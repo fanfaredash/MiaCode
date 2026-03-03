@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="fonts/consola.ttf">../assets/fonts/consola.ttf</file>
+        <file alias="data/slide_native_data.json">../assets/generated/slide_native_data.json</file>
+    </qresource>
+</RCC>
