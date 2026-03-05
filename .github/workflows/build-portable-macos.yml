@@ -2,10 +2,6 @@ name: Build Portable Package (macOS)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
 
 jobs:
   build-macos:
