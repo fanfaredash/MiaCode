@@ -47,6 +47,14 @@ Run:
 
 ## Windows Packaging
 
+If `windeployqt` is not found in `PATH`, pass `-QtRoot` explicitly:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1 -QtRoot <QtRoot>
+```
+
+If `Qt\bin` is already in `PATH`, you can run:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1
 ```
