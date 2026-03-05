@@ -1,15 +1,25 @@
 #include "PreviewCanvas.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QFontDatabase>
+#include <QFontInfo>
 #include <QImage>
+#include <QOpenGLContext>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPaintEvent>
 #include <QRectF>
+#include <QStringList>
+#include <QTextStream>
 #include <QTransform>
 #include <QtMath>
+#ifdef HAVE_QT_MULTIMEDIA
+#include <QVideoFrame>
+#endif
 
 #include <algorithm>
 #include <numeric>
@@ -59,12 +69,70 @@ constexpr qreal kAngleWrapOffset = 540.0;
 constexpr qreal kAngleWrapCycle = 360.0;
 constexpr qreal kAngleWrapCenter = 180.0;
 constexpr bool kEnablePreviewCaches = true;
+constexpr qreal kLegacyOutlineToCanvasRatio = 490.0 / 540.0;
 constexpr int kGuideTransformCacheLimit = 256;
 constexpr int kSpriteTransformCacheLimit = 512;
 constexpr int kGuideTransformSizeStep = 2;
 constexpr int kSpriteTransformSizeStep = 4;
 constexpr int kAtlasPadding = 2;
 constexpr int kAtlasMaxWidth = 2048;
+
+struct SampleStats {
+    bool hasValue = false;
+    double avgMs = 0.0;
+    double p95Ms = 0.0;
+    double maxMs = 0.0;
+};
+
+SampleStats computeSampleStats(const QVector<double>& samples)
+{
+    SampleStats stats;
+    if (samples.isEmpty()) {
+        return stats;
+    }
+
+    stats.hasValue = true;
+    const double sum = std::accumulate(samples.cbegin(), samples.cend(), 0.0);
+    stats.avgMs = sum / static_cast<double>(samples.size());
+
+    QVector<double> sorted = samples;
+    std::sort(sorted.begin(), sorted.end());
+    stats.maxMs = sorted.constLast();
+    const int p95Index = qBound(0, static_cast<int>(qCeil(sorted.size() * 0.95)) - 1, sorted.size() - 1);
+    stats.p95Ms = sorted.at(p95Index);
+    return stats;
+}
+
+QString formatHudTimeLabel(double seconds)
+{
+    const qint64 totalMs = qMax<qint64>(0, qRound64(seconds * 1000.0));
+    const qint64 minutes = totalMs / 60000;
+    const qint64 sec = (totalMs / 1000) % 60;
+    const qint64 ms = totalMs % 1000;
+    return QString("%1:%2:%3")
+        .arg(minutes, 2, 10, QChar('0'))
+        .arg(sec, 2, 10, QChar('0'))
+        .arg(ms, 3, 10, QChar('0'));
+}
+
+QFont hudMonoFont(int pointSize, QFont::Weight weight = QFont::Medium)
+{
+    QFont font;
+    for (const QString& family : QStringList{"Cascadia Mono", "JetBrains Mono", "Cascadia Code", "Consolas"}) {
+        font.setFamily(family);
+        if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0) {
+            break;
+        }
+    }
+    if (font.family().isEmpty()) {
+        font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    }
+    font.setPointSize(pointSize);
+    font.setWeight(weight);
+    font.setStyleHint(QFont::Monospace);
+    font.setFixedPitch(true);
+    return font;
+}
 
 int quantizeDimension(int value, int step)
 {
@@ -225,11 +293,9 @@ QString defaultNoteGuideDir()
 }
 }
 
-PreviewCanvas::PreviewCanvas(QWidget* parent)
-    : QOpenGLWidget(parent)
+PreviewCanvas::PreviewCanvas(QWindow* parent)
+    : QOpenGLWindow(NoPartialUpdate, parent)
 {
-    setAutoFillBackground(false);
-    setUpdateBehavior(QOpenGLWidget::NoPartialUpdate);
     const QString outlinePath = defaultOutlinePath();
     if (QFileInfo::exists(outlinePath)) {
         outlineImage_ = QImage(outlinePath);
@@ -240,6 +306,13 @@ PreviewCanvas::~PreviewCanvas()
 {
     if (context() != nullptr) {
         makeCurrent();
+        if (gpuTimerQueriesSupported_) {
+            QOpenGLContext* ctx = QOpenGLContext::currentContext();
+            QOpenGLExtraFunctions* extra = ctx != nullptr ? ctx->extraFunctions() : nullptr;
+            if (extra != nullptr) {
+                extra->glDeleteQueries(4, gpuTimeQueries_);
+            }
+        }
         glRenderer_.shutdown();
         doneCurrent();
     }
@@ -257,8 +330,20 @@ void PreviewCanvas::setPlayheadSeconds(double seconds)
 
 void PreviewCanvas::setMediaFrame(const QImage& frame)
 {
+#ifdef HAVE_QT_MULTIMEDIA
+    videoFrame_ = QVideoFrame();
+#endif
     mediaFrame_ = frame;
-    update();
+}
+
+void PreviewCanvas::setVideoFrame(const QVideoFrame& frame)
+{
+#ifdef HAVE_QT_MULTIMEDIA
+    mediaFrame_ = QImage();
+    videoFrame_ = frame;
+#else
+    Q_UNUSED(frame);
+#endif
 }
 
 void PreviewCanvas::setNoteMarkers(const QVector<TimelineNoteMarker>& notes)
@@ -505,6 +590,11 @@ void PreviewCanvas::setSkinDirectory(const QString& skinDir)
         }
     }
     rebuildAtlases();
+    if (glRenderer_.isInitialized() && context() != nullptr) {
+        makeCurrent();
+        prewarmGlTextures();
+        doneCurrent();
+    }
     update();
 }
 
@@ -547,18 +637,150 @@ void PreviewCanvas::reset()
     frameMsP95_ = 0.0;
     frameMsMax_ = 0.0;
     playheadSeconds_ = 0.0;
+    mediaFrame_ = QImage();
+#ifdef HAVE_QT_MULTIMEDIA
+    videoFrame_ = QVideoFrame();
+#endif
+    resetProfilingSession();
     update();
+}
+
+void PreviewCanvas::resetProfilingSession()
+{
+    if (context() != nullptr && gpuTimerQueriesSupported_) {
+        makeCurrent();
+        collectGpuProfilingResults(true);
+        doneCurrent();
+    }
+    profileCpuPrepTotalMs_ = 0.0;
+    profileCpuUploadTotalMs_ = 0.0;
+    profileGpuDrawTotalMs_ = 0.0;
+    profileFrameCount_ = 0;
+    profileGpuSampleCount_ = 0;
+    profileCpuPrepSamplesMs_.clear();
+    profileCpuUploadSamplesMs_.clear();
+    profileGpuDrawSamplesMs_.clear();
+    profilePresentApproxSamplesMs_.clear();
+    profileTickToPaintSamplesMs_.clear();
+    profileVideoMapSamplesMs_.clear();
+    profileVideoUploadSamplesMs_.clear();
+    profileSessionClock_.invalidate();
+    lastProfileFrameStartNs_ = -1;
+    lastProfileCpuFrameNs_ = 0;
+    pendingTickToPaintStartNs_ = -1;
+}
+
+void PreviewCanvas::noteTickForProfiling()
+{
+    if (!profileSessionClock_.isValid()) {
+        profileSessionClock_.start();
+        lastProfileFrameStartNs_ = 0;
+    }
+    pendingTickToPaintStartNs_ = profileSessionClock_.nsecsElapsed();
+}
+
+QString PreviewCanvas::writeProfilingSummaryToFile()
+{
+    if (profileFrameCount_ == 0) {
+        return QString();
+    }
+
+    if (context() != nullptr && gpuTimerQueriesSupported_) {
+        makeCurrent();
+        collectGpuProfilingResults(true);
+        doneCurrent();
+    }
+
+    QFile file(profilingSummaryPath());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        return QString();
+    }
+
+    const SampleStats cpuPrepStats = computeSampleStats(profileCpuPrepSamplesMs_);
+    const SampleStats cpuUploadStats = computeSampleStats(profileCpuUploadSamplesMs_);
+    const SampleStats gpuDrawStats = computeSampleStats(profileGpuDrawSamplesMs_);
+    const SampleStats presentApproxStats = computeSampleStats(profilePresentApproxSamplesMs_);
+    const SampleStats tickToPaintStats = computeSampleStats(profileTickToPaintSamplesMs_);
+    const SampleStats videoMapStats = computeSampleStats(profileVideoMapSamplesMs_);
+    const SampleStats videoUploadStats = computeSampleStats(profileVideoUploadSamplesMs_);
+
+    const auto writeStats = [](QTextStream& stream, const QString& prefix, const SampleStats& stats) {
+        if (!stats.hasValue) {
+            stream << prefix << "_avg_ms=N/A\n";
+            stream << prefix << "_p95_ms=N/A\n";
+            stream << prefix << "_max_ms=N/A\n";
+            return;
+        }
+        stream << prefix << "_avg_ms=" << QString::number(stats.avgMs, 'f', 4) << '\n';
+        stream << prefix << "_p95_ms=" << QString::number(stats.p95Ms, 'f', 4) << '\n';
+        stream << prefix << "_max_ms=" << QString::number(stats.maxMs, 'f', 4) << '\n';
+    };
+
+    QTextStream stream(&file);
+    stream << "timestamp=" << QDateTime::currentDateTime().toString(Qt::ISODate) << '\n';
+    stream << "frame_samples=" << profileFrameCount_ << '\n';
+    stream << "gpu_frame_samples=" << profileGpuSampleCount_ << '\n';
+    stream << "present_approx_note=frame interval residual; includes event loop/compositor/vsync and is not exact swap time\n";
+    writeStats(stream, "cpu_prepare", cpuPrepStats);
+    writeStats(stream, "cpu_upload", cpuUploadStats);
+    writeStats(stream, "gpu_draw", gpuDrawStats);
+    writeStats(stream, "present_approx", presentApproxStats);
+    writeStats(stream, "tick_to_paint", tickToPaintStats);
+    writeStats(stream, "video_frame_map", videoMapStats);
+    writeStats(stream, "video_frame_upload", videoUploadStats);
+    file.close();
+    return file.fileName();
 }
 
 void PreviewCanvas::initializeGL()
 {
     glRenderer_.initialize();
+    QOpenGLContext* ctx = QOpenGLContext::currentContext();
+    QOpenGLExtraFunctions* extra = ctx != nullptr ? ctx->extraFunctions() : nullptr;
+    if (extra != nullptr && (ctx->hasExtension("GL_ARB_timer_query")
+        || ctx->hasExtension("GL_EXT_disjoint_timer_query")
+        || ctx->format().majorVersion() >= 3)) {
+        extra->glGenQueries(4, gpuTimeQueries_);
+        gpuTimerQueriesSupported_ = true;
+    }
+    prewarmGlTextures();
 }
 
 void PreviewCanvas::resizeGL(int w, int h)
 {
     Q_UNUSED(w);
     Q_UNUSED(h);
+}
+
+void PreviewCanvas::beginNativeBatch(QPainter& painter)
+{
+    if (nativePaintingActive_ || !glRenderer_.isInitialized()) {
+        return;
+    }
+    painter.beginNativePainting();
+    nativePaintingActive_ = true;
+}
+
+void PreviewCanvas::endNativeBatch(QPainter& painter)
+{
+    if (!nativePaintingActive_) {
+        return;
+    }
+    painter.endNativePainting();
+    nativePaintingActive_ = false;
+}
+
+void PreviewCanvas::prewarmGlTextures()
+{
+    if (!glRenderer_.isInitialized()) {
+        return;
+    }
+
+    glRenderer_.prewarmTexture(tapAtlasImage_);
+    glRenderer_.prewarmTexture(trackAtlasImage_);
+    glRenderer_.prewarmTexture(touchAtlasImage_);
+    glRenderer_.prewarmTexture(guideAtlasImage_);
+    glRenderer_.prewarmTexture(outlineImage_);
 }
 
 const QImage* PreviewCanvas::selectTapImage(const TimelineNoteMarker& marker) const
@@ -893,7 +1115,6 @@ void PreviewCanvas::flushTapAtlasBatch(QPainter& painter)
             sprite.targetWidth,
             sprite.targetHeight
         );
-
         bool renderedByGl = false;
         if (nativePaintingActive_ && glRenderer_.isInitialized()) {
             renderedByGl = glRenderer_.drawImageQuad(
@@ -925,6 +1146,7 @@ void PreviewCanvas::flushTapAtlasBatch(QPainter& painter)
             sprite.sourceRect
         );
         painter.restore();
+        ++cpuFallbackCount_;
 
         if (hadNative && glRenderer_.isInitialized()) {
             painter.beginNativePainting();
@@ -1125,27 +1347,57 @@ void PreviewCanvas::drawStageBackground(QPainter& painter, const QRectF& stageRe
 {
     painter.fillRect(stageRect, QColor("#1F2833"));
 
-    if (!mediaFrame_.isNull()) {
-        QSize fittedSize = mediaFrame_.size();
-        fittedSize.scale(stageRect.size().toSize(), Qt::KeepAspectRatio);
+    QSize mediaSize = mediaFrame_.size();
+    bool hasVideoFrame = false;
+#ifdef HAVE_QT_MULTIMEDIA
+    hasVideoFrame = videoFrame_.isValid();
+    if (hasVideoFrame) {
+        mediaSize = videoFrame_.surfaceFormat().viewport().size();
+        if (mediaSize.isEmpty()) {
+            mediaSize = videoFrame_.surfaceFormat().frameSize();
+        }
+    }
+#endif
+
+    if (!mediaSize.isEmpty()) {
+        QSize fittedSize = mediaSize;
+        const QRectF playfieldRect = stagePlayfieldRect(stageRect);
+        const qreal mediaSquareSide = qMax<qreal>(1.0, playfieldRect.width() * kLegacyOutlineToCanvasRatio);
+        const QSize mediaBounds(qRound(mediaSquareSide), qRound(mediaSquareSide));
+        fittedSize.scale(mediaBounds, Qt::KeepAspectRatio);
         if (!fittedSize.isEmpty()) {
-        const QRectF targetRect(
-            stageRect.center().x() - fittedSize.width() / 2.0,
-            stageRect.center().y() - fittedSize.height() / 2.0,
-            fittedSize.width(),
-            fittedSize.height()
-        );
-        bool renderedByGl = false;
-        if (glRenderer_.isInitialized()) {
-            painter.beginNativePainting();
-            renderedByGl = glRenderer_.drawImageQuad(mediaFrame_, targetRect);
-            painter.endNativePainting();
-        }
-        if (renderedByGl) {
-            usedGpuRendererThisFrame_ = true;
-        } else {
-            painter.drawImage(targetRect, mediaFrame_);
-        }
+            const QRectF targetRect(
+                playfieldRect.center().x() - fittedSize.width() / 2.0,
+                playfieldRect.center().y() - fittedSize.height() / 2.0,
+                fittedSize.width(),
+                fittedSize.height()
+            );
+            bool renderedByGl = false;
+            if (glRenderer_.isInitialized()) {
+                painter.beginNativePainting();
+                if (hasVideoFrame) {
+#ifdef HAVE_QT_MULTIMEDIA
+                    renderedByGl = glRenderer_.drawVideoFrame(videoFrame_, targetRect, 1.0);
+#endif
+                } else if (!mediaFrame_.isNull()) {
+                    renderedByGl = glRenderer_.drawImageQuad(mediaFrame_, targetRect, 0.0, 1.0, QRectF(), false);
+                }
+                painter.endNativePainting();
+            }
+            if (renderedByGl) {
+                usedGpuRendererThisFrame_ = true;
+            } else if (!mediaFrame_.isNull()) {
+                ++cpuFallbackCount_;
+                painter.drawImage(targetRect, mediaFrame_);
+            } else if (hasVideoFrame) {
+#ifdef HAVE_QT_MULTIMEDIA
+                const QImage fallbackImage = videoFrame_.toImage();
+                if (!fallbackImage.isNull()) {
+                    ++cpuFallbackCount_;
+                    painter.drawImage(targetRect, fallbackImage);
+                }
+#endif
+            }
         }
     }
 
@@ -1176,6 +1428,7 @@ void PreviewCanvas::drawPlayfieldBackdrop(QPainter& painter, const QRectF& playf
         return;
     }
 
+    ++cpuFallbackCount_;
     painter.save();
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     painter.drawImage(targetRect, outlineImage_);
@@ -1278,36 +1531,40 @@ void PreviewCanvas::drawTapLayer(QPainter& painter, const QRectF& playfieldRect)
 void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
 {
     painter.setPen(QColor("#D9E2EC"));
-    QFont timeFont = painter.font();
-    timeFont.setPointSize(18);
-    timeFont.setBold(true);
-    painter.setFont(timeFont);
-    painter.drawText(
-        stageRect.adjusted(18.0, 16.0, -18.0, -16.0),
-        Qt::AlignLeft | Qt::AlignTop,
-        QString::number(playheadSeconds_, 'f', 2) + "s"
-    );
+    QFont timeFont = hudMonoFont(18, QFont::DemiBold);
     if (!showDebugInfo_) {
+        painter.setFont(timeFont);
+        painter.drawText(
+            QPointF(stageRect.left() + 18.0, stageRect.bottom() - 18.0),
+            formatHudTimeLabel(playheadSeconds_)
+        );
         return;
     }
-    QFont fpsFont = painter.font();
-    fpsFont.setPointSize(11);
-    fpsFont.setBold(false);
+    QFont fpsFont = hudMonoFont(11, QFont::Medium);
     painter.setFont(fpsFont);
     const QFontMetrics metrics(fpsFont);
     const qreal leftX = stageRect.left() + 18.0;
-    const qreal baseline0 = stageRect.bottom() - 24.0 - metrics.height() * 2 + metrics.ascent();
+    const qreal baseline0 = stageRect.top() + 18.0 + metrics.ascent();
     const QString rendererLabel = usedGpuRendererThisFrame_ ? "Renderer: GPU" : "Renderer: CPU";
     painter.drawText(
         QPointF(leftX, baseline0),
-        QString::number(fpsDisplay_, 'f', 1) + " FPS"
+        rendererLabel
     );
     painter.drawText(
         QPointF(leftX, baseline0 + metrics.height()),
-        QString("%1 ms avg")
-            .arg(frameMsAverage_, 0, 'f', 1)
+        QString::number(fpsDisplay_, 'f', 1) + " FPS"
     );
-    painter.drawText(QPointF(leftX, baseline0 + metrics.height() * 2), rendererLabel);
+    painter.drawText(
+        QPointF(leftX, baseline0 + metrics.height() * 2),
+        QString("Fallback: %1")
+            .arg(cpuFallbackCount_)
+    );
+
+    painter.setFont(timeFont);
+    painter.drawText(
+        QPointF(stageRect.left() + 18.0, stageRect.bottom() - 18.0),
+        formatHudTimeLabel(playheadSeconds_)
+    );
 }
 
 bool PreviewCanvas::drawSpriteImage(
@@ -1375,6 +1632,7 @@ bool PreviewCanvas::drawSpriteImage(
     }
 
     if (resolvedSourceRect.isValid() && !resolvedSourceRect.isEmpty()) {
+        ++cpuFallbackCount_;
         painter.save();
         painter.setOpacity(opacity);
         painter.translate(center);
@@ -1392,6 +1650,7 @@ bool PreviewCanvas::drawSpriteImage(
     if (transformed.isNull()) {
         return false;
     }
+    ++cpuFallbackCount_;
     painter.save();
     painter.drawImage(
         QPointF(center.x() - transformed.width() / 2.0, center.y() - transformed.height() / 2.0),
@@ -1601,7 +1860,13 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
         bool renderedByGl = false;
         if (preferGpu && glRenderer_.isInitialized()) {
             if (nativePaintingActive_) {
-                renderedByGl = glRenderer_.drawImageQuad(*renderImage, targetRect, angleDegrees + gpuAngleOffset, 1.0, renderSourceRect);
+                renderedByGl = glRenderer_.drawImageQuad(
+                    *renderImage,
+                    targetRect,
+                    angleDegrees + gpuAngleOffset,
+                    1.0,
+                    renderSourceRect
+                );
             } else {
                 painter.beginNativePainting();
                 renderedByGl = glRenderer_.drawImageQuad(*renderImage, targetRect, angleDegrees + gpuAngleOffset, 1.0, renderSourceRect);
@@ -1617,6 +1882,7 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
         }
 
         if (atlasResolved && renderSourceRect.isValid() && !renderSourceRect.isEmpty()) {
+            ++cpuFallbackCount_;
             painter.save();
             painter.translate(point);
             painter.rotate(angleDegrees);
@@ -1633,6 +1899,7 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
         if (transformed.isNull()) {
             return;
         }
+        ++cpuFallbackCount_;
         painter.drawImage(
             QPointF(
                 point.x() - transformed.width() / 2.0,
@@ -1712,7 +1979,7 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
                 addEachCandidate(marker);
             }
         } else if (marker.type == "hold") {
-            if (marker.endSecond <= marker.second || playheadSeconds_ > marker.endSecond) {
+            if (marker.endSecond < marker.second || playheadSeconds_ > marker.endSecond) {
                 continue;
             }
             const qreal distance = static_cast<qreal>(playheadSeconds_ - marker.second) * kTapUnitsPerSecond + kLogicalDistanceEdge;
@@ -1876,7 +2143,7 @@ void PreviewCanvas::drawTapMarker(QPainter& painter, const TimelineNoteMarker& m
 
 void PreviewCanvas::drawHoldMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)
 {
-    if (marker.endSecond <= marker.second) {
+    if (marker.endSecond < marker.second) {
         return;
     }
 
@@ -2044,15 +2311,54 @@ void PreviewCanvas::drawCachedSlideArea(
     const int targetHeight = qMax(1, qRound(image->height() * canvasScale * kSlideTrackScale));
 
     if (glRenderer_.isInitialized()) {
-        for (int pointIndex = startPointIndex; pointIndex < endPointIndex; ++pointIndex) {
-            const QPointF point = mapLogicalPointToRect(
-                QPointF(kLogicalCanvasCenter + points[pointIndex].x(), kLogicalCanvasCenter + points[pointIndex].y()),
-                playfieldRect
-            );
-            const qreal angle = -rotations.value(pointIndex);
-            drawSpriteImage(painter, *image, point, targetWidth, targetHeight, angle, opacity);
+        const QImage* renderImage = image;
+        QRectF resolvedSourceRect;
+        resolveAtlasImage(*image, QRectF(), renderImage, resolvedSourceRect);
+        if (renderImage != nullptr && !renderImage->isNull()) {
+            QVector<QPointF> centers;
+            QVector<qreal> angles;
+            centers.reserve(qMax(0, endPointIndex - startPointIndex));
+            angles.reserve(qMax(0, endPointIndex - startPointIndex));
+            for (int pointIndex = startPointIndex; pointIndex < endPointIndex; ++pointIndex) {
+                centers.append(mapLogicalPointToRect(
+                    QPointF(kLogicalCanvasCenter + points[pointIndex].x(), kLogicalCanvasCenter + points[pointIndex].y()),
+                    playfieldRect
+                ));
+                angles.append(-rotations.value(pointIndex));
+            }
+
+            bool renderedByGl = false;
+            if (nativePaintingActive_) {
+                renderedByGl = glRenderer_.drawImageQuadBatch(
+                    *renderImage,
+                    centers,
+                    targetWidth,
+                    targetHeight,
+                    angles,
+                    opacity,
+                    resolvedSourceRect
+                );
+            } else {
+                painter.beginNativePainting();
+                renderedByGl = glRenderer_.drawImageQuadBatch(
+                    *renderImage,
+                    centers,
+                    targetWidth,
+                    targetHeight,
+                    angles,
+                    opacity,
+                    resolvedSourceRect
+                );
+                painter.endNativePainting();
+            }
+            if (renderedByGl) {
+                usedGpuRendererThisFrame_ = true;
+                return;
+            }
+            if (nativePaintingActive_) {
+                return;
+            }
         }
-        return;
     }
 
     const int playfieldWidth = qMax(1, qRound(playfieldRect.width()));
@@ -2825,9 +3131,9 @@ void PreviewCanvas::drawTouchHoldMarker(QPainter& painter, const TimelineNoteMar
     }
 
     if (deltaSeconds >= 0.0) {
-        if (batchNative) {
-            painter.endNativePainting();
-            nativePaintingActive_ = false;
+        const bool resumeNativeAfterBorder = nativePaintingActive_;
+        if (resumeNativeAfterBorder) {
+            endNativeBatch(painter);
         }
         const QRectF borderRect(
             point.x() - borderWidth / 2.0,
@@ -2846,15 +3152,13 @@ void PreviewCanvas::drawTouchHoldMarker(QPainter& painter, const TimelineNoteMar
             painter.drawImage(borderRect, touchHoldBorderImage_);
             painter.restore();
         }
-        if (batchNative) {
-            nativePaintingActive_ = true;
-            painter.beginNativePainting();
+        if (resumeNativeAfterBorder) {
+            beginNativeBatch(painter);
         }
     }
     drawSpriteImage(painter, pointBase, point, pointWidth, pointHeight, 0.0);
     if (batchNative) {
-        painter.endNativePainting();
-        nativePaintingActive_ = false;
+        endNativeBatch(painter);
     }
 }
 
@@ -2910,39 +3214,147 @@ void PreviewCanvas::updateFpsSample()
 
 void PreviewCanvas::paintGL()
 {
+    QOpenGLContext* ctx = QOpenGLContext::currentContext();
+    QOpenGLExtraFunctions* extra = ctx != nullptr ? ctx->extraFunctions() : nullptr;
+    collectGpuProfilingResults(false);
+
+    if (profileSessionClock_.isValid() && pendingTickToPaintStartNs_ >= 0) {
+        const qint64 nowNs = profileSessionClock_.nsecsElapsed();
+        profileTickToPaintSamplesMs_.append(
+            static_cast<double>(qMax<qint64>(0, nowNs - pendingTickToPaintStartNs_)) / 1000000.0
+        );
+        pendingTickToPaintStartNs_ = -1;
+    }
+
+    if (!profileSessionClock_.isValid()) {
+        profileSessionClock_.start();
+        lastProfileFrameStartNs_ = 0;
+    } else {
+        const qint64 frameStartNs = profileSessionClock_.nsecsElapsed();
+        if (lastProfileFrameStartNs_ >= 0) {
+            const qint64 intervalNs = frameStartNs - lastProfileFrameStartNs_;
+            const qint64 residualNs = qMax<qint64>(0, intervalNs - lastProfileCpuFrameNs_);
+            profilePresentApproxSamplesMs_.append(static_cast<double>(residualNs) / 1000000.0);
+        }
+        lastProfileFrameStartNs_ = frameStartNs;
+    }
+
+    bool gpuQueryActive = false;
+    if (gpuTimerQueriesSupported_ && extra != nullptr && !gpuTimeQueryPending_[gpuTimeQueryCursor_]) {
+        extra->glBeginQuery(GL_TIME_ELAPSED, gpuTimeQueries_[gpuTimeQueryCursor_]);
+        gpuQueryActive = true;
+    }
+
+    QElapsedTimer cpuFrameTimer;
+    cpuFrameTimer.start();
     glRenderer_.beginFrame(size(), devicePixelRatioF());
-    QPainter painter(this);
-    renderCanvas(painter);
+    {
+        QPainter painter(this);
+        renderCanvas(painter);
+    }
+    const qint64 cpuFrameNs = cpuFrameTimer.nsecsElapsed();
+    const qint64 cpuUploadNs = static_cast<qint64>(glRenderer_.frameCpuUploadNs());
+    const qint64 videoMapNs = static_cast<qint64>(glRenderer_.frameVideoMapNs());
+    const qint64 videoUploadNs = static_cast<qint64>(glRenderer_.frameVideoUploadNs());
+    glRenderer_.endFrame();
+
+    if (gpuQueryActive && extra != nullptr) {
+        extra->glEndQuery(GL_TIME_ELAPSED);
+        gpuTimeQueryPending_[gpuTimeQueryCursor_] = true;
+        gpuTimeQueryCursor_ = (gpuTimeQueryCursor_ + 1) % 4;
+    }
+
+    const double cpuUploadMs = static_cast<double>(cpuUploadNs) / 1000000.0;
+    const double cpuPrepMs = static_cast<double>(qMax<qint64>(0, cpuFrameNs - cpuUploadNs)) / 1000000.0;
+    lastProfileCpuFrameNs_ = cpuFrameNs;
+    profileCpuPrepTotalMs_ += cpuPrepMs;
+    profileCpuUploadTotalMs_ += cpuUploadMs;
+    profileCpuPrepSamplesMs_.append(cpuPrepMs);
+    profileCpuUploadSamplesMs_.append(cpuUploadMs);
+    if (videoMapNs > 0) {
+        profileVideoMapSamplesMs_.append(static_cast<double>(videoMapNs) / 1000000.0);
+    }
+    if (videoUploadNs > 0) {
+        profileVideoUploadSamplesMs_.append(static_cast<double>(videoUploadNs) / 1000000.0);
+    }
+    ++profileFrameCount_;
 }
 
 void PreviewCanvas::renderCanvas(QPainter& painter)
 {
     usedGpuRendererThisFrame_ = false;
+    cpuFallbackCount_ = 0;
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
-    painter.fillRect(rect(), QColor("#1F2833"));
+    painter.fillRect(QRect(QPoint(0, 0), size()), QColor("#1F2833"));
 
     const QRectF stageRect = currentStageRect();
     const QRectF playfieldRect = stagePlayfieldRect(stageRect);
 
     drawStageBackground(painter, stageRect);
     drawPlayfieldBackdrop(painter, playfieldRect);
+    const bool batchNative = glRenderer_.isInitialized();
+    if (batchNative) {
+        beginNativeBatch(painter);
+    }
     drawTouchLayer(painter, playfieldRect);
     drawTrackLayer(painter, playfieldRect);
     drawGuideLayer(painter, playfieldRect);
     drawHoldLayer(painter, playfieldRect);
     drawTapLayer(painter, playfieldRect);
+    if (batchNative) {
+        endNativeBatch(painter);
+    }
 
     updateFpsSample();
     drawHud(painter, stageRect);
 }
 
-QSize PreviewCanvas::minimumSizeHint() const
+void PreviewCanvas::collectGpuProfilingResults(bool waitForAll)
 {
-    return QSize(540, 540);
+    if (!gpuTimerQueriesSupported_) {
+        return;
+    }
+
+    QOpenGLContext* ctx = QOpenGLContext::currentContext();
+    QOpenGLExtraFunctions* extra = ctx != nullptr ? ctx->extraFunctions() : nullptr;
+    if (extra == nullptr) {
+        return;
+    }
+
+    for (int i = 0; i < 4; ++i) {
+        if (!gpuTimeQueryPending_[i]) {
+            continue;
+        }
+
+        bool ready = waitForAll;
+        if (!waitForAll) {
+            GLuint available = 0;
+            extra->glGetQueryObjectuiv(gpuTimeQueries_[i], GL_QUERY_RESULT_AVAILABLE, &available);
+            ready = available != 0;
+        }
+
+        if (!ready) {
+            continue;
+        }
+
+        GLuint resultNs = 0;
+        extra->glGetQueryObjectuiv(gpuTimeQueries_[i], GL_QUERY_RESULT, &resultNs);
+        const double gpuMs = static_cast<double>(resultNs) / 1000000.0;
+        profileGpuDrawTotalMs_ += gpuMs;
+        ++profileGpuSampleCount_;
+        profileGpuDrawSamplesMs_.append(gpuMs);
+        gpuTimeQueryPending_[i] = false;
+    }
 }
 
-QSize PreviewCanvas::sizeHint() const
+QString PreviewCanvas::profilingSummaryPath() const
+{
+    const QDir appDir(QCoreApplication::applicationDirPath());
+    return QDir::cleanPath(appDir.filePath("preview_profile_summary.txt"));
+}
+
+QSize PreviewCanvas::preferredSize() const
 {
     return QSize(620, 620);
 }
