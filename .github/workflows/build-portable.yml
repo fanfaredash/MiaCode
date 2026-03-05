@@ -1,0 +1,73 @@
+name: Build Portable Packages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-windows:
+    name: Windows Qt 6.1
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt 6.1.3 (MSVC 2019)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.1.3
+          host: windows
+          target: desktop
+          arch: win64_msvc2019_64
+
+      - name: Configure
+        shell: pwsh
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -D CMAKE_PREFIX_PATH="$env:Qt6_DIR"
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build build --config Release --target miacode
+
+      - name: Package Portable
+        shell: pwsh
+        run: ./scripts/package-win.ps1 -BuildDir build -Config Release
+
+      - name: Upload Portable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiaCode-portable-win64
+          path: dist/*.zip
+          if-no-files-found: error
+
+  build-macos:
+    name: macOS Qt 6.1
+    runs-on: macos-13
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt 6.1.3 (clang_64)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.1.3
+          host: mac
+          target: desktop
+          arch: clang_64
+
+      - name: Package Portable
+        shell: bash
+        env:
+          CMAKE_PREFIX_PATH: ${{ env.Qt6_DIR }}
+        run: |
+          chmod +x scripts/package-mac.sh
+          bash scripts/package-mac.sh
+
+      - name: Upload Portable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiaCode-portable-macos
+          path: dist/*.zip
+          if-no-files-found: error
