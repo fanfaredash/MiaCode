@@ -1,5 +1,4 @@
 build/
-build_verify/
 dist/
 .vs/
 .idea/
@@ -25,3 +24,4 @@ install_manifest.txt
 *.vcxproj.user
 *.VC.db
 *.opendb
+DEVELOPMENT_PLAN.md
