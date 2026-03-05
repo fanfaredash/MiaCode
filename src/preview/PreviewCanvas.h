@@ -6,35 +6,42 @@
 #include <QElapsedTimer>
 #include <QHash>
 #include <QImage>
-#include <QOpenGLWidget>
+#include <QOpenGLExtraFunctions>
+#include <QOpenGLWindow>
 #include <QString>
 #include <QStringList>
+#ifdef HAVE_QT_MULTIMEDIA
+#include <QVideoFrame>
+#endif
 
 class QPainter;
 class QRectF;
 
-class PreviewCanvas : public QOpenGLWidget
+class PreviewCanvas : public QOpenGLWindow
 {
     Q_OBJECT
 
 public:
-    explicit PreviewCanvas(QWidget* parent = nullptr);
+    explicit PreviewCanvas(QWindow* parent = nullptr);
     ~PreviewCanvas() override;
 
     void setPlayheadSeconds(double seconds);
     void setMediaFrame(const QImage& frame);
+    void setVideoFrame(const QVideoFrame& frame);
     void setNoteMarkers(const QVector<TimelineNoteMarker>& notes);
     void setSkinDirectory(const QString& skinDir);
     void setBackgroundBrightness(double brightness);
     void setShowDebugInfo(bool show);
     void reset();
+    void noteTickForProfiling();
+    void resetProfilingSession();
+    QString writeProfilingSummaryToFile();
+    QSize preferredSize() const;
 
 protected:
     void initializeGL() override;
     void paintGL() override;
     void resizeGL(int w, int h) override;
-    QSize minimumSizeHint() const override;
-    QSize sizeHint() const override;
 
 private:
     struct CachedTrackArea {
@@ -78,6 +85,9 @@ private:
     void rebuildAtlas(QImage& atlasImage, const QVector<const QImage*>& images);
     bool resolveAtlasImage(const QImage& image, const QRectF& sourceRect, const QImage*& atlasImage, QRectF& atlasSourceRect) const;
     void flushTapAtlasBatch(QPainter& painter);
+    void beginNativeBatch(QPainter& painter);
+    void endNativeBatch(QPainter& painter);
+    void prewarmGlTextures();
     QRectF currentStageRect() const;
     QRectF stagePlayfieldRect(const QRectF& stageRect) const;
     QRectF currentPlayfieldRect() const;
@@ -131,6 +141,8 @@ private:
     void drawHoldMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect);
     void renderCanvas(QPainter& painter);
     void updateFpsSample();
+    void collectGpuProfilingResults(bool waitForAll);
+    QString profilingSummaryPath() const;
 
     QImage tapImage_;
     QImage tapEachImage_;
@@ -190,6 +202,9 @@ private:
     PreviewGLRenderer glRenderer_;
     QVector<TimelineNoteMarker> noteMarkers_;
     QImage mediaFrame_;
+#ifdef HAVE_QT_MULTIMEDIA
+    QVideoFrame videoFrame_;
+#endif
     double playheadSeconds_ = 0.0;
     double backgroundBrightness_ = 0.2;
     QElapsedTimer fpsTimer_;
@@ -202,9 +217,30 @@ private:
     double frameMsAverage_ = 0.0;
     double frameMsP95_ = 0.0;
     double frameMsMax_ = 0.0;
+    int cpuFallbackCount_ = 0;
     bool usedGpuRendererThisFrame_ = false;
-    bool showDebugInfo_ = true;
+    bool showDebugInfo_ = false;
     bool nativePaintingActive_ = false;
     bool tapAtlasBatchingActive_ = false;
     QVector<BatchedSprite> tapAtlasBatch_;
+    QElapsedTimer profileSessionClock_;
+    qint64 lastProfileFrameStartNs_ = -1;
+    qint64 lastProfileCpuFrameNs_ = 0;
+    double profileCpuPrepTotalMs_ = 0.0;
+    double profileCpuUploadTotalMs_ = 0.0;
+    double profileGpuDrawTotalMs_ = 0.0;
+    quint64 profileFrameCount_ = 0;
+    quint64 profileGpuSampleCount_ = 0;
+    QVector<double> profileCpuPrepSamplesMs_;
+    QVector<double> profileCpuUploadSamplesMs_;
+    QVector<double> profileGpuDrawSamplesMs_;
+    QVector<double> profilePresentApproxSamplesMs_;
+    QVector<double> profileTickToPaintSamplesMs_;
+    QVector<double> profileVideoMapSamplesMs_;
+    QVector<double> profileVideoUploadSamplesMs_;
+    qint64 pendingTickToPaintStartNs_ = -1;
+    bool gpuTimerQueriesSupported_ = false;
+    GLuint gpuTimeQueries_[4] = {0, 0, 0, 0};
+    bool gpuTimeQueryPending_[4] = {false, false, false, false};
+    int gpuTimeQueryCursor_ = 0;
 };

@@ -17,13 +17,17 @@ public:
 
     void reloadAssets(const PreviewAudioSettings& settings);
     void setChartPath(const QString& chartPath);
+    void setBackgroundTrackOffsetSeconds(double seconds);
+    void setBackgroundTrackPlaybackRate(double rate);
     void applyLevels(const PreviewAudioSettings& settings);
     void configureTimeline(const QVector<TimelineNoteMarker>& noteMarkers);
     void clearTimeline();
     void resetCursor(double second, bool includeCurrentSecond);
     void drainEvents(double second);
     void syncTouchholdVoices(double second);
+    void syncBackgroundTrack(double timelineSecond);
     bool hasBackgroundTrack() const;
+    bool isBackgroundTrackRunning() const;
     void startBackgroundTrack(double second);
     void pauseBackgroundTrack();
     double backgroundPlaybackSecond() const;
@@ -45,6 +49,7 @@ private:
 
     struct EngineState;
     struct Voice;
+    struct StretchedBackgroundState;
 
     struct SfxBank {
         QVector<Voice*> voices;
@@ -60,10 +65,13 @@ private:
     QString resolveTrackPath(const QString& chartPath) const;
     QString resolveSfxDir() const;
     void resetBackgroundTrack();
+    void resetStretchedBackgroundTrack();
     void resetBanks();
     bool initializeAudioEngine();
     void initializeAssets();
     void initializeBackgroundTrack();
+    bool prepareStretchedBackgroundTrack(double timelineSecond);
+    double stretchedBackgroundPlaybackSecond() const;
     void applyVolumes();
     bool playKindInternal(const QString& kind);
     void startTouchholdSpan(int spanIndex, double offsetSeconds);
@@ -82,6 +90,12 @@ private:
     bool engineInitialized_ = false;
     Voice* backgroundTrackVoice_ = nullptr;
     bool backgroundTrackConfigured_ = false;
+    bool backgroundTrackRunning_ = false;
+    bool backgroundTrackPendingStart_ = false;
+    double backgroundTrackOffsetSeconds_ = 0.0;
+    double backgroundTrackPlaybackRate_ = 1.0;
+    double backgroundTrackLastTimelineSecond_ = 0.0;
+    StretchedBackgroundState* stretchedBackgroundState_ = nullptr;
     SfxBank answerSfx_;
     SfxBank slideSfx_;
     SfxBank breakSfx_;
