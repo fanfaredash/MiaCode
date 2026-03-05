@@ -61,11 +61,11 @@ typedef int BOOL;
 #define SOUNDTOUCH_ALIGN_POINTER_16(x)      ( ( (ulongptr)(x) + 15 ) & ~(ulongptr)15 )
 
 
-#if (defined(__GNUC__) && (!defined(ANDROID) && !defined(TARGET_OS_IPHONE) && !defined(IOS)))
+#if (defined(__GNUC__) && (!defined(ANDROID) && (!(defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE)) && (!(defined(IOS) && IOS))))
     // In GCC, include soundtouch_config.h made by config scritps.
     // Skip this in Android and iOS compilation that uses GCC but without configure scripts.
     #include "soundtouch_config.h"
-#elif defined(TARGET_OS_IPHONE) || defined(IOS)
+#elif ((defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) || (defined(IOS) && IOS))
     #include <CoreFoundation/CoreFoundation.h>
     #include <objc/objc.h>
 #endif
