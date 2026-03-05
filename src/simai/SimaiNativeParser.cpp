@@ -31,6 +31,7 @@ struct ParseState {
     double bpm = kDefaultBpm;
     int beats = kDefaultBeats;
     double second = 0.0;
+    int lastBeatSourceLine = -1;
     SimaiNativeParseResult result;
 };
 
@@ -1092,6 +1093,7 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     marker.second = state->second;
     marker.availableSecond = marker.second;
     marker.sourceLine = lineNumber;
+    marker.sourceCol = qMax(1, column);
     marker.lane = lane;
     marker.type = sanitizedCore.contains('w', Qt::CaseInsensitive) ? "wifi" : "slide";
     marker.hasHeadStar = !sanitizedCore.contains('?') && !sanitizedCore.contains('!');
@@ -1279,6 +1281,7 @@ void parseTouchToken(ParseState* state, const QString& token, int lineNumber, in
     TimelineNoteMarker marker;
     marker.second = state->second;
     marker.sourceLine = lineNumber;
+    marker.sourceCol = qMax(1, column);
     marker.lane = 9;
     marker.endLane = 9;
     marker.type = "touch";
@@ -1316,19 +1319,31 @@ void parseTapOrHoldToken(ParseState* state, const QString& token, int lineNumber
     TimelineNoteMarker marker;
     marker.second = state->second;
     marker.sourceLine = lineNumber;
+    marker.sourceCol = qMax(1, column);
     marker.lane = token.at(0).digitValue();
     marker.endLane = marker.lane;
     marker.type = "tap";
     marker.isBreak = token.contains('b');
     marker.isEx = token.contains('x');
 
-    if (token.contains('h') && token.contains('[') && token.contains(']')) {
-        bool durationOk = false;
-        const double durationSecond = parseHoldDurationSignature(tokenInsideBrackets(token), state->bpm, &durationOk);
-        if (!durationOk) {
+    if (token.contains('h')) {
+        const bool hasOpenBracket = token.contains('[');
+        const bool hasCloseBracket = token.contains(']');
+        if (hasOpenBracket != hasCloseBracket) {
             appendTokenError(state, lineNumber, column, QString("Invalid hold duration: %1").arg(token));
             return;
         }
+
+        double durationSecond = 0.0;
+        if (hasOpenBracket && hasCloseBracket) {
+            bool durationOk = false;
+            durationSecond = parseHoldDurationSignature(tokenInsideBrackets(token), state->bpm, &durationOk);
+            if (!durationOk) {
+                appendTokenError(state, lineNumber, column, QString("Invalid hold duration: %1").arg(token));
+                return;
+            }
+        }
+
         marker.type = "hold";
         marker.endSecond = marker.second + qMax(0.0, durationSecond);
     }
@@ -1474,9 +1489,10 @@ SimaiNativeParseResult parseInternal(const QString& text)
                 currentGroup.clear();
                 TimelineBeatMarker marker;
                 marker.second = state.second;
-                marker.major = state.result.beatMarkers.isEmpty()
-                    || qFuzzyIsNull(std::fmod(state.second / qMax(0.0001, noteStepSeconds(state.bpm, state.beats)), static_cast<double>(state.beats)));
+                marker.sourceLine = qMax(1, lineNumber);
+                marker.major = (state.lastBeatSourceLine != marker.sourceLine);
                 state.result.beatMarkers.append(marker);
+                state.lastBeatSourceLine = marker.sourceLine;
                 state.result.durationSeconds = qMax(state.result.durationSeconds, state.second);
                 state.second += noteStepSeconds(state.bpm, state.beats);
                 continue;
