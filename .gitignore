@@ -1,4 +1,5 @@
 build/
+build-qt61/
 dist/
 .vs/
 .idea/
