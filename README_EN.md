@@ -65,6 +65,10 @@ Output:
 
 ---
 
+## Acknowledgements
+
+Thanks to [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) for reference implementations of simai syntax parsing and rendering logic.
+
 ## Changelog
 
 ### 0.1.0

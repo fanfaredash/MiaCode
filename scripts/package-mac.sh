@@ -52,6 +52,21 @@ mkdir -p "$DIST_DIR/docs"
 cp -R "$APP_PATH" "$DIST_DIR/"
 
 if [[ -d "$ROOT_DIR/assets" ]]; then
+  required_sfx_dir="$ROOT_DIR/assets/SFX"
+  required_sfx_files=(
+    "answer.wav"
+    "slide.wav"
+    "break.wav"
+    "judge_ex.wav"
+    "touch.wav"
+    "touchHold_riser.wav"
+  )
+  for sfx_file in "${required_sfx_files[@]}"; do
+    if [[ ! -f "$required_sfx_dir/$sfx_file" ]]; then
+      echo "Missing required SFX asset: $required_sfx_dir/$sfx_file" >&2
+      exit 1
+    fi
+  done
   cp -R "$ROOT_DIR/assets" "$DIST_DIR/assets"
 fi
 

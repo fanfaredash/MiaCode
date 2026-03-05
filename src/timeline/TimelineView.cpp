@@ -1,6 +1,6 @@
 #include "TimelineView.h"
+#include "common/AssetPaths.h"
 
-#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QImage>
@@ -803,8 +803,7 @@ QPixmap TimelineView::iconForType(const QString& type) const
 
 void TimelineView::loadNoteIcons()
 {
-    const QDir appDir(QCoreApplication::applicationDirPath());
-    const QString notesDir = QDir::cleanPath(appDir.filePath("..\\..\\assets\\skin"));
+    const QString notesDir = miacode::assets::assetPath("skin");
     if (!QFileInfo::exists(QDir(notesDir).filePath("tap.png"))) {
         return;
     }
