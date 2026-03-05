@@ -47,6 +47,14 @@ cmake --build --preset release
 
 ## Windows 打包
 
+如果系统 `PATH` 里找不到 `windeployqt`，需要手动指定 `-QtRoot`：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1 -QtRoot D:\Qt\6.8.3\msvc2022_64
+```
+
+如果 `Qt\bin` 已在 `PATH` 中，也可以直接运行：
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1
 ```
