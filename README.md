@@ -1,111 +1,74 @@
-# maicode
+# MiaCode
 
-`maicode` is a native Qt 6 simai editor and preview host.
+[中文](README.md) | [English](README_EN.md)
 
-The current codebase is self-contained for the main editing path:
-- native C++ simai parsing for timeline metadata and validation
-- native OpenGL-backed preview rendering
-- native miniaudio-based preview SFX and BGM playback
+`MiaCode` 是一个基于 Qt 6 + OpenGL 实现的 simai 编辑器与预览器。
 
-The old Python bridge is no longer required for the main workflow. A legacy pygame preview session fallback still exists in code, but it is disabled by default and optional.
+## 功能
 
-## Features
+- 文本编辑器
+- 校验错误列表并支持跳转定位
+- 原生时间轴视图
+  - 波形背景
+  - 缩放等级
+  - 播放线与光标线
+  - tap、hold、slide、wifi、touch、touch-hold 预览
+- 原生 OpenGL 预览
+- 本地渲染设置，包含音频与视频
 
-- text editor with optional QScintilla integration
-- validation error list with jump-to-location
-- native timeline view with:
-  - waveform background
-  - zoom levels
-  - playback line and cursor line
-  - note previews for tap / hold / slide / wifi / touch / touch-hold
-- native OpenGL preview with staged GPU migration
-- local preview audio settings and display settings
-- native `simai_native_dump` utility for parser inspection
+## 构建
 
-## Build
-
-Requirements:
-
+依赖：
 - CMake 3.21+
-- Qt 6.8+ (`Core`, `Gui`, `Widgets`, `OpenGLWidgets`)
-- Optional: `Qt6::Multimedia`
-- Optional: QScintilla for Qt 6
+- Qt 6.1+，需要 `Core`、`Gui`、`Widgets`、`OpenGLWidgets`
+- 可选 `Qt6::Multimedia`
+- 可选 QScintilla for Qt 6
 
-This workspace is configured for:
-
-- `D:/Qt/6.8.3/msvc2022_64`
-
-via [CMakePresets.json](CMakePresets.json).
-
-Configure and build:
+使用仓库内的 [CMakePresets.json](CMakePresets.json) 配置并构建：
 
 ```powershell
 cmake --preset vs2022-qt6
 cmake --build --preset release
 ```
 
-Run:
+运行：
 
 ```powershell
-.\build\Release\maicode.exe
+.\build\Release\MiaCode.exe
 ```
 
-Parser dump:
+## 仓库结构
 
-```powershell
-.\build\Release\simai_native_dump.exe D:\Desktop\maimuri\test\maidata.txt
-```
+- [src](src)：源码
+- [assets](assets)：运行资源与生成数据
+- [resources](resources)：Qt 资源文件
+- [scripts](scripts)：打包脚本
+- [third_party](third_party)：第三方依赖
 
-## Windows Packaging
-
-After a Release build:
+## Windows 打包
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1
 ```
 
-This copies `maicode.exe` into `dist/windows-x64` and runs `windeployqt`.
+输出：
+- `dist/MiaCode-v<version>-portable-win64`
+- `dist/MiaCode-v<version>-portable-win64.zip`
 
-## Environment Variables
+---
 
-Current environment variables:
+## 更新日志
 
-- `MAICODE_TRACK_PATH`
-  Optional default `track.mp3` path for preview.
-- `MAICODE_PREVIEW_SFX_DIR`
-  Optional override directory for preview SFX assets.
-- `MAICODE_ENABLE_PYGAME_PREVIEW`
-  Optional legacy preview-session fallback toggle.
-- `MAICODE_PREVIEW_SESSION_SCRIPT`
-  Optional override path for the legacy pygame preview session script.
+### 0.1.0
 
-Backward-compatible `MAIMURI_*` names are still accepted for now.
-
-## Quick Check
-
-1. Build and run `maicode.exe`.
-2. Open `D:\Desktop\maimuri\test\maidata.txt`.
-3. Confirm:
-   - timeline renders notes and waveform
-   - `Validation Errors` stays empty
-   - `Preview From Start` opens the native Qt preview path
-4. Run:
-
-```powershell
-.\build\Release\simai_native_dump.exe D:\Desktop\maimuri\test\maidata.txt
-```
-
-Expected current baseline:
-
-- `ok: true`
-- `note_count: 460`
-- `error_count: 0`
-
-## Repository Layout
-
-- [src](src): application source
-- [assets](assets): embedded assets and generated slide data
-- [resources](resources): Qt resource collections
-- [scripts](scripts): packaging helpers
-- [third_party](third_party): vendored dependencies (including miniaudio)
-
+- **Simai 编辑**
+  - 完整支持 simai 文本解析与编辑流程。
+  - 支持多难度字段管理，包含新增、删除与自动切换。
+  - 支持镜像与旋转批量操作。
+  - 支持多难度和谱面信息设置。
+- **渲染与预览**
+  - 预览区升级为播放器式控制，支持时间条与倍速播放。
+  - 优化视频与音频预览链路，明显改善卡顿问题。
+  - 时间轴与预览联动增强，拖动与定位行为更稳定。
+- **其它**
+  - 完成中英文界面适配。
