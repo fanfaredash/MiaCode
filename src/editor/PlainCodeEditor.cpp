@@ -1,7 +1,11 @@
 #include "PlainCodeEditor.h"
 
+#include <QContextMenuEvent>
+#include <QMenu>
 #include <QPainter>
 #include <QTextBlock>
+#include <QTextBlockFormat>
+#include <QTextCursor>
 
 namespace {
 constexpr int kLineNumberLeftPadding = 6;
@@ -39,6 +43,18 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
     connect(this, &QPlainTextEdit::updateRequest, this, &PlainCodeEditor::updateLineNumberArea);
     updateLineNumberAreaWidth(0);
     setLineWrapMode(QPlainTextEdit::NoWrap);
+}
+
+void PlainCodeEditor::setBlockSpacingPixels(int px)
+{
+    blockSpacingPixels_ = qMax(0, px);
+    QTextCursor cursor(document());
+    cursor.beginEditBlock();
+    cursor.select(QTextCursor::Document);
+    QTextBlockFormat fmt;
+    fmt.setBottomMargin(static_cast<qreal>(blockSpacingPixels_));
+    cursor.mergeBlockFormat(fmt);
+    cursor.endEditBlock();
 }
 
 int PlainCodeEditor::lineNumberAreaWidth() const
@@ -79,6 +95,41 @@ void PlainCodeEditor::resizeEvent(QResizeEvent* event)
 
     const QRect cr = contentsRect();
     lineNumberArea_->setGeometry(QRect(cr.left(), cr.top(), lineNumberAreaWidth(), cr.height()));
+}
+
+void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
+{
+    QMenu* menu = createStandardContextMenu();
+    if (menu == nullptr) {
+        return;
+    }
+    menu->setWindowFlag(Qt::FramelessWindowHint, true);
+    menu->setWindowFlag(Qt::NoDropShadowWindowHint, true);
+    menu->setAttribute(Qt::WA_TranslucentBackground, true);
+    menu->setStyleSheet(
+        "QMenu {"
+        " background: rgba(255, 255, 255, 245);"
+        " border: 1px solid #D7E0EB;"
+        " border-radius: 8px;"
+        " padding: 7px;"
+        "}"
+        "QMenu::item {"
+        " padding: 6px 20px 6px 12px;"
+        " margin: 1px 0;"
+        " border-radius: 6px;"
+        " color: #203040;"
+        "}"
+        "QMenu::item:selected {"
+        " background: #EEF5FF;"
+        " color: #203040;"
+        "}"
+        "QMenu::item:disabled {"
+        " color: #9AA5B4;"
+        " background: transparent;"
+        "}"
+    );
+    menu->exec(event->globalPos());
+    delete menu;
 }
 
 void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
