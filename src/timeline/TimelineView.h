@@ -9,6 +9,7 @@
 #include <QStringList>
 #include <QToolButton>
 #include <QVector>
+#include <QEvent>
 
 struct TimelineBeatMarker {
     double second = 0.0;
@@ -90,6 +91,7 @@ signals:
     void ctrlClickNavigateRequested(double second, int lane);
 
 protected:
+    bool viewportEvent(QEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;

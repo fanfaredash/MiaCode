@@ -11,6 +11,8 @@
 #include <QResizeEvent>
 #include <QScrollBar>
 #include <QDockWidget>
+#include <QEvent>
+#include <QPalette>
 #include <QToolButton>
 #include <QTransform>
 #include <QWheelEvent>
@@ -40,10 +42,19 @@ QString laneLabelForIndex(int laneIndex)
 TimelineView::TimelineView(QWidget* parent)
     : QAbstractScrollArea(parent)
 {
+    setAttribute(Qt::WA_OpaquePaintEvent, true);
     setMinimumHeight(kHeaderHeight + kTimelineTopMargin + (kLaneCount * kLaneHeight) + 10);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setMouseTracking(true);
+    viewport()->setAttribute(Qt::WA_OpaquePaintEvent, true);
+    viewport()->setAutoFillBackground(false);
+    QPalette vp = viewport()->palette();
+    vp.setColor(QPalette::Window, QColor("#F5F5F5"));
+    vp.setColor(QPalette::Base, QColor("#F7F8FA"));
+    vp.setColor(QPalette::Highlight, QColor("#D7EBFF"));
+    viewport()->setPalette(vp);
+
     zoomButton_ = new QToolButton(this);
     zoomButton_->setAutoRaise(false);
     zoomButton_->setCursor(Qt::PointingHandCursor);
@@ -90,6 +101,24 @@ TimelineView::TimelineView(QWidget* parent)
     updateZoomButtonAppearance();
     loadNoteIcons();
     updateHorizontalRange();
+}
+
+bool TimelineView::viewportEvent(QEvent* event)
+{
+    if (event == nullptr) {
+        return QAbstractScrollArea::viewportEvent(event);
+    }
+    if (event->type() == QEvent::Paint) {
+        paintEvent(static_cast<QPaintEvent*>(event));
+        return true;
+    }
+    if (event->type() == QEvent::Show
+        || event->type() == QEvent::Resize
+        || event->type() == QEvent::PaletteChange
+        || event->type() == QEvent::StyleChange) {
+        viewport()->update();
+    }
+    return QAbstractScrollArea::viewportEvent(event);
 }
 
 void TimelineView::setTimelineData(
@@ -217,6 +246,9 @@ void TimelineView::paintEvent(QPaintEvent* event)
     Q_UNUSED(event);
 
     QPainter painter(viewport());
+    if (!painter.isActive()) {
+        return;
+    }
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     painter.fillRect(rect(), QColor("#F5F5F5"));
 
