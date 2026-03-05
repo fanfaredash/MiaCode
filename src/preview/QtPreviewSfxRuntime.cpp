@@ -1,5 +1,7 @@
 ﻿#include "QtPreviewSfxRuntime.h"
 
+#include "common/AssetPaths.h"
+
 #include <algorithm>
 #include <cstring>
 #include <QCoreApplication>
@@ -340,6 +342,13 @@ void QtPreviewSfxRuntime::setChartPath(const QString& chartPath)
 
     chartPath_ = normalizedChartPath;
     trackPath_ = resolveTrackPath(chartPath_);
+    const QString resolvedSfxDir = resolveSfxDir();
+    if (resolvedSfxDir != sfxDir_) {
+        sfxDir_ = resolvedSfxDir;
+        if (engineInitialized_ && engineState_ != nullptr) {
+            initializeAssets();
+        }
+    }
     appendAudioDebugLog(QString("setChartPath chart=%1 track=%2").arg(chartPath_, trackPath_));
     resetBackgroundTrack();
     if (qFuzzyCompare(backgroundTrackPlaybackRate_ + 1.0, 2.0)) {
@@ -804,21 +813,18 @@ QString QtPreviewSfxRuntime::resolveSfxDir() const
     }
 
     QStringList candidates;
-    const QDir currentDir = QDir::current();
-    candidates << QDir::cleanPath(currentDir.filePath("test/SFX"));
-    candidates << QDir::cleanPath(currentDir.filePath("../test/SFX"));
-    candidates << QDir::cleanPath(currentDir.filePath("tmp/SFX"));
-    candidates << QDir::cleanPath(currentDir.filePath("../tmp/SFX"));
+    const QString assetSfxUpper = miacode::assets::assetPath("SFX");
+    if (!assetSfxUpper.isEmpty()) {
+        candidates << assetSfxUpper;
+    }
+    const QString assetSfxLower = miacode::assets::assetPath("sfx");
+    if (!assetSfxLower.isEmpty()) {
+        candidates << assetSfxLower;
+    }
 
     const QDir appDir(QCoreApplication::applicationDirPath());
-    candidates << QDir::cleanPath(appDir.filePath("test/SFX"));
-    candidates << QDir::cleanPath(appDir.filePath("..\\test\\SFX"));
-    candidates << QDir::cleanPath(appDir.filePath("..\\..\\test\\SFX"));
-    candidates << QDir::cleanPath(appDir.filePath("..\\..\\..\\test\\SFX"));
-    candidates << QDir::cleanPath(appDir.filePath("tmp\\SFX"));
-    candidates << QDir::cleanPath(appDir.filePath("..\\tmp\\SFX"));
-    candidates << QDir::cleanPath(appDir.filePath("..\\..\\tmp\\SFX"));
-    candidates << QDir::cleanPath(appDir.filePath("..\\..\\..\\tmp\\SFX"));
+    candidates << QDir::cleanPath(appDir.filePath("SFX"));
+    candidates << QDir::cleanPath(appDir.filePath("sfx"));
 
     for (const QString& path : candidates) {
         if (QFileInfo::exists(QDir(path).filePath("answer.wav"))) {

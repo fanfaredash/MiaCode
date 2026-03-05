@@ -1,4 +1,5 @@
 #include "PreviewCanvas.h"
+#include "common/AssetPaths.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -282,14 +283,12 @@ QColor exStarTintColor(bool isBreak, bool isEach)
 
 QString defaultOutlinePath()
 {
-    const QDir appDir(QCoreApplication::applicationDirPath());
-    return QDir::cleanPath(appDir.filePath("..\\..\\assets\\background\\outline.png"));
+    return miacode::assets::assetPath("background/outline.png");
 }
 
 QString defaultNoteGuideDir()
 {
-    const QDir appDir(QCoreApplication::applicationDirPath());
-    return QDir::cleanPath(appDir.filePath("..\\..\\assets\\noteguide"));
+    return miacode::assets::assetPath("noteguide");
 }
 }
 

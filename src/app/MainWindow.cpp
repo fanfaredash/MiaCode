@@ -7,6 +7,7 @@
 #include "SimaiNativeParser.h"
 #include "TimelineView.h"
 #include "UiText.h"
+#include "common/AssetPaths.h"
 
 #include <algorithm>
 #include <QAction>
@@ -3082,18 +3083,6 @@ QString MainWindow::resolvePreviewSessionScriptPath() const
     if (!envPath.isEmpty() && QFileInfo::exists(envPath)) {
         return envPath;
     }
-
-    QStringList candidates;
-    candidates << QDir::cleanPath(QDir::current().filePath("../MaiMuriDX/api_preview_session.py"));
-    candidates << QDir::cleanPath(QDir::current().filePath("..\\MaiMuriDX\\api_preview_session.py"));
-    candidates << QDir::cleanPath(QDir(QCoreApplication::applicationDirPath()).filePath("..\\..\\MaiMuriDX\\api_preview_session.py"));
-    candidates << QDir::cleanPath(QDir(QCoreApplication::applicationDirPath()).filePath("..\\..\\..\\MaiMuriDX\\api_preview_session.py"));
-
-    for (const QString& path : candidates) {
-        if (QFileInfo::exists(path)) {
-            return path;
-        }
-    }
     return QString();
 }
 
@@ -3856,8 +3845,7 @@ QString MainWindow::resolveDefaultTrackPath() const
 
 QString MainWindow::resolvePreviewSkinDir() const
 {
-    const QDir appDir(QCoreApplication::applicationDirPath());
-    const QString assetSkinDir = QDir::cleanPath(appDir.filePath("..\\..\\assets\\skin"));
+    const QString assetSkinDir = miacode::assets::assetPath("skin");
     if (QFileInfo::exists(QDir(assetSkinDir).filePath("tap.png"))) {
         return assetSkinDir;
     }
@@ -4979,8 +4967,8 @@ bool MainWindow::ensurePreviewSessionStarted()
         QMessageBox::warning(
             this,
             "Preview Session",
-            "Cannot locate MaiMuriDX/api_preview_session.py.\n"
-            "Set MIACODE_PREVIEW_SESSION_SCRIPT or run from repo workspace."
+            "Preview session script is not configured.\n"
+            "Set MIACODE_PREVIEW_SESSION_SCRIPT to enable legacy preview."
         );
         return false;
     }

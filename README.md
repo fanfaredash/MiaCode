@@ -65,6 +65,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1
 
 ---
 
+## 致谢
+
+感谢 [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) 提供的 simai 语法解析与渲染逻辑参考。
+
 ## 更新日志
 
 ### 0.1.0
