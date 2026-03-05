@@ -72,6 +72,21 @@ foreach ($runtimeDll in @("dxcompiler.dll", "dxil.dll")) {
 
 $assetsSrc = Join-Path $repoRoot "assets"
 if (Test-Path $assetsSrc) {
+    $requiredSfxDir = Join-Path $assetsSrc "SFX"
+    $requiredSfxFiles = @(
+        "answer.wav",
+        "slide.wav",
+        "break.wav",
+        "judge_ex.wav",
+        "touch.wav",
+        "touchHold_riser.wav"
+    )
+    foreach ($sfxFile in $requiredSfxFiles) {
+        $sfxPath = Join-Path $requiredSfxDir $sfxFile
+        if (!(Test-Path $sfxPath)) {
+            throw "Missing required SFX asset: $sfxPath"
+        }
+    }
     Copy-Item $assetsSrc (Join-Path $DistDir "assets") -Recurse -Force
 }
 
