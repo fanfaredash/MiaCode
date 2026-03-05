@@ -13,6 +13,7 @@
 struct TimelineBeatMarker {
     double second = 0.0;
     bool major = false;
+    int sourceLine = 1;
 };
 
 struct TimelineNoteMarker {
@@ -21,6 +22,7 @@ struct TimelineNoteMarker {
     double slideTraceSecond = -1.0;
     double availableSecond = -1.0;
     int sourceLine = 1;
+    int sourceCol = 1;
     int lane = 1;
     int endLane = 1;
     QString type;
@@ -72,7 +74,7 @@ public:
         const QVector<TimelineNoteMarker>& notes,
         double durationSeconds
     );
-    void setWaveformData(const QVector<float>& peaks);
+    void setWaveformData(const QVector<float>& peaks, double startSecond = 0.0, double durationSeconds = 0.0);
     void clear();
     void setPlayheadUpperLimitSeconds(double second);
     void setPlayheadSeconds(double second, bool centerView);
@@ -92,6 +94,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void scrollContentsBy(int dx, int dy) override;
 
 private:
     void updateHorizontalRange();
@@ -120,6 +123,8 @@ private:
     bool showSlideTracks_ = true;
     QHash<QString, QPixmap> noteIcons_;
     QVector<float> waveformPeaks_;
+    double waveformStartSeconds_ = 0.0;
+    double waveformDurationSeconds_ = 0.0;
     QToolButton* zoomButton_ = nullptr;
     QVector<double> zoomPresets_{0.25, 0.5, 1.0, 1.5, 2.0};
     int zoomPresetIndex_ = 2;

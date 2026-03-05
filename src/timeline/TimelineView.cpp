@@ -15,14 +15,15 @@
 #include <QTransform>
 #include <QWheelEvent>
 #include <QtMath>
+#include <algorithm>
 
 namespace {
 constexpr int kPlayableLaneCount = 8;
 constexpr int kTouchLane = kPlayableLaneCount + 1;
 constexpr int kLaneCount = kTouchLane;
-constexpr int kHeaderHeight = 22;
-constexpr int kLaneHeight = 20;
-constexpr int kTimelineLeftMargin = 64;
+constexpr int kHeaderHeight = 28;
+constexpr int kLaneHeight = 22;
+constexpr int kTimelineLeftMargin = 40;
 constexpr int kTimelineTopMargin = 6;
 constexpr int kTimelineRightPadding = 24;
 constexpr int kNoteSize = 14;
@@ -44,9 +45,47 @@ TimelineView::TimelineView(QWidget* parent)
     setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setMouseTracking(true);
     zoomButton_ = new QToolButton(this);
-    zoomButton_->setAutoRaise(true);
+    zoomButton_->setAutoRaise(false);
     zoomButton_->setCursor(Qt::PointingHandCursor);
-    zoomButton_->setStyleSheet("QToolButton { padding: 0px; }");
+    zoomButton_->setStyleSheet(
+        "QToolButton {"
+        " color: #1F2E41;"
+        " background: #FFFFFF;"
+        " border: 1px solid #B8C7DA;"
+        " border-radius: 6px;"
+        " padding: 1px 8px;"
+        " font-weight: 600;"
+        "}"
+        "QToolButton:hover { background: #F1F6FC; border-color: #89A7CB; }"
+        "QToolButton:pressed { background: #E5EFFA; }"
+    );
+    horizontalScrollBar()->setStyleSheet(
+        "QScrollBar:horizontal {"
+        " background: #F4F7FB;"
+        " height: 14px;"
+        " margin: 2px 4px 2px 4px;"
+        " border: 1px solid #D1DDEA;"
+        " border-radius: 7px;"
+        "}"
+        "QScrollBar::handle:horizontal {"
+        " background: #9AB2CC;"
+        " min-width: 42px;"
+        " border-radius: 6px;"
+        "}"
+        "QScrollBar::handle:horizontal:hover { background: #7F9FBE; }"
+        "QScrollBar::sub-line:horizontal, QScrollBar::add-line:horizontal {"
+        " width: 20px;"
+        " border: none;"
+        " background: transparent;"
+        "}"
+        "QScrollBar::left-arrow:horizontal, QScrollBar::right-arrow:horizontal {"
+        " width: 0px;"
+        " height: 0px;"
+        "}"
+        "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {"
+        " background: transparent;"
+        "}"
+    );
     connect(zoomButton_, &QToolButton::clicked, this, [this]() { cycleZoomPreset(); });
     updateZoomButtonAppearance();
     loadNoteIcons();
@@ -61,14 +100,19 @@ void TimelineView::setTimelineData(
 {
     beats_ = beats;
     notes_ = notes;
+    std::sort(beats_.begin(), beats_.end(), [](const TimelineBeatMarker& a, const TimelineBeatMarker& b) {
+        return a.second < b.second;
+    });
     durationSeconds_ = qMax(0.0, durationSeconds);
     updateHorizontalRange();
     viewport()->update();
 }
 
-void TimelineView::setWaveformData(const QVector<float>& peaks)
+void TimelineView::setWaveformData(const QVector<float>& peaks, double startSecond, double durationSeconds)
 {
     waveformPeaks_ = peaks;
+    waveformStartSeconds_ = startSecond;
+    waveformDurationSeconds_ = qMax(0.0, durationSeconds);
     viewport()->update();
 }
 
@@ -81,6 +125,8 @@ void TimelineView::clear()
     cursorSeconds_ = 0.0;
     playheadUpperLimitSeconds_ = -1.0;
     waveformPeaks_.clear();
+    waveformStartSeconds_ = 0.0;
+    waveformDurationSeconds_ = 0.0;
     updateHorizontalRange();
     viewport()->update();
 }
@@ -110,9 +156,18 @@ void TimelineView::setPlayheadSeconds(double second, bool centerView)
     }
 
     playheadSeconds_ = clamped;
+    const int playheadX = secondToX(playheadSeconds_);
     if (centerView) {
-        const int targetX = secondToX(playheadSeconds_) - (viewport()->width() / 2);
+        const int targetX = playheadX - (viewport()->width() / 2);
         horizontalScrollBar()->setValue(qBound(horizontalScrollBar()->minimum(), targetX, horizontalScrollBar()->maximum()));
+    } else {
+        const int visibleLeft = horizontalScrollBar()->value();
+        const int visibleRight = visibleLeft + viewport()->width();
+        const int keepMargin = 96;
+        if (playheadX < visibleLeft + keepMargin || playheadX > visibleRight - keepMargin) {
+            const int targetX = playheadX - (viewport()->width() / 2);
+            horizontalScrollBar()->setValue(qBound(horizontalScrollBar()->minimum(), targetX, horizontalScrollBar()->maximum()));
+        }
     }
     viewport()->update();
     emit playheadChanged(playheadSeconds_);
@@ -171,18 +226,19 @@ void TimelineView::paintEvent(QPaintEvent* event)
     const int laneH = laneHeight();
     const int xOffset = horizontalScrollBar()->value();
     const bool drawSlideTracks = effectiveShowSlideTracks();
+    const QRect timelineRect(left, top, viewport()->width() - left, h);
 
+    painter.fillRect(QRect(0, 0, viewport()->width(), top), QColor("#F3F5F8"));
     painter.fillRect(QRect(0, top, left, h), QColor("#E8E8E8"));
-    painter.fillRect(QRect(left, top, viewport()->width() - left, h), QColor("#F7F8FA"));
-    painter.setPen(QColor("#666666"));
-    QFont headerFont = painter.font();
-    headerFont.setBold(true);
-    painter.setFont(headerFont);
-    painter.drawText(6, 0, left - 12, kHeaderHeight, Qt::AlignLeft | Qt::AlignVCenter, "Line No.");
-    headerFont.setBold(false);
-    painter.setFont(headerFont);
+    painter.fillRect(timelineRect, QColor("#F7F8FA"));
+    painter.setPen(QColor("#CDD7E3"));
+    painter.drawLine(0, top - 1, viewport()->width(), top - 1);
+    QFont laneLabelFont(QStringLiteral("Consolas"));
+    laneLabelFont.setStyleHint(QFont::Monospace);
+    laneLabelFont.setPointSize(12);
+    laneLabelFont.setWeight(QFont::DemiBold);
 
-    if (!waveformPeaks_.isEmpty() && durationSeconds_ > 0.0) {
+    if (!waveformPeaks_.isEmpty() && waveformDurationSeconds_ > 0.0) {
         painter.save();
         painter.setClipRect(QRect(left, top, viewport()->width() - left, h));
         QPainterPath waveformPath;
@@ -192,7 +248,8 @@ void TimelineView::paintEvent(QPaintEvent* event)
         bool started = false;
         for (int i = 0; i < sampleCount; ++i) {
             const qreal peak = qBound<qreal>(0.0, waveformPeaks_.at(i), 1.0);
-            const double second = durationSeconds_ * (static_cast<double>(i) / qMax(1, sampleCount - 1));
+            const double second = waveformStartSeconds_
+                + waveformDurationSeconds_ * (static_cast<double>(i) / qMax(1, sampleCount - 1));
             const qreal x = secondToX(second) - xOffset;
             const qreal y = centerY - peak * maxAmplitude;
             if (!started) {
@@ -204,7 +261,8 @@ void TimelineView::paintEvent(QPaintEvent* event)
         }
         for (int i = sampleCount - 1; i >= 0; --i) {
             const qreal peak = qBound<qreal>(0.0, waveformPeaks_.at(i), 1.0);
-            const double second = durationSeconds_ * (static_cast<double>(i) / qMax(1, sampleCount - 1));
+            const double second = waveformStartSeconds_
+                + waveformDurationSeconds_ * (static_cast<double>(i) / qMax(1, sampleCount - 1));
             const qreal x = secondToX(second) - xOffset;
             const qreal y = centerY + peak * maxAmplitude;
             waveformPath.lineTo(x, y);
@@ -216,41 +274,41 @@ void TimelineView::paintEvent(QPaintEvent* event)
         painter.restore();
     }
 
+    painter.setFont(laneLabelFont);
     for (int lane = 0; lane < kLaneCount; ++lane) {
         const int y = top + lane * laneH;
         const QColor rowColor = (lane % 2 == 0) ? QColor(251, 251, 251, 180) : QColor(242, 242, 242, 180);
         painter.fillRect(QRect(left, y, viewport()->width() - left, laneH), rowColor);
         painter.setPen(QColor("#D4D4D4"));
         painter.drawLine(0, y + laneH, viewport()->width(), y + laneH);
-        painter.setPen(QColor("#666666"));
-        painter.drawText(4, y, left - 8, laneH, Qt::AlignRight | Qt::AlignVCenter, laneLabelForIndex(lane));
+        painter.setPen(QColor("#4D5C6D"));
+        painter.drawText(4, y + 1, left - 8, laneH - 1, Qt::AlignRight | Qt::AlignVCenter, laneLabelForIndex(lane));
     }
 
-    painter.setPen(QColor("#A0A0A0"));
+    painter.setPen(QColor("#A8B2BE"));
     painter.drawLine(left, top - 1, left, top + h);
 
-    int lastLabelContentX = -1000000;
-    const int headerRightLimit = zoomButton_ != nullptr ? (zoomButton_->x() - 1) : viewport()->width();
+    int lastLabelScreenX = -1000000;
+    const int headerLeftLimit = zoomButton_ != nullptr ? (zoomButton_->x() + zoomButton_->width() + 8) : 0;
+    const int headerRightLimit = viewport()->width() - 4;
     for (const TimelineBeatMarker& marker : beats_) {
-        const int contentX = secondToX(marker.second);
         const int x = secondToX(marker.second) - xOffset;
         if (x < left - 1 || x > viewport()->width()) {
-            if (marker.major && contentX - lastLabelContentX >= 68) {
-                lastLabelContentX = contentX;
-            }
-            painter.setPen(marker.major ? QColor("#B0B0B0") : QColor("#D9D9D9"));
             continue;
         }
-        painter.setPen(marker.major ? QColor("#B0B0B0") : QColor("#D9D9D9"));
+        painter.setPen(marker.major ? QColor("#B6C1CE") : QColor("#D0D8E2"));
         painter.drawLine(x, top, x, top + h);
-        if (marker.major && contentX - lastLabelContentX >= 68) {
-            const int sourceLine = lineNumberForSecond(marker.second);
+        if (marker.major) {
+            const int sourceLine = marker.sourceLine > 0 ? marker.sourceLine : lineNumberForSecond(marker.second);
             const QString labelText = QString::number(sourceLine);
             const int labelWidth = 56;
-            lastLabelContentX = contentX;
-            if (x + labelWidth <= headerRightLimit) {
+            const int labelX = x - (labelWidth / 2);
+            if (labelX >= headerLeftLimit
+                && labelX + labelWidth <= headerRightLimit
+                && labelX - lastLabelScreenX >= 22) {
                 painter.setPen(QColor("#666666"));
-                painter.drawText(x + 2, 0, labelWidth, kHeaderHeight, Qt::AlignLeft | Qt::AlignVCenter, labelText);
+                painter.drawText(labelX, 0, labelWidth, kHeaderHeight, Qt::AlignHCenter | Qt::AlignVCenter, labelText);
+                lastLabelScreenX = labelX;
             }
         }
     }
@@ -501,31 +559,46 @@ void TimelineView::paintEvent(QPaintEvent* event)
     }
 
     const int cursorX = secondToX(cursorSeconds_) - xOffset;
-    painter.setPen(QPen(QColor("#4A90E2"), 2));
-    painter.drawLine(cursorX, top - 1, cursorX, top + h);
+    if (cursorX > left) {
+        painter.save();
+        painter.setClipRect(timelineRect);
+        painter.setPen(QPen(QColor("#4A90E2"), 2));
+        painter.drawLine(cursorX, top, cursorX, top + h);
+        painter.restore();
+    }
 
     const int playheadX = secondToX(playheadSeconds_) - xOffset;
-    painter.setPen(QPen(QColor("#E84D4D"), 2));
-    painter.drawLine(playheadX, top - 1, playheadX, top + h);
+    if (playheadX > left) {
+        painter.save();
+        painter.setClipRect(timelineRect);
+        painter.setPen(QPen(QColor("#E84D4D"), 2));
+        painter.drawLine(playheadX, top, playheadX, top + h);
+        painter.restore();
+    }
 
     // Overlay the gutter last so timeline objects never bleed into the lane-number column.
     painter.fillRect(QRect(0, top - 1, left + 1, h + 2), QColor("#E8E8E8"));
+    painter.setFont(laneLabelFont);
     for (int lane = 0; lane < kLaneCount; ++lane) {
         const int y = top + lane * laneH;
-        painter.setPen(QColor("#D4D4D4"));
+        painter.setPen(QColor("#CCD6E2"));
         painter.drawLine(0, y + laneH, left, y + laneH);
-        painter.setPen(QColor("#666666"));
-        painter.drawText(4, y, left - 8, laneH, Qt::AlignRight | Qt::AlignVCenter, laneLabelForIndex(lane));
+        painter.setPen(QColor("#4D5C6D"));
+        painter.drawText(4, y + 1, left - 8, laneH - 1, Qt::AlignRight | Qt::AlignVCenter, laneLabelForIndex(lane));
     }
-    painter.setPen(QColor("#A0A0A0"));
+    painter.setPen(QColor("#A8B2BE"));
     painter.drawLine(left, top - 1, left, top + h);
+    painter.setPen(QColor("#C8D3E0"));
+    painter.drawRect(QRect(0, 0, viewport()->width() - 1, top + h));
 }
 
 void TimelineView::resizeEvent(QResizeEvent* event)
 {
     QAbstractScrollArea::resizeEvent(event);
     if (zoomButton_ != nullptr) {
-        zoomButton_->move(width() - zoomButton_->width() - 6, 0);
+        const int y = qMax(0, (timelineTop() - zoomButton_->height()) / 2);
+        const int x = qMax(4, (timelineLeft() - zoomButton_->width()) / 2);
+        zoomButton_->move(x, y);
     }
     updateHorizontalRange();
 }
@@ -558,6 +631,15 @@ void TimelineView::wheelEvent(QWheelEvent* event)
         return;
     }
     QAbstractScrollArea::wheelEvent(event);
+}
+
+void TimelineView::scrollContentsBy(int dx, int dy)
+{
+    Q_UNUSED(dx);
+    Q_UNUSED(dy);
+    // This view has fixed (non-scrolling) painted regions on the left/header.
+    // Force full repaint to avoid stale artifacts from scroll blit optimization.
+    viewport()->update();
 }
 
 void TimelineView::updateHorizontalRange()
@@ -657,7 +739,9 @@ void TimelineView::updateZoomButtonAppearance()
     zoomButton_->setToolTip(QString("Timeline zoom: %1x").arg(currentScale, 0, 'f', currentScale == qRound(currentScale) ? 0 : 2));
     zoomButton_->adjustSize();
     zoomButton_->setFixedHeight(24);
-    zoomButton_->move(width() - zoomButton_->width() - 4, 0);
+    const int y = qMax(0, (timelineTop() - zoomButton_->height()) / 2);
+    const int x = qMax(4, (timelineLeft() - zoomButton_->width()) / 2);
+    zoomButton_->move(x, y);
     if (auto* dock = qobject_cast<QDockWidget*>(parentWidget())) {
         dock->setWindowTitle(QString("Timeline - %1x").arg(currentScale, 0, 'f', currentScale == qRound(currentScale) ? 0 : 2));
     }
