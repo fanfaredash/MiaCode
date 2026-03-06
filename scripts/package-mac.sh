@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-build}"
 QT_ROOT="${QT_ROOT:-}"
+DEPLOYMENT_TARGET="${CMAKE_OSX_DEPLOYMENT_TARGET:-}"
 if [[ -z "$QT_ROOT" && -n "${QT_ROOT_DIR:-}" ]]; then
   QT_ROOT="$QT_ROOT_DIR"
 fi
@@ -23,6 +24,65 @@ parse_version() {
 
 VERSION="$(parse_version "$ROOT_DIR/CMakeLists.txt")"
 DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist/MiaCode-v${VERSION}-macos}"
+
+version_gt() {
+  local i
+  local lhs rhs
+  local lhs_parts=(${1//./ })
+  local rhs_parts=(${2//./ })
+  local limit=${#lhs_parts[@]}
+  if (( ${#rhs_parts[@]} > limit )); then
+    limit=${#rhs_parts[@]}
+  fi
+  for ((i=0; i<limit; i++)); do
+    lhs=${lhs_parts[i]:-0}
+    rhs=${rhs_parts[i]:-0}
+    if ((10#$lhs > 10#$rhs)); then
+      return 0
+    fi
+    if ((10#$lhs < 10#$rhs)); then
+      return 1
+    fi
+  done
+  return 1
+}
+
+extract_macos_minos() {
+  local binary_path="$1"
+  otool -l "$binary_path" | awk '
+    $1 == "cmd" && ($2 == "LC_BUILD_VERSION" || $2 == "LC_VERSION_MIN_MACOSX") {
+      cmd = $2
+      next
+    }
+    cmd == "LC_BUILD_VERSION" && $1 == "minos" {
+      print $2
+      exit
+    }
+    cmd == "LC_VERSION_MIN_MACOSX" && $1 == "version" {
+      print $2
+      exit
+    }
+  '
+}
+
+validate_minos() {
+  local binary_path="$1"
+  local expected_target="$2"
+  local actual_target
+  if [[ ! -f "$binary_path" ]]; then
+    echo "Missing binary for minOS validation: $binary_path" >&2
+    exit 1
+  fi
+  actual_target="$(extract_macos_minos "$binary_path")"
+  if [[ -z "$actual_target" ]]; then
+    echo "Failed to determine minimum macOS version for $binary_path" >&2
+    exit 1
+  fi
+  if version_gt "$actual_target" "$expected_target"; then
+    echo "Binary requires macOS $actual_target, which exceeds requested target $expected_target: $binary_path" >&2
+    exit 1
+  fi
+}
 
 if [[ -n "$QT_ROOT" ]]; then
   export PATH="$QT_ROOT/bin:$PATH"
@@ -44,6 +104,9 @@ cmake_args=(
   -B "$BUILD_DIR"
   -DCMAKE_BUILD_TYPE=Release
 )
+if [[ -n "$DEPLOYMENT_TARGET" ]]; then
+  cmake_args+=("-DCMAKE_OSX_DEPLOYMENT_TARGET=$DEPLOYMENT_TARGET")
+fi
 cmake "${cmake_args[@]}"
 cmake --build "$BUILD_DIR" --config Release
 
@@ -99,6 +162,11 @@ Included:
 EOF
 
 macdeployqt "$DIST_DIR/MiaCode.app" -always-overwrite
+
+if [[ -n "$DEPLOYMENT_TARGET" ]]; then
+  validate_minos "$DIST_DIR/MiaCode.app/Contents/MacOS/MiaCode" "$DEPLOYMENT_TARGET"
+  validate_minos "$DIST_DIR/MiaCode.app/Contents/Frameworks/QtCore.framework/Versions/A/QtCore" "$DEPLOYMENT_TARGET"
+fi
 
 ZIP_PATH="${DIST_DIR}.zip"
 rm -f "$ZIP_PATH"
