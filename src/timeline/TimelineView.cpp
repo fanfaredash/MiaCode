@@ -37,6 +37,11 @@ QString laneLabelForIndex(int laneIndex)
     }
     return QString();
 }
+
+bool hasTimelineNavigateModifier(Qt::KeyboardModifiers modifiers)
+{
+    return modifiers.testFlag(Qt::ControlModifier) || modifiers.testFlag(Qt::MetaModifier);
+}
 }  // namespace
 
 TimelineView::TimelineView(QWidget* parent)
@@ -637,21 +642,52 @@ void TimelineView::resizeEvent(QResizeEvent* event)
 
 void TimelineView::mousePressEvent(QMouseEvent* event)
 {
-    if (event != nullptr
-        && event->button() == Qt::LeftButton
-        && (event->modifiers() & Qt::ControlModifier)) {
-        const int top = timelineTop();
-        const int laneH = laneHeight();
-        const int laneIndex = (event->position().y() >= top)
-            ? static_cast<int>((event->position().y() - top) / laneH)
-            : -1;
-        const int lane = (laneIndex >= 0 && laneIndex < kLaneCount) ? (laneIndex + 1) : -1;
-        const double second = xToSecond(static_cast<int>(event->position().x()));
-        emit ctrlClickNavigateRequested(second, lane);
+    if (event == nullptr || event->button() != Qt::LeftButton) {
+        QAbstractScrollArea::mousePressEvent(event);
+        return;
+    }
+
+    const QRect timelineRect(timelineLeft(), timelineTop(), viewport()->width() - timelineLeft(), timelineHeight());
+    if (!timelineRect.contains(event->position().toPoint())) {
+        QAbstractScrollArea::mousePressEvent(event);
+        return;
+    }
+
+    if (hasTimelineNavigateModifier(event->modifiers())) {
+        if (const TimelineNoteMarker* note = nearestNoteForViewportPos(event->position())) {
+            emit noteNavigateRequested(note->sourceLine, note->sourceCol);
+        }
         event->accept();
         return;
     }
-    QAbstractScrollArea::mousePressEvent(event);
+
+    timelineDragActive_ = true;
+    timelineDragStartX_ = qRound(event->position().x());
+    timelineDragStartScrollValue_ = horizontalScrollBar()->value();
+    viewport()->setCursor(Qt::ClosedHandCursor);
+    event->accept();
+}
+
+void TimelineView::mouseMoveEvent(QMouseEvent* event)
+{
+    if (event != nullptr && timelineDragActive_) {
+        const int deltaX = qRound(event->position().x()) - timelineDragStartX_;
+        horizontalScrollBar()->setValue(timelineDragStartScrollValue_ - deltaX);
+        event->accept();
+        return;
+    }
+    QAbstractScrollArea::mouseMoveEvent(event);
+}
+
+void TimelineView::mouseReleaseEvent(QMouseEvent* event)
+{
+    if (event != nullptr && event->button() == Qt::LeftButton && timelineDragActive_) {
+        timelineDragActive_ = false;
+        viewport()->unsetCursor();
+        event->accept();
+        return;
+    }
+    QAbstractScrollArea::mouseReleaseEvent(event);
 }
 
 void TimelineView::wheelEvent(QWheelEvent* event)
@@ -946,4 +982,33 @@ void TimelineView::loadNoteIcons()
     if (!touchHoldComposite.isNull()) {
         noteIcons_.insert("touch_hold", touchHoldComposite);
     }
+}
+
+const TimelineNoteMarker* TimelineView::nearestNoteForViewportPos(const QPointF& pos) const
+{
+    const int xOffset = horizontalScrollBar()->value();
+    const int top = timelineTop();
+    const int laneH = laneHeight();
+    const QRect timelineRect(timelineLeft(), top, viewport()->width() - timelineLeft(), timelineHeight());
+    if (!timelineRect.contains(pos.toPoint())) {
+        return nullptr;
+    }
+
+    const TimelineNoteMarker* best = nullptr;
+    qreal bestDistanceSq = 0.0;
+    for (const TimelineNoteMarker& note : notes_) {
+        if (note.lane < 1 || note.lane > kLaneCount) {
+            continue;
+        }
+        const qreal noteX = secondToX(note.second) - xOffset;
+        const qreal noteY = top + (note.lane - 1) * laneH + (laneH / 2.0);
+        const qreal dx = noteX - pos.x();
+        const qreal dy = noteY - pos.y();
+        const qreal distanceSq = dx * dx + dy * dy;
+        if (best == nullptr || distanceSq < bestDistanceSq) {
+            best = &note;
+            bestDistanceSq = distanceSq;
+        }
+    }
+    return best;
 }

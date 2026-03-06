@@ -1629,7 +1629,10 @@ MainWindow::MainWindow(QWidget* parent)
     bottomTabs_ = new QTabWidget(central);
     timelineView_ = new TimelineView(bottomTabs_);
     timelineView_->setShowSlideTracks(true);
-    connect(timelineView_, &TimelineView::ctrlClickNavigateRequested, this, &MainWindow::jumpToNearestTimelineNote);
+    connect(timelineView_, &TimelineView::noteNavigateRequested, this, [this](int line, int col) {
+        jumpToLocation(line, col);
+        statusBar()->showMessage(QString("Timeline jump: nearest object -> L%1 C%2").arg(line).arg(col));
+    });
     bottomTabs_->addTab(timelineView_, uiText("tab.timeline", "Timeline"));
 
     connect(qobject_cast<PlainCodeEditor*>(editorWidget_), &QPlainTextEdit::textChanged, this, [this]() {
@@ -2340,7 +2343,7 @@ void MainWindow::updateEditorHeader()
         updateDifficultyDeleteButton(false);
         return;
     }
-    editorContextLabel_->setText(SimaiDocument::difficultyName(activeDifficultyId_));
+    editorContextLabel_->setText(SimaiDocument::difficultyShortName(activeDifficultyId_));
     editorContextLabel_->setFont(uiAccentFont(12, QFont::DemiBold));
     editorContextLabel_->setStyleSheet(QString());
     if (editorDifficultyControls_ != nullptr) {
@@ -2889,7 +2892,7 @@ void MainWindow::jumpToLocation(int line, int col)
     }
     QTextCursor cursor(editor->document());
     cursor.setPosition(block.position() + col - 1);
-    cursor.select(QTextCursor::LineUnderCursor);
+    cursor.clearSelection();
     editor->setTextCursor(cursor);
     editor->ensureCursorVisible();
     editor->setFocus();

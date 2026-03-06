@@ -88,12 +88,14 @@ public:
 
 signals:
     void playheadChanged(double second);
-    void ctrlClickNavigateRequested(double second, int lane);
+    void noteNavigateRequested(int line, int col);
 
 protected:
     bool viewportEvent(QEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void scrollContentsBy(int dx, int dy) override;
@@ -114,6 +116,7 @@ private:
     int lineNumberForSecond(double second) const;
     QPixmap iconForType(const QString& type) const;
     void loadNoteIcons();
+    const TimelineNoteMarker* nearestNoteForViewportPos(const QPointF& pos) const;
 
     QVector<TimelineBeatMarker> beats_;
     QVector<TimelineNoteMarker> notes_;
@@ -130,4 +133,7 @@ private:
     QToolButton* zoomButton_ = nullptr;
     QVector<double> zoomPresets_{0.25, 0.5, 1.0, 1.5, 2.0};
     int zoomPresetIndex_ = 2;
+    bool timelineDragActive_ = false;
+    int timelineDragStartX_ = 0;
+    int timelineDragStartScrollValue_ = 0;
 };

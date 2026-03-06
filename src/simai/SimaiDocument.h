@@ -37,6 +37,7 @@ public:
 
     static bool isDifficultyId(int id);
     static QString difficultyName(int id);
+    static QString difficultyShortName(int id);
 
     QString toText() const;
     QVector<int> difficultyIds() const;
