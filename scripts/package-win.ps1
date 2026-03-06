@@ -3,7 +3,8 @@ param(
     [string]$Config = "Release",
     [string]$QtRoot = "",
     [string]$BuildDir = "build",
-    [string]$DistDir = ""
+    [string]$DistDir = "",
+    [switch]$IncludeDevTools
 )
 
 $ErrorActionPreference = "Stop"
@@ -70,6 +71,15 @@ foreach ($runtimeDll in @("dxcompiler.dll", "dxil.dll")) {
     }
 }
 
+if ($IncludeDevTools) {
+    foreach ($toolName in @("simai_native_dump.exe", "soundtouch_probe.exe")) {
+        $toolPath = Join-Path $buildOutputDir $toolName
+        if (Test-Path $toolPath) {
+            Copy-Item $toolPath (Join-Path $DistDir $toolName) -Force
+        }
+    }
+}
+
 $assetsSrc = Join-Path $repoRoot "assets"
 if (Test-Path $assetsSrc) {
     $requiredSfxDir = Join-Path $assetsSrc "SFX"
@@ -99,7 +109,7 @@ foreach ($docFile in @("README.md", "README_EN.md")) {
     }
 }
 $releaseReadme = Join-Path $docsDir "RELEASE_README.txt"
-@(
+$releaseLines = @(
     "MiaCode release package"
     ""
     "Run:"
@@ -110,11 +120,21 @@ $releaseReadme = Join-Path $docsDir "RELEASE_README.txt"
     "  - Qt runtime DLLs and plugin folders"
     "  - assets/"
     "  - docs/"
-    ""
-    "Not included on purpose:"
-    "  - simai_native_dump.exe"
-    "  - soundtouch_probe.exe"
-) | Set-Content -Path $releaseReadme -Encoding UTF8
+)
+if ($IncludeDevTools) {
+    $releaseLines += @(
+        "  - simai_native_dump.exe"
+        "  - soundtouch_probe.exe"
+    )
+} else {
+    $releaseLines += @(
+        ""
+        "Not included on purpose:"
+        "  - simai_native_dump.exe"
+        "  - soundtouch_probe.exe"
+    )
+}
+$releaseLines | Set-Content -Path $releaseReadme -Encoding UTF8
 
 $zipPath = "$DistDir.zip"
 if (Test-Path $zipPath) {

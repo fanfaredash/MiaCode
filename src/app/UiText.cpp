@@ -1,18 +1,236 @@
 #include "UiText.h"
 
+#include <QCoreApplication>
+#include <QDir>
+#include <QFile>
 #include <QHash>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLocale>
+#include <QSaveFile>
+#include <QStandardPaths>
+#include <QStringList>
 
 namespace {
 
-bool useChineseUi()
+constexpr auto kPreferencesSchema = "miacode_preferences_v3";
+constexpr auto kUiSectionKey = "ui";
+constexpr auto kAppSectionKey = "app";
+constexpr auto kPreviewSectionKey = "preview";
+constexpr auto kLanguageKey = "language";
+
+QString preferencesPath()
 {
-    const QByteArray env = qgetenv("MIACODE_LANG").trimmed().toLower();
-    if (!env.isEmpty()) {
-        return env == "zh" || env == "zh-cn" || env == "zh_cn" || env == "cn";
+    const QDir appDir(QCoreApplication::applicationDirPath());
+    return appDir.filePath(".miacode_preferences.json");
+}
+
+QString legacyPreferencesFilePath()
+{
+    QString configRoot = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    if (configRoot.isEmpty()) {
+        return QString();
     }
-    const QString localeName = QLocale::system().name().toLower();
-    return localeName.startsWith("zh");
+    const QDir configDir(configRoot);
+    return configDir.filePath("preferences.json");
+}
+
+QJsonObject loadJsonObjectFromFile(const QString& path)
+{
+    QFile file(path);
+    if (!file.exists() || !file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QJsonObject();
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        return QJsonObject();
+    }
+    return doc.object();
+}
+
+bool saveJsonObjectToFile(const QString& path, const QJsonObject& root)
+{
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        return false;
+    }
+
+    const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Indented);
+    if (file.write(payload) != payload.size()) {
+        return false;
+    }
+    return file.commit();
+}
+
+QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
+{
+    QJsonObject normalized;
+    normalized.insert("schema", kPreferencesSchema);
+
+    QJsonObject ui = raw.value(kUiSectionKey).toObject();
+    if (!ui.contains(kLanguageKey) && raw.contains("ui_language")) {
+        ui.insert(kLanguageKey, raw.value("ui_language").toString("system"));
+    }
+    if (!ui.contains(kLanguageKey)) {
+        ui.insert(kLanguageKey, "system");
+    }
+    normalized.insert(kUiSectionKey, ui);
+
+    QJsonObject app = raw.value(kAppSectionKey).toObject();
+    if (raw.contains("last_open_dir")) {
+        app.insert("last_open_dir", raw.value("last_open_dir").toString());
+    }
+    if (raw.contains("last_track_path")) {
+        app.insert("last_track_path", raw.value("last_track_path").toString());
+    }
+    if (raw.contains("show_slide_tracks")) {
+        app.insert("show_slide_tracks", raw.value("show_slide_tracks").toBool(true));
+    }
+
+    QJsonObject preview = app.value(kPreviewSectionKey).toObject();
+    if (raw.contains("show_judge_markers")) {
+        preview.insert("show_judge_markers", raw.value("show_judge_markers").toBool(false));
+    }
+    if (raw.contains("show_touch_trail")) {
+        preview.insert("show_touch_trail", raw.value("show_touch_trail").toBool(false));
+    }
+    if (raw.contains("preview_background_brightness")) {
+        preview.insert("background_brightness", raw.value("preview_background_brightness").toDouble(0.2));
+    }
+    if (raw.contains("preview_show_debug_info")) {
+        preview.insert("show_debug_info", raw.value("preview_show_debug_info").toBool(false));
+    }
+    if (raw.contains("preview_audio") && raw.value("preview_audio").isObject()) {
+        preview.insert("audio", raw.value("preview_audio").toObject());
+    }
+    if (raw.contains("bgm_volume") || raw.contains("sfx_volume") || raw.contains("answer_volume")) {
+        QJsonObject audio = preview.value("audio").toObject();
+        if (raw.contains("bgm_volume")) {
+            audio.insert("bgm_volume", raw.value("bgm_volume").toDouble());
+        }
+        if (raw.contains("answer_volume")) {
+            audio.insert("answer_volume", raw.value("answer_volume").toDouble(raw.value("sfx_volume").toDouble()));
+        }
+        if (raw.contains("slide_volume")) {
+            audio.insert("slide_volume", raw.value("slide_volume").toDouble(raw.value("sfx_volume").toDouble()));
+        }
+        if (raw.contains("break_volume")) {
+            audio.insert("break_volume", raw.value("break_volume").toDouble(raw.value("sfx_volume").toDouble()));
+        }
+        if (raw.contains("ex_volume")) {
+            audio.insert("ex_volume", raw.value("ex_volume").toDouble(raw.value("sfx_volume").toDouble()));
+        }
+        if (raw.contains("touch_volume")) {
+            audio.insert("touch_volume", raw.value("touch_volume").toDouble(raw.value("sfx_volume").toDouble()));
+        }
+        if (raw.contains("touchhold_volume")) {
+            audio.insert("touchhold_volume", raw.value("touchhold_volume").toDouble(raw.value("sfx_volume").toDouble()));
+        }
+        preview.insert("audio", audio);
+    }
+
+    if (!preview.isEmpty()) {
+        app.insert(kPreviewSectionKey, preview);
+    }
+    normalized.insert(kAppSectionKey, app);
+    return normalized;
+}
+
+QString normalizedLanguageToken(QString token)
+{
+    token = token.trimmed().toLower();
+    token.replace('-', '_');
+    return token;
+}
+
+UiText::LanguagePreference parseLanguagePreference(const QString& raw)
+{
+    const QString token = normalizedLanguageToken(raw);
+    if (token == "zh" || token == "zh_cn" || token == "zh_hans" || token == "zh_hans_cn" || token == "cn") {
+        return UiText::LanguagePreference::Chinese;
+    }
+    if (token == "en" || token == "en_us" || token == "en_gb") {
+        return UiText::LanguagePreference::English;
+    }
+    return UiText::LanguagePreference::System;
+}
+
+QString languagePreferenceToken(UiText::LanguagePreference preference)
+{
+    switch (preference) {
+    case UiText::LanguagePreference::English:
+        return "en";
+    case UiText::LanguagePreference::Chinese:
+        return "zh";
+    case UiText::LanguagePreference::System:
+    default:
+        return "system";
+    }
+}
+
+UiText::LanguagePreference loadStoredLanguagePreference()
+{
+    const bool hasMergedPreferences = QFile::exists(preferencesPath());
+    const QJsonObject root = UiText::loadPreferencesObject();
+    if (!hasMergedPreferences) {
+        UiText::savePreferencesObject(root);
+    }
+
+    return parseLanguagePreference(root.value(kUiSectionKey).toObject().value(kLanguageKey).toString("system"));
+}
+
+void saveStoredLanguagePreference(UiText::LanguagePreference preference)
+{
+    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject ui = root.value(kUiSectionKey).toObject();
+    ui.insert(kLanguageKey, languagePreferenceToken(preference));
+    root.insert(kUiSectionKey, ui);
+    root.insert("schema", kPreferencesSchema);
+    UiText::savePreferencesObject(root);
+}
+
+bool languageListPrefersChinese(const QStringList& languages)
+{
+    for (const QString& language : languages) {
+        const QString token = normalizedLanguageToken(language);
+        if (token.startsWith("zh")) {
+            return true;
+        }
+        if (token.startsWith("en")) {
+            return false;
+        }
+    }
+    return false;
+}
+
+UiText::LanguagePreference resolvedLanguagePreference()
+{
+    const QByteArray env = qgetenv("MIACODE_LANG").trimmed();
+    if (!env.isEmpty()) {
+        const UiText::LanguagePreference envPreference = parseLanguagePreference(QString::fromUtf8(env));
+        if (envPreference != UiText::LanguagePreference::System) {
+            return envPreference;
+        }
+    }
+
+    const UiText::LanguagePreference storedPreference = UiText::preferredLanguage();
+    if (storedPreference != UiText::LanguagePreference::System) {
+        return storedPreference;
+    }
+
+    const QStringList uiLanguages = QLocale::system().uiLanguages();
+    if (languageListPrefersChinese(uiLanguages)) {
+        return UiText::LanguagePreference::Chinese;
+    }
+
+    const QString localeName = normalizedLanguageToken(QLocale::system().name());
+    if (localeName.startsWith("zh")) {
+        return UiText::LanguagePreference::Chinese;
+    }
+
+    return UiText::LanguagePreference::English;
 }
 
 const QHash<QString, QString>& zhMap()
@@ -27,6 +245,7 @@ const QHash<QString, QString>& zhMap()
         {"action.open", "打开"},
         {"action.save", "保存"},
         {"action.save_as", "另存为"},
+        {"action.preferences", "首选项..."},
         {"action.about", "关于"},
         {"action.validate", "校验 Simai"},
         {"action.stop_preview", "停止预览"},
@@ -61,6 +280,17 @@ const QHash<QString, QString>& zhMap()
         {"tab.timeline", "时间轴"},
         {"tab.validation_errors", "校验错误"},
 
+        {"dialog.preferences.title", "首选项"},
+        {"dialog.preferences.interface_group", "界面"},
+        {"dialog.preferences.language", "语言"},
+        {"dialog.preferences.language.system", "跟随系统"},
+        {"dialog.preferences.language.english", "English"},
+        {"dialog.preferences.language.chinese", "简体中文"},
+        {"dialog.preferences.editor_group", "编辑器"},
+        {"dialog.preferences.editor_placeholder", "后续会在这里加入文本框字体大小与字体类型设置。"},
+        {"dialog.preferences.restart_title", "需要重启"},
+        {"dialog.preferences.restart_message", "语言设置已保存。请重启 MiaCode 以应用菜单、字体和界面文本。"},
+
         {"dialog.render_settings.title", "渲染设置"},
         {"dialog.render_settings.audio_group", "音频"},
         {"dialog.render_settings.video_group", "视频"},
@@ -81,18 +311,58 @@ const QHash<QString, QString>& zhMap()
         {"status.touch_trail_disabled", "Touch 轨迹已关闭"},
         {"status.judge_marker_enabled", "判定标记已开启"},
         {"status.judge_marker_disabled", "判定标记已隐藏"},
+        {"status.preferences_saved", "首选项已保存，重启后生效。"},
     };
     return map;
+}
+
+UiText::LanguagePreference& preferredLanguageStorage()
+{
+    static UiText::LanguagePreference preference = loadStoredLanguagePreference();
+    return preference;
 }
 
 }  // namespace
 
 namespace UiText {
 
+LanguagePreference preferredLanguage()
+{
+    return preferredLanguageStorage();
+}
+
+void setPreferredLanguage(LanguagePreference preference)
+{
+    preferredLanguageStorage() = preference;
+    saveStoredLanguagePreference(preference);
+}
+
 bool isChineseUi()
 {
-    static const bool isZh = useChineseUi();
-    return isZh;
+    return resolvedLanguagePreference() == LanguagePreference::Chinese;
+}
+
+QString preferencesFilePath()
+{
+    return preferencesPath();
+}
+
+QJsonObject loadPreferencesObject()
+{
+    const QJsonObject primary = loadJsonObjectFromFile(preferencesPath());
+    if (!primary.isEmpty()) {
+        return normalizedPreferencesRoot(primary);
+    }
+    const QJsonObject legacy = loadJsonObjectFromFile(legacyPreferencesFilePath());
+    if (!legacy.isEmpty()) {
+        return normalizedPreferencesRoot(legacy);
+    }
+    return normalizedPreferencesRoot(QJsonObject());
+}
+
+bool savePreferencesObject(const QJsonObject& root)
+{
+    return saveJsonObjectToFile(preferencesPath(), normalizedPreferencesRoot(root));
 }
 
 QString text(const QString& key)

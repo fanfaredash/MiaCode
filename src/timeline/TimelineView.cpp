@@ -50,7 +50,7 @@ TimelineView::TimelineView(QWidget* parent)
     setAttribute(Qt::WA_OpaquePaintEvent, true);
     setMinimumHeight(kHeaderHeight + kTimelineTopMargin + (kLaneCount * kLaneHeight) + 10);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setMouseTracking(true);
     viewport()->setAttribute(Qt::WA_OpaquePaintEvent, true);
     viewport()->setAutoFillBackground(false);
@@ -74,33 +74,6 @@ TimelineView::TimelineView(QWidget* parent)
         "}"
         "QToolButton:hover { background: #F1F6FC; border-color: #89A7CB; }"
         "QToolButton:pressed { background: #E5EFFA; }"
-    );
-    horizontalScrollBar()->setStyleSheet(
-        "QScrollBar:horizontal {"
-        " background: #F4F7FB;"
-        " height: 14px;"
-        " margin: 2px 4px 2px 4px;"
-        " border: 1px solid #D1DDEA;"
-        " border-radius: 7px;"
-        "}"
-        "QScrollBar::handle:horizontal {"
-        " background: #9AB2CC;"
-        " min-width: 42px;"
-        " border-radius: 6px;"
-        "}"
-        "QScrollBar::handle:horizontal:hover { background: #7F9FBE; }"
-        "QScrollBar::sub-line:horizontal, QScrollBar::add-line:horizontal {"
-        " width: 20px;"
-        " border: none;"
-        " background: transparent;"
-        "}"
-        "QScrollBar::left-arrow:horizontal, QScrollBar::right-arrow:horizontal {"
-        " width: 0px;"
-        " height: 0px;"
-        "}"
-        "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {"
-        " background: transparent;"
-        "}"
     );
     connect(zoomButton_, &QToolButton::clicked, this, [this]() { cycleZoomPreset(); });
     updateZoomButtonAppearance();

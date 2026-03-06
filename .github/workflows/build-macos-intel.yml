@@ -1,6 +1,9 @@
 name: Build Release Package (macOS Intel)
 
 on:
+  push:
+    branches:
+      - dev
   workflow_dispatch:
 
 jobs:

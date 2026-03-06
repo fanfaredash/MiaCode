@@ -70,7 +70,6 @@ constexpr qreal kAngleWrapOffset = 540.0;
 constexpr qreal kAngleWrapCycle = 360.0;
 constexpr qreal kAngleWrapCenter = 180.0;
 constexpr bool kEnablePreviewCaches = true;
-constexpr qreal kLegacyOutlineToCanvasRatio = 490.0 / 540.0;
 constexpr int kGuideTransformCacheLimit = 256;
 constexpr int kSpriteTransformCacheLimit = 512;
 constexpr int kGuideTransformSizeStep = 2;
@@ -1360,14 +1359,15 @@ void PreviewCanvas::drawStageBackground(QPainter& painter, const QRectF& stageRe
 
     if (!mediaSize.isEmpty()) {
         QSize fittedSize = mediaSize;
-        const QRectF playfieldRect = stagePlayfieldRect(stageRect);
-        const qreal mediaSquareSide = qMax<qreal>(1.0, playfieldRect.width() * kLegacyOutlineToCanvasRatio);
-        const QSize mediaBounds(qRound(mediaSquareSide), qRound(mediaSquareSide));
-        fittedSize.scale(mediaBounds, Qt::KeepAspectRatio);
+        const QSize mediaBounds(
+            qMax(1, qRound(stageRect.width())),
+            qMax(1, qRound(stageRect.height()))
+        );
+        fittedSize.scale(mediaBounds, Qt::KeepAspectRatioByExpanding);
         if (!fittedSize.isEmpty()) {
             const QRectF targetRect(
-                playfieldRect.center().x() - fittedSize.width() / 2.0,
-                playfieldRect.center().y() - fittedSize.height() / 2.0,
+                stageRect.center().x() - fittedSize.width() / 2.0,
+                stageRect.center().y() - fittedSize.height() / 2.0,
                 fittedSize.width(),
                 fittedSize.height()
             );
@@ -1530,20 +1530,23 @@ void PreviewCanvas::drawTapLayer(QPainter& painter, const QRectF& playfieldRect)
 void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
 {
     painter.setPen(QColor("#D9E2EC"));
-    QFont timeFont = hudMonoFont(18, QFont::DemiBold);
+    const qreal hudPadding = qBound<qreal>(10.0, stageRect.width() * 0.028, 18.0);
+    const int timeFontPointSize = qBound(12, qRound(stageRect.width() * 0.03), 20);
+    const int debugFontPointSize = qBound(8, qRound(stageRect.width() * 0.019), 13);
+    QFont timeFont = hudMonoFont(timeFontPointSize, QFont::DemiBold);
     if (!showDebugInfo_) {
         painter.setFont(timeFont);
         painter.drawText(
-            QPointF(stageRect.left() + 18.0, stageRect.bottom() - 18.0),
+            QPointF(stageRect.left() + hudPadding, stageRect.bottom() - hudPadding),
             formatHudTimeLabel(playheadSeconds_)
         );
         return;
     }
-    QFont fpsFont = hudMonoFont(11, QFont::Medium);
+    QFont fpsFont = hudMonoFont(debugFontPointSize, QFont::Medium);
     painter.setFont(fpsFont);
     const QFontMetrics metrics(fpsFont);
-    const qreal leftX = stageRect.left() + 18.0;
-    const qreal baseline0 = stageRect.top() + 18.0 + metrics.ascent();
+    const qreal leftX = stageRect.left() + hudPadding;
+    const qreal baseline0 = stageRect.top() + hudPadding + metrics.ascent();
     const QString rendererLabel = usedGpuRendererThisFrame_ ? "Renderer: GPU" : "Renderer: CPU";
     painter.drawText(
         QPointF(leftX, baseline0),
@@ -1561,7 +1564,7 @@ void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
 
     painter.setFont(timeFont);
     painter.drawText(
-        QPointF(stageRect.left() + 18.0, stageRect.bottom() - 18.0),
+        QPointF(stageRect.left() + hudPadding, stageRect.bottom() - hudPadding),
         formatHudTimeLabel(playheadSeconds_)
     );
 }

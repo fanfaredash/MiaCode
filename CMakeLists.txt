@@ -20,6 +20,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 set(MIACODE_APP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/app.ico" CACHE FILEPATH "Optional application icon (.ico) for Windows builds")
+option(MIACODE_BUILD_DEV_TOOLS "Build developer helper tools" OFF)
 
 configure_file(
     src/app/AppVersion.h.in
@@ -29,7 +30,7 @@ configure_file(
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets Concurrent Multimedia)
 
-add_executable(miacode WIN32 MACOSX_BUNDLE
+add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
     src/app/MainWindow.h
     src/app/MainWindow.cpp
@@ -57,8 +58,7 @@ add_executable(miacode WIN32 MACOSX_BUNDLE
     src/timeline/TimelineView.cpp
     resources/fonts.qrc
 )
-set_target_properties(miacode PROPERTIES
-    OUTPUT_NAME "MiaCode"
+set_target_properties(MiaCode PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "MiaCode"
 )
 
@@ -66,27 +66,8 @@ if (WIN32 AND EXISTS "${MIACODE_APP_ICON}")
     file(TO_NATIVE_PATH "${MIACODE_APP_ICON}" MIACODE_APP_ICON_NATIVE)
     set(MIACODE_APP_RC "${CMAKE_CURRENT_BINARY_DIR}/generated/miacode_app_icon.rc")
     file(WRITE "${MIACODE_APP_RC}" "IDI_APP_ICON ICON \"${MIACODE_APP_ICON_NATIVE}\"\n")
-    target_sources(miacode PRIVATE "${MIACODE_APP_RC}")
+    target_sources(MiaCode PRIVATE "${MIACODE_APP_RC}")
 endif()
-
-add_executable(simai_native_dump
-    src/simai/SimaiNativeDump.cpp
-    src/simai/SimaiNativeParser.h
-    src/simai/SimaiNativeParser.cpp
-    src/timeline/TimelineView.h
-    src/timeline/TimelineView.cpp
-    resources/fonts.qrc
-)
-
-add_executable(soundtouch_probe
-    src/tools/SoundtouchProbe.cpp
-    src/preview/PreviewAudioSettings.h
-    src/preview/PreviewAudioSettings.cpp
-    src/preview/QtPreviewSfxRuntime.h
-    src/preview/QtPreviewSfxRuntime.cpp
-    src/timeline/TimelineView.h
-    src/timeline/TimelineView.cpp
-)
 
 add_library(soundtouch STATIC
     third_party/soundtouch/source/SoundTouch/AAFilter.cpp
@@ -110,7 +91,7 @@ target_include_directories(soundtouch PUBLIC
 )
 target_compile_definitions(soundtouch PUBLIC SOUNDTOUCH_FLOAT_SAMPLES=1)
 
-target_link_libraries(miacode PRIVATE
+target_link_libraries(MiaCode PRIVATE
     Qt6::Concurrent
     Qt6::Core
     Qt6::Gui
@@ -118,7 +99,7 @@ target_link_libraries(miacode PRIVATE
     Qt6::Widgets
     soundtouch
 )
-target_include_directories(miacode PRIVATE
+target_include_directories(MiaCode PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/generated
     src
     src/app
@@ -128,33 +109,54 @@ target_include_directories(miacode PRIVATE
     src/timeline
 )
 
-target_link_libraries(simai_native_dump PRIVATE
-    Qt6::Core
-    Qt6::Gui
-    Qt6::Widgets
-)
-target_include_directories(simai_native_dump PRIVATE
-    src
-    src/simai
-    src/timeline
-)
+target_link_libraries(MiaCode PRIVATE Qt6::Multimedia)
+target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
 
-target_link_libraries(soundtouch_probe PRIVATE
-    Qt6::Concurrent
-    Qt6::Core
-    Qt6::Gui
-    Qt6::Widgets
-    soundtouch
-)
-target_include_directories(soundtouch_probe PRIVATE
-    src
-    src/preview
-    src/timeline
-    src/tools
-)
+if (MIACODE_BUILD_DEV_TOOLS)
+    add_executable(simai_native_dump
+        src/simai/SimaiNativeDump.cpp
+        src/simai/SimaiNativeParser.h
+        src/simai/SimaiNativeParser.cpp
+        src/timeline/TimelineView.h
+        src/timeline/TimelineView.cpp
+        resources/fonts.qrc
+    )
 
-target_link_libraries(miacode PRIVATE Qt6::Multimedia)
-target_compile_definitions(miacode PRIVATE HAVE_QT_MULTIMEDIA=1)
+    add_executable(soundtouch_probe
+        src/tools/SoundtouchProbe.cpp
+        src/preview/PreviewAudioSettings.h
+        src/preview/PreviewAudioSettings.cpp
+        src/preview/QtPreviewSfxRuntime.h
+        src/preview/QtPreviewSfxRuntime.cpp
+        src/timeline/TimelineView.h
+        src/timeline/TimelineView.cpp
+    )
+
+    target_link_libraries(simai_native_dump PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+    )
+    target_include_directories(simai_native_dump PRIVATE
+        src
+        src/simai
+        src/timeline
+    )
+
+    target_link_libraries(soundtouch_probe PRIVATE
+        Qt6::Concurrent
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+        soundtouch
+    )
+    target_include_directories(soundtouch_probe PRIVATE
+        src
+        src/preview
+        src/timeline
+        src/tools
+    )
+endif()
 
 if (WIN32)
     get_target_property(QT_QMAKE_EXECUTABLE Qt6::qmake IMPORTED_LOCATION)
@@ -162,12 +164,12 @@ if (WIN32)
     find_program(WINDEPLOYQT_EXECUTABLE NAMES windeployqt HINTS "${QT_BIN_DIR}")
 
     if (WINDEPLOYQT_EXECUTABLE)
-        add_custom_command(TARGET miacode POST_BUILD
+        add_custom_command(TARGET MiaCode POST_BUILD
             COMMAND "${WINDEPLOYQT_EXECUTABLE}"
                 "$<$<CONFIG:Debug>:--debug>$<$<NOT:$<CONFIG:Debug>>:--release>"
                 --compiler-runtime
                 --no-translations
-                "$<TARGET_FILE:miacode>"
+                "$<TARGET_FILE:MiaCode>"
             COMMENT "Deploying Qt runtime next to MiaCode.exe"
             VERBATIM
         )

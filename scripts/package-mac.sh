@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-build}"
 QT_ROOT="${QT_ROOT:-}"
 DEPLOYMENT_TARGET="${CMAKE_OSX_DEPLOYMENT_TARGET:-}"
+BUILD_DEV_TOOLS="${MIACODE_BUILD_DEV_TOOLS:-OFF}"
 MACOS_CODESIGN_IDENTITY="${MACOS_CODESIGN_IDENTITY:--}"
 if [[ -z "$QT_ROOT" && -n "${QT_ROOT_DIR:-}" ]]; then
   QT_ROOT="$QT_ROOT_DIR"
@@ -104,12 +105,19 @@ cmake_args=(
   -S "$ROOT_DIR"
   -B "$BUILD_DIR"
   -DCMAKE_BUILD_TYPE=Release
+  "-DMIACODE_BUILD_DEV_TOOLS=$BUILD_DEV_TOOLS"
 )
 if [[ -n "$DEPLOYMENT_TARGET" ]]; then
   cmake_args+=("-DCMAKE_OSX_DEPLOYMENT_TARGET=$DEPLOYMENT_TARGET")
 fi
 cmake "${cmake_args[@]}"
-cmake --build "$BUILD_DIR" --config Release
+build_args=(--build "$BUILD_DIR" --config Release)
+if [[ "$BUILD_DEV_TOOLS" == "ON" ]]; then
+  build_args+=(--target MiaCode simai_native_dump soundtouch_probe)
+else
+  build_args+=(--target MiaCode)
+fi
+cmake "${build_args[@]}"
 
 APP_PATH="$BUILD_DIR/MiaCode.app"
 if [[ ! -d "$APP_PATH" ]]; then
@@ -123,6 +131,18 @@ fi
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR/docs"
 cp -R "$APP_PATH" "$DIST_DIR/"
+
+if [[ "$BUILD_DEV_TOOLS" == "ON" ]]; then
+  for helper_bin in simai_native_dump soundtouch_probe; do
+    helper_path="$BUILD_DIR/$helper_bin"
+    if [[ ! -f "$helper_path" && -f "$BUILD_DIR/Release/$helper_bin" ]]; then
+      helper_path="$BUILD_DIR/Release/$helper_bin"
+    fi
+    if [[ -f "$helper_path" ]]; then
+      cp "$helper_path" "$DIST_DIR/$helper_bin"
+    fi
+  done
+fi
 
 if [[ -d "$ROOT_DIR/assets" ]]; then
   required_sfx_dir="$ROOT_DIR/assets/SFX"
@@ -161,6 +181,20 @@ Included:
   - assets/
   - docs/
 EOF
+
+if [[ "$BUILD_DEV_TOOLS" != "ON" ]]; then
+  cat >>"$DIST_DIR/docs/RELEASE_README.txt" <<'EOF'
+
+Not included on purpose:
+  - simai_native_dump
+  - soundtouch_probe
+EOF
+else
+  cat >>"$DIST_DIR/docs/RELEASE_README.txt" <<'EOF'
+  - simai_native_dump
+  - soundtouch_probe
+EOF
+fi
 
 macdeployqt "$DIST_DIR/MiaCode.app" -always-overwrite
 
