@@ -58,6 +58,7 @@
 #include <QSaveFile>
 #include <QSignalBlocker>
 #include <QSlider>
+#include <QSplitter>
 #include <QScreen>
 #include <QScrollBar>
 #include <QStackedWidget>
@@ -78,6 +79,7 @@
 #include <QTextEdit>
 #include <QTextOption>
 #include <QToolBar>
+#include <QWidgetAction>
 #include <QToolTip>
 #include <QtMath>
 #ifdef HAVE_QT_MULTIMEDIA
@@ -144,6 +146,23 @@ QString uiText(const QString& key, const QString& fallback)
 
 QFont editorFont()
 {
+#ifdef Q_OS_MACOS
+    QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    if (!QFontInfo(font).fixedPitch()) {
+        for (const QString& family : QStringList{"SF Mono", "Menlo", "Monaco", "Noto Sans Mono", "JetBrains Mono"}) {
+            font.setFamily(family);
+            if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0 && QFontInfo(font).fixedPitch()) {
+                break;
+            }
+        }
+    }
+    font.setStyleHint(QFont::Monospace);
+    font.setFixedPitch(true);
+    font.setPointSize(13);
+    font.setStyleStrategy(QFont::PreferAntialias);
+    font.setHintingPreference(QFont::PreferNoHinting);
+    return font;
+#else
     static const QString embeddedConsolasFamily = []() -> QString {
         const int fontId = QFontDatabase::addApplicationFont(":/fonts/consola.ttf");
         if (fontId < 0) {
@@ -169,10 +188,18 @@ QFont editorFont()
     font.setFixedPitch(true);
     font.setPointSize(11);
     return font;
+#endif
 }
 
 QFont uiOutputFont()
 {
+#ifdef Q_OS_MACOS
+    QFont font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
+    font.setPointSize(12);
+    font.setStyleStrategy(QFont::PreferAntialias);
+    font.setHintingPreference(QFont::PreferNoHinting);
+    return font;
+#else
     QFont font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
     if (UiText::isChineseUi()) {
         for (const QString& family : QStringList{"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC"}) {
@@ -186,10 +213,27 @@ QFont uiOutputFont()
     font.setHintingPreference(QFont::PreferNoHinting);
     font.setPointSize(11);
     return font;
+#endif
 }
 
 QFont uiAccentFont(int pointSize, QFont::Weight weight = QFont::Medium)
 {
+#ifdef Q_OS_MACOS
+    QFont font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
+    if (UiText::isChineseUi()) {
+        for (const QString& family : QStringList{"PingFang SC", "Hiragino Sans GB"}) {
+            font.setFamily(family);
+            if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0) {
+                break;
+            }
+        }
+    }
+    font.setPointSize(pointSize + ((pointSize <= 11) ? 1 : 0));
+    font.setWeight(weight);
+    font.setStyleStrategy(QFont::PreferAntialias);
+    font.setHintingPreference(QFont::PreferNoHinting);
+    return font;
+#else
     QFont font;
     QStringList familyCandidates;
     if (UiText::isChineseUi()) {
@@ -210,10 +254,29 @@ QFont uiAccentFont(int pointSize, QFont::Weight weight = QFont::Medium)
     font.setStyleStrategy(QFont::PreferAntialias);
     font.setHintingPreference(QFont::PreferNoHinting);
     return font;
+#endif
 }
 
 QFont uiMonoFont(int pointSize, QFont::Weight weight = QFont::Medium)
 {
+#ifdef Q_OS_MACOS
+    QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    if (!QFontInfo(font).fixedPitch()) {
+        for (const QString& family : QStringList{"SF Mono", "Menlo", "Monaco", "Noto Sans Mono", "JetBrains Mono"}) {
+            font.setFamily(family);
+            if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0 && QFontInfo(font).fixedPitch()) {
+                break;
+            }
+        }
+    }
+    font.setPointSize(pointSize + 1);
+    font.setWeight(weight);
+    font.setStyleHint(QFont::Monospace);
+    font.setFixedPitch(true);
+    font.setStyleStrategy(QFont::PreferAntialias);
+    font.setHintingPreference(QFont::PreferNoHinting);
+    return font;
+#else
     QFont font;
     for (const QString& family : QStringList{"Cascadia Mono", "JetBrains Mono", "Cascadia Code", "Consolas"}) {
         font.setFamily(family);
@@ -229,6 +292,7 @@ QFont uiMonoFont(int pointSize, QFont::Weight weight = QFont::Medium)
     font.setStyleHint(QFont::Monospace);
     font.setFixedPitch(true);
     return font;
+#endif
 }
 
 QProcessEnvironment pythonProcessEnvironment()
@@ -424,14 +488,14 @@ QPixmap makeDifficultyBadgePixmap(int difficultyId)
 {
     const QColor fill = difficultyColor(difficultyId);
     const qreal dpr = qApp != nullptr ? qApp->devicePixelRatio() : 1.0;
-    QImage image(static_cast<int>(18 * dpr), static_cast<int>(14 * dpr), QImage::Format_ARGB32_Premultiplied);
+    QImage image(static_cast<int>(14 * dpr), static_cast<int>(14 * dpr), QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::transparent);
     QPainter painter(&image);
-    painter.setRenderHint(QPainter::Antialiasing, false);
+    painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setPen(Qt::NoPen);
     painter.setBrush(fill);
     painter.setCompositionMode(QPainter::CompositionMode_Source);
-    painter.drawRoundedRect(QRectF(5.0 * dpr, 1.0 * dpr, 10.0 * dpr, 10.0 * dpr), 2.0 * dpr, 2.0 * dpr);
+    painter.drawRoundedRect(QRectF(2.0 * dpr, 2.0 * dpr, 10.0 * dpr, 10.0 * dpr), 3.0 * dpr, 3.0 * dpr);
     painter.end();
     QPixmap pixmap = QPixmap::fromImage(image);
     pixmap.setDevicePixelRatio(dpr);
@@ -1016,13 +1080,18 @@ MainWindow::MainWindow(QWidget* parent)
     logStartupStage("menus_and_actions_ready");
 
     auto* editor = new PlainCodeEditor(this);
-    editor->setFont(editorFont());
+    const QFont codeFont = editorFont();
+    editor->setFont(codeFont);
     editor->setLineWrapMode(QPlainTextEdit::WidgetWidth);
     editor->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     editor->setPlainText(QString());
+#ifdef Q_OS_MACOS
+    editor->setBlockSpacingPixels(2);
+#else
     editor->setBlockSpacingPixels(1);
+#endif
     editorWidget_ = editor;
-    editorWidget_->setFont(editorFont());
+    editorWidget_->setFont(codeFont);
     editorWidget_->setStyleSheet(
         "border: none;"
         "background: #FFFFFF;"
@@ -1081,8 +1150,9 @@ MainWindow::MainWindow(QWidget* parent)
     editorContextLabel_ = new QLabel(uiText("editor.metadata", "Metadata"), editorHeader);
     editorContextLabel_->setObjectName("EditorContext");
     editorContextLabel_->setFont(uiAccentFont(12));
-    editorContextLabel_->setMinimumWidth(120);
-    editorHeaderLayout->addWidget(editorContextLabel_, 0);
+    editorContextLabel_->setMinimumWidth(0);
+    editorContextLabel_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    editorHeaderLayout->addWidget(editorContextLabel_, 1);
 
     editorBatchTransformControls_ = new QWidget(editorHeader);
     editorBatchTransformControls_->setObjectName("EditorBatchTransformControls");
@@ -1120,22 +1190,23 @@ MainWindow::MainWindow(QWidget* parent)
     difficultyLevelLabel->setFont(uiAccentFont(10));
     difficultyLevelEdit_ = new QLineEdit(editorDifficultyControls_);
     difficultyLevelEdit_->setPlaceholderText("&lv_n=");
-    difficultyLevelEdit_->setMinimumWidth(72);
-    difficultyLevelEdit_->setMaximumWidth(96);
-    difficultyLevelEdit_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    difficultyLevelEdit_->setMinimumWidth(0);
+    difficultyLevelEdit_->setMaximumWidth(72);
+    difficultyLevelEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     auto* difficultyDesignerLabel = new QLabel(uiText("editor.des", "Des"), editorDifficultyControls_);
     difficultyDesignerLabel->setFont(uiAccentFont(10));
     difficultyDesignerEdit_ = new QLineEdit(editorDifficultyControls_);
     difficultyDesignerEdit_->setPlaceholderText("&des_n=");
-    difficultyDesignerEdit_->setMinimumWidth(160);
-    difficultyDesignerEdit_->setMaximumWidth(300);
-    difficultyDesignerEdit_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    difficultyDesignerEdit_->setMinimumWidth(0);
+    difficultyDesignerEdit_->setMaximumWidth(140);
+    difficultyDesignerEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     editorDifficultyLayout->addWidget(difficultyLevelLabel);
     editorDifficultyLayout->addWidget(difficultyLevelEdit_);
     editorDifficultyLayout->addWidget(difficultyDesignerLabel);
-    editorDifficultyLayout->addWidget(difficultyDesignerEdit_);
+    editorDifficultyLayout->addWidget(difficultyDesignerEdit_, 1);
     editorDifficultyLayout->addSpacing(10);
     editorDifficultyLayout->addWidget(editorBatchTransformControls_);
+    editorDifficultyControls_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     editorDifficultyControls_->hide();
     editorHeaderLayout->addWidget(editorDifficultyControls_, 0);
 
@@ -1144,7 +1215,7 @@ MainWindow::MainWindow(QWidget* parent)
     editorCursorLabel_ = new QLabel("Ln 1, Col 1", editorHeader);
     editorCursorLabel_->setObjectName("EditorMeta");
     editorCursorLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    editorCursorLabel_->setMinimumWidth(92);
+    editorCursorLabel_->setMinimumWidth(0);
     editorCursorLabel_->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
     editorHeaderLayout->addWidget(editorCursorLabel_, 0, Qt::AlignRight);
     centralLayout->addWidget(editorHeader, 0);
@@ -1259,7 +1330,7 @@ MainWindow::MainWindow(QWidget* parent)
     outlineDock->setTitleBarWidget(outlineTitle);
     outlineList_ = new QListWidget(outlineDock);
     outlineList_->setUniformItemSizes(true);
-    outlineList_->setIconSize(QSize(18, 14));
+    outlineList_->setIconSize(QSize(14, 14));
     outlineList_->setSpacing(2);
     outlineList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     outlineList_->setTextElideMode(Qt::ElideRight);
@@ -1331,8 +1402,34 @@ MainWindow::MainWindow(QWidget* parent)
                 if (document_.difficulty(id) != nullptr) {
                     continue;
                 }
-                QAction* action = menu.addAction(SimaiDocument::difficultyName(id));
-                action->setIcon(makeDifficultyBadgeIcon(id));
+                auto* action = new QWidgetAction(&menu);
+                auto* button = new QToolButton(&menu);
+                button->setAutoRaise(true);
+                button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+                button->setIcon(makeDifficultyBadgeIcon(id));
+                button->setIconSize(QSize(14, 14));
+                button->setText(SimaiDocument::difficultyName(id));
+                button->setFont(uiAccentFont(10));
+                button->setCursor(Qt::PointingHandCursor);
+                button->setStyleSheet(
+                    "QToolButton {"
+                    " color: #203040;"
+                    " background: transparent;"
+                    " border: none;"
+                    " padding: 6px 20px 6px 12px;"
+                    " text-align: left;"
+                    "}"
+                    "QToolButton:hover {"
+                    " background: #EEF5FF;"
+                    " border-radius: 6px;"
+                    "}"
+                );
+                connect(button, &QToolButton::clicked, &menu, [action, &menu]() {
+                    action->trigger();
+                    menu.close();
+                });
+                action->setDefaultWidget(button);
+                menu.addAction(action);
                 connect(action, &QAction::triggered, this, [this, id]() {
                     if (!maybeSaveCurrentFieldChanges()) {
                         rebuildFieldSidebar();
@@ -1464,24 +1561,26 @@ MainWindow::MainWindow(QWidget* parent)
     previewCanvas_ = new PreviewCanvas();
     previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
     const QSize previewCanvasPreferredSize = previewCanvas_->preferredSize();
-    const int previewAuxPanelWidth = previewCanvasPreferredSize.width() + 6;
     previewCanvas_->resize(previewCanvasPreferredSize);
     auto* previewCanvasFrame = new QFrame(previewPanel);
     previewCanvasFrame->setObjectName("PreviewCanvasFrame");
-    previewCanvasFrame->setFixedSize(previewCanvasPreferredSize + QSize(2, 2));
+    previewCanvasFrame->setMinimumSize(QSize(320, 320));
+    previewCanvasFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     auto* previewCanvasFrameLayout = new QVBoxLayout(previewCanvasFrame);
     previewCanvasFrameLayout->setContentsMargins(1, 1, 1, 1);
     previewCanvasFrameLayout->setSpacing(0);
     QWidget* previewCanvasContainer = QWidget::createWindowContainer(previewCanvas_, previewCanvasFrame);
-    previewCanvasContainer->setFixedSize(previewCanvasPreferredSize);
+    previewCanvasContainer->setMinimumSize(QSize(318, 318));
+    previewCanvasContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     previewCanvasContainer->setFocusPolicy(Qt::StrongFocus);
-    previewCanvasFrameLayout->addWidget(previewCanvasContainer, 0, Qt::AlignCenter);
-    previewPanelLayout->addWidget(previewCanvasFrame, 0, Qt::AlignHCenter | Qt::AlignTop);
+    previewCanvasFrameLayout->addWidget(previewCanvasContainer, 1);
+    previewPanelLayout->addWidget(previewCanvasFrame, 1);
     logStartupStage("preview_canvas_container_ready");
 
     auto* previewControlCard = new QFrame(previewPanel);
     previewControlCard->setObjectName("PreviewControlCard");
-    previewControlCard->setFixedWidth(previewAuxPanelWidth);
+    previewControlCard->setMinimumWidth(280);
+    previewControlCard->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     auto* previewControlCardLayout = new QVBoxLayout(previewControlCard);
     previewControlCardLayout->setContentsMargins(8, 8, 8, 8);
     previewControlCardLayout->setSpacing(0);
@@ -1554,12 +1653,13 @@ MainWindow::MainWindow(QWidget* parent)
     previewSpeedButton_->setMenu(speedMenu);
     previewControlsLayout->addWidget(previewSpeedButton_, 0);
     previewControlCardLayout->addWidget(previewControls, 0);
-    previewPanelLayout->addWidget(previewControlCard, 0, Qt::AlignHCenter);
+    previewPanelLayout->addWidget(previewControlCard, 0);
 
     auto* previewStatsCard = new QFrame(previewPanel);
     previewStatsCard_ = previewStatsCard;
     previewStatsCard->setObjectName("PreviewStatsCard");
-    previewStatsCard->setFixedWidth(previewAuxPanelWidth);
+    previewStatsCard->setMinimumWidth(280);
+    previewStatsCard->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* previewStatsCardLayout = new QVBoxLayout(previewStatsCard);
     previewStatsCardLayout->setContentsMargins(8, 8, 8, 8);
     previewStatsCardLayout->setSpacing(0);
@@ -1599,7 +1699,7 @@ MainWindow::MainWindow(QWidget* parent)
                        << previewBreakStatsLabel_
                        << previewTotalStatsLabel_;
     previewStatsCardLayout->addWidget(previewStats, 0);
-    previewPanelLayout->addWidget(previewStatsCard, 1, Qt::AlignHCenter);
+    previewPanelLayout->addWidget(previewStatsCard, 0);
     previewStatsCard->installEventFilter(this);
     updatePreviewStatsLayoutMode();
     logStartupStage("preview_controls_and_stats_ready");
@@ -1622,8 +1722,8 @@ MainWindow::MainWindow(QWidget* parent)
         });
     });
     logStartupStage("preview_runtime_connections_ready");
-    const int previewPaneWidth = previewAuxPanelWidth + 16;
-    previewPanel->setFixedWidth(previewPaneWidth);
+    previewPanel->setMinimumWidth(320);
+    previewPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     logStartupStage("preview_runtime_ready");
 
     bottomTabs_ = new QTabWidget(central);
@@ -1667,18 +1767,22 @@ MainWindow::MainWindow(QWidget* parent)
     logStartupStage("timeline_and_tabs_ready");
 
     auto* leftColumn = new QWidget(this);
+    leftColumn->setMinimumWidth(320);
+    leftColumn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     auto* leftColumnLayout = new QVBoxLayout(leftColumn);
     leftColumnLayout->setContentsMargins(0, 0, 0, 0);
     leftColumnLayout->setSpacing(0);
     leftColumnLayout->addWidget(central, 1);
     leftColumnLayout->addWidget(bottomTabs_, 0);
 
-    auto* workspace = new QWidget(this);
-    auto* workspaceLayout = new QHBoxLayout(workspace);
-    workspaceLayout->setContentsMargins(0, 0, 0, 0);
-    workspaceLayout->setSpacing(0);
-    workspaceLayout->addWidget(leftColumn, 1);
-    workspaceLayout->addWidget(previewPanel, 0);
+    auto* workspace = new QSplitter(Qt::Horizontal, this);
+    workspace->setChildrenCollapsible(false);
+    workspace->setHandleWidth(1);
+    workspace->addWidget(leftColumn);
+    workspace->addWidget(previewPanel);
+    workspace->setStretchFactor(0, 1);
+    workspace->setStretchFactor(1, 1);
+    workspace->setSizes({1, 1});
     setCentralWidget(workspace);
     logStartupStage("workspace_and_central_widget_ready");
 
@@ -2510,7 +2614,7 @@ void MainWindow::rebuildFieldSidebar()
     const QVector<int> ids = document_.difficultyIds();
     for (int id : ids) {
         auto* difficultyItem = new QListWidgetItem(SimaiDocument::difficultyName(id), outlineList_);
-        difficultyItem->setData(Qt::DecorationRole, makeDifficultyBadgePixmap(id));
+        difficultyItem->setIcon(makeDifficultyBadgeIcon(id));
         difficultyItem->setData(Qt::UserRole, "difficulty_chart");
         difficultyItem->setData(Qt::UserRole + 1, id);
         if (id == activeDifficultyId_) {
@@ -3058,17 +3162,25 @@ void MainWindow::updatePreviewStatsLayoutMode()
         return;
     }
 
-    const int h = previewStatsCard_->contentsRect().height();
-    int rows = 2;
-    if (h < 52) {
-        rows = 1;
-    } else if (h >= 112) {
-        rows = 3;
-    }
     const int itemCount = previewStatsChips_.size();
-    const int cols = qMax(1, (itemCount + rows - 1) / rows);
-    const bool structureChanged = (rows != previewStatsLayoutRows_);
+    const QWidget* gridHost = previewStatsGridLayout_->parentWidget();
+    const int horizontalSpacing = qMax(0, previewStatsGridLayout_->horizontalSpacing());
+    const int verticalSpacing = qMax(0, previewStatsGridLayout_->verticalSpacing());
+    const int hostWidth = (gridHost != nullptr) ? gridHost->contentsRect().width() : previewStatsCard_->contentsRect().width();
+    constexpr int kPreferredRows = 2;
+    constexpr int kPreferredChipMinWidth = 118;
+    const int preferredCols = qMax(1, (itemCount + kPreferredRows - 1) / kPreferredRows);
+    const int maxColsByWidth = qMax(1, (hostWidth + horizontalSpacing) / (kPreferredChipMinWidth + horizontalSpacing));
+    const int cols = qMax(1, qMin(preferredCols, qMin(itemCount, maxColsByWidth)));
+    const int rows = qMax(kPreferredRows, (itemCount + cols - 1) / cols);
+    const bool structureChanged = (rows != previewStatsLayoutRows_) || (cols != previewStatsLayoutCols_);
     previewStatsLayoutRows_ = rows;
+    previewStatsLayoutCols_ = cols;
+
+    constexpr int kChipMinHeight = 28;
+    const int cardHeight = 16 + rows * kChipMinHeight + qMax(0, rows - 1) * verticalSpacing;
+    previewStatsCard_->setMinimumHeight(cardHeight);
+    previewStatsCard_->setMaximumHeight(cardHeight);
 
     if (structureChanged) {
         while (QLayoutItem* item = previewStatsGridLayout_->takeAt(0)) {
@@ -3096,10 +3208,7 @@ void MainWindow::updatePreviewStatsLayoutMode()
     }
 
     // Keep chip widths column-driven and independent from text metrics.
-    const QWidget* gridHost = previewStatsGridLayout_->parentWidget();
-    const int spacing = qMax(0, previewStatsGridLayout_->horizontalSpacing());
-    const int totalSpacing = spacing * qMax(0, cols - 1);
-    const int hostWidth = (gridHost != nullptr) ? gridHost->contentsRect().width() : previewStatsCard_->contentsRect().width();
+    const int totalSpacing = horizontalSpacing * qMax(0, cols - 1);
     const int availableWidth = qMax(0, hostWidth - totalSpacing);
     const int columnWidth = (cols > 0) ? (availableWidth / cols) : 0;
     for (QLabel* chip : previewStatsChips_) {
