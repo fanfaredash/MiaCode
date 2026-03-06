@@ -54,13 +54,15 @@ SideBySideLayout computeSideBySideLayout(const QRect& workArea)
 {
     constexpr int kGap = 26;
     const int previewWidth = qBound(520, static_cast<int>(workArea.width() * 0.34), 900);
+    const int previewSide = qMin(previewWidth, workArea.height());
+    const int previewTop = workArea.top() + qMax(0, (workArea.height() - previewSide) / 2);
 
     SideBySideLayout layout;
-    layout.previewRect = QRect(workArea.left(), workArea.top(), previewWidth, workArea.height());
+    layout.previewRect = QRect(workArea.left(), previewTop, previewSide, previewSide);
     layout.editorRect = QRect(
         layout.previewRect.right() + 1 + kGap,
         workArea.top(),
-        qMax(640, workArea.width() - previewWidth - kGap),
+        qMax(640, workArea.width() - previewSide - kGap),
         workArea.height()
     );
     return layout;

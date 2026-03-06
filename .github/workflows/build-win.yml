@@ -1,6 +1,9 @@
 name: Build Release Package (Windows)
 
 on:
+  push:
+    branches:
+      - dev
   workflow_dispatch:
 
 jobs:
