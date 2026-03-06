@@ -20,9 +20,7 @@
 
 Requirements:
 - CMake 3.21+
-- Qt 6.1+ with `Core`, `Gui`, `Widgets`, `OpenGLWidgets`
-- Optional `Qt6::Multimedia`
-- Optional QScintilla for Qt 6
+- Qt 6.8+ with `Core`, `Gui`, `Widgets`, `OpenGLWidgets`, `Multimedia`
 
 Build with [CMakePresets.json](CMakePresets.json):
 

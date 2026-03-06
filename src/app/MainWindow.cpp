@@ -94,11 +94,6 @@
 #include <windows.h>
 #endif
 
-#ifdef HAVE_QSCINTILLA
-#include <Qsci/qsciscintillabase.h>
-#include <Qsci/qsciscintilla.h>
-#endif
-
 namespace {
 class OutlineItemDelegate : public QStyledItemDelegate {
 public:
@@ -329,11 +324,6 @@ QVector<float> buildWaveformPeaks(const QString& trackPath, double* durationSeco
     ma_decoder_uninit(&decoder);
     return peaks;
 }
-
-#ifdef HAVE_QSCINTILLA
-constexpr int kErrorIndicator = 8;
-constexpr int kErrorMarker = 8;
-#endif
 
 QIcon makePreviewPlayIcon(const QColor& color)
 {
@@ -1025,27 +1015,6 @@ MainWindow::MainWindow(QWidget* parent)
     setupMenusAndActions(fileMenu, toolsMenu, transformMenu, helpMenu);
     logStartupStage("menus_and_actions_ready");
 
-#ifdef HAVE_QSCINTILLA
-    auto* editor = new QsciScintilla(this);
-    editor->setUtf8(true);
-    editor->setFont(editorFont());
-    editor->setMarginsFont(editorFont());
-    editor->setMarginsForegroundColor(QColor("#D4D4D4"));
-    editor->setMarginsBackgroundColor(QColor("#2D2D2D"));
-    editor->setMarginWidth(0, 48);
-    editor->setMarginWidth(1, 14);
-    editor->setMarginMarkerMask(1, 1 << kErrorMarker);
-    editor->markerDefine(QsciScintilla::Circle, kErrorMarker);
-    editor->setMarkerBackgroundColor(QColor("#E74C3C"), kErrorMarker);
-    editor->indicatorDefine(QsciScintilla::SquiggleIndicator, kErrorIndicator);
-    editor->setIndicatorForegroundColor(QColor("#E74C3C"), kErrorIndicator);
-    editor->setAnnotationDisplay(QsciScintilla::AnnotationStandard);
-    editor->setWrapMode(QsciScintilla::WrapCharacter);
-    editor->setWrapVisualFlags(QsciScintilla::WrapFlagNone);
-    editor->setWrapIndentMode(QsciScintilla::WrapIndentFixed);
-    editor->setText(QString());
-    editorWidget_ = editor;
-#else
     auto* editor = new PlainCodeEditor(this);
     editor->setFont(editorFont());
     editor->setLineWrapMode(QPlainTextEdit::WidgetWidth);
@@ -1053,7 +1022,6 @@ MainWindow::MainWindow(QWidget* parent)
     editor->setPlainText(QString());
     editor->setBlockSpacingPixels(1);
     editorWidget_ = editor;
-#endif
     editorWidget_->setFont(editorFont());
     editorWidget_->setStyleSheet(
         "border: none;"
@@ -1664,17 +1632,6 @@ MainWindow::MainWindow(QWidget* parent)
     connect(timelineView_, &TimelineView::ctrlClickNavigateRequested, this, &MainWindow::jumpToNearestTimelineNote);
     bottomTabs_->addTab(timelineView_, uiText("tab.timeline", "Timeline"));
 
-#ifdef HAVE_QSCINTILLA
-    connect(qobject_cast<QsciScintilla*>(editorWidget_), &QsciScintilla::textChanged, this, [this]() {
-        markCurrentFieldDirty();
-        scheduleTimelineRefresh();
-        updateEditorEmptyState();
-        updateEditorStatus();
-    });
-    connect(qobject_cast<QsciScintilla*>(editorWidget_), &QsciScintilla::cursorPositionChanged, this, [this](int, int) {
-        updateEditorStatus();
-    });
-#else
     connect(qobject_cast<PlainCodeEditor*>(editorWidget_), &QPlainTextEdit::textChanged, this, [this]() {
         markCurrentFieldDirty();
         scheduleTimelineRefresh();
@@ -1684,7 +1641,6 @@ MainWindow::MainWindow(QWidget* parent)
     connect(qobject_cast<PlainCodeEditor*>(editorWidget_), &QPlainTextEdit::cursorPositionChanged, this, [this]() {
         updateEditorStatus();
     });
-#endif
     connect(titleEdit_, &QLineEdit::textChanged, this, [this]() {
         markCurrentFieldDirty();
         updateWindowTitle();
@@ -1807,20 +1763,12 @@ MainWindow::MainWindow(QWidget* parent)
         });
     }
 
-#ifdef HAVE_QSCINTILLA
-    editorViewport_ = qobject_cast<QsciScintilla*>(editorWidget_)->viewport();
-#else
     editorViewport_ = qobject_cast<PlainCodeEditor*>(editorWidget_)->viewport();
-#endif
     if (editorViewport_ != nullptr) {
         editorViewport_->installEventFilter(this);
     }
 
-#ifdef HAVE_QSCINTILLA
-    statusBar()->showMessage("QScintilla detected.");
-#else
-    statusBar()->showMessage("QScintilla not found. Using PlainCodeEditor fallback.");
-#endif
+    statusBar()->showMessage("PlainCodeEditor ready.");
 
     loadPortableState();
     logStartupStage("portable_state_loaded");
@@ -1971,32 +1919,11 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             int line = 1;
             int col = 1;
 
-#ifdef HAVE_QSCINTILLA
-            auto* editor = qobject_cast<QsciScintilla*>(editorWidget_);
-            const int pos = editor->SendScintilla(
-                QsciScintillaBase::SCI_POSITIONFROMPOINTCLOSE,
-                mouseEvent->position().x(),
-                mouseEvent->position().y()
-            );
-            if (pos >= 0) {
-                int lineIndex = 0;
-                int columnIndex = 0;
-                editor->lineIndexFromPosition(pos, &lineIndex, &columnIndex);
-                editor->setCursorPosition(lineIndex, columnIndex);
-                line = lineIndex + 1;
-                col = columnIndex + 1;
-            } else {
-                const auto fallback = currentCursorLineCol();
-                line = fallback.first;
-                col = fallback.second;
-            }
-#else
             auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
             QTextCursor cursor = editor->cursorForPosition(mouseEvent->pos());
             editor->setTextCursor(cursor);
             line = cursor.blockNumber() + 1;
             col = cursor.positionInBlock() + 1;
-#endif
             const double second = timelineSecondForCursor(line, col);
             if (second >= 0.0) {
                 if (qtPreviewPlaying_) {
@@ -2245,22 +2172,12 @@ bool MainWindow::applyBatchTransform(const QString& opName, const BatchTransform
         return false;
     }
 
-#ifdef HAVE_QSCINTILLA
-    auto* editor = qobject_cast<QsciScintilla*>(editorWidget_);
-    int endLine = qMax(0, editor->lines() - 1);
-    int endIndex = qMax(0, editor->lineLength(endLine));
-    editor->beginUndoAction();
-    editor->setSelection(0, 0, endLine, endIndex);
-    editor->replaceSelectedText(transformed);
-    editor->endUndoAction();
-#else
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
     QTextCursor cursor(editor->document());
     cursor.beginEditBlock();
     cursor.select(QTextCursor::Document);
     cursor.insertText(transformed);
     cursor.endEditBlock();
-#endif
 
     markCurrentFieldDirty();
     scheduleTimelineRefresh();
@@ -2292,26 +2209,6 @@ bool MainWindow::applySelectionBatchTransform(const QString& opName, const Batch
         return false;
     }
 
-#ifdef HAVE_QSCINTILLA
-    auto* editor = qobject_cast<QsciScintilla*>(editorWidget_);
-    int lineFrom = 0;
-    int indexFrom = 0;
-    int lineTo = 0;
-    int indexTo = 0;
-    editor->lineIndexFromPosition(begin, &lineFrom, &indexFrom);
-    editor->lineIndexFromPosition(finish, &lineTo, &indexTo);
-    editor->beginUndoAction();
-    editor->setSelection(lineFrom, indexFrom, lineTo, indexTo);
-    editor->replaceSelectedText(transformed);
-    int newLineFrom = 0;
-    int newIndexFrom = 0;
-    int newLineTo = 0;
-    int newIndexTo = 0;
-    editor->lineIndexFromPosition(begin, &newLineFrom, &newIndexFrom);
-    editor->lineIndexFromPosition(begin + transformed.size(), &newLineTo, &newIndexTo);
-    editor->setSelection(newLineFrom, newIndexFrom, newLineTo, newIndexTo);
-    editor->endUndoAction();
-#else
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
     QTextCursor cursor(editor->document());
     cursor.beginEditBlock();
@@ -2322,7 +2219,6 @@ bool MainWindow::applySelectionBatchTransform(const QString& opName, const Batch
     cursor.setPosition(begin + transformed.size(), QTextCursor::KeepAnchor);
     editor->setTextCursor(cursor);
     cursor.endEditBlock();
-#endif
 
     markCurrentFieldDirty();
     scheduleTimelineRefresh();
@@ -2332,17 +2228,9 @@ bool MainWindow::applySelectionBatchTransform(const QString& opName, const Batch
 
 std::pair<int, int> MainWindow::currentCursorLineCol() const
 {
-#ifdef HAVE_QSCINTILLA
-    auto* editor = qobject_cast<QsciScintilla*>(editorWidget_);
-    int line = 0;
-    int index = 0;
-    editor->getCursorPosition(&line, &index);
-    return {line + 1, index + 1};
-#else
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
     const QTextCursor cursor = editor->textCursor();
     return {cursor.blockNumber() + 1, cursor.positionInBlock() + 1};
-#endif
 }
 
 bool MainWindow::currentSelectionRange(int* startPos, int* endPos) const
@@ -2351,20 +2239,6 @@ bool MainWindow::currentSelectionRange(int* startPos, int* endPos) const
         return false;
     }
 
-#ifdef HAVE_QSCINTILLA
-    auto* editor = qobject_cast<QsciScintilla*>(editorWidget_);
-    if (!editor->hasSelectedText()) {
-        return false;
-    }
-    int lineFrom = 0;
-    int indexFrom = 0;
-    int lineTo = 0;
-    int indexTo = 0;
-    editor->getSelection(&lineFrom, &indexFrom, &lineTo, &indexTo);
-    *startPos = editor->positionFromLineIndex(lineFrom, indexFrom);
-    *endPos = editor->positionFromLineIndex(lineTo, indexTo);
-    return *endPos > *startPos;
-#else
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
     const QTextCursor cursor = editor->textCursor();
     if (!cursor.hasSelection()) {
@@ -2373,23 +2247,10 @@ bool MainWindow::currentSelectionRange(int* startPos, int* endPos) const
     *startPos = cursor.selectionStart();
     *endPos = cursor.selectionEnd();
     return *endPos > *startPos;
-#endif
 }
 
 std::pair<int, int> MainWindow::currentSelectionOrCursorLineCol() const
 {
-#ifdef HAVE_QSCINTILLA
-    auto* editor = qobject_cast<QsciScintilla*>(editorWidget_);
-    if (editor->hasSelectedText()) {
-        int lineFrom = 0;
-        int indexFrom = 0;
-        int lineTo = 0;
-        int indexTo = 0;
-        editor->getSelection(&lineFrom, &indexFrom, &lineTo, &indexTo);
-        return {lineFrom + 1, indexFrom + 1};
-    }
-    return currentCursorLineCol();
-#else
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
     QTextCursor cursor = editor->textCursor();
     if (!cursor.hasSelection()) {
@@ -2397,7 +2258,6 @@ std::pair<int, int> MainWindow::currentSelectionOrCursorLineCol() const
     }
     cursor.setPosition(cursor.selectionStart());
     return {cursor.blockNumber() + 1, cursor.positionInBlock() + 1};
-#endif
 }
 
 void MainWindow::setMetadataExtraText(const QString& text)
@@ -2413,15 +2273,9 @@ void MainWindow::setMetadataExtraText(const QString& text)
 void MainWindow::setEditorText(const QString& text)
 {
     QSignalBlocker blocker(editorWidget_);
-#ifdef HAVE_QSCINTILLA
-    auto* editor = qobject_cast<QsciScintilla*>(editorWidget_);
-    editor->setText(text);
-    editor->emptyUndoBuffer();
-#else
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
     editor->setPlainText(text);
     editor->document()->clearUndoRedoStacks();
-#endif
 }
 
 void MainWindow::updatePauseButtonAppearance()
@@ -2968,11 +2822,7 @@ void MainWindow::updateCurrentFileLabel()
 
 QString MainWindow::editorText() const
 {
-#ifdef HAVE_QSCINTILLA
-    return qobject_cast<QsciScintilla*>(editorWidget_)->text();
-#else
     return qobject_cast<PlainCodeEditor*>(editorWidget_)->toPlainText();
-#endif
 }
 
 void MainWindow::clearValidationErrors()
@@ -2982,16 +2832,8 @@ void MainWindow::clearValidationErrors()
 
 void MainWindow::clearValidationDecorations()
 {
-#ifdef HAVE_QSCINTILLA
-    auto* editor = qobject_cast<QsciScintilla*>(editorWidget_);
-    editor->clearAnnotations();
-    editor->markerDeleteAll(kErrorMarker);
-    editor->SendScintilla(QsciScintillaBase::SCI_SETINDICATORCURRENT, kErrorIndicator);
-    editor->SendScintilla(QsciScintillaBase::SCI_INDICATORCLEARRANGE, 0, editor->length());
-#else
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
     editor->setExtraSelections({});
-#endif
 }
 
 void MainWindow::addValidationError(int line, int col, const QString& message)
@@ -3010,22 +2852,6 @@ void MainWindow::addValidationDecoration(int line, int col, const QString& messa
         col = 1;
     }
 
-#ifdef HAVE_QSCINTILLA
-    auto* editor = qobject_cast<QsciScintilla*>(editorWidget_);
-    const int lineIndex = line - 1;
-    int colIndex = col - 1;
-    const int lineLen = qMax(1, editor->lineLength(lineIndex));
-    if (colIndex >= lineLen) {
-        colIndex = lineLen - 1;
-    }
-
-    editor->markerAdd(lineIndex, kErrorMarker);
-    editor->fillIndicatorRange(lineIndex, colIndex, lineIndex, colIndex + 1, kErrorIndicator);
-
-    const QString oldAnno = editor->annotation(lineIndex);
-    const QString merged = oldAnno.isEmpty() ? message : (oldAnno + "\n" + message);
-    editor->annotate(lineIndex, merged);
-#else
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
     QTextBlock block = editor->document()->findBlockByNumber(line - 1);
     if (!block.isValid()) {
@@ -3045,7 +2871,6 @@ void MainWindow::addValidationDecoration(int line, int col, const QString& messa
     auto selections = editor->extraSelections();
     selections.append(sel);
     editor->setExtraSelections(selections);
-#endif
 }
 
 void MainWindow::jumpToLocation(int line, int col)
@@ -3057,12 +2882,6 @@ void MainWindow::jumpToLocation(int line, int col)
         col = 1;
     }
 
-#ifdef HAVE_QSCINTILLA
-    auto* editor = qobject_cast<QsciScintilla*>(editorWidget_);
-    editor->setCursorPosition(line - 1, col - 1);
-    editor->ensureLineVisible(line - 1);
-    editor->setFocus();
-#else
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
     QTextBlock block = editor->document()->findBlockByNumber(line - 1);
     if (!block.isValid()) {
@@ -3074,7 +2893,6 @@ void MainWindow::jumpToLocation(int line, int col)
     editor->setTextCursor(cursor);
     editor->ensureCursorVisible();
     editor->setFocus();
-#endif
 }
 
 QString MainWindow::resolvePreviewSessionScriptPath() const

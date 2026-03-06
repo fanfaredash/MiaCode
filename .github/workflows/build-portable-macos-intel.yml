@@ -1,0 +1,36 @@
+name: Build Portable Package (macOS Intel)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-macos-intel:
+    name: macOS x86_64
+    runs-on: macos-13
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt
+        shell: bash
+        run: |
+          brew update
+          brew install qt
+          echo "QT_ROOT=$(brew --prefix qt)" >> "$GITHUB_ENV"
+
+      - name: Package Portable
+        shell: bash
+        env:
+          QT_ROOT: ${{ env.QT_ROOT }}
+          CMAKE_PREFIX_PATH: ${{ env.QT_ROOT }}
+          CMAKE_OSX_ARCHITECTURES: x86_64
+        run: |
+          chmod +x scripts/package-mac.sh
+          bash scripts/package-mac.sh
+
+      - name: Upload Portable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiaCode-portable-macos-x86_64
+          path: dist/*.zip
+          if-no-files-found: error
