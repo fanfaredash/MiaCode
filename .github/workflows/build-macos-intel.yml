@@ -17,7 +17,7 @@ jobs:
           version: 6.8.3
           host: mac
           target: desktop
-          modules: qtmultimedia qttools
+          modules: qtmultimedia
           cache: true
 
       - name: Package Release
