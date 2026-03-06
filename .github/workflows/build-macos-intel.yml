@@ -11,14 +11,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run build script
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.8.3
+          host: mac
+          target: desktop
+          modules: qtmultimedia
+          cache: true
+
+      - name: Package Release
         shell: bash
         env:
+          CMAKE_OSX_ARCHITECTURES: x86_64
           CMAKE_OSX_DEPLOYMENT_TARGET: 13.0
           MACOS_CODESIGN_IDENTITY: "-"
         run: |
-          chmod +x scripts/build-macos.sh
-          bash scripts/build-macos.sh
+          chmod +x scripts/package-mac.sh
+          bash scripts/package-mac.sh
 
       - name: Verify App Signature
         shell: bash
