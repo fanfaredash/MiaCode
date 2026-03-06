@@ -2,32 +2,27 @@ name: Build Release Package (macOS Apple Silicon)
 
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch or tag to build
+        required: true
+        default: dev
 
 jobs:
   build-macos-arm64:
     name: macOS arm64
     runs-on: macos-14
     steps:
-      - name: Checkout
+      - name: Checkout target ref
         uses: actions/checkout@v4
-
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4
         with:
-          version: 6.8.3
-          host: mac
-          target: desktop
-          modules: qtmultimedia
-          cache: true
+          ref: ${{ inputs.ref }}
 
-      - name: Package Release
+      - name: Run build script
         shell: bash
-        env:
-          CMAKE_OSX_ARCHITECTURES: arm64
-          CMAKE_OSX_DEPLOYMENT_TARGET: 13.0
         run: |
-          chmod +x scripts/package-mac.sh
-          bash scripts/package-mac.sh
+          chmod +x scripts/build-macos.sh
+          bash scripts/build-macos.sh
 
       - name: Upload Release Artifact
         uses: actions/upload-artifact@v4
