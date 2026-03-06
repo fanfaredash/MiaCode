@@ -2,21 +2,14 @@ name: Build Release Package (Windows)
 
 on:
   workflow_dispatch:
-    inputs:
-      ref:
-        description: Branch or tag to build
-        required: true
-        default: dev
 
 jobs:
   build-windows:
     name: Windows Qt 6.8
     runs-on: windows-latest
     steps:
-      - name: Checkout target ref
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref }}
 
       - name: Run build script
         shell: pwsh
