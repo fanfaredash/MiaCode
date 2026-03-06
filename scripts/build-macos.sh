@@ -6,6 +6,7 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 QT_VERSION="${QT_VERSION:-6.8.3}"
 QT_OUTPUT_DIR="${QT_OUTPUT_DIR:-$ROOT_DIR/.qt}"
 QT_MODULES="${QT_MODULES:-qtmultimedia}"
+QT_DESKTOP_ARCH="${QT_DESKTOP_ARCH:-clang_64}"
 DEPLOYMENT_TARGET="${CMAKE_OSX_DEPLOYMENT_TARGET:-13.0}"
 RUNNER_ARCH="$(uname -m)"
 
@@ -28,8 +29,7 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
 fi
 
 "$PYTHON_BIN" -m pip install --user "aqtinstall==3.3.*" "py7zr==1.0.*"
-"$PYTHON_BIN" -m aqt install-qt mac desktop "$QT_VERSION" \
-  --autodesktop \
+"$PYTHON_BIN" -m aqt install-qt mac desktop "$QT_VERSION" "$QT_DESKTOP_ARCH" \
   --outputdir "$QT_OUTPUT_DIR" \
   --modules $QT_MODULES
 
