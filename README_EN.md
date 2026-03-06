@@ -22,18 +22,37 @@ Requirements:
 - CMake 3.21+
 - Qt 6.8+ with `Core`, `Gui`, `Widgets`, `OpenGLWidgets`, `Multimedia`
 
-Build with [CMakePresets.json](CMakePresets.json):
+### Windows Build
+
+The recommended entry point is the helper script that installs Qt, builds, and packages:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build-win.ps1
+```
+
+If Qt is already installed locally, you can also build with [CMakePresets.json](CMakePresets.json):
 
 ```powershell
 cmake --preset vs2022-qt6
 cmake --build --preset release
-```
-
-Run:
-
-```powershell
 .\build\Release\MiaCode.exe
 ```
+
+### macOS Build
+
+The recommended entry point is the helper script that installs Qt, builds, and packages:
+
+```bash
+bash scripts/build-macos.sh
+```
+
+If Qt is already installed locally, you can also pass `QT_ROOT` explicitly to the packaging script:
+
+```bash
+QT_ROOT="$HOME/Qt/6.8.3/macos" bash scripts/package-mac.sh
+```
+
+Packaging details have been moved to [scripts/README_EN.md](scripts/README_EN.md).
 
 ## Repository Layout
 
@@ -42,24 +61,6 @@ Run:
 - [resources](resources): Qt resource files
 - [scripts](scripts): packaging scripts
 - [third_party](third_party): third-party dependencies
-
-## Windows Packaging
-
-If `windeployqt` is not found in `PATH`, pass `-QtRoot` explicitly:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1 -QtRoot D:\Qt\6.8.3\msvc2022_64
-```
-
-If `Qt\bin` is already in `PATH`, you can run:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1
-```
-
-Output:
-- `dist/MiaCode-v<version>-win64`
-- `dist/MiaCode-v<version>-win64.zip`
 
 ---
 

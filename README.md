@@ -23,18 +23,37 @@
 - Qt 6.8+，需要 `Core`、`Gui`、`Widgets`、`OpenGLWidgets`
 - `Qt6::Multimedia`
 
-使用仓库内的 [CMakePresets.json](CMakePresets.json) 配置并构建：
+### Windows 构建
+
+推荐直接使用脚本自动安装 Qt、构建并打包：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build-win.ps1
+```
+
+如果你已经手动安装好 Qt，也可以使用仓库内的 [CMakePresets.json](CMakePresets.json)：
 
 ```powershell
 cmake --preset vs2022-qt6
 cmake --build --preset release
-```
-
-运行：
-
-```powershell
 .\build\Release\MiaCode.exe
 ```
+
+### macOS 构建
+
+推荐直接使用脚本自动安装 Qt、构建并打包：
+
+```bash
+bash scripts/build-macos.sh
+```
+
+如果你已经手动安装好 Qt，也可以显式传入 `QT_ROOT` 调用打包脚本：
+
+```bash
+QT_ROOT="$HOME/Qt/6.8.3/macos" bash scripts/package-mac.sh
+```
+
+打包说明已移动到 [scripts/README.md](scripts/README.md)。
 
 ## 仓库结构
 
@@ -43,24 +62,6 @@ cmake --build --preset release
 - [resources](resources)：Qt 资源文件
 - [scripts](scripts)：打包脚本
 - [third_party](third_party)：第三方依赖
-
-## Windows 打包
-
-如果系统 `PATH` 里找不到 `windeployqt`，需要手动指定 `-QtRoot`：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1 -QtRoot D:\Qt\6.8.3\msvc2022_64
-```
-
-如果 `Qt\bin` 已在 `PATH` 中，也可以直接运行：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1
-```
-
-输出：
-- `dist/MiaCode-v<version>-win64`
-- `dist/MiaCode-v<version>-win64.zip`
 
 ---
 
