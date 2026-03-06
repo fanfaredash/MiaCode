@@ -25,9 +25,17 @@ jobs:
         env:
           CMAKE_OSX_ARCHITECTURES: arm64
           CMAKE_OSX_DEPLOYMENT_TARGET: 13.0
+          MACOS_CODESIGN_IDENTITY: "-"
         run: |
           chmod +x scripts/package-mac.sh
           bash scripts/package-mac.sh
+
+      - name: Verify App Signature
+        shell: bash
+        run: |
+          APP_PATH="$(find dist -maxdepth 2 -type d -name 'MiaCode.app' | head -n 1)"
+          test -n "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
       - name: Upload Release Artifact
         uses: actions/upload-artifact@v4
