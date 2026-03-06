@@ -89,8 +89,8 @@ int main(int argc, char* argv[])
 
     MainWindow window;
     logStartupStage("mainwindow_constructed");
-    window.showMaximized();
-    logStartupStage("mainwindow_showmaximized_called");
+    window.show();
+    logStartupStage("mainwindow_show_called");
     QTimer::singleShot(0, &app, [&logStartupStage]() {
         logStartupStage("event_loop_first_tick");
     });

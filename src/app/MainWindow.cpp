@@ -54,11 +54,13 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QScrollArea>
 #include <QSaveFile>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSplitter>
+#include <QSplitterHandle>
 #include <QScreen>
 #include <QScrollBar>
 #include <QStackedWidget>
@@ -67,6 +69,7 @@
 #include <QTabWidget>
 #include <QSysInfo>
 #include <QStyle>
+#include <QStyleOptionFrame>
 #include <QStyleOptionSlider>
 #include <QStringList>
 #include <QStringConverter>
@@ -97,6 +100,17 @@
 #endif
 
 namespace {
+constexpr int kEmbeddedPreviewPanelMinWidth = 320;
+constexpr qreal kEmbeddedPreviewPanelWidthRatio = 0.50;
+constexpr int kEmbeddedPreviewPanelWidthMax = 900;
+constexpr int kPreviewPanelMarginX = 8;
+constexpr int kPreviewPanelMarginTop = 12;
+constexpr int kPreviewPanelMarginBottom = 12;
+constexpr int kPreviewCanvasControlGap = 10;
+constexpr int kPreviewStatsBottomGap = 12;
+constexpr int kPreviewControlStatsGap = 10;
+constexpr int kPreviewControlStatsCardMinWidth = 280;
+
 class OutlineItemDelegate : public QStyledItemDelegate {
 public:
     explicit OutlineItemDelegate(QObject* parent = nullptr)
@@ -129,6 +143,41 @@ public:
         drawOption.palette.setColor(QPalette::HighlightedText, QColor("#243447"));
         QStyledItemDelegate::paint(painter, drawOption, index);
     }
+};
+
+class LeftPlaceholderLineEdit : public QLineEdit {
+public:
+    explicit LeftPlaceholderLineEdit(QWidget* parent = nullptr)
+        : QLineEdit(parent)
+    {}
+
+    void setLeftPlaceholderText(const QString& text)
+    {
+        leftPlaceholderText_ = text;
+        QLineEdit::setPlaceholderText(QString());
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent* event) override
+    {
+        QLineEdit::paintEvent(event);
+        if (!text().isEmpty() || leftPlaceholderText_.isEmpty()) {
+            return;
+        }
+
+        QStyleOptionFrame option;
+        initStyleOption(&option);
+        const QRect contentsRect = style()->subElementRect(QStyle::SE_LineEditContents, &option, this);
+
+        QPainter painter(this);
+        painter.setPen(palette().color(QPalette::PlaceholderText));
+        painter.setFont(font());
+        painter.drawText(contentsRect.adjusted(0, 0, -2, 0), Qt::AlignLeft | Qt::AlignVCenter, leftPlaceholderText_);
+    }
+
+private:
+    QString leftPlaceholderText_;
 };
 
 QString timestampLine(const QString& title)
@@ -820,6 +869,11 @@ QString startupTimingLogPath()
     return QDir::temp().filePath("miacode_startup_timing.log");
 }
 
+QString runtimeDebugLogPath()
+{
+    return QDir::temp().filePath("miacode_runtime_debug.log");
+}
+
 bool startupTimingEnabled()
 {
     static const bool enabled = []() {
@@ -856,6 +910,7 @@ void MainWindow::configureRuntimeDebugOutput()
     runtimeDebugOutputEnabled_ = hasRuntimeDebugArg(appArgs);
     if (runtimeDebugOutputEnabled_) {
         qputenv("MIACODE_ENABLE_RUNTIME_DEBUG_OUTPUT", "1");
+        QFile::remove(runtimeDebugLogPath());
     } else {
         qunsetenv("MIACODE_ENABLE_RUNTIME_DEBUG_OUTPUT");
     }
@@ -927,12 +982,16 @@ void MainWindow::ensurePreviewMediaControllerInitialized()
 
 void MainWindow::setupInitialWindowGeometry()
 {
+    QSize initialSize(1280, 800);
     if (QScreen* screen = QGuiApplication::primaryScreen(); screen != nullptr) {
         const QRect workArea = screen->availableGeometry();
-        setGeometry(workArea);
+        initialSize.setWidth(qMin(initialSize.width(), qMax(960, workArea.width() - 120)));
+        initialSize.setHeight(qMin(initialSize.height(), qMax(640, workArea.height() - 120)));
+        resize(initialSize);
+        move(workArea.center() - QPoint(width() / 2, height() / 2));
         return;
     }
-    resize(1280, 800);
+    resize(initialSize);
 }
 
 void MainWindow::setupMenusAndActions(QMenu* fileMenu, QMenu* toolsMenu, QMenu* transformMenu, QMenu* helpMenu)
@@ -960,6 +1019,12 @@ void MainWindow::setupMenusAndActions(QMenu* fileMenu, QMenu* toolsMenu, QMenu* 
     saveAsAction_->setShortcut(QKeySequence::SaveAs);
     connect(saveAsAction_, &QAction::triggered, this, &MainWindow::onSaveFileAs);
     fileMenu->addAction(saveAsAction_);
+
+    fileMenu->addSeparator();
+
+    preferencesAction_ = new QAction(uiText("action.preferences", "Preferences..."), this);
+    connect(preferencesAction_, &QAction::triggered, this, &MainWindow::onPreferences);
+    fileMenu->addAction(preferencesAction_);
 
     fileMenu->addSeparator();
 
@@ -1147,9 +1212,9 @@ MainWindow::MainWindow(QWidget* parent)
     auto* editorHeaderLayout = new QHBoxLayout(editorHeader);
     editorHeaderLayout->setContentsMargins(12, 8, 12, 8);
     editorHeaderLayout->setSpacing(10);
-    editorContextLabel_ = new QLabel(uiText("editor.metadata", "Metadata"), editorHeader);
+    editorContextLabel_ = new QLabel(uiText("editor.welcome", "Welcome to MiaCode!"), editorHeader);
     editorContextLabel_->setObjectName("EditorContext");
-    editorContextLabel_->setFont(uiAccentFont(12));
+    editorContextLabel_->setFont(uiAccentFont(15, QFont::DemiBold));
     editorContextLabel_->setMinimumWidth(0);
     editorContextLabel_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     editorHeaderLayout->addWidget(editorContextLabel_, 1);
@@ -1188,10 +1253,12 @@ MainWindow::MainWindow(QWidget* parent)
     editorDifficultyLayout->setSpacing(8);
     auto* difficultyLevelLabel = new QLabel("Lv", editorDifficultyControls_);
     difficultyLevelLabel->setFont(uiAccentFont(10));
-    difficultyLevelEdit_ = new QLineEdit(editorDifficultyControls_);
-    difficultyLevelEdit_->setPlaceholderText("&lv_n=");
+    auto* difficultyLevelLineEdit = new LeftPlaceholderLineEdit(editorDifficultyControls_);
+    difficultyLevelLineEdit->setLeftPlaceholderText("&lv_n=");
+    difficultyLevelEdit_ = difficultyLevelLineEdit;
     difficultyLevelEdit_->setMinimumWidth(0);
     difficultyLevelEdit_->setMaximumWidth(72);
+    difficultyLevelEdit_->setAlignment(Qt::AlignCenter);
     difficultyLevelEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     auto* difficultyDesignerLabel = new QLabel(uiText("editor.des", "Des"), editorDifficultyControls_);
     difficultyDesignerLabel->setFont(uiAccentFont(10));
@@ -1304,7 +1371,7 @@ MainWindow::MainWindow(QWidget* parent)
         hbar->setStyleSheet(modernScrollBarStyle());
     }
     metadataCardLayout->addWidget(metadataExtraEdit_, 1);
-    metadataEmptyHintLabel_ = new QLabel(uiText("metadata.empty_hint", "← 点击添加谱面难度"), metadataPage_);
+    metadataEmptyHintLabel_ = new QLabel(uiText("metadata.empty_hint", "← Click to add a chart difficulty"), metadataPage_);
     metadataEmptyHintLabel_->setFont(uiAccentFont(11));
     metadataEmptyHintLabel_->setStyleSheet("color: #6A7890; background: transparent; padding-left: 6px;");
     metadataEmptyHintLabel_->hide();
@@ -1486,9 +1553,9 @@ MainWindow::MainWindow(QWidget* parent)
     outlineDock->setMaximumWidth(210);
     logStartupStage("outline_ready");
 
-    auto* previewPanel = new QWidget(this);
-    previewPanel->setObjectName("PreviewPanel");
-    previewPanel->setStyleSheet(
+    previewPanel_ = new QWidget(this);
+    previewPanel_->setObjectName("PreviewPanel");
+    previewPanel_->setStyleSheet(
         "QWidget#PreviewPanel {"
         " background: #F5F7FA;"
         " border-left: 1px solid #DEE4EC;"
@@ -1554,38 +1621,29 @@ MainWindow::MainWindow(QWidget* parent)
         " border: 1px solid #AFC0D6;"
         "}"
     );
-    auto* previewPanelLayout = new QVBoxLayout(previewPanel);
-    previewPanelLayout->setContentsMargins(8, 12, 8, 12);
-    previewPanelLayout->setSpacing(10);
+    previewPanel_->setMinimumWidth(kEmbeddedPreviewPanelMinWidth);
+    previewPanel_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
     previewCanvas_ = new PreviewCanvas();
     previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
-    const QSize previewCanvasPreferredSize = previewCanvas_->preferredSize();
-    previewCanvas_->resize(previewCanvasPreferredSize);
-    auto* previewCanvasFrame = new QFrame(previewPanel);
-    previewCanvasFrame->setObjectName("PreviewCanvasFrame");
-    previewCanvasFrame->setMinimumSize(QSize(320, 320));
-    previewCanvasFrame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    auto* previewCanvasFrameLayout = new QVBoxLayout(previewCanvasFrame);
-    previewCanvasFrameLayout->setContentsMargins(1, 1, 1, 1);
-    previewCanvasFrameLayout->setSpacing(0);
-    QWidget* previewCanvasContainer = QWidget::createWindowContainer(previewCanvas_, previewCanvasFrame);
-    previewCanvasContainer->setMinimumSize(QSize(318, 318));
-    previewCanvasContainer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    previewCanvasContainer->setFocusPolicy(Qt::StrongFocus);
-    previewCanvasFrameLayout->addWidget(previewCanvasContainer, 1);
-    previewPanelLayout->addWidget(previewCanvasFrame, 1);
+    previewCanvasFrame_ = new QFrame(previewPanel_);
+    previewCanvasFrame_->setObjectName("PreviewCanvasFrame");
+    previewCanvasFrame_->setMinimumSize(QSize(1, 1));
+    previewCanvasContainer_ = QWidget::createWindowContainer(previewCanvas_, previewCanvasFrame_);
+    previewCanvasContainer_->setMinimumSize(QSize(1, 1));
+    previewCanvasContainer_->setFocusPolicy(Qt::StrongFocus);
+    previewCanvasContainer_->hide();
     logStartupStage("preview_canvas_container_ready");
 
-    auto* previewControlCard = new QFrame(previewPanel);
-    previewControlCard->setObjectName("PreviewControlCard");
-    previewControlCard->setMinimumWidth(280);
-    previewControlCard->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* previewControlCardLayout = new QVBoxLayout(previewControlCard);
+    previewControlCard_ = new QFrame(previewPanel_);
+    previewControlCard_->setObjectName("PreviewControlCard");
+    previewControlCard_->setMinimumWidth(kPreviewControlStatsCardMinWidth);
+    previewControlCard_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto* previewControlCardLayout = new QVBoxLayout(previewControlCard_);
     previewControlCardLayout->setContentsMargins(8, 8, 8, 8);
     previewControlCardLayout->setSpacing(0);
 
-    auto* previewControls = new QFrame(previewControlCard);
+    auto* previewControls = new QFrame(previewControlCard_);
     previewControls->setObjectName("PreviewControls");
     auto* previewControlsLayout = new QHBoxLayout(previewControls);
     previewControlsLayout->setContentsMargins(0, 0, 0, 0);
@@ -1653,12 +1711,11 @@ MainWindow::MainWindow(QWidget* parent)
     previewSpeedButton_->setMenu(speedMenu);
     previewControlsLayout->addWidget(previewSpeedButton_, 0);
     previewControlCardLayout->addWidget(previewControls, 0);
-    previewPanelLayout->addWidget(previewControlCard, 0);
 
-    auto* previewStatsCard = new QFrame(previewPanel);
+    auto* previewStatsCard = new QFrame(previewPanel_);
     previewStatsCard_ = previewStatsCard;
     previewStatsCard->setObjectName("PreviewStatsCard");
-    previewStatsCard->setMinimumWidth(280);
+    previewStatsCard->setMinimumWidth(kPreviewControlStatsCardMinWidth);
     previewStatsCard->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* previewStatsCardLayout = new QVBoxLayout(previewStatsCard);
     previewStatsCardLayout->setContentsMargins(8, 8, 8, 8);
@@ -1668,7 +1725,7 @@ MainWindow::MainWindow(QWidget* parent)
     previewStats->setObjectName("PreviewStats");
     auto* previewStatsLayout = new QGridLayout(previewStats);
     previewStatsGridLayout_ = previewStatsLayout;
-    previewStatsLayout->setContentsMargins(0, 0, 0, 0);
+    previewStatsLayout->setContentsMargins(2, 2, 2, 2);
     previewStatsLayout->setHorizontalSpacing(10);
     previewStatsLayout->setVerticalSpacing(6);
 
@@ -1677,7 +1734,7 @@ MainWindow::MainWindow(QWidget* parent)
         label->setObjectName("PreviewStatChip");
         label->setFont(uiMonoFont(10, QFont::DemiBold));
         label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-        label->setMinimumHeight(28);
+        label->setFixedHeight(30);
         label->setMinimumWidth(0);
         label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
         previewStatsLayout->addWidget(label);
@@ -1699,8 +1756,7 @@ MainWindow::MainWindow(QWidget* parent)
                        << previewBreakStatsLabel_
                        << previewTotalStatsLabel_;
     previewStatsCardLayout->addWidget(previewStats, 0);
-    previewPanelLayout->addWidget(previewStatsCard, 0);
-    previewStatsCard->installEventFilter(this);
+    previewStatsCardLayout->addStretch(1);
     updatePreviewStatsLayoutMode();
     logStartupStage("preview_controls_and_stats_ready");
 
@@ -1722,8 +1778,6 @@ MainWindow::MainWindow(QWidget* parent)
         });
     });
     logStartupStage("preview_runtime_connections_ready");
-    previewPanel->setMinimumWidth(320);
-    previewPanel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     logStartupStage("preview_runtime_ready");
 
     bottomTabs_ = new QTabWidget(central);
@@ -1766,34 +1820,38 @@ MainWindow::MainWindow(QWidget* parent)
     bottomTabs_->setMaximumHeight(280);
     logStartupStage("timeline_and_tabs_ready");
 
-    auto* leftColumn = new QWidget(this);
-    leftColumn->setMinimumWidth(320);
-    leftColumn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    auto* leftColumnLayout = new QVBoxLayout(leftColumn);
+    previewLeftColumn_ = new QWidget(this);
+    previewLeftColumn_->setMinimumWidth(320);
+    previewLeftColumn_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    auto* leftColumnLayout = new QVBoxLayout(previewLeftColumn_);
     leftColumnLayout->setContentsMargins(0, 0, 0, 0);
     leftColumnLayout->setSpacing(0);
     leftColumnLayout->addWidget(central, 1);
     leftColumnLayout->addWidget(bottomTabs_, 0);
 
-    auto* workspace = new QSplitter(Qt::Horizontal, this);
-    workspace->setChildrenCollapsible(false);
-    workspace->setHandleWidth(1);
-    workspace->addWidget(leftColumn);
-    workspace->addWidget(previewPanel);
-    workspace->setStretchFactor(0, 1);
-    workspace->setStretchFactor(1, 1);
-    workspace->setSizes({1, 1});
-    setCentralWidget(workspace);
+    workspaceSplitter_ = new QSplitter(Qt::Horizontal, this);
+    workspaceSplitter_->setChildrenCollapsible(false);
+    workspaceSplitter_->setHandleWidth(0);
+    workspaceSplitter_->addWidget(previewLeftColumn_);
+    workspaceSplitter_->addWidget(previewPanel_);
+    workspaceSplitter_->setStretchFactor(0, 1);
+    workspaceSplitter_->setStretchFactor(1, 0);
+    if (QSplitterHandle* handle = workspaceSplitter_->handle(1); handle != nullptr) {
+        handle->setEnabled(false);
+        handle->hide();
+    }
+    setCentralWidget(workspaceSplitter_);
+    updatePreviewWorkspaceLayout();
     logStartupStage("workspace_and_central_widget_ready");
 
     toolBar->addAction(openAction_);
     toolBar->addAction(saveAction_);
     settingsPlaceholderAction_ = toolBar->addAction(
         makeSettingsGearIcon(QColor("#5D6E83")),
-        uiText("toolbar.settings_placeholder", "Settings (Reserved)")
+        uiText("action.preferences", "Preferences...")
     );
-    settingsPlaceholderAction_->setEnabled(false);
-    settingsPlaceholderAction_->setToolTip(uiText("toolbar.settings_placeholder", "Settings (Reserved)"));
+    settingsPlaceholderAction_->setToolTip(uiText("action.preferences", "Preferences..."));
+    connect(settingsPlaceholderAction_, &QAction::triggered, this, &MainWindow::onPreferences);
     statusBar()->addPermanentWidget(new QLabel("Current File:", this));
     currentFileLabel_ = new QLabel(this);
     statusBar()->addPermanentWidget(currentFileLabel_, 1);
@@ -1946,11 +2004,6 @@ void MainWindow::closeEvent(QCloseEvent* event)
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event)
 {
-    if (previewStatsCard_ != nullptr && watched == previewStatsCard_) {
-        if (event->type() == QEvent::Resize || event->type() == QEvent::Show) {
-            updatePreviewStatsLayoutMode();
-        }
-    }
     if (outlineList_ != nullptr && watched == outlineList_->viewport()) {
         if (event->type() == QEvent::MouseMove) {
             auto* mouseEvent = static_cast<QMouseEvent*>(event);
@@ -2044,6 +2097,13 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
         }
     }
     return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::resizeEvent(QResizeEvent* event)
+{
+    QMainWindow::resizeEvent(event);
+    updatePreviewWorkspaceLayout();
+    updateEditorHeaderLayoutMode();
 }
 
 bool MainWindow::maybeSaveBeforeContinue()
@@ -2431,7 +2491,7 @@ void MainWindow::updateEditorHeader()
     }
     if (!hasActiveDifficulty()) {
         if (document_.difficultyIds().isEmpty()) {
-            editorContextLabel_->setText(uiText("editor.welcome", "欢迎使用MiaCode！"));
+            editorContextLabel_->setText(uiText("editor.welcome", "Welcome to MiaCode!"));
             editorContextLabel_->setFont(uiAccentFont(15, QFont::DemiBold));
         } else {
             editorContextLabel_->setText(uiText("editor.metadata", "Metadata"));
@@ -2445,11 +2505,14 @@ void MainWindow::updateEditorHeader()
             editorBatchTransformControls_->hide();
         }
         updateDifficultyDeleteButton(false);
+        editorContextLabel_->setMinimumWidth(0);
+        updateEditorHeaderLayoutMode();
         return;
     }
     editorContextLabel_->setText(SimaiDocument::difficultyShortName(activeDifficultyId_));
     editorContextLabel_->setFont(uiAccentFont(12, QFont::DemiBold));
     editorContextLabel_->setStyleSheet(QString());
+    editorContextLabel_->setMinimumWidth(QFontMetrics(editorContextLabel_->font()).horizontalAdvance(editorContextLabel_->text()) + 8);
     if (editorDifficultyControls_ != nullptr) {
         editorDifficultyControls_->show();
     }
@@ -2457,6 +2520,29 @@ void MainWindow::updateEditorHeader()
         editorBatchTransformControls_->show();
     }
     updateDifficultyDeleteButton(false);
+    updateEditorHeaderLayoutMode();
+}
+
+void MainWindow::updateEditorHeaderLayoutMode()
+{
+    if (editorHeaderWidget_ == nullptr || editorCursorLabel_ == nullptr || editorContextLabel_ == nullptr) {
+        return;
+    }
+
+    if (!hasActiveDifficulty()) {
+        editorCursorLabel_->setVisible(false);
+        return;
+    }
+
+    const int headerWidth = editorHeaderWidget_->contentsRect().width();
+    const int contextWidth = editorContextLabel_->minimumWidth();
+    const int controlsWidth =
+        (editorDifficultyControls_ != nullptr && editorDifficultyControls_->isVisible())
+        ? editorDifficultyControls_->sizeHint().width()
+        : 0;
+    const int cursorWidth = editorCursorLabel_->sizeHint().width();
+    const int requiredWithCursor = contextWidth + controlsWidth + cursorWidth + 84;
+    editorCursorLabel_->setVisible(headerWidth >= requiredWithCursor);
 }
 
 void MainWindow::updateEditorStatus()
@@ -2466,10 +2552,12 @@ void MainWindow::updateEditorStatus()
     }
     if (!hasActiveDifficulty()) {
         editorCursorLabel_->clear();
+        updateEditorHeaderLayoutMode();
         return;
     }
     const auto [line, col] = currentCursorLineCol();
     editorCursorLabel_->setText(QString("Ln %1, Col %2").arg(line).arg(col));
+    updateEditorHeaderLayoutMode();
 }
 
 void MainWindow::updateEditorEmptyState()
@@ -2669,7 +2757,9 @@ void MainWindow::populateDifficultyPage(int difficultyId)
     }
     if (difficultyLevelEdit_ != nullptr) {
         QSignalBlocker blocker(difficultyLevelEdit_);
-        difficultyLevelEdit_->setPlaceholderText(QString("&lv_%1=").arg(difficultyId));
+        if (auto* placeholderEdit = dynamic_cast<LeftPlaceholderLineEdit*>(difficultyLevelEdit_)) {
+            placeholderEdit->setLeftPlaceholderText(QString("&lv_%1=").arg(difficultyId));
+        }
         difficultyLevelEdit_->setText(difficultyData->level);
     }
     if (difficultyDesignerEdit_ != nullptr) {
@@ -3156,31 +3246,40 @@ void MainWindow::clearPreviewObjectStats()
     updatePreviewObjectStats(0.0);
 }
 
-void MainWindow::updatePreviewStatsLayoutMode()
+int MainWindow::updatePreviewStatsLayoutMode(int hostWidth)
 {
     if (previewStatsCard_ == nullptr || previewStatsGridLayout_ == nullptr || previewStatsChips_.isEmpty()) {
-        return;
+        return 0;
     }
 
     const int itemCount = previewStatsChips_.size();
     const QWidget* gridHost = previewStatsGridLayout_->parentWidget();
     const int horizontalSpacing = qMax(0, previewStatsGridLayout_->horizontalSpacing());
     const int verticalSpacing = qMax(0, previewStatsGridLayout_->verticalSpacing());
-    const int hostWidth = (gridHost != nullptr) ? gridHost->contentsRect().width() : previewStatsCard_->contentsRect().width();
-    constexpr int kPreferredRows = 2;
-    constexpr int kPreferredChipMinWidth = 118;
-    const int preferredCols = qMax(1, (itemCount + kPreferredRows - 1) / kPreferredRows);
-    const int maxColsByWidth = qMax(1, (hostWidth + horizontalSpacing) / (kPreferredChipMinWidth + horizontalSpacing));
-    const int cols = qMax(1, qMin(preferredCols, qMin(itemCount, maxColsByWidth)));
-    const int rows = qMax(kPreferredRows, (itemCount + cols - 1) / cols);
+    const QMargins gridMargins = previewStatsGridLayout_->contentsMargins();
+    const int resolvedHostWidth =
+        (hostWidth >= 0)
+        ? hostWidth
+        : ((gridHost != nullptr) ? gridHost->contentsRect().width() : previewStatsCard_->contentsRect().width());
+    constexpr int kWideLayoutCols = 3;
+    constexpr int kNarrowLayoutCols = 2;
+    constexpr int kWideLayoutMinChipWidth = 118;
+    const int wideLayoutThreshold = kWideLayoutCols * kWideLayoutMinChipWidth + qMax(0, kWideLayoutCols - 1) * horizontalSpacing;
+    const bool useWideLayout = resolvedHostWidth >= wideLayoutThreshold;
+    const int cols = qMin(itemCount, useWideLayout ? kWideLayoutCols : kNarrowLayoutCols);
+    const int rows = qMax(1, (itemCount + cols - 1) / cols);
     const bool structureChanged = (rows != previewStatsLayoutRows_) || (cols != previewStatsLayoutCols_);
     previewStatsLayoutRows_ = rows;
     previewStatsLayoutCols_ = cols;
 
-    constexpr int kChipMinHeight = 28;
-    const int cardHeight = 16 + rows * kChipMinHeight + qMax(0, rows - 1) * verticalSpacing;
+    const int chipHeight = qMax(
+        30,
+        !previewStatsChips_.isEmpty() && previewStatsChips_.constFirst() != nullptr
+            ? previewStatsChips_.constFirst()->sizeHint().height()
+            : 30
+    );
+    const int cardHeight = 16 + gridMargins.top() + gridMargins.bottom() + rows * chipHeight + qMax(0, rows - 1) * verticalSpacing;
     previewStatsCard_->setMinimumHeight(cardHeight);
-    previewStatsCard_->setMaximumHeight(cardHeight);
 
     if (structureChanged) {
         while (QLayoutItem* item = previewStatsGridLayout_->takeAt(0)) {
@@ -3209,13 +3308,203 @@ void MainWindow::updatePreviewStatsLayoutMode()
 
     // Keep chip widths column-driven and independent from text metrics.
     const int totalSpacing = horizontalSpacing * qMax(0, cols - 1);
-    const int availableWidth = qMax(0, hostWidth - totalSpacing);
+    const int availableWidth = qMax(0, resolvedHostWidth - gridMargins.left() - gridMargins.right() - totalSpacing);
     const int columnWidth = (cols > 0) ? (availableWidth / cols) : 0;
     for (QLabel* chip : previewStatsChips_) {
         if (chip == nullptr) {
             continue;
         }
         chip->setFixedWidth(qMax(0, columnWidth));
+    }
+
+    return cardHeight;
+}
+
+void MainWindow::updatePreviewWorkspaceLayout()
+{
+    if (workspaceSplitter_ == nullptr || previewPanel_ == nullptr || previewControlCard_ == nullptr) {
+        return;
+    }
+
+    const QRect splitterRect = workspaceSplitter_->contentsRect();
+    if (splitterRect.width() <= 0 || splitterRect.height() <= 0) {
+        updatePreviewPanelLayout();
+        return;
+    }
+
+    const int handleWidth = qMax(0, workspaceSplitter_->handleWidth());
+    const int availableWidth = qMax(0, splitterRect.width() - handleWidth);
+    const int availableHeight = qMax(0, splitterRect.height());
+    const int leftMinWidth = (previewLeftColumn_ != nullptr) ? previewLeftColumn_->minimumWidth() : 320;
+    const int minimumRightWidth =
+        (availableWidth >= leftMinWidth + kPreviewControlStatsCardMinWidth + kPreviewPanelMarginX * 2)
+        ? (kPreviewControlStatsCardMinWidth + kPreviewPanelMarginX * 2)
+        : qMin(availableWidth, kPreviewControlStatsCardMinWidth + kPreviewPanelMarginX * 2);
+    const int rightMaxWidth =
+        (availableWidth >= leftMinWidth + minimumRightWidth)
+        ? qMin(kEmbeddedPreviewPanelWidthMax, availableWidth - leftMinWidth)
+        : availableWidth;
+    const int preferredRightMaxWidth = qMax(minimumRightWidth, rightMaxWidth);
+    int preferredRightWidth = qRound(availableWidth * kEmbeddedPreviewPanelWidthRatio);
+    preferredRightWidth = qMin(preferredRightWidth, preferredRightMaxWidth);
+    preferredRightWidth = qMax(preferredRightWidth, qMin(kEmbeddedPreviewPanelMinWidth, preferredRightMaxWidth));
+
+    const int controlHeight = qMax(previewControlCard_->minimumSizeHint().height(), previewControlCard_->sizeHint().height());
+    if (runtimeDebugOutputEnabled_) {
+        appendOutput(
+            "preview/layout-calc/workspace-base",
+            QString("splitter_rect=%1x%2 handle=%3 available=%4x%5 left_min=%6 right_min=%7 right_max=%8 preferred_ratio=%.2f preferred_right=%9 control_h=%10")
+                .arg(splitterRect.width())
+                .arg(splitterRect.height())
+                .arg(handleWidth)
+                .arg(availableWidth)
+                .arg(availableHeight)
+                .arg(leftMinWidth)
+                .arg(minimumRightWidth)
+                .arg(rightMaxWidth)
+                .arg(preferredRightWidth)
+                .arg(controlHeight)
+                .replace("%.2f", QString::number(kEmbeddedPreviewPanelWidthRatio, 'f', 2))
+        );
+    }
+    int targetRightWidth = preferredRightWidth;
+    for (int i = 0; i < 3; ++i) {
+        const int panelContentWidth = qMax(0, targetRightWidth - kPreviewPanelMarginX * 2);
+        const int statsHostWidth = qMax(0, panelContentWidth - 16);
+        const int minimumStatsHeight = updatePreviewStatsLayoutMode(statsHostWidth);
+        const int availablePreviewHeight = qMax(
+            0,
+            availableHeight
+                - kPreviewPanelMarginTop
+                - kPreviewCanvasControlGap
+                - controlHeight
+                - kPreviewControlStatsGap
+                - minimumStatsHeight
+                - kPreviewStatsBottomGap
+        );
+        const int heightLimitedWidth = qMax(0, availablePreviewHeight + kPreviewPanelMarginX * 2);
+        const int nextRightWidth = qMin(targetRightWidth, qMax(minimumRightWidth, heightLimitedWidth));
+        if (runtimeDebugOutputEnabled_) {
+            appendOutput(
+                "preview/layout-calc/workspace-iter",
+                QString("iter=%1 target_right=%2 panel_content_w=%3 stats_host_w=%4 stats_min_h=%5 available_preview_h=%6 height_limited_w=%7 next_right=%8")
+                    .arg(i)
+                    .arg(targetRightWidth)
+                    .arg(panelContentWidth)
+                    .arg(statsHostWidth)
+                    .arg(minimumStatsHeight)
+                    .arg(availablePreviewHeight)
+                    .arg(heightLimitedWidth)
+                    .arg(nextRightWidth)
+            );
+        }
+        if (nextRightWidth == targetRightWidth) {
+            break;
+        }
+        targetRightWidth = nextRightWidth;
+    }
+
+    targetRightWidth = qBound(minimumRightWidth, targetRightWidth, rightMaxWidth);
+    const int targetLeftWidth =
+        (availableWidth >= leftMinWidth + targetRightWidth)
+        ? qMax(leftMinWidth, availableWidth - targetRightWidth)
+        : qMax(0, availableWidth - targetRightWidth);
+    if (runtimeDebugOutputEnabled_) {
+        appendOutput(
+            "preview/layout-calc/workspace-final",
+            QString("target_left=%1 target_right=%2 total_available_w=%3")
+                .arg(targetLeftWidth)
+                .arg(targetRightWidth)
+                .arg(availableWidth)
+        );
+    }
+    const QList<int> currentSizes = workspaceSplitter_->sizes();
+    if (currentSizes.size() == 2
+        && (qAbs(currentSizes.at(0) - targetLeftWidth) > 1 || qAbs(currentSizes.at(1) - targetRightWidth) > 1)) {
+        workspaceSplitter_->setSizes({targetLeftWidth, targetRightWidth});
+        if (runtimeDebugOutputEnabled_) {
+            appendOutput(
+                "preview/layout-calc/workspace-apply",
+                QString("applied_sizes=[%1,%2] previous=[%3,%4]")
+                    .arg(targetLeftWidth)
+                    .arg(targetRightWidth)
+                    .arg(currentSizes.value(0))
+                    .arg(currentSizes.value(1))
+            );
+        }
+    }
+
+    updatePreviewPanelLayout();
+}
+
+void MainWindow::updatePreviewPanelLayout()
+{
+    if (previewPanel_ == nullptr
+        || previewCanvasFrame_ == nullptr
+        || previewCanvasContainer_ == nullptr
+        || previewControlCard_ == nullptr
+        || previewStatsCard_ == nullptr) {
+        return;
+    }
+
+    const QRect panelRect = previewPanel_->contentsRect();
+    if (panelRect.width() <= 0 || panelRect.height() <= 0) {
+        return;
+    }
+
+    const int contentX = panelRect.x() + kPreviewPanelMarginX;
+    const int contentY = panelRect.y() + kPreviewPanelMarginTop;
+    const int contentWidth = qMax(0, panelRect.width() - kPreviewPanelMarginX * 2);
+    const int controlHeight = qMax(previewControlCard_->minimumSizeHint().height(), previewControlCard_->sizeHint().height());
+    const int statsHostWidth = qMax(0, contentWidth - 16);
+    const int minimumStatsHeight = updatePreviewStatsLayoutMode(statsHostWidth);
+    const int availablePreviewHeight = qMax(
+        0,
+        panelRect.height()
+            - kPreviewPanelMarginTop
+            - kPreviewCanvasControlGap
+            - controlHeight
+            - kPreviewControlStatsGap
+            - minimumStatsHeight
+            - kPreviewStatsBottomGap
+    );
+    const int previewSide = qMax(1, qMin(contentWidth, availablePreviewHeight));
+    const int controlY = contentY + previewSide + kPreviewCanvasControlGap;
+    const int statsAreaY = controlY + controlHeight + kPreviewControlStatsGap;
+    const int statsAreaHeight = qMax(0, panelRect.height() - (statsAreaY - panelRect.y()) - kPreviewStatsBottomGap);
+    const int statsHeight = qMin(minimumStatsHeight, statsAreaHeight);
+    const int statsY = statsAreaY + qMax(0, (statsAreaHeight - statsHeight) / 2);
+    if (runtimeDebugOutputEnabled_) {
+        appendOutput(
+            "preview/layout-calc/panel",
+            QString("panel=%1x%2 content=(x=%3,y=%4,w=%5) control_h=%6 stats_host_w=%7 stats_min_h=%8 available_preview_h=%9 preview_side=%10 control_y=%11 stats_area_y=%12 stats_area_h=%13 stats_y=%14 stats_h=%15")
+                .arg(panelRect.width())
+                .arg(panelRect.height())
+                .arg(contentX)
+                .arg(contentY)
+                .arg(contentWidth)
+                .arg(controlHeight)
+                .arg(statsHostWidth)
+                .arg(minimumStatsHeight)
+                .arg(availablePreviewHeight)
+                .arg(previewSide)
+                .arg(controlY)
+                .arg(statsAreaY)
+                .arg(statsAreaHeight)
+                .arg(statsY)
+                .arg(statsHeight)
+        );
+    }
+
+    previewCanvasFrame_->setGeometry(contentX, contentY, previewSide, previewSide);
+    previewCanvasContainer_->setGeometry(previewCanvasFrame_->rect().adjusted(1, 1, -1, -1));
+    previewControlCard_->setGeometry(contentX, controlY, contentWidth, controlHeight);
+    previewStatsCard_->setGeometry(contentX, statsY, contentWidth, statsHeight);
+    updatePreviewStatsLayoutMode(statsHostWidth);
+
+    if (!previewLayoutInitialized_) {
+        previewCanvasContainer_->show();
+        previewLayoutInitialized_ = true;
     }
 }
 
@@ -3782,12 +4071,6 @@ QString MainWindow::resolvePreviewSkinDir() const
     return QString();
 }
 
-QString MainWindow::resolvePortableStateFilePath() const
-{
-    const QDir appDir(QCoreApplication::applicationDirPath());
-    return appDir.filePath(".miacode_state.json");
-}
-
 QString MainWindow::resolveProjectRenderStateFilePath() const
 {
     if (currentFilePath_.isEmpty()) {
@@ -3826,57 +4109,47 @@ void MainWindow::loadPortableState()
     previewBackgroundBrightness_ = 0.2;
     previewShowDebugInfo_ = false;
 
-    QFile file(resolvePortableStateFilePath());
-    if (!file.exists()) {
-        return;
-    }
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return;
-    }
+    const QJsonObject root = UiText::loadPreferencesObject();
+    const QJsonObject app = root.value("app").toObject();
+    const QJsonObject preview = app.value("preview").toObject();
 
-    QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-        return;
-    }
-    const QJsonObject root = doc.object();
-    const QString dir = root.value("last_open_dir").toString();
+    const QString dir = app.value("last_open_dir").toString();
     if (!dir.isEmpty() && QDir(dir).exists()) {
         lastOpenDir_ = QDir::cleanPath(dir);
     }
-    const QString trackPath = root.value("last_track_path").toString();
+    const QString trackPath = app.value("last_track_path").toString();
     if (!trackPath.isEmpty() && QFileInfo::exists(trackPath)) {
         lastTrackPath_ = QDir::cleanPath(trackPath);
     }
     showSlideTracks_ = true;
-    if (root.value("show_judge_markers").isBool()) {
-        showJudgeMarkers_ = root.value("show_judge_markers").toBool(false);
+    if (preview.value("show_judge_markers").isBool()) {
+        showJudgeMarkers_ = preview.value("show_judge_markers").toBool(false);
     }
-    if (root.value("show_touch_trail").isBool()) {
-        showTouchTrail_ = root.value("show_touch_trail").toBool(false);
+    if (preview.value("show_touch_trail").isBool()) {
+        showTouchTrail_ = preview.value("show_touch_trail").toBool(false);
     }
-    if (root.value("preview_background_brightness").isDouble()) {
-        previewBackgroundBrightness_ = qBound(0.0, root.value("preview_background_brightness").toDouble(0.2), 1.0);
+    if (preview.value("background_brightness").isDouble()) {
+        previewBackgroundBrightness_ = qBound(0.0, preview.value("background_brightness").toDouble(0.2), 1.0);
     }
-    if (root.value("preview_show_debug_info").isBool()) {
-        previewShowDebugInfo_ = root.value("preview_show_debug_info").toBool(false);
+    if (preview.value("show_debug_info").isBool()) {
+        previewShowDebugInfo_ = preview.value("show_debug_info").toBool(false);
     }
-    if (root.value("preview_audio").isObject()) {
-        softwarePreviewAudioSettings_ = PreviewAudioSettings::fromJson(root.value("preview_audio").toObject());
+    if (preview.value("audio").isObject()) {
+        softwarePreviewAudioSettings_ = PreviewAudioSettings::fromJson(preview.value("audio").toObject());
     } else {
-        softwarePreviewAudioSettings_.bgmVolume = root.value("bgm_volume").toDouble(softwarePreviewAudioSettings_.bgmVolume);
-        const double legacyAnswer = root.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.answerVolume);
-        const double legacySlide = root.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.slideVolume);
-        const double legacyBreak = root.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.breakVolume);
-        const double legacyEx = root.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.exVolume);
-        const double legacyTouch = root.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.touchVolume);
-        const double legacyTouchhold = root.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.touchholdVolume);
-        softwarePreviewAudioSettings_.answerVolume = root.value("answer_volume").toDouble(legacyAnswer);
-        softwarePreviewAudioSettings_.slideVolume = root.value("slide_volume").toDouble(legacySlide);
-        softwarePreviewAudioSettings_.breakVolume = root.value("break_volume").toDouble(legacyBreak);
-        softwarePreviewAudioSettings_.exVolume = root.value("ex_volume").toDouble(legacyEx);
-        softwarePreviewAudioSettings_.touchVolume = root.value("touch_volume").toDouble(legacyTouch);
-        softwarePreviewAudioSettings_.touchholdVolume = root.value("touchhold_volume").toDouble(legacyTouchhold);
+        softwarePreviewAudioSettings_.bgmVolume = preview.value("bgm_volume").toDouble(softwarePreviewAudioSettings_.bgmVolume);
+        const double legacyAnswer = preview.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.answerVolume);
+        const double legacySlide = preview.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.slideVolume);
+        const double legacyBreak = preview.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.breakVolume);
+        const double legacyEx = preview.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.exVolume);
+        const double legacyTouch = preview.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.touchVolume);
+        const double legacyTouchhold = preview.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.touchholdVolume);
+        softwarePreviewAudioSettings_.answerVolume = preview.value("answer_volume").toDouble(legacyAnswer);
+        softwarePreviewAudioSettings_.slideVolume = preview.value("slide_volume").toDouble(legacySlide);
+        softwarePreviewAudioSettings_.breakVolume = preview.value("break_volume").toDouble(legacyBreak);
+        softwarePreviewAudioSettings_.exVolume = preview.value("ex_volume").toDouble(legacyEx);
+        softwarePreviewAudioSettings_.touchVolume = preview.value("touch_volume").toDouble(legacyTouch);
+        softwarePreviewAudioSettings_.touchholdVolume = preview.value("touchhold_volume").toDouble(legacyTouchhold);
         softwarePreviewAudioSettings_.normalize();
     }
     previewAudioSettings_ = softwarePreviewAudioSettings_;
@@ -3884,26 +4157,23 @@ void MainWindow::loadPortableState()
 
 void MainWindow::savePortableState() const
 {
-    const QString path = resolvePortableStateFilePath();
-    QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        return;
-    }
+    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject app = root.value("app").toObject();
+    QJsonObject preview = app.value("preview").toObject();
 
-    QJsonObject root;
-    root.insert("last_open_dir", lastOpenDir_);
-    root.insert("last_track_path", lastTrackPath_);
-    root.insert("show_slide_tracks", true);
-    root.insert("show_judge_markers", showJudgeMarkers_);
-    root.insert("show_touch_trail", showTouchTrail_);
-    root.insert("preview_background_brightness", previewBackgroundBrightness_);
-    root.insert("preview_show_debug_info", previewShowDebugInfo_);
-    root.insert("preview_audio", softwarePreviewAudioSettings_.toJson());
-    const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Indented);
-    if (file.write(payload) != payload.size()) {
-        return;
-    }
-    file.commit();
+    app.insert("last_open_dir", lastOpenDir_);
+    app.insert("last_track_path", lastTrackPath_);
+    app.insert("show_slide_tracks", true);
+
+    preview.insert("show_judge_markers", showJudgeMarkers_);
+    preview.insert("show_touch_trail", showTouchTrail_);
+    preview.insert("background_brightness", previewBackgroundBrightness_);
+    preview.insert("show_debug_info", previewShowDebugInfo_);
+    preview.insert("audio", softwarePreviewAudioSettings_.toJson());
+
+    app.insert("preview", preview);
+    root.insert("app", app);
+    UiText::savePreferencesObject(root);
 }
 
 void MainWindow::loadProjectRenderState()
@@ -4487,6 +4757,9 @@ void MainWindow::onPreviewFromStart()
         statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
+    if (!saveBeforePreviewStart()) {
+        return;
+    }
     refreshTimelineMetadata();
     if (!legacyPygamePreviewEnabled_) {
         if (timelineView_ != nullptr) {
@@ -4507,6 +4780,9 @@ void MainWindow::onPreviewFromCursor()
 {
     if (!hasActiveDifficulty()) {
         statusBar()->showMessage("Select a difficulty field first.");
+        return;
+    }
+    if (!saveBeforePreviewStart()) {
         return;
     }
     const auto [line, col] = currentSelectionOrCursorLineCol();
@@ -4532,6 +4808,9 @@ void MainWindow::onTogglePreviewPause()
         } else {
             if (!hasActiveDifficulty()) {
                 statusBar()->showMessage("Select a difficulty field first.");
+                return;
+            }
+            if (!saveBeforePreviewStart()) {
                 return;
             }
             startQtPreviewPlayback(qtPreviewPauseSecond_, true);
@@ -4587,6 +4866,134 @@ void MainWindow::onPreviewAudioSettings()
 void MainWindow::onPreviewDisplaySettings()
 {
     onPreviewRenderSettings();
+}
+
+void MainWindow::onPreferences()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(uiText("dialog.preferences.title", "Preferences"));
+    dialog.setModal(true);
+    dialog.setMinimumWidth(460);
+    dialog.setStyleSheet(
+        "QDialog { background: #F8FAFD; }"
+        "QGroupBox { background: #FFFFFF; border: 1px solid #DCE5F0; border-radius: 10px; margin-top: 12px; padding-top: 10px; font-weight: 600; }"
+        "QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 4px; }"
+        "QLabel { color: #203040; }"
+        "QToolButton#PreferenceMenuButton {"
+        " min-height: 30px;"
+        " min-width: 180px;"
+        " border: 1px solid #D8E0EA;"
+        " border-radius: 6px;"
+        " padding: 4px 10px;"
+        " background: #FFFFFF;"
+        " color: #223042;"
+        " font-weight: 600;"
+        " text-align: left;"
+        "}"
+        "QToolButton#PreferenceMenuButton:hover { background: #F5F8FC; border-color: #BCD0E5; }"
+        "QToolButton#PreferenceMenuButton:pressed { background: #E8F1FB; border-color: #9FC1E9; }"
+        "QPushButton { min-width: 92px; min-height: 30px; border: 1px solid #BFD0E3; border-radius: 6px; background: #FFFFFF; color: #223042; }"
+        "QPushButton:hover { background: #F3F8FF; border-color: #9FC1E9; }"
+    );
+
+    auto* rootLayout = new QVBoxLayout(&dialog);
+    rootLayout->setContentsMargins(12, 12, 12, 12);
+    rootLayout->setSpacing(10);
+
+    auto* interfaceGroup = new QGroupBox(uiText("dialog.preferences.interface_group", "Interface"), &dialog);
+    auto* interfaceLayout = new QFormLayout(interfaceGroup);
+    interfaceLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    interfaceLayout->setHorizontalSpacing(12);
+    interfaceLayout->setVerticalSpacing(8);
+
+    const UiText::LanguagePreference currentPreference = UiText::preferredLanguage();
+    UiText::LanguagePreference selectedPreference = currentPreference;
+    const auto languageLabel = [](UiText::LanguagePreference preference) -> QString {
+        switch (preference) {
+        case UiText::LanguagePreference::English:
+            return uiText("dialog.preferences.language.english", "English");
+        case UiText::LanguagePreference::Chinese:
+            return uiText("dialog.preferences.language.chinese", "Simplified Chinese");
+        case UiText::LanguagePreference::System:
+        default:
+            return uiText("dialog.preferences.language.system", "Follow System");
+        }
+    };
+
+    auto* languageLabelWidget = new QLabel(uiText("dialog.preferences.language", "Language"), interfaceGroup);
+    auto* languageButton = new QToolButton(interfaceGroup);
+    languageButton->setObjectName("PreferenceMenuButton");
+    languageButton->setFont(uiAccentFont(10, QFont::DemiBold));
+    languageButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    languageButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    languageButton->setText(languageLabel(selectedPreference));
+    auto* languageMenu = new QMenu(languageButton);
+    languageMenu->setFont(uiAccentFont(10));
+    styleRoundedMenu(*languageMenu);
+    const QList<UiText::LanguagePreference> languageOptions{
+        UiText::LanguagePreference::System,
+        UiText::LanguagePreference::English,
+        UiText::LanguagePreference::Chinese,
+    };
+    for (UiText::LanguagePreference preference : languageOptions) {
+        QAction* action = languageMenu->addAction(languageLabel(preference));
+        action->setCheckable(true);
+        action->setChecked(preference == selectedPreference);
+        connect(action, &QAction::triggered, &dialog, [&, preference, languageMenu, languageButton]() {
+            selectedPreference = preference;
+            for (QAction* candidate : languageMenu->actions()) {
+                candidate->setChecked(candidate->text() == languageLabel(selectedPreference));
+            }
+            languageButton->setText(languageLabel(selectedPreference));
+        });
+    }
+    int languageButtonWidth = 0;
+    const QFontMetrics languageMetrics(languageButton->font());
+    for (UiText::LanguagePreference preference : languageOptions) {
+        languageButtonWidth = qMax(languageButtonWidth, languageMetrics.horizontalAdvance(languageLabel(preference)));
+    }
+    languageButton->setFixedWidth(languageButtonWidth + 28);
+    connect(languageButton, &QToolButton::clicked, &dialog, [languageButton, languageLabelWidget, languageMenu]() {
+        const int estimatedItemHeight = qMax(32, languageButton->sizeHint().height() + 2);
+        const QPoint labelCenterGlobal = languageLabelWidget->mapToGlobal(QPoint(languageLabelWidget->width(), languageLabelWidget->height() / 2));
+        const QPoint buttonTopLeftGlobal = languageButton->mapToGlobal(QPoint(0, 0));
+        const QPoint popupPos(buttonTopLeftGlobal.x(), labelCenterGlobal.y() - estimatedItemHeight / 2 - 7);
+        languageMenu->popup(popupPos);
+    });
+    interfaceLayout->addRow(languageLabelWidget, languageButton);
+    rootLayout->addWidget(interfaceGroup);
+
+    auto* editorGroup = new QGroupBox(uiText("dialog.preferences.editor_group", "Editor"), &dialog);
+    auto* editorLayout = new QVBoxLayout(editorGroup);
+    editorLayout->setContentsMargins(12, 10, 12, 12);
+    auto* editorPlaceholder = new QLabel(
+        "Work in progress",
+        editorGroup
+    );
+    editorPlaceholder->setWordWrap(true);
+    editorLayout->addWidget(editorPlaceholder);
+    rootLayout->addWidget(editorGroup);
+
+    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    rootLayout->addWidget(buttonBox, 0, Qt::AlignRight);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    if (selectedPreference == currentPreference) {
+        return;
+    }
+
+    UiText::setPreferredLanguage(selectedPreference);
+    statusBar()->showMessage(uiText("status.preferences_saved", "Preferences saved. Restart to apply."));
+    QMessageBox::information(
+        this,
+        uiText("dialog.preferences.restart_title", "Restart Required"),
+        uiText("dialog.preferences.restart_message", "Language preference saved. Restart MiaCode to apply menu, font, and UI text updates.")
+    );
 }
 
 void MainWindow::onAbout()
@@ -5241,6 +5648,12 @@ void MainWindow::appendOutput(const QString& title, const QString& payload)
     if (!runtimeDebugOutputEnabled_) {
         return;
     }
+    QFile logFile(runtimeDebugLogPath());
+    if (logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+        QTextStream out(&logFile);
+        out << timestampLine(title) << "\n";
+        out << payload << "\n\n";
+    }
     if (outputView_ == nullptr) {
         return;
     }
@@ -5290,6 +5703,14 @@ bool MainWindow::runValidateSimai()
         statusBar()->showMessage(QString("Validate Simai failed: %1 syntax error(s).").arg(nativeResult.errors.size()));
     }
     return false;
+}
+
+bool MainWindow::saveBeforePreviewStart()
+{
+    if (documentDirty_ || currentFieldDirty_) {
+        return onSaveFile();
+    }
+    return maybeSaveCurrentFieldChanges();
 }
 
 void MainWindow::onValidateSimai()

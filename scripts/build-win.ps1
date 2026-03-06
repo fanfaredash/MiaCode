@@ -76,18 +76,23 @@ if ([string]::IsNullOrWhiteSpace($qtRoot) -or !(Test-Path $qtRoot)) {
 
 $cmakePrefixPath = $qtRoot
 $env:PATH = "$qtRoot\bin;$env:PATH"
+$buildDevTools = if ($Config -eq "Debug") { "ON" } else { "OFF" }
 
-cmake -S $repoRoot -B $BuildDir -G "Visual Studio 17 2022" -D CMAKE_PREFIX_PATH="$cmakePrefixPath"
+cmake -S $repoRoot -B $BuildDir -G "Visual Studio 17 2022" -D CMAKE_PREFIX_PATH="$cmakePrefixPath" -D MIACODE_BUILD_DEV_TOOLS="$buildDevTools"
 if ($LASTEXITCODE -ne 0) {
     throw "CMake configure failed."
 }
 
-cmake --build $BuildDir --config $Config --target miacode
+$buildTargets = @("MiaCode")
+if ($buildDevTools -eq "ON") {
+    $buildTargets += @("simai_native_dump", "soundtouch_probe")
+}
+cmake --build $BuildDir --config $Config --target @buildTargets
 if ($LASTEXITCODE -ne 0) {
     throw "CMake build failed."
 }
 
-& (Join-Path $repoRoot "scripts\package-win.ps1") -BuildDir $BuildDir -Config $Config -QtRoot $qtRoot
+& (Join-Path $repoRoot "scripts\package-win.ps1") -BuildDir $BuildDir -Config $Config -QtRoot $qtRoot -IncludeDevTools:($buildDevTools -eq "ON")
 if ($LASTEXITCODE -ne 0) {
     throw "Windows packaging failed."
 }

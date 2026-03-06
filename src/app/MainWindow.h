@@ -14,6 +14,7 @@
 class QAction;
 class QCloseEvent;
 class QEvent;
+class QFrame;
 class QGridLayout;
 class QLabel;
 class QListWidget;
@@ -27,8 +28,10 @@ class PreviewCanvas;
 class PreviewMediaController;
 class QPlainTextEdit;
 class QProcess;
+class QResizeEvent;
 class QStackedWidget;
 class QSlider;
+class QSplitter;
 class QTimer;
 class QToolButton;
 class QWidget;
@@ -46,6 +49,7 @@ public:
 protected:
     void closeEvent(QCloseEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
 private slots:
     void onValidateSimai();
@@ -67,6 +71,7 @@ private slots:
     void onPreviewAudioSettings();
     void onPreviewDisplaySettings();
     void onPreviewRenderSettings();
+    void onPreferences();
     void onAbout();
     void onErrorItemActivated(QListWidgetItem* item);
     void onPreviewProcessFinished(int exitCode);
@@ -117,6 +122,7 @@ private:
     void markCurrentFieldDirty();
     void rebuildFieldSidebar();
     void updateEditorHeader();
+    void updateEditorHeaderLayoutMode();
     void updateEditorStatus();
     void updateEditorEmptyState();
     void updateMetadataPageMode();
@@ -152,7 +158,9 @@ private:
     void refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers);
     void updatePreviewObjectStats(double second);
     void clearPreviewObjectStats();
-    void updatePreviewStatsLayoutMode();
+    int updatePreviewStatsLayoutMode(int hostWidth = -1);
+    void updatePreviewWorkspaceLayout();
+    void updatePreviewPanelLayout();
     double previewDurationSeconds() const;
     void applyPreviewPlaybackRate(double rate);
     double timelineSecondForCursor(int line, int col) const;
@@ -162,7 +170,6 @@ private:
     QString resolvePreviewSessionScriptPath() const;
     QString resolveDefaultTrackPath() const;
     QString resolvePreviewSkinDir() const;
-    QString resolvePortableStateFilePath() const;
     QString resolveProjectRenderStateFilePath() const;
     QString resolveInitialOpenDirectory() const;
     void loadPortableState();
@@ -173,6 +180,7 @@ private:
     void applyPreviewAudioSettingsToRuntime();
     void setLastOpenDirectory(const QString& pathOrDir);
     bool runValidateSimai();
+    bool saveBeforePreviewStart();
     void appendOutput(const QString& title, const QString& payload);
     void clearValidationErrors();
     void clearValidationDecorations();
@@ -198,6 +206,7 @@ private:
     QAction* openAction_ = nullptr;
     QAction* saveAction_ = nullptr;
     QAction* settingsPlaceholderAction_ = nullptr;
+    QAction* preferencesAction_ = nullptr;
     QAction* saveAsAction_ = nullptr;
     QAction* transformMirrorLeftRightAction_ = nullptr;
     QAction* transformMirrorUpDownAction_ = nullptr;
@@ -286,6 +295,12 @@ private:
     QLabel* editorEmptyStateLabel_ = nullptr;
     QTabWidget* bottomTabs_ = nullptr;
     QToolButton* deleteDifficultyButton_ = nullptr;
+    QSplitter* workspaceSplitter_ = nullptr;
+    QWidget* previewPanel_ = nullptr;
+    QWidget* previewLeftColumn_ = nullptr;
+    QWidget* previewCanvasContainer_ = nullptr;
+    QFrame* previewCanvasFrame_ = nullptr;
+    QFrame* previewControlCard_ = nullptr;
     QToolButton* stopPreviewButton_ = nullptr;
     QToolButton* pausePreviewButton_ = nullptr;
     QSlider* previewSlider_ = nullptr;
@@ -301,6 +316,7 @@ private:
     QVector<QLabel*> previewStatsChips_;
     int previewStatsLayoutRows_ = 0;
     int previewStatsLayoutCols_ = 0;
+    bool previewLayoutInitialized_ = false;
     QVector<TimelineNoteMarker> previewStatsNoteMarkers_;
     QString activeOutlineKey_ = "metadata";
     int activeDifficultyId_ = 0;
