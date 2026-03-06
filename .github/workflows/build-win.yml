@@ -2,34 +2,25 @@ name: Build Release Package (Windows)
 
 on:
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch or tag to build
+        required: true
+        default: dev
 
 jobs:
   build-windows:
     name: Windows Qt 6.8
     runs-on: windows-latest
     steps:
-      - name: Checkout
+      - name: Checkout target ref
         uses: actions/checkout@v4
-
-      - name: Install Qt 6.8.3 (MSVC 2022)
-        uses: jurplel/install-qt-action@v4
         with:
-          version: 6.8.3
-          host: windows
-          target: desktop
-          arch: win64_msvc2022_64
+          ref: ${{ inputs.ref }}
 
-      - name: Configure
+      - name: Run build script
         shell: pwsh
-        run: cmake -S . -B build -G "Visual Studio 17 2022" -D CMAKE_PREFIX_PATH="$env:Qt6_DIR"
-
-      - name: Build
-        shell: pwsh
-        run: cmake --build build --config Release --target miacode
-
-      - name: Package Release
-        shell: pwsh
-        run: ./scripts/package-win.ps1 -BuildDir build -Config Release
+        run: ./scripts/build-win.ps1
 
       - name: Upload Release Artifact
         uses: actions/upload-artifact@v4
