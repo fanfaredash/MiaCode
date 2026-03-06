@@ -300,6 +300,7 @@ private:
     QGridLayout* previewStatsGridLayout_ = nullptr;
     QVector<QLabel*> previewStatsChips_;
     int previewStatsLayoutRows_ = 0;
+    int previewStatsLayoutCols_ = 0;
     QVector<TimelineNoteMarker> previewStatsNoteMarkers_;
     QString activeOutlineKey_ = "metadata";
     int activeDifficultyId_ = 0;
