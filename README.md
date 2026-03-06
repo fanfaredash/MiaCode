@@ -20,9 +20,8 @@
 
 依赖：
 - CMake 3.21+
-- Qt 6.1+，需要 `Core`、`Gui`、`Widgets`、`OpenGLWidgets`
-- 可选 `Qt6::Multimedia`
-- 可选 QScintilla for Qt 6
+- Qt 6.8+，需要 `Core`、`Gui`、`Widgets`、`OpenGLWidgets`
+- `Qt6::Multimedia`
 
 使用仓库内的 [CMakePresets.json](CMakePresets.json) 配置并构建：
 

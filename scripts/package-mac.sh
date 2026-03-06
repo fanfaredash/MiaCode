@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-build}"
 QT_ROOT="${QT_ROOT:-}"
+if [[ -z "$QT_ROOT" && -n "${QT_ROOT_DIR:-}" ]]; then
+  QT_ROOT="$QT_ROOT_DIR"
+fi
 
 parse_version() {
   local cmake_file="$1"
@@ -23,6 +26,7 @@ DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist/MiaCode-v${VERSION}-portable-macos}"
 
 if [[ -n "$QT_ROOT" ]]; then
   export PATH="$QT_ROOT/bin:$PATH"
+  export CMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH:-$QT_ROOT}"
 fi
 
 if ! command -v cmake >/dev/null 2>&1; then
@@ -31,11 +35,16 @@ if ! command -v cmake >/dev/null 2>&1; then
 fi
 
 if ! command -v macdeployqt >/dev/null 2>&1; then
-  echo "macdeployqt not found in PATH (set QT_ROOT=/path/to/Qt/6.1.x/macos)" >&2
+  echo "macdeployqt not found in PATH (set QT_ROOT=/path/to/Qt/6.8.x/macos)" >&2
   exit 1
 fi
 
-cmake -S "$ROOT_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
+cmake_args=(
+  -S "$ROOT_DIR"
+  -B "$BUILD_DIR"
+  -DCMAKE_BUILD_TYPE=Release
+)
+cmake "${cmake_args[@]}"
 cmake --build "$BUILD_DIR" --config Release
 
 APP_PATH="$BUILD_DIR/MiaCode.app"

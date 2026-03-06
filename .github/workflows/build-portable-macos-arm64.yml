@@ -1,0 +1,36 @@
+name: Build Portable Package (macOS Apple Silicon)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-macos-arm64:
+    name: macOS arm64
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt
+        shell: bash
+        run: |
+          brew update
+          brew install qt
+          echo "QT_ROOT=$(brew --prefix qt)" >> "$GITHUB_ENV"
+
+      - name: Package Portable
+        shell: bash
+        env:
+          QT_ROOT: ${{ env.QT_ROOT }}
+          CMAKE_PREFIX_PATH: ${{ env.QT_ROOT }}
+          CMAKE_OSX_ARCHITECTURES: arm64
+        run: |
+          chmod +x scripts/package-mac.sh
+          bash scripts/package-mac.sh
+
+      - name: Upload Portable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MiaCode-portable-macos-arm64
+          path: dist/*.zip
+          if-no-files-found: error

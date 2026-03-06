@@ -27,11 +27,7 @@ configure_file(
     @ONLY
 )
 
-find_package(Qt6 6.1 REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets Concurrent)
-find_package(Qt6 6.1 QUIET COMPONENTS Multimedia)
-
-find_path(QSCINTILLA_INCLUDE_DIR NAMES Qsci/qsciscintilla.h)
-find_library(QSCINTILLA_LIBRARY NAMES qscintilla2_qt6 qscintilla2-qt6 qscintilla2)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets Concurrent Multimedia)
 
 add_executable(miacode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
@@ -157,16 +153,8 @@ target_include_directories(soundtouch_probe PRIVATE
     src/tools
 )
 
-if (TARGET Qt6::Multimedia)
-    target_link_libraries(miacode PRIVATE Qt6::Multimedia)
-    target_compile_definitions(miacode PRIVATE HAVE_QT_MULTIMEDIA=1)
-endif()
-
-if (QSCINTILLA_INCLUDE_DIR AND QSCINTILLA_LIBRARY)
-    target_include_directories(miacode PRIVATE ${QSCINTILLA_INCLUDE_DIR})
-    target_link_libraries(miacode PRIVATE ${QSCINTILLA_LIBRARY})
-    target_compile_definitions(miacode PRIVATE HAVE_QSCINTILLA=1)
-endif()
+target_link_libraries(miacode PRIVATE Qt6::Multimedia)
+target_compile_definitions(miacode PRIVATE HAVE_QT_MULTIMEDIA=1)
 
 if (WIN32)
     get_target_property(QT_QMAKE_EXECUTABLE Qt6::qmake IMPORTED_LOCATION)
