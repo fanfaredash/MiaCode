@@ -26,7 +26,7 @@ function Read-VersionFromCMake {
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $version = Read-VersionFromCMake -CMakeFilePath (Join-Path $repoRoot "CMakeLists.txt")
 if ([string]::IsNullOrWhiteSpace($DistDir)) {
-    $DistDir = Join-Path "dist" "MiaCode-v$version-portable-win64"
+    $DistDir = Join-Path "dist" "MiaCode-v$version-win64"
 }
 
 $exePath = Join-Path $BuildDir "$Config\MiaCode.exe"
@@ -98,9 +98,9 @@ foreach ($docFile in @("README.md", "README_EN.md")) {
         Copy-Item $srcDoc (Join-Path $docsDir $docFile) -Force
     }
 }
-$portableReadme = Join-Path $docsDir "PORTABLE_README.txt"
+$releaseReadme = Join-Path $docsDir "RELEASE_README.txt"
 @(
-    "MiaCode portable package"
+    "MiaCode release package"
     ""
     "Run:"
     "  MiaCode.exe"
@@ -114,7 +114,7 @@ $portableReadme = Join-Path $docsDir "PORTABLE_README.txt"
     "Not included on purpose:"
     "  - simai_native_dump.exe"
     "  - soundtouch_probe.exe"
-) | Set-Content -Path $portableReadme -Encoding UTF8
+) | Set-Content -Path $releaseReadme -Encoding UTF8
 
 $zipPath = "$DistDir.zip"
 if (Test-Path $zipPath) {

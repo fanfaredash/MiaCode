@@ -58,8 +58,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1
 ```
 
 Output:
-- `dist/MiaCode-v<version>-portable-win64`
-- `dist/MiaCode-v<version>-portable-win64.zip`
+- `dist/MiaCode-v<version>-win64`
+- `dist/MiaCode-v<version>-win64.zip`
 
 ---
 
