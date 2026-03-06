@@ -185,6 +185,28 @@ QString SimaiDocument::difficultyName(int id)
     }
 }
 
+QString SimaiDocument::difficultyShortName(int id)
+{
+    switch (id) {
+    case 1:
+        return "ESY";
+    case 2:
+        return "BAS";
+    case 3:
+        return "ADV";
+    case 4:
+        return "EXP";
+    case 5:
+        return "MAS";
+    case 6:
+        return "REM";
+    case 7:
+        return "UTG";
+    default:
+        return QString("Difficulty %1").arg(id);
+    }
+}
+
 QString SimaiDocument::toText() const
 {
     QStringList blocks;
