@@ -22,7 +22,7 @@ parse_version() {
 }
 
 VERSION="$(parse_version "$ROOT_DIR/CMakeLists.txt")"
-DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist/MiaCode-v${VERSION}-portable-macos}"
+DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist/MiaCode-v${VERSION}-macos}"
 
 if [[ -n "$QT_ROOT" ]]; then
   export PATH="$QT_ROOT/bin:$PATH"
@@ -85,8 +85,8 @@ for doc in README.md README_EN.md; do
   fi
 done
 
-cat >"$DIST_DIR/docs/PORTABLE_README.txt" <<'EOF'
-MiaCode portable package (macOS)
+cat >"$DIST_DIR/docs/RELEASE_README.txt" <<'EOF'
+MiaCode release package (macOS)
 
 Run:
   Open MiaCode.app

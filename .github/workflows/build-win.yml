@@ -1,4 +1,4 @@
-name: Build Portable Package (Windows)
+name: Build Release Package (Windows)
 
 on:
   workflow_dispatch:
@@ -27,13 +27,13 @@ jobs:
         shell: pwsh
         run: cmake --build build --config Release --target miacode
 
-      - name: Package Portable
+      - name: Package Release
         shell: pwsh
         run: ./scripts/package-win.ps1 -BuildDir build -Config Release
 
-      - name: Upload Portable Artifact
+      - name: Upload Release Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MiaCode-portable-win64
+          name: MiaCode-win64
           path: dist/*.zip
           if-no-files-found: error
