@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-build}"
 QT_ROOT="${QT_ROOT:-}"
 DEPLOYMENT_TARGET="${CMAKE_OSX_DEPLOYMENT_TARGET:-}"
+MACOS_CODESIGN_IDENTITY="${MACOS_CODESIGN_IDENTITY:--}"
 if [[ -z "$QT_ROOT" && -n "${QT_ROOT_DIR:-}" ]]; then
   QT_ROOT="$QT_ROOT_DIR"
 fi
@@ -162,6 +163,16 @@ Included:
 EOF
 
 macdeployqt "$DIST_DIR/MiaCode.app" -always-overwrite
+
+# macdeployqt may rewrite Qt binaries and invalidate bundled signatures.
+# Re-sign the packaged app (ad-hoc by default) so macOS won't kill it at launch.
+if [[ -n "$MACOS_CODESIGN_IDENTITY" ]]; then
+  if ! command -v codesign >/dev/null 2>&1; then
+    echo "codesign not found in PATH" >&2
+    exit 1
+  fi
+  codesign --force --deep --sign "$MACOS_CODESIGN_IDENTITY" "$DIST_DIR/MiaCode.app"
+fi
 
 if [[ -n "$DEPLOYMENT_TARGET" ]]; then
   validate_minos "$DIST_DIR/MiaCode.app/Contents/MacOS/MiaCode" "$DEPLOYMENT_TARGET"
