@@ -2,6 +2,7 @@ param(
     [string]$PythonExe = "",
     [string]$QtVersion = "6.8.3",
     [string]$QtArch = "win64_msvc2022_64",
+    [string[]]$QtModules = @("qtmultimedia"),
     [string]$QtOutputDir = "",
     [string]$BuildDir = "build",
     [ValidateSet("Release", "Debug")]
@@ -55,11 +56,13 @@ if ([string]::IsNullOrWhiteSpace($QtOutputDir)) {
 $pythonCommand = Resolve-PythonExe -Preferred $PythonExe
 
 Invoke-Python -PythonCommand $pythonCommand -Arguments @("-m", "pip", "install", "--user", "aqtinstall==3.3.*", "py7zr==1.0.*")
-Invoke-Python -PythonCommand $pythonCommand -Arguments @(
+$qtInstallArgs = @(
     "-m", "aqt", "install-qt",
     "windows", "desktop", $QtVersion, $QtArch,
-    "--outputdir", $QtOutputDir
-)
+    "--outputdir", $QtOutputDir,
+    "--modules"
+) + $QtModules
+Invoke-Python -PythonCommand $pythonCommand -Arguments $qtInstallArgs
 
 $qtRoot = Join-Path $QtOutputDir $QtVersion "msvc2022_64"
 if (!(Test-Path $qtRoot)) {
