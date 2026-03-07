@@ -20,6 +20,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 set(MIACODE_APP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/app.ico" CACHE FILEPATH "Optional application icon (.ico) for Windows builds")
+set(MIACODE_MACOS_APP_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/app.icns" CACHE FILEPATH "Optional application icon (.icns) for macOS bundles")
 option(MIACODE_BUILD_DEV_TOOLS "Build developer helper tools" OFF)
 
 configure_file(
@@ -56,6 +57,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/simai/SimaiNativeParser.cpp
     src/timeline/TimelineView.h
     src/timeline/TimelineView.cpp
+    resources/app_icons.qrc
     resources/fonts.qrc
 )
 set_target_properties(MiaCode PROPERTIES
@@ -63,10 +65,20 @@ set_target_properties(MiaCode PROPERTIES
 )
 
 if (WIN32 AND EXISTS "${MIACODE_APP_ICON}")
-    file(TO_NATIVE_PATH "${MIACODE_APP_ICON}" MIACODE_APP_ICON_NATIVE)
+    file(TO_CMAKE_PATH "${MIACODE_APP_ICON}" MIACODE_APP_ICON_RC_PATH)
     set(MIACODE_APP_RC "${CMAKE_CURRENT_BINARY_DIR}/generated/miacode_app_icon.rc")
-    file(WRITE "${MIACODE_APP_RC}" "IDI_APP_ICON ICON \"${MIACODE_APP_ICON_NATIVE}\"\n")
+    file(WRITE "${MIACODE_APP_RC}" "IDI_APP_ICON ICON \"${MIACODE_APP_ICON_RC_PATH}\"\n")
     target_sources(MiaCode PRIVATE "${MIACODE_APP_RC}")
+endif()
+
+if (APPLE AND EXISTS "${MIACODE_MACOS_APP_ICON}")
+    set_source_files_properties("${MIACODE_MACOS_APP_ICON}" PROPERTIES
+        MACOSX_PACKAGE_LOCATION "Resources"
+    )
+    target_sources(MiaCode PRIVATE "${MIACODE_MACOS_APP_ICON}")
+    set_target_properties(MiaCode PROPERTIES
+        MACOSX_BUNDLE_ICON_FILE "app.icns"
+    )
 endif()
 
 add_library(soundtouch STATIC
