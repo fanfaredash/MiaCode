@@ -18,9 +18,19 @@ jobs:
         shell: pwsh
         run: ./scripts/build-win.ps1
 
+      - name: Detect Artifact Name
+        id: artifact_name
+        shell: pwsh
+        run: |
+          $distDir = Get-ChildItem -Path dist -Directory -Filter 'MiaCode-v*-win64' | Select-Object -First 1
+          if ($null -eq $distDir) {
+            throw "Windows dist directory not found."
+          }
+          "name=$($distDir.Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
       - name: Upload Release Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MiaCode-win64
+          name: ${{ steps.artifact_name.outputs.name }}
           path: dist/MiaCode-v*-win64
           if-no-files-found: error

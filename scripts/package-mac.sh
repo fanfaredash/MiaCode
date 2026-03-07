@@ -161,6 +161,10 @@ if [[ -d "$ROOT_DIR/assets" ]]; then
     fi
   done
   cp -R "$ROOT_DIR/assets" "$DIST_DIR/assets"
+  bundle_assets_dir="$DIST_DIR/MiaCode.app/Contents/Resources/assets"
+  rm -rf "$bundle_assets_dir"
+  mkdir -p "$(dirname "$bundle_assets_dir")"
+  cp -R "$ROOT_DIR/assets" "$bundle_assets_dir"
 fi
 
 for doc in README.md README_EN.md; do
