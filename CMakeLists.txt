@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 
 set(MIACODE_VERSION_MAJOR "0" CACHE STRING "miacode major version")
 set(MIACODE_VERSION_MINOR "1" CACHE STRING "miacode minor version")
-set(MIACODE_VERSION_PATCH "0" CACHE STRING "miacode patch version")
+set(MIACODE_VERSION_PATCH "1" CACHE STRING "miacode patch version")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 
 project(MiaCode VERSION ${MIACODE_VERSION} LANGUAGES CXX)

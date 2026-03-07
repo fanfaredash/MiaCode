@@ -71,6 +71,11 @@ QT_ROOT="$HOME/Qt/6.8.3/macos" bash scripts/package-mac.sh
 
 ## 更新日志
 
+### 0.1.1
+
+- UI 美化
+- 增加 icon
+
 ### 0.1.0
 
 - **Simai 编辑**
