@@ -7,6 +7,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFont>
+#include <QIcon>
 #include <QTextStream>
 #include <QTimer>
 #include <QStringList>
@@ -70,6 +71,7 @@ int main(int argc, char* argv[])
     logStartupStage("qapplication_constructed");
     app.setApplicationName("MiaCode");
     app.setApplicationVersion(MIACODE_VERSION_STRING);
+    app.setWindowIcon(QIcon(":/icons/app.png"));
     app.setStyle(QStyleFactory::create("Fusion"));
     logStartupStage("app_style_ready");
 
