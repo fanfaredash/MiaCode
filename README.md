@@ -23,6 +23,8 @@
 - Qt 6.8+，需要 `Core`、`Gui`、`Widgets`、`OpenGLWidgets`
 - `Qt6::Multimedia`
 
+打包的详细说明在 [scripts/README.md](scripts/README.md)。
+
 ### Windows 构建
 
 推荐直接使用脚本自动安装 Qt、构建并打包：
@@ -52,8 +54,6 @@ bash scripts/build-macos.sh
 ```bash
 QT_ROOT="$HOME/Qt/6.8.3/macos" bash scripts/package-mac.sh
 ```
-
-打包说明已移动到 [scripts/README.md](scripts/README.md)。
 
 ## 仓库结构
 

@@ -19,6 +19,11 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-win.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1 -QtRoot D:\Qt\6.8.3\msvc2022_64
 ```
 
+Notes:
+- `package-win.ps1` only packages an existing build. It does not trigger a build or download Qt.
+- If `-QtRoot` is omitted, the script tries to find `windeployqt` from the current `PATH`.
+- If you want Qt to be installed automatically and then build/package in one step, use `build-win.ps1`.
+
 Output:
 - `dist/MiaCode-v<version>-win64`
 - `dist/MiaCode-v<version>-win64.zip`
