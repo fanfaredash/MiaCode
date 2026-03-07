@@ -40,9 +40,17 @@ jobs:
           test -n "$APP_PATH"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
+      - name: Detect Artifact Name
+        id: artifact_name
+        shell: bash
+        run: |
+          ZIP_PATH="$(find dist -maxdepth 1 -type f -name '*.zip' | head -n 1)"
+          test -n "$ZIP_PATH"
+          echo "name=$(basename "$ZIP_PATH" .zip)" >> "$GITHUB_OUTPUT"
+
       - name: Upload Release Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MiaCode-macos-arm64
+          name: ${{ steps.artifact_name.outputs.name }}
           path: dist/*.zip
           if-no-files-found: error

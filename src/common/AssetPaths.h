@@ -4,20 +4,25 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QString>
+#include <QStringList>
 
 namespace miacode::assets {
 
 inline QString findAssetRoot()
 {
     static const QString cachedRoot = []() -> QString {
+        QStringList candidates;
         QDir cursor(QCoreApplication::applicationDirPath());
+        candidates << QDir::cleanPath(cursor.filePath("../Resources/assets"));
         for (int depth = 0; depth < 8; ++depth) {
-            const QString candidate = QDir::cleanPath(cursor.filePath("assets"));
-            if (QFileInfo(candidate).isDir()) {
-                return candidate;
-            }
+            candidates << QDir::cleanPath(cursor.filePath("assets"));
             if (!cursor.cdUp()) {
                 break;
+            }
+        }
+        for (const QString& candidate : candidates) {
+            if (QFileInfo(candidate).isDir()) {
+                return candidate;
             }
         }
         return QString();
