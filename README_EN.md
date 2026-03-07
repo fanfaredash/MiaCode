@@ -70,6 +70,11 @@ Thanks to [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) for referenc
 
 ## Changelog
 
+### 0.1.1
+
+- UI polish.
+- Added application icon.
+
 ### 0.1.0
 
 - **Simai Editing**
