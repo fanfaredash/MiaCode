@@ -9,6 +9,10 @@
 - `build-win.ps1`：自动安装 Qt、执行 CMake 构建，并调用 `package-win.ps1` 生成发布包
 - `package-win.ps1`：对已有 Windows 构建结果执行 `windeployqt` 并输出 `dist/`
 
+    - `package-win.ps1` 只打包，不会触发构建，也不会自动下载 Qt。
+    - 如果不指定 `-QtRoot`，脚本会尝试从当前 `PATH` 中查找 `windeployqt`。
+    - 如果希望自动安装 Qt 并完成构建打包，请使用 `build-win.ps1`。
+
 常用示例：
 
 ```powershell
