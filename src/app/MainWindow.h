@@ -5,6 +5,7 @@
 
 #include <QElapsedTimer>
 #include <QMainWindow>
+#include <QPointer>
 #include <QVector>
 
 #include "PreviewAudioSettings.h"
@@ -17,6 +18,7 @@ class QEvent;
 class QFrame;
 class QGridLayout;
 class QLabel;
+class LatencyDetectorDialog;
 class QListWidget;
 class QListWidgetItem;
 class QLineEdit;
@@ -71,6 +73,7 @@ private slots:
     void onPreviewAudioSettings();
     void onPreviewDisplaySettings();
     void onPreviewRenderSettings();
+    void onOpenLatencyDetector();
     void onPreferences();
     void onAbout();
     void onErrorItemActivated(QListWidgetItem* item);
@@ -93,8 +96,13 @@ private:
     bool maybeSaveBeforeContinue();
     void configureRuntimeDebugOutput();
     void ensurePreviewMediaControllerInitialized();
+    void ensurePreviewSfxRuntimePrepared();
+    void schedulePreviewSubsystemWarmup();
+    void tryFinalizePreviewSubsystemWarmup();
     void setupInitialWindowGeometry();
     void setupMenusAndActions(QMenu* fileMenu, QMenu* toolsMenu, QMenu* transformMenu, QMenu* helpMenu);
+    void updateLatencyDetectorAvailability();
+    QString resolveLatencyDetectorTrackPath() const;
     bool maybeSaveCurrentFieldChanges();
     bool applyCurrentFieldToDocument();
     bool saveToPath(const QString& path);
@@ -139,6 +147,11 @@ private:
     int activeDifficultyId() const;
     QString activeChartText() const;
     double parsedFirstSeconds(bool* ok = nullptr) const;
+    double parsedWholeBpm(bool* ok = nullptr) const;
+    QString parsedLatencyMeterId() const;
+    void applyLatencyDetectorOffset(double seconds);
+    void applyLatencyDetectorBpm(double bpm);
+    void applyLatencyDetectorMeter(const QString& meterId);
     void refreshWaveformCache();
     void scheduleTimelineRefresh();
     void refreshTimelineMetadata();
@@ -217,6 +230,7 @@ private:
     QAction* previewFromStartAction_ = nullptr;
     QAction* previewFromCursorAction_ = nullptr;
     QAction* pausePreviewAction_ = nullptr;
+    QAction* latencyDetectorAction_ = nullptr;
     QAction* toggleJudgeMarkersAction_ = nullptr;
     QAction* toggleTouchTrailAction_ = nullptr;
     QAction* previewRenderSettingsAction_ = nullptr;
@@ -239,6 +253,10 @@ private:
     int previewArrangeRetryCount_ = 0;
     bool legacyPygamePreviewEnabled_ = false;
     bool runtimeDebugOutputEnabled_ = false;
+    bool previewSfxRuntimePrepared_ = false;
+    bool previewSubsystemWarmupScheduled_ = false;
+    bool previewSubsystemWarmupFinalized_ = false;
+    int previewSubsystemWarmupPendingTasks_ = 0;
     bool documentDirty_ = false;
     bool currentFieldDirty_ = false;
     bool qtPreviewPlaying_ = false;
@@ -303,6 +321,7 @@ private:
     QFrame* previewControlCard_ = nullptr;
     QToolButton* stopPreviewButton_ = nullptr;
     QToolButton* pausePreviewButton_ = nullptr;
+    QToolButton* latencyDetectorButton_ = nullptr;
     QSlider* previewSlider_ = nullptr;
     QToolButton* previewSpeedButton_ = nullptr;
     QLabel* previewTapStatsLabel_ = nullptr;
@@ -318,6 +337,7 @@ private:
     int previewStatsLayoutCols_ = 0;
     bool previewLayoutInitialized_ = false;
     QVector<TimelineNoteMarker> previewStatsNoteMarkers_;
+    QPointer<LatencyDetectorDialog> latencyDetectorDialog_;
     QString activeOutlineKey_ = "metadata";
     int activeDifficultyId_ = 0;
 };

@@ -7,6 +7,7 @@
 #include "SimaiNativeParser.h"
 #include "TimelineView.h"
 #include "UiText.h"
+#include "tools/LatencyDetectorDialog.h"
 #include "common/AssetPaths.h"
 
 #include <algorithm>
@@ -82,6 +83,7 @@
 #include <QTextEdit>
 #include <QTextOption>
 #include <QToolBar>
+#include <QThreadPool>
 #include <QWidgetAction>
 #include <QToolTip>
 #include <QtMath>
@@ -980,6 +982,101 @@ void MainWindow::ensurePreviewMediaControllerInitialized()
     appendStartupTimingStage("mainwindow/preview_media_controller_lazy_init", elapsedMs, elapsedMs);
 }
 
+void MainWindow::ensurePreviewSfxRuntimePrepared()
+{
+    if (previewSfxRuntime_ == nullptr || previewSfxRuntimePrepared_) {
+        return;
+    }
+    QElapsedTimer initTimer;
+    initTimer.start();
+    previewSfxRuntime_->reloadAssets(previewAudioSettings_);
+    previewSfxRuntime_->setChartPath(currentFilePath_);
+    previewSfxRuntime_->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
+    previewSfxRuntimePrepared_ = true;
+    const qint64 elapsedMs = initTimer.elapsed();
+    appendStartupTimingStage("mainwindow/preview_sfx_runtime_prepare_on_demand", elapsedMs, elapsedMs);
+}
+
+void MainWindow::schedulePreviewSubsystemWarmup()
+{
+    if (previewSubsystemWarmupScheduled_) {
+        return;
+    }
+    previewSubsystemWarmupScheduled_ = true;
+    previewSubsystemWarmupPendingTasks_ = 2;
+
+    const PreviewAudioSettings audioSettingsSnapshot = previewAudioSettings_;
+    const QString chartPathSnapshot = currentFilePath_;
+    const double playbackRateSnapshot = previewPlaybackRate_;
+    QPointer<MainWindow> guard(this);
+
+    QThreadPool::globalInstance()->start([guard]() {
+        QElapsedTimer timer;
+        timer.start();
+#ifdef HAVE_QT_MULTIMEDIA
+        PreviewMediaController controllerWarmup;
+#endif
+        const qint64 elapsedMs = timer.elapsed();
+        if (guard.isNull()) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+            guard.data(),
+            [guard, elapsedMs]() {
+                if (guard.isNull()) {
+                    return;
+                }
+                appendStartupTimingStage("mainwindow/preview_media_controller_worker_warmup", elapsedMs, elapsedMs);
+                guard->previewSubsystemWarmupPendingTasks_ = qMax(0, guard->previewSubsystemWarmupPendingTasks_ - 1);
+                guard->tryFinalizePreviewSubsystemWarmup();
+            },
+            Qt::QueuedConnection
+        );
+    }, -1);
+
+    QThreadPool::globalInstance()->start([guard, audioSettingsSnapshot, chartPathSnapshot, playbackRateSnapshot]() {
+        QElapsedTimer timer;
+        timer.start();
+        QtPreviewSfxRuntime runtimeWarmup;
+        runtimeWarmup.setChartPath(chartPathSnapshot);
+        runtimeWarmup.setBackgroundTrackPlaybackRate(playbackRateSnapshot);
+        runtimeWarmup.reloadAssets(audioSettingsSnapshot);
+        const qint64 elapsedMs = timer.elapsed();
+        if (guard.isNull()) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+            guard.data(),
+            [guard, elapsedMs]() {
+                if (guard.isNull()) {
+                    return;
+                }
+                appendStartupTimingStage("mainwindow/preview_sfx_worker_warmup", elapsedMs, elapsedMs);
+                guard->previewSubsystemWarmupPendingTasks_ = qMax(0, guard->previewSubsystemWarmupPendingTasks_ - 1);
+                guard->tryFinalizePreviewSubsystemWarmup();
+            },
+            Qt::QueuedConnection
+        );
+    }, -1);
+}
+
+void MainWindow::tryFinalizePreviewSubsystemWarmup()
+{
+    if (!previewSubsystemWarmupScheduled_
+        || previewSubsystemWarmupFinalized_
+        || previewSubsystemWarmupPendingTasks_ > 0) {
+        return;
+    }
+    previewSubsystemWarmupFinalized_ = true;
+
+    QElapsedTimer applyTimer;
+    applyTimer.start();
+    ensurePreviewSfxRuntimePrepared();
+    ensurePreviewMediaControllerInitialized();
+    const qint64 elapsedMs = applyTimer.elapsed();
+    appendStartupTimingStage("mainwindow/preview_subsystem_warmup_apply", elapsedMs, elapsedMs);
+}
+
 void MainWindow::setupInitialWindowGeometry()
 {
     QSize initialSize(1280, 800);
@@ -1050,6 +1147,10 @@ void MainWindow::setupMenusAndActions(QMenu* fileMenu, QMenu* toolsMenu, QMenu* 
     pausePreviewAction_->setToolTip(QString());
     connect(pausePreviewAction_, &QAction::triggered, this, &MainWindow::onTogglePreviewPause);
     toolsMenu->addAction(pausePreviewAction_);
+
+    latencyDetectorAction_ = new QAction(UiText::isChineseUi() ? QStringLiteral("BPM&&偏移检测") : QStringLiteral("BPM && Offset Detection..."), this);
+    connect(latencyDetectorAction_, &QAction::triggered, this, &MainWindow::onOpenLatencyDetector);
+    toolsMenu->addAction(latencyDetectorAction_);
 
     toolsMenu->addSeparator();
 
@@ -1262,10 +1363,12 @@ MainWindow::MainWindow(QWidget* parent)
     difficultyLevelEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     auto* difficultyDesignerLabel = new QLabel(uiText("editor.des", "Des"), editorDifficultyControls_);
     difficultyDesignerLabel->setFont(uiAccentFont(10));
-    difficultyDesignerEdit_ = new QLineEdit(editorDifficultyControls_);
-    difficultyDesignerEdit_->setPlaceholderText("&des_n=");
+    auto* difficultyDesignerLineEdit = new LeftPlaceholderLineEdit(editorDifficultyControls_);
+    difficultyDesignerLineEdit->setLeftPlaceholderText("&des_n=");
+    difficultyDesignerEdit_ = difficultyDesignerLineEdit;
     difficultyDesignerEdit_->setMinimumWidth(0);
     difficultyDesignerEdit_->setMaximumWidth(140);
+    difficultyDesignerEdit_->setAlignment(Qt::AlignCenter);
     difficultyDesignerEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     editorDifficultyLayout->addWidget(difficultyLevelLabel);
     editorDifficultyLayout->addWidget(difficultyLevelEdit_);
@@ -1329,11 +1432,13 @@ MainWindow::MainWindow(QWidget* parent)
     titleEdit_ = new QLineEdit(metadataPage_);
     artistEdit_ = new QLineEdit(metadataPage_);
     firstEdit_ = new QLineEdit(metadataPage_);
-    designerEdit_ = new QLineEdit(metadataPage_);
+    auto* designerLineEdit = new LeftPlaceholderLineEdit(metadataPage_);
+    designerLineEdit->setLeftPlaceholderText("&des=");
+    designerEdit_ = designerLineEdit;
     titleEdit_->setPlaceholderText("&title=");
     artistEdit_->setPlaceholderText("&artist=");
     firstEdit_->setPlaceholderText("&first=");
-    designerEdit_->setPlaceholderText("&des=");
+    designerEdit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     const auto makeMetadataFieldLabel = [this](const QString& text) {
         auto* label = new QLabel(text, metadataPage_);
         label->setObjectName("MetadataFieldLabel");
@@ -1345,8 +1450,12 @@ MainWindow::MainWindow(QWidget* parent)
     auto* firstWrap = new QWidget(metadataPage_);
     auto* firstWrapLayout = new QHBoxLayout(firstWrap);
     firstWrapLayout->setContentsMargins(0, 0, 0, 0);
-    firstWrapLayout->setSpacing(0);
+    firstWrapLayout->setSpacing(6);
     firstWrapLayout->addWidget(firstEdit_, 0, Qt::AlignLeft);
+    latencyDetectorButton_ = new QToolButton(metadataPage_);
+    latencyDetectorButton_->setText(UiText::isChineseUi() ? QStringLiteral("BPM&&偏移检测") : QStringLiteral("BPM && Offset Detection"));
+    connect(latencyDetectorButton_, &QToolButton::clicked, this, &MainWindow::onOpenLatencyDetector);
+    firstWrapLayout->addWidget(latencyDetectorButton_, 0, Qt::AlignLeft);
     firstWrapLayout->addStretch(1);
 
     metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.title", "title")), titleEdit_);
@@ -1625,7 +1734,9 @@ MainWindow::MainWindow(QWidget* parent)
     previewPanel_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
     previewCanvas_ = new PreviewCanvas();
+    logStartupStage("preview_canvas_created");
     previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
+    logStartupStage("preview_skin_async_dispatched");
     previewCanvasFrame_ = new QFrame(previewPanel_);
     previewCanvasFrame_->setObjectName("PreviewCanvasFrame");
     previewCanvasFrame_->setMinimumSize(QSize(1, 1));
@@ -1762,8 +1873,6 @@ MainWindow::MainWindow(QWidget* parent)
 
     previewSfxRuntime_ = new QtPreviewSfxRuntime(this);
     logStartupStage("preview_sfx_runtime_created");
-    previewCanvas_->setBackgroundBrightness(previewBackgroundBrightness_);
-    previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
     connect(previewCanvas_, &QOpenGLWindow::frameSwapped, this, [this]() {
         if (!qtPreviewPlaying_ || legacyPygamePreviewEnabled_ || !qtPreviewAwaitingFrameSwap_) {
             return;
@@ -1856,6 +1965,7 @@ MainWindow::MainWindow(QWidget* parent)
     currentFileLabel_ = new QLabel(this);
     statusBar()->addPermanentWidget(currentFileLabel_, 1);
     updateCurrentFileLabel();
+    updateLatencyDetectorAvailability();
 
     metadataRefreshTimer_ = new QTimer(this);
     metadataRefreshTimer_->setSingleShot(true);
@@ -1946,9 +2056,10 @@ MainWindow::MainWindow(QWidget* parent)
         previewMediaController_->setBackgroundTrackPath(lastTrackPath_);
     }
     if (previewSfxRuntime_ != nullptr) {
-        previewSfxRuntime_->reloadAssets(previewAudioSettings_);
         previewSfxRuntime_->setChartPath(currentFilePath_);
+        logStartupStage("preview_sfx_set_chart_path_done");
         previewSfxRuntime_->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
+        logStartupStage("preview_sfx_set_playback_rate_done");
     }
     if (toggleJudgeMarkersAction_ != nullptr) {
         toggleJudgeMarkersAction_->setChecked(showJudgeMarkers_);
@@ -1962,13 +2073,13 @@ MainWindow::MainWindow(QWidget* parent)
     if (previewCanvas_ != nullptr) {
         previewCanvas_->setBackgroundBrightness(previewBackgroundBrightness_);
         previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
-        previewCanvas_->reset();
     }
     if (previewMediaController_ != nullptr) {
         previewMediaController_->setBackgroundBrightness(previewBackgroundBrightness_);
     }
     updatePauseButtonAppearance();
     loadDocument(SimaiDocument::createEmpty());
+    logStartupStage("initial_empty_document_applied");
     updatePreviewSliderRange();
     updatePreviewSliderPosition(0.0);
     logStartupStage("initial_document_loaded");
@@ -1985,9 +2096,11 @@ MainWindow::MainWindow(QWidget* parent)
     } else {
         appendOutput("preview/bootstrap", "legacy pygame preview disabled by default");
     }
-    QTimer::singleShot(120, this, [this]() {
-        ensurePreviewMediaControllerInitialized();
+    logStartupStage("preview_media_controller_lazy_init_deferred");
+    QTimer::singleShot(0, this, [this]() {
+        schedulePreviewSubsystemWarmup();
     });
+    logStartupStage("preview_subsystem_warmup_scheduled");
     logStartupStage("constructor_done");
 }
 
@@ -2764,7 +2877,9 @@ void MainWindow::populateDifficultyPage(int difficultyId)
     }
     if (difficultyDesignerEdit_ != nullptr) {
         QSignalBlocker blocker(difficultyDesignerEdit_);
-        difficultyDesignerEdit_->setPlaceholderText(QString("&des_%1=").arg(difficultyId));
+        if (auto* placeholderEdit = dynamic_cast<LeftPlaceholderLineEdit*>(difficultyDesignerEdit_)) {
+            placeholderEdit->setLeftPlaceholderText(QString("&des_%1=").arg(difficultyId));
+        }
         difficultyDesignerEdit_->setText(difficultyData->designer);
     }
     setEditorText(difficultyData->chart);
@@ -2784,6 +2899,18 @@ bool MainWindow::switchToMetadataField()
     populateMetadataPage();
     if (editorStack_ != nullptr && metadataPage_ != nullptr) {
         editorStack_->setCurrentWidget(metadataPage_);
+    }
+    if (bottomTabs_ != nullptr && timelineView_ != nullptr) {
+        const int timelineTabIndex = bottomTabs_->indexOf(timelineView_);
+        if (timelineTabIndex >= 0) {
+            bottomTabs_->setTabVisible(timelineTabIndex, false);
+        }
+        if (errorList_ != nullptr) {
+            const int errorTabIndex = bottomTabs_->indexOf(errorList_);
+            if (errorTabIndex >= 0) {
+                bottomTabs_->setCurrentIndex(errorTabIndex);
+            }
+        }
     }
     updateMetadataPageMode();
     currentFieldDirty_ = false;
@@ -2811,6 +2938,12 @@ bool MainWindow::switchToDifficultyField(int difficultyId)
     populateDifficultyPage(difficultyId);
     if (editorStack_ != nullptr && chartPage_ != nullptr) {
         editorStack_->setCurrentWidget(chartPage_);
+    }
+    if (bottomTabs_ != nullptr && timelineView_ != nullptr) {
+        const int timelineTabIndex = bottomTabs_->indexOf(timelineView_);
+        if (timelineTabIndex >= 0) {
+            bottomTabs_->setTabVisible(timelineTabIndex, true);
+        }
     }
     currentFieldDirty_ = false;
     updateDirtyState();
@@ -2946,12 +3079,137 @@ double MainWindow::parsedFirstSeconds(bool* ok) const
     return localOk ? value : 0.0;
 }
 
+double MainWindow::parsedWholeBpm(bool* ok) const
+{
+    const QVector<SimaiRawField> fields = SimaiDocument::parseRawFields(
+        metadataExtraEdit_ != nullptr ? metadataExtraEdit_->toPlainText() : QString(),
+        true
+    );
+    for (const SimaiRawField& field : fields) {
+        if (field.key.compare(QStringLiteral("wholebpm"), Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+        bool localOk = false;
+        const double value = field.value.trimmed().toDouble(&localOk);
+        if (ok != nullptr) {
+            *ok = localOk && value > 0.0;
+        }
+        return (localOk && value > 0.0) ? value : 0.0;
+    }
+    if (ok != nullptr) {
+        *ok = false;
+    }
+    return 0.0;
+}
+
+QString MainWindow::parsedLatencyMeterId() const
+{
+    const QVector<SimaiRawField> fields = SimaiDocument::parseRawFields(
+        metadataExtraEdit_ != nullptr ? metadataExtraEdit_->toPlainText() : QString(),
+        true
+    );
+    for (const SimaiRawField& field : fields) {
+        if (field.key.compare(QStringLiteral("meter"), Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+        const QString value = field.value.trimmed();
+        if (value == QLatin1String("4/4")
+            || value == QLatin1String("3/4")
+            || value == QLatin1String("6/8")
+            || value == QLatin1String("7/4")
+            || value == QLatin1String("auto")) {
+            return value;
+        }
+        return QStringLiteral("auto");
+    }
+    return QStringLiteral("auto");
+}
+
+void MainWindow::applyLatencyDetectorOffset(double seconds)
+{
+    const double normalized = qIsFinite(seconds) ? seconds : 0.0;
+    const QString serialized = QString::number(normalized, 'f', 3);
+    document_.first = serialized;
+    if (firstEdit_ != nullptr) {
+        QSignalBlocker blocker(firstEdit_);
+        firstEdit_->setText(serialized);
+    }
+    documentDirty_ = true;
+    updateDirtyState();
+    refreshWaveformCache();
+}
+
+void MainWindow::applyLatencyDetectorBpm(double bpm)
+{
+    if (!qIsFinite(bpm) || bpm <= 0.0) {
+        return;
+    }
+    QVector<SimaiRawField> fields = SimaiDocument::parseRawFields(
+        metadataExtraEdit_ != nullptr ? metadataExtraEdit_->toPlainText() : QString(),
+        true
+    );
+    const QString serializedBpm = QString::number(bpm, 'f', 3);
+    bool foundWholeBpm = false;
+    for (SimaiRawField& field : fields) {
+        if (field.key.compare(QStringLiteral("wholebpm"), Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+        field.value = serializedBpm;
+        foundWholeBpm = true;
+        break;
+    }
+    if (!foundWholeBpm) {
+        fields.append(SimaiRawField{QStringLiteral("wholebpm"), serializedBpm});
+    }
+    document_.extraFields = fields;
+    setMetadataExtraText(SimaiDocument::serializeRawFields(fields));
+    documentDirty_ = true;
+    updateDirtyState();
+}
+
+void MainWindow::applyLatencyDetectorMeter(const QString& meterId)
+{
+    QString normalized = meterId.trimmed();
+    if (normalized != QLatin1String("4/4")
+        && normalized != QLatin1String("3/4")
+        && normalized != QLatin1String("6/8")
+        && normalized != QLatin1String("7/4")
+        && normalized != QLatin1String("auto")) {
+        normalized = QStringLiteral("auto");
+    }
+
+    QVector<SimaiRawField> fields = SimaiDocument::parseRawFields(
+        metadataExtraEdit_ != nullptr ? metadataExtraEdit_->toPlainText() : QString(),
+        true
+    );
+    bool found = false;
+    for (SimaiRawField& field : fields) {
+        if (field.key.compare(QStringLiteral("meter"), Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+        field.value = normalized;
+        found = true;
+        break;
+    }
+    if (!found) {
+        fields.append(SimaiRawField{QStringLiteral("meter"), normalized});
+    }
+    document_.extraFields = fields;
+    setMetadataExtraText(SimaiDocument::serializeRawFields(fields));
+    documentDirty_ = true;
+    updateDirtyState();
+}
+
 void MainWindow::setCurrentFilePath(const QString& path)
 {
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
     const bool pathChanged = normalizedPath != currentFilePath_;
     if (pathChanged) {
         stopQtPreviewPlayback(false);
+        if (latencyDetectorDialog_ != nullptr) {
+            latencyDetectorDialog_->close();
+            latencyDetectorDialog_.clear();
+        }
     }
     currentFilePath_ = normalizedPath;
     if (!currentFilePath_.isEmpty()) {
@@ -2969,6 +3227,7 @@ void MainWindow::setCurrentFilePath(const QString& path)
     }
     updateWindowTitle();
     updateCurrentFileLabel();
+    updateLatencyDetectorAvailability();
     if (pathChanged) {
         loadProjectRenderState();
     }
@@ -3740,6 +3999,7 @@ void MainWindow::applyPreviewPlaybackRate(double rate)
 void MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
 {
     ensurePreviewMediaControllerInitialized();
+    ensurePreviewSfxRuntimePrepared();
     const double startSecond = qBound(0.0, second, previewDurationSeconds());
     qtPreviewStartSecond_ = startSecond;
     qtPreviewPauseSecond_ = startSecond;
@@ -4060,6 +4320,29 @@ QString MainWindow::resolveDefaultTrackPath() const
         return lastTrackPath_;
     }
     return QString();
+}
+
+QString MainWindow::resolveLatencyDetectorTrackPath() const
+{
+    if (currentFilePath_.isEmpty()) {
+        return QString();
+    }
+    const QString siblingTrack = QDir(QFileInfo(currentFilePath_).absolutePath()).filePath("track.mp3");
+    if (QFileInfo::exists(siblingTrack)) {
+        return QDir::cleanPath(siblingTrack);
+    }
+    return QString();
+}
+
+void MainWindow::updateLatencyDetectorAvailability()
+{
+    const bool enabled = !resolveLatencyDetectorTrackPath().isEmpty();
+    if (latencyDetectorAction_ != nullptr) {
+        latencyDetectorAction_->setEnabled(enabled);
+    }
+    if (latencyDetectorButton_ != nullptr) {
+        latencyDetectorButton_->setEnabled(enabled);
+    }
 }
 
 QString MainWindow::resolvePreviewSkinDir() const
@@ -5066,6 +5349,54 @@ void MainWindow::onAbout()
     dialog.exec();
 }
 
+void MainWindow::onOpenLatencyDetector()
+{
+    const QString trackPath = resolveLatencyDetectorTrackPath();
+    bool wholeBpmOk = false;
+    const double wholeBpm = parsedWholeBpm(&wholeBpmOk);
+    const QString meterId = parsedLatencyMeterId();
+    if (trackPath.isEmpty()) {
+        statusBar()->showMessage(UiText::isChineseUi()
+            ? QStringLiteral("当前谱面目录缺少 track.mp3，无法打开BPM&偏移检测。")
+            : QStringLiteral("track.mp3 was not found next to the current chart."));
+        updateLatencyDetectorAvailability();
+        return;
+    }
+
+    if (latencyDetectorDialog_ != nullptr) {
+        if (latencyDetectorDialog_->trackPath() == trackPath) {
+            latencyDetectorDialog_->setOffsetSeconds(parsedFirstSeconds());
+            latencyDetectorDialog_->setBpm(wholeBpmOk ? wholeBpm : 0.0);
+            latencyDetectorDialog_->setMeterId(meterId);
+            latencyDetectorDialog_->raise();
+            latencyDetectorDialog_->activateWindow();
+            return;
+        }
+        latencyDetectorDialog_->close();
+        latencyDetectorDialog_.clear();
+    }
+
+    latencyDetectorDialog_ = new LatencyDetectorDialog(trackPath, currentFilePath_, previewAudioSettings_, this);
+    latencyDetectorDialog_->setOffsetSeconds(parsedFirstSeconds());
+    latencyDetectorDialog_->setBpm(wholeBpmOk ? wholeBpm : 0.0);
+    latencyDetectorDialog_->setMeterId(meterId);
+    connect(latencyDetectorDialog_, &LatencyDetectorDialog::offsetChanged, this, [this](double seconds) {
+        applyLatencyDetectorOffset(seconds);
+    });
+    connect(latencyDetectorDialog_, &LatencyDetectorDialog::bpmChanged, this, [this](double bpm) {
+        applyLatencyDetectorBpm(bpm);
+    });
+    connect(latencyDetectorDialog_, &LatencyDetectorDialog::meterIdChanged, this, [this](const QString& value) {
+        applyLatencyDetectorMeter(value);
+    });
+    connect(latencyDetectorDialog_, &QObject::destroyed, this, [this]() {
+        latencyDetectorDialog_.clear();
+    });
+    latencyDetectorDialog_->show();
+    latencyDetectorDialog_->raise();
+    latencyDetectorDialog_->activateWindow();
+}
+
 void MainWindow::onPreviewRenderSettings()
 {
     previewAudioSettings_.normalize();
@@ -5252,6 +5583,9 @@ void MainWindow::onPreviewRenderSettings()
             audioApplyTimer->start();
             return;
         }
+        if (!pendingAudition.isEmpty()) {
+            ensurePreviewSfxRuntimePrepared();
+        }
         const bool handledLocally = !pendingAudition.isEmpty()
             && previewSfxRuntime_ != nullptr
             && previewSfxRuntime_->audition(pendingAudition);
@@ -5263,6 +5597,9 @@ void MainWindow::onPreviewRenderSettings()
             return;
         }
         audioApplyTimer->stop();
+        if (!pendingAudition.isEmpty()) {
+            ensurePreviewSfxRuntimePrepared();
+        }
         const bool handledLocally = !pendingAudition.isEmpty()
             && previewSfxRuntime_ != nullptr
             && previewSfxRuntime_->audition(pendingAudition);
