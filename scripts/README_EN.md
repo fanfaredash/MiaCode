@@ -49,5 +49,5 @@ Optional environment variables:
 - `MACOS_CODESIGN_IDENTITY="-"`: use ad-hoc signing, or replace it with a real signing identity
 
 Output:
-- `dist/MiaCode-v<version>-macos`
-- `dist/MiaCode-v<version>-macos.zip`
+- `dist/MiaCode-v<version>-macos-apple-silicon` or `dist/MiaCode-v<version>-macos-intel`
+- `dist/MiaCode-v<version>-macos-apple-silicon.zip` or `dist/MiaCode-v<version>-macos-intel.zip`
