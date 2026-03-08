@@ -48,5 +48,5 @@ QT_ROOT="$HOME/Qt/6.8.3/macos" bash scripts/package-mac.sh
 - `MACOS_CODESIGN_IDENTITY="-"`：使用 ad-hoc 签名；若有正式签名证书，可替换为实际 identity
 
 输出：
-- `dist/MiaCode-v<version>-macos`
-- `dist/MiaCode-v<version>-macos.zip`
+- `dist/MiaCode-v<version>-macos-apple-silicon` 或 `dist/MiaCode-v<version>-macos-intel`
+- `dist/MiaCode-v<version>-macos-apple-silicon.zip` 或 `dist/MiaCode-v<version>-macos-intel.zip`

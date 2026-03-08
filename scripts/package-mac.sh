@@ -25,7 +25,16 @@ parse_version() {
 }
 
 VERSION="$(parse_version "$ROOT_DIR/CMakeLists.txt")"
-DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist/MiaCode-v${VERSION}-macos}"
+MACOS_PACKAGE_SUFFIX="macos"
+case "${CMAKE_OSX_ARCHITECTURES:-}" in
+  arm64)
+    MACOS_PACKAGE_SUFFIX="macos-apple-silicon"
+    ;;
+  x86_64)
+    MACOS_PACKAGE_SUFFIX="macos-intel"
+    ;;
+esac
+DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist/MiaCode-v${VERSION}-${MACOS_PACKAGE_SUFFIX}}"
 
 version_gt() {
   local i
