@@ -754,9 +754,9 @@ void QtPreviewSfxRuntime::syncBackgroundTrack(double timelineSecond)
     }
 }
 
-bool QtPreviewSfxRuntime::audition(const QString& kind)
+bool QtPreviewSfxRuntime::audition(const QString& kind, double gain)
 {
-    return playKindInternal(kind);
+    return playKindInternal(kind, gain);
 }
 
 void QtPreviewSfxRuntime::stopAll()
@@ -1184,7 +1184,7 @@ double QtPreviewSfxRuntime::stretchedBackgroundPlaybackSecond() const
     return qMax(0.0, timelineSecond);
 }
 
-bool QtPreviewSfxRuntime::playKindInternal(const QString& kind)
+bool QtPreviewSfxRuntime::playKindInternal(const QString& kind, double gain)
 {
     const QString lowered = kind.trimmed().toLower();
     if (lowered.isEmpty()) {
@@ -1224,7 +1224,10 @@ bool QtPreviewSfxRuntime::playKindInternal(const QString& kind)
     if (voice == nullptr || !voice->initialized) {
         return true;
     }
+    const double effectiveGain = qMax(0.0, gain);
+    const double effectiveVolume = qBound(0.0, volume * effectiveGain, 1.0);
     ma_sound_stop(&voice->sound);
+    ma_sound_set_volume(&voice->sound, static_cast<float>(effectiveVolume));
     ma_sound_seek_to_pcm_frame(&voice->sound, 0);
     ma_sound_start(&voice->sound);
     return true;

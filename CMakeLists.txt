@@ -39,6 +39,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/UiText.cpp
     src/editor/PlainCodeEditor.h
     src/editor/PlainCodeEditor.cpp
+    src/tools/LatencyDetectorDialog.h
+    src/tools/LatencyDetectorDialog.cpp
     src/preview/PreviewCanvas.h
     src/preview/PreviewCanvas.cpp
     src/preview/PreviewGLRenderer.h

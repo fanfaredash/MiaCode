@@ -31,7 +31,7 @@ public:
     void startBackgroundTrack(double second);
     void pauseBackgroundTrack();
     double backgroundPlaybackSecond() const;
-    bool audition(const QString& kind);
+    bool audition(const QString& kind, double gain = 1.0);
     void stopAll();
 
 private:
@@ -73,7 +73,7 @@ private:
     bool prepareStretchedBackgroundTrack(double timelineSecond);
     double stretchedBackgroundPlaybackSecond() const;
     void applyVolumes();
-    bool playKindInternal(const QString& kind);
+    bool playKindInternal(const QString& kind, double gain = 1.0);
     void startTouchholdSpan(int spanIndex, double offsetSeconds);
     void stopTouchholdSpan(int spanIndex);
     bool playTouchholdAudition();
