@@ -16,12 +16,15 @@
 
 class QPainter;
 class QRectF;
+class QTimer;
 
 class PreviewCanvas : public QOpenGLWindow
 {
     Q_OBJECT
 
 public:
+    struct SkinLoadResult;
+
     explicit PreviewCanvas(QWindow* parent = nullptr);
     ~PreviewCanvas() override;
 
@@ -87,7 +90,9 @@ private:
     void flushTapAtlasBatch(QPainter& painter);
     void beginNativeBatch(QPainter& painter);
     void endNativeBatch(QPainter& painter);
-    void prewarmGlTextures();
+    void applySkinLoadResult(SkinLoadResult&& result);
+    void scheduleTexturePrewarm();
+    void processTexturePrewarmQueue();
     QRectF currentStageRect() const;
     QRectF stagePlayfieldRect(const QRectF& stageRect) const;
     QRectF currentPlayfieldRect() const;
@@ -243,4 +248,9 @@ private:
     GLuint gpuTimeQueries_[4] = {0, 0, 0, 0};
     bool gpuTimeQueryPending_[4] = {false, false, false, false};
     int gpuTimeQueryCursor_ = 0;
+    quint64 skinLoadGeneration_ = 0;
+    QTimer* texturePrewarmTimer_ = nullptr;
+    QVector<QImage> pendingTexturePrewarmImages_;
+    qint64 lastSkinLoadDispatchMs_ = -1;
+    qint64 texturePrewarmStartMs_ = -1;
 };
