@@ -9,13 +9,17 @@
 #include <QFontDatabase>
 #include <QFontInfo>
 #include <QImage>
+#include <QMetaObject>
 #include <QOpenGLContext>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPaintEvent>
+#include <QPointer>
 #include <QRectF>
 #include <QStringList>
 #include <QTextStream>
+#include <QThreadPool>
+#include <QTimer>
 #include <QTransform>
 #include <QtMath>
 #ifdef HAVE_QT_MULTIMEDIA
@@ -289,6 +293,49 @@ QString defaultNoteGuideDir()
 {
     return miacode::assets::assetPath("noteguide");
 }
+
+bool previewStartupTimingEnabled()
+{
+    static const bool enabled = []() {
+        const QString raw = qEnvironmentVariable(
+            "MIACODE_ENABLE_STARTUP_TIMING",
+            qEnvironmentVariable("MAIMURI_ENABLE_STARTUP_TIMING")
+        ).trimmed();
+        return raw == "1" || raw.compare("true", Qt::CaseInsensitive) == 0;
+    }();
+    return enabled;
+}
+
+QString startupTimingLogPath()
+{
+    return QDir::temp().filePath("miacode_startup_timing.log");
+}
+
+void appendPreviewStartupTiming(const QString& stage, qint64 deltaMs)
+{
+    if (!previewStartupTimingEnabled()) {
+        return;
+    }
+    static QElapsedTimer timer;
+    static qint64 lastMs = 0;
+    if (!timer.isValid()) {
+        timer.start();
+        lastMs = 0;
+    }
+    const qint64 elapsedMs = timer.elapsed();
+    const qint64 resolvedDeltaMs = deltaMs >= 0 ? deltaMs : (elapsedMs - lastMs);
+    lastMs = elapsedMs;
+
+    QFile logFile(startupTimingLogPath());
+    if (!logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+        return;
+    }
+    QTextStream out(&logFile);
+    out << "stage=" << stage
+        << ", elapsed_ms=" << elapsedMs
+        << ", delta_ms=" << resolvedDeltaMs
+        << "\n";
+}
 }
 
 PreviewCanvas::PreviewCanvas(QWindow* parent)
@@ -352,55 +399,422 @@ void PreviewCanvas::setNoteMarkers(const QVector<TimelineNoteMarker>& notes)
     update();
 }
 
+struct PreviewCanvas::SkinLoadResult {
+    quint64 generation = 0;
+    QImage tapImage;
+    QImage tapEachImage;
+    QImage tapBreakImage;
+    QImage tapExImage;
+    QImage slideTrackImage;
+    QImage slideTrackEachImage;
+    QImage slideTrackBreakImage;
+    QImage starImage;
+    QImage starEachImage;
+    QImage starBreakImage;
+    QImage starBreakDoubleImage;
+    QImage starDoubleImage;
+    QImage starEachDoubleImage;
+    QImage starExImage;
+    QImage starExDoubleImage;
+    QVector<QImage> wifiImages;
+    QVector<QImage> wifiEachImages;
+    QVector<QImage> wifiBreakImages;
+    QImage holdImage;
+    QImage holdEachImage;
+    QImage holdBreakImage;
+    QImage holdExImage;
+    QImage noteGuideNormalImage;
+    QImage noteGuideBreakImage;
+    QImage noteGuideEachImage;
+    QImage noteGuideEachLine1Image;
+    QImage noteGuideEachLine2Image;
+    QImage noteGuideEachLine3Image;
+    QImage noteGuideEachLine4Image;
+    QImage noteGuideHoldEndImage;
+    QImage noteGuideHoldEachEndImage;
+    QImage noteGuideHoldBreakEndImage;
+    QImage noteGuideSlideImage;
+    QImage touchCornerImage;
+    QImage touchCornerEachImage;
+    QImage touchPointImage;
+    QImage touchPointEachImage;
+    QImage touchHold0Image;
+    QImage touchHold1Image;
+    QImage touchHold2Image;
+    QImage touchHold3Image;
+    QImage touchHoldBorderImage;
+    QImage tapAtlasImage;
+    QImage trackAtlasImage;
+    QImage touchAtlasImage;
+    QImage guideAtlasImage;
+    QHash<quint64, QRect> tapAtlasRegions;
+    QHash<quint64, QRect> trackAtlasRegions;
+    QHash<quint64, QRect> touchAtlasRegions;
+    QHash<quint64, QRect> guideAtlasRegions;
+};
+
+namespace {
+struct AtlasBuildResult {
+    QImage atlasImage;
+    QHash<quint64, QRect> regions;
+};
+
+QImage loadImageIfExists(const QString& path)
+{
+    if (!QFileInfo::exists(path)) {
+        return QImage();
+    }
+    return QImage(path);
+}
+
+QImage loadGuideImageScaled(const QDir& noteGuideDir, const QString& name)
+{
+    const QString path = noteGuideDir.filePath(name);
+    if (!QFileInfo::exists(path)) {
+        return QImage();
+    }
+    QImage image(path);
+    if (image.isNull()) {
+        return QImage();
+    }
+    const int width = qMax(1, qRound(image.width() * kSkinAssetScale));
+    const int height = qMax(1, qRound(image.height() * kSkinAssetScale));
+    if (width != image.width() || height != image.height()) {
+        image = image.scaled(width, height, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    }
+    return image;
+}
+
+AtlasBuildResult buildAtlasFromImages(const QVector<const QImage*>& images)
+{
+    AtlasBuildResult result;
+
+    struct Placement {
+        const QImage* source = nullptr;
+        QRect rect;
+    };
+
+    QVector<Placement> placements;
+    QHash<quint64, bool> seen;
+    int x = kAtlasPadding;
+    int y = kAtlasPadding;
+    int rowHeight = 0;
+    int atlasWidth = 0;
+
+    for (const QImage* image : images) {
+        if (image == nullptr || image->isNull()) {
+            continue;
+        }
+
+        const quint64 key = image->cacheKey();
+        if (seen.contains(key)) {
+            continue;
+        }
+        seen.insert(key, true);
+
+        const int width = image->width();
+        const int height = image->height();
+        if (width <= 0 || height <= 0) {
+            continue;
+        }
+
+        if (x > kAtlasPadding && x + width + kAtlasPadding > kAtlasMaxWidth) {
+            x = kAtlasPadding;
+            y += rowHeight + kAtlasPadding;
+            rowHeight = 0;
+        }
+
+        Placement placement;
+        placement.source = image;
+        placement.rect = QRect(x, y, width, height);
+        placements.append(placement);
+
+        x += width + kAtlasPadding;
+        rowHeight = qMax(rowHeight, height);
+        atlasWidth = qMax(atlasWidth, x);
+    }
+
+    if (placements.isEmpty()) {
+        return result;
+    }
+
+    const int finalWidth = qMax(kAtlasPadding * 2 + 1, atlasWidth);
+    const int finalHeight = qMax(kAtlasPadding * 2 + 1, y + rowHeight + kAtlasPadding);
+    result.atlasImage = QImage(finalWidth, finalHeight, QImage::Format_ARGB32_Premultiplied);
+    result.atlasImage.fill(Qt::transparent);
+
+    QPainter atlasPainter(&result.atlasImage);
+    atlasPainter.setRenderHint(QPainter::SmoothPixmapTransform, false);
+    for (const Placement& placement : placements) {
+        atlasPainter.drawImage(placement.rect.topLeft(), *placement.source);
+        result.regions.insert(placement.source->cacheKey(), placement.rect);
+    }
+    atlasPainter.end();
+    return result;
+}
+
+PreviewCanvas::SkinLoadResult loadSkinAssets(const QString& skinDir, quint64 generation)
+{
+    PreviewCanvas::SkinLoadResult result;
+    result.generation = generation;
+
+    if (skinDir.isEmpty()) {
+        return result;
+    }
+
+    const QDir dir(skinDir);
+    const QDir noteGuideDir(defaultNoteGuideDir());
+
+    result.tapImage = loadImageIfExists(dir.filePath("tap.png"));
+    result.tapEachImage = loadImageIfExists(dir.filePath("tap_each.png"));
+    result.tapBreakImage = loadImageIfExists(dir.filePath("tap_break.png"));
+    result.tapExImage = loadImageIfExists(dir.filePath("tap_ex.png"));
+    result.slideTrackImage = loadImageIfExists(dir.filePath("slide.png"));
+    result.slideTrackEachImage = loadImageIfExists(dir.filePath("slide_each.png"));
+    result.slideTrackBreakImage = loadImageIfExists(dir.filePath("slide_break.png"));
+    result.starImage = loadImageIfExists(dir.filePath("star.png"));
+    result.starEachImage = loadImageIfExists(dir.filePath("star_each.png"));
+    result.starBreakImage = loadImageIfExists(dir.filePath("star_break.png"));
+    result.starBreakDoubleImage = loadImageIfExists(dir.filePath("star_break_double.png"));
+    result.starDoubleImage = loadImageIfExists(dir.filePath("star_double.png"));
+    result.starEachDoubleImage = loadImageIfExists(dir.filePath("star_each_double.png"));
+    result.starExImage = loadImageIfExists(dir.filePath("star_ex.png"));
+    result.starExDoubleImage = loadImageIfExists(dir.filePath("star_ex_double.png"));
+    result.holdImage = loadImageIfExists(dir.filePath("hold.png"));
+    result.holdEachImage = loadImageIfExists(dir.filePath("hold_each.png"));
+    result.holdBreakImage = loadImageIfExists(dir.filePath("hold_break.png"));
+    result.holdExImage = loadImageIfExists(dir.filePath("hold_ex.png"));
+    result.touchCornerImage = loadImageIfExists(dir.filePath("touch.png"));
+    result.touchCornerEachImage = loadImageIfExists(dir.filePath("touch_each.png"));
+    result.touchPointImage = loadImageIfExists(dir.filePath("touch_point.png"));
+    result.touchPointEachImage = loadImageIfExists(dir.filePath("touch_point_each.png"));
+    result.touchHold0Image = loadImageIfExists(dir.filePath("touchhold_0.png"));
+    result.touchHold1Image = loadImageIfExists(dir.filePath("touchhold_1.png"));
+    result.touchHold2Image = loadImageIfExists(dir.filePath("touchhold_2.png"));
+    result.touchHold3Image = loadImageIfExists(dir.filePath("touchhold_3.png"));
+    result.touchHoldBorderImage = loadImageIfExists(dir.filePath("touchhold_border.png"));
+
+    result.noteGuideNormalImage = loadGuideImageScaled(noteGuideDir, "Normal.png");
+    result.noteGuideBreakImage = loadGuideImageScaled(noteGuideDir, "Break.png");
+    if (result.noteGuideBreakImage.isNull()) {
+        result.noteGuideBreakImage = result.noteGuideNormalImage;
+    }
+    result.noteGuideEachImage = loadGuideImageScaled(noteGuideDir, "Each.png");
+    if (result.noteGuideEachImage.isNull()) {
+        result.noteGuideEachImage = result.noteGuideNormalImage;
+    }
+    result.noteGuideEachLine1Image = loadGuideImageScaled(noteGuideDir, "EachLine1.png");
+    result.noteGuideEachLine2Image = loadGuideImageScaled(noteGuideDir, "EachLine2.png");
+    result.noteGuideEachLine3Image = loadGuideImageScaled(noteGuideDir, "EachLine3.png");
+    result.noteGuideEachLine4Image = loadGuideImageScaled(noteGuideDir, "EachLine4.png");
+    result.noteGuideHoldEndImage = loadGuideImageScaled(noteGuideDir, "Hold_End.png");
+    result.noteGuideHoldEachEndImage = loadGuideImageScaled(noteGuideDir, "Hold_Each_End.png");
+    if (result.noteGuideHoldEachEndImage.isNull()) {
+        result.noteGuideHoldEachEndImage = result.noteGuideHoldEndImage;
+    }
+    result.noteGuideHoldBreakEndImage = loadGuideImageScaled(noteGuideDir, "Hold_Break_End.png");
+    if (result.noteGuideHoldBreakEndImage.isNull()) {
+        result.noteGuideHoldBreakEndImage = result.noteGuideHoldEndImage;
+    }
+    result.noteGuideSlideImage = loadGuideImageScaled(noteGuideDir, "Slide.png");
+    if (result.noteGuideSlideImage.isNull()) {
+        result.noteGuideSlideImage = result.noteGuideNormalImage;
+    }
+
+    for (int i = 0; i <= 10; ++i) {
+        const QImage wifiImage = loadImageIfExists(dir.filePath(QString("wifi_%1.png").arg(i)));
+        if (!wifiImage.isNull()) {
+            result.wifiImages.append(wifiImage);
+        }
+        const QImage wifiEachImage = loadImageIfExists(dir.filePath(QString("wifi_each_%1.png").arg(i)));
+        if (!wifiEachImage.isNull()) {
+            result.wifiEachImages.append(wifiEachImage);
+        }
+        const QImage wifiBreakImage = loadImageIfExists(dir.filePath(QString("wifi_break_%1.png").arg(i)));
+        if (!wifiBreakImage.isNull()) {
+            result.wifiBreakImages.append(wifiBreakImage);
+        }
+    }
+
+    {
+        const AtlasBuildResult tapAtlas = buildAtlasFromImages(
+            QVector<const QImage*>{
+                &result.tapImage,
+                &result.tapEachImage,
+                &result.tapBreakImage,
+                &result.starImage,
+                &result.starEachImage,
+                &result.starBreakImage,
+                &result.holdImage,
+                &result.holdEachImage,
+                &result.holdBreakImage,
+            }
+        );
+        result.tapAtlasImage = tapAtlas.atlasImage;
+        result.tapAtlasRegions = tapAtlas.regions;
+    }
+
+    {
+        QVector<const QImage*> trackImages{
+            &result.slideTrackImage,
+            &result.slideTrackEachImage,
+            &result.slideTrackBreakImage,
+        };
+        for (const QImage& image : result.wifiImages) {
+            trackImages.append(&image);
+        }
+        for (const QImage& image : result.wifiEachImages) {
+            trackImages.append(&image);
+        }
+        for (const QImage& image : result.wifiBreakImages) {
+            trackImages.append(&image);
+        }
+        const AtlasBuildResult trackAtlas = buildAtlasFromImages(trackImages);
+        result.trackAtlasImage = trackAtlas.atlasImage;
+        result.trackAtlasRegions = trackAtlas.regions;
+    }
+
+    {
+        const AtlasBuildResult touchAtlas = buildAtlasFromImages(
+            QVector<const QImage*>{
+                &result.touchCornerImage,
+                &result.touchCornerEachImage,
+                &result.touchPointImage,
+                &result.touchPointEachImage,
+                &result.touchHold0Image,
+                &result.touchHold1Image,
+                &result.touchHold2Image,
+                &result.touchHold3Image,
+                &result.touchHoldBorderImage,
+            }
+        );
+        result.touchAtlasImage = touchAtlas.atlasImage;
+        result.touchAtlasRegions = touchAtlas.regions;
+    }
+
+    {
+        const AtlasBuildResult guideAtlas = buildAtlasFromImages(
+            QVector<const QImage*>{
+                &result.noteGuideNormalImage,
+                &result.noteGuideBreakImage,
+                &result.noteGuideEachImage,
+                &result.noteGuideEachLine1Image,
+                &result.noteGuideEachLine2Image,
+                &result.noteGuideEachLine3Image,
+                &result.noteGuideEachLine4Image,
+                &result.noteGuideHoldEndImage,
+                &result.noteGuideHoldEachEndImage,
+                &result.noteGuideHoldBreakEndImage,
+                &result.noteGuideSlideImage,
+            }
+        );
+        result.guideAtlasImage = guideAtlas.atlasImage;
+        result.guideAtlasRegions = guideAtlas.regions;
+    }
+
+    return result;
+}
+} // namespace
+
 void PreviewCanvas::setSkinDirectory(const QString& skinDir)
 {
-    tapImage_ = QImage();
-    tapEachImage_ = QImage();
-    tapBreakImage_ = QImage();
-    tapExImage_ = QImage();
-    slideTrackImage_ = QImage();
-    slideTrackEachImage_ = QImage();
-    slideTrackBreakImage_ = QImage();
-    starImage_ = QImage();
-    starEachImage_ = QImage();
-    starBreakImage_ = QImage();
-    starBreakDoubleImage_ = QImage();
-    starDoubleImage_ = QImage();
-    starEachDoubleImage_ = QImage();
-    starExImage_ = QImage();
-    starExDoubleImage_ = QImage();
-    wifiImages_.clear();
-    wifiEachImages_.clear();
-    wifiBreakImages_.clear();
-    holdImage_ = QImage();
-    holdEachImage_ = QImage();
-    holdBreakImage_ = QImage();
-    holdExImage_ = QImage();
-    noteGuideNormalImage_ = QImage();
-    noteGuideBreakImage_ = QImage();
-    noteGuideEachImage_ = QImage();
-    noteGuideEachLine1Image_ = QImage();
-    noteGuideEachLine2Image_ = QImage();
-    noteGuideEachLine3Image_ = QImage();
-    noteGuideEachLine4Image_ = QImage();
-    noteGuideHoldEndImage_ = QImage();
-    noteGuideHoldEachEndImage_ = QImage();
-    noteGuideHoldBreakEndImage_ = QImage();
-    noteGuideSlideImage_ = QImage();
-    touchCornerImage_ = QImage();
-    touchCornerEachImage_ = QImage();
-    touchPointImage_ = QImage();
-    touchPointEachImage_ = QImage();
-    touchHold0Image_ = QImage();
-    touchHold1Image_ = QImage();
-    touchHold2Image_ = QImage();
-    touchHold3Image_ = QImage();
-    touchHoldBorderImage_ = QImage();
-    tapAtlasImage_ = QImage();
-    trackAtlasImage_ = QImage();
-    touchAtlasImage_ = QImage();
-    guideAtlasImage_ = QImage();
+    const quint64 generation = ++skinLoadGeneration_;
+    lastSkinLoadDispatchMs_ = QDateTime::currentMSecsSinceEpoch();
+    appendPreviewStartupTiming("preview_canvas/skin_load_dispatch", -1);
+    QPointer<PreviewCanvas> guard(this);
+    QThreadPool::globalInstance()->start([guard, skinDir, generation]() {
+        QElapsedTimer workerTimer;
+        workerTimer.start();
+        SkinLoadResult result = loadSkinAssets(skinDir, generation);
+        const qint64 workerElapsedMs = workerTimer.elapsed();
+        if (guard.isNull()) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+            guard.data(),
+            [guard, result = std::move(result), workerElapsedMs]() mutable {
+                if (guard.isNull()) {
+                    return;
+                }
+                appendPreviewStartupTiming("preview_canvas/skin_load_worker_done", workerElapsedMs);
+                guard->applySkinLoadResult(std::move(result));
+            },
+            Qt::QueuedConnection
+        );
+    }, -1);
+}
+
+void PreviewCanvas::applySkinLoadResult(SkinLoadResult&& result)
+{
+    if (result.generation != skinLoadGeneration_) {
+        return;
+    }
+
+    tapImage_ = std::move(result.tapImage);
+    tapEachImage_ = std::move(result.tapEachImage);
+    tapBreakImage_ = std::move(result.tapBreakImage);
+    tapExImage_ = std::move(result.tapExImage);
+    slideTrackImage_ = std::move(result.slideTrackImage);
+    slideTrackEachImage_ = std::move(result.slideTrackEachImage);
+    slideTrackBreakImage_ = std::move(result.slideTrackBreakImage);
+    starImage_ = std::move(result.starImage);
+    starEachImage_ = std::move(result.starEachImage);
+    starBreakImage_ = std::move(result.starBreakImage);
+    starBreakDoubleImage_ = std::move(result.starBreakDoubleImage);
+    starDoubleImage_ = std::move(result.starDoubleImage);
+    starEachDoubleImage_ = std::move(result.starEachDoubleImage);
+    starExImage_ = std::move(result.starExImage);
+    starExDoubleImage_ = std::move(result.starExDoubleImage);
+    wifiImages_ = std::move(result.wifiImages);
+    wifiEachImages_ = std::move(result.wifiEachImages);
+    wifiBreakImages_ = std::move(result.wifiBreakImages);
+    holdImage_ = std::move(result.holdImage);
+    holdEachImage_ = std::move(result.holdEachImage);
+    holdBreakImage_ = std::move(result.holdBreakImage);
+    holdExImage_ = std::move(result.holdExImage);
+    noteGuideNormalImage_ = std::move(result.noteGuideNormalImage);
+    noteGuideBreakImage_ = std::move(result.noteGuideBreakImage);
+    noteGuideEachImage_ = std::move(result.noteGuideEachImage);
+    noteGuideEachLine1Image_ = std::move(result.noteGuideEachLine1Image);
+    noteGuideEachLine2Image_ = std::move(result.noteGuideEachLine2Image);
+    noteGuideEachLine3Image_ = std::move(result.noteGuideEachLine3Image);
+    noteGuideEachLine4Image_ = std::move(result.noteGuideEachLine4Image);
+    noteGuideHoldEndImage_ = std::move(result.noteGuideHoldEndImage);
+    noteGuideHoldEachEndImage_ = std::move(result.noteGuideHoldEachEndImage);
+    noteGuideHoldBreakEndImage_ = std::move(result.noteGuideHoldBreakEndImage);
+    noteGuideSlideImage_ = std::move(result.noteGuideSlideImage);
+    touchCornerImage_ = std::move(result.touchCornerImage);
+    touchCornerEachImage_ = std::move(result.touchCornerEachImage);
+    touchPointImage_ = std::move(result.touchPointImage);
+    touchPointEachImage_ = std::move(result.touchPointEachImage);
+    touchHold0Image_ = std::move(result.touchHold0Image);
+    touchHold1Image_ = std::move(result.touchHold1Image);
+    touchHold2Image_ = std::move(result.touchHold2Image);
+    touchHold3Image_ = std::move(result.touchHold3Image);
+    touchHoldBorderImage_ = std::move(result.touchHoldBorderImage);
+    tapAtlasImage_ = std::move(result.tapAtlasImage);
+    trackAtlasImage_ = std::move(result.trackAtlasImage);
+    touchAtlasImage_ = std::move(result.touchAtlasImage);
+    guideAtlasImage_ = std::move(result.guideAtlasImage);
+
     atlasRegions_.clear();
+    const auto appendAtlasRegions =
+        [this](const QHash<quint64, QRect>& regions, const QImage* atlasImage) {
+            if (atlasImage == nullptr || atlasImage->isNull()) {
+                return;
+            }
+            for (auto it = regions.cbegin(); it != regions.cend(); ++it) {
+                AtlasRegionRef region;
+                region.atlasImage = atlasImage;
+                region.rect = it.value();
+                atlasRegions_.insert(it.key(), region);
+            }
+        };
+    appendAtlasRegions(result.tapAtlasRegions, &tapAtlasImage_);
+    appendAtlasRegions(result.trackAtlasRegions, &trackAtlasImage_);
+    appendAtlasRegions(result.touchAtlasRegions, &touchAtlasImage_);
+    appendAtlasRegions(result.guideAtlasRegions, &guideAtlasImage_);
+
     overlayCache_.clear();
     guideTransformCache_.clear();
     guideTransformCacheOrder_.clear();
@@ -409,189 +823,15 @@ void PreviewCanvas::setSkinDirectory(const QString& skinDir)
     slideTrackAreaCache_.clear();
     wifiTrackAreaCache_.clear();
 
-    if (skinDir.isEmpty()) {
-        rebuildAtlases();
-        update();
-        return;
-    }
-
-    const QDir dir(skinDir);
-    const QDir noteGuideDir(defaultNoteGuideDir());
-    const QString tapPath = dir.filePath("tap.png");
-    const QString tapEachPath = dir.filePath("tap_each.png");
-    const QString tapBreakPath = dir.filePath("tap_break.png");
-    const QString tapExPath = dir.filePath("tap_ex.png");
-    const QString slideTrackPath = dir.filePath("slide.png");
-    const QString slideTrackEachPath = dir.filePath("slide_each.png");
-    const QString slideTrackBreakPath = dir.filePath("slide_break.png");
-    const QString starPath = dir.filePath("star.png");
-    const QString starEachPath = dir.filePath("star_each.png");
-    const QString starBreakPath = dir.filePath("star_break.png");
-    const QString starBreakDoublePath = dir.filePath("star_break_double.png");
-    const QString starDoublePath = dir.filePath("star_double.png");
-    const QString starEachDoublePath = dir.filePath("star_each_double.png");
-    const QString starExPath = dir.filePath("star_ex.png");
-    const QString starExDoublePath = dir.filePath("star_ex_double.png");
-    const QString holdPath = dir.filePath("hold.png");
-    const QString holdEachPath = dir.filePath("hold_each.png");
-    const QString holdBreakPath = dir.filePath("hold_break.png");
-    const QString holdExPath = dir.filePath("hold_ex.png");
-    const QString touchCornerPath = dir.filePath("touch.png");
-    const QString touchCornerEachPath = dir.filePath("touch_each.png");
-    const QString touchPointPath = dir.filePath("touch_point.png");
-    const QString touchPointEachPath = dir.filePath("touch_point_each.png");
-    const QString touchHold0Path = dir.filePath("touchhold_0.png");
-    const QString touchHold1Path = dir.filePath("touchhold_1.png");
-    const QString touchHold2Path = dir.filePath("touchhold_2.png");
-    const QString touchHold3Path = dir.filePath("touchhold_3.png");
-    const QString touchHoldBorderPath = dir.filePath("touchhold_border.png");
-
-    auto loadGuideImage = [&noteGuideDir](const QString& name) -> QImage {
-        const QString path = noteGuideDir.filePath(name);
-        if (!QFileInfo::exists(path)) {
-            return QImage();
-        }
-        QImage image(path);
-        if (image.isNull()) {
-            return QImage();
-        }
-        const int width = qMax(1, qRound(image.width() * 0.5));
-        const int height = qMax(1, qRound(image.height() * 0.5));
-        if (width != image.width() || height != image.height()) {
-            image = image.scaled(width, height, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-        }
-        return image;
-    };
-
-    if (QFileInfo::exists(tapPath)) {
-        tapImage_ = QImage(tapPath);
-    }
-    if (QFileInfo::exists(tapEachPath)) {
-        tapEachImage_ = QImage(tapEachPath);
-    }
-    if (QFileInfo::exists(tapBreakPath)) {
-        tapBreakImage_ = QImage(tapBreakPath);
-    }
-    if (QFileInfo::exists(tapExPath)) {
-        tapExImage_ = QImage(tapExPath);
-    }
-    if (QFileInfo::exists(slideTrackPath)) {
-        slideTrackImage_ = QImage(slideTrackPath);
-    }
-    if (QFileInfo::exists(slideTrackEachPath)) {
-        slideTrackEachImage_ = QImage(slideTrackEachPath);
-    }
-    if (QFileInfo::exists(slideTrackBreakPath)) {
-        slideTrackBreakImage_ = QImage(slideTrackBreakPath);
-    }
-    if (QFileInfo::exists(starPath)) {
-        starImage_ = QImage(starPath);
-    }
-    if (QFileInfo::exists(starEachPath)) {
-        starEachImage_ = QImage(starEachPath);
-    }
-    if (QFileInfo::exists(starBreakPath)) {
-        starBreakImage_ = QImage(starBreakPath);
-    }
-    if (QFileInfo::exists(starBreakDoublePath)) {
-        starBreakDoubleImage_ = QImage(starBreakDoublePath);
-    }
-    if (QFileInfo::exists(starDoublePath)) {
-        starDoubleImage_ = QImage(starDoublePath);
-    }
-    if (QFileInfo::exists(starEachDoublePath)) {
-        starEachDoubleImage_ = QImage(starEachDoublePath);
-    }
-    if (QFileInfo::exists(starExPath)) {
-        starExImage_ = QImage(starExPath);
-    }
-    if (QFileInfo::exists(starExDoublePath)) {
-        starExDoubleImage_ = QImage(starExDoublePath);
-    }
-    if (QFileInfo::exists(holdPath)) {
-        holdImage_ = QImage(holdPath);
-    }
-    if (QFileInfo::exists(holdEachPath)) {
-        holdEachImage_ = QImage(holdEachPath);
-    }
-    if (QFileInfo::exists(holdBreakPath)) {
-        holdBreakImage_ = QImage(holdBreakPath);
-    }
-    if (QFileInfo::exists(holdExPath)) {
-        holdExImage_ = QImage(holdExPath);
-    }
-    noteGuideNormalImage_ = loadGuideImage("Normal.png");
-    noteGuideBreakImage_ = loadGuideImage("Break.png");
-    if (noteGuideBreakImage_.isNull()) {
-        noteGuideBreakImage_ = noteGuideNormalImage_;
-    }
-    noteGuideEachImage_ = loadGuideImage("Each.png");
-    if (noteGuideEachImage_.isNull()) {
-        noteGuideEachImage_ = noteGuideNormalImage_;
-    }
-    noteGuideEachLine1Image_ = loadGuideImage("EachLine1.png");
-    noteGuideEachLine2Image_ = loadGuideImage("EachLine2.png");
-    noteGuideEachLine3Image_ = loadGuideImage("EachLine3.png");
-    noteGuideEachLine4Image_ = loadGuideImage("EachLine4.png");
-    noteGuideHoldEndImage_ = loadGuideImage("Hold_End.png");
-    noteGuideHoldEachEndImage_ = loadGuideImage("Hold_Each_End.png");
-    if (noteGuideHoldEachEndImage_.isNull()) {
-        noteGuideHoldEachEndImage_ = noteGuideHoldEndImage_;
-    }
-    noteGuideHoldBreakEndImage_ = loadGuideImage("Hold_Break_End.png");
-    if (noteGuideHoldBreakEndImage_.isNull()) {
-        noteGuideHoldBreakEndImage_ = noteGuideHoldEndImage_;
-    }
-    noteGuideSlideImage_ = loadGuideImage("Slide.png");
-    if (noteGuideSlideImage_.isNull()) {
-        noteGuideSlideImage_ = noteGuideNormalImage_;
-    }
-    if (QFileInfo::exists(touchCornerPath)) {
-        touchCornerImage_ = QImage(touchCornerPath);
-    }
-    if (QFileInfo::exists(touchCornerEachPath)) {
-        touchCornerEachImage_ = QImage(touchCornerEachPath);
-    }
-    if (QFileInfo::exists(touchPointPath)) {
-        touchPointImage_ = QImage(touchPointPath);
-    }
-    if (QFileInfo::exists(touchPointEachPath)) {
-        touchPointEachImage_ = QImage(touchPointEachPath);
-    }
-    if (QFileInfo::exists(touchHold0Path)) {
-        touchHold0Image_ = QImage(touchHold0Path);
-    }
-    if (QFileInfo::exists(touchHold1Path)) {
-        touchHold1Image_ = QImage(touchHold1Path);
-    }
-    if (QFileInfo::exists(touchHold2Path)) {
-        touchHold2Image_ = QImage(touchHold2Path);
-    }
-    if (QFileInfo::exists(touchHold3Path)) {
-        touchHold3Image_ = QImage(touchHold3Path);
-    }
-    if (QFileInfo::exists(touchHoldBorderPath)) {
-        touchHoldBorderImage_ = QImage(touchHoldBorderPath);
-    }
-    for (int i = 0; i <= 10; ++i) {
-        const QString wifiPath = dir.filePath(QString("wifi_%1.png").arg(i));
-        const QString wifiEachPath = dir.filePath(QString("wifi_each_%1.png").arg(i));
-        const QString wifiBreakPath = dir.filePath(QString("wifi_break_%1.png").arg(i));
-        if (QFileInfo::exists(wifiPath)) {
-            wifiImages_.append(QImage(wifiPath));
-        }
-        if (QFileInfo::exists(wifiEachPath)) {
-            wifiEachImages_.append(QImage(wifiEachPath));
-        }
-        if (QFileInfo::exists(wifiBreakPath)) {
-            wifiBreakImages_.append(QImage(wifiBreakPath));
-        }
-    }
-    rebuildAtlases();
     if (glRenderer_.isInitialized() && context() != nullptr) {
-        makeCurrent();
-        prewarmGlTextures();
-        doneCurrent();
+        scheduleTexturePrewarm();
+    }
+    if (lastSkinLoadDispatchMs_ >= 0) {
+        const qint64 totalMs = qMax<qint64>(0, QDateTime::currentMSecsSinceEpoch() - lastSkinLoadDispatchMs_);
+        appendPreviewStartupTiming("preview_canvas/skin_load_apply_done", totalMs);
+        lastSkinLoadDispatchMs_ = -1;
+    } else {
+        appendPreviewStartupTiming("preview_canvas/skin_load_apply_done", -1);
     }
     update();
 }
@@ -741,7 +981,7 @@ void PreviewCanvas::initializeGL()
         extra->glGenQueries(4, gpuTimeQueries_);
         gpuTimerQueriesSupported_ = true;
     }
-    prewarmGlTextures();
+    scheduleTexturePrewarm();
 }
 
 void PreviewCanvas::resizeGL(int w, int h)
@@ -768,17 +1008,55 @@ void PreviewCanvas::endNativeBatch(QPainter& painter)
     nativePaintingActive_ = false;
 }
 
-void PreviewCanvas::prewarmGlTextures()
+void PreviewCanvas::scheduleTexturePrewarm()
 {
-    if (!glRenderer_.isInitialized()) {
+    pendingTexturePrewarmImages_.clear();
+    pendingTexturePrewarmImages_.append(tapAtlasImage_);
+    pendingTexturePrewarmImages_.append(trackAtlasImage_);
+    pendingTexturePrewarmImages_.append(touchAtlasImage_);
+    pendingTexturePrewarmImages_.append(guideAtlasImage_);
+    pendingTexturePrewarmImages_.append(outlineImage_);
+    texturePrewarmStartMs_ = QDateTime::currentMSecsSinceEpoch();
+    appendPreviewStartupTiming("preview_canvas/texture_prewarm_schedule", -1);
+
+    if (texturePrewarmTimer_ == nullptr) {
+        texturePrewarmTimer_ = new QTimer(this);
+        texturePrewarmTimer_->setInterval(16);
+        texturePrewarmTimer_->setTimerType(Qt::CoarseTimer);
+        connect(texturePrewarmTimer_, &QTimer::timeout, this, &PreviewCanvas::processTexturePrewarmQueue);
+    }
+    if (!texturePrewarmTimer_->isActive()) {
+        texturePrewarmTimer_->start();
+    }
+}
+
+void PreviewCanvas::processTexturePrewarmQueue()
+{
+    if (pendingTexturePrewarmImages_.isEmpty()) {
+        if (texturePrewarmTimer_ != nullptr) {
+            texturePrewarmTimer_->stop();
+        }
+        if (texturePrewarmStartMs_ >= 0) {
+            const qint64 elapsedMs = qMax<qint64>(0, QDateTime::currentMSecsSinceEpoch() - texturePrewarmStartMs_);
+            appendPreviewStartupTiming("preview_canvas/texture_prewarm_done", elapsedMs);
+            texturePrewarmStartMs_ = -1;
+        }
+        return;
+    }
+    if (!glRenderer_.isInitialized() || context() == nullptr) {
         return;
     }
 
-    glRenderer_.prewarmTexture(tapAtlasImage_);
-    glRenderer_.prewarmTexture(trackAtlasImage_);
-    glRenderer_.prewarmTexture(touchAtlasImage_);
-    glRenderer_.prewarmTexture(guideAtlasImage_);
-    glRenderer_.prewarmTexture(outlineImage_);
+    const QImage image = pendingTexturePrewarmImages_.takeFirst();
+    if (!image.isNull()) {
+        makeCurrent();
+        glRenderer_.prewarmTexture(image);
+        doneCurrent();
+    }
+
+    if (pendingTexturePrewarmImages_.isEmpty() && texturePrewarmTimer_ != nullptr) {
+        texturePrewarmTimer_->stop();
+    }
 }
 
 const QImage* PreviewCanvas::selectTapImage(const TimelineNoteMarker& marker) const
