@@ -13,7 +13,7 @@ fi
 
 parse_version() {
   local cmake_file="$1"
-  local major minor patch
+  local major minor patch prerelease version
   major="$(grep -Eo 'set\(MIACODE_VERSION_MAJOR\s+"[^"]+"' "$cmake_file" | sed -E 's/.*"([^"]+)"/\1/')"
   minor="$(grep -Eo 'set\(MIACODE_VERSION_MINOR\s+"[^"]+"' "$cmake_file" | sed -E 's/.*"([^"]+)"/\1/')"
   patch="$(grep -Eo 'set\(MIACODE_VERSION_PATCH\s+"[^"]+"' "$cmake_file" | sed -E 's/.*"([^"]+)"/\1/')"
@@ -21,7 +21,12 @@ parse_version() {
     echo "Failed to parse MIACODE_VERSION_* from $cmake_file" >&2
     exit 1
   fi
-  echo "${major}.${minor}.${patch}"
+  prerelease="$(grep -Eo 'set\(MIACODE_VERSION_PRERELEASE\s+"[^"]*"' "$cmake_file" | sed -E 's/.*"([^"]*)"/\1/' || true)"
+  version="${major}.${minor}.${patch}"
+  if [[ -n "$prerelease" ]]; then
+    version="${version}-${prerelease}"
+  fi
+  echo "$version"
 }
 
 VERSION="$(parse_version "$ROOT_DIR/CMakeLists.txt")"
