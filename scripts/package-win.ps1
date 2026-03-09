@@ -21,7 +21,12 @@ function Read-VersionFromCMake {
     if ([string]::IsNullOrWhiteSpace($major) -or [string]::IsNullOrWhiteSpace($minor) -or [string]::IsNullOrWhiteSpace($patch)) {
         throw "Failed to parse MIACODE_VERSION_* from $CMakeFilePath"
     }
-    return "$major.$minor.$patch"
+    $version = "$major.$minor.$patch"
+    $prerelease = [regex]::Match($content, 'set\(MIACODE_VERSION_PRERELEASE\s+"([^"]*)"').Groups[1].Value
+    if (![string]::IsNullOrWhiteSpace($prerelease)) {
+        $version = "$version-$prerelease"
+    }
+    return $version
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
