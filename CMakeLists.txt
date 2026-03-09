@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+﻿cmake_minimum_required(VERSION 3.21)
 
 set(MIACODE_VERSION_MAJOR "0" CACHE STRING "miacode major version")
 set(MIACODE_VERSION_MINOR "1" CACHE STRING "miacode minor version")
@@ -38,12 +38,14 @@ find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets Concurre
 
 add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
-    src/app/MainWindow.h
-    src/app/MainWindow.cpp
+    src/app/mainwindow/MainWindow.h
+    src/app/mainwindow/MainWindow.cpp
     src/app/UiText.h
     src/app/UiText.cpp
     src/editor/PlainCodeEditor.h
     src/editor/PlainCodeEditor.cpp
+    src/editor/BracketScopeHighlighter.h
+    src/editor/BracketScopeHighlighter.cpp
     src/tools/LatencyDetectorDialog.h
     src/tools/LatencyDetectorDialog.cpp
     src/preview/PreviewCanvas.h
@@ -196,4 +198,5 @@ if (WIN32)
         message(WARNING "windeployqt not found. Qt runtime DLLs will not be auto-deployed.")
     endif()
 endif()
+
 
