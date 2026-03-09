@@ -1,5 +1,5 @@
 ﻿#include "AppVersion.h"
-#include "MainWindow.h"
+#include "mainwindow/MainWindow.h"
 #include "UiText.h"
 
 #include <QApplication>
@@ -98,3 +98,4 @@ int main(int argc, char* argv[])
     });
     return app.exec();
 }
+
