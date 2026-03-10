@@ -27,6 +27,9 @@
 #endif
 
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <limits>
 #include <numeric>
 
 namespace {
@@ -80,6 +83,619 @@ constexpr int kGuideTransformSizeStep = 2;
 constexpr int kSpriteTransformSizeStep = 4;
 constexpr int kAtlasPadding = 2;
 constexpr int kAtlasMaxWidth = 2048;
+constexpr qreal kJudgeEffectClipDurationSeconds = 0.71666664;
+constexpr qreal kJudgeEffectPlaybackSpeed = 1.0;
+constexpr qreal kJudgeEffectDurationSeconds = kJudgeEffectClipDurationSeconds / kJudgeEffectPlaybackSpeed;
+// Derived from source assets:
+// Hex sprite width ~= 173.87 (ppu=100), tap sprite width ~= 122 (ppu=100).
+constexpr qreal kJudgeEffectBaseRelativeToTap = 173.87256 / 122.0;
+// One local transform unit in judgeEffect maps to world units; convert through tap width.
+constexpr qreal kJudgeEffectOffsetRelativeToTap = 100.0 / 122.0;
+constexpr qreal kJudgeEffectEdgeGlowScale = 1.012;
+constexpr qreal kJudgeEffectEdgeGlowAlpha = 0.14;
+constexpr qreal kJudgeEffectAlphaTailGamma = 1.00;
+constexpr qreal kJudgeEffectLaneFacingAngleOffsetDegrees = 0.0;
+// Texture-orientation: 
+constexpr qreal kJudgeEffectTapTextureAngleOffsetDegrees = 0.0;
+constexpr qreal kJudgeEffectBreakTextureAngleOffsetDegrees = 132.5;
+constexpr qreal kJudgeEffectTouchDurationSeconds = 0.33333334;
+constexpr qreal kJudgeEffectTouchDestroySeconds = 0.25;
+constexpr qreal kJudgeEffectTouchCircleFadeEndSeconds = 0.31666666;
+constexpr qreal kJudgeEffectHoldSustainLifetimeSeconds = 0.6;
+constexpr int kJudgeEffectHoldSustainParticleCount = 5;
+// Mapping from exported data:
+// Circle.png = 256 px @ 100 PPU, Hold_Effect prefab local scale = 1.2,
+// tap sprite width ~= 122 px @ 100 PPU.
+constexpr qreal kJudgeEffectHoldSustainBaseRelativeToTap = (256.0 * 1.2) / 122.0;
+// Alpha tightening (>1 narrows soft edges, making ring lines appear thinner).
+constexpr qreal kJudgeEffectHoldSustainAlphaTightenGamma = 1.0;
+// Mapping from exported data:
+// TouchPoint sprite is 32px @ 100 PPU => 0.32 world units.
+// Preview touch marker renders at 32 * 0.5 = 16 px, thus 1 world unit ~= 50 px.
+// worldToPixels = touchBasePixels * kJudgeEffectTouchUnitRelativeToTouch => 16 * k = 50.
+constexpr qreal kJudgeEffectTouchUnitRelativeToTouch = 3.125;
+constexpr qreal kJudgeEffectTouchInnerScaleBase = 0.1725238;
+constexpr qreal kJudgeEffectTouchOuterScaleBase = 0.3146144;
+constexpr qreal kJudgeEffectTouchCircleSpriteWidthUnits = 512.0 / 100.0;
+constexpr qreal kJudgeEffectTouchPartSpriteWidthUnits = 103.948685 / 100.0;
+constexpr qreal kJudgeEffectFireworkTouchTriggerDelaySeconds = 0.05;
+constexpr qreal kJudgeEffectFireworkDurationSeconds = 1.3333334;
+constexpr qreal kJudgeEffectFireworkBaseWidthUnits = 10.8;
+constexpr qreal kJudgeEffectFireworkColorBallBaseWidthUnits = 5.12;
+constexpr qreal kJudgeEffectFireworkBrightnessGain = 1.25;
+constexpr int kJudgeEffectFireworkSectorCount = 30;
+constexpr int kJudgeEffectFireworkColoredSectorCount = kJudgeEffectFireworkSectorCount / 2;
+constexpr qreal kJudgeEffectFireworkSectorSpanDegrees = 360.0 / static_cast<qreal>(kJudgeEffectFireworkSectorCount);
+constexpr qreal kJudgeEffectFireworkSectorStepDegrees = kJudgeEffectFireworkSectorSpanDegrees * 2.0;
+constexpr qreal kJudgeEffectFireworkSectorPhaseDegrees = -102.0;
+constexpr int kJudgeEffectFireworkStepRotationSegmentCount = 3;
+constexpr qreal kJudgeEffectFireworkStepRotationDegrees = 24.0;
+// Hanabi.mat source params:
+// _InnerLB=0.018, _InnerUB=0.054, _OuterLB=0.36, _OuterUB=0.429
+constexpr qreal kHanabiInnerLB = 0.018;
+constexpr qreal kHanabiInnerUB = 0.054;
+constexpr qreal kHanabiOuterLB = 0.36;
+constexpr qreal kHanabiOuterUB = 0.429;
+constexpr qreal kJudgeEffectFireworkHoleStartRadiusRatio = kHanabiInnerUB;
+constexpr qreal kJudgeEffectFireworkHoleEndRadiusRatio = 1.0;
+constexpr qreal kJudgeEffectFireworkHoleBandRatio =
+    (kHanabiInnerUB - kHanabiInnerLB) + (kHanabiOuterUB - kHanabiOuterLB);
+const QColor kJudgeEffectTouchCircleTint = QColor::fromRgbF(1.0, 0.9943893, 0.4669811, 1.0);
+const QColor kJudgeEffectTouchPartTint = QColor::fromRgbF(1.0, 0.9000474, 0.4666667, 1.0);
+const std::array<QColor, 5> kJudgeEffectFireworkSectorColors = {{
+    QColor(214, 106, 59),
+    QColor(188, 86, 165),
+    QColor(88, 157, 212),
+    QColor(156, 186, 71),
+    QColor(202, 178, 70),
+}};
+
+struct ScalarCurveKey {
+    qreal time = 0.0;
+    qreal value = 0.0;
+};
+
+struct ScalarHermiteKey {
+    qreal time = 0.0;
+    qreal value = 0.0;
+    qreal inSlope = 0.0;
+    qreal outSlope = 0.0;
+};
+
+struct Vec2CurveKey {
+    qreal time = 0.0;
+    QPointF value;
+};
+
+qreal smoothStep01(qreal t)
+{
+    const qreal x = qBound<qreal>(0.0, t, 1.0);
+    return x * x * (3.0 - 2.0 * x);
+}
+
+QColor scaleRgb(const QColor& color, qreal gain, qreal alpha)
+{
+    QColor result(
+        qBound(0, qRound(static_cast<qreal>(color.red()) * gain), 255),
+        qBound(0, qRound(static_cast<qreal>(color.green()) * gain), 255),
+        qBound(0, qRound(static_cast<qreal>(color.blue()) * gain), 255)
+    );
+    result.setAlphaF(qBound<qreal>(0.0, alpha, 1.0));
+    return result;
+}
+
+const std::array<ScalarCurveKey, 13> kJudgeEffectRootScaleKeys = {{
+    {0.0, 0.5},
+    {0.016666668, 0.50919664},
+    {0.033333335, 0.53476083},
+    {0.05, 0.57365394},
+    {0.06666667, 0.6228372},
+    {0.083333336, 0.67927206},
+    {0.1, 0.7399199},
+    {0.11666667, 0.80174196},
+    {0.13333334, 0.8616997},
+    {0.15, 0.91675436},
+    {0.16666667, 0.96386737},
+    {0.18333334, 1.0},
+    {0.45, 1.3},
+}};
+
+const std::array<ScalarHermiteKey, 4> kJudgeEffectAlphaKeys = {{
+    {0.0, 1.0, 0.0, 0.0},
+    {0.23333333, 0.995328, -0.04485111, -0.044851113},
+    {0.41666666, 8.059014e-08, 1.7378422e-06, -std::numeric_limits<qreal>::infinity()},
+    {0.5833333, 0.0, 0.0, 0.0},
+}};
+
+const std::array<ScalarCurveKey, 3> kJudgeEffectRotationKeys = {{
+    {0.0, 0.0},
+    {0.46666667, 180.0},
+    {0.71666664, 360.0},
+}};
+
+const std::array<std::array<Vec2CurveKey, 4>, 4> kJudgeEffectTapHexPositionKeys = {{
+    {{
+        {0.0, QPointF(0.552, 0.5)},
+        {0.25, QPointF(0.43683612, 0.39568493)},
+        {0.56666666, QPointF(0.0, 0.0)},
+        {0.56666666, QPointF(0.0, 0.0)},
+    }},
+    {{
+        {0.0, QPointF(-0.431, -0.527)},
+        {0.25, QPointF(-0.31925926, -0.39037037)},
+        {0.5, QPointF(0.0, 0.0)},
+        {0.56666666, QPointF(0.0, 0.0)},
+    }},
+    {{
+        {0.0, QPointF(0.473, -0.468)},
+        {0.25, QPointF(0.35037035, -0.34666663)},
+        {0.5, QPointF(0.0, 0.0)},
+        {0.56666666, QPointF(0.0, 0.0)},
+    }},
+    {{
+        {0.0, QPointF(-0.502, 0.492)},
+        {0.25, QPointF(-0.3718518, 0.36444443)},
+        {0.5, QPointF(0.0, 0.0)},
+        {0.56666666, QPointF(0.0, 0.0)},
+    }},
+}};
+
+const std::array<std::array<ScalarCurveKey, 2>, 4> kJudgeEffectTapHexScaleKeys = {{
+    {{
+        {0.0, 0.4788},
+        {0.26666668, 0.6},
+    }},
+    {{
+        {0.0, 0.4788},
+        {0.26666668, 0.6},
+    }},
+    {{
+        {0.0, 0.4788},
+        {0.26666668, 0.8},
+    }},
+    {{
+        {0.0, 0.4788},
+        {0.26666668, 0.8},
+    }},
+}};
+
+const std::array<ScalarCurveKey, 2> kJudgeEffectTouchCircleScaleKeys = {{
+    {0.0, 0.1},
+    {0.3, 0.35},
+}};
+
+const std::array<ScalarCurveKey, 2> kJudgeEffectTouchInnerParentScaleKeys = {{
+    {0.0, 1.0},
+    {0.25, 1.5},
+}};
+
+const std::array<ScalarCurveKey, 2> kJudgeEffectTouchOuterParentScaleKeys = {{
+    {0.0, 2.0},
+    {0.25, 0.2},
+}};
+
+const std::array<ScalarCurveKey, 5> kJudgeEffectFireworkScaleKeys = {{
+    // fire.anim -> Firework.m_LocalScale (x/y)
+    {0.0, 0.0},
+    {0.1, 0.0},
+    {0.13333334, 0.6},
+    {0.23333333, 1.25},
+    {1.3333334, 5.0},
+}};
+
+const std::array<ScalarCurveKey, 3> kJudgeEffectFireworkRotationKeys = {{
+    {0.0, 0.0},
+    {1.2166667, -72.0},
+    {1.3333334, -78.85715},
+}};
+
+const std::array<ScalarCurveKey, 3> kJudgeEffectFireworkAlphaKeys = {{
+    // fire.anim -> Firework.material._Alpha (with Hanabi.mat default _Alpha=0.589 at t=0)
+    {0.0, 0.589},
+    {0.5, 0.589},
+    {1.3333334, 0.0},
+}};
+
+const std::array<ScalarCurveKey, 3> kJudgeEffectFireworkColorBallScaleKeys = {{
+    {0.0, 0.2},
+    {0.1, 0.5},
+    {1.3333334, 0.5},
+}};
+
+const std::array<ScalarCurveKey, 3> kJudgeEffectFireworkColorBallBigScaleKeys = {{
+    {0.0, 1.0},
+    {0.3, 1.15},
+    {1.3333334, 1.15},
+}};
+
+const std::array<ScalarCurveKey, 4> kJudgeEffectFireworkColorBallAlphaKeys = {{
+    {0.0, 1.0},
+    {0.2, 0.1},
+    {0.3, 0.0},
+    {1.3333334, 0.0},
+}};
+
+const std::array<ScalarCurveKey, 4> kJudgeEffectFireworkColorBallBigAlphaKeys = {{
+    {0.0, 1.0},
+    {0.16666667, 0.1},
+    {0.8833333, 0.0},
+    {1.3333334, 0.0},
+}};
+
+const std::array<ScalarCurveKey, 3> kJudgeEffectHoldSustainSizeKeys = {{
+    {0.0, 0.22448978},
+    {0.43861136, 0.8877539},
+    {0.99853516, 1.0},
+}};
+
+const std::array<ScalarCurveKey, 7> kJudgeEffectHoldSustainAlphaKeys = {{
+    {0.0, 0.007843138},
+    {0.09459098, 0.5411765},
+    {0.14285539, 0.9774867},
+    {0.50193027, 1.0},
+    {0.59652174, 0.30085242},
+    {0.66602579, 0.30980393},
+    {1.0, 0.0},
+}};
+
+// Avoid perfectly even phase spacing, which tends to flatten aggregate brightness and hide fade tuning.
+const std::array<qreal, 5> kJudgeEffectHoldSustainPhaseOffsets = {
+    0.00, 0.18, 0.43, 0.67, 0.86,
+};
+
+const std::array<QPointF, 4> kJudgeEffectTouchInnerOffsets = {
+    QPointF(0.0, -0.246),
+    QPointF(0.0, 0.246),
+    QPointF(0.246, 0.0),
+    QPointF(-0.246, 0.0),
+};
+
+const std::array<QPointF, 4> kJudgeEffectTouchOuterDiagonalOffsets = {
+    QPointF(0.254, 0.256),
+    QPointF(0.254, -0.256),
+    QPointF(-0.254, -0.256),
+    QPointF(-0.254, 0.256),
+};
+
+const std::array<QPointF, 4> kJudgeEffectTouchOuterCardinalOffsets = {
+    QPointF(0.0, 0.359),
+    QPointF(0.0, -0.359),
+    QPointF(-0.359, 0.0),
+    QPointF(0.359, 0.0),
+};
+
+const std::array<qreal, 4> kJudgeEffectParentRotationDirection = {1.0, 1.0, -1.0, -1.0};
+
+template <std::size_t N>
+qreal sampleScalarCurve(const std::array<ScalarCurveKey, N>& keys, qreal time)
+{
+    if (keys.empty()) {
+        return 0.0;
+    }
+    if (time <= keys.front().time) {
+        return keys.front().value;
+    }
+    if (time >= keys.back().time) {
+        return keys.back().value;
+    }
+    for (std::size_t i = 1; i < keys.size(); ++i) {
+        const ScalarCurveKey& next = keys[i];
+        if (time > next.time) {
+            continue;
+        }
+        const ScalarCurveKey& prev = keys[i - 1];
+        const qreal span = next.time - prev.time;
+        if (qFuzzyIsNull(span)) {
+            return next.value;
+        }
+        const qreal t = (time - prev.time) / span;
+        return prev.value + (next.value - prev.value) * t;
+    }
+    return keys.back().value;
+}
+
+template <std::size_t N>
+qreal sampleScalarHermiteCurve(const std::array<ScalarHermiteKey, N>& keys, qreal time)
+{
+    if (keys.empty()) {
+        return 0.0;
+    }
+    if (time <= keys.front().time) {
+        return keys.front().value;
+    }
+    if (time >= keys.back().time) {
+        return keys.back().value;
+    }
+    for (std::size_t i = 1; i < keys.size(); ++i) {
+        const ScalarHermiteKey& next = keys[i];
+        if (time > next.time) {
+            continue;
+        }
+        const ScalarHermiteKey& prev = keys[i - 1];
+        const qreal span = next.time - prev.time;
+        if (qFuzzyIsNull(span)) {
+            return next.value;
+        }
+        const qreal t = (time - prev.time) / span;
+        const qreal prevOutSlope = prev.outSlope;
+        const qreal nextInSlope = next.inSlope;
+        if (!std::isfinite(static_cast<double>(prevOutSlope))
+            || !std::isfinite(static_cast<double>(nextInSlope))) {
+            return prev.value + (next.value - prev.value) * t;
+        }
+        const qreal t2 = t * t;
+        const qreal t3 = t2 * t;
+        const qreal h00 = 2.0 * t3 - 3.0 * t2 + 1.0;
+        const qreal h10 = t3 - 2.0 * t2 + t;
+        const qreal h01 = -2.0 * t3 + 3.0 * t2;
+        const qreal h11 = t3 - t2;
+        return h00 * prev.value
+            + h10 * span * prevOutSlope
+            + h01 * next.value
+            + h11 * span * nextInSlope;
+    }
+    return keys.back().value;
+}
+
+template <std::size_t N>
+QPointF sampleVec2Curve(const std::array<Vec2CurveKey, N>& keys, qreal time)
+{
+    if (keys.empty()) {
+        return QPointF();
+    }
+    if (time <= keys.front().time) {
+        return keys.front().value;
+    }
+    if (time >= keys.back().time) {
+        return keys.back().value;
+    }
+    for (std::size_t i = 1; i < keys.size(); ++i) {
+        const Vec2CurveKey& next = keys[i];
+        if (time > next.time) {
+            continue;
+        }
+        const Vec2CurveKey& prev = keys[i - 1];
+        const qreal span = next.time - prev.time;
+        if (qFuzzyIsNull(span)) {
+            return next.value;
+        }
+        const qreal t = (time - prev.time) / span;
+        return QPointF(
+            prev.value.x() + (next.value.x() - prev.value.x()) * t,
+            prev.value.y() + (next.value.y() - prev.value.y()) * t
+        );
+    }
+    return keys.back().value;
+}
+
+qreal judgeEffectClipTime(qreal elapsedSeconds)
+{
+    return qBound<qreal>(0.0, elapsedSeconds * kJudgeEffectPlaybackSpeed, kJudgeEffectClipDurationSeconds);
+}
+
+qreal judgeEffectTouchClipTime(qreal elapsedSeconds)
+{
+    return qBound<qreal>(0.0, elapsedSeconds, kJudgeEffectTouchDurationSeconds);
+}
+
+QPointF rotatePointDegrees(const QPointF& point, qreal angleDegrees)
+{
+    const qreal radians = qDegreesToRadians(angleDegrees);
+    const qreal c = qCos(radians);
+    const qreal s = qSin(radians);
+    return QPointF(point.x() * c - point.y() * s, point.x() * s + point.y() * c);
+}
+
+QImage buildJudgeEffectTapFallbackImage()
+{
+    constexpr int kSize = 192;
+    QImage image(kSize, kSize, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+
+    const QPointF center(kSize / 2.0, kSize / 2.0);
+    const qreal radius = kSize * 0.32;
+
+    QPolygonF hex;
+    hex.reserve(6);
+    for (int i = 0; i < 6; ++i) {
+        const qreal angle = qDegreesToRadians(60.0 * i - 30.0);
+        hex.append(QPointF(
+            center.x() + qCos(angle) * radius,
+            center.y() + qSin(angle) * radius
+        ));
+    }
+
+    // Extracted Hex.png dominant color is around #FFF39C; fallback keeps only hollow strokes.
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(QColor(255, 248, 184, 230), radius * 0.12, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.drawPolygon(hex);
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(QColor(255, 243, 156, 240), radius * 0.078, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.drawPolygon(hex);
+    painter.end();
+    return image;
+}
+
+QImage buildJudgeEffectTapBreakFallbackImage()
+{
+    constexpr int kSize = 192;
+    QImage image(kSize, kSize, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+
+    const QPointF center(kSize / 2.0, kSize / 2.0);
+    const qreal outerRadius = kSize * 0.34;
+    const qreal innerRadius = outerRadius * 0.46;
+
+    QPolygonF star;
+    star.reserve(10);
+    for (int i = 0; i < 10; ++i) {
+        const qreal radius = (i % 2 == 0) ? outerRadius : innerRadius;
+        const qreal angle = qDegreesToRadians(-90.0 + i * 36.0);
+        star.append(QPointF(
+            center.x() + qCos(angle) * radius,
+            center.y() + qSin(angle) * radius
+        ));
+    }
+
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(QColor(255, 248, 184, 230), outerRadius * 0.16, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.drawPolygon(star);
+    painter.setPen(QPen(QColor(255, 243, 156, 240), outerRadius * 0.095, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.drawPolygon(star);
+    painter.end();
+    return image;
+}
+
+QImage buildJudgeEffectFireworkFallbackImage()
+{
+    constexpr int kSize = 512;
+    QImage image(kSize, kSize, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+
+    const QPointF center(kSize / 2.0, kSize / 2.0);
+    const qreal outerR = kSize * 0.45;
+    const qreal innerR = outerR * 0.48;
+
+    QPainterPath ring;
+    ring.addEllipse(center, outerR, outerR);
+    QPainterPath hole;
+    hole.addEllipse(center, innerR, innerR);
+    ring = ring.subtracted(hole);
+
+    QRadialGradient gradient(center, outerR);
+    gradient.setColorAt(0.0, QColor(255, 255, 220, 20));
+    gradient.setColorAt(0.5, QColor(255, 245, 150, 180));
+    gradient.setColorAt(1.0, QColor(255, 235, 120, 35));
+    painter.fillPath(ring, gradient);
+
+    painter.setBrush(Qt::NoBrush);
+    painter.setPen(QPen(QColor(255, 246, 157, 210), kSize * 0.012, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.drawEllipse(center, outerR, outerR);
+    painter.setPen(QPen(QColor(255, 249, 190, 160), kSize * 0.008, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.drawEllipse(center, innerR, innerR);
+
+    painter.end();
+    return image;
+}
+
+QImage buildJudgeEffectFireworkColorBallFallbackImage()
+{
+    constexpr int kSize = 512;
+    QImage image(kSize, kSize, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+
+    const QPointF center(kSize / 2.0, kSize / 2.0);
+    const qreal radius = kSize * 0.46;
+    QRadialGradient gradient(center, radius);
+    gradient.setColorAt(0.0, QColor(255, 245, 130, 255));
+    gradient.setColorAt(0.33, QColor(255, 72, 210, 235));
+    gradient.setColorAt(0.62, QColor(83, 185, 255, 215));
+    gradient.setColorAt(1.0, QColor(255, 238, 96, 0));
+
+    painter.setBrush(gradient);
+    painter.setPen(Qt::NoPen);
+    painter.drawEllipse(center, radius, radius);
+    painter.end();
+    return image;
+}
+
+QRectF nonTransparentBounds(const QImage& image)
+{
+    if (image.isNull()) {
+        return QRectF();
+    }
+    int minX = image.width();
+    int minY = image.height();
+    int maxX = -1;
+    int maxY = -1;
+    for (int y = 0; y < image.height(); ++y) {
+        const QRgb* row = reinterpret_cast<const QRgb*>(image.constScanLine(y));
+        for (int x = 0; x < image.width(); ++x) {
+            if (qAlpha(row[x]) <= 0) {
+                continue;
+            }
+            minX = qMin(minX, x);
+            minY = qMin(minY, y);
+            maxX = qMax(maxX, x);
+            maxY = qMax(maxY, y);
+        }
+    }
+    if (maxX < minX || maxY < minY) {
+        return QRectF();
+    }
+    return QRectF(
+        static_cast<qreal>(minX),
+        static_cast<qreal>(minY),
+        static_cast<qreal>(maxX - minX + 1),
+        static_cast<qreal>(maxY - minY + 1)
+    );
+}
+
+QImage tintedSpriteImage(const QImage& source, const QColor& tint)
+{
+    if (source.isNull()) {
+        return QImage();
+    }
+    QImage result = source.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    const int tr = tint.red();
+    const int tg = tint.green();
+    const int tb = tint.blue();
+    for (int y = 0; y < result.height(); ++y) {
+        QRgb* row = reinterpret_cast<QRgb*>(result.scanLine(y));
+        for (int x = 0; x < result.width(); ++x) {
+            const int a = qAlpha(row[x]);
+            if (a == 0) {
+                continue;
+            }
+            const int r = qRed(row[x]) * tr / 255;
+            const int g = qGreen(row[x]) * tg / 255;
+            const int b = qBlue(row[x]) * tb / 255;
+            row[x] = qRgba(r, g, b, a);
+        }
+    }
+    return result;
+}
+
+QImage alphaTightenedSpriteImage(const QImage& source, qreal tightenGamma)
+{
+    if (source.isNull()) {
+        return QImage();
+    }
+    const qreal gamma = qMax<qreal>(1e-4, tightenGamma);
+    if (qFuzzyCompare(gamma, 1.0)) {
+        return source;
+    }
+    QImage result = source.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    for (int y = 0; y < result.height(); ++y) {
+        QRgb* row = reinterpret_cast<QRgb*>(result.scanLine(y));
+        for (int x = 0; x < result.width(); ++x) {
+            const int a = qAlpha(row[x]);
+            if (a == 0) {
+                continue;
+            }
+            const qreal alpha01 = static_cast<qreal>(a) / 255.0;
+            const int tightenedAlpha = qBound(0, qRound(qPow(alpha01, gamma) * 255.0), 255);
+            row[x] = qRgba(qRed(row[x]), qGreen(row[x]), qBlue(row[x]), tightenedAlpha);
+        }
+    }
+    return result;
+}
 
 struct SampleStats {
     bool hasValue = false;
@@ -250,7 +866,9 @@ qreal laneRotationDegreesForIndex(qreal laneIndex)
 
 QColor tapColorForMarker(const TimelineNoteMarker& marker)
 {
-    if (marker.headBreak || marker.isBreak) {
+    const bool slideHeadStar = marker.type == "slide" || marker.type == "wifi";
+    const bool isBreak = slideHeadStar ? marker.headBreak : marker.isBreak;
+    if (isBreak) {
         return QColor("#F39C12");
     }
     // Slide/wifi head stars use `headEach`; the trace body uses `slideEach`.
@@ -345,6 +963,14 @@ PreviewCanvas::PreviewCanvas(QWindow* parent)
     if (QFileInfo::exists(outlinePath)) {
         outlineImage_ = QImage(outlinePath);
     }
+    judgeEffectTapImage_ = buildJudgeEffectTapFallbackImage();
+    judgeEffectTapSourceRect_ = nonTransparentBounds(judgeEffectTapImage_);
+    judgeEffectTapBreakImage_ = buildJudgeEffectTapBreakFallbackImage();
+    judgeEffectTapBreakSourceRect_ = nonTransparentBounds(judgeEffectTapBreakImage_);
+    judgeEffectFireworkImage_ = buildJudgeEffectFireworkFallbackImage();
+    judgeEffectFireworkSourceRect_ = nonTransparentBounds(judgeEffectFireworkImage_);
+    judgeEffectFireworkColorBallImage_ = buildJudgeEffectFireworkColorBallFallbackImage();
+    judgeEffectFireworkColorBallSourceRect_ = nonTransparentBounds(judgeEffectFireworkColorBallImage_);
 }
 
 PreviewCanvas::~PreviewCanvas()
@@ -443,6 +1069,14 @@ struct PreviewCanvas::SkinLoadResult {
     QImage touchHold2Image;
     QImage touchHold3Image;
     QImage touchHoldBorderImage;
+    QImage judgeEffectTapImage;
+    QImage judgeEffectTapBreakImage;
+    QImage judgeEffectHoldSustainCircleImage;
+    QImage judgeEffectTouchCircleImage;
+    QImage judgeEffectTouchPart01Image;
+    QImage judgeEffectTouchPart02Image;
+    QImage judgeEffectFireworkImage;
+    QImage judgeEffectFireworkColorBallImage;
     QImage tapAtlasImage;
     QImage trackAtlasImage;
     QImage touchAtlasImage;
@@ -593,6 +1227,23 @@ PreviewCanvas::SkinLoadResult loadSkinAssets(const QString& skinDir, quint64 gen
     result.touchHold2Image = loadImageIfExists(dir.filePath("touchhold_2.png"));
     result.touchHold3Image = loadImageIfExists(dir.filePath("touchhold_3.png"));
     result.touchHoldBorderImage = loadImageIfExists(dir.filePath("touchhold_border.png"));
+    result.judgeEffectTapImage = loadImageIfExists(dir.filePath("judge_effect_tap.png"));
+    result.judgeEffectTapBreakImage = loadImageIfExists(dir.filePath("judge_effect_tap_break.png"));
+    result.judgeEffectHoldSustainCircleImage = loadImageIfExists(dir.filePath("judge_effect_hold_sustain_circle.png"));
+    if (result.judgeEffectHoldSustainCircleImage.isNull()) {
+        result.judgeEffectHoldSustainCircleImage = loadImageIfExists(dir.filePath("circle.png"));
+    }
+    result.judgeEffectTouchCircleImage = loadImageIfExists(dir.filePath("judge_effect_touch_circle.png"));
+    result.judgeEffectTouchPart01Image = loadImageIfExists(dir.filePath("judge_effect_touch_part_01.png"));
+    result.judgeEffectTouchPart02Image = loadImageIfExists(dir.filePath("judge_effect_touch_part_02.png"));
+    result.judgeEffectFireworkImage = loadImageIfExists(dir.filePath("judge_effect_firework_tinted_sample.png"));
+    if (result.judgeEffectFireworkImage.isNull()) {
+        result.judgeEffectFireworkImage = loadImageIfExists(dir.filePath("judge_effect_firework.png"));
+    }
+    result.judgeEffectFireworkColorBallImage = loadImageIfExists(dir.filePath("judge_effect_firework_color_ball.png"));
+    if (result.judgeEffectFireworkColorBallImage.isNull()) {
+        result.judgeEffectFireworkColorBallImage = loadImageIfExists(dir.filePath("ColorBall.png"));
+    }
 
     result.noteGuideNormalImage = loadGuideImageScaled(noteGuideDir, "Normal.png");
     result.noteGuideBreakImage = loadGuideImageScaled(noteGuideDir, "Break.png");
@@ -792,6 +1443,47 @@ void PreviewCanvas::applySkinLoadResult(SkinLoadResult&& result)
     touchHold2Image_ = std::move(result.touchHold2Image);
     touchHold3Image_ = std::move(result.touchHold3Image);
     touchHoldBorderImage_ = std::move(result.touchHoldBorderImage);
+    if (!result.judgeEffectTapImage.isNull()) {
+        judgeEffectTapImage_ = std::move(result.judgeEffectTapImage);
+    } else if (judgeEffectTapImage_.isNull()) {
+        judgeEffectTapImage_ = buildJudgeEffectTapFallbackImage();
+    }
+    judgeEffectTapSourceRect_ = nonTransparentBounds(judgeEffectTapImage_);
+
+    if (!result.judgeEffectTapBreakImage.isNull()) {
+        judgeEffectTapBreakImage_ = std::move(result.judgeEffectTapBreakImage);
+    } else if (judgeEffectTapBreakImage_.isNull()) {
+        judgeEffectTapBreakImage_ = buildJudgeEffectTapBreakFallbackImage();
+    }
+    judgeEffectTapBreakSourceRect_ = nonTransparentBounds(judgeEffectTapBreakImage_);
+    judgeEffectHoldSustainCircleImage_ = alphaTightenedSpriteImage(
+        result.judgeEffectHoldSustainCircleImage,
+        kJudgeEffectHoldSustainAlphaTightenGamma
+    );
+
+    judgeEffectTouchCircleImage_ = result.judgeEffectTouchCircleImage.isNull()
+        ? QImage()
+        : tintedSpriteImage(result.judgeEffectTouchCircleImage, kJudgeEffectTouchCircleTint);
+    judgeEffectTouchPart01Image_ = result.judgeEffectTouchPart01Image.isNull()
+        ? QImage()
+        : tintedSpriteImage(result.judgeEffectTouchPart01Image, kJudgeEffectTouchPartTint);
+    judgeEffectTouchPart02Image_ = result.judgeEffectTouchPart02Image.isNull()
+        ? QImage()
+        : tintedSpriteImage(result.judgeEffectTouchPart02Image, kJudgeEffectTouchPartTint);
+
+    if (!result.judgeEffectFireworkImage.isNull()) {
+        judgeEffectFireworkImage_ = std::move(result.judgeEffectFireworkImage);
+    } else if (judgeEffectFireworkImage_.isNull()) {
+        judgeEffectFireworkImage_ = buildJudgeEffectFireworkFallbackImage();
+    }
+    judgeEffectFireworkSourceRect_ = nonTransparentBounds(judgeEffectFireworkImage_);
+    if (!result.judgeEffectFireworkColorBallImage.isNull()) {
+        judgeEffectFireworkColorBallImage_ = std::move(result.judgeEffectFireworkColorBallImage);
+    } else if (judgeEffectFireworkColorBallImage_.isNull()) {
+        judgeEffectFireworkColorBallImage_ = buildJudgeEffectFireworkColorBallFallbackImage();
+    }
+    judgeEffectFireworkColorBallSourceRect_ = nonTransparentBounds(judgeEffectFireworkColorBallImage_);
+
     tapAtlasImage_ = std::move(result.tapAtlasImage);
     trackAtlasImage_ = std::move(result.trackAtlasImage);
     touchAtlasImage_ = std::move(result.touchAtlasImage);
@@ -1016,6 +1708,14 @@ void PreviewCanvas::scheduleTexturePrewarm()
     pendingTexturePrewarmImages_.append(touchAtlasImage_);
     pendingTexturePrewarmImages_.append(guideAtlasImage_);
     pendingTexturePrewarmImages_.append(outlineImage_);
+    pendingTexturePrewarmImages_.append(judgeEffectTapImage_);
+    pendingTexturePrewarmImages_.append(judgeEffectTapBreakImage_);
+    pendingTexturePrewarmImages_.append(judgeEffectHoldSustainCircleImage_);
+    pendingTexturePrewarmImages_.append(judgeEffectTouchCircleImage_);
+    pendingTexturePrewarmImages_.append(judgeEffectTouchPart01Image_);
+    pendingTexturePrewarmImages_.append(judgeEffectTouchPart02Image_);
+    pendingTexturePrewarmImages_.append(judgeEffectFireworkImage_);
+    pendingTexturePrewarmImages_.append(judgeEffectFireworkColorBallImage_);
     texturePrewarmStartMs_ = QDateTime::currentMSecsSinceEpoch();
     appendPreviewStartupTiming("preview_canvas/texture_prewarm_schedule", -1);
 
@@ -1062,7 +1762,7 @@ void PreviewCanvas::processTexturePrewarmQueue()
 const QImage* PreviewCanvas::selectTapImage(const TimelineNoteMarker& marker) const
 {
     const QImage* tapImage = &tapImage_;
-    if ((marker.headBreak || marker.isBreak) && !tapBreakImage_.isNull()) {
+    if (marker.isBreak && !tapBreakImage_.isNull()) {
         tapImage = &tapBreakImage_;
     } else if (marker.isEach && !tapEachImage_.isNull()) {
         tapImage = &tapEachImage_;
@@ -1073,7 +1773,7 @@ const QImage* PreviewCanvas::selectTapImage(const TimelineNoteMarker& marker) co
 const QImage* PreviewCanvas::selectHoldImage(const TimelineNoteMarker& marker) const
 {
     const QImage* holdImage = &holdImage_;
-    if ((marker.headBreak || marker.isBreak) && !holdBreakImage_.isNull()) {
+    if (marker.isBreak && !holdBreakImage_.isNull()) {
         holdImage = &holdBreakImage_;
     } else if (marker.isEach && !holdEachImage_.isNull()) {
         holdImage = &holdEachImage_;
@@ -1712,1735 +2412,7 @@ void PreviewCanvas::drawPlayfieldBackdrop(QPainter& painter, const QRectF& playf
     painter.restore();
 }
 
-void PreviewCanvas::drawTouchLayer(QPainter& painter, const QRectF& playfieldRect)
-{
-    for (const TimelineNoteMarker& marker : noteMarkers_) {
-        if (marker.type == "touch") {
-            drawTouchMarker(painter, marker, playfieldRect);
-        } else if (marker.type == "touch_hold") {
-            drawTouchHoldMarker(painter, marker, playfieldRect);
-        }
-    }
-}
-
-void PreviewCanvas::drawTrackLayer(QPainter& painter, const QRectF& playfieldRect)
-{
-    const bool batchNative = glRenderer_.isInitialized() && !nativePaintingActive_;
-    if (batchNative) {
-        nativePaintingActive_ = true;
-        painter.beginNativePainting();
-    }
-    for (const TimelineNoteMarker& marker : noteMarkers_) {
-        if (marker.type == "slide") {
-            drawSlideTrack(painter, marker, playfieldRect);
-        } else if (marker.type == "wifi") {
-            drawWifiTrack(painter, marker, playfieldRect);
-        }
-    }
-    if (batchNative) {
-        painter.endNativePainting();
-        nativePaintingActive_ = false;
-    }
-}
-
-void PreviewCanvas::drawGuideLayer(QPainter& painter, const QRectF& playfieldRect)
-{
-    const bool batchNative = glRenderer_.isInitialized() && !nativePaintingActive_;
-    if (batchNative) {
-        nativePaintingActive_ = true;
-        painter.beginNativePainting();
-    }
-    drawNoteGuides(painter, playfieldRect);
-    if (batchNative) {
-        painter.endNativePainting();
-        nativePaintingActive_ = false;
-    }
-}
-
-void PreviewCanvas::drawHoldLayer(QPainter& painter, const QRectF& playfieldRect)
-{
-    const bool batchNative = glRenderer_.isInitialized() && !nativePaintingActive_;
-    if (batchNative) {
-        nativePaintingActive_ = true;
-        painter.beginNativePainting();
-    }
-    for (const TimelineNoteMarker& marker : noteMarkers_) {
-        if (marker.type == "hold") {
-            drawHoldMarker(painter, marker, playfieldRect);
-        }
-    }
-    if (batchNative) {
-        painter.endNativePainting();
-        nativePaintingActive_ = false;
-    }
-}
-
-void PreviewCanvas::drawTapLayer(QPainter& painter, const QRectF& playfieldRect)
-{
-    const bool batchNative = glRenderer_.isInitialized() && !nativePaintingActive_;
-    if (batchNative) {
-        nativePaintingActive_ = true;
-        painter.beginNativePainting();
-    }
-    tapAtlasBatchingActive_ = glRenderer_.isInitialized();
-    tapAtlasBatch_.clear();
-    for (const TimelineNoteMarker& marker : noteMarkers_) {
-        if (marker.type == "slide") {
-            drawSlideMarker(painter, marker, playfieldRect);
-        } else if (marker.type == "wifi") {
-            drawWifiMarker(painter, marker, playfieldRect);
-        }
-    }
-    flushTapAtlasBatch(painter);
-    for (const TimelineNoteMarker& marker : noteMarkers_) {
-        if (marker.type == "tap" || marker.type == "slide" || marker.type == "wifi") {
-            drawTapMarker(painter, marker, playfieldRect);
-        }
-    }
-    flushTapAtlasBatch(painter);
-    tapAtlasBatchingActive_ = false;
-    if (batchNative) {
-        painter.endNativePainting();
-        nativePaintingActive_ = false;
-    }
-}
-
-void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
-{
-    painter.setPen(QColor("#D9E2EC"));
-    const qreal hudPadding = qBound<qreal>(10.0, stageRect.width() * 0.028, 18.0);
-    const int timeFontPointSize = qBound(12, qRound(stageRect.width() * 0.03), 20);
-    const int debugFontPointSize = qBound(8, qRound(stageRect.width() * 0.019), 13);
-    QFont timeFont = hudMonoFont(timeFontPointSize, QFont::DemiBold);
-    if (!showDebugInfo_) {
-        painter.setFont(timeFont);
-        painter.drawText(
-            QPointF(stageRect.left() + hudPadding, stageRect.bottom() - hudPadding),
-            formatHudTimeLabel(playheadSeconds_)
-        );
-        return;
-    }
-    QFont fpsFont = hudMonoFont(debugFontPointSize, QFont::Medium);
-    painter.setFont(fpsFont);
-    const QFontMetrics metrics(fpsFont);
-    const qreal leftX = stageRect.left() + hudPadding;
-    const qreal baseline0 = stageRect.top() + hudPadding + metrics.ascent();
-    const QString rendererLabel = usedGpuRendererThisFrame_ ? "Renderer: GPU" : "Renderer: CPU";
-    painter.drawText(
-        QPointF(leftX, baseline0),
-        rendererLabel
-    );
-    painter.drawText(
-        QPointF(leftX, baseline0 + metrics.height()),
-        QString::number(fpsDisplay_, 'f', 1) + " FPS"
-    );
-    painter.drawText(
-        QPointF(leftX, baseline0 + metrics.height() * 2),
-        QString("Fallback: %1")
-            .arg(cpuFallbackCount_)
-    );
-
-    painter.setFont(timeFont);
-    painter.drawText(
-        QPointF(stageRect.left() + hudPadding, stageRect.bottom() - hudPadding),
-        formatHudTimeLabel(playheadSeconds_)
-    );
-}
-
-bool PreviewCanvas::drawSpriteImage(
-    QPainter& painter,
-    const QImage& image,
-    const QPointF& center,
-    int targetWidth,
-    int targetHeight,
-    qreal angleDegrees,
-    qreal opacity,
-    const QRectF& sourceRect
-)
-{
-    if (opacity <= 0.0) {
-        return true;
-    }
-    if (image.isNull() || targetWidth <= 0 || targetHeight <= 0) {
-        return false;
-    }
-
-    const QImage* renderImage = &image;
-    QRectF resolvedSourceRect = sourceRect;
-    resolveAtlasImage(image, sourceRect, renderImage, resolvedSourceRect);
-    if (renderImage == nullptr || renderImage->isNull()) {
-        return false;
-    }
-    if (tapAtlasBatchingActive_ && !tapAtlasBatch_.isEmpty() && renderImage != &tapAtlasImage_) {
-        flushTapAtlasBatch(painter);
-    }
-    if (tapAtlasBatchingActive_ && renderImage == &tapAtlasImage_) {
-        BatchedSprite sprite;
-        sprite.image = renderImage;
-        sprite.center = center;
-        sprite.targetWidth = targetWidth;
-        sprite.targetHeight = targetHeight;
-        sprite.angleDegrees = angleDegrees;
-        sprite.opacity = opacity;
-        sprite.sourceRect = resolvedSourceRect;
-        tapAtlasBatch_.append(sprite);
-        return true;
-    }
-
-    const QRectF targetRect(
-        center.x() - targetWidth / 2.0,
-        center.y() - targetHeight / 2.0,
-        targetWidth,
-        targetHeight
-    );
-    bool renderedByGl = false;
-    if (glRenderer_.isInitialized()) {
-        if (nativePaintingActive_) {
-            renderedByGl = glRenderer_.drawImageQuad(*renderImage, targetRect, angleDegrees, opacity, resolvedSourceRect);
-        } else {
-            painter.beginNativePainting();
-            renderedByGl = glRenderer_.drawImageQuad(*renderImage, targetRect, angleDegrees, opacity, resolvedSourceRect);
-            painter.endNativePainting();
-        }
-    }
-    if (renderedByGl) {
-        usedGpuRendererThisFrame_ = true;
-        return true;
-    }
-    if (nativePaintingActive_) {
-        return false;
-    }
-
-    if (resolvedSourceRect.isValid() && !resolvedSourceRect.isEmpty()) {
-        ++cpuFallbackCount_;
-        painter.save();
-        painter.setOpacity(opacity);
-        painter.translate(center);
-        painter.rotate(angleDegrees);
-        painter.drawImage(
-            QRectF(-targetWidth / 2.0, -targetHeight / 2.0, targetWidth, targetHeight),
-            *renderImage,
-            resolvedSourceRect
-        );
-        painter.restore();
-        return true;
-    }
-
-    const QImage transformed = cachedSpriteTransform(*renderImage, targetWidth, targetHeight, angleDegrees);
-    if (transformed.isNull()) {
-        return false;
-    }
-    ++cpuFallbackCount_;
-    painter.save();
-    painter.drawImage(
-        QPointF(center.x() - transformed.width() / 2.0, center.y() - transformed.height() / 2.0),
-        transformed
-    );
-    painter.restore();
-    return true;
-}
-
-void PreviewCanvas::warmTransformCachesForCurrentSize()
-{
-    if (!kEnablePreviewCaches) {
-        return;
-    }
-
-    guideTransformCache_.clear();
-    guideTransformCacheOrder_.clear();
-    spriteTransformCache_.clear();
-    spriteTransformCacheOrder_.clear();
-
-    const QRectF playfieldRect = currentPlayfieldRect();
-    const int side = qMax(1, qRound(playfieldRect.width()));
-    if (side <= 0) {
-        return;
-    }
-    const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-    const qreal tapBaseScale = canvasScale * kSkinAssetScale;
-
-    const int laneAngles[] = {23, 68, 113, 158, 203, 248, 293, 338};
-
-    const auto warmSprite = [this](const QImage& image, int targetWidth, int targetHeight, int angleDegrees) {
-        if (image.isNull() || targetWidth <= 0 || targetHeight <= 0) {
-            return;
-        }
-        cachedSpriteTransform(image, targetWidth, targetHeight, angleDegrees);
-    };
-    const auto warmGuide = [this](const QImage& image, int targetWidth, int targetHeight, int angleDegrees) {
-        if (image.isNull() || targetWidth <= 0 || targetHeight <= 0) {
-            return;
-        }
-        cachedGuideTransform(image, targetWidth, targetHeight, angleDegrees);
-    };
-
-    const QImage* tapSprites[] = {
-        &tapImage_, &tapEachImage_, &tapBreakImage_
-    };
-    for (const QImage* image : tapSprites) {
-        if (image == nullptr || image->isNull()) {
-            continue;
-        }
-        const int minWidth = quantizeDimension(qRound(image->width() * tapBaseScale * tapScaleForDistance(0.0)), kSpriteTransformSizeStep);
-        const int maxWidth = quantizeDimension(qRound(image->width() * tapBaseScale), kSpriteTransformSizeStep);
-        const qreal aspect = static_cast<qreal>(image->height()) / qMax(1, image->width());
-        for (int targetWidth = minWidth; targetWidth <= maxWidth; targetWidth += kSpriteTransformSizeStep) {
-            const int targetHeight = qMax(1, qRound(targetWidth * aspect));
-            for (int angle : laneAngles) {
-                warmSprite(*image, targetWidth, targetHeight, angle);
-            }
-        }
-    }
-
-    const QImage* starSprites[] = {
-        &starImage_, &starEachImage_, &starBreakImage_
-    };
-    const qreal tapSizedStarWidth = (!tapImage_.isNull() ? tapImage_.width() * kSkinAssetScale : 90.0) * kSlideSpawnStarRelativeScale;
-    const qreal tapSizedStarHeight = (!tapImage_.isNull() ? tapImage_.height() * kSkinAssetScale : 90.0) * kSlideSpawnStarRelativeScale;
-    for (const QImage* image : starSprites) {
-        if (image == nullptr || image->isNull()) {
-            continue;
-        }
-        const int spawnMinWidth = quantizeDimension(qRound(tapSizedStarWidth * canvasScale * tapScaleForDistance(0.0)), kSpriteTransformSizeStep);
-        const int spawnMaxWidth = quantizeDimension(qRound(tapSizedStarWidth * canvasScale), kSpriteTransformSizeStep);
-        const qreal spawnAspect = tapSizedStarHeight / qMax<qreal>(1.0, tapSizedStarWidth);
-        for (int targetWidth = spawnMinWidth; targetWidth <= spawnMaxWidth; targetWidth += kSpriteTransformSizeStep) {
-            const int targetHeight = qMax(1, qRound(targetWidth * spawnAspect));
-            for (int angle : laneAngles) {
-                warmSprite(*image, targetWidth, targetHeight, angle);
-            }
-        }
-        const int waitMinWidth = quantizeDimension(qRound(image->width() * canvasScale * slideStartupStarInitialScale(*image)), kSpriteTransformSizeStep);
-        const int waitMaxWidth = quantizeDimension(qRound(image->width() * canvasScale * kStarAssetScale), kSpriteTransformSizeStep);
-        const qreal waitAspect = static_cast<qreal>(image->height()) / qMax(1, image->width());
-        for (int targetWidth = waitMinWidth; targetWidth <= waitMaxWidth; targetWidth += kSpriteTransformSizeStep) {
-            const int targetHeight = qMax(1, qRound(targetWidth * waitAspect));
-            for (int angle = 0; angle < 360; angle += 15) {
-                warmSprite(*image, targetWidth, targetHeight, angle);
-            }
-        }
-    }
-
-    const struct {
-        const QImage* image;
-        qreal sourceRadius;
-    } guideSprites[] = {
-        {&noteGuideNormalImage_, kNoteGuideSourceRadius},
-        {&noteGuideBreakImage_, kNoteGuideSourceRadius},
-        {&noteGuideEachImage_, kNoteGuideSourceRadius},
-        {&noteGuideSlideImage_, kNoteGuideSourceRadius},
-        {&noteGuideEachLine1Image_, kEachLine1SourceRadius},
-        {&noteGuideEachLine2Image_, kEachLine2SourceRadius},
-        {&noteGuideEachLine3Image_, kEachLine3SourceRadius},
-        {&noteGuideEachLine4Image_, kEachLine4SourceRadius},
-    };
-    for (const auto& guide : guideSprites) {
-        if (guide.image == nullptr || guide.image->isNull() || guide.sourceRadius <= 0.0) {
-            continue;
-        }
-        const qreal minScale = kLogicalDistanceTap / guide.sourceRadius;
-        const qreal maxScale = kLogicalDistanceEdge / guide.sourceRadius;
-        const int minWidth = quantizeDimension(qRound(guide.image->width() * canvasScale * minScale), kGuideTransformSizeStep);
-        const int maxWidth = quantizeDimension(qRound(guide.image->width() * canvasScale * maxScale), kGuideTransformSizeStep);
-        const qreal aspect = static_cast<qreal>(guide.image->height()) / qMax(1, guide.image->width());
-        for (int targetWidth = minWidth; targetWidth <= maxWidth; targetWidth += kGuideTransformSizeStep) {
-            const int targetHeight = qMax(1, qRound(targetWidth * aspect));
-            for (int angle = 0; angle < 360; angle += 15) {
-                warmGuide(*guide.image, targetWidth, targetHeight, angle);
-            }
-        }
-    }
-}
-
-void PreviewCanvas::prebuildTrackAreaCachesForCurrentState()
-{
-    slideTrackAreaCache_.clear();
-    wifiTrackAreaCache_.clear();
-    if (!kEnablePreviewCaches || noteMarkers_.isEmpty()) {
-        return;
-    }
-
-    const QRectF playfieldRect = currentPlayfieldRect();
-    if (playfieldRect.width() <= 0.0 || playfieldRect.height() <= 0.0) {
-        return;
-    }
-
-    QImage dummy(1, 1, QImage::Format_ARGB32_Premultiplied);
-    dummy.fill(Qt::transparent);
-    QPainter painter(&dummy);
-
-    for (const TimelineNoteMarker& marker : noteMarkers_) {
-        if (marker.type == "slide") {
-            const QImage* image = selectSlideTrackImage(marker);
-            if (image == nullptr || image->isNull()) {
-                continue;
-            }
-            for (int segmentIndex = 0; segmentIndex < marker.slideTrackAreaPoints.size(); ++segmentIndex) {
-                const QVector<QVector<QPointF>>& areas = marker.slideTrackAreaPoints[segmentIndex];
-                const QVector<QVector<int>>& areaCuts = marker.slideTrackAreaCutIndices.value(segmentIndex);
-                for (int areaIndex = 0; areaIndex < areas.size(); ++areaIndex) {
-                    drawCachedSlideArea(painter, marker, segmentIndex, areaIndex, 0, playfieldRect, image);
-                    const QVector<int>& cuts = areaCuts.value(areaIndex);
-                    for (int cut : cuts) {
-                        drawCachedSlideArea(painter, marker, segmentIndex, areaIndex, cut, playfieldRect, image);
-                    }
-                }
-            }
-        } else if (marker.type == "wifi") {
-            for (int areaIndex = 0; areaIndex < marker.wifiTrackAreaPoints.size(); ++areaIndex) {
-                drawCachedWifiArea(painter, marker, areaIndex, 0, playfieldRect);
-                const int areaSize = marker.wifiTrackAreaPoints[areaIndex].size();
-                const QVector<double>& checkpoints = marker.wifiTrackAreaCheckpoints.value(areaIndex);
-                for (int passed = 1; passed <= checkpoints.size(); ++passed) {
-                    const int localCut = qBound(
-                        0,
-                        qFloor(static_cast<qreal>(passed) * areaSize / qMax(1, checkpoints.size())),
-                        areaSize
-                    );
-                    drawCachedWifiArea(painter, marker, areaIndex, localCut, playfieldRect);
-                }
-            }
-        }
-    }
-}
-
-void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRect)
-{
-    struct ActiveEachCandidate {
-        const TimelineNoteMarker* marker = nullptr;
-    };
-
-    auto renderGuideImage = [this, &painter, &playfieldRect](
-        const QImage* image,
-        qreal scale,
-        qreal angleDegrees,
-        const QPointF& logicalPos,
-        bool preferGpu,
-        qreal gpuAngleOffset
-    ) {
-        if (image == nullptr || image->isNull() || scale <= 0.0) {
-            return;
-        }
-        const QImage* renderImage = image;
-        QRectF renderSourceRect;
-        const bool atlasResolved = resolveAtlasImage(*image, QRectF(), renderImage, renderSourceRect);
-        if (renderImage == nullptr || renderImage->isNull()) {
-            return;
-        }
-        const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-        const QPointF point = mapLogicalPointToRect(logicalPos, playfieldRect);
-        const int targetWidth = qMax(1, qRound(image->width() * canvasScale * scale));
-        const int targetHeight = qMax(1, qRound(image->height() * canvasScale * scale));
-        const QRectF targetRect(
-            point.x() - targetWidth / 2.0,
-            point.y() - targetHeight / 2.0,
-            targetWidth,
-            targetHeight
-        );
-        bool renderedByGl = false;
-        if (preferGpu && glRenderer_.isInitialized()) {
-            if (nativePaintingActive_) {
-                renderedByGl = glRenderer_.drawImageQuad(
-                    *renderImage,
-                    targetRect,
-                    angleDegrees + gpuAngleOffset,
-                    1.0,
-                    renderSourceRect
-                );
-            } else {
-                painter.beginNativePainting();
-                renderedByGl = glRenderer_.drawImageQuad(*renderImage, targetRect, angleDegrees + gpuAngleOffset, 1.0, renderSourceRect);
-                painter.endNativePainting();
-            }
-        }
-        if (renderedByGl) {
-            usedGpuRendererThisFrame_ = true;
-            return;
-        }
-        if (nativePaintingActive_) {
-            return;
-        }
-
-        if (atlasResolved && renderSourceRect.isValid() && !renderSourceRect.isEmpty()) {
-            ++cpuFallbackCount_;
-            painter.save();
-            painter.translate(point);
-            painter.rotate(angleDegrees);
-            painter.drawImage(
-                QRectF(-targetWidth / 2.0, -targetHeight / 2.0, targetWidth, targetHeight),
-                *renderImage,
-                renderSourceRect
-            );
-            painter.restore();
-            return;
-        }
-
-        const QImage transformed = cachedGuideTransform(*image, targetWidth, targetHeight, angleDegrees);
-        if (transformed.isNull()) {
-            return;
-        }
-        ++cpuFallbackCount_;
-        painter.drawImage(
-            QPointF(
-                point.x() - transformed.width() / 2.0,
-                point.y() - transformed.height() / 2.0
-            ),
-            transformed
-        );
-    };
-
-    auto renderConcentricGuide = [&renderGuideImage](
-        const QImage* image,
-        qreal distance,
-        qreal sourceRadius,
-        qreal angleDegrees,
-        bool preferGpu = true,
-        qreal gpuAngleOffset = 0.0
-    ) {
-        if (distance <= 0.0 || sourceRadius <= 0.0) {
-            return;
-        }
-        const qreal guideRadius = distance < kLogicalDistanceTap
-            ? kLogicalDistanceTap
-            : qMin(distance, kLogicalDistanceEdge);
-        const qreal scale = guideRadius / sourceRadius;
-        renderGuideImage(
-            image,
-            scale,
-            angleDegrees,
-            QPointF(kLogicalCanvasCenter, kLogicalCanvasCenter),
-            preferGpu,
-            gpuAngleOffset
-        );
-    };
-
-    auto renderTailGuide = [&renderGuideImage](const QImage* image, int lane, qreal distance) {
-        const qreal scale = qMax<qreal>(0.0, tapScaleForDistance(distance));
-        if (scale <= 0.0) {
-            return;
-        }
-        const QPointF unit = laneUnitVector(lane);
-        const qreal renderedDistance = distance < kLogicalDistanceTap
-            ? kLogicalDistanceTap
-            : qMin(distance, kLogicalDistanceEdge);
-        const QPointF logicalPos(
-            kLogicalCanvasCenter + unit.x() * renderedDistance,
-            kLogicalCanvasCenter + unit.y() * renderedDistance
-        );
-        renderGuideImage(image, scale, laneRotationDegrees(lane), logicalPos, true, 0.0);
-    };
-
-    QHash<qint64, QVector<ActiveEachCandidate>> eachGroups;
-    const auto addEachCandidate = [&eachGroups](const TimelineNoteMarker& marker) {
-        const qint64 key = qRound64(marker.second * 1000000.0);
-        eachGroups[key].append(ActiveEachCandidate{&marker});
-    };
-
-    for (const TimelineNoteMarker& marker : noteMarkers_) {
-        if (marker.type == "tap" || marker.type == "slide" || marker.type == "wifi") {
-            const bool slideHeadStar = marker.type == "slide" || marker.type == "wifi";
-            if (slideHeadStar && !marker.hasHeadStar) {
-                continue;
-            }
-            if (playheadSeconds_ > marker.second) {
-                continue;
-            }
-            const qreal distance = static_cast<qreal>(playheadSeconds_ - marker.second) * kTapUnitsPerSecond + kLogicalDistanceEdge;
-            renderConcentricGuide(
-                selectTapNoteGuideImage(marker),
-                distance,
-                kNoteGuideSourceRadius,
-                laneRotationDegrees(marker.lane),
-                true,
-                0.0
-            );
-            const bool inEachGroup = slideHeadStar ? marker.headEach : marker.isEach;
-            if (inEachGroup) {
-                addEachCandidate(marker);
-            }
-        } else if (marker.type == "hold") {
-            if (marker.endSecond < marker.second || playheadSeconds_ > marker.endSecond) {
-                continue;
-            }
-            const qreal distance = static_cast<qreal>(playheadSeconds_ - marker.second) * kTapUnitsPerSecond + kLogicalDistanceEdge;
-            const QImage* headImage = marker.isBreak ? &noteGuideBreakImage_
-                : marker.isEach ? &noteGuideEachImage_
-                : &noteGuideNormalImage_;
-            renderConcentricGuide(headImage, distance, kNoteGuideSourceRadius, laneRotationDegrees(marker.lane), true, 0.0);
-
-            const qreal distanceEnd = static_cast<qreal>(playheadSeconds_ - marker.endSecond) * kTapUnitsPerSecond + kLogicalDistanceEdge;
-            if (distanceEnd >= kLogicalDistanceTap) {
-                renderTailGuide(selectHoldEndNoteGuideImage(marker), marker.lane, distanceEnd);
-            }
-            if (marker.isEach) {
-                addEachCandidate(marker);
-            }
-        }
-    }
-
-    for (auto it = eachGroups.cbegin(); it != eachGroups.cend(); ++it) {
-        const QVector<ActiveEachCandidate>& notes = it.value();
-        if (notes.size() < 2) {
-            continue;
-        }
-
-        const int groupSize = notes.size();
-        int laneDistance = 4;
-        if (groupSize == 2) {
-            const int a = notes[0].marker->lane;
-            const int b = notes[1].marker->lane;
-            const int delta = qAbs(a - b);
-            laneDistance = qMin(delta, 8 - delta);
-        }
-
-        const QImage* lineImage = nullptr;
-        qreal sourceRadius = kEachLine4SourceRadius;
-        if (groupSize >= 3 || laneDistance == 4) {
-            lineImage = &noteGuideEachLine4Image_;
-            sourceRadius = kEachLine4SourceRadius;
-        } else if (laneDistance == 3) {
-            lineImage = &noteGuideEachLine3Image_;
-            sourceRadius = kEachLine3SourceRadius;
-        } else if (laneDistance == 2) {
-            lineImage = &noteGuideEachLine2Image_;
-            sourceRadius = kEachLine2SourceRadius;
-        } else if (laneDistance == 1) {
-            lineImage = &noteGuideEachLine1Image_;
-            sourceRadius = kEachLine1SourceRadius;
-        }
-        if (lineImage == nullptr || lineImage->isNull()) {
-            continue;
-        }
-
-        const qreal distance = static_cast<qreal>(playheadSeconds_ - notes[0].marker->second) * kTapUnitsPerSecond + kLogicalDistanceEdge;
-        if (distance <= 0.0) {
-            continue;
-        }
-
-        qreal angleDegrees = 0.0;
-        if (!(groupSize >= 3 || laneDistance == 4)) {
-            const int a = notes[0].marker->lane;
-            const int b = notes[1].marker->lane;
-            int diff = (b - a) % 8;
-            if (diff > 4) {
-                diff -= 8;
-            } else if (diff < -4) {
-                diff += 8;
-            }
-            qreal midpoint = a + diff / 2.0;
-            while (midpoint <= 0.0) {
-                midpoint += 8.0;
-            }
-            while (midpoint > 8.0) {
-                midpoint -= 8.0;
-            }
-            const qreal sourceMidpoint = 1.0 + laneDistance / 2.0;
-            angleDegrees = laneRotationDegreesForIndex(midpoint) - laneRotationDegreesForIndex(sourceMidpoint);
-        }
-
-        renderConcentricGuide(lineImage, distance, sourceRadius, angleDegrees, true, 0.0);
-    }
-}
-
-void PreviewCanvas::drawTapMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)
-{
-    const bool slideHeadStar = marker.type == "slide" || marker.type == "wifi";
-    if (slideHeadStar && !marker.hasHeadStar) {
-        return;
-    }
-
-    const qreal deltaSeconds = static_cast<qreal>(playheadSeconds_ - marker.second);
-    if (slideHeadStar ? deltaSeconds >= 0.0 : deltaSeconds > 0.0) {
-        return;
-    }
-
-    const qreal distance = deltaSeconds * kTapUnitsPerSecond + kLogicalDistanceEdge;
-    const qreal spawnScale = tapScaleForDistance(distance);
-    if (spawnScale < 0.0) {
-        return;
-    }
-
-    const QPointF unit = laneUnitVector(marker.lane);
-    const bool parked = distance < kLogicalDistanceTap;
-    const qreal renderedDistance = parked ? kLogicalDistanceTap : distance;
-    const qreal effectiveScale = parked ? spawnScale : 1.0;
-    const QPointF logicalPoint(
-        kLogicalCanvasCenter + unit.x() * renderedDistance,
-        kLogicalCanvasCenter + unit.y() * renderedDistance
-    );
-    const QPointF point = mapLogicalPointToRect(logicalPoint, playfieldRect);
-    const QImage* tapImage = slideHeadStar ? selectSlideStarImage(marker) : selectTapImage(marker);
-    QImage renderImage = tapImage != nullptr ? *tapImage : QImage();
-    if (slideHeadStar && marker.headEx && !renderImage.isNull()) {
-        const QImage& overlay = (marker.sameHeadSlide && !starExDoubleImage_.isNull()) ? starExDoubleImage_ : starExImage_;
-        if (!overlay.isNull()) {
-            const QColor tint = exStarTintColor(marker.headBreak, marker.headEach);
-            renderImage = composeOverlay(renderImage, overlay, 0.82, 0.18, nullptr, &tint);
-        }
-    } else if (!slideHeadStar && marker.isEx && !renderImage.isNull() && !tapExImage_.isNull()) {
-        const QColor tint = exTintColor(marker.isBreak, marker.isEach);
-        renderImage = composeOverlay(renderImage, tapExImage_, 0.82, 0.18, nullptr, &tint);
-    }
-
-    if (!renderImage.isNull()) {
-        const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-        int targetWidth = 0;
-        int targetHeight = 0;
-        if (slideHeadStar) {
-            const qreal baseWidth = (!tapImage_.isNull() ? tapImage_.width() * kSkinAssetScale : renderImage.width() * kStarAssetScale)
-                * kSlideSpawnStarRelativeScale;
-            const qreal baseHeight = (!tapImage_.isNull() ? tapImage_.height() * kSkinAssetScale : renderImage.height() * kStarAssetScale)
-                * kSlideSpawnStarRelativeScale;
-            targetWidth = qMax(1, qRound(baseWidth * canvasScale * effectiveScale));
-            targetHeight = qMax(1, qRound(baseHeight * canvasScale * effectiveScale));
-        } else {
-            const qreal imageScale = canvasScale * effectiveScale * kSkinAssetScale;
-            targetWidth = qMax(1, qRound(renderImage.width() * imageScale));
-            targetHeight = qMax(1, qRound(renderImage.height() * imageScale));
-        }
-
-        if (!drawSpriteImage(
-                painter,
-                renderImage,
-                point,
-                targetWidth,
-                targetHeight,
-                laneRotationDegrees(marker.lane))) {
-            return;
-        }
-        return;
-    }
-
-    const qreal radius = mapLogicalLengthToRect(16.0 * effectiveScale, playfieldRect);
-    const QColor fillColor = tapColorForMarker(marker);
-    painter.setPen(QPen(QColor("#0F1720"), qMax<qreal>(1.5, radius * 0.14)));
-    painter.setBrush(fillColor);
-    painter.drawEllipse(point, radius, radius);
-
-    painter.setPen(QPen(QColor("#FFFDF4"), qMax<qreal>(1.0, radius * 0.10)));
-    painter.drawEllipse(point, radius * 0.58, radius * 0.58);
-}
-
-void PreviewCanvas::drawHoldMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)
-{
-    if (marker.endSecond < marker.second) {
-        return;
-    }
-
-    const qreal deltaSeconds = static_cast<qreal>(playheadSeconds_ - marker.second);
-    const qreal deltaEndSeconds = static_cast<qreal>(playheadSeconds_ - marker.endSecond);
-    if (deltaEndSeconds > 0.0) {
-        return;
-    }
-
-    qreal distance = deltaSeconds * kTapUnitsPerSecond + kLogicalDistanceEdge;
-    const qreal spawnScale = tapScaleForDistance(distance);
-    if (spawnScale < 0.0) {
-        return;
-    }
-
-    const QPointF unit = laneUnitVector(marker.lane);
-    const QImage* holdImage = selectHoldImage(marker);
-    QImage holdCapImage = holdImage != nullptr ? *holdImage : QImage();
-    if (marker.isEx && !holdCapImage.isNull() && !holdExImage_.isNull()) {
-        const QColor tint = exTintColor(marker.isBreak, marker.isEach);
-        holdCapImage = composeOverlay(holdCapImage, holdExImage_, 0.85, 0.20, nullptr, &tint);
-    }
-    const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-    const auto drawHoldStripSlices = [&](const QPointF& center, int bodyLogicalLength, qreal scale) -> bool {
-        if (holdCapImage.isNull()) {
-            return false;
-        }
-
-        const int srcW = qMax(1, holdCapImage.width());
-        const int srcH = qMax(1, holdCapImage.height());
-        const int capRaw = qMax(1, qMin(srcH / 2, qRound(srcH * 67.0 / 200.0)));
-        const int midY = qBound(0, srcH / 2, srcH - 1);
-        const int targetWidth = qMax(1, qRound(kHoldTargetWidth * canvasScale * scale));
-        const int targetCapHeight = qMax(
-            1,
-            qRound(static_cast<qreal>(qRound(static_cast<qreal>(capRaw) * kHoldTargetWidth / srcW)) * canvasScale * scale)
-        );
-        const int targetBodyHeight = qMax(0, qRound(bodyLogicalLength * canvasScale * scale));
-        const qreal capOffset = (targetBodyHeight + targetCapHeight) / 2.0;
-        const qreal angle = laneRotationDegrees(marker.lane);
-        const QPointF headCenter = center + unit * capOffset;
-        const QPointF tailCenter = center - unit * capOffset;
-
-        if (targetBodyHeight > 0) {
-            drawSpriteImage(
-                painter,
-                holdCapImage,
-                center,
-                targetWidth,
-                targetBodyHeight,
-                angle,
-                1.0,
-                QRectF(0.0, midY, srcW, 1.0)
-            );
-        }
-        drawSpriteImage(
-            painter,
-            holdCapImage,
-            headCenter,
-            targetWidth,
-            targetCapHeight,
-            angle,
-            1.0,
-            QRectF(0.0, 0.0, srcW, capRaw)
-        );
-        drawSpriteImage(
-            painter,
-            holdCapImage,
-            tailCenter,
-            targetWidth,
-            targetCapHeight,
-            angle,
-            1.0,
-            QRectF(0.0, srcH - capRaw, srcW, capRaw)
-        );
-        return true;
-    };
-
-    if (distance < kLogicalDistanceTap) {
-        const QPointF logicalPoint(
-            kLogicalCanvasCenter + unit.x() * kLogicalDistanceTap,
-            kLogicalCanvasCenter + unit.y() * kLogicalDistanceTap
-        );
-        const QPointF point = mapLogicalPointToRect(logicalPoint, playfieldRect);
-        if (drawHoldStripSlices(point, 0, spawnScale)) {
-            return;
-        }
-
-        const qreal radius = mapLogicalLengthToRect(18.0 * spawnScale, playfieldRect);
-        painter.setPen(QPen(QColor("#0F1720"), qMax<qreal>(1.5, radius * 0.14)));
-        painter.setBrush(tapColorForMarker(marker));
-        painter.drawEllipse(point, radius, radius);
-        return;
-    }
-
-    distance = qMin(distance, kLogicalDistanceEdge);
-    qreal distanceEnd = deltaEndSeconds * kTapUnitsPerSecond + kLogicalDistanceEdge;
-    if (distanceEnd < kLogicalDistanceTap) {
-        distanceEnd = kLogicalDistanceTap;
-    } else if (distanceEnd > kLogicalDistanceEdge) {
-        distanceEnd = kLogicalDistanceEdge;
-    }
-
-    const QPointF logicalHead(
-        kLogicalCanvasCenter + unit.x() * distance,
-        kLogicalCanvasCenter + unit.y() * distance
-    );
-    const QPointF logicalTail(
-        kLogicalCanvasCenter + unit.x() * distanceEnd,
-        kLogicalCanvasCenter + unit.y() * distanceEnd
-    );
-    const QPointF logicalCenter = (logicalHead + logicalTail) * 0.5;
-    const QPointF centerPoint = mapLogicalPointToRect(logicalCenter, playfieldRect);
-    const QPointF headPoint = mapLogicalPointToRect(logicalHead, playfieldRect);
-    const QPointF tailPoint = mapLogicalPointToRect(logicalTail, playfieldRect);
-
-    const int lineLength = qMax(0, qRound(distance - distanceEnd));
-    if (drawHoldStripSlices(centerPoint, lineLength, 1.0)) {
-        return;
-    }
-
-    const qreal bodyWidth = mapLogicalLengthToRect(30.0, playfieldRect);
-    painter.setPen(QPen(tapColorForMarker(marker), qMax<qreal>(4.0, bodyWidth), Qt::SolidLine, Qt::RoundCap));
-    painter.drawLine(tailPoint, headPoint);
-}
-
-void PreviewCanvas::drawCachedSlideArea(
-    QPainter& painter,
-    const TimelineNoteMarker& marker,
-    int segmentIndex,
-    int areaIndex,
-    int localCut,
-    const QRectF& playfieldRect,
-    const QImage* image,
-    qreal opacity,
-    bool trimFromTail
-)
-{
-    if (image == nullptr || image->isNull()) {
-        return;
-    }
-    if (opacity <= 0.0) {
-        return;
-    }
-    if (segmentIndex < 0 || segmentIndex >= marker.slideTrackAreaPoints.size()) {
-        return;
-    }
-    const QVector<QVector<QPointF>>& segmentAreas = marker.slideTrackAreaPoints[segmentIndex];
-    if (areaIndex < 0 || areaIndex >= segmentAreas.size()) {
-        return;
-    }
-    const QVector<QPointF>& points = segmentAreas[areaIndex];
-    if (points.isEmpty()) {
-        return;
-    }
-    const QVector<double>& rotations = marker.slideTrackAreaRotations.value(segmentIndex).value(areaIndex);
-    const int clampedCut = qBound(0, localCut, points.size());
-    if (clampedCut >= points.size()) {
-        return;
-    }
-    const int startPointIndex = trimFromTail ? 0 : clampedCut;
-    const int endPointIndex = trimFromTail ? points.size() - clampedCut : points.size();
-    const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-    const int targetWidth = qMax(1, qRound(image->width() * canvasScale * kSlideTrackScale));
-    const int targetHeight = qMax(1, qRound(image->height() * canvasScale * kSlideTrackScale));
-
-    if (glRenderer_.isInitialized()) {
-        const QImage* renderImage = image;
-        QRectF resolvedSourceRect;
-        resolveAtlasImage(*image, QRectF(), renderImage, resolvedSourceRect);
-        if (renderImage != nullptr && !renderImage->isNull()) {
-            QVector<QPointF> centers;
-            QVector<qreal> angles;
-            centers.reserve(qMax(0, endPointIndex - startPointIndex));
-            angles.reserve(qMax(0, endPointIndex - startPointIndex));
-            for (int pointIndex = startPointIndex; pointIndex < endPointIndex; ++pointIndex) {
-                centers.append(mapLogicalPointToRect(
-                    QPointF(kLogicalCanvasCenter + points[pointIndex].x(), kLogicalCanvasCenter + points[pointIndex].y()),
-                    playfieldRect
-                ));
-                angles.append(-rotations.value(pointIndex));
-            }
-
-            bool renderedByGl = false;
-            if (nativePaintingActive_) {
-                renderedByGl = glRenderer_.drawImageQuadBatch(
-                    *renderImage,
-                    centers,
-                    targetWidth,
-                    targetHeight,
-                    angles,
-                    opacity,
-                    resolvedSourceRect
-                );
-            } else {
-                painter.beginNativePainting();
-                renderedByGl = glRenderer_.drawImageQuadBatch(
-                    *renderImage,
-                    centers,
-                    targetWidth,
-                    targetHeight,
-                    angles,
-                    opacity,
-                    resolvedSourceRect
-                );
-                painter.endNativePainting();
-            }
-            if (renderedByGl) {
-                usedGpuRendererThisFrame_ = true;
-                return;
-            }
-            if (nativePaintingActive_) {
-                return;
-            }
-        }
-    }
-
-    const int playfieldWidth = qMax(1, qRound(playfieldRect.width()));
-    const QString cacheKey = QStringLiteral("%1|%2|%3|%4|%5|%6|%7|%8|%9")
-        .arg(marker.slideSegmentKeys.value(segmentIndex, marker.slideTrackKey))
-        .arg(static_cast<qulonglong>(image->cacheKey()))
-        .arg(segmentIndex)
-        .arg(areaIndex)
-        .arg(clampedCut)
-        .arg(trimFromTail ? 1 : 0)
-        .arg(playfieldWidth)
-        .arg(qRound(playfieldRect.left()))
-        .arg(qRound(playfieldRect.top()));
-
-    CachedTrackArea uncached;
-    CachedTrackArea* cachedArea = nullptr;
-    auto cacheIt = slideTrackAreaCache_.end();
-    if (kEnablePreviewCaches) {
-        cacheIt = slideTrackAreaCache_.find(cacheKey);
-        if (cacheIt != slideTrackAreaCache_.end()) {
-            cachedArea = &cacheIt.value();
-        }
-    }
-    if (cachedArea == nullptr) {
-        const qreal targetWidth = image->width() * canvasScale * kSlideTrackScale;
-        const qreal targetHeight = image->height() * canvasScale * kSlideTrackScale;
-
-        QRectF bounds;
-        for (int pointIndex = startPointIndex; pointIndex < endPointIndex; ++pointIndex) {
-            const QPointF point = mapLogicalPointToRect(
-                QPointF(kLogicalCanvasCenter + points[pointIndex].x(), kLogicalCanvasCenter + points[pointIndex].y()),
-                playfieldRect
-            );
-            bounds = bounds.isNull()
-                ? QRectF(
-                    point.x() - targetWidth / 2.0,
-                    point.y() - targetHeight / 2.0,
-                    targetWidth,
-                    targetHeight
-                )
-                : bounds.united(QRectF(
-                    point.x() - targetWidth / 2.0,
-                    point.y() - targetHeight / 2.0,
-                    targetWidth,
-                    targetHeight
-                ));
-        }
-
-        if (bounds.isNull() || bounds.width() <= 0.0 || bounds.height() <= 0.0) {
-            return;
-        }
-
-        const QRect pixelBounds = bounds.adjusted(-1.0, -1.0, 1.0, 1.0).toAlignedRect();
-        CachedTrackArea built;
-        built.image = QImage(pixelBounds.size(), QImage::Format_ARGB32_Premultiplied);
-        built.image.fill(Qt::transparent);
-        built.offset = pixelBounds.topLeft();
-
-        QPainter cachePainter(&built.image);
-        cachePainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-        for (int pointIndex = startPointIndex; pointIndex < endPointIndex; ++pointIndex) {
-            const QPointF point = mapLogicalPointToRect(
-                QPointF(kLogicalCanvasCenter + points[pointIndex].x(), kLogicalCanvasCenter + points[pointIndex].y()),
-                playfieldRect
-            ) - built.offset;
-            const qreal angle = rotations.value(pointIndex);
-            cachePainter.save();
-            cachePainter.translate(point);
-            cachePainter.rotate(-angle);
-            cachePainter.drawImage(
-                QRectF(-targetWidth / 2.0, -targetHeight / 2.0, targetWidth, targetHeight),
-                *image
-            );
-            cachePainter.restore();
-        }
-        if (kEnablePreviewCaches) {
-            cacheIt = slideTrackAreaCache_.insert(cacheKey, built);
-            cachedArea = &cacheIt.value();
-        } else {
-            uncached = built;
-            cachedArea = &uncached;
-        }
-    }
-
-    if (cachedArea != nullptr) {
-        painter.save();
-        painter.setOpacity(opacity);
-        painter.drawImage(cachedArea->offset, cachedArea->image);
-        painter.restore();
-    }
-}
-
-void PreviewCanvas::drawCachedWifiArea(
-    QPainter& painter,
-    const TimelineNoteMarker& marker,
-    int areaIndex,
-    int localCut,
-    const QRectF& playfieldRect,
-    qreal opacity
-)
-{
-    if (opacity <= 0.0) {
-        return;
-    }
-    if (areaIndex < 0 || areaIndex >= marker.wifiTrackAreaPoints.size()) {
-        return;
-    }
-    const QVector<QPointF>& points = marker.wifiTrackAreaPoints[areaIndex];
-    if (points.isEmpty()) {
-        return;
-    }
-    const QVector<double>& rotations = marker.wifiTrackAreaRotations.value(areaIndex);
-    const QVector<int>& imageIndices = marker.wifiTrackAreaImageIndices.value(areaIndex);
-    const int clampedCut = qBound(0, localCut, points.size());
-    const int visibleCount = points.size() - clampedCut;
-    if (visibleCount <= 0) {
-        return;
-    }
-
-    if (glRenderer_.isInitialized()) {
-        const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-        for (int pointIndex = clampedCut; pointIndex < points.size(); ++pointIndex) {
-            const int imageIndex = imageIndices.value(pointIndex, pointIndex);
-            const QImage* image = selectWifiTrackImage(marker, imageIndex, 0);
-            if (image == nullptr || image->isNull()) {
-                continue;
-            }
-            const int targetWidth = qMax(1, qRound(image->width() * canvasScale * kSlideTrackScale));
-            const int targetHeight = qMax(1, qRound(image->height() * canvasScale * kSlideTrackScale));
-            const QPointF point = mapLogicalPointToRect(
-                QPointF(kLogicalCanvasCenter + points[pointIndex].x(), kLogicalCanvasCenter + points[pointIndex].y()),
-                playfieldRect
-            );
-            const qreal angle = -rotations.value(pointIndex);
-            drawSpriteImage(painter, *image, point, targetWidth, targetHeight, angle, opacity);
-        }
-        return;
-    }
-
-    int variantTag = 0;
-    if (marker.trackBreak && !wifiBreakImages_.isEmpty()) {
-        variantTag = 2;
-    } else if (marker.slideEach && !wifiEachImages_.isEmpty()) {
-        variantTag = 1;
-    }
-
-    const int playfieldWidth = qMax(1, qRound(playfieldRect.width()));
-    const QString cacheKey = QStringLiteral("%1|%2|%3|%4|%5|%6|%7")
-        .arg(marker.slideTrackKey)
-        .arg(variantTag)
-        .arg(areaIndex)
-        .arg(clampedCut)
-        .arg(playfieldWidth)
-        .arg(qRound(playfieldRect.left()))
-        .arg(qRound(playfieldRect.top()));
-
-    CachedTrackArea uncached;
-    CachedTrackArea* cachedArea = nullptr;
-    auto cacheIt = wifiTrackAreaCache_.end();
-    if (kEnablePreviewCaches) {
-        cacheIt = wifiTrackAreaCache_.find(cacheKey);
-        if (cacheIt != wifiTrackAreaCache_.end()) {
-            cachedArea = &cacheIt.value();
-        }
-    }
-    if (cachedArea == nullptr) {
-        QRectF bounds;
-
-        for (int pointIndex = clampedCut; pointIndex < points.size(); ++pointIndex) {
-            const int imageIndex = imageIndices.value(pointIndex, pointIndex);
-            const QImage* image = selectWifiTrackImage(marker, imageIndex, 0);
-            if (image == nullptr || image->isNull()) {
-                continue;
-            }
-            const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-            const qreal targetWidth = image->width() * canvasScale * kSlideTrackScale;
-            const qreal targetHeight = image->height() * canvasScale * kSlideTrackScale;
-            const QPointF point = mapLogicalPointToRect(
-                QPointF(kLogicalCanvasCenter + points[pointIndex].x(), kLogicalCanvasCenter + points[pointIndex].y()),
-                playfieldRect
-            );
-            bounds = bounds.isNull()
-                ? QRectF(point.x() - targetWidth / 2.0, point.y() - targetHeight / 2.0, targetWidth, targetHeight)
-                : bounds.united(QRectF(point.x() - targetWidth / 2.0, point.y() - targetHeight / 2.0, targetWidth, targetHeight));
-        }
-
-        if (bounds.isNull() || bounds.width() <= 0.0 || bounds.height() <= 0.0) {
-            return;
-        }
-
-        const QRect pixelBounds = bounds.adjusted(-1.0, -1.0, 1.0, 1.0).toAlignedRect();
-        CachedTrackArea built;
-        built.image = QImage(pixelBounds.size(), QImage::Format_ARGB32_Premultiplied);
-        built.image.fill(Qt::transparent);
-        built.offset = pixelBounds.topLeft();
-
-        QPainter cachePainter(&built.image);
-        cachePainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-        for (int pointIndex = clampedCut; pointIndex < points.size(); ++pointIndex) {
-            const int imageIndex = imageIndices.value(pointIndex, pointIndex);
-            const QImage* image = selectWifiTrackImage(marker, imageIndex, 0);
-            if (image == nullptr || image->isNull()) {
-                continue;
-            }
-            const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-            const qreal targetWidth = image->width() * canvasScale * kSlideTrackScale;
-            const qreal targetHeight = image->height() * canvasScale * kSlideTrackScale;
-            const QPointF point = mapLogicalPointToRect(
-                QPointF(kLogicalCanvasCenter + points[pointIndex].x(), kLogicalCanvasCenter + points[pointIndex].y()),
-                playfieldRect
-            ) - built.offset;
-            const qreal angle = rotations.value(pointIndex);
-            cachePainter.save();
-            cachePainter.translate(point);
-            cachePainter.rotate(-angle);
-            cachePainter.drawImage(
-                QRectF(-targetWidth / 2.0, -targetHeight / 2.0, targetWidth, targetHeight),
-                *image
-            );
-            cachePainter.restore();
-        }
-        if (kEnablePreviewCaches) {
-            cacheIt = wifiTrackAreaCache_.insert(cacheKey, built);
-            cachedArea = &cacheIt.value();
-        } else {
-            uncached = built;
-            cachedArea = &uncached;
-        }
-    }
-
-    if (cachedArea != nullptr) {
-        painter.save();
-        painter.setOpacity(opacity);
-        painter.drawImage(cachedArea->offset, cachedArea->image);
-        painter.restore();
-    }
-}
-
-void PreviewCanvas::drawSlideTrack(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)
-{
-    if (marker.availableSecond < 0.0
-        || marker.slideTrackAreaPoints.isEmpty()
-        || playheadSeconds_ < marker.availableSecond - kSlideTrackFadeInSeconds
-        || (marker.endSecond > marker.slideTraceSecond && playheadSeconds_ >= marker.endSecond)) {
-        return;
-    }
-    const QImage* image = selectSlideTrackImage(marker);
-    if (image->isNull()) {
-        return;
-    }
-
-    int startSegment = 0;
-    int startAreaIndex = 0;
-    int removedArrowCount = 0;
-    qreal startProportion = 0.0;
-    qreal opacity = 1.0;
-    if (playheadSeconds_ < marker.slideTraceSecond) {
-        const qreal fadeStartSecond = marker.availableSecond - kSlideTrackFadeInSeconds;
-        if (playheadSeconds_ < fadeStartSecond) {
-            return;
-        }
-        opacity = qBound<qreal>(
-            0.0,
-            (playheadSeconds_ - fadeStartSecond) / qMax(0.001, kSlideTrackFadeInSeconds),
-            1.0
-        );
-    } else if (!marker.slideSegmentShootSeconds.isEmpty()
-        && marker.slideSegmentShootSeconds.size() == marker.slideSegmentDurations.size()
-        && marker.slideTrackAreaPoints.size() == marker.slideSegmentDurations.size()) {
-        for (int i = marker.slideSegmentShootSeconds.size() - 1; i >= 0; --i) {
-            if (playheadSeconds_ >= marker.slideSegmentShootSeconds[i]) {
-                startSegment = i;
-                break;
-            }
-        }
-        startSegment = qBound(0, startSegment, marker.slideTrackAreaPoints.size() - 1);
-        const qreal duration = qMax(0.001, marker.slideSegmentDurations.value(startSegment));
-        startProportion = qBound<qreal>(0.0, (playheadSeconds_ - marker.slideSegmentShootSeconds[startSegment]) / duration, 1.0);
-        const int areaCount = marker.slideTrackAreaPoints[startSegment].size();
-        startAreaIndex = currentAreaIndexForProportion(marker.slideTrackAreaThresholds.value(startSegment), startProportion, areaCount);
-
-        qreal totalDuration = marker.endSecond - marker.slideTraceSecond;
-        if (!marker.slideTrackAreaThresholds.isEmpty()
-            && !marker.slideTrackAreaThresholds.constLast().isEmpty()
-            && !marker.slideSegmentShootSeconds.isEmpty()
-            && !marker.slideSegmentDurations.isEmpty()) {
-            const int lastSegmentIndex = qMin(
-                marker.slideTrackAreaThresholds.size(),
-                qMin(marker.slideSegmentShootSeconds.size(), marker.slideSegmentDurations.size())
-            ) - 1;
-            if (lastSegmentIndex >= 0) {
-                const QVector<double>& lastThresholds = marker.slideTrackAreaThresholds[lastSegmentIndex];
-                const qreal lastAreaEntryProportion = qBound<qreal>(0.0, lastThresholds.constLast(), 1.0);
-                const qreal trimEndSecond =
-                    marker.slideSegmentShootSeconds[lastSegmentIndex]
-                    + lastAreaEntryProportion * marker.slideSegmentDurations[lastSegmentIndex];
-                totalDuration = trimEndSecond - marker.slideTraceSecond;
-            }
-        }
-        if (totalDuration <= 0.0) {
-            totalDuration = 0.0;
-            for (double segmentDuration : marker.slideSegmentDurations) {
-                totalDuration += segmentDuration;
-            }
-        }
-        if (totalDuration > 0.0) {
-            int totalArrowCount = 0;
-            for (const auto& segmentAreas : marker.slideTrackAreaPoints) {
-                for (const auto& areaPoints : segmentAreas) {
-                    totalArrowCount += areaPoints.size();
-                }
-            }
-            const qreal totalProportion = qBound<qreal>(0.0, (playheadSeconds_ - marker.slideTraceSecond) / totalDuration, 1.0);
-            removedArrowCount = qBound(0, qFloor(totalProportion * totalArrowCount), totalArrowCount);
-        }
-    }
-
-    painter.save();
-    painter.setOpacity(opacity);
-
-    if (kSlideTrackTrimMode == SlideTrackTrimMode::AreaImmediate) {
-        for (int segmentIndex = marker.slideTrackAreaPoints.size() - 1; segmentIndex > startSegment; --segmentIndex) {
-            const QVector<QVector<QPointF>>& areas = marker.slideTrackAreaPoints[segmentIndex];
-            for (int areaIndex = areas.size() - 1; areaIndex >= 0; --areaIndex) {
-                drawCachedSlideArea(painter, marker, segmentIndex, areaIndex, 0, playfieldRect, image, opacity);
-            }
-        }
-        if (startSegment >= 0 && startSegment < marker.slideTrackAreaPoints.size()) {
-            const QVector<QVector<QPointF>>& areas = marker.slideTrackAreaPoints[startSegment];
-            const QVector<QVector<double>>& checkpoints = marker.slideTrackAreaCheckpoints.value(startSegment);
-            const QVector<QVector<int>>& cutIndices = marker.slideTrackAreaCutIndices.value(startSegment);
-            const int clampedStartArea = qBound(0, startAreaIndex, areas.size());
-            int partialTrimCount = 0;
-            if (clampedStartArea >= 0 && clampedStartArea < areas.size()) {
-                const QVector<double>& areaCheckpoints = checkpoints.value(clampedStartArea);
-                if (!areaCheckpoints.isEmpty()) {
-                    int passedCheckpoints = 0;
-                    for (double checkpoint : areaCheckpoints) {
-                        if (startProportion >= checkpoint) {
-                            ++passedCheckpoints;
-                        } else {
-                            break;
-                        }
-                    }
-                    if (passedCheckpoints > 0) {
-                        const QVector<int>& areaCutIndices = cutIndices.value(clampedStartArea);
-                        if (!areaCutIndices.isEmpty()) {
-                            const int cutIndex = areaCutIndices.value(qMin(passedCheckpoints - 1, areaCutIndices.size() - 1));
-                            partialTrimCount = qBound(0, cutIndex, areas[clampedStartArea].size());
-                        } else {
-                            partialTrimCount = qBound(
-                                0,
-                                qFloor(static_cast<qreal>(passedCheckpoints) * areas[clampedStartArea].size() / areaCheckpoints.size()),
-                                areas[clampedStartArea].size()
-                            );
-                        }
-                    }
-                }
-            }
-            for (int areaIndex = areas.size() - 1; areaIndex >= clampedStartArea; --areaIndex) {
-                const int localCut = areaIndex == clampedStartArea ? partialTrimCount : 0;
-                drawCachedSlideArea(painter, marker, startSegment, areaIndex, localCut, playfieldRect, image, opacity);
-            }
-        }
-    } else {
-        int trimSegment = marker.slideTrackAreaPoints.size();
-        int trimArea = 0;
-        int trimLocalCut = 0;
-        int remainingToRemove = removedArrowCount;
-
-        for (int segmentIndex = 0; segmentIndex < marker.slideTrackAreaPoints.size(); ++segmentIndex) {
-            const QVector<QVector<QPointF>>& areas = marker.slideTrackAreaPoints[segmentIndex];
-            const int segmentArrowCount = std::accumulate(
-                areas.cbegin(),
-                areas.cend(),
-                0,
-                [](int total, const QVector<QPointF>& areaPoints) { return total + areaPoints.size(); }
-            );
-            if (remainingToRemove >= segmentArrowCount) {
-                remainingToRemove -= segmentArrowCount;
-                continue;
-            }
-
-            trimSegment = segmentIndex;
-            for (int areaIndex = 0; areaIndex < areas.size(); ++areaIndex) {
-                const int areaArrowCount = areas[areaIndex].size();
-                if (remainingToRemove < areaArrowCount) {
-                    trimArea = areaIndex;
-                    trimLocalCut = qBound(0, remainingToRemove, areaArrowCount);
-                    remainingToRemove = 0;
-                    break;
-                }
-                remainingToRemove -= areaArrowCount;
-            }
-            break;
-        }
-
-        for (int segmentIndex = marker.slideTrackAreaPoints.size() - 1; segmentIndex > trimSegment; --segmentIndex) {
-            const QVector<QVector<QPointF>>& areas = marker.slideTrackAreaPoints[segmentIndex];
-            for (int areaIndex = areas.size() - 1; areaIndex >= 0; --areaIndex) {
-                drawCachedSlideArea(painter, marker, segmentIndex, areaIndex, 0, playfieldRect, image, opacity);
-            }
-        }
-        if (trimSegment >= 0 && trimSegment < marker.slideTrackAreaPoints.size()) {
-            const QVector<QVector<QPointF>>& areas = marker.slideTrackAreaPoints[trimSegment];
-            for (int areaIndex = areas.size() - 1; areaIndex >= trimArea; --areaIndex) {
-                const int localCut = areaIndex == trimArea ? trimLocalCut : 0;
-                drawCachedSlideArea(
-                    painter,
-                    marker,
-                    trimSegment,
-                    areaIndex,
-                    localCut,
-                    playfieldRect,
-                    image,
-                    opacity,
-                    areaIndex == trimArea
-                );
-            }
-        }
-    }
-    painter.restore();
-}
-
-void PreviewCanvas::drawWifiTrack(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)
-{
-    if (marker.availableSecond < 0.0
-        || marker.wifiTrackAreaPoints.isEmpty()
-        || playheadSeconds_ < marker.availableSecond - kSlideTrackFadeInSeconds
-        || (marker.endSecond > marker.slideTraceSecond && playheadSeconds_ >= marker.endSecond)) {
-        return;
-    }
-    qreal opacity = 1.0;
-    int startAreaIndex = 0;
-    qreal startProportion = 0.0;
-    if (playheadSeconds_ < marker.availableSecond) {
-        const qreal fadeStartSecond = marker.availableSecond - kSlideTrackFadeInSeconds;
-        if (playheadSeconds_ < fadeStartSecond) {
-            return;
-        }
-        opacity = qBound<qreal>(0.0, (playheadSeconds_ - fadeStartSecond) / kSlideTrackFadeInSeconds, 1.0);
-    } else if (playheadSeconds_ >= marker.slideTraceSecond) {
-        const qreal totalDuration = !marker.slideSegmentDurations.isEmpty()
-            ? qMax(0.001, marker.slideSegmentDurations.constFirst())
-            : qMax(0.001, marker.endSecond - marker.slideTraceSecond);
-        startProportion = qBound<qreal>(0.0, (playheadSeconds_ - marker.slideTraceSecond) / totalDuration, 1.0);
-        startAreaIndex = currentAreaIndexForProportion(marker.wifiTrackAreaThresholds, startProportion, marker.wifiTrackAreaPoints.size());
-    }
-
-    painter.save();
-    const int clampedStartArea = qBound(0, startAreaIndex, marker.wifiTrackAreaPoints.size());
-    int partialTrimCount = 0;
-    if (kSlideTrackTrimMode == SlideTrackTrimMode::AreaImmediate
-        && clampedStartArea >= 0
-        && clampedStartArea < marker.wifiTrackAreaPoints.size()) {
-        const QVector<double>& areaCheckpoints = marker.wifiTrackAreaCheckpoints.value(clampedStartArea);
-        if (!areaCheckpoints.isEmpty()) {
-            int passedCheckpoints = 0;
-            for (double checkpoint : areaCheckpoints) {
-                if (startProportion >= checkpoint) {
-                    ++passedCheckpoints;
-                } else {
-                    break;
-                }
-            }
-            partialTrimCount = qBound(
-                0,
-                qFloor(static_cast<qreal>(passedCheckpoints) * marker.wifiTrackAreaPoints[clampedStartArea].size() / areaCheckpoints.size()),
-                marker.wifiTrackAreaPoints[clampedStartArea].size()
-            );
-        }
-    }
-    for (int areaIndex = marker.wifiTrackAreaPoints.size() - 1; areaIndex >= clampedStartArea; --areaIndex) {
-        const int localCut = (kSlideTrackTrimMode == SlideTrackTrimMode::AreaImmediate && areaIndex == clampedStartArea)
-            ? partialTrimCount
-            : 0;
-        drawCachedWifiArea(painter, marker, areaIndex, localCut, playfieldRect, opacity);
-    }
-    painter.restore();
-}
-
-void PreviewCanvas::drawSlideMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)
-{
-    if (marker.slideTraceSecond <= marker.second || marker.slideSegmentPoints.isEmpty()) {
-        return;
-    }
-
-    qreal angle = 0.0;
-    QPointF logicalPoint;
-    qreal imageScale = kStarAssetScale;
-    qreal imageOpacity = 1.0;
-    const QImage* starImage = nullptr;
-
-    if (playheadSeconds_ < marker.second || playheadSeconds_ > marker.endSecond) {
-        return;
-    }
-
-    if (playheadSeconds_ < marker.slideTraceSecond) {
-        if (!marker.hasHeadStar) {
-            return;
-        }
-        starImage = selectSlideMovingStarImage(marker);
-        if (starImage->isNull()) {
-            return;
-        }
-        const QVector<QPointF>& points = marker.slideSegmentPoints.constFirst();
-        const QVector<double>& angles = marker.slideSegmentAngles.constFirst();
-        if (points.isEmpty()) {
-            return;
-        }
-        logicalPoint = points.constFirst();
-        angle = angles.isEmpty() ? 0.0 : angles.constFirst();
-        const qreal waitDuration = qMax(0.001, marker.slideTraceSecond - marker.second);
-        const qreal waitT = qBound<qreal>(0.0, (playheadSeconds_ - marker.second) / waitDuration, 1.0);
-        const qreal startScale = slideStartupStarInitialScale(*starImage);
-        imageScale = startScale + (kStarAssetScale - startScale) * waitT;
-        imageOpacity = 0.5 + 0.5 * waitT;
-    } else {
-        starImage = selectSlideMovingStarImage(marker);
-        if (starImage->isNull()) {
-            return;
-        }
-        int segmentIndex = 0;
-        if (!marker.slideSegmentShootSeconds.isEmpty() && marker.slideSegmentShootSeconds.size() == marker.slideSegmentDurations.size()) {
-            for (int i = marker.slideSegmentShootSeconds.size() - 1; i >= 0; --i) {
-                if (playheadSeconds_ >= marker.slideSegmentShootSeconds[i]) {
-                    segmentIndex = i;
-                    break;
-                }
-            }
-        }
-        segmentIndex = qBound(0, segmentIndex, marker.slideSegmentPoints.size() - 1);
-        const QVector<QPointF>& points = marker.slideSegmentPoints[segmentIndex];
-        const QVector<double>& angles = marker.slideSegmentAngles.value(segmentIndex);
-        if (points.isEmpty()) {
-            return;
-        }
-        qreal proportion = 1.0;
-        if (segmentIndex < marker.slideSegmentShootSeconds.size() && segmentIndex < marker.slideSegmentDurations.size()) {
-            const qreal duration = qMax(0.001, marker.slideSegmentDurations[segmentIndex]);
-            proportion = qBound<qreal>(0.0, (playheadSeconds_ - marker.slideSegmentShootSeconds[segmentIndex]) / duration, 1.0);
-        }
-        logicalPoint = interpolatePoint(points, proportion);
-        angle = interpolateAngle(angles, proportion);
-    }
-
-    const QPointF point = mapLogicalPointToRect(
-        QPointF(kLogicalCanvasCenter + logicalPoint.x(), kLogicalCanvasCenter + logicalPoint.y()),
-        playfieldRect
-    );
-    const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-    const int targetWidth = qMax(1, qRound(starImage->width() * canvasScale * imageScale));
-    const int targetHeight = qMax(1, qRound(starImage->height() * canvasScale * imageScale));
-    if (!drawSpriteImage(
-            painter,
-            *starImage,
-            point,
-            targetWidth,
-            targetHeight,
-            angle,
-            imageOpacity)) {
-        return;
-    }
-}
-
-void PreviewCanvas::drawWifiMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)
-{
-    if (marker.slideTraceSecond <= marker.second || marker.wifiLanePoints.isEmpty()) {
-        return;
-    }
-    if (playheadSeconds_ < marker.second || playheadSeconds_ > marker.endSecond) {
-        return;
-    }
-
-    const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-    qreal imageScale = kStarAssetScale;
-    qreal imageOpacity = 1.0;
-    qreal proportion = 0.0;
-    bool waiting = playheadSeconds_ < marker.slideTraceSecond;
-    const QImage* starImage = selectSlideMovingStarImage(marker);
-    if (starImage->isNull()) {
-        return;
-    }
-    if (waiting) {
-        if (!marker.hasHeadStar) {
-            return;
-        }
-        const qreal waitDuration = qMax(0.001, marker.slideTraceSecond - marker.second);
-        const qreal waitT = qBound<qreal>(0.0, (playheadSeconds_ - marker.second) / waitDuration, 1.0);
-        const qreal startScale = slideStartupStarInitialScale(*starImage);
-        imageScale = startScale + (kStarAssetScale - startScale) * waitT;
-        imageOpacity = 0.5 + 0.5 * waitT;
-    } else if (!marker.slideSegmentDurations.isEmpty()) {
-        const qreal duration = qMax(0.001, marker.slideSegmentDurations.constFirst());
-        proportion = qBound<qreal>(0.0, (playheadSeconds_ - marker.slideTraceSecond) / duration, 1.0);
-    } else if (marker.endSecond > marker.slideTraceSecond) {
-        const qreal duration = qMax(0.001, marker.endSecond - marker.slideTraceSecond);
-        proportion = qBound<qreal>(0.0, (playheadSeconds_ - marker.slideTraceSecond) / duration, 1.0);
-    }
-
-    const int targetWidth = qMax(1, qRound(starImage->width() * canvasScale * imageScale));
-    const int targetHeight = qMax(1, qRound(starImage->height() * canvasScale * imageScale));
-    for (int laneIndex = 0; laneIndex < marker.wifiLanePoints.size(); ++laneIndex) {
-        const QVector<QPointF>& points = marker.wifiLanePoints[laneIndex];
-        const QVector<double>& angles = marker.wifiLaneAngles.value(laneIndex);
-        if (points.isEmpty()) {
-            continue;
-        }
-        const QPointF logicalPoint = waiting ? points.constFirst() : interpolatePoint(points, proportion);
-        const qreal angle = waiting
-            ? (angles.isEmpty() ? 0.0 : angles.constFirst())
-            : interpolateAngle(angles, proportion);
-        const QPointF point = mapLogicalPointToRect(
-            QPointF(kLogicalCanvasCenter + logicalPoint.x(), kLogicalCanvasCenter + logicalPoint.y()),
-            playfieldRect
-        );
-        if (!drawSpriteImage(
-                painter,
-                *starImage,
-                point,
-                targetWidth,
-                targetHeight,
-                angle,
-                imageOpacity)) {
-            continue;
-        }
-    }
-}
-
-void PreviewCanvas::drawTouchMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)
-{
-    if (qFuzzyIsNull(marker.touchPoint.x()) && qFuzzyIsNull(marker.touchPoint.y())) {
-        return;
-    }
-
-    const qreal deltaSeconds = static_cast<qreal>(playheadSeconds_ - marker.second);
-    if (deltaSeconds <= -kTouchDurationSeconds || deltaSeconds >= 0.0) {
-        return;
-    }
-
-    const QImage& basePointImage = (marker.isEach && !touchPointEachImage_.isNull()) ? touchPointEachImage_ : touchPointImage_;
-    const QImage& baseCornerImage = (marker.isEach && !touchCornerEachImage_.isNull()) ? touchCornerEachImage_ : touchCornerImage_;
-    if (basePointImage.isNull() || baseCornerImage.isNull()) {
-        return;
-    }
-
-    const QPointF point = mapLogicalPointToRect(marker.touchPoint, playfieldRect);
-    const int pointWidth = qMax(1, qRound(basePointImage.width() * kTouchAssetScale));
-    const int pointHeight = qMax(1, qRound(basePointImage.height() * kTouchAssetScale));
-    const int cornerWidth = qMax(1, qRound(baseCornerImage.width() * kTouchAssetScale));
-    const int cornerHeight = qMax(1, qRound(baseCornerImage.height() * kTouchAssetScale));
-    const qreal progress = qBound<qreal>(0.0, (deltaSeconds + kTouchDurationSeconds) / kTouchDurationSeconds, 1.0);
-    qreal alpha = 1.0;
-    qreal closeRatio = 0.0;
-    if (progress < kTouchAppearPhase) {
-        alpha = qBound<qreal>(0.0, progress / kTouchAppearPhase, 1.0);
-    } else {
-        closeRatio = qBound<qreal>(0.0, (progress - kTouchAppearPhase) / (1.0 - kTouchAppearPhase), 1.0);
-    }
-
-    const qreal logicalOffset = kTouchClosedOffset + (kTouchStartOffset - kTouchClosedOffset) * (1.0 - closeRatio);
-    const qreal offset = mapLogicalLengthToRect(logicalOffset, playfieldRect);
-    const struct {
-        qreal dx;
-        qreal dy;
-        int angle;
-    } layout[] = {
-        {0.0, -offset, 180},
-        {offset, 0.0, -90},
-        {0.0, offset, 0},
-        {-offset, 0.0, 90},
-    };
-
-    const bool batchNative = glRenderer_.isInitialized() && !nativePaintingActive_;
-    if (batchNative) {
-        nativePaintingActive_ = true;
-        painter.beginNativePainting();
-    }
-    for (const auto& pieceLayout : layout) {
-        drawSpriteImage(
-            painter,
-            baseCornerImage,
-            QPointF(point.x() + pieceLayout.dx, point.y() + pieceLayout.dy),
-            cornerWidth,
-            cornerHeight,
-            pieceLayout.angle,
-            alpha
-        );
-    }
-    drawSpriteImage(painter, basePointImage, point, pointWidth, pointHeight, 0.0);
-    if (batchNative) {
-        painter.endNativePainting();
-        nativePaintingActive_ = false;
-    }
-}
-
-void PreviewCanvas::drawTouchHoldMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)
-{
-    if (qFuzzyIsNull(marker.touchPoint.x()) && qFuzzyIsNull(marker.touchPoint.y())) {
-        return;
-    }
-    if (marker.endSecond <= marker.second) {
-        return;
-    }
-    if (touchHold0Image_.isNull() || touchHold1Image_.isNull() || touchHold2Image_.isNull()
-        || touchHold3Image_.isNull() || touchHoldBorderImage_.isNull()) {
-        return;
-    }
-
-    const qreal deltaSeconds = static_cast<qreal>(playheadSeconds_ - marker.second);
-    const qreal holdDuration = qMax<qreal>(0.001, marker.endSecond - marker.second);
-    if (deltaSeconds <= -kTouchDurationSeconds || deltaSeconds >= holdDuration) {
-        return;
-    }
-
-    const QImage pointBase = !touchPointEachImage_.isNull() ? touchPointEachImage_ : touchPointImage_;
-    if (pointBase.isNull()) {
-        return;
-    }
-
-    const QPointF point = mapLogicalPointToRect(marker.touchPoint, playfieldRect);
-    const int pointWidth = qMax(1, qRound(pointBase.width() * kTouchAssetScale));
-    const int pointHeight = qMax(1, qRound(pointBase.height() * kTouchAssetScale));
-    const int borderWidth = qMax(1, qRound(touchHoldBorderImage_.width() * kTouchAssetScale));
-    const int borderHeight = qMax(1, qRound(touchHoldBorderImage_.height() * kTouchAssetScale));
-    qreal alpha = 1.0;
-    qreal logicalOffset = kTouchHoldClosedOffset;
-    if (deltaSeconds < 0.0) {
-        const qreal progress = qBound<qreal>(0.0, (deltaSeconds + kTouchDurationSeconds) / kTouchDurationSeconds, 1.0);
-        qreal closeRatio = 0.0;
-        if (progress < kTouchAppearPhase) {
-            alpha = qBound<qreal>(0.0, progress / kTouchAppearPhase, 1.0);
-        } else {
-            closeRatio = qBound<qreal>(0.0, (progress - kTouchAppearPhase) / (1.0 - kTouchAppearPhase), 1.0);
-        }
-        logicalOffset = kTouchHoldClosedOffset + (kTouchHoldStartOffset - kTouchHoldClosedOffset) * (1.0 - closeRatio);
-    }
-
-    const qreal offset = mapLogicalLengthToRect(logicalOffset, playfieldRect);
-    const struct {
-        const QImage* image;
-        int width;
-        int height;
-        int angle;
-        qreal dx;
-        qreal dy;
-    } layout[] = {
-        {&touchHold0Image_, qMax(1, qRound(touchHold0Image_.width() * kTouchAssetScale)), qMax(1, qRound(touchHold0Image_.height() * kTouchAssetScale)), -135, offset, -offset},
-        {&touchHold1Image_, qMax(1, qRound(touchHold1Image_.width() * kTouchAssetScale)), qMax(1, qRound(touchHold1Image_.height() * kTouchAssetScale)), -45, offset, offset},
-        {&touchHold2Image_, qMax(1, qRound(touchHold2Image_.width() * kTouchAssetScale)), qMax(1, qRound(touchHold2Image_.height() * kTouchAssetScale)), 45, -offset, offset},
-        {&touchHold3Image_, qMax(1, qRound(touchHold3Image_.width() * kTouchAssetScale)), qMax(1, qRound(touchHold3Image_.height() * kTouchAssetScale)), 135, -offset, -offset},
-    };
-
-    const bool batchNative = glRenderer_.isInitialized() && !nativePaintingActive_;
-    if (batchNative) {
-        nativePaintingActive_ = true;
-        painter.beginNativePainting();
-    }
-    for (int index = 3; index >= 0; --index) {
-        const auto& pieceLayout = layout[index];
-        drawSpriteImage(
-            painter,
-            *pieceLayout.image,
-            QPointF(point.x() + pieceLayout.dx, point.y() + pieceLayout.dy),
-            pieceLayout.width,
-            pieceLayout.height,
-            pieceLayout.angle,
-            alpha
-        );
-    }
-
-    if (deltaSeconds >= 0.0) {
-        const bool resumeNativeAfterBorder = nativePaintingActive_;
-        if (resumeNativeAfterBorder) {
-            endNativeBatch(painter);
-        }
-        const QRectF borderRect(
-            point.x() - borderWidth / 2.0,
-            point.y() - borderHeight / 2.0,
-            borderWidth,
-            borderHeight
-        );
-        const qreal progress = qBound<qreal>(0.0, deltaSeconds / holdDuration, 1.0);
-        if (progress > 0.0) {
-            QPainterPath clipPath;
-            clipPath.moveTo(borderRect.center());
-            clipPath.arcTo(borderRect, 90.0, -progress * 360.0);
-            clipPath.closeSubpath();
-            painter.save();
-            painter.setClipPath(clipPath);
-            painter.drawImage(borderRect, touchHoldBorderImage_);
-            painter.restore();
-        }
-        if (resumeNativeAfterBorder) {
-            beginNativeBatch(painter);
-        }
-    }
-    drawSpriteImage(painter, pointBase, point, pointWidth, pointHeight, 0.0);
-    if (batchNative) {
-        endNativeBatch(painter);
-    }
-}
+#include "PreviewCanvas.Objects.cpp"
 
 void PreviewCanvas::updateFpsSample()
 {
@@ -3577,11 +2549,16 @@ void PreviewCanvas::renderCanvas(QPainter& painter)
     if (batchNative) {
         beginNativeBatch(painter);
     }
-    drawTouchLayer(painter, playfieldRect);
-    drawTrackLayer(painter, playfieldRect);
+    drawJudgeEffectFireworkLayer(painter, playfieldRect);
     drawGuideLayer(painter, playfieldRect);
+    drawTrackLayer(painter, playfieldRect);
+    drawSlideMotionLayer(painter, playfieldRect);
+    drawJudgeEffectLayer(painter, playfieldRect);
+    drawJudgeEffectTouchLayer(painter, playfieldRect);
     drawHoldLayer(painter, playfieldRect);
     drawTapLayer(painter, playfieldRect);
+    drawTouchLayer(painter, playfieldRect);
+    drawTouchHoldLayer(painter, playfieldRect);
     if (batchNative) {
         endNativeBatch(painter);
     }
@@ -3638,3 +2615,4 @@ QSize PreviewCanvas::preferredSize() const
 {
     return QSize(620, 620);
 }
+

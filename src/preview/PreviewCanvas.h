@@ -8,6 +8,7 @@
 #include <QImage>
 #include <QOpenGLExtraFunctions>
 #include <QOpenGLWindow>
+#include <QRectF>
 #include <QString>
 #include <QStringList>
 #ifdef HAVE_QT_MULTIMEDIA
@@ -101,10 +102,15 @@ private:
     void drawStageBackground(QPainter& painter, const QRectF& stageRect);
     void drawPlayfieldBackdrop(QPainter& painter, const QRectF& playfieldRect);
     void drawTouchLayer(QPainter& painter, const QRectF& playfieldRect);
+    void drawTouchHoldLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawTrackLayer(QPainter& painter, const QRectF& playfieldRect);
+    void drawSlideMotionLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawGuideLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawHoldLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawTapLayer(QPainter& painter, const QRectF& playfieldRect);
+    void drawJudgeEffectLayer(QPainter& painter, const QRectF& playfieldRect);
+    void drawJudgeEffectTouchLayer(QPainter& painter, const QRectF& playfieldRect);
+    void drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawHud(QPainter& painter, const QRectF& stageRect);
     bool drawSpriteImage(
         QPainter& painter,
@@ -191,6 +197,18 @@ private:
     QImage touchHold2Image_;
     QImage touchHold3Image_;
     QImage touchHoldBorderImage_;
+    QImage judgeEffectTapImage_;
+    QRectF judgeEffectTapSourceRect_;
+    QImage judgeEffectTapBreakImage_;
+    QRectF judgeEffectTapBreakSourceRect_;
+    QImage judgeEffectHoldSustainCircleImage_;
+    QImage judgeEffectTouchCircleImage_;
+    QImage judgeEffectTouchPart01Image_;
+    QImage judgeEffectTouchPart02Image_;
+    QImage judgeEffectFireworkImage_;
+    QRectF judgeEffectFireworkSourceRect_;
+    QImage judgeEffectFireworkColorBallImage_;
+    QRectF judgeEffectFireworkColorBallSourceRect_;
     QImage outlineImage_;
     QImage tapAtlasImage_;
     QImage trackAtlasImage_;

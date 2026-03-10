@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QImage>
 #include <QIcon>
+#include <QLinearGradient>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPaintEvent>
@@ -18,6 +19,7 @@
 #include <QWheelEvent>
 #include <QtMath>
 #include <algorithm>
+#include <array>
 
 namespace {
 constexpr int kPlayableLaneCount = 8;
@@ -29,6 +31,15 @@ constexpr int kTimelineLeftMargin = 40;
 constexpr int kTimelineTopMargin = 6;
 constexpr int kTimelineRightPadding = 24;
 constexpr int kNoteSize = 14;
+constexpr double kTimelineFireworkTouchTriggerDelaySeconds = 0.05;
+constexpr double kTimelineFireworkDurationSeconds = 1.3333334;
+const std::array<QColor, 5> kTimelineFireworkBandColors = {
+    QColor(232, 124, 72),
+    QColor(208, 106, 182),
+    QColor(102, 180, 236),
+    QColor(178, 202, 84),
+    QColor(226, 206, 104),
+};
 
 QString laneLabelForIndex(int laneIndex)
 {
@@ -323,6 +334,66 @@ void TimelineView::paintEvent(QPaintEvent* event)
         }
     }
 
+    for (const TimelineNoteMarker& note : notes_) {
+        if (!note.isFirework) {
+            continue;
+        }
+        const QString noteType = note.type.toLower();
+        if (noteType != "touch" && noteType != "touch_hold") {
+            continue;
+        }
+
+        const double triggerSecond =
+            (noteType == "touch")
+            ? (note.second + kTimelineFireworkTouchTriggerDelaySeconds)
+            : ((note.endSecond > note.second) ? note.endSecond : note.second);
+        const double endSecond = triggerSecond + kTimelineFireworkDurationSeconds;
+        if (endSecond <= triggerSecond) {
+            continue;
+        }
+
+        const int fireX0 = secondToX(triggerSecond) - xOffset;
+        const int fireX1 = secondToX(endSecond) - xOffset;
+        const int fireLeft = qMin(fireX0, fireX1);
+        const int fireRight = qMax(fireX0, fireX1);
+        if (fireRight < left || fireLeft > viewport()->width()) {
+            continue;
+        }
+
+        const int lane = qBound(1, note.lane, kLaneCount);
+        const int rowTop = top + (lane - 1) * laneH;
+        const QRectF fireRect(
+            static_cast<qreal>(fireLeft),
+            static_cast<qreal>(rowTop + 2),
+            qMax<qreal>(1.0, static_cast<qreal>(fireRight - fireLeft)),
+            qMax<qreal>(1.0, static_cast<qreal>(laneH - 4))
+        );
+        painter.save();
+        painter.setClipRect(fireRect);
+        const qreal rowHeight = qMax<qreal>(1.0, fireRect.height());
+        const qreal bandHeight = rowHeight / static_cast<qreal>(kTimelineFireworkBandColors.size());
+        for (int bandIndex = 0; bandIndex < static_cast<int>(kTimelineFireworkBandColors.size()); ++bandIndex) {
+            const qreal bandTop = fireRect.top() + bandHeight * static_cast<qreal>(bandIndex);
+            QRectF bandRect(
+                fireRect.left(),
+                bandTop,
+                fireRect.width(),
+                (bandIndex + 1 == static_cast<int>(kTimelineFireworkBandColors.size()))
+                    ? (fireRect.bottom() - bandTop + 1.0)
+                    : bandHeight
+            );
+            painter.fillRect(bandRect, kTimelineFireworkBandColors.at(bandIndex));
+        }
+
+        QLinearGradient dimGrad(fireRect.topLeft(), fireRect.topRight());
+        dimGrad.setColorAt(0.0, QColor(255, 255, 255, 30));
+        dimGrad.setColorAt(0.5, QColor(178, 178, 178, 110));
+        dimGrad.setColorAt(1.0, QColor(102, 102, 102, 185));
+        painter.setCompositionMode(QPainter::CompositionMode_Multiply);
+        painter.fillRect(fireRect, dimGrad);
+        painter.restore();
+    }
+
     QPixmap slideTrackTileLeft;
     QPixmap slideTrackTileRight;
     QPixmap slideTrackEachTileLeft;
@@ -382,14 +453,10 @@ void TimelineView::paintEvent(QPaintEvent* event)
         QString iconType = note.type.toLower();
         if (iconType == "tap" && note.isBreak) {
             iconType = "tap_break";
-        } else if (iconType == "tap" && note.isEx) {
-            iconType = "tap_ex";
         } else if (iconType == "tap" && note.isEach) {
             iconType = "tap_each";
         } else if (iconType == "hold" && note.isBreak) {
             iconType = "hold_break";
-        } else if (iconType == "hold" && note.isEx) {
-            iconType = "hold_ex";
         } else if (iconType == "hold" && note.isEach) {
             iconType = "hold_each";
         } else if (iconType == "touch" && note.isEach) {
@@ -402,10 +469,6 @@ void TimelineView::paintEvent(QPaintEvent* event)
                 iconType = "star_break_double";
             } else if (note.headBreak) {
                 iconType = "star_break";
-            } else if (note.headEx && note.sameHeadSlide) {
-                iconType = "star_ex_double";
-            } else if (note.headEx) {
-                iconType = "star_ex";
             } else if (headEach && note.sameHeadSlide) {
                 iconType = "star_each_double";
             } else if (note.sameHeadSlide) {
@@ -955,6 +1018,7 @@ void TimelineView::loadNoteIcons()
     if (!touchHoldComposite.isNull()) {
         noteIcons_.insert("touch_hold", touchHoldComposite);
     }
+
 }
 
 const TimelineNoteMarker* TimelineView::nearestNoteForViewportPos(const QPointF& pos) const
