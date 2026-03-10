@@ -50,6 +50,7 @@ struct TimelineNoteMarker {
     bool isEach = false;
     bool isBreak = false;
     bool isEx = false;
+    bool isFirework = false;
     bool onSlide = false;
     bool slideHead = false;
     bool tailOnSlideHead = false;

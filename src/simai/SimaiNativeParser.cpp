@@ -69,6 +69,98 @@ QString touchPadForToken(const QString& token)
     return QString(head) + token.at(1);
 }
 
+int touchPrefixLength(const QString& token)
+{
+    if (token.isEmpty()) {
+        return 0;
+    }
+    const QChar head = token.at(0).toUpper();
+    if (head == QChar('C')) {
+        return 1;
+    }
+    if (token.size() >= 2
+        && (head == QChar('A') || head == QChar('B') || head == QChar('D') || head == QChar('E'))
+        && isDigitLane(token.at(1))) {
+        return 2;
+    }
+    return 0;
+}
+
+bool parseTouchSuffix(
+    const QString& token,
+    QString* durationSignature,
+    bool* hasHold,
+    bool* hasFirework,
+    QString* errorMessage)
+{
+    if (durationSignature == nullptr || hasHold == nullptr || hasFirework == nullptr || errorMessage == nullptr) {
+        return false;
+    }
+    durationSignature->clear();
+    *hasHold = false;
+    *hasFirework = false;
+    errorMessage->clear();
+
+    const int prefixLength = touchPrefixLength(token);
+    if (prefixLength <= 0 || prefixLength > token.size()) {
+        *errorMessage = QString("Invalid note: %1").arg(token);
+        return false;
+    }
+
+    const QString suffix = token.mid(prefixLength);
+    const int openBracket = suffix.indexOf('[');
+    const int closeBracket = suffix.indexOf(']');
+    if (openBracket < 0 && closeBracket >= 0) {
+        *errorMessage = QString("Invalid touch token: %1").arg(token);
+        return false;
+    }
+
+    QString modifierPart = suffix;
+    if (openBracket >= 0) {
+        if (closeBracket <= openBracket) {
+            *errorMessage = QString("Invalid touch-hold duration: %1").arg(token);
+            return false;
+        }
+        if (closeBracket != suffix.size() - 1) {
+            *errorMessage = QString("Invalid touch token: %1").arg(token);
+            return false;
+        }
+        if (suffix.indexOf('[', openBracket + 1) >= 0 || suffix.indexOf(']', closeBracket + 1) >= 0) {
+            *errorMessage = QString("Invalid touch token: %1").arg(token);
+            return false;
+        }
+        modifierPart = suffix.left(openBracket);
+        *durationSignature = suffix.mid(openBracket + 1, closeBracket - openBracket - 1);
+    }
+
+    for (QChar ch : modifierPart) {
+        const QChar lower = ch.toLower();
+        if (lower == QChar('h')) {
+            *hasHold = true;
+        } else if (lower == QChar('f')) {
+            *hasFirework = true;
+        } else if (!ch.isSpace()) {
+            *errorMessage = QString("Invalid touch modifier: %1").arg(token);
+            return false;
+        }
+    }
+
+    if (openBracket >= 0 && !*hasHold) {
+        *errorMessage = QString("Touch duration requires 'h': %1").arg(token);
+        return false;
+    }
+    if (*hasHold && openBracket < 0) {
+        *errorMessage = QString("Invalid touch-hold duration: %1").arg(token);
+        return false;
+    }
+    if (*hasHold && durationSignature->isEmpty()) {
+        *errorMessage = QString("Invalid touch-hold duration: %1").arg(token);
+        return false;
+    }
+
+    return true;
+}
+
 double noteStepSeconds(double bpm, int beats)
 {
     const double clampedBpm = bpm > 0.0 ? bpm : kDefaultBpm;
@@ -1005,6 +1097,88 @@ void appendTokenError(ParseState* state, int line, int col, const QString& messa
     state->result.ok = false;
 }
 
+void runStrictFormatChecks(ParseState* state, const QStringList& lines)
+{
+    if (state == nullptr) {
+        return;
+    }
+
+    int lastContentLine = -1;
+    QString lastContentText;
+    struct OpenBracket {
+        QChar ch;
+        int line = 1;
+        int col = 1;
+    };
+    QVector<OpenBracket> stack;
+
+    auto noteLikeLine = [](const QString& line) {
+        for (QChar ch : line) {
+            if (isDigitLane(ch)) {
+                return true;
+            }
+            const QChar lower = ch.toLower();
+            if (lower == QChar('a') || lower == QChar('b')
+                || lower == QChar('c') || lower == QChar('d') || lower == QChar('e')) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    auto matches = [](QChar open, QChar close) {
+        return (open == QChar('(') && close == QChar(')'))
+            || (open == QChar('[') && close == QChar(']'))
+            || (open == QChar('{') && close == QChar('}'));
+    };
+
+    for (int lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
+        QString line = lines.at(lineIndex);
+        if (line.endsWith('\r')) {
+            line.chop(1);
+        }
+        const int lineNumber = lineIndex + 1;
+        const QString trimmed = line.trimmed();
+        if (trimmed.isEmpty()) {
+            continue;
+        }
+        if (trimmed.startsWith(QStringLiteral("||"))) {
+            continue;
+        }
+        lastContentLine = lineNumber;
+        lastContentText = trimmed;
+
+        if (trimmed != QLatin1String("E") && noteLikeLine(line) && !line.contains(',')) {
+            appendTokenError(state, lineNumber, 1, "Missing beat separator ','");
+        }
+
+        for (int i = 0; i < line.size(); ++i) {
+            const QChar ch = line.at(i);
+            if (ch == QChar('(') || ch == QChar('[') || ch == QChar('{')) {
+                stack.append(OpenBracket{ch, lineNumber, i + 1});
+                continue;
+            }
+            if (ch != QChar(')') && ch != QChar(']') && ch != QChar('}')) {
+                continue;
+            }
+            if (stack.isEmpty() || !matches(stack.constLast().ch, ch)) {
+                appendTokenError(state, lineNumber, i + 1, QString("Unmatched closing bracket '%1'").arg(ch));
+                continue;
+            }
+            stack.removeLast();
+        }
+    }
+
+    while (!stack.isEmpty()) {
+        const OpenBracket open = stack.takeLast();
+        appendTokenError(state, open.line, open.col, QString("Unclosed bracket '%1'").arg(open.ch));
+    }
+
+    if (lastContentLine > 0 && lastContentText != QLatin1String("E")) {
+        appendTokenError(state, lastContentLine, 1, "Missing terminal 'E' line");
+    }
+}
+
 void appendNote(ParseState* state, const TimelineNoteMarker& marker, QVector<int>* groupIndices)
 {
     if (state == nullptr) {
@@ -1278,6 +1452,16 @@ void parseTouchToken(ParseState* state, const QString& token, int lineNumber, in
     if (state == nullptr || token.isEmpty()) {
         return;
     }
+
+    QString durationSignature;
+    bool hasHold = false;
+    bool hasFirework = false;
+    QString errorMessage;
+    if (!parseTouchSuffix(token, &durationSignature, &hasHold, &hasFirework, &errorMessage)) {
+        appendTokenError(state, lineNumber, column, errorMessage.isEmpty() ? QString("Invalid touch token: %1").arg(token) : errorMessage);
+        return;
+    }
+
     TimelineNoteMarker marker;
     marker.second = state->second;
     marker.sourceLine = lineNumber;
@@ -1287,10 +1471,11 @@ void parseTouchToken(ParseState* state, const QString& token, int lineNumber, in
     marker.type = "touch";
     marker.touchPoint = touchPointForToken(token);
     marker.touchPad = touchPadForToken(token);
+    marker.isFirework = hasFirework;
 
-    if (token.contains('h') && token.contains('[') && token.contains(']')) {
+    if (hasHold) {
         bool durationOk = false;
-        const double durationSecond = parseHoldDurationSignature(tokenInsideBrackets(token), state->bpm, &durationOk);
+        const double durationSecond = parseHoldDurationSignature(durationSignature, state->bpm, &durationOk);
         if (!durationOk) {
             appendTokenError(state, lineNumber, column, QString("Invalid touch-hold duration: %1").arg(token));
             return;
@@ -1386,7 +1571,7 @@ void parseToken(ParseState* state, const QString& token, int lineNumber, int col
     appendTokenError(state, lineNumber, column, QString("Invalid note: %1").arg(token));
 }
 
-SimaiNativeParseResult parseInternal(const QString& text)
+SimaiNativeParseResult parseInternal(const QString& text, bool strictMode)
 {
     ParseState state;
 
@@ -1461,15 +1646,18 @@ SimaiNativeParseResult parseInternal(const QString& text)
                 continue;
             }
 
-            if (ch == QChar('H') && line.mid(i, 3) == QStringLiteral("HS*")) {
-                flushToken(lineNumber);
-                const int close = line.indexOf('>', i + 3);
-                if (close < 0) {
-                    break;
+                if (ch == QChar('H') && line.mid(i, 3) == QStringLiteral("HS*")) {
+                    flushToken(lineNumber);
+                    const int close = line.indexOf('>', i + 3);
+                    if (close < 0) {
+                        if (strictMode) {
+                            appendTokenError(&state, lineNumber, i + 1, "Unterminated HS* block");
+                        }
+                        break;
+                    }
+                    i = close;
+                    continue;
                 }
-                i = close;
-                continue;
-            }
 
             if (ch == QChar('/')) {
                 flushToken(lineNumber);
@@ -1507,6 +1695,10 @@ SimaiNativeParseResult parseInternal(const QString& text)
         flushToken(lineNumber);
         finalizeEachGroup(&state.result.noteMarkers, currentGroup);
         currentGroup.clear();
+    }
+
+    if (strictMode) {
+        runStrictFormatChecks(&state, lines);
     }
 
     std::sort(
@@ -1615,11 +1807,11 @@ SimaiNativeParseResult parseInternal(const QString& text)
 
 SimaiNativeParseResult SimaiNativeParser::parseForTimeline(const QString& text)
 {
-    return parseInternal(text);
+    return parseInternal(text, false);
 }
 
 SimaiNativeParseResult SimaiNativeParser::validateSyntax(const QString& text)
 {
-    SimaiNativeParseResult result = parseInternal(text);
+    SimaiNativeParseResult result = parseInternal(text, true);
     return result;
 }
