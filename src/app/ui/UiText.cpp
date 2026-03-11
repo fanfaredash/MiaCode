@@ -287,7 +287,8 @@ const QHash<QString, QString>& zhMap()
         {"dialog.preferences.language.english", "English"},
         {"dialog.preferences.language.chinese", "简体中文"},
         {"dialog.preferences.editor_group", "编辑器"},
-        {"dialog.preferences.editor_placeholder", "后续会在这里加入文本框字体大小与字体类型设置。"},
+        {"dialog.preferences.editor_font_size", "文本框字号"},
+        {"dialog.preferences.editor_line_spacing", "行距"},
         {"dialog.preferences.restart_title", "需要重启"},
         {"dialog.preferences.restart_message", "语言设置已保存。请重启 MiaCode 以应用菜单、字体和界面文本。"},
 
@@ -311,6 +312,7 @@ const QHash<QString, QString>& zhMap()
         {"status.touch_trail_disabled", "Touch 轨迹已关闭"},
         {"status.judge_marker_enabled", "判定标记已开启"},
         {"status.judge_marker_disabled", "判定标记已隐藏"},
+        {"status.editor_text_display_updated", "文本框显示已更新。"},
         {"status.preferences_saved", "首选项已保存，重启后生效。"},
     };
     return map;

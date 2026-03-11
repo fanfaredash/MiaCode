@@ -90,6 +90,7 @@ public:
 signals:
     void playheadChanged(double second);
     void noteNavigateRequested(int line, int col);
+    void syncPreviewRequested();
 
 protected:
     bool viewportEvent(QEvent* event) override;
@@ -114,6 +115,7 @@ private:
     bool effectiveShowSlideTracks() const;
     void cycleZoomPreset();
     void updateZoomButtonAppearance();
+    void layoutHeaderButtons();
     int lineNumberForSecond(double second) const;
     QPixmap iconForType(const QString& type) const;
     void loadNoteIcons();
@@ -132,6 +134,7 @@ private:
     double waveformStartSeconds_ = 0.0;
     double waveformDurationSeconds_ = 0.0;
     QToolButton* zoomButton_ = nullptr;
+    QToolButton* syncButton_ = nullptr;
     QVector<double> zoomPresets_{0.25, 0.5, 1.0, 1.5, 2.0};
     int zoomPresetIndex_ = 2;
     bool timelineDragActive_ = false;
