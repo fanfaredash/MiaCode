@@ -5,9 +5,9 @@
 #include <QTextDocument>
 
 namespace {
-const QColor kParenColor(QStringLiteral("#2B5BFF"));
-const QColor kBraceColor(QStringLiteral("#2F7EA7"));
-const QColor kSquareColor(QStringLiteral("#4F8F6A"));
+const QColor kParenColor(QStringLiteral("#66221B"));
+const QColor kBraceColor(QStringLiteral("#66221B"));
+const QColor kSquareColor(QStringLiteral("#282F60"));
 }
 
 BracketScopeHighlighter::BracketScopeHighlighter(QTextDocument* parent)

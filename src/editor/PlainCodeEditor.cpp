@@ -9,11 +9,19 @@
 #include <QTextBlockFormat>
 #include <QTextCursor>
 #include <QTextDocument>
+#include <QTextFrame>
 
 namespace {
 constexpr int kLineNumberLeftPadding = 6;
 constexpr int kLineNumberRightPadding = 10;
 constexpr int kLineNumberMinWidth = 40;
+constexpr qreal kEditorDocumentLeftInset = 14.0;
+constexpr int kCurrentLineHighlightLeftInset = 3;
+constexpr int kCurrentLineHighlightRightInset = 0;
+constexpr int kEditorCursorVisibleWidth = 1;
+constexpr int kEditorCursorHiddenWidth = 0;
+const QColor kCurrentLineBorderColor("#CBD4E0");
+const QColor kCurrentLineFillColor(248, 250, 253, 36);
 }  // namespace
 
 class LineNumberArea : public QWidget
@@ -42,6 +50,12 @@ private:
 PlainCodeEditor::PlainCodeEditor(QWidget* parent)
     : QTextEdit(parent), lineNumberArea_(new LineNumberArea(this))
 {
+    const auto applyCursorVisibility = [this]() {
+        const QTextCursor cursor = textCursor();
+        const bool hideAtLineStart = !cursor.hasSelection() && cursor.positionInBlock() == 0;
+        setCursorWidth(hideAtLineStart ? kEditorCursorHiddenWidth : kEditorCursorVisibleWidth);
+    };
+
     lineNumberArea_->setFont(font());
     connect(document(), &QTextDocument::blockCountChanged, this, &PlainCodeEditor::updateLineNumberAreaWidth);
     connect(this, &QTextEdit::textChanged, this, [this]() {
@@ -52,8 +66,19 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
         Q_UNUSED(value);
         updateLineNumberArea();
     });
+    connect(this, &QTextEdit::cursorPositionChanged, this, [this, applyCursorVisibility]() {
+        applyCursorVisibility();
+        viewport()->update();
+    });
     updateLineNumberAreaWidth(0);
     setLineWrapMode(QTextEdit::NoWrap);
+    if (QTextFrame* frame = document()->rootFrame(); frame != nullptr) {
+        QTextFrameFormat format = frame->frameFormat();
+        format.setLeftMargin(kEditorDocumentLeftInset);
+        frame->setFrameFormat(format);
+    }
+    setCursorWidth(kEditorCursorVisibleWidth);
+    applyCursorVisibility();
 }
 
 void PlainCodeEditor::setBlockSpacingPixels(int px)
@@ -152,6 +177,39 @@ void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
     );
     menu->exec(event->globalPos());
     delete menu;
+}
+
+void PlainCodeEditor::paintEvent(QPaintEvent* event)
+{
+    QTextEdit::paintEvent(event);
+
+    QTextCursor cursor = textCursor();
+    const QTextBlock block = cursor.block();
+    if (!block.isValid()) {
+        return;
+    }
+
+    QTextCursor blockStartCursor(block);
+    const QRect blockRect = cursorRect(blockStartCursor);
+    const int blockTop = blockRect.top();
+    // Keep current-line highlight tied to glyph line height, not paragraph bottom margin.
+    const int blockHeight = qMax(1, blockRect.height());
+
+    QRect highlightRect(
+        kCurrentLineHighlightLeftInset,
+        blockTop,
+        viewport()->width() - kCurrentLineHighlightLeftInset - kCurrentLineHighlightRightInset,
+        blockHeight
+    );
+    highlightRect.adjust(0, 0, -1, -1);
+    if (!highlightRect.isValid()) {
+        return;
+    }
+
+    QPainter painter(viewport());
+    painter.setPen(QPen(kCurrentLineBorderColor, 1));
+    painter.setBrush(kCurrentLineFillColor);
+    painter.drawRoundedRect(highlightRect, 4.0, 4.0);
 }
 
 void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
