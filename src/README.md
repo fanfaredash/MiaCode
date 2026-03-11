@@ -1,42 +1,58 @@
-﻿# `src` Directory Responsibilities
+# `src` Directory Layout (Current)
 
-This project is split by functional module. Keep new code in the closest module and avoid adding more logic back into `app/MainWindow.*` unless it is window-level orchestration.
+This repository is organized by module responsibility.
+Except for entry files, keep sources in second-level folders.
 
-## `app/`
-- Entry and shell wiring.
-- `main.cpp`: app/bootstrap (`QApplication`, style, surface format).
-- `MainWindow.*`: UI orchestration, action routing, document lifecycle, cross-module coordination.
+```text
+src/
+  app/
+    main.cpp
+    AppVersion.h.in
+    mainwindow/
+    ui/
 
-## `editor/`
-- Text editor widgets and editing UX helpers.
-- Example: `PlainCodeEditor.*`.
+  common/
 
-## `simai/`
-- Simai format model, parse/serialize, native parser/dump tooling.
-- No UI dependencies here.
+  editor/
+    PlainCodeEditor.*
+    BracketScopeHighlighter.*
 
-## `timeline/`
-- Timeline view/rendering, note marker visualization, timeline interaction.
-- Should consume parsed note markers, not parse document text directly.
+  preview/
+    audio/
+      PreviewAudioSettings.*
+      QtPreviewSfxRuntime.*
+      QtPreviewSfxRuntime.*.cpp
+    video/
+      PreviewCanvas.*
+      PreviewCanvas.*.cpp
+      PreviewGLRenderer.*
+      PreviewMediaController.*
+    layout/
+      PreviewIntegration.*
 
-## `preview/`
-- Preview rendering and media/audio runtime.
-- `PreviewCanvas.*`: OpenGL rendering path and profiling.
-- `PreviewMediaController.*`: media decode/position/frame delivery.
-- `QtPreviewSfxRuntime.*`: SFX/BGM runtime and playback-rate audio path.
-- `PreviewIntegration.*`: glue helpers between preview components.
+  simai/
+    document/
+      SimaiDocument.*
+    parser/
+      SimaiNativeParser.*
+    native/
+      SimaiNativeParser.*.cpp
+      SimaiNativeDump.cpp
 
-## `tools/`
-- Developer/diagnostic utilities and probes that are not part of the normal app path.
+  timeline/
+    TimelineView.*
+    TimelineView.*.cpp
 
-## Debug Output Policy
-- Runtime debug output is **off by default**.
-- Enable it only from command line:
-  - `--miacode-debug`
-  - `--debug-runtime`
-  - `--enable-debug-output`
-- This switch controls:
-  - preview debug HUD default override
-  - runtime debug text output
-  - profiling/artifact file emission (e.g. preview profiling summary, audio debug log)
+  tools/
+    latency/
+      LatencyDetectorDialog.*
+      LatencyDetectorDialog.*.cpp
+    probe/
+      SoundtouchProbe.cpp
+```
 
+## Conventions
+- `app/` is for app entry and window orchestration only.
+- `preview/` keeps exactly three categories: `audio`, `video`, `layout`.
+- `simai/native` stores parser internal fragments and native dump tooling.
+- Prefer existing second-level folders instead of creating parallel aliases.

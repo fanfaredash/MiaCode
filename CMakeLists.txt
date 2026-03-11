@@ -3,7 +3,7 @@
 set(MIACODE_VERSION_MAJOR "0" CACHE STRING "miacode major version")
 set(MIACODE_VERSION_MINOR "1" CACHE STRING "miacode minor version")
 set(MIACODE_VERSION_PATCH "2" CACHE STRING "miacode patch version")
-set(MIACODE_VERSION_PRERELEASE "dev.1" CACHE STRING "miacode prerelease suffix (empty for stable release)")
+set(MIACODE_VERSION_PRERELEASE "dev.2" CACHE STRING "miacode prerelease suffix (empty for stable release)")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
@@ -40,30 +40,30 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
     src/app/mainwindow/MainWindow.h
     src/app/mainwindow/MainWindow.cpp
-    src/app/UiText.h
-    src/app/UiText.cpp
+    src/app/ui/UiText.h
+    src/app/ui/UiText.cpp
     src/editor/PlainCodeEditor.h
     src/editor/PlainCodeEditor.cpp
     src/editor/BracketScopeHighlighter.h
     src/editor/BracketScopeHighlighter.cpp
-    src/tools/LatencyDetectorDialog.h
-    src/tools/LatencyDetectorDialog.cpp
-    src/preview/PreviewCanvas.h
-    src/preview/PreviewCanvas.cpp
-    src/preview/PreviewGLRenderer.h
-    src/preview/PreviewGLRenderer.cpp
-    src/preview/PreviewMediaController.h
-    src/preview/PreviewMediaController.cpp
-    src/preview/PreviewIntegration.h
-    src/preview/PreviewIntegration.cpp
-    src/preview/PreviewAudioSettings.h
-    src/preview/PreviewAudioSettings.cpp
-    src/preview/QtPreviewSfxRuntime.h
-    src/preview/QtPreviewSfxRuntime.cpp
-    src/simai/SimaiDocument.h
-    src/simai/SimaiDocument.cpp
-    src/simai/SimaiNativeParser.h
-    src/simai/SimaiNativeParser.cpp
+    src/tools/latency/LatencyDetectorDialog.h
+    src/tools/latency/LatencyDetectorDialog.cpp
+    src/preview/video/PreviewCanvas.h
+    src/preview/video/PreviewCanvas.cpp
+    src/preview/video/PreviewGLRenderer.h
+    src/preview/video/PreviewGLRenderer.cpp
+    src/preview/video/PreviewMediaController.h
+    src/preview/video/PreviewMediaController.cpp
+    src/preview/layout/PreviewIntegration.h
+    src/preview/layout/PreviewIntegration.cpp
+    src/preview/audio/PreviewAudioSettings.h
+    src/preview/audio/PreviewAudioSettings.cpp
+    src/preview/audio/QtPreviewSfxRuntime.h
+    src/preview/audio/QtPreviewSfxRuntime.cpp
+    src/simai/document/SimaiDocument.h
+    src/simai/document/SimaiDocument.cpp
+    src/simai/parser/SimaiNativeParser.h
+    src/simai/parser/SimaiNativeParser.cpp
     src/timeline/TimelineView.h
     src/timeline/TimelineView.cpp
     resources/app_icons.qrc
@@ -124,10 +124,18 @@ target_include_directories(MiaCode PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/generated
     src
     src/app
+    src/app/ui
     src/editor
     src/preview
+    src/preview/audio
+    src/preview/video
+    src/preview/layout
     src/simai
+    src/simai/document
+    src/simai/native
+    src/simai/parser
     src/timeline
+    src/tools/latency
 )
 
 target_link_libraries(MiaCode PRIVATE Qt6::Multimedia)
@@ -135,20 +143,20 @@ target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
 
 if (MIACODE_BUILD_DEV_TOOLS)
     add_executable(simai_native_dump
-        src/simai/SimaiNativeDump.cpp
-        src/simai/SimaiNativeParser.h
-        src/simai/SimaiNativeParser.cpp
+        src/simai/native/SimaiNativeDump.cpp
+        src/simai/parser/SimaiNativeParser.h
+        src/simai/parser/SimaiNativeParser.cpp
         src/timeline/TimelineView.h
         src/timeline/TimelineView.cpp
         resources/fonts.qrc
     )
 
     add_executable(soundtouch_probe
-        src/tools/SoundtouchProbe.cpp
-        src/preview/PreviewAudioSettings.h
-        src/preview/PreviewAudioSettings.cpp
-        src/preview/QtPreviewSfxRuntime.h
-        src/preview/QtPreviewSfxRuntime.cpp
+        src/tools/probe/SoundtouchProbe.cpp
+        src/preview/audio/PreviewAudioSettings.h
+        src/preview/audio/PreviewAudioSettings.cpp
+        src/preview/audio/QtPreviewSfxRuntime.h
+        src/preview/audio/QtPreviewSfxRuntime.cpp
         src/timeline/TimelineView.h
         src/timeline/TimelineView.cpp
     )
@@ -161,6 +169,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_include_directories(simai_native_dump PRIVATE
         src
         src/simai
+        src/simai/parser
+        src/simai/native
         src/timeline
     )
 
@@ -174,6 +184,9 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_include_directories(soundtouch_probe PRIVATE
         src
         src/preview
+        src/preview/audio
+        src/preview/video
+        src/preview/layout
         src/timeline
         src/tools
     )
