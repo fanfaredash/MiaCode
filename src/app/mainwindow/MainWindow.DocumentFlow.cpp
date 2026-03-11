@@ -205,11 +205,12 @@ void MainWindow::onOpenFile()
         }
     }
 
+    currentEncoding_ = encodingUsed;
+    setCurrentFilePath(path);
     loadDocument(SimaiDocument::fromText(text));
     clearValidationErrors();
     clearValidationDecorations();
-    currentEncoding_ = encodingUsed;
-    setCurrentFilePath(path);
+    refreshWaveformCache();
     statusBar()->showMessage(
         QString("Opened: %1 (%2)")
             .arg(QFileInfo(path).fileName())
@@ -932,6 +933,7 @@ bool MainWindow::switchToDifficultyField(int difficultyId)
     }
     stopQtPreviewPlayback(true);
     activeDifficultyId_ = difficultyId;
+    projectLastOpenedDifficultyId_ = difficultyId;
     if (activeOutlineKey_.isEmpty() || activeOutlineKey_ == "metadata") {
         activeOutlineKey_ = "chart";
     }
@@ -953,6 +955,7 @@ bool MainWindow::switchToDifficultyField(int difficultyId)
     updateEditorEmptyState();
     updateEditorStatus();
     scheduleTimelineRefresh();
+    saveProjectRenderState();
     return true;
 }
 
@@ -961,12 +964,19 @@ void MainWindow::activateInitialField()
     const QVector<int> ids = document_.difficultyIds();
     if (!ids.isEmpty()) {
         activeOutlineKey_ = "chart";
-        const QVector<int> preferredOrder{5, 6, 4, 7, 3, 2, 1};
-        int targetId = ids.constFirst();
-        for (int id : preferredOrder) {
-            if (ids.contains(id)) {
-                targetId = id;
-                break;
+        int targetId = 0;
+        if (SimaiDocument::isDifficultyId(projectLastOpenedDifficultyId_)
+            && ids.contains(projectLastOpenedDifficultyId_)) {
+            targetId = projectLastOpenedDifficultyId_;
+        }
+        if (targetId == 0) {
+            const QVector<int> preferredOrder{5, 6, 4, 7, 3, 2, 1};
+            targetId = ids.constFirst();
+            for (int id : preferredOrder) {
+                if (ids.contains(id)) {
+                    targetId = id;
+                    break;
+                }
             }
         }
         switchToDifficultyField(targetId);
