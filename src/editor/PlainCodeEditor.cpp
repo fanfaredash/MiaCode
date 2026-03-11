@@ -1,11 +1,14 @@
 #include "PlainCodeEditor.h"
 
 #include <QContextMenuEvent>
+#include <QEvent>
 #include <QMenu>
 #include <QPainter>
+#include <QScrollBar>
 #include <QTextBlock>
 #include <QTextBlockFormat>
 #include <QTextCursor>
+#include <QTextDocument>
 
 namespace {
 constexpr int kLineNumberLeftPadding = 6;
@@ -37,12 +40,20 @@ private:
 };
 
 PlainCodeEditor::PlainCodeEditor(QWidget* parent)
-    : QPlainTextEdit(parent), lineNumberArea_(new LineNumberArea(this))
+    : QTextEdit(parent), lineNumberArea_(new LineNumberArea(this))
 {
-    connect(this, &QPlainTextEdit::blockCountChanged, this, &PlainCodeEditor::updateLineNumberAreaWidth);
-    connect(this, &QPlainTextEdit::updateRequest, this, &PlainCodeEditor::updateLineNumberArea);
+    lineNumberArea_->setFont(font());
+    connect(document(), &QTextDocument::blockCountChanged, this, &PlainCodeEditor::updateLineNumberAreaWidth);
+    connect(this, &QTextEdit::textChanged, this, [this]() {
+        updateLineNumberAreaWidth(0);
+        updateLineNumberArea();
+    });
+    connect(verticalScrollBar(), &QScrollBar::valueChanged, this, [this](int value) {
+        Q_UNUSED(value);
+        updateLineNumberArea();
+    });
     updateLineNumberAreaWidth(0);
-    setLineWrapMode(QPlainTextEdit::NoWrap);
+    setLineWrapMode(QTextEdit::NoWrap);
 }
 
 void PlainCodeEditor::setBlockSpacingPixels(int px)
@@ -57,16 +68,27 @@ void PlainCodeEditor::setBlockSpacingPixels(int px)
     cursor.endEditBlock();
 }
 
+void PlainCodeEditor::refreshLineNumberAreaLayout()
+{
+    lineNumberArea_->setFont(font());
+    updateLineNumberAreaWidth(0);
+    const QRect cr = contentsRect();
+    lineNumberArea_->setGeometry(QRect(cr.left(), cr.top(), lineNumberAreaWidth(), cr.height()));
+    lineNumberArea_->update();
+    viewport()->update();
+}
+
 int PlainCodeEditor::lineNumberAreaWidth() const
 {
     int digits = 1;
-    int max = qMax(1, blockCount());
+    int max = qMax(1, document() != nullptr ? document()->blockCount() : 1);
     while (max >= 10) {
         max /= 10;
         ++digits;
     }
 
-    const int digitWidth = fontMetrics().horizontalAdvance(QLatin1Char('9'));
+    const QFontMetrics metrics(lineNumberArea_->font());
+    const int digitWidth = metrics.horizontalAdvance(QLatin1Char('9'));
     const int space = kLineNumberLeftPadding + (digitWidth * digits) + kLineNumberRightPadding;
     return qMax(kLineNumberMinWidth, space);
 }
@@ -76,25 +98,25 @@ void PlainCodeEditor::updateLineNumberAreaWidth(int)
     setViewportMargins(lineNumberAreaWidth(), 0, 0, 0);
 }
 
-void PlainCodeEditor::updateLineNumberArea(const QRect& rect, int dy)
+void PlainCodeEditor::updateLineNumberArea()
 {
-    if (dy) {
-        lineNumberArea_->scroll(0, dy);
-    } else {
-        lineNumberArea_->update(0, rect.y(), lineNumberArea_->width(), rect.height());
-    }
-
-    if (rect.contains(viewport()->rect())) {
-        updateLineNumberAreaWidth(0);
-    }
+    lineNumberArea_->update();
 }
 
 void PlainCodeEditor::resizeEvent(QResizeEvent* event)
 {
-    QPlainTextEdit::resizeEvent(event);
+    QTextEdit::resizeEvent(event);
 
     const QRect cr = contentsRect();
     lineNumberArea_->setGeometry(QRect(cr.left(), cr.top(), lineNumberAreaWidth(), cr.height()));
+}
+
+void PlainCodeEditor::changeEvent(QEvent* event)
+{
+    QTextEdit::changeEvent(event);
+    if (event != nullptr && event->type() == QEvent::FontChange) {
+        refreshLineNumberAreaLayout();
+    }
 }
 
 void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
@@ -137,28 +159,37 @@ void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
     QPainter painter(lineNumberArea_);
     painter.fillRect(event->rect(), QColor("#E6E6E6"));
     painter.setPen(QColor("#666666"));
+    painter.setFont(lineNumberArea_->font());
 
-    QTextBlock block = firstVisibleBlock();
-    int blockNumber = block.blockNumber();
-    int top = static_cast<int>(blockBoundingGeometry(block).translated(contentOffset()).top());
-    int bottom = top + static_cast<int>(blockBoundingRect(block).height());
+    QTextCursor startCursor = cursorForPosition(QPoint(0, 0));
+    QTextBlock block = startCursor.block();
+    if (!block.isValid() && document() != nullptr) {
+        block = document()->firstBlock();
+    }
+    int blockNumber = block.isValid() ? block.blockNumber() : 0;
+    const int visibleTop = event->rect().top();
+    const int visibleBottom = event->rect().bottom();
+    const int lineHeight = QFontMetrics(lineNumberArea_->font()).height();
 
-    while (block.isValid() && top <= event->rect().bottom()) {
-        if (block.isVisible() && bottom >= event->rect().top()) {
+    while (block.isValid()) {
+        QTextCursor blockCursor(block);
+        const QRect blockRect = cursorRect(blockCursor);
+        if (blockRect.top() > visibleBottom) {
+            break;
+        }
+        if (blockRect.bottom() >= visibleTop) {
             const QString number = QString::number(blockNumber + 1);
             painter.drawText(
                 kLineNumberLeftPadding,
-                top,
+                blockRect.top(),
                 lineNumberArea_->width() - kLineNumberLeftPadding - kLineNumberRightPadding,
-                fontMetrics().height(),
+                lineHeight,
                 Qt::AlignRight,
                 number
             );
         }
 
         block = block.next();
-        top = bottom;
-        bottom = top + static_cast<int>(blockBoundingRect(block).height());
         ++blockNumber;
     }
 }

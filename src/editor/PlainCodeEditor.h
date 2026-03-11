@@ -1,11 +1,11 @@
 #pragma once
 
-#include <QPlainTextEdit>
+#include <QTextEdit>
 
 class LineNumberArea;
 class QContextMenuEvent;
 
-class PlainCodeEditor : public QPlainTextEdit
+class PlainCodeEditor : public QTextEdit
 {
     Q_OBJECT
 
@@ -14,14 +14,16 @@ public:
     int lineNumberAreaWidth() const;
     void lineNumberAreaPaintEvent(QPaintEvent* event);
     void setBlockSpacingPixels(int px);
+    void refreshLineNumberAreaLayout();
 
 protected:
+    void changeEvent(QEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
 
 private slots:
     void updateLineNumberAreaWidth(int newBlockCount);
-    void updateLineNumberArea(const QRect& rect, int dy);
+    void updateLineNumberArea();
 
 private:
     int blockSpacingPixels_ = 0;

@@ -13,18 +13,22 @@
 #include "TimelineView.h"
 
 class QAction;
+class QByteArray;
 class QCloseEvent;
 class QEvent;
 class QFrame;
 class QGridLayout;
+class QHideEvent;
 class QLabel;
 class LatencyDetectorDialog;
 class QListWidget;
 class QListWidgetItem;
 class QLineEdit;
 class QMenu;
+class QMoveEvent;
 class QTabWidget;
 class QToolBar;
+class QShowEvent;
 class BracketScopeHighlighter;
 class PlainCodeEditor;
 class PreviewCanvas;
@@ -54,6 +58,10 @@ protected:
     void closeEvent(QCloseEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
+    void moveEvent(QMoveEvent* event) override;
+    void showEvent(QShowEvent* event) override;
+    void hideEvent(QHideEvent* event) override;
+    void changeEvent(QEvent* event) override;
 
 private slots:
     void onValidateSimai();
@@ -102,7 +110,7 @@ private:
     void schedulePreviewSubsystemWarmup();
     void tryFinalizePreviewSubsystemWarmup();
     void setupInitialWindowGeometry();
-    void setupMenusAndActions(QMenu* fileMenu, QMenu* toolsMenu, QMenu* transformMenu, QMenu* helpMenu);
+    void setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* previewMenu, QMenu* helpMenu);
     void updateLatencyDetectorAvailability();
     QString resolveLatencyDetectorTrackPath() const;
     bool maybeSaveCurrentFieldChanges();
@@ -119,6 +127,7 @@ private:
     bool handlePreviewSessionLine(const QString& line);
     void bootstrapPreviewWindow();
     void arrangeWithPreviewWindow();
+    void schedulePreviewArrange(int delayMs);
     std::pair<int, int> currentCursorLineCol() const;
     std::pair<int, int> currentSelectionOrCursorLineCol() const;
     bool currentSelectionRange(int* startPos, int* endPos) const;
@@ -135,6 +144,7 @@ private:
     void updateEditorHeaderLayoutMode();
     void updateEditorStatus();
     void updateEditorEmptyState();
+    void updateDifficultyScopedActionStates();
     void updateMetadataPageMode();
     bool deleteDifficultyField(int difficultyId);
     void updateDifficultyDeleteButton(bool visible);
@@ -158,6 +168,7 @@ private:
     void scheduleTimelineRefresh();
     void refreshTimelineMetadata();
     void seekTimelineToCursor(int line, int col);
+    void syncTimelineToEditorCursor(bool centerView = true);
     void jumpToNearestTimelineNote(double second, int lane);
     void startQtPreviewPlayback(double second, bool resumeFromPause = false);
     void stopQtPreviewPlayback(bool keepPosition = true);
@@ -200,6 +211,10 @@ private:
     bool runValidateSimai();
     bool saveBeforePreviewStart();
     void appendOutput(const QString& title, const QString& payload);
+    void logWindowGeometryDebug(const QString& tag, const QString& detail = QString());
+    QString formatWindowStateFlags(Qt::WindowStates states) const;
+    void logTopLevelWindowSnapshot(const QString& tag);
+    void logNativeWindowDebug(const QString& tag, WId dialogWId = 0);
     void clearValidationErrors();
     void clearValidationDecorations();
     void addValidationError(int line, int col, const QString& message);
@@ -256,8 +271,10 @@ private:
     QByteArray lastPreviewNoteMarkerSignature_;
     TextEncoding currentEncoding_ = TextEncoding::Utf8;
     int previewArrangeRetryCount_ = 0;
+    quint64 previewArrangeGeneration_ = 0;
     bool legacyPygamePreviewEnabled_ = false;
     bool runtimeDebugOutputEnabled_ = false;
+    quint64 windowEventDebugSequence_ = 0;
     bool previewSfxRuntimePrepared_ = false;
     bool previewSubsystemWarmupScheduled_ = false;
     bool previewSubsystemWarmupFinalized_ = false;
@@ -270,6 +287,8 @@ private:
     bool qtPreviewAwaitingFrameSwap_ = false;
     qint64 qtPreviewAwaitingFrameSwapSinceMs_ = -1;
     bool previewSliderDragging_ = false;
+    int previewSeekHeldArrowKey_ = 0;
+    QElapsedTimer previewSeekHeldArrowElapsed_;
     double qtPreviewStartSecond_ = 0.0;
     double qtPreviewPauseSecond_ = 0.0;
     double qtPreviewLastTimelineSecond_ = -1.0;

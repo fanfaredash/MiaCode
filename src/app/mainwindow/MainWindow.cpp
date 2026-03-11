@@ -8,7 +8,7 @@
 #include "SimaiNativeParser.h"
 #include "TimelineView.h"
 #include "UiText.h"
-#include "tools/LatencyDetectorDialog.h"
+#include "tools/latency/LatencyDetectorDialog.h"
 #include "common/AssetPaths.h"
 
 #include <algorithm>
@@ -37,6 +37,7 @@
 #include <QGuiApplication>
 #include <QGridLayout>
 #include <QGroupBox>
+#include <QHideEvent>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QJsonArray>
@@ -51,6 +52,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QMoveEvent>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPlainTextEdit>
@@ -90,11 +92,13 @@
 #include <QThreadPool>
 #include <QWidgetAction>
 #include <QToolTip>
+#include <QWindowStateChangeEvent>
 #include <QtMath>
 #ifdef HAVE_QT_MULTIMEDIA
 #include <QVideoFrame>
 #endif
 #include <QVBoxLayout>
+#include <QShowEvent>
 #include <QSizePolicy>
 
 #include <cmath>
@@ -118,6 +122,9 @@ constexpr int kPreviewControlStatsGap = 10;
 constexpr int kPreviewControlStatsCardMinWidth = 280;
 constexpr int kEditorTextFontSizeMin = 8;
 constexpr int kEditorTextFontSizeMax = 28;
+constexpr qreal kPreviewSeekInitialStepSeconds = 0.016;
+constexpr qreal kPreviewSeekMaxStepSeconds = 0.250;
+constexpr qreal kPreviewSeekLinearAccelerationSecondsPerMs = 0.00024;
 constexpr double kEditorLineSpacingFactorDefault = 1.5;
 const QList<double> kEditorLineSpacingFactorOptions{
     0.0, 1.0, 1.5, 2.0, 3.0, 5.0,
@@ -148,6 +155,146 @@ QString editorLineSpacingFactorLabel(double factor)
     const QString text = QString::number(factor, 'f', qFuzzyCompare(factor, qRound(factor)) ? 0 : 1);
     return text + QStringLiteral("x");
 }
+
+#ifdef Q_OS_WIN
+QString sanitizeNativeDebugText(QString text)
+{
+    text.replace('\r', QStringLiteral("\\r"));
+    text.replace('\n', QStringLiteral("\\n"));
+    if (text.isEmpty()) {
+        return QStringLiteral("(empty)");
+    }
+    constexpr int kMaxLength = 96;
+    if (text.size() > kMaxLength) {
+        text = text.left(kMaxLength) + QStringLiteral("...");
+    }
+    return text;
+}
+
+QString describeNativeWindowHandle(HWND hwnd)
+{
+    if (hwnd == nullptr) {
+        return QStringLiteral("hwnd=0x0");
+    }
+
+    wchar_t classNameBuf[256] = {};
+    const int classNameLen = GetClassNameW(hwnd, classNameBuf, 256);
+    const QString className = classNameLen > 0
+        ? sanitizeNativeDebugText(QString::fromWCharArray(classNameBuf, classNameLen))
+        : QStringLiteral("(none)");
+
+    wchar_t titleBuf[512] = {};
+    const int titleLen = GetWindowTextW(hwnd, titleBuf, 512);
+    const QString title = titleLen > 0
+        ? sanitizeNativeDebugText(QString::fromWCharArray(titleBuf, titleLen))
+        : QStringLiteral("(empty)");
+
+    RECT rect{};
+    const BOOL hasRect = GetWindowRect(hwnd, &rect);
+    const int rectX = hasRect ? rect.left : -1;
+    const int rectY = hasRect ? rect.top : -1;
+    const int rectW = hasRect ? (rect.right - rect.left) : -1;
+    const int rectH = hasRect ? (rect.bottom - rect.top) : -1;
+
+    DWORD pid = 0;
+    const DWORD tid = GetWindowThreadProcessId(hwnd, &pid);
+    const HWND owner = GetWindow(hwnd, GW_OWNER);
+    const HWND root = GetAncestor(hwnd, GA_ROOT);
+    const HWND rootOwner = GetAncestor(hwnd, GA_ROOTOWNER);
+    const HWND lastPopup = GetLastActivePopup(hwnd);
+
+    WINDOWPLACEMENT placement{};
+    placement.length = sizeof(WINDOWPLACEMENT);
+    const BOOL hasPlacement = GetWindowPlacement(hwnd, &placement);
+    const int showCmd = hasPlacement ? static_cast<int>(placement.showCmd) : -1;
+    const int normalX = hasPlacement ? placement.rcNormalPosition.left : -1;
+    const int normalY = hasPlacement ? placement.rcNormalPosition.top : -1;
+    const int normalW = hasPlacement
+        ? (placement.rcNormalPosition.right - placement.rcNormalPosition.left)
+        : -1;
+    const int normalH = hasPlacement
+        ? (placement.rcNormalPosition.bottom - placement.rcNormalPosition.top)
+        : -1;
+
+    const auto style = static_cast<qulonglong>(GetWindowLongPtrW(hwnd, GWL_STYLE));
+    const auto exStyle = static_cast<qulonglong>(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+
+    return QString(
+               "hwnd=0x%1 class=%2 title=%3 vis=%4 ena=%5 iconic=%6 zoomed=%7 "
+               "owner=0x%8 root=0x%9 root_owner=0x%10 popup=0x%11 pid=%12 tid=%13 "
+               "rect=[%14,%15 %16x%17] show=%18 normal=[%19,%20 %21x%22] style=0x%23 ex=0x%24"
+           )
+        .arg(reinterpret_cast<quintptr>(hwnd), 0, 16)
+        .arg(className)
+        .arg(title)
+        .arg(IsWindowVisible(hwnd) ? 1 : 0)
+        .arg(IsWindowEnabled(hwnd) ? 1 : 0)
+        .arg(IsIconic(hwnd) ? 1 : 0)
+        .arg(IsZoomed(hwnd) ? 1 : 0)
+        .arg(reinterpret_cast<quintptr>(owner), 0, 16)
+        .arg(reinterpret_cast<quintptr>(root), 0, 16)
+        .arg(reinterpret_cast<quintptr>(rootOwner), 0, 16)
+        .arg(reinterpret_cast<quintptr>(lastPopup), 0, 16)
+        .arg(pid)
+        .arg(tid)
+        .arg(rectX)
+        .arg(rectY)
+        .arg(rectW)
+        .arg(rectH)
+        .arg(showCmd)
+        .arg(normalX)
+        .arg(normalY)
+        .arg(normalW)
+        .arg(normalH)
+        .arg(style, 0, 16)
+        .arg(exStyle, 0, 16);
+}
+
+bool tryRestoreOwnedNativeFileDialog(HWND ownerHwnd, QString* detailOut)
+{
+    if (ownerHwnd == nullptr) {
+        return false;
+    }
+
+    const HWND foregroundHwnd = GetForegroundWindow();
+    if (foregroundHwnd == nullptr || foregroundHwnd == ownerHwnd) {
+        return false;
+    }
+
+    wchar_t classNameBuf[64] = {};
+    const int classNameLen = GetClassNameW(foregroundHwnd, classNameBuf, 64);
+    if (classNameLen <= 0 || QString::fromWCharArray(classNameBuf, classNameLen) != QStringLiteral("#32770")) {
+        return false;
+    }
+
+    const HWND owner = GetWindow(foregroundHwnd, GW_OWNER);
+    const HWND rootOwner = GetAncestor(foregroundHwnd, GA_ROOTOWNER);
+    if (owner != ownerHwnd && rootOwner != ownerHwnd) {
+        return false;
+    }
+    if (!IsZoomed(foregroundHwnd)) {
+        return false;
+    }
+
+    WINDOWPLACEMENT before{};
+    before.length = sizeof(WINDOWPLACEMENT);
+    const BOOL hasBefore = GetWindowPlacement(foregroundHwnd, &before);
+    ShowWindow(foregroundHwnd, SW_RESTORE);
+    WINDOWPLACEMENT after{};
+    after.length = sizeof(WINDOWPLACEMENT);
+    const BOOL hasAfter = GetWindowPlacement(foregroundHwnd, &after);
+
+    if (detailOut != nullptr) {
+        *detailOut = QString("restore hwnd=0x%1 owner=0x%2 root_owner=0x%3 before_show=%4 after_show=%5")
+                         .arg(reinterpret_cast<quintptr>(foregroundHwnd), 0, 16)
+                         .arg(reinterpret_cast<quintptr>(owner), 0, 16)
+                         .arg(reinterpret_cast<quintptr>(rootOwner), 0, 16)
+                         .arg(hasBefore ? static_cast<int>(before.showCmd) : -1)
+                         .arg(hasAfter ? static_cast<int>(after.showCmd) : -1);
+    }
+    return true;
+}
+#endif
 
 class OutlineItemDelegate : public QStyledItemDelegate {
 public:
@@ -439,6 +586,8 @@ QByteArray noteMarkerSignature(const QVector<TimelineNoteMarker>& notes)
         signature.append(QByteArray::number(marker.slideTraceSecond, 'f', 6));
         signature.append('|');
         signature.append(marker.type.toUtf8());
+        signature.append('|');
+        signature.append(marker.isFirework ? '1' : '0');
         signature.append(';');
     }
     return signature;
@@ -1148,15 +1297,203 @@ void MainWindow::setupInitialWindowGeometry()
     resize(initialSize);
 }
 
+QString MainWindow::formatWindowStateFlags(Qt::WindowStates states) const
+{
+    QStringList flags;
+    if (states.testFlag(Qt::WindowMinimized)) {
+        flags.append("minimized");
+    }
+    if (states.testFlag(Qt::WindowMaximized)) {
+        flags.append("maximized");
+    }
+    if (states.testFlag(Qt::WindowFullScreen)) {
+        flags.append("fullscreen");
+    }
+    if (states.testFlag(Qt::WindowActive)) {
+        flags.append("active");
+    }
+    if (flags.isEmpty()) {
+        flags.append("normal");
+    }
+    return flags.join('|');
+}
+
+void MainWindow::logWindowGeometryDebug(const QString& tag, const QString& detail)
+{
+    if (!runtimeDebugOutputEnabled_) {
+        return;
+    }
+
+    const QRect clientRect = geometry();
+    const QRect frameRect = frameGeometry();
+    const Qt::WindowStates states = windowState();
+
+    QString payload = QString(
+        "seq=%1 tag=%2 geom=[%3,%4 %5x%6] frame=[%7,%8 %9x%10] state=%11 "
+        "active=%12 visible=%13 minimized=%14 maximized=%15 fullscreen=%16 "
+        "suspend_depth=%17 arrange_gen=%18 arrange_retry=%19"
+    )
+        .arg(++windowEventDebugSequence_)
+        .arg(tag)
+        .arg(clientRect.left())
+        .arg(clientRect.top())
+        .arg(clientRect.width())
+        .arg(clientRect.height())
+        .arg(frameRect.left())
+        .arg(frameRect.top())
+        .arg(frameRect.width())
+        .arg(frameRect.height())
+        .arg(formatWindowStateFlags(states))
+        .arg(isActiveWindow() ? 1 : 0)
+        .arg(isVisible() ? 1 : 0)
+        .arg(isMinimized() ? 1 : 0)
+        .arg(isMaximized() ? 1 : 0)
+        .arg(isFullScreen() ? 1 : 0)
+        .arg(0)
+        .arg(previewArrangeGeneration_)
+        .arg(previewArrangeRetryCount_);
+
+    if (!detail.isEmpty()) {
+        payload += " detail=" + detail;
+    }
+
+#ifdef Q_OS_WIN
+    const HWND selfHwnd = reinterpret_cast<HWND>(winId());
+    const HWND foregroundHwnd = GetForegroundWindow();
+    const HWND foregroundOwner = foregroundHwnd != nullptr ? GetWindow(foregroundHwnd, GW_OWNER) : nullptr;
+    const HWND foregroundRootOwner = foregroundHwnd != nullptr ? GetAncestor(foregroundHwnd, GA_ROOTOWNER) : nullptr;
+    payload += QString(" self=0x%1 fg=0x%2 fg_owner=0x%3 fg_root_owner=0x%4 zoomed=%5 iconic=%6")
+                   .arg(reinterpret_cast<quintptr>(selfHwnd), 0, 16)
+                   .arg(reinterpret_cast<quintptr>(foregroundHwnd), 0, 16)
+                   .arg(reinterpret_cast<quintptr>(foregroundOwner), 0, 16)
+                   .arg(reinterpret_cast<quintptr>(foregroundRootOwner), 0, 16)
+                   .arg(selfHwnd != nullptr ? (IsZoomed(selfHwnd) ? 1 : 0) : -1)
+                   .arg(selfHwnd != nullptr ? (IsIconic(selfHwnd) ? 1 : 0) : -1);
+    WINDOWPLACEMENT placement{};
+    placement.length = sizeof(WINDOWPLACEMENT);
+    if (selfHwnd != nullptr && GetWindowPlacement(selfHwnd, &placement)) {
+        payload += QString(" wp_show=%1 wp_normal=[%2,%3 %4x%5]")
+                       .arg(static_cast<int>(placement.showCmd))
+                       .arg(placement.rcNormalPosition.left)
+                       .arg(placement.rcNormalPosition.top)
+                       .arg(placement.rcNormalPosition.right - placement.rcNormalPosition.left)
+                       .arg(placement.rcNormalPosition.bottom - placement.rcNormalPosition.top);
+    } else {
+        payload += " wp_show=-1";
+    }
+#endif
+
+    appendOutput("window/event", payload);
+}
+
+void MainWindow::logTopLevelWindowSnapshot(const QString& tag)
+{
+    if (!runtimeDebugOutputEnabled_) {
+        return;
+    }
+
+    QStringList lines;
+    const auto topLevels = QApplication::topLevelWidgets();
+    lines.reserve(topLevels.size() + 1);
+    lines.append(QString("tag=%1 count=%2").arg(tag).arg(topLevels.size()));
+    int index = 0;
+    for (QWidget* window : topLevels) {
+        if (window == nullptr) {
+            continue;
+        }
+        const QRect geom = window->geometry();
+#ifdef Q_OS_WIN
+        const HWND hwnd = reinterpret_cast<HWND>(window->winId());
+        const HWND owner = hwnd != nullptr ? GetWindow(hwnd, GW_OWNER) : nullptr;
+        const HWND rootOwner = hwnd != nullptr ? GetAncestor(hwnd, GA_ROOTOWNER) : nullptr;
+        const QString nativeDetail = QString(" wid=0x%1 owner=0x%2 root_owner=0x%3 zoomed=%4 iconic=%5")
+                                         .arg(reinterpret_cast<quintptr>(hwnd), 0, 16)
+                                         .arg(reinterpret_cast<quintptr>(owner), 0, 16)
+                                         .arg(reinterpret_cast<quintptr>(rootOwner), 0, 16)
+                                         .arg(hwnd != nullptr ? (IsZoomed(hwnd) ? 1 : 0) : -1)
+                                         .arg(hwnd != nullptr ? (IsIconic(hwnd) ? 1 : 0) : -1);
+#else
+        const QString nativeDetail;
+#endif
+        lines.append(
+            QString("[%1] class=%2 title=%3 vis=%4 active=%5 modal=%6 state=%7 geom=[%8,%9 %10x%11]%12")
+                .arg(index++)
+                .arg(window->metaObject() != nullptr ? window->metaObject()->className() : "unknown")
+                .arg(window->windowTitle().isEmpty() ? "(empty)" : window->windowTitle())
+                .arg(window->isVisible() ? 1 : 0)
+                .arg(window->isActiveWindow() ? 1 : 0)
+                .arg(window->isModal() ? 1 : 0)
+                .arg(formatWindowStateFlags(window->windowState()))
+                .arg(geom.left())
+                .arg(geom.top())
+                .arg(geom.width())
+                .arg(geom.height())
+                .arg(nativeDetail)
+        );
+    }
+    appendOutput("window/top_levels", lines.join('\n'));
+}
+
+void MainWindow::logNativeWindowDebug(const QString& tag, WId dialogWId)
+{
+    if (!runtimeDebugOutputEnabled_) {
+        return;
+    }
+#ifdef Q_OS_WIN
+    const HWND selfHwnd = reinterpret_cast<HWND>(winId());
+    const HWND foregroundHwnd = GetForegroundWindow();
+    const HWND activeHwnd = GetActiveWindow();
+    const HWND focusHwnd = GetFocus();
+
+    QString payload = QString("tag=%1 self={%2} fg={%3} active={%4} focus={%5}")
+                          .arg(tag)
+                          .arg(describeNativeWindowHandle(selfHwnd))
+                          .arg(describeNativeWindowHandle(foregroundHwnd))
+                          .arg(describeNativeWindowHandle(activeHwnd))
+                          .arg(describeNativeWindowHandle(focusHwnd));
+
+    if (dialogWId != 0) {
+        const HWND dialogHwnd = reinterpret_cast<HWND>(dialogWId);
+        payload += QString(" dialog={%1}").arg(describeNativeWindowHandle(dialogHwnd));
+    }
+
+    GUITHREADINFO guiInfo{};
+    guiInfo.cbSize = sizeof(GUITHREADINFO);
+    if (GetGUIThreadInfo(0, &guiInfo)) {
+        payload += QString(
+                       " gui_active=0x%1 gui_focus=0x%2 gui_capture=0x%3 "
+                       "gui_menu_owner=0x%4 gui_move_size=0x%5 gui_caret=0x%6 gui_flags=0x%7"
+                   )
+                       .arg(reinterpret_cast<quintptr>(guiInfo.hwndActive), 0, 16)
+                       .arg(reinterpret_cast<quintptr>(guiInfo.hwndFocus), 0, 16)
+                       .arg(reinterpret_cast<quintptr>(guiInfo.hwndCapture), 0, 16)
+                       .arg(reinterpret_cast<quintptr>(guiInfo.hwndMenuOwner), 0, 16)
+                       .arg(reinterpret_cast<quintptr>(guiInfo.hwndMoveSize), 0, 16)
+                       .arg(reinterpret_cast<quintptr>(guiInfo.hwndCaret), 0, 16)
+                       .arg(static_cast<qulonglong>(guiInfo.flags), 0, 16);
+    } else {
+        payload += QString(" gui_info_err=%1").arg(GetLastError());
+    }
+
+    appendOutput("window/native", payload);
+#else
+    Q_UNUSED(tag);
+    Q_UNUSED(dialogWId);
+#endif
+}
+
 #include "MainWindow.BootstrapAndMenus.cpp"
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    logWindowGeometryDebug("close_event_enter");
     if (maybeSaveBeforeContinue()) {
         savePortableState();
         stopPreviewSession();
         event->accept();
+        logWindowGeometryDebug("close_event_accept");
     } else {
         event->ignore();
+        logWindowGeometryDebug("close_event_ignore");
     }
 }
 
@@ -1177,6 +1514,12 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             updateDifficultyDeleteButton(true);
         }
     }
+    const bool previewKeyScope =
+        watched == previewSlider_
+        || watched == previewCanvas_
+        || watched == previewCanvasContainer_
+        || watched == previewCanvasFrame_
+        || watched == previewPanel_;
     if (previewSlider_ != nullptr && watched == previewSlider_) {
         if (event->type() == QEvent::MouseButtonPress) {
             auto* mouseEvent = static_cast<QMouseEvent*>(event);
@@ -1210,15 +1553,33 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
                     return true;
                 }
             }
-        } else if (event->type() == QEvent::KeyPress) {
+        }
+    }
+    if (previewSlider_ != nullptr && previewKeyScope) {
+        if (event->type() == QEvent::KeyPress) {
             auto* keyEvent = static_cast<QKeyEvent*>(event);
-            int deltaMs = 0;
+            int direction = 0;
             if (keyEvent->key() == Qt::Key_Left) {
-                deltaMs = -16;
+                direction = -1;
             } else if (keyEvent->key() == Qt::Key_Right) {
-                deltaMs = 16;
+                direction = 1;
             }
-            if (deltaMs != 0) {
+            if (direction != 0) {
+                if (!keyEvent->isAutoRepeat() || previewSeekHeldArrowKey_ != keyEvent->key()) {
+                    previewSeekHeldArrowKey_ = keyEvent->key();
+                    previewSeekHeldArrowElapsed_.restart();
+                } else if (!previewSeekHeldArrowElapsed_.isValid()) {
+                    previewSeekHeldArrowElapsed_.restart();
+                }
+
+                const qreal heldMs = previewSeekHeldArrowElapsed_.isValid()
+                    ? static_cast<qreal>(previewSeekHeldArrowElapsed_.elapsed())
+                    : 0.0;
+                const qreal acceleratedStep = qMin(
+                    kPreviewSeekMaxStepSeconds,
+                    kPreviewSeekInitialStepSeconds + (heldMs * kPreviewSeekLinearAccelerationSecondsPerMs)
+                );
+                const int deltaMs = direction * qRound(acceleratedStep * 1000.0);
                 const int value = qBound(
                     previewSlider_->minimum(),
                     previewSlider_->value() + deltaMs,
@@ -1227,6 +1588,15 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
                 previewSlider_->setValue(value);
                 showPreviewSliderTimeHint(value);
                 seekPreviewToSecond(static_cast<double>(value) / 1000.0, true);
+                return true;
+            }
+        } else if (event->type() == QEvent::KeyRelease) {
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (!keyEvent->isAutoRepeat()
+                && (keyEvent->key() == Qt::Key_Left || keyEvent->key() == Qt::Key_Right)
+                && previewSeekHeldArrowKey_ == keyEvent->key()) {
+                previewSeekHeldArrowKey_ = 0;
+                previewSeekHeldArrowElapsed_.invalidate();
                 return true;
             }
         }
@@ -1253,6 +1623,12 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             }
             return true;
         }
+        if (mouseEvent->button() == Qt::LeftButton && !qtPreviewPlaying_) {
+            QTimer::singleShot(0, this, [this]() { syncTimelineToEditorCursor(true); });
+        }
+    }
+    if (watched == editorViewport_ && event->type() == QEvent::FocusIn && !qtPreviewPlaying_) {
+        QTimer::singleShot(0, this, [this]() { syncTimelineToEditorCursor(true); });
     }
     return QMainWindow::eventFilter(watched, event);
 }
@@ -1262,6 +1638,58 @@ void MainWindow::resizeEvent(QResizeEvent* event)
     QMainWindow::resizeEvent(event);
     updatePreviewWorkspaceLayout();
     updateEditorHeaderLayoutMode();
+    logWindowGeometryDebug(
+        "resize_event",
+        QString("old=%1x%2 new=%3x%4")
+            .arg(event->oldSize().width())
+            .arg(event->oldSize().height())
+            .arg(event->size().width())
+            .arg(event->size().height())
+    );
+}
+
+void MainWindow::moveEvent(QMoveEvent* event)
+{
+    QMainWindow::moveEvent(event);
+    logWindowGeometryDebug(
+        "move_event",
+        QString("old=(%1,%2) new=(%3,%4)")
+            .arg(event->oldPos().x())
+            .arg(event->oldPos().y())
+            .arg(event->pos().x())
+            .arg(event->pos().y())
+    );
+}
+
+void MainWindow::showEvent(QShowEvent* event)
+{
+    QMainWindow::showEvent(event);
+    logWindowGeometryDebug("show_event");
+}
+
+void MainWindow::hideEvent(QHideEvent* event)
+{
+    QMainWindow::hideEvent(event);
+    logWindowGeometryDebug("hide_event");
+}
+
+void MainWindow::changeEvent(QEvent* event)
+{
+    const QEvent::Type type = event != nullptr ? event->type() : QEvent::None;
+    QMainWindow::changeEvent(event);
+    if (type == QEvent::WindowStateChange) {
+        auto* stateEvent = static_cast<QWindowStateChangeEvent*>(event);
+        logWindowGeometryDebug(
+            "window_state_change",
+            QString("old_state=%1 new_state=%2")
+                .arg(formatWindowStateFlags(stateEvent != nullptr ? stateEvent->oldState() : Qt::WindowNoState))
+                .arg(formatWindowStateFlags(windowState()))
+        );
+    } else if (type == QEvent::ActivationChange) {
+        logWindowGeometryDebug("activation_change", QString("is_active=%1").arg(isActiveWindow() ? 1 : 0));
+    } else if (type == QEvent::ZOrderChange) {
+        logWindowGeometryDebug("zorder_change");
+    }
 }
 
 #include "MainWindow.DocumentFlow.cpp"
@@ -1845,12 +2273,107 @@ void MainWindow::bootstrapPreviewWindow()
         QString("resident preview session started, pid=%1").arg(previewProcess_ != nullptr ? previewProcess_->processId() : -1)
     );
     previewArrangeRetryCount_ = 0;
-    QTimer::singleShot(80, this, &MainWindow::arrangeWithPreviewWindow);
+    schedulePreviewArrange(80);
+}
+
+void MainWindow::schedulePreviewArrange(int delayMs)
+{
+    const int safeDelay = qMax(0, delayMs);
+    const quint64 generation = ++previewArrangeGeneration_;
+    if (runtimeDebugOutputEnabled_) {
+        appendOutput(
+            "preview/layout-schedule",
+            QString("queue generation=%1 delay_ms=%2 retry=%3")
+                .arg(generation)
+                .arg(safeDelay)
+                .arg(previewArrangeRetryCount_)
+        );
+        logNativeWindowDebug(
+            QString("schedule_queue generation=%1 delay=%2 retry=%3")
+                .arg(generation)
+                .arg(safeDelay)
+                .arg(previewArrangeRetryCount_)
+        );
+    }
+    QTimer::singleShot(safeDelay, this, [this, generation, safeDelay]() {
+        if (generation != previewArrangeGeneration_) {
+            if (runtimeDebugOutputEnabled_) {
+                appendOutput(
+                    "preview/layout-schedule",
+                    QString("drop generation_mismatch task=%1 latest=%2 delay_ms=%3")
+                        .arg(generation)
+                        .arg(previewArrangeGeneration_)
+                        .arg(safeDelay)
+                );
+                logNativeWindowDebug(
+                    QString("schedule_drop_generation task=%1 latest=%2 delay=%3")
+                        .arg(generation)
+                        .arg(previewArrangeGeneration_)
+                        .arg(safeDelay)
+                );
+            }
+            return;
+        }
+        if (runtimeDebugOutputEnabled_) {
+            appendOutput(
+                "preview/layout-schedule",
+                QString("execute generation=%1 delay_ms=%2").arg(generation).arg(safeDelay)
+            );
+            logNativeWindowDebug(QString("schedule_execute generation=%1 delay=%2").arg(generation).arg(safeDelay));
+        }
+        arrangeWithPreviewWindow();
+    });
 }
 
 void MainWindow::arrangeWithPreviewWindow()
 {
 #ifdef Q_OS_WIN
+    logWindowGeometryDebug("arrange_enter");
+    logNativeWindowDebug("arrange_enter");
+    if (QApplication::activeModalWidget() != nullptr) {
+        logWindowGeometryDebug("arrange_skip_active_modal_widget");
+        logNativeWindowDebug("arrange_skip_active_modal_widget");
+        if (runtimeDebugOutputEnabled_) {
+            appendOutput("preview/layout", "skip active_modal_widget");
+        }
+        return;
+    }
+    if (!isActiveWindow()) {
+        logWindowGeometryDebug("arrange_skip_mainwindow_not_active");
+        logNativeWindowDebug("arrange_skip_mainwindow_not_active");
+        if (runtimeDebugOutputEnabled_) {
+            appendOutput("preview/layout", "skip mainwindow_not_active");
+        }
+        return;
+    }
+    const HWND selfHwnd = reinterpret_cast<HWND>(winId());
+    const HWND foregroundHwnd = GetForegroundWindow();
+    if (foregroundHwnd != nullptr && foregroundHwnd != selfHwnd) {
+        const HWND foregroundRootOwner = GetAncestor(foregroundHwnd, GA_ROOTOWNER);
+        // Native/common dialogs may be wrapped in extra owner chains; use root owner
+        // instead of one-hop GW_OWNER to detect ownership robustly.
+        if (foregroundRootOwner == selfHwnd) {
+            logWindowGeometryDebug("arrange_skip_foreground_owned_dialog");
+            logNativeWindowDebug("arrange_skip_foreground_owned_dialog");
+            if (runtimeDebugOutputEnabled_) {
+                appendOutput(
+                    "preview/layout",
+                    QString("skip foreground_owned_dialog fg=0x%1 root_owner=0x%2")
+                        .arg(reinterpret_cast<quintptr>(foregroundHwnd), 0, 16)
+                        .arg(reinterpret_cast<quintptr>(foregroundRootOwner), 0, 16)
+                );
+            }
+            return;
+        }
+    }
+    if (previewProcess_ == nullptr || previewProcess_->state() != QProcess::Running) {
+        logWindowGeometryDebug("arrange_skip_preview_process_not_running");
+        logNativeWindowDebug("arrange_skip_preview_process_not_running");
+        if (runtimeDebugOutputEnabled_) {
+            appendOutput("preview/layout", "skip preview_process_not_running");
+        }
+        return;
+    }
     QScreen* screen = this->screen();
     if (screen == nullptr) {
         screen = QGuiApplication::primaryScreen();
@@ -1887,20 +2410,52 @@ void MainWindow::arrangeWithPreviewWindow()
         qMax(320, editorFrameRect.width() - frameExtraW),
         qMax(320, editorFrameRect.height() - frameExtraH)
     );
-    setGeometry(editorRect);
 
     QString detail;
-    const qint64 pid = (previewProcess_ != nullptr && previewProcess_->state() == QProcess::Running)
-        ? previewProcess_->processId()
-        : -1;
+    const qint64 pid = previewProcess_->processId();
     if (!PreviewIntegration::placePreviewWindow(pid, layout.previewRect, &detail)) {
+        logWindowGeometryDebug("arrange_place_failed", detail);
+        logNativeWindowDebug("arrange_place_failed");
+        if (runtimeDebugOutputEnabled_) {
+            appendOutput(
+                "preview/layout",
+                QString("place_failed pid=%1 retry=%2 detail=%3")
+                    .arg(pid)
+                    .arg(previewArrangeRetryCount_)
+                    .arg(detail)
+            );
+        }
         if (previewArrangeRetryCount_ < 30) {
             ++previewArrangeRetryCount_;
-            QTimer::singleShot(120, this, &MainWindow::arrangeWithPreviewWindow);
+            schedulePreviewArrange(120);
         } else {
             appendOutput("preview/layout", "preview window placement failed: " + detail);
         }
         return;
+    }
+
+    if (geometry() != editorRect) {
+        if (runtimeDebugOutputEnabled_) {
+            appendOutput(
+                "preview/layout",
+                QString("apply_editor_geometry rect=[%1,%2 %3x%4]")
+                    .arg(editorRect.left())
+                    .arg(editorRect.top())
+                    .arg(editorRect.width())
+                    .arg(editorRect.height())
+            );
+        }
+        logNativeWindowDebug("arrange_before_set_geometry");
+        setGeometry(editorRect);
+        logWindowGeometryDebug(
+            "arrange_after_set_geometry",
+            QString("target=[%1,%2 %3x%4]")
+                .arg(editorRect.left())
+                .arg(editorRect.top())
+                .arg(editorRect.width())
+                .arg(editorRect.height())
+        );
+        logNativeWindowDebug("arrange_after_set_geometry");
     }
 
     if (previewArrangeRetryCount_ > 0) {
@@ -1908,6 +2463,8 @@ void MainWindow::arrangeWithPreviewWindow()
     } else {
         appendOutput("preview/layout", "arranged (" + detail + ")");
     }
+    logWindowGeometryDebug("arrange_success", detail);
+    logNativeWindowDebug("arrange_success");
     previewArrangeRetryCount_ = 0;
 #endif
 }
@@ -2055,6 +2612,7 @@ void MainWindow::onAbout()
     dialog.setStyleSheet(
         "QDialog { background: #F8FAFD; }"
         "QFrame#AboutCard { background: #FFFFFF; border: 1px solid #DCE5F0; border-radius: 10px; }"
+        "QLabel#AboutIcon { background: #F2F7FD; border: 1px solid #D7E4F3; border-radius: 10px; padding: 6px; }"
         "QLabel#AboutTitle { color: #1B2A3B; font-size: 26px; font-weight: 700; }"
         "QLabel#AboutVersion { color: #2B4D78; background: #EAF2FC; border: 1px solid #C7DBF5; border-radius: 10px; padding: 2px 8px; }"
         "QLabel#AboutKey { color: #5B697A; }"
@@ -2074,13 +2632,26 @@ void MainWindow::onAbout()
     cardLayout->setSpacing(10);
 
     auto* titleRow = new QHBoxLayout();
+    titleRow->setSpacing(10);
+    auto* iconLabel = new QLabel(card);
+    iconLabel->setObjectName("AboutIcon");
+    iconLabel->setFixedSize(64, 64);
+    QPixmap appIcon = QIcon(":/icons/app.png").pixmap(48, 48);
+    if (!appIcon.isNull()) {
+        iconLabel->setPixmap(appIcon);
+        iconLabel->setAlignment(Qt::AlignCenter);
+    }
+    titleRow->addWidget(iconLabel, 0, Qt::AlignVCenter);
+
+    auto* titleTextCol = new QVBoxLayout();
+    titleTextCol->setSpacing(4);
     auto* titleLabel = new QLabel("MiaCode", card);
     titleLabel->setObjectName("AboutTitle");
     auto* versionLabel = new QLabel(QString("v%1").arg(QCoreApplication::applicationVersion()), card);
     versionLabel->setObjectName("AboutVersion");
-    titleRow->addWidget(titleLabel, 0, Qt::AlignVCenter);
-    titleRow->addSpacing(8);
-    titleRow->addWidget(versionLabel, 0, Qt::AlignVCenter);
+    titleTextCol->addWidget(titleLabel, 0, Qt::AlignLeft);
+    titleTextCol->addWidget(versionLabel, 0, Qt::AlignLeft);
+    titleRow->addLayout(titleTextCol, 0);
     titleRow->addStretch(1);
     cardLayout->addLayout(titleRow);
 

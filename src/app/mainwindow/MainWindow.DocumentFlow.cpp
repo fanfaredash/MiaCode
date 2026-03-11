@@ -115,19 +115,74 @@ void MainWindow::onNewFile()
 
 void MainWindow::onOpenFile()
 {
-    if (!maybeSaveBeforeContinue()) {
+    logTopLevelWindowSnapshot("open_file_flow/begin");
+    logNativeWindowDebug("open_file_flow/begin");
+    const bool canContinue = maybeSaveBeforeContinue();
+    if (!canContinue) {
+        logTopLevelWindowSnapshot("open_file_flow/cancelled_before_dialog");
+        logNativeWindowDebug("open_file_flow/cancelled_before_dialog");
         return;
     }
 
+    logWindowGeometryDebug("open_file_before_dialog");
+    logTopLevelWindowSnapshot("open_file_before_dialog");
+    logNativeWindowDebug("open_file_before_dialog");
+    int sampleCount = 0;
+    int restoreCount = 0;
+    QTimer sampleTimer;
+    sampleTimer.setInterval(120);
+    sampleTimer.setSingleShot(false);
+    connect(&sampleTimer, &QTimer::timeout, this, [this, &sampleCount, &restoreCount]() {
+        if (sampleCount >= 80) {
+            if (sampleCount == 80 && runtimeDebugOutputEnabled_) {
+                appendOutput("window/dialog_watch", "open_file_dialog sample_limit_reached");
+            }
+            ++sampleCount;
+            return;
+        }
+        ++sampleCount;
+#ifdef Q_OS_WIN
+        QString restoreDetail;
+        if (tryRestoreOwnedNativeFileDialog(reinterpret_cast<HWND>(winId()), &restoreDetail)) {
+            ++restoreCount;
+            appendOutput("window/dialog_watch", QString("open_file_dialog sample=%1 %2").arg(sampleCount).arg(restoreDetail));
+        }
+#endif
+        if (runtimeDebugOutputEnabled_ && (sampleCount <= 12 || (sampleCount % 5) == 0)) {
+            logWindowGeometryDebug("open_file_dialog_poll");
+            logNativeWindowDebug(QString("open_file_dialog_poll sample=%1").arg(sampleCount));
+        }
+    });
+
+    logTopLevelWindowSnapshot("open_file_dialog_exec_begin");
+    logNativeWindowDebug("open_file_dialog_exec_begin");
+    sampleTimer.start();
     const QString path = QFileDialog::getOpenFileName(
         this,
         "Open simai file",
         resolveInitialOpenDirectory(),
-        "Simai (*.txt *.simai);;All Files (*.*)"
+        "Simai (*.txt *.simai);;All Files (*.*)",
+        nullptr
     );
+    sampleTimer.stop();
+    if (runtimeDebugOutputEnabled_) {
+        appendOutput(
+            "window/dialog_watch",
+            QString("open_file_dialog finished selected_empty=%1 samples=%2 restores=%3")
+                .arg(path.isEmpty() ? 1 : 0)
+                .arg(qMin(sampleCount, 80))
+                .arg(restoreCount)
+        );
+    }
+    logTopLevelWindowSnapshot("open_file_dialog_exec_end");
+    logNativeWindowDebug("open_file_dialog_exec_end");
+    logWindowGeometryDebug("open_file_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
+    logTopLevelWindowSnapshot("open_file_after_dialog");
+    logNativeWindowDebug("open_file_after_dialog");
     if (path.isEmpty()) {
         return;
     }
+    setLastOpenDirectory(path);
 
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -172,15 +227,64 @@ bool MainWindow::onSaveFile()
 
 bool MainWindow::onSaveFileAs()
 {
+    logTopLevelWindowSnapshot("save_file_as_dialog/begin");
+    logWindowGeometryDebug("save_file_as_before_dialog");
+    logNativeWindowDebug("save_file_as_before_dialog");
+    int sampleCount = 0;
+    int restoreCount = 0;
+    QTimer sampleTimer;
+    sampleTimer.setInterval(120);
+    connect(&sampleTimer, &QTimer::timeout, this, [this, &sampleCount, &restoreCount]() {
+        if (sampleCount >= 80) {
+            if (sampleCount == 80 && runtimeDebugOutputEnabled_) {
+                appendOutput("window/dialog_watch", "save_file_dialog sample_limit_reached");
+            }
+            ++sampleCount;
+            return;
+        }
+        ++sampleCount;
+#ifdef Q_OS_WIN
+        QString restoreDetail;
+        if (tryRestoreOwnedNativeFileDialog(reinterpret_cast<HWND>(winId()), &restoreDetail)) {
+            ++restoreCount;
+            appendOutput("window/dialog_watch", QString("save_file_dialog sample=%1 %2").arg(sampleCount).arg(restoreDetail));
+        }
+#endif
+        if (runtimeDebugOutputEnabled_ && (sampleCount <= 12 || (sampleCount % 5) == 0)) {
+            logWindowGeometryDebug("save_file_dialog_poll");
+            logNativeWindowDebug(QString("save_file_dialog_poll sample=%1").arg(sampleCount));
+        }
+    });
+
+    logTopLevelWindowSnapshot("save_file_dialog_exec_begin");
+    logNativeWindowDebug("save_file_dialog_exec_begin");
+    sampleTimer.start();
     const QString path = QFileDialog::getSaveFileName(
         this,
         "Save simai file",
         currentFilePath_.isEmpty() ? QString("chart.txt") : currentFilePath_,
-        "Simai (*.txt *.simai);;All Files (*.*)"
+        "Simai (*.txt *.simai);;All Files (*.*)",
+        nullptr
     );
+    sampleTimer.stop();
+    if (runtimeDebugOutputEnabled_) {
+        appendOutput(
+            "window/dialog_watch",
+            QString("save_file_dialog finished selected_empty=%1 samples=%2 restores=%3")
+                .arg(path.isEmpty() ? 1 : 0)
+                .arg(qMin(sampleCount, 80))
+                .arg(restoreCount)
+        );
+    }
+    logTopLevelWindowSnapshot("save_file_dialog_exec_end");
+    logNativeWindowDebug("save_file_dialog_exec_end");
+    logWindowGeometryDebug("save_file_as_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
+    logTopLevelWindowSnapshot("save_file_as_dialog/after_dialog");
+    logNativeWindowDebug("save_file_as_after_dialog");
     if (path.isEmpty()) {
         return false;
     }
+    setLastOpenDirectory(path);
     return saveToPath(path);
 }
 
@@ -224,6 +328,10 @@ bool MainWindow::saveToPath(const QString& path)
 bool MainWindow::applyBatchTransform(const QString& opName, const BatchTransform& transform)
 {
     const QString original = editorText();
+    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
+    const QTextCursor oldCursor = editor->textCursor();
+    const int oldVScroll = editor->verticalScrollBar() != nullptr ? editor->verticalScrollBar()->value() : 0;
+    const int oldHScroll = editor->horizontalScrollBar() != nullptr ? editor->horizontalScrollBar()->value() : 0;
     int changed = 0;
     const QString transformed = transform(original, &changed);
     if (transformed == original) {
@@ -231,12 +339,33 @@ bool MainWindow::applyBatchTransform(const QString& opName, const BatchTransform
         return false;
     }
 
-    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-    QTextCursor cursor(editor->document());
-    cursor.beginEditBlock();
-    cursor.select(QTextCursor::Document);
-    cursor.insertText(transformed);
-    cursor.endEditBlock();
+    QTextCursor editCursor = oldCursor;
+    editCursor.beginEditBlock();
+    editCursor.select(QTextCursor::Document);
+    editCursor.insertText(transformed);
+    editCursor.endEditBlock();
+
+    QTextCursor restoredCursor(editor->document());
+    const int maxPos = editor->document()->characterCount() - 1;
+    const int restoredAnchor = qBound(0, oldCursor.anchor(), maxPos);
+    const int restoredPosition = qBound(0, oldCursor.position(), maxPos);
+    restoredCursor.setPosition(restoredAnchor);
+    restoredCursor.setPosition(restoredPosition, QTextCursor::KeepAnchor);
+    editor->setTextCursor(restoredCursor);
+    if (editor->verticalScrollBar() != nullptr) {
+        editor->verticalScrollBar()->setValue(qBound(
+            editor->verticalScrollBar()->minimum(),
+            oldVScroll,
+            editor->verticalScrollBar()->maximum()
+        ));
+    }
+    if (editor->horizontalScrollBar() != nullptr) {
+        editor->horizontalScrollBar()->setValue(qBound(
+            editor->horizontalScrollBar()->minimum(),
+            oldHScroll,
+            editor->horizontalScrollBar()->maximum()
+        ));
+    }
 
     markCurrentFieldDirty();
     scheduleTimelineRefresh();
@@ -246,10 +375,15 @@ bool MainWindow::applyBatchTransform(const QString& opName, const BatchTransform
 
 bool MainWindow::applySelectionBatchTransform(const QString& opName, const BatchTransform& transform)
 {
+    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
+    const QTextCursor oldCursor = editor->textCursor();
+    const int oldVScroll = editor->verticalScrollBar() != nullptr ? editor->verticalScrollBar()->value() : 0;
+    const int oldHScroll = editor->horizontalScrollBar() != nullptr ? editor->horizontalScrollBar()->value() : 0;
     int startPos = -1;
     int endPos = -1;
     if (!currentSelectionRange(&startPos, &endPos)) {
-        return applyBatchTransform(opName, transform);
+        statusBar()->showMessage(QString("%1: no selection.").arg(opName));
+        return false;
     }
 
     const QString original = editorText();
@@ -268,16 +402,46 @@ bool MainWindow::applySelectionBatchTransform(const QString& opName, const Batch
         return false;
     }
 
-    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-    QTextCursor cursor(editor->document());
-    cursor.beginEditBlock();
-    cursor.setPosition(begin);
-    cursor.setPosition(finish, QTextCursor::KeepAnchor);
-    cursor.insertText(transformed);
-    cursor.setPosition(begin);
-    cursor.setPosition(begin + transformed.size(), QTextCursor::KeepAnchor);
-    editor->setTextCursor(cursor);
-    cursor.endEditBlock();
+    QTextCursor editCursor = oldCursor;
+    editCursor.beginEditBlock();
+    editCursor.setPosition(begin);
+    editCursor.setPosition(finish, QTextCursor::KeepAnchor);
+    editCursor.insertText(transformed);
+    editCursor.endEditBlock();
+
+    const int replacedLength = finish - begin;
+    const int delta = transformed.size() - replacedLength;
+    const auto remapPos = [begin, finish, delta, &transformed](int pos) -> int {
+        if (pos <= begin) {
+            return pos;
+        }
+        if (pos >= finish) {
+            return pos + delta;
+        }
+        return begin + qBound(0, pos - begin, transformed.size());
+    };
+
+    QTextCursor restoredCursor(editor->document());
+    const int maxPos = editor->document()->characterCount() - 1;
+    const int restoredAnchor = qBound(0, remapPos(oldCursor.anchor()), maxPos);
+    const int restoredPosition = qBound(0, remapPos(oldCursor.position()), maxPos);
+    restoredCursor.setPosition(restoredAnchor);
+    restoredCursor.setPosition(restoredPosition, QTextCursor::KeepAnchor);
+    editor->setTextCursor(restoredCursor);
+    if (editor->verticalScrollBar() != nullptr) {
+        editor->verticalScrollBar()->setValue(qBound(
+            editor->verticalScrollBar()->minimum(),
+            oldVScroll,
+            editor->verticalScrollBar()->maximum()
+        ));
+    }
+    if (editor->horizontalScrollBar() != nullptr) {
+        editor->horizontalScrollBar()->setValue(qBound(
+            editor->horizontalScrollBar()->minimum(),
+            oldHScroll,
+            editor->horizontalScrollBar()->maximum()
+        ));
+    }
 
     markCurrentFieldDirty();
     scheduleTimelineRefresh();
@@ -383,6 +547,7 @@ void MainWindow::markCurrentFieldDirty()
 
 void MainWindow::updateEditorHeader()
 {
+    updateDifficultyScopedActionStates();
     if (editorContextLabel_ == nullptr) {
         return;
     }
@@ -418,6 +583,57 @@ void MainWindow::updateEditorHeader()
     }
     updateDifficultyDeleteButton(false);
     updateEditorHeaderLayoutMode();
+}
+
+void MainWindow::updateDifficultyScopedActionStates()
+{
+    const bool enabled = hasActiveDifficulty();
+
+    if (validateAction_ != nullptr) {
+        validateAction_->setEnabled(enabled);
+    }
+    if (pausePreviewAction_ != nullptr) {
+        pausePreviewAction_->setEnabled(enabled);
+    }
+    if (stopPreviewAction_ != nullptr) {
+        stopPreviewAction_->setEnabled(enabled);
+    }
+    if (transformMirrorLeftRightAction_ != nullptr) {
+        transformMirrorLeftRightAction_->setEnabled(enabled);
+    }
+    if (transformMirrorUpDownAction_ != nullptr) {
+        transformMirrorUpDownAction_->setEnabled(enabled);
+    }
+    if (transformRotate180Action_ != nullptr) {
+        transformRotate180Action_->setEnabled(enabled);
+    }
+    if (transformRotate45CounterClockwiseAction_ != nullptr) {
+        transformRotate45CounterClockwiseAction_->setEnabled(enabled);
+    }
+    if (transformRotate45ClockwiseAction_ != nullptr) {
+        transformRotate45ClockwiseAction_->setEnabled(enabled);
+    }
+    if (stopPreviewButton_ != nullptr) {
+        stopPreviewButton_->setEnabled(enabled);
+    }
+    if (pausePreviewButton_ != nullptr) {
+        pausePreviewButton_->setEnabled(enabled);
+    }
+    if (transformMirrorLeftRightButton_ != nullptr) {
+        transformMirrorLeftRightButton_->setEnabled(enabled);
+    }
+    if (transformMirrorUpDownButton_ != nullptr) {
+        transformMirrorUpDownButton_->setEnabled(enabled);
+    }
+    if (transformRotate180Button_ != nullptr) {
+        transformRotate180Button_->setEnabled(enabled);
+    }
+    if (transformRotate45CounterClockwiseButton_ != nullptr) {
+        transformRotate45CounterClockwiseButton_->setEnabled(enabled);
+    }
+    if (transformRotate45ClockwiseButton_ != nullptr) {
+        transformRotate45ClockwiseButton_->setEnabled(enabled);
+    }
 }
 
 void MainWindow::updateEditorHeaderLayoutMode()
@@ -727,6 +943,7 @@ bool MainWindow::switchToDifficultyField(int difficultyId)
         const int timelineTabIndex = bottomTabs_->indexOf(timelineView_);
         if (timelineTabIndex >= 0) {
             bottomTabs_->setTabVisible(timelineTabIndex, true);
+            bottomTabs_->setCurrentIndex(timelineTabIndex);
         }
     }
     currentFieldDirty_ = false;

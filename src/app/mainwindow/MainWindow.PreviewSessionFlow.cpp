@@ -54,7 +54,7 @@
             if (!line.isEmpty()) {
                 if (line.contains("[session] ready")) {
                     previewArrangeRetryCount_ = 0;
-                    QTimer::singleShot(40, this, &MainWindow::arrangeWithPreviewWindow);
+                    schedulePreviewArrange(40);
                     sendPreviewConfigCommand();
                 }
                 if (!handlePreviewSessionLine(line)) {
@@ -297,16 +297,68 @@ void MainWindow::startPreviewProcess(const QString& mode, int cursorLine, int cu
     }
     QString trackPath = resolveDefaultTrackPath();
     if (trackPath.isEmpty()) {
+        logTopLevelWindowSnapshot("preview_track_dialog/begin");
+        logWindowGeometryDebug("preview_track_before_dialog");
+        logNativeWindowDebug("preview_track_before_dialog");
+        int sampleCount = 0;
+        int restoreCount = 0;
+        QTimer sampleTimer;
+        sampleTimer.setInterval(120);
+        connect(&sampleTimer, &QTimer::timeout, this, [this, &sampleCount, &restoreCount]() {
+            if (sampleCount >= 80) {
+                if (sampleCount == 80 && runtimeDebugOutputEnabled_) {
+                    appendOutput("window/dialog_watch", "preview_track_dialog sample_limit_reached");
+                }
+                ++sampleCount;
+                return;
+            }
+            ++sampleCount;
+#ifdef Q_OS_WIN
+            QString restoreDetail;
+            if (tryRestoreOwnedNativeFileDialog(reinterpret_cast<HWND>(winId()), &restoreDetail)) {
+                ++restoreCount;
+                appendOutput(
+                    "window/dialog_watch",
+                    QString("preview_track_dialog sample=%1 %2").arg(sampleCount).arg(restoreDetail)
+                );
+            }
+#endif
+            if (runtimeDebugOutputEnabled_ && (sampleCount <= 12 || (sampleCount % 5) == 0)) {
+                logWindowGeometryDebug("preview_track_dialog_poll");
+                logNativeWindowDebug(QString("preview_track_dialog_poll sample=%1").arg(sampleCount));
+            }
+        });
+
+        logTopLevelWindowSnapshot("preview_track_dialog_exec_begin");
+        logNativeWindowDebug("preview_track_dialog_exec_begin");
+        sampleTimer.start();
         trackPath = QFileDialog::getOpenFileName(
             this,
             "Select Preview Track",
             QString(),
-            "Audio (*.mp3 *.wav *.ogg);;All Files (*.*)"
+            "Audio (*.mp3 *.wav *.ogg);;All Files (*.*)",
+            nullptr
         );
+        sampleTimer.stop();
+        if (runtimeDebugOutputEnabled_) {
+            appendOutput(
+                "window/dialog_watch",
+                QString("preview_track_dialog finished selected_empty=%1 samples=%2 restores=%3")
+                    .arg(trackPath.isEmpty() ? 1 : 0)
+                    .arg(qMin(sampleCount, 80))
+                    .arg(restoreCount)
+            );
+        }
+        logTopLevelWindowSnapshot("preview_track_dialog_exec_end");
+        logNativeWindowDebug("preview_track_dialog_exec_end");
+        logWindowGeometryDebug("preview_track_after_dialog", QString("selected_empty=%1").arg(trackPath.isEmpty() ? 1 : 0));
+        logTopLevelWindowSnapshot("preview_track_dialog/after_dialog");
+        logNativeWindowDebug("preview_track_after_dialog");
     }
     if (trackPath.isEmpty()) {
         return;
     }
+    setLastOpenDirectory(trackPath);
     lastTrackPath_ = trackPath;
 
     if (!ensurePreviewSessionStarted()) {
@@ -327,7 +379,7 @@ void MainWindow::startPreviewProcess(const QString& mode, int cursorLine, int cu
     statusBar()->showMessage(
         QString("Preview(%1) sent to resident session: %2").arg(mode).arg(QFileInfo(trackPath).fileName())
     );
-    QTimer::singleShot(80, this, &MainWindow::arrangeWithPreviewWindow);
+    schedulePreviewArrange(80);
 }
 
 void MainWindow::onPreviewProcessFinished(int exitCode)
@@ -387,7 +439,21 @@ bool MainWindow::runValidateSimai()
     clearValidationErrors();
     clearValidationDecorations();
 
-    const SimaiNativeParseResult nativeResult = SimaiNativeParser::validateSyntax(activeChartText());
+    const QString chartText = activeChartText();
+    if (chartText.trimmed().isEmpty()) {
+        addValidationError(1, 1, "Chart is empty.");
+        addValidationDecoration(1, 1, "Chart is empty.");
+        if (bottomTabs_ != nullptr && errorList_ != nullptr) {
+            const int errorTabIndex = bottomTabs_->indexOf(errorList_);
+            if (errorTabIndex >= 0) {
+                bottomTabs_->setCurrentIndex(errorTabIndex);
+            }
+        }
+        statusBar()->showMessage("Validate Simai failed: chart is empty.");
+        return false;
+    }
+
+    const SimaiNativeParseResult nativeResult = SimaiNativeParser::validateSyntax(chartText);
     QString payload;
     payload += QString("note_count=%1\nsyntax_error_count=%2")
         .arg(nativeResult.noteMarkers.size())
@@ -399,6 +465,12 @@ bool MainWindow::runValidateSimai()
         addValidationDecoration(err.line, err.col, err.message);
     }
     if (!nativeResult.errors.isEmpty()) {
+        if (bottomTabs_ != nullptr && errorList_ != nullptr) {
+            const int errorTabIndex = bottomTabs_->indexOf(errorList_);
+            if (errorTabIndex >= 0) {
+                bottomTabs_->setCurrentIndex(errorTabIndex);
+            }
+        }
         onErrorItemActivated(errorList_->item(0));
     }
 
