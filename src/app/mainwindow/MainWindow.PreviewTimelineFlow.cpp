@@ -217,12 +217,6 @@ void MainWindow::setCurrentFilePath(const QString& path)
     }
     applyPreviewAudioSettingsToRuntime();
     refreshWaveformCache();
-    if (legacyPygamePreviewEnabled_ && pathChanged && !currentFilePath_.isEmpty()) {
-        stopPreviewSession();
-        if (ensurePreviewSessionStarted()) {
-            sendPreviewPrepareCommand();
-        }
-    }
 }
 
 void MainWindow::updateWindowTitle()
@@ -428,12 +422,24 @@ void MainWindow::seekTimelineToCursor(int line, int col)
     }
     const double second = timelineSecondForCursor(line, col);
     if (second < 0.0) {
-        statusBar()->showMessage("Timeline metadata unavailable.");
         return;
     }
     timelineView_->setCursorSeconds(second);
     timelineView_->setPlayheadSeconds(second, true);
-    statusBar()->showMessage(QString("Timeline seek: L%1 C%2 -> %3s").arg(line).arg(col).arg(second, 0, 'f', 3));
+}
+
+void MainWindow::syncTimelineToEditorCursor(bool centerView)
+{
+    if (qtPreviewPlaying_ || !hasActiveDifficulty() || timelineView_ == nullptr) {
+        return;
+    }
+    const auto [line, col] = currentCursorLineCol();
+    const double second = timelineSecondForCursor(line, col);
+    if (second < 0.0) {
+        return;
+    }
+    timelineView_->setCursorSeconds(second);
+    timelineView_->setPlayheadSeconds(second, centerView);
 }
 
 double MainWindow::previewDurationSeconds() const
@@ -1098,6 +1104,7 @@ void MainWindow::stopQtPreviewPlayback(bool keepPosition)
     qtPreviewAwaitingFrameSwapSinceMs_ = -1;
     qtPreviewPendingAudioCalibration_ = false;
     flushQtPreviewTimelinePosition();
+    syncTimelineToEditorCursor(true);
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->stopAll();
     }
@@ -1272,7 +1279,47 @@ void MainWindow::jumpToNearestTimelineNote(double second, int lane)
         return;
     }
 
-    jumpToLocation(best->line, best->col);
+    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
+    QTextBlock block = editor->document()->findBlockByNumber(best->line - 1);
+    if (!block.isValid()) {
+        jumpToLocation(best->line, best->col);
+    } else {
+        const QString blockText = block.text();
+        const int lineLength = blockText.size();
+        int localIndex = qBound(0, best->col - 1, qMax(0, lineLength));
+        const int commentIndex = blockText.indexOf(QStringLiteral("||"));
+        const int scanEnd = (commentIndex >= 0) ? commentIndex : lineLength;
+        if (localIndex > scanEnd) {
+            localIndex = scanEnd;
+        }
+        auto isDelimiter = [](QChar ch) {
+            return ch.isSpace() || ch == QChar('/') || ch == QChar(',') || ch == QChar('`');
+        };
+
+        int tokenStart = localIndex;
+        while (tokenStart > 0 && !isDelimiter(blockText.at(tokenStart - 1))) {
+            --tokenStart;
+        }
+        int tokenEnd = localIndex;
+        while (tokenEnd < scanEnd && !isDelimiter(blockText.at(tokenEnd))) {
+            ++tokenEnd;
+        }
+        if (tokenEnd <= tokenStart) {
+            tokenStart = qBound(0, localIndex, lineLength);
+            tokenEnd = qMin(lineLength, tokenStart + 1);
+        }
+
+        QTextCursor cursor(editor->document());
+        cursor.setPosition(block.position() + tokenStart);
+        cursor.setPosition(block.position() + tokenEnd, QTextCursor::KeepAnchor);
+        editor->setTextCursor(cursor);
+        if (QScrollBar* vbar = editor->verticalScrollBar()) {
+            const QRect caretRect = editor->cursorRect();
+            const int centeredValue = vbar->value() + caretRect.center().y() - (editor->viewport()->height() / 2);
+            vbar->setValue(qBound(vbar->minimum(), centeredValue, vbar->maximum()));
+        }
+        editor->setFocus();
+    }
     statusBar()->showMessage(
         QString("Timeline jump: %1s -> L%2 C%3")
             .arg(target, 0, 'f', 3)

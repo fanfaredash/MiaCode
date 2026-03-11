@@ -1,6 +1,6 @@
-﻿void MainWindow::setupMenusAndActions(QMenu* fileMenu, QMenu* toolsMenu, QMenu* transformMenu, QMenu* helpMenu)
+﻿void MainWindow::setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* previewMenu, QMenu* helpMenu)
 {
-    if (fileMenu == nullptr || toolsMenu == nullptr || transformMenu == nullptr || helpMenu == nullptr) {
+    if (fileMenu == nullptr || editMenu == nullptr || previewMenu == nullptr || helpMenu == nullptr) {
         return;
     }
 
@@ -40,32 +40,66 @@
     validateAction_ = new QAction(uiText("action.validate", "Validate Simai"), this);
     validateAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
     connect(validateAction_, &QAction::triggered, this, &MainWindow::onValidateSimai);
-    toolsMenu->addAction(validateAction_);
+    editMenu->addAction(validateAction_);
+
+    editMenu->addSeparator();
+
+    transformMirrorLeftRightAction_ = new QAction(uiText("action.transform.mirror_lr", "Mirror Left/Right"), this);
+    transformMirrorLeftRightAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_J));
+    transformMirrorLeftRightAction_->setIcon(makeTransformMirrorLeftRightIcon(QColor("#2B3C4E")));
+    connect(transformMirrorLeftRightAction_, &QAction::triggered, this, &MainWindow::onMirrorLeftRight);
+    editMenu->addAction(transformMirrorLeftRightAction_);
+
+    transformMirrorUpDownAction_ = new QAction(uiText("action.transform.mirror_ud", "Mirror Up/Down"), this);
+    transformMirrorUpDownAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
+    transformMirrorUpDownAction_->setIcon(makeTransformMirrorUpDownIcon(QColor("#2B3C4E")));
+    connect(transformMirrorUpDownAction_, &QAction::triggered, this, &MainWindow::onMirrorUpDown);
+    editMenu->addAction(transformMirrorUpDownAction_);
+
+    transformRotate180Action_ = new QAction(uiText("action.transform.rotate_180", "Rotate 180"), this);
+    transformRotate180Action_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
+    transformRotate180Action_->setIcon(makeTransformRotate180Icon(QColor("#2B3C4E")));
+    connect(transformRotate180Action_, &QAction::triggered, this, &MainWindow::onRotate180);
+    editMenu->addAction(transformRotate180Action_);
+
+    transformRotate45CounterClockwiseAction_ = new QAction(uiText("action.transform.rotate_ccw_45", "Rotate -45"), this);
+    transformRotate45CounterClockwiseAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Semicolon));
+    transformRotate45CounterClockwiseAction_->setIcon(makeTransformRotateCcw45Icon(QColor("#2B3C4E")));
+    connect(transformRotate45CounterClockwiseAction_, &QAction::triggered, this, &MainWindow::onRotate45CounterClockwise);
+    editMenu->addAction(transformRotate45CounterClockwiseAction_);
+
+    transformRotate45ClockwiseAction_ = new QAction(uiText("action.transform.rotate_cw_45", "Rotate +45"), this);
+    transformRotate45ClockwiseAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Apostrophe));
+    transformRotate45ClockwiseAction_->setIcon(makeTransformRotateCw45Icon(QColor("#2B3C4E")));
+    connect(transformRotate45ClockwiseAction_, &QAction::triggered, this, &MainWindow::onRotate45Clockwise);
+    editMenu->addAction(transformRotate45ClockwiseAction_);
+
+    editMenu->addSeparator();
+
+    latencyDetectorAction_ = new QAction(UiText::isChineseUi() ? QStringLiteral("BPM&&偏移检测") : QStringLiteral("BPM && Offset Detection..."), this);
+    connect(latencyDetectorAction_, &QAction::triggered, this, &MainWindow::onOpenLatencyDetector);
+    editMenu->addAction(latencyDetectorAction_);
 
     stopPreviewAction_ = new QAction(uiText("action.stop_preview", "Stop Preview"), this);
     stopPreviewAction_->setIcon(makePreviewStopIcon(QColor("#2B3C4E")));
     stopPreviewAction_->setToolTip(QString());
     connect(stopPreviewAction_, &QAction::triggered, this, &MainWindow::onStopPreview);
-    toolsMenu->addAction(stopPreviewAction_);
+    previewMenu->addAction(stopPreviewAction_);
 
     pausePreviewAction_ = new QAction(uiText("action.pause_preview", "Play/Pause Preview"), this);
     pausePreviewAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Space));
     pausePreviewAction_->setIcon(makePreviewPlayIcon(QColor("#2B3C4E")));
     pausePreviewAction_->setToolTip(QString());
     connect(pausePreviewAction_, &QAction::triggered, this, &MainWindow::onTogglePreviewPause);
-    toolsMenu->addAction(pausePreviewAction_);
+    previewMenu->addAction(pausePreviewAction_);
 
-    latencyDetectorAction_ = new QAction(UiText::isChineseUi() ? QStringLiteral("BPM&&偏移检测") : QStringLiteral("BPM && Offset Detection..."), this);
-    connect(latencyDetectorAction_, &QAction::triggered, this, &MainWindow::onOpenLatencyDetector);
-    toolsMenu->addAction(latencyDetectorAction_);
-
-    toolsMenu->addSeparator();
+    previewMenu->addSeparator();
 
     toggleJudgeMarkersAction_ = new QAction("Show Judge Markers", this);
     toggleJudgeMarkersAction_->setCheckable(true);
     toggleJudgeMarkersAction_->setChecked(showJudgeMarkers_);
     connect(toggleJudgeMarkersAction_, &QAction::toggled, this, &MainWindow::onToggleJudgeMarkers);
-    toolsMenu->addAction(toggleJudgeMarkersAction_);
+    previewMenu->addAction(toggleJudgeMarkersAction_);
     toggleJudgeMarkersAction_->setEnabled(false);
     toggleJudgeMarkersAction_->setVisible(false);
 
@@ -73,51 +107,20 @@
     toggleTouchTrailAction_->setCheckable(true);
     toggleTouchTrailAction_->setChecked(showTouchTrail_);
     connect(toggleTouchTrailAction_, &QAction::toggled, this, &MainWindow::onToggleTouchTrail);
-    toolsMenu->addAction(toggleTouchTrailAction_);
+    previewMenu->addAction(toggleTouchTrailAction_);
     toggleTouchTrailAction_->setEnabled(false);
     toggleTouchTrailAction_->setVisible(false);
 
-    toolsMenu->addSeparator();
+    previewMenu->addSeparator();
 
     previewRenderSettingsAction_ = new QAction(uiText("action.render_settings", "Render Settings..."), this);
     connect(previewRenderSettingsAction_, &QAction::triggered, this, &MainWindow::onPreviewRenderSettings);
-    toolsMenu->addAction(previewRenderSettingsAction_);
-
-    transformMirrorLeftRightAction_ = new QAction(uiText("action.transform.mirror_lr", "Mirror Left/Right"), this);
-    transformMirrorLeftRightAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_J));
-    transformMirrorLeftRightAction_->setIcon(makeTransformMirrorLeftRightIcon(QColor("#2B3C4E")));
-    connect(transformMirrorLeftRightAction_, &QAction::triggered, this, &MainWindow::onMirrorLeftRight);
-    transformMenu->addAction(transformMirrorLeftRightAction_);
-
-    transformMirrorUpDownAction_ = new QAction(uiText("action.transform.mirror_ud", "Mirror Up/Down"), this);
-    transformMirrorUpDownAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
-    transformMirrorUpDownAction_->setIcon(makeTransformMirrorUpDownIcon(QColor("#2B3C4E")));
-    connect(transformMirrorUpDownAction_, &QAction::triggered, this, &MainWindow::onMirrorUpDown);
-    transformMenu->addAction(transformMirrorUpDownAction_);
-
-    transformRotate180Action_ = new QAction(uiText("action.transform.rotate_180", "Rotate 180"), this);
-    transformRotate180Action_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
-    transformRotate180Action_->setIcon(makeTransformRotate180Icon(QColor("#2B3C4E")));
-    connect(transformRotate180Action_, &QAction::triggered, this, &MainWindow::onRotate180);
-    transformMenu->addAction(transformRotate180Action_);
-
-    transformRotate45CounterClockwiseAction_ = new QAction(uiText("action.transform.rotate_ccw_45", "Rotate -45"), this);
-    transformRotate45CounterClockwiseAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Semicolon));
-    transformRotate45CounterClockwiseAction_->setIcon(makeTransformRotateCcw45Icon(QColor("#2B3C4E")));
-    connect(transformRotate45CounterClockwiseAction_, &QAction::triggered, this, &MainWindow::onRotate45CounterClockwise);
-    transformMenu->addAction(transformRotate45CounterClockwiseAction_);
-
-    transformRotate45ClockwiseAction_ = new QAction(uiText("action.transform.rotate_cw_45", "Rotate +45"), this);
-    transformRotate45ClockwiseAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Apostrophe));
-    transformRotate45ClockwiseAction_->setIcon(makeTransformRotateCw45Icon(QColor("#2B3C4E")));
-    connect(transformRotate45ClockwiseAction_, &QAction::triggered, this, &MainWindow::onRotate45Clockwise);
-    transformMenu->addAction(transformRotate45ClockwiseAction_);
+    previewMenu->addAction(previewRenderSettingsAction_);
 
     aboutAction_ = new QAction(uiText("action.about", "About"), this);
     connect(aboutAction_, &QAction::triggered, this, &MainWindow::onAbout);
     helpMenu->addAction(aboutAction_);
 }
-
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
@@ -143,13 +146,13 @@ MainWindow::MainWindow(QWidget* parent)
     setupInitialWindowGeometry();
 
     auto* fileMenu = menuBar()->addMenu(uiText("menu.file", "&File"));
-    auto* toolsMenu = menuBar()->addMenu(uiText("menu.tools", "&Tools"));
-    auto* transformMenu = menuBar()->addMenu(uiText("menu.transform", "&Transform"));
+    auto* editMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("编辑(&E)") : QStringLiteral("&Edit"));
+    auto* previewMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("预览(&P)") : QStringLiteral("&Preview"));
     auto* helpMenu = menuBar()->addMenu(uiText("menu.help", "&Help"));
 
     auto* toolBar = addToolBar("Main");
     toolBar->setMovable(false);
-    setupMenusAndActions(fileMenu, toolsMenu, transformMenu, helpMenu);
+    setupMenusAndActions(fileMenu, editMenu, previewMenu, helpMenu);
     logStartupStage("menus_and_actions_ready");
 
     auto* editor = new PlainCodeEditor(this);
@@ -168,7 +171,8 @@ MainWindow::MainWindow(QWidget* parent)
         "border: none;"
         "background: #FFFFFF;"
         "color: #1F1F1F;"
-        "selection-background-color: #D7EBFF;"
+        "selection-background-color: #B8CCE5;"
+        "selection-color: #1F1F1F;"
     );
     if (auto* scrollArea = qobject_cast<QAbstractScrollArea*>(editorWidget_)) {
         if (QScrollBar* vbar = scrollArea->verticalScrollBar()) {
@@ -204,7 +208,8 @@ MainWindow::MainWindow(QWidget* parent)
         " border: 1px solid #CCD6E2;"
         " border-radius: 6px;"
         " padding: 4px 6px;"
-        " selection-background-color: #D7EBFF;"
+        " selection-background-color: #B8CCE5;"
+        " selection-color: #1F1F1F;"
         "}"
         "QWidget#EditorDifficultyControls QLineEdit:focus { border-color: #3B82F6; }"
     );
@@ -310,7 +315,8 @@ MainWindow::MainWindow(QWidget* parent)
         " border: 1px solid #CCD6E2;"
         " border-radius: 6px;"
         " padding: 6px 8px;"
-        " selection-background-color: #D7EBFF;"
+        " selection-background-color: #B8CCE5;"
+        " selection-color: #1F1F1F;"
         "}"
         "QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus { border-color: #3B82F6; }"
     );
@@ -648,9 +654,11 @@ MainWindow::MainWindow(QWidget* parent)
     previewCanvasFrame_ = new QFrame(previewPanel_);
     previewCanvasFrame_->setObjectName("PreviewCanvasFrame");
     previewCanvasFrame_->setMinimumSize(QSize(1, 1));
+    previewCanvasFrame_->setFocusPolicy(Qt::StrongFocus);
     previewCanvasContainer_ = QWidget::createWindowContainer(previewCanvas_, previewCanvasFrame_);
     previewCanvasContainer_->setMinimumSize(QSize(1, 1));
     previewCanvasContainer_->setFocusPolicy(Qt::StrongFocus);
+    previewPanel_->setFocusPolicy(Qt::StrongFocus);
     previewCanvasContainer_->hide();
     logStartupStage("preview_canvas_container_ready");
 
@@ -804,6 +812,21 @@ MainWindow::MainWindow(QWidget* parent)
         jumpToLocation(line, col);
         statusBar()->showMessage(QString("Timeline jump: nearest object -> L%1 C%2").arg(line).arg(col));
     });
+    connect(timelineView_, &TimelineView::syncPreviewRequested, this, [this]() {
+        double second = qMax(0.0, qtPreviewPauseSecond_);
+        if (qtPreviewPlaying_) {
+            if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
+                second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
+            } else if (previewMediaController_ != nullptr) {
+                second = qMax(0.0, previewMediaController_->currentPlaybackSecond());
+            }
+        }
+        jumpToNearestTimelineNote(second, -1);
+        if (timelineView_ != nullptr) {
+            timelineView_->setCursorSeconds(second);
+            timelineView_->setPlayheadSeconds(second, true);
+        }
+    });
     bottomTabs_->addTab(timelineView_, uiText("tab.timeline", "Timeline"));
 
     connect(qobject_cast<PlainCodeEditor*>(editorWidget_), &QTextEdit::textChanged, this, [this]() {
@@ -814,6 +837,9 @@ MainWindow::MainWindow(QWidget* parent)
     });
     connect(qobject_cast<PlainCodeEditor*>(editorWidget_), &QTextEdit::cursorPositionChanged, this, [this]() {
         updateEditorStatus();
+        if (!qtPreviewPlaying_) {
+            syncTimelineToEditorCursor(true);
+        }
     });
     connect(titleEdit_, &QLineEdit::textChanged, this, [this]() {
         markCurrentFieldDirty();
@@ -945,6 +971,18 @@ MainWindow::MainWindow(QWidget* parent)
             schedulePreviewSeek(static_cast<double>(previewSlider_->value()) / 1000.0, true);
         });
     }
+    if (previewCanvasContainer_ != nullptr) {
+        previewCanvasContainer_->installEventFilter(this);
+    }
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->installEventFilter(this);
+    }
+    if (previewCanvasFrame_ != nullptr) {
+        previewCanvasFrame_->installEventFilter(this);
+    }
+    if (previewPanel_ != nullptr) {
+        previewPanel_->installEventFilter(this);
+    }
 
     editorViewport_ = qobject_cast<PlainCodeEditor*>(editorWidget_)->viewport();
     if (editorViewport_ != nullptr) {
@@ -1029,4 +1067,5 @@ MainWindow::MainWindow(QWidget* parent)
     logStartupStage("preview_subsystem_warmup_scheduled");
     logStartupStage("constructor_done");
 }
+
 
