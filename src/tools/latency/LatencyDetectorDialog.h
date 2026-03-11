@@ -60,6 +60,7 @@ private:
     void restartPlaybackAfterOffsetChange();
     void onPlaybackTick();
     void triggerBeatAudition(double fromSecond, double toSecond);
+    QString selectedOffsetSnapModeId() const;
     double parsedBpm(bool* ok = nullptr) const;
     double parsedOffset(bool* ok = nullptr) const;
     double detectBpm();
@@ -86,6 +87,7 @@ private:
     QToolButton* zoomInButton_ = nullptr;
     QLabel* playbackTimeLabel_ = nullptr;
     QComboBox* meterCombo_ = nullptr;
+    QComboBox* offsetSnapCombo_ = nullptr;
     QtPreviewSfxRuntime* sfxRuntime_ = nullptr;
     QTimer* playbackTimer_ = nullptr;
     QTimer* beatAuditionTimer_ = nullptr;
@@ -106,6 +108,8 @@ private:
     double pendingBeatBpm_ = 0.0;
     double pendingBeatOffset_ = 0.0;
     int pendingBeatBarPulseCount_ = 4;
+    double pendingBeatAuditionPeriodSeconds_ = 0.0;
+    bool pendingBeatForceUniformGain_ = false;
     QVector<double> pendingBeatAccentWeights_{1.0};
     bool pendingBeatUseUniformAccent_ = true;
     int pendingBeatAccentAnchorIndex_ = 0;

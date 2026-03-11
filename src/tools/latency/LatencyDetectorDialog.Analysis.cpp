@@ -19,6 +19,18 @@ double LatencyDetectorDialog::parsedOffset(bool* ok) const
     return (text.isEmpty() || localOk) ? value : 0.0;
 }
 
+QString LatencyDetectorDialog::selectedOffsetSnapModeId() const
+{
+    if (offsetSnapCombo_ == nullptr) {
+        return QStringLiteral("bar");
+    }
+    const QString mode = offsetSnapCombo_->currentData().toString().trimmed();
+    if (mode == QLatin1String("quarter") || mode == QLatin1String("eighth")) {
+        return mode;
+    }
+    return QStringLiteral("bar");
+}
+
 double LatencyDetectorDialog::detectBpm()
 {
     lastDetectedBpm_ = 0.0;
@@ -328,10 +340,80 @@ double LatencyDetectorDialog::detectOffset(double bpm) const
     }
 
     const double beatPeriod = 60.0 / bpm;
-    auto scorePhase = [&](double phaseSecond) {
-        if (beatPeriod <= 0.0) {
-            return -1.0;
+    if (beatPeriod <= 0.0) {
+        return 0.0;
+    }
+
+    const QString selectedMeterId = meterCombo_ != nullptr ? meterCombo_->currentData().toString() : QStringLiteral("4/4");
+    const QString snapModeId = selectedOffsetSnapModeId();
+    QString effectiveMeterId = selectedMeterId;
+    if (effectiveMeterId == QLatin1String("auto")) {
+        effectiveMeterId = lastDetectedMeterId_;
+    }
+    const MeterPattern* meterPattern = meterPatternById(effectiveMeterId);
+    const int barPulseCount = meterPattern != nullptr
+        ? qMax(1, meterPattern->accentWeights.size())
+        : 4;
+    const double barPeriod = beatPeriod * static_cast<double>(barPulseCount);
+    const bool hasMeterPhaseHint = detectedMeterPhaseValid_ && effectiveMeterId == lastDetectedMeterId_;
+    const double meterBeatPhase = hasMeterPhaseHint
+        ? std::fmod(std::fmod(detectedMeterPhaseSecond_, beatPeriod) + beatPeriod, beatPeriod)
+        : 0.0;
+    const double offsetAnchor = parsedOffset();
+    const double nearZeroEpsilon = qMax(0.0005, onsetStepSeconds_ * 0.20);
+
+    double translationPeriod = barPeriod;
+    if (snapModeId == QLatin1String("quarter")) {
+        translationPeriod = beatPeriod;
+    } else if (snapModeId == QLatin1String("eighth")) {
+        translationPeriod = beatPeriod * 0.5;
+    }
+    if (translationPeriod <= 0.0) {
+        translationPeriod = beatPeriod;
+    }
+
+    auto foldToNearest = [](double baseValue, double period, double anchor) {
+        if (period <= 0.0) {
+            return baseValue;
         }
+        const double stepCount = static_cast<double>(qRound64((anchor - baseValue) / period));
+        return baseValue + stepCount * period;
+    };
+
+    auto phaseDistance = [](double lhs, double rhs, double period) {
+        if (period <= 0.0) {
+            return qAbs(lhs - rhs);
+        }
+        double delta = std::fmod(lhs - rhs, period);
+        if (delta < 0.0) {
+            delta += period;
+        }
+        return qMin(delta, period - delta);
+    };
+
+    auto normalizePhase = [beatPeriod](double phase) {
+        double normalized = std::fmod(phase, beatPeriod);
+        if (normalized < 0.0) {
+            normalized += beatPeriod;
+        }
+        return normalized;
+    };
+
+    auto normalizeToSymmetricRange = [](double value, double period) {
+        if (period <= 0.0) {
+            return value;
+        }
+        double normalized = std::fmod(value, period);
+        if (normalized < 0.0) {
+            normalized += period;
+        }
+        if (normalized > period * 0.5) {
+            normalized -= period;
+        }
+        return normalized;
+    };
+
+    auto scorePhase = [&](double phaseSecond) {
         const double normalizedPhase =
             phaseSecond > beatPeriod * 0.5
             ? phaseSecond - beatPeriod
@@ -352,6 +434,9 @@ double LatencyDetectorDialog::detectOffset(double bpm) const
         }
         score /= static_cast<double>(sampleCount);
         score -= qAbs(normalizedPhase) * kOffsetPhasePenalty;
+        if (hasMeterPhaseHint && snapModeId == QLatin1String("bar")) {
+            score -= phaseDistance(phaseSecond, meterBeatPhase, beatPeriod) * 0.14;
+        }
         return score;
     };
 
@@ -387,48 +472,70 @@ double LatencyDetectorDialog::detectOffset(double bpm) const
         }
         snapCandidates.append(candidate);
     }
+    if (snapModeId == QLatin1String("eighth")) {
+        snapCandidates.append(beatPeriod * 0.5);
+    }
+    if (hasMeterPhaseHint) {
+        snapCandidates.append(meterBeatPhase);
+        snapCandidates.append(normalizePhase(meterBeatPhase + beatPeriod * 0.5));
+    }
+
+    double preferredPhase = bestPhaseSecond;
+    if (snapModeId == QLatin1String("bar")) {
+        if (qAbs(offsetAnchor) > nearZeroEpsilon) {
+            preferredPhase = normalizePhase(offsetAnchor);
+        } else if (hasMeterPhaseHint) {
+            preferredPhase = meterBeatPhase;
+        }
+    }
 
     double snappedPhaseSecond = bestPhaseSecond;
     for (double candidate : snapCandidates) {
-        const double candidateScore = scorePhase(candidate);
+        const double candidatePhase = normalizePhase(candidate);
+        const double candidateScore = scorePhase(candidatePhase);
         if (candidateScore < bestScore * kOffsetSnapThreshold) {
             continue;
         }
-        double normalizedCandidate = std::fmod(candidate, beatPeriod);
-        if (normalizedCandidate < 0.0) {
-            normalizedCandidate += beatPeriod;
-        }
-        if (normalizedCandidate > beatPeriod * 0.5) {
-            normalizedCandidate -= beatPeriod;
-        }
 
-        double normalizedCurrent = std::fmod(snappedPhaseSecond, beatPeriod);
-        if (normalizedCurrent < 0.0) {
-            normalizedCurrent += beatPeriod;
-        }
-        if (normalizedCurrent > beatPeriod * 0.5) {
-            normalizedCurrent -= beatPeriod;
-        }
-
-        const double bestNormalized = bestPhaseSecond > beatPeriod * 0.5 ? bestPhaseSecond - beatPeriod : bestPhaseSecond;
-        if (qAbs(normalizedCandidate) < qAbs(normalizedCurrent) - 1e-9
-            || (qAbs(qAbs(normalizedCandidate) - qAbs(normalizedCurrent)) <= 1e-9
-                && qAbs(normalizedCandidate - bestNormalized) < qAbs(normalizedCurrent - bestNormalized))) {
-            snappedPhaseSecond = candidate;
+        const double currentDistance = phaseDistance(snappedPhaseSecond, preferredPhase, beatPeriod);
+        const double candidateDistance = phaseDistance(candidatePhase, preferredPhase, beatPeriod);
+        if (candidateDistance + 1e-9 < currentDistance) {
+            snappedPhaseSecond = candidatePhase;
+        } else if (qAbs(candidateDistance - currentDistance) <= 1e-9
+            && candidateScore > scorePhase(snappedPhaseSecond) + 1e-9) {
+            snappedPhaseSecond = candidatePhase;
         }
     }
 
-    double normalizedOffset = std::fmod(snappedPhaseSecond, beatPeriod);
-    if (normalizedOffset < 0.0) {
-        normalizedOffset += beatPeriod;
+    const double canonicalPhase = normalizePhase(snappedPhaseSecond);
+    const double baseAnchor = snapModeId == QLatin1String("bar") ? offsetAnchor : 0.0;
+    double baseOffset = foldToNearest(canonicalPhase, beatPeriod, baseAnchor);
+    if (hasMeterPhaseHint && snapModeId == QLatin1String("bar")) {
+        const double meterAnchored = foldToNearest(canonicalPhase, beatPeriod, detectedMeterPhaseSecond_);
+        if (qAbs(meterAnchored - offsetAnchor) <= qAbs(baseOffset - offsetAnchor) + 1e-9
+            || qAbs(offsetAnchor) <= nearZeroEpsilon) {
+            baseOffset = meterAnchored;
+        }
     }
-    if (normalizedOffset > beatPeriod * 0.5) {
-        normalizedOffset -= beatPeriod;
+
+    double resolvedOffset = 0.0;
+    if (snapModeId == QLatin1String("bar")) {
+        resolvedOffset = foldToNearest(baseOffset, translationPeriod, offsetAnchor);
+        if (hasMeterPhaseHint
+            && qAbs(offsetAnchor) <= nearZeroEpsilon
+            && qAbs(resolvedOffset) <= nearZeroEpsilon
+            && translationPeriod > nearZeroEpsilon) {
+            resolvedOffset -= translationPeriod;
+        }
+    } else {
+        // Quarter/Eighth snap modes should stay inside one snap interval.
+        resolvedOffset = normalizeToSymmetricRange(baseOffset, translationPeriod);
     }
-    if (qAbs(normalizedOffset) <= onsetStepSeconds_ * 0.5) {
-        normalizedOffset = 0.0;
+
+    if (qAbs(resolvedOffset) <= 1e-4) {
+        resolvedOffset = 0.0;
     }
-    return normalizedOffset;
+    return resolvedOffset;
 }
 
 QString LatencyDetectorDialog::formatTimestamp(double second) const

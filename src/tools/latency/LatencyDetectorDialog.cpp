@@ -44,8 +44,8 @@ constexpr double kMinimumVisibleSeconds = 4.0;
 constexpr double kOffsetReplayDelayMs = 120.0;
 constexpr double kMinDetectBpm = 50.0;
 constexpr double kMaxDetectBpm = 300.0;
-constexpr double kOffsetPhasePenalty = 0.18;
-constexpr double kOffsetSnapThreshold = 0.73;
+constexpr double kOffsetPhasePenalty = 0.06;
+constexpr double kOffsetSnapThreshold = 0.90;
 
 struct MeterPattern {
     const char* id = "";
