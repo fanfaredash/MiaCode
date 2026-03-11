@@ -18,6 +18,9 @@
 class QPainter;
 class QRectF;
 class QTimer;
+class QOffscreenSurface;
+class QOpenGLFramebufferObject;
+class QSurfaceFormat;
 
 class PreviewCanvas : public QOpenGLWindow
 {
@@ -36,6 +39,22 @@ public:
     void setSkinDirectory(const QString& skinDir);
     void setBackgroundBrightness(double brightness);
     void setShowDebugInfo(bool show);
+    void setShowTimestamp(bool show);
+    bool showTimestamp() const;
+    void copyRenderStateFrom(const PreviewCanvas& source);
+    QImage renderOverlayFrame(const QSize& outputSize, double playheadSeconds, bool showTimestamp);
+    bool initializeOffscreenRenderer(
+        const QSurfaceFormat& requestedFormat,
+        QOpenGLContext* shareContext,
+        QString* errorMessage = nullptr
+    );
+    void shutdownOffscreenRenderer();
+    QImage renderOverlayFrameOffscreen(const QSize& outputSize, double playheadSeconds, bool showTimestamp);
+    bool isGpuRendererReadyForDebug() const { return glRenderer_.isInitialized(); }
+    bool usedGpuRendererLastFrameForDebug() const { return usedGpuRendererThisFrame_; }
+    int cpuFallbackCountLastFrameForDebug() const { return cpuFallbackCount_; }
+    qint64 offscreenDrawNsLastFrameForDebug() const { return offscreenDrawNsLastFrame_; }
+    qint64 offscreenReadbackNsLastFrameForDebug() const { return offscreenReadbackNsLastFrame_; }
     void reset();
     void noteTickForProfiling();
     void resetProfilingSession();
@@ -95,6 +114,7 @@ private:
     void scheduleTexturePrewarm();
     void processTexturePrewarmQueue();
     QRectF currentStageRect() const;
+    QRectF stageRectForSize(const QSize& renderSize) const;
     QRectF stagePlayfieldRect(const QRectF& stageRect) const;
     QRectF currentPlayfieldRect() const;
     void warmTransformCachesForCurrentSize();
@@ -151,6 +171,14 @@ private:
     void drawTapMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect);
     void drawHoldMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect);
     void renderCanvas(QPainter& painter);
+    void renderCanvas(
+        QPainter& painter,
+        const QSize& canvasSize,
+        bool drawStageBackground,
+        bool clearToStageColor,
+        bool highQualityRender
+    );
+    bool ensureOffscreenFramebuffer(const QSize& framebufferSize, QString* errorMessage = nullptr);
     void updateFpsSample();
     void collectGpuProfilingResults(bool waitForAll);
     QString profilingSummaryPath() const;
@@ -243,6 +271,8 @@ private:
     int cpuFallbackCount_ = 0;
     bool usedGpuRendererThisFrame_ = false;
     bool showDebugInfo_ = false;
+    bool showTimestamp_ = true;
+    bool highQualityRender_ = false;
     bool nativePaintingActive_ = false;
     bool tapAtlasBatchingActive_ = false;
     QVector<BatchedSprite> tapAtlasBatch_;
@@ -271,4 +301,10 @@ private:
     QVector<QImage> pendingTexturePrewarmImages_;
     qint64 lastSkinLoadDispatchMs_ = -1;
     qint64 texturePrewarmStartMs_ = -1;
+    QOffscreenSurface* offscreenSurface_ = nullptr;
+    QOpenGLContext* offscreenContext_ = nullptr;
+    QOpenGLFramebufferObject* offscreenFramebuffer_ = nullptr;
+    QSize offscreenFramebufferSize_;
+    qint64 offscreenDrawNsLastFrame_ = 0;
+    qint64 offscreenReadbackNsLastFrame_ = 0;
 };

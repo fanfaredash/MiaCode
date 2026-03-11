@@ -596,6 +596,9 @@ void MainWindow::updateDifficultyScopedActionStates()
     if (pausePreviewAction_ != nullptr) {
         pausePreviewAction_->setEnabled(enabled);
     }
+    if (exportVideoAction_ != nullptr) {
+        exportVideoAction_->setEnabled(enabled);
+    }
     if (stopPreviewAction_ != nullptr) {
         stopPreviewAction_->setEnabled(enabled);
     }
@@ -619,6 +622,9 @@ void MainWindow::updateDifficultyScopedActionStates()
     }
     if (pausePreviewButton_ != nullptr) {
         pausePreviewButton_->setEnabled(enabled);
+    }
+    if (exportVideoButton_ != nullptr) {
+        exportVideoButton_->setEnabled(enabled);
     }
     if (transformMirrorLeftRightButton_ != nullptr) {
         transformMirrorLeftRightButton_->setEnabled(enabled);

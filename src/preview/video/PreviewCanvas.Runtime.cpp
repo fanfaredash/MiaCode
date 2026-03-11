@@ -17,6 +17,10 @@ PreviewCanvas::PreviewCanvas(QWindow* parent)
 
 PreviewCanvas::~PreviewCanvas()
 {
+    if (offscreenContext_ != nullptr || offscreenSurface_ != nullptr || offscreenFramebuffer_ != nullptr) {
+        shutdownOffscreenRenderer();
+    }
+
     if (context() != nullptr) {
         makeCurrent();
         if (gpuTimerQueriesSupported_) {
@@ -26,7 +30,9 @@ PreviewCanvas::~PreviewCanvas()
                 extra->glDeleteQueries(4, gpuTimeQueries_);
             }
         }
-        glRenderer_.shutdown();
+        if (glRenderer_.isInitialized()) {
+            glRenderer_.shutdown();
+        }
         doneCurrent();
     }
 }
@@ -65,6 +71,334 @@ void PreviewCanvas::setNoteMarkers(const QVector<TimelineNoteMarker>& notes)
     slideTrackAreaCache_.clear();
     wifiTrackAreaCache_.clear();
     update();
+}
+
+void PreviewCanvas::setShowTimestamp(bool show)
+{
+    if (showTimestamp_ == show) {
+        return;
+    }
+    showTimestamp_ = show;
+    update();
+}
+
+bool PreviewCanvas::showTimestamp() const
+{
+    return showTimestamp_;
+}
+
+void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
+{
+    tapImage_ = source.tapImage_;
+    tapEachImage_ = source.tapEachImage_;
+    tapBreakImage_ = source.tapBreakImage_;
+    tapExImage_ = source.tapExImage_;
+    slideTrackImage_ = source.slideTrackImage_;
+    slideTrackEachImage_ = source.slideTrackEachImage_;
+    slideTrackBreakImage_ = source.slideTrackBreakImage_;
+    starImage_ = source.starImage_;
+    starEachImage_ = source.starEachImage_;
+    starBreakImage_ = source.starBreakImage_;
+    starBreakDoubleImage_ = source.starBreakDoubleImage_;
+    starDoubleImage_ = source.starDoubleImage_;
+    starEachDoubleImage_ = source.starEachDoubleImage_;
+    starExImage_ = source.starExImage_;
+    starExDoubleImage_ = source.starExDoubleImage_;
+    wifiImages_ = source.wifiImages_;
+    wifiEachImages_ = source.wifiEachImages_;
+    wifiBreakImages_ = source.wifiBreakImages_;
+    holdImage_ = source.holdImage_;
+    holdEachImage_ = source.holdEachImage_;
+    holdBreakImage_ = source.holdBreakImage_;
+    holdExImage_ = source.holdExImage_;
+    noteGuideNormalImage_ = source.noteGuideNormalImage_;
+    noteGuideBreakImage_ = source.noteGuideBreakImage_;
+    noteGuideEachImage_ = source.noteGuideEachImage_;
+    noteGuideEachLine1Image_ = source.noteGuideEachLine1Image_;
+    noteGuideEachLine2Image_ = source.noteGuideEachLine2Image_;
+    noteGuideEachLine3Image_ = source.noteGuideEachLine3Image_;
+    noteGuideEachLine4Image_ = source.noteGuideEachLine4Image_;
+    noteGuideHoldEndImage_ = source.noteGuideHoldEndImage_;
+    noteGuideHoldEachEndImage_ = source.noteGuideHoldEachEndImage_;
+    noteGuideHoldBreakEndImage_ = source.noteGuideHoldBreakEndImage_;
+    noteGuideSlideImage_ = source.noteGuideSlideImage_;
+    touchCornerImage_ = source.touchCornerImage_;
+    touchCornerEachImage_ = source.touchCornerEachImage_;
+    touchPointImage_ = source.touchPointImage_;
+    touchPointEachImage_ = source.touchPointEachImage_;
+    touchHold0Image_ = source.touchHold0Image_;
+    touchHold1Image_ = source.touchHold1Image_;
+    touchHold2Image_ = source.touchHold2Image_;
+    touchHold3Image_ = source.touchHold3Image_;
+    touchHoldBorderImage_ = source.touchHoldBorderImage_;
+    judgeEffectTapImage_ = source.judgeEffectTapImage_;
+    judgeEffectTapSourceRect_ = source.judgeEffectTapSourceRect_;
+    judgeEffectTapBreakImage_ = source.judgeEffectTapBreakImage_;
+    judgeEffectTapBreakSourceRect_ = source.judgeEffectTapBreakSourceRect_;
+    judgeEffectHoldSustainCircleImage_ = source.judgeEffectHoldSustainCircleImage_;
+    judgeEffectTouchCircleImage_ = source.judgeEffectTouchCircleImage_;
+    judgeEffectTouchPart01Image_ = source.judgeEffectTouchPart01Image_;
+    judgeEffectTouchPart02Image_ = source.judgeEffectTouchPart02Image_;
+    judgeEffectFireworkImage_ = source.judgeEffectFireworkImage_;
+    judgeEffectFireworkSourceRect_ = source.judgeEffectFireworkSourceRect_;
+    judgeEffectFireworkColorBallImage_ = source.judgeEffectFireworkColorBallImage_;
+    judgeEffectFireworkColorBallSourceRect_ = source.judgeEffectFireworkColorBallSourceRect_;
+    outlineImage_ = source.outlineImage_;
+    tapAtlasImage_ = source.tapAtlasImage_;
+    trackAtlasImage_ = source.trackAtlasImage_;
+    touchAtlasImage_ = source.touchAtlasImage_;
+    guideAtlasImage_ = source.guideAtlasImage_;
+    atlasRegions_ = source.atlasRegions_;
+    noteMarkers_ = source.noteMarkers_;
+    backgroundBrightness_ = source.backgroundBrightness_;
+    showDebugInfo_ = source.showDebugInfo_;
+    showTimestamp_ = source.showTimestamp_;
+
+    overlayCache_.clear();
+    guideTransformCache_.clear();
+    guideTransformCacheOrder_.clear();
+    spriteTransformCache_.clear();
+    spriteTransformCacheOrder_.clear();
+    slideTrackAreaCache_.clear();
+    wifiTrackAreaCache_.clear();
+}
+
+QImage PreviewCanvas::renderOverlayFrame(const QSize& outputSize, double playheadSeconds, bool showTimestamp)
+{
+    const QSize safeSize(qMax(1, outputSize.width()), qMax(1, outputSize.height()));
+    const double originalPlayhead = playheadSeconds_;
+    const bool originalShowTimestamp = showTimestamp_;
+    const bool originalHighQualityRender = highQualityRender_;
+
+    playheadSeconds_ = playheadSeconds;
+    showTimestamp_ = showTimestamp;
+    highQualityRender_ = true;
+
+    QImage frame(safeSize, QImage::Format_RGBA8888);
+    frame.fill(Qt::transparent);
+    {
+        QPainter painter(&frame);
+        renderCanvas(painter, safeSize, false, false, true);
+    }
+
+    playheadSeconds_ = originalPlayhead;
+    showTimestamp_ = originalShowTimestamp;
+    highQualityRender_ = originalHighQualityRender;
+    return frame;
+}
+
+bool PreviewCanvas::initializeOffscreenRenderer(
+    const QSurfaceFormat& requestedFormat,
+    QOpenGLContext* shareContext,
+    QString* errorMessage
+)
+{
+    if (offscreenContext_ != nullptr && offscreenSurface_ != nullptr && glRenderer_.isInitialized()) {
+        return true;
+    }
+
+    shutdownOffscreenRenderer();
+
+    QSurfaceFormat surfaceFormat = requestedFormat;
+    if (shareContext != nullptr && shareContext->isValid()) {
+        surfaceFormat = shareContext->format();
+    }
+    if (surfaceFormat.renderableType() == QSurfaceFormat::DefaultRenderableType) {
+        surfaceFormat = QSurfaceFormat::defaultFormat();
+    }
+
+    QOffscreenSurface* surface = new QOffscreenSurface();
+    surface->setFormat(surfaceFormat);
+    surface->create();
+    if (!surface->isValid()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to create offscreen surface");
+        }
+        delete surface;
+        return false;
+    }
+
+    QOpenGLContext* offscreenContext = new QOpenGLContext();
+    offscreenContext->setFormat(surface->format());
+    if (shareContext != nullptr && shareContext->isValid()) {
+        offscreenContext->setShareContext(shareContext);
+    }
+    if (!offscreenContext->create()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to create offscreen OpenGL context");
+        }
+        delete offscreenContext;
+        delete surface;
+        return false;
+    }
+    if (!offscreenContext->makeCurrent(surface)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to make offscreen OpenGL context current");
+        }
+        delete offscreenContext;
+        delete surface;
+        return false;
+    }
+
+    glRenderer_.initialize();
+    const QVector<const QImage*> prewarmImages{
+        &tapAtlasImage_,
+        &trackAtlasImage_,
+        &touchAtlasImage_,
+        &guideAtlasImage_,
+        &outlineImage_,
+        &judgeEffectTapImage_,
+        &judgeEffectTapBreakImage_,
+        &judgeEffectHoldSustainCircleImage_,
+        &judgeEffectTouchCircleImage_,
+        &judgeEffectTouchPart01Image_,
+        &judgeEffectTouchPart02Image_,
+        &judgeEffectFireworkImage_,
+        &judgeEffectFireworkColorBallImage_,
+    };
+    for (const QImage* image : prewarmImages) {
+        if (image != nullptr && !image->isNull()) {
+            glRenderer_.prewarmTexture(*image);
+        }
+    }
+    offscreenContext->doneCurrent();
+
+    offscreenSurface_ = surface;
+    offscreenContext_ = offscreenContext;
+    return true;
+}
+
+void PreviewCanvas::shutdownOffscreenRenderer()
+{
+    if (offscreenContext_ != nullptr && offscreenSurface_ != nullptr) {
+        if (offscreenContext_->makeCurrent(offscreenSurface_)) {
+            if (offscreenFramebuffer_ != nullptr) {
+                delete offscreenFramebuffer_;
+                offscreenFramebuffer_ = nullptr;
+                offscreenFramebufferSize_ = QSize();
+            }
+            if (glRenderer_.isInitialized()) {
+                glRenderer_.shutdown();
+            }
+            offscreenContext_->doneCurrent();
+        } else {
+            if (offscreenFramebuffer_ != nullptr) {
+                delete offscreenFramebuffer_;
+                offscreenFramebuffer_ = nullptr;
+                offscreenFramebufferSize_ = QSize();
+            }
+        }
+    } else if (offscreenFramebuffer_ != nullptr) {
+        delete offscreenFramebuffer_;
+        offscreenFramebuffer_ = nullptr;
+        offscreenFramebufferSize_ = QSize();
+    }
+
+    if (offscreenContext_ != nullptr) {
+        delete offscreenContext_;
+        offscreenContext_ = nullptr;
+    }
+    if (offscreenSurface_ != nullptr) {
+        offscreenSurface_->destroy();
+        delete offscreenSurface_;
+        offscreenSurface_ = nullptr;
+    }
+}
+
+bool PreviewCanvas::ensureOffscreenFramebuffer(const QSize& framebufferSize, QString* errorMessage)
+{
+    const QSize safeSize(qMax(1, framebufferSize.width()), qMax(1, framebufferSize.height()));
+    if (offscreenFramebuffer_ != nullptr
+        && offscreenFramebufferSize_ == safeSize
+        && offscreenFramebuffer_->isValid()) {
+        return true;
+    }
+
+    if (offscreenFramebuffer_ != nullptr) {
+        delete offscreenFramebuffer_;
+        offscreenFramebuffer_ = nullptr;
+        offscreenFramebufferSize_ = QSize();
+    }
+
+    QOpenGLFramebufferObjectFormat format;
+    format.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
+    const int preferredSamples = offscreenContext_ != nullptr ? offscreenContext_->format().samples() : 0;
+    format.setSamples(qBound(0, preferredSamples, 8));
+    offscreenFramebuffer_ = new QOpenGLFramebufferObject(safeSize, format);
+    if (offscreenFramebuffer_ == nullptr || !offscreenFramebuffer_->isValid()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to create offscreen framebuffer");
+        }
+        if (offscreenFramebuffer_ != nullptr) {
+            delete offscreenFramebuffer_;
+            offscreenFramebuffer_ = nullptr;
+        }
+        return false;
+    }
+    offscreenFramebufferSize_ = safeSize;
+    return true;
+}
+
+QImage PreviewCanvas::renderOverlayFrameOffscreen(const QSize& outputSize, double playheadSeconds, bool showTimestamp)
+{
+    const QSize safeSize(qMax(1, outputSize.width()), qMax(1, outputSize.height()));
+    offscreenDrawNsLastFrame_ = 0;
+    offscreenReadbackNsLastFrame_ = 0;
+    if (offscreenContext_ == nullptr || offscreenSurface_ == nullptr || !glRenderer_.isInitialized()) {
+        return QImage();
+    }
+    if (!offscreenContext_->makeCurrent(offscreenSurface_)) {
+        return QImage();
+    }
+    if (!ensureOffscreenFramebuffer(safeSize, nullptr)) {
+        offscreenContext_->doneCurrent();
+        return QImage();
+    }
+
+    const double originalPlayhead = playheadSeconds_;
+    const bool originalShowTimestamp = showTimestamp_;
+    const bool originalHighQualityRender = highQualityRender_;
+
+    playheadSeconds_ = playheadSeconds;
+    showTimestamp_ = showTimestamp;
+    highQualityRender_ = true;
+
+    QImage frame;
+    if (offscreenFramebuffer_->bind()) {
+        QOpenGLFunctions* gl = offscreenContext_->functions();
+        if (gl != nullptr) {
+            gl->glViewport(0, 0, safeSize.width(), safeSize.height());
+            gl->glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            gl->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        }
+
+        QElapsedTimer drawTimer;
+        drawTimer.start();
+        glRenderer_.beginFrame(safeSize, 1.0);
+        {
+            QOpenGLPaintDevice paintDevice(safeSize);
+            paintDevice.setDevicePixelRatio(1.0);
+            QPainter painter(&paintDevice);
+            renderCanvas(painter, safeSize, false, false, true);
+        }
+        glRenderer_.endFrame();
+        offscreenDrawNsLastFrame_ = drawTimer.nsecsElapsed();
+        QElapsedTimer readbackTimer;
+        readbackTimer.start();
+        frame = offscreenFramebuffer_->toImage(false);
+        offscreenReadbackNsLastFrame_ = readbackTimer.nsecsElapsed();
+        offscreenFramebuffer_->release();
+    }
+
+    playheadSeconds_ = originalPlayhead;
+    showTimestamp_ = originalShowTimestamp;
+    highQualityRender_ = originalHighQualityRender;
+    offscreenContext_->doneCurrent();
+
+    if (!frame.isNull() && frame.format() != QImage::Format_RGBA8888) {
+        frame = frame.convertToFormat(QImage::Format_RGBA8888);
+    }
+    return frame;
 }
 
 struct PreviewCanvas::SkinLoadResult {

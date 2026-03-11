@@ -1,10 +1,17 @@
 QRectF PreviewCanvas::currentStageRect() const
 {
+    return stageRectForSize(size());
+}
+
+QRectF PreviewCanvas::stageRectForSize(const QSize& renderSize) const
+{
+    const int renderWidth = qMax(1, renderSize.width());
+    const int renderHeight = qMax(1, renderSize.height());
     return QRectF(
         kMargin,
         kMargin,
-        qMax<qreal>(1.0, width() - kMargin * 2),
-        qMax<qreal>(1.0, height() - kMargin * 2)
+        qMax<qreal>(1.0, renderWidth - kMargin * 2),
+        qMax<qreal>(1.0, renderHeight - kMargin * 2)
     );
 }
 
@@ -240,16 +247,31 @@ void PreviewCanvas::paintGL()
 
 void PreviewCanvas::renderCanvas(QPainter& painter)
 {
+    renderCanvas(painter, size(), true, true, false);
+}
+
+void PreviewCanvas::renderCanvas(
+    QPainter& painter,
+    const QSize& canvasSize,
+    bool drawStageBackgroundEnabled,
+    bool clearToStageColor,
+    bool highQualityRender
+)
+{
     usedGpuRendererThisFrame_ = false;
     cpuFallbackCount_ = 0;
     painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
-    painter.fillRect(QRect(QPoint(0, 0), size()), QColor("#1F2833"));
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, highQualityRender);
+    if (clearToStageColor) {
+        painter.fillRect(QRect(QPoint(0, 0), canvasSize), QColor("#1F2833"));
+    }
 
-    const QRectF stageRect = currentStageRect();
+    const QRectF stageRect = stageRectForSize(canvasSize);
     const QRectF playfieldRect = stagePlayfieldRect(stageRect);
 
-    drawStageBackground(painter, stageRect);
+    if (drawStageBackgroundEnabled) {
+        drawStageBackground(painter, stageRect);
+    }
     drawPlayfieldBackdrop(painter, playfieldRect);
     const bool batchNative = glRenderer_.isInitialized();
     if (batchNative) {

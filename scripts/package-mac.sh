@@ -182,6 +182,17 @@ if [[ -d "$ROOT_DIR/assets" ]]; then
   cp -R "$ROOT_DIR/assets" "$bundle_assets_dir"
 fi
 
+ffmpeg_src="$ROOT_DIR/third_party/ffmpeg/macos/ffmpeg"
+if [[ -f "$ffmpeg_src" ]]; then
+  ffmpeg_bin_dir="$DIST_DIR/MiaCode.app/Contents/MacOS/ffmpeg"
+  mkdir -p "$ffmpeg_bin_dir"
+  cp "$ffmpeg_src" "$ffmpeg_bin_dir/ffmpeg"
+  chmod +x "$ffmpeg_bin_dir/ffmpeg"
+else
+  echo "Missing required ffmpeg binary: $ffmpeg_src" >&2
+  exit 1
+fi
+
 for doc in README.md README_EN.md; do
   if [[ -f "$ROOT_DIR/$doc" ]]; then
     cp "$ROOT_DIR/$doc" "$DIST_DIR/docs/$doc"
@@ -197,6 +208,7 @@ Run:
 Included:
   - MiaCode.app
   - Qt frameworks/plugins deployed by macdeployqt
+  - MiaCode.app/Contents/MacOS/ffmpeg/ffmpeg
   - assets/
   - docs/
 EOF

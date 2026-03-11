@@ -1228,7 +1228,12 @@ GLuint PreviewGLRenderer::ensureTexture(const QImage& image, bool useCache)
     }
 
     glBindTexture(GL_TEXTURE_2D, texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    // Apply mipmaps only for cached static textures to avoid per-frame cost on media frames.
+    glTexParameteri(
+        GL_TEXTURE_2D,
+        GL_TEXTURE_MIN_FILTER,
+        useCache ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR
+    );
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -1260,6 +1265,9 @@ GLuint PreviewGLRenderer::ensureTexture(const QImage& image, bool useCache)
             GL_UNSIGNED_BYTE,
             textureImage.constBits()
         );
+    }
+    if (useCache) {
+        glGenerateMipmap(GL_TEXTURE_2D);
     }
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     glBindTexture(GL_TEXTURE_2D, 0);

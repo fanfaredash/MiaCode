@@ -3,7 +3,7 @@
 set(MIACODE_VERSION_MAJOR "0" CACHE STRING "miacode major version")
 set(MIACODE_VERSION_MINOR "1" CACHE STRING "miacode minor version")
 set(MIACODE_VERSION_PATCH "2" CACHE STRING "miacode patch version")
-set(MIACODE_VERSION_PRERELEASE "dev.2" CACHE STRING "miacode prerelease suffix (empty for stable release)")
+set(MIACODE_VERSION_PRERELEASE "dev.3" CACHE STRING "miacode prerelease suffix (empty for stable release)")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
@@ -48,6 +48,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/editor/BracketScopeHighlighter.cpp
     src/tools/latency/LatencyDetectorDialog.h
     src/tools/latency/LatencyDetectorDialog.cpp
+    src/tools/video_export/VideoExportDialog.h
+    src/tools/video_export/VideoExportDialog.cpp
+    src/tools/video_export/VideoExportController.h
+    src/tools/video_export/VideoExportController.cpp
     src/preview/video/PreviewCanvas.h
     src/preview/video/PreviewCanvas.cpp
     src/preview/video/PreviewGLRenderer.h
@@ -136,6 +140,7 @@ target_include_directories(MiaCode PRIVATE
     src/simai/parser
     src/timeline
     src/tools/latency
+    src/tools/video_export
 )
 
 target_link_libraries(MiaCode PRIVATE Qt6::Multimedia)
