@@ -10,6 +10,7 @@ struct PreviewAudioSettings {
     double exVolume = 0.10;
     double touchVolume = 0.10;
     double touchholdVolume = 0.10;
+    double fireworkVolume = 0.10;
 
     static double clamp(double value);
     void normalize();
@@ -21,6 +22,7 @@ struct PreviewAudioSettings {
     int exPercent() const;
     int touchPercent() const;
     int touchholdPercent() const;
+    int fireworkPercent() const;
     void setBgmPercent(int value);
     void setAnswerPercent(int value);
     void setSlidePercent(int value);
@@ -28,6 +30,7 @@ struct PreviewAudioSettings {
     void setExPercent(int value);
     void setTouchPercent(int value);
     void setTouchholdPercent(int value);
+    void setFireworkPercent(int value);
 
     QJsonObject toJson() const;
     static PreviewAudioSettings fromJson(const QJsonObject& object);

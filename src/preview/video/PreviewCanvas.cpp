@@ -122,7 +122,7 @@ constexpr qreal kJudgeEffectFireworkTouchTriggerDelaySeconds = 0.05;
 constexpr qreal kJudgeEffectFireworkDurationSeconds = 1.3333334;
 constexpr qreal kJudgeEffectFireworkBaseWidthUnits = 10.8;
 constexpr qreal kJudgeEffectFireworkColorBallBaseWidthUnits = 5.12;
-constexpr qreal kJudgeEffectFireworkBrightnessGain = 1.25;
+constexpr qreal kJudgeEffectFireworkBrightnessGain = 1.20;
 constexpr int kJudgeEffectFireworkSectorCount = 30;
 constexpr int kJudgeEffectFireworkColoredSectorCount = kJudgeEffectFireworkSectorCount / 2;
 constexpr qreal kJudgeEffectFireworkSectorSpanDegrees = 360.0 / static_cast<qreal>(kJudgeEffectFireworkSectorCount);
@@ -130,16 +130,16 @@ constexpr qreal kJudgeEffectFireworkSectorStepDegrees = kJudgeEffectFireworkSect
 constexpr qreal kJudgeEffectFireworkSectorPhaseDegrees = -102.0;
 constexpr int kJudgeEffectFireworkStepRotationSegmentCount = 3;
 constexpr qreal kJudgeEffectFireworkStepRotationDegrees = 24.0;
-// Hanabi.mat source params:
+// Firework material source params:
 // _InnerLB=0.018, _InnerUB=0.054, _OuterLB=0.36, _OuterUB=0.429
-constexpr qreal kHanabiInnerLB = 0.018;
-constexpr qreal kHanabiInnerUB = 0.054;
-constexpr qreal kHanabiOuterLB = 0.36;
-constexpr qreal kHanabiOuterUB = 0.429;
-constexpr qreal kJudgeEffectFireworkHoleStartRadiusRatio = kHanabiInnerUB;
+constexpr qreal kFireworkInnerLB = 0.018;
+constexpr qreal kFireworkInnerUB = 0.054;
+constexpr qreal kFireworkOuterLB = 0.36;
+constexpr qreal kFireworkOuterUB = 0.429;
+constexpr qreal kJudgeEffectFireworkHoleStartRadiusRatio = kFireworkInnerUB;
 constexpr qreal kJudgeEffectFireworkHoleEndRadiusRatio = 1.0;
 constexpr qreal kJudgeEffectFireworkHoleBandRatio =
-    (kHanabiInnerUB - kHanabiInnerLB) + (kHanabiOuterUB - kHanabiOuterLB);
+    (kFireworkInnerUB - kFireworkInnerLB) + (kFireworkOuterUB - kFireworkOuterLB);
 const QColor kJudgeEffectTouchCircleTint = QColor::fromRgbF(1.0, 0.9943893, 0.4669811, 1.0);
 const QColor kJudgeEffectTouchPartTint = QColor::fromRgbF(1.0, 0.9000474, 0.4666667, 1.0);
 const std::array<QColor, 5> kJudgeEffectFireworkSectorColors = {{
@@ -289,10 +289,18 @@ const std::array<ScalarCurveKey, 3> kJudgeEffectFireworkRotationKeys = {{
     {1.3333334, -78.85715},
 }};
 
-const std::array<ScalarCurveKey, 3> kJudgeEffectFireworkAlphaKeys = {{
-    // fire.anim -> Firework.material._Alpha (with Hanabi.mat default _Alpha=0.589 at t=0)
+const std::array<ScalarCurveKey, 12> kJudgeEffectFireworkAlphaKeys = {{
     {0.0, 0.589},
     {0.5, 0.589},
+    {0.5833333, 0.47709},
+    {0.6666667, 0.37696},
+    {0.75, 0.28861},
+    {0.8333333, 0.21204},
+    {0.9166667, 0.14725},
+    {1.0, 0.09424},
+    {1.0833333, 0.05301},
+    {1.1666667, 0.02356},
+    {1.25, 0.00589},
     {1.3333334, 0.0},
 }};
 

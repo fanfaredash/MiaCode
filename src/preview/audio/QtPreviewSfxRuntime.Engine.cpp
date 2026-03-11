@@ -55,6 +55,8 @@ void QtPreviewSfxRuntime::initializeAssets()
     configureBank(breakSfx_, "break.wav", 8);
     configureBank(exSfx_, "judge_ex.wav", 8);
     configureBank(touchSfx_, "touch.wav", 12);
+    // Firework SFX mirrors the visual behavior: latest trigger interrupts the previous one.
+    configureBank(fireworkSfx_, "firework.wav", 1);
 
     const QString touchholdPath = QDir(sfxDir_).filePath("touchHold_riser.wav");
     if (QFileInfo::exists(touchholdPath)) {
@@ -133,6 +135,7 @@ void QtPreviewSfxRuntime::applyVolumes()
     applyVolume(breakSfx_, settings_.breakVolume);
     applyVolume(exSfx_, settings_.exVolume);
     applyVolume(touchSfx_, settings_.touchVolume);
+    applyVolume(fireworkSfx_, settings_.fireworkVolume);
     if (backgroundTrackVoice_ != nullptr && backgroundTrackVoice_->initialized) {
         ma_sound_set_volume(&backgroundTrackVoice_->sound, static_cast<float>(settings_.bgmVolume));
     }

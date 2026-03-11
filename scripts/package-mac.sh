@@ -164,6 +164,7 @@ if [[ -d "$ROOT_DIR/assets" ]]; then
     "answer.wav"
     "slide.wav"
     "break.wav"
+    "firework.wav"
     "judge_ex.wav"
     "touch.wav"
     "touchHold_riser.wav"

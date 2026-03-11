@@ -193,6 +193,7 @@ void QtPreviewSfxRuntime::stopAll()
     stopBank(breakSfx_);
     stopBank(exSfx_);
     stopBank(touchSfx_);
+    stopBank(fireworkSfx_);
     if (backgroundTrackVoice_ != nullptr && backgroundTrackVoice_->initialized) {
         ma_sound_stop(&backgroundTrackVoice_->sound);
     }

@@ -22,6 +22,7 @@
 
 namespace {
 constexpr double kQtPreviewSfxEpsilonSeconds = 1e-6;
+constexpr double kQtPreviewSfxFireworkTouchTriggerDelaySeconds = 0.05;
 
 bool runtimeAudioDebugEnabled()
 {

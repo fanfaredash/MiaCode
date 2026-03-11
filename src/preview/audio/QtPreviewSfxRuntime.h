@@ -40,6 +40,7 @@ private:
         int priority = 0;
         QString kind;
         int spanIndex = -1;
+        double gain = 1.0;
     };
 
     struct TouchholdSpan {
@@ -101,6 +102,7 @@ private:
     SfxBank breakSfx_;
     SfxBank exSfx_;
     SfxBank touchSfx_;
+    SfxBank fireworkSfx_;
     QVector<TouchholdVoice> touchholdVoices_;
     EngineState* engineState_ = nullptr;
 };

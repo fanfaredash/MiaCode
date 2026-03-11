@@ -98,6 +98,7 @@ void QtPreviewSfxRuntime::resetBanks()
     resetBank(breakSfx_);
     resetBank(exSfx_);
     resetBank(touchSfx_);
+    resetBank(fireworkSfx_);
     resetBackgroundTrack();
     for (TouchholdVoice& voice : touchholdVoices_) {
         if (voice.voice != nullptr) {
