@@ -19,6 +19,7 @@ public:
 protected:
     void changeEvent(QEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
+    void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
 
 private slots:
