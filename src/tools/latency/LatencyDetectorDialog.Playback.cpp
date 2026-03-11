@@ -90,27 +90,41 @@ void LatencyDetectorDialog::triggerBeatAudition(double fromSecond, double toSeco
         return;
     }
 
-    const double epsilon = 1e-5;
-    const int beatIndex = static_cast<int>(qFloor((toSecond - pendingBeatOffset_) / beatPeriod));
-    const double beatSecond = pendingBeatOffset_ + beatIndex * beatPeriod;
-    if (beatSecond < fromSecond - epsilon || beatSecond > toSecond + epsilon) {
-        return;
-    }
-    if (beatSecond <= lastBeatAuditionSecond_ + epsilon) {
+    const double auditionPeriod = pendingBeatAuditionPeriodSeconds_ > 1e-6
+        ? pendingBeatAuditionPeriodSeconds_
+        : beatPeriod;
+    if (auditionPeriod <= 0.0) {
         return;
     }
 
-    double gain = 1.0;
-    if (!pendingBeatUseUniformAccent_ && !pendingBeatAccentWeights_.isEmpty()) {
-        const int accentCount = pendingBeatAccentWeights_.size();
-        int accentIndex = (beatIndex - pendingBeatAccentAnchorIndex_) % accentCount;
-        if (accentIndex < 0) {
-            accentIndex += accentCount;
-        }
-        gain = pendingBeatAccentWeights_.at(accentIndex);
+    const double epsilon = 1e-5;
+    qint64 stepIndex = static_cast<qint64>(qFloor((fromSecond - pendingBeatOffset_) / auditionPeriod));
+    if (pendingBeatOffset_ + static_cast<double>(stepIndex) * auditionPeriod < fromSecond - epsilon) {
+        ++stepIndex;
     }
-    gain = qBound(0.0, (0.72 + 0.28 * gain) * beatSfxVolume_, 4.0);
-    sfxRuntime_->audition("answer", gain);
-    lastBeatAuditionSecond_ = beatSecond;
+
+    for (;; ++stepIndex) {
+        const double eventSecond = pendingBeatOffset_ + static_cast<double>(stepIndex) * auditionPeriod;
+        if (eventSecond > toSecond + epsilon) {
+            break;
+        }
+        if (eventSecond <= lastBeatAuditionSecond_ + epsilon) {
+            continue;
+        }
+
+        double gain = 1.0;
+        if (!pendingBeatForceUniformGain_ && !pendingBeatUseUniformAccent_ && !pendingBeatAccentWeights_.isEmpty()) {
+            const int accentCount = pendingBeatAccentWeights_.size();
+            const int beatIndex = static_cast<int>(qRound64((eventSecond - pendingBeatOffset_) / beatPeriod));
+            int accentIndex = (beatIndex - pendingBeatAccentAnchorIndex_) % accentCount;
+            if (accentIndex < 0) {
+                accentIndex += accentCount;
+            }
+            gain = pendingBeatAccentWeights_.at(accentIndex);
+        }
+        gain = qBound(0.0, (0.72 + 0.28 * gain) * beatSfxVolume_, 4.0);
+        sfxRuntime_->audition("answer", gain);
+        lastBeatAuditionSecond_ = eventSecond;
+    }
 }
 

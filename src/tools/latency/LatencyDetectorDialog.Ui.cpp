@@ -25,14 +25,12 @@ void LatencyDetectorDialog::buildUi()
     bpmEdit_->setPlaceholderText("180.000");
     bpmEdit_->setFixedWidth(74);
     detectBpmButton_ = new QPushButton(localizedText("检测BPM", "Detect BPM"), this);
-    bpmHelpButton_ = new QPushButton(localizedText("BPM测得不准？", "BPM inaccurate?"), this);
+    bpmHelpButton_ = new QPushButton(localizedText(QStringLiteral("\u6D4B\u5F97\u4E0D\u51C6?"), "Inaccurate?"), this);
     bpmHelpButton_->setMinimumWidth(120);
-    bpmRow->addWidget(meterLabel);
-    bpmRow->addWidget(meterCombo_);
-    bpmRow->addSpacing(6);
     bpmRow->addWidget(bpmLabel);
     bpmRow->addWidget(bpmEdit_);
     bpmRow->addWidget(detectBpmButton_);
+    bpmRow->addSpacing(16);
     bpmRow->addWidget(bpmHelpButton_);
     bpmRow->addStretch(1);
     rootLayout->addLayout(bpmRow);
@@ -66,6 +64,23 @@ void LatencyDetectorDialog::buildUi()
     offsetRow->addWidget(detectOffsetButton_);
     offsetRow->addStretch(1);
     rootLayout->addLayout(offsetRow);
+
+    auto* timingRow = new QHBoxLayout();
+    timingRow->setSpacing(8);
+    auto* snapLabel = new QLabel(localizedText(QStringLiteral("\u504F\u79FB\u5438\u9644\u8BBE\u7F6E"), "Offset Snap:"), this);
+    offsetSnapCombo_ = new QComboBox(this);
+    offsetSnapCombo_->setFixedWidth(96);
+    offsetSnapCombo_->addItem(localizedText(QStringLiteral("\u5C0F\u8282"), "Bar"), QStringLiteral("bar"));
+    offsetSnapCombo_->addItem(localizedText(QStringLiteral("4\u5206\u97F3\u7B26"), "Quarter"), QStringLiteral("quarter"));
+    offsetSnapCombo_->addItem(localizedText(QStringLiteral("8\u5206\u97F3\u7B26"), "Eighth"), QStringLiteral("eighth"));
+    offsetSnapCombo_->setCurrentIndex(0);
+    timingRow->addWidget(meterLabel);
+    timingRow->addWidget(meterCombo_);
+    timingRow->addSpacing(10);
+    timingRow->addWidget(snapLabel);
+    timingRow->addWidget(offsetSnapCombo_);
+    timingRow->addStretch(1);
+    rootLayout->addLayout(timingRow);
 
     waveformView_ = new WaveformOverviewWidget(this);
     static_cast<WaveformOverviewWidget*>(waveformView_)->setSeekCallback([this](double second) {
@@ -198,6 +213,9 @@ void LatencyDetectorDialog::buildUi()
             emit meterIdChanged(meterCombo_->currentData().toString());
         }
     });
+    connect(offsetSnapCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
+        updateBeatOverlay();
+    });
     connect(zoomOutButton_, &QToolButton::clicked, this, [this]() {
         if (zoomLevel_ < 1) {
             ++zoomLevel_;
@@ -275,6 +293,7 @@ void LatencyDetectorDialog::updateBeatOverlay()
     bool offsetOk = false;
     const double offset = parsedOffset(&offsetOk);
     const QString selectedMeterId = meterCombo_ != nullptr ? meterCombo_->currentData().toString() : QStringLiteral("4/4");
+    const QString snapModeId = selectedOffsetSnapModeId();
     QString meterId = selectedMeterId;
     if (meterId == QLatin1String("auto")) {
         meterId = lastDetectedMeterId_;
@@ -283,9 +302,19 @@ void LatencyDetectorDialog::updateBeatOverlay()
     pendingBeatBpm_ = bpmOk ? bpm : 0.0;
     pendingBeatOffset_ = offsetOk ? offset : 0.0;
     pendingBeatBarPulseCount_ = pattern != nullptr ? qMax(1, pattern->accentWeights.size()) : 4;
-    pendingBeatUseUniformAccent_ = selectedMeterId == QLatin1String("auto");
+    pendingBeatForceUniformGain_ = snapModeId != QLatin1String("bar");
+    pendingBeatUseUniformAccent_ = pendingBeatForceUniformGain_ || selectedMeterId == QLatin1String("auto");
+    pendingBeatAuditionPeriodSeconds_ = 0.0;
     pendingBeatAccentAnchorIndex_ = 0;
     pendingBeatAccentWeights_.clear();
+    const double beatPeriod = pendingBeatBpm_ > 0.0 ? (60.0 / pendingBeatBpm_) : 0.0;
+    if (beatPeriod > 0.0) {
+        if (snapModeId == QLatin1String("eighth")) {
+            pendingBeatAuditionPeriodSeconds_ = beatPeriod * 0.5;
+        } else {
+            pendingBeatAuditionPeriodSeconds_ = beatPeriod;
+        }
+    }
     if (pendingBeatUseUniformAccent_) {
         pendingBeatAccentWeights_.append(1.0);
     } else if (pattern != nullptr && !pattern->accentWeights.isEmpty()) {
@@ -302,7 +331,6 @@ void LatencyDetectorDialog::updateBeatOverlay()
         && !pendingBeatAccentWeights_.isEmpty()
         && detectedMeterPhaseValid_
         && meterId == lastDetectedMeterId_) {
-        const double beatPeriod = 60.0 / pendingBeatBpm_;
         if (beatPeriod > 0.0) {
             const double anchorBeats = (detectedMeterPhaseSecond_ - pendingBeatOffset_) / beatPeriod;
             pendingBeatAccentAnchorIndex_ = qRound(anchorBeats);
@@ -486,4 +514,3 @@ void LatencyDetectorDialog::showBpmHelpDialog()
     rootLayout->addWidget(buttonBox);
     dialog.exec();
 }
-
