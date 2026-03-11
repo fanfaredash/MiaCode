@@ -442,6 +442,160 @@ void MainWindow::syncTimelineToEditorCursor(bool centerView)
     timelineView_->setPlayheadSeconds(second, centerView);
 }
 
+bool MainWindow::resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const
+{
+    if (timelineCursorNotes_.isEmpty()) {
+        return false;
+    }
+    const TimelineCursorNote* best = nullptr;
+    bool foundSameLane = false;
+    const bool preferLane = lane >= 1;
+    const double target = qMax(0.0, second);
+
+    for (const TimelineCursorNote& note : timelineCursorNotes_) {
+        const bool sameLane = preferLane && note.lane == lane;
+        if (preferLane) {
+            if (sameLane && !foundSameLane) {
+                best = &note;
+                foundSameLane = true;
+                continue;
+            }
+            if (!sameLane && foundSameLane) {
+                continue;
+            }
+        }
+
+        if (best == nullptr) {
+            best = &note;
+            continue;
+        }
+
+        const double bestDelta = qAbs(best->second - target);
+        const double noteDelta = qAbs(note.second - target);
+        if (noteDelta + 1e-9 < bestDelta) {
+            best = &note;
+            continue;
+        }
+        if (qAbs(noteDelta - bestDelta) <= 1e-9) {
+            if (note.line < best->line || (note.line == best->line && note.col < best->col)) {
+                best = &note;
+            }
+        }
+    }
+
+    if (best == nullptr) {
+        return false;
+    }
+    if (line != nullptr) {
+        *line = best->line;
+    }
+    if (col != nullptr) {
+        *col = best->col;
+    }
+    if (noteSecond != nullptr) {
+        *noteSecond = best->second;
+    }
+    return true;
+}
+
+bool MainWindow::moveEditorCursorToTimelineLocation(
+    int line,
+    int col,
+    bool selectToken,
+    bool focusEditor,
+    bool centerView,
+    bool suppressSignals
+)
+{
+    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
+    if (editor == nullptr || editor->document() == nullptr) {
+        return false;
+    }
+
+    QTextBlock block = editor->document()->findBlockByNumber(line - 1);
+    if (!block.isValid()) {
+        jumpToLocation(line, col);
+        return true;
+    }
+
+    const QString blockText = block.text();
+    const int lineLength = blockText.size();
+    int localIndex = qBound(0, col - 1, qMax(0, lineLength));
+
+    QTextCursor cursor(editor->document());
+    if (selectToken) {
+        const int commentIndex = blockText.indexOf(QStringLiteral("||"));
+        const int scanEnd = (commentIndex >= 0) ? commentIndex : lineLength;
+        if (localIndex > scanEnd) {
+            localIndex = scanEnd;
+        }
+        auto isDelimiter = [](QChar ch) {
+            return ch.isSpace() || ch == QChar('/') || ch == QChar(',') || ch == QChar('`');
+        };
+
+        int tokenStart = localIndex;
+        while (tokenStart > 0 && !isDelimiter(blockText.at(tokenStart - 1))) {
+            --tokenStart;
+        }
+        int tokenEnd = localIndex;
+        while (tokenEnd < scanEnd && !isDelimiter(blockText.at(tokenEnd))) {
+            ++tokenEnd;
+        }
+        if (tokenEnd <= tokenStart) {
+            tokenStart = qBound(0, localIndex, lineLength);
+            tokenEnd = qMin(lineLength, tokenStart + 1);
+        }
+
+        cursor.setPosition(block.position() + tokenStart);
+        cursor.setPosition(block.position() + tokenEnd, QTextCursor::KeepAnchor);
+    } else {
+        cursor.setPosition(block.position() + localIndex);
+    }
+
+    if (suppressSignals) {
+        QSignalBlocker blocker(editor);
+        editor->setTextCursor(cursor);
+    } else {
+        editor->setTextCursor(cursor);
+    }
+
+    if (centerView) {
+        if (QScrollBar* vbar = editor->verticalScrollBar()) {
+            const QRect caretRect = editor->cursorRect();
+            const int centeredValue = vbar->value() + caretRect.center().y() - (editor->viewport()->height() / 2);
+            vbar->setValue(qBound(vbar->minimum(), centeredValue, vbar->maximum()));
+        }
+    }
+    if (focusEditor) {
+        editor->setFocus();
+    }
+    return true;
+}
+
+void MainWindow::syncEditorCursorToPreviewSecond(double second, bool centerView)
+{
+    if (timelineView_ == nullptr || !timelineView_->followPreviewEnabled() || !hasActiveDifficulty()) {
+        return;
+    }
+
+    int line = 1;
+    int col = 1;
+    double noteSecond = -1.0;
+    if (!resolveNearestTimelineNote(second, -1, &line, &col, &noteSecond)) {
+        return;
+    }
+
+    const auto [currentLine, currentCol] = currentCursorLineCol();
+    if (currentLine == line && currentCol == col) {
+        timelineView_->setCursorSeconds(noteSecond >= 0.0 ? noteSecond : qMax(0.0, second));
+        return;
+    }
+
+    if (moveEditorCursorToTimelineLocation(line, col, false, false, centerView, true)) {
+        timelineView_->setCursorSeconds(noteSecond >= 0.0 ? noteSecond : qMax(0.0, second));
+    }
+}
+
 double MainWindow::previewDurationSeconds() const
 {
     double duration = 0.0;
@@ -1104,7 +1258,7 @@ void MainWindow::stopQtPreviewPlayback(bool keepPosition)
     qtPreviewAwaitingFrameSwapSinceMs_ = -1;
     qtPreviewPendingAudioCalibration_ = false;
     flushQtPreviewTimelinePosition();
-    syncTimelineToEditorCursor(true);
+    syncEditorCursorToPreviewSecond(qtPreviewPauseSecond_, false);
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->stopAll();
     }
@@ -1139,6 +1293,7 @@ void MainWindow::applyQtPreviewPosition(double second, bool centerView)
     }
     updatePreviewSliderPosition(second);
     updatePreviewObjectStats(second);
+    syncEditorCursorToPreviewSecond(second, centerView);
 }
 
 void MainWindow::flushQtPreviewTimelinePosition()
@@ -1230,101 +1385,21 @@ void MainWindow::onQtPreviewTick()
 
 void MainWindow::jumpToNearestTimelineNote(double second, int lane)
 {
-    if (timelineCursorNotes_.isEmpty()) {
+    int line = 1;
+    int col = 1;
+    if (!resolveNearestTimelineNote(second, lane, &line, &col, nullptr)) {
         statusBar()->showMessage("Timeline metadata unavailable.");
         return;
     }
-
-    const TimelineCursorNote* best = nullptr;
-    bool foundSameLane = false;
-    const bool preferLane = lane >= 1;
-    const double target = qMax(0.0, second);
-
-    for (const TimelineCursorNote& note : timelineCursorNotes_) {
-        const bool sameLane = preferLane && note.lane == lane;
-        if (preferLane) {
-            if (sameLane && !foundSameLane) {
-                best = &note;
-                foundSameLane = true;
-                continue;
-            }
-            if (!sameLane && foundSameLane) {
-                continue;
-            }
-            if (!sameLane && !foundSameLane && best != nullptr) {
-                // Still in all-note fallback mode.
-            }
-        }
-
-        if (best == nullptr) {
-            best = &note;
-            continue;
-        }
-
-        const double bestDelta = qAbs(best->second - target);
-        const double noteDelta = qAbs(note.second - target);
-        if (noteDelta + 1e-9 < bestDelta) {
-            best = &note;
-            continue;
-        }
-        if (qAbs(noteDelta - bestDelta) <= 1e-9) {
-            if (note.line < best->line || (note.line == best->line && note.col < best->col)) {
-                best = &note;
-            }
-        }
-    }
-
-    if (best == nullptr) {
+    if (!moveEditorCursorToTimelineLocation(line, col, true, true, true, false)) {
         statusBar()->showMessage("Timeline metadata unavailable.");
         return;
-    }
-
-    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-    QTextBlock block = editor->document()->findBlockByNumber(best->line - 1);
-    if (!block.isValid()) {
-        jumpToLocation(best->line, best->col);
-    } else {
-        const QString blockText = block.text();
-        const int lineLength = blockText.size();
-        int localIndex = qBound(0, best->col - 1, qMax(0, lineLength));
-        const int commentIndex = blockText.indexOf(QStringLiteral("||"));
-        const int scanEnd = (commentIndex >= 0) ? commentIndex : lineLength;
-        if (localIndex > scanEnd) {
-            localIndex = scanEnd;
-        }
-        auto isDelimiter = [](QChar ch) {
-            return ch.isSpace() || ch == QChar('/') || ch == QChar(',') || ch == QChar('`');
-        };
-
-        int tokenStart = localIndex;
-        while (tokenStart > 0 && !isDelimiter(blockText.at(tokenStart - 1))) {
-            --tokenStart;
-        }
-        int tokenEnd = localIndex;
-        while (tokenEnd < scanEnd && !isDelimiter(blockText.at(tokenEnd))) {
-            ++tokenEnd;
-        }
-        if (tokenEnd <= tokenStart) {
-            tokenStart = qBound(0, localIndex, lineLength);
-            tokenEnd = qMin(lineLength, tokenStart + 1);
-        }
-
-        QTextCursor cursor(editor->document());
-        cursor.setPosition(block.position() + tokenStart);
-        cursor.setPosition(block.position() + tokenEnd, QTextCursor::KeepAnchor);
-        editor->setTextCursor(cursor);
-        if (QScrollBar* vbar = editor->verticalScrollBar()) {
-            const QRect caretRect = editor->cursorRect();
-            const int centeredValue = vbar->value() + caretRect.center().y() - (editor->viewport()->height() / 2);
-            vbar->setValue(qBound(vbar->minimum(), centeredValue, vbar->maximum()));
-        }
-        editor->setFocus();
     }
     statusBar()->showMessage(
         QString("Timeline jump: %1s -> L%2 C%3")
-            .arg(target, 0, 'f', 3)
-            .arg(best->line)
-            .arg(best->col)
+            .arg(qMax(0.0, second), 0, 'f', 3)
+            .arg(line)
+            .arg(col)
     );
 }
 

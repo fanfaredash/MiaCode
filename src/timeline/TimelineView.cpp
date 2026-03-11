@@ -6,6 +6,7 @@
 #include <QFileInfo>
 #include <QImage>
 #include <QIcon>
+#include <QCheckBox>
 #include <QLinearGradient>
 #include <QPainter>
 #include <QPainterPath>
@@ -87,27 +88,32 @@ TimelineView::TimelineView(QWidget* parent)
         "QToolButton:pressed { background: #E5EFFA; }"
     );
     connect(zoomButton_, &QToolButton::clicked, this, [this]() { cycleZoomPreset(); });
-
-    syncButton_ = new QToolButton(this);
-    syncButton_->setAutoRaise(false);
-    syncButton_->setCursor(Qt::PointingHandCursor);
-    syncButton_->setStyleSheet(
-        "QToolButton {"
+    followPreviewCheckBox_ = new QCheckBox(this);
+    followPreviewCheckBox_->setCursor(Qt::PointingHandCursor);
+    followPreviewCheckBox_->setStyleSheet(
+        "QCheckBox {"
         " color: #1F2E41;"
-        " background: #FFFFFF;"
-        " border: 1px solid #B8C7DA;"
-        " border-radius: 6px;"
-        " padding: 1px 8px;"
+        " spacing: 6px;"
         " font-weight: 600;"
         "}"
-        "QToolButton:hover { background: #F1F6FC; border-color: #89A7CB; }"
-        "QToolButton:pressed { background: #E5EFFA; }"
+        "QCheckBox::indicator {"
+        " width: 14px;"
+        " height: 14px;"
+        "}"
     );
-    syncButton_->setText(UiText::isChineseUi() ? QStringLiteral("谱面位置同步") : QStringLiteral("Sync Position"));
-    syncButton_->setToolTip(UiText::isChineseUi()
-        ? QStringLiteral("将预览当前位置同步到光标与时间轴")
-        : QStringLiteral("Sync preview position to cursor and timeline"));
-    connect(syncButton_, &QToolButton::clicked, this, [this]() { emit syncPreviewRequested(); });
+    followPreviewCheckBox_->setText(
+        UiText::isChineseUi()
+            ? QStringLiteral("\u8ddf\u968f\u9884\u89c8")
+            : QStringLiteral("Follow Preview")
+    );
+    followPreviewCheckBox_->setToolTip(
+        UiText::isChineseUi()
+            ? QStringLiteral("\u6309\u9884\u89c8\u65f6\u95f4\u5f3a\u5236\u8ddf\u968f\u5b9a\u4f4d\u7f16\u8f91\u5668\u5149\u6807")
+            : QStringLiteral("Force editor cursor to follow current preview time")
+    );
+    connect(followPreviewCheckBox_, &QCheckBox::toggled, this, [this](bool enabled) {
+        emit followPreviewToggled(enabled);
+    });
 
     updateZoomButtonAppearance();
     loadNoteIcons();
@@ -250,6 +256,19 @@ bool TimelineView::showSlideTracks() const
 double TimelineView::zoomScale() const
 {
     return zoomPresets_.value(zoomPresetIndex_, 1.0);
+}
+
+void TimelineView::setFollowPreviewEnabled(bool enabled)
+{
+    if (followPreviewCheckBox_ == nullptr) {
+        return;
+    }
+    followPreviewCheckBox_->setChecked(enabled);
+}
+
+bool TimelineView::followPreviewEnabled() const
+{
+    return followPreviewCheckBox_ != nullptr && followPreviewCheckBox_->isChecked();
 }
 
 

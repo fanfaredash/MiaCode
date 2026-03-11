@@ -83,8 +83,8 @@ void TimelineView::paintEvent(QPaintEvent* event)
         headerLeftLimit = qMax(headerLeftLimit, zoomButton_->x() + zoomButton_->width() + 8);
     }
     int headerRightLimit = viewport()->width() - 4;
-    if (syncButton_ != nullptr) {
-        headerRightLimit = qMin(headerRightLimit, syncButton_->x() - 8);
+    if (followPreviewCheckBox_ != nullptr) {
+        headerRightLimit = qMin(headerRightLimit, followPreviewCheckBox_->x() - 8);
     }
     for (const TimelineBeatMarker& marker : beats_) {
         const int x = secondToX(marker.second) - xOffset;

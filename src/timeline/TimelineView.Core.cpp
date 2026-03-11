@@ -110,12 +110,12 @@ void TimelineView::layoutHeaderButtons()
         const int y = qMax(0, (timelineTop() - zoomButton_->height()) / 2);
         zoomButton_->move(x, y);
     }
-    if (syncButton_ != nullptr) {
-        syncButton_->adjustSize();
-        syncButton_->setFixedHeight(24);
-        const int y = qMax(0, (timelineTop() - syncButton_->height()) / 2);
-        const int rightX = qMax(leftBaseX, viewport()->width() - syncButton_->width() - rightMargin);
-        syncButton_->move(rightX, y);
+    if (followPreviewCheckBox_ != nullptr) {
+        followPreviewCheckBox_->adjustSize();
+        followPreviewCheckBox_->setFixedHeight(24);
+        const int y = qMax(0, (timelineTop() - followPreviewCheckBox_->height()) / 2);
+        const int rightX = qMax(leftBaseX, viewport()->width() - followPreviewCheckBox_->width() - rightMargin);
+        followPreviewCheckBox_->move(rightX, y);
     }
 }
 
