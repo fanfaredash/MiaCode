@@ -2420,11 +2420,12 @@ void PreviewCanvas::drawTouchMarker(QPainter& painter, const TimelineNoteMarker&
         return;
     }
 
+    const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
     const QPointF point = mapLogicalPointToRect(marker.touchPoint, playfieldRect);
-    const int pointWidth = qMax(1, qRound(basePointImage.width() * kTouchAssetScale));
-    const int pointHeight = qMax(1, qRound(basePointImage.height() * kTouchAssetScale));
-    const int cornerWidth = qMax(1, qRound(baseCornerImage.width() * kTouchAssetScale));
-    const int cornerHeight = qMax(1, qRound(baseCornerImage.height() * kTouchAssetScale));
+    const int pointWidth = qMax(1, qRound(basePointImage.width() * kTouchAssetScale * canvasScale));
+    const int pointHeight = qMax(1, qRound(basePointImage.height() * kTouchAssetScale * canvasScale));
+    const int cornerWidth = qMax(1, qRound(baseCornerImage.width() * kTouchAssetScale * canvasScale));
+    const int cornerHeight = qMax(1, qRound(baseCornerImage.height() * kTouchAssetScale * canvasScale));
     const qreal progress = qBound<qreal>(0.0, (deltaSeconds + kTouchDurationSeconds) / kTouchDurationSeconds, 1.0);
     qreal alpha = 1.0;
     qreal closeRatio = 0.0;
@@ -2494,11 +2495,12 @@ void PreviewCanvas::drawTouchHoldMarker(QPainter& painter, const TimelineNoteMar
         return;
     }
 
+    const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
     const QPointF point = mapLogicalPointToRect(marker.touchPoint, playfieldRect);
-    const int pointWidth = qMax(1, qRound(pointBase.width() * kTouchAssetScale));
-    const int pointHeight = qMax(1, qRound(pointBase.height() * kTouchAssetScale));
-    const int borderWidth = qMax(1, qRound(touchHoldBorderImage_.width() * kTouchAssetScale));
-    const int borderHeight = qMax(1, qRound(touchHoldBorderImage_.height() * kTouchAssetScale));
+    const int pointWidth = qMax(1, qRound(pointBase.width() * kTouchAssetScale * canvasScale));
+    const int pointHeight = qMax(1, qRound(pointBase.height() * kTouchAssetScale * canvasScale));
+    const int borderWidth = qMax(1, qRound(touchHoldBorderImage_.width() * kTouchAssetScale * canvasScale));
+    const int borderHeight = qMax(1, qRound(touchHoldBorderImage_.height() * kTouchAssetScale * canvasScale));
     qreal alpha = 1.0;
     qreal logicalOffset = kTouchHoldClosedOffset;
     if (deltaSeconds < 0.0) {
@@ -2521,10 +2523,10 @@ void PreviewCanvas::drawTouchHoldMarker(QPainter& painter, const TimelineNoteMar
         qreal dx;
         qreal dy;
     } layout[] = {
-        {&touchHold0Image_, qMax(1, qRound(touchHold0Image_.width() * kTouchAssetScale)), qMax(1, qRound(touchHold0Image_.height() * kTouchAssetScale)), -135, offset, -offset},
-        {&touchHold1Image_, qMax(1, qRound(touchHold1Image_.width() * kTouchAssetScale)), qMax(1, qRound(touchHold1Image_.height() * kTouchAssetScale)), -45, offset, offset},
-        {&touchHold2Image_, qMax(1, qRound(touchHold2Image_.width() * kTouchAssetScale)), qMax(1, qRound(touchHold2Image_.height() * kTouchAssetScale)), 45, -offset, offset},
-        {&touchHold3Image_, qMax(1, qRound(touchHold3Image_.width() * kTouchAssetScale)), qMax(1, qRound(touchHold3Image_.height() * kTouchAssetScale)), 135, -offset, -offset},
+        {&touchHold0Image_, qMax(1, qRound(touchHold0Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold0Image_.height() * kTouchAssetScale * canvasScale)), -135, offset, -offset},
+        {&touchHold1Image_, qMax(1, qRound(touchHold1Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold1Image_.height() * kTouchAssetScale * canvasScale)), -45, offset, offset},
+        {&touchHold2Image_, qMax(1, qRound(touchHold2Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold2Image_.height() * kTouchAssetScale * canvasScale)), 45, -offset, offset},
+        {&touchHold3Image_, qMax(1, qRound(touchHold3Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold3Image_.height() * kTouchAssetScale * canvasScale)), 135, -offset, -offset},
     };
 
     const bool batchNative = glRenderer_.isInitialized() && !nativePaintingActive_;

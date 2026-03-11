@@ -122,7 +122,7 @@ void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& n
     touchholdSpans_.reserve(noteMarkers.size());
     events_.reserve(noteMarkers.size() * 3);
 
-    const auto addEvent = [this](double second, const QString& kind, int priority = 1, int spanIndex = -1) {
+    const auto addEvent = [this](double second, const QString& kind, int priority = 1, int spanIndex = -1, double gain = 1.0) {
         if (second < 0.0 || kind.isEmpty()) {
             return;
         }
@@ -131,6 +131,7 @@ void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& n
         event.priority = priority;
         event.kind = kind;
         event.spanIndex = spanIndex;
+        event.gain = qMax(0.0, gain);
         events_.append(event);
     };
 
@@ -147,8 +148,12 @@ void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& n
         }
         if (marker.type == "hold") {
             addEvent(marker.second, "answer");
+            if (marker.isBreak) {
+                // Break hold: head plays break + judge, tail plays judge only.
+                addEvent(marker.second, "break");
+            }
             if (marker.endSecond > marker.second) {
-                addEvent(marker.endSecond, "answer");
+                addEvent(marker.endSecond, "answer", 1, -1, 0.5);
             }
             if (marker.isEx) {
                 addEvent(marker.second, "ex");
@@ -160,10 +165,16 @@ void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& n
         }
         if (marker.type == "touch") {
             addEvent(marker.second, "touch");
+            if (marker.isFirework) {
+                addEvent(marker.second + kQtPreviewSfxFireworkTouchTriggerDelaySeconds, "firework");
+            }
             continue;
         }
         if (marker.type == "touch_hold") {
             addEvent(marker.second, "touch");
+            if (marker.isFirework && marker.endSecond >= 0.0) {
+                addEvent(marker.endSecond, "firework");
+            }
             if (marker.endSecond > marker.second) {
                 TouchholdSpan span;
                 span.startSecond = marker.second;
@@ -178,6 +189,10 @@ void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& n
         if (marker.type == "slide" || marker.type == "wifi") {
             if (marker.hasHeadStar && !marker.sameHeadSlide) {
                 addEvent(marker.second, "answer");
+                if (marker.headBreak) {
+                    // Keep break-track excluded; only break head-star note gets break SFX.
+                    addEvent(marker.second, "break");
+                }
             }
             addEvent(marker.slideTraceSecond >= 0.0 ? marker.slideTraceSecond : marker.second, "slide");
             continue;
@@ -221,18 +236,42 @@ void QtPreviewSfxRuntime::resetCursor(double second, bool includeCurrentSecond)
 void QtPreviewSfxRuntime::drainEvents(double second)
 {
     while (eventIndex_ < events_.size()) {
-        const Event& event = events_[eventIndex_];
-        if (event.second > second + kQtPreviewSfxEpsilonSeconds) {
+        const int groupStart = eventIndex_;
+        const double groupSecond = events_[groupStart].second;
+        if (groupSecond > second + kQtPreviewSfxEpsilonSeconds) {
             break;
         }
-        if (event.kind == "touchhold_start") {
-            startTouchholdSpan(event.spanIndex, 0.0);
-        } else if (event.kind == "touchhold_stop") {
-            stopTouchholdSpan(event.spanIndex);
-        } else {
-            playKindInternal(event.kind);
+
+        int groupEnd = groupStart + 1;
+        while (groupEnd < events_.size()
+               && qAbs(events_[groupEnd].second - groupSecond) <= kQtPreviewSfxEpsilonSeconds) {
+            ++groupEnd;
         }
-        ++eventIndex_;
+
+        bool judgePlayedInGroup = false;
+        double judgeGainInGroup = 0.0;
+        for (int i = groupStart; i < groupEnd; ++i) {
+            const Event& event = events_[i];
+            if (event.kind == "touchhold_start") {
+                startTouchholdSpan(event.spanIndex, 0.0);
+                continue;
+            }
+            if (event.kind == "touchhold_stop") {
+                stopTouchholdSpan(event.spanIndex);
+                continue;
+            }
+            if (event.kind == "answer") {
+                judgeGainInGroup = qMax(judgeGainInGroup, qMax(0.0, event.gain));
+                judgePlayedInGroup = true;
+                continue;
+            }
+            playKindInternal(event.kind, event.gain);
+        }
+        if (judgePlayedInGroup) {
+            playKindInternal("answer", judgeGainInGroup);
+        }
+
+        eventIndex_ = groupEnd;
     }
 }
 

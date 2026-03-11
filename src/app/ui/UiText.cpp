@@ -105,7 +105,7 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
     if (raw.contains("preview_audio") && raw.value("preview_audio").isObject()) {
         preview.insert("audio", raw.value("preview_audio").toObject());
     }
-    if (raw.contains("bgm_volume") || raw.contains("sfx_volume") || raw.contains("answer_volume")) {
+    if (raw.contains("bgm_volume") || raw.contains("sfx_volume") || raw.contains("answer_volume") || raw.contains("firework_volume")) {
         QJsonObject audio = preview.value("audio").toObject();
         if (raw.contains("bgm_volume")) {
             audio.insert("bgm_volume", raw.value("bgm_volume").toDouble());
@@ -127,6 +127,9 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
         }
         if (raw.contains("touchhold_volume")) {
             audio.insert("touchhold_volume", raw.value("touchhold_volume").toDouble(raw.value("sfx_volume").toDouble()));
+        }
+        if (raw.contains("firework_volume")) {
+            audio.insert("firework_volume", raw.value("firework_volume").toDouble(raw.value("sfx_volume").toDouble()));
         }
         preview.insert("audio", audio);
     }

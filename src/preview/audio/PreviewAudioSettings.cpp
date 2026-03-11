@@ -22,6 +22,7 @@ void PreviewAudioSettings::normalize()
     exVolume = clamp(exVolume);
     touchVolume = clamp(touchVolume);
     touchholdVolume = clamp(touchholdVolume);
+    fireworkVolume = clamp(fireworkVolume);
 }
 
 int PreviewAudioSettings::bgmPercent() const
@@ -59,6 +60,11 @@ int PreviewAudioSettings::touchholdPercent() const
     return qRound(clamp(touchholdVolume) * 100.0);
 }
 
+int PreviewAudioSettings::fireworkPercent() const
+{
+    return qRound(clamp(fireworkVolume) * 100.0);
+}
+
 void PreviewAudioSettings::setBgmPercent(int value)
 {
     bgmVolume = clamp(static_cast<double>(qBound(0, value, 100)) / 100.0);
@@ -94,6 +100,11 @@ void PreviewAudioSettings::setTouchholdPercent(int value)
     touchholdVolume = clamp(static_cast<double>(qBound(0, value, 100)) / 100.0);
 }
 
+void PreviewAudioSettings::setFireworkPercent(int value)
+{
+    fireworkVolume = clamp(static_cast<double>(qBound(0, value, 100)) / 100.0);
+}
+
 QJsonObject PreviewAudioSettings::toJson() const
 {
     PreviewAudioSettings normalized = *this;
@@ -106,6 +117,7 @@ QJsonObject PreviewAudioSettings::toJson() const
     object.insert("ex_volume", normalized.exVolume);
     object.insert("touch_volume", normalized.touchVolume);
     object.insert("touchhold_volume", normalized.touchholdVolume);
+    object.insert("firework_volume", normalized.fireworkVolume);
     return object;
 }
 
@@ -119,12 +131,14 @@ PreviewAudioSettings PreviewAudioSettings::fromJson(const QJsonObject& object)
     const double exLegacySfx = object.value("sfx_volume").toDouble(settings.exVolume);
     const double touchLegacySfx = object.value("sfx_volume").toDouble(settings.touchVolume);
     const double touchholdLegacySfx = object.value("sfx_volume").toDouble(settings.touchholdVolume);
+    const double fireworkLegacySfx = object.value("sfx_volume").toDouble(settings.fireworkVolume);
     settings.answerVolume = object.value("answer_volume").toDouble(answerLegacySfx);
     settings.slideVolume = object.value("slide_volume").toDouble(slideLegacySfx);
     settings.breakVolume = object.value("break_volume").toDouble(breakLegacySfx);
     settings.exVolume = object.value("ex_volume").toDouble(exLegacySfx);
     settings.touchVolume = object.value("touch_volume").toDouble(touchLegacySfx);
     settings.touchholdVolume = object.value("touchhold_volume").toDouble(touchholdLegacySfx);
+    settings.fireworkVolume = object.value("firework_volume").toDouble(fireworkLegacySfx);
     settings.normalize();
     return settings;
 }

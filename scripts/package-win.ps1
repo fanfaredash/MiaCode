@@ -92,6 +92,7 @@ if (Test-Path $assetsSrc) {
         "answer.wav",
         "slide.wav",
         "break.wav",
+        "firework.wav",
         "judge_ex.wav",
         "touch.wav",
         "touchHold_riser.wav"
