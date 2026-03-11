@@ -108,9 +108,17 @@ if (Test-Path $assetsSrc) {
 
 $ffmpegSrc = Join-Path $repoRoot "third_party\\ffmpeg\\windows\\ffmpeg.exe"
 if (Test-Path $ffmpegSrc) {
+    $ffmpegSize = (Get-Item $ffmpegSrc).Length
+    if ($ffmpegSize -lt 1MB) {
+        throw "Invalid ffmpeg binary (too small): $ffmpegSrc ($ffmpegSize bytes)"
+    }
     $ffmpegDstDir = Join-Path $DistDir "ffmpeg"
     New-Item -ItemType Directory -Path $ffmpegDstDir -Force | Out-Null
     Copy-Item $ffmpegSrc (Join-Path $ffmpegDstDir "ffmpeg.exe") -Force
+    $ffprobeSrc = Join-Path $repoRoot "third_party\\ffmpeg\\windows\\ffprobe.exe"
+    if (Test-Path $ffprobeSrc) {
+        Copy-Item $ffprobeSrc (Join-Path $ffmpegDstDir "ffprobe.exe") -Force
+    }
 } else {
     throw "Missing required ffmpeg binary: $ffmpegSrc"
 }

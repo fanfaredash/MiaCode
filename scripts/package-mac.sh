@@ -183,11 +183,20 @@ if [[ -d "$ROOT_DIR/assets" ]]; then
 fi
 
 ffmpeg_src="$ROOT_DIR/third_party/ffmpeg/macos/ffmpeg"
-if [[ -f "$ffmpeg_src" ]]; then
+if [[ -f "$ffmpeg_src" && -s "$ffmpeg_src" ]]; then
   ffmpeg_bin_dir="$DIST_DIR/MiaCode.app/Contents/MacOS/ffmpeg"
   mkdir -p "$ffmpeg_bin_dir"
   cp "$ffmpeg_src" "$ffmpeg_bin_dir/ffmpeg"
   chmod +x "$ffmpeg_bin_dir/ffmpeg"
+  if [[ ! -x "$ffmpeg_bin_dir/ffmpeg" ]]; then
+    echo "ffmpeg copy failed or not executable: $ffmpeg_bin_dir/ffmpeg" >&2
+    exit 1
+  fi
+  ffprobe_src="$ROOT_DIR/third_party/ffmpeg/macos/ffprobe"
+  if [[ -f "$ffprobe_src" && -s "$ffprobe_src" ]]; then
+    cp "$ffprobe_src" "$ffmpeg_bin_dir/ffprobe"
+    chmod +x "$ffmpeg_bin_dir/ffprobe"
+  fi
 else
   echo "Missing required ffmpeg binary: $ffmpeg_src" >&2
   exit 1
