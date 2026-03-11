@@ -9,6 +9,7 @@
 #include "TimelineView.h"
 #include "UiText.h"
 #include "tools/latency/LatencyDetectorDialog.h"
+#include "tools/video_export/VideoExportDialog.h"
 #include "common/AssetPaths.h"
 
 #include <algorithm>
@@ -2693,6 +2694,47 @@ void MainWindow::onAbout()
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok, &dialog);
     connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     rootLayout->addWidget(buttonBox, 0, Qt::AlignRight);
+    dialog.exec();
+}
+
+void MainWindow::onExportPreviewVideo()
+{
+    if (!hasActiveDifficulty()) {
+        statusBar()->showMessage(QStringLiteral("当前未选中难度，无法导出视频。"));
+        return;
+    }
+    if (previewCanvas_ == nullptr) {
+        statusBar()->showMessage(QStringLiteral("预览画布未初始化，无法导出视频。"));
+        return;
+    }
+    if (!legacyPygamePreviewEnabled_ && qtPreviewPlaying_) {
+        onTogglePreviewPause();
+    }
+
+    refreshTimelineMetadata();
+
+    VideoExportTask task;
+    task.chartPath = currentFilePath_;
+    task.trackPath = resolveDefaultTrackPath();
+    task.noteMarkers = previewStatsNoteMarkers_;
+    task.audioSettings = previewAudioSettings_;
+    task.backgroundBrightness = previewBackgroundBrightness_;
+    task.exportStartSeconds = 0.0;
+    task.contentDurationSeconds = qMax(0.0, previewDurationSeconds());
+    task.resolution = 1024;
+    task.fps = 60;
+    task.showTimestamp = true;
+
+    const QFileInfo chartInfo(currentFilePath_);
+    const QString difficultyName = hasActiveDifficulty()
+        ? SimaiDocument::difficultyShortName(activeDifficultyId_).replace(':', '_')
+        : QStringLiteral("chart");
+    const QString outputName = QString("%1_%2_preview.mp4")
+        .arg(chartInfo.completeBaseName().isEmpty() ? QStringLiteral("export") : chartInfo.completeBaseName())
+        .arg(difficultyName);
+    task.outputPath = chartInfo.absoluteDir().filePath(outputName);
+
+    VideoExportDialog dialog(task, previewCanvas_, this);
     dialog.exec();
 }
 

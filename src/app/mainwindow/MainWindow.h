@@ -80,6 +80,7 @@ private slots:
     void onTogglePreviewPause();
     void onToggleJudgeMarkers(bool checked);
     void onToggleTouchTrail(bool checked);
+    void onExportPreviewVideo();
     void onPreviewAudioSettings();
     void onPreviewDisplaySettings();
     void onPreviewRenderSettings();
@@ -260,6 +261,7 @@ private:
     QAction* previewFromStartAction_ = nullptr;
     QAction* previewFromCursorAction_ = nullptr;
     QAction* pausePreviewAction_ = nullptr;
+    QAction* exportVideoAction_ = nullptr;
     QAction* latencyDetectorAction_ = nullptr;
     QAction* toggleJudgeMarkersAction_ = nullptr;
     QAction* toggleTouchTrailAction_ = nullptr;
@@ -358,6 +360,7 @@ private:
     QFrame* previewControlCard_ = nullptr;
     QToolButton* stopPreviewButton_ = nullptr;
     QToolButton* pausePreviewButton_ = nullptr;
+    QToolButton* exportVideoButton_ = nullptr;
     QToolButton* latencyDetectorButton_ = nullptr;
     QSlider* previewSlider_ = nullptr;
     QToolButton* previewSpeedButton_ = nullptr;

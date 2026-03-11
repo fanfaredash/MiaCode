@@ -106,6 +106,15 @@ if (Test-Path $assetsSrc) {
     Copy-Item $assetsSrc (Join-Path $DistDir "assets") -Recurse -Force
 }
 
+$ffmpegSrc = Join-Path $repoRoot "third_party\\ffmpeg\\windows\\ffmpeg.exe"
+if (Test-Path $ffmpegSrc) {
+    $ffmpegDstDir = Join-Path $DistDir "ffmpeg"
+    New-Item -ItemType Directory -Path $ffmpegDstDir -Force | Out-Null
+    Copy-Item $ffmpegSrc (Join-Path $ffmpegDstDir "ffmpeg.exe") -Force
+} else {
+    throw "Missing required ffmpeg binary: $ffmpegSrc"
+}
+
 $docsDir = Join-Path $DistDir "docs"
 New-Item -ItemType Directory -Path $docsDir -Force | Out-Null
 foreach ($docFile in @("README.md", "README_EN.md")) {
@@ -124,6 +133,7 @@ $releaseLines = @(
     "Included:"
     "  - MiaCode.exe (main app)"
     "  - Qt runtime DLLs and plugin folders"
+    "  - ffmpeg/ffmpeg.exe"
     "  - assets/"
     "  - docs/"
 )

@@ -11,12 +11,16 @@
 #include <QImage>
 #include <QMetaObject>
 #include <QOpenGLContext>
+#include <QOpenGLFramebufferObject>
+#include <QOffscreenSurface>
 #include <QPainter>
+#include <QOpenGLPaintDevice>
 #include <QPainterPath>
 #include <QPaintEvent>
 #include <QPointer>
 #include <QRectF>
 #include <QStringList>
+#include <QSurfaceFormat>
 #include <QTextStream>
 #include <QThreadPool>
 #include <QTimer>
@@ -733,11 +737,14 @@ SampleStats computeSampleStats(const QVector<double>& samples)
 
 QString formatHudTimeLabel(double seconds)
 {
-    const qint64 totalMs = qMax<qint64>(0, qRound64(seconds * 1000.0));
+    const qint64 signedMs = qRound64(seconds * 1000.0);
+    const bool negative = signedMs < 0;
+    const qint64 totalMs = qAbs(signedMs);
     const qint64 minutes = totalMs / 60000;
     const qint64 sec = (totalMs / 1000) % 60;
     const qint64 ms = totalMs % 1000;
-    return QString("%1:%2:%3")
+    return QString("%1%2:%3:%4")
+        .arg(negative ? QStringLiteral("-") : QString())
         .arg(minutes, 2, 10, QChar('0'))
         .arg(sec, 2, 10, QChar('0'))
         .arg(ms, 3, 10, QChar('0'));
@@ -762,13 +769,9 @@ QFont hudMonoFont(int pointSize, QFont::Weight weight = QFont::Medium)
     return font;
 }
 
-int quantizeDimension(int value, int step)
+int quantizeDimension(int value, int)
 {
-    const int clampedValue = qMax(1, value);
-    if (step <= 1) {
-        return clampedValue;
-    }
-    return qMax(step, ((clampedValue + step / 2) / step) * step);
+    return qMax(1, value);
 }
 
 QPointF interpolatePoint(const QVector<QPointF>& points, qreal proportion)

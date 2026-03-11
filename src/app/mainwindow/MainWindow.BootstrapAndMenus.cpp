@@ -93,6 +93,13 @@
     connect(pausePreviewAction_, &QAction::triggered, this, &MainWindow::onTogglePreviewPause);
     previewMenu->addAction(pausePreviewAction_);
 
+    exportVideoAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("导出视频...") : QStringLiteral("Export Video..."),
+        this
+    );
+    connect(exportVideoAction_, &QAction::triggered, this, &MainWindow::onExportPreviewVideo);
+    previewMenu->addAction(exportVideoAction_);
+
     previewMenu->addSeparator();
 
     toggleJudgeMarkersAction_ = new QAction("Show Judge Markers", this);
@@ -892,6 +899,14 @@ MainWindow::MainWindow(QWidget* parent)
 
     toolBar->addAction(openAction_);
     toolBar->addAction(saveAction_);
+    exportVideoButton_ = new QToolButton(toolBar);
+    exportVideoButton_->setDefaultAction(exportVideoAction_);
+    exportVideoButton_->setAutoRaise(true);
+    exportVideoButton_->setStyleSheet(
+        "QToolButton:disabled { background: transparent; border: none; }"
+        "QToolButton:disabled:hover { background: transparent; border: none; }"
+    );
+    toolBar->addWidget(exportVideoButton_);
     settingsPlaceholderAction_ = toolBar->addAction(
         makeSettingsGearIcon(QColor("#5D6E83")),
         uiText("action.preferences", "Preferences...")

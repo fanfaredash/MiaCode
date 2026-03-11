@@ -254,7 +254,8 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
     }
 
     if (!holdSustainTriggers.isEmpty()) {
-        const qreal sustainBasePixels = qMax<qreal>(6.0, tapBasePixels * kJudgeEffectHoldSustainBaseRelativeToTap);
+        const qreal holdBasePixels = mapLogicalLengthToRect(static_cast<qreal>(kHoldTargetWidth), playfieldRect);
+        const qreal sustainBasePixels = qMax<qreal>(6.0, holdBasePixels * kJudgeEffectHoldSustainBaseRelativeToTap);
         const bool useHoldTexture = !judgeEffectHoldSustainCircleImage_.isNull();
         for (auto it = holdSustainTriggers.cbegin(); it != holdSustainTriggers.cend(); ++it) {
             const HoldSustainTrigger& trigger = it.value();
@@ -942,6 +943,10 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
 
 void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
 {
+    if (!showTimestamp_) {
+        return;
+    }
+
     painter.setPen(QColor("#D9E2EC"));
     const qreal hudPadding = qBound<qreal>(10.0, stageRect.width() * 0.028, 18.0);
     const int timeFontPointSize = qBound(12, qRound(stageRect.width() * 0.03), 20);
@@ -1046,17 +1051,18 @@ bool PreviewCanvas::drawSpriteImage(
         return false;
     }
 
-    if (resolvedSourceRect.isValid() && !resolvedSourceRect.isEmpty()) {
+    if (highQualityRender_ || (resolvedSourceRect.isValid() && !resolvedSourceRect.isEmpty())) {
         ++cpuFallbackCount_;
         painter.save();
         painter.setOpacity(opacity);
         painter.translate(center);
         painter.rotate(angleDegrees);
-        painter.drawImage(
-            QRectF(-targetWidth / 2.0, -targetHeight / 2.0, targetWidth, targetHeight),
-            *renderImage,
-            resolvedSourceRect
-        );
+        const QRectF drawRect(-targetWidth / 2.0, -targetHeight / 2.0, targetWidth, targetHeight);
+        if (resolvedSourceRect.isValid() && !resolvedSourceRect.isEmpty()) {
+            painter.drawImage(drawRect, *renderImage, resolvedSourceRect);
+        } else {
+            painter.drawImage(drawRect, *renderImage);
+        }
         painter.restore();
         return true;
     }
