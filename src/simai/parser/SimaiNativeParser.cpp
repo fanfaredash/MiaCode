@@ -1085,7 +1085,7 @@ int inferSlideEndLane(const QString& token, int fallbackLane)
 }
 
 
-#include "native/SimaiNativeParser.StrictChecks.cpp"
-#include "native/SimaiNativeParser.Slide.cpp"
-#include "native/SimaiNativeParser.TouchTap.cpp"
-#include "native/SimaiNativeParser.Driver.cpp"
+#include "SimaiNativeParser.StrictChecks.cpp"
+#include "SimaiNativeParser.Slide.cpp"
+#include "SimaiNativeParser.TouchTap.cpp"
+#include "SimaiNativeParser.Driver.cpp"

@@ -136,7 +136,6 @@ target_include_directories(MiaCode PRIVATE
     src/preview/layout
     src/simai
     src/simai/document
-    src/simai/native
     src/simai/parser
     src/timeline
     src/tools/latency
@@ -148,7 +147,7 @@ target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
 
 if (MIACODE_BUILD_DEV_TOOLS)
     add_executable(simai_native_dump
-        src/simai/native/SimaiNativeDump.cpp
+        src/simai/parser/SimaiNativeDump.cpp
         src/simai/parser/SimaiNativeParser.h
         src/simai/parser/SimaiNativeParser.cpp
         src/timeline/TimelineView.h
@@ -175,7 +174,6 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src
         src/simai
         src/simai/parser
-        src/simai/native
         src/timeline
     )
 

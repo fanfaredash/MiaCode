@@ -2734,7 +2734,12 @@ void MainWindow::onExportPreviewVideo()
         .arg(difficultyName);
     task.outputPath = chartInfo.absoluteDir().filePath(outputName);
 
-    VideoExportDialog dialog(task, previewCanvas_, this);
+    VideoExportDialog dialog(
+        task,
+        previewCanvas_,
+        [this](double second) { seekPreviewToSecond(second, false); },
+        this
+    );
     dialog.exec();
 }
 
