@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAbstractScrollArea>
+#include <QCheckBox>
 #include <QHash>
 #include <QMouseEvent>
 #include <QPixmap>
@@ -86,11 +87,13 @@ public:
     void setShowSlideTracks(bool show);
     bool showSlideTracks() const;
     double zoomScale() const;
+    void setFollowPreviewEnabled(bool enabled);
+    bool followPreviewEnabled() const;
 
 signals:
     void playheadChanged(double second);
     void noteNavigateRequested(int line, int col);
-    void syncPreviewRequested();
+    void followPreviewToggled(bool enabled);
 
 protected:
     bool viewportEvent(QEvent* event) override;
@@ -134,7 +137,7 @@ private:
     double waveformStartSeconds_ = 0.0;
     double waveformDurationSeconds_ = 0.0;
     QToolButton* zoomButton_ = nullptr;
-    QToolButton* syncButton_ = nullptr;
+    QCheckBox* followPreviewCheckBox_ = nullptr;
     QVector<double> zoomPresets_{0.25, 0.5, 1.0, 1.5, 2.0};
     int zoomPresetIndex_ = 2;
     bool timelineDragActive_ = false;

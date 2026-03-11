@@ -1624,11 +1624,23 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             return true;
         }
         if (mouseEvent->button() == Qt::LeftButton && !qtPreviewPlaying_) {
-            QTimer::singleShot(0, this, [this]() { syncTimelineToEditorCursor(true); });
+            QTimer::singleShot(0, this, [this]() {
+                if (timelineView_ != nullptr && timelineView_->followPreviewEnabled()) {
+                    syncEditorCursorToPreviewSecond(qtPreviewPauseSecond_, false);
+                } else {
+                    syncTimelineToEditorCursor(true);
+                }
+            });
         }
     }
     if (watched == editorViewport_ && event->type() == QEvent::FocusIn && !qtPreviewPlaying_) {
-        QTimer::singleShot(0, this, [this]() { syncTimelineToEditorCursor(true); });
+        QTimer::singleShot(0, this, [this]() {
+            if (timelineView_ != nullptr && timelineView_->followPreviewEnabled()) {
+                syncEditorCursorToPreviewSecond(qtPreviewPauseSecond_, false);
+            } else {
+                syncTimelineToEditorCursor(true);
+            }
+        });
     }
     return QMainWindow::eventFilter(watched, event);
 }
@@ -1776,6 +1788,7 @@ void MainWindow::loadProjectRenderState()
 {
     previewAudioSettings_ = softwarePreviewAudioSettings_;
     previewAudioSettings_.normalize();
+    projectLastOpenedDifficultyId_ = 0;
 
     const QString path = resolveProjectRenderStateFilePath();
     if (path.isEmpty()) {
@@ -1799,6 +1812,10 @@ void MainWindow::loadProjectRenderState()
     } else if (root.value("preview_audio").isObject()) {
         previewAudioSettings_ = PreviewAudioSettings::fromJson(root.value("preview_audio").toObject());
     }
+    const int savedDifficultyId = root.value("last_opened_difficulty").toInt(0);
+    if (SimaiDocument::isDifficultyId(savedDifficultyId)) {
+        projectLastOpenedDifficultyId_ = savedDifficultyId;
+    }
     previewAudioSettings_.normalize();
 }
 
@@ -1816,6 +1833,7 @@ void MainWindow::saveProjectRenderState() const
 
     QJsonObject root;
     root.insert("audio", previewAudioSettings_.toJson());
+    root.insert("last_opened_difficulty", projectLastOpenedDifficultyId_);
     root.insert("schema", "miacode_render_settings_v1");
     const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Indented);
     if (file.write(payload) != payload.size()) {
@@ -2684,6 +2702,7 @@ void MainWindow::onOpenLatencyDetector()
     bool wholeBpmOk = false;
     const double wholeBpm = parsedWholeBpm(&wholeBpmOk);
     const QString meterId = parsedLatencyMeterId();
+    const double offsetSeconds = parsedFirstSeconds();
     if (trackPath.isEmpty()) {
         statusBar()->showMessage(UiText::isChineseUi()
             ? QStringLiteral("当前谱面目录缺少 track.mp3，无法打开BPM&偏移检测。")
@@ -2694,7 +2713,7 @@ void MainWindow::onOpenLatencyDetector()
 
     if (latencyDetectorDialog_ != nullptr) {
         if (latencyDetectorDialog_->trackPath() == trackPath) {
-            latencyDetectorDialog_->setOffsetSeconds(parsedFirstSeconds());
+            latencyDetectorDialog_->setOffsetSeconds(offsetSeconds);
             latencyDetectorDialog_->setBpm(wholeBpmOk ? wholeBpm : 0.0);
             latencyDetectorDialog_->setMeterId(meterId);
             latencyDetectorDialog_->raise();
@@ -2706,7 +2725,7 @@ void MainWindow::onOpenLatencyDetector()
     }
 
     latencyDetectorDialog_ = new LatencyDetectorDialog(trackPath, currentFilePath_, previewAudioSettings_, this);
-    latencyDetectorDialog_->setOffsetSeconds(parsedFirstSeconds());
+    latencyDetectorDialog_->setOffsetSeconds(offsetSeconds);
     latencyDetectorDialog_->setBpm(wholeBpmOk ? wholeBpm : 0.0);
     latencyDetectorDialog_->setMeterId(meterId);
     connect(latencyDetectorDialog_, &LatencyDetectorDialog::offsetChanged, this, [this](double seconds) {
@@ -2787,6 +2806,9 @@ void MainWindow::onPreviewRenderSettings()
     QSlider* touchholdSlider = nullptr;
     QLabel* touchholdLabel = nullptr;
     addAudioRow(uiText("dialog.render_settings.audio.touchhold", "TouchHold Volume"), previewAudioSettings_.touchholdPercent(), &touchholdSlider, &touchholdLabel);
+    QSlider* fireworkSlider = nullptr;
+    QLabel* fireworkLabel = nullptr;
+    addAudioRow(uiText("dialog.render_settings.audio.firework", "Firework Volume"), previewAudioSettings_.fireworkPercent(), &fireworkSlider, &fireworkLabel);
 
     auto* restoreButton = new QPushButton(uiText("dialog.render_settings.button.restore_project_default", "Restore Project Audio to Software Default"), audioGroup);
     audioFormLayout->addRow(QString(), restoreButton);
@@ -2881,13 +2903,20 @@ void MainWindow::onPreviewRenderSettings()
         saveProjectRenderState();
         queueAudioApply("touchhold");
     });
+    connect(fireworkSlider, &QSlider::valueChanged, &dialog, [this, fireworkLabel, queueAudioApply](int value) {
+        previewAudioSettings_.setFireworkPercent(value);
+        fireworkLabel->setText(QString::number(previewAudioSettings_.fireworkPercent()) + "%");
+        applyPreviewAudioSettingsToRuntime();
+        saveProjectRenderState();
+        queueAudioApply("firework");
+    });
 
-    connect(restoreButton, &QPushButton::clicked, &dialog, [this, bgmSlider, answerSlider, slideSlider, breakSlider, exSlider, touchSlider, touchholdSlider]() {
+    connect(restoreButton, &QPushButton::clicked, &dialog, [this, bgmSlider, answerSlider, slideSlider, breakSlider, exSlider, touchSlider, touchholdSlider, fireworkSlider]() {
         removeProjectRenderState();
         previewAudioSettings_ = softwarePreviewAudioSettings_;
         previewAudioSettings_.normalize();
         {
-            QSignalBlocker b1(bgmSlider), b2(answerSlider), b3(slideSlider), b4(breakSlider), b5(exSlider), b6(touchSlider), b7(touchholdSlider);
+            QSignalBlocker b1(bgmSlider), b2(answerSlider), b3(slideSlider), b4(breakSlider), b5(exSlider), b6(touchSlider), b7(touchholdSlider), b8(fireworkSlider);
             bgmSlider->setValue(previewAudioSettings_.bgmPercent());
             answerSlider->setValue(previewAudioSettings_.answerPercent());
             slideSlider->setValue(previewAudioSettings_.slidePercent());
@@ -2895,20 +2924,22 @@ void MainWindow::onPreviewRenderSettings()
             exSlider->setValue(previewAudioSettings_.exPercent());
             touchSlider->setValue(previewAudioSettings_.touchPercent());
             touchholdSlider->setValue(previewAudioSettings_.touchholdPercent());
+            fireworkSlider->setValue(previewAudioSettings_.fireworkPercent());
         }
         applyPreviewAudioSettingsToRuntime();
         sendPreviewConfigCommand();
         statusBar()->showMessage(uiText("status.audio_restored_default", "Project audio restored to software defaults."));
     });
 
-    connect(audioApplyTimer, &QTimer::timeout, &dialog, [this, audioApplyTimer, bgmSlider, answerSlider, slideSlider, breakSlider, exSlider, touchSlider, touchholdSlider, &pendingAudition]() {
+    connect(audioApplyTimer, &QTimer::timeout, &dialog, [this, audioApplyTimer, bgmSlider, answerSlider, slideSlider, breakSlider, exSlider, touchSlider, touchholdSlider, fireworkSlider, &pendingAudition]() {
         if (bgmSlider->isSliderDown()
             || answerSlider->isSliderDown()
             || slideSlider->isSliderDown()
             || breakSlider->isSliderDown()
             || exSlider->isSliderDown()
             || touchSlider->isSliderDown()
-            || touchholdSlider->isSliderDown()) {
+            || touchholdSlider->isSliderDown()
+            || fireworkSlider->isSliderDown()) {
             audioApplyTimer->start();
             return;
         }

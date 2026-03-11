@@ -169,6 +169,16 @@ private:
     void refreshTimelineMetadata();
     void seekTimelineToCursor(int line, int col);
     void syncTimelineToEditorCursor(bool centerView = true);
+    bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
+    bool moveEditorCursorToTimelineLocation(
+        int line,
+        int col,
+        bool selectToken,
+        bool focusEditor,
+        bool centerView,
+        bool suppressSignals
+    );
+    void syncEditorCursorToPreviewSecond(double second, bool centerView = true);
     void jumpToNearestTimelineNote(double second, int lane);
     void startQtPreviewPlayback(double second, bool resumeFromPause = false);
     void stopQtPreviewPlayback(bool keepPosition = true);
@@ -279,6 +289,7 @@ private:
     bool previewSubsystemWarmupScheduled_ = false;
     bool previewSubsystemWarmupFinalized_ = false;
     int previewSubsystemWarmupPendingTasks_ = 0;
+    int projectLastOpenedDifficultyId_ = 0;
     bool documentDirty_ = false;
     bool currentFieldDirty_ = false;
     bool qtPreviewPlaying_ = false;
