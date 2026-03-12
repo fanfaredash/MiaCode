@@ -75,7 +75,8 @@ void PreviewCanvas::drawHoldLayer(QPainter& painter, const QRectF& playfieldRect
         nativePaintingActive_ = true;
         painter.beginNativePainting();
     }
-    for (const TimelineNoteMarker& marker : noteMarkers_) {
+    for (qsizetype markerIndex = noteMarkers_.size() - 1; markerIndex >= 0; --markerIndex) {
+        const TimelineNoteMarker& marker = noteMarkers_[markerIndex];
         if (marker.type == "hold") {
             drawHoldMarker(painter, marker, playfieldRect);
         }
@@ -95,7 +96,8 @@ void PreviewCanvas::drawTapLayer(QPainter& painter, const QRectF& playfieldRect)
     }
     tapAtlasBatchingActive_ = glRenderer_.isInitialized();
     tapAtlasBatch_.clear();
-    for (const TimelineNoteMarker& marker : noteMarkers_) {
+    for (qsizetype markerIndex = noteMarkers_.size() - 1; markerIndex >= 0; --markerIndex) {
+        const TimelineNoteMarker& marker = noteMarkers_[markerIndex];
         if (marker.type == "tap" || marker.type == "slide" || marker.type == "wifi") {
             drawTapMarker(painter, marker, playfieldRect);
         }
@@ -731,7 +733,13 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
         endNativeBatch(painter);
     }
 
-    const QSize layerSize = size();
+    QSize layerSize = painter.viewport().size();
+    if (layerSize.isEmpty()) {
+        layerSize = painter.window().size();
+    }
+    if (layerSize.isEmpty()) {
+        layerSize = size();
+    }
     if (layerSize.isEmpty()) {
         if (resumeNativeBatch) {
             beginNativeBatch(painter);
