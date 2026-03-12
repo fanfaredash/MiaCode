@@ -48,14 +48,29 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     }
 
     bool trackBreak = false;
+    const int firstBracketIndex = noteCore.indexOf(QChar('['));
+    for (int i = 1; i < noteCore.size(); ++i) {
+        if (noteCore.at(i) != QChar('b')) {
+            continue;
+        }
+        trackBreak = true;
+        const bool validStrictBreakPos = firstBracketIndex > 0 && i == firstBracketIndex - 1;
+        if (state->strictMode && !validStrictBreakPos) {
+            appendTokenError(
+                state,
+                lineNumber,
+                column,
+                QString("Invalid break slide modifier position: %1").arg(token)
+            );
+            return;
+        }
+    }
+
     QString sanitizedCore;
     sanitizedCore.reserve(noteCore.size());
     for (int i = 0; i < noteCore.size(); ++i) {
         const QChar ch = noteCore.at(i);
         if (ch == QChar('b')) {
-            if (i > 0 && i + 1 < noteCore.size() && noteCore.at(i + 1) == QChar('[')) {
-                trackBreak = true;
-            }
             continue;
         }
         sanitizedCore.append(ch);
@@ -81,7 +96,13 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     marker.headEx = prefixModifiers.contains(QChar('x'));
     marker.isEx = false;
 
-    if (marker.type == "slide" && parseStandardSlideChain(sanitizedCore, state->bpm, &chainShapes, &waitSecond, &chainDurations)) {
+    if (state->strictMode && marker.type == "slide" && sanitizedCore.count(QChar('[')) > 1) {
+        appendTokenError(state, lineNumber, column, QString("Invalid slide duration placement: %1").arg(token));
+        return;
+    }
+
+    if (marker.type == "slide"
+        && parseStandardSlideChain(sanitizedCore, state->strictMode, state->bpm, &chainShapes, &waitSecond, &chainDurations)) {
         for (QString& shapeKey : chainShapes) {
             shapeKey = canonicalSlideKey(shapeKey);
         }

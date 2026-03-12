@@ -32,6 +32,7 @@ struct ParseState {
     int beats = kDefaultBeats;
     double second = 0.0;
     int lastBeatSourceLine = -1;
+    bool strictMode = false;
     SimaiNativeParseResult result;
 };
 
@@ -139,6 +140,8 @@ bool parseTouchSuffix(
             *hasHold = true;
         } else if (lower == QChar('f')) {
             *hasFirework = true;
+        } else if (lower == QChar('b') || lower == QChar('x')) {
+            // Currently accepted for compatibility; touch ex/break flags are not bound yet.
         } else if (!ch.isSpace()) {
             *errorMessage = QString("Invalid touch modifier: %1").arg(token);
             return false;
@@ -684,6 +687,7 @@ bool touchHitsSlide(const TimelineNoteMarker& touch, const TimelineNoteMarker& s
 
 bool parseStandardSlideChain(
     const QString& slideCore,
+    bool strictMode,
     double bpm,
     QStringList* shapes,
     double* waitSecond,
@@ -799,26 +803,11 @@ bool parseStandardSlideChain(
     segmentDurations->clear();
     *shapes = parsedShapes;
 
-    if (signatureState == 2) {
-        if (waitAndDurations.size() != parsedShapes.size()) {
-            return false;
-        }
-        segmentDurations->reserve(waitAndDurations.size());
-        for (const auto& item : waitAndDurations) {
-            segmentDurations->append(item.second);
-        }
-        return true;
-    }
-
-    if (signatureState == 3) {
-        const double totalDuration = waitAndDurations.constFirst().second;
+    auto distributeTotalDurationByShapeLength = [&parsedShapes, &segmentDurations](double totalDuration) -> bool {
         QVector<double> lengths;
         lengths.reserve(parsedShapes.size());
         double totalLength = 0.0;
-        // This is still an approximation of SimaiSlideChain(total_duration=...):
-        // the total duration is distributed by sampled polyline length. It matches
-        // current legacy metadata well enough for timing/export, but it is not yet
-        // a full geometry-perfect port of the Python SlideInfo internals.
+        // Approximate chain duration splitting by sampled polyline length.
         for (const QString& key : parsedShapes) {
             const QJsonObject entry = slideDataRoot().value("slides").toObject().value(key).toObject();
             QVector<QPointF> points;
@@ -836,6 +825,32 @@ bool parseStandardSlideChain(
             segmentDurations->append(totalDuration * length / totalLength);
         }
         return true;
+    };
+
+    if (signatureState == 2) {
+        if (waitAndDurations.size() != parsedShapes.size()) {
+            return false;
+        }
+        if (parsedShapes.size() > 1) {
+            if (strictMode) {
+                return false;
+            }
+            double totalDuration = 0.0;
+            for (const auto& item : waitAndDurations) {
+                totalDuration += qMax(0.0, item.second);
+            }
+            return distributeTotalDurationByShapeLength(totalDuration);
+        }
+        segmentDurations->reserve(waitAndDurations.size());
+        for (const auto& item : waitAndDurations) {
+            segmentDurations->append(item.second);
+        }
+        return true;
+    }
+
+    if (signatureState == 3) {
+        const double totalDuration = waitAndDurations.constFirst().second;
+        return distributeTotalDurationByShapeLength(totalDuration);
     }
 
     return false;

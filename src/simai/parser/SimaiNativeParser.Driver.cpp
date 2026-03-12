@@ -1,3 +1,191 @@
+﻿namespace ValidationMessage {
+
+const QString& kInvalidNotePrefix()
+{
+    static const QString value = QStringLiteral("Invalid note: ");
+    return value;
+}
+
+const QString& kUnterminatedBpmBlock()
+{
+    static const QString value = QStringLiteral("Unterminated BPM block");
+    return value;
+}
+
+const QString& kInvalidBpmValue()
+{
+    static const QString value = QStringLiteral("Invalid BPM value");
+    return value;
+}
+
+const QString& kUnterminatedBeatBlock()
+{
+    static const QString value = QStringLiteral("Unterminated beat block");
+    return value;
+}
+
+const QString& kInvalidBeatValue()
+{
+    static const QString value = QStringLiteral("Invalid beat value");
+    return value;
+}
+
+const QString& kInvalidBeatValueStrictPrefix()
+{
+    static const QString value = QStringLiteral("Invalid beat value for strict mode: ");
+    return value;
+}
+
+const QString& kStrictDivisorSuffix()
+{
+    static const QString value = QStringLiteral(" (must be a positive divisor of 384)");
+    return value;
+}
+
+const QString& kUnterminatedHsBlock()
+{
+    static const QString value = QStringLiteral("Unterminated HS* block");
+    return value;
+}
+
+const QString& kInvalidBreakSlideModifierPositionPrefix()
+{
+    static const QString value = QStringLiteral("Invalid break slide modifier position: ");
+    return value;
+}
+
+const QString& kInvalidSlideDurationPlacementPrefix()
+{
+    static const QString value = QStringLiteral("Invalid slide duration placement: ");
+    return value;
+}
+
+const QString& kInvalidSlideDurationPrefix()
+{
+    static const QString value = QStringLiteral("Invalid slide duration: ");
+    return value;
+}
+
+const QString& kInvalidHoldDurationPrefix()
+{
+    static const QString value = QStringLiteral("Invalid hold duration: ");
+    return value;
+}
+
+const QString& kInvalidTouchHoldDurationPrefix()
+{
+    static const QString value = QStringLiteral("Invalid touch-hold duration: ");
+    return value;
+}
+
+const QString& kTouchDurationRequiresHPrefix()
+{
+    static const QString value = QStringLiteral("Touch duration requires 'h': ");
+    return value;
+}
+
+const QString& kInvalidTouchTokenPrefix()
+{
+    static const QString value = QStringLiteral("Invalid touch token: ");
+    return value;
+}
+
+const QString& kInvalidTouchModifierPrefix()
+{
+    static const QString value = QStringLiteral("Invalid touch modifier: ");
+    return value;
+}
+
+const QString& kMissingBeatSeparator()
+{
+    static const QString value = QStringLiteral("Missing beat separator ','");
+    return value;
+}
+
+const QString& kUnmatchedClosingBracketPrefix()
+{
+    static const QString value = QStringLiteral("Unmatched closing bracket '");
+    return value;
+}
+
+const QString& kUnclosedBracketPrefix()
+{
+    static const QString value = QStringLiteral("Unclosed bracket '");
+    return value;
+}
+
+const QString& kChartEmpty()
+{
+    static const QString value = QStringLiteral("Chart is empty.");
+    return value;
+}
+
+QString formatInvalidNote(const QString& token)
+{
+    return QStringLiteral("%1%2").arg(kInvalidNotePrefix(), token);
+}
+
+QString formatStrictBeatValue(int beats)
+{
+    return QStringLiteral("%1%2%3")
+        .arg(kInvalidBeatValueStrictPrefix())
+        .arg(beats)
+        .arg(kStrictDivisorSuffix());
+}
+
+const QHash<QString, QString>& zhExactMap()
+{
+    static const QHash<QString, QString> map{
+        {kInvalidBpmValue(), QStringLiteral("BPM 数值无效")},
+        {kInvalidBeatValue(), QStringLiteral("分拍数值无效")},
+        {kUnterminatedBpmBlock(), QStringLiteral("BPM 块未闭合")},
+        {kUnterminatedBeatBlock(), QStringLiteral("分拍块未闭合")},
+        {kUnterminatedHsBlock(), QStringLiteral("HS* 块未闭合")},
+        {kMissingBeatSeparator(), QStringLiteral("缺少拍间分隔符 ','")},
+        {kChartEmpty(), QStringLiteral("谱面为空。")},
+    };
+    return map;
+}
+
+const QHash<QString, QString>& zhPrefixMap()
+{
+    static const QHash<QString, QString> map{
+        {kInvalidBreakSlideModifierPositionPrefix(), QStringLiteral("Break Slide 修饰符 b 位置无效：")},
+        {kInvalidSlideDurationPlacementPrefix(), QStringLiteral("Slide 时值块位置无效：")},
+        {kInvalidSlideDurationPrefix(), QStringLiteral("Slide 时值无效：")},
+        {kInvalidHoldDurationPrefix(), QStringLiteral("Hold 时值无效：")},
+        {kInvalidTouchHoldDurationPrefix(), QStringLiteral("TouchHold 时值无效：")},
+        {kTouchDurationRequiresHPrefix(), QStringLiteral("Touch 时值需要 'h' 修饰符：")},
+        {kInvalidTouchTokenPrefix(), QStringLiteral("Touch 音符无效：")},
+        {kInvalidTouchModifierPrefix(), QStringLiteral("Touch 修饰符无效：")},
+        {kInvalidNotePrefix(), QStringLiteral("音符无效：")},
+        {kInvalidBeatValueStrictPrefix(), QStringLiteral("严格模式下分拍数值无效：")},
+        {kUnmatchedClosingBracketPrefix(), QStringLiteral("未匹配的右括号 '")},
+        {kUnclosedBracketPrefix(), QStringLiteral("未闭合的左括号 '")},
+    };
+    return map;
+}
+
+const QVector<QString>& zhPrefixOrder()
+{
+    static const QVector<QString> order{
+        kInvalidBeatValueStrictPrefix(),
+        kInvalidBreakSlideModifierPositionPrefix(),
+        kInvalidSlideDurationPlacementPrefix(),
+        kInvalidSlideDurationPrefix(),
+        kInvalidHoldDurationPrefix(),
+        kInvalidTouchHoldDurationPrefix(),
+        kTouchDurationRequiresHPrefix(),
+        kInvalidTouchTokenPrefix(),
+        kInvalidTouchModifierPrefix(),
+        kInvalidNotePrefix(),
+        kUnmatchedClosingBracketPrefix(),
+        kUnclosedBracketPrefix(),
+    };
+    return order;
+}
+
+}  // namespace ValidationMessage
 void parseToken(ParseState* state, const QString& token, int lineNumber, int column, QVector<int>* groupIndices)
 {
     if (state == nullptr) {
@@ -30,12 +218,13 @@ void parseToken(ParseState* state, const QString& token, int lineNumber, int col
         return;
     }
 
-    appendTokenError(state, lineNumber, column, QString("Invalid note: %1").arg(token));
+    appendTokenError(state, lineNumber, column, ValidationMessage::formatInvalidNote(token));
 }
 
 SimaiNativeParseResult parseInternal(const QString& text, bool strictMode)
 {
     ParseState state;
+    state.strictMode = strictMode;
 
     QString token;
     int tokenColumn = 1;
@@ -76,13 +265,13 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode)
                 flushToken(lineNumber);
                 int close = line.indexOf(')', i + 1);
                 if (close < 0) {
-                    appendTokenError(&state, lineNumber, i + 1, "Unterminated BPM block");
+                    appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kUnterminatedBpmBlock());
                     break;
                 }
                 bool bpmOk = false;
                 const double bpm = line.mid(i + 1, close - i - 1).trimmed().toDouble(&bpmOk);
                 if (!bpmOk || bpm <= 0.0) {
-                    appendTokenError(&state, lineNumber, i + 1, "Invalid BPM value");
+                    appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kInvalidBpmValue());
                 } else {
                     state.bpm = bpm;
                 }
@@ -94,13 +283,20 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode)
                 flushToken(lineNumber);
                 int close = line.indexOf('}', i + 1);
                 if (close < 0) {
-                    appendTokenError(&state, lineNumber, i + 1, "Unterminated beat block");
+                    appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kUnterminatedBeatBlock());
                     break;
                 }
                 bool beatsOk = false;
                 const int beats = line.mid(i + 1, close - i - 1).trimmed().toInt(&beatsOk);
                 if (!beatsOk || beats <= 0) {
-                    appendTokenError(&state, lineNumber, i + 1, "Invalid beat value");
+                    appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kInvalidBeatValue());
+                } else if (strictMode && (384 % beats) != 0) {
+                    appendTokenError(
+                        &state,
+                        lineNumber,
+                        i + 1,
+                        ValidationMessage::formatStrictBeatValue(beats)
+                    );
                 } else {
                     state.beats = beats;
                 }
@@ -113,7 +309,7 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode)
                     const int close = line.indexOf('>', i + 3);
                     if (close < 0) {
                         if (strictMode) {
-                            appendTokenError(&state, lineNumber, i + 1, "Unterminated HS* block");
+                            appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kUnterminatedHsBlock());
                         }
                         break;
                     }
@@ -265,6 +461,55 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode)
     return state.result;
 }
 
+QString makeValidationMessageKey(const SimaiNativeMessage& message)
+{
+    return QStringLiteral("%1:%2:%3")
+        .arg(message.line)
+        .arg(message.col)
+        .arg(message.message);
+}
+
+QString localizeValidationDetail(QString detail, SimaiNativeValidationLocale locale)
+{
+    if (locale == SimaiNativeValidationLocale::English) {
+        return detail;
+    }
+
+    const auto exactIt = ValidationMessage::zhExactMap().constFind(detail);
+    if (exactIt != ValidationMessage::zhExactMap().constEnd()) {
+        return exactIt.value();
+    }
+
+    const QHash<QString, QString>& prefixMap = ValidationMessage::zhPrefixMap();
+    for (const QString& prefix : ValidationMessage::zhPrefixOrder()) {
+        if (!detail.startsWith(prefix)) {
+            continue;
+        }
+        QString localized = prefixMap.value(prefix) + detail.mid(prefix.size());
+        if (prefix == ValidationMessage::kInvalidBeatValueStrictPrefix()) {
+            localized.replace(
+                ValidationMessage::kStrictDivisorSuffix(),
+                QStringLiteral("（必须是 384 的正整数约数）")
+            );
+        }
+        return localized;
+    }
+
+    return detail;
+}
+
+QString validationSeverityPrefix(SimaiNativeValidationSeverity severity, SimaiNativeValidationLocale locale)
+{
+    if (locale == SimaiNativeValidationLocale::Chinese) {
+        return severity == SimaiNativeValidationSeverity::Error
+            ? QStringLiteral("[错误]")
+            : QStringLiteral("[警告]");
+    }
+    return severity == SimaiNativeValidationSeverity::Error
+        ? QStringLiteral("[ERROR]")
+        : QStringLiteral("[WARNING]");
+}
+
 }  // namespace
 
 SimaiNativeParseResult SimaiNativeParser::parseForTimeline(const QString& text)
@@ -276,4 +521,64 @@ SimaiNativeParseResult SimaiNativeParser::validateSyntax(const QString& text)
 {
     SimaiNativeParseResult result = parseInternal(text, true);
     return result;
+}
+
+SimaiNativeValidationReport SimaiNativeParser::buildValidationReport(
+    const QString& text,
+    SimaiNativeValidationLocale locale)
+{
+    SimaiNativeValidationReport report;
+
+    if (text.trimmed().isEmpty()) {
+        SimaiNativeValidationIssue issue;
+        issue.line = 1;
+        issue.col = 1;
+        issue.severity = SimaiNativeValidationSeverity::Error;
+        issue.rawMessage = ValidationMessage::kChartEmpty();
+        issue.displayMessage = QStringLiteral("%1 %2")
+            .arg(validationSeverityPrefix(issue.severity, locale), localizeValidationDetail(issue.rawMessage, locale));
+        report.issues.append(issue);
+        report.errorCount = 1;
+        report.strictErrorCount = 1;
+        report.ok = false;
+        return report;
+    }
+
+    const SimaiNativeParseResult lenientResult = parseForTimeline(text);
+    const SimaiNativeParseResult strictResult = validateSyntax(text);
+
+    report.lenientNoteCount = lenientResult.noteMarkers.size();
+    report.lenientErrorCount = lenientResult.errors.size();
+    report.strictNoteCount = strictResult.noteMarkers.size();
+    report.strictErrorCount = strictResult.errors.size();
+
+    QSet<QString> lenientErrorKeys;
+    for (const SimaiNativeMessage& error : lenientResult.errors) {
+        lenientErrorKeys.insert(makeValidationMessageKey(error));
+    }
+
+    report.issues.reserve(strictResult.errors.size());
+    for (const SimaiNativeMessage& error : strictResult.errors) {
+        const bool lenientAlsoFailed = lenientErrorKeys.contains(makeValidationMessageKey(error));
+        const SimaiNativeValidationSeverity severity = lenientAlsoFailed
+            ? SimaiNativeValidationSeverity::Error
+            : SimaiNativeValidationSeverity::Warning;
+        if (severity == SimaiNativeValidationSeverity::Error) {
+            ++report.errorCount;
+        } else {
+            ++report.warningCount;
+        }
+
+        SimaiNativeValidationIssue issue;
+        issue.line = error.line;
+        issue.col = error.col;
+        issue.severity = severity;
+        issue.rawMessage = error.message;
+        issue.displayMessage = QStringLiteral("%1 %2")
+            .arg(validationSeverityPrefix(severity, locale), localizeValidationDetail(error.message, locale));
+        report.issues.append(issue);
+    }
+
+    report.ok = strictResult.errors.isEmpty();
+    return report;
 }

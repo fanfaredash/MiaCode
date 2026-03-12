@@ -17,8 +17,6 @@ void runStrictFormatChecks(ParseState* state, const QStringList& lines)
         return;
     }
 
-    int lastContentLine = -1;
-    QString lastContentText;
     struct OpenBracket {
         QChar ch;
         int line = 1;
@@ -93,8 +91,6 @@ void runStrictFormatChecks(ParseState* state, const QStringList& lines)
         if (trimmed.startsWith(QStringLiteral("||"))) {
             continue;
         }
-        lastContentLine = lineNumber;
-        lastContentText = trimmed;
 
         const QString strippedLine = stripControlBlocks(line);
         if (trimmed != QLatin1String("E")
@@ -123,10 +119,6 @@ void runStrictFormatChecks(ParseState* state, const QStringList& lines)
     while (!stack.isEmpty()) {
         const OpenBracket open = stack.takeLast();
         appendTokenError(state, open.line, open.col, QString("Unclosed bracket '%1'").arg(open.ch));
-    }
-
-    if (lastContentLine > 0 && lastContentText != QLatin1String("E")) {
-        appendTokenError(state, lastContentLine, 1, "Missing terminal 'E' line");
     }
 }
 
