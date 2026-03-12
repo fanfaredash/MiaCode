@@ -46,5 +46,8 @@ export CMAKE_OSX_ARCHITECTURES="$CMAKE_ARCH"
 export CMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET"
 export MIACODE_BUILD_DEV_TOOLS
 
+chmod +x "$ROOT_DIR/scripts/ensure-macos-ffmpeg.sh"
+bash "$ROOT_DIR/scripts/ensure-macos-ffmpeg.sh"
+
 chmod +x "$ROOT_DIR/scripts/package-mac.sh"
 bash "$ROOT_DIR/scripts/package-mac.sh"
