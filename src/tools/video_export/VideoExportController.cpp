@@ -529,8 +529,10 @@ bool noteMarkerIntersectsRange(const TimelineNoteMarker& marker, double startSec
     if (endSecond <= startSecond) {
         return true;
     }
-    return marker.second >= startSecond - kTimelineEpsilonSeconds
-        && marker.second <= endSecond + kTimelineEpsilonSeconds;
+    const double markerStart = marker.second;
+    const double markerEnd = qMax(marker.second, marker.endSecond);
+    return markerEnd >= startSecond - kTimelineEpsilonSeconds
+        && markerStart <= endSecond + kTimelineEpsilonSeconds;
 }
 
 QVector<TimelineNoteMarker> filteredMarkersForRange(
@@ -1007,7 +1009,8 @@ VideoExportResult VideoExportController::exportFullPreview(
     const double segmentEndSecond = segmentStartSecond + segmentDurationSeconds;
     const double timelineOriginSecond = segmentStartSecond - kExportLeadInSeconds;
     const double totalSeconds = kExportLeadInSeconds + segmentDurationSeconds;
-    const int frameCount = qMax(1, qCeil(totalSeconds * task.fps));
+    const int frameCount = qMax(1, qRound(totalSeconds * task.fps));
+    const double alignedTotalSeconds = static_cast<double>(frameCount) / qMax(1, task.fps);
     const int resolution = task.resolution;
     const QSize frameSize(resolution, resolution);
     const QString mediaPath = resolveBackgroundMediaPath(task.chartPath);
@@ -1021,7 +1024,7 @@ VideoExportResult VideoExportController::exportFullPreview(
         filteredMarkersForRange(task.noteMarkers, segmentStartSecond, segmentEndSecond);
     appendVideoExportLog(
         QStringLiteral("input_probe"),
-        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 timelineOrigin=%8 totalSeconds=%9 frameCount=%10")
+        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 timelineOrigin=%8 totalSeconds=%9 alignedSeconds=%10 frameCount=%11")
             .arg(mediaPath)
             .arg(hasMedia ? 1 : 0)
             .arg(mediaIsImage ? 1 : 0)
@@ -1031,6 +1034,7 @@ VideoExportResult VideoExportController::exportFullPreview(
             .arg(segmentEndSecond, 0, 'f', 6)
             .arg(timelineOriginSecond, 0, 'f', 6)
             .arg(totalSeconds, 0, 'f', 6)
+            .arg(alignedTotalSeconds, 0, 'f', 6)
             .arg(frameCount)
     );
     appendVideoExportLog(
@@ -1061,7 +1065,7 @@ VideoExportResult VideoExportController::exportFullPreview(
             sfxWavPath,
             exportMarkers,
             task.audioSettings,
-            totalSeconds,
+            alignedTotalSeconds,
             timelineOriginSecond,
             segmentStartSecond)) {
         result.message = QStringLiteral("Unable to generate SFX mix track.");
@@ -1116,7 +1120,7 @@ VideoExportResult VideoExportController::exportFullPreview(
     sfxInputIndex = currentInputIndex++;
     args << QStringLiteral("-i") << sfxWavPath;
 
-    const QString totalSecondsText = QString::number(totalSeconds, 'f', 6);
+    const QString totalSecondsText = QString::number(alignedTotalSeconds, 'f', 6);
     const QString timelineOriginText = QString::number(timelineOriginSecond, 'f', 6);
     QStringList filterParts;
     filterParts << QStringLiteral("color=c=#1F2833:s=%1x%1:d=%2[base_fill]")
@@ -1132,10 +1136,10 @@ VideoExportResult VideoExportController::exportFullPreview(
             if (timelineOriginSecond > kTimelineEpsilonSeconds) {
                 mediaChain += QStringLiteral(",trim=start=%1:end=%2,setpts=PTS-STARTPTS")
                     .arg(timelineOriginText)
-                    .arg(QString::number(timelineOriginSecond + totalSeconds, 'f', 6));
+                    .arg(QString::number(timelineOriginSecond + alignedTotalSeconds, 'f', 6));
             } else if (timelineOriginSecond < -kTimelineEpsilonSeconds) {
                 mediaChain += QStringLiteral(",trim=start=0:end=%1,setpts=PTS-STARTPTS+%2/TB")
-                    .arg(QString::number(totalSeconds + timelineOriginSecond, 'f', 6))
+                    .arg(QString::number(alignedTotalSeconds + timelineOriginSecond, 'f', 6))
                     .arg(QString::number(-timelineOriginSecond, 'f', 6));
             }
             mediaChain += QStringLiteral(",tpad=stop_mode=clone:stop_duration=%1").arg(totalSecondsText);
@@ -1169,14 +1173,14 @@ VideoExportResult VideoExportController::exportFullPreview(
             filterParts << QStringLiteral("[%1:a]atrim=start=%2:end=%3,asetpts=PTS-STARTPTS,aresample=%4,volume=%5[bgm]")
                                .arg(bgmInputIndex)
                                .arg(timelineOriginText)
-                               .arg(QString::number(timelineOriginSecond + totalSeconds, 'f', 6))
+                               .arg(QString::number(timelineOriginSecond + alignedTotalSeconds, 'f', 6))
                                .arg(kMixSampleRate)
                                .arg(QString::number(task.audioSettings.bgmVolume, 'f', 6));
         } else if (timelineOriginSecond < -kTimelineEpsilonSeconds) {
             const int delayMs = qMax(0, qRound(-timelineOriginSecond * 1000.0));
             filterParts << QStringLiteral("[%1:a]atrim=start=0:end=%2,asetpts=PTS-STARTPTS,adelay=%3|%3,aresample=%4,volume=%5[bgm]")
                                .arg(bgmInputIndex)
-                               .arg(QString::number(totalSeconds + timelineOriginSecond, 'f', 6))
+                               .arg(QString::number(alignedTotalSeconds + timelineOriginSecond, 'f', 6))
                                .arg(delayMs)
                                .arg(kMixSampleRate)
                                .arg(QString::number(task.audioSettings.bgmVolume, 'f', 6));

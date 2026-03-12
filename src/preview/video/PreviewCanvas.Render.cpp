@@ -18,7 +18,7 @@ QRectF PreviewCanvas::stageRectForSize(const QSize& renderSize) const
 QRectF PreviewCanvas::stagePlayfieldRect(const QRectF& stageRect) const
 {
     const QRectF innerRect = stageRect.adjusted(18.0, 18.0, -18.0, -18.0);
-    const qreal playfieldSide = qMin<qreal>(qMin(innerRect.width(), innerRect.height()), kLogicalCanvasSize);
+    const qreal playfieldSide = qMax<qreal>(1.0, qMin(innerRect.width(), innerRect.height()));
     return QRectF(
         innerRect.center().x() - playfieldSide / 2.0,
         innerRect.center().y() - playfieldSide / 2.0,

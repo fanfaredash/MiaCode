@@ -2734,12 +2734,90 @@ void MainWindow::onExportPreviewVideo()
         .arg(difficultyName);
     task.outputPath = chartInfo.absoluteDir().filePath(outputName);
 
+    const auto currentPreviewSecond = [this]() -> double {
+        double second = qMax(0.0, qtPreviewPauseSecond_);
+        if (qtPreviewPlaying_) {
+            if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
+                second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
+            } else if (previewMediaController_ != nullptr) {
+                second = qMax(0.0, previewMediaController_->currentPlaybackSecond());
+            }
+        }
+        return second;
+    };
+
     VideoExportDialog dialog(
         task,
         previewCanvas_,
-        [this](double second) { seekPreviewToSecond(second, false); },
+        [this](double second) {
+            seekPreviewToSecond(second, false);
+        },
+        [this](double second) {
+            if (legacyPygamePreviewEnabled_) {
+                return;
+            }
+            startQtPreviewPlayback(second, true);
+            updatePauseButtonAppearance();
+        },
+        [this]() {
+            if (legacyPygamePreviewEnabled_) {
+                return;
+            }
+            if (qtPreviewPlaying_) {
+                stopQtPreviewPlayback(true);
+                updatePauseButtonAppearance();
+            }
+        },
+        [this]() -> bool {
+            return !legacyPygamePreviewEnabled_ && qtPreviewPlaying_;
+        },
+        currentPreviewSecond,
         this
     );
+
+    dialog.adjustSize();
+    QRect anchorRect = geometry();
+    bool hasAnchor = false;
+    auto mergeGlobalRect = [&anchorRect, &hasAnchor](const QWidget* widget) {
+        if (widget == nullptr || !widget->isVisible()) {
+            return;
+        }
+        const QRect local = widget->rect();
+        const QRect global(widget->mapToGlobal(local.topLeft()), local.size());
+        if (!hasAnchor) {
+            anchorRect = global;
+            hasAnchor = true;
+            return;
+        }
+        anchorRect = anchorRect.united(global);
+    };
+    mergeGlobalRect(outlineList_);
+    mergeGlobalRect(previewLeftColumn_);
+    if (!hasAnchor && workspaceSplitter_ != nullptr && previewPanel_ != nullptr && previewPanel_->isVisible()) {
+        const QRect splitterRect = workspaceSplitter_->rect();
+        const QRect previewRect = previewPanel_->geometry();
+        const int leftWidth = qMax(1, previewRect.left());
+        const QRect localLeftArea(0, 0, leftWidth, splitterRect.height());
+        anchorRect = QRect(workspaceSplitter_->mapToGlobal(localLeftArea.topLeft()), localLeftArea.size());
+    }
+    if (hasAnchor) {
+        const int preferredWidth = qRound(anchorRect.width() * 0.5);
+        dialog.resize(qMax(dialog.minimumWidth(), preferredWidth), dialog.height());
+    }
+    QPoint targetTopLeft(
+        anchorRect.center().x() - dialog.width() / 2,
+        anchorRect.center().y() - dialog.height() / 2
+    );
+    QScreen* targetScreen = QGuiApplication::screenAt(anchorRect.center());
+    if (targetScreen == nullptr && windowHandle() != nullptr) {
+        targetScreen = windowHandle()->screen();
+    }
+    if (targetScreen != nullptr) {
+        const QRect avail = targetScreen->availableGeometry();
+        targetTopLeft.setX(qBound(avail.left(), targetTopLeft.x(), avail.right() - dialog.width() + 1));
+        targetTopLeft.setY(qBound(avail.top(), targetTopLeft.y(), avail.bottom() - dialog.height() + 1));
+    }
+    dialog.move(targetTopLeft);
     dialog.exec();
 }
 
