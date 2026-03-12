@@ -150,8 +150,8 @@ const QHash<QString, QString>& zhExactMap()
 const QHash<QString, QString>& zhPrefixMap()
 {
     static const QHash<QString, QString> map{
-        {kInvalidBreakSlideModifierPositionPrefix(), QStringLiteral("Break Slide 修饰符 b 位置无效：")},
-        {kInvalidSlideDurationPlacementPrefix(), QStringLiteral("Slide 时值块位置无效：")},
+        {kInvalidBreakSlideModifierPositionPrefix(), QStringLiteral("Break Slide 修饰符 b 位置可能导致转谱错误：")},
+        {kInvalidSlideDurationPlacementPrefix(), QStringLiteral("Slide 时值块位置可能导致转谱错误：")},
         {kInvalidSlideDurationPrefix(), QStringLiteral("Slide 时值无效：")},
         {kInvalidHoldDurationPrefix(), QStringLiteral("Hold 时值无效：")},
         {kInvalidTouchHoldDurationPrefix(), QStringLiteral("TouchHold 时值无效：")},
@@ -159,7 +159,7 @@ const QHash<QString, QString>& zhPrefixMap()
         {kInvalidTouchTokenPrefix(), QStringLiteral("Touch 音符无效：")},
         {kInvalidTouchModifierPrefix(), QStringLiteral("Touch 修饰符无效：")},
         {kInvalidNotePrefix(), QStringLiteral("音符无效：")},
-        {kInvalidBeatValueStrictPrefix(), QStringLiteral("严格模式下分拍数值无效：")},
+        {kInvalidBeatValueStrictPrefix(), QStringLiteral("分拍数值可能导致转谱错误：")},
         {kUnmatchedClosingBracketPrefix(), QStringLiteral("未匹配的右括号 '")},
         {kUnclosedBracketPrefix(), QStringLiteral("未闭合的左括号 '")},
     };
