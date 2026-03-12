@@ -120,6 +120,7 @@ if (Test-Path $ffmpegSrc) {
         Copy-Item $ffprobeSrc (Join-Path $ffmpegDstDir "ffprobe.exe") -Force
     }
 } else {
+    Write-Host "Run .\scripts\ensure-windows-ffmpeg.ps1 to download the pinned Windows ffmpeg binary."
     throw "Missing required ffmpeg binary: $ffmpegSrc"
 }
 
@@ -168,4 +169,3 @@ Compress-Archive -Path (Join-Path $DistDir "*") -DestinationPath $zipPath -Compr
 
 Write-Host "Packaged to $DistDir"
 Write-Host "Zip created: $zipPath"
-
