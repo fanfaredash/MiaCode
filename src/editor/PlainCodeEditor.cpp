@@ -93,6 +93,17 @@ void PlainCodeEditor::setBlockSpacingPixels(int px)
     cursor.endEditBlock();
 }
 
+void PlainCodeEditor::setTopOverlayInsetPixels(int px)
+{
+    const int normalized = qMax(0, px);
+    if (topOverlayInsetPixels_ == normalized) {
+        return;
+    }
+    topOverlayInsetPixels_ = normalized;
+    updateLineNumberAreaWidth(0);
+    updateLineNumberArea();
+}
+
 void PlainCodeEditor::refreshLineNumberAreaLayout()
 {
     lineNumberArea_->setFont(font());
@@ -120,7 +131,7 @@ int PlainCodeEditor::lineNumberAreaWidth() const
 
 void PlainCodeEditor::updateLineNumberAreaWidth(int)
 {
-    setViewportMargins(lineNumberAreaWidth(), 0, 0, 0);
+    setViewportMargins(lineNumberAreaWidth(), topOverlayInsetPixels_, 0, 0);
 }
 
 void PlainCodeEditor::updateLineNumberArea()
@@ -195,12 +206,14 @@ void PlainCodeEditor::paintEvent(QPaintEvent* event)
     // Keep current-line highlight tied to glyph line height, not paragraph bottom margin.
     const int blockHeight = qMax(1, blockRect.height());
 
+    const int verticalExpand = qMax(0, qRound(static_cast<qreal>(blockSpacingPixels_) / 8.0));
     QRect highlightRect(
         kCurrentLineHighlightLeftInset,
-        blockTop,
+        blockTop - verticalExpand,
         viewport()->width() - kCurrentLineHighlightLeftInset - kCurrentLineHighlightRightInset,
-        blockHeight
+        blockHeight + (verticalExpand * 2)
     );
+    highlightRect = highlightRect.intersected(viewport()->rect());
     highlightRect.adjust(0, 0, -1, -1);
     if (!highlightRect.isValid()) {
         return;
@@ -225,8 +238,9 @@ void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
         block = document()->firstBlock();
     }
     int blockNumber = block.isValid() ? block.blockNumber() : 0;
-    const int visibleTop = event->rect().top();
-    const int visibleBottom = event->rect().bottom();
+    const int yOffset = qMax(0, topOverlayInsetPixels_);
+    const int visibleTop = event->rect().top() - yOffset;
+    const int visibleBottom = event->rect().bottom() - yOffset;
     const int lineHeight = QFontMetrics(lineNumberArea_->font()).height();
 
     while (block.isValid()) {
@@ -237,9 +251,10 @@ void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
         }
         if (blockRect.bottom() >= visibleTop) {
             const QString number = QString::number(blockNumber + 1);
+            const int drawTop = blockRect.top() + yOffset;
             painter.drawText(
                 kLineNumberLeftPadding,
-                blockRect.top(),
+                drawTop,
                 lineNumberArea_->width() - kLineNumberLeftPadding - kLineNumberRightPadding,
                 lineHeight,
                 Qt::AlignRight,

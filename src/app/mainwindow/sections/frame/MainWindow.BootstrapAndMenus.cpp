@@ -37,10 +37,21 @@
     connect(quitAction, &QAction::triggered, qApp, &QApplication::quit);
     fileMenu->addAction(quitAction);
 
-    validateAction_ = new QAction(uiText("action.validate", "Validate Simai"), this);
+    validateAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("语法检查") : QStringLiteral("Syntax Check"),
+        this
+    );
     validateAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
     connect(validateAction_, &QAction::triggered, this, &MainWindow::onValidateSimai);
     editMenu->addAction(validateAction_);
+
+    findReplaceAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("查找/替换") : QStringLiteral("Find/Replace"),
+        this
+    );
+    findReplaceAction_->setShortcut(QKeySequence::Find);
+    connect(findReplaceAction_, &QAction::triggered, this, &MainWindow::onToggleFindReplace);
+    editMenu->addAction(findReplaceAction_);
 
     editMenu->addSeparator();
 
@@ -310,6 +321,97 @@ MainWindow::MainWindow(QWidget* parent)
 
     editorStack_ = new QStackedWidget(central);
 
+    auto* findBar = new QFrame(editorStack_);
+    findBar->setObjectName("EditorFindBar");
+    findBar->setStyleSheet(
+        "QFrame#EditorFindBar {"
+        " background: rgba(248, 250, 253, 248);"
+        " border: 1px solid #DEE4EC;"
+        " border-radius: 10px;"
+        "}"
+        "QFrame#EditorFindBar QLineEdit {"
+        " background: #FFFFFF;"
+        " border: 1px solid #CCD6E2;"
+        " border-radius: 6px;"
+        " min-height: 22px;"
+        " padding: 1px 6px;"
+        " selection-background-color: #B8CCE5;"
+        " selection-color: #1F1F1F;"
+        "}"
+        "QFrame#EditorFindBar QLineEdit:focus { border-color: #3B82F6; }"
+        "QFrame#EditorFindBar QToolButton, QFrame#EditorFindBar QPushButton {"
+        " color: #223042;"
+        " min-height: 22px;"
+        " padding: 0 6px;"
+        " border: 1px solid #D8E0EA;"
+        " border-radius: 6px;"
+        " background: #FFFFFF;"
+        " font-weight: 400;"
+        "}"
+        "QFrame#EditorFindBar QToolButton:hover, QFrame#EditorFindBar QPushButton:hover {"
+        " background: #F5F8FC;"
+        " border-color: #BCD0E5;"
+        "}"
+        "QFrame#EditorFindBar QToolButton:pressed, QFrame#EditorFindBar QPushButton:pressed {"
+        " background: #E8F1FB;"
+        "}"
+        "QFrame#EditorFindBar QToolButton#EditorFindPrevButton, QFrame#EditorFindBar QToolButton#EditorFindNextButton {"
+        " min-width: 24px;"
+        " padding: 0;"
+        " font-size: 12px;"
+        "}"
+        "QFrame#EditorFindBar QToolButton#EditorFindCloseButton {"
+        " min-width: 28px;"
+        " padding: 0;"
+        " font-size: 15px;"
+        " font-weight: 400;"
+        "}"
+    );
+    auto* findBarLayout = new QVBoxLayout(findBar);
+    findBarLayout->setContentsMargins(10, 6, 10, 6);
+    findBarLayout->setSpacing(4);
+
+    auto* findRow = new QHBoxLayout();
+    findRow->setContentsMargins(0, 0, 0, 0);
+    findRow->setSpacing(6);
+    editorFindEdit_ = new QLineEdit(findBar);
+    editorFindEdit_->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("查找") : QStringLiteral("Find"));
+    editorFindPrevButton_ = new QToolButton(findBar);
+    editorFindPrevButton_->setObjectName("EditorFindPrevButton");
+    editorFindPrevButton_->setText(QStringLiteral("↑"));
+    editorFindPrevButton_->setToolTip(UiText::isChineseUi() ? QStringLiteral("查找上一个") : QStringLiteral("Find Previous"));
+    editorFindPrevButton_->setFixedWidth(24);
+    editorFindNextButton_ = new QToolButton(findBar);
+    editorFindNextButton_->setObjectName("EditorFindNextButton");
+    editorFindNextButton_->setText(QStringLiteral("↓"));
+    editorFindNextButton_->setToolTip(UiText::isChineseUi() ? QStringLiteral("查找下一个") : QStringLiteral("Find Next"));
+    editorFindNextButton_->setFixedWidth(24);
+    editorFindCloseButton_ = new QToolButton(findBar);
+    editorFindCloseButton_->setObjectName("EditorFindCloseButton");
+    editorFindCloseButton_->setText(QStringLiteral("✕"));
+    editorFindCloseButton_->setToolTip(UiText::isChineseUi() ? QStringLiteral("关闭查找栏") : QStringLiteral("Close"));
+    editorFindCloseButton_->setFixedWidth(28);
+    findRow->addWidget(editorFindEdit_, 1);
+    findRow->addWidget(editorFindPrevButton_, 0);
+    findRow->addWidget(editorFindNextButton_, 0);
+    findRow->addWidget(editorFindCloseButton_, 0);
+    findBarLayout->addLayout(findRow);
+
+    auto* replaceRow = new QHBoxLayout();
+    replaceRow->setContentsMargins(0, 0, 0, 0);
+    replaceRow->setSpacing(4);
+    editorReplaceEdit_ = new QLineEdit(findBar);
+    editorReplaceEdit_->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("替换") : QStringLiteral("Replace"));
+    editorReplaceButton_ = new QPushButton(UiText::isChineseUi() ? QStringLiteral("替换") : QStringLiteral("Replace"), findBar);
+    editorReplaceAllButton_ = new QPushButton(UiText::isChineseUi() ? QStringLiteral("全部替换") : QStringLiteral("Replace All"), findBar);
+    replaceRow->addWidget(editorReplaceEdit_, 1);
+    replaceRow->addWidget(editorReplaceButton_, 0);
+    replaceRow->addWidget(editorReplaceAllButton_, 0);
+    findBarLayout->addLayout(replaceRow);
+
+    findBar->hide();
+    editorFindBar_ = findBar;
+
     metadataPage_ = new QWidget(editorStack_);
     metadataPage_->setStyleSheet(
         "QWidget { background: #FFFFFF; color: #2A3440; }"
@@ -417,6 +519,9 @@ MainWindow::MainWindow(QWidget* parent)
     editorStack_->addWidget(metadataPage_);
     editorStack_->addWidget(chartPage_);
     centralLayout->addWidget(editorStack_, 1);
+    if (editorFindBar_ != nullptr) {
+        editorFindBar_->raise();
+    }
     logStartupStage("editor_stack_ready");
 
     auto* outlineDock = new QDockWidget("Fields", this);
@@ -866,9 +971,16 @@ MainWindow::MainWindow(QWidget* parent)
 
     errorList_ = new QListWidget(bottomTabs_);
     errorList_->setFont(uiOutputFont());
+    errorList_->setUniformItemSizes(false);
+    errorList_->setWordWrap(true);
+    errorList_->setTextElideMode(Qt::ElideNone);
+    errorList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     connect(errorList_, &QListWidget::itemActivated, this, &MainWindow::onErrorItemActivated);
     connect(errorList_, &QListWidget::itemClicked, this, &MainWindow::onErrorItemActivated);
-    bottomTabs_->addTab(errorList_, uiText("tab.validation_errors", "Validation Errors"));
+    bottomTabs_->addTab(
+        errorList_,
+        UiText::isChineseUi() ? QStringLiteral("语法检查") : QStringLiteral("Syntax Check")
+    );
     bottomTabs_->setMinimumHeight(220);
     bottomTabs_->setMaximumHeight(280);
     logStartupStage("timeline_and_tabs_ready");
@@ -899,13 +1011,23 @@ MainWindow::MainWindow(QWidget* parent)
 
     toolBar->addAction(openAction_);
     toolBar->addAction(saveAction_);
-    exportVideoButton_ = new QToolButton(toolBar);
-    exportVideoButton_->setDefaultAction(exportVideoAction_);
-    exportVideoButton_->setAutoRaise(true);
-    exportVideoButton_->setStyleSheet(
-        "QToolButton:disabled { background: transparent; border: none; }"
-        "QToolButton:disabled:hover { background: transparent; border: none; }"
-    );
+    constexpr int kToolbarActionButtonWidth = 64;
+    const auto makeCompactToolbarButton = [toolBar](QAction* action) -> QToolButton* {
+        auto* button = new QToolButton(toolBar);
+        button->setDefaultAction(action);
+        button->setAutoRaise(true);
+        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        button->setFixedWidth(kToolbarActionButtonWidth);
+        button->setStyleSheet(
+            "QToolButton:disabled { background: transparent; border: none; }"
+            "QToolButton:disabled:hover { background: transparent; border: none; }"
+        );
+        return button;
+    };
+
+    syntaxCheckButton_ = makeCompactToolbarButton(validateAction_);
+    toolBar->addWidget(syntaxCheckButton_);
+    exportVideoButton_ = makeCompactToolbarButton(exportVideoAction_);
     toolBar->addWidget(exportVideoButton_);
     settingsPlaceholderAction_ = toolBar->addAction(
         makeSettingsGearIcon(QColor("#5D6E83")),
@@ -1006,6 +1128,38 @@ MainWindow::MainWindow(QWidget* parent)
     if (editorViewport_ != nullptr) {
         editorViewport_->installEventFilter(this);
     }
+    if (editorFindEdit_ != nullptr) {
+        editorFindEdit_->installEventFilter(this);
+        connect(editorFindEdit_, &QLineEdit::returnPressed, this, &MainWindow::onFindNext);
+    }
+    if (editorReplaceEdit_ != nullptr) {
+        editorReplaceEdit_->installEventFilter(this);
+    }
+    if (editorFindPrevButton_ != nullptr) {
+        connect(editorFindPrevButton_, &QToolButton::clicked, this, &MainWindow::onFindPrevious);
+    }
+    if (editorFindNextButton_ != nullptr) {
+        connect(editorFindNextButton_, &QToolButton::clicked, this, &MainWindow::onFindNext);
+    }
+    if (editorFindCloseButton_ != nullptr) {
+        connect(editorFindCloseButton_, &QToolButton::clicked, this, &MainWindow::hideFindReplaceBar);
+    }
+    if (editorReplaceButton_ != nullptr) {
+        connect(editorReplaceButton_, &QPushButton::clicked, this, &MainWindow::onReplaceOne);
+    }
+    if (editorReplaceAllButton_ != nullptr) {
+        connect(editorReplaceAllButton_, &QPushButton::clicked, this, &MainWindow::onReplaceAll);
+    }
+    if (editorFindBar_ != nullptr) {
+        auto* toggleFindBarShortcut = new QShortcut(QKeySequence::Find, editorFindBar_);
+        toggleFindBarShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(toggleFindBarShortcut, &QShortcut::activated, this, &MainWindow::onToggleFindReplace);
+        auto* closeFindBarShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), editorFindBar_);
+        closeFindBarShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(closeFindBarShortcut, &QShortcut::activated, this, &MainWindow::hideFindReplaceBar);
+    }
+    updateEditorFindBarGeometry();
+    applyFindOverlayInset();
     auto* fontDecreaseShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+-")), this);
     fontDecreaseShortcut->setContext(Qt::WindowShortcut);
     connect(fontDecreaseShortcut, &QShortcut::activated, this, [this]() {

@@ -290,7 +290,9 @@ void MainWindow::startPreviewProcess(const QString& mode, int cursorLine, int cu
 {
     if (!runValidateSimai()) {
         appendOutput("preview/blocked", "validation failed; preview canceled");
-        statusBar()->showMessage("Preview canceled: fix validation errors first.");
+        statusBar()->showMessage(
+            QStringLiteral("预览取消：请修复语法错误。 / Preview canceled: fix syntax check issues first.")
+        );
         return;
     }
 
@@ -422,78 +424,10 @@ void MainWindow::appendOutput(const QString& title, const QString& payload)
     outputView_->appendPlainText(QString());
 }
 
-void MainWindow::onErrorItemActivated(QListWidgetItem* item)
-{
-    if (item == nullptr) {
-        return;
-    }
-    const int line = item->data(Qt::UserRole).toInt();
-    const int col = item->data(Qt::UserRole + 1).toInt();
-    jumpToLocation(line, col);
-}
-
-bool MainWindow::runValidateSimai()
-{
-    if (!hasActiveDifficulty()) {
-        statusBar()->showMessage("Select a difficulty field first.");
-        return false;
-    }
-    clearValidationErrors();
-    clearValidationDecorations();
-
-    const QString chartText = activeChartText();
-    if (chartText.trimmed().isEmpty()) {
-        addValidationError(1, 1, "Chart is empty.");
-        addValidationDecoration(1, 1, "Chart is empty.");
-        if (bottomTabs_ != nullptr && errorList_ != nullptr) {
-            const int errorTabIndex = bottomTabs_->indexOf(errorList_);
-            if (errorTabIndex >= 0) {
-                bottomTabs_->setCurrentIndex(errorTabIndex);
-            }
-        }
-        statusBar()->showMessage("Validate Simai failed: chart is empty.");
-        return false;
-    }
-
-    const SimaiNativeParseResult nativeResult = SimaiNativeParser::validateSyntax(chartText);
-    QString payload;
-    payload += QString("note_count=%1\nsyntax_error_count=%2")
-        .arg(nativeResult.noteMarkers.size())
-        .arg(nativeResult.errors.size());
-    appendOutput("validate", payload);
-
-    for (const SimaiNativeMessage& err : nativeResult.errors) {
-        addValidationError(err.line, err.col, err.message);
-        addValidationDecoration(err.line, err.col, err.message);
-    }
-    if (!nativeResult.errors.isEmpty()) {
-        if (bottomTabs_ != nullptr && errorList_ != nullptr) {
-            const int errorTabIndex = bottomTabs_->indexOf(errorList_);
-            if (errorTabIndex >= 0) {
-                bottomTabs_->setCurrentIndex(errorTabIndex);
-            }
-        }
-        onErrorItemActivated(errorList_->item(0));
-    }
-
-    if (nativeResult.errors.isEmpty()) {
-        statusBar()->showMessage("Validate Simai passed.");
-        return true;
-    } else {
-        statusBar()->showMessage(QString("Validate Simai failed: %1 syntax error(s).").arg(nativeResult.errors.size()));
-    }
-    return false;
-}
-
 bool MainWindow::saveBeforePreviewStart()
 {
     if (documentDirty_ || currentFieldDirty_) {
         return onSaveFile();
     }
     return maybeSaveCurrentFieldChanges();
-}
-
-void MainWindow::onValidateSimai()
-{
-    (void)runValidateSimai();
 }

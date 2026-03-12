@@ -1,4 +1,4 @@
-#include "UiText.h"
+﻿#include "UiText.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -317,6 +317,9 @@ const QHash<QString, QString>& zhMap()
         {"status.judge_marker_disabled", "判定标记已隐藏"},
         {"status.editor_text_display_updated", "文本框显示已更新。"},
         {"status.preferences_saved", "首选项已保存，重启后生效。"},
+        {"status.syntax.select_difficulty", "请先选择一个难度文本。"},
+        {"status.syntax.passed", "语法检查通过。"},
+        {"status.syntax.failed_counts", "语法检查未通过：%1 个错误，%2 个警告。"},
     };
     return map;
 }

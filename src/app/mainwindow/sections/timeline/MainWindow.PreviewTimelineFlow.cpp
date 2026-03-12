@@ -182,6 +182,9 @@ void MainWindow::setCurrentFilePath(const QString& path)
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
     const bool pathChanged = normalizedPath != currentFilePath_;
     if (pathChanged) {
+        clearValidationCache();
+        clearValidationErrors();
+        clearValidationDecorations();
         stopQtPreviewPlayback(false);
         if (latencyDetectorDialog_ != nullptr) {
             latencyDetectorDialog_->close();
@@ -250,76 +253,6 @@ void MainWindow::updateCurrentFileLabel()
 QString MainWindow::editorText() const
 {
     return qobject_cast<PlainCodeEditor*>(editorWidget_)->toPlainText();
-}
-
-void MainWindow::clearValidationErrors()
-{
-    errorList_->clear();
-}
-
-void MainWindow::clearValidationDecorations()
-{
-    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-    editor->setExtraSelections({});
-}
-
-void MainWindow::addValidationError(int line, int col, const QString& message)
-{
-    auto* item = new QListWidgetItem(QString("L%1 C%2  %3").arg(line).arg(col).arg(message), errorList_);
-    item->setData(Qt::UserRole, line);
-    item->setData(Qt::UserRole + 1, col);
-}
-
-void MainWindow::addValidationDecoration(int line, int col, const QString& message)
-{
-    if (line < 1) {
-        line = 1;
-    }
-    if (col < 1) {
-        col = 1;
-    }
-
-    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-    QTextBlock block = editor->document()->findBlockByNumber(line - 1);
-    if (!block.isValid()) {
-        return;
-    }
-
-    QTextCursor cursor(editor->document());
-    cursor.setPosition(block.position() + qMax(0, col - 1));
-    cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
-
-    QTextEdit::ExtraSelection sel;
-    sel.cursor = cursor;
-    sel.format.setUnderlineStyle(QTextCharFormat::WaveUnderline);
-    sel.format.setUnderlineColor(QColor("#E74C3C"));
-    sel.format.setToolTip(message);
-
-    auto selections = editor->extraSelections();
-    selections.append(sel);
-    editor->setExtraSelections(selections);
-}
-
-void MainWindow::jumpToLocation(int line, int col)
-{
-    if (line < 1) {
-        line = 1;
-    }
-    if (col < 1) {
-        col = 1;
-    }
-
-    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-    QTextBlock block = editor->document()->findBlockByNumber(line - 1);
-    if (!block.isValid()) {
-        return;
-    }
-    QTextCursor cursor(editor->document());
-    cursor.setPosition(block.position() + col - 1);
-    cursor.clearSelection();
-    editor->setTextCursor(cursor);
-    editor->ensureCursorVisible();
-    editor->setFocus();
 }
 
 QString MainWindow::resolvePreviewSessionScriptPath() const
@@ -591,7 +524,7 @@ void MainWindow::syncEditorCursorToPreviewSecond(double second, bool centerView)
         return;
     }
 
-    if (moveEditorCursorToTimelineLocation(line, col, false, false, centerView, true)) {
+    if (moveEditorCursorToTimelineLocation(line, col, false, false, centerView, false)) {
         timelineView_->setCursorSeconds(noteSecond >= 0.0 ? noteSecond : qMax(0.0, second));
     }
 }
@@ -831,6 +764,8 @@ void MainWindow::updatePreviewWorkspaceLayout()
     }
 
     updatePreviewPanelLayout();
+    updateEditorFindBarGeometry();
+    applyFindOverlayInset();
 }
 
 void MainWindow::updatePreviewPanelLayout()

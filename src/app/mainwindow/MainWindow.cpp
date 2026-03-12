@@ -1,4 +1,5 @@
 ﻿#include "MainWindow.h"
+#include "AppVersion.h"
 #include "BracketScopeHighlighter.h"
 #include "PlainCodeEditor.h"
 #include "PreviewCanvas.h"
@@ -127,6 +128,11 @@ constexpr qreal kPreviewSeekInitialStepSeconds = 0.016;
 constexpr qreal kPreviewSeekMaxStepSeconds = 0.250;
 constexpr qreal kPreviewSeekLinearAccelerationSecondsPerMs = 0.00024;
 constexpr double kEditorLineSpacingFactorDefault = 1.5;
+constexpr int kEditorFindBarMinWidth = 300;
+constexpr int kEditorFindBarMaxWidth = 500;
+constexpr int kEditorFindBarHorizontalMargin = 14;
+constexpr int kEditorFindBarTopMargin = 10;
+constexpr int kEditorFindBarOverlayGap = 8;
 const QList<double> kEditorLineSpacingFactorOptions{
     0.0, 1.0, 1.5, 2.0, 3.0, 5.0,
 };
@@ -1483,7 +1489,7 @@ void MainWindow::logNativeWindowDebug(const QString& tag, WId dialogWId)
 #endif
 }
 
-#include "MainWindow.BootstrapAndMenus.cpp"
+#include "sections/frame/MainWindow.BootstrapAndMenus.cpp"
 void MainWindow::closeEvent(QCloseEvent* event)
 {
     logWindowGeometryDebug("close_event_enter");
@@ -1602,6 +1608,18 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             }
         }
     }
+    if (watched == editorFindEdit_ || watched == editorReplaceEdit_) {
+        if (event->type() == QEvent::KeyPress || event->type() == QEvent::ShortcutOverride) {
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            const bool ctrlOnly = (keyEvent->modifiers() & Qt::ControlModifier)
+                && !(keyEvent->modifiers() & (Qt::AltModifier | Qt::MetaModifier));
+            if ((keyEvent->matches(QKeySequence::Find))
+                || (ctrlOnly && keyEvent->key() == Qt::Key_F)) {
+                onToggleFindReplace();
+                return true;
+            }
+        }
+    }
     if (watched == editorViewport_ && event->type() == QEvent::MouseButtonPress) {
         auto* mouseEvent = static_cast<QMouseEvent*>(event);
         if (mouseEvent->button() == Qt::LeftButton && (mouseEvent->modifiers() & Qt::ControlModifier)) {
@@ -1646,11 +1664,193 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
     return QMainWindow::eventFilter(watched, event);
 }
 
+QTextEdit* MainWindow::activeFindTarget() const
+{
+    auto* chartEditor = qobject_cast<QTextEdit*>(editorWidget_);
+    QWidget* focus = QApplication::focusWidget();
+    if (focus != nullptr) {
+        if (chartEditor != nullptr && (focus == chartEditor || chartEditor->isAncestorOf(focus))) {
+            return chartEditor;
+        }
+        if (metadataExtraEdit_ != nullptr && (focus == metadataExtraEdit_ || metadataExtraEdit_->isAncestorOf(focus))) {
+            return metadataExtraEdit_;
+        }
+    }
+
+    if (editorStack_ != nullptr && editorStack_->currentWidget() == chartPage_ && chartEditor != nullptr) {
+        return chartEditor;
+    }
+    if (editorStack_ != nullptr && editorStack_->currentWidget() == metadataPage_ && metadataExtraEdit_ != nullptr) {
+        return metadataExtraEdit_;
+    }
+    return chartEditor != nullptr ? chartEditor : metadataExtraEdit_;
+}
+
+bool MainWindow::runFindInEditor(bool backward)
+{
+    QTextEdit* target = activeFindTarget();
+    if (target == nullptr || editorFindEdit_ == nullptr) {
+        return false;
+    }
+    const QString pattern = editorFindEdit_->text();
+    if (pattern.isEmpty()) {
+        return false;
+    }
+
+    QTextDocument::FindFlags flags;
+    if (backward) {
+        flags |= QTextDocument::FindBackward;
+    }
+    if (target->find(pattern, flags)) {
+        return true;
+    }
+
+    QTextCursor resetCursor = target->textCursor();
+    resetCursor.movePosition(backward ? QTextCursor::End : QTextCursor::Start);
+    target->setTextCursor(resetCursor);
+    return target->find(pattern, flags);
+}
+
+void MainWindow::updateEditorFindBarGeometry()
+{
+    if (editorFindBar_ == nullptr || editorStack_ == nullptr) {
+        return;
+    }
+    const int availableWidth = qMax(0, editorStack_->width() - (kEditorFindBarHorizontalMargin * 2));
+    if (availableWidth <= 0) {
+        return;
+    }
+    int width = qMin(kEditorFindBarMaxWidth, availableWidth);
+    if (availableWidth >= kEditorFindBarMinWidth) {
+        width = qMax(kEditorFindBarMinWidth, width);
+    }
+    const int x = qMax(kEditorFindBarHorizontalMargin, editorStack_->width() - kEditorFindBarHorizontalMargin - width);
+    const int y = kEditorFindBarTopMargin;
+    const int height = editorFindBar_->sizeHint().height();
+    editorFindBar_->setGeometry(x, y, width, height);
+    editorFindBar_->raise();
+}
+
+void MainWindow::applyFindOverlayInset()
+{
+    const int topInset =
+        (editorFindBar_ != nullptr && editorFindBar_->isVisible())
+        ? editorFindBar_->height() + kEditorFindBarOverlayGap
+        : 0;
+    if (auto* plainEditor = qobject_cast<PlainCodeEditor*>(editorWidget_); plainEditor != nullptr) {
+        plainEditor->setTopOverlayInsetPixels(topInset);
+    }
+}
+
+void MainWindow::hideFindReplaceBar()
+{
+    if (editorFindBar_ == nullptr || !editorFindBar_->isVisible()) {
+        return;
+    }
+    editorFindBar_->hide();
+    applyFindOverlayInset();
+    if (QTextEdit* target = activeFindTarget(); target != nullptr) {
+        target->setFocus();
+    }
+}
+
+void MainWindow::onToggleFindReplace()
+{
+    if (editorFindBar_ == nullptr) {
+        return;
+    }
+    if (editorFindBar_->isVisible()) {
+        hideFindReplaceBar();
+        return;
+    }
+
+    updateEditorFindBarGeometry();
+    editorFindBar_->show();
+    editorFindBar_->raise();
+    applyFindOverlayInset();
+    QTextEdit* target = activeFindTarget();
+    if (target != nullptr && editorFindEdit_ != nullptr && editorFindEdit_->text().isEmpty()) {
+        const QTextCursor cursor = target->textCursor();
+        const QString selected = cursor.selectedText();
+        if (!selected.isEmpty() && !selected.contains(QChar::ParagraphSeparator)) {
+            editorFindEdit_->setText(selected);
+        }
+    }
+    if (editorFindEdit_ != nullptr) {
+        editorFindEdit_->setFocus();
+        editorFindEdit_->selectAll();
+    }
+}
+
+void MainWindow::onFindNext()
+{
+    runFindInEditor(false);
+}
+
+void MainWindow::onFindPrevious()
+{
+    runFindInEditor(true);
+}
+
+void MainWindow::onReplaceOne()
+{
+    QTextEdit* target = activeFindTarget();
+    if (target == nullptr || editorFindEdit_ == nullptr || editorReplaceEdit_ == nullptr) {
+        return;
+    }
+    const QString findText = editorFindEdit_->text();
+    if (findText.isEmpty()) {
+        return;
+    }
+
+    QTextCursor cursor = target->textCursor();
+    if (cursor.hasSelection() && cursor.selectedText() == findText) {
+        cursor.insertText(editorReplaceEdit_->text());
+        target->setTextCursor(cursor);
+    }
+    runFindInEditor(false);
+}
+
+void MainWindow::onReplaceAll()
+{
+    QTextEdit* target = activeFindTarget();
+    if (target == nullptr || editorFindEdit_ == nullptr || editorReplaceEdit_ == nullptr) {
+        return;
+    }
+    const QString findText = editorFindEdit_->text();
+    if (findText.isEmpty()) {
+        return;
+    }
+
+    QTextDocument* doc = target->document();
+    QTextCursor editCursor(doc);
+    editCursor.beginEditBlock();
+    const QString replaceText = editorReplaceEdit_->text();
+    int replacedCount = 0;
+    QTextCursor searchCursor = doc->find(findText, 0);
+    while (true) {
+        if (searchCursor.isNull()) {
+            break;
+        }
+        searchCursor.insertText(replaceText);
+        ++replacedCount;
+        searchCursor = doc->find(findText, searchCursor);
+    }
+    editCursor.endEditBlock();
+    statusBar()->showMessage(
+        UiText::isChineseUi()
+            ? QStringLiteral("已替换 %1 处。").arg(replacedCount)
+            : QStringLiteral("Replaced %1 occurrence(s).").arg(replacedCount)
+    );
+}
+
 void MainWindow::resizeEvent(QResizeEvent* event)
 {
     QMainWindow::resizeEvent(event);
     updatePreviewWorkspaceLayout();
     updateEditorHeaderLayoutMode();
+    updateEditorFindBarGeometry();
+    applyFindOverlayInset();
     logWindowGeometryDebug(
         "resize_event",
         QString("old=%1x%2 new=%3x%4")
@@ -1705,8 +1905,9 @@ void MainWindow::changeEvent(QEvent* event)
     }
 }
 
-#include "MainWindow.DocumentFlow.cpp"
-#include "MainWindow.PreviewTimelineFlow.cpp"
+#include "sections/document/MainWindow.DocumentFlow.cpp"
+#include "sections/timeline/MainWindow.PreviewTimelineFlow.cpp"
+#include "sections/validation/MainWindow.ValidationFlow.cpp"
 QString MainWindow::resolveDefaultTrackPath() const
 {
     const QString envTrack = qEnvironmentVariable("MIACODE_TRACK_PATH", qEnvironmentVariable("MAIMURI_TRACK_PATH"));
@@ -1784,7 +1985,7 @@ QString MainWindow::resolveInitialOpenDirectory() const
     return QDir::currentPath();
 }
 
-#include "MainWindow.EditorDisplay.cpp"
+#include "sections/editor/MainWindow.EditorDisplay.cpp"
 void MainWindow::loadProjectRenderState()
 {
     previewAudioSettings_ = softwarePreviewAudioSettings_;
@@ -2612,7 +2813,7 @@ void MainWindow::onPreviewDisplaySettings()
     onPreviewRenderSettings();
 }
 
-#include "MainWindow.PreferencesDialog.cpp"
+#include "sections/preferences/MainWindow.PreferencesDialog.cpp"
 void MainWindow::onAbout()
 {
     QString buildType = "Release";
@@ -2666,7 +2867,14 @@ void MainWindow::onAbout()
     titleTextCol->setSpacing(4);
     auto* titleLabel = new QLabel("MiaCode", card);
     titleLabel->setObjectName("AboutTitle");
-    auto* versionLabel = new QLabel(QString("v%1").arg(QCoreApplication::applicationVersion()), card);
+    QString displayVersion = QString::fromLatin1(MIACODE_VERSION_STRING).trimmed();
+    if (displayVersion.isEmpty()) {
+        displayVersion = QCoreApplication::applicationVersion().trimmed();
+    }
+    if (displayVersion.isEmpty()) {
+        displayVersion = QStringLiteral("0.0.0");
+    }
+    auto* versionLabel = new QLabel(QStringLiteral("v%1").arg(displayVersion), card);
     versionLabel->setObjectName("AboutVersion");
     titleTextCol->addWidget(titleLabel, 0, Qt::AlignLeft);
     titleTextCol->addWidget(versionLabel, 0, Qt::AlignLeft);
@@ -3114,5 +3322,6 @@ void MainWindow::onPreviewRenderSettings()
     dialog.exec();
 }
 
-#include "MainWindow.PreviewSessionFlow.cpp"
+#include "sections/preview/MainWindow.PreviewSessionFlow.cpp"
+
 
