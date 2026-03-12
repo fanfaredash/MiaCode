@@ -6,9 +6,8 @@ This directory stores prebuilt `ffmpeg` executables used by MiaCode video export
 
 - `windows/ffmpeg.exe`
   - Source: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-lgpl-7.1.zip
-  - Size: 107,622,912 bytes
-  - SHA256: `DA80A9F19D6D3D58321F4C6C1A7590CE3B98BD7EF59107FEC6556482E188AB9E`
-  - Runtime check: `ffmpeg version n7.1.3-43-g5a1f107b4c-20260310`
+  - Current observed SHA256 on 2026-03-12: `56A6CAF7B94C88E0741AD57536033BC0A1D74A0DAB072C840DD41879C7E51082`
+  - Runtime check: `ffmpeg.exe -version` starts with `ffmpeg version n7.1.`
 
 - `linux/ffmpeg`
   - Source: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-lgpl-7.1.tar.xz
@@ -25,3 +24,4 @@ This directory stores prebuilt `ffmpeg` executables used by MiaCode video export
 - Downloaded on 2026-03-11.
 - Export runtime resolves these binaries from app-local `ffmpeg/` and `third_party/ffmpeg/<platform>/` paths.
 - Keep binary replacement explicit and update hashes in this file after upgrades.
+- The Windows `latest` asset is mutable. CI validates runtime/version by default instead of pinning a fixed hash.

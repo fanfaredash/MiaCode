@@ -12,7 +12,8 @@ function Get-UpperSha256 {
 function Test-ExistingBinary {
     param(
         [string]$Path,
-        [string]$ExpectedSha256
+        [string]$ExpectedSha256,
+        [string]$ExpectedVersionPattern
     )
 
     if (!(Test-Path $Path)) {
@@ -25,11 +26,27 @@ function Test-ExistingBinary {
         return $false
     }
 
-    $actualSha256 = Get-UpperSha256 -Path $Path
-    if ($actualSha256 -ne $ExpectedSha256) {
-        Write-Warning "Existing ffmpeg hash mismatch at $Path"
-        Write-Warning "Expected: $ExpectedSha256"
-        Write-Warning "Actual:   $actualSha256"
+    if (![string]::IsNullOrWhiteSpace($ExpectedSha256)) {
+        $actualSha256 = Get-UpperSha256 -Path $Path
+        if ($actualSha256 -ne $ExpectedSha256) {
+            Write-Warning "Existing ffmpeg hash mismatch at $Path"
+            Write-Warning "Expected: $ExpectedSha256"
+            Write-Warning "Actual:   $actualSha256"
+            return $false
+        }
+    }
+
+    $versionLine = & $Path -version 2>&1 | Select-Object -First 1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "Failed to execute ffmpeg for runtime validation: $Path"
+        return $false
+    }
+    if ([string]::IsNullOrWhiteSpace($versionLine)) {
+        Write-Warning "ffmpeg returned no version output: $Path"
+        return $false
+    }
+    if ($versionLine -notmatch $ExpectedVersionPattern) {
+        Write-Warning "Unexpected ffmpeg version output: $versionLine"
         return $false
     }
 
@@ -49,12 +66,17 @@ $ffmpegUrl = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG_URL)) 
     $env:MIACODE_WINDOWS_FFMPEG_URL
 }
 $expectedSha256 = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG_SHA256)) {
-    "DA80A9F19D6D3D58321F4C6C1A7590CE3B98BD7EF59107FEC6556482E188AB9E"
+    ""
 } else {
     $env:MIACODE_WINDOWS_FFMPEG_SHA256.ToUpperInvariant()
 }
+$expectedVersionPattern = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG_VERSION_PATTERN)) {
+    '^ffmpeg version n7\.1\.'
+} else {
+    $env:MIACODE_WINDOWS_FFMPEG_VERSION_PATTERN
+}
 
-if (Test-ExistingBinary -Path $ffmpegPath -ExpectedSha256 $expectedSha256) {
+if (Test-ExistingBinary -Path $ffmpegPath -ExpectedSha256 $expectedSha256 -ExpectedVersionPattern $expectedVersionPattern) {
     Write-Host "Using existing Windows ffmpeg: $ffmpegPath"
     return
 }
@@ -81,9 +103,11 @@ try {
         throw "ffmpeg.exe not found inside downloaded archive: $archivePath"
     }
 
-    $actualSha256 = Get-UpperSha256 -Path $downloadedFfmpeg.FullName
-    if ($actualSha256 -ne $expectedSha256) {
-        throw "Downloaded ffmpeg hash mismatch. Expected: $expectedSha256 Actual: $actualSha256"
+    if (![string]::IsNullOrWhiteSpace($expectedSha256)) {
+        $actualSha256 = Get-UpperSha256 -Path $downloadedFfmpeg.FullName
+        if ($actualSha256 -ne $expectedSha256) {
+            throw "Downloaded ffmpeg hash mismatch. Expected: $expectedSha256 Actual: $actualSha256"
+        }
     }
 
     New-Item -ItemType Directory -Path $ffmpegDir -Force | Out-Null
@@ -97,6 +121,14 @@ try {
     $installedInfo = Get-Item $ffmpegPath
     if ($installedInfo.Length -lt 1MB) {
         throw "Installed ffmpeg binary is too small: $ffmpegPath ($($installedInfo.Length) bytes)"
+    }
+
+    $installedVersionLine = & $ffmpegPath -version 2>&1 | Select-Object -First 1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to execute downloaded ffmpeg for runtime validation: $ffmpegPath"
+    }
+    if ([string]::IsNullOrWhiteSpace($installedVersionLine) -or $installedVersionLine -notmatch $expectedVersionPattern) {
+        throw "Unexpected downloaded ffmpeg version output: $installedVersionLine"
     }
 
     Write-Host "Prepared Windows ffmpeg at $ffmpegPath"
