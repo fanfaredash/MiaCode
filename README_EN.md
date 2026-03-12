@@ -70,6 +70,27 @@ Thanks to [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) for referenc
 
 ## Changelog
 
+### 0.2.0
+
+- **Simai Text Editor**
+  - Added Ctrl+F find and replace
+  - Added adjustable font size and line spacing
+  - Added simai syntax highlighting
+- **BPM and Offset Detection**
+  - Added fully automatic BPM and delay detection
+  - Chart creators no longer need to measure BPM and delay by hand
+- **Chart Video Export**
+  - Added full chart video export
+  - Added partial clip export
+  - Makes it easier to share short parts of your work
+- **Syntax Validation**
+  - Can now detect chart syntax errors
+  - Can now warn about potential issues
+  - Helps avoid parsing problems on non-Maj platforms
+- **Feature Completion**
+  - Added judgment effect animations for multiple note types
+  - Added firework rendering effects
+
 ### 0.1.1
 
 - UI polish.
