@@ -199,6 +199,7 @@ if [[ -f "$ffmpeg_src" && -s "$ffmpeg_src" ]]; then
   fi
 else
   echo "Missing required ffmpeg binary: $ffmpeg_src" >&2
+  echo "Run bash scripts/ensure-macos-ffmpeg.sh to download the pinned macOS ffmpeg binary." >&2
   exit 1
 fi
 

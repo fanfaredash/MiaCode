@@ -23,6 +23,12 @@ jobs:
           modules: qtmultimedia
           cache: true
 
+      - name: Prepare FFmpeg
+        shell: bash
+        run: |
+          chmod +x scripts/ensure-macos-ffmpeg.sh
+          bash scripts/ensure-macos-ffmpeg.sh
+
       - name: Package Release
         shell: bash
         env:
