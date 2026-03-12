@@ -14,6 +14,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prepare FFmpeg
+        shell: pwsh
+        run: ./scripts/ensure-windows-ffmpeg.ps1
+
       - name: Run build script
         shell: pwsh
         run: ./scripts/build-win.ps1

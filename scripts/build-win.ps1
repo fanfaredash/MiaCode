@@ -53,6 +53,11 @@ if ([string]::IsNullOrWhiteSpace($QtOutputDir)) {
     $QtOutputDir = Join-Path $repoRoot ".qt"
 }
 
+& (Join-Path $repoRoot "scripts\ensure-windows-ffmpeg.ps1") -RepoRoot $repoRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "Windows ffmpeg preparation failed."
+}
+
 $pythonCommand = Resolve-PythonExe -Preferred $PythonExe
 
 Invoke-Python -PythonCommand $pythonCommand -Arguments @("-m", "pip", "install", "--user", "aqtinstall==3.3.*", "py7zr==1.0.*")
