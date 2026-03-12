@@ -103,10 +103,10 @@ void MainWindow::onNewFile()
         return;
     }
     loadDocument(SimaiDocument::createEmpty());
-    clearValidationErrors();
-    clearValidationDecorations();
+    clearValidationCache();
     currentEncoding_ = TextEncoding::Utf8;
     setCurrentFilePath(QString());
+    refreshValidationPanelForActiveField();
     if (previewMediaController_ != nullptr) {
         previewMediaController_->setChartPath(QString());
     }
@@ -208,8 +208,7 @@ void MainWindow::onOpenFile()
     currentEncoding_ = encodingUsed;
     setCurrentFilePath(path);
     loadDocument(SimaiDocument::fromText(text));
-    clearValidationErrors();
-    clearValidationDecorations();
+    refreshValidationPanelForActiveField();
     refreshWaveformCache();
     statusBar()->showMessage(
         QString("Opened: %1 (%2)")
@@ -623,6 +622,9 @@ void MainWindow::updateDifficultyScopedActionStates()
     if (pausePreviewButton_ != nullptr) {
         pausePreviewButton_->setEnabled(enabled);
     }
+    if (syntaxCheckButton_ != nullptr) {
+        syntaxCheckButton_->setEnabled(enabled);
+    }
     if (exportVideoButton_ != nullptr) {
         exportVideoButton_->setEnabled(enabled);
     }
@@ -742,6 +744,10 @@ bool MainWindow::deleteDifficultyField(int difficultyId)
             if (editorStack_ != nullptr && metadataPage_ != nullptr) {
                 editorStack_->setCurrentWidget(metadataPage_);
             }
+            if (bottomTabs_ != nullptr) {
+                bottomTabs_->setVisible(false);
+            }
+            setValidationTabVisible(false);
             clearTimelineAndPreview();
             if (titleEdit_ != nullptr) {
                 titleEdit_->setFocus();
@@ -912,13 +918,12 @@ bool MainWindow::switchToMetadataField()
         if (timelineTabIndex >= 0) {
             bottomTabs_->setTabVisible(timelineTabIndex, false);
         }
-        if (errorList_ != nullptr) {
-            const int errorTabIndex = bottomTabs_->indexOf(errorList_);
-            if (errorTabIndex >= 0) {
-                bottomTabs_->setCurrentIndex(errorTabIndex);
-            }
-        }
     }
+    if (bottomTabs_ != nullptr) {
+        bottomTabs_->setVisible(false);
+    }
+    setValidationTabVisible(false);
+    clearValidationDecorations();
     updateMetadataPageMode();
     currentFieldDirty_ = false;
     updateDirtyState();
@@ -953,7 +958,12 @@ bool MainWindow::switchToDifficultyField(int difficultyId)
             bottomTabs_->setTabVisible(timelineTabIndex, true);
             bottomTabs_->setCurrentIndex(timelineTabIndex);
         }
+        bottomTabs_->setVisible(true);
+    } else if (bottomTabs_ != nullptr) {
+        bottomTabs_->setVisible(true);
     }
+    setValidationTabVisible(true);
+    refreshValidationPanelForActiveField();
     currentFieldDirty_ = false;
     updateDirtyState();
     rebuildFieldSidebar();

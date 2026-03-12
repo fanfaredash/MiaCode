@@ -4,6 +4,7 @@
 #include <utility>
 
 #include <QElapsedTimer>
+#include <QHash>
 #include <QMainWindow>
 #include <QPointer>
 #include <QVector>
@@ -28,6 +29,7 @@ class QMenu;
 class QMoveEvent;
 class QTabWidget;
 class QToolBar;
+class QPushButton;
 class QShowEvent;
 class BracketScopeHighlighter;
 class PlainCodeEditor;
@@ -87,6 +89,11 @@ private slots:
     void onOpenLatencyDetector();
     void onPreferences();
     void onAbout();
+    void onToggleFindReplace();
+    void onFindNext();
+    void onFindPrevious();
+    void onReplaceOne();
+    void onReplaceAll();
     void onErrorItemActivated(QListWidgetItem* item);
     void onPreviewProcessFinished(int exitCode);
 
@@ -138,6 +145,11 @@ private:
     void updateWindowTitle();
     void updateCurrentFileLabel();
     void updatePauseButtonAppearance();
+    QTextEdit* activeFindTarget() const;
+    bool runFindInEditor(bool backward);
+    void updateEditorFindBarGeometry();
+    void applyFindOverlayInset();
+    void hideFindReplaceBar();
     void updateDirtyState();
     void markCurrentFieldDirty();
     void rebuildFieldSidebar();
@@ -230,12 +242,34 @@ private:
     void clearValidationDecorations();
     void addValidationError(int line, int col, const QString& message);
     void addValidationDecoration(int line, int col, const QString& message);
+    void clearValidationCache();
+    void refreshValidationPanelForActiveField();
+    void setValidationTabVisible(bool visible);
 
     struct TimelineCursorNote {
         int line = 1;
         int col = 1;
         int lane = -1;
         double second = 0.0;
+    };
+
+    struct ValidationCachedIssue {
+        int line = 1;
+        int col = 1;
+        QString displayMessage;
+    };
+
+    struct ValidationCacheEntry {
+        QString chartText;
+        bool chineseUi = false;
+        bool ok = true;
+        int errorCount = 0;
+        int warningCount = 0;
+        int lenientNoteCount = 0;
+        int lenientErrorCount = 0;
+        int strictNoteCount = 0;
+        int strictErrorCount = 0;
+        QVector<ValidationCachedIssue> issues;
     };
 
     QWidget* editorWidget_ = nullptr;
@@ -257,6 +291,7 @@ private:
     QAction* transformRotate180Action_ = nullptr;
     QAction* transformRotate45CounterClockwiseAction_ = nullptr;
     QAction* transformRotate45ClockwiseAction_ = nullptr;
+    QAction* findReplaceAction_ = nullptr;
     QAction* stopPreviewAction_ = nullptr;
     QAction* previewFromStartAction_ = nullptr;
     QAction* previewFromCursorAction_ = nullptr;
@@ -349,6 +384,14 @@ private:
     QToolButton* transformRotate45ClockwiseButton_ = nullptr;
     QLabel* editorContextLabel_ = nullptr;
     QLabel* editorCursorLabel_ = nullptr;
+    QWidget* editorFindBar_ = nullptr;
+    QLineEdit* editorFindEdit_ = nullptr;
+    QLineEdit* editorReplaceEdit_ = nullptr;
+    QToolButton* editorFindPrevButton_ = nullptr;
+    QToolButton* editorFindNextButton_ = nullptr;
+    QToolButton* editorFindCloseButton_ = nullptr;
+    QPushButton* editorReplaceButton_ = nullptr;
+    QPushButton* editorReplaceAllButton_ = nullptr;
     QLabel* editorEmptyStateLabel_ = nullptr;
     QTabWidget* bottomTabs_ = nullptr;
     QToolButton* deleteDifficultyButton_ = nullptr;
@@ -360,6 +403,7 @@ private:
     QFrame* previewControlCard_ = nullptr;
     QToolButton* stopPreviewButton_ = nullptr;
     QToolButton* pausePreviewButton_ = nullptr;
+    QToolButton* syntaxCheckButton_ = nullptr;
     QToolButton* exportVideoButton_ = nullptr;
     QToolButton* latencyDetectorButton_ = nullptr;
     QSlider* previewSlider_ = nullptr;
@@ -380,6 +424,7 @@ private:
     QPointer<LatencyDetectorDialog> latencyDetectorDialog_;
     BracketScopeHighlighter* chartBracketHighlighter_ = nullptr;
     BracketScopeHighlighter* metadataBracketHighlighter_ = nullptr;
+    QHash<int, ValidationCacheEntry> validationCacheByDifficulty_;
     QString activeOutlineKey_ = "metadata";
     int activeDifficultyId_ = 0;
 };

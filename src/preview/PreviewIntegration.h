@@ -21,4 +21,3 @@ SideBySideLayout computeSideBySideLayout(const QRect& workArea);
 bool placePreviewWindow(qint64 processId, const QRect& previewRect, QString* detailOut);
 
 }  // namespace PreviewIntegration
-

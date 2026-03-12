@@ -14,6 +14,7 @@ public:
     int lineNumberAreaWidth() const;
     void lineNumberAreaPaintEvent(QPaintEvent* event);
     void setBlockSpacingPixels(int px);
+    void setTopOverlayInsetPixels(int px);
     void refreshLineNumberAreaLayout();
 
 protected:
@@ -28,5 +29,6 @@ private slots:
 
 private:
     int blockSpacingPixels_ = 0;
+    int topOverlayInsetPixels_ = 0;
     LineNumberArea* lineNumberArea_;
 };

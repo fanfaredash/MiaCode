@@ -1,9 +1,9 @@
 ﻿cmake_minimum_required(VERSION 3.21)
 
-set(MIACODE_VERSION_MAJOR "0" CACHE STRING "miacode major version")
-set(MIACODE_VERSION_MINOR "1" CACHE STRING "miacode minor version")
-set(MIACODE_VERSION_PATCH "2" CACHE STRING "miacode patch version")
-set(MIACODE_VERSION_PRERELEASE "dev.3" CACHE STRING "miacode prerelease suffix (empty for stable release)")
+set(MIACODE_VERSION_MAJOR "0")
+set(MIACODE_VERSION_MINOR "1")
+set(MIACODE_VERSION_PATCH "2")
+set(MIACODE_VERSION_PRERELEASE "dev.3")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
@@ -58,8 +58,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/video/PreviewGLRenderer.cpp
     src/preview/video/PreviewMediaController.h
     src/preview/video/PreviewMediaController.cpp
-    src/preview/layout/PreviewIntegration.h
-    src/preview/layout/PreviewIntegration.cpp
+    src/preview/PreviewIntegration.h
+    src/preview/PreviewIntegration.cpp
     src/preview/audio/PreviewAudioSettings.h
     src/preview/audio/PreviewAudioSettings.cpp
     src/preview/audio/QtPreviewSfxRuntime.h
@@ -133,7 +133,6 @@ target_include_directories(MiaCode PRIVATE
     src/preview
     src/preview/audio
     src/preview/video
-    src/preview/layout
     src/simai
     src/simai/document
     src/simai/parser
@@ -150,8 +149,6 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/simai/parser/SimaiNativeDump.cpp
         src/simai/parser/SimaiNativeParser.h
         src/simai/parser/SimaiNativeParser.cpp
-        src/timeline/TimelineView.h
-        src/timeline/TimelineView.cpp
         resources/fonts.qrc
     )
 
@@ -161,8 +158,13 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/preview/audio/PreviewAudioSettings.cpp
         src/preview/audio/QtPreviewSfxRuntime.h
         src/preview/audio/QtPreviewSfxRuntime.cpp
-        src/timeline/TimelineView.h
-        src/timeline/TimelineView.cpp
+    )
+
+    add_executable(simai_parser_spec
+        src/tools/simai_parser/SimaiParserSpec.cpp
+        src/simai/parser/SimaiNativeParser.h
+        src/simai/parser/SimaiNativeParser.cpp
+        resources/fonts.qrc
     )
 
     target_link_libraries(simai_native_dump PRIVATE
@@ -172,6 +174,19 @@ if (MIACODE_BUILD_DEV_TOOLS)
     )
     target_include_directories(simai_native_dump PRIVATE
         src
+        src/simai
+        src/simai/parser
+        src/timeline
+    )
+
+    target_link_libraries(simai_parser_spec PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+    )
+    target_include_directories(simai_parser_spec PRIVATE
+        src
+        src/app/ui
         src/simai
         src/simai/parser
         src/timeline
@@ -189,7 +204,6 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/preview
         src/preview/audio
         src/preview/video
-        src/preview/layout
         src/timeline
         src/tools
     )
