@@ -36,11 +36,12 @@ function Test-ExistingBinary {
         }
     }
 
-    $versionLine = & $Path -version 2>&1 | Select-Object -First 1
+    $versionOutput = & $Path -version 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Warning "Failed to execute ffmpeg for runtime validation: $Path"
         return $false
     }
+    $versionLine = $versionOutput | Select-Object -First 1
     if ([string]::IsNullOrWhiteSpace($versionLine)) {
         Write-Warning "ffmpeg returned no version output: $Path"
         return $false
@@ -123,10 +124,11 @@ try {
         throw "Installed ffmpeg binary is too small: $ffmpegPath ($($installedInfo.Length) bytes)"
     }
 
-    $installedVersionLine = & $ffmpegPath -version 2>&1 | Select-Object -First 1
+    $installedVersionOutput = & $ffmpegPath -version 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to execute downloaded ffmpeg for runtime validation: $ffmpegPath"
     }
+    $installedVersionLine = $installedVersionOutput | Select-Object -First 1
     if ([string]::IsNullOrWhiteSpace($installedVersionLine) -or $installedVersionLine -notmatch $expectedVersionPattern) {
         throw "Unexpected downloaded ffmpeg version output: $installedVersionLine"
     }
