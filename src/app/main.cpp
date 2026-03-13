@@ -3,6 +3,8 @@
 #include "UiText.h"
 
 #include <QApplication>
+#include <QCommandLineOption>
+#include <QCommandLineParser>
 #include <QDateTime>
 #include <QElapsedTimer>
 #include <QFile>
@@ -14,6 +16,8 @@
 #include <QSurfaceFormat>
 #include <QStyleFactory>
 #include <QDir>
+
+#include <cmath>
 
 namespace {
 
@@ -27,6 +31,168 @@ bool startupTimingEnabled()
         return raw == "1" || raw.compare("true", Qt::CaseInsensitive) == 0;
     }();
     return enabled;
+}
+
+bool wantsCliVideoExport(const QStringList& arguments)
+{
+    return arguments.contains(QStringLiteral("--export-video"));
+}
+
+int runCliVideoExport(QApplication& app, QString* errorMessage)
+{
+    QCommandLineParser parser;
+    parser.setApplicationDescription(QStringLiteral("MiaCode CLI video export"));
+    parser.addHelpOption();
+    parser.addVersionOption();
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("export-video"),
+        QStringLiteral("Run single-pass video export and exit.")
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringList{QStringLiteral("chart"), QStringLiteral("chart-path")},
+        QStringLiteral("Chart file path or chart directory path."),
+        QStringLiteral("path")
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringList{QStringLiteral("d"), QStringLiteral("difficulty")},
+        QStringLiteral("Difficulty short name or id (ESY/BAS/ADV/EXP/MAS/REM/UTG or 1..7)."),
+        QStringLiteral("difficulty"),
+        QStringLiteral("MAS")
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringList{QStringLiteral("r"), QStringLiteral("resolution")},
+        QStringLiteral("Output square resolution."),
+        QStringLiteral("pixels"),
+        QStringLiteral("1024")
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringList{QStringLiteral("f"), QStringLiteral("fps")},
+        QStringLiteral("Output frame rate."),
+        QStringLiteral("fps"),
+        QStringLiteral("60")
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringList{QStringLiteral("o"), QStringLiteral("output")},
+        QStringLiteral("Output .mp4 file path or output directory."),
+        QStringLiteral("path")
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("start"),
+        QStringLiteral("Export start second."),
+        QStringLiteral("seconds"),
+        QStringLiteral("0")
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("duration"),
+        QStringLiteral("Export content duration in seconds. Omit to export until timeline end."),
+        QStringLiteral("seconds")
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("hide-timestamp"),
+        QStringLiteral("Hide timestamp overlay in output video.")
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("skin-wait-ms"),
+        QStringLiteral("Max wait milliseconds for async skin loading before export."),
+        QStringLiteral("milliseconds"),
+        QStringLiteral("2000")
+    ));
+
+    if (!parser.parse(app.arguments())) {
+        if (errorMessage != nullptr) {
+            *errorMessage = parser.errorText();
+        }
+        return 2;
+    }
+    if (!parser.isSet(QStringLiteral("export-video"))) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("internal CLI dispatch error: --export-video not set");
+        }
+        return 2;
+    }
+
+    const QString chartInput = parser.value(QStringLiteral("chart")).trimmed();
+    if (chartInput.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("--chart is required in --export-video mode");
+        }
+        return 2;
+    }
+
+    bool resolutionOk = false;
+    const int resolution = parser.value(QStringLiteral("resolution")).toInt(&resolutionOk);
+    bool fpsOk = false;
+    const int fps = parser.value(QStringLiteral("fps")).toInt(&fpsOk);
+    bool startOk = false;
+    const double startSeconds = parser.value(QStringLiteral("start")).toDouble(&startOk);
+    bool skinWaitOk = false;
+    const int skinWaitMs = parser.value(QStringLiteral("skin-wait-ms")).toInt(&skinWaitOk);
+
+    if (!resolutionOk || resolution <= 0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("--resolution must be a positive integer");
+        }
+        return 2;
+    }
+    if (!fpsOk || fps <= 0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("--fps must be a positive integer");
+        }
+        return 2;
+    }
+    if (!startOk || !std::isfinite(startSeconds) || startSeconds < 0.0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("--start must be a non-negative number");
+        }
+        return 2;
+    }
+    if (!skinWaitOk || skinWaitMs < 0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("--skin-wait-ms must be a non-negative integer");
+        }
+        return 2;
+    }
+
+    double durationSeconds = -1.0;
+    if (parser.isSet(QStringLiteral("duration"))) {
+        bool durationOk = false;
+        durationSeconds = parser.value(QStringLiteral("duration")).toDouble(&durationOk);
+        if (!durationOk || !std::isfinite(durationSeconds) || durationSeconds <= 0.0) {
+            if (errorMessage != nullptr) {
+                *errorMessage = QStringLiteral("--duration must be a positive number");
+            }
+            return 2;
+        }
+    }
+
+    MainWindow::CliVideoExportRequest request;
+    request.chartPathOrDirectory = chartInput;
+    request.difficulty = parser.value(QStringLiteral("difficulty")).trimmed();
+    request.outputPath = parser.value(QStringLiteral("output")).trimmed();
+    request.resolution = resolution;
+    request.fps = fps;
+    request.exportStartSeconds = startSeconds;
+    request.contentDurationSeconds = durationSeconds;
+    request.showTimestamp = !parser.isSet(QStringLiteral("hide-timestamp"));
+    request.skinLoadWaitMs = skinWaitMs;
+
+    MainWindow window;
+    QString resolvedOutputPath;
+    QString exportError;
+    QString exportDetails;
+    if (!window.exportPreviewVideoFromCli(request, &resolvedOutputPath, &exportError, &exportDetails)) {
+        QTextStream(stderr) << "Video export failed: " << exportError << "\n";
+        if (!exportDetails.trimmed().isEmpty()) {
+            QTextStream(stderr) << exportDetails << "\n";
+        }
+        return 1;
+    }
+
+    QTextStream(stdout) << "Video export success: " << QDir::toNativeSeparators(resolvedOutputPath) << "\n";
+    if (!exportDetails.trimmed().isEmpty()) {
+        QTextStream(stdout) << exportDetails << "\n";
+    }
+    return 0;
 }
 
 }  // namespace
@@ -88,6 +254,15 @@ int main(int argc, char* argv[])
         app.setFont(zhUiFont);
     }
     logStartupStage("ui_font_ready");
+
+    if (wantsCliVideoExport(app.arguments())) {
+        QString cliError;
+        const int exitCode = runCliVideoExport(app, &cliError);
+        if (exitCode != 0 && !cliError.trimmed().isEmpty()) {
+            QTextStream(stderr) << "CLI argument error: " << cliError << "\n";
+        }
+        return exitCode;
+    }
 
     MainWindow window;
     logStartupStage("mainwindow_constructed");

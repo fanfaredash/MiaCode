@@ -44,3 +44,6 @@ scripts/*
 !scripts/package-win.ps1
 !scripts/README.md
 !scripts/README_EN.md
+!scripts/analyze_video_duplicate_frames.py
+!scripts/export_and_analyze_duplicates.py
+!scripts/compare_log_vs_video_trajectory.py
