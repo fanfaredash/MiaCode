@@ -115,10 +115,6 @@ if (Test-Path $ffmpegSrc) {
     $ffmpegDstDir = Join-Path $DistDir "ffmpeg"
     New-Item -ItemType Directory -Path $ffmpegDstDir -Force | Out-Null
     Copy-Item $ffmpegSrc (Join-Path $ffmpegDstDir "ffmpeg.exe") -Force
-    $ffprobeSrc = Join-Path $repoRoot "third_party\\ffmpeg\\windows\\ffprobe.exe"
-    if (Test-Path $ffprobeSrc) {
-        Copy-Item $ffprobeSrc (Join-Path $ffmpegDstDir "ffprobe.exe") -Force
-    }
 } else {
     Write-Host "Run .\scripts\ensure-windows-ffmpeg.ps1 to download the pinned Windows ffmpeg binary."
     throw "Missing required ffmpeg binary: $ffmpegSrc"

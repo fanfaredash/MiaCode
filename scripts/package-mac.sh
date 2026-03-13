@@ -192,11 +192,6 @@ if [[ -f "$ffmpeg_src" && -s "$ffmpeg_src" ]]; then
     echo "ffmpeg copy failed or not executable: $ffmpeg_bin_dir/ffmpeg" >&2
     exit 1
   fi
-  ffprobe_src="$ROOT_DIR/third_party/ffmpeg/macos/ffprobe"
-  if [[ -f "$ffprobe_src" && -s "$ffprobe_src" ]]; then
-    cp "$ffprobe_src" "$ffmpeg_bin_dir/ffprobe"
-    chmod +x "$ffmpeg_bin_dir/ffprobe"
-  fi
 else
   echo "Missing required ffmpeg binary: $ffmpeg_src" >&2
   echo "Run bash scripts/ensure-macos-ffmpeg.sh to download the pinned macOS ffmpeg binary." >&2
