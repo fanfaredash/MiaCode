@@ -55,6 +55,10 @@ public:
     int cpuFallbackCountLastFrameForDebug() const { return cpuFallbackCount_; }
     qint64 offscreenDrawNsLastFrameForDebug() const { return offscreenDrawNsLastFrame_; }
     qint64 offscreenReadbackNsLastFrameForDebug() const { return offscreenReadbackNsLastFrame_; }
+    bool hasCoreSkinAssetsLoadedForDebug() const
+    {
+        return !tapImage_.isNull() && !holdImage_.isNull() && !starImage_.isNull();
+    }
     void reset();
     void noteTickForProfiling();
     void resetProfilingSession();
