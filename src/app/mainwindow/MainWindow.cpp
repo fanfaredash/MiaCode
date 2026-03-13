@@ -13,6 +13,7 @@
 #include "tools/video_export/VideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
 #include "common/AssetPaths.h"
+#include "common/PreviewInteractionConfig.h"
 
 #include <algorithm>
 #include <QAction>
@@ -126,9 +127,10 @@ constexpr int kPreviewControlStatsGap = 10;
 constexpr int kPreviewControlStatsCardMinWidth = 280;
 constexpr int kEditorTextFontSizeMin = 8;
 constexpr int kEditorTextFontSizeMax = 28;
-constexpr qreal kPreviewSeekInitialStepSeconds = 0.016;
-constexpr qreal kPreviewSeekMaxStepSeconds = 0.250;
-constexpr qreal kPreviewSeekLinearAccelerationSecondsPerMs = 0.00024;
+constexpr qreal kPreviewSeekInitialStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekInitialStepSeconds);
+constexpr qreal kPreviewSeekMaxStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekMaxStepSeconds);
+constexpr qreal kPreviewSeekLinearAccelerationSecondsPerMs =
+    static_cast<qreal>(miacode::preview_interaction::kSeekLinearAccelerationSecondsPerMs);
 constexpr double kEditorLineSpacingFactorDefault = 1.5;
 constexpr int kEditorFindBarMinWidth = 300;
 constexpr int kEditorFindBarMaxWidth = 500;
@@ -1254,7 +1256,7 @@ void MainWindow::ensurePreviewMediaControllerInitialized()
         previewMediaController_,
         &PreviewMediaController::backgroundBrightnessChanged,
         previewCanvas_,
-        &PreviewCanvas::setBackgroundBrightness
+        &PreviewCanvas::setBackgroundBrightnessOuter
     );
     connect(previewMediaController_, &PreviewMediaController::playbackPositionChanged, this, [this](double second) {
         if (qtPreviewPlaying_) {
@@ -1277,7 +1279,12 @@ void MainWindow::ensurePreviewMediaControllerInitialized()
     previewMediaController_->setBackgroundTrackVolume(previewAudioSettings_.bgmVolume);
     previewMediaController_->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
     previewMediaController_->setBackgroundTrackPath(lastTrackPath_);
-    previewMediaController_->setBackgroundBrightness(previewBackgroundBrightness_);
+    previewMediaController_->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
+        previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
+        previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
+    }
     previewMediaController_->setTimelineOffsetSeconds(parsedFirstSeconds());
     previewMediaController_->setChartPath(currentFilePath_);
     previewMediaController_->setPlayheadSeconds(qtPreviewPauseSecond_);
@@ -3009,7 +3016,9 @@ void MainWindow::onExportPreviewVideo()
     task.trackPath = resolveDefaultTrackPath();
     task.noteMarkers = previewStatsNoteMarkers_;
     task.audioSettings = previewAudioSettings_;
-    task.backgroundBrightness = previewBackgroundBrightness_;
+    task.backgroundBrightnessOuter = previewBackgroundBrightnessOuter_;
+    task.backgroundBrightnessInner = previewBackgroundBrightnessInner_;
+    task.backgroundScaleMode = previewBackgroundScaleMode_;
     task.exportStartSeconds = 0.0;
     task.contentDurationSeconds = qMax(0.0, previewDurationSeconds());
     task.resolution = 1024;
@@ -3255,7 +3264,9 @@ bool MainWindow::exportPreviewVideoFromCli(
     task.trackPath = resolveDefaultTrackPath();
     task.noteMarkers = previewStatsNoteMarkers_;
     task.audioSettings = previewAudioSettings_;
-    task.backgroundBrightness = previewBackgroundBrightness_;
+    task.backgroundBrightnessOuter = previewBackgroundBrightnessOuter_;
+    task.backgroundBrightnessInner = previewBackgroundBrightnessInner_;
+    task.backgroundScaleMode = previewBackgroundScaleMode_;
     task.exportStartSeconds = exportStartSeconds;
     task.contentDurationSeconds = contentDurationSeconds;
     task.resolution = request.resolution;
@@ -3401,23 +3412,62 @@ void MainWindow::onPreviewRenderSettings()
     auto* restoreButton = new QPushButton(uiText("dialog.render_settings.button.restore_project_default", "Restore Project Audio to Software Default"), audioGroup);
     audioFormLayout->addRow(QString(), restoreButton);
 
-    auto* brightnessRow = new QWidget(&dialog);
-    auto* brightnessRowLayout = new QHBoxLayout(brightnessRow);
-    brightnessRowLayout->setContentsMargins(0, 0, 0, 0);
-    auto* brightnessSlider = new QSlider(Qt::Horizontal, brightnessRow);
-    brightnessSlider->setRange(0, 100);
-    brightnessSlider->setValue(qRound(previewBackgroundBrightness_ * 100.0));
-    auto* brightnessLabel = new QLabel(QString::number(brightnessSlider->value()) + "%", brightnessRow);
-    brightnessLabel->setMinimumWidth(44);
-    brightnessRowLayout->addWidget(brightnessSlider, 1);
-    brightnessRowLayout->addWidget(brightnessLabel);
+    const auto addVideoSliderRow = [](QWidget* parent, int valuePercent, QSlider** sliderOut, QLabel** labelOut) {
+        auto* row = new QWidget(parent);
+        auto* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setSpacing(8);
+        auto* slider = new QSlider(Qt::Horizontal, row);
+        slider->setRange(0, 100);
+        slider->setValue(valuePercent);
+        auto* label = new QLabel(QString::number(valuePercent) + "%", row);
+        label->setMinimumWidth(44);
+        rowLayout->addWidget(slider, 1);
+        rowLayout->addWidget(label, 0);
+        *sliderOut = slider;
+        *labelOut = label;
+        return row;
+    };
+
+    QSlider* outerBrightnessSlider = nullptr;
+    QLabel* outerBrightnessLabel = nullptr;
+    QWidget* outerBrightnessRow = addVideoSliderRow(
+        &dialog,
+        qRound(previewBackgroundBrightnessOuter_ * 100.0),
+        &outerBrightnessSlider,
+        &outerBrightnessLabel
+    );
+    QSlider* innerBrightnessSlider = nullptr;
+    QLabel* innerBrightnessLabel = nullptr;
+    QWidget* innerBrightnessRow = addVideoSliderRow(
+        &dialog,
+        qRound(previewBackgroundBrightnessInner_ * 100.0),
+        &innerBrightnessSlider,
+        &innerBrightnessLabel
+    );
+
+    auto* scaleModeCombo = new QComboBox(&dialog);
+    scaleModeCombo->addItem(
+        uiText("dialog.render_settings.video.scale.fill", "Fill (crop if needed)"),
+        static_cast<int>(PreviewBackgroundScaleMode::FillCrop)
+    );
+    scaleModeCombo->addItem(
+        uiText("dialog.render_settings.video.scale.fit", "Fit (keep full image, may letterbox)"),
+        static_cast<int>(PreviewBackgroundScaleMode::FitContain)
+    );
+    const int scaleModeIndex = scaleModeCombo->findData(static_cast<int>(previewBackgroundScaleMode_));
+    if (scaleModeIndex >= 0) {
+        scaleModeCombo->setCurrentIndex(scaleModeIndex);
+    }
 
     auto* videoGroup = new QGroupBox(uiText("dialog.render_settings.video_group", "Video"), &dialog);
     auto* videoFormLayout = new QFormLayout(videoGroup);
     videoFormLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     videoFormLayout->setHorizontalSpacing(10);
     videoFormLayout->setVerticalSpacing(8);
-    videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness", "Background / PV Brightness"), brightnessRow);
+    videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_outer", "Background / PV Brightness (Outer)"), outerBrightnessRow);
+    videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Background / PV Brightness (Inner)"), innerBrightnessRow);
+    videoFormLayout->addRow(uiText("dialog.render_settings.video.scale_mode", "Background / PV Scale Mode"), scaleModeCombo);
 
     auto* debugCheck = new QCheckBox(uiText("dialog.render_settings.video.debug", "Show preview debug info"), videoGroup);
     debugCheck->setChecked(previewShowDebugInfo_);
@@ -3555,13 +3605,33 @@ void MainWindow::onPreviewRenderSettings()
         pendingAudition.clear();
     });
 
-    connect(brightnessSlider, &QSlider::valueChanged, &dialog, [this, brightnessLabel](int value) {
-        previewBackgroundBrightness_ = qBound(0.0, static_cast<double>(value) / 100.0, 1.0);
-        brightnessLabel->setText(QString::number(value) + "%");
+    connect(outerBrightnessSlider, &QSlider::valueChanged, &dialog, [this, outerBrightnessLabel](int value) {
+        previewBackgroundBrightnessOuter_ = qBound(0.0, static_cast<double>(value) / 100.0, 1.0);
+        outerBrightnessLabel->setText(QString::number(value) + "%");
         if (previewMediaController_ != nullptr) {
-            previewMediaController_->setBackgroundBrightness(previewBackgroundBrightness_);
-        } else if (previewCanvas_ != nullptr) {
-            previewCanvas_->setBackgroundBrightness(previewBackgroundBrightness_);
+            previewMediaController_->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
+        }
+        if (previewCanvas_ != nullptr) {
+            previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
+        }
+        savePortableState();
+    });
+    connect(innerBrightnessSlider, &QSlider::valueChanged, &dialog, [this, innerBrightnessLabel](int value) {
+        previewBackgroundBrightnessInner_ = qBound(0.0, static_cast<double>(value) / 100.0, 1.0);
+        innerBrightnessLabel->setText(QString::number(value) + "%");
+        if (previewCanvas_ != nullptr) {
+            previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
+        }
+        savePortableState();
+    });
+    connect(scaleModeCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [this, scaleModeCombo](int) {
+        const int modeValue = scaleModeCombo->currentData().isValid()
+            ? scaleModeCombo->currentData().toInt()
+            : static_cast<int>(PreviewBackgroundScaleMode::FillCrop);
+        const PreviewBackgroundScaleMode mode = static_cast<PreviewBackgroundScaleMode>(modeValue);
+        previewBackgroundScaleMode_ = mode;
+        if (previewCanvas_ != nullptr) {
+            previewCanvas_->setBackgroundScaleMode(mode);
         }
         savePortableState();
     });

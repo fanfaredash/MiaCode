@@ -1,5 +1,6 @@
 #include "PreviewCanvas.h"
 #include "common/AssetPaths.h"
+#include "common/PreviewGameplayConfig.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -19,6 +20,7 @@
 #include <QPaintEvent>
 #include <QPointer>
 #include <QRectF>
+#include <QRegion>
 #include <QStringList>
 #include <QSurfaceFormat>
 #include <QTextStream>
@@ -43,22 +45,25 @@ enum class SlideTrackTrimMode {
 };
 
 constexpr int kMargin = 0;
-constexpr qreal kLogicalCanvasSize = 540.0;
+constexpr qreal kLogicalCanvasSize = static_cast<qreal>(miacode::preview_gameplay::kLogicalCanvasSize);
 constexpr qreal kLogicalCanvasCenter = kLogicalCanvasSize / 2.0;
-constexpr qreal kLogicalDistanceTap = kLogicalCanvasSize * 122.5 / 1080.0;
-constexpr qreal kLogicalDistanceEdge = kLogicalCanvasSize * 480.0 / 1080.0;
-constexpr qreal kTapUnitsPerSecond = 540.0;
+constexpr qreal kLogicalDistanceTap = static_cast<qreal>(miacode::preview_gameplay::kLogicalDistanceTap);
+constexpr qreal kLogicalDistanceEdge = static_cast<qreal>(miacode::preview_gameplay::kLogicalDistanceEdge);
+constexpr qreal kTapUnitsPerSecond = static_cast<qreal>(miacode::preview_gameplay::kTapUnitsPerSecond);
 constexpr qreal kLaneUnitVectorBaseDegrees = -67.5;
 constexpr qreal kLaneRotationBaseDegrees = 22.5;
 constexpr qreal kLaneAngleStepDegrees = 45.0;
-constexpr qreal kDistanceToScaleSlope = 0.008;
-constexpr qreal kDistanceToScaleOffset = 0.51;
+constexpr qreal kDistanceToScaleSlope = static_cast<qreal>(miacode::preview_gameplay::kDistanceToScaleSlope);
+constexpr qreal kDistanceToScaleOffset = static_cast<qreal>(miacode::preview_gameplay::kDistanceToScaleOffset);
+constexpr qreal kPlayfieldInset = static_cast<qreal>(miacode::preview_gameplay::kPlayfieldInset);
 constexpr qreal kSlideStarFadeBaseScale = 0.45;
 constexpr qreal kSlideStarFadeScaleDelta = 0.55;
 constexpr qreal kSkinAssetScale = 0.5;
 constexpr qreal kStarAssetScale = 90.0 / 126.0;
 constexpr qreal kSlideSpawnStarRelativeScale = 1.08;
-constexpr qreal kLogicalOutlineInset = 25.0;
+constexpr qreal kLogicalOutlineInset = miacode::layout_ring::kOutlineInsetLogical;
+constexpr qreal kOutlineTargetToPlayfieldRatio =
+    (kLogicalCanvasSize - kLogicalOutlineInset * 2.0) / kLogicalCanvasSize;
 constexpr qreal kNoteGuideSourceRadius = 240.75;
 constexpr qreal kEachLine1SourceRadius = 240.02;
 constexpr qreal kEachLine2SourceRadius = 239.89;
@@ -68,8 +73,8 @@ constexpr int kHoldTargetWidth = 60;
 constexpr int kFpsSampleWindowMs = 250;
 constexpr int kFrameStatsWindowSize = 120;
 constexpr qreal kSlideTrackScale = 0.5;
-constexpr qreal kSlideTrackFadeInSeconds = 0.2;
-constexpr qreal kTouchDurationSeconds = 0.5;
+constexpr qreal kSlideTrackFadeInSeconds = static_cast<qreal>(miacode::preview_gameplay::kSlideTrackFadeInSeconds);
+constexpr qreal kTouchDurationSeconds = static_cast<qreal>(miacode::preview_gameplay::kTouchDurationSeconds);
 constexpr qreal kTouchAppearPhase = 0.25;
 constexpr qreal kTouchStartOffset = 30.0;
 constexpr qreal kTouchClosedOffset = 12.0;
@@ -87,7 +92,7 @@ constexpr int kGuideTransformSizeStep = 2;
 constexpr int kSpriteTransformSizeStep = 4;
 constexpr int kAtlasPadding = 2;
 constexpr int kAtlasMaxWidth = 2048;
-constexpr qreal kJudgeEffectClipDurationSeconds = 0.71666664;
+constexpr qreal kJudgeEffectClipDurationSeconds = static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectDurationSeconds);
 constexpr qreal kJudgeEffectPlaybackSpeed = 1.0;
 constexpr qreal kJudgeEffectDurationSeconds = kJudgeEffectClipDurationSeconds / kJudgeEffectPlaybackSpeed;
 // Derived from source assets:
@@ -102,7 +107,7 @@ constexpr qreal kJudgeEffectLaneFacingAngleOffsetDegrees = 0.0;
 // Texture-orientation: 
 constexpr qreal kJudgeEffectTapTextureAngleOffsetDegrees = 0.0;
 constexpr qreal kJudgeEffectBreakTextureAngleOffsetDegrees = 132.5;
-constexpr qreal kJudgeEffectTouchDurationSeconds = 0.33333334;
+constexpr qreal kJudgeEffectTouchDurationSeconds = static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectTouchDurationSeconds);
 constexpr qreal kJudgeEffectTouchDestroySeconds = 0.25;
 constexpr qreal kJudgeEffectTouchCircleFadeEndSeconds = 0.31666666;
 constexpr qreal kJudgeEffectHoldSustainLifetimeSeconds = 0.6;
@@ -122,8 +127,10 @@ constexpr qreal kJudgeEffectTouchInnerScaleBase = 0.1725238;
 constexpr qreal kJudgeEffectTouchOuterScaleBase = 0.3146144;
 constexpr qreal kJudgeEffectTouchCircleSpriteWidthUnits = 512.0 / 100.0;
 constexpr qreal kJudgeEffectTouchPartSpriteWidthUnits = 103.948685 / 100.0;
-constexpr qreal kJudgeEffectFireworkTouchTriggerDelaySeconds = 0.05;
-constexpr qreal kJudgeEffectFireworkDurationSeconds = 1.3333334;
+constexpr qreal kJudgeEffectFireworkTouchTriggerDelaySeconds =
+    static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectFireworkTouchTriggerDelaySeconds);
+constexpr qreal kJudgeEffectFireworkDurationSeconds =
+    static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectFireworkDurationSeconds);
 constexpr qreal kJudgeEffectFireworkBaseWidthUnits = 10.8;
 constexpr qreal kJudgeEffectFireworkColorBallBaseWidthUnits = 5.12;
 constexpr qreal kJudgeEffectFireworkBrightnessGain = 1.20;
@@ -916,6 +923,104 @@ QColor exStarTintColor(bool isBreak, bool isEach)
 QString defaultOutlinePath()
 {
     return miacode::assets::assetPath("background/outline.png");
+}
+
+double detectLayoutRingDiameterRatio(const QImage& source)
+{
+    if (source.isNull() || source.width() <= 2 || source.height() <= 2) {
+        return miacode::layout_ring::kFallbackTextureDiameterRatio;
+    }
+    QImage image = source;
+    if (image.format() != QImage::Format_RGBA8888) {
+        image = source.convertToFormat(QImage::Format_RGBA8888);
+    }
+    if (image.isNull()) {
+        return miacode::layout_ring::kFallbackTextureDiameterRatio;
+    }
+
+    const int width = image.width();
+    const int height = image.height();
+    const int maxRadius = qMax(1, qMin(width, height) / 2);
+    QVector<double> histogram(maxRadius + 1, 0.0);
+    const double cx = (static_cast<double>(width) - 1.0) * 0.5;
+    const double cy = (static_cast<double>(height) - 1.0) * 0.5;
+
+    for (int y = 0; y < height; ++y) {
+        const uchar* row = image.constScanLine(y);
+        for (int x = 0; x < width; ++x) {
+            const int offset = x * 4;
+            const int r = row[offset + 0];
+            const int g = row[offset + 1];
+            const int b = row[offset + 2];
+            const int a = row[offset + 3];
+            if (a < miacode::layout_ring::kDetectMinAlpha) {
+                continue;
+            }
+            const int luminance = (r * 3 + g * 4 + b) / 8;
+            if (luminance < miacode::layout_ring::kDetectMinLuminance) {
+                continue;
+            }
+            const double dx = static_cast<double>(x) - cx;
+            const double dy = static_cast<double>(y) - cy;
+            const int radius = qBound(0, qRound(std::sqrt(dx * dx + dy * dy)), maxRadius);
+            histogram[radius] += static_cast<double>(a) * static_cast<double>(luminance);
+        }
+    }
+
+    QVector<double> smooth(histogram.size(), 0.0);
+    for (int i = 0; i < histogram.size(); ++i) {
+        double sum = histogram[i] * 2.0;
+        double weight = 2.0;
+        if (i > 0) {
+            sum += histogram[i - 1];
+            weight += 1.0;
+        }
+        if (i + 1 < histogram.size()) {
+            sum += histogram[i + 1];
+            weight += 1.0;
+        }
+        smooth[i] = sum / qMax(1.0, weight);
+    }
+
+    const int searchStart = qBound(
+        0,
+        qRound(maxRadius * miacode::layout_ring::kDetectSearchStartRadiusRatio),
+        maxRadius
+    );
+    const int searchEnd = qBound(
+        searchStart,
+        qRound(maxRadius * miacode::layout_ring::kDetectSearchEndRadiusRatio),
+        maxRadius
+    );
+    int peakIndex = -1;
+    double peakValue = 0.0;
+    for (int i = searchStart; i <= searchEnd; ++i) {
+        if (smooth[i] > peakValue) {
+            peakValue = smooth[i];
+            peakIndex = i;
+        }
+    }
+    if (peakIndex < 0 || peakValue <= 1.0) {
+        return miacode::layout_ring::kFallbackTextureDiameterRatio;
+    }
+
+    const double edgeThreshold = peakValue * miacode::layout_ring::kDetectEdgeThresholdRatio;
+    int innerRadius = peakIndex;
+    while (innerRadius > searchStart && smooth[innerRadius - 1] >= edgeThreshold) {
+        --innerRadius;
+    }
+    int outerRadius = peakIndex;
+    while (outerRadius < searchEnd && smooth[outerRadius + 1] >= edgeThreshold) {
+        ++outerRadius;
+    }
+
+    const double averageRadius = (static_cast<double>(innerRadius) + static_cast<double>(outerRadius)) * 0.5;
+    const double diameterRatio = (averageRadius * 2.0) / static_cast<double>(qMax(1, qMin(width, height)));
+    return qBound(
+        miacode::layout_ring::kDetectDiameterRatioMin,
+        diameterRatio,
+        miacode::layout_ring::kDetectDiameterRatioMax
+    );
 }
 
 QString defaultNoteGuideDir()

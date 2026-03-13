@@ -3,6 +3,7 @@
 #include <QString>
 #include <QVector>
 
+#include "PreviewRenderSettings.h"
 #include "PreviewAudioSettings.h"
 #include "TimelineView.h"
 
@@ -15,7 +16,9 @@ struct VideoExportTask {
     QString trackPath;
     QVector<TimelineNoteMarker> noteMarkers;
     PreviewAudioSettings audioSettings;
-    double backgroundBrightness = 0.2;
+    double backgroundBrightnessOuter = 0.2;
+    double backgroundBrightnessInner = 0.2;
+    PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
     double exportStartSeconds = 0.0;
     double contentDurationSeconds = 0.0;
     int resolution = 1024;

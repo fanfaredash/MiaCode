@@ -10,6 +10,7 @@
 #include <QVector>
 
 #include "PreviewAudioSettings.h"
+#include "PreviewRenderSettings.h"
 #include "SimaiDocument.h"
 #include "TimelineView.h"
 
@@ -372,7 +373,9 @@ private:
     bool showSlideTracks_ = true;
     bool showJudgeMarkers_ = false;
     bool showTouchTrail_ = false;
-    double previewBackgroundBrightness_ = 0.2;
+    double previewBackgroundBrightnessOuter_ = 0.2;
+    double previewBackgroundBrightnessInner_ = 0.2;
+    PreviewBackgroundScaleMode previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     bool previewShowDebugInfo_ = false;
     PreviewAudioSettings softwarePreviewAudioSettings_;
     PreviewAudioSettings previewAudioSettings_;
