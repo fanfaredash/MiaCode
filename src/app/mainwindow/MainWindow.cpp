@@ -11,6 +11,7 @@
 #include "UiText.h"
 #include "tools/latency/LatencyDetectorDialog.h"
 #include "tools/video_export/VideoExportDialog.h"
+#include "tools/video_export/VideoExportController.h"
 #include "common/AssetPaths.h"
 
 #include <algorithm>
@@ -28,6 +29,7 @@
 #include <QDir>
 #include <QDockWidget>
 #include <QEvent>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -598,6 +600,95 @@ QByteArray noteMarkerSignature(const QVector<TimelineNoteMarker>& notes)
         signature.append(';');
     }
     return signature;
+}
+
+int difficultyIdFromCliToken(const QString& rawToken)
+{
+    const QString token = rawToken.trimmed().toUpper();
+    if (token.isEmpty()) {
+        return 0;
+    }
+    bool numericOk = false;
+    const int numericId = token.toInt(&numericOk);
+    if (numericOk && SimaiDocument::isDifficultyId(numericId)) {
+        return numericId;
+    }
+    for (int id = 1; id <= 7; ++id) {
+        if (SimaiDocument::difficultyShortName(id).compare(token, Qt::CaseInsensitive) == 0) {
+            return id;
+        }
+        if (SimaiDocument::difficultyName(id).compare(token, Qt::CaseInsensitive) == 0) {
+            return id;
+        }
+    }
+    return 0;
+}
+
+QString resolveChartPathFromCliInput(const QString& inputPath)
+{
+    const QString cleaned = QDir::cleanPath(inputPath.trimmed());
+    if (cleaned.isEmpty()) {
+        return QString();
+    }
+
+    const QFileInfo info(cleaned);
+    if (info.isFile()) {
+        return info.absoluteFilePath();
+    }
+    if (!info.isDir()) {
+        return QString();
+    }
+
+    const QDir dir(info.absoluteFilePath());
+    const QStringList preferredNames{
+        QStringLiteral("maidata.txt"),
+        QStringLiteral("maidata.simai"),
+        QStringLiteral("chart.txt"),
+        QStringLiteral("chart.simai"),
+    };
+    for (const QString& name : preferredNames) {
+        const QString candidate = dir.filePath(name);
+        if (QFileInfo::exists(candidate)) {
+            return QDir::cleanPath(candidate);
+        }
+    }
+
+    QStringList filters;
+    filters << QStringLiteral("*.simai") << QStringLiteral("*.txt");
+    const QStringList files = dir.entryList(filters, QDir::Files | QDir::Readable, QDir::Name);
+    if (!files.isEmpty()) {
+        return QDir::cleanPath(dir.filePath(files.constFirst()));
+    }
+    return QString();
+}
+
+QString readTextFileWithFallbackEncoding(const QString& path, bool* usedSystemEncoding)
+{
+    if (usedSystemEncoding != nullptr) {
+        *usedSystemEncoding = false;
+    }
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString();
+    }
+
+    const QByteArray bytes = file.readAll();
+    if (bytes.startsWith("\xEF\xBB\xBF")) {
+        return QString::fromUtf8(bytes.mid(3));
+    }
+
+    QStringDecoder utf8Decoder(QStringConverter::Utf8);
+    const QString utf8Text = utf8Decoder.decode(bytes);
+    if (!utf8Decoder.hasError()) {
+        return utf8Text;
+    }
+
+    if (usedSystemEncoding != nullptr) {
+        *usedSystemEncoding = true;
+    }
+    QStringDecoder systemDecoder(QStringConverter::System);
+    return systemDecoder.decode(bytes);
 }
 
 QVector<float> buildWaveformPeaks(const QString& trackPath, double* durationSeconds, int peakCount = 1024)
@@ -3019,6 +3110,178 @@ void MainWindow::onExportPreviewVideo()
     }
     dialog.move(targetTopLeft);
     dialog.exec();
+}
+
+bool MainWindow::exportPreviewVideoFromCli(
+    const CliVideoExportRequest& request,
+    QString* resolvedOutputPath,
+    QString* errorMessage,
+    QString* details
+)
+{
+    if (resolvedOutputPath != nullptr) {
+        resolvedOutputPath->clear();
+    }
+    if (errorMessage != nullptr) {
+        errorMessage->clear();
+    }
+    if (details != nullptr) {
+        details->clear();
+    }
+
+    const auto fail = [errorMessage, details](const QString& message, const QString& detail = QString()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = message;
+        }
+        if (details != nullptr) {
+            *details = detail;
+        }
+        return false;
+    };
+
+    if (previewCanvas_ == nullptr) {
+        return fail(QStringLiteral("preview canvas is not initialized"));
+    }
+    if (request.resolution <= 0 || request.fps <= 0) {
+        return fail(QStringLiteral("resolution and fps must be positive integers"));
+    }
+
+    const QString chartPath = resolveChartPathFromCliInput(request.chartPathOrDirectory);
+    if (chartPath.isEmpty()) {
+        return fail(
+            QStringLiteral("cannot resolve chart file from input path"),
+            request.chartPathOrDirectory
+        );
+    }
+
+    bool usedSystemEncoding = false;
+    const QString chartText = readTextFileWithFallbackEncoding(chartPath, &usedSystemEncoding);
+    if (chartText.isNull()) {
+        return fail(QStringLiteral("failed to read chart file"), chartPath);
+    }
+
+    setCurrentFilePath(chartPath);
+    loadDocument(SimaiDocument::fromText(chartText));
+    refreshWaveformCache();
+
+    const int difficultyId = difficultyIdFromCliToken(request.difficulty);
+    if (!SimaiDocument::isDifficultyId(difficultyId)) {
+        return fail(
+            QStringLiteral("invalid difficulty token"),
+            QStringLiteral("expected one of: ESY/BAS/ADV/EXP/MAS/REM/UTG or 1..7")
+        );
+    }
+
+    if (document_.difficulty(difficultyId) == nullptr) {
+        QStringList available;
+        const QVector<int> ids = document_.difficultyIds();
+        available.reserve(ids.size());
+        for (int id : ids) {
+            available.append(SimaiDocument::difficultyShortName(id));
+        }
+        return fail(
+            QStringLiteral("requested difficulty is missing in chart"),
+            QStringLiteral("requested=%1 available=%2")
+                .arg(SimaiDocument::difficultyShortName(difficultyId))
+                .arg(available.join(','))
+        );
+    }
+    if (!switchToDifficultyField(difficultyId)) {
+        return fail(QStringLiteral("failed to switch to requested difficulty"));
+    }
+
+    refreshTimelineMetadata();
+    if (previewStatsNoteMarkers_.isEmpty()) {
+        return fail(QStringLiteral("no parsed note markers for requested difficulty"));
+    }
+
+    bool skinLoaded = previewCanvas_->hasCoreSkinAssetsLoadedForDebug();
+    const int skinWaitMs = qBound(0, request.skinLoadWaitMs, 20000);
+    if (!skinLoaded && skinWaitMs > 0) {
+        QElapsedTimer waitTimer;
+        waitTimer.start();
+        while (!skinLoaded && waitTimer.elapsed() < skinWaitMs) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+            skinLoaded = previewCanvas_->hasCoreSkinAssetsLoadedForDebug();
+        }
+    }
+
+    const QFileInfo chartInfo(currentFilePath_);
+    const QString difficultyName = SimaiDocument::difficultyShortName(difficultyId).replace(':', '_');
+    const QString defaultOutputName = QString("%1_%2_preview.mp4")
+        .arg(chartInfo.completeBaseName().isEmpty() ? QStringLiteral("export") : chartInfo.completeBaseName())
+        .arg(difficultyName);
+
+    QString outputPath = request.outputPath.trimmed();
+    if (outputPath.isEmpty()) {
+        outputPath = chartInfo.absoluteDir().filePath(defaultOutputName);
+    } else {
+        const bool trailingSeparator = outputPath.endsWith('/') || outputPath.endsWith('\\');
+        const QFileInfo outputInfo(outputPath);
+        if ((outputInfo.exists() && outputInfo.isDir()) || trailingSeparator) {
+            const QString outputDirPath = outputInfo.exists() && outputInfo.isDir()
+                ? outputInfo.absoluteFilePath()
+                : outputPath;
+            outputPath = QDir(outputDirPath).filePath(defaultOutputName);
+        }
+    }
+    outputPath = QDir::cleanPath(outputPath);
+
+    const QFileInfo outputInfo(outputPath);
+    const QString outputDirPath = outputInfo.absolutePath();
+    if (!outputDirPath.isEmpty() && !QDir(outputDirPath).exists()) {
+        if (!QDir().mkpath(outputDirPath)) {
+            return fail(QStringLiteral("cannot create output directory"), outputDirPath);
+        }
+    }
+
+    const double exportStartSeconds = qMax(0.0, request.exportStartSeconds);
+    const double totalDuration = previewDurationSeconds();
+    const double maxDuration = qMax(0.0, totalDuration - exportStartSeconds);
+    const double contentDurationSeconds = request.contentDurationSeconds > 0.0
+        ? request.contentDurationSeconds
+        : maxDuration;
+    if (contentDurationSeconds <= 0.0) {
+        return fail(
+            QStringLiteral("content duration is not positive"),
+            QStringLiteral("start=%1 total=%2")
+                .arg(exportStartSeconds, 0, 'f', 3)
+                .arg(totalDuration, 0, 'f', 3)
+        );
+    }
+
+    VideoExportTask task;
+    task.chartPath = currentFilePath_;
+    task.trackPath = resolveDefaultTrackPath();
+    task.noteMarkers = previewStatsNoteMarkers_;
+    task.audioSettings = previewAudioSettings_;
+    task.backgroundBrightness = previewBackgroundBrightness_;
+    task.exportStartSeconds = exportStartSeconds;
+    task.contentDurationSeconds = contentDurationSeconds;
+    task.resolution = request.resolution;
+    task.fps = request.fps;
+    task.showTimestamp = request.showTimestamp;
+    task.outputPath = outputPath;
+
+    const VideoExportResult exportResult = VideoExportController::exportFullPreview(task, previewCanvas_, nullptr);
+    if (!exportResult.success) {
+        return fail(exportResult.message, exportResult.details);
+    }
+
+    if (resolvedOutputPath != nullptr) {
+        *resolvedOutputPath = outputPath;
+    }
+    if (details != nullptr) {
+        QStringList detailLines;
+        detailLines << QStringLiteral("chart=%1").arg(chartPath);
+        detailLines << QStringLiteral("difficulty=%1").arg(SimaiDocument::difficultyShortName(difficultyId));
+        detailLines << QStringLiteral("encoding=%1").arg(usedSystemEncoding ? QStringLiteral("system") : QStringLiteral("utf8"));
+        detailLines << QStringLiteral("noteCount=%1").arg(previewStatsNoteMarkers_.size());
+        detailLines << QStringLiteral("trackPath=%1").arg(task.trackPath.isEmpty() ? QStringLiteral("(none)") : task.trackPath);
+        detailLines << QStringLiteral("skinLoaded=%1").arg(skinLoaded ? 1 : 0);
+        *details = detailLines.join('\n');
+    }
+    return true;
 }
 
 void MainWindow::onOpenLatencyDetector()

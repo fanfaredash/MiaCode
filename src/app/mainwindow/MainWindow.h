@@ -53,8 +53,26 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
+    struct CliVideoExportRequest {
+        QString chartPathOrDirectory;
+        QString difficulty = QStringLiteral("MAS");
+        QString outputPath;
+        int resolution = 1024;
+        int fps = 60;
+        double exportStartSeconds = 0.0;
+        double contentDurationSeconds = -1.0;
+        bool showTimestamp = true;
+        int skinLoadWaitMs = 2000;
+    };
+
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override = default;
+    bool exportPreviewVideoFromCli(
+        const CliVideoExportRequest& request,
+        QString* resolvedOutputPath,
+        QString* errorMessage,
+        QString* details = nullptr
+    );
 
 protected:
     void closeEvent(QCloseEvent* event) override;
