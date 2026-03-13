@@ -2,6 +2,8 @@
 
 #include "PreviewCanvas.h"
 #include "UiText.h"
+#include "common/PreviewInteractionConfig.h"
+#include "common/VideoExportConfig.h"
 
 #include <QAbstractSpinBox>
 #include <QCheckBox>
@@ -35,7 +37,6 @@
 
 namespace {
 
-constexpr double kExportLeadInSeconds = 3.0;
 constexpr int kPreviewSliderScale = 1000;
 constexpr int kPreviewTickIntervalMs = 33;
 constexpr int kFormLabelWidth = 52;
@@ -44,9 +45,10 @@ constexpr int kFormRowSpacing = 3;
 constexpr int kTimelineHorizontalInset = 12;
 constexpr int kDialogMinWidth = 560;
 constexpr int kSetButtonLeftGap = 12;
-constexpr qreal kPreviewSeekInitialStepSeconds = 0.016;
-constexpr qreal kPreviewSeekMaxStepSeconds = 0.250;
-constexpr qreal kPreviewSeekLinearAccelerationSecondsPerMs = 0.00024;
+constexpr qreal kPreviewSeekInitialStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekInitialStepSeconds);
+constexpr qreal kPreviewSeekMaxStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekMaxStepSeconds);
+constexpr qreal kPreviewSeekLinearAccelerationSecondsPerMs =
+    static_cast<qreal>(miacode::preview_interaction::kSeekLinearAccelerationSecondsPerMs);
 
 QString l10n(const QString& en, const QString& zh)
 {
@@ -781,7 +783,7 @@ double VideoExportDialog::rangeEndSeconds() const
 
 double VideoExportDialog::leadInStartSeconds() const
 {
-    return qMax(0.0, rangeStartSeconds() - kExportLeadInSeconds);
+    return qMax(0.0, rangeStartSeconds() - miacode::video_export::kLeadInSeconds);
 }
 
 QString VideoExportDialog::formatSecond(double second) const

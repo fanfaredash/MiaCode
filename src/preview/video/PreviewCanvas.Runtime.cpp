@@ -4,6 +4,12 @@ PreviewCanvas::PreviewCanvas(QWindow* parent)
     const QString outlinePath = defaultOutlinePath();
     if (QFileInfo::exists(outlinePath)) {
         outlineImage_ = QImage(outlinePath);
+        const double textureRingRatio = detectLayoutRingDiameterRatio(outlineImage_);
+        layoutRingDiameterRatio_ = qBound(
+            miacode::layout_ring::kPlayfieldRatioMin,
+            static_cast<double>(kOutlineTargetToPlayfieldRatio) * textureRingRatio,
+            miacode::layout_ring::kPlayfieldRatioMax
+        );
     }
     judgeEffectTapImage_ = buildJudgeEffectTapFallbackImage();
     judgeEffectTapSourceRect_ = nonTransparentBounds(judgeEffectTapImage_);
@@ -150,7 +156,10 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     guideAtlasImage_ = source.guideAtlasImage_;
     atlasRegions_ = source.atlasRegions_;
     noteMarkers_ = source.noteMarkers_;
-    backgroundBrightness_ = source.backgroundBrightness_;
+    backgroundBrightnessOuter_ = source.backgroundBrightnessOuter_;
+    backgroundBrightnessInner_ = source.backgroundBrightnessInner_;
+    backgroundScaleMode_ = source.backgroundScaleMode_;
+    layoutRingDiameterRatio_ = source.layoutRingDiameterRatio_;
     showDebugInfo_ = source.showDebugInfo_;
     showTimestamp_ = source.showTimestamp_;
 

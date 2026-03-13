@@ -161,11 +161,36 @@ void PreviewCanvas::applySkinLoadResult(SkinLoadResult&& result)
 
 void PreviewCanvas::setBackgroundBrightness(double brightness)
 {
+    setBackgroundBrightnessOuter(brightness);
+    setBackgroundBrightnessInner(brightness);
+}
+
+void PreviewCanvas::setBackgroundBrightnessOuter(double brightness)
+{
     const double clamped = qBound(0.0, brightness, 1.0);
-    if (qFuzzyCompare(backgroundBrightness_ + 1.0, clamped + 1.0)) {
+    if (qFuzzyCompare(backgroundBrightnessOuter_ + 1.0, clamped + 1.0)) {
         return;
     }
-    backgroundBrightness_ = clamped;
+    backgroundBrightnessOuter_ = clamped;
+    update();
+}
+
+void PreviewCanvas::setBackgroundBrightnessInner(double brightness)
+{
+    const double clamped = qBound(0.0, brightness, 1.0);
+    if (qFuzzyCompare(backgroundBrightnessInner_ + 1.0, clamped + 1.0)) {
+        return;
+    }
+    backgroundBrightnessInner_ = clamped;
+    update();
+}
+
+void PreviewCanvas::setBackgroundScaleMode(PreviewBackgroundScaleMode mode)
+{
+    if (backgroundScaleMode_ == mode) {
+        return;
+    }
+    backgroundScaleMode_ = mode;
     update();
 }
 

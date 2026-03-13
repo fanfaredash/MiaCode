@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common/LayoutRingConfig.h"
+#include "PreviewRenderSettings.h"
 #include "PreviewGLRenderer.h"
 #include "TimelineView.h"
 
@@ -38,6 +40,9 @@ public:
     void setNoteMarkers(const QVector<TimelineNoteMarker>& notes);
     void setSkinDirectory(const QString& skinDir);
     void setBackgroundBrightness(double brightness);
+    void setBackgroundBrightnessOuter(double brightness);
+    void setBackgroundBrightnessInner(double brightness);
+    void setBackgroundScaleMode(PreviewBackgroundScaleMode mode);
     void setShowDebugInfo(bool show);
     void setShowTimestamp(bool show);
     bool showTimestamp() const;
@@ -261,7 +266,9 @@ private:
     QVideoFrame videoFrame_;
 #endif
     double playheadSeconds_ = 0.0;
-    double backgroundBrightness_ = 0.2;
+    double backgroundBrightnessOuter_ = 0.2;
+    double backgroundBrightnessInner_ = 0.2;
+    PreviewBackgroundScaleMode backgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     QElapsedTimer fpsTimer_;
     int fpsFrameCounter_ = 0;
     double fpsDisplay_ = 0.0;
@@ -276,6 +283,7 @@ private:
     bool usedGpuRendererThisFrame_ = false;
     bool showDebugInfo_ = false;
     bool showTimestamp_ = true;
+    double layoutRingDiameterRatio_ = miacode::layout_ring::kFallbackPlayfieldDiameterRatio;
     bool highQualityRender_ = false;
     bool nativePaintingActive_ = false;
     bool tapAtlasBatchingActive_ = false;

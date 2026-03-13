@@ -6,7 +6,9 @@
     showSlideTracks_ = true;
     showJudgeMarkers_ = false;
     showTouchTrail_ = false;
-    previewBackgroundBrightness_ = 0.2;
+    previewBackgroundBrightnessOuter_ = 0.2;
+    previewBackgroundBrightnessInner_ = 0.2;
+    previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     previewShowDebugInfo_ = false;
     editorLineSpacingFactor_ = kEditorLineSpacingFactorDefault;
     editorTextFontPointSize_ = qBound(
@@ -49,8 +51,24 @@
     if (preview.value("show_touch_trail").isBool()) {
         showTouchTrail_ = preview.value("show_touch_trail").toBool(false);
     }
-    if (preview.value("background_brightness").isDouble()) {
-        previewBackgroundBrightness_ = qBound(0.0, preview.value("background_brightness").toDouble(0.2), 1.0);
+    const double legacyBrightness = qBound(0.0, preview.value("background_brightness").toDouble(0.2), 1.0);
+    if (preview.value("background_brightness_outer").isDouble()) {
+        previewBackgroundBrightnessOuter_ =
+            qBound(0.0, preview.value("background_brightness_outer").toDouble(legacyBrightness), 1.0);
+    } else {
+        previewBackgroundBrightnessOuter_ = legacyBrightness;
+    }
+    if (preview.value("background_brightness_inner").isDouble()) {
+        previewBackgroundBrightnessInner_ =
+            qBound(0.0, preview.value("background_brightness_inner").toDouble(previewBackgroundBrightnessOuter_), 1.0);
+    } else {
+        previewBackgroundBrightnessInner_ = previewBackgroundBrightnessOuter_;
+    }
+    const QString scaleMode = preview.value("background_scale_mode").toString().trimmed().toLower();
+    if (scaleMode == QLatin1String("fit") || scaleMode == QLatin1String("contain")) {
+        previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FitContain;
+    } else {
+        previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     }
     if (preview.value("show_debug_info").isBool()) {
         previewShowDebugInfo_ = preview.value("show_debug_info").toBool(false);
@@ -95,7 +113,15 @@ void MainWindow::savePortableState() const
 
     preview.insert("show_judge_markers", showJudgeMarkers_);
     preview.insert("show_touch_trail", showTouchTrail_);
-    preview.insert("background_brightness", previewBackgroundBrightness_);
+    preview.insert("background_brightness", previewBackgroundBrightnessOuter_);
+    preview.insert("background_brightness_outer", previewBackgroundBrightnessOuter_);
+    preview.insert("background_brightness_inner", previewBackgroundBrightnessInner_);
+    preview.insert(
+        "background_scale_mode",
+        previewBackgroundScaleMode_ == PreviewBackgroundScaleMode::FitContain
+            ? QStringLiteral("fit")
+            : QStringLiteral("fill")
+    );
     preview.insert("show_debug_info", previewShowDebugInfo_);
     preview.insert("audio", softwarePreviewAudioSettings_.toJson());
 

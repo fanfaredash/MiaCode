@@ -193,7 +193,10 @@ bool MainWindow::sendPreviewPrepareCommand()
         {"cmd", "prepare"},
         {"chart_path", currentFilePath_},
         {"render_profile", "studio"},
-        {"background_brightness", previewBackgroundBrightness_},
+        {"background_brightness", previewBackgroundBrightnessOuter_},
+        {"background_brightness_outer", previewBackgroundBrightnessOuter_},
+        {"background_brightness_inner", previewBackgroundBrightnessInner_},
+        {"background_scale_mode", previewBackgroundScaleMode_ == PreviewBackgroundScaleMode::FitContain ? "fit" : "fill"},
     };
     const QString skinDir = resolvePreviewSkinDir();
     if (!skinDir.isEmpty()) {
@@ -229,7 +232,10 @@ bool MainWindow::sendPreviewConfigCommand(const QString& audition)
         {"show_slide_tracks", true},
         {"show_judge_markers", showJudgeMarkers_},
         {"show_touch_trail", showTouchTrail_},
-        {"background_brightness", previewBackgroundBrightness_},
+        {"background_brightness", previewBackgroundBrightnessOuter_},
+        {"background_brightness_outer", previewBackgroundBrightnessOuter_},
+        {"background_brightness_inner", previewBackgroundBrightnessInner_},
+        {"background_scale_mode", previewBackgroundScaleMode_ == PreviewBackgroundScaleMode::FitContain ? "fit" : "fill"},
     };
     if (!audition.isEmpty()) {
         cmd.insert("audition", audition);

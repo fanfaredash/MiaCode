@@ -17,7 +17,7 @@ QRectF PreviewCanvas::stageRectForSize(const QSize& renderSize) const
 
 QRectF PreviewCanvas::stagePlayfieldRect(const QRectF& stageRect) const
 {
-    const QRectF innerRect = stageRect.adjusted(18.0, 18.0, -18.0, -18.0);
+    const QRectF innerRect = stageRect.adjusted(kPlayfieldInset, kPlayfieldInset, -kPlayfieldInset, -kPlayfieldInset);
     const qreal playfieldSide = qMax<qreal>(1.0, qMin(innerRect.width(), innerRect.height()));
     return QRectF(
         innerRect.center().x() - playfieldSide / 2.0,
@@ -34,8 +34,6 @@ QRectF PreviewCanvas::currentPlayfieldRect() const
 
 void PreviewCanvas::drawStageBackground(QPainter& painter, const QRectF& stageRect)
 {
-    painter.fillRect(stageRect, QColor("#1F2833"));
-
     QSize mediaSize = mediaFrame_.size();
     bool hasVideoFrame = false;
 #ifdef HAVE_QT_MULTIMEDIA
@@ -47,14 +45,19 @@ void PreviewCanvas::drawStageBackground(QPainter& painter, const QRectF& stageRe
         }
     }
 #endif
+    const bool hasMedia = !mediaSize.isEmpty();
+    painter.fillRect(stageRect, hasMedia ? QColor("#000000") : QColor("#1F2833"));
 
-    if (!mediaSize.isEmpty()) {
+    if (hasMedia) {
         QSize fittedSize = mediaSize;
         const QSize mediaBounds(
             qMax(1, qRound(stageRect.width())),
             qMax(1, qRound(stageRect.height()))
         );
-        fittedSize.scale(mediaBounds, Qt::KeepAspectRatioByExpanding);
+        const Qt::AspectRatioMode aspectMode = backgroundScaleMode_ == PreviewBackgroundScaleMode::FitContain
+            ? Qt::KeepAspectRatio
+            : Qt::KeepAspectRatioByExpanding;
+        fittedSize.scale(mediaBounds, aspectMode);
         if (!fittedSize.isEmpty()) {
             const QRectF targetRect(
                 stageRect.center().x() - fittedSize.width() / 2.0,
@@ -91,9 +94,37 @@ void PreviewCanvas::drawStageBackground(QPainter& painter, const QRectF& stageRe
         }
     }
 
-    const int darkAlpha = qBound(0, qRound((1.0 - backgroundBrightness_) * 255.0), 255);
-    if (darkAlpha > 0) {
-        painter.fillRect(stageRect, QColor(0, 0, 0, darkAlpha));
+    const int outerDarkAlpha = qBound(0, qRound((1.0 - backgroundBrightnessOuter_) * 255.0), 255);
+    const int innerDarkAlpha = qBound(0, qRound((1.0 - backgroundBrightnessInner_) * 255.0), 255);
+    if (outerDarkAlpha > 0 || innerDarkAlpha > 0) {
+        const QRectF playfieldRect = stagePlayfieldRect(stageRect);
+        const qreal circleRadius = qMax<qreal>(
+            1.0,
+            playfieldRect.width()
+                * qBound(
+                    miacode::layout_ring::kPlayfieldRatioMin,
+                    layoutRingDiameterRatio_,
+                    miacode::layout_ring::kRenderRatioMax
+                )
+                * 0.5
+        );
+        QPainterPath circlePath;
+        circlePath.addEllipse(playfieldRect.center(), circleRadius, circleRadius);
+        if (outerDarkAlpha > 0) {
+            painter.save();
+            QPainterPath outerPath;
+            outerPath.addRect(stageRect);
+            outerPath -= circlePath;
+            painter.setClipPath(outerPath);
+            painter.fillRect(stageRect, QColor(0, 0, 0, outerDarkAlpha));
+            painter.restore();
+        }
+        if (innerDarkAlpha > 0) {
+            painter.save();
+            painter.setClipPath(circlePath);
+            painter.fillRect(stageRect, QColor(0, 0, 0, innerDarkAlpha));
+            painter.restore();
+        }
     }
 
 }

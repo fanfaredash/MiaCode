@@ -2,6 +2,9 @@
 
 #include "PreviewCanvas.h"
 #include "common/AssetPaths.h"
+#include "common/LayoutRingConfig.h"
+#include "common/PreviewGameplayConfig.h"
+#include "common/VideoExportConfig.h"
 
 #include <QCoreApplication>
 #include <QDataStream>
@@ -25,10 +28,10 @@
 #include "../../../third_party/miniaudio/miniaudio.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 namespace {
-constexpr double kExportLeadInSeconds = 3.0;
 constexpr int kMixSampleRate = 48000;
 constexpr int kMixChannels = 2;
 constexpr double kTimelineEpsilonSeconds = 1e-6;
@@ -166,20 +169,23 @@ struct ObjectTraceItem {
     }
 };
 
-constexpr double kDiagTapUnitsPerSecond = 540.0;
-constexpr double kDiagLogicalDistanceEdge = 240.0;
-constexpr double kDiagLogicalDistanceTap = 61.25;
-constexpr double kDiagTapScaleSlope = 0.008;
-constexpr double kDiagTapScaleOffset = 0.51;
-constexpr double kDiagTouchDurationSeconds = 0.5;
-constexpr double kDiagSlideTrackFadeInSeconds = 0.2;
-constexpr double kDiagJudgeEffectDurationSeconds = 0.71666664;
-constexpr double kDiagJudgeEffectTouchDurationSeconds = 0.33333334;
-constexpr double kDiagJudgeEffectFireworkTouchTriggerDelaySeconds = 0.05;
-constexpr double kDiagJudgeEffectFireworkDurationSeconds = 1.3333334;
-constexpr double kDiagLogicalCanvasSize = 540.0;
+constexpr double kDiagTapUnitsPerSecond = miacode::preview_gameplay::kTapUnitsPerSecond;
+constexpr double kDiagLogicalDistanceEdge = miacode::preview_gameplay::kLogicalDistanceEdge;
+constexpr double kDiagLogicalDistanceTap = miacode::preview_gameplay::kLogicalDistanceTap;
+constexpr double kDiagTapScaleSlope = miacode::preview_gameplay::kDistanceToScaleSlope;
+constexpr double kDiagTapScaleOffset = miacode::preview_gameplay::kDistanceToScaleOffset;
+constexpr double kDiagTouchDurationSeconds = miacode::preview_gameplay::kTouchDurationSeconds;
+constexpr double kDiagSlideTrackFadeInSeconds = miacode::preview_gameplay::kSlideTrackFadeInSeconds;
+constexpr double kDiagJudgeEffectDurationSeconds = miacode::preview_gameplay::kJudgeEffectDurationSeconds;
+constexpr double kDiagJudgeEffectTouchDurationSeconds = miacode::preview_gameplay::kJudgeEffectTouchDurationSeconds;
+constexpr double kDiagJudgeEffectFireworkTouchTriggerDelaySeconds =
+    miacode::preview_gameplay::kJudgeEffectFireworkTouchTriggerDelaySeconds;
+constexpr double kDiagJudgeEffectFireworkDurationSeconds = miacode::preview_gameplay::kJudgeEffectFireworkDurationSeconds;
+constexpr double kDiagLogicalCanvasSize = miacode::preview_gameplay::kLogicalCanvasSize;
 constexpr double kDiagLogicalCanvasCenter = kDiagLogicalCanvasSize / 2.0;
-constexpr double kDiagPlayfieldInset = 18.0;
+constexpr double kDiagPlayfieldInset = miacode::preview_gameplay::kPlayfieldInset;
+constexpr double kOutlineTargetToPlayfieldRatio =
+    (kDiagLogicalCanvasSize - miacode::layout_ring::kOutlineInsetLogical * 2.0) / kDiagLogicalCanvasSize;
 
 bool envFlagEnabled(const QString& key)
 {
@@ -798,6 +804,163 @@ bool hasEncoderToken(const QString& encodersOutput, const QString& encoderName)
         QStringLiteral("(?m)^\\s*\\S{6}\\s+%1(?:\\s|$)").arg(QRegularExpression::escape(encoderName))
     );
     return pattern.match(encodersOutput).hasMatch();
+}
+
+double detectLayoutRingDiameterRatio(const QImage& source)
+{
+    if (source.isNull() || source.width() <= 2 || source.height() <= 2) {
+        return miacode::layout_ring::kFallbackTextureDiameterRatio;
+    }
+    QImage image = source;
+    if (image.format() != QImage::Format_RGBA8888) {
+        image = source.convertToFormat(QImage::Format_RGBA8888);
+    }
+    if (image.isNull()) {
+        return miacode::layout_ring::kFallbackTextureDiameterRatio;
+    }
+
+    const int width = image.width();
+    const int height = image.height();
+    const int maxRadius = qMax(1, qMin(width, height) / 2);
+    QVector<double> histogram(maxRadius + 1, 0.0);
+    const double cx = (static_cast<double>(width) - 1.0) * 0.5;
+    const double cy = (static_cast<double>(height) - 1.0) * 0.5;
+
+    for (int y = 0; y < height; ++y) {
+        const uchar* row = image.constScanLine(y);
+        for (int x = 0; x < width; ++x) {
+            const int offset = x * 4;
+            const int r = row[offset + 0];
+            const int g = row[offset + 1];
+            const int b = row[offset + 2];
+            const int a = row[offset + 3];
+            if (a < miacode::layout_ring::kDetectMinAlpha) {
+                continue;
+            }
+            const int luminance = (r * 3 + g * 4 + b) / 8;
+            if (luminance < miacode::layout_ring::kDetectMinLuminance) {
+                continue;
+            }
+            const double dx = static_cast<double>(x) - cx;
+            const double dy = static_cast<double>(y) - cy;
+            const int radius = qBound(0, qRound(std::sqrt(dx * dx + dy * dy)), maxRadius);
+            histogram[radius] += static_cast<double>(a) * static_cast<double>(luminance);
+        }
+    }
+
+    QVector<double> smooth(histogram.size(), 0.0);
+    for (int i = 0; i < histogram.size(); ++i) {
+        double sum = histogram[i] * 2.0;
+        double weight = 2.0;
+        if (i > 0) {
+            sum += histogram[i - 1];
+            weight += 1.0;
+        }
+        if (i + 1 < histogram.size()) {
+            sum += histogram[i + 1];
+            weight += 1.0;
+        }
+        smooth[i] = sum / qMax(1.0, weight);
+    }
+
+    const int searchStart = qBound(
+        0,
+        qRound(maxRadius * miacode::layout_ring::kDetectSearchStartRadiusRatio),
+        maxRadius
+    );
+    const int searchEnd = qBound(
+        searchStart,
+        qRound(maxRadius * miacode::layout_ring::kDetectSearchEndRadiusRatio),
+        maxRadius
+    );
+    int peakIndex = -1;
+    double peakValue = 0.0;
+    for (int i = searchStart; i <= searchEnd; ++i) {
+        if (smooth[i] > peakValue) {
+            peakValue = smooth[i];
+            peakIndex = i;
+        }
+    }
+    if (peakIndex < 0 || peakValue <= 1.0) {
+        return miacode::layout_ring::kFallbackTextureDiameterRatio;
+    }
+
+    const double edgeThreshold = peakValue * miacode::layout_ring::kDetectEdgeThresholdRatio;
+    int innerRadius = peakIndex;
+    while (innerRadius > searchStart && smooth[innerRadius - 1] >= edgeThreshold) {
+        --innerRadius;
+    }
+    int outerRadius = peakIndex;
+    while (outerRadius < searchEnd && smooth[outerRadius + 1] >= edgeThreshold) {
+        ++outerRadius;
+    }
+
+    const double averageRadius = (static_cast<double>(innerRadius) + static_cast<double>(outerRadius)) * 0.5;
+    const double diameterRatio = (averageRadius * 2.0) / static_cast<double>(qMax(1, qMin(width, height)));
+    return qBound(
+        miacode::layout_ring::kDetectDiameterRatioMin,
+        diameterRatio,
+        miacode::layout_ring::kDetectDiameterRatioMax
+    );
+}
+
+double resolvedLayoutRingDiameterRatio()
+{
+    static const double ratio = []() {
+        const QString outlinePath = miacode::assets::assetPath("background/outline.png");
+        const QImage outline(outlinePath);
+        const double textureRatio = detectLayoutRingDiameterRatio(outline);
+        return qBound(
+            miacode::layout_ring::kPlayfieldRatioMin,
+            textureRatio * kOutlineTargetToPlayfieldRatio,
+            miacode::layout_ring::kPlayfieldRatioMax
+        );
+    }();
+    return ratio;
+}
+
+QImage buildCircularDimMaskImage(
+    int resolution,
+    double outerDimAlpha,
+    double innerDimAlpha,
+    double layoutRingDiameterRatio
+)
+{
+    const int side = qMax(1, resolution);
+    QImage mask(side, side, QImage::Format_RGBA8888);
+    mask.fill(Qt::transparent);
+
+    const int outerAlpha = qBound(0, qRound(outerDimAlpha * 255.0), 255);
+    const int innerAlpha = qBound(0, qRound(innerDimAlpha * 255.0), 255);
+    if (outerAlpha == 0 && innerAlpha == 0) {
+        return mask;
+    }
+
+    const double playfieldSide = static_cast<double>(qMax(1, side - qRound(kDiagPlayfieldInset * 2.0)));
+    const double ratio = qBound(
+        miacode::layout_ring::kPlayfieldRatioMin,
+        layoutRingDiameterRatio,
+        miacode::layout_ring::kRenderRatioMax
+    );
+    const double radius = qMax(1.0, playfieldSide * ratio * 0.5);
+    const double center = (static_cast<double>(side) - 1.0) * 0.5;
+    const double radiusSq = radius * radius;
+
+    for (int y = 0; y < side; ++y) {
+        uchar* row = mask.scanLine(y);
+        const double dy = static_cast<double>(y) - center;
+        for (int x = 0; x < side; ++x) {
+            const double dx = static_cast<double>(x) - center;
+            const bool inside = (dx * dx + dy * dy) <= radiusSq;
+            const int alpha = inside ? innerAlpha : outerAlpha;
+            const int offset = x * 4;
+            row[offset + 0] = 0;
+            row[offset + 1] = 0;
+            row[offset + 2] = 0;
+            row[offset + 3] = static_cast<uchar>(alpha);
+        }
+    }
+    return mask;
 }
 
 bool probeEncoderRuntimeAvailability(
@@ -1979,8 +2142,8 @@ VideoExportResult VideoExportController::exportFullPreview(
     const double segmentStartSecond = qMax(0.0, task.exportStartSeconds);
     const double segmentDurationSeconds = task.contentDurationSeconds;
     const double segmentEndSecond = segmentStartSecond + segmentDurationSeconds;
-    const double timelineOriginSecond = segmentStartSecond - kExportLeadInSeconds;
-    const double totalSeconds = kExportLeadInSeconds + segmentDurationSeconds;
+    const double timelineOriginSecond = segmentStartSecond - miacode::video_export::kLeadInSeconds;
+    const double totalSeconds = miacode::video_export::kLeadInSeconds + segmentDurationSeconds;
     const int frameCount = qMax(1, qRound(totalSeconds * task.fps));
     const double alignedTotalSeconds = static_cast<double>(frameCount) / qMax(1, task.fps);
     const int resolution = task.resolution;
@@ -2071,7 +2234,12 @@ VideoExportResult VideoExportController::exportFullPreview(
          << QStringLiteral("-i")
          << QStringLiteral("pipe:0");
 
+    const double outerDimAlpha = qBound(0.0, 1.0 - task.backgroundBrightnessOuter, 1.0);
+    const double innerDimAlpha = qBound(0.0, 1.0 - task.backgroundBrightnessInner, 1.0);
+    const bool hasDimMask = outerDimAlpha > 1e-6 || innerDimAlpha > 1e-6;
+
     int mediaInputIndex = -1;
+    int dimMaskInputIndex = -1;
     int bgmInputIndex = -1;
     int sfxInputIndex = -1;
     int currentInputIndex = 1;
@@ -2085,6 +2253,45 @@ VideoExportResult VideoExportController::exportFullPreview(
         }
         args << QStringLiteral("-i") << mediaPath;
     }
+    if (hasDimMask) {
+        const QString dimMaskPath = QDir(tempDir.path()).filePath(QStringLiteral("dim_mask.png"));
+        const double ringRatio = resolvedLayoutRingDiameterRatio();
+        const QImage dimMask = buildCircularDimMaskImage(
+            resolution,
+            outerDimAlpha,
+            innerDimAlpha,
+            ringRatio
+        );
+        if (dimMask.isNull() || !dimMask.save(dimMaskPath)) {
+            result.message = QStringLiteral("Unable to create dim mask image.");
+            result.details = withExportLogPath(dimMaskPath);
+            appendVideoExportLog(
+                QStringLiteral("fail_dim_mask"),
+                QStringLiteral("path=%1 outer=%2 inner=%3 ratio=%4")
+                    .arg(dimMaskPath)
+                    .arg(outerDimAlpha, 0, 'f', 6)
+                    .arg(innerDimAlpha, 0, 'f', 6)
+                    .arg(ringRatio, 0, 'f', 6)
+            );
+            return result;
+        }
+        dimMaskInputIndex = currentInputIndex++;
+        args << QStringLiteral("-loop")
+             << QStringLiteral("1")
+             << QStringLiteral("-framerate")
+             << QString::number(task.fps)
+             << QStringLiteral("-i")
+             << dimMaskPath;
+        appendVideoExportLog(
+            QStringLiteral("dim_mask"),
+            QStringLiteral("path=%1 inputIndex=%2 outer=%3 inner=%4 ringRatio=%5")
+                .arg(dimMaskPath)
+                .arg(dimMaskInputIndex)
+                .arg(outerDimAlpha, 0, 'f', 6)
+                .arg(innerDimAlpha, 0, 'f', 6)
+                .arg(ringRatio, 0, 'f', 6)
+        );
+    }
     if (hasTrack) {
         bgmInputIndex = currentInputIndex++;
         args << QStringLiteral("-i") << trackPath;
@@ -2094,17 +2301,25 @@ VideoExportResult VideoExportController::exportFullPreview(
 
     const QString totalSecondsText = QString::number(alignedTotalSeconds, 'f', 6);
     const QString timelineOriginText = QString::number(timelineOriginSecond, 'f', 6);
+    const QString baseFillColor = hasMedia ? QStringLiteral("#000000") : QStringLiteral("#1F2833");
     QStringList filterParts;
-    filterParts << QStringLiteral("color=c=#1F2833:s=%1x%1:r=%2:d=%3[base_fill]")
+    filterParts << QStringLiteral("color=c=%1:s=%2x%2:r=%3:d=%4[base_fill]")
+                       .arg(baseFillColor)
                        .arg(resolution)
                        .arg(task.fps)
                        .arg(totalSecondsText);
     if (hasMedia) {
-        QString mediaChain =
-            QStringLiteral("[%1:v]scale=%2:%2:force_original_aspect_ratio=increase,crop=%2:%2,setsar=1,fps=%3,format=rgba")
-                .arg(mediaInputIndex)
-                .arg(resolution)
-                .arg(task.fps);
+        QString mediaChain = QStringLiteral("[%1:v]").arg(mediaInputIndex);
+        if (task.backgroundScaleMode == PreviewBackgroundScaleMode::FitContain) {
+            mediaChain += QStringLiteral(
+                "scale=%1:%1:force_original_aspect_ratio=decrease,pad=%1:%1:(ow-iw)/2:(oh-ih)/2:color=black")
+                .arg(resolution);
+        } else {
+            mediaChain += QStringLiteral(
+                "scale=%1:%1:force_original_aspect_ratio=increase,crop=%1:%1")
+                .arg(resolution);
+        }
+        mediaChain += QStringLiteral(",setsar=1,fps=%1,format=rgba").arg(task.fps);
         if (!mediaIsImage) {
             if (timelineOriginSecond > kTimelineEpsilonSeconds) {
                 mediaChain += QStringLiteral(",trim=start=%1:end=%2,setpts=PTS-STARTPTS")
@@ -2124,14 +2339,11 @@ VideoExportResult VideoExportController::exportFullPreview(
         filterParts << QStringLiteral("[base_fill]null[base_media]");
     }
 
-    const double dimAlpha = qBound(0.0, 1.0 - task.backgroundBrightness, 1.0);
-    if (dimAlpha > 1e-6) {
-        filterParts << QStringLiteral("color=c=black@%1:s=%2x%2:r=%3:d=%4[dim]")
-                           .arg(QString::number(dimAlpha, 'f', 6))
-                           .arg(resolution)
-                           .arg(task.fps)
-                           .arg(totalSecondsText);
-        filterParts << QStringLiteral("[base_media][dim]overlay=0:0[base]");
+    if (hasDimMask) {
+        filterParts << QStringLiteral("[%1:v]fps=%2,format=rgba[dim_mask]")
+                           .arg(dimMaskInputIndex)
+                           .arg(task.fps);
+        filterParts << QStringLiteral("[base_media][dim_mask]overlay=0:0:format=auto[base]");
     } else {
         filterParts << QStringLiteral("[base_media]null[base]");
     }
@@ -2250,7 +2462,9 @@ VideoExportResult VideoExportController::exportFullPreview(
 
     PreviewCanvas exportCanvas;
     exportCanvas.copyRenderStateFrom(*sourceCanvas);
-    exportCanvas.setBackgroundBrightness(task.backgroundBrightness);
+    exportCanvas.setBackgroundBrightnessOuter(task.backgroundBrightnessOuter);
+    exportCanvas.setBackgroundBrightnessInner(task.backgroundBrightnessInner);
+    exportCanvas.setBackgroundScaleMode(task.backgroundScaleMode);
     exportCanvas.setShowDebugInfo(false);
     exportCanvas.setNoteMarkers(exportMarkers);
     QOpenGLContext* shareContext = sourceCanvas->context();
@@ -2415,7 +2629,9 @@ VideoExportResult VideoExportController::exportFullPreview(
     }
     if (diagObjectHashEnabled) {
         diagReferenceCanvas.copyRenderStateFrom(exportCanvas);
-        diagReferenceCanvas.setBackgroundBrightness(task.backgroundBrightness);
+        diagReferenceCanvas.setBackgroundBrightnessOuter(task.backgroundBrightnessOuter);
+        diagReferenceCanvas.setBackgroundBrightnessInner(task.backgroundBrightnessInner);
+        diagReferenceCanvas.setBackgroundScaleMode(task.backgroundScaleMode);
         diagReferenceCanvas.setShowDebugInfo(false);
         diagReferenceCanvas.setNoteMarkers({});
         QString diagInitError;
@@ -2443,7 +2659,9 @@ VideoExportResult VideoExportController::exportFullPreview(
     }
     if (diagCompareRenderPathsEnabled) {
         diagCpuCompareCanvas.copyRenderStateFrom(exportCanvas);
-        diagCpuCompareCanvas.setBackgroundBrightness(task.backgroundBrightness);
+        diagCpuCompareCanvas.setBackgroundBrightnessOuter(task.backgroundBrightnessOuter);
+        diagCpuCompareCanvas.setBackgroundBrightnessInner(task.backgroundBrightnessInner);
+        diagCpuCompareCanvas.setBackgroundScaleMode(task.backgroundScaleMode);
         diagCpuCompareCanvas.setShowDebugInfo(false);
         diagCpuCompareCanvas.setNoteMarkers(exportMarkers);
         diagCpuCompareReady = true;
@@ -2704,7 +2922,9 @@ VideoExportResult VideoExportController::exportFullPreview(
             );
             return result;
         }
-        const quint64 packedHash = fnv1a64Bytes(packedFrame.constData(), packedFrame.size());
+        const quint64 packedHash = diagPipeHashEnabled
+            ? fnv1a64Bytes(packedFrame.constData(), packedFrame.size())
+            : 0;
 
         if (diagPipeHashEnabled && !traceItems.isEmpty()) {
             ++diagPipeHashObjectFrames;

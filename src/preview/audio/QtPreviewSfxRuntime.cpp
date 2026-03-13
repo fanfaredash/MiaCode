@@ -1,6 +1,7 @@
 #include "QtPreviewSfxRuntime.h"
 
 #include "common/AssetPaths.h"
+#include "common/PreviewGameplayConfig.h"
 
 #include <algorithm>
 #include <cstring>
@@ -22,7 +23,8 @@
 
 namespace {
 constexpr double kQtPreviewSfxEpsilonSeconds = 1e-6;
-constexpr double kQtPreviewSfxFireworkTouchTriggerDelaySeconds = 0.05;
+constexpr double kQtPreviewSfxFireworkTouchTriggerDelaySeconds =
+    miacode::preview_gameplay::kJudgeEffectFireworkTouchTriggerDelaySeconds;
 
 bool runtimeAudioDebugEnabled()
 {

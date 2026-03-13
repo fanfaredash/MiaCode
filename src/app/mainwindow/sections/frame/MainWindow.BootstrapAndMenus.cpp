@@ -1205,11 +1205,13 @@ MainWindow::MainWindow(QWidget* parent)
         timelineView_->setShowSlideTracks(true);
     }
     if (previewCanvas_ != nullptr) {
-        previewCanvas_->setBackgroundBrightness(previewBackgroundBrightness_);
+        previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
+        previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
+        previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
         previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
     }
     if (previewMediaController_ != nullptr) {
-        previewMediaController_->setBackgroundBrightness(previewBackgroundBrightness_);
+        previewMediaController_->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
     }
     updatePauseButtonAppearance();
     loadDocument(SimaiDocument::createEmpty());
