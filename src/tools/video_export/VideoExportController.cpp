@@ -14,6 +14,7 @@
 #include <QImage>
 #include <QProcess>
 #include <QProgressDialog>
+#include <QRect>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -93,6 +94,601 @@ struct FrameTimingStats {
     int offscreenDrawMaxFrame = -1;
     int offscreenReadbackMaxFrame = -1;
 };
+
+struct FrameLayerActivityStats {
+    int tapVisible = 0;
+    int tapParked = 0;
+    int holdVisible = 0;
+    int slideMotionVisible = 0;
+    int wifiMotionVisible = 0;
+    int slideTrackVisible = 0;
+    int wifiTrackVisible = 0;
+    int touchVisible = 0;
+    int touchHoldVisible = 0;
+    int holdSustainVisible = 0;
+    int judgeTapVisible = 0;
+    int judgeTouchVisible = 0;
+    int judgeFireworkVisible = 0;
+
+    int activeCoreObjects() const
+    {
+        return tapVisible + holdVisible + slideMotionVisible + wifiMotionVisible + touchVisible + touchHoldVisible;
+    }
+
+    int activeEffects() const
+    {
+        return holdSustainVisible + judgeTapVisible + judgeTouchVisible + judgeFireworkVisible;
+    }
+
+    QString toCompactString() const
+    {
+        return QStringLiteral(
+            "tap=%1 parked=%2 hold=%3 slide=%4 wifi=%5 trackS=%6 trackW=%7 "
+            "touch=%8 touchHold=%9 sustain=%10 judgeTap=%11 judgeTouch=%12 judgeFirework=%13")
+            .arg(tapVisible)
+            .arg(tapParked)
+            .arg(holdVisible)
+            .arg(slideMotionVisible)
+            .arg(wifiMotionVisible)
+            .arg(slideTrackVisible)
+            .arg(wifiTrackVisible)
+            .arg(touchVisible)
+            .arg(touchHoldVisible)
+            .arg(holdSustainVisible)
+            .arg(judgeTapVisible)
+            .arg(judgeTouchVisible)
+            .arg(judgeFireworkVisible);
+    }
+};
+
+struct ObjectTraceItem {
+    QString key;
+    QString type;
+    QPointF posPx;
+    QString extra;
+
+    QString compact() const
+    {
+        if (extra.isEmpty()) {
+            return QStringLiteral("%1:%2@(%3,%4)")
+                .arg(type)
+                .arg(key)
+                .arg(posPx.x(), 0, 'f', 2)
+                .arg(posPx.y(), 0, 'f', 2);
+        }
+        return QStringLiteral("%1:%2@(%3,%4){%5}")
+            .arg(type)
+            .arg(key)
+            .arg(posPx.x(), 0, 'f', 2)
+            .arg(posPx.y(), 0, 'f', 2)
+            .arg(extra);
+    }
+};
+
+constexpr double kDiagTapUnitsPerSecond = 540.0;
+constexpr double kDiagLogicalDistanceEdge = 240.0;
+constexpr double kDiagLogicalDistanceTap = 61.25;
+constexpr double kDiagTapScaleSlope = 0.008;
+constexpr double kDiagTapScaleOffset = 0.51;
+constexpr double kDiagTouchDurationSeconds = 0.5;
+constexpr double kDiagSlideTrackFadeInSeconds = 0.2;
+constexpr double kDiagJudgeEffectDurationSeconds = 0.71666664;
+constexpr double kDiagJudgeEffectTouchDurationSeconds = 0.33333334;
+constexpr double kDiagJudgeEffectFireworkTouchTriggerDelaySeconds = 0.05;
+constexpr double kDiagJudgeEffectFireworkDurationSeconds = 1.3333334;
+constexpr double kDiagLogicalCanvasSize = 540.0;
+constexpr double kDiagLogicalCanvasCenter = kDiagLogicalCanvasSize / 2.0;
+constexpr double kDiagPlayfieldInset = 18.0;
+
+bool envFlagEnabled(const QString& key)
+{
+    const QByteArray keyBytes = key.toUtf8();
+    const QString raw = qEnvironmentVariable(keyBytes.constData()).trimmed();
+    return raw == QLatin1String("1")
+        || raw.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0
+        || raw.compare(QStringLiteral("yes"), Qt::CaseInsensitive) == 0
+        || raw.compare(QStringLiteral("on"), Qt::CaseInsensitive) == 0;
+}
+
+int envIntValue(const QString& key, int defaultValue)
+{
+    const QByteArray keyBytes = key.toUtf8();
+    bool ok = false;
+    const int value = qEnvironmentVariableIntValue(keyBytes.constData(), &ok);
+    return ok ? value : defaultValue;
+}
+
+double envDoubleValue(const QString& key, double defaultValue)
+{
+    const QByteArray keyBytes = key.toUtf8();
+    bool ok = false;
+    const double value = qEnvironmentVariable(keyBytes.constData()).toDouble(&ok);
+    return ok ? value : defaultValue;
+}
+
+bool diagTapSpriteVisible(double deltaSeconds)
+{
+    if (deltaSeconds > 0.0) {
+        return false;
+    }
+    const double distance = deltaSeconds * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
+    return distance * kDiagTapScaleSlope + kDiagTapScaleOffset >= 0.0;
+}
+
+bool diagSlideHeadVisible(double deltaSeconds)
+{
+    if (deltaSeconds >= 0.0) {
+        return false;
+    }
+    const double distance = deltaSeconds * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
+    return distance * kDiagTapScaleSlope + kDiagTapScaleOffset >= 0.0;
+}
+
+QPointF diagLaneUnitVector(int lane)
+{
+    if (lane < 1 || lane > 8) {
+        return QPointF(0.0, 0.0);
+    }
+    const double angleDeg = -67.5 + (lane - 1) * 45.0;
+    const double angleRad = qDegreesToRadians(angleDeg);
+    return QPointF(qCos(angleRad), qSin(angleRad));
+}
+
+QRectF diagPlayfieldRect(int width, int height)
+{
+    const QRectF stageRect(0.0, 0.0, qMax(1, width), qMax(1, height));
+    const QRectF inner = stageRect.adjusted(kDiagPlayfieldInset, kDiagPlayfieldInset, -kDiagPlayfieldInset, -kDiagPlayfieldInset);
+    const qreal side = qMax<qreal>(1.0, qMin(inner.width(), inner.height()));
+    return QRectF(
+        inner.center().x() - side / 2.0,
+        inner.center().y() - side / 2.0,
+        side,
+        side
+    );
+}
+
+QPointF diagMapLogicalPointToPlayfield(const QPointF& logicalPoint, const QRectF& playfieldRect)
+{
+    const qreal scale = playfieldRect.width() / kDiagLogicalCanvasSize;
+    return QPointF(
+        playfieldRect.left() + logicalPoint.x() * scale,
+        playfieldRect.top() + logicalPoint.y() * scale
+    );
+}
+
+QPointF diagInterpolatePoint(const QVector<QPointF>& points, qreal proportion)
+{
+    if (points.isEmpty()) {
+        return QPointF();
+    }
+    if (points.size() == 1) {
+        return points.constFirst();
+    }
+    const qreal clamped = qBound<qreal>(0.0, proportion, 1.0);
+    const qreal scaled = clamped * (points.size() - 1);
+    const int index = qBound(0, static_cast<int>(qFloor(scaled)), points.size() - 2);
+    const qreal t = scaled - index;
+    const QPointF& a = points[index];
+    const QPointF& b = points[index + 1];
+    return QPointF(a.x() + (b.x() - a.x()) * t, a.y() + (b.y() - a.y()) * t);
+}
+
+qreal diagInterpolateAngle(const QVector<double>& angles, qreal proportion)
+{
+    if (angles.isEmpty()) {
+        return 0.0;
+    }
+    if (angles.size() == 1) {
+        return angles.constFirst();
+    }
+    const qreal clamped = qBound<qreal>(0.0, proportion, 1.0);
+    const qreal scaled = clamped * (angles.size() - 1);
+    const int index = qBound(0, static_cast<int>(qFloor(scaled)), angles.size() - 2);
+    const qreal t = scaled - index;
+    const qreal a = angles[index];
+    const qreal b = angles[index + 1];
+    qreal delta = std::fmod(b - a + 540.0, 360.0) - 180.0;
+    return a + delta * t;
+}
+
+QString markerTraceKey(const TimelineNoteMarker& marker)
+{
+    return QStringLiteral("L%1C%2")
+        .arg(qMax(1, marker.sourceLine))
+        .arg(qMax(1, marker.sourceCol));
+}
+
+QVector<ObjectTraceItem> collectVisibleObjectTrace(
+    const QVector<TimelineNoteMarker>& markers,
+    double playheadSecond,
+    int frameWidth,
+    int frameHeight
+)
+{
+    QVector<ObjectTraceItem> items;
+    const QRectF playfield = diagPlayfieldRect(frameWidth, frameHeight);
+    for (const TimelineNoteMarker& marker : markers) {
+        const QString keyBase = markerTraceKey(marker);
+
+        if (marker.type == QLatin1String("tap")) {
+            const double delta = playheadSecond - marker.second;
+            if (delta > 0.0) {
+                continue;
+            }
+            const double distance = delta * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
+            const double scale = distance * kDiagTapScaleSlope + kDiagTapScaleOffset;
+            if (scale < 0.0) {
+                continue;
+            }
+            const QPointF lane = diagLaneUnitVector(marker.lane);
+            const double renderedDistance = distance < kDiagLogicalDistanceTap ? kDiagLogicalDistanceTap : distance;
+            const QPointF logical(
+                kDiagLogicalCanvasCenter + lane.x() * renderedDistance,
+                kDiagLogicalCanvasCenter + lane.y() * renderedDistance
+            );
+            ObjectTraceItem item;
+            item.key = keyBase;
+            item.type = QStringLiteral("tap");
+            item.posPx = diagMapLogicalPointToPlayfield(logical, playfield);
+            item.extra = QStringLiteral("lane=%1").arg(marker.lane);
+            items.append(item);
+            continue;
+        }
+
+        if (marker.type == QLatin1String("hold")) {
+            if (marker.endSecond < marker.second) {
+                continue;
+            }
+            const double delta = playheadSecond - marker.second;
+            const double deltaEnd = playheadSecond - marker.endSecond;
+            if (deltaEnd > 0.0) {
+                continue;
+            }
+            double distance = delta * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
+            const double scale = distance * kDiagTapScaleSlope + kDiagTapScaleOffset;
+            if (scale < 0.0) {
+                continue;
+            }
+            const QPointF lane = diagLaneUnitVector(marker.lane);
+            if (distance < kDiagLogicalDistanceTap) {
+                const QPointF logical(
+                    kDiagLogicalCanvasCenter + lane.x() * kDiagLogicalDistanceTap,
+                    kDiagLogicalCanvasCenter + lane.y() * kDiagLogicalDistanceTap
+                );
+                ObjectTraceItem item;
+                item.key = keyBase + QStringLiteral(":spawn");
+                item.type = QStringLiteral("hold");
+                item.posPx = diagMapLogicalPointToPlayfield(logical, playfield);
+                item.extra = QStringLiteral("lane=%1,phase=spawn").arg(marker.lane);
+                items.append(item);
+                continue;
+            }
+            distance = qBound(kDiagLogicalDistanceTap, distance, kDiagLogicalDistanceEdge);
+            double distanceEnd = deltaEnd * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
+            distanceEnd = qBound(kDiagLogicalDistanceTap, distanceEnd, kDiagLogicalDistanceEdge);
+            const QPointF logicalHead(
+                kDiagLogicalCanvasCenter + lane.x() * distance,
+                kDiagLogicalCanvasCenter + lane.y() * distance
+            );
+            const QPointF logicalTail(
+                kDiagLogicalCanvasCenter + lane.x() * distanceEnd,
+                kDiagLogicalCanvasCenter + lane.y() * distanceEnd
+            );
+            ObjectTraceItem head;
+            head.key = keyBase + QStringLiteral(":head");
+            head.type = QStringLiteral("hold");
+            head.posPx = diagMapLogicalPointToPlayfield(logicalHead, playfield);
+            head.extra = QStringLiteral("lane=%1,role=head").arg(marker.lane);
+            items.append(head);
+
+            ObjectTraceItem tail;
+            tail.key = keyBase + QStringLiteral(":tail");
+            tail.type = QStringLiteral("hold");
+            tail.posPx = diagMapLogicalPointToPlayfield(logicalTail, playfield);
+            tail.extra = QStringLiteral("lane=%1,role=tail").arg(marker.lane);
+            items.append(tail);
+            continue;
+        }
+
+        if (marker.type == QLatin1String("slide")) {
+            if (marker.hasHeadStar) {
+                const double delta = playheadSecond - marker.second;
+                if (delta < 0.0) {
+                    const double distance = delta * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
+                    const double scale = distance * kDiagTapScaleSlope + kDiagTapScaleOffset;
+                    if (scale >= 0.0) {
+                        const QPointF lane = diagLaneUnitVector(marker.lane);
+                        const double renderedDistance =
+                            distance < kDiagLogicalDistanceTap ? kDiagLogicalDistanceTap : distance;
+                        const QPointF logical(
+                            kDiagLogicalCanvasCenter + lane.x() * renderedDistance,
+                            kDiagLogicalCanvasCenter + lane.y() * renderedDistance
+                        );
+                        ObjectTraceItem headStar;
+                        headStar.key = keyBase + QStringLiteral(":head_pre");
+                        headStar.type = QStringLiteral("slide_head");
+                        headStar.posPx = diagMapLogicalPointToPlayfield(logical, playfield);
+                        headStar.extra = QStringLiteral("lane=%1").arg(marker.lane);
+                        items.append(headStar);
+                    }
+                }
+            }
+            if (marker.slideTraceSecond <= marker.second || marker.slideSegmentPoints.isEmpty()) {
+                continue;
+            }
+            if (playheadSecond < marker.second || playheadSecond > marker.endSecond) {
+                continue;
+            }
+            QPointF logical;
+            qreal angle = 0.0;
+            if (playheadSecond < marker.slideTraceSecond) {
+                if (!marker.hasHeadStar || marker.slideSegmentPoints.constFirst().isEmpty()) {
+                    continue;
+                }
+                const QVector<QPointF>& points = marker.slideSegmentPoints.constFirst();
+                const QVector<double>& angles = marker.slideSegmentAngles.constFirst();
+                logical = points.constFirst();
+                angle = angles.isEmpty() ? 0.0 : angles.constFirst();
+            } else {
+                int segmentIndex = 0;
+                if (!marker.slideSegmentShootSeconds.isEmpty()
+                    && marker.slideSegmentShootSeconds.size() == marker.slideSegmentDurations.size()) {
+                    for (int i = marker.slideSegmentShootSeconds.size() - 1; i >= 0; --i) {
+                        if (playheadSecond >= marker.slideSegmentShootSeconds[i]) {
+                            segmentIndex = i;
+                            break;
+                        }
+                    }
+                }
+                segmentIndex = qBound(0, segmentIndex, marker.slideSegmentPoints.size() - 1);
+                const QVector<QPointF>& points = marker.slideSegmentPoints[segmentIndex];
+                const QVector<double>& angles = marker.slideSegmentAngles.value(segmentIndex);
+                if (points.isEmpty()) {
+                    continue;
+                }
+                qreal proportion = 1.0;
+                if (segmentIndex < marker.slideSegmentShootSeconds.size()
+                    && segmentIndex < marker.slideSegmentDurations.size()) {
+                    const qreal duration = qMax(0.001, marker.slideSegmentDurations[segmentIndex]);
+                    proportion = qBound<qreal>(
+                        0.0,
+                        (playheadSecond - marker.slideSegmentShootSeconds[segmentIndex]) / duration,
+                        1.0
+                    );
+                }
+                logical = diagInterpolatePoint(points, proportion);
+                angle = diagInterpolateAngle(angles, proportion);
+            }
+            ObjectTraceItem item;
+            item.key = keyBase + QStringLiteral(":star");
+            item.type = QStringLiteral("slide_star");
+            item.posPx = diagMapLogicalPointToPlayfield(
+                QPointF(kDiagLogicalCanvasCenter + logical.x(), kDiagLogicalCanvasCenter + logical.y()),
+                playfield
+            );
+            item.extra = QStringLiteral("lane=%1,angle=%2").arg(marker.lane).arg(angle, 0, 'f', 2);
+            items.append(item);
+            continue;
+        }
+
+        if (marker.type == QLatin1String("wifi")) {
+            if (marker.hasHeadStar) {
+                const double delta = playheadSecond - marker.second;
+                if (delta < 0.0) {
+                    const double distance = delta * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
+                    const double scale = distance * kDiagTapScaleSlope + kDiagTapScaleOffset;
+                    if (scale >= 0.0) {
+                        const QPointF lane = diagLaneUnitVector(marker.lane);
+                        const double renderedDistance =
+                            distance < kDiagLogicalDistanceTap ? kDiagLogicalDistanceTap : distance;
+                        const QPointF logical(
+                            kDiagLogicalCanvasCenter + lane.x() * renderedDistance,
+                            kDiagLogicalCanvasCenter + lane.y() * renderedDistance
+                        );
+                        ObjectTraceItem headStar;
+                        headStar.key = keyBase + QStringLiteral(":head_pre");
+                        headStar.type = QStringLiteral("wifi_head");
+                        headStar.posPx = diagMapLogicalPointToPlayfield(logical, playfield);
+                        headStar.extra = QStringLiteral("lane=%1").arg(marker.lane);
+                        items.append(headStar);
+                    }
+                }
+            }
+            if (marker.slideTraceSecond <= marker.second || marker.wifiLanePoints.isEmpty()) {
+                continue;
+            }
+            if (playheadSecond < marker.second || playheadSecond > marker.endSecond) {
+                continue;
+            }
+            bool waiting = playheadSecond < marker.slideTraceSecond;
+            qreal proportion = 0.0;
+            if (!waiting && !marker.slideSegmentDurations.isEmpty()) {
+                const qreal duration = qMax(0.001, marker.slideSegmentDurations.constFirst());
+                proportion = qBound<qreal>(0.0, (playheadSecond - marker.slideTraceSecond) / duration, 1.0);
+            } else if (!waiting && marker.endSecond > marker.slideTraceSecond) {
+                const qreal duration = qMax(0.001, marker.endSecond - marker.slideTraceSecond);
+                proportion = qBound<qreal>(0.0, (playheadSecond - marker.slideTraceSecond) / duration, 1.0);
+            }
+            for (int laneIndex = 0; laneIndex < marker.wifiLanePoints.size(); ++laneIndex) {
+                const QVector<QPointF>& points = marker.wifiLanePoints[laneIndex];
+                const QVector<double>& angles = marker.wifiLaneAngles.value(laneIndex);
+                if (points.isEmpty()) {
+                    continue;
+                }
+                const QPointF logical = waiting ? points.constFirst() : diagInterpolatePoint(points, proportion);
+                const qreal angle = waiting
+                    ? (angles.isEmpty() ? 0.0 : angles.constFirst())
+                    : diagInterpolateAngle(angles, proportion);
+                ObjectTraceItem item;
+                item.key = keyBase + QStringLiteral(":lane%1").arg(laneIndex);
+                item.type = QStringLiteral("wifi_star");
+                item.posPx = diagMapLogicalPointToPlayfield(
+                    QPointF(kDiagLogicalCanvasCenter + logical.x(), kDiagLogicalCanvasCenter + logical.y()),
+                    playfield
+                );
+                item.extra = QStringLiteral("lane=%1,angle=%2").arg(marker.lane).arg(angle, 0, 'f', 2);
+                items.append(item);
+            }
+            continue;
+        }
+
+        if (marker.type == QLatin1String("touch")) {
+            if (qFuzzyIsNull(marker.touchPoint.x()) && qFuzzyIsNull(marker.touchPoint.y())) {
+                continue;
+            }
+            const qreal delta = playheadSecond - marker.second;
+            if (delta <= -kDiagTouchDurationSeconds || delta >= 0.0) {
+                continue;
+            }
+            ObjectTraceItem item;
+            item.key = keyBase;
+            item.type = QStringLiteral("touch");
+            item.posPx = diagMapLogicalPointToPlayfield(marker.touchPoint, playfield);
+            item.extra = marker.touchPad;
+            items.append(item);
+            continue;
+        }
+
+        if (marker.type == QLatin1String("touch_hold")) {
+            if (qFuzzyIsNull(marker.touchPoint.x()) && qFuzzyIsNull(marker.touchPoint.y())) {
+                continue;
+            }
+            if (marker.endSecond <= marker.second) {
+                continue;
+            }
+            const qreal delta = playheadSecond - marker.second;
+            const qreal duration = qMax<qreal>(0.001, marker.endSecond - marker.second);
+            if (delta <= -kDiagTouchDurationSeconds || delta >= duration) {
+                continue;
+            }
+            ObjectTraceItem item;
+            item.key = keyBase;
+            item.type = QStringLiteral("touch_hold");
+            item.posPx = diagMapLogicalPointToPlayfield(marker.touchPoint, playfield);
+            item.extra = marker.touchPad;
+            items.append(item);
+            continue;
+        }
+    }
+
+    std::sort(items.begin(), items.end(), [](const ObjectTraceItem& a, const ObjectTraceItem& b) {
+        if (a.type != b.type) {
+            return a.type < b.type;
+        }
+        return a.key < b.key;
+    });
+    return items;
+}
+
+FrameLayerActivityStats estimateFrameLayerActivity(
+    const QVector<TimelineNoteMarker>& markers,
+    double playheadSecond
+)
+{
+    FrameLayerActivityStats stats;
+    for (const TimelineNoteMarker& marker : markers) {
+        if (marker.type == QLatin1String("tap")) {
+            const double delta = playheadSecond - marker.second;
+            if (diagTapSpriteVisible(delta)) {
+                ++stats.tapVisible;
+                const double distance = delta * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
+                if (distance < kDiagLogicalDistanceTap) {
+                    ++stats.tapParked;
+                }
+            }
+            if (delta >= 0.0 && delta <= kDiagJudgeEffectDurationSeconds) {
+                ++stats.judgeTapVisible;
+            }
+            continue;
+        }
+
+        if (marker.type == QLatin1String("hold")) {
+            if (marker.endSecond >= marker.second) {
+                const double delta = playheadSecond - marker.second;
+                const double deltaEnd = playheadSecond - marker.endSecond;
+                if (deltaEnd <= 0.0 && diagTapSpriteVisible(delta)) {
+                    ++stats.holdVisible;
+                }
+                if (playheadSecond >= marker.second && playheadSecond < marker.endSecond) {
+                    ++stats.holdSustainVisible;
+                }
+                if (deltaEnd >= 0.0 && deltaEnd <= kDiagJudgeEffectDurationSeconds) {
+                    ++stats.judgeTapVisible;
+                }
+            }
+            continue;
+        }
+
+        if (marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi")) {
+            const bool isWifi = marker.type == QLatin1String("wifi");
+            const double delta = playheadSecond - marker.second;
+            if (marker.hasHeadStar && diagSlideHeadVisible(delta)) {
+                ++stats.tapVisible;
+                const double distance = delta * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
+                if (distance < kDiagLogicalDistanceTap) {
+                    ++stats.tapParked;
+                }
+            }
+            if (delta >= 0.0 && delta <= kDiagJudgeEffectDurationSeconds && marker.hasHeadStar) {
+                ++stats.judgeTapVisible;
+            }
+            if (playheadSecond >= marker.second && playheadSecond <= marker.endSecond) {
+                if (isWifi) {
+                    ++stats.wifiMotionVisible;
+                } else {
+                    ++stats.slideMotionVisible;
+                }
+            }
+            if (marker.availableSecond >= 0.0
+                && playheadSecond >= marker.availableSecond - kDiagSlideTrackFadeInSeconds
+                && !(marker.endSecond > marker.slideTraceSecond && playheadSecond >= marker.endSecond)) {
+                if (isWifi) {
+                    ++stats.wifiTrackVisible;
+                } else {
+                    ++stats.slideTrackVisible;
+                }
+            }
+            continue;
+        }
+
+        if (marker.type == QLatin1String("touch")) {
+            const double delta = playheadSecond - marker.second;
+            if (delta > -kDiagTouchDurationSeconds && delta < 0.0) {
+                ++stats.touchVisible;
+            }
+            if (delta >= 0.0 && delta <= kDiagJudgeEffectTouchDurationSeconds) {
+                ++stats.judgeTouchVisible;
+            }
+            if (marker.isFirework) {
+                const double fireworkElapsed = delta - kDiagJudgeEffectFireworkTouchTriggerDelaySeconds;
+                if (fireworkElapsed >= 0.0 && fireworkElapsed <= kDiagJudgeEffectFireworkDurationSeconds) {
+                    ++stats.judgeFireworkVisible;
+                }
+            }
+            continue;
+        }
+
+        if (marker.type == QLatin1String("touch_hold")) {
+            if (marker.endSecond <= marker.second) {
+                continue;
+            }
+            const double delta = playheadSecond - marker.second;
+            const double holdDuration = marker.endSecond - marker.second;
+            if (delta > -kDiagTouchDurationSeconds && delta < holdDuration) {
+                ++stats.touchHoldVisible;
+            }
+            if (playheadSecond >= marker.second && playheadSecond < marker.endSecond) {
+                ++stats.holdSustainVisible;
+            }
+            const double deltaEnd = playheadSecond - marker.endSecond;
+            if (deltaEnd >= 0.0 && deltaEnd <= kDiagJudgeEffectDurationSeconds) {
+                ++stats.judgeTapVisible;
+            }
+            continue;
+        }
+    }
+    return stats;
+}
 
 QString normalizePath(const QString& path)
 {
@@ -791,9 +1387,60 @@ bool mixSfxTrackToWav(
     return writeWav16(outputPath, mix, kMixSampleRate, kMixChannels);
 }
 
-bool writePackedRgbaFrame(QProcess* process, const QImage& frame)
+quint64 fnv1a64Bytes(const char* data, qint64 size)
 {
-    if (process == nullptr) {
+    if (data == nullptr || size <= 0) {
+        return 0;
+    }
+    quint64 hash = 1469598103934665603ULL;
+    for (qint64 i = 0; i < size; ++i) {
+        hash ^= static_cast<quint64>(static_cast<unsigned char>(data[i]));
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+bool writeAllToProcess(QProcess* process, const char* data, qint64 size)
+{
+    if (process == nullptr || data == nullptr || size < 0) {
+        return false;
+    }
+    qint64 writtenTotal = 0;
+    while (writtenTotal < size) {
+        const qint64 written = process->write(data + writtenTotal, size - writtenTotal);
+        if (written < 0) {
+            return false;
+        }
+        if (written == 0) {
+            if (!process->waitForBytesWritten(30000)) {
+                return false;
+            }
+            continue;
+        }
+        writtenTotal += written;
+    }
+    return true;
+}
+
+bool writeAllToFile(QFile* file, const char* data, qint64 size)
+{
+    if (file == nullptr || data == nullptr || size < 0) {
+        return false;
+    }
+    qint64 writtenTotal = 0;
+    while (writtenTotal < size) {
+        const qint64 written = file->write(data + writtenTotal, size - writtenTotal);
+        if (written <= 0) {
+            return false;
+        }
+        writtenTotal += written;
+    }
+    return true;
+}
+
+bool packRgbaFrame(const QImage& frame, QByteArray* packed)
+{
+    if (packed == nullptr) {
         return false;
     }
     QImage rgba = frame;
@@ -803,39 +1450,142 @@ bool writePackedRgbaFrame(QProcess* process, const QImage& frame)
 
     const int width = rgba.width();
     const int height = rgba.height();
-    const int packedStride = width * 4;
-    const auto writeAll = [process](const char* data, qint64 size) -> bool {
-        qint64 writtenTotal = 0;
-        while (writtenTotal < size) {
-            const qint64 written = process->write(data + writtenTotal, size - writtenTotal);
-            if (written < 0) {
-                return false;
-            }
-            if (written == 0) {
-                if (!process->waitForBytesWritten(30000)) {
-                    return false;
-                }
-                continue;
-            }
-            writtenTotal += written;
-        }
+    if (width <= 0 || height <= 0) {
+        packed->clear();
         return true;
-    };
-    if (rgba.bytesPerLine() == packedStride) {
-        const qint64 expectedBytes = static_cast<qint64>(packedStride) * height;
-        return writeAll(reinterpret_cast<const char*>(rgba.constBits()), expectedBytes);
     }
-
-    QByteArray packed;
-    packed.resize(packedStride * height);
+    const int packedStride = width * 4;
+    packed->resize(packedStride * height);
     for (int y = 0; y < height; ++y) {
         std::memcpy(
-            packed.data() + y * packedStride,
+            packed->data() + y * packedStride,
             rgba.constScanLine(y),
             static_cast<size_t>(packedStride)
         );
     }
-    return writeAll(packed.constData(), packed.size());
+    return true;
+}
+
+bool writePackedRgbaFrame(QProcess* process, const QByteArray& packed)
+{
+    if (packed.isEmpty()) {
+        return true;
+    }
+    return writeAllToProcess(process, packed.constData(), packed.size());
+}
+
+double meanAbsDiffNormalized(const QImage& lhs, const QImage& rhs)
+{
+    QImage a = lhs;
+    if (a.format() != QImage::Format_RGBA8888) {
+        a = lhs.convertToFormat(QImage::Format_RGBA8888);
+    }
+    QImage b = rhs;
+    if (b.format() != QImage::Format_RGBA8888) {
+        b = rhs.convertToFormat(QImage::Format_RGBA8888);
+    }
+    if (a.size() != b.size() || a.width() <= 0 || a.height() <= 0) {
+        return -1.0;
+    }
+
+    qint64 totalAbs = 0;
+    const int width = a.width();
+    const int height = a.height();
+    const int rowBytes = width * 4;
+    for (int y = 0; y < height; ++y) {
+        const uchar* rowA = a.constScanLine(y);
+        const uchar* rowB = b.constScanLine(y);
+        for (int x = 0; x < rowBytes; ++x) {
+            totalAbs += qAbs(static_cast<int>(rowA[x]) - static_cast<int>(rowB[x]));
+        }
+    }
+    const double denom = static_cast<double>(width) * height * 4.0 * 255.0;
+    return denom > 0.0 ? static_cast<double>(totalAbs) / denom : -1.0;
+}
+
+double meanAbsDiffNormalizedRect(const QImage& lhs, const QImage& rhs, const QRect& rect)
+{
+    QImage a = lhs;
+    if (a.format() != QImage::Format_RGBA8888) {
+        a = lhs.convertToFormat(QImage::Format_RGBA8888);
+    }
+    QImage b = rhs;
+    if (b.format() != QImage::Format_RGBA8888) {
+        b = rhs.convertToFormat(QImage::Format_RGBA8888);
+    }
+    if (a.size() != b.size() || a.width() <= 0 || a.height() <= 0) {
+        return -1.0;
+    }
+
+    const int width = a.width();
+    const int height = a.height();
+    const int x0 = qBound(0, rect.left(), width);
+    const int y0 = qBound(0, rect.top(), height);
+    const int x1 = qBound(0, rect.right() + 1, width);
+    const int y1 = qBound(0, rect.bottom() + 1, height);
+    if (x1 <= x0 || y1 <= y0) {
+        return -1.0;
+    }
+
+    qint64 totalAbs = 0;
+    for (int y = y0; y < y1; ++y) {
+        const uchar* rowA = a.constScanLine(y);
+        const uchar* rowB = b.constScanLine(y);
+        for (int x = x0; x < x1; ++x) {
+            const int p = x * 4;
+            totalAbs += qAbs(static_cast<int>(rowA[p + 0]) - static_cast<int>(rowB[p + 0]));
+            totalAbs += qAbs(static_cast<int>(rowA[p + 1]) - static_cast<int>(rowB[p + 1]));
+            totalAbs += qAbs(static_cast<int>(rowA[p + 2]) - static_cast<int>(rowB[p + 2]));
+            totalAbs += qAbs(static_cast<int>(rowA[p + 3]) - static_cast<int>(rowB[p + 3]));
+        }
+    }
+    const double denom = static_cast<double>(x1 - x0) * (y1 - y0) * 4.0 * 255.0;
+    return denom > 0.0 ? static_cast<double>(totalAbs) / denom : -1.0;
+}
+
+double meanAbsDiffAroundTraceItems(
+    const QImage& lhs,
+    const QImage& rhs,
+    const QVector<ObjectTraceItem>& traceItems,
+    int radius,
+    double* maxDiffOut
+)
+{
+    if (maxDiffOut != nullptr) {
+        *maxDiffOut = -1.0;
+    }
+    if (traceItems.isEmpty()) {
+        return -1.0;
+    }
+
+    const int clampedRadius = qBound(2, radius, 512);
+    double sumDiff = 0.0;
+    double maxDiff = -1.0;
+    int count = 0;
+    for (const ObjectTraceItem& item : traceItems) {
+        const int cx = qRound(item.posPx.x());
+        const int cy = qRound(item.posPx.y());
+        const QRect roi(
+            cx - clampedRadius,
+            cy - clampedRadius,
+            clampedRadius * 2 + 1,
+            clampedRadius * 2 + 1
+        );
+        const double diff = meanAbsDiffNormalizedRect(lhs, rhs, roi);
+        if (diff < 0.0) {
+            continue;
+        }
+        sumDiff += diff;
+        maxDiff = qMax(maxDiff, diff);
+        ++count;
+    }
+    if (maxDiffOut != nullptr) {
+        *maxDiffOut = maxDiff;
+    }
+    if (count <= 0) {
+        return -1.0;
+    }
+    return sumDiff / count;
 }
 
 quint64 sampledFrameSignature(const QImage& frame)
@@ -870,6 +1620,106 @@ quint64 sampledFrameSignature(const QImage& frame)
     hash ^= static_cast<quint64>(width);
     hash *= 1099511628211ULL;
     hash ^= static_cast<quint64>(height);
+    return hash;
+}
+
+quint64 fullFrameSignature(const QImage& frame, int cropBottom)
+{
+    QImage rgba = frame;
+    if (rgba.format() != QImage::Format_RGBA8888) {
+        rgba = frame.convertToFormat(QImage::Format_RGBA8888);
+    }
+    const int width = rgba.width();
+    const int height = rgba.height();
+    if (width <= 0 || height <= 0) {
+        return 0;
+    }
+    const int clampedCrop = qBound(0, cropBottom, height - 1);
+    const int hashHeight = height - clampedCrop;
+    const int packedWidthBytes = width * 4;
+    quint64 hash = 1469598103934665603ULL;
+    for (int y = 0; y < hashHeight; ++y) {
+        const uchar* row = rgba.constScanLine(y);
+        for (int x = 0; x < packedWidthBytes; ++x) {
+            hash ^= static_cast<quint64>(row[x]);
+            hash *= 1099511628211ULL;
+        }
+    }
+    hash ^= static_cast<quint64>(width);
+    hash *= 1099511628211ULL;
+    hash ^= static_cast<quint64>(hashHeight);
+    return hash;
+}
+
+quint64 objectOnlyFrameSignature(
+    const QImage& frameWithObjects,
+    const QImage& frameWithoutObjects,
+    int diffThreshold,
+    int* activePixelCount
+)
+{
+    if (activePixelCount != nullptr) {
+        *activePixelCount = 0;
+    }
+
+    QImage withRgba = frameWithObjects;
+    if (withRgba.format() != QImage::Format_RGBA8888) {
+        withRgba = frameWithObjects.convertToFormat(QImage::Format_RGBA8888);
+    }
+    QImage withoutRgba = frameWithoutObjects;
+    if (withoutRgba.format() != QImage::Format_RGBA8888) {
+        withoutRgba = frameWithoutObjects.convertToFormat(QImage::Format_RGBA8888);
+    }
+    if (withRgba.size() != withoutRgba.size()) {
+        return 0;
+    }
+
+    const int width = withRgba.width();
+    const int height = withRgba.height();
+    if (width <= 0 || height <= 0) {
+        return 0;
+    }
+
+    const int clampedThreshold = qBound(0, diffThreshold, 4 * 255);
+    quint64 hash = 1469598103934665603ULL;
+    int active = 0;
+    for (int y = 0; y < height; ++y) {
+        const uchar* rowWith = withRgba.constScanLine(y);
+        const uchar* rowWithout = withoutRgba.constScanLine(y);
+        for (int x = 0; x < width; ++x) {
+            const int p = x * 4;
+            const int d0 = qAbs(static_cast<int>(rowWith[p + 0]) - static_cast<int>(rowWithout[p + 0]));
+            const int d1 = qAbs(static_cast<int>(rowWith[p + 1]) - static_cast<int>(rowWithout[p + 1]));
+            const int d2 = qAbs(static_cast<int>(rowWith[p + 2]) - static_cast<int>(rowWithout[p + 2]));
+            const int d3 = qAbs(static_cast<int>(rowWith[p + 3]) - static_cast<int>(rowWithout[p + 3]));
+            const int score = d0 + d1 + d2 + d3;
+            if (score <= clampedThreshold) {
+                continue;
+            }
+
+            ++active;
+            hash ^= static_cast<quint64>(x);
+            hash *= 1099511628211ULL;
+            hash ^= static_cast<quint64>(y);
+            hash *= 1099511628211ULL;
+            hash ^= static_cast<quint64>(rowWith[p + 0]);
+            hash *= 1099511628211ULL;
+            hash ^= static_cast<quint64>(rowWith[p + 1]);
+            hash *= 1099511628211ULL;
+            hash ^= static_cast<quint64>(rowWith[p + 2]);
+            hash *= 1099511628211ULL;
+            hash ^= static_cast<quint64>(rowWith[p + 3]);
+            hash *= 1099511628211ULL;
+        }
+    }
+    if (activePixelCount != nullptr) {
+        *activePixelCount = active;
+    }
+    if (active == 0) {
+        return 0;
+    }
+    hash ^= static_cast<quint64>(active);
+    hash *= 1099511628211ULL;
     return hash;
 }
 
@@ -1123,8 +1973,9 @@ VideoExportResult VideoExportController::exportFullPreview(
     const QString totalSecondsText = QString::number(alignedTotalSeconds, 'f', 6);
     const QString timelineOriginText = QString::number(timelineOriginSecond, 'f', 6);
     QStringList filterParts;
-    filterParts << QStringLiteral("color=c=#1F2833:s=%1x%1:d=%2[base_fill]")
+    filterParts << QStringLiteral("color=c=#1F2833:s=%1x%1:r=%2:d=%3[base_fill]")
                        .arg(resolution)
+                       .arg(task.fps)
                        .arg(totalSecondsText);
     if (hasMedia) {
         QString mediaChain =
@@ -1153,9 +2004,10 @@ VideoExportResult VideoExportController::exportFullPreview(
 
     const double dimAlpha = qBound(0.0, 1.0 - task.backgroundBrightness, 1.0);
     if (dimAlpha > 1e-6) {
-        filterParts << QStringLiteral("color=c=black@%1:s=%2x%2:d=%3[dim]")
+        filterParts << QStringLiteral("color=c=black@%1:s=%2x%2:r=%3:d=%4[dim]")
                            .arg(QString::number(dimAlpha, 'f', 6))
                            .arg(resolution)
+                           .arg(task.fps)
                            .arg(totalSecondsText);
         filterParts << QStringLiteral("[base_media][dim]overlay=0:0[base]");
     } else {
@@ -1282,11 +2134,122 @@ VideoExportResult VideoExportController::exportFullPreview(
     static constexpr qint64 kFrameStallLogNs = 80000000;  // 80ms
     static constexpr int kFrameProgressStride = 120;
     FrameTimingStats frameStats;
+
+    const bool diagRepeatEnabled = envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DIAG_REPEAT"));
+    const int diagCropBottom = qMax(0, envIntValue(QStringLiteral("MIACODE_EXPORT_DIAG_CROP_BOTTOM"), 0));
+    const int diagMaxLogLines = qMax(0, envIntValue(QStringLiteral("MIACODE_EXPORT_DIAG_MAX_LINES"), 400));
+    const bool diagLogAllRepeatPairs = envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DIAG_LOG_ALL_REPEATS"));
+    const bool hasObjectHashOverride = !qEnvironmentVariableIsEmpty("MIACODE_EXPORT_DIAG_OBJECT_HASH");
+    const bool diagObjectHashEnabled = diagRepeatEnabled
+        && (hasObjectHashOverride
+                ? envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DIAG_OBJECT_HASH"))
+                : true);
+    const bool diagObjectTraceEnabled = diagRepeatEnabled
+        && envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DIAG_OBJECT_TRACE"));
+    const int diagObjectTraceMaxLines = qMax(
+        0,
+        envIntValue(QStringLiteral("MIACODE_EXPORT_DIAG_OBJECT_TRACE_MAX_LINES"), 5000)
+    );
+    const int diagObjectDiffThreshold = qBound(
+        0,
+        envIntValue(QStringLiteral("MIACODE_EXPORT_DIAG_OBJECT_DIFF_THRESHOLD"), 8),
+        4 * 255
+    );
+    int diagRawRepeatedAdjacent = 0;
+    int diagRawRepeatedRuns = 0;
+    int diagRawLongestRun = 1;
+    int diagRawLongestRunStartFrame = -1;
+    int diagRawRepeatedWithObjects = 0;
+    int diagRawRepeatedWithEffects = 0;
+    int diagLoggedLines = 0;
+    quint64 previousRawSignature = 0;
+    bool hasPreviousRawSignature = false;
+    int rawRepeatRunStartFrame = 0;
+    int rawRepeatRunLength = 1;
+    int diagObjectRepeatedAdjacent = 0;
+    int diagObjectRepeatedRuns = 0;
+    int diagObjectLongestRun = 1;
+    int diagObjectLongestRunStartFrame = -1;
+    int diagObjectRepeatedWithObjects = 0;
+    int diagObjectRepeatedWithEffects = 0;
+    int diagObjectActiveFrames = 0;
+    int diagObjectLoggedLines = 0;
+    int diagObjectTraceLoggedLines = 0;
+    quint64 previousObjectSignature = 0;
+    bool hasPreviousObjectSignature = false;
+    int objectRepeatRunStartFrame = 0;
+    int objectRepeatRunLength = 1;
+    const bool diagCompareRenderPathsEnabled = diagRepeatEnabled
+        && envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DIAG_COMPARE_RENDER_PATHS"));
+    const int diagCompareRadius = qBound(
+        2,
+        envIntValue(QStringLiteral("MIACODE_EXPORT_DIAG_COMPARE_RADIUS"), 24),
+        512
+    );
+    const int diagCompareMaxLines = qMax(
+        0,
+        envIntValue(QStringLiteral("MIACODE_EXPORT_DIAG_COMPARE_MAX_LINES"), 400)
+    );
+    const double diagCompareLogThreshold = qBound(
+        0.0,
+        envDoubleValue(QStringLiteral("MIACODE_EXPORT_DIAG_COMPARE_LOG_THRESHOLD"), 0.0010),
+        1.0
+    );
+    int diagCompareLoggedLines = 0;
+    int diagCompareFrames = 0;
+    int diagCompareObjectFrames = 0;
+    double diagCompareFullDiffSum = 0.0;
+    double diagCompareFullDiffMax = 0.0;
+    int diagCompareFullDiffMaxFrame = -1;
+    double diagCompareObjectDiffSum = 0.0;
+    double diagCompareObjectDiffMax = 0.0;
+    int diagCompareObjectDiffMaxFrame = -1;
+    const bool diagPipeHashEnabled = diagRepeatEnabled
+        && envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DIAG_PIPE_HASH"));
+    const int diagPipeHashMaxLines = qMax(
+        0,
+        envIntValue(QStringLiteral("MIACODE_EXPORT_DIAG_PIPE_HASH_MAX_LINES"), 400)
+    );
+    int diagPipeHashLoggedLines = 0;
+    int diagPipeHashObjectFrames = 0;
+    int diagPipeHashObjectRepeatedAdj = 0;
+    quint64 previousObjectPackedHash = 0;
+    bool hasPreviousObjectPackedHash = false;
+    const QString diagRawDumpPath =
+        qEnvironmentVariable("MIACODE_EXPORT_DIAG_RAW_DUMP_PATH").trimmed();
+    QFile diagRawDumpFile;
+    bool diagRawDumpEnabled = false;
+    qint64 diagRawDumpBytes = 0;
+    int diagRawDumpFrames = 0;
+    if (!diagRawDumpPath.isEmpty()) {
+        const QString normalizedRawDumpPath = normalizePath(diagRawDumpPath);
+        const QFileInfo rawDumpInfo(normalizedRawDumpPath);
+        QDir().mkpath(rawDumpInfo.absolutePath());
+        diagRawDumpFile.setFileName(normalizedRawDumpPath);
+        if (diagRawDumpFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            diagRawDumpEnabled = true;
+            appendVideoExportLog(
+                QStringLiteral("raw_dump_open"),
+                QStringLiteral("path=%1").arg(normalizedRawDumpPath)
+            );
+        } else {
+            appendVideoExportLog(
+                QStringLiteral("raw_dump_open_failed"),
+                QStringLiteral("path=%1 error=%2").arg(normalizedRawDumpPath, diagRawDumpFile.errorString())
+            );
+        }
+    }
+
     quint64 previousSignature = 0;
     bool hasPreviousSignature = false;
     int repeatRunStartFrame = 0;
     int repeatRunLength = 1;
     QElapsedTimer frameTimer;
+    PreviewCanvas diagReferenceCanvas;
+    PreviewCanvas diagCpuCompareCanvas;
+    bool diagReferenceUseOffscreen = false;
+    bool diagReferenceReady = false;
+    bool diagCpuCompareReady = false;
 
     if (useOffscreenGpu) {
         frameTimer.start();
@@ -1299,6 +2262,45 @@ VideoExportResult VideoExportController::exportFullPreview(
                 .arg(warmupNs / 1000000.0, 0, 'f', 3)
                 .arg(exportCanvas.offscreenDrawNsLastFrameForDebug() / 1000000.0, 0, 'f', 3)
                 .arg(exportCanvas.offscreenReadbackNsLastFrameForDebug() / 1000000.0, 0, 'f', 3)
+        );
+    }
+    if (diagObjectHashEnabled) {
+        diagReferenceCanvas.copyRenderStateFrom(exportCanvas);
+        diagReferenceCanvas.setBackgroundBrightness(task.backgroundBrightness);
+        diagReferenceCanvas.setShowDebugInfo(false);
+        diagReferenceCanvas.setNoteMarkers({});
+        QString diagInitError;
+        if (useOffscreenGpu) {
+            diagReferenceUseOffscreen = diagReferenceCanvas.initializeOffscreenRenderer(
+                sourceCanvas->format(),
+                shareContext,
+                &diagInitError
+            );
+            if (!diagReferenceUseOffscreen) {
+                appendVideoExportLog(
+                    QStringLiteral("object_hash_ref_backend"),
+                    QStringLiteral("offscreenInit=0 initError=%1 fallback=cpu").arg(diagInitError)
+                );
+            }
+        }
+        diagReferenceReady = true;
+        if (diagReferenceUseOffscreen) {
+            appendVideoExportLog(
+                QStringLiteral("object_hash_ref_backend"),
+                QStringLiteral("offscreenInit=1 gpuReady=%1")
+                    .arg(diagReferenceCanvas.isGpuRendererReadyForDebug() ? 1 : 0)
+            );
+        }
+    }
+    if (diagCompareRenderPathsEnabled) {
+        diagCpuCompareCanvas.copyRenderStateFrom(exportCanvas);
+        diagCpuCompareCanvas.setBackgroundBrightness(task.backgroundBrightness);
+        diagCpuCompareCanvas.setShowDebugInfo(false);
+        diagCpuCompareCanvas.setNoteMarkers(exportMarkers);
+        diagCpuCompareReady = true;
+        appendVideoExportLog(
+            QStringLiteral("render_path_compare_backend"),
+            QStringLiteral("cpuCompareReady=1")
         );
     }
 
@@ -1333,6 +2335,34 @@ VideoExportResult VideoExportController::exportFullPreview(
             return result;
         }
         const double exportSecond = timelineOriginSecond + static_cast<double>(frameIndex) / task.fps;
+        QVector<ObjectTraceItem> traceItems;
+        if (diagObjectTraceEnabled || diagObjectHashEnabled) {
+            traceItems = collectVisibleObjectTrace(
+                exportMarkers,
+                exportSecond,
+                frameSize.width(),
+                frameSize.height()
+            );
+        }
+        if (diagObjectTraceEnabled
+            && !traceItems.isEmpty()
+            && diagObjectTraceLoggedLines < diagObjectTraceMaxLines) {
+            QStringList encodedItems;
+            encodedItems.reserve(traceItems.size());
+            for (const ObjectTraceItem& item : traceItems) {
+                encodedItems.append(item.compact());
+            }
+            appendVideoExportLog(
+                QStringLiteral("object_frame_trace"),
+                QStringLiteral("frame=%1 t=%2 count=%3 objects=%4")
+                    .arg(frameIndex)
+                    .arg(exportSecond, 0, 'f', 6)
+                    .arg(traceItems.size())
+                    .arg(truncateForLog(encodedItems.join(';'), 16000))
+            );
+            ++diagObjectTraceLoggedLines;
+        }
+
         frameTimer.start();
         bool usedOffscreenPath = false;
         QImage frame;
@@ -1376,8 +2406,200 @@ VideoExportResult VideoExportController::exportFullPreview(
             frameStats.cpuFallbackMaxFrame = frameIndex;
         }
 
+        if (diagObjectHashEnabled && diagReferenceReady) {
+            QImage referenceFrame;
+            if (diagReferenceUseOffscreen) {
+                referenceFrame = diagReferenceCanvas.renderOverlayFrameOffscreen(
+                    frameSize,
+                    exportSecond,
+                    task.showTimestamp
+                );
+            }
+            if (referenceFrame.isNull()) {
+                referenceFrame = diagReferenceCanvas.renderOverlayFrame(
+                    frameSize,
+                    exportSecond,
+                    task.showTimestamp
+                );
+            }
+
+            int objectPixels = 0;
+            const quint64 objectSignature = objectOnlyFrameSignature(
+                frame,
+                referenceFrame,
+                diagObjectDiffThreshold,
+                &objectPixels
+            );
+            if (!traceItems.isEmpty()) {
+                ++diagObjectActiveFrames;
+            }
+
+            if (hasPreviousObjectSignature) {
+                if (objectSignature != 0 && objectSignature == previousObjectSignature) {
+                    ++diagObjectRepeatedAdjacent;
+                    if (objectRepeatRunLength == 1) {
+                        objectRepeatRunStartFrame = frameIndex - 1;
+                    }
+                    ++objectRepeatRunLength;
+                    if (objectRepeatRunLength == 2) {
+                        ++diagObjectRepeatedRuns;
+                    }
+                    if (objectRepeatRunLength > diagObjectLongestRun) {
+                        diagObjectLongestRun = objectRepeatRunLength;
+                        diagObjectLongestRunStartFrame = objectRepeatRunStartFrame;
+                    }
+
+                    const FrameLayerActivityStats layerStats =
+                        estimateFrameLayerActivity(exportMarkers, exportSecond);
+                    const bool hasObjectActivity = layerStats.activeCoreObjects() > 0;
+                    const bool hasEffectActivity = layerStats.activeEffects() > 0;
+                    if (hasObjectActivity) {
+                        ++diagObjectRepeatedWithObjects;
+                    }
+                    if (hasEffectActivity) {
+                        ++diagObjectRepeatedWithEffects;
+                    }
+                    if ((diagLogAllRepeatPairs || hasObjectActivity || hasEffectActivity)
+                        && diagObjectLoggedLines < diagMaxLogLines) {
+                        appendVideoExportLog(
+                            QStringLiteral("object_repeat_detail"),
+                            QStringLiteral(
+                                "frame=%1 t=%2 sig=0x%3 pixels=%4 core=%5 fx=%6 %7")
+                                .arg(frameIndex)
+                                .arg(exportSecond, 0, 'f', 6)
+                                .arg(QString::number(objectSignature, 16))
+                                .arg(objectPixels)
+                                .arg(layerStats.activeCoreObjects())
+                                .arg(layerStats.activeEffects())
+                                .arg(layerStats.toCompactString())
+                        );
+                        ++diagObjectLoggedLines;
+                    }
+                } else {
+                    objectRepeatRunLength = 1;
+                }
+            } else {
+                objectRepeatRunStartFrame = frameIndex;
+                objectRepeatRunLength = 1;
+            }
+            previousObjectSignature = objectSignature;
+            hasPreviousObjectSignature = true;
+        }
+
+        if (diagCompareRenderPathsEnabled && diagCpuCompareReady) {
+            const QImage cpuFrame = diagCpuCompareCanvas.renderOverlayFrame(
+                frameSize,
+                exportSecond,
+                task.showTimestamp
+            );
+            const double fullDiff = meanAbsDiffNormalized(frame, cpuFrame);
+            if (fullDiff >= 0.0) {
+                ++diagCompareFrames;
+                diagCompareFullDiffSum += fullDiff;
+                if (fullDiff > diagCompareFullDiffMax) {
+                    diagCompareFullDiffMax = fullDiff;
+                    diagCompareFullDiffMaxFrame = frameIndex;
+                }
+            }
+
+            double objectDiffMax = -1.0;
+            const double objectDiff = meanAbsDiffAroundTraceItems(
+                frame,
+                cpuFrame,
+                traceItems,
+                diagCompareRadius,
+                &objectDiffMax
+            );
+            if (objectDiff >= 0.0) {
+                ++diagCompareObjectFrames;
+                diagCompareObjectDiffSum += objectDiff;
+                if (objectDiff > diagCompareObjectDiffMax) {
+                    diagCompareObjectDiffMax = objectDiff;
+                    diagCompareObjectDiffMaxFrame = frameIndex;
+                }
+            }
+
+            if (diagCompareLoggedLines < diagCompareMaxLines) {
+                const bool shouldLog = !traceItems.isEmpty()
+                    || (fullDiff >= diagCompareLogThreshold)
+                    || (objectDiff >= diagCompareLogThreshold);
+                if (shouldLog) {
+                    appendVideoExportLog(
+                        QStringLiteral("render_path_compare"),
+                        QStringLiteral(
+                            "frame=%1 t=%2 hasObjects=%3 fullDiff=%4 objDiff=%5 objMax=%6 radius=%7 offSig=0x%8 cpuSig=0x%9")
+                            .arg(frameIndex)
+                            .arg(exportSecond, 0, 'f', 6)
+                            .arg(traceItems.isEmpty() ? 0 : 1)
+                            .arg(fullDiff, 0, 'f', 8)
+                            .arg(objectDiff, 0, 'f', 8)
+                            .arg(objectDiffMax, 0, 'f', 8)
+                            .arg(diagCompareRadius)
+                            .arg(QString::number(sampledFrameSignature(frame), 16))
+                            .arg(QString::number(sampledFrameSignature(cpuFrame), 16))
+                    );
+                    ++diagCompareLoggedLines;
+                }
+            }
+        }
+
+        QByteArray packedFrame;
+        if (!packRgbaFrame(frame, &packedFrame)) {
+            ffmpeg.kill();
+            ffmpeg.waitForFinished(2000);
+            result.message = QStringLiteral("Failed to pack RGBA frame.");
+            result.details = withExportLogPath(result.details);
+            appendVideoExportLog(
+                QStringLiteral("fail_pack_frame"),
+                QStringLiteral("frame=%1").arg(frameIndex)
+            );
+            return result;
+        }
+        const quint64 packedHash = fnv1a64Bytes(packedFrame.constData(), packedFrame.size());
+
+        if (diagPipeHashEnabled && !traceItems.isEmpty()) {
+            ++diagPipeHashObjectFrames;
+            if (hasPreviousObjectPackedHash && packedHash == previousObjectPackedHash) {
+                ++diagPipeHashObjectRepeatedAdj;
+            }
+            previousObjectPackedHash = packedHash;
+            hasPreviousObjectPackedHash = true;
+
+            if (diagPipeHashLoggedLines < diagPipeHashMaxLines) {
+                appendVideoExportLog(
+                    QStringLiteral("pipe_frame_hash"),
+                    QStringLiteral("frame=%1 t=%2 bytes=%3 hash=0x%4 objects=%5")
+                        .arg(frameIndex)
+                        .arg(exportSecond, 0, 'f', 6)
+                        .arg(packedFrame.size())
+                        .arg(QString::number(packedHash, 16))
+                        .arg(traceItems.size())
+                );
+                ++diagPipeHashLoggedLines;
+            }
+        }
+
+        if (diagRawDumpEnabled && !packedFrame.isEmpty()) {
+            if (!writeAllToFile(&diagRawDumpFile, packedFrame.constData(), packedFrame.size())) {
+                ffmpeg.kill();
+                ffmpeg.waitForFinished(2000);
+                result.message = QStringLiteral("Failed to write raw dump frame.");
+                result.details = withExportLogPath(diagRawDumpFile.errorString());
+                appendVideoExportLog(
+                    QStringLiteral("raw_dump_write_failed"),
+                    QStringLiteral("frame=%1 path=%2 error=%3")
+                        .arg(frameIndex)
+                        .arg(diagRawDumpFile.fileName())
+                        .arg(diagRawDumpFile.errorString())
+                );
+                return result;
+            }
+            diagRawDumpBytes += packedFrame.size();
+            ++diagRawDumpFrames;
+        }
+
         frameTimer.restart();
-        if (!writePackedRgbaFrame(&ffmpeg, frame)) {
+        if (!writePackedRgbaFrame(&ffmpeg, packedFrame)) {
             ffmpeg.kill();
             ffmpeg.waitForFinished(2000);
             const QString ffmpegOutput = truncateForLog(QString::fromUtf8(ffmpeg.readAllStandardOutput()).trimmed());
@@ -1389,8 +2611,10 @@ VideoExportResult VideoExportController::exportFullPreview(
             result.details = withExportLogPath(result.details);
             appendVideoExportLog(
                 QStringLiteral("fail_ffmpeg_write"),
-                QStringLiteral("frame=%1 error=%2 output=%3")
+                QStringLiteral("frame=%1 bytes=%2 hash=0x%3 error=%4 output=%5")
                     .arg(frameIndex)
+                    .arg(packedFrame.size())
+                    .arg(QString::number(packedHash, 16))
                     .arg(ffmpeg.errorString())
                     .arg(truncateForLog(ffmpegOutput, 1000))
             );
@@ -1449,6 +2673,59 @@ VideoExportResult VideoExportController::exportFullPreview(
         }
         previousSignature = signature;
         hasPreviousSignature = true;
+
+        if (diagRepeatEnabled) {
+            const quint64 rawSignature = fullFrameSignature(frame, diagCropBottom);
+            if (hasPreviousRawSignature) {
+                if (rawSignature == previousRawSignature) {
+                    ++diagRawRepeatedAdjacent;
+                    if (rawRepeatRunLength == 1) {
+                        rawRepeatRunStartFrame = frameIndex - 1;
+                    }
+                    ++rawRepeatRunLength;
+                    if (rawRepeatRunLength == 2) {
+                        ++diagRawRepeatedRuns;
+                    }
+                    if (rawRepeatRunLength > diagRawLongestRun) {
+                        diagRawLongestRun = rawRepeatRunLength;
+                        diagRawLongestRunStartFrame = rawRepeatRunStartFrame;
+                    }
+
+                    const FrameLayerActivityStats layerStats =
+                        estimateFrameLayerActivity(exportMarkers, exportSecond);
+                    const bool hasObjectActivity = layerStats.activeCoreObjects() > 0;
+                    const bool hasEffectActivity = layerStats.activeEffects() > 0;
+                    if (hasObjectActivity) {
+                        ++diagRawRepeatedWithObjects;
+                    }
+                    if (hasEffectActivity) {
+                        ++diagRawRepeatedWithEffects;
+                    }
+                    if ((diagLogAllRepeatPairs || hasObjectActivity || hasEffectActivity)
+                        && diagLoggedLines < diagMaxLogLines) {
+                        appendVideoExportLog(
+                            QStringLiteral("raw_repeat_detail"),
+                            QStringLiteral(
+                                "frame=%1 t=%2 sig=0x%3 core=%4 fx=%5 %6")
+                                .arg(frameIndex)
+                                .arg(exportSecond, 0, 'f', 6)
+                                .arg(QString::number(rawSignature, 16))
+                                .arg(layerStats.activeCoreObjects())
+                                .arg(layerStats.activeEffects())
+                                .arg(layerStats.toCompactString())
+                        );
+                        ++diagLoggedLines;
+                    }
+                } else {
+                    rawRepeatRunLength = 1;
+                }
+            } else {
+                rawRepeatRunStartFrame = frameIndex;
+                rawRepeatRunLength = 1;
+            }
+            previousRawSignature = rawSignature;
+            hasPreviousRawSignature = true;
+        }
 
         const bool shouldLogProgress = (frameIndex == 0)
             || (((frameIndex + 1) % kFrameProgressStride) == 0)
@@ -1529,6 +2806,94 @@ VideoExportResult VideoExportController::exportFullPreview(
             .arg(frameStats.offscreenReadbackMaxNs / 1000000.0, 0, 'f', 3)
             .arg(frameStats.offscreenReadbackMaxFrame)
     );
+    if (diagRepeatEnabled) {
+        appendVideoExportLog(
+            QStringLiteral("raw_repeat_summary"),
+            QStringLiteral(
+                "cropBottom=%1 repeatedAdj=%2 repeatedRuns=%3 longestRun=%4@%5 "
+                "repeatWithObjects=%6 repeatWithEffects=%7 logged=%8")
+                .arg(diagCropBottom)
+                .arg(diagRawRepeatedAdjacent)
+                .arg(diagRawRepeatedRuns)
+                .arg(diagRawLongestRun)
+                .arg(diagRawLongestRunStartFrame)
+                .arg(diagRawRepeatedWithObjects)
+                .arg(diagRawRepeatedWithEffects)
+                .arg(diagLoggedLines)
+        );
+        if (diagObjectHashEnabled) {
+            appendVideoExportLog(
+                QStringLiteral("object_repeat_summary"),
+                QStringLiteral(
+                    "diffThreshold=%1 repeatedAdj=%2 repeatedRuns=%3 longestRun=%4@%5 "
+                    "repeatWithObjects=%6 repeatWithEffects=%7 activeFrames=%8 logged=%9")
+                    .arg(diagObjectDiffThreshold)
+                    .arg(diagObjectRepeatedAdjacent)
+                    .arg(diagObjectRepeatedRuns)
+                    .arg(diagObjectLongestRun)
+                    .arg(diagObjectLongestRunStartFrame)
+                    .arg(diagObjectRepeatedWithObjects)
+                    .arg(diagObjectRepeatedWithEffects)
+                    .arg(diagObjectActiveFrames)
+                    .arg(diagObjectLoggedLines)
+            );
+        }
+        if (diagObjectTraceEnabled) {
+            appendVideoExportLog(
+                QStringLiteral("object_trace_summary"),
+                QStringLiteral("logged=%1 max=%2").arg(diagObjectTraceLoggedLines).arg(diagObjectTraceMaxLines)
+            );
+        }
+    }
+    if (diagCompareRenderPathsEnabled) {
+        appendVideoExportLog(
+            QStringLiteral("render_path_compare_summary"),
+            QStringLiteral(
+                "frames=%1 objectFrames=%2 avgFullDiff=%3 maxFullDiff=%4@%5 "
+                "avgObjDiff=%6 maxObjDiff=%7@%8 logged=%9 radius=%10 threshold=%11")
+                .arg(diagCompareFrames)
+                .arg(diagCompareObjectFrames)
+                .arg(diagCompareFrames > 0
+                        ? (diagCompareFullDiffSum / static_cast<double>(diagCompareFrames))
+                        : 0.0,
+                    0,
+                    'f',
+                    8)
+                .arg(diagCompareFullDiffMax, 0, 'f', 8)
+                .arg(diagCompareFullDiffMaxFrame)
+                .arg(diagCompareObjectFrames > 0
+                        ? (diagCompareObjectDiffSum / static_cast<double>(diagCompareObjectFrames))
+                        : 0.0,
+                    0,
+                    'f',
+                    8)
+                .arg(diagCompareObjectDiffMax, 0, 'f', 8)
+                .arg(diagCompareObjectDiffMaxFrame)
+                .arg(diagCompareLoggedLines)
+                .arg(diagCompareRadius)
+                .arg(diagCompareLogThreshold, 0, 'f', 8)
+        );
+    }
+    if (diagPipeHashEnabled) {
+        appendVideoExportLog(
+            QStringLiteral("pipe_hash_summary"),
+            QStringLiteral("objectFrames=%1 repeatedAdj=%2 logged=%3")
+                .arg(diagPipeHashObjectFrames)
+                .arg(diagPipeHashObjectRepeatedAdj)
+                .arg(diagPipeHashLoggedLines)
+        );
+    }
+    if (diagRawDumpEnabled) {
+        diagRawDumpFile.flush();
+        diagRawDumpFile.close();
+        appendVideoExportLog(
+            QStringLiteral("raw_dump_summary"),
+            QStringLiteral("path=%1 frames=%2 bytes=%3")
+                .arg(diagRawDumpFile.fileName())
+                .arg(diagRawDumpFrames)
+                .arg(diagRawDumpBytes)
+        );
+    }
 
     ffmpeg.closeWriteChannel();
     appendVideoExportLog(QStringLiteral("ffmpeg_finalize_wait_begin"));
