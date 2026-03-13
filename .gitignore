@@ -32,3 +32,15 @@ third_party/ffmpeg/**/ffmpeg
 third_party/ffmpeg/**/ffmpeg.exe
 third_party/ffmpeg/**/ffprobe
 third_party/ffmpeg/**/ffprobe.exe
+
+# scripts whitelist: ignore all by default, allow only release/infra scripts.
+scripts/*
+!scripts/build-macos.sh
+!scripts/build-win.ps1
+!scripts/compare-export-encode-profiles.ps1
+!scripts/ensure-macos-ffmpeg.sh
+!scripts/ensure-windows-ffmpeg.ps1
+!scripts/package-mac.sh
+!scripts/package-win.ps1
+!scripts/README.md
+!scripts/README_EN.md
