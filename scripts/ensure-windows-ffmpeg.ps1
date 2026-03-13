@@ -54,6 +54,38 @@ function Test-ExistingBinary {
     return $true
 }
 
+function Expand-DownloadedArchive {
+    param(
+        [string]$ArchivePath,
+        [string]$ExtractDir,
+        [string]$ArchiveExtension
+    )
+
+    $ext = $ArchiveExtension.ToLowerInvariant()
+    if ($ext -eq ".zip") {
+        Expand-Archive -LiteralPath $ArchivePath -DestinationPath $ExtractDir -Force
+        return
+    }
+    if ($ext -eq ".7z") {
+        $sevenZip = Get-Command 7z -ErrorAction SilentlyContinue
+        if ($null -ne $sevenZip) {
+            & $sevenZip.Source x "-y" "-o$ExtractDir" $ArchivePath | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                return
+            }
+        }
+        $tar = Get-Command tar -ErrorAction SilentlyContinue
+        if ($null -ne $tar) {
+            & $tar.Source -xf $ArchivePath -C $ExtractDir
+            if ($LASTEXITCODE -eq 0) {
+                return
+            }
+        }
+        throw "Unable to extract .7z archive. Install 7z or tar and retry."
+    }
+    throw "Unsupported archive extension: $ArchiveExtension"
+}
+
 if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
     $RepoRoot = Split-Path -Parent $PSScriptRoot
 }
@@ -62,19 +94,29 @@ $ffmpegDir = Join-Path $RepoRoot "third_party\ffmpeg\windows"
 $ffmpegPath = Join-Path $ffmpegDir "ffmpeg.exe"
 $ffprobePath = Join-Path $ffmpegDir "ffprobe.exe"
 $ffmpegUrl = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG_URL)) {
-    "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-lgpl-7.1.zip"
+    "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-7.1.1-essentials_build.7z"
 } else {
     $env:MIACODE_WINDOWS_FFMPEG_URL
 }
 $expectedSha256 = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG_SHA256)) {
-    ""
+    "B90225987BDD042CCA09A1EFB5E34E9848F2D1DBF5FBCD388753A44145522997"
 } else {
     $env:MIACODE_WINDOWS_FFMPEG_SHA256.ToUpperInvariant()
 }
 $expectedVersionPattern = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG_VERSION_PATTERN)) {
-    '^ffmpeg version n7\.1\.'
+    '^ffmpeg version 7\.1\.1-essentials_build-www\.gyan\.dev'
 } else {
     $env:MIACODE_WINDOWS_FFMPEG_VERSION_PATTERN
+}
+$archiveExtension = if ([string]::IsNullOrWhiteSpace($env:MIACODE_WINDOWS_FFMPEG_ARCHIVE_EXT)) {
+    try {
+        $extFromUrl = [System.IO.Path]::GetExtension(([Uri]$ffmpegUrl).AbsolutePath)
+        if ([string]::IsNullOrWhiteSpace($extFromUrl)) { ".zip" } else { $extFromUrl }
+    } catch {
+        ".zip"
+    }
+} else {
+    $env:MIACODE_WINDOWS_FFMPEG_ARCHIVE_EXT
 }
 
 if (Test-ExistingBinary -Path $ffmpegPath -ExpectedSha256 $expectedSha256 -ExpectedVersionPattern $expectedVersionPattern) {
@@ -83,7 +125,7 @@ if (Test-ExistingBinary -Path $ffmpegPath -ExpectedSha256 $expectedSha256 -Expec
 }
 
 $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("miacode-ffmpeg-" + [System.Guid]::NewGuid().ToString("N"))
-$archivePath = Join-Path $tmpDir "ffmpeg.zip"
+$archivePath = Join-Path $tmpDir ("ffmpeg" + $archiveExtension)
 $extractDir = Join-Path $tmpDir "extracted"
 
 try {
@@ -97,7 +139,7 @@ try {
         -MaximumRetryCount 5 `
         -RetryIntervalSec 2
 
-    Expand-Archive -LiteralPath $archivePath -DestinationPath $extractDir -Force
+    Expand-DownloadedArchive -ArchivePath $archivePath -ExtractDir $extractDir -ArchiveExtension $archiveExtension
 
     $downloadedFfmpeg = Get-ChildItem -Path $extractDir -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
     if ($null -eq $downloadedFfmpeg) {

@@ -2,26 +2,27 @@
 
 This directory stores prebuilt `ffmpeg` executables used by MiaCode video export.
 
-## Files
+## Fixed baseline (0.2.2-dev.1)
 
-- `windows/ffmpeg.exe`
-  - Source: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-win64-lgpl-7.1.zip
-  - Current observed SHA256 on 2026-03-12: `BD7AC63FACD35211A4F20B886D4687FA951CBEEAE8B20C1C154FD7FAEB29CEAE`
-  - Runtime check: `ffmpeg.exe -version` starts with `ffmpeg version n7.1.`
+- Windows
+  - Binary: `windows/ffmpeg.exe`
+  - Source package:
+    `https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-7.1.1-essentials_build.7z`
+  - Runtime version pattern: `ffmpeg version 7.1.1-essentials_build-www.gyan.dev`
+  - SHA256 (`ffmpeg.exe`): `B90225987BDD042CCA09A1EFB5E34E9848F2D1DBF5FBCD388753A44145522997`
 
-- `linux/ffmpeg`
-  - Source: https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-lgpl-7.1.tar.xz
-  - Size: 109,580,488 bytes
-  - SHA256: `D91FE748D77422A783BBFA1811E33E12C7BDC1667AB746AB0C765F00467F1AC4`
+- macOS
+  - Binary: `macos/ffmpeg`
+  - Source package: `https://evermeet.cx/ffmpeg/ffmpeg-7.1.zip`
+  - Runtime version pattern: `ffmpeg version 7.1`
+  - SHA256 (`ffmpeg`): `430D60FBF419DAB28DAEE9B679E7929A31EE9BAE53F6E42E8AE26B725584290F`
 
-- `macos/ffmpeg`
-  - Source: https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip
-  - Size: 80,083,328 bytes
-  - SHA256: `430D60FBF419DAB28DAEE9B679E7929A31EE9BAE53F6E42E8AE26B725584290F`
+- Linux
+  - Binary: `linux/ffmpeg`
+  - SHA256 (`ffmpeg`): `D91FE748D77422A783BBFA1811E33E12C7BDC1667AB746AB0C765F00467F1AC4`
 
 ## Notes
 
-- Downloaded on 2026-03-11.
-- Export runtime resolves these binaries from app-local `ffmpeg/` and `third_party/ffmpeg/<platform>/` paths.
-- Keep binary replacement explicit and update hashes in this file after upgrades.
-- The Windows `latest` asset is mutable. CI validates runtime/version by default instead of pinning a fixed hash.
+- Release packages now include only `ffmpeg` (not `ffprobe`) to reduce package size.
+- Export runtime resolves binaries from app-local `ffmpeg/` and `third_party/ffmpeg/<platform>/` paths.
+- When upgrading ffmpeg, update this file and the corresponding ensure scripts together.
