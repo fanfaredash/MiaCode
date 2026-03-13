@@ -949,11 +949,9 @@ MainWindow::MainWindow(QWidget* parent)
     connect(qobject_cast<PlainCodeEditor*>(editorWidget_), &QTextEdit::cursorPositionChanged, this, [this]() {
         updateEditorStatus();
         if (!qtPreviewPlaying_) {
-            if (timelineView_ != nullptr && timelineView_->followPreviewEnabled()) {
-                syncEditorCursorToPreviewSecond(qtPreviewPauseSecond_, false);
-            } else {
-                syncTimelineToEditorCursor(true);
-            }
+            // Keep editor editable while paused even if "follow preview" is enabled.
+            // Preview takes over cursor only during active playback.
+            syncTimelineToEditorCursor(true);
         }
     });
     connect(titleEdit_, &QLineEdit::textChanged, this, [this]() {

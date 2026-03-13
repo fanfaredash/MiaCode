@@ -1644,21 +1644,13 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
         }
         if (mouseEvent->button() == Qt::LeftButton && !qtPreviewPlaying_) {
             QTimer::singleShot(0, this, [this]() {
-                if (timelineView_ != nullptr && timelineView_->followPreviewEnabled()) {
-                    syncEditorCursorToPreviewSecond(qtPreviewPauseSecond_, false);
-                } else {
-                    syncTimelineToEditorCursor(true);
-                }
+                syncTimelineToEditorCursor(true);
             });
         }
     }
     if (watched == editorViewport_ && event->type() == QEvent::FocusIn && !qtPreviewPlaying_) {
         QTimer::singleShot(0, this, [this]() {
-            if (timelineView_ != nullptr && timelineView_->followPreviewEnabled()) {
-                syncEditorCursorToPreviewSecond(qtPreviewPauseSecond_, false);
-            } else {
-                syncTimelineToEditorCursor(true);
-            }
+            syncTimelineToEditorCursor(true);
         });
     }
     return QMainWindow::eventFilter(watched, event);

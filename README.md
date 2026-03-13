@@ -71,6 +71,11 @@ QT_ROOT="$HOME/Qt/6.8.3/macos" bash scripts/package-mac.sh
 
 ## 更新日志
 
+### 0.2.1
+
+- 修复导出链路中 ffmpeg 合成节拍异常，消除周期性重复帧卡顿。
+- 修复"timeline 跟随预览"在非播放状态下锁定编辑光标的问题。
+
 ### 0.2.0
 
 - **Simai文本编辑器**

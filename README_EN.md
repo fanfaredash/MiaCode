@@ -70,6 +70,11 @@ Thanks to [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) for referenc
 
 ## Changelog
 
+### 0.2.1
+
+- Fixed ffmpeg compositing cadence to eliminate periodic duplicate-frame stutter during export.
+- Fixed timeline follow-preview behavior so the editor cursor is only controlled during playback.
+
 ### 0.2.0
 
 - **Simai Text Editor**
