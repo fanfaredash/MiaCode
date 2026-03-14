@@ -2,6 +2,7 @@
 
 #include <QDialog>
 #include <QElapsedTimer>
+#include <QSize>
 
 #include <functional>
 
@@ -30,6 +31,7 @@ public:
     using PausePreviewCallback = std::function<void()>;
     using IsPreviewPlayingCallback = std::function<bool()>;
     using CurrentPreviewSecondCallback = std::function<double()>;
+    using PreviewAspectRatioCallback = std::function<void(double ratio)>;
 
     VideoExportDialog(
         const VideoExportTask& baseTask,
@@ -39,8 +41,10 @@ public:
         PausePreviewCallback pausePreviewCallback = {},
         IsPreviewPlayingCallback isPreviewPlayingCallback = {},
         CurrentPreviewSecondCallback currentPreviewSecondCallback = {},
+        PreviewAspectRatioCallback previewAspectRatioCallback = {},
         QWidget* parent = nullptr
     );
+    bool exportSucceeded() const { return exportSucceeded_; }
 
 private:
     void browseOutputPath();
@@ -63,6 +67,7 @@ private:
     void pausePreview();
     bool isPreviewPlaying() const;
     double currentPreviewSecond() const;
+    QSize selectedResolution() const;
     double rangeStartSeconds() const;
     double rangeEndSeconds() const;
     double leadInStartSeconds() const;
@@ -80,9 +85,11 @@ private:
     PausePreviewCallback pausePreviewCallback_;
     IsPreviewPlayingCallback isPreviewPlayingCallback_;
     CurrentPreviewSecondCallback currentPreviewSecondCallback_;
+    PreviewAspectRatioCallback previewAspectRatioCallback_;
 
     double totalDurationSeconds_ = 0.0;
     double previewCursorSecond_ = 0.0;
+    bool exportSucceeded_ = false;
     bool syncingRangeUi_ = false;
     bool rangePreviewPlaying_ = false;
     int previewSeekHeldArrowKey_ = 0;

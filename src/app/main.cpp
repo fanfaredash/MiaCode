@@ -16,6 +16,7 @@
 #include <QSurfaceFormat>
 #include <QStyleFactory>
 #include <QDir>
+#include <QRegularExpression>
 
 #include <cmath>
 
@@ -36,6 +37,43 @@ bool startupTimingEnabled()
 bool wantsCliVideoExport(const QStringList& arguments)
 {
     return arguments.contains(QStringLiteral("--export-video"));
+}
+
+bool parseCliResolutionToken(const QString& token, int* outputWidth, int* outputHeight)
+{
+    if (outputWidth == nullptr || outputHeight == nullptr) {
+        return false;
+    }
+    const QString trimmed = token.trimmed();
+    if (trimmed.isEmpty()) {
+        return false;
+    }
+    static const QRegularExpression re(
+        QStringLiteral("^\\s*(\\d+)\\s*(?:[xX]\\s*(\\d+)\\s*)?$")
+    );
+    const QRegularExpressionMatch match = re.match(trimmed);
+    if (!match.hasMatch()) {
+        return false;
+    }
+    bool widthOk = false;
+    const int parsedWidth = match.captured(1).toInt(&widthOk);
+    if (!widthOk || parsedWidth <= 0) {
+        return false;
+    }
+    const QString heightText = match.captured(2).trimmed();
+    if (heightText.isEmpty()) {
+        *outputWidth = parsedWidth;
+        *outputHeight = parsedWidth;
+        return true;
+    }
+    bool heightOk = false;
+    const int parsedHeight = heightText.toInt(&heightOk);
+    if (!heightOk || parsedHeight <= 0) {
+        return false;
+    }
+    *outputWidth = parsedWidth;
+    *outputHeight = parsedHeight;
+    return true;
 }
 
 int runCliVideoExport(QApplication& app, QString* errorMessage)
@@ -61,8 +99,8 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     ));
     parser.addOption(QCommandLineOption(
         QStringList{QStringLiteral("r"), QStringLiteral("resolution")},
-        QStringLiteral("Output square resolution."),
-        QStringLiteral("pixels"),
+        QStringLiteral("Output resolution. Accepts N (square) or WxH (e.g. 1280x720)."),
+        QStringLiteral("size"),
         QStringLiteral("1024")
     ));
     parser.addOption(QCommandLineOption(
@@ -119,8 +157,13 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
         return 2;
     }
 
-    bool resolutionOk = false;
-    const int resolution = parser.value(QStringLiteral("resolution")).toInt(&resolutionOk);
+    int outputWidth = 0;
+    int outputHeight = 0;
+    const bool resolutionOk = parseCliResolutionToken(
+        parser.value(QStringLiteral("resolution")),
+        &outputWidth,
+        &outputHeight
+    );
     bool fpsOk = false;
     const int fps = parser.value(QStringLiteral("fps")).toInt(&fpsOk);
     bool startOk = false;
@@ -128,9 +171,15 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     bool skinWaitOk = false;
     const int skinWaitMs = parser.value(QStringLiteral("skin-wait-ms")).toInt(&skinWaitOk);
 
-    if (!resolutionOk || resolution <= 0) {
+    if (!resolutionOk || outputWidth <= 0 || outputHeight <= 0) {
         if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("--resolution must be a positive integer");
+            *errorMessage = QStringLiteral("--resolution must be N or WxH (positive integers)");
+        }
+        return 2;
+    }
+    if (outputWidth < outputHeight) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("--resolution currently requires width >= height");
         }
         return 2;
     }
@@ -169,7 +218,8 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     request.chartPathOrDirectory = chartInput;
     request.difficulty = parser.value(QStringLiteral("difficulty")).trimmed();
     request.outputPath = parser.value(QStringLiteral("output")).trimmed();
-    request.resolution = resolution;
+    request.outputWidth = outputWidth;
+    request.outputHeight = outputHeight;
     request.fps = fps;
     request.exportStartSeconds = startSeconds;
     request.contentDurationSeconds = durationSeconds;

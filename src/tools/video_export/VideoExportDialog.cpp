@@ -50,6 +50,26 @@ constexpr qreal kPreviewSeekMaxStepSeconds = static_cast<qreal>(miacode::preview
 constexpr qreal kPreviewSeekLinearAccelerationSecondsPerMs =
     static_cast<qreal>(miacode::preview_interaction::kSeekLinearAccelerationSecondsPerMs);
 
+struct ResolutionPreset {
+    int width = 1024;
+    int height = 1024;
+    const char* label = "1024x1024 (1:1)";
+};
+
+constexpr ResolutionPreset kResolutionPresets[] = {
+    {512, 512, "512x512 (1:1)"},
+    {768, 768, "768x768 (1:1)"},
+    {1024, 1024, "1024x1024 (1:1)"},
+    {640, 480, "640x480 (4:3)"},
+    {800, 600, "800x600 (4:3)"},
+    {1024, 768, "1024x768 (4:3)"},
+    {1280, 960, "1280x960 (4:3)"},
+    {960, 540, "960x540 (16:9)"},
+    {1280, 720, "1280x720 (16:9)"},
+    {1600, 900, "1600x900 (16:9)"},
+    {1920, 1080, "1920x1080 (16:9)"},
+};
+
 QString l10n(const QString& en, const QString& zh)
 {
     return UiText::isChineseUi() ? zh : en;
@@ -177,6 +197,7 @@ VideoExportDialog::VideoExportDialog(
     PausePreviewCallback pausePreviewCallback,
     IsPreviewPlayingCallback isPreviewPlayingCallback,
     CurrentPreviewSecondCallback currentPreviewSecondCallback,
+    PreviewAspectRatioCallback previewAspectRatioCallback,
     QWidget* parent
 )
     : QDialog(parent)
@@ -187,6 +208,7 @@ VideoExportDialog::VideoExportDialog(
     , pausePreviewCallback_(std::move(pausePreviewCallback))
     , isPreviewPlayingCallback_(std::move(isPreviewPlayingCallback))
     , currentPreviewSecondCallback_(std::move(currentPreviewSecondCallback))
+    , previewAspectRatioCallback_(std::move(previewAspectRatioCallback))
     , totalDurationSeconds_(qMax(0.0, baseTask.contentDurationSeconds))
 {
     setWindowTitle(l10n(QStringLiteral("Export Video"), QStringLiteral("导出视频")));
@@ -237,11 +259,18 @@ VideoExportDialog::VideoExportDialog(
     auto* resolutionLabel = new QLabel(l10n(QStringLiteral("Resolution"), QStringLiteral("分辨率")), resolutionRow);
     resolutionLabel->setFixedWidth(kFormLabelWidth);
     resolutionCombo_ = new QComboBox(resolutionRow);
-    const QList<int> presets{512, 768, 1024, 1280, 1536};
-    for (int preset : presets) {
-        resolutionCombo_->addItem(QStringLiteral("%1x%1").arg(preset), preset);
+    for (const ResolutionPreset& preset : kResolutionPresets) {
+        resolutionCombo_->addItem(QString::fromLatin1(preset.label), QSize(preset.width, preset.height));
     }
-    const int currentPresetIndex = resolutionCombo_->findData(baseTask_.resolution);
+    int currentPresetIndex = -1;
+    for (int i = 0; i < resolutionCombo_->count(); ++i) {
+        const QSize size = resolutionCombo_->itemData(i).toSize();
+        if (size.width() == qMax(1, baseTask_.outputWidth)
+            && size.height() == qMax(1, baseTask_.outputHeight)) {
+            currentPresetIndex = i;
+            break;
+        }
+    }
     resolutionCombo_->setCurrentIndex(currentPresetIndex >= 0 ? currentPresetIndex : 2);
     resolutionCombo_->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     resolutionCombo_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -401,12 +430,28 @@ VideoExportDialog::VideoExportDialog(
     connect(setEndButton, &QPushButton::clicked, this, &VideoExportDialog::setRangeEndFromPreview);
     connect(previewRangeButton_, &QToolButton::clicked, this, &VideoExportDialog::toggleRangePreview);
     connect(stopPreviewButton_, &QToolButton::clicked, this, &VideoExportDialog::stopRangePreviewToLeadIn);
+    connect(resolutionCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
+        if (!previewAspectRatioCallback_) {
+            return;
+        }
+        const QSize size = selectedResolution();
+        if (size.width() <= 0 || size.height() <= 0) {
+            return;
+        }
+        previewAspectRatioCallback_(static_cast<double>(size.width()) / static_cast<double>(size.height()));
+    });
     previewSlider_->setFocusPolicy(Qt::StrongFocus);
     previewSlider_->installEventFilter(this);
 
     updatePreviewPlayPauseUi();
     syncRangeUi();
     seekPreview(previewCursorSecond_);
+    if (previewAspectRatioCallback_) {
+        const QSize size = selectedResolution();
+        if (size.width() > 0 && size.height() > 0) {
+            previewAspectRatioCallback_(static_cast<double>(size.width()) / static_cast<double>(size.height()));
+        }
+    }
     refreshDialogGeometry();
     QTimer::singleShot(0, this, [this]() {
         if (outputPathEdit_ != nullptr) {
@@ -510,7 +555,9 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
         return false;
     }
     updated.outputPath = outputPath;
-    updated.resolution = resolutionCombo_ != nullptr ? resolutionCombo_->currentData().toInt() : updated.resolution;
+    const QSize selectedSize = selectedResolution();
+    updated.outputWidth = selectedSize.width() > 0 ? selectedSize.width() : updated.outputWidth;
+    updated.outputHeight = selectedSize.height() > 0 ? selectedSize.height() : updated.outputHeight;
     updated.fps = 60;
     updated.showTimestamp = showTimestampCheck_ != nullptr ? showTimestampCheck_->isChecked() : true;
     updated.exportStartSeconds = rangeStartSeconds();
@@ -524,7 +571,7 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
         }
         return false;
     }
-    if (updated.resolution <= 0) {
+    if (updated.outputWidth <= 0 || updated.outputHeight <= 0) {
         if (errorMessage != nullptr) {
             *errorMessage = l10n(QStringLiteral("Resolution is invalid."), QStringLiteral("分辨率无效。"));
         }
@@ -544,6 +591,18 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     }
     *task = updated;
     return true;
+}
+
+QSize VideoExportDialog::selectedResolution() const
+{
+    if (resolutionCombo_ == nullptr) {
+        return QSize(qMax(1, baseTask_.outputWidth), qMax(1, baseTask_.outputHeight));
+    }
+    const QSize selected = resolutionCombo_->currentData().toSize();
+    if (selected.width() > 0 && selected.height() > 0) {
+        return selected;
+    }
+    return QSize(qMax(1, baseTask_.outputWidth), qMax(1, baseTask_.outputHeight));
 }
 
 void VideoExportDialog::onRangeSpinChanged()
@@ -858,6 +917,7 @@ void VideoExportDialog::startExport()
         l10n(QStringLiteral("Export Video"), QStringLiteral("导出视频")),
         l10n(QStringLiteral("Export completed."), QStringLiteral("导出完成。"))
     );
+    exportSucceeded_ = true;
     accept();
 }
 

@@ -21,7 +21,8 @@ struct VideoExportTask {
     PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
     double exportStartSeconds = 0.0;
     double contentDurationSeconds = 0.0;
-    int resolution = 1024;
+    int outputWidth = 1024;
+    int outputHeight = 1024;
     int fps = 60;
     bool showTimestamp = true;
 };

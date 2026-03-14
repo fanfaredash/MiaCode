@@ -58,7 +58,8 @@ public:
         QString chartPathOrDirectory;
         QString difficulty = QStringLiteral("MAS");
         QString outputPath;
-        int resolution = 1024;
+        int outputWidth = 1024;
+        int outputHeight = 1024;
         int fps = 60;
         double exportStartSeconds = 0.0;
         double contentDurationSeconds = -1.0;
@@ -231,6 +232,8 @@ private:
     void updatePreviewPanelLayout();
     double previewDurationSeconds() const;
     void applyPreviewPlaybackRate(double rate);
+    void setPreviewCanvasAspectRatio(double ratio, bool persistState);
+    double normalizedPreviewCanvasAspectRatio(double ratio) const;
     double timelineSecondForCursor(int line, int col) const;
     void jumpToLocation(int line, int col);
     QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount = nullptr) const;
@@ -376,6 +379,8 @@ private:
     double previewBackgroundBrightnessOuter_ = 0.2;
     double previewBackgroundBrightnessInner_ = 0.2;
     PreviewBackgroundScaleMode previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
+    double previewCanvasAspectRatio_ = 1.0;
+    bool previewAutoRestoreSquareAfterExport_ = true;
     bool previewShowDebugInfo_ = false;
     PreviewAudioSettings softwarePreviewAudioSettings_;
     PreviewAudioSettings previewAudioSettings_;

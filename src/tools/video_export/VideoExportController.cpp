@@ -920,14 +920,16 @@ double resolvedLayoutRingDiameterRatio()
 }
 
 QImage buildCircularDimMaskImage(
-    int resolution,
+    int frameWidth,
+    int frameHeight,
     double outerDimAlpha,
     double innerDimAlpha,
     double layoutRingDiameterRatio
 )
 {
-    const int side = qMax(1, resolution);
-    QImage mask(side, side, QImage::Format_RGBA8888);
+    const int width = qMax(1, frameWidth);
+    const int height = qMax(1, frameHeight);
+    QImage mask(width, height, QImage::Format_RGBA8888);
     mask.fill(Qt::transparent);
 
     const int outerAlpha = qBound(0, qRound(outerDimAlpha * 255.0), 255);
@@ -936,21 +938,22 @@ QImage buildCircularDimMaskImage(
         return mask;
     }
 
-    const double playfieldSide = static_cast<double>(qMax(1, side - qRound(kDiagPlayfieldInset * 2.0)));
+    const double playfieldSide = static_cast<double>(qMax(1, qMin(width, height) - qRound(kDiagPlayfieldInset * 2.0)));
     const double ratio = qBound(
         miacode::layout_ring::kPlayfieldRatioMin,
         layoutRingDiameterRatio,
         miacode::layout_ring::kRenderRatioMax
     );
     const double radius = qMax(1.0, playfieldSide * ratio * 0.5);
-    const double center = (static_cast<double>(side) - 1.0) * 0.5;
+    const double centerX = (static_cast<double>(width) - 1.0) * 0.5;
+    const double centerY = (static_cast<double>(height) - 1.0) * 0.5;
     const double radiusSq = radius * radius;
 
-    for (int y = 0; y < side; ++y) {
+    for (int y = 0; y < height; ++y) {
         uchar* row = mask.scanLine(y);
-        const double dy = static_cast<double>(y) - center;
-        for (int x = 0; x < side; ++x) {
-            const double dx = static_cast<double>(x) - center;
+        const double dy = static_cast<double>(y) - centerY;
+        for (int x = 0; x < width; ++x) {
+            const double dx = static_cast<double>(x) - centerX;
             const bool inside = (dx * dx + dy * dy) <= radiusSq;
             const int alpha = inside ? innerAlpha : outerAlpha;
             const int offset = x * 4;
@@ -1028,7 +1031,8 @@ bool probeEncoderRuntimeAvailability(
 
 VideoEncoderConfig chooseVideoEncoder(
     const QString& ffmpegPath,
-    int resolution,
+    int outputWidth,
+    int outputHeight,
     int fps,
     QString* probeLog
 )
@@ -1063,12 +1067,13 @@ VideoEncoderConfig chooseVideoEncoder(
     const bool hasLibx264 = hasEncoderToken(output, QStringLiteral("libx264"));
     const bool hasOpenH264 = hasEncoderToken(output, QStringLiteral("libopenh264"));
     const bool hasMpeg4 = hasEncoderToken(output, QStringLiteral("mpeg4"));
-    const int safeResolution = qMax(1, resolution);
+    const int safeWidth = qMax(1, outputWidth);
+    const int safeHeight = qMax(1, outputHeight);
     const int safeFps = qMax(1, fps);
-    // Keep export artifacts low at 1024x1024@60 while avoiding oversized files.
+    // Keep export artifacts low while avoiding oversized files.
     const qint64 estimatedBitrateKbps = qBound<qint64>(
         2200LL,
-        qRound64(static_cast<double>(safeResolution) * safeResolution * safeFps * 0.075 / 1000.0),
+        qRound64(static_cast<double>(safeWidth) * safeHeight * safeFps * 0.075 / 1000.0),
         8500LL
     );
     const qint64 maxRateKbps = qBound<qint64>(
@@ -1198,7 +1203,7 @@ VideoEncoderConfig chooseVideoEncoder(
         QString detail = QStringLiteral(
             "encoder_probe hevc_nvenc=%1 hevc_qsv=%2 hevc_amf=%3 libx265=%4 "
             "h264_nvenc=%5 h264_qsv=%6 h264_amf=%7 libx264=%8 libopenh264=%9 mpeg4=%10 "
-            "selected=%11 hw=%12 bitrateK=%13 maxrateK=%14")
+            "selected=%11 hw=%12 bitrateK=%13 maxrateK=%14 size=%15x%16")
             .arg(hasHevcNvenc ? 1 : 0)
             .arg(hasHevcQsv ? 1 : 0)
             .arg(hasHevcAmf ? 1 : 0)
@@ -1212,7 +1217,9 @@ VideoEncoderConfig chooseVideoEncoder(
             .arg(config.codec)
             .arg(config.isHardware ? 1 : 0)
             .arg(estimatedBitrateKbps)
-            .arg(maxRateKbps);
+            .arg(maxRateKbps)
+            .arg(safeWidth)
+            .arg(safeHeight);
         if (!runtimeProbeLines.isEmpty()) {
             detail += QStringLiteral(" runtime=%1")
                 .arg(truncateForLog(runtimeProbeLines.join(QLatin1Char(';')), 2400));
@@ -2083,12 +2090,13 @@ VideoExportResult VideoExportController::exportFullPreview(
     exportTimer.start();
     appendVideoExportLog(
         QStringLiteral("export_begin"),
-        QStringLiteral("output=%1 chart=%2 track=%3 notes=%4 start=%5 duration=%6 resolution=%7 fps=%8")
+        QStringLiteral("output=%1 chart=%2 track=%3 notes=%4 start=%5 duration=%6 size=%7x%8 fps=%9")
             .arg(task.outputPath, task.chartPath, task.trackPath)
             .arg(task.noteMarkers.size())
             .arg(task.exportStartSeconds, 0, 'f', 6)
             .arg(task.contentDurationSeconds, 0, 'f', 6)
-            .arg(task.resolution)
+            .arg(task.outputWidth)
+            .arg(task.outputHeight)
             .arg(task.fps)
     );
     if (sourceCanvas == nullptr) {
@@ -2103,8 +2111,14 @@ VideoExportResult VideoExportController::exportFullPreview(
         appendVideoExportLog(QStringLiteral("fail_validation"), result.message);
         return result;
     }
-    if (task.resolution <= 0 || task.fps <= 0) {
+    if (task.outputWidth <= 0 || task.outputHeight <= 0 || task.fps <= 0) {
         result.message = QStringLiteral("Export parameters are invalid.");
+        result.details = withExportLogPath(result.details);
+        appendVideoExportLog(QStringLiteral("fail_validation"), result.message);
+        return result;
+    }
+    if (task.outputWidth < task.outputHeight) {
+        result.message = QStringLiteral("Output size currently requires width >= height.");
         result.details = withExportLogPath(result.details);
         appendVideoExportLog(QStringLiteral("fail_validation"), result.message);
         return result;
@@ -2146,8 +2160,9 @@ VideoExportResult VideoExportController::exportFullPreview(
     const double totalSeconds = miacode::video_export::kLeadInSeconds + segmentDurationSeconds;
     const int frameCount = qMax(1, qRound(totalSeconds * task.fps));
     const double alignedTotalSeconds = static_cast<double>(frameCount) / qMax(1, task.fps);
-    const int resolution = task.resolution;
-    const QSize frameSize(resolution, resolution);
+    const int frameWidth = qMax(1, task.outputWidth);
+    const int frameHeight = qMax(1, task.outputHeight);
+    const QSize frameSize(frameWidth, frameHeight);
     const QString mediaPath = resolveBackgroundMediaPath(task.chartPath);
     const bool hasMedia = !mediaPath.isEmpty();
     const bool mediaIsImage = hasMedia && isImageMediaPath(mediaPath);
@@ -2159,7 +2174,7 @@ VideoExportResult VideoExportController::exportFullPreview(
         filteredMarkersForRange(task.noteMarkers, segmentStartSecond, segmentEndSecond);
     appendVideoExportLog(
         QStringLiteral("input_probe"),
-        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 timelineOrigin=%8 totalSeconds=%9 alignedSeconds=%10 frameCount=%11")
+        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 timelineOrigin=%8 totalSeconds=%9 alignedSeconds=%10 frameCount=%11 size=%12x%13")
             .arg(mediaPath)
             .arg(hasMedia ? 1 : 0)
             .arg(mediaIsImage ? 1 : 0)
@@ -2171,6 +2186,8 @@ VideoExportResult VideoExportController::exportFullPreview(
             .arg(totalSeconds, 0, 'f', 6)
             .arg(alignedTotalSeconds, 0, 'f', 6)
             .arg(frameCount)
+            .arg(frameWidth)
+            .arg(frameHeight)
     );
     appendVideoExportLog(
         QStringLiteral("render_plan"),
@@ -2228,7 +2245,7 @@ VideoExportResult VideoExportController::exportFullPreview(
          << QStringLiteral("-pix_fmt")
          << QStringLiteral("rgba")
          << QStringLiteral("-s:v")
-         << QStringLiteral("%1x%2").arg(resolution).arg(resolution)
+         << QStringLiteral("%1x%2").arg(frameWidth).arg(frameHeight)
          << QStringLiteral("-framerate")
          << QString::number(task.fps)
          << QStringLiteral("-i")
@@ -2257,7 +2274,8 @@ VideoExportResult VideoExportController::exportFullPreview(
         const QString dimMaskPath = QDir(tempDir.path()).filePath(QStringLiteral("dim_mask.png"));
         const double ringRatio = resolvedLayoutRingDiameterRatio();
         const QImage dimMask = buildCircularDimMaskImage(
-            resolution,
+            frameWidth,
+            frameHeight,
             outerDimAlpha,
             innerDimAlpha,
             ringRatio
@@ -2303,21 +2321,24 @@ VideoExportResult VideoExportController::exportFullPreview(
     const QString timelineOriginText = QString::number(timelineOriginSecond, 'f', 6);
     const QString baseFillColor = hasMedia ? QStringLiteral("#000000") : QStringLiteral("#1F2833");
     QStringList filterParts;
-    filterParts << QStringLiteral("color=c=%1:s=%2x%2:r=%3:d=%4[base_fill]")
+    filterParts << QStringLiteral("color=c=%1:s=%2x%3:r=%4:d=%5[base_fill]")
                        .arg(baseFillColor)
-                       .arg(resolution)
+                       .arg(frameWidth)
+                       .arg(frameHeight)
                        .arg(task.fps)
                        .arg(totalSecondsText);
     if (hasMedia) {
         QString mediaChain = QStringLiteral("[%1:v]").arg(mediaInputIndex);
         if (task.backgroundScaleMode == PreviewBackgroundScaleMode::FitContain) {
             mediaChain += QStringLiteral(
-                "scale=%1:%1:force_original_aspect_ratio=decrease,pad=%1:%1:(ow-iw)/2:(oh-ih)/2:color=black")
-                .arg(resolution);
+                "scale=%1:%2:force_original_aspect_ratio=decrease,pad=%1:%2:(ow-iw)/2:(oh-ih)/2:color=black")
+                .arg(frameWidth)
+                .arg(frameHeight);
         } else {
             mediaChain += QStringLiteral(
-                "scale=%1:%1:force_original_aspect_ratio=increase,crop=%1:%1")
-                .arg(resolution);
+                "scale=%1:%2:force_original_aspect_ratio=increase,crop=%1:%2")
+                .arg(frameWidth)
+                .arg(frameHeight);
         }
         mediaChain += QStringLiteral(",setsar=1,fps=%1,format=rgba").arg(task.fps);
         if (!mediaIsImage) {
@@ -2383,7 +2404,13 @@ VideoExportResult VideoExportController::exportFullPreview(
     }
 
     QString encoderProbeLog;
-    const VideoEncoderConfig encoderConfig = chooseVideoEncoder(ffmpegPath, resolution, task.fps, &encoderProbeLog);
+    const VideoEncoderConfig encoderConfig = chooseVideoEncoder(
+        ffmpegPath,
+        frameWidth,
+        frameHeight,
+        task.fps,
+        &encoderProbeLog
+    );
     appendVideoExportLog(QStringLiteral("encoder_select"), encoderProbeLog);
     const int idealThreadCount = qMax(1, QThread::idealThreadCount());
     const int encoderThreads = qBound(
@@ -2616,7 +2643,12 @@ VideoExportResult VideoExportController::exportFullPreview(
 
     if (useOffscreenGpu) {
         frameTimer.start();
-        const QImage warmupFrame = exportCanvas.renderOverlayFrameOffscreen(frameSize, timelineOriginSecond, task.showTimestamp);
+        const QImage warmupFrame = exportCanvas.renderOverlayFrameOffscreen(
+            frameSize,
+            timelineOriginSecond,
+            task.showTimestamp,
+            true
+        );
         const qint64 warmupNs = frameTimer.nsecsElapsed();
         appendVideoExportLog(
             QStringLiteral("offscreen_warmup"),
@@ -2734,7 +2766,7 @@ VideoExportResult VideoExportController::exportFullPreview(
         bool usedOffscreenPath = false;
         QImage frame;
         if (useOffscreenGpu) {
-            frame = exportCanvas.renderOverlayFrameOffscreen(frameSize, exportSecond, task.showTimestamp);
+            frame = exportCanvas.renderOverlayFrameOffscreen(frameSize, exportSecond, task.showTimestamp, true);
             if (!frame.isNull()) {
                 usedOffscreenPath = true;
             } else {
@@ -2747,7 +2779,7 @@ VideoExportResult VideoExportController::exportFullPreview(
             }
         }
         if (frame.isNull()) {
-            frame = exportCanvas.renderOverlayFrame(frameSize, exportSecond, task.showTimestamp);
+            frame = exportCanvas.renderOverlayFrame(frameSize, exportSecond, task.showTimestamp, true);
         }
         const qint64 renderNs = frameTimer.nsecsElapsed();
         const qint64 offscreenDrawNs = exportCanvas.offscreenDrawNsLastFrameForDebug();
@@ -2779,14 +2811,16 @@ VideoExportResult VideoExportController::exportFullPreview(
                 referenceFrame = diagReferenceCanvas.renderOverlayFrameOffscreen(
                     frameSize,
                     exportSecond,
-                    task.showTimestamp
+                    task.showTimestamp,
+                    false
                 );
             }
             if (referenceFrame.isNull()) {
                 referenceFrame = diagReferenceCanvas.renderOverlayFrame(
                     frameSize,
                     exportSecond,
-                    task.showTimestamp
+                    task.showTimestamp,
+                    false
                 );
             }
 
@@ -2857,7 +2891,8 @@ VideoExportResult VideoExportController::exportFullPreview(
             const QImage cpuFrame = diagCpuCompareCanvas.renderOverlayFrame(
                 frameSize,
                 exportSecond,
-                task.showTimestamp
+                task.showTimestamp,
+                true
             );
             const double fullDiff = meanAbsDiffNormalized(frame, cpuFrame);
             if (fullDiff >= 0.0) {
