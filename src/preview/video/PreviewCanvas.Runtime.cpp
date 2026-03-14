@@ -303,6 +303,7 @@ void PreviewCanvas::shutdownOffscreenRenderer()
 {
     if (offscreenContext_ != nullptr && offscreenSurface_ != nullptr) {
         if (offscreenContext_->makeCurrent(offscreenSurface_)) {
+            destroyOffscreenReadbackPbos();
             if (offscreenFramebuffer_ != nullptr) {
                 delete offscreenFramebuffer_;
                 offscreenFramebuffer_ = nullptr;
@@ -313,6 +314,7 @@ void PreviewCanvas::shutdownOffscreenRenderer()
             }
             offscreenContext_->doneCurrent();
         } else {
+            destroyOffscreenReadbackPbos();
             if (offscreenFramebuffer_ != nullptr) {
                 delete offscreenFramebuffer_;
                 offscreenFramebuffer_ = nullptr;
@@ -320,9 +322,12 @@ void PreviewCanvas::shutdownOffscreenRenderer()
             }
         }
     } else if (offscreenFramebuffer_ != nullptr) {
+        destroyOffscreenReadbackPbos();
         delete offscreenFramebuffer_;
         offscreenFramebuffer_ = nullptr;
         offscreenFramebufferSize_ = QSize();
+    } else {
+        destroyOffscreenReadbackPbos();
     }
 
     if (offscreenContext_ != nullptr) {
@@ -334,6 +339,147 @@ void PreviewCanvas::shutdownOffscreenRenderer()
         delete offscreenSurface_;
         offscreenSurface_ = nullptr;
     }
+}
+
+bool PreviewCanvas::supportsOffscreenPboReadback(QOpenGLContext* context) const
+{
+    QOpenGLContext* activeContext = context != nullptr ? context : QOpenGLContext::currentContext();
+    if (activeContext == nullptr) {
+        return false;
+    }
+    const QSurfaceFormat format = activeContext->format();
+    const bool versionSupported = format.majorVersion() > 2
+        || (format.majorVersion() == 2 && format.minorVersion() >= 1);
+    return versionSupported || activeContext->hasExtension(QByteArrayLiteral("GL_ARB_pixel_buffer_object"));
+}
+
+bool PreviewCanvas::supportsOffscreenPboReadback(QString* errorMessage)
+{
+    QOpenGLContext* activeContext = offscreenContext_ != nullptr ? offscreenContext_ : QOpenGLContext::currentContext();
+    if (!supportsOffscreenPboReadback(activeContext)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("OpenGL context does not expose pixel pack buffer support");
+        }
+        return false;
+    }
+    return true;
+}
+
+void PreviewCanvas::destroyOffscreenReadbackPbos()
+{
+    QOpenGLContext* activeContext = QOpenGLContext::currentContext();
+    QOpenGLExtraFunctions* extra = activeContext != nullptr ? activeContext->extraFunctions() : nullptr;
+    if (extra != nullptr && (offscreenReadbackPbos_[0] != 0 || offscreenReadbackPbos_[1] != 0)) {
+        extra->glDeleteBuffers(2, offscreenReadbackPbos_);
+    }
+    offscreenReadbackPbos_[0] = 0;
+    offscreenReadbackPbos_[1] = 0;
+    offscreenReadbackPboSize_ = QSize();
+    offscreenReadbackPboBytes_ = 0;
+    offscreenReadbackPboWriteIndex_ = 0;
+    offscreenReadbackPendingIndex_ = -1;
+}
+
+void PreviewCanvas::resetOffscreenPboReadback()
+{
+    if (offscreenContext_ != nullptr && offscreenSurface_ != nullptr) {
+        if (offscreenContext_->makeCurrent(offscreenSurface_)) {
+            destroyOffscreenReadbackPbos();
+            offscreenContext_->doneCurrent();
+            return;
+        }
+    }
+    destroyOffscreenReadbackPbos();
+}
+
+bool PreviewCanvas::ensureOffscreenReadbackPbos(const QSize& framebufferSize, QString* errorMessage)
+{
+    const QSize safeSize(qMax(1, framebufferSize.width()), qMax(1, framebufferSize.height()));
+    const qsizetype byteCount = static_cast<qsizetype>(safeSize.width()) * safeSize.height() * 4;
+    if (offscreenReadbackPbos_[0] != 0
+        && offscreenReadbackPbos_[1] != 0
+        && offscreenReadbackPboSize_ == safeSize
+        && offscreenReadbackPboBytes_ == byteCount) {
+        return true;
+    }
+
+    if (!supportsOffscreenPboReadback(errorMessage)) {
+        return false;
+    }
+
+    QOpenGLContext* activeContext = QOpenGLContext::currentContext();
+    QOpenGLExtraFunctions* extra = activeContext != nullptr ? activeContext->extraFunctions() : nullptr;
+    if (extra == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("OpenGL extra functions are unavailable for PBO readback");
+        }
+        return false;
+    }
+
+    destroyOffscreenReadbackPbos();
+    extra->glGenBuffers(2, offscreenReadbackPbos_);
+    if (offscreenReadbackPbos_[0] == 0 || offscreenReadbackPbos_[1] == 0) {
+        destroyOffscreenReadbackPbos();
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to allocate pixel pack buffers");
+        }
+        return false;
+    }
+
+    for (GLuint pboId : offscreenReadbackPbos_) {
+        extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, pboId);
+        extra->glBufferData(GL_PIXEL_PACK_BUFFER, byteCount, nullptr, GL_STREAM_READ);
+    }
+    extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    offscreenReadbackPboSize_ = safeSize;
+    offscreenReadbackPboBytes_ = byteCount;
+    offscreenReadbackPboWriteIndex_ = 0;
+    offscreenReadbackPendingIndex_ = -1;
+    return true;
+}
+
+bool PreviewCanvas::mapOffscreenReadbackPbo(int pboIndex, const QSize& imageSize, QImage* frame, QString* errorMessage)
+{
+    if (frame == nullptr) {
+        return false;
+    }
+    if (pboIndex < 0 || pboIndex >= 2 || offscreenReadbackPbos_[pboIndex] == 0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("invalid offscreen readback PBO index");
+        }
+        return false;
+    }
+
+    QOpenGLContext* activeContext = QOpenGLContext::currentContext();
+    QOpenGLExtraFunctions* extra = activeContext != nullptr ? activeContext->extraFunctions() : nullptr;
+    if (extra == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("OpenGL extra functions are unavailable while mapping PBO");
+        }
+        return false;
+    }
+
+    const QSize safeSize(qMax(1, imageSize.width()), qMax(1, imageSize.height()));
+    const qsizetype bytesPerRow = static_cast<qsizetype>(safeSize.width()) * 4;
+    extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, offscreenReadbackPbos_[pboIndex]);
+    void* mapped = extra->glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, offscreenReadbackPboBytes_, GL_MAP_READ_BIT);
+    if (mapped == nullptr) {
+        extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to map offscreen readback PBO");
+        }
+        return false;
+    }
+
+    QImage output(safeSize, QImage::Format_RGBA8888);
+    const uchar* sourceBytes = static_cast<const uchar*>(mapped);
+    for (int row = 0; row < safeSize.height(); ++row) {
+        std::memcpy(output.scanLine(row), sourceBytes + (static_cast<qsizetype>(row) * bytesPerRow), bytesPerRow);
+    }
+    extra->glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+    extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    *frame = output;
+    return true;
 }
 
 bool PreviewCanvas::ensureOffscreenFramebuffer(const QSize& framebufferSize, QString* errorMessage)
@@ -438,6 +584,150 @@ QImage PreviewCanvas::renderOverlayFrameOffscreen(
         frame = frame.convertToFormat(QImage::Format_RGBA8888);
     }
     return frame;
+}
+
+bool PreviewCanvas::renderOverlayFrameOffscreenPboStep(
+    const QSize& outputSize,
+    double playheadSeconds,
+    bool showTimestamp,
+    bool showObjectStatsHud,
+    QImage* completedFrame,
+    bool* completedFrameReady,
+    bool drainOnly,
+    QString* errorMessage
+)
+{
+    if (completedFrame != nullptr) {
+        *completedFrame = QImage();
+    }
+    if (completedFrameReady != nullptr) {
+        *completedFrameReady = false;
+    }
+    offscreenDrawNsLastFrame_ = 0;
+    offscreenReadbackNsLastFrame_ = 0;
+
+    const QSize safeSize(qMax(1, outputSize.width()), qMax(1, outputSize.height()));
+    if (offscreenContext_ == nullptr || offscreenSurface_ == nullptr || !glRenderer_.isInitialized()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("offscreen renderer is unavailable");
+        }
+        return false;
+    }
+    if (!offscreenContext_->makeCurrent(offscreenSurface_)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to make offscreen OpenGL context current");
+        }
+        return false;
+    }
+    if (!ensureOffscreenFramebuffer(safeSize, errorMessage)) {
+        offscreenContext_->doneCurrent();
+        return false;
+    }
+    if (!ensureOffscreenReadbackPbos(safeSize, errorMessage)) {
+        offscreenContext_->doneCurrent();
+        return false;
+    }
+
+    if (drainOnly) {
+        if (offscreenReadbackPendingIndex_ >= 0) {
+            QElapsedTimer readbackTimer;
+            readbackTimer.start();
+            QImage drainedFrame;
+            if (!mapOffscreenReadbackPbo(offscreenReadbackPendingIndex_, safeSize, &drainedFrame, errorMessage)) {
+                offscreenContext_->doneCurrent();
+                return false;
+            }
+            offscreenReadbackNsLastFrame_ = readbackTimer.nsecsElapsed();
+            offscreenReadbackPendingIndex_ = -1;
+            if (completedFrame != nullptr) {
+                *completedFrame = drainedFrame;
+            }
+            if (completedFrameReady != nullptr) {
+                *completedFrameReady = !drainedFrame.isNull();
+            }
+        }
+        offscreenContext_->doneCurrent();
+        return true;
+    }
+
+    const double originalPlayhead = playheadSeconds_;
+    const bool originalShowTimestamp = showTimestamp_;
+    const bool originalShowObjectStatsHud = showObjectStatsHud_;
+    const bool originalHighQualityRender = highQualityRender_;
+
+    playheadSeconds_ = playheadSeconds;
+    showTimestamp_ = showTimestamp;
+    showObjectStatsHud_ = showObjectStatsHud;
+    highQualityRender_ = true;
+
+    bool stepOk = true;
+    if (offscreenFramebuffer_->bind()) {
+        QOpenGLFunctions* gl = offscreenContext_->functions();
+        QOpenGLExtraFunctions* extra = offscreenContext_->extraFunctions();
+        if (gl != nullptr) {
+            gl->glViewport(0, 0, safeSize.width(), safeSize.height());
+            gl->glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+            gl->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        }
+
+        QElapsedTimer drawTimer;
+        drawTimer.start();
+        glRenderer_.beginFrame(safeSize, 1.0);
+        {
+            QOpenGLPaintDevice paintDevice(safeSize);
+            paintDevice.setDevicePixelRatio(1.0);
+            QPainter painter(&paintDevice);
+            renderCanvas(painter, safeSize, false, false, true);
+        }
+        glRenderer_.endFrame();
+        offscreenDrawNsLastFrame_ = drawTimer.nsecsElapsed();
+
+        if (extra != nullptr) {
+            const int writeIndex = offscreenReadbackPboWriteIndex_;
+            extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, offscreenReadbackPbos_[writeIndex]);
+            extra->glReadPixels(0, 0, safeSize.width(), safeSize.height(), GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+
+            if (offscreenReadbackPendingIndex_ >= 0) {
+                QElapsedTimer readbackTimer;
+                readbackTimer.start();
+                QImage readyFrame;
+                if (!mapOffscreenReadbackPbo(offscreenReadbackPendingIndex_, safeSize, &readyFrame, errorMessage)) {
+                    stepOk = false;
+                } else {
+                    offscreenReadbackNsLastFrame_ = readbackTimer.nsecsElapsed();
+                    if (completedFrame != nullptr) {
+                        *completedFrame = readyFrame;
+                    }
+                    if (completedFrameReady != nullptr) {
+                        *completedFrameReady = !readyFrame.isNull();
+                    }
+                }
+            }
+
+            offscreenReadbackPendingIndex_ = writeIndex;
+            offscreenReadbackPboWriteIndex_ = (writeIndex + 1) % 2;
+        } else {
+            if (errorMessage != nullptr) {
+                *errorMessage = QStringLiteral("OpenGL extra functions are unavailable for PBO readback");
+            }
+            stepOk = false;
+        }
+
+        offscreenFramebuffer_->release();
+    } else {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to bind offscreen framebuffer");
+        }
+        stepOk = false;
+    }
+
+    playheadSeconds_ = originalPlayhead;
+    showTimestamp_ = originalShowTimestamp;
+    showObjectStatsHud_ = originalShowObjectStatsHud;
+    highQualityRender_ = originalHighQualityRender;
+    offscreenContext_->doneCurrent();
+    return stepOk;
 }
 
 struct PreviewCanvas::SkinLoadResult {

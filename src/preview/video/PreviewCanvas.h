@@ -69,11 +69,24 @@ public:
         bool showTimestamp,
         bool showObjectStatsHud = false
     );
+    bool supportsOffscreenPboReadback(QString* errorMessage = nullptr);
+    void resetOffscreenPboReadback();
+    bool renderOverlayFrameOffscreenPboStep(
+        const QSize& outputSize,
+        double playheadSeconds,
+        bool showTimestamp,
+        bool showObjectStatsHud,
+        QImage* completedFrame,
+        bool* completedFrameReady,
+        bool drainOnly = false,
+        QString* errorMessage = nullptr
+    );
     bool isGpuRendererReadyForDebug() const { return glRenderer_.isInitialized(); }
     bool usedGpuRendererLastFrameForDebug() const { return usedGpuRendererThisFrame_; }
     int cpuFallbackCountLastFrameForDebug() const { return cpuFallbackCount_; }
     qint64 offscreenDrawNsLastFrameForDebug() const { return offscreenDrawNsLastFrame_; }
     qint64 offscreenReadbackNsLastFrameForDebug() const { return offscreenReadbackNsLastFrame_; }
+    bool offscreenPboReadbackActiveForDebug() const { return offscreenReadbackPendingIndex_ >= 0; }
     bool hasCoreSkinAssetsLoadedForDebug() const
     {
         return !tapImage_.isNull() && !holdImage_.isNull() && !starImage_.isNull();
@@ -202,6 +215,10 @@ private:
         bool highQualityRender
     );
     bool ensureOffscreenFramebuffer(const QSize& framebufferSize, QString* errorMessage = nullptr);
+    bool ensureOffscreenReadbackPbos(const QSize& framebufferSize, QString* errorMessage = nullptr);
+    bool mapOffscreenReadbackPbo(int pboIndex, const QSize& imageSize, QImage* frame, QString* errorMessage = nullptr);
+    void destroyOffscreenReadbackPbos();
+    bool supportsOffscreenPboReadback(QOpenGLContext* context) const;
     void updateFpsSample();
     void collectGpuProfilingResults(bool waitForAll);
     QString profilingSummaryPath() const;
@@ -341,6 +358,11 @@ private:
     QOpenGLContext* offscreenContext_ = nullptr;
     QOpenGLFramebufferObject* offscreenFramebuffer_ = nullptr;
     QSize offscreenFramebufferSize_;
+    GLuint offscreenReadbackPbos_[2] = {0, 0};
+    QSize offscreenReadbackPboSize_;
+    qsizetype offscreenReadbackPboBytes_ = 0;
+    int offscreenReadbackPboWriteIndex_ = 0;
+    int offscreenReadbackPendingIndex_ = -1;
     qint64 offscreenDrawNsLastFrame_ = 0;
     qint64 offscreenReadbackNsLastFrame_ = 0;
 };
