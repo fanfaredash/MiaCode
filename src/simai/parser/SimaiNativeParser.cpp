@@ -494,8 +494,9 @@ void finalizeEachGroup(QVector<TimelineNoteMarker>* noteMarkers, const QVector<i
         + touchHoldIndices.size()
         + headStarLanes.size()
         + headlessSlideCount;
+    const int noteEachGroupCount = touchIndices.size() + logicalUnitCount;
 
-    if (logicalUnitCount >= 2) {
+    if (noteEachGroupCount >= 2) {
         for (int index : tapIndices) {
             (*noteMarkers)[index].isEach = true;
         }
@@ -505,14 +506,19 @@ void finalizeEachGroup(QVector<TimelineNoteMarker>* noteMarkers, const QVector<i
         for (int index : touchHoldIndices) {
             (*noteMarkers)[index].isEach = true;
         }
-        // For slide/wifi we keep the head-star each state separate from the
-        // trace each state. `isEach` is reserved for non-slide notes only.
+    }
+
+    if (noteEachGroupCount >= 2) {
+        // Slide/wifi keep head-star each state and trace each state separate.
+        // The head-star each grouping follows the same synchronous grouping
+        // rule as tap/hold/touch, while `sameHeadSlide` remains the separate
+        // double-star indicator.
         for (int index : slideIndices) {
             (*noteMarkers)[index].headEach = true;
         }
     }
 
-    if (touchIndices.size() + logicalUnitCount >= 2) {
+    if (noteEachGroupCount >= 2) {
         for (int index : touchIndices) {
             (*noteMarkers)[index].isEach = true;
         }

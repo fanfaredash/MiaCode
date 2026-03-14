@@ -114,6 +114,61 @@ int main(int argc, char** argv)
     }
 
     {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("{4}1x/7,7,E1/7,C/7,\n{4}E5/7,7,E6/7,C/7,\nE")
+        );
+        expect(parsed.ok, QStringLiteral("touch and tap mixed each repro parses"));
+        int simultaneousTapCount = 0;
+        int simultaneousTapEachCount = 0;
+        int simultaneousTouchCount = 0;
+        for (const TimelineNoteMarker& marker : parsed.noteMarkers) {
+            const bool simultaneousMoment = nearlyEqual(marker.second, 1.0)
+                || nearlyEqual(marker.second, 1.5)
+                || nearlyEqual(marker.second, 2.0)
+                || nearlyEqual(marker.second, 3.0)
+                || nearlyEqual(marker.second, 3.5);
+            if (!simultaneousMoment) {
+                continue;
+            }
+            if (marker.type == QLatin1String("tap")) {
+                ++simultaneousTapCount;
+                if (marker.isEach) {
+                    ++simultaneousTapEachCount;
+                }
+            } else if (marker.type == QLatin1String("touch")) {
+                ++simultaneousTouchCount;
+                expect(marker.isEach, QStringLiteral("touch keeps each flag when paired with tap"));
+            }
+        }
+        expect(simultaneousTapCount == 5, QStringLiteral("repro emits five tap notes at touch-shared moments"));
+        expect(simultaneousTouchCount == 5, QStringLiteral("repro emits five touch notes at shared moments"));
+        expect(simultaneousTapEachCount == simultaneousTapCount, QStringLiteral("tap is marked each when paired with touch"));
+    }
+
+    {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("{4}1-4[8:1]/C,\nE")
+        );
+        expect(parsed.ok, QStringLiteral("touch and slide mixed each repro parses"));
+        const TimelineNoteMarker* slide = nullptr;
+        const TimelineNoteMarker* touch = nullptr;
+        for (const TimelineNoteMarker& marker : parsed.noteMarkers) {
+            if (marker.type == QLatin1String("slide")) {
+                slide = &marker;
+            } else if (marker.type == QLatin1String("touch")) {
+                touch = &marker;
+            }
+        }
+        expect(slide != nullptr && touch != nullptr, QStringLiteral("touch and slide repro emits both note types"));
+        if (slide != nullptr) {
+            expect(slide->headEach, QStringLiteral("slide head is marked each when paired with touch"));
+        }
+        if (touch != nullptr) {
+            expect(touch->isEach, QStringLiteral("touch remains each when paired with slide"));
+        }
+    }
+
+    {
         const SimaiNativeParseResult lenientInvalid = SimaiNativeParser::parseForTimeline(QStringLiteral("@,\nE"));
         const SimaiNativeParseResult strictInvalid = SimaiNativeParser::validateSyntax(QStringLiteral("@,\nE"));
         expect(!lenientInvalid.ok, QStringLiteral("lenient parse rejects illegal token"));
