@@ -1,3 +1,12 @@
+namespace {
+
+qreal mirroredStarAngleDegrees(qreal angleDegrees)
+{
+    return 360.0 - angleDegrees;
+}
+
+}  // namespace
+
 void PreviewCanvas::drawTouchLayer(QPainter& painter, const QRectF& playfieldRect)
 {
     for (const TimelineNoteMarker& marker : noteMarkers_) {
@@ -1709,7 +1718,7 @@ void PreviewCanvas::drawTapMarker(QPainter& painter, const TimelineNoteMarker& m
                 point,
                 targetWidth,
                 targetHeight,
-                laneRotationDegrees(marker.lane))) {
+                slideHeadStar ? mirroredStarAngleDegrees(laneRotationDegrees(marker.lane)) : laneRotationDegrees(marker.lane))) {
             return;
         }
         return;
@@ -2181,6 +2190,101 @@ void PreviewCanvas::drawCachedWifiArea(
     }
 }
 
+int slideAreaTrimCountForProportion(
+    const QVector<QPointF>& areaPoints,
+    const QVector<double>& areaThresholds,
+    const QVector<double>& areaCheckpoints,
+    const QVector<int>& areaCutIndices,
+    int areaIndex,
+    qreal proportion
+)
+{
+    if (areaPoints.isEmpty()) {
+        return 0;
+    }
+
+    qreal areaStart = 0.0;
+    qreal areaEnd = 1.0;
+    if (!areaThresholds.isEmpty()) {
+        areaStart = qBound<qreal>(0.0, areaThresholds.value(areaIndex, 0.0), 1.0);
+        if (areaIndex + 1 < areaThresholds.size()) {
+            areaEnd = qBound<qreal>(areaStart, areaThresholds.at(areaIndex + 1), 1.0);
+        }
+    }
+
+    const qreal clampedProportion = qBound<qreal>(0.0, proportion, 1.0);
+    if (!areaCheckpoints.isEmpty()) {
+        const int checkpointCount = areaCheckpoints.size();
+        const auto cutAt = [&](int index) {
+            if (!areaCutIndices.isEmpty()) {
+                return qBound(0, areaCutIndices.value(index, 0), areaPoints.size());
+            }
+            return qBound(
+                0,
+                qFloor(static_cast<qreal>(index + 1) * areaPoints.size() / checkpointCount),
+                areaPoints.size()
+            );
+        };
+
+        qreal previousThreshold = areaStart;
+        int previousCut = 0;
+        for (int checkpointIndex = 0; checkpointIndex < checkpointCount; ++checkpointIndex) {
+            const qreal checkpointThreshold = qBound<qreal>(
+                previousThreshold,
+                areaCheckpoints.at(checkpointIndex),
+                areaEnd
+            );
+            const int checkpointCut = cutAt(checkpointIndex);
+            if (clampedProportion <= checkpointThreshold) {
+                const qreal span = qMax<qreal>(0.001, checkpointThreshold - previousThreshold);
+                const qreal localT = qBound<qreal>(0.0, (clampedProportion - previousThreshold) / span, 1.0);
+                return qBound(
+                    0,
+                    qFloor(previousCut + (checkpointCut - previousCut) * localT),
+                    areaPoints.size()
+                );
+            }
+            previousThreshold = checkpointThreshold;
+            previousCut = checkpointCut;
+        }
+
+        if (areaEnd > previousThreshold && previousCut < areaPoints.size()) {
+            const qreal span = qMax<qreal>(0.001, areaEnd - previousThreshold);
+            const qreal localT = qBound<qreal>(0.0, (clampedProportion - previousThreshold) / span, 1.0);
+            return qBound(
+                0,
+                qFloor(previousCut + (areaPoints.size() - previousCut) * localT),
+                areaPoints.size()
+            );
+        }
+        return previousCut;
+    }
+
+    const qreal span = qMax<qreal>(0.001, areaEnd - areaStart);
+    const qreal localT = qBound<qreal>(0.0, (clampedProportion - areaStart) / span, 1.0);
+    return qBound(0, qFloor(localT * areaPoints.size()), areaPoints.size());
+}
+
+int totalSlideTrackArrowCount(const QVector<QVector<QVector<QPointF>>>& segmentAreas)
+{
+    int totalArrowCount = 0;
+    for (const QVector<QVector<QPointF>>& areas : segmentAreas) {
+        for (const QVector<QPointF>& areaPoints : areas) {
+            totalArrowCount += areaPoints.size();
+        }
+    }
+    return totalArrowCount;
+}
+
+int totalWifiTrackArrowCount(const QVector<QVector<QPointF>>& areas)
+{
+    int totalArrowCount = 0;
+    for (const QVector<QPointF>& areaPoints : areas) {
+        totalArrowCount += areaPoints.size();
+    }
+    return totalArrowCount;
+}
+
 void PreviewCanvas::drawSlideTrack(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)
 {
     if (marker.availableSecond < 0.0
@@ -2196,6 +2300,7 @@ void PreviewCanvas::drawSlideTrack(QPainter& painter, const TimelineNoteMarker& 
 
     int startSegment = 0;
     int startAreaIndex = 0;
+    int partialTrimCount = 0;
     int removedArrowCount = 0;
     qreal startProportion = 0.0;
     qreal opacity = 1.0;
@@ -2209,53 +2314,37 @@ void PreviewCanvas::drawSlideTrack(QPainter& painter, const TimelineNoteMarker& 
             (playheadSeconds_ - fadeStartSecond) / qMax(0.001, kSlideTrackFadeInSeconds),
             1.0
         );
-    } else if (!marker.slideSegmentShootSeconds.isEmpty()
-        && marker.slideSegmentShootSeconds.size() == marker.slideSegmentDurations.size()
-        && marker.slideTrackAreaPoints.size() == marker.slideSegmentDurations.size()) {
-        for (int i = marker.slideSegmentShootSeconds.size() - 1; i >= 0; --i) {
-            if (playheadSeconds_ >= marker.slideSegmentShootSeconds[i]) {
-                startSegment = i;
-                break;
-            }
-        }
-        startSegment = qBound(0, startSegment, marker.slideTrackAreaPoints.size() - 1);
-        const qreal duration = qMax(0.001, marker.slideSegmentDurations.value(startSegment));
-        startProportion = qBound<qreal>(0.0, (playheadSeconds_ - marker.slideSegmentShootSeconds[startSegment]) / duration, 1.0);
-        const int areaCount = marker.slideTrackAreaPoints[startSegment].size();
-        startAreaIndex = currentAreaIndexForProportion(marker.slideTrackAreaThresholds.value(startSegment), startProportion, areaCount);
-
-        qreal totalDuration = marker.endSecond - marker.slideTraceSecond;
-        if (!marker.slideTrackAreaThresholds.isEmpty()
-            && !marker.slideTrackAreaThresholds.constLast().isEmpty()
+    } else {
+        if (kSlideTrackTrimMode == SlideTrackTrimMode::AreaImmediate
             && !marker.slideSegmentShootSeconds.isEmpty()
-            && !marker.slideSegmentDurations.isEmpty()) {
-            const int lastSegmentIndex = qMin(
-                marker.slideTrackAreaThresholds.size(),
-                qMin(marker.slideSegmentShootSeconds.size(), marker.slideSegmentDurations.size())
-            ) - 1;
-            if (lastSegmentIndex >= 0) {
-                const QVector<double>& lastThresholds = marker.slideTrackAreaThresholds[lastSegmentIndex];
-                const qreal lastAreaEntryProportion = qBound<qreal>(0.0, lastThresholds.constLast(), 1.0);
-                const qreal trimEndSecond =
-                    marker.slideSegmentShootSeconds[lastSegmentIndex]
-                    + lastAreaEntryProportion * marker.slideSegmentDurations[lastSegmentIndex];
-                totalDuration = trimEndSecond - marker.slideTraceSecond;
-            }
-        }
-        if (totalDuration <= 0.0) {
-            totalDuration = 0.0;
-            for (double segmentDuration : marker.slideSegmentDurations) {
-                totalDuration += segmentDuration;
-            }
-        }
-        if (totalDuration > 0.0) {
-            int totalArrowCount = 0;
-            for (const auto& segmentAreas : marker.slideTrackAreaPoints) {
-                for (const auto& areaPoints : segmentAreas) {
-                    totalArrowCount += areaPoints.size();
+            && marker.slideSegmentShootSeconds.size() == marker.slideSegmentDurations.size()
+            && marker.slideTrackAreaPoints.size() == marker.slideSegmentDurations.size()) {
+            for (int i = marker.slideSegmentShootSeconds.size() - 1; i >= 0; --i) {
+                if (playheadSeconds_ >= marker.slideSegmentShootSeconds[i]) {
+                    startSegment = i;
+                    break;
                 }
             }
+            startSegment = qBound(0, startSegment, marker.slideTrackAreaPoints.size() - 1);
+            const qreal duration = qMax(0.001, marker.slideSegmentDurations.value(startSegment));
+            startProportion = qBound<qreal>(0.0, (playheadSeconds_ - marker.slideSegmentShootSeconds[startSegment]) / duration, 1.0);
+            const int areaCount = marker.slideTrackAreaPoints[startSegment].size();
+            startAreaIndex = currentAreaIndexForProportion(marker.slideTrackAreaThresholds.value(startSegment), startProportion, areaCount);
+
+            if (startAreaIndex >= 0 && startAreaIndex < areaCount) {
+                partialTrimCount = slideAreaTrimCountForProportion(
+                    marker.slideTrackAreaPoints[startSegment][startAreaIndex],
+                    marker.slideTrackAreaThresholds.value(startSegment),
+                    marker.slideTrackAreaCheckpoints.value(startSegment).value(startAreaIndex),
+                    marker.slideTrackAreaCutIndices.value(startSegment).value(startAreaIndex),
+                    startAreaIndex,
+                    startProportion
+                );
+            }
+        } else {
+            const qreal totalDuration = qMax(0.001, marker.endSecond - marker.slideTraceSecond);
             const qreal totalProportion = qBound<qreal>(0.0, (playheadSeconds_ - marker.slideTraceSecond) / totalDuration, 1.0);
+            const int totalArrowCount = totalSlideTrackArrowCount(marker.slideTrackAreaPoints);
             removedArrowCount = qBound(0, qFloor(totalProportion * totalArrowCount), totalArrowCount);
         }
     }
@@ -2272,35 +2361,16 @@ void PreviewCanvas::drawSlideTrack(QPainter& painter, const TimelineNoteMarker& 
         }
         if (startSegment >= 0 && startSegment < marker.slideTrackAreaPoints.size()) {
             const QVector<QVector<QPointF>>& areas = marker.slideTrackAreaPoints[startSegment];
-            const QVector<QVector<double>>& checkpoints = marker.slideTrackAreaCheckpoints.value(startSegment);
-            const QVector<QVector<int>>& cutIndices = marker.slideTrackAreaCutIndices.value(startSegment);
             const int clampedStartArea = qBound(0, startAreaIndex, areas.size());
-            int partialTrimCount = 0;
             if (clampedStartArea >= 0 && clampedStartArea < areas.size()) {
-                const QVector<double>& areaCheckpoints = checkpoints.value(clampedStartArea);
-                if (!areaCheckpoints.isEmpty()) {
-                    int passedCheckpoints = 0;
-                    for (double checkpoint : areaCheckpoints) {
-                        if (startProportion >= checkpoint) {
-                            ++passedCheckpoints;
-                        } else {
-                            break;
-                        }
-                    }
-                    if (passedCheckpoints > 0) {
-                        const QVector<int>& areaCutIndices = cutIndices.value(clampedStartArea);
-                        if (!areaCutIndices.isEmpty()) {
-                            const int cutIndex = areaCutIndices.value(qMin(passedCheckpoints - 1, areaCutIndices.size() - 1));
-                            partialTrimCount = qBound(0, cutIndex, areas[clampedStartArea].size());
-                        } else {
-                            partialTrimCount = qBound(
-                                0,
-                                qFloor(static_cast<qreal>(passedCheckpoints) * areas[clampedStartArea].size() / areaCheckpoints.size()),
-                                areas[clampedStartArea].size()
-                            );
-                        }
-                    }
-                }
+                partialTrimCount = slideAreaTrimCountForProportion(
+                    areas[clampedStartArea],
+                    marker.slideTrackAreaThresholds.value(startSegment),
+                    marker.slideTrackAreaCheckpoints.value(startSegment).value(clampedStartArea),
+                    marker.slideTrackAreaCutIndices.value(startSegment).value(clampedStartArea),
+                    clampedStartArea,
+                    startProportion
+                );
             }
             for (int areaIndex = areas.size() - 1; areaIndex >= clampedStartArea; --areaIndex) {
                 const int localCut = areaIndex == clampedStartArea ? partialTrimCount : 0;
@@ -2315,12 +2385,10 @@ void PreviewCanvas::drawSlideTrack(QPainter& painter, const TimelineNoteMarker& 
 
         for (int segmentIndex = 0; segmentIndex < marker.slideTrackAreaPoints.size(); ++segmentIndex) {
             const QVector<QVector<QPointF>>& areas = marker.slideTrackAreaPoints[segmentIndex];
-            const int segmentArrowCount = std::accumulate(
-                areas.cbegin(),
-                areas.cend(),
-                0,
-                [](int total, const QVector<QPointF>& areaPoints) { return total + areaPoints.size(); }
-            );
+            int segmentArrowCount = 0;
+            for (const QVector<QPointF>& areaPoints : areas) {
+                segmentArrowCount += areaPoints.size();
+            }
             if (remainingToRemove >= segmentArrowCount) {
                 remainingToRemove -= segmentArrowCount;
                 continue;
@@ -2378,6 +2446,7 @@ void PreviewCanvas::drawWifiTrack(QPainter& painter, const TimelineNoteMarker& m
     qreal opacity = 1.0;
     int startAreaIndex = 0;
     qreal startProportion = 0.0;
+    int removedArrowCount = 0;
     if (playheadSeconds_ < marker.availableSecond) {
         const qreal fadeStartSecond = marker.availableSecond - kSlideTrackFadeInSeconds;
         if (playheadSeconds_ < fadeStartSecond) {
@@ -2385,11 +2454,14 @@ void PreviewCanvas::drawWifiTrack(QPainter& painter, const TimelineNoteMarker& m
         }
         opacity = qBound<qreal>(0.0, (playheadSeconds_ - fadeStartSecond) / kSlideTrackFadeInSeconds, 1.0);
     } else if (playheadSeconds_ >= marker.slideTraceSecond) {
-        const qreal totalDuration = !marker.slideSegmentDurations.isEmpty()
-            ? qMax(0.001, marker.slideSegmentDurations.constFirst())
-            : qMax(0.001, marker.endSecond - marker.slideTraceSecond);
+        const qreal totalDuration = qMax(0.001, marker.endSecond - marker.slideTraceSecond);
         startProportion = qBound<qreal>(0.0, (playheadSeconds_ - marker.slideTraceSecond) / totalDuration, 1.0);
-        startAreaIndex = currentAreaIndexForProportion(marker.wifiTrackAreaThresholds, startProportion, marker.wifiTrackAreaPoints.size());
+        if (kSlideTrackTrimMode == SlideTrackTrimMode::AreaImmediate) {
+            startAreaIndex = currentAreaIndexForProportion(marker.wifiTrackAreaThresholds, startProportion, marker.wifiTrackAreaPoints.size());
+        } else {
+            const int totalArrowCount = totalWifiTrackArrowCount(marker.wifiTrackAreaPoints);
+            removedArrowCount = qBound(0, qFloor(startProportion * totalArrowCount), totalArrowCount);
+        }
     }
 
     painter.save();
@@ -2415,11 +2487,29 @@ void PreviewCanvas::drawWifiTrack(QPainter& painter, const TimelineNoteMarker& m
             );
         }
     }
-    for (int areaIndex = marker.wifiTrackAreaPoints.size() - 1; areaIndex >= clampedStartArea; --areaIndex) {
-        const int localCut = (kSlideTrackTrimMode == SlideTrackTrimMode::AreaImmediate && areaIndex == clampedStartArea)
-            ? partialTrimCount
-            : 0;
-        drawCachedWifiArea(painter, marker, areaIndex, localCut, playfieldRect, opacity);
+    if (kSlideTrackTrimMode == SlideTrackTrimMode::AreaImmediate) {
+        for (int areaIndex = marker.wifiTrackAreaPoints.size() - 1; areaIndex >= clampedStartArea; --areaIndex) {
+            const int localCut = areaIndex == clampedStartArea ? partialTrimCount : 0;
+            drawCachedWifiArea(painter, marker, areaIndex, localCut, playfieldRect, opacity);
+        }
+    } else {
+        int trimArea = marker.wifiTrackAreaPoints.size();
+        int trimLocalCut = 0;
+        int remainingToRemove = removedArrowCount;
+        for (int areaIndex = 0; areaIndex < marker.wifiTrackAreaPoints.size(); ++areaIndex) {
+            const int areaArrowCount = marker.wifiTrackAreaPoints[areaIndex].size();
+            if (remainingToRemove < areaArrowCount) {
+                trimArea = areaIndex;
+                trimLocalCut = qBound(0, remainingToRemove, areaArrowCount);
+                remainingToRemove = 0;
+                break;
+            }
+            remainingToRemove -= areaArrowCount;
+        }
+        for (int areaIndex = marker.wifiTrackAreaPoints.size() - 1; areaIndex >= trimArea; --areaIndex) {
+            const int localCut = areaIndex == trimArea ? trimLocalCut : 0;
+            drawCachedWifiArea(painter, marker, areaIndex, localCut, playfieldRect, opacity);
+        }
     }
     painter.restore();
 }
@@ -2488,6 +2578,7 @@ void PreviewCanvas::drawSlideMarker(QPainter& painter, const TimelineNoteMarker&
         logicalPoint = interpolatePoint(points, proportion);
         angle = interpolateAngle(angles, proportion);
     }
+    angle = mirroredStarAngleDegrees(angle);
 
     const QPointF point = mapLogicalPointToRect(
         QPointF(kLogicalCanvasCenter + logicalPoint.x(), kLogicalCanvasCenter + logicalPoint.y()),
@@ -2565,7 +2656,7 @@ void PreviewCanvas::drawWifiMarker(QPainter& painter, const TimelineNoteMarker& 
                 point,
                 targetWidth,
                 targetHeight,
-                angle,
+                mirroredStarAngleDegrees(angle),
                 imageOpacity)) {
             continue;
         }
