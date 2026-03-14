@@ -200,6 +200,9 @@ VideoExportDialog::VideoExportDialog(
     CurrentPreviewSecondCallback currentPreviewSecondCallback,
     PreviewAspectRatioCallback previewAspectRatioCallback,
     PreviewBrightnessCallback previewBrightnessCallback,
+    PreviewLayoutScaleCallback previewLayoutScaleCallback,
+    PreviewSmoothBrightnessCallback previewSmoothBrightnessCallback,
+    PreviewScaleModeCallback previewScaleModeCallback,
     QWidget* parent
 )
     : QDialog(parent)
@@ -212,6 +215,9 @@ VideoExportDialog::VideoExportDialog(
     , currentPreviewSecondCallback_(std::move(currentPreviewSecondCallback))
     , previewAspectRatioCallback_(std::move(previewAspectRatioCallback))
     , previewBrightnessCallback_(std::move(previewBrightnessCallback))
+    , previewLayoutScaleCallback_(std::move(previewLayoutScaleCallback))
+    , previewSmoothBrightnessCallback_(std::move(previewSmoothBrightnessCallback))
+    , previewScaleModeCallback_(std::move(previewScaleModeCallback))
     , totalDurationSeconds_(qMax(0.0, baseTask.contentDurationSeconds))
 {
     setWindowTitle(l10n(QStringLiteral("Export Video"), QStringLiteral("导出视频")));
@@ -392,7 +398,7 @@ VideoExportDialog::VideoExportDialog(
         buildCollapsibleSection(
             l10n(QStringLiteral("Export Range"), QStringLiteral("导出区间")),
             rangeContent_,
-            true,
+            false,
             &rangeToggle_
         )
     );
@@ -410,7 +416,22 @@ VideoExportDialog::VideoExportDialog(
     );
     showTimestampCheck_->setChecked(baseTask_.showTimestamp);
     optionsLayout->addWidget(showTimestampCheck_, 0, 0, 1, 1, Qt::AlignLeft);
-    const auto addBrightnessOption = [this](QWidget* parent, const QString& title, int valuePercent, QSlider** sliderOut, QLabel** valueOut) {
+    smoothBrightnessCheck_ = new QCheckBox(
+        l10n(QStringLiteral("Smooth brightness"), QStringLiteral("平滑亮度")),
+        optionsContent_
+    );
+    smoothBrightnessCheck_->setChecked(baseTask_.smoothBrightness);
+    optionsLayout->addWidget(smoothBrightnessCheck_, 0, 1, 1, 1, Qt::AlignLeft);
+    const auto addPercentSliderOption = [](
+        QWidget* parent,
+        const QString& title,
+        int minimum,
+        int maximum,
+        int step,
+        int valuePercent,
+        QSlider** sliderOut,
+        QLabel** valueOut
+    ) {
         auto* container = new QWidget(parent);
         auto* containerLayout = new QVBoxLayout(container);
         containerLayout->setContentsMargins(0, 0, 0, 0);
@@ -426,7 +447,10 @@ VideoExportDialog::VideoExportDialog(
         headerLayout->addWidget(titleLabel, 1);
         headerLayout->addWidget(valueLabel, 0);
         auto* slider = new QSlider(Qt::Horizontal, container);
-        slider->setRange(0, 100);
+        slider->setRange(minimum, maximum);
+        slider->setSingleStep(step);
+        slider->setPageStep(step);
+        slider->setTickInterval(step);
         slider->setValue(valuePercent);
         containerLayout->addWidget(header, 0);
         containerLayout->addWidget(slider, 0);
@@ -434,27 +458,69 @@ VideoExportDialog::VideoExportDialog(
         *valueOut = valueLabel;
         return container;
     };
-    QWidget* outerBrightnessOption = addBrightnessOption(
+    QWidget* outerBrightnessOption = addPercentSliderOption(
         optionsContent_,
         l10n(QStringLiteral("Brightness (Outer)"), QStringLiteral("Brightness (Outer)")),
+        0,
+        100,
+        1,
         qRound(qBound(0.0, baseTask_.backgroundBrightnessOuter, 1.0) * 100.0),
         &brightnessOuterSlider_,
         &brightnessOuterValueLabel_
     );
-    QWidget* innerBrightnessOption = addBrightnessOption(
+    QWidget* innerBrightnessOption = addPercentSliderOption(
         optionsContent_,
         l10n(QStringLiteral("Brightness (Inner)"), QStringLiteral("Brightness (Inner)")),
+        0,
+        100,
+        1,
         qRound(qBound(0.0, baseTask_.backgroundBrightnessInner, 1.0) * 100.0),
         &brightnessInnerSlider_,
         &brightnessInnerValueLabel_
     );
     optionsLayout->addWidget(outerBrightnessOption, 1, 0, 1, 1);
     optionsLayout->addWidget(innerBrightnessOption, 1, 1, 1, 1);
+    QWidget* layoutSquareScaleOption = addPercentSliderOption(
+        optionsContent_,
+        l10n(QStringLiteral("Layout Size"), QStringLiteral("Layout整图大小")),
+        qRound(miacode::preview_video::kLayoutSquareScaleMin * 100.0),
+        qRound(miacode::preview_video::kLayoutSquareScaleMax * 100.0),
+        qRound(miacode::preview_video::kLayoutSquareScaleStep * 100.0),
+        qRound(miacode::preview_video::normalizedLayoutSquareScale(baseTask_.layoutSquareScale) * 100.0),
+        &layoutSquareScaleSlider_,
+        &layoutSquareScaleValueLabel_
+    );
+    optionsLayout->addWidget(layoutSquareScaleOption, 2, 0, 1, 2);
+    backgroundScaleModeCombo_ = new QComboBox(optionsContent_);
+    backgroundScaleModeCombo_->addItem(
+        l10n(QStringLiteral("Fill (crop if needed)"), QStringLiteral("Fill (crop if needed)")),
+        static_cast<int>(PreviewBackgroundScaleMode::FillCrop)
+    );
+    backgroundScaleModeCombo_->addItem(
+        l10n(QStringLiteral("Fit (keep full image, may letterbox)"), QStringLiteral("Fit (keep full image, may letterbox)")),
+        static_cast<int>(PreviewBackgroundScaleMode::FitContain)
+    );
+    const int backgroundScaleModeIndex =
+        backgroundScaleModeCombo_->findData(static_cast<int>(baseTask_.backgroundScaleMode));
+    if (backgroundScaleModeIndex >= 0) {
+        backgroundScaleModeCombo_->setCurrentIndex(backgroundScaleModeIndex);
+    }
+    auto* backgroundScaleModeRow = new QWidget(optionsContent_);
+    auto* backgroundScaleModeLayout = new QHBoxLayout(backgroundScaleModeRow);
+    backgroundScaleModeLayout->setContentsMargins(0, 0, 0, 0);
+    backgroundScaleModeLayout->setSpacing(6);
+    auto* backgroundScaleModeLabel = new QLabel(
+        l10n(QStringLiteral("Background / PV Scale Mode"), QStringLiteral("Background / PV Scale Mode")),
+        backgroundScaleModeRow
+    );
+    backgroundScaleModeLayout->addWidget(backgroundScaleModeLabel, 0);
+    backgroundScaleModeLayout->addWidget(backgroundScaleModeCombo_, 1);
+    optionsLayout->addWidget(backgroundScaleModeRow, 3, 0, 1, 2);
     rootLayout->addWidget(
         buildCollapsibleSection(
             l10n(QStringLiteral("Options"), QStringLiteral("选项")),
             optionsContent_,
-            true,
+            false,
             &optionsToggle_
         )
     );
@@ -482,6 +548,20 @@ VideoExportDialog::VideoExportDialog(
     connect(showTimestampCheck_, &QCheckBox::toggled, this, [this](bool) {
         syncLivePreviewTimestampVisibility();
     });
+    connect(smoothBrightnessCheck_, &QCheckBox::toggled, this, [this](bool checked) {
+        if (previewSmoothBrightnessCallback_) {
+            previewSmoothBrightnessCallback_(checked);
+        }
+    });
+    connect(backgroundScaleModeCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
+        if (!previewScaleModeCallback_ || backgroundScaleModeCombo_ == nullptr) {
+            return;
+        }
+        const PreviewBackgroundScaleMode mode = static_cast<PreviewBackgroundScaleMode>(
+            backgroundScaleModeCombo_->currentData().toInt()
+        );
+        previewScaleModeCallback_(mode);
+    });
     connect(brightnessOuterSlider_, &QSlider::valueChanged, this, [this](int value) {
         if (brightnessOuterValueLabel_ != nullptr) {
             brightnessOuterValueLabel_->setText(QStringLiteral("%1%").arg(value));
@@ -492,6 +572,15 @@ VideoExportDialog::VideoExportDialog(
                 ? qBound(0.0, static_cast<double>(brightnessInnerSlider_->value()) / 100.0, 1.0)
                 : baseTask_.backgroundBrightnessInner;
             previewBrightnessCallback_(outer, inner);
+        }
+    });
+    connect(layoutSquareScaleSlider_, &QSlider::valueChanged, this, [this](int value) {
+        const double scale = miacode::preview_video::normalizedLayoutSquareScale(static_cast<double>(value) / 100.0);
+        if (layoutSquareScaleValueLabel_ != nullptr) {
+            layoutSquareScaleValueLabel_->setText(QStringLiteral("%1%").arg(qRound(scale * 100.0)));
+        }
+        if (previewLayoutScaleCallback_) {
+            previewLayoutScaleCallback_(scale);
         }
     });
     connect(brightnessInnerSlider_, &QSlider::valueChanged, this, [this](int value) {
@@ -514,6 +603,15 @@ VideoExportDialog::VideoExportDialog(
     initialResolutionAspectRatio_ = selectedResolutionAspectRatio();
     seekPreview(previewCursorSecond_);
     syncLivePreviewTimestampVisibility();
+    if (previewLayoutScaleCallback_) {
+        previewLayoutScaleCallback_(miacode::preview_video::normalizedLayoutSquareScale(baseTask_.layoutSquareScale));
+    }
+    if (previewSmoothBrightnessCallback_) {
+        previewSmoothBrightnessCallback_(baseTask_.smoothBrightness);
+    }
+    if (previewScaleModeCallback_) {
+        previewScaleModeCallback_(baseTask_.backgroundScaleMode);
+    }
     applySelectedAspectRatioToPreview(false);
     refreshDialogGeometry();
     QTimer::singleShot(0, this, [this]() {
@@ -659,6 +757,15 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     updated.backgroundBrightnessInner = brightnessInnerSlider_ != nullptr
         ? qBound(0.0, static_cast<double>(brightnessInnerSlider_->value()) / 100.0, 1.0)
         : updated.backgroundBrightnessInner;
+    updated.layoutSquareScale = layoutSquareScaleSlider_ != nullptr
+        ? miacode::preview_video::normalizedLayoutSquareScale(static_cast<double>(layoutSquareScaleSlider_->value()) / 100.0)
+        : updated.layoutSquareScale;
+    updated.smoothBrightness = smoothBrightnessCheck_ != nullptr
+        ? smoothBrightnessCheck_->isChecked()
+        : updated.smoothBrightness;
+    updated.backgroundScaleMode = backgroundScaleModeCombo_ != nullptr
+        ? static_cast<PreviewBackgroundScaleMode>(backgroundScaleModeCombo_->currentData().toInt())
+        : updated.backgroundScaleMode;
     updated.exportStartSeconds = rangeStartSeconds();
     updated.contentDurationSeconds = qMax(0.0, rangeEndSeconds() - updated.exportStartSeconds);
 

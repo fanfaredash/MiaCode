@@ -3018,6 +3018,8 @@ void MainWindow::onExportPreviewVideo()
     task.audioSettings = previewAudioSettings_;
     task.backgroundBrightnessOuter = previewBackgroundBrightnessOuter_;
     task.backgroundBrightnessInner = previewBackgroundBrightnessInner_;
+    task.layoutSquareScale = previewLayoutSquareScale_;
+    task.smoothBrightness = previewSmoothBrightness_;
     task.backgroundScaleMode = previewBackgroundScaleMode_;
     task.exportStartSeconds = 0.0;
     task.contentDurationSeconds = qMax(0.0, previewDurationSeconds());
@@ -3094,6 +3096,27 @@ void MainWindow::onExportPreviewVideo()
             if (previewCanvas_ != nullptr) {
                 previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
                 previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
+            }
+            savePortableState();
+        },
+        [this](double scale) {
+            previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(scale);
+            if (previewCanvas_ != nullptr) {
+                previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
+            }
+            savePortableState();
+        },
+        [this](bool smooth) {
+            previewSmoothBrightness_ = smooth;
+            if (previewCanvas_ != nullptr) {
+                previewCanvas_->setSmoothBrightness(previewSmoothBrightness_);
+            }
+            savePortableState();
+        },
+        [this](PreviewBackgroundScaleMode mode) {
+            previewBackgroundScaleMode_ = mode;
+            if (previewCanvas_ != nullptr) {
+                previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
             }
             savePortableState();
         },
@@ -3298,6 +3321,8 @@ bool MainWindow::exportPreviewVideoFromCli(
     task.audioSettings = previewAudioSettings_;
     task.backgroundBrightnessOuter = previewBackgroundBrightnessOuter_;
     task.backgroundBrightnessInner = previewBackgroundBrightnessInner_;
+    task.layoutSquareScale = previewLayoutSquareScale_;
+    task.smoothBrightness = previewSmoothBrightness_;
     task.backgroundScaleMode = previewBackgroundScaleMode_;
     task.exportStartSeconds = exportStartSeconds;
     task.contentDurationSeconds = contentDurationSeconds;
@@ -3445,15 +3470,27 @@ void MainWindow::onPreviewRenderSettings()
     auto* restoreButton = new QPushButton(uiText("dialog.render_settings.button.restore_project_default", "Restore Project Audio to Software Default"), audioGroup);
     audioFormLayout->addRow(QString(), restoreButton);
 
-    const auto addVideoSliderRow = [](QWidget* parent, int valuePercent, QSlider** sliderOut, QLabel** labelOut) {
+    const auto addVideoSliderRow = [](
+        QWidget* parent,
+        int minimum,
+        int maximum,
+        int step,
+        int value,
+        const QString& suffix,
+        QSlider** sliderOut,
+        QLabel** labelOut
+    ) {
         auto* row = new QWidget(parent);
         auto* rowLayout = new QHBoxLayout(row);
         rowLayout->setContentsMargins(0, 0, 0, 0);
         rowLayout->setSpacing(8);
         auto* slider = new QSlider(Qt::Horizontal, row);
-        slider->setRange(0, 100);
-        slider->setValue(valuePercent);
-        auto* label = new QLabel(QString::number(valuePercent) + "%", row);
+        slider->setRange(minimum, maximum);
+        slider->setSingleStep(step);
+        slider->setPageStep(step);
+        slider->setTickInterval(step);
+        slider->setValue(value);
+        auto* label = new QLabel(QString::number(value) + suffix, row);
         label->setMinimumWidth(44);
         rowLayout->addWidget(slider, 1);
         rowLayout->addWidget(label, 0);
@@ -3466,7 +3503,11 @@ void MainWindow::onPreviewRenderSettings()
     QLabel* outerBrightnessLabel = nullptr;
     QWidget* outerBrightnessRow = addVideoSliderRow(
         &dialog,
+        0,
+        100,
+        1,
         qRound(previewBackgroundBrightnessOuter_ * 100.0),
+        QStringLiteral("%"),
         &outerBrightnessSlider,
         &outerBrightnessLabel
     );
@@ -3474,9 +3515,25 @@ void MainWindow::onPreviewRenderSettings()
     QLabel* innerBrightnessLabel = nullptr;
     QWidget* innerBrightnessRow = addVideoSliderRow(
         &dialog,
+        0,
+        100,
+        1,
         qRound(previewBackgroundBrightnessInner_ * 100.0),
+        QStringLiteral("%"),
         &innerBrightnessSlider,
         &innerBrightnessLabel
+    );
+    QSlider* layoutSquareScaleSlider = nullptr;
+    QLabel* layoutSquareScaleLabel = nullptr;
+    QWidget* layoutSquareScaleRow = addVideoSliderRow(
+        &dialog,
+        qRound(miacode::preview_video::kLayoutSquareScaleMin * 100.0),
+        qRound(miacode::preview_video::kLayoutSquareScaleMax * 100.0),
+        qRound(miacode::preview_video::kLayoutSquareScaleStep * 100.0),
+        qRound(previewLayoutSquareScale_ * 100.0),
+        QStringLiteral("%"),
+        &layoutSquareScaleSlider,
+        &layoutSquareScaleLabel
     );
 
     auto* scaleModeCombo = new QComboBox(&dialog);
@@ -3521,6 +3578,11 @@ void MainWindow::onPreviewRenderSettings()
         &dialog
     );
     restoreSquareCheck->setChecked(previewAutoRestoreSquareAfterExport_);
+    auto* smoothBrightnessCheck = new QCheckBox(
+        uiText("dialog.render_settings.video.smooth_brightness", "Smooth brightness"),
+        &dialog
+    );
+    smoothBrightnessCheck->setChecked(previewSmoothBrightness_);
 
     auto* videoGroup = new QGroupBox(uiText("dialog.render_settings.video_group", "Video"), &dialog);
     auto* videoFormLayout = new QFormLayout(videoGroup);
@@ -3529,8 +3591,10 @@ void MainWindow::onPreviewRenderSettings()
     videoFormLayout->setVerticalSpacing(8);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_outer", "Background / PV Brightness (Outer)"), outerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Background / PV Brightness (Inner)"), innerBrightnessRow);
+    videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Layout Size"), layoutSquareScaleRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.scale_mode", "Background / PV Scale Mode"), scaleModeCombo);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.canvas_aspect", "Preview Canvas Aspect"), canvasAspectCombo);
+    videoFormLayout->addRow(QString(), smoothBrightnessCheck);
     videoFormLayout->addRow(QString(), restoreSquareCheck);
 
     auto* debugCheck = new QCheckBox(uiText("dialog.render_settings.video.debug", "Show preview debug info"), videoGroup);
@@ -3688,6 +3752,14 @@ void MainWindow::onPreviewRenderSettings()
         }
         savePortableState();
     });
+    connect(layoutSquareScaleSlider, &QSlider::valueChanged, &dialog, [this, layoutSquareScaleLabel](int value) {
+        previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(static_cast<double>(value) / 100.0);
+        layoutSquareScaleLabel->setText(QString::number(qRound(previewLayoutSquareScale_ * 100.0)) + "%");
+        if (previewCanvas_ != nullptr) {
+            previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
+        }
+        savePortableState();
+    });
     connect(scaleModeCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [this, scaleModeCombo](int) {
         const int modeValue = scaleModeCombo->currentData().isValid()
             ? scaleModeCombo->currentData().toInt()
@@ -3707,6 +3779,13 @@ void MainWindow::onPreviewRenderSettings()
     });
     connect(restoreSquareCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
         previewAutoRestoreSquareAfterExport_ = checked;
+        savePortableState();
+    });
+    connect(smoothBrightnessCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
+        previewSmoothBrightness_ = checked;
+        if (previewCanvas_ != nullptr) {
+            previewCanvas_->setSmoothBrightness(previewSmoothBrightness_);
+        }
         savePortableState();
     });
 

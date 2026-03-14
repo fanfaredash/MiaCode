@@ -6,8 +6,10 @@
     showSlideTracks_ = true;
     showJudgeMarkers_ = false;
     showTouchTrail_ = false;
-    previewBackgroundBrightnessOuter_ = 0.2;
-    previewBackgroundBrightnessInner_ = 0.2;
+    previewBackgroundBrightnessOuter_ = miacode::preview_video::kBackgroundBrightnessDefault;
+    previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessDefault;
+    previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
+    previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
     previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     previewCanvasAspectRatio_ = 1.0;
     previewAutoRestoreSquareAfterExport_ = true;
@@ -53,7 +55,11 @@
     if (preview.value("show_touch_trail").isBool()) {
         showTouchTrail_ = preview.value("show_touch_trail").toBool(false);
     }
-    const double legacyBrightness = qBound(0.0, preview.value("background_brightness").toDouble(0.2), 1.0);
+    const double legacyBrightness = qBound(
+        0.0,
+        preview.value("background_brightness").toDouble(miacode::preview_video::kBackgroundBrightnessDefault),
+        1.0
+    );
     if (preview.value("background_brightness_outer").isDouble()) {
         previewBackgroundBrightnessOuter_ =
             qBound(0.0, preview.value("background_brightness_outer").toDouble(legacyBrightness), 1.0);
@@ -65,6 +71,18 @@
             qBound(0.0, preview.value("background_brightness_inner").toDouble(previewBackgroundBrightnessOuter_), 1.0);
     } else {
         previewBackgroundBrightnessInner_ = previewBackgroundBrightnessOuter_;
+    }
+    if (preview.value("layout_square_scale").isDouble()) {
+        previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(
+            preview.value("layout_square_scale").toDouble(previewLayoutSquareScale_)
+        );
+    } else {
+        previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
+    }
+    if (preview.value("smooth_brightness").isBool()) {
+        previewSmoothBrightness_ = preview.value("smooth_brightness").toBool(previewSmoothBrightness_);
+    } else {
+        previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
     }
     const QString scaleMode = preview.value("background_scale_mode").toString().trimmed().toLower();
     if (scaleMode == QLatin1String("fit") || scaleMode == QLatin1String("contain")) {
@@ -130,6 +148,8 @@ void MainWindow::savePortableState() const
     preview.insert("background_brightness", previewBackgroundBrightnessOuter_);
     preview.insert("background_brightness_outer", previewBackgroundBrightnessOuter_);
     preview.insert("background_brightness_inner", previewBackgroundBrightnessInner_);
+    preview.insert("layout_square_scale", previewLayoutSquareScale_);
+    preview.insert("smooth_brightness", previewSmoothBrightness_);
     preview.insert(
         "background_scale_mode",
         previewBackgroundScaleMode_ == PreviewBackgroundScaleMode::FitContain

@@ -172,6 +172,8 @@ void PreviewCanvas::setBackgroundBrightnessOuter(double brightness)
         return;
     }
     backgroundBrightnessOuter_ = clamped;
+    brightnessMaskCache_ = QImage();
+    brightnessMaskCacheSize_ = QSize();
     update();
 }
 
@@ -182,6 +184,31 @@ void PreviewCanvas::setBackgroundBrightnessInner(double brightness)
         return;
     }
     backgroundBrightnessInner_ = clamped;
+    brightnessMaskCache_ = QImage();
+    brightnessMaskCacheSize_ = QSize();
+    update();
+}
+
+void PreviewCanvas::setLayoutSquareScale(double scale)
+{
+    const double normalized = miacode::preview_video::normalizedLayoutSquareScale(scale);
+    if (qFuzzyCompare(layoutSquareScale_ + 1.0, normalized + 1.0)) {
+        return;
+    }
+    layoutSquareScale_ = normalized;
+    brightnessMaskCache_ = QImage();
+    brightnessMaskCacheSize_ = QSize();
+    update();
+}
+
+void PreviewCanvas::setSmoothBrightness(bool smooth)
+{
+    if (smoothBrightness_ == smooth) {
+        return;
+    }
+    smoothBrightness_ = smooth;
+    brightnessMaskCache_ = QImage();
+    brightnessMaskCacheSize_ = QSize();
     update();
 }
 
@@ -206,6 +233,8 @@ void PreviewCanvas::setShowDebugInfo(bool show)
 void PreviewCanvas::reset()
 {
     overlayCache_.clear();
+    brightnessMaskCache_ = QImage();
+    brightnessMaskCacheSize_ = QSize();
     guideTransformCache_.clear();
     guideTransformCacheOrder_.clear();
     spriteTransformCache_.clear();

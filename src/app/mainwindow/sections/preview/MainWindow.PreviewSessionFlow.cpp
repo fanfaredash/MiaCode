@@ -196,6 +196,8 @@ bool MainWindow::sendPreviewPrepareCommand()
         {"background_brightness", previewBackgroundBrightnessOuter_},
         {"background_brightness_outer", previewBackgroundBrightnessOuter_},
         {"background_brightness_inner", previewBackgroundBrightnessInner_},
+        {"layout_square_scale", previewLayoutSquareScale_},
+        {"smooth_brightness", previewSmoothBrightness_},
         {"background_scale_mode", previewBackgroundScaleMode_ == PreviewBackgroundScaleMode::FitContain ? "fit" : "fill"},
     };
     const QString skinDir = resolvePreviewSkinDir();
@@ -235,6 +237,8 @@ bool MainWindow::sendPreviewConfigCommand(const QString& audition)
         {"background_brightness", previewBackgroundBrightnessOuter_},
         {"background_brightness_outer", previewBackgroundBrightnessOuter_},
         {"background_brightness_inner", previewBackgroundBrightnessInner_},
+        {"layout_square_scale", previewLayoutSquareScale_},
+        {"smooth_brightness", previewSmoothBrightness_},
         {"background_scale_mode", previewBackgroundScaleMode_ == PreviewBackgroundScaleMode::FitContain ? "fit" : "fill"},
     };
     if (!audition.isEmpty()) {

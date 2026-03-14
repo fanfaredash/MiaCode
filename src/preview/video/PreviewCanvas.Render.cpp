@@ -17,14 +17,7 @@ QRectF PreviewCanvas::stageRectForSize(const QSize& renderSize) const
 
 QRectF PreviewCanvas::stagePlayfieldRect(const QRectF& stageRect) const
 {
-    const QRectF innerRect = stageRect.adjusted(kPlayfieldInset, kPlayfieldInset, -kPlayfieldInset, -kPlayfieldInset);
-    const qreal playfieldSide = qMax<qreal>(1.0, qMin(innerRect.width(), innerRect.height()));
-    return QRectF(
-        innerRect.center().x() - playfieldSide / 2.0,
-        innerRect.center().y() - playfieldSide / 2.0,
-        playfieldSide,
-        playfieldSide
-    );
+    return miacode::preview_video::centeredLayoutRectForStage(stageRect, layoutSquareScale_);
 }
 
 QRectF PreviewCanvas::currentPlayfieldRect() const
@@ -32,7 +25,7 @@ QRectF PreviewCanvas::currentPlayfieldRect() const
     return stagePlayfieldRect(currentStageRect());
 }
 
-void PreviewCanvas::drawStageBackground(QPainter& painter, const QRectF& stageRect)
+void PreviewCanvas::drawStageBackground(QPainter& painter, const QSize& canvasSize, const QRectF& stageRect)
 {
     QSize mediaSize = mediaFrame_.size();
     bool hasVideoFrame = false;
@@ -94,37 +87,62 @@ void PreviewCanvas::drawStageBackground(QPainter& painter, const QRectF& stageRe
         }
     }
 
-    const int outerDarkAlpha = qBound(0, qRound((1.0 - backgroundBrightnessOuter_) * 255.0), 255);
-    const int innerDarkAlpha = qBound(0, qRound((1.0 - backgroundBrightnessInner_) * 255.0), 255);
-    if (outerDarkAlpha > 0 || innerDarkAlpha > 0) {
-        const QRectF playfieldRect = stagePlayfieldRect(stageRect);
-        const qreal circleRadius = qMax<qreal>(
-            1.0,
-            playfieldRect.width()
-                * qBound(
-                    miacode::layout_ring::kPlayfieldRatioMin,
-                    layoutRingDiameterRatio_,
-                    miacode::layout_ring::kRenderRatioMax
-                )
-                * 0.5
-        );
-        QPainterPath circlePath;
-        circlePath.addEllipse(playfieldRect.center(), circleRadius, circleRadius);
-        if (outerDarkAlpha > 0) {
-            painter.save();
-            QPainterPath outerPath;
-            outerPath.addRect(stageRect);
-            outerPath -= circlePath;
-            painter.setClipPath(outerPath);
-            painter.fillRect(stageRect, QColor(0, 0, 0, outerDarkAlpha));
-            painter.restore();
+    const double outerDarkAlpha = qBound(0.0, 1.0 - backgroundBrightnessOuter_, 1.0);
+    const double innerDarkAlpha = qBound(0.0, 1.0 - backgroundBrightnessInner_, 1.0);
+    if (outerDarkAlpha > 1e-6 || innerDarkAlpha > 1e-6) {
+        const QSize safeSize(qMax(1, canvasSize.width()), qMax(1, canvasSize.height()));
+        const double normalizedLayoutScale = miacode::preview_video::normalizedLayoutSquareScale(layoutSquareScale_);
+        const double ringRatio = miacode::preview_video::effectiveLayoutRingDiameterRatio(layoutRingDiameterRatio_);
+        if (brightnessMaskCache_.isNull()
+            || brightnessMaskCacheSize_ != safeSize
+            || qAbs(brightnessMaskCacheOuter_ - outerDarkAlpha) > 1e-6
+            || qAbs(brightnessMaskCacheInner_ - innerDarkAlpha) > 1e-6
+            || qAbs(brightnessMaskCacheLayoutScale_ - normalizedLayoutScale) > 1e-6
+            || qAbs(brightnessMaskCacheRingRatio_ - ringRatio) > 1e-6
+            || brightnessMaskCacheSmooth_ != smoothBrightness_) {
+            brightnessMaskCache_ = QImage(safeSize, QImage::Format_RGBA8888);
+            brightnessMaskCache_.fill(Qt::transparent);
+            const double layoutSide = miacode::preview_video::layoutSquareSideForCanvasHeight(
+                static_cast<double>(safeSize.height()),
+                normalizedLayoutScale
+            );
+            const double centerX = stageRect.center().x();
+            const double centerY = stageRect.center().y();
+            for (int y = 0; y < safeSize.height(); ++y) {
+                uchar* row = brightnessMaskCache_.scanLine(y);
+                const double dy = static_cast<double>(y) - centerY;
+                for (int x = 0; x < safeSize.width(); ++x) {
+                    const double dx = static_cast<double>(x) - centerX;
+                    const double radius = std::sqrt(dx * dx + dy * dy);
+                    const int alpha = qBound(
+                        0,
+                        qRound(
+                            miacode::preview_video::dimAlphaForRadius(
+                                radius,
+                                outerDarkAlpha,
+                                innerDarkAlpha,
+                                layoutSide,
+                                ringRatio,
+                                smoothBrightness_
+                            ) * 255.0
+                        ),
+                        255
+                    );
+                    const int offset = x * 4;
+                    row[offset + 0] = 0;
+                    row[offset + 1] = 0;
+                    row[offset + 2] = 0;
+                    row[offset + 3] = static_cast<uchar>(alpha);
+                }
+            }
+            brightnessMaskCacheSize_ = safeSize;
+            brightnessMaskCacheOuter_ = outerDarkAlpha;
+            brightnessMaskCacheInner_ = innerDarkAlpha;
+            brightnessMaskCacheLayoutScale_ = normalizedLayoutScale;
+            brightnessMaskCacheRingRatio_ = ringRatio;
+            brightnessMaskCacheSmooth_ = smoothBrightness_;
         }
-        if (innerDarkAlpha > 0) {
-            painter.save();
-            painter.setClipPath(circlePath);
-            painter.fillRect(stageRect, QColor(0, 0, 0, innerDarkAlpha));
-            painter.restore();
-        }
+        painter.drawImage(QPointF(0.0, 0.0), brightnessMaskCache_);
     }
 
 }
@@ -301,7 +319,7 @@ void PreviewCanvas::renderCanvas(
     const QRectF playfieldRect = stagePlayfieldRect(stageRect);
 
     if (drawStageBackgroundEnabled) {
-        drawStageBackground(painter, stageRect);
+        drawStageBackground(painter, canvasSize, stageRect);
     }
     drawPlayfieldBackdrop(painter, playfieldRect);
     const bool batchNative = glRenderer_.isInitialized();

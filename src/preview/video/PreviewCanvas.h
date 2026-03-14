@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/LayoutRingConfig.h"
+#include "common/PreviewVideoGeometryConfig.h"
 #include "PreviewRenderSettings.h"
 #include "PreviewGLRenderer.h"
 #include "TimelineView.h"
@@ -42,6 +43,8 @@ public:
     void setBackgroundBrightness(double brightness);
     void setBackgroundBrightnessOuter(double brightness);
     void setBackgroundBrightnessInner(double brightness);
+    void setLayoutSquareScale(double scale);
+    void setSmoothBrightness(bool smooth);
     void setBackgroundScaleMode(PreviewBackgroundScaleMode mode);
     void setShowDebugInfo(bool show);
     void setShowTimestamp(bool show);
@@ -139,7 +142,7 @@ private:
     QRectF currentPlayfieldRect() const;
     void warmTransformCachesForCurrentSize();
     void prebuildTrackAreaCachesForCurrentState();
-    void drawStageBackground(QPainter& painter, const QRectF& stageRect);
+    void drawStageBackground(QPainter& painter, const QSize& canvasSize, const QRectF& stageRect);
     void drawPlayfieldBackdrop(QPainter& painter, const QRectF& playfieldRect);
     void drawTouchLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawTouchHoldLayer(QPainter& painter, const QRectF& playfieldRect);
@@ -263,6 +266,13 @@ private:
     QImage touchAtlasImage_;
     QImage guideAtlasImage_;
     QHash<quint64, QImage> overlayCache_;
+    QImage brightnessMaskCache_;
+    QSize brightnessMaskCacheSize_;
+    double brightnessMaskCacheOuter_ = -1.0;
+    double brightnessMaskCacheInner_ = -1.0;
+    double brightnessMaskCacheLayoutScale_ = -1.0;
+    double brightnessMaskCacheRingRatio_ = -1.0;
+    bool brightnessMaskCacheSmooth_ = false;
     QHash<quint64, AtlasRegionRef> atlasRegions_;
     QHash<QString, QImage> guideTransformCache_;
     QStringList guideTransformCacheOrder_;
@@ -277,8 +287,10 @@ private:
     QVideoFrame videoFrame_;
 #endif
     double playheadSeconds_ = 0.0;
-    double backgroundBrightnessOuter_ = 0.2;
-    double backgroundBrightnessInner_ = 0.2;
+    double backgroundBrightnessOuter_ = miacode::preview_video::kBackgroundBrightnessDefault;
+    double backgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessDefault;
+    double layoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
+    bool smoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
     PreviewBackgroundScaleMode backgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     QElapsedTimer fpsTimer_;
     int fpsFrameCounter_ = 0;

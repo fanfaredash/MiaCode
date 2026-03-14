@@ -167,6 +167,8 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     noteMarkers_ = source.noteMarkers_;
     backgroundBrightnessOuter_ = source.backgroundBrightnessOuter_;
     backgroundBrightnessInner_ = source.backgroundBrightnessInner_;
+    layoutSquareScale_ = source.layoutSquareScale_;
+    smoothBrightness_ = source.smoothBrightness_;
     backgroundScaleMode_ = source.backgroundScaleMode_;
     layoutRingDiameterRatio_ = source.layoutRingDiameterRatio_;
     showDebugInfo_ = source.showDebugInfo_;
@@ -174,6 +176,8 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     showObjectStatsHud_ = source.showObjectStatsHud_;
 
     overlayCache_.clear();
+    brightnessMaskCache_ = QImage();
+    brightnessMaskCacheSize_ = QSize();
     guideTransformCache_.clear();
     guideTransformCacheOrder_.clear();
     spriteTransformCache_.clear();
