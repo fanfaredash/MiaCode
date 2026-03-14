@@ -3,6 +3,7 @@
 #include <QContextMenuEvent>
 #include <QEvent>
 #include <QMenu>
+#include <QMimeData>
 #include <QPainter>
 #include <QScrollBar>
 #include <QTextBlock>
@@ -72,6 +73,7 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
     });
     updateLineNumberAreaWidth(0);
     setLineWrapMode(QTextEdit::NoWrap);
+    setAcceptRichText(false);
     if (QTextFrame* frame = document()->rootFrame(); frame != nullptr) {
         QTextFrameFormat format = frame->frameFormat();
         format.setLeftMargin(kEditorDocumentLeftInset);
@@ -188,6 +190,33 @@ void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
     );
     menu->exec(event->globalPos());
     delete menu;
+}
+
+void PlainCodeEditor::insertFromMimeData(const QMimeData* source)
+{
+    if (source == nullptr) {
+        return;
+    }
+
+    const QString text = source->text();
+    if (text.isEmpty()) {
+        QTextEdit::insertFromMimeData(source);
+        return;
+    }
+
+    QTextCursor cursor = textCursor();
+    const int selectionStart = cursor.selectionStart();
+    cursor.beginEditBlock();
+    cursor.insertText(text);
+
+    QTextCursor blockCursor(document());
+    blockCursor.setPosition(selectionStart);
+    blockCursor.setPosition(cursor.position(), QTextCursor::KeepAnchor);
+    QTextBlockFormat fmt;
+    fmt.setBottomMargin(static_cast<qreal>(blockSpacingPixels_));
+    blockCursor.mergeBlockFormat(fmt);
+    cursor.endEditBlock();
+    setTextCursor(cursor);
 }
 
 void PlainCodeEditor::paintEvent(QPaintEvent* event)
