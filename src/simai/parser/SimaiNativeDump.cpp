@@ -20,9 +20,9 @@ QJsonObject dumpMarker(const TimelineNoteMarker& marker)
     item.insert("second", marker.second);
     item.insert("end_second", marker.endSecond);
     item.insert("slide_trace_second", marker.slideTraceSecond);
-    // For slide/wifi, `is_each` is kept only as a debug field. Runtime styling
-    // should read `head_each` for the head star and `slide_each` for the trace.
-    item.insert("is_each", marker.isEach);
+    if (marker.type != QLatin1String("slide") && marker.type != QLatin1String("wifi")) {
+        item.insert("is_each", marker.isEach);
+    }
     item.insert("is_break", marker.isBreak);
     item.insert("is_ex", marker.isEx);
     item.insert("is_firework", marker.isFirework);

@@ -889,7 +889,7 @@ QColor tapColorForMarker(const TimelineNoteMarker& marker)
         return QColor("#F39C12");
     }
     // Slide/wifi head stars use `headEach`; the trace body uses `slideEach`.
-    // `isEach` is intentionally ignored for slide-like notes to avoid overlap.
+    // Non-slide notes use `isEach`.
     const bool each = (marker.type == "slide" || marker.type == "wifi") ? marker.headEach : marker.isEach;
     if (each) {
         return QColor("#3FD7FF");
