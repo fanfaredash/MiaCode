@@ -45,16 +45,27 @@ public:
     void setBackgroundScaleMode(PreviewBackgroundScaleMode mode);
     void setShowDebugInfo(bool show);
     void setShowTimestamp(bool show);
+    void setShowObjectStatsHud(bool show);
     bool showTimestamp() const;
     void copyRenderStateFrom(const PreviewCanvas& source);
-    QImage renderOverlayFrame(const QSize& outputSize, double playheadSeconds, bool showTimestamp);
+    QImage renderOverlayFrame(
+        const QSize& outputSize,
+        double playheadSeconds,
+        bool showTimestamp,
+        bool showObjectStatsHud = false
+    );
     bool initializeOffscreenRenderer(
         const QSurfaceFormat& requestedFormat,
         QOpenGLContext* shareContext,
         QString* errorMessage = nullptr
     );
     void shutdownOffscreenRenderer();
-    QImage renderOverlayFrameOffscreen(const QSize& outputSize, double playheadSeconds, bool showTimestamp);
+    QImage renderOverlayFrameOffscreen(
+        const QSize& outputSize,
+        double playheadSeconds,
+        bool showTimestamp,
+        bool showObjectStatsHud = false
+    );
     bool isGpuRendererReadyForDebug() const { return glRenderer_.isInitialized(); }
     bool usedGpuRendererLastFrameForDebug() const { return usedGpuRendererThisFrame_; }
     int cpuFallbackCountLastFrameForDebug() const { return cpuFallbackCount_; }
@@ -283,6 +294,7 @@ private:
     bool usedGpuRendererThisFrame_ = false;
     bool showDebugInfo_ = false;
     bool showTimestamp_ = true;
+    bool showObjectStatsHud_ = false;
     double layoutRingDiameterRatio_ = miacode::layout_ring::kFallbackPlayfieldDiameterRatio;
     bool highQualityRender_ = false;
     bool nativePaintingActive_ = false;

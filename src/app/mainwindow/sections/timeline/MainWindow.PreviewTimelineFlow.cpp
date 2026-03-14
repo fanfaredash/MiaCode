@@ -649,6 +649,32 @@ int MainWindow::updatePreviewStatsLayoutMode(int hostWidth)
     return cardHeight;
 }
 
+double MainWindow::normalizedPreviewCanvasAspectRatio(double ratio) const
+{
+    if (!qIsFinite(ratio)) {
+        return 1.0;
+    }
+    return qBound(1.0, ratio, 3.0);
+}
+
+void MainWindow::setPreviewCanvasAspectRatio(double ratio, bool persistState)
+{
+    const double normalized = normalizedPreviewCanvasAspectRatio(ratio);
+    if (qAbs(previewCanvasAspectRatio_ - normalized) <= 1e-6) {
+        return;
+    }
+    const double previousRatio = previewCanvasAspectRatio_;
+    previewCanvasAspectRatio_ = normalized;
+    if (normalized + 1e-6 < previousRatio) {
+        updatePreviewWorkspaceLayout();
+    } else {
+        updatePreviewPanelLayout();
+    }
+    if (persistState) {
+        savePortableState();
+    }
+}
+
 void MainWindow::updatePreviewWorkspaceLayout()
 {
     if (workspaceSplitter_ == nullptr || previewPanel_ == nullptr || previewControlCard_ == nullptr) {
@@ -679,10 +705,11 @@ void MainWindow::updatePreviewWorkspaceLayout()
     preferredRightWidth = qMax(preferredRightWidth, qMin(kEmbeddedPreviewPanelMinWidth, preferredRightMaxWidth));
 
     const int controlHeight = qMax(previewControlCard_->minimumSizeHint().height(), previewControlCard_->sizeHint().height());
+    const double aspectRatio = normalizedPreviewCanvasAspectRatio(previewCanvasAspectRatio_);
     if (runtimeDebugOutputEnabled_) {
         appendOutput(
             "preview/layout-calc/workspace-base",
-            QString("splitter_rect=%1x%2 handle=%3 available=%4x%5 left_min=%6 right_min=%7 right_max=%8 preferred_ratio=%.2f preferred_right=%9 control_h=%10")
+            QString("splitter_rect=%1x%2 handle=%3 available=%4x%5 left_min=%6 right_min=%7 right_max=%8 preferred_ratio=%.2f preferred_right=%9 control_h=%10 aspect=%11")
                 .arg(splitterRect.width())
                 .arg(splitterRect.height())
                 .arg(handleWidth)
@@ -693,6 +720,7 @@ void MainWindow::updatePreviewWorkspaceLayout()
                 .arg(rightMaxWidth)
                 .arg(preferredRightWidth)
                 .arg(controlHeight)
+                .arg(aspectRatio, 0, 'f', 3)
                 .replace("%.2f", QString::number(kEmbeddedPreviewPanelWidthRatio, 'f', 2))
         );
     }
@@ -711,12 +739,15 @@ void MainWindow::updatePreviewWorkspaceLayout()
                 - minimumStatsHeight
                 - kPreviewStatsBottomGap
         );
-        const int heightLimitedWidth = qMax(0, availablePreviewHeight + kPreviewPanelMarginX * 2);
+        const int heightLimitedWidth = qMax(
+            0,
+            qRound(static_cast<double>(availablePreviewHeight) * aspectRatio) + kPreviewPanelMarginX * 2
+        );
         const int nextRightWidth = qMin(targetRightWidth, qMax(minimumRightWidth, heightLimitedWidth));
         if (runtimeDebugOutputEnabled_) {
             appendOutput(
                 "preview/layout-calc/workspace-iter",
-                QString("iter=%1 target_right=%2 panel_content_w=%3 stats_host_w=%4 stats_min_h=%5 available_preview_h=%6 height_limited_w=%7 next_right=%8")
+                QString("iter=%1 target_right=%2 panel_content_w=%3 stats_host_w=%4 stats_min_h=%5 available_preview_h=%6 height_limited_w=%7 next_right=%8 aspect=%9")
                     .arg(i)
                     .arg(targetRightWidth)
                     .arg(panelContentWidth)
@@ -725,6 +756,7 @@ void MainWindow::updatePreviewWorkspaceLayout()
                     .arg(availablePreviewHeight)
                     .arg(heightLimitedWidth)
                     .arg(nextRightWidth)
+                    .arg(aspectRatio, 0, 'f', 3)
             );
         }
         if (nextRightWidth == targetRightWidth) {
@@ -799,8 +831,11 @@ void MainWindow::updatePreviewPanelLayout()
             - minimumStatsHeight
             - kPreviewStatsBottomGap
     );
-    const int previewSide = qMax(1, qMin(contentWidth, availablePreviewHeight));
-    const int controlY = contentY + previewSide + kPreviewCanvasControlGap;
+    const double aspectRatio = normalizedPreviewCanvasAspectRatio(previewCanvasAspectRatio_);
+    const int previewWidth = qMax(1, qMin(contentWidth, qRound(static_cast<double>(availablePreviewHeight) * aspectRatio)));
+    const int previewHeight = qMax(1, qRound(static_cast<double>(previewWidth) / aspectRatio));
+    const int previewX = contentX + qMax(0, (contentWidth - previewWidth) / 2);
+    const int controlY = contentY + previewHeight + kPreviewCanvasControlGap;
     const int statsAreaY = controlY + controlHeight + kPreviewControlStatsGap;
     const int statsAreaHeight = qMax(0, panelRect.height() - (statsAreaY - panelRect.y()) - kPreviewStatsBottomGap);
     const int statsHeight = qMin(minimumStatsHeight, statsAreaHeight);
@@ -808,7 +843,7 @@ void MainWindow::updatePreviewPanelLayout()
     if (runtimeDebugOutputEnabled_) {
         appendOutput(
             "preview/layout-calc/panel",
-            QString("panel=%1x%2 content=(x=%3,y=%4,w=%5) control_h=%6 stats_host_w=%7 stats_min_h=%8 available_preview_h=%9 preview_side=%10 control_y=%11 stats_area_y=%12 stats_area_h=%13 stats_y=%14 stats_h=%15")
+            QString("panel=%1x%2 content=(x=%3,y=%4,w=%5) control_h=%6 stats_host_w=%7 stats_min_h=%8 available_preview_h=%9 preview=%10x%11 aspect=%12 control_y=%13 stats_area_y=%14 stats_area_h=%15 stats_y=%16 stats_h=%17")
                 .arg(panelRect.width())
                 .arg(panelRect.height())
                 .arg(contentX)
@@ -818,7 +853,9 @@ void MainWindow::updatePreviewPanelLayout()
                 .arg(statsHostWidth)
                 .arg(minimumStatsHeight)
                 .arg(availablePreviewHeight)
-                .arg(previewSide)
+                .arg(previewWidth)
+                .arg(previewHeight)
+                .arg(aspectRatio, 0, 'f', 3)
                 .arg(controlY)
                 .arg(statsAreaY)
                 .arg(statsAreaHeight)
@@ -827,7 +864,7 @@ void MainWindow::updatePreviewPanelLayout()
         );
     }
 
-    previewCanvasFrame_->setGeometry(contentX, contentY, previewSide, previewSide);
+    previewCanvasFrame_->setGeometry(previewX, contentY, previewWidth, previewHeight);
     previewCanvasContainer_->setGeometry(previewCanvasFrame_->rect().adjusted(1, 1, -1, -1));
     previewControlCard_->setGeometry(contentX, controlY, contentWidth, controlHeight);
     previewStatsCard_->setGeometry(contentX, statsY, contentWidth, statsHeight);

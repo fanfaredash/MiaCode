@@ -955,6 +955,103 @@ void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
         return;
     }
 
+    struct HudStats {
+        int tapTotal = 0;
+        int tapPlayed = 0;
+        int holdTotal = 0;
+        int holdPlayed = 0;
+        int slideTotal = 0;
+        int slidePlayed = 0;
+        int touchTotal = 0;
+        int touchPlayed = 0;
+        int breakTotal = 0;
+        int breakPlayed = 0;
+        int totalCount = 0;
+        int totalPlayed = 0;
+    };
+    const auto computeHudStats = [this](double second) {
+        HudStats stats;
+        int helperTapNonBreakTotal = 0;
+        int helperTapNonBreakPlayed = 0;
+        int helperTapBreakTotal = 0;
+        int helperTapBreakPlayed = 0;
+        int baseTotalCount = 0;
+        int baseTotalPlayed = 0;
+        for (const TimelineNoteMarker& marker : noteMarkers_) {
+            const QString type = marker.type.toLower();
+            const bool played = marker.second <= (second + 1e-6);
+            const bool isTap = (type == "tap");
+            const bool isHold = (type == "hold" || type == "touch_hold");
+            const bool isSlide = (type == "slide" || type == "wifi");
+            const bool isTouch = (type == "touch");
+            const bool isBreak = marker.isBreak || marker.headBreak || marker.trackBreak;
+            if (played) {
+                ++baseTotalPlayed;
+            }
+            ++baseTotalCount;
+            if (isTap && !marker.isBreak) {
+                ++stats.tapTotal;
+                if (played) {
+                    ++stats.tapPlayed;
+                }
+            }
+            if (isHold) {
+                ++stats.holdTotal;
+                if (played) {
+                    ++stats.holdPlayed;
+                }
+            }
+            if (isSlide) {
+                ++stats.slideTotal;
+                if (played) {
+                    ++stats.slidePlayed;
+                }
+            }
+            if (isTouch) {
+                ++stats.touchTotal;
+                if (played) {
+                    ++stats.touchPlayed;
+                }
+            }
+            if (isBreak) {
+                ++stats.breakTotal;
+                if (played) {
+                    ++stats.breakPlayed;
+                }
+            }
+            if (isSlide && marker.hasHeadStar) {
+                const double helperMoment = marker.slideTraceSecond > marker.second
+                    ? marker.slideTraceSecond
+                    : marker.second;
+                const bool helperPlayed = helperMoment <= (second + 1e-6);
+                if (marker.headBreak) {
+                    ++helperTapBreakTotal;
+                    if (helperPlayed) {
+                        ++helperTapBreakPlayed;
+                    }
+                } else {
+                    ++helperTapNonBreakTotal;
+                    if (helperPlayed) {
+                        ++helperTapNonBreakPlayed;
+                    }
+                }
+            }
+        }
+        stats.tapTotal += helperTapNonBreakTotal;
+        stats.tapPlayed += helperTapNonBreakPlayed;
+        stats.breakTotal += helperTapBreakTotal;
+        stats.breakPlayed += helperTapBreakPlayed;
+        stats.totalCount = baseTotalCount + helperTapNonBreakTotal + helperTapBreakTotal;
+        stats.totalPlayed = baseTotalPlayed + helperTapNonBreakPlayed + helperTapBreakPlayed;
+        return stats;
+    };
+    const auto fmtHudStat = [](const QString& name, int played, int total) {
+        return QString("%1  %2/%3")
+            .arg(name.leftJustified(5, QChar(' '), true))
+            .arg(played)
+            .arg(total);
+    };
+
     painter.setPen(QColor("#D9E2EC"));
     const qreal hudPadding = qBound<qreal>(10.0, stageRect.width() * 0.028, 18.0);
     const int timeFontPointSize = qBound(12, qRound(stageRect.width() * 0.03), 20);
@@ -966,33 +1063,91 @@ void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
             QPointF(stageRect.left() + hudPadding, stageRect.bottom() - hudPadding),
             formatHudTimeLabel(playheadSeconds_)
         );
+    } else {
+        QFont fpsFont = hudMonoFont(debugFontPointSize, QFont::Medium);
+        painter.setFont(fpsFont);
+        const QFontMetrics metrics(fpsFont);
+        const qreal leftX = stageRect.left() + hudPadding;
+        const qreal baseline0 = stageRect.top() + hudPadding + metrics.ascent();
+        const QString rendererLabel = usedGpuRendererThisFrame_ ? "Renderer: GPU" : "Renderer: CPU";
+        painter.drawText(
+            QPointF(leftX, baseline0),
+            rendererLabel
+        );
+        painter.drawText(
+            QPointF(leftX, baseline0 + metrics.height()),
+            QString::number(fpsDisplay_, 'f', 1) + " FPS"
+        );
+        painter.drawText(
+            QPointF(leftX, baseline0 + metrics.height() * 2),
+            QString("Fallback: %1")
+                .arg(cpuFallbackCount_)
+        );
+
+        painter.setFont(timeFont);
+        painter.drawText(
+            QPointF(stageRect.left() + hudPadding, stageRect.bottom() - hudPadding),
+            formatHudTimeLabel(playheadSeconds_)
+        );
+    }
+
+    if (!showObjectStatsHud_) {
         return;
     }
-    QFont fpsFont = hudMonoFont(debugFontPointSize, QFont::Medium);
-    painter.setFont(fpsFont);
-    const QFontMetrics metrics(fpsFont);
-    const qreal leftX = stageRect.left() + hudPadding;
-    const qreal baseline0 = stageRect.top() + hudPadding + metrics.ascent();
-    const QString rendererLabel = usedGpuRendererThisFrame_ ? "Renderer: GPU" : "Renderer: CPU";
-    painter.drawText(
-        QPointF(leftX, baseline0),
-        rendererLabel
-    );
-    painter.drawText(
-        QPointF(leftX, baseline0 + metrics.height()),
-        QString::number(fpsDisplay_, 'f', 1) + " FPS"
-    );
-    painter.drawText(
-        QPointF(leftX, baseline0 + metrics.height() * 2),
-        QString("Fallback: %1")
-            .arg(cpuFallbackCount_)
-    );
 
-    painter.setFont(timeFont);
-    painter.drawText(
-        QPointF(stageRect.left() + hudPadding, stageRect.bottom() - hudPadding),
-        formatHudTimeLabel(playheadSeconds_)
-    );
+    const QRectF playfieldRect = stagePlayfieldRect(stageRect);
+    const qreal statsLeftLimit = playfieldRect.right() + hudPadding;
+    const qreal statsRightLimit = stageRect.right() - hudPadding;
+    const qreal availableStatsWidth = statsRightLimit - statsLeftLimit;
+    if (availableStatsWidth < 40.0) {
+        return;
+    }
+
+    const HudStats stats = computeHudStats(playheadSeconds_);
+    const QStringList lines{
+        fmtHudStat(QStringLiteral("Tap"), stats.tapPlayed, stats.tapTotal),
+        fmtHudStat(QStringLiteral("Hold"), stats.holdPlayed, stats.holdTotal),
+        fmtHudStat(QStringLiteral("Slide"), stats.slidePlayed, stats.slideTotal),
+        fmtHudStat(QStringLiteral("Touch"), stats.touchPlayed, stats.touchTotal),
+        fmtHudStat(QStringLiteral("Break"), stats.breakPlayed, stats.breakTotal),
+        fmtHudStat(QStringLiteral("Total"), stats.totalPlayed, stats.totalCount),
+    };
+    int statsFontPointSize = qBound(9, timeFontPointSize, 20);
+    QFont statsFont = hudMonoFont(statsFontPointSize, QFont::Medium);
+    QFontMetrics statsMetrics(statsFont);
+    auto maxLineWidth = [&statsMetrics, &lines]() {
+        int width = 0;
+        for (const QString& line : lines) {
+            width = qMax(width, statsMetrics.horizontalAdvance(line));
+        }
+        return width;
+    };
+    int linesMaxWidth = maxLineWidth();
+    while (statsFontPointSize > 8 && linesMaxWidth > availableStatsWidth) {
+        --statsFontPointSize;
+        statsFont = hudMonoFont(statsFontPointSize, QFont::Medium);
+        statsMetrics = QFontMetrics(statsFont);
+        linesMaxWidth = maxLineWidth();
+    }
+    if (linesMaxWidth > availableStatsWidth) {
+        return;
+    }
+
+    const qreal baselineBottom = stageRect.bottom() - hudPadding;
+    const qreal baselineTop = baselineBottom - static_cast<qreal>(qMax(0, lines.size() - 1)) * statsMetrics.height();
+    if (baselineTop - statsMetrics.ascent() < stageRect.top() + hudPadding) {
+        return;
+    }
+
+    painter.setFont(statsFont);
+    for (int i = 0; i < lines.size(); ++i) {
+        const qreal baseline = baselineTop + static_cast<qreal>(i) * statsMetrics.height();
+        const int lineWidth = statsMetrics.horizontalAdvance(lines[i]);
+        painter.drawText(
+            QPointF(statsRightLimit - lineWidth, baseline),
+            lines[i]
+        );
+    }
 }
 
 bool PreviewCanvas::drawSpriteImage(

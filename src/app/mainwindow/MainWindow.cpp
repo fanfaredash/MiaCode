@@ -3021,7 +3021,17 @@ void MainWindow::onExportPreviewVideo()
     task.backgroundScaleMode = previewBackgroundScaleMode_;
     task.exportStartSeconds = 0.0;
     task.contentDurationSeconds = qMax(0.0, previewDurationSeconds());
-    task.resolution = 1024;
+    const double currentAspect = normalizedPreviewCanvasAspectRatio(previewCanvasAspectRatio_);
+    if (qAbs(currentAspect - (16.0 / 9.0)) < 0.05) {
+        task.outputWidth = 1280;
+        task.outputHeight = 720;
+    } else if (qAbs(currentAspect - (4.0 / 3.0)) < 0.05) {
+        task.outputWidth = 1024;
+        task.outputHeight = 768;
+    } else {
+        task.outputWidth = 1024;
+        task.outputHeight = 1024;
+    }
     task.fps = 60;
     task.showTimestamp = true;
 
@@ -3072,6 +3082,9 @@ void MainWindow::onExportPreviewVideo()
             return !legacyPygamePreviewEnabled_ && qtPreviewPlaying_;
         },
         currentPreviewSecond,
+        [this](double ratio) {
+            setPreviewCanvasAspectRatio(ratio, false);
+        },
         this
     );
 
@@ -3119,6 +3132,9 @@ void MainWindow::onExportPreviewVideo()
     }
     dialog.move(targetTopLeft);
     dialog.exec();
+    if (dialog.exportSucceeded() && previewAutoRestoreSquareAfterExport_) {
+        setPreviewCanvasAspectRatio(1.0, false);
+    }
 }
 
 bool MainWindow::exportPreviewVideoFromCli(
@@ -3151,8 +3167,11 @@ bool MainWindow::exportPreviewVideoFromCli(
     if (previewCanvas_ == nullptr) {
         return fail(QStringLiteral("preview canvas is not initialized"));
     }
-    if (request.resolution <= 0 || request.fps <= 0) {
-        return fail(QStringLiteral("resolution and fps must be positive integers"));
+    if (request.outputWidth <= 0 || request.outputHeight <= 0 || request.fps <= 0) {
+        return fail(QStringLiteral("output width/height and fps must be positive integers"));
+    }
+    if (request.outputWidth < request.outputHeight) {
+        return fail(QStringLiteral("output size currently requires width >= height"));
     }
 
     const QString chartPath = resolveChartPathFromCliInput(request.chartPathOrDirectory);
@@ -3269,7 +3288,8 @@ bool MainWindow::exportPreviewVideoFromCli(
     task.backgroundScaleMode = previewBackgroundScaleMode_;
     task.exportStartSeconds = exportStartSeconds;
     task.contentDurationSeconds = contentDurationSeconds;
-    task.resolution = request.resolution;
+    task.outputWidth = request.outputWidth;
+    task.outputHeight = request.outputHeight;
     task.fps = request.fps;
     task.showTimestamp = request.showTimestamp;
     task.outputPath = outputPath;
@@ -3459,6 +3479,35 @@ void MainWindow::onPreviewRenderSettings()
     if (scaleModeIndex >= 0) {
         scaleModeCombo->setCurrentIndex(scaleModeIndex);
     }
+    auto* canvasAspectCombo = new QComboBox(&dialog);
+    canvasAspectCombo->addItem(
+        uiText("dialog.render_settings.video.canvas_aspect.square", "1:1 (Square)"),
+        1.0
+    );
+    canvasAspectCombo->addItem(
+        uiText("dialog.render_settings.video.canvas_aspect.4_3", "4:3"),
+        (4.0 / 3.0)
+    );
+    canvasAspectCombo->addItem(
+        uiText("dialog.render_settings.video.canvas_aspect.16_9", "16:9"),
+        (16.0 / 9.0)
+    );
+    int canvasAspectIndex = 0;
+    double bestAspectDiff = 1e9;
+    for (int i = 0; i < canvasAspectCombo->count(); ++i) {
+        const double option = canvasAspectCombo->itemData(i).toDouble();
+        const double diff = qAbs(option - previewCanvasAspectRatio_);
+        if (diff < bestAspectDiff) {
+            bestAspectDiff = diff;
+            canvasAspectIndex = i;
+        }
+    }
+    canvasAspectCombo->setCurrentIndex(canvasAspectIndex);
+    auto* restoreSquareCheck = new QCheckBox(
+        uiText("dialog.render_settings.video.auto_restore_square", "Auto restore 1:1 after export"),
+        &dialog
+    );
+    restoreSquareCheck->setChecked(previewAutoRestoreSquareAfterExport_);
 
     auto* videoGroup = new QGroupBox(uiText("dialog.render_settings.video_group", "Video"), &dialog);
     auto* videoFormLayout = new QFormLayout(videoGroup);
@@ -3468,6 +3517,8 @@ void MainWindow::onPreviewRenderSettings()
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_outer", "Background / PV Brightness (Outer)"), outerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Background / PV Brightness (Inner)"), innerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.scale_mode", "Background / PV Scale Mode"), scaleModeCombo);
+    videoFormLayout->addRow(uiText("dialog.render_settings.video.canvas_aspect", "Preview Canvas Aspect"), canvasAspectCombo);
+    videoFormLayout->addRow(QString(), restoreSquareCheck);
 
     auto* debugCheck = new QCheckBox(uiText("dialog.render_settings.video.debug", "Show preview debug info"), videoGroup);
     debugCheck->setChecked(previewShowDebugInfo_);
@@ -3633,6 +3684,16 @@ void MainWindow::onPreviewRenderSettings()
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setBackgroundScaleMode(mode);
         }
+        savePortableState();
+    });
+    connect(canvasAspectCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [this, canvasAspectCombo](int) {
+        const double ratio = canvasAspectCombo->currentData().isValid()
+            ? canvasAspectCombo->currentData().toDouble()
+            : 1.0;
+        setPreviewCanvasAspectRatio(ratio, true);
+    });
+    connect(restoreSquareCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
+        previewAutoRestoreSquareAfterExport_ = checked;
         savePortableState();
     });
 

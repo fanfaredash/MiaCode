@@ -9,6 +9,8 @@
     previewBackgroundBrightnessOuter_ = 0.2;
     previewBackgroundBrightnessInner_ = 0.2;
     previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
+    previewCanvasAspectRatio_ = 1.0;
+    previewAutoRestoreSquareAfterExport_ = true;
     previewShowDebugInfo_ = false;
     editorLineSpacingFactor_ = kEditorLineSpacingFactorDefault;
     editorTextFontPointSize_ = qBound(
@@ -73,6 +75,18 @@
     if (preview.value("show_debug_info").isBool()) {
         previewShowDebugInfo_ = preview.value("show_debug_info").toBool(false);
     }
+    if (preview.value("canvas_aspect_ratio").isDouble()) {
+        previewCanvasAspectRatio_ = normalizedPreviewCanvasAspectRatio(
+            preview.value("canvas_aspect_ratio").toDouble(previewCanvasAspectRatio_)
+        );
+    } else {
+        previewCanvasAspectRatio_ = 1.0;
+    }
+    if (preview.value("auto_restore_square_after_export").isBool()) {
+        previewAutoRestoreSquareAfterExport_ = preview.value("auto_restore_square_after_export").toBool(true);
+    } else {
+        previewAutoRestoreSquareAfterExport_ = true;
+    }
     if (preview.value("audio").isObject()) {
         softwarePreviewAudioSettings_ = PreviewAudioSettings::fromJson(preview.value("audio").toObject());
     } else {
@@ -123,6 +137,8 @@ void MainWindow::savePortableState() const
             : QStringLiteral("fill")
     );
     preview.insert("show_debug_info", previewShowDebugInfo_);
+    preview.insert("canvas_aspect_ratio", previewCanvasAspectRatio_);
+    preview.insert("auto_restore_square_after_export", previewAutoRestoreSquareAfterExport_);
     preview.insert("audio", softwarePreviewAudioSettings_.toJson());
 
     app.insert("preview", preview);

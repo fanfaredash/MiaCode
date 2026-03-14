@@ -93,6 +93,15 @@ bool PreviewCanvas::showTimestamp() const
     return showTimestamp_;
 }
 
+void PreviewCanvas::setShowObjectStatsHud(bool show)
+{
+    if (showObjectStatsHud_ == show) {
+        return;
+    }
+    showObjectStatsHud_ = show;
+    update();
+}
+
 void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
 {
     tapImage_ = source.tapImage_;
@@ -162,6 +171,7 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     layoutRingDiameterRatio_ = source.layoutRingDiameterRatio_;
     showDebugInfo_ = source.showDebugInfo_;
     showTimestamp_ = source.showTimestamp_;
+    showObjectStatsHud_ = source.showObjectStatsHud_;
 
     overlayCache_.clear();
     guideTransformCache_.clear();
@@ -172,15 +182,22 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     wifiTrackAreaCache_.clear();
 }
 
-QImage PreviewCanvas::renderOverlayFrame(const QSize& outputSize, double playheadSeconds, bool showTimestamp)
+QImage PreviewCanvas::renderOverlayFrame(
+    const QSize& outputSize,
+    double playheadSeconds,
+    bool showTimestamp,
+    bool showObjectStatsHud
+)
 {
     const QSize safeSize(qMax(1, outputSize.width()), qMax(1, outputSize.height()));
     const double originalPlayhead = playheadSeconds_;
     const bool originalShowTimestamp = showTimestamp_;
+    const bool originalShowObjectStatsHud = showObjectStatsHud_;
     const bool originalHighQualityRender = highQualityRender_;
 
     playheadSeconds_ = playheadSeconds;
     showTimestamp_ = showTimestamp;
+    showObjectStatsHud_ = showObjectStatsHud;
     highQualityRender_ = true;
 
     QImage frame(safeSize, QImage::Format_RGBA8888);
@@ -192,6 +209,7 @@ QImage PreviewCanvas::renderOverlayFrame(const QSize& outputSize, double playhea
 
     playheadSeconds_ = originalPlayhead;
     showTimestamp_ = originalShowTimestamp;
+    showObjectStatsHud_ = originalShowObjectStatsHud;
     highQualityRender_ = originalHighQualityRender;
     return frame;
 }
@@ -348,7 +366,12 @@ bool PreviewCanvas::ensureOffscreenFramebuffer(const QSize& framebufferSize, QSt
     return true;
 }
 
-QImage PreviewCanvas::renderOverlayFrameOffscreen(const QSize& outputSize, double playheadSeconds, bool showTimestamp)
+QImage PreviewCanvas::renderOverlayFrameOffscreen(
+    const QSize& outputSize,
+    double playheadSeconds,
+    bool showTimestamp,
+    bool showObjectStatsHud
+)
 {
     const QSize safeSize(qMax(1, outputSize.width()), qMax(1, outputSize.height()));
     offscreenDrawNsLastFrame_ = 0;
@@ -366,10 +389,12 @@ QImage PreviewCanvas::renderOverlayFrameOffscreen(const QSize& outputSize, doubl
 
     const double originalPlayhead = playheadSeconds_;
     const bool originalShowTimestamp = showTimestamp_;
+    const bool originalShowObjectStatsHud = showObjectStatsHud_;
     const bool originalHighQualityRender = highQualityRender_;
 
     playheadSeconds_ = playheadSeconds;
     showTimestamp_ = showTimestamp;
+    showObjectStatsHud_ = showObjectStatsHud;
     highQualityRender_ = true;
 
     QImage frame;
@@ -401,6 +426,7 @@ QImage PreviewCanvas::renderOverlayFrameOffscreen(const QSize& outputSize, doubl
 
     playheadSeconds_ = originalPlayhead;
     showTimestamp_ = originalShowTimestamp;
+    showObjectStatsHud_ = originalShowObjectStatsHud;
     highQualityRender_ = originalHighQualityRender;
     offscreenContext_->doneCurrent();
 
