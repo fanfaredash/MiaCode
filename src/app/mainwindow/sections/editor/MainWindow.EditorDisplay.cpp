@@ -1,5 +1,6 @@
 ﻿void MainWindow::loadPortableState()
 {
+    lastSessionFilePath_.clear();
     lastOpenDir_.clear();
     softwarePreviewAudioSettings_ = PreviewAudioSettings();
     previewAudioSettings_ = softwarePreviewAudioSettings_;
@@ -43,6 +44,10 @@
     const QString dir = app.value("last_open_dir").toString();
     if (!dir.isEmpty() && QDir(dir).exists()) {
         lastOpenDir_ = QDir::cleanPath(dir);
+    }
+    const QString lastOpenFile = app.value("last_open_file").toString();
+    if (!lastOpenFile.isEmpty()) {
+        lastSessionFilePath_ = QDir::cleanPath(lastOpenFile);
     }
     const QString trackPath = app.value("last_track_path").toString();
     if (!trackPath.isEmpty() && QFileInfo::exists(trackPath)) {
@@ -140,6 +145,7 @@ void MainWindow::savePortableState() const
     root.insert("ui", ui);
 
     app.insert("last_open_dir", lastOpenDir_);
+    app.insert("last_open_file", lastSessionFilePath_);
     app.insert("last_track_path", lastTrackPath_);
     app.insert("show_slide_tracks", true);
 

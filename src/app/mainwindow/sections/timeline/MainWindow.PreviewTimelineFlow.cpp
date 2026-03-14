@@ -192,6 +192,7 @@ void MainWindow::setCurrentFilePath(const QString& path)
         }
     }
     currentFilePath_ = normalizedPath;
+    lastSessionFilePath_ = currentFilePath_;
     if (!currentFilePath_.isEmpty()) {
         setLastOpenDirectory(currentFilePath_);
 

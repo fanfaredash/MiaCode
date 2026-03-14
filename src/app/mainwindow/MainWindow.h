@@ -162,6 +162,8 @@ private:
     bool currentSelectionRange(int* startPos, int* endPos) const;
     void setEditorText(const QString& text);
     void setMetadataExtraText(const QString& text);
+    bool openFileAtPath(const QString& path, bool showStatusMessage = true, bool showErrors = true);
+    bool restoreLastSessionFile();
     void setCurrentFilePath(const QString& path);
     void updateWindowTitle();
     void updateCurrentFileLabel();
@@ -335,6 +337,7 @@ private:
     QProcess* previewProcess_ = nullptr;
     QString previewStdoutBuffer_;
     QString previewStderrBuffer_;
+    QString lastSessionFilePath_;
     QString currentFilePath_;
     QString lastOpenDir_;
     QString lastTrackPath_;
