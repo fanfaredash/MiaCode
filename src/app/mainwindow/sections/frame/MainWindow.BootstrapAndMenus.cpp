@@ -1219,8 +1219,12 @@ MainWindow::MainWindow(QWidget* parent)
         previewMediaController_->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
     }
     updatePauseButtonAppearance();
-    loadDocument(SimaiDocument::createEmpty());
-    logStartupStage("initial_empty_document_applied");
+    if (restoreLastSessionFile()) {
+        logStartupStage("restored_last_document_applied");
+    } else {
+        loadDocument(SimaiDocument::createEmpty());
+        logStartupStage("initial_empty_document_applied");
+    }
     updatePreviewSliderRange();
     updatePreviewSliderPosition(0.0);
     logStartupStage("initial_document_loaded");
