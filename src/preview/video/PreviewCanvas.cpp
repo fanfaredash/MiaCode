@@ -55,7 +55,6 @@ constexpr qreal kLaneRotationBaseDegrees = 22.5;
 constexpr qreal kLaneAngleStepDegrees = 45.0;
 constexpr qreal kDistanceToScaleSlope = static_cast<qreal>(miacode::preview_gameplay::kDistanceToScaleSlope);
 constexpr qreal kDistanceToScaleOffset = static_cast<qreal>(miacode::preview_gameplay::kDistanceToScaleOffset);
-constexpr qreal kPlayfieldInset = static_cast<qreal>(miacode::preview_gameplay::kPlayfieldInset);
 constexpr qreal kSlideStarFadeBaseScale = 0.45;
 constexpr qreal kSlideStarFadeScaleDelta = 0.55;
 constexpr qreal kSkinAssetScale = 0.5;

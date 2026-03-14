@@ -33,6 +33,9 @@ public:
     using CurrentPreviewSecondCallback = std::function<double()>;
     using PreviewAspectRatioCallback = std::function<void(double ratio)>;
     using PreviewBrightnessCallback = std::function<void(double outer, double inner)>;
+    using PreviewLayoutScaleCallback = std::function<void(double scale)>;
+    using PreviewSmoothBrightnessCallback = std::function<void(bool smooth)>;
+    using PreviewScaleModeCallback = std::function<void(PreviewBackgroundScaleMode mode)>;
 
     VideoExportDialog(
         const VideoExportTask& baseTask,
@@ -44,6 +47,9 @@ public:
         CurrentPreviewSecondCallback currentPreviewSecondCallback = {},
         PreviewAspectRatioCallback previewAspectRatioCallback = {},
         PreviewBrightnessCallback previewBrightnessCallback = {},
+        PreviewLayoutScaleCallback previewLayoutScaleCallback = {},
+        PreviewSmoothBrightnessCallback previewSmoothBrightnessCallback = {},
+        PreviewScaleModeCallback previewScaleModeCallback = {},
         QWidget* parent = nullptr
     );
     bool exportSucceeded() const { return exportSucceeded_; }
@@ -95,6 +101,9 @@ private:
     CurrentPreviewSecondCallback currentPreviewSecondCallback_;
     PreviewAspectRatioCallback previewAspectRatioCallback_;
     PreviewBrightnessCallback previewBrightnessCallback_;
+    PreviewLayoutScaleCallback previewLayoutScaleCallback_;
+    PreviewSmoothBrightnessCallback previewSmoothBrightnessCallback_;
+    PreviewScaleModeCallback previewScaleModeCallback_;
 
     double totalDurationSeconds_ = 0.0;
     double previewCursorSecond_ = 0.0;
@@ -110,10 +119,14 @@ private:
     QLineEdit* outputPathEdit_ = nullptr;
     QComboBox* resolutionCombo_ = nullptr;
     QCheckBox* showTimestampCheck_ = nullptr;
+    QCheckBox* smoothBrightnessCheck_ = nullptr;
+    QComboBox* backgroundScaleModeCombo_ = nullptr;
     QSlider* brightnessOuterSlider_ = nullptr;
     QSlider* brightnessInnerSlider_ = nullptr;
+    QSlider* layoutSquareScaleSlider_ = nullptr;
     QLabel* brightnessOuterValueLabel_ = nullptr;
     QLabel* brightnessInnerValueLabel_ = nullptr;
+    QLabel* layoutSquareScaleValueLabel_ = nullptr;
     QDoubleSpinBox* startSecondSpin_ = nullptr;
     QDoubleSpinBox* endSecondSpin_ = nullptr;
     QSlider* previewSlider_ = nullptr;

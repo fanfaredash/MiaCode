@@ -1207,6 +1207,8 @@ MainWindow::MainWindow(QWidget* parent)
     if (previewCanvas_ != nullptr) {
         previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
         previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
+        previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
+        previewCanvas_->setSmoothBrightness(previewSmoothBrightness_);
         previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
         previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
     }

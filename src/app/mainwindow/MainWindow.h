@@ -13,6 +13,7 @@
 #include "PreviewRenderSettings.h"
 #include "SimaiDocument.h"
 #include "TimelineView.h"
+#include "common/PreviewVideoGeometryConfig.h"
 
 class QAction;
 class QByteArray;
@@ -376,8 +377,10 @@ private:
     bool showSlideTracks_ = true;
     bool showJudgeMarkers_ = false;
     bool showTouchTrail_ = false;
-    double previewBackgroundBrightnessOuter_ = 0.2;
-    double previewBackgroundBrightnessInner_ = 0.2;
+    double previewBackgroundBrightnessOuter_ = miacode::preview_video::kBackgroundBrightnessDefault;
+    double previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessDefault;
+    double previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
+    bool previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
     PreviewBackgroundScaleMode previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     double previewCanvasAspectRatio_ = 1.0;
     bool previewAutoRestoreSquareAfterExport_ = true;

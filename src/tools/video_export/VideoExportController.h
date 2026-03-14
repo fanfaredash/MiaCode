@@ -6,6 +6,7 @@
 #include "PreviewRenderSettings.h"
 #include "PreviewAudioSettings.h"
 #include "TimelineView.h"
+#include "common/PreviewVideoGeometryConfig.h"
 
 class PreviewCanvas;
 class QProgressDialog;
@@ -16,8 +17,10 @@ struct VideoExportTask {
     QString trackPath;
     QVector<TimelineNoteMarker> noteMarkers;
     PreviewAudioSettings audioSettings;
-    double backgroundBrightnessOuter = 0.2;
-    double backgroundBrightnessInner = 0.2;
+    double backgroundBrightnessOuter = miacode::preview_video::kBackgroundBrightnessDefault;
+    double backgroundBrightnessInner = miacode::preview_video::kBackgroundBrightnessDefault;
+    double layoutSquareScale = miacode::preview_video::kLayoutSquareScaleDefault;
+    bool smoothBrightness = miacode::preview_video::kSmoothBrightnessDefault;
     PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
     double exportStartSeconds = 0.0;
     double contentDurationSeconds = 0.0;

@@ -183,7 +183,6 @@ constexpr double kDiagJudgeEffectFireworkTouchTriggerDelaySeconds =
 constexpr double kDiagJudgeEffectFireworkDurationSeconds = miacode::preview_gameplay::kJudgeEffectFireworkDurationSeconds;
 constexpr double kDiagLogicalCanvasSize = miacode::preview_gameplay::kLogicalCanvasSize;
 constexpr double kDiagLogicalCanvasCenter = kDiagLogicalCanvasSize / 2.0;
-constexpr double kDiagPlayfieldInset = miacode::preview_gameplay::kPlayfieldInset;
 constexpr double kOutlineTargetToPlayfieldRatio =
     (kDiagLogicalCanvasSize - miacode::layout_ring::kOutlineInsetLogical * 2.0) / kDiagLogicalCanvasSize;
 
@@ -241,17 +240,10 @@ QPointF diagLaneUnitVector(int lane)
     return QPointF(qCos(angleRad), qSin(angleRad));
 }
 
-QRectF diagPlayfieldRect(int width, int height)
+QRectF diagPlayfieldRect(int width, int height, double layoutSquareScale)
 {
     const QRectF stageRect(0.0, 0.0, qMax(1, width), qMax(1, height));
-    const QRectF inner = stageRect.adjusted(kDiagPlayfieldInset, kDiagPlayfieldInset, -kDiagPlayfieldInset, -kDiagPlayfieldInset);
-    const qreal side = qMax<qreal>(1.0, qMin(inner.width(), inner.height()));
-    return QRectF(
-        inner.center().x() - side / 2.0,
-        inner.center().y() - side / 2.0,
-        side,
-        side
-    );
+    return miacode::preview_video::centeredLayoutRectForStage(stageRect, layoutSquareScale);
 }
 
 QPointF diagMapLogicalPointToPlayfield(const QPointF& logicalPoint, const QRectF& playfieldRect)
@@ -309,11 +301,12 @@ QVector<ObjectTraceItem> collectVisibleObjectTrace(
     const QVector<TimelineNoteMarker>& markers,
     double playheadSecond,
     int frameWidth,
-    int frameHeight
+    int frameHeight,
+    double layoutSquareScale
 )
 {
     QVector<ObjectTraceItem> items;
-    const QRectF playfield = diagPlayfieldRect(frameWidth, frameHeight);
+    const QRectF playfield = diagPlayfieldRect(frameWidth, frameHeight, layoutSquareScale);
     for (const TimelineNoteMarker& marker : markers) {
         const QString keyBase = markerTraceKey(marker);
 
@@ -924,7 +917,9 @@ QImage buildCircularDimMaskImage(
     int frameHeight,
     double outerDimAlpha,
     double innerDimAlpha,
-    double layoutRingDiameterRatio
+    double layoutRingDiameterRatio,
+    double layoutSquareScale,
+    bool smoothBrightness
 )
 {
     const int width = qMax(1, frameWidth);
@@ -938,24 +933,33 @@ QImage buildCircularDimMaskImage(
         return mask;
     }
 
-    const double playfieldSide = static_cast<double>(qMax(1, qMin(width, height) - qRound(kDiagPlayfieldInset * 2.0)));
-    const double ratio = qBound(
-        miacode::layout_ring::kPlayfieldRatioMin,
-        layoutRingDiameterRatio,
-        miacode::layout_ring::kRenderRatioMax
+    const double layoutSide = miacode::preview_video::layoutSquareSideForCanvasHeight(
+        static_cast<double>(height),
+        layoutSquareScale
     );
-    const double radius = qMax(1.0, playfieldSide * ratio * 0.5);
     const double centerX = (static_cast<double>(width) - 1.0) * 0.5;
     const double centerY = (static_cast<double>(height) - 1.0) * 0.5;
-    const double radiusSq = radius * radius;
 
     for (int y = 0; y < height; ++y) {
         uchar* row = mask.scanLine(y);
         const double dy = static_cast<double>(y) - centerY;
         for (int x = 0; x < width; ++x) {
             const double dx = static_cast<double>(x) - centerX;
-            const bool inside = (dx * dx + dy * dy) <= radiusSq;
-            const int alpha = inside ? innerAlpha : outerAlpha;
+            const double radius = std::sqrt(dx * dx + dy * dy);
+            const int alpha = qBound(
+                0,
+                qRound(
+                    miacode::preview_video::dimAlphaForRadius(
+                        radius,
+                        outerDimAlpha,
+                        innerDimAlpha,
+                        layoutSide,
+                        layoutRingDiameterRatio,
+                        smoothBrightness
+                    ) * 255.0
+                ),
+                255
+            );
             const int offset = x * 4;
             row[offset + 0] = 0;
             row[offset + 1] = 0;
@@ -2278,7 +2282,9 @@ VideoExportResult VideoExportController::exportFullPreview(
             frameHeight,
             outerDimAlpha,
             innerDimAlpha,
-            ringRatio
+            ringRatio,
+            task.layoutSquareScale,
+            task.smoothBrightness
         );
         if (dimMask.isNull() || !dimMask.save(dimMaskPath)) {
             result.message = QStringLiteral("Unable to create dim mask image.");
@@ -2491,6 +2497,8 @@ VideoExportResult VideoExportController::exportFullPreview(
     exportCanvas.copyRenderStateFrom(*sourceCanvas);
     exportCanvas.setBackgroundBrightnessOuter(task.backgroundBrightnessOuter);
     exportCanvas.setBackgroundBrightnessInner(task.backgroundBrightnessInner);
+    exportCanvas.setLayoutSquareScale(task.layoutSquareScale);
+    exportCanvas.setSmoothBrightness(task.smoothBrightness);
     exportCanvas.setBackgroundScaleMode(task.backgroundScaleMode);
     exportCanvas.setShowDebugInfo(false);
     exportCanvas.setNoteMarkers(exportMarkers);
@@ -2663,6 +2671,8 @@ VideoExportResult VideoExportController::exportFullPreview(
         diagReferenceCanvas.copyRenderStateFrom(exportCanvas);
         diagReferenceCanvas.setBackgroundBrightnessOuter(task.backgroundBrightnessOuter);
         diagReferenceCanvas.setBackgroundBrightnessInner(task.backgroundBrightnessInner);
+        diagReferenceCanvas.setLayoutSquareScale(task.layoutSquareScale);
+        diagReferenceCanvas.setSmoothBrightness(task.smoothBrightness);
         diagReferenceCanvas.setBackgroundScaleMode(task.backgroundScaleMode);
         diagReferenceCanvas.setShowDebugInfo(false);
         diagReferenceCanvas.setNoteMarkers({});
@@ -2693,6 +2703,8 @@ VideoExportResult VideoExportController::exportFullPreview(
         diagCpuCompareCanvas.copyRenderStateFrom(exportCanvas);
         diagCpuCompareCanvas.setBackgroundBrightnessOuter(task.backgroundBrightnessOuter);
         diagCpuCompareCanvas.setBackgroundBrightnessInner(task.backgroundBrightnessInner);
+        diagCpuCompareCanvas.setLayoutSquareScale(task.layoutSquareScale);
+        diagCpuCompareCanvas.setSmoothBrightness(task.smoothBrightness);
         diagCpuCompareCanvas.setBackgroundScaleMode(task.backgroundScaleMode);
         diagCpuCompareCanvas.setShowDebugInfo(false);
         diagCpuCompareCanvas.setNoteMarkers(exportMarkers);
@@ -2740,7 +2752,8 @@ VideoExportResult VideoExportController::exportFullPreview(
                 exportMarkers,
                 exportSecond,
                 frameSize.width(),
-                frameSize.height()
+                frameSize.height(),
+                task.layoutSquareScale
             );
         }
         if (diagObjectTraceEnabled
