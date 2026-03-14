@@ -14,6 +14,7 @@
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
@@ -395,15 +396,58 @@ VideoExportDialog::VideoExportDialog(
     );
 
     optionsContent_ = new QWidget(this);
-    auto* optionsLayout = new QVBoxLayout(optionsContent_);
+    auto* optionsLayout = new QGridLayout(optionsContent_);
     optionsLayout->setContentsMargins(0, 0, 0, 0);
-    optionsLayout->setSpacing(4);
+    optionsLayout->setHorizontalSpacing(10);
+    optionsLayout->setVerticalSpacing(6);
+    optionsLayout->setColumnStretch(0, 1);
+    optionsLayout->setColumnStretch(1, 1);
     showTimestampCheck_ = new QCheckBox(
         l10n(QStringLiteral("Show bottom-left timestamp"), QStringLiteral("显示左下角时间戳")),
         optionsContent_
     );
     showTimestampCheck_->setChecked(baseTask_.showTimestamp);
-    optionsLayout->addWidget(showTimestampCheck_, 0, Qt::AlignLeft);
+    optionsLayout->addWidget(showTimestampCheck_, 0, 0, 1, 1, Qt::AlignLeft);
+    const auto addBrightnessOption = [this](QWidget* parent, const QString& title, int valuePercent, QSlider** sliderOut, QLabel** valueOut) {
+        auto* container = new QWidget(parent);
+        auto* containerLayout = new QVBoxLayout(container);
+        containerLayout->setContentsMargins(0, 0, 0, 0);
+        containerLayout->setSpacing(2);
+        auto* header = new QWidget(container);
+        auto* headerLayout = new QHBoxLayout(header);
+        headerLayout->setContentsMargins(0, 0, 0, 0);
+        headerLayout->setSpacing(6);
+        auto* titleLabel = new QLabel(title, header);
+        auto* valueLabel = new QLabel(QStringLiteral("%1%").arg(valuePercent), header);
+        valueLabel->setMinimumWidth(40);
+        valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        headerLayout->addWidget(titleLabel, 1);
+        headerLayout->addWidget(valueLabel, 0);
+        auto* slider = new QSlider(Qt::Horizontal, container);
+        slider->setRange(0, 100);
+        slider->setValue(valuePercent);
+        containerLayout->addWidget(header, 0);
+        containerLayout->addWidget(slider, 0);
+        *sliderOut = slider;
+        *valueOut = valueLabel;
+        return container;
+    };
+    QWidget* outerBrightnessOption = addBrightnessOption(
+        optionsContent_,
+        l10n(QStringLiteral("Brightness (Outer)"), QStringLiteral("澶栭儴浜害")),
+        qRound(qBound(0.0, baseTask_.backgroundBrightnessOuter, 1.0) * 100.0),
+        &brightnessOuterSlider_,
+        &brightnessOuterValueLabel_
+    );
+    QWidget* innerBrightnessOption = addBrightnessOption(
+        optionsContent_,
+        l10n(QStringLiteral("Brightness (Inner)"), QStringLiteral("鍐呴儴浜害")),
+        qRound(qBound(0.0, baseTask_.backgroundBrightnessInner, 1.0) * 100.0),
+        &brightnessInnerSlider_,
+        &brightnessInnerValueLabel_
+    );
+    optionsLayout->addWidget(outerBrightnessOption, 1, 0, 1, 1);
+    optionsLayout->addWidget(innerBrightnessOption, 1, 1, 1, 1);
     rootLayout->addWidget(
         buildCollapsibleSection(
             l10n(QStringLiteral("Options"), QStringLiteral("选项")),
@@ -439,6 +483,16 @@ VideoExportDialog::VideoExportDialog(
             return;
         }
         previewAspectRatioCallback_(static_cast<double>(size.width()) / static_cast<double>(size.height()));
+    });
+    connect(brightnessOuterSlider_, &QSlider::valueChanged, this, [this](int value) {
+        if (brightnessOuterValueLabel_ != nullptr) {
+            brightnessOuterValueLabel_->setText(QStringLiteral("%1%").arg(value));
+        }
+    });
+    connect(brightnessInnerSlider_, &QSlider::valueChanged, this, [this](int value) {
+        if (brightnessInnerValueLabel_ != nullptr) {
+            brightnessInnerValueLabel_->setText(QStringLiteral("%1%").arg(value));
+        }
     });
     previewSlider_->setFocusPolicy(Qt::StrongFocus);
     previewSlider_->installEventFilter(this);
@@ -560,6 +614,12 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     updated.outputHeight = selectedSize.height() > 0 ? selectedSize.height() : updated.outputHeight;
     updated.fps = 60;
     updated.showTimestamp = showTimestampCheck_ != nullptr ? showTimestampCheck_->isChecked() : true;
+    updated.backgroundBrightnessOuter = brightnessOuterSlider_ != nullptr
+        ? qBound(0.0, static_cast<double>(brightnessOuterSlider_->value()) / 100.0, 1.0)
+        : updated.backgroundBrightnessOuter;
+    updated.backgroundBrightnessInner = brightnessInnerSlider_ != nullptr
+        ? qBound(0.0, static_cast<double>(brightnessInnerSlider_->value()) / 100.0, 1.0)
+        : updated.backgroundBrightnessInner;
     updated.exportStartSeconds = rangeStartSeconds();
     updated.contentDurationSeconds = qMax(0.0, rangeEndSeconds() - updated.exportStartSeconds);
 
