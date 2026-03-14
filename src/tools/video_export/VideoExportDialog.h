@@ -98,6 +98,10 @@ private:
     QLineEdit* outputPathEdit_ = nullptr;
     QComboBox* resolutionCombo_ = nullptr;
     QCheckBox* showTimestampCheck_ = nullptr;
+    QSlider* brightnessOuterSlider_ = nullptr;
+    QSlider* brightnessInnerSlider_ = nullptr;
+    QLabel* brightnessOuterValueLabel_ = nullptr;
+    QLabel* brightnessInnerValueLabel_ = nullptr;
     QDoubleSpinBox* startSecondSpin_ = nullptr;
     QDoubleSpinBox* endSecondSpin_ = nullptr;
     QSlider* previewSlider_ = nullptr;
