@@ -3085,6 +3085,18 @@ void MainWindow::onExportPreviewVideo()
         [this](double ratio) {
             setPreviewCanvasAspectRatio(ratio, false);
         },
+        [this](double outer, double inner) {
+            previewBackgroundBrightnessOuter_ = qBound(0.0, outer, 1.0);
+            previewBackgroundBrightnessInner_ = qBound(0.0, inner, 1.0);
+            if (previewMediaController_ != nullptr) {
+                previewMediaController_->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
+            }
+            if (previewCanvas_ != nullptr) {
+                previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
+                previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
+            }
+            savePortableState();
+        },
         this
     );
 
@@ -3132,7 +3144,8 @@ void MainWindow::onExportPreviewVideo()
     }
     dialog.move(targetTopLeft);
     dialog.exec();
-    if (dialog.exportSucceeded() && previewAutoRestoreSquareAfterExport_) {
+    if (previewAutoRestoreSquareAfterExport_
+        && (dialog.exportSucceeded() || dialog.previewAspectChangedByDialog())) {
         setPreviewCanvasAspectRatio(1.0, false);
     }
 }
