@@ -32,6 +32,7 @@ public:
     using IsPreviewPlayingCallback = std::function<bool()>;
     using CurrentPreviewSecondCallback = std::function<double()>;
     using PreviewAspectRatioCallback = std::function<void(double ratio)>;
+    using PreviewBrightnessCallback = std::function<void(double outer, double inner)>;
 
     VideoExportDialog(
         const VideoExportTask& baseTask,
@@ -42,15 +43,20 @@ public:
         IsPreviewPlayingCallback isPreviewPlayingCallback = {},
         CurrentPreviewSecondCallback currentPreviewSecondCallback = {},
         PreviewAspectRatioCallback previewAspectRatioCallback = {},
+        PreviewBrightnessCallback previewBrightnessCallback = {},
         QWidget* parent = nullptr
     );
     bool exportSucceeded() const { return exportSucceeded_; }
+    bool previewAspectChangedByDialog() const { return previewAspectChangedByDialog_; }
 
 private:
     void browseOutputPath();
     void startExport();
     bool applyUiToTask(VideoExportTask* task, QString* errorMessage) const;
     void refreshDialogGeometry();
+    void syncLivePreviewTimestampVisibility();
+    void restoreLivePreviewState();
+    void applySelectedAspectRatioToPreview(bool markChanged);
 
     void onRangeSpinChanged();
     void onPreviewSliderChanged(int sliderValue);
@@ -68,6 +74,7 @@ private:
     bool isPreviewPlaying() const;
     double currentPreviewSecond() const;
     QSize selectedResolution() const;
+    double selectedResolutionAspectRatio() const;
     double rangeStartSeconds() const;
     double rangeEndSeconds() const;
     double leadInStartSeconds() const;
@@ -76,6 +83,7 @@ private:
     void updateSectionToggle(QToolButton* toggle, QWidget* content, bool expanded);
 
     void closeEvent(QCloseEvent* event) override;
+    void done(int result) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
 
     VideoExportTask baseTask_;
@@ -86,12 +94,16 @@ private:
     IsPreviewPlayingCallback isPreviewPlayingCallback_;
     CurrentPreviewSecondCallback currentPreviewSecondCallback_;
     PreviewAspectRatioCallback previewAspectRatioCallback_;
+    PreviewBrightnessCallback previewBrightnessCallback_;
 
     double totalDurationSeconds_ = 0.0;
     double previewCursorSecond_ = 0.0;
+    double initialResolutionAspectRatio_ = 1.0;
     bool exportSucceeded_ = false;
     bool syncingRangeUi_ = false;
     bool rangePreviewPlaying_ = false;
+    bool previewAspectChangedByDialog_ = false;
+    bool previewStateRestored_ = false;
     int previewSeekHeldArrowKey_ = 0;
     QElapsedTimer previewSeekHeldArrowElapsed_;
 

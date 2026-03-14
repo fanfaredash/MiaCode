@@ -43,7 +43,7 @@ constexpr int kPreviewTickIntervalMs = 33;
 constexpr int kFormLabelWidth = 52;
 constexpr int kRangeLabelWidth = 36;
 constexpr int kFormRowSpacing = 3;
-constexpr int kTimelineHorizontalInset = 12;
+constexpr int kSectionContentLeftInset = 12;
 constexpr int kDialogMinWidth = 560;
 constexpr int kSetButtonLeftGap = 12;
 constexpr qreal kPreviewSeekInitialStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekInitialStepSeconds);
@@ -199,6 +199,7 @@ VideoExportDialog::VideoExportDialog(
     IsPreviewPlayingCallback isPreviewPlayingCallback,
     CurrentPreviewSecondCallback currentPreviewSecondCallback,
     PreviewAspectRatioCallback previewAspectRatioCallback,
+    PreviewBrightnessCallback previewBrightnessCallback,
     QWidget* parent
 )
     : QDialog(parent)
@@ -210,6 +211,7 @@ VideoExportDialog::VideoExportDialog(
     , isPreviewPlayingCallback_(std::move(isPreviewPlayingCallback))
     , currentPreviewSecondCallback_(std::move(currentPreviewSecondCallback))
     , previewAspectRatioCallback_(std::move(previewAspectRatioCallback))
+    , previewBrightnessCallback_(std::move(previewBrightnessCallback))
     , totalDurationSeconds_(qMax(0.0, baseTask.contentDurationSeconds))
 {
     setWindowTitle(l10n(QStringLiteral("Export Video"), QStringLiteral("导出视频")));
@@ -284,7 +286,7 @@ VideoExportDialog::VideoExportDialog(
 
     rangeContent_ = new QWidget(this);
     auto* rangeLayout = new QVBoxLayout(rangeContent_);
-    rangeLayout->setContentsMargins(0, 0, 0, 0);
+    rangeLayout->setContentsMargins(kSectionContentLeftInset, 0, 0, 0);
     rangeLayout->setSpacing(6);
 
     startSecondSpin_ = new TimestampSpinBox(rangeContent_);
@@ -307,7 +309,7 @@ VideoExportDialog::VideoExportDialog(
     startRowLayout->setSpacing(kSetButtonLeftGap);
     auto* startLabel = new QLabel(l10n(QStringLiteral("Start"), QStringLiteral("起始")), startRow);
     startLabel->setFixedWidth(kRangeLabelWidth);
-    startLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    startLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     auto* setStartButton = new QPushButton(l10n(QStringLiteral("Set"), QStringLiteral("设定")), startRow);
     setStartButton->setFixedWidth(54);
     startRowLayout->addWidget(startLabel, 0);
@@ -322,7 +324,7 @@ VideoExportDialog::VideoExportDialog(
     endRowLayout->setSpacing(kSetButtonLeftGap);
     auto* endLabel = new QLabel(l10n(QStringLiteral("End"), QStringLiteral("结束")), endRow);
     endLabel->setFixedWidth(kRangeLabelWidth);
-    endLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    endLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     auto* setEndButton = new QPushButton(l10n(QStringLiteral("Set"), QStringLiteral("设定")), endRow);
     setEndButton->setFixedWidth(54);
     endRowLayout->addWidget(endLabel, 0);
@@ -345,8 +347,8 @@ VideoExportDialog::VideoExportDialog(
     previewSlider_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     auto* previewSliderRow = new QWidget(rangeContent_);
     auto* previewSliderLayout = new QHBoxLayout(previewSliderRow);
-    const int sliderRightInset = kTimelineHorizontalInset + rightAlignedButtonWidth + kFormRowSpacing;
-    previewSliderLayout->setContentsMargins(kTimelineHorizontalInset, 2, sliderRightInset, 0);
+    const int sliderRightInset = kSectionContentLeftInset + rightAlignedButtonWidth + kFormRowSpacing;
+    previewSliderLayout->setContentsMargins(0, 2, sliderRightInset, 0);
     previewSliderLayout->setSpacing(0);
     previewSliderLayout->addWidget(previewSlider_, 1);
     rangeLayout->addWidget(previewSliderRow, 0);
@@ -356,7 +358,7 @@ VideoExportDialog::VideoExportDialog(
     previewTimeLabel_->setFixedWidth(rangeControlWidth);
     auto* previewTimeRow = new QWidget(rangeContent_);
     auto* previewTimeLayout = new QHBoxLayout(previewTimeRow);
-    previewTimeLayout->setContentsMargins(kTimelineHorizontalInset, 0, 0, 0);
+    previewTimeLayout->setContentsMargins(0, 0, 0, 0);
     previewTimeLayout->setSpacing(0);
     previewTimeLayout->addWidget(previewTimeLabel_, 0, Qt::AlignLeft);
     previewTimeLayout->addStretch(1);
@@ -364,7 +366,7 @@ VideoExportDialog::VideoExportDialog(
 
     auto* previewButtonsRow = new QWidget(rangeContent_);
     auto* previewButtonsLayout = new QHBoxLayout(previewButtonsRow);
-    previewButtonsLayout->setContentsMargins(kTimelineHorizontalInset, 2, 0, 2);
+    previewButtonsLayout->setContentsMargins(0, 2, 0, 2);
     previewButtonsLayout->setSpacing(6);
     stopPreviewButton_ = new QToolButton(previewButtonsRow);
     stopPreviewButton_->setObjectName(QStringLiteral("RangePreviewControlButton"));
@@ -397,7 +399,7 @@ VideoExportDialog::VideoExportDialog(
 
     optionsContent_ = new QWidget(this);
     auto* optionsLayout = new QGridLayout(optionsContent_);
-    optionsLayout->setContentsMargins(0, 0, 0, 0);
+    optionsLayout->setContentsMargins(kSectionContentLeftInset, 0, 0, 0);
     optionsLayout->setHorizontalSpacing(10);
     optionsLayout->setVerticalSpacing(6);
     optionsLayout->setColumnStretch(0, 1);
@@ -446,9 +448,8 @@ VideoExportDialog::VideoExportDialog(
         &brightnessInnerSlider_,
         &brightnessInnerValueLabel_
     );
-    // Keep sliders on separate lines for readability.
-    optionsLayout->addWidget(outerBrightnessOption, 1, 0, 1, 2);
-    optionsLayout->addWidget(innerBrightnessOption, 2, 0, 1, 2);
+    optionsLayout->addWidget(outerBrightnessOption, 1, 0, 1, 1);
+    optionsLayout->addWidget(innerBrightnessOption, 1, 1, 1, 1);
     rootLayout->addWidget(
         buildCollapsibleSection(
             l10n(QStringLiteral("Options"), QStringLiteral("选项")),
@@ -476,23 +477,33 @@ VideoExportDialog::VideoExportDialog(
     connect(previewRangeButton_, &QToolButton::clicked, this, &VideoExportDialog::toggleRangePreview);
     connect(stopPreviewButton_, &QToolButton::clicked, this, &VideoExportDialog::stopRangePreviewToLeadIn);
     connect(resolutionCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
-        if (!previewAspectRatioCallback_) {
-            return;
-        }
-        const QSize size = selectedResolution();
-        if (size.width() <= 0 || size.height() <= 0) {
-            return;
-        }
-        previewAspectRatioCallback_(static_cast<double>(size.width()) / static_cast<double>(size.height()));
+        applySelectedAspectRatioToPreview(true);
+    });
+    connect(showTimestampCheck_, &QCheckBox::toggled, this, [this](bool) {
+        syncLivePreviewTimestampVisibility();
     });
     connect(brightnessOuterSlider_, &QSlider::valueChanged, this, [this](int value) {
         if (brightnessOuterValueLabel_ != nullptr) {
             brightnessOuterValueLabel_->setText(QStringLiteral("%1%").arg(value));
         }
+        if (previewBrightnessCallback_) {
+            const double outer = qBound(0.0, static_cast<double>(value) / 100.0, 1.0);
+            const double inner = brightnessInnerSlider_ != nullptr
+                ? qBound(0.0, static_cast<double>(brightnessInnerSlider_->value()) / 100.0, 1.0)
+                : baseTask_.backgroundBrightnessInner;
+            previewBrightnessCallback_(outer, inner);
+        }
     });
     connect(brightnessInnerSlider_, &QSlider::valueChanged, this, [this](int value) {
         if (brightnessInnerValueLabel_ != nullptr) {
             brightnessInnerValueLabel_->setText(QStringLiteral("%1%").arg(value));
+        }
+        if (previewBrightnessCallback_) {
+            const double outer = brightnessOuterSlider_ != nullptr
+                ? qBound(0.0, static_cast<double>(brightnessOuterSlider_->value()) / 100.0, 1.0)
+                : baseTask_.backgroundBrightnessOuter;
+            const double inner = qBound(0.0, static_cast<double>(value) / 100.0, 1.0);
+            previewBrightnessCallback_(outer, inner);
         }
     });
     previewSlider_->setFocusPolicy(Qt::StrongFocus);
@@ -500,13 +511,10 @@ VideoExportDialog::VideoExportDialog(
 
     updatePreviewPlayPauseUi();
     syncRangeUi();
+    initialResolutionAspectRatio_ = selectedResolutionAspectRatio();
     seekPreview(previewCursorSecond_);
-    if (previewAspectRatioCallback_) {
-        const QSize size = selectedResolution();
-        if (size.width() > 0 && size.height() > 0) {
-            previewAspectRatioCallback_(static_cast<double>(size.width()) / static_cast<double>(size.height()));
-        }
-    }
+    syncLivePreviewTimestampVisibility();
+    applySelectedAspectRatioToPreview(false);
     refreshDialogGeometry();
     QTimer::singleShot(0, this, [this]() {
         if (outputPathEdit_ != nullptr) {
@@ -579,6 +587,36 @@ void VideoExportDialog::refreshDialogGeometry()
     setMinimumHeight(targetHeight);
     setMaximumHeight(targetHeight);
     resize(targetWidth, targetHeight);
+}
+
+void VideoExportDialog::syncLivePreviewTimestampVisibility()
+{
+    if (sourceCanvas_ == nullptr || showTimestampCheck_ == nullptr) {
+        return;
+    }
+    sourceCanvas_->setShowTimestamp(showTimestampCheck_->isChecked());
+}
+
+void VideoExportDialog::restoreLivePreviewState()
+{
+    if (previewStateRestored_) {
+        return;
+    }
+    previewStateRestored_ = true;
+    if (sourceCanvas_ != nullptr) {
+        sourceCanvas_->setShowTimestamp(true);
+    }
+}
+
+void VideoExportDialog::applySelectedAspectRatioToPreview(bool markChanged)
+{
+    const double aspectRatio = selectedResolutionAspectRatio();
+    if (markChanged && qAbs(aspectRatio - initialResolutionAspectRatio_) > 0.0001) {
+        previewAspectChangedByDialog_ = true;
+    }
+    if (previewAspectRatioCallback_) {
+        previewAspectRatioCallback_(aspectRatio);
+    }
 }
 
 void VideoExportDialog::browseOutputPath()
@@ -664,6 +702,15 @@ QSize VideoExportDialog::selectedResolution() const
         return selected;
     }
     return QSize(qMax(1, baseTask_.outputWidth), qMax(1, baseTask_.outputHeight));
+}
+
+double VideoExportDialog::selectedResolutionAspectRatio() const
+{
+    const QSize size = selectedResolution();
+    if (size.width() <= 0 || size.height() <= 0) {
+        return 1.0;
+    }
+    return static_cast<double>(size.width()) / static_cast<double>(size.height());
 }
 
 void VideoExportDialog::onRangeSpinChanged()
@@ -985,7 +1032,15 @@ void VideoExportDialog::startExport()
 void VideoExportDialog::closeEvent(QCloseEvent* event)
 {
     stopRangePreview(false);
+    restoreLivePreviewState();
     QDialog::closeEvent(event);
+}
+
+void VideoExportDialog::done(int result)
+{
+    stopRangePreview(false);
+    restoreLivePreviewState();
+    QDialog::done(result);
 }
 
 bool VideoExportDialog::eventFilter(QObject* watched, QEvent* event)
