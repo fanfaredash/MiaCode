@@ -434,20 +434,21 @@ VideoExportDialog::VideoExportDialog(
     };
     QWidget* outerBrightnessOption = addBrightnessOption(
         optionsContent_,
-        l10n(QStringLiteral("Brightness (Outer)"), QStringLiteral("澶栭儴浜害")),
+        l10n(QStringLiteral("Brightness (Outer)"), QStringLiteral("Brightness (Outer)")),
         qRound(qBound(0.0, baseTask_.backgroundBrightnessOuter, 1.0) * 100.0),
         &brightnessOuterSlider_,
         &brightnessOuterValueLabel_
     );
     QWidget* innerBrightnessOption = addBrightnessOption(
         optionsContent_,
-        l10n(QStringLiteral("Brightness (Inner)"), QStringLiteral("鍐呴儴浜害")),
+        l10n(QStringLiteral("Brightness (Inner)"), QStringLiteral("Brightness (Inner)")),
         qRound(qBound(0.0, baseTask_.backgroundBrightnessInner, 1.0) * 100.0),
         &brightnessInnerSlider_,
         &brightnessInnerValueLabel_
     );
-    optionsLayout->addWidget(outerBrightnessOption, 1, 0, 1, 1);
-    optionsLayout->addWidget(innerBrightnessOption, 1, 1, 1, 1);
+    // Keep sliders on separate lines for readability.
+    optionsLayout->addWidget(outerBrightnessOption, 1, 0, 1, 2);
+    optionsLayout->addWidget(innerBrightnessOption, 2, 0, 1, 2);
     rootLayout->addWidget(
         buildCollapsibleSection(
             l10n(QStringLiteral("Options"), QStringLiteral("选项")),
