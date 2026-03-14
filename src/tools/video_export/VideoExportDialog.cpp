@@ -46,6 +46,10 @@ constexpr int kFormRowSpacing = 3;
 constexpr int kSectionContentLeftInset = 12;
 constexpr int kDialogMinWidth = 560;
 constexpr int kSetButtonLeftGap = 12;
+constexpr int kPreviewControlButtonWidth = 32;
+constexpr int kPreviewControlButtonHeight = 26;
+constexpr int kPreviewControlSpacing = 6;
+constexpr int kPreviewControlsToSliderGap = 8;
 constexpr qreal kPreviewSeekInitialStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekInitialStepSeconds);
 constexpr qreal kPreviewSeekMaxStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekMaxStepSeconds);
 constexpr qreal kPreviewSeekLinearAccelerationSecondsPerMs =
@@ -260,6 +264,7 @@ VideoExportDialog::VideoExportDialog(
     outputLayout->addWidget(outputPathEdit_, 1);
     outputLayout->addWidget(browseButton, 0);
     rootLayout->addWidget(outputRow, 0);
+    const int sectionRightInset = rightAlignedButtonWidth + kFormRowSpacing;
 
     auto* resolutionRow = new QWidget(this);
     auto* resolutionLayout = new QHBoxLayout(resolutionRow);
@@ -316,8 +321,8 @@ VideoExportDialog::VideoExportDialog(
     auto* startLabel = new QLabel(l10n(QStringLiteral("Start"), QStringLiteral("起始")), startRow);
     startLabel->setFixedWidth(kRangeLabelWidth);
     startLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    auto* setStartButton = new QPushButton(l10n(QStringLiteral("Set"), QStringLiteral("设定")), startRow);
-    setStartButton->setFixedWidth(54);
+    auto* setStartButton = new QPushButton(l10n(QStringLiteral("Set Start"), QStringLiteral("设定起始")), startRow);
+    setStartButton->setFixedWidth(84);
     startRowLayout->addWidget(startLabel, 0);
     startRowLayout->addWidget(startSecondSpin_, 0, Qt::AlignLeft);
     startRowLayout->addWidget(setStartButton, 0, Qt::AlignLeft);
@@ -331,8 +336,8 @@ VideoExportDialog::VideoExportDialog(
     auto* endLabel = new QLabel(l10n(QStringLiteral("End"), QStringLiteral("结束")), endRow);
     endLabel->setFixedWidth(kRangeLabelWidth);
     endLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    auto* setEndButton = new QPushButton(l10n(QStringLiteral("Set"), QStringLiteral("设定")), endRow);
-    setEndButton->setFixedWidth(54);
+    auto* setEndButton = new QPushButton(l10n(QStringLiteral("Set End"), QStringLiteral("设定结束")), endRow);
+    setEndButton->setFixedWidth(84);
     endRowLayout->addWidget(endLabel, 0);
     endRowLayout->addWidget(endSecondSpin_, 0, Qt::AlignLeft);
     endRowLayout->addWidget(setEndButton, 0, Qt::AlignLeft);
@@ -346,66 +351,55 @@ VideoExportDialog::VideoExportDialog(
         + kSetButtonLeftGap
         + setStartButton->width();
 
-    previewSlider_ = new QSlider(Qt::Horizontal, rangeContent_);
+    previewCursorSecond_ = qBound(0.0, currentPreviewSecond(), totalDurationSeconds_);
+    previewSlider_ = new QSlider(Qt::Horizontal, this);
     previewSlider_->setRange(0, secondToSliderValue(totalDurationSeconds_));
-    previewCursorSecond_ = defaultStart;
     previewSlider_->setValue(secondToSliderValue(previewCursorSecond_));
     previewSlider_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* previewSliderRow = new QWidget(rangeContent_);
-    auto* previewSliderLayout = new QHBoxLayout(previewSliderRow);
-    const int sliderRightInset = kSectionContentLeftInset + rightAlignedButtonWidth + kFormRowSpacing;
-    previewSliderLayout->setContentsMargins(0, 2, sliderRightInset, 0);
-    previewSliderLayout->setSpacing(0);
-    previewSliderLayout->addWidget(previewSlider_, 1);
-    rangeLayout->addWidget(previewSliderRow, 0);
+    auto* previewControlsRow = new QWidget(this);
+    auto* previewControlsLayout = new QHBoxLayout(previewControlsRow);
+    previewControlsLayout->setContentsMargins(0, 2, sectionRightInset, 0);
+    previewControlsLayout->setSpacing(kPreviewControlSpacing);
 
-    previewTimeLabel_ = new QLabel(rangeContent_);
+    previewTimeLabel_ = new QLabel(this);
     previewTimeLabel_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     previewTimeLabel_->setFixedWidth(rangeControlWidth);
-    auto* previewTimeRow = new QWidget(rangeContent_);
+    auto* previewTimeRow = new QWidget(this);
     auto* previewTimeLayout = new QHBoxLayout(previewTimeRow);
-    previewTimeLayout->setContentsMargins(0, 0, 0, 0);
+    const int previewControlsWidth =
+        (kPreviewControlButtonWidth * 2)
+        + kPreviewControlSpacing
+        + kPreviewControlsToSliderGap;
+    previewTimeLayout->setContentsMargins(previewControlsWidth, 0, sectionRightInset, 2);
     previewTimeLayout->setSpacing(0);
     previewTimeLayout->addWidget(previewTimeLabel_, 0, Qt::AlignLeft);
     previewTimeLayout->addStretch(1);
-    rangeLayout->addWidget(previewTimeRow, 0);
 
-    auto* previewButtonsRow = new QWidget(rangeContent_);
-    auto* previewButtonsLayout = new QHBoxLayout(previewButtonsRow);
-    previewButtonsLayout->setContentsMargins(0, 2, 0, 2);
-    previewButtonsLayout->setSpacing(6);
-    stopPreviewButton_ = new QToolButton(previewButtonsRow);
+    stopPreviewButton_ = new QToolButton(previewControlsRow);
     stopPreviewButton_->setObjectName(QStringLiteral("RangePreviewControlButton"));
     stopPreviewButton_->setToolButtonStyle(Qt::ToolButtonIconOnly);
     stopPreviewButton_->setIconSize(QSize(16, 16));
-    stopPreviewButton_->setFixedSize(QSize(32, 26));
+    stopPreviewButton_->setFixedSize(QSize(kPreviewControlButtonWidth, kPreviewControlButtonHeight));
     stopPreviewButton_->setIcon(makePreviewStopIcon(QColor("#2B3C4E")));
     stopPreviewButton_->setToolTip(l10n(QStringLiteral("Stop"), QStringLiteral("停止")));
     stopPreviewButton_->setAutoRaise(false);
-    previewRangeButton_ = new QToolButton(previewButtonsRow);
+    previewRangeButton_ = new QToolButton(previewControlsRow);
     previewRangeButton_->setObjectName(QStringLiteral("RangePreviewControlButton"));
     previewRangeButton_->setToolButtonStyle(Qt::ToolButtonIconOnly);
     previewRangeButton_->setIconSize(QSize(16, 16));
-    previewRangeButton_->setFixedSize(QSize(32, 26));
+    previewRangeButton_->setFixedSize(QSize(kPreviewControlButtonWidth, kPreviewControlButtonHeight));
     previewRangeButton_->setAutoRaise(false);
     stopPreviewButton_->setEnabled(false);
-    previewButtonsLayout->addWidget(stopPreviewButton_, 0);
-    previewButtonsLayout->addWidget(previewRangeButton_, 0);
-    previewButtonsLayout->addStretch(1);
-    rangeLayout->addWidget(previewButtonsRow, 0);
-
-    rootLayout->addWidget(
-        buildCollapsibleSection(
-            l10n(QStringLiteral("Export Range"), QStringLiteral("导出区间")),
-            rangeContent_,
-            false,
-            &rangeToggle_
-        )
-    );
+    previewControlsLayout->addWidget(stopPreviewButton_, 0);
+    previewControlsLayout->addWidget(previewRangeButton_, 0);
+    previewControlsLayout->addSpacing(kPreviewControlsToSliderGap);
+    previewControlsLayout->addWidget(previewSlider_, 1);
+    rootLayout->addWidget(previewControlsRow, 0);
+    rootLayout->addWidget(previewTimeRow, 0);
 
     optionsContent_ = new QWidget(this);
     auto* optionsLayout = new QGridLayout(optionsContent_);
-    optionsLayout->setContentsMargins(kSectionContentLeftInset, 0, 0, 0);
+    optionsLayout->setContentsMargins(kSectionContentLeftInset, 0, sectionRightInset, 0);
     optionsLayout->setHorizontalSpacing(10);
     optionsLayout->setVerticalSpacing(6);
     optionsLayout->setColumnStretch(0, 1);
@@ -522,6 +516,14 @@ VideoExportDialog::VideoExportDialog(
             optionsContent_,
             false,
             &optionsToggle_
+        )
+    );
+    rootLayout->addWidget(
+        buildCollapsibleSection(
+            l10n(QStringLiteral("Export Range"), QStringLiteral("导出区间")),
+            rangeContent_,
+            false,
+            &rangeToggle_
         )
     );
 
