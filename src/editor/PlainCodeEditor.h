@@ -4,6 +4,7 @@
 
 class LineNumberArea;
 class QContextMenuEvent;
+class QMimeData;
 
 class PlainCodeEditor : public QTextEdit
 {
@@ -20,6 +21,7 @@ public:
 protected:
     void changeEvent(QEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
+    void insertFromMimeData(const QMimeData* source) override;
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
 
