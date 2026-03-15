@@ -234,9 +234,6 @@ bool MainWindow::openFileAtPath(const QString& path, bool showStatusMessage, boo
 
 bool MainWindow::restoreLastSessionFile()
 {
-    if (!autoRestoreLastSessionFile_) {
-        return false;
-    }
     if (lastSessionFilePath_.isEmpty()) {
         return false;
     }

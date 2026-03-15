@@ -70,7 +70,7 @@ private:
     void setRangeEndFromPreview();
     void toggleRangePreview();
     void stopRangePreview(bool seekToCurrent);
-    void stopRangePreviewToLeadIn();
+    void stopRangePreviewToStart();
     void updatePreviewPlayPauseUi();
     void onRangePreviewTick();
     void syncRangeUi();
@@ -83,7 +83,6 @@ private:
     double selectedResolutionAspectRatio() const;
     double rangeStartSeconds() const;
     double rangeEndSeconds() const;
-    double leadInStartSeconds() const;
     QString formatSecond(double second) const;
     QWidget* buildCollapsibleSection(const QString& title, QWidget* content, bool expanded, QToolButton** toggleOut);
     void updateSectionToggle(QToolButton* toggle, QWidget* content, bool expanded);
@@ -129,6 +128,8 @@ private:
     QLabel* layoutSquareScaleValueLabel_ = nullptr;
     QDoubleSpinBox* startSecondSpin_ = nullptr;
     QDoubleSpinBox* endSecondSpin_ = nullptr;
+    QLineEdit* startCurrentTimeEdit_ = nullptr;
+    QLineEdit* endCurrentTimeEdit_ = nullptr;
     QSlider* previewSlider_ = nullptr;
     QLabel* previewTimeLabel_ = nullptr;
     QWidget* optionsContent_ = nullptr;

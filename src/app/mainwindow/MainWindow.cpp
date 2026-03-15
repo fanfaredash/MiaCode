@@ -2997,7 +2997,7 @@ void MainWindow::onExportPreviewVideo()
         task.outputHeight = 1024;
     }
     task.fps = 60;
-    task.showTimestamp = true;
+    task.showTimestamp = previewShowTimestamp_;
 
     const QFileInfo chartInfo(currentFilePath_);
     const QString difficultyName = hasActiveDifficulty()
@@ -3377,12 +3377,25 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     QDialog dialog(this);
     dialog.setWindowTitle(title);
     dialog.setModal(true);
-    dialog.resize(560, includeAudioSettings && includeVideoSettings ? 520 : (includeAudioSettings ? 420 : 320));
     dialog.setMinimumWidth(520);
+    dialog.setStyleSheet(
+        QStringLiteral(
+            "QDialog { background: #F5F7FA; }"
+            "QGroupBox {"
+            " border: 1px solid #DCE3EC;"
+            " border-radius: 8px;"
+            " background: #FFFFFF;"
+            " margin-top: 10px;"
+            " padding: 12px 10px 10px 10px;"
+            " }"
+            "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }"
+        )
+    );
 
     auto* rootLayout = new QVBoxLayout(&dialog);
     rootLayout->setContentsMargins(12, 12, 12, 12);
     rootLayout->setSpacing(10);
+    rootLayout->setSizeConstraint(QLayout::SetFixedSize);
 
     auto* audioGroup = new QGroupBox(uiText("dialog.render_settings.audio_group", "Audio"), &dialog);
     auto* audioFormLayout = new QFormLayout(audioGroup);
@@ -3554,18 +3567,31 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         videoGroup
     );
     smoothBrightnessCheck->setChecked(previewSmoothBrightness_);
+    auto* timestampCheck = new QCheckBox(
+        uiText("dialog.video_export.option.show_timestamp", "Show bottom-left timestamp"),
+        videoGroup
+    );
+    timestampCheck->setChecked(previewShowTimestamp_);
 
-    videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_outer", "Background / PV Brightness (Outer)"), outerBrightnessRow);
-    videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Background / PV Brightness (Inner)"), innerBrightnessRow);
+    videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_outer", "Outer Brightness"), outerBrightnessRow);
+    videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Inner Brightness"), innerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Layout Size"), layoutSquareScaleRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.scale_mode", "Background / PV Scale Mode"), scaleModeCombo);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.canvas_aspect", "Preview Canvas Aspect"), canvasAspectCombo);
-    videoFormLayout->addRow(QString(), smoothBrightnessCheck);
-    videoFormLayout->addRow(QString(), restoreSquareCheck);
-
+    auto* videoCheckRow = new QWidget(videoGroup);
+    auto* videoCheckLayout = new QGridLayout(videoCheckRow);
+    videoCheckLayout->setContentsMargins(0, 0, 0, 0);
+    videoCheckLayout->setHorizontalSpacing(10);
+    videoCheckLayout->setVerticalSpacing(6);
+    videoCheckLayout->setColumnStretch(0, 1);
+    videoCheckLayout->setColumnStretch(1, 1);
+    videoCheckLayout->addWidget(smoothBrightnessCheck, 0, 0, Qt::AlignLeft);
+    videoCheckLayout->addWidget(timestampCheck, 0, 1, Qt::AlignLeft);
+    videoCheckLayout->addWidget(restoreSquareCheck, 1, 0, Qt::AlignLeft);
     auto* debugCheck = new QCheckBox(uiText("dialog.render_settings.video.debug", "Show preview debug info"), videoGroup);
     debugCheck->setChecked(previewShowDebugInfo_);
-    videoFormLayout->addRow(QString(), debugCheck);
+    videoCheckLayout->addWidget(debugCheck, 1, 1, Qt::AlignLeft);
+    videoFormLayout->addRow(QString(), videoCheckRow);
 
     audioGroup->setVisible(includeAudioSettings);
     videoGroup->setVisible(includeVideoSettings);
@@ -3576,8 +3602,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     if (includeVideoSettings) {
         rootLayout->addWidget(videoGroup, 0);
     }
-    rootLayout->addStretch(1);
-
     auto* buttonBox = new QDialogButtonBox(&dialog);
     buttonBox->addButton(uiText("dialog.render_settings.button.close", "Close"), QDialogButtonBox::RejectRole);
     connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::accept);
@@ -3761,6 +3785,13 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         }
         savePortableState();
     });
+    connect(timestampCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
+        previewShowTimestamp_ = checked;
+        if (previewCanvas_ != nullptr) {
+            previewCanvas_->setShowTimestamp(previewShowTimestamp_);
+        }
+        savePortableState();
+    });
 
     connect(debugCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
         previewShowDebugInfo_ = checked;
@@ -3770,6 +3801,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         savePortableState();
     });
 
+    dialog.adjustSize();
     dialog.exec();
 }
 

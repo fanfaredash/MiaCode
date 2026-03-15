@@ -80,13 +80,100 @@ constexpr int kFpsSampleWindowMs = 250;
 constexpr int kFrameStatsWindowSize = 120;
 constexpr qreal kSlideTrackScale = 0.5;
 constexpr qreal kSlideTrackFadeInSeconds = static_cast<qreal>(miacode::preview_gameplay::kSlideTrackFadeInSeconds);
-constexpr qreal kTouchDurationSeconds = static_cast<qreal>(miacode::preview_gameplay::kTouchDurationSeconds);
-constexpr qreal kTouchAppearPhase = 0.25;
-constexpr qreal kTouchStartOffset = 30.0;
+constexpr qreal kTouchLifecyclePhaseCount = 5.0;
+constexpr qreal kTouchPhaseDivisionEpsilonSeconds = 0.001;
+constexpr qreal kRenderAlphaEpsilon = 0.001;
+constexpr qreal kRenderDurationEpsilon = 0.001;
+constexpr qreal kPreviewPointHashScale = 1000.0;
+constexpr quint64 kTouchPadRegionHashFlag = 0x8000000000000000ULL;
+constexpr int kPreviewSmallCollectionReserve = 16;
+constexpr qreal kTouchPrefabStartRadiusNormalized = 0.626;
+constexpr qreal kTouchPrefabEndRadiusNormalized = 0.226;
+constexpr qreal kTouchPrefabMaxCloseAmountNormalized =
+    kTouchPrefabStartRadiusNormalized - kTouchPrefabEndRadiusNormalized;
+constexpr qreal kTouchCloseCurveResidualBias = 0.42;
+constexpr qreal kTouchCloseCurveProgressBias = 4.05;
+constexpr qreal kTouchDurationSeconds = static_cast<qreal>(kTapLifecycleFramesAt60Fps) / kPreviewReferenceFps;
+constexpr qreal kTouchShowDurationSeconds = kTouchDurationSeconds / kTouchLifecyclePhaseCount;
+constexpr qreal kTouchCloseDurationSeconds = kTouchDurationSeconds - kTouchShowDurationSeconds;
+constexpr qreal kTouchPrefabStartEndRatio = kTouchPrefabStartRadiusNormalized / kTouchPrefabEndRadiusNormalized;
 constexpr qreal kTouchClosedOffset = 12.0;
-constexpr qreal kTouchHoldStartOffset = 24.0;
+constexpr qreal kTouchStartOffset = kTouchClosedOffset * kTouchPrefabStartEndRatio;
 constexpr qreal kTouchHoldClosedOffset = 8.0;
+constexpr qreal kTouchHoldStartOffset = kTouchHoldClosedOffset * kTouchPrefabStartEndRatio;
+constexpr qreal kTouchCloseCurveExponent = 3.2;
+constexpr int kTouchOverlapBorder2Threshold = 2;
+constexpr int kTouchOverlapBorder3Threshold = 3;
+constexpr int kTouchUpAngleDegrees = 180;
+constexpr int kTouchRightAngleDegrees = -90;
+constexpr int kTouchDownAngleDegrees = 0;
+constexpr int kTouchLeftAngleDegrees = 90;
+constexpr int kTouchHoldUpperRightAngleDegrees = -135;
+constexpr int kTouchHoldLowerRightAngleDegrees = -45;
+constexpr int kTouchHoldLowerLeftAngleDegrees = 45;
+constexpr int kTouchHoldUpperLeftAngleDegrees = 135;
 constexpr qreal kTouchAssetScale = 0.5;
+constexpr qreal kObjectWaitStateStartOpacity = 0.5;
+constexpr qreal kObjectWaitStateOpacityDelta = 0.5;
+constexpr qreal kJudgeEffectFallbackTapPixels = 96.0;
+constexpr qreal kJudgeEffectMinBasePixels = 8.0;
+constexpr qreal kJudgeEffectMinOffsetPixels = 4.0;
+constexpr qreal kJudgeEffectHoldSustainMinBasePixels = 6.0;
+constexpr quint64 kJudgeEffectParticleSeedMultiplier = 0x9e3779b97f4a7c15ULL;
+constexpr int kJudgeEffectParticleJitterBitShift = 11;
+constexpr quint64 kJudgeEffectParticleJitterMask = 0xFFULL;
+constexpr qreal kJudgeEffectParticleJitterCenter = 0.5;
+constexpr qreal kJudgeEffectParticleJitterScale = 0.06;
+constexpr qreal kJudgeEffectParticleMinRadiusPixels = 0.5;
+constexpr int kJudgeEffectHoldRingRed = 255;
+constexpr int kJudgeEffectHoldRingGreen = 253;
+constexpr int kJudgeEffectHoldRingBlue = 119;
+constexpr qreal kJudgeEffectHoldRingOuterAlphaScale = 0.42;
+constexpr qreal kJudgeEffectHoldRingCoreAlphaScale = 0.98;
+constexpr qreal kJudgeEffectHoldRingOuterWidthScale = 0.18;
+constexpr qreal kJudgeEffectHoldRingCoreWidthScale = 0.09;
+constexpr qreal kJudgeEffectHoldRingOuterMinWidth = 1.0;
+constexpr qreal kJudgeEffectHoldRingCoreMinWidth = 0.8;
+constexpr qreal kJudgeEffectTouchFallbackPixels = 96.0;
+constexpr qreal kJudgeEffectTouchMinUnitPixels = 6.0;
+constexpr qreal kJudgeEffectTouchTextureOuterDiagonalAngleDegrees = -45.0;
+constexpr qreal kJudgeEffectTouchSparkleSizeThreshold = 0.5;
+constexpr qreal kJudgeEffectTouchSparkleOuterRadiusScale = 0.5;
+constexpr qreal kJudgeEffectTouchSparkleInnerRadiusScale = 0.42;
+constexpr int kJudgeEffectTouchSparklePointCount = 8;
+constexpr qreal kJudgeEffectTouchSparklePointAngleStepDegrees = 45.0;
+constexpr qreal kJudgeEffectTouchSparkleGlowAlphaScale = 0.38;
+constexpr qreal kJudgeEffectTouchSparkleGlowScale = 1.22;
+constexpr qreal kJudgeEffectTouchCircleOuterAlphaScale = 0.45;
+constexpr qreal kJudgeEffectTouchCircleCoreAlphaScale = 0.95;
+constexpr qreal kJudgeEffectTouchOuterCardinalAxisScaleX = 1.18;
+constexpr qreal kJudgeEffectTouchOuterCardinalAxisScaleY = 0.85;
+constexpr qreal kJudgeEffectFireworkFallbackTouchPixels = 96.0;
+constexpr qreal kJudgeEffectFireworkMinUnitPixels = 6.0;
+constexpr qreal kJudgeEffectFireworkClipInsetPixels = 1.0;
+constexpr qreal kJudgeEffectFireworkSectorAlphaScale = 0.88;
+constexpr qreal kJudgeEffectFireworkColorBallCoreStop = 0.0;
+constexpr qreal kJudgeEffectFireworkColorBallMidStop = 0.3;
+constexpr qreal kJudgeEffectFireworkColorBallOuterStop = 0.68;
+constexpr qreal kJudgeEffectFireworkColorBallCoreAlphaScale = 0.92;
+constexpr qreal kJudgeEffectFireworkColorBallMidAlphaScale = 0.65;
+constexpr qreal kJudgeEffectFireworkColorBallOuterAlphaScale = 0.42;
+constexpr qreal kJudgeEffectFireworkHoleMinFeatherPixels = 2.0;
+constexpr qreal kTapOverlayBaseMix = 0.82;
+constexpr qreal kTapOverlayAlphaMix = 0.18;
+constexpr qreal kTapFallbackRadiusLogical = 16.0;
+constexpr qreal kTapFallbackOuterStrokeMinWidth = 1.5;
+constexpr qreal kTapFallbackOuterStrokeScale = 0.14;
+constexpr qreal kTapFallbackInnerStrokeMinWidth = 1.0;
+constexpr qreal kTapFallbackInnerStrokeScale = 0.10;
+constexpr qreal kTapFallbackInnerRadiusScale = 0.58;
+constexpr qreal kHoldOverlayBaseMix = 0.85;
+constexpr qreal kHoldOverlayAlphaMix = 0.20;
+constexpr qreal kHoldCapSliceRatioNumerator = 71.0;
+constexpr qreal kHoldCapSliceRatioDenominator = 200.0;
+constexpr qreal kHoldFallbackCapRadiusLogical = 18.0;
+constexpr qreal kHoldFallbackBodyWidthLogical = 30.0;
+constexpr qreal kHoldFallbackBodyMinWidth = 4.0;
 constexpr SlideTrackTrimMode kSlideTrackTrimMode = SlideTrackTrimMode::UniformTime;
 constexpr qreal kAngleWrapOffset = 540.0;
 constexpr qreal kAngleWrapCycle = 360.0;
@@ -101,10 +188,9 @@ constexpr int kAtlasMaxWidth = 2048;
 constexpr qreal kJudgeEffectClipDurationSeconds = static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectDurationSeconds);
 constexpr qreal kJudgeEffectPlaybackSpeed = 1.0;
 constexpr qreal kJudgeEffectDurationSeconds = kJudgeEffectClipDurationSeconds / kJudgeEffectPlaybackSpeed;
-// Derived from source assets:
-// Hex sprite width ~= 173.87 (ppu=100), tap sprite width ~= 122 (ppu=100).
+// [ASSET_TUNING] Hex sprite width ~= 173.87 (ppu=100), tap sprite width ~= 122 (ppu=100).
 constexpr qreal kJudgeEffectBaseRelativeToTap = 173.87256 / 122.0;
-// One local transform unit in judgeEffect maps to world units; convert through tap width.
+// [ASSET_TUNING] One local transform unit in judgeEffect maps to world units; convert through tap width.
 constexpr qreal kJudgeEffectOffsetRelativeToTap = 100.0 / 122.0;
 constexpr qreal kJudgeEffectEdgeGlowScale = 1.012;
 constexpr qreal kJudgeEffectEdgeGlowAlpha = 0.14;
@@ -118,16 +204,14 @@ constexpr qreal kJudgeEffectTouchDestroySeconds = 0.25;
 constexpr qreal kJudgeEffectTouchCircleFadeEndSeconds = 0.31666666;
 constexpr qreal kJudgeEffectHoldSustainLifetimeSeconds = 0.6;
 constexpr int kJudgeEffectHoldSustainParticleCount = 5;
-// Mapping from exported data:
-// Circle.png = 256 px @ 100 PPU, Hold_Effect prefab local scale = 1.2,
-// tap sprite width ~= 122 px @ 100 PPU.
+// [ASSET_TUNING] Circle.png = 256 px @ 100 PPU, Hold_Effect prefab local scale = 1.2,
+// [ASSET_TUNING] tap sprite width ~= 122 px @ 100 PPU.
 constexpr qreal kJudgeEffectHoldSustainBaseRelativeToTap = (256.0 * 1.2) / 122.0;
 // Alpha tightening (>1 narrows soft edges, making ring lines appear thinner).
 constexpr qreal kJudgeEffectHoldSustainAlphaTightenGamma = 1.0;
-// Mapping from exported data:
-// TouchPoint sprite is 32px @ 100 PPU => 0.32 world units.
-// Preview touch marker renders at 32 * 0.5 = 16 px, thus 1 world unit ~= 50 px.
-// worldToPixels = touchBasePixels * kJudgeEffectTouchUnitRelativeToTouch => 16 * k = 50.
+// [ASSET_TUNING] TouchPoint sprite is 32px @ 100 PPU => 0.32 world units.
+// [ASSET_TUNING] Preview touch marker renders at 32 * 0.5 = 16 px, thus 1 world unit ~= 50 px.
+// [ASSET_TUNING] worldToPixels = touchBasePixels * kJudgeEffectTouchUnitRelativeToTouch => 16 * k = 50.
 constexpr qreal kJudgeEffectTouchUnitRelativeToTouch = 3.125;
 constexpr qreal kJudgeEffectTouchInnerScaleBase = 0.1725238;
 constexpr qreal kJudgeEffectTouchOuterScaleBase = 0.3146144;
@@ -147,8 +231,8 @@ constexpr qreal kJudgeEffectFireworkSectorStepDegrees = kJudgeEffectFireworkSect
 constexpr qreal kJudgeEffectFireworkSectorPhaseDegrees = -102.0;
 constexpr int kJudgeEffectFireworkStepRotationSegmentCount = 3;
 constexpr qreal kJudgeEffectFireworkStepRotationDegrees = 24.0;
-// Firework material source params:
-// _InnerLB=0.018, _InnerUB=0.054, _OuterLB=0.36, _OuterUB=0.429
+// [ASSET_TUNING] Firework material source params:
+// [ASSET_TUNING] _InnerLB=0.018, _InnerUB=0.054, _OuterLB=0.36, _OuterUB=0.429
 constexpr qreal kFireworkInnerLB = 0.018;
 constexpr qreal kFireworkInnerUB = 0.054;
 constexpr qreal kFireworkOuterLB = 0.36;
