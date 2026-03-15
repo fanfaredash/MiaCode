@@ -1,9 +1,9 @@
 ﻿cmake_minimum_required(VERSION 3.21)
 
 set(MIACODE_VERSION_MAJOR "0")
-set(MIACODE_VERSION_MINOR "2")
-set(MIACODE_VERSION_PATCH "2")
-set(MIACODE_VERSION_PRERELEASE "dev.5")
+set(MIACODE_VERSION_MINOR "3")
+set(MIACODE_VERSION_PATCH "0")
+set(MIACODE_VERSION_PRERELEASE "")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
@@ -42,6 +42,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/MainWindow.cpp
     src/app/ui/UiText.h
     src/app/ui/UiText.cpp
+    src/app/ui/UiTheme.h
+    src/app/ui/UiTheme.cpp
     src/editor/PlainCodeEditor.h
     src/editor/PlainCodeEditor.cpp
     src/editor/BracketScopeHighlighter.h
