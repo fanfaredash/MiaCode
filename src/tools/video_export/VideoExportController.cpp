@@ -15,10 +15,13 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QImage>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QProcess>
 #include <QProgressDialog>
 #include <QRect>
 #include <QRegularExpression>
+#include <QSet>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTextStream>
@@ -199,6 +202,102 @@ struct FrameLayerActivityStats {
 
 bool envFlagEnabled(const QString& key);
 int envIntValue(const QString& key, int defaultValue);
+
+QString exportTempDirTemplate()
+{
+    return QDir(QDir::tempPath()).filePath(QStringLiteral("miacode-video-export-XXXXXX"));
+}
+
+class ExportTempDirRegistry
+{
+public:
+    static ExportTempDirRegistry& instance()
+    {
+        static ExportTempDirRegistry registry;
+        return registry;
+    }
+
+    void initialize()
+    {
+        QMutexLocker locker(&mutex_);
+        if (initialized_) {
+            return;
+        }
+        initialized_ = true;
+        cleanupStaleDirsLocked();
+        if (QCoreApplication* app = QCoreApplication::instance()) {
+            QObject::connect(app, &QCoreApplication::aboutToQuit, app, [this]() {
+                cleanupActiveDirs();
+            }, Qt::DirectConnection);
+        }
+    }
+
+    void track(const QString& path)
+    {
+        if (path.isEmpty()) {
+            return;
+        }
+        QMutexLocker locker(&mutex_);
+        activeDirs_.insert(QDir::cleanPath(path));
+    }
+
+    void untrack(const QString& path)
+    {
+        if (path.isEmpty()) {
+            return;
+        }
+        QMutexLocker locker(&mutex_);
+        activeDirs_.remove(QDir::cleanPath(path));
+    }
+
+    void cleanupActiveDirs()
+    {
+        QStringList paths;
+        {
+            QMutexLocker locker(&mutex_);
+            paths = activeDirs_.values();
+            activeDirs_.clear();
+        }
+        for (const QString& path : paths) {
+            QDir(path).removeRecursively();
+        }
+    }
+
+private:
+    void cleanupStaleDirsLocked()
+    {
+        QDir tempRoot(QDir::tempPath());
+        const QFileInfoList entries = tempRoot.entryInfoList(
+            QStringList(QStringLiteral("miacode-video-export-*")),
+            QDir::Dirs | QDir::NoDotAndDotDot | QDir::Readable | QDir::Writable
+        );
+        for (const QFileInfo& entry : entries) {
+            QDir(entry.absoluteFilePath()).removeRecursively();
+        }
+    }
+
+    bool initialized_ = false;
+    QSet<QString> activeDirs_;
+    QMutex mutex_;
+};
+
+class ScopedExportTempDirTracker
+{
+public:
+    explicit ScopedExportTempDirTracker(const QString& path)
+        : path_(QDir::cleanPath(path))
+    {
+        ExportTempDirRegistry::instance().track(path_);
+    }
+
+    ~ScopedExportTempDirTracker()
+    {
+        ExportTempDirRegistry::instance().untrack(path_);
+    }
+
+private:
+    QString path_;
+};
 
 qint64 bytesToMiB(quint64 bytes)
 {
@@ -2632,13 +2731,15 @@ VideoExportResult VideoExportController::exportFullPreview(
         return result;
     }
 
-    QTemporaryDir tempDir;
+    ExportTempDirRegistry::instance().initialize();
+    QTemporaryDir tempDir(exportTempDirTemplate());
     if (!tempDir.isValid()) {
         result.message = QStringLiteral("Unable to create temporary directory.");
         result.details = withExportLogPath(result.details);
         appendVideoExportLog(QStringLiteral("fail_temp_dir"), result.message);
         return result;
     }
+    ScopedExportTempDirTracker tempDirTracker(tempDir.path());
     const QString encodedTempPath = QDir(tempDir.path()).filePath(QStringLiteral("encoded_raw.mp4"));
     const QString remuxStagePath = makeRemuxStageOutputPath(task.outputPath);
     appendVideoExportLog(
