@@ -363,6 +363,7 @@ private:
     qint64 qtPreviewAwaitingFrameSwapSinceMs_ = -1;
     bool previewSliderDragging_ = false;
     bool suppressTimelineCursorSync_ = false;
+    bool autoRestoreLastSessionFile_ = true;
     int previewSeekHeldArrowKey_ = 0;
     QElapsedTimer previewSeekHeldArrowElapsed_;
     double qtPreviewStartSecond_ = 0.0;
