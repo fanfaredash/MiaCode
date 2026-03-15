@@ -5,13 +5,50 @@ qreal mirroredStarAngleDegrees(qreal angleDegrees)
     return 360.0 - angleDegrees;
 }
 
+quint64 touchPointKey(const QPointF& point)
+{
+    const qint32 x = qRound(point.x() * 1000.0);
+    const qint32 y = qRound(point.y() * 1000.0);
+    return (static_cast<quint64>(static_cast<quint32>(x)) << 32)
+        | static_cast<quint64>(static_cast<quint32>(y));
+}
+
+quint64 touchRegionKey(const TimelineNoteMarker& marker)
+{
+    if (!marker.touchPad.isEmpty()) {
+        return 0x8000000000000000ULL | static_cast<quint64>(qHash(marker.touchPad.toUpper()));
+    }
+    return touchPointKey(marker.touchPoint);
+}
+
+bool isTouchMarkerVisibleAtPlayhead(const TimelineNoteMarker& marker, double playheadSeconds)
+{
+    if (marker.type != "touch") {
+        return false;
+    }
+    if (qFuzzyIsNull(marker.touchPoint.x()) && qFuzzyIsNull(marker.touchPoint.y())) {
+        return false;
+    }
+    const qreal deltaSeconds = static_cast<qreal>(playheadSeconds - marker.second);
+    return deltaSeconds > -kTouchDurationSeconds && deltaSeconds < 0.0;
+}
+
 }  // namespace
 
 void PreviewCanvas::drawTouchLayer(QPainter& painter, const QRectF& playfieldRect)
 {
+    QHash<quint64, int> overlapCounts;
+    overlapCounts.reserve(16);
+    for (const TimelineNoteMarker& marker : noteMarkers_) {
+        if (!isTouchMarkerVisibleAtPlayhead(marker, playheadSeconds_)) {
+            continue;
+        }
+        overlapCounts[touchRegionKey(marker)] += 1;
+    }
+
     for (const TimelineNoteMarker& marker : noteMarkers_) {
         if (marker.type == "touch") {
-            drawTouchMarker(painter, marker, playfieldRect);
+            drawTouchMarker(painter, marker, playfieldRect, overlapCounts.value(touchRegionKey(marker), 0));
         }
     }
 }
@@ -1527,20 +1564,17 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
         );
     };
 
-    auto renderTailGuide = [&renderGuideImage](const QImage* image, int lane, qreal distance) {
-        const qreal scale = qMax<qreal>(0.0, tapScaleForDistance(distance));
-        if (scale <= 0.0) {
+    auto renderTailGuide = [&renderGuideImage](const QImage* image, int lane, qreal deltaSeconds) {
+        const TapApproachSample approach = sampleTapApproach(deltaSeconds);
+        if (approach.scale <= 0.0) {
             return;
         }
         const QPointF unit = laneUnitVector(lane);
-        const qreal renderedDistance = distance < kLogicalDistanceTap
-            ? kLogicalDistanceTap
-            : qMin(distance, kLogicalDistanceEdge);
         const QPointF logicalPos(
-            kLogicalCanvasCenter + unit.x() * renderedDistance,
-            kLogicalCanvasCenter + unit.y() * renderedDistance
+            kLogicalCanvasCenter + unit.x() * approach.distance,
+            kLogicalCanvasCenter + unit.y() * approach.distance
         );
-        renderGuideImage(image, scale, laneRotationDegrees(lane), logicalPos, true, 0.0);
+        renderGuideImage(image, approach.scale, laneRotationDegrees(lane), logicalPos, true, 0.0);
     };
 
     QHash<qint64, QVector<ActiveEachCandidate>> eachGroups;
@@ -1555,13 +1589,14 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
             if (slideHeadStar && !marker.hasHeadStar) {
                 continue;
             }
-            if (playheadSeconds_ > marker.second) {
+            const qreal deltaSeconds = static_cast<qreal>(playheadSeconds_ - marker.second);
+            const TapApproachSample approach = sampleTapApproach(deltaSeconds);
+            if (playheadSeconds_ > marker.second || approach.scale <= 0.0) {
                 continue;
             }
-            const qreal distance = static_cast<qreal>(playheadSeconds_ - marker.second) * kTapUnitsPerSecond + kLogicalDistanceEdge;
             renderConcentricGuide(
                 selectTapNoteGuideImage(marker),
-                distance,
+                approach.distance,
                 kNoteGuideSourceRadius,
                 laneRotationDegrees(marker.lane),
                 true,
@@ -1575,15 +1610,19 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
             if (marker.endSecond < marker.second || playheadSeconds_ > marker.endSecond) {
                 continue;
             }
-            const qreal distance = static_cast<qreal>(playheadSeconds_ - marker.second) * kTapUnitsPerSecond + kLogicalDistanceEdge;
+            const qreal deltaSeconds = static_cast<qreal>(playheadSeconds_ - marker.second);
+            const TapApproachSample approach = sampleTapApproach(deltaSeconds);
+            if (approach.scale <= 0.0) {
+                continue;
+            }
             const QImage* headImage = marker.isBreak ? &noteGuideBreakImage_
                 : marker.isEach ? &noteGuideEachImage_
                 : &noteGuideNormalImage_;
-            renderConcentricGuide(headImage, distance, kNoteGuideSourceRadius, laneRotationDegrees(marker.lane), true, 0.0);
+            renderConcentricGuide(headImage, approach.distance, kNoteGuideSourceRadius, laneRotationDegrees(marker.lane), true, 0.0);
 
-            const qreal distanceEnd = static_cast<qreal>(playheadSeconds_ - marker.endSecond) * kTapUnitsPerSecond + kLogicalDistanceEdge;
-            if (distanceEnd >= kLogicalDistanceTap) {
-                renderTailGuide(selectHoldEndNoteGuideImage(marker), marker.lane, distanceEnd);
+            const qreal deltaEndSeconds = static_cast<qreal>(playheadSeconds_ - marker.endSecond);
+            if (sampleTapApproach(deltaEndSeconds).scale > 0.0) {
+                renderTailGuide(selectHoldEndNoteGuideImage(marker), marker.lane, deltaEndSeconds);
             }
             if (marker.isEach) {
                 addEachCandidate(marker);
@@ -1625,8 +1664,8 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
             continue;
         }
 
-        const qreal distance = static_cast<qreal>(playheadSeconds_ - notes[0].marker->second) * kTapUnitsPerSecond + kLogicalDistanceEdge;
-        if (distance <= 0.0) {
+        const TapApproachSample approach = sampleTapApproach(static_cast<qreal>(playheadSeconds_ - notes[0].marker->second));
+        if (approach.scale <= 0.0) {
             continue;
         }
 
@@ -1651,7 +1690,7 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
             angleDegrees = laneRotationDegreesForIndex(midpoint) - laneRotationDegreesForIndex(sourceMidpoint);
         }
 
-        renderConcentricGuide(lineImage, distance, sourceRadius, angleDegrees, true, 0.0);
+        renderConcentricGuide(lineImage, approach.distance, sourceRadius, angleDegrees, true, 0.0);
     }
 }
 
@@ -1667,19 +1706,15 @@ void PreviewCanvas::drawTapMarker(QPainter& painter, const TimelineNoteMarker& m
         return;
     }
 
-    const qreal distance = deltaSeconds * kTapUnitsPerSecond + kLogicalDistanceEdge;
-    const qreal spawnScale = tapScaleForDistance(distance);
-    if (spawnScale < 0.0) {
+    const TapApproachSample approach = sampleTapApproach(deltaSeconds);
+    if (approach.scale <= 0.0) {
         return;
     }
 
     const QPointF unit = laneUnitVector(marker.lane);
-    const bool parked = distance < kLogicalDistanceTap;
-    const qreal renderedDistance = parked ? kLogicalDistanceTap : distance;
-    const qreal effectiveScale = parked ? spawnScale : 1.0;
     const QPointF logicalPoint(
-        kLogicalCanvasCenter + unit.x() * renderedDistance,
-        kLogicalCanvasCenter + unit.y() * renderedDistance
+        kLogicalCanvasCenter + unit.x() * approach.distance,
+        kLogicalCanvasCenter + unit.y() * approach.distance
     );
     const QPointF point = mapLogicalPointToRect(logicalPoint, playfieldRect);
     const QImage* tapImage = slideHeadStar ? selectSlideStarImage(marker) : selectTapImage(marker);
@@ -1704,10 +1739,10 @@ void PreviewCanvas::drawTapMarker(QPainter& painter, const TimelineNoteMarker& m
                 * kSlideSpawnStarRelativeScale;
             const qreal baseHeight = (!tapImage_.isNull() ? tapImage_.height() * kSkinAssetScale : renderImage.height() * kStarAssetScale)
                 * kSlideSpawnStarRelativeScale;
-            targetWidth = qMax(1, qRound(baseWidth * canvasScale * effectiveScale));
-            targetHeight = qMax(1, qRound(baseHeight * canvasScale * effectiveScale));
+            targetWidth = qMax(1, qRound(baseWidth * canvasScale * approach.scale));
+            targetHeight = qMax(1, qRound(baseHeight * canvasScale * approach.scale));
         } else {
-            const qreal imageScale = canvasScale * effectiveScale * kSkinAssetScale;
+            const qreal imageScale = canvasScale * approach.scale * kSkinAssetScale;
             targetWidth = qMax(1, qRound(renderImage.width() * imageScale));
             targetHeight = qMax(1, qRound(renderImage.height() * imageScale));
         }
@@ -1724,7 +1759,7 @@ void PreviewCanvas::drawTapMarker(QPainter& painter, const TimelineNoteMarker& m
         return;
     }
 
-    const qreal radius = mapLogicalLengthToRect(16.0 * effectiveScale, playfieldRect);
+    const qreal radius = mapLogicalLengthToRect(16.0 * approach.scale, playfieldRect);
     const QColor fillColor = tapColorForMarker(marker);
     painter.setPen(QPen(QColor("#0F1720"), qMax<qreal>(1.5, radius * 0.14)));
     painter.setBrush(fillColor);
@@ -1746,9 +1781,8 @@ void PreviewCanvas::drawHoldMarker(QPainter& painter, const TimelineNoteMarker& 
         return;
     }
 
-    qreal distance = deltaSeconds * kTapUnitsPerSecond + kLogicalDistanceEdge;
-    const qreal spawnScale = tapScaleForDistance(distance);
-    if (spawnScale < 0.0) {
+    const TapApproachSample headApproach = sampleTapApproach(deltaSeconds);
+    if (headApproach.scale <= 0.0) {
         return;
     }
 
@@ -1815,30 +1849,25 @@ void PreviewCanvas::drawHoldMarker(QPainter& painter, const TimelineNoteMarker& 
         return true;
     };
 
-    if (distance < kLogicalDistanceTap) {
+    if (deltaSeconds < -kTapFlyDurationSeconds) {
         const QPointF logicalPoint(
             kLogicalCanvasCenter + unit.x() * kLogicalDistanceTap,
             kLogicalCanvasCenter + unit.y() * kLogicalDistanceTap
         );
         const QPointF point = mapLogicalPointToRect(logicalPoint, playfieldRect);
-        if (drawHoldStripSlices(point, 0, spawnScale)) {
+        if (drawHoldStripSlices(point, 0, headApproach.scale)) {
             return;
         }
 
-        const qreal radius = mapLogicalLengthToRect(18.0 * spawnScale, playfieldRect);
+        const qreal radius = mapLogicalLengthToRect(18.0 * headApproach.scale, playfieldRect);
         painter.setPen(QPen(QColor("#0F1720"), qMax<qreal>(1.5, radius * 0.14)));
         painter.setBrush(tapColorForMarker(marker));
         painter.drawEllipse(point, radius, radius);
         return;
     }
 
-    distance = qMin(distance, kLogicalDistanceEdge);
-    qreal distanceEnd = deltaEndSeconds * kTapUnitsPerSecond + kLogicalDistanceEdge;
-    if (distanceEnd < kLogicalDistanceTap) {
-        distanceEnd = kLogicalDistanceTap;
-    } else if (distanceEnd > kLogicalDistanceEdge) {
-        distanceEnd = kLogicalDistanceEdge;
-    }
+    const qreal distance = headApproach.distance;
+    const qreal distanceEnd = sampleTapApproach(deltaEndSeconds).distance;
 
     const QPointF logicalHead(
         kLogicalCanvasCenter + unit.x() * distance,
@@ -2663,7 +2692,11 @@ void PreviewCanvas::drawWifiMarker(QPainter& painter, const TimelineNoteMarker& 
     }
 }
 
-void PreviewCanvas::drawTouchMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)
+void PreviewCanvas::drawTouchMarker(
+    QPainter& painter,
+    const TimelineNoteMarker& marker,
+    const QRectF& playfieldRect,
+    int overlapCount)
 {
     if (qFuzzyIsNull(marker.touchPoint.x()) && qFuzzyIsNull(marker.touchPoint.y())) {
         return;
@@ -2682,6 +2715,10 @@ void PreviewCanvas::drawTouchMarker(QPainter& painter, const TimelineNoteMarker&
         (marker.isBreak && !touchCornerBreakImage_.isNull())
             ? touchCornerBreakImage_
             : ((marker.isEach && !touchCornerEachImage_.isNull()) ? touchCornerEachImage_ : touchCornerImage_);
+    const QImage* border2Image =
+        marker.isBreak ? &touchBorder2BreakImage_ : (marker.isEach ? &touchBorder2EachImage_ : &touchBorder2Image_);
+    const QImage* border3Image =
+        marker.isBreak ? &touchBorder3BreakImage_ : (marker.isEach ? &touchBorder3EachImage_ : &touchBorder3Image_);
     if (basePointImage.isNull() || baseCornerImage.isNull()) {
         return;
     }
@@ -2692,6 +2729,14 @@ void PreviewCanvas::drawTouchMarker(QPainter& painter, const TimelineNoteMarker&
     const int pointHeight = qMax(1, qRound(basePointImage.height() * kTouchAssetScale * canvasScale));
     const int cornerWidth = qMax(1, qRound(baseCornerImage.width() * kTouchAssetScale * canvasScale));
     const int cornerHeight = qMax(1, qRound(baseCornerImage.height() * kTouchAssetScale * canvasScale));
+    const int border2Width =
+        (border2Image != nullptr && !border2Image->isNull()) ? qMax(1, qRound(border2Image->width() * kTouchAssetScale * canvasScale)) : 0;
+    const int border2Height =
+        (border2Image != nullptr && !border2Image->isNull()) ? qMax(1, qRound(border2Image->height() * kTouchAssetScale * canvasScale)) : 0;
+    const int border3Width =
+        (border3Image != nullptr && !border3Image->isNull()) ? qMax(1, qRound(border3Image->width() * kTouchAssetScale * canvasScale)) : 0;
+    const int border3Height =
+        (border3Image != nullptr && !border3Image->isNull()) ? qMax(1, qRound(border3Image->height() * kTouchAssetScale * canvasScale)) : 0;
     const qreal progress = qBound<qreal>(0.0, (deltaSeconds + kTouchDurationSeconds) / kTouchDurationSeconds, 1.0);
     qreal alpha = 1.0;
     qreal closeRatio = 0.0;
@@ -2729,6 +2774,12 @@ void PreviewCanvas::drawTouchMarker(QPainter& painter, const TimelineNoteMarker&
             pieceLayout.angle,
             alpha
         );
+    }
+    if (overlapCount >= 2 && border2Image != nullptr && !border2Image->isNull()) {
+        drawSpriteImage(painter, *border2Image, point, border2Width, border2Height, 0.0, alpha);
+    }
+    if (overlapCount >= 3 && border3Image != nullptr && !border3Image->isNull()) {
+        drawSpriteImage(painter, *border3Image, point, border3Width, border3Height, 0.0, alpha);
     }
     drawSpriteImage(painter, basePointImage, point, pointWidth, pointHeight, 0.0);
     if (batchNative) {

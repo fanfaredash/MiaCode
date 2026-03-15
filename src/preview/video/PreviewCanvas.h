@@ -203,7 +203,7 @@ private:
     void drawWifiTrack(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect);
     void drawSlideMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect);
     void drawWifiMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect);
-    void drawTouchMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect);
+    void drawTouchMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect, int overlapCount);
     void drawTapMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect);
     void drawHoldMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect);
     void renderCanvas(QPainter& painter);
@@ -259,6 +259,12 @@ private:
     QImage touchCornerImage_;
     QImage touchCornerEachImage_;
     QImage touchCornerBreakImage_;
+    QImage touchBorder2Image_;
+    QImage touchBorder2EachImage_;
+    QImage touchBorder2BreakImage_;
+    QImage touchBorder3Image_;
+    QImage touchBorder3EachImage_;
+    QImage touchBorder3BreakImage_;
     QImage touchPointImage_;
     QImage touchPointEachImage_;
     QImage touchPointBreakImage_;
