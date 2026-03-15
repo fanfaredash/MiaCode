@@ -131,9 +131,13 @@
 
     previewMenu->addSeparator();
 
-    previewRenderSettingsAction_ = new QAction(uiText("action.render_settings", "Render Settings..."), this);
-    connect(previewRenderSettingsAction_, &QAction::triggered, this, &MainWindow::onPreviewRenderSettings);
-    previewMenu->addAction(previewRenderSettingsAction_);
+    previewAudioSettingsAction_ = new QAction(uiText("action.audio_settings", "Audio Settings..."), this);
+    connect(previewAudioSettingsAction_, &QAction::triggered, this, &MainWindow::onPreviewAudioSettings);
+    previewMenu->addAction(previewAudioSettingsAction_);
+
+    previewVideoSettingsAction_ = new QAction(uiText("action.video_settings", "Video Settings..."), this);
+    connect(previewVideoSettingsAction_, &QAction::triggered, this, &MainWindow::onPreviewVideoSettings);
+    previewMenu->addAction(previewVideoSettingsAction_);
 
     aboutAction_ = new QAction(uiText("action.about", "About"), this);
     connect(aboutAction_, &QAction::triggered, this, &MainWindow::onAbout);
@@ -320,6 +324,8 @@ MainWindow::MainWindow(QWidget* parent)
     centralLayout->addWidget(editorHeader, 0);
 
     editorStack_ = new QStackedWidget(central);
+    editorStack_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
+    editorStack_->setMinimumWidth(0);
 
     auto* findBar = new QFrame(editorStack_);
     findBar->setObjectName("EditorFindBar");
@@ -413,6 +419,7 @@ MainWindow::MainWindow(QWidget* parent)
     editorFindBar_ = findBar;
 
     metadataPage_ = new QWidget(editorStack_);
+    metadataPage_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
     metadataPage_->setStyleSheet(
         "QWidget { background: #FFFFFF; color: #2A3440; }"
         "QFrame#MetadataCard { background: #FFFFFF; border: 1px solid #DEE4EC; border-radius: 8px; }"
@@ -511,6 +518,7 @@ MainWindow::MainWindow(QWidget* parent)
     metadataLayout->addWidget(metadataCard, 1);
 
     chartPage_ = new QWidget(editorStack_);
+    chartPage_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
     auto* chartLayout = new QVBoxLayout(chartPage_);
     chartLayout->setContentsMargins(0, 0, 0, 0);
     chartLayout->setSpacing(0);
@@ -684,8 +692,8 @@ MainWindow::MainWindow(QWidget* parent)
         menu.exec(outlineList_->viewport()->mapToGlobal(pos));
     });
     addDockWidget(Qt::LeftDockWidgetArea, outlineDock);
-    outlineDock->setMinimumWidth(210);
-    outlineDock->setMaximumWidth(210);
+    outlineDock->setMinimumWidth(190);
+    outlineDock->setMaximumWidth(190);
     logStartupStage("outline_ready");
 
     previewPanel_ = new QWidget(this);
@@ -988,7 +996,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     previewLeftColumn_ = new QWidget(this);
     previewLeftColumn_->setMinimumWidth(320);
-    previewLeftColumn_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    previewLeftColumn_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
     auto* leftColumnLayout = new QVBoxLayout(previewLeftColumn_);
     leftColumnLayout->setContentsMargins(0, 0, 0, 0);
     leftColumnLayout->setSpacing(0);
@@ -1013,12 +1021,21 @@ MainWindow::MainWindow(QWidget* parent)
     toolBar->addAction(openAction_);
     toolBar->addAction(saveAction_);
     constexpr int kToolbarActionButtonWidth = 64;
+    constexpr int kToolbarActionButtonHorizontalPadding = 20;
     const auto makeCompactToolbarButton = [toolBar](QAction* action) -> QToolButton* {
         auto* button = new QToolButton(toolBar);
         button->setDefaultAction(action);
         button->setAutoRaise(true);
         button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-        button->setFixedWidth(kToolbarActionButtonWidth);
+        int buttonWidth = kToolbarActionButtonWidth;
+        if (!UiText::isChineseUi() && action != nullptr) {
+            const QFontMetrics metrics(button->font());
+            buttonWidth = qMax(
+                kToolbarActionButtonWidth,
+                metrics.horizontalAdvance(action->text()) + kToolbarActionButtonHorizontalPadding
+            );
+        }
+        button->setFixedWidth(buttonWidth);
         button->setStyleSheet(
             "QToolButton:disabled { background: transparent; border: none; }"
             "QToolButton:disabled:hover { background: transparent; border: none; }"

@@ -69,6 +69,71 @@ void QtPreviewSfxRuntime::startBackgroundTrack(double second)
     }
 }
 
+void QtPreviewSfxRuntime::seekBackgroundTrack(double second)
+{
+    if (!hasBackgroundTrack()) {
+        return;
+    }
+
+    const bool useStretched = !qFuzzyCompare(backgroundTrackPlaybackRate_ + 1.0, 2.0);
+    if (useStretched && !prepareStretchedBackgroundTrack(second)) {
+        backgroundTrackLastTimelineSecond_ = qMax(0.0, second);
+        backgroundTrackPendingStart_ = false;
+        backgroundTrackRunning_ = false;
+        appendAudioDebugLog(QString("seekBackgroundTrack deferred second=%1 rate=%2")
+                                .arg(second, 0, 'f', 3)
+                                .arg(backgroundTrackPlaybackRate_, 0, 'f', 3));
+        return;
+    }
+
+    ma_sound* activeSound = nullptr;
+    StretchedBackgroundState* activeStretchedState = nullptr;
+    if (useStretched) {
+        if (stretchedBackgroundState_ == nullptr || !stretchedBackgroundState_->soundInitialized) {
+            return;
+        }
+        activeSound = &stretchedBackgroundState_->sound;
+        activeStretchedState = stretchedBackgroundState_;
+    } else {
+        if (backgroundTrackVoice_ == nullptr || !backgroundTrackVoice_->initialized) {
+            return;
+        }
+        activeSound = &backgroundTrackVoice_->sound;
+    }
+
+    backgroundTrackLastTimelineSecond_ = qMax(0.0, second);
+    backgroundTrackPendingStart_ = false;
+    backgroundTrackRunning_ = false;
+    ma_sound_stop(activeSound);
+    const double rawSecond = second + backgroundTrackOffsetSeconds_;
+    const double mappedSecond = useStretched ? (rawSecond / backgroundTrackPlaybackRate_) : rawSecond;
+    if (rawSecond < 0.0) {
+        ma_sound_seek_to_pcm_frame(activeSound, 0);
+        appendAudioDebugLog(QString("seekBackgroundTrack clamped_to_start second=%1 raw=%2 rate=%3")
+                                .arg(second, 0, 'f', 3)
+                                .arg(rawSecond, 0, 'f', 3)
+                                .arg(backgroundTrackPlaybackRate_, 0, 'f', 3));
+        return;
+    }
+
+    if (useStretched && activeStretchedState != nullptr) {
+        const double clampedMappedSecond = qMax(0.0, mappedSecond);
+        ma_uint64 targetFrame = static_cast<ma_uint64>(clampedMappedSecond * activeStretchedState->sampleRate);
+        if (activeStretchedState->stretchedFrameCount > 0) {
+            targetFrame = qMin(targetFrame, activeStretchedState->stretchedFrameCount - 1);
+        }
+        ma_sound_seek_to_pcm_frame(activeSound, targetFrame);
+    } else if (ma_sound_seek_to_second(activeSound, static_cast<float>(qMax(0.0, mappedSecond))) != MA_SUCCESS) {
+        ma_sound_seek_to_pcm_frame(activeSound, 0);
+    }
+
+    appendAudioDebugLog(QString("seekBackgroundTrack positioned second=%1 raw=%2 mapped=%3 rate=%4")
+                            .arg(second, 0, 'f', 3)
+                            .arg(rawSecond, 0, 'f', 3)
+                            .arg(mappedSecond, 0, 'f', 3)
+                            .arg(backgroundTrackPlaybackRate_, 0, 'f', 3));
+}
+
 void QtPreviewSfxRuntime::pauseBackgroundTrack()
 {
     if (!hasBackgroundTrack()) {

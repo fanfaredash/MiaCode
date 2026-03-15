@@ -766,6 +766,7 @@ bool MainWindow::deleteDifficultyField(int difficultyId)
     documentDirty_ = true;
 
     if (deletingActiveDifficulty) {
+        cacheWorkspaceLayoutSizes();
         currentFieldDirty_ = false;
         const QVector<int> remainingIds = document_.difficultyIds();
         if (remainingIds.isEmpty()) {
@@ -783,6 +784,8 @@ bool MainWindow::deleteDifficultyField(int difficultyId)
             if (titleEdit_ != nullptr) {
                 titleEdit_->setFocus();
             }
+            refreshLayoutAfterPageSwitch();
+            QTimer::singleShot(0, this, [this]() { refreshLayoutAfterPageSwitch(); });
         } else {
             int fallbackId = remainingIds.constFirst();
             int bestDistance = qAbs(fallbackId - difficultyId);
@@ -937,6 +940,7 @@ bool MainWindow::switchToMetadataField()
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
     }
+    cacheWorkspaceLayoutSizes();
     stopQtPreviewPlayback(true);
     activeDifficultyId_ = 0;
     activeOutlineKey_ = "metadata";
@@ -962,6 +966,8 @@ bool MainWindow::switchToMetadataField()
     updateWindowTitle();
     updateEditorEmptyState();
     updateEditorStatus();
+    refreshLayoutAfterPageSwitch();
+    QTimer::singleShot(0, this, [this]() { refreshLayoutAfterPageSwitch(); });
     return true;
 }
 
@@ -973,6 +979,7 @@ bool MainWindow::switchToDifficultyField(int difficultyId)
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
     }
+    cacheWorkspaceLayoutSizes();
     stopQtPreviewPlayback(true);
     activeDifficultyId_ = difficultyId;
     projectLastOpenedDifficultyId_ = difficultyId;
@@ -1003,6 +1010,8 @@ bool MainWindow::switchToDifficultyField(int difficultyId)
     updateEditorStatus();
     scheduleTimelineRefresh();
     saveProjectRenderState();
+    refreshLayoutAfterPageSwitch();
+    QTimer::singleShot(0, this, [this]() { refreshLayoutAfterPageSwitch(); });
     return true;
 }
 
