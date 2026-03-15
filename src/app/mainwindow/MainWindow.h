@@ -385,13 +385,14 @@ private:
     bool showJudgeMarkers_ = false;
     bool showTouchTrail_ = false;
     double previewBackgroundBrightnessOuter_ = miacode::preview_video::kBackgroundBrightnessDefault;
-    double previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessDefault;
+    double previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessInnerDefault;
     double previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
     bool previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
     PreviewBackgroundScaleMode previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     double previewCanvasAspectRatio_ = 1.0;
     bool previewAutoRestoreSquareAfterExport_ = true;
     bool previewShowDebugInfo_ = false;
+    bool previewShowTimestamp_ = true;
     PreviewAudioSettings softwarePreviewAudioSettings_;
     PreviewAudioSettings previewAudioSettings_;
     int editorTextFontPointSize_ = 0;
@@ -441,6 +442,8 @@ private:
     QToolButton* pausePreviewButton_ = nullptr;
     QToolButton* syntaxCheckButton_ = nullptr;
     QToolButton* exportVideoButton_ = nullptr;
+    QToolButton* previewAudioSettingsButton_ = nullptr;
+    QToolButton* previewVideoSettingsButton_ = nullptr;
     QToolButton* latencyDetectorButton_ = nullptr;
     QSlider* previewSlider_ = nullptr;
     QToolButton* previewSpeedButton_ = nullptr;

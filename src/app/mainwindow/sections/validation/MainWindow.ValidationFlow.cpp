@@ -333,6 +333,20 @@ bool MainWindow::runValidateSimai()
 
     if (entry.ok) {
         statusBar()->showMessage(uiText("status.syntax.passed", "Syntax check passed."));
+        QMessageBox okDialog(this);
+        okDialog.setIcon(QMessageBox::Information);
+        okDialog.setWindowTitle(validateAction_ != nullptr ? validateAction_->text() : QStringLiteral("Syntax Check"));
+        okDialog.setWindowIcon(windowIcon());
+        okDialog.setText(uiText("dialog.syntax_ok.message", "No syntax errors or warnings found."));
+        okDialog.setStandardButtons(QMessageBox::Ok);
+        okDialog.setDefaultButton(QMessageBox::Ok);
+        auto* closeOnSpace = new QShortcut(QKeySequence(Qt::Key_Space), &okDialog);
+        connect(closeOnSpace, &QShortcut::activated, &okDialog, &QDialog::accept);
+        auto* closeOnReturn = new QShortcut(QKeySequence(Qt::Key_Return), &okDialog);
+        connect(closeOnReturn, &QShortcut::activated, &okDialog, &QDialog::accept);
+        auto* closeOnEnter = new QShortcut(QKeySequence(Qt::Key_Enter), &okDialog);
+        connect(closeOnEnter, &QShortcut::activated, &okDialog, &QDialog::accept);
+        okDialog.exec();
         return true;
     }
 

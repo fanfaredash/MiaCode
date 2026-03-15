@@ -313,7 +313,7 @@ private:
 #endif
     double playheadSeconds_ = 0.0;
     double backgroundBrightnessOuter_ = miacode::preview_video::kBackgroundBrightnessDefault;
-    double backgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessDefault;
+    double backgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessInnerDefault;
     double layoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
     bool smoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
     PreviewBackgroundScaleMode backgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;

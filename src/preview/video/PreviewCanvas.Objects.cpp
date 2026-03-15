@@ -7,8 +7,8 @@ qreal mirroredStarAngleDegrees(qreal angleDegrees)
 
 quint64 touchPointKey(const QPointF& point)
 {
-    const qint32 x = qRound(point.x() * 1000.0);
-    const qint32 y = qRound(point.y() * 1000.0);
+    const qint32 x = qRound(point.x() * kPreviewPointHashScale);
+    const qint32 y = qRound(point.y() * kPreviewPointHashScale);
     return (static_cast<quint64>(static_cast<quint32>(x)) << 32)
         | static_cast<quint64>(static_cast<quint32>(y));
 }
@@ -16,9 +16,65 @@ quint64 touchPointKey(const QPointF& point)
 quint64 touchRegionKey(const TimelineNoteMarker& marker)
 {
     if (!marker.touchPad.isEmpty()) {
-        return 0x8000000000000000ULL | static_cast<quint64>(qHash(marker.touchPad.toUpper()));
+        return kTouchPadRegionHashFlag | static_cast<quint64>(qHash(marker.touchPad.toUpper()));
     }
     return touchPointKey(marker.touchPoint);
+}
+
+qreal touchPreHitElapsedSeconds(qreal deltaSeconds)
+{
+    return qBound<qreal>(0.0, deltaSeconds + kTouchDurationSeconds, kTouchDurationSeconds);
+}
+
+qreal touchPreHitAlpha(qreal deltaSeconds)
+{
+    if (deltaSeconds >= 0.0) {
+        return 1.0;
+    }
+    return qBound<qreal>(
+        0.0,
+        touchPreHitElapsedSeconds(deltaSeconds) / qMax<qreal>(kTouchPhaseDivisionEpsilonSeconds, kTouchShowDurationSeconds),
+        1.0
+    );
+}
+
+qreal touchCloseProgress(qreal deltaSeconds)
+{
+    if (deltaSeconds >= 0.0) {
+        return 1.0;
+    }
+    const qreal preHitElapsed = touchPreHitElapsedSeconds(deltaSeconds);
+    if (preHitElapsed <= kTouchShowDurationSeconds) {
+        return 0.0;
+    }
+    return qBound<qreal>(
+        0.0,
+        (preHitElapsed - kTouchShowDurationSeconds) / qMax<qreal>(kTouchPhaseDivisionEpsilonSeconds, kTouchCloseDurationSeconds),
+        1.0
+    );
+}
+
+qreal touchCloseAmount(qreal progress, qreal range)
+{
+    if (range <= 0.0) {
+        return 0.0;
+    }
+    const qreal clampedProgress = qBound<qreal>(0.0, progress, 1.0);
+    const qreal closeResidualNormalized = qBound<qreal>(
+        0.0,
+        kTouchCloseCurveResidualBias - qExp(kTouchCloseCurveExponent * clampedProgress - kTouchCloseCurveProgressBias),
+        kTouchPrefabMaxCloseAmountNormalized
+    );
+    return range * (1.0 - closeResidualNormalized / kTouchPrefabMaxCloseAmountNormalized);
+}
+
+qreal touchLogicalOffsetForDelta(qreal deltaSeconds, qreal startOffset, qreal endOffset)
+{
+    if (deltaSeconds >= 0.0) {
+        return endOffset;
+    }
+    const qreal range = qMax<qreal>(0.0, startOffset - endOffset);
+    return startOffset - touchCloseAmount(touchCloseProgress(deltaSeconds), range);
 }
 
 bool isTouchMarkerVisibleAtPlayhead(const TimelineNoteMarker& marker, double playheadSeconds)
@@ -163,12 +219,12 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
     }
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-    const qreal fallbackTapPixels = 96.0 * canvasScale;
+    const qreal fallbackTapPixels = kJudgeEffectFallbackTapPixels * canvasScale;
     const qreal tapBasePixels = (!tapImage_.isNull())
         ? (tapImage_.width() * kSkinAssetScale * canvasScale)
         : fallbackTapPixels;
-    const qreal effectBasePixels = qMax<qreal>(8.0, tapBasePixels * kJudgeEffectBaseRelativeToTap);
-    const qreal effectOffsetPixels = qMax<qreal>(4.0, tapBasePixels * kJudgeEffectOffsetRelativeToTap);
+    const qreal effectBasePixels = qMax<qreal>(kJudgeEffectMinBasePixels, tapBasePixels * kJudgeEffectBaseRelativeToTap);
+    const qreal effectOffsetPixels = qMax<qreal>(kJudgeEffectMinOffsetPixels, tapBasePixels * kJudgeEffectOffsetRelativeToTap);
 
     struct JudgeEffectTrigger {
         qreal second = -1.0;
@@ -186,9 +242,9 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
     };
     std::array<LaneJudgeEffectTrigger, 8> laneTriggers;
     QVector<JudgeEffectTrigger> freeTriggers;
-    freeTriggers.reserve(16);
+    freeTriggers.reserve(kPreviewSmallCollectionReserve);
     QHash<quint64, HoldSustainTrigger> holdSustainTriggers;
-    holdSustainTriggers.reserve(16);
+    holdSustainTriggers.reserve(kPreviewSmallCollectionReserve);
 
     auto laneFacingAngleFor = [](int lane) {
         return kLaneUnitVectorBaseDegrees
@@ -231,18 +287,12 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
         trigger.useBreakShape = useBreakShape;
         freeTriggers.append(trigger);
     };
-    auto pointKey = [](const QPointF& point) -> quint64 {
-        const qint32 x = qRound(point.x() * 1000.0);
-        const qint32 y = qRound(point.y() * 1000.0);
-        return (static_cast<quint64>(static_cast<quint32>(x)) << 32)
-            | static_cast<quint64>(static_cast<quint32>(y));
-    };
     auto queueHoldSustain = [&](const QPointF& logicalCenter, qreal startSecond) {
         const qreal elapsedSeconds = static_cast<qreal>(playheadSeconds_ - startSecond);
         if (elapsedSeconds < 0.0) {
             return;
         }
-        const quint64 key = pointKey(logicalCenter);
+        const quint64 key = touchPointKey(logicalCenter);
         const auto existing = holdSustainTriggers.constFind(key);
         if (existing != holdSustainTriggers.constEnd() && existing->startSecond > startSecond) {
             return;
@@ -303,7 +353,7 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
 
     if (!holdSustainTriggers.isEmpty()) {
         const qreal holdBasePixels = mapLogicalLengthToRect(static_cast<qreal>(kHoldTargetWidth), playfieldRect);
-        const qreal sustainBasePixels = qMax<qreal>(6.0, holdBasePixels * kJudgeEffectHoldSustainBaseRelativeToTap);
+        const qreal sustainBasePixels = qMax<qreal>(kJudgeEffectHoldSustainMinBasePixels, holdBasePixels * kJudgeEffectHoldSustainBaseRelativeToTap);
         const bool useHoldTexture = !judgeEffectHoldSustainCircleImage_.isNull();
         for (auto it = holdSustainTriggers.cbegin(); it != holdSustainTriggers.cend(); ++it) {
             const HoldSustainTrigger& trigger = it.value();
@@ -314,9 +364,10 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
                     kJudgeEffectHoldSustainPhaseOffsets[static_cast<std::size_t>(particleIndex)
                     % kJudgeEffectHoldSustainPhaseOffsets.size()];
                 const quint64 jitterSeed =
-                    it.key() ^ (0x9e3779b97f4a7c15ULL * static_cast<quint64>(particleIndex + 1));
+                    it.key() ^ (kJudgeEffectParticleSeedMultiplier * static_cast<quint64>(particleIndex + 1));
                 const qreal phaseJitterNorm =
-                    (static_cast<qreal>((jitterSeed >> 11) & 0xFF) / 255.0 - 0.5) * 0.06;
+                    (static_cast<qreal>((jitterSeed >> kJudgeEffectParticleJitterBitShift) & kJudgeEffectParticleJitterMask) / 255.0
+                        - kJudgeEffectParticleJitterCenter) * kJudgeEffectParticleJitterScale;
                 qreal phaseNorm = basePhaseNorm + phaseJitterNorm;
                 phaseNorm -= qFloor(phaseNorm);
                 const qreal phase = phaseNorm * kJudgeEffectHoldSustainLifetimeSeconds;
@@ -333,7 +384,7 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
                 );
                 qreal particleAlpha = sampledAlpha;
                 particleAlpha = qBound<qreal>(0.0, particleAlpha, 1.0);
-                if (particleAlpha <= 0.001) {
+                if (particleAlpha <= kRenderAlphaEpsilon) {
                     continue;
                 }
                 const int particleSize = qMax(1, qRound(sustainBasePixels * particleScale));
@@ -343,7 +394,7 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
                         particleAlpha * kJudgeEffectEdgeGlowAlpha,
                         1.0
                     );
-                    if (glowAlpha > 0.001) {
+                    if (glowAlpha > kRenderAlphaEpsilon) {
                         const int glowSize = qMax(1, qRound(particleSize * kJudgeEffectEdgeGlowScale));
                         drawSpriteImage(
                             painter,
@@ -365,18 +416,15 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
                         particleAlpha
                     );
                 } else {
-                    const qreal radius = qMax<qreal>(0.5, particleSize * 0.5);
-                    const int br = 255;
-                    const int bg = 253;
-                    const int bb = 119;
-                    QColor ringOuter(br, bg, bb);
-                    ringOuter.setAlphaF(qBound<qreal>(0.0, particleAlpha * 0.42, 1.0));
-                    QColor ringCore(br, bg, bb);
-                    ringCore.setAlphaF(qBound<qreal>(0.0, particleAlpha * 0.98, 1.0));
+                    const qreal radius = qMax<qreal>(kJudgeEffectParticleMinRadiusPixels, particleSize * 0.5);
+                    QColor ringOuter(kJudgeEffectHoldRingRed, kJudgeEffectHoldRingGreen, kJudgeEffectHoldRingBlue);
+                    ringOuter.setAlphaF(qBound<qreal>(0.0, particleAlpha * kJudgeEffectHoldRingOuterAlphaScale, 1.0));
+                    QColor ringCore(kJudgeEffectHoldRingRed, kJudgeEffectHoldRingGreen, kJudgeEffectHoldRingBlue);
+                    ringCore.setAlphaF(qBound<qreal>(0.0, particleAlpha * kJudgeEffectHoldRingCoreAlphaScale, 1.0));
                     painter.setBrush(Qt::NoBrush);
-                    painter.setPen(QPen(ringOuter, qMax<qreal>(1.0, radius * 0.18), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+                    painter.setPen(QPen(ringOuter, qMax<qreal>(kJudgeEffectHoldRingOuterMinWidth, radius * kJudgeEffectHoldRingOuterWidthScale), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
                     painter.drawEllipse(center, radius, radius);
-                    painter.setPen(QPen(ringCore, qMax<qreal>(0.8, radius * 0.09), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+                    painter.setPen(QPen(ringCore, qMax<qreal>(kJudgeEffectHoldRingCoreMinWidth, radius * kJudgeEffectHoldRingCoreWidthScale), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
                     painter.drawEllipse(center, radius, radius);
                 }
             }
@@ -384,7 +432,7 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
     }
 
     auto drawJudgeEffectShapeWithEdgeGlow = [this, &painter](const QImage* image, const QRectF& sourceRect, const QPointF& center, int size, qreal angleDegrees, qreal opacity) {
-        if (size <= 0 || opacity <= 0.001) {
+        if (size <= 0 || opacity <= kRenderAlphaEpsilon) {
             return;
         }
         if (image == nullptr || image->isNull()) {
@@ -402,7 +450,7 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
         const int glowWidth = qMax(1, qRound(targetWidth * kJudgeEffectEdgeGlowScale));
         const int glowHeight = qMax(1, qRound(targetHeight * kJudgeEffectEdgeGlowScale));
         const qreal glowAlpha = qBound<qreal>(0.0, opacity * kJudgeEffectEdgeGlowAlpha, 1.0);
-        if (glowAlpha > 0.001) {
+        if (glowAlpha > kRenderAlphaEpsilon) {
             drawSpriteImage(
                 painter,
                 *image,
@@ -495,13 +543,7 @@ void PreviewCanvas::drawJudgeEffectTouchLayer(QPainter& painter, const QRectF& p
         qreal second = -1.0;
     };
     QHash<quint64, TouchJudgeTrigger> positionTriggers;
-    positionTriggers.reserve(16);
-    auto pointKey = [](const QPointF& point) -> quint64 {
-        const qint32 x = qRound(point.x() * 1000.0);
-        const qint32 y = qRound(point.y() * 1000.0);
-        return (static_cast<quint64>(static_cast<quint32>(x)) << 32)
-            | static_cast<quint64>(static_cast<quint32>(y));
-    };
+    positionTriggers.reserve(kPreviewSmallCollectionReserve);
     for (const TimelineNoteMarker& marker : noteMarkers_) {
         if (marker.type != "touch") {
             continue;
@@ -513,7 +555,7 @@ void PreviewCanvas::drawJudgeEffectTouchLayer(QPainter& painter, const QRectF& p
         if (elapsedSeconds < 0.0 || elapsedSeconds > kJudgeEffectTouchDurationSeconds) {
             continue;
         }
-        const quint64 key = pointKey(marker.touchPoint);
+        const quint64 key = touchPointKey(marker.touchPoint);
         const auto existing = positionTriggers.constFind(key);
         if (existing == positionTriggers.constEnd() || marker.second >= existing->second) {
             TouchJudgeTrigger trigger;
@@ -528,11 +570,11 @@ void PreviewCanvas::drawJudgeEffectTouchLayer(QPainter& painter, const QRectF& p
 
     // Firework uses an isotropic scale basis to prevent any accidental non-square distortion.
     const qreal canvasScale = qMin(playfieldRect.width(), playfieldRect.height()) / kLogicalCanvasSize;
-    const qreal fallbackTouchPixels = 96.0 * kTouchAssetScale * canvasScale;
+    const qreal fallbackTouchPixels = kJudgeEffectTouchFallbackPixels * kTouchAssetScale * canvasScale;
     const qreal touchBasePixels = (!touchPointImage_.isNull())
         ? (touchPointImage_.width() * kTouchAssetScale * canvasScale)
         : fallbackTouchPixels;
-    const qreal prefabUnitPixels = qMax<qreal>(6.0, touchBasePixels * kJudgeEffectTouchUnitRelativeToTouch);
+    const qreal prefabUnitPixels = qMax<qreal>(kJudgeEffectTouchMinUnitPixels, touchBasePixels * kJudgeEffectTouchUnitRelativeToTouch);
     const bool useTextureSprites = !judgeEffectTouchCircleImage_.isNull()
         && !judgeEffectTouchPart01Image_.isNull()
         && !judgeEffectTouchPart02Image_.isNull();
@@ -558,7 +600,7 @@ void PreviewCanvas::drawJudgeEffectTouchLayer(QPainter& painter, const QRectF& p
             continue;
         }
         const qreal clipTime = judgeEffectTouchClipTime(elapsedSeconds);
-        // In original Unity prefab, DestroySelf.ifDestroy flips at 0.25s, so visual should stop there.
+        // [ASSET_TUNING] DestroySelf.ifDestroy flips at 0.25s in the source effect timing, so visual should stop there.
         if (clipTime > kJudgeEffectTouchDestroySeconds) {
             continue;
         }
@@ -575,7 +617,7 @@ void PreviewCanvas::drawJudgeEffectTouchLayer(QPainter& painter, const QRectF& p
         if (useTextureSprites) {
             auto drawTouchEffectSpriteByUnits =
                 [this, &painter, worldToPixels](const QImage& image, const QPointF& spriteCenter, qreal widthUnits, qreal angleDegrees, qreal opacity) {
-                    if (image.isNull() || widthUnits <= 0.0 || opacity <= 0.001) {
+                    if (image.isNull() || widthUnits <= 0.0 || opacity <= kRenderAlphaEpsilon) {
                         return;
                     }
                     const qreal aspect = image.width() > 0 ? static_cast<qreal>(image.height()) / image.width() : 1.0;
@@ -622,7 +664,7 @@ void PreviewCanvas::drawJudgeEffectTouchLayer(QPainter& painter, const QRectF& p
                     judgeEffectTouchPart02Image_,
                     pieceCenter,
                     outerPieceWidthUnits,
-                    -45.0,
+                    kJudgeEffectTouchTextureOuterDiagonalAngleDegrees,
                     lifeAlpha
                 );
             }
@@ -642,15 +684,15 @@ void PreviewCanvas::drawJudgeEffectTouchLayer(QPainter& painter, const QRectF& p
         const QColor circleColor(255, 253, 119);
         const QColor sparkleColor(255, 230, 119);
         auto drawSparkle = [&painter, &sparkleColor](const QPointF& sparkleCenter, qreal size, qreal rotationDeg, qreal alpha, qreal axisScaleX, qreal axisScaleY) {
-            if (size <= 0.5 || alpha <= 0.001) {
+            if (size <= kJudgeEffectTouchSparkleSizeThreshold || alpha <= kRenderAlphaEpsilon) {
                 return;
             }
-            const qreal outer = size * 0.5;
-            const qreal inner = outer * 0.42;
+            const qreal outer = size * kJudgeEffectTouchSparkleOuterRadiusScale;
+            const qreal inner = outer * kJudgeEffectTouchSparkleInnerRadiusScale;
             QPainterPath path;
-            for (int i = 0; i < 8; ++i) {
+            for (int i = 0; i < kJudgeEffectTouchSparklePointCount; ++i) {
                 const qreal radius = (i % 2 == 0) ? outer : inner;
-                const qreal radians = qDegreesToRadians(rotationDeg + i * 45.0);
+                const qreal radians = qDegreesToRadians(rotationDeg + i * kJudgeEffectTouchSparklePointAngleStepDegrees);
                 const QPointF point(
                     qCos(radians) * radius * axisScaleX,
                     qSin(radians) * radius * axisScaleY
@@ -663,12 +705,12 @@ void PreviewCanvas::drawJudgeEffectTouchLayer(QPainter& painter, const QRectF& p
             }
             path.closeSubpath();
             QColor glow = sparkleColor;
-            glow.setAlphaF(qBound<qreal>(0.0, alpha * 0.38, 1.0));
+            glow.setAlphaF(qBound<qreal>(0.0, alpha * kJudgeEffectTouchSparkleGlowAlphaScale, 1.0));
             painter.setPen(Qt::NoPen);
             painter.setBrush(glow);
             QTransform grow;
             grow.translate(sparkleCenter.x(), sparkleCenter.y());
-            grow.scale(1.22, 1.22);
+            grow.scale(kJudgeEffectTouchSparkleGlowScale, kJudgeEffectTouchSparkleGlowScale);
             grow.translate(-sparkleCenter.x(), -sparkleCenter.y());
             painter.drawPath(grow.map(path));
             QColor core = sparkleColor;
@@ -678,15 +720,15 @@ void PreviewCanvas::drawJudgeEffectTouchLayer(QPainter& painter, const QRectF& p
         };
 
         const qreal circleRadius = qMax<qreal>(1.0, worldToPixels * circleScale);
-        if (circleAlpha > 0.001) {
+        if (circleAlpha > kRenderAlphaEpsilon) {
             QColor ringOuter = circleColor;
-            ringOuter.setAlphaF(qBound<qreal>(0.0, circleAlpha * 0.45, 1.0));
+            ringOuter.setAlphaF(qBound<qreal>(0.0, circleAlpha * kJudgeEffectTouchCircleOuterAlphaScale, 1.0));
             QColor ringCore = circleColor;
-            ringCore.setAlphaF(qBound<qreal>(0.0, circleAlpha * 0.95, 1.0));
+            ringCore.setAlphaF(qBound<qreal>(0.0, circleAlpha * kJudgeEffectTouchCircleCoreAlphaScale, 1.0));
             painter.setBrush(Qt::NoBrush);
-            painter.setPen(QPen(ringOuter, qMax<qreal>(1.0, circleRadius * 0.18), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            painter.setPen(QPen(ringOuter, qMax<qreal>(kJudgeEffectHoldRingOuterMinWidth, circleRadius * kJudgeEffectHoldRingOuterWidthScale), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
             painter.drawEllipse(center, circleRadius, circleRadius);
-            painter.setPen(QPen(ringCore, qMax<qreal>(0.8, circleRadius * 0.09), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+            painter.setPen(QPen(ringCore, qMax<qreal>(kJudgeEffectHoldRingCoreMinWidth, circleRadius * kJudgeEffectHoldRingCoreWidthScale), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
             painter.drawEllipse(center, circleRadius, circleRadius);
         }
 
@@ -699,11 +741,11 @@ void PreviewCanvas::drawJudgeEffectTouchLayer(QPainter& painter, const QRectF& p
         const qreal outerPieceSize = qMax<qreal>(1.0, worldToPixels * kJudgeEffectTouchOuterScaleBase * outerParentScale);
         for (const QPointF& offset : kJudgeEffectTouchOuterDiagonalOffsets) {
             const QPointF pieceCenter = center + offset * (worldToPixels * outerParentScale);
-            drawSparkle(pieceCenter, outerPieceSize, -45.0, lifeAlpha, 1.0, 1.0);
+            drawSparkle(pieceCenter, outerPieceSize, kJudgeEffectTouchTextureOuterDiagonalAngleDegrees, lifeAlpha, 1.0, 1.0);
         }
         for (const QPointF& offset : kJudgeEffectTouchOuterCardinalOffsets) {
             const QPointF pieceCenter = center + offset * (worldToPixels * outerParentScale);
-            drawSparkle(pieceCenter, outerPieceSize, 0.0, lifeAlpha, 1.18, 0.85);
+            drawSparkle(pieceCenter, outerPieceSize, 0.0, lifeAlpha, kJudgeEffectTouchOuterCardinalAxisScaleX, kJudgeEffectTouchOuterCardinalAxisScaleY);
         }
     }
 
@@ -722,13 +764,7 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
         qreal second = -1.0;
     };
     QHash<quint64, FireworkTrigger> positionTriggers;
-    positionTriggers.reserve(16);
-    auto pointKey = [](const QPointF& point) -> quint64 {
-        const qint32 x = qRound(point.x() * 1000.0);
-        const qint32 y = qRound(point.y() * 1000.0);
-        return (static_cast<quint64>(static_cast<quint32>(x)) << 32)
-            | static_cast<quint64>(static_cast<quint32>(y));
-    };
+    positionTriggers.reserve(kPreviewSmallCollectionReserve);
 
     for (const TimelineNoteMarker& marker : noteMarkers_) {
         if (!marker.isFirework) {
@@ -753,7 +789,7 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
             continue;
         }
 
-        const quint64 key = pointKey(marker.touchPoint);
+        const quint64 key = touchPointKey(marker.touchPoint);
         const auto existing = positionTriggers.constFind(key);
         if (existing == positionTriggers.constEnd() || triggerSecond >= existing->second) {
             FireworkTrigger trigger;
@@ -768,11 +804,11 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
     }
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-    const qreal fallbackTouchPixels = 96.0 * kTouchAssetScale * canvasScale;
+    const qreal fallbackTouchPixels = kJudgeEffectFireworkFallbackTouchPixels * kTouchAssetScale * canvasScale;
     const qreal touchBasePixels = (!touchPointImage_.isNull())
         ? (touchPointImage_.width() * kTouchAssetScale * canvasScale)
         : fallbackTouchPixels;
-    const qreal worldToPixels = qMax<qreal>(6.0, touchBasePixels * kJudgeEffectTouchUnitRelativeToTouch);
+    const qreal worldToPixels = qMax<qreal>(kJudgeEffectFireworkMinUnitPixels, touchBasePixels * kJudgeEffectTouchUnitRelativeToTouch);
     const bool hasColorBallSprite = !judgeEffectFireworkColorBallImage_.isNull();
     const bool resumeNativeBatch = nativePaintingActive_;
     if (resumeNativeBatch) {
@@ -802,7 +838,7 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
 
     const QPointF playfieldCenter = mapLogicalPointToRect(QPointF(kLogicalCanvasCenter, kLogicalCanvasCenter), playfieldRect);
     const qreal outlineRadius = qMax<qreal>(1.0, mapLogicalLengthToRect(kLogicalDistanceEdge, playfieldRect));
-    const qreal clipRadius = qMax<qreal>(1.0, outlineRadius - 1.0);
+    const qreal clipRadius = qMax<qreal>(1.0, outlineRadius - kJudgeEffectFireworkClipInsetPixels);
     QPainterPath playfieldClip;
     playfieldClip.addEllipse(playfieldCenter, clipRadius, clipRadius);
     layerPainter.setClipPath(playfieldClip, Qt::IntersectClip);
@@ -814,7 +850,7 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
         qreal widthPixels,
         qreal alpha
     ) {
-        if (image.isNull() || widthPixels <= 1.0 || alpha <= 0.001) {
+        if (image.isNull() || widthPixels <= 1.0 || alpha <= kRenderAlphaEpsilon) {
             return;
         }
         const QRectF resolvedSource =
@@ -887,12 +923,12 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
         );
         const qreal steppedRotationDegrees =
             -static_cast<qreal>(stepRotationIndex) * kJudgeEffectFireworkStepRotationDegrees;
-        if (fireworkScale <= 0.001 && colorBallScale <= 0.001 && colorBallBigScale <= 0.001) {
+        if (fireworkScale <= kRenderAlphaEpsilon && colorBallScale <= kRenderAlphaEpsilon && colorBallBigScale <= kRenderAlphaEpsilon) {
             continue;
         }
         const QPointF center = mapLogicalPointToRect(marker.touchPoint, playfieldRect);
 
-        if (fireworkScale > 0.001 && fireworkAlpha > 0.001) {
+        if (fireworkScale > kRenderAlphaEpsilon && fireworkAlpha > kRenderAlphaEpsilon) {
             const qreal outerRadius = qMax<qreal>(1.0, (kJudgeEffectFireworkBaseWidthUnits * fireworkScale * worldToPixels) * 0.5);
             const QRectF sectorRect(
                 center.x() - outerRadius,
@@ -906,7 +942,7 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
                 const QColor sectorColor = scaleRgb(
                     kJudgeEffectFireworkSectorColors[static_cast<std::size_t>(sector % kJudgeEffectFireworkSectorColors.size())],
                     kJudgeEffectFireworkBrightnessGain,
-                    fireworkAlpha * 0.88
+                    fireworkAlpha * kJudgeEffectFireworkSectorAlphaScale
                 );
                 layerPainter.setBrush(sectorColor);
                 const qreal startAngle =
@@ -923,7 +959,7 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
             layerPainter.restore();
         }
 
-        if (hasColorBallSprite && colorBallBigScale > 0.001 && colorBallBigAlpha > 0.001) {
+        if (hasColorBallSprite && colorBallBigScale > kRenderAlphaEpsilon && colorBallBigAlpha > kRenderAlphaEpsilon) {
             const qreal widthPixels = qMax<qreal>(
                 1.0,
                 kJudgeEffectFireworkColorBallBaseWidthUnits * colorBallBigScale * worldToPixels
@@ -936,7 +972,7 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
                 colorBallBigAlpha
             );
         }
-        if (hasColorBallSprite && colorBallScale > 0.001 && colorBallAlpha > 0.001) {
+        if (hasColorBallSprite && colorBallScale > kRenderAlphaEpsilon && colorBallAlpha > kRenderAlphaEpsilon) {
             const qreal widthPixels = qMax<qreal>(
                 1.0,
                 kJudgeEffectFireworkColorBallBaseWidthUnits * colorBallScale * worldToPixels
@@ -949,14 +985,14 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
                 colorBallAlpha
             );
         }
-        if (!hasColorBallSprite && (colorBallScale > 0.001 || colorBallBigScale > 0.001)) {
+        if (!hasColorBallSprite && (colorBallScale > kRenderAlphaEpsilon || colorBallBigScale > kRenderAlphaEpsilon)) {
             const qreal fallbackScale = qMax(colorBallScale, colorBallBigScale);
             const qreal fallbackAlpha = qMax(colorBallAlpha, colorBallBigAlpha);
             const qreal radius = qMax<qreal>(1.0, (kJudgeEffectFireworkColorBallBaseWidthUnits * fallbackScale * worldToPixels) * 0.5);
             QRadialGradient glow(center, radius);
-            glow.setColorAt(0.0, scaleRgb(QColor(255, 245, 160), 1.0, fallbackAlpha * 0.92));
-            glow.setColorAt(0.3, scaleRgb(QColor(255, 110, 220), 1.0, fallbackAlpha * 0.65));
-            glow.setColorAt(0.68, scaleRgb(QColor(110, 190, 255), 1.0, fallbackAlpha * 0.42));
+            glow.setColorAt(kJudgeEffectFireworkColorBallCoreStop, scaleRgb(QColor(255, 245, 160), 1.0, fallbackAlpha * kJudgeEffectFireworkColorBallCoreAlphaScale));
+            glow.setColorAt(kJudgeEffectFireworkColorBallMidStop, scaleRgb(QColor(255, 110, 220), 1.0, fallbackAlpha * kJudgeEffectFireworkColorBallMidAlphaScale));
+            glow.setColorAt(kJudgeEffectFireworkColorBallOuterStop, scaleRgb(QColor(110, 190, 255), 1.0, fallbackAlpha * kJudgeEffectFireworkColorBallOuterAlphaScale));
             glow.setColorAt(1.0, QColor(255, 240, 120, 0));
             layerPainter.setPen(Qt::NoPen);
             layerPainter.setBrush(glow);
@@ -967,7 +1003,7 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
             kJudgeEffectFireworkHoleStartRadiusRatio
             + (kJudgeEffectFireworkHoleEndRadiusRatio - kJudgeEffectFireworkHoleStartRadiusRatio) * smoothStep01(life01)
         );
-        const qreal holeFeather = qMax<qreal>(2.0, holeRadius * kJudgeEffectFireworkHoleBandRatio);
+        const qreal holeFeather = qMax<qreal>(kJudgeEffectFireworkHoleMinFeatherPixels, holeRadius * kJudgeEffectFireworkHoleBandRatio);
         const qreal holeMaskRadius = holeRadius + holeFeather;
         const qreal holeSolidRatio = qBound<qreal>(0.0, holeRadius / qMax<qreal>(holeMaskRadius, 0.001), 1.0);
         QRadialGradient holeGradient(center, holeMaskRadius);
@@ -997,7 +1033,7 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
 
 void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
 {
-    if (!showTimestamp_) {
+    if (!showTimestamp_ && !showDebugInfo_ && !showObjectStatsHud_) {
         return;
     }
 
@@ -1100,16 +1136,10 @@ void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
 
     painter.setPen(QColor("#D9E2EC"));
     const qreal hudPadding = qBound<qreal>(10.0, stageRect.width() * 0.028, 18.0);
-    const int timeFontPointSize = qBound(12, qRound(stageRect.width() * 0.03), 20);
-    const int debugFontPointSize = qBound(8, qRound(stageRect.width() * 0.019), 13);
+    const int timeFontPointSize = qBound(12, qRound(stageRect.height() * 0.03), 20);
+    const int debugFontPointSize = qBound(8, qRound(stageRect.height() * 0.019), 13);
     QFont timeFont = hudMonoFont(timeFontPointSize, QFont::DemiBold);
-    if (!showDebugInfo_) {
-        painter.setFont(timeFont);
-        painter.drawText(
-            QPointF(stageRect.left() + hudPadding, stageRect.bottom() - hudPadding),
-            formatHudTimeLabel(playheadSeconds_)
-        );
-    } else {
+    if (showDebugInfo_) {
         QFont fpsFont = hudMonoFont(debugFontPointSize, QFont::Medium);
         painter.setFont(fpsFont);
         const QFontMetrics metrics(fpsFont);
@@ -1129,7 +1159,9 @@ void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
             QString("Fallback: %1")
                 .arg(cpuFallbackCount_)
         );
+    }
 
+    if (showTimestamp_) {
         painter.setFont(timeFont);
         painter.drawText(
             QPointF(stageRect.left() + hudPadding, stageRect.bottom() - hudPadding),
@@ -1723,11 +1755,11 @@ void PreviewCanvas::drawTapMarker(QPainter& painter, const TimelineNoteMarker& m
         const QImage& overlay = (marker.sameHeadSlide && !starExDoubleImage_.isNull()) ? starExDoubleImage_ : starExImage_;
         if (!overlay.isNull()) {
             const QColor tint = exStarTintColor(marker.headBreak, marker.headEach);
-            renderImage = composeOverlay(renderImage, overlay, 0.82, 0.18, nullptr, &tint);
+            renderImage = composeOverlay(renderImage, overlay, kTapOverlayBaseMix, kTapOverlayAlphaMix, nullptr, &tint);
         }
     } else if (!slideHeadStar && marker.isEx && !renderImage.isNull() && !tapExImage_.isNull()) {
         const QColor tint = exTintColor(marker.isBreak, marker.isEach);
-        renderImage = composeOverlay(renderImage, tapExImage_, 0.82, 0.18, nullptr, &tint);
+        renderImage = composeOverlay(renderImage, tapExImage_, kTapOverlayBaseMix, kTapOverlayAlphaMix, nullptr, &tint);
     }
 
     if (!renderImage.isNull()) {
@@ -1759,14 +1791,14 @@ void PreviewCanvas::drawTapMarker(QPainter& painter, const TimelineNoteMarker& m
         return;
     }
 
-    const qreal radius = mapLogicalLengthToRect(16.0 * approach.scale, playfieldRect);
+    const qreal radius = mapLogicalLengthToRect(kTapFallbackRadiusLogical * approach.scale, playfieldRect);
     const QColor fillColor = tapColorForMarker(marker);
-    painter.setPen(QPen(QColor("#0F1720"), qMax<qreal>(1.5, radius * 0.14)));
+    painter.setPen(QPen(QColor("#0F1720"), qMax<qreal>(kTapFallbackOuterStrokeMinWidth, radius * kTapFallbackOuterStrokeScale)));
     painter.setBrush(fillColor);
     painter.drawEllipse(point, radius, radius);
 
-    painter.setPen(QPen(QColor("#FFFDF4"), qMax<qreal>(1.0, radius * 0.10)));
-    painter.drawEllipse(point, radius * 0.58, radius * 0.58);
+    painter.setPen(QPen(QColor("#FFFDF4"), qMax<qreal>(kTapFallbackInnerStrokeMinWidth, radius * kTapFallbackInnerStrokeScale)));
+    painter.drawEllipse(point, radius * kTapFallbackInnerRadiusScale, radius * kTapFallbackInnerRadiusScale);
 }
 
 void PreviewCanvas::drawHoldMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)
@@ -1791,7 +1823,7 @@ void PreviewCanvas::drawHoldMarker(QPainter& painter, const TimelineNoteMarker& 
     QImage holdCapImage = holdImage != nullptr ? *holdImage : QImage();
     if (marker.isEx && !holdCapImage.isNull() && !holdExImage_.isNull()) {
         const QColor tint = exTintColor(marker.isBreak, marker.isEach);
-        holdCapImage = composeOverlay(holdCapImage, holdExImage_, 0.85, 0.20, nullptr, &tint);
+        holdCapImage = composeOverlay(holdCapImage, holdExImage_, kHoldOverlayBaseMix, kHoldOverlayAlphaMix, nullptr, &tint);
     }
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
     const auto drawHoldStripSlices = [&](const QPointF& center, int bodyLogicalLength, qreal scale) -> bool {
@@ -1801,7 +1833,7 @@ void PreviewCanvas::drawHoldMarker(QPainter& painter, const TimelineNoteMarker& 
 
         const int srcW = qMax(1, holdCapImage.width());
         const int srcH = qMax(1, holdCapImage.height());
-        const int capRaw = qMax(1, qMin(srcH / 2, qRound(srcH * 67.0 / 200.0)));
+        const int capRaw = qMax(1, qMin(srcH / 2, qRound(srcH * kHoldCapSliceRatioNumerator / kHoldCapSliceRatioDenominator)));
         const int midY = qBound(0, srcH / 2, srcH - 1);
         const int targetWidth = qMax(1, qRound(kHoldTargetWidth * canvasScale * scale));
         const int targetCapHeight = qMax(
@@ -1859,8 +1891,8 @@ void PreviewCanvas::drawHoldMarker(QPainter& painter, const TimelineNoteMarker& 
             return;
         }
 
-        const qreal radius = mapLogicalLengthToRect(18.0 * headApproach.scale, playfieldRect);
-        painter.setPen(QPen(QColor("#0F1720"), qMax<qreal>(1.5, radius * 0.14)));
+        const qreal radius = mapLogicalLengthToRect(kHoldFallbackCapRadiusLogical * headApproach.scale, playfieldRect);
+        painter.setPen(QPen(QColor("#0F1720"), qMax<qreal>(kTapFallbackOuterStrokeMinWidth, radius * kTapFallbackOuterStrokeScale)));
         painter.setBrush(tapColorForMarker(marker));
         painter.drawEllipse(point, radius, radius);
         return;
@@ -1887,8 +1919,8 @@ void PreviewCanvas::drawHoldMarker(QPainter& painter, const TimelineNoteMarker& 
         return;
     }
 
-    const qreal bodyWidth = mapLogicalLengthToRect(30.0, playfieldRect);
-    painter.setPen(QPen(tapColorForMarker(marker), qMax<qreal>(4.0, bodyWidth), Qt::SolidLine, Qt::RoundCap));
+    const qreal bodyWidth = mapLogicalLengthToRect(kHoldFallbackBodyWidthLogical, playfieldRect);
+    painter.setPen(QPen(tapColorForMarker(marker), qMax<qreal>(kHoldFallbackBodyMinWidth, bodyWidth), Qt::SolidLine, Qt::RoundCap));
     painter.drawLine(tailPoint, headPoint);
 }
 
@@ -2574,11 +2606,11 @@ void PreviewCanvas::drawSlideMarker(QPainter& painter, const TimelineNoteMarker&
         }
         logicalPoint = points.constFirst();
         angle = angles.isEmpty() ? 0.0 : angles.constFirst();
-        const qreal waitDuration = qMax(0.001, marker.slideTraceSecond - marker.second);
+        const qreal waitDuration = qMax(kRenderDurationEpsilon, marker.slideTraceSecond - marker.second);
         const qreal waitT = qBound<qreal>(0.0, (playheadSeconds_ - marker.second) / waitDuration, 1.0);
         const qreal startScale = slideStartupStarInitialScale(*starImage);
         imageScale = startScale + (kStarAssetScale - startScale) * waitT;
-        imageOpacity = 0.5 + 0.5 * waitT;
+        imageOpacity = kObjectWaitStateStartOpacity + kObjectWaitStateOpacityDelta * waitT;
     } else {
         starImage = selectSlideMovingStarImage(marker);
         if (starImage->isNull()) {
@@ -2601,7 +2633,7 @@ void PreviewCanvas::drawSlideMarker(QPainter& painter, const TimelineNoteMarker&
         }
         qreal proportion = 1.0;
         if (segmentIndex < marker.slideSegmentShootSeconds.size() && segmentIndex < marker.slideSegmentDurations.size()) {
-            const qreal duration = qMax(0.001, marker.slideSegmentDurations[segmentIndex]);
+            const qreal duration = qMax(kRenderDurationEpsilon, marker.slideSegmentDurations[segmentIndex]);
             proportion = qBound<qreal>(0.0, (playheadSeconds_ - marker.slideSegmentShootSeconds[segmentIndex]) / duration, 1.0);
         }
         logicalPoint = interpolatePoint(points, proportion);
@@ -2650,16 +2682,16 @@ void PreviewCanvas::drawWifiMarker(QPainter& painter, const TimelineNoteMarker& 
         if (!marker.hasHeadStar) {
             return;
         }
-        const qreal waitDuration = qMax(0.001, marker.slideTraceSecond - marker.second);
+        const qreal waitDuration = qMax(kRenderDurationEpsilon, marker.slideTraceSecond - marker.second);
         const qreal waitT = qBound<qreal>(0.0, (playheadSeconds_ - marker.second) / waitDuration, 1.0);
         const qreal startScale = slideStartupStarInitialScale(*starImage);
         imageScale = startScale + (kStarAssetScale - startScale) * waitT;
-        imageOpacity = 0.5 + 0.5 * waitT;
+        imageOpacity = kObjectWaitStateStartOpacity + kObjectWaitStateOpacityDelta * waitT;
     } else if (!marker.slideSegmentDurations.isEmpty()) {
-        const qreal duration = qMax(0.001, marker.slideSegmentDurations.constFirst());
+        const qreal duration = qMax(kRenderDurationEpsilon, marker.slideSegmentDurations.constFirst());
         proportion = qBound<qreal>(0.0, (playheadSeconds_ - marker.slideTraceSecond) / duration, 1.0);
     } else if (marker.endSecond > marker.slideTraceSecond) {
-        const qreal duration = qMax(0.001, marker.endSecond - marker.slideTraceSecond);
+        const qreal duration = qMax(kRenderDurationEpsilon, marker.endSecond - marker.slideTraceSecond);
         proportion = qBound<qreal>(0.0, (playheadSeconds_ - marker.slideTraceSecond) / duration, 1.0);
     }
 
@@ -2737,26 +2769,18 @@ void PreviewCanvas::drawTouchMarker(
         (border3Image != nullptr && !border3Image->isNull()) ? qMax(1, qRound(border3Image->width() * kTouchAssetScale * canvasScale)) : 0;
     const int border3Height =
         (border3Image != nullptr && !border3Image->isNull()) ? qMax(1, qRound(border3Image->height() * kTouchAssetScale * canvasScale)) : 0;
-    const qreal progress = qBound<qreal>(0.0, (deltaSeconds + kTouchDurationSeconds) / kTouchDurationSeconds, 1.0);
-    qreal alpha = 1.0;
-    qreal closeRatio = 0.0;
-    if (progress < kTouchAppearPhase) {
-        alpha = qBound<qreal>(0.0, progress / kTouchAppearPhase, 1.0);
-    } else {
-        closeRatio = qBound<qreal>(0.0, (progress - kTouchAppearPhase) / (1.0 - kTouchAppearPhase), 1.0);
-    }
-
-    const qreal logicalOffset = kTouchClosedOffset + (kTouchStartOffset - kTouchClosedOffset) * (1.0 - closeRatio);
+    const qreal alpha = touchPreHitAlpha(deltaSeconds);
+    const qreal logicalOffset = touchLogicalOffsetForDelta(deltaSeconds, kTouchStartOffset, kTouchClosedOffset);
     const qreal offset = mapLogicalLengthToRect(logicalOffset, playfieldRect);
     const struct {
         qreal dx;
         qreal dy;
         int angle;
     } layout[] = {
-        {0.0, -offset, 180},
-        {offset, 0.0, -90},
-        {0.0, offset, 0},
-        {-offset, 0.0, 90},
+        {0.0, -offset, kTouchUpAngleDegrees},
+        {offset, 0.0, kTouchRightAngleDegrees},
+        {0.0, offset, kTouchDownAngleDegrees},
+        {-offset, 0.0, kTouchLeftAngleDegrees},
     };
 
     const bool batchNative = glRenderer_.isInitialized() && !nativePaintingActive_;
@@ -2775,13 +2799,13 @@ void PreviewCanvas::drawTouchMarker(
             alpha
         );
     }
-    if (overlapCount >= 2 && border2Image != nullptr && !border2Image->isNull()) {
+    if (overlapCount >= kTouchOverlapBorder2Threshold && border2Image != nullptr && !border2Image->isNull()) {
         drawSpriteImage(painter, *border2Image, point, border2Width, border2Height, 0.0, alpha);
     }
-    if (overlapCount >= 3 && border3Image != nullptr && !border3Image->isNull()) {
+    if (overlapCount >= kTouchOverlapBorder3Threshold && border3Image != nullptr && !border3Image->isNull()) {
         drawSpriteImage(painter, *border3Image, point, border3Width, border3Height, 0.0, alpha);
     }
-    drawSpriteImage(painter, basePointImage, point, pointWidth, pointHeight, 0.0);
+    drawSpriteImage(painter, basePointImage, point, pointWidth, pointHeight, 0.0, alpha);
     if (batchNative) {
         painter.endNativePainting();
         nativePaintingActive_ = false;
@@ -2824,14 +2848,8 @@ void PreviewCanvas::drawTouchHoldMarker(QPainter& painter, const TimelineNoteMar
     qreal alpha = 1.0;
     qreal logicalOffset = kTouchHoldClosedOffset;
     if (deltaSeconds < 0.0) {
-        const qreal progress = qBound<qreal>(0.0, (deltaSeconds + kTouchDurationSeconds) / kTouchDurationSeconds, 1.0);
-        qreal closeRatio = 0.0;
-        if (progress < kTouchAppearPhase) {
-            alpha = qBound<qreal>(0.0, progress / kTouchAppearPhase, 1.0);
-        } else {
-            closeRatio = qBound<qreal>(0.0, (progress - kTouchAppearPhase) / (1.0 - kTouchAppearPhase), 1.0);
-        }
-        logicalOffset = kTouchHoldClosedOffset + (kTouchHoldStartOffset - kTouchHoldClosedOffset) * (1.0 - closeRatio);
+        alpha = touchPreHitAlpha(deltaSeconds);
+        logicalOffset = touchLogicalOffsetForDelta(deltaSeconds, kTouchHoldStartOffset, kTouchHoldClosedOffset);
     }
 
     const qreal offset = mapLogicalLengthToRect(logicalOffset, playfieldRect);
@@ -2843,10 +2861,10 @@ void PreviewCanvas::drawTouchHoldMarker(QPainter& painter, const TimelineNoteMar
         qreal dx;
         qreal dy;
     } layout[] = {
-        {&touchHold0Image_, qMax(1, qRound(touchHold0Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold0Image_.height() * kTouchAssetScale * canvasScale)), -135, offset, -offset},
-        {&touchHold1Image_, qMax(1, qRound(touchHold1Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold1Image_.height() * kTouchAssetScale * canvasScale)), -45, offset, offset},
-        {&touchHold2Image_, qMax(1, qRound(touchHold2Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold2Image_.height() * kTouchAssetScale * canvasScale)), 45, -offset, offset},
-        {&touchHold3Image_, qMax(1, qRound(touchHold3Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold3Image_.height() * kTouchAssetScale * canvasScale)), 135, -offset, -offset},
+        {&touchHold0Image_, qMax(1, qRound(touchHold0Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold0Image_.height() * kTouchAssetScale * canvasScale)), kTouchHoldUpperRightAngleDegrees, offset, -offset},
+        {&touchHold1Image_, qMax(1, qRound(touchHold1Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold1Image_.height() * kTouchAssetScale * canvasScale)), kTouchHoldLowerRightAngleDegrees, offset, offset},
+        {&touchHold2Image_, qMax(1, qRound(touchHold2Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold2Image_.height() * kTouchAssetScale * canvasScale)), kTouchHoldLowerLeftAngleDegrees, -offset, offset},
+        {&touchHold3Image_, qMax(1, qRound(touchHold3Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold3Image_.height() * kTouchAssetScale * canvasScale)), kTouchHoldUpperLeftAngleDegrees, -offset, -offset},
     };
 
     const bool batchNative = glRenderer_.isInitialized() && !nativePaintingActive_;
@@ -2893,7 +2911,7 @@ void PreviewCanvas::drawTouchHoldMarker(QPainter& painter, const TimelineNoteMar
             beginNativeBatch(painter);
         }
     }
-    drawSpriteImage(painter, pointBase, point, pointWidth, pointHeight, 0.0);
+    drawSpriteImage(painter, pointBase, point, pointWidth, pointHeight, 0.0, alpha);
     if (batchNative) {
         endNativeBatch(painter);
     }

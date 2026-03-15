@@ -1022,19 +1022,25 @@ MainWindow::MainWindow(QWidget* parent)
     toolBar->addAction(saveAction_);
     constexpr int kToolbarActionButtonWidth = 64;
     constexpr int kToolbarActionButtonHorizontalPadding = 20;
-    const auto makeCompactToolbarButton = [toolBar](QAction* action) -> QToolButton* {
+    const auto compactToolbarButtonWidth = [](const QFont& font, QAction* action) -> int {
+        if (action == nullptr) {
+            return kToolbarActionButtonWidth;
+        }
+        if (UiText::isChineseUi()) {
+            return kToolbarActionButtonWidth;
+        }
+        const QFontMetrics metrics(font);
+        return qMax(
+            kToolbarActionButtonWidth,
+            metrics.horizontalAdvance(action->text()) + kToolbarActionButtonHorizontalPadding
+        );
+    };
+    const auto makeCompactToolbarButton = [toolBar, compactToolbarButtonWidth](QAction* action) -> QToolButton* {
         auto* button = new QToolButton(toolBar);
         button->setDefaultAction(action);
         button->setAutoRaise(true);
         button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-        int buttonWidth = kToolbarActionButtonWidth;
-        if (!UiText::isChineseUi() && action != nullptr) {
-            const QFontMetrics metrics(button->font());
-            buttonWidth = qMax(
-                kToolbarActionButtonWidth,
-                metrics.horizontalAdvance(action->text()) + kToolbarActionButtonHorizontalPadding
-            );
-        }
+        const int buttonWidth = compactToolbarButtonWidth(button->font(), action);
         button->setFixedWidth(buttonWidth);
         button->setStyleSheet(
             "QToolButton:disabled { background: transparent; border: none; }"
@@ -1045,14 +1051,34 @@ MainWindow::MainWindow(QWidget* parent)
 
     syntaxCheckButton_ = makeCompactToolbarButton(validateAction_);
     toolBar->addWidget(syntaxCheckButton_);
-    exportVideoButton_ = makeCompactToolbarButton(exportVideoAction_);
-    toolBar->addWidget(exportVideoButton_);
+    previewAudioSettingsButton_ = makeCompactToolbarButton(previewAudioSettingsAction_);
+    previewVideoSettingsButton_ = makeCompactToolbarButton(previewVideoSettingsAction_);
+    const int settingsButtonWidth = syntaxCheckButton_ != nullptr ? syntaxCheckButton_->width() : kToolbarActionButtonWidth;
+    if (previewAudioSettingsButton_ != nullptr) {
+        previewAudioSettingsButton_->setFixedWidth(settingsButtonWidth);
+        toolBar->addWidget(previewAudioSettingsButton_);
+    }
+    if (previewVideoSettingsButton_ != nullptr) {
+        previewVideoSettingsButton_->setFixedWidth(settingsButtonWidth);
+        toolBar->addWidget(previewVideoSettingsButton_);
+    }
     settingsPlaceholderAction_ = toolBar->addAction(
         makeSettingsGearIcon(QColor("#5D6E83")),
         uiText("action.preferences", "Preferences...")
     );
     settingsPlaceholderAction_->setToolTip(uiText("action.preferences", "Preferences..."));
     connect(settingsPlaceholderAction_, &QAction::triggered, this, &MainWindow::onPreferences);
+    exportVideoButton_ = makeCompactToolbarButton(exportVideoAction_);
+    if (exportVideoButton_ != nullptr) {
+        exportVideoButton_->setText(uiText("toolbar.export", "Export"));
+        exportVideoButton_->setToolTip(exportVideoAction_ != nullptr ? exportVideoAction_->text() : QString());
+        int openButtonWidth = kToolbarActionButtonWidth;
+        if (QWidget* openWidget = toolBar->widgetForAction(openAction_); openWidget != nullptr) {
+            openButtonWidth = qMax(1, openWidget->sizeHint().width());
+        }
+        exportVideoButton_->setFixedWidth(openButtonWidth);
+        toolBar->insertWidget(settingsPlaceholderAction_, exportVideoButton_);
+    }
     statusBar()->addPermanentWidget(new QLabel("Current File:", this));
     currentFileLabel_ = new QLabel(this);
     statusBar()->addPermanentWidget(currentFileLabel_, 1);
@@ -1231,6 +1257,7 @@ MainWindow::MainWindow(QWidget* parent)
         previewCanvas_->setSmoothBrightness(previewSmoothBrightness_);
         previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
         previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
+        previewCanvas_->setShowTimestamp(previewShowTimestamp_);
     }
     if (previewMediaController_ != nullptr) {
         previewMediaController_->setBackgroundBrightness(previewBackgroundBrightnessOuter_);

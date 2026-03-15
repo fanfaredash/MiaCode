@@ -9,13 +9,14 @@
     showJudgeMarkers_ = false;
     showTouchTrail_ = false;
     previewBackgroundBrightnessOuter_ = miacode::preview_video::kBackgroundBrightnessDefault;
-    previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessDefault;
+    previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessInnerDefault;
     previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
     previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
     previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     previewCanvasAspectRatio_ = 1.0;
     previewAutoRestoreSquareAfterExport_ = true;
     previewShowDebugInfo_ = false;
+    previewShowTimestamp_ = true;
     editorLineSpacingFactor_ = kEditorLineSpacingFactorDefault;
     editorTextFontPointSize_ = qBound(
         kEditorTextFontSizeMin,
@@ -50,9 +51,7 @@
     if (!lastOpenFile.isEmpty()) {
         lastSessionFilePath_ = QDir::cleanPath(lastOpenFile);
     }
-    if (app.value("auto_restore_last_open_file").isBool()) {
-        autoRestoreLastSessionFile_ = app.value("auto_restore_last_open_file").toBool(true);
-    }
+    autoRestoreLastSessionFile_ = true;
     const QString trackPath = app.value("last_track_path").toString();
     if (!trackPath.isEmpty() && QFileInfo::exists(trackPath)) {
         lastTrackPath_ = QDir::cleanPath(trackPath);
@@ -102,6 +101,9 @@
     if (preview.value("show_debug_info").isBool()) {
         previewShowDebugInfo_ = preview.value("show_debug_info").toBool(false);
     }
+    if (preview.value("show_timestamp").isBool()) {
+        previewShowTimestamp_ = preview.value("show_timestamp").toBool(true);
+    }
     if (preview.value("canvas_aspect_ratio").isDouble()) {
         previewCanvasAspectRatio_ = normalizedPreviewCanvasAspectRatio(
             preview.value("canvas_aspect_ratio").toDouble(previewCanvasAspectRatio_)
@@ -150,7 +152,7 @@ void MainWindow::savePortableState() const
 
     app.insert("last_open_dir", lastOpenDir_);
     app.insert("last_open_file", lastSessionFilePath_);
-    app.insert("auto_restore_last_open_file", autoRestoreLastSessionFile_);
+    app.insert("auto_restore_last_open_file", true);
     app.insert("last_track_path", lastTrackPath_);
     app.insert("show_slide_tracks", true);
 
@@ -168,6 +170,7 @@ void MainWindow::savePortableState() const
             : QStringLiteral("fill")
     );
     preview.insert("show_debug_info", previewShowDebugInfo_);
+    preview.insert("show_timestamp", previewShowTimestamp_);
     preview.insert("canvas_aspect_ratio", previewCanvasAspectRatio_);
     preview.insert("auto_restore_square_after_export", previewAutoRestoreSquareAfterExport_);
     preview.insert("audio", softwarePreviewAudioSettings_.toJson());

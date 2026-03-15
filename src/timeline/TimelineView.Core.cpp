@@ -263,7 +263,7 @@ void TimelineView::loadNoteIcons()
 
     const QPixmap touchBorder = loadRawIcon({"touch_border_2.png", "touch.png", "touch_each.png", "each.png", "tap.png"});
     const QPixmap touchPoint = loadRawIcon({"touch_point.png", "touch_point_each.png", "tap.png"});
-    const QPixmap touchBreakBorder = loadRawIcon({"touch_break.png", "touch_border_2.png", "touch.png", "touch_each.png", "each.png", "tap.png"});
+    const QPixmap touchBreakBorder = loadRawIcon({"touch_break_border_2.png", "touch_break.png", "touch_border_2.png", "touch.png", "touch_each.png", "each.png", "tap.png"});
     const QPixmap touchBreakPoint = loadRawIcon({"touch_break_point.png", "touch_point.png", "touch_point_each.png", "tap.png"});
     const QPixmap touchEachBorder = loadRawIcon({"touch_border_2_each.png", "touch_border_2.png", "touch_each.png", "touch.png", "each.png", "tap.png"});
     const QPixmap touchEachPoint = loadRawIcon({"touch_point_each.png", "touch_point.png", "tap.png"});
