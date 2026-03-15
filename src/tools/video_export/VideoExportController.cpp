@@ -3049,9 +3049,12 @@ VideoExportResult VideoExportController::exportFullPreview(
         shareContext,
         &offscreenInitError
     );
+    const bool enableOffscreenPboReadback =
+        envFlagEnabled(QStringLiteral("MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO"));
     const bool disableOffscreenPboReadback =
         envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO"));
-    const bool requestOffscreenPboReadback = useOffscreenGpu && !disableOffscreenPboReadback;
+    const bool requestOffscreenPboReadback =
+        useOffscreenGpu && enableOffscreenPboReadback && !disableOffscreenPboReadback;
     QString offscreenPboError;
     bool useOffscreenPboReadback = false;
     if (requestOffscreenPboReadback) {
@@ -3206,7 +3209,7 @@ VideoExportResult VideoExportController::exportFullPreview(
             frameSize,
             timelineOriginSecond,
             task.showTimestamp,
-            true
+            false
         );
         const qint64 warmupNs = frameTimer.nsecsElapsed();
         appendVideoExportLog(
@@ -3768,7 +3771,7 @@ VideoExportResult VideoExportController::exportFullPreview(
                     frameSize,
                     exportSecond,
                     task.showTimestamp,
-                    true,
+                    false,
                     &completedFrame,
                     &completedFrameReady,
                     false,
@@ -3811,7 +3814,7 @@ VideoExportResult VideoExportController::exportFullPreview(
                     continue;
                 }
             } else {
-                frame = exportCanvas.renderOverlayFrameOffscreen(frameSize, exportSecond, task.showTimestamp, true);
+                frame = exportCanvas.renderOverlayFrameOffscreen(frameSize, exportSecond, task.showTimestamp, false);
                 if (!frame.isNull()) {
                     usedOffscreenPath = true;
                 } else {
@@ -3825,7 +3828,7 @@ VideoExportResult VideoExportController::exportFullPreview(
             }
         }
         if (frame.isNull()) {
-            frame = exportCanvas.renderOverlayFrame(frameSize, exportSecond, task.showTimestamp, true);
+            frame = exportCanvas.renderOverlayFrame(frameSize, exportSecond, task.showTimestamp, false);
         }
         ReadyFramePayload readyFrame;
         readyFrame.frameIndex = frameIndex;
@@ -3852,7 +3855,7 @@ VideoExportResult VideoExportController::exportFullPreview(
             frameSize,
             pendingPboFrame.exportSecond,
             task.showTimestamp,
-            true,
+            false,
             &drainedFrame,
             &drainedFrameReady,
             true,
