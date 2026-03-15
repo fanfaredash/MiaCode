@@ -924,6 +924,9 @@ MainWindow::MainWindow(QWidget* parent)
         jumpToLocation(line, col);
         statusBar()->showMessage(QString("Timeline jump: nearest object -> L%1 C%2").arg(line).arg(col));
     });
+    connect(timelineView_, &TimelineView::headerNavigateRequested, this, [this](double second) {
+        navigateTimelineToSecond(second, true);
+    });
     connect(timelineView_, &TimelineView::followPreviewToggled, this, [this](bool enabled) {
         if (!enabled) {
             return;

@@ -203,6 +203,7 @@ private:
     void refreshTimelineMetadata();
     void seekTimelineToCursor(int line, int col);
     void syncTimelineToEditorCursor(bool centerView = true);
+    void navigateTimelineToSecond(double second, bool focusEditor = true);
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
     bool moveEditorCursorToTimelineLocation(
         int line,
@@ -358,6 +359,7 @@ private:
     bool qtPreviewAwaitingFrameSwap_ = false;
     qint64 qtPreviewAwaitingFrameSwapSinceMs_ = -1;
     bool previewSliderDragging_ = false;
+    bool suppressTimelineCursorSync_ = false;
     int previewSeekHeldArrowKey_ = 0;
     QElapsedTimer previewSeekHeldArrowElapsed_;
     double qtPreviewStartSecond_ = 0.0;

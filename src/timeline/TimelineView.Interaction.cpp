@@ -12,6 +12,20 @@ void TimelineView::mousePressEvent(QMouseEvent* event)
         return;
     }
 
+    const QRect headerRect(timelineLeft(), 0, viewport()->width() - timelineLeft(), kHeaderHeight);
+    if (headerRect.contains(event->position().toPoint())) {
+        const double maxSecond = playheadUpperLimitSeconds_ > 0.0
+            ? playheadUpperLimitSeconds_
+            : qMax(durationSeconds_, playheadSeconds_);
+        double second = qMax(0.0, xToSecond(qRound(event->position().x())));
+        if (maxSecond > 0.0) {
+            second = qMin(second, maxSecond);
+        }
+        emit headerNavigateRequested(second);
+        event->accept();
+        return;
+    }
+
     const QRect timelineRect(timelineLeft(), timelineTop(), viewport()->width() - timelineLeft(), timelineHeight());
     if (!timelineRect.contains(event->position().toPoint())) {
         QAbstractScrollArea::mousePressEvent(event);
