@@ -67,8 +67,10 @@ void PreviewCanvas::applySkinLoadResult(SkinLoadResult&& result)
     noteGuideSlideImage_ = std::move(result.noteGuideSlideImage);
     touchCornerImage_ = std::move(result.touchCornerImage);
     touchCornerEachImage_ = std::move(result.touchCornerEachImage);
+    touchCornerBreakImage_ = std::move(result.touchCornerBreakImage);
     touchPointImage_ = std::move(result.touchPointImage);
     touchPointEachImage_ = std::move(result.touchPointEachImage);
+    touchPointBreakImage_ = std::move(result.touchPointBreakImage);
     touchHold0Image_ = std::move(result.touchHold0Image);
     touchHold1Image_ = std::move(result.touchHold1Image);
     touchHold2Image_ = std::move(result.touchHold2Image);

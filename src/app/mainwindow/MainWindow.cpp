@@ -1264,6 +1264,7 @@ void MainWindow::ensurePreviewMediaControllerInitialized()
         }
         qtPreviewStartSecond_ = second;
         qtPreviewElapsed_.restart();
+        syncPausedPreviewMediaTimestamps(second);
         applyQtPreviewPosition(second, true);
     });
     connect(previewMediaController_, &PreviewMediaController::playbackFinished, this, [this]() {
@@ -2786,53 +2787,6 @@ void MainWindow::onStopPreview()
     statusBar()->showMessage("Qt preview stopped.");
 }
 
-void MainWindow::onPreviewFromStart()
-{
-    if (!hasActiveDifficulty()) {
-        statusBar()->showMessage("Select a difficulty field first.");
-        return;
-    }
-    if (!saveBeforePreviewStart()) {
-        return;
-    }
-    refreshTimelineMetadata();
-    if (!legacyPygamePreviewEnabled_) {
-        if (timelineView_ != nullptr) {
-            timelineView_->setCursorSeconds(0.0);
-        }
-        startQtPreviewPlayback(0.0, false);
-        updatePauseButtonAppearance();
-        statusBar()->showMessage("Qt preview playback started from 0.00s.");
-        return;
-    }
-    if (timelineView_ != nullptr) {
-        timelineView_->setPlayheadSeconds(0.0, true);
-    }
-    startPreviewProcess("start", -1, -1);
-}
-
-void MainWindow::onPreviewFromCursor()
-{
-    if (!hasActiveDifficulty()) {
-        statusBar()->showMessage("Select a difficulty field first.");
-        return;
-    }
-    if (!saveBeforePreviewStart()) {
-        return;
-    }
-    const auto [line, col] = currentSelectionOrCursorLineCol();
-    refreshTimelineMetadata();
-    seekTimelineToCursor(line, col);
-    const double second = timelineSecondForCursor(line, col);
-    if (!legacyPygamePreviewEnabled_) {
-        startQtPreviewPlayback(second, false);
-        updatePauseButtonAppearance();
-        statusBar()->showMessage(QString("Qt preview playback started from %1s.").arg(second, 0, 'f', 2));
-        return;
-    }
-    startPreviewProcess("cursor", line, col);
-}
-
 void MainWindow::onTogglePreviewPause()
 {
     if (!legacyPygamePreviewEnabled_) {
@@ -2895,12 +2849,20 @@ void MainWindow::onToggleTouchTrail(bool checked)
 
 void MainWindow::onPreviewAudioSettings()
 {
-    onPreviewRenderSettings();
+    openPreviewSettingsDialog(
+        true,
+        false,
+        uiText("dialog.audio_settings.title", "Audio Settings")
+    );
 }
 
-void MainWindow::onPreviewDisplaySettings()
+void MainWindow::onPreviewVideoSettings()
 {
-    onPreviewRenderSettings();
+    openPreviewSettingsDialog(
+        false,
+        true,
+        uiText("dialog.video_settings.title", "Video Settings")
+    );
 }
 
 #include "sections/preferences/MainWindow.PreferencesDialog.cpp"
@@ -3402,17 +3364,20 @@ void MainWindow::onOpenLatencyDetector()
     latencyDetectorDialog_->activateWindow();
 }
 
-void MainWindow::onPreviewRenderSettings()
+void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool includeVideoSettings, const QString& title)
 {
+    if (!includeAudioSettings && !includeVideoSettings) {
+        return;
+    }
     previewAudioSettings_.normalize();
     if (legacyPygamePreviewEnabled_) {
         ensurePreviewSessionStarted();
     }
 
     QDialog dialog(this);
-    dialog.setWindowTitle(uiText("dialog.render_settings.title", "Render Settings"));
+    dialog.setWindowTitle(title);
     dialog.setModal(true);
-    dialog.resize(560, 520);
+    dialog.resize(560, includeAudioSettings && includeVideoSettings ? 520 : (includeAudioSettings ? 420 : 320));
     dialog.setMinimumWidth(520);
 
     auto* rootLayout = new QVBoxLayout(&dialog);
@@ -3499,10 +3464,16 @@ void MainWindow::onPreviewRenderSettings()
         return row;
     };
 
+    auto* videoGroup = new QGroupBox(uiText("dialog.render_settings.video_group", "Video"), &dialog);
+    auto* videoFormLayout = new QFormLayout(videoGroup);
+    videoFormLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    videoFormLayout->setHorizontalSpacing(10);
+    videoFormLayout->setVerticalSpacing(8);
+
     QSlider* outerBrightnessSlider = nullptr;
     QLabel* outerBrightnessLabel = nullptr;
     QWidget* outerBrightnessRow = addVideoSliderRow(
-        &dialog,
+        videoGroup,
         0,
         100,
         1,
@@ -3514,7 +3485,7 @@ void MainWindow::onPreviewRenderSettings()
     QSlider* innerBrightnessSlider = nullptr;
     QLabel* innerBrightnessLabel = nullptr;
     QWidget* innerBrightnessRow = addVideoSliderRow(
-        &dialog,
+        videoGroup,
         0,
         100,
         1,
@@ -3526,7 +3497,7 @@ void MainWindow::onPreviewRenderSettings()
     QSlider* layoutSquareScaleSlider = nullptr;
     QLabel* layoutSquareScaleLabel = nullptr;
     QWidget* layoutSquareScaleRow = addVideoSliderRow(
-        &dialog,
+        videoGroup,
         qRound(miacode::preview_video::kLayoutSquareScaleMin * 100.0),
         qRound(miacode::preview_video::kLayoutSquareScaleMax * 100.0),
         qRound(miacode::preview_video::kLayoutSquareScaleStep * 100.0),
@@ -3536,7 +3507,7 @@ void MainWindow::onPreviewRenderSettings()
         &layoutSquareScaleLabel
     );
 
-    auto* scaleModeCombo = new QComboBox(&dialog);
+    auto* scaleModeCombo = new QComboBox(videoGroup);
     scaleModeCombo->addItem(
         uiText("dialog.render_settings.video.scale.fill", "Fill (crop if needed)"),
         static_cast<int>(PreviewBackgroundScaleMode::FillCrop)
@@ -3549,7 +3520,7 @@ void MainWindow::onPreviewRenderSettings()
     if (scaleModeIndex >= 0) {
         scaleModeCombo->setCurrentIndex(scaleModeIndex);
     }
-    auto* canvasAspectCombo = new QComboBox(&dialog);
+    auto* canvasAspectCombo = new QComboBox(videoGroup);
     canvasAspectCombo->addItem(
         uiText("dialog.render_settings.video.canvas_aspect.square", "1:1 (Square)"),
         1.0
@@ -3575,20 +3546,15 @@ void MainWindow::onPreviewRenderSettings()
     canvasAspectCombo->setCurrentIndex(canvasAspectIndex);
     auto* restoreSquareCheck = new QCheckBox(
         uiText("dialog.render_settings.video.auto_restore_square", "Auto restore 1:1 after export"),
-        &dialog
+        videoGroup
     );
     restoreSquareCheck->setChecked(previewAutoRestoreSquareAfterExport_);
     auto* smoothBrightnessCheck = new QCheckBox(
         uiText("dialog.render_settings.video.smooth_brightness", "Smooth brightness"),
-        &dialog
+        videoGroup
     );
     smoothBrightnessCheck->setChecked(previewSmoothBrightness_);
 
-    auto* videoGroup = new QGroupBox(uiText("dialog.render_settings.video_group", "Video"), &dialog);
-    auto* videoFormLayout = new QFormLayout(videoGroup);
-    videoFormLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
-    videoFormLayout->setHorizontalSpacing(10);
-    videoFormLayout->setVerticalSpacing(8);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_outer", "Background / PV Brightness (Outer)"), outerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Background / PV Brightness (Inner)"), innerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Layout Size"), layoutSquareScaleRow);
@@ -3601,8 +3567,15 @@ void MainWindow::onPreviewRenderSettings()
     debugCheck->setChecked(previewShowDebugInfo_);
     videoFormLayout->addRow(QString(), debugCheck);
 
-    rootLayout->addWidget(audioGroup, 0);
-    rootLayout->addWidget(videoGroup, 0);
+    audioGroup->setVisible(includeAudioSettings);
+    videoGroup->setVisible(includeVideoSettings);
+
+    if (includeAudioSettings) {
+        rootLayout->addWidget(audioGroup, 0);
+    }
+    if (includeVideoSettings) {
+        rootLayout->addWidget(videoGroup, 0);
+    }
     rootLayout->addStretch(1);
 
     auto* buttonBox = new QDialogButtonBox(&dialog);

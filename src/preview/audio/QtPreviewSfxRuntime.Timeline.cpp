@@ -164,14 +164,14 @@ void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& n
             continue;
         }
         if (marker.type == "touch") {
-            addEvent(marker.second, "touch");
+            addEvent(marker.second, marker.isBreak ? "break" : "touch");
             if (marker.isFirework) {
                 addEvent(marker.second + kQtPreviewSfxFireworkTouchTriggerDelaySeconds, "firework");
             }
             continue;
         }
         if (marker.type == "touch_hold") {
-            addEvent(marker.second, "touch");
+            addEvent(marker.second, marker.isBreak ? "break" : "touch");
             if (marker.isFirework && marker.endSecond >= 0.0) {
                 addEvent(marker.endSecond, "firework");
             }

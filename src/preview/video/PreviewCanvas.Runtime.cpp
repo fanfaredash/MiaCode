@@ -139,8 +139,10 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     noteGuideSlideImage_ = source.noteGuideSlideImage_;
     touchCornerImage_ = source.touchCornerImage_;
     touchCornerEachImage_ = source.touchCornerEachImage_;
+    touchCornerBreakImage_ = source.touchCornerBreakImage_;
     touchPointImage_ = source.touchPointImage_;
     touchPointEachImage_ = source.touchPointEachImage_;
+    touchPointBreakImage_ = source.touchPointBreakImage_;
     touchHold0Image_ = source.touchHold0Image_;
     touchHold1Image_ = source.touchHold1Image_;
     touchHold2Image_ = source.touchHold2Image_;
@@ -767,8 +769,10 @@ struct PreviewCanvas::SkinLoadResult {
     QImage noteGuideSlideImage;
     QImage touchCornerImage;
     QImage touchCornerEachImage;
+    QImage touchCornerBreakImage;
     QImage touchPointImage;
     QImage touchPointEachImage;
+    QImage touchPointBreakImage;
     QImage touchHold0Image;
     QImage touchHold1Image;
     QImage touchHold2Image;
@@ -925,8 +929,10 @@ PreviewCanvas::SkinLoadResult loadSkinAssets(const QString& skinDir, quint64 gen
     result.holdExImage = loadImageIfExists(dir.filePath("hold_ex.png"));
     result.touchCornerImage = loadImageIfExists(dir.filePath("touch.png"));
     result.touchCornerEachImage = loadImageIfExists(dir.filePath("touch_each.png"));
+    result.touchCornerBreakImage = loadImageIfExists(dir.filePath("touch_break.png"));
     result.touchPointImage = loadImageIfExists(dir.filePath("touch_point.png"));
     result.touchPointEachImage = loadImageIfExists(dir.filePath("touch_point_each.png"));
+    result.touchPointBreakImage = loadImageIfExists(dir.filePath("touch_break_point.png"));
     result.touchHold0Image = loadImageIfExists(dir.filePath("touchhold_0.png"));
     result.touchHold1Image = loadImageIfExists(dir.filePath("touchhold_1.png"));
     result.touchHold2Image = loadImageIfExists(dir.filePath("touchhold_2.png"));
@@ -1035,8 +1041,10 @@ PreviewCanvas::SkinLoadResult loadSkinAssets(const QString& skinDir, quint64 gen
             QVector<const QImage*>{
                 &result.touchCornerImage,
                 &result.touchCornerEachImage,
+                &result.touchCornerBreakImage,
                 &result.touchPointImage,
                 &result.touchPointEachImage,
+                &result.touchPointBreakImage,
                 &result.touchHold0Image,
                 &result.touchHold1Image,
                 &result.touchHold2Image,

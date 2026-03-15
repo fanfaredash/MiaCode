@@ -182,12 +182,24 @@ void MainWindow::onOpenFile()
     if (path.isEmpty()) {
         return;
     }
-    setLastOpenDirectory(path);
+    openFileAtPath(path, true, true);
+}
 
-    QFile file(path);
+bool MainWindow::openFileAtPath(const QString& path, bool showStatusMessage, bool showErrors)
+{
+    const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
+    if (normalizedPath.isEmpty()) {
+        return false;
+    }
+
+    setLastOpenDirectory(normalizedPath);
+
+    QFile file(normalizedPath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QMessageBox::critical(this, "Open Failed", "Cannot open file:\n" + path);
-        return;
+        if (showErrors) {
+            QMessageBox::critical(this, "Open Failed", "Cannot open file:\n" + normalizedPath);
+        }
+        return false;
     }
 
     const QByteArray bytes = file.readAll();
@@ -206,15 +218,34 @@ void MainWindow::onOpenFile()
     }
 
     currentEncoding_ = encodingUsed;
-    setCurrentFilePath(path);
+    setCurrentFilePath(normalizedPath);
     loadDocument(SimaiDocument::fromText(text));
     refreshValidationPanelForActiveField();
     refreshWaveformCache();
-    statusBar()->showMessage(
-        QString("Opened: %1 (%2)")
-            .arg(QFileInfo(path).fileName())
-            .arg(encodingUsed == TextEncoding::Utf8 ? "UTF-8" : "System encoding")
-    );
+    if (showStatusMessage) {
+        statusBar()->showMessage(
+            QString("Opened: %1 (%2)")
+                .arg(QFileInfo(normalizedPath).fileName())
+                .arg(encodingUsed == TextEncoding::Utf8 ? "UTF-8" : "System encoding")
+        );
+    }
+    return true;
+}
+
+bool MainWindow::restoreLastSessionFile()
+{
+    if (!autoRestoreLastSessionFile_) {
+        return false;
+    }
+    if (lastSessionFilePath_.isEmpty()) {
+        return false;
+    }
+    const QFileInfo fileInfo(lastSessionFilePath_);
+    if (!fileInfo.exists() || !fileInfo.isFile()) {
+        lastSessionFilePath_.clear();
+        return false;
+    }
+    return openFileAtPath(fileInfo.absoluteFilePath(), false, false);
 }
 
 bool MainWindow::onSaveFile()
@@ -735,6 +766,7 @@ bool MainWindow::deleteDifficultyField(int difficultyId)
     documentDirty_ = true;
 
     if (deletingActiveDifficulty) {
+        cacheWorkspaceLayoutSizes();
         currentFieldDirty_ = false;
         const QVector<int> remainingIds = document_.difficultyIds();
         if (remainingIds.isEmpty()) {
@@ -752,6 +784,8 @@ bool MainWindow::deleteDifficultyField(int difficultyId)
             if (titleEdit_ != nullptr) {
                 titleEdit_->setFocus();
             }
+            refreshLayoutAfterPageSwitch();
+            QTimer::singleShot(0, this, [this]() { refreshLayoutAfterPageSwitch(); });
         } else {
             int fallbackId = remainingIds.constFirst();
             int bestDistance = qAbs(fallbackId - difficultyId);
@@ -906,6 +940,7 @@ bool MainWindow::switchToMetadataField()
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
     }
+    cacheWorkspaceLayoutSizes();
     stopQtPreviewPlayback(true);
     activeDifficultyId_ = 0;
     activeOutlineKey_ = "metadata";
@@ -931,6 +966,8 @@ bool MainWindow::switchToMetadataField()
     updateWindowTitle();
     updateEditorEmptyState();
     updateEditorStatus();
+    refreshLayoutAfterPageSwitch();
+    QTimer::singleShot(0, this, [this]() { refreshLayoutAfterPageSwitch(); });
     return true;
 }
 
@@ -942,6 +979,7 @@ bool MainWindow::switchToDifficultyField(int difficultyId)
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
     }
+    cacheWorkspaceLayoutSizes();
     stopQtPreviewPlayback(true);
     activeDifficultyId_ = difficultyId;
     projectLastOpenedDifficultyId_ = difficultyId;
@@ -972,6 +1010,8 @@ bool MainWindow::switchToDifficultyField(int difficultyId)
     updateEditorStatus();
     scheduleTimelineRefresh();
     saveProjectRenderState();
+    refreshLayoutAfterPageSwitch();
+    QTimer::singleShot(0, this, [this]() { refreshLayoutAfterPageSwitch(); });
     return true;
 }
 

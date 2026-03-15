@@ -52,10 +52,12 @@ int main(int argc, char** argv)
 
     {
         const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(QStringLiteral("C1bx,\nE"));
-        expect(parsed.ok, QStringLiteral("lenient parse accepts C1 with unsupported b/x modifiers"));
+        expect(parsed.ok, QStringLiteral("lenient parse accepts C1 with b/x modifiers"));
         expect(!parsed.noteMarkers.isEmpty(), QStringLiteral("C1 lenient parse emits marker"));
         if (!parsed.noteMarkers.isEmpty()) {
-            expect(parsed.noteMarkers.constFirst().touchPad == QLatin1String("C"), QStringLiteral("C1 is normalized to C in lenient mode"));
+            const TimelineNoteMarker& marker = parsed.noteMarkers.constFirst();
+            expect(marker.touchPad == QLatin1String("C"), QStringLiteral("C1 is normalized to C in lenient mode"));
+            expect(marker.isBreak, QStringLiteral("touch b modifier binds break flag"));
         }
     }
 
