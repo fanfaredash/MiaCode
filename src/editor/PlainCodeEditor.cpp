@@ -1,5 +1,8 @@
 #include "PlainCodeEditor.h"
+#include "UiText.h"
+#include "UiTheme.h"
 
+#include <QAction>
 #include <QContextMenuEvent>
 #include <QEvent>
 #include <QMenu>
@@ -21,8 +24,6 @@ constexpr int kCurrentLineHighlightLeftInset = 3;
 constexpr int kCurrentLineHighlightRightInset = 0;
 constexpr int kEditorCursorVisibleWidth = 1;
 constexpr int kEditorCursorHiddenWidth = 0;
-const QColor kCurrentLineBorderColor("#CBD4E0");
-const QColor kCurrentLineFillColor(248, 250, 253, 36);
 }  // namespace
 
 class LineNumberArea : public QWidget
@@ -116,6 +117,11 @@ void PlainCodeEditor::refreshLineNumberAreaLayout()
     viewport()->update();
 }
 
+void PlainCodeEditor::setBatchTransformActions(const QList<QAction*>& actions)
+{
+    batchTransformActions_ = actions;
+}
+
 int PlainCodeEditor::lineNumberAreaWidth() const
 {
     int digits = 1;
@@ -159,35 +165,82 @@ void PlainCodeEditor::changeEvent(QEvent* event)
 
 void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
 {
-    QMenu* menu = createStandardContextMenu();
-    if (menu == nullptr) {
+    if (event == nullptr) {
         return;
     }
-    menu->setWindowFlag(Qt::FramelessWindowHint, true);
-    menu->setWindowFlag(Qt::NoDropShadowWindowHint, true);
-    menu->setAttribute(Qt::WA_TranslucentBackground, true);
+    auto* menu = new QMenu(this);
+    UiTheme::styleRoundedMenu(*menu);
+    const UiTheme::Colors& c = UiTheme::colors();
+    const QColor contextMenuBg = c.dark ? QColor(QStringLiteral("#2B3543")) : QColor(QStringLiteral("#FFFFFF"));
+    const QColor contextMenuBorder = c.dark ? QColor(QStringLiteral("#667A91")) : c.menuBorder;
+    const QColor contextMenuHover = c.dark ? QColor(QStringLiteral("#3D4A5C")) : c.menuHoverBg;
+    const QColor contextMenuSeparator = c.dark ? QColor(QStringLiteral("#73859A")) : c.border;
     menu->setStyleSheet(
-        "QMenu {"
-        " background: rgba(255, 255, 255, 245);"
-        " border: 1px solid #D7E0EB;"
-        " border-radius: 8px;"
-        " padding: 7px;"
-        "}"
-        "QMenu::item {"
-        " padding: 6px 20px 6px 12px;"
-        " margin: 1px 0;"
-        " border-radius: 6px;"
-        " color: #203040;"
-        "}"
-        "QMenu::item:selected {"
-        " background: #EEF5FF;"
-        " color: #203040;"
-        "}"
-        "QMenu::item:disabled {"
-        " color: #9AA5B4;"
-        " background: transparent;"
-        "}"
+        QStringLiteral(
+            "QMenu { background: %1; border: 1px solid %2; border-radius: 8px; padding: 7px; }"
+            "QMenu::item { padding: 4px 12px; margin: 1px 4px; min-height: 20px; border-radius: 6px; color: %3; background: transparent; }"
+            "QMenu::item:selected { background: %4; color: %3; }"
+            "QMenu::item:disabled { color: %5; background: transparent; }"
+            "QMenu::separator { height: 1px; margin: 7px 6px; background: %6; }"
+        )
+            .arg(contextMenuBg.name(QColor::HexRgb))
+            .arg(contextMenuBorder.name(QColor::HexRgb))
+            .arg(c.textPrimary.name(QColor::HexRgb))
+            .arg(contextMenuHover.name(QColor::HexRgb))
+            .arg(c.menuDisabledText.name(QColor::HexRgb))
+            .arg(contextMenuSeparator.name(QColor::HexRgb))
     );
+
+    const auto translated = [](const QString& key, const QString& fallback) {
+        const QString value = UiText::text(key);
+        return value.isEmpty() ? fallback : value;
+    };
+
+    auto* cutAction = menu->addAction(translated(QStringLiteral("action.cut"), QStringLiteral("Cut")));
+    cutAction->setShortcut(QKeySequence::Cut);
+    cutAction->setShortcutVisibleInContextMenu(true);
+    cutAction->setEnabled(textCursor().hasSelection());
+    connect(cutAction, &QAction::triggered, this, &QTextEdit::cut);
+
+    auto* copyAction = menu->addAction(translated(QStringLiteral("action.copy"), QStringLiteral("Copy")));
+    copyAction->setShortcut(QKeySequence::Copy);
+    copyAction->setShortcutVisibleInContextMenu(true);
+    copyAction->setEnabled(textCursor().hasSelection());
+    connect(copyAction, &QAction::triggered, this, &QTextEdit::copy);
+
+    auto* pasteAction = menu->addAction(translated(QStringLiteral("action.paste"), QStringLiteral("Paste")));
+    pasteAction->setShortcut(QKeySequence::Paste);
+    pasteAction->setShortcutVisibleInContextMenu(true);
+    pasteAction->setEnabled(canPaste());
+    connect(pasteAction, &QAction::triggered, this, &QTextEdit::paste);
+
+    if (!batchTransformActions_.isEmpty()) {
+        menu->addSeparator();
+        auto* transformMenu = menu->addMenu(QStringLiteral("批量操作"));
+        UiTheme::styleRoundedMenu(*transformMenu);
+        transformMenu->setStyleSheet(
+            QStringLiteral(
+                "QMenu { background: %1; border: 1px solid %2; border-radius: 8px; padding: 7px; }"
+                "QMenu::item { padding: 4px 12px; margin: 1px 4px; min-height: 20px; border-radius: 6px; color: %3; background: transparent; }"
+                "QMenu::item:selected { background: %4; color: %3; }"
+                "QMenu::item:disabled { color: %5; background: transparent; }"
+                "QMenu::separator { height: 1px; margin: 7px 6px; background: %6; }"
+            )
+                .arg(contextMenuBg.name(QColor::HexRgb))
+                .arg(contextMenuBorder.name(QColor::HexRgb))
+                .arg(c.textPrimary.name(QColor::HexRgb))
+                .arg(contextMenuHover.name(QColor::HexRgb))
+                .arg(c.menuDisabledText.name(QColor::HexRgb))
+                .arg(contextMenuSeparator.name(QColor::HexRgb))
+        );
+        for (QAction* action : batchTransformActions_) {
+            if (action == nullptr) {
+                continue;
+            }
+            transformMenu->addAction(action);
+        }
+    }
+
     menu->exec(event->globalPos());
     delete menu;
 }
@@ -249,16 +302,20 @@ void PlainCodeEditor::paintEvent(QPaintEvent* event)
     }
 
     QPainter painter(viewport());
-    painter.setPen(QPen(kCurrentLineBorderColor, 1));
-    painter.setBrush(kCurrentLineFillColor);
+    const UiTheme::Colors& c = UiTheme::colors();
+    QColor currentLineFill = c.menuHoverBg;
+    currentLineFill.setAlpha(c.dark ? 60 : 36);
+    painter.setPen(QPen(c.borderSoft, 1));
+    painter.setBrush(currentLineFill);
     painter.drawRoundedRect(highlightRect, 4.0, 4.0);
 }
 
 void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)
 {
     QPainter painter(lineNumberArea_);
-    painter.fillRect(event->rect(), QColor("#E6E6E6"));
-    painter.setPen(QColor("#666666"));
+    const UiTheme::Colors& c = UiTheme::colors();
+    painter.fillRect(event->rect(), c.timelineSidebar);
+    painter.setPen(c.textSecondary);
     painter.setFont(lineNumberArea_->font());
 
     QTextCursor startCursor = cursorForPosition(QPoint(0, 0));

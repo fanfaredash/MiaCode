@@ -1,6 +1,6 @@
-﻿void MainWindow::setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* previewMenu, QMenu* helpMenu)
+﻿void MainWindow::setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* transformMenu, QMenu* previewMenu, QMenu* helpMenu)
 {
-    if (fileMenu == nullptr || editMenu == nullptr || previewMenu == nullptr || helpMenu == nullptr) {
+    if (fileMenu == nullptr || editMenu == nullptr || transformMenu == nullptr || previewMenu == nullptr || helpMenu == nullptr) {
         return;
     }
 
@@ -37,14 +37,6 @@
     connect(quitAction, &QAction::triggered, qApp, &QApplication::quit);
     fileMenu->addAction(quitAction);
 
-    validateAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("语法检查") : QStringLiteral("Syntax Check"),
-        this
-    );
-    validateAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
-    connect(validateAction_, &QAction::triggered, this, &MainWindow::onValidateSimai);
-    editMenu->addAction(validateAction_);
-
     findReplaceAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("查找/替换") : QStringLiteral("Find/Replace"),
         this
@@ -55,41 +47,113 @@
 
     editMenu->addSeparator();
 
-    transformMirrorLeftRightAction_ = new QAction(uiText("action.transform.mirror_lr", "Mirror Left/Right"), this);
-    transformMirrorLeftRightAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_J));
-    transformMirrorLeftRightAction_->setIcon(makeTransformMirrorLeftRightIcon(QColor("#2B3C4E")));
-    connect(transformMirrorLeftRightAction_, &QAction::triggered, this, &MainWindow::onMirrorLeftRight);
-    editMenu->addAction(transformMirrorLeftRightAction_);
+    const auto invokeOnFocusedTextWidget = [this](const auto& textEditHandler, const auto& lineEditHandler) {
+        if (QWidget* focus = QApplication::focusWidget(); focus != nullptr) {
+            if (auto* lineEdit = qobject_cast<QLineEdit*>(focus); lineEdit != nullptr) {
+                lineEditHandler(lineEdit);
+                return;
+            }
+            if (auto* textEdit = qobject_cast<QTextEdit*>(focus); textEdit != nullptr) {
+                textEditHandler(textEdit);
+                return;
+            }
+        }
+        if (auto* editor = qobject_cast<QTextEdit*>(editorWidget_); editor != nullptr) {
+            textEditHandler(editor);
+        }
+    };
 
-    transformMirrorUpDownAction_ = new QAction(uiText("action.transform.mirror_ud", "Mirror Up/Down"), this);
-    transformMirrorUpDownAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
-    transformMirrorUpDownAction_->setIcon(makeTransformMirrorUpDownIcon(QColor("#2B3C4E")));
-    connect(transformMirrorUpDownAction_, &QAction::triggered, this, &MainWindow::onMirrorUpDown);
-    editMenu->addAction(transformMirrorUpDownAction_);
+    auto* cutAction = new QAction(uiText("action.cut", "Cut"), this);
+    cutAction->setShortcut(QKeySequence::Cut);
+    connect(cutAction, &QAction::triggered, this, [invokeOnFocusedTextWidget]() {
+        invokeOnFocusedTextWidget(
+            [](QTextEdit* textEdit) { textEdit->cut(); },
+            [](QLineEdit* lineEdit) { lineEdit->cut(); }
+        );
+    });
+    editMenu->addAction(cutAction);
 
-    transformRotate180Action_ = new QAction(uiText("action.transform.rotate_180", "Rotate 180"), this);
-    transformRotate180Action_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
-    transformRotate180Action_->setIcon(makeTransformRotate180Icon(QColor("#2B3C4E")));
-    connect(transformRotate180Action_, &QAction::triggered, this, &MainWindow::onRotate180);
-    editMenu->addAction(transformRotate180Action_);
+    auto* copyAction = new QAction(uiText("action.copy", "Copy"), this);
+    copyAction->setShortcut(QKeySequence::Copy);
+    connect(copyAction, &QAction::triggered, this, [invokeOnFocusedTextWidget]() {
+        invokeOnFocusedTextWidget(
+            [](QTextEdit* textEdit) { textEdit->copy(); },
+            [](QLineEdit* lineEdit) { lineEdit->copy(); }
+        );
+    });
+    editMenu->addAction(copyAction);
 
-    transformRotate45CounterClockwiseAction_ = new QAction(uiText("action.transform.rotate_ccw_45", "Rotate -45"), this);
-    transformRotate45CounterClockwiseAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Semicolon));
-    transformRotate45CounterClockwiseAction_->setIcon(makeTransformRotateCcw45Icon(QColor("#2B3C4E")));
-    connect(transformRotate45CounterClockwiseAction_, &QAction::triggered, this, &MainWindow::onRotate45CounterClockwise);
-    editMenu->addAction(transformRotate45CounterClockwiseAction_);
+    auto* pasteAction = new QAction(uiText("action.paste", "Paste"), this);
+    pasteAction->setShortcut(QKeySequence::Paste);
+    connect(pasteAction, &QAction::triggered, this, [invokeOnFocusedTextWidget]() {
+        invokeOnFocusedTextWidget(
+            [](QTextEdit* textEdit) { textEdit->paste(); },
+            [](QLineEdit* lineEdit) { lineEdit->paste(); }
+        );
+    });
+    editMenu->addAction(pasteAction);
 
-    transformRotate45ClockwiseAction_ = new QAction(uiText("action.transform.rotate_cw_45", "Rotate +45"), this);
-    transformRotate45ClockwiseAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Apostrophe));
-    transformRotate45ClockwiseAction_->setIcon(makeTransformRotateCw45Icon(QColor("#2B3C4E")));
-    connect(transformRotate45ClockwiseAction_, &QAction::triggered, this, &MainWindow::onRotate45Clockwise);
-    editMenu->addAction(transformRotate45ClockwiseAction_);
+    editMenu->addSeparator();
+
+    auto* undoAction = new QAction(uiText("action.undo", "Undo"), this);
+    undoAction->setShortcut(QKeySequence::Undo);
+    connect(undoAction, &QAction::triggered, this, [invokeOnFocusedTextWidget]() {
+        invokeOnFocusedTextWidget(
+            [](QTextEdit* textEdit) { textEdit->undo(); },
+            [](QLineEdit* lineEdit) { lineEdit->undo(); }
+        );
+    });
+    editMenu->addAction(undoAction);
+
+    auto* redoAction = new QAction(uiText("action.redo", "Redo"), this);
+    redoAction->setShortcut(QKeySequence::Redo);
+    connect(redoAction, &QAction::triggered, this, [invokeOnFocusedTextWidget]() {
+        invokeOnFocusedTextWidget(
+            [](QTextEdit* textEdit) { textEdit->redo(); },
+            [](QLineEdit* lineEdit) { lineEdit->redo(); }
+        );
+    });
+    editMenu->addAction(redoAction);
 
     editMenu->addSeparator();
 
     latencyDetectorAction_ = new QAction(UiText::isChineseUi() ? QStringLiteral("BPM&&偏移检测") : QStringLiteral("BPM && Offset Detection..."), this);
     connect(latencyDetectorAction_, &QAction::triggered, this, &MainWindow::onOpenLatencyDetector);
     editMenu->addAction(latencyDetectorAction_);
+    editMenu->addSeparator();
+
+    validateAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("语法检查") : QStringLiteral("Syntax Check"),
+        this
+    );
+    validateAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
+    connect(validateAction_, &QAction::triggered, this, &MainWindow::onValidateSimai);
+    editMenu->addAction(validateAction_);
+
+    transformMirrorLeftRightAction_ = new QAction(uiText("action.transform.mirror_lr", "Mirror Left/Right"), this);
+    transformMirrorLeftRightAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_J));
+    connect(transformMirrorLeftRightAction_, &QAction::triggered, this, &MainWindow::onMirrorLeftRight);
+    transformMenu->addAction(transformMirrorLeftRightAction_);
+
+    transformMirrorUpDownAction_ = new QAction(uiText("action.transform.mirror_ud", "Mirror Up/Down"), this);
+    transformMirrorUpDownAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
+    connect(transformMirrorUpDownAction_, &QAction::triggered, this, &MainWindow::onMirrorUpDown);
+    transformMenu->addAction(transformMirrorUpDownAction_);
+
+    transformRotate180Action_ = new QAction(uiText("action.transform.rotate_180", "Rotate 180"), this);
+    transformRotate180Action_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
+    connect(transformRotate180Action_, &QAction::triggered, this, &MainWindow::onRotate180);
+    transformMenu->addAction(transformRotate180Action_);
+
+    transformRotate45CounterClockwiseAction_ = new QAction(uiText("action.transform.rotate_ccw_45", "Rotate -45"), this);
+    transformRotate45CounterClockwiseAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Semicolon));
+    connect(transformRotate45CounterClockwiseAction_, &QAction::triggered, this, &MainWindow::onRotate45CounterClockwise);
+    transformMenu->addAction(transformRotate45CounterClockwiseAction_);
+
+    transformRotate45ClockwiseAction_ = new QAction(uiText("action.transform.rotate_cw_45", "Rotate +45"), this);
+    transformRotate45ClockwiseAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Apostrophe));
+    connect(transformRotate45ClockwiseAction_, &QAction::triggered, this, &MainWindow::onRotate45Clockwise);
+    transformMenu->addAction(transformRotate45ClockwiseAction_);
 
     stopPreviewAction_ = new QAction(uiText("action.stop_preview", "Stop Preview"), this);
     stopPreviewAction_->setIcon(makePreviewStopIcon(QColor("#2B3C4E")));
@@ -169,12 +233,13 @@ MainWindow::MainWindow(QWidget* parent)
 
     auto* fileMenu = menuBar()->addMenu(uiText("menu.file", "&File"));
     auto* editMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("编辑(&E)") : QStringLiteral("&Edit"));
+    auto* transformMenu = menuBar()->addMenu(uiText("menu.transform", "变换(&T)"));
     auto* previewMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("预览(&P)") : QStringLiteral("&Preview"));
     auto* helpMenu = menuBar()->addMenu(uiText("menu.help", "&Help"));
 
     auto* toolBar = addToolBar("Main");
     toolBar->setMovable(false);
-    setupMenusAndActions(fileMenu, editMenu, previewMenu, helpMenu);
+    setupMenusAndActions(fileMenu, editMenu, transformMenu, previewMenu, helpMenu);
     logStartupStage("menus_and_actions_ready");
 
     auto* editor = new PlainCodeEditor(this);
@@ -186,6 +251,13 @@ MainWindow::MainWindow(QWidget* parent)
     editor->setLineWrapMode(QTextEdit::WidgetWidth);
     editor->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     editor->setPlainText(QString());
+    editor->setBatchTransformActions({
+        transformMirrorLeftRightAction_,
+        transformMirrorUpDownAction_,
+        transformRotate180Action_,
+        transformRotate45CounterClockwiseAction_,
+        transformRotate45ClockwiseAction_,
+    });
     chartBracketHighlighter_ = new BracketScopeHighlighter(editor->document());
     editorWidget_ = editor;
     editorWidget_->setFont(codeFont);
@@ -213,17 +285,6 @@ MainWindow::MainWindow(QWidget* parent)
         "QLabel#EditorContext { color: #1F2D3D; font-weight: 700; }"
         "QLabel#EditorMeta { color: #5F6B7A; }"
         "QWidget#EditorDifficultyControls QLabel { color: #5F6B7A; }"
-        "QWidget#EditorBatchTransformControls QToolButton {"
-        " color: #223042;"
-        " min-width: 24px;"
-        " min-height: 22px;"
-        " padding: 0;"
-        " border: 1px solid #D2DCE8;"
-        " border-radius: 5px;"
-        " background: #FFFFFF;"
-        "}"
-        "QWidget#EditorBatchTransformControls QToolButton:hover { background: #F3F8FF; border-color: #9FC1E9; }"
-        "QWidget#EditorBatchTransformControls QToolButton:pressed { background: #E7F1FD; }"
         "QWidget#EditorDifficultyControls QLineEdit {"
         " background: #FFFFFF;"
         " color: #1F1F1F;"
@@ -250,35 +311,15 @@ MainWindow::MainWindow(QWidget* parent)
     editorContextLabel_->setObjectName("EditorContext");
     editorContextLabel_->setFont(uiAccentFont(15, QFont::DemiBold));
     editorContextLabel_->setMinimumWidth(0);
-    editorContextLabel_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
-    editorHeaderLayout->addWidget(editorContextLabel_, 1);
+    editorContextLabel_->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    editorHeaderLayout->addWidget(editorContextLabel_, 0);
 
-    editorBatchTransformControls_ = new QWidget(editorHeader);
-    editorBatchTransformControls_->setObjectName("EditorBatchTransformControls");
-    auto* editorBatchLayout = new QHBoxLayout(editorBatchTransformControls_);
-    editorBatchLayout->setContentsMargins(0, 0, 0, 0);
-    editorBatchLayout->setSpacing(4);
-    const auto makeTransformButton = [this](QAction* action) -> QToolButton* {
-        auto* button = new QToolButton(editorBatchTransformControls_);
-        button->setObjectName("PreviewControlButton");
-        button->setDefaultAction(action);
-        button->setAutoRaise(false);
-        button->setToolButtonStyle(Qt::ToolButtonIconOnly);
-        button->setIconSize(QSize(15, 15));
-        button->setFixedSize(26, 24);
-        return button;
-    };
-    transformMirrorLeftRightButton_ = makeTransformButton(transformMirrorLeftRightAction_);
-    transformMirrorUpDownButton_ = makeTransformButton(transformMirrorUpDownAction_);
-    transformRotate180Button_ = makeTransformButton(transformRotate180Action_);
-    transformRotate45CounterClockwiseButton_ = makeTransformButton(transformRotate45CounterClockwiseAction_);
-    transformRotate45ClockwiseButton_ = makeTransformButton(transformRotate45ClockwiseAction_);
-    editorBatchLayout->addWidget(transformMirrorLeftRightButton_);
-    editorBatchLayout->addWidget(transformMirrorUpDownButton_);
-    editorBatchLayout->addWidget(transformRotate180Button_);
-    editorBatchLayout->addWidget(transformRotate45CounterClockwiseButton_);
-    editorBatchLayout->addWidget(transformRotate45ClockwiseButton_);
-    editorBatchTransformControls_->setVisible(false);
+    editorBatchTransformControls_ = nullptr;
+    transformMirrorLeftRightButton_ = nullptr;
+    transformMirrorUpDownButton_ = nullptr;
+    transformRotate180Button_ = nullptr;
+    transformRotate45CounterClockwiseButton_ = nullptr;
+    transformRotate45ClockwiseButton_ = nullptr;
 
     editorDifficultyControls_ = new QWidget(editorHeader);
     editorDifficultyControls_->setObjectName("EditorDifficultyControls");
@@ -290,26 +331,22 @@ MainWindow::MainWindow(QWidget* parent)
     auto* difficultyLevelLineEdit = new LeftPlaceholderLineEdit(editorDifficultyControls_);
     difficultyLevelLineEdit->setLeftPlaceholderText("&lv_n=");
     difficultyLevelEdit_ = difficultyLevelLineEdit;
-    difficultyLevelEdit_->setMinimumWidth(0);
-    difficultyLevelEdit_->setMaximumWidth(72);
-    difficultyLevelEdit_->setAlignment(Qt::AlignCenter);
-    difficultyLevelEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    difficultyLevelEdit_->setFixedWidth(72);
+    difficultyLevelEdit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    difficultyLevelEdit_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     auto* difficultyDesignerLabel = new QLabel(uiText("editor.des", "Des"), editorDifficultyControls_);
     difficultyDesignerLabel->setFont(uiAccentFont(10));
     auto* difficultyDesignerLineEdit = new LeftPlaceholderLineEdit(editorDifficultyControls_);
     difficultyDesignerLineEdit->setLeftPlaceholderText("&des_n=");
     difficultyDesignerEdit_ = difficultyDesignerLineEdit;
-    difficultyDesignerEdit_->setMinimumWidth(0);
-    difficultyDesignerEdit_->setMaximumWidth(140);
-    difficultyDesignerEdit_->setAlignment(Qt::AlignCenter);
-    difficultyDesignerEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    difficultyDesignerEdit_->setFixedWidth(140);
+    difficultyDesignerEdit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    difficultyDesignerEdit_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     editorDifficultyLayout->addWidget(difficultyLevelLabel);
     editorDifficultyLayout->addWidget(difficultyLevelEdit_);
     editorDifficultyLayout->addWidget(difficultyDesignerLabel);
-    editorDifficultyLayout->addWidget(difficultyDesignerEdit_, 1);
-    editorDifficultyLayout->addSpacing(10);
-    editorDifficultyLayout->addWidget(editorBatchTransformControls_);
-    editorDifficultyControls_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    editorDifficultyLayout->addWidget(difficultyDesignerEdit_);
+    editorDifficultyControls_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     editorDifficultyControls_->hide();
     editorHeaderLayout->addWidget(editorDifficultyControls_, 0);
 
@@ -318,8 +355,8 @@ MainWindow::MainWindow(QWidget* parent)
     editorCursorLabel_ = new QLabel("Ln 1, Col 1", editorHeader);
     editorCursorLabel_->setObjectName("EditorMeta");
     editorCursorLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    editorCursorLabel_->setMinimumWidth(0);
-    editorCursorLabel_->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+    editorCursorLabel_->setFixedWidth(QFontMetrics(uiMonoFont(10)).horizontalAdvance(QStringLiteral("Ln 9999, Col 9999")) + 4);
+    editorCursorLabel_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     editorHeaderLayout->addWidget(editorCursorLabel_, 0, Qt::AlignRight);
     centralLayout->addWidget(editorHeader, 0);
 
@@ -621,18 +658,23 @@ MainWindow::MainWindow(QWidget* parent)
                 button->setText(SimaiDocument::difficultyName(id));
                 button->setFont(uiAccentFont(10));
                 button->setCursor(Qt::PointingHandCursor);
+                const UiTheme::Colors& c = UiTheme::colors();
                 button->setStyleSheet(
-                    "QToolButton {"
-                    " color: #203040;"
-                    " background: transparent;"
-                    " border: none;"
-                    " padding: 6px 20px 6px 12px;"
-                    " text-align: left;"
-                    "}"
-                    "QToolButton:hover {"
-                    " background: #EEF5FF;"
-                    " border-radius: 6px;"
-                    "}"
+                    QStringLiteral(
+                        "QToolButton {"
+                        " color: %1;"
+                        " background: transparent;"
+                        " border: none;"
+                        " padding: 6px 20px 6px 12px;"
+                        " text-align: left;"
+                        "}"
+                        "QToolButton:hover {"
+                        " background: %2;"
+                        " border-radius: 6px;"
+                        "}"
+                    )
+                        .arg(c.textPrimary.name(QColor::HexRgb))
+                        .arg(c.menuHoverBg.name(QColor::HexRgb))
                 );
                 connect(button, &QToolButton::clicked, &menu, [action, &menu]() {
                     action->trigger();
@@ -951,12 +993,20 @@ MainWindow::MainWindow(QWidget* parent)
     });
     bottomTabs_->addTab(timelineView_, uiText("tab.timeline", "Timeline"));
 
-    connect(qobject_cast<PlainCodeEditor*>(editorWidget_), &QTextEdit::textChanged, this, [this]() {
-        markCurrentFieldDirty();
-        scheduleTimelineRefresh();
-        updateEditorEmptyState();
-        updateEditorStatus();
-    });
+    if (auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_); editor != nullptr) {
+        connect(editor->document(), &QTextDocument::contentsChange, this, [this](int, int charsRemoved, int charsAdded) {
+            if (suppressTextDirtyTracking_) {
+                return;
+            }
+            if (charsRemoved == 0 && charsAdded == 0) {
+                return;
+            }
+            markCurrentFieldDirty();
+            scheduleTimelineRefresh();
+            updateEditorEmptyState();
+            updateEditorStatus();
+        });
+    }
     connect(qobject_cast<PlainCodeEditor*>(editorWidget_), &QTextEdit::cursorPositionChanged, this, [this]() {
         updateEditorStatus();
         if (!qtPreviewPlaying_) {
@@ -972,7 +1022,17 @@ MainWindow::MainWindow(QWidget* parent)
     connect(artistEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
     connect(firstEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
     connect(designerEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
-    connect(metadataExtraEdit_, &QTextEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
+    if (metadataExtraEdit_ != nullptr) {
+        connect(metadataExtraEdit_->document(), &QTextDocument::contentsChange, this, [this](int, int charsRemoved, int charsAdded) {
+            if (suppressTextDirtyTracking_) {
+                return;
+            }
+            if (charsRemoved == 0 && charsAdded == 0) {
+                return;
+            }
+            markCurrentFieldDirty();
+        });
+    }
     connect(difficultyLevelEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
     connect(difficultyDesignerEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
 
@@ -1042,10 +1102,7 @@ MainWindow::MainWindow(QWidget* parent)
         button->setToolButtonStyle(Qt::ToolButtonTextOnly);
         const int buttonWidth = compactToolbarButtonWidth(button->font(), action);
         button->setFixedWidth(buttonWidth);
-        button->setStyleSheet(
-            "QToolButton:disabled { background: transparent; border: none; }"
-            "QToolButton:disabled:hover { background: transparent; border: none; }"
-        );
+        button->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
         return button;
     };
 
@@ -1262,6 +1319,7 @@ MainWindow::MainWindow(QWidget* parent)
     if (previewMediaController_ != nullptr) {
         previewMediaController_->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
     }
+    applyUiTheme();
     updatePauseButtonAppearance();
     if (restoreLastSessionFile()) {
         logStartupStage("restored_last_document_applied");

@@ -136,7 +136,7 @@ private:
     void schedulePreviewSubsystemWarmup();
     void tryFinalizePreviewSubsystemWarmup();
     void setupInitialWindowGeometry();
-    void setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* previewMenu, QMenu* helpMenu);
+    void setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* transformMenu, QMenu* previewMenu, QMenu* helpMenu);
     void updateLatencyDetectorAvailability();
     QString resolveLatencyDetectorTrackPath() const;
     bool maybeSaveCurrentFieldChanges();
@@ -253,6 +253,7 @@ private:
     void savePortableState() const;
     void applyEditorTextFontSize(int pointSize, bool persistPreference);
     void applyEditorLineSpacingFactor(double factor, bool persistPreference);
+    void applyUiTheme();
     void persistEditorTextFontPreference() const;
     void loadProjectRenderState();
     void saveProjectRenderState() const;
@@ -364,6 +365,7 @@ private:
     qint64 qtPreviewAwaitingFrameSwapSinceMs_ = -1;
     bool previewSliderDragging_ = false;
     bool suppressTimelineCursorSync_ = false;
+    bool suppressTextDirtyTracking_ = false;
     bool autoRestoreLastSessionFile_ = true;
     int previewSeekHeldArrowKey_ = 0;
     QElapsedTimer previewSeekHeldArrowElapsed_;
