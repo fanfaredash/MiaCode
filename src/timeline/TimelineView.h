@@ -93,6 +93,7 @@ public:
 signals:
     void playheadChanged(double second);
     void noteNavigateRequested(int line, int col);
+    void headerNavigateRequested(double second);
     void followPreviewToggled(bool enabled);
 
 protected:

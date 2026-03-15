@@ -363,7 +363,7 @@ void MainWindow::seekTimelineToCursor(int line, int col)
 
 void MainWindow::syncTimelineToEditorCursor(bool centerView)
 {
-    if (qtPreviewPlaying_ || !hasActiveDifficulty() || timelineView_ == nullptr) {
+    if (suppressTimelineCursorSync_ || qtPreviewPlaying_ || !hasActiveDifficulty() || timelineView_ == nullptr) {
         return;
     }
     const auto [line, col] = currentCursorLineCol();
@@ -373,6 +373,49 @@ void MainWindow::syncTimelineToEditorCursor(bool centerView)
     }
     timelineView_->setCursorSeconds(second);
     timelineView_->setPlayheadSeconds(second, centerView);
+}
+
+void MainWindow::navigateTimelineToSecond(double second, bool focusEditor)
+{
+    if (timelineView_ == nullptr) {
+        return;
+    }
+
+    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    int line = 1;
+    int col = 1;
+    double noteSecond = -1.0;
+    const bool hasNearestNote = resolveNearestTimelineNote(clampedSecond, -1, &line, &col, &noteSecond);
+    const bool previousSuppressState = suppressTimelineCursorSync_;
+    suppressTimelineCursorSync_ = true;
+
+    previewPendingSeekSecond_ = clampedSecond;
+    previewPendingSeekCenterView_ = true;
+    if (previewSeekDebounceTimer_ != nullptr) {
+        previewSeekDebounceTimer_->stop();
+    }
+    seekPreviewToSecond(clampedSecond, true);
+    timelineView_->setCursorSeconds(noteSecond >= 0.0 ? noteSecond : clampedSecond);
+
+    if (hasNearestNote) {
+        moveEditorCursorToTimelineLocation(line, col, false, focusEditor, true, true);
+    }
+
+    suppressTimelineCursorSync_ = previousSuppressState;
+
+    if (hasNearestNote) {
+        statusBar()->showMessage(
+            QString("Timeline jump: %1s -> L%2 C%3")
+                .arg(clampedSecond, 0, 'f', 3)
+                .arg(line)
+                .arg(col)
+        );
+    } else {
+        statusBar()->showMessage(
+            QString("Timeline centered at %1s (source location unavailable).")
+                .arg(clampedSecond, 0, 'f', 3)
+        );
+    }
 }
 
 bool MainWindow::resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const
@@ -507,7 +550,7 @@ bool MainWindow::moveEditorCursorToTimelineLocation(
 
 void MainWindow::syncEditorCursorToPreviewSecond(double second, bool centerView)
 {
-    if (timelineView_ == nullptr || !timelineView_->followPreviewEnabled() || !hasActiveDifficulty()) {
+    if (suppressTimelineCursorSync_ || timelineView_ == nullptr || !timelineView_->followPreviewEnabled() || !hasActiveDifficulty()) {
         return;
     }
 
