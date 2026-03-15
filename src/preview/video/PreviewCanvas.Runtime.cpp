@@ -140,6 +140,12 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     touchCornerImage_ = source.touchCornerImage_;
     touchCornerEachImage_ = source.touchCornerEachImage_;
     touchCornerBreakImage_ = source.touchCornerBreakImage_;
+    touchBorder2Image_ = source.touchBorder2Image_;
+    touchBorder2EachImage_ = source.touchBorder2EachImage_;
+    touchBorder2BreakImage_ = source.touchBorder2BreakImage_;
+    touchBorder3Image_ = source.touchBorder3Image_;
+    touchBorder3EachImage_ = source.touchBorder3EachImage_;
+    touchBorder3BreakImage_ = source.touchBorder3BreakImage_;
     touchPointImage_ = source.touchPointImage_;
     touchPointEachImage_ = source.touchPointEachImage_;
     touchPointBreakImage_ = source.touchPointBreakImage_;
@@ -770,6 +776,12 @@ struct PreviewCanvas::SkinLoadResult {
     QImage touchCornerImage;
     QImage touchCornerEachImage;
     QImage touchCornerBreakImage;
+    QImage touchBorder2Image;
+    QImage touchBorder2EachImage;
+    QImage touchBorder2BreakImage;
+    QImage touchBorder3Image;
+    QImage touchBorder3EachImage;
+    QImage touchBorder3BreakImage;
     QImage touchPointImage;
     QImage touchPointEachImage;
     QImage touchPointBreakImage;
@@ -930,6 +942,12 @@ PreviewCanvas::SkinLoadResult loadSkinAssets(const QString& skinDir, quint64 gen
     result.touchCornerImage = loadImageIfExists(dir.filePath("touch.png"));
     result.touchCornerEachImage = loadImageIfExists(dir.filePath("touch_each.png"));
     result.touchCornerBreakImage = loadImageIfExists(dir.filePath("touch_break.png"));
+    result.touchBorder2Image = loadImageIfExists(dir.filePath("touch_border_2.png"));
+    result.touchBorder2EachImage = loadImageIfExists(dir.filePath("touch_border_2_each.png"));
+    result.touchBorder2BreakImage = loadImageIfExists(dir.filePath("touch_break_border_2.png"));
+    result.touchBorder3Image = loadImageIfExists(dir.filePath("touch_border_3.png"));
+    result.touchBorder3EachImage = loadImageIfExists(dir.filePath("touch_border_3_each.png"));
+    result.touchBorder3BreakImage = loadImageIfExists(dir.filePath("touch_break_border_3.png"));
     result.touchPointImage = loadImageIfExists(dir.filePath("touch_point.png"));
     result.touchPointEachImage = loadImageIfExists(dir.filePath("touch_point_each.png"));
     result.touchPointBreakImage = loadImageIfExists(dir.filePath("touch_break_point.png"));
@@ -1042,6 +1060,12 @@ PreviewCanvas::SkinLoadResult loadSkinAssets(const QString& skinDir, quint64 gen
                 &result.touchCornerImage,
                 &result.touchCornerEachImage,
                 &result.touchCornerBreakImage,
+                &result.touchBorder2Image,
+                &result.touchBorder2EachImage,
+                &result.touchBorder2BreakImage,
+                &result.touchBorder3Image,
+                &result.touchBorder3EachImage,
+                &result.touchBorder3BreakImage,
                 &result.touchPointImage,
                 &result.touchPointEachImage,
                 &result.touchPointBreakImage,

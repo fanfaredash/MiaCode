@@ -68,6 +68,12 @@ void PreviewCanvas::applySkinLoadResult(SkinLoadResult&& result)
     touchCornerImage_ = std::move(result.touchCornerImage);
     touchCornerEachImage_ = std::move(result.touchCornerEachImage);
     touchCornerBreakImage_ = std::move(result.touchCornerBreakImage);
+    touchBorder2Image_ = std::move(result.touchBorder2Image);
+    touchBorder2EachImage_ = std::move(result.touchBorder2EachImage);
+    touchBorder2BreakImage_ = std::move(result.touchBorder2BreakImage);
+    touchBorder3Image_ = std::move(result.touchBorder3Image);
+    touchBorder3EachImage_ = std::move(result.touchBorder3EachImage);
+    touchBorder3BreakImage_ = std::move(result.touchBorder3BreakImage);
     touchPointImage_ = std::move(result.touchPointImage);
     touchPointEachImage_ = std::move(result.touchPointEachImage);
     touchPointBreakImage_ = std::move(result.touchPointBreakImage);
