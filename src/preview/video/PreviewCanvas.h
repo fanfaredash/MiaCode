@@ -258,8 +258,10 @@ private:
     QImage noteGuideSlideImage_;
     QImage touchCornerImage_;
     QImage touchCornerEachImage_;
+    QImage touchCornerBreakImage_;
     QImage touchPointImage_;
     QImage touchPointEachImage_;
+    QImage touchPointBreakImage_;
     QImage touchHold0Image_;
     QImage touchHold1Image_;
     QImage touchHold2Image_;

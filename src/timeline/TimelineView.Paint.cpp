@@ -234,8 +234,12 @@ void TimelineView::paintEvent(QPaintEvent* event)
             iconType = "hold_break";
         } else if (iconType == "hold" && note.isEach) {
             iconType = "hold_each";
+        } else if (iconType == "touch" && note.isBreak) {
+            iconType = "touch_break";
         } else if (iconType == "touch" && note.isEach) {
             iconType = "touch_each";
+        } else if (iconType == "touch_hold" && note.isBreak) {
+            iconType = "touch_hold_break";
         } else if (iconType == "slide" || iconType == "wifi") {
             // Star icon should follow the falling slide-head star(each) semantics,
             // while track color is controlled separately by slideEach.

@@ -263,10 +263,13 @@ void TimelineView::loadNoteIcons()
 
     const QPixmap touchBorder = loadRawIcon({"touch_border_2.png", "touch.png", "touch_each.png", "each.png", "tap.png"});
     const QPixmap touchPoint = loadRawIcon({"touch_point.png", "touch_point_each.png", "tap.png"});
+    const QPixmap touchBreakBorder = loadRawIcon({"touch_break.png", "touch_border_2.png", "touch.png", "touch_each.png", "each.png", "tap.png"});
+    const QPixmap touchBreakPoint = loadRawIcon({"touch_break_point.png", "touch_point.png", "touch_point_each.png", "tap.png"});
     const QPixmap touchEachBorder = loadRawIcon({"touch_border_2_each.png", "touch_border_2.png", "touch_each.png", "touch.png", "each.png", "tap.png"});
     const QPixmap touchEachPoint = loadRawIcon({"touch_point_each.png", "touch_point.png", "tap.png"});
 
     const QPixmap touchComposite = buildTouchCompositeIcon(touchBorder, touchPoint);
+    const QPixmap touchBreakComposite = buildTouchCompositeIcon(touchBreakBorder, touchBreakPoint);
     const QPixmap touchEachComposite = buildTouchCompositeIcon(touchEachBorder, touchEachPoint);
     if (!touchComposite.isNull()) {
         noteIcons_.insert("touch", touchComposite);
@@ -278,6 +281,11 @@ void TimelineView::loadNoteIcons()
     } else {
         loadIcon("touch_each", {"touch_each.png", "touch.png", "each.png", "tap.png"}, kNoteSize);
     }
+    if (!touchBreakComposite.isNull()) {
+        noteIcons_.insert("touch_break", touchBreakComposite);
+    } else {
+        loadIcon("touch_break", {"touch_break.png", "touch.png", "touch_each.png", "each.png", "tap.png"}, kNoteSize);
+    }
 
     const QPixmap touchHoldComposite = buildTouchCompositeIcon(
         loadRawIcon({"touchhold_border.png", "touch_border_2.png", "touch.png", "tap.png"}),
@@ -285,6 +293,15 @@ void TimelineView::loadNoteIcons()
     );
     if (!touchHoldComposite.isNull()) {
         noteIcons_.insert("touch_hold", touchHoldComposite);
+    }
+    const QPixmap touchHoldBreakComposite = buildTouchCompositeIcon(
+        loadRawIcon({"touchhold_border.png", "touch_break.png", "touch_border_2.png", "touch.png", "tap.png"}),
+        loadRawIcon({"touch_break_point.png", "touch_point.png", "tap.png"})
+    );
+    if (!touchHoldBreakComposite.isNull()) {
+        noteIcons_.insert("touch_hold_break", touchHoldBreakComposite);
+    } else if (!touchHoldComposite.isNull()) {
+        noteIcons_.insert("touch_hold_break", touchHoldComposite);
     }
 
 }
