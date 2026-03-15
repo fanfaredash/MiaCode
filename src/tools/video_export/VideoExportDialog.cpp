@@ -230,6 +230,19 @@ VideoExportDialog::VideoExportDialog(
     resize(680, 360);
     setStyleSheet(
         QStringLiteral(
+            "QDialog {"
+            " background: #F5F7FA;"
+            "}"
+            "QFrame#VideoExportPrimaryPanel {"
+            " border: 1px solid #DCE3EC;"
+            " border-radius: 8px;"
+            " background: #FFFFFF;"
+            "}"
+            "QFrame#VideoExportSectionPanel {"
+            " border: 1px solid #DCE3EC;"
+            " border-radius: 8px;"
+            " background: #FFFFFF;"
+            "}"
             "QToolButton#RangePreviewControlButton {"
             " color: #223042;"
             " padding: 3px 5px;"
@@ -248,7 +261,14 @@ VideoExportDialog::VideoExportDialog(
     rootLayout->setSpacing(8);
     rootLayout->setSizeConstraint(QLayout::SetDefaultConstraint);
 
-    auto* outputRow = new QWidget(this);
+    auto* primaryPanel = new QFrame(this);
+    primaryPanel->setObjectName(QStringLiteral("VideoExportPrimaryPanel"));
+    auto* primaryPanelLayout = new QVBoxLayout(primaryPanel);
+    primaryPanelLayout->setContentsMargins(10, 10, 10, 10);
+    primaryPanelLayout->setSpacing(8);
+    rootLayout->addWidget(primaryPanel, 0);
+
+    auto* outputRow = new QWidget(primaryPanel);
     auto* outputLayout = new QHBoxLayout(outputRow);
     outputLayout->setContentsMargins(0, 0, 0, 0);
     outputLayout->setSpacing(kFormRowSpacing);
@@ -263,10 +283,10 @@ VideoExportDialog::VideoExportDialog(
     outputLayout->addWidget(outputLabel, 0);
     outputLayout->addWidget(outputPathEdit_, 1);
     outputLayout->addWidget(browseButton, 0);
-    rootLayout->addWidget(outputRow, 0);
+    primaryPanelLayout->addWidget(outputRow, 0);
     const int sectionRightInset = rightAlignedButtonWidth + kFormRowSpacing;
 
-    auto* resolutionRow = new QWidget(this);
+    auto* resolutionRow = new QWidget(primaryPanel);
     auto* resolutionLayout = new QHBoxLayout(resolutionRow);
     resolutionLayout->setContentsMargins(0, 0, 0, 0);
     resolutionLayout->setSpacing(kFormRowSpacing);
@@ -293,7 +313,7 @@ VideoExportDialog::VideoExportDialog(
     auto* resolutionRightPlaceholder = new QWidget(resolutionRow);
     resolutionRightPlaceholder->setFixedWidth(rightAlignedButtonWidth);
     resolutionLayout->addWidget(resolutionRightPlaceholder, 0);
-    rootLayout->addWidget(resolutionRow, 0);
+    primaryPanelLayout->addWidget(resolutionRow, 0);
 
     rangeContent_ = new QWidget(this);
     auto* rangeLayout = new QVBoxLayout(rangeContent_);
@@ -356,15 +376,15 @@ VideoExportDialog::VideoExportDialog(
     previewSlider_->setRange(0, secondToSliderValue(totalDurationSeconds_));
     previewSlider_->setValue(secondToSliderValue(previewCursorSecond_));
     previewSlider_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* previewControlsRow = new QWidget(this);
+    auto* previewControlsRow = new QWidget(primaryPanel);
     auto* previewControlsLayout = new QHBoxLayout(previewControlsRow);
     previewControlsLayout->setContentsMargins(0, 2, sectionRightInset, 0);
     previewControlsLayout->setSpacing(kPreviewControlSpacing);
 
-    previewTimeLabel_ = new QLabel(this);
+    previewTimeLabel_ = new QLabel(primaryPanel);
     previewTimeLabel_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     previewTimeLabel_->setFixedWidth(rangeControlWidth);
-    auto* previewTimeRow = new QWidget(this);
+    auto* previewTimeRow = new QWidget(primaryPanel);
     auto* previewTimeLayout = new QHBoxLayout(previewTimeRow);
     const int previewControlsWidth =
         (kPreviewControlButtonWidth * 2)
@@ -394,8 +414,8 @@ VideoExportDialog::VideoExportDialog(
     previewControlsLayout->addWidget(previewRangeButton_, 0);
     previewControlsLayout->addSpacing(kPreviewControlsToSliderGap);
     previewControlsLayout->addWidget(previewSlider_, 1);
-    rootLayout->addWidget(previewControlsRow, 0);
-    rootLayout->addWidget(previewTimeRow, 0);
+    primaryPanelLayout->addWidget(previewControlsRow, 0);
+    primaryPanelLayout->addWidget(previewTimeRow, 0);
 
     optionsContent_ = new QWidget(this);
     auto* optionsLayout = new QGridLayout(optionsContent_);
@@ -409,13 +429,11 @@ VideoExportDialog::VideoExportDialog(
         optionsContent_
     );
     showTimestampCheck_->setChecked(baseTask_.showTimestamp);
-    optionsLayout->addWidget(showTimestampCheck_, 0, 0, 1, 1, Qt::AlignLeft);
     smoothBrightnessCheck_ = new QCheckBox(
         l10n(QStringLiteral("Smooth brightness"), QStringLiteral("平滑亮度")),
         optionsContent_
     );
     smoothBrightnessCheck_->setChecked(baseTask_.smoothBrightness);
-    optionsLayout->addWidget(smoothBrightnessCheck_, 0, 1, 1, 1, Qt::AlignLeft);
     const auto addPercentSliderOption = [](
         QWidget* parent,
         const QString& title,
@@ -510,6 +528,8 @@ VideoExportDialog::VideoExportDialog(
     backgroundScaleModeLayout->addWidget(backgroundScaleModeLabel, 0);
     backgroundScaleModeLayout->addWidget(backgroundScaleModeCombo_, 1);
     optionsLayout->addWidget(backgroundScaleModeRow, 3, 0, 1, 2);
+    optionsLayout->addWidget(showTimestampCheck_, 4, 0, 1, 1, Qt::AlignLeft | Qt::AlignTop);
+    optionsLayout->addWidget(smoothBrightnessCheck_, 4, 1, 1, 1, Qt::AlignLeft | Qt::AlignTop);
     rootLayout->addWidget(
         buildCollapsibleSection(
             l10n(QStringLiteral("Options"), QStringLiteral("选项")),
@@ -647,12 +667,23 @@ QWidget* VideoExportDialog::buildCollapsibleSection(
     toggle->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     toggle->setStyleSheet(QStringLiteral("QToolButton { border: none; font-weight: 600; text-align: left; }"));
 
-    layout->addWidget(toggle, 0);
-    layout->addWidget(content, 0);
-    updateSectionToggle(toggle, content, expanded);
+    auto* panel = new QFrame(container);
+    panel->setObjectName(QStringLiteral("VideoExportSectionPanel"));
+    auto* panelLayout = new QVBoxLayout(panel);
+    panelLayout->setContentsMargins(10, 10, 10, 10);
+    panelLayout->setSpacing(0);
+    panelLayout->addWidget(content, 0);
 
-    connect(toggle, &QToolButton::toggled, this, [this, toggle, content](bool checked) {
+    layout->addWidget(toggle, 0);
+    layout->addWidget(panel, 0);
+    updateSectionToggle(toggle, content, expanded);
+    panel->setVisible(expanded);
+
+    connect(toggle, &QToolButton::toggled, this, [this, toggle, content, panel](bool checked) {
         updateSectionToggle(toggle, content, checked);
+        if (panel != nullptr) {
+            panel->setVisible(checked);
+        }
         refreshDialogGeometry();
         QTimer::singleShot(0, this, [this]() { refreshDialogGeometry(); });
     });
