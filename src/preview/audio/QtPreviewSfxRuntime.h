@@ -29,6 +29,7 @@ public:
     bool hasBackgroundTrack() const;
     bool isBackgroundTrackRunning() const;
     void startBackgroundTrack(double second);
+    void seekBackgroundTrack(double second);
     void pauseBackgroundTrack();
     double backgroundPlaybackSecond() const;
     bool audition(const QString& kind, double gain = 1.0);

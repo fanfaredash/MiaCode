@@ -838,10 +838,71 @@ void MainWindow::updatePreviewWorkspaceLayout()
             );
         }
     }
+    workspaceCachedLeftWidth_ = targetLeftWidth;
+    workspaceCachedRightWidth_ = targetRightWidth;
 
     updatePreviewPanelLayout();
     updateEditorFindBarGeometry();
     applyFindOverlayInset();
+}
+
+void MainWindow::cacheWorkspaceLayoutSizes()
+{
+    if (workspaceSplitter_ == nullptr) {
+        return;
+    }
+    const QList<int> sizes = workspaceSplitter_->sizes();
+    if (sizes.size() != 2) {
+        return;
+    }
+    workspaceCachedLeftWidth_ = qMax(0, sizes.at(0));
+    workspaceCachedRightWidth_ = qMax(0, sizes.at(1));
+}
+
+void MainWindow::restoreWorkspaceLayoutSizes()
+{
+    if (workspaceSplitter_ == nullptr || workspaceCachedLeftWidth_ <= 0 || workspaceCachedRightWidth_ <= 0) {
+        return;
+    }
+    const QList<int> currentSizes = workspaceSplitter_->sizes();
+    if (currentSizes.size() == 2
+        && qAbs(currentSizes.at(0) - workspaceCachedLeftWidth_) <= 1
+        && qAbs(currentSizes.at(1) - workspaceCachedRightWidth_) <= 1) {
+        return;
+    }
+    workspaceSplitter_->setSizes({workspaceCachedLeftWidth_, workspaceCachedRightWidth_});
+    updatePreviewPanelLayout();
+    updateEditorFindBarGeometry();
+    applyFindOverlayInset();
+}
+
+void MainWindow::refreshLayoutAfterPageSwitch()
+{
+    if (previewLeftColumn_ != nullptr) {
+        previewLeftColumn_->updateGeometry();
+        if (QLayout* layout = previewLeftColumn_->layout(); layout != nullptr) {
+            layout->activate();
+        }
+    }
+    if (editorStack_ != nullptr) {
+        editorStack_->updateGeometry();
+    }
+    if (bottomTabs_ != nullptr) {
+        bottomTabs_->updateGeometry();
+    }
+    if (workspaceSplitter_ != nullptr) {
+        workspaceSplitter_->updateGeometry();
+        if (QLayout* layout = workspaceSplitter_->layout(); layout != nullptr) {
+            layout->activate();
+        }
+    }
+    restoreWorkspaceLayoutSizes();
+    updatePreviewWorkspaceLayout();
+    updateEditorHeaderLayoutMode();
+    if (timelineView_ != nullptr) {
+        timelineView_->updateGeometry();
+        timelineView_->viewport()->update();
+    }
 }
 
 void MainWindow::updatePreviewPanelLayout()
@@ -1094,6 +1155,7 @@ void MainWindow::schedulePreviewSeek(double second, bool centerView)
 void MainWindow::seekPreviewToSecond(double second, bool centerView)
 {
     ensurePreviewMediaControllerInitialized();
+    ensurePreviewSfxRuntimePrepared();
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     if (qtPreviewPlaying_) {
         stopQtPreviewPlayback(true);
@@ -1108,9 +1170,7 @@ void MainWindow::seekPreviewToSecond(double second, bool centerView)
     if (timelineView_ != nullptr) {
         timelineView_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
     }
-    if (previewMediaController_ != nullptr) {
-        previewMediaController_->setPlayheadSeconds(clampedSecond);
-    }
+    syncPausedPreviewMediaTimestamps(clampedSecond);
     applyQtPreviewPosition(clampedSecond, centerView);
     if (previewCanvas_ != nullptr) {
         previewCanvas_->update();
@@ -1310,6 +1370,17 @@ void MainWindow::applyQtPreviewPosition(double second, bool centerView)
     updatePreviewSliderPosition(second);
     updatePreviewObjectStats(second);
     syncEditorCursorToPreviewSecond(second, centerView);
+}
+
+void MainWindow::syncPausedPreviewMediaTimestamps(double second)
+{
+    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    if (previewMediaController_ != nullptr) {
+        previewMediaController_->setPlayheadSeconds(clampedSecond);
+    }
+    if (previewSfxRuntime_ != nullptr) {
+        previewSfxRuntime_->seekBackgroundTrack(clampedSecond);
+    }
 }
 
 void MainWindow::flushQtPreviewTimelinePosition()
