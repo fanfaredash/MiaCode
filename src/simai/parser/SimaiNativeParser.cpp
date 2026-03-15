@@ -92,14 +92,20 @@ bool parseTouchSuffix(
     QString* durationSignature,
     bool* hasHold,
     bool* hasFirework,
+    bool* hasBreak,
     QString* errorMessage)
 {
-    if (durationSignature == nullptr || hasHold == nullptr || hasFirework == nullptr || errorMessage == nullptr) {
+    if (durationSignature == nullptr
+        || hasHold == nullptr
+        || hasFirework == nullptr
+        || hasBreak == nullptr
+        || errorMessage == nullptr) {
         return false;
     }
     durationSignature->clear();
     *hasHold = false;
     *hasFirework = false;
+    *hasBreak = false;
     errorMessage->clear();
 
     const int prefixLength = touchPrefixLength(token);
@@ -140,8 +146,10 @@ bool parseTouchSuffix(
             *hasHold = true;
         } else if (lower == QChar('f')) {
             *hasFirework = true;
-        } else if (lower == QChar('b') || lower == QChar('x')) {
-            // Currently accepted for compatibility; touch ex/break flags are not bound yet.
+        } else if (lower == QChar('b')) {
+            *hasBreak = true;
+        } else if (lower == QChar('x')) {
+            // Currently accepted for compatibility; touch ex is not bound yet.
         } else if (!ch.isSpace()) {
             *errorMessage = QString("Invalid touch modifier: %1").arg(token);
             return false;

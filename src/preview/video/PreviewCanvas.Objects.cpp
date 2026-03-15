@@ -2674,8 +2674,14 @@ void PreviewCanvas::drawTouchMarker(QPainter& painter, const TimelineNoteMarker&
         return;
     }
 
-    const QImage& basePointImage = (marker.isEach && !touchPointEachImage_.isNull()) ? touchPointEachImage_ : touchPointImage_;
-    const QImage& baseCornerImage = (marker.isEach && !touchCornerEachImage_.isNull()) ? touchCornerEachImage_ : touchCornerImage_;
+    const QImage& basePointImage =
+        (marker.isBreak && !touchPointBreakImage_.isNull())
+            ? touchPointBreakImage_
+            : ((marker.isEach && !touchPointEachImage_.isNull()) ? touchPointEachImage_ : touchPointImage_);
+    const QImage& baseCornerImage =
+        (marker.isBreak && !touchCornerBreakImage_.isNull())
+            ? touchCornerBreakImage_
+            : ((marker.isEach && !touchCornerEachImage_.isNull()) ? touchCornerEachImage_ : touchCornerImage_);
     if (basePointImage.isNull() || baseCornerImage.isNull()) {
         return;
     }
@@ -2750,7 +2756,10 @@ void PreviewCanvas::drawTouchHoldMarker(QPainter& painter, const TimelineNoteMar
         return;
     }
 
-    const QImage pointBase = !touchPointEachImage_.isNull() ? touchPointEachImage_ : touchPointImage_;
+    const QImage& pointBase =
+        (marker.isBreak && !touchPointBreakImage_.isNull())
+            ? touchPointBreakImage_
+            : (!touchPointEachImage_.isNull() ? touchPointEachImage_ : touchPointImage_);
     if (pointBase.isNull()) {
         return;
     }

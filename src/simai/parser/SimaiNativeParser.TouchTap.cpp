@@ -15,8 +15,9 @@ void parseTouchToken(ParseState* state, const QString& token, int lineNumber, in
     QString durationSignature;
     bool hasHold = false;
     bool hasFirework = false;
+    bool hasBreak = false;
     QString errorMessage;
-    if (!parseTouchSuffix(normalizedToken, &durationSignature, &hasHold, &hasFirework, &errorMessage)) {
+    if (!parseTouchSuffix(normalizedToken, &durationSignature, &hasHold, &hasFirework, &hasBreak, &errorMessage)) {
         appendTokenError(state, lineNumber, column, errorMessage.isEmpty() ? QString("Invalid touch token: %1").arg(token) : errorMessage);
         return;
     }
@@ -30,6 +31,7 @@ void parseTouchToken(ParseState* state, const QString& token, int lineNumber, in
     marker.type = "touch";
     marker.touchPoint = touchPointForToken(normalizedToken);
     marker.touchPad = touchPadForToken(normalizedToken);
+    marker.isBreak = hasBreak;
     marker.isFirework = hasFirework;
 
     if (hasHold) {
