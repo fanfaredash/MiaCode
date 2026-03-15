@@ -10,10 +10,10 @@
 
 class QCheckBox;
 class QCloseEvent;
-class QComboBox;
 class QDoubleSpinBox;
 class QLabel;
 class QLineEdit;
+class QMenu;
 class QPushButton;
 class QSlider;
 class QTimer;
@@ -116,10 +116,14 @@ private:
     QElapsedTimer previewSeekHeldArrowElapsed_;
 
     QLineEdit* outputPathEdit_ = nullptr;
-    QComboBox* resolutionCombo_ = nullptr;
+    QToolButton* resolutionButton_ = nullptr;
+    QMenu* resolutionMenu_ = nullptr;
+    QSize selectedResolution_ = QSize();
     QCheckBox* showTimestampCheck_ = nullptr;
     QCheckBox* smoothBrightnessCheck_ = nullptr;
-    QComboBox* backgroundScaleModeCombo_ = nullptr;
+    QToolButton* backgroundScaleModeButton_ = nullptr;
+    QMenu* backgroundScaleModeMenu_ = nullptr;
+    PreviewBackgroundScaleMode selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     QSlider* brightnessOuterSlider_ = nullptr;
     QSlider* brightnessInnerSlider_ = nullptr;
     QSlider* layoutSquareScaleSlider_ = nullptr;

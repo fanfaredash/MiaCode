@@ -29,6 +29,7 @@
 
 #include "QtPreviewSfxRuntime.h"
 #include "UiText.h"
+#include "UiTheme.h"
 
 #include "../../third_party/miniaudio/miniaudio.h"
 
@@ -147,14 +148,15 @@ protected:
     void paintEvent(QPaintEvent* event) override
     {
         Q_UNUSED(event);
+        const UiTheme::Colors& c = UiTheme::colors();
 
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing, true);
-        painter.fillRect(rect(), QColor("#F7F9FC"));
+        painter.fillRect(rect(), c.windowAltBg);
 
         const QRectF chartRect = rect().adjusted(8.0, 12.0, -8.0, -18.0);
-        painter.setPen(QPen(QColor("#D7DEE8"), 1.0));
-        painter.setBrush(QColor("#FFFFFF"));
+        painter.setPen(QPen(c.border, 1.0));
+        painter.setBrush(c.cardBg);
         painter.drawRoundedRect(chartRect, 8.0, 8.0);
 
         if (chartRect.width() <= 2.0 || chartRect.height() <= 2.0 || durationSeconds_ <= 0.0) {
@@ -182,7 +184,7 @@ protected:
                     const bool isBarLine = beatIndex >= 0
                         ? (beatIndex % qMax(1, barPulseCount_)) == 0
                         : ((-beatIndex) % qMax(1, barPulseCount_)) == 0;
-                    painter.setPen(QPen(isBarLine ? QColor("#7CA7D8") : QColor("#D5E2F2"), isBarLine ? 1.5 : 1.0));
+                    painter.setPen(QPen(isBarLine ? c.timelineCursor : c.timelineGridMinor, isBarLine ? 1.5 : 1.0));
                     painter.drawLine(QPointF(x, chartRect.top() + 2.0), QPointF(x, chartRect.bottom() - 2.0));
                 }
             }
@@ -210,19 +212,19 @@ protected:
                     lowerPath.lineTo(x, lowerY);
                 }
             }
-            painter.setPen(QPen(QColor("#59718F"), 1.15));
+            painter.setPen(QPen(c.timelineWaveStroke, 1.15));
             painter.drawPath(upperPath);
             painter.drawPath(lowerPath);
         }
 
-        painter.setPen(QPen(QColor("#203449"), 1.0));
+        painter.setPen(QPen(c.textPrimary, 1.0));
         painter.drawLine(
             QPointF(chartRect.left(), chartRect.center().y()),
             QPointF(chartRect.right(), chartRect.center().y())
         );
 
         const qreal playheadX = secondToX(playheadSecond_, chartRect);
-        painter.setPen(QPen(QColor("#E0564A"), 2.0));
+        painter.setPen(QPen(c.timelinePlayhead, 2.0));
         painter.drawLine(QPointF(playheadX, chartRect.top()), QPointF(playheadX, chartRect.bottom()));
     }
 

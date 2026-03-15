@@ -1,13 +1,14 @@
 void TimelineView::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event);
+    const UiTheme::Colors& c = UiTheme::colors();
 
     QPainter painter(viewport());
     if (!painter.isActive()) {
         return;
     }
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-    painter.fillRect(rect(), QColor("#F5F5F5"));
+    painter.fillRect(rect(), c.timelineWindow);
 
     const int left = timelineLeft();
     const int top = timelineTop();
@@ -17,10 +18,10 @@ void TimelineView::paintEvent(QPaintEvent* event)
     const bool drawSlideTracks = effectiveShowSlideTracks();
     const QRect timelineRect(left, top, viewport()->width() - left, h);
 
-    painter.fillRect(QRect(0, 0, viewport()->width(), top), QColor("#F3F5F8"));
-    painter.fillRect(QRect(0, top, left, h), QColor("#E8E8E8"));
-    painter.fillRect(timelineRect, QColor("#F7F8FA"));
-    painter.setPen(QColor("#CDD7E3"));
+    painter.fillRect(QRect(0, 0, viewport()->width(), top), c.timelineHeader);
+    painter.fillRect(QRect(0, top, left, h), c.timelineSidebar);
+    painter.fillRect(timelineRect, c.timelineBase);
+    painter.setPen(c.timelineBorder);
     painter.drawLine(0, top - 1, viewport()->width(), top - 1);
     QFont laneLabelFont(QStringLiteral("Consolas"));
     laneLabelFont.setStyleHint(QFont::Monospace);
@@ -57,8 +58,8 @@ void TimelineView::paintEvent(QPaintEvent* event)
             waveformPath.lineTo(x, y);
         }
         waveformPath.closeSubpath();
-        painter.fillPath(waveformPath, QColor(88, 112, 148, 80));
-        painter.setPen(QPen(QColor(88, 112, 148, 140), 1.0));
+        painter.fillPath(waveformPath, c.timelineWaveFill);
+        painter.setPen(QPen(c.timelineWaveStroke, 1.0));
         painter.drawPath(waveformPath);
         painter.restore();
     }
@@ -66,15 +67,15 @@ void TimelineView::paintEvent(QPaintEvent* event)
     painter.setFont(laneLabelFont);
     for (int lane = 0; lane < kLaneCount; ++lane) {
         const int y = top + lane * laneH;
-        const QColor rowColor = (lane % 2 == 0) ? QColor(251, 251, 251, 180) : QColor(242, 242, 242, 180);
+        const QColor rowColor = (lane % 2 == 0) ? c.timelineLaneEven : c.timelineLaneOdd;
         painter.fillRect(QRect(left, y, viewport()->width() - left, laneH), rowColor);
-        painter.setPen(QColor("#D4D4D4"));
+        painter.setPen(c.timelineBorder);
         painter.drawLine(0, y + laneH, viewport()->width(), y + laneH);
-        painter.setPen(QColor("#4D5C6D"));
+        painter.setPen(c.timelineLabel);
         painter.drawText(4, y + 1, left - 8, laneH - 1, Qt::AlignRight | Qt::AlignVCenter, laneLabelForIndex(lane));
     }
 
-    painter.setPen(QColor("#A8B2BE"));
+    painter.setPen(c.timelineAxis);
     painter.drawLine(left, top - 1, left, top + h);
 
     int lastLabelScreenX = -1000000;
@@ -91,7 +92,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
         if (x < left - 1 || x > viewport()->width()) {
             continue;
         }
-        painter.setPen(marker.major ? QColor("#B6C1CE") : QColor("#D0D8E2"));
+        painter.setPen(marker.major ? c.timelineGridMajor : c.timelineGridMinor);
         painter.drawLine(x, top, x, top + h);
         if (marker.major) {
             const int sourceLine = marker.sourceLine > 0 ? marker.sourceLine : lineNumberForSecond(marker.second);
@@ -101,7 +102,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
             if (labelX >= headerLeftLimit
                 && labelX + labelWidth <= headerRightLimit
                 && labelX - lastLabelScreenX >= 22) {
-                painter.setPen(QColor("#666666"));
+                painter.setPen(c.textSecondary);
                 painter.drawText(labelX, 0, labelWidth, kHeaderHeight, Qt::AlignHCenter | Qt::AlignVCenter, labelText);
                 lastLabelScreenX = labelX;
             }
@@ -402,7 +403,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
             }
         } else if (shouldDrawHead) {
             painter.setPen(Qt::NoPen);
-            painter.setBrush(QColor("#3A7AFE"));
+            painter.setBrush(c.timelineCursor);
             painter.drawEllipse(QRectF(x - 3, rowCenterY - 4, 8, 8));
             if (isHold) {
                 painter.drawEllipse(QRectF(holdEndX - 3, rowCenterY - 4, 8, 8));
@@ -414,7 +415,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
     if (cursorX > left) {
         painter.save();
         painter.setClipRect(timelineRect);
-        painter.setPen(QPen(QColor("#4A90E2"), 2));
+        painter.setPen(QPen(c.timelineCursor, 2));
         painter.drawLine(cursorX, top, cursorX, top + h);
         painter.restore();
     }
@@ -423,24 +424,24 @@ void TimelineView::paintEvent(QPaintEvent* event)
     if (playheadX > left) {
         painter.save();
         painter.setClipRect(timelineRect);
-        painter.setPen(QPen(QColor("#E84D4D"), 2));
+        painter.setPen(QPen(c.timelinePlayhead, 2));
         painter.drawLine(playheadX, top, playheadX, top + h);
         painter.restore();
     }
 
     // Overlay the gutter last so timeline objects never bleed into the lane-number column.
-    painter.fillRect(QRect(0, top - 1, left + 1, h + 2), QColor("#E8E8E8"));
+    painter.fillRect(QRect(0, top - 1, left + 1, h + 2), c.timelineSidebar);
     painter.setFont(laneLabelFont);
     for (int lane = 0; lane < kLaneCount; ++lane) {
         const int y = top + lane * laneH;
-        painter.setPen(QColor("#CCD6E2"));
+        painter.setPen(c.timelineBorder);
         painter.drawLine(0, y + laneH, left, y + laneH);
-        painter.setPen(QColor("#4D5C6D"));
+        painter.setPen(c.timelineLabel);
         painter.drawText(4, y + 1, left - 8, laneH - 1, Qt::AlignRight | Qt::AlignVCenter, laneLabelForIndex(lane));
     }
-    painter.setPen(QColor("#A8B2BE"));
+    painter.setPen(c.timelineAxis);
     painter.drawLine(left, top - 1, left, top + h);
-    painter.setPen(QColor("#C8D3E0"));
+    painter.setPen(c.timelineBorder);
     painter.drawRect(QRect(0, 0, viewport()->width() - 1, top + h));
 }
 

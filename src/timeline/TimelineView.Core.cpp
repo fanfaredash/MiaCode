@@ -69,6 +69,7 @@ void TimelineView::updateZoomButtonAppearance()
     if (zoomButton_ == nullptr) {
         return;
     }
+    const UiTheme::Colors& c = UiTheme::colors();
 
     const double currentScale = zoomScale();
     const double nextScale = zoomPresets_.value((zoomPresetIndex_ + 1) % zoomPresets_.size(), currentScale);
@@ -78,7 +79,7 @@ void TimelineView::updateZoomButtonAppearance()
     iconPixmap.fill(Qt::transparent);
     QPainter p(&iconPixmap);
     p.setRenderHint(QPainter::Antialiasing, true);
-    p.setPen(QPen(QColor("#4A5568"), 1.8));
+    p.setPen(QPen(c.timelineLabel, 1.8));
     p.drawEllipse(QRectF(3.0, 3.0, 10.0, 10.0));
     p.drawLine(QPointF(11.5, 11.5), QPointF(17.0, 17.0));
     QFont font = p.font();

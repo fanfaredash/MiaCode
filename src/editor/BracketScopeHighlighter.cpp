@@ -1,13 +1,25 @@
 #include "BracketScopeHighlighter.h"
+#include "UiTheme.h"
 
 #include <QColor>
 #include <QTextBlock>
 #include <QTextDocument>
 
 namespace {
-const QColor kParenColor(QStringLiteral("#66221B"));
-const QColor kBraceColor(QStringLiteral("#66221B"));
-const QColor kSquareColor(QStringLiteral("#282F60"));
+QColor parenColor()
+{
+    return UiTheme::isDarkTheme() ? QColor(QStringLiteral("#F29A83")) : QColor(QStringLiteral("#66221B"));
+}
+
+QColor braceColor()
+{
+    return UiTheme::isDarkTheme() ? QColor(QStringLiteral("#F29A83")) : QColor(QStringLiteral("#66221B"));
+}
+
+QColor squareColor()
+{
+    return UiTheme::isDarkTheme() ? QColor(QStringLiteral("#88A4FF")) : QColor(QStringLiteral("#282F60"));
+}
 }
 
 BracketScopeHighlighter::BracketScopeHighlighter(QTextDocument* parent)
@@ -75,13 +87,13 @@ QTextCharFormat BracketScopeHighlighter::formatForKind(BracketKind kind)
     QTextCharFormat format;
     switch (kind) {
     case BracketKind::Paren:
-        format.setForeground(kParenColor);
+        format.setForeground(parenColor());
         break;
     case BracketKind::Brace:
-        format.setForeground(kBraceColor);
+        format.setForeground(braceColor());
         break;
     case BracketKind::Square:
-        format.setForeground(kSquareColor);
+        format.setForeground(squareColor());
         break;
     }
     return format;

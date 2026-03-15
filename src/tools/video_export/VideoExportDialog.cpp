@@ -2,23 +2,27 @@
 
 #include "PreviewCanvas.h"
 #include "UiText.h"
+#include "UiTheme.h"
 #include "common/PreviewInteractionConfig.h"
 
+#include <QAbstractItemView>
 #include <QAbstractSpinBox>
 #include <QCheckBox>
 #include <QCloseEvent>
-#include <QComboBox>
 #include <QDialogButtonBox>
+#include <QDockWidget>
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLayout>
 #include <QLineEdit>
+#include <QMenu>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPolygonF>
@@ -28,10 +32,12 @@
 #include <QRegularExpression>
 #include <QSignalBlocker>
 #include <QSlider>
+#include <QSplitter>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QWidgetAction>
 
 #include <limits>
 #include <utility>
@@ -50,6 +56,8 @@ constexpr int kPreviewControlButtonWidth = 32;
 constexpr int kPreviewControlButtonHeight = 26;
 constexpr int kPreviewControlSpacing = 6;
 constexpr int kPreviewControlsToSliderGap = 8;
+constexpr int kDialogActionButtonMinWidth = 92;
+constexpr int kRangeSetButtonWidth = 72;
 constexpr qreal kPreviewSeekInitialStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekInitialStepSeconds);
 constexpr qreal kPreviewSeekMaxStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekMaxStepSeconds);
 constexpr qreal kPreviewSeekLinearAccelerationSecondsPerMs =
@@ -88,6 +96,98 @@ QString l10n(const QString& en, const QString& zh)
 int secondToSliderValue(double second)
 {
     return qMax(0, qRound(second * kPreviewSliderScale));
+}
+
+QToolButton* createDialogMenuButton(QWidget* parent, const QString& text, int minimumWidth = 0)
+{
+    auto* button = new QToolButton(parent);
+    button->setPopupMode(QToolButton::InstantPopup);
+    button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    button->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
+    button->setText(text);
+    if (minimumWidth > 0) {
+        button->setMinimumWidth(minimumWidth);
+    }
+    return button;
+}
+
+QWidgetAction* addDialogMenuChoice(
+    QMenu* menu,
+    const QString& text,
+    const std::function<void()>& onTriggered
+)
+{
+    auto* action = new QWidgetAction(menu);
+    auto* button = new QToolButton(menu);
+    button->setAutoRaise(true);
+    button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    button->setText(text);
+    button->setCursor(Qt::PointingHandCursor);
+    const auto& c = UiTheme::colors();
+    button->setStyleSheet(
+        QStringLiteral(
+            "QToolButton {"
+            " color: %1;"
+            " background: transparent;"
+            " border: none;"
+            " padding: 6px 20px 6px 12px;"
+            " text-align: left;"
+            "}"
+            "QToolButton:hover {"
+            " background: %2;"
+            " border-radius: 6px;"
+            "}"
+        )
+            .arg(c.textPrimary.name(QColor::HexRgb))
+            .arg(c.menuHoverBg.name(QColor::HexRgb))
+    );
+    QObject::connect(button, &QToolButton::clicked, menu, [action, menu, onTriggered]() {
+        if (onTriggered) {
+            onTriggered();
+        }
+        action->trigger();
+        menu->close();
+    });
+    action->setDefaultWidget(button);
+    menu->addAction(action);
+    return action;
+}
+
+QPoint desiredDialogTopLeft(QWidget* owner, const QSize& dialogSize)
+{
+    if (owner == nullptr) {
+        return QPoint();
+    }
+    const QRect ownerFrame = owner->frameGeometry();
+    int targetCenterX = ownerFrame.center().x();
+    QRect anchorRect;
+    bool hasAnchor = false;
+    const auto mergeGlobalRect = [&](QWidget* widget) {
+        if (widget == nullptr || !widget->isVisible()) {
+            return;
+        }
+        const QRect rect(widget->mapToGlobal(QPoint(0, 0)), widget->size());
+        if (!hasAnchor) {
+            anchorRect = rect;
+            hasAnchor = true;
+        } else {
+            anchorRect = anchorRect.united(rect);
+        }
+    };
+    if (QDockWidget* outlineDock = owner->findChild<QDockWidget*>(QStringLiteral("OutlineDock")); outlineDock != nullptr) {
+        mergeGlobalRect(outlineDock);
+    }
+    if (QWidget* previewPanel = owner->findChild<QWidget*>(QStringLiteral("PreviewPanel")); previewPanel != nullptr) {
+        if (QSplitter* splitter = qobject_cast<QSplitter*>(previewPanel->parentWidget()); splitter != nullptr && splitter->count() > 0) {
+            mergeGlobalRect(splitter->widget(0));
+        }
+    }
+    if (hasAnchor) {
+        targetCenterX = anchorRect.center().x();
+    }
+    const int targetCenterY = ownerFrame.top() + (ownerFrame.height() / 3);
+    return QPoint(targetCenterX - (dialogSize.width() / 2), targetCenterY - (dialogSize.height() / 2));
 }
 
 double sliderValueToSecond(int sliderValue)
@@ -148,6 +248,7 @@ public:
         setAlignment(Qt::AlignCenter);
         setKeyboardTracking(false);
         setFixedWidth(92);
+        setMinimumHeight(28);
     }
 
 protected:
@@ -233,33 +334,7 @@ VideoExportDialog::VideoExportDialog(
     setModal(true);
     setMinimumWidth(kDialogMinWidth);
     resize(680, 360);
-    setStyleSheet(
-        QStringLiteral(
-            "QDialog {"
-            " background: #F5F7FA;"
-            "}"
-            "QFrame#VideoExportPrimaryPanel {"
-            " border: 1px solid #DCE3EC;"
-            " border-radius: 8px;"
-            " background: #FFFFFF;"
-            "}"
-            "QFrame#VideoExportSectionPanel {"
-            " border: 1px solid #DCE3EC;"
-            " border-radius: 8px;"
-            " background: #FFFFFF;"
-            "}"
-            "QToolButton#RangePreviewControlButton {"
-            " color: #223042;"
-            " padding: 3px 5px;"
-            " border: 1px solid #D8E0EA;"
-            " border-radius: 6px;"
-            " background: transparent;"
-            "}"
-            "QToolButton#RangePreviewControlButton:hover { background: #F5F8FC; border-color: #BCD0E5; }"
-            "QToolButton#RangePreviewControlButton:pressed { background: #E8F1FB; }"
-            "QToolButton#RangePreviewControlButton:disabled { color: #9AA6B5; border-color: #E0E7EF; }"
-        )
-    );
+    setStyleSheet(UiTheme::exportDialogStyleSheet());
 
     auto* rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(12, 10, 12, 10);
@@ -275,7 +350,7 @@ VideoExportDialog::VideoExportDialog(
 
     auto* outputRow = new QWidget(primaryPanel);
     auto* outputLayout = new QHBoxLayout(outputRow);
-    outputLayout->setContentsMargins(0, 0, 0, 0);
+    outputLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     outputLayout->setSpacing(kFormRowSpacing);
     auto* outputLabel = new QLabel(l10n(QStringLiteral("Output"), QStringLiteral("输出")), outputRow);
     outputLabel->setFixedWidth(kFormLabelWidth);
@@ -283,30 +358,25 @@ VideoExportDialog::VideoExportDialog(
     outputPathEdit_ = new QLineEdit(outputRow);
     outputPathEdit_->setText(baseTask_.outputPath);
     auto* browseButton = new QPushButton(l10n(QStringLiteral("Browse..."), QStringLiteral("浏览...")), outputRow);
-    const int rightAlignedButtonWidth = browseButton->sizeHint().width();
     browseButton->setText(uiText("dialog.video_export.browse", QStringLiteral("Browse...")));
+    browseButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    const int rightAlignedButtonWidth = qMax(browseButton->sizeHint().width(), kDialogActionButtonMinWidth);
     browseButton->setFixedWidth(rightAlignedButtonWidth);
     connect(browseButton, &QPushButton::clicked, this, &VideoExportDialog::browseOutputPath);
     outputLayout->addWidget(outputLabel, 0);
     outputLayout->addWidget(outputPathEdit_, 1);
     outputLayout->addWidget(browseButton, 0);
     primaryPanelLayout->addWidget(outputRow, 0);
-    const int sectionRightInset = rightAlignedButtonWidth + kFormRowSpacing;
-
     auto* resolutionRow = new QWidget(primaryPanel);
     auto* resolutionLayout = new QHBoxLayout(resolutionRow);
-    resolutionLayout->setContentsMargins(0, 0, 0, 0);
+    resolutionLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     resolutionLayout->setSpacing(kFormRowSpacing);
     auto* resolutionLabel = new QLabel(l10n(QStringLiteral("Resolution"), QStringLiteral("分辨率")), resolutionRow);
     resolutionLabel->setFixedWidth(kFormLabelWidth);
     resolutionLabel->setText(uiText("dialog.video_export.resolution", QStringLiteral("Resolution")));
-    resolutionCombo_ = new QComboBox(resolutionRow);
-    for (const ResolutionPreset& preset : kResolutionPresets) {
-        resolutionCombo_->addItem(QString::fromLatin1(preset.label), QSize(preset.width, preset.height));
-    }
     int currentPresetIndex = -1;
-    for (int i = 0; i < resolutionCombo_->count(); ++i) {
-        const QSize size = resolutionCombo_->itemData(i).toSize();
+    for (int i = 0; i < static_cast<int>(std::size(kResolutionPresets)); ++i) {
+        const QSize size(kResolutionPresets[i].width, kResolutionPresets[i].height);
         if (size.width() == qMax(1, baseTask_.outputWidth)
             && size.height() == qMax(1, baseTask_.outputHeight)) {
             currentPresetIndex = i;
@@ -317,8 +387,8 @@ VideoExportDialog::VideoExportDialog(
         const double currentAspect =
             static_cast<double>(qMax(1, baseTask_.outputWidth)) / static_cast<double>(qMax(1, baseTask_.outputHeight));
         double bestScore = std::numeric_limits<double>::max();
-        for (int i = 0; i < resolutionCombo_->count(); ++i) {
-            const QSize size = resolutionCombo_->itemData(i).toSize();
+        for (int i = 0; i < static_cast<int>(std::size(kResolutionPresets)); ++i) {
+            const QSize size(kResolutionPresets[i].width, kResolutionPresets[i].height);
             const double optionAspect = size.height() > 0
                 ? static_cast<double>(size.width()) / static_cast<double>(size.height())
                 : 1.0;
@@ -331,11 +401,28 @@ VideoExportDialog::VideoExportDialog(
             }
         }
     }
-    resolutionCombo_->setCurrentIndex(currentPresetIndex >= 0 ? currentPresetIndex : 0);
-    resolutionCombo_->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    resolutionCombo_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    currentPresetIndex = currentPresetIndex >= 0 ? currentPresetIndex : 0;
+    selectedResolution_ = QSize(kResolutionPresets[currentPresetIndex].width, kResolutionPresets[currentPresetIndex].height);
+    resolutionButton_ = createDialogMenuButton(
+        resolutionRow,
+        QString::fromLatin1(kResolutionPresets[currentPresetIndex].label)
+    );
+    resolutionMenu_ = new QMenu(resolutionButton_);
+    UiTheme::styleRoundedMenu(*resolutionMenu_);
+    for (const ResolutionPreset& preset : kResolutionPresets) {
+        const QSize size(preset.width, preset.height);
+        const QString label = QString::fromLatin1(preset.label);
+        addDialogMenuChoice(resolutionMenu_, label, [this, size, label]() {
+            selectedResolution_ = size;
+            if (resolutionButton_ != nullptr) {
+                resolutionButton_->setText(label);
+            }
+            applySelectedAspectRatioToPreview(true);
+        });
+    }
+    resolutionButton_->setMenu(resolutionMenu_);
     resolutionLayout->addWidget(resolutionLabel, 0);
-    resolutionLayout->addWidget(resolutionCombo_, 1);
+    resolutionLayout->addWidget(resolutionButton_, 1);
     auto* resolutionRightPlaceholder = new QWidget(resolutionRow);
     resolutionRightPlaceholder->setFixedWidth(rightAlignedButtonWidth);
     resolutionLayout->addWidget(resolutionRightPlaceholder, 0);
@@ -343,7 +430,7 @@ VideoExportDialog::VideoExportDialog(
 
     rangeContent_ = new QWidget(this);
     auto* rangeLayout = new QVBoxLayout(rangeContent_);
-    rangeLayout->setContentsMargins(kSectionContentLeftInset, 0, 0, 0);
+    rangeLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     rangeLayout->setSpacing(6);
 
     startSecondSpin_ = new TimestampSpinBox(rangeContent_);
@@ -369,17 +456,17 @@ VideoExportDialog::VideoExportDialog(
     startLabel->setText(uiText("dialog.video_export.range.start", QStringLiteral("Start")));
     startLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     auto* setStartButton = new QPushButton(l10n(QStringLiteral("Set Start"), QStringLiteral("设定起始")), startRow);
-    setStartButton->setFixedWidth(84);
+    setStartButton->setFixedWidth(kRangeSetButtonWidth);
     setStartButton->setText(uiText("dialog.video_export.range.set_left", QStringLiteral("<- Set")));
+    setStartButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     startCurrentTimeEdit_ = new QLineEdit(startRow);
     startCurrentTimeEdit_->setReadOnly(true);
     startCurrentTimeEdit_->setFocusPolicy(Qt::NoFocus);
-    startCurrentTimeEdit_->setFixedWidth(108);
+    startCurrentTimeEdit_->setMinimumWidth(108);
+    startCurrentTimeEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     startCurrentTimeEdit_->setMinimumHeight(startSecondSpin_->sizeHint().height() * 2 + rangeLayout->spacing());
     startCurrentTimeEdit_->setAlignment(Qt::AlignCenter);
-    startCurrentTimeEdit_->setStyleSheet(QStringLiteral(
-        "QLineEdit { background: #F2F5F9; color: #5D6B79; border: 1px solid #D4DEE8; border-radius: 6px; }"
-    ));
+    startCurrentTimeEdit_->setStyleSheet(UiTheme::readOnlyLineEditStyleSheet());
     startRowLayout->addWidget(startLabel, 0);
     startRowLayout->addWidget(startSecondSpin_, 0, Qt::AlignLeft);
     startRowLayout->addWidget(setStartButton, 0, Qt::AlignLeft);
@@ -396,16 +483,16 @@ VideoExportDialog::VideoExportDialog(
     endLabel->setText(uiText("dialog.video_export.range.end", QStringLiteral("End")));
     endLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     auto* setEndButton = new QPushButton(l10n(QStringLiteral("Set End"), QStringLiteral("设定结束")), endRow);
-    setEndButton->setFixedWidth(84);
+    setEndButton->setFixedWidth(kRangeSetButtonWidth);
     setEndButton->setText(uiText("dialog.video_export.range.set_left", QStringLiteral("<- Set")));
+    setEndButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     endCurrentTimeEdit_ = new QLineEdit(endRow);
     endCurrentTimeEdit_->setReadOnly(true);
     endCurrentTimeEdit_->setFocusPolicy(Qt::NoFocus);
-    endCurrentTimeEdit_->setFixedWidth(108);
+    endCurrentTimeEdit_->setMinimumWidth(108);
+    endCurrentTimeEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     endCurrentTimeEdit_->setAlignment(Qt::AlignCenter);
-    endCurrentTimeEdit_->setStyleSheet(QStringLiteral(
-        "QLineEdit { background: #F2F5F9; color: #5D6B79; border: 1px solid #D4DEE8; border-radius: 6px; }"
-    ));
+    endCurrentTimeEdit_->setStyleSheet(UiTheme::readOnlyLineEditStyleSheet());
     endCurrentTimeEdit_->hide();
     endRowLayout->addWidget(endLabel, 0);
     endRowLayout->addWidget(endSecondSpin_, 0, Qt::AlignLeft);
@@ -448,16 +535,17 @@ VideoExportDialog::VideoExportDialog(
         + kSetButtonLeftGap
         + setStartButton->width()
         + kSetButtonLeftGap
-        + startCurrentTimeEdit_->width();
+        + startCurrentTimeEdit_->minimumWidth();
 
     previewCursorSecond_ = qBound(0.0, currentPreviewSecond(), totalDurationSeconds_);
     previewSlider_ = new QSlider(Qt::Horizontal, this);
     previewSlider_->setRange(0, secondToSliderValue(totalDurationSeconds_));
     previewSlider_->setValue(secondToSliderValue(previewCursorSecond_));
     previewSlider_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    previewSlider_->setStyleSheet(UiTheme::formSliderStyleSheet());
     auto* previewControlsRow = new QWidget(primaryPanel);
     auto* previewControlsLayout = new QHBoxLayout(previewControlsRow);
-    previewControlsLayout->setContentsMargins(0, 2, sectionRightInset, 0);
+    previewControlsLayout->setContentsMargins(kSectionContentLeftInset, 2, kSectionContentLeftInset, 0);
     previewControlsLayout->setSpacing(kPreviewControlSpacing);
 
     previewTimeLabel_ = new QLabel(primaryPanel);
@@ -465,7 +553,11 @@ VideoExportDialog::VideoExportDialog(
     previewTimeLabel_->setFixedWidth(rangeControlWidth);
     auto* previewTimeRow = new QWidget(primaryPanel);
     auto* previewTimeLayout = new QHBoxLayout(previewTimeRow);
-    previewTimeLayout->setContentsMargins(0, 0, sectionRightInset, 2);
+    const int previewControlsWidth =
+        (kPreviewControlButtonWidth * 2)
+        + kPreviewControlSpacing
+        + kPreviewControlsToSliderGap;
+    previewTimeLayout->setContentsMargins(kSectionContentLeftInset + previewControlsWidth, 0, kSectionContentLeftInset, 2);
     previewTimeLayout->setSpacing(0);
     previewTimeLayout->addWidget(previewTimeLabel_, 0, Qt::AlignLeft);
     previewTimeLayout->addStretch(1);
@@ -475,15 +567,17 @@ VideoExportDialog::VideoExportDialog(
     stopPreviewButton_->setToolButtonStyle(Qt::ToolButtonIconOnly);
     stopPreviewButton_->setIconSize(QSize(16, 16));
     stopPreviewButton_->setFixedSize(QSize(kPreviewControlButtonWidth, kPreviewControlButtonHeight));
-    stopPreviewButton_->setIcon(makePreviewStopIcon(QColor("#2B3C4E")));
+    stopPreviewButton_->setIcon(makePreviewStopIcon(UiTheme::colors().iconPrimary));
     stopPreviewButton_->setToolTip(uiText("dialog.video_export.preview.stop", QStringLiteral("Stop")));
     stopPreviewButton_->setAutoRaise(false);
+    stopPreviewButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet());
     previewRangeButton_ = new QToolButton(previewControlsRow);
     previewRangeButton_->setObjectName(QStringLiteral("RangePreviewControlButton"));
     previewRangeButton_->setToolButtonStyle(Qt::ToolButtonIconOnly);
     previewRangeButton_->setIconSize(QSize(16, 16));
     previewRangeButton_->setFixedSize(QSize(kPreviewControlButtonWidth, kPreviewControlButtonHeight));
     previewRangeButton_->setAutoRaise(false);
+    previewRangeButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet());
     stopPreviewButton_->setEnabled(false);
     previewControlsLayout->addWidget(stopPreviewButton_, 0);
     previewControlsLayout->addWidget(previewRangeButton_, 0);
@@ -494,7 +588,7 @@ VideoExportDialog::VideoExportDialog(
 
     optionsContent_ = new QWidget(this);
     auto* optionsLayout = new QGridLayout(optionsContent_);
-    optionsLayout->setContentsMargins(kSectionContentLeftInset, 0, sectionRightInset, 0);
+    optionsLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     optionsLayout->setHorizontalSpacing(10);
     optionsLayout->setVerticalSpacing(6);
     optionsLayout->setColumnStretch(0, 1);
@@ -604,20 +698,34 @@ VideoExportDialog::VideoExportDialog(
     );
     setSliderOptionTitle(layoutSquareScaleOption, uiText("dialog.video_export.option.layout_size", QStringLiteral("Layout Size")));
     optionsLayout->addWidget(layoutSquareScaleOption, 2, 0, 1, 2);
-    backgroundScaleModeCombo_ = new QComboBox(optionsContent_);
-    backgroundScaleModeCombo_->addItem(
-        uiText("dialog.video_export.option.scale.fill", QStringLiteral("Fill (crop if needed)")),
-        static_cast<int>(PreviewBackgroundScaleMode::FillCrop)
+    const QString scaleFillLabel = uiText("dialog.video_export.option.scale.fill", QStringLiteral("Fill (crop if needed)"));
+    const QString scaleFitLabel = uiText("dialog.video_export.option.scale.fit", QStringLiteral("Fit (keep full image, may letterbox)"));
+    selectedBackgroundScaleMode_ = baseTask_.backgroundScaleMode;
+    backgroundScaleModeButton_ = createDialogMenuButton(
+        optionsContent_,
+        selectedBackgroundScaleMode_ == PreviewBackgroundScaleMode::FitContain ? scaleFitLabel : scaleFillLabel
     );
-    backgroundScaleModeCombo_->addItem(
-        uiText("dialog.video_export.option.scale.fit", QStringLiteral("Fit (keep full image, may letterbox)")),
-        static_cast<int>(PreviewBackgroundScaleMode::FitContain)
-    );
-    const int backgroundScaleModeIndex =
-        backgroundScaleModeCombo_->findData(static_cast<int>(baseTask_.backgroundScaleMode));
-    if (backgroundScaleModeIndex >= 0) {
-        backgroundScaleModeCombo_->setCurrentIndex(backgroundScaleModeIndex);
-    }
+    backgroundScaleModeMenu_ = new QMenu(backgroundScaleModeButton_);
+    UiTheme::styleRoundedMenu(*backgroundScaleModeMenu_);
+    addDialogMenuChoice(backgroundScaleModeMenu_, scaleFillLabel, [this, scaleFillLabel]() {
+        selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
+        if (backgroundScaleModeButton_ != nullptr) {
+            backgroundScaleModeButton_->setText(scaleFillLabel);
+        }
+        if (previewScaleModeCallback_) {
+            previewScaleModeCallback_(selectedBackgroundScaleMode_);
+        }
+    });
+    addDialogMenuChoice(backgroundScaleModeMenu_, scaleFitLabel, [this, scaleFitLabel]() {
+        selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FitContain;
+        if (backgroundScaleModeButton_ != nullptr) {
+            backgroundScaleModeButton_->setText(scaleFitLabel);
+        }
+        if (previewScaleModeCallback_) {
+            previewScaleModeCallback_(selectedBackgroundScaleMode_);
+        }
+    });
+    backgroundScaleModeButton_->setMenu(backgroundScaleModeMenu_);
     auto* backgroundScaleModeRow = new QWidget(optionsContent_);
     auto* backgroundScaleModeLayout = new QHBoxLayout(backgroundScaleModeRow);
     backgroundScaleModeLayout->setContentsMargins(0, 0, 0, 0);
@@ -627,7 +735,7 @@ VideoExportDialog::VideoExportDialog(
         backgroundScaleModeRow
     );
     backgroundScaleModeLayout->addWidget(backgroundScaleModeLabel, 0);
-    backgroundScaleModeLayout->addWidget(backgroundScaleModeCombo_, 1);
+    backgroundScaleModeLayout->addWidget(backgroundScaleModeButton_, 1);
     optionsLayout->addWidget(backgroundScaleModeRow, 3, 0, 1, 2);
     optionsLayout->addWidget(smoothBrightnessCheck_, 4, 0, 1, 1, Qt::AlignLeft | Qt::AlignTop);
     optionsLayout->addWidget(showTimestampCheck_, 4, 1, 1, 1, Qt::AlignLeft | Qt::AlignTop);
@@ -657,8 +765,12 @@ VideoExportDialog::VideoExportDialog(
 
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
     exportButton_ = buttonBox->addButton(uiText("dialog.video_export.button.export", QStringLiteral("Export")), QDialogButtonBox::AcceptRole);
+    exportButton_->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(true));
+    exportButton_->setMinimumWidth(kDialogActionButtonMinWidth);
     if (QPushButton* cancelButton = buttonBox->button(QDialogButtonBox::Cancel)) {
         cancelButton->setText(uiText("dialog.video_export.button.cancel", QStringLiteral("Cancel")));
+        cancelButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+        cancelButton->setMinimumWidth(kDialogActionButtonMinWidth);
     }
     connect(exportButton_, &QPushButton::clicked, this, &VideoExportDialog::startExport);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -675,9 +787,6 @@ VideoExportDialog::VideoExportDialog(
     connect(setEndButton, &QPushButton::clicked, this, &VideoExportDialog::setRangeEndFromPreview);
     connect(previewRangeButton_, &QToolButton::clicked, this, &VideoExportDialog::toggleRangePreview);
     connect(stopPreviewButton_, &QToolButton::clicked, this, &VideoExportDialog::stopRangePreviewToStart);
-    connect(resolutionCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
-        applySelectedAspectRatioToPreview(true);
-    });
     connect(showTimestampCheck_, &QCheckBox::toggled, this, [this](bool) {
         syncLivePreviewTimestampVisibility();
     });
@@ -685,15 +794,6 @@ VideoExportDialog::VideoExportDialog(
         if (previewSmoothBrightnessCallback_) {
             previewSmoothBrightnessCallback_(checked);
         }
-    });
-    connect(backgroundScaleModeCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
-        if (!previewScaleModeCallback_ || backgroundScaleModeCombo_ == nullptr) {
-            return;
-        }
-        const PreviewBackgroundScaleMode mode = static_cast<PreviewBackgroundScaleMode>(
-            backgroundScaleModeCombo_->currentData().toInt()
-        );
-        previewScaleModeCallback_(mode);
     });
     connect(brightnessOuterSlider_, &QSlider::valueChanged, this, [this](int value) {
         if (brightnessOuterValueLabel_ != nullptr) {
@@ -747,6 +847,9 @@ VideoExportDialog::VideoExportDialog(
     }
     applySelectedAspectRatioToPreview(false);
     refreshDialogGeometry();
+    if (QWidget* owner = parentWidget(); owner != nullptr) {
+        move(desiredDialogTopLeft(owner, size()));
+    }
     QTimer::singleShot(0, this, [this]() {
         if (outputPathEdit_ != nullptr) {
             outputPathEdit_->clearFocus();
@@ -755,6 +858,9 @@ VideoExportDialog::VideoExportDialog(
             rangeToggle_->setFocus(Qt::OtherFocusReason);
         }
         refreshDialogGeometry();
+        if (QWidget* owner = parentWidget(); owner != nullptr) {
+            move(desiredDialogTopLeft(owner, size()));
+        }
     });
 }
 
@@ -776,7 +882,7 @@ QWidget* VideoExportDialog::buildCollapsibleSection(
     toggle->setCheckable(true);
     toggle->setChecked(expanded);
     toggle->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    toggle->setStyleSheet(QStringLiteral("QToolButton { border: none; font-weight: 600; text-align: left; }"));
+    toggle->setStyleSheet(UiTheme::collapsibleToggleStyleSheet());
 
     auto* panel = new QFrame(container);
     panel->setObjectName(QStringLiteral("VideoExportSectionPanel"));
@@ -907,9 +1013,7 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     updated.smoothBrightness = smoothBrightnessCheck_ != nullptr
         ? smoothBrightnessCheck_->isChecked()
         : updated.smoothBrightness;
-    updated.backgroundScaleMode = backgroundScaleModeCombo_ != nullptr
-        ? static_cast<PreviewBackgroundScaleMode>(backgroundScaleModeCombo_->currentData().toInt())
-        : updated.backgroundScaleMode;
+    updated.backgroundScaleMode = selectedBackgroundScaleMode_;
     updated.exportStartSeconds = rangeStartSeconds();
     updated.contentDurationSeconds = qMax(0.0, rangeEndSeconds() - updated.exportStartSeconds);
 
@@ -945,14 +1049,10 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
 
 QSize VideoExportDialog::selectedResolution() const
 {
-    if (resolutionCombo_ == nullptr) {
+    if (selectedResolution_.width() <= 0 || selectedResolution_.height() <= 0) {
         return QSize(qMax(1, baseTask_.outputWidth), qMax(1, baseTask_.outputHeight));
     }
-    const QSize selected = resolutionCombo_->currentData().toSize();
-    if (selected.width() > 0 && selected.height() > 0) {
-        return selected;
-    }
-    return QSize(qMax(1, baseTask_.outputWidth), qMax(1, baseTask_.outputHeight));
+    return selectedResolution_;
 }
 
 double VideoExportDialog::selectedResolutionAspectRatio() const
@@ -1059,19 +1159,15 @@ void VideoExportDialog::updatePreviewPlayPauseUi()
     if (previewRangeButton_ == nullptr) {
         return;
     }
+    const QColor iconColor = UiTheme::colors().iconPrimary;
     if (rangePreviewPlaying_) {
-        previewRangeButton_->setIcon(makePreviewPauseIcon(QColor("#2B3C4E")));
+        previewRangeButton_->setIcon(makePreviewPauseIcon(iconColor));
         previewRangeButton_->setToolTip(uiText("dialog.video_export.preview.pause", QStringLiteral("Pause")));
-        previewRangeButton_->setStyleSheet(
-            QStringLiteral(
-                "QToolButton { color: #2B3C4E; border: 1px solid #2E77D0; border-radius: 6px; background: #2E77D0; }"
-                "QToolButton:hover { background: #3A86E8; }"
-            )
-        );
+        previewRangeButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet(true));
     } else {
-        previewRangeButton_->setIcon(makePreviewPlayIcon(QColor("#2B3C4E")));
+        previewRangeButton_->setIcon(makePreviewPlayIcon(iconColor));
         previewRangeButton_->setToolTip(uiText("dialog.video_export.preview.play", QStringLiteral("Play")));
-        previewRangeButton_->setStyleSheet(QString());
+        previewRangeButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet());
     }
 }
 

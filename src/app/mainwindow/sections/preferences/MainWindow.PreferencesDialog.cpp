@@ -4,27 +4,7 @@
     dialog.setWindowTitle(uiText("dialog.preferences.title", "Preferences"));
     dialog.setModal(true);
     dialog.setMinimumWidth(400);
-    dialog.setStyleSheet(
-        "QDialog { background: #F8FAFD; }"
-        "QGroupBox { background: #FFFFFF; border: 1px solid #DCE5F0; border-radius: 10px; margin-top: 12px; padding-top: 10px; font-weight: 600; }"
-        "QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 4px; }"
-        "QLabel { color: #203040; }"
-        "QToolButton#PreferenceMenuButton {"
-        " min-height: 30px;"
-        " min-width: 180px;"
-        " border: 1px solid #D8E0EA;"
-        " border-radius: 6px;"
-        " padding: 4px 10px;"
-        " background: #FFFFFF;"
-        " color: #223042;"
-        " font-weight: 600;"
-        " text-align: left;"
-        "}"
-        "QToolButton#PreferenceMenuButton:hover { background: #F5F8FC; border-color: #BCD0E5; }"
-        "QToolButton#PreferenceMenuButton:pressed { background: #E8F1FB; border-color: #9FC1E9; }"
-        "QPushButton { min-width: 92px; min-height: 30px; border: 1px solid #BFD0E3; border-radius: 6px; background: #FFFFFF; color: #223042; }"
-        "QPushButton:hover { background: #F3F8FF; border-color: #9FC1E9; }"
-    );
+    dialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
 
     auto* rootLayout = new QVBoxLayout(&dialog);
     rootLayout->setContentsMargins(12, 12, 12, 12);
@@ -39,6 +19,8 @@
 
     const UiText::LanguagePreference currentPreference = UiText::preferredLanguage();
     UiText::LanguagePreference selectedPreference = currentPreference;
+    const UiText::ThemePreference currentThemePreference = UiText::preferredTheme();
+    UiText::ThemePreference selectedThemePreference = currentThemePreference;
     const auto languageLabel = [](UiText::LanguagePreference preference) -> QString {
         switch (preference) {
         case UiText::LanguagePreference::English:
@@ -48,6 +30,17 @@
         case UiText::LanguagePreference::System:
         default:
             return uiText("dialog.preferences.language.system", "Follow System");
+        }
+    };
+    const auto themeLabel = [](UiText::ThemePreference preference) -> QString {
+        switch (preference) {
+        case UiText::ThemePreference::Light:
+            return uiText("dialog.preferences.theme.light", "Light");
+        case UiText::ThemePreference::Dark:
+            return uiText("dialog.preferences.theme.dark", "Dark");
+        case UiText::ThemePreference::System:
+        default:
+            return uiText("dialog.preferences.theme.system", "Follow System");
         }
     };
 
@@ -98,6 +91,54 @@
     languageRowLayout->addWidget(languageButton, 0);
     languageRowLayout->addStretch(1);
     interfaceLayout->addRow(languageLabelWidget, languageRow);
+
+    auto* themeLabelWidget = new QLabel(uiText("dialog.preferences.theme", "Theme"), interfaceGroup);
+    auto* themeRow = new QWidget(interfaceGroup);
+    auto* themeRowLayout = new QHBoxLayout(themeRow);
+    themeRowLayout->setContentsMargins(0, 0, 0, 0);
+    themeRowLayout->setSpacing(12);
+    auto* themeButton = new QToolButton(themeRow);
+    themeButton->setObjectName("PreferenceMenuButton");
+    themeButton->setFont(uiAccentFont(10, QFont::DemiBold));
+    themeButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    themeButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    themeButton->setText(themeLabel(selectedThemePreference));
+    auto* themeMenu = new QMenu(themeButton);
+    themeMenu->setFont(uiAccentFont(10));
+    styleRoundedMenu(*themeMenu);
+    const QList<UiText::ThemePreference> themeOptions{
+        UiText::ThemePreference::System,
+        UiText::ThemePreference::Light,
+        UiText::ThemePreference::Dark,
+    };
+    for (UiText::ThemePreference preference : themeOptions) {
+        QAction* action = themeMenu->addAction(themeLabel(preference));
+        action->setCheckable(true);
+        action->setChecked(preference == selectedThemePreference);
+        connect(action, &QAction::triggered, &dialog, [&, preference, themeMenu, themeButton]() {
+            selectedThemePreference = preference;
+            for (QAction* candidate : themeMenu->actions()) {
+                candidate->setChecked(candidate->text() == themeLabel(selectedThemePreference));
+            }
+            themeButton->setText(themeLabel(selectedThemePreference));
+        });
+    }
+    int themeButtonWidth = 0;
+    const QFontMetrics themeMetrics(themeButton->font());
+    for (UiText::ThemePreference preference : themeOptions) {
+        themeButtonWidth = qMax(themeButtonWidth, themeMetrics.horizontalAdvance(themeLabel(preference)));
+    }
+    themeButton->setFixedWidth(themeButtonWidth + 28);
+    connect(themeButton, &QToolButton::clicked, &dialog, [themeButton, themeLabelWidget, themeMenu]() {
+        const int estimatedItemHeight = qMax(32, themeButton->sizeHint().height() + 2);
+        const QPoint labelCenterGlobal = themeLabelWidget->mapToGlobal(QPoint(themeLabelWidget->width(), themeLabelWidget->height() / 2));
+        const QPoint buttonTopLeftGlobal = themeButton->mapToGlobal(QPoint(0, 0));
+        const QPoint popupPos(buttonTopLeftGlobal.x(), labelCenterGlobal.y() - estimatedItemHeight / 2 - 7);
+        themeMenu->popup(popupPos);
+    });
+    themeRowLayout->addWidget(themeButton, 0);
+    themeRowLayout->addStretch(1);
+    interfaceLayout->addRow(themeLabelWidget, themeRow);
     rootLayout->addWidget(interfaceGroup);
 
     auto* editorGroup = new QGroupBox(uiText("dialog.preferences.editor_group", "Editor"), &dialog);
@@ -121,7 +162,7 @@
     editorFontSizeSpin->setValue(selectedEditorFontSize);
     editorFontSizeSpin->setSuffix(" pt");
     auto* shortcutHint = new QLabel(QStringLiteral("Ctrl+-/Ctrl+="), fontSizeRow);
-    shortcutHint->setStyleSheet("color: #607086;");
+    shortcutHint->setStyleSheet(QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
     connect(editorFontSizeSpin, qOverload<int>(&QSpinBox::valueChanged), &dialog, [&](int value) {
         selectedEditorFontSize = value;
         applyEditorTextFontSize(selectedEditorFontSize, false);
@@ -182,18 +223,24 @@
     }
 
     const bool languageChanged = selectedPreference != currentPreference;
+    const bool themeChanged = selectedThemePreference != currentThemePreference;
     const bool editorFontChanged = selectedEditorFontSize != originalEditorFontSize;
     const bool editorLineSpacingChanged = !qFuzzyCompare(
         selectedEditorLineSpacingFactor + 1.0,
         originalEditorLineSpacingFactor + 1.0
     );
-    if (!languageChanged && !editorFontChanged && !editorLineSpacingChanged) {
+    if (!languageChanged && !themeChanged && !editorFontChanged && !editorLineSpacingChanged) {
         return;
     }
 
     if (editorFontChanged || editorLineSpacingChanged) {
         persistEditorTextFontPreference();
         statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+    }
+    if (themeChanged) {
+        UiText::setPreferredTheme(selectedThemePreference);
+        applyUiTheme();
+        statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
     }
     if (languageChanged) {
         UiText::setPreferredLanguage(selectedPreference);

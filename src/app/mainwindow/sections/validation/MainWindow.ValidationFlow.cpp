@@ -49,8 +49,8 @@ QString highlightValidationDetailHtml(const QString& body)
         return escapedBody;
     }
 
-    return QStringLiteral("%1<span style=\"color:#3A86D1;\">%2</span>")
-        .arg(prefix, codeTail.toHtmlEscaped());
+    return QStringLiteral("%1<span style=\"color:%2;\">%3</span>")
+        .arg(prefix, UiTheme::colors().accent.name(QColor::HexRgb), codeTail.toHtmlEscaped());
 }
 
 QColor severityColor(ValidationSeverityLevel severity)
@@ -104,22 +104,23 @@ void MainWindow::addValidationError(int line, int col, const QString& message)
     label->setTextFormat(Qt::RichText);
     label->setWordWrap(true);
     label->setTextInteractionFlags(Qt::NoTextInteraction);
-    label->setStyleSheet(QStringLiteral(
-        "QLabel {"
-        " background: transparent;"
-        " color: #243447;"
-        " padding: 2px 4px;"
-        "}"
-    ));
+    label->setStyleSheet(UiTheme::validationMessageLabelStyleSheet());
 
     const QString headerHtml = QStringLiteral(
         "<span style=\"font-weight:700;color:%1;\">%2</span> "
-        "<span style=\"color:#5F6B7A;\">L%3 C%4</span>"
+        "<span style=\"color:%5;\">L%3 C%4</span>"
     )
-        .arg(sevColor.name(), parts.severityPrefix.toHtmlEscaped(), QString::number(line), QString::number(col));
+        .arg(
+            sevColor.name(),
+            parts.severityPrefix.toHtmlEscaped(),
+            QString::number(line),
+            QString::number(col),
+            UiTheme::colors().textSecondary.name(QColor::HexRgb)
+        );
     const QString detailHtml = parts.body.isEmpty()
         ? QString()
-        : QStringLiteral("<br/><span style=\"color:#243447;\">%1</span>").arg(highlightValidationDetailHtml(parts.body));
+        : QStringLiteral("<br/><span style=\"color:%1;\">%2</span>")
+              .arg(UiTheme::colors().textPrimary.name(QColor::HexRgb), highlightValidationDetailHtml(parts.body));
     label->setText(headerHtml + detailHtml);
 
     auto* rowWidget = new QWidget(errorList_);
