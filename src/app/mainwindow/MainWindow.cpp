@@ -9,6 +9,7 @@
 #include "SimaiNativeParser.h"
 #include "TimelineView.h"
 #include "UiText.h"
+#include "UiTheme.h"
 #include "tools/latency/LatencyDetectorDialog.h"
 #include "tools/video_export/VideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
@@ -17,6 +18,7 @@
 
 #include <algorithm>
 #include <QAction>
+#include <QAbstractItemView>
 #include <QAbstractScrollArea>
 #include <QApplication>
 #include <QCheckBox>
@@ -317,18 +319,22 @@ public:
     {
         QStyleOptionViewItem drawOption(option);
         initStyleOption(&drawOption, index);
+        const UiTheme::Colors& c = UiTheme::colors();
+        const QColor selectedBorder = c.dark ? QColor("#6B8BB8") : QColor("#9EC2EF");
+        const QColor selectedFill = c.dark ? QColor("#314158") : QColor("#F1F6FF");
+        const QColor hoverFill = c.dark ? QColor("#2A3442") : QColor("#F3F7FD");
 
         painter->save();
         const QRect fillRect = option.rect.adjusted(1, 1, -1, -1);
         if (option.state.testFlag(QStyle::State_Selected)) {
             painter->setRenderHint(QPainter::Antialiasing, true);
-            painter->setPen(QPen(QColor("#9EC2EF"), 1.0));
-            painter->setBrush(QColor("#F1F6FF"));
+            painter->setPen(QPen(selectedBorder, 1.0));
+            painter->setBrush(selectedFill);
             painter->drawRoundedRect(fillRect, 6.0, 6.0);
         } else if (option.state.testFlag(QStyle::State_MouseOver)) {
             painter->setRenderHint(QPainter::Antialiasing, true);
             painter->setPen(Qt::NoPen);
-            painter->setBrush(QColor("#F3F7FD"));
+            painter->setBrush(hoverFill);
             painter->drawRoundedRect(fillRect, 6.0, 6.0);
         }
         painter->restore();
@@ -336,7 +342,7 @@ public:
         drawOption.state &= ~QStyle::State_Selected;
         drawOption.state &= ~QStyle::State_MouseOver;
         drawOption.backgroundBrush = Qt::NoBrush;
-        drawOption.palette.setColor(QPalette::HighlightedText, QColor("#243447"));
+        drawOption.palette.setColor(QPalette::HighlightedText, c.textPrimary);
         QStyledItemDelegate::paint(painter, drawOption, index);
     }
 };
@@ -1101,69 +1107,104 @@ QIcon makeTransformRotateCw45Icon(const QColor& color)
 
 QString modernScrollBarStyle()
 {
-    return QStringLiteral(
-        "QScrollBar:vertical {"
-        " background: #F4F7FB;"
-        " width: 12px;"
-        " margin: 2px;"
-        " border: 1px solid #D1DDEA;"
-        " border-radius: 6px;"
-        "}"
-        "QScrollBar::handle:vertical {"
-        " background: #9CB5CE;"
-        " min-height: 36px;"
-        " border-radius: 5px;"
-        "}"
-        "QScrollBar::handle:vertical:hover { background: #81A2C3; }"
-        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0px; background: transparent; }"
-        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"
-        "QScrollBar:horizontal {"
-        " background: #F4F7FB;"
-        " height: 12px;"
-        " margin: 2px;"
-        " border: 1px solid #D1DDEA;"
-        " border-radius: 6px;"
-        "}"
-        "QScrollBar::handle:horizontal {"
-        " background: #9CB5CE;"
-        " min-width: 36px;"
-        " border-radius: 5px;"
-        "}"
-        "QScrollBar::handle:horizontal:hover { background: #81A2C3; }"
-        "QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; background: transparent; }"
-        "QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }"
-    );
+    return UiTheme::scrollBarStyleSheet();
 }
 
 void styleRoundedMenu(QMenu& menu)
 {
-    menu.setWindowFlag(Qt::FramelessWindowHint, true);
-    menu.setWindowFlag(Qt::NoDropShadowWindowHint, true);
-    menu.setAttribute(Qt::WA_TranslucentBackground, true);
-    menu.setStyleSheet(
-        "QMenu {"
-        " background: rgba(255, 255, 255, 245);"
-        " border: 1px solid #D7E0EB;"
-        " border-radius: 8px;"
-        " padding: 7px;"
-        "}"
-        "QMenu::item {"
-        " padding: 6px 20px 6px 12px;"
-        " margin: 1px 0;"
-        " border-radius: 6px;"
-        " color: #203040;"
-        " background: transparent;"
-        "}"
-        "QMenu::item:selected {"
-        " background: #EEF5FF;"
-        " color: #203040;"
-        "}"
-        "QMenu::item:disabled {"
-        " color: #9AA5B4;"
-        " background: transparent;"
-        "}"
-    );
+    UiTheme::styleRoundedMenu(menu);
 }
+
+}  // namespace
+
+void MainWindow::applyUiTheme()
+{
+    if (QApplication* app = qobject_cast<QApplication*>(QCoreApplication::instance()); app != nullptr) {
+        UiTheme::applyApplicationTheme(*app);
+    }
+
+    if (editorWidget_ != nullptr) {
+        editorWidget_->setStyleSheet(UiTheme::editorTextEditStyleSheet());
+        if (auto* scrollArea = qobject_cast<QAbstractScrollArea*>(editorWidget_)) {
+            if (QScrollBar* vbar = scrollArea->verticalScrollBar()) {
+                vbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
+            }
+            if (QScrollBar* hbar = scrollArea->horizontalScrollBar()) {
+                hbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
+            }
+        }
+    }
+    if (editorFindBar_ != nullptr) {
+        editorFindBar_->setStyleSheet(UiTheme::editorFindBarStyleSheet());
+    }
+    if (metadataPage_ != nullptr) {
+        metadataPage_->setStyleSheet(UiTheme::metadataPageStyleSheet());
+    }
+    if (metadataEmptyHintLabel_ != nullptr) {
+        metadataEmptyHintLabel_->setStyleSheet(UiTheme::metadataEmptyHintLabelStyleSheet());
+    }
+    if (metadataExtraEdit_ != nullptr) {
+        if (QScrollBar* vbar = metadataExtraEdit_->verticalScrollBar()) {
+            vbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
+        }
+        if (QScrollBar* hbar = metadataExtraEdit_->horizontalScrollBar()) {
+            hbar->setStyleSheet(UiTheme::scrollBarStyleSheet());
+        }
+    }
+    if (outlineList_ != nullptr) {
+        outlineList_->setStyleSheet(UiTheme::outlineListStyleSheet());
+    }
+    if (deleteDifficultyButton_ != nullptr) {
+        deleteDifficultyButton_->setStyleSheet(UiTheme::deleteDifficultyButtonStyleSheet());
+        deleteDifficultyButton_->setIcon(makeOutlineCloseIcon(UiTheme::colors().iconSecondary));
+    }
+    if (previewPanel_ != nullptr) {
+        previewPanel_->setStyleSheet(UiTheme::previewPanelStyleSheet());
+    }
+    if (timelineView_ != nullptr) {
+        timelineView_->refreshTheme();
+    }
+    if (chartBracketHighlighter_ != nullptr) {
+        chartBracketHighlighter_->rehighlight();
+    }
+    if (metadataBracketHighlighter_ != nullptr) {
+        metadataBracketHighlighter_->rehighlight();
+    }
+    if (QWidget* editorShell = findChild<QWidget*>(QStringLiteral("EditorShell")); editorShell != nullptr) {
+        editorShell->setStyleSheet(UiTheme::editorShellStyleSheet());
+    }
+    const QList<QMenu*> menus = findChildren<QMenu*>();
+    for (QMenu* menu : menus) {
+        if (menu != nullptr) {
+            UiTheme::styleRoundedMenu(*menu);
+        }
+    }
+
+    const QColor iconColor = UiTheme::colors().iconPrimary;
+    const QColor secondaryIconColor = UiTheme::colors().iconSecondary;
+    if (stopPreviewAction_ != nullptr) {
+        stopPreviewAction_->setIcon(makePreviewStopIcon(iconColor));
+    }
+    if (settingsPlaceholderAction_ != nullptr) {
+        settingsPlaceholderAction_->setIcon(makeSettingsGearIcon(secondaryIconColor));
+    }
+    if (previewAudioSettingsButton_ != nullptr) {
+        previewAudioSettingsButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
+    }
+    if (previewVideoSettingsButton_ != nullptr) {
+        previewVideoSettingsButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
+    }
+    if (syntaxCheckButton_ != nullptr) {
+        syntaxCheckButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
+    }
+    if (exportVideoButton_ != nullptr) {
+        exportVideoButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
+    }
+    updatePauseButtonAppearance();
+    update();
+}
+
+namespace {
 
 bool hasRuntimeDebugArg(const QStringList& args)
 {
@@ -2881,17 +2922,7 @@ void MainWindow::onAbout()
     dialog.setWindowTitle(uiText("action.about", "About"));
     dialog.setModal(true);
     dialog.setMinimumWidth(500);
-    dialog.setStyleSheet(
-        "QDialog { background: #F8FAFD; }"
-        "QFrame#AboutCard { background: #FFFFFF; border: 1px solid #DCE5F0; border-radius: 10px; }"
-        "QLabel#AboutIcon { background: #F2F7FD; border: 1px solid #D7E4F3; border-radius: 10px; padding: 6px; }"
-        "QLabel#AboutTitle { color: #1B2A3B; font-size: 26px; font-weight: 700; }"
-        "QLabel#AboutVersion { color: #2B4D78; background: #EAF2FC; border: 1px solid #C7DBF5; border-radius: 10px; padding: 2px 8px; }"
-        "QLabel#AboutKey { color: #5B697A; }"
-        "QLabel#AboutValue { color: #1D2C3E; font-weight: 600; }"
-        "QPushButton { min-width: 92px; min-height: 30px; border: 1px solid #BFD0E3; border-radius: 6px; background: #FFFFFF; color: #223042; }"
-        "QPushButton:hover { background: #F3F8FF; border-color: #9FC1E9; }"
-    );
+    dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
 
     auto* rootLayout = new QVBoxLayout(&dialog);
     rootLayout->setContentsMargins(14, 14, 14, 12);
@@ -3378,19 +3409,52 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     dialog.setWindowTitle(title);
     dialog.setModal(true);
     dialog.setMinimumWidth(520);
-    dialog.setStyleSheet(
-        QStringLiteral(
-            "QDialog { background: #F5F7FA; }"
-            "QGroupBox {"
-            " border: 1px solid #DCE3EC;"
-            " border-radius: 8px;"
-            " background: #FFFFFF;"
-            " margin-top: 10px;"
-            " padding: 12px 10px 10px 10px;"
-            " }"
-            "QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }"
-        )
-    );
+    dialog.setStyleSheet(UiTheme::settingsDialogStyleSheet());
+
+    const auto createDialogMenuButton = [](QWidget* parent, const QString& text) {
+        auto* button = new QToolButton(parent);
+        button->setPopupMode(QToolButton::InstantPopup);
+        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        button->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
+        button->setText(text);
+        return button;
+    };
+    const auto addDialogMenuChoice = [](QMenu* menu, const QString& text, const std::function<void()>& onTriggered) {
+        auto* action = new QWidgetAction(menu);
+        auto* button = new QToolButton(menu);
+        button->setAutoRaise(true);
+        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        button->setText(text);
+        button->setCursor(Qt::PointingHandCursor);
+        const auto& c = UiTheme::colors();
+        button->setStyleSheet(
+            QStringLiteral(
+                "QToolButton {"
+                " color: %1;"
+                " background: transparent;"
+                " border: none;"
+                " padding: 6px 20px 6px 12px;"
+                " text-align: left;"
+                "}"
+                "QToolButton:hover {"
+                " background: %2;"
+                " border-radius: 6px;"
+                "}"
+            )
+                .arg(c.textPrimary.name(QColor::HexRgb))
+                .arg(c.menuHoverBg.name(QColor::HexRgb))
+        );
+        QObject::connect(button, &QToolButton::clicked, menu, [action, menu, onTriggered]() {
+            if (onTriggered) {
+                onTriggered();
+            }
+            action->trigger();
+            menu->close();
+        });
+        action->setDefaultWidget(button);
+        menu->addAction(action);
+    };
 
     auto* rootLayout = new QVBoxLayout(&dialog);
     rootLayout->setContentsMargins(12, 12, 12, 12);
@@ -3446,6 +3510,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     addAudioRow(uiText("dialog.render_settings.audio.firework", "Firework Volume"), previewAudioSettings_.fireworkPercent(), &fireworkSlider, &fireworkLabel);
 
     auto* restoreButton = new QPushButton(uiText("dialog.render_settings.button.restore_project_default", "Restore Project Audio to Software Default"), audioGroup);
+    restoreButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     audioFormLayout->addRow(QString(), restoreButton);
 
     const auto addVideoSliderRow = [](
@@ -3520,43 +3585,68 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         &layoutSquareScaleLabel
     );
 
-    auto* scaleModeCombo = new QComboBox(videoGroup);
-    scaleModeCombo->addItem(
-        uiText("dialog.render_settings.video.scale.fill", "Fill (crop if needed)"),
-        static_cast<int>(PreviewBackgroundScaleMode::FillCrop)
+    const QString scaleFillLabel = uiText("dialog.render_settings.video.scale.fill", "Fill (crop if needed)");
+    const QString scaleFitLabel = uiText("dialog.render_settings.video.scale.fit", "Fit (keep full image, may letterbox)");
+    PreviewBackgroundScaleMode selectedScaleMode = previewBackgroundScaleMode_;
+    auto* scaleModeButton = createDialogMenuButton(
+        videoGroup,
+        selectedScaleMode == PreviewBackgroundScaleMode::FitContain ? scaleFitLabel : scaleFillLabel
     );
-    scaleModeCombo->addItem(
-        uiText("dialog.render_settings.video.scale.fit", "Fit (keep full image, may letterbox)"),
-        static_cast<int>(PreviewBackgroundScaleMode::FitContain)
-    );
-    const int scaleModeIndex = scaleModeCombo->findData(static_cast<int>(previewBackgroundScaleMode_));
-    if (scaleModeIndex >= 0) {
-        scaleModeCombo->setCurrentIndex(scaleModeIndex);
-    }
-    auto* canvasAspectCombo = new QComboBox(videoGroup);
-    canvasAspectCombo->addItem(
-        uiText("dialog.render_settings.video.canvas_aspect.square", "1:1 (Square)"),
-        1.0
-    );
-    canvasAspectCombo->addItem(
-        uiText("dialog.render_settings.video.canvas_aspect.4_3", "4:3"),
-        (4.0 / 3.0)
-    );
-    canvasAspectCombo->addItem(
-        uiText("dialog.render_settings.video.canvas_aspect.16_9", "16:9"),
-        (16.0 / 9.0)
-    );
-    int canvasAspectIndex = 0;
+    auto* scaleModeMenu = new QMenu(scaleModeButton);
+    styleRoundedMenu(*scaleModeMenu);
+    addDialogMenuChoice(scaleModeMenu, scaleFillLabel, [&, scaleFillLabel]() {
+        selectedScaleMode = PreviewBackgroundScaleMode::FillCrop;
+        scaleModeButton->setText(scaleFillLabel);
+        previewBackgroundScaleMode_ = selectedScaleMode;
+        if (previewCanvas_ != nullptr) {
+            previewCanvas_->setBackgroundScaleMode(selectedScaleMode);
+        }
+        savePortableState();
+    });
+    addDialogMenuChoice(scaleModeMenu, scaleFitLabel, [&, scaleFitLabel]() {
+        selectedScaleMode = PreviewBackgroundScaleMode::FitContain;
+        scaleModeButton->setText(scaleFitLabel);
+        previewBackgroundScaleMode_ = selectedScaleMode;
+        if (previewCanvas_ != nullptr) {
+            previewCanvas_->setBackgroundScaleMode(selectedScaleMode);
+        }
+        savePortableState();
+    });
+    scaleModeButton->setMenu(scaleModeMenu);
+
+    struct CanvasAspectOption {
+        double ratio;
+        QString label;
+    };
+    const QList<CanvasAspectOption> canvasAspectOptions{
+        {1.0, uiText("dialog.render_settings.video.canvas_aspect.square", "1:1 (Square)")},
+        {(4.0 / 3.0), uiText("dialog.render_settings.video.canvas_aspect.4_3", "4:3")},
+        {(16.0 / 9.0), uiText("dialog.render_settings.video.canvas_aspect.16_9", "16:9")},
+    };
+    double selectedCanvasAspect = previewCanvasAspectRatio_;
+    QString selectedCanvasAspectLabel = canvasAspectOptions.front().label;
     double bestAspectDiff = 1e9;
-    for (int i = 0; i < canvasAspectCombo->count(); ++i) {
-        const double option = canvasAspectCombo->itemData(i).toDouble();
-        const double diff = qAbs(option - previewCanvasAspectRatio_);
+    for (const CanvasAspectOption& option : canvasAspectOptions) {
+        const double diff = qAbs(option.ratio - previewCanvasAspectRatio_);
         if (diff < bestAspectDiff) {
             bestAspectDiff = diff;
-            canvasAspectIndex = i;
+            selectedCanvasAspect = option.ratio;
+            selectedCanvasAspectLabel = option.label;
         }
     }
-    canvasAspectCombo->setCurrentIndex(canvasAspectIndex);
+    auto* canvasAspectButton = createDialogMenuButton(videoGroup, selectedCanvasAspectLabel);
+    auto* canvasAspectMenu = new QMenu(canvasAspectButton);
+    styleRoundedMenu(*canvasAspectMenu);
+    for (const CanvasAspectOption& option : canvasAspectOptions) {
+        const double ratio = option.ratio;
+        const QString label = option.label;
+        addDialogMenuChoice(canvasAspectMenu, label, [&, ratio, label]() {
+            selectedCanvasAspect = ratio;
+            canvasAspectButton->setText(label);
+            setPreviewCanvasAspectRatio(ratio, true);
+        });
+    }
+    canvasAspectButton->setMenu(canvasAspectMenu);
     auto* restoreSquareCheck = new QCheckBox(
         uiText("dialog.render_settings.video.auto_restore_square", "Auto restore 1:1 after export"),
         videoGroup
@@ -3576,8 +3666,8 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_outer", "Outer Brightness"), outerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Inner Brightness"), innerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Layout Size"), layoutSquareScaleRow);
-    videoFormLayout->addRow(uiText("dialog.render_settings.video.scale_mode", "Background / PV Scale Mode"), scaleModeCombo);
-    videoFormLayout->addRow(uiText("dialog.render_settings.video.canvas_aspect", "Preview Canvas Aspect"), canvasAspectCombo);
+    videoFormLayout->addRow(uiText("dialog.render_settings.video.scale_mode", "Background / PV Scale Mode"), scaleModeButton);
+    videoFormLayout->addRow(uiText("dialog.render_settings.video.canvas_aspect", "Preview Canvas Aspect"), canvasAspectButton);
     auto* videoCheckRow = new QWidget(videoGroup);
     auto* videoCheckLayout = new QGridLayout(videoCheckRow);
     videoCheckLayout->setContentsMargins(0, 0, 0, 0);
@@ -3603,7 +3693,9 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         rootLayout->addWidget(videoGroup, 0);
     }
     auto* buttonBox = new QDialogButtonBox(&dialog);
-    buttonBox->addButton(uiText("dialog.render_settings.button.close", "Close"), QDialogButtonBox::RejectRole);
+    if (QPushButton* closeButton = buttonBox->addButton(uiText("dialog.render_settings.button.close", "Close"), QDialogButtonBox::RejectRole)) {
+        closeButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    }
     connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::accept);
     rootLayout->addWidget(buttonBox);
 
@@ -3756,23 +3848,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
             previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
         }
         savePortableState();
-    });
-    connect(scaleModeCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [this, scaleModeCombo](int) {
-        const int modeValue = scaleModeCombo->currentData().isValid()
-            ? scaleModeCombo->currentData().toInt()
-            : static_cast<int>(PreviewBackgroundScaleMode::FillCrop);
-        const PreviewBackgroundScaleMode mode = static_cast<PreviewBackgroundScaleMode>(modeValue);
-        previewBackgroundScaleMode_ = mode;
-        if (previewCanvas_ != nullptr) {
-            previewCanvas_->setBackgroundScaleMode(mode);
-        }
-        savePortableState();
-    });
-    connect(canvasAspectCombo, qOverload<int>(&QComboBox::currentIndexChanged), &dialog, [this, canvasAspectCombo](int) {
-        const double ratio = canvasAspectCombo->currentData().isValid()
-            ? canvasAspectCombo->currentData().toDouble()
-            : 1.0;
-        setPreviewCanvasAspectRatio(ratio, true);
     });
     connect(restoreSquareCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
         previewAutoRestoreSquareAfterExport_ = checked;

@@ -1,6 +1,7 @@
 #include "TimelineView.h"
 #include "common/AssetPaths.h"
 #include "UiText.h"
+#include "UiTheme.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -66,41 +67,13 @@ TimelineView::TimelineView(QWidget* parent)
     setMouseTracking(true);
     viewport()->setAttribute(Qt::WA_OpaquePaintEvent, true);
     viewport()->setAutoFillBackground(false);
-    QPalette vp = viewport()->palette();
-    vp.setColor(QPalette::Window, QColor("#F5F5F5"));
-    vp.setColor(QPalette::Base, QColor("#F7F8FA"));
-    vp.setColor(QPalette::Highlight, QColor("#D7EBFF"));
-    viewport()->setPalette(vp);
 
     zoomButton_ = new QToolButton(this);
     zoomButton_->setAutoRaise(false);
     zoomButton_->setCursor(Qt::PointingHandCursor);
-    zoomButton_->setStyleSheet(
-        "QToolButton {"
-        " color: #1F2E41;"
-        " background: #FFFFFF;"
-        " border: 1px solid #B8C7DA;"
-        " border-radius: 6px;"
-        " padding: 1px 8px;"
-        " font-weight: 600;"
-        "}"
-        "QToolButton:hover { background: #F1F6FC; border-color: #89A7CB; }"
-        "QToolButton:pressed { background: #E5EFFA; }"
-    );
     connect(zoomButton_, &QToolButton::clicked, this, [this]() { cycleZoomPreset(); });
     followPreviewCheckBox_ = new QCheckBox(this);
     followPreviewCheckBox_->setCursor(Qt::PointingHandCursor);
-    followPreviewCheckBox_->setStyleSheet(
-        "QCheckBox {"
-        " color: #1F2E41;"
-        " spacing: 6px;"
-        " font-weight: 600;"
-        "}"
-        "QCheckBox::indicator {"
-        " width: 14px;"
-        " height: 14px;"
-        "}"
-    );
     followPreviewCheckBox_->setText(
         UiText::isChineseUi()
             ? QStringLiteral("\u8ddf\u968f\u9884\u89c8")
@@ -115,9 +88,22 @@ TimelineView::TimelineView(QWidget* parent)
         emit followPreviewToggled(enabled);
     });
 
+    refreshTheme();
     updateZoomButtonAppearance();
     loadNoteIcons();
     updateHorizontalRange();
+}
+
+void TimelineView::refreshTheme()
+{
+    viewport()->setPalette(UiTheme::timelineViewportPalette());
+    if (zoomButton_ != nullptr) {
+        zoomButton_->setStyleSheet(UiTheme::timelineZoomButtonStyleSheet());
+    }
+    if (followPreviewCheckBox_ != nullptr) {
+        followPreviewCheckBox_->setStyleSheet(UiTheme::timelineCheckBoxStyleSheet());
+    }
+    viewport()->update();
 }
 
 bool TimelineView::viewportEvent(QEvent* event)

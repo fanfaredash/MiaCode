@@ -89,6 +89,7 @@ public:
     double zoomScale() const;
     void setFollowPreviewEnabled(bool enabled);
     bool followPreviewEnabled() const;
+    void refreshTheme();
 
 signals:
     void playheadChanged(double second);

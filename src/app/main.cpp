@@ -1,6 +1,7 @@
 ﻿#include "AppVersion.h"
 #include "mainwindow/MainWindow.h"
 #include "UiText.h"
+#include "UiTheme.h"
 
 #include <QApplication>
 #include <QCommandLineOption>
@@ -289,6 +290,7 @@ int main(int argc, char* argv[])
     app.setApplicationVersion(MIACODE_VERSION_STRING);
     app.setWindowIcon(QIcon(":/icons/app.png"));
     app.setStyle(QStyleFactory::create("Fusion"));
+    UiTheme::applyApplicationTheme(app);
     logStartupStage("app_style_ready");
 
     if (UiText::isChineseUi()) {

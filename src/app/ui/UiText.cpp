@@ -18,6 +18,7 @@ constexpr auto kUiSectionKey = "ui";
 constexpr auto kAppSectionKey = "app";
 constexpr auto kPreviewSectionKey = "preview";
 constexpr auto kLanguageKey = "language";
+constexpr auto kThemeKey = "theme";
 
 QString preferencesPath()
 {
@@ -75,6 +76,12 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
     }
     if (!ui.contains(kLanguageKey)) {
         ui.insert(kLanguageKey, "system");
+    }
+    if (!ui.contains(kThemeKey) && raw.contains("ui_theme")) {
+        ui.insert(kThemeKey, raw.value("ui_theme").toString("system"));
+    }
+    if (!ui.contains(kThemeKey)) {
+        ui.insert(kThemeKey, "system");
     }
     normalized.insert(kUiSectionKey, ui);
 
@@ -173,6 +180,19 @@ QString languagePreferenceToken(UiText::LanguagePreference preference)
     }
 }
 
+QString themePreferenceToken(UiText::ThemePreference preference)
+{
+    switch (preference) {
+    case UiText::ThemePreference::Light:
+        return "light";
+    case UiText::ThemePreference::Dark:
+        return "dark";
+    case UiText::ThemePreference::System:
+    default:
+        return "system";
+    }
+}
+
 UiText::LanguagePreference loadStoredLanguagePreference()
 {
     const bool hasMergedPreferences = QFile::exists(preferencesPath());
@@ -184,11 +204,39 @@ UiText::LanguagePreference loadStoredLanguagePreference()
     return parseLanguagePreference(root.value(kUiSectionKey).toObject().value(kLanguageKey).toString("system"));
 }
 
+UiText::ThemePreference loadStoredThemePreference()
+{
+    const bool hasMergedPreferences = QFile::exists(preferencesPath());
+    const QJsonObject root = UiText::loadPreferencesObject();
+    if (!hasMergedPreferences) {
+        UiText::savePreferencesObject(root);
+    }
+
+    const QString raw = root.value(kUiSectionKey).toObject().value(kThemeKey).toString("system").trimmed().toLower();
+    if (raw == "light") {
+        return UiText::ThemePreference::Light;
+    }
+    if (raw == "dark") {
+        return UiText::ThemePreference::Dark;
+    }
+    return UiText::ThemePreference::System;
+}
+
 void saveStoredLanguagePreference(UiText::LanguagePreference preference)
 {
     QJsonObject root = UiText::loadPreferencesObject();
     QJsonObject ui = root.value(kUiSectionKey).toObject();
     ui.insert(kLanguageKey, languagePreferenceToken(preference));
+    root.insert(kUiSectionKey, ui);
+    root.insert("schema", kPreferencesSchema);
+    UiText::savePreferencesObject(root);
+}
+
+void saveStoredThemePreference(UiText::ThemePreference preference)
+{
+    QJsonObject root = UiText::loadPreferencesObject();
+    QJsonObject ui = root.value(kUiSectionKey).toObject();
+    ui.insert(kThemeKey, themePreferenceToken(preference));
     root.insert(kUiSectionKey, ui);
     root.insert("schema", kPreferencesSchema);
     UiText::savePreferencesObject(root);
@@ -241,7 +289,7 @@ const QHash<QString, QString>& zhMap()
     static const QHash<QString, QString> map{
         {"menu.file", "文件(&F)"},
         {"menu.tools", "工具(&T)"},
-        {"menu.transform", "变换(&R)"},
+        {"menu.transform", "变换(&T)"},
         {"menu.help", "帮助(&H)"},
 
         {"action.new", "新建"},
@@ -250,6 +298,11 @@ const QHash<QString, QString>& zhMap()
         {"action.save_as", "另存为"},
         {"action.preferences", "首选项..."},
         {"action.about", "关于"},
+        {"action.cut", "剪切"},
+        {"action.copy", "复制"},
+        {"action.paste", "粘贴"},
+        {"action.undo", "撤回"},
+        {"action.redo", "重做"},
         {"action.validate", "校验 Simai"},
         {"action.stop_preview", "停止预览"},
         {"action.pause_preview", "播放/暂停预览"},
@@ -291,7 +344,10 @@ const QHash<QString, QString>& zhMap()
         {"dialog.preferences.language.system", "跟随系统"},
         {"dialog.preferences.language.english", "English"},
         {"dialog.preferences.language.chinese", "简体中文"},
-        {"dialog.preferences.auto_restore_last_file", "自动打开上次文件"},
+        {"dialog.preferences.theme", "主题"},
+        {"dialog.preferences.theme.system", "跟随系统"},
+        {"dialog.preferences.theme.light", "浅色"},
+        {"dialog.preferences.theme.dark", "深色"},
         {"dialog.preferences.editor_group", "编辑器"},
         {"dialog.preferences.editor_font_size", "文本框字号"},
         {"dialog.preferences.editor_line_spacing", "行距"},
@@ -378,6 +434,12 @@ UiText::LanguagePreference& preferredLanguageStorage()
     return preference;
 }
 
+UiText::ThemePreference& preferredThemeStorage()
+{
+    static UiText::ThemePreference preference = loadStoredThemePreference();
+    return preference;
+}
+
 }  // namespace
 
 namespace UiText {
@@ -391,6 +453,17 @@ void setPreferredLanguage(LanguagePreference preference)
 {
     preferredLanguageStorage() = preference;
     saveStoredLanguagePreference(preference);
+}
+
+ThemePreference preferredTheme()
+{
+    return preferredThemeStorage();
+}
+
+void setPreferredTheme(ThemePreference preference)
+{
+    preferredThemeStorage() = preference;
+    saveStoredThemePreference(preference);
 }
 
 bool isChineseUi()
