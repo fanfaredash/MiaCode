@@ -516,14 +516,19 @@ void MainWindow::setMetadataExtraText(const QString& text)
     if (metadataExtraEdit_ == nullptr) {
         return;
     }
+    const bool previousSuppress = suppressTextDirtyTracking_;
+    suppressTextDirtyTracking_ = true;
     QSignalBlocker blocker(metadataExtraEdit_);
     metadataExtraEdit_->setPlainText(text);
     metadataExtraEdit_->document()->clearUndoRedoStacks();
     applyBlockSpacingToTextEdit(metadataExtraEdit_, blockSpacingPixelsForPointSize(editorTextFontPointSize_, editorLineSpacingFactor_));
+    suppressTextDirtyTracking_ = previousSuppress;
 }
 
 void MainWindow::setEditorText(const QString& text)
 {
+    const bool previousSuppress = suppressTextDirtyTracking_;
+    suppressTextDirtyTracking_ = true;
     QSignalBlocker blocker(editorWidget_);
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
     const int blockSpacingPixels = blockSpacingPixelsForPointSize(editorTextFontPointSize_, editorLineSpacingFactor_);
@@ -532,6 +537,7 @@ void MainWindow::setEditorText(const QString& text)
     editor->document()->clearUndoRedoStacks();
     // QSignalBlocker suppresses blockCountChanged, so force line-number gutter recompute.
     editor->refreshLineNumberAreaLayout();
+    suppressTextDirtyTracking_ = previousSuppress;
 }
 
 void MainWindow::updatePauseButtonAppearance()
@@ -539,11 +545,12 @@ void MainWindow::updatePauseButtonAppearance()
     if (pausePreviewAction_ == nullptr) {
         return;
     }
+    const QColor iconColor = UiTheme::colors().iconPrimary;
     if (qtPreviewPlaying_) {
-        pausePreviewAction_->setIcon(makePreviewPauseIcon(QColor("#2B3C4E")));
+        pausePreviewAction_->setIcon(makePreviewPauseIcon(iconColor));
         pausePreviewAction_->setText(uiText("preview.pause", "Pause"));
     } else {
-        pausePreviewAction_->setIcon(makePreviewPlayIcon(QColor("#2B3C4E")));
+        pausePreviewAction_->setIcon(makePreviewPlayIcon(iconColor));
         pausePreviewAction_->setText(uiText("preview.play", "Play"));
     }
     if (pausePreviewButton_ != nullptr) {
@@ -552,13 +559,7 @@ void MainWindow::updatePauseButtonAppearance()
                 ? uiText("preview.pause", "Pause")
                 : uiText("preview.play", "Play")
         );
-        pausePreviewButton_->setStyleSheet(
-            qtPreviewPlaying_
-                ? "QToolButton { color: #FFFFFF; padding: 5px 8px; min-height: 28px; border: 1px solid #2E77D0; border-radius: 6px; background: #2E77D0; font-weight: 600; }"
-                  "QToolButton:hover { background: #3A86E8; }"
-                : "QToolButton { color: #223042; padding: 5px 8px; min-height: 28px; border: 1px solid #D8E0EA; border-radius: 6px; background: transparent; font-weight: 600; }"
-                  "QToolButton:hover { background: #F5F8FC; border-color: #BCD0E5; }"
-        );
+        pausePreviewButton_->setStyleSheet(UiTheme::pausePreviewButtonStyleSheet(qtPreviewPlaying_));
     }
 }
 
@@ -683,16 +684,7 @@ void MainWindow::updateEditorHeaderLayoutMode()
         editorCursorLabel_->setVisible(false);
         return;
     }
-
-    const int headerWidth = editorHeaderWidget_->contentsRect().width();
-    const int contextWidth = editorContextLabel_->minimumWidth();
-    const int controlsWidth =
-        (editorDifficultyControls_ != nullptr && editorDifficultyControls_->isVisible())
-        ? editorDifficultyControls_->sizeHint().width()
-        : 0;
-    const int cursorWidth = editorCursorLabel_->sizeHint().width();
-    const int requiredWithCursor = contextWidth + controlsWidth + cursorWidth + 84;
-    editorCursorLabel_->setVisible(headerWidth >= requiredWithCursor);
+    editorCursorLabel_->setVisible(true);
 }
 
 void MainWindow::updateEditorStatus()

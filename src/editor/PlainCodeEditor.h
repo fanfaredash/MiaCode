@@ -1,8 +1,10 @@
 #pragma once
 
+#include <QList>
 #include <QTextEdit>
 
 class LineNumberArea;
+class QAction;
 class QContextMenuEvent;
 class QMimeData;
 
@@ -17,6 +19,7 @@ public:
     void setBlockSpacingPixels(int px);
     void setTopOverlayInsetPixels(int px);
     void refreshLineNumberAreaLayout();
+    void setBatchTransformActions(const QList<QAction*>& actions);
 
 protected:
     void changeEvent(QEvent* event) override;
@@ -32,5 +35,6 @@ private slots:
 private:
     int blockSpacingPixels_ = 0;
     int topOverlayInsetPixels_ = 0;
+    QList<QAction*> batchTransformActions_;
     LineNumberArea* lineNumberArea_;
 };
