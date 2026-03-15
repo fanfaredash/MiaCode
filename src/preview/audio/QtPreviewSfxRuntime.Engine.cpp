@@ -113,7 +113,6 @@ void QtPreviewSfxRuntime::initializeBackgroundTrack()
     backgroundTrackConfigured_ = true;
     backgroundTrackRunning_ = false;
     backgroundTrackPendingStart_ = false;
-    backgroundTrackLastTimelineSecond_ = 0.0;
     ma_sound_set_volume(&backgroundTrackVoice_->sound, static_cast<float>(settings_.bgmVolume));
     appendAudioDebugLog(QString("initializeBackgroundTrack ok path=%1 volume=%2")
                             .arg(trackPath_)
