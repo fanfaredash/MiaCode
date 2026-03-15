@@ -1045,7 +1045,7 @@ void MainWindow::updatePreviewObjectStats(double second)
                 ++slidePlayed;
             }
         }
-        if (isTouch) {
+        if (isTouch && !marker.isBreak) {
             ++touchTotal;
             if (played) {
                 ++touchPlayed;
