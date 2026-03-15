@@ -98,15 +98,12 @@ private slots:
     void onRotate45CounterClockwise();
     void onRotate45Clockwise();
     void onStopPreview();
-    void onPreviewFromStart();
-    void onPreviewFromCursor();
     void onTogglePreviewPause();
     void onToggleJudgeMarkers(bool checked);
     void onToggleTouchTrail(bool checked);
     void onExportPreviewVideo();
     void onPreviewAudioSettings();
-    void onPreviewDisplaySettings();
-    void onPreviewRenderSettings();
+    void onPreviewVideoSettings();
     void onOpenLatencyDetector();
     void onPreferences();
     void onAbout();
@@ -162,6 +159,8 @@ private:
     bool currentSelectionRange(int* startPos, int* endPos) const;
     void setEditorText(const QString& text);
     void setMetadataExtraText(const QString& text);
+    bool openFileAtPath(const QString& path, bool showStatusMessage = true, bool showErrors = true);
+    bool restoreLastSessionFile();
     void setCurrentFilePath(const QString& path);
     void updateWindowTitle();
     void updateCurrentFileLabel();
@@ -203,6 +202,7 @@ private:
     void refreshTimelineMetadata();
     void seekTimelineToCursor(int line, int col);
     void syncTimelineToEditorCursor(bool centerView = true);
+    void navigateTimelineToSecond(double second, bool focusEditor = true);
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
     bool moveEditorCursorToTimelineLocation(
         int line,
@@ -217,6 +217,7 @@ private:
     void startQtPreviewPlayback(double second, bool resumeFromPause = false);
     void stopQtPreviewPlayback(bool keepPosition = true);
     void applyQtPreviewPosition(double second, bool centerView);
+    void syncPausedPreviewMediaTimestamps(double second);
     void flushQtPreviewTimelinePosition();
     void onQtPreviewTick();
     void seekPreviewToSecond(double second, bool centerView);
@@ -231,6 +232,10 @@ private:
     int updatePreviewStatsLayoutMode(int hostWidth = -1);
     void updatePreviewWorkspaceLayout();
     void updatePreviewPanelLayout();
+    void cacheWorkspaceLayoutSizes();
+    void restoreWorkspaceLayoutSizes();
+    void refreshLayoutAfterPageSwitch();
+    void openPreviewSettingsDialog(bool includeAudioSettings, bool includeVideoSettings, const QString& title);
     double previewDurationSeconds() const;
     void applyPreviewPlaybackRate(double rate);
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
@@ -316,14 +321,13 @@ private:
     QAction* transformRotate45ClockwiseAction_ = nullptr;
     QAction* findReplaceAction_ = nullptr;
     QAction* stopPreviewAction_ = nullptr;
-    QAction* previewFromStartAction_ = nullptr;
-    QAction* previewFromCursorAction_ = nullptr;
     QAction* pausePreviewAction_ = nullptr;
     QAction* exportVideoAction_ = nullptr;
     QAction* latencyDetectorAction_ = nullptr;
     QAction* toggleJudgeMarkersAction_ = nullptr;
     QAction* toggleTouchTrailAction_ = nullptr;
-    QAction* previewRenderSettingsAction_ = nullptr;
+    QAction* previewAudioSettingsAction_ = nullptr;
+    QAction* previewVideoSettingsAction_ = nullptr;
     QAction* aboutAction_ = nullptr;
     QLabel* currentFileLabel_ = nullptr;
     QTimer* metadataRefreshTimer_ = nullptr;
@@ -334,6 +338,7 @@ private:
     QProcess* previewProcess_ = nullptr;
     QString previewStdoutBuffer_;
     QString previewStderrBuffer_;
+    QString lastSessionFilePath_;
     QString currentFilePath_;
     QString lastOpenDir_;
     QString lastTrackPath_;
@@ -358,6 +363,8 @@ private:
     bool qtPreviewAwaitingFrameSwap_ = false;
     qint64 qtPreviewAwaitingFrameSwapSinceMs_ = -1;
     bool previewSliderDragging_ = false;
+    bool suppressTimelineCursorSync_ = false;
+    bool autoRestoreLastSessionFile_ = true;
     int previewSeekHeldArrowKey_ = 0;
     QElapsedTimer previewSeekHeldArrowElapsed_;
     double qtPreviewStartSecond_ = 0.0;
@@ -449,6 +456,8 @@ private:
     int previewStatsLayoutRows_ = 0;
     int previewStatsLayoutCols_ = 0;
     bool previewLayoutInitialized_ = false;
+    int workspaceCachedLeftWidth_ = 0;
+    int workspaceCachedRightWidth_ = 0;
     QVector<TimelineNoteMarker> previewStatsNoteMarkers_;
     QPointer<LatencyDetectorDialog> latencyDetectorDialog_;
     BracketScopeHighlighter* chartBracketHighlighter_ = nullptr;

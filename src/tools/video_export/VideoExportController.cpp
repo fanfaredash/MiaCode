@@ -1913,14 +1913,14 @@ void buildSfxTimeline(
             continue;
         }
         if (type == QLatin1String("touch")) {
-            addEvent(marker.second, QStringLiteral("touch"));
+            addEvent(marker.second, marker.isBreak ? QStringLiteral("break") : QStringLiteral("touch"));
             if (marker.isFirework) {
                 addEvent(marker.second + 0.05, QStringLiteral("firework"));
             }
             continue;
         }
         if (type == QLatin1String("touch_hold")) {
-            addEvent(marker.second, QStringLiteral("touch"));
+            addEvent(marker.second, marker.isBreak ? QStringLiteral("break") : QStringLiteral("touch"));
             if (marker.isFirework && marker.endSecond >= 0.0) {
                 addEvent(marker.endSecond, QStringLiteral("firework"));
             }

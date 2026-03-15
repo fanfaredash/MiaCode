@@ -38,6 +38,8 @@
 
     const UiText::LanguagePreference currentPreference = UiText::preferredLanguage();
     UiText::LanguagePreference selectedPreference = currentPreference;
+    const bool originalAutoRestoreLastSessionFile = autoRestoreLastSessionFile_;
+    bool selectedAutoRestoreLastSessionFile = originalAutoRestoreLastSessionFile;
     const auto languageLabel = [](UiText::LanguagePreference preference) -> QString {
         switch (preference) {
         case UiText::LanguagePreference::English:
@@ -51,7 +53,11 @@
     };
 
     auto* languageLabelWidget = new QLabel(uiText("dialog.preferences.language", "Language"), interfaceGroup);
-    auto* languageButton = new QToolButton(interfaceGroup);
+    auto* languageRow = new QWidget(interfaceGroup);
+    auto* languageRowLayout = new QHBoxLayout(languageRow);
+    languageRowLayout->setContentsMargins(0, 0, 0, 0);
+    languageRowLayout->setSpacing(12);
+    auto* languageButton = new QToolButton(languageRow);
     languageButton->setObjectName("PreferenceMenuButton");
     languageButton->setFont(uiAccentFont(10, QFont::DemiBold));
     languageButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
@@ -90,7 +96,18 @@
         const QPoint popupPos(buttonTopLeftGlobal.x(), labelCenterGlobal.y() - estimatedItemHeight / 2 - 7);
         languageMenu->popup(popupPos);
     });
-    interfaceLayout->addRow(languageLabelWidget, languageButton);
+    auto* autoRestoreCheck = new QCheckBox(
+        uiText("dialog.preferences.auto_restore_last_file", "Auto-open last file"),
+        languageRow
+    );
+    autoRestoreCheck->setChecked(selectedAutoRestoreLastSessionFile);
+    connect(autoRestoreCheck, &QCheckBox::toggled, &dialog, [&](bool checked) {
+        selectedAutoRestoreLastSessionFile = checked;
+    });
+    languageRowLayout->addWidget(languageButton, 0);
+    languageRowLayout->addWidget(autoRestoreCheck, 0);
+    languageRowLayout->addStretch(1);
+    interfaceLayout->addRow(languageLabelWidget, languageRow);
     rootLayout->addWidget(interfaceGroup);
 
     auto* editorGroup = new QGroupBox(uiText("dialog.preferences.editor_group", "Editor"), &dialog);
@@ -175,18 +192,25 @@
     }
 
     const bool languageChanged = selectedPreference != currentPreference;
+    const bool autoRestoreLastSessionFileChanged =
+        selectedAutoRestoreLastSessionFile != originalAutoRestoreLastSessionFile;
     const bool editorFontChanged = selectedEditorFontSize != originalEditorFontSize;
     const bool editorLineSpacingChanged = !qFuzzyCompare(
         selectedEditorLineSpacingFactor + 1.0,
         originalEditorLineSpacingFactor + 1.0
     );
-    if (!languageChanged && !editorFontChanged && !editorLineSpacingChanged) {
+    if (!languageChanged && !autoRestoreLastSessionFileChanged && !editorFontChanged && !editorLineSpacingChanged) {
         return;
     }
 
     if (editorFontChanged || editorLineSpacingChanged) {
         persistEditorTextFontPreference();
         statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+    }
+    if (autoRestoreLastSessionFileChanged) {
+        autoRestoreLastSessionFile_ = selectedAutoRestoreLastSessionFile;
+        savePortableState();
+        statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
     }
     if (languageChanged) {
         UiText::setPreferredLanguage(selectedPreference);
