@@ -50,7 +50,7 @@ inline constexpr double kSlideTrackAppearLeadInSeconds =
     previewTimingSecondsFromFramesAt120Fps(kSlideTrackAppearLeadInFramesAt120Fps);
 inline constexpr double kSlideTrackFullBrightLeadInSeconds =
     previewTimingSecondsFromFramesAt120Fps(kSlideTrackFullBrightLeadInFramesAt120Fps);
-inline constexpr double kSlideTrackAppearAlphaCap = 0.80;
+inline constexpr double kSlideTrackAppearAlphaCap = 0.70;
 inline constexpr double kSlideTrackAppearAlphaEaseOutExponent = 2.7;
 inline constexpr double kTapUnitsPerSecond =
     (kLogicalDistanceEdge - kLogicalDistanceTap) / kTapFlyDurationSeconds;
