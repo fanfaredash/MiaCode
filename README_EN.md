@@ -70,6 +70,13 @@ Thanks to [Minepig/MaiMuriDX](https://github.com/Minepig/MaiMuriDX) for referenc
 
 ## Changelog
 
+### 3.0
+
+- Improved export stability
+- Note scroll speed control
+- Added a dark UI theme
+- Added break touch support
+
 ### 0.2.1
 
 - Fixed ffmpeg compositing cadence to eliminate periodic duplicate-frame stutter during export.

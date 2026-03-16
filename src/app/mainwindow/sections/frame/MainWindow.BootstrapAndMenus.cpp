@@ -254,6 +254,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     auto* fileMenu = menuBar()->addMenu(uiText("menu.file", "&File"));
     auto* editMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("编辑(&E)") : QStringLiteral("&Edit"));
+    auto* toolsMenu = menuBar()->addMenu(uiText("menu.tools", "&Tools"));
     auto* transformMenu = menuBar()->addMenu(uiText("menu.transform", "变换(&T)"));
     auto* previewMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("预览(&P)") : QStringLiteral("&Preview"));
     auto* helpMenu = menuBar()->addMenu(uiText("menu.help", "&Help"));
@@ -261,6 +262,19 @@ MainWindow::MainWindow(QWidget* parent)
     auto* toolBar = addToolBar("Main");
     toolBar->setMovable(false);
     setupMenusAndActions(fileMenu, editMenu, transformMenu, previewMenu, helpMenu);
+    if (latencyDetectorAction_ != nullptr) {
+        editMenu->removeAction(latencyDetectorAction_);
+        toolsMenu->addAction(latencyDetectorAction_);
+    }
+    if (validateAction_ != nullptr) {
+        editMenu->removeAction(validateAction_);
+        toolsMenu->addSeparator();
+        toolsMenu->addAction(validateAction_);
+    }
+    const QList<QAction*> editActions = editMenu->actions();
+    if (!editActions.isEmpty() && editActions.constLast()->isSeparator()) {
+        editMenu->removeAction(editActions.constLast());
+    }
     logStartupStage("menus_and_actions_ready");
 
     auto* editor = new PlainCodeEditor(this);
@@ -1105,7 +1119,7 @@ MainWindow::MainWindow(QWidget* parent)
     updatePreviewWorkspaceLayout();
     logStartupStage("workspace_and_central_widget_ready");
 
-    constexpr int kToolbarLeadingSpacerWidth = 12;
+    constexpr int kToolbarLeadingSpacerWidth = 6;
     auto* toolbarLeadingSpacer = new QWidget(toolBar);
     toolbarLeadingSpacer->setFixedWidth(kToolbarLeadingSpacerWidth);
     toolBar->addWidget(toolbarLeadingSpacer);
@@ -1137,11 +1151,15 @@ MainWindow::MainWindow(QWidget* parent)
         return button;
     };
 
-    syntaxCheckButton_ = makeCompactToolbarButton(validateAction_);
-    toolBar->addWidget(syntaxCheckButton_);
     previewAudioSettingsButton_ = makeCompactToolbarButton(previewAudioSettingsAction_);
     previewVideoSettingsButton_ = makeCompactToolbarButton(previewVideoSettingsAction_);
-    const int settingsButtonWidth = syntaxCheckButton_ != nullptr ? syntaxCheckButton_->width() : kToolbarActionButtonWidth;
+    int settingsButtonWidth = kToolbarActionButtonWidth;
+    if (previewAudioSettingsButton_ != nullptr) {
+        settingsButtonWidth = qMax(settingsButtonWidth, previewAudioSettingsButton_->width());
+    }
+    if (previewVideoSettingsButton_ != nullptr) {
+        settingsButtonWidth = qMax(settingsButtonWidth, previewVideoSettingsButton_->width());
+    }
     if (previewAudioSettingsButton_ != nullptr) {
         previewAudioSettingsButton_->setFixedWidth(settingsButtonWidth);
         toolBar->addWidget(previewAudioSettingsButton_);

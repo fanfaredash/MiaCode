@@ -71,6 +71,13 @@ QT_ROOT="$HOME/Qt/6.8.3/macos" bash scripts/package-mac.sh
 
 ## 更新日志
 
+### 3.0
+
+- 导出稳定性提升
+- note流速控制
+- UI新增深色主题
+- break touch 支持
+
 ### 0.2.1
 
 - 修复导出链路中 ffmpeg 合成节拍异常，消除周期性重复帧卡顿。
