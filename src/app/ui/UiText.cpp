@@ -314,6 +314,13 @@ const QHash<QString, QString>& zhMap()
         {"action.transform.rotate_180", "旋转 180°"},
         {"action.transform.rotate_ccw_45", "逆时针旋转 45°"},
         {"action.transform.rotate_cw_45", "顺时针旋转 45°"},
+        {"action.transform.more", "更多..."},
+        {"action.transform.toggle_break", "一键全 Break"},
+        {"action.transform.toggle_ex", "一键全 Ex"},
+        {"action.transform.toggle_firework", "一键全 Firework"},
+        {"action.transform.random_rotate", "一键全随机"},
+        {"context.batch_transform", "批量操作"},
+        {"context.more_transform", "更多..."},
 
         {"toolbar.settings_placeholder", "设置"},
 
@@ -380,6 +387,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.video.brightness_outer", "亮度（外侧）"},
         {"dialog.render_settings.video.brightness_inner", "亮度（内侧）"},
         {"dialog.render_settings.video.layout_square_scale", "判定线大小"},
+        {"dialog.render_settings.video.flow_speed", "流速"},
         {"dialog.render_settings.video.scale_mode", "背景 / PV 缩放模式"},
         {"dialog.render_settings.video.canvas_aspect", "预览画布比例"},
 
@@ -403,6 +411,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.video_export.option.brightness_outer", "亮度（外侧）"},
         {"dialog.video_export.option.brightness_inner", "亮度（内侧）"},
         {"dialog.video_export.option.layout_size", "判定线大小"},
+        {"dialog.video_export.option.flow_speed", "流速"},
         {"dialog.video_export.option.scale_mode", "背景 / PV 缩放模式"},
         {"dialog.video_export.option.scale.fill", "填充（必要时裁切）"},
         {"dialog.video_export.option.scale.fit", "适应（完整显示）"},

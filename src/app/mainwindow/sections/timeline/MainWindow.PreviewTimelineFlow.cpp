@@ -715,6 +715,7 @@ void MainWindow::setPreviewCanvasAspectRatio(double ratio, bool persistState)
         updatePreviewPanelLayout();
     }
     if (persistState) {
+        saveProjectRenderState();
         savePortableState();
     }
 }

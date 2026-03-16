@@ -313,6 +313,7 @@ VideoExportDialog::VideoExportDialog(
     PreviewLayoutScaleCallback previewLayoutScaleCallback,
     PreviewSmoothBrightnessCallback previewSmoothBrightnessCallback,
     PreviewScaleModeCallback previewScaleModeCallback,
+    PreviewFlowSpeedCallback previewFlowSpeedCallback,
     QWidget* parent
 )
     : QDialog(parent)
@@ -328,6 +329,7 @@ VideoExportDialog::VideoExportDialog(
     , previewLayoutScaleCallback_(std::move(previewLayoutScaleCallback))
     , previewSmoothBrightnessCallback_(std::move(previewSmoothBrightnessCallback))
     , previewScaleModeCallback_(std::move(previewScaleModeCallback))
+    , previewFlowSpeedCallback_(std::move(previewFlowSpeedCallback))
     , totalDurationSeconds_(qMax(0.0, baseTask.contentDurationSeconds))
 {
     setWindowTitle(uiText("dialog.video_export.title", QStringLiteral("Export Video")));
@@ -386,7 +388,7 @@ VideoExportDialog::VideoExportDialog(
     if (currentPresetIndex < 0) {
         const double currentAspect =
             static_cast<double>(qMax(1, baseTask_.outputWidth)) / static_cast<double>(qMax(1, baseTask_.outputHeight));
-        double bestScore = std::numeric_limits<double>::max();
+        double bestScore = (std::numeric_limits<double>::max)();
         for (int i = 0; i < static_cast<int>(std::size(kResolutionPresets)); ++i) {
             const QSize size(kResolutionPresets[i].width, kResolutionPresets[i].height);
             const double optionAspect = size.height() > 0
@@ -698,6 +700,45 @@ VideoExportDialog::VideoExportDialog(
     );
     setSliderOptionTitle(layoutSquareScaleOption, uiText("dialog.video_export.option.layout_size", QStringLiteral("Layout Size")));
     optionsLayout->addWidget(layoutSquareScaleOption, 2, 0, 1, 2);
+    selectedFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(baseTask_.noteFlowSpeed);
+    const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
+    const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
+    const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
+    const int flowSpeedOptionCount = qRound((flowSpeedMax - flowSpeedMin) / flowSpeedStep);
+    selectedFlowSpeed_ = qBound(
+        flowSpeedMin,
+        flowSpeedMin + qRound((selectedFlowSpeed_ - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
+        flowSpeedMax
+    );
+    QString selectedFlowSpeedLabel = QString::number(selectedFlowSpeed_, 'f', 1);
+    flowSpeedButton_ = createDialogMenuButton(optionsContent_, selectedFlowSpeedLabel);
+    flowSpeedMenu_ = new QMenu(flowSpeedButton_);
+    UiTheme::styleRoundedMenu(*flowSpeedMenu_);
+    for (int optionIndex = 0; optionIndex <= flowSpeedOptionCount; ++optionIndex) {
+        const double flowSpeed = flowSpeedMin + optionIndex * flowSpeedStep;
+        const QString label = QString::number(flowSpeed, 'f', 1);
+        addDialogMenuChoice(flowSpeedMenu_, label, [this, flowSpeed, label]() {
+            selectedFlowSpeed_ = flowSpeed;
+            if (flowSpeedButton_ != nullptr) {
+                flowSpeedButton_->setText(label);
+            }
+            if (previewFlowSpeedCallback_) {
+                previewFlowSpeedCallback_(flowSpeed);
+            }
+        });
+    }
+    flowSpeedButton_->setMenu(flowSpeedMenu_);
+    auto* flowSpeedRow = new QWidget(optionsContent_);
+    auto* flowSpeedLayout = new QHBoxLayout(flowSpeedRow);
+    flowSpeedLayout->setContentsMargins(0, 0, 0, 0);
+    flowSpeedLayout->setSpacing(6);
+    auto* flowSpeedLabel = new QLabel(
+        uiText("dialog.video_export.option.flow_speed", QStringLiteral("Flow Speed")),
+        flowSpeedRow
+    );
+    flowSpeedLayout->addWidget(flowSpeedLabel, 0);
+    flowSpeedLayout->addWidget(flowSpeedButton_, 1);
+    optionsLayout->addWidget(flowSpeedRow, 3, 0, 1, 2);
     const QString scaleFillLabel = uiText("dialog.video_export.option.scale.fill", QStringLiteral("Fill (crop if needed)"));
     const QString scaleFitLabel = uiText("dialog.video_export.option.scale.fit", QStringLiteral("Fit (keep full image, may letterbox)"));
     selectedBackgroundScaleMode_ = baseTask_.backgroundScaleMode;
@@ -736,9 +777,9 @@ VideoExportDialog::VideoExportDialog(
     );
     backgroundScaleModeLayout->addWidget(backgroundScaleModeLabel, 0);
     backgroundScaleModeLayout->addWidget(backgroundScaleModeButton_, 1);
-    optionsLayout->addWidget(backgroundScaleModeRow, 3, 0, 1, 2);
-    optionsLayout->addWidget(smoothBrightnessCheck_, 4, 0, 1, 1, Qt::AlignLeft | Qt::AlignTop);
-    optionsLayout->addWidget(showTimestampCheck_, 4, 1, 1, 1, Qt::AlignLeft | Qt::AlignTop);
+    optionsLayout->addWidget(backgroundScaleModeRow, 4, 0, 1, 2);
+    optionsLayout->addWidget(smoothBrightnessCheck_, 5, 0, 1, 1, Qt::AlignLeft | Qt::AlignTop);
+    optionsLayout->addWidget(showTimestampCheck_, 5, 1, 1, 1, Qt::AlignLeft | Qt::AlignTop);
     rootLayout->addWidget(
         buildCollapsibleSection(
             l10n(QStringLiteral("Options"), QStringLiteral("选项")),
@@ -844,6 +885,9 @@ VideoExportDialog::VideoExportDialog(
     }
     if (previewScaleModeCallback_) {
         previewScaleModeCallback_(baseTask_.backgroundScaleMode);
+    }
+    if (previewFlowSpeedCallback_) {
+        previewFlowSpeedCallback_(selectedFlowSpeed_);
     }
     applySelectedAspectRatioToPreview(false);
     refreshDialogGeometry();
@@ -1014,6 +1058,7 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
         ? smoothBrightnessCheck_->isChecked()
         : updated.smoothBrightness;
     updated.backgroundScaleMode = selectedBackgroundScaleMode_;
+    updated.noteFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(selectedFlowSpeed_);
     updated.exportStartSeconds = rangeStartSeconds();
     updated.contentDurationSeconds = qMax(0.0, rangeEndSeconds() - updated.exportStartSeconds);
 

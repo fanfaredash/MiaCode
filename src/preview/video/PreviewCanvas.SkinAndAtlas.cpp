@@ -229,6 +229,22 @@ void PreviewCanvas::setBackgroundScaleMode(PreviewBackgroundScaleMode mode)
     update();
 }
 
+void PreviewCanvas::setNoteFlowSpeed(double flowSpeed)
+{
+    const double normalized = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
+    if (qFuzzyCompare(noteFlowSpeed_ + 1.0, normalized + 1.0)) {
+        return;
+    }
+    noteFlowSpeed_ = normalized;
+    refreshTimingFromFlowSpeed();
+    update();
+}
+
+double PreviewCanvas::noteFlowSpeed() const
+{
+    return noteFlowSpeed_;
+}
+
 void PreviewCanvas::setShowDebugInfo(bool show)
 {
     if (showDebugInfo_ == show) {

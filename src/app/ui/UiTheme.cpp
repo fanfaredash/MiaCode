@@ -207,7 +207,7 @@ QString applicationStyleSheet()
     const Colors& c = colors();
     return QStringLiteral(
         "QMenuBar { background: %1; color: %2; border-bottom: 1px solid %3; }"
-        "QMenuBar::item { background: transparent; color: %2; padding: 4px 8px; }"
+        "QMenuBar::item { background: transparent; color: %2; padding: 4px 8px; margin: 0 0 1px 0; }"
         "QMenuBar::item:selected { background: %4; }"
         "QToolBar { background: %1; border: none; border-bottom: 1px solid %3; spacing: 4px; }"
         "QStatusBar { background: %5; color: %6; border-top: 1px solid %3; }"

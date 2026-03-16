@@ -49,14 +49,6 @@ constexpr qreal kLogicalCanvasSize = static_cast<qreal>(miacode::preview_gamepla
 constexpr qreal kLogicalCanvasCenter = kLogicalCanvasSize / 2.0;
 constexpr qreal kLogicalDistanceTap = static_cast<qreal>(miacode::preview_gameplay::kLogicalDistanceTap);
 constexpr qreal kLogicalDistanceEdge = static_cast<qreal>(miacode::preview_gameplay::kLogicalDistanceEdge);
-constexpr qreal kTapUnitsPerSecond = static_cast<qreal>(miacode::preview_gameplay::kTapUnitsPerSecond);
-constexpr int kTapLifecycleFramesAt60Fps = 33;
-constexpr qreal kPreviewReferenceFps = 60.0;
-constexpr qreal kTapLifecycleDurationSeconds =
-    static_cast<qreal>(kTapLifecycleFramesAt60Fps - 1) / kPreviewReferenceFps;
-constexpr qreal kTapSpawnDurationSeconds = kTapLifecycleDurationSeconds * 0.5;
-constexpr qreal kTapFlyDurationSeconds = kTapLifecycleDurationSeconds - kTapSpawnDurationSeconds;
-constexpr qreal kTapTravelDistance = kLogicalDistanceEdge - kLogicalDistanceTap;
 constexpr qreal kLaneUnitVectorBaseDegrees = -67.5;
 constexpr qreal kLaneRotationBaseDegrees = 22.5;
 constexpr qreal kLaneAngleStepDegrees = 45.0;
@@ -79,7 +71,6 @@ constexpr int kHoldTargetWidth = 60;
 constexpr int kFpsSampleWindowMs = 250;
 constexpr int kFrameStatsWindowSize = 120;
 constexpr qreal kSlideTrackScale = 0.5;
-constexpr qreal kSlideTrackFadeInSeconds = static_cast<qreal>(miacode::preview_gameplay::kSlideTrackFadeInSeconds);
 constexpr qreal kTouchLifecyclePhaseCount = 5.0;
 constexpr qreal kTouchPhaseDivisionEpsilonSeconds = 0.001;
 constexpr qreal kRenderAlphaEpsilon = 0.001;
@@ -93,7 +84,7 @@ constexpr qreal kTouchPrefabMaxCloseAmountNormalized =
     kTouchPrefabStartRadiusNormalized - kTouchPrefabEndRadiusNormalized;
 constexpr qreal kTouchCloseCurveResidualBias = 0.42;
 constexpr qreal kTouchCloseCurveProgressBias = 4.05;
-constexpr qreal kTouchDurationSeconds = static_cast<qreal>(kTapLifecycleFramesAt60Fps) / kPreviewReferenceFps;
+constexpr qreal kTouchDurationSeconds = static_cast<qreal>(miacode::preview_gameplay::kTouchDurationSeconds);
 constexpr qreal kTouchShowDurationSeconds = kTouchDurationSeconds / kTouchLifecyclePhaseCount;
 constexpr qreal kTouchCloseDurationSeconds = kTouchDurationSeconds - kTouchShowDurationSeconds;
 constexpr qreal kTouchPrefabStartEndRatio = kTouchPrefabStartRadiusNormalized / kTouchPrefabEndRadiusNormalized;
@@ -957,40 +948,6 @@ qreal mapLogicalLengthToRect(qreal logicalLength, const QRectF& targetRect)
 qreal tapScaleForDistance(qreal distance)
 {
     return distance * kDistanceToScaleSlope + kDistanceToScaleOffset;
-}
-
-struct TapApproachSample {
-    qreal distance = kLogicalDistanceTap;
-    qreal scale = 0.0;
-};
-
-TapApproachSample sampleTapApproach(qreal deltaSeconds)
-{
-    TapApproachSample sample;
-    if (deltaSeconds <= -kTapLifecycleDurationSeconds) {
-        return sample;
-    }
-    if (deltaSeconds < -kTapFlyDurationSeconds) {
-        sample.scale = qBound<qreal>(
-            0.0,
-            (deltaSeconds + kTapLifecycleDurationSeconds) / qMax<qreal>(0.001, kTapSpawnDurationSeconds),
-            1.0
-        );
-        return sample;
-    }
-    if (deltaSeconds < 0.0) {
-        const qreal flightProgress = qBound<qreal>(
-            0.0,
-            (deltaSeconds + kTapFlyDurationSeconds) / qMax<qreal>(0.001, kTapFlyDurationSeconds),
-            1.0
-        );
-        sample.distance = kLogicalDistanceTap + kTapTravelDistance * flightProgress;
-        sample.scale = 1.0;
-        return sample;
-    }
-    sample.distance = kLogicalDistanceEdge;
-    sample.scale = 1.0;
-    return sample;
 }
 
 qreal laneRotationDegrees(int lane)

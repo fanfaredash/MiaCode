@@ -10,10 +10,12 @@
 #include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "simai/transform/ChartBatchTransform.h"
 #include "tools/latency/LatencyDetectorDialog.h"
 #include "tools/video_export/VideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
 #include "common/AssetPaths.h"
+#include "common/PreviewGameplayConfig.h"
 #include "common/PreviewInteractionConfig.h"
 
 #include <algorithm>
@@ -1326,6 +1328,7 @@ void MainWindow::ensurePreviewMediaControllerInitialized()
         previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
         previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
         previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
+        previewCanvas_->setNoteFlowSpeed(previewNoteFlowSpeed_);
     }
     previewMediaController_->setTimelineOffsetSeconds(parsedFirstSeconds());
     previewMediaController_->setChartPath(currentFilePath_);
@@ -1702,9 +1705,18 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             }
         }
     }
-    if (previewSlider_ != nullptr && previewKeyScope) {
+    if (previewKeyScope) {
         if (event->type() == QEvent::KeyPress) {
             auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (keyEvent->key() == Qt::Key_Space
+                && keyEvent->modifiers() == Qt::NoModifier
+                && !keyEvent->isAutoRepeat()) {
+                onTogglePreviewPause();
+                return true;
+            }
+            if (previewSlider_ == nullptr) {
+                return QMainWindow::eventFilter(watched, event);
+            }
             int direction = 0;
             if (keyEvent->key() == Qt::Key_Left) {
                 direction = -1;
@@ -1739,6 +1751,12 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             }
         } else if (event->type() == QEvent::KeyRelease) {
             auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (keyEvent->key() == Qt::Key_Space && keyEvent->modifiers() == Qt::NoModifier) {
+                return true;
+            }
+            if (previewSlider_ == nullptr) {
+                return QMainWindow::eventFilter(watched, event);
+            }
             if (!keyEvent->isAutoRepeat()
                 && (keyEvent->key() == Qt::Key_Left || keyEvent->key() == Qt::Key_Right)
                 && previewSeekHeldArrowKey_ == keyEvent->key()) {
@@ -1762,30 +1780,57 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
     }
     if (watched == editorViewport_ && event->type() == QEvent::MouseButtonPress) {
         auto* mouseEvent = static_cast<QMouseEvent*>(event);
-        if (mouseEvent->button() == Qt::LeftButton && (mouseEvent->modifiers() & Qt::ControlModifier)) {
-            int line = 1;
-            int col = 1;
-
-            auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-            QTextCursor cursor = editor->cursorForPosition(mouseEvent->pos());
-            editor->setTextCursor(cursor);
-            line = cursor.blockNumber() + 1;
-            col = cursor.positionInBlock() + 1;
-            const double second = timelineSecondForCursor(line, col);
-            if (second >= 0.0) {
-                if (qtPreviewPlaying_) {
-                    stopQtPreviewPlayback(true);
-                }
-                schedulePreviewSeek(second, true);
-            } else {
-                seekTimelineToCursor(line, col);
-            }
-            return true;
+        const bool ctrlLeftClick = mouseEvent->button() == Qt::LeftButton
+            && (mouseEvent->modifiers() & Qt::ControlModifier);
+        if (ctrlLeftClick) {
+            editorCtrlLeftJumpPending_ = true;
+            editorCtrlLeftJumpDragged_ = false;
+            editorCtrlLeftJumpPressPos_ = mouseEvent->pos();
+        } else if (mouseEvent->button() == Qt::LeftButton) {
+            editorCtrlLeftJumpPending_ = false;
+            editorCtrlLeftJumpDragged_ = false;
         }
-        if (mouseEvent->button() == Qt::LeftButton && !qtPreviewPlaying_) {
+        if (mouseEvent->button() == Qt::LeftButton && !qtPreviewPlaying_ && !ctrlLeftClick) {
             QTimer::singleShot(0, this, [this]() {
                 syncTimelineToEditorCursor(true);
             });
+        }
+    }
+    if (watched == editorViewport_ && event->type() == QEvent::MouseMove && editorCtrlLeftJumpPending_) {
+        auto* mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent->buttons().testFlag(Qt::LeftButton)
+            && (mouseEvent->pos() - editorCtrlLeftJumpPressPos_).manhattanLength() >= QApplication::startDragDistance()) {
+            editorCtrlLeftJumpDragged_ = true;
+        }
+    }
+    if (watched == editorViewport_ && event->type() == QEvent::MouseButtonRelease) {
+        auto* mouseEvent = static_cast<QMouseEvent*>(event);
+        if (mouseEvent->button() == Qt::LeftButton && editorCtrlLeftJumpPending_) {
+            const bool shouldJump = !editorCtrlLeftJumpDragged_
+                && (mouseEvent->modifiers() & Qt::ControlModifier);
+            const QPoint releasePos = mouseEvent->pos();
+            editorCtrlLeftJumpPending_ = false;
+            editorCtrlLeftJumpDragged_ = false;
+            if (shouldJump) {
+                QTimer::singleShot(0, this, [this, releasePos]() {
+                    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
+                    if (editor == nullptr) {
+                        return;
+                    }
+                    const QTextCursor cursor = editor->cursorForPosition(releasePos);
+                    const int line = cursor.blockNumber() + 1;
+                    const int col = cursor.positionInBlock() + 1;
+                    const double second = timelineSecondForCursor(line, col);
+                    if (second >= 0.0) {
+                        if (qtPreviewPlaying_) {
+                            stopQtPreviewPlayback(true);
+                        }
+                        schedulePreviewSeek(second, true);
+                    } else {
+                        seekTimelineToCursor(line, col);
+                    }
+                });
+            }
         }
     }
     if (watched == editorViewport_ && event->type() == QEvent::FocusIn && !qtPreviewPlaying_) {
@@ -2146,11 +2191,76 @@ void MainWindow::loadProjectRenderState()
     } else if (root.value("preview_audio").isObject()) {
         previewAudioSettings_ = PreviewAudioSettings::fromJson(root.value("preview_audio").toObject());
     }
+    const QJsonObject render = root.value("render").toObject();
+    if (!render.isEmpty()) {
+        const double legacyBrightness = qBound(
+            0.0,
+            render.value("background_brightness").toDouble(previewBackgroundBrightnessOuter_),
+            1.0
+        );
+        if (render.value("background_brightness_outer").isDouble()) {
+            previewBackgroundBrightnessOuter_ =
+                qBound(0.0, render.value("background_brightness_outer").toDouble(legacyBrightness), 1.0);
+        } else {
+            previewBackgroundBrightnessOuter_ = legacyBrightness;
+        }
+        if (render.value("background_brightness_inner").isDouble()) {
+            previewBackgroundBrightnessInner_ =
+                qBound(0.0, render.value("background_brightness_inner").toDouble(previewBackgroundBrightnessOuter_), 1.0);
+        } else {
+            previewBackgroundBrightnessInner_ = previewBackgroundBrightnessOuter_;
+        }
+        if (render.value("layout_square_scale").isDouble()) {
+            previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(
+                render.value("layout_square_scale").toDouble(previewLayoutSquareScale_)
+            );
+        }
+        if (render.value("smooth_brightness").isBool()) {
+            previewSmoothBrightness_ = render.value("smooth_brightness").toBool(previewSmoothBrightness_);
+        }
+        const QString scaleMode = render.value("background_scale_mode").toString().trimmed().toLower();
+        if (scaleMode == QLatin1String("fit") || scaleMode == QLatin1String("contain")) {
+            previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FitContain;
+        } else if (!scaleMode.isEmpty()) {
+            previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
+        }
+        if (render.value("note_flow_speed").isDouble()) {
+            previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(
+                render.value("note_flow_speed").toDouble(previewNoteFlowSpeed_)
+            );
+        }
+        if (render.value("show_debug_info").isBool()) {
+            previewShowDebugInfo_ = render.value("show_debug_info").toBool(previewShowDebugInfo_);
+        }
+        if (render.value("show_timestamp").isBool()) {
+            previewShowTimestamp_ = render.value("show_timestamp").toBool(previewShowTimestamp_);
+        }
+        if (render.value("auto_restore_square_after_export").isBool()) {
+            previewAutoRestoreSquareAfterExport_ =
+                render.value("auto_restore_square_after_export").toBool(previewAutoRestoreSquareAfterExport_);
+        }
+        if (render.value("canvas_aspect_ratio").isDouble()) {
+            setPreviewCanvasAspectRatio(render.value("canvas_aspect_ratio").toDouble(previewCanvasAspectRatio_), false);
+        }
+    }
     const int savedDifficultyId = root.value("last_opened_difficulty").toInt(0);
     if (SimaiDocument::isDifficultyId(savedDifficultyId)) {
         projectLastOpenedDifficultyId_ = savedDifficultyId;
     }
     previewAudioSettings_.normalize();
+    if (previewMediaController_ != nullptr) {
+        previewMediaController_->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
+    }
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
+        previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
+        previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
+        previewCanvas_->setSmoothBrightness(previewSmoothBrightness_);
+        previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
+        previewCanvas_->setNoteFlowSpeed(previewNoteFlowSpeed_);
+        previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
+        previewCanvas_->setShowTimestamp(previewShowTimestamp_);
+    }
 }
 
 void MainWindow::saveProjectRenderState() const
@@ -2167,6 +2277,24 @@ void MainWindow::saveProjectRenderState() const
 
     QJsonObject root;
     root.insert("audio", previewAudioSettings_.toJson());
+    QJsonObject render;
+    render.insert("background_brightness", previewBackgroundBrightnessOuter_);
+    render.insert("background_brightness_outer", previewBackgroundBrightnessOuter_);
+    render.insert("background_brightness_inner", previewBackgroundBrightnessInner_);
+    render.insert("layout_square_scale", previewLayoutSquareScale_);
+    render.insert("smooth_brightness", previewSmoothBrightness_);
+    render.insert(
+        "background_scale_mode",
+        previewBackgroundScaleMode_ == PreviewBackgroundScaleMode::FitContain
+            ? QStringLiteral("fit")
+            : QStringLiteral("fill")
+    );
+    render.insert("note_flow_speed", previewNoteFlowSpeed_);
+    render.insert("show_debug_info", previewShowDebugInfo_);
+    render.insert("show_timestamp", previewShowTimestamp_);
+    render.insert("canvas_aspect_ratio", previewCanvasAspectRatio_);
+    render.insert("auto_restore_square_after_export", previewAutoRestoreSquareAfterExport_);
+    root.insert("render", render);
     root.insert("last_opened_difficulty", projectLastOpenedDifficultyId_);
     root.insert("schema", "miacode_render_settings_v1");
     const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Indented);
@@ -2612,6 +2740,50 @@ void MainWindow::onRotate45Clockwise()
     });
 }
 
+void MainWindow::onToggleBreakSelection()
+{
+    if (!hasActiveDifficulty()) {
+        statusBar()->showMessage("Select a difficulty field first.");
+        return;
+    }
+    applySelectionBatchTransform("Toggle Break", [](const QString& text, int* changedCount) {
+        return miacode::chart_transform::toggleBreakForSelection(text, changedCount);
+    });
+}
+
+void MainWindow::onToggleExSelection()
+{
+    if (!hasActiveDifficulty()) {
+        statusBar()->showMessage("Select a difficulty field first.");
+        return;
+    }
+    applySelectionBatchTransform("Toggle EX", [](const QString& text, int* changedCount) {
+        return miacode::chart_transform::toggleExForSelection(text, changedCount);
+    });
+}
+
+void MainWindow::onToggleFireworkSelection()
+{
+    if (!hasActiveDifficulty()) {
+        statusBar()->showMessage("Select a difficulty field first.");
+        return;
+    }
+    applySelectionBatchTransform("Toggle Firework", [](const QString& text, int* changedCount) {
+        return miacode::chart_transform::toggleFireworkForSelection(text, changedCount);
+    });
+}
+
+void MainWindow::onRandomRotateSelection()
+{
+    if (!hasActiveDifficulty()) {
+        statusBar()->showMessage("Select a difficulty field first.");
+        return;
+    }
+    applySelectionBatchTransform("Random Rotate", [](const QString& text, int* changedCount) {
+        return miacode::chart_transform::randomRotateForSelection(text, changedCount);
+    });
+}
+
 void MainWindow::bootstrapPreviewWindow()
 {
     const QString scriptPath = resolvePreviewSessionScriptPath();
@@ -3014,6 +3186,7 @@ void MainWindow::onExportPreviewVideo()
     task.layoutSquareScale = previewLayoutSquareScale_;
     task.smoothBrightness = previewSmoothBrightness_;
     task.backgroundScaleMode = previewBackgroundScaleMode_;
+    task.noteFlowSpeed = previewNoteFlowSpeed_;
     task.exportStartSeconds = 0.0;
     task.contentDurationSeconds = qMax(0.0, previewDurationSeconds());
     const double currentAspect = normalizedPreviewCanvasAspectRatio(previewCanvasAspectRatio_);
@@ -3090,6 +3263,7 @@ void MainWindow::onExportPreviewVideo()
                 previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
                 previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
             }
+            saveProjectRenderState();
             savePortableState();
         },
         [this](double scale) {
@@ -3097,6 +3271,7 @@ void MainWindow::onExportPreviewVideo()
             if (previewCanvas_ != nullptr) {
                 previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
             }
+            saveProjectRenderState();
             savePortableState();
         },
         [this](bool smooth) {
@@ -3104,6 +3279,7 @@ void MainWindow::onExportPreviewVideo()
             if (previewCanvas_ != nullptr) {
                 previewCanvas_->setSmoothBrightness(previewSmoothBrightness_);
             }
+            saveProjectRenderState();
             savePortableState();
         },
         [this](PreviewBackgroundScaleMode mode) {
@@ -3111,6 +3287,15 @@ void MainWindow::onExportPreviewVideo()
             if (previewCanvas_ != nullptr) {
                 previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
             }
+            saveProjectRenderState();
+            savePortableState();
+        },
+        [this](double flowSpeed) {
+            previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
+            if (previewCanvas_ != nullptr) {
+                previewCanvas_->setNoteFlowSpeed(previewNoteFlowSpeed_);
+            }
+            saveProjectRenderState();
             savePortableState();
         },
         this
@@ -3317,6 +3502,7 @@ bool MainWindow::exportPreviewVideoFromCli(
     task.layoutSquareScale = previewLayoutSquareScale_;
     task.smoothBrightness = previewSmoothBrightness_;
     task.backgroundScaleMode = previewBackgroundScaleMode_;
+    task.noteFlowSpeed = previewNoteFlowSpeed_;
     task.exportStartSeconds = exportStartSeconds;
     task.contentDurationSeconds = contentDurationSeconds;
     task.outputWidth = request.outputWidth;
@@ -3584,6 +3770,35 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         &layoutSquareScaleSlider,
         &layoutSquareScaleLabel
     );
+    double selectedFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(previewNoteFlowSpeed_);
+    const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
+    const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
+    const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
+    const int flowSpeedOptionCount = qRound((flowSpeedMax - flowSpeedMin) / flowSpeedStep);
+    selectedFlowSpeed = qBound(
+        flowSpeedMin,
+        flowSpeedMin + qRound((selectedFlowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
+        flowSpeedMax
+    );
+    QString selectedFlowSpeedLabel = QString::number(selectedFlowSpeed, 'f', 1);
+    auto* flowSpeedButton = createDialogMenuButton(videoGroup, selectedFlowSpeedLabel);
+    auto* flowSpeedMenu = new QMenu(flowSpeedButton);
+    styleRoundedMenu(*flowSpeedMenu);
+    for (int optionIndex = 0; optionIndex <= flowSpeedOptionCount; ++optionIndex) {
+        const double flowSpeed = flowSpeedMin + optionIndex * flowSpeedStep;
+        const QString label = QString::number(flowSpeed, 'f', 1);
+        addDialogMenuChoice(flowSpeedMenu, label, [&, flowSpeed, label]() {
+            selectedFlowSpeed = flowSpeed;
+            flowSpeedButton->setText(label);
+            previewNoteFlowSpeed_ = selectedFlowSpeed;
+            if (previewCanvas_ != nullptr) {
+                previewCanvas_->setNoteFlowSpeed(selectedFlowSpeed);
+            }
+            saveProjectRenderState();
+            savePortableState();
+        });
+    }
+    flowSpeedButton->setMenu(flowSpeedMenu);
 
     const QString scaleFillLabel = uiText("dialog.render_settings.video.scale.fill", "Fill (crop if needed)");
     const QString scaleFitLabel = uiText("dialog.render_settings.video.scale.fit", "Fit (keep full image, may letterbox)");
@@ -3601,6 +3816,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setBackgroundScaleMode(selectedScaleMode);
         }
+        saveProjectRenderState();
         savePortableState();
     });
     addDialogMenuChoice(scaleModeMenu, scaleFitLabel, [&, scaleFitLabel]() {
@@ -3610,6 +3826,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setBackgroundScaleMode(selectedScaleMode);
         }
+        saveProjectRenderState();
         savePortableState();
     });
     scaleModeButton->setMenu(scaleModeMenu);
@@ -3666,6 +3883,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_outer", "Outer Brightness"), outerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Inner Brightness"), innerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Layout Size"), layoutSquareScaleRow);
+    videoFormLayout->addRow(uiText("dialog.render_settings.video.flow_speed", "Flow Speed"), flowSpeedButton);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.scale_mode", "Background / PV Scale Mode"), scaleModeButton);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.canvas_aspect", "Preview Canvas Aspect"), canvasAspectButton);
     auto* videoCheckRow = new QWidget(videoGroup);
@@ -3767,7 +3985,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     });
 
     connect(restoreButton, &QPushButton::clicked, &dialog, [this, bgmSlider, answerSlider, slideSlider, breakSlider, exSlider, touchSlider, touchholdSlider, fireworkSlider]() {
-        removeProjectRenderState();
         previewAudioSettings_ = softwarePreviewAudioSettings_;
         previewAudioSettings_.normalize();
         {
@@ -3782,6 +3999,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
             fireworkSlider->setValue(previewAudioSettings_.fireworkPercent());
         }
         applyPreviewAudioSettingsToRuntime();
+        saveProjectRenderState();
         sendPreviewConfigCommand();
         statusBar()->showMessage(uiText("status.audio_restored_default", "Project audio restored to software defaults."));
     });
@@ -3831,6 +4049,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
         }
+        saveProjectRenderState();
         savePortableState();
     });
     connect(innerBrightnessSlider, &QSlider::valueChanged, &dialog, [this, innerBrightnessLabel](int value) {
@@ -3839,6 +4058,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
         }
+        saveProjectRenderState();
         savePortableState();
     });
     connect(layoutSquareScaleSlider, &QSlider::valueChanged, &dialog, [this, layoutSquareScaleLabel](int value) {
@@ -3847,10 +4067,12 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
         }
+        saveProjectRenderState();
         savePortableState();
     });
     connect(restoreSquareCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
         previewAutoRestoreSquareAfterExport_ = checked;
+        saveProjectRenderState();
         savePortableState();
     });
     connect(smoothBrightnessCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
@@ -3858,6 +4080,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setSmoothBrightness(previewSmoothBrightness_);
         }
+        saveProjectRenderState();
         savePortableState();
     });
     connect(timestampCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
@@ -3865,6 +4088,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setShowTimestamp(previewShowTimestamp_);
         }
+        saveProjectRenderState();
         savePortableState();
     });
 
@@ -3873,6 +4097,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
         }
+        saveProjectRenderState();
         savePortableState();
     });
 
