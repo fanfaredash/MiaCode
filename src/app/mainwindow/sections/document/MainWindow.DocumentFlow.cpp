@@ -102,15 +102,53 @@ void MainWindow::onNewFile()
     if (!maybeSaveBeforeContinue()) {
         return;
     }
-    loadDocument(SimaiDocument::createEmpty());
+
+    const QString targetDirectory = QFileDialog::getExistingDirectory(
+        this,
+        UiText::isChineseUi() ? QStringLiteral("选择谱面文件夹") : QStringLiteral("Select Chart Folder"),
+        resolveInitialOpenDirectory(),
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
+    );
+    if (targetDirectory.isEmpty()) {
+        return;
+    }
+
+    const QString normalizedDirectory = QDir::cleanPath(targetDirectory);
+    const QString targetPath = QDir(normalizedDirectory).filePath(QStringLiteral("maidata.txt"));
+    if (QFileInfo::exists(targetPath)) {
+        const QMessageBox::StandardButton choice = QMessageBox::warning(
+            this,
+            UiText::isChineseUi() ? QStringLiteral("文件已存在") : QStringLiteral("File Already Exists"),
+            UiText::isChineseUi()
+                ? QStringLiteral("所选文件夹下已存在 maidata.txt，是否覆盖？")
+                : QStringLiteral("maidata.txt already exists in the selected folder. Overwrite it?"),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No
+        );
+        if (choice != QMessageBox::Yes) {
+            return;
+        }
+    }
+
+    const SimaiDocument newDocument = SimaiDocument::createEmpty();
+    QStringEncoder encoder(QStringConverter::Utf8);
+    const QByteArray payload = encoder.encode(newDocument.toText());
+    QSaveFile file(targetPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::critical(this, "Create Failed", "Cannot write file:\n" + targetPath);
+        return;
+    }
+    if (file.write(payload) != payload.size() || !file.commit()) {
+        QMessageBox::critical(this, "Create Failed", "Write failed:\n" + targetPath);
+        return;
+    }
+
+    loadDocument(newDocument);
     clearValidationCache();
     currentEncoding_ = TextEncoding::Utf8;
-    setCurrentFilePath(QString());
+    setCurrentFilePath(targetPath);
     refreshValidationPanelForActiveField();
-    if (previewMediaController_ != nullptr) {
-        previewMediaController_->setChartPath(QString());
-    }
-    statusBar()->showMessage("New file.");
+    statusBar()->showMessage(QString("Created: %1").arg(targetPath));
 }
 
 void MainWindow::onOpenFile()
@@ -437,22 +475,12 @@ bool MainWindow::applySelectionBatchTransform(const QString& opName, const Batch
     editCursor.insertText(transformed);
     editCursor.endEditBlock();
 
-    const int replacedLength = finish - begin;
-    const int delta = transformed.size() - replacedLength;
-    const auto remapPos = [begin, finish, delta, &transformed](int pos) -> int {
-        if (pos <= begin) {
-            return pos;
-        }
-        if (pos >= finish) {
-            return pos + delta;
-        }
-        return begin + qBound(0, pos - begin, transformed.size());
-    };
-
     QTextCursor restoredCursor(editor->document());
     const int maxPos = editor->document()->characterCount() - 1;
-    const int restoredAnchor = qBound(0, remapPos(oldCursor.anchor()), maxPos);
-    const int restoredPosition = qBound(0, remapPos(oldCursor.position()), maxPos);
+    const int transformedEnd = begin + transformed.size();
+    const bool forwardSelection = oldCursor.position() >= oldCursor.anchor();
+    const int restoredAnchor = qBound(0, forwardSelection ? begin : transformedEnd, maxPos);
+    const int restoredPosition = qBound(0, forwardSelection ? transformedEnd : begin, maxPos);
     restoredCursor.setPosition(restoredAnchor);
     restoredCursor.setPosition(restoredPosition, QTextCursor::KeepAnchor);
     editor->setTextCursor(restoredCursor);
@@ -644,6 +672,18 @@ void MainWindow::updateDifficultyScopedActionStates()
     }
     if (transformRotate45ClockwiseAction_ != nullptr) {
         transformRotate45ClockwiseAction_->setEnabled(enabled);
+    }
+    if (transformToggleBreakAction_ != nullptr) {
+        transformToggleBreakAction_->setEnabled(enabled);
+    }
+    if (transformToggleExAction_ != nullptr) {
+        transformToggleExAction_->setEnabled(enabled);
+    }
+    if (transformToggleFireworkAction_ != nullptr) {
+        transformToggleFireworkAction_->setEnabled(enabled);
+    }
+    if (transformRandomRotateAction_ != nullptr) {
+        transformRandomRotateAction_->setEnabled(enabled);
     }
     if (stopPreviewButton_ != nullptr) {
         stopPreviewButton_->setEnabled(enabled);

@@ -98,6 +98,12 @@
     } else {
         previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     }
+    if (preview.value("note_flow_speed").isDouble()) {
+        previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(
+            preview.value("note_flow_speed").toDouble(previewNoteFlowSpeed_));
+    } else {
+        previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    }
     if (preview.value("show_debug_info").isBool()) {
         previewShowDebugInfo_ = preview.value("show_debug_info").toBool(false);
     }
@@ -169,6 +175,7 @@ void MainWindow::savePortableState() const
             ? QStringLiteral("fit")
             : QStringLiteral("fill")
     );
+    preview.insert("note_flow_speed", previewNoteFlowSpeed_);
     preview.insert("show_debug_info", previewShowDebugInfo_);
     preview.insert("show_timestamp", previewShowTimestamp_);
     preview.insert("canvas_aspect_ratio", previewCanvasAspectRatio_);

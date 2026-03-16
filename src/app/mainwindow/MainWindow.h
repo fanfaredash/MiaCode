@@ -7,12 +7,14 @@
 #include <QHash>
 #include <QMainWindow>
 #include <QPointer>
+#include <QPoint>
 #include <QVector>
 
 #include "PreviewAudioSettings.h"
 #include "PreviewRenderSettings.h"
 #include "SimaiDocument.h"
 #include "TimelineView.h"
+#include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
 
 class QAction;
@@ -97,6 +99,10 @@ private slots:
     void onRotate180();
     void onRotate45CounterClockwise();
     void onRotate45Clockwise();
+    void onToggleBreakSelection();
+    void onToggleExSelection();
+    void onToggleFireworkSelection();
+    void onRandomRotateSelection();
     void onStopPreview();
     void onTogglePreviewPause();
     void onToggleJudgeMarkers(bool checked);
@@ -320,6 +326,10 @@ private:
     QAction* transformRotate180Action_ = nullptr;
     QAction* transformRotate45CounterClockwiseAction_ = nullptr;
     QAction* transformRotate45ClockwiseAction_ = nullptr;
+    QAction* transformToggleBreakAction_ = nullptr;
+    QAction* transformToggleExAction_ = nullptr;
+    QAction* transformToggleFireworkAction_ = nullptr;
+    QAction* transformRandomRotateAction_ = nullptr;
     QAction* findReplaceAction_ = nullptr;
     QAction* stopPreviewAction_ = nullptr;
     QAction* pausePreviewAction_ = nullptr;
@@ -367,6 +377,9 @@ private:
     bool suppressTimelineCursorSync_ = false;
     bool suppressTextDirtyTracking_ = false;
     bool autoRestoreLastSessionFile_ = true;
+    bool editorCtrlLeftJumpPending_ = false;
+    bool editorCtrlLeftJumpDragged_ = false;
+    QPoint editorCtrlLeftJumpPressPos_;
     int previewSeekHeldArrowKey_ = 0;
     QElapsedTimer previewSeekHeldArrowElapsed_;
     double qtPreviewStartSecond_ = 0.0;
@@ -391,6 +404,7 @@ private:
     double previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
     bool previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
     PreviewBackgroundScaleMode previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
+    double previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     double previewCanvasAspectRatio_ = 1.0;
     bool previewAutoRestoreSquareAfterExport_ = true;
     bool previewShowDebugInfo_ = false;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common/LayoutRingConfig.h"
+#include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "PreviewRenderSettings.h"
 #include "PreviewGLRenderer.h"
@@ -46,6 +47,8 @@ public:
     void setLayoutSquareScale(double scale);
     void setSmoothBrightness(bool smooth);
     void setBackgroundScaleMode(PreviewBackgroundScaleMode mode);
+    void setNoteFlowSpeed(double flowSpeed);
+    double noteFlowSpeed() const;
     void setShowDebugInfo(bool show);
     void setShowTimestamp(bool show);
     void setShowObjectStatsHud(bool show);
@@ -119,6 +122,10 @@ private:
         qreal angleDegrees = 0.0;
         qreal opacity = 1.0;
         QRectF sourceRect;
+    };
+    struct TapApproachSample {
+        qreal distance = 0.0;
+        qreal scale = 0.0;
     };
 
     const QImage* selectTapImage(const TimelineNoteMarker& marker) const;
@@ -206,6 +213,9 @@ private:
     void drawTouchMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect, int overlapCount);
     void drawTapMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect);
     void drawHoldMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect);
+    TapApproachSample sampleTapApproach(qreal deltaSeconds) const;
+    qreal sampleSlideTrackPreTraceOpacity(qreal markerSecond, qreal playheadSecond) const;
+    void refreshTimingFromFlowSpeed();
     void renderCanvas(QPainter& painter);
     void renderCanvas(
         QPainter& painter,
@@ -317,6 +327,13 @@ private:
     double layoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
     bool smoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
     PreviewBackgroundScaleMode backgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
+    double noteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    double tapLifecycleDurationSeconds_ = miacode::preview_gameplay::kTapLifecycleDurationSeconds;
+    double tapSpawnDurationSeconds_ = miacode::preview_gameplay::kTapSpawnDurationSeconds;
+    double tapFlyDurationSeconds_ = miacode::preview_gameplay::kTapFlyDurationSeconds;
+    double tapUnitsPerSecond_ = miacode::preview_gameplay::kTapUnitsPerSecond;
+    double slideTrackAppearLeadInSeconds_ = miacode::preview_gameplay::kSlideTrackAppearLeadInSeconds;
+    double slideTrackFullBrightLeadInSeconds_ = miacode::preview_gameplay::kSlideTrackFullBrightLeadInSeconds;
     QElapsedTimer fpsTimer_;
     int fpsFrameCounter_ = 0;
     double fpsDisplay_ = 0.0;

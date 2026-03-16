@@ -491,10 +491,11 @@ struct ObjectTraceItem {
 constexpr double kDiagTapUnitsPerSecond = miacode::preview_gameplay::kTapUnitsPerSecond;
 constexpr double kDiagLogicalDistanceEdge = miacode::preview_gameplay::kLogicalDistanceEdge;
 constexpr double kDiagLogicalDistanceTap = miacode::preview_gameplay::kLogicalDistanceTap;
-constexpr double kDiagTapScaleSlope = miacode::preview_gameplay::kDistanceToScaleSlope;
-constexpr double kDiagTapScaleOffset = miacode::preview_gameplay::kDistanceToScaleOffset;
+constexpr double kDiagTapLifecycleDurationSeconds = miacode::preview_gameplay::kTapLifecycleDurationSeconds;
+constexpr double kDiagTapSpawnDurationSeconds = miacode::preview_gameplay::kTapSpawnDurationSeconds;
+constexpr double kDiagTapFlyDurationSeconds = miacode::preview_gameplay::kTapFlyDurationSeconds;
 constexpr double kDiagTouchDurationSeconds = miacode::preview_gameplay::kTouchDurationSeconds;
-constexpr double kDiagSlideTrackFadeInSeconds = miacode::preview_gameplay::kSlideTrackFadeInSeconds;
+constexpr double kDiagSlideTrackAppearLeadInSeconds = miacode::preview_gameplay::kSlideTrackAppearLeadInSeconds;
 constexpr double kDiagJudgeEffectDurationSeconds = miacode::preview_gameplay::kJudgeEffectDurationSeconds;
 constexpr double kDiagJudgeEffectTouchDurationSeconds = miacode::preview_gameplay::kJudgeEffectTouchDurationSeconds;
 constexpr double kDiagJudgeEffectFireworkTouchTriggerDelaySeconds =
@@ -531,13 +532,47 @@ double envDoubleValue(const QString& key, double defaultValue)
     return ok ? value : defaultValue;
 }
 
+struct DiagTapApproachSample {
+    double distance = kDiagLogicalDistanceTap;
+    double scale = 0.0;
+};
+
+DiagTapApproachSample diagSampleTapApproach(double deltaSeconds)
+{
+    DiagTapApproachSample sample;
+    if (deltaSeconds <= -kDiagTapLifecycleDurationSeconds) {
+        return sample;
+    }
+    if (deltaSeconds < -kDiagTapFlyDurationSeconds) {
+        const double progress = qBound(
+            0.0,
+            (deltaSeconds + kDiagTapLifecycleDurationSeconds) / qMax(0.001, kDiagTapSpawnDurationSeconds),
+            1.0
+        );
+        sample.scale = progress;
+        return sample;
+    }
+    if (deltaSeconds < 0.0) {
+        const double flightProgress = qBound(
+            0.0,
+            (deltaSeconds + kDiagTapFlyDurationSeconds) / qMax(0.001, kDiagTapFlyDurationSeconds),
+            1.0
+        );
+        sample.distance = kDiagLogicalDistanceTap + (kDiagLogicalDistanceEdge - kDiagLogicalDistanceTap) * flightProgress;
+        sample.scale = 1.0;
+        return sample;
+    }
+    sample.distance = kDiagLogicalDistanceEdge;
+    sample.scale = 1.0;
+    return sample;
+}
+
 bool diagTapSpriteVisible(double deltaSeconds)
 {
     if (deltaSeconds > 0.0) {
         return false;
     }
-    const double distance = deltaSeconds * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
-    return distance * kDiagTapScaleSlope + kDiagTapScaleOffset >= 0.0;
+    return diagSampleTapApproach(deltaSeconds).scale > 0.0;
 }
 
 bool diagSlideHeadVisible(double deltaSeconds)
@@ -545,8 +580,7 @@ bool diagSlideHeadVisible(double deltaSeconds)
     if (deltaSeconds >= 0.0) {
         return false;
     }
-    const double distance = deltaSeconds * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
-    return distance * kDiagTapScaleSlope + kDiagTapScaleOffset >= 0.0;
+    return diagSampleTapApproach(deltaSeconds).scale > 0.0;
 }
 
 QPointF diagLaneUnitVector(int lane)
@@ -634,16 +668,14 @@ QVector<ObjectTraceItem> collectVisibleObjectTrace(
             if (delta > 0.0) {
                 continue;
             }
-            const double distance = delta * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
-            const double scale = distance * kDiagTapScaleSlope + kDiagTapScaleOffset;
-            if (scale < 0.0) {
+            const DiagTapApproachSample approach = diagSampleTapApproach(delta);
+            if (approach.scale <= 0.0) {
                 continue;
             }
             const QPointF lane = diagLaneUnitVector(marker.lane);
-            const double renderedDistance = distance < kDiagLogicalDistanceTap ? kDiagLogicalDistanceTap : distance;
             const QPointF logical(
-                kDiagLogicalCanvasCenter + lane.x() * renderedDistance,
-                kDiagLogicalCanvasCenter + lane.y() * renderedDistance
+                kDiagLogicalCanvasCenter + lane.x() * approach.distance,
+                kDiagLogicalCanvasCenter + lane.y() * approach.distance
             );
             ObjectTraceItem item;
             item.key = keyBase;
@@ -663,13 +695,12 @@ QVector<ObjectTraceItem> collectVisibleObjectTrace(
             if (deltaEnd > 0.0) {
                 continue;
             }
-            double distance = delta * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
-            const double scale = distance * kDiagTapScaleSlope + kDiagTapScaleOffset;
-            if (scale < 0.0) {
+            const DiagTapApproachSample headApproach = diagSampleTapApproach(delta);
+            if (headApproach.scale <= 0.0) {
                 continue;
             }
             const QPointF lane = diagLaneUnitVector(marker.lane);
-            if (distance < kDiagLogicalDistanceTap) {
+            if (delta < -kDiagTapFlyDurationSeconds) {
                 const QPointF logical(
                     kDiagLogicalCanvasCenter + lane.x() * kDiagLogicalDistanceTap,
                     kDiagLogicalCanvasCenter + lane.y() * kDiagLogicalDistanceTap
@@ -682,7 +713,7 @@ QVector<ObjectTraceItem> collectVisibleObjectTrace(
                 items.append(item);
                 continue;
             }
-            distance = qBound(kDiagLogicalDistanceTap, distance, kDiagLogicalDistanceEdge);
+            const double distance = headApproach.distance;
             double distanceEnd = deltaEnd * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
             distanceEnd = qBound(kDiagLogicalDistanceTap, distanceEnd, kDiagLogicalDistanceEdge);
             const QPointF logicalHead(
@@ -713,15 +744,12 @@ QVector<ObjectTraceItem> collectVisibleObjectTrace(
             if (marker.hasHeadStar) {
                 const double delta = playheadSecond - marker.second;
                 if (delta < 0.0) {
-                    const double distance = delta * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
-                    const double scale = distance * kDiagTapScaleSlope + kDiagTapScaleOffset;
-                    if (scale >= 0.0) {
+                    const DiagTapApproachSample approach = diagSampleTapApproach(delta);
+                    if (approach.scale > 0.0) {
                         const QPointF lane = diagLaneUnitVector(marker.lane);
-                        const double renderedDistance =
-                            distance < kDiagLogicalDistanceTap ? kDiagLogicalDistanceTap : distance;
                         const QPointF logical(
-                            kDiagLogicalCanvasCenter + lane.x() * renderedDistance,
-                            kDiagLogicalCanvasCenter + lane.y() * renderedDistance
+                            kDiagLogicalCanvasCenter + lane.x() * approach.distance,
+                            kDiagLogicalCanvasCenter + lane.y() * approach.distance
                         );
                         ObjectTraceItem headStar;
                         headStar.key = keyBase + QStringLiteral(":head_pre");
@@ -794,15 +822,12 @@ QVector<ObjectTraceItem> collectVisibleObjectTrace(
             if (marker.hasHeadStar) {
                 const double delta = playheadSecond - marker.second;
                 if (delta < 0.0) {
-                    const double distance = delta * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
-                    const double scale = distance * kDiagTapScaleSlope + kDiagTapScaleOffset;
-                    if (scale >= 0.0) {
+                    const DiagTapApproachSample approach = diagSampleTapApproach(delta);
+                    if (approach.scale > 0.0) {
                         const QPointF lane = diagLaneUnitVector(marker.lane);
-                        const double renderedDistance =
-                            distance < kDiagLogicalDistanceTap ? kDiagLogicalDistanceTap : distance;
                         const QPointF logical(
-                            kDiagLogicalCanvasCenter + lane.x() * renderedDistance,
-                            kDiagLogicalCanvasCenter + lane.y() * renderedDistance
+                            kDiagLogicalCanvasCenter + lane.x() * approach.distance,
+                            kDiagLogicalCanvasCenter + lane.y() * approach.distance
                         );
                         ObjectTraceItem headStar;
                         headStar.key = keyBase + QStringLiteral(":head_pre");
@@ -908,10 +933,10 @@ FrameLayerActivityStats estimateFrameLayerActivity(
     for (const TimelineNoteMarker& marker : markers) {
         if (marker.type == QLatin1String("tap")) {
             const double delta = playheadSecond - marker.second;
-            if (diagTapSpriteVisible(delta)) {
+            const DiagTapApproachSample approach = diagSampleTapApproach(delta);
+            if (delta <= 0.0 && approach.scale > 0.0) {
                 ++stats.tapVisible;
-                const double distance = delta * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
-                if (distance < kDiagLogicalDistanceTap) {
+                if (approach.distance <= kDiagLogicalDistanceTap) {
                     ++stats.tapParked;
                 }
             }
@@ -943,8 +968,7 @@ FrameLayerActivityStats estimateFrameLayerActivity(
             const double delta = playheadSecond - marker.second;
             if (marker.hasHeadStar && diagSlideHeadVisible(delta)) {
                 ++stats.tapVisible;
-                const double distance = delta * kDiagTapUnitsPerSecond + kDiagLogicalDistanceEdge;
-                if (distance < kDiagLogicalDistanceTap) {
+                if (delta < -kDiagTapFlyDurationSeconds) {
                     ++stats.tapParked;
                 }
             }
@@ -959,7 +983,7 @@ FrameLayerActivityStats estimateFrameLayerActivity(
                 }
             }
             if (marker.availableSecond >= 0.0
-                && playheadSecond >= marker.availableSecond - kDiagSlideTrackFadeInSeconds
+                && playheadSecond >= marker.second - kDiagSlideTrackAppearLeadInSeconds
                 && !(marker.endSecond > marker.slideTraceSecond && playheadSecond >= marker.endSecond)) {
                 if (isWifi) {
                     ++stats.wifiTrackVisible;
@@ -3040,6 +3064,7 @@ VideoExportResult VideoExportController::exportFullPreview(
     exportCanvas.setLayoutSquareScale(task.layoutSquareScale);
     exportCanvas.setSmoothBrightness(task.smoothBrightness);
     exportCanvas.setBackgroundScaleMode(task.backgroundScaleMode);
+    exportCanvas.setNoteFlowSpeed(task.noteFlowSpeed);
     exportCanvas.setShowDebugInfo(false);
     exportCanvas.setNoteMarkers(exportMarkers);
     QOpenGLContext* shareContext = sourceCanvas->context();
@@ -3231,6 +3256,7 @@ VideoExportResult VideoExportController::exportFullPreview(
         diagReferenceCanvas.setLayoutSquareScale(task.layoutSquareScale);
         diagReferenceCanvas.setSmoothBrightness(task.smoothBrightness);
         diagReferenceCanvas.setBackgroundScaleMode(task.backgroundScaleMode);
+        diagReferenceCanvas.setNoteFlowSpeed(task.noteFlowSpeed);
         diagReferenceCanvas.setShowDebugInfo(false);
         diagReferenceCanvas.setNoteMarkers({});
         QString diagInitError;
@@ -3263,6 +3289,7 @@ VideoExportResult VideoExportController::exportFullPreview(
         diagCpuCompareCanvas.setLayoutSquareScale(task.layoutSquareScale);
         diagCpuCompareCanvas.setSmoothBrightness(task.smoothBrightness);
         diagCpuCompareCanvas.setBackgroundScaleMode(task.backgroundScaleMode);
+        diagCpuCompareCanvas.setNoteFlowSpeed(task.noteFlowSpeed);
         diagCpuCompareCanvas.setShowDebugInfo(false);
         diagCpuCompareCanvas.setNoteMarkers(exportMarkers);
         diagCpuCompareReady = true;

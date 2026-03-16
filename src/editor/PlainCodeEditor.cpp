@@ -122,6 +122,11 @@ void PlainCodeEditor::setBatchTransformActions(const QList<QAction*>& actions)
     batchTransformActions_ = actions;
 }
 
+void PlainCodeEditor::setMoreBatchTransformActions(const QList<QAction*>& actions)
+{
+    moreBatchTransformActions_ = actions;
+}
+
 int PlainCodeEditor::lineNumberAreaWidth() const
 {
     int digits = 1;
@@ -214,11 +219,10 @@ void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
     pasteAction->setEnabled(canPaste());
     connect(pasteAction, &QAction::triggered, this, &QTextEdit::paste);
 
-    if (!batchTransformActions_.isEmpty()) {
-        menu->addSeparator();
-        auto* transformMenu = menu->addMenu(QStringLiteral("批量操作"));
-        UiTheme::styleRoundedMenu(*transformMenu);
-        transformMenu->setStyleSheet(
+    const auto addStyledSubmenu = [&](const QString& title, const QList<QAction*>& actions) {
+        auto* submenu = menu->addMenu(title);
+        UiTheme::styleRoundedMenu(*submenu);
+        submenu->setStyleSheet(
             QStringLiteral(
                 "QMenu { background: %1; border: 1px solid %2; border-radius: 8px; padding: 7px; }"
                 "QMenu::item { padding: 4px 12px; margin: 1px 4px; min-height: 20px; border-radius: 6px; color: %3; background: transparent; }"
@@ -233,11 +237,27 @@ void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
                 .arg(c.menuDisabledText.name(QColor::HexRgb))
                 .arg(contextMenuSeparator.name(QColor::HexRgb))
         );
-        for (QAction* action : batchTransformActions_) {
+        for (QAction* action : actions) {
             if (action == nullptr) {
                 continue;
             }
-            transformMenu->addAction(action);
+            submenu->addAction(action);
+        }
+    };
+
+    if (!batchTransformActions_.isEmpty() || !moreBatchTransformActions_.isEmpty()) {
+        menu->addSeparator();
+        if (!batchTransformActions_.isEmpty()) {
+            addStyledSubmenu(
+                translated(QStringLiteral("context.batch_transform"), QStringLiteral("Batch Transform")),
+                batchTransformActions_
+            );
+        }
+        if (!moreBatchTransformActions_.isEmpty()) {
+            addStyledSubmenu(
+                translated(QStringLiteral("context.more_transform"), QStringLiteral("More...")),
+                moreBatchTransformActions_
+            );
         }
     }
 

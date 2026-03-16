@@ -124,7 +124,8 @@ void PreviewCanvas::drawTrackLayer(QPainter& painter, const QRectF& playfieldRec
         nativePaintingActive_ = true;
         painter.beginNativePainting();
     }
-    for (const TimelineNoteMarker& marker : noteMarkers_) {
+    for (qsizetype markerIndex = noteMarkers_.size() - 1; markerIndex >= 0; --markerIndex) {
+        const TimelineNoteMarker& marker = noteMarkers_[markerIndex];
         if (marker.type == "slide") {
             drawSlideTrack(painter, marker, playfieldRect);
         } else if (marker.type == "wifi") {
@@ -143,7 +144,8 @@ void PreviewCanvas::drawSlideMotionLayer(QPainter& painter, const QRectF& playfi
         nativePaintingActive_ = true;
         painter.beginNativePainting();
     }
-    for (const TimelineNoteMarker& marker : noteMarkers_) {
+    for (qsizetype markerIndex = noteMarkers_.size() - 1; markerIndex >= 0; --markerIndex) {
+        const TimelineNoteMarker& marker = noteMarkers_[markerIndex];
         if (marker.type == "slide") {
             drawSlideMarker(painter, marker, playfieldRect);
         } else if (marker.type == "wifi") {
@@ -1596,7 +1598,7 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
         );
     };
 
-    auto renderTailGuide = [&renderGuideImage](const QImage* image, int lane, qreal deltaSeconds) {
+    auto renderTailGuide = [this, &renderGuideImage](const QImage* image, int lane, qreal deltaSeconds) {
         const TapApproachSample approach = sampleTapApproach(deltaSeconds);
         if (approach.scale <= 0.0) {
             return;
@@ -1881,7 +1883,7 @@ void PreviewCanvas::drawHoldMarker(QPainter& painter, const TimelineNoteMarker& 
         return true;
     };
 
-    if (deltaSeconds < -kTapFlyDurationSeconds) {
+    if (deltaSeconds < -static_cast<qreal>(tapFlyDurationSeconds_)) {
         const QPointF logicalPoint(
             kLogicalCanvasCenter + unit.x() * kLogicalDistanceTap,
             kLogicalCanvasCenter + unit.y() * kLogicalDistanceTap
@@ -2350,7 +2352,7 @@ void PreviewCanvas::drawSlideTrack(QPainter& painter, const TimelineNoteMarker& 
 {
     if (marker.availableSecond < 0.0
         || marker.slideTrackAreaPoints.isEmpty()
-        || playheadSeconds_ < marker.availableSecond - kSlideTrackFadeInSeconds
+        || playheadSeconds_ < marker.second - slideTrackAppearLeadInSeconds_
         || (marker.endSecond > marker.slideTraceSecond && playheadSeconds_ >= marker.endSecond)) {
         return;
     }
@@ -2366,15 +2368,10 @@ void PreviewCanvas::drawSlideTrack(QPainter& painter, const TimelineNoteMarker& 
     qreal startProportion = 0.0;
     qreal opacity = 1.0;
     if (playheadSeconds_ < marker.slideTraceSecond) {
-        const qreal fadeStartSecond = marker.availableSecond - kSlideTrackFadeInSeconds;
-        if (playheadSeconds_ < fadeStartSecond) {
+        opacity = sampleSlideTrackPreTraceOpacity(marker.second, playheadSeconds_);
+        if (opacity < 0.0) {
             return;
         }
-        opacity = qBound<qreal>(
-            0.0,
-            (playheadSeconds_ - fadeStartSecond) / qMax(0.001, kSlideTrackFadeInSeconds),
-            1.0
-        );
     } else {
         if (kSlideTrackTrimMode == SlideTrackTrimMode::AreaImmediate
             && !marker.slideSegmentShootSeconds.isEmpty()
@@ -2500,7 +2497,7 @@ void PreviewCanvas::drawWifiTrack(QPainter& painter, const TimelineNoteMarker& m
 {
     if (marker.availableSecond < 0.0
         || marker.wifiTrackAreaPoints.isEmpty()
-        || playheadSeconds_ < marker.availableSecond - kSlideTrackFadeInSeconds
+        || playheadSeconds_ < marker.second - slideTrackAppearLeadInSeconds_
         || (marker.endSecond > marker.slideTraceSecond && playheadSeconds_ >= marker.endSecond)) {
         return;
     }
@@ -2508,12 +2505,11 @@ void PreviewCanvas::drawWifiTrack(QPainter& painter, const TimelineNoteMarker& m
     int startAreaIndex = 0;
     qreal startProportion = 0.0;
     int removedArrowCount = 0;
-    if (playheadSeconds_ < marker.availableSecond) {
-        const qreal fadeStartSecond = marker.availableSecond - kSlideTrackFadeInSeconds;
-        if (playheadSeconds_ < fadeStartSecond) {
+    if (playheadSeconds_ < marker.slideTraceSecond) {
+        opacity = sampleSlideTrackPreTraceOpacity(marker.second, playheadSeconds_);
+        if (opacity < 0.0) {
             return;
         }
-        opacity = qBound<qreal>(0.0, (playheadSeconds_ - fadeStartSecond) / kSlideTrackFadeInSeconds, 1.0);
     } else if (playheadSeconds_ >= marker.slideTraceSecond) {
         const qreal totalDuration = qMax(0.001, marker.endSecond - marker.slideTraceSecond);
         startProportion = qBound<qreal>(0.0, (playheadSeconds_ - marker.slideTraceSecond) / totalDuration, 1.0);

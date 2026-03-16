@@ -7,6 +7,7 @@
 #include "PreviewAudioSettings.h"
 #include "TimelineView.h"
 #include "common/PreviewVideoGeometryConfig.h"
+#include "common/PreviewGameplayConfig.h"
 
 class PreviewCanvas;
 class QProgressDialog;
@@ -22,6 +23,7 @@ struct VideoExportTask {
     double layoutSquareScale = miacode::preview_video::kLayoutSquareScaleDefault;
     bool smoothBrightness = miacode::preview_video::kSmoothBrightnessDefault;
     PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
+    double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     double exportStartSeconds = 0.0;
     double contentDurationSeconds = 0.0;
     int outputWidth = 1024;

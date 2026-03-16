@@ -66,6 +66,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/audio/PreviewAudioSettings.cpp
     src/preview/audio/QtPreviewSfxRuntime.h
     src/preview/audio/QtPreviewSfxRuntime.cpp
+    src/simai/transform/ChartBatchTransform.h
+    src/simai/transform/ChartBatchTransform.cpp
     src/simai/document/SimaiDocument.h
     src/simai/document/SimaiDocument.cpp
     src/simai/parser/SimaiNativeParser.h
@@ -169,6 +171,12 @@ if (MIACODE_BUILD_DEV_TOOLS)
         resources/fonts.qrc
     )
 
+    add_executable(chart_batch_transform_spec
+        src/tools/chart_transform/ChartBatchTransformSpec.cpp
+        src/simai/transform/ChartBatchTransform.h
+        src/simai/transform/ChartBatchTransform.cpp
+    )
+
     target_link_libraries(simai_native_dump PRIVATE
         Qt6::Core
         Qt6::Gui
@@ -208,6 +216,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/preview/video
         src/timeline
         src/tools
+    )
+
+    target_link_libraries(chart_batch_transform_spec PRIVATE
+        Qt6::Core
+    )
+    target_include_directories(chart_batch_transform_spec PRIVATE
+        src
+        src/simai
+        src/simai/transform
     )
 endif()
 

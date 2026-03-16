@@ -5,7 +5,7 @@
     }
 
     newAction_ = new QAction(uiText("action.new", "New"), this);
-    newAction_->setShortcut(QKeySequence::New);
+    newAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+N")));
     connect(newAction_, &QAction::triggered, this, &MainWindow::onNewFile);
     fileMenu->addAction(newAction_);
 
@@ -155,6 +155,27 @@
     connect(transformRotate45ClockwiseAction_, &QAction::triggered, this, &MainWindow::onRotate45Clockwise);
     transformMenu->addAction(transformRotate45ClockwiseAction_);
 
+    auto* moreTransformMenu = transformMenu->addMenu(uiText("action.transform.more", "More..."));
+    transformToggleBreakAction_ = new QAction(uiText("action.transform.toggle_break", "Toggle Break"), this);
+    transformToggleBreakAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_B));
+    connect(transformToggleBreakAction_, &QAction::triggered, this, &MainWindow::onToggleBreakSelection);
+    moreTransformMenu->addAction(transformToggleBreakAction_);
+
+    transformToggleExAction_ = new QAction(uiText("action.transform.toggle_ex", "Toggle EX"), this);
+    transformToggleExAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_N));
+    connect(transformToggleExAction_, &QAction::triggered, this, &MainWindow::onToggleExSelection);
+    moreTransformMenu->addAction(transformToggleExAction_);
+
+    transformToggleFireworkAction_ = new QAction(uiText("action.transform.toggle_firework", "Toggle Firework"), this);
+    transformToggleFireworkAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_M));
+    connect(transformToggleFireworkAction_, &QAction::triggered, this, &MainWindow::onToggleFireworkSelection);
+    moreTransformMenu->addAction(transformToggleFireworkAction_);
+
+    transformRandomRotateAction_ = new QAction(uiText("action.transform.random_rotate", "Random Rotate"), this);
+    transformRandomRotateAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma));
+    connect(transformRandomRotateAction_, &QAction::triggered, this, &MainWindow::onRandomRotateSelection);
+    moreTransformMenu->addAction(transformRandomRotateAction_);
+
     stopPreviewAction_ = new QAction(uiText("action.stop_preview", "Stop Preview"), this);
     stopPreviewAction_->setIcon(makePreviewStopIcon(QColor("#2B3C4E")));
     stopPreviewAction_->setToolTip(QString());
@@ -257,6 +278,12 @@ MainWindow::MainWindow(QWidget* parent)
         transformRotate180Action_,
         transformRotate45CounterClockwiseAction_,
         transformRotate45ClockwiseAction_,
+    });
+    editor->setMoreBatchTransformActions({
+        transformToggleBreakAction_,
+        transformToggleExAction_,
+        transformToggleFireworkAction_,
+        transformRandomRotateAction_,
     });
     chartBracketHighlighter_ = new BracketScopeHighlighter(editor->document());
     editorWidget_ = editor;
@@ -1078,6 +1105,10 @@ MainWindow::MainWindow(QWidget* parent)
     updatePreviewWorkspaceLayout();
     logStartupStage("workspace_and_central_widget_ready");
 
+    constexpr int kToolbarLeadingSpacerWidth = 12;
+    auto* toolbarLeadingSpacer = new QWidget(toolBar);
+    toolbarLeadingSpacer->setFixedWidth(kToolbarLeadingSpacerWidth);
+    toolBar->addWidget(toolbarLeadingSpacer);
     toolBar->addAction(openAction_);
     toolBar->addAction(saveAction_);
     constexpr int kToolbarActionButtonWidth = 64;
@@ -1127,14 +1158,23 @@ MainWindow::MainWindow(QWidget* parent)
     connect(settingsPlaceholderAction_, &QAction::triggered, this, &MainWindow::onPreferences);
     exportVideoButton_ = makeCompactToolbarButton(exportVideoAction_);
     if (exportVideoButton_ != nullptr) {
-        exportVideoButton_->setText(uiText("toolbar.export", "Export"));
-        exportVideoButton_->setToolTip(exportVideoAction_ != nullptr ? exportVideoAction_->text() : QString());
+        const auto syncExportToolbarButton = [this]() {
+            if (exportVideoButton_ == nullptr) {
+                return;
+            }
+            exportVideoButton_->setText(uiText("toolbar.export", "Export"));
+            exportVideoButton_->setToolTip(exportVideoAction_ != nullptr ? exportVideoAction_->text() : QString());
+        };
+        syncExportToolbarButton();
         int openButtonWidth = kToolbarActionButtonWidth;
         if (QWidget* openWidget = toolBar->widgetForAction(openAction_); openWidget != nullptr) {
             openButtonWidth = qMax(1, openWidget->sizeHint().width());
         }
         exportVideoButton_->setFixedWidth(openButtonWidth);
         toolBar->insertWidget(settingsPlaceholderAction_, exportVideoButton_);
+        if (exportVideoAction_ != nullptr) {
+            connect(exportVideoAction_, &QAction::changed, this, syncExportToolbarButton);
+        }
     }
     statusBar()->addPermanentWidget(new QLabel("Current File:", this));
     currentFileLabel_ = new QLabel(this);
@@ -1313,6 +1353,7 @@ MainWindow::MainWindow(QWidget* parent)
         previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
         previewCanvas_->setSmoothBrightness(previewSmoothBrightness_);
         previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
+        previewCanvas_->setNoteFlowSpeed(previewNoteFlowSpeed_);
         previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
         previewCanvas_->setShowTimestamp(previewShowTimestamp_);
     }

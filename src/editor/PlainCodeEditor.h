@@ -20,6 +20,7 @@ public:
     void setTopOverlayInsetPixels(int px);
     void refreshLineNumberAreaLayout();
     void setBatchTransformActions(const QList<QAction*>& actions);
+    void setMoreBatchTransformActions(const QList<QAction*>& actions);
 
 protected:
     void changeEvent(QEvent* event) override;
@@ -36,5 +37,6 @@ private:
     int blockSpacingPixels_ = 0;
     int topOverlayInsetPixels_ = 0;
     QList<QAction*> batchTransformActions_;
+    QList<QAction*> moreBatchTransformActions_;
     LineNumberArea* lineNumberArea_;
 };

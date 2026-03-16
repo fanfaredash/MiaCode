@@ -1,6 +1,7 @@
 PreviewCanvas::PreviewCanvas(QWindow* parent)
     : QOpenGLWindow(NoPartialUpdate, parent)
 {
+    refreshTimingFromFlowSpeed();
     const QString outlinePath = defaultOutlinePath();
     if (QFileInfo::exists(outlinePath)) {
         outlineImage_ = QImage(outlinePath);
@@ -41,6 +42,84 @@ PreviewCanvas::~PreviewCanvas()
         }
         doneCurrent();
     }
+}
+
+PreviewCanvas::TapApproachSample PreviewCanvas::sampleTapApproach(qreal deltaSeconds) const
+{
+    TapApproachSample sample;
+    const qreal logicalDistanceTap = static_cast<qreal>(miacode::preview_gameplay::kLogicalDistanceTap);
+    const qreal logicalDistanceEdge = static_cast<qreal>(miacode::preview_gameplay::kLogicalDistanceEdge);
+    sample.distance = logicalDistanceTap;
+    sample.scale = 0.0;
+    const qreal tapLifecycleDurationSeconds = static_cast<qreal>(tapLifecycleDurationSeconds_);
+    const qreal tapSpawnDurationSeconds = static_cast<qreal>(tapSpawnDurationSeconds_);
+    const qreal tapFlyDurationSeconds = static_cast<qreal>(tapFlyDurationSeconds_);
+    if (deltaSeconds <= -tapLifecycleDurationSeconds) {
+        return sample;
+    }
+    if (deltaSeconds < -tapFlyDurationSeconds) {
+        sample.scale = qBound<qreal>(
+            0.0,
+            (deltaSeconds + tapLifecycleDurationSeconds) / qMax<qreal>(0.001, tapSpawnDurationSeconds),
+            1.0
+        );
+        return sample;
+    }
+    if (deltaSeconds < 0.0) {
+        sample.distance = qBound<qreal>(
+            logicalDistanceTap,
+            logicalDistanceTap + (deltaSeconds + tapFlyDurationSeconds) * static_cast<qreal>(tapUnitsPerSecond_),
+            logicalDistanceEdge
+        );
+        sample.scale = 1.0;
+        return sample;
+    }
+    sample.distance = logicalDistanceEdge;
+    sample.scale = 1.0;
+    return sample;
+}
+
+qreal PreviewCanvas::sampleSlideTrackPreTraceOpacity(qreal markerSecond, qreal playheadSecond) const
+{
+    const qreal deltaSeconds = playheadSecond - markerSecond;
+    const qreal slideTrackAppearLeadInSeconds = static_cast<qreal>(slideTrackAppearLeadInSeconds_);
+    const qreal slideTrackFullBrightLeadInSeconds = static_cast<qreal>(slideTrackFullBrightLeadInSeconds_);
+    if (deltaSeconds < -slideTrackAppearLeadInSeconds) {
+        return -1.0;
+    }
+    if (deltaSeconds < -slideTrackFullBrightLeadInSeconds) {
+        const qreal appearDuration = qMax<qreal>(
+            0.001,
+            slideTrackAppearLeadInSeconds - slideTrackFullBrightLeadInSeconds);
+        const qreal progress = qBound<qreal>(
+            0.0,
+            (deltaSeconds + slideTrackAppearLeadInSeconds) / appearDuration,
+            1.0
+        );
+        const qreal alpha = static_cast<qreal>(miacode::preview_gameplay::kSlideTrackAppearAlphaCap)
+            * (1.0 - qPow(1.0 - progress, static_cast<qreal>(miacode::preview_gameplay::kSlideTrackAppearAlphaEaseOutExponent)));
+        return qBound<qreal>(0.0, alpha, static_cast<qreal>(miacode::preview_gameplay::kSlideTrackAppearAlphaCap));
+    }
+    return 1.0;
+}
+
+void PreviewCanvas::refreshTimingFromFlowSpeed()
+{
+    noteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(noteFlowSpeed_);
+    const double timingScaleFrames =
+        miacode::preview_gameplay::previewTimingScaleFramesAt120Fps(noteFlowSpeed_);
+    const double tapFrames = timingScaleFrames;
+    tapSpawnDurationSeconds_ = miacode::preview_gameplay::previewTimingSecondsFromFramesAt120Fps(tapFrames);
+    tapFlyDurationSeconds_ = tapSpawnDurationSeconds_;
+    tapLifecycleDurationSeconds_ =
+        miacode::preview_gameplay::previewTimingSecondsFromFramesAt120Fps(tapFrames * 2.0);
+    tapUnitsPerSecond_ = (miacode::preview_gameplay::kLogicalDistanceEdge - miacode::preview_gameplay::kLogicalDistanceTap)
+        / qMax(0.0001, tapFlyDurationSeconds_);
+    slideTrackAppearLeadInSeconds_ =
+        miacode::preview_gameplay::previewTimingSecondsFromFramesAt120Fps(timingScaleFrames + 2.0);
+    slideTrackFullBrightLeadInSeconds_ =
+        miacode::preview_gameplay::previewTimingSecondsFromFramesAt120Fps(
+            miacode::preview_gameplay::kSlideTrackFullBrightLeadInFramesAt120Fps);
 }
 
 void PreviewCanvas::setPlayheadSeconds(double seconds)
@@ -178,6 +257,13 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     layoutSquareScale_ = source.layoutSquareScale_;
     smoothBrightness_ = source.smoothBrightness_;
     backgroundScaleMode_ = source.backgroundScaleMode_;
+    noteFlowSpeed_ = source.noteFlowSpeed_;
+    tapLifecycleDurationSeconds_ = source.tapLifecycleDurationSeconds_;
+    tapSpawnDurationSeconds_ = source.tapSpawnDurationSeconds_;
+    tapFlyDurationSeconds_ = source.tapFlyDurationSeconds_;
+    tapUnitsPerSecond_ = source.tapUnitsPerSecond_;
+    slideTrackAppearLeadInSeconds_ = source.slideTrackAppearLeadInSeconds_;
+    slideTrackFullBrightLeadInSeconds_ = source.slideTrackFullBrightLeadInSeconds_;
     layoutRingDiameterRatio_ = source.layoutRingDiameterRatio_;
     showDebugInfo_ = source.showDebugInfo_;
     showTimestamp_ = source.showTimestamp_;
