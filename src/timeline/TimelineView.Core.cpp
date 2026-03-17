@@ -8,7 +8,7 @@ void TimelineView::updateHorizontalRange()
 
 int TimelineView::contentWidth() const
 {
-    const double timelineSeconds = qMax(durationSeconds_, playheadSeconds_) + 1.0;
+    const double timelineSeconds = qMax(0.0, displayEndSeconds_ - displayStartSeconds_);
     return timelineLeft() + static_cast<int>(timelineSeconds * pixelsPerSecond_) + kTimelineRightPadding;
 }
 
@@ -39,14 +39,15 @@ int TimelineView::notePixelSize() const
 
 int TimelineView::secondToX(double second) const
 {
-    return timelineLeft() + qRound(second * pixelsPerSecond_);
+    return timelineLeft() + qRound((second - displayStartSeconds_) * pixelsPerSecond_);
 }
 
 double TimelineView::xToSecond(int x) const
 {
     return qMax(
         0.0,
-        static_cast<double>(x + horizontalScrollBar()->value() - timelineLeft()) / pixelsPerSecond_
+        displayStartSeconds_
+            + (static_cast<double>(x + horizontalScrollBar()->value() - timelineLeft()) / pixelsPerSecond_)
     );
 }
 

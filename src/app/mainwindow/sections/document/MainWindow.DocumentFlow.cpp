@@ -1,4 +1,4 @@
-﻿bool MainWindow::maybeSaveBeforeContinue()
+bool MainWindow::maybeSaveBeforeContinue()
 {
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
@@ -93,6 +93,7 @@ bool MainWindow::applyCurrentFieldToDocument()
     rebuildFieldSidebar();
     if (metadataTimingChanged) {
         refreshWaveformCache();
+        refreshTimelineMetadata();
     }
     return true;
 }

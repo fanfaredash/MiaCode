@@ -63,6 +63,7 @@ private:
     QString selectedOffsetSnapModeId() const;
     double parsedBpm(bool* ok = nullptr) const;
     double parsedOffset(bool* ok = nullptr) const;
+    double parsedFixedOffsetSeconds() const;
     double detectBpm();
     double detectOffset(double bpm) const;
     QString formatTimestamp(double second) const;

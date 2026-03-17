@@ -108,6 +108,7 @@ protected:
     void scrollContentsBy(int dx, int dy) override;
 
 private:
+    void updateDisplayBounds();
     void updateHorizontalRange();
     int contentWidth() const;
     int timelineLeft() const;
@@ -132,6 +133,8 @@ private:
     double playheadSeconds_ = 0.0;
     double cursorSeconds_ = 0.0;
     double playheadUpperLimitSeconds_ = -1.0;
+    double displayStartSeconds_ = -0.5;
+    double displayEndSeconds_ = 1.0;
     double pixelsPerSecond_ = 120.0;
     bool showSlideTracks_ = true;
     QHash<QString, QPixmap> noteIcons_;
