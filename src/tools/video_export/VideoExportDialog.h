@@ -117,6 +117,7 @@ private:
     bool previewStateRestored_ = false;
     int previewSeekHeldArrowKey_ = 0;
     QElapsedTimer previewSeekHeldArrowElapsed_;
+    QElapsedTimer previewScrubRenderElapsed_;
 
     QLineEdit* outputPathEdit_ = nullptr;
     QToolButton* resolutionButton_ = nullptr;

@@ -306,6 +306,8 @@ const QHash<QString, QString>& zhMap()
         {"action.validate", "校验 Simai"},
         {"action.stop_preview", "停止预览"},
         {"action.pause_preview", "播放/暂停预览"},
+        {"action.preview_speed_down", "播放速度 ↓"},
+        {"action.preview_speed_up", "播放速度 ↑"},
         {"action.audio_settings", "音频设置..."},
         {"action.video_settings", "视频设置..."},
         {"toolbar.export", "导出"},

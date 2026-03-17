@@ -91,6 +91,7 @@ QString previewPanelStyleSheet();
 QString compactToolbarButtonStyleSheet();
 QString pausePreviewButtonStyleSheet(bool active);
 QString formSliderStyleSheet();
+QString dialogSliderStyleSheet();
 QString dialogComboBoxStyleSheet();
 QString dialogMenuButtonStyleSheet();
 QString dialogPushButtonStyleSheet(bool emphasized = false);

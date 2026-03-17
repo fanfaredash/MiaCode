@@ -172,26 +172,7 @@ void PreviewCanvas::drawGuideLayer(QPainter& painter, const QRectF& playfieldRec
     }
 }
 
-void PreviewCanvas::drawHoldLayer(QPainter& painter, const QRectF& playfieldRect)
-{
-    const bool batchNative = glRenderer_.isInitialized() && !nativePaintingActive_;
-    if (batchNative) {
-        nativePaintingActive_ = true;
-        painter.beginNativePainting();
-    }
-    for (qsizetype markerIndex = noteMarkers_.size() - 1; markerIndex >= 0; --markerIndex) {
-        const TimelineNoteMarker& marker = noteMarkers_[markerIndex];
-        if (marker.type == "hold") {
-            drawHoldMarker(painter, marker, playfieldRect);
-        }
-    }
-    if (batchNative) {
-        painter.endNativePainting();
-        nativePaintingActive_ = false;
-    }
-}
-
-void PreviewCanvas::drawTapLayer(QPainter& painter, const QRectF& playfieldRect)
+void PreviewCanvas::drawHoldAndTapHeadLayer(QPainter& painter, const QRectF& playfieldRect)
 {
     const bool batchNative = glRenderer_.isInitialized() && !nativePaintingActive_;
     if (batchNative) {
@@ -200,12 +181,34 @@ void PreviewCanvas::drawTapLayer(QPainter& painter, const QRectF& playfieldRect)
     }
     tapAtlasBatchingActive_ = glRenderer_.isInitialized();
     tapAtlasBatch_.clear();
-    for (qsizetype markerIndex = noteMarkers_.size() - 1; markerIndex >= 0; --markerIndex) {
+
+    QVector<qsizetype> layerOrder;
+    layerOrder.reserve(noteMarkers_.size());
+    for (qsizetype markerIndex = 0; markerIndex < noteMarkers_.size(); ++markerIndex) {
         const TimelineNoteMarker& marker = noteMarkers_[markerIndex];
-        if (marker.type == "tap" || marker.type == "slide" || marker.type == "wifi") {
+        if (marker.type == "hold" || marker.type == "tap" || marker.type == "slide" || marker.type == "wifi") {
+            layerOrder.append(markerIndex);
+        }
+    }
+    std::sort(layerOrder.begin(), layerOrder.end(), [this](qsizetype a, qsizetype b) {
+        const TimelineNoteMarker& markerA = noteMarkers_[a];
+        const TimelineNoteMarker& markerB = noteMarkers_[b];
+        if (!qFuzzyCompare(1.0 + markerA.second, 1.0 + markerB.second)) {
+            return markerA.second > markerB.second;
+        }
+        return a > b;
+    });
+
+    for (qsizetype markerIndex : layerOrder) {
+        const TimelineNoteMarker& marker = noteMarkers_[markerIndex];
+        if (marker.type == "hold") {
+            flushTapAtlasBatch(painter);
+            drawHoldMarker(painter, marker, playfieldRect);
+        } else {
             drawTapMarker(painter, marker, playfieldRect);
         }
     }
+
     flushTapAtlasBatch(painter);
     tapAtlasBatchingActive_ = false;
     if (batchNative) {
@@ -233,6 +236,9 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
         QPointF logicalCenter;
         qreal facingAngle = 0.0;
         bool useBreakShape = false;
+        qreal visibleStartSecond = -1.0;
+        qreal visibleEndSecond = -1.0;
+        bool useApproxAlpha = false;
     };
     struct LaneJudgeEffectTrigger {
         bool active = false;
@@ -253,12 +259,18 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
             + (lane - 1) * kLaneAngleStepDegrees
             + kJudgeEffectLaneFacingAngleOffsetDegrees;
     };
-    auto queueLaneTrigger = [&](int lane, qreal second, bool useBreakShape) {
+    auto queueLaneTrigger = [&](int lane, qreal second, bool useBreakShape, qreal visibleStartOffsetSeconds, qreal visibleEndOffsetSeconds, bool useApproxAlpha) {
         if (lane < 1 || lane > 8) {
             return;
         }
+        const qreal visibleStartSecond = second + visibleStartOffsetSeconds;
+        const qreal visibleEndSecond = second + visibleEndOffsetSeconds;
+        if (visibleEndSecond <= visibleStartSecond) {
+            return;
+        }
         const qreal elapsedSeconds = static_cast<qreal>(playheadSeconds_ - second);
-        if (elapsedSeconds < 0.0 || elapsedSeconds > kJudgeEffectDurationSeconds) {
+        if (playheadSeconds_ < visibleStartSecond || playheadSeconds_ > visibleEndSecond
+            || elapsedSeconds < 0.0 || elapsedSeconds > kJudgeEffectDurationSeconds) {
             return;
         }
         const QPointF laneUnit = laneUnitVector(lane);
@@ -270,6 +282,9 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
         );
         trigger.facingAngle = laneFacingAngleFor(lane);
         trigger.useBreakShape = useBreakShape;
+        trigger.visibleStartSecond = visibleStartSecond;
+        trigger.visibleEndSecond = visibleEndSecond;
+        trigger.useApproxAlpha = useApproxAlpha;
 
         LaneJudgeEffectTrigger& laneTrigger = laneTriggers[static_cast<std::size_t>(lane - 1)];
         if (!laneTrigger.active || second >= laneTrigger.trigger.second) {
@@ -287,57 +302,97 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
         trigger.logicalCenter = logicalCenter;
         trigger.facingAngle = facingAngle + kJudgeEffectLaneFacingAngleOffsetDegrees;
         trigger.useBreakShape = useBreakShape;
+        trigger.visibleStartSecond = second;
+        trigger.visibleEndSecond = second + kJudgeEffectDurationSeconds;
+        trigger.useApproxAlpha = false;
         freeTriggers.append(trigger);
     };
-    auto queueHoldSustain = [&](const QPointF& logicalCenter, qreal startSecond) {
-        const qreal elapsedSeconds = static_cast<qreal>(playheadSeconds_ - startSecond);
-        if (elapsedSeconds < 0.0) {
+    auto queueHoldSustain = [&](const QPointF& logicalCenter, qreal startSecond, qreal endSecond) {
+        const qreal effectiveStartSecond = startSecond
+            + static_cast<qreal>(miacode::preview_gameplay::kHoldSustainEffectStartOffsetSeconds);
+        const qreal effectiveEndSecond = endSecond
+            - static_cast<qreal>(miacode::preview_gameplay::kHoldSustainEffectEndOffsetSeconds);
+        if (effectiveEndSecond <= effectiveStartSecond) {
+            return;
+        }
+        const qreal elapsedSeconds = static_cast<qreal>(playheadSeconds_ - effectiveStartSecond);
+        if (elapsedSeconds < 0.0 || playheadSeconds_ >= effectiveEndSecond) {
             return;
         }
         const quint64 key = touchPointKey(logicalCenter);
         const auto existing = holdSustainTriggers.constFind(key);
-        if (existing != holdSustainTriggers.constEnd() && existing->startSecond > startSecond) {
+        if (existing != holdSustainTriggers.constEnd() && existing->startSecond > effectiveStartSecond) {
             return;
         }
         HoldSustainTrigger trigger;
         trigger.logicalCenter = logicalCenter;
-        trigger.startSecond = startSecond;
+        trigger.startSecond = effectiveStartSecond;
         holdSustainTriggers.insert(key, trigger);
+    };
+    auto approximateLaneJudgeAlpha = [](qreal normalizedTime) {
+        constexpr qreal kDelayNorm = 0.56;
+        constexpr qreal kSigmaNorm = 0.252;
+        constexpr qreal kExponent = 2.3;
+        if (normalizedTime <= 0.0) {
+            return 1.0;
+        }
+        if (normalizedTime >= 1.0) {
+            return 0.0;
+        }
+        const qreal delayedTime = qMax<qreal>(0.0, normalizedTime - kDelayNorm);
+        if (delayedTime <= 0.0) {
+            return 1.0;
+        }
+        return qExp(-qPow(delayedTime / kSigmaNorm, kExponent));
     };
 
     for (const TimelineNoteMarker& marker : noteMarkers_) {
         if (marker.type == "tap") {
             if (!marker.slideHead) {
-                queueLaneTrigger(marker.lane, marker.second, marker.isBreak);
+                queueLaneTrigger(
+                    marker.lane,
+                    marker.second,
+                    marker.isBreak,
+                    static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectLaneTriggerVisibleStartSeconds),
+                    static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectLaneTriggerVisibleEndSeconds),
+                    true
+                );
             }
             continue;
         }
         if (marker.type == "slide" || marker.type == "wifi") {
             if (marker.hasHeadStar) {
-                queueLaneTrigger(marker.lane, marker.second, marker.headBreak);
+                queueLaneTrigger(marker.lane, marker.second, marker.headBreak, 0.0, kJudgeEffectDurationSeconds, false);
             }
             continue;
         }
         if (marker.type == "hold") {
             if (marker.endSecond >= 0.0) {
                 const int holdEndLane = (marker.endLane >= 1 && marker.endLane <= 8) ? marker.endLane : marker.lane;
-                queueLaneTrigger(holdEndLane, marker.endSecond, marker.isBreak);
+                queueLaneTrigger(
+                    holdEndLane,
+                    marker.endSecond,
+                    marker.isBreak,
+                    static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectLaneTriggerVisibleStartSeconds),
+                    static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectLaneTriggerVisibleEndSeconds),
+                    true
+                );
             }
-            if (marker.endSecond > marker.second && playheadSeconds_ >= marker.second && playheadSeconds_ < marker.endSecond
+            if (marker.endSecond > marker.second
                 && marker.lane >= 1 && marker.lane <= 8) {
                 const QPointF laneUnit = laneUnitVector(marker.lane);
                 const QPointF logicalCenter(
                     kLogicalCanvasCenter + laneUnit.x() * kLogicalDistanceEdge,
                     kLogicalCanvasCenter + laneUnit.y() * kLogicalDistanceEdge
                 );
-                queueHoldSustain(logicalCenter, marker.second);
+                queueHoldSustain(logicalCenter, marker.second, marker.endSecond);
             }
             continue;
         }
         if (marker.type == "touch_hold") {
-            if (marker.endSecond > marker.second && playheadSeconds_ >= marker.second && playheadSeconds_ < marker.endSecond
+            if (marker.endSecond > marker.second
                 && !(qFuzzyIsNull(marker.touchPoint.x()) && qFuzzyIsNull(marker.touchPoint.y()))) {
-                queueHoldSustain(marker.touchPoint, marker.second);
+                queueHoldSustain(marker.touchPoint, marker.second, marker.endSecond);
             }
             if (marker.endSecond < 0.0) {
                 continue;
@@ -490,9 +545,38 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
 
         const qreal elapsedSeconds = static_cast<qreal>(playheadSeconds_ - trigger.second);
         const qreal clipTime = judgeEffectClipTime(elapsedSeconds);
-        const qreal rootScale = sampleScalarCurve(kJudgeEffectRootScaleKeys, clipTime);
-        const qreal sampledAlpha = qBound<qreal>(0.0, sampleScalarHermiteCurve(kJudgeEffectAlphaKeys, clipTime), 1.0);
-        const qreal alpha = qBound<qreal>(0.0, qPow(sampledAlpha, kJudgeEffectAlphaTailGamma), 1.0);
+        qreal alpha = 0.0;
+        qreal normalizedTime = 0.0;
+        qreal normalizedMotionTime = 0.0;
+        qreal motionClipTime = clipTime;
+        if (trigger.useApproxAlpha) {
+            const qreal visibleDuration = trigger.visibleEndSecond - trigger.visibleStartSecond;
+            if (visibleDuration <= 0.0) {
+                return;
+            }
+            normalizedTime = qBound<qreal>(
+                0.0,
+                static_cast<qreal>((playheadSeconds_ - trigger.visibleStartSecond) / visibleDuration),
+                1.0
+            );
+            const qreal legacyMotionStart = qMax<qreal>(0.0, static_cast<qreal>(trigger.visibleStartSecond - trigger.second));
+            const qreal legacyMotionEnd = qMax<qreal>(
+                legacyMotionStart,
+                static_cast<qreal>(trigger.visibleEndSecond - trigger.second)
+            );
+            const qreal legacyMotionDuration = legacyMotionEnd - legacyMotionStart;
+            normalizedMotionTime = normalizedTime;
+            motionClipTime = qBound<qreal>(
+                0.0,
+                legacyMotionStart + legacyMotionDuration * normalizedMotionTime,
+                kJudgeEffectDurationSeconds
+            );
+            alpha = qBound<qreal>(0.0, approximateLaneJudgeAlpha(normalizedTime), 1.0);
+        } else {
+            const qreal sampledAlpha = qBound<qreal>(0.0, sampleScalarHermiteCurve(kJudgeEffectAlphaKeys, clipTime), 1.0);
+            alpha = qBound<qreal>(0.0, qPow(sampledAlpha, kJudgeEffectAlphaTailGamma), 1.0);
+        }
+        const qreal rootScale = sampleScalarCurve(kJudgeEffectRootScaleKeys, motionClipTime);
         if (alpha <= 0.001) {
             return;
         }
@@ -506,15 +590,17 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
         const int rootSize = qMax(1, qRound(effectBasePixels * rootScale));
         drawJudgeEffectShapeWithEdgeGlow(effectImage, effectSourceRect, effectCenter, rootSize, spriteBaseAngle, alpha);
 
-        const qreal rotationBase = sampleScalarCurve(kJudgeEffectRotationKeys, clipTime);
+        const qreal rotationBase = trigger.useApproxAlpha
+            ? (180.0 * normalizedTime)
+            : sampleScalarCurve(kJudgeEffectRotationKeys, motionClipTime);
         for (int i = 0; i < static_cast<int>(kJudgeEffectParentRotationDirection.size()); ++i) {
             const qreal parentRotation = rotationBase * kJudgeEffectParentRotationDirection[static_cast<std::size_t>(i)];
             const qreal childRotation = -parentRotation;
-            const QPointF localOffset = sampleVec2Curve(kJudgeEffectTapHexPositionKeys[static_cast<std::size_t>(i)], clipTime)
+            const QPointF localOffset = sampleVec2Curve(kJudgeEffectTapHexPositionKeys[static_cast<std::size_t>(i)], motionClipTime)
                 * (effectOffsetPixels * rootScale);
             const QPointF rotatedOffset = rotatePointDegrees(localOffset, laneFacingAngle + parentRotation);
             const QPointF childCenter = effectCenter + rotatedOffset;
-            const qreal childScale = sampleScalarCurve(kJudgeEffectTapHexScaleKeys[static_cast<std::size_t>(i)], clipTime);
+            const qreal childScale = sampleScalarCurve(kJudgeEffectTapHexScaleKeys[static_cast<std::size_t>(i)], motionClipTime);
             const int childSize = qMax(1, qRound(effectBasePixels * rootScale * childScale));
             drawJudgeEffectShapeWithEdgeGlow(
                 effectImage,
@@ -1599,7 +1685,27 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
     };
 
     auto renderTailGuide = [this, &renderGuideImage](const QImage* image, int lane, qreal deltaSeconds) {
-        const TapApproachSample approach = sampleTapApproach(deltaSeconds);
+        TapApproachSample approach;
+        const qreal logicalDistanceTap = static_cast<qreal>(miacode::preview_gameplay::kLogicalDistanceTap);
+        const qreal logicalDistanceEdge = static_cast<qreal>(miacode::preview_gameplay::kLogicalDistanceEdge);
+        approach.distance = logicalDistanceTap;
+        approach.scale = 0.0;
+        const qreal holdTailGuideLifecycleDurationSeconds = static_cast<qreal>(tapFlyDurationSeconds_);
+        if (deltaSeconds < -holdTailGuideLifecycleDurationSeconds) {
+            return;
+        }
+        if (deltaSeconds < 0.0) {
+            approach.distance = qBound<qreal>(
+                logicalDistanceTap,
+                logicalDistanceTap + (deltaSeconds + holdTailGuideLifecycleDurationSeconds)
+                    * static_cast<qreal>(tapUnitsPerSecond_),
+                logicalDistanceEdge
+            );
+            approach.scale = 1.0;
+        } else {
+            approach.distance = logicalDistanceEdge;
+            approach.scale = 1.0;
+        }
         if (approach.scale <= 0.0) {
             return;
         }

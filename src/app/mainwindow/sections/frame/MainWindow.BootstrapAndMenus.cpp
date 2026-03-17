@@ -10,7 +10,7 @@
     fileMenu->addAction(newAction_);
 
     openAction_ = new QAction(uiText("action.open", "Open..."), this);
-    openAction_->setShortcut(QKeySequence::Open);
+    openAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+O")));
     connect(openAction_, &QAction::triggered, this, &MainWindow::onOpenFile);
     fileMenu->addAction(openAction_);
 
@@ -188,6 +188,26 @@
     pausePreviewAction_->setToolTip(QString());
     connect(pausePreviewAction_, &QAction::triggered, this, &MainWindow::onTogglePreviewPause);
     previewMenu->addAction(pausePreviewAction_);
+
+    auto* previewSlowerAction = new QAction(
+        uiText("action.preview_speed_down", "Playback Speed -"),
+        this
+    );
+    previewSlowerAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+O")));
+    connect(previewSlowerAction, &QAction::triggered, this, [this]() {
+        applyPreviewPlaybackRate(steppedPreviewPlaybackRate(previewPlaybackRate_, -1));
+    });
+    previewMenu->addAction(previewSlowerAction);
+
+    auto* previewFasterAction = new QAction(
+        uiText("action.preview_speed_up", "Playback Speed +"),
+        this
+    );
+    previewFasterAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+P")));
+    connect(previewFasterAction, &QAction::triggered, this, [this]() {
+        applyPreviewPlaybackRate(steppedPreviewPlaybackRate(previewPlaybackRate_, 1));
+    });
+    previewMenu->addAction(previewFasterAction);
 
     exportVideoAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("导出视频...") : QStringLiteral("Export Video..."),
@@ -926,6 +946,7 @@ MainWindow::MainWindow(QWidget* parent)
         QAction* speedAction = speedMenu->addAction(speedOption.second);
         speedAction->setCheckable(true);
         speedAction->setChecked(qFuzzyCompare(speed + 1.0, 2.0));
+        speedAction->setData(speed);
         connect(speedAction, &QAction::triggered, this, [this, speed, speedMenu]() {
             const QList<QAction*> actions = speedMenu->actions();
             for (QAction* action : actions) {
@@ -1250,6 +1271,7 @@ MainWindow::MainWindow(QWidget* parent)
                 stopQtPreviewPlayback(true);
             }
             previewSliderDragging_ = true;
+            previewScrubRenderElapsed_.invalidate();
             if (previewSlider_ != nullptr) {
                 showPreviewSliderTimeHint(previewSlider_->value());
             }
@@ -1259,15 +1281,30 @@ MainWindow::MainWindow(QWidget* parent)
                 return;
             }
             showPreviewSliderTimeHint(value);
-            schedulePreviewSeek(static_cast<double>(value) / 1000.0, true);
+            const double second = static_cast<double>(value) / 1000.0;
+            const bool shouldRenderNow = !previewScrubRenderElapsed_.isValid()
+                || previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs;
+            if (shouldRenderNow) {
+                if (previewSeekDebounceTimer_ != nullptr) {
+                    previewSeekDebounceTimer_->stop();
+                }
+                seekPreviewToSecond(second, true);
+                previewScrubRenderElapsed_.restart();
+            } else {
+                schedulePreviewSeek(second, true);
+            }
         });
         connect(previewSlider_, &QSlider::sliderReleased, this, [this]() {
             previewSliderDragging_ = false;
+            previewScrubRenderElapsed_.invalidate();
             if (previewSlider_ == nullptr) {
                 return;
             }
             showPreviewSliderTimeHint(previewSlider_->value());
-            schedulePreviewSeek(static_cast<double>(previewSlider_->value()) / 1000.0, true);
+            if (previewSeekDebounceTimer_ != nullptr) {
+                previewSeekDebounceTimer_->stop();
+            }
+            seekPreviewToSecond(static_cast<double>(previewSlider_->value()) / 1000.0, true);
         });
     }
     if (previewCanvasContainer_ != nullptr) {
