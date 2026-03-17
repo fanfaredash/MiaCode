@@ -34,6 +34,7 @@ constexpr int kTimelineLeftMargin = 40;
 constexpr int kTimelineTopMargin = 6;
 constexpr int kTimelineRightPadding = 24;
 constexpr int kNoteSize = 14;
+constexpr double kTimelineDisplayLeadInSeconds = 0.5;
 constexpr double kTimelineFireworkDurationSeconds = 1.3333334;
 const std::array<QColor, 5> kTimelineFireworkBandColors = {
     QColor(232, 124, 72),
@@ -136,6 +137,7 @@ void TimelineView::setTimelineData(
         return a.second < b.second;
     });
     durationSeconds_ = qMax(0.0, durationSeconds);
+    updateDisplayBounds();
     updateHorizontalRange();
     viewport()->update();
 }
@@ -145,6 +147,8 @@ void TimelineView::setWaveformData(const QVector<float>& peaks, double startSeco
     waveformPeaks_ = peaks;
     waveformStartSeconds_ = startSecond;
     waveformDurationSeconds_ = qMax(0.0, durationSeconds);
+    updateDisplayBounds();
+    updateHorizontalRange();
     viewport()->update();
 }
 
@@ -156,6 +160,8 @@ void TimelineView::clear()
     playheadSeconds_ = 0.0;
     cursorSeconds_ = 0.0;
     playheadUpperLimitSeconds_ = -1.0;
+    displayStartSeconds_ = -kTimelineDisplayLeadInSeconds;
+    displayEndSeconds_ = 1.0;
     waveformPeaks_.clear();
     waveformStartSeconds_ = 0.0;
     waveformDurationSeconds_ = 0.0;
@@ -173,6 +179,7 @@ void TimelineView::setPlayheadUpperLimitSeconds(double second)
     if (playheadUpperLimitSeconds_ > 0.0 && playheadSeconds_ > playheadUpperLimitSeconds_) {
         playheadSeconds_ = playheadUpperLimitSeconds_;
     }
+    updateDisplayBounds();
     updateHorizontalRange();
     viewport()->update();
 }
@@ -188,6 +195,8 @@ void TimelineView::setPlayheadSeconds(double second, bool centerView)
     }
 
     playheadSeconds_ = clamped;
+    updateDisplayBounds();
+    updateHorizontalRange();
     const int playheadX = secondToX(playheadSeconds_);
     if (centerView) {
         const int targetX = playheadX - (viewport()->width() / 2);
@@ -207,11 +216,13 @@ void TimelineView::setPlayheadSeconds(double second, bool centerView)
 
 void TimelineView::setCursorSeconds(double second)
 {
-    const double clamped = qMax(0.0, second);
+    const double clamped = qIsFinite(second) ? second : 0.0;
     if (qFuzzyCompare(cursorSeconds_ + 1.0, clamped + 1.0)) {
         return;
     }
     cursorSeconds_ = clamped;
+    updateDisplayBounds();
+    updateHorizontalRange();
     viewport()->update();
 }
 
@@ -237,6 +248,37 @@ void TimelineView::setShowSlideTracks(bool show)
 bool TimelineView::showSlideTracks() const
 {
     return showSlideTracks_;
+}
+
+void TimelineView::updateDisplayBounds()
+{
+    double minSecond = 0.0;
+    double maxSecond = qMax(durationSeconds_, qMax(playheadSeconds_, qMax(0.0, cursorSeconds_)));
+    if (playheadUpperLimitSeconds_ > 0.0) {
+        maxSecond = qMax(maxSecond, playheadUpperLimitSeconds_);
+    }
+    if (waveformDurationSeconds_ > 0.0) {
+        minSecond = qMin(minSecond, waveformStartSeconds_);
+        maxSecond = qMax(maxSecond, waveformStartSeconds_ + waveformDurationSeconds_);
+    }
+    for (const TimelineBeatMarker& beat : beats_) {
+        minSecond = qMin(minSecond, beat.second);
+        maxSecond = qMax(maxSecond, beat.second);
+    }
+    for (const TimelineNoteMarker& note : notes_) {
+        minSecond = qMin(minSecond, note.second);
+        maxSecond = qMax(maxSecond, note.second);
+        if (note.endSecond >= 0.0) {
+            minSecond = qMin(minSecond, note.endSecond);
+            maxSecond = qMax(maxSecond, note.endSecond);
+        }
+        if (note.slideTraceSecond >= 0.0) {
+            minSecond = qMin(minSecond, note.slideTraceSecond);
+            maxSecond = qMax(maxSecond, note.slideTraceSecond);
+        }
+    }
+    displayStartSeconds_ = qMin(-kTimelineDisplayLeadInSeconds, minSecond - kTimelineDisplayLeadInSeconds);
+    displayEndSeconds_ = qMax(displayStartSeconds_ + 1.0, maxSecond + 1.0);
 }
 
 double TimelineView::zoomScale() const

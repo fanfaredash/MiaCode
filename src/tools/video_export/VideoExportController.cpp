@@ -1988,8 +1988,7 @@ bool mixSfxTrackToWav(
     const QVector<TimelineNoteMarker>& noteMarkers,
     const PreviewAudioSettings& settings,
     double totalSeconds,
-    double timelineOriginSecond,
-    double segmentStartSecond
+    double timelineOriginSecond
 )
 {
     const qint64 totalFrames = qMax<qint64>(1, qCeil(totalSeconds * kMixSampleRate));
@@ -2046,12 +2045,12 @@ bool mixSfxTrackToWav(
         return 0.0;
     };
 
-    const auto mixEvent = [&clips, &mix, &kindVolume, timelineOriginSecond, segmentStartSecond](const QString& kind, double gain, double second) {
+    const auto mixEvent = [&clips, &mix, &kindVolume, timelineOriginSecond](const QString& kind, double gain, double second) {
         const auto it = clips.constFind(kind);
         if (it == clips.constEnd()) {
             return;
         }
-        if (second + kTimelineEpsilonSeconds < segmentStartSecond) {
+        if (second + kTimelineEpsilonSeconds < timelineOriginSecond) {
             return;
         }
         const double volume = kindVolume(kind);
@@ -2105,7 +2104,7 @@ bool mixSfxTrackToWav(
             if (span.endSecond <= span.startSecond) {
                 continue;
             }
-            if (span.startSecond + kTimelineEpsilonSeconds < segmentStartSecond) {
+            if (span.startSecond + kTimelineEpsilonSeconds < timelineOriginSecond) {
                 continue;
             }
             const double shiftedSecond = span.startSecond - timelineOriginSecond;
@@ -2722,7 +2721,7 @@ VideoExportResult VideoExportController::exportFullPreview(
         : normalizePath(task.trackPath);
     const bool hasTrack = !trackPath.isEmpty();
     const QVector<TimelineNoteMarker> exportMarkers =
-        filteredMarkersForRange(task.noteMarkers, segmentStartSecond, segmentEndSecond);
+        filteredMarkersForRange(task.noteMarkers, timelineOriginSecond, segmentEndSecond);
     appendVideoExportLog(
         QStringLiteral("input_probe"),
         QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 timelineOrigin=%8 totalSeconds=%9 alignedSeconds=%10 frameCount=%11 size=%12x%13")
@@ -2778,8 +2777,7 @@ VideoExportResult VideoExportController::exportFullPreview(
             exportMarkers,
             task.audioSettings,
             alignedTotalSeconds,
-            timelineOriginSecond,
-            segmentStartSecond)) {
+            timelineOriginSecond)) {
         result.message = QStringLiteral("Unable to generate SFX mix track.");
         result.details = QStringLiteral("Check whether assets/SFX files are complete.");
         result.details = withExportLogPath(result.details);

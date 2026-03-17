@@ -97,14 +97,15 @@ void LatencyDetectorDialog::triggerBeatAudition(double fromSecond, double toSeco
         return;
     }
 
+    const double playbackOffsetSeconds = parsedFixedOffsetSeconds();
     const double epsilon = 1e-5;
-    qint64 stepIndex = static_cast<qint64>(qFloor((fromSecond - pendingBeatOffset_) / auditionPeriod));
-    if (pendingBeatOffset_ + static_cast<double>(stepIndex) * auditionPeriod < fromSecond - epsilon) {
+    qint64 stepIndex = static_cast<qint64>(qFloor((fromSecond - playbackOffsetSeconds) / auditionPeriod));
+    if (playbackOffsetSeconds + static_cast<double>(stepIndex) * auditionPeriod < fromSecond - epsilon) {
         ++stepIndex;
     }
 
     for (;; ++stepIndex) {
-        const double eventSecond = pendingBeatOffset_ + static_cast<double>(stepIndex) * auditionPeriod;
+        const double eventSecond = playbackOffsetSeconds + static_cast<double>(stepIndex) * auditionPeriod;
         if (eventSecond > toSecond + epsilon) {
             break;
         }
@@ -115,7 +116,7 @@ void LatencyDetectorDialog::triggerBeatAudition(double fromSecond, double toSeco
         double gain = 1.0;
         if (!pendingBeatForceUniformGain_ && !pendingBeatUseUniformAccent_ && !pendingBeatAccentWeights_.isEmpty()) {
             const int accentCount = pendingBeatAccentWeights_.size();
-            const int beatIndex = static_cast<int>(qRound64((eventSecond - pendingBeatOffset_) / beatPeriod));
+            const int beatIndex = static_cast<int>(qRound64((eventSecond - playbackOffsetSeconds) / beatPeriod));
             int accentIndex = (beatIndex - pendingBeatAccentAnchorIndex_) % accentCount;
             if (accentIndex < 0) {
                 accentIndex += accentCount;

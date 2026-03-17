@@ -1,11 +1,57 @@
-﻿void MainWindow::refreshWaveformCache()
+namespace {
+
+double shiftedTimelineSecond(double second, double offsetSeconds)
 {
-    const double firstSeconds = parsedFirstSeconds();
+    if (!qIsFinite(second) || !qIsFinite(offsetSeconds)) {
+        return second;
+    }
+    return second + offsetSeconds;
+}
+
+QVector<TimelineBeatMarker> shiftedBeatMarkers(
+    const QVector<TimelineBeatMarker>& beatMarkers,
+    double offsetSeconds
+)
+{
+    QVector<TimelineBeatMarker> shifted = beatMarkers;
+    for (TimelineBeatMarker& marker : shifted) {
+        marker.second = shiftedTimelineSecond(marker.second, offsetSeconds);
+    }
+    return shifted;
+}
+
+QVector<TimelineNoteMarker> shiftedNoteMarkers(
+    const QVector<TimelineNoteMarker>& noteMarkers,
+    double offsetSeconds
+)
+{
+    QVector<TimelineNoteMarker> shifted = noteMarkers;
+    for (TimelineNoteMarker& marker : shifted) {
+        marker.second = shiftedTimelineSecond(marker.second, offsetSeconds);
+        if (marker.endSecond >= 0.0) {
+            marker.endSecond = shiftedTimelineSecond(marker.endSecond, offsetSeconds);
+        }
+        if (marker.slideTraceSecond >= 0.0) {
+            marker.slideTraceSecond = shiftedTimelineSecond(marker.slideTraceSecond, offsetSeconds);
+        }
+        if (marker.availableSecond >= 0.0) {
+            marker.availableSecond = shiftedTimelineSecond(marker.availableSecond, offsetSeconds);
+        }
+        for (double& shootSecond : marker.slideSegmentShootSeconds) {
+            shootSecond = shiftedTimelineSecond(shootSecond, offsetSeconds);
+        }
+    }
+    return shifted;
+}
+
+}  // namespace
+void MainWindow::refreshWaveformCache()
+{
     if (previewSfxRuntime_ != nullptr) {
-        previewSfxRuntime_->setBackgroundTrackOffsetSeconds(firstSeconds);
+        previewSfxRuntime_->setBackgroundTrackOffsetSeconds(0.0);
     }
     if (previewMediaController_ != nullptr) {
-        previewMediaController_->setTimelineOffsetSeconds(firstSeconds);
+        previewMediaController_->setTimelineOffsetSeconds(0.0);
     }
     if (timelineView_ == nullptr) {
         return;
@@ -13,7 +59,7 @@
     double audioDurationSeconds = 0.0;
     const QVector<float> waveform = buildWaveformPeaks(lastTrackPath_, &audioDurationSeconds);
     previewTrackDurationSeconds_ = qMax(0.0, audioDurationSeconds);
-    timelineView_->setWaveformData(waveform, -firstSeconds, audioDurationSeconds);
+    timelineView_->setWaveformData(waveform, 0.0, audioDurationSeconds);
     updatePreviewSliderRange();
 }
 
@@ -54,6 +100,11 @@ double MainWindow::parsedFirstSeconds(bool* ok) const
         return 0.0;
     }
     return localOk ? value : 0.0;
+}
+
+double MainWindow::parsedFixedFirstSeconds() const
+{
+    return -parsedFirstSeconds();
 }
 
 double MainWindow::parsedWholeBpm(bool* ok) const
@@ -114,6 +165,7 @@ void MainWindow::applyLatencyDetectorOffset(double seconds)
     documentDirty_ = true;
     updateDirtyState();
     refreshWaveformCache();
+    refreshTimelineMetadata();
 }
 
 void MainWindow::applyLatencyDetectorBpm(double bpm)
@@ -221,6 +273,7 @@ void MainWindow::setCurrentFilePath(const QString& path)
     }
     applyPreviewAudioSettingsToRuntime();
     refreshWaveformCache();
+    refreshTimelineMetadata();
 }
 
 void MainWindow::updateWindowTitle()
@@ -283,8 +336,9 @@ void MainWindow::refreshTimelineMetadata()
         return;
     }
     const SimaiNativeParseResult nativeResult = SimaiNativeParser::parseForTimeline(activeChartText());
-    QVector<TimelineBeatMarker> beatMarkers = nativeResult.beatMarkers;
-    QVector<TimelineNoteMarker> noteMarkers = nativeResult.noteMarkers;
+    const double firstSeconds = parsedFixedFirstSeconds();
+    QVector<TimelineBeatMarker> beatMarkers = shiftedBeatMarkers(nativeResult.beatMarkers, firstSeconds);
+    QVector<TimelineNoteMarker> noteMarkers = shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds);
     timelineCursorNotes_.clear();
     timelineCursorNotes_.reserve(noteMarkers.size());
     for (const TimelineNoteMarker& marker : noteMarkers) {
@@ -306,8 +360,8 @@ void MainWindow::refreshTimelineMetadata()
         return a.second < b.second;
     });
 
-    double durationSeconds = nativeResult.durationSeconds;
-    if (durationSeconds <= 0.0) {
+    double durationSeconds = qMax(0.0, nativeResult.durationSeconds + firstSeconds);
+    {
         for (const TimelineNoteMarker& marker : noteMarkers) {
             durationSeconds = qMax(durationSeconds, marker.second);
             if (marker.endSecond > marker.second) {
@@ -355,6 +409,11 @@ void MainWindow::seekTimelineToCursor(int line, int col)
         return;
     }
     const double second = timelineSecondForCursor(line, col);
+    if (second < -1e-6) {
+        timelineView_->setCursorSeconds(second);
+        timelineView_->setPlayheadSeconds(0.0, true);
+        return;
+    }
     if (second < 0.0) {
         return;
     }
@@ -369,6 +428,11 @@ void MainWindow::syncTimelineToEditorCursor(bool centerView)
     }
     const auto [line, col] = currentCursorLineCol();
     const double second = timelineSecondForCursor(line, col);
+    if (second < -1e-6) {
+        timelineView_->setCursorSeconds(second);
+        timelineView_->setPlayheadSeconds(0.0, centerView);
+        return;
+    }
     if (second < 0.0) {
         return;
     }
@@ -580,9 +644,7 @@ double MainWindow::previewDurationSeconds() const
         duration = qMax(duration, timelineView_->durationSeconds());
     }
     if (previewTrackDurationSeconds_ > 0.0) {
-        const double firstSeconds = parsedFirstSeconds();
-        const double audioStartSecond = qMax(0.0, -firstSeconds);
-        duration = qMax(duration, audioStartSecond + previewTrackDurationSeconds_ + 3.0);
+        duration = qMax(duration, previewTrackDurationSeconds_ + 3.0);
     }
     return qMax(0.0, duration);
 }

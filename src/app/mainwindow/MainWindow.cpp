@@ -1,4 +1,4 @@
-﻿#include "MainWindow.h"
+#include "MainWindow.h"
 #include "AppVersion.h"
 #include "BracketScopeHighlighter.h"
 #include "PlainCodeEditor.h"
@@ -1389,7 +1389,7 @@ void MainWindow::ensurePreviewMediaControllerInitialized()
         previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
         previewCanvas_->setNoteFlowSpeed(previewNoteFlowSpeed_);
     }
-    previewMediaController_->setTimelineOffsetSeconds(parsedFirstSeconds());
+    previewMediaController_->setTimelineOffsetSeconds(0.0);
     previewMediaController_->setChartPath(currentFilePath_);
     previewMediaController_->setPlayheadSeconds(qtPreviewPauseSecond_);
 
