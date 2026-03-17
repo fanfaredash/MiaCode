@@ -73,7 +73,7 @@ void LatencyDetectorDialog::buildUi()
     offsetSnapCombo_->addItem(localizedText(QStringLiteral("\u5C0F\u8282"), "Bar"), QStringLiteral("bar"));
     offsetSnapCombo_->addItem(localizedText(QStringLiteral("4\u5206\u97F3\u7B26"), "Quarter"), QStringLiteral("quarter"));
     offsetSnapCombo_->addItem(localizedText(QStringLiteral("8\u5206\u97F3\u7B26"), "Eighth"), QStringLiteral("eighth"));
-    offsetSnapCombo_->setCurrentIndex(0);
+    offsetSnapCombo_->setCurrentIndex(1);
     timingRow->addWidget(meterLabel);
     timingRow->addWidget(meterCombo_);
     timingRow->addSpacing(10);

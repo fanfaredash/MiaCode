@@ -1192,6 +1192,12 @@ void MainWindow::applyUiTheme()
     if (editorFindBar_ != nullptr) {
         editorFindBar_->setStyleSheet(UiTheme::editorFindBarStyleSheet());
     }
+    if (welcomePage_ != nullptr) {
+        welcomePage_->setStyleSheet(UiTheme::metadataPageStyleSheet());
+    }
+    if (welcomeEmptyHintLabel_ != nullptr) {
+        welcomeEmptyHintLabel_->setStyleSheet(UiTheme::metadataEmptyHintLabelStyleSheet());
+    }
     if (metadataPage_ != nullptr) {
         metadataPage_->setStyleSheet(UiTheme::metadataPageStyleSheet());
     }

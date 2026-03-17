@@ -516,6 +516,20 @@ MainWindow::MainWindow(QWidget* parent)
     findBar->hide();
     editorFindBar_ = findBar;
 
+    welcomePage_ = new QWidget(editorStack_);
+    welcomePage_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
+    welcomePage_->setStyleSheet(
+        "QWidget { background: #FFFFFF; color: #2A3440; }"
+    );
+    auto* welcomeLayout = new QVBoxLayout(welcomePage_);
+    welcomeLayout->setContentsMargins(12, 8, 12, 12);
+    welcomeLayout->setSpacing(8);
+    welcomeEmptyHintLabel_ = new QLabel(uiText("metadata.empty_hint", "← Click to add a chart difficulty"), welcomePage_);
+    welcomeEmptyHintLabel_->setFont(uiAccentFont(11));
+    welcomeEmptyHintLabel_->setStyleSheet("color: #6A7890; background: transparent; padding-left: 6px;");
+    welcomeLayout->addWidget(welcomeEmptyHintLabel_, 0, Qt::AlignLeft | Qt::AlignTop);
+    welcomeLayout->addStretch(1);
+
     metadataPage_ = new QWidget(editorStack_);
     metadataPage_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
     metadataPage_->setStyleSheet(
@@ -622,6 +636,7 @@ MainWindow::MainWindow(QWidget* parent)
     chartLayout->setSpacing(0);
     chartLayout->addWidget(editorWidget_, 1);
 
+    editorStack_->addWidget(welcomePage_);
     editorStack_->addWidget(metadataPage_);
     editorStack_->addWidget(chartPage_);
     centralLayout->addWidget(editorStack_, 1);
@@ -688,7 +703,7 @@ MainWindow::MainWindow(QWidget* parent)
             deleteDifficultyField(activeDifficultyId_);
         }
     });
-    connect(outlineList_, &QListWidget::currentItemChanged, this, [this](QListWidgetItem* current, QListWidgetItem*) {
+    connect(outlineList_, &QListWidget::itemClicked, this, [this](QListWidgetItem* current) {
         updateDifficultyDeleteButton(false);
         if (current == nullptr) {
             return;
