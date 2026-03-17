@@ -141,8 +141,12 @@ constexpr int kEditorFindBarMaxWidth = 500;
 constexpr int kEditorFindBarHorizontalMargin = 14;
 constexpr int kEditorFindBarTopMargin = 10;
 constexpr int kEditorFindBarOverlayGap = 8;
+constexpr int kPreviewScrubRenderIntervalMs = 33;
 const QList<double> kEditorLineSpacingFactorOptions{
     0.0, 1.0, 1.5, 2.0, 3.0, 5.0,
+};
+const QList<double> kPreviewPlaybackRateOptions{
+    0.25, 0.5, 0.75, 1.0, 1.25, 2.0,
 };
 
 double normalizeEditorLineSpacingFactor(double factor)
@@ -169,6 +173,55 @@ QString editorLineSpacingFactorLabel(double factor)
     }
     const QString text = QString::number(factor, 'f', qFuzzyCompare(factor, qRound(factor)) ? 0 : 1);
     return text + QStringLiteral("x");
+}
+
+int nearestPreviewPlaybackRateIndex(double rate)
+{
+    if (kPreviewPlaybackRateOptions.isEmpty()) {
+        return -1;
+    }
+    int bestIndex = 0;
+    double bestDiff = qAbs(kPreviewPlaybackRateOptions.first() - rate);
+    for (int index = 1; index < kPreviewPlaybackRateOptions.size(); ++index) {
+        const double diff = qAbs(kPreviewPlaybackRateOptions[index] - rate);
+        if (diff < bestDiff) {
+            bestDiff = diff;
+            bestIndex = index;
+        }
+    }
+    return bestIndex;
+}
+
+double steppedPreviewPlaybackRate(double rate, int direction)
+{
+    const int currentIndex = nearestPreviewPlaybackRateIndex(rate);
+    if (currentIndex < 0) {
+        return qMax(0.25, rate);
+    }
+    const int targetIndex = qBound(0, currentIndex + direction, kPreviewPlaybackRateOptions.size() - 1);
+    return kPreviewPlaybackRateOptions[targetIndex];
+}
+
+QString sanitizeExportFileStem(QString text, const QString& fallback = QStringLiteral("out"))
+{
+    text = text.trimmed();
+    QString sanitized;
+    sanitized.reserve(text.size());
+    for (const QChar ch : text) {
+        if (ch.isNull() || ch.isLowSurrogate() || ch.isHighSurrogate()) {
+            continue;
+        }
+        if (ch.unicode() < 0x20 || QStringLiteral("<>:\"/\\|?*").contains(ch)) {
+            sanitized.append(QLatin1Char('_'));
+            continue;
+        }
+        sanitized.append(ch);
+    }
+    sanitized = sanitized.trimmed();
+    while (!sanitized.isEmpty() && (sanitized.endsWith(QLatin1Char('.')) || sanitized.endsWith(QLatin1Char(' ')))) {
+        sanitized.chop(1);
+    }
+    return sanitized.isEmpty() ? fallback : sanitized;
 }
 
 #ifdef Q_OS_WIN
@@ -3204,13 +3257,18 @@ void MainWindow::onExportPreviewVideo()
     task.showTimestamp = previewShowTimestamp_;
 
     const QFileInfo chartInfo(currentFilePath_);
+    QString chartTitle = document_.title;
+    if (editorStack_ != nullptr && editorStack_->currentWidget() == metadataPage_ && titleEdit_ != nullptr) {
+        chartTitle = titleEdit_->text();
+    }
+    const QString exportStem = sanitizeExportFileStem(chartTitle, QStringLiteral("out"));
     const QString difficultyName = hasActiveDifficulty()
         ? SimaiDocument::difficultyShortName(activeDifficultyId_).replace(':', '_')
         : QStringLiteral("chart");
     const QString outputName = QString("%1_%2_preview.mp4")
-        .arg(chartInfo.completeBaseName().isEmpty() ? QStringLiteral("export") : chartInfo.completeBaseName())
+        .arg(exportStem)
         .arg(difficultyName);
-    task.outputPath = chartInfo.absoluteDir().filePath(outputName);
+    task.outputPath = outputName;
 
     const auto currentPreviewSecond = [this]() -> double {
         double second = qMax(0.0, qtPreviewPauseSecond_);
@@ -3449,9 +3507,10 @@ bool MainWindow::exportPreviewVideoFromCli(
     }
 
     const QFileInfo chartInfo(currentFilePath_);
+    const QString exportStem = sanitizeExportFileStem(document_.title, QStringLiteral("out"));
     const QString difficultyName = SimaiDocument::difficultyShortName(difficultyId).replace(':', '_');
     const QString defaultOutputName = QString("%1_%2_preview.mp4")
-        .arg(chartInfo.completeBaseName().isEmpty() ? QStringLiteral("export") : chartInfo.completeBaseName())
+        .arg(exportStem)
         .arg(difficultyName);
 
     QString outputPath = request.outputPath.trimmed();
@@ -3661,6 +3720,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         auto* slider = new QSlider(Qt::Horizontal, row);
         slider->setRange(0, 100);
         slider->setValue(valuePercent);
+        slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
         auto* label = new QLabel(QString::number(valuePercent) + "%", row);
         label->setMinimumWidth(44);
         rowLayout->addWidget(slider, 1);
@@ -3719,6 +3779,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         slider->setPageStep(step);
         slider->setTickInterval(step);
         slider->setValue(value);
+        slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
         auto* label = new QLabel(QString::number(value) + suffix, row);
         label->setMinimumWidth(44);
         rowLayout->addWidget(slider, 1);

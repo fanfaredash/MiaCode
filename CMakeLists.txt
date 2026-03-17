@@ -1,9 +1,9 @@
-﻿cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.21)
 
 set(MIACODE_VERSION_MAJOR "0")
 set(MIACODE_VERSION_MINOR "3")
-set(MIACODE_VERSION_PATCH "0")
-set(MIACODE_VERSION_PRERELEASE "")
+set(MIACODE_VERSION_PATCH "1")
+set(MIACODE_VERSION_PRERELEASE "dev1")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
@@ -247,4 +247,5 @@ if (WIN32)
         message(WARNING "windeployqt not found. Qt runtime DLLs will not be auto-deployed.")
     endif()
 endif()
+
 

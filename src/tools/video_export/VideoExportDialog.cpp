@@ -58,6 +58,7 @@ constexpr int kPreviewControlSpacing = 6;
 constexpr int kPreviewControlsToSliderGap = 8;
 constexpr int kDialogActionButtonMinWidth = 92;
 constexpr int kRangeSetButtonWidth = 72;
+constexpr int kPreviewScrubRenderIntervalMs = 33;
 constexpr qreal kPreviewSeekInitialStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekInitialStepSeconds);
 constexpr qreal kPreviewSeekMaxStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekMaxStepSeconds);
 constexpr qreal kPreviewSeekLinearAccelerationSecondsPerMs =
@@ -96,6 +97,40 @@ QString l10n(const QString& en, const QString& zh)
 int secondToSliderValue(double second)
 {
     return qMax(0, qRound(second * kPreviewSliderScale));
+}
+
+QString exportBaseDirectory(const VideoExportTask& task)
+{
+    const QFileInfo chartInfo(task.chartPath);
+    if (!chartInfo.absoluteDir().path().isEmpty()) {
+        return chartInfo.absoluteDir().absolutePath();
+    }
+    return QDir::currentPath();
+}
+
+QString displayOutputPathForDialog(const QString& outputPath, const QString& baseDirectory)
+{
+    if (outputPath.trimmed().isEmpty()) {
+        return QString();
+    }
+    const QFileInfo outputInfo(outputPath);
+    const QString absolutePath = outputInfo.isRelative()
+        ? QDir(baseDirectory).absoluteFilePath(outputPath)
+        : outputInfo.absoluteFilePath();
+    return QDir::toNativeSeparators(QDir(baseDirectory).relativeFilePath(QDir::cleanPath(absolutePath)));
+}
+
+QString resolveOutputPathForExport(const QString& outputPath, const QString& baseDirectory)
+{
+    const QString trimmed = QDir::fromNativeSeparators(outputPath.trimmed());
+    if (trimmed.isEmpty()) {
+        return QString();
+    }
+    const QFileInfo outputInfo(trimmed);
+    const QString absolutePath = outputInfo.isRelative()
+        ? QDir(baseDirectory).absoluteFilePath(trimmed)
+        : outputInfo.absoluteFilePath();
+    return QDir::cleanPath(absolutePath);
 }
 
 QToolButton* createDialogMenuButton(QWidget* parent, const QString& text, int minimumWidth = 0)
@@ -358,7 +393,7 @@ VideoExportDialog::VideoExportDialog(
     outputLabel->setFixedWidth(kFormLabelWidth);
     outputLabel->setText(uiText("dialog.video_export.output", QStringLiteral("Output")));
     outputPathEdit_ = new QLineEdit(outputRow);
-    outputPathEdit_->setText(baseTask_.outputPath);
+    outputPathEdit_->setText(displayOutputPathForDialog(baseTask_.outputPath, exportBaseDirectory(baseTask_)));
     auto* browseButton = new QPushButton(l10n(QStringLiteral("Browse..."), QStringLiteral("浏览...")), outputRow);
     browseButton->setText(uiText("dialog.video_export.browse", QStringLiteral("Browse...")));
     browseButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
@@ -637,6 +672,7 @@ VideoExportDialog::VideoExportDialog(
         slider->setPageStep(step);
         slider->setTickInterval(step);
         slider->setValue(valuePercent);
+        slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
         containerLayout->addWidget(header, 0);
         containerLayout->addWidget(slider, 0);
         *sliderOut = slider;
@@ -824,6 +860,14 @@ VideoExportDialog::VideoExportDialog(
     connect(startSecondSpin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &VideoExportDialog::onRangeSpinChanged);
     connect(endSecondSpin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &VideoExportDialog::onRangeSpinChanged);
     connect(previewSlider_, &QSlider::valueChanged, this, &VideoExportDialog::onPreviewSliderChanged);
+    connect(previewSlider_, &QSlider::sliderPressed, this, [this]() {
+        previewScrubRenderElapsed_.invalidate();
+    });
+    connect(previewSlider_, &QSlider::sliderReleased, this, [this]() {
+        previewScrubRenderElapsed_.invalidate();
+        seekPreview(previewCursorSecond_);
+        syncRangeUi();
+    });
     connect(setStartButton, &QPushButton::clicked, this, &VideoExportDialog::setRangeStartFromPreview);
     connect(setEndButton, &QPushButton::clicked, this, &VideoExportDialog::setRangeEndFromPreview);
     connect(previewRangeButton_, &QToolButton::clicked, this, &VideoExportDialog::toggleRangePreview);
@@ -1013,7 +1057,10 @@ void VideoExportDialog::applySelectedAspectRatioToPreview(bool markChanged)
 
 void VideoExportDialog::browseOutputPath()
 {
-    const QString initial = outputPathEdit_ != nullptr ? outputPathEdit_->text().trimmed() : QString();
+    const QString baseDirectory = exportBaseDirectory(baseTask_);
+    const QString initial = outputPathEdit_ != nullptr
+        ? resolveOutputPathForExport(outputPathEdit_->text(), baseDirectory)
+        : QString();
     const QString selected = QFileDialog::getSaveFileName(
         this,
         l10n(QStringLiteral("Export Video"), QStringLiteral("导出视频")),
@@ -1023,7 +1070,7 @@ void VideoExportDialog::browseOutputPath()
     if (selected.isEmpty() || outputPathEdit_ == nullptr) {
         return;
     }
-    outputPathEdit_->setText(selected);
+    outputPathEdit_->setText(displayOutputPathForDialog(selected, baseDirectory));
 }
 
 bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessage) const
@@ -1032,6 +1079,7 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
         return false;
     }
     VideoExportTask updated = baseTask_;
+    const QString baseDirectory = exportBaseDirectory(updated);
     const QString outputPath = outputPathEdit_ != nullptr ? outputPathEdit_->text().trimmed() : QString();
     if (outputPath.isEmpty()) {
         if (errorMessage != nullptr) {
@@ -1039,7 +1087,7 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
         }
         return false;
     }
-    updated.outputPath = outputPath;
+    updated.outputPath = resolveOutputPathForExport(outputPath, baseDirectory);
     const QSize selectedSize = selectedResolution();
     updated.outputWidth = selectedSize.width() > 0 ? selectedSize.width() : updated.outputWidth;
     updated.outputHeight = selectedSize.height() > 0 ? selectedSize.height() : updated.outputHeight;
@@ -1135,7 +1183,14 @@ void VideoExportDialog::onPreviewSliderChanged(int sliderValue)
         return;
     }
     previewCursorSecond_ = qBound(0.0, sliderValueToSecond(sliderValue), totalDurationSeconds_);
-    seekPreview(previewCursorSecond_);
+    const bool shouldRenderNow = previewSlider_ == nullptr
+        || !previewSlider_->isSliderDown()
+        || !previewScrubRenderElapsed_.isValid()
+        || previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs;
+    if (shouldRenderNow) {
+        seekPreview(previewCursorSecond_);
+        previewScrubRenderElapsed_.restart();
+    }
     syncRangeUi();
 }
 

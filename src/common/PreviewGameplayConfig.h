@@ -44,6 +44,19 @@ inline constexpr double kTapLifecycleDurationSeconds = previewTimingSecondsFromF
 inline constexpr double kTapSpawnDurationSeconds = previewTimingSecondsFromFramesAt120Fps(kTapSpawnFramesAt120Fps);
 inline constexpr double kTapFlyDurationSeconds = previewTimingSecondsFromFramesAt120Fps(kTapFlyFramesAt120Fps);
 
+inline constexpr double kJudgeEffectLaneTriggerVisibleStartFramesAt120Fps = 3.0;
+inline constexpr double kJudgeEffectLaneTriggerVisibleStartSeconds =
+    previewTimingSecondsFromFramesAt120Fps(kJudgeEffectLaneTriggerVisibleStartFramesAt120Fps);
+inline constexpr double kJudgeEffectLaneTriggerVisibleEndFramesAt120Fps = 48.0;
+inline constexpr double kJudgeEffectLaneTriggerVisibleEndSeconds =
+    previewTimingSecondsFromFramesAt120Fps(kJudgeEffectLaneTriggerVisibleEndFramesAt120Fps);
+inline constexpr double kHoldSustainEffectStartOffsetFramesAt120Fps = 9.0;
+inline constexpr double kHoldSustainEffectStartOffsetSeconds =
+    previewTimingSecondsFromFramesAt120Fps(kHoldSustainEffectStartOffsetFramesAt120Fps);
+inline constexpr double kHoldSustainEffectEndOffsetFramesAt120Fps = 3.0;
+inline constexpr double kHoldSustainEffectEndOffsetSeconds =
+    previewTimingSecondsFromFramesAt120Fps(kHoldSustainEffectEndOffsetFramesAt120Fps);
+
 inline constexpr double kSlideTrackAppearLeadInFramesAt120Fps = kPreviewTimingScaleFramesAt120Fps + 2.0;
 inline constexpr double kSlideTrackFullBrightLeadInFramesAt120Fps = 6.0;
 inline constexpr double kSlideTrackAppearLeadInSeconds =

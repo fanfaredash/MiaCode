@@ -517,6 +517,38 @@ QString formSliderStyleSheet()
         .arg(css(c.menuHoverBg));
 }
 
+QString dialogSliderStyleSheet()
+{
+    const Colors& c = colors();
+    if (c.dark) {
+        return formSliderStyleSheet();
+    }
+
+    const QColor groove = c.selection;
+    const QColor filled = c.accentHover;
+    const QColor handleBg = c.cardBg;
+    const QColor handleBorder = c.accent;
+    const QColor handleHover = c.accentHover;
+    const QColor handlePressedBg = c.menuHoverBg;
+    const QColor handlePressedBorder = c.accentPressed;
+
+    return QStringLiteral(
+        "QSlider::groove:horizontal { height: 6px; background: %1; border-radius: 3px; }"
+        "QSlider::add-page:horizontal { background: %1; border-radius: 3px; }"
+        "QSlider::sub-page:horizontal { background: %2; border-radius: 3px; }"
+        "QSlider::handle:horizontal { width: 14px; margin: -4px 0; border-radius: 7px; background: %3; border: 1px solid %4; }"
+        "QSlider::handle:horizontal:hover { border-color: %5; }"
+        "QSlider::handle:horizontal:pressed { background: %6; border-color: %7; }"
+    )
+        .arg(css(groove))
+        .arg(css(filled))
+        .arg(css(handleBg))
+        .arg(css(handleBorder))
+        .arg(css(handleHover))
+        .arg(css(handlePressedBg))
+        .arg(css(handlePressedBorder));
+}
+
 QString dialogComboBoxStyleSheet()
 {
     const Colors& c = colors();

@@ -332,8 +332,7 @@ void PreviewCanvas::renderCanvas(
     drawSlideMotionLayer(painter, playfieldRect);
     drawJudgeEffectLayer(painter, playfieldRect);
     drawJudgeEffectTouchLayer(painter, playfieldRect);
-    drawHoldLayer(painter, playfieldRect);
-    drawTapLayer(painter, playfieldRect);
+    drawHoldAndTapHeadLayer(painter, playfieldRect);
     drawTouchLayer(painter, playfieldRect);
     drawTouchHoldLayer(painter, playfieldRect);
     if (batchNative) {

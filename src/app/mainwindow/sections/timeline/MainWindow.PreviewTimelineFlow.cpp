@@ -1196,6 +1196,20 @@ void MainWindow::applyPreviewPlaybackRate(double rate)
             rateText.chop(1);
         }
         previewSpeedButton_->setText(QString("%1x").arg(rateText));
+        if (QMenu* speedMenu = previewSpeedButton_->menu(); speedMenu != nullptr) {
+            const int targetIndex = nearestPreviewPlaybackRateIndex(previewPlaybackRate_);
+            const QList<QAction*> actions = speedMenu->actions();
+            for (int index = 0; index < actions.size(); ++index) {
+                QAction* action = actions[index];
+                const QVariant data = action != nullptr ? action->data() : QVariant();
+                const bool checked = data.isValid()
+                    ? qFuzzyCompare(data.toDouble() + 1.0, previewPlaybackRate_ + 1.0)
+                    : (index == targetIndex);
+                if (action != nullptr) {
+                    action->setChecked(checked);
+                }
+            }
+        }
     }
     if (previewMediaController_ != nullptr) {
         previewMediaController_->setPlaybackRate(previewPlaybackRate_);

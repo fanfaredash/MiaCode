@@ -169,8 +169,7 @@ private:
     void drawTrackLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawSlideMotionLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawGuideLayer(QPainter& painter, const QRectF& playfieldRect);
-    void drawHoldLayer(QPainter& painter, const QRectF& playfieldRect);
-    void drawTapLayer(QPainter& painter, const QRectF& playfieldRect);
+    void drawHoldAndTapHeadLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawJudgeEffectLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawJudgeEffectTouchLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF& playfieldRect);
