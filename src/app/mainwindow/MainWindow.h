@@ -248,6 +248,8 @@ private:
     void applyPreviewPlaybackRate(double rate);
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
     double normalizedPreviewCanvasAspectRatio(double ratio) const;
+    int computeBottomTabsDeviceHeight() const;
+    void updateBottomTabsDeviceHeight();
     double timelineSecondForCursor(int line, int col) const;
     void jumpToLocation(int line, int col);
     QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount = nullptr) const;

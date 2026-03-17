@@ -5,6 +5,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QFontDatabase>
 #include <QImage>
 #include <QIcon>
 #include <QCheckBox>
@@ -29,7 +30,7 @@ constexpr int kPlayableLaneCount = 8;
 constexpr int kTouchLane = kPlayableLaneCount + 1;
 constexpr int kLaneCount = kTouchLane;
 constexpr int kHeaderHeight = 28;
-constexpr int kLaneHeight = 22;
+constexpr int kLaneHeight = 20;
 constexpr int kTimelineLeftMargin = 40;
 constexpr int kTimelineTopMargin = 6;
 constexpr int kTimelineRightPadding = 24;
@@ -62,7 +63,6 @@ TimelineView::TimelineView(QWidget* parent)
     : QAbstractScrollArea(parent)
 {
     setAttribute(Qt::WA_OpaquePaintEvent, true);
-    setMinimumHeight(kHeaderHeight + kTimelineTopMargin + (kLaneCount * kLaneHeight) + 10);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setMouseTracking(true);
@@ -89,10 +89,35 @@ TimelineView::TimelineView(QWidget* parent)
         emit followPreviewToggled(enabled);
     });
 
+    headerLineNumberFont_ = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    headerLineNumberFont_.setStyleHint(QFont::Monospace);
+    headerLineNumberFont_.setFixedPitch(true);
+
     refreshTheme();
     updateZoomButtonAppearance();
     loadNoteIcons();
+    refreshMinimumHeightForCurrentDevice();
     updateHorizontalRange();
+}
+
+QSize TimelineView::minimumSizeHint() const
+{
+    return QSize(kTimelineLeftMargin + 240, minimumContentHeightForCurrentDevice());
+}
+
+QSize TimelineView::sizeHint() const
+{
+    return minimumSizeHint();
+}
+
+void TimelineView::setHeaderLineNumberFont(const QFont& font)
+{
+    if (headerLineNumberFont_ == font) {
+        return;
+    }
+    headerLineNumberFont_ = font;
+    refreshMinimumHeightForCurrentDevice();
+    viewport()->update();
 }
 
 void TimelineView::refreshTheme()
@@ -104,6 +129,7 @@ void TimelineView::refreshTheme()
     if (followPreviewCheckBox_ != nullptr) {
         followPreviewCheckBox_->setStyleSheet(UiTheme::timelineCheckBoxStyleSheet());
     }
+    refreshMinimumHeightForCurrentDevice();
     viewport()->update();
 }
 
@@ -248,6 +274,39 @@ void TimelineView::setShowSlideTracks(bool show)
 bool TimelineView::showSlideTracks() const
 {
     return showSlideTracks_;
+}
+
+int TimelineView::minimumContentHeightForCurrentDevice() const
+{
+    const int baseHeaderHeight = kHeaderHeight + kTimelineTopMargin;
+    int controlBandHeight = 0;
+    if (zoomButton_ != nullptr) {
+        controlBandHeight = qMax(
+            controlBandHeight,
+            qMax(zoomButton_->minimumSizeHint().height(), zoomButton_->sizeHint().height())
+        );
+    }
+    if (followPreviewCheckBox_ != nullptr) {
+        controlBandHeight = qMax(
+            controlBandHeight,
+            qMax(followPreviewCheckBox_->minimumSizeHint().height(), followPreviewCheckBox_->sizeHint().height())
+        );
+    }
+    if (!headerLineNumberFont_.family().isEmpty()) {
+        controlBandHeight = qMax(controlBandHeight, QFontMetrics(headerLineNumberFont_).height());
+    }
+    const int headerHeight = qMax(baseHeaderHeight, controlBandHeight + 10);
+    return headerHeight + timelineHeight() + 10;
+}
+
+void TimelineView::refreshMinimumHeightForCurrentDevice()
+{
+    const int targetHeight = minimumContentHeightForCurrentDevice();
+    if (minimumHeight() == targetHeight) {
+        return;
+    }
+    setMinimumHeight(targetHeight);
+    updateGeometry();
 }
 
 void TimelineView::updateDisplayBounds()
