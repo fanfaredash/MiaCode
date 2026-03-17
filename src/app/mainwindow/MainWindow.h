@@ -190,6 +190,7 @@ private:
     void populateMetadataPage();
     void populateDifficultyPage(int difficultyId);
     bool switchToMetadataField();
+    bool switchToWelcomePage();
     bool switchToDifficultyField(int difficultyId);
     void activateInitialField();
     void loadDocument(const SimaiDocument& document);
@@ -415,6 +416,8 @@ private:
     int editorTextFontPointSize_ = 0;
     double editorLineSpacingFactor_ = 1.5;
     SimaiDocument document_;
+    QWidget* welcomePage_ = nullptr;
+    QLabel* welcomeEmptyHintLabel_ = nullptr;
     QWidget* metadataPage_ = nullptr;
     QWidget* metadataCard_ = nullptr;
     QLabel* metadataEmptyHintLabel_ = nullptr;

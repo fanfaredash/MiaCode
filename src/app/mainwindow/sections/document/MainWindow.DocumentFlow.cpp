@@ -609,7 +609,7 @@ void MainWindow::updateEditorHeader()
         return;
     }
     if (!hasActiveDifficulty()) {
-        if (document_.difficultyIds().isEmpty()) {
+        if (document_.difficultyIds().isEmpty() && activeOutlineKey_ == QLatin1String("welcome")) {
             editorContextLabel_->setText(uiText("editor.welcome", "Welcome to MiaCode!"));
             editorContextLabel_->setFont(uiAccentFont(15, QFont::DemiBold));
         } else {
@@ -754,9 +754,8 @@ void MainWindow::updateMetadataPageMode()
     if (metadataCard_ == nullptr || metadataEmptyHintLabel_ == nullptr) {
         return;
     }
-    const bool hasAnyDifficulty = !document_.difficultyIds().isEmpty();
-    metadataCard_->setVisible(hasAnyDifficulty);
-    metadataEmptyHintLabel_->setVisible(!hasAnyDifficulty);
+    metadataCard_->setVisible(true);
+    metadataEmptyHintLabel_->hide();
 }
 
 bool MainWindow::deleteDifficultyField(int difficultyId)
@@ -800,18 +799,18 @@ bool MainWindow::deleteDifficultyField(int difficultyId)
         const QVector<int> remainingIds = document_.difficultyIds();
         if (remainingIds.isEmpty()) {
             activeDifficultyId_ = 0;
-            activeOutlineKey_ = "metadata";
+            activeOutlineKey_ = "welcome";
             populateMetadataPage();
-            if (editorStack_ != nullptr && metadataPage_ != nullptr) {
-                editorStack_->setCurrentWidget(metadataPage_);
+            if (editorStack_ != nullptr && welcomePage_ != nullptr) {
+                editorStack_->setCurrentWidget(welcomePage_);
             }
             if (bottomTabs_ != nullptr) {
                 bottomTabs_->setVisible(false);
             }
             setValidationTabVisible(false);
             clearTimelineAndPreview();
-            if (titleEdit_ != nullptr) {
-                titleEdit_->setFocus();
+            if (outlineList_ != nullptr) {
+                outlineList_->setFocus();
             }
             refreshLayoutAfterPageSwitch();
             QTimer::singleShot(0, this, [this]() { refreshLayoutAfterPageSwitch(); });
@@ -886,7 +885,7 @@ void MainWindow::rebuildFieldSidebar()
     );
     metadataItem->setData(Qt::UserRole, "metadata");
 
-    QListWidgetItem* selectedItem = metadataItem;
+    QListWidgetItem* selectedItem = nullptr;
     bool hasMissingDifficulty = false;
     const QVector<int> ids = document_.difficultyIds();
     for (int id : ids) {
@@ -912,11 +911,19 @@ void MainWindow::rebuildFieldSidebar()
         );
         addItem->setData(Qt::UserRole, "add");
     }
-    if (!hasActiveDifficulty()) {
+    if (activeOutlineKey_ == QLatin1String("metadata")) {
         selectedItem = metadataItem;
     }
     if (selectedItem != nullptr) {
         outlineList_->setCurrentItem(selectedItem);
+    } else {
+        outlineList_->setCurrentItem(nullptr);
+        outlineList_->setCurrentRow(-1);
+        outlineList_->clearSelection();
+        if (outlineList_->selectionModel() != nullptr) {
+            outlineList_->selectionModel()->clearCurrentIndex();
+            outlineList_->selectionModel()->clearSelection();
+        }
     }
 }
 
@@ -1000,6 +1007,40 @@ bool MainWindow::switchToMetadataField()
     return true;
 }
 
+bool MainWindow::switchToWelcomePage()
+{
+    if (!maybeSaveCurrentFieldChanges()) {
+        return false;
+    }
+    cacheWorkspaceLayoutSizes();
+    stopQtPreviewPlayback(true);
+    activeDifficultyId_ = 0;
+    activeOutlineKey_ = "welcome";
+    if (editorStack_ != nullptr && welcomePage_ != nullptr) {
+        editorStack_->setCurrentWidget(welcomePage_);
+    }
+    if (bottomTabs_ != nullptr && timelineView_ != nullptr) {
+        const int timelineTabIndex = bottomTabs_->indexOf(timelineView_);
+        if (timelineTabIndex >= 0) {
+            bottomTabs_->setTabVisible(timelineTabIndex, false);
+        }
+    }
+    if (bottomTabs_ != nullptr) {
+        bottomTabs_->setVisible(false);
+    }
+    setValidationTabVisible(false);
+    clearValidationDecorations();
+    currentFieldDirty_ = false;
+    updateDirtyState();
+    rebuildFieldSidebar();
+    updateWindowTitle();
+    updateEditorEmptyState();
+    updateEditorStatus();
+    refreshLayoutAfterPageSwitch();
+    QTimer::singleShot(0, this, [this]() { refreshLayoutAfterPageSwitch(); });
+    return true;
+}
+
 bool MainWindow::switchToDifficultyField(int difficultyId)
 {
     if (!SimaiDocument::isDifficultyId(difficultyId) || document_.difficulty(difficultyId) == nullptr) {
@@ -1012,7 +1053,7 @@ bool MainWindow::switchToDifficultyField(int difficultyId)
     stopQtPreviewPlayback(true);
     activeDifficultyId_ = difficultyId;
     projectLastOpenedDifficultyId_ = difficultyId;
-    if (activeOutlineKey_.isEmpty() || activeOutlineKey_ == "metadata") {
+    if (activeOutlineKey_.isEmpty() || activeOutlineKey_ == "metadata" || activeOutlineKey_ == "welcome") {
         activeOutlineKey_ = "chart";
     }
     populateDifficultyPage(difficultyId);
@@ -1066,8 +1107,8 @@ void MainWindow::activateInitialField()
         }
         switchToDifficultyField(targetId);
     } else {
-        activeOutlineKey_ = "metadata";
-        switchToMetadataField();
+        activeOutlineKey_ = "welcome";
+        switchToWelcomePage();
         clearTimelineAndPreview();
     }
 }
@@ -1078,6 +1119,7 @@ void MainWindow::loadDocument(const SimaiDocument& document)
     documentDirty_ = false;
     currentFieldDirty_ = false;
     activeDifficultyId_ = 0;
+    activeOutlineKey_ = document_.difficultyIds().isEmpty() ? QStringLiteral("welcome") : QStringLiteral("chart");
     rebuildFieldSidebar();
     activateInitialField();
     updateMetadataPageMode();
