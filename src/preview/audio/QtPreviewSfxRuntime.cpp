@@ -1,7 +1,7 @@
 #include "QtPreviewSfxRuntime.h"
 
-#include "common/AssetPaths.h"
 #include "common/PreviewGameplayConfig.h"
+#include "common/PreviewSfxAssets.h"
 
 #include <algorithm>
 #include <cstring>

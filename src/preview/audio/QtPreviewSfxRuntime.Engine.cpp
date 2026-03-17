@@ -24,12 +24,12 @@ void QtPreviewSfxRuntime::initializeAssets()
         return;
     }
 
-    const auto configureBank = [this](SfxBank& bank, const QString& filename, int voiceCount) {
-        const QString path = QDir(sfxDir_).filePath(filename);
+    const auto configureBank = [this](SfxBank& bank, const QString& kind, int voiceCount) {
+        const QString path = miacode::preview_sfx::assetFilePathForKind(sfxDir_, kind);
         if (!QFileInfo::exists(path)) {
             return;
         }
-        const QByteArray pathBytes = QFile::encodeName(path);
+        const QByteArray pathBytes = miacode::preview_sfx::encodedAssetFilePathForKind(sfxDir_, kind);
         bank.voices.reserve(voiceCount);
         for (int i = 0; i < voiceCount; ++i) {
             Voice* voice = new Voice();
@@ -50,17 +50,17 @@ void QtPreviewSfxRuntime::initializeAssets()
         bank.configured = !bank.voices.isEmpty();
     };
 
-    configureBank(answerSfx_, "answer.wav", 12);
-    configureBank(slideSfx_, "slide.wav", 8);
-    configureBank(breakSfx_, "break.wav", 8);
-    configureBank(exSfx_, "judge_ex.wav", 8);
-    configureBank(touchSfx_, "touch.wav", 12);
+    configureBank(answerSfx_, "answer", 12);
+    configureBank(slideSfx_, "slide", 8);
+    configureBank(breakSfx_, "break", 8);
+    configureBank(exSfx_, "ex", 8);
+    configureBank(touchSfx_, "touch", 12);
     // Firework SFX mirrors the visual behavior: latest trigger interrupts the previous one.
-    configureBank(fireworkSfx_, "firework.wav", 1);
+    configureBank(fireworkSfx_, "firework", 1);
 
-    const QString touchholdPath = QDir(sfxDir_).filePath("touchHold_riser.wav");
+    const QString touchholdPath = miacode::preview_sfx::assetFilePathForKind(sfxDir_, "touchhold");
     if (QFileInfo::exists(touchholdPath)) {
-        const QByteArray pathBytes = QFile::encodeName(touchholdPath);
+        const QByteArray pathBytes = miacode::preview_sfx::encodedAssetFilePathForKind(sfxDir_, "touchhold");
         touchholdVoices_.reserve(8);
         for (int i = 0; i < 8; ++i) {
             TouchholdVoice touchholdVoice;
