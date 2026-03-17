@@ -76,18 +76,18 @@ void TimelineView::updateZoomButtonAppearance()
     const double nextScale = zoomPresets_.value((zoomPresetIndex_ + 1) % zoomPresets_.size(), currentScale);
     const QString sign = nextScale < currentScale ? "-" : "+";
 
-    QPixmap iconPixmap(20, 20);
+    QPixmap iconPixmap(18, 18);
     iconPixmap.fill(Qt::transparent);
     QPainter p(&iconPixmap);
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setPen(QPen(c.timelineLabel, 1.8));
-    p.drawEllipse(QRectF(3.0, 3.0, 10.0, 10.0));
-    p.drawLine(QPointF(11.5, 11.5), QPointF(17.0, 17.0));
+    p.drawEllipse(QRectF(2.5, 2.5, 9.0, 9.0));
+    p.drawLine(QPointF(10.5, 10.5), QPointF(15.2, 15.2));
     QFont font = p.font();
     font.setBold(true);
-    font.setPointSize(8);
+    font.setPointSize(7);
     p.setFont(font);
-    p.drawText(QRectF(13.5, 0.0, 6.5, 10.0), Qt::AlignCenter, sign);
+    p.drawText(QRectF(11.5, 0.0, 6.5, 9.0), Qt::AlignCenter, sign);
     p.end();
 
     zoomButton_->setIcon(QIcon(iconPixmap));
@@ -96,7 +96,7 @@ void TimelineView::updateZoomButtonAppearance()
     zoomButton_->setText(QString("%1x").arg(currentScale, 0, 'f', currentScale == qRound(currentScale) ? 0 : 2));
     zoomButton_->setToolTip(QString("Timeline zoom: %1x").arg(currentScale, 0, 'f', currentScale == qRound(currentScale) ? 0 : 2));
     zoomButton_->adjustSize();
-    zoomButton_->setFixedHeight(24);
+    zoomButton_->setFixedHeight(22);
     layoutHeaderButtons();
     if (auto* dock = qobject_cast<QDockWidget*>(parentWidget())) {
         dock->setWindowTitle(QString("Timeline - %1x").arg(currentScale, 0, 'f', currentScale == qRound(currentScale) ? 0 : 2));
@@ -114,7 +114,7 @@ void TimelineView::layoutHeaderButtons()
     }
     if (followPreviewCheckBox_ != nullptr) {
         followPreviewCheckBox_->adjustSize();
-        followPreviewCheckBox_->setFixedHeight(24);
+        followPreviewCheckBox_->setFixedHeight(22);
         const int y = qMax(0, (timelineTop() - followPreviewCheckBox_->height()) / 2);
         const int rightX = qMax(leftBaseX, viewport()->width() - followPreviewCheckBox_->width() - rightMargin);
         followPreviewCheckBox_->move(rightX, y);

@@ -82,6 +82,7 @@
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QStyledItemDelegate>
+#include <QTabBar>
 #include <QTabWidget>
 #include <QSysInfo>
 #include <QStyle>
@@ -1225,6 +1226,7 @@ void MainWindow::applyUiTheme()
     if (timelineView_ != nullptr) {
         timelineView_->refreshTheme();
     }
+    updateBottomTabsDeviceHeight();
     if (chartBracketHighlighter_ != nullptr) {
         chartBracketHighlighter_->rehighlight();
     }
@@ -1263,6 +1265,50 @@ void MainWindow::applyUiTheme()
     }
     updatePauseButtonAppearance();
     update();
+}
+
+int MainWindow::computeBottomTabsDeviceHeight() const
+{
+    if (bottomTabs_ == nullptr || timelineView_ == nullptr) {
+        return 0;
+    }
+
+    bottomTabs_->ensurePolished();
+    timelineView_->ensurePolished();
+    QTabBar* tabBar = bottomTabs_->tabBar();
+    if (tabBar != nullptr) {
+        tabBar->ensurePolished();
+    }
+
+    const int timelineHeight = qMax(timelineView_->minimumHeight(), timelineView_->minimumSizeHint().height());
+    const int tabBarHeight = tabBar != nullptr
+        ? qMax(tabBar->minimumSizeHint().height(), tabBar->sizeHint().height())
+        : 0;
+    const int frameWidth = qMax(0, bottomTabs_->style()->pixelMetric(QStyle::PM_DefaultFrameWidth, nullptr, bottomTabs_));
+    constexpr int kSafetyPadding = 4;
+    return timelineHeight + tabBarHeight + frameWidth * 2 + kSafetyPadding;
+}
+
+void MainWindow::updateBottomTabsDeviceHeight()
+{
+    if (bottomTabs_ == nullptr) {
+        return;
+    }
+
+    const int targetHeight = computeBottomTabsDeviceHeight();
+    if (targetHeight <= 0) {
+        return;
+    }
+    if (bottomTabs_->minimumHeight() == targetHeight && bottomTabs_->maximumHeight() == targetHeight) {
+        return;
+    }
+
+    bottomTabs_->setMinimumHeight(targetHeight);
+    bottomTabs_->setMaximumHeight(targetHeight);
+    bottomTabs_->updateGeometry();
+    if (previewLeftColumn_ != nullptr) {
+        previewLeftColumn_->updateGeometry();
+    }
 }
 
 namespace {
@@ -2113,6 +2159,7 @@ void MainWindow::moveEvent(QMoveEvent* event)
 void MainWindow::showEvent(QShowEvent* event)
 {
     QMainWindow::showEvent(event);
+    updateBottomTabsDeviceHeight();
     logWindowGeometryDebug("show_event");
 }
 
@@ -2134,6 +2181,11 @@ void MainWindow::changeEvent(QEvent* event)
                 .arg(formatWindowStateFlags(stateEvent != nullptr ? stateEvent->oldState() : Qt::WindowNoState))
                 .arg(formatWindowStateFlags(windowState()))
         );
+    } else if (type == QEvent::ScreenChangeInternal
+        || type == QEvent::DevicePixelRatioChange
+        || type == QEvent::FontChange
+        || type == QEvent::StyleChange) {
+        updateBottomTabsDeviceHeight();
     } else if (type == QEvent::ActivationChange) {
         logWindowGeometryDebug("activation_change", QString("is_active=%1").arg(isActiveWindow() ? 1 : 0));
     } else if (type == QEvent::ZOrderChange) {

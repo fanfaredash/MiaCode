@@ -1046,6 +1046,9 @@ MainWindow::MainWindow(QWidget* parent)
 
     bottomTabs_ = new QTabWidget(central);
     timelineView_ = new TimelineView(bottomTabs_);
+    QFont timelineHeaderLineNumberFont = codeFont;
+    timelineHeaderLineNumberFont.setPointSize(qMax(codeFont.pointSize() + 1, 12));
+    timelineView_->setHeaderLineNumberFont(timelineHeaderLineNumberFont);
     timelineView_->setShowSlideTracks(true);
     connect(timelineView_, &TimelineView::noteNavigateRequested, this, [this](int line, int col) {
         jumpToLocation(line, col);
@@ -1127,8 +1130,7 @@ MainWindow::MainWindow(QWidget* parent)
         errorList_,
         UiText::isChineseUi() ? QStringLiteral("语法检查") : QStringLiteral("Syntax Check")
     );
-    bottomTabs_->setMinimumHeight(220);
-    bottomTabs_->setMaximumHeight(280);
+    updateBottomTabsDeviceHeight();
     logStartupStage("timeline_and_tabs_ready");
 
     previewLeftColumn_ = new QWidget(this);

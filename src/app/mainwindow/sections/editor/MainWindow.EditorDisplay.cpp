@@ -208,6 +208,12 @@ void MainWindow::applyEditorTextFontSize(int pointSize, bool persistPreference)
         editor->setBlockSpacingPixels(blockSpacingPixels);
         editor->refreshLineNumberAreaLayout();
     }
+    if (timelineView_ != nullptr) {
+        QFont timelineHeaderLineNumberFont = editorFont(normalized);
+        timelineHeaderLineNumberFont.setPointSize(qMax(timelineHeaderLineNumberFont.pointSize() + 1, 12));
+        timelineView_->setHeaderLineNumberFont(timelineHeaderLineNumberFont);
+        updateBottomTabsDeviceHeight();
+    }
     if (metadataExtraEdit_ != nullptr) {
         metadataExtraEdit_->setFont(editorFont(normalized));
         applyBlockSpacingToTextEdit(metadataExtraEdit_, blockSpacingPixels);

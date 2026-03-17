@@ -25,7 +25,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
     painter.drawLine(0, top - 1, viewport()->width(), top - 1);
     QFont laneLabelFont(QStringLiteral("Consolas"));
     laneLabelFont.setStyleHint(QFont::Monospace);
-    laneLabelFont.setPointSize(12);
+    laneLabelFont.setPointSize(10);
     laneLabelFont.setWeight(QFont::DemiBold);
 
     if (!waveformPeaks_.isEmpty() && waveformDurationSeconds_ > 0.0) {
@@ -102,8 +102,10 @@ void TimelineView::paintEvent(QPaintEvent* event)
             if (labelX >= headerLeftLimit
                 && labelX + labelWidth <= headerRightLimit
                 && labelX - lastLabelScreenX >= 22) {
+                painter.setFont(headerLineNumberFont_);
                 painter.setPen(c.textSecondary);
-                painter.drawText(labelX, 0, labelWidth, kHeaderHeight, Qt::AlignHCenter | Qt::AlignVCenter, labelText);
+                painter.drawText(labelX, 0, labelWidth, top, Qt::AlignHCenter | Qt::AlignVCenter, labelText);
+                painter.setFont(laneLabelFont);
                 lastLabelScreenX = labelX;
             }
         }

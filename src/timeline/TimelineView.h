@@ -2,6 +2,7 @@
 
 #include <QAbstractScrollArea>
 #include <QCheckBox>
+#include <QFont>
 #include <QHash>
 #include <QMouseEvent>
 #include <QPixmap>
@@ -72,6 +73,9 @@ class TimelineView : public QAbstractScrollArea
 
 public:
     explicit TimelineView(QWidget* parent = nullptr);
+    QSize minimumSizeHint() const override;
+    QSize sizeHint() const override;
+    void setHeaderLineNumberFont(const QFont& font);
     void setTimelineData(
         const QVector<TimelineBeatMarker>& beats,
         const QVector<TimelineNoteMarker>& notes,
@@ -126,6 +130,8 @@ private:
     QPixmap iconForType(const QString& type) const;
     void loadNoteIcons();
     const TimelineNoteMarker* nearestNoteForViewportPos(const QPointF& pos) const;
+    int minimumContentHeightForCurrentDevice() const;
+    void refreshMinimumHeightForCurrentDevice();
 
     QVector<TimelineBeatMarker> beats_;
     QVector<TimelineNoteMarker> notes_;
@@ -143,6 +149,7 @@ private:
     double waveformDurationSeconds_ = 0.0;
     QToolButton* zoomButton_ = nullptr;
     QCheckBox* followPreviewCheckBox_ = nullptr;
+    QFont headerLineNumberFont_;
     QVector<double> zoomPresets_{0.25, 0.5, 1.0, 1.5, 2.0};
     int zoomPresetIndex_ = 2;
     bool timelineDragActive_ = false;
