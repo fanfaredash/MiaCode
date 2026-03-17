@@ -3300,17 +3300,8 @@ void MainWindow::onExportPreviewVideo()
     task.noteFlowSpeed = previewNoteFlowSpeed_;
     task.exportStartSeconds = 0.0;
     task.contentDurationSeconds = qMax(0.0, previewDurationSeconds());
-    const double currentAspect = normalizedPreviewCanvasAspectRatio(previewCanvasAspectRatio_);
-    if (qAbs(currentAspect - (16.0 / 9.0)) < 0.05) {
-        task.outputWidth = 1280;
-        task.outputHeight = 720;
-    } else if (qAbs(currentAspect - (4.0 / 3.0)) < 0.05) {
-        task.outputWidth = 1024;
-        task.outputHeight = 768;
-    } else {
-        task.outputWidth = 1024;
-        task.outputHeight = 1024;
-    }
+    task.outputWidth = 1024;
+    task.outputHeight = 1024;
     task.fps = 60;
     task.showTimestamp = previewShowTimestamp_;
 
@@ -3323,7 +3314,7 @@ void MainWindow::onExportPreviewVideo()
     const QString difficultyName = hasActiveDifficulty()
         ? SimaiDocument::difficultyShortName(activeDifficultyId_).replace(':', '_')
         : QStringLiteral("chart");
-    const QString outputName = QString("%1_%2_preview.mp4")
+    const QString outputName = QString("%1_%2.mp4")
         .arg(exportStem)
         .arg(difficultyName);
     task.outputPath = outputName;
@@ -3567,7 +3558,7 @@ bool MainWindow::exportPreviewVideoFromCli(
     const QFileInfo chartInfo(currentFilePath_);
     const QString exportStem = sanitizeExportFileStem(document_.title, QStringLiteral("out"));
     const QString difficultyName = SimaiDocument::difficultyShortName(difficultyId).replace(':', '_');
-    const QString defaultOutputName = QString("%1_%2_preview.mp4")
+    const QString defaultOutputName = QString("%1_%2.mp4")
         .arg(exportStem)
         .arg(difficultyName);
 
