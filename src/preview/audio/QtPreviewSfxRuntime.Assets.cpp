@@ -13,33 +13,7 @@ QString QtPreviewSfxRuntime::resolveTrackPath(const QString& chartPath) const
 
 QString QtPreviewSfxRuntime::resolveSfxDir() const
 {
-    const QString envDir = QDir::cleanPath(
-        qEnvironmentVariable("MIACODE_PREVIEW_SFX_DIR", qEnvironmentVariable("MAIMURI_PREVIEW_SFX_DIR")).trimmed()
-    );
-    if (!envDir.isEmpty() && QFileInfo::exists(QDir(envDir).filePath("answer.wav"))) {
-        return envDir;
-    }
-
-    QStringList candidates;
-    const QString assetSfxUpper = miacode::assets::assetPath("SFX");
-    if (!assetSfxUpper.isEmpty()) {
-        candidates << assetSfxUpper;
-    }
-    const QString assetSfxLower = miacode::assets::assetPath("sfx");
-    if (!assetSfxLower.isEmpty()) {
-        candidates << assetSfxLower;
-    }
-
-    const QDir appDir(QCoreApplication::applicationDirPath());
-    candidates << QDir::cleanPath(appDir.filePath("SFX"));
-    candidates << QDir::cleanPath(appDir.filePath("sfx"));
-
-    for (const QString& path : candidates) {
-        if (QFileInfo::exists(QDir(path).filePath("answer.wav"))) {
-            return path;
-        }
-    }
-    return QString();
+    return miacode::preview_sfx::resolveSfxDirectory();
 }
 
 void QtPreviewSfxRuntime::resetBackgroundTrack()

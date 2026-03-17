@@ -4,6 +4,7 @@
 #include "common/AssetPaths.h"
 #include "common/LayoutRingConfig.h"
 #include "common/PreviewGameplayConfig.h"
+#include "common/PreviewSfxAssets.h"
 #include "common/VideoExportConfig.h"
 
 #include <QCoreApplication>
@@ -1705,35 +1706,7 @@ bool isImageMediaPath(const QString& path)
 
 QString resolveSfxDirectory()
 {
-    const QString envPath = qEnvironmentVariable(
-        "MIACODE_PREVIEW_SFX_DIR",
-        qEnvironmentVariable("MAIMURI_PREVIEW_SFX_DIR")
-    ).trimmed();
-    if (!envPath.isEmpty() && QFileInfo::exists(QDir(envPath).filePath("answer.wav"))) {
-        return normalizePath(envPath);
-    }
-
-    const QString assetSfxUpper = miacode::assets::assetPath("SFX");
-    if (QFileInfo::exists(QDir(assetSfxUpper).filePath("answer.wav"))) {
-        return normalizePath(assetSfxUpper);
-    }
-    const QString assetSfxLower = miacode::assets::assetPath("assets/SFX");
-    if (QFileInfo::exists(QDir(assetSfxLower).filePath("answer.wav"))) {
-        return normalizePath(assetSfxLower);
-    }
-
-    const QDir appDir(QCoreApplication::applicationDirPath());
-    const QStringList candidates{
-        appDir.filePath("assets/SFX"),
-        appDir.filePath("SFX"),
-        appDir.filePath("../Resources/assets/SFX"),
-    };
-    for (const QString& candidate : candidates) {
-        if (QFileInfo::exists(QDir(candidate).filePath("answer.wav"))) {
-            return normalizePath(candidate);
-        }
-    }
-    return QString();
+    return normalizePath(miacode::preview_sfx::resolveSfxDirectory());
 }
 
 bool decodeAudioClip(const QString& path, DecodedClip* clip)
@@ -1748,7 +1721,8 @@ bool decodeAudioClip(const QString& path, DecodedClip* clip)
 
     ma_decoder decoder;
     ma_decoder_config config = ma_decoder_config_init(ma_format_f32, kMixChannels, kMixSampleRate);
-    if (ma_decoder_init_file(path.toUtf8().constData(), &config, &decoder) != MA_SUCCESS) {
+    const QByteArray encodedPath = QFile::encodeName(path);
+    if (ma_decoder_init_file(encodedPath.constData(), &config, &decoder) != MA_SUCCESS) {
         return false;
     }
 
@@ -2001,20 +1975,20 @@ bool mixSfxTrackToWav(
     }
 
     QHash<QString, DecodedClip> clips;
-    const auto loadClip = [&sfxDir, &clips](const QString& key, const QString& fileName) {
+    const auto loadClip = [&sfxDir, &clips](const QString& key) {
         DecodedClip clip;
-        const QString path = QDir(sfxDir).filePath(fileName);
+        const QString path = miacode::preview_sfx::assetFilePathForKind(sfxDir, key);
         if (decodeAudioClip(path, &clip)) {
             clips.insert(key, clip);
         }
     };
-    loadClip(QStringLiteral("answer"), QStringLiteral("answer.wav"));
-    loadClip(QStringLiteral("slide"), QStringLiteral("slide.wav"));
-    loadClip(QStringLiteral("break"), QStringLiteral("break.wav"));
-    loadClip(QStringLiteral("ex"), QStringLiteral("judge_ex.wav"));
-    loadClip(QStringLiteral("touch"), QStringLiteral("touch.wav"));
-    loadClip(QStringLiteral("touchhold"), QStringLiteral("touchHold_riser.wav"));
-    loadClip(QStringLiteral("firework"), QStringLiteral("firework.wav"));
+    loadClip(QStringLiteral("answer"));
+    loadClip(QStringLiteral("slide"));
+    loadClip(QStringLiteral("break"));
+    loadClip(QStringLiteral("ex"));
+    loadClip(QStringLiteral("touch"));
+    loadClip(QStringLiteral("touchhold"));
+    loadClip(QStringLiteral("firework"));
 
     QVector<ExportEvent> events;
     QVector<ExportTouchholdSpan> spans;
