@@ -511,7 +511,7 @@ EncoderAutoMode resolveEncoderAutoMode()
         || mode == QLatin1String("fast")) {
         return EncoderAutoMode::Hardware;
     }
-    return EncoderAutoMode::Balanced;
+    return EncoderAutoMode::Hardware;
 }
 
 bool shouldPreferHardwareEncoderInAutoMode(

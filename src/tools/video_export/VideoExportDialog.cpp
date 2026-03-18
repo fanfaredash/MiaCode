@@ -635,7 +635,7 @@ VideoExportDialog::VideoExportDialog(
         l10n(QStringLiteral("Show bottom-left timestamp"), QStringLiteral("显示左下角时间戳")),
         optionsContent_
     );
-    showTimestampCheck_->setChecked(baseTask_.showTimestamp);
+    showTimestampCheck_->setChecked(false);
     showTimestampCheck_->setText(uiText("dialog.video_export.option.show_timestamp", QStringLiteral("Show bottom-left timestamp")));
     smoothBrightnessCheck_ = new QCheckBox(
         l10n(QStringLiteral("Smooth brightness"), QStringLiteral("平滑亮度")),
