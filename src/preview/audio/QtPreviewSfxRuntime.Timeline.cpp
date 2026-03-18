@@ -1,7 +1,5 @@
 namespace {
 
-constexpr double kQtPreviewSfxSameKindBoostGain = 1.5;
-
 struct AggregatedPlayback {
     QString kind;
     int count = 0;
@@ -10,21 +8,7 @@ struct AggregatedPlayback {
 
 bool shouldAggregatePlaybackKind(const QString& kind)
 {
-    return kind == "answer"
-        || kind == "judge"
-        || kind == "judge_break"
-        || kind == "slide"
-        || kind == "break_slide_start"
-        || kind == "ex";
-}
-
-bool shouldBoostAggregatedPlaybackKind(const QString& kind)
-{
-    return kind == "judge"
-        || kind == "judge_break"
-        || kind == "slide"
-        || kind == "break_slide_start"
-        || kind == "ex";
+    return previewSfxShouldAggregateKind(kind);
 }
 
 void accumulatePlayback(QVector<AggregatedPlayback>* playbacks, const QString& kind, double gain)
@@ -49,11 +33,7 @@ void accumulatePlayback(QVector<AggregatedPlayback>* playbacks, const QString& k
 
 double playbackGain(const AggregatedPlayback& playback)
 {
-    double gain = qMax(0.0, playback.maxGain);
-    if (playback.count >= 2 && shouldBoostAggregatedPlaybackKind(playback.kind)) {
-        gain = qMin(kQtPreviewSfxSameKindBoostGain, gain * kQtPreviewSfxSameKindBoostGain);
-    }
-    return gain;
+    return previewSfxPlaybackGainForAggregate(playback.kind, playback.count, playback.maxGain);
 }
 
 }
@@ -222,6 +202,9 @@ void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& n
             continue;
         }
         if (marker.type == "touch") {
+            if (!marker.isFirework) {
+                addEvent(marker.second, "answer");
+            }
             addEvent(marker.second, marker.isBreak ? "judge_break" : "touch");
             if (marker.isFirework) {
                 addEvent(marker.second + kQtPreviewSfxFireworkTouchTriggerDelaySeconds, "firework");
@@ -229,6 +212,9 @@ void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& n
             continue;
         }
         if (marker.type == "touch_hold") {
+            if (!marker.isFirework) {
+                addEvent(marker.second, "answer");
+            }
             addEvent(marker.second, marker.isBreak ? "judge_break" : "touch");
             if (marker.isFirework && marker.endSecond >= 0.0) {
                 addEvent(marker.endSecond, "firework");

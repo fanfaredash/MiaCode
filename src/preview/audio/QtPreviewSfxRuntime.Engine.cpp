@@ -134,17 +134,17 @@ void QtPreviewSfxRuntime::applyVolumes()
         }
     };
 
-    applyVolume(answerSfx_, settings_.answerVolume);
-    applyVolume(judgeSfx_, settings_.judgeVolume);
-    applyVolume(judgeBreakSfx_, settings_.breakVolume);
-    applyVolume(slideSfx_, settings_.slideVolume);
-    applyVolume(breakSfx_, qMin(settings_.breakVolume * 1.5, 1.5));
-    applyVolume(breakSlideStartSfx_, settings_.breakSlideVolume);
-    applyVolume(breakSlideSfx_, settings_.breakSlideVolume);
-    applyVolume(judgeBreakSlideSfx_, settings_.breakSlideVolume);
-    applyVolume(exSfx_, settings_.exVolume);
-    applyVolume(touchSfx_, settings_.touchVolume);
-    applyVolume(fireworkSfx_, settings_.fireworkVolume);
+    applyVolume(answerSfx_, previewSfxVolumeForKind(settings_, "answer"));
+    applyVolume(judgeSfx_, previewSfxVolumeForKind(settings_, "judge"));
+    applyVolume(judgeBreakSfx_, previewSfxVolumeForKind(settings_, "judge_break"));
+    applyVolume(slideSfx_, previewSfxVolumeForKind(settings_, "slide"));
+    applyVolume(breakSfx_, previewSfxVolumeForKind(settings_, "break"));
+    applyVolume(breakSlideStartSfx_, previewSfxVolumeForKind(settings_, "break_slide_start"));
+    applyVolume(breakSlideSfx_, previewSfxVolumeForKind(settings_, "break_slide_finish"));
+    applyVolume(judgeBreakSlideSfx_, previewSfxVolumeForKind(settings_, "judge_break_slide"));
+    applyVolume(exSfx_, previewSfxVolumeForKind(settings_, "ex"));
+    applyVolume(touchSfx_, previewSfxVolumeForKind(settings_, "touch"));
+    applyVolume(fireworkSfx_, previewSfxVolumeForKind(settings_, "firework"));
     if (backgroundTrackVoice_ != nullptr && backgroundTrackVoice_->initialized) {
         ma_sound_set_volume(&backgroundTrackVoice_->sound, static_cast<float>(settings_.bgmVolume));
     }
@@ -153,7 +153,7 @@ void QtPreviewSfxRuntime::applyVolumes()
     }
     for (TouchholdVoice& voice : touchholdVoices_) {
         if (voice.voice != nullptr && voice.voice->initialized) {
-            ma_sound_set_volume(&voice.voice->sound, static_cast<float>(settings_.touchVolume));
+            ma_sound_set_volume(&voice.voice->sound, static_cast<float>(previewSfxVolumeForKind(settings_, "touchhold")));
         }
     }
 }
