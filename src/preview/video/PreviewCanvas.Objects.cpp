@@ -1138,94 +1138,110 @@ void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
         int breakPlayed = 0;
         int totalCount = 0;
         int totalPlayed = 0;
+        double finaleBaseTotal = 0.0;
+        double finaleCurrent = 0.0;
+        double deluxeBaseTotal = 0.0;
+        double deluxeBaseCurrent = 0.0;
+        int deluxeBreakTotal = 0;
+        int deluxeBreakCurrent = 0;
     };
     const auto computeHudStats = [this](double second) {
         HudStats stats;
-        int helperTapNonBreakTotal = 0;
-        int helperTapNonBreakPlayed = 0;
-        int helperTapBreakTotal = 0;
-        int helperTapBreakPlayed = 0;
-        int baseTotalCount = 0;
-        int baseTotalPlayed = 0;
+        const auto eventPlayed = [second](double judgeSecond) {
+            return judgeSecond <= (second + 1e-6);
+        };
+        const auto slideJudgeSecondFor = [](const TimelineNoteMarker& marker) {
+            if (marker.endSecond > marker.second) {
+                return marker.endSecond;
+            }
+            if (marker.slideTraceSecond > marker.second) {
+                return marker.slideTraceSecond;
+            }
+            return marker.second;
+        };
+        const auto addNormalEvent = [&stats, &eventPlayed](
+            double judgeSecond,
+            int finaleScore,
+            int deluxeValue,
+            int* totalCounter,
+            int* playedCounter
+        ) {
+            const bool played = eventPlayed(judgeSecond);
+            ++(*totalCounter);
+            ++stats.totalCount;
+            stats.finaleBaseTotal += static_cast<double>(finaleScore);
+            stats.deluxeBaseTotal += static_cast<double>(deluxeValue);
+            if (played) {
+                ++(*playedCounter);
+                ++stats.totalPlayed;
+                stats.finaleCurrent += static_cast<double>(finaleScore);
+                stats.deluxeBaseCurrent += static_cast<double>(deluxeValue);
+            }
+        };
+        const auto addBreakEvent = [&stats, &eventPlayed](double judgeSecond) {
+            const bool played = eventPlayed(judgeSecond);
+            ++stats.breakTotal;
+            ++stats.totalCount;
+            ++stats.deluxeBreakTotal;
+            stats.finaleBaseTotal += 2500.0;
+            stats.deluxeBaseTotal += 5.0;
+            if (played) {
+                ++stats.breakPlayed;
+                ++stats.totalPlayed;
+                ++stats.deluxeBreakCurrent;
+                stats.finaleCurrent += 2600.0;
+                stats.deluxeBaseCurrent += 5.0;
+            }
+        };
         for (const TimelineNoteMarker& marker : noteMarkers_) {
             const QString type = marker.type.toLower();
-            const bool played = marker.second <= (second + 1e-6);
-            const bool isTap = (type == "tap");
-            const bool isHold = (type == "hold" || type == "touch_hold");
-            const bool isSlide = (type == "slide" || type == "wifi");
-            const bool isTouch = (type == "touch");
-            const bool isBreak = marker.isBreak || marker.headBreak || marker.trackBreak;
-            if (played) {
-                ++baseTotalPlayed;
-            }
-            ++baseTotalCount;
-            if (isTap && !marker.isBreak) {
-                ++stats.tapTotal;
-                if (played) {
-                    ++stats.tapPlayed;
-                }
-            }
-            if (isHold) {
-                ++stats.holdTotal;
-                if (played) {
-                    ++stats.holdPlayed;
-                }
-            }
-            if (isSlide) {
-                ++stats.slideTotal;
-                if (played) {
-                    ++stats.slidePlayed;
-                }
-            }
-            if (isTouch) {
-                ++stats.touchTotal;
-                if (played) {
-                    ++stats.touchPlayed;
-                }
-            }
-            if (isBreak) {
-                ++stats.breakTotal;
-                if (played) {
-                    ++stats.breakPlayed;
-                }
-            }
-            if (isSlide && marker.hasHeadStar) {
-                const double helperMoment = marker.slideTraceSecond > marker.second
-                    ? marker.slideTraceSecond
-                    : marker.second;
-                const bool helperPlayed = helperMoment <= (second + 1e-6);
-                if (marker.headBreak) {
-                    ++helperTapBreakTotal;
-                    if (helperPlayed) {
-                        ++helperTapBreakPlayed;
-                    }
+            if (type == "tap") {
+                if (marker.isBreak) {
+                    addBreakEvent(marker.second);
                 } else {
-                    ++helperTapNonBreakTotal;
-                    if (helperPlayed) {
-                        ++helperTapNonBreakPlayed;
+                    addNormalEvent(marker.second, 500, 1, &stats.tapTotal, &stats.tapPlayed);
+                }
+                continue;
+            }
+            if (type == "touch") {
+                if (marker.isBreak) {
+                    addBreakEvent(marker.second);
+                } else {
+                    addNormalEvent(marker.second, 500, 1, &stats.touchTotal, &stats.touchPlayed);
+                }
+                continue;
+            }
+            if (type == "hold" || type == "touch_hold") {
+                if (marker.isBreak) {
+                    addBreakEvent(marker.second);
+                } else {
+                    addNormalEvent(marker.second, 1000, 2, &stats.holdTotal, &stats.holdPlayed);
+                }
+                continue;
+            }
+            if (type == "slide" || type == "wifi") {
+                if (marker.hasHeadStar) {
+                    if (marker.headBreak) {
+                        addBreakEvent(marker.second);
+                    } else {
+                        addNormalEvent(marker.second, 500, 1, &stats.tapTotal, &stats.tapPlayed);
                     }
+                }
+                const double slideJudgeSecond = slideJudgeSecondFor(marker);
+                if (marker.trackBreak) {
+                    addBreakEvent(slideJudgeSecond);
+                } else {
+                    addNormalEvent(slideJudgeSecond, 1500, 3, &stats.slideTotal, &stats.slidePlayed);
                 }
             }
         }
-        stats.tapTotal += helperTapNonBreakTotal;
-        stats.tapPlayed += helperTapNonBreakPlayed;
-        stats.breakTotal += helperTapBreakTotal;
-        stats.breakPlayed += helperTapBreakPlayed;
-        stats.totalCount = baseTotalCount + helperTapNonBreakTotal + helperTapBreakTotal;
-        stats.totalPlayed = baseTotalPlayed + helperTapNonBreakPlayed + helperTapBreakPlayed;
         return stats;
     };
-    const auto fmtHudStat = [](const QString& name, int played, int total) {
-        return QString("%1  %2/%3")
-            .arg(name.leftJustified(5, QChar(' '), true))
-            .arg(played)
-            .arg(total);
-    };
-
     painter.setPen(QColor("#D9E2EC"));
     const qreal hudPadding = qBound<qreal>(10.0, stageRect.width() * 0.028, 18.0);
-    const int timeFontPointSize = qBound(12, qRound(stageRect.height() * 0.03), 20);
-    const int debugFontPointSize = qBound(8, qRound(stageRect.height() * 0.019), 13);
+    const qreal stageShortSide = qMax<qreal>(1.0, qMin(stageRect.width(), stageRect.height()));
+    const int timeFontPointSize = qBound(12, qRound(stageShortSide * 0.022), 34);
+    const int debugFontPointSize = qBound(8, qRound(stageShortSide * 0.013), 22);
     QFont timeFont = hudMonoFont(timeFontPointSize, QFont::DemiBold);
     if (showDebugInfo_) {
         QFont fpsFont = hudMonoFont(debugFontPointSize, QFont::Medium);
@@ -1270,49 +1286,119 @@ void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
     }
 
     const HudStats stats = computeHudStats(playheadSeconds_);
-    const QStringList lines{
-        fmtHudStat(QStringLiteral("Tap"), stats.tapPlayed, stats.tapTotal),
-        fmtHudStat(QStringLiteral("Hold"), stats.holdPlayed, stats.holdTotal),
-        fmtHudStat(QStringLiteral("Slide"), stats.slidePlayed, stats.slideTotal),
-        fmtHudStat(QStringLiteral("Touch"), stats.touchPlayed, stats.touchTotal),
-        fmtHudStat(QStringLiteral("Break"), stats.breakPlayed, stats.breakTotal),
-        fmtHudStat(QStringLiteral("Total"), stats.totalPlayed, stats.totalCount),
-    };
-    int statsFontPointSize = qBound(9, timeFontPointSize, 20);
-    QFont statsFont = hudMonoFont(statsFontPointSize, QFont::Medium);
-    QFontMetrics statsMetrics(statsFont);
-    auto maxLineWidth = [&statsMetrics, &lines]() {
-        int width = 0;
-        for (const QString& line : lines) {
-            width = qMax(width, statsMetrics.horizontalAdvance(line));
+    const double finaleRate = stats.finaleBaseTotal > 0.0
+        ? (stats.finaleCurrent / stats.finaleBaseTotal) * 100.0
+        : 0.0;
+    const double deluxeRate = (stats.deluxeBaseTotal > 0.0
+        ? (stats.deluxeBaseCurrent / stats.deluxeBaseTotal) * 100.0
+        : 0.0)
+        + (stats.deluxeBreakTotal > 0
+            ? (static_cast<double>(stats.deluxeBreakCurrent) / static_cast<double>(stats.deluxeBreakTotal))
+            : 0.0);
+
+    int baseFontPointSize = qBound(10, qRound(stageShortSide * 0.021), 22);
+    QFont titleFont;
+    QFont rateFont;
+    QFont statFont;
+    QFontMetrics titleMetrics{QFont()};
+    QFontMetrics rateMetrics{QFont()};
+    QFontMetrics statMetrics{QFont()};
+    qreal blockWidth = 0.0;
+    qreal blockHeight = 0.0;
+    qreal headerGap = 0.0;
+    qreal sectionGap = 0.0;
+    qreal statGap = 0.0;
+    QString rateLine;
+    QStringList statLines;
+
+    while (baseFontPointSize >= 8) {
+        titleFont = hudMonoFont(baseFontPointSize, QFont::Black);
+        rateFont = hudMonoFont(baseFontPointSize + 1, QFont::Black);
+        statFont = hudMonoFont(baseFontPointSize, QFont::Black);
+        titleMetrics = QFontMetrics(titleFont);
+        rateMetrics = QFontMetrics(rateFont);
+        statMetrics = QFontMetrics(statFont);
+
+        const QString finaleLine = QStringLiteral("%1 %")
+            .arg(QString::number(finaleRate, 'f', 2).rightJustified(6, QChar('0')));
+        rateLine = QStringLiteral("%1 %")
+            .arg(QString::number(deluxeRate, 'f', 4).rightJustified(8, QChar('0')));
+        statLines = QStringList{
+            finaleLine,
+            QStringLiteral("TAP: %1").arg(stats.tapPlayed),
+            QStringLiteral("HLD: %1").arg(stats.holdPlayed),
+            QStringLiteral("SLD: %1").arg(stats.slidePlayed),
+            QStringLiteral("TOH: %1").arg(stats.touchPlayed),
+            QStringLiteral("BRK: %1").arg(stats.breakPlayed),
+        };
+
+        int maxStatWidth = 0;
+        for (const QString& line : statLines) {
+            maxStatWidth = qMax(maxStatWidth, statMetrics.horizontalAdvance(line));
         }
-        return width;
-    };
-    int linesMaxWidth = maxLineWidth();
-    while (statsFontPointSize > 8 && linesMaxWidth > availableStatsWidth) {
-        --statsFontPointSize;
-        statsFont = hudMonoFont(statsFontPointSize, QFont::Medium);
-        statsMetrics = QFontMetrics(statsFont);
-        linesMaxWidth = maxLineWidth();
-    }
-    if (linesMaxWidth > availableStatsWidth) {
-        return;
-    }
 
-    const qreal baselineBottom = stageRect.bottom() - hudPadding;
-    const qreal baselineTop = baselineBottom - static_cast<qreal>(qMax(0, lines.size() - 1)) * statsMetrics.height();
-    if (baselineTop - statsMetrics.ascent() < stageRect.top() + hudPadding) {
-        return;
-    }
-
-    painter.setFont(statsFont);
-    for (int i = 0; i < lines.size(); ++i) {
-        const qreal baseline = baselineTop + static_cast<qreal>(i) * statsMetrics.height();
-        const int lineWidth = statsMetrics.horizontalAdvance(lines[i]);
-        painter.drawText(
-            QPointF(statsRightLimit - lineWidth, baseline),
-            lines[i]
+        headerGap = qMax<qreal>(2.0, titleMetrics.height() * 0.18);
+        sectionGap = qMax<qreal>(8.0, titleMetrics.height() * 0.5);
+        statGap = qMax<qreal>(1.0, statMetrics.height() * 0.08);
+        blockWidth = qMax<qreal>(
+            qMax<qreal>(
+                titleMetrics.horizontalAdvance(QStringLiteral("FiNALE Rate:")),
+                titleMetrics.horizontalAdvance(QStringLiteral("DELUXE Rate:"))
+            ),
+            qMax<qreal>(
+                qMax(rateMetrics.horizontalAdvance(rateLine), rateMetrics.horizontalAdvance(finaleLine)),
+                maxStatWidth
+            )
         );
+        blockHeight =
+            static_cast<qreal>(titleMetrics.height()) * 2.0
+            + headerGap * 2.0
+            + static_cast<qreal>(rateMetrics.height()) * 2.0
+            + sectionGap * 2.0
+            + static_cast<qreal>(statMetrics.height()) * static_cast<qreal>(statLines.size() - 1)
+            + statGap * static_cast<qreal>(qMax(0, statLines.size() - 2));
+
+        if (blockWidth <= availableStatsWidth && blockHeight <= (stageRect.height() - hudPadding * 2.0)) {
+            break;
+        }
+        --baseFontPointSize;
+    }
+
+    if (blockWidth > availableStatsWidth || blockHeight > (stageRect.height() - hudPadding * 2.0)) {
+        return;
+    }
+
+    const qreal blockLeft = statsRightLimit - blockWidth;
+    const qreal blockTop = stageRect.bottom() - hudPadding - blockHeight;
+    if (blockTop < stageRect.top() + hudPadding) {
+        return;
+    }
+
+    const auto drawHudText = [&painter](const QPointF& baseline, const QString& text, const QFont& font) {
+        painter.save();
+        painter.setFont(font);
+        painter.setPen(QColor(0, 0, 0, 190));
+        painter.drawText(baseline + QPointF(2.0, 2.0), text);
+        painter.setPen(QColor("#FFFFFF"));
+        painter.drawText(baseline, text);
+        painter.restore();
+    };
+
+    qreal baseline = blockTop + titleMetrics.ascent();
+    drawHudText(QPointF(blockLeft, baseline), QStringLiteral("FiNALE Rate:"), titleFont);
+    baseline += titleMetrics.descent() + headerGap + rateMetrics.ascent();
+    drawHudText(QPointF(blockLeft, baseline), statLines.at(0), rateFont);
+    baseline += rateMetrics.descent() + sectionGap + titleMetrics.ascent();
+    drawHudText(QPointF(blockLeft, baseline), QStringLiteral("DELUXE Rate:"), titleFont);
+    baseline += titleMetrics.descent() + headerGap + rateMetrics.ascent();
+    drawHudText(QPointF(blockLeft, baseline), rateLine, rateFont);
+    baseline += rateMetrics.descent() + sectionGap + statMetrics.ascent();
+    for (int i = 1; i < statLines.size(); ++i) {
+        if (i > 1) {
+            baseline += statGap + statMetrics.leading();
+        }
+        drawHudText(QPointF(blockLeft, baseline), statLines.at(i), statFont);
+        baseline += statMetrics.height();
     }
 }
 

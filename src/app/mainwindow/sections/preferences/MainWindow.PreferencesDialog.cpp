@@ -216,6 +216,7 @@
     connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     rootLayout->addWidget(buttonBox, 0, Qt::AlignRight);
 
+    applySystemWindowBackdrop(&dialog);
     if (dialog.exec() != QDialog::Accepted) {
         applyEditorLineSpacingFactor(originalEditorLineSpacingFactor, false);
         applyEditorTextFontSize(originalEditorFontSize, false);

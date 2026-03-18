@@ -361,46 +361,117 @@ void MainWindow::refreshTimelineMetadata()
     const double firstSeconds = parsedFixedFirstSeconds();
     QVector<TimelineBeatMarker> beatMarkers = shiftedBeatMarkers(nativeResult.beatMarkers, firstSeconds);
     QVector<TimelineNoteMarker> noteMarkers = shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds);
-    timelineCursorNotes_.clear();
-    timelineCursorNotes_.reserve(noteMarkers.size() + 1);
-    for (const TimelineNoteMarker& marker : noteMarkers) {
+    const auto appendCursorNote = [](QVector<TimelineCursorNote>* target, int line, int col, int lane, double second) {
+        if (target == nullptr) {
+            return;
+        }
         TimelineCursorNote cursorNote;
-        cursorNote.line = qMax(1, marker.sourceLine);
-        cursorNote.col = qMax(1, marker.sourceCol);
-        cursorNote.lane = marker.lane;
-        cursorNote.second = marker.second;
-        timelineCursorNotes_.append(cursorNote);
+        cursorNote.line = qMax(1, line);
+        cursorNote.col = qMax(1, col);
+        cursorNote.lane = lane;
+        cursorNote.second = second;
+        target->append(cursorNote);
+    };
+    const auto sortCursorNotes = [](QVector<TimelineCursorNote>* notes) {
+        if (notes == nullptr) {
+            return;
+        }
+        std::sort(notes->begin(), notes->end(), [](const TimelineCursorNote& a, const TimelineCursorNote& b) {
+            if (a.line != b.line) {
+                return a.line < b.line;
+            }
+            if (a.col != b.col) {
+                return a.col < b.col;
+            }
+            return a.second < b.second;
+        });
+    };
+
+    timelineCursorNotes_.clear();
+    timelineCursorNotes_.reserve(noteMarkers.size() + beatMarkers.size() + 1);
+    for (const TimelineNoteMarker& marker : noteMarkers) {
+        appendCursorNote(&timelineCursorNotes_, marker.sourceLine, marker.sourceCol, marker.lane, marker.second);
+    }
+    for (const TimelineBeatMarker& marker : beatMarkers) {
+        appendCursorNote(&timelineCursorNotes_, marker.sourceLine, marker.sourceCol, -1, marker.second);
     }
 
-    bool hasRawZeroNote = false;
+    bool hasRawZeroAnchor = false;
     for (const TimelineNoteMarker& marker : nativeResult.noteMarkers) {
         if (qAbs(marker.second) <= kTimelineZeroSecondTolerance) {
-            hasRawZeroNote = true;
+            hasRawZeroAnchor = true;
             break;
         }
     }
-    if (!hasRawZeroNote) {
+    if (!hasRawZeroAnchor) {
+        for (const TimelineBeatMarker& marker : nativeResult.beatMarkers) {
+            if (qAbs(marker.second) <= kTimelineZeroSecondTolerance) {
+                hasRawZeroAnchor = true;
+                break;
+            }
+        }
+    }
+    if (!hasRawZeroAnchor) {
+        for (const TimelineCursorNote& note : timelineCursorNotes_) {
+            if (qAbs(note.second - shiftedTimelineSecond(0.0, firstSeconds)) <= kTimelineZeroSecondTolerance) {
+                hasRawZeroAnchor = true;
+                break;
+            }
+        }
+    }
+    if (!hasRawZeroAnchor) {
         const int firstCommaOffset = chartText.indexOf(QLatin1Char(','));
         if (firstCommaOffset >= 0) {
             const auto [line, col] = lineColForTextOffset(chartText, firstCommaOffset);
-            TimelineCursorNote virtualZeroNote;
-            virtualZeroNote.line = line;
-            virtualZeroNote.col = col;
-            virtualZeroNote.lane = -1;
-            virtualZeroNote.second = shiftedTimelineSecond(0.0, firstSeconds);
-            timelineCursorNotes_.append(virtualZeroNote);
+            appendCursorNote(&timelineCursorNotes_, line, col, -1, shiftedTimelineSecond(0.0, firstSeconds));
         }
     }
+    sortCursorNotes(&timelineCursorNotes_);
 
-    std::sort(timelineCursorNotes_.begin(), timelineCursorNotes_.end(), [](const TimelineCursorNote& a, const TimelineCursorNote& b) {
-        if (a.line != b.line) {
-            return a.line < b.line;
+    previewFollowCursorNotes_.clear();
+    switch (previewFollowMode_) {
+    case PreviewFollowMode::EveryComma:
+        previewFollowCursorNotes_ = timelineCursorNotes_;
+        break;
+    case PreviewFollowMode::NonEmptyComma: {
+        previewFollowCursorNotes_.reserve(noteMarkers.size() + beatMarkers.size());
+        QHash<qint64, bool> noteSecondKeys;
+        noteSecondKeys.reserve(noteMarkers.size());
+        for (const TimelineNoteMarker& marker : noteMarkers) {
+            appendCursorNote(&previewFollowCursorNotes_, marker.sourceLine, marker.sourceCol, marker.lane, marker.second);
+            noteSecondKeys.insert(qRound64(marker.second * 1000000.0), true);
         }
-        if (a.col != b.col) {
-            return a.col < b.col;
+        for (const TimelineBeatMarker& marker : beatMarkers) {
+            const qint64 secondKey = qRound64(marker.second * 1000000.0);
+            if (!noteSecondKeys.contains(secondKey)) {
+                continue;
+            }
+            appendCursorNote(&previewFollowCursorNotes_, marker.sourceLine, marker.sourceCol, -1, marker.second);
         }
-        return a.second < b.second;
-    });
+        sortCursorNotes(&previewFollowCursorNotes_);
+        break;
+    }
+    case PreviewFollowMode::LineOnly: {
+        previewFollowCursorNotes_.reserve(timelineCursorNotes_.size());
+        QHash<int, int> lineToIndex;
+        for (const TimelineCursorNote& note : timelineCursorNotes_) {
+            const int existingIndex = lineToIndex.value(note.line, -1);
+            if (existingIndex < 0) {
+                lineToIndex.insert(note.line, previewFollowCursorNotes_.size());
+                previewFollowCursorNotes_.append(note);
+                continue;
+            }
+
+            TimelineCursorNote& existing = previewFollowCursorNotes_[existingIndex];
+            if (note.second + kTimelineZeroSecondTolerance < existing.second
+                || (qAbs(note.second - existing.second) <= kTimelineZeroSecondTolerance && note.col < existing.col)) {
+                existing = note;
+            }
+        }
+        sortCursorNotes(&previewFollowCursorNotes_);
+        break;
+    }
+    }
 
     double durationSeconds = qMax(0.0, nativeResult.durationSeconds + firstSeconds);
     {
@@ -431,14 +502,19 @@ void MainWindow::refreshTimelineMetadata()
     }
 }
 
-bool MainWindow::findTimelineCursorNoteForTextPosition(int line, int col, int* indexOut) const
+bool MainWindow::findCursorNoteForTextPosition(
+    const QVector<TimelineCursorNote>& notes,
+    int line,
+    int col,
+    int* indexOut
+) const
 {
-    if (timelineCursorNotes_.isEmpty()) {
+    if (notes.isEmpty()) {
         return false;
     }
 
-    for (int index = 0; index < timelineCursorNotes_.size(); ++index) {
-        const TimelineCursorNote& note = timelineCursorNotes_.at(index);
+    for (int index = 0; index < notes.size(); ++index) {
+        const TimelineCursorNote& note = notes.at(index);
         if (note.line > line || (note.line == line && note.col >= col)) {
             if (indexOut != nullptr) {
                 *indexOut = index;
@@ -448,9 +524,14 @@ bool MainWindow::findTimelineCursorNoteForTextPosition(int line, int col, int* i
     }
 
     if (indexOut != nullptr) {
-        *indexOut = timelineCursorNotes_.size() - 1;
+        *indexOut = notes.size() - 1;
     }
     return true;
+}
+
+bool MainWindow::findTimelineCursorNoteForTextPosition(int line, int col, int* indexOut) const
+{
+    return findCursorNoteForTextPosition(timelineCursorNotes_, line, col, indexOut);
 }
 
 double MainWindow::timelineSecondForCursor(int line, int col) const
@@ -538,9 +619,16 @@ void MainWindow::navigateTimelineToSecond(double second, bool focusEditor)
     }
 }
 
-bool MainWindow::resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const
+bool MainWindow::resolveNearestCursorNote(
+    const QVector<TimelineCursorNote>& notes,
+    double second,
+    int lane,
+    int* line,
+    int* col,
+    double* noteSecond
+) const
 {
-    if (timelineCursorNotes_.isEmpty()) {
+    if (notes.isEmpty()) {
         return false;
     }
     const TimelineCursorNote* best = nullptr;
@@ -548,7 +636,7 @@ bool MainWindow::resolveNearestTimelineNote(double second, int lane, int* line, 
     const bool preferLane = lane >= 1;
     const double target = qMax(0.0, second);
 
-    for (const TimelineCursorNote& note : timelineCursorNotes_) {
+    for (const TimelineCursorNote& note : notes) {
         const bool sameLane = preferLane && note.lane == lane;
         if (preferLane) {
             if (sameLane && !foundSameLane) {
@@ -594,7 +682,13 @@ bool MainWindow::resolveNearestTimelineNote(double second, int lane, int* line, 
     return true;
 }
 
-bool MainWindow::resolveTimelineNoteFromCursorAnchor(
+bool MainWindow::resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const
+{
+    return resolveNearestCursorNote(timelineCursorNotes_, second, lane, line, col, noteSecond);
+}
+
+bool MainWindow::resolveCursorNoteFromAnchor(
+    const QVector<TimelineCursorNote>& notes,
     double second,
     int anchorLine,
     int anchorCol,
@@ -604,7 +698,7 @@ bool MainWindow::resolveTimelineNoteFromCursorAnchor(
     double* noteSecond
 ) const
 {
-    if (timelineCursorNotes_.isEmpty()) {
+    if (notes.isEmpty()) {
         return false;
     }
 
@@ -615,7 +709,7 @@ bool MainWindow::resolveTimelineNoteFromCursorAnchor(
     const bool preferLane = lane >= 1;
     const double target = qMax(0.0, second);
 
-    for (const TimelineCursorNote& note : timelineCursorNotes_) {
+    for (const TimelineCursorNote& note : notes) {
         fallbackLast = &note;
         if (preferLane && note.lane == lane) {
             fallbackLastSameLane = &note;
@@ -749,13 +843,41 @@ bool MainWindow::moveEditorCursorToTimelineLocation(
     }
     if (focusEditor) {
         editor->setFocus();
+        clearPreviewFollowDecoration();
+    } else {
+        setPreviewFollowDecoration(line, col);
     }
     return true;
+}
+
+bool MainWindow::resolveTimelineNoteFromCursorAnchor(
+    double second,
+    int anchorLine,
+    int anchorCol,
+    int lane,
+    int* line,
+    int* col,
+    double* noteSecond
+) const
+{
+    return resolveCursorNoteFromAnchor(
+        timelineCursorNotes_,
+        second,
+        anchorLine,
+        anchorCol,
+        lane,
+        line,
+        col,
+        noteSecond
+    );
 }
 
 void MainWindow::syncEditorCursorToPreviewSecond(double second, bool centerView)
 {
     if (suppressTimelineCursorSync_ || timelineView_ == nullptr || !timelineView_->followPreviewEnabled() || !hasActiveDifficulty()) {
+        if (timelineView_ == nullptr || !hasActiveDifficulty() || !timelineView_->followPreviewEnabled()) {
+            clearPreviewFollowDecoration();
+        }
         return;
     }
 
@@ -763,16 +885,41 @@ void MainWindow::syncEditorCursorToPreviewSecond(double second, bool centerView)
     int line = 1;
     int col = 1;
     double noteSecond = -1.0;
-    if (!resolveTimelineNoteFromCursorAnchor(second, currentLine, currentCol, -1, &line, &col, &noteSecond)) {
+    const bool useAbsoluteSeekAnchor = !qtPreviewPlaying_;
+    const bool resolved = useAbsoluteSeekAnchor
+        ? resolveNearestCursorNote(previewFollowCursorNotes_, second, -1, &line, &col, &noteSecond)
+        : resolveCursorNoteFromAnchor(
+            previewFollowCursorNotes_,
+            second,
+            currentLine,
+            currentCol,
+            -1,
+            &line,
+            &col,
+            &noteSecond);
+    if (!resolved) {
         return;
     }
 
-    if (currentLine == line && currentCol == col) {
+    const bool lineOnlyMode = previewFollowMode_ == PreviewFollowMode::LineOnly;
+    const bool alreadyAtAnchor = lineOnlyMode
+        ? (currentLine == line)
+        : (currentLine == line && currentCol == col);
+
+    if (alreadyAtAnchor) {
+        if (lineOnlyMode) {
+            clearPreviewFollowDecoration();
+        } else {
+            setPreviewFollowDecoration(line, col);
+        }
         timelineView_->setCursorSeconds(noteSecond >= 0.0 ? noteSecond : qMax(0.0, second));
         return;
     }
 
     if (moveEditorCursorToTimelineLocation(line, col, false, false, centerView, false)) {
+        if (lineOnlyMode) {
+            clearPreviewFollowDecoration();
+        }
         timelineView_->setCursorSeconds(noteSecond >= 0.0 ? noteSecond : qMax(0.0, second));
     }
 }
@@ -901,6 +1048,148 @@ double MainWindow::normalizedPreviewCanvasAspectRatio(double ratio) const
         return 1.0;
     }
     return qBound(1.0, ratio, 3.0);
+}
+
+MainWindow::PreviewCanvasFrameRateMode MainWindow::previewCanvasFrameRateModeFromStorageValue(const QString& value) const
+{
+    const QString normalized = value.trimmed().toLower();
+    if (normalized == QLatin1String("120") || normalized == QLatin1String("120fps")) {
+        return PreviewCanvasFrameRateMode::Fps120;
+    }
+    if (normalized == QLatin1String("display")
+        || normalized == QLatin1String("display_max")
+        || normalized == QLatin1String("screen")
+        || normalized == QLatin1String("unlimited")) {
+        return PreviewCanvasFrameRateMode::DisplayRefresh;
+    }
+    return PreviewCanvasFrameRateMode::Fps60;
+}
+
+QString MainWindow::previewCanvasFrameRateModeStorageValue() const
+{
+    switch (previewCanvasFrameRateMode_) {
+    case PreviewCanvasFrameRateMode::Fps120:
+        return QStringLiteral("120");
+    case PreviewCanvasFrameRateMode::DisplayRefresh:
+        return QStringLiteral("display_max");
+    case PreviewCanvasFrameRateMode::Fps60:
+    default:
+        return QStringLiteral("60");
+    }
+}
+
+MainWindow::PreviewFollowMode MainWindow::previewFollowModeFromStorageValue(const QString& value) const
+{
+    const QString normalized = value.trimmed().toLower();
+    if (normalized == QLatin1String("nonempty")
+        || normalized == QLatin1String("non_empty")
+        || normalized == QLatin1String("content")
+        || normalized == QLatin1String("value_only")) {
+        return PreviewFollowMode::NonEmptyComma;
+    }
+    if (normalized == QLatin1String("line")
+        || normalized == QLatin1String("line_only")
+        || normalized == QLatin1String("row")) {
+        return PreviewFollowMode::LineOnly;
+    }
+    return PreviewFollowMode::EveryComma;
+}
+
+QString MainWindow::previewFollowModeStorageValue() const
+{
+    switch (previewFollowMode_) {
+    case PreviewFollowMode::NonEmptyComma:
+        return QStringLiteral("non_empty");
+    case PreviewFollowMode::LineOnly:
+        return QStringLiteral("line_only");
+    case PreviewFollowMode::EveryComma:
+    default:
+        return QStringLiteral("every_comma");
+    }
+}
+
+void MainWindow::setPreviewFollowMode(PreviewFollowMode mode, bool persistState)
+{
+    const bool changed = previewFollowMode_ != mode;
+    previewFollowMode_ = mode;
+    if (hasActiveDifficulty()) {
+        refreshTimelineMetadata();
+    } else {
+        previewFollowCursorNotes_.clear();
+    }
+
+    if (timelineView_ != nullptr && timelineView_->followPreviewEnabled() && hasActiveDifficulty()) {
+        double second = qMax(0.0, qtPreviewPauseSecond_);
+        if (qtPreviewPlaying_) {
+            if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
+                second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
+            } else if (previewMediaController_ != nullptr) {
+                second = qMax(0.0, previewMediaController_->currentPlaybackSecond());
+            }
+        }
+        syncEditorCursorToPreviewSecond(second, false);
+    } else {
+        clearPreviewFollowDecoration();
+    }
+
+    if ((changed || persistState) && persistState) {
+        saveProjectRenderState();
+        savePortableState();
+    }
+}
+
+double MainWindow::currentPreviewCanvasRefreshRate() const
+{
+    QScreen* targetScreen = screen();
+    if (windowHandle() != nullptr && windowHandle()->screen() != nullptr) {
+        targetScreen = windowHandle()->screen();
+    }
+    if (targetScreen == nullptr) {
+        targetScreen = QGuiApplication::primaryScreen();
+    }
+    const double refreshRate = targetScreen != nullptr ? targetScreen->refreshRate() : 0.0;
+    if (!qIsFinite(refreshRate) || refreshRate < 1.0) {
+        return 60.0;
+    }
+    return refreshRate;
+}
+
+void MainWindow::refreshPreviewFrameRateTimers()
+{
+    int intervalMs = 16;
+    switch (previewCanvasFrameRateMode_) {
+    case PreviewCanvasFrameRateMode::Fps120:
+        intervalMs = 8;
+        break;
+    case PreviewCanvasFrameRateMode::DisplayRefresh:
+        intervalMs = qMax(1, qRound(1000.0 / currentPreviewCanvasRefreshRate()));
+        break;
+    case PreviewCanvasFrameRateMode::Fps60:
+    default:
+        intervalMs = 16;
+        break;
+    }
+
+    if (qtPreviewTimer_ != nullptr) {
+        qtPreviewTimer_->setInterval(intervalMs);
+    }
+    if (qtPreviewTimelineTimer_ != nullptr) {
+        qtPreviewTimelineTimer_->setInterval(intervalMs);
+    }
+}
+
+void MainWindow::setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
+{
+    if (previewCanvasFrameRateMode_ == mode) {
+        refreshPreviewFrameRateTimers();
+        return;
+    }
+    previewCanvasFrameRateMode_ = mode;
+    refreshPreviewFrameRateTimers();
+    if (persistState) {
+        saveProjectRenderState();
+        savePortableState();
+    }
 }
 
 void MainWindow::setPreviewCanvasAspectRatio(double ratio, bool persistState)
@@ -1370,6 +1659,7 @@ void MainWindow::seekPreviewToSecond(double second, bool centerView)
     qtPreviewPendingTimelineSecond_ = clampedSecond;
     qtPreviewPendingTimelineCenterView_ = centerView;
     qtPreviewTimelineDirty_ = true;
+    qtPreviewPlaybackReturnSecond_ = clampedSecond;
     if (timelineView_ != nullptr) {
         timelineView_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
     }
@@ -1520,6 +1810,16 @@ void MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
     updatePauseButtonAppearance();
 }
 
+void MainWindow::finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage)
+{
+    const double returnSecond = qBound(0.0, qtPreviewPlaybackReturnSecond_, previewDurationSeconds());
+    stopQtPreviewPlayback(true);
+    seekPreviewToSecond(returnSecond, true);
+    if (statusBar() != nullptr && !statusMessage.isEmpty()) {
+        statusBar()->showMessage(statusMessage);
+    }
+}
+
 void MainWindow::stopQtPreviewPlayback(bool keepPosition)
 {
     const bool wasPlaying = qtPreviewPlaying_;
@@ -1555,6 +1855,9 @@ void MainWindow::stopQtPreviewPlayback(bool keepPosition)
     qtPreviewPendingAudioCalibration_ = false;
     flushQtPreviewTimelinePosition();
     syncEditorCursorToPreviewSecond(qtPreviewPauseSecond_, false);
+    if (timelineView_ == nullptr || !timelineView_->followPreviewEnabled()) {
+        clearPreviewFollowDecoration();
+    }
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->stopAll();
     }
@@ -1684,8 +1987,7 @@ void MainWindow::onQtPreviewTick()
         if (previewSfxRuntime_ != nullptr) {
             previewSfxRuntime_->drainEvents(second);
         }
-        stopQtPreviewPlayback(true);
-        statusBar()->showMessage("Qt preview reached the end of current timeline.");
+        finishQtPreviewPlaybackAndReturnToEntry("Qt preview reached the end of current timeline.");
         return;
     }
 

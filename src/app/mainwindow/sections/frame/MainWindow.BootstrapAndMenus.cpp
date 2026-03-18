@@ -166,7 +166,7 @@
     connect(transformToggleExAction_, &QAction::triggered, this, &MainWindow::onToggleExSelection);
     moreTransformMenu->addAction(transformToggleExAction_);
 
-    transformToggleFireworkAction_ = new QAction(uiText("action.transform.toggle_firework", "Toggle Firework"), this);
+    transformToggleFireworkAction_ = new QAction(uiText("action.transform.toggle_firework", "Toggle Hanabi"), this);
     transformToggleFireworkAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_M));
     connect(transformToggleFireworkAction_, &QAction::triggered, this, &MainWindow::onToggleFireworkSelection);
     moreTransformMenu->addAction(transformToggleFireworkAction_);
@@ -240,7 +240,7 @@
     connect(previewAudioSettingsAction_, &QAction::triggered, this, &MainWindow::onPreviewAudioSettings);
     previewMenu->addAction(previewAudioSettingsAction_);
 
-    previewVideoSettingsAction_ = new QAction(uiText("action.video_settings", "Video Settings..."), this);
+    previewVideoSettingsAction_ = new QAction(uiText("action.video_settings", "Preview Settings..."), this);
     connect(previewVideoSettingsAction_, &QAction::triggered, this, &MainWindow::onPreviewVideoSettings);
     previewMenu->addAction(previewVideoSettingsAction_);
 
@@ -271,6 +271,15 @@ MainWindow::MainWindow(QWidget* parent)
     setWindowModified(false);
     updateWindowTitle();
     setupInitialWindowGeometry();
+    if (QGuiApplication* guiApp = qobject_cast<QGuiApplication*>(QCoreApplication::instance()); guiApp != nullptr) {
+        if (QStyleHints* styleHints = guiApp->styleHints(); styleHints != nullptr) {
+            connect(styleHints, &QStyleHints::colorSchemeChanged, this, [this]() {
+                applyUiTheme();
+                QTimer::singleShot(0, this, [this]() { applySystemWindowBackdrop(); });
+                QTimer::singleShot(80, this, [this]() { applySystemWindowBackdrop(); });
+            });
+        }
+    }
 
     auto* fileMenu = menuBar()->addMenu(uiText("menu.file", "&File"));
     auto* editMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("编辑(&E)") : QStringLiteral("&Edit"));
@@ -290,6 +299,11 @@ MainWindow::MainWindow(QWidget* parent)
         editMenu->removeAction(validateAction_);
         toolsMenu->addSeparator();
         toolsMenu->addAction(validateAction_);
+    }
+    if (exportVideoAction_ != nullptr) {
+        previewMenu->removeAction(exportVideoAction_);
+        toolsMenu->addSeparator();
+        toolsMenu->addAction(exportVideoAction_);
     }
     const QList<QAction*> editActions = editMenu->actions();
     if (!editActions.isEmpty() && editActions.constLast()->isSeparator()) {
@@ -1059,6 +1073,8 @@ MainWindow::MainWindow(QWidget* parent)
     });
     connect(timelineView_, &TimelineView::followPreviewToggled, this, [this](bool enabled) {
         if (!enabled) {
+            clearPreviewFollowDecoration();
+            syncTimelineToEditorCursor(!qtPreviewPlaying_);
             return;
         }
         double second = qMax(0.0, qtPreviewPauseSecond_);
@@ -1428,6 +1444,7 @@ MainWindow::MainWindow(QWidget* parent)
         previewCanvas_->setNoteFlowSpeed(previewNoteFlowSpeed_);
         previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
         previewCanvas_->setShowTimestamp(previewShowTimestamp_);
+        previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
     }
     if (previewMediaController_ != nullptr) {
         previewMediaController_->setBackgroundBrightness(previewBackgroundBrightnessOuter_);

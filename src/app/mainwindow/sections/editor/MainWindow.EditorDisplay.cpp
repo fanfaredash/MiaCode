@@ -13,10 +13,14 @@
     previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
     previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
     previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
+    previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
+    previewFollowMode_ = PreviewFollowMode::EveryComma;
     previewCanvasAspectRatio_ = 1.0;
     previewAutoRestoreSquareAfterExport_ = true;
     previewShowDebugInfo_ = false;
     previewShowTimestamp_ = true;
+    previewShowObjectStatsHud_ = false;
+    exportShowObjectStatsHud_ = false;
     editorLineSpacingFactor_ = kEditorLineSpacingFactorDefault;
     editorTextFontPointSize_ = qBound(
         kEditorTextFontSizeMin,
@@ -104,11 +108,28 @@
     } else {
         previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     }
+    if (preview.value("canvas_frame_rate_mode").isString()) {
+        previewCanvasFrameRateMode_ =
+            previewCanvasFrameRateModeFromStorageValue(preview.value("canvas_frame_rate_mode").toString());
+    } else {
+        previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
+    }
+    if (preview.value("follow_mode").isString()) {
+        previewFollowMode_ = previewFollowModeFromStorageValue(preview.value("follow_mode").toString());
+    } else {
+        previewFollowMode_ = PreviewFollowMode::EveryComma;
+    }
     if (preview.value("show_debug_info").isBool()) {
         previewShowDebugInfo_ = preview.value("show_debug_info").toBool(false);
     }
     if (preview.value("show_timestamp").isBool()) {
         previewShowTimestamp_ = preview.value("show_timestamp").toBool(true);
+    }
+    if (preview.value("show_object_stats_preview").isBool()) {
+        previewShowObjectStatsHud_ = preview.value("show_object_stats_preview").toBool(false);
+    }
+    if (preview.value("show_object_stats_export").isBool()) {
+        exportShowObjectStatsHud_ = preview.value("show_object_stats_export").toBool(false);
     }
     if (preview.value("canvas_aspect_ratio").isDouble()) {
         previewCanvasAspectRatio_ = normalizedPreviewCanvasAspectRatio(
@@ -127,6 +148,9 @@
     } else {
         softwarePreviewAudioSettings_ = PreviewAudioSettings::fromJson(preview);
     }
+    softwarePreviewAudioSettings_.bgmVolume = PreviewAudioSettings().bgmVolume;
+    softwarePreviewAudioSettings_.normalize();
+    refreshPreviewFrameRateTimers();
     previewAudioSettings_ = softwarePreviewAudioSettings_;
 }
 
@@ -161,8 +185,12 @@ void MainWindow::savePortableState() const
             : QStringLiteral("fill")
     );
     preview.insert("note_flow_speed", previewNoteFlowSpeed_);
+    preview.insert("canvas_frame_rate_mode", previewCanvasFrameRateModeStorageValue());
+    preview.insert("follow_mode", previewFollowModeStorageValue());
     preview.insert("show_debug_info", previewShowDebugInfo_);
     preview.insert("show_timestamp", previewShowTimestamp_);
+    preview.insert("show_object_stats_preview", previewShowObjectStatsHud_);
+    preview.insert("show_object_stats_export", exportShowObjectStatsHud_);
     preview.insert("canvas_aspect_ratio", previewCanvasAspectRatio_);
     preview.insert("auto_restore_square_after_export", previewAutoRestoreSquareAfterExport_);
     preview.insert("audio", softwarePreviewAudioSettings_.toJson());

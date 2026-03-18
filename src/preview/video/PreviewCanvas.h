@@ -55,6 +55,7 @@ public:
     void setShowTimestamp(bool show);
     void setShowObjectStatsHud(bool show);
     bool showTimestamp() const;
+    bool showObjectStatsHud() const;
     void copyRenderStateFrom(const PreviewCanvas& source);
     QImage renderOverlayFrame(
         const QSize& outputSize,
