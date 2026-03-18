@@ -1220,6 +1220,10 @@ void applySystemBackdropToWidget(QWidget* widget, bool enabled, bool darkTheme)
         setDwmWindowAttribute(hwnd, kDwmwaMicaEffect, &micaEnabled, sizeof(micaEnabled));
     }
 
+    if (::IsWindowVisible(hwnd) == FALSE || ::IsIconic(hwnd) != FALSE) {
+        return;
+    }
+
     ::SetWindowPos(
         hwnd,
         nullptr,
@@ -1347,7 +1351,11 @@ void MainWindow::applySystemWindowBackdrop(QWidget* target) const
     applySystemBackdropToWidget(const_cast<MainWindow*>(this), true, UiTheme::isDarkTheme());
     const auto topLevels = QApplication::topLevelWidgets();
     for (QWidget* topLevel : topLevels) {
-        if (topLevel == nullptr || topLevel == this || topLevel->parentWidget() != this) {
+        if (topLevel == nullptr
+            || topLevel == this
+            || topLevel->parentWidget() != this
+            || !topLevel->isVisible()
+            || topLevel->windowState().testFlag(Qt::WindowMinimized)) {
             continue;
         }
         applySystemBackdropToWidget(topLevel, true, UiTheme::isDarkTheme());
@@ -2273,6 +2281,10 @@ void MainWindow::showEvent(QShowEvent* event)
     updateBottomTabsDeviceHeight();
     refreshPreviewFrameRateTimers();
     applySystemWindowBackdrop();
+    if (!isMinimized()) {
+        QTimer::singleShot(0, this, [this]() { applySystemWindowBackdrop(); });
+        QTimer::singleShot(120, this, [this]() { applySystemWindowBackdrop(); });
+    }
     logWindowGeometryDebug("show_event");
 }
 
@@ -2294,6 +2306,14 @@ void MainWindow::changeEvent(QEvent* event)
                 .arg(formatWindowStateFlags(stateEvent != nullptr ? stateEvent->oldState() : Qt::WindowNoState))
                 .arg(formatWindowStateFlags(windowState()))
         );
+        const bool wasMinimized =
+            stateEvent != nullptr && stateEvent->oldState().testFlag(Qt::WindowMinimized);
+        const bool isNowMinimized = windowState().testFlag(Qt::WindowMinimized);
+        if (!isNowMinimized && wasMinimized) {
+            refreshPreviewFrameRateTimers();
+            QTimer::singleShot(0, this, [this]() { applySystemWindowBackdrop(); });
+            QTimer::singleShot(120, this, [this]() { applySystemWindowBackdrop(); });
+        }
     } else if (type == QEvent::ScreenChangeInternal
         || type == QEvent::DevicePixelRatioChange
         || type == QEvent::FontChange
