@@ -17,6 +17,7 @@ struct TimelineBeatMarker {
     double second = 0.0;
     bool major = false;
     int sourceLine = 1;
+    int sourceCol = 1;
 };
 
 struct TimelineNoteMarker {

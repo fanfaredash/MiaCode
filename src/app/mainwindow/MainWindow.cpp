@@ -82,6 +82,7 @@
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QStyledItemDelegate>
+#include <QStyleHints>
 #include <QTabBar>
 #include <QTabWidget>
 #include <QSysInfo>
@@ -1171,6 +1172,72 @@ void styleRoundedMenu(QMenu& menu)
     UiTheme::styleRoundedMenu(menu);
 }
 
+#ifdef Q_OS_WIN
+constexpr DWORD kDwmwaUseImmersiveDarkMode = 20;
+constexpr DWORD kDwmwaSystemBackdropType = 38;
+constexpr DWORD kDwmwaMicaEffect = 1029;
+constexpr int kDwmsbtNone = 1;
+constexpr int kDwmsbtMainWindow = 2;
+
+bool setDwmWindowAttribute(HWND hwnd, DWORD attribute, const void* value, DWORD size)
+{
+    if (hwnd == nullptr || value == nullptr || size == 0) {
+        return false;
+    }
+    static HMODULE dwmapiModule = ::LoadLibraryW(L"dwmapi.dll");
+    if (dwmapiModule == nullptr) {
+        return false;
+    }
+    using DwmSetWindowAttributeFn = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
+    static auto setWindowAttribute = reinterpret_cast<DwmSetWindowAttributeFn>(
+        ::GetProcAddress(dwmapiModule, "DwmSetWindowAttribute")
+    );
+    if (setWindowAttribute == nullptr) {
+        return false;
+    }
+    return SUCCEEDED(setWindowAttribute(hwnd, attribute, value, size));
+}
+
+void applySystemBackdropToWidget(QWidget* widget, bool enabled, bool darkTheme)
+{
+    if (widget == nullptr) {
+        return;
+    }
+    widget->winId();
+    QWidget* topLevel = widget->window();
+    const WId nativeId = topLevel != nullptr ? topLevel->winId() : widget->winId();
+    const HWND hwnd = reinterpret_cast<HWND>(nativeId);
+    if (hwnd == nullptr) {
+        return;
+    }
+
+    const BOOL darkMode = darkTheme ? TRUE : FALSE;
+    setDwmWindowAttribute(hwnd, kDwmwaUseImmersiveDarkMode, &darkMode, sizeof(darkMode));
+
+    const int backdropType = enabled ? kDwmsbtMainWindow : kDwmsbtNone;
+    if (!setDwmWindowAttribute(hwnd, kDwmwaSystemBackdropType, &backdropType, sizeof(backdropType))) {
+        const BOOL micaEnabled = enabled ? TRUE : FALSE;
+        setDwmWindowAttribute(hwnd, kDwmwaMicaEffect, &micaEnabled, sizeof(micaEnabled));
+    }
+
+    ::SetWindowPos(
+        hwnd,
+        nullptr,
+        0,
+        0,
+        0,
+        0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED
+    );
+    ::RedrawWindow(
+        hwnd,
+        nullptr,
+        nullptr,
+        RDW_INVALIDATE | RDW_UPDATENOW | RDW_FRAME | RDW_ALLCHILDREN
+    );
+}
+#endif
+
 }  // namespace
 
 void MainWindow::applyUiTheme()
@@ -1257,6 +1324,9 @@ void MainWindow::applyUiTheme()
     if (previewVideoSettingsButton_ != nullptr) {
         previewVideoSettingsButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
     }
+    applySystemWindowBackdrop();
+    QTimer::singleShot(0, this, [this]() { applySystemWindowBackdrop(); });
+    QTimer::singleShot(80, this, [this]() { applySystemWindowBackdrop(); });
     if (syntaxCheckButton_ != nullptr) {
         syntaxCheckButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
     }
@@ -1265,6 +1335,26 @@ void MainWindow::applyUiTheme()
     }
     updatePauseButtonAppearance();
     update();
+}
+
+void MainWindow::applySystemWindowBackdrop(QWidget* target) const
+{
+#ifdef Q_OS_WIN
+    if (target != nullptr) {
+        applySystemBackdropToWidget(target, true, UiTheme::isDarkTheme());
+        return;
+    }
+    applySystemBackdropToWidget(const_cast<MainWindow*>(this), true, UiTheme::isDarkTheme());
+    const auto topLevels = QApplication::topLevelWidgets();
+    for (QWidget* topLevel : topLevels) {
+        if (topLevel == nullptr || topLevel == this || topLevel->parentWidget() != this) {
+            continue;
+        }
+        applySystemBackdropToWidget(topLevel, true, UiTheme::isDarkTheme());
+    }
+#else
+    Q_UNUSED(target);
+#endif
 }
 
 int MainWindow::computeBottomTabsDeviceHeight() const
@@ -1439,13 +1529,7 @@ void MainWindow::ensurePreviewMediaControllerInitialized()
         applyQtPreviewPosition(second, true);
     });
     connect(previewMediaController_, &PreviewMediaController::playbackFinished, this, [this]() {
-        if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
-            qtPreviewPauseSecond_ = previewSfxRuntime_->backgroundPlaybackSecond();
-        } else if (previewMediaController_ != nullptr) {
-            qtPreviewPauseSecond_ = previewMediaController_->currentPlaybackSecond();
-        }
-        stopQtPreviewPlayback(true);
-        statusBar()->showMessage("Qt preview reached the end of current media.");
+        finishQtPreviewPlaybackAndReturnToEntry("Qt preview reached the end of current media.");
     });
 
     previewMediaController_->setBackgroundTrackVolume(previewAudioSettings_.bgmVolume);
@@ -2172,6 +2256,7 @@ void MainWindow::resizeEvent(QResizeEvent* event)
 void MainWindow::moveEvent(QMoveEvent* event)
 {
     QMainWindow::moveEvent(event);
+    refreshPreviewFrameRateTimers();
     logWindowGeometryDebug(
         "move_event",
         QString("old=(%1,%2) new=(%3,%4)")
@@ -2186,6 +2271,8 @@ void MainWindow::showEvent(QShowEvent* event)
 {
     QMainWindow::showEvent(event);
     updateBottomTabsDeviceHeight();
+    refreshPreviewFrameRateTimers();
+    applySystemWindowBackdrop();
     logWindowGeometryDebug("show_event");
 }
 
@@ -2210,8 +2297,15 @@ void MainWindow::changeEvent(QEvent* event)
     } else if (type == QEvent::ScreenChangeInternal
         || type == QEvent::DevicePixelRatioChange
         || type == QEvent::FontChange
-        || type == QEvent::StyleChange) {
+        || type == QEvent::StyleChange
+        || type == QEvent::PaletteChange
+        || type == QEvent::ThemeChange
+        || type == QEvent::ApplicationPaletteChange) {
         updateBottomTabsDeviceHeight();
+        refreshPreviewFrameRateTimers();
+        applySystemWindowBackdrop();
+        QTimer::singleShot(0, this, [this]() { applySystemWindowBackdrop(); });
+        QTimer::singleShot(80, this, [this]() { applySystemWindowBackdrop(); });
     } else if (type == QEvent::ActivationChange) {
         logWindowGeometryDebug("activation_change", QString("is_active=%1").arg(isActiveWindow() ? 1 : 0));
     } else if (type == QEvent::ZOrderChange) {
@@ -2366,11 +2460,26 @@ void MainWindow::loadProjectRenderState()
                 render.value("note_flow_speed").toDouble(previewNoteFlowSpeed_)
             );
         }
+        if (render.value("canvas_frame_rate_mode").isString()) {
+            previewCanvasFrameRateMode_ =
+                previewCanvasFrameRateModeFromStorageValue(render.value("canvas_frame_rate_mode").toString());
+        }
+        if (render.value("follow_mode").isString()) {
+            previewFollowMode_ = previewFollowModeFromStorageValue(render.value("follow_mode").toString());
+        }
         if (render.value("show_debug_info").isBool()) {
             previewShowDebugInfo_ = render.value("show_debug_info").toBool(previewShowDebugInfo_);
         }
         if (render.value("show_timestamp").isBool()) {
             previewShowTimestamp_ = render.value("show_timestamp").toBool(previewShowTimestamp_);
+        }
+        if (render.value("show_object_stats_preview").isBool()) {
+            previewShowObjectStatsHud_ =
+                render.value("show_object_stats_preview").toBool(previewShowObjectStatsHud_);
+        }
+        if (render.value("show_object_stats_export").isBool()) {
+            exportShowObjectStatsHud_ =
+                render.value("show_object_stats_export").toBool(exportShowObjectStatsHud_);
         }
         if (render.value("auto_restore_square_after_export").isBool()) {
             previewAutoRestoreSquareAfterExport_ =
@@ -2385,6 +2494,7 @@ void MainWindow::loadProjectRenderState()
         projectLastOpenedDifficultyId_ = savedDifficultyId;
     }
     previewAudioSettings_.normalize();
+    refreshPreviewFrameRateTimers();
     if (previewMediaController_ != nullptr) {
         previewMediaController_->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
     }
@@ -2397,6 +2507,7 @@ void MainWindow::loadProjectRenderState()
         previewCanvas_->setNoteFlowSpeed(previewNoteFlowSpeed_);
         previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
         previewCanvas_->setShowTimestamp(previewShowTimestamp_);
+        previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
     }
 }
 
@@ -2427,8 +2538,12 @@ void MainWindow::saveProjectRenderState() const
             : QStringLiteral("fill")
     );
     render.insert("note_flow_speed", previewNoteFlowSpeed_);
+    render.insert("canvas_frame_rate_mode", previewCanvasFrameRateModeStorageValue());
+    render.insert("follow_mode", previewFollowModeStorageValue());
     render.insert("show_debug_info", previewShowDebugInfo_);
     render.insert("show_timestamp", previewShowTimestamp_);
+    render.insert("show_object_stats_preview", previewShowObjectStatsHud_);
+    render.insert("show_object_stats_export", exportShowObjectStatsHud_);
     render.insert("canvas_aspect_ratio", previewCanvasAspectRatio_);
     render.insert("auto_restore_square_after_export", previewAutoRestoreSquareAfterExport_);
     root.insert("render", render);
@@ -2905,7 +3020,7 @@ void MainWindow::onToggleFireworkSelection()
         statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
-    applySelectionBatchTransform("Toggle Firework", [](const QString& text, int* changedCount) {
+    applySelectionBatchTransform("Toggle Hanabi", [](const QString& text, int* changedCount) {
         return miacode::chart_transform::toggleFireworkForSelection(text, changedCount);
     });
 }
@@ -3211,7 +3326,7 @@ void MainWindow::onPreviewVideoSettings()
     openPreviewSettingsDialog(
         false,
         true,
-        uiText("dialog.video_settings.title", "Video Settings")
+        uiText("dialog.video_settings.title", "Preview Settings")
     );
 }
 
@@ -3313,6 +3428,24 @@ void MainWindow::onExportPreviewVideo()
 
     refreshTimelineMetadata();
 
+    const auto previewMarkerEndSecond = [](const TimelineNoteMarker& marker) {
+        double markerEnd = qMax(marker.second, marker.endSecond);
+        markerEnd = qMax(markerEnd, marker.slideTraceSecond);
+        markerEnd = qMax(markerEnd, marker.availableSecond);
+        for (double shootSecond : marker.slideSegmentShootSeconds) {
+            markerEnd = qMax(markerEnd, shootSecond);
+        }
+        return qMax(0.0, markerEnd);
+    };
+    double lastMarkerEndSecond = 0.0;
+    for (const TimelineNoteMarker& marker : previewStatsNoteMarkers_) {
+        lastMarkerEndSecond = qMax(lastMarkerEndSecond, previewMarkerEndSecond(marker));
+    }
+    const double cappedExportEndSecond = qMax(
+        0.0,
+        qMin(previewDurationSeconds(), lastMarkerEndSecond + 3.0)
+    );
+
     VideoExportTask task;
     task.chartPath = currentFilePath_;
     task.trackPath = resolveDefaultTrackPath();
@@ -3325,11 +3458,12 @@ void MainWindow::onExportPreviewVideo()
     task.backgroundScaleMode = previewBackgroundScaleMode_;
     task.noteFlowSpeed = previewNoteFlowSpeed_;
     task.exportStartSeconds = 0.0;
-    task.contentDurationSeconds = qMax(0.0, previewDurationSeconds());
+    task.contentDurationSeconds = cappedExportEndSecond;
     task.outputWidth = 1024;
     task.outputHeight = 1024;
     task.fps = 60;
     task.showTimestamp = previewShowTimestamp_;
+    task.showObjectStatsHud = exportShowObjectStatsHud_;
 
     const QFileInfo chartInfo(currentFilePath_);
     QString chartTitle = document_.title;
@@ -3477,6 +3611,7 @@ void MainWindow::onExportPreviewVideo()
         targetTopLeft.setY(qBound(avail.top(), targetTopLeft.y(), avail.bottom() - dialog.height() + 1));
     }
     dialog.move(targetTopLeft);
+    applySystemWindowBackdrop(&dialog);
     dialog.exec();
     if (previewAutoRestoreSquareAfterExport_
         && (dialog.exportSucceeded() || dialog.previewAspectChangedByDialog())) {
@@ -3612,8 +3747,24 @@ bool MainWindow::exportPreviewVideoFromCli(
     }
 
     const double exportStartSeconds = qMax(0.0, request.exportStartSeconds);
-    const double totalDuration = previewDurationSeconds();
-    const double maxDuration = qMax(0.0, totalDuration - exportStartSeconds);
+    const auto previewMarkerEndSecond = [](const TimelineNoteMarker& marker) {
+        double markerEnd = qMax(marker.second, marker.endSecond);
+        markerEnd = qMax(markerEnd, marker.slideTraceSecond);
+        markerEnd = qMax(markerEnd, marker.availableSecond);
+        for (double shootSecond : marker.slideSegmentShootSeconds) {
+            markerEnd = qMax(markerEnd, shootSecond);
+        }
+        return qMax(0.0, markerEnd);
+    };
+    double lastMarkerEndSecond = 0.0;
+    for (const TimelineNoteMarker& marker : previewStatsNoteMarkers_) {
+        lastMarkerEndSecond = qMax(lastMarkerEndSecond, previewMarkerEndSecond(marker));
+    }
+    const double cappedExportEndSecond = qMax(
+        0.0,
+        qMin(previewDurationSeconds(), lastMarkerEndSecond + 3.0)
+    );
+    const double maxDuration = qMax(0.0, cappedExportEndSecond - exportStartSeconds);
     const double contentDurationSeconds = request.contentDurationSeconds > 0.0
         ? request.contentDurationSeconds
         : maxDuration;
@@ -3622,7 +3773,7 @@ bool MainWindow::exportPreviewVideoFromCli(
             QStringLiteral("content duration is not positive"),
             QStringLiteral("start=%1 total=%2")
                 .arg(exportStartSeconds, 0, 'f', 3)
-                .arg(totalDuration, 0, 'f', 3)
+                .arg(cappedExportEndSecond, 0, 'f', 3)
         );
     }
 
@@ -3643,6 +3794,7 @@ bool MainWindow::exportPreviewVideoFromCli(
     task.outputHeight = request.outputHeight;
     task.fps = request.fps;
     task.showTimestamp = request.showTimestamp;
+    task.showObjectStatsHud = exportShowObjectStatsHud_;
     task.outputPath = outputPath;
 
     const VideoExportResult exportResult = VideoExportController::exportFullPreview(task, previewCanvas_, nullptr);
@@ -3828,7 +3980,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     addAudioRow(uiText("dialog.render_settings.audio.touch", "Touch / TouchHold Volume"), previewAudioSettings_.touchPercent(), &touchSlider, &touchLabel);
     QSlider* fireworkSlider = nullptr;
     QLabel* fireworkLabel = nullptr;
-    addAudioRow(uiText("dialog.render_settings.audio.firework", "Firework Volume"), previewAudioSettings_.fireworkPercent(), &fireworkSlider, &fireworkLabel);
+    addAudioRow(uiText("dialog.render_settings.audio.firework", "Hanabi Volume"), previewAudioSettings_.fireworkPercent(), &fireworkSlider, &fireworkLabel);
     QSlider* breakSlideSlider = nullptr;
     QLabel* breakSlideLabel = nullptr;
     addAudioRow(uiText("dialog.render_settings.audio.break_slide", "Break Slide Volume"), previewAudioSettings_.breakSlidePercent(), &breakSlideSlider, &breakSlideLabel);
@@ -3939,6 +4091,71 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     }
     flowSpeedButton->setMenu(flowSpeedMenu);
 
+    auto* previewGroup = new QGroupBox(uiText("dialog.render_settings.preview_group", "Preview"), &dialog);
+    auto* previewFormLayout = new QFormLayout(previewGroup);
+    previewFormLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    previewFormLayout->setHorizontalSpacing(10);
+    previewFormLayout->setVerticalSpacing(8);
+
+    auto* canvasFrameRateCombo = new QComboBox(previewGroup);
+    canvasFrameRateCombo->setStyleSheet(UiTheme::dialogComboBoxStyleSheet());
+    canvasFrameRateCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    canvasFrameRateCombo->addItem(
+        uiText("dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS"),
+        static_cast<int>(PreviewCanvasFrameRateMode::Fps60)
+    );
+    canvasFrameRateCombo->addItem(
+        uiText("dialog.render_settings.preview.canvas_frame_rate.120", "120 FPS"),
+        static_cast<int>(PreviewCanvasFrameRateMode::Fps120)
+    );
+    const double detectedRefreshRate = currentPreviewCanvasRefreshRate();
+    const QString displayRefreshLabel = QStringLiteral("%1 (%2 Hz)")
+        .arg(uiText(
+            "dialog.render_settings.preview.canvas_frame_rate.display",
+            "Display Refresh Rate"
+        ))
+        .arg(QString::number(detectedRefreshRate, 'f', detectedRefreshRate >= 100.0 ? 0 : 1));
+    canvasFrameRateCombo->addItem(
+        displayRefreshLabel,
+        static_cast<int>(PreviewCanvasFrameRateMode::DisplayRefresh)
+    );
+    const int selectedCanvasFrameRateIndex =
+        canvasFrameRateCombo->findData(static_cast<int>(previewCanvasFrameRateMode_));
+    canvasFrameRateCombo->setCurrentIndex(selectedCanvasFrameRateIndex >= 0 ? selectedCanvasFrameRateIndex : 0);
+
+    auto* followModeCombo = new QComboBox(previewGroup);
+    followModeCombo->setStyleSheet(UiTheme::dialogComboBoxStyleSheet());
+    followModeCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    /*
+    followModeCombo->addItem(
+        uiText("dialog.render_settings.video.follow_mode.every_comma", "每个逗号都跟随"),
+        static_cast<int>(PreviewFollowMode::EveryComma)
+    );
+    followModeCombo->addItem(
+        uiText("dialog.render_settings.video.follow_mode.nonempty_comma", "只跟随有具体数值的逗号"),
+        static_cast<int>(PreviewFollowMode::NonEmptyComma)
+    );
+    followModeCombo->addItem(
+        uiText("dialog.render_settings.video.follow_mode.line_only", "只跟随行"),
+        static_cast<int>(PreviewFollowMode::LineOnly)
+    );
+    */
+    followModeCombo->clear();
+    followModeCombo->addItem(
+        uiText("dialog.render_settings.preview.follow_mode.every_comma", "Follow Every Comma"),
+        static_cast<int>(PreviewFollowMode::EveryComma)
+    );
+    followModeCombo->addItem(
+        uiText("dialog.render_settings.preview.follow_mode.nonempty_comma", "Follow Non-Empty Commas"),
+        static_cast<int>(PreviewFollowMode::NonEmptyComma)
+    );
+    followModeCombo->addItem(
+        uiText("dialog.render_settings.preview.follow_mode.line_only", "Follow Line Only"),
+        static_cast<int>(PreviewFollowMode::LineOnly)
+    );
+    const int selectedFollowModeIndex = followModeCombo->findData(static_cast<int>(previewFollowMode_));
+    followModeCombo->setCurrentIndex(selectedFollowModeIndex >= 0 ? selectedFollowModeIndex : 0);
+
     const QString scaleFillLabel = uiText("dialog.render_settings.video.scale.fill", "Fill (crop if needed)");
     const QString scaleFitLabel = uiText("dialog.render_settings.video.scale.fit", "Fit (keep full image, may letterbox)");
     PreviewBackgroundScaleMode selectedScaleMode = previewBackgroundScaleMode_;
@@ -4015,14 +4232,31 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     smoothBrightnessCheck->setChecked(previewSmoothBrightness_);
     auto* timestampCheck = new QCheckBox(
         uiText("dialog.video_export.option.show_timestamp", "Show bottom-left timestamp"),
-        videoGroup
+        previewGroup
     );
     timestampCheck->setChecked(previewShowTimestamp_);
-
+    auto* previewObjectStatsCheck = new QCheckBox(
+        uiText("dialog.render_settings.preview.show_object_stats_preview", "Show object stats in preview"),
+        previewGroup
+    );
+    previewObjectStatsCheck->setChecked(previewShowObjectStatsHud_);
+    auto* exportObjectStatsCheck = new QCheckBox(
+        uiText("dialog.render_settings.preview.show_object_stats_export", "Show object stats in export"),
+        previewGroup
+    );
+    exportObjectStatsCheck->setChecked(exportShowObjectStatsHud_);
+    auto* debugCheck = new QCheckBox(
+        uiText("dialog.render_settings.preview.debug", "Show preview debug info"),
+        previewGroup
+    );
+    debugCheck->setChecked(previewShowDebugInfo_);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_outer", "Outer Brightness"), outerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Inner Brightness"), innerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Layout Size"), layoutSquareScaleRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.flow_speed", "Flow Speed"), flowSpeedButton);
+    /*
+        uiText("dialog.render_settings.video.follow_mode", "跟随模式"),
+    */
     videoFormLayout->addRow(uiText("dialog.render_settings.video.scale_mode", "Background / PV Scale Mode"), scaleModeButton);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.canvas_aspect", "Preview Canvas Aspect"), canvasAspectButton);
     auto* videoCheckRow = new QWidget(videoGroup);
@@ -4035,19 +4269,43 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     videoCheckLayout->addWidget(smoothBrightnessCheck, 0, 0, Qt::AlignLeft);
     videoCheckLayout->addWidget(timestampCheck, 0, 1, Qt::AlignLeft);
     videoCheckLayout->addWidget(restoreSquareCheck, 1, 0, Qt::AlignLeft);
-    auto* debugCheck = new QCheckBox(uiText("dialog.render_settings.video.debug", "Show preview debug info"), videoGroup);
-    debugCheck->setChecked(previewShowDebugInfo_);
     videoCheckLayout->addWidget(debugCheck, 1, 1, Qt::AlignLeft);
     videoFormLayout->addRow(QString(), videoCheckRow);
 
+    videoCheckLayout->removeWidget(timestampCheck);
+    videoCheckLayout->removeWidget(debugCheck);
+
+    previewFormLayout->addRow(
+        uiText("dialog.render_settings.preview.canvas_frame_rate", "Preview Canvas Refresh Rate"),
+        canvasFrameRateCombo
+    );
+    previewFormLayout->addRow(
+        uiText("dialog.render_settings.preview.follow_mode", "Follow Mode"),
+        followModeCombo
+    );
+    auto* previewCheckRow = new QWidget(previewGroup);
+    auto* previewCheckLayout = new QGridLayout(previewCheckRow);
+    previewCheckLayout->setContentsMargins(0, 0, 0, 0);
+    previewCheckLayout->setHorizontalSpacing(10);
+    previewCheckLayout->setVerticalSpacing(6);
+    previewCheckLayout->setColumnStretch(0, 1);
+    previewCheckLayout->setColumnStretch(1, 1);
+    previewCheckLayout->addWidget(timestampCheck, 0, 0, Qt::AlignLeft);
+    previewCheckLayout->addWidget(debugCheck, 0, 1, Qt::AlignLeft);
+    previewCheckLayout->addWidget(previewObjectStatsCheck, 1, 0, Qt::AlignLeft);
+    previewCheckLayout->addWidget(exportObjectStatsCheck, 1, 1, Qt::AlignLeft);
+    previewFormLayout->addRow(QString(), previewCheckRow);
+
     audioGroup->setVisible(includeAudioSettings);
     videoGroup->setVisible(includeVideoSettings);
+    previewGroup->setVisible(includeVideoSettings);
 
     if (includeAudioSettings) {
         rootLayout->addWidget(audioGroup, 0);
     }
     if (includeVideoSettings) {
         rootLayout->addWidget(videoGroup, 0);
+        rootLayout->addWidget(previewGroup, 0);
     }
     auto* buttonBox = new QDialogButtonBox(&dialog);
     if (QPushButton* closeButton = buttonBox->addButton(uiText("dialog.render_settings.button.close", "Close"), QDialogButtonBox::RejectRole)) {
@@ -4130,8 +4388,31 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         queueAudioApply("break_slide");
     });
 
-    connect(restoreButton, &QPushButton::clicked, &dialog, [this, bgmSlider, answerSlider, judgeSlider, breakSlider, slideSlider, exSlider, touchSlider, fireworkSlider, breakSlideSlider]() {
-        previewAudioSettings_ = softwarePreviewAudioSettings_;
+    const auto refreshAudioValueLabels = [
+        this,
+        bgmLabel,
+        answerLabel,
+        judgeLabel,
+        breakLabel,
+        slideLabel,
+        exLabel,
+        touchLabel,
+        fireworkLabel,
+        breakSlideLabel
+    ]() {
+        bgmLabel->setText(QString::number(this->previewAudioSettings_.bgmPercent()) + "%");
+        answerLabel->setText(QString::number(this->previewAudioSettings_.answerPercent()) + "%");
+        judgeLabel->setText(QString::number(this->previewAudioSettings_.judgePercent()) + "%");
+        breakLabel->setText(QString::number(this->previewAudioSettings_.breakPercent()) + "%");
+        slideLabel->setText(QString::number(this->previewAudioSettings_.slidePercent()) + "%");
+        exLabel->setText(QString::number(this->previewAudioSettings_.exPercent()) + "%");
+        touchLabel->setText(QString::number(this->previewAudioSettings_.touchPercent()) + "%");
+        fireworkLabel->setText(QString::number(this->previewAudioSettings_.fireworkPercent()) + "%");
+        breakSlideLabel->setText(QString::number(this->previewAudioSettings_.breakSlidePercent()) + "%");
+    };
+
+    connect(restoreButton, &QPushButton::clicked, &dialog, [this, bgmSlider, answerSlider, judgeSlider, breakSlider, slideSlider, exSlider, touchSlider, fireworkSlider, breakSlideSlider, refreshAudioValueLabels]() {
+        previewAudioSettings_ = PreviewAudioSettings();
         previewAudioSettings_.normalize();
         {
             QSignalBlocker b1(bgmSlider), b2(answerSlider), b3(judgeSlider), b4(breakSlider), b5(slideSlider), b6(exSlider), b7(touchSlider), b8(fireworkSlider), b9(breakSlideSlider);
@@ -4145,6 +4426,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
             fireworkSlider->setValue(previewAudioSettings_.fireworkPercent());
             breakSlideSlider->setValue(previewAudioSettings_.breakSlidePercent());
         }
+        refreshAudioValueLabels();
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
         sendPreviewConfigCommand();
@@ -4218,6 +4500,20 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         saveProjectRenderState();
         savePortableState();
     });
+    connect(canvasFrameRateCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dialog, [this, canvasFrameRateCombo](int index) {
+        const QVariant data = canvasFrameRateCombo->itemData(index);
+        if (!data.isValid()) {
+            return;
+        }
+        setPreviewCanvasFrameRateMode(static_cast<PreviewCanvasFrameRateMode>(data.toInt()), true);
+    });
+    connect(followModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dialog, [this, followModeCombo](int index) {
+        const QVariant data = followModeCombo->itemData(index);
+        if (!data.isValid()) {
+            return;
+        }
+        setPreviewFollowMode(static_cast<PreviewFollowMode>(data.toInt()), true);
+    });
     connect(restoreSquareCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
         previewAutoRestoreSquareAfterExport_ = checked;
         saveProjectRenderState();
@@ -4248,8 +4544,21 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         saveProjectRenderState();
         savePortableState();
     });
-
+    connect(previewObjectStatsCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
+        previewShowObjectStatsHud_ = checked;
+        if (previewCanvas_ != nullptr) {
+            previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
+        }
+        saveProjectRenderState();
+        savePortableState();
+    });
+    connect(exportObjectStatsCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
+        exportShowObjectStatsHud_ = checked;
+        saveProjectRenderState();
+        savePortableState();
+    });
     dialog.adjustSize();
+    applySystemWindowBackdrop(&dialog);
     dialog.exec();
 }
 

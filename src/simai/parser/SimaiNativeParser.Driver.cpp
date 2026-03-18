@@ -336,6 +336,7 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode)
                 TimelineBeatMarker marker;
                 marker.second = state.second;
                 marker.sourceLine = qMax(1, lineNumber);
+                marker.sourceCol = qMax(1, i + 1);
                 marker.major = (state.lastBeatSourceLine != marker.sourceLine);
                 state.result.beatMarkers.append(marker);
                 state.lastBeatSourceLine = marker.sourceLine;

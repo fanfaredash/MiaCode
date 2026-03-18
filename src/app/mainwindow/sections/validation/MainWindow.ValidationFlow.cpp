@@ -60,7 +60,99 @@ QColor severityColor(ValidationSeverityLevel severity)
         : QColor(QStringLiteral("#C62828"));
 }
 
+bool buildEditorSelectionCursor(PlainCodeEditor* editor, int line, int col, QTextCursor* cursorOut)
+{
+    if (editor == nullptr || editor->document() == nullptr || cursorOut == nullptr) {
+        return false;
+    }
+
+    const int normalizedLine = qMax(1, line);
+    const int normalizedCol = qMax(1, col);
+    QTextBlock block = editor->document()->findBlockByNumber(normalizedLine - 1);
+    if (!block.isValid()) {
+        return false;
+    }
+
+    const QString blockText = block.text();
+    const int lineLength = blockText.size();
+    const int localIndex = qBound(0, normalizedCol - 1, qMax(0, lineLength));
+
+    QTextCursor cursor(editor->document());
+    cursor.setPosition(block.position() + localIndex);
+    if (lineLength > 0) {
+        const int selectionLength = (localIndex < lineLength) ? 1 : 0;
+        if (selectionLength > 0) {
+            cursor.setPosition(block.position() + localIndex + selectionLength, QTextCursor::KeepAnchor);
+        } else {
+            cursor.setPosition(block.position() + qMax(0, lineLength - 1));
+            cursor.setPosition(block.position() + lineLength, QTextCursor::KeepAnchor);
+        }
+    }
+
+    *cursorOut = cursor;
+    return true;
+}
+
 }  // namespace
+
+void MainWindow::refreshEditorExtraSelections()
+{
+    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
+    if (editor == nullptr) {
+        return;
+    }
+
+    QVector<QTextEdit::ExtraSelection> selections;
+    selections.reserve(validationDecorations_.size() + (previewFollowDecorationActive_ ? 1 : 0));
+
+    for (const ValidationDecoration& decoration : validationDecorations_) {
+        QTextCursor cursor;
+        if (!buildEditorSelectionCursor(editor, decoration.line, decoration.col, &cursor)) {
+            continue;
+        }
+
+        QTextEdit::ExtraSelection sel;
+        sel.cursor = cursor;
+        sel.format.setUnderlineStyle(QTextCharFormat::WaveUnderline);
+        sel.format.setUnderlineColor(decoration.warning
+                                         ? severityColor(ValidationSeverityLevel::Warning)
+                                         : severityColor(ValidationSeverityLevel::Error));
+        sel.format.setToolTip(decoration.message);
+        selections.append(sel);
+    }
+
+    if (previewFollowDecorationActive_) {
+        QTextCursor cursor;
+        if (buildEditorSelectionCursor(editor, previewFollowDecorationLine_, previewFollowDecorationCol_, &cursor)) {
+            QTextEdit::ExtraSelection sel;
+            sel.cursor = cursor;
+            QColor highlight = UiTheme::colors().accent;
+            highlight.setAlpha(UiTheme::colors().dark ? 88 : 56);
+            sel.format.setBackground(highlight);
+            sel.format.setProperty(QTextFormat::FullWidthSelection, false);
+            selections.append(sel);
+        }
+    }
+
+    editor->setExtraSelections(selections);
+}
+
+void MainWindow::setPreviewFollowDecoration(int line, int col)
+{
+    previewFollowDecorationActive_ = true;
+    previewFollowDecorationLine_ = qMax(1, line);
+    previewFollowDecorationCol_ = qMax(1, col);
+    refreshEditorExtraSelections();
+}
+
+void MainWindow::clearPreviewFollowDecoration()
+{
+    if (!previewFollowDecorationActive_) {
+        return;
+    }
+    previewFollowDecorationActive_ = false;
+    refreshEditorExtraSelections();
+}
 
 void MainWindow::clearValidationErrors()
 {
@@ -72,11 +164,8 @@ void MainWindow::clearValidationErrors()
 
 void MainWindow::clearValidationDecorations()
 {
-    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-    if (editor == nullptr) {
-        return;
-    }
-    editor->setExtraSelections({});
+    validationDecorations_.clear();
+    refreshEditorExtraSelections();
 }
 
 void MainWindow::addValidationError(int line, int col, const QString& message)
@@ -145,32 +234,14 @@ void MainWindow::addValidationDecoration(int line, int col, const QString& messa
         col = 1;
     }
 
-    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
-    if (editor == nullptr || editor->document() == nullptr) {
-        return;
-    }
-
-    QTextBlock block = editor->document()->findBlockByNumber(line - 1);
-    if (!block.isValid()) {
-        return;
-    }
-
     const ValidationMessageParts parts = parseValidationMessage(message);
-    const QColor underlineColor = severityColor(parts.severity);
-
-    QTextCursor cursor(editor->document());
-    cursor.setPosition(block.position() + qMax(0, col - 1));
-    cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
-
-    QTextEdit::ExtraSelection sel;
-    sel.cursor = cursor;
-    sel.format.setUnderlineStyle(QTextCharFormat::WaveUnderline);
-    sel.format.setUnderlineColor(underlineColor);
-    sel.format.setToolTip(message);
-
-    auto selections = editor->extraSelections();
-    selections.append(sel);
-    editor->setExtraSelections(selections);
+    ValidationDecoration decoration;
+    decoration.line = qMax(1, line);
+    decoration.col = qMax(1, col);
+    decoration.message = message;
+    decoration.warning = (parts.severity == ValidationSeverityLevel::Warning);
+    validationDecorations_.append(decoration);
+    refreshEditorExtraSelections();
 }
 
 void MainWindow::jumpToLocation(int line, int col)
@@ -197,6 +268,7 @@ void MainWindow::jumpToLocation(int line, int col)
     editor->setTextCursor(cursor);
     editor->ensureCursorVisible();
     editor->setFocus();
+    clearPreviewFollowDecoration();
 }
 
 void MainWindow::onErrorItemActivated(QListWidgetItem* item)

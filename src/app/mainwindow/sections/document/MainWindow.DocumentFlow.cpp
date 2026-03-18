@@ -1134,7 +1134,9 @@ void MainWindow::loadDocument(const SimaiDocument& document)
 void MainWindow::clearTimelineAndPreview()
 {
     timelineCursorNotes_.clear();
+    previewFollowCursorNotes_.clear();
     lastPreviewNoteMarkerSignature_.clear();
+    clearPreviewFollowDecoration();
     clearPreviewObjectStats();
     previewTrackDurationSeconds_ = 0.0;
     qtPreviewTimelineDirty_ = false;

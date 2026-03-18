@@ -237,6 +237,11 @@ void PreviewCanvas::setShowObjectStatsHud(bool show)
     update();
 }
 
+bool PreviewCanvas::showObjectStatsHud() const
+{
+    return showObjectStatsHud_;
+}
+
 void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
 {
     tapImage_ = source.tapImage_;

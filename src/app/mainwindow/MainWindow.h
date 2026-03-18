@@ -130,10 +130,21 @@ private:
         Rotate45CounterClockwise,
         Rotate45Clockwise,
     };
+    enum class PreviewCanvasFrameRateMode {
+        Fps60,
+        Fps120,
+        DisplayRefresh,
+    };
+    enum class PreviewFollowMode {
+        EveryComma,
+        NonEmptyComma,
+        LineOnly,
+    };
     enum class TextEncoding {
         Utf8,
         System,
     };
+    struct TimelineCursorNote;
 
     bool maybeSaveBeforeContinue();
     void configureRuntimeDebugOutput();
@@ -228,6 +239,7 @@ private:
     void syncPausedPreviewMediaTimestamps(double second);
     void flushQtPreviewTimelinePosition();
     void onQtPreviewTick();
+    void finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage);
     void seekPreviewToSecond(double second, bool centerView);
     void schedulePreviewSeek(double second, bool centerView);
     void updatePreviewSliderRange();
@@ -248,6 +260,14 @@ private:
     void applyPreviewPlaybackRate(double rate);
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
     double normalizedPreviewCanvasAspectRatio(double ratio) const;
+    void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
+    PreviewCanvasFrameRateMode previewCanvasFrameRateModeFromStorageValue(const QString& value) const;
+    QString previewCanvasFrameRateModeStorageValue() const;
+    void setPreviewFollowMode(PreviewFollowMode mode, bool persistState);
+    PreviewFollowMode previewFollowModeFromStorageValue(const QString& value) const;
+    QString previewFollowModeStorageValue() const;
+    double currentPreviewCanvasRefreshRate() const;
+    void refreshPreviewFrameRateTimers();
     int computeBottomTabsDeviceHeight() const;
     void updateBottomTabsDeviceHeight();
     bool findTimelineCursorNoteForTextPosition(int line, int col, int* indexOut) const;
@@ -274,6 +294,7 @@ private:
     void applyEditorTextFontSize(int pointSize, bool persistPreference);
     void applyEditorLineSpacingFactor(double factor, bool persistPreference);
     void applyUiTheme();
+    void applySystemWindowBackdrop(QWidget* target = nullptr) const;
     void persistEditorTextFontPreference() const;
     void loadProjectRenderState();
     void saveProjectRenderState() const;
@@ -287,6 +308,9 @@ private:
     QString formatWindowStateFlags(Qt::WindowStates states) const;
     void logTopLevelWindowSnapshot(const QString& tag);
     void logNativeWindowDebug(const QString& tag, WId dialogWId = 0);
+    void refreshEditorExtraSelections();
+    void setPreviewFollowDecoration(int line, int col);
+    void clearPreviewFollowDecoration();
     void clearValidationErrors();
     void clearValidationDecorations();
     void addValidationError(int line, int col, const QString& message);
@@ -294,6 +318,30 @@ private:
     void clearValidationCache();
     void refreshValidationPanelForActiveField();
     void setValidationTabVisible(bool visible);
+    bool findCursorNoteForTextPosition(
+        const QVector<TimelineCursorNote>& notes,
+        int line,
+        int col,
+        int* indexOut
+    ) const;
+    bool resolveNearestCursorNote(
+        const QVector<TimelineCursorNote>& notes,
+        double second,
+        int lane,
+        int* line,
+        int* col,
+        double* noteSecond
+    ) const;
+    bool resolveCursorNoteFromAnchor(
+        const QVector<TimelineCursorNote>& notes,
+        double second,
+        int anchorLine,
+        int anchorCol,
+        int lane,
+        int* line,
+        int* col,
+        double* noteSecond
+    ) const;
 
     struct TimelineCursorNote {
         int line = 1;
@@ -306,6 +354,13 @@ private:
         int line = 1;
         int col = 1;
         QString displayMessage;
+    };
+
+    struct ValidationDecoration {
+        int line = 1;
+        int col = 1;
+        QString message;
+        bool warning = false;
     };
 
     struct ValidationCacheEntry {
@@ -368,6 +423,7 @@ private:
     QString lastOpenDir_;
     QString lastTrackPath_;
     QVector<TimelineCursorNote> timelineCursorNotes_;
+    QVector<TimelineCursorNote> previewFollowCursorNotes_;
     QByteArray lastPreviewNoteMarkerSignature_;
     TextEncoding currentEncoding_ = TextEncoding::Utf8;
     int previewArrangeRetryCount_ = 0;
@@ -399,6 +455,7 @@ private:
     QElapsedTimer previewScrubRenderElapsed_;
     double qtPreviewStartSecond_ = 0.0;
     double qtPreviewPauseSecond_ = 0.0;
+    double qtPreviewPlaybackReturnSecond_ = 0.0;
     double qtPreviewLastTimelineSecond_ = -1.0;
     double qtPreviewPendingTimelineSecond_ = 0.0;
     bool qtPreviewPendingTimelineCenterView_ = true;
@@ -420,10 +477,14 @@ private:
     bool previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
     PreviewBackgroundScaleMode previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     double previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    PreviewCanvasFrameRateMode previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
+    PreviewFollowMode previewFollowMode_ = PreviewFollowMode::EveryComma;
     double previewCanvasAspectRatio_ = 1.0;
     bool previewAutoRestoreSquareAfterExport_ = true;
     bool previewShowDebugInfo_ = false;
     bool previewShowTimestamp_ = true;
+    bool previewShowObjectStatsHud_ = false;
+    bool exportShowObjectStatsHud_ = false;
     PreviewAudioSettings softwarePreviewAudioSettings_;
     PreviewAudioSettings previewAudioSettings_;
     int editorTextFontPointSize_ = 0;
@@ -499,6 +560,10 @@ private:
     BracketScopeHighlighter* chartBracketHighlighter_ = nullptr;
     BracketScopeHighlighter* metadataBracketHighlighter_ = nullptr;
     QHash<int, ValidationCacheEntry> validationCacheByDifficulty_;
+    QVector<ValidationDecoration> validationDecorations_;
+    bool previewFollowDecorationActive_ = false;
+    int previewFollowDecorationLine_ = 1;
+    int previewFollowDecorationCol_ = 1;
     QString activeOutlineKey_ = "metadata";
     int activeDifficultyId_ = 0;
 };
