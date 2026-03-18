@@ -59,8 +59,6 @@ struct ExportTouchholdSpan {
     double endSecond = 0.0;
 };
 
-constexpr double kSameKindBoostGain = 1.5;
-
 struct AggregatedExportPlayback {
     QString kind;
     int count = 0;
@@ -220,21 +218,7 @@ int envIntValue(const QString& key, int defaultValue);
 
 bool shouldAggregateExportPlaybackKind(const QString& kind)
 {
-    return kind == QLatin1String("answer")
-        || kind == QLatin1String("judge")
-        || kind == QLatin1String("judge_break")
-        || kind == QLatin1String("slide")
-        || kind == QLatin1String("break_slide_start")
-        || kind == QLatin1String("ex");
-}
-
-bool shouldBoostExportPlaybackKind(const QString& kind)
-{
-    return kind == QLatin1String("judge")
-        || kind == QLatin1String("judge_break")
-        || kind == QLatin1String("slide")
-        || kind == QLatin1String("break_slide_start")
-        || kind == QLatin1String("ex");
+    return previewSfxShouldAggregateKind(kind);
 }
 
 void accumulateExportPlayback(QVector<AggregatedExportPlayback>* playbacks, const QString& kind, double gain)
@@ -259,11 +243,7 @@ void accumulateExportPlayback(QVector<AggregatedExportPlayback>* playbacks, cons
 
 double exportPlaybackGain(const AggregatedExportPlayback& playback)
 {
-    double gain = qMax(0.0, playback.maxGain);
-    if (playback.count >= 2 && shouldBoostExportPlaybackKind(playback.kind)) {
-        gain = qMin(kSameKindBoostGain, gain * kSameKindBoostGain);
-    }
-    return gain;
+    return previewSfxPlaybackGainForAggregate(playback.kind, playback.count, playback.maxGain);
 }
 
 QString exportTempDirTemplate()
@@ -730,6 +710,7 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
     int frameIndex,
     double exportSecond,
     bool showTimestamp,
+    bool showObjectStatsHud,
     QVector<ObjectTraceItem>&& traceItems,
     ReadyFramePayload* readyFrame,
     QString* fallbackDetail
@@ -757,7 +738,7 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
             frameSize,
             exportSecond,
             showTimestamp,
-            false,
+            showObjectStatsHud,
             &completedFrame,
             &completedFrameReady,
             false,
@@ -796,7 +777,7 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
     }
 
     if (*useOffscreenGpu) {
-        frame = exportCanvas->renderOverlayFrameOffscreen(frameSize, exportSecond, showTimestamp, false);
+        frame = exportCanvas->renderOverlayFrameOffscreen(frameSize, exportSecond, showTimestamp, showObjectStatsHud);
         if (!frame.isNull()) {
             usedOffscreenPath = true;
         } else {
@@ -810,7 +791,7 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
     }
 
     if (frame.isNull()) {
-        frame = exportCanvas->renderOverlayFrame(frameSize, exportSecond, showTimestamp, false);
+        frame = exportCanvas->renderOverlayFrame(frameSize, exportSecond, showTimestamp, showObjectStatsHud);
     }
 
     *readyFrame = buildReadyFramePayload(
@@ -830,6 +811,7 @@ bool drainPendingExportFrame(
     PendingPboFrame* pendingPboFrame,
     const QSize& frameSize,
     bool showTimestamp,
+    bool showObjectStatsHud,
     ReadyFramePayload* readyFrame,
     QString* errorMessage
 )
@@ -851,7 +833,7 @@ bool drainPendingExportFrame(
         frameSize,
         pendingPboFrame->exportSecond,
         showTimestamp,
-        false,
+        showObjectStatsHud,
         &drainedFrame,
         &drainedFrameReady,
         true,
@@ -2405,6 +2387,9 @@ void buildSfxTimeline(
             continue;
         }
         if (type == QLatin1String("touch")) {
+            if (!marker.isFirework) {
+                addEvent(marker.second, QStringLiteral("answer"));
+            }
             addEvent(marker.second, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("touch"));
             if (marker.isFirework) {
                 addEvent(marker.second + 0.05, QStringLiteral("firework"));
@@ -2412,6 +2397,9 @@ void buildSfxTimeline(
             continue;
         }
         if (type == QLatin1String("touch_hold")) {
+            if (!marker.isFirework) {
+                addEvent(marker.second, QStringLiteral("answer"));
+            }
             addEvent(marker.second, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("touch"));
             if (marker.isFirework && marker.endSecond >= 0.0) {
                 addEvent(marker.endSecond, QStringLiteral("firework"));
@@ -2504,40 +2492,7 @@ bool mixSfxTrackToWav(
     buildSfxTimeline(noteMarkers, &events, &spans);
 
     const auto kindVolume = [&settings](const QString& kind) -> double {
-        if (kind == QLatin1String("answer")) {
-            return settings.answerVolume;
-        }
-        if (kind == QLatin1String("judge")) {
-            return settings.judgeVolume;
-        }
-        if (kind == QLatin1String("judge_break")) {
-            return settings.breakVolume;
-        }
-        if (kind == QLatin1String("slide")) {
-            return settings.slideVolume;
-        }
-        if (kind == QLatin1String("break")) {
-            return qMin(settings.breakVolume * 1.5, 1.5);
-        }
-        if (kind == QLatin1String("break_slide_start")
-            || kind == QLatin1String("break_slide_finish")
-            || kind == QLatin1String("break_slide")
-            || kind == QLatin1String("judge_break_slide")) {
-            return settings.breakSlideVolume;
-        }
-        if (kind == QLatin1String("ex")) {
-            return settings.exVolume;
-        }
-        if (kind == QLatin1String("touch")) {
-            return settings.touchVolume;
-        }
-        if (kind == QLatin1String("touchhold")) {
-            return settings.touchVolume;
-        }
-        if (kind == QLatin1String("firework")) {
-            return settings.fireworkVolume;
-        }
-        return 0.0;
+        return previewSfxVolumeForKind(settings, kind);
     };
 
     const auto mixEvent = [&clips, &mix, &kindVolume, timelineOriginSecond](const QString& kind, double gain, double second) {
@@ -3760,7 +3715,7 @@ VideoExportResult VideoExportController::exportFullPreview(
             frameSize,
             timelineOriginSecond,
             task.showTimestamp,
-            false
+            task.showObjectStatsHud
         );
         const qint64 warmupNs = frameTimer.nsecsElapsed();
         appendVideoExportLog(
@@ -3870,7 +3825,7 @@ VideoExportResult VideoExportController::exportFullPreview(
                     frameSize,
                     exportSecond,
                     task.showTimestamp,
-                    false
+                    task.showObjectStatsHud
                 );
             }
             if (referenceFrame.isNull()) {
@@ -3878,7 +3833,7 @@ VideoExportResult VideoExportController::exportFullPreview(
                     frameSize,
                     exportSecond,
                     task.showTimestamp,
-                    false
+                    task.showObjectStatsHud
                 );
             }
 
@@ -3950,7 +3905,7 @@ VideoExportResult VideoExportController::exportFullPreview(
                 frameSize,
                 exportSecond,
                 task.showTimestamp,
-                true
+                task.showObjectStatsHud
             );
             const double fullDiff = meanAbsDiffNormalized(frame, cpuFrame);
             if (fullDiff >= 0.0) {
@@ -4315,6 +4270,7 @@ VideoExportResult VideoExportController::exportFullPreview(
             frameIndex,
             exportSecond,
             task.showTimestamp,
+            task.showObjectStatsHud,
             std::move(traceItems),
             &readyFrame,
             &renderBackendFallbackDetail
@@ -4349,6 +4305,7 @@ VideoExportResult VideoExportController::exportFullPreview(
                 &pendingPboFrame,
                 frameSize,
                 task.showTimestamp,
+                task.showObjectStatsHud,
                 &readyFrame,
                 &drainError)) {
             ffmpeg.kill();

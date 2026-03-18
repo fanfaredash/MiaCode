@@ -30,6 +30,7 @@ struct VideoExportTask {
     int outputHeight = 1024;
     int fps = 60;
     bool showTimestamp = true;
+    bool showObjectStatsHud = false;
 };
 
 struct VideoExportResult {

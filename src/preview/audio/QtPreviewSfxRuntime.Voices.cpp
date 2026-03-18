@@ -1,45 +1,33 @@
 bool QtPreviewSfxRuntime::playKindInternal(const QString& kind, double gain)
 {
-    const QString lowered = kind.trimmed().toLower();
+    const QString lowered = previewSfxNormalizedKind(kind);
     if (lowered.isEmpty()) {
         return false;
     }
 
     SfxBank* bank = nullptr;
-    double volume = 0.0;
     if (lowered == "answer") {
         bank = &answerSfx_;
-        volume = settings_.answerVolume;
     } else if (lowered == "judge") {
         bank = &judgeSfx_;
-        volume = settings_.judgeVolume;
     } else if (lowered == "judge_break" || lowered == "break_touch") {
         bank = &judgeBreakSfx_;
-        volume = settings_.breakVolume;
     } else if (lowered == "slide") {
         bank = &slideSfx_;
-        volume = settings_.slideVolume;
     } else if (lowered == "break") {
         bank = &breakSfx_;
-        volume = qMin(settings_.breakVolume * 1.5, 1.5);
     } else if (lowered == "break_slide" || lowered == "break_slide_start") {
         bank = &breakSlideStartSfx_;
-        volume = settings_.breakSlideVolume;
     } else if (lowered == "break_slide_finish") {
         bank = &breakSlideSfx_;
-        volume = settings_.breakSlideVolume;
     } else if (lowered == "judge_break_slide") {
         bank = &judgeBreakSlideSfx_;
-        volume = settings_.breakSlideVolume;
     } else if (lowered == "ex") {
         bank = &exSfx_;
-        volume = settings_.exVolume;
     } else if (lowered == "touch") {
         bank = &touchSfx_;
-        volume = settings_.touchVolume;
     } else if (lowered == "firework") {
         bank = &fireworkSfx_;
-        volume = settings_.fireworkVolume;
     } else if (lowered == "touchhold") {
         return playTouchholdAudition();
     }
@@ -47,6 +35,7 @@ bool QtPreviewSfxRuntime::playKindInternal(const QString& kind, double gain)
     if (bank == nullptr || !bank->configured || bank->voices.isEmpty()) {
         return false;
     }
+    const double volume = previewSfxVolumeForKind(settings_, lowered);
     if (volume <= 0.0) {
         return true;
     }

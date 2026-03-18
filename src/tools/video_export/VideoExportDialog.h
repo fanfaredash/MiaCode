@@ -115,6 +115,8 @@ private:
     bool rangePreviewPlaying_ = false;
     bool previewAspectChangedByDialog_ = false;
     bool previewStateRestored_ = false;
+    bool initialShowTimestamp_ = true;
+    bool initialShowObjectStatsHud_ = false;
     int previewSeekHeldArrowKey_ = 0;
     QElapsedTimer previewSeekHeldArrowElapsed_;
     QElapsedTimer previewScrubRenderElapsed_;

@@ -373,6 +373,10 @@ VideoExportDialog::VideoExportDialog(
     setMinimumWidth(kDialogMinWidth);
     resize(680, 360);
     setStyleSheet(UiTheme::exportDialogStyleSheet());
+    if (sourceCanvas_ != nullptr) {
+        initialShowTimestamp_ = sourceCanvas_->showTimestamp();
+        initialShowObjectStatsHud_ = sourceCanvas_->showObjectStatsHud();
+    }
 
     auto* rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(12, 10, 12, 10);
@@ -635,7 +639,7 @@ VideoExportDialog::VideoExportDialog(
         l10n(QStringLiteral("Show bottom-left timestamp"), QStringLiteral("显示左下角时间戳")),
         optionsContent_
     );
-    showTimestampCheck_->setChecked(false);
+    showTimestampCheck_->setChecked(baseTask_.showTimestamp);
     showTimestampCheck_->setText(uiText("dialog.video_export.option.show_timestamp", QStringLiteral("Show bottom-left timestamp")));
     smoothBrightnessCheck_ = new QCheckBox(
         l10n(QStringLiteral("Smooth brightness"), QStringLiteral("平滑亮度")),
@@ -1041,7 +1045,8 @@ void VideoExportDialog::restoreLivePreviewState()
     }
     previewStateRestored_ = true;
     if (sourceCanvas_ != nullptr) {
-        sourceCanvas_->setShowTimestamp(true);
+        sourceCanvas_->setShowTimestamp(initialShowTimestamp_);
+        sourceCanvas_->setShowObjectStatsHud(initialShowObjectStatsHud_);
     }
 }
 

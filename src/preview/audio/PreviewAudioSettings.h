@@ -1,18 +1,20 @@
 #pragma once
 
 #include <QJsonObject>
+#include <QString>
+#include <QtGlobal>
 
 struct PreviewAudioSettings {
-    double bgmVolume = 0.6;
-    double answerVolume = 0.15;
-    double judgeVolume = 0.10;
+    double bgmVolume = 0.15;
+    double answerVolume = 0.25;
+    double judgeVolume = 0.05;
     double slideVolume = 0.05;
-    double breakVolume = 0.10;
+    double breakVolume = 0.05;
     double breakSlideVolume = 0.05;
-    double exVolume = 0.10;
-    double touchVolume = 0.10;
-    double touchholdVolume = 0.10;
-    double fireworkVolume = 0.10;
+    double exVolume = 0.05;
+    double touchVolume = 0.05;
+    double touchholdVolume = 0.05;
+    double fireworkVolume = 0.05;
 
     static double clamp(double value);
     void normalize();
@@ -41,3 +43,93 @@ struct PreviewAudioSettings {
     QJsonObject toJson() const;
     static PreviewAudioSettings fromJson(const QJsonObject& object);
 };
+
+constexpr double kPreviewSfxSameKindBoostGain = 1.5;
+
+inline QString previewSfxNormalizedKind(const QString& kind)
+{
+    return kind.trimmed().toLower();
+}
+
+inline bool previewSfxShouldAggregateKind(const QString& kind)
+{
+    const QString lowered = previewSfxNormalizedKind(kind);
+    return lowered == "answer"
+        || lowered == "judge"
+        || lowered == "judge_break"
+        || lowered == "slide"
+        || lowered == "break_slide_start"
+        || lowered == "ex"
+        || lowered == "touch";
+}
+
+inline bool previewSfxShouldBoostAggregatedKind(const QString& kind)
+{
+    const QString lowered = previewSfxNormalizedKind(kind);
+    return lowered == "judge"
+        || lowered == "judge_break"
+        || lowered == "slide"
+        || lowered == "break_slide_start"
+        || lowered == "ex";
+}
+
+inline int previewSfxAggregatePlaybackCopies(const QString& kind, int count)
+{
+    const QString lowered = previewSfxNormalizedKind(kind);
+    if (lowered == "touch") {
+        // Touch clusters are capped so dense chords do not keep scaling indefinitely.
+        return qBound(1, count, 2);
+    }
+    return 1;
+}
+
+inline double previewSfxPlaybackGainForAggregate(const QString& kind, int count, double maxGain)
+{
+    double gain = qMax(0.0, maxGain);
+    if (gain <= 0.0) {
+        return 0.0;
+    }
+
+    const QString lowered = previewSfxNormalizedKind(kind);
+    gain *= static_cast<double>(previewSfxAggregatePlaybackCopies(lowered, count));
+    if (count >= 2 && previewSfxShouldBoostAggregatedKind(lowered)) {
+        gain = qMin(kPreviewSfxSameKindBoostGain, gain * kPreviewSfxSameKindBoostGain);
+    }
+    return gain;
+}
+
+inline double previewSfxVolumeForKind(const PreviewAudioSettings& settings, const QString& kind)
+{
+    const QString lowered = previewSfxNormalizedKind(kind);
+    if (lowered == "answer") {
+        return settings.answerVolume;
+    }
+    if (lowered == "judge") {
+        return settings.judgeVolume * 0.25;
+    }
+    if (lowered == "judge_break" || lowered == "break_touch") {
+        return settings.breakVolume * 0.25;
+    }
+    if (lowered == "slide") {
+        return settings.slideVolume * 0.25;
+    }
+    if (lowered == "break") {
+        return settings.breakVolume * 0.25;
+    }
+    if (lowered == "break_slide"
+        || lowered == "break_slide_start"
+        || lowered == "break_slide_finish"
+        || lowered == "judge_break_slide") {
+        return settings.breakSlideVolume * 0.25;
+    }
+    if (lowered == "ex") {
+        return settings.exVolume * 0.25;
+    }
+    if (lowered == "touch" || lowered == "touchhold") {
+        return settings.touchVolume * 0.25;
+    }
+    if (lowered == "firework") {
+        return settings.fireworkVolume * 0.25;
+    }
+    return 0.0;
+}
