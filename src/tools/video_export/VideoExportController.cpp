@@ -3577,6 +3577,8 @@ VideoExportResult VideoExportController::exportFullPreview(
     exportCanvas.setNoteMarkers(exportMarkers);
     exportCanvas.setCpuTrackAreaCachingEnabled(false);
     QOpenGLContext* shareContext = sourceCanvas->context();
+    const bool hasOffscreenPboReadbackOverride =
+        !qEnvironmentVariableIsEmpty("MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO");
     const bool enableOffscreenPboReadback =
         envFlagEnabled(QStringLiteral("MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO"));
     const bool hasGpuRenderOverride =
@@ -3600,7 +3602,9 @@ VideoExportResult VideoExportController::exportFullPreview(
     const bool disableOffscreenPboReadback =
         envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO"));
     const bool requestOffscreenPboReadback =
-        useOffscreenGpu && enableOffscreenPboReadback && !disableOffscreenPboReadback;
+        useOffscreenGpu
+        && !disableOffscreenPboReadback
+        && (hasOffscreenPboReadbackOverride ? enableOffscreenPboReadback : true);
     QString offscreenPboError;
     bool useOffscreenPboReadback = false;
     if (requestOffscreenPboReadback) {
