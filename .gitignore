@@ -1,4 +1,6 @@
 build/
+build-mingw*/
+Build-Mingw*/
 dist/
 .qt/
 .vs/
