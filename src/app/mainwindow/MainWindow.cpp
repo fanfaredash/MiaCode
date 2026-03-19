@@ -3625,8 +3625,19 @@ void MainWindow::onExportPreviewVideo()
         targetTopLeft.setY(qBound(avail.top(), targetTopLeft.y(), avail.bottom() - dialog.height() + 1));
     }
     dialog.move(targetTopLeft);
-    applySystemWindowBackdrop(&dialog);
     dialog.exec();
+    if (previewPanel_ != nullptr && previewPanel_->isVisible()) {
+        updatePreviewWorkspaceLayout();
+    }
+    if (previewCanvasFrame_ != nullptr) {
+        previewCanvasFrame_->update();
+    }
+    if (previewCanvasContainer_ != nullptr) {
+        previewCanvasContainer_->update();
+    }
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->update();
+    }
     if (previewAutoRestoreSquareAfterExport_
         && (dialog.exportSucceeded() || dialog.previewAspectChangedByDialog())) {
         setPreviewCanvasAspectRatio(1.0, false);
@@ -4536,8 +4547,19 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         savePortableState();
     });
     dialog.adjustSize();
-    applySystemWindowBackdrop(&dialog);
     dialog.exec();
+    if (previewPanel_ != nullptr && previewPanel_->isVisible()) {
+        updatePreviewWorkspaceLayout();
+    }
+    if (previewCanvasFrame_ != nullptr) {
+        previewCanvasFrame_->update();
+    }
+    if (previewCanvasContainer_ != nullptr) {
+        previewCanvasContainer_->update();
+    }
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->update();
+    }
 }
 
 #include "sections/preview/MainWindow.PreviewSessionFlow.cpp"
