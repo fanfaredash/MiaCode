@@ -3034,7 +3034,7 @@ void MainWindow::onToggleFireworkSelection()
         statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
-    applySelectionBatchTransform("Toggle Hanabi", [](const QString& text, int* changedCount) {
+    applySelectionBatchTransform("Toggle Firework", [](const QString& text, int* changedCount) {
         return miacode::chart_transform::toggleFireworkForSelection(text, changedCount);
     });
 }
@@ -3991,10 +3991,10 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     addAudioRow(uiText("dialog.render_settings.audio.ex", "EX Volume"), previewAudioSettings_.exPercent(), &exSlider, &exLabel);
     QSlider* touchSlider = nullptr;
     QLabel* touchLabel = nullptr;
-    addAudioRow(uiText("dialog.render_settings.audio.touch", "Touch / TouchHold Volume"), previewAudioSettings_.touchPercent(), &touchSlider, &touchLabel);
+    addAudioRow(uiText("dialog.render_settings.audio.touch", "Touch Volume"), previewAudioSettings_.touchPercent(), &touchSlider, &touchLabel);
     QSlider* fireworkSlider = nullptr;
     QLabel* fireworkLabel = nullptr;
-    addAudioRow(uiText("dialog.render_settings.audio.firework", "Hanabi Volume"), previewAudioSettings_.fireworkPercent(), &fireworkSlider, &fireworkLabel);
+    addAudioRow(uiText("dialog.render_settings.audio.firework", "Firework Volume"), previewAudioSettings_.fireworkPercent(), &fireworkSlider, &fireworkLabel);
     QSlider* breakSlideSlider = nullptr;
     QLabel* breakSlideLabel = nullptr;
     addAudioRow(uiText("dialog.render_settings.audio.break_slide", "Break Slide Volume"), previewAudioSettings_.breakSlidePercent(), &breakSlideSlider, &breakSlideLabel);
