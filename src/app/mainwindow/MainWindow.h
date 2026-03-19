@@ -478,7 +478,7 @@ private:
     PreviewBackgroundScaleMode previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     double previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     PreviewCanvasFrameRateMode previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
-    PreviewFollowMode previewFollowMode_ = PreviewFollowMode::EveryComma;
+    PreviewFollowMode previewFollowMode_ = PreviewFollowMode::NonEmptyComma;
     double previewCanvasAspectRatio_ = 1.0;
     bool previewAutoRestoreSquareAfterExport_ = true;
     bool previewShowDebugInfo_ = false;

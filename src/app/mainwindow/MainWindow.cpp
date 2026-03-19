@@ -2484,9 +2484,7 @@ void MainWindow::loadProjectRenderState()
             previewCanvasFrameRateMode_ =
                 previewCanvasFrameRateModeFromStorageValue(render.value("canvas_frame_rate_mode").toString());
         }
-        if (render.value("follow_mode").isString()) {
-            previewFollowMode_ = previewFollowModeFromStorageValue(render.value("follow_mode").toString());
-        }
+        previewFollowMode_ = PreviewFollowMode::NonEmptyComma;
         if (render.value("show_debug_info").isBool()) {
             previewShowDebugInfo_ = render.value("show_debug_info").toBool(previewShowDebugInfo_);
         }
@@ -4120,6 +4118,8 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     auto* canvasFrameRateCombo = new QComboBox(previewGroup);
     canvasFrameRateCombo->setStyleSheet(UiTheme::dialogComboBoxStyleSheet());
     canvasFrameRateCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    canvasFrameRateCombo->setEditable(true);
+    canvasFrameRateCombo->setInsertPolicy(QComboBox::NoInsert);
     canvasFrameRateCombo->addItem(
         uiText("dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS"),
         static_cast<int>(PreviewCanvasFrameRateMode::Fps60)
@@ -4142,39 +4142,17 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     const int selectedCanvasFrameRateIndex =
         canvasFrameRateCombo->findData(static_cast<int>(previewCanvasFrameRateMode_));
     canvasFrameRateCombo->setCurrentIndex(selectedCanvasFrameRateIndex >= 0 ? selectedCanvasFrameRateIndex : 0);
-
-    auto* followModeCombo = new QComboBox(previewGroup);
-    followModeCombo->setStyleSheet(UiTheme::dialogComboBoxStyleSheet());
-    followModeCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    /*
-    followModeCombo->addItem(
-        uiText("dialog.render_settings.video.follow_mode.every_comma", "每个逗号都跟随"),
-        static_cast<int>(PreviewFollowMode::EveryComma)
-    );
-    followModeCombo->addItem(
-        uiText("dialog.render_settings.video.follow_mode.nonempty_comma", "只跟随有具体数值的逗号"),
-        static_cast<int>(PreviewFollowMode::NonEmptyComma)
-    );
-    followModeCombo->addItem(
-        uiText("dialog.render_settings.video.follow_mode.line_only", "只跟随行"),
-        static_cast<int>(PreviewFollowMode::LineOnly)
-    );
-    */
-    followModeCombo->clear();
-    followModeCombo->addItem(
-        uiText("dialog.render_settings.preview.follow_mode.every_comma", "Follow Every Comma"),
-        static_cast<int>(PreviewFollowMode::EveryComma)
-    );
-    followModeCombo->addItem(
-        uiText("dialog.render_settings.preview.follow_mode.nonempty_comma", "Follow Non-Empty Commas"),
-        static_cast<int>(PreviewFollowMode::NonEmptyComma)
-    );
-    followModeCombo->addItem(
-        uiText("dialog.render_settings.preview.follow_mode.line_only", "Follow Line Only"),
-        static_cast<int>(PreviewFollowMode::LineOnly)
-    );
-    const int selectedFollowModeIndex = followModeCombo->findData(static_cast<int>(previewFollowMode_));
-    followModeCombo->setCurrentIndex(selectedFollowModeIndex >= 0 ? selectedFollowModeIndex : 0);
+    canvasFrameRateCombo->setFixedHeight(flowSpeedButton->sizeHint().height());
+    for (int index = 0; index < canvasFrameRateCombo->count(); ++index) {
+        canvasFrameRateCombo->setItemData(index, Qt::AlignCenter, Qt::TextAlignmentRole);
+    }
+    if (QLineEdit* lineEdit = canvasFrameRateCombo->lineEdit(); lineEdit != nullptr) {
+        lineEdit->setReadOnly(true);
+        lineEdit->setAlignment(Qt::AlignCenter);
+        lineEdit->setFrame(false);
+        lineEdit->setStyleSheet(QStringLiteral("QLineEdit { border: none; background: transparent; padding: 0; }"));
+        lineEdit->setCursor(Qt::ArrowCursor);
+    }
 
     const QString scaleFillLabel = uiText("dialog.render_settings.video.scale.fill", "Fill (crop if needed)");
     const QString scaleFitLabel = uiText("dialog.render_settings.video.scale.fit", "Fit (keep full image, may letterbox)");
@@ -4296,12 +4274,8 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     videoCheckLayout->removeWidget(debugCheck);
 
     previewFormLayout->addRow(
-        uiText("dialog.render_settings.preview.canvas_frame_rate", "Preview Canvas Refresh Rate"),
+        uiText("dialog.render_settings.preview.canvas_frame_rate", "Preview Refresh Rate"),
         canvasFrameRateCombo
-    );
-    previewFormLayout->addRow(
-        uiText("dialog.render_settings.preview.follow_mode", "Follow Mode"),
-        followModeCombo
     );
     auto* previewCheckRow = new QWidget(previewGroup);
     auto* previewCheckLayout = new QGridLayout(previewCheckRow);
@@ -4526,13 +4500,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
             return;
         }
         setPreviewCanvasFrameRateMode(static_cast<PreviewCanvasFrameRateMode>(data.toInt()), true);
-    });
-    connect(followModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dialog, [this, followModeCombo](int index) {
-        const QVariant data = followModeCombo->itemData(index);
-        if (!data.isValid()) {
-            return;
-        }
-        setPreviewFollowMode(static_cast<PreviewFollowMode>(data.toInt()), true);
     });
     connect(restoreSquareCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
         previewAutoRestoreSquareAfterExport_ = checked;
