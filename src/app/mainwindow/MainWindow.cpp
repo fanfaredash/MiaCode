@@ -1330,6 +1330,29 @@ QString runtimeDebugLogPath()
     return QDir::temp().filePath("miacode_runtime_debug.log");
 }
 
+bool probeStageMediaAvailable(const QString& chartPath)
+{
+    if (chartPath.isEmpty()) {
+        return false;
+    }
+
+    const QFileInfo chartInfo(chartPath);
+    const QDir chartDir(chartInfo.absolutePath());
+    QStringList candidates;
+#ifdef HAVE_QT_MULTIMEDIA
+    candidates << QStringLiteral("bg.mp4") << QStringLiteral("pv.mp4");
+#endif
+    candidates << QStringLiteral("bg.jpg")
+               << QStringLiteral("bg.png")
+               << QStringLiteral("bg.jpeg");
+    for (const QString& name : candidates) {
+        if (QFileInfo::exists(chartDir.filePath(name))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool startupTimingEnabled()
 {
     static const bool enabled = []() {
@@ -1437,6 +1460,9 @@ void MainWindow::ensurePreviewMediaControllerInitialized()
     }
     previewMediaController_->setTimelineOffsetSeconds(0.0);
     previewMediaController_->setChartPath(currentFilePath_);
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->setStageMediaAvailable(previewMediaController_->hasResolvedMedia());
+    }
     previewMediaController_->setPlayheadSeconds(qtPreviewPauseSecond_);
 
     const qint64 elapsedMs = initTimer.elapsed();

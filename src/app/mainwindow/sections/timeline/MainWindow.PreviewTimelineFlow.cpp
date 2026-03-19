@@ -1,5 +1,7 @@
 namespace {
 
+constexpr double kTimelineZeroSecondTolerance = 1e-6;
+
 double shiftedTimelineSecond(double second, double offsetSeconds)
 {
     if (!qIsFinite(second) || !qIsFinite(offsetSeconds)) {
@@ -42,6 +44,22 @@ QVector<TimelineNoteMarker> shiftedNoteMarkers(
         }
     }
     return shifted;
+}
+
+std::pair<int, int> lineColForTextOffset(const QString& text, int offset)
+{
+    const int boundedOffset = qBound(0, offset, text.size());
+    int line = 1;
+    int col = 1;
+    for (int index = 0; index < boundedOffset; ++index) {
+        if (text.at(index) == QChar('\n')) {
+            ++line;
+            col = 1;
+            continue;
+        }
+        ++col;
+    }
+    return {line, col};
 }
 
 }  // namespace
@@ -258,6 +276,9 @@ void MainWindow::setCurrentFilePath(const QString& path)
     } else {
         lastTrackPath_.clear();
     }
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->setStageMediaAvailable(probeStageMediaAvailable(currentFilePath_));
+    }
     updateWindowTitle();
     updateCurrentFileLabel();
     updateLatencyDetectorAvailability();
@@ -335,12 +356,13 @@ void MainWindow::refreshTimelineMetadata()
     if (timelineView_ == nullptr || !hasActiveDifficulty()) {
         return;
     }
-    const SimaiNativeParseResult nativeResult = SimaiNativeParser::parseForTimeline(activeChartText());
+    const QString chartText = activeChartText();
+    const SimaiNativeParseResult nativeResult = SimaiNativeParser::parseForTimeline(chartText);
     const double firstSeconds = parsedFixedFirstSeconds();
     QVector<TimelineBeatMarker> beatMarkers = shiftedBeatMarkers(nativeResult.beatMarkers, firstSeconds);
     QVector<TimelineNoteMarker> noteMarkers = shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds);
     timelineCursorNotes_.clear();
-    timelineCursorNotes_.reserve(noteMarkers.size());
+    timelineCursorNotes_.reserve(noteMarkers.size() + 1);
     for (const TimelineNoteMarker& marker : noteMarkers) {
         TimelineCursorNote cursorNote;
         cursorNote.line = qMax(1, marker.sourceLine);
@@ -348,6 +370,26 @@ void MainWindow::refreshTimelineMetadata()
         cursorNote.lane = marker.lane;
         cursorNote.second = marker.second;
         timelineCursorNotes_.append(cursorNote);
+    }
+
+    bool hasRawZeroNote = false;
+    for (const TimelineNoteMarker& marker : nativeResult.noteMarkers) {
+        if (qAbs(marker.second) <= kTimelineZeroSecondTolerance) {
+            hasRawZeroNote = true;
+            break;
+        }
+    }
+    if (!hasRawZeroNote) {
+        const int firstCommaOffset = chartText.indexOf(QLatin1Char(','));
+        if (firstCommaOffset >= 0) {
+            const auto [line, col] = lineColForTextOffset(chartText, firstCommaOffset);
+            TimelineCursorNote virtualZeroNote;
+            virtualZeroNote.line = line;
+            virtualZeroNote.col = col;
+            virtualZeroNote.lane = -1;
+            virtualZeroNote.second = shiftedTimelineSecond(0.0, firstSeconds);
+            timelineCursorNotes_.append(virtualZeroNote);
+        }
     }
 
     std::sort(timelineCursorNotes_.begin(), timelineCursorNotes_.end(), [](const TimelineCursorNote& a, const TimelineCursorNote& b) {
@@ -389,18 +431,35 @@ void MainWindow::refreshTimelineMetadata()
     }
 }
 
-double MainWindow::timelineSecondForCursor(int line, int col) const
+bool MainWindow::findTimelineCursorNoteForTextPosition(int line, int col, int* indexOut) const
 {
     if (timelineCursorNotes_.isEmpty()) {
-        return -1.0;
+        return false;
     }
 
-    for (const TimelineCursorNote& note : timelineCursorNotes_) {
+    for (int index = 0; index < timelineCursorNotes_.size(); ++index) {
+        const TimelineCursorNote& note = timelineCursorNotes_.at(index);
         if (note.line > line || (note.line == line && note.col >= col)) {
-            return note.second;
+            if (indexOut != nullptr) {
+                *indexOut = index;
+            }
+            return true;
         }
     }
-    return timelineCursorNotes_.constLast().second;
+
+    if (indexOut != nullptr) {
+        *indexOut = timelineCursorNotes_.size() - 1;
+    }
+    return true;
+}
+
+double MainWindow::timelineSecondForCursor(int line, int col) const
+{
+    int noteIndex = -1;
+    if (!findTimelineCursorNoteForTextPosition(line, col, &noteIndex) || noteIndex < 0) {
+        return -1.0;
+    }
+    return timelineCursorNotes_.at(noteIndex).second;
 }
 
 void MainWindow::seekTimelineToCursor(int line, int col)
@@ -410,34 +469,30 @@ void MainWindow::seekTimelineToCursor(int line, int col)
     }
     const double second = timelineSecondForCursor(line, col);
     if (second < -1e-6) {
-        timelineView_->setCursorSeconds(second);
-        timelineView_->setPlayheadSeconds(0.0, true);
+        timelineView_->setCursorSeconds(second, true);
         return;
     }
     if (second < 0.0) {
         return;
     }
-    timelineView_->setCursorSeconds(second);
-    timelineView_->setPlayheadSeconds(second, true);
+    timelineView_->setCursorSeconds(second, true);
 }
 
 void MainWindow::syncTimelineToEditorCursor(bool centerView)
 {
-    if (suppressTimelineCursorSync_ || qtPreviewPlaying_ || !hasActiveDifficulty() || timelineView_ == nullptr) {
+    if (suppressTimelineCursorSync_ || !hasActiveDifficulty() || timelineView_ == nullptr) {
         return;
     }
     const auto [line, col] = currentCursorLineCol();
     const double second = timelineSecondForCursor(line, col);
     if (second < -1e-6) {
-        timelineView_->setCursorSeconds(second);
-        timelineView_->setPlayheadSeconds(0.0, centerView);
+        timelineView_->setCursorSeconds(second, centerView);
         return;
     }
     if (second < 0.0) {
         return;
     }
-    timelineView_->setCursorSeconds(second);
-    timelineView_->setPlayheadSeconds(second, centerView);
+    timelineView_->setCursorSeconds(second, centerView);
 }
 
 void MainWindow::navigateTimelineToSecond(double second, bool focusEditor)
@@ -539,6 +594,91 @@ bool MainWindow::resolveNearestTimelineNote(double second, int lane, int* line, 
     return true;
 }
 
+bool MainWindow::resolveTimelineNoteFromCursorAnchor(
+    double second,
+    int anchorLine,
+    int anchorCol,
+    int lane,
+    int* line,
+    int* col,
+    double* noteSecond
+) const
+{
+    if (timelineCursorNotes_.isEmpty()) {
+        return false;
+    }
+
+    const TimelineCursorNote* best = nullptr;
+    const TimelineCursorNote* fallbackLast = nullptr;
+    const TimelineCursorNote* fallbackLastSameLane = nullptr;
+    bool foundSameLane = false;
+    const bool preferLane = lane >= 1;
+    const double target = qMax(0.0, second);
+
+    for (const TimelineCursorNote& note : timelineCursorNotes_) {
+        fallbackLast = &note;
+        if (preferLane && note.lane == lane) {
+            fallbackLastSameLane = &note;
+        }
+        if (note.line < anchorLine || (note.line == anchorLine && note.col < anchorCol)) {
+            continue;
+        }
+
+        const bool sameLane = preferLane && note.lane == lane;
+        if (preferLane) {
+            if (sameLane && !foundSameLane) {
+                best = &note;
+                foundSameLane = true;
+                continue;
+            }
+            if (!sameLane && foundSameLane) {
+                continue;
+            }
+            if (!sameLane && !foundSameLane && best == nullptr) {
+                best = &note;
+                continue;
+            }
+        } else if (best == nullptr) {
+            best = &note;
+            continue;
+        }
+
+        if (best == nullptr) {
+            best = &note;
+            continue;
+        }
+
+        const double bestDelta = qAbs(best->second - target);
+        const double noteDelta = qAbs(note.second - target);
+        if (noteDelta + 1e-9 < bestDelta) {
+            best = &note;
+            continue;
+        }
+        if (qAbs(noteDelta - bestDelta) <= 1e-9) {
+            if (note.line < best->line || (note.line == best->line && note.col < best->col)) {
+                best = &note;
+            }
+        }
+    }
+
+    if (best == nullptr) {
+        best = (preferLane && fallbackLastSameLane != nullptr) ? fallbackLastSameLane : fallbackLast;
+    }
+    if (best == nullptr) {
+        return false;
+    }
+    if (line != nullptr) {
+        *line = best->line;
+    }
+    if (col != nullptr) {
+        *col = best->col;
+    }
+    if (noteSecond != nullptr) {
+        *noteSecond = best->second;
+    }
+    return true;
+}
+
 bool MainWindow::moveEditorCursorToTimelineLocation(
     int line,
     int col,
@@ -619,14 +759,14 @@ void MainWindow::syncEditorCursorToPreviewSecond(double second, bool centerView)
         return;
     }
 
+    const auto [currentLine, currentCol] = currentCursorLineCol();
     int line = 1;
     int col = 1;
     double noteSecond = -1.0;
-    if (!resolveNearestTimelineNote(second, -1, &line, &col, &noteSecond)) {
+    if (!resolveTimelineNoteFromCursorAnchor(second, currentLine, currentCol, -1, &line, &col, &noteSecond)) {
         return;
     }
 
-    const auto [currentLine, currentCol] = currentCursorLineCol();
     if (currentLine == line && currentCol == col) {
         timelineView_->setCursorSeconds(noteSecond >= 0.0 ? noteSecond : qMax(0.0, second));
         return;
@@ -1321,6 +1461,9 @@ void MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
     }
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
+        if (resumeFromPause && previewSfxRuntime_->hasBackgroundTrack()) {
+            previewSfxRuntime_->seekBackgroundTrack(startSecond);
+        }
         previewSfxRuntime_->startBackgroundTrack(startSecond);
         if (previewSfxRuntime_->hasBackgroundTrack()
             && previewSfxRuntime_->isBackgroundTrackRunning()) {
@@ -1466,10 +1609,15 @@ void MainWindow::flushQtPreviewTimelinePosition()
         return;
     }
     if (qtPreviewPlaying_) {
-        const double second = qMax(
+        double second = qMax(
             0.0,
             qtPreviewTimelineStartSecond_ + ((qtPreviewTimelineElapsed_.elapsed() / 1000.0) * previewPlaybackRate_)
         );
+        if (previewSfxRuntime_ != nullptr
+            && previewSfxRuntime_->hasBackgroundTrack()
+            && previewSfxRuntime_->isBackgroundTrackRunning()) {
+            second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
+        }
         timelineView_->setPlayheadSeconds(second, qtPreviewTimelineCenterNextTick_);
         qtPreviewLastTimelineSecond_ = second;
         qtPreviewTimelineCenterNextTick_ = false;
@@ -1514,8 +1662,15 @@ void MainWindow::onQtPreviewTick()
         }
         return;
     }
-    const double elapsedSeconds = static_cast<double>(qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
-    double second = qtPreviewStartSecond_ + (elapsedSeconds * previewPlaybackRate_);
+    double second = 0.0;
+    if (previewSfxRuntime_ != nullptr
+        && previewSfxRuntime_->hasBackgroundTrack()
+        && previewSfxRuntime_->isBackgroundTrackRunning()) {
+        second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
+    } else {
+        const double elapsedSeconds = static_cast<double>(qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
+        second = qtPreviewStartSecond_ + (elapsedSeconds * previewPlaybackRate_);
+    }
     if (previewMediaController_ != nullptr) {
         previewMediaController_->syncPlayback(second);
     }

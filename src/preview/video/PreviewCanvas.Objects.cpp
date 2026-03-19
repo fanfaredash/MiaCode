@@ -348,16 +348,16 @@ void PreviewCanvas::drawJudgeEffectLayer(QPainter& painter, const QRectF& playfi
 
     for (const TimelineNoteMarker& marker : noteMarkers_) {
         if (marker.type == "tap") {
-            if (!marker.slideHead) {
-                queueLaneTrigger(
-                    marker.lane,
-                    marker.second,
-                    marker.isBreak,
-                    static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectLaneTriggerVisibleStartSeconds),
-                    static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectLaneTriggerVisibleEndSeconds),
-                    true
-                );
-            }
+            // Tap-on-slide is still a real tap judgment moment; only the note body
+            // overlaps the slide shoot point. Its judge effect should still render.
+            queueLaneTrigger(
+                marker.lane,
+                marker.second,
+                marker.isBreak,
+                static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectLaneTriggerVisibleStartSeconds),
+                static_cast<qreal>(miacode::preview_gameplay::kJudgeEffectLaneTriggerVisibleEndSeconds),
+                true
+            );
             continue;
         }
         if (marker.type == "slide" || marker.type == "wifi") {

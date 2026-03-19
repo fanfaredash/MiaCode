@@ -240,16 +240,23 @@ void TimelineView::setPlayheadSeconds(double second, bool centerView)
     emit playheadChanged(playheadSeconds_);
 }
 
-void TimelineView::setCursorSeconds(double second)
+void TimelineView::setCursorSeconds(double second, bool centerView)
 {
     const double clamped = qIsFinite(second) ? second : 0.0;
-    if (qFuzzyCompare(cursorSeconds_ + 1.0, clamped + 1.0)) {
-        return;
+    const bool changed = !qFuzzyCompare(cursorSeconds_ + 1.0, clamped + 1.0);
+    if (changed) {
+        cursorSeconds_ = clamped;
+        updateDisplayBounds();
+        updateHorizontalRange();
     }
-    cursorSeconds_ = clamped;
-    updateDisplayBounds();
-    updateHorizontalRange();
-    viewport()->update();
+    if (centerView) {
+        const int cursorX = secondToX(cursorSeconds_);
+        const int targetX = cursorX - (viewport()->width() / 2);
+        horizontalScrollBar()->setValue(qBound(horizontalScrollBar()->minimum(), targetX, horizontalScrollBar()->maximum()));
+    }
+    if (changed || centerView) {
+        viewport()->update();
+    }
 }
 
 double TimelineView::playheadSeconds() const

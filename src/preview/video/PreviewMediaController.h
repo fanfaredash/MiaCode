@@ -18,6 +18,7 @@ public:
     explicit PreviewMediaController(QObject* parent = nullptr);
     ~PreviewMediaController() override;
 
+    bool hasResolvedMedia() const;
     bool hasVideoMedia() const;
     bool hasBackgroundTrack() const;
     bool isPlaybackActive() const;
