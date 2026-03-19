@@ -5,8 +5,10 @@
 struct PreviewAudioSettings {
     double bgmVolume = 0.6;
     double answerVolume = 0.15;
+    double judgeVolume = 0.10;
     double slideVolume = 0.05;
     double breakVolume = 0.10;
+    double breakSlideVolume = 0.05;
     double exVolume = 0.10;
     double touchVolume = 0.10;
     double touchholdVolume = 0.10;
@@ -17,16 +19,20 @@ struct PreviewAudioSettings {
 
     int bgmPercent() const;
     int answerPercent() const;
+    int judgePercent() const;
     int slidePercent() const;
     int breakPercent() const;
+    int breakSlidePercent() const;
     int exPercent() const;
     int touchPercent() const;
     int touchholdPercent() const;
     int fireworkPercent() const;
     void setBgmPercent(int value);
     void setAnswerPercent(int value);
+    void setJudgePercent(int value);
     void setSlidePercent(int value);
     void setBreakPercent(int value);
+    void setBreakSlidePercent(int value);
     void setExPercent(int value);
     void setTouchPercent(int value);
     void setTouchholdPercent(int value);

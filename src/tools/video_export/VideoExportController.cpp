@@ -59,6 +59,14 @@ struct ExportTouchholdSpan {
     double endSecond = 0.0;
 };
 
+constexpr double kSameKindBoostGain = 1.5;
+
+struct AggregatedExportPlayback {
+    QString kind;
+    int count = 0;
+    double maxGain = 0.0;
+};
+
 struct DecodedClip {
     QVector<float> samples;
     int sampleRate = kMixSampleRate;
@@ -128,6 +136,12 @@ struct X264TuningPlan {
             QStringLiteral("-bf"), QString::number(bframes)
         };
     }
+};
+
+enum class EncoderAutoMode {
+    Balanced,
+    Compatibility,
+    Hardware,
 };
 
 struct FrameTimingStats {
@@ -203,6 +217,54 @@ struct FrameLayerActivityStats {
 
 bool envFlagEnabled(const QString& key);
 int envIntValue(const QString& key, int defaultValue);
+
+bool shouldAggregateExportPlaybackKind(const QString& kind)
+{
+    return kind == QLatin1String("answer")
+        || kind == QLatin1String("judge")
+        || kind == QLatin1String("judge_break")
+        || kind == QLatin1String("slide")
+        || kind == QLatin1String("break_slide_start")
+        || kind == QLatin1String("ex");
+}
+
+bool shouldBoostExportPlaybackKind(const QString& kind)
+{
+    return kind == QLatin1String("judge")
+        || kind == QLatin1String("judge_break")
+        || kind == QLatin1String("slide")
+        || kind == QLatin1String("break_slide_start")
+        || kind == QLatin1String("ex");
+}
+
+void accumulateExportPlayback(QVector<AggregatedExportPlayback>* playbacks, const QString& kind, double gain)
+{
+    if (playbacks == nullptr || kind.isEmpty()) {
+        return;
+    }
+    for (AggregatedExportPlayback& playback : *playbacks) {
+        if (playback.kind != kind) {
+            continue;
+        }
+        ++playback.count;
+        playback.maxGain = qMax(playback.maxGain, qMax(0.0, gain));
+        return;
+    }
+    AggregatedExportPlayback playback;
+    playback.kind = kind;
+    playback.count = 1;
+    playback.maxGain = qMax(0.0, gain);
+    playbacks->append(playback);
+}
+
+double exportPlaybackGain(const AggregatedExportPlayback& playback)
+{
+    double gain = qMax(0.0, playback.maxGain);
+    if (playback.count >= 2 && shouldBoostExportPlaybackKind(playback.kind)) {
+        gain = qMin(kSameKindBoostGain, gain * kSameKindBoostGain);
+    }
+    return gain;
+}
 
 QString exportTempDirTemplate()
 {
@@ -406,19 +468,118 @@ X265TuningPlan chooseX265TuningPlan(
     return plan;
 }
 
+QString fasterX264Preset(const QString& preset)
+{
+    if (preset == QLatin1String("medium")) {
+        return QStringLiteral("fast");
+    }
+    if (preset == QLatin1String("fast")) {
+        return QStringLiteral("faster");
+    }
+    if (preset == QLatin1String("faster")) {
+        return QStringLiteral("veryfast");
+    }
+    if (preset == QLatin1String("veryfast")) {
+        return QStringLiteral("superfast");
+    }
+    return preset;
+}
+
+QString encoderAutoModeToken(EncoderAutoMode mode)
+{
+    switch (mode) {
+    case EncoderAutoMode::Compatibility:
+        return QStringLiteral("compatibility");
+    case EncoderAutoMode::Hardware:
+        return QStringLiteral("hardware");
+    case EncoderAutoMode::Balanced:
+    default:
+        return QStringLiteral("balanced");
+    }
+}
+
+EncoderAutoMode resolveEncoderAutoMode()
+{
+    const QString mode = qEnvironmentVariable("MIACODE_EXPORT_ENCODER_MODE").trimmed().toLower();
+    if (mode == QLatin1String("compatibility")
+        || mode == QLatin1String("software")
+        || mode == QLatin1String("safe")) {
+        return EncoderAutoMode::Compatibility;
+    }
+    if (mode == QLatin1String("hardware")
+        || mode == QLatin1String("hardware_preferred")
+        || mode == QLatin1String("fast")) {
+        return EncoderAutoMode::Hardware;
+    }
+    return EncoderAutoMode::Balanced;
+}
+
+bool shouldPreferHardwareEncoderInAutoMode(
+    EncoderAutoMode mode,
+    int outputWidth,
+    int outputHeight,
+    int fps,
+    int idealThreadCount,
+    const SystemMemoryInfo& memoryInfo,
+    QString* reason
+)
+{
+    if (mode == EncoderAutoMode::Compatibility) {
+        if (reason != nullptr) {
+            *reason = QStringLiteral("mode=compatibility");
+        }
+        return false;
+    }
+    if (mode == EncoderAutoMode::Hardware) {
+        if (reason != nullptr) {
+            *reason = QStringLiteral("mode=hardware");
+        }
+        return true;
+    }
+
+    const qint64 pixelsPerSecond =
+        static_cast<qint64>(qMax(1, outputWidth)) * qMax(1, outputHeight) * qMax(1, fps);
+    const qint64 availMiB = bytesToMiB(memoryInfo.availablePhysicalBytes);
+
+    if (pixelsPerSecond >= 180000000LL) {
+        if (reason != nullptr) {
+            *reason = QStringLiteral("high_pixels_per_second");
+        }
+        return true;
+    }
+    if (pixelsPerSecond >= 120000000LL && idealThreadCount <= 8) {
+        if (reason != nullptr) {
+            *reason = QStringLiteral("heavy_export_with_limited_cpu");
+        }
+        return true;
+    }
+    if (memoryInfo.valid && availMiB > 0 && availMiB <= 4096 && pixelsPerSecond >= 100000000LL) {
+        if (reason != nullptr) {
+            *reason = QStringLiteral("memory_pressure");
+        }
+        return true;
+    }
+
+    if (reason != nullptr) {
+        *reason = QStringLiteral("balanced_prefers_software");
+    }
+    return false;
+}
+
 X264TuningPlan chooseX264TuningPlan(
     const SystemMemoryInfo& memoryInfo,
     int outputWidth,
     int outputHeight,
+    int fps,
     int idealThreadCount
 )
 {
     const qint64 availMiB = bytesToMiB(memoryInfo.availablePhysicalBytes);
     const qint64 totalMiB = bytesToMiB(memoryInfo.totalPhysicalBytes);
+    const qint64 pixelsPerSecond =
+        static_cast<qint64>(qMax(1, outputWidth)) * qMax(1, outputHeight) * qMax(1, fps);
 
     X264TuningPlan plan;
-    Q_UNUSED(outputWidth);
-    Q_UNUSED(outputHeight);
     if (memoryInfo.valid) {
         if (availMiB >= 24576 && totalMiB >= 32768) {
             plan.preset = QStringLiteral("medium");
@@ -445,6 +606,13 @@ X264TuningPlan chooseX264TuningPlan(
 
     if (memoryInfo.valid && totalMiB < 16384 && plan.preset == QLatin1String("medium")) {
         plan.preset = QStringLiteral("fast");
+    }
+
+    if (pixelsPerSecond >= 120000000LL) {
+        plan.preset = fasterX264Preset(plan.preset);
+    }
+    if (pixelsPerSecond >= 180000000LL) {
+        plan.preset = fasterX264Preset(plan.preset);
     }
 
     const QString presetOverride =
@@ -488,6 +656,228 @@ struct ObjectTraceItem {
             .arg(extra);
     }
 };
+
+struct ReadyFramePayload {
+    int frameIndex = -1;
+    double exportSecond = 0.0;
+    QVector<ObjectTraceItem> traceItems;
+    QImage frame;
+    qint64 renderNs = 0;
+    qint64 offscreenDrawNs = 0;
+    qint64 offscreenReadbackNs = 0;
+    bool usedOffscreenPath = false;
+    int fallbackCount = 0;
+    bool usedGpuRenderer = false;
+};
+
+struct PendingPboFrame {
+    bool valid = false;
+    int frameIndex = -1;
+    double exportSecond = 0.0;
+    QVector<ObjectTraceItem> traceItems;
+};
+
+enum class ExportFrameRenderStatus {
+    Ready,
+    Deferred,
+    Failed,
+};
+
+void appendRenderBackendFallbackDetail(QString* detail, const QString& entry)
+{
+    if (detail == nullptr || entry.isEmpty()) {
+        return;
+    }
+    if (detail->isEmpty()) {
+        *detail = entry;
+        return;
+    }
+    *detail += QStringLiteral("; ") + entry;
+}
+
+ReadyFramePayload buildReadyFramePayload(
+    PreviewCanvas* exportCanvas,
+    int frameIndex,
+    double exportSecond,
+    QVector<ObjectTraceItem>&& traceItems,
+    QImage&& frame,
+    qint64 renderNs,
+    bool usedOffscreenPath
+)
+{
+    ReadyFramePayload readyFrame;
+    readyFrame.frameIndex = frameIndex;
+    readyFrame.exportSecond = exportSecond;
+    readyFrame.traceItems = std::move(traceItems);
+    readyFrame.frame = std::move(frame);
+    readyFrame.renderNs = renderNs;
+    readyFrame.usedOffscreenPath = usedOffscreenPath;
+    if (exportCanvas != nullptr) {
+        readyFrame.offscreenDrawNs = exportCanvas->offscreenDrawNsLastFrameForDebug();
+        readyFrame.offscreenReadbackNs = exportCanvas->offscreenReadbackNsLastFrameForDebug();
+        readyFrame.fallbackCount = exportCanvas->cpuFallbackCountLastFrameForDebug();
+        readyFrame.usedGpuRenderer = exportCanvas->usedGpuRendererLastFrameForDebug();
+    }
+    return readyFrame;
+}
+
+ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
+    PreviewCanvas* exportCanvas,
+    bool* useOffscreenGpu,
+    bool* useOffscreenPboReadback,
+    PendingPboFrame* pendingPboFrame,
+    const QSize& frameSize,
+    int frameIndex,
+    double exportSecond,
+    bool showTimestamp,
+    QVector<ObjectTraceItem>&& traceItems,
+    ReadyFramePayload* readyFrame,
+    QString* fallbackDetail
+)
+{
+    if (exportCanvas == nullptr
+        || useOffscreenGpu == nullptr
+        || useOffscreenPboReadback == nullptr
+        || pendingPboFrame == nullptr
+        || readyFrame == nullptr) {
+        return ExportFrameRenderStatus::Failed;
+    }
+
+    *readyFrame = ReadyFramePayload{};
+    QElapsedTimer frameTimer;
+    frameTimer.start();
+    bool usedOffscreenPath = false;
+    QImage frame;
+
+    if (*useOffscreenGpu && *useOffscreenPboReadback) {
+        QImage completedFrame;
+        bool completedFrameReady = false;
+        QString pboStepError;
+        const bool pboStepOk = exportCanvas->renderOverlayFrameOffscreenPboStep(
+            frameSize,
+            exportSecond,
+            showTimestamp,
+            false,
+            &completedFrame,
+            &completedFrameReady,
+            false,
+            &pboStepError
+        );
+        const qint64 renderNs = frameTimer.nsecsElapsed();
+        if (pboStepOk) {
+            usedOffscreenPath = true;
+            const bool producedReadyFrame = completedFrameReady && pendingPboFrame->valid;
+            if (producedReadyFrame) {
+                *readyFrame = buildReadyFramePayload(
+                    exportCanvas,
+                    pendingPboFrame->frameIndex,
+                    pendingPboFrame->exportSecond,
+                    std::move(pendingPboFrame->traceItems),
+                    std::move(completedFrame),
+                    renderNs,
+                    true
+                );
+            }
+            pendingPboFrame->valid = true;
+            pendingPboFrame->frameIndex = frameIndex;
+            pendingPboFrame->exportSecond = exportSecond;
+            pendingPboFrame->traceItems = std::move(traceItems);
+            return producedReadyFrame ? ExportFrameRenderStatus::Ready : ExportFrameRenderStatus::Deferred;
+        }
+
+        appendRenderBackendFallbackDetail(
+            fallbackDetail,
+            QStringLiteral("frame=%1 reason=offscreen_pbo_failed error=%2")
+                .arg(frameIndex)
+                .arg(pboStepError)
+        );
+        exportCanvas->resetOffscreenPboReadback();
+        *useOffscreenPboReadback = false;
+    }
+
+    if (*useOffscreenGpu) {
+        frame = exportCanvas->renderOverlayFrameOffscreen(frameSize, exportSecond, showTimestamp, false);
+        if (!frame.isNull()) {
+            usedOffscreenPath = true;
+        } else {
+            appendRenderBackendFallbackDetail(
+                fallbackDetail,
+                QStringLiteral("frame=%1 reason=offscreen_render_failed").arg(frameIndex)
+            );
+            exportCanvas->shutdownOffscreenRenderer();
+            *useOffscreenGpu = false;
+        }
+    }
+
+    if (frame.isNull()) {
+        frame = exportCanvas->renderOverlayFrame(frameSize, exportSecond, showTimestamp, false);
+    }
+
+    *readyFrame = buildReadyFramePayload(
+        exportCanvas,
+        frameIndex,
+        exportSecond,
+        std::move(traceItems),
+        std::move(frame),
+        frameTimer.nsecsElapsed(),
+        usedOffscreenPath
+    );
+    return ExportFrameRenderStatus::Ready;
+}
+
+bool drainPendingExportFrame(
+    PreviewCanvas* exportCanvas,
+    PendingPboFrame* pendingPboFrame,
+    const QSize& frameSize,
+    bool showTimestamp,
+    ReadyFramePayload* readyFrame,
+    QString* errorMessage
+)
+{
+    if (exportCanvas == nullptr || pendingPboFrame == nullptr || readyFrame == nullptr || !pendingPboFrame->valid) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("no pending PBO frame to drain");
+        }
+        return false;
+    }
+
+    *readyFrame = ReadyFramePayload{};
+    QElapsedTimer frameTimer;
+    frameTimer.start();
+    QImage drainedFrame;
+    bool drainedFrameReady = false;
+    QString drainError;
+    const bool drainOk = exportCanvas->renderOverlayFrameOffscreenPboStep(
+        frameSize,
+        pendingPboFrame->exportSecond,
+        showTimestamp,
+        false,
+        &drainedFrame,
+        &drainedFrameReady,
+        true,
+        &drainError
+    );
+    if (!drainOk || !drainedFrameReady) {
+        if (errorMessage != nullptr) {
+            *errorMessage = drainError.isEmpty() ? QStringLiteral("failed to drain PBO readback") : drainError;
+        }
+        return false;
+    }
+
+    *readyFrame = buildReadyFramePayload(
+        exportCanvas,
+        pendingPboFrame->frameIndex,
+        pendingPboFrame->exportSecond,
+        std::move(pendingPboFrame->traceItems),
+        std::move(drainedFrame),
+        frameTimer.nsecsElapsed(),
+        true
+    );
+    pendingPboFrame->valid = false;
+    pendingPboFrame->frameIndex = -1;
+    pendingPboFrame->exportSecond = 0.0;
+    return true;
+}
 
 constexpr double kDiagTapUnitsPerSecond = miacode::preview_gameplay::kTapUnitsPerSecond;
 constexpr double kDiagLogicalDistanceEdge = miacode::preview_gameplay::kLogicalDistanceEdge;
@@ -1241,19 +1631,41 @@ double detectLayoutRingDiameterRatio(const QImage& source)
     );
 }
 
-double resolvedLayoutRingDiameterRatio()
+QString primaryOutlinePath()
 {
-    static const double ratio = []() {
-        const QString outlinePath = miacode::assets::assetPath("background/outline.png");
-        const QImage outline(outlinePath);
-        const double textureRatio = detectLayoutRingDiameterRatio(outline);
-        return qBound(
-            miacode::layout_ring::kPlayfieldRatioMin,
-            textureRatio * kOutlineTargetToPlayfieldRatio,
-            miacode::layout_ring::kPlayfieldRatioMax
-        );
-    }();
-    return ratio;
+    return miacode::assets::assetPath("background/outline.png");
+}
+
+QString legacyOutlinePath()
+{
+    return miacode::assets::assetPath("background/outline_2.png");
+}
+
+QString outlinePathForStageMedia(bool hasMedia)
+{
+    const QString preferredPath = hasMedia ? primaryOutlinePath() : legacyOutlinePath();
+    if (QFileInfo::exists(preferredPath)) {
+        return preferredPath;
+    }
+
+    const QString fallbackPath = hasMedia ? legacyOutlinePath() : primaryOutlinePath();
+    if (QFileInfo::exists(fallbackPath)) {
+        return fallbackPath;
+    }
+
+    return QString();
+}
+
+double resolvedLayoutRingDiameterRatio(bool hasMedia)
+{
+    const QString outlinePath = outlinePathForStageMedia(hasMedia);
+    const QImage outline(outlinePath);
+    const double textureRatio = detectLayoutRingDiameterRatio(outline);
+    return qBound(
+        miacode::layout_ring::kPlayfieldRatioMin,
+        textureRatio * kOutlineTargetToPlayfieldRatio,
+        miacode::layout_ring::kPlayfieldRatioMax
+    );
 }
 
 QImage buildCircularDimMaskImage(
@@ -1317,6 +1729,8 @@ QImage buildCircularDimMaskImage(
 bool probeEncoderRuntimeAvailability(
     const QString& ffmpegPath,
     const VideoEncoderConfig& candidate,
+    int outputWidth,
+    int outputHeight,
     int fps,
     QString* detail
 )
@@ -1324,14 +1738,28 @@ bool probeEncoderRuntimeAvailability(
     QProcess probe;
     probe.setProcessChannelMode(QProcess::MergedChannels);
     const int safeFps = qBound(24, qMax(1, fps), 120);
+    QSize probeSize(qMax(64, outputWidth), qMax(64, outputHeight));
+    probeSize.scale(
+        candidate.isHardware ? QSize(1920, 1080) : QSize(1280, 720),
+        Qt::KeepAspectRatio
+    );
+    probeSize.setWidth(qMax(64, probeSize.width() & ~1));
+    probeSize.setHeight(qMax(64, probeSize.height() & ~1));
+    const int probeFrameCount = candidate.isHardware ? qBound(6, safeFps / 5, 12) : 1;
+    const double probeDurationSeconds =
+        qMax(0.10, static_cast<double>(probeFrameCount) / static_cast<double>(safeFps));
     QStringList args{
         QStringLiteral("-hide_banner"),
         QStringLiteral("-loglevel"), QStringLiteral("error"),
         QStringLiteral("-f"), QStringLiteral("lavfi"),
         QStringLiteral("-i"),
-        QStringLiteral("color=c=black:s=64x64:r=%1:d=0.1").arg(safeFps),
+        QStringLiteral("color=c=black:s=%1x%2:r=%3:d=%4")
+            .arg(probeSize.width())
+            .arg(probeSize.height())
+            .arg(safeFps)
+            .arg(QString::number(probeDurationSeconds, 'f', 3)),
         QStringLiteral("-an"),
-        QStringLiteral("-frames:v"), QStringLiteral("1"),
+        QStringLiteral("-frames:v"), QString::number(probeFrameCount),
         QStringLiteral("-c:v"), candidate.codec,
         QStringLiteral("-pix_fmt"), QStringLiteral("yuv420p")
     };
@@ -1350,7 +1778,7 @@ bool probeEncoderRuntimeAvailability(
     }
 
     constexpr int kProbeSliceMs = 50;
-    constexpr int kProbeTimeoutMs = 4000;
+    const int kProbeTimeoutMs = candidate.isHardware ? 6000 : 4000;
     int elapsedMs = 0;
     while (probe.state() != QProcess::NotRunning && elapsedMs < kProbeTimeoutMs) {
         probe.waitForFinished(kProbeSliceMs);
@@ -1361,18 +1789,27 @@ bool probeEncoderRuntimeAvailability(
         probe.kill();
         probe.waitForFinished(1000);
         if (detail != nullptr) {
-            *detail = QStringLiteral("timeout");
+            *detail = QStringLiteral("probe=%1x%2 frames=%3 timeout")
+                .arg(probeSize.width())
+                .arg(probeSize.height())
+                .arg(probeFrameCount);
         }
         return false;
     }
 
     const QString output = QString::fromUtf8(probe.readAllStandardOutput()).trimmed();
     const bool ok = probe.exitStatus() == QProcess::NormalExit && probe.exitCode() == 0;
+    if (detail != nullptr) {
+        *detail = QStringLiteral("probe=%1x%2 frames=%3")
+            .arg(probeSize.width())
+            .arg(probeSize.height())
+            .arg(probeFrameCount);
+    }
     if (!ok && detail != nullptr) {
-        *detail = QStringLiteral("status=%1 code=%2 output=%3")
-                      .arg(static_cast<int>(probe.exitStatus()))
-                      .arg(probe.exitCode())
-                      .arg(truncateForLog(output, 280));
+        *detail += QStringLiteral(" status=%1 code=%2 output=%3")
+                       .arg(static_cast<int>(probe.exitStatus()))
+                       .arg(probe.exitCode())
+                       .arg(truncateForLog(output, 280));
     }
     return ok;
 }
@@ -1409,10 +1846,12 @@ VideoEncoderConfig chooseVideoEncoder(
     const bool hasHevcNvenc = hasEncoderToken(output, QStringLiteral("hevc_nvenc"));
     const bool hasHevcQsv = hasEncoderToken(output, QStringLiteral("hevc_qsv"));
     const bool hasHevcAmf = hasEncoderToken(output, QStringLiteral("hevc_amf"));
+    const bool hasHevcMf = hasEncoderToken(output, QStringLiteral("hevc_mf"));
     const bool hasLibx265 = hasEncoderToken(output, QStringLiteral("libx265"));
     const bool hasH264Nvenc = hasEncoderToken(output, QStringLiteral("h264_nvenc"));
     const bool hasH264Qsv = hasEncoderToken(output, QStringLiteral("h264_qsv"));
     const bool hasH264Amf = hasEncoderToken(output, QStringLiteral("h264_amf"));
+    const bool hasH264Mf = hasEncoderToken(output, QStringLiteral("h264_mf"));
     const bool hasLibx264 = hasEncoderToken(output, QStringLiteral("libx264"));
     const bool hasOpenH264 = hasEncoderToken(output, QStringLiteral("libopenh264"));
     const bool hasMpeg4 = hasEncoderToken(output, QStringLiteral("mpeg4"));
@@ -1421,7 +1860,7 @@ VideoEncoderConfig chooseVideoEncoder(
     const int safeFps = qMax(1, fps);
     const int idealThreadCount = qMax(1, QThread::idealThreadCount());
     const X265TuningPlan x265Plan = chooseX265TuningPlan(memoryInfo, safeWidth, safeHeight, idealThreadCount);
-    const X264TuningPlan x264Plan = chooseX264TuningPlan(memoryInfo, safeWidth, safeHeight, idealThreadCount);
+    const X264TuningPlan x264Plan = chooseX264TuningPlan(memoryInfo, safeWidth, safeHeight, safeFps, idealThreadCount);
     // Keep export artifacts low while avoiding oversized files.
     const qint64 estimatedBitrateKbps = qBound<qint64>(
         2200LL,
@@ -1448,9 +1887,20 @@ VideoEncoderConfig chooseVideoEncoder(
     const QString x265Params = x265Plan.toParams();
     const QStringList x264Args = x264Plan.toArgs();
     const QString forcedEncoder = qEnvironmentVariable("MIACODE_EXPORT_FORCE_ENCODER").trimmed();
+    const EncoderAutoMode encoderAutoMode = resolveEncoderAutoMode();
+    QString encoderAutoModeReason;
+    const bool preferHardwareFirst = shouldPreferHardwareEncoderInAutoMode(
+        encoderAutoMode,
+        safeWidth,
+        safeHeight,
+        safeFps,
+        idealThreadCount,
+        memoryInfo,
+        &encoderAutoModeReason
+    );
 
     QVector<VideoEncoderConfig> candidates;
-    candidates.reserve(10);
+    candidates.reserve(14);
     const auto pushCandidate = [&candidates](const QString& codec, const QStringList& extraArgs, bool isHardware) {
         VideoEncoderConfig item;
         item.codec = codec;
@@ -1465,9 +1915,7 @@ VideoEncoderConfig chooseVideoEncoder(
     const auto forcedMatches = [&forcedEncoder](const QString& codec) {
         return !forcedEncoder.isEmpty() && codec.compare(forcedEncoder, Qt::CaseInsensitive) == 0;
     };
-
-    // Automatic mode now prefers conservative H.264 export paths for better compatibility and speed.
-    if (autoModeEnabled()) {
+    const auto appendAutoHardwareCandidates = [&]() {
         if (hasH264Nvenc) {
             pushCandidate(QStringLiteral("h264_nvenc"), variableBitrateArgs(), true);
         }
@@ -1477,6 +1925,25 @@ VideoEncoderConfig chooseVideoEncoder(
         if (hasH264Amf) {
             pushCandidate(QStringLiteral("h264_amf"), variableBitrateArgs(), true);
         }
+        if (hasH264Mf) {
+            pushCandidate(QStringLiteral("h264_mf"), variableBitrateArgs(), true);
+        }
+        if (encoderAutoMode == EncoderAutoMode::Hardware) {
+            if (hasHevcNvenc) {
+                pushCandidate(QStringLiteral("hevc_nvenc"), variableBitrateArgs(), true);
+            }
+            if (hasHevcQsv) {
+                pushCandidate(QStringLiteral("hevc_qsv"), variableBitrateArgs(), true);
+            }
+            if (hasHevcAmf) {
+                pushCandidate(QStringLiteral("hevc_amf"), variableBitrateArgs(), true);
+            }
+            if (hasHevcMf) {
+                pushCandidate(QStringLiteral("hevc_mf"), variableBitrateArgs(), true);
+            }
+        }
+    };
+    const auto appendAutoSoftwareCandidates = [&]() {
         if (hasLibx264) {
             pushCandidate(QStringLiteral("libx264"), x264Args, false);
         }
@@ -1489,6 +1956,17 @@ VideoEncoderConfig chooseVideoEncoder(
                 false
             );
         }
+    };
+
+    // Automatic mode now prefers conservative H.264 export paths for better compatibility and speed.
+    if (autoModeEnabled()) {
+        if (preferHardwareFirst) {
+            appendAutoHardwareCandidates();
+            appendAutoSoftwareCandidates();
+        } else {
+            appendAutoSoftwareCandidates();
+            appendAutoHardwareCandidates();
+        }
     } else {
         if (forcedMatches(QStringLiteral("hevc_nvenc")) && hasHevcNvenc) {
             pushCandidate(QStringLiteral("hevc_nvenc"), variableBitrateArgs(), true);
@@ -1498,6 +1976,9 @@ VideoEncoderConfig chooseVideoEncoder(
         }
         if (forcedMatches(QStringLiteral("hevc_amf")) && hasHevcAmf) {
             pushCandidate(QStringLiteral("hevc_amf"), variableBitrateArgs(), true);
+        }
+        if (forcedMatches(QStringLiteral("hevc_mf")) && hasHevcMf) {
+            pushCandidate(QStringLiteral("hevc_mf"), variableBitrateArgs(), true);
         }
         if (forcedMatches(QStringLiteral("libx265")) && hasLibx265) {
             pushCandidate(
@@ -1518,6 +1999,9 @@ VideoEncoderConfig chooseVideoEncoder(
         }
         if (forcedMatches(QStringLiteral("h264_amf")) && hasH264Amf) {
             pushCandidate(QStringLiteral("h264_amf"), variableBitrateArgs(), true);
+        }
+        if (forcedMatches(QStringLiteral("h264_mf")) && hasH264Mf) {
+            pushCandidate(QStringLiteral("h264_mf"), variableBitrateArgs(), true);
         }
         if (forcedMatches(QStringLiteral("libx264")) && hasLibx264) {
             pushCandidate(QStringLiteral("libx264"), x264Args, false);
@@ -1601,8 +2085,14 @@ VideoEncoderConfig chooseVideoEncoder(
             selected = true;
             break;
         }
+        if (!candidate.isHardware) {
+            config = candidate;
+            runtimeProbeLines.append(QStringLiteral("%1:software").arg(candidate.codec));
+            selected = true;
+            break;
+        }
         QString probeDetail;
-        if (probeEncoderRuntimeAvailability(ffmpegPath, candidate, fps, &probeDetail)) {
+        if (probeEncoderRuntimeAvailability(ffmpegPath, candidate, safeWidth, safeHeight, fps, &probeDetail)) {
             config = candidate;
             runtimeProbeLines.append(QStringLiteral("%1:ok").arg(candidate.codec));
             selected = true;
@@ -1631,16 +2121,18 @@ VideoEncoderConfig chooseVideoEncoder(
 
     if (probeLog != nullptr) {
         QString detail = QStringLiteral(
-            "encoder_probe hevc_nvenc=%1 hevc_qsv=%2 hevc_amf=%3 libx265=%4 "
-            "h264_nvenc=%5 h264_qsv=%6 h264_amf=%7 libx264=%8 libopenh264=%9 mpeg4=%10 "
-            "selected=%11 hw=%12 bitrateK=%13 maxrateK=%14 size=%15x%16")
+            "encoder_probe hevc_nvenc=%1 hevc_qsv=%2 hevc_amf=%3 hevc_mf=%4 libx265=%5 "
+            "h264_nvenc=%6 h264_qsv=%7 h264_amf=%8 h264_mf=%9 libx264=%10 libopenh264=%11 mpeg4=%12 "
+            "selected=%13 hw=%14 bitrateK=%15 maxrateK=%16 size=%17x%18 autoMode=%19 hwFirst=%20 modeReason=%21")
             .arg(hasHevcNvenc ? 1 : 0)
             .arg(hasHevcQsv ? 1 : 0)
             .arg(hasHevcAmf ? 1 : 0)
+            .arg(hasHevcMf ? 1 : 0)
             .arg(hasLibx265 ? 1 : 0)
             .arg(hasH264Nvenc ? 1 : 0)
             .arg(hasH264Qsv ? 1 : 0)
             .arg(hasH264Amf ? 1 : 0)
+            .arg(hasH264Mf ? 1 : 0)
             .arg(hasLibx264 ? 1 : 0)
             .arg(hasOpenH264 ? 1 : 0)
             .arg(hasMpeg4 ? 1 : 0)
@@ -1649,7 +2141,10 @@ VideoEncoderConfig chooseVideoEncoder(
             .arg(estimatedBitrateKbps)
             .arg(maxRateKbps)
             .arg(safeWidth)
-            .arg(safeHeight);
+            .arg(safeHeight)
+            .arg(encoderAutoModeToken(encoderAutoMode))
+            .arg(preferHardwareFirst ? 1 : 0)
+            .arg(encoderAutoModeReason);
         if (!runtimeProbeLines.isEmpty()) {
             detail += QStringLiteral(" runtime=%1")
                 .arg(truncateForLog(runtimeProbeLines.join(QLatin1Char(';')), 2400));
@@ -1866,7 +2361,7 @@ void buildSfxTimeline(
     }
     events->clear();
     touchholdSpans->clear();
-    events->reserve(noteMarkers.size() * 3);
+    events->reserve(noteMarkers.size() * 5);
     touchholdSpans->reserve(noteMarkers.size());
 
     const auto addEvent = [events](double second, const QString& kind, int priority = 1, int spanIndex = -1, double gain = 1.0) {
@@ -1886,6 +2381,7 @@ void buildSfxTimeline(
         const QString type = marker.type.toLower();
         if (type == QLatin1String("tap")) {
             addEvent(marker.second, QStringLiteral("answer"));
+            addEvent(marker.second, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("judge"));
             if (marker.isBreak) {
                 addEvent(marker.second, QStringLiteral("break"));
             }
@@ -1896,29 +2392,27 @@ void buildSfxTimeline(
         }
         if (type == QLatin1String("hold")) {
             addEvent(marker.second, QStringLiteral("answer"));
+            addEvent(marker.second, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("judge"));
             if (marker.isBreak) {
                 addEvent(marker.second, QStringLiteral("break"));
             }
             if (marker.endSecond > marker.second) {
-                addEvent(marker.endSecond, QStringLiteral("answer"), 1, -1, 0.5);
+                addEvent(marker.endSecond, QStringLiteral("answer"));
             }
             if (marker.isEx) {
                 addEvent(marker.second, QStringLiteral("ex"));
-                if (marker.endSecond > marker.second) {
-                    addEvent(marker.endSecond, QStringLiteral("ex"));
-                }
             }
             continue;
         }
         if (type == QLatin1String("touch")) {
-            addEvent(marker.second, marker.isBreak ? QStringLiteral("break") : QStringLiteral("touch"));
+            addEvent(marker.second, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("touch"));
             if (marker.isFirework) {
                 addEvent(marker.second + 0.05, QStringLiteral("firework"));
             }
             continue;
         }
         if (type == QLatin1String("touch_hold")) {
-            addEvent(marker.second, marker.isBreak ? QStringLiteral("break") : QStringLiteral("touch"));
+            addEvent(marker.second, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("touch"));
             if (marker.isFirework && marker.endSecond >= 0.0) {
                 addEvent(marker.endSecond, QStringLiteral("firework"));
             }
@@ -1934,14 +2428,24 @@ void buildSfxTimeline(
             continue;
         }
         if (type == QLatin1String("slide") || type == QLatin1String("wifi")) {
-            if (marker.hasHeadStar && !marker.sameHeadSlide) {
+            if (marker.hasHeadStar) {
                 addEvent(marker.second, QStringLiteral("answer"));
+                addEvent(marker.second, marker.headBreak ? QStringLiteral("judge_break") : QStringLiteral("judge"));
                 if (marker.headBreak) {
-                    addEvent(marker.second, QStringLiteral("break"));
+                    if (!marker.trackBreak) {
+                        addEvent(marker.second, QStringLiteral("break"));
+                    }
+                }
+                if (marker.headEx) {
+                    addEvent(marker.second, QStringLiteral("ex"));
                 }
             }
             const double traceSecond = marker.slideTraceSecond >= 0.0 ? marker.slideTraceSecond : marker.second;
-            addEvent(traceSecond, QStringLiteral("slide"));
+            addEvent(traceSecond, marker.trackBreak ? QStringLiteral("break_slide_start") : QStringLiteral("slide"));
+            if (marker.trackBreak && marker.endSecond > traceSecond) {
+                addEvent(marker.endSecond, QStringLiteral("break_slide_finish"), 1, -1, 0.5);
+                addEvent(marker.endSecond, QStringLiteral("judge_break_slide"), 1, -1, 0.5);
+            }
             continue;
         }
     }
@@ -1983,8 +2487,13 @@ bool mixSfxTrackToWav(
         }
     };
     loadClip(QStringLiteral("answer"));
+    loadClip(QStringLiteral("judge"));
+    loadClip(QStringLiteral("judge_break"));
     loadClip(QStringLiteral("slide"));
     loadClip(QStringLiteral("break"));
+    loadClip(QStringLiteral("break_slide_start"));
+    loadClip(QStringLiteral("break_slide"));
+    loadClip(QStringLiteral("judge_break_slide"));
     loadClip(QStringLiteral("ex"));
     loadClip(QStringLiteral("touch"));
     loadClip(QStringLiteral("touchhold"));
@@ -1998,11 +2507,23 @@ bool mixSfxTrackToWav(
         if (kind == QLatin1String("answer")) {
             return settings.answerVolume;
         }
+        if (kind == QLatin1String("judge")) {
+            return settings.judgeVolume;
+        }
+        if (kind == QLatin1String("judge_break")) {
+            return settings.breakVolume;
+        }
         if (kind == QLatin1String("slide")) {
             return settings.slideVolume;
         }
         if (kind == QLatin1String("break")) {
-            return settings.breakVolume;
+            return qMin(settings.breakVolume * 1.5, 1.5);
+        }
+        if (kind == QLatin1String("break_slide_start")
+            || kind == QLatin1String("break_slide_finish")
+            || kind == QLatin1String("break_slide")
+            || kind == QLatin1String("judge_break_slide")) {
+            return settings.breakSlideVolume;
         }
         if (kind == QLatin1String("ex")) {
             return settings.exVolume;
@@ -2011,7 +2532,7 @@ bool mixSfxTrackToWav(
             return settings.touchVolume;
         }
         if (kind == QLatin1String("touchhold")) {
-            return settings.touchholdVolume;
+            return settings.touchVolume;
         }
         if (kind == QLatin1String("firework")) {
             return settings.fireworkVolume;
@@ -2020,7 +2541,10 @@ bool mixSfxTrackToWav(
     };
 
     const auto mixEvent = [&clips, &mix, &kindVolume, timelineOriginSecond](const QString& kind, double gain, double second) {
-        const auto it = clips.constFind(kind);
+        const QString clipKind = kind == QLatin1String("break_slide_finish")
+            ? QStringLiteral("break_slide")
+            : kind;
+        const auto it = clips.constFind(clipKind);
         if (it == clips.constEnd()) {
             return;
         }
@@ -2050,29 +2574,27 @@ bool mixSfxTrackToWav(
             ++groupEnd;
         }
 
-        bool hasJudge = false;
-        double judgeGain = 0.0;
+        QVector<AggregatedExportPlayback> playbacks;
         for (int i = groupStart; i < groupEnd; ++i) {
             const ExportEvent& event = events.at(i);
             if (event.kind == QLatin1String("touchhold_start")
                 || event.kind == QLatin1String("touchhold_stop")) {
                 continue;
             }
-            if (event.kind == QLatin1String("answer")) {
-                hasJudge = true;
-                judgeGain = qMax(judgeGain, event.gain);
+            if (shouldAggregateExportPlaybackKind(event.kind)) {
+                accumulateExportPlayback(&playbacks, event.kind, event.gain);
                 continue;
             }
             mixEvent(event.kind, event.gain, event.second);
         }
-        if (hasJudge) {
-            mixEvent(QStringLiteral("answer"), judgeGain, groupSecond);
+        for (const AggregatedExportPlayback& playback : playbacks) {
+            mixEvent(playback.kind, exportPlaybackGain(playback), groupSecond);
         }
         index = groupEnd;
     }
 
     const auto touchholdIt = clips.constFind(QStringLiteral("touchhold"));
-    if (touchholdIt != clips.constEnd() && settings.touchholdVolume > 0.0) {
+    if (touchholdIt != clips.constEnd() && settings.touchVolume > 0.0) {
         const DecodedClip& touchholdClip = touchholdIt.value();
         for (const ExportTouchholdSpan& span : spans) {
             if (span.endSecond <= span.startSecond) {
@@ -2087,7 +2609,7 @@ bool mixSfxTrackToWav(
             }
             const qint64 startFrame = qRound64(shiftedSecond * kMixSampleRate);
             const qint64 spanFrames = qRound64((span.endSecond - span.startSecond) * kMixSampleRate);
-            addClipToMix(touchholdClip, settings.touchholdVolume, startFrame, spanFrames, &mix);
+            addClipToMix(touchholdClip, settings.touchVolume, startFrame, spanFrames, &mix);
         }
     }
 
@@ -2145,40 +2667,53 @@ bool writeAllToFile(QFile* file, const char* data, qint64 size)
     return true;
 }
 
-bool packRgbaFrame(const QImage& frame, QByteArray* packed)
+bool preparePackedRgbaFrame(
+    const QImage& frame,
+    QImage* convertedFrame,
+    QByteArray* packedScratch,
+    const char** data,
+    qint64* size
+)
 {
-    if (packed == nullptr) {
+    if (convertedFrame == nullptr || packedScratch == nullptr || data == nullptr || size == nullptr) {
         return false;
     }
-    QImage rgba = frame;
-    if (rgba.format() != QImage::Format_RGBA8888) {
-        rgba = frame.convertToFormat(QImage::Format_RGBA8888);
+    *convertedFrame = QImage();
+    packedScratch->clear();
+    *data = nullptr;
+    *size = 0;
+
+    const QImage* rgba = &frame;
+    if (rgba->format() != QImage::Format_RGBA8888) {
+        *convertedFrame = frame.convertToFormat(QImage::Format_RGBA8888);
+        rgba = convertedFrame;
     }
 
-    const int width = rgba.width();
-    const int height = rgba.height();
+    const int width = rgba->width();
+    const int height = rgba->height();
     if (width <= 0 || height <= 0) {
-        packed->clear();
         return true;
     }
-    const int packedStride = width * 4;
-    packed->resize(packedStride * height);
+
+    const qint64 packedStride = static_cast<qint64>(width) * 4;
+    const qint64 packedSize = packedStride * height;
+    if (rgba->bytesPerLine() == packedStride) {
+        *data = reinterpret_cast<const char*>(rgba->constBits());
+        *size = packedSize;
+        return true;
+    }
+
+    packedScratch->resize(static_cast<qsizetype>(packedSize));
     for (int y = 0; y < height; ++y) {
         std::memcpy(
-            packed->data() + y * packedStride,
-            rgba.constScanLine(y),
+            packedScratch->data() + y * packedStride,
+            rgba->constScanLine(y),
             static_cast<size_t>(packedStride)
         );
     }
+    *data = packedScratch->constData();
+    *size = packedScratch->size();
     return true;
-}
-
-bool writePackedRgbaFrame(QProcess* process, const QByteArray& packed)
-{
-    if (packed.isEmpty()) {
-        return true;
-    }
-    return writeAllToProcess(process, packed.constData(), packed.size());
 }
 
 double meanAbsDiffNormalized(const QImage& lhs, const QImage& rhs)
@@ -2804,7 +3339,7 @@ VideoExportResult VideoExportController::exportFullPreview(
     }
     if (hasDimMask) {
         const QString dimMaskPath = QDir(tempDir.path()).filePath(QStringLiteral("dim_mask.png"));
-        const double ringRatio = resolvedLayoutRingDiameterRatio();
+        const double ringRatio = resolvedLayoutRingDiameterRatio(hasMedia);
         const QImage dimMask = buildCircularDimMaskImage(
             frameWidth,
             frameHeight,
@@ -3031,6 +3566,7 @@ VideoExportResult VideoExportController::exportFullPreview(
 
     PreviewCanvas exportCanvas;
     exportCanvas.copyRenderStateFrom(*sourceCanvas);
+    exportCanvas.setStageMediaAvailable(hasMedia);
     exportCanvas.setBackgroundBrightnessOuter(task.backgroundBrightnessOuter);
     exportCanvas.setBackgroundBrightnessInner(task.backgroundBrightnessInner);
     exportCanvas.setLayoutSquareScale(task.layoutSquareScale);
@@ -3039,15 +3575,28 @@ VideoExportResult VideoExportController::exportFullPreview(
     exportCanvas.setNoteFlowSpeed(task.noteFlowSpeed);
     exportCanvas.setShowDebugInfo(false);
     exportCanvas.setNoteMarkers(exportMarkers);
+    exportCanvas.setCpuTrackAreaCachingEnabled(false);
     QOpenGLContext* shareContext = sourceCanvas->context();
-    QString offscreenInitError;
-    bool useOffscreenGpu = exportCanvas.initializeOffscreenRenderer(
-        sourceCanvas->format(),
-        shareContext,
-        &offscreenInitError
-    );
     const bool enableOffscreenPboReadback =
         envFlagEnabled(QStringLiteral("MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO"));
+    const bool hasGpuRenderOverride =
+        !qEnvironmentVariableIsEmpty("MIACODE_EXPORT_ENABLE_GPU_RENDER");
+    const bool requestOffscreenGpu =
+        enableOffscreenPboReadback
+        || (hasGpuRenderOverride
+                ? envFlagEnabled(QStringLiteral("MIACODE_EXPORT_ENABLE_GPU_RENDER"))
+                : true);
+    QString offscreenInitError;
+    bool useOffscreenGpu = false;
+    if (requestOffscreenGpu) {
+        useOffscreenGpu = exportCanvas.initializeOffscreenRenderer(
+            sourceCanvas->format(),
+            shareContext,
+            &offscreenInitError
+        );
+    } else {
+        offscreenInitError = QStringLiteral("disabled_by_env");
+    }
     const bool disableOffscreenPboReadback =
         envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO"));
     const bool requestOffscreenPboReadback =
@@ -3059,7 +3608,8 @@ VideoExportResult VideoExportController::exportFullPreview(
     }
     appendVideoExportLog(
         QStringLiteral("render_backend"),
-        QStringLiteral("sourceGpuReady=%1 sourceCtx=%2 offscreenInit=%3 exportGpuReady=%4 pboRequested=%5 pboEnabled=%6 initError=%7 pboError=%8")
+        QStringLiteral("gpuRequested=%1 sourceGpuReady=%2 sourceCtx=%3 offscreenInit=%4 exportGpuReady=%5 pboRequested=%6 pboEnabled=%7 initError=%8 pboError=%9")
+            .arg(requestOffscreenGpu ? 1 : 0)
             .arg(sourceCanvas->isGpuRendererReadyForDebug() ? 1 : 0)
             .arg(shareContext != nullptr ? 1 : 0)
             .arg(useOffscreenGpu ? 1 : 0)
@@ -3231,6 +3781,7 @@ VideoExportResult VideoExportController::exportFullPreview(
         diagReferenceCanvas.setNoteFlowSpeed(task.noteFlowSpeed);
         diagReferenceCanvas.setShowDebugInfo(false);
         diagReferenceCanvas.setNoteMarkers({});
+        diagReferenceCanvas.setCpuTrackAreaCachingEnabled(false);
         QString diagInitError;
         if (useOffscreenGpu) {
             diagReferenceUseOffscreen = diagReferenceCanvas.initializeOffscreenRenderer(
@@ -3264,6 +3815,7 @@ VideoExportResult VideoExportController::exportFullPreview(
         diagCpuCompareCanvas.setNoteFlowSpeed(task.noteFlowSpeed);
         diagCpuCompareCanvas.setShowDebugInfo(false);
         diagCpuCompareCanvas.setNoteMarkers(exportMarkers);
+        diagCpuCompareCanvas.setCpuTrackAreaCachingEnabled(false);
         diagCpuCompareReady = true;
         appendVideoExportLog(
             QStringLiteral("render_path_compare_backend"),
@@ -3271,25 +3823,9 @@ VideoExportResult VideoExportController::exportFullPreview(
         );
     }
 
-    struct ReadyFramePayload {
-        int frameIndex = -1;
-        double exportSecond = 0.0;
-        QVector<ObjectTraceItem> traceItems;
-        QImage frame;
-        qint64 renderNs = 0;
-        qint64 offscreenDrawNs = 0;
-        qint64 offscreenReadbackNs = 0;
-        bool usedOffscreenPath = false;
-        int fallbackCount = 0;
-        bool usedGpuRenderer = false;
-    };
-    struct PendingPboFrame {
-        bool valid = false;
-        int frameIndex = -1;
-        double exportSecond = 0.0;
-        QVector<ObjectTraceItem> traceItems;
-    };
     PendingPboFrame pendingPboFrame;
+    QImage convertedRgbaFrame;
+    QByteArray packedFrameScratch;
 
     auto processReadyFrame = [&](const ReadyFramePayload& readyFrame) -> bool {
         const int frameIndex = readyFrame.frameIndex;
@@ -3463,8 +3999,14 @@ VideoExportResult VideoExportController::exportFullPreview(
             }
         }
 
-        QByteArray packedFrame;
-        if (!packRgbaFrame(frame, &packedFrame)) {
+        const char* packedFrameData = nullptr;
+        qint64 packedFrameSize = 0;
+        if (!preparePackedRgbaFrame(
+                frame,
+                &convertedRgbaFrame,
+                &packedFrameScratch,
+                &packedFrameData,
+                &packedFrameSize)) {
             ffmpeg.kill();
             ffmpeg.waitForFinished(2000);
             result.message = QStringLiteral("Failed to pack RGBA frame.");
@@ -3476,7 +4018,7 @@ VideoExportResult VideoExportController::exportFullPreview(
             return false;
         }
         const quint64 packedHash = diagPipeHashEnabled
-            ? fnv1a64Bytes(packedFrame.constData(), packedFrame.size())
+            ? fnv1a64Bytes(packedFrameData, packedFrameSize)
             : 0;
 
         if (diagPipeHashEnabled && !traceItems.isEmpty()) {
@@ -3493,7 +4035,7 @@ VideoExportResult VideoExportController::exportFullPreview(
                     QStringLiteral("frame=%1 t=%2 bytes=%3 hash=0x%4 objects=%5")
                         .arg(frameIndex)
                         .arg(exportSecond, 0, 'f', 6)
-                        .arg(packedFrame.size())
+                        .arg(packedFrameSize)
                         .arg(QString::number(packedHash, 16))
                         .arg(traceItems.size())
                 );
@@ -3501,8 +4043,8 @@ VideoExportResult VideoExportController::exportFullPreview(
             }
         }
 
-        if (diagRawDumpEnabled && !packedFrame.isEmpty()) {
-            if (!writeAllToFile(&diagRawDumpFile, packedFrame.constData(), packedFrame.size())) {
+        if (diagRawDumpEnabled && packedFrameSize > 0) {
+            if (!writeAllToFile(&diagRawDumpFile, packedFrameData, packedFrameSize)) {
                 ffmpeg.kill();
                 ffmpeg.waitForFinished(2000);
                 result.message = QStringLiteral("Failed to write raw dump frame.");
@@ -3516,12 +4058,12 @@ VideoExportResult VideoExportController::exportFullPreview(
                 );
                 return false;
             }
-            diagRawDumpBytes += packedFrame.size();
+            diagRawDumpBytes += packedFrameSize;
             ++diagRawDumpFrames;
         }
 
         frameTimer.restart();
-        if (!writePackedRgbaFrame(&ffmpeg, packedFrame)) {
+        if (packedFrameSize > 0 && !writeAllToProcess(&ffmpeg, packedFrameData, packedFrameSize)) {
             ffmpeg.kill();
             ffmpeg.waitForFinished(2000);
             const QString ffmpegOutput = truncateForLog(QString::fromUtf8(ffmpeg.readAllStandardOutput()).trimmed());
@@ -3535,7 +4077,7 @@ VideoExportResult VideoExportController::exportFullPreview(
                 QStringLiteral("fail_ffmpeg_write"),
                 QStringLiteral("frame=%1 bytes=%2 hash=0x%3 error=%4 output=%5")
                     .arg(frameIndex)
-                    .arg(packedFrame.size())
+                    .arg(packedFrameSize)
                     .arg(QString::number(packedHash, 16))
                     .arg(ffmpeg.errorString())
                     .arg(truncateForLog(ffmpegOutput, 1000))
@@ -3758,109 +4300,53 @@ VideoExportResult VideoExportController::exportFullPreview(
             ++diagObjectTraceLoggedLines;
         }
 
-        frameTimer.start();
-        bool usedOffscreenPath = false;
-        QImage frame;
-        if (useOffscreenGpu) {
-            if (useOffscreenPboReadback) {
-                QImage completedFrame;
-                bool completedFrameReady = false;
-                QString pboStepError;
-                const bool pboStepOk = exportCanvas.renderOverlayFrameOffscreenPboStep(
-                    frameSize,
-                    exportSecond,
-                    task.showTimestamp,
-                    false,
-                    &completedFrame,
-                    &completedFrameReady,
-                    false,
-                    &pboStepError
-                );
-                const qint64 renderNs = frameTimer.nsecsElapsed();
-                const qint64 offscreenDrawNs = exportCanvas.offscreenDrawNsLastFrameForDebug();
-                const qint64 offscreenReadbackNs = exportCanvas.offscreenReadbackNsLastFrameForDebug();
-                if (!pboStepOk) {
-                    appendVideoExportLog(
-                        QStringLiteral("render_backend_fallback"),
-                        QStringLiteral("frame=%1 reason=offscreen_pbo_failed error=%2").arg(frameIndex).arg(pboStepError)
-                    );
-                    exportCanvas.resetOffscreenPboReadback();
-                    useOffscreenPboReadback = false;
-                } else {
-                    usedOffscreenPath = true;
-                    const int fallbackCount = exportCanvas.cpuFallbackCountLastFrameForDebug();
-                    const bool usedGpuRenderer = exportCanvas.usedGpuRendererLastFrameForDebug();
-                    if (completedFrameReady && pendingPboFrame.valid) {
-                        ReadyFramePayload readyFrame;
-                        readyFrame.frameIndex = pendingPboFrame.frameIndex;
-                        readyFrame.exportSecond = pendingPboFrame.exportSecond;
-                        readyFrame.traceItems = std::move(pendingPboFrame.traceItems);
-                        readyFrame.frame = std::move(completedFrame);
-                        readyFrame.renderNs = renderNs;
-                        readyFrame.offscreenDrawNs = offscreenDrawNs;
-                        readyFrame.offscreenReadbackNs = offscreenReadbackNs;
-                        readyFrame.usedOffscreenPath = true;
-                        readyFrame.fallbackCount = fallbackCount;
-                        readyFrame.usedGpuRenderer = usedGpuRenderer;
-                        if (!processReadyFrame(readyFrame)) {
-                            return result;
-                        }
-                    }
-                    pendingPboFrame.valid = true;
-                    pendingPboFrame.frameIndex = frameIndex;
-                    pendingPboFrame.exportSecond = exportSecond;
-                    pendingPboFrame.traceItems = std::move(traceItems);
-                    continue;
-                }
-            } else {
-                frame = exportCanvas.renderOverlayFrameOffscreen(frameSize, exportSecond, task.showTimestamp, false);
-                if (!frame.isNull()) {
-                    usedOffscreenPath = true;
-                } else {
-                    appendVideoExportLog(
-                        QStringLiteral("render_backend_fallback"),
-                        QStringLiteral("frame=%1 reason=offscreen_render_failed").arg(frameIndex)
-                    );
-                    exportCanvas.shutdownOffscreenRenderer();
-                    useOffscreenGpu = false;
-                }
-            }
-        }
-        if (frame.isNull()) {
-            frame = exportCanvas.renderOverlayFrame(frameSize, exportSecond, task.showTimestamp, false);
-        }
         ReadyFramePayload readyFrame;
-        readyFrame.frameIndex = frameIndex;
-        readyFrame.exportSecond = exportSecond;
-        readyFrame.traceItems = std::move(traceItems);
-        readyFrame.frame = std::move(frame);
-        readyFrame.renderNs = frameTimer.nsecsElapsed();
-        readyFrame.offscreenDrawNs = exportCanvas.offscreenDrawNsLastFrameForDebug();
-        readyFrame.offscreenReadbackNs = exportCanvas.offscreenReadbackNsLastFrameForDebug();
-        readyFrame.usedOffscreenPath = usedOffscreenPath;
-        readyFrame.fallbackCount = exportCanvas.cpuFallbackCountLastFrameForDebug();
-        readyFrame.usedGpuRenderer = exportCanvas.usedGpuRendererLastFrameForDebug();
+        QString renderBackendFallbackDetail;
+        const ExportFrameRenderStatus renderStatus = renderExportFrameWithConfiguredBackend(
+            &exportCanvas,
+            &useOffscreenGpu,
+            &useOffscreenPboReadback,
+            &pendingPboFrame,
+            frameSize,
+            frameIndex,
+            exportSecond,
+            task.showTimestamp,
+            std::move(traceItems),
+            &readyFrame,
+            &renderBackendFallbackDetail
+        );
+        if (!renderBackendFallbackDetail.isEmpty()) {
+            appendVideoExportLog(QStringLiteral("render_backend_fallback"), renderBackendFallbackDetail);
+        }
+        if (renderStatus == ExportFrameRenderStatus::Failed) {
+            ffmpeg.kill();
+            ffmpeg.waitForFinished(2000);
+            result.message = QStringLiteral("Render frame failed.");
+            result.details = withExportLogPath(QStringLiteral("render backend failed unexpectedly"));
+            appendVideoExportLog(
+                QStringLiteral("fail_render_frame"),
+                QStringLiteral("frame=%1 offscreen=%2").arg(frameIndex).arg(useOffscreenGpu ? 1 : 0)
+            );
+            return result;
+        }
+        if (renderStatus == ExportFrameRenderStatus::Deferred) {
+            continue;
+        }
         if (!processReadyFrame(readyFrame)) {
             return result;
         }
     }
 
     if (useOffscreenPboReadback && pendingPboFrame.valid) {
-        frameTimer.start();
-        QImage drainedFrame;
-        bool drainedFrameReady = false;
+        ReadyFramePayload readyFrame;
         QString drainError;
-        const bool drainOk = exportCanvas.renderOverlayFrameOffscreenPboStep(
-            frameSize,
-            pendingPboFrame.exportSecond,
-            task.showTimestamp,
-            false,
-            &drainedFrame,
-            &drainedFrameReady,
-            true,
-            &drainError
-        );
-        if (!drainOk || !drainedFrameReady) {
+        if (!drainPendingExportFrame(
+                &exportCanvas,
+                &pendingPboFrame,
+                frameSize,
+                task.showTimestamp,
+                &readyFrame,
+                &drainError)) {
             ffmpeg.kill();
             ffmpeg.waitForFinished(2000);
             result.message = QStringLiteral("Render frame failed.");
@@ -3873,18 +4359,6 @@ VideoExportResult VideoExportController::exportFullPreview(
             );
             return result;
         }
-        ReadyFramePayload readyFrame;
-        readyFrame.frameIndex = pendingPboFrame.frameIndex;
-        readyFrame.exportSecond = pendingPboFrame.exportSecond;
-        readyFrame.traceItems = std::move(pendingPboFrame.traceItems);
-        readyFrame.frame = std::move(drainedFrame);
-        readyFrame.renderNs = frameTimer.nsecsElapsed();
-        readyFrame.offscreenDrawNs = exportCanvas.offscreenDrawNsLastFrameForDebug();
-        readyFrame.offscreenReadbackNs = exportCanvas.offscreenReadbackNsLastFrameForDebug();
-        readyFrame.usedOffscreenPath = true;
-        readyFrame.fallbackCount = exportCanvas.cpuFallbackCountLastFrameForDebug();
-        readyFrame.usedGpuRenderer = exportCanvas.usedGpuRendererLastFrameForDebug();
-        pendingPboFrame.valid = false;
         if (!processReadyFrame(readyFrame)) {
             return result;
         }

@@ -254,8 +254,13 @@ void QtPreviewSfxRuntime::stopAll()
     };
 
     stopBank(answerSfx_);
+    stopBank(judgeSfx_);
+    stopBank(judgeBreakSfx_);
     stopBank(slideSfx_);
     stopBank(breakSfx_);
+    stopBank(breakSlideStartSfx_);
+    stopBank(breakSlideSfx_);
+    stopBank(judgeBreakSlideSfx_);
     stopBank(exSfx_);
     stopBank(touchSfx_);
     stopBank(fireworkSfx_);

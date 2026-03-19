@@ -125,22 +125,7 @@
     if (preview.value("audio").isObject()) {
         softwarePreviewAudioSettings_ = PreviewAudioSettings::fromJson(preview.value("audio").toObject());
     } else {
-        softwarePreviewAudioSettings_.bgmVolume = preview.value("bgm_volume").toDouble(softwarePreviewAudioSettings_.bgmVolume);
-        const double legacyAnswer = preview.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.answerVolume);
-        const double legacySlide = preview.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.slideVolume);
-        const double legacyBreak = preview.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.breakVolume);
-        const double legacyEx = preview.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.exVolume);
-        const double legacyTouch = preview.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.touchVolume);
-        const double legacyTouchhold = preview.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.touchholdVolume);
-        const double legacyFirework = preview.value("sfx_volume").toDouble(softwarePreviewAudioSettings_.fireworkVolume);
-        softwarePreviewAudioSettings_.answerVolume = preview.value("answer_volume").toDouble(legacyAnswer);
-        softwarePreviewAudioSettings_.slideVolume = preview.value("slide_volume").toDouble(legacySlide);
-        softwarePreviewAudioSettings_.breakVolume = preview.value("break_volume").toDouble(legacyBreak);
-        softwarePreviewAudioSettings_.exVolume = preview.value("ex_volume").toDouble(legacyEx);
-        softwarePreviewAudioSettings_.touchVolume = preview.value("touch_volume").toDouble(legacyTouch);
-        softwarePreviewAudioSettings_.touchholdVolume = preview.value("touchhold_volume").toDouble(legacyTouchhold);
-        softwarePreviewAudioSettings_.fireworkVolume = preview.value("firework_volume").toDouble(legacyFirework);
-        softwarePreviewAudioSettings_.normalize();
+        softwarePreviewAudioSettings_ = PreviewAudioSettings::fromJson(preview);
     }
     previewAudioSettings_ = softwarePreviewAudioSettings_;
 }

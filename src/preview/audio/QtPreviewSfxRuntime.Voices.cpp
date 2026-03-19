@@ -10,12 +10,27 @@ bool QtPreviewSfxRuntime::playKindInternal(const QString& kind, double gain)
     if (lowered == "answer") {
         bank = &answerSfx_;
         volume = settings_.answerVolume;
+    } else if (lowered == "judge") {
+        bank = &judgeSfx_;
+        volume = settings_.judgeVolume;
+    } else if (lowered == "judge_break" || lowered == "break_touch") {
+        bank = &judgeBreakSfx_;
+        volume = settings_.breakVolume;
     } else if (lowered == "slide") {
         bank = &slideSfx_;
         volume = settings_.slideVolume;
     } else if (lowered == "break") {
         bank = &breakSfx_;
-        volume = settings_.breakVolume;
+        volume = qMin(settings_.breakVolume * 1.5, 1.5);
+    } else if (lowered == "break_slide" || lowered == "break_slide_start") {
+        bank = &breakSlideStartSfx_;
+        volume = settings_.breakSlideVolume;
+    } else if (lowered == "break_slide_finish") {
+        bank = &breakSlideSfx_;
+        volume = settings_.breakSlideVolume;
+    } else if (lowered == "judge_break_slide") {
+        bank = &judgeBreakSlideSfx_;
+        volume = settings_.breakSlideVolume;
     } else if (lowered == "ex") {
         bank = &exSfx_;
         volume = settings_.exVolume;
@@ -42,7 +57,7 @@ bool QtPreviewSfxRuntime::playKindInternal(const QString& kind, double gain)
         return true;
     }
     const double effectiveGain = qMax(0.0, gain);
-    const double effectiveVolume = qBound(0.0, volume * effectiveGain, 1.0);
+    const double effectiveVolume = qBound(0.0, volume * effectiveGain, 1.5);
     ma_sound_stop(&voice->sound);
     ma_sound_set_volume(&voice->sound, static_cast<float>(effectiveVolume));
     ma_sound_seek_to_pcm_frame(&voice->sound, 0);
@@ -52,7 +67,7 @@ bool QtPreviewSfxRuntime::playKindInternal(const QString& kind, double gain)
 
 void QtPreviewSfxRuntime::startTouchholdSpan(int spanIndex, double offsetSeconds)
 {
-    if (settings_.touchholdVolume <= 0.0) {
+    if (settings_.touchVolume <= 0.0) {
         return;
     }
     if (spanIndex < 0 || spanIndex >= touchholdSpans_.size()) {
@@ -123,7 +138,7 @@ void QtPreviewSfxRuntime::stopTouchholdSpan(int spanIndex)
 
 bool QtPreviewSfxRuntime::playTouchholdAudition()
 {
-    if (settings_.touchholdVolume <= 0.0 || touchholdVoices_.isEmpty()) {
+    if (settings_.touchVolume <= 0.0 || touchholdVoices_.isEmpty()) {
         return !touchholdVoices_.isEmpty();
     }
 

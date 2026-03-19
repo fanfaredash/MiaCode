@@ -1,17 +1,37 @@
+namespace {
+
+int preferredOffscreenFramebufferSamples(QOpenGLContext* offscreenContext, const QSize& framebufferSize)
+{
+    bool overrideOk = false;
+    const int overrideValue =
+        qEnvironmentVariableIntValue("MIACODE_EXPORT_OFFSCREEN_SAMPLES", &overrideOk);
+    if (overrideOk) {
+        return qBound(0, overrideValue, 8);
+    }
+
+    const int preferredSamples = offscreenContext != nullptr ? offscreenContext->format().samples() : 0;
+    if (preferredSamples <= 0) {
+        return 0;
+    }
+
+    const qint64 pixelCount =
+        static_cast<qint64>(qMax(1, framebufferSize.width())) * qMax(1, framebufferSize.height());
+    if (pixelCount >= 1920LL * 1080LL) {
+        return 0;
+    }
+    if (pixelCount >= 1600LL * 900LL) {
+        return qBound(0, preferredSamples, 2);
+    }
+    return qBound(0, preferredSamples, 4);
+}
+
+}  // namespace
+
 PreviewCanvas::PreviewCanvas(QWindow* parent)
     : QOpenGLWindow(NoPartialUpdate, parent)
 {
     refreshTimingFromFlowSpeed();
-    const QString outlinePath = defaultOutlinePath();
-    if (QFileInfo::exists(outlinePath)) {
-        outlineImage_ = QImage(outlinePath);
-        const double textureRingRatio = detectLayoutRingDiameterRatio(outlineImage_);
-        layoutRingDiameterRatio_ = qBound(
-            miacode::layout_ring::kPlayfieldRatioMin,
-            static_cast<double>(kOutlineTargetToPlayfieldRatio) * textureRingRatio,
-            miacode::layout_ring::kPlayfieldRatioMax
-        );
-    }
+    refreshOutlineAsset();
     judgeEffectTapImage_ = buildJudgeEffectTapFallbackImage();
     judgeEffectTapSourceRect_ = nonTransparentBounds(judgeEffectTapImage_);
     judgeEffectTapBreakImage_ = buildJudgeEffectTapBreakFallbackImage();
@@ -20,6 +40,30 @@ PreviewCanvas::PreviewCanvas(QWindow* parent)
     judgeEffectFireworkSourceRect_ = nonTransparentBounds(judgeEffectFireworkImage_);
     judgeEffectFireworkColorBallImage_ = buildJudgeEffectFireworkColorBallFallbackImage();
     judgeEffectFireworkColorBallSourceRect_ = nonTransparentBounds(judgeEffectFireworkColorBallImage_);
+}
+
+void PreviewCanvas::setStageMediaAvailable(bool hasMedia)
+{
+    if (stageMediaAvailable_ == hasMedia) {
+        return;
+    }
+    stageMediaAvailable_ = hasMedia;
+    refreshOutlineAsset();
+}
+
+void PreviewCanvas::refreshOutlineAsset()
+{
+    const QString outlinePath = defaultOutlinePath(stageMediaAvailable_);
+    outlineImage_ = outlinePath.isEmpty() ? QImage() : QImage(outlinePath);
+    const double textureRingRatio = detectLayoutRingDiameterRatio(outlineImage_);
+    layoutRingDiameterRatio_ = qBound(
+        miacode::layout_ring::kPlayfieldRatioMin,
+        static_cast<double>(kOutlineTargetToPlayfieldRatio) * textureRingRatio,
+        miacode::layout_ring::kPlayfieldRatioMax
+    );
+    brightnessMaskCache_ = QImage();
+    brightnessMaskCacheSize_ = QSize();
+    update();
 }
 
 PreviewCanvas::~PreviewCanvas()
@@ -138,6 +182,7 @@ void PreviewCanvas::setMediaFrame(const QImage& frame)
     videoFrame_ = QVideoFrame();
 #endif
     mediaFrame_ = frame;
+    setStageMediaAvailable(!frame.isNull());
 }
 
 void PreviewCanvas::setVideoFrame(const QVideoFrame& frame)
@@ -145,6 +190,7 @@ void PreviewCanvas::setVideoFrame(const QVideoFrame& frame)
 #ifdef HAVE_QT_MULTIMEDIA
     mediaFrame_ = QImage();
     videoFrame_ = frame;
+    setStageMediaAvailable(frame.isValid());
 #else
     Q_UNUSED(frame);
 #endif
@@ -156,6 +202,16 @@ void PreviewCanvas::setNoteMarkers(const QVector<TimelineNoteMarker>& notes)
     slideTrackAreaCache_.clear();
     wifiTrackAreaCache_.clear();
     update();
+}
+
+void PreviewCanvas::setCpuTrackAreaCachingEnabled(bool enabled)
+{
+    if (cpuTrackAreaCachingEnabled_ == enabled) {
+        return;
+    }
+    cpuTrackAreaCachingEnabled_ = enabled;
+    slideTrackAreaCache_.clear();
+    wifiTrackAreaCache_.clear();
 }
 
 void PreviewCanvas::setShowTimestamp(bool show)
@@ -252,6 +308,7 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     guideAtlasImage_ = source.guideAtlasImage_;
     atlasRegions_ = source.atlasRegions_;
     noteMarkers_ = source.noteMarkers_;
+    stageMediaAvailable_ = source.stageMediaAvailable_;
     backgroundBrightnessOuter_ = source.backgroundBrightnessOuter_;
     backgroundBrightnessInner_ = source.backgroundBrightnessInner_;
     layoutSquareScale_ = source.layoutSquareScale_;
@@ -278,6 +335,7 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     spriteTransformCacheOrder_.clear();
     slideTrackAreaCache_.clear();
     wifiTrackAreaCache_.clear();
+    cpuTrackAreaCachingEnabled_ = source.cpuTrackAreaCachingEnabled_;
 }
 
 QImage PreviewCanvas::renderOverlayFrame(
@@ -593,12 +651,25 @@ bool PreviewCanvas::ensureOffscreenFramebuffer(const QSize& framebufferSize, QSt
 
     QOpenGLFramebufferObjectFormat format;
     format.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
-    const int preferredSamples = offscreenContext_ != nullptr ? offscreenContext_->format().samples() : 0;
-    format.setSamples(qBound(0, preferredSamples, 8));
-    offscreenFramebuffer_ = new QOpenGLFramebufferObject(safeSize, format);
-    if (offscreenFramebuffer_ == nullptr || !offscreenFramebuffer_->isValid()) {
+    const int requestedSamples = preferredOffscreenFramebufferSamples(offscreenContext_, safeSize);
+    const auto tryCreateFramebuffer = [&](int sampleCount) {
+        format.setSamples(sampleCount);
+        offscreenFramebuffer_ = new QOpenGLFramebufferObject(safeSize, format);
+        return offscreenFramebuffer_ != nullptr && offscreenFramebuffer_->isValid();
+    };
+
+    int activeSamples = requestedSamples;
+    bool created = tryCreateFramebuffer(activeSamples);
+    if (!created && activeSamples > 0) {
+        delete offscreenFramebuffer_;
+        offscreenFramebuffer_ = nullptr;
+        activeSamples = 0;
+        created = tryCreateFramebuffer(activeSamples);
+    }
+    if (!created) {
         if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("failed to create offscreen framebuffer");
+            *errorMessage = QStringLiteral("failed to create offscreen framebuffer samples=%1")
+                .arg(activeSamples);
         }
         if (offscreenFramebuffer_ != nullptr) {
             delete offscreenFramebuffer_;

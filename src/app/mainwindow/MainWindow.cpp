@@ -3785,24 +3785,27 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     QSlider* answerSlider = nullptr;
     QLabel* answerLabel = nullptr;
     addAudioRow(uiText("dialog.render_settings.audio.answer", "Answer Volume"), previewAudioSettings_.answerPercent(), &answerSlider, &answerLabel);
-    QSlider* slideSlider = nullptr;
-    QLabel* slideLabel = nullptr;
-    addAudioRow(uiText("dialog.render_settings.audio.slide", "Slide Volume"), previewAudioSettings_.slidePercent(), &slideSlider, &slideLabel);
+    QSlider* judgeSlider = nullptr;
+    QLabel* judgeLabel = nullptr;
+    addAudioRow(uiText("dialog.render_settings.audio.judge", "Judge Volume"), previewAudioSettings_.judgePercent(), &judgeSlider, &judgeLabel);
     QSlider* breakSlider = nullptr;
     QLabel* breakLabel = nullptr;
     addAudioRow(uiText("dialog.render_settings.audio.break", "Break Volume"), previewAudioSettings_.breakPercent(), &breakSlider, &breakLabel);
+    QSlider* slideSlider = nullptr;
+    QLabel* slideLabel = nullptr;
+    addAudioRow(uiText("dialog.render_settings.audio.slide", "Slide Volume"), previewAudioSettings_.slidePercent(), &slideSlider, &slideLabel);
     QSlider* exSlider = nullptr;
     QLabel* exLabel = nullptr;
     addAudioRow(uiText("dialog.render_settings.audio.ex", "EX Volume"), previewAudioSettings_.exPercent(), &exSlider, &exLabel);
     QSlider* touchSlider = nullptr;
     QLabel* touchLabel = nullptr;
-    addAudioRow(uiText("dialog.render_settings.audio.touch", "Touch Volume"), previewAudioSettings_.touchPercent(), &touchSlider, &touchLabel);
-    QSlider* touchholdSlider = nullptr;
-    QLabel* touchholdLabel = nullptr;
-    addAudioRow(uiText("dialog.render_settings.audio.touchhold", "TouchHold Volume"), previewAudioSettings_.touchholdPercent(), &touchholdSlider, &touchholdLabel);
+    addAudioRow(uiText("dialog.render_settings.audio.touch", "Touch / TouchHold Volume"), previewAudioSettings_.touchPercent(), &touchSlider, &touchLabel);
     QSlider* fireworkSlider = nullptr;
     QLabel* fireworkLabel = nullptr;
     addAudioRow(uiText("dialog.render_settings.audio.firework", "Firework Volume"), previewAudioSettings_.fireworkPercent(), &fireworkSlider, &fireworkLabel);
+    QSlider* breakSlideSlider = nullptr;
+    QLabel* breakSlideLabel = nullptr;
+    addAudioRow(uiText("dialog.render_settings.audio.break_slide", "Break Slide Volume"), previewAudioSettings_.breakSlidePercent(), &breakSlideSlider, &breakSlideLabel);
 
     auto* restoreButton = new QPushButton(uiText("dialog.render_settings.button.restore_project_default", "Restore Project Audio to Software Default"), audioGroup);
     restoreButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
@@ -4051,12 +4054,12 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         saveProjectRenderState();
         queueAudioApply("answer");
     });
-    connect(slideSlider, &QSlider::valueChanged, &dialog, [this, slideLabel, queueAudioApply](int value) {
-        previewAudioSettings_.setSlidePercent(value);
-        slideLabel->setText(QString::number(previewAudioSettings_.slidePercent()) + "%");
+    connect(judgeSlider, &QSlider::valueChanged, &dialog, [this, judgeLabel, queueAudioApply](int value) {
+        previewAudioSettings_.setJudgePercent(value);
+        judgeLabel->setText(QString::number(previewAudioSettings_.judgePercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
-        queueAudioApply("slide");
+        queueAudioApply("judge");
     });
     connect(breakSlider, &QSlider::valueChanged, &dialog, [this, breakLabel, queueAudioApply](int value) {
         previewAudioSettings_.setBreakPercent(value);
@@ -4064,6 +4067,13 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
         queueAudioApply("break");
+    });
+    connect(slideSlider, &QSlider::valueChanged, &dialog, [this, slideLabel, queueAudioApply](int value) {
+        previewAudioSettings_.setSlidePercent(value);
+        slideLabel->setText(QString::number(previewAudioSettings_.slidePercent()) + "%");
+        applyPreviewAudioSettingsToRuntime();
+        saveProjectRenderState();
+        queueAudioApply("slide");
     });
     connect(exSlider, &QSlider::valueChanged, &dialog, [this, exLabel, queueAudioApply](int value) {
         previewAudioSettings_.setExPercent(value);
@@ -4079,13 +4089,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         saveProjectRenderState();
         queueAudioApply("touch");
     });
-    connect(touchholdSlider, &QSlider::valueChanged, &dialog, [this, touchholdLabel, queueAudioApply](int value) {
-        previewAudioSettings_.setTouchholdPercent(value);
-        touchholdLabel->setText(QString::number(previewAudioSettings_.touchholdPercent()) + "%");
-        applyPreviewAudioSettingsToRuntime();
-        saveProjectRenderState();
-        queueAudioApply("touchhold");
-    });
     connect(fireworkSlider, &QSlider::valueChanged, &dialog, [this, fireworkLabel, queueAudioApply](int value) {
         previewAudioSettings_.setFireworkPercent(value);
         fireworkLabel->setText(QString::number(previewAudioSettings_.fireworkPercent()) + "%");
@@ -4093,20 +4096,28 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         saveProjectRenderState();
         queueAudioApply("firework");
     });
+    connect(breakSlideSlider, &QSlider::valueChanged, &dialog, [this, breakSlideLabel, queueAudioApply](int value) {
+        previewAudioSettings_.setBreakSlidePercent(value);
+        breakSlideLabel->setText(QString::number(previewAudioSettings_.breakSlidePercent()) + "%");
+        applyPreviewAudioSettingsToRuntime();
+        saveProjectRenderState();
+        queueAudioApply("break_slide");
+    });
 
-    connect(restoreButton, &QPushButton::clicked, &dialog, [this, bgmSlider, answerSlider, slideSlider, breakSlider, exSlider, touchSlider, touchholdSlider, fireworkSlider]() {
+    connect(restoreButton, &QPushButton::clicked, &dialog, [this, bgmSlider, answerSlider, judgeSlider, breakSlider, slideSlider, exSlider, touchSlider, fireworkSlider, breakSlideSlider]() {
         previewAudioSettings_ = softwarePreviewAudioSettings_;
         previewAudioSettings_.normalize();
         {
-            QSignalBlocker b1(bgmSlider), b2(answerSlider), b3(slideSlider), b4(breakSlider), b5(exSlider), b6(touchSlider), b7(touchholdSlider), b8(fireworkSlider);
+            QSignalBlocker b1(bgmSlider), b2(answerSlider), b3(judgeSlider), b4(breakSlider), b5(slideSlider), b6(exSlider), b7(touchSlider), b8(fireworkSlider), b9(breakSlideSlider);
             bgmSlider->setValue(previewAudioSettings_.bgmPercent());
             answerSlider->setValue(previewAudioSettings_.answerPercent());
-            slideSlider->setValue(previewAudioSettings_.slidePercent());
+            judgeSlider->setValue(previewAudioSettings_.judgePercent());
             breakSlider->setValue(previewAudioSettings_.breakPercent());
+            slideSlider->setValue(previewAudioSettings_.slidePercent());
             exSlider->setValue(previewAudioSettings_.exPercent());
             touchSlider->setValue(previewAudioSettings_.touchPercent());
-            touchholdSlider->setValue(previewAudioSettings_.touchholdPercent());
             fireworkSlider->setValue(previewAudioSettings_.fireworkPercent());
+            breakSlideSlider->setValue(previewAudioSettings_.breakSlidePercent());
         }
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
@@ -4114,15 +4125,16 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         statusBar()->showMessage(uiText("status.audio_restored_default", "Project audio restored to software defaults."));
     });
 
-    connect(audioApplyTimer, &QTimer::timeout, &dialog, [this, audioApplyTimer, bgmSlider, answerSlider, slideSlider, breakSlider, exSlider, touchSlider, touchholdSlider, fireworkSlider, &pendingAudition]() {
+    connect(audioApplyTimer, &QTimer::timeout, &dialog, [this, audioApplyTimer, bgmSlider, answerSlider, judgeSlider, breakSlider, slideSlider, exSlider, touchSlider, fireworkSlider, breakSlideSlider, &pendingAudition]() {
         if (bgmSlider->isSliderDown()
             || answerSlider->isSliderDown()
-            || slideSlider->isSliderDown()
+            || judgeSlider->isSliderDown()
             || breakSlider->isSliderDown()
+            || slideSlider->isSliderDown()
             || exSlider->isSliderDown()
             || touchSlider->isSliderDown()
-            || touchholdSlider->isSliderDown()
-            || fireworkSlider->isSliderDown()) {
+            || fireworkSlider->isSliderDown()
+            || breakSlideSlider->isSliderDown()) {
             audioApplyTimer->start();
             return;
         }

@@ -1,3 +1,63 @@
+namespace {
+
+constexpr double kQtPreviewSfxSameKindBoostGain = 1.5;
+
+struct AggregatedPlayback {
+    QString kind;
+    int count = 0;
+    double maxGain = 0.0;
+};
+
+bool shouldAggregatePlaybackKind(const QString& kind)
+{
+    return kind == "answer"
+        || kind == "judge"
+        || kind == "judge_break"
+        || kind == "slide"
+        || kind == "break_slide_start"
+        || kind == "ex";
+}
+
+bool shouldBoostAggregatedPlaybackKind(const QString& kind)
+{
+    return kind == "judge"
+        || kind == "judge_break"
+        || kind == "slide"
+        || kind == "break_slide_start"
+        || kind == "ex";
+}
+
+void accumulatePlayback(QVector<AggregatedPlayback>* playbacks, const QString& kind, double gain)
+{
+    if (playbacks == nullptr || kind.isEmpty()) {
+        return;
+    }
+    for (AggregatedPlayback& playback : *playbacks) {
+        if (playback.kind != kind) {
+            continue;
+        }
+        ++playback.count;
+        playback.maxGain = qMax(playback.maxGain, qMax(0.0, gain));
+        return;
+    }
+    AggregatedPlayback playback;
+    playback.kind = kind;
+    playback.count = 1;
+    playback.maxGain = qMax(0.0, gain);
+    playbacks->append(playback);
+}
+
+double playbackGain(const AggregatedPlayback& playback)
+{
+    double gain = qMax(0.0, playback.maxGain);
+    if (playback.count >= 2 && shouldBoostAggregatedPlaybackKind(playback.kind)) {
+        gain = qMin(kQtPreviewSfxSameKindBoostGain, gain * kQtPreviewSfxSameKindBoostGain);
+    }
+    return gain;
+}
+
+}
+
 QtPreviewSfxRuntime::QtPreviewSfxRuntime(QObject* parent)
     : QObject(parent)
 {
@@ -120,7 +180,7 @@ void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& n
     eventIndex_ = 0;
     touchholdSpans_.clear();
     touchholdSpans_.reserve(noteMarkers.size());
-    events_.reserve(noteMarkers.size() * 3);
+    events_.reserve(noteMarkers.size() * 5);
 
     const auto addEvent = [this](double second, const QString& kind, int priority = 1, int spanIndex = -1, double gain = 1.0) {
         if (second < 0.0 || kind.isEmpty()) {
@@ -138,6 +198,7 @@ void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& n
     for (const TimelineNoteMarker& marker : noteMarkers) {
         if (marker.type == "tap") {
             addEvent(marker.second, "answer");
+            addEvent(marker.second, marker.isBreak ? "judge_break" : "judge");
             if (marker.isBreak) {
                 addEvent(marker.second, "break");
             }
@@ -148,30 +209,27 @@ void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& n
         }
         if (marker.type == "hold") {
             addEvent(marker.second, "answer");
+            addEvent(marker.second, marker.isBreak ? "judge_break" : "judge");
             if (marker.isBreak) {
-                // Break hold: head plays break + judge, tail plays judge only.
                 addEvent(marker.second, "break");
             }
             if (marker.endSecond > marker.second) {
-                addEvent(marker.endSecond, "answer", 1, -1, 0.5);
+                addEvent(marker.endSecond, "answer");
             }
             if (marker.isEx) {
                 addEvent(marker.second, "ex");
-                if (marker.endSecond > marker.second) {
-                    addEvent(marker.endSecond, "ex");
-                }
             }
             continue;
         }
         if (marker.type == "touch") {
-            addEvent(marker.second, marker.isBreak ? "break" : "touch");
+            addEvent(marker.second, marker.isBreak ? "judge_break" : "touch");
             if (marker.isFirework) {
                 addEvent(marker.second + kQtPreviewSfxFireworkTouchTriggerDelaySeconds, "firework");
             }
             continue;
         }
         if (marker.type == "touch_hold") {
-            addEvent(marker.second, marker.isBreak ? "break" : "touch");
+            addEvent(marker.second, marker.isBreak ? "judge_break" : "touch");
             if (marker.isFirework && marker.endSecond >= 0.0) {
                 addEvent(marker.endSecond, "firework");
             }
@@ -187,14 +245,24 @@ void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& n
             continue;
         }
         if (marker.type == "slide" || marker.type == "wifi") {
-            if (marker.hasHeadStar && !marker.sameHeadSlide) {
+            if (marker.hasHeadStar) {
                 addEvent(marker.second, "answer");
+                addEvent(marker.second, marker.headBreak ? "judge_break" : "judge");
                 if (marker.headBreak) {
-                    // Keep break-track excluded; only break head-star note gets break SFX.
-                    addEvent(marker.second, "break");
+                    if (!marker.trackBreak) {
+                        addEvent(marker.second, "break");
+                    }
+                }
+                if (marker.headEx) {
+                    addEvent(marker.second, "ex");
                 }
             }
-            addEvent(marker.slideTraceSecond >= 0.0 ? marker.slideTraceSecond : marker.second, "slide");
+            const double traceSecond = marker.slideTraceSecond >= 0.0 ? marker.slideTraceSecond : marker.second;
+            addEvent(traceSecond, marker.trackBreak ? "break_slide_start" : "slide");
+            if (marker.trackBreak && marker.endSecond > traceSecond) {
+                addEvent(marker.endSecond, "break_slide_finish", 1, -1, 0.5);
+                addEvent(marker.endSecond, "judge_break_slide", 1, -1, 0.5);
+            }
             continue;
         }
     }
@@ -248,8 +316,7 @@ void QtPreviewSfxRuntime::drainEvents(double second)
             ++groupEnd;
         }
 
-        bool judgePlayedInGroup = false;
-        double judgeGainInGroup = 0.0;
+        QVector<AggregatedPlayback> playbacks;
         for (int i = groupStart; i < groupEnd; ++i) {
             const Event& event = events_[i];
             if (event.kind == "touchhold_start") {
@@ -260,15 +327,14 @@ void QtPreviewSfxRuntime::drainEvents(double second)
                 stopTouchholdSpan(event.spanIndex);
                 continue;
             }
-            if (event.kind == "answer") {
-                judgeGainInGroup = qMax(judgeGainInGroup, qMax(0.0, event.gain));
-                judgePlayedInGroup = true;
+            if (shouldAggregatePlaybackKind(event.kind)) {
+                accumulatePlayback(&playbacks, event.kind, event.gain);
                 continue;
             }
             playKindInternal(event.kind, event.gain);
         }
-        if (judgePlayedInGroup) {
-            playKindInternal("answer", judgeGainInGroup);
+        for (const AggregatedPlayback& playback : playbacks) {
+            playKindInternal(playback.kind, playbackGain(playback));
         }
 
         eventIndex_ = groupEnd;

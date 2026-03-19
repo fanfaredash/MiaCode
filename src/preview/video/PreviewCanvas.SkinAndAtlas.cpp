@@ -280,6 +280,8 @@ void PreviewCanvas::reset()
 #ifdef HAVE_QT_MULTIMEDIA
     videoFrame_ = QVideoFrame();
 #endif
+    stageMediaAvailable_ = false;
+    refreshOutlineAsset();
     resetProfilingSession();
     update();
 }

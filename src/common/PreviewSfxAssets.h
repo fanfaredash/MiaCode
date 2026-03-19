@@ -18,11 +18,26 @@ inline QString assetFileNameForKind(const QString& kind)
     if (lowered == QStringLiteral("answer")) {
         return QStringLiteral("answer.wav");
     }
+    if (lowered == QStringLiteral("judge")) {
+        return QStringLiteral("judge.wav");
+    }
+    if (lowered == QStringLiteral("judge_break") || lowered == QStringLiteral("break_touch")) {
+        return QStringLiteral("judge_break.wav");
+    }
     if (lowered == QStringLiteral("slide")) {
         return QStringLiteral("slide.wav");
     }
     if (lowered == QStringLiteral("break")) {
         return QStringLiteral("break.wav");
+    }
+    if (lowered == QStringLiteral("break_slide_start")) {
+        return QStringLiteral("break_slide_start.wav");
+    }
+    if (lowered == QStringLiteral("break_slide")) {
+        return QStringLiteral("break_slide.wav");
+    }
+    if (lowered == QStringLiteral("judge_break_slide")) {
+        return QStringLiteral("judge_break_slide.wav");
     }
     if (lowered == QStringLiteral("ex")) {
         return QStringLiteral("judge_ex.wav");

@@ -2123,6 +2123,7 @@ void PreviewCanvas::drawCachedSlideArea(
         }
     }
 
+    const bool allowCpuTrackAreaCaching = kEnablePreviewCaches && cpuTrackAreaCachingEnabled_;
     const int playfieldWidth = qMax(1, qRound(playfieldRect.width()));
     const QString cacheKey = QStringLiteral("%1|%2|%3|%4|%5|%6|%7|%8|%9")
         .arg(marker.slideSegmentKeys.value(segmentIndex, marker.slideTrackKey))
@@ -2138,7 +2139,7 @@ void PreviewCanvas::drawCachedSlideArea(
     CachedTrackArea uncached;
     CachedTrackArea* cachedArea = nullptr;
     auto cacheIt = slideTrackAreaCache_.end();
-    if (kEnablePreviewCaches) {
+    if (allowCpuTrackAreaCaching) {
         cacheIt = slideTrackAreaCache_.find(cacheKey);
         if (cacheIt != slideTrackAreaCache_.end()) {
             cachedArea = &cacheIt.value();
@@ -2196,7 +2197,7 @@ void PreviewCanvas::drawCachedSlideArea(
             );
             cachePainter.restore();
         }
-        if (kEnablePreviewCaches) {
+        if (allowCpuTrackAreaCaching) {
             cacheIt = slideTrackAreaCache_.insert(cacheKey, built);
             cachedArea = &cacheIt.value();
         } else {
@@ -2267,6 +2268,7 @@ void PreviewCanvas::drawCachedWifiArea(
         variantTag = 1;
     }
 
+    const bool allowCpuTrackAreaCaching = kEnablePreviewCaches && cpuTrackAreaCachingEnabled_;
     const int playfieldWidth = qMax(1, qRound(playfieldRect.width()));
     const QString cacheKey = QStringLiteral("%1|%2|%3|%4|%5|%6|%7")
         .arg(marker.slideTrackKey)
@@ -2280,7 +2282,7 @@ void PreviewCanvas::drawCachedWifiArea(
     CachedTrackArea uncached;
     CachedTrackArea* cachedArea = nullptr;
     auto cacheIt = wifiTrackAreaCache_.end();
-    if (kEnablePreviewCaches) {
+    if (allowCpuTrackAreaCaching) {
         cacheIt = wifiTrackAreaCache_.find(cacheKey);
         if (cacheIt != wifiTrackAreaCache_.end()) {
             cachedArea = &cacheIt.value();
@@ -2342,7 +2344,7 @@ void PreviewCanvas::drawCachedWifiArea(
             );
             cachePainter.restore();
         }
-        if (kEnablePreviewCaches) {
+        if (allowCpuTrackAreaCaching) {
             cacheIt = wifiTrackAreaCache_.insert(cacheKey, built);
             cachedArea = &cacheIt.value();
         } else {
