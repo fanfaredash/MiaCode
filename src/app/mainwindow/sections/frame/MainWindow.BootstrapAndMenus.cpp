@@ -275,8 +275,6 @@ MainWindow::MainWindow(QWidget* parent)
         if (QStyleHints* styleHints = guiApp->styleHints(); styleHints != nullptr) {
             connect(styleHints, &QStyleHints::colorSchemeChanged, this, [this]() {
                 applyUiTheme();
-                QTimer::singleShot(0, this, [this]() { applySystemWindowBackdrop(); });
-                QTimer::singleShot(80, this, [this]() { applySystemWindowBackdrop(); });
             });
         }
     }

@@ -1174,10 +1174,14 @@ void styleRoundedMenu(QMenu& menu)
 
 #ifdef Q_OS_WIN
 constexpr DWORD kDwmwaUseImmersiveDarkMode = 20;
+constexpr DWORD kDwmwaBorderColor = 34;
+constexpr DWORD kDwmwaCaptionColor = 35;
+constexpr DWORD kDwmwaTextColor = 36;
 constexpr DWORD kDwmwaSystemBackdropType = 38;
 constexpr DWORD kDwmwaMicaEffect = 1029;
 constexpr int kDwmsbtNone = 1;
 constexpr int kDwmsbtMainWindow = 2;
+constexpr COLORREF kDwmColorDefault = 0xFFFFFFFF;
 
 bool setDwmWindowAttribute(HWND hwnd, DWORD attribute, const void* value, DWORD size)
 {
@@ -1198,6 +1202,11 @@ bool setDwmWindowAttribute(HWND hwnd, DWORD attribute, const void* value, DWORD 
     return SUCCEEDED(setWindowAttribute(hwnd, attribute, value, size));
 }
 
+COLORREF colorRefForDwm(const QColor& color)
+{
+    return RGB(color.red(), color.green(), color.blue());
+}
+
 void applySystemBackdropToWidget(QWidget* widget, bool enabled, bool darkTheme)
 {
     if (widget == nullptr) {
@@ -1214,31 +1223,26 @@ void applySystemBackdropToWidget(QWidget* widget, bool enabled, bool darkTheme)
     const BOOL darkMode = darkTheme ? TRUE : FALSE;
     setDwmWindowAttribute(hwnd, kDwmwaUseImmersiveDarkMode, &darkMode, sizeof(darkMode));
 
+    if (UiText::preferredTheme() == UiText::ThemePreference::System) {
+        setDwmWindowAttribute(hwnd, kDwmwaBorderColor, &kDwmColorDefault, sizeof(kDwmColorDefault));
+        setDwmWindowAttribute(hwnd, kDwmwaCaptionColor, &kDwmColorDefault, sizeof(kDwmColorDefault));
+        setDwmWindowAttribute(hwnd, kDwmwaTextColor, &kDwmColorDefault, sizeof(kDwmColorDefault));
+    } else {
+        const UiTheme::Colors& themeColors = UiTheme::colors();
+        const bool active = topLevel != nullptr ? topLevel->isActiveWindow() : widget->isActiveWindow();
+        const COLORREF borderColor = colorRefForDwm(active ? themeColors.borderStrong : themeColors.borderSoft);
+        const COLORREF captionColor = colorRefForDwm(active ? themeColors.toolbarBg : themeColors.windowAltBg);
+        const COLORREF textColor = colorRefForDwm(active ? themeColors.textPrimary : themeColors.textSecondary);
+        setDwmWindowAttribute(hwnd, kDwmwaBorderColor, &borderColor, sizeof(borderColor));
+        setDwmWindowAttribute(hwnd, kDwmwaCaptionColor, &captionColor, sizeof(captionColor));
+        setDwmWindowAttribute(hwnd, kDwmwaTextColor, &textColor, sizeof(textColor));
+    }
+
     const int backdropType = enabled ? kDwmsbtMainWindow : kDwmsbtNone;
     if (!setDwmWindowAttribute(hwnd, kDwmwaSystemBackdropType, &backdropType, sizeof(backdropType))) {
         const BOOL micaEnabled = enabled ? TRUE : FALSE;
         setDwmWindowAttribute(hwnd, kDwmwaMicaEffect, &micaEnabled, sizeof(micaEnabled));
     }
-
-    if (::IsWindowVisible(hwnd) == FALSE || ::IsIconic(hwnd) != FALSE) {
-        return;
-    }
-
-    ::SetWindowPos(
-        hwnd,
-        nullptr,
-        0,
-        0,
-        0,
-        0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED
-    );
-    ::RedrawWindow(
-        hwnd,
-        nullptr,
-        nullptr,
-        RDW_INVALIDATE | RDW_UPDATENOW | RDW_FRAME | RDW_ALLCHILDREN
-    );
 }
 #endif
 
@@ -1329,8 +1333,6 @@ void MainWindow::applyUiTheme()
         previewVideoSettingsButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
     }
     applySystemWindowBackdrop();
-    QTimer::singleShot(0, this, [this]() { applySystemWindowBackdrop(); });
-    QTimer::singleShot(80, this, [this]() { applySystemWindowBackdrop(); });
     if (syntaxCheckButton_ != nullptr) {
         syntaxCheckButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
     }
@@ -2281,10 +2283,6 @@ void MainWindow::showEvent(QShowEvent* event)
     updateBottomTabsDeviceHeight();
     refreshPreviewFrameRateTimers();
     applySystemWindowBackdrop();
-    if (!isMinimized()) {
-        QTimer::singleShot(0, this, [this]() { applySystemWindowBackdrop(); });
-        QTimer::singleShot(120, this, [this]() { applySystemWindowBackdrop(); });
-    }
     logWindowGeometryDebug("show_event");
 }
 
@@ -2311,8 +2309,7 @@ void MainWindow::changeEvent(QEvent* event)
         const bool isNowMinimized = windowState().testFlag(Qt::WindowMinimized);
         if (!isNowMinimized && wasMinimized) {
             refreshPreviewFrameRateTimers();
-            QTimer::singleShot(0, this, [this]() { applySystemWindowBackdrop(); });
-            QTimer::singleShot(120, this, [this]() { applySystemWindowBackdrop(); });
+            applySystemWindowBackdrop();
         }
     } else if (type == QEvent::ScreenChangeInternal
         || type == QEvent::DevicePixelRatioChange
@@ -2324,9 +2321,8 @@ void MainWindow::changeEvent(QEvent* event)
         updateBottomTabsDeviceHeight();
         refreshPreviewFrameRateTimers();
         applySystemWindowBackdrop();
-        QTimer::singleShot(0, this, [this]() { applySystemWindowBackdrop(); });
-        QTimer::singleShot(80, this, [this]() { applySystemWindowBackdrop(); });
     } else if (type == QEvent::ActivationChange) {
+        applySystemWindowBackdrop();
         logWindowGeometryDebug("activation_change", QString("is_active=%1").arg(isActiveWindow() ? 1 : 0));
     } else if (type == QEvent::ZOrderChange) {
         logWindowGeometryDebug("zorder_change");
