@@ -112,7 +112,12 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
     if (raw.contains("preview_audio") && raw.value("preview_audio").isObject()) {
         preview.insert("audio", raw.value("preview_audio").toObject());
     }
-    if (raw.contains("bgm_volume") || raw.contains("sfx_volume") || raw.contains("answer_volume") || raw.contains("firework_volume")) {
+    if (raw.contains("bgm_volume")
+        || raw.contains("sfx_volume")
+        || raw.contains("answer_volume")
+        || raw.contains("judge_volume")
+        || raw.contains("break_slide_volume")
+        || raw.contains("firework_volume")) {
         QJsonObject audio = preview.value("audio").toObject();
         if (raw.contains("bgm_volume")) {
             audio.insert("bgm_volume", raw.value("bgm_volume").toDouble());
@@ -120,11 +125,17 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
         if (raw.contains("answer_volume")) {
             audio.insert("answer_volume", raw.value("answer_volume").toDouble(raw.value("sfx_volume").toDouble()));
         }
+        if (raw.contains("judge_volume")) {
+            audio.insert("judge_volume", raw.value("judge_volume").toDouble(raw.value("sfx_volume").toDouble()));
+        }
         if (raw.contains("slide_volume")) {
             audio.insert("slide_volume", raw.value("slide_volume").toDouble(raw.value("sfx_volume").toDouble()));
         }
         if (raw.contains("break_volume")) {
             audio.insert("break_volume", raw.value("break_volume").toDouble(raw.value("sfx_volume").toDouble()));
+        }
+        if (raw.contains("break_slide_volume")) {
+            audio.insert("break_slide_volume", raw.value("break_slide_volume").toDouble(raw.value("slide_volume").toDouble(raw.value("sfx_volume").toDouble())));
         }
         if (raw.contains("ex_volume")) {
             audio.insert("ex_volume", raw.value("ex_volume").toDouble(raw.value("sfx_volume").toDouble()));
@@ -134,6 +145,9 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
         }
         if (raw.contains("touchhold_volume")) {
             audio.insert("touchhold_volume", raw.value("touchhold_volume").toDouble(raw.value("sfx_volume").toDouble()));
+            if (!raw.contains("touch_volume")) {
+                audio.insert("touch_volume", raw.value("touchhold_volume").toDouble(raw.value("sfx_volume").toDouble()));
+            }
         }
         if (raw.contains("firework_volume")) {
             audio.insert("firework_volume", raw.value("firework_volume").toDouble(raw.value("sfx_volume").toDouble()));
@@ -371,12 +385,14 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.button.restore_project_default", "恢复默认"},
         {"dialog.render_settings.audio.bgm", "BGM 音量"},
         {"dialog.render_settings.audio.answer", "Answer 音量"},
-        {"dialog.render_settings.audio.slide", "Slide 音量"},
+        {"dialog.render_settings.audio.judge", "Judge 音量"},
         {"dialog.render_settings.audio.break", "Break 音量"},
+        {"dialog.render_settings.audio.slide", "Slide 音量"},
         {"dialog.render_settings.audio.ex", "EX 音量"},
-        {"dialog.render_settings.audio.touch", "Touch 音量"},
+        {"dialog.render_settings.audio.touch", "Touch / TouchHold 音量"},
         {"dialog.render_settings.audio.touchhold", "TouchHold 音量"},
         {"dialog.render_settings.audio.firework", "Firework 音量"},
+        {"dialog.render_settings.audio.break_slide", "Break Slide 音量"},
         {"dialog.render_settings.video.brightness", "背景/PV 亮度"},
         {"dialog.render_settings.video.debug", "显示预览调试信息"},
         {"dialog.render_settings.video.scale.fill", "填充（必要时裁切）"},

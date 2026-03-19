@@ -51,8 +51,13 @@ void QtPreviewSfxRuntime::initializeAssets()
     };
 
     configureBank(answerSfx_, "answer", 12);
+    configureBank(judgeSfx_, "judge", 12);
+    configureBank(judgeBreakSfx_, "judge_break", 12);
     configureBank(slideSfx_, "slide", 8);
     configureBank(breakSfx_, "break", 8);
+    configureBank(breakSlideStartSfx_, "break_slide_start", 8);
+    configureBank(breakSlideSfx_, "break_slide", 8);
+    configureBank(judgeBreakSlideSfx_, "judge_break_slide", 8);
     configureBank(exSfx_, "ex", 8);
     configureBank(touchSfx_, "touch", 12);
     // Firework SFX mirrors the visual behavior: latest trigger interrupts the previous one.
@@ -130,8 +135,13 @@ void QtPreviewSfxRuntime::applyVolumes()
     };
 
     applyVolume(answerSfx_, settings_.answerVolume);
+    applyVolume(judgeSfx_, settings_.judgeVolume);
+    applyVolume(judgeBreakSfx_, settings_.breakVolume);
     applyVolume(slideSfx_, settings_.slideVolume);
-    applyVolume(breakSfx_, settings_.breakVolume);
+    applyVolume(breakSfx_, qMin(settings_.breakVolume * 1.5, 1.5));
+    applyVolume(breakSlideStartSfx_, settings_.breakSlideVolume);
+    applyVolume(breakSlideSfx_, settings_.breakSlideVolume);
+    applyVolume(judgeBreakSlideSfx_, settings_.breakSlideVolume);
     applyVolume(exSfx_, settings_.exVolume);
     applyVolume(touchSfx_, settings_.touchVolume);
     applyVolume(fireworkSfx_, settings_.fireworkVolume);
@@ -143,7 +153,7 @@ void QtPreviewSfxRuntime::applyVolumes()
     }
     for (TouchholdVoice& voice : touchholdVoices_) {
         if (voice.voice != nullptr && voice.voice->initialized) {
-            ma_sound_set_volume(&voice.voice->sound, static_cast<float>(settings_.touchholdVolume));
+            ma_sound_set_volume(&voice.voice->sound, static_cast<float>(settings_.touchVolume));
         }
     }
 }

@@ -99,8 +99,13 @@ private:
     double backgroundTrackLastTimelineSecond_ = 0.0;
     StretchedBackgroundState* stretchedBackgroundState_ = nullptr;
     SfxBank answerSfx_;
+    SfxBank judgeSfx_;
+    SfxBank judgeBreakSfx_;
     SfxBank slideSfx_;
     SfxBank breakSfx_;
+    SfxBank breakSlideStartSfx_;
+    SfxBank breakSlideSfx_;
+    SfxBank judgeBreakSlideSfx_;
     SfxBank exSfx_;
     SfxBank touchSfx_;
     SfxBank fireworkSfx_;

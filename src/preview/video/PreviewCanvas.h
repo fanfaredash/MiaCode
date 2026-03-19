@@ -36,6 +36,7 @@ public:
     explicit PreviewCanvas(QWindow* parent = nullptr);
     ~PreviewCanvas() override;
 
+    void setStageMediaAvailable(bool hasMedia);
     void setPlayheadSeconds(double seconds);
     void setMediaFrame(const QImage& frame);
     void setVideoFrame(const QVideoFrame& frame);
@@ -49,6 +50,7 @@ public:
     void setBackgroundScaleMode(PreviewBackgroundScaleMode mode);
     void setNoteFlowSpeed(double flowSpeed);
     double noteFlowSpeed() const;
+    void setCpuTrackAreaCachingEnabled(bool enabled);
     void setShowDebugInfo(bool show);
     void setShowTimestamp(bool show);
     void setShowObjectStatsHud(bool show);
@@ -156,6 +158,7 @@ private:
     void applySkinLoadResult(SkinLoadResult&& result);
     void scheduleTexturePrewarm();
     void processTexturePrewarmQueue();
+    void refreshOutlineAsset();
     QRectF currentStageRect() const;
     QRectF stageRectForSize(const QSize& renderSize) const;
     QRectF stagePlayfieldRect(const QRectF& stageRect) const;
@@ -314,12 +317,14 @@ private:
     QStringList spriteTransformCacheOrder_;
     QHash<QString, CachedTrackArea> slideTrackAreaCache_;
     QHash<QString, CachedTrackArea> wifiTrackAreaCache_;
+    bool cpuTrackAreaCachingEnabled_ = true;
     PreviewGLRenderer glRenderer_;
     QVector<TimelineNoteMarker> noteMarkers_;
     QImage mediaFrame_;
 #ifdef HAVE_QT_MULTIMEDIA
     QVideoFrame videoFrame_;
 #endif
+    bool stageMediaAvailable_ = false;
     double playheadSeconds_ = 0.0;
     double backgroundBrightnessOuter_ = miacode::preview_video::kBackgroundBrightnessDefault;
     double backgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessInnerDefault;
