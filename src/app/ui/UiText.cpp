@@ -409,7 +409,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.video.scale_mode", "背景 / PV 缩放模式"},
         {"dialog.render_settings.video.canvas_aspect", "预览画布比例"},
         {"dialog.render_settings.preview.debug", "显示预览调试信息"},
-        {"dialog.render_settings.preview.canvas_frame_rate", "预览画布刷新率"},
+        {"dialog.render_settings.preview.canvas_frame_rate", "预览刷新率"},
         {"dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS"},
         {"dialog.render_settings.preview.canvas_frame_rate.120", "120 FPS"},
         {"dialog.render_settings.preview.canvas_frame_rate.display", "屏幕最大刷新率"},

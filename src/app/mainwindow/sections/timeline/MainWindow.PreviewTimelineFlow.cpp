@@ -1080,36 +1080,18 @@ QString MainWindow::previewCanvasFrameRateModeStorageValue() const
 
 MainWindow::PreviewFollowMode MainWindow::previewFollowModeFromStorageValue(const QString& value) const
 {
-    const QString normalized = value.trimmed().toLower();
-    if (normalized == QLatin1String("nonempty")
-        || normalized == QLatin1String("non_empty")
-        || normalized == QLatin1String("content")
-        || normalized == QLatin1String("value_only")) {
-        return PreviewFollowMode::NonEmptyComma;
-    }
-    if (normalized == QLatin1String("line")
-        || normalized == QLatin1String("line_only")
-        || normalized == QLatin1String("row")) {
-        return PreviewFollowMode::LineOnly;
-    }
-    return PreviewFollowMode::EveryComma;
+    Q_UNUSED(value);
+    return PreviewFollowMode::NonEmptyComma;
 }
 
 QString MainWindow::previewFollowModeStorageValue() const
 {
-    switch (previewFollowMode_) {
-    case PreviewFollowMode::NonEmptyComma:
-        return QStringLiteral("non_empty");
-    case PreviewFollowMode::LineOnly:
-        return QStringLiteral("line_only");
-    case PreviewFollowMode::EveryComma:
-    default:
-        return QStringLiteral("every_comma");
-    }
+    return QStringLiteral("non_empty");
 }
 
 void MainWindow::setPreviewFollowMode(PreviewFollowMode mode, bool persistState)
 {
+    mode = PreviewFollowMode::NonEmptyComma;
     const bool changed = previewFollowMode_ != mode;
     previewFollowMode_ = mode;
     if (hasActiveDifficulty()) {

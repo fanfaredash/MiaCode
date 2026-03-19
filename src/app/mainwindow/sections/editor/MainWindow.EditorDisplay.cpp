@@ -14,7 +14,7 @@
     previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
     previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
-    previewFollowMode_ = PreviewFollowMode::EveryComma;
+    previewFollowMode_ = PreviewFollowMode::NonEmptyComma;
     previewCanvasAspectRatio_ = 1.0;
     previewAutoRestoreSquareAfterExport_ = true;
     previewShowDebugInfo_ = false;
@@ -114,11 +114,7 @@
     } else {
         previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
     }
-    if (preview.value("follow_mode").isString()) {
-        previewFollowMode_ = previewFollowModeFromStorageValue(preview.value("follow_mode").toString());
-    } else {
-        previewFollowMode_ = PreviewFollowMode::EveryComma;
-    }
+    previewFollowMode_ = PreviewFollowMode::NonEmptyComma;
     if (preview.value("show_debug_info").isBool()) {
         previewShowDebugInfo_ = preview.value("show_debug_info").toBool(false);
     }
