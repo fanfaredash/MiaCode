@@ -924,21 +924,6 @@ VideoExportDialog::VideoExportDialog(
     updatePreviewPlayPauseUi();
     syncRangeUi();
     initialResolutionAspectRatio_ = selectedResolutionAspectRatio();
-    seekPreview(previewCursorSecond_);
-    syncLivePreviewTimestampVisibility();
-    if (previewLayoutScaleCallback_) {
-        previewLayoutScaleCallback_(miacode::preview_video::normalizedLayoutSquareScale(baseTask_.layoutSquareScale));
-    }
-    if (previewSmoothBrightnessCallback_) {
-        previewSmoothBrightnessCallback_(baseTask_.smoothBrightness);
-    }
-    if (previewScaleModeCallback_) {
-        previewScaleModeCallback_(baseTask_.backgroundScaleMode);
-    }
-    if (previewFlowSpeedCallback_) {
-        previewFlowSpeedCallback_(selectedFlowSpeed_);
-    }
-    applySelectedAspectRatioToPreview(false);
     refreshDialogGeometry();
     if (QWidget* owner = parentWidget(); owner != nullptr) {
         move(desiredDialogTopLeft(owner, size()));
