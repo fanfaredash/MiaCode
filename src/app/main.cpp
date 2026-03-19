@@ -21,7 +21,28 @@
 
 #include <cmath>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
 namespace {
+
+#ifdef Q_OS_WIN
+void setWindowsAppUserModelId()
+{
+    static HMODULE shell32Module = ::LoadLibraryW(L"shell32.dll");
+    if (shell32Module == nullptr) {
+        return;
+    }
+    using SetAppIdFn = HRESULT(WINAPI*)(PCWSTR);
+    static auto setAppId = reinterpret_cast<SetAppIdFn>(
+        ::GetProcAddress(shell32Module, "SetCurrentProcessExplicitAppUserModelID")
+    );
+    if (setAppId != nullptr) {
+        setAppId(L"fanfaredash.MiaCode");
+    }
+}
+#endif
 
 bool startupTimingEnabled()
 {
@@ -286,9 +307,13 @@ int main(int argc, char* argv[])
 
     QApplication app(argc, argv);
     logStartupStage("qapplication_constructed");
+#ifdef Q_OS_WIN
+    setWindowsAppUserModelId();
+#endif
     app.setApplicationName("MiaCode");
     app.setApplicationVersion(MIACODE_VERSION_STRING);
-    app.setWindowIcon(QIcon(":/icons/app.png"));
+    const QIcon appIcon(QStringLiteral(":/icons/app.png"));
+    app.setWindowIcon(appIcon);
     app.setStyle(QStyleFactory::create("Fusion"));
     UiTheme::applyApplicationTheme(app);
     logStartupStage("app_style_ready");
@@ -317,6 +342,9 @@ int main(int argc, char* argv[])
     }
 
     MainWindow window;
+    if (!appIcon.isNull()) {
+        window.setWindowIcon(appIcon);
+    }
     logStartupStage("mainwindow_constructed");
     window.show();
     logStartupStage("mainwindow_show_called");
