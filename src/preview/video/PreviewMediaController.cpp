@@ -116,6 +116,11 @@ PreviewMediaController::PreviewMediaController(QObject* parent)
 
 PreviewMediaController::~PreviewMediaController() = default;
 
+bool PreviewMediaController::hasResolvedMedia() const
+{
+    return mediaKind_ != MediaKind::None;
+}
+
 bool PreviewMediaController::hasVideoMedia() const
 {
     return mediaKind_ == MediaKind::Video;

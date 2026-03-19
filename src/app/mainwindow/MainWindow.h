@@ -250,6 +250,16 @@ private:
     double normalizedPreviewCanvasAspectRatio(double ratio) const;
     int computeBottomTabsDeviceHeight() const;
     void updateBottomTabsDeviceHeight();
+    bool findTimelineCursorNoteForTextPosition(int line, int col, int* indexOut) const;
+    bool resolveTimelineNoteFromCursorAnchor(
+        double second,
+        int anchorLine,
+        int anchorCol,
+        int lane,
+        int* line,
+        int* col,
+        double* noteSecond
+    ) const;
     double timelineSecondForCursor(int line, int col) const;
     void jumpToLocation(int line, int col);
     QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount = nullptr) const;

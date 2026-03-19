@@ -85,7 +85,7 @@ public:
     void clear();
     void setPlayheadUpperLimitSeconds(double second);
     void setPlayheadSeconds(double second, bool centerView);
-    void setCursorSeconds(double second);
+    void setCursorSeconds(double second, bool centerView = false);
     double playheadSeconds() const;
     double durationSeconds() const;
     void setShowSlideTracks(bool show);
