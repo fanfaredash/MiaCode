@@ -12,46 +12,53 @@
 
 namespace miacode::preview_sfx {
 
-inline QString assetFileNameForKind(const QString& kind)
+inline QStringList assetFileNamesForKind(const QString& kind)
 {
     const QString lowered = kind.trimmed().toLower();
     if (lowered == QStringLiteral("answer")) {
-        return QStringLiteral("answer.wav");
+        return {QStringLiteral("answer.wav")};
     }
     if (lowered == QStringLiteral("judge")) {
-        return QStringLiteral("judge.wav");
+        return {QStringLiteral("judge.wav")};
     }
     if (lowered == QStringLiteral("judge_break") || lowered == QStringLiteral("break_touch")) {
-        return QStringLiteral("judge_break.wav");
+        return {QStringLiteral("judge_break.wav")};
     }
     if (lowered == QStringLiteral("slide")) {
-        return QStringLiteral("slide.wav");
+        return {QStringLiteral("slide.wav")};
     }
     if (lowered == QStringLiteral("break")) {
-        return QStringLiteral("break.wav");
+        return {QStringLiteral("break.wav")};
     }
     if (lowered == QStringLiteral("break_slide_start")) {
-        return QStringLiteral("break_slide_start.wav");
+        return {QStringLiteral("break_slide_start.wav")};
     }
     if (lowered == QStringLiteral("break_slide")) {
-        return QStringLiteral("break_slide.wav");
+        return {QStringLiteral("break_slide.wav")};
     }
     if (lowered == QStringLiteral("judge_break_slide")) {
-        return QStringLiteral("judge_break_slide.wav");
+        return {QStringLiteral("judge_break_slide.wav")};
     }
     if (lowered == QStringLiteral("ex")) {
-        return QStringLiteral("judge_ex.wav");
+        return {QStringLiteral("judge_ex.wav")};
     }
     if (lowered == QStringLiteral("touch")) {
-        return QStringLiteral("touch.wav");
+        return {QStringLiteral("touch.wav")};
     }
     if (lowered == QStringLiteral("touchhold")) {
-        return QStringLiteral("touchHold_riser.wav");
+        return {QStringLiteral("touchHold_riser.wav")};
     }
     if (lowered == QStringLiteral("firework")) {
-        return QStringLiteral("firework.wav");
+        // Keep the legacy Hanabi filename only as an on-disk compatibility alias.
+        return {QStringLiteral("firework.wav"), QStringLiteral("hanabi.wav")};
     }
-    return QString();
+    return {};
+}
+
+inline QString assetFileNameForKind(const QString& kind)
+{
+    const QStringList fileNames = assetFileNamesForKind(kind);
+    return fileNames.isEmpty() ? QString() : fileNames.constFirst();
 }
 
 inline QString assetFilePathForKind(const QString& sfxDir, const QString& kind)
@@ -59,11 +66,18 @@ inline QString assetFilePathForKind(const QString& sfxDir, const QString& kind)
     if (sfxDir.isEmpty()) {
         return QString();
     }
-    const QString fileName = assetFileNameForKind(kind);
-    if (fileName.isEmpty()) {
+    const QStringList fileNames = assetFileNamesForKind(kind);
+    if (fileNames.isEmpty()) {
         return QString();
     }
-    return QDir::cleanPath(QDir(sfxDir).filePath(fileName));
+    const QDir dir(sfxDir);
+    for (const QString& fileName : fileNames) {
+        const QString path = QDir::cleanPath(dir.filePath(fileName));
+        if (QFileInfo::exists(path)) {
+            return path;
+        }
+    }
+    return QDir::cleanPath(dir.filePath(fileNames.constFirst()));
 }
 
 inline QByteArray encodedAssetFilePathForKind(const QString& sfxDir, const QString& kind)

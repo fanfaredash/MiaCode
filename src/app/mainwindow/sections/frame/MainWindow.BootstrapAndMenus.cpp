@@ -166,7 +166,7 @@
     connect(transformToggleExAction_, &QAction::triggered, this, &MainWindow::onToggleExSelection);
     moreTransformMenu->addAction(transformToggleExAction_);
 
-    transformToggleFireworkAction_ = new QAction(uiText("action.transform.toggle_firework", "Toggle Hanabi"), this);
+    transformToggleFireworkAction_ = new QAction(uiText("action.transform.toggle_firework", "Toggle Firework"), this);
     transformToggleFireworkAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_M));
     connect(transformToggleFireworkAction_, &QAction::triggered, this, &MainWindow::onToggleFireworkSelection);
     moreTransformMenu->addAction(transformToggleFireworkAction_);
