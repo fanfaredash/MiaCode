@@ -4115,19 +4115,10 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     previewFormLayout->setHorizontalSpacing(10);
     previewFormLayout->setVerticalSpacing(8);
 
-    auto* canvasFrameRateCombo = new QComboBox(previewGroup);
-    canvasFrameRateCombo->setStyleSheet(UiTheme::dialogComboBoxStyleSheet());
-    canvasFrameRateCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    canvasFrameRateCombo->setEditable(true);
-    canvasFrameRateCombo->setInsertPolicy(QComboBox::NoInsert);
-    canvasFrameRateCombo->addItem(
-        uiText("dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS"),
-        static_cast<int>(PreviewCanvasFrameRateMode::Fps60)
-    );
-    canvasFrameRateCombo->addItem(
-        uiText("dialog.render_settings.preview.canvas_frame_rate.120", "120 FPS"),
-        static_cast<int>(PreviewCanvasFrameRateMode::Fps120)
-    );
+    struct CanvasFrameRateOption {
+        PreviewCanvasFrameRateMode mode;
+        QString label;
+    };
     const double detectedRefreshRate = currentPreviewCanvasRefreshRate();
     const QString displayRefreshLabel = QStringLiteral("%1 (%2 Hz)")
         .arg(uiText(
@@ -4135,24 +4126,35 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
             "Display Refresh Rate"
         ))
         .arg(QString::number(detectedRefreshRate, 'f', detectedRefreshRate >= 100.0 ? 0 : 1));
-    canvasFrameRateCombo->addItem(
-        displayRefreshLabel,
-        static_cast<int>(PreviewCanvasFrameRateMode::DisplayRefresh)
+    const QList<CanvasFrameRateOption> canvasFrameRateOptions{
+        {PreviewCanvasFrameRateMode::Fps60, uiText("dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS")},
+        {PreviewCanvasFrameRateMode::Fps120, uiText("dialog.render_settings.preview.canvas_frame_rate.120", "120 FPS")},
+        {PreviewCanvasFrameRateMode::DisplayRefresh, displayRefreshLabel},
+    };
+    QString selectedCanvasFrameRateLabel = canvasFrameRateOptions.front().label;
+    for (const CanvasFrameRateOption& option : canvasFrameRateOptions) {
+        if (option.mode == previewCanvasFrameRateMode_) {
+            selectedCanvasFrameRateLabel = option.label;
+            break;
+        }
+    }
+    auto* canvasFrameRateButton = createDialogMenuButton(previewGroup, selectedCanvasFrameRateLabel);
+    canvasFrameRateButton->setFixedHeight(flowSpeedButton->sizeHint().height());
+    canvasFrameRateButton->setStyleSheet(
+        UiTheme::dialogMenuButtonStyleSheet()
+        + QStringLiteral("QToolButton { text-align: center; padding: 2px 22px 2px 10px; }")
     );
-    const int selectedCanvasFrameRateIndex =
-        canvasFrameRateCombo->findData(static_cast<int>(previewCanvasFrameRateMode_));
-    canvasFrameRateCombo->setCurrentIndex(selectedCanvasFrameRateIndex >= 0 ? selectedCanvasFrameRateIndex : 0);
-    canvasFrameRateCombo->setFixedHeight(flowSpeedButton->sizeHint().height());
-    for (int index = 0; index < canvasFrameRateCombo->count(); ++index) {
-        canvasFrameRateCombo->setItemData(index, Qt::AlignCenter, Qt::TextAlignmentRole);
+    auto* canvasFrameRateMenu = new QMenu(canvasFrameRateButton);
+    styleRoundedMenu(*canvasFrameRateMenu);
+    for (const CanvasFrameRateOption& option : canvasFrameRateOptions) {
+        const PreviewCanvasFrameRateMode mode = option.mode;
+        const QString label = option.label;
+        addDialogMenuChoice(canvasFrameRateMenu, label, [this, canvasFrameRateButton, mode, label]() {
+            canvasFrameRateButton->setText(label);
+            setPreviewCanvasFrameRateMode(mode, true);
+        });
     }
-    if (QLineEdit* lineEdit = canvasFrameRateCombo->lineEdit(); lineEdit != nullptr) {
-        lineEdit->setReadOnly(true);
-        lineEdit->setAlignment(Qt::AlignCenter);
-        lineEdit->setFrame(false);
-        lineEdit->setStyleSheet(QStringLiteral("QLineEdit { border: none; background: transparent; padding: 0; }"));
-        lineEdit->setCursor(Qt::ArrowCursor);
-    }
+    canvasFrameRateButton->setMenu(canvasFrameRateMenu);
 
     const QString scaleFillLabel = uiText("dialog.render_settings.video.scale.fill", "Fill (crop if needed)");
     const QString scaleFitLabel = uiText("dialog.render_settings.video.scale.fit", "Fit (keep full image, may letterbox)");
@@ -4275,7 +4277,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
 
     previewFormLayout->addRow(
         uiText("dialog.render_settings.preview.canvas_frame_rate", "Preview Refresh Rate"),
-        canvasFrameRateCombo
+        canvasFrameRateButton
     );
     auto* previewCheckRow = new QWidget(previewGroup);
     auto* previewCheckLayout = new QGridLayout(previewCheckRow);
@@ -4493,13 +4495,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         }
         saveProjectRenderState();
         savePortableState();
-    });
-    connect(canvasFrameRateCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dialog, [this, canvasFrameRateCombo](int index) {
-        const QVariant data = canvasFrameRateCombo->itemData(index);
-        if (!data.isValid()) {
-            return;
-        }
-        setPreviewCanvasFrameRateMode(static_cast<PreviewCanvasFrameRateMode>(data.toInt()), true);
     });
     connect(restoreSquareCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
         previewAutoRestoreSquareAfterExport_ = checked;
