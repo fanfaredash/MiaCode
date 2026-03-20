@@ -1,3 +1,31 @@
+namespace {
+
+enum class UnsavedChangesChoice {
+    Save,
+    Discard,
+    Cancel,
+};
+
+UnsavedChangesChoice showUnsavedChangesDialog(QWidget* parent, const QString& title, const QString& text)
+{
+    QMessageBox dialog(QMessageBox::Warning, title, text, QMessageBox::NoButton, parent);
+    QPushButton* saveButton = dialog.addButton(uiText("action.save", "Save"), QMessageBox::AcceptRole);
+    QPushButton* discardButton = dialog.addButton(uiText("action.discard", "Discard"), QMessageBox::DestructiveRole);
+    QPushButton* cancelButton = dialog.addButton(uiText("action.cancel", "Cancel"), QMessageBox::RejectRole);
+    dialog.setDefaultButton(saveButton);
+    dialog.setEscapeButton(cancelButton);
+    dialog.exec();
+    if (dialog.clickedButton() == saveButton) {
+        return UnsavedChangesChoice::Save;
+    }
+    if (dialog.clickedButton() == discardButton) {
+        return UnsavedChangesChoice::Discard;
+    }
+    return UnsavedChangesChoice::Cancel;
+}
+
+}  // namespace
+
 bool MainWindow::maybeSaveBeforeContinue()
 {
     if (!maybeSaveCurrentFieldChanges()) {
@@ -7,16 +35,15 @@ bool MainWindow::maybeSaveBeforeContinue()
         return true;
     }
 
-    const QMessageBox::StandardButton choice = QMessageBox::warning(
+    const UnsavedChangesChoice choice = showUnsavedChangesDialog(
         this,
-        "Unsaved Changes",
-        "Current document has unsaved changes. Save before continue?",
-        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel
+        uiText("dialog.unsaved_changes.title", "Unsaved Changes"),
+        uiText("dialog.unsaved_changes.message", "Current document has unsaved changes. Save before continue?")
     );
-    if (choice == QMessageBox::Save) {
+    if (choice == UnsavedChangesChoice::Save) {
         return onSaveFile();
     }
-    return choice == QMessageBox::Discard;
+    return choice == UnsavedChangesChoice::Discard;
 }
 
 bool MainWindow::maybeSaveCurrentFieldChanges()
@@ -27,17 +54,16 @@ bool MainWindow::maybeSaveCurrentFieldChanges()
 
     const QString fieldName = hasActiveDifficulty()
         ? SimaiDocument::difficultyName(activeDifficultyId_)
-        : QString("Metadata");
-    const QMessageBox::StandardButton choice = QMessageBox::warning(
+        : uiText("dialog.unsaved_field_changes.field.metadata", "Metadata");
+    const UnsavedChangesChoice choice = showUnsavedChangesDialog(
         this,
-        "Unsaved Field Changes",
-        QString("%1 has unsaved changes. Save before switch?").arg(fieldName),
-        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel
+        uiText("dialog.unsaved_field_changes.title", "Unsaved Field Changes"),
+        uiText("dialog.unsaved_field_changes.message", "%1 has unsaved changes. Save before switch?").arg(fieldName)
     );
-    if (choice == QMessageBox::Save) {
+    if (choice == UnsavedChangesChoice::Save) {
         return applyCurrentFieldToDocument();
     }
-    if (choice == QMessageBox::Discard) {
+    if (choice == UnsavedChangesChoice::Discard) {
         currentFieldDirty_ = false;
         updateDirtyState();
         return true;
@@ -117,7 +143,8 @@ void MainWindow::onNewFile()
     const QString normalizedDirectory = QDir::cleanPath(targetDirectory);
     const QString targetPath = QDir(normalizedDirectory).filePath(QStringLiteral("maidata.txt"));
     if (QFileInfo::exists(targetPath)) {
-        const QMessageBox::StandardButton choice = QMessageBox::warning(
+        const QMessageBox::StandardButton choice = UiDialogs::showMessageBox(
+            QMessageBox::Warning,
             this,
             UiText::isChineseUi() ? QStringLiteral("文件已存在") : QStringLiteral("File Already Exists"),
             UiText::isChineseUi()
@@ -136,11 +163,11 @@ void MainWindow::onNewFile()
     const QByteArray payload = encoder.encode(newDocument.toText());
     QSaveFile file(targetPath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QMessageBox::critical(this, "Create Failed", "Cannot write file:\n" + targetPath);
+        UiDialogs::showMessageBox(QMessageBox::Critical, this, "Create Failed", "Cannot write file:\n" + targetPath);
         return;
     }
     if (file.write(payload) != payload.size() || !file.commit()) {
-        QMessageBox::critical(this, "Create Failed", "Write failed:\n" + targetPath);
+        UiDialogs::showMessageBox(QMessageBox::Critical, this, "Create Failed", "Write failed:\n" + targetPath);
         return;
     }
 
@@ -236,7 +263,7 @@ bool MainWindow::openFileAtPath(const QString& path, bool showStatusMessage, boo
     QFile file(normalizedPath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         if (showErrors) {
-            QMessageBox::critical(this, "Open Failed", "Cannot open file:\n" + normalizedPath);
+            UiDialogs::showMessageBox(QMessageBox::Critical, this, "Open Failed", "Cannot open file:\n" + normalizedPath);
         }
         return false;
     }
@@ -363,12 +390,12 @@ bool MainWindow::saveToPath(const QString& path)
     bool firstOk = false;
     (void)parsedFirstSeconds(&firstOk);
     if (!firstOk) {
-        QMessageBox::critical(this, "Save Failed", "&first must be a valid number of seconds.");
+        UiDialogs::showMessageBox(QMessageBox::Critical, this, "Save Failed", "&first must be a valid number of seconds.");
         return false;
     }
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QMessageBox::critical(this, "Save Failed", "Cannot write file:\n" + path);
+        UiDialogs::showMessageBox(QMessageBox::Critical, this, "Save Failed", "Cannot write file:\n" + path);
         return false;
     }
     QByteArray data;
@@ -381,7 +408,7 @@ bool MainWindow::saveToPath(const QString& path)
         data = encoder.encode(serialized);
     }
     if (file.write(data) != data.size() || !file.commit()) {
-        QMessageBox::critical(this, "Save Failed", "Write failed:\n" + path);
+        UiDialogs::showMessageBox(QMessageBox::Critical, this, "Save Failed", "Write failed:\n" + path);
         return false;
     }
     setCurrentFilePath(path);
@@ -778,7 +805,8 @@ bool MainWindow::deleteDifficultyField(int difficultyId)
         && currentChart.trimmed().isEmpty();
 
     if (!emptyDifficulty) {
-        const QMessageBox::StandardButton choice = QMessageBox::question(
+        const QMessageBox::StandardButton choice = UiDialogs::showMessageBox(
+            QMessageBox::Question,
             this,
             "Delete Difficulty",
             QString("Delete %1?").arg(difficultyName),

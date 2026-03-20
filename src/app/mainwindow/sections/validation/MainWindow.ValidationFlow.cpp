@@ -413,6 +413,7 @@ bool MainWindow::runValidateSimai()
         okDialog.setText(uiText("dialog.syntax_ok.message", "No syntax errors or warnings found."));
         okDialog.setStandardButtons(QMessageBox::Ok);
         okDialog.setDefaultButton(QMessageBox::Ok);
+        UiDialogs::localizeMessageBox(&okDialog);
         auto* closeOnSpace = new QShortcut(QKeySequence(Qt::Key_Space), &okDialog);
         connect(closeOnSpace, &QShortcut::activated, &okDialog, &QDialog::accept);
         auto* closeOnReturn = new QShortcut(QKeySequence(Qt::Key_Return), &okDialog);

@@ -8,6 +8,7 @@
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "TimelineView.h"
+#include "DialogLocalization.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "simai/transform/ChartBatchTransform.h"
@@ -901,6 +902,23 @@ QIcon makeOutlineCloseIcon(const QColor& color)
     painter.setPen(pen);
     painter.drawLine(QPointF(3.0, 3.0), QPointF(9.0, 9.0));
     painter.drawLine(QPointF(9.0, 3.0), QPointF(3.0, 9.0));
+    return QIcon(pixmap);
+}
+
+QIcon makeMenuSelectionCheckIcon(const QColor& color, bool visible = true)
+{
+    QPixmap pixmap(14, 14);
+    pixmap.fill(Qt::transparent);
+    if (visible) {
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        QPen pen(color, 1.8);
+        pen.setCapStyle(Qt::RoundCap);
+        pen.setJoinStyle(Qt::RoundJoin);
+        painter.setPen(pen);
+        painter.drawLine(QPointF(5.0, 7.4), QPointF(7.7, 10.1));
+        painter.drawLine(QPointF(7.7, 10.1), QPointF(12.4, 4.4));
+    }
     return QIcon(pixmap);
 }
 
@@ -3421,6 +3439,7 @@ void MainWindow::onAbout()
     rootLayout->addWidget(card);
 
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok, &dialog);
+    UiDialogs::localizeButtonBox(buttonBox);
     connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     rootLayout->addWidget(buttonBox, 0, Qt::AlignRight);
     dialog.exec();
