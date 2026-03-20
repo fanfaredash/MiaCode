@@ -400,6 +400,7 @@ MainWindow::MainWindow(QWidget* parent)
     editorDifficultyLayout->setContentsMargins(0, 0, 0, 0);
     editorDifficultyLayout->setSpacing(8);
     auto* difficultyLevelLabel = new QLabel("Lv", editorDifficultyControls_);
+    difficultyLevelLabel_ = difficultyLevelLabel;
     difficultyLevelLabel->setFont(uiAccentFont(10));
     auto* difficultyLevelLineEdit = new LeftPlaceholderLineEdit(editorDifficultyControls_);
     difficultyLevelLineEdit->setLeftPlaceholderText("&lv_n=");
@@ -408,6 +409,7 @@ MainWindow::MainWindow(QWidget* parent)
     difficultyLevelEdit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     difficultyLevelEdit_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     auto* difficultyDesignerLabel = new QLabel(uiText("editor.des", "Des"), editorDifficultyControls_);
+    difficultyDesignerLabel_ = difficultyDesignerLabel;
     difficultyDesignerLabel->setFont(uiAccentFont(10));
     auto* difficultyDesignerLineEdit = new LeftPlaceholderLineEdit(editorDifficultyControls_);
     difficultyDesignerLineEdit->setLeftPlaceholderText("&des_n=");
@@ -425,12 +427,51 @@ MainWindow::MainWindow(QWidget* parent)
 
     editorHeaderLayout->addStretch(1);
 
-    editorCursorLabel_ = new QLabel("Ln 1, Col 1", editorHeader);
+    auto* editorHeaderTrailingWidget = new QWidget(editorHeader);
+    auto* editorHeaderTrailingLayout = new QHBoxLayout(editorHeaderTrailingWidget);
+    editorHeaderTrailingLayout->setContentsMargins(0, 0, 0, 0);
+    editorHeaderTrailingLayout->setSpacing(16);
+
+    editorValidationSummaryWidget_ = new QWidget(editorHeaderTrailingWidget);
+    auto* editorValidationSummaryLayout = new QHBoxLayout(editorValidationSummaryWidget_);
+    editorValidationSummaryLayout->setContentsMargins(0, 0, 0, 0);
+    editorValidationSummaryLayout->setSpacing(10);
+
+    auto* editorValidationErrorGroup = new QWidget(editorValidationSummaryWidget_);
+    auto* editorValidationErrorLayout = new QHBoxLayout(editorValidationErrorGroup);
+    editorValidationErrorLayout->setContentsMargins(0, 0, 0, 0);
+    editorValidationErrorLayout->setSpacing(6);
+    editorValidationErrorIconLabel_ = new QLabel(editorValidationErrorGroup);
+    editorValidationErrorIconLabel_->setFixedSize(14, 14);
+    editorValidationErrorCountLabel_ = new QLabel(QStringLiteral("0"), editorValidationErrorGroup);
+    editorValidationErrorCountLabel_->setFont(uiMonoFont(10, QFont::DemiBold));
+    editorValidationErrorLayout->addWidget(editorValidationErrorIconLabel_, 0, Qt::AlignVCenter);
+    editorValidationErrorLayout->addWidget(editorValidationErrorCountLabel_, 0, Qt::AlignVCenter);
+
+    auto* editorValidationWarningGroup = new QWidget(editorValidationSummaryWidget_);
+    auto* editorValidationWarningLayout = new QHBoxLayout(editorValidationWarningGroup);
+    editorValidationWarningLayout->setContentsMargins(0, 0, 0, 0);
+    editorValidationWarningLayout->setSpacing(3);
+    editorValidationWarningIconLabel_ = new QLabel(editorValidationWarningGroup);
+    editorValidationWarningIconLabel_->setFixedSize(14, 14);
+    editorValidationWarningCountLabel_ = new QLabel(QStringLiteral("0"), editorValidationWarningGroup);
+    editorValidationWarningCountLabel_->setFont(uiMonoFont(10, QFont::DemiBold));
+    editorValidationWarningLayout->addWidget(editorValidationWarningIconLabel_, 0, Qt::AlignVCenter);
+    editorValidationWarningLayout->addWidget(editorValidationWarningCountLabel_, 0, Qt::AlignVCenter);
+
+    editorValidationSummaryLayout->addWidget(editorValidationErrorGroup, 0, Qt::AlignVCenter);
+    editorValidationSummaryLayout->addWidget(editorValidationWarningGroup, 0, Qt::AlignVCenter);
+    editorValidationSummaryWidget_->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    editorValidationSummaryWidget_->hide();
+    editorHeaderTrailingLayout->addWidget(editorValidationSummaryWidget_, 0, Qt::AlignRight);
+
+    editorCursorLabel_ = new QLabel("Ln 1, Col 1", editorHeaderTrailingWidget);
     editorCursorLabel_->setObjectName("EditorMeta");
     editorCursorLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     editorCursorLabel_->setFixedWidth(QFontMetrics(uiMonoFont(10)).horizontalAdvance(QStringLiteral("Ln 9999, Col 9999")) + 4);
     editorCursorLabel_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    editorHeaderLayout->addWidget(editorCursorLabel_, 0, Qt::AlignRight);
+    editorHeaderTrailingLayout->addWidget(editorCursorLabel_, 0, Qt::AlignRight);
+    editorHeaderLayout->addWidget(editorHeaderTrailingWidget, 0, Qt::AlignRight);
     centralLayout->addWidget(editorHeader, 0);
 
     editorStack_ = new QStackedWidget(central);

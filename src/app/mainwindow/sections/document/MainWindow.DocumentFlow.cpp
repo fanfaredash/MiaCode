@@ -657,6 +657,7 @@ void MainWindow::updateEditorHeader()
         updateDifficultyDeleteButton(false);
         editorContextLabel_->setMinimumWidth(0);
         updateEditorHeaderLayoutMode();
+        updateEditorValidationSummary();
         return;
     }
     editorContextLabel_->setText(SimaiDocument::difficultyShortName(activeDifficultyId_));
@@ -671,6 +672,7 @@ void MainWindow::updateEditorHeader()
     }
     updateDifficultyDeleteButton(false);
     updateEditorHeaderLayoutMode();
+    updateEditorValidationSummary();
 }
 
 void MainWindow::updateDifficultyScopedActionStates()
@@ -753,9 +755,82 @@ void MainWindow::updateEditorHeaderLayoutMode()
 
     if (!hasActiveDifficulty()) {
         editorCursorLabel_->setVisible(false);
+        if (editorValidationSummaryWidget_ != nullptr) {
+            editorValidationSummaryWidget_->setVisible(false);
+        }
         return;
     }
-    editorCursorLabel_->setVisible(true);
+
+    const int headerWidth = editorHeaderWidget_->contentsRect().width();
+    const bool summaryHasContent =
+        editorValidationSummaryWidget_ != nullptr
+        && editorValidationSummaryWidget_->property("hasContent").toBool();
+
+    bool showLevelLabel = true;
+    bool showDesignerLabel = true;
+    bool showSummary = summaryHasContent;
+    bool showCursor = true;
+    bool compactCursor = false;
+    int levelWidth = 72;
+    int designerWidth = 140;
+
+    if (headerWidth < 700) {
+        designerWidth = 124;
+    }
+    if (headerWidth < 640) {
+        designerWidth = 108;
+        levelWidth = 64;
+    }
+    if (headerWidth < 590) {
+        showDesignerLabel = false;
+        designerWidth = 92;
+    }
+    if (headerWidth < 540) {
+        showLevelLabel = false;
+        levelWidth = 54;
+        designerWidth = 84;
+    }
+    if (headerWidth < 500) {
+        compactCursor = true;
+        designerWidth = 76;
+    }
+    if (headerWidth < 460) {
+        showCursor = false;
+        levelWidth = 48;
+        designerWidth = 68;
+    }
+    if (headerWidth < 420) {
+        showSummary = false;
+        levelWidth = 44;
+        designerWidth = 60;
+    }
+
+    if (difficultyLevelLabel_ != nullptr) {
+        difficultyLevelLabel_->setVisible(showLevelLabel);
+    }
+    if (difficultyDesignerLabel_ != nullptr) {
+        difficultyDesignerLabel_->setVisible(showDesignerLabel);
+    }
+    if (difficultyLevelEdit_ != nullptr) {
+        difficultyLevelEdit_->setFixedWidth(levelWidth);
+    }
+    if (difficultyDesignerEdit_ != nullptr) {
+        difficultyDesignerEdit_->setFixedWidth(designerWidth);
+    }
+    if (editorValidationSummaryWidget_ != nullptr) {
+        editorValidationSummaryWidget_->setVisible(summaryHasContent && showSummary);
+    }
+    if (showCursor) {
+        const auto [line, col] = currentCursorLineCol();
+        if (compactCursor) {
+            editorCursorLabel_->setText(QStringLiteral("%1:%2").arg(line).arg(col));
+        } else {
+            editorCursorLabel_->setText(QStringLiteral("Ln %1, Col %2").arg(line).arg(col));
+        }
+        editorCursorLabel_->setFixedWidth(
+            QFontMetrics(editorCursorLabel_->font()).horizontalAdvance(editorCursorLabel_->text()) + 2);
+    }
+    editorCursorLabel_->setVisible(showCursor);
 }
 
 void MainWindow::updateEditorStatus()
@@ -768,8 +843,6 @@ void MainWindow::updateEditorStatus()
         updateEditorHeaderLayoutMode();
         return;
     }
-    const auto [line, col] = currentCursorLineCol();
-    editorCursorLabel_->setText(QString("Ln %1, Col %2").arg(line).arg(col));
     updateEditorHeaderLayoutMode();
 }
 

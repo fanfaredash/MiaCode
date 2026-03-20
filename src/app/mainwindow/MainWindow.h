@@ -193,6 +193,7 @@ private:
     void updateEditorHeader();
     void updateEditorHeaderLayoutMode();
     void updateEditorStatus();
+    void updateEditorValidationSummary();
     void updateEditorEmptyState();
     void updateDifficultyScopedActionStates();
     void updateMetadataPageMode();
@@ -514,7 +515,9 @@ private:
     QLineEdit* designerEdit_ = nullptr;
     QTextEdit* metadataExtraEdit_ = nullptr;
     QWidget* editorDifficultyControls_ = nullptr;
+    QLabel* difficultyLevelLabel_ = nullptr;
     QLineEdit* difficultyLevelEdit_ = nullptr;
+    QLabel* difficultyDesignerLabel_ = nullptr;
     QLineEdit* difficultyDesignerEdit_ = nullptr;
     QWidget* editorHeaderWidget_ = nullptr;
     QWidget* editorBatchTransformControls_ = nullptr;
@@ -524,6 +527,11 @@ private:
     QToolButton* transformRotate45CounterClockwiseButton_ = nullptr;
     QToolButton* transformRotate45ClockwiseButton_ = nullptr;
     QLabel* editorContextLabel_ = nullptr;
+    QWidget* editorValidationSummaryWidget_ = nullptr;
+    QLabel* editorValidationErrorIconLabel_ = nullptr;
+    QLabel* editorValidationErrorCountLabel_ = nullptr;
+    QLabel* editorValidationWarningIconLabel_ = nullptr;
+    QLabel* editorValidationWarningCountLabel_ = nullptr;
     QLabel* editorCursorLabel_ = nullptr;
     QWidget* editorFindBar_ = nullptr;
     QLineEdit* editorFindEdit_ = nullptr;

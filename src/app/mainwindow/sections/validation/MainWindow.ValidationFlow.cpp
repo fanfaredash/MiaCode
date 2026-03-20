@@ -144,6 +144,66 @@ void MainWindow::refreshEditorExtraSelections()
     editor->setExtraSelections(selections);
 }
 
+void MainWindow::updateEditorValidationSummary()
+{
+    if (editorValidationSummaryWidget_ == nullptr
+        || editorValidationErrorIconLabel_ == nullptr
+        || editorValidationErrorCountLabel_ == nullptr
+        || editorValidationWarningIconLabel_ == nullptr
+        || editorValidationWarningCountLabel_ == nullptr) {
+        return;
+    }
+
+    if (!hasActiveDifficulty()) {
+        editorValidationSummaryWidget_->hide();
+        return;
+    }
+
+    int errorCount = 0;
+    int warningCount = 0;
+    const auto cacheIt = validationCacheByDifficulty_.constFind(activeDifficultyId());
+    if (cacheIt != validationCacheByDifficulty_.constEnd()) {
+        const ValidationCacheEntry& entry = cacheIt.value();
+        if (entry.chartText == activeChartText() && entry.chineseUi == UiText::isChineseUi()) {
+            errorCount = entry.errorCount;
+            warningCount = entry.warningCount;
+        }
+    }
+
+    const QColor mutedColor = UiTheme::colors().textMuted;
+    const QColor errorColor = errorCount > 0 ? QColor(QStringLiteral("#D94A4A")) : mutedColor;
+    const QColor warningColor = warningCount > 0 ? QColor(QStringLiteral("#D4A12A")) : mutedColor;
+    const bool showError = errorCount > 0;
+    const bool showWarning = warningCount > 0;
+
+    editorValidationErrorIconLabel_->setPixmap(makeEditorValidationSummaryIcon(errorColor, false));
+    editorValidationErrorCountLabel_->setText(QString::number(errorCount));
+    editorValidationErrorCountLabel_->setStyleSheet(QStringLiteral("color: %1;").arg(errorColor.name(QColor::HexRgb)));
+    editorValidationErrorIconLabel_->setVisible(showError);
+    editorValidationErrorCountLabel_->setVisible(showError);
+
+    editorValidationWarningIconLabel_->setPixmap(makeEditorValidationSummaryIcon(warningColor, true));
+    editorValidationWarningCountLabel_->setText(QString::number(warningCount));
+    editorValidationWarningCountLabel_->setStyleSheet(
+        QStringLiteral("color: %1;").arg(warningColor.name(QColor::HexRgb)));
+    editorValidationWarningIconLabel_->setVisible(showWarning);
+    editorValidationWarningCountLabel_->setVisible(showWarning);
+
+    const QString summaryTooltip = uiText(
+        "editor.validation_summary.tooltip",
+        "%1 error(s), %2 warning(s)"
+    ).arg(errorCount).arg(warningCount);
+    editorValidationSummaryWidget_->setProperty("hasContent", showError || showWarning);
+    editorValidationSummaryWidget_->setToolTip(summaryTooltip);
+    editorValidationErrorIconLabel_->setToolTip(summaryTooltip);
+    editorValidationErrorCountLabel_->setToolTip(summaryTooltip);
+    editorValidationWarningIconLabel_->setToolTip(summaryTooltip);
+    editorValidationWarningCountLabel_->setToolTip(summaryTooltip);
+    editorValidationSummaryWidget_->setVisible(showError || showWarning);
+    editorValidationSummaryWidget_->adjustSize();
+    updateEditorHeaderLayoutMode();
+}
+
 void MainWindow::setPreviewFollowDecoration(int line, int col)
 {
     previewFollowDecorationActive_ = true;
@@ -295,6 +355,7 @@ void MainWindow::onErrorItemActivated(QListWidgetItem* item)
 void MainWindow::clearValidationCache()
 {
     validationCacheByDifficulty_.clear();
+    updateEditorValidationSummary();
 }
 
 void MainWindow::setValidationTabVisible(bool visible)
@@ -315,6 +376,7 @@ void MainWindow::refreshValidationPanelForActiveField()
         setValidationTabVisible(false);
         clearValidationErrors();
         clearValidationDecorations();
+        updateEditorValidationSummary();
         return;
     }
 
@@ -324,6 +386,7 @@ void MainWindow::refreshValidationPanelForActiveField()
     if (it == validationCacheByDifficulty_.constEnd()) {
         clearValidationErrors();
         clearValidationDecorations();
+        updateEditorValidationSummary();
         return;
     }
 
@@ -333,6 +396,7 @@ void MainWindow::refreshValidationPanelForActiveField()
     if (entry.chartText != chartText || entry.chineseUi != chineseUi) {
         clearValidationErrors();
         clearValidationDecorations();
+        updateEditorValidationSummary();
         return;
     }
 
@@ -342,6 +406,7 @@ void MainWindow::refreshValidationPanelForActiveField()
         addValidationError(issue.line, issue.col, issue.displayMessage);
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
+    updateEditorValidationSummary();
 }
 
 void MainWindow::scheduleAutoValidation()
@@ -408,6 +473,7 @@ bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
         addValidationError(issue.line, issue.col, issue.displayMessage);
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
+    updateEditorValidationSummary();
     if (focusFirstIssue && !entry.issues.isEmpty() && bottomTabs_ != nullptr && errorList_ != nullptr) {
         const int errorTabIndex = bottomTabs_->indexOf(errorList_);
         if (errorTabIndex >= 0) {
@@ -482,6 +548,7 @@ bool MainWindow::runValidateSimai()
         addValidationError(issue.line, issue.col, issue.displayMessage);
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
+    updateEditorValidationSummary();
     if (!entry.issues.isEmpty() && bottomTabs_ != nullptr && errorList_ != nullptr) {
         const int errorTabIndex = bottomTabs_->indexOf(errorList_);
         if (errorTabIndex >= 0) {
