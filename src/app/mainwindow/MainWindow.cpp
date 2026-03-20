@@ -65,6 +65,7 @@
 #include <QMoveEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPlainTextEdit>
 #include <QProcess>
 #include <QProcessEnvironment>
@@ -319,6 +320,36 @@ QString describeNativeWindowHandle(HWND hwnd)
         .arg(normalH)
         .arg(style, 0, 16)
         .arg(exStyle, 0, 16);
+}
+
+QPixmap makeEditorValidationSummaryIcon(const QColor& color, bool warning)
+{
+    QPixmap pixmap(14, 14);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+
+    if (warning) {
+        QPainterPath triangle;
+        triangle.moveTo(7.0, 1.2);
+        triangle.lineTo(12.8, 12.0);
+        triangle.lineTo(1.2, 12.0);
+        triangle.closeSubpath();
+        painter.drawPath(triangle);
+        painter.setBrush(Qt::white);
+        painter.drawRoundedRect(QRectF(6.2, 4.0, 1.6, 4.0), 0.8, 0.8);
+        painter.drawEllipse(QRectF(6.1, 9.2, 1.8, 1.8));
+    } else {
+        painter.drawEllipse(QRectF(1.2, 1.2, 11.6, 11.6));
+        painter.setBrush(Qt::white);
+        painter.drawRoundedRect(QRectF(6.1, 3.4, 1.8, 5.0), 0.9, 0.9);
+        painter.drawEllipse(QRectF(6.0, 9.5, 2.0, 2.0));
+    }
+
+    return pixmap;
 }
 
 bool tryRestoreOwnedNativeFileDialog(HWND ownerHwnd, QString* detailOut)
@@ -1357,6 +1388,7 @@ void MainWindow::applyUiTheme()
     if (exportVideoButton_ != nullptr) {
         exportVideoButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
     }
+    updateEditorValidationSummary();
     updatePauseButtonAppearance();
     update();
 }
@@ -2513,6 +2545,9 @@ void MainWindow::loadProjectRenderState()
             exportShowObjectStatsHud_ =
                 render.value("show_object_stats_export").toBool(exportShowObjectStatsHud_);
         }
+        const bool unifiedObjectStatsHud = previewShowObjectStatsHud_ || exportShowObjectStatsHud_;
+        previewShowObjectStatsHud_ = unifiedObjectStatsHud;
+        exportShowObjectStatsHud_ = unifiedObjectStatsHud;
         if (render.value("auto_restore_square_after_export").isBool()) {
             previewAutoRestoreSquareAfterExport_ =
                 render.value("auto_restore_square_after_export").toBool(previewAutoRestoreSquareAfterExport_);
@@ -4265,12 +4300,15 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         uiText("dialog.render_settings.preview.show_object_stats_preview", "Show object stats in preview"),
         previewGroup
     );
-    previewObjectStatsCheck->setChecked(previewShowObjectStatsHud_);
+    const bool unifiedObjectStatsChecked = previewShowObjectStatsHud_ || exportShowObjectStatsHud_;
+    previewShowObjectStatsHud_ = unifiedObjectStatsChecked;
+    exportShowObjectStatsHud_ = unifiedObjectStatsChecked;
+    previewObjectStatsCheck->setChecked(unifiedObjectStatsChecked);
     auto* exportObjectStatsCheck = new QCheckBox(
         uiText("dialog.render_settings.preview.show_object_stats_export", "Show object stats in export"),
         previewGroup
     );
-    exportObjectStatsCheck->setChecked(exportShowObjectStatsHud_);
+    exportObjectStatsCheck->setChecked(unifiedObjectStatsChecked);
     auto* debugCheck = new QCheckBox(
         uiText("dialog.render_settings.preview.debug", "Show preview debug info"),
         previewGroup
@@ -4552,18 +4590,28 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         saveProjectRenderState();
         savePortableState();
     });
-    connect(previewObjectStatsCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
+    const auto setObjectStatsHudEnabled = [this, previewObjectStatsCheck, exportObjectStatsCheck](bool checked) {
         previewShowObjectStatsHud_ = checked;
+        exportShowObjectStatsHud_ = checked;
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
         }
+        {
+            const QSignalBlocker previewBlocker(previewObjectStatsCheck);
+            previewObjectStatsCheck->setChecked(checked);
+        }
+        {
+            const QSignalBlocker exportBlocker(exportObjectStatsCheck);
+            exportObjectStatsCheck->setChecked(checked);
+        }
         saveProjectRenderState();
         savePortableState();
+    };
+    connect(previewObjectStatsCheck, &QCheckBox::toggled, &dialog, [setObjectStatsHudEnabled](bool checked) {
+        setObjectStatsHudEnabled(checked);
     });
-    connect(exportObjectStatsCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
-        exportShowObjectStatsHud_ = checked;
-        saveProjectRenderState();
-        savePortableState();
+    connect(exportObjectStatsCheck, &QCheckBox::toggled, &dialog, [setObjectStatsHudEnabled](bool checked) {
+        setObjectStatsHudEnabled(checked);
     });
     dialog.adjustSize();
     dialog.exec();
