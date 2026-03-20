@@ -210,6 +210,8 @@ void MainWindow::applyEditorTextFontSize(int pointSize, bool persistPreference)
 {
     const int normalized = qBound(kEditorTextFontSizeMin, pointSize, kEditorTextFontSizeMax);
     const int blockSpacingPixels = blockSpacingPixelsForPointSize(normalized, editorLineSpacingFactor_);
+    const bool previousSuppress = suppressTextDirtyTracking_;
+    suppressTextDirtyTracking_ = true;
     editorTextFontPointSize_ = normalized;
     if (auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_); editor != nullptr) {
         QSignalBlocker blocker(editor);
@@ -227,6 +229,7 @@ void MainWindow::applyEditorTextFontSize(int pointSize, bool persistPreference)
         metadataExtraEdit_->setFont(editorFont(normalized));
         applyBlockSpacingToTextEdit(metadataExtraEdit_, blockSpacingPixels);
     }
+    suppressTextDirtyTracking_ = previousSuppress;
     if (persistPreference) {
         persistEditorTextFontPreference();
     }
@@ -234,6 +237,8 @@ void MainWindow::applyEditorTextFontSize(int pointSize, bool persistPreference)
 
 void MainWindow::applyEditorLineSpacingFactor(double factor, bool persistPreference)
 {
+    const bool previousSuppress = suppressTextDirtyTracking_;
+    suppressTextDirtyTracking_ = true;
     editorLineSpacingFactor_ = normalizeEditorLineSpacingFactor(factor);
     const int blockSpacingPixels = blockSpacingPixelsForPointSize(editorTextFontPointSize_, editorLineSpacingFactor_);
     if (auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_); editor != nullptr) {
@@ -244,6 +249,7 @@ void MainWindow::applyEditorLineSpacingFactor(double factor, bool persistPrefere
     if (metadataExtraEdit_ != nullptr) {
         applyBlockSpacingToTextEdit(metadataExtraEdit_, blockSpacingPixels);
     }
+    suppressTextDirtyTracking_ = previousSuppress;
     if (persistPreference) {
         persistEditorTextFontPreference();
     }
