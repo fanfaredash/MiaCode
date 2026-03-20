@@ -8,6 +8,7 @@
 struct SimaiNativeMessage {
     int line = 1;
     int col = 1;
+    int endCol = 1;
     QString message;
 };
 
@@ -33,6 +34,7 @@ enum class SimaiNativeValidationSeverity {
 struct SimaiNativeValidationIssue {
     int line = 1;
     int col = 1;
+    int endCol = 1;
     SimaiNativeValidationSeverity severity = SimaiNativeValidationSeverity::Error;
     QString rawMessage;
     QString displayMessage;

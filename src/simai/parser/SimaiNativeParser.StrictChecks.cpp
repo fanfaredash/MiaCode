@@ -1,4 +1,4 @@
-void appendTokenError(ParseState* state, int line, int col, const QString& message)
+void appendTokenError(ParseState* state, int line, int col, const QString& message, int endCol = -1)
 {
     if (state == nullptr) {
         return;
@@ -6,9 +6,23 @@ void appendTokenError(ParseState* state, int line, int col, const QString& messa
     SimaiNativeMessage error;
     error.line = qMax(1, line);
     error.col = qMax(1, col);
+    error.endCol = qMax(error.col, endCol >= 0 ? endCol : error.col);
     error.message = message;
     state->result.errors.append(error);
     state->result.ok = false;
+}
+
+void appendTokenWarning(ParseState* state, int line, int col, const QString& message, int endCol = -1)
+{
+    if (state == nullptr) {
+        return;
+    }
+    SimaiNativeMessage warning;
+    warning.line = qMax(1, line);
+    warning.col = qMax(1, col);
+    warning.endCol = qMax(warning.col, endCol >= 0 ? endCol : warning.col);
+    warning.message = message;
+    state->result.warnings.append(warning);
 }
 
 void runStrictFormatChecks(ParseState* state, const QStringList& lines)

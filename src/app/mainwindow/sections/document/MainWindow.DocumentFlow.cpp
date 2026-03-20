@@ -175,7 +175,7 @@ void MainWindow::onNewFile()
     clearValidationCache();
     currentEncoding_ = TextEncoding::Utf8;
     setCurrentFilePath(targetPath);
-    refreshValidationPanelForActiveField();
+    (void)runValidateSimaiSilently(false);
     statusBar()->showMessage(QString("Created: %1").arg(targetPath));
 }
 
@@ -286,7 +286,7 @@ bool MainWindow::openFileAtPath(const QString& path, bool showStatusMessage, boo
     currentEncoding_ = encodingUsed;
     setCurrentFilePath(normalizedPath);
     loadDocument(SimaiDocument::fromText(text));
-    refreshValidationPanelForActiveField();
+    (void)runValidateSimaiSilently(false);
     refreshWaveformCache();
     if (showStatusMessage) {
         statusBar()->showMessage(
