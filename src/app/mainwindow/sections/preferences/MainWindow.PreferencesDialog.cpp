@@ -43,6 +43,8 @@
             return uiText("dialog.preferences.theme.system", "Follow System");
         }
     };
+    const QIcon selectedMenuOptionIcon = makeMenuSelectionCheckIcon(UiTheme::colors().accent);
+    const QIcon unselectedMenuOptionIcon = makeMenuSelectionCheckIcon(UiTheme::colors().accent, false);
 
     auto* languageLabelWidget = new QLabel(uiText("dialog.preferences.language", "Language"), interfaceGroup);
     auto* languageRow = new QWidget(interfaceGroup);
@@ -63,15 +65,19 @@
         UiText::LanguagePreference::English,
         UiText::LanguagePreference::Chinese,
     };
+    const auto refreshLanguageMenuIcons = [&]() {
+        for (QAction* action : languageMenu->actions()) {
+            const auto actionPreference = static_cast<UiText::LanguagePreference>(action->data().toInt());
+            action->setIcon(actionPreference == selectedPreference ? selectedMenuOptionIcon : unselectedMenuOptionIcon);
+        }
+    };
     for (UiText::LanguagePreference preference : languageOptions) {
         QAction* action = languageMenu->addAction(languageLabel(preference));
-        action->setCheckable(true);
-        action->setChecked(preference == selectedPreference);
-        connect(action, &QAction::triggered, &dialog, [&, preference, languageMenu, languageButton]() {
+        action->setData(static_cast<int>(preference));
+        action->setIcon(preference == selectedPreference ? selectedMenuOptionIcon : unselectedMenuOptionIcon);
+        connect(action, &QAction::triggered, &dialog, [&, preference, languageButton]() {
             selectedPreference = preference;
-            for (QAction* candidate : languageMenu->actions()) {
-                candidate->setChecked(candidate->text() == languageLabel(selectedPreference));
-            }
+            refreshLanguageMenuIcons();
             languageButton->setText(languageLabel(selectedPreference));
         });
     }
@@ -111,15 +117,19 @@
         UiText::ThemePreference::Light,
         UiText::ThemePreference::Dark,
     };
+    const auto refreshThemeMenuIcons = [&]() {
+        for (QAction* action : themeMenu->actions()) {
+            const auto actionPreference = static_cast<UiText::ThemePreference>(action->data().toInt());
+            action->setIcon(actionPreference == selectedThemePreference ? selectedMenuOptionIcon : unselectedMenuOptionIcon);
+        }
+    };
     for (UiText::ThemePreference preference : themeOptions) {
         QAction* action = themeMenu->addAction(themeLabel(preference));
-        action->setCheckable(true);
-        action->setChecked(preference == selectedThemePreference);
-        connect(action, &QAction::triggered, &dialog, [&, preference, themeMenu, themeButton]() {
+        action->setData(static_cast<int>(preference));
+        action->setIcon(preference == selectedThemePreference ? selectedMenuOptionIcon : unselectedMenuOptionIcon);
+        connect(action, &QAction::triggered, &dialog, [&, preference, themeButton]() {
             selectedThemePreference = preference;
-            for (QAction* candidate : themeMenu->actions()) {
-                candidate->setChecked(candidate->text() == themeLabel(selectedThemePreference));
-            }
+            refreshThemeMenuIcons();
             themeButton->setText(themeLabel(selectedThemePreference));
         });
     }
@@ -212,6 +222,7 @@
     rootLayout->addWidget(editorGroup);
 
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    UiDialogs::localizeButtonBox(buttonBox);
     connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     rootLayout->addWidget(buttonBox, 0, Qt::AlignRight);
@@ -258,7 +269,8 @@
     if (languageChanged) {
         UiText::setPreferredLanguage(selectedPreference);
         statusBar()->showMessage(uiText("status.preferences_saved", "Preferences saved. Restart to apply."));
-        QMessageBox::information(
+        UiDialogs::showMessageBox(
+            QMessageBox::Information,
             this,
             uiText("dialog.preferences.restart_title", "Restart Required"),
             uiText("dialog.preferences.restart_message", "Language preference saved. Restart MiaCode to apply menu, font, and UI text updates.")

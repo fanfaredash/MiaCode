@@ -7,7 +7,8 @@
     const QString scriptPath = resolvePreviewSessionScriptPath();
     if (scriptPath.isEmpty()) {
         appendOutput("preview/session-start", "script path not found");
-        QMessageBox::warning(
+        UiDialogs::showMessageBox(
+            QMessageBox::Warning,
             this,
             "Preview Session",
             "Preview session script is not configured.\n"

@@ -1,5 +1,6 @@
 #include "VideoExportDialog.h"
 
+#include "DialogLocalization.h"
 #include "PreviewCanvas.h"
 #include "UiText.h"
 #include "UiTheme.h"
@@ -1402,11 +1403,17 @@ void VideoExportDialog::startExport()
     VideoExportTask task;
     QString errorMessage;
     if (!applyUiToTask(&task, &errorMessage)) {
-        QMessageBox::warning(this, uiText("dialog.video_export.title", QStringLiteral("Export Video")), errorMessage);
+        UiDialogs::showMessageBox(
+            QMessageBox::Warning,
+            this,
+            uiText("dialog.video_export.title", QStringLiteral("Export Video")),
+            errorMessage
+        );
         return;
     }
     if (sourceCanvas_ == nullptr) {
-        QMessageBox::warning(
+        UiDialogs::showMessageBox(
+            QMessageBox::Warning,
             this,
             uiText("dialog.video_export.title", QStringLiteral("Export Video")),
             uiText("dialog.video_export.error.preview_unavailable", QStringLiteral("Preview canvas is not initialized."))
@@ -1434,7 +1441,8 @@ void VideoExportDialog::startExport()
 
     if (!result.success) {
         if (result.message == QLatin1String("canceled")) {
-            QMessageBox::information(
+            UiDialogs::showMessageBox(
+                QMessageBox::Information,
                 this,
                 l10n(QStringLiteral("Export Video"), QStringLiteral("导出视频")),
                 l10n(QStringLiteral("Export canceled."), QStringLiteral("导出已取消。"))
@@ -1442,7 +1450,8 @@ void VideoExportDialog::startExport()
             return;
         }
         const QString details = result.details.trimmed();
-        QMessageBox::critical(
+        UiDialogs::showMessageBox(
+            QMessageBox::Critical,
             this,
             l10n(QStringLiteral("Export Failed"), QStringLiteral("导出失败")),
             details.isEmpty() ? result.message : QStringLiteral("%1\n\n%2").arg(result.message, details)
@@ -1450,7 +1459,8 @@ void VideoExportDialog::startExport()
         return;
     }
 
-    QMessageBox::information(
+    UiDialogs::showMessageBox(
+        QMessageBox::Information,
         this,
         l10n(QStringLiteral("Export Video"), QStringLiteral("导出视频")),
         l10n(QStringLiteral("Export completed."), QStringLiteral("导出完成。"))

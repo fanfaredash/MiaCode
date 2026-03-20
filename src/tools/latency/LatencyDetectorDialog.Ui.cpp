@@ -510,6 +510,7 @@ void LatencyDetectorDialog::showBpmHelpDialog()
     rootLayout->addWidget(infoEdit, 1);
 
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok, &dialog);
+    UiDialogs::localizeButtonBox(buttonBox);
     connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     rootLayout->addWidget(buttonBox);
     dialog.exec();

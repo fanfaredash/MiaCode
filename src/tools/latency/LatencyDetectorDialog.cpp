@@ -1,5 +1,7 @@
 #include "LatencyDetectorDialog.h"
 
+#include "DialogLocalization.h"
+
 #include <algorithm>
 #include <climits>
 #include <functional>
