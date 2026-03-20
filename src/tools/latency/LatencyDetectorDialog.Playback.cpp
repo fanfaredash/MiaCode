@@ -97,7 +97,7 @@ void LatencyDetectorDialog::triggerBeatAudition(double fromSecond, double toSeco
         return;
     }
 
-    const double playbackOffsetSeconds = parsedFixedOffsetSeconds();
+    const double playbackOffsetSeconds = parsedOffset();
     const double epsilon = 1e-5;
     qint64 stepIndex = static_cast<qint64>(qFloor((fromSecond - playbackOffsetSeconds) / auditionPeriod));
     if (playbackOffsetSeconds + static_cast<double>(stepIndex) * auditionPeriod < fromSecond - epsilon) {

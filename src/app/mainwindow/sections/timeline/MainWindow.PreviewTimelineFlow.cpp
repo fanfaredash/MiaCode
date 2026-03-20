@@ -120,11 +120,6 @@ double MainWindow::parsedFirstSeconds(bool* ok) const
     return localOk ? value : 0.0;
 }
 
-double MainWindow::parsedFixedFirstSeconds() const
-{
-    return -parsedFirstSeconds();
-}
-
 double MainWindow::parsedWholeBpm(bool* ok) const
 {
     const QVector<SimaiRawField> fields = SimaiDocument::parseRawFields(
@@ -358,7 +353,7 @@ void MainWindow::refreshTimelineMetadata()
     }
     const QString chartText = activeChartText();
     const SimaiNativeParseResult nativeResult = SimaiNativeParser::parseForTimeline(chartText);
-    const double firstSeconds = parsedFixedFirstSeconds();
+    const double firstSeconds = parsedFirstSeconds();
     QVector<TimelineBeatMarker> beatMarkers = shiftedBeatMarkers(nativeResult.beatMarkers, firstSeconds);
     QVector<TimelineNoteMarker> noteMarkers = shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds);
     const auto appendCursorNote = [](QVector<TimelineCursorNote>* target, int line, int col, int lane, double second) {

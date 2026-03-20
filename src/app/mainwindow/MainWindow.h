@@ -210,7 +210,6 @@ private:
     int activeDifficultyId() const;
     QString activeChartText() const;
     double parsedFirstSeconds(bool* ok = nullptr) const;
-    double parsedFixedFirstSeconds() const;
     double parsedWholeBpm(bool* ok = nullptr) const;
     QString parsedLatencyMeterId() const;
     void applyLatencyDetectorOffset(double seconds);

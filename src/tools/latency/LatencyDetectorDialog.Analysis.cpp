@@ -19,11 +19,6 @@ double LatencyDetectorDialog::parsedOffset(bool* ok) const
     return (text.isEmpty() || localOk) ? value : 0.0;
 }
 
-double LatencyDetectorDialog::parsedFixedOffsetSeconds() const
-{
-    return -parsedOffset();
-}
-
 QString LatencyDetectorDialog::selectedOffsetSnapModeId() const
 {
     if (offsetSnapCombo_ == nullptr) {
