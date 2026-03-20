@@ -387,6 +387,7 @@ bool MainWindow::saveToPath(const QString& path)
     if (!applyCurrentFieldToDocument()) {
         return false;
     }
+    const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
     bool firstOk = false;
     (void)parsedFirstSeconds(&firstOk);
     if (!firstOk) {
@@ -411,7 +412,9 @@ bool MainWindow::saveToPath(const QString& path)
         UiDialogs::showMessageBox(QMessageBox::Critical, this, "Save Failed", "Write failed:\n" + path);
         return false;
     }
-    setCurrentFilePath(path);
+    if (normalizedPath != currentFilePath_) {
+        setCurrentFilePath(normalizedPath);
+    }
     documentDirty_ = false;
     currentFieldDirty_ = false;
     updateDirtyState();

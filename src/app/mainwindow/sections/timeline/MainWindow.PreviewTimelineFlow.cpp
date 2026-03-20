@@ -483,6 +483,17 @@ void MainWindow::refreshTimelineMetadata()
 
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->configureTimeline(noteMarkers);
+        if (qtPreviewPlaying_) {
+            double currentSecond = qMax(0.0, qtPreviewPauseSecond_);
+            if (previewSfxRuntime_->hasBackgroundTrack()) {
+                currentSecond = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
+            } else if (previewMediaController_ != nullptr && previewMediaController_->hasVideoMedia()) {
+                currentSecond = qMax(0.0, previewMediaController_->currentPlaybackSecond());
+            }
+            qtPreviewPauseSecond_ = currentSecond;
+            previewSfxRuntime_->resetCursor(currentSecond, false);
+            previewSfxRuntime_->syncTouchholdVoices(currentSecond);
+        }
     }
     refreshPreviewObjectStatsTotals(noteMarkers);
 
