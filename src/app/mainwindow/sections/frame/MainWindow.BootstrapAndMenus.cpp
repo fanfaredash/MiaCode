@@ -1041,11 +1041,17 @@ MainWindow::MainWindow(QWidget* parent)
     previewSfxRuntime_ = new QtPreviewSfxRuntime(this);
     logStartupStage("preview_sfx_runtime_created");
     connect(previewCanvas_, &QOpenGLWindow::frameSwapped, this, [this]() {
-        if (!qtPreviewPlaying_ || legacyPygamePreviewEnabled_ || !qtPreviewAwaitingFrameSwap_) {
+        if (!qtPreviewPlaying_
+            || legacyPygamePreviewEnabled_
+            || !previewCanvasUsesFrameSwappedPacing()
+            || !qtPreviewAwaitingFrameSwap_) {
             return;
         }
         qtPreviewAwaitingFrameSwap_ = false;
         qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+        if (qtPreviewTimer_ != nullptr) {
+            qtPreviewTimer_->stop();
+        }
         QTimer::singleShot(0, this, [this]() {
             if (!qtPreviewPlaying_ || legacyPygamePreviewEnabled_) {
                 return;
@@ -1267,16 +1273,38 @@ MainWindow::MainWindow(QWidget* parent)
 
     qtPreviewTimer_ = new QTimer(this);
     qtPreviewTimer_->setInterval(16);
+    qtPreviewTimer_->setSingleShot(true);
     qtPreviewTimer_->setTimerType(Qt::PreciseTimer);
     connect(qtPreviewTimer_, &QTimer::timeout, this, [this]() {
         if (!qtPreviewPlaying_) {
             return;
         }
-        if (previewCanvas_ == nullptr || legacyPygamePreviewEnabled_) {
+        const bool usingFrameSwapPacing =
+            previewCanvas_ != nullptr && !legacyPygamePreviewEnabled_ && previewCanvasUsesFrameSwappedPacing();
+        if (!usingFrameSwapPacing) {
             onQtPreviewTick();
+            if (!qtPreviewPlaying_) {
+                return;
+            }
+            if (previewCanvas_ != nullptr && !legacyPygamePreviewEnabled_ && !previewCanvasUsesFrameSwappedPacing()) {
+                previewCanvas_->update();
+            }
+            if (!previewCanvasUsesFrameSwappedPacing()) {
+                const qint64 nowNs = qtPreviewWatchdogElapsed_.nsecsElapsed();
+                const qint64 frameIntervalNs = previewCanvasTargetFrameIntervalNs();
+                if (qtPreviewNextFixedTickDueNs_ < 0) {
+                    qtPreviewNextFixedTickDueNs_ = nowNs + frameIntervalNs;
+                } else {
+                    do {
+                        qtPreviewNextFixedTickDueNs_ += frameIntervalNs;
+                    } while (qtPreviewNextFixedTickDueNs_ <= nowNs);
+                }
+            }
+            scheduleNextQtPreviewTick();
             return;
         }
         if (!qtPreviewAwaitingFrameSwap_) {
+            scheduleNextQtPreviewTick();
             return;
         }
         const qint64 nowMs = qtPreviewWatchdogElapsed_.elapsed();
@@ -1287,6 +1315,7 @@ MainWindow::MainWindow(QWidget* parent)
             return;
         }
         previewCanvas_->update();
+        scheduleNextQtPreviewTick();
     });
 
     qtPreviewTimelineTimer_ = new QTimer(this);

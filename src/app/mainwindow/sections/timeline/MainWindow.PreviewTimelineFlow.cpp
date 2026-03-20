@@ -1142,21 +1142,68 @@ double MainWindow::currentPreviewCanvasRefreshRate() const
     return refreshRate;
 }
 
-void MainWindow::refreshPreviewFrameRateTimers()
+bool MainWindow::previewCanvasUsesFrameSwappedPacing() const
 {
-    int intervalMs = 16;
+    return previewCanvasFrameRateMode_ == PreviewCanvasFrameRateMode::DisplayRefresh;
+}
+
+qint64 MainWindow::previewCanvasTargetFrameIntervalNs() const
+{
     switch (previewCanvasFrameRateMode_) {
     case PreviewCanvasFrameRateMode::Fps120:
-        intervalMs = 8;
-        break;
+        return 1000000000LL / 120LL;
     case PreviewCanvasFrameRateMode::DisplayRefresh:
-        intervalMs = qMax(1, qRound(1000.0 / currentPreviewCanvasRefreshRate()));
-        break;
+        return qMax<qint64>(1LL, qRound64(1000000000.0 / currentPreviewCanvasRefreshRate()));
     case PreviewCanvasFrameRateMode::Fps60:
     default:
-        intervalMs = 16;
-        break;
+        return 1000000000LL / 60LL;
     }
+}
+
+void MainWindow::resetQtPreviewFixedFramePacing()
+{
+    qtPreviewNextFixedTickDueNs_ = -1;
+    if (previewCanvasUsesFrameSwappedPacing()) {
+        return;
+    }
+    qtPreviewNextFixedTickDueNs_ = qtPreviewWatchdogElapsed_.nsecsElapsed() + previewCanvasTargetFrameIntervalNs();
+}
+
+void MainWindow::scheduleNextQtPreviewTick()
+{
+    if (qtPreviewTimer_ == nullptr || !qtPreviewPlaying_) {
+        return;
+    }
+    if (previewCanvasUsesFrameSwappedPacing()) {
+        qtPreviewTimer_->start(qMax(1, qtPreviewTimer_->interval()));
+        return;
+    }
+    if (qtPreviewNextFixedTickDueNs_ < 0) {
+        resetQtPreviewFixedFramePacing();
+    }
+    const qint64 nowNs = qtPreviewWatchdogElapsed_.nsecsElapsed();
+    const qint64 delayNs = qMax<qint64>(0, qtPreviewNextFixedTickDueNs_ - nowNs);
+    const int delayMs = delayNs <= 0 ? 0 : qMax(1, static_cast<int>((delayNs + 999999LL) / 1000000LL));
+    qtPreviewTimer_->start(delayMs);
+}
+
+void MainWindow::requestNextDisplayRefreshPreviewFrame()
+{
+    if (!qtPreviewPlaying_
+        || legacyPygamePreviewEnabled_
+        || previewCanvas_ == nullptr
+        || !previewCanvasUsesFrameSwappedPacing()) {
+        return;
+    }
+    qtPreviewAwaitingFrameSwap_ = true;
+    qtPreviewAwaitingFrameSwapSinceMs_ = qtPreviewWatchdogElapsed_.elapsed();
+    previewCanvas_->update();
+    scheduleNextQtPreviewTick();
+}
+
+void MainWindow::refreshPreviewFrameRateTimers()
+{
+    const int intervalMs = qMax(1, qRound(static_cast<double>(previewCanvasTargetFrameIntervalNs()) / 1000000.0));
 
     if (qtPreviewTimer_ != nullptr) {
         qtPreviewTimer_->setInterval(intervalMs);
@@ -1174,6 +1221,19 @@ void MainWindow::setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, 
     }
     previewCanvasFrameRateMode_ = mode;
     refreshPreviewFrameRateTimers();
+    if (qtPreviewTimer_ != nullptr) {
+        qtPreviewTimer_->stop();
+    }
+    qtPreviewAwaitingFrameSwap_ = false;
+    qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+    resetQtPreviewFixedFramePacing();
+    if (qtPreviewPlaying_) {
+        if (previewCanvas_ != nullptr && !legacyPygamePreviewEnabled_ && previewCanvasUsesFrameSwappedPacing()) {
+            requestNextDisplayRefreshPreviewFrame();
+        } else {
+            scheduleNextQtPreviewTick();
+        }
+    }
     if (persistState) {
         saveProjectRenderState();
         savePortableState();
@@ -1783,13 +1843,15 @@ void MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
     qtPreviewPlaying_ = true;
     qtPreviewAwaitingFrameSwap_ = false;
     qtPreviewAwaitingFrameSwapSinceMs_ = -1;
-    if (previewCanvas_ != nullptr) {
-        qtPreviewAwaitingFrameSwap_ = true;
-        qtPreviewAwaitingFrameSwapSinceMs_ = qtPreviewWatchdogElapsed_.elapsed();
+    resetQtPreviewFixedFramePacing();
+    if (previewCanvas_ != nullptr
+        && (!previewCanvasUsesFrameSwappedPacing() || legacyPygamePreviewEnabled_)) {
         previewCanvas_->update();
     }
-    if (qtPreviewTimer_ != nullptr && !qtPreviewTimer_->isActive()) {
-        qtPreviewTimer_->start();
+    if (previewCanvas_ != nullptr && !legacyPygamePreviewEnabled_ && previewCanvasUsesFrameSwappedPacing()) {
+        requestNextDisplayRefreshPreviewFrame();
+    } else {
+        scheduleNextQtPreviewTick();
     }
     if (qtPreviewTimelineTimer_ != nullptr && !qtPreviewTimelineTimer_->isActive()) {
         qtPreviewTimelineTimer_->start();
@@ -1840,6 +1902,7 @@ void MainWindow::stopQtPreviewPlayback(bool keepPosition)
     qtPreviewPlaying_ = false;
     qtPreviewAwaitingFrameSwap_ = false;
     qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+    qtPreviewNextFixedTickDueNs_ = -1;
     qtPreviewPendingAudioCalibration_ = false;
     flushQtPreviewTimelinePosition();
     syncEditorCursorToPreviewSecond(qtPreviewPauseSecond_, false);
@@ -1876,7 +1939,7 @@ void MainWindow::applyQtPreviewPosition(double second, bool centerView)
         flushQtPreviewTimelinePosition();
     }
     if (previewCanvas_ != nullptr) {
-        previewCanvas_->setPlayheadSeconds(second);
+        previewCanvas_->setPlayheadSeconds(second, !qtPreviewPlaying_);
     }
     updatePreviewSliderPosition(second);
     updatePreviewObjectStats(second);
@@ -1947,10 +2010,7 @@ void MainWindow::onQtPreviewTick()
         previewSfxRuntime_->drainEvents(calibratedSecond);
         previewSfxRuntime_->syncTouchholdVoices(calibratedSecond);
         qtPreviewPendingAudioCalibration_ = false;
-        if (previewCanvas_ != nullptr) {
-            qtPreviewAwaitingFrameSwap_ = true;
-            qtPreviewAwaitingFrameSwapSinceMs_ = qtPreviewWatchdogElapsed_.elapsed();
-        }
+        requestNextDisplayRefreshPreviewFrame();
         return;
     }
     double second = 0.0;
@@ -1986,10 +2046,7 @@ void MainWindow::onQtPreviewTick()
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->drainEvents(second);
     }
-    if (previewCanvas_ != nullptr) {
-        qtPreviewAwaitingFrameSwap_ = true;
-        qtPreviewAwaitingFrameSwapSinceMs_ = qtPreviewWatchdogElapsed_.elapsed();
-    }
+    requestNextDisplayRefreshPreviewFrame();
 }
 
 void MainWindow::jumpToNearestTimelineNote(double second, int lane)
