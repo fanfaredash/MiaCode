@@ -60,7 +60,7 @@ QColor severityColor(ValidationSeverityLevel severity)
         : QColor(QStringLiteral("#C62828"));
 }
 
-bool buildEditorSelectionCursor(PlainCodeEditor* editor, int line, int col, QTextCursor* cursorOut)
+bool buildEditorSelectionCursor(PlainCodeEditor* editor, int line, int col, int endCol, QTextCursor* cursorOut)
 {
     if (editor == nullptr || editor->document() == nullptr || cursorOut == nullptr) {
         return false;
@@ -68,6 +68,7 @@ bool buildEditorSelectionCursor(PlainCodeEditor* editor, int line, int col, QTex
 
     const int normalizedLine = qMax(1, line);
     const int normalizedCol = qMax(1, col);
+    const int normalizedEndCol = qMax(normalizedCol, endCol);
     QTextBlock block = editor->document()->findBlockByNumber(normalizedLine - 1);
     if (!block.isValid()) {
         return false;
@@ -76,11 +77,12 @@ bool buildEditorSelectionCursor(PlainCodeEditor* editor, int line, int col, QTex
     const QString blockText = block.text();
     const int lineLength = blockText.size();
     const int localIndex = qBound(0, normalizedCol - 1, qMax(0, lineLength));
+    const int localEndIndex = qBound(localIndex, normalizedEndCol - 1, qMax(0, lineLength));
 
     QTextCursor cursor(editor->document());
     cursor.setPosition(block.position() + localIndex);
     if (lineLength > 0) {
-        const int selectionLength = (localIndex < lineLength) ? 1 : 0;
+        const int selectionLength = qMax(0, localEndIndex - localIndex + (localIndex < lineLength ? 1 : 0));
         if (selectionLength > 0) {
             cursor.setPosition(block.position() + localIndex + selectionLength, QTextCursor::KeepAnchor);
         } else {
@@ -107,7 +109,7 @@ void MainWindow::refreshEditorExtraSelections()
 
     for (const ValidationDecoration& decoration : validationDecorations_) {
         QTextCursor cursor;
-        if (!buildEditorSelectionCursor(editor, decoration.line, decoration.col, &cursor)) {
+        if (!buildEditorSelectionCursor(editor, decoration.line, decoration.col, decoration.endCol, &cursor)) {
             continue;
         }
 
@@ -123,7 +125,12 @@ void MainWindow::refreshEditorExtraSelections()
 
     if (previewFollowDecorationActive_) {
         QTextCursor cursor;
-        if (buildEditorSelectionCursor(editor, previewFollowDecorationLine_, previewFollowDecorationCol_, &cursor)) {
+        if (buildEditorSelectionCursor(
+                editor,
+                previewFollowDecorationLine_,
+                previewFollowDecorationCol_,
+                previewFollowDecorationCol_,
+                &cursor)) {
             QTextEdit::ExtraSelection sel;
             sel.cursor = cursor;
             QColor highlight = UiTheme::colors().accent;
@@ -225,7 +232,7 @@ void MainWindow::addValidationError(int line, int col, const QString& message)
     errorList_->setItemWidget(item, rowWidget);
 }
 
-void MainWindow::addValidationDecoration(int line, int col, const QString& message)
+void MainWindow::addValidationDecoration(int line, int col, const QString& message, int endCol)
 {
     if (line < 1) {
         line = 1;
@@ -233,11 +240,15 @@ void MainWindow::addValidationDecoration(int line, int col, const QString& messa
     if (col < 1) {
         col = 1;
     }
+    if (endCol < col) {
+        endCol = col;
+    }
 
     const ValidationMessageParts parts = parseValidationMessage(message);
     ValidationDecoration decoration;
     decoration.line = qMax(1, line);
     decoration.col = qMax(1, col);
+    decoration.endCol = qMax(decoration.col, endCol);
     decoration.message = message;
     decoration.warning = (parts.severity == ValidationSeverityLevel::Warning);
     validationDecorations_.append(decoration);
@@ -329,7 +340,7 @@ void MainWindow::refreshValidationPanelForActiveField()
     clearValidationDecorations();
     for (const ValidationCachedIssue& issue : entry.issues) {
         addValidationError(issue.line, issue.col, issue.displayMessage);
-        addValidationDecoration(issue.line, issue.col, issue.displayMessage);
+        addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
 }
 
@@ -383,6 +394,7 @@ bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
             ValidationCachedIssue cachedIssue;
             cachedIssue.line = issue.line;
             cachedIssue.col = issue.col;
+            cachedIssue.endCol = issue.endCol;
             cachedIssue.displayMessage = issue.displayMessage;
             entry.issues.append(cachedIssue);
         }
@@ -394,7 +406,7 @@ bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
     clearValidationDecorations();
     for (const ValidationCachedIssue& issue : entry.issues) {
         addValidationError(issue.line, issue.col, issue.displayMessage);
-        addValidationDecoration(issue.line, issue.col, issue.displayMessage);
+        addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
     if (focusFirstIssue && !entry.issues.isEmpty() && bottomTabs_ != nullptr && errorList_ != nullptr) {
         const int errorTabIndex = bottomTabs_->indexOf(errorList_);
@@ -445,6 +457,7 @@ bool MainWindow::runValidateSimai()
             ValidationCachedIssue cachedIssue;
             cachedIssue.line = issue.line;
             cachedIssue.col = issue.col;
+            cachedIssue.endCol = issue.endCol;
             cachedIssue.displayMessage = issue.displayMessage;
             entry.issues.append(cachedIssue);
         }
@@ -467,7 +480,7 @@ bool MainWindow::runValidateSimai()
     clearValidationDecorations();
     for (const ValidationCachedIssue& issue : entry.issues) {
         addValidationError(issue.line, issue.col, issue.displayMessage);
-        addValidationDecoration(issue.line, issue.col, issue.displayMessage);
+        addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
     if (!entry.issues.isEmpty() && bottomTabs_ != nullptr && errorList_ != nullptr) {
         const int errorTabIndex = bottomTabs_->indexOf(errorList_);

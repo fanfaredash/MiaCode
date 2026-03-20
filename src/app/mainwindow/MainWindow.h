@@ -320,7 +320,7 @@ private:
     void clearValidationErrors();
     void clearValidationDecorations();
     void addValidationError(int line, int col, const QString& message);
-    void addValidationDecoration(int line, int col, const QString& message);
+    void addValidationDecoration(int line, int col, const QString& message, int endCol = -1);
     void clearValidationCache();
     void refreshValidationPanelForActiveField();
     void setValidationTabVisible(bool visible);
@@ -359,12 +359,14 @@ private:
     struct ValidationCachedIssue {
         int line = 1;
         int col = 1;
+        int endCol = 1;
         QString displayMessage;
     };
 
     struct ValidationDecoration {
         int line = 1;
         int col = 1;
+        int endCol = 1;
         QString message;
         bool warning = false;
     };

@@ -1103,9 +1103,11 @@ MainWindow::MainWindow(QWidget* parent)
             }
             markCurrentFieldDirty();
             scheduleTimelineRefresh();
-            scheduleAutoValidation();
             updateEditorEmptyState();
             updateEditorStatus();
+        });
+        connect(editor, &QTextEdit::textChanged, this, [this]() {
+            scheduleAutoValidation();
         });
     }
     connect(qobject_cast<PlainCodeEditor*>(editorWidget_), &QTextEdit::cursorPositionChanged, this, [this]() {

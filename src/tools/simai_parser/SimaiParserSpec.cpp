@@ -191,7 +191,7 @@ int main(int argc, char** argv)
             QStringLiteral("{10}1,\nE"),
             SimaiNativeValidationLocale::English
         );
-        expect(!strictOnlyReport.ok, QStringLiteral("validation report fails when strict parse fails"));
+        expect(strictOnlyReport.ok, QStringLiteral("validation report stays ok when issue is warning-only"));
         expect(strictOnlyReport.errorCount == 0 && strictOnlyReport.warningCount == 1, QStringLiteral("strict-only failure is downgraded to warning"));
         if (!strictOnlyReport.issues.isEmpty()) {
             expect(
@@ -202,11 +202,35 @@ int main(int argc, char** argv)
     }
 
     {
+        const SimaiNativeParseResult lenientClamped = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("(60){20000}1,,\nE")
+        );
+        expect(lenientClamped.ok, QStringLiteral("lenient parse accepts beat value above 384 by clamping to 384"));
+        expect(lenientClamped.errors.isEmpty(), QStringLiteral("clamped beat value does not create lenient errors"));
+        expect(lenientClamped.warnings.isEmpty(), QStringLiteral("lenient parse stays quiet for clamped beat value"));
+        expect(!lenientClamped.noteMarkers.isEmpty(), QStringLiteral("clamped beat value still emits note markers"));
+
+        const SimaiNativeValidationReport clampedReport = SimaiNativeParser::buildValidationReport(
+            QStringLiteral("(60){20000}1,,\nE"),
+            SimaiNativeValidationLocale::English
+        );
+        expect(clampedReport.ok, QStringLiteral("validation report stays ok for beat value above 384 clamp"));
+        expect(clampedReport.errorCount == 0, QStringLiteral("clamped beat value does not count as validation error"));
+        expect(clampedReport.warningCount == 1, QStringLiteral("clamped beat value adds one validation warning"));
+        if (!clampedReport.issues.isEmpty()) {
+            expect(
+                clampedReport.issues.constFirst().displayMessage.contains(QStringLiteral("treated as 384")),
+                QStringLiteral("clamped beat value warning explains 384 fallback")
+            );
+        }
+    }
+
+    {
         const SimaiNativeValidationReport zhReport = SimaiNativeParser::buildValidationReport(
             QStringLiteral("1\nE"),
             SimaiNativeValidationLocale::Chinese
         );
-        expect(!zhReport.ok, QStringLiteral("zh validation report fails on strict syntax issue"));
+        expect(zhReport.ok, QStringLiteral("zh validation report stays ok on warning-only strict issue"));
         if (!zhReport.issues.isEmpty()) {
             expect(
                 zhReport.issues.constFirst().displayMessage.startsWith(QStringLiteral("[警告]")),

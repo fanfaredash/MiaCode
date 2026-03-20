@@ -42,6 +42,12 @@ const QString& kStrictDivisorSuffix()
     return value;
 }
 
+const QString& kBeatValueClampedPrefix()
+{
+    static const QString value = QStringLiteral("Beat value above 384 is treated as 384: ");
+    return value;
+}
+
 const QString& kUnterminatedHsBlock()
 {
     static const QString value = QStringLiteral("Unterminated HS* block");
@@ -133,6 +139,11 @@ QString formatStrictBeatValue(int beats)
         .arg(kStrictDivisorSuffix());
 }
 
+QString formatBeatValueClamped(int beats)
+{
+    return QStringLiteral("%1%2").arg(kBeatValueClampedPrefix(), QString::number(beats));
+}
+
 const QHash<QString, QString>& zhExactMap()
 {
     static const QHash<QString, QString> map{
@@ -160,6 +171,7 @@ const QHash<QString, QString>& zhPrefixMap()
         {kInvalidTouchModifierPrefix(), QStringLiteral("Touch 修饰符无效：")},
         {kInvalidNotePrefix(), QStringLiteral("音符无效：")},
         {kInvalidBeatValueStrictPrefix(), QStringLiteral("分拍数值可能导致转谱错误：")},
+        {kBeatValueClampedPrefix(), QStringLiteral("分拍数值大于 384，已按 384 处理：")},
         {kUnmatchedClosingBracketPrefix(), QStringLiteral("未匹配的右括号 '")},
         {kUnclosedBracketPrefix(), QStringLiteral("未闭合的左括号 '")},
     };
@@ -170,6 +182,7 @@ const QVector<QString>& zhPrefixOrder()
 {
     static const QVector<QString> order{
         kInvalidBeatValueStrictPrefix(),
+        kBeatValueClampedPrefix(),
         kInvalidBreakSlideModifierPositionPrefix(),
         kInvalidSlideDurationPlacementPrefix(),
         kInvalidSlideDurationPrefix(),
@@ -290,6 +303,21 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode)
                 const int beats = line.mid(i + 1, close - i - 1).trimmed().toInt(&beatsOk);
                 if (!beatsOk || beats <= 0) {
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kInvalidBeatValue());
+                } else if (beats > 384) {
+                    state.beats = 384;
+                    if (strictMode) {
+                        int warningEndCol = close + 1;
+                        while (warningEndCol < line.size() && line.at(warningEndCol) == QChar(',')) {
+                            ++warningEndCol;
+                        }
+                        appendTokenWarning(
+                            &state,
+                            lineNumber,
+                            i + 1,
+                            ValidationMessage::formatBeatValueClamped(beats),
+                            warningEndCol
+                        );
+                    }
                 } else if (strictMode && (384 % beats) != 0) {
                     appendTokenError(
                         &state,
@@ -464,9 +492,10 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode)
 
 QString makeValidationMessageKey(const SimaiNativeMessage& message)
 {
-    return QStringLiteral("%1:%2:%3")
+    return QStringLiteral("%1:%2:%3:%4")
         .arg(message.line)
         .arg(message.col)
+        .arg(message.endCol)
         .arg(message.message);
 }
 
@@ -534,6 +563,7 @@ SimaiNativeValidationReport SimaiNativeParser::buildValidationReport(
         SimaiNativeValidationIssue issue;
         issue.line = 1;
         issue.col = 1;
+        issue.endCol = 1;
         issue.severity = SimaiNativeValidationSeverity::Error;
         issue.rawMessage = ValidationMessage::kChartEmpty();
         issue.displayMessage = QStringLiteral("%1 %2")
@@ -558,7 +588,7 @@ SimaiNativeValidationReport SimaiNativeParser::buildValidationReport(
         lenientErrorKeys.insert(makeValidationMessageKey(error));
     }
 
-    report.issues.reserve(strictResult.errors.size());
+    report.issues.reserve(strictResult.errors.size() + strictResult.warnings.size());
     for (const SimaiNativeMessage& error : strictResult.errors) {
         const bool lenientAlsoFailed = lenientErrorKeys.contains(makeValidationMessageKey(error));
         const SimaiNativeValidationSeverity severity = lenientAlsoFailed
@@ -573,6 +603,7 @@ SimaiNativeValidationReport SimaiNativeParser::buildValidationReport(
         SimaiNativeValidationIssue issue;
         issue.line = error.line;
         issue.col = error.col;
+        issue.endCol = error.endCol;
         issue.severity = severity;
         issue.rawMessage = error.message;
         issue.displayMessage = QStringLiteral("%1 %2")
@@ -580,6 +611,20 @@ SimaiNativeValidationReport SimaiNativeParser::buildValidationReport(
         report.issues.append(issue);
     }
 
-    report.ok = strictResult.errors.isEmpty();
+    for (const SimaiNativeMessage& warning : strictResult.warnings) {
+        ++report.warningCount;
+
+        SimaiNativeValidationIssue issue;
+        issue.line = warning.line;
+        issue.col = warning.col;
+        issue.endCol = warning.endCol;
+        issue.severity = SimaiNativeValidationSeverity::Warning;
+        issue.rawMessage = warning.message;
+        issue.displayMessage = QStringLiteral("%1 %2")
+            .arg(validationSeverityPrefix(issue.severity, locale), localizeValidationDetail(warning.message, locale));
+        report.issues.append(issue);
+    }
+
+    report.ok = (report.errorCount == 0);
     return report;
 }
