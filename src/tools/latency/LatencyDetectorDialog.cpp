@@ -566,7 +566,7 @@ LatencyDetectorDialog::LatencyDetectorDialog(
     , audioSettings_(audioSettings)
 {
     setAttribute(Qt::WA_DeleteOnClose, true);
-    setWindowTitle(localizedText("BPM&&偏移检测", "BPM && Offset Detection"));
+    setWindowTitle(localizedText("BPM&偏移检测", "BPM & Offset Detection"));
 
     buildUi();
     loadAudioAnalysis();
