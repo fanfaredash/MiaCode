@@ -140,9 +140,7 @@ qreal PreviewCanvas::sampleSlideTrackPreTraceOpacity(qreal markerSecond, qreal p
             (deltaSeconds + slideTrackAppearLeadInSeconds) / appearDuration,
             1.0
         );
-        const qreal alpha = static_cast<qreal>(miacode::preview_gameplay::kSlideTrackAppearAlphaCap)
-            * (1.0 - qPow(1.0 - progress, static_cast<qreal>(miacode::preview_gameplay::kSlideTrackAppearAlphaEaseOutExponent)));
-        return qBound<qreal>(0.0, alpha, static_cast<qreal>(miacode::preview_gameplay::kSlideTrackAppearAlphaCap));
+        return progress;
     }
     return 1.0;
 }
