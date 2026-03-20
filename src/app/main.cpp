@@ -311,7 +311,7 @@ int main(int argc, char* argv[])
     setWindowsAppUserModelId();
 #endif
     app.setApplicationName("MiaCode");
-    app.setApplicationVersion(MIACODE_VERSION_STRING);
+    app.setApplicationVersion(MIACODE_DISPLAY_VERSION_STRING);
     const QIcon appIcon(QStringLiteral(":/icons/app.png"));
     app.setWindowIcon(appIcon);
     app.setStyle(QStyleFactory::create("Fusion"));

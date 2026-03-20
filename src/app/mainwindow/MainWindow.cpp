@@ -3388,7 +3388,7 @@ void MainWindow::onAbout()
     titleTextCol->setSpacing(4);
     auto* titleLabel = new QLabel("MiaCode", card);
     titleLabel->setObjectName("AboutTitle");
-    QString displayVersion = QString::fromLatin1(MIACODE_VERSION_STRING).trimmed();
+    QString displayVersion = QString::fromLatin1(MIACODE_DISPLAY_VERSION_STRING).trimmed();
     if (displayVersion.isEmpty()) {
         displayVersion = QCoreApplication::applicationVersion().trimmed();
     }
