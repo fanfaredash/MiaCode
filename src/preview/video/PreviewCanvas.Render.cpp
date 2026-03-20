@@ -79,8 +79,12 @@ void PreviewCanvas::drawStageBackground(QPainter& painter, const QSize& canvasSi
 #ifdef HAVE_QT_MULTIMEDIA
                 const QImage fallbackImage = videoFrame_.toImage();
                 if (!fallbackImage.isNull()) {
+                    retainedVideoFallbackFrame_ = fallbackImage;
                     ++cpuFallbackCount_;
                     painter.drawImage(targetRect, fallbackImage);
+                } else if (!retainedVideoFallbackFrame_.isNull()) {
+                    ++cpuFallbackCount_;
+                    painter.drawImage(targetRect, retainedVideoFallbackFrame_);
                 }
 #endif
             }

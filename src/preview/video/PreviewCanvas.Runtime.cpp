@@ -164,14 +164,16 @@ void PreviewCanvas::refreshTimingFromFlowSpeed()
             miacode::preview_gameplay::kSlideTrackFullBrightLeadInFramesAt120Fps);
 }
 
-void PreviewCanvas::setPlayheadSeconds(double seconds)
+void PreviewCanvas::setPlayheadSeconds(double seconds, bool requestUpdate)
 {
     const double clamped = seconds < 0.0 ? 0.0 : seconds;
     if (qFuzzyCompare(playheadSeconds_ + 1.0, clamped + 1.0)) {
         return;
     }
     playheadSeconds_ = clamped;
-    update();
+    if (requestUpdate) {
+        update();
+    }
 }
 
 void PreviewCanvas::setMediaFrame(const QImage& frame)
@@ -180,6 +182,7 @@ void PreviewCanvas::setMediaFrame(const QImage& frame)
     videoFrame_ = QVideoFrame();
 #endif
     mediaFrame_ = frame;
+    retainedVideoFallbackFrame_ = QImage();
     setStageMediaAvailable(!frame.isNull());
 }
 
@@ -188,6 +191,9 @@ void PreviewCanvas::setVideoFrame(const QVideoFrame& frame)
 #ifdef HAVE_QT_MULTIMEDIA
     mediaFrame_ = QImage();
     videoFrame_ = frame;
+    if (!frame.isValid()) {
+        retainedVideoFallbackFrame_ = QImage();
+    }
     setStageMediaAvailable(frame.isValid());
 #else
     Q_UNUSED(frame);

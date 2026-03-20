@@ -239,6 +239,11 @@ private:
     void flushQtPreviewTimelinePosition();
     void onQtPreviewTick();
     void finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage);
+    bool previewCanvasUsesFrameSwappedPacing() const;
+    qint64 previewCanvasTargetFrameIntervalNs() const;
+    void resetQtPreviewFixedFramePacing();
+    void scheduleNextQtPreviewTick();
+    void requestNextDisplayRefreshPreviewFrame();
     void seekPreviewToSecond(double second, bool centerView);
     void schedulePreviewSeek(double second, bool centerView);
     void updatePreviewSliderRange();
@@ -463,6 +468,7 @@ private:
     bool qtPreviewPendingTimelineCenterView_ = true;
     QElapsedTimer qtPreviewElapsed_;
     QElapsedTimer qtPreviewWatchdogElapsed_;
+    qint64 qtPreviewNextFixedTickDueNs_ = -1;
     double qtPreviewTimelineStartSecond_ = 0.0;
     bool qtPreviewTimelineCenterNextTick_ = true;
     QElapsedTimer qtPreviewTimelineElapsed_;

@@ -37,7 +37,7 @@ public:
     ~PreviewCanvas() override;
 
     void setStageMediaAvailable(bool hasMedia);
-    void setPlayheadSeconds(double seconds);
+    void setPlayheadSeconds(double seconds, bool requestUpdate = true);
     void setMediaFrame(const QImage& frame);
     void setVideoFrame(const QVideoFrame& frame);
     void setNoteMarkers(const QVector<TimelineNoteMarker>& notes);
@@ -322,6 +322,7 @@ private:
     PreviewGLRenderer glRenderer_;
     QVector<TimelineNoteMarker> noteMarkers_;
     QImage mediaFrame_;
+    QImage retainedVideoFallbackFrame_;
 #ifdef HAVE_QT_MULTIMEDIA
     QVideoFrame videoFrame_;
 #endif
