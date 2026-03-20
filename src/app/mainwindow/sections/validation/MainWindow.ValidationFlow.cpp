@@ -333,6 +333,79 @@ void MainWindow::refreshValidationPanelForActiveField()
     }
 }
 
+void MainWindow::scheduleAutoValidation()
+{
+    if (validationRefreshTimer_ == nullptr) {
+        return;
+    }
+    validationRefreshTimer_->stop();
+    if (!hasActiveDifficulty()) {
+        refreshValidationPanelForActiveField();
+        return;
+    }
+    validationRefreshTimer_->start();
+}
+
+bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
+{
+    if (!hasActiveDifficulty()) {
+        refreshValidationPanelForActiveField();
+        return false;
+    }
+
+    const int difficultyId = activeDifficultyId();
+    const QString chartText = activeChartText();
+    const bool chineseUi = UiText::isChineseUi();
+
+    ValidationCacheEntry entry;
+    const auto cacheIt = validationCacheByDifficulty_.constFind(difficultyId);
+    if (cacheIt != validationCacheByDifficulty_.constEnd()
+        && cacheIt->chartText == chartText
+        && cacheIt->chineseUi == chineseUi) {
+        entry = cacheIt.value();
+    } else {
+        const SimaiNativeValidationLocale locale = chineseUi
+            ? SimaiNativeValidationLocale::Chinese
+            : SimaiNativeValidationLocale::English;
+        const SimaiNativeValidationReport report = SimaiNativeParser::buildValidationReport(chartText, locale);
+        entry.chartText = chartText;
+        entry.chineseUi = chineseUi;
+        entry.ok = report.ok;
+        entry.errorCount = report.errorCount;
+        entry.warningCount = report.warningCount;
+        entry.lenientNoteCount = report.lenientNoteCount;
+        entry.lenientErrorCount = report.lenientErrorCount;
+        entry.strictNoteCount = report.strictNoteCount;
+        entry.strictErrorCount = report.strictErrorCount;
+        entry.issues.clear();
+        entry.issues.reserve(report.issues.size());
+        for (const SimaiNativeValidationIssue& issue : report.issues) {
+            ValidationCachedIssue cachedIssue;
+            cachedIssue.line = issue.line;
+            cachedIssue.col = issue.col;
+            cachedIssue.displayMessage = issue.displayMessage;
+            entry.issues.append(cachedIssue);
+        }
+        validationCacheByDifficulty_.insert(difficultyId, entry);
+    }
+
+    setValidationTabVisible(true);
+    clearValidationErrors();
+    clearValidationDecorations();
+    for (const ValidationCachedIssue& issue : entry.issues) {
+        addValidationError(issue.line, issue.col, issue.displayMessage);
+        addValidationDecoration(issue.line, issue.col, issue.displayMessage);
+    }
+    if (focusFirstIssue && !entry.issues.isEmpty() && bottomTabs_ != nullptr && errorList_ != nullptr) {
+        const int errorTabIndex = bottomTabs_->indexOf(errorList_);
+        if (errorTabIndex >= 0) {
+            bottomTabs_->setCurrentIndex(errorTabIndex);
+        }
+        onErrorItemActivated(errorList_->item(0));
+    }
+    return entry.ok;
+}
+
 bool MainWindow::runValidateSimai()
 {
     if (!hasActiveDifficulty()) {

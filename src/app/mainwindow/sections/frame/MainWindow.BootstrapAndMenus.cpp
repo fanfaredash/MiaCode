@@ -1097,6 +1097,7 @@ MainWindow::MainWindow(QWidget* parent)
             }
             markCurrentFieldDirty();
             scheduleTimelineRefresh();
+            scheduleAutoValidation();
             updateEditorEmptyState();
             updateEditorStatus();
         });
@@ -1256,6 +1257,13 @@ MainWindow::MainWindow(QWidget* parent)
     metadataRefreshTimer_->setSingleShot(true);
     metadataRefreshTimer_->setInterval(0);
     connect(metadataRefreshTimer_, &QTimer::timeout, this, &MainWindow::refreshTimelineMetadata);
+
+    validationRefreshTimer_ = new QTimer(this);
+    validationRefreshTimer_->setSingleShot(true);
+    validationRefreshTimer_->setInterval(180);
+    connect(validationRefreshTimer_, &QTimer::timeout, this, [this]() {
+        (void)runValidateSimaiSilently(false);
+    });
 
     qtPreviewTimer_ = new QTimer(this);
     qtPreviewTimer_->setInterval(16);

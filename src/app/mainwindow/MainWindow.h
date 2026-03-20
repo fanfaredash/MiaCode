@@ -301,6 +301,8 @@ private:
     void applyPreviewAudioSettingsToRuntime();
     void setLastOpenDirectory(const QString& pathOrDir);
     bool runValidateSimai();
+    bool runValidateSimaiSilently(bool focusFirstIssue = false);
+    void scheduleAutoValidation();
     bool saveBeforePreviewStart();
     void appendOutput(const QString& title, const QString& payload);
     void logWindowGeometryDebug(const QString& tag, const QString& detail = QString());
@@ -410,6 +412,7 @@ private:
     QAction* aboutAction_ = nullptr;
     QLabel* currentFileLabel_ = nullptr;
     QTimer* metadataRefreshTimer_ = nullptr;
+    QTimer* validationRefreshTimer_ = nullptr;
     QTimer* qtPreviewTimer_ = nullptr;
     QTimer* qtPreviewTimelineTimer_ = nullptr;
     QTimer* previewSeekDebounceTimer_ = nullptr;
