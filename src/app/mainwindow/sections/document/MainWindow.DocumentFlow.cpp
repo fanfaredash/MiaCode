@@ -1103,7 +1103,7 @@ bool MainWindow::switchToDifficultyField(int difficultyId)
         bottomTabs_->setVisible(true);
     }
     setValidationTabVisible(true);
-    refreshValidationPanelForActiveField();
+    (void)runValidateSimaiSilently(false);
     currentFieldDirty_ = false;
     updateDirtyState();
     rebuildFieldSidebar();
