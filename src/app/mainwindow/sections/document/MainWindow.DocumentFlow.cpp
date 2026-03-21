@@ -766,8 +766,8 @@ void MainWindow::updateEditorHeaderLayoutMode()
         editorValidationSummaryWidget_ != nullptr
         && editorValidationSummaryWidget_->property("hasContent").toBool();
 
-    bool showLevelLabel = true;
-    bool showDesignerLabel = true;
+    bool showLevelControls = true;
+    bool showDesignerControls = true;
     bool showSummary = summaryHasContent;
     bool showCursor = true;
     bool compactCursor = false;
@@ -775,47 +775,51 @@ void MainWindow::updateEditorHeaderLayoutMode()
     int designerWidth = 140;
 
     if (headerWidth < 700) {
-        designerWidth = 124;
+        designerWidth = 128;
     }
     if (headerWidth < 640) {
-        designerWidth = 108;
-        levelWidth = 64;
+        designerWidth = 112;
+        levelWidth = 68;
     }
-    if (headerWidth < 590) {
-        showDesignerLabel = false;
-        designerWidth = 92;
+    if (headerWidth < 580) {
+        compactCursor = true;
+        designerWidth = 100;
+        levelWidth = 62;
     }
     if (headerWidth < 540) {
-        showLevelLabel = false;
+        showSummary = false;
+        levelWidth = 58;
+        designerWidth = 92;
+    }
+    if (headerWidth < 500) {
+        showCursor = false;
         levelWidth = 54;
         designerWidth = 84;
     }
-    if (headerWidth < 500) {
-        compactCursor = true;
+    if (headerWidth < 440) {
+        levelWidth = 50;
         designerWidth = 76;
     }
-    if (headerWidth < 460) {
-        showCursor = false;
-        levelWidth = 48;
-        designerWidth = 68;
+    if (headerWidth < 380) {
+        showDesignerControls = false;
     }
-    if (headerWidth < 420) {
-        showSummary = false;
-        levelWidth = 44;
-        designerWidth = 60;
+    if (headerWidth < 330) {
+        showLevelControls = false;
     }
 
     if (difficultyLevelLabel_ != nullptr) {
-        difficultyLevelLabel_->setVisible(showLevelLabel);
+        difficultyLevelLabel_->setVisible(showLevelControls);
     }
     if (difficultyDesignerLabel_ != nullptr) {
-        difficultyDesignerLabel_->setVisible(showDesignerLabel);
+        difficultyDesignerLabel_->setVisible(showDesignerControls);
     }
     if (difficultyLevelEdit_ != nullptr) {
         difficultyLevelEdit_->setFixedWidth(levelWidth);
+        difficultyLevelEdit_->setVisible(showLevelControls);
     }
     if (difficultyDesignerEdit_ != nullptr) {
         difficultyDesignerEdit_->setFixedWidth(designerWidth);
+        difficultyDesignerEdit_->setVisible(showDesignerControls);
     }
     if (editorValidationSummaryWidget_ != nullptr) {
         editorValidationSummaryWidget_->setVisible(summaryHasContent && showSummary);
