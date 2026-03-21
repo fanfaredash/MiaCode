@@ -781,29 +781,23 @@ void MainWindow::updateEditorHeaderLayoutMode()
         designerWidth = 112;
         levelWidth = 68;
     }
-    if (headerWidth < 580) {
-        compactCursor = true;
-        designerWidth = 100;
-        levelWidth = 62;
-    }
-    if (headerWidth < 540) {
+    if (headerWidth < 480) {
         showSummary = false;
         levelWidth = 58;
         designerWidth = 92;
     }
-    if (headerWidth < 500) {
+    if (headerWidth < 400) {
+        compactCursor = true;
+        designerWidth = 100;
+        levelWidth = 62;
+    }
+    if (headerWidth < 360) {
         showCursor = false;
         levelWidth = 54;
         designerWidth = 84;
-    }
-    if (headerWidth < 440) {
-        levelWidth = 50;
-        designerWidth = 76;
-    }
-    if (headerWidth < 380) {
         showDesignerControls = false;
     }
-    if (headerWidth < 330) {
+    if (headerWidth < 310) {
         showLevelControls = false;
     }
 

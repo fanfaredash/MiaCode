@@ -193,13 +193,14 @@ void MainWindow::updateEditorValidationSummary()
         "editor.validation_summary.tooltip",
         "%1 error(s), %2 warning(s)"
     ).arg(errorCount).arg(warningCount);
-    editorValidationSummaryWidget_->setProperty("hasContent", showError || showWarning);
+    const bool showSummary = previewShowValidationSummary_ && (showError || showWarning);
+    editorValidationSummaryWidget_->setProperty("hasContent", showSummary);
     editorValidationSummaryWidget_->setToolTip(summaryTooltip);
     editorValidationErrorIconLabel_->setToolTip(summaryTooltip);
     editorValidationErrorCountLabel_->setToolTip(summaryTooltip);
     editorValidationWarningIconLabel_->setToolTip(summaryTooltip);
     editorValidationWarningCountLabel_->setToolTip(summaryTooltip);
-    editorValidationSummaryWidget_->setVisible(showError || showWarning);
+    editorValidationSummaryWidget_->setVisible(showSummary);
     editorValidationSummaryWidget_->adjustSize();
     updateEditorHeaderLayoutMode();
 }
