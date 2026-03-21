@@ -132,6 +132,9 @@ private:
     QToolButton* fpsButton_ = nullptr;
     QMenu* fpsMenu_ = nullptr;
     int selectedFps_ = 60;
+    QToolButton* performanceButton_ = nullptr;
+    QMenu* performanceMenu_ = nullptr;
+    VideoExportPerformanceProfile selectedPerformanceProfile_ = VideoExportPerformanceProfile::Balanced;
     QCheckBox* showTimestampCheck_ = nullptr;
     QCheckBox* smoothBrightnessCheck_ = nullptr;
     QToolButton* backgroundScaleModeButton_ = nullptr;

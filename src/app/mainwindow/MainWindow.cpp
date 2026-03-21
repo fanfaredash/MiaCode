@@ -4132,8 +4132,9 @@ void MainWindow::handleVideoExportWorkerStderr()
 void MainWindow::handleVideoExportWorkerEvent(const QJsonObject& eventObject)
 {
     const QString eventType = eventObject.value(QStringLiteral("event")).toString();
+    const bool suppressProgressUi = videoExportWorkerCancelRequested_;
     if (eventType == QLatin1String("worker_ready")) {
-        if (videoExportProgressDialog_ != nullptr) {
+        if (!suppressProgressUi && videoExportProgressDialog_ != nullptr) {
             videoExportProgressDialog_->setValue(qMax(videoExportProgressDialog_->value(), 1));
             videoExportProgressDialog_->setLabelText(systemL10n(
                 QStringLiteral("Worker ready..."),
@@ -4143,7 +4144,7 @@ void MainWindow::handleVideoExportWorkerEvent(const QJsonObject& eventObject)
         return;
     }
     if (eventType == QLatin1String("accepted")) {
-        if (videoExportProgressDialog_ != nullptr) {
+        if (!suppressProgressUi && videoExportProgressDialog_ != nullptr) {
             videoExportProgressDialog_->setValue(qMax(videoExportProgressDialog_->value(), 2));
             videoExportProgressDialog_->setLabelText(systemL10n(
                 QStringLiteral("Starting export..."),
@@ -4153,7 +4154,7 @@ void MainWindow::handleVideoExportWorkerEvent(const QJsonObject& eventObject)
         return;
     }
     if (eventType == QLatin1String("progress")) {
-        if (videoExportProgressDialog_ != nullptr) {
+        if (!suppressProgressUi && videoExportProgressDialog_ != nullptr) {
             const int percent = qBound(0, eventObject.value(QStringLiteral("percent")).toInt(), 100);
             const QString rawMessage = eventObject.value(QStringLiteral("message")).toString(
                 QStringLiteral("Exporting...")
@@ -4192,7 +4193,7 @@ void MainWindow::handleVideoExportWorkerEvent(const QJsonObject& eventObject)
         if (!details.isEmpty()) {
             videoExportWorkerResultDetails_ = details;
         }
-        if (videoExportProgressDialog_ != nullptr) {
+        if (!suppressProgressUi && videoExportProgressDialog_ != nullptr) {
             videoExportProgressDialog_->setValue(videoExportWorkerSuccess_ ? 100 : videoExportProgressDialog_->value());
             if (videoExportWorkerSuccess_) {
                 videoExportProgressDialog_->setLabelText(systemL10n(
@@ -4271,6 +4272,7 @@ void MainWindow::cancelVideoExportWorker()
             QStringLiteral("Canceling export..."),
             QStringLiteral("正在取消导出...")
         ));
+        videoExportProgressDialog_->hide();
     }
     if (videoExportWorkerProcess_ == nullptr || videoExportWorkerProcess_->state() == QProcess::NotRunning) {
         return;
@@ -4278,7 +4280,7 @@ void MainWindow::cancelVideoExportWorker()
 
     QPointer<QProcess> processGuard(videoExportWorkerProcess_);
     videoExportWorkerProcess_->terminate();
-    QTimer::singleShot(3000, this, [this, processGuard]() {
+    QTimer::singleShot(500, this, [this, processGuard]() {
         if (processGuard.isNull() || processGuard != videoExportWorkerProcess_) {
             return;
         }
