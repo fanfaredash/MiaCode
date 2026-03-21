@@ -1,5 +1,6 @@
 ﻿#include "AppVersion.h"
 #include "mainwindow/MainWindow.h"
+#include "tools/video_export/VideoExportSnapshot.h"
 #include "UiText.h"
 #include "UiTheme.h"
 
@@ -11,6 +12,8 @@
 #include <QFile>
 #include <QFont>
 #include <QIcon>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTextStream>
 #include <QTimer>
 #include <QStringList>
@@ -20,6 +23,7 @@
 #include <QRegularExpression>
 
 #include <cmath>
+#include <cstdio>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -59,6 +63,18 @@ bool startupTimingEnabled()
 bool wantsCliVideoExport(const QStringList& arguments)
 {
     return arguments.contains(QStringLiteral("--export-video"));
+}
+
+bool wantsCliVideoExportWorker(const QStringList& arguments)
+{
+    return arguments.contains(QStringLiteral("--export-video-worker"));
+}
+
+void writeWorkerJsonLine(const QJsonObject& object)
+{
+    QTextStream out(stdout);
+    out << QJsonDocument(object).toJson(QJsonDocument::Compact) << '\n';
+    out.flush();
 }
 
 bool parseCliResolutionToken(const QString& token, int* outputWidth, int* outputHeight)
@@ -267,6 +283,134 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     return 0;
 }
 
+int runCliVideoExportWorker(QApplication& app, QString* errorMessage)
+{
+    QCommandLineParser parser;
+    parser.setApplicationDescription(QStringLiteral("MiaCode export worker"));
+    parser.addHelpOption();
+    parser.addVersionOption();
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("export-video-worker"),
+        QStringLiteral("Run background export worker and exit.")
+    ));
+
+    if (!parser.parse(app.arguments())) {
+        if (errorMessage != nullptr) {
+            *errorMessage = parser.errorText();
+        }
+        return 2;
+    }
+    if (!parser.isSet(QStringLiteral("export-video-worker"))) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("internal CLI dispatch error: --export-video-worker not set");
+        }
+        return 2;
+    }
+
+    writeWorkerJsonLine(QJsonObject{
+        {QStringLiteral("event"), QStringLiteral("worker_ready")},
+        {QStringLiteral("protocol"), 1},
+    });
+
+    QFile stdinFile;
+    if (!stdinFile.open(stdin, QIODevice::ReadOnly)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to open stdin for export worker");
+        }
+        return 1;
+    }
+
+    const QList<QByteArray> inputLines = stdinFile.readAll().split('\n');
+    QByteArray rawCommand;
+    for (const QByteArray& line : inputLines) {
+        if (!line.trimmed().isEmpty()) {
+            rawCommand = line.trimmed();
+            break;
+        }
+    }
+    if (rawCommand.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("export worker received empty command payload");
+        }
+        return 1;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument commandDocument = QJsonDocument::fromJson(rawCommand, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !commandDocument.isObject()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("export worker failed to parse command JSON");
+        }
+        return 1;
+    }
+
+    const QJsonObject commandObject = commandDocument.object();
+    if (commandObject.value(QStringLiteral("cmd")).toString() != QLatin1String("start_export")) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("unsupported export worker command");
+        }
+        return 1;
+    }
+
+    VideoExportSnapshot snapshot;
+    QString snapshotError;
+    if (!VideoExportSnapshot::fromJson(commandObject.value(QStringLiteral("snapshot")).toObject(), &snapshot, &snapshotError)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = snapshotError;
+        }
+        return 1;
+    }
+
+    writeWorkerJsonLine(QJsonObject{
+        {QStringLiteral("event"), QStringLiteral("accepted")},
+        {QStringLiteral("job_id"), snapshot.jobId},
+    });
+
+    VideoExportTask task;
+    QString taskError;
+    if (!buildVideoExportTaskFromSnapshot(snapshot, &task, &taskError)) {
+        writeWorkerJsonLine(QJsonObject{
+            {QStringLiteral("event"), QStringLiteral("finished")},
+            {QStringLiteral("job_id"), snapshot.jobId},
+            {QStringLiteral("success"), false},
+            {QStringLiteral("error"), QStringLiteral("Failed to prepare export task.")},
+            {QStringLiteral("details"), taskError},
+        });
+        return 1;
+    }
+
+    const auto progressCallback = [&snapshot](int percent, const QString& text) {
+        if (percent < 0 && text.isEmpty()) {
+            return false;
+        }
+        writeWorkerJsonLine(QJsonObject{
+            {QStringLiteral("event"), QStringLiteral("progress")},
+            {QStringLiteral("job_id"), snapshot.jobId},
+            {QStringLiteral("stage"), QStringLiteral("render")},
+            {QStringLiteral("percent"), percent},
+            {QStringLiteral("message"), text},
+        });
+        QCoreApplication::processEvents();
+        return false;
+    };
+
+    const VideoExportResult result = VideoExportController::exportPreparedTask(task, nullptr, progressCallback);
+
+    QJsonObject finishedObject{
+        {QStringLiteral("event"), QStringLiteral("finished")},
+        {QStringLiteral("job_id"), snapshot.jobId},
+        {QStringLiteral("success"), result.success},
+    };
+    if (result.success) {
+        finishedObject.insert(QStringLiteral("output_path"), task.outputPath);
+    } else {
+        finishedObject.insert(QStringLiteral("error"), result.message);
+        finishedObject.insert(QStringLiteral("details"), result.details);
+    }
+    writeWorkerJsonLine(finishedObject);
+    return result.success ? 0 : 1;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -331,6 +475,15 @@ int main(int argc, char* argv[])
         app.setFont(zhUiFont);
     }
     logStartupStage("ui_font_ready");
+
+    if (wantsCliVideoExportWorker(app.arguments())) {
+        QString cliError;
+        const int exitCode = runCliVideoExportWorker(app, &cliError);
+        if (exitCode != 0 && !cliError.trimmed().isEmpty()) {
+            QTextStream(stderr) << "Worker error: " << cliError << "\n";
+        }
+        return exitCode;
+    }
 
     if (wantsCliVideoExport(app.arguments())) {
         QString cliError;

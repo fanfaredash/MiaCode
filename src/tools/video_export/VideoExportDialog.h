@@ -55,6 +55,8 @@ public:
         QWidget* parent = nullptr
     );
     bool exportSucceeded() const { return exportSucceeded_; }
+    bool exportRequested() const { return exportRequested_; }
+    VideoExportTask requestedExportTask() const { return requestedExportTask_; }
     bool previewAspectChangedByDialog() const { return previewAspectChangedByDialog_; }
 
 private:
@@ -111,6 +113,7 @@ private:
     double previewCursorSecond_ = 0.0;
     double initialResolutionAspectRatio_ = 1.0;
     bool exportSucceeded_ = false;
+    bool exportRequested_ = false;
     bool syncingRangeUi_ = false;
     bool rangePreviewPlaying_ = false;
     bool previewAspectChangedByDialog_ = false;
@@ -120,6 +123,7 @@ private:
     int previewSeekHeldArrowKey_ = 0;
     QElapsedTimer previewSeekHeldArrowElapsed_;
     QElapsedTimer previewScrubRenderElapsed_;
+    VideoExportTask requestedExportTask_;
 
     QLineEdit* outputPathEdit_ = nullptr;
     QToolButton* resolutionButton_ = nullptr;

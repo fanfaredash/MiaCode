@@ -1,0 +1,45 @@
+#pragma once
+
+#include <QJsonObject>
+#include <QString>
+
+#include "VideoExportController.h"
+
+struct VideoExportSnapshot {
+    QString schema = QStringLiteral("miacode_export_snapshot_v1");
+    QString jobId;
+    QString createdAtUtc;
+    QString chartTextUtf8;
+    int difficultyId = 0;
+    QString difficultyName;
+    QString originalChartPath;
+    QString projectDir;
+    QString trackPath;
+    QString backgroundMediaPath;
+    QString skinDirectory;
+    PreviewAudioSettings audioSettings;
+    double backgroundBrightnessOuter = miacode::preview_video::kBackgroundBrightnessDefault;
+    double backgroundBrightnessInner = miacode::preview_video::kBackgroundBrightnessInnerDefault;
+    double layoutSquareScale = miacode::preview_video::kLayoutSquareScaleDefault;
+    bool smoothBrightness = miacode::preview_video::kSmoothBrightnessDefault;
+    PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
+    double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    double exportStartSeconds = 0.0;
+    double contentDurationSeconds = 0.0;
+    int outputWidth = 1024;
+    int outputHeight = 1024;
+    int fps = 60;
+    QString outputPath;
+    bool showTimestamp = true;
+    bool showObjectStatsHud = false;
+    int skinLoadWaitMs = 2000;
+
+    QJsonObject toJson() const;
+    static bool fromJson(const QJsonObject& object, VideoExportSnapshot* snapshot, QString* errorMessage = nullptr);
+};
+
+bool buildVideoExportTaskFromSnapshot(
+    const VideoExportSnapshot& snapshot,
+    VideoExportTask* task,
+    QString* errorMessage = nullptr
+);

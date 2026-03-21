@@ -27,7 +27,6 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QPolygonF>
-#include <QProgressDialog>
 #include <QPushButton>
 #include <QPixmap>
 #include <QRegularExpression>
@@ -1411,61 +1410,8 @@ void VideoExportDialog::startExport()
         );
         return;
     }
-    if (sourceCanvas_ == nullptr) {
-        UiDialogs::showMessageBox(
-            QMessageBox::Warning,
-            this,
-            uiText("dialog.video_export.title", QStringLiteral("Export Video")),
-            uiText("dialog.video_export.error.preview_unavailable", QStringLiteral("Preview canvas is not initialized."))
-        );
-        return;
-    }
-
-    QProgressDialog progress(
-        uiText("dialog.video_export.progress.preparing", QStringLiteral("Preparing export...")),
-        uiText("dialog.video_export.button.cancel", QStringLiteral("Cancel")),
-        0,
-        100,
-        this
-    );
-    progress.setWindowTitle(uiText("dialog.video_export.title", QStringLiteral("Export Video")));
-    progress.setWindowModality(Qt::WindowModal);
-    progress.setMinimumDuration(0);
-    progress.setAutoClose(false);
-    progress.setAutoReset(false);
-    progress.show();
-
-    exportButton_->setEnabled(false);
-    VideoExportResult result = VideoExportController::exportFullPreview(task, sourceCanvas_, &progress);
-    exportButton_->setEnabled(true);
-
-    if (!result.success) {
-        if (result.message == QLatin1String("canceled")) {
-            UiDialogs::showMessageBox(
-                QMessageBox::Information,
-                this,
-                l10n(QStringLiteral("Export Video"), QStringLiteral("导出视频")),
-                l10n(QStringLiteral("Export canceled."), QStringLiteral("导出已取消。"))
-            );
-            return;
-        }
-        const QString details = result.details.trimmed();
-        UiDialogs::showMessageBox(
-            QMessageBox::Critical,
-            this,
-            l10n(QStringLiteral("Export Failed"), QStringLiteral("导出失败")),
-            details.isEmpty() ? result.message : QStringLiteral("%1\n\n%2").arg(result.message, details)
-        );
-        return;
-    }
-
-    UiDialogs::showMessageBox(
-        QMessageBox::Information,
-        this,
-        l10n(QStringLiteral("Export Video"), QStringLiteral("导出视频")),
-        l10n(QStringLiteral("Export completed."), QStringLiteral("导出完成。"))
-    );
-    exportSucceeded_ = true;
+    requestedExportTask_ = task;
+    exportRequested_ = true;
     accept();
 }
 

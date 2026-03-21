@@ -458,6 +458,11 @@ const QHash<QString, QString>& zhMap()
         {"dialog.video_export.progress.preparing", "正在准备导出..."},
         {"dialog.video_export.status.canceled", "导出已取消。"},
         {"dialog.video_export.status.completed", "导出完成。"},
+        {"dialog.video_export.message.canceled", "导出已取消。"},
+        {"dialog.video_export.message.completed", "导出完成。"},
+        {"dialog.video_export.error.failed", "导出失败。"},
+        {"dialog.video_export.error.worker_crash", "导出子进程已崩溃。"},
+        {"dialog.video_export.error.worker_exit", "导出子进程异常退出。"},
         {"dialog.video_export.error.failed_title", "导出失败"},
 
         {"status.audio_restored_default", "已恢复默认音量设置"},
