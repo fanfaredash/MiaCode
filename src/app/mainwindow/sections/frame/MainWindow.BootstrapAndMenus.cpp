@@ -97,11 +97,32 @@
 
     auto* undoAction = new QAction(uiText("action.undo", "Undo"), this);
     undoAction->setShortcut(QKeySequence::Undo);
-    connect(undoAction, &QAction::triggered, this, [invokeOnFocusedTextWidget]() {
-        invokeOnFocusedTextWidget(
-            [](QTextEdit* textEdit) { textEdit->undo(); },
-            [](QLineEdit* lineEdit) { lineEdit->undo(); }
-        );
+    connect(undoAction, &QAction::triggered, this, [this]() {
+        bool handled = false;
+        if (QWidget* focus = QApplication::focusWidget(); focus != nullptr) {
+            if (auto* lineEdit = qobject_cast<QLineEdit*>(focus); lineEdit != nullptr) {
+                if (lineEdit->isUndoAvailable()) {
+                    lineEdit->undo();
+                    handled = true;
+                }
+            } else if (auto* textEdit = qobject_cast<QTextEdit*>(focus); textEdit != nullptr) {
+                if (textEdit->document() != nullptr && textEdit->document()->isUndoAvailable()) {
+                    textEdit->undo();
+                    handled = true;
+                }
+            }
+        }
+        if (!handled) {
+            if (auto* editor = qobject_cast<QTextEdit*>(editorWidget_); editor != nullptr
+                && editor->document() != nullptr
+                && editor->document()->isUndoAvailable()) {
+                editor->undo();
+                handled = true;
+            }
+        }
+        if (!handled) {
+            (void)undoDeletedDifficultyField();
+        }
     });
     editMenu->addAction(undoAction);
 

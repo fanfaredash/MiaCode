@@ -192,6 +192,8 @@ private:
     void hideFindReplaceBar();
     void updateDirtyState();
     void markCurrentFieldDirty();
+    bool undoDeletedDifficultyField();
+    void clearDeletedDifficultyUndoState();
     void rebuildFieldSidebar();
     void updateEditorHeader();
     void updateEditorHeaderLayoutMode();
@@ -398,6 +400,13 @@ private:
         int strictNoteCount = 0;
         int strictErrorCount = 0;
         QVector<ValidationCachedIssue> issues;
+    };
+
+    struct DeletedDifficultyUndoState {
+        bool valid = false;
+        bool wasActive = false;
+        int difficultyId = 0;
+        SimaiDifficultyData difficultyData;
     };
 
     QWidget* editorWidget_ = nullptr;
@@ -609,6 +618,7 @@ private:
     BracketScopeHighlighter* metadataBracketHighlighter_ = nullptr;
     QHash<int, ValidationCacheEntry> validationCacheByDifficulty_;
     QVector<ValidationDecoration> validationDecorations_;
+    DeletedDifficultyUndoState deletedDifficultyUndoState_;
     bool previewFollowDecorationActive_ = false;
     int previewFollowDecorationLine_ = 1;
     int previewFollowDecorationCol_ = 1;

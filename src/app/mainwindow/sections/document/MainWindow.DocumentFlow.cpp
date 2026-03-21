@@ -633,6 +633,72 @@ void MainWindow::markCurrentFieldDirty()
     updateDirtyState();
 }
 
+void MainWindow::clearDeletedDifficultyUndoState()
+{
+    deletedDifficultyUndoState_ = DeletedDifficultyUndoState{};
+}
+
+bool MainWindow::undoDeletedDifficultyField()
+{
+    if (!deletedDifficultyUndoState_.valid) {
+        return false;
+    }
+    if (!applyCurrentFieldToDocument()) {
+        return false;
+    }
+
+    const DeletedDifficultyUndoState deletedState = deletedDifficultyUndoState_;
+    if (!SimaiDocument::isDifficultyId(deletedState.difficultyId)) {
+        clearDeletedDifficultyUndoState();
+        return false;
+    }
+    if (document_.difficulty(deletedState.difficultyId) != nullptr) {
+        statusBar()->showMessage(
+            QString("Cannot restore %1 because that difficulty already exists.")
+                .arg(SimaiDocument::difficultyName(deletedState.difficultyId))
+        );
+        return false;
+    }
+
+    stopQtPreviewPlayback(true);
+    SimaiDifficultyData& restoredDifficulty = document_.ensureDifficulty(deletedState.difficultyId);
+    restoredDifficulty = deletedState.difficultyData;
+    restoredDifficulty.id = deletedState.difficultyId;
+    validationCacheByDifficulty_.remove(deletedState.difficultyId);
+    documentDirty_ = true;
+    currentFieldDirty_ = false;
+    updateDirtyState();
+
+    const bool shouldActivateRestoredDifficulty = deletedState.wasActive || !hasActiveDifficulty();
+    if (shouldActivateRestoredDifficulty) {
+        activeOutlineKey_ = QStringLiteral("chart");
+        if (!switchToDifficultyField(deletedState.difficultyId)) {
+            return false;
+        }
+    } else {
+        rebuildFieldSidebar();
+        updateEditorHeader();
+        updateEditorEmptyState();
+        updateEditorStatus();
+        saveProjectRenderState();
+        refreshLayoutAfterPageSwitch();
+        QTimer::singleShot(0, this, [this]() { refreshLayoutAfterPageSwitch(); });
+    }
+
+    clearDeletedDifficultyUndoState();
+    const QString difficultyName = SimaiDocument::difficultyName(deletedState.difficultyId);
+    if (currentFilePath_.isEmpty()) {
+        statusBar()->showMessage(QString("Restored %1.").arg(difficultyName));
+        return true;
+    }
+    if (!saveToPath(currentFilePath_)) {
+        statusBar()->showMessage(QString("Restored %1. Changes are still unsaved.").arg(difficultyName));
+        return true;
+    }
+    statusBar()->showMessage(QString("Restored %1.").arg(difficultyName));
+    return true;
+}
+
 void MainWindow::updateEditorHeader()
 {
     updateDifficultyScopedActionStates();
@@ -892,8 +958,18 @@ bool MainWindow::deleteDifficultyField(int difficultyId)
         }
     }
 
+    clearDeletedDifficultyUndoState();
+    deletedDifficultyUndoState_.valid = true;
+    deletedDifficultyUndoState_.wasActive = deletingActiveDifficulty;
+    deletedDifficultyUndoState_.difficultyId = difficultyId;
+    deletedDifficultyUndoState_.difficultyData.id = difficultyId;
+    deletedDifficultyUndoState_.difficultyData.level = currentLevel;
+    deletedDifficultyUndoState_.difficultyData.designer = currentDesigner;
+    deletedDifficultyUndoState_.difficultyData.chart = currentChart;
+
     stopQtPreviewPlayback(true);
     document_.removeDifficulty(difficultyId);
+    validationCacheByDifficulty_.remove(difficultyId);
     documentDirty_ = true;
 
     if (deletingActiveDifficulty) {
@@ -1218,6 +1294,7 @@ void MainWindow::activateInitialField()
 
 void MainWindow::loadDocument(const SimaiDocument& document)
 {
+    clearDeletedDifficultyUndoState();
     document_ = document;
     documentDirty_ = false;
     currentFieldDirty_ = false;
