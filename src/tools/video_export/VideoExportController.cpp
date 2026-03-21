@@ -48,6 +48,17 @@ constexpr int kMixSampleRate = 48000;
 constexpr int kMixChannels = 2;
 constexpr double kTimelineEpsilonSeconds = 1e-6;
 
+QString performanceProfileToken(VideoExportPerformanceProfile profile)
+{
+    switch (profile) {
+    case VideoExportPerformanceProfile::Speed:
+        return QStringLiteral("speed");
+    case VideoExportPerformanceProfile::Balanced:
+    default:
+        return QStringLiteral("balanced");
+    }
+}
+
 struct ExportEvent {
     double second = 0.0;
     int priority = 0;
@@ -3129,7 +3140,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     exportTimer.start();
     appendVideoExportLog(
         QStringLiteral("export_begin"),
-        QStringLiteral("output=%1 chart=%2 media=%3 track=%4 skin=%5 notes=%6 start=%7 duration=%8 size=%9x%10 fps=%11 sourceCanvas=%12")
+        QStringLiteral("output=%1 chart=%2 media=%3 track=%4 skin=%5 notes=%6 start=%7 duration=%8 size=%9x%10 fps=%11 profile=%12 sourceCanvas=%13")
             .arg(task.outputPath, task.chartPath, task.backgroundMediaPath, task.trackPath, task.skinDirectory)
             .arg(task.noteMarkers.size())
             .arg(task.exportStartSeconds, 0, 'f', 6)
@@ -3137,6 +3148,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(task.outputWidth)
             .arg(task.outputHeight)
             .arg(task.fps)
+            .arg(performanceProfileToken(task.performanceProfile))
             .arg(sourceCanvas != nullptr ? 1 : 0)
     );
     if (sourceCanvas == nullptr && task.skinDirectory.trimmed().isEmpty()) {
@@ -3465,6 +3477,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     );
     appendVideoExportLog(QStringLiteral("encoder_select"), encoderProbeLog);
     const int idealThreadCount = qMax(1, QThread::idealThreadCount());
+    const bool speedProfile = task.performanceProfile == VideoExportPerformanceProfile::Speed;
     const bool softwareX265 = !encoderConfig.isHardware && encoderConfig.codec == QLatin1String("libx265");
     const qint64 availMiB = bytesToMiB(memoryInfo.availablePhysicalBytes);
     const int encoderThreads = qBound(
@@ -3474,7 +3487,9 @@ VideoExportResult VideoExportController::exportPreparedTask(
     );
     const int defaultFilterThreads = softwareX265
         ? ((memoryInfo.valid && availMiB >= 16384) ? 2 : 1)
-        : qBound(1, qMax(1, idealThreadCount / 2), 8);
+        : (speedProfile
+            ? qBound(1, idealThreadCount, 16)
+            : qBound(1, qMax(1, idealThreadCount / 2), 8));
     const int filterThreads = qBound(
         1,
         envIntValue(QStringLiteral("MIACODE_EXPORT_FILTER_THREADS"), defaultFilterThreads),
@@ -3483,7 +3498,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const int effectiveEncoderThreads = softwareX265 ? 0 : encoderThreads;
     appendVideoExportLog(
         QStringLiteral("thread_plan"),
-        QStringLiteral("ideal=%1 encoderThreads=%2 effectiveEncoderThreads=%3 filterThreads=%4 encoder=%5 hw=%6 x265Managed=%7 availMiB=%8")
+        QStringLiteral("ideal=%1 encoderThreads=%2 effectiveEncoderThreads=%3 filterThreads=%4 encoder=%5 hw=%6 x265Managed=%7 availMiB=%8 profile=%9")
             .arg(idealThreadCount)
             .arg(encoderThreads)
             .arg(effectiveEncoderThreads)
@@ -3492,6 +3507,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(encoderConfig.isHardware ? 1 : 0)
             .arg(softwareX265 ? 1 : 0)
             .arg(memoryInfo.valid ? QString::number(availMiB) : QStringLiteral("na"))
+            .arg(performanceProfileToken(task.performanceProfile))
     );
 
     args << QStringLiteral("-filter_threads") << QString::number(filterThreads);
@@ -3582,7 +3598,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     exportCanvas.setNoteFlowSpeed(task.noteFlowSpeed);
     exportCanvas.setShowDebugInfo(false);
     exportCanvas.setNoteMarkers(exportMarkers);
-    exportCanvas.setCpuTrackAreaCachingEnabled(false);
+    exportCanvas.setCpuTrackAreaCachingEnabled(speedProfile);
     const QSurfaceFormat requestedFormat = sourceCanvas != nullptr
         ? sourceCanvas->format()
         : QSurfaceFormat::defaultFormat();

@@ -13,6 +13,11 @@
 class PreviewCanvas;
 class QProgressDialog;
 
+enum class VideoExportPerformanceProfile {
+    Balanced,
+    Speed,
+};
+
 struct VideoExportTask {
     QString outputPath;
     QString chartPath;
@@ -32,6 +37,7 @@ struct VideoExportTask {
     int outputWidth = 1024;
     int outputHeight = 1024;
     int fps = 60;
+    VideoExportPerformanceProfile performanceProfile = VideoExportPerformanceProfile::Balanced;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;
     int skinLoadWaitMs = 2000;
