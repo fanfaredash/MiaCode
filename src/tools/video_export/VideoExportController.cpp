@@ -12,6 +12,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -24,6 +25,7 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QStandardPaths>
+#include <QSurfaceFormat>
 #include <QTemporaryDir>
 #include <QTextStream>
 #include <QThread>
@@ -3099,22 +3101,46 @@ VideoExportResult VideoExportController::exportFullPreview(
     QProgressDialog* progress
 )
 {
+    const auto progressCallback = [progress](int percent, const QString& text) {
+        if (progress == nullptr) {
+            return false;
+        }
+        if (percent >= 0) {
+            progress->setMaximum(100);
+            progress->setValue(qBound(0, percent, 100));
+        }
+        if (!text.isEmpty()) {
+            progress->setLabelText(text);
+        }
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        return progress->wasCanceled();
+    };
+    return exportPreparedTask(task, sourceCanvas, progressCallback);
+}
+
+VideoExportResult VideoExportController::exportPreparedTask(
+    const VideoExportTask& task,
+    const PreviewCanvas* sourceCanvas,
+    const VideoExportProgressCallback& progressCallback
+)
+{
     VideoExportResult result;
     QElapsedTimer exportTimer;
     exportTimer.start();
     appendVideoExportLog(
         QStringLiteral("export_begin"),
-        QStringLiteral("output=%1 chart=%2 track=%3 notes=%4 start=%5 duration=%6 size=%7x%8 fps=%9")
-            .arg(task.outputPath, task.chartPath, task.trackPath)
+        QStringLiteral("output=%1 chart=%2 media=%3 track=%4 skin=%5 notes=%6 start=%7 duration=%8 size=%9x%10 fps=%11 sourceCanvas=%12")
+            .arg(task.outputPath, task.chartPath, task.backgroundMediaPath, task.trackPath, task.skinDirectory)
             .arg(task.noteMarkers.size())
             .arg(task.exportStartSeconds, 0, 'f', 6)
             .arg(task.contentDurationSeconds, 0, 'f', 6)
             .arg(task.outputWidth)
             .arg(task.outputHeight)
             .arg(task.fps)
+            .arg(sourceCanvas != nullptr ? 1 : 0)
     );
-    if (sourceCanvas == nullptr) {
-        result.message = QStringLiteral("Preview canvas is not available.");
+    if (sourceCanvas == nullptr && task.skinDirectory.trimmed().isEmpty()) {
+        result.message = QStringLiteral("Skin directory is empty.");
         result.details = withExportLogPath(result.details);
         appendVideoExportLog(QStringLiteral("fail_validation"), result.message);
         return result;
@@ -3156,15 +3182,11 @@ VideoExportResult VideoExportController::exportFullPreview(
     const QString ffprobePath = resolveFfprobeExecutable(ffmpegPath);
     appendVideoExportLog(QStringLiteral("resolve_ffprobe"), QStringLiteral("path=%1").arg(ffprobePath));
 
-    const auto setProgressPercent = [progress](int percent, const QString& text) {
-        if (progress == nullptr) {
+    const auto setProgressPercent = [progressCallback](int percent, const QString& text) {
+        if (!progressCallback) {
             return false;
         }
-        progress->setMaximum(100);
-        progress->setValue(qBound(0, percent, 100));
-        progress->setLabelText(text);
-        QCoreApplication::processEvents();
-        return progress->wasCanceled();
+        return progressCallback(percent, text);
     };
 
     const double segmentStartSecond = qMax(0.0, task.exportStartSeconds);
@@ -3177,7 +3199,10 @@ VideoExportResult VideoExportController::exportFullPreview(
     const int frameWidth = qMax(1, task.outputWidth);
     const int frameHeight = qMax(1, task.outputHeight);
     const QSize frameSize(frameWidth, frameHeight);
-    const QString mediaPath = resolveBackgroundMediaPath(task.chartPath);
+    const QString explicitMediaPath = normalizePath(task.backgroundMediaPath);
+    const QString mediaPath = (!explicitMediaPath.isEmpty() && QFileInfo::exists(explicitMediaPath))
+        ? explicitMediaPath
+        : resolveBackgroundMediaPath(task.chartPath);
     const bool hasMedia = !mediaPath.isEmpty();
     const bool mediaIsImage = hasMedia && isImageMediaPath(mediaPath);
     const QString trackPath = (task.trackPath.isEmpty() || !QFileInfo::exists(task.trackPath))
@@ -3520,7 +3545,34 @@ VideoExportResult VideoExportController::exportFullPreview(
     appendVideoExportLog(QStringLiteral("ffmpeg_encode_started"));
 
     PreviewCanvas exportCanvas;
-    exportCanvas.copyRenderStateFrom(*sourceCanvas);
+    if (sourceCanvas != nullptr) {
+        exportCanvas.copyRenderStateFrom(*sourceCanvas);
+    } else {
+        exportCanvas.setSkinDirectory(task.skinDirectory);
+        const int skinWaitMs = qBound(0, task.skinLoadWaitMs, 20000);
+        bool skinLoaded = exportCanvas.hasCoreSkinAssetsLoadedForDebug();
+        if (!skinLoaded && skinWaitMs > 0) {
+            QElapsedTimer skinWaitTimer;
+            skinWaitTimer.start();
+            while (!skinLoaded && skinWaitTimer.elapsed() < skinWaitMs) {
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+                skinLoaded = exportCanvas.hasCoreSkinAssetsLoadedForDebug();
+            }
+        }
+        appendVideoExportLog(
+            QStringLiteral("skin_bootstrap"),
+            QStringLiteral("standalone=1 loaded=%1 waitMs=%2 dir=%3")
+                .arg(skinLoaded ? 1 : 0)
+                .arg(skinWaitMs)
+                .arg(task.skinDirectory)
+        );
+        if (!skinLoaded) {
+            result.message = QStringLiteral("Failed to load export skin assets.");
+            result.details = withExportLogPath(QStringLiteral("skin_dir=%1").arg(task.skinDirectory));
+            appendVideoExportLog(QStringLiteral("fail_skin_load"), result.message);
+            return result;
+        }
+    }
     exportCanvas.setStageMediaAvailable(hasMedia);
     exportCanvas.setBackgroundBrightnessOuter(task.backgroundBrightnessOuter);
     exportCanvas.setBackgroundBrightnessInner(task.backgroundBrightnessInner);
@@ -3531,7 +3583,10 @@ VideoExportResult VideoExportController::exportFullPreview(
     exportCanvas.setShowDebugInfo(false);
     exportCanvas.setNoteMarkers(exportMarkers);
     exportCanvas.setCpuTrackAreaCachingEnabled(false);
-    QOpenGLContext* shareContext = sourceCanvas->context();
+    const QSurfaceFormat requestedFormat = sourceCanvas != nullptr
+        ? sourceCanvas->format()
+        : QSurfaceFormat::defaultFormat();
+    QOpenGLContext* shareContext = sourceCanvas != nullptr ? sourceCanvas->context() : nullptr;
     const bool hasOffscreenPboReadbackOverride =
         !qEnvironmentVariableIsEmpty("MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO");
     const bool enableOffscreenPboReadback =
@@ -3547,7 +3602,7 @@ VideoExportResult VideoExportController::exportFullPreview(
     bool useOffscreenGpu = false;
     if (requestOffscreenGpu) {
         useOffscreenGpu = exportCanvas.initializeOffscreenRenderer(
-            sourceCanvas->format(),
+            requestedFormat,
             shareContext,
             &offscreenInitError
         );
@@ -3569,7 +3624,7 @@ VideoExportResult VideoExportController::exportFullPreview(
         QStringLiteral("render_backend"),
         QStringLiteral("gpuRequested=%1 sourceGpuReady=%2 sourceCtx=%3 offscreenInit=%4 exportGpuReady=%5 pboRequested=%6 pboEnabled=%7 initError=%8 pboError=%9")
             .arg(requestOffscreenGpu ? 1 : 0)
-            .arg(sourceCanvas->isGpuRendererReadyForDebug() ? 1 : 0)
+            .arg(sourceCanvas != nullptr && sourceCanvas->isGpuRendererReadyForDebug() ? 1 : 0)
             .arg(shareContext != nullptr ? 1 : 0)
             .arg(useOffscreenGpu ? 1 : 0)
             .arg(exportCanvas.isGpuRendererReadyForDebug() ? 1 : 0)
@@ -3744,7 +3799,7 @@ VideoExportResult VideoExportController::exportFullPreview(
         QString diagInitError;
         if (useOffscreenGpu) {
             diagReferenceUseOffscreen = diagReferenceCanvas.initializeOffscreenRenderer(
-                sourceCanvas->format(),
+                requestedFormat,
                 shareContext,
                 &diagInitError
             );
@@ -4221,7 +4276,7 @@ VideoExportResult VideoExportController::exportFullPreview(
             );
             return result;
         }
-        if (progress != nullptr && progress->wasCanceled()) {
+        if (setProgressPercent(-1, QString())) {
             ffmpeg.kill();
             ffmpeg.waitForFinished(2000);
             result.message = QStringLiteral("canceled");

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <QString>
 #include <QVector>
 
@@ -15,7 +16,9 @@ class QProgressDialog;
 struct VideoExportTask {
     QString outputPath;
     QString chartPath;
+    QString backgroundMediaPath;
     QString trackPath;
+    QString skinDirectory;
     QVector<TimelineNoteMarker> noteMarkers;
     PreviewAudioSettings audioSettings;
     double backgroundBrightnessOuter = miacode::preview_video::kBackgroundBrightnessDefault;
@@ -31,6 +34,7 @@ struct VideoExportTask {
     int fps = 60;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;
+    int skinLoadWaitMs = 2000;
 };
 
 struct VideoExportResult {
@@ -39,6 +43,8 @@ struct VideoExportResult {
     QString details;
 };
 
+using VideoExportProgressCallback = std::function<bool(int percent, const QString& text)>;
+
 class VideoExportController
 {
 public:
@@ -46,5 +52,10 @@ public:
         const VideoExportTask& task,
         const PreviewCanvas* sourceCanvas,
         QProgressDialog* progress
+    );
+    static VideoExportResult exportPreparedTask(
+        const VideoExportTask& task,
+        const PreviewCanvas* sourceCanvas = nullptr,
+        const VideoExportProgressCallback& progressCallback = {}
     );
 };

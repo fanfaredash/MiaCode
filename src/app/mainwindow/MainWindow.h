@@ -14,6 +14,7 @@
 #include "PreviewRenderSettings.h"
 #include "SimaiDocument.h"
 #include "TimelineView.h"
+#include "tools/video_export/VideoExportSnapshot.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
 
@@ -28,6 +29,7 @@ class QLabel;
 class LatencyDetectorDialog;
 class QListWidget;
 class QListWidgetItem;
+class QJsonObject;
 class QLineEdit;
 class QMenu;
 class QMoveEvent;
@@ -41,6 +43,7 @@ class PreviewCanvas;
 class PreviewMediaController;
 class QPlainTextEdit;
 class QProcess;
+class QProgressDialog;
 class QResizeEvent;
 class QStackedWidget;
 class QSlider;
@@ -292,6 +295,18 @@ private:
     QString resolvePreviewSessionScriptPath() const;
     QString resolveDefaultTrackPath() const;
     QString resolvePreviewSkinDir() const;
+    bool buildVideoExportSnapshot(
+        const VideoExportTask& requestedTask,
+        VideoExportSnapshot* snapshot,
+        QString* errorMessage
+    );
+    bool launchVideoExportWorker(const VideoExportSnapshot& snapshot, QString* errorMessage);
+    void handleVideoExportWorkerStdout();
+    void handleVideoExportWorkerStderr();
+    void handleVideoExportWorkerEvent(const QJsonObject& eventObject);
+    void handleVideoExportWorkerProcessFinished(int exitCode, int exitStatus);
+    void cancelVideoExportWorker();
+    void clearVideoExportWorkerState();
     QString resolveProjectRenderStateFilePath() const;
     QString resolveInitialOpenDirectory() const;
     void loadPortableState();
@@ -426,8 +441,17 @@ private:
     QTimer* previewSeekDebounceTimer_ = nullptr;
     QObject* editorViewport_ = nullptr;
     QProcess* previewProcess_ = nullptr;
+    QProcess* videoExportWorkerProcess_ = nullptr;
+    QProgressDialog* videoExportProgressDialog_ = nullptr;
     QString previewStdoutBuffer_;
     QString previewStderrBuffer_;
+    QByteArray videoExportWorkerStdoutBuffer_;
+    QByteArray videoExportWorkerStderrBuffer_;
+    QString videoExportWorkerJobId_;
+    QString videoExportWorkerOutputPath_;
+    QString videoExportWorkerResultMessage_;
+    QString videoExportWorkerResultDetails_;
+    QElapsedTimer videoExportWorkerElapsed_;
     QString lastSessionFilePath_;
     QString currentFilePath_;
     QString lastOpenDir_;
@@ -445,6 +469,11 @@ private:
     bool previewSubsystemWarmupScheduled_ = false;
     bool previewSubsystemWarmupFinalized_ = false;
     int previewSubsystemWarmupPendingTasks_ = 0;
+    bool videoExportWorkerSuccess_ = false;
+    bool videoExportWorkerCompletionReceived_ = false;
+    bool videoExportWorkerCancelRequested_ = false;
+    int videoExportWorkerLastProgressPercent_ = 0;
+    qint64 videoExportWorkerLastEtaSeconds_ = -1;
     int projectLastOpenedDifficultyId_ = 0;
     bool documentDirty_ = false;
     bool currentFieldDirty_ = false;

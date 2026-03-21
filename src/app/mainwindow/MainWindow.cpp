@@ -59,6 +59,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QLocale>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -69,6 +70,7 @@
 #include <QPlainTextEdit>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QProgressDialog>
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollArea>
@@ -106,6 +108,7 @@
 #include <QWidgetAction>
 #include <QToolTip>
 #include <QWindowStateChangeEvent>
+#include <QUuid>
 #include <QtMath>
 #ifdef HAVE_QT_MULTIMEDIA
 #include <QVideoFrame>
@@ -482,6 +485,191 @@ QString uiText(const QString& key, const QString& fallback)
 {
     const QString localized = UiText::text(key);
     return localized.isEmpty() ? fallback : localized;
+}
+
+QString normalizeLanguageToken(QString token)
+{
+    token = token.trimmed().toLower();
+    token.replace('-', '_');
+    return token;
+}
+
+bool systemLanguagePrefersChinese()
+{
+    static const bool prefersChinese = []() {
+        const QStringList uiLanguages = QLocale::system().uiLanguages();
+        for (const QString& language : uiLanguages) {
+            const QString token = normalizeLanguageToken(language);
+            if (token.startsWith(QStringLiteral("zh"))) {
+                return true;
+            }
+            if (token.startsWith(QStringLiteral("en"))) {
+                return false;
+            }
+        }
+        return normalizeLanguageToken(QLocale::system().name()).startsWith(QStringLiteral("zh"));
+    }();
+    return prefersChinese;
+}
+
+QString systemL10n(const QString& en, const QString& zh)
+{
+    return systemLanguagePrefersChinese() ? zh : en;
+}
+
+QMessageBox::StandardButton showCenteredLocalizedMessageBox(
+    QMessageBox::Icon icon,
+    QWidget* parent,
+    const QString& title,
+    const QString& message,
+    QMessageBox::StandardButtons buttons = QMessageBox::Ok,
+    QMessageBox::StandardButton defaultButton = QMessageBox::NoButton
+)
+{
+    QMessageBox dialog(icon, title, message, QMessageBox::NoButton, parent);
+    dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+    dialog.setStandardButtons(buttons);
+    if (defaultButton != QMessageBox::NoButton) {
+        dialog.setDefaultButton(defaultButton);
+    }
+    UiDialogs::localizeMessageBox(&dialog);
+    dialog.adjustSize();
+
+    QWidget* anchorWidget = parent != nullptr ? parent->window() : nullptr;
+    QRect anchorRect;
+    if (anchorWidget != nullptr && anchorWidget->isVisible()) {
+        anchorRect = anchorWidget->frameGeometry();
+    } else if (anchorWidget != nullptr) {
+        anchorRect = QRect(anchorWidget->mapToGlobal(QPoint(0, 0)), anchorWidget->size());
+    }
+    if (!anchorRect.isValid()) {
+        if (QScreen* screen = QGuiApplication::primaryScreen(); screen != nullptr) {
+            anchorRect = screen->availableGeometry();
+        }
+    }
+    if (anchorRect.isValid()) {
+        QPoint targetTopLeft(
+            anchorRect.center().x() - dialog.width() / 2,
+            anchorRect.center().y() - dialog.height() / 2
+        );
+        QScreen* targetScreen = QGuiApplication::screenAt(anchorRect.center());
+        if (targetScreen == nullptr && anchorWidget != nullptr && anchorWidget->windowHandle() != nullptr) {
+            targetScreen = anchorWidget->windowHandle()->screen();
+        }
+        if (targetScreen != nullptr) {
+            const QRect avail = targetScreen->availableGeometry();
+            targetTopLeft.setX(qBound(avail.left(), targetTopLeft.x(), avail.right() - dialog.width() + 1));
+            targetTopLeft.setY(qBound(avail.top(), targetTopLeft.y(), avail.bottom() - dialog.height() + 1));
+        }
+        dialog.move(targetTopLeft);
+    }
+
+    dialog.exec();
+    return dialog.standardButton(dialog.clickedButton());
+}
+
+QString formatExportRemainingDuration(qint64 seconds)
+{
+    seconds = qMax<qint64>(0, seconds);
+    const qint64 hours = seconds / 3600;
+    const qint64 minutes = (seconds % 3600) / 60;
+    const qint64 secs = seconds % 60;
+    if (systemLanguagePrefersChinese()) {
+        if (hours > 0) {
+            return QStringLiteral("%1小时%2分").arg(hours).arg(minutes);
+        }
+        if (minutes > 0) {
+            return QStringLiteral("%1分%2秒").arg(minutes).arg(secs);
+        }
+        return QStringLiteral("%1秒").arg(secs);
+    }
+    if (hours > 0) {
+        return QStringLiteral("%1h %2m").arg(hours).arg(minutes);
+    }
+    if (minutes > 0) {
+        return QStringLiteral("%1m %2s").arg(minutes).arg(secs);
+    }
+    return QStringLiteral("%1s").arg(secs);
+}
+
+QString localizeExportWorkerMessageForSystemLanguage(const QString& rawMessage)
+{
+    const QString trimmed = rawMessage.trimmed();
+    if (trimmed.isEmpty()) {
+        return trimmed;
+    }
+
+    static const QRegularExpression renderProgressPattern(
+        QStringLiteral("^Rendering frames and encoding\\.\\.\\.\\s+(\\d+)/(\\d+)$")
+    );
+    const QRegularExpressionMatch renderMatch = renderProgressPattern.match(trimmed);
+    if (renderMatch.hasMatch()) {
+        return systemL10n(
+            QStringLiteral("Rendering frames... %1/%2").arg(renderMatch.captured(1), renderMatch.captured(2)),
+            QStringLiteral("正在渲染帧... %1/%2").arg(renderMatch.captured(1), renderMatch.captured(2))
+        );
+    }
+
+    if (trimmed == QLatin1String("Preparing SFX track...")) {
+        return systemL10n(QStringLiteral("Preparing audio..."), QStringLiteral("正在准备音频..."));
+    }
+    if (trimmed == QLatin1String("Starting ffmpeg...")) {
+        return systemL10n(QStringLiteral("Starting ffmpeg..."), QStringLiteral("正在启动 ffmpeg..."));
+    }
+    if (trimmed == QLatin1String("Rendering frames and encoding...")) {
+        return systemL10n(QStringLiteral("Rendering frames..."), QStringLiteral("正在渲染帧..."));
+    }
+    if (trimmed == QLatin1String("Repacking MP4 for fast start...")) {
+        return systemL10n(QStringLiteral("Finalizing video..."), QStringLiteral("正在整理视频..."));
+    }
+    if (trimmed == QLatin1String("Collecting export summary...")) {
+        return systemL10n(QStringLiteral("Finishing up..."), QStringLiteral("正在收尾..."));
+    }
+    if (trimmed == QLatin1String("Export completed.")) {
+        return systemL10n(QStringLiteral("Done."), QStringLiteral("导出完成。"));
+    }
+    return systemL10n(rawMessage, rawMessage);
+}
+
+QString buildExportProgressLabelText(
+    const QString& rawMessage,
+    int percent,
+    const QElapsedTimer& elapsed,
+    qint64* smoothedEtaSeconds
+)
+{
+    QString text = localizeExportWorkerMessageForSystemLanguage(rawMessage.trimmed());
+    if (text.isEmpty()) {
+        text = systemL10n(QStringLiteral("Exporting..."), QStringLiteral("正在导出..."));
+    }
+    if (!elapsed.isValid() || percent < 5) {
+        return text;
+    }
+
+    const qint64 elapsedMs = elapsed.elapsed();
+    if (elapsedMs < 1500) {
+        return text;
+    }
+
+    const double totalMs = (static_cast<double>(elapsedMs) * 100.0) / static_cast<double>(percent);
+    const qint64 estimatedRemainingSeconds = qRound64(qMax(0.0, totalMs - static_cast<double>(elapsedMs)) / 1000.0);
+    if (estimatedRemainingSeconds <= 0) {
+        return text;
+    }
+
+    qint64 displayEtaSeconds = estimatedRemainingSeconds;
+    if (smoothedEtaSeconds != nullptr) {
+        if (*smoothedEtaSeconds >= 0) {
+            displayEtaSeconds = qRound64((static_cast<double>(*smoothedEtaSeconds) * 2.0 + estimatedRemainingSeconds) / 3.0);
+        }
+        *smoothedEtaSeconds = displayEtaSeconds;
+    }
+
+    const QString etaLine = systemL10n(
+        QStringLiteral("About %1 remaining").arg(formatExportRemainingDuration(displayEtaSeconds)),
+        QStringLiteral("预计剩余 %1").arg(formatExportRemainingDuration(displayEtaSeconds))
+    );
+    return QStringLiteral("%1\n%2").arg(text, etaLine);
 }
 
 QFont editorFont(int pointSize = -1)
@@ -1503,6 +1691,30 @@ bool probeStageMediaAvailable(const QString& chartPath)
     return false;
 }
 
+QString resolveExportBackgroundMediaPath(const QString& chartPath)
+{
+    if (chartPath.isEmpty()) {
+        return QString();
+    }
+
+    const QFileInfo chartInfo(chartPath);
+    const QDir chartDir(chartInfo.absolutePath());
+    QStringList candidates;
+#ifdef HAVE_QT_MULTIMEDIA
+    candidates << QStringLiteral("bg.mp4") << QStringLiteral("pv.mp4");
+#endif
+    candidates << QStringLiteral("bg.jpg")
+               << QStringLiteral("bg.png")
+               << QStringLiteral("bg.jpeg");
+    for (const QString& name : candidates) {
+        const QString candidatePath = chartDir.filePath(name);
+        if (QFileInfo::exists(candidatePath)) {
+            return QDir::cleanPath(candidatePath);
+        }
+    }
+    return QString();
+}
+
 bool startupTimingEnabled()
 {
     static const bool enabled = []() {
@@ -1913,6 +2125,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
     logWindowGeometryDebug("close_event_enter");
     if (maybeSaveBeforeContinue()) {
         savePortableState();
+        clearVideoExportWorkerState();
         stopPreviewSession();
         event->accept();
         logWindowGeometryDebug("close_event_accept");
@@ -3692,10 +3905,417 @@ void MainWindow::onExportPreviewVideo()
     if (previewCanvas_ != nullptr) {
         previewCanvas_->update();
     }
+    if (dialog.exportRequested()) {
+        VideoExportSnapshot snapshot;
+        QString launchError;
+        if (!buildVideoExportSnapshot(dialog.requestedExportTask(), &snapshot, &launchError)
+            || !launchVideoExportWorker(snapshot, &launchError)) {
+            UiDialogs::showMessageBox(
+                QMessageBox::Critical,
+                this,
+                uiText("dialog.video_export.title", "Export Video"),
+                launchError.isEmpty()
+                    ? uiText("dialog.video_export.error.launch_failed", "Failed to start background export.")
+                    : launchError
+            );
+        }
+    }
     if (previewAutoRestoreSquareAfterExport_
-        && (dialog.exportSucceeded() || dialog.previewAspectChangedByDialog())) {
+        && (dialog.exportRequested() || dialog.previewAspectChangedByDialog())) {
         setPreviewCanvasAspectRatio(1.0, false);
     }
+}
+
+bool MainWindow::buildVideoExportSnapshot(
+    const VideoExportTask& requestedTask,
+    VideoExportSnapshot* snapshot,
+    QString* errorMessage
+)
+{
+    if (snapshot == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("export snapshot output is null");
+        }
+        return false;
+    }
+    if (!hasActiveDifficulty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText("dialog.video_export.error.no_difficulty", "No active difficulty is selected.");
+        }
+        return false;
+    }
+    if (!applyCurrentFieldToDocument()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText("dialog.video_export.error.sync_failed", "Failed to sync current editor state.");
+        }
+        return false;
+    }
+
+    refreshTimelineMetadata();
+    if (previewStatsNoteMarkers_.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText("dialog.video_export.error.no_markers", "No parsed note markers are available for export.");
+        }
+        return false;
+    }
+
+    VideoExportSnapshot built;
+    built.jobId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    built.createdAtUtc = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    built.chartTextUtf8 = document_.toText();
+    built.difficultyId = activeDifficultyId_;
+    built.difficultyName = SimaiDocument::difficultyShortName(activeDifficultyId_);
+    built.originalChartPath = currentFilePath_;
+    built.projectDir = currentFilePath_.isEmpty()
+        ? QString()
+        : QFileInfo(currentFilePath_).absolutePath();
+    built.trackPath = resolveDefaultTrackPath();
+    built.backgroundMediaPath = resolveExportBackgroundMediaPath(currentFilePath_);
+    built.skinDirectory = resolvePreviewSkinDir();
+    built.audioSettings = previewAudioSettings_;
+    built.audioSettings.normalize();
+    built.backgroundBrightnessOuter = requestedTask.backgroundBrightnessOuter;
+    built.backgroundBrightnessInner = requestedTask.backgroundBrightnessInner;
+    built.layoutSquareScale = requestedTask.layoutSquareScale;
+    built.smoothBrightness = requestedTask.smoothBrightness;
+    built.backgroundScaleMode = requestedTask.backgroundScaleMode;
+    built.noteFlowSpeed = requestedTask.noteFlowSpeed;
+    built.exportStartSeconds = requestedTask.exportStartSeconds;
+    built.contentDurationSeconds = requestedTask.contentDurationSeconds;
+    built.outputWidth = requestedTask.outputWidth;
+    built.outputHeight = requestedTask.outputHeight;
+    built.fps = requestedTask.fps;
+    built.outputPath = requestedTask.outputPath;
+    built.showTimestamp = requestedTask.showTimestamp;
+    built.showObjectStatsHud = requestedTask.showObjectStatsHud;
+    built.skinLoadWaitMs = requestedTask.skinLoadWaitMs;
+
+    if (built.skinDirectory.trimmed().isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText("dialog.video_export.error.skin_missing", "Preview skin assets were not found.");
+        }
+        return false;
+    }
+
+    *snapshot = built;
+    return true;
+}
+
+bool MainWindow::launchVideoExportWorker(const VideoExportSnapshot& snapshot, QString* errorMessage)
+{
+    if (videoExportWorkerProcess_ != nullptr && videoExportWorkerProcess_->state() != QProcess::NotRunning) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText("dialog.video_export.error.worker_busy", "Another export is already running.");
+        }
+        return false;
+    }
+
+    const QString executablePath = QCoreApplication::applicationFilePath();
+    if (executablePath.trimmed().isEmpty() || !QFileInfo::exists(executablePath)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText("dialog.video_export.error.executable_missing", "Failed to locate MiaCode executable.");
+        }
+        return false;
+    }
+
+    clearVideoExportWorkerState();
+
+    auto* progress = new QProgressDialog(
+        systemL10n(QStringLiteral("Preparing export..."), QStringLiteral("准备导出...")),
+        systemL10n(QStringLiteral("Cancel"), QStringLiteral("取消")),
+        0,
+        100,
+        this
+    );
+    progress->setWindowTitle(systemL10n(QStringLiteral("Export Video"), QStringLiteral("导出视频")));
+    progress->setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+    progress->setWindowFlag(Qt::WindowMinimizeButtonHint, true);
+    progress->setWindowModality(Qt::NonModal);
+    progress->setMinimumDuration(0);
+    progress->setAutoClose(false);
+    progress->setAutoReset(false);
+    progress->setMinimumWidth(320);
+    progress->setMaximumWidth(360);
+    progress->setValue(0);
+    if (QLabel* label = progress->findChild<QLabel*>(); label != nullptr) {
+        label->setWordWrap(true);
+    }
+    progress->show();
+    videoExportProgressDialog_ = progress;
+
+    auto* process = new QProcess(this);
+    process->setProcessChannelMode(QProcess::SeparateChannels);
+    videoExportWorkerProcess_ = process;
+    videoExportWorkerJobId_ = snapshot.jobId;
+    videoExportWorkerOutputPath_ = snapshot.outputPath;
+    videoExportWorkerResultMessage_.clear();
+    videoExportWorkerResultDetails_.clear();
+    videoExportWorkerStdoutBuffer_.clear();
+    videoExportWorkerStderrBuffer_.clear();
+    videoExportWorkerSuccess_ = false;
+    videoExportWorkerCompletionReceived_ = false;
+    videoExportWorkerCancelRequested_ = false;
+    videoExportWorkerLastProgressPercent_ = 0;
+    videoExportWorkerLastEtaSeconds_ = -1;
+    videoExportWorkerElapsed_.start();
+
+    connect(progress, &QProgressDialog::canceled, this, &MainWindow::cancelVideoExportWorker);
+    connect(process, &QProcess::readyReadStandardOutput, this, &MainWindow::handleVideoExportWorkerStdout);
+    connect(process, &QProcess::readyReadStandardError, this, &MainWindow::handleVideoExportWorkerStderr);
+    connect(process, &QProcess::finished, this, [this](int exitCode, QProcess::ExitStatus exitStatus) {
+        handleVideoExportWorkerProcessFinished(exitCode, static_cast<int>(exitStatus));
+    });
+
+    process->start(executablePath, QStringList{QStringLiteral("--export-video-worker")}, QIODevice::ReadWrite);
+    if (!process->waitForStarted(5000)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = process->errorString();
+        }
+        clearVideoExportWorkerState();
+        return false;
+    }
+
+    QJsonObject commandObject;
+    commandObject.insert(QStringLiteral("cmd"), QStringLiteral("start_export"));
+    commandObject.insert(QStringLiteral("protocol"), 1);
+    commandObject.insert(QStringLiteral("snapshot"), snapshot.toJson());
+    QByteArray payload = QJsonDocument(commandObject).toJson(QJsonDocument::Compact);
+    payload.append('\n');
+    if (process->write(payload) != payload.size()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText("dialog.video_export.error.worker_write_failed", "Failed to send export snapshot to worker.");
+        }
+        clearVideoExportWorkerState();
+        return false;
+    }
+    process->closeWriteChannel();
+    return true;
+}
+
+void MainWindow::handleVideoExportWorkerStdout()
+{
+    if (videoExportWorkerProcess_ == nullptr) {
+        return;
+    }
+    videoExportWorkerStdoutBuffer_.append(videoExportWorkerProcess_->readAllStandardOutput());
+    while (true) {
+        const int newlineIndex = videoExportWorkerStdoutBuffer_.indexOf('\n');
+        if (newlineIndex < 0) {
+            break;
+        }
+        const QByteArray rawLine = videoExportWorkerStdoutBuffer_.left(newlineIndex).trimmed();
+        videoExportWorkerStdoutBuffer_.remove(0, newlineIndex + 1);
+        if (rawLine.isEmpty()) {
+            continue;
+        }
+        QJsonParseError parseError;
+        const QJsonDocument document = QJsonDocument::fromJson(rawLine, &parseError);
+        if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+            if (!videoExportWorkerResultDetails_.isEmpty()) {
+                videoExportWorkerResultDetails_.append('\n');
+            }
+            videoExportWorkerResultDetails_.append(QString::fromUtf8(rawLine));
+            continue;
+        }
+        handleVideoExportWorkerEvent(document.object());
+    }
+}
+
+void MainWindow::handleVideoExportWorkerStderr()
+{
+    if (videoExportWorkerProcess_ == nullptr) {
+        return;
+    }
+    videoExportWorkerStderrBuffer_.append(videoExportWorkerProcess_->readAllStandardError());
+}
+
+void MainWindow::handleVideoExportWorkerEvent(const QJsonObject& eventObject)
+{
+    const QString eventType = eventObject.value(QStringLiteral("event")).toString();
+    if (eventType == QLatin1String("worker_ready")) {
+        if (videoExportProgressDialog_ != nullptr) {
+            videoExportProgressDialog_->setValue(qMax(videoExportProgressDialog_->value(), 1));
+            videoExportProgressDialog_->setLabelText(systemL10n(
+                QStringLiteral("Worker ready..."),
+                QStringLiteral("后台已就绪...")
+            ));
+        }
+        return;
+    }
+    if (eventType == QLatin1String("accepted")) {
+        if (videoExportProgressDialog_ != nullptr) {
+            videoExportProgressDialog_->setValue(qMax(videoExportProgressDialog_->value(), 2));
+            videoExportProgressDialog_->setLabelText(systemL10n(
+                QStringLiteral("Starting export..."),
+                QStringLiteral("开始导出...")
+            ));
+        }
+        return;
+    }
+    if (eventType == QLatin1String("progress")) {
+        if (videoExportProgressDialog_ != nullptr) {
+            const int percent = qBound(0, eventObject.value(QStringLiteral("percent")).toInt(), 100);
+            const QString rawMessage = eventObject.value(QStringLiteral("message")).toString(
+                QStringLiteral("Exporting...")
+            );
+            videoExportWorkerLastProgressPercent_ = qMax(videoExportWorkerLastProgressPercent_, percent);
+            videoExportProgressDialog_->setValue(percent);
+            videoExportProgressDialog_->setLabelText(
+                buildExportProgressLabelText(
+                    rawMessage,
+                    videoExportWorkerLastProgressPercent_,
+                    videoExportWorkerElapsed_,
+                    &videoExportWorkerLastEtaSeconds_
+                )
+            );
+        }
+        return;
+    }
+    if (eventType == QLatin1String("log")) {
+        const QString message = eventObject.value(QStringLiteral("message")).toString().trimmed();
+        if (!message.isEmpty()) {
+            if (!videoExportWorkerResultDetails_.isEmpty()) {
+                videoExportWorkerResultDetails_.append('\n');
+            }
+            videoExportWorkerResultDetails_.append(message);
+        }
+        return;
+    }
+    if (eventType == QLatin1String("finished")) {
+        videoExportWorkerCompletionReceived_ = true;
+        videoExportWorkerSuccess_ = eventObject.value(QStringLiteral("success")).toBool(false);
+        videoExportWorkerOutputPath_ = eventObject.value(QStringLiteral("output_path")).toString(videoExportWorkerOutputPath_);
+        videoExportWorkerResultMessage_ = videoExportWorkerSuccess_
+            ? QStringLiteral("ok")
+            : eventObject.value(QStringLiteral("error")).toString(uiText("dialog.video_export.error.failed", "Export failed."));
+        const QString details = eventObject.value(QStringLiteral("details")).toString().trimmed();
+        if (!details.isEmpty()) {
+            videoExportWorkerResultDetails_ = details;
+        }
+        if (videoExportProgressDialog_ != nullptr) {
+            videoExportProgressDialog_->setValue(videoExportWorkerSuccess_ ? 100 : videoExportProgressDialog_->value());
+            if (videoExportWorkerSuccess_) {
+                videoExportProgressDialog_->setLabelText(systemL10n(
+                    QStringLiteral("Done."),
+                    QStringLiteral("导出完成。")
+                ));
+            }
+        }
+    }
+}
+
+void MainWindow::handleVideoExportWorkerProcessFinished(int exitCode, int exitStatus)
+{
+    Q_UNUSED(exitCode);
+
+    if (videoExportProgressDialog_ != nullptr) {
+        videoExportProgressDialog_->hide();
+    }
+
+    const QString stderrText = QString::fromUtf8(videoExportWorkerStderrBuffer_).trimmed();
+    if (videoExportWorkerCancelRequested_ && !videoExportWorkerCompletionReceived_) {
+        showCenteredLocalizedMessageBox(
+            QMessageBox::Information,
+            this,
+            uiText("dialog.video_export.title", "Export Video"),
+            uiText("dialog.video_export.message.canceled", "Export canceled.")
+        );
+        clearVideoExportWorkerState();
+        return;
+    }
+
+    if (!videoExportWorkerCompletionReceived_) {
+        videoExportWorkerSuccess_ = false;
+        videoExportWorkerResultMessage_ = exitStatus == static_cast<int>(QProcess::CrashExit)
+            ? uiText("dialog.video_export.error.worker_crash", "Export worker crashed.")
+            : uiText("dialog.video_export.error.worker_exit", "Export worker exited unexpectedly.");
+        if (!stderrText.isEmpty()) {
+            videoExportWorkerResultDetails_ = stderrText;
+        }
+    } else if (!stderrText.isEmpty() && !videoExportWorkerSuccess_) {
+        if (!videoExportWorkerResultDetails_.isEmpty()) {
+            videoExportWorkerResultDetails_.append(QStringLiteral("\n\n"));
+        }
+        videoExportWorkerResultDetails_.append(stderrText);
+    }
+
+    if (videoExportWorkerSuccess_) {
+        showCenteredLocalizedMessageBox(
+            QMessageBox::Information,
+            this,
+            uiText("dialog.video_export.title", "Export Video"),
+            QStringLiteral("%1\n\n%2")
+                .arg(uiText("dialog.video_export.message.completed", "Export completed."))
+                .arg(QDir::toNativeSeparators(videoExportWorkerOutputPath_))
+        );
+    } else {
+        const QString details = videoExportWorkerResultDetails_.trimmed();
+        showCenteredLocalizedMessageBox(
+            QMessageBox::Critical,
+            this,
+            uiText("dialog.video_export.error.failed_title", "Export Failed"),
+            details.isEmpty()
+                ? videoExportWorkerResultMessage_
+                : QStringLiteral("%1\n\n%2").arg(videoExportWorkerResultMessage_, details)
+        );
+    }
+
+    clearVideoExportWorkerState();
+}
+
+void MainWindow::cancelVideoExportWorker()
+{
+    videoExportWorkerCancelRequested_ = true;
+    if (videoExportProgressDialog_ != nullptr) {
+        videoExportProgressDialog_->setLabelText(systemL10n(
+            QStringLiteral("Canceling export..."),
+            QStringLiteral("正在取消导出...")
+        ));
+    }
+    if (videoExportWorkerProcess_ == nullptr || videoExportWorkerProcess_->state() == QProcess::NotRunning) {
+        return;
+    }
+
+    QPointer<QProcess> processGuard(videoExportWorkerProcess_);
+    videoExportWorkerProcess_->terminate();
+    QTimer::singleShot(3000, this, [this, processGuard]() {
+        if (processGuard.isNull() || processGuard != videoExportWorkerProcess_) {
+            return;
+        }
+        if (processGuard->state() != QProcess::NotRunning) {
+            processGuard->kill();
+        }
+    });
+}
+
+void MainWindow::clearVideoExportWorkerState()
+{
+    if (videoExportProgressDialog_ != nullptr) {
+        videoExportProgressDialog_->close();
+        videoExportProgressDialog_->deleteLater();
+        videoExportProgressDialog_ = nullptr;
+    }
+    if (videoExportWorkerProcess_ != nullptr) {
+        videoExportWorkerProcess_->disconnect(this);
+        if (videoExportWorkerProcess_->state() != QProcess::NotRunning) {
+            videoExportWorkerProcess_->kill();
+            videoExportWorkerProcess_->waitForFinished(2000);
+        }
+        videoExportWorkerProcess_->deleteLater();
+        videoExportWorkerProcess_ = nullptr;
+    }
+    videoExportWorkerStdoutBuffer_.clear();
+    videoExportWorkerStderrBuffer_.clear();
+    videoExportWorkerJobId_.clear();
+    videoExportWorkerOutputPath_.clear();
+    videoExportWorkerResultMessage_.clear();
+    videoExportWorkerResultDetails_.clear();
+    videoExportWorkerElapsed_.invalidate();
+    videoExportWorkerSuccess_ = false;
+    videoExportWorkerCompletionReceived_ = false;
+    videoExportWorkerCancelRequested_ = false;
+    videoExportWorkerLastProgressPercent_ = 0;
+    videoExportWorkerLastEtaSeconds_ = -1;
 }
 
 bool MainWindow::exportPreviewVideoFromCli(

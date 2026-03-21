@@ -9,7 +9,7 @@ set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
     set(MIACODE_VERSION_STRING "${MIACODE_VERSION}-${MIACODE_VERSION_PRERELEASE}")
 endif()
-set(MIACODE_DISPLAY_PRERELEASE "dev1.3")
+set(MIACODE_DISPLAY_PRERELEASE "dev1.6")
 set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_DISPLAY_PRERELEASE}" STREQUAL "")
     set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_DISPLAY_VERSION_STRING}-${MIACODE_DISPLAY_PRERELEASE}")
@@ -59,6 +59,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/VideoExportDialog.cpp
     src/tools/video_export/VideoExportController.h
     src/tools/video_export/VideoExportController.cpp
+    src/tools/video_export/VideoExportSnapshot.h
+    src/tools/video_export/VideoExportSnapshot.cpp
     src/preview/video/PreviewCanvas.h
     src/preview/video/PreviewCanvas.cpp
     src/preview/video/PreviewGLRenderer.h
