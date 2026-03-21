@@ -1277,6 +1277,11 @@ void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
         return;
     }
 
+    const qreal stageAspectRatio = stageRect.height() > 0.0 ? (stageRect.width() / stageRect.height()) : 1.0;
+    if (qAbs(stageAspectRatio - 1.0) < 0.02) {
+        return;
+    }
+
     const QRectF playfieldRect = stagePlayfieldRect(stageRect);
     const qreal statsLeftLimit = playfieldRect.right() + hudPadding;
     const qreal statsRightLimit = stageRect.right() - hudPadding;
