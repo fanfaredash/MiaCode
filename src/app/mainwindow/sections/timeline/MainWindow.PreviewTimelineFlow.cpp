@@ -1952,9 +1952,6 @@ void MainWindow::syncPausedPreviewMediaTimestamps(double second)
     if (previewMediaController_ != nullptr) {
         previewMediaController_->setPlayheadSeconds(clampedSecond);
     }
-    if (previewSfxRuntime_ != nullptr) {
-        previewSfxRuntime_->seekBackgroundTrack(clampedSecond);
-    }
 }
 
 void MainWindow::flushQtPreviewTimelinePosition()
