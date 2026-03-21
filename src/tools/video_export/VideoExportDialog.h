@@ -129,6 +129,9 @@ private:
     QToolButton* resolutionButton_ = nullptr;
     QMenu* resolutionMenu_ = nullptr;
     QSize selectedResolution_ = QSize();
+    QToolButton* fpsButton_ = nullptr;
+    QMenu* fpsMenu_ = nullptr;
+    int selectedFps_ = 60;
     QCheckBox* showTimestampCheck_ = nullptr;
     QCheckBox* smoothBrightnessCheck_ = nullptr;
     QToolButton* backgroundScaleModeButton_ = nullptr;
