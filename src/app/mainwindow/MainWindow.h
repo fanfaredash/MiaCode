@@ -525,6 +525,7 @@ private:
     bool previewShowTimestamp_ = true;
     bool previewShowObjectStatsHud_ = false;
     bool exportShowObjectStatsHud_ = false;
+    bool previewShowValidationSummary_ = true;
     PreviewAudioSettings softwarePreviewAudioSettings_;
     PreviewAudioSettings previewAudioSettings_;
     int editorTextFontPointSize_ = 0;

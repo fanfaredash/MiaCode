@@ -2758,6 +2758,10 @@ void MainWindow::loadProjectRenderState()
             exportShowObjectStatsHud_ =
                 render.value("show_object_stats_export").toBool(exportShowObjectStatsHud_);
         }
+        if (render.value("show_validation_summary").isBool()) {
+            previewShowValidationSummary_ =
+                render.value("show_validation_summary").toBool(previewShowValidationSummary_);
+        }
         const bool unifiedObjectStatsHud = previewShowObjectStatsHud_ || exportShowObjectStatsHud_;
         previewShowObjectStatsHud_ = unifiedObjectStatsHud;
         exportShowObjectStatsHud_ = unifiedObjectStatsHud;
@@ -2824,6 +2828,7 @@ void MainWindow::saveProjectRenderState() const
     render.insert("show_timestamp", previewShowTimestamp_);
     render.insert("show_object_stats_preview", previewShowObjectStatsHud_);
     render.insert("show_object_stats_export", exportShowObjectStatsHud_);
+    render.insert("show_validation_summary", previewShowValidationSummary_);
     render.insert("canvas_aspect_ratio", previewCanvasAspectRatio_);
     render.insert("auto_restore_square_after_export", previewAutoRestoreSquareAfterExport_);
     root.insert("render", render);
@@ -4931,6 +4936,11 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         previewGroup
     );
     exportObjectStatsCheck->setChecked(unifiedObjectStatsChecked);
+    auto* validationSummaryCheck = new QCheckBox(
+        uiText("dialog.render_settings.preview.show_validation_summary", "Show header error/warning summary"),
+        previewGroup
+    );
+    validationSummaryCheck->setChecked(previewShowValidationSummary_);
     auto* debugCheck = new QCheckBox(
         uiText("dialog.render_settings.preview.debug", "Show preview debug info"),
         previewGroup
@@ -4976,6 +4986,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     previewCheckLayout->addWidget(debugCheck, 0, 1, Qt::AlignLeft);
     previewCheckLayout->addWidget(previewObjectStatsCheck, 1, 0, Qt::AlignLeft);
     previewCheckLayout->addWidget(exportObjectStatsCheck, 1, 1, Qt::AlignLeft);
+    previewCheckLayout->addWidget(validationSummaryCheck, 2, 0, 1, 2, Qt::AlignLeft);
     previewFormLayout->addRow(QString(), previewCheckRow);
 
     audioGroup->setVisible(includeAudioSettings);
@@ -5234,6 +5245,12 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     });
     connect(exportObjectStatsCheck, &QCheckBox::toggled, &dialog, [setObjectStatsHudEnabled](bool checked) {
         setObjectStatsHudEnabled(checked);
+    });
+    connect(validationSummaryCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
+        previewShowValidationSummary_ = checked;
+        saveProjectRenderState();
+        savePortableState();
+        updateEditorValidationSummary();
     });
     dialog.adjustSize();
     dialog.exec();
