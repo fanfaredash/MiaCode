@@ -128,6 +128,9 @@
     if (preview.value("show_object_stats_export").isBool()) {
         exportShowObjectStatsHud_ = preview.value("show_object_stats_export").toBool(false);
     }
+    const bool unifiedObjectStatsHud = previewShowObjectStatsHud_ || exportShowObjectStatsHud_;
+    previewShowObjectStatsHud_ = unifiedObjectStatsHud;
+    exportShowObjectStatsHud_ = unifiedObjectStatsHud;
     if (preview.value("show_validation_summary").isBool()) {
         previewShowValidationSummary_ = preview.value("show_validation_summary").toBool(true);
     }

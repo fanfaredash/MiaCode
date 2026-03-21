@@ -4923,19 +4923,14 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         previewGroup
     );
     timestampCheck->setChecked(previewShowTimestamp_);
-    auto* previewObjectStatsCheck = new QCheckBox(
-        uiText("dialog.render_settings.preview.show_object_stats_preview", "Show object stats in preview"),
-        previewGroup
-    );
     const bool unifiedObjectStatsChecked = previewShowObjectStatsHud_ || exportShowObjectStatsHud_;
     previewShowObjectStatsHud_ = unifiedObjectStatsChecked;
     exportShowObjectStatsHud_ = unifiedObjectStatsChecked;
-    previewObjectStatsCheck->setChecked(unifiedObjectStatsChecked);
-    auto* exportObjectStatsCheck = new QCheckBox(
-        uiText("dialog.render_settings.preview.show_object_stats_export", "Show object stats in export"),
+    auto* objectStatsCheck = new QCheckBox(
+        uiText("dialog.render_settings.preview.show_object_stats", "Show object stats in preview/export"),
         previewGroup
     );
-    exportObjectStatsCheck->setChecked(unifiedObjectStatsChecked);
+    objectStatsCheck->setChecked(unifiedObjectStatsChecked);
     auto* validationSummaryCheck = new QCheckBox(
         uiText("dialog.render_settings.preview.show_validation_summary", "Show header error/warning summary"),
         previewGroup
@@ -4978,15 +4973,14 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     auto* previewCheckRow = new QWidget(previewGroup);
     auto* previewCheckLayout = new QGridLayout(previewCheckRow);
     previewCheckLayout->setContentsMargins(0, 0, 0, 0);
-    previewCheckLayout->setHorizontalSpacing(10);
+    previewCheckLayout->setHorizontalSpacing(6);
     previewCheckLayout->setVerticalSpacing(6);
     previewCheckLayout->setColumnStretch(0, 1);
     previewCheckLayout->setColumnStretch(1, 1);
     previewCheckLayout->addWidget(timestampCheck, 0, 0, Qt::AlignLeft);
     previewCheckLayout->addWidget(debugCheck, 0, 1, Qt::AlignLeft);
-    previewCheckLayout->addWidget(previewObjectStatsCheck, 1, 0, Qt::AlignLeft);
-    previewCheckLayout->addWidget(exportObjectStatsCheck, 1, 1, Qt::AlignLeft);
-    previewCheckLayout->addWidget(validationSummaryCheck, 2, 0, 1, 2, Qt::AlignLeft);
+    previewCheckLayout->addWidget(objectStatsCheck, 1, 0, Qt::AlignLeft);
+    previewCheckLayout->addWidget(validationSummaryCheck, 1, 1, Qt::AlignLeft);
     previewFormLayout->addRow(QString(), previewCheckRow);
 
     audioGroup->setVisible(includeAudioSettings);
@@ -5223,27 +5217,18 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         saveProjectRenderState();
         savePortableState();
     });
-    const auto setObjectStatsHudEnabled = [this, previewObjectStatsCheck, exportObjectStatsCheck](bool checked) {
+    const auto setObjectStatsHudEnabled = [this, objectStatsCheck](bool checked) {
         previewShowObjectStatsHud_ = checked;
         exportShowObjectStatsHud_ = checked;
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
         }
-        {
-            const QSignalBlocker previewBlocker(previewObjectStatsCheck);
-            previewObjectStatsCheck->setChecked(checked);
-        }
-        {
-            const QSignalBlocker exportBlocker(exportObjectStatsCheck);
-            exportObjectStatsCheck->setChecked(checked);
-        }
+        const QSignalBlocker objectStatsBlocker(objectStatsCheck);
+        objectStatsCheck->setChecked(checked);
         saveProjectRenderState();
         savePortableState();
     };
-    connect(previewObjectStatsCheck, &QCheckBox::toggled, &dialog, [setObjectStatsHudEnabled](bool checked) {
-        setObjectStatsHudEnabled(checked);
-    });
-    connect(exportObjectStatsCheck, &QCheckBox::toggled, &dialog, [setObjectStatsHudEnabled](bool checked) {
+    connect(objectStatsCheck, &QCheckBox::toggled, &dialog, [setObjectStatsHudEnabled](bool checked) {
         setObjectStatsHudEnabled(checked);
     });
     connect(validationSummaryCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {

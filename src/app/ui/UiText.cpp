@@ -427,6 +427,8 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.preview.follow_mode.every_comma", "全部逗号"},
         {"dialog.render_settings.preview.follow_mode.nonempty_comma", "仅非空逗号"},
         {"dialog.render_settings.preview.follow_mode.line_only", "仅按行"},
+        {"dialog.render_settings.preview.show_object_stats", "预览/导出显示物件统计"},
+        {"dialog.render_settings.preview.show_validation_summary", "显示头部错误/警告摘要"},
         {"dialog.render_settings.preview.show_object_stats_preview", "预览显示物件统计"},
         {"dialog.render_settings.preview.show_object_stats_export", "导出显示物件统计"},
 
