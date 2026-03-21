@@ -208,6 +208,20 @@ void PreviewCanvas::setNoteMarkers(const QVector<TimelineNoteMarker>& notes)
     update();
 }
 
+void PreviewCanvas::setMuriAnalysisReport(const MuriAnalysisReport& report)
+{
+    muriAnalysisReport_ = report;
+    slideTrackAreaCache_.clear();
+    wifiTrackAreaCache_.clear();
+    update();
+}
+
+void PreviewCanvas::setMuriRenderOptions(const MuriRenderOptions& options)
+{
+    muriRenderOptions_ = options;
+    update();
+}
+
 void PreviewCanvas::setCpuTrackAreaCachingEnabled(bool enabled)
 {
     if (cpuTrackAreaCachingEnabled_ == enabled) {
@@ -317,6 +331,8 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     guideAtlasImage_ = source.guideAtlasImage_;
     atlasRegions_ = source.atlasRegions_;
     noteMarkers_ = source.noteMarkers_;
+    muriAnalysisReport_ = source.muriAnalysisReport_;
+    muriRenderOptions_ = source.muriRenderOptions_;
     stageMediaAvailable_ = source.stageMediaAvailable_;
     backgroundBrightnessOuter_ = source.backgroundBrightnessOuter_;
     backgroundBrightnessInner_ = source.backgroundBrightnessInner_;

@@ -141,7 +141,9 @@ void appendNote(ParseState* state, const TimelineNoteMarker& marker, QVector<int
     if (state == nullptr) {
         return;
     }
-    state->result.noteMarkers.append(marker);
+    TimelineNoteMarker stored = marker;
+    stored.parseOrder = state->result.noteMarkers.size();
+    state->result.noteMarkers.append(stored);
     if (groupIndices != nullptr) {
         groupIndices->append(state->result.noteMarkers.size() - 1);
     }

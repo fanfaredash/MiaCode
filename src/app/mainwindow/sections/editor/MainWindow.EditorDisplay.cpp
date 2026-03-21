@@ -8,6 +8,7 @@
     showSlideTracks_ = true;
     showJudgeMarkers_ = false;
     showTouchTrail_ = false;
+    muriRenderOptions_ = MuriRenderOptions();
     previewBackgroundBrightnessOuter_ = miacode::preview_video::kBackgroundBrightnessDefault;
     previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessInnerDefault;
     previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
@@ -68,6 +69,11 @@
     if (preview.value("show_touch_trail").isBool()) {
         showTouchTrail_ = preview.value("show_touch_trail").toBool(false);
     }
+    const QString muriRenderMode = preview.value("muri_render_mode").toString().trimmed().toLower();
+    muriRenderOptions_.renderMode =
+        muriRenderMode == QLatin1String("maimuri_dx_style")
+        ? RenderMode::MaimuriDxStyle
+        : RenderMode::Native;
     const double legacyBrightness = qBound(
         0.0,
         preview.value("background_brightness").toDouble(miacode::preview_video::kBackgroundBrightnessDefault),
@@ -176,6 +182,12 @@ void MainWindow::savePortableState() const
 
     preview.insert("show_judge_markers", showJudgeMarkers_);
     preview.insert("show_touch_trail", showTouchTrail_);
+    preview.insert(
+        "muri_render_mode",
+        muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle
+            ? QStringLiteral("maimuri_dx_style")
+            : QStringLiteral("native")
+    );
     preview.insert("background_brightness", previewBackgroundBrightnessOuter_);
     preview.insert("background_brightness_outer", previewBackgroundBrightnessOuter_);
     preview.insert("background_brightness_inner", previewBackgroundBrightnessInner_);

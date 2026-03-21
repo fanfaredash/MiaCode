@@ -31,12 +31,14 @@ struct ParseState {
     double bpm = kDefaultBpm;
     int beats = kDefaultBeats;
     double second = 0.0;
+    int nextEachGroupId = 0;
     int lastBeatSourceLine = -1;
     bool strictMode = false;
     SimaiNativeParseResult result;
 };
 
 void loadSamplePath(const QJsonArray& samples, QVector<QPointF>* points, QVector<double>* angles);
+QVector<MuriPadTimeEntry> loadPadEnterTimes(const QJsonArray& padEnterTimes);
 
 bool isDigitLane(QChar ch)
 {
@@ -452,11 +454,13 @@ QVector<QPointF> buildTrackArrowPoints(const QPointF& start, const QPointF& end,
     return points;
 }
 
-void finalizeEachGroup(QVector<TimelineNoteMarker>* noteMarkers, const QVector<int>& groupIndices)
+void finalizeEachGroup(ParseState* state, const QVector<int>& groupIndices)
 {
-    if (noteMarkers == nullptr || groupIndices.isEmpty()) {
+    if (state == nullptr || groupIndices.isEmpty()) {
         return;
     }
+    QVector<TimelineNoteMarker>* noteMarkers = &state->result.noteMarkers;
+    const int eachGroupId = state->nextEachGroupId++;
     QVector<int> touchIndices;
     QVector<int> tapIndices;
     QVector<int> holdIndices;
@@ -469,6 +473,7 @@ void finalizeEachGroup(QVector<TimelineNoteMarker>* noteMarkers, const QVector<i
         if (index < 0 || index >= noteMarkers->size()) {
             continue;
         }
+        (*noteMarkers)[index].eachGroupId = eachGroupId;
         const TimelineNoteMarker& marker = noteMarkers->at(index);
         if (marker.type == "touch") {
             touchIndices.append(index);
@@ -947,6 +952,12 @@ bool populateSlideFromLookup(const QString& key, TimelineNoteMarker* marker)
         marker->slideTrackKey = key;
         marker->slideSegmentKeys = QStringList{key};
         marker->endLane = qBound(1, entry.value("end").toInt(marker->endLane), 8);
+        marker->slideSegmentPadEnterTimes = QVector<QVector<MuriPadTimeEntry>>{
+            loadPadEnterTimes(entry.value("pad_enter_times").toArray())
+        };
+        marker->slideSegmentCriticalProportions = QVector<double>{
+            entry.value("critical_proportion").toDouble(1.0)
+        };
 
         QVector<QPointF> points;
         QVector<double> angles;
@@ -1030,6 +1041,8 @@ bool populateSlideFromLookup(const QString& key, TimelineNoteMarker* marker)
         marker->slideTrackKey = key;
         marker->slideSegmentKeys = QStringList{key};
         marker->endLane = qBound(1, entry.value("end").toInt(marker->endLane), 8);
+        marker->wifiPadEnterTimes = loadPadEnterTimes(entry.value("pad_enter_times").toArray());
+        marker->wifiCriticalProportion = entry.value("critical_proportion").toDouble(1.0);
 
         marker->wifiLanePoints.clear();
         marker->wifiLaneAngles.clear();

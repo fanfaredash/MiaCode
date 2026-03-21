@@ -2,6 +2,7 @@
 
 #include "SimaiDocument.h"
 #include "SimaiNativeParser.h"
+#include "tools/muri/MuriAnalyzer.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -39,6 +40,20 @@ VideoExportPerformanceProfile performanceProfileFromToken(const QString& token)
     return token.trimmed().compare(QStringLiteral("speed"), Qt::CaseInsensitive) == 0
         ? VideoExportPerformanceProfile::Speed
         : VideoExportPerformanceProfile::Balanced;
+}
+
+QString renderModeToken(RenderMode mode)
+{
+    return mode == RenderMode::MaimuriDxStyle
+        ? QStringLiteral("maimuri_dx_style")
+        : QStringLiteral("native");
+}
+
+RenderMode renderModeFromToken(const QString& token)
+{
+    return token.trimmed().compare(QStringLiteral("maimuri_dx_style"), Qt::CaseInsensitive) == 0
+        ? RenderMode::MaimuriDxStyle
+        : RenderMode::Native;
 }
 
 double parsedFirstSeconds(const QString& rawValue)
@@ -116,6 +131,10 @@ QJsonObject VideoExportSnapshot::toJson() const
     render.insert(QStringLiteral("smooth_brightness"), smoothBrightness);
     render.insert(QStringLiteral("background_scale_mode"), backgroundScaleModeToken(backgroundScaleMode));
     render.insert(QStringLiteral("note_flow_speed"), noteFlowSpeed);
+    render.insert(QStringLiteral("render_mode"), renderModeToken(muriRenderOptions.renderMode));
+    render.insert(QStringLiteral("show_slide_tracks"), muriRenderOptions.showSlideTracks);
+    render.insert(QStringLiteral("show_judge_markers"), muriRenderOptions.showJudgeMarkers);
+    render.insert(QStringLiteral("show_touch_trail"), muriRenderOptions.showTouchTrail);
     render.insert(QStringLiteral("show_timestamp"), showTimestamp);
     render.insert(QStringLiteral("show_object_stats_hud"), showObjectStatsHud);
     render.insert(QStringLiteral("skin_wait_ms"), skinLoadWaitMs);
@@ -185,6 +204,14 @@ bool VideoExportSnapshot::fromJson(
         backgroundScaleModeFromToken(render.value(QStringLiteral("background_scale_mode")).toString());
     parsed.noteFlowSpeed =
         render.value(QStringLiteral("note_flow_speed")).toDouble(parsed.noteFlowSpeed);
+    parsed.muriRenderOptions.renderMode =
+        renderModeFromToken(render.value(QStringLiteral("render_mode")).toString());
+    parsed.muriRenderOptions.showSlideTracks =
+        render.value(QStringLiteral("show_slide_tracks")).toBool(parsed.muriRenderOptions.showSlideTracks);
+    parsed.muriRenderOptions.showJudgeMarkers =
+        render.value(QStringLiteral("show_judge_markers")).toBool(parsed.muriRenderOptions.showJudgeMarkers);
+    parsed.muriRenderOptions.showTouchTrail =
+        render.value(QStringLiteral("show_touch_trail")).toBool(parsed.muriRenderOptions.showTouchTrail);
     parsed.showTimestamp =
         render.value(QStringLiteral("show_timestamp")).toBool(parsed.showTimestamp);
     parsed.showObjectStatsHud =
@@ -267,6 +294,7 @@ bool buildVideoExportTaskFromSnapshot(
     built.smoothBrightness = snapshot.smoothBrightness;
     built.backgroundScaleMode = snapshot.backgroundScaleMode;
     built.noteFlowSpeed = snapshot.noteFlowSpeed;
+    built.muriRenderOptions = snapshot.muriRenderOptions;
     built.exportStartSeconds = qMax(0.0, snapshot.exportStartSeconds);
     built.contentDurationSeconds = qMax(0.0, snapshot.contentDurationSeconds);
     built.outputWidth = snapshot.outputWidth;
@@ -276,6 +304,7 @@ bool buildVideoExportTaskFromSnapshot(
     built.showTimestamp = snapshot.showTimestamp;
     built.showObjectStatsHud = snapshot.showObjectStatsHud;
     built.skinLoadWaitMs = qBound(0, snapshot.skinLoadWaitMs, 20000);
+    built.muriAnalysisReport = MuriAnalyzer::analyze(built.noteMarkers);
 
     if (built.noteMarkers.isEmpty()) {
         if (errorMessage != nullptr) {

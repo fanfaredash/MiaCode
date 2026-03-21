@@ -1315,8 +1315,10 @@ void MainWindow::clearTimelineAndPreview()
     timelineCursorNotes_.clear();
     previewFollowCursorNotes_.clear();
     lastPreviewNoteMarkerSignature_.clear();
+    muriAnalysisReport_ = MuriAnalysisReport();
     clearPreviewFollowDecoration();
     clearPreviewObjectStats();
+    clearMuriDiagnostics();
     previewTrackDurationSeconds_ = 0.0;
     qtPreviewTimelineDirty_ = false;
     qtPreviewPendingTimelineSecond_ = 0.0;
@@ -1330,9 +1332,11 @@ void MainWindow::clearTimelineAndPreview()
     stopQtPreviewPlayback(false);
     if (timelineView_ != nullptr) {
         timelineView_->clear();
+        timelineView_->setMuriAnalysisReport(muriAnalysisReport_);
     }
     if (previewCanvas_ != nullptr) {
         previewCanvas_->reset();
+        previewCanvas_->setMuriAnalysisReport(muriAnalysisReport_);
     }
     if (previewMediaController_ != nullptr) {
         previewMediaController_->reset();

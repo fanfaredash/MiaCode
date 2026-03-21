@@ -14,6 +14,8 @@
 #include "PreviewRenderSettings.h"
 #include "SimaiDocument.h"
 #include "TimelineView.h"
+#include "common/MuriRenderOptions.h"
+#include "common/MuriTypes.h"
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
@@ -122,6 +124,7 @@ private slots:
     void onReplaceOne();
     void onReplaceAll();
     void onErrorItemActivated(QListWidgetItem* item);
+    void onMuriItemActivated(QListWidgetItem* item);
     void onPreviewProcessFinished(int exitCode);
 
 private:
@@ -339,9 +342,13 @@ private:
     void clearValidationDecorations();
     void addValidationError(int line, int col, const QString& message);
     void addValidationDecoration(int line, int col, const QString& message, int endCol = -1);
+    void clearMuriDiagnostics();
+    void refreshMuriDiagnosticsPanel();
     void clearValidationCache();
     void refreshValidationPanelForActiveField();
     void setValidationTabVisible(bool visible);
+    void applyMuriRenderOptions();
+    void setMuriRenderMode(RenderMode mode, bool persistState = true);
     bool findCursorNoteForTextPosition(
         const QVector<TimelineCursorNote>& notes,
         int line,
@@ -416,6 +423,7 @@ private:
     TimelineView* timelineView_ = nullptr;
     QPlainTextEdit* outputView_ = nullptr;
     QListWidget* errorList_ = nullptr;
+    QListWidget* muriList_ = nullptr;
     QAction* validateAction_ = nullptr;
     QAction* newAction_ = nullptr;
     QAction* openAction_ = nullptr;
@@ -439,6 +447,8 @@ private:
     QAction* latencyDetectorAction_ = nullptr;
     QAction* toggleJudgeMarkersAction_ = nullptr;
     QAction* toggleTouchTrailAction_ = nullptr;
+    QAction* renderModeNativeAction_ = nullptr;
+    QAction* renderModeMaimuriDxAction_ = nullptr;
     QAction* previewAudioSettingsAction_ = nullptr;
     QAction* previewVideoSettingsAction_ = nullptr;
     QAction* aboutAction_ = nullptr;
@@ -520,6 +530,8 @@ private:
     bool showSlideTracks_ = true;
     bool showJudgeMarkers_ = false;
     bool showTouchTrail_ = false;
+    MuriAnalysisReport muriAnalysisReport_;
+    MuriRenderOptions muriRenderOptions_;
     double previewBackgroundBrightnessOuter_ = miacode::preview_video::kBackgroundBrightnessDefault;
     double previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessInnerDefault;
     double previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;

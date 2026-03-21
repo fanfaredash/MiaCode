@@ -13,6 +13,7 @@
 #include "UiTheme.h"
 #include "simai/transform/ChartBatchTransform.h"
 #include "tools/latency/LatencyDetectorDialog.h"
+#include "tools/muri/MuriAnalyzer.h"
 #include "tools/video_export/VideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
 #include "common/AssetPaths.h"
@@ -21,6 +22,7 @@
 
 #include <algorithm>
 #include <QAction>
+#include <QActionGroup>
 #include <QAbstractItemView>
 #include <QAbstractScrollArea>
 #include <QApplication>
@@ -901,6 +903,20 @@ QByteArray noteMarkerSignature(const QVector<TimelineNoteMarker>& notes)
         signature.append(';');
     }
     return signature;
+}
+
+QString renderModeToken(RenderMode mode)
+{
+    return mode == RenderMode::MaimuriDxStyle
+        ? QStringLiteral("maimuri_dx_style")
+        : QStringLiteral("native");
+}
+
+RenderMode renderModeFromToken(const QString& token)
+{
+    return token.trimmed().compare(QStringLiteral("maimuri_dx_style"), Qt::CaseInsensitive) == 0
+        ? RenderMode::MaimuriDxStyle
+        : RenderMode::Native;
 }
 
 int difficultyIdFromCliToken(const QString& rawToken)
@@ -2755,6 +2771,15 @@ void MainWindow::loadProjectRenderState()
                 render.value("note_flow_speed").toDouble(previewNoteFlowSpeed_)
             );
         }
+        if (render.value("render_mode").isString()) {
+            muriRenderOptions_.renderMode = renderModeFromToken(render.value("render_mode").toString());
+        }
+        if (render.value("show_judge_markers").isBool()) {
+            showJudgeMarkers_ = render.value("show_judge_markers").toBool(showJudgeMarkers_);
+        }
+        if (render.value("show_touch_trail").isBool()) {
+            showTouchTrail_ = render.value("show_touch_trail").toBool(showTouchTrail_);
+        }
         if (render.value("canvas_frame_rate_mode").isString()) {
             previewCanvasFrameRateMode_ =
                 previewCanvasFrameRateModeFromStorageValue(render.value("canvas_frame_rate_mode").toString());
@@ -2809,6 +2834,7 @@ void MainWindow::loadProjectRenderState()
         previewCanvas_->setShowTimestamp(previewShowTimestamp_);
         previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
     }
+    applyMuriRenderOptions();
 }
 
 void MainWindow::saveProjectRenderState() const
@@ -2838,6 +2864,9 @@ void MainWindow::saveProjectRenderState() const
             : QStringLiteral("fill")
     );
     render.insert("note_flow_speed", previewNoteFlowSpeed_);
+    render.insert("render_mode", renderModeToken(muriRenderOptions_.renderMode));
+    render.insert("show_judge_markers", showJudgeMarkers_);
+    render.insert("show_touch_trail", showTouchTrail_);
     render.insert("canvas_frame_rate_mode", previewCanvasFrameRateModeStorageValue());
     render.insert("follow_mode", previewFollowModeStorageValue());
     render.insert("show_debug_info", previewShowDebugInfo_);
@@ -3592,7 +3621,9 @@ void MainWindow::onTogglePreviewPause()
 void MainWindow::onToggleJudgeMarkers(bool checked)
 {
     showJudgeMarkers_ = checked;
+    applyMuriRenderOptions();
     savePortableState();
+    saveProjectRenderState();
     sendPreviewConfigCommand();
     statusBar()->showMessage(
         showJudgeMarkers_
@@ -3604,12 +3635,57 @@ void MainWindow::onToggleJudgeMarkers(bool checked)
 void MainWindow::onToggleTouchTrail(bool checked)
 {
     showTouchTrail_ = checked;
+    applyMuriRenderOptions();
     savePortableState();
+    saveProjectRenderState();
     sendPreviewConfigCommand();
     statusBar()->showMessage(
         showTouchTrail_
             ? uiText("status.touch_trail_enabled", "Touch trail enabled.")
             : uiText("status.touch_trail_disabled", "Touch trail hidden.")
+    );
+}
+
+void MainWindow::applyMuriRenderOptions()
+{
+    muriRenderOptions_.showSlideTracks = showSlideTracks_;
+    muriRenderOptions_.showJudgeMarkers = showJudgeMarkers_;
+    muriRenderOptions_.showTouchTrail = showTouchTrail_;
+
+    if (renderModeNativeAction_ != nullptr) {
+        QSignalBlocker blocker(renderModeNativeAction_);
+        renderModeNativeAction_->setChecked(muriRenderOptions_.renderMode == RenderMode::Native);
+    }
+    if (renderModeMaimuriDxAction_ != nullptr) {
+        QSignalBlocker blocker(renderModeMaimuriDxAction_);
+        renderModeMaimuriDxAction_->setChecked(muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle);
+    }
+    if (timelineView_ != nullptr) {
+        timelineView_->setShowSlideTracks(muriRenderOptions_.showSlideTracks);
+        timelineView_->setMuriAnalysisReport(muriAnalysisReport_);
+    }
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->setMuriRenderOptions(muriRenderOptions_);
+        previewCanvas_->setMuriAnalysisReport(muriAnalysisReport_);
+    }
+}
+
+void MainWindow::setMuriRenderMode(RenderMode mode, bool persistState)
+{
+    if (muriRenderOptions_.renderMode == mode && !persistState) {
+        applyMuriRenderOptions();
+        return;
+    }
+    muriRenderOptions_.renderMode = mode;
+    applyMuriRenderOptions();
+    if (persistState) {
+        savePortableState();
+        saveProjectRenderState();
+    }
+    statusBar()->showMessage(
+        mode == RenderMode::MaimuriDxStyle
+            ? uiText("status.muri_render_mode_dx", "MaiMuriDX-style track trim enabled.")
+            : uiText("status.muri_render_mode_native", "Native track trim enabled.")
     );
 }
 
@@ -3752,6 +3828,8 @@ void MainWindow::onExportPreviewVideo()
     task.chartPath = currentFilePath_;
     task.trackPath = resolveDefaultTrackPath();
     task.noteMarkers = previewStatsNoteMarkers_;
+    task.muriAnalysisReport = muriAnalysisReport_;
+    task.muriRenderOptions = muriRenderOptions_;
     task.audioSettings = previewAudioSettings_;
     task.backgroundBrightnessOuter = previewBackgroundBrightnessOuter_;
     task.backgroundBrightnessInner = previewBackgroundBrightnessInner_;
@@ -4001,6 +4079,7 @@ bool MainWindow::buildVideoExportSnapshot(
     built.smoothBrightness = requestedTask.smoothBrightness;
     built.backgroundScaleMode = requestedTask.backgroundScaleMode;
     built.noteFlowSpeed = requestedTask.noteFlowSpeed;
+    built.muriRenderOptions = requestedTask.muriRenderOptions;
     built.exportStartSeconds = requestedTask.exportStartSeconds;
     built.contentDurationSeconds = requestedTask.contentDurationSeconds;
     built.outputWidth = requestedTask.outputWidth;
@@ -4503,6 +4582,8 @@ bool MainWindow::exportPreviewVideoFromCli(
     task.chartPath = currentFilePath_;
     task.trackPath = resolveDefaultTrackPath();
     task.noteMarkers = previewStatsNoteMarkers_;
+    task.muriAnalysisReport = muriAnalysisReport_;
+    task.muriRenderOptions = muriRenderOptions_;
     task.audioSettings = previewAudioSettings_;
     task.backgroundBrightnessOuter = previewBackgroundBrightnessOuter_;
     task.backgroundBrightnessInner = previewBackgroundBrightnessInner_;

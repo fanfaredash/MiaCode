@@ -7,11 +7,14 @@
 #include <QMouseEvent>
 #include <QPixmap>
 #include <QPointF>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QToolButton>
 #include <QVector>
 #include <QEvent>
+
+#include "common/MuriTypes.h"
 
 struct TimelineBeatMarker {
     double second = 0.0;
@@ -25,6 +28,8 @@ struct TimelineNoteMarker {
     double endSecond = -1.0;
     double slideTraceSecond = -1.0;
     double availableSecond = -1.0;
+    int parseOrder = -1;
+    int eachGroupId = -1;
     int sourceLine = 1;
     int sourceCol = 1;
     int lane = 1;
@@ -34,6 +39,8 @@ struct TimelineNoteMarker {
     QStringList slideSegmentKeys;
     QVector<double> slideSegmentShootSeconds;
     QVector<double> slideSegmentDurations;
+    QVector<QVector<MuriPadTimeEntry>> slideSegmentPadEnterTimes;
+    QVector<double> slideSegmentCriticalProportions;
     QVector<QVector<QPointF>> slideSegmentPoints;
     QVector<QVector<double>> slideSegmentAngles;
     QVector<QVector<QPointF>> wifiLanePoints;
@@ -48,6 +55,8 @@ struct TimelineNoteMarker {
     QVector<QVector<int>> wifiTrackAreaImageIndices;
     QVector<double> wifiTrackAreaThresholds;
     QVector<QVector<double>> wifiTrackAreaCheckpoints;
+    QVector<MuriPadTimeEntry> wifiPadEnterTimes;
+    double wifiCriticalProportion = 1.0;
     QPointF touchPoint;
     QString touchPad;
     bool isEach = false;
@@ -91,6 +100,7 @@ public:
     double durationSeconds() const;
     void setShowSlideTracks(bool show);
     bool showSlideTracks() const;
+    void setMuriAnalysisReport(const MuriAnalysisReport& report);
     double zoomScale() const;
     void setFollowPreviewEnabled(bool enabled);
     bool followPreviewEnabled() const;
@@ -144,6 +154,7 @@ private:
     double displayEndSeconds_ = 1.0;
     double pixelsPerSecond_ = 120.0;
     bool showSlideTracks_ = true;
+    QSet<QString> muriMarkerKeys_;
     QHash<QString, QPixmap> noteIcons_;
     QVector<float> waveformPeaks_;
     double waveformStartSeconds_ = 0.0;

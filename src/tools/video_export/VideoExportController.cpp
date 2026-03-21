@@ -3598,6 +3598,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
     exportCanvas.setNoteFlowSpeed(task.noteFlowSpeed);
     exportCanvas.setShowDebugInfo(false);
     exportCanvas.setNoteMarkers(exportMarkers);
+    exportCanvas.setMuriRenderOptions(task.muriRenderOptions);
+    exportCanvas.setMuriAnalysisReport(task.muriAnalysisReport);
     exportCanvas.setCpuTrackAreaCachingEnabled(speedProfile);
     const QSurfaceFormat requestedFormat = sourceCanvas != nullptr
         ? sourceCanvas->format()

@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.21)
 
 set(MIACODE_VERSION_MAJOR "0")
 set(MIACODE_VERSION_MINOR "3")
-set(MIACODE_VERSION_PATCH "1")
-set(MIACODE_VERSION_PRERELEASE "dev1")
+set(MIACODE_VERSION_PATCH "3")
+set(MIACODE_VERSION_PRERELEASE "")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
@@ -49,12 +49,18 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/ui/UiText.cpp
     src/app/ui/UiTheme.h
     src/app/ui/UiTheme.cpp
+    src/common/MuriTypes.h
+    src/common/MuriTypes.cpp
+    src/common/MuriRenderOptions.h
+    src/common/MuriConfig.h
     src/editor/PlainCodeEditor.h
     src/editor/PlainCodeEditor.cpp
     src/editor/BracketScopeHighlighter.h
     src/editor/BracketScopeHighlighter.cpp
     src/tools/latency/LatencyDetectorDialog.h
     src/tools/latency/LatencyDetectorDialog.cpp
+    src/tools/muri/MuriAnalyzer.h
+    src/tools/muri/MuriAnalyzer.cpp
     src/tools/video_export/VideoExportDialog.h
     src/tools/video_export/VideoExportDialog.cpp
     src/tools/video_export/VideoExportController.h
@@ -156,6 +162,19 @@ target_link_libraries(MiaCode PRIVATE Qt6::Multimedia)
 target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
 
 if (MIACODE_BUILD_DEV_TOOLS)
+    add_executable(miacode_muri_dump
+        src/tools/muri/MuriDump.cpp
+        src/common/MuriTypes.h
+        src/common/MuriTypes.cpp
+        src/simai/document/SimaiDocument.h
+        src/simai/document/SimaiDocument.cpp
+        src/simai/parser/SimaiNativeParser.h
+        src/simai/parser/SimaiNativeParser.cpp
+        src/tools/muri/MuriAnalyzer.h
+        src/tools/muri/MuriAnalyzer.cpp
+        resources/fonts.qrc
+    )
+
     add_executable(simai_native_dump
         src/simai/parser/SimaiNativeDump.cpp
         src/simai/parser/SimaiNativeParser.h
@@ -182,6 +201,22 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/tools/chart_transform/ChartBatchTransformSpec.cpp
         src/simai/transform/ChartBatchTransform.h
         src/simai/transform/ChartBatchTransform.cpp
+    )
+
+    target_link_libraries(miacode_muri_dump PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+    )
+    target_include_directories(miacode_muri_dump PRIVATE
+        src
+        src/app/ui
+        src/common
+        src/simai
+        src/simai/document
+        src/simai/parser
+        src/timeline
+        src/tools
     )
 
     target_link_libraries(simai_native_dump PRIVATE

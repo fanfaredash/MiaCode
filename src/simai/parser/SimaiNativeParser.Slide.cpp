@@ -1,3 +1,22 @@
+QVector<MuriPadTimeEntry> loadPadEnterTimes(const QJsonArray& padEnterTimes)
+{
+    QVector<MuriPadTimeEntry> result;
+    result.reserve(padEnterTimes.size());
+    for (const QJsonValue& value : padEnterTimes) {
+        if (!value.isObject()) {
+            continue;
+        }
+        const QJsonObject object = value.toObject();
+        MuriPadTimeEntry entry;
+        entry.pad = object.value("pad").toString();
+        entry.proportion = object.value("t").toDouble();
+        if (!entry.pad.isEmpty()) {
+            result.append(entry);
+        }
+    }
+    return result;
+}
+
 void parseSlideToken(ParseState* state, const QString& token, int lineNumber, int column, QVector<int>* groupIndices)
 {
     if (state == nullptr || token.isEmpty() || !isDigitLane(token.at(0))) {
@@ -111,6 +130,8 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
         marker.slideSegmentKeys = chainShapes;
         marker.slideSegmentDurations = chainDurations;
         marker.slideSegmentShootSeconds.clear();
+        marker.slideSegmentPadEnterTimes.clear();
+        marker.slideSegmentCriticalProportions.clear();
         marker.slideSegmentPoints.clear();
         marker.slideSegmentAngles.clear();
         marker.slideTrackAreaPoints.clear();
@@ -132,6 +153,8 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
             marker.slideSegmentShootSeconds.append(segmentShootSecond);
             segmentShootSecond += qMax(0.001, chainDurations.value(shapeIndex, 0.001));
             marker.endLane = qBound(1, entry.value("end").toInt(marker.endLane), 8);
+            marker.slideSegmentPadEnterTimes.append(loadPadEnterTimes(entry.value("pad_enter_times").toArray()));
+            marker.slideSegmentCriticalProportions.append(entry.value("critical_proportion").toDouble(1.0));
 
             QVector<QPointF> points;
             QVector<double> angles;
@@ -216,6 +239,10 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     marker.slideSegmentKeys = QStringList{marker.slideTrackKey};
     marker.slideSegmentShootSeconds = QVector<double>{marker.slideTraceSecond};
     marker.slideSegmentDurations = QVector<double>{qMax(0.001, durationSecond)};
+    marker.slideSegmentPadEnterTimes.clear();
+    marker.slideSegmentCriticalProportions.clear();
+    marker.wifiPadEnterTimes.clear();
+    marker.wifiCriticalProportion = 1.0;
 
     if (!populateSlideFromLookup(marker.slideTrackKey, &marker)) {
         const QPointF start = polarPoint(kOuterLaneRadius, lane);
@@ -234,6 +261,8 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
             marker.slideTrackAreaThresholds = QVector<QVector<double>>{QVector<double>{0.0}};
             marker.slideTrackAreaCheckpoints = QVector<QVector<QVector<double>>>{QVector<QVector<double>>{QVector<double>()}};
             marker.slideTrackAreaCutIndices = QVector<QVector<QVector<int>>>{QVector<QVector<int>>{QVector<int>()}};
+            marker.slideSegmentPadEnterTimes = QVector<QVector<MuriPadTimeEntry>>{QVector<MuriPadTimeEntry>()};
+            marker.slideSegmentCriticalProportions = QVector<double>{1.0};
         } else {
             const QPointF delta = end - start;
             const QPointF normal(-delta.y(), delta.x());
@@ -266,6 +295,8 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
             marker.wifiTrackAreaImageIndices = QVector<QVector<int>>{imageIndices};
             marker.wifiTrackAreaThresholds = QVector<double>{0.0};
             marker.wifiTrackAreaCheckpoints = QVector<QVector<double>>{QVector<double>()};
+            marker.wifiPadEnterTimes.clear();
+            marker.wifiCriticalProportion = 1.0;
         }
     }
 

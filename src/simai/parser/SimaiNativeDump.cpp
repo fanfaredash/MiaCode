@@ -15,11 +15,14 @@ QJsonObject dumpMarker(const TimelineNoteMarker& marker)
     QJsonObject item;
     item.insert("type", marker.type);
     item.insert("line", marker.sourceLine);
+    item.insert("col", marker.sourceCol);
     item.insert("lane", marker.lane);
     item.insert("end_lane", marker.endLane);
     item.insert("second", marker.second);
     item.insert("end_second", marker.endSecond);
     item.insert("slide_trace_second", marker.slideTraceSecond);
+    item.insert("parse_order", marker.parseOrder);
+    item.insert("each_group_id", marker.eachGroupId);
     if (marker.type != QLatin1String("slide") && marker.type != QLatin1String("wifi")) {
         item.insert("is_each", marker.isEach);
     }
