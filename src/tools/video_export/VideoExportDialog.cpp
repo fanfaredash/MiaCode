@@ -84,6 +84,8 @@ constexpr ResolutionPreset kResolutionPresets[] = {
     {2560, 1440, "2560x1440 (16:9)", 16.0 / 9.0},
 };
 
+constexpr int kFpsOptions[] = {60, 120};
+
 QString uiText(const char* key, const QString& fallback)
 {
     const QString translated = UiText::text(QString::fromLatin1(key));
@@ -469,6 +471,33 @@ VideoExportDialog::VideoExportDialog(
     resolutionRightPlaceholder->setFixedWidth(rightAlignedButtonWidth);
     resolutionLayout->addWidget(resolutionRightPlaceholder, 0);
     primaryPanelLayout->addWidget(resolutionRow, 0);
+
+    selectedFps_ = baseTask_.fps >= 90 ? 120 : 60;
+    fpsButton_ = createDialogMenuButton(optionsContent_, QStringLiteral("%1 FPS").arg(selectedFps_));
+    fpsMenu_ = new QMenu(fpsButton_);
+    UiTheme::styleRoundedMenu(*fpsMenu_);
+    for (int fps : kFpsOptions) {
+        const QString label = QStringLiteral("%1 FPS").arg(fps);
+        addDialogMenuChoice(fpsMenu_, label, [this, fps, label]() {
+            selectedFps_ = fps;
+            if (fpsButton_ != nullptr) {
+                fpsButton_->setText(label);
+            }
+        });
+    }
+    fpsButton_->setMenu(fpsMenu_);
+    auto* fpsRow = new QWidget(primaryPanel);
+    auto* fpsLayout = new QHBoxLayout(fpsRow);
+    fpsLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
+    fpsLayout->setSpacing(kFormRowSpacing);
+    auto* fpsLabel = new QLabel(uiText("dialog.video_export.fps", QStringLiteral("FPS")), fpsRow);
+    fpsLabel->setFixedWidth(kFormLabelWidth);
+    fpsLayout->addWidget(fpsLabel, 0);
+    fpsLayout->addWidget(fpsButton_, 1);
+    auto* fpsRightPlaceholder = new QWidget(fpsRow);
+    fpsRightPlaceholder->setFixedWidth(rightAlignedButtonWidth);
+    fpsLayout->addWidget(fpsRightPlaceholder, 0);
+    primaryPanelLayout->addWidget(fpsRow, 0);
 
     rangeContent_ = new QWidget(this);
     auto* rangeLayout = new QVBoxLayout(rangeContent_);
@@ -1082,7 +1111,7 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     const QSize selectedSize = selectedResolution();
     updated.outputWidth = selectedSize.width() > 0 ? selectedSize.width() : updated.outputWidth;
     updated.outputHeight = selectedSize.height() > 0 ? selectedSize.height() : updated.outputHeight;
-    updated.fps = 60;
+    updated.fps = qMax(1, selectedFps_);
     updated.showTimestamp = showTimestampCheck_ != nullptr ? showTimestampCheck_->isChecked() : true;
     updated.backgroundBrightnessOuter = brightnessOuterSlider_ != nullptr
         ? qBound(0.0, static_cast<double>(brightnessOuterSlider_->value()) / 100.0, 1.0)
