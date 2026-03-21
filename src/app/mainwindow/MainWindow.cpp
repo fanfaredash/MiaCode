@@ -865,7 +865,7 @@ QString decodeProcessText(const QByteArray& data)
 QByteArray noteMarkerSignature(const QVector<TimelineNoteMarker>& notes)
 {
     QByteArray signature;
-    signature.reserve(notes.size() * 48);
+    signature.reserve(notes.size() * 72);
     for (const TimelineNoteMarker& marker : notes) {
         signature.append(QByteArray::number(marker.sourceLine));
         signature.append('|');
@@ -881,7 +881,23 @@ QByteArray noteMarkerSignature(const QVector<TimelineNoteMarker>& notes)
         signature.append('|');
         signature.append(marker.type.toUtf8());
         signature.append('|');
+        signature.append(marker.isEach ? '1' : '0');
+        signature.append('|');
+        signature.append(marker.isBreak ? '1' : '0');
+        signature.append('|');
+        signature.append(marker.isEx ? '1' : '0');
+        signature.append('|');
         signature.append(marker.isFirework ? '1' : '0');
+        signature.append('|');
+        signature.append(marker.headEach ? '1' : '0');
+        signature.append('|');
+        signature.append(marker.headBreak ? '1' : '0');
+        signature.append('|');
+        signature.append(marker.headEx ? '1' : '0');
+        signature.append('|');
+        signature.append(marker.trackBreak ? '1' : '0');
+        signature.append('|');
+        signature.append(marker.hasHeadStar ? '1' : '0');
         signature.append(';');
     }
     return signature;
