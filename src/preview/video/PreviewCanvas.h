@@ -1,6 +1,8 @@
 #pragma once
 
 #include "common/LayoutRingConfig.h"
+#include "common/MuriConfig.h"
+#include "common/MuriRenderOptions.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "PreviewRenderSettings.h"
@@ -41,6 +43,8 @@ public:
     void setMediaFrame(const QImage& frame);
     void setVideoFrame(const QVideoFrame& frame);
     void setNoteMarkers(const QVector<TimelineNoteMarker>& notes);
+    void setMuriAnalysisReport(const MuriAnalysisReport& report);
+    void setMuriRenderOptions(const MuriRenderOptions& options);
     void setSkinDirectory(const QString& skinDir);
     void setBackgroundBrightness(double brightness);
     void setBackgroundBrightnessOuter(double brightness);
@@ -172,6 +176,8 @@ private:
     void drawTouchHoldLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawTrackLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawSlideMotionLayer(QPainter& painter, const QRectF& playfieldRect);
+    void drawMuriPadStateOverlay(QPainter& painter, const QRectF& playfieldRect);
+    void drawMuriActionOverlay(QPainter& painter, const QRectF& playfieldRect);
     void drawGuideLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawHoldAndTapHeadLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawJudgeEffectLayer(QPainter& painter, const QRectF& playfieldRect);
@@ -232,6 +238,7 @@ private:
     bool mapOffscreenReadbackPbo(int pboIndex, const QSize& imageSize, QImage* frame, QString* errorMessage = nullptr);
     void destroyOffscreenReadbackPbos();
     bool supportsOffscreenPboReadback(QOpenGLContext* context) const;
+    const MarkerMuriState* markerMuriState(const TimelineNoteMarker& marker) const;
     void updateFpsSample();
     void collectGpuProfilingResults(bool waitForAll);
     QString profilingSummaryPath() const;
@@ -321,6 +328,8 @@ private:
     bool cpuTrackAreaCachingEnabled_ = true;
     PreviewGLRenderer glRenderer_;
     QVector<TimelineNoteMarker> noteMarkers_;
+    MuriAnalysisReport muriAnalysisReport_;
+    MuriRenderOptions muriRenderOptions_;
     QImage mediaFrame_;
     QImage retainedVideoFallbackFrame_;
 #ifdef HAVE_QT_MULTIMEDIA

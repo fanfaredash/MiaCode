@@ -326,6 +326,8 @@ void PreviewCanvas::renderCanvas(
         drawStageBackground(painter, canvasSize, stageRect);
     }
     drawPlayfieldBackdrop(painter, playfieldRect);
+    drawMuriPadStateOverlay(painter, playfieldRect);
+    drawMuriActionOverlay(painter, playfieldRect);
     const bool batchNative = glRenderer_.isInitialized();
     if (batchNative) {
         beginNativeBatch(painter);

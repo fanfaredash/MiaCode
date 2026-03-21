@@ -239,21 +239,46 @@
 
     previewMenu->addSeparator();
 
+    auto* renderModeGroup = new QActionGroup(previewMenu);
+    renderModeGroup->setExclusive(true);
+
+    renderModeNativeAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("原生轨道裁切") : QStringLiteral("Native Track Trim"),
+        this
+    );
+    renderModeNativeAction_->setCheckable(true);
+    renderModeNativeAction_->setChecked(muriRenderOptions_.renderMode == RenderMode::Native);
+    connect(renderModeNativeAction_, &QAction::triggered, this, [this]() {
+        setMuriRenderMode(RenderMode::Native);
+    });
+    renderModeGroup->addAction(renderModeNativeAction_);
+    previewMenu->addAction(renderModeNativeAction_);
+
+    renderModeMaimuriDxAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("MaiMuriDX 风格裁切") : QStringLiteral("MaiMuriDX Style Trim"),
+        this
+    );
+    renderModeMaimuriDxAction_->setCheckable(true);
+    renderModeMaimuriDxAction_->setChecked(muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle);
+    connect(renderModeMaimuriDxAction_, &QAction::triggered, this, [this]() {
+        setMuriRenderMode(RenderMode::MaimuriDxStyle);
+    });
+    renderModeGroup->addAction(renderModeMaimuriDxAction_);
+    previewMenu->addAction(renderModeMaimuriDxAction_);
+
+    previewMenu->addSeparator();
+
     toggleJudgeMarkersAction_ = new QAction("Show Judge Markers", this);
     toggleJudgeMarkersAction_->setCheckable(true);
     toggleJudgeMarkersAction_->setChecked(showJudgeMarkers_);
     connect(toggleJudgeMarkersAction_, &QAction::toggled, this, &MainWindow::onToggleJudgeMarkers);
     previewMenu->addAction(toggleJudgeMarkersAction_);
-    toggleJudgeMarkersAction_->setEnabled(false);
-    toggleJudgeMarkersAction_->setVisible(false);
 
     toggleTouchTrailAction_ = new QAction("Show Touch Trail", this);
     toggleTouchTrailAction_->setCheckable(true);
     toggleTouchTrailAction_->setChecked(showTouchTrail_);
     connect(toggleTouchTrailAction_, &QAction::toggled, this, &MainWindow::onToggleTouchTrail);
     previewMenu->addAction(toggleTouchTrailAction_);
-    toggleTouchTrailAction_->setEnabled(false);
-    toggleTouchTrailAction_->setVisible(false);
 
     previewMenu->addSeparator();
 
@@ -1215,6 +1240,19 @@ MainWindow::MainWindow(QWidget* parent)
         errorList_,
         UiText::isChineseUi() ? QStringLiteral("语法检查") : QStringLiteral("Syntax Check")
     );
+
+    muriList_ = new QListWidget(bottomTabs_);
+    muriList_->setFont(uiOutputFont());
+    muriList_->setUniformItemSizes(false);
+    muriList_->setWordWrap(true);
+    muriList_->setTextElideMode(Qt::ElideNone);
+    muriList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    connect(muriList_, &QListWidget::itemActivated, this, &MainWindow::onMuriItemActivated);
+    connect(muriList_, &QListWidget::itemClicked, this, &MainWindow::onMuriItemActivated);
+    bottomTabs_->addTab(
+        muriList_,
+        UiText::isChineseUi() ? QStringLiteral("无理检查") : QStringLiteral("Muri Check")
+    );
     updateBottomTabsDeviceHeight();
     logStartupStage("timeline_and_tabs_ready");
 
@@ -1531,9 +1569,6 @@ MainWindow::MainWindow(QWidget* parent)
     if (toggleTouchTrailAction_ != nullptr) {
         toggleTouchTrailAction_->setChecked(showTouchTrail_);
     }
-    if (timelineView_ != nullptr) {
-        timelineView_->setShowSlideTracks(true);
-    }
     if (previewCanvas_ != nullptr) {
         previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
         previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
@@ -1548,6 +1583,7 @@ MainWindow::MainWindow(QWidget* parent)
     if (previewMediaController_ != nullptr) {
         previewMediaController_->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
     }
+    applyMuriRenderOptions();
     applyUiTheme();
     updatePauseButtonAppearance();
     if (restoreLastSessionFile()) {

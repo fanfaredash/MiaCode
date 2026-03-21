@@ -182,6 +182,7 @@ void TimelineView::clear()
 {
     beats_.clear();
     notes_.clear();
+    muriMarkerKeys_.clear();
     durationSeconds_ = 0.0;
     playheadSeconds_ = 0.0;
     cursorSeconds_ = 0.0;
@@ -281,6 +282,21 @@ void TimelineView::setShowSlideTracks(bool show)
 bool TimelineView::showSlideTracks() const
 {
     return showSlideTracks_;
+}
+
+void TimelineView::setMuriAnalysisReport(const MuriAnalysisReport& report)
+{
+    QSet<QString> nextKeys;
+    for (const MuriDiagnostic& diagnostic : report.diagnostics) {
+        if (!diagnostic.markerKey.isEmpty()) {
+            nextKeys.insert(diagnostic.markerKey);
+        }
+    }
+    if (muriMarkerKeys_ == nextKeys) {
+        return;
+    }
+    muriMarkerKeys_ = nextKeys;
+    viewport()->update();
 }
 
 int TimelineView::minimumContentHeightForCurrentDevice() const

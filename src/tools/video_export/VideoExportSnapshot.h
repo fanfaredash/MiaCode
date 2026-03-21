@@ -3,6 +3,7 @@
 #include <QJsonObject>
 #include <QString>
 
+#include "common/MuriRenderOptions.h"
 #include "VideoExportController.h"
 
 struct VideoExportSnapshot {
@@ -24,6 +25,7 @@ struct VideoExportSnapshot {
     bool smoothBrightness = miacode::preview_video::kSmoothBrightnessDefault;
     PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
     double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    MuriRenderOptions muriRenderOptions;
     double exportStartSeconds = 0.0;
     double contentDurationSeconds = 0.0;
     int outputWidth = 1024;

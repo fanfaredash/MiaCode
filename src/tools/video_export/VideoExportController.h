@@ -7,6 +7,8 @@
 #include "PreviewRenderSettings.h"
 #include "PreviewAudioSettings.h"
 #include "TimelineView.h"
+#include "common/MuriRenderOptions.h"
+#include "common/MuriTypes.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "common/PreviewGameplayConfig.h"
 
@@ -25,6 +27,8 @@ struct VideoExportTask {
     QString trackPath;
     QString skinDirectory;
     QVector<TimelineNoteMarker> noteMarkers;
+    MuriAnalysisReport muriAnalysisReport;
+    MuriRenderOptions muriRenderOptions;
     PreviewAudioSettings audioSettings;
     double backgroundBrightnessOuter = miacode::preview_video::kBackgroundBrightnessDefault;
     double backgroundBrightnessInner = miacode::preview_video::kBackgroundBrightnessInnerDefault;

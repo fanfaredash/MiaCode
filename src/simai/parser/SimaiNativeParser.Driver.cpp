@@ -42,9 +42,9 @@ const QString& kStrictDivisorSuffix()
     return value;
 }
 
-const QString& kBeatValueClampedPrefix()
+const QString& kBeatValueAbove384Prefix()
 {
-    static const QString value = QStringLiteral("Beat value above 384 is treated as 384: ");
+    static const QString value = QStringLiteral("Beat value above 384 may cause transfer issues: ");
     return value;
 }
 
@@ -141,7 +141,7 @@ QString formatStrictBeatValue(int beats)
 
 QString formatBeatValueClamped(int beats)
 {
-    return QStringLiteral("%1%2").arg(kBeatValueClampedPrefix(), QString::number(beats));
+    return QStringLiteral("%1%2").arg(kBeatValueAbove384Prefix(), QString::number(beats));
 }
 
 const QHash<QString, QString>& zhExactMap()
@@ -171,7 +171,7 @@ const QHash<QString, QString>& zhPrefixMap()
         {kInvalidTouchModifierPrefix(), QStringLiteral("Touch 修饰符无效：")},
         {kInvalidNotePrefix(), QStringLiteral("音符无效：")},
         {kInvalidBeatValueStrictPrefix(), QStringLiteral("分拍数值可能导致转谱错误：")},
-        {kBeatValueClampedPrefix(), QStringLiteral("分拍数值大于 384，已按 384 处理：")},
+        {kBeatValueAbove384Prefix(), QStringLiteral("分拍数值大于 384，可能导致转谱错误：")},
         {kUnmatchedClosingBracketPrefix(), QStringLiteral("未匹配的右括号 '")},
         {kUnclosedBracketPrefix(), QStringLiteral("未闭合的左括号 '")},
     };
@@ -182,7 +182,7 @@ const QVector<QString>& zhPrefixOrder()
 {
     static const QVector<QString> order{
         kInvalidBeatValueStrictPrefix(),
-        kBeatValueClampedPrefix(),
+        kBeatValueAbove384Prefix(),
         kInvalidBreakSlideModifierPositionPrefix(),
         kInvalidSlideDurationPlacementPrefix(),
         kInvalidSlideDurationPrefix(),
@@ -304,7 +304,7 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode)
                 if (!beatsOk || beats <= 0) {
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kInvalidBeatValue());
                 } else if (beats > 384) {
-                    state.beats = 384;
+                    state.beats = beats;
                     if (strictMode) {
                         int warningEndCol = close + 1;
                         while (warningEndCol < line.size() && line.at(warningEndCol) == QChar(',')) {
@@ -352,14 +352,14 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode)
 
             if (ch == QChar('`')) {
                 flushToken(lineNumber);
-                finalizeEachGroup(&state.result.noteMarkers, currentGroup);
+                finalizeEachGroup(&state, currentGroup);
                 currentGroup.clear();
                 continue;
             }
 
             if (ch == QChar(',')) {
                 flushToken(lineNumber);
-                finalizeEachGroup(&state.result.noteMarkers, currentGroup);
+                finalizeEachGroup(&state, currentGroup);
                 currentGroup.clear();
                 TimelineBeatMarker marker;
                 marker.second = state.second;
@@ -380,7 +380,7 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode)
         }
 
         flushToken(lineNumber);
-        finalizeEachGroup(&state.result.noteMarkers, currentGroup);
+        finalizeEachGroup(&state, currentGroup);
         currentGroup.clear();
     }
 

@@ -198,6 +198,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
         if (note.lane < 1 || note.lane > kLaneCount) {
             continue;
         }
+        const bool hasMuriWarning = muriMarkerKeys_.contains(makeMarkerAnalysisKey(note));
         const bool isHold = note.type.compare("hold", Qt::CaseInsensitive) == 0 && note.endSecond > note.second;
         const bool isTouchHold = note.type.compare("touch_hold", Qt::CaseInsensitive) == 0 && note.endSecond > note.second;
         const bool isSlideTrack = (note.type.compare("slide", Qt::CaseInsensitive) == 0
@@ -410,6 +411,13 @@ void TimelineView::paintEvent(QPaintEvent* event)
             if (isHold) {
                 painter.drawEllipse(QRectF(holdEndX - 3, rowCenterY - 4, 8, 8));
             }
+        }
+        if (hasMuriWarning) {
+            painter.save();
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(255, 146, 43, 230));
+            painter.drawEllipse(QRectF(x + 4, rowCenterY - 8, 7, 7));
+            painter.restore();
         }
     }
 

@@ -275,6 +275,8 @@ void PreviewCanvas::reset()
     frameMsAverage_ = 0.0;
     frameMsP95_ = 0.0;
     frameMsMax_ = 0.0;
+    noteMarkers_.clear();
+    muriAnalysisReport_ = MuriAnalysisReport();
     playheadSeconds_ = 0.0;
     mediaFrame_ = QImage();
 #ifdef HAVE_QT_MULTIMEDIA

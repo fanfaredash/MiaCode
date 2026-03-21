@@ -496,8 +496,11 @@ void MainWindow::refreshTimelineMetadata()
         }
     }
     refreshPreviewObjectStatsTotals(noteMarkers);
+    muriAnalysisReport_ = MuriAnalyzer::analyze(noteMarkers);
 
     timelineView_->setTimelineData(beatMarkers, noteMarkers, durationSeconds);
+    timelineView_->setMuriAnalysisReport(muriAnalysisReport_);
+    refreshMuriDiagnosticsPanel();
     updatePreviewSliderRange();
     if (previewCanvas_ != nullptr) {
         const QByteArray newSignature = noteMarkerSignature(noteMarkers);
@@ -505,6 +508,8 @@ void MainWindow::refreshTimelineMetadata()
             previewCanvas_->setNoteMarkers(noteMarkers);
             lastPreviewNoteMarkerSignature_ = newSignature;
         }
+        previewCanvas_->setMuriAnalysisReport(muriAnalysisReport_);
+        previewCanvas_->setMuriRenderOptions(muriRenderOptions_);
     }
 }
 
@@ -1542,91 +1547,96 @@ void MainWindow::updatePreviewObjectStats(double second)
     int touchPlayed = 0;
     int breakTotal = 0;
     int breakPlayed = 0;
-    int helperTapNonBreakTotal = 0;
-    int helperTapNonBreakPlayed = 0;
-    int helperTapBreakTotal = 0;
-    int helperTapBreakPlayed = 0;
-    int baseTotalCount = 0;
-    int baseTotalPlayed = 0;
     int totalCount = 0;
     int totalPlayed = 0;
+    QHash<QString, bool> helperHeadSeen;
+    const auto slideJudgeSecondFor = [](const TimelineNoteMarker& marker) {
+        if (marker.endSecond > marker.second) {
+            return marker.endSecond;
+        }
+        if (marker.slideTraceSecond > marker.second) {
+            return marker.slideTraceSecond;
+        }
+        return marker.second;
+    };
+    const auto slideHeadEventKey = [](const TimelineNoteMarker& marker) {
+        return QStringLiteral("slide_head_star|%1|%2|%3|%4|%5")
+            .arg(marker.second, 0, 'f', 6)
+            .arg(marker.lane)
+            .arg(marker.sourceLine)
+            .arg(marker.sourceCol)
+            .arg(marker.eachGroupId);
+    };
+    const auto addCount = [&totalCount, &totalPlayed](bool played, int* total, int* playedCount) {
+        ++(*total);
+        ++totalCount;
+        if (played) {
+            ++(*playedCount);
+            ++totalPlayed;
+        }
+    };
 
     for (const TimelineNoteMarker& marker : previewStatsNoteMarkers_) {
         const QString type = marker.type.toLower();
-        const bool played = marker.second <= (second + 1e-6);
         const bool isTap = (type == "tap");
         const bool isHold = (type == "hold" || type == "touch_hold");
         const bool isSlide = (type == "slide" || type == "wifi");
         const bool isTouch = (type == "touch");
-        const bool isBreak = marker.isBreak || marker.headBreak || marker.trackBreak;
-        if (played) {
-            ++baseTotalPlayed;
-        }
-        ++baseTotalCount;
         if (isTap) {
-            // Legacy display semantics: "Tap" excludes break taps, and break
-            // is shown as a dedicated bucket.
-            if (!marker.isBreak) {
-                ++tapTotal;
-                if (played) {
-                    ++tapPlayed;
-                }
+            const bool played = marker.second <= (second + 1e-6);
+            if (marker.isBreak) {
+                addCount(played, &breakTotal, &breakPlayed);
+            } else {
+                addCount(played, &tapTotal, &tapPlayed);
             }
+            continue;
         }
+
+        if (isTouch) {
+            const bool played = marker.second <= (second + 1e-6);
+            if (marker.isBreak) {
+                addCount(played, &breakTotal, &breakPlayed);
+            } else {
+                addCount(played, &touchTotal, &touchPlayed);
+            }
+            continue;
+        }
+
         if (isHold) {
-            ++holdTotal;
-            if (played) {
-                ++holdPlayed;
+            const bool played = marker.second <= (second + 1e-6);
+            if (marker.isBreak) {
+                addCount(played, &breakTotal, &breakPlayed);
+            } else {
+                addCount(played, &holdTotal, &holdPlayed);
             }
+            continue;
         }
-        if (isSlide) {
-            ++slideTotal;
-            if (played) {
-                ++slidePlayed;
-            }
+
+        if (!isSlide) {
+            continue;
         }
-        if (isTouch && !marker.isBreak) {
-            ++touchTotal;
-            if (played) {
-                ++touchPlayed;
-            }
-        }
-        if (isBreak) {
-            ++breakTotal;
-            if (played) {
-                ++breakPlayed;
+
+        if (marker.hasHeadStar) {
+            const QString helperKey = slideHeadEventKey(marker);
+            if (!helperHeadSeen.contains(helperKey)) {
+                helperHeadSeen.insert(helperKey, true);
+                const bool helperPlayed = marker.second <= (second + 1e-6);
+                if (marker.headBreak) {
+                    addCount(helperPlayed, &breakTotal, &breakPlayed);
+                } else {
+                    addCount(helperPlayed, &tapTotal, &tapPlayed);
+                }
             }
         }
 
-        // Legacy parser internally has helper slide-head taps ("*_") that are
-        // filtered from timeline lanes. Re-add them for preview counters so
-        // Tap/Total matches legacy display numbers.
-        if (isSlide && marker.hasHeadStar) {
-            const double helperMoment = marker.slideTraceSecond > marker.second
-                ? marker.slideTraceSecond
-                : marker.second;
-            const bool helperPlayed = helperMoment <= (second + 1e-6);
-            if (marker.headBreak) {
-                ++helperTapBreakTotal;
-                if (helperPlayed) {
-                    ++helperTapBreakPlayed;
-                }
-            } else {
-                ++helperTapNonBreakTotal;
-                if (helperPlayed) {
-                    ++helperTapNonBreakPlayed;
-                }
-            }
+        const double slideJudgeSecond = slideJudgeSecondFor(marker);
+        const bool slideEventPlayed = slideJudgeSecond <= (second + 1e-6);
+        if (marker.trackBreak) {
+            addCount(slideEventPlayed, &breakTotal, &breakPlayed);
+        } else {
+            addCount(slideEventPlayed, &slideTotal, &slidePlayed);
         }
     }
-
-    tapTotal += helperTapNonBreakTotal;
-    tapPlayed += helperTapNonBreakPlayed;
-    breakTotal += helperTapBreakTotal;
-    breakPlayed += helperTapBreakPlayed;
-
-    totalCount = baseTotalCount + helperTapNonBreakTotal + helperTapBreakTotal;
-    totalPlayed = baseTotalPlayed + helperTapNonBreakPlayed + helperTapBreakPlayed;
 
     const auto fmt = [](const QString& name, int played, int total) {
         return QString("%1  %2/%3")

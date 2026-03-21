@@ -89,7 +89,52 @@ bool isTouchMarkerVisibleAtPlayhead(const TimelineNoteMarker& marker, double pla
     return deltaSeconds > -kTouchDurationSeconds && deltaSeconds < 0.0;
 }
 
+int passedCheckpointCount(const QVector<MuriCheckpointState>& checkpoints, double playheadSeconds)
+{
+    int passed = 0;
+    for (const MuriCheckpointState& checkpoint : checkpoints) {
+        if (checkpoint.second >= 0.0 && checkpoint.second <= playheadSeconds + 1e-6) {
+            ++passed;
+        }
+    }
+    return passed;
+}
+
+int slideAreaCutForPassedCount(const QVector<int>& cutIndices, int passedCount, int pointCount)
+{
+    if (passedCount <= 0) {
+        return 0;
+    }
+    if (cutIndices.isEmpty()) {
+        return qBound(0, passedCount, pointCount);
+    }
+    const int index = qBound(0, passedCount - 1, cutIndices.size() - 1);
+    return qBound(0, cutIndices.value(index), pointCount);
+}
+
+qreal muriFlashOpacity(const MarkerMuriState* state, double playheadSeconds)
+{
+    if (state == nullptr || state->flashSecond < 0.0) {
+        return 0.0;
+    }
+    const qreal elapsed = static_cast<qreal>(playheadSeconds - state->flashSecond);
+    constexpr qreal kFlashDurationSeconds = 0.14;
+    if (elapsed < 0.0 || elapsed > kFlashDurationSeconds) {
+        return 0.0;
+    }
+    return qBound<qreal>(0.0, 0.45 * (1.0 - elapsed / kFlashDurationSeconds), 0.45);
+}
+
 }  // namespace
+
+const MarkerMuriState* PreviewCanvas::markerMuriState(const TimelineNoteMarker& marker) const
+{
+    const auto it = muriAnalysisReport_.markerStates.constFind(makeMarkerAnalysisKey(marker));
+    if (it == muriAnalysisReport_.markerStates.constEnd()) {
+        return nullptr;
+    }
+    return &it.value();
+}
 
 void PreviewCanvas::drawTouchLayer(QPainter& painter, const QRectF& playfieldRect)
 {
@@ -1147,6 +1192,7 @@ void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
     };
     const auto computeHudStats = [this](double second) {
         HudStats stats;
+        QHash<QString, bool> slideHeadSeen;
         const auto eventPlayed = [second](double judgeSecond) {
             return judgeSecond <= (second + 1e-6);
         };
@@ -1158,6 +1204,14 @@ void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
                 return marker.slideTraceSecond;
             }
             return marker.second;
+        };
+        const auto slideHeadEventKey = [](const TimelineNoteMarker& marker) {
+            return QStringLiteral("slide_head_star|%1|%2|%3|%4|%5")
+                .arg(marker.second, 0, 'f', 6)
+                .arg(marker.lane)
+                .arg(marker.sourceLine)
+                .arg(marker.sourceCol)
+                .arg(marker.eachGroupId);
         };
         const auto addNormalEvent = [&stats, &eventPlayed](
             double judgeSecond,
@@ -1221,10 +1275,14 @@ void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
             }
             if (type == "slide" || type == "wifi") {
                 if (marker.hasHeadStar) {
-                    if (marker.headBreak) {
-                        addBreakEvent(marker.second);
-                    } else {
-                        addNormalEvent(marker.second, 500, 1, &stats.tapTotal, &stats.tapPlayed);
+                    const QString helperKey = slideHeadEventKey(marker);
+                    if (!slideHeadSeen.contains(helperKey)) {
+                        slideHeadSeen.insert(helperKey, true);
+                        if (marker.headBreak) {
+                            addBreakEvent(marker.second);
+                        } else {
+                            addNormalEvent(marker.second, 500, 1, &stats.tapTotal, &stats.tapPlayed);
+                        }
                     }
                 }
                 const double slideJudgeSecond = slideJudgeSecondFor(marker);
@@ -2549,6 +2607,9 @@ int totalWifiTrackArrowCount(const QVector<QVector<QPointF>>& areas)
 
 void PreviewCanvas::drawSlideTrack(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)
 {
+    if (!muriRenderOptions_.showSlideTracks) {
+        return;
+    }
     if (marker.availableSecond < 0.0
         || marker.slideTrackAreaPoints.isEmpty()
         || playheadSeconds_ < marker.second - slideTrackAppearLeadInSeconds_
@@ -2558,6 +2619,60 @@ void PreviewCanvas::drawSlideTrack(QPainter& painter, const TimelineNoteMarker& 
     const QImage* image = selectSlideTrackImage(marker);
     if (image->isNull()) {
         return;
+    }
+
+    if (muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle) {
+        const MarkerMuriState* state = markerMuriState(marker);
+        if (state != nullptr && !state->slideSegments.isEmpty()) {
+            qreal opacity = 1.0;
+            if (playheadSeconds_ < marker.slideTraceSecond) {
+                opacity = sampleSlideTrackPreTraceOpacity(marker.second, playheadSeconds_);
+                if (opacity < 0.0) {
+                    return;
+                }
+            }
+
+            painter.save();
+            painter.setOpacity(opacity);
+            for (int segmentIndex = marker.slideTrackAreaPoints.size() - 1; segmentIndex >= 0; --segmentIndex) {
+                const QVector<QVector<QPointF>>& areas = marker.slideTrackAreaPoints[segmentIndex];
+                const MuriSegmentState& segmentState = state->slideSegments.value(segmentIndex);
+                for (int areaIndex = areas.size() - 1; areaIndex >= 0; --areaIndex) {
+                    const QVector<MuriCheckpointState>& checkpoints = segmentState.areaCheckpoints.value(areaIndex);
+                    if (checkpoints.isEmpty()) {
+                        if (segmentState.completedSecond >= 0.0
+                            && playheadSeconds_ >= segmentState.completedSecond - 1e-6) {
+                            continue;
+                        }
+                        drawCachedSlideArea(painter, marker, segmentIndex, areaIndex, 0, playfieldRect, image, opacity);
+                        continue;
+                    }
+
+                    const int passed = passedCheckpointCount(checkpoints, playheadSeconds_);
+                    if (passed >= checkpoints.size()) {
+                        continue;
+                    }
+                    const int localCut = slideAreaCutForPassedCount(
+                        marker.slideTrackAreaCutIndices.value(segmentIndex).value(areaIndex),
+                        passed,
+                        areas[areaIndex].size()
+                    );
+                    drawCachedSlideArea(painter, marker, segmentIndex, areaIndex, localCut, playfieldRect, image, opacity);
+                }
+            }
+            painter.restore();
+
+            const qreal flashOpacity = muriFlashOpacity(state, playheadSeconds_);
+            if (flashOpacity > 0.0) {
+                for (int segmentIndex = marker.slideTrackAreaPoints.size() - 1; segmentIndex >= 0; --segmentIndex) {
+                    const QVector<QVector<QPointF>>& areas = marker.slideTrackAreaPoints[segmentIndex];
+                    for (int areaIndex = areas.size() - 1; areaIndex >= 0; --areaIndex) {
+                        drawCachedSlideArea(painter, marker, segmentIndex, areaIndex, 0, playfieldRect, image, flashOpacity);
+                    }
+                }
+            }
+            return;
+        }
     }
 
     int startSegment = 0;
@@ -2694,6 +2809,9 @@ void PreviewCanvas::drawSlideTrack(QPainter& painter, const TimelineNoteMarker& 
 
 void PreviewCanvas::drawWifiTrack(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)
 {
+    if (!muriRenderOptions_.showSlideTracks) {
+        return;
+    }
     if (marker.availableSecond < 0.0
         || marker.wifiTrackAreaPoints.isEmpty()
         || playheadSeconds_ < marker.second - slideTrackAppearLeadInSeconds_
@@ -2704,6 +2822,7 @@ void PreviewCanvas::drawWifiTrack(QPainter& painter, const TimelineNoteMarker& m
     int startAreaIndex = 0;
     qreal startProportion = 0.0;
     int removedArrowCount = 0;
+    const MarkerMuriState* state = markerMuriState(marker);
     if (playheadSeconds_ < marker.slideTraceSecond) {
         opacity = sampleSlideTrackPreTraceOpacity(marker.second, playheadSeconds_);
         if (opacity < 0.0) {
@@ -2718,6 +2837,45 @@ void PreviewCanvas::drawWifiTrack(QPainter& painter, const TimelineNoteMarker& m
             const int totalArrowCount = totalWifiTrackArrowCount(marker.wifiTrackAreaPoints);
             removedArrowCount = qBound(0, qFloor(startProportion * totalArrowCount), totalArrowCount);
         }
+    }
+
+    if (muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle
+        && state != nullptr
+        && !state->wifiAreas.isEmpty()) {
+        painter.save();
+        painter.setOpacity(opacity);
+        for (int areaIndex = marker.wifiTrackAreaPoints.size() - 1; areaIndex >= 0; --areaIndex) {
+            const QVector<MuriCheckpointState>& checkpoints = state->wifiAreas.value(areaIndex);
+            if (checkpoints.isEmpty()) {
+                if (state->wifiCompletedSecond >= 0.0 && playheadSeconds_ >= state->wifiCompletedSecond - 1e-6) {
+                    continue;
+                }
+                drawCachedWifiArea(painter, marker, areaIndex, 0, playfieldRect, opacity);
+                continue;
+            }
+
+            const int passed = passedCheckpointCount(checkpoints, playheadSeconds_);
+            if (passed >= checkpoints.size()) {
+                continue;
+            }
+            const int localCut = checkpoints.isEmpty()
+                ? 0
+                : qBound(
+                      0,
+                      qFloor(static_cast<qreal>(passed) * marker.wifiTrackAreaPoints[areaIndex].size() / checkpoints.size()),
+                      marker.wifiTrackAreaPoints[areaIndex].size()
+                  );
+            drawCachedWifiArea(painter, marker, areaIndex, localCut, playfieldRect, opacity);
+        }
+        painter.restore();
+
+        const qreal flashOpacity = muriFlashOpacity(state, playheadSeconds_);
+        if (flashOpacity > 0.0) {
+            for (int areaIndex = marker.wifiTrackAreaPoints.size() - 1; areaIndex >= 0; --areaIndex) {
+                drawCachedWifiArea(painter, marker, areaIndex, 0, playfieldRect, flashOpacity);
+            }
+        }
+        return;
     }
 
     painter.save();
@@ -2768,6 +2926,194 @@ void PreviewCanvas::drawWifiTrack(QPainter& painter, const TimelineNoteMarker& m
         }
     }
     painter.restore();
+}
+
+void PreviewCanvas::drawMuriPadStateOverlay(QPainter& painter, const QRectF& playfieldRect)
+{
+    if (!muriRenderOptions_.showJudgeMarkers || muriAnalysisReport_.padWindows.isEmpty()) {
+        return;
+    }
+
+    const bool resumeNativeBatch = nativePaintingActive_;
+    if (resumeNativeBatch) {
+        endNativeBatch(painter);
+    }
+
+    QHash<QString, int> activePadCounts;
+    for (const MuriPadWindow& window : muriAnalysisReport_.padWindows) {
+        if (window.startSecond <= playheadSeconds_ + 1e-6 && window.endSecond + 1e-6 >= playheadSeconds_) {
+            activePadCounts[window.pad] += 1;
+        }
+    }
+
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    const bool maimuriDxStyle = muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle;
+    for (auto it = activePadCounts.cbegin(); it != activePadCounts.cend(); ++it) {
+        const QPointF logicalCenter = miacode::muri::padCenter(it.key());
+        const double logicalRadius = miacode::muri::padRadius(it.key());
+        if (logicalRadius <= 0.0) {
+            continue;
+        }
+        const QPointF center = mapLogicalPointToRect(logicalCenter, playfieldRect);
+        const qreal radius = qMax<qreal>(2.0, mapLogicalLengthToRect(logicalRadius, playfieldRect));
+        if (maimuriDxStyle) {
+            painter.setBrush(QColor(255, 255, 0));
+            painter.setPen(Qt::NoPen);
+            painter.drawEllipse(center, radius, radius);
+            continue;
+        }
+        QColor fillColor(255, 225, 84, qBound(90, 110 + it.value() * 26, 200));
+        QColor strokeColor(255, 248, 187, qBound(130, 170 + it.value() * 18, 255));
+        painter.setBrush(fillColor);
+        painter.setPen(QPen(strokeColor, qMax<qreal>(2.0, radius * 0.08)));
+        painter.drawEllipse(center, radius, radius);
+    }
+    painter.restore();
+
+    if (resumeNativeBatch) {
+        beginNativeBatch(painter);
+    }
+}
+
+void PreviewCanvas::drawMuriActionOverlay(QPainter& painter, const QRectF& playfieldRect)
+{
+    if (!muriRenderOptions_.showTouchTrail || muriAnalysisReport_.actionTrails.isEmpty()) {
+        return;
+    }
+
+    const bool resumeNativeBatch = nativePaintingActive_;
+    if (resumeNativeBatch) {
+        endNativeBatch(painter);
+    }
+
+    painter.save();
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    if (muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle) {
+        constexpr qreal kPressEffectLifetimeSeconds = static_cast<qreal>(36.0 / miacode::muri::kJudgeTps);
+        constexpr qreal kPressEffectTickSeconds = static_cast<qreal>(1.0 / miacode::muri::kJudgeTps);
+        constexpr qreal kPressEffectSlideRadiusEndScale = 0.5;
+        const qreal playheadSecond = static_cast<qreal>(playheadSeconds_);
+        const qreal sampleStartSecond = playheadSecond - kPressEffectLifetimeSeconds;
+        QVector<const MuriActionTrail*> visibleTrails;
+        visibleTrails.reserve(muriAnalysisReport_.actionTrails.size());
+        for (const MuriActionTrail& trail : muriAnalysisReport_.actionTrails) {
+            if (trail.endSecond + 1e-6 < sampleStartSecond || trail.startSecond > playheadSecond + 1e-6) {
+                continue;
+            }
+            if (trail.points.isEmpty()) {
+                continue;
+            }
+            visibleTrails.append(&trail);
+        }
+
+        if (!visibleTrails.isEmpty()) {
+            const int startTick = qMax(
+                0,
+                static_cast<int>(qFloor(sampleStartSecond * miacode::muri::kJudgeTps))
+            );
+            const int endTick = qMax(
+                startTick,
+                static_cast<int>(qFloor(playheadSecond * miacode::muri::kJudgeTps + 1e-6))
+            );
+
+            for (int tick = startTick; tick <= endTick; ++tick) {
+                const qreal sampleSecond = static_cast<qreal>(tick) * kPressEffectTickSeconds;
+                QVector<const MuriActionTrail*> activeTrails;
+                activeTrails.reserve(visibleTrails.size());
+                for (const MuriActionTrail* trail : visibleTrails) {
+                    if (trail == nullptr) {
+                        continue;
+                    }
+                    if (trail->startSecond <= sampleSecond + 1e-6
+                        && trail->endSecond + 1e-6 >= sampleSecond) {
+                        activeTrails.append(trail);
+                    }
+                }
+                if (activeTrails.isEmpty()) {
+                    continue;
+                }
+
+                const qreal ageSeconds = playheadSecond - sampleSecond;
+                if (ageSeconds < 0.0 || ageSeconds > kPressEffectLifetimeSeconds) {
+                    continue;
+                }
+                const qreal t = qBound<qreal>(0.0, ageSeconds / kPressEffectLifetimeSeconds, 1.0);
+                QColor fillColor = activeTrails.size() > 2
+                    ? QColor(224, 108, 117)
+                    : QColor(255, 255, 255);
+                fillColor.setAlpha(qBound(0, qRound((1.0 - t) * 255.0), 255));
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(fillColor);
+
+                for (const MuriActionTrail* trail : activeTrails) {
+                    qreal proportion = 0.0;
+                    if (trail->endSecond > trail->startSecond) {
+                        proportion = qBound<qreal>(
+                            0.0,
+                            (sampleSecond - trail->startSecond) / (trail->endSecond - trail->startSecond),
+                            1.0
+                        );
+                    }
+                    const QPointF logicalPoint = trail->points.size() == 1
+                        ? trail->points.constFirst()
+                        : interpolatePoint(trail->points, proportion);
+                    const QPointF center = mapLogicalPointToRect(logicalPoint, playfieldRect);
+                    qreal logicalRadius = static_cast<qreal>(trail->radius);
+                    if (trail->sourceType == QLatin1String("slide")
+                        || trail->sourceType == QLatin1String("wifi")) {
+                        logicalRadius *= (1.0 - (1.0 - kPressEffectSlideRadiusEndScale) * t);
+                    }
+                    const qreal radius = qMax<qreal>(1.0, mapLogicalLengthToRect(logicalRadius, playfieldRect));
+                    painter.drawEllipse(center, radius, radius);
+                }
+            }
+        }
+
+        painter.restore();
+
+        if (resumeNativeBatch) {
+            beginNativeBatch(painter);
+        }
+        return;
+    }
+
+    for (const MuriActionTrail& trail : muriAnalysisReport_.actionTrails) {
+        if (trail.startSecond > playheadSeconds_ + 1e-6 || trail.endSecond + 1e-6 < playheadSeconds_) {
+            continue;
+        }
+        if (trail.points.isEmpty()) {
+            continue;
+        }
+
+        qreal proportion = 0.0;
+        if (trail.endSecond > trail.startSecond) {
+            proportion = qBound<qreal>(
+                0.0,
+                static_cast<qreal>((playheadSeconds_ - trail.startSecond) / (trail.endSecond - trail.startSecond)),
+                1.0
+            );
+        }
+        const QPointF logicalPoint = trail.points.size() == 1
+            ? trail.points.constFirst()
+            : interpolatePoint(trail.points, proportion);
+        const QPointF center = mapLogicalPointToRect(logicalPoint, playfieldRect);
+        const qreal radius = qMax<qreal>(2.0, mapLogicalLengthToRect(trail.radius, playfieldRect));
+        QColor fillColor = trail.sourceType == QLatin1String("wifi")
+            ? QColor(75, 218, 255, 60)
+            : QColor(255, 112, 84, 64);
+        QColor strokeColor = trail.sourceType == QLatin1String("wifi")
+            ? QColor(150, 240, 255, 220)
+            : QColor(255, 182, 120, 220);
+        painter.setBrush(fillColor);
+        painter.setPen(QPen(strokeColor, qMax<qreal>(2.0, radius * 0.08)));
+        painter.drawEllipse(center, radius, radius);
+    }
+    painter.restore();
+
+    if (resumeNativeBatch) {
+        beginNativeBatch(painter);
+    }
 }
 
 void PreviewCanvas::drawSlideMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)

@@ -230,6 +230,14 @@ void MainWindow::clearValidationErrors()
     errorList_->clear();
 }
 
+void MainWindow::clearMuriDiagnostics()
+{
+    if (muriList_ == nullptr) {
+        return;
+    }
+    muriList_->clear();
+}
+
 void MainWindow::clearValidationDecorations()
 {
     validationDecorations_.clear();
@@ -351,6 +359,57 @@ void MainWindow::onErrorItemActivated(QListWidgetItem* item)
     const int line = item->data(Qt::UserRole).toInt();
     const int col = item->data(Qt::UserRole + 1).toInt();
     jumpToLocation(line, col);
+}
+
+void MainWindow::onMuriItemActivated(QListWidgetItem* item)
+{
+    if (item == nullptr || !item->flags().testFlag(Qt::ItemIsEnabled)) {
+        return;
+    }
+    const int line = item->data(Qt::UserRole).toInt();
+    const int col = item->data(Qt::UserRole + 1).toInt();
+    const double second = item->data(Qt::UserRole + 2).toDouble();
+    if (second >= 0.0) {
+        navigateTimelineToSecond(second, true);
+        return;
+    }
+    jumpToLocation(line, col);
+}
+
+void MainWindow::refreshMuriDiagnosticsPanel()
+{
+    if (muriList_ == nullptr) {
+        return;
+    }
+
+    muriList_->clear();
+    if (muriAnalysisReport_.diagnostics.isEmpty()) {
+        auto* item = new QListWidgetItem(
+            UiText::isChineseUi()
+                ? QStringLiteral("未检测到无理。")
+                : QStringLiteral("No muri issues detected."),
+            muriList_
+        );
+        item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+        return;
+    }
+
+    for (const MuriDiagnostic& diagnostic : muriAnalysisReport_.diagnostics) {
+        const QString title = muriKindDisplayName(diagnostic.kind, UiText::isChineseUi());
+        const QString summary = QStringLiteral("[%1] %2  L%3 C%4")
+                                    .arg(formatPreviewTimestamp(diagnostic.second))
+                                    .arg(title)
+                                    .arg(diagnostic.line)
+                                    .arg(diagnostic.col);
+        const QString text = diagnostic.detail.isEmpty()
+            ? summary
+            : QStringLiteral("%1\n%2").arg(summary, diagnostic.detail);
+        auto* item = new QListWidgetItem(text, muriList_);
+        item->setToolTip(text);
+        item->setData(Qt::UserRole, diagnostic.line);
+        item->setData(Qt::UserRole + 1, diagnostic.col);
+        item->setData(Qt::UserRole + 2, diagnostic.second);
+    }
 }
 
 void MainWindow::clearValidationCache()
