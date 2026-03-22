@@ -497,6 +497,7 @@ void MainWindow::refreshTimelineMetadata()
     }
     refreshPreviewObjectStatsTotals(noteMarkers);
     muriAnalysisReport_ = MuriAnalyzer::analyze(noteMarkers);
+    rebuildStaticMuriReferences(noteMarkers);
 
     timelineView_->setTimelineData(beatMarkers, noteMarkers, durationSeconds);
     timelineView_->setMuriAnalysisReport(muriAnalysisReport_);
@@ -511,6 +512,13 @@ void MainWindow::refreshTimelineMetadata()
         previewCanvas_->setMuriAnalysisReport(muriAnalysisReport_);
         previewCanvas_->setMuriRenderOptions(muriRenderOptions_);
     }
+}
+
+void MainWindow::rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& noteMarkers)
+{
+    muriStaticReferences_ = miacode::muri::buildStaticMuriReferences(
+        noteMarkers,
+        static_cast<double>(staticTapOnSlideThresholdMs_) / 1000.0);
 }
 
 bool MainWindow::findCursorNoteForTextPosition(

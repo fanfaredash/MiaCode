@@ -243,7 +243,7 @@
     renderModeGroup->setExclusive(true);
 
     renderModeNativeAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("原生轨道裁切") : QStringLiteral("Native Track Trim"),
+        UiText::isChineseUi() ? QStringLiteral("预览模式：谱面确认") : QStringLiteral("Preview Mode: Chart Review"),
         this
     );
     renderModeNativeAction_->setCheckable(true);
@@ -255,7 +255,7 @@
     previewMenu->addAction(renderModeNativeAction_);
 
     renderModeMaimuriDxAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("MaiMuriDX 风格裁切") : QStringLiteral("MaiMuriDX Style Trim"),
+        UiText::isChineseUi() ? QStringLiteral("预览模式：无理检测") : QStringLiteral("Preview Mode: Muri Check"),
         this
     );
     renderModeMaimuriDxAction_->setCheckable(true);
@@ -266,19 +266,16 @@
     renderModeGroup->addAction(renderModeMaimuriDxAction_);
     previewMenu->addAction(renderModeMaimuriDxAction_);
 
-    previewMenu->addSeparator();
-
-    toggleJudgeMarkersAction_ = new QAction("Show Judge Markers", this);
-    toggleJudgeMarkersAction_->setCheckable(true);
-    toggleJudgeMarkersAction_->setChecked(showJudgeMarkers_);
-    connect(toggleJudgeMarkersAction_, &QAction::toggled, this, &MainWindow::onToggleJudgeMarkers);
-    previewMenu->addAction(toggleJudgeMarkersAction_);
-
-    toggleTouchTrailAction_ = new QAction("Show Touch Trail", this);
-    toggleTouchTrailAction_->setCheckable(true);
-    toggleTouchTrailAction_->setChecked(showTouchTrail_);
-    connect(toggleTouchTrailAction_, &QAction::toggled, this, &MainWindow::onToggleTouchTrail);
-    previewMenu->addAction(toggleTouchTrailAction_);
+    editStaticTapOnSlideThresholdAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("撞尾阈值...") : QStringLiteral("Tap-On-Slide Threshold..."),
+        this
+    );
+    connect(
+        editStaticTapOnSlideThresholdAction_,
+        &QAction::triggered,
+        this,
+        &MainWindow::onEditStaticTapOnSlideThreshold);
+    previewMenu->addAction(editStaticTapOnSlideThresholdAction_);
 
     previewMenu->addSeparator();
 
@@ -1562,12 +1559,6 @@ MainWindow::MainWindow(QWidget* parent)
         logStartupStage("preview_sfx_set_chart_path_done");
         previewSfxRuntime_->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
         logStartupStage("preview_sfx_set_playback_rate_done");
-    }
-    if (toggleJudgeMarkersAction_ != nullptr) {
-        toggleJudgeMarkersAction_->setChecked(showJudgeMarkers_);
-    }
-    if (toggleTouchTrailAction_ != nullptr) {
-        toggleTouchTrailAction_->setChecked(showTouchTrail_);
     }
     if (previewCanvas_ != nullptr) {
         previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);

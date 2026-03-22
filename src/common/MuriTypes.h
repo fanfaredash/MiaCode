@@ -89,6 +89,27 @@ struct MuriDiagnostic {
     QString detail;
 };
 
+struct MuriStaticReferenceNote {
+    QString markerKey;
+    QString markerType;
+    QString pad;
+    int line = 1;
+    int col = 1;
+    int lane = 1;
+    int endLane = 1;
+    double second = 0.0;
+    double endSecond = -1.0;
+    double slideTraceSecond = -1.0;
+};
+
+struct MuriStaticReference {
+    MuriKind kind = MuriKind::Overlap;
+    MuriStaticReferenceNote affected;
+    MuriStaticReferenceNote cause;
+    double deltaSecond = 0.0;
+    bool hasDelta = false;
+};
+
 struct MuriAnalysisReport {
     QHash<QString, MarkerMuriState> markerStates;
     QVector<MuriDiagnostic> diagnostics;
