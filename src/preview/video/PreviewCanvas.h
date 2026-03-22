@@ -58,6 +58,7 @@ public:
     void setShowDebugInfo(bool show);
     void setShowTimestamp(bool show);
     void setShowObjectStatsHud(bool show);
+    void setExportWifiTrackBrightnessCompensationEnabled(bool enabled);
     bool showTimestamp() const;
     bool showObjectStatsHud() const;
     void copyRenderStateFrom(const PreviewCanvas& source);
@@ -364,6 +365,7 @@ private:
     bool showDebugInfo_ = false;
     bool showTimestamp_ = true;
     bool showObjectStatsHud_ = false;
+    bool exportWifiTrackBrightnessCompensationEnabled_ = false;
     double layoutRingDiameterRatio_ = miacode::layout_ring::kFallbackPlayfieldDiameterRatio;
     bool highQualityRender_ = false;
     bool nativePaintingActive_ = false;

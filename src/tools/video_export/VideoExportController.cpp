@@ -3416,7 +3416,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         }
         mediaChain += QStringLiteral("[media_src]");
         filterParts << mediaChain;
-        filterParts << QStringLiteral("[base_fill][media_src]overlay=0:0:format=auto[base_media]");
+        filterParts << QStringLiteral("[base_fill][media_src]overlay=0:0:format=rgb:alpha=straight[base_media]");
     } else {
         filterParts << QStringLiteral("[base_fill]null[base_media]");
     }
@@ -3425,13 +3425,12 @@ VideoExportResult VideoExportController::exportPreparedTask(
         filterParts << QStringLiteral("[%1:v]fps=%2,format=rgba[dim_mask]")
                            .arg(dimMaskInputIndex)
                            .arg(task.fps);
-        filterParts << QStringLiteral("[base_media][dim_mask]overlay=0:0:format=auto[base]");
+        filterParts << QStringLiteral("[base_media][dim_mask]overlay=0:0:format=rgb:alpha=straight[base]");
     } else {
         filterParts << QStringLiteral("[base_media]null[base]");
     }
 
-    filterParts << QStringLiteral("[0:v]vflip[overlay_src]");
-    filterParts << QStringLiteral("[base][overlay_src]overlay=0:0:format=auto[vout]");
+    filterParts << QStringLiteral("[0:v]vflip,format=rgba[overlay_src]");
     filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3[sfx]")
                        .arg(sfxInputIndex)
                        .arg(totalSecondsText)
@@ -3510,56 +3509,6 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(performanceProfileToken(task.performanceProfile))
     );
 
-    args << QStringLiteral("-filter_threads") << QString::number(filterThreads);
-    args << QStringLiteral("-filter_complex_threads") << QString::number(filterThreads);
-    args << QStringLiteral("-filter_complex") << filterParts.join(';');
-    args << QStringLiteral("-map")
-         << QStringLiteral("[vout]")
-         << QStringLiteral("-map")
-         << QStringLiteral("[aout]")
-         << QStringLiteral("-fps_mode")
-         << QStringLiteral("cfr")
-         << QStringLiteral("-r")
-         << QString::number(task.fps)
-         << QStringLiteral("-frames:v")
-         << QString::number(frameCount)
-         << QStringLiteral("-g")
-         << QString::number(qMax(1, task.fps * 2))
-         << QStringLiteral("-c:v")
-         << encoderConfig.codec
-         << QStringLiteral("-pix_fmt")
-         << QStringLiteral("yuv420p")
-         << QStringLiteral("-c:a")
-         << QStringLiteral("aac")
-         << QStringLiteral("-b:a")
-         << QStringLiteral("160k");
-    if (encoderConfig.codec.startsWith(QStringLiteral("h264"))) {
-        args << QStringLiteral("-bf") << QStringLiteral("0");
-    }
-    if (!encoderConfig.isHardware && !softwareX265) {
-        args << QStringLiteral("-threads") << QString::number(effectiveEncoderThreads);
-    }
-    args << encoderConfig.extraArgs;
-    args << encodedTempPath;
-    appendVideoExportLog(
-        QStringLiteral("ffmpeg_encode_args"),
-        truncateForLog(ffmpegBaseArgsLog(ffmpegPath, args), 8000)
-    );
-
-    QProcess ffmpeg;
-    ffmpeg.setProcessChannelMode(QProcess::MergedChannels);
-    ffmpeg.start(ffmpegPath, args, QIODevice::ReadWrite);
-    if (!ffmpeg.waitForStarted(5000)) {
-        result.message = QStringLiteral("Failed to start ffmpeg.");
-        result.details = withExportLogPath(ffmpeg.errorString());
-        appendVideoExportLog(
-            QStringLiteral("fail_ffmpeg_start"),
-            QStringLiteral("error=%1").arg(ffmpeg.errorString())
-        );
-        return result;
-    }
-    appendVideoExportLog(QStringLiteral("ffmpeg_encode_started"));
-
     PreviewCanvas exportCanvas;
     if (sourceCanvas != nullptr) {
         exportCanvas.copyRenderStateFrom(*sourceCanvas);
@@ -3597,6 +3546,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     exportCanvas.setBackgroundScaleMode(task.backgroundScaleMode);
     exportCanvas.setNoteFlowSpeed(task.noteFlowSpeed);
     exportCanvas.setShowDebugInfo(false);
+    exportCanvas.setExportWifiTrackBrightnessCompensationEnabled(true);
     exportCanvas.setNoteMarkers(exportMarkers);
     exportCanvas.setMuriRenderOptions(task.muriRenderOptions);
     exportCanvas.setMuriAnalysisReport(task.muriAnalysisReport);
@@ -3651,6 +3601,62 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(offscreenInitError.isEmpty() ? QStringLiteral("ok") : offscreenInitError)
             .arg(offscreenPboError.isEmpty() ? QStringLiteral("ok") : offscreenPboError)
     );
+
+    const QString overlayAlphaMode = useOffscreenGpu
+        ? QStringLiteral("premultiplied")
+        : QStringLiteral("straight");
+    filterParts << QStringLiteral("[base][overlay_src]overlay=0:0:format=rgb:alpha=%1[vout]")
+                       .arg(overlayAlphaMode);
+
+    args << QStringLiteral("-filter_threads") << QString::number(filterThreads);
+    args << QStringLiteral("-filter_complex_threads") << QString::number(filterThreads);
+    args << QStringLiteral("-filter_complex") << filterParts.join(';');
+    args << QStringLiteral("-map")
+         << QStringLiteral("[vout]")
+         << QStringLiteral("-map")
+         << QStringLiteral("[aout]")
+         << QStringLiteral("-fps_mode")
+         << QStringLiteral("cfr")
+         << QStringLiteral("-r")
+         << QString::number(task.fps)
+         << QStringLiteral("-frames:v")
+         << QString::number(frameCount)
+         << QStringLiteral("-g")
+         << QString::number(qMax(1, task.fps * 2))
+         << QStringLiteral("-c:v")
+         << encoderConfig.codec
+         << QStringLiteral("-pix_fmt")
+         << QStringLiteral("yuv420p")
+         << QStringLiteral("-c:a")
+         << QStringLiteral("aac")
+         << QStringLiteral("-b:a")
+         << QStringLiteral("160k");
+    if (encoderConfig.codec.startsWith(QStringLiteral("h264"))) {
+        args << QStringLiteral("-bf") << QStringLiteral("0");
+    }
+    if (!encoderConfig.isHardware && !softwareX265) {
+        args << QStringLiteral("-threads") << QString::number(effectiveEncoderThreads);
+    }
+    args << encoderConfig.extraArgs;
+    args << encodedTempPath;
+    appendVideoExportLog(
+        QStringLiteral("ffmpeg_encode_args"),
+        truncateForLog(ffmpegBaseArgsLog(ffmpegPath, args), 8000)
+    );
+
+    QProcess ffmpeg;
+    ffmpeg.setProcessChannelMode(QProcess::MergedChannels);
+    ffmpeg.start(ffmpegPath, args, QIODevice::ReadWrite);
+    if (!ffmpeg.waitForStarted(5000)) {
+        result.message = QStringLiteral("Failed to start ffmpeg.");
+        result.details = withExportLogPath(ffmpeg.errorString());
+        appendVideoExportLog(
+            QStringLiteral("fail_ffmpeg_start"),
+            QStringLiteral("error=%1").arg(ffmpeg.errorString())
+        );
+        return result;
+    }
+    appendVideoExportLog(QStringLiteral("ffmpeg_encode_started"));
 
     if (setProgressPercent(8, QStringLiteral("Rendering frames and encoding..."))) {
         ffmpeg.kill();

@@ -65,6 +65,47 @@ void unpremultiplyRgba8888InPlace(QImage* image)
     }
 }
 
+void clearOffscreenDarkHazeRgba8888InPlace(QImage* image)
+{
+    if (image == nullptr || image->isNull()) {
+        return;
+    }
+    if (image->format() != QImage::Format_RGBA8888) {
+        *image = image->convertToFormat(QImage::Format_RGBA8888);
+    }
+
+    static constexpr uchar kLowAlphaThreshold = 28;
+    static constexpr uchar kLowAlphaDarkChannelThreshold = 28;
+    static constexpr uchar kBlackFogAlphaThreshold = 96;
+    static constexpr uchar kBlackFogChannelThreshold = 8;
+
+    for (int y = 0; y < image->height(); ++y) {
+        uchar* row = image->scanLine(y);
+        for (int x = 0; x < image->width(); ++x) {
+            uchar* px = row + x * 4;
+            const uchar alpha = px[3];
+            if (alpha == 0) {
+                px[0] = 0;
+                px[1] = 0;
+                px[2] = 0;
+                continue;
+            }
+
+            const uchar maxChannel = qMax(px[0], qMax(px[1], px[2]));
+            const bool lowAlphaDarkFog =
+                alpha <= kLowAlphaThreshold && maxChannel <= kLowAlphaDarkChannelThreshold;
+            const bool blackFog =
+                alpha <= kBlackFogAlphaThreshold && maxChannel <= kBlackFogChannelThreshold;
+            if (lowAlphaDarkFog || blackFog) {
+                px[0] = 0;
+                px[1] = 0;
+                px[2] = 0;
+                px[3] = 0;
+            }
+        }
+    }
+}
+
 }  // namespace
 
 PreviewCanvas::PreviewCanvas(QWindow* parent)
@@ -300,6 +341,15 @@ bool PreviewCanvas::showObjectStatsHud() const
     return showObjectStatsHud_;
 }
 
+void PreviewCanvas::setExportWifiTrackBrightnessCompensationEnabled(bool enabled)
+{
+    if (exportWifiTrackBrightnessCompensationEnabled_ == enabled) {
+        return;
+    }
+    exportWifiTrackBrightnessCompensationEnabled_ = enabled;
+    update();
+}
+
 void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
 {
     tapImage_ = source.tapImage_;
@@ -390,6 +440,7 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     showDebugInfo_ = source.showDebugInfo_;
     showTimestamp_ = source.showTimestamp_;
     showObjectStatsHud_ = source.showObjectStatsHud_;
+    exportWifiTrackBrightnessCompensationEnabled_ = source.exportWifiTrackBrightnessCompensationEnabled_;
 
     overlayCache_.clear();
     brightnessMaskCache_ = QImage();
@@ -695,7 +746,7 @@ bool PreviewCanvas::mapOffscreenReadbackPbo(int pboIndex, const QSize& imageSize
     }
     extra->glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
     extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-    unpremultiplyRgba8888InPlace(&output);
+    clearOffscreenDarkHazeRgba8888InPlace(&output);
     *frame = output;
     return true;
 }
@@ -814,7 +865,7 @@ QImage PreviewCanvas::renderOverlayFrameOffscreen(
     if (!frame.isNull() && frame.format() != QImage::Format_RGBA8888) {
         frame = frame.convertToFormat(QImage::Format_RGBA8888);
     }
-    unpremultiplyRgba8888InPlace(&frame);
+    clearOffscreenDarkHazeRgba8888InPlace(&frame);
     return frame;
 }
 
