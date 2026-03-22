@@ -97,6 +97,74 @@ bool buildEditorSelectionCursor(PlainCodeEditor* editor, int line, int col, int 
 
 }  // namespace
 
+QListWidgetItem* MainWindow::addWrappedListEntry(
+    QListWidget* list,
+    const QString& html,
+    const QString& plainText,
+    int line,
+    int col,
+    double second,
+    bool enabled)
+{
+    if (list == nullptr) {
+        return nullptr;
+    }
+
+    auto* item = new QListWidgetItem(list);
+    item->setToolTip(plainText);
+    item->setData(Qt::UserRole, line);
+    item->setData(Qt::UserRole + 1, col);
+    item->setData(Qt::UserRole + 2, second);
+    if (!enabled) {
+        item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+    }
+    item->setText(QString());
+
+    auto* label = new QLabel(list);
+    label->setObjectName(QStringLiteral("WrappedListEntryLabel"));
+    label->setTextFormat(Qt::RichText);
+    label->setWordWrap(true);
+    label->setTextInteractionFlags(Qt::NoTextInteraction);
+    label->setStyleSheet(UiTheme::validationMessageLabelStyleSheet());
+    label->setText(html);
+
+    auto* rowWidget = new QWidget(list);
+    auto* rowLayout = new QVBoxLayout(rowWidget);
+    rowLayout->setContentsMargins(0, 0, 0, 0);
+    rowLayout->setSpacing(0);
+    rowLayout->addWidget(label);
+
+    list->setItemWidget(item, rowWidget);
+    relayoutWrappedListRows(list);
+    return item;
+}
+
+void MainWindow::relayoutWrappedListRows(QListWidget* list)
+{
+    if (list == nullptr) {
+        return;
+    }
+
+    const int rowWidth = qMax(220, list->viewport()->width() - 12);
+    for (int index = 0; index < list->count(); ++index) {
+        QListWidgetItem* item = list->item(index);
+        if (item == nullptr) {
+            continue;
+        }
+        QWidget* rowWidget = list->itemWidget(item);
+        if (rowWidget == nullptr) {
+            continue;
+        }
+        QLabel* label = rowWidget->findChild<QLabel*>(QStringLiteral("WrappedListEntryLabel"));
+        if (label == nullptr) {
+            continue;
+        }
+        label->setFixedWidth(rowWidth);
+        label->adjustSize();
+        item->setSizeHint(QSize(rowWidth, qMax(26, label->sizeHint().height() + 4)));
+    }
+}
+
 void MainWindow::refreshEditorExtraSelections()
 {
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
@@ -258,19 +326,6 @@ void MainWindow::addValidationError(int line, int col, const QString& message)
         ? headerText
         : QStringLiteral("%1\n%2").arg(headerText, parts.body);
 
-    auto* item = new QListWidgetItem(errorList_);
-    item->setToolTip(plainText);
-    item->setData(Qt::UserRole, line);
-    item->setData(Qt::UserRole + 1, col);
-    item->setData(Qt::UserRole + 2, parts.severity == ValidationSeverityLevel::Warning ? 1 : 0);
-    item->setText(QString());
-
-    auto* label = new QLabel(errorList_);
-    label->setTextFormat(Qt::RichText);
-    label->setWordWrap(true);
-    label->setTextInteractionFlags(Qt::NoTextInteraction);
-    label->setStyleSheet(UiTheme::validationMessageLabelStyleSheet());
-
     const QString headerHtml = QStringLiteral(
         "<span style=\"font-weight:700;color:%1;\">%2</span> "
         "<span style=\"color:%5;\">L%3 C%4</span>"
@@ -286,19 +341,10 @@ void MainWindow::addValidationError(int line, int col, const QString& message)
         ? QString()
         : QStringLiteral("<br/><span style=\"color:%1;\">%2</span>")
               .arg(UiTheme::colors().textPrimary.name(QColor::HexRgb), highlightValidationDetailHtml(parts.body));
-    label->setText(headerHtml + detailHtml);
-
-    auto* rowWidget = new QWidget(errorList_);
-    auto* rowLayout = new QVBoxLayout(rowWidget);
-    rowLayout->setContentsMargins(0, 0, 0, 0);
-    rowLayout->setSpacing(0);
-    rowLayout->addWidget(label);
-
-    const int rowWidth = qMax(220, errorList_->viewport()->width() - 12);
-    label->setFixedWidth(rowWidth);
-    label->adjustSize();
-    item->setSizeHint(QSize(rowWidth, qMax(26, label->sizeHint().height() + 4)));
-    errorList_->setItemWidget(item, rowWidget);
+    QListWidgetItem* item = addWrappedListEntry(errorList_, headerHtml + detailHtml, plainText, line, col, -1.0, true);
+    if (item != nullptr) {
+        item->setData(Qt::UserRole + 2, parts.severity == ValidationSeverityLevel::Warning ? 1 : 0);
+    }
 }
 
 void MainWindow::addValidationDecoration(int line, int col, const QString& message, int endCol)
@@ -383,7 +429,7 @@ void MainWindow::refreshMuriDiagnosticsPanel()
     }
 
     muriList_->clear();
-    if (muriAnalysisReport_.diagnostics.isEmpty()) {
+    if (muriAnalysisReport_.diagnostics.isEmpty() && muriStaticReferences_.isEmpty()) {
         auto* item = new QListWidgetItem(
             UiText::isChineseUi()
                 ? QStringLiteral("未检测到无理。")
@@ -394,21 +440,97 @@ void MainWindow::refreshMuriDiagnosticsPanel()
         return;
     }
 
+    struct MuriPanelEntry {
+        bool isStatic = false;
+        MuriKind kind = MuriKind::Overlap;
+        double second = 0.0;
+        int line = 1;
+        int col = 1;
+        QString detail;
+    };
+
+    QVector<MuriPanelEntry> entries;
+    entries.reserve(muriAnalysisReport_.diagnostics.size() + muriStaticReferences_.size());
     for (const MuriDiagnostic& diagnostic : muriAnalysisReport_.diagnostics) {
-        const QString title = muriKindDisplayName(diagnostic.kind, UiText::isChineseUi());
-        const QString summary = QStringLiteral("[%1] %2  L%3 C%4")
-                                    .arg(formatPreviewTimestamp(diagnostic.second))
-                                    .arg(title)
-                                    .arg(diagnostic.line)
-                                    .arg(diagnostic.col);
-        const QString text = diagnostic.detail.isEmpty()
-            ? summary
-            : QStringLiteral("%1\n%2").arg(summary, diagnostic.detail);
-        auto* item = new QListWidgetItem(text, muriList_);
-        item->setToolTip(text);
-        item->setData(Qt::UserRole, diagnostic.line);
-        item->setData(Qt::UserRole + 1, diagnostic.col);
-        item->setData(Qt::UserRole + 2, diagnostic.second);
+        MuriPanelEntry entry;
+        entry.kind = diagnostic.kind;
+        entry.second = diagnostic.second;
+        entry.line = diagnostic.line;
+        entry.col = diagnostic.col;
+        entry.detail = diagnostic.detail;
+        entries.append(entry);
+    }
+    for (const MuriStaticReference& reference : muriStaticReferences_) {
+        MuriPanelEntry entry;
+        entry.isStatic = true;
+        entry.kind = reference.kind;
+        entry.second = reference.affected.second;
+        entry.line = reference.affected.line;
+        entry.col = reference.affected.col;
+        const QString causeText = QStringLiteral("L%1 C%2")
+            .arg(reference.cause.line)
+            .arg(reference.cause.col);
+        if (reference.hasDelta) {
+            entry.detail = UiText::isChineseUi()
+                ? QStringLiteral("静态参考  Δ %1 ms  原因 %2")
+                      .arg(QString::number(reference.deltaSecond * 1000.0, 'f', 1), causeText)
+                : QStringLiteral("Static reference  Δ %1 ms  Cause %2")
+                      .arg(QString::number(reference.deltaSecond * 1000.0, 'f', 1), causeText);
+        } else {
+            entry.detail = UiText::isChineseUi()
+                ? QStringLiteral("静态参考  原因 %1").arg(causeText)
+                : QStringLiteral("Static reference  Cause %1").arg(causeText);
+        }
+        entries.append(entry);
+    }
+    std::sort(entries.begin(), entries.end(), [](const MuriPanelEntry& a, const MuriPanelEntry& b) {
+        if (!qFuzzyCompare(a.second + 1.0, b.second + 1.0)) {
+            return a.second < b.second;
+        }
+        if (a.line != b.line) {
+            return a.line < b.line;
+        }
+        if (a.col != b.col) {
+            return a.col < b.col;
+        }
+        if (a.isStatic != b.isStatic) {
+            return !a.isStatic && b.isStatic;
+        }
+        return static_cast<int>(a.kind) < static_cast<int>(b.kind);
+    });
+
+    for (const MuriPanelEntry& entry : entries) {
+        const QString title = muriKindDisplayName(entry.kind, UiText::isChineseUi());
+        const QString staticBadge = entry.isStatic
+            ? QStringLiteral("<span style=\"font-weight:700;color:%1;\">[%2]</span> ")
+                  .arg(UiTheme::colors().accent.name(QColor::HexRgb),
+                       UiText::isChineseUi() ? QStringLiteral("静态") : QStringLiteral("Static"))
+            : QString();
+        const QString summary = QStringLiteral("%1<span style=\"font-weight:700;color:%2;\">[%3]</span> "
+                                               "<span style=\"color:%4;\">%5</span>  "
+                                               "<span style=\"color:%6;\">L%7 C%8</span>")
+                                    .arg(
+                                        staticBadge,
+                                        entry.isStatic ? QColor(QStringLiteral("#C48A1A")).name(QColor::HexRgb)
+                                                       : QColor(QStringLiteral("#D45B5B")).name(QColor::HexRgb),
+                                        formatPreviewTimestamp(entry.second),
+                                        UiTheme::colors().textPrimary.name(QColor::HexRgb),
+                                        title.toHtmlEscaped(),
+                                        UiTheme::colors().textSecondary.name(QColor::HexRgb),
+                                        QString::number(entry.line),
+                                        QString::number(entry.col));
+        const QString detailHtml = entry.detail.isEmpty()
+            ? QString()
+            : QStringLiteral("<br/><span style=\"color:%1;\">%2</span>")
+                  .arg(UiTheme::colors().textPrimary.name(QColor::HexRgb), entry.detail.toHtmlEscaped());
+        const QString plainText = QStringLiteral("[%1] %2  L%3 C%4%5%6")
+                                      .arg(formatPreviewTimestamp(entry.second))
+                                      .arg(title)
+                                      .arg(entry.line)
+                                      .arg(entry.col)
+                                      .arg(entry.isStatic ? QStringLiteral(" [Static]") : QString())
+                                      .arg(entry.detail.isEmpty() ? QString() : QStringLiteral("\n") + entry.detail);
+        addWrappedListEntry(muriList_, summary + detailHtml, plainText, entry.line, entry.col, entry.second, true);
     }
 }
 

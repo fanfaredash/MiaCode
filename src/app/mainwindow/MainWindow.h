@@ -112,6 +112,7 @@ private slots:
     void onTogglePreviewPause();
     void onToggleJudgeMarkers(bool checked);
     void onToggleTouchTrail(bool checked);
+    void onEditStaticTapOnSlideThreshold();
     void onExportPreviewVideo();
     void onPreviewAudioSettings();
     void onPreviewVideoSettings();
@@ -343,7 +344,18 @@ private:
     void addValidationError(int line, int col, const QString& message);
     void addValidationDecoration(int line, int col, const QString& message, int endCol = -1);
     void clearMuriDiagnostics();
+    QListWidgetItem* addWrappedListEntry(
+        QListWidget* list,
+        const QString& html,
+        const QString& plainText,
+        int line = 1,
+        int col = 1,
+        double second = -1.0,
+        bool enabled = true
+    );
+    void relayoutWrappedListRows(QListWidget* list);
     void refreshMuriDiagnosticsPanel();
+    void rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& noteMarkers);
     void clearValidationCache();
     void refreshValidationPanelForActiveField();
     void setValidationTabVisible(bool visible);
@@ -449,6 +461,7 @@ private:
     QAction* toggleTouchTrailAction_ = nullptr;
     QAction* renderModeNativeAction_ = nullptr;
     QAction* renderModeMaimuriDxAction_ = nullptr;
+    QAction* editStaticTapOnSlideThresholdAction_ = nullptr;
     QAction* previewAudioSettingsAction_ = nullptr;
     QAction* previewVideoSettingsAction_ = nullptr;
     QAction* aboutAction_ = nullptr;
@@ -531,7 +544,9 @@ private:
     bool showJudgeMarkers_ = false;
     bool showTouchTrail_ = false;
     MuriAnalysisReport muriAnalysisReport_;
+    QVector<MuriStaticReference> muriStaticReferences_;
     MuriRenderOptions muriRenderOptions_;
+    int staticTapOnSlideThresholdMs_ = 200;
     double previewBackgroundBrightnessOuter_ = miacode::preview_video::kBackgroundBrightnessDefault;
     double previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessInnerDefault;
     double previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;

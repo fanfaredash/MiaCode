@@ -14,6 +14,7 @@
 #include "simai/transform/ChartBatchTransform.h"
 #include "tools/latency/LatencyDetectorDialog.h"
 #include "tools/muri/MuriAnalyzer.h"
+#include "tools/muri/MuriStaticChecker.h"
 #include "tools/video_export/VideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
 #include "common/AssetPaths.h"
@@ -2548,6 +2549,8 @@ void MainWindow::resizeEvent(QResizeEvent* event)
     updateEditorHeaderLayoutMode();
     updateEditorFindBarGeometry();
     applyFindOverlayInset();
+    relayoutWrappedListRows(errorList_);
+    relayoutWrappedListRows(muriList_);
     logWindowGeometryDebug(
         "resize_event",
         QString("old=%1x%2 new=%3x%4")
@@ -2774,12 +2777,8 @@ void MainWindow::loadProjectRenderState()
         if (render.value("render_mode").isString()) {
             muriRenderOptions_.renderMode = renderModeFromToken(render.value("render_mode").toString());
         }
-        if (render.value("show_judge_markers").isBool()) {
-            showJudgeMarkers_ = render.value("show_judge_markers").toBool(showJudgeMarkers_);
-        }
-        if (render.value("show_touch_trail").isBool()) {
-            showTouchTrail_ = render.value("show_touch_trail").toBool(showTouchTrail_);
-        }
+        showJudgeMarkers_ = false;
+        showTouchTrail_ = false;
         if (render.value("canvas_frame_rate_mode").isString()) {
             previewCanvasFrameRateMode_ =
                 previewCanvasFrameRateModeFromStorageValue(render.value("canvas_frame_rate_mode").toString());
@@ -2852,6 +2851,8 @@ void MainWindow::saveProjectRenderState() const
     QJsonObject root;
     root.insert("audio", previewAudioSettings_.toJson());
     QJsonObject render;
+    render.remove("show_judge_markers");
+    render.remove("show_touch_trail");
     render.insert("background_brightness", previewBackgroundBrightnessOuter_);
     render.insert("background_brightness_outer", previewBackgroundBrightnessOuter_);
     render.insert("background_brightness_inner", previewBackgroundBrightnessInner_);
@@ -2865,8 +2866,6 @@ void MainWindow::saveProjectRenderState() const
     );
     render.insert("note_flow_speed", previewNoteFlowSpeed_);
     render.insert("render_mode", renderModeToken(muriRenderOptions_.renderMode));
-    render.insert("show_judge_markers", showJudgeMarkers_);
-    render.insert("show_touch_trail", showTouchTrail_);
     render.insert("canvas_frame_rate_mode", previewCanvasFrameRateModeStorageValue());
     render.insert("follow_mode", previewFollowModeStorageValue());
     render.insert("show_debug_info", previewShowDebugInfo_);
@@ -3646,8 +3645,83 @@ void MainWindow::onToggleTouchTrail(bool checked)
     );
 }
 
+void MainWindow::onEditStaticTapOnSlideThreshold()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle(UiText::isChineseUi() ? QStringLiteral("撞尾阈值") : QStringLiteral("Tap-On-Slide Threshold"));
+    dialog.setModal(true);
+    dialog.setMinimumWidth(360);
+    dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
+
+    auto* rootLayout = new QVBoxLayout(&dialog);
+    rootLayout->setContentsMargins(16, 14, 16, 14);
+    rootLayout->setSpacing(10);
+
+    auto* hintLabel = new QLabel(
+        UiText::isChineseUi()
+            ? QStringLiteral("调整静态“撞尾无理”参考检查阈值。")
+            : QStringLiteral("Adjust the static Tap-On-Slide reference threshold."),
+        &dialog);
+    hintLabel->setWordWrap(true);
+    rootLayout->addWidget(hintLabel);
+
+    auto* valueRow = new QWidget(&dialog);
+    auto* valueLayout = new QHBoxLayout(valueRow);
+    valueLayout->setContentsMargins(0, 0, 0, 0);
+    valueLayout->setSpacing(10);
+
+    auto* slider = new QSlider(Qt::Horizontal, valueRow);
+    slider->setRange(
+        miacode::muri::kStaticTapOnSlideThresholdMinMs,
+        miacode::muri::kStaticTapOnSlideThresholdMaxMs);
+    slider->setValue(staticTapOnSlideThresholdMs_);
+
+    auto* spinBox = new QSpinBox(valueRow);
+    spinBox->setRange(
+        miacode::muri::kStaticTapOnSlideThresholdMinMs,
+        miacode::muri::kStaticTapOnSlideThresholdMaxMs);
+    spinBox->setSuffix(QStringLiteral(" ms"));
+    spinBox->setValue(staticTapOnSlideThresholdMs_);
+
+    connect(slider, &QSlider::valueChanged, spinBox, &QSpinBox::setValue);
+    connect(spinBox, qOverload<int>(&QSpinBox::valueChanged), slider, &QSlider::setValue);
+
+    valueLayout->addWidget(slider, 1);
+    valueLayout->addWidget(spinBox, 0);
+    rootLayout->addWidget(valueRow);
+
+    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    rootLayout->addWidget(buttonBox);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    const int newThresholdMs = spinBox->value();
+    if (newThresholdMs == staticTapOnSlideThresholdMs_) {
+        return;
+    }
+
+    staticTapOnSlideThresholdMs_ = newThresholdMs;
+    savePortableState();
+    if (hasActiveDifficulty()) {
+        refreshTimelineMetadata();
+    } else {
+        muriStaticReferences_.clear();
+        refreshMuriDiagnosticsPanel();
+    }
+    statusBar()->showMessage(
+        UiText::isChineseUi()
+            ? QStringLiteral("撞尾阈值已更新为 %1 ms。").arg(staticTapOnSlideThresholdMs_)
+            : QStringLiteral("Tap-On-Slide threshold set to %1 ms.").arg(staticTapOnSlideThresholdMs_));
+}
+
 void MainWindow::applyMuriRenderOptions()
 {
+    showJudgeMarkers_ = false;
+    showTouchTrail_ = false;
     muriRenderOptions_.showSlideTracks = showSlideTracks_;
     muriRenderOptions_.showJudgeMarkers = showJudgeMarkers_;
     muriRenderOptions_.showTouchTrail = showTouchTrail_;
@@ -3684,8 +3758,8 @@ void MainWindow::setMuriRenderMode(RenderMode mode, bool persistState)
     }
     statusBar()->showMessage(
         mode == RenderMode::MaimuriDxStyle
-            ? uiText("status.muri_render_mode_dx", "MaiMuriDX-style track trim enabled.")
-            : uiText("status.muri_render_mode_native", "Native track trim enabled.")
+            ? uiText("status.muri_render_mode_dx", "Preview mode: muri check.")
+            : uiText("status.muri_render_mode_native", "Preview mode: chart review.")
     );
 }
 

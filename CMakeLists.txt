@@ -9,7 +9,7 @@ set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
     set(MIACODE_VERSION_STRING "${MIACODE_VERSION}-${MIACODE_VERSION_PRERELEASE}")
 endif()
-set(MIACODE_DISPLAY_PRERELEASE "dev1.6")
+set(MIACODE_DISPLAY_PRERELEASE "")
 set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_DISPLAY_PRERELEASE}" STREQUAL "")
     set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_DISPLAY_VERSION_STRING}-${MIACODE_DISPLAY_PRERELEASE}")
@@ -61,6 +61,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/latency/LatencyDetectorDialog.cpp
     src/tools/muri/MuriAnalyzer.h
     src/tools/muri/MuriAnalyzer.cpp
+    src/tools/muri/MuriStaticChecker.h
+    src/tools/muri/MuriStaticChecker.cpp
     src/tools/video_export/VideoExportDialog.h
     src/tools/video_export/VideoExportDialog.cpp
     src/tools/video_export/VideoExportController.h
@@ -172,6 +174,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/simai/parser/SimaiNativeParser.cpp
         src/tools/muri/MuriAnalyzer.h
         src/tools/muri/MuriAnalyzer.cpp
+        src/tools/muri/MuriStaticChecker.h
+        src/tools/muri/MuriStaticChecker.cpp
         resources/fonts.qrc
     )
 

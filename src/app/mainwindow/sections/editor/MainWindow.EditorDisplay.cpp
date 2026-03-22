@@ -9,6 +9,7 @@
     showJudgeMarkers_ = false;
     showTouchTrail_ = false;
     muriRenderOptions_ = MuriRenderOptions();
+    staticTapOnSlideThresholdMs_ = miacode::muri::kStaticTapOnSlideThresholdDefaultMs;
     previewBackgroundBrightnessOuter_ = miacode::preview_video::kBackgroundBrightnessDefault;
     previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessInnerDefault;
     previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
@@ -63,11 +64,15 @@
         lastTrackPath_ = QDir::cleanPath(trackPath);
     }
     showSlideTracks_ = true;
-    if (preview.value("show_judge_markers").isBool()) {
-        showJudgeMarkers_ = preview.value("show_judge_markers").toBool(false);
-    }
-    if (preview.value("show_touch_trail").isBool()) {
-        showTouchTrail_ = preview.value("show_touch_trail").toBool(false);
+    showJudgeMarkers_ = false;
+    showTouchTrail_ = false;
+    if (preview.value("static_tap_on_slide_threshold_ms").isDouble()) {
+        staticTapOnSlideThresholdMs_ = qBound(
+            miacode::muri::kStaticTapOnSlideThresholdMinMs,
+            qRound(preview.value("static_tap_on_slide_threshold_ms")
+                       .toDouble(staticTapOnSlideThresholdMs_)),
+            miacode::muri::kStaticTapOnSlideThresholdMaxMs
+        );
     }
     const QString muriRenderMode = preview.value("muri_render_mode").toString().trimmed().toLower();
     muriRenderOptions_.renderMode =
@@ -169,6 +174,8 @@ void MainWindow::savePortableState() const
     QJsonObject ui = root.value("ui").toObject();
     QJsonObject app = root.value("app").toObject();
     QJsonObject preview = app.value("preview").toObject();
+    preview.remove("show_judge_markers");
+    preview.remove("show_touch_trail");
 
     ui.insert("editor_text_font_size", editorTextFontPointSize_);
     ui.insert("editor_line_spacing_factor", editorLineSpacingFactor_);
@@ -180,8 +187,7 @@ void MainWindow::savePortableState() const
     app.insert("last_track_path", lastTrackPath_);
     app.insert("show_slide_tracks", true);
 
-    preview.insert("show_judge_markers", showJudgeMarkers_);
-    preview.insert("show_touch_trail", showTouchTrail_);
+    preview.insert("static_tap_on_slide_threshold_ms", staticTapOnSlideThresholdMs_);
     preview.insert(
         "muri_render_mode",
         muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle

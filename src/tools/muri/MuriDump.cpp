@@ -20,6 +20,7 @@
 #include "common/MuriConfig.h"
 #include "common/MuriTypes.h"
 #include "tools/muri/MuriAnalyzer.h"
+#include "tools/muri/MuriStaticChecker.h"
 
 namespace {
 
@@ -141,35 +142,42 @@ QVector<TimelineNoteMarker> markersWithStaticHelperHeadTaps(const QVector<Timeli
 {
     QVector<TimelineNoteMarker> augmented = noteMarkers;
     augmented.reserve(noteMarkers.size() * 2);
+
+    QSet<QString> emittedKeys;
     for (const TimelineNoteMarker& marker : noteMarkers) {
-        if (!isSlideLike(marker) || !marker.hasHeadStar || marker.slideTraceSecond < 0.0) {
+        if (!isSlideLike(marker) || !marker.hasHeadStar) {
             continue;
         }
-        bool hasSameLaneHeadNote = false;
-        for (const TimelineNoteMarker& other : noteMarkers) {
-            if (!isTapMarker(other) && !isHoldMarker(other)) {
-                continue;
-            }
-            if (other.lane != marker.lane) {
-                continue;
-            }
-            if (qAbs(other.second - marker.slideTraceSecond) <= miacode::muri::kTapOnSlideThresholdSeconds + kStaticTimeEpsilonSeconds) {
-                hasSameLaneHeadNote = true;
-                break;
-            }
-        }
-        if (hasSameLaneHeadNote) {
+
+        const int helperCol = qMax(1, marker.sourceCol + 1);
+        const QString emitKey = marker.sameHeadSlide
+            ? QStringLiteral("same_head_helper|%1|%2|%3|%4|%5|%6")
+                  .arg(marker.second, 0, 'f', 6)
+                  .arg(marker.sourceLine)
+                  .arg(marker.lane)
+                  .arg(marker.headBreak ? 1 : 0)
+                  .arg(marker.headEx ? 1 : 0)
+                  .arg(marker.headEach ? 1 : 0)
+            : QStringLiteral("helper|%1|%2|%3|%4|%5")
+                  .arg(marker.second, 0, 'f', 6)
+                  .arg(marker.sourceLine)
+                  .arg(helperCol)
+                  .arg(marker.lane)
+                  .arg(marker.parseOrder);
+        if (emittedKeys.contains(emitKey)) {
             continue;
         }
+        emittedKeys.insert(emitKey);
+
         TimelineNoteMarker helper;
-        helper.second = marker.slideTraceSecond;
+        helper.second = marker.second;
         helper.endSecond = -1.0;
         helper.slideTraceSecond = -1.0;
         helper.availableSecond = -1.0;
         helper.parseOrder = marker.parseOrder;
         helper.eachGroupId = marker.eachGroupId;
         helper.sourceLine = marker.sourceLine;
-        helper.sourceCol = marker.sourceCol;
+        helper.sourceCol = helperCol;
         helper.lane = marker.lane;
         helper.endLane = marker.lane;
         helper.type = QStringLiteral("tap");
@@ -180,6 +188,7 @@ QVector<TimelineNoteMarker> markersWithStaticHelperHeadTaps(const QVector<Timeli
         helper.slideTrackKey = QStringLiteral("__static_helper_head_tap__");
         augmented.append(helper);
     }
+
     return augmented;
 }
 
@@ -316,18 +325,34 @@ QJsonObject jsonFromStaticReferenceMarker(const TimelineNoteMarker& marker)
     return item;
 }
 
-QJsonObject jsonFromStaticReferenceRecord(
-    const StaticReferenceRecord& record,
-    const QVector<TimelineNoteMarker>& noteMarkers)
+QJsonObject jsonFromStaticReferenceNote(const MuriStaticReferenceNote& note)
+{
+    QJsonObject item;
+    item.insert(QStringLiteral("marker_key"), note.markerKey);
+    item.insert(QStringLiteral("marker_type"), note.markerType);
+    item.insert(QStringLiteral("line"), note.line);
+    item.insert(QStringLiteral("col"), note.col);
+    item.insert(QStringLiteral("second"), note.second);
+    item.insert(QStringLiteral("lane"), note.lane);
+    item.insert(QStringLiteral("end_lane"), note.endLane);
+    if (note.endSecond >= 0.0) {
+        item.insert(QStringLiteral("end_second"), note.endSecond);
+    }
+    if (note.slideTraceSecond >= 0.0) {
+        item.insert(QStringLiteral("slide_trace_second"), note.slideTraceSecond);
+    }
+    if (!note.pad.isEmpty()) {
+        item.insert(QStringLiteral("pad"), note.pad);
+    }
+    return item;
+}
+
+QJsonObject jsonFromStaticReferenceRecord(const MuriStaticReference& record)
 {
     QJsonObject item;
     item.insert(QStringLiteral("kind"), muriKindKey(record.kind));
-    if (record.affectedIndex >= 0 && record.affectedIndex < noteMarkers.size()) {
-        item.insert(QStringLiteral("affected"), jsonFromStaticReferenceMarker(noteMarkers.at(record.affectedIndex)));
-    }
-    if (record.causeIndex >= 0 && record.causeIndex < noteMarkers.size()) {
-        item.insert(QStringLiteral("cause"), jsonFromStaticReferenceMarker(noteMarkers.at(record.causeIndex)));
-    }
+    item.insert(QStringLiteral("affected"), jsonFromStaticReferenceNote(record.affected));
+    item.insert(QStringLiteral("cause"), jsonFromStaticReferenceNote(record.cause));
     if (record.hasDelta) {
         item.insert(QStringLiteral("delta_second"), record.deltaSecond);
         item.insert(QStringLiteral("delta_ms"), record.deltaSecond * 1000.0);
@@ -1071,9 +1096,11 @@ int main(int argc, char* argv[])
     }
 
     const TimelineChartCounts chartCounts = countTimelineChartNotes(shiftedMarkers);
-    const QVector<StaticReferenceRecord> staticReferences = buildStaticReferenceRecords(shiftedMarkers);
+    const QVector<MuriStaticReference> staticReferences = miacode::muri::buildStaticMuriReferences(
+        shiftedMarkers,
+        static_cast<double>(miacode::muri::kStaticTapOnSlideThresholdDefaultMs) / 1000.0);
     QJsonObject staticReferenceCountsByKind;
-    for (const StaticReferenceRecord& record : staticReferences) {
+    for (const MuriStaticReference& record : staticReferences) {
         const QString kind = muriKindKey(record.kind);
         staticReferenceCountsByKind.insert(kind, staticReferenceCountsByKind.value(kind).toInt() + 1);
     }
@@ -1101,8 +1128,8 @@ int main(int argc, char* argv[])
     }
 
     QJsonArray staticReferencesArray;
-    for (const StaticReferenceRecord& record : staticReferences) {
-        staticReferencesArray.append(jsonFromStaticReferenceRecord(record, shiftedMarkers));
+    for (const MuriStaticReference& record : staticReferences) {
+        staticReferencesArray.append(jsonFromStaticReferenceRecord(record));
     }
 
     QJsonArray markerStatesArray;
