@@ -2385,128 +2385,25 @@ void PreviewCanvas::drawCachedWifiArea(
     const QVector<double>& rotations = marker.wifiTrackAreaRotations.value(areaIndex);
     const QVector<int>& imageIndices = marker.wifiTrackAreaImageIndices.value(areaIndex);
     const int clampedCut = qBound(0, localCut, points.size());
-    const int visibleCount = points.size() - clampedCut;
-    if (visibleCount <= 0) {
+    if (clampedCut >= points.size()) {
         return;
     }
 
-    if (glRenderer_.isInitialized()) {
-        const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-        for (int pointIndex = clampedCut; pointIndex < points.size(); ++pointIndex) {
-            const int imageIndex = imageIndices.value(pointIndex, pointIndex);
-            const QImage* image = selectWifiTrackImage(marker, imageIndex, 0);
-            if (image == nullptr || image->isNull()) {
-                continue;
-            }
-            const int targetWidth = qMax(1, qRound(image->width() * canvasScale * kSlideTrackScale));
-            const int targetHeight = qMax(1, qRound(image->height() * canvasScale * kSlideTrackScale));
-            const QPointF point = mapLogicalPointToRect(
-                QPointF(kLogicalCanvasCenter + points[pointIndex].x(), kLogicalCanvasCenter + points[pointIndex].y()),
-                playfieldRect
-            );
-            const qreal angle = -rotations.value(pointIndex);
-            drawSpriteImage(painter, *image, point, targetWidth, targetHeight, angle, opacity);
+    const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
+    for (int pointIndex = clampedCut; pointIndex < points.size(); ++pointIndex) {
+        const int imageIndex = imageIndices.value(pointIndex, pointIndex);
+        const QImage* image = selectWifiTrackImage(marker, imageIndex, 0);
+        if (image == nullptr || image->isNull()) {
+            continue;
         }
-        return;
-    }
-
-    int variantTag = 0;
-    if (marker.trackBreak && !wifiBreakImages_.isEmpty()) {
-        variantTag = 2;
-    } else if (marker.slideEach && !wifiEachImages_.isEmpty()) {
-        variantTag = 1;
-    }
-
-    const bool allowCpuTrackAreaCaching = kEnablePreviewCaches && cpuTrackAreaCachingEnabled_;
-    const int playfieldWidth = qMax(1, qRound(playfieldRect.width()));
-    const QString cacheKey = QStringLiteral("%1|%2|%3|%4|%5|%6|%7")
-        .arg(marker.slideTrackKey)
-        .arg(variantTag)
-        .arg(areaIndex)
-        .arg(clampedCut)
-        .arg(playfieldWidth)
-        .arg(qRound(playfieldRect.left()))
-        .arg(qRound(playfieldRect.top()));
-
-    CachedTrackArea uncached;
-    CachedTrackArea* cachedArea = nullptr;
-    auto cacheIt = wifiTrackAreaCache_.end();
-    if (allowCpuTrackAreaCaching) {
-        cacheIt = wifiTrackAreaCache_.find(cacheKey);
-        if (cacheIt != wifiTrackAreaCache_.end()) {
-            cachedArea = &cacheIt.value();
-        }
-    }
-    if (cachedArea == nullptr) {
-        QRectF bounds;
-
-        for (int pointIndex = clampedCut; pointIndex < points.size(); ++pointIndex) {
-            const int imageIndex = imageIndices.value(pointIndex, pointIndex);
-            const QImage* image = selectWifiTrackImage(marker, imageIndex, 0);
-            if (image == nullptr || image->isNull()) {
-                continue;
-            }
-            const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-            const qreal targetWidth = image->width() * canvasScale * kSlideTrackScale;
-            const qreal targetHeight = image->height() * canvasScale * kSlideTrackScale;
-            const QPointF point = mapLogicalPointToRect(
-                QPointF(kLogicalCanvasCenter + points[pointIndex].x(), kLogicalCanvasCenter + points[pointIndex].y()),
-                playfieldRect
-            );
-            bounds = bounds.isNull()
-                ? QRectF(point.x() - targetWidth / 2.0, point.y() - targetHeight / 2.0, targetWidth, targetHeight)
-                : bounds.united(QRectF(point.x() - targetWidth / 2.0, point.y() - targetHeight / 2.0, targetWidth, targetHeight));
-        }
-
-        if (bounds.isNull() || bounds.width() <= 0.0 || bounds.height() <= 0.0) {
-            return;
-        }
-
-        const QRect pixelBounds = bounds.adjusted(-1.0, -1.0, 1.0, 1.0).toAlignedRect();
-        CachedTrackArea built;
-        built.image = QImage(pixelBounds.size(), QImage::Format_ARGB32_Premultiplied);
-        built.image.fill(Qt::transparent);
-        built.offset = pixelBounds.topLeft();
-
-        QPainter cachePainter(&built.image);
-        cachePainter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-        for (int pointIndex = clampedCut; pointIndex < points.size(); ++pointIndex) {
-            const int imageIndex = imageIndices.value(pointIndex, pointIndex);
-            const QImage* image = selectWifiTrackImage(marker, imageIndex, 0);
-            if (image == nullptr || image->isNull()) {
-                continue;
-            }
-            const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-            const qreal targetWidth = image->width() * canvasScale * kSlideTrackScale;
-            const qreal targetHeight = image->height() * canvasScale * kSlideTrackScale;
-            const QPointF point = mapLogicalPointToRect(
-                QPointF(kLogicalCanvasCenter + points[pointIndex].x(), kLogicalCanvasCenter + points[pointIndex].y()),
-                playfieldRect
-            ) - built.offset;
-            const qreal angle = rotations.value(pointIndex);
-            cachePainter.save();
-            cachePainter.translate(point);
-            cachePainter.rotate(-angle);
-            cachePainter.drawImage(
-                QRectF(-targetWidth / 2.0, -targetHeight / 2.0, targetWidth, targetHeight),
-                *image
-            );
-            cachePainter.restore();
-        }
-        if (allowCpuTrackAreaCaching) {
-            cacheIt = wifiTrackAreaCache_.insert(cacheKey, built);
-            cachedArea = &cacheIt.value();
-        } else {
-            uncached = built;
-            cachedArea = &uncached;
-        }
-    }
-
-    if (cachedArea != nullptr) {
-        painter.save();
-        painter.setOpacity(opacity);
-        painter.drawImage(cachedArea->offset, cachedArea->image);
-        painter.restore();
+        const int targetWidth = qMax(1, qRound(image->width() * canvasScale * kSlideTrackScale));
+        const int targetHeight = qMax(1, qRound(image->height() * canvasScale * kSlideTrackScale));
+        const QPointF point = mapLogicalPointToRect(
+            QPointF(kLogicalCanvasCenter + points[pointIndex].x(), kLogicalCanvasCenter + points[pointIndex].y()),
+            playfieldRect
+        );
+        const qreal angle = -rotations.value(pointIndex);
+        drawSpriteImage(painter, *image, point, targetWidth, targetHeight, angle, opacity);
     }
 }
 
