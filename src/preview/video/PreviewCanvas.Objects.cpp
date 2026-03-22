@@ -5,6 +5,11 @@ qreal mirroredStarAngleDegrees(qreal angleDegrees)
     return 360.0 - angleDegrees;
 }
 
+qreal exportWifiTrackCompensationOpacity(qreal opacity)
+{
+    return qBound<qreal>(0.0, opacity * 0.18, 0.20);
+}
+
 quint64 touchPointKey(const QPointF& point)
 {
     const qint32 x = qRound(point.x() * kPreviewPointHashScale);
@@ -2404,6 +2409,12 @@ void PreviewCanvas::drawCachedWifiArea(
         );
         const qreal angle = -rotations.value(pointIndex);
         drawSpriteImage(painter, *image, point, targetWidth, targetHeight, angle, opacity);
+        if (exportWifiTrackBrightnessCompensationEnabled_) {
+            const qreal compensationOpacity = exportWifiTrackCompensationOpacity(opacity);
+            if (compensationOpacity > 0.0) {
+                drawSpriteImage(painter, *image, point, targetWidth, targetHeight, angle, compensationOpacity);
+            }
+        }
     }
 }
 
