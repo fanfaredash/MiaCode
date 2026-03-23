@@ -1159,6 +1159,12 @@ MainWindow::MainWindow(QWidget* parent)
     connect(timelineView_, &TimelineView::headerNavigateRequested, this, [this](double second) {
         navigateTimelineToSecond(second, true);
     });
+    connect(timelineView_, &TimelineView::timelineDragStarted, this, [this]() {
+        if (!legacyPygamePreviewEnabled_ && qtPreviewPlaying_) {
+            stopQtPreviewPlayback(true);
+            updatePauseButtonAppearance();
+        }
+    });
     connect(timelineView_, &TimelineView::followPreviewToggled, this, [this](bool enabled) {
         if (!enabled) {
             clearPreviewFollowDecoration();
@@ -1606,5 +1612,4 @@ MainWindow::MainWindow(QWidget* parent)
     logStartupStage("preview_subsystem_warmup_scheduled");
     logStartupStage("constructor_done");
 }
-
 

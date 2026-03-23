@@ -44,6 +44,7 @@ void TimelineView::mousePressEvent(QMouseEvent* event)
     timelineDragStartX_ = qRound(event->position().x());
     timelineDragStartScrollValue_ = horizontalScrollBar()->value();
     viewport()->setCursor(Qt::ClosedHandCursor);
+    emit timelineDragStarted();
     event->accept();
 }
 
