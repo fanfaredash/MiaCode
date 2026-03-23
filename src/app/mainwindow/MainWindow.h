@@ -50,6 +50,7 @@ class QResizeEvent;
 class QStackedWidget;
 class QSlider;
 class QSplitter;
+class QSoundEffect;
 class QTimer;
 class QTextEdit;
 class QToolButton;
@@ -321,6 +322,9 @@ private:
     void applyEditorLineSpacingFactor(double factor, bool persistPreference);
     void applyUiTheme();
     void applySystemWindowBackdrop(QWidget* target = nullptr) const;
+    void setInvalidStarPreviewEasterEggEnabled(bool enabled);
+    void ensureInvalidStarPreviewEasterEggSounds();
+    void playInvalidStarPreviewEasterEggSound(bool enabled);
     void persistEditorTextFontPreference() const;
     void loadProjectRenderState();
     void saveProjectRenderState() const;
@@ -475,6 +479,9 @@ private:
     QProcess* previewProcess_ = nullptr;
     QProcess* videoExportWorkerProcess_ = nullptr;
     QProgressDialog* videoExportProgressDialog_ = nullptr;
+    QPointer<QLabel> aboutIconLabel_;
+    QSoundEffect* invalidStarPreviewEnableSound_ = nullptr;
+    QSoundEffect* invalidStarPreviewDisableSound_ = nullptr;
     QString previewStdoutBuffer_;
     QString previewStderrBuffer_;
     QByteArray videoExportWorkerStdoutBuffer_;
@@ -520,6 +527,9 @@ private:
     bool autoRestoreLastSessionFile_ = true;
     bool editorCtrlLeftJumpPending_ = false;
     bool editorCtrlLeftJumpDragged_ = false;
+    bool invalidStarPreviewEasterEggEnabled_ = false;
+    int invalidStarPreviewAboutClickCount_ = 0;
+    QElapsedTimer invalidStarPreviewAboutClickElapsed_;
     QPoint editorCtrlLeftJumpPressPos_;
     int previewSeekHeldArrowKey_ = 0;
     QElapsedTimer previewSeekHeldArrowElapsed_;

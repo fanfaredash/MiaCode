@@ -56,6 +56,8 @@ class SimaiNativeParser
 public:
     static SimaiNativeParseResult parseForTimeline(const QString& text);
     static SimaiNativeParseResult validateSyntax(const QString& text);
+    static void setInvalidStarPreviewEnabled(bool enabled);
+    static bool invalidStarPreviewEnabled();
     static SimaiNativeValidationReport buildValidationReport(
         const QString& text,
         SimaiNativeValidationLocale locale

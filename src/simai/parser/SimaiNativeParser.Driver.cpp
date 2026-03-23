@@ -234,10 +234,11 @@ void parseToken(ParseState* state, const QString& token, int lineNumber, int col
     appendTokenError(state, lineNumber, column, ValidationMessage::formatInvalidNote(token));
 }
 
-SimaiNativeParseResult parseInternal(const QString& text, bool strictMode)
+SimaiNativeParseResult parseInternal(const QString& text, bool strictMode, bool allowInvalidStarFallback = false)
 {
     ParseState state;
     state.strictMode = strictMode;
+    state.allowInvalidStarFallback = allowInvalidStarFallback;
 
     QString token;
     int tokenColumn = 1;
@@ -544,13 +545,23 @@ QString validationSeverityPrefix(SimaiNativeValidationSeverity severity, SimaiNa
 
 SimaiNativeParseResult SimaiNativeParser::parseForTimeline(const QString& text)
 {
-    return parseInternal(text, false);
+    return parseInternal(text, false, g_invalidStarPreviewEnabled);
 }
 
 SimaiNativeParseResult SimaiNativeParser::validateSyntax(const QString& text)
 {
-    SimaiNativeParseResult result = parseInternal(text, true);
+    SimaiNativeParseResult result = parseInternal(text, true, false);
     return result;
+}
+
+void SimaiNativeParser::setInvalidStarPreviewEnabled(bool enabled)
+{
+    g_invalidStarPreviewEnabled = enabled;
+}
+
+bool SimaiNativeParser::invalidStarPreviewEnabled()
+{
+    return g_invalidStarPreviewEnabled;
 }
 
 SimaiNativeValidationReport SimaiNativeParser::buildValidationReport(

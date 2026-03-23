@@ -18,6 +18,7 @@
 #include "tools/video_export/VideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
 #include "common/AssetPaths.h"
+#include "common/PreviewSfxAssets.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewInteractionConfig.h"
 
@@ -82,6 +83,7 @@
 #include <QSaveFile>
 #include <QSignalBlocker>
 #include <QSlider>
+#include <QSoundEffect>
 #include <QSplitter>
 #include <QSplitterHandle>
 #include <QSpinBox>
@@ -154,6 +156,7 @@ constexpr int kEditorFindBarHorizontalMargin = 14;
 constexpr int kEditorFindBarTopMargin = 10;
 constexpr int kEditorFindBarOverlayGap = 8;
 constexpr int kPreviewScrubRenderIntervalMs = 33;
+constexpr qint64 kInvalidStarPreviewAboutClickWindowMs = 900;
 const QList<double> kEditorLineSpacingFactorOptions{
     0.0, 1.0, 1.5, 2.0, 3.0, 5.0,
 };
@@ -234,6 +237,41 @@ QString sanitizeExportFileStem(QString text, const QString& fallback = QStringLi
         sanitized.chop(1);
     }
     return sanitized.isEmpty() ? fallback : sanitized;
+}
+
+QString resolveInvalidStarPreviewReverseSoundPath()
+{
+    QStringList candidates;
+    const auto appendCandidate = [&candidates](const QString& candidate) {
+        if (candidate.isEmpty()) {
+            return;
+        }
+        const QString cleanPath = QDir::cleanPath(candidate);
+        if (!candidates.contains(cleanPath)) {
+            candidates.append(cleanPath);
+        }
+    };
+
+    const QString sfxDir = miacode::preview_sfx::resolveSfxDirectory();
+    if (!sfxDir.isEmpty()) {
+        appendCandidate(QDir(sfxDir).filePath(QStringLiteral("answer_reverse.wav")));
+    }
+
+    appendCandidate(miacode::assets::assetPath(QStringLiteral("SFX/answer_reverse.wav")));
+    appendCandidate(miacode::assets::assetPath(QStringLiteral("sfx/answer_reverse.wav")));
+
+    const QDir appDir(QCoreApplication::applicationDirPath());
+    appendCandidate(appDir.filePath(QStringLiteral("assets/SFX/answer_reverse.wav")));
+    appendCandidate(appDir.filePath(QStringLiteral("SFX/answer_reverse.wav")));
+    appendCandidate(appDir.filePath(QStringLiteral("sfx/answer_reverse.wav")));
+    appendCandidate(appDir.filePath(QStringLiteral("../Resources/assets/SFX/answer_reverse.wav")));
+
+    for (const QString& candidate : candidates) {
+        if (QFileInfo::exists(candidate)) {
+            return candidate;
+        }
+    }
+    return QString();
 }
 
 #ifdef Q_OS_WIN
@@ -2275,8 +2313,87 @@ void MainWindow::closeEvent(QCloseEvent* event)
     }
 }
 
+void MainWindow::setInvalidStarPreviewEasterEggEnabled(bool enabled)
+{
+    if (invalidStarPreviewEasterEggEnabled_ == enabled) {
+        return;
+    }
+    invalidStarPreviewEasterEggEnabled_ = enabled;
+    SimaiNativeParser::setInvalidStarPreviewEnabled(enabled);
+    refreshTimelineMetadata();
+    playInvalidStarPreviewEasterEggSound(enabled);
+}
+
+void MainWindow::ensureInvalidStarPreviewEasterEggSounds()
+{
+    if (invalidStarPreviewEnableSound_ == nullptr) {
+        invalidStarPreviewEnableSound_ = new QSoundEffect(this);
+        invalidStarPreviewEnableSound_->setLoopCount(1);
+        invalidStarPreviewEnableSound_->setVolume(0.45f);
+    }
+    if (invalidStarPreviewDisableSound_ == nullptr) {
+        invalidStarPreviewDisableSound_ = new QSoundEffect(this);
+        invalidStarPreviewDisableSound_->setLoopCount(1);
+        invalidStarPreviewDisableSound_->setVolume(0.45f);
+    }
+
+    const QString sfxDir = miacode::preview_sfx::resolveSfxDirectory();
+    const QString forwardPath = miacode::preview_sfx::assetFilePathForKind(sfxDir, QStringLiteral("answer"));
+    const QString reversePath = resolveInvalidStarPreviewReverseSoundPath();
+
+    const QUrl forwardUrl = QFileInfo::exists(forwardPath) ? QUrl::fromLocalFile(forwardPath) : QUrl();
+    const QUrl reverseUrl = QFileInfo::exists(reversePath) ? QUrl::fromLocalFile(reversePath) : QUrl();
+
+    if (invalidStarPreviewDisableSound_->source() != forwardUrl) {
+        invalidStarPreviewDisableSound_->setSource(forwardUrl);
+    }
+    if (invalidStarPreviewEnableSound_->source() != reverseUrl) {
+        invalidStarPreviewEnableSound_->setSource(reverseUrl);
+    }
+}
+
+void MainWindow::playInvalidStarPreviewEasterEggSound(bool enabled)
+{
+    ensureInvalidStarPreviewEasterEggSounds();
+    QSoundEffect* effect = enabled ? invalidStarPreviewEnableSound_ : invalidStarPreviewDisableSound_;
+    if (effect == nullptr || effect->source().isEmpty()) {
+        return;
+    }
+    effect->stop();
+    effect->play();
+}
+
 bool MainWindow::eventFilter(QObject* watched, QEvent* event)
 {
+    if (aboutIconLabel_ != nullptr && watched == aboutIconLabel_) {
+        if (event->type() == QEvent::MouseButtonRelease) {
+            auto* mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::LeftButton) {
+                if (invalidStarPreviewEasterEggEnabled_) {
+                    invalidStarPreviewAboutClickCount_ = 0;
+                    invalidStarPreviewAboutClickElapsed_.invalidate();
+                    setInvalidStarPreviewEasterEggEnabled(false);
+                } else {
+                    if (!invalidStarPreviewAboutClickElapsed_.isValid()
+                        || invalidStarPreviewAboutClickElapsed_.elapsed() > kInvalidStarPreviewAboutClickWindowMs) {
+                        invalidStarPreviewAboutClickCount_ = 0;
+                    }
+                    ++invalidStarPreviewAboutClickCount_;
+                    if (invalidStarPreviewAboutClickElapsed_.isValid()) {
+                        invalidStarPreviewAboutClickElapsed_.restart();
+                    } else {
+                        invalidStarPreviewAboutClickElapsed_.start();
+                    }
+                    if (invalidStarPreviewAboutClickCount_ >= 3) {
+                        invalidStarPreviewAboutClickCount_ = 0;
+                        invalidStarPreviewAboutClickElapsed_.invalidate();
+                        setInvalidStarPreviewEasterEggEnabled(true);
+                    }
+                }
+                return true;
+            }
+        }
+    }
     if (outlineList_ != nullptr && watched == outlineList_->viewport()) {
         if (event->type() == QEvent::MouseMove) {
             auto* mouseEvent = static_cast<QMouseEvent*>(event);
@@ -3929,6 +4046,8 @@ void MainWindow::onAbout()
         iconLabel->setPixmap(appIcon);
         iconLabel->setAlignment(Qt::AlignCenter);
     }
+    aboutIconLabel_ = iconLabel;
+    iconLabel->installEventFilter(this);
     titleRow->addWidget(iconLabel, 0, Qt::AlignVCenter);
 
     auto* titleTextCol = new QVBoxLayout();
@@ -3972,6 +4091,12 @@ void MainWindow::onAbout()
     connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     rootLayout->addWidget(buttonBox, 0, Qt::AlignRight);
     dialog.exec();
+    if (aboutIconLabel_ != nullptr) {
+        aboutIconLabel_->removeEventFilter(this);
+    }
+    aboutIconLabel_.clear();
+    invalidStarPreviewAboutClickCount_ = 0;
+    invalidStarPreviewAboutClickElapsed_.invalidate();
 }
 
 void MainWindow::onExportPreviewVideo()
