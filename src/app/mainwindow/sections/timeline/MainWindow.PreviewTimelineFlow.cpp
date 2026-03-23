@@ -1880,7 +1880,9 @@ void MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
 
 void MainWindow::finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage)
 {
-    const double returnSecond = qBound(0.0, qtPreviewPlaybackReturnSecond_, previewDurationSeconds());
+    const double returnSecond = timelineView_ != nullptr
+        ? qBound(0.0, timelineView_->cursorSeconds(), previewDurationSeconds())
+        : qBound(0.0, qtPreviewPlaybackReturnSecond_, previewDurationSeconds());
     stopQtPreviewPlayback(true);
     seekPreviewToSecond(returnSecond, true);
     if (statusBar() != nullptr && !statusMessage.isEmpty()) {
@@ -2083,4 +2085,3 @@ void MainWindow::jumpToNearestTimelineNote(double second, int lane)
             .arg(col)
     );
 }
-

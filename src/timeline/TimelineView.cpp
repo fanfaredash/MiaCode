@@ -265,6 +265,11 @@ double TimelineView::playheadSeconds() const
     return playheadSeconds_;
 }
 
+double TimelineView::cursorSeconds() const
+{
+    return cursorSeconds_;
+}
+
 double TimelineView::durationSeconds() const
 {
     return durationSeconds_;

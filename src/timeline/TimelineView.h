@@ -97,6 +97,7 @@ public:
     void setPlayheadSeconds(double second, bool centerView);
     void setCursorSeconds(double second, bool centerView = false);
     double playheadSeconds() const;
+    double cursorSeconds() const;
     double durationSeconds() const;
     void setShowSlideTracks(bool show);
     bool showSlideTracks() const;
