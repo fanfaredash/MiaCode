@@ -34,8 +34,11 @@ struct ParseState {
     int nextEachGroupId = 0;
     int lastBeatSourceLine = -1;
     bool strictMode = false;
+    bool allowInvalidStarFallback = false;
     SimaiNativeParseResult result;
 };
+
+bool g_invalidStarPreviewEnabled = false;
 
 void loadSamplePath(const QJsonArray& samples, QVector<QPointF>* points, QVector<double>* angles);
 QVector<MuriPadTimeEntry> loadPadEnterTimes(const QJsonArray& padEnterTimes);
