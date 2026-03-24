@@ -1052,9 +1052,11 @@ QString decodeProcessText(const QByteArray& data)
 QByteArray noteMarkerSignature(const QVector<TimelineNoteMarker>& notes)
 {
     QByteArray signature;
-    signature.reserve(notes.size() * 72);
+    signature.reserve(notes.size() * 128);
     for (const TimelineNoteMarker& marker : notes) {
         signature.append(QByteArray::number(marker.sourceLine));
+        signature.append('|');
+        signature.append(QByteArray::number(marker.sourceCol));
         signature.append('|');
         signature.append(QByteArray::number(marker.lane));
         signature.append('|');
@@ -1067,6 +1069,29 @@ QByteArray noteMarkerSignature(const QVector<TimelineNoteMarker>& notes)
         signature.append(QByteArray::number(marker.slideTraceSecond, 'f', 6));
         signature.append('|');
         signature.append(marker.type.toUtf8());
+        signature.append('|');
+        signature.append(marker.slideTrackKey.toUtf8());
+        signature.append('|');
+        signature.append(QByteArray::number(marker.slideSegmentKeys.size()));
+        signature.append('|');
+        for (int index = 0; index < marker.slideSegmentKeys.size(); ++index) {
+            signature.append(marker.slideSegmentKeys.at(index).toUtf8());
+            signature.append(',');
+        }
+        signature.append('|');
+        signature.append(QByteArray::number(marker.slideSegmentShootSeconds.size()));
+        signature.append('|');
+        for (double second : marker.slideSegmentShootSeconds) {
+            signature.append(QByteArray::number(second, 'f', 6));
+            signature.append(',');
+        }
+        signature.append('|');
+        signature.append(QByteArray::number(marker.slideSegmentDurations.size()));
+        signature.append('|');
+        for (double duration : marker.slideSegmentDurations) {
+            signature.append(QByteArray::number(duration, 'f', 6));
+            signature.append(',');
+        }
         signature.append('|');
         signature.append(marker.isEach ? '1' : '0');
         signature.append('|');
