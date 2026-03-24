@@ -1172,6 +1172,9 @@ MainWindow::MainWindow(QWidget* parent)
     logStartupStage("preview_runtime_ready");
 
     bottomTabs_ = new QTabWidget(central);
+    if (QTabBar* bottomTabBar = bottomTabs_->tabBar(); bottomTabBar != nullptr) {
+        bottomTabBar->installEventFilter(this);
+    }
     timelineView_ = new TimelineView(bottomTabs_);
     QFont timelineHeaderLineNumberFont = codeFont;
     timelineHeaderLineNumberFont.setPointSize(qMax(codeFont.pointSize() + 1, 12));

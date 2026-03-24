@@ -2442,6 +2442,9 @@ void MainWindow::playInvalidStarPreviewEasterEggSound(bool enabled)
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event)
 {
+    if (bottomTabs_ != nullptr && watched == bottomTabs_->tabBar() && event->type() == QEvent::Wheel) {
+        return true;
+    }
     if (aboutIconLabel_ != nullptr && watched == aboutIconLabel_) {
         if (event->type() == QEvent::MouseButtonRelease) {
             auto* mouseEvent = static_cast<QMouseEvent*>(event);
