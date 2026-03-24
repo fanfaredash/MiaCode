@@ -841,6 +841,7 @@ VideoExportDialog::VideoExportDialog(
     flowSpeedEdit_ = new QLineEdit(optionsContent_);
     flowSpeedEdit_->setAlignment(Qt::AlignCenter);
     flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
+    flowSpeedEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet());
     auto* flowSpeedValidator = new QDoubleValidator(flowSpeedMin, flowSpeedMax, 2, flowSpeedEdit_);
     flowSpeedValidator->setNotation(QDoubleValidator::StandardNotation);
     flowSpeedEdit_->setValidator(flowSpeedValidator);

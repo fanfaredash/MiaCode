@@ -376,6 +376,29 @@ enum class EditorValidationSummaryIconKind {
     Muri,
 };
 
+QIcon makeMenuSelectionCheckIcon(const QColor& color, bool visible = true);
+
+void applyAccentCheckBoxIcon(QCheckBox* checkBox, const QColor& accentColor)
+{
+    if (checkBox == nullptr) {
+        return;
+    }
+
+    const QIcon checkedIcon = makeMenuSelectionCheckIcon(accentColor);
+    const QIcon uncheckedIcon = makeMenuSelectionCheckIcon(accentColor, false);
+    checkBox->setIcon(checkBox->isChecked() ? checkedIcon : uncheckedIcon);
+    checkBox->setIconSize(QSize(14, 14));
+    checkBox->setStyleSheet(
+        QStringLiteral(
+            "QCheckBox { spacing: 6px; }"
+            "QCheckBox::indicator { width: 0px; height: 0px; }"
+        )
+    );
+    QObject::connect(checkBox, &QCheckBox::toggled, checkBox, [checkBox, checkedIcon, uncheckedIcon](bool checked) {
+        checkBox->setIcon(checked ? checkedIcon : uncheckedIcon);
+    });
+}
+
 QPixmap makeEditorValidationSummaryIcon(const QColor& color, EditorValidationSummaryIconKind kind)
 {
     QPixmap pixmap(14, 14);
@@ -397,16 +420,13 @@ QPixmap makeEditorValidationSummaryIcon(const QColor& color, EditorValidationSum
         painter.drawRoundedRect(QRectF(6.2, 4.0, 1.6, 4.0), 0.8, 0.8);
         painter.drawEllipse(QRectF(6.1, 9.2, 1.8, 1.8));
     } else if (kind == EditorValidationSummaryIconKind::Muri) {
-        QPainterPath diamond;
-        diamond.moveTo(7.0, 1.0);
-        diamond.lineTo(13.0, 7.0);
-        diamond.lineTo(7.0, 13.0);
-        diamond.lineTo(1.0, 7.0);
-        diamond.closeSubpath();
-        painter.drawPath(diamond);
-        painter.setBrush(Qt::white);
-        painter.drawRoundedRect(QRectF(4.0, 6.2, 6.0, 1.6), 0.8, 0.8);
-        painter.drawRoundedRect(QRectF(6.2, 4.0, 1.6, 6.0), 0.8, 0.8);
+        painter.drawEllipse(QRectF(1.2, 1.2, 11.6, 11.6));
+        painter.setPen(Qt::white);
+        QFont font = painter.font();
+        font.setBold(true);
+        font.setPixelSize(11);
+        painter.setFont(font);
+        painter.drawText(QRectF(0.2, 0.6, 13.6, 12.8), Qt::AlignCenter, QStringLiteral("?"));
     } else {
         painter.drawEllipse(QRectF(1.2, 1.2, 11.6, 11.6));
         painter.setBrush(Qt::white);
@@ -1321,7 +1341,7 @@ QIcon makeOutlineCloseIcon(const QColor& color)
     return QIcon(pixmap);
 }
 
-QIcon makeMenuSelectionCheckIcon(const QColor& color, bool visible = true)
+QIcon makeMenuSelectionCheckIcon(const QColor& color, bool visible)
 {
     QPixmap pixmap(14, 14);
     pixmap.fill(Qt::transparent);
@@ -3986,10 +4006,16 @@ void MainWindow::applyMuriRenderOptions()
     if (renderModeNativeAction_ != nullptr) {
         QSignalBlocker blocker(renderModeNativeAction_);
         renderModeNativeAction_->setChecked(muriRenderOptions_.renderMode == RenderMode::Native);
+        renderModeNativeAction_->setIcon(
+            makeMenuSelectionCheckIcon(UiTheme::colors().accent, renderModeNativeAction_->isChecked())
+        );
     }
     if (renderModeMaimuriDxAction_ != nullptr) {
         QSignalBlocker blocker(renderModeMaimuriDxAction_);
         renderModeMaimuriDxAction_->setChecked(muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle);
+        renderModeMaimuriDxAction_->setIcon(
+            makeMenuSelectionCheckIcon(UiTheme::colors().accent, renderModeMaimuriDxAction_->isChecked())
+        );
     }
     if (timelineView_ != nullptr) {
         timelineView_->setShowSlideTracks(muriRenderOptions_.showSlideTracks);
@@ -5299,6 +5325,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     auto* flowSpeedEdit = new QLineEdit(videoGroup);
     flowSpeedEdit->setAlignment(Qt::AlignCenter);
     flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed));
+    flowSpeedEdit->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet());
     auto* flowSpeedValidator = new QDoubleValidator(flowSpeedMin, flowSpeedMax, 2, flowSpeedEdit);
     flowSpeedValidator->setNotation(QDoubleValidator::StandardNotation);
     flowSpeedEdit->setValidator(flowSpeedValidator);
@@ -5467,6 +5494,13 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         previewGroup
     );
     debugCheck->setChecked(previewShowDebugInfo_);
+    const QColor accentCheckColor = UiTheme::colors().accent;
+    applyAccentCheckBoxIcon(restoreSquareCheck, accentCheckColor);
+    applyAccentCheckBoxIcon(smoothBrightnessCheck, accentCheckColor);
+    applyAccentCheckBoxIcon(timestampCheck, accentCheckColor);
+    applyAccentCheckBoxIcon(objectStatsCheck, accentCheckColor);
+    applyAccentCheckBoxIcon(validationSummaryCheck, accentCheckColor);
+    applyAccentCheckBoxIcon(debugCheck, accentCheckColor);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_outer", "Outer Brightness"), outerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Inner Brightness"), innerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Layout Size"), layoutSquareScaleRow);

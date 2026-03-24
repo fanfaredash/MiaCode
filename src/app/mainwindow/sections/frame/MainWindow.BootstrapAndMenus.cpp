@@ -241,6 +241,8 @@
 
     auto* renderModeGroup = new QActionGroup(previewMenu);
     renderModeGroup->setExclusive(true);
+    const QIcon selectedRenderModeIcon = makeMenuSelectionCheckIcon(UiTheme::colors().accent);
+    const QIcon unselectedRenderModeIcon = makeMenuSelectionCheckIcon(UiTheme::colors().accent, false);
 
     renderModeNativeAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("预览模式：谱面确认") : QStringLiteral("Preview Mode: Chart Review"),
@@ -248,6 +250,9 @@
     );
     renderModeNativeAction_->setCheckable(true);
     renderModeNativeAction_->setChecked(muriRenderOptions_.renderMode == RenderMode::Native);
+    renderModeNativeAction_->setIcon(
+        renderModeNativeAction_->isChecked() ? selectedRenderModeIcon : unselectedRenderModeIcon
+    );
     connect(renderModeNativeAction_, &QAction::triggered, this, [this]() {
         setMuriRenderMode(RenderMode::Native);
     });
@@ -260,6 +265,9 @@
     );
     renderModeMaimuriDxAction_->setCheckable(true);
     renderModeMaimuriDxAction_->setChecked(muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle);
+    renderModeMaimuriDxAction_->setIcon(
+        renderModeMaimuriDxAction_->isChecked() ? selectedRenderModeIcon : unselectedRenderModeIcon
+    );
     connect(renderModeMaimuriDxAction_, &QAction::triggered, this, [this]() {
         setMuriRenderMode(RenderMode::MaimuriDxStyle);
     });
