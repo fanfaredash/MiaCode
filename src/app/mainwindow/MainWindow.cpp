@@ -5305,10 +5305,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     QLabel* breakSlideLabel = nullptr;
     addAudioRow(uiText("dialog.render_settings.audio.break_slide", "Break Slide Volume"), previewAudioSettings_.breakSlidePercent(), &breakSlideSlider, &breakSlideLabel);
 
-    auto* restoreButton = new QPushButton(uiText("dialog.render_settings.button.restore_project_default", "Restore Project Audio to Software Default"), audioGroup);
-    restoreButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    audioFormLayout->addRow(QString(), restoreButton);
-
     const auto addVideoSliderRow = [](
         QWidget* parent,
         int minimum,
@@ -5639,113 +5635,84 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         audioApplyTimer->start();
     };
 
-    connect(bgmSlider, &QSlider::valueChanged, &dialog, [this, bgmLabel, queueAudioApply](int value) {
+    const auto persistCurrentAudioAsSoftwareDefault = [this]() {
+        previewAudioSettings_.normalize();
+        softwarePreviewAudioSettings_ = previewAudioSettings_;
+        softwarePreviewAudioSettings_.normalize();
+        savePortableState();
+    };
+
+    connect(bgmSlider, &QSlider::valueChanged, &dialog, [this, bgmLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
         previewAudioSettings_.setBgmPercent(value);
         bgmLabel->setText(QString::number(previewAudioSettings_.bgmPercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
+        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply(QString());
     });
-    connect(answerSlider, &QSlider::valueChanged, &dialog, [this, answerLabel, queueAudioApply](int value) {
+    connect(answerSlider, &QSlider::valueChanged, &dialog, [this, answerLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
         previewAudioSettings_.setAnswerPercent(value);
         answerLabel->setText(QString::number(previewAudioSettings_.answerPercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
+        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply("answer");
     });
-    connect(judgeSlider, &QSlider::valueChanged, &dialog, [this, judgeLabel, queueAudioApply](int value) {
+    connect(judgeSlider, &QSlider::valueChanged, &dialog, [this, judgeLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
         previewAudioSettings_.setJudgePercent(value);
         judgeLabel->setText(QString::number(previewAudioSettings_.judgePercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
+        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply("judge");
     });
-    connect(breakSlider, &QSlider::valueChanged, &dialog, [this, breakLabel, queueAudioApply](int value) {
+    connect(breakSlider, &QSlider::valueChanged, &dialog, [this, breakLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
         previewAudioSettings_.setBreakPercent(value);
         breakLabel->setText(QString::number(previewAudioSettings_.breakPercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
+        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply("break");
     });
-    connect(slideSlider, &QSlider::valueChanged, &dialog, [this, slideLabel, queueAudioApply](int value) {
+    connect(slideSlider, &QSlider::valueChanged, &dialog, [this, slideLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
         previewAudioSettings_.setSlidePercent(value);
         slideLabel->setText(QString::number(previewAudioSettings_.slidePercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
+        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply("slide");
     });
-    connect(exSlider, &QSlider::valueChanged, &dialog, [this, exLabel, queueAudioApply](int value) {
+    connect(exSlider, &QSlider::valueChanged, &dialog, [this, exLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
         previewAudioSettings_.setExPercent(value);
         exLabel->setText(QString::number(previewAudioSettings_.exPercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
+        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply("ex");
     });
-    connect(touchSlider, &QSlider::valueChanged, &dialog, [this, touchLabel, queueAudioApply](int value) {
+    connect(touchSlider, &QSlider::valueChanged, &dialog, [this, touchLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
         previewAudioSettings_.setTouchPercent(value);
         touchLabel->setText(QString::number(previewAudioSettings_.touchPercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
+        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply("touch");
     });
-    connect(fireworkSlider, &QSlider::valueChanged, &dialog, [this, fireworkLabel, queueAudioApply](int value) {
+    connect(fireworkSlider, &QSlider::valueChanged, &dialog, [this, fireworkLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
         previewAudioSettings_.setFireworkPercent(value);
         fireworkLabel->setText(QString::number(previewAudioSettings_.fireworkPercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
+        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply("firework");
     });
-    connect(breakSlideSlider, &QSlider::valueChanged, &dialog, [this, breakSlideLabel, queueAudioApply](int value) {
+    connect(breakSlideSlider, &QSlider::valueChanged, &dialog, [this, breakSlideLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
         previewAudioSettings_.setBreakSlidePercent(value);
         breakSlideLabel->setText(QString::number(previewAudioSettings_.breakSlidePercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
+        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply("break_slide");
-    });
-
-    const auto refreshAudioValueLabels = [
-        this,
-        bgmLabel,
-        answerLabel,
-        judgeLabel,
-        breakLabel,
-        slideLabel,
-        exLabel,
-        touchLabel,
-        fireworkLabel,
-        breakSlideLabel
-    ]() {
-        bgmLabel->setText(QString::number(this->previewAudioSettings_.bgmPercent()) + "%");
-        answerLabel->setText(QString::number(this->previewAudioSettings_.answerPercent()) + "%");
-        judgeLabel->setText(QString::number(this->previewAudioSettings_.judgePercent()) + "%");
-        breakLabel->setText(QString::number(this->previewAudioSettings_.breakPercent()) + "%");
-        slideLabel->setText(QString::number(this->previewAudioSettings_.slidePercent()) + "%");
-        exLabel->setText(QString::number(this->previewAudioSettings_.exPercent()) + "%");
-        touchLabel->setText(QString::number(this->previewAudioSettings_.touchPercent()) + "%");
-        fireworkLabel->setText(QString::number(this->previewAudioSettings_.fireworkPercent()) + "%");
-        breakSlideLabel->setText(QString::number(this->previewAudioSettings_.breakSlidePercent()) + "%");
-    };
-
-    connect(restoreButton, &QPushButton::clicked, &dialog, [this, bgmSlider, answerSlider, judgeSlider, breakSlider, slideSlider, exSlider, touchSlider, fireworkSlider, breakSlideSlider, refreshAudioValueLabels]() {
-        previewAudioSettings_ = PreviewAudioSettings();
-        previewAudioSettings_.normalize();
-        {
-            QSignalBlocker b1(bgmSlider), b2(answerSlider), b3(judgeSlider), b4(breakSlider), b5(slideSlider), b6(exSlider), b7(touchSlider), b8(fireworkSlider), b9(breakSlideSlider);
-            bgmSlider->setValue(previewAudioSettings_.bgmPercent());
-            answerSlider->setValue(previewAudioSettings_.answerPercent());
-            judgeSlider->setValue(previewAudioSettings_.judgePercent());
-            breakSlider->setValue(previewAudioSettings_.breakPercent());
-            slideSlider->setValue(previewAudioSettings_.slidePercent());
-            exSlider->setValue(previewAudioSettings_.exPercent());
-            touchSlider->setValue(previewAudioSettings_.touchPercent());
-            fireworkSlider->setValue(previewAudioSettings_.fireworkPercent());
-            breakSlideSlider->setValue(previewAudioSettings_.breakSlidePercent());
-        }
-        refreshAudioValueLabels();
-        applyPreviewAudioSettingsToRuntime();
-        saveProjectRenderState();
-        sendPreviewConfigCommand();
-        statusBar()->showMessage(uiText("status.audio_restored_default", "Project audio restored to software defaults."));
     });
 
     connect(audioApplyTimer, &QTimer::timeout, &dialog, [this, audioApplyTimer, bgmSlider, answerSlider, judgeSlider, breakSlider, slideSlider, exSlider, touchSlider, fireworkSlider, breakSlideSlider, &pendingAudition]() {

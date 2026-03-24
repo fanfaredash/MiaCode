@@ -398,6 +398,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.video_group", "视频"},
         {"dialog.render_settings.preview_group", "预览"},
         {"dialog.render_settings.button.close", "关闭"},
+        {"dialog.render_settings.button.set_software_default_audio", "设为默认音频"},
         {"dialog.render_settings.button.restore_project_default", "恢复默认"},
         {"dialog.render_settings.audio.bgm", "BGM 音量"},
         {"dialog.render_settings.audio.answer", "Answer 音量"},
@@ -490,6 +491,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.video_export.error.failed_title", "导出失败"},
 
         {"status.audio_restored_default", "已恢复默认音量设置"},
+        {"status.audio_saved_software_default", "当前音频设置已保存为软件默认值"},
         {"status.touch_trail_enabled", "Touch 轨迹已开启"},
         {"status.touch_trail_disabled", "Touch 轨迹已关闭"},
         {"status.judge_marker_enabled", "判定标记已开启"},
