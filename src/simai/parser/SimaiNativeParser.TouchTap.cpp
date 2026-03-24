@@ -69,29 +69,106 @@ void parseTapOrHoldToken(ParseState* state, const QString& token, int lineNumber
     marker.lane = token.at(0).digitValue();
     marker.endLane = marker.lane;
     marker.type = "tap";
-    marker.isBreak = token.contains('b');
-    marker.isEx = token.contains('x');
+    const QString suffix = token.mid(1);
+    const int openBracket = suffix.indexOf('[');
+    const int closeBracket = suffix.indexOf(']');
+    const bool hasOpenBracket = openBracket >= 0;
+    const bool hasCloseBracket = closeBracket >= 0;
+    if (hasOpenBracket != hasCloseBracket) {
+        appendTokenError(state, lineNumber, column, QString("Invalid hold duration: %1").arg(token));
+        return;
+    }
+    if (hasOpenBracket) {
+        if (closeBracket <= openBracket
+            || suffix.indexOf('[', openBracket + 1) >= 0
+            || suffix.indexOf(']', closeBracket + 1) >= 0) {
+            appendTokenError(state, lineNumber, column, QString("Invalid hold duration: %1").arg(token));
+            return;
+        }
+    }
 
-    if (token.contains('h')) {
-        const bool hasOpenBracket = token.contains('[');
-        const bool hasCloseBracket = token.contains(']');
-        if (hasOpenBracket != hasCloseBracket) {
+    const QString prefixModifiers = hasOpenBracket ? suffix.left(openBracket) : suffix;
+    const QString suffixModifiers = hasOpenBracket ? suffix.mid(closeBracket + 1) : QString();
+    int breakCount = 0;
+    int exCount = 0;
+    int holdCount = 0;
+    int firstHoldIndex = -1;
+    bool hasNonCanonicalHoldModifierPlacement = false;
+
+    const auto registerModifier = [&](QChar ch, int globalIndex) -> bool {
+        const QChar lower = ch.toLower();
+        if (lower == QChar('b')) {
+            ++breakCount;
+            return breakCount <= 1;
+        }
+        if (lower == QChar('x')) {
+            ++exCount;
+            return exCount <= 1;
+        }
+        if (lower == QChar('h')) {
+            ++holdCount;
+            if (firstHoldIndex < 0) {
+                firstHoldIndex = globalIndex;
+            }
+            return holdCount <= 1;
+        }
+        return false;
+    };
+
+    for (int i = 0; i < prefixModifiers.size(); ++i) {
+        if (!registerModifier(prefixModifiers.at(i), i)) {
+            appendTokenError(state, lineNumber, column, QString("Invalid hold modifier sequence: %1").arg(token));
+            return;
+        }
+    }
+    for (int i = 0; i < suffixModifiers.size(); ++i) {
+        if (!registerModifier(suffixModifiers.at(i), prefixModifiers.size() + i)) {
+            appendTokenError(state, lineNumber, column, QString("Invalid hold modifier sequence: %1").arg(token));
+            return;
+        }
+    }
+
+    const bool hasHold = holdCount > 0;
+    marker.isBreak = breakCount > 0;
+    marker.isEx = exCount > 0;
+
+    if (!hasHold && hasOpenBracket) {
+        appendTokenError(state, lineNumber, column, QString("Invalid hold duration: %1").arg(token));
+        return;
+    }
+
+    if (hasHold) {
+        if (suffixModifiers.contains(QChar('h'), Qt::CaseInsensitive)) {
+            appendTokenError(state, lineNumber, column, QString("Invalid hold modifier sequence: %1").arg(token));
+            return;
+        }
+        if (firstHoldIndex >= 0 && firstHoldIndex + 1 < prefixModifiers.size()) {
+            hasNonCanonicalHoldModifierPlacement = true;
+        }
+        if (!suffixModifiers.isEmpty()) {
+            hasNonCanonicalHoldModifierPlacement = true;
+        }
+
+        double durationSecond = 0.0;
+        bool durationOk = true;
+        if (hasOpenBracket) {
+            durationSecond = parseHoldDurationSignature(tokenInsideBrackets(token), state->bpm, &durationOk);
+        }
+        if (!durationOk) {
             appendTokenError(state, lineNumber, column, QString("Invalid hold duration: %1").arg(token));
             return;
         }
 
-        double durationSecond = 0.0;
-        if (hasOpenBracket && hasCloseBracket) {
-            bool durationOk = false;
-            durationSecond = parseHoldDurationSignature(tokenInsideBrackets(token), state->bpm, &durationOk);
-            if (!durationOk) {
-                appendTokenError(state, lineNumber, column, QString("Invalid hold duration: %1").arg(token));
-                return;
-            }
-        }
-
         marker.type = "hold";
         marker.endSecond = marker.second + qMax(0.0, durationSecond);
+        if (state->strictMode && hasOpenBracket && hasNonCanonicalHoldModifierPlacement) {
+            appendTokenWarning(
+                state,
+                lineNumber,
+                column,
+                QString("Non-canonical hold modifier placement: %1").arg(token)
+            );
+        }
     }
 
     appendNote(state, marker, groupIndices);

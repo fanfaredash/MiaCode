@@ -368,7 +368,13 @@ QString describeNativeWindowHandle(HWND hwnd)
         .arg(exStyle, 0, 16);
 }
 
-QPixmap makeEditorValidationSummaryIcon(const QColor& color, bool warning)
+enum class EditorValidationSummaryIconKind {
+    Error,
+    Warning,
+    Muri,
+};
+
+QPixmap makeEditorValidationSummaryIcon(const QColor& color, EditorValidationSummaryIconKind kind)
 {
     QPixmap pixmap(14, 14);
     pixmap.fill(Qt::transparent);
@@ -378,7 +384,7 @@ QPixmap makeEditorValidationSummaryIcon(const QColor& color, bool warning)
     painter.setPen(Qt::NoPen);
     painter.setBrush(color);
 
-    if (warning) {
+    if (kind == EditorValidationSummaryIconKind::Warning) {
         QPainterPath triangle;
         triangle.moveTo(7.0, 1.2);
         triangle.lineTo(12.8, 12.0);
@@ -388,6 +394,17 @@ QPixmap makeEditorValidationSummaryIcon(const QColor& color, bool warning)
         painter.setBrush(Qt::white);
         painter.drawRoundedRect(QRectF(6.2, 4.0, 1.6, 4.0), 0.8, 0.8);
         painter.drawEllipse(QRectF(6.1, 9.2, 1.8, 1.8));
+    } else if (kind == EditorValidationSummaryIconKind::Muri) {
+        QPainterPath diamond;
+        diamond.moveTo(7.0, 1.0);
+        diamond.lineTo(13.0, 7.0);
+        diamond.lineTo(7.0, 13.0);
+        diamond.lineTo(1.0, 7.0);
+        diamond.closeSubpath();
+        painter.drawPath(diamond);
+        painter.setBrush(Qt::white);
+        painter.drawRoundedRect(QRectF(4.0, 6.2, 6.0, 1.6), 0.8, 0.8);
+        painter.drawRoundedRect(QRectF(6.2, 4.0, 1.6, 6.0), 0.8, 0.8);
     } else {
         painter.drawEllipse(QRectF(1.2, 1.2, 11.6, 11.6));
         painter.setBrush(Qt::white);

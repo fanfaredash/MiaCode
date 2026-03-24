@@ -78,6 +78,18 @@ const QString& kInvalidHoldDurationPrefix()
     return value;
 }
 
+const QString& kInvalidHoldModifierSequencePrefix()
+{
+    static const QString value = QStringLiteral("Invalid hold modifier sequence: ");
+    return value;
+}
+
+const QString& kNonCanonicalHoldModifierPlacementPrefix()
+{
+    static const QString value = QStringLiteral("Non-canonical hold modifier placement: ");
+    return value;
+}
+
 const QString& kInvalidTouchHoldDurationPrefix()
 {
     static const QString value = QStringLiteral("Invalid touch-hold duration: ");
@@ -165,6 +177,8 @@ const QHash<QString, QString>& zhPrefixMap()
         {kInvalidSlideDurationPlacementPrefix(), QStringLiteral("Slide 时值块位置可能导致转谱错误：")},
         {kInvalidSlideDurationPrefix(), QStringLiteral("Slide 时值无效：")},
         {kInvalidHoldDurationPrefix(), QStringLiteral("Hold 时值无效：")},
+        {kInvalidHoldModifierSequencePrefix(), QStringLiteral("Hold 修饰符顺序无效：")},
+        {kNonCanonicalHoldModifierPlacementPrefix(), QStringLiteral("Hold 修饰符位置可能导致上机转换错误：")},
         {kInvalidTouchHoldDurationPrefix(), QStringLiteral("TouchHold 时值无效：")},
         {kTouchDurationRequiresHPrefix(), QStringLiteral("Touch 时值需要 'h' 修饰符：")},
         {kInvalidTouchTokenPrefix(), QStringLiteral("Touch 音符无效：")},
@@ -187,6 +201,8 @@ const QVector<QString>& zhPrefixOrder()
         kInvalidSlideDurationPlacementPrefix(),
         kInvalidSlideDurationPrefix(),
         kInvalidHoldDurationPrefix(),
+        kInvalidHoldModifierSequencePrefix(),
+        kNonCanonicalHoldModifierPlacementPrefix(),
         kInvalidTouchHoldDurationPrefix(),
         kTouchDurationRequiresHPrefix(),
         kInvalidTouchTokenPrefix(),

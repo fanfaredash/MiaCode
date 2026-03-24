@@ -478,7 +478,7 @@ MainWindow::MainWindow(QWidget* parent)
     editorValidationSummaryWidget_ = new QWidget(editorHeaderTrailingWidget);
     auto* editorValidationSummaryLayout = new QHBoxLayout(editorValidationSummaryWidget_);
     editorValidationSummaryLayout->setContentsMargins(0, 0, 0, 0);
-    editorValidationSummaryLayout->setSpacing(10);
+    editorValidationSummaryLayout->setSpacing(8);
 
     auto* editorValidationErrorGroup = new QWidget(editorValidationSummaryWidget_);
     auto* editorValidationErrorLayout = new QHBoxLayout(editorValidationErrorGroup);
@@ -502,8 +502,20 @@ MainWindow::MainWindow(QWidget* parent)
     editorValidationWarningLayout->addWidget(editorValidationWarningIconLabel_, 0, Qt::AlignVCenter);
     editorValidationWarningLayout->addWidget(editorValidationWarningCountLabel_, 0, Qt::AlignVCenter);
 
+    auto* editorValidationMuriGroup = new QWidget(editorValidationSummaryWidget_);
+    auto* editorValidationMuriLayout = new QHBoxLayout(editorValidationMuriGroup);
+    editorValidationMuriLayout->setContentsMargins(0, 0, 0, 0);
+    editorValidationMuriLayout->setSpacing(4);
+    editorValidationMuriIconLabel_ = new QLabel(editorValidationMuriGroup);
+    editorValidationMuriIconLabel_->setFixedSize(14, 14);
+    editorValidationMuriCountLabel_ = new QLabel(QStringLiteral("0"), editorValidationMuriGroup);
+    editorValidationMuriCountLabel_->setFont(uiMonoFont(10, QFont::DemiBold));
+    editorValidationMuriLayout->addWidget(editorValidationMuriIconLabel_, 0, Qt::AlignVCenter);
+    editorValidationMuriLayout->addWidget(editorValidationMuriCountLabel_, 0, Qt::AlignVCenter);
+
     editorValidationSummaryLayout->addWidget(editorValidationErrorGroup, 0, Qt::AlignVCenter);
     editorValidationSummaryLayout->addWidget(editorValidationWarningGroup, 0, Qt::AlignVCenter);
+    editorValidationSummaryLayout->addWidget(editorValidationMuriGroup, 0, Qt::AlignVCenter);
     editorValidationSummaryWidget_->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
     editorValidationSummaryWidget_->hide();
     editorHeaderTrailingLayout->addWidget(editorValidationSummaryWidget_, 0, Qt::AlignRight);
@@ -1612,4 +1624,3 @@ MainWindow::MainWindow(QWidget* parent)
     logStartupStage("preview_subsystem_warmup_scheduled");
     logStartupStage("constructor_done");
 }
-

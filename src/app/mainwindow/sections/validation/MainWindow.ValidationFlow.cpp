@@ -218,7 +218,9 @@ void MainWindow::updateEditorValidationSummary()
         || editorValidationErrorIconLabel_ == nullptr
         || editorValidationErrorCountLabel_ == nullptr
         || editorValidationWarningIconLabel_ == nullptr
-        || editorValidationWarningCountLabel_ == nullptr) {
+        || editorValidationWarningCountLabel_ == nullptr
+        || editorValidationMuriIconLabel_ == nullptr
+        || editorValidationMuriCountLabel_ == nullptr) {
         return;
     }
 
@@ -229,6 +231,7 @@ void MainWindow::updateEditorValidationSummary()
 
     int errorCount = 0;
     int warningCount = 0;
+    int muriIssueCount = muriAnalysisReport_.diagnostics.size() + muriStaticReferences_.size();
     const auto cacheIt = validationCacheByDifficulty_.constFind(activeDifficultyId());
     if (cacheIt != validationCacheByDifficulty_.constEnd()) {
         const ValidationCacheEntry& entry = cacheIt.value();
@@ -237,44 +240,55 @@ void MainWindow::updateEditorValidationSummary()
             warningCount = entry.warningCount;
         }
     }
-    const int muriIssueCount = muriAnalysisReport_.diagnostics.size() + muriStaticReferences_.size();
-    errorCount += muriIssueCount;
 
     const QColor mutedColor = UiTheme::colors().textMuted;
     const QColor errorColor = errorCount > 0 ? QColor(QStringLiteral("#D94A4A")) : mutedColor;
     const QColor warningColor = warningCount > 0 ? QColor(QStringLiteral("#D4A12A")) : mutedColor;
+    const QColor muriColor = muriIssueCount > 0 ? QColor(QStringLiteral("#A24AD9")) : mutedColor;
     const bool showError = errorCount > 0;
     const bool showWarning = warningCount > 0;
+    const bool showMuri = muriIssueCount > 0;
 
-    editorValidationErrorIconLabel_->setPixmap(makeEditorValidationSummaryIcon(errorColor, false));
+    editorValidationErrorIconLabel_->setPixmap(
+        makeEditorValidationSummaryIcon(errorColor, EditorValidationSummaryIconKind::Error));
     editorValidationErrorCountLabel_->setText(QString::number(errorCount));
     editorValidationErrorCountLabel_->setStyleSheet(QStringLiteral("color: %1;").arg(errorColor.name(QColor::HexRgb)));
     editorValidationErrorIconLabel_->setVisible(showError);
     editorValidationErrorCountLabel_->setVisible(showError);
 
-    editorValidationWarningIconLabel_->setPixmap(makeEditorValidationSummaryIcon(warningColor, true));
+    editorValidationWarningIconLabel_->setPixmap(
+        makeEditorValidationSummaryIcon(warningColor, EditorValidationSummaryIconKind::Warning));
     editorValidationWarningCountLabel_->setText(QString::number(warningCount));
     editorValidationWarningCountLabel_->setStyleSheet(
         QStringLiteral("color: %1;").arg(warningColor.name(QColor::HexRgb)));
     editorValidationWarningIconLabel_->setVisible(showWarning);
     editorValidationWarningCountLabel_->setVisible(showWarning);
 
-    const QString summaryTooltip = muriIssueCount > 0
+    editorValidationMuriIconLabel_->setPixmap(
+        makeEditorValidationSummaryIcon(muriColor, EditorValidationSummaryIconKind::Muri));
+    editorValidationMuriCountLabel_->setText(QString::number(muriIssueCount));
+    editorValidationMuriCountLabel_->setStyleSheet(QStringLiteral("color: %1;").arg(muriColor.name(QColor::HexRgb)));
+    editorValidationMuriIconLabel_->setVisible(showMuri);
+    editorValidationMuriCountLabel_->setVisible(showMuri);
+
+    const QString summaryTooltip = showMuri
         ? uiText(
               "editor.validation_summary.tooltip_with_muri",
-              "%1 error(s), %2 warning(s) (%3 muri issue(s) included)"
+              "%1 error(s), %2 warning(s), %3 muri issue(s)"
           ).arg(errorCount).arg(warningCount).arg(muriIssueCount)
         : uiText(
               "editor.validation_summary.tooltip",
               "%1 error(s), %2 warning(s)"
           ).arg(errorCount).arg(warningCount);
-    const bool showSummary = previewShowValidationSummary_ && (showError || showWarning);
+    const bool showSummary = previewShowValidationSummary_ && (showError || showWarning || showMuri);
     editorValidationSummaryWidget_->setProperty("hasContent", showSummary);
     editorValidationSummaryWidget_->setToolTip(summaryTooltip);
     editorValidationErrorIconLabel_->setToolTip(summaryTooltip);
     editorValidationErrorCountLabel_->setToolTip(summaryTooltip);
     editorValidationWarningIconLabel_->setToolTip(summaryTooltip);
     editorValidationWarningCountLabel_->setToolTip(summaryTooltip);
+    editorValidationMuriIconLabel_->setToolTip(summaryTooltip);
+    editorValidationMuriCountLabel_->setToolTip(summaryTooltip);
     editorValidationSummaryWidget_->setVisible(showSummary);
     editorValidationSummaryWidget_->adjustSize();
     updateEditorHeaderLayoutMode();

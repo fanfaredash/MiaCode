@@ -608,6 +608,8 @@ private:
     QLabel* editorValidationErrorCountLabel_ = nullptr;
     QLabel* editorValidationWarningIconLabel_ = nullptr;
     QLabel* editorValidationWarningCountLabel_ = nullptr;
+    QLabel* editorValidationMuriIconLabel_ = nullptr;
+    QLabel* editorValidationMuriCountLabel_ = nullptr;
     QLabel* editorCursorLabel_ = nullptr;
     QWidget* editorFindBar_ = nullptr;
     QLineEdit* editorFindEdit_ = nullptr;
