@@ -98,12 +98,14 @@ bool parseTouchSuffix(
     bool* hasHold,
     bool* hasFirework,
     bool* hasBreak,
+    bool* hasNonCanonicalHoldModifierPlacement,
     QString* errorMessage)
 {
     if (durationSignature == nullptr
         || hasHold == nullptr
         || hasFirework == nullptr
         || hasBreak == nullptr
+        || hasNonCanonicalHoldModifierPlacement == nullptr
         || errorMessage == nullptr) {
         return false;
     }
@@ -111,6 +113,7 @@ bool parseTouchSuffix(
     *hasHold = false;
     *hasFirework = false;
     *hasBreak = false;
+    *hasNonCanonicalHoldModifierPlacement = false;
     errorMessage->clear();
 
     const int prefixLength = touchPrefixLength(token);
@@ -127,38 +130,53 @@ bool parseTouchSuffix(
         return false;
     }
 
-    QString modifierPart = suffix;
+    QString prefixModifierPart = suffix;
+    QString suffixModifierPart;
     if (openBracket >= 0) {
         if (closeBracket <= openBracket) {
             *errorMessage = QString("Invalid touch-hold duration: %1").arg(token);
-            return false;
-        }
-        if (closeBracket != suffix.size() - 1) {
-            *errorMessage = QString("Invalid touch token: %1").arg(token);
             return false;
         }
         if (suffix.indexOf('[', openBracket + 1) >= 0 || suffix.indexOf(']', closeBracket + 1) >= 0) {
             *errorMessage = QString("Invalid touch token: %1").arg(token);
             return false;
         }
-        modifierPart = suffix.left(openBracket);
+        prefixModifierPart = suffix.left(openBracket);
+        suffixModifierPart = suffix.mid(closeBracket + 1);
         *durationSignature = suffix.mid(openBracket + 1, closeBracket - openBracket - 1);
     }
 
-    for (QChar ch : modifierPart) {
-        const QChar lower = ch.toLower();
-        if (lower == QChar('h')) {
-            *hasHold = true;
-        } else if (lower == QChar('f')) {
-            *hasFirework = true;
-        } else if (lower == QChar('b')) {
-            *hasBreak = true;
-        } else if (lower == QChar('x')) {
-            // Currently accepted for compatibility; touch ex is not bound yet.
-        } else if (!ch.isSpace()) {
-            *errorMessage = QString("Invalid touch modifier: %1").arg(token);
+    auto parseModifierPart = [token, hasHold, hasFirework, hasBreak, errorMessage](const QString& modifierPart) {
+        for (QChar ch : modifierPart) {
+            const QChar lower = ch.toLower();
+            if (lower == QChar('h')) {
+                *hasHold = true;
+            } else if (lower == QChar('f')) {
+                *hasFirework = true;
+            } else if (lower == QChar('b')) {
+                *hasBreak = true;
+            } else if (lower == QChar('x')) {
+                // Currently accepted for compatibility; touch ex is not bound yet.
+            } else if (!ch.isSpace()) {
+                *errorMessage = QString("Invalid touch modifier: %1").arg(token);
+                return false;
+            }
+        }
+        return true;
+    };
+
+    if (!parseModifierPart(prefixModifierPart)) {
+        return false;
+    }
+    if (!suffixModifierPart.isEmpty()) {
+        *hasNonCanonicalHoldModifierPlacement = true;
+        if (suffixModifierPart.contains(QChar('h'), Qt::CaseInsensitive)) {
+            *errorMessage = QString("Invalid touch token: %1").arg(token);
             return false;
         }
+    }
+    if (!parseModifierPart(suffixModifierPart)) {
+        return false;
     }
 
     if (openBracket >= 0 && !*hasHold) {
