@@ -1,4 +1,4 @@
-#include "UiTheme.h"
+﻿#include "UiTheme.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -754,7 +754,7 @@ QString activePlaybackButtonStyleSheet()
 
 QString validationMessageLabelStyleSheet()
 {
-    return QStringLiteral("QLabel { background: transparent; color: %1; padding: 2px 4px; }")
+    return QStringLiteral("QLabel { background: transparent; color: %1; padding: 1px 2px; }")
         .arg(css(colors().textPrimary));
 }
 

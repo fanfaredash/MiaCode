@@ -520,10 +520,14 @@ MainWindow::MainWindow(QWidget* parent)
     editorValidationSummaryWidget_->hide();
     editorHeaderTrailingLayout->addWidget(editorValidationSummaryWidget_, 0, Qt::AlignRight);
 
-    editorCursorLabel_ = new QLabel("Ln 1, Col 1", editorHeaderTrailingWidget);
+    editorCursorLabel_ = new QLabel(
+        UiText::isChineseUi() ? QStringLiteral("1行 1列") : QStringLiteral("Ln 1, Col 1"),
+        editorHeaderTrailingWidget);
     editorCursorLabel_->setObjectName("EditorMeta");
     editorCursorLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    editorCursorLabel_->setFixedWidth(QFontMetrics(uiMonoFont(10)).horizontalAdvance(QStringLiteral("Ln 9999, Col 9999")) + 4);
+    editorCursorLabel_->setFixedWidth(
+        QFontMetrics(uiMonoFont(10)).horizontalAdvance(
+            UiText::isChineseUi() ? QStringLiteral("9999行 9999列") : QStringLiteral("Ln 9999, Col 9999")) + 10);
     editorCursorLabel_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     editorHeaderTrailingLayout->addWidget(editorCursorLabel_, 0, Qt::AlignRight);
     editorHeaderLayout->addWidget(editorHeaderTrailingWidget, 0, Qt::AlignRight);
@@ -1249,8 +1253,13 @@ MainWindow::MainWindow(QWidget* parent)
     errorList_->setWordWrap(true);
     errorList_->setTextElideMode(Qt::ElideNone);
     errorList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    errorList_->setContextMenuPolicy(Qt::CustomContextMenu);
+    errorList_->viewport()->installEventFilter(this);
     connect(errorList_, &QListWidget::itemActivated, this, &MainWindow::onErrorItemActivated);
     connect(errorList_, &QListWidget::itemClicked, this, &MainWindow::onErrorItemActivated);
+    connect(errorList_, &QListWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+        showIssueListContextMenu(errorList_, pos, false);
+    });
     bottomTabs_->addTab(
         errorList_,
         UiText::isChineseUi() ? QStringLiteral("语法检查") : QStringLiteral("Syntax Check")
@@ -1262,12 +1271,21 @@ MainWindow::MainWindow(QWidget* parent)
     muriList_->setWordWrap(true);
     muriList_->setTextElideMode(Qt::ElideNone);
     muriList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    muriList_->setContextMenuPolicy(Qt::CustomContextMenu);
+    muriList_->viewport()->installEventFilter(this);
     connect(muriList_, &QListWidget::itemActivated, this, &MainWindow::onMuriItemActivated);
     connect(muriList_, &QListWidget::itemClicked, this, &MainWindow::onMuriItemActivated);
+    connect(muriList_, &QListWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+        showIssueListContextMenu(muriList_, pos, true);
+    });
     bottomTabs_->addTab(
         muriList_,
         UiText::isChineseUi() ? QStringLiteral("无理检查") : QStringLiteral("Muri Check")
     );
+    connect(bottomTabs_, &QTabWidget::currentChanged, this, [this](int) {
+        scheduleWrappedListRelayout(errorList_);
+        scheduleWrappedListRelayout(muriList_);
+    });
     updateBottomTabsDeviceHeight();
     logStartupStage("timeline_and_tabs_ready");
 

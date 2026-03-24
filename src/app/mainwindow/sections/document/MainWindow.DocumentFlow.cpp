@@ -894,11 +894,13 @@ void MainWindow::updateEditorHeaderLayoutMode()
         const auto [line, col] = currentCursorLineCol();
         if (compactCursor) {
             editorCursorLabel_->setText(QStringLiteral("%1:%2").arg(line).arg(col));
+        } else if (UiText::isChineseUi()) {
+            editorCursorLabel_->setText(QStringLiteral("%1行 %2列").arg(line).arg(col));
         } else {
             editorCursorLabel_->setText(QStringLiteral("Ln %1, Col %2").arg(line).arg(col));
         }
         editorCursorLabel_->setFixedWidth(
-            QFontMetrics(editorCursorLabel_->font()).horizontalAdvance(editorCursorLabel_->text()) + 2);
+            QFontMetrics(editorCursorLabel_->font()).horizontalAdvance(editorCursorLabel_->text()) + 10);
     }
     editorCursorLabel_->setVisible(showCursor);
 }

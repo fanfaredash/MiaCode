@@ -49,6 +49,7 @@
 #include <QFontDatabase>
 #include <QFontMetrics>
 #include <QFontInfo>
+#include <QGraphicsOpacityEffect>
 #include <QGuiApplication>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -2424,6 +2425,17 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             updateDifficultyDeleteButton(false);
         } else if (event->type() == QEvent::Resize && deleteDifficultyButton_ != nullptr && deleteDifficultyButton_->isVisible()) {
             updateDifficultyDeleteButton(true);
+        }
+    }
+    if ((errorList_ != nullptr && watched == errorList_->viewport())
+        || (muriList_ != nullptr && watched == muriList_->viewport())) {
+        if (event->type() == QEvent::Resize
+            || event->type() == QEvent::Show
+            || event->type() == QEvent::LayoutRequest
+            || event->type() == QEvent::PolishRequest) {
+            scheduleWrappedListRelayout(
+                watched == (errorList_ != nullptr ? errorList_->viewport() : nullptr) ? errorList_ : muriList_
+            );
         }
     }
     const bool previewKeyScope =
