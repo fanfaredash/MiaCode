@@ -714,6 +714,9 @@ void MainWindow::refreshMuriDiagnosticsPanel()
         entries.append(entry);
     }
     std::sort(entries.begin(), entries.end(), [](const MuriPanelEntry& a, const MuriPanelEntry& b) {
+        if (a.isStatic != b.isStatic) {
+            return !a.isStatic && b.isStatic;
+        }
         if (!qFuzzyCompare(a.second + 1.0, b.second + 1.0)) {
             return a.second < b.second;
         }
@@ -722,9 +725,6 @@ void MainWindow::refreshMuriDiagnosticsPanel()
         }
         if (a.col != b.col) {
             return a.col < b.col;
-        }
-        if (a.isStatic != b.isStatic) {
-            return !a.isStatic && b.isStatic;
         }
         return static_cast<int>(a.kind) < static_cast<int>(b.kind);
     });
