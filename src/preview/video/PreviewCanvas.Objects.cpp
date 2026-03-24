@@ -3361,7 +3361,7 @@ void PreviewCanvas::drawTouchHoldMarker(QPainter& painter, const TimelineNoteMar
     const QImage& pointBase =
         (marker.isBreak && !touchPointBreakImage_.isNull())
             ? touchPointBreakImage_
-            : (!touchPointEachImage_.isNull() ? touchPointEachImage_ : touchPointImage_);
+            : ((marker.isEach && !touchPointEachImage_.isNull()) ? touchPointEachImage_ : touchPointImage_);
     if (pointBase.isNull()) {
         return;
     }
@@ -3394,29 +3394,7 @@ void PreviewCanvas::drawTouchHoldMarker(QPainter& painter, const TimelineNoteMar
         {&touchHold3Image_, qMax(1, qRound(touchHold3Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold3Image_.height() * kTouchAssetScale * canvasScale)), kTouchHoldUpperLeftAngleDegrees, -offset, -offset},
     };
 
-    const bool batchNative = glRenderer_.isInitialized() && !nativePaintingActive_;
-    if (batchNative) {
-        nativePaintingActive_ = true;
-        painter.beginNativePainting();
-    }
-    for (int index = 3; index >= 0; --index) {
-        const auto& pieceLayout = layout[index];
-        drawSpriteImage(
-            painter,
-            *pieceLayout.image,
-            QPointF(point.x() + pieceLayout.dx, point.y() + pieceLayout.dy),
-            pieceLayout.width,
-            pieceLayout.height,
-            pieceLayout.angle,
-            alpha
-        );
-    }
-
     if (deltaSeconds >= 0.0) {
-        const bool resumeNativeAfterBorder = nativePaintingActive_;
-        if (resumeNativeAfterBorder) {
-            endNativeBatch(painter);
-        }
         const QRectF borderRect(
             point.x() - borderWidth / 2.0,
             point.y() - borderHeight / 2.0,
@@ -3434,9 +3412,24 @@ void PreviewCanvas::drawTouchHoldMarker(QPainter& painter, const TimelineNoteMar
             painter.drawImage(borderRect, touchHoldBorderImage_);
             painter.restore();
         }
-        if (resumeNativeAfterBorder) {
-            beginNativeBatch(painter);
-        }
+    }
+
+    const bool batchNative = glRenderer_.isInitialized() && !nativePaintingActive_;
+    if (batchNative) {
+        nativePaintingActive_ = true;
+        painter.beginNativePainting();
+    }
+    for (int index = 3; index >= 0; --index) {
+        const auto& pieceLayout = layout[index];
+        drawSpriteImage(
+            painter,
+            *pieceLayout.image,
+            QPointF(point.x() + pieceLayout.dx, point.y() + pieceLayout.dy),
+            pieceLayout.width,
+            pieceLayout.height,
+            pieceLayout.angle,
+            alpha
+        );
     }
     drawSpriteImage(painter, pointBase, point, pointWidth, pointHeight, 0.0, alpha);
     if (batchNative) {

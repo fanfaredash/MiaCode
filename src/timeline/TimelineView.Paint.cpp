@@ -244,6 +244,8 @@ void TimelineView::paintEvent(QPaintEvent* event)
             iconType = "touch_each";
         } else if (iconType == "touch_hold" && note.isBreak) {
             iconType = "touch_hold_break";
+        } else if (iconType == "touch_hold" && note.isEach) {
+            iconType = "touch_hold_each";
         } else if (iconType == "slide" || iconType == "wifi") {
             // Star icon should follow the falling slide-head star(each) semantics,
             // while track color is controlled separately by slideEach.
@@ -384,7 +386,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
             const int startX = x;
             const int endX = note.endSecond > note.second ? (secondToX(note.endSecond) - xOffset) : x;
             const QPen holdPen(
-                note.isEach ? QColor(44, 214, 255, 120) : QColor(231, 76, 60, 120),
+                note.isEach ? QColor(255, 214, 64, 120) : QColor(44, 214, 255, 120),
                 4.0,
                 Qt::SolidLine,
                 Qt::RoundCap
@@ -454,4 +456,3 @@ void TimelineView::paintEvent(QPaintEvent* event)
     painter.setPen(c.timelineBorder);
     painter.drawRect(QRect(0, 0, viewport()->width() - 1, top + h));
 }
-
