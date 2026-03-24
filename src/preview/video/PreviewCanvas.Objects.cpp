@@ -1246,6 +1246,12 @@ void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
         return;
     }
 
+    constexpr qreal kHudReferenceShortSide = 1024.0;
+    constexpr qreal kHudReferencePadding = 18.0;
+    constexpr int kHudReferenceTimeFontPointSize = 23;
+    constexpr int kHudReferenceDebugFontPointSize = 13;
+    constexpr int kHudReferenceStatsFontPointSize = 22;
+
     struct HudStats {
         int tapTotal = 0;
         int tapPlayed = 0;
@@ -1371,11 +1377,12 @@ void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
         }
         return stats;
     };
-    painter.setPen(QColor("#D9E2EC"));
-    const qreal hudPadding = qBound<qreal>(10.0, stageRect.width() * 0.028, 18.0);
     const qreal stageShortSide = qMax<qreal>(1.0, qMin(stageRect.width(), stageRect.height()));
-    const int timeFontPointSize = qBound(12, qRound(stageShortSide * 0.022), 34);
-    const int debugFontPointSize = qBound(8, qRound(stageShortSide * 0.013), 22);
+    const qreal hudScale = qMax<qreal>(0.1, stageShortSide / kHudReferenceShortSide);
+    painter.setPen(QColor("#D9E2EC"));
+    const qreal hudPadding = qMax<qreal>(10.0, kHudReferencePadding * hudScale);
+    const int timeFontPointSize = qMax(12, qRound(static_cast<qreal>(kHudReferenceTimeFontPointSize) * hudScale));
+    const int debugFontPointSize = qMax(8, qRound(static_cast<qreal>(kHudReferenceDebugFontPointSize) * hudScale));
     QFont timeFont = hudMonoFont(timeFontPointSize, QFont::DemiBold);
     if (showDebugInfo_) {
         QFont fpsFont = hudMonoFont(debugFontPointSize, QFont::Medium);
@@ -1435,7 +1442,7 @@ void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
             ? (static_cast<double>(stats.deluxeBreakCurrent) / static_cast<double>(stats.deluxeBreakTotal))
             : 0.0);
 
-    int baseFontPointSize = qBound(10, qRound(stageShortSide * 0.021), 22);
+    int baseFontPointSize = qMax(10, qRound(static_cast<qreal>(kHudReferenceStatsFontPointSize) * hudScale));
     QFont titleFont;
     QFont rateFont;
     QFont statFont;
@@ -1513,11 +1520,12 @@ void PreviewCanvas::drawHud(QPainter& painter, const QRectF& stageRect)
         return;
     }
 
-    const auto drawHudText = [&painter](const QPointF& baseline, const QString& text, const QFont& font) {
+    const qreal shadowOffset = qMax<qreal>(1.0, 2.0 * hudScale);
+    const auto drawHudText = [&painter, shadowOffset](const QPointF& baseline, const QString& text, const QFont& font) {
         painter.save();
         painter.setFont(font);
         painter.setPen(QColor(0, 0, 0, 190));
-        painter.drawText(baseline + QPointF(2.0, 2.0), text);
+        painter.drawText(baseline + QPointF(shadowOffset, shadowOffset), text);
         painter.setPen(QColor("#FFFFFF"));
         painter.drawText(baseline, text);
         painter.restore();
