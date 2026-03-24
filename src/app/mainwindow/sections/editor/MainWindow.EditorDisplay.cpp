@@ -162,7 +162,6 @@
     } else {
         softwarePreviewAudioSettings_ = PreviewAudioSettings::fromJson(preview);
     }
-    softwarePreviewAudioSettings_.bgmVolume = PreviewAudioSettings().bgmVolume;
     softwarePreviewAudioSettings_.normalize();
     refreshPreviewFrameRateTimers();
     previewAudioSettings_ = softwarePreviewAudioSettings_;
@@ -280,4 +279,3 @@ void MainWindow::applyEditorLineSpacingFactor(double factor, bool persistPrefere
         persistEditorTextFontPreference();
     }
 }
-

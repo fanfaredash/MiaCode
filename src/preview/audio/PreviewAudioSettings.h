@@ -5,16 +5,16 @@
 #include <QtGlobal>
 
 struct PreviewAudioSettings {
-    double bgmVolume = 0.15;
-    double answerVolume = 0.25;
-    double judgeVolume = 0.05;
-    double slideVolume = 0.05;
-    double breakVolume = 0.05;
-    double breakSlideVolume = 0.05;
-    double exVolume = 0.05;
-    double touchVolume = 0.05;
-    double touchholdVolume = 0.05;
-    double fireworkVolume = 0.05;
+    double bgmVolume = 0.25;
+    double answerVolume = 0.35;
+    double judgeVolume = 0.15;
+    double slideVolume = 0.15;
+    double breakVolume = 0.15;
+    double breakSlideVolume = 0.15;
+    double exVolume = 0.15;
+    double touchVolume = 0.15;
+    double touchholdVolume = 0.15;
+    double fireworkVolume = 0.15;
 
     static double clamp(double value);
     void normalize();
