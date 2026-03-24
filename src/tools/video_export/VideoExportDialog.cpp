@@ -1166,12 +1166,6 @@ void VideoExportDialog::loadPersistedSettings()
     QSettings settings = exportDialogSettingsStore();
     settings.beginGroup(QStringLiteral("video_export_dialog"));
 
-    const QString baseDirectory = exportBaseDirectory(baseTask_);
-    const QString savedOutputPath = settings.value(QStringLiteral("output_path")).toString().trimmed();
-    if (!savedOutputPath.isEmpty() && outputPathEdit_ != nullptr) {
-        outputPathEdit_->setText(displayOutputPathForDialog(savedOutputPath, baseDirectory));
-    }
-
     const int savedWidth = settings.value(QStringLiteral("resolution_width"), selectedResolution_.width()).toInt();
     const int savedHeight = settings.value(QStringLiteral("resolution_height"), selectedResolution_.height()).toInt();
     if (savedWidth > 0 && savedHeight > 0) {
@@ -1260,7 +1254,6 @@ void VideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
 {
     QSettings settings = exportDialogSettingsStore();
     settings.beginGroup(QStringLiteral("video_export_dialog"));
-    settings.setValue(QStringLiteral("output_path"), task.outputPath);
     settings.setValue(QStringLiteral("resolution_width"), task.outputWidth);
     settings.setValue(QStringLiteral("resolution_height"), task.outputHeight);
     settings.setValue(QStringLiteral("fps"), task.fps);
