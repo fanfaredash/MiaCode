@@ -94,6 +94,7 @@ QString formSliderStyleSheet();
 QString dialogSliderStyleSheet();
 QString dialogComboBoxStyleSheet();
 QString dialogMenuButtonStyleSheet();
+QString dialogMenuLineEditStyleSheet();
 QString dialogPushButtonStyleSheet(bool emphasized = false);
 QString dialogIconToolButtonStyleSheet(bool active = false);
 QString preferencesDialogStyleSheet();

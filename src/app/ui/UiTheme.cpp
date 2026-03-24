@@ -591,6 +591,20 @@ QString dialogMenuButtonStyleSheet()
         .arg(css(c.accentPressed));
 }
 
+QString dialogMenuLineEditStyleSheet()
+{
+    const Colors& c = colors();
+    return QStringLiteral(
+        "QLineEdit { min-height: 24px; padding: 2px 10px; border: 1px solid %1; border-radius: 8px; background: %2; color: %3; font-weight: 500; }"
+        "QLineEdit:hover { border-color: %4; }"
+        "QLineEdit:focus { border-color: %4; background: %2; }"
+    )
+        .arg(css(c.border))
+        .arg(css(c.inputBg))
+        .arg(css(c.textPrimary))
+        .arg(css(c.accent));
+}
+
 QString dialogPushButtonStyleSheet(bool emphasized)
 {
     const Colors& c = colors();
