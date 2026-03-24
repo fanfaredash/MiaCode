@@ -1,5 +1,12 @@
 ﻿namespace {
 
+constexpr int kIssueLineRole = Qt::UserRole;
+constexpr int kIssueColRole = Qt::UserRole + 1;
+constexpr int kIssueAuxRole = Qt::UserRole + 2;
+constexpr int kIssueTypeKeyRole = Qt::UserRole + 3;
+constexpr int kIssueTypeLabelRole = Qt::UserRole + 4;
+constexpr int kIssueIgnoredRole = Qt::UserRole + 5;
+
 enum class ValidationSeverityLevel {
     Error,
     Warning,
@@ -10,6 +17,26 @@ struct ValidationMessageParts {
     QString body;
     ValidationSeverityLevel severity = ValidationSeverityLevel::Error;
 };
+
+QString issueTypeSegment(const QString& text)
+{
+    QString normalized = text.trimmed();
+    const int split = normalized.indexOf(QStringLiteral(": "));
+    if (split > 0) {
+        normalized = normalized.left(split).trimmed();
+    }
+    return normalized;
+}
+
+QString issueDetailTail(const QString& text)
+{
+    const QString normalized = text.trimmed();
+    const int split = normalized.indexOf(QStringLiteral(": "));
+    if (split < 0 || split + 2 >= normalized.size()) {
+        return QString();
+    }
+    return normalized.mid(split + 2).trimmed();
+}
 
 ValidationMessageParts parseValidationMessage(const QString& rawMessage)
 {
@@ -58,6 +85,22 @@ QColor severityColor(ValidationSeverityLevel severity)
     return severity == ValidationSeverityLevel::Warning
         ? QColor(QStringLiteral("#B07B00"))
         : QColor(QStringLiteral("#C62828"));
+}
+
+QString validationIssueTypeKeyFromRawMessage(const QString& rawMessage)
+{
+    return QStringLiteral("validation:%1").arg(issueTypeSegment(rawMessage));
+}
+
+QString validationIssueTypeLabelFromDisplayMessage(const QString& displayMessage)
+{
+    const ValidationMessageParts parts = parseValidationMessage(displayMessage);
+    return issueTypeSegment(parts.body.isEmpty() ? displayMessage : parts.body);
+}
+
+QString muriIssueTypeKey(MuriKind kind)
+{
+    return QStringLiteral("muri:%1").arg(static_cast<int>(kind));
 }
 
 bool buildEditorSelectionCursor(PlainCodeEditor* editor, int line, int col, int endCol, QTextCursor* cursorOut)
@@ -112,9 +155,9 @@ QListWidgetItem* MainWindow::addWrappedListEntry(
 
     auto* item = new QListWidgetItem(list);
     item->setToolTip(plainText);
-    item->setData(Qt::UserRole, line);
-    item->setData(Qt::UserRole + 1, col);
-    item->setData(Qt::UserRole + 2, second);
+    item->setData(kIssueLineRole, line);
+    item->setData(kIssueColRole, col);
+    item->setData(kIssueAuxRole, second);
     if (!enabled) {
         item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
     }
@@ -136,6 +179,7 @@ QListWidgetItem* MainWindow::addWrappedListEntry(
 
     list->setItemWidget(item, rowWidget);
     relayoutWrappedListRows(list);
+    scheduleWrappedListRelayout(list);
     return item;
 }
 
@@ -145,7 +189,7 @@ void MainWindow::relayoutWrappedListRows(QListWidget* list)
         return;
     }
 
-    const int rowWidth = qMax(220, list->viewport()->width() - 12);
+    const int rowWidth = qMax(220, list->viewport()->width());
     for (int index = 0; index < list->count(); ++index) {
         QListWidgetItem* item = list->item(index);
         if (item == nullptr) {
@@ -161,7 +205,56 @@ void MainWindow::relayoutWrappedListRows(QListWidget* list)
         }
         label->setFixedWidth(rowWidth);
         label->adjustSize();
-        item->setSizeHint(QSize(rowWidth, qMax(26, label->sizeHint().height() + 4)));
+        item->setSizeHint(QSize(rowWidth, qMax(24, label->sizeHint().height() - 2)));
+    }
+}
+
+void MainWindow::scheduleWrappedListRelayout(QListWidget* list)
+{
+    if (list == nullptr) {
+        return;
+    }
+    if (list->property("wrappedRelayoutPending").toBool()) {
+        return;
+    }
+    list->setProperty("wrappedRelayoutPending", true);
+    QTimer::singleShot(0, list, [this, list]() {
+        if (list == nullptr) {
+            return;
+        }
+        list->setProperty("wrappedRelayoutPending", false);
+        relayoutWrappedListRows(list);
+    });
+}
+
+QString MainWindow::currentValidationIgnoreScopeKey() const
+{
+    return currentFilePath_.isEmpty() ? QStringLiteral("<unsaved>") : currentFilePath_;
+}
+
+bool MainWindow::isIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey) const
+{
+    if (issueTypeKey.isEmpty()) {
+        return false;
+    }
+    const auto it = ignoredHeaderIssueTypesByFile_.constFind(currentValidationIgnoreScopeKey());
+    return it != ignoredHeaderIssueTypesByFile_.constEnd() && it->contains(issueTypeKey);
+}
+
+void MainWindow::setIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey, bool ignored)
+{
+    if (issueTypeKey.isEmpty()) {
+        return;
+    }
+    const QString scopeKey = currentValidationIgnoreScopeKey();
+    QSet<QString>& ignoredTypes = ignoredHeaderIssueTypesByFile_[scopeKey];
+    if (ignored) {
+        ignoredTypes.insert(issueTypeKey);
+    } else {
+        ignoredTypes.remove(issueTypeKey);
+        if (ignoredTypes.isEmpty()) {
+            ignoredHeaderIssueTypesByFile_.remove(scopeKey);
+        }
     }
 }
 
@@ -231,13 +324,36 @@ void MainWindow::updateEditorValidationSummary()
 
     int errorCount = 0;
     int warningCount = 0;
-    int muriIssueCount = muriAnalysisReport_.diagnostics.size() + muriStaticReferences_.size();
+    int muriIssueCount = 0;
+    const QSet<QString> ignoredTypes = ignoredHeaderIssueTypesByFile_.value(currentValidationIgnoreScopeKey());
     const auto cacheIt = validationCacheByDifficulty_.constFind(activeDifficultyId());
     if (cacheIt != validationCacheByDifficulty_.constEnd()) {
         const ValidationCacheEntry& entry = cacheIt.value();
         if (entry.chartText == activeChartText() && entry.chineseUi == UiText::isChineseUi()) {
-            errorCount = entry.errorCount;
-            warningCount = entry.warningCount;
+            for (const ValidationCachedIssue& issue : entry.issues) {
+                const QString issueTypeKey = issue.issueTypeKey.isEmpty()
+                    ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)
+                    : issue.issueTypeKey;
+                if (ignoredTypes.contains(issueTypeKey)) {
+                    continue;
+                }
+                const ValidationMessageParts parts = parseValidationMessage(issue.displayMessage);
+                if (parts.severity == ValidationSeverityLevel::Warning) {
+                    ++warningCount;
+                } else {
+                    ++errorCount;
+                }
+            }
+        }
+    }
+    for (const MuriDiagnostic& diagnostic : muriAnalysisReport_.diagnostics) {
+        if (!ignoredTypes.contains(muriIssueTypeKey(diagnostic.kind))) {
+            ++muriIssueCount;
+        }
+    }
+    for (const MuriStaticReference& reference : muriStaticReferences_) {
+        if (!ignoredTypes.contains(muriIssueTypeKey(reference.kind))) {
+            ++muriIssueCount;
         }
     }
 
@@ -335,22 +451,33 @@ void MainWindow::clearValidationDecorations()
     refreshEditorExtraSelections();
 }
 
-void MainWindow::addValidationError(int line, int col, const QString& message)
+void MainWindow::addValidationError(
+    int line,
+    int col,
+    const QString& message,
+    const QString& issueTypeKey,
+    const QString& issueTypeLabel,
+    bool ignoredInHeader)
 {
     if (errorList_ == nullptr) {
         return;
     }
 
     const ValidationMessageParts parts = parseValidationMessage(message);
-    const QColor sevColor = severityColor(parts.severity);
-    const QString headerText = QStringLiteral("%1 L%2 C%3")
-        .arg(parts.severityPrefix, QString::number(line), QString::number(col));
-    const QString plainText = parts.body.isEmpty()
+    const QColor sevColor = ignoredInHeader ? UiTheme::colors().textMuted : severityColor(parts.severity);
+    const QColor detailColor = ignoredInHeader ? UiTheme::colors().textSecondary : UiTheme::colors().textPrimary;
+    const QString issueTitle = issueTypeLabel.isEmpty() ? issueTypeSegment(parts.body) : issueTypeLabel;
+    const QString detailTail = issueDetailTail(parts.body);
+    const QString detailText = detailTail.isEmpty() ? parts.body : detailTail;
+    const QString headerText = QStringLiteral("%1 %2 L%3 C%4")
+        .arg(parts.severityPrefix, issueTitle, QString::number(line), QString::number(col));
+    const QString plainText = detailText.isEmpty()
         ? headerText
-        : QStringLiteral("%1\n%2").arg(headerText, parts.body);
+        : QStringLiteral("%1\n%2").arg(headerText, detailText);
 
     const QString headerHtml = QStringLiteral(
         "<span style=\"font-weight:700;color:%1;\">%2</span> "
+        "<span style=\"color:%5;\">%6</span>  "
         "<span style=\"color:%5;\">L%3 C%4</span>"
     )
         .arg(
@@ -358,15 +485,29 @@ void MainWindow::addValidationError(int line, int col, const QString& message)
             parts.severityPrefix.toHtmlEscaped(),
             QString::number(line),
             QString::number(col),
-            UiTheme::colors().textSecondary.name(QColor::HexRgb)
+            UiTheme::colors().textSecondary.name(QColor::HexRgb),
+            issueTitle.toHtmlEscaped()
         );
-    const QString detailHtml = parts.body.isEmpty()
+    const QString detailHtml = detailText.isEmpty()
         ? QString()
         : QStringLiteral("<br/><span style=\"color:%1;\">%2</span>")
-              .arg(UiTheme::colors().textPrimary.name(QColor::HexRgb), highlightValidationDetailHtml(parts.body));
+              .arg(
+                  detailColor.name(QColor::HexRgb),
+                  ignoredInHeader ? detailText.toHtmlEscaped() : detailText.toHtmlEscaped()
+              );
     QListWidgetItem* item = addWrappedListEntry(errorList_, headerHtml + detailHtml, plainText, line, col, -1.0, true);
     if (item != nullptr) {
-        item->setData(Qt::UserRole + 2, parts.severity == ValidationSeverityLevel::Warning ? 1 : 0);
+        item->setData(kIssueAuxRole, parts.severity == ValidationSeverityLevel::Warning ? 1 : 0);
+        item->setData(kIssueTypeKeyRole, issueTypeKey);
+        item->setData(kIssueTypeLabelRole, issueTypeLabel);
+        item->setData(kIssueIgnoredRole, ignoredInHeader);
+        if (ignoredInHeader) {
+            if (QWidget* rowWidget = errorList_->itemWidget(item)) {
+                auto* effect = new QGraphicsOpacityEffect(rowWidget);
+                effect->setOpacity(0.58);
+                rowWidget->setGraphicsEffect(effect);
+            }
+        }
     }
 }
 
@@ -425,8 +566,8 @@ void MainWindow::onErrorItemActivated(QListWidgetItem* item)
     if (item == nullptr) {
         return;
     }
-    const int line = item->data(Qt::UserRole).toInt();
-    const int col = item->data(Qt::UserRole + 1).toInt();
+    const int line = item->data(kIssueLineRole).toInt();
+    const int col = item->data(kIssueColRole).toInt();
     jumpToLocation(line, col);
 }
 
@@ -435,14 +576,79 @@ void MainWindow::onMuriItemActivated(QListWidgetItem* item)
     if (item == nullptr || !item->flags().testFlag(Qt::ItemIsEnabled)) {
         return;
     }
-    const int line = item->data(Qt::UserRole).toInt();
-    const int col = item->data(Qt::UserRole + 1).toInt();
-    const double second = item->data(Qt::UserRole + 2).toDouble();
+    const int line = item->data(kIssueLineRole).toInt();
+    const int col = item->data(kIssueColRole).toInt();
+    const double second = item->data(kIssueAuxRole).toDouble();
     if (second >= 0.0) {
         navigateTimelineToSecond(second, true);
         return;
     }
     jumpToLocation(line, col);
+}
+
+void MainWindow::showIssueListContextMenu(QListWidget* list, const QPoint& pos, bool muriList)
+{
+    if (list == nullptr) {
+        return;
+    }
+    QListWidgetItem* item = list->itemAt(pos);
+    if (item == nullptr) {
+        return;
+    }
+
+    const QString issueTypeKey = item->data(kIssueTypeKeyRole).toString();
+    const QString issueTypeLabel = item->data(kIssueTypeLabelRole).toString();
+    const bool ignoredInHeader = item->data(kIssueIgnoredRole).toBool();
+
+    QMenu menu(this);
+    styleRoundedMenu(menu);
+
+    QAction* jumpAction = menu.addAction(
+        UiText::isChineseUi() ? QStringLiteral("跳转到源") : QStringLiteral("Jump to Source")
+    );
+    connect(jumpAction, &QAction::triggered, this, [this, item, muriList]() {
+        if (muriList) {
+            onMuriItemActivated(item);
+        } else {
+            onErrorItemActivated(item);
+        }
+    });
+
+    QAction* detailAction = menu.addAction(
+        UiText::isChineseUi() ? QStringLiteral("显示问题详情") : QStringLiteral("Show Issue Details")
+    );
+    connect(detailAction, &QAction::triggered, this, [this, item, issueTypeLabel]() {
+        QMessageBox dialog(this);
+        dialog.setIcon(QMessageBox::Information);
+        dialog.setWindowTitle(UiText::isChineseUi() ? QStringLiteral("提示详情") : QStringLiteral("Issue Details"));
+        dialog.setWindowIcon(windowIcon());
+        dialog.setText(issueTypeLabel.isEmpty() ? item->toolTip() : issueTypeLabel);
+        dialog.setInformativeText(item->toolTip());
+        dialog.setStandardButtons(QMessageBox::Ok);
+        UiDialogs::localizeMessageBox(&dialog);
+        dialog.exec();
+    });
+
+    if (!issueTypeKey.isEmpty()) {
+        QAction* ignoreAction = menu.addAction(
+            ignoredInHeader
+                ? (UiText::isChineseUi() ? QStringLiteral("取消忽视该类型提示")
+                                         : QStringLiteral("Stop Ignoring This Issue Type"))
+                : (UiText::isChineseUi() ? QStringLiteral("忽视该类型提示")
+                                         : QStringLiteral("Ignore This Issue Type"))
+        );
+        connect(ignoreAction, &QAction::triggered, this, [this, issueTypeKey, ignoredInHeader]() {
+            const int currentTabIndex = bottomTabs_ != nullptr ? bottomTabs_->currentIndex() : -1;
+            setIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey, !ignoredInHeader);
+            refreshValidationPanelForActiveField();
+            refreshMuriDiagnosticsPanel();
+            if (bottomTabs_ != nullptr && currentTabIndex >= 0) {
+                bottomTabs_->setCurrentIndex(currentTabIndex);
+            }
+        });
+    }
+
+    menu.exec(list->viewport()->mapToGlobal(pos));
 }
 
 void MainWindow::refreshMuriDiagnosticsPanel()
@@ -524,38 +730,70 @@ void MainWindow::refreshMuriDiagnosticsPanel()
     });
 
     for (const MuriPanelEntry& entry : entries) {
+        const QString issueTypeKey = muriIssueTypeKey(entry.kind);
+        const bool ignoredInHeader = isIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey);
+        const QColor badgeColor = ignoredInHeader
+            ? UiTheme::colors().textMuted
+            : (entry.isStatic ? QColor(QStringLiteral("#C48A1A")) : QColor(QStringLiteral("#D45B5B")));
         const QString title = muriKindDisplayName(entry.kind, UiText::isChineseUi());
-        const QString staticBadge = entry.isStatic
-            ? QStringLiteral("<span style=\"font-weight:700;color:%1;\">[%2]</span> ")
-                  .arg(UiTheme::colors().accent.name(QColor::HexRgb),
-                       UiText::isChineseUi() ? QStringLiteral("静态") : QStringLiteral("Static"))
-            : QString();
-        const QString summary = QStringLiteral("%1<span style=\"font-weight:700;color:%2;\">[%3]</span> "
-                                               "<span style=\"color:%4;\">%5</span>  "
-                                               "<span style=\"color:%6;\">L%7 C%8</span>")
-                                    .arg(
-                                        staticBadge,
-                                        entry.isStatic ? QColor(QStringLiteral("#C48A1A")).name(QColor::HexRgb)
-                                                       : QColor(QStringLiteral("#D45B5B")).name(QColor::HexRgb),
-                                        formatPreviewTimestamp(entry.second),
-                                        UiTheme::colors().textPrimary.name(QColor::HexRgb),
-                                        title.toHtmlEscaped(),
-                                        UiTheme::colors().textSecondary.name(QColor::HexRgb),
-                                        QString::number(entry.line),
-                                        QString::number(entry.col));
-        const QString detailHtml = entry.detail.isEmpty()
-            ? QString()
-            : QStringLiteral("<br/><span style=\"color:%1;\">%2</span>")
-                  .arg(UiTheme::colors().textPrimary.name(QColor::HexRgb), entry.detail.toHtmlEscaped());
-        const QString plainText = QStringLiteral("[%1] %2  L%3 C%4%5%6")
-                                      .arg(formatPreviewTimestamp(entry.second))
-                                      .arg(title)
-                                      .arg(entry.line)
-                                      .arg(entry.col)
-                                      .arg(entry.isStatic ? QStringLiteral(" [Static]") : QString())
-                                      .arg(entry.detail.isEmpty() ? QString() : QStringLiteral("\n") + entry.detail);
-        addWrappedListEntry(muriList_, summary + detailHtml, plainText, entry.line, entry.col, entry.second, true);
+        const QString badgeText = entry.isStatic
+            ? (UiText::isChineseUi() ? QStringLiteral("[静态无理]") : QStringLiteral("[Static Muri]"))
+            : (UiText::isChineseUi() ? QStringLiteral("[无理]") : QStringLiteral("[Muri]"));
+        const QString headerHtml = QStringLiteral(
+            "<span style=\"font-weight:700;color:%1;\">%2</span> "
+            "<span style=\"color:%3;\">%4</span>  "
+            "<span style=\"color:%5;\">L%6 C%7</span>"
+        )
+            .arg(
+                badgeColor.name(QColor::HexRgb),
+                badgeText.toHtmlEscaped(),
+                (ignoredInHeader ? UiTheme::colors().textSecondary : UiTheme::colors().textPrimary)
+                    .name(QColor::HexRgb),
+                title.toHtmlEscaped(),
+                UiTheme::colors().textSecondary.name(QColor::HexRgb),
+                QString::number(entry.line),
+                QString::number(entry.col)
+            );
+        const QString detailText = entry.detail.isEmpty() ? QString() : entry.detail;
+        const QString detailHtml = QStringLiteral("<br/><span style=\"color:%1;\">%2</span>")
+              .arg(
+                  (ignoredInHeader ? UiTheme::colors().textSecondary : UiTheme::colors().textPrimary)
+                      .name(QColor::HexRgb),
+                  detailText.toHtmlEscaped()
+              );
+        const QString plainText = detailText.isEmpty()
+            ? QStringLiteral("%1 %2 L%3 C%4")
+                  .arg(badgeText, title)
+                  .arg(entry.line)
+                  .arg(entry.col)
+            : QStringLiteral("%1 %2 L%3 C%4\n%5")
+                  .arg(badgeText, title)
+                  .arg(entry.line)
+                  .arg(entry.col)
+                  .arg(detailText);
+        QListWidgetItem* item = addWrappedListEntry(
+            muriList_,
+            headerHtml + detailHtml,
+            plainText,
+            entry.line,
+            entry.col,
+            entry.second,
+            true
+        );
+        if (item != nullptr) {
+            item->setData(kIssueTypeKeyRole, issueTypeKey);
+            item->setData(kIssueTypeLabelRole, title);
+            item->setData(kIssueIgnoredRole, ignoredInHeader);
+            if (ignoredInHeader) {
+                if (QWidget* rowWidget = muriList_->itemWidget(item)) {
+                    auto* effect = new QGraphicsOpacityEffect(rowWidget);
+                    effect->setOpacity(0.58);
+                    rowWidget->setGraphicsEffect(effect);
+                }
+            }
+        }
     }
+    scheduleWrappedListRelayout(muriList_);
     updateEditorValidationSummary();
 }
 
@@ -610,9 +848,23 @@ void MainWindow::refreshValidationPanelForActiveField()
     clearValidationErrors();
     clearValidationDecorations();
     for (const ValidationCachedIssue& issue : entry.issues) {
-        addValidationError(issue.line, issue.col, issue.displayMessage);
+        const QString issueTypeKey = issue.issueTypeKey.isEmpty()
+            ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)
+            : issue.issueTypeKey;
+        const QString issueTypeLabel = issue.issueTypeLabel.isEmpty()
+            ? validationIssueTypeLabelFromDisplayMessage(issue.displayMessage)
+            : issue.issueTypeLabel;
+        addValidationError(
+            issue.line,
+            issue.col,
+            issue.displayMessage,
+            issueTypeKey,
+            issueTypeLabel,
+            isIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey)
+        );
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
+    scheduleWrappedListRelayout(errorList_);
     updateEditorValidationSummary();
 }
 
@@ -667,7 +919,10 @@ bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
             cachedIssue.line = issue.line;
             cachedIssue.col = issue.col;
             cachedIssue.endCol = issue.endCol;
+            cachedIssue.rawMessage = issue.rawMessage;
             cachedIssue.displayMessage = issue.displayMessage;
+            cachedIssue.issueTypeKey = validationIssueTypeKeyFromRawMessage(issue.rawMessage);
+            cachedIssue.issueTypeLabel = validationIssueTypeLabelFromDisplayMessage(issue.displayMessage);
             entry.issues.append(cachedIssue);
         }
         validationCacheByDifficulty_.insert(difficultyId, entry);
@@ -677,9 +932,23 @@ bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
     clearValidationErrors();
     clearValidationDecorations();
     for (const ValidationCachedIssue& issue : entry.issues) {
-        addValidationError(issue.line, issue.col, issue.displayMessage);
+        const QString issueTypeKey = issue.issueTypeKey.isEmpty()
+            ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)
+            : issue.issueTypeKey;
+        const QString issueTypeLabel = issue.issueTypeLabel.isEmpty()
+            ? validationIssueTypeLabelFromDisplayMessage(issue.displayMessage)
+            : issue.issueTypeLabel;
+        addValidationError(
+            issue.line,
+            issue.col,
+            issue.displayMessage,
+            issueTypeKey,
+            issueTypeLabel,
+            isIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey)
+        );
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
+    scheduleWrappedListRelayout(errorList_);
     updateEditorValidationSummary();
     if (focusFirstIssue && !entry.issues.isEmpty() && bottomTabs_ != nullptr && errorList_ != nullptr) {
         const int errorTabIndex = bottomTabs_->indexOf(errorList_);
@@ -731,7 +1000,10 @@ bool MainWindow::runValidateSimai()
             cachedIssue.line = issue.line;
             cachedIssue.col = issue.col;
             cachedIssue.endCol = issue.endCol;
+            cachedIssue.rawMessage = issue.rawMessage;
             cachedIssue.displayMessage = issue.displayMessage;
+            cachedIssue.issueTypeKey = validationIssueTypeKeyFromRawMessage(issue.rawMessage);
+            cachedIssue.issueTypeLabel = validationIssueTypeLabelFromDisplayMessage(issue.displayMessage);
             entry.issues.append(cachedIssue);
         }
         validationCacheByDifficulty_.insert(difficultyId, entry);
@@ -752,9 +1024,23 @@ bool MainWindow::runValidateSimai()
     clearValidationErrors();
     clearValidationDecorations();
     for (const ValidationCachedIssue& issue : entry.issues) {
-        addValidationError(issue.line, issue.col, issue.displayMessage);
+        const QString issueTypeKey = issue.issueTypeKey.isEmpty()
+            ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)
+            : issue.issueTypeKey;
+        const QString issueTypeLabel = issue.issueTypeLabel.isEmpty()
+            ? validationIssueTypeLabelFromDisplayMessage(issue.displayMessage)
+            : issue.issueTypeLabel;
+        addValidationError(
+            issue.line,
+            issue.col,
+            issue.displayMessage,
+            issueTypeKey,
+            issueTypeLabel,
+            isIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey)
+        );
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
+    scheduleWrappedListRelayout(errorList_);
     updateEditorValidationSummary();
     if (!entry.issues.isEmpty() && bottomTabs_ != nullptr && errorList_ != nullptr) {
         const int errorTabIndex = bottomTabs_->indexOf(errorList_);

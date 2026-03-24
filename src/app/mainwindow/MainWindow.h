@@ -8,6 +8,7 @@
 #include <QMainWindow>
 #include <QPointer>
 #include <QPoint>
+#include <QSet>
 #include <QVector>
 
 #include "PreviewAudioSettings.h"
@@ -345,7 +346,14 @@ private:
     void clearPreviewFollowDecoration();
     void clearValidationErrors();
     void clearValidationDecorations();
-    void addValidationError(int line, int col, const QString& message);
+    void addValidationError(
+        int line,
+        int col,
+        const QString& message,
+        const QString& issueTypeKey = QString(),
+        const QString& issueTypeLabel = QString(),
+        bool ignoredInHeader = false
+    );
     void addValidationDecoration(int line, int col, const QString& message, int endCol = -1);
     void clearMuriDiagnostics();
     QListWidgetItem* addWrappedListEntry(
@@ -358,7 +366,12 @@ private:
         bool enabled = true
     );
     void relayoutWrappedListRows(QListWidget* list);
+    void scheduleWrappedListRelayout(QListWidget* list);
     void refreshMuriDiagnosticsPanel();
+    QString currentValidationIgnoreScopeKey() const;
+    bool isIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey) const;
+    void setIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey, bool ignored);
+    void showIssueListContextMenu(QListWidget* list, const QPoint& pos, bool muriList);
     void rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& noteMarkers);
     void clearValidationCache();
     void refreshValidationPanelForActiveField();
@@ -401,7 +414,10 @@ private:
         int line = 1;
         int col = 1;
         int endCol = 1;
+        QString rawMessage;
         QString displayMessage;
+        QString issueTypeKey;
+        QString issueTypeLabel;
     };
 
     struct ValidationDecoration {
@@ -656,6 +672,7 @@ private:
     BracketScopeHighlighter* chartBracketHighlighter_ = nullptr;
     BracketScopeHighlighter* metadataBracketHighlighter_ = nullptr;
     QHash<int, ValidationCacheEntry> validationCacheByDifficulty_;
+    QHash<QString, QSet<QString>> ignoredHeaderIssueTypesByFile_;
     QVector<ValidationDecoration> validationDecorations_;
     DeletedDifficultyUndoState deletedDifficultyUndoState_;
     bool previewFollowDecorationActive_ = false;
