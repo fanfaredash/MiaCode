@@ -324,6 +324,7 @@ private:
     void applyUiTheme();
     void applySystemWindowBackdrop(QWidget* target = nullptr) const;
     void setInvalidStarPreviewEasterEggEnabled(bool enabled);
+    void setLegacyFireworkStackingEasterEggEnabled(bool enabled);
     void ensureInvalidStarPreviewEasterEggSounds();
     void playInvalidStarPreviewEasterEggSound(bool enabled);
     void persistEditorTextFontPreference() const;
@@ -544,8 +545,11 @@ private:
     bool editorCtrlLeftJumpPending_ = false;
     bool editorCtrlLeftJumpDragged_ = false;
     bool invalidStarPreviewEasterEggEnabled_ = false;
+    bool legacyFireworkStackingEasterEggEnabled_ = false;
     int invalidStarPreviewAboutClickCount_ = 0;
+    int legacyFireworkStackingAboutClickCount_ = 0;
     QElapsedTimer invalidStarPreviewAboutClickElapsed_;
+    QElapsedTimer legacyFireworkStackingAboutClickElapsed_;
     QPoint editorCtrlLeftJumpPressPos_;
     int previewSeekHeldArrowKey_ = 0;
     QElapsedTimer previewSeekHeldArrowElapsed_;
