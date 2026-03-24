@@ -465,7 +465,11 @@ bool MainWindow::applyBatchTransform(const QString& opName, const BatchTransform
     }
 
     markCurrentFieldDirty();
-    scheduleTimelineRefresh();
+    lastPreviewNoteMarkerSignature_.clear();
+    if (metadataRefreshTimer_ != nullptr) {
+        metadataRefreshTimer_->stop();
+    }
+    refreshTimelineMetadata();
     statusBar()->showMessage(QString("%1 applied: %2 replacement(s).").arg(opName).arg(changed));
     return true;
 }
@@ -531,7 +535,11 @@ bool MainWindow::applySelectionBatchTransform(const QString& opName, const Batch
     }
 
     markCurrentFieldDirty();
-    scheduleTimelineRefresh();
+    lastPreviewNoteMarkerSignature_.clear();
+    if (metadataRefreshTimer_ != nullptr) {
+        metadataRefreshTimer_->stop();
+    }
+    refreshTimelineMetadata();
     statusBar()->showMessage(QString("%1 applied on selection: %2 replacement(s).").arg(opName).arg(changed));
     return true;
 }
