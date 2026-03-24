@@ -78,6 +78,13 @@ struct AggregatedExportPlayback {
     double maxGain = 0.0;
 };
 
+struct ScheduledExportPlayback {
+    double second = 0.0;
+    QString kind;
+    double gain = 1.0;
+    double nextSameKindSecond = -1.0;
+};
+
 struct DecodedClip {
     QVector<float> samples;
     int sampleRate = kMixSampleRate;
@@ -2508,30 +2515,7 @@ bool mixSfxTrackToWav(
         return previewSfxVolumeForKind(settings, kind);
     };
 
-    const auto mixEvent = [&clips, &mix, &kindVolume, timelineOriginSecond](const QString& kind, double gain, double second) {
-        const QString clipKind = kind == QLatin1String("break_slide_finish")
-            ? QStringLiteral("break_slide")
-            : kind;
-        const auto it = clips.constFind(clipKind);
-        if (it == clips.constEnd()) {
-            return;
-        }
-        if (second + kTimelineEpsilonSeconds < timelineOriginSecond) {
-            return;
-        }
-        const double volume = kindVolume(kind);
-        const double mixedGain = qMax(0.0, gain) * qMax(0.0, volume);
-        if (mixedGain <= 0.0) {
-            return;
-        }
-        const double shiftedSecond = second - timelineOriginSecond;
-        if (shiftedSecond < 0.0) {
-            return;
-        }
-        const qint64 startFrame = qRound64(shiftedSecond * kMixSampleRate);
-        addClipToMix(it.value(), mixedGain, startFrame, -1, &mix);
-    };
-
+    QVector<ScheduledExportPlayback> scheduledPlaybacks;
     int index = 0;
     while (index < events.size()) {
         const int groupStart = index;
@@ -2553,12 +2537,60 @@ bool mixSfxTrackToWav(
                 accumulateExportPlayback(&playbacks, event.kind, event.gain);
                 continue;
             }
-            mixEvent(event.kind, event.gain, event.second);
+            ScheduledExportPlayback playback;
+            playback.second = event.second;
+            playback.kind = event.kind;
+            playback.gain = event.gain;
+            scheduledPlaybacks.append(playback);
         }
         for (const AggregatedExportPlayback& playback : playbacks) {
-            mixEvent(playback.kind, exportPlaybackGain(playback), groupSecond);
+            ScheduledExportPlayback scheduled;
+            scheduled.second = groupSecond;
+            scheduled.kind = playback.kind;
+            scheduled.gain = exportPlaybackGain(playback);
+            scheduledPlaybacks.append(scheduled);
         }
         index = groupEnd;
+    }
+
+    QHash<QString, double> nextPlaybackSecondByKind;
+    for (int i = scheduledPlaybacks.size() - 1; i >= 0; --i) {
+        ScheduledExportPlayback& playback = scheduledPlaybacks[i];
+        const QString normalizedKind = previewSfxNormalizedKind(playback.kind);
+        if (previewSfxShouldInterruptPreviousKind(normalizedKind)
+            && nextPlaybackSecondByKind.contains(normalizedKind)) {
+            playback.nextSameKindSecond = nextPlaybackSecondByKind.value(normalizedKind);
+        }
+        nextPlaybackSecondByKind.insert(normalizedKind, playback.second);
+    }
+
+    for (const ScheduledExportPlayback& playback : std::as_const(scheduledPlaybacks)) {
+        qint64 maxFrames = -1;
+        if (playback.nextSameKindSecond >= 0.0) {
+            const double availableSeconds = playback.nextSameKindSecond - playback.second;
+            maxFrames = qMax<qint64>(0, qRound64(availableSeconds * kMixSampleRate));
+        }
+        const QString clipKind = playback.kind == QLatin1String("break_slide_finish")
+            ? QStringLiteral("break_slide")
+            : playback.kind;
+        const auto it = clips.constFind(clipKind);
+        if (it == clips.constEnd()) {
+            continue;
+        }
+        if (playback.second + kTimelineEpsilonSeconds < timelineOriginSecond) {
+            continue;
+        }
+        const double volume = kindVolume(playback.kind);
+        const double mixedGain = qMax(0.0, playback.gain) * qMax(0.0, volume);
+        if (mixedGain <= 0.0) {
+            continue;
+        }
+        const double shiftedSecond = playback.second - timelineOriginSecond;
+        if (shiftedSecond < 0.0) {
+            continue;
+        }
+        const qint64 startFrame = qRound64(shiftedSecond * kMixSampleRate);
+        addClipToMix(it.value(), mixedGain, startFrame, maxFrames, &mix);
     }
 
     const auto touchholdIt = clips.constFind(QStringLiteral("touchhold"));

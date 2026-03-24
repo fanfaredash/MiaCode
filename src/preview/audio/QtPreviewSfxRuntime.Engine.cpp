@@ -52,15 +52,15 @@ void QtPreviewSfxRuntime::initializeAssets()
 
     configureBank(answerSfx_, "answer", 12);
     configureBank(judgeSfx_, "judge", 12);
-    configureBank(judgeBreakSfx_, "judge_break", 12);
+    configureBank(judgeBreakSfx_, "judge_break", 1);
     configureBank(slideSfx_, "slide", 8);
-    configureBank(breakSfx_, "break", 8);
-    configureBank(breakSlideStartSfx_, "break_slide_start", 8);
-    configureBank(breakSlideSfx_, "break_slide", 8);
-    configureBank(judgeBreakSlideSfx_, "judge_break_slide", 8);
+    configureBank(breakSfx_, "break", 1);
+    configureBank(breakSlideStartSfx_, "break_slide_start", 1);
+    configureBank(breakSlideSfx_, "break_slide", 1);
+    configureBank(judgeBreakSlideSfx_, "judge_break_slide", 1);
     configureBank(exSfx_, "ex", 8);
     configureBank(touchSfx_, "touch", 12);
-    // Firework SFX mirrors the visual behavior: latest trigger interrupts the previous one.
+    // Firework cheers should also be latest-wins, matching break cheer behavior.
     configureBank(fireworkSfx_, "firework", 1);
 
     const QString touchholdPath = miacode::preview_sfx::assetFilePathForKind(sfxDir_, "touchhold");
@@ -99,16 +99,30 @@ void QtPreviewSfxRuntime::initializeBackgroundTrack()
         return;
     }
 
-    const QByteArray pathBytes = QFile::encodeName(trackPath_);
     Voice* voice = new Voice();
-    if (ma_sound_init_from_file(
-            &engineState_->engine,
-            pathBytes.constData(),
-            0,
-            nullptr,
-            nullptr,
-            &voice->sound
-        ) != MA_SUCCESS) {
+    ma_result initResult = MA_ERROR;
+#ifdef Q_OS_WIN
+    const QString nativeTrackPath = QDir::toNativeSeparators(trackPath_);
+    initResult = ma_sound_init_from_file_w(
+        &engineState_->engine,
+        reinterpret_cast<const wchar_t*>(nativeTrackPath.utf16()),
+        0,
+        nullptr,
+        nullptr,
+        &voice->sound
+    );
+#else
+    const QByteArray pathBytes = QFile::encodeName(trackPath_);
+    initResult = ma_sound_init_from_file(
+        &engineState_->engine,
+        pathBytes.constData(),
+        0,
+        nullptr,
+        nullptr,
+        &voice->sound
+    );
+#endif
+    if (initResult != MA_SUCCESS) {
         delete voice;
         appendAudioDebugLog(QString("initializeBackgroundTrack failed path=%1").arg(trackPath_));
         return;
@@ -179,8 +193,18 @@ bool QtPreviewSfxRuntime::prepareStretchedBackgroundTrack(double timelineSecond)
     state->playbackRate = backgroundTrackPlaybackRate_;
 
     ma_decoder_config decoderConfig = ma_decoder_config_init(ma_format_f32, 0, 0);
+    ma_result decoderInitResult = MA_ERROR;
+#ifdef Q_OS_WIN
+    const QString nativeTrackPath = QDir::toNativeSeparators(trackPath_);
+    decoderInitResult = ma_decoder_init_file_w(
+        reinterpret_cast<const wchar_t*>(nativeTrackPath.utf16()),
+        &decoderConfig,
+        &state->decoder
+    );
+#else
     const QByteArray pathBytes = QFile::encodeName(trackPath_);
-    const ma_result decoderInitResult = ma_decoder_init_file(pathBytes.constData(), &decoderConfig, &state->decoder);
+    decoderInitResult = ma_decoder_init_file(pathBytes.constData(), &decoderConfig, &state->decoder);
+#endif
     if (decoderInitResult != MA_SUCCESS) {
         appendAudioDebugLog(QString("prepareStretchedBackgroundTrack decoder_init_file failed rc=%1 track=%2")
                                 .arg(static_cast<int>(decoderInitResult))
