@@ -39,6 +39,7 @@
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QDockWidget>
+#include <QDoubleValidator>
 #include <QEvent>
 #include <QEventLoop>
 #include <QFile>
@@ -5111,6 +5112,12 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         button->setText(text);
         return button;
     };
+    const auto flowSpeedValueLabel = [](double flowSpeed) {
+        const double snapped = qRound(flowSpeed * 4.0) / 4.0;
+        const double roundedOneDecimal = qRound(snapped * 10.0) / 10.0;
+        const bool useSingleDecimal = qAbs(snapped - roundedOneDecimal) < 0.001;
+        return QString::number(snapped, 'f', useSingleDecimal ? 1 : 2);
+    };
     const auto addDialogMenuChoice = [](QMenu* menu, const QString& text, const std::function<void()>& onTriggered) {
         auto* action = new QWidgetAction(menu);
         auto* button = new QToolButton(menu);
@@ -5284,31 +5291,37 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
     const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
     const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
-    const int flowSpeedOptionCount = qRound((flowSpeedMax - flowSpeedMin) / flowSpeedStep);
     selectedFlowSpeed = qBound(
         flowSpeedMin,
         flowSpeedMin + qRound((selectedFlowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
         flowSpeedMax
     );
-    QString selectedFlowSpeedLabel = QString::number(selectedFlowSpeed, 'f', 1);
-    auto* flowSpeedButton = createDialogMenuButton(videoGroup, selectedFlowSpeedLabel);
-    auto* flowSpeedMenu = new QMenu(flowSpeedButton);
-    styleRoundedMenu(*flowSpeedMenu);
-    for (int optionIndex = 0; optionIndex <= flowSpeedOptionCount; ++optionIndex) {
-        const double flowSpeed = flowSpeedMin + optionIndex * flowSpeedStep;
-        const QString label = QString::number(flowSpeed, 'f', 1);
-        addDialogMenuChoice(flowSpeedMenu, label, [&, flowSpeed, label]() {
-            selectedFlowSpeed = flowSpeed;
-            flowSpeedButton->setText(label);
-            previewNoteFlowSpeed_ = selectedFlowSpeed;
-            if (previewCanvas_ != nullptr) {
-                previewCanvas_->setNoteFlowSpeed(selectedFlowSpeed);
-            }
-            saveProjectRenderState();
-            savePortableState();
-        });
-    }
-    flowSpeedButton->setMenu(flowSpeedMenu);
+    auto* flowSpeedEdit = new QLineEdit(videoGroup);
+    flowSpeedEdit->setAlignment(Qt::AlignCenter);
+    flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed));
+    auto* flowSpeedValidator = new QDoubleValidator(flowSpeedMin, flowSpeedMax, 2, flowSpeedEdit);
+    flowSpeedValidator->setNotation(QDoubleValidator::StandardNotation);
+    flowSpeedEdit->setValidator(flowSpeedValidator);
+    QObject::connect(flowSpeedEdit, &QLineEdit::editingFinished, &dialog, [&, flowSpeedEdit]() {
+        bool ok = false;
+        const double typedSpeed = flowSpeedEdit->text().trimmed().toDouble(&ok);
+        if (!ok) {
+            flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed));
+            return;
+        }
+        selectedFlowSpeed = qBound(
+            flowSpeedMin,
+            flowSpeedMin + qRound((typedSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
+            flowSpeedMax
+        );
+        flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed));
+        previewNoteFlowSpeed_ = selectedFlowSpeed;
+        if (previewCanvas_ != nullptr) {
+            previewCanvas_->setNoteFlowSpeed(selectedFlowSpeed);
+        }
+        saveProjectRenderState();
+        savePortableState();
+    });
 
     auto* previewGroup = new QGroupBox(uiText("dialog.render_settings.preview_group", "Preview"), &dialog);
     auto* previewFormLayout = new QFormLayout(previewGroup);
@@ -5340,7 +5353,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         }
     }
     auto* canvasFrameRateButton = createDialogMenuButton(previewGroup, selectedCanvasFrameRateLabel);
-    canvasFrameRateButton->setFixedHeight(flowSpeedButton->sizeHint().height());
+    canvasFrameRateButton->setFixedHeight(flowSpeedEdit->sizeHint().height());
     canvasFrameRateButton->setStyleSheet(
         UiTheme::dialogMenuButtonStyleSheet()
         + QStringLiteral("QToolButton { text-align: center; padding: 2px 22px 2px 10px; }")
@@ -5457,7 +5470,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_outer", "Outer Brightness"), outerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Inner Brightness"), innerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Layout Size"), layoutSquareScaleRow);
-    videoFormLayout->addRow(uiText("dialog.render_settings.video.flow_speed", "Flow Speed"), flowSpeedButton);
+    videoFormLayout->addRow(uiText("dialog.render_settings.video.flow_speed", "Flow Speed"), flowSpeedEdit);
     /*
         uiText("dialog.render_settings.video.follow_mode", "跟随模式"),
     */

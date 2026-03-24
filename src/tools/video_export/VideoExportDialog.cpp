@@ -12,6 +12,7 @@
 #include <QCloseEvent>
 #include <QDialogButtonBox>
 #include <QDockWidget>
+#include <QDoubleValidator>
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
@@ -95,6 +96,14 @@ QString uiText(const char* key, const QString& fallback)
 QString l10n(const QString& en, const QString& zh)
 {
     return UiText::isChineseUi() ? zh : en;
+}
+
+QString flowSpeedValueLabel(double flowSpeed)
+{
+    const double snapped = qRound(flowSpeed * 4.0) / 4.0;
+    const double roundedOneDecimal = qRound(snapped * 10.0) / 10.0;
+    const bool useSingleDecimal = qAbs(snapped - roundedOneDecimal) < 0.001;
+    return QString::number(snapped, 'f', useSingleDecimal ? 1 : 2);
 }
 
 int secondToSliderValue(double second)
@@ -824,30 +833,37 @@ VideoExportDialog::VideoExportDialog(
     const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
     const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
     const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
-    const int flowSpeedOptionCount = qRound((flowSpeedMax - flowSpeedMin) / flowSpeedStep);
     selectedFlowSpeed_ = qBound(
         flowSpeedMin,
         flowSpeedMin + qRound((selectedFlowSpeed_ - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
         flowSpeedMax
     );
-    QString selectedFlowSpeedLabel = QString::number(selectedFlowSpeed_, 'f', 1);
-    flowSpeedButton_ = createDialogMenuButton(optionsContent_, selectedFlowSpeedLabel);
-    flowSpeedMenu_ = new QMenu(flowSpeedButton_);
-    UiTheme::styleRoundedMenu(*flowSpeedMenu_);
-    for (int optionIndex = 0; optionIndex <= flowSpeedOptionCount; ++optionIndex) {
-        const double flowSpeed = flowSpeedMin + optionIndex * flowSpeedStep;
-        const QString label = QString::number(flowSpeed, 'f', 1);
-        addDialogMenuChoice(flowSpeedMenu_, label, [this, flowSpeed, label]() {
-            selectedFlowSpeed_ = flowSpeed;
-            if (flowSpeedButton_ != nullptr) {
-                flowSpeedButton_->setText(label);
-            }
-            if (previewFlowSpeedCallback_) {
-                previewFlowSpeedCallback_(flowSpeed);
-            }
-        });
-    }
-    flowSpeedButton_->setMenu(flowSpeedMenu_);
+    flowSpeedEdit_ = new QLineEdit(optionsContent_);
+    flowSpeedEdit_->setAlignment(Qt::AlignCenter);
+    flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
+    auto* flowSpeedValidator = new QDoubleValidator(flowSpeedMin, flowSpeedMax, 2, flowSpeedEdit_);
+    flowSpeedValidator->setNotation(QDoubleValidator::StandardNotation);
+    flowSpeedEdit_->setValidator(flowSpeedValidator);
+    QObject::connect(flowSpeedEdit_, &QLineEdit::editingFinished, this, [this, flowSpeedMin, flowSpeedMax, flowSpeedStep]() {
+        if (flowSpeedEdit_ == nullptr) {
+            return;
+        }
+        bool ok = false;
+        const double typedSpeed = flowSpeedEdit_->text().trimmed().toDouble(&ok);
+        if (!ok) {
+            flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
+            return;
+        }
+        selectedFlowSpeed_ = qBound(
+            flowSpeedMin,
+            flowSpeedMin + qRound((typedSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
+            flowSpeedMax
+        );
+        flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
+        if (previewFlowSpeedCallback_) {
+            previewFlowSpeedCallback_(selectedFlowSpeed_);
+        }
+    });
     auto* flowSpeedRow = new QWidget(optionsContent_);
     auto* flowSpeedLayout = new QHBoxLayout(flowSpeedRow);
     flowSpeedLayout->setContentsMargins(0, 0, 0, 0);
@@ -857,7 +873,7 @@ VideoExportDialog::VideoExportDialog(
         flowSpeedRow
     );
     flowSpeedLayout->addWidget(flowSpeedLabel, 0);
-    flowSpeedLayout->addWidget(flowSpeedButton_, 1);
+    flowSpeedLayout->addWidget(flowSpeedEdit_, 1);
     optionsLayout->addWidget(flowSpeedRow, 3, 0, 1, 2);
     const QString scaleFillLabel = uiText("dialog.video_export.option.scale.fill", QStringLiteral("Fill (crop if needed)"));
     const QString scaleFitLabel = uiText("dialog.video_export.option.scale.fit", QStringLiteral("Fit (keep full image, may letterbox)"));
@@ -1177,7 +1193,22 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
         ? smoothBrightnessCheck_->isChecked()
         : updated.smoothBrightness;
     updated.backgroundScaleMode = selectedBackgroundScaleMode_;
-    updated.noteFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(selectedFlowSpeed_);
+    double exportFlowSpeed = selectedFlowSpeed_;
+    if (flowSpeedEdit_ != nullptr) {
+        bool ok = false;
+        const double typedSpeed = flowSpeedEdit_->text().trimmed().toDouble(&ok);
+        if (ok) {
+            exportFlowSpeed = typedSpeed;
+        }
+    }
+    const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
+    const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
+    const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
+    updated.noteFlowSpeed = qBound(
+        flowSpeedMin,
+        flowSpeedMin + qRound((exportFlowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
+        flowSpeedMax
+    );
     updated.exportStartSeconds = rangeStartSeconds();
     updated.contentDurationSeconds = qMax(0.0, rangeEndSeconds() - updated.exportStartSeconds);
 

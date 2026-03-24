@@ -12,7 +12,7 @@ inline constexpr double kPreviewTimingFramesPerSecond = 120.0;
 inline constexpr double kPreviewTimingDefaultFlowSpeed = 7.5;
 inline constexpr double kPreviewTimingFlowSpeedMin = 4.5;
 inline constexpr double kPreviewTimingFlowSpeedMax = 10.0;
-inline constexpr double kPreviewTimingFlowSpeedStep = 0.5;
+inline constexpr double kPreviewTimingFlowSpeedStep = 0.25;
 inline constexpr double kPreviewTimingBaseFrames = 5.0;
 inline constexpr double kPreviewTimingFlowFramesNumerator = 215.0;
 inline constexpr double normalizePreviewTimingFlowSpeed(double flowSpeed)

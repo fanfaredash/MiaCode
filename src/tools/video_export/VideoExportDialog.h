@@ -140,8 +140,7 @@ private:
     QToolButton* backgroundScaleModeButton_ = nullptr;
     QMenu* backgroundScaleModeMenu_ = nullptr;
     PreviewBackgroundScaleMode selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
-    QToolButton* flowSpeedButton_ = nullptr;
-    QMenu* flowSpeedMenu_ = nullptr;
+    QLineEdit* flowSpeedEdit_ = nullptr;
     double selectedFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     QSlider* brightnessOuterSlider_ = nullptr;
     QSlider* brightnessInnerSlider_ = nullptr;
