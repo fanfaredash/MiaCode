@@ -5,6 +5,50 @@ qreal mirroredStarAngleDegrees(qreal angleDegrees)
     return 360.0 - angleDegrees;
 }
 
+qreal totalSlideTraceDurationSeconds(const TimelineNoteMarker& marker)
+{
+    qreal duration = 0.0;
+    for (double segmentDuration : marker.slideSegmentDurations) {
+        duration += static_cast<qreal>(qMax(0.0, segmentDuration));
+    }
+    if (duration > 0.0) {
+        return duration;
+    }
+    if (marker.endSecond > marker.slideTraceSecond) {
+        return static_cast<qreal>(marker.endSecond - marker.slideTraceSecond);
+    }
+    return 0.0;
+}
+
+qreal slideHeadRotateSpeedDegreesPerSecond(const TimelineNoteMarker& marker)
+{
+    if (marker.type != QLatin1String("slide") && marker.type != QLatin1String("wifi")) {
+        return 0.0;
+    }
+
+    const qreal totalLen = static_cast<qreal>(marker.slideNativeTrackLength);
+    const qreal totalDuration = totalSlideTraceDurationSeconds(marker);
+    if (totalLen <= 0.0 || totalDuration <= 0.0) {
+        return 0.0;
+    }
+    return qMax<qreal>(-4.500 * totalLen / totalDuration, -1080.0);
+}
+
+qreal slideHeadFallRotationDegrees(
+    const TimelineNoteMarker& marker,
+    qreal deltaSeconds,
+    qreal tapLifecycleDurationSeconds)
+{
+    if ((marker.type != QLatin1String("slide") && marker.type != QLatin1String("wifi"))
+        || deltaSeconds >= 0.0
+        || tapLifecycleDurationSeconds <= 0.0) {
+        return 0.0;
+    }
+    const qreal elapsedSeconds =
+        qBound<qreal>(0.0, deltaSeconds + tapLifecycleDurationSeconds, tapLifecycleDurationSeconds);
+    return slideHeadRotateSpeedDegreesPerSecond(marker) * elapsedSeconds;
+}
+
 qreal exportWifiTrackCompensationOpacity(qreal opacity)
 {
     return qBound<qreal>(0.0, opacity * 0.18, 0.20);
@@ -2047,7 +2091,14 @@ void PreviewCanvas::drawTapMarker(QPainter& painter, const TimelineNoteMarker& m
                 point,
                 targetWidth,
                 targetHeight,
-                slideHeadStar ? mirroredStarAngleDegrees(laneRotationDegrees(marker.lane)) : laneRotationDegrees(marker.lane))) {
+                slideHeadStar
+                    ? mirroredStarAngleDegrees(
+                        laneRotationDegrees(marker.lane)
+                        + slideHeadFallRotationDegrees(
+                            marker,
+                            deltaSeconds,
+                            static_cast<qreal>(tapLifecycleDurationSeconds_)))
+                    : laneRotationDegrees(marker.lane))) {
             return;
         }
         return;

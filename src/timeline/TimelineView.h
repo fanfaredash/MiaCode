@@ -57,6 +57,8 @@ struct TimelineNoteMarker {
     QVector<QVector<double>> wifiTrackAreaCheckpoints;
     QVector<MuriPadTimeEntry> wifiPadEnterTimes;
     double wifiCriticalProportion = 1.0;
+    double slideNativeTrackLength = 0.0;
+    double slideRuntimeTrackLength = 0.0;
     QPointF touchPoint;
     QString touchPad;
     bool isEach = false;

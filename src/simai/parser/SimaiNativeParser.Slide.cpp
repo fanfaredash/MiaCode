@@ -222,6 +222,7 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
         }
 
         marker.endSecond = segmentShootSecond;
+        populateSlideTrackLengths(&marker);
         appendNote(state, marker, groupIndices);
         return;
     }
@@ -304,5 +305,6 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
         }
     }
 
+    populateSlideTrackLengths(&marker);
     appendNote(state, marker, groupIndices);
 }

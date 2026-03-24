@@ -594,6 +594,82 @@ const QJsonObject& slideDataRoot()
     return root;
 }
 
+const QJsonObject& slideRuntimeRoot()
+{
+    static const QJsonObject root = []() {
+        QFile file(":/data/slide_runtime_data.json");
+        if (!file.open(QIODevice::ReadOnly)) {
+            return QJsonObject();
+        }
+        QJsonParseError error;
+        const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
+        if (error.error != QJsonParseError::NoError || !doc.isObject()) {
+            return QJsonObject();
+        }
+        return doc.object();
+    }();
+    return root;
+}
+
+double nativeSlideTrackLengthForAreas(const QVector<QVector<QPointF>>& areas)
+{
+    double length = 1.0;
+    for (const QVector<QPointF>& areaPoints : areas) {
+        length += static_cast<double>(areaPoints.size());
+    }
+    return length;
+}
+
+double runtimeSlideTrackLengthForJudgeSequence(const QJsonArray& judgeSequence)
+{
+    double length = 1.0;
+    for (const QJsonValue& areaValue : judgeSequence) {
+        if (!areaValue.isArray()) {
+            continue;
+        }
+        length += static_cast<double>(areaValue.toArray().size());
+    }
+    return length;
+}
+
+void populateSlideTrackLengths(TimelineNoteMarker* marker)
+{
+    if (marker == nullptr) {
+        return;
+    }
+
+    marker->slideNativeTrackLength = 0.0;
+    marker->slideRuntimeTrackLength = 0.0;
+    if (marker->type == QLatin1String("wifi")) {
+        marker->slideNativeTrackLength = 20.0;
+        marker->slideRuntimeTrackLength = 20.0;
+        return;
+    }
+    if (marker->type != QLatin1String("slide")) {
+        return;
+    }
+
+    for (const QVector<QVector<QPointF>>& segmentAreas : marker->slideTrackAreaPoints) {
+        marker->slideNativeTrackLength += nativeSlideTrackLengthForAreas(segmentAreas);
+    }
+
+    const QJsonObject slides = slideRuntimeRoot().value("slides").toObject();
+    bool foundRuntimeLength = false;
+    for (const QString& key : marker->slideSegmentKeys) {
+        const QJsonObject entry = slides.value(key).toObject();
+        if (entry.isEmpty()) {
+            continue;
+        }
+        marker->slideRuntimeTrackLength += runtimeSlideTrackLengthForJudgeSequence(
+            entry.value("judge_sequence").toArray());
+        foundRuntimeLength = true;
+    }
+
+    if (!foundRuntimeLength) {
+        marker->slideRuntimeTrackLength = marker->slideNativeTrackLength;
+    }
+}
+
 QJsonObject slideLookupEntry(const TimelineNoteMarker& marker)
 {
     const QJsonObject root = slideDataRoot();
