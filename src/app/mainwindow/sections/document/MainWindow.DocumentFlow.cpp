@@ -831,6 +831,12 @@ void MainWindow::updateEditorHeaderLayoutMode()
     const bool summaryHasContent =
         editorValidationSummaryWidget_ != nullptr
         && editorValidationSummaryWidget_->property("hasContent").toBool();
+    const int summaryExtraWidth = summaryHasContent && editorValidationSummaryWidget_ != nullptr
+        ? qMax(0, editorValidationSummaryWidget_->sizeHint().width() - 52)
+        : 0;
+    const int summaryHideThreshold = 480 + qMin(summaryExtraWidth, 56);
+    const int compactCursorThreshold = 400 + qMin(summaryExtraWidth / 2, 28);
+    const int cursorHideThreshold = 360 + qMin(summaryExtraWidth / 2, 20);
 
     bool showLevelControls = true;
     bool showDesignerControls = true;
@@ -847,17 +853,17 @@ void MainWindow::updateEditorHeaderLayoutMode()
         designerWidth = 112;
         levelWidth = 68;
     }
-    if (headerWidth < 480) {
+    if (headerWidth < summaryHideThreshold) {
         showSummary = false;
         levelWidth = 58;
         designerWidth = 92;
     }
-    if (headerWidth < 400) {
+    if (headerWidth < compactCursorThreshold) {
         compactCursor = true;
         designerWidth = 100;
         levelWidth = 62;
     }
-    if (headerWidth < 360) {
+    if (headerWidth < cursorHideThreshold) {
         showCursor = false;
         levelWidth = 54;
         designerWidth = 84;
@@ -1344,4 +1350,3 @@ void MainWindow::clearTimelineAndPreview()
     updatePreviewSliderRange();
     updatePreviewSliderPosition(0.0);
 }
-

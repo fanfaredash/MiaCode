@@ -433,7 +433,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.preview.follow_mode.line_only", "仅按行"},
         {"dialog.render_settings.preview.show_object_stats", "预览/导出显示物件统计"},
         {"dialog.render_settings.preview.show_validation_summary", "显示头部错误/警告摘要"},
-        {"editor.validation_summary.tooltip_with_muri", "%1 个错误，%2 个警告（含 %3 条无理）"},
+        {"editor.validation_summary.tooltip_with_muri", "%1 个错误，%2 个警告，%3 条无理"},
         {"dialog.render_settings.preview.show_object_stats_preview", "预览显示物件统计"},
         {"dialog.render_settings.preview.show_object_stats_export", "导出显示物件统计"},
 
