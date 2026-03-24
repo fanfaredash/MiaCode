@@ -237,6 +237,8 @@ void MainWindow::updateEditorValidationSummary()
             warningCount = entry.warningCount;
         }
     }
+    const int muriIssueCount = muriAnalysisReport_.diagnostics.size() + muriStaticReferences_.size();
+    errorCount += muriIssueCount;
 
     const QColor mutedColor = UiTheme::colors().textMuted;
     const QColor errorColor = errorCount > 0 ? QColor(QStringLiteral("#D94A4A")) : mutedColor;
@@ -257,10 +259,15 @@ void MainWindow::updateEditorValidationSummary()
     editorValidationWarningIconLabel_->setVisible(showWarning);
     editorValidationWarningCountLabel_->setVisible(showWarning);
 
-    const QString summaryTooltip = uiText(
-        "editor.validation_summary.tooltip",
-        "%1 error(s), %2 warning(s)"
-    ).arg(errorCount).arg(warningCount);
+    const QString summaryTooltip = muriIssueCount > 0
+        ? uiText(
+              "editor.validation_summary.tooltip_with_muri",
+              "%1 error(s), %2 warning(s) (%3 muri issue(s) included)"
+          ).arg(errorCount).arg(warningCount).arg(muriIssueCount)
+        : uiText(
+              "editor.validation_summary.tooltip",
+              "%1 error(s), %2 warning(s)"
+          ).arg(errorCount).arg(warningCount);
     const bool showSummary = previewShowValidationSummary_ && (showError || showWarning);
     editorValidationSummaryWidget_->setProperty("hasContent", showSummary);
     editorValidationSummaryWidget_->setToolTip(summaryTooltip);
@@ -301,9 +308,11 @@ void MainWindow::clearValidationErrors()
 void MainWindow::clearMuriDiagnostics()
 {
     if (muriList_ == nullptr) {
+        updateEditorValidationSummary();
         return;
     }
     muriList_->clear();
+    updateEditorValidationSummary();
 }
 
 void MainWindow::clearValidationDecorations()
@@ -437,6 +446,7 @@ void MainWindow::refreshMuriDiagnosticsPanel()
             muriList_
         );
         item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+        updateEditorValidationSummary();
         return;
     }
 
@@ -532,6 +542,7 @@ void MainWindow::refreshMuriDiagnosticsPanel()
                                       .arg(entry.detail.isEmpty() ? QString() : QStringLiteral("\n") + entry.detail);
         addWrappedListEntry(muriList_, summary + detailHtml, plainText, entry.line, entry.col, entry.second, true);
     }
+    updateEditorValidationSummary();
 }
 
 void MainWindow::clearValidationCache()
