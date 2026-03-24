@@ -195,6 +195,35 @@ void TimelineView::loadNoteIcons()
         return canvas;
     };
 
+    const auto buildTouchHoldCompositeIcon = [this](const QPixmap& borderBase, const QPixmap& holdBodyBase, const QPixmap& pointBase) -> QPixmap {
+        if (borderBase.isNull() || holdBodyBase.isNull()) {
+            return QPixmap();
+        }
+        const int iconSize = kNoteSize + 3;
+        QPixmap canvas(iconSize, iconSize);
+        canvas.fill(Qt::transparent);
+
+        QPainter p(&canvas);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        p.setRenderHint(QPainter::SmoothPixmapTransform, true);
+
+        const QPixmap border = borderBase.scaled(iconSize, iconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        p.drawPixmap((iconSize - border.width()) / 2, (iconSize - border.height()) / 2, border);
+
+        const int bodySize = qMax(1, qRound(static_cast<qreal>(iconSize) * 0.30));
+        const QPixmap body = holdBodyBase.scaled(bodySize, bodySize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        p.drawPixmap((iconSize - body.width()) / 2, (iconSize - body.height()) / 2, body);
+
+        if (!pointBase.isNull()) {
+            const int pointSize = qMax(1, qRound(static_cast<qreal>(iconSize) * 0.24));
+            const QPixmap point = pointBase.scaled(pointSize, pointSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            p.drawPixmap((iconSize - point.width()) / 2, (iconSize - point.height()) / 2, point);
+        }
+
+        p.end();
+        return canvas;
+    };
+
     const auto buildOverlayCompositeIcon = [](const QPixmap& base, const QPixmap& overlay, int iconSize) -> QPixmap {
         if (base.isNull()) {
             return QPixmap();
@@ -289,15 +318,27 @@ void TimelineView::loadNoteIcons()
         loadIcon("touch_break", {"touch_break.png", "touch.png", "touch_each.png", "each.png", "tap.png"}, kNoteSize);
     }
 
-    const QPixmap touchHoldComposite = buildTouchCompositeIcon(
+    const QPixmap touchHoldComposite = buildTouchHoldCompositeIcon(
         loadRawIcon({"touchhold_border.png", "touch_border_2.png", "touch.png", "tap.png"}),
-        loadRawIcon({"touchhold_1.png", "touch_point.png", "tap.png"})
+        loadRawIcon({"touchhold_1.png", "tap.png"}),
+        loadRawIcon({"touch_point.png", "tap.png"})
     );
     if (!touchHoldComposite.isNull()) {
         noteIcons_.insert("touch_hold", touchHoldComposite);
     }
-    const QPixmap touchHoldBreakComposite = buildTouchCompositeIcon(
+    const QPixmap touchHoldEachComposite = buildTouchHoldCompositeIcon(
+        loadRawIcon({"touchhold_border.png", "touch_border_2.png", "touch.png", "tap.png"}),
+        loadRawIcon({"touchhold_1.png", "tap.png"}),
+        loadRawIcon({"touch_point_each.png", "touch_point.png", "tap.png"})
+    );
+    if (!touchHoldEachComposite.isNull()) {
+        noteIcons_.insert("touch_hold_each", touchHoldEachComposite);
+    } else if (!touchHoldComposite.isNull()) {
+        noteIcons_.insert("touch_hold_each", touchHoldComposite);
+    }
+    const QPixmap touchHoldBreakComposite = buildTouchHoldCompositeIcon(
         loadRawIcon({"touchhold_border.png", "touch_break.png", "touch_border_2.png", "touch.png", "tap.png"}),
+        loadRawIcon({"touchhold_1.png", "tap.png"}),
         loadRawIcon({"touch_break_point.png", "touch_point.png", "tap.png"})
     );
     if (!touchHoldBreakComposite.isNull()) {
