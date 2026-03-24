@@ -142,16 +142,12 @@ void parseTapOrHoldToken(ParseState* state, const QString& token, int lineNumber
             appendTokenError(state, lineNumber, column, QString("Invalid hold modifier sequence: %1").arg(token));
             return;
         }
-        if (firstHoldIndex >= 0 && firstHoldIndex + 1 < prefixModifiers.size()) {
-            hasNonCanonicalHoldModifierPlacement = true;
-        }
-        if (!suffixModifiers.isEmpty()) {
-            hasNonCanonicalHoldModifierPlacement = true;
-        }
-
         double durationSecond = 0.0;
         bool durationOk = true;
         if (hasOpenBracket) {
+            if (!suffixModifiers.isEmpty()) {
+                hasNonCanonicalHoldModifierPlacement = true;
+            }
             durationSecond = parseHoldDurationSignature(tokenInsideBrackets(token), state->bpm, &durationOk);
         }
         if (!durationOk) {
