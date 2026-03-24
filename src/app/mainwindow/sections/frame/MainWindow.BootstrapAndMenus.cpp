@@ -1008,6 +1008,7 @@ MainWindow::MainWindow(QWidget* parent)
     previewCanvas_ = new PreviewCanvas();
     logStartupStage("preview_canvas_created");
     previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
+    previewCanvas_->setLegacyFireworkStackingEnabled(legacyFireworkStackingEasterEggEnabled_);
     logStartupStage("preview_skin_async_dispatched");
     previewCanvasFrame_ = new QFrame(previewPanel_);
     previewCanvasFrame_->setObjectName("PreviewCanvasFrame");
@@ -1183,7 +1184,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(timelineView_, &TimelineView::headerNavigateRequested, this, [this](double second) {
         navigateTimelineToSecond(second, true);
     });
-    connect(timelineView_, &TimelineView::timelineDragStarted, this, [this]() {
+    connect(timelineView_, &TimelineView::timelineUserInteractionStarted, this, [this]() {
         if (!legacyPygamePreviewEnabled_ && qtPreviewPlaying_) {
             stopQtPreviewPlayback(true);
             updatePauseButtonAppearance();

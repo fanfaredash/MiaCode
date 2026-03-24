@@ -21,6 +21,7 @@ void TimelineView::mousePressEvent(QMouseEvent* event)
         if (maxSecond > 0.0) {
             second = qMin(second, maxSecond);
         }
+        emit timelineUserInteractionStarted();
         emit headerNavigateRequested(second);
         event->accept();
         return;
@@ -45,6 +46,7 @@ void TimelineView::mousePressEvent(QMouseEvent* event)
     timelineDragStartScrollValue_ = horizontalScrollBar()->value();
     viewport()->setCursor(Qt::ClosedHandCursor);
     emit timelineDragStarted();
+    emit timelineUserInteractionStarted();
     event->accept();
 }
 
@@ -74,6 +76,7 @@ void TimelineView::wheelEvent(QWheelEvent* event)
 {
     const int delta = event->angleDelta().y();
     if (delta != 0) {
+        emit timelineUserInteractionStarted();
         horizontalScrollBar()->setValue(horizontalScrollBar()->value() - (delta / 2));
         event->accept();
         return;
@@ -89,4 +92,3 @@ void TimelineView::scrollContentsBy(int dx, int dy)
     // Force full repaint to avoid stale artifacts from scroll blit optimization.
     viewport()->update();
 }
-

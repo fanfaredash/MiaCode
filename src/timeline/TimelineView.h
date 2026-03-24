@@ -114,6 +114,7 @@ signals:
     void noteNavigateRequested(int line, int col);
     void headerNavigateRequested(double second);
     void timelineDragStarted();
+    void timelineUserInteractionStarted();
     void followPreviewToggled(bool enabled);
 
 protected:

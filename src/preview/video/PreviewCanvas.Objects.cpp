@@ -945,8 +945,16 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
         const TimelineNoteMarker* marker = nullptr;
         qreal second = -1.0;
     };
-    QHash<quint64, FireworkTrigger> positionTriggers;
-    positionTriggers.reserve(kPreviewSmallCollectionReserve);
+    QVector<FireworkTrigger> activeTriggers;
+    activeTriggers.reserve(kPreviewSmallCollectionReserve);
+
+    QHash<quint64, FireworkTrigger> legacyPositionTriggers;
+    if (legacyFireworkStackingEnabled_) {
+        legacyPositionTriggers.reserve(kPreviewSmallCollectionReserve);
+    }
+
+    FireworkTrigger latestTrigger;
+    bool latestTriggerValid = false;
 
     for (const TimelineNoteMarker& marker : noteMarkers_) {
         if (!marker.isFirework) {
@@ -971,17 +979,37 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
             continue;
         }
 
+        FireworkTrigger trigger;
+        trigger.marker = &marker;
+        trigger.second = triggerSecond;
+
+        if (!legacyFireworkStackingEnabled_) {
+            if (!latestTriggerValid || triggerSecond >= latestTrigger.second) {
+                latestTrigger = trigger;
+                latestTriggerValid = true;
+            }
+            continue;
+        }
+
         const quint64 key = touchPointKey(marker.touchPoint);
-        const auto existing = positionTriggers.constFind(key);
-        if (existing == positionTriggers.constEnd() || triggerSecond >= existing->second) {
-            FireworkTrigger trigger;
-            trigger.marker = &marker;
-            trigger.second = triggerSecond;
-            positionTriggers.insert(key, trigger);
+        const auto existing = legacyPositionTriggers.constFind(key);
+        if (existing == legacyPositionTriggers.constEnd() || triggerSecond >= existing->second) {
+            legacyPositionTriggers.insert(key, trigger);
         }
     }
 
-    if (positionTriggers.isEmpty()) {
+    if (!legacyFireworkStackingEnabled_) {
+        if (latestTriggerValid) {
+            activeTriggers.append(latestTrigger);
+        }
+    } else {
+        activeTriggers.reserve(legacyPositionTriggers.size());
+        for (auto it = legacyPositionTriggers.cbegin(); it != legacyPositionTriggers.cend(); ++it) {
+            activeTriggers.append(it.value());
+        }
+    }
+
+    if (activeTriggers.isEmpty()) {
         return;
     }
 
@@ -1066,8 +1094,7 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
         layerPainter.restore();
     };
 
-    for (auto it = positionTriggers.cbegin(); it != positionTriggers.cend(); ++it) {
-        const FireworkTrigger& trigger = it.value();
+    for (const FireworkTrigger& trigger : activeTriggers) {
         if (trigger.marker == nullptr) {
             continue;
         }

@@ -350,6 +350,15 @@ void PreviewCanvas::setExportWifiTrackBrightnessCompensationEnabled(bool enabled
     update();
 }
 
+void PreviewCanvas::setLegacyFireworkStackingEnabled(bool enabled)
+{
+    if (legacyFireworkStackingEnabled_ == enabled) {
+        return;
+    }
+    legacyFireworkStackingEnabled_ = enabled;
+    update();
+}
+
 void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
 {
     tapImage_ = source.tapImage_;
@@ -441,6 +450,7 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     showTimestamp_ = source.showTimestamp_;
     showObjectStatsHud_ = source.showObjectStatsHud_;
     exportWifiTrackBrightnessCompensationEnabled_ = source.exportWifiTrackBrightnessCompensationEnabled_;
+    legacyFireworkStackingEnabled_ = source.legacyFireworkStackingEnabled_;
 
     overlayCache_.clear();
     brightnessMaskCache_ = QImage();

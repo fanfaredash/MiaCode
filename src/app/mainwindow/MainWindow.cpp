@@ -159,6 +159,7 @@ constexpr int kEditorFindBarTopMargin = 10;
 constexpr int kEditorFindBarOverlayGap = 8;
 constexpr int kPreviewScrubRenderIntervalMs = 33;
 constexpr qint64 kInvalidStarPreviewAboutClickWindowMs = 900;
+constexpr qint64 kLegacyFireworkStackingAboutClickWindowMs = 900;
 const QList<double> kEditorLineSpacingFactorOptions{
     0.0, 1.0, 1.5, 2.0, 3.0, 5.0,
 };
@@ -2388,6 +2389,18 @@ void MainWindow::setInvalidStarPreviewEasterEggEnabled(bool enabled)
     playInvalidStarPreviewEasterEggSound(enabled);
 }
 
+void MainWindow::setLegacyFireworkStackingEasterEggEnabled(bool enabled)
+{
+    if (legacyFireworkStackingEasterEggEnabled_ == enabled) {
+        return;
+    }
+    legacyFireworkStackingEasterEggEnabled_ = enabled;
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->setLegacyFireworkStackingEnabled(enabled);
+    }
+    playInvalidStarPreviewEasterEggSound(enabled);
+}
+
 void MainWindow::ensureInvalidStarPreviewEasterEggSounds()
 {
     if (invalidStarPreviewEnableSound_ == nullptr) {
@@ -2433,6 +2446,30 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
         if (event->type() == QEvent::MouseButtonRelease) {
             auto* mouseEvent = static_cast<QMouseEvent*>(event);
             if (mouseEvent->button() == Qt::LeftButton) {
+                if (mouseEvent->modifiers().testFlag(Qt::ShiftModifier)) {
+                    if (legacyFireworkStackingEasterEggEnabled_) {
+                        legacyFireworkStackingAboutClickCount_ = 0;
+                        legacyFireworkStackingAboutClickElapsed_.invalidate();
+                        setLegacyFireworkStackingEasterEggEnabled(false);
+                    } else {
+                        if (!legacyFireworkStackingAboutClickElapsed_.isValid()
+                            || legacyFireworkStackingAboutClickElapsed_.elapsed() > kLegacyFireworkStackingAboutClickWindowMs) {
+                            legacyFireworkStackingAboutClickCount_ = 0;
+                        }
+                        ++legacyFireworkStackingAboutClickCount_;
+                        if (legacyFireworkStackingAboutClickElapsed_.isValid()) {
+                            legacyFireworkStackingAboutClickElapsed_.restart();
+                        } else {
+                            legacyFireworkStackingAboutClickElapsed_.start();
+                        }
+                        if (legacyFireworkStackingAboutClickCount_ >= 3) {
+                            legacyFireworkStackingAboutClickCount_ = 0;
+                            legacyFireworkStackingAboutClickElapsed_.invalidate();
+                            setLegacyFireworkStackingEasterEggEnabled(true);
+                        }
+                    }
+                    return true;
+                }
                 if (invalidStarPreviewEasterEggEnabled_) {
                     invalidStarPreviewAboutClickCount_ = 0;
                     invalidStarPreviewAboutClickElapsed_.invalidate();
@@ -3131,6 +3168,7 @@ void MainWindow::loadProjectRenderState()
         previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
         previewCanvas_->setShowTimestamp(previewShowTimestamp_);
         previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
+        previewCanvas_->setLegacyFireworkStackingEnabled(legacyFireworkStackingEasterEggEnabled_);
     }
     applyMuriRenderOptions();
 }
@@ -4178,6 +4216,8 @@ void MainWindow::onAbout()
     aboutIconLabel_.clear();
     invalidStarPreviewAboutClickCount_ = 0;
     invalidStarPreviewAboutClickElapsed_.invalidate();
+    legacyFireworkStackingAboutClickCount_ = 0;
+    legacyFireworkStackingAboutClickElapsed_.invalidate();
 }
 
 void MainWindow::onExportPreviewVideo()
