@@ -66,6 +66,8 @@ private:
     void refreshDialogGeometry();
     void syncLivePreviewTimestampVisibility();
     void restoreLivePreviewState();
+    void loadPersistedSettings();
+    void savePersistedSettings(const VideoExportTask& task) const;
     void applySelectedAspectRatioToPreview(bool markChanged);
 
     void onRangeSpinChanged();

@@ -31,6 +31,7 @@
 #include <QPushButton>
 #include <QPixmap>
 #include <QRegularExpression>
+#include <QSettings>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSplitter>
@@ -104,6 +105,43 @@ QString flowSpeedValueLabel(double flowSpeed)
     const double roundedOneDecimal = qRound(snapped * 10.0) / 10.0;
     const bool useSingleDecimal = qAbs(snapped - roundedOneDecimal) < 0.001;
     return QString::number(snapped, 'f', useSingleDecimal ? 1 : 2);
+}
+
+QSettings exportDialogSettingsStore()
+{
+    return QSettings(QStringLiteral("fanfaredash"), QStringLiteral("MiaCode"));
+}
+
+QString exportDialogResolutionLabel(const QSize& size)
+{
+    for (const ResolutionPreset& preset : kResolutionPresets) {
+        if (preset.width == size.width() && preset.height == size.height()) {
+            return QString::fromLatin1(preset.label);
+        }
+    }
+    return QStringLiteral("%1x%2").arg(qMax(1, size.width())).arg(qMax(1, size.height()));
+}
+
+QString exportDialogPerformanceProfileLabel(VideoExportPerformanceProfile profile)
+{
+    switch (profile) {
+    case VideoExportPerformanceProfile::Speed:
+        return uiText("dialog.video_export.performance.speed", QStringLiteral("Speed First"));
+    case VideoExportPerformanceProfile::Balanced:
+    default:
+        return uiText("dialog.video_export.performance.balanced", QStringLiteral("Balanced"));
+    }
+}
+
+QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
+{
+    switch (mode) {
+    case PreviewBackgroundScaleMode::FitContain:
+        return uiText("dialog.video_export.option.scale.fit", QStringLiteral("Fit (keep full image, may letterbox)"));
+    case PreviewBackgroundScaleMode::FillCrop:
+    default:
+        return uiText("dialog.video_export.option.scale.fill", QStringLiteral("Fill (crop if needed)"));
+    }
 }
 
 int secondToSliderValue(double second)
@@ -509,35 +547,26 @@ VideoExportDialog::VideoExportDialog(
     primaryPanelLayout->addWidget(fpsRow, 0);
 
     selectedPerformanceProfile_ = baseTask_.performanceProfile;
-    const auto performanceProfileLabel = [](VideoExportPerformanceProfile profile) {
-        switch (profile) {
-        case VideoExportPerformanceProfile::Speed:
-            return uiText("dialog.video_export.performance.speed", QStringLiteral("Speed First"));
-        case VideoExportPerformanceProfile::Balanced:
-        default:
-            return uiText("dialog.video_export.performance.balanced", QStringLiteral("Balanced"));
-        }
-    };
-    performanceButton_ = createDialogMenuButton(primaryPanel, performanceProfileLabel(selectedPerformanceProfile_));
+    performanceButton_ = createDialogMenuButton(primaryPanel, exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
     performanceMenu_ = new QMenu(performanceButton_);
     UiTheme::styleRoundedMenu(*performanceMenu_);
     addDialogMenuChoice(
         performanceMenu_,
         uiText("dialog.video_export.performance.balanced", QStringLiteral("Balanced")),
-        [this, performanceProfileLabel]() {
+        [this]() {
             selectedPerformanceProfile_ = VideoExportPerformanceProfile::Balanced;
             if (performanceButton_ != nullptr) {
-                performanceButton_->setText(performanceProfileLabel(selectedPerformanceProfile_));
+                performanceButton_->setText(exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
             }
         }
     );
     addDialogMenuChoice(
         performanceMenu_,
         uiText("dialog.video_export.performance.speed", QStringLiteral("Speed First")),
-        [this, performanceProfileLabel]() {
+        [this]() {
             selectedPerformanceProfile_ = VideoExportPerformanceProfile::Speed;
             if (performanceButton_ != nullptr) {
-                performanceButton_->setText(performanceProfileLabel(selectedPerformanceProfile_));
+                performanceButton_->setText(exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
             }
         }
     );
@@ -1017,9 +1046,10 @@ VideoExportDialog::VideoExportDialog(
     previewSlider_->setFocusPolicy(Qt::StrongFocus);
     previewSlider_->installEventFilter(this);
 
-    updatePreviewPlayPauseUi();
-    syncRangeUi();
+    loadPersistedSettings();
     initialResolutionAspectRatio_ = selectedResolutionAspectRatio();
+    syncRangeUi();
+    updatePreviewPlayPauseUi();
     refreshDialogGeometry();
     if (QWidget* owner = parentWidget(); owner != nullptr) {
         move(desiredDialogTopLeft(owner, size()));
@@ -1129,6 +1159,129 @@ void VideoExportDialog::restoreLivePreviewState()
         sourceCanvas_->setShowTimestamp(initialShowTimestamp_);
         sourceCanvas_->setShowObjectStatsHud(initialShowObjectStatsHud_);
     }
+}
+
+void VideoExportDialog::loadPersistedSettings()
+{
+    QSettings settings = exportDialogSettingsStore();
+    settings.beginGroup(QStringLiteral("video_export_dialog"));
+
+    const QString baseDirectory = exportBaseDirectory(baseTask_);
+    const QString savedOutputPath = settings.value(QStringLiteral("output_path")).toString().trimmed();
+    if (!savedOutputPath.isEmpty() && outputPathEdit_ != nullptr) {
+        outputPathEdit_->setText(displayOutputPathForDialog(savedOutputPath, baseDirectory));
+    }
+
+    const int savedWidth = settings.value(QStringLiteral("resolution_width"), selectedResolution_.width()).toInt();
+    const int savedHeight = settings.value(QStringLiteral("resolution_height"), selectedResolution_.height()).toInt();
+    if (savedWidth > 0 && savedHeight > 0) {
+        selectedResolution_ = QSize(savedWidth, savedHeight);
+        if (resolutionButton_ != nullptr) {
+            resolutionButton_->setText(exportDialogResolutionLabel(selectedResolution_));
+        }
+        applySelectedAspectRatioToPreview(false);
+    }
+
+    const int savedFps = settings.value(QStringLiteral("fps"), selectedFps_).toInt();
+    selectedFps_ = savedFps >= 90 ? 120 : 60;
+    if (fpsButton_ != nullptr) {
+        fpsButton_->setText(QStringLiteral("%1 FPS").arg(selectedFps_));
+    }
+
+    const int savedProfile = settings.value(
+        QStringLiteral("performance_profile"),
+        static_cast<int>(selectedPerformanceProfile_)
+    ).toInt();
+    selectedPerformanceProfile_ = savedProfile == static_cast<int>(VideoExportPerformanceProfile::Speed)
+        ? VideoExportPerformanceProfile::Speed
+        : VideoExportPerformanceProfile::Balanced;
+    if (performanceButton_ != nullptr) {
+        performanceButton_->setText(exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
+    }
+
+    if (showTimestampCheck_ != nullptr) {
+        showTimestampCheck_->setChecked(settings.value(QStringLiteral("show_timestamp"), showTimestampCheck_->isChecked()).toBool());
+    }
+    if (smoothBrightnessCheck_ != nullptr) {
+        smoothBrightnessCheck_->setChecked(
+            settings.value(QStringLiteral("smooth_brightness"), smoothBrightnessCheck_->isChecked()).toBool()
+        );
+    }
+    if (brightnessOuterSlider_ != nullptr) {
+        brightnessOuterSlider_->setValue(
+            settings.value(QStringLiteral("brightness_outer"), brightnessOuterSlider_->value()).toInt()
+        );
+    }
+    if (brightnessInnerSlider_ != nullptr) {
+        brightnessInnerSlider_->setValue(
+            settings.value(QStringLiteral("brightness_inner"), brightnessInnerSlider_->value()).toInt()
+        );
+    }
+    if (layoutSquareScaleSlider_ != nullptr) {
+        layoutSquareScaleSlider_->setValue(
+            settings.value(QStringLiteral("layout_square_scale"), layoutSquareScaleSlider_->value()).toInt()
+        );
+    }
+
+    const int savedScaleMode = settings.value(
+        QStringLiteral("background_scale_mode"),
+        static_cast<int>(selectedBackgroundScaleMode_)
+    ).toInt();
+    selectedBackgroundScaleMode_ = savedScaleMode == static_cast<int>(PreviewBackgroundScaleMode::FitContain)
+        ? PreviewBackgroundScaleMode::FitContain
+        : PreviewBackgroundScaleMode::FillCrop;
+    if (backgroundScaleModeButton_ != nullptr) {
+        backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
+    }
+    if (previewScaleModeCallback_) {
+        previewScaleModeCallback_(selectedBackgroundScaleMode_);
+    }
+
+    const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
+    const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
+    const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
+    const double savedFlowSpeed = settings.value(QStringLiteral("flow_speed"), selectedFlowSpeed_).toDouble();
+    selectedFlowSpeed_ = qBound(
+        flowSpeedMin,
+        flowSpeedMin + qRound((savedFlowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
+        flowSpeedMax
+    );
+    if (flowSpeedEdit_ != nullptr) {
+        flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
+    }
+    if (previewFlowSpeedCallback_) {
+        previewFlowSpeedCallback_(selectedFlowSpeed_);
+    }
+
+    settings.endGroup();
+}
+
+void VideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
+{
+    QSettings settings = exportDialogSettingsStore();
+    settings.beginGroup(QStringLiteral("video_export_dialog"));
+    settings.setValue(QStringLiteral("output_path"), task.outputPath);
+    settings.setValue(QStringLiteral("resolution_width"), task.outputWidth);
+    settings.setValue(QStringLiteral("resolution_height"), task.outputHeight);
+    settings.setValue(QStringLiteral("fps"), task.fps);
+    settings.setValue(QStringLiteral("performance_profile"), static_cast<int>(task.performanceProfile));
+    settings.setValue(QStringLiteral("show_timestamp"), task.showTimestamp);
+    settings.setValue(QStringLiteral("smooth_brightness"), task.smoothBrightness);
+    settings.setValue(
+        QStringLiteral("brightness_outer"),
+        qRound(qBound(0.0, task.backgroundBrightnessOuter, 1.0) * 100.0)
+    );
+    settings.setValue(
+        QStringLiteral("brightness_inner"),
+        qRound(qBound(0.0, task.backgroundBrightnessInner, 1.0) * 100.0)
+    );
+    settings.setValue(
+        QStringLiteral("layout_square_scale"),
+        qRound(miacode::preview_video::normalizedLayoutSquareScale(task.layoutSquareScale) * 100.0)
+    );
+    settings.setValue(QStringLiteral("background_scale_mode"), static_cast<int>(task.backgroundScaleMode));
+    settings.setValue(QStringLiteral("flow_speed"), task.noteFlowSpeed);
+    settings.endGroup();
 }
 
 void VideoExportDialog::applySelectedAspectRatioToPreview(bool markChanged)
@@ -1522,6 +1675,7 @@ void VideoExportDialog::startExport()
         );
         return;
     }
+    savePersistedSettings(task);
     requestedExportTask_ = task;
     exportRequested_ = true;
     accept();
