@@ -57,20 +57,33 @@ inline bool previewSfxShouldAggregateKind(const QString& kind)
     return lowered == "answer"
         || lowered == "judge"
         || lowered == "judge_break"
+        || lowered == "break"
         || lowered == "slide"
         || lowered == "break_slide_start"
+        || lowered == "break_slide_finish"
+        || lowered == "judge_break_slide"
         || lowered == "ex"
-        || lowered == "touch";
+        || lowered == "touch"
+        || lowered == "firework";
 }
 
 inline bool previewSfxShouldBoostAggregatedKind(const QString& kind)
 {
     const QString lowered = previewSfxNormalizedKind(kind);
     return lowered == "judge"
-        || lowered == "judge_break"
         || lowered == "slide"
-        || lowered == "break_slide_start"
         || lowered == "ex";
+}
+
+inline bool previewSfxShouldInterruptPreviousKind(const QString& kind)
+{
+    const QString lowered = previewSfxNormalizedKind(kind);
+    return lowered == "judge_break"
+        || lowered == "break"
+        || lowered == "break_slide_start"
+        || lowered == "break_slide_finish"
+        || lowered == "judge_break_slide"
+        || lowered == "firework";
 }
 
 inline int previewSfxAggregatePlaybackCopies(const QString& kind, int count)
