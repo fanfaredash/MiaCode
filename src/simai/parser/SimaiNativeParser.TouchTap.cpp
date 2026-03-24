@@ -16,8 +16,16 @@ void parseTouchToken(ParseState* state, const QString& token, int lineNumber, in
     bool hasHold = false;
     bool hasFirework = false;
     bool hasBreak = false;
+    bool hasNonCanonicalHoldModifierPlacement = false;
     QString errorMessage;
-    if (!parseTouchSuffix(normalizedToken, &durationSignature, &hasHold, &hasFirework, &hasBreak, &errorMessage)) {
+    if (!parseTouchSuffix(
+            normalizedToken,
+            &durationSignature,
+            &hasHold,
+            &hasFirework,
+            &hasBreak,
+            &hasNonCanonicalHoldModifierPlacement,
+            &errorMessage)) {
         appendTokenError(state, lineNumber, column, errorMessage.isEmpty() ? QString("Invalid touch token: %1").arg(token) : errorMessage);
         return;
     }
@@ -43,6 +51,14 @@ void parseTouchToken(ParseState* state, const QString& token, int lineNumber, in
         }
         marker.type = "touch_hold";
         marker.endSecond = marker.second + qMax(0.0, durationSecond);
+        if (state->strictMode && hasNonCanonicalHoldModifierPlacement) {
+            appendTokenWarning(
+                state,
+                lineNumber,
+                column,
+                QString("Non-canonical hold modifier placement: %1").arg(token)
+            );
+        }
     }
 
     appendNote(state, marker, groupIndices);
