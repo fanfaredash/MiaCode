@@ -1,0 +1,901 @@
+#include "BatchVideoExportDialog.h"
+
+#include "SimaiNativeParser.h"
+#include "SimaiDocument.h"
+#include "UiText.h"
+#include "UiTheme.h"
+
+#include <QAbstractItemView>
+#include <QCheckBox>
+#include <QDialogButtonBox>
+#include <QDoubleValidator>
+#include <QDir>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QGridLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QLineEdit>
+#include <QListView>
+#include <QListWidget>
+#include <QMenu>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QSettings>
+#include <QSet>
+#include <QSlider>
+#include <QToolButton>
+#include <QTreeView>
+#include <QVBoxLayout>
+#include <QWidgetAction>
+#include <QtMath>
+
+#include <functional>
+
+namespace {
+
+constexpr int kDialogMinWidth = 620;
+constexpr int kFormLabelWidth = 72;
+constexpr int kDialogActionButtonMinWidth = 92;
+constexpr int kSliderValueLabelWidth = 44;
+
+struct ResolutionPreset {
+    int width = 1024;
+    int height = 1024;
+    const char* label = "1024x1024 (1:1)";
+};
+
+constexpr ResolutionPreset kResolutionPresets[] = {
+    {720, 720, "720x720 (1:1)"},
+    {1024, 1024, "1024x1024 (1:1)"},
+    {960, 720, "960x720 (4:3)"},
+    {1280, 720, "1280x720 (16:9)"},
+    {1080, 1080, "1080x1080 (1:1)"},
+    {1440, 1080, "1440x1080 (4:3)"},
+    {1920, 1080, "1920x1080 (16:9)"},
+    {1440, 1440, "1440x1440 (1:1)"},
+    {1920, 1440, "1920x1440 (4:3)"},
+    {2560, 1440, "2560x1440 (16:9)"},
+};
+
+constexpr int kFpsOptions[] = {60, 120};
+
+QString uiText(const char* key, const QString& fallback)
+{
+    const QString translated = UiText::text(QString::fromLatin1(key));
+    return translated.isEmpty() ? fallback : translated;
+}
+
+QSettings exportDialogSettingsStore()
+{
+    return QSettings(QStringLiteral("fanfaredash"), QStringLiteral("MiaCode"));
+}
+
+QString batchExportChartBrowseDirectoryKey()
+{
+    return QStringLiteral("last_chart_directory");
+}
+
+QString batchExportOutputBrowseDirectoryKey()
+{
+    return QStringLiteral("last_output_directory");
+}
+
+QString exportDialogResolutionLabel(const QSize& size)
+{
+    for (const ResolutionPreset& preset : kResolutionPresets) {
+        if (preset.width == size.width() && preset.height == size.height()) {
+            return QString::fromLatin1(preset.label);
+        }
+    }
+    return QStringLiteral("%1x%2").arg(qMax(1, size.width())).arg(qMax(1, size.height()));
+}
+
+QString exportDialogPerformanceProfileLabel(VideoExportPerformanceProfile profile)
+{
+    switch (profile) {
+    case VideoExportPerformanceProfile::Speed:
+        return uiText("dialog.video_export.performance.speed", QStringLiteral("Speed First"));
+    case VideoExportPerformanceProfile::Balanced:
+    default:
+        return uiText("dialog.video_export.performance.balanced", QStringLiteral("Balanced"));
+    }
+}
+
+QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
+{
+    switch (mode) {
+    case PreviewBackgroundScaleMode::FitContain:
+        return uiText("dialog.video_export.option.scale.fit", QStringLiteral("Fit (keep full image, may letterbox)"));
+    case PreviewBackgroundScaleMode::FillCrop:
+    default:
+        return uiText("dialog.video_export.option.scale.fill", QStringLiteral("Fill (crop if needed)"));
+    }
+}
+
+QString flowSpeedValueLabel(double flowSpeed)
+{
+    const double snapped = qRound(flowSpeed * 4.0) / 4.0;
+    const double roundedOneDecimal = qRound(snapped * 10.0) / 10.0;
+    const bool useSingleDecimal = qAbs(snapped - roundedOneDecimal) < 0.001;
+    return QString::number(snapped, 'f', useSingleDecimal ? 1 : 2);
+}
+
+QString exportBaseDirectory(const VideoExportTask& task)
+{
+    const QFileInfo chartInfo(task.chartPath);
+    if (!chartInfo.absoluteDir().path().isEmpty()) {
+        return chartInfo.absoluteDir().absolutePath();
+    }
+    return QDir::currentPath();
+}
+
+QString batchExportLineEditStyleSheet()
+{
+    const auto& c = UiTheme::colors();
+    return QStringLiteral(
+        "QLineEdit { min-height: 24px; padding: 0px 10px; border: 1px solid %1; border-radius: 8px; background: %2; color: %3; font-weight: 500; }"
+        "QLineEdit:hover { border-color: %4; }"
+        "QLineEdit:focus { border-color: %4; background: %2; }"
+    )
+        .arg(c.border.name(QColor::HexRgb))
+        .arg(c.inputBg.name(QColor::HexRgb))
+        .arg(c.textPrimary.name(QColor::HexRgb))
+        .arg(c.accent.name(QColor::HexRgb));
+}
+
+QString preferredChartFilePathInDirectory(const QString& directoryPath)
+{
+    const QDir dir(directoryPath);
+    const QStringList preferredNames{
+        QStringLiteral("majdata.txt"),
+        QStringLiteral("maidata.txt"),
+        QStringLiteral("majdata.simai"),
+        QStringLiteral("maidata.simai"),
+    };
+    for (const QString& name : preferredNames) {
+        const QString candidate = dir.filePath(name);
+        if (QFileInfo::exists(candidate)) {
+            return QDir::cleanPath(candidate);
+        }
+    }
+    return QString();
+}
+
+bool validateBatchChartDirectory(const QString& directoryPath, QString* chartPath, QString* errorMessage)
+{
+    if (chartPath != nullptr) {
+        chartPath->clear();
+    }
+    if (errorMessage != nullptr) {
+        errorMessage->clear();
+    }
+
+    const QFileInfo directoryInfo(directoryPath);
+    if (!directoryInfo.exists() || !directoryInfo.isDir()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText(
+                "dialog.batch_export.error.invalid_folder",
+                QStringLiteral("The selected path is not a valid folder.")
+            );
+        }
+        return false;
+    }
+
+    const QString resolvedChartPath = preferredChartFilePathInDirectory(directoryInfo.absoluteFilePath());
+    if (resolvedChartPath.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText(
+                "dialog.batch_export.error.missing_chart_file",
+                QStringLiteral("Missing majdata.txt (or maidata.txt).")
+            );
+        }
+        return false;
+    }
+
+    const QString trackPath = QDir(directoryInfo.absoluteFilePath()).filePath(QStringLiteral("track.mp3"));
+    if (!QFileInfo::exists(trackPath)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText(
+                "dialog.batch_export.error.missing_track_file",
+                QStringLiteral("Missing track.mp3.")
+            );
+        }
+        return false;
+    }
+
+    if (chartPath != nullptr) {
+        *chartPath = resolvedChartPath;
+    }
+    return true;
+}
+
+QToolButton* createDialogMenuButton(QWidget* parent, const QString& text)
+{
+    auto* button = new QToolButton(parent);
+    button->setPopupMode(QToolButton::InstantPopup);
+    button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    button->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
+    button->setText(text);
+    return button;
+}
+
+void addDialogMenuChoice(
+    QMenu* menu,
+    const QString& text,
+    const std::function<void()>& onTriggered
+)
+{
+    auto* action = new QWidgetAction(menu);
+    auto* button = new QToolButton(menu);
+    button->setAutoRaise(true);
+    button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    button->setText(text);
+    button->setCursor(Qt::PointingHandCursor);
+    const auto& c = UiTheme::colors();
+    button->setStyleSheet(
+        QStringLiteral(
+            "QToolButton {"
+            " color: %1;"
+            " background: transparent;"
+            " border: none;"
+            " padding: 6px 20px 6px 12px;"
+            " text-align: left;"
+            "}"
+            "QToolButton:hover {"
+            " background: %2;"
+            " border-radius: 6px;"
+            "}"
+        )
+            .arg(c.textPrimary.name(QColor::HexRgb))
+            .arg(c.menuHoverBg.name(QColor::HexRgb))
+    );
+    QObject::connect(button, &QToolButton::clicked, menu, [action, menu, onTriggered]() {
+        if (onTriggered) {
+            onTriggered();
+        }
+        action->trigger();
+        menu->close();
+    });
+    action->setDefaultWidget(button);
+    menu->addAction(action);
+}
+
+QStringList selectMultipleDirectories(QWidget* parent, const QString& startDirectory)
+{
+    QFileDialog dialog(parent, uiText("dialog.batch_export.select_charts", QStringLiteral("Select Chart Folders")), startDirectory);
+    dialog.setFileMode(QFileDialog::Directory);
+    dialog.setOption(QFileDialog::ShowDirsOnly, true);
+    dialog.setOption(QFileDialog::DontUseNativeDialog, true);
+    for (QListView* view : dialog.findChildren<QListView*>()) {
+        view->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    }
+    for (QTreeView* view : dialog.findChildren<QTreeView*>()) {
+        view->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    }
+    if (dialog.exec() != QDialog::Accepted) {
+        return {};
+    }
+    return dialog.selectedFiles();
+}
+
+QWidget* createSliderOption(
+    QWidget* parent,
+    const QString& title,
+    int valuePercent,
+    QSlider** sliderOut,
+    QLabel** valueLabelOut
+)
+{
+    auto* container = new QWidget(parent);
+    auto* layout = new QHBoxLayout(container);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(8);
+
+    auto* titleLabel = new QLabel(title, container);
+    auto* slider = new QSlider(Qt::Horizontal, container);
+    slider->setRange(0, 100);
+    slider->setSingleStep(1);
+    slider->setPageStep(1);
+    slider->setTickInterval(1);
+    slider->setValue(valuePercent);
+    slider->setStyleSheet(UiTheme::dialogSliderStyleSheet());
+    auto* valueLabel = new QLabel(QStringLiteral("%1%").arg(valuePercent), container);
+    valueLabel->setMinimumWidth(kSliderValueLabelWidth);
+    valueLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+
+    layout->addWidget(titleLabel, 0);
+    layout->addWidget(slider, 1);
+    layout->addWidget(valueLabel, 0);
+
+    if (sliderOut != nullptr) {
+        *sliderOut = slider;
+    }
+    if (valueLabelOut != nullptr) {
+        *valueLabelOut = valueLabel;
+    }
+    return container;
+}
+
+}
+
+BatchVideoExportDialog::BatchVideoExportDialog(
+    const VideoExportTask& baseTask,
+    const QString& difficultyLabel,
+    QWidget* parent
+)
+    : QDialog(parent)
+    , baseTask_(baseTask)
+    , difficultyLabel_(difficultyLabel)
+    , requestedTask_(baseTask)
+    , selectedResolution_(QSize(qMax(1, baseTask.outputWidth), qMax(1, baseTask.outputHeight)))
+    , selectedFps_(baseTask.fps >= 90 ? 120 : 60)
+    , selectedPerformanceProfile_(baseTask.performanceProfile)
+    , selectedBackgroundScaleMode_(baseTask.backgroundScaleMode)
+    , selectedFlowSpeed_(baseTask.noteFlowSpeed)
+{
+    setWindowTitle(uiText("dialog.batch_export.title", QStringLiteral("Batch Export")));
+    setModal(true);
+    setMinimumWidth(kDialogMinWidth);
+    setStyleSheet(UiTheme::exportDialogStyleSheet());
+
+    auto* rootLayout = new QVBoxLayout(this);
+    rootLayout->setContentsMargins(16, 16, 16, 16);
+    rootLayout->setSpacing(12);
+
+    auto* topForm = new QGridLayout();
+    topForm->setHorizontalSpacing(10);
+    topForm->setVerticalSpacing(8);
+    int row = 0;
+
+    auto* difficultyLabelTitle = new QLabel(uiText("dialog.batch_export.difficulty", QStringLiteral("Difficulty")), this);
+    difficultyLabelTitle->setFixedWidth(kFormLabelWidth);
+    auto* difficultyValueLabel = new QLabel(difficultyLabel_, this);
+    topForm->addWidget(difficultyLabelTitle, row, 0);
+    topForm->addWidget(difficultyValueLabel, row, 1);
+    ++row;
+
+    auto* outputLabel = new QLabel(uiText("dialog.batch_export.output_dir", QStringLiteral("Output Folder")), this);
+    outputLabel->setFixedWidth(kFormLabelWidth);
+    outputDirectoryEdit_ = new QLineEdit(this);
+    outputDirectoryEdit_->setText(QDir::toNativeSeparators(exportBaseDirectory(baseTask_)));
+    outputDirectoryEdit_->setStyleSheet(batchExportLineEditStyleSheet());
+    auto* outputBrowseButton = new QPushButton(uiText("action.browse", QStringLiteral("Browse...")), this);
+    outputBrowseButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    connect(outputBrowseButton, &QPushButton::clicked, this, &BatchVideoExportDialog::browseOutputDirectory);
+    topForm->addWidget(outputLabel, row, 0);
+    topForm->addWidget(outputDirectoryEdit_, row, 1);
+    topForm->addWidget(outputBrowseButton, row, 2);
+    ++row;
+
+    auto* resolutionLabel = new QLabel(uiText("dialog.video_export.resolution", QStringLiteral("Resolution")), this);
+    resolutionLabel->setFixedWidth(kFormLabelWidth);
+    resolutionButton_ = createDialogMenuButton(this, exportDialogResolutionLabel(selectedResolution_));
+    resolutionMenu_ = new QMenu(resolutionButton_);
+    resolutionButton_->setMenu(resolutionMenu_);
+    for (const ResolutionPreset& preset : kResolutionPresets) {
+        addDialogMenuChoice(resolutionMenu_, QString::fromLatin1(preset.label), [this, preset]() {
+            selectedResolution_ = QSize(preset.width, preset.height);
+            if (resolutionButton_ != nullptr) {
+                resolutionButton_->setText(QString::fromLatin1(preset.label));
+            }
+        });
+    }
+    topForm->addWidget(resolutionLabel, row, 0);
+    topForm->addWidget(resolutionButton_, row, 1, 1, 2);
+    ++row;
+
+    auto* fpsLabel = new QLabel(uiText("dialog.video_export.fps", QStringLiteral("FPS")), this);
+    fpsLabel->setFixedWidth(kFormLabelWidth);
+    fpsButton_ = createDialogMenuButton(this, QStringLiteral("%1 FPS").arg(selectedFps_));
+    fpsMenu_ = new QMenu(fpsButton_);
+    fpsButton_->setMenu(fpsMenu_);
+    for (int fps : kFpsOptions) {
+        addDialogMenuChoice(fpsMenu_, QStringLiteral("%1 FPS").arg(fps), [this, fps]() {
+            selectedFps_ = fps;
+            if (fpsButton_ != nullptr) {
+                fpsButton_->setText(QStringLiteral("%1 FPS").arg(selectedFps_));
+            }
+        });
+    }
+    topForm->addWidget(fpsLabel, row, 0);
+    topForm->addWidget(fpsButton_, row, 1, 1, 2);
+    ++row;
+
+    auto* performanceLabel = new QLabel(uiText("dialog.video_export.performance", QStringLiteral("Performance")), this);
+    performanceLabel->setFixedWidth(kFormLabelWidth);
+    performanceButton_ = createDialogMenuButton(this, exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
+    performanceMenu_ = new QMenu(performanceButton_);
+    performanceButton_->setMenu(performanceMenu_);
+    addDialogMenuChoice(performanceMenu_, exportDialogPerformanceProfileLabel(VideoExportPerformanceProfile::Balanced), [this]() {
+        selectedPerformanceProfile_ = VideoExportPerformanceProfile::Balanced;
+        if (performanceButton_ != nullptr) {
+            performanceButton_->setText(exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
+        }
+    });
+    addDialogMenuChoice(performanceMenu_, exportDialogPerformanceProfileLabel(VideoExportPerformanceProfile::Speed), [this]() {
+        selectedPerformanceProfile_ = VideoExportPerformanceProfile::Speed;
+        if (performanceButton_ != nullptr) {
+            performanceButton_->setText(exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
+        }
+    });
+    topForm->addWidget(performanceLabel, row, 0);
+    topForm->addWidget(performanceButton_, row, 1, 1, 2);
+
+    rootLayout->addLayout(topForm);
+
+    auto* chartLabel = new QLabel(uiText("dialog.batch_export.chart_folders", QStringLiteral("Chart Folders")), this);
+    rootLayout->addWidget(chartLabel);
+
+    auto* chartSectionLayout = new QHBoxLayout();
+    chartSectionLayout->setSpacing(8);
+    chartDirectoryList_ = new QListWidget(this);
+    chartDirectoryList_->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    chartDirectoryList_->setMinimumHeight(180);
+    chartDirectoryList_->setStyleSheet(UiTheme::outlineListStyleSheet());
+    chartSectionLayout->addWidget(chartDirectoryList_, 1);
+
+    auto* chartButtonsLayout = new QVBoxLayout();
+    chartButtonsLayout->setSpacing(6);
+    auto* addButton = new QPushButton(uiText("dialog.batch_export.add_folders", QStringLiteral("Add Folders")), this);
+    addButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    connect(addButton, &QPushButton::clicked, this, &BatchVideoExportDialog::browseChartDirectories);
+    chartButtonsLayout->addWidget(addButton);
+    auto* removeButton = new QPushButton(uiText("dialog.batch_export.remove_selected", QStringLiteral("Remove Selected")), this);
+    removeButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    connect(removeButton, &QPushButton::clicked, this, &BatchVideoExportDialog::removeSelectedChartDirectories);
+    chartButtonsLayout->addWidget(removeButton);
+    auto* clearButton = new QPushButton(uiText("dialog.batch_export.clear", QStringLiteral("Clear")), this);
+    clearButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    connect(clearButton, &QPushButton::clicked, this, &BatchVideoExportDialog::clearChartDirectories);
+    chartButtonsLayout->addWidget(clearButton);
+    chartButtonsLayout->addStretch(1);
+    chartSectionLayout->addLayout(chartButtonsLayout);
+    rootLayout->addLayout(chartSectionLayout);
+
+    auto* optionsCard = new QFrame(this);
+    optionsCard->setObjectName(QStringLiteral("SettingsCard"));
+    auto* optionsLayout = new QGridLayout(optionsCard);
+    optionsLayout->setContentsMargins(12, 12, 12, 12);
+    optionsLayout->setHorizontalSpacing(10);
+    optionsLayout->setVerticalSpacing(8);
+    int optionRow = 0;
+
+    auto* checkboxRow = new QWidget(optionsCard);
+    auto* checkboxLayout = new QHBoxLayout(checkboxRow);
+    checkboxLayout->setContentsMargins(0, 0, 0, 0);
+    checkboxLayout->setSpacing(14);
+    showTimestampCheck_ = new QCheckBox(uiText("dialog.video_export.option.show_timestamp", QStringLiteral("Show timestamp")), optionsCard);
+    showTimestampCheck_->setChecked(baseTask_.showTimestamp);
+    showObjectStatsCheck_ = new QCheckBox(uiText("dialog.video_export.option.show_object_stats", QStringLiteral("Show object stats")), optionsCard);
+    showObjectStatsCheck_->setChecked(baseTask_.showObjectStatsHud);
+    smoothBrightnessCheck_ = new QCheckBox(uiText("dialog.video_export.option.smooth_brightness", QStringLiteral("Smooth brightness")), optionsCard);
+    smoothBrightnessCheck_->setChecked(baseTask_.smoothBrightness);
+    checkboxLayout->addWidget(showTimestampCheck_, 0);
+    checkboxLayout->addWidget(showObjectStatsCheck_, 0);
+    checkboxLayout->addWidget(smoothBrightnessCheck_, 0);
+    checkboxLayout->addStretch(1);
+    optionsLayout->addWidget(checkboxRow, optionRow, 0, 1, 2);
+    ++optionRow;
+
+    QWidget* outerBrightnessOption = createSliderOption(
+        optionsCard,
+        uiText("dialog.video_export.option.outer_brightness", QStringLiteral("Outer Brightness")),
+        qRound(qBound(0.0, baseTask_.backgroundBrightnessOuter, 1.0) * 100.0),
+        &brightnessOuterSlider_,
+        &brightnessOuterValueLabel_
+    );
+    optionsLayout->addWidget(outerBrightnessOption, optionRow, 0, 1, 2);
+    ++optionRow;
+
+    QWidget* innerBrightnessOption = createSliderOption(
+        optionsCard,
+        uiText("dialog.video_export.option.inner_brightness", QStringLiteral("Inner Brightness")),
+        qRound(qBound(0.0, baseTask_.backgroundBrightnessInner, 1.0) * 100.0),
+        &brightnessInnerSlider_,
+        &brightnessInnerValueLabel_
+    );
+    optionsLayout->addWidget(innerBrightnessOption, optionRow, 0, 1, 2);
+    ++optionRow;
+
+    QWidget* judgeLineOption = createSliderOption(
+        optionsCard,
+        uiText("dialog.video_export.option.judge_line_size", QStringLiteral("Judge Line Size")),
+        qRound(miacode::preview_video::normalizedLayoutSquareScale(baseTask_.layoutSquareScale) * 100.0),
+        &layoutSquareScaleSlider_,
+        &layoutSquareScaleValueLabel_
+    );
+    layoutSquareScaleSlider_->setRange(50, 150);
+    layoutSquareScaleSlider_->setSingleStep(1);
+    layoutSquareScaleSlider_->setPageStep(1);
+    optionsLayout->addWidget(judgeLineOption, optionRow, 0, 1, 2);
+    ++optionRow;
+
+    auto* scaleModeLabel = new QLabel(uiText("dialog.video_export.option.scale_mode", QStringLiteral("Background / PV Scale")), optionsCard);
+    backgroundScaleModeButton_ = createDialogMenuButton(optionsCard, exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
+    backgroundScaleModeMenu_ = new QMenu(backgroundScaleModeButton_);
+    backgroundScaleModeButton_->setMenu(backgroundScaleModeMenu_);
+    addDialogMenuChoice(backgroundScaleModeMenu_, exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode::FillCrop), [this]() {
+        selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
+        if (backgroundScaleModeButton_ != nullptr) {
+            backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
+        }
+    });
+    addDialogMenuChoice(backgroundScaleModeMenu_, exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode::FitContain), [this]() {
+        selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FitContain;
+        if (backgroundScaleModeButton_ != nullptr) {
+            backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
+        }
+    });
+    optionsLayout->addWidget(scaleModeLabel, optionRow, 0);
+    optionsLayout->addWidget(backgroundScaleModeButton_, optionRow, 1);
+    ++optionRow;
+
+    auto* flowSpeedLabel = new QLabel(uiText("dialog.video_export.option.flow_speed", QStringLiteral("Flow Speed")), optionsCard);
+    flowSpeedEdit_ = new QLineEdit(optionsCard);
+    flowSpeedEdit_->setAlignment(Qt::AlignCenter);
+    flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
+    flowSpeedEdit_->setStyleSheet(batchExportLineEditStyleSheet());
+    auto* flowValidator = new QDoubleValidator(
+        miacode::preview_gameplay::kPreviewTimingFlowSpeedMin,
+        miacode::preview_gameplay::kPreviewTimingFlowSpeedMax,
+        2,
+        flowSpeedEdit_
+    );
+    flowValidator->setNotation(QDoubleValidator::StandardNotation);
+    flowSpeedEdit_->setValidator(flowValidator);
+    optionsLayout->addWidget(flowSpeedLabel, optionRow, 0);
+    optionsLayout->addWidget(flowSpeedEdit_, optionRow, 1);
+
+    connect(brightnessOuterSlider_, &QSlider::valueChanged, this, [this](int value) {
+        if (brightnessOuterValueLabel_ != nullptr) {
+            brightnessOuterValueLabel_->setText(QStringLiteral("%1%").arg(value));
+        }
+    });
+    connect(brightnessInnerSlider_, &QSlider::valueChanged, this, [this](int value) {
+        if (brightnessInnerValueLabel_ != nullptr) {
+            brightnessInnerValueLabel_->setText(QStringLiteral("%1%").arg(value));
+        }
+    });
+    connect(layoutSquareScaleSlider_, &QSlider::valueChanged, this, [this](int value) {
+        if (layoutSquareScaleValueLabel_ != nullptr) {
+            layoutSquareScaleValueLabel_->setText(QStringLiteral("%1%").arg(value));
+        }
+    });
+
+    rootLayout->addWidget(optionsCard);
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);
+    auto* exportButton = new QPushButton(uiText("dialog.video_export.button.export", QStringLiteral("Export")), this);
+    exportButton->setMinimumWidth(kDialogActionButtonMinWidth);
+    exportButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet(true));
+    buttons->addButton(exportButton, QDialogButtonBox::AcceptRole);
+    if (QPushButton* cancelButton = buttons->button(QDialogButtonBox::Cancel); cancelButton != nullptr) {
+        cancelButton->setMinimumWidth(kDialogActionButtonMinWidth);
+        cancelButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+        connect(cancelButton, &QPushButton::clicked, this, &BatchVideoExportDialog::reject);
+    }
+    connect(exportButton, &QPushButton::clicked, this, &BatchVideoExportDialog::startExport);
+    rootLayout->addWidget(buttons);
+
+    loadPersistedSettings();
+}
+
+QStringList BatchVideoExportDialog::selectedChartDirectories() const
+{
+    QStringList directories;
+    for (int i = 0; i < chartDirectoryList_->count(); ++i) {
+        QListWidgetItem* item = chartDirectoryList_->item(i);
+        if (item == nullptr) {
+            continue;
+        }
+        const QString path = item->data(Qt::UserRole).toString();
+        if (!path.trimmed().isEmpty()) {
+            directories.append(path);
+        }
+    }
+    return directories;
+}
+
+QString BatchVideoExportDialog::outputDirectory() const
+{
+    return QDir::cleanPath(QDir::fromNativeSeparators(outputDirectoryEdit_->text().trimmed()));
+}
+
+void BatchVideoExportDialog::addChartDirectories(const QStringList& directories)
+{
+    QSet<QString> existing;
+    for (int i = 0; i < chartDirectoryList_->count(); ++i) {
+        if (QListWidgetItem* item = chartDirectoryList_->item(i); item != nullptr) {
+            existing.insert(item->data(Qt::UserRole).toString());
+        }
+    }
+
+    QStringList invalidDescriptions;
+    QString firstValidDirectory;
+
+    for (const QString& directory : directories) {
+        const QString normalized = QDir::cleanPath(directory.trimmed());
+        if (normalized.isEmpty() || existing.contains(normalized)) {
+            continue;
+        }
+        QString resolvedChartPath;
+        QString errorMessage;
+        if (!validateBatchChartDirectory(normalized, &resolvedChartPath, &errorMessage)) {
+            invalidDescriptions.append(
+                QStringLiteral("%1 - %2")
+                    .arg(QDir::toNativeSeparators(normalized), errorMessage)
+            );
+            continue;
+        }
+        existing.insert(normalized);
+        auto* item = new QListWidgetItem(QDir::toNativeSeparators(normalized), chartDirectoryList_);
+        item->setData(Qt::UserRole, normalized);
+        item->setData(Qt::UserRole + 1, resolvedChartPath);
+        if (firstValidDirectory.isEmpty()) {
+            firstValidDirectory = normalized;
+        }
+    }
+
+    if (!firstValidDirectory.isEmpty()) {
+        saveLastChartBrowseDirectory(firstValidDirectory);
+    }
+    if (!invalidDescriptions.isEmpty()) {
+        QMessageBox::warning(
+            this,
+            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
+            uiText(
+                "dialog.batch_export.error.invalid_selection",
+                QStringLiteral("Some folders were skipped because required files are missing.")
+            ) + QStringLiteral("\n\n") + invalidDescriptions.join(QLatin1Char('\n'))
+        );
+    }
+}
+
+void BatchVideoExportDialog::browseChartDirectories()
+{
+    QString startDir = lastChartBrowseDirectory();
+    if (startDir.trimmed().isEmpty()) {
+        startDir = outputDirectory();
+    }
+    if (startDir.trimmed().isEmpty()) {
+        startDir = exportBaseDirectory(baseTask_);
+    }
+    addChartDirectories(selectMultipleDirectories(this, startDir));
+}
+
+void BatchVideoExportDialog::browseOutputDirectory()
+{
+    QString startDir = lastOutputBrowseDirectory();
+    if (startDir.trimmed().isEmpty()) {
+        startDir = outputDirectory();
+    }
+    const QString selected = QFileDialog::getExistingDirectory(
+        this,
+        uiText("dialog.batch_export.output_dir", QStringLiteral("Output Folder")),
+        startDir.trimmed().isEmpty() ? exportBaseDirectory(baseTask_) : startDir
+    );
+    if (!selected.trimmed().isEmpty()) {
+        const QString normalized = QDir::cleanPath(selected);
+        outputDirectoryEdit_->setText(QDir::toNativeSeparators(normalized));
+        saveLastOutputBrowseDirectory(normalized);
+    }
+}
+
+void BatchVideoExportDialog::removeSelectedChartDirectories()
+{
+    qDeleteAll(chartDirectoryList_->selectedItems());
+}
+
+void BatchVideoExportDialog::clearChartDirectories()
+{
+    chartDirectoryList_->clear();
+}
+
+bool BatchVideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessage) const
+{
+    if (task == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("task is null");
+        }
+        return false;
+    }
+
+    bool flowSpeedOk = false;
+    const double flowSpeed = flowSpeedEdit_->text().trimmed().toDouble(&flowSpeedOk);
+    if (!flowSpeedOk) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText("dialog.video_export.error.invalid_flow_speed", QStringLiteral("Flow speed is invalid."));
+        }
+        return false;
+    }
+
+    task->outputWidth = selectedResolution_.width();
+    task->outputHeight = selectedResolution_.height();
+    task->fps = selectedFps_;
+    task->performanceProfile = selectedPerformanceProfile_;
+    task->showTimestamp = showTimestampCheck_ != nullptr && showTimestampCheck_->isChecked();
+    task->showObjectStatsHud = showObjectStatsCheck_ != nullptr && showObjectStatsCheck_->isChecked();
+    task->smoothBrightness = smoothBrightnessCheck_ != nullptr && smoothBrightnessCheck_->isChecked();
+    task->backgroundBrightnessOuter = qBound(0.0, brightnessOuterSlider_->value() / 100.0, 1.0);
+    task->backgroundBrightnessInner = qBound(0.0, brightnessInnerSlider_->value() / 100.0, 1.0);
+    task->layoutSquareScale = miacode::preview_video::normalizedLayoutSquareScale(layoutSquareScaleSlider_->value() / 100.0);
+    task->backgroundScaleMode = selectedBackgroundScaleMode_;
+    task->noteFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
+    return true;
+}
+
+void BatchVideoExportDialog::startExport()
+{
+    if (selectedChartDirectories().isEmpty()) {
+        QMessageBox::warning(
+            this,
+            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
+            uiText("dialog.batch_export.error.no_chart_dirs", QStringLiteral("Please add at least one chart folder."))
+        );
+        return;
+    }
+
+    const QString outputDir = outputDirectory();
+    if (outputDir.trimmed().isEmpty()) {
+        QMessageBox::warning(
+            this,
+            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
+            uiText("dialog.batch_export.error.no_output_dir", QStringLiteral("Please choose an output folder."))
+        );
+        return;
+    }
+
+    VideoExportTask task = baseTask_;
+    QString errorMessage;
+    if (!applyUiToTask(&task, &errorMessage)) {
+        QMessageBox::warning(
+            this,
+            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
+            errorMessage
+        );
+        return;
+    }
+
+    requestedTask_ = task;
+    saveLastOutputBrowseDirectory(outputDir);
+    savePersistedSettings(task);
+    exportRequested_ = true;
+    accept();
+}
+
+QSize BatchVideoExportDialog::selectedResolution() const
+{
+    return selectedResolution_;
+}
+
+QString BatchVideoExportDialog::lastChartBrowseDirectory() const
+{
+    QSettings settings = exportDialogSettingsStore();
+    settings.beginGroup(QStringLiteral("batch_video_export_dialog"));
+    const QString value = settings.value(batchExportChartBrowseDirectoryKey()).toString().trimmed();
+    settings.endGroup();
+    return QDir::cleanPath(QDir::fromNativeSeparators(value));
+}
+
+QString BatchVideoExportDialog::lastOutputBrowseDirectory() const
+{
+    QSettings settings = exportDialogSettingsStore();
+    settings.beginGroup(QStringLiteral("batch_video_export_dialog"));
+    const QString value = settings.value(batchExportOutputBrowseDirectoryKey()).toString().trimmed();
+    settings.endGroup();
+    return QDir::cleanPath(QDir::fromNativeSeparators(value));
+}
+
+void BatchVideoExportDialog::saveLastChartBrowseDirectory(const QString& directory) const
+{
+    if (directory.trimmed().isEmpty()) {
+        return;
+    }
+    QSettings settings = exportDialogSettingsStore();
+    settings.beginGroup(QStringLiteral("batch_video_export_dialog"));
+    settings.setValue(batchExportChartBrowseDirectoryKey(), QDir::cleanPath(directory));
+    settings.endGroup();
+}
+
+void BatchVideoExportDialog::saveLastOutputBrowseDirectory(const QString& directory) const
+{
+    if (directory.trimmed().isEmpty()) {
+        return;
+    }
+    QSettings settings = exportDialogSettingsStore();
+    settings.beginGroup(QStringLiteral("batch_video_export_dialog"));
+    settings.setValue(batchExportOutputBrowseDirectoryKey(), QDir::cleanPath(directory));
+    settings.endGroup();
+}
+
+void BatchVideoExportDialog::loadPersistedSettings()
+{
+    QSettings settings = exportDialogSettingsStore();
+    settings.beginGroup(QStringLiteral("video_export_dialog"));
+
+    const int savedWidth = settings.value(QStringLiteral("resolution_width"), selectedResolution_.width()).toInt();
+    const int savedHeight = settings.value(QStringLiteral("resolution_height"), selectedResolution_.height()).toInt();
+    if (savedWidth > 0 && savedHeight > 0) {
+        selectedResolution_ = QSize(savedWidth, savedHeight);
+        if (resolutionButton_ != nullptr) {
+            resolutionButton_->setText(exportDialogResolutionLabel(selectedResolution_));
+        }
+    }
+
+    const int savedFps = settings.value(QStringLiteral("fps"), selectedFps_).toInt();
+    selectedFps_ = savedFps >= 90 ? 120 : 60;
+    if (fpsButton_ != nullptr) {
+        fpsButton_->setText(QStringLiteral("%1 FPS").arg(selectedFps_));
+    }
+
+    const int savedProfile = settings.value(QStringLiteral("performance_profile"), static_cast<int>(selectedPerformanceProfile_)).toInt();
+    selectedPerformanceProfile_ = savedProfile == static_cast<int>(VideoExportPerformanceProfile::Speed)
+        ? VideoExportPerformanceProfile::Speed
+        : VideoExportPerformanceProfile::Balanced;
+    if (performanceButton_ != nullptr) {
+        performanceButton_->setText(exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
+    }
+
+    if (showTimestampCheck_ != nullptr) {
+        showTimestampCheck_->setChecked(settings.value(QStringLiteral("show_timestamp"), showTimestampCheck_->isChecked()).toBool());
+    }
+    if (showObjectStatsCheck_ != nullptr) {
+        showObjectStatsCheck_->setChecked(settings.value(QStringLiteral("show_object_stats_export"), showObjectStatsCheck_->isChecked()).toBool());
+    }
+    if (smoothBrightnessCheck_ != nullptr) {
+        smoothBrightnessCheck_->setChecked(settings.value(QStringLiteral("smooth_brightness"), smoothBrightnessCheck_->isChecked()).toBool());
+    }
+    if (brightnessOuterSlider_ != nullptr) {
+        brightnessOuterSlider_->setValue(settings.value(QStringLiteral("brightness_outer"), brightnessOuterSlider_->value()).toInt());
+    }
+    if (brightnessInnerSlider_ != nullptr) {
+        brightnessInnerSlider_->setValue(settings.value(QStringLiteral("brightness_inner"), brightnessInnerSlider_->value()).toInt());
+    }
+    if (layoutSquareScaleSlider_ != nullptr) {
+        layoutSquareScaleSlider_->setValue(settings.value(QStringLiteral("layout_square_scale"), layoutSquareScaleSlider_->value()).toInt());
+    }
+
+    const int savedScaleMode = settings.value(QStringLiteral("background_scale_mode"), static_cast<int>(selectedBackgroundScaleMode_)).toInt();
+    selectedBackgroundScaleMode_ = savedScaleMode == static_cast<int>(PreviewBackgroundScaleMode::FitContain)
+        ? PreviewBackgroundScaleMode::FitContain
+        : PreviewBackgroundScaleMode::FillCrop;
+    if (backgroundScaleModeButton_ != nullptr) {
+        backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
+    }
+
+    const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
+    const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
+    const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
+    const double savedFlowSpeed = settings.value(QStringLiteral("flow_speed"), selectedFlowSpeed_).toDouble();
+    selectedFlowSpeed_ = qBound(
+        flowSpeedMin,
+        flowSpeedMin + qRound((savedFlowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
+        flowSpeedMax
+    );
+    if (flowSpeedEdit_ != nullptr) {
+        flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
+    }
+
+    settings.endGroup();
+}
+
+void BatchVideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
+{
+    QSettings settings = exportDialogSettingsStore();
+    settings.beginGroup(QStringLiteral("video_export_dialog"));
+    settings.setValue(QStringLiteral("resolution_width"), task.outputWidth);
+    settings.setValue(QStringLiteral("resolution_height"), task.outputHeight);
+    settings.setValue(QStringLiteral("fps"), task.fps);
+    settings.setValue(QStringLiteral("performance_profile"), static_cast<int>(task.performanceProfile));
+    settings.setValue(QStringLiteral("show_timestamp"), task.showTimestamp);
+    settings.setValue(QStringLiteral("show_object_stats_export"), task.showObjectStatsHud);
+    settings.setValue(QStringLiteral("smooth_brightness"), task.smoothBrightness);
+    settings.setValue(QStringLiteral("brightness_outer"), qRound(qBound(0.0, task.backgroundBrightnessOuter, 1.0) * 100.0));
+    settings.setValue(QStringLiteral("brightness_inner"), qRound(qBound(0.0, task.backgroundBrightnessInner, 1.0) * 100.0));
+    settings.setValue(QStringLiteral("layout_square_scale"), qRound(miacode::preview_video::normalizedLayoutSquareScale(task.layoutSquareScale) * 100.0));
+    settings.setValue(QStringLiteral("background_scale_mode"), static_cast<int>(task.backgroundScaleMode));
+    settings.setValue(QStringLiteral("flow_speed"), task.noteFlowSpeed);
+    settings.endGroup();
+}

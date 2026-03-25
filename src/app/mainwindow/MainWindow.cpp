@@ -16,6 +16,7 @@
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriStaticChecker.h"
 #include "tools/video_export/VideoExportDialog.h"
+#include "tools/video_export/BatchVideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
 #include "common/AssetPaths.h"
 #include "common/PreviewSfxAssets.h"
@@ -240,6 +241,39 @@ QString sanitizeExportFileStem(QString text, const QString& fallback = QStringLi
         sanitized.chop(1);
     }
     return sanitized.isEmpty() ? fallback : sanitized;
+}
+
+QString videoExportPerformanceProfileToken(VideoExportPerformanceProfile profile)
+{
+    switch (profile) {
+    case VideoExportPerformanceProfile::Speed:
+        return QStringLiteral("speed");
+    case VideoExportPerformanceProfile::Balanced:
+    default:
+        return QStringLiteral("balanced");
+    }
+}
+
+QString videoExportBackgroundScaleModeToken(PreviewBackgroundScaleMode mode)
+{
+    switch (mode) {
+    case PreviewBackgroundScaleMode::FitContain:
+        return QStringLiteral("fit");
+    case PreviewBackgroundScaleMode::FillCrop:
+    default:
+        return QStringLiteral("fill");
+    }
+}
+
+QByteArray buildVideoExportWorkerStartPayload(const VideoExportSnapshot& snapshot)
+{
+    QJsonObject commandObject;
+    commandObject.insert(QStringLiteral("cmd"), QStringLiteral("start_export"));
+    commandObject.insert(QStringLiteral("protocol"), 1);
+    commandObject.insert(QStringLiteral("snapshot"), snapshot.toJson());
+    QByteArray payload = QJsonDocument(commandObject).toJson(QJsonDocument::Compact);
+    payload.append('\n');
+    return payload;
 }
 
 QString resolveInvalidStarPreviewReverseSoundPath()
@@ -1169,7 +1203,9 @@ QString resolveChartPathFromCliInput(const QString& inputPath)
 
     const QDir dir(info.absoluteFilePath());
     const QStringList preferredNames{
+        QStringLiteral("majdata.txt"),
         QStringLiteral("maidata.txt"),
+        QStringLiteral("majdata.simai"),
         QStringLiteral("maidata.simai"),
         QStringLiteral("chart.txt"),
         QStringLiteral("chart.simai"),
@@ -2444,6 +2480,19 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
 {
     if (bottomTabs_ != nullptr && watched == bottomTabs_->tabBar() && event->type() == QEvent::Wheel) {
         return true;
+    }
+    if (exportVideoButton_ != nullptr && watched == exportVideoButton_) {
+        if (event->type() == QEvent::Enter || event->type() == QEvent::HoverEnter || event->type() == QEvent::MouseMove) {
+            if (exportVideoHoverMenuTimer_ != nullptr && !QApplication::mouseButtons().testAnyFlag(Qt::AllButtons)) {
+                exportVideoHoverMenuTimer_->start();
+            }
+        } else if (event->type() == QEvent::Leave
+                   || event->type() == QEvent::MouseButtonPress
+                   || event->type() == QEvent::Hide) {
+            if (exportVideoHoverMenuTimer_ != nullptr) {
+                exportVideoHoverMenuTimer_->stop();
+            }
+        }
     }
     if (aboutIconLabel_ != nullptr && watched == aboutIconLabel_) {
         if (event->type() == QEvent::MouseButtonRelease) {
@@ -4458,6 +4507,208 @@ void MainWindow::onExportPreviewVideo()
     }
 }
 
+void MainWindow::onBatchExportPreviewVideo()
+{
+    if (!hasActiveDifficulty()) {
+        statusBar()->showMessage(uiText("dialog.batch_export.error.no_difficulty", QStringLiteral("No active difficulty is selected.")));
+        return;
+    }
+    if (previewCanvas_ == nullptr) {
+        statusBar()->showMessage(uiText("dialog.batch_export.error.no_preview", QStringLiteral("Preview canvas is not initialized.")));
+        return;
+    }
+    if (videoExportWorkerProcess_ != nullptr && videoExportWorkerProcess_->state() != QProcess::NotRunning) {
+        UiDialogs::showMessageBox(
+            QMessageBox::Warning,
+            this,
+            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
+            uiText("dialog.video_export.error.worker_busy", QStringLiteral("Another export is already running."))
+        );
+        return;
+    }
+    if (!legacyPygamePreviewEnabled_ && qtPreviewPlaying_) {
+        onTogglePreviewPause();
+    }
+
+    refreshTimelineMetadata();
+
+    const auto previewMarkerEndSecond = [](const TimelineNoteMarker& marker) {
+        double markerEnd = qMax(marker.second, marker.endSecond);
+        markerEnd = qMax(markerEnd, marker.slideTraceSecond);
+        markerEnd = qMax(markerEnd, marker.availableSecond);
+        for (double shootSecond : marker.slideSegmentShootSeconds) {
+            markerEnd = qMax(markerEnd, shootSecond);
+        }
+        return qMax(0.0, markerEnd);
+    };
+    double lastMarkerEndSecond = 0.0;
+    for (const TimelineNoteMarker& marker : previewStatsNoteMarkers_) {
+        lastMarkerEndSecond = qMax(lastMarkerEndSecond, previewMarkerEndSecond(marker));
+    }
+    const double cappedExportEndSecond = qMax(
+        0.0,
+        qMin(previewDurationSeconds(), lastMarkerEndSecond + 3.0)
+    );
+
+    VideoExportTask task;
+    task.chartPath = currentFilePath_;
+    task.trackPath = resolveDefaultTrackPath();
+    task.noteMarkers = previewStatsNoteMarkers_;
+    task.muriAnalysisReport = muriAnalysisReport_;
+    task.muriRenderOptions = muriRenderOptions_;
+    task.audioSettings = previewAudioSettings_;
+    task.backgroundBrightnessOuter = previewBackgroundBrightnessOuter_;
+    task.backgroundBrightnessInner = previewBackgroundBrightnessInner_;
+    task.layoutSquareScale = previewLayoutSquareScale_;
+    task.smoothBrightness = previewSmoothBrightness_;
+    task.backgroundScaleMode = previewBackgroundScaleMode_;
+    task.noteFlowSpeed = previewNoteFlowSpeed_;
+    task.exportStartSeconds = 0.0;
+    task.contentDurationSeconds = cappedExportEndSecond;
+    task.outputWidth = 1024;
+    task.outputHeight = 1024;
+    task.fps = 60;
+    task.performanceProfile = VideoExportPerformanceProfile::Balanced;
+    task.showTimestamp = previewShowTimestamp_;
+    task.showObjectStatsHud = exportShowObjectStatsHud_;
+
+    const QString difficultyToken = SimaiDocument::difficultyShortName(activeDifficultyId_);
+    BatchVideoExportDialog dialog(task, difficultyToken, this);
+    dialog.adjustSize();
+    dialog.exec();
+    if (!dialog.exportRequested()) {
+        return;
+    }
+
+    const QStringList chartDirectories = dialog.selectedChartDirectories();
+    const QString outputDirectory = dialog.outputDirectory();
+    const VideoExportTask requestedTask = dialog.requestedTaskTemplate();
+    if (chartDirectories.isEmpty()) {
+        return;
+    }
+    if (outputDirectory.trimmed().isEmpty()) {
+        UiDialogs::showMessageBox(
+            QMessageBox::Warning,
+            this,
+            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
+            uiText("dialog.batch_export.error.no_output_dir", QStringLiteral("Please choose an output folder."))
+        );
+        return;
+    }
+    if (!QDir().mkpath(outputDirectory)) {
+        UiDialogs::showMessageBox(
+            QMessageBox::Critical,
+            this,
+            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
+            uiText("dialog.batch_export.error.output_dir_create_failed", QStringLiteral("Failed to create output folder."))
+                + QStringLiteral("\n") + QDir::toNativeSeparators(outputDirectory)
+        );
+        return;
+    }
+
+    const int difficultyId = difficultyIdFromCliToken(difficultyToken);
+
+    QProgressDialog progress(
+        uiText("dialog.batch_export.progress.preparing", QStringLiteral("Preparing batch export...")),
+        uiText("dialog.video_export.button.cancel", QStringLiteral("Cancel")),
+        0,
+        chartDirectories.size(),
+        this
+    );
+    progress.setWindowTitle(uiText("dialog.batch_export.title", QStringLiteral("Batch Export")));
+    progress.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setMinimumDuration(0);
+    progress.setAutoClose(false);
+    progress.setAutoReset(false);
+    progress.setValue(0);
+    progress.show();
+
+    QStringList failedCharts;
+    int successCount = 0;
+    bool canceled = false;
+    for (int index = 0; index < chartDirectories.size(); ++index) {
+        const QString chartDirectory = chartDirectories[index];
+        progress.setValue(index);
+        progress.setLabelText(
+            uiText("dialog.batch_export.progress.exporting", QStringLiteral("Exporting %1/%2...\n%3"))
+                .arg(index + 1)
+                .arg(chartDirectories.size())
+                .arg(QDir::toNativeSeparators(chartDirectory))
+        );
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        if (progress.wasCanceled()) {
+            canceled = true;
+            break;
+        }
+
+        VideoExportSnapshot snapshot;
+        QString validationFailure;
+        if (!buildVideoExportSnapshotForChartDirectory(
+                chartDirectory,
+                difficultyId,
+                difficultyToken,
+                requestedTask,
+                outputDirectory,
+                &snapshot,
+                &validationFailure)) {
+            failedCharts.append(QDir::toNativeSeparators(chartDirectory) + QStringLiteral(" - ") + validationFailure);
+            continue;
+        }
+
+        QString failureText;
+        bool canceledThisItem = false;
+        if (!runVideoExportWorkerSync(snapshot, &progress, &canceledThisItem, &failureText)) {
+            if (canceledThisItem) {
+                canceled = true;
+                break;
+            }
+            failedCharts.append(QDir::toNativeSeparators(chartDirectory) + QStringLiteral(" - ") + failureText);
+            continue;
+        }
+
+        ++successCount;
+    }
+
+    progress.setValue(chartDirectories.size());
+    progress.hide();
+
+    if (canceled) {
+        UiDialogs::showMessageBox(
+            QMessageBox::Information,
+            this,
+            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
+            uiText("dialog.batch_export.message.canceled", QStringLiteral("Batch export canceled."))
+        );
+        return;
+    }
+
+    if (failedCharts.isEmpty()) {
+        UiDialogs::showMessageBox(
+            QMessageBox::Information,
+            this,
+            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
+            uiText("dialog.batch_export.message.success", QStringLiteral("Batch export completed: %1 file(s)."))
+                .arg(successCount)
+        );
+        return;
+    }
+
+    QString details = failedCharts.join(QLatin1Char('\n'));
+    if (details.size() > 3000) {
+        details = details.left(3000) + QStringLiteral("\n...");
+    }
+    UiDialogs::showMessageBox(
+        QMessageBox::Warning,
+        this,
+        uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
+        uiText("dialog.batch_export.message.partial_failed", QStringLiteral("Batch export finished with failures.\nSucceeded: %1\nFailed: %2"))
+            .arg(successCount)
+            .arg(failedCharts.size())
+            + QStringLiteral("\n\n") + details
+    );
+}
+
 bool MainWindow::buildVideoExportSnapshot(
     const VideoExportTask& requestedTask,
     VideoExportSnapshot* snapshot,
@@ -4534,11 +4785,156 @@ bool MainWindow::buildVideoExportSnapshot(
     return true;
 }
 
-bool MainWindow::launchVideoExportWorker(const VideoExportSnapshot& snapshot, QString* errorMessage)
+bool MainWindow::buildVideoExportSnapshotForChartDirectory(
+    const QString& chartDirectory,
+    int difficultyId,
+    const QString& difficultyToken,
+    const VideoExportTask& requestedTask,
+    const QString& outputDirectory,
+    VideoExportSnapshot* snapshot,
+    QString* errorMessage
+)
 {
-    if (videoExportWorkerProcess_ != nullptr && videoExportWorkerProcess_->state() != QProcess::NotRunning) {
+    if (snapshot != nullptr) {
+        *snapshot = VideoExportSnapshot();
+    }
+    if (errorMessage != nullptr) {
+        errorMessage->clear();
+    }
+
+    const QFileInfo directoryInfo(chartDirectory);
+    if (!directoryInfo.exists() || !directoryInfo.isDir()) {
         if (errorMessage != nullptr) {
-            *errorMessage = uiText("dialog.video_export.error.worker_busy", "Another export is already running.");
+            *errorMessage = uiText("dialog.batch_export.error.invalid_folder", "The selected path is not a valid folder.");
+        }
+        return false;
+    }
+
+    const QString chartPath = resolveChartPathFromCliInput(directoryInfo.absoluteFilePath());
+    if (chartPath.isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText("dialog.batch_export.error.missing_chart_file", "Missing majdata.txt (or maidata.txt).");
+        }
+        return false;
+    }
+
+    const QString trackPath = QDir(directoryInfo.absoluteFilePath()).filePath(QStringLiteral("track.mp3"));
+    if (!QFileInfo::exists(trackPath)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText("dialog.batch_export.error.missing_track_file", "Missing track.mp3.");
+        }
+        return false;
+    }
+
+    bool usedSystemEncoding = false;
+    const QString chartText = readTextFileWithFallbackEncoding(chartPath, &usedSystemEncoding);
+    if (chartText.isNull()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText(
+                "dialog.batch_export.error.read_chart_failed",
+                "Failed to read %1."
+            ).arg(QFileInfo(chartPath).fileName());
+        }
+        return false;
+    }
+
+    const SimaiDocument document = SimaiDocument::fromText(chartText);
+    const SimaiDifficultyData* difficulty = document.difficulty(difficultyId);
+    if (difficulty == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText(
+                "dialog.batch_export.error.missing_requested_difficulty",
+                "Requested difficulty is missing."
+            );
+        }
+        return false;
+    }
+
+    const auto validationLocale = UiText::isChineseUi()
+        ? SimaiNativeValidationLocale::Chinese
+        : SimaiNativeValidationLocale::English;
+    const SimaiNativeValidationReport report =
+        SimaiNativeParser::buildValidationReport(difficulty->chart, validationLocale);
+    if (report.errorCount > 0) {
+        QString issueSummary;
+        if (!report.issues.isEmpty()) {
+            issueSummary = report.issues.constFirst().displayMessage.trimmed();
+        }
+        if (errorMessage != nullptr) {
+            *errorMessage = issueSummary.isEmpty()
+                ? uiText(
+                      "dialog.batch_export.error.validation_failed_count",
+                      "Syntax check failed with %1 error(s)."
+                  ).arg(report.errorCount)
+                : uiText(
+                      "dialog.batch_export.error.validation_failed_detail",
+                      "Syntax check failed: %1"
+                  ).arg(issueSummary);
+        }
+        return false;
+    }
+
+    if (snapshot == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("export snapshot output is null");
+        }
+        return false;
+    }
+
+    const QString exportStem = sanitizeExportFileStem(document.title, directoryInfo.completeBaseName());
+    const QString difficultyName = SimaiDocument::difficultyShortName(difficultyId).replace(':', '_');
+    const QString defaultOutputName = QStringLiteral("%1_%2.mp4").arg(exportStem, difficultyName);
+
+    VideoExportSnapshot built;
+    built.jobId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    built.createdAtUtc = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    built.chartTextUtf8 = chartText;
+    built.difficultyId = difficultyId;
+    built.difficultyName = difficultyToken;
+    built.originalChartPath = chartPath;
+    built.projectDir = QFileInfo(chartPath).absolutePath();
+    built.trackPath = trackPath;
+    built.backgroundMediaPath = resolveExportBackgroundMediaPath(chartPath);
+    built.skinDirectory = resolvePreviewSkinDir();
+    built.audioSettings = requestedTask.audioSettings;
+    built.audioSettings.normalize();
+    built.backgroundBrightnessOuter = requestedTask.backgroundBrightnessOuter;
+    built.backgroundBrightnessInner = requestedTask.backgroundBrightnessInner;
+    built.layoutSquareScale = requestedTask.layoutSquareScale;
+    built.smoothBrightness = requestedTask.smoothBrightness;
+    built.backgroundScaleMode = requestedTask.backgroundScaleMode;
+    built.noteFlowSpeed = requestedTask.noteFlowSpeed;
+    built.muriRenderOptions = requestedTask.muriRenderOptions;
+    built.exportStartSeconds = requestedTask.exportStartSeconds;
+    built.contentDurationSeconds = requestedTask.contentDurationSeconds;
+    built.outputWidth = requestedTask.outputWidth;
+    built.outputHeight = requestedTask.outputHeight;
+    built.fps = requestedTask.fps;
+    built.performanceProfile = requestedTask.performanceProfile;
+    built.outputPath = QDir(outputDirectory).filePath(defaultOutputName);
+    built.showTimestamp = requestedTask.showTimestamp;
+    built.showObjectStatsHud = requestedTask.showObjectStatsHud;
+    built.skinLoadWaitMs = requestedTask.skinLoadWaitMs;
+
+    if (built.skinDirectory.trimmed().isEmpty()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText(
+                "dialog.batch_export.error.skin_missing",
+                "Preview skin assets were not found."
+            );
+        }
+        return false;
+    }
+
+    *snapshot = built;
+    return true;
+}
+
+bool MainWindow::startVideoExportWorkerProcess(QProcess* process, const VideoExportSnapshot& snapshot, QString* errorMessage)
+{
+    if (process == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("export worker process is null");
         }
         return false;
     }
@@ -4547,6 +4943,165 @@ bool MainWindow::launchVideoExportWorker(const VideoExportSnapshot& snapshot, QS
     if (executablePath.trimmed().isEmpty() || !QFileInfo::exists(executablePath)) {
         if (errorMessage != nullptr) {
             *errorMessage = uiText("dialog.video_export.error.executable_missing", "Failed to locate MiaCode executable.");
+        }
+        return false;
+    }
+
+    process->setProcessChannelMode(QProcess::SeparateChannels);
+    process->start(executablePath, QStringList{QStringLiteral("--export-video-worker")}, QIODevice::ReadWrite);
+    if (!process->waitForStarted(5000)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = process->errorString();
+        }
+        return false;
+    }
+
+    const QByteArray payload = buildVideoExportWorkerStartPayload(snapshot);
+    if (process->write(payload) != payload.size()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText(
+                "dialog.video_export.error.worker_write_failed",
+                "Failed to send export snapshot to worker."
+            );
+        }
+        process->kill();
+        process->waitForFinished(1000);
+        return false;
+    }
+    process->closeWriteChannel();
+    return true;
+}
+
+bool MainWindow::runVideoExportWorkerSync(
+    const VideoExportSnapshot& snapshot,
+    QProgressDialog* progressDialog,
+    bool* canceledByUser,
+    QString* errorMessage
+)
+{
+    if (errorMessage != nullptr) {
+        errorMessage->clear();
+    }
+    if (canceledByUser != nullptr) {
+        *canceledByUser = false;
+    }
+
+    QProcess process;
+    if (!startVideoExportWorkerProcess(&process, snapshot, errorMessage)) {
+        return false;
+    }
+
+    QByteArray stdoutBuffer;
+    QByteArray stderrBuffer;
+    bool finishedEventReceived = false;
+    bool success = false;
+    QString resultMessage;
+    QString resultDetails;
+
+    const auto parseStdoutLines = [&]() {
+        while (true) {
+            const int newlineIndex = stdoutBuffer.indexOf('\n');
+            if (newlineIndex < 0) {
+                break;
+            }
+            const QByteArray rawLine = stdoutBuffer.left(newlineIndex).trimmed();
+            stdoutBuffer.remove(0, newlineIndex + 1);
+            if (rawLine.isEmpty()) {
+                continue;
+            }
+            QJsonParseError parseError;
+            const QJsonDocument document = QJsonDocument::fromJson(rawLine, &parseError);
+            if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+                resultDetails += (resultDetails.isEmpty() ? QString() : QStringLiteral("\n")) + QString::fromUtf8(rawLine);
+                continue;
+            }
+            const QJsonObject object = document.object();
+            const QString eventType = object.value(QStringLiteral("event")).toString();
+            if (eventType == QLatin1String("progress")) {
+                const QString message = object.value(QStringLiteral("message")).toString();
+                if (progressDialog != nullptr && !message.trimmed().isEmpty()) {
+                    progressDialog->setLabelText(message);
+                }
+                continue;
+            }
+            if (eventType == QLatin1String("finished")) {
+                finishedEventReceived = true;
+                success = object.value(QStringLiteral("success")).toBool(false);
+                resultMessage = object.value(QStringLiteral("message")).toString();
+                resultDetails = object.value(QStringLiteral("details")).toString();
+            }
+        }
+    };
+
+    while (process.state() != QProcess::NotRunning) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        stdoutBuffer.append(process.readAllStandardOutput());
+        stderrBuffer.append(process.readAllStandardError());
+        parseStdoutLines();
+        if (progressDialog != nullptr && progressDialog->wasCanceled()) {
+            if (canceledByUser != nullptr) {
+                *canceledByUser = true;
+            }
+            process.kill();
+            process.waitForFinished(2000);
+            return false;
+        }
+        process.waitForFinished(50);
+    }
+
+    stdoutBuffer.append(process.readAllStandardOutput());
+    stderrBuffer.append(process.readAllStandardError());
+    parseStdoutLines();
+
+    const QString stderrText = QString::fromUtf8(stderrBuffer).trimmed();
+    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = !resultMessage.trimmed().isEmpty()
+                ? resultMessage
+                : (!stderrText.isEmpty()
+                    ? stderrText.split('\n').constFirst().trimmed()
+                    : uiText("dialog.batch_export.error.export_failed", QStringLiteral("Export failed.")));
+        }
+        return false;
+    }
+
+    if (!finishedEventReceived || !success) {
+        if (errorMessage != nullptr) {
+            *errorMessage = !resultMessage.trimmed().isEmpty()
+                ? resultMessage
+                : (!stderrText.isEmpty()
+                    ? stderrText.split('\n').constFirst().trimmed()
+                    : uiText("dialog.batch_export.error.export_failed", QStringLiteral("Export failed.")));
+        }
+        return false;
+    }
+
+    return true;
+}
+
+void MainWindow::showExportToolbarMenu()
+{
+    if (exportVideoButton_ == nullptr || exportVideoMenu_ == nullptr) {
+        return;
+    }
+    if (!exportVideoButton_->isVisible() || !exportVideoButton_->underMouse()) {
+        return;
+    }
+    if (QApplication::mouseButtons().testAnyFlag(Qt::AllButtons)) {
+        return;
+    }
+    if (exportVideoMenu_->isVisible()) {
+        return;
+    }
+    const QPoint globalPos = exportVideoButton_->mapToGlobal(QPoint(0, exportVideoButton_->height()));
+    exportVideoMenu_->popup(globalPos);
+}
+
+bool MainWindow::launchVideoExportWorker(const VideoExportSnapshot& snapshot, QString* errorMessage)
+{
+    if (videoExportWorkerProcess_ != nullptr && videoExportWorkerProcess_->state() != QProcess::NotRunning) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText("dialog.video_export.error.worker_busy", "Another export is already running.");
         }
         return false;
     }
@@ -4602,29 +5157,10 @@ bool MainWindow::launchVideoExportWorker(const VideoExportSnapshot& snapshot, QS
         handleVideoExportWorkerProcessFinished(exitCode, static_cast<int>(exitStatus));
     });
 
-    process->start(executablePath, QStringList{QStringLiteral("--export-video-worker")}, QIODevice::ReadWrite);
-    if (!process->waitForStarted(5000)) {
-        if (errorMessage != nullptr) {
-            *errorMessage = process->errorString();
-        }
+    if (!startVideoExportWorkerProcess(process, snapshot, errorMessage)) {
         clearVideoExportWorkerState();
         return false;
     }
-
-    QJsonObject commandObject;
-    commandObject.insert(QStringLiteral("cmd"), QStringLiteral("start_export"));
-    commandObject.insert(QStringLiteral("protocol"), 1);
-    commandObject.insert(QStringLiteral("snapshot"), snapshot.toJson());
-    QByteArray payload = QJsonDocument(commandObject).toJson(QJsonDocument::Compact);
-    payload.append('\n');
-    if (process->write(payload) != payload.size()) {
-        if (errorMessage != nullptr) {
-            *errorMessage = uiText("dialog.video_export.error.worker_write_failed", "Failed to send export snapshot to worker.");
-        }
-        clearVideoExportWorkerState();
-        return false;
-    }
-    process->closeWriteChannel();
     return true;
 }
 
@@ -5096,19 +5632,20 @@ bool MainWindow::exportPreviewVideoFromCli(
     task.muriAnalysisReport = muriAnalysisReport_;
     task.muriRenderOptions = muriRenderOptions_;
     task.audioSettings = previewAudioSettings_;
-    task.backgroundBrightnessOuter = previewBackgroundBrightnessOuter_;
-    task.backgroundBrightnessInner = previewBackgroundBrightnessInner_;
-    task.layoutSquareScale = previewLayoutSquareScale_;
-    task.smoothBrightness = previewSmoothBrightness_;
-    task.backgroundScaleMode = previewBackgroundScaleMode_;
-    task.noteFlowSpeed = previewNoteFlowSpeed_;
+    task.backgroundBrightnessOuter = request.backgroundBrightnessOuter;
+    task.backgroundBrightnessInner = request.backgroundBrightnessInner;
+    task.layoutSquareScale = request.layoutSquareScale;
+    task.smoothBrightness = request.smoothBrightness;
+    task.backgroundScaleMode = request.backgroundScaleMode;
+    task.noteFlowSpeed = request.noteFlowSpeed;
     task.exportStartSeconds = exportStartSeconds;
     task.contentDurationSeconds = contentDurationSeconds;
     task.outputWidth = request.outputWidth;
     task.outputHeight = request.outputHeight;
     task.fps = request.fps;
+    task.performanceProfile = request.performanceProfile;
     task.showTimestamp = request.showTimestamp;
-    task.showObjectStatsHud = exportShowObjectStatsHud_;
+    task.showObjectStatsHud = request.showObjectStatsHud;
     task.outputPath = outputPath;
 
     const VideoExportResult exportResult = VideoExportController::exportFullPreview(task, previewCanvas_, nullptr);

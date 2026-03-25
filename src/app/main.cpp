@@ -153,6 +153,12 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
         QStringLiteral("path")
     ));
     parser.addOption(QCommandLineOption(
+        QStringLiteral("performance"),
+        QStringLiteral("Export performance profile: balanced or speed."),
+        QStringLiteral("profile"),
+        QStringLiteral("balanced")
+    ));
+    parser.addOption(QCommandLineOption(
         QStringLiteral("start"),
         QStringLiteral("Export start second."),
         QStringLiteral("seconds"),
@@ -166,6 +172,44 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     parser.addOption(QCommandLineOption(
         QStringLiteral("hide-timestamp"),
         QStringLiteral("Hide timestamp overlay in output video.")
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("show-object-stats"),
+        QStringLiteral("Show object stats HUD in output video.")
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("smooth-brightness"),
+        QStringLiteral("Enable smooth brightness in output video.")
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("brightness-outer"),
+        QStringLiteral("Outer background brightness (0.0-1.0)."),
+        QStringLiteral("value"),
+        QString::number(miacode::preview_video::kBackgroundBrightnessDefault, 'f', 2)
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("brightness-inner"),
+        QStringLiteral("Inner background brightness (0.0-1.0)."),
+        QStringLiteral("value"),
+        QString::number(miacode::preview_video::kBackgroundBrightnessInnerDefault, 'f', 2)
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("layout-square-scale"),
+        QStringLiteral("Judge line size scale."),
+        QStringLiteral("value"),
+        QString::number(miacode::preview_video::kLayoutSquareScaleDefault, 'f', 2)
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("background-scale"),
+        QStringLiteral("Background scale mode: fill or fit."),
+        QStringLiteral("mode"),
+        QStringLiteral("fill")
+    ));
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("flow-speed"),
+        QStringLiteral("Note flow speed."),
+        QStringLiteral("value"),
+        QString::number(miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed, 'f', 2)
     ));
     parser.addOption(QCommandLineOption(
         QStringLiteral("skin-wait-ms"),
@@ -206,6 +250,16 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     const int fps = parser.value(QStringLiteral("fps")).toInt(&fpsOk);
     bool startOk = false;
     const double startSeconds = parser.value(QStringLiteral("start")).toDouble(&startOk);
+    const QString performanceToken = parser.value(QStringLiteral("performance")).trimmed().toLower();
+    bool outerBrightnessOk = false;
+    const double outerBrightness = parser.value(QStringLiteral("brightness-outer")).toDouble(&outerBrightnessOk);
+    bool innerBrightnessOk = false;
+    const double innerBrightness = parser.value(QStringLiteral("brightness-inner")).toDouble(&innerBrightnessOk);
+    bool layoutScaleOk = false;
+    const double layoutSquareScale = parser.value(QStringLiteral("layout-square-scale")).toDouble(&layoutScaleOk);
+    const QString backgroundScaleToken = parser.value(QStringLiteral("background-scale")).trimmed().toLower();
+    bool flowSpeedOk = false;
+    const double flowSpeed = parser.value(QStringLiteral("flow-speed")).toDouble(&flowSpeedOk);
     bool skinWaitOk = false;
     const int skinWaitMs = parser.value(QStringLiteral("skin-wait-ms")).toInt(&skinWaitOk);
 
@@ -239,6 +293,42 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
         }
         return 2;
     }
+    if (performanceToken != QStringLiteral("balanced") && performanceToken != QStringLiteral("speed")) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("--performance must be either balanced or speed");
+        }
+        return 2;
+    }
+    if (!outerBrightnessOk || !std::isfinite(outerBrightness) || outerBrightness < 0.0 || outerBrightness > 1.0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("--brightness-outer must be between 0.0 and 1.0");
+        }
+        return 2;
+    }
+    if (!innerBrightnessOk || !std::isfinite(innerBrightness) || innerBrightness < 0.0 || innerBrightness > 1.0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("--brightness-inner must be between 0.0 and 1.0");
+        }
+        return 2;
+    }
+    if (!layoutScaleOk || !std::isfinite(layoutSquareScale) || layoutSquareScale <= 0.0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("--layout-square-scale must be a positive number");
+        }
+        return 2;
+    }
+    if (backgroundScaleToken != QStringLiteral("fill") && backgroundScaleToken != QStringLiteral("fit")) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("--background-scale must be either fill or fit");
+        }
+        return 2;
+    }
+    if (!flowSpeedOk || !std::isfinite(flowSpeed) || flowSpeed <= 0.0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("--flow-speed must be a positive number");
+        }
+        return 2;
+    }
 
     double durationSeconds = -1.0;
     if (parser.isSet(QStringLiteral("duration"))) {
@@ -259,9 +349,21 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     request.outputWidth = outputWidth;
     request.outputHeight = outputHeight;
     request.fps = fps;
+    request.performanceProfile = performanceToken == QStringLiteral("speed")
+        ? VideoExportPerformanceProfile::Speed
+        : VideoExportPerformanceProfile::Balanced;
     request.exportStartSeconds = startSeconds;
     request.contentDurationSeconds = durationSeconds;
     request.showTimestamp = !parser.isSet(QStringLiteral("hide-timestamp"));
+    request.showObjectStatsHud = parser.isSet(QStringLiteral("show-object-stats"));
+    request.smoothBrightness = parser.isSet(QStringLiteral("smooth-brightness"));
+    request.backgroundBrightnessOuter = outerBrightness;
+    request.backgroundBrightnessInner = innerBrightness;
+    request.layoutSquareScale = layoutSquareScale;
+    request.backgroundScaleMode = backgroundScaleToken == QStringLiteral("fit")
+        ? PreviewBackgroundScaleMode::FitContain
+        : PreviewBackgroundScaleMode::FillCrop;
+    request.noteFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
     request.skinLoadWaitMs = skinWaitMs;
 
     MainWindow window;
@@ -506,4 +608,3 @@ int main(int argc, char* argv[])
     });
     return app.exec();
 }
-

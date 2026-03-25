@@ -71,9 +71,17 @@ public:
         int outputWidth = 1024;
         int outputHeight = 1024;
         int fps = 60;
+        VideoExportPerformanceProfile performanceProfile = VideoExportPerformanceProfile::Balanced;
         double exportStartSeconds = 0.0;
         double contentDurationSeconds = -1.0;
         bool showTimestamp = true;
+        bool showObjectStatsHud = false;
+        bool smoothBrightness = miacode::preview_video::kSmoothBrightnessDefault;
+        double backgroundBrightnessOuter = miacode::preview_video::kBackgroundBrightnessDefault;
+        double backgroundBrightnessInner = miacode::preview_video::kBackgroundBrightnessInnerDefault;
+        double layoutSquareScale = miacode::preview_video::kLayoutSquareScaleDefault;
+        PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
+        double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
         int skinLoadWaitMs = 2000;
     };
 
@@ -116,6 +124,7 @@ private slots:
     void onToggleTouchTrail(bool checked);
     void onEditStaticTapOnSlideThreshold();
     void onExportPreviewVideo();
+    void onBatchExportPreviewVideo();
     void onPreviewAudioSettings();
     void onPreviewVideoSettings();
     void onOpenLatencyDetector();
@@ -308,7 +317,24 @@ private:
         VideoExportSnapshot* snapshot,
         QString* errorMessage
     );
+    bool buildVideoExportSnapshotForChartDirectory(
+        const QString& chartDirectory,
+        int difficultyId,
+        const QString& difficultyToken,
+        const VideoExportTask& requestedTask,
+        const QString& outputDirectory,
+        VideoExportSnapshot* snapshot,
+        QString* errorMessage
+    );
+    bool startVideoExportWorkerProcess(QProcess* process, const VideoExportSnapshot& snapshot, QString* errorMessage);
+    bool runVideoExportWorkerSync(
+        const VideoExportSnapshot& snapshot,
+        QProgressDialog* progressDialog,
+        bool* canceledByUser,
+        QString* errorMessage
+    );
     bool launchVideoExportWorker(const VideoExportSnapshot& snapshot, QString* errorMessage);
+    void showExportToolbarMenu();
     void handleVideoExportWorkerStdout();
     void handleVideoExportWorkerStderr();
     void handleVideoExportWorkerEvent(const QJsonObject& eventObject);
@@ -477,6 +503,7 @@ private:
     QAction* stopPreviewAction_ = nullptr;
     QAction* pausePreviewAction_ = nullptr;
     QAction* exportVideoAction_ = nullptr;
+    QAction* batchExportVideoAction_ = nullptr;
     QAction* latencyDetectorAction_ = nullptr;
     QAction* toggleJudgeMarkersAction_ = nullptr;
     QAction* toggleTouchTrailAction_ = nullptr;
@@ -492,6 +519,7 @@ private:
     QTimer* qtPreviewTimer_ = nullptr;
     QTimer* qtPreviewTimelineTimer_ = nullptr;
     QTimer* previewSeekDebounceTimer_ = nullptr;
+    QTimer* exportVideoHoverMenuTimer_ = nullptr;
     QObject* editorViewport_ = nullptr;
     QProcess* previewProcess_ = nullptr;
     QProcess* videoExportWorkerProcess_ = nullptr;
@@ -652,6 +680,7 @@ private:
     QToolButton* pausePreviewButton_ = nullptr;
     QToolButton* syntaxCheckButton_ = nullptr;
     QToolButton* exportVideoButton_ = nullptr;
+    QMenu* exportVideoMenu_ = nullptr;
     QToolButton* previewAudioSettingsButton_ = nullptr;
     QToolButton* previewVideoSettingsButton_ = nullptr;
     QToolButton* latencyDetectorButton_ = nullptr;
