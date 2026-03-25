@@ -3,6 +3,7 @@
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "common/DebugOptions.h"
 
 #include <QApplication>
 #include <QCommandLineOption>
@@ -47,18 +48,6 @@ void setWindowsAppUserModelId()
     }
 }
 #endif
-
-bool startupTimingEnabled()
-{
-    static const bool enabled = []() {
-        const QString raw = qEnvironmentVariable(
-            "MIACODE_ENABLE_STARTUP_TIMING",
-            qEnvironmentVariable("MAIMURI_ENABLE_STARTUP_TIMING")
-        ).trimmed();
-        return raw == "1" || raw.compare("true", Qt::CaseInsensitive) == 0;
-    }();
-    return enabled;
-}
 
 bool wantsCliVideoExport(const QStringList& arguments)
 {
@@ -520,8 +509,8 @@ int main(int argc, char* argv[])
     QElapsedTimer startupTimer;
     startupTimer.start();
     qint64 lastStageMs = 0;
-    const QString startupLogPath = QDir::toNativeSeparators(QDir::temp().filePath("miacode_startup_timing.log"));
-    if (startupTimingEnabled()) {
+    const QString startupLogPath = QDir::toNativeSeparators(miacode::debug_options::startupTimingLogPath());
+    if (miacode::debug_options::startupTimingEnabled()) {
         QFile logFile(startupLogPath);
         if (logFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
             QTextStream out(&logFile);
@@ -531,7 +520,7 @@ int main(int argc, char* argv[])
         }
     }
     const auto logStartupStage = [&](const QString& stage) {
-        if (!startupTimingEnabled()) {
+        if (!miacode::debug_options::startupTimingEnabled()) {
             return;
         }
         const qint64 nowMs = startupTimer.elapsed();

@@ -96,6 +96,8 @@ Current repo-local helper scripts include:
 
 These are developer aids, not runtime dependencies. If a debugging workflow starts depending on one of them regularly, keep this list and its purpose notes up to date.
 
+Repo-wide debug flags and diagnostic env vars are indexed separately in `references/debug-flags.md`.
+
 ## 7. Dev Helper Binaries
 
 Defined in `CMakeLists.txt` behind `MIACODE_BUILD_DEV_TOOLS`:

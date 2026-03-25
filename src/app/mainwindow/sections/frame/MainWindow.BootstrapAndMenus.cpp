@@ -322,9 +322,10 @@ MainWindow::MainWindow(QWidget* parent)
     configureRuntimeDebugOutput();
     logStartupStage("configure_runtime_debug_output");
 
-    const QString legacyPreviewEnv = qEnvironmentVariable("MIACODE_ENABLE_PYGAME_PREVIEW", qEnvironmentVariable("MAIMURI_ENABLE_PYGAME_PREVIEW")).trimmed();
-    legacyPygamePreviewEnabled_ =
-        legacyPreviewEnv == "1" || legacyPreviewEnv.compare("true", Qt::CaseInsensitive) == 0;
+    legacyPygamePreviewEnabled_ = miacode::debug_options::envFlagEnabled(
+        "MIACODE_ENABLE_PYGAME_PREVIEW",
+        "MAIMURI_ENABLE_PYGAME_PREVIEW"
+    );
 
     setWindowModified(false);
     updateWindowTitle();

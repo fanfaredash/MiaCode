@@ -19,6 +19,7 @@
 #include "tools/video_export/BatchVideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
 #include "common/AssetPaths.h"
+#include "common/DebugOptions.h"
 #include "common/PreviewSfxAssets.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewInteractionConfig.h"
@@ -1930,21 +1931,14 @@ void MainWindow::updateBottomTabsDeviceHeight()
 
 namespace {
 
-bool hasRuntimeDebugArg(const QStringList& args)
-{
-    return args.contains("--miacode-debug")
-        || args.contains("--debug-runtime")
-        || args.contains("--enable-debug-output");
-}
-
 QString startupTimingLogPath()
 {
-    return QDir::temp().filePath("miacode_startup_timing.log");
+    return miacode::debug_options::startupTimingLogPath();
 }
 
 QString runtimeDebugLogPath()
 {
-    return QDir::temp().filePath("miacode_runtime_debug.log");
+    return miacode::debug_options::runtimeDebugLogPath();
 }
 
 bool probeStageMediaAvailable(const QString& chartPath)
@@ -1996,13 +1990,7 @@ QString resolveExportBackgroundMediaPath(const QString& chartPath)
 
 bool startupTimingEnabled()
 {
-    static const bool enabled = []() {
-        const QString raw = qEnvironmentVariable(
-            "MIACODE_ENABLE_STARTUP_TIMING",
-            qEnvironmentVariable("MAIMURI_ENABLE_STARTUP_TIMING")
-        ).trimmed();
-        return raw == "1" || raw.compare("true", Qt::CaseInsensitive) == 0;
-    }();
+    static const bool enabled = miacode::debug_options::startupTimingEnabled();
     return enabled;
 }
 
@@ -2027,7 +2015,7 @@ void appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 del
 void MainWindow::configureRuntimeDebugOutput()
 {
     const QStringList appArgs = QCoreApplication::arguments();
-    runtimeDebugOutputEnabled_ = hasRuntimeDebugArg(appArgs);
+    runtimeDebugOutputEnabled_ = miacode::debug_options::hasRuntimeDebugArg(appArgs);
     if (runtimeDebugOutputEnabled_) {
         qputenv("MIACODE_ENABLE_RUNTIME_DEBUG_OUTPUT", "1");
         QFile::remove(runtimeDebugLogPath());
