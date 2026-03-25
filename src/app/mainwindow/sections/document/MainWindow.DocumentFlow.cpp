@@ -1328,9 +1328,23 @@ void MainWindow::loadDocument(const SimaiDocument& document)
 
 void MainWindow::clearTimelineAndPreview()
 {
+    if (metadataRefreshTimer_ != nullptr) {
+        metadataRefreshTimer_->stop();
+    }
+    if (validationRefreshTimer_ != nullptr) {
+        validationRefreshTimer_->stop();
+    }
+    if (muriRefreshTimer_ != nullptr) {
+        muriRefreshTimer_->stop();
+    }
     timelineCursorNotes_.clear();
     previewFollowCursorNotes_.clear();
+    pendingMuriNoteMarkers_.clear();
+    pendingMuriNoteMarkerSignature_.clear();
     lastPreviewNoteMarkerSignature_.clear();
+    lastTimelineParseDifficultyId_ = 0;
+    lastTimelineParseChartText_.clear();
+    lastTimelineParseResult_ = SimaiNativeParseResult();
     muriAnalysisReport_ = MuriAnalysisReport();
     clearPreviewFollowDecoration();
     clearPreviewObjectStats();

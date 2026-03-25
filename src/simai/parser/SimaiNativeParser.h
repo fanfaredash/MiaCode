@@ -60,6 +60,7 @@ public:
     static bool invalidStarPreviewEnabled();
     static SimaiNativeValidationReport buildValidationReport(
         const QString& text,
-        SimaiNativeValidationLocale locale
+        SimaiNativeValidationLocale locale,
+        const SimaiNativeParseResult* lenientResult = nullptr
     );
 };
