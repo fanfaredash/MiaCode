@@ -146,6 +146,9 @@ private:
     void restorePlayheadIndicatorAfterInteraction();
     bool effectiveShowSlideTracks() const;
     void cycleZoomPreset();
+    void applyZoomPresetIndex(int nextIndex, double anchorSecond);
+    void stepZoomPreset(int deltaSteps, double anchorSecond);
+    bool handleAltZoomWheel(QWheelEvent* event);
     void updateZoomButtonAppearance();
     void layoutHeaderButtons();
     int lineNumberForSecond(double second) const;
@@ -173,8 +176,9 @@ private:
     QToolButton* zoomButton_ = nullptr;
     QCheckBox* followPreviewCheckBox_ = nullptr;
     QFont headerLineNumberFont_;
-    QVector<double> zoomPresets_{0.25, 0.5, 1.0, 1.5, 2.0};
-    int zoomPresetIndex_ = 2;
+    QVector<double> zoomPresets_;
+    QVector<double> buttonZoomPresets_;
+    int zoomPresetIndex_ = 0;
     bool timelineDragActive_ = false;
     int timelineDragStartX_ = 0;
     int timelineDragStartScrollValue_ = 0;

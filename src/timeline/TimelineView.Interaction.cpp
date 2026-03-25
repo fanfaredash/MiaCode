@@ -77,7 +77,13 @@ void TimelineView::mouseReleaseEvent(QMouseEvent* event)
 
 void TimelineView::wheelEvent(QWheelEvent* event)
 {
-    const int delta = event->angleDelta().y();
+    if (handleAltZoomWheel(event)) {
+        return;
+    }
+    int delta = event->angleDelta().y();
+    if (delta == 0) {
+        delta = event->angleDelta().x();
+    }
     if (delta != 0) {
         emit timelineUserInteractionStarted();
         suppressPlayheadIndicatorForInteraction();
