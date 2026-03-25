@@ -4,6 +4,11 @@ void parseTouchToken(ParseState* state, const QString& token, int lineNumber, in
         return;
     }
 
+    if (const QString fullwidthIssue = detectFullwidthSyntaxIssueMessage(token); !fullwidthIssue.isEmpty()) {
+        appendTokenError(state, lineNumber, column, fullwidthIssue, column + token.size() - 1);
+        return;
+    }
+
     QString normalizedToken = token;
     if (!state->strictMode
         && normalizedToken.size() >= 2
@@ -67,6 +72,11 @@ void parseTouchToken(ParseState* state, const QString& token, int lineNumber, in
 void parseTapOrHoldToken(ParseState* state, const QString& token, int lineNumber, int column, QVector<int>* groupIndices)
 {
     if (state == nullptr || token.isEmpty() || !isDigitLane(token.at(0))) {
+        return;
+    }
+
+    if (const QString fullwidthIssue = detectFullwidthSyntaxIssueMessage(token); !fullwidthIssue.isEmpty()) {
+        appendTokenError(state, lineNumber, column, fullwidthIssue, column + token.size() - 1);
         return;
     }
 
