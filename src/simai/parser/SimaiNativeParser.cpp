@@ -50,13 +50,13 @@ bool isDigitLane(QChar ch)
 
 bool isTouchPrefix(const QString& token)
 {
-    if (!token.isEmpty() && token.at(0).toUpper() == QChar('C')) {
+    if (!token.isEmpty() && token.at(0) == QChar('C')) {
         return true;
     }
     if (token.size() < 2) {
         return false;
     }
-    const QChar head = token.at(0).toUpper();
+    const QChar head = token.at(0);
     return (head == QChar('A') || head == QChar('B') || head == QChar('D') || head == QChar('E')) && isDigitLane(token.at(1));
 }
 
@@ -65,7 +65,7 @@ QString touchPadForToken(const QString& token)
     if (token.isEmpty()) {
         return QString();
     }
-    const QChar head = token.at(0).toUpper();
+    const QChar head = token.at(0);
     if (head == QChar('C')) {
         return QStringLiteral("C");
     }
@@ -80,7 +80,7 @@ int touchPrefixLength(const QString& token)
     if (token.isEmpty()) {
         return 0;
     }
-    const QChar head = token.at(0).toUpper();
+    const QChar head = token.at(0);
     if (head == QChar('C')) {
         return 1;
     }
@@ -148,14 +148,13 @@ bool parseTouchSuffix(
 
     auto parseModifierPart = [token, hasHold, hasFirework, hasBreak, errorMessage](const QString& modifierPart) {
         for (QChar ch : modifierPart) {
-            const QChar lower = ch.toLower();
-            if (lower == QChar('h')) {
+            if (ch == QChar('h')) {
                 *hasHold = true;
-            } else if (lower == QChar('f')) {
+            } else if (ch == QChar('f')) {
                 *hasFirework = true;
-            } else if (lower == QChar('b')) {
+            } else if (ch == QChar('b')) {
                 *hasBreak = true;
-            } else if (lower == QChar('x')) {
+            } else if (ch == QChar('x')) {
                 // Currently accepted for compatibility; touch ex is not bound yet.
             } else if (!ch.isSpace()) {
                 *errorMessage = QString("Invalid touch modifier: %1").arg(token);
@@ -234,7 +233,7 @@ QPointF touchPointForToken(const QString& token)
     if (token.isEmpty()) {
         return QPointF();
     }
-    const QChar head = token.at(0).toUpper();
+    const QChar head = token.at(0);
     if (head == QChar('C')) {
         return QPointF(kTouchCanvasCenter, kTouchCanvasCenter);
     }
