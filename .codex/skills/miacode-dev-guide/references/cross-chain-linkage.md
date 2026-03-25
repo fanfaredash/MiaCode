@@ -49,6 +49,7 @@ Canonical sync pair:
 Shared concerns:
 
 - which note kinds emit `answer`, `judge`, `break`, `ex`, `touch`, `touchhold`, `firework`
+- touch and touch-hold still emit `answer` when `isFirework` is set; firework is additive rather than replacing the hit-confirm sound
 - head-star behavior for slide and wifi
 - `sameHeadSlide` behavior
 - `trackBreak` vs `headBreak`

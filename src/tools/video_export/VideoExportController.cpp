@@ -2251,17 +2251,21 @@ void addClipToMix(
     double gain,
     qint64 startFrame,
     qint64 maxFrames,
+    qint64 clipStartFrame,
     QVector<float>* mix
 )
 {
-    if (mix == nullptr || !clip.isValid() || gain <= 0.0 || startFrame < 0) {
+    if (mix == nullptr || !clip.isValid() || gain <= 0.0 || startFrame < 0 || clipStartFrame < 0) {
         return;
     }
     const qint64 totalMixFrames = mix->size() / kMixChannels;
     if (startFrame >= totalMixFrames) {
         return;
     }
-    qint64 framesToMix = qMin(clip.frameCount(), totalMixFrames - startFrame);
+    if (clipStartFrame >= clip.frameCount()) {
+        return;
+    }
+    qint64 framesToMix = qMin(clip.frameCount() - clipStartFrame, totalMixFrames - startFrame);
     if (maxFrames >= 0) {
         framesToMix = qMin(framesToMix, maxFrames);
     }
@@ -2272,7 +2276,7 @@ void addClipToMix(
     const float gainF = static_cast<float>(gain);
     for (qint64 frame = 0; frame < framesToMix; ++frame) {
         const qint64 mixIndex = (startFrame + frame) * kMixChannels;
-        const qint64 clipIndex = frame * clip.channels;
+        const qint64 clipIndex = (clipStartFrame + frame) * clip.channels;
         float left = clip.samples[clipIndex];
         float right = clip.channels >= 2 ? clip.samples[clipIndex + 1] : left;
         (*mix)[mixIndex] += left * gainF;
@@ -2407,9 +2411,7 @@ void buildSfxTimeline(
             continue;
         }
         if (type == QLatin1String("touch")) {
-            if (!marker.isFirework) {
-                addEvent(marker.second, QStringLiteral("answer"));
-            }
+            addEvent(marker.second, QStringLiteral("answer"));
             addEvent(marker.second, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("touch"));
             if (marker.isFirework) {
                 addEvent(marker.second + 0.05, QStringLiteral("firework"));
@@ -2417,9 +2419,7 @@ void buildSfxTimeline(
             continue;
         }
         if (type == QLatin1String("touch_hold")) {
-            if (!marker.isFirework) {
-                addEvent(marker.second, QStringLiteral("answer"));
-            }
+            addEvent(marker.second, QStringLiteral("answer"));
             addEvent(marker.second, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("touch"));
             if (marker.isFirework && marker.endSecond >= 0.0) {
                 addEvent(marker.endSecond, QStringLiteral("firework"));
@@ -2590,12 +2590,21 @@ bool mixSfxTrackToWav(
             continue;
         }
         const qint64 startFrame = qRound64(shiftedSecond * kMixSampleRate);
-        addClipToMix(it.value(), mixedGain, startFrame, maxFrames, &mix);
+        addClipToMix(it.value(), mixedGain, startFrame, maxFrames, 0, &mix);
     }
 
     const auto touchholdIt = clips.constFind(QStringLiteral("touchhold"));
     if (touchholdIt != clips.constEnd() && settings.touchVolume > 0.0) {
         const DecodedClip& touchholdClip = touchholdIt.value();
+        struct MixTouchholdSpan {
+            qint64 startFrame = 0;
+            qint64 endFrame = 0;
+        };
+        QVector<MixTouchholdSpan> activeSpans;
+        activeSpans.reserve(spans.size());
+        QVector<qint64> boundaries;
+        boundaries.reserve(spans.size() * 2);
+        const qint64 totalMixFrames = mix.size() / kMixChannels;
         for (const ExportTouchholdSpan& span : spans) {
             if (span.endSecond <= span.startSecond) {
                 continue;
@@ -2609,7 +2618,53 @@ bool mixSfxTrackToWav(
             }
             const qint64 startFrame = qRound64(shiftedSecond * kMixSampleRate);
             const qint64 spanFrames = qRound64((span.endSecond - span.startSecond) * kMixSampleRate);
-            addClipToMix(touchholdClip, settings.touchVolume, startFrame, spanFrames, &mix);
+            const qint64 audibleEndFrame = qMin(startFrame + spanFrames, startFrame + touchholdClip.frameCount());
+            if (startFrame >= totalMixFrames || audibleEndFrame <= startFrame) {
+                continue;
+            }
+            MixTouchholdSpan mixSpan;
+            mixSpan.startFrame = startFrame;
+            mixSpan.endFrame = qMin(audibleEndFrame, totalMixFrames);
+            activeSpans.append(mixSpan);
+            boundaries.append(mixSpan.startFrame);
+            boundaries.append(mixSpan.endFrame);
+        }
+        if (!activeSpans.isEmpty()) {
+            std::sort(boundaries.begin(), boundaries.end());
+            boundaries.erase(std::unique(boundaries.begin(), boundaries.end()), boundaries.end());
+            for (int boundaryIndex = 0; boundaryIndex + 1 < boundaries.size(); ++boundaryIndex) {
+                const qint64 intervalStart = boundaries.at(boundaryIndex);
+                const qint64 intervalEnd = boundaries.at(boundaryIndex + 1);
+                if (intervalEnd <= intervalStart) {
+                    continue;
+                }
+
+                QVector<const MixTouchholdSpan*> overlappingSpans;
+                overlappingSpans.reserve(activeSpans.size());
+                for (const MixTouchholdSpan& span : activeSpans) {
+                    if (span.startFrame < intervalEnd && span.endFrame > intervalStart) {
+                        overlappingSpans.append(&span);
+                    }
+                }
+                if (overlappingSpans.isEmpty()) {
+                    continue;
+                }
+
+                const double totalCopies = previewTouchholdAggregatePlaybackCopies(overlappingSpans.size());
+                const double perSpanGain =
+                    qBound(0.0, settings.touchVolume * (totalCopies / static_cast<double>(overlappingSpans.size())), 1.5);
+                for (const MixTouchholdSpan* span : overlappingSpans) {
+                    const qint64 clipStartFrame = intervalStart - span->startFrame;
+                    addClipToMix(
+                        touchholdClip,
+                        perSpanGain,
+                        intervalStart,
+                        intervalEnd - intervalStart,
+                        clipStartFrame,
+                        &mix
+                    );
+                }
+            }
         }
     }
 

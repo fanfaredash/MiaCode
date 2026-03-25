@@ -45,6 +45,7 @@ struct PreviewAudioSettings {
 };
 
 constexpr double kPreviewSfxSameKindBoostGain = 1.5;
+constexpr double kPreviewTouchholdMaxPlaybackCopies = 1.5;
 
 inline QString previewSfxNormalizedKind(const QString& kind)
 {
@@ -96,6 +97,11 @@ inline int previewSfxAggregatePlaybackCopies(const QString& kind, int count)
     return 1;
 }
 
+inline double previewTouchholdAggregatePlaybackCopies(int count)
+{
+    return qBound(0.0, qMin(kPreviewTouchholdMaxPlaybackCopies, static_cast<double>(count)), kPreviewTouchholdMaxPlaybackCopies);
+}
+
 inline double previewSfxPlaybackGainForAggregate(const QString& kind, int count, double maxGain)
 {
     double gain = qMax(0.0, maxGain);
@@ -121,19 +127,19 @@ inline double previewSfxVolumeForKind(const PreviewAudioSettings& settings, cons
         return settings.judgeVolume * 0.25;
     }
     if (lowered == "judge_break" || lowered == "break_touch") {
-        return settings.breakVolume * 0.25;
+        return settings.breakVolume * 0.5;
     }
     if (lowered == "slide") {
         return settings.slideVolume * 0.25;
     }
     if (lowered == "break") {
-        return settings.breakVolume * 0.25;
+        return settings.breakVolume * 0.5;
     }
     if (lowered == "break_slide"
         || lowered == "break_slide_start"
         || lowered == "break_slide_finish"
         || lowered == "judge_break_slide") {
-        return settings.breakSlideVolume * 0.25;
+        return settings.breakSlideVolume * 0.5;
     }
     if (lowered == "ex") {
         return settings.exVolume * 0.25;
@@ -142,7 +148,7 @@ inline double previewSfxVolumeForKind(const PreviewAudioSettings& settings, cons
         return settings.touchVolume * 0.25;
     }
     if (lowered == "firework") {
-        return settings.fireworkVolume * 0.25;
+        return settings.fireworkVolume * 0.5;
     }
     return 0.0;
 }

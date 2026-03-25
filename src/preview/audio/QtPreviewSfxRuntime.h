@@ -76,6 +76,7 @@ private:
     double stretchedBackgroundPlaybackSecond() const;
     void applyVolumes();
     bool playKindInternal(const QString& kind, double gain = 1.0);
+    void updateTouchholdVoiceVolumes();
     void startTouchholdSpan(int spanIndex, double offsetSeconds);
     void stopTouchholdSpan(int spanIndex);
     bool playTouchholdAudition();
