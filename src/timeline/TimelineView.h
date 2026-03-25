@@ -10,6 +10,7 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 #include <QToolButton>
 #include <QVector>
 #include <QEvent>
@@ -113,6 +114,7 @@ signals:
     void playheadChanged(double second);
     void noteNavigateRequested(int line, int col);
     void headerNavigateRequested(double second);
+    void centerNavigateRequested(double second);
     void timelineDragStarted();
     void timelineUserInteractionStarted();
     void followPreviewToggled(bool enabled);
@@ -138,6 +140,10 @@ private:
     int notePixelSize() const;
     int secondToX(double second) const;
     double xToSecond(int x) const;
+    double viewportCenterSecond() const;
+    void updateCursorToViewportCenter(bool emitNavigate = true);
+    void suppressPlayheadIndicatorForInteraction();
+    void restorePlayheadIndicatorAfterInteraction();
     bool effectiveShowSlideTracks() const;
     void cycleZoomPreset();
     void updateZoomButtonAppearance();
@@ -172,4 +178,6 @@ private:
     bool timelineDragActive_ = false;
     int timelineDragStartX_ = 0;
     int timelineDragStartScrollValue_ = 0;
+    bool playheadIndicatorSuppressed_ = false;
+    QTimer* playheadIndicatorRestoreTimer_ = nullptr;
 };

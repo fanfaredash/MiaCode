@@ -423,21 +423,21 @@ void TimelineView::paintEvent(QPaintEvent* event)
         }
     }
 
+    const int playheadX = secondToX(playheadSeconds_) - xOffset;
+    if (!playheadIndicatorSuppressed_ && playheadX > left) {
+        painter.save();
+        painter.setClipRect(timelineRect);
+        painter.setPen(QPen(c.timelinePlayhead, 2));
+        painter.drawLine(playheadX, top, playheadX, top + h);
+        painter.restore();
+    }
+
     const int cursorX = secondToX(cursorSeconds_) - xOffset;
     if (cursorX > left) {
         painter.save();
         painter.setClipRect(timelineRect);
         painter.setPen(QPen(c.timelineCursor, 2));
         painter.drawLine(cursorX, top, cursorX, top + h);
-        painter.restore();
-    }
-
-    const int playheadX = secondToX(playheadSeconds_) - xOffset;
-    if (playheadX > left) {
-        painter.save();
-        painter.setClipRect(timelineRect);
-        painter.setPen(QPen(c.timelinePlayhead, 2));
-        painter.drawLine(playheadX, top, playheadX, top + h);
         painter.restore();
     }
 

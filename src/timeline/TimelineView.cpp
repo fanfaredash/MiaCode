@@ -97,6 +97,16 @@ TimelineView::TimelineView(QWidget* parent)
     updateZoomButtonAppearance();
     loadNoteIcons();
     refreshMinimumHeightForCurrentDevice();
+    playheadIndicatorRestoreTimer_ = new QTimer(this);
+    playheadIndicatorRestoreTimer_->setSingleShot(true);
+    playheadIndicatorRestoreTimer_->setInterval(180);
+    connect(playheadIndicatorRestoreTimer_, &QTimer::timeout, this, [this]() {
+        if (timelineDragActive_) {
+            return;
+        }
+        playheadIndicatorSuppressed_ = false;
+        viewport()->update();
+    });
     updateHorizontalRange();
 }
 

@@ -1201,6 +1201,20 @@ MainWindow::MainWindow(QWidget* parent)
             updatePauseButtonAppearance();
         }
     });
+    connect(timelineView_, &TimelineView::centerNavigateRequested, this, [this](double second) {
+        const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+        const bool shouldRenderNow = !previewScrubRenderElapsed_.isValid()
+            || previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs;
+        if (shouldRenderNow) {
+            if (previewSeekDebounceTimer_ != nullptr) {
+                previewSeekDebounceTimer_->stop();
+            }
+            seekPreviewToSecond(clampedSecond, false);
+            previewScrubRenderElapsed_.restart();
+        } else {
+            schedulePreviewSeek(clampedSecond, false);
+        }
+    });
     connect(timelineView_, &TimelineView::followPreviewToggled, this, [this](bool enabled) {
         if (!enabled) {
             clearPreviewFollowDecoration();
