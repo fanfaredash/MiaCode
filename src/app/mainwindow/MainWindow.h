@@ -14,6 +14,7 @@
 #include "PreviewAudioSettings.h"
 #include "PreviewRenderSettings.h"
 #include "SimaiDocument.h"
+#include "SimaiNativeParser.h"
 #include "TimelineView.h"
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
@@ -239,6 +240,8 @@ private:
     void refreshWaveformCache();
     void scheduleTimelineRefresh();
     void refreshTimelineMetadata();
+    void scheduleDeferredMuriRefresh(const QVector<TimelineNoteMarker>& noteMarkers, const QByteArray& noteMarkerSignature);
+    void refreshDeferredMuriDiagnostics();
     void seekTimelineToCursor(int line, int col);
     void syncTimelineToEditorCursor(bool centerView = true);
     void navigateTimelineToSecond(double second, bool focusEditor = true);
@@ -516,6 +519,7 @@ private:
     QLabel* currentFileLabel_ = nullptr;
     QTimer* metadataRefreshTimer_ = nullptr;
     QTimer* validationRefreshTimer_ = nullptr;
+    QTimer* muriRefreshTimer_ = nullptr;
     QTimer* qtPreviewTimer_ = nullptr;
     QTimer* qtPreviewTimelineTimer_ = nullptr;
     QTimer* previewSeekDebounceTimer_ = nullptr;
@@ -540,8 +544,13 @@ private:
     QString currentFilePath_;
     QString lastOpenDir_;
     QString lastTrackPath_;
+    int lastTimelineParseDifficultyId_ = 0;
+    QString lastTimelineParseChartText_;
+    SimaiNativeParseResult lastTimelineParseResult_;
     QVector<TimelineCursorNote> timelineCursorNotes_;
     QVector<TimelineCursorNote> previewFollowCursorNotes_;
+    QVector<TimelineNoteMarker> pendingMuriNoteMarkers_;
+    QByteArray pendingMuriNoteMarkerSignature_;
     QByteArray lastPreviewNoteMarkerSignature_;
     TextEncoding currentEncoding_ = TextEncoding::Utf8;
     int previewArrangeRetryCount_ = 0;

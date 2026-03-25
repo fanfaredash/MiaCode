@@ -582,7 +582,8 @@ bool SimaiNativeParser::invalidStarPreviewEnabled()
 
 SimaiNativeValidationReport SimaiNativeParser::buildValidationReport(
     const QString& text,
-    SimaiNativeValidationLocale locale)
+    SimaiNativeValidationLocale locale,
+    const SimaiNativeParseResult* lenientResult)
 {
     SimaiNativeValidationReport report;
 
@@ -602,16 +603,21 @@ SimaiNativeValidationReport SimaiNativeParser::buildValidationReport(
         return report;
     }
 
-    const SimaiNativeParseResult lenientResult = parseForTimeline(text);
+    SimaiNativeParseResult lenientOwned;
+    const SimaiNativeParseResult* effectiveLenientResult = lenientResult;
+    if (effectiveLenientResult == nullptr) {
+        lenientOwned = parseForTimeline(text);
+        effectiveLenientResult = &lenientOwned;
+    }
     const SimaiNativeParseResult strictResult = validateSyntax(text);
 
-    report.lenientNoteCount = lenientResult.noteMarkers.size();
-    report.lenientErrorCount = lenientResult.errors.size();
+    report.lenientNoteCount = effectiveLenientResult->noteMarkers.size();
+    report.lenientErrorCount = effectiveLenientResult->errors.size();
     report.strictNoteCount = strictResult.noteMarkers.size();
     report.strictErrorCount = strictResult.errors.size();
 
     QSet<QString> lenientErrorKeys;
-    for (const SimaiNativeMessage& error : lenientResult.errors) {
+    for (const SimaiNativeMessage& error : effectiveLenientResult->errors) {
         lenientErrorKeys.insert(makeValidationMessageKey(error));
     }
 

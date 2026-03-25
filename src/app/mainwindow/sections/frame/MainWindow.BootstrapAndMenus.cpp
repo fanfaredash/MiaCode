@@ -1429,15 +1429,20 @@ MainWindow::MainWindow(QWidget* parent)
 
     metadataRefreshTimer_ = new QTimer(this);
     metadataRefreshTimer_->setSingleShot(true);
-    metadataRefreshTimer_->setInterval(0);
+    metadataRefreshTimer_->setInterval(75);
     connect(metadataRefreshTimer_, &QTimer::timeout, this, &MainWindow::refreshTimelineMetadata);
 
     validationRefreshTimer_ = new QTimer(this);
     validationRefreshTimer_->setSingleShot(true);
-    validationRefreshTimer_->setInterval(180);
+    validationRefreshTimer_->setInterval(220);
     connect(validationRefreshTimer_, &QTimer::timeout, this, [this]() {
         (void)runValidateSimaiSilently(false);
     });
+
+    muriRefreshTimer_ = new QTimer(this);
+    muriRefreshTimer_->setSingleShot(true);
+    muriRefreshTimer_->setInterval(280);
+    connect(muriRefreshTimer_, &QTimer::timeout, this, &MainWindow::refreshDeferredMuriDiagnostics);
 
     qtPreviewTimer_ = new QTimer(this);
     qtPreviewTimer_->setInterval(16);

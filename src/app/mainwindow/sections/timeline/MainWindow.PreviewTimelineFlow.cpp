@@ -336,6 +336,9 @@ QString MainWindow::resolvePreviewSessionScriptPath() const
 
 void MainWindow::scheduleTimelineRefresh()
 {
+    if (muriRefreshTimer_ != nullptr) {
+        muriRefreshTimer_->stop();
+    }
     if (metadataRefreshTimer_ == nullptr) {
         return;
     }
@@ -351,8 +354,20 @@ void MainWindow::refreshTimelineMetadata()
     if (timelineView_ == nullptr || !hasActiveDifficulty()) {
         return;
     }
+
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    qint64 stageStartNs = totalTimer.nsecsElapsed();
+    const auto finishStageMs = [&totalTimer, &stageStartNs]() -> double {
+        const qint64 nowNs = totalTimer.nsecsElapsed();
+        const double elapsedMs = static_cast<double>(nowNs - stageStartNs) / 1000000.0;
+        stageStartNs = nowNs;
+        return elapsedMs;
+    };
+
     const QString chartText = activeChartText();
-    const SimaiNativeParseResult nativeResult = SimaiNativeParser::parseForTimeline(chartText);
+    SimaiNativeParseResult nativeResult = SimaiNativeParser::parseForTimeline(chartText);
+    const double parseMs = finishStageMs();
     const double firstSeconds = parsedFirstSeconds();
     QVector<TimelineBeatMarker> beatMarkers = shiftedBeatMarkers(nativeResult.beatMarkers, firstSeconds);
     QVector<TimelineNoteMarker> noteMarkers = shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds);
@@ -467,6 +482,7 @@ void MainWindow::refreshTimelineMetadata()
         break;
     }
     }
+    const double cursorModelMs = finishStageMs();
 
     double durationSeconds = qMax(0.0, nativeResult.durationSeconds + firstSeconds);
     {
@@ -480,6 +496,9 @@ void MainWindow::refreshTimelineMetadata()
             durationSeconds = qMax(durationSeconds, marker.second);
         }
     }
+    lastTimelineParseDifficultyId_ = activeDifficultyId();
+    lastTimelineParseChartText_ = chartText;
+    lastTimelineParseResult_ = nativeResult;
 
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->configureTimeline(noteMarkers);
@@ -495,22 +514,102 @@ void MainWindow::refreshTimelineMetadata()
             previewSfxRuntime_->syncTouchholdVoices(currentSecond);
         }
     }
+    const double audioTimelineMs = finishStageMs();
     refreshPreviewObjectStatsTotals(noteMarkers);
-    muriAnalysisReport_ = MuriAnalyzer::analyze(noteMarkers);
-    rebuildStaticMuriReferences(noteMarkers);
 
     timelineView_->setTimelineData(beatMarkers, noteMarkers, durationSeconds);
-    timelineView_->setMuriAnalysisReport(muriAnalysisReport_);
-    refreshMuriDiagnosticsPanel();
     updatePreviewSliderRange();
+    const QByteArray newSignature = noteMarkerSignature(noteMarkers);
     if (previewCanvas_ != nullptr) {
-        const QByteArray newSignature = noteMarkerSignature(noteMarkers);
         if (newSignature != lastPreviewNoteMarkerSignature_) {
             previewCanvas_->setNoteMarkers(noteMarkers);
             lastPreviewNoteMarkerSignature_ = newSignature;
         }
+    }
+    const double fastUiMs = finishStageMs();
+    scheduleDeferredMuriRefresh(noteMarkers, newSignature);
+
+    if (runtimeDebugOutputEnabled_) {
+        appendOutput(
+            "edit/metadata_perf",
+            QStringLiteral(
+                "total=%1ms parse=%2ms cursor_model=%3ms audio_timeline=%4ms fast_ui=%5ms notes=%6 beats=%7"
+            )
+                .arg(QString::number(static_cast<double>(totalTimer.nsecsElapsed()) / 1000000.0, 'f', 2))
+                .arg(QString::number(parseMs, 'f', 2))
+                .arg(QString::number(cursorModelMs, 'f', 2))
+                .arg(QString::number(audioTimelineMs, 'f', 2))
+                .arg(QString::number(fastUiMs, 'f', 2))
+                .arg(noteMarkers.size())
+                .arg(beatMarkers.size())
+        );
+    }
+}
+
+void MainWindow::scheduleDeferredMuriRefresh(
+    const QVector<TimelineNoteMarker>& noteMarkers,
+    const QByteArray& noteMarkerSignature)
+{
+    pendingMuriNoteMarkers_ = noteMarkers;
+    pendingMuriNoteMarkerSignature_ = noteMarkerSignature;
+    if (muriRefreshTimer_ == nullptr) {
+        refreshDeferredMuriDiagnostics();
+        return;
+    }
+    muriRefreshTimer_->stop();
+    muriRefreshTimer_->start();
+}
+
+void MainWindow::refreshDeferredMuriDiagnostics()
+{
+    if (!hasActiveDifficulty()) {
+        return;
+    }
+
+    const QVector<TimelineNoteMarker> noteMarkers = pendingMuriNoteMarkers_;
+    const QByteArray noteMarkerSignature = pendingMuriNoteMarkerSignature_;
+    if (previewCanvas_ != nullptr
+        && !noteMarkerSignature.isEmpty()
+        && noteMarkerSignature != lastPreviewNoteMarkerSignature_) {
+        return;
+    }
+
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    qint64 stageStartNs = totalTimer.nsecsElapsed();
+    const auto finishStageMs = [&totalTimer, &stageStartNs]() -> double {
+        const qint64 nowNs = totalTimer.nsecsElapsed();
+        const double elapsedMs = static_cast<double>(nowNs - stageStartNs) / 1000000.0;
+        stageStartNs = nowNs;
+        return elapsedMs;
+    };
+
+    muriAnalysisReport_ = MuriAnalyzer::analyze(noteMarkers);
+    const double analyzeMs = finishStageMs();
+    rebuildStaticMuriReferences(noteMarkers);
+    const double staticRefMs = finishStageMs();
+
+    if (timelineView_ != nullptr) {
+        timelineView_->setMuriAnalysisReport(muriAnalysisReport_);
+    }
+    refreshMuriDiagnosticsPanel();
+    if (previewCanvas_ != nullptr) {
         previewCanvas_->setMuriAnalysisReport(muriAnalysisReport_);
         previewCanvas_->setMuriRenderOptions(muriRenderOptions_);
+    }
+    const double uiApplyMs = finishStageMs();
+
+    if (runtimeDebugOutputEnabled_) {
+        appendOutput(
+            "edit/muri_perf",
+            QStringLiteral("total=%1ms analyze=%2ms static_refs=%3ms ui_apply=%4ms diagnostics=%5 static=%6")
+                .arg(QString::number(static_cast<double>(totalTimer.nsecsElapsed()) / 1000000.0, 'f', 2))
+                .arg(QString::number(analyzeMs, 'f', 2))
+                .arg(QString::number(staticRefMs, 'f', 2))
+                .arg(QString::number(uiApplyMs, 'f', 2))
+                .arg(muriAnalysisReport_.diagnostics.size())
+                .arg(muriStaticReferences_.size())
+        );
     }
 }
 
