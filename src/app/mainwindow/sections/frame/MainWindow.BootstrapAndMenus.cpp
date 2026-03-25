@@ -231,11 +231,18 @@
     previewMenu->addAction(previewFasterAction);
 
     exportVideoAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("导出视频...") : QStringLiteral("Export Video..."),
+        uiText("action.export_chart", "Export Chart"),
         this
     );
     connect(exportVideoAction_, &QAction::triggered, this, &MainWindow::onExportPreviewVideo);
     previewMenu->addAction(exportVideoAction_);
+
+    batchExportVideoAction_ = new QAction(
+        uiText("action.batch_export", "Batch Export"),
+        this
+    );
+    connect(batchExportVideoAction_, &QAction::triggered, this, &MainWindow::onBatchExportPreviewVideo);
+    previewMenu->addAction(batchExportVideoAction_);
 
     previewMenu->addSeparator();
 
@@ -1396,10 +1403,24 @@ MainWindow::MainWindow(QWidget* parent)
         }
         exportVideoButton_->setFixedWidth(openButtonWidth);
         toolBar->insertWidget(settingsPlaceholderAction_, exportVideoButton_);
+        exportVideoMenu_ = new QMenu(exportVideoButton_);
+        if (exportVideoAction_ != nullptr) {
+            exportVideoMenu_->addAction(exportVideoAction_);
+        }
+        if (batchExportVideoAction_ != nullptr) {
+            exportVideoMenu_->addAction(batchExportVideoAction_);
+        }
+        exportVideoButton_->installEventFilter(this);
+        exportVideoButton_->setMouseTracking(true);
         if (exportVideoAction_ != nullptr) {
             connect(exportVideoAction_, &QAction::changed, this, syncExportToolbarButton);
         }
     }
+
+    exportVideoHoverMenuTimer_ = new QTimer(this);
+    exportVideoHoverMenuTimer_->setSingleShot(true);
+    exportVideoHoverMenuTimer_->setInterval(250);
+    connect(exportVideoHoverMenuTimer_, &QTimer::timeout, this, &MainWindow::showExportToolbarMenu);
     statusBar()->addPermanentWidget(new QLabel("Current File:", this));
     currentFileLabel_ = new QLabel(this);
     statusBar()->addPermanentWidget(currentFileLabel_, 1);

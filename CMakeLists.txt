@@ -65,6 +65,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/muri/MuriStaticChecker.cpp
     src/tools/video_export/VideoExportDialog.h
     src/tools/video_export/VideoExportDialog.cpp
+    src/tools/video_export/BatchVideoExportDialog.h
+    src/tools/video_export/BatchVideoExportDialog.cpp
     src/tools/video_export/VideoExportController.h
     src/tools/video_export/VideoExportController.cpp
     src/tools/video_export/VideoExportSnapshot.h
@@ -293,4 +295,3 @@ if (WIN32)
         message(WARNING "windeployqt not found. Qt runtime DLLs will not be auto-deployed.")
     endif()
 endif()
-
