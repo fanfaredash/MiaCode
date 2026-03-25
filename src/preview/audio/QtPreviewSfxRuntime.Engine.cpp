@@ -170,6 +170,39 @@ void QtPreviewSfxRuntime::applyVolumes()
             ma_sound_set_volume(&voice.voice->sound, static_cast<float>(previewSfxVolumeForKind(settings_, "touchhold")));
         }
     }
+    updateTouchholdVoiceVolumes();
+}
+
+void QtPreviewSfxRuntime::updateTouchholdVoiceVolumes()
+{
+    const double baseVolume = previewSfxVolumeForKind(settings_, "touchhold");
+    if (touchholdVoices_.isEmpty()) {
+        return;
+    }
+
+    int activeCount = 0;
+    for (const TouchholdVoice& voice : touchholdVoices_) {
+        if (voice.activeSpanIndex >= 0 && voice.voice != nullptr && voice.voice->initialized) {
+            ++activeCount;
+        }
+    }
+
+    const double activeCopies = previewTouchholdAggregatePlaybackCopies(activeCount);
+    const double activeVoiceVolume = (activeCount > 0)
+        ? qBound(0.0, baseVolume * (activeCopies / static_cast<double>(activeCount)), 1.5)
+        : qBound(0.0, baseVolume, 1.5);
+    const float inactiveVoiceVolume = static_cast<float>(qBound(0.0, baseVolume, 1.5));
+    const float activeVoiceVolumeF = static_cast<float>(activeVoiceVolume);
+
+    for (TouchholdVoice& voice : touchholdVoices_) {
+        if (voice.voice == nullptr || !voice.voice->initialized) {
+            continue;
+        }
+        ma_sound_set_volume(
+            &voice.voice->sound,
+            voice.activeSpanIndex >= 0 ? activeVoiceVolumeF : inactiveVoiceVolume
+        );
+    }
 }
 
 bool QtPreviewSfxRuntime::prepareStretchedBackgroundTrack(double timelineSecond)

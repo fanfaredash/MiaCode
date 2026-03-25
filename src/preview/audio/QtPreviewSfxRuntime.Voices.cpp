@@ -81,6 +81,7 @@ void QtPreviewSfxRuntime::startTouchholdSpan(int spanIndex, double offsetSeconds
             if (voice.voice == nullptr || !voice.voice->initialized) {
                 return;
             }
+            updateTouchholdVoiceVolumes();
             ma_sound_stop(&voice.voice->sound);
             ma_sound_seek_to_pcm_frame(&voice.voice->sound, offsetFrames);
             ma_sound_start(&voice.voice->sound);
@@ -102,10 +103,11 @@ void QtPreviewSfxRuntime::startTouchholdSpan(int spanIndex, double offsetSeconds
         return;
     }
 
+    freeVoice->activeSpanIndex = spanIndex;
+    updateTouchholdVoiceVolumes();
     ma_sound_stop(&freeVoice->voice->sound);
     ma_sound_seek_to_pcm_frame(&freeVoice->voice->sound, offsetFrames);
     ma_sound_start(&freeVoice->voice->sound);
-    freeVoice->activeSpanIndex = spanIndex;
 }
 
 void QtPreviewSfxRuntime::stopTouchholdSpan(int spanIndex)
@@ -121,6 +123,7 @@ void QtPreviewSfxRuntime::stopTouchholdSpan(int spanIndex)
             ma_sound_stop(&voice.voice->sound);
         }
         voice.activeSpanIndex = -1;
+        updateTouchholdVoiceVolumes();
         return;
     }
 }
@@ -151,4 +154,3 @@ bool QtPreviewSfxRuntime::playTouchholdAudition()
     ma_sound_start(&voiceToUse->voice->sound);
     return true;
 }
-

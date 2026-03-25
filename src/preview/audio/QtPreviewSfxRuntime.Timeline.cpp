@@ -202,9 +202,7 @@ void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& n
             continue;
         }
         if (marker.type == "touch") {
-            if (!marker.isFirework) {
-                addEvent(marker.second, "answer");
-            }
+            addEvent(marker.second, "answer");
             addEvent(marker.second, marker.isBreak ? "judge_break" : "touch");
             if (marker.isFirework) {
                 addEvent(marker.second + kQtPreviewSfxFireworkTouchTriggerDelaySeconds, "firework");
@@ -212,9 +210,7 @@ void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& n
             continue;
         }
         if (marker.type == "touch_hold") {
-            if (!marker.isFirework) {
-                addEvent(marker.second, "answer");
-            }
+            addEvent(marker.second, "answer");
             addEvent(marker.second, marker.isBreak ? "judge_break" : "touch");
             if (marker.isFirework && marker.endSecond >= 0.0) {
                 addEvent(marker.endSecond, "firework");
@@ -346,6 +342,7 @@ void QtPreviewSfxRuntime::syncTouchholdVoices(double second)
         }
         startTouchholdSpan(spanIndex, second - span.startSecond);
     }
+    updateTouchholdVoiceVolumes();
 }
 
 bool QtPreviewSfxRuntime::hasBackgroundTrack() const
@@ -363,4 +360,3 @@ bool QtPreviewSfxRuntime::isBackgroundTrackRunning() const
 {
     return backgroundTrackRunning_;
 }
-
