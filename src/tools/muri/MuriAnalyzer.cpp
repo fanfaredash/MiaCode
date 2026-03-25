@@ -151,6 +151,32 @@ struct CoveringCircle {
     bool valid = false;
 };
 
+QVector<MuriDiagnostic> dedupeDenseOverlapDiagnostics(const QVector<MuriDiagnostic>& diagnostics)
+{
+    QVector<MuriDiagnostic> deduped;
+    deduped.reserve(diagnostics.size());
+
+    QHash<qint64, int> keptOverlapCountBySecond;
+    keptOverlapCountBySecond.reserve(diagnostics.size());
+
+    for (const MuriDiagnostic& diagnostic : diagnostics) {
+        if (diagnostic.kind != MuriKind::Overlap) {
+            deduped.append(diagnostic);
+            continue;
+        }
+
+        const qint64 secondKey = static_cast<qint64>(std::llround(diagnostic.second * 1000000.0));
+        const int keptCount = keptOverlapCountBySecond.value(secondKey, 0);
+        if (keptCount >= 2) {
+            continue;
+        }
+        keptOverlapCountBySecond.insert(secondKey, keptCount + 1);
+        deduped.append(diagnostic);
+    }
+
+    return deduped;
+}
+
 const QJsonObject& slideRuntimeRoot()
 {
     static const QJsonObject root = []() {
@@ -3521,5 +3547,6 @@ MuriAnalysisReport MuriAnalyzer::analyze(const QVector<TimelineNoteMarker>& note
         }
         return a.col < b.col;
     });
+    report.diagnostics = dedupeDenseOverlapDiagnostics(report.diagnostics);
     return report;
 }
