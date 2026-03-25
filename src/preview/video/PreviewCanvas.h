@@ -264,8 +264,12 @@ private:
     QVector<QImage> wifiEachImages_;
     QVector<QImage> wifiBreakImages_;
     QImage holdImage_;
+    QImage holdOnImage_;
+    QImage holdOffImage_;
     QImage holdEachImage_;
+    QImage holdEachOnImage_;
     QImage holdBreakImage_;
+    QImage holdBreakOnImage_;
     QImage holdExImage_;
     QImage noteGuideNormalImage_;
     QImage noteGuideBreakImage_;
@@ -295,6 +299,12 @@ private:
     QImage touchHold2Image_;
     QImage touchHold3Image_;
     QImage touchHoldBorderImage_;
+    QImage touchHoldBreak0Image_;
+    QImage touchHoldBreak1Image_;
+    QImage touchHoldBreak2Image_;
+    QImage touchHoldBreak3Image_;
+    QImage touchHoldBreakBorderImage_;
+    QImage touchHoldOffImage_;
     QImage judgeEffectTapImage_;
     QRectF judgeEffectTapSourceRect_;
     QImage judgeEffectTapBreakImage_;
@@ -313,6 +323,7 @@ private:
     QImage touchAtlasImage_;
     QImage guideAtlasImage_;
     QHash<quint64, QImage> overlayCache_;
+    QHash<quint64, QImage> animatedSpriteCache_;
     QImage brightnessMaskCache_;
     QSize brightnessMaskCacheSize_;
     double brightnessMaskCacheOuter_ = -1.0;

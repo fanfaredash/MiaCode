@@ -51,8 +51,12 @@ void PreviewCanvas::applySkinLoadResult(SkinLoadResult&& result)
     wifiEachImages_ = std::move(result.wifiEachImages);
     wifiBreakImages_ = std::move(result.wifiBreakImages);
     holdImage_ = std::move(result.holdImage);
+    holdOnImage_ = std::move(result.holdOnImage);
+    holdOffImage_ = std::move(result.holdOffImage);
     holdEachImage_ = std::move(result.holdEachImage);
+    holdEachOnImage_ = std::move(result.holdEachOnImage);
     holdBreakImage_ = std::move(result.holdBreakImage);
+    holdBreakOnImage_ = std::move(result.holdBreakOnImage);
     holdExImage_ = std::move(result.holdExImage);
     noteGuideNormalImage_ = std::move(result.noteGuideNormalImage);
     noteGuideBreakImage_ = std::move(result.noteGuideBreakImage);
@@ -82,6 +86,12 @@ void PreviewCanvas::applySkinLoadResult(SkinLoadResult&& result)
     touchHold2Image_ = std::move(result.touchHold2Image);
     touchHold3Image_ = std::move(result.touchHold3Image);
     touchHoldBorderImage_ = std::move(result.touchHoldBorderImage);
+    touchHoldBreak0Image_ = std::move(result.touchHoldBreak0Image);
+    touchHoldBreak1Image_ = std::move(result.touchHoldBreak1Image);
+    touchHoldBreak2Image_ = std::move(result.touchHoldBreak2Image);
+    touchHoldBreak3Image_ = std::move(result.touchHoldBreak3Image);
+    touchHoldBreakBorderImage_ = std::move(result.touchHoldBreakBorderImage);
+    touchHoldOffImage_ = std::move(result.touchHoldOffImage);
     if (!result.judgeEffectTapImage.isNull()) {
         judgeEffectTapImage_ = std::move(result.judgeEffectTapImage);
     } else if (judgeEffectTapImage_.isNull()) {
@@ -147,6 +157,7 @@ void PreviewCanvas::applySkinLoadResult(SkinLoadResult&& result)
     appendAtlasRegions(result.guideAtlasRegions, &guideAtlasImage_);
 
     overlayCache_.clear();
+    animatedSpriteCache_.clear();
     guideTransformCache_.clear();
     guideTransformCacheOrder_.clear();
     spriteTransformCache_.clear();
@@ -257,6 +268,7 @@ void PreviewCanvas::setShowDebugInfo(bool show)
 void PreviewCanvas::reset()
 {
     overlayCache_.clear();
+    animatedSpriteCache_.clear();
     brightnessMaskCache_ = QImage();
     brightnessMaskCacheSize_ = QSize();
     guideTransformCache_.clear();

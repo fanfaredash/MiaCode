@@ -40,6 +40,12 @@
 #include <numeric>
 
 namespace {
+enum class AnimatedSpriteEffect {
+    None = 0,
+    HoldShine = 1,
+    BreakAnimate = 2,
+};
+
 enum class SlideTrackTrimMode {
     AreaImmediate,
     UniformTime,
@@ -166,6 +172,11 @@ constexpr qreal kHoldCapSliceRatioDenominator = 200.0;
 constexpr qreal kHoldFallbackCapRadiusLogical = 18.0;
 constexpr qreal kHoldFallbackBodyWidthLogical = 30.0;
 constexpr qreal kHoldFallbackBodyMinWidth = 4.0;
+// Unity vector-to-scalar casts read the x component, so `_Time` here maps to `t / 20`.
+constexpr qreal kMaterialAnimationTimeScale = 1.0 / 20.0;
+constexpr qreal kMaterialAnimationPhaseScale =
+    (kMaterialAnimationTimeScale / 0.0008) * 0.2;
+constexpr int kAnimatedSpriteEffectBucketCount = 96;
 constexpr SlideTrackTrimMode kSlideTrackTrimMode = SlideTrackTrimMode::UniformTime;
 constexpr qreal kAngleWrapOffset = 540.0;
 constexpr qreal kAngleWrapCycle = 360.0;
@@ -805,6 +816,12 @@ struct SampleStats {
     double maxMs = 0.0;
 };
 
+struct AnimatedSpriteAdjustParams {
+    qreal brightness = 1.0;
+    qreal saturation = 1.0;
+    qreal contrast = 1.0;
+};
+
 SampleStats computeSampleStats(const QVector<double>& samples)
 {
     SampleStats stats;
@@ -1134,6 +1151,112 @@ bool previewStartupTimingEnabled()
 {
     static const bool enabled = miacode::debug_options::startupTimingEnabled();
     return enabled;
+}
+
+qreal animatedSpriteWave(double playheadSeconds)
+{
+    return qSin(static_cast<qreal>(playheadSeconds) * kMaterialAnimationPhaseScale);
+}
+
+AnimatedSpriteAdjustParams animatedSpriteAdjustParams(AnimatedSpriteEffect effect, double playheadSeconds)
+{
+    AnimatedSpriteAdjustParams params;
+    if (effect == AnimatedSpriteEffect::None) {
+        return params;
+    }
+
+    const qreal wave = animatedSpriteWave(playheadSeconds);
+    if (effect == AnimatedSpriteEffect::HoldShine) {
+        params.brightness = 0.95 + qAbs(wave) * 0.5;
+        return params;
+    }
+
+    params.brightness = 0.95 + qMax<qreal>(wave * 0.65, 0.0);
+    params.contrast = 1.0 + qMin<qreal>(wave * -0.55, 0.0);
+    return params;
+}
+
+int animatedSpriteBucket(AnimatedSpriteEffect effect, double playheadSeconds)
+{
+    if (effect == AnimatedSpriteEffect::None) {
+        return 0;
+    }
+
+    const qreal wave = animatedSpriteWave(playheadSeconds);
+    const qreal normalized = effect == AnimatedSpriteEffect::HoldShine
+        ? qAbs(wave)
+        : ((wave + 1.0) * 0.5);
+    return qBound(
+        0,
+        qRound(normalized * static_cast<qreal>(kAnimatedSpriteEffectBucketCount - 1)),
+        kAnimatedSpriteEffectBucketCount - 1
+    );
+}
+
+QImage applyAnimatedSpriteAdjustments(const QImage& source, const AnimatedSpriteAdjustParams& params)
+{
+    if (source.isNull()) {
+        return QImage();
+    }
+    QImage result = source.convertToFormat(QImage::Format_ARGB32);
+    for (int y = 0; y < result.height(); ++y) {
+        QRgb* row = reinterpret_cast<QRgb*>(result.scanLine(y));
+        for (int x = 0; x < result.width(); ++x) {
+            const int alpha = qAlpha(row[x]);
+            if (alpha == 0) {
+                continue;
+            }
+
+            const qreal sourceRed = static_cast<qreal>(qRed(row[x])) / 255.0;
+            const qreal sourceGreen = static_cast<qreal>(qGreen(row[x])) / 255.0;
+            const qreal sourceBlue = static_cast<qreal>(qBlue(row[x])) / 255.0;
+
+            qreal finalRed = sourceRed * params.brightness;
+            qreal finalGreen = sourceGreen * params.brightness;
+            qreal finalBlue = sourceBlue * params.brightness;
+
+            const qreal gray = 0.2125 * sourceRed + 0.7154 * sourceGreen + 0.0721 * sourceBlue;
+            finalRed = gray + (finalRed - gray) * params.saturation;
+            finalGreen = gray + (finalGreen - gray) * params.saturation;
+            finalBlue = gray + (finalBlue - gray) * params.saturation;
+
+            finalRed = 0.5 + (finalRed - 0.5) * params.contrast;
+            finalGreen = 0.5 + (finalGreen - 0.5) * params.contrast;
+            finalBlue = 0.5 + (finalBlue - 0.5) * params.contrast;
+
+            row[x] = qRgba(
+                qBound(0, qRound(finalRed * 255.0), 255),
+                qBound(0, qRound(finalGreen * 255.0), 255),
+                qBound(0, qRound(finalBlue * 255.0), 255),
+                alpha
+            );
+        }
+    }
+    return result;
+}
+
+const QImage* animatedSpriteImage(
+    QHash<quint64, QImage>& cache,
+    const QImage& image,
+    AnimatedSpriteEffect effect,
+    double playheadSeconds)
+{
+    if (effect == AnimatedSpriteEffect::None || image.isNull()) {
+        return &image;
+    }
+
+    const int bucket = animatedSpriteBucket(effect, playheadSeconds);
+    const quint64 key = static_cast<quint64>(image.cacheKey())
+        ^ (static_cast<quint64>(bucket) << 1)
+        ^ (static_cast<quint64>(static_cast<int>(effect)) << 15);
+    const auto cached = cache.constFind(key);
+    if (cached != cache.cend()) {
+        return &cached.value();
+    }
+
+    const AnimatedSpriteAdjustParams params = animatedSpriteAdjustParams(effect, playheadSeconds);
+    auto inserted = cache.insert(key, applyAnimatedSpriteAdjustments(image, params));
+    return &inserted.value();
 }
 
 QString startupTimingLogPath()

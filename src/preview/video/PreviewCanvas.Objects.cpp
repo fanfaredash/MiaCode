@@ -2102,27 +2102,33 @@ void PreviewCanvas::drawTapMarker(QPainter& painter, const TimelineNoteMarker& m
         const QColor tint = exTintColor(marker.isBreak, marker.isEach);
         renderImage = composeOverlay(renderImage, tapExImage_, kTapOverlayBaseMix, kTapOverlayAlphaMix, nullptr, &tint);
     }
+    const AnimatedSpriteEffect spriteEffect =
+        (slideHeadStar ? marker.headBreak : marker.isBreak)
+            ? AnimatedSpriteEffect::BreakAnimate
+            : AnimatedSpriteEffect::None;
+    const QImage* animatedTapImage =
+        animatedSpriteImage(animatedSpriteCache_, renderImage, spriteEffect, playheadSeconds_);
 
-    if (!renderImage.isNull()) {
+    if (animatedTapImage != nullptr && !animatedTapImage->isNull()) {
         const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
         int targetWidth = 0;
         int targetHeight = 0;
         if (slideHeadStar) {
-            const qreal baseWidth = (!tapImage_.isNull() ? tapImage_.width() * kSkinAssetScale : renderImage.width() * kStarAssetScale)
+            const qreal baseWidth = (!tapImage_.isNull() ? tapImage_.width() * kSkinAssetScale : animatedTapImage->width() * kStarAssetScale)
                 * kSlideSpawnStarRelativeScale;
-            const qreal baseHeight = (!tapImage_.isNull() ? tapImage_.height() * kSkinAssetScale : renderImage.height() * kStarAssetScale)
+            const qreal baseHeight = (!tapImage_.isNull() ? tapImage_.height() * kSkinAssetScale : animatedTapImage->height() * kStarAssetScale)
                 * kSlideSpawnStarRelativeScale;
             targetWidth = qMax(1, qRound(baseWidth * canvasScale * approach.scale));
             targetHeight = qMax(1, qRound(baseHeight * canvasScale * approach.scale));
         } else {
             const qreal imageScale = canvasScale * approach.scale * kSkinAssetScale;
-            targetWidth = qMax(1, qRound(renderImage.width() * imageScale));
-            targetHeight = qMax(1, qRound(renderImage.height() * imageScale));
+            targetWidth = qMax(1, qRound(animatedTapImage->width() * imageScale));
+            targetHeight = qMax(1, qRound(animatedTapImage->height() * imageScale));
         }
 
         if (!drawSpriteImage(
                 painter,
-                renderImage,
+                *animatedTapImage,
                 point,
                 targetWidth,
                 targetHeight,
@@ -2167,12 +2173,29 @@ void PreviewCanvas::drawHoldMarker(QPainter& painter, const TimelineNoteMarker& 
     }
 
     const QPointF unit = laneUnitVector(marker.lane);
-    const QImage* holdImage = selectHoldImage(marker);
+    const bool holdActive = deltaSeconds >= 0.0;
+    const QImage* holdImage = nullptr;
+    if (marker.isBreak) {
+        holdImage = (holdActive && !holdBreakOnImage_.isNull()) ? &holdBreakOnImage_ : &holdBreakImage_;
+    } else if (marker.isEach) {
+        holdImage = (holdActive && !holdEachOnImage_.isNull()) ? &holdEachOnImage_ : &holdEachImage_;
+    } else {
+        holdImage = (holdActive && !holdOnImage_.isNull()) ? &holdOnImage_ : &holdImage_;
+    }
+    if (holdImage == nullptr || holdImage->isNull()) {
+        holdImage = selectHoldImage(marker);
+    }
     QImage holdCapImage = holdImage != nullptr ? *holdImage : QImage();
     if (marker.isEx && !holdCapImage.isNull() && !holdExImage_.isNull()) {
         const QColor tint = exTintColor(marker.isBreak, marker.isEach);
         holdCapImage = composeOverlay(holdCapImage, holdExImage_, kHoldOverlayBaseMix, kHoldOverlayAlphaMix, nullptr, &tint);
     }
+    const AnimatedSpriteEffect holdEffect = marker.isBreak
+        ? AnimatedSpriteEffect::BreakAnimate
+        : (holdActive ? AnimatedSpriteEffect::HoldShine : AnimatedSpriteEffect::None);
+    const QImage* animatedHoldImage =
+        animatedSpriteImage(animatedSpriteCache_, holdCapImage, holdEffect, playheadSeconds_);
+    holdCapImage = animatedHoldImage != nullptr ? *animatedHoldImage : holdCapImage;
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
     const auto drawHoldStripSlices = [&](const QPointF& center, int bodyLogicalLength, qreal scale) -> bool {
         if (holdCapImage.isNull()) {
@@ -2484,6 +2507,13 @@ void PreviewCanvas::drawCachedWifiArea(
     for (int pointIndex = clampedCut; pointIndex < points.size(); ++pointIndex) {
         const int imageIndex = imageIndices.value(pointIndex, pointIndex);
         const QImage* image = selectWifiTrackImage(marker, imageIndex, 0);
+        if (image != nullptr && !image->isNull()) {
+            image = animatedSpriteImage(
+                animatedSpriteCache_,
+                *image,
+                marker.trackBreak ? AnimatedSpriteEffect::BreakAnimate : AnimatedSpriteEffect::None,
+                playheadSeconds_);
+        }
         if (image == nullptr || image->isNull()) {
             continue;
         }
@@ -2611,7 +2641,14 @@ void PreviewCanvas::drawSlideTrack(QPainter& painter, const TimelineNoteMarker& 
         return;
     }
     const QImage* image = selectSlideTrackImage(marker);
-    if (image->isNull()) {
+    if (image != nullptr && !image->isNull()) {
+        image = animatedSpriteImage(
+            animatedSpriteCache_,
+            *image,
+            marker.trackBreak ? AnimatedSpriteEffect::BreakAnimate : AnimatedSpriteEffect::None,
+            playheadSeconds_);
+    }
+    if (image == nullptr || image->isNull()) {
         return;
     }
 
@@ -3175,6 +3212,16 @@ void PreviewCanvas::drawSlideMarker(QPainter& painter, const TimelineNoteMarker&
         angle = interpolateAngle(angles, proportion);
     }
     angle = mirroredStarAngleDegrees(angle);
+    if (starImage != nullptr && !starImage->isNull()) {
+        starImage = animatedSpriteImage(
+            animatedSpriteCache_,
+            *starImage,
+            marker.trackBreak ? AnimatedSpriteEffect::BreakAnimate : AnimatedSpriteEffect::None,
+            playheadSeconds_);
+    }
+    if (starImage == nullptr || starImage->isNull()) {
+        return;
+    }
 
     const QPointF point = mapLogicalPointToRect(
         QPointF(kLogicalCanvasCenter + logicalPoint.x(), kLogicalCanvasCenter + logicalPoint.y()),
@@ -3210,7 +3257,7 @@ void PreviewCanvas::drawWifiMarker(QPainter& painter, const TimelineNoteMarker& 
     qreal proportion = 0.0;
     bool waiting = playheadSeconds_ < marker.slideTraceSecond;
     const QImage* starImage = selectSlideMovingStarImage(marker);
-    if (starImage->isNull()) {
+    if (starImage == nullptr || starImage->isNull()) {
         return;
     }
     if (waiting) {
@@ -3228,6 +3275,15 @@ void PreviewCanvas::drawWifiMarker(QPainter& painter, const TimelineNoteMarker& 
     } else if (marker.endSecond > marker.slideTraceSecond) {
         const qreal duration = qMax(kRenderDurationEpsilon, marker.endSecond - marker.slideTraceSecond);
         proportion = qBound<qreal>(0.0, (playheadSeconds_ - marker.slideTraceSecond) / duration, 1.0);
+    }
+
+    starImage = animatedSpriteImage(
+        animatedSpriteCache_,
+        *starImage,
+        marker.trackBreak ? AnimatedSpriteEffect::BreakAnimate : AnimatedSpriteEffect::None,
+        playheadSeconds_);
+    if (starImage == nullptr || starImage->isNull()) {
+        return;
     }
 
     const int targetWidth = qMax(1, qRound(starImage->width() * canvasScale * imageScale));
@@ -3289,6 +3345,11 @@ void PreviewCanvas::drawTouchMarker(
     if (basePointImage.isNull() || baseCornerImage.isNull()) {
         return;
     }
+    const QImage* animatedCornerImage = animatedSpriteImage(
+        animatedSpriteCache_,
+        baseCornerImage,
+        marker.isBreak ? AnimatedSpriteEffect::BreakAnimate : AnimatedSpriteEffect::None,
+        playheadSeconds_);
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
     const QPointF point = mapLogicalPointToRect(marker.touchPoint, playfieldRect);
@@ -3326,7 +3387,7 @@ void PreviewCanvas::drawTouchMarker(
     for (const auto& pieceLayout : layout) {
         drawSpriteImage(
             painter,
-            baseCornerImage,
+            *animatedCornerImage,
             QPointF(point.x() + pieceLayout.dx, point.y() + pieceLayout.dy),
             cornerWidth,
             cornerHeight,
@@ -3370,16 +3431,48 @@ void PreviewCanvas::drawTouchHoldMarker(QPainter& painter, const TimelineNoteMar
         (marker.isBreak && !touchPointBreakImage_.isNull())
             ? touchPointBreakImage_
             : ((marker.isEach && !touchPointEachImage_.isNull()) ? touchPointEachImage_ : touchPointImage_);
+    const QImage& borderBase =
+        (marker.isBreak && !touchHoldBreakBorderImage_.isNull())
+            ? touchHoldBreakBorderImage_
+            : touchHoldBorderImage_;
+    const QImage& fan0Base =
+        (marker.isBreak && !touchHoldBreak0Image_.isNull()) ? touchHoldBreak0Image_ : touchHold0Image_;
+    const QImage& fan1Base =
+        (marker.isBreak && !touchHoldBreak1Image_.isNull()) ? touchHoldBreak1Image_ : touchHold1Image_;
+    const QImage& fan2Base =
+        (marker.isBreak && !touchHoldBreak2Image_.isNull()) ? touchHoldBreak2Image_ : touchHold2Image_;
+    const QImage& fan3Base =
+        (marker.isBreak && !touchHoldBreak3Image_.isNull()) ? touchHoldBreak3Image_ : touchHold3Image_;
     if (pointBase.isNull()) {
         return;
     }
+    const QImage* animatedFan0 = animatedSpriteImage(
+        animatedSpriteCache_,
+        fan0Base,
+        marker.isBreak ? AnimatedSpriteEffect::BreakAnimate : AnimatedSpriteEffect::None,
+        playheadSeconds_);
+    const QImage* animatedFan1 = animatedSpriteImage(
+        animatedSpriteCache_,
+        fan1Base,
+        marker.isBreak ? AnimatedSpriteEffect::BreakAnimate : AnimatedSpriteEffect::None,
+        playheadSeconds_);
+    const QImage* animatedFan2 = animatedSpriteImage(
+        animatedSpriteCache_,
+        fan2Base,
+        marker.isBreak ? AnimatedSpriteEffect::BreakAnimate : AnimatedSpriteEffect::None,
+        playheadSeconds_);
+    const QImage* animatedFan3 = animatedSpriteImage(
+        animatedSpriteCache_,
+        fan3Base,
+        marker.isBreak ? AnimatedSpriteEffect::BreakAnimate : AnimatedSpriteEffect::None,
+        playheadSeconds_);
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
     const QPointF point = mapLogicalPointToRect(marker.touchPoint, playfieldRect);
     const int pointWidth = qMax(1, qRound(pointBase.width() * kTouchAssetScale * canvasScale));
     const int pointHeight = qMax(1, qRound(pointBase.height() * kTouchAssetScale * canvasScale));
-    const int borderWidth = qMax(1, qRound(touchHoldBorderImage_.width() * kTouchAssetScale * canvasScale));
-    const int borderHeight = qMax(1, qRound(touchHoldBorderImage_.height() * kTouchAssetScale * canvasScale));
+    const int borderWidth = qMax(1, qRound(borderBase.width() * kTouchAssetScale * canvasScale));
+    const int borderHeight = qMax(1, qRound(borderBase.height() * kTouchAssetScale * canvasScale));
     qreal alpha = 1.0;
     qreal logicalOffset = kTouchHoldClosedOffset;
     if (deltaSeconds < 0.0) {
@@ -3396,10 +3489,10 @@ void PreviewCanvas::drawTouchHoldMarker(QPainter& painter, const TimelineNoteMar
         qreal dx;
         qreal dy;
     } layout[] = {
-        {&touchHold0Image_, qMax(1, qRound(touchHold0Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold0Image_.height() * kTouchAssetScale * canvasScale)), kTouchHoldUpperRightAngleDegrees, offset, -offset},
-        {&touchHold1Image_, qMax(1, qRound(touchHold1Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold1Image_.height() * kTouchAssetScale * canvasScale)), kTouchHoldLowerRightAngleDegrees, offset, offset},
-        {&touchHold2Image_, qMax(1, qRound(touchHold2Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold2Image_.height() * kTouchAssetScale * canvasScale)), kTouchHoldLowerLeftAngleDegrees, -offset, offset},
-        {&touchHold3Image_, qMax(1, qRound(touchHold3Image_.width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(touchHold3Image_.height() * kTouchAssetScale * canvasScale)), kTouchHoldUpperLeftAngleDegrees, -offset, -offset},
+        {animatedFan0, qMax(1, qRound(animatedFan0->width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(animatedFan0->height() * kTouchAssetScale * canvasScale)), kTouchHoldUpperRightAngleDegrees, offset, -offset},
+        {animatedFan1, qMax(1, qRound(animatedFan1->width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(animatedFan1->height() * kTouchAssetScale * canvasScale)), kTouchHoldLowerRightAngleDegrees, offset, offset},
+        {animatedFan2, qMax(1, qRound(animatedFan2->width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(animatedFan2->height() * kTouchAssetScale * canvasScale)), kTouchHoldLowerLeftAngleDegrees, -offset, offset},
+        {animatedFan3, qMax(1, qRound(animatedFan3->width() * kTouchAssetScale * canvasScale)), qMax(1, qRound(animatedFan3->height() * kTouchAssetScale * canvasScale)), kTouchHoldUpperLeftAngleDegrees, -offset, -offset},
     };
 
     if (deltaSeconds >= 0.0) {
@@ -3417,7 +3510,7 @@ void PreviewCanvas::drawTouchHoldMarker(QPainter& painter, const TimelineNoteMar
             clipPath.closeSubpath();
             painter.save();
             painter.setClipPath(clipPath);
-            painter.drawImage(borderRect, touchHoldBorderImage_);
+            painter.drawImage(borderRect, borderBase);
             painter.restore();
         }
     }
