@@ -57,6 +57,21 @@ bool hasTimelineNavigateModifier(Qt::KeyboardModifiers modifiers)
 {
     return modifiers.testFlag(Qt::ControlModifier) || modifiers.testFlag(Qt::MetaModifier);
 }
+
+QVector<double> makeTimelineZoomPresets()
+{
+    QVector<double> presets;
+    presets.reserve(((200 - 25) / 5) + 1);
+    for (int percent = 25; percent <= 200; percent += 5) {
+        presets.append(static_cast<double>(percent) / 100.0);
+    }
+    return presets;
+}
+
+QVector<double> makeTimelineButtonZoomPresets()
+{
+    return {0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0};
+}
 }  // namespace
 
 TimelineView::TimelineView(QWidget* parent)
@@ -92,6 +107,9 @@ TimelineView::TimelineView(QWidget* parent)
     headerLineNumberFont_ = QFontDatabase::systemFont(QFontDatabase::FixedFont);
     headerLineNumberFont_.setStyleHint(QFont::Monospace);
     headerLineNumberFont_.setFixedPitch(true);
+    zoomPresets_ = makeTimelineZoomPresets();
+    buttonZoomPresets_ = makeTimelineButtonZoomPresets();
+    zoomPresetIndex_ = qMax(0, zoomPresets_.indexOf(1.0));
 
     refreshTheme();
     updateZoomButtonAppearance();

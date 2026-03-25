@@ -90,16 +90,83 @@ void TimelineView::restorePlayheadIndicatorAfterInteraction()
 
 bool TimelineView::effectiveShowSlideTracks() const
 {
-    return showSlideTracks_ && zoomScale() > 0.5;
+    return showSlideTracks_;
 }
 
 void TimelineView::cycleZoomPreset()
 {
-    zoomPresetIndex_ = (zoomPresetIndex_ + 1) % zoomPresets_.size();
+    if (buttonZoomPresets_.isEmpty()) {
+        return;
+    }
+    const double currentScale = zoomScale();
+    double nextScale = buttonZoomPresets_.constFirst();
+    bool foundHigherPreset = false;
+    for (double preset : buttonZoomPresets_) {
+        if (preset > currentScale + 1e-6) {
+            nextScale = preset;
+            foundHigherPreset = true;
+            break;
+        }
+    }
+    if (!foundHigherPreset) {
+        nextScale = buttonZoomPresets_.constFirst();
+    }
+    applyZoomPresetIndex(qMax(0, zoomPresets_.indexOf(nextScale)), viewportCenterSecond());
+}
+
+void TimelineView::applyZoomPresetIndex(int nextIndex, double anchorSecond)
+{
+    if (zoomPresets_.isEmpty()) {
+        return;
+    }
+    nextIndex = qBound(0, nextIndex, zoomPresets_.size() - 1);
+    if (nextIndex == zoomPresetIndex_) {
+        return;
+    }
+    zoomPresetIndex_ = nextIndex;
     pixelsPerSecond_ = 120.0 * zoomScale();
     updateZoomButtonAppearance();
     updateHorizontalRange();
+    const int anchorX = secondToX(anchorSecond) - (viewport()->width() / 2);
+    horizontalScrollBar()->setValue(
+        qBound(horizontalScrollBar()->minimum(), anchorX, horizontalScrollBar()->maximum())
+    );
+    updateCursorToViewportCenter(false);
     viewport()->update();
+}
+
+void TimelineView::stepZoomPreset(int deltaSteps, double anchorSecond)
+{
+    if (zoomPresets_.isEmpty() || deltaSteps == 0) {
+        return;
+    }
+    applyZoomPresetIndex(zoomPresetIndex_ + deltaSteps, anchorSecond);
+}
+
+bool TimelineView::handleAltZoomWheel(QWheelEvent* event)
+{
+    if (event == nullptr || !event->modifiers().testFlag(Qt::AltModifier)) {
+        return false;
+    }
+    int delta = event->angleDelta().y();
+    if (delta == 0) {
+        delta = event->angleDelta().x();
+    }
+    if (delta == 0) {
+        delta = event->pixelDelta().y();
+    }
+    if (delta == 0) {
+        delta = event->pixelDelta().x();
+    }
+    if (delta == 0) {
+        return false;
+    }
+
+    const int steps = delta > 0 ? qMax(1, qRound(static_cast<double>(delta) / 120.0))
+                                : qMin(-1, qRound(static_cast<double>(delta) / 120.0));
+    stepZoomPreset(steps, viewportCenterSecond());
+    event->accept();
+    return true;
 }
 
 void TimelineView::updateZoomButtonAppearance()
@@ -110,7 +177,13 @@ void TimelineView::updateZoomButtonAppearance()
     const UiTheme::Colors& c = UiTheme::colors();
 
     const double currentScale = zoomScale();
-    const double nextScale = zoomPresets_.value((zoomPresetIndex_ + 1) % zoomPresets_.size(), currentScale);
+    double nextScale = buttonZoomPresets_.value(0, currentScale);
+    for (double preset : buttonZoomPresets_) {
+        if (preset > currentScale + 1e-6) {
+            nextScale = preset;
+            break;
+        }
+    }
     const QString sign = nextScale < currentScale ? "-" : "+";
 
     QPixmap iconPixmap(18, 18);
@@ -130,8 +203,9 @@ void TimelineView::updateZoomButtonAppearance()
     zoomButton_->setIcon(QIcon(iconPixmap));
     zoomButton_->setIconSize(iconPixmap.size());
     zoomButton_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-    zoomButton_->setText(QString("%1x").arg(currentScale, 0, 'f', currentScale == qRound(currentScale) ? 0 : 2));
-    zoomButton_->setToolTip(QString("Timeline zoom: %1x").arg(currentScale, 0, 'f', currentScale == qRound(currentScale) ? 0 : 2));
+    const int currentPercent = qRound(currentScale * 100.0);
+    zoomButton_->setText(QString("%1%").arg(currentPercent));
+    zoomButton_->setToolTip(QString("Timeline zoom: %1%").arg(currentPercent));
     zoomButton_->adjustSize();
     zoomButton_->setFixedHeight(22);
     layoutHeaderButtons();
