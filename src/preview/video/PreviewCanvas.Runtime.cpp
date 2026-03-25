@@ -380,8 +380,12 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     wifiEachImages_ = source.wifiEachImages_;
     wifiBreakImages_ = source.wifiBreakImages_;
     holdImage_ = source.holdImage_;
+    holdOnImage_ = source.holdOnImage_;
+    holdOffImage_ = source.holdOffImage_;
     holdEachImage_ = source.holdEachImage_;
+    holdEachOnImage_ = source.holdEachOnImage_;
     holdBreakImage_ = source.holdBreakImage_;
+    holdBreakOnImage_ = source.holdBreakOnImage_;
     holdExImage_ = source.holdExImage_;
     noteGuideNormalImage_ = source.noteGuideNormalImage_;
     noteGuideBreakImage_ = source.noteGuideBreakImage_;
@@ -411,6 +415,12 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     touchHold2Image_ = source.touchHold2Image_;
     touchHold3Image_ = source.touchHold3Image_;
     touchHoldBorderImage_ = source.touchHoldBorderImage_;
+    touchHoldBreak0Image_ = source.touchHoldBreak0Image_;
+    touchHoldBreak1Image_ = source.touchHoldBreak1Image_;
+    touchHoldBreak2Image_ = source.touchHoldBreak2Image_;
+    touchHoldBreak3Image_ = source.touchHoldBreak3Image_;
+    touchHoldBreakBorderImage_ = source.touchHoldBreakBorderImage_;
+    touchHoldOffImage_ = source.touchHoldOffImage_;
     judgeEffectTapImage_ = source.judgeEffectTapImage_;
     judgeEffectTapSourceRect_ = source.judgeEffectTapSourceRect_;
     judgeEffectTapBreakImage_ = source.judgeEffectTapBreakImage_;
@@ -453,6 +463,7 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     legacyFireworkStackingEnabled_ = source.legacyFireworkStackingEnabled_;
 
     overlayCache_.clear();
+    animatedSpriteCache_.clear();
     brightnessMaskCache_ = QImage();
     brightnessMaskCacheSize_ = QSize();
     guideTransformCache_.clear();
@@ -1044,8 +1055,12 @@ struct PreviewCanvas::SkinLoadResult {
     QVector<QImage> wifiEachImages;
     QVector<QImage> wifiBreakImages;
     QImage holdImage;
+    QImage holdOnImage;
+    QImage holdOffImage;
     QImage holdEachImage;
+    QImage holdEachOnImage;
     QImage holdBreakImage;
+    QImage holdBreakOnImage;
     QImage holdExImage;
     QImage noteGuideNormalImage;
     QImage noteGuideBreakImage;
@@ -1075,6 +1090,12 @@ struct PreviewCanvas::SkinLoadResult {
     QImage touchHold2Image;
     QImage touchHold3Image;
     QImage touchHoldBorderImage;
+    QImage touchHoldBreak0Image;
+    QImage touchHoldBreak1Image;
+    QImage touchHoldBreak2Image;
+    QImage touchHoldBreak3Image;
+    QImage touchHoldBreakBorderImage;
+    QImage touchHoldOffImage;
     QImage judgeEffectTapImage;
     QImage judgeEffectTapBreakImage;
     QImage judgeEffectHoldSustainCircleImage;
@@ -1221,8 +1242,12 @@ PreviewCanvas::SkinLoadResult loadSkinAssets(const QString& skinDir, quint64 gen
     result.starExImage = loadImageIfExists(dir.filePath("star_ex.png"));
     result.starExDoubleImage = loadImageIfExists(dir.filePath("star_ex_double.png"));
     result.holdImage = loadImageIfExists(dir.filePath("hold.png"));
+    result.holdOnImage = loadImageIfExists(dir.filePath("hold_on.png"));
+    result.holdOffImage = loadImageIfExists(dir.filePath("hold_off.png"));
     result.holdEachImage = loadImageIfExists(dir.filePath("hold_each.png"));
+    result.holdEachOnImage = loadImageIfExists(dir.filePath("hold_each_on.png"));
     result.holdBreakImage = loadImageIfExists(dir.filePath("hold_break.png"));
+    result.holdBreakOnImage = loadImageIfExists(dir.filePath("hold_break_on.png"));
     result.holdExImage = loadImageIfExists(dir.filePath("hold_ex.png"));
     result.touchCornerImage = loadImageIfExists(dir.filePath("touch.png"));
     result.touchCornerEachImage = loadImageIfExists(dir.filePath("touch_each.png"));
@@ -1241,6 +1266,12 @@ PreviewCanvas::SkinLoadResult loadSkinAssets(const QString& skinDir, quint64 gen
     result.touchHold2Image = loadImageIfExists(dir.filePath("touchhold_2.png"));
     result.touchHold3Image = loadImageIfExists(dir.filePath("touchhold_3.png"));
     result.touchHoldBorderImage = loadImageIfExists(dir.filePath("touchhold_border.png"));
+    result.touchHoldBreak0Image = loadImageIfExists(dir.filePath("touchhold_break_0.png"));
+    result.touchHoldBreak1Image = loadImageIfExists(dir.filePath("touchhold_break_1.png"));
+    result.touchHoldBreak2Image = loadImageIfExists(dir.filePath("touchhold_break_2.png"));
+    result.touchHoldBreak3Image = loadImageIfExists(dir.filePath("touchhold_break_3.png"));
+    result.touchHoldBreakBorderImage = loadImageIfExists(dir.filePath("touchhold_break_border.png"));
+    result.touchHoldOffImage = loadImageIfExists(dir.filePath("touchhold_off.png"));
     result.judgeEffectTapImage = loadImageIfExists(dir.filePath("judge_effect_tap.png"));
     result.judgeEffectTapBreakImage = loadImageIfExists(dir.filePath("judge_effect_tap_break.png"));
     result.judgeEffectHoldSustainCircleImage = loadImageIfExists(dir.filePath("judge_effect_hold_sustain_circle.png"));
@@ -1311,8 +1342,12 @@ PreviewCanvas::SkinLoadResult loadSkinAssets(const QString& skinDir, quint64 gen
                 &result.starEachImage,
                 &result.starBreakImage,
                 &result.holdImage,
+                &result.holdOnImage,
+                &result.holdOffImage,
                 &result.holdEachImage,
+                &result.holdEachOnImage,
                 &result.holdBreakImage,
+                &result.holdBreakOnImage,
             }
         );
         result.tapAtlasImage = tapAtlas.atlasImage;
@@ -1359,6 +1394,12 @@ PreviewCanvas::SkinLoadResult loadSkinAssets(const QString& skinDir, quint64 gen
                 &result.touchHold2Image,
                 &result.touchHold3Image,
                 &result.touchHoldBorderImage,
+                &result.touchHoldBreak0Image,
+                &result.touchHoldBreak1Image,
+                &result.touchHoldBreak2Image,
+                &result.touchHoldBreak3Image,
+                &result.touchHoldBreakBorderImage,
+                &result.touchHoldOffImage,
             }
         );
         result.touchAtlasImage = touchAtlas.atlasImage;
