@@ -18,6 +18,21 @@ struct ValidationMessageParts {
     ValidationSeverityLevel severity = ValidationSeverityLevel::Error;
 };
 
+bool keepDenseOverlapUiIssue(MuriKind kind, double second, QHash<qint64, int>* keptOverlapCountBySecond)
+{
+    if (kind != MuriKind::Overlap || keptOverlapCountBySecond == nullptr) {
+        return true;
+    }
+
+    const qint64 secondKey = qRound64(second * 1000000.0);
+    const int keptCount = keptOverlapCountBySecond->value(secondKey, 0);
+    if (keptCount >= 2) {
+        return false;
+    }
+    keptOverlapCountBySecond->insert(secondKey, keptCount + 1);
+    return true;
+}
+
 QString issueTypeSegment(const QString& text)
 {
     QString normalized = text.trimmed();
@@ -346,15 +361,24 @@ void MainWindow::updateEditorValidationSummary()
             }
         }
     }
+    QHash<qint64, int> keptOverlapCountBySecond;
     for (const MuriDiagnostic& diagnostic : muriAnalysisReport_.diagnostics) {
-        if (!ignoredTypes.contains(muriIssueTypeKey(diagnostic.kind))) {
-            ++muriIssueCount;
+        if (ignoredTypes.contains(muriIssueTypeKey(diagnostic.kind))) {
+            continue;
         }
+        if (!keepDenseOverlapUiIssue(diagnostic.kind, diagnostic.second, &keptOverlapCountBySecond)) {
+            continue;
+        }
+        ++muriIssueCount;
     }
     for (const MuriStaticReference& reference : muriStaticReferences_) {
-        if (!ignoredTypes.contains(muriIssueTypeKey(reference.kind))) {
-            ++muriIssueCount;
+        if (ignoredTypes.contains(muriIssueTypeKey(reference.kind))) {
+            continue;
         }
+        if (!keepDenseOverlapUiIssue(reference.kind, reference.affected.second, &keptOverlapCountBySecond)) {
+            continue;
+        }
+        ++muriIssueCount;
     }
 
     const QColor mutedColor = UiTheme::colors().textMuted;
@@ -531,7 +555,6 @@ void MainWindow::addValidationDecoration(int line, int col, const QString& messa
     decoration.message = message;
     decoration.warning = (parts.severity == ValidationSeverityLevel::Warning);
     validationDecorations_.append(decoration);
-    refreshEditorExtraSelections();
 }
 
 void MainWindow::jumpToLocation(int line, int col)
@@ -681,7 +704,11 @@ void MainWindow::refreshMuriDiagnosticsPanel()
 
     QVector<MuriPanelEntry> entries;
     entries.reserve(muriAnalysisReport_.diagnostics.size() + muriStaticReferences_.size());
+    QHash<qint64, int> keptOverlapCountBySecond;
     for (const MuriDiagnostic& diagnostic : muriAnalysisReport_.diagnostics) {
+        if (!keepDenseOverlapUiIssue(diagnostic.kind, diagnostic.second, &keptOverlapCountBySecond)) {
+            continue;
+        }
         MuriPanelEntry entry;
         entry.kind = diagnostic.kind;
         entry.second = diagnostic.second;
@@ -691,6 +718,9 @@ void MainWindow::refreshMuriDiagnosticsPanel()
         entries.append(entry);
     }
     for (const MuriStaticReference& reference : muriStaticReferences_) {
+        if (!keepDenseOverlapUiIssue(reference.kind, reference.affected.second, &keptOverlapCountBySecond)) {
+            continue;
+        }
         MuriPanelEntry entry;
         entry.isStatic = true;
         entry.kind = reference.kind;
@@ -864,6 +894,7 @@ void MainWindow::refreshValidationPanelForActiveField()
         );
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
+    refreshEditorExtraSelections();
     scheduleWrappedListRelayout(errorList_);
     updateEditorValidationSummary();
 }
@@ -891,6 +922,10 @@ bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
     const int difficultyId = activeDifficultyId();
     const QString chartText = activeChartText();
     const bool chineseUi = UiText::isChineseUi();
+    const SimaiNativeParseResult* cachedLenientResult =
+        (lastTimelineParseDifficultyId_ == difficultyId && lastTimelineParseChartText_ == chartText)
+        ? &lastTimelineParseResult_
+        : nullptr;
 
     ValidationCacheEntry entry;
     const auto cacheIt = validationCacheByDifficulty_.constFind(difficultyId);
@@ -899,10 +934,13 @@ bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
         && cacheIt->chineseUi == chineseUi) {
         entry = cacheIt.value();
     } else {
+        QElapsedTimer reportTimer;
+        reportTimer.start();
         const SimaiNativeValidationLocale locale = chineseUi
             ? SimaiNativeValidationLocale::Chinese
             : SimaiNativeValidationLocale::English;
-        const SimaiNativeValidationReport report = SimaiNativeParser::buildValidationReport(chartText, locale);
+        const SimaiNativeValidationReport report =
+            SimaiNativeParser::buildValidationReport(chartText, locale, cachedLenientResult);
         entry.chartText = chartText;
         entry.chineseUi = chineseUi;
         entry.ok = report.ok;
@@ -926,8 +964,19 @@ bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
             entry.issues.append(cachedIssue);
         }
         validationCacheByDifficulty_.insert(difficultyId, entry);
+        if (runtimeDebugOutputEnabled_) {
+            appendOutput(
+                "edit/validation_perf",
+                QStringLiteral("build_report=%1ms issues=%2 cached_lenient=%3")
+                    .arg(reportTimer.elapsed())
+                    .arg(entry.issues.size())
+                    .arg(cachedLenientResult != nullptr ? QStringLiteral("1") : QStringLiteral("0"))
+            );
+        }
     }
 
+    QElapsedTimer applyTimer;
+    applyTimer.start();
     setValidationTabVisible(true);
     clearValidationErrors();
     clearValidationDecorations();
@@ -948,6 +997,7 @@ bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
         );
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
+    refreshEditorExtraSelections();
     scheduleWrappedListRelayout(errorList_);
     updateEditorValidationSummary();
     if (focusFirstIssue && !entry.issues.isEmpty() && bottomTabs_ != nullptr && errorList_ != nullptr) {
@@ -956,6 +1006,14 @@ bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
             bottomTabs_->setCurrentIndex(errorTabIndex);
         }
         onErrorItemActivated(errorList_->item(0));
+    }
+    if (runtimeDebugOutputEnabled_) {
+        appendOutput(
+            "edit/validation_apply_perf",
+            QStringLiteral("apply_ui=%1ms issues=%2")
+                .arg(applyTimer.elapsed())
+                .arg(entry.issues.size())
+        );
     }
     return entry.ok;
 }
@@ -972,6 +1030,10 @@ bool MainWindow::runValidateSimai()
     const int difficultyId = activeDifficultyId();
     const QString chartText = activeChartText();
     const bool chineseUi = UiText::isChineseUi();
+    const SimaiNativeParseResult* cachedLenientResult =
+        (lastTimelineParseDifficultyId_ == difficultyId && lastTimelineParseChartText_ == chartText)
+        ? &lastTimelineParseResult_
+        : nullptr;
 
     ValidationCacheEntry entry;
     const auto cacheIt = validationCacheByDifficulty_.constFind(difficultyId);
@@ -980,10 +1042,13 @@ bool MainWindow::runValidateSimai()
         && cacheIt->chineseUi == chineseUi) {
         entry = cacheIt.value();
     } else {
+        QElapsedTimer reportTimer;
+        reportTimer.start();
         const SimaiNativeValidationLocale locale = chineseUi
             ? SimaiNativeValidationLocale::Chinese
             : SimaiNativeValidationLocale::English;
-        const SimaiNativeValidationReport report = SimaiNativeParser::buildValidationReport(chartText, locale);
+        const SimaiNativeValidationReport report =
+            SimaiNativeParser::buildValidationReport(chartText, locale, cachedLenientResult);
         entry.chartText = chartText;
         entry.chineseUi = chineseUi;
         entry.ok = report.ok;
@@ -1007,6 +1072,15 @@ bool MainWindow::runValidateSimai()
             entry.issues.append(cachedIssue);
         }
         validationCacheByDifficulty_.insert(difficultyId, entry);
+        if (runtimeDebugOutputEnabled_) {
+            appendOutput(
+                "edit/validation_perf",
+                QStringLiteral("build_report=%1ms issues=%2 cached_lenient=%3")
+                    .arg(reportTimer.elapsed())
+                    .arg(entry.issues.size())
+                    .arg(cachedLenientResult != nullptr ? QStringLiteral("1") : QStringLiteral("0"))
+            );
+        }
     }
 
     const QString payload = QStringLiteral(
@@ -1040,6 +1114,7 @@ bool MainWindow::runValidateSimai()
         );
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
+    refreshEditorExtraSelections();
     scheduleWrappedListRelayout(errorList_);
     updateEditorValidationSummary();
     if (!entry.issues.isEmpty() && bottomTabs_ != nullptr && errorList_ != nullptr) {

@@ -13,6 +13,32 @@ namespace {
 constexpr double kStaticOverlayThresholdSeconds = 6.0 / miacode::muri::kJudgeTps;
 constexpr double kStaticTimeEpsilonSeconds = 1e-9;
 
+QVector<MuriStaticReference> dedupeDenseOverlapReferences(const QVector<MuriStaticReference>& references)
+{
+    QVector<MuriStaticReference> deduped;
+    deduped.reserve(references.size());
+
+    QHash<qint64, int> keptOverlapCountBySecond;
+    keptOverlapCountBySecond.reserve(references.size());
+
+    for (const MuriStaticReference& reference : references) {
+        if (reference.kind != MuriKind::Overlap) {
+            deduped.append(reference);
+            continue;
+        }
+
+        const qint64 secondKey = qRound64(reference.affected.second * 1000000.0);
+        const int keptCount = keptOverlapCountBySecond.value(secondKey, 0);
+        if (keptCount >= 2) {
+            continue;
+        }
+        keptOverlapCountBySecond.insert(secondKey, keptCount + 1);
+        deduped.append(reference);
+    }
+
+    return deduped;
+}
+
 bool isSlideLike(const TimelineNoteMarker& marker)
 {
     return marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi");
@@ -450,7 +476,7 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
         return a.cause.col < b.cause.col;
     });
 
-    return records;
+    return dedupeDenseOverlapReferences(records);
 }
 
 }  // namespace miacode::muri
