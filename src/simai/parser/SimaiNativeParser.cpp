@@ -40,6 +40,56 @@ struct ParseState {
 
 bool g_invalidStarPreviewEnabled = false;
 
+QString detectFullwidthSyntaxIssueMessage(const QString& token)
+{
+    if (token.isEmpty()) {
+        return QString();
+    }
+
+    static const QString kFullwidthDigits = QStringLiteral("０１２３４５６７８９");
+    static const QString kFullwidthTouchRegionLetters = QStringLiteral("ＡＢＣＤＥａｂｃｄｅ");
+    static const QString kFullwidthModifiers = QStringLiteral("ｂｘｈｆＢＸＨＦ");
+    static const QString kFullwidthBrackets = QStringLiteral("（）［］｛｝【】");
+    static const QString kFullwidthSeparators = QStringLiteral("，：／；＃");
+    static const QString kFullwidthSlideSymbols = QStringLiteral("－＜＞＾ｖＶｐｑｓｚｗ＊？！");
+
+    for (QChar ch : token) {
+        if (kFullwidthDigits.contains(ch)) {
+            return QStringLiteral("Fullwidth digit detected, use halfwidth digits: %1").arg(token);
+        }
+        if (kFullwidthTouchRegionLetters.contains(ch)) {
+            return QStringLiteral("Fullwidth touch region letter detected, use halfwidth region letters: %1").arg(token);
+        }
+        if (kFullwidthModifiers.contains(ch)) {
+            return QStringLiteral("Fullwidth modifier detected, use halfwidth modifiers: %1").arg(token);
+        }
+        if (kFullwidthBrackets.contains(ch)) {
+            return QStringLiteral("Fullwidth bracket detected, use halfwidth brackets: %1").arg(token);
+        }
+        if (kFullwidthSeparators.contains(ch)) {
+            return QStringLiteral("Fullwidth separator detected, use halfwidth separators: %1").arg(token);
+        }
+        if (kFullwidthSlideSymbols.contains(ch)) {
+            return QStringLiteral("Fullwidth slide symbol detected, use halfwidth slide symbols: %1").arg(token);
+        }
+        const ushort code = ch.unicode();
+        if ((code >= 0xFF21 && code <= 0xFF3A) || (code >= 0xFF41 && code <= 0xFF5A)) {
+            return QStringLiteral("Fullwidth latin letter detected, use halfwidth letters: %1").arg(token);
+        }
+    }
+
+    return QString();
+}
+
+QString classifyInvalidNoteMessage(const QString& token)
+{
+    const QString fullwidthIssue = detectFullwidthSyntaxIssueMessage(token);
+    if (!fullwidthIssue.isEmpty()) {
+        return fullwidthIssue;
+    }
+    return QStringLiteral("Invalid note: %1").arg(token);
+}
+
 void loadSamplePath(const QJsonArray& samples, QVector<QPointF>* points, QVector<double>* angles);
 QVector<MuriPadTimeEntry> loadPadEnterTimes(const QJsonArray& padEnterTimes);
 

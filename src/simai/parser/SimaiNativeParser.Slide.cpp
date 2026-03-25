@@ -31,7 +31,7 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
             break;
         }
         if (prefixModifiers.contains(modifier)) {
-            appendTokenError(state, lineNumber, column, QString("Invalid note: %1").arg(token));
+            appendTokenError(state, lineNumber, column, classifyInvalidNoteMessage(token));
             return;
         }
         prefixModifiers.append(modifier);
@@ -39,7 +39,7 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     }
 
     if (prefixModifiers.contains(QChar('h'))) {
-        appendTokenError(state, lineNumber, column, QString("Invalid note: %1").arg(token));
+        appendTokenError(state, lineNumber, column, classifyInvalidNoteMessage(token));
         return;
     }
 
@@ -245,9 +245,9 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     marker.wifiPadEnterTimes.clear();
     marker.wifiCriticalProportion = 1.0;
 
-    if (!populateSlideFromLookup(marker.slideTrackKey, &marker)) {
+        if (!populateSlideFromLookup(marker.slideTrackKey, &marker)) {
         if (!state->allowInvalidStarFallback) {
-            appendTokenError(state, lineNumber, column, QString("Invalid note: %1").arg(token));
+            appendTokenError(state, lineNumber, column, classifyInvalidNoteMessage(token));
             return;
         }
         const QPointF start = polarPoint(kOuterLaneRadius, lane);

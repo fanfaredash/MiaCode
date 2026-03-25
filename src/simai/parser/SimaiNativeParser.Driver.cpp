@@ -114,6 +114,48 @@ const QString& kInvalidTouchModifierPrefix()
     return value;
 }
 
+const QString& kFullwidthDigitPrefix()
+{
+    static const QString value = QStringLiteral("Fullwidth digit detected, use halfwidth digits: ");
+    return value;
+}
+
+const QString& kFullwidthTouchRegionPrefix()
+{
+    static const QString value = QStringLiteral("Fullwidth touch region letter detected, use halfwidth region letters: ");
+    return value;
+}
+
+const QString& kFullwidthModifierPrefix()
+{
+    static const QString value = QStringLiteral("Fullwidth modifier detected, use halfwidth modifiers: ");
+    return value;
+}
+
+const QString& kFullwidthBracketPrefix()
+{
+    static const QString value = QStringLiteral("Fullwidth bracket detected, use halfwidth brackets: ");
+    return value;
+}
+
+const QString& kFullwidthSeparatorPrefix()
+{
+    static const QString value = QStringLiteral("Fullwidth separator detected, use halfwidth separators: ");
+    return value;
+}
+
+const QString& kFullwidthSlideSymbolPrefix()
+{
+    static const QString value = QStringLiteral("Fullwidth slide symbol detected, use halfwidth slide symbols: ");
+    return value;
+}
+
+const QString& kFullwidthLatinLetterPrefix()
+{
+    static const QString value = QStringLiteral("Fullwidth latin letter detected, use halfwidth letters: ");
+    return value;
+}
+
 const QString& kMissingBeatSeparator()
 {
     static const QString value = QStringLiteral("Missing beat separator ','");
@@ -183,6 +225,13 @@ const QHash<QString, QString>& zhPrefixMap()
         {kTouchDurationRequiresHPrefix(), QStringLiteral("Touch 时值需要 'h' 修饰符：")},
         {kInvalidTouchTokenPrefix(), QStringLiteral("Touch 音符无效：")},
         {kInvalidTouchModifierPrefix(), QStringLiteral("Touch 修饰符无效：")},
+        {kFullwidthDigitPrefix(), QStringLiteral("检测到全角数字，请改用半角数字：")},
+        {kFullwidthTouchRegionPrefix(), QStringLiteral("检测到全角触摸区域字母，请改用半角区域字母：")},
+        {kFullwidthModifierPrefix(), QStringLiteral("检测到全角修饰符，请改用半角修饰符：")},
+        {kFullwidthBracketPrefix(), QStringLiteral("检测到全角括号，请改用半角括号：")},
+        {kFullwidthSeparatorPrefix(), QStringLiteral("检测到全角分隔符，请改用半角分隔符：")},
+        {kFullwidthSlideSymbolPrefix(), QStringLiteral("检测到全角 Slide 符号，请改用半角符号：")},
+        {kFullwidthLatinLetterPrefix(), QStringLiteral("检测到全角字母，请改用半角字母：")},
         {kInvalidNotePrefix(), QStringLiteral("音符无效：")},
         {kInvalidBeatValueStrictPrefix(), QStringLiteral("分拍数值可能导致转谱错误：")},
         {kBeatValueAbove384Prefix(), QStringLiteral("分拍数值大于 384，可能导致转谱错误：")},
@@ -207,6 +256,13 @@ const QVector<QString>& zhPrefixOrder()
         kTouchDurationRequiresHPrefix(),
         kInvalidTouchTokenPrefix(),
         kInvalidTouchModifierPrefix(),
+        kFullwidthDigitPrefix(),
+        kFullwidthTouchRegionPrefix(),
+        kFullwidthModifierPrefix(),
+        kFullwidthBracketPrefix(),
+        kFullwidthSeparatorPrefix(),
+        kFullwidthSlideSymbolPrefix(),
+        kFullwidthLatinLetterPrefix(),
         kInvalidNotePrefix(),
         kUnmatchedClosingBracketPrefix(),
         kUnclosedBracketPrefix(),
@@ -221,6 +277,11 @@ void parseToken(ParseState* state, const QString& token, int lineNumber, int col
         return;
     }
     if (token.isEmpty()) {
+        return;
+    }
+
+    if (const QString fullwidthIssue = detectFullwidthSyntaxIssueMessage(token); !fullwidthIssue.isEmpty()) {
+        appendTokenError(state, lineNumber, column, fullwidthIssue, column + token.size() - 1);
         return;
     }
 
@@ -247,7 +308,7 @@ void parseToken(ParseState* state, const QString& token, int lineNumber, int col
         return;
     }
 
-    appendTokenError(state, lineNumber, column, ValidationMessage::formatInvalidNote(token));
+    appendTokenError(state, lineNumber, column, classifyInvalidNoteMessage(token));
 }
 
 SimaiNativeParseResult parseInternal(const QString& text, bool strictMode, bool allowInvalidStarFallback = false)
