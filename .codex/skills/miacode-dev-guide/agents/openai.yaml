@@ -1,0 +1,4 @@
+interface:
+  display_name: "MiaCode Guide"
+  short_description: "Repo map, link rules, design notes for MiaCode."
+  default_prompt: "Use $miacode-dev-guide to locate the implementation and linked change surfaces for a feature in the MiaCode repo."
