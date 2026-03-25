@@ -51,6 +51,43 @@ double TimelineView::xToSecond(int x) const
     );
 }
 
+double TimelineView::viewportCenterSecond() const
+{
+    return xToSecond(viewport()->width() / 2);
+}
+
+void TimelineView::updateCursorToViewportCenter(bool emitNavigate)
+{
+    const double centerSecond = viewportCenterSecond();
+    const bool changed = !qFuzzyCompare(cursorSeconds_ + 1.0, centerSecond + 1.0);
+    setCursorSeconds(centerSecond, false);
+    if (emitNavigate && changed) {
+        emit centerNavigateRequested(centerSecond);
+    }
+}
+
+void TimelineView::suppressPlayheadIndicatorForInteraction()
+{
+    playheadIndicatorSuppressed_ = true;
+    if (playheadIndicatorRestoreTimer_ != nullptr) {
+        playheadIndicatorRestoreTimer_->stop();
+    }
+    viewport()->update();
+}
+
+void TimelineView::restorePlayheadIndicatorAfterInteraction()
+{
+    if (timelineDragActive_) {
+        return;
+    }
+    if (playheadIndicatorRestoreTimer_ != nullptr) {
+        playheadIndicatorRestoreTimer_->start();
+    } else {
+        playheadIndicatorSuppressed_ = false;
+        viewport()->update();
+    }
+}
+
 bool TimelineView::effectiveShowSlideTracks() const
 {
     return showSlideTracks_ && zoomScale() > 0.5;

@@ -45,6 +45,7 @@ void TimelineView::mousePressEvent(QMouseEvent* event)
     timelineDragStartX_ = qRound(event->position().x());
     timelineDragStartScrollValue_ = horizontalScrollBar()->value();
     viewport()->setCursor(Qt::ClosedHandCursor);
+    suppressPlayheadIndicatorForInteraction();
     emit timelineDragStarted();
     emit timelineUserInteractionStarted();
     event->accept();
@@ -55,6 +56,7 @@ void TimelineView::mouseMoveEvent(QMouseEvent* event)
     if (event != nullptr && timelineDragActive_) {
         const int deltaX = qRound(event->position().x()) - timelineDragStartX_;
         horizontalScrollBar()->setValue(timelineDragStartScrollValue_ - deltaX);
+        updateCursorToViewportCenter();
         event->accept();
         return;
     }
@@ -66,6 +68,7 @@ void TimelineView::mouseReleaseEvent(QMouseEvent* event)
     if (event != nullptr && event->button() == Qt::LeftButton && timelineDragActive_) {
         timelineDragActive_ = false;
         viewport()->unsetCursor();
+        restorePlayheadIndicatorAfterInteraction();
         event->accept();
         return;
     }
@@ -77,7 +80,10 @@ void TimelineView::wheelEvent(QWheelEvent* event)
     const int delta = event->angleDelta().y();
     if (delta != 0) {
         emit timelineUserInteractionStarted();
+        suppressPlayheadIndicatorForInteraction();
         horizontalScrollBar()->setValue(horizontalScrollBar()->value() - (delta / 2));
+        updateCursorToViewportCenter();
+        restorePlayheadIndicatorAfterInteraction();
         event->accept();
         return;
     }
