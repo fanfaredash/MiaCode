@@ -1,5 +1,6 @@
 #include "PreviewCanvas.h"
 #include "common/AssetPaths.h"
+#include "common/DebugOptions.h"
 #include "common/PreviewGameplayConfig.h"
 
 #include <QCoreApplication>
@@ -1131,19 +1132,13 @@ QString defaultNoteGuideDir()
 
 bool previewStartupTimingEnabled()
 {
-    static const bool enabled = []() {
-        const QString raw = qEnvironmentVariable(
-            "MIACODE_ENABLE_STARTUP_TIMING",
-            qEnvironmentVariable("MAIMURI_ENABLE_STARTUP_TIMING")
-        ).trimmed();
-        return raw == "1" || raw.compare("true", Qt::CaseInsensitive) == 0;
-    }();
+    static const bool enabled = miacode::debug_options::startupTimingEnabled();
     return enabled;
 }
 
 QString startupTimingLogPath()
 {
-    return QDir::temp().filePath("miacode_startup_timing.log");
+    return miacode::debug_options::startupTimingLogPath();
 }
 
 void appendPreviewStartupTiming(const QString& stage, qint64 deltaMs)

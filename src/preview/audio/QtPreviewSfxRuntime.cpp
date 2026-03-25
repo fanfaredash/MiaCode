@@ -1,5 +1,6 @@
 #include "QtPreviewSfxRuntime.h"
 
+#include "common/DebugOptions.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewSfxAssets.h"
 
@@ -28,8 +29,7 @@ constexpr double kQtPreviewSfxFireworkTouchTriggerDelaySeconds =
 
 bool runtimeAudioDebugEnabled()
 {
-    const QByteArray value = qgetenv("MIACODE_ENABLE_RUNTIME_DEBUG_OUTPUT").trimmed().toLower();
-    return value == "1" || value == "true" || value == "yes" || value == "on";
+    return miacode::debug_options::runtimeDebugOutputEnabled();
 }
 
 QString audioDebugLogPath()

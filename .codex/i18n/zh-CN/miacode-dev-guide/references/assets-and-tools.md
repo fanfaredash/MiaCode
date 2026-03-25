@@ -1,17 +1,17 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/assets-and-tools.md -->
-<!-- translation-source-hash: a6b3e4463bb433930719a30894d0d7d3f624f340bd684455294bf5aeb77d6098 -->
+<!-- translation-source-hash: 4b35a994b78ddf84b2af45b55cd309cdd89d08945d790fc5391c6c98e32fc17c -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 资源与工具
 
-这份文件用于记录资源查找规则、谱面目录约定、脚本、辅助可执行工具以及打包进去的外部工具。
+这份文件用于记录资源查找规则、谱面目录约定、脚本、辅助可执行工具，以及被打包进去的外部工具。
 
 ## 1. 资源根与仓库资源区域
 
 - 共享资源根解析：
   - 文件：`src/common/AssetPaths.h`
   - 函数：`findAssetRoot`、`assetPath`
-- 仓库内主要资源区域：
+- 仓库内主要资源区：
   - `assets/skin`
   - `assets/SFX`
   - `assets/background`
@@ -28,7 +28,7 @@
 当前约定：
 
 - 谱面文本文件：`maidata.txt`
-- 音乐轨：`track.mp3`
+- 音乐轨道：`track.mp3`
 - 背景媒体候选：
   - `bg.mp4`
   - `pv.mp4`
@@ -50,10 +50,10 @@
   - 入口：`miacode::preview_sfx::resolveSfxDirectory`
 - 背景 outline 与辅助背景图：
   - 消费者：预览与导出的 overlay 合成
-  - 当前引用包括 `background/outline.png` 与 `background/outline_2.png`
+  - 当前引用包括 `background/outline.png` 和 `background/outline_2.png`
 - 生成的 slide 数据：
-  - 存放在 `assets/generated`
-  - 应把它当作运行时输入数据，而不是普通装饰资源
+  - 存放于 `assets/generated`
+  - 应将其视作运行时输入数据，而不是普通装饰资源
 
 ## 4. SFX 命名约定
 
@@ -100,6 +100,8 @@
 
 这些是开发辅助工具，不是运行时依赖。如果某个调试流程开始长期依赖其中某个脚本，要把它的用途持续记录在这里。
 
+全仓通用的调试开关、诊断环境变量和日志路径另有一份独立引用文档：`references/debug-flags.md`。
+
 ## 7. 开发辅助二进制
 
 它们在 `CMakeLists.txt` 中由 `MIACODE_BUILD_DEV_TOOLS` 控制：
@@ -114,9 +116,9 @@
 
 ## 8. ffmpeg 打包契约
 
-- 固定版本二进制说明在 `third_party/ffmpeg/README.md`。
+- 固定版本二进制说明位于 `third_party/ffmpeg/README.md`。
 - 导出运行时会从应用目录和仓库回退路径中解析 `ffmpeg`。
-- 打包脚本会把固定版本的 `ffmpeg` 拷贝进发行产物。
+- 打包脚本会把固定版本的 `ffmpeg` 拷贝进发布产物。
 
 如果升级 ffmpeg，要一起检查：
 
@@ -126,7 +128,7 @@
 - 打包脚本
 - 所有提到版本假设的导出文档
 
-## 9. 在这些情况下更新本文件
+## 9. 在这些情况下更新本文档
 
 - 新增了资源目录
 - 文件名约定变化

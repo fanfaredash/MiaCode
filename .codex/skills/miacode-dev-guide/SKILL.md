@@ -14,6 +14,7 @@ Use this skill as the repo memory layer for MiaCode. Start from the user-facing 
 - For product logic, interaction expectations, and "must vs flexible" decisions, read `references/design-ledger.md`.
 - For constants, thresholds, tuning numbers, and magic-value ownership, read `references/hardcode-registry.md`.
 - For assets, filenames, lookup rules, build/package tooling, and helper scripts, read `references/assets-and-tools.md`.
+- For repo-wide debug switches, runtime timing logs, preview overrides, and export diagnostics, read `references/debug-flags.md`.
 
 ## Work The Repo In This Order
 
@@ -42,6 +43,7 @@ Use this skill as the repo memory layer for MiaCode. Start from the user-facing 
 - After changing product behavior, expectations, defaults, or decision boundaries, update `references/design-ledger.md`.
 - After introducing, removing, centralizing, or re-scoping constants, update `references/hardcode-registry.md`.
 - After changing filenames, lookup order, packaged dependencies, helper scripts, or debug tooling, update `references/assets-and-tools.md`.
+- After adding, removing, centralizing, or re-scoping debug flags, timing logs, or diagnostic env vars, update `references/debug-flags.md`.
 - After changing this skill or any of its reference Markdown files, update the Chinese mirror under `.codex/i18n/zh-CN/miacode-dev-guide/` in the same change.
 - After updating the Chinese mirror, run `python .codex/tools/check_translation_sync.py --stamp` to refresh the recorded source hashes.
 - When adding a new hardcoded value, first check whether an existing `src/common/*.h` config header should own it. If it must stay local, document the file, meaning, unit, and linked surfaces.
@@ -63,3 +65,4 @@ Use this skill as the repo memory layer for MiaCode. Start from the user-facing 
 - `references/design-ledger.md`
 - `references/hardcode-registry.md`
 - `references/assets-and-tools.md`
+- `references/debug-flags.md`
