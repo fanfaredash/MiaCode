@@ -25,6 +25,7 @@
 class QAction;
 class QByteArray;
 class QCloseEvent;
+class QDockWidget;
 class QEvent;
 class QFrame;
 class QGridLayout;
@@ -280,6 +281,8 @@ private:
     int updatePreviewStatsLayoutMode(int hostWidth = -1);
     void updatePreviewWorkspaceLayout();
     void updatePreviewPanelLayout();
+    void setWorkspacePanelsSwapped(bool swapped, bool persistState);
+    void applyWorkspacePanelArrangement();
     void cacheWorkspaceLayoutSizes();
     void restoreWorkspaceLayoutSizes();
     void refreshLayoutAfterPageSwitch();
@@ -334,7 +337,8 @@ private:
         const VideoExportSnapshot& snapshot,
         QProgressDialog* progressDialog,
         bool* canceledByUser,
-        QString* errorMessage
+        QString* errorMessage,
+        const std::function<void(int percent, const QString& rawMessage)>& progressCallback = {}
     );
     bool launchVideoExportWorker(const VideoExportSnapshot& snapshot, QString* errorMessage);
     void showExportToolbarMenu();
@@ -515,6 +519,7 @@ private:
     QAction* editStaticTapOnSlideThresholdAction_ = nullptr;
     QAction* previewAudioSettingsAction_ = nullptr;
     QAction* previewVideoSettingsAction_ = nullptr;
+    QAction* swapWorkspaceSidesAction_ = nullptr;
     QAction* aboutAction_ = nullptr;
     QLabel* currentFileLabel_ = nullptr;
     QTimer* metadataRefreshTimer_ = nullptr;
@@ -629,6 +634,7 @@ private:
     bool previewShowObjectStatsHud_ = false;
     bool exportShowObjectStatsHud_ = false;
     bool previewShowValidationSummary_ = true;
+    bool workspacePanelsSwapped_ = false;
     PreviewAudioSettings softwarePreviewAudioSettings_;
     PreviewAudioSettings previewAudioSettings_;
     int editorTextFontPointSize_ = 0;
@@ -641,6 +647,7 @@ private:
     QLabel* metadataEmptyHintLabel_ = nullptr;
     QWidget* chartPage_ = nullptr;
     QStackedWidget* editorStack_ = nullptr;
+    QDockWidget* outlineDock_ = nullptr;
     QListWidget* outlineList_ = nullptr;
     QLineEdit* titleEdit_ = nullptr;
     QLineEdit* artistEdit_ = nullptr;

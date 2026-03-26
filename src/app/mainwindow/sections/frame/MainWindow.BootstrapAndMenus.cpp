@@ -302,6 +302,19 @@
     connect(previewVideoSettingsAction_, &QAction::triggered, this, &MainWindow::onPreviewVideoSettings);
     previewMenu->addAction(previewVideoSettingsAction_);
 
+    swapWorkspaceSidesAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("左右面板互换") : QStringLiteral("Swap Side Panels"),
+        this
+    );
+    swapWorkspaceSidesAction_->setCheckable(true);
+    swapWorkspaceSidesAction_->setIcon(
+        makeMenuSelectionCheckIcon(UiTheme::colors().accent, workspacePanelsSwapped_)
+    );
+    connect(swapWorkspaceSidesAction_, &QAction::toggled, this, [this](bool checked) {
+        setWorkspacePanelsSwapped(checked, true);
+    });
+    previewMenu->addAction(swapWorkspaceSidesAction_);
+
     aboutAction_ = new QAction(uiText("action.about", "About"), this);
     connect(aboutAction_, &QAction::triggered, this, &MainWindow::onAbout);
     helpMenu->addAction(aboutAction_);
@@ -776,6 +789,7 @@ MainWindow::MainWindow(QWidget* parent)
     auto* outlineDock = new QDockWidget("Fields", this);
     outlineDock->setObjectName("OutlineDock");
     outlineDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    outlineDock_ = outlineDock;
     auto* outlineTitle = new QWidget(outlineDock);
     outlineTitle->setFixedHeight(0);
     outlineDock->setTitleBarWidget(outlineTitle);
@@ -1344,6 +1358,7 @@ MainWindow::MainWindow(QWidget* parent)
         handle->hide();
     }
     setCentralWidget(workspaceSplitter_);
+    applyWorkspacePanelArrangement();
     updatePreviewWorkspaceLayout();
     logStartupStage("workspace_and_central_widget_ready");
 
@@ -1634,6 +1649,7 @@ MainWindow::MainWindow(QWidget* parent)
     statusBar()->showMessage("PlainCodeEditor ready.");
 
     loadPortableState();
+    applyWorkspacePanelArrangement();
     logStartupStage("portable_state_loaded");
     if (runtimeDebugOutputEnabled_) {
         previewShowDebugInfo_ = true;
