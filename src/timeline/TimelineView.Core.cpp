@@ -225,7 +225,11 @@ void TimelineView::layoutHeaderButtons()
     }
     if (followPreviewCheckBox_ != nullptr) {
         followPreviewCheckBox_->adjustSize();
-        followPreviewCheckBox_->setFixedHeight(22);
+        const int checkBoxHeight = qMax(
+            followPreviewCheckBox_->minimumSizeHint().height(),
+            followPreviewCheckBox_->sizeHint().height()
+        );
+        followPreviewCheckBox_->setFixedHeight(checkBoxHeight);
         const int y = qMax(0, (timelineTop() - followPreviewCheckBox_->height()) / 2);
         const int rightX = qMax(leftBaseX, viewport()->width() - followPreviewCheckBox_->width() - rightMargin);
         followPreviewCheckBox_->move(rightX, y);
