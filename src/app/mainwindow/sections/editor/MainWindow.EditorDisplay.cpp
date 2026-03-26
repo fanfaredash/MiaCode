@@ -2,29 +2,9 @@
 {
     lastSessionFilePath_.clear();
     lastOpenDir_.clear();
+    lastTrackPath_.clear();
     autoRestoreLastSessionFile_ = true;
-    softwarePreviewAudioSettings_ = PreviewAudioSettings();
-    previewAudioSettings_ = softwarePreviewAudioSettings_;
-    showSlideTracks_ = true;
-    showJudgeMarkers_ = false;
-    showTouchTrail_ = false;
-    muriRenderOptions_ = MuriRenderOptions();
-    staticTapOnSlideThresholdMs_ = miacode::muri::kStaticTapOnSlideThresholdDefaultMs;
-    previewBackgroundBrightnessOuter_ = miacode::preview_video::kBackgroundBrightnessDefault;
-    previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessInnerDefault;
-    previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
-    previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
-    previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
-    previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
-    previewFollowMode_ = PreviewFollowMode::NonEmptyComma;
-    previewCanvasAspectRatio_ = 1.0;
-    previewAutoRestoreSquareAfterExport_ = true;
-    previewShowDebugInfo_ = false;
-    previewShowTimestamp_ = true;
-    previewShowObjectStatsHud_ = false;
-    exportShowObjectStatsHud_ = false;
-    previewShowValidationSummary_ = true;
-    workspacePanelsSwapped_ = false;
+    resetPortablePreviewSettingsToDefaults();
     editorLineSpacingFactor_ = kEditorLineSpacingFactorDefault;
     editorTextFontPointSize_ = qBound(
         kEditorTextFontSizeMin,
@@ -59,14 +39,43 @@
     if (!lastOpenFile.isEmpty()) {
         lastSessionFilePath_ = QDir::cleanPath(lastOpenFile);
     }
-    autoRestoreLastSessionFile_ = true;
     const QString trackPath = app.value("last_track_path").toString();
     if (!trackPath.isEmpty() && QFileInfo::exists(trackPath)) {
         lastTrackPath_ = QDir::cleanPath(trackPath);
     }
+    applyPortablePreviewSettings(preview);
+    refreshPreviewFrameRateTimers();
+}
+
+void MainWindow::resetPortablePreviewSettingsToDefaults()
+{
+    softwarePreviewAudioSettings_ = PreviewAudioSettings();
+    previewAudioSettings_ = softwarePreviewAudioSettings_;
     showSlideTracks_ = true;
     showJudgeMarkers_ = false;
     showTouchTrail_ = false;
+    muriRenderOptions_ = MuriRenderOptions();
+    staticTapOnSlideThresholdMs_ = miacode::muri::kStaticTapOnSlideThresholdDefaultMs;
+    previewBackgroundBrightnessOuter_ = miacode::preview_video::kBackgroundBrightnessDefault;
+    previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessInnerDefault;
+    previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
+    previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
+    previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
+    previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
+    previewFollowMode_ = PreviewFollowMode::NonEmptyComma;
+    previewCanvasAspectRatio_ = 1.0;
+    previewAutoRestoreSquareAfterExport_ = true;
+    previewShowDebugInfo_ = false;
+    previewShowTimestamp_ = true;
+    previewShowObjectStatsHud_ = false;
+    exportShowObjectStatsHud_ = false;
+    previewShowValidationSummary_ = true;
+    workspacePanelsSwapped_ = false;
+}
+
+void MainWindow::applyPortablePreviewSettings(const QJsonObject& preview)
+{
     if (preview.value("static_tap_on_slide_threshold_ms").isDouble()) {
         staticTapOnSlideThresholdMs_ = qBound(
             miacode::muri::kStaticTapOnSlideThresholdMinMs,
@@ -104,33 +113,28 @@
         previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(
             preview.value("layout_square_scale").toDouble(previewLayoutSquareScale_)
         );
-    } else {
-        previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
     }
     if (preview.value("smooth_brightness").isBool()) {
         previewSmoothBrightness_ = preview.value("smooth_brightness").toBool(previewSmoothBrightness_);
-    } else {
-        previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
     }
     const QString scaleMode = preview.value("background_scale_mode").toString().trimmed().toLower();
     if (scaleMode == QLatin1String("fit") || scaleMode == QLatin1String("contain")) {
         previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FitContain;
-    } else {
+    } else if (!scaleMode.isEmpty()) {
         previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     }
     if (preview.value("note_flow_speed").isDouble()) {
         previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(
-            preview.value("note_flow_speed").toDouble(previewNoteFlowSpeed_));
-    } else {
-        previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+            preview.value("note_flow_speed").toDouble(previewNoteFlowSpeed_)
+        );
     }
     if (preview.value("canvas_frame_rate_mode").isString()) {
         previewCanvasFrameRateMode_ =
             previewCanvasFrameRateModeFromStorageValue(preview.value("canvas_frame_rate_mode").toString());
-    } else {
-        previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
     }
-    previewFollowMode_ = PreviewFollowMode::NonEmptyComma;
+    if (preview.value("follow_mode").isString()) {
+        previewFollowMode_ = previewFollowModeFromStorageValue(preview.value("follow_mode").toString());
+    }
     if (preview.value("show_debug_info").isBool()) {
         previewShowDebugInfo_ = preview.value("show_debug_info").toBool(false);
     }
@@ -156,13 +160,9 @@
         previewCanvasAspectRatio_ = normalizedPreviewCanvasAspectRatio(
             preview.value("canvas_aspect_ratio").toDouble(previewCanvasAspectRatio_)
         );
-    } else {
-        previewCanvasAspectRatio_ = 1.0;
     }
     if (preview.value("auto_restore_square_after_export").isBool()) {
         previewAutoRestoreSquareAfterExport_ = preview.value("auto_restore_square_after_export").toBool(true);
-    } else {
-        previewAutoRestoreSquareAfterExport_ = true;
     }
     if (preview.value("audio").isObject()) {
         softwarePreviewAudioSettings_ = PreviewAudioSettings::fromJson(preview.value("audio").toObject());
@@ -170,7 +170,6 @@
         softwarePreviewAudioSettings_ = PreviewAudioSettings::fromJson(preview);
     }
     softwarePreviewAudioSettings_.normalize();
-    refreshPreviewFrameRateTimers();
     previewAudioSettings_ = softwarePreviewAudioSettings_;
 }
 
