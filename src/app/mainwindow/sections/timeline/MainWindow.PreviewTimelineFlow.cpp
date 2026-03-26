@@ -584,7 +584,7 @@ void MainWindow::refreshDeferredMuriDiagnostics()
         return elapsedMs;
     };
 
-    muriAnalysisReport_ = MuriAnalyzer::analyze(noteMarkers);
+    muriAnalysisReport_ = MuriAnalyzer::analyze(noteMarkers, muriRenderOptions_);
     const double analyzeMs = finishStageMs();
     rebuildStaticMuriReferences(noteMarkers);
     const double staticRefMs = finishStageMs();

@@ -70,6 +70,7 @@ struct RuntimeSlideJudgeResult {
     QVector<int> segmentEndAreaIndices;
     QVector<QVector<RuntimeJudgeHit>> wifiLaneAreaHits;
     QVector<QVector<QStringList>> wifiLaneJudgeSequence;
+    QVector<QVector<double>> wifiLaneProgressSeconds;
 };
 
 struct JudgeableSimpleNote {
@@ -2243,6 +2244,7 @@ struct RuntimeWifiNoteState {
     double criticalDeltaSecond = 0.0;
     QVector<QVector<QStringList>> laneJudgeSequence;
     QVector<QVector<RuntimeJudgeHit>> areaHits;
+    QVector<QVector<double>> laneProgressSeconds;
     QVector<int> curAreaIdxes;
     QVector<QString> pressingPads;
     QVector<bool> laneFinished;
@@ -2358,7 +2360,8 @@ bool buildRuntimeSlideJudgeSequence(
 bool buildRuntimeWifiJudgeSequence(
     const TimelineNoteMarker& marker,
     QVector<QVector<QStringList>>* laneJudgeSequence,
-    bool* padCPassed)
+    bool* padCPassed,
+    const MuriRenderOptions& renderOptions)
 {
     if (laneJudgeSequence == nullptr) {
         return false;
@@ -2388,7 +2391,7 @@ bool buildRuntimeWifiJudgeSequence(
     }
 
     if (padCPassed != nullptr) {
-        *padCPassed = !root.value(QStringLiteral("config")).toObject().value(QStringLiteral("wifi_need_c")).toBool(false);
+        *padCPassed = !renderOptions.wifiNeedC;
     }
     return true;
 }
@@ -2444,7 +2447,10 @@ bool buildRuntimeSlideNoteState(const TimelineNoteMarker& marker, RuntimeSlideNo
     return true;
 }
 
-bool buildRuntimeWifiNoteState(const TimelineNoteMarker& marker, RuntimeWifiNoteState* note)
+bool buildRuntimeWifiNoteState(
+    const TimelineNoteMarker& marker,
+    RuntimeWifiNoteState* note,
+    const MuriRenderOptions& renderOptions)
 {
     if (note == nullptr || marker.type != QLatin1String("wifi")) {
         return false;
@@ -2452,7 +2458,7 @@ bool buildRuntimeWifiNoteState(const TimelineNoteMarker& marker, RuntimeWifiNote
 
     QVector<QVector<QStringList>> laneJudgeSequence;
     bool padCPassed = true;
-    if (!buildRuntimeWifiJudgeSequence(marker, &laneJudgeSequence, &padCPassed)) {
+    if (!buildRuntimeWifiJudgeSequence(marker, &laneJudgeSequence, &padCPassed, renderOptions)) {
         return false;
     }
 
@@ -2466,6 +2472,7 @@ bool buildRuntimeWifiNoteState(const TimelineNoteMarker& marker, RuntimeWifiNote
     note->laneJudgeSequence = laneJudgeSequence;
     note->totalAreaNum = laneJudgeSequence.value(1).size();
     note->areaHits = QVector<QVector<RuntimeJudgeHit>>(3, QVector<RuntimeJudgeHit>(note->totalAreaNum));
+    note->laneProgressSeconds = QVector<QVector<double>>(3, QVector<double>(note->totalAreaNum + 1, -1.0));
     note->curAreaIdxes = QVector<int>(3, 0);
     note->pressingPads = QVector<QString>(3);
     note->laneFinished = QVector<bool>(3, false);
@@ -2634,6 +2641,7 @@ bool progressRuntimeWifiLaneOnce(
             note->areaHits[lane][note->curAreaIdxes.at(lane)].cause = cause;
             if (note->curAreaIdxes.at(lane) >= note->totalAreaNum - 1) {
                 ++note->curAreaIdxes[lane];
+                note->laneProgressSeconds[lane][note->curAreaIdxes.at(lane)] = nowSecond;
                 note->laneFinished[lane] = true;
                 note->judgeAction = cause;
             }
@@ -2643,6 +2651,7 @@ bool progressRuntimeWifiLaneOnce(
         if (!padStates.contains(note->pressingPads.at(lane))) {
             note->pressingPads[lane].clear();
             ++note->curAreaIdxes[lane];
+            note->laneProgressSeconds[lane][note->curAreaIdxes.at(lane)] = nowSecond;
             return true;
         }
     }
@@ -2659,11 +2668,13 @@ bool progressRuntimeWifiLaneOnce(
 
             note->pressingPads[lane] = pad;
             ++note->curAreaIdxes[lane];
+            note->laneProgressSeconds[lane][note->curAreaIdxes.at(lane)] = nowSecond;
             note->areaHits[lane][note->curAreaIdxes.at(lane)].judged = true;
             note->areaHits[lane][note->curAreaIdxes.at(lane)].second = nowSecond;
             note->areaHits[lane][note->curAreaIdxes.at(lane)].cause = down ? padStateCause : cause;
             if (note->curAreaIdxes.at(lane) >= note->totalAreaNum - 1) {
                 ++note->curAreaIdxes[lane];
+                note->laneProgressSeconds[lane][note->curAreaIdxes.at(lane)] = nowSecond;
                 note->laneFinished[lane] = true;
                 note->judgeAction = down ? padStateCause : RuntimePadEvent{};
             }
@@ -2796,7 +2807,8 @@ QHash<QString, RuntimeSlideJudgeResult> simulateRuntimeSlideAndWifiJudgments(
     const QVector<TimelineNoteMarker>& noteMarkers,
     const QVector<JudgeableSimpleNote>& notes,
     const QVector<RuntimeTouchGroup>& touchGroups,
-    const QHash<int, int>& touchGroupByChildNoteIndex)
+    const QHash<int, int>& touchGroupByChildNoteIndex,
+    const MuriRenderOptions& renderOptions)
 {
     QVector<RuntimeSlideNoteState> slideNotes;
     QVector<RuntimeWifiNoteState> wifiNotes;
@@ -2813,7 +2825,7 @@ QHash<QString, RuntimeSlideJudgeResult> simulateRuntimeSlideAndWifiJudgments(
         }
         if (marker.type == QLatin1String("wifi")) {
             RuntimeWifiNoteState note;
-            if (buildRuntimeWifiNoteState(marker, &note)) {
+            if (buildRuntimeWifiNoteState(marker, &note, renderOptions)) {
                 wifiNotes.append(note);
             }
         }
@@ -2959,6 +2971,7 @@ QHash<QString, RuntimeSlideJudgeResult> simulateRuntimeSlideAndWifiJudgments(
         result.segmentCompletedSeconds.append(note.judgeSecond);
         result.wifiLaneAreaHits = note.areaHits;
         result.wifiLaneJudgeSequence = note.laneJudgeSequence;
+        result.wifiLaneProgressSeconds = note.laneProgressSeconds;
         results.insert(note.markerKey, result);
     }
 
@@ -3009,6 +3022,9 @@ void applyRuntimeJudgeResultToState(const RuntimeSlideJudgeResult& result, Marke
         }
         if (!runtimeLanes.isEmpty()) {
             state->wifiLaneAreas = runtimeLanes;
+        }
+        if (!result.wifiLaneProgressSeconds.isEmpty()) {
+            state->wifiLaneProgressSeconds = result.wifiLaneProgressSeconds;
         }
     } else {
         int areaCursor = 0;
@@ -3416,7 +3432,9 @@ void collectSimpleNoteRuntimeDiagnostics(
 
 }  // namespace
 
-MuriAnalysisReport MuriAnalyzer::analyze(const QVector<TimelineNoteMarker>& noteMarkers)
+MuriAnalysisReport MuriAnalyzer::analyze(
+    const QVector<TimelineNoteMarker>& noteMarkers,
+    const MuriRenderOptions& renderOptions)
 {
     MuriAnalysisReport report;
     QStringList signatureParts;
@@ -3441,7 +3459,8 @@ MuriAnalysisReport MuriAnalyzer::analyze(const QVector<TimelineNoteMarker>& note
             noteMarkers,
             runtimeNotes,
             runtimeTouchGroups,
-            touchGroupByChildNoteIndex);
+            touchGroupByChildNoteIndex,
+            renderOptions);
 
     std::sort(report.padWindows.begin(), report.padWindows.end(), [](const MuriPadWindow& a, const MuriPadWindow& b) {
         if (!qFuzzyCompare(a.startSecond + 1.0, b.startSecond + 1.0)) {

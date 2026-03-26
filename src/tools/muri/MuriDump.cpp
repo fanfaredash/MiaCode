@@ -505,6 +505,19 @@ QJsonArray jsonFromLaneJudgeAreas(const QVector<QVector<QVector<MuriCheckpointSt
     return laneArray;
 }
 
+QJsonArray jsonFromLaneProgressSeconds(const QVector<QVector<double>>& lanes)
+{
+    QJsonArray laneArray;
+    for (const QVector<double>& lane : lanes) {
+        QJsonArray progressArray;
+        for (double second : lane) {
+            progressArray.append(second);
+        }
+        laneArray.append(progressArray);
+    }
+    return laneArray;
+}
+
 QJsonObject jsonFromSegmentState(const MuriSegmentState& segment)
 {
     QJsonObject item;
@@ -537,6 +550,7 @@ QJsonObject jsonFromMarkerState(const MarkerMuriState& state)
     item.insert(QStringLiteral("wifi_judge_areas"), jsonFromJudgeAreas(state.wifiAreas));
     item.insert(QStringLiteral("wifi_lane_areas"), jsonFromLaneCheckpointAreas(state.wifiLaneAreas));
     item.insert(QStringLiteral("wifi_lane_judge_areas"), jsonFromLaneJudgeAreas(state.wifiLaneAreas));
+    item.insert(QStringLiteral("wifi_lane_progress_seconds"), jsonFromLaneProgressSeconds(state.wifiLaneProgressSeconds));
     item.insert(QStringLiteral("wifi_completed_second"), state.wifiCompletedSecond);
     item.insert(QStringLiteral("wifi_expected_completed_second"), state.wifiExpectedCompletedSecond);
     item.insert(QStringLiteral("wifi_critical_second"), state.wifiCriticalSecond);

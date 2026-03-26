@@ -307,7 +307,7 @@ bool buildVideoExportTaskFromSnapshot(
     built.showTimestamp = snapshot.showTimestamp;
     built.showObjectStatsHud = snapshot.showObjectStatsHud;
     built.skinLoadWaitMs = qBound(0, snapshot.skinLoadWaitMs, 20000);
-    built.muriAnalysisReport = MuriAnalyzer::analyze(built.noteMarkers);
+    built.muriAnalysisReport = MuriAnalyzer::analyze(built.noteMarkers, built.muriRenderOptions);
 
     if (built.noteMarkers.isEmpty()) {
         if (errorMessage != nullptr) {
