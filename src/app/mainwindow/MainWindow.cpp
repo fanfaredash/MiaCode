@@ -497,27 +497,6 @@ enum class EditorValidationSummaryIconKind {
 
 QIcon makeMenuSelectionCheckIcon(const QColor& color, bool visible = true);
 
-void applyAccentCheckBoxIcon(QCheckBox* checkBox, const QColor& accentColor)
-{
-    if (checkBox == nullptr) {
-        return;
-    }
-
-    const QIcon checkedIcon = makeMenuSelectionCheckIcon(accentColor);
-    const QIcon uncheckedIcon = makeMenuSelectionCheckIcon(accentColor, false);
-    checkBox->setIcon(checkBox->isChecked() ? checkedIcon : uncheckedIcon);
-    checkBox->setIconSize(QSize(14, 14));
-    checkBox->setStyleSheet(
-        QStringLiteral(
-            "QCheckBox { spacing: 6px; }"
-            "QCheckBox::indicator { width: 0px; height: 0px; }"
-        )
-    );
-    QObject::connect(checkBox, &QCheckBox::toggled, checkBox, [checkBox, checkedIcon, uncheckedIcon](bool checked) {
-        checkBox->setIcon(checked ? checkedIcon : uncheckedIcon);
-    });
-}
-
 QPixmap makeEditorValidationSummaryIcon(const QColor& color, EditorValidationSummaryIconKind kind)
 {
     QPixmap pixmap(14, 14);
@@ -6329,13 +6308,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         previewGroup
     );
     debugCheck->setChecked(previewShowDebugInfo_);
-    const QColor accentCheckColor = UiTheme::colors().accent;
-    applyAccentCheckBoxIcon(restoreSquareCheck, accentCheckColor);
-    applyAccentCheckBoxIcon(smoothBrightnessCheck, accentCheckColor);
-    applyAccentCheckBoxIcon(timestampCheck, accentCheckColor);
-    applyAccentCheckBoxIcon(objectStatsCheck, accentCheckColor);
-    applyAccentCheckBoxIcon(validationSummaryCheck, accentCheckColor);
-    applyAccentCheckBoxIcon(debugCheck, accentCheckColor);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_outer", "Outer Brightness"), outerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Inner Brightness"), innerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Layout Size"), layoutSquareScaleRow);
