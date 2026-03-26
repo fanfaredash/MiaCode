@@ -277,6 +277,87 @@ QByteArray buildVideoExportWorkerStartPayload(const VideoExportSnapshot& snapsho
     return payload;
 }
 
+QString videoExportWorkerLogPathForUi()
+{
+    const QString envPath = qEnvironmentVariable("MIACODE_EXPORT_LOG_PATH").trimmed();
+    if (!envPath.isEmpty()) {
+        return QDir::cleanPath(envPath);
+    }
+    return QDir::temp().filePath(QStringLiteral("miacode_video_export.log"));
+}
+
+QString qProcessExitStatusForUi(QProcess::ExitStatus status)
+{
+    switch (status) {
+    case QProcess::NormalExit:
+        return QStringLiteral("NormalExit");
+    case QProcess::CrashExit:
+        return QStringLiteral("CrashExit");
+    }
+    return QStringLiteral("Unknown(%1)").arg(static_cast<int>(status));
+}
+
+QString truncateProcessTextForUi(QString text, int maxChars = 2000)
+{
+    text = text.trimmed();
+    if (text.size() <= maxChars) {
+        return text;
+    }
+    return text.left(maxChars) + QStringLiteral(" ...<truncated>");
+}
+
+QString appendVideoExportDiagnostics(const QString& base, const QString& extra)
+{
+    const QString trimmedBase = base.trimmed();
+    const QString trimmedExtra = extra.trimmed();
+    if (trimmedBase.isEmpty()) {
+        return trimmedExtra;
+    }
+    if (trimmedExtra.isEmpty()) {
+        return trimmedBase;
+    }
+    return trimmedBase + QStringLiteral("\n\n") + trimmedExtra;
+}
+
+QString buildWorkerProcessDiagnostics(
+    int exitCode,
+    QProcess::ExitStatus exitStatus,
+    const QString& processError,
+    const QString& stderrText,
+    const QString& stdoutTailText
+)
+{
+    QStringList lines;
+    lines.append(
+        QStringLiteral("Worker exitCode=%1 exitStatus=%2")
+            .arg(exitCode)
+            .arg(qProcessExitStatusForUi(exitStatus))
+    );
+    if (!processError.trimmed().isEmpty()) {
+        lines.append(QStringLiteral("Process error: %1").arg(truncateProcessTextForUi(processError, 500)));
+    }
+    if (!stderrText.trimmed().isEmpty()) {
+        lines.append(QStringLiteral("stderr: %1").arg(truncateProcessTextForUi(stderrText, 2000)));
+    }
+    if (!stdoutTailText.trimmed().isEmpty()) {
+        lines.append(QStringLiteral("stdout_tail: %1").arg(truncateProcessTextForUi(stdoutTailText, 1000)));
+    }
+    lines.append(QStringLiteral("Log: %1").arg(videoExportWorkerLogPathForUi()));
+    return lines.join(QStringLiteral("\n"));
+}
+
+QString compactWorkerExitSummary(
+    int exitCode,
+    QProcess::ExitStatus exitStatus,
+    const QString& fallbackMessage
+)
+{
+    return QStringLiteral("%1 [%2, code=%3]")
+        .arg(fallbackMessage)
+        .arg(qProcessExitStatusForUi(exitStatus))
+        .arg(exitCode);
+}
+
 QString resolveInvalidStarPreviewReverseSoundPath()
 {
     QStringList candidates;
@@ -5178,24 +5259,38 @@ bool MainWindow::runVideoExportWorkerSync(
     parseStdoutLines();
 
     const QString stderrText = QString::fromUtf8(stderrBuffer).trimmed();
+    const QString stdoutTailText = QString::fromUtf8(stdoutBuffer).trimmed();
+    const QString processErrorText = process.errorString().trimmed();
+    const QString workerDiagnostics = buildWorkerProcessDiagnostics(
+        process.exitCode(),
+        process.exitStatus(),
+        processErrorText,
+        stderrText,
+        stdoutTailText
+    );
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
         if (errorMessage != nullptr) {
-            *errorMessage = !resultMessage.trimmed().isEmpty()
+            const QString summary = !resultMessage.trimmed().isEmpty()
                 ? resultMessage
                 : (!stderrText.isEmpty()
                     ? stderrText.split('\n').constFirst().trimmed()
                     : uiText("dialog.batch_export.error.export_failed", QStringLiteral("Export failed.")));
+            *errorMessage = compactWorkerExitSummary(process.exitCode(), process.exitStatus(), summary);
         }
         return false;
     }
 
     if (!finishedEventReceived || !success) {
         if (errorMessage != nullptr) {
-            *errorMessage = !resultMessage.trimmed().isEmpty()
+            const QString summary = !resultMessage.trimmed().isEmpty()
                 ? resultMessage
                 : (!stderrText.isEmpty()
                     ? stderrText.split('\n').constFirst().trimmed()
                     : uiText("dialog.batch_export.error.export_failed", QStringLiteral("Export failed.")));
+            const bool genericFailure = resultMessage.trimmed().isEmpty() && stderrText.trimmed().isEmpty();
+            *errorMessage = genericFailure
+                ? appendVideoExportDiagnostics(summary, workerDiagnostics)
+                : summary;
         }
         return false;
     }
@@ -5456,6 +5551,17 @@ void MainWindow::handleVideoExportWorkerProcessFinished(int exitCode, int exitSt
     }
 
     const QString stderrText = QString::fromUtf8(videoExportWorkerStderrBuffer_).trimmed();
+    const QString stdoutTailText = QString::fromUtf8(videoExportWorkerStdoutBuffer_).trimmed();
+    const QString processErrorText = videoExportWorkerProcess_ != nullptr
+        ? videoExportWorkerProcess_->errorString().trimmed()
+        : QString();
+    const QString workerDiagnostics = buildWorkerProcessDiagnostics(
+        exitCode,
+        static_cast<QProcess::ExitStatus>(exitStatus),
+        processErrorText,
+        stderrText,
+        stdoutTailText
+    );
     if (videoExportWorkerCancelRequested_ && !videoExportWorkerCompletionReceived_) {
         showCenteredLocalizedMessageBox(
             QMessageBox::Information,
@@ -5472,14 +5578,11 @@ void MainWindow::handleVideoExportWorkerProcessFinished(int exitCode, int exitSt
         videoExportWorkerResultMessage_ = exitStatus == static_cast<int>(QProcess::CrashExit)
             ? uiText("dialog.video_export.error.worker_crash", "Export worker crashed.")
             : uiText("dialog.video_export.error.worker_exit", "Export worker exited unexpectedly.");
-        if (!stderrText.isEmpty()) {
-            videoExportWorkerResultDetails_ = stderrText;
-        }
+        videoExportWorkerResultDetails_ = workerDiagnostics;
     } else if (!stderrText.isEmpty() && !videoExportWorkerSuccess_) {
-        if (!videoExportWorkerResultDetails_.isEmpty()) {
-            videoExportWorkerResultDetails_.append(QStringLiteral("\n\n"));
-        }
-        videoExportWorkerResultDetails_.append(stderrText);
+        videoExportWorkerResultDetails_ = appendVideoExportDiagnostics(videoExportWorkerResultDetails_, workerDiagnostics);
+    } else if (!videoExportWorkerSuccess_) {
+        videoExportWorkerResultDetails_ = appendVideoExportDiagnostics(videoExportWorkerResultDetails_, workerDiagnostics);
     }
 
     if (videoExportWorkerSuccess_) {
