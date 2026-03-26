@@ -3,6 +3,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QHash>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -22,18 +23,18 @@ constexpr auto kThemeKey = "theme";
 
 QString preferencesPath()
 {
-    const QDir appDir(QCoreApplication::applicationDirPath());
-    return appDir.filePath(".miacode_preferences.json");
-}
-
-QString legacyPreferencesFilePath()
-{
-    QString configRoot = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    const QString configRoot = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
     if (configRoot.isEmpty()) {
         return QString();
     }
     const QDir configDir(configRoot);
     return configDir.filePath("preferences.json");
+}
+
+QString legacyPreferencesFilePath()
+{
+    const QDir appDir(QCoreApplication::applicationDirPath());
+    return appDir.filePath(".miacode_preferences.json");
 }
 
 QJsonObject loadJsonObjectFromFile(const QString& path)
@@ -53,6 +54,16 @@ QJsonObject loadJsonObjectFromFile(const QString& path)
 
 bool saveJsonObjectToFile(const QString& path, const QJsonObject& root)
 {
+    if (path.isEmpty()) {
+        return false;
+    }
+
+    const QFileInfo fileInfo(path);
+    const QDir parentDir = fileInfo.dir();
+    if (!parentDir.exists() && !QDir().mkpath(parentDir.absolutePath())) {
+        return false;
+    }
+
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         return false;
@@ -401,8 +412,8 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.video_group", "视频"},
         {"dialog.render_settings.preview_group", "预览"},
         {"dialog.render_settings.button.close", "关闭"},
-        {"dialog.render_settings.button.set_software_default_audio", "设为默认音频"},
-        {"dialog.render_settings.button.restore_project_default", "恢复默认"},
+        {"dialog.render_settings.button.set_software_default_audio", "保存为本地预设"},
+        {"dialog.render_settings.button.restore_project_default", "应用本地预设"},
         {"dialog.render_settings.audio.bgm", "BGM 音量"},
         {"dialog.render_settings.audio.answer", "Answer 音量"},
         {"dialog.render_settings.audio.judge", "Judge 音量"},
