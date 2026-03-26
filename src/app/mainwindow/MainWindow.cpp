@@ -3153,6 +3153,9 @@ void MainWindow::loadProjectRenderState()
         if (render.value("render_mode").isString()) {
             muriRenderOptions_.renderMode = renderModeFromToken(render.value("render_mode").toString());
         }
+        if (render.value("wifi_need_c").isBool()) {
+            muriRenderOptions_.wifiNeedC = render.value("wifi_need_c").toBool(muriRenderOptions_.wifiNeedC);
+        }
         showJudgeMarkers_ = false;
         showTouchTrail_ = false;
         if (render.value("canvas_frame_rate_mode").isString()) {
@@ -3243,6 +3246,7 @@ void MainWindow::saveProjectRenderState() const
     );
     render.insert("note_flow_speed", previewNoteFlowSpeed_);
     render.insert("render_mode", renderModeToken(muriRenderOptions_.renderMode));
+    render.insert("wifi_need_c", muriRenderOptions_.wifiNeedC);
     render.insert("canvas_frame_rate_mode", previewCanvasFrameRateModeStorageValue());
     render.insert("follow_mode", previewFollowModeStorageValue());
     render.insert("show_debug_info", previewShowDebugInfo_);

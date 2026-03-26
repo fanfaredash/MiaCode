@@ -79,6 +79,9 @@
         muriRenderMode == QLatin1String("maimuri_dx_style")
         ? RenderMode::MaimuriDxStyle
         : RenderMode::Native;
+    if (preview.value("wifi_need_c").isBool()) {
+        muriRenderOptions_.wifiNeedC = preview.value("wifi_need_c").toBool(muriRenderOptions_.wifiNeedC);
+    }
     const double legacyBrightness = qBound(
         0.0,
         preview.value("background_brightness").toDouble(miacode::preview_video::kBackgroundBrightnessDefault),
@@ -193,6 +196,7 @@ void MainWindow::savePortableState() const
             ? QStringLiteral("maimuri_dx_style")
             : QStringLiteral("native")
     );
+    preview.insert("wifi_need_c", muriRenderOptions_.wifiNeedC);
     preview.insert("background_brightness", previewBackgroundBrightnessOuter_);
     preview.insert("background_brightness_outer", previewBackgroundBrightnessOuter_);
     preview.insert("background_brightness_inner", previewBackgroundBrightnessInner_);
