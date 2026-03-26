@@ -153,6 +153,8 @@ constexpr qreal kPreviewSeekInitialStepSeconds = static_cast<qreal>(miacode::pre
 constexpr qreal kPreviewSeekMaxStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekMaxStepSeconds);
 constexpr qreal kPreviewSeekLinearAccelerationSecondsPerMs =
     static_cast<qreal>(miacode::preview_interaction::kSeekLinearAccelerationSecondsPerMs);
+constexpr qreal kPreviewSeekHeldRepeatSpeedScale =
+    static_cast<qreal>(miacode::preview_interaction::kSeekHeldRepeatSpeedScale);
 constexpr double kEditorLineSpacingFactorDefault = 1.5;
 constexpr int kEditorFindBarMinWidth = 300;
 constexpr int kEditorFindBarMaxWidth = 500;
@@ -2635,7 +2637,8 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
                     kPreviewSeekMaxStepSeconds,
                     kPreviewSeekInitialStepSeconds + (heldMs * kPreviewSeekLinearAccelerationSecondsPerMs)
                 );
-                const int deltaMs = direction * qRound(acceleratedStep * 1000.0);
+                const qreal stepScale = keyEvent->isAutoRepeat() ? kPreviewSeekHeldRepeatSpeedScale : 1.0;
+                const int deltaMs = direction * qRound(acceleratedStep * stepScale * 1000.0);
                 const int value = qBound(
                     previewSlider_->minimum(),
                     previewSlider_->value() + deltaMs,
