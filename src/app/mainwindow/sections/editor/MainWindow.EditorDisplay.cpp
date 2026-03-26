@@ -24,6 +24,7 @@
     previewShowObjectStatsHud_ = false;
     exportShowObjectStatsHud_ = false;
     previewShowValidationSummary_ = true;
+    workspacePanelsSwapped_ = false;
     editorLineSpacingFactor_ = kEditorLineSpacingFactorDefault;
     editorTextFontPointSize_ = qBound(
         kEditorTextFontSizeMin,
@@ -148,6 +149,9 @@
     if (preview.value("show_validation_summary").isBool()) {
         previewShowValidationSummary_ = preview.value("show_validation_summary").toBool(true);
     }
+    if (preview.value("swap_side_panels").isBool()) {
+        workspacePanelsSwapped_ = preview.value("swap_side_panels").toBool(false);
+    }
     if (preview.value("canvas_aspect_ratio").isDouble()) {
         previewCanvasAspectRatio_ = normalizedPreviewCanvasAspectRatio(
             preview.value("canvas_aspect_ratio").toDouble(previewCanvasAspectRatio_)
@@ -216,6 +220,7 @@ void MainWindow::savePortableState() const
     preview.insert("show_object_stats_preview", previewShowObjectStatsHud_);
     preview.insert("show_object_stats_export", exportShowObjectStatsHud_);
     preview.insert("show_validation_summary", previewShowValidationSummary_);
+    preview.insert("swap_side_panels", workspacePanelsSwapped_);
     preview.insert("canvas_aspect_ratio", previewCanvasAspectRatio_);
     preview.insert("auto_restore_square_after_export", previewAutoRestoreSquareAfterExport_);
     preview.insert("audio", softwarePreviewAudioSettings_.toJson());

@@ -2684,19 +2684,33 @@ quint64 fnv1a64Bytes(const char* data, qint64 size)
     return hash;
 }
 
-bool writeAllToProcess(QProcess* process, const char* data, qint64 size)
+bool writeAllToProcess(QProcess* process, const char* data, qint64 size, QString* failureDetail = nullptr)
 {
     if (process == nullptr || data == nullptr || size < 0) {
+        if (failureDetail != nullptr) {
+            *failureDetail = QStringLiteral("invalid process write input");
+        }
         return false;
     }
     qint64 writtenTotal = 0;
     while (writtenTotal < size) {
         const qint64 written = process->write(data + writtenTotal, size - writtenTotal);
         if (written < 0) {
+            if (failureDetail != nullptr) {
+                *failureDetail = QStringLiteral("write returned %1 after %2/%3 bytes")
+                    .arg(written)
+                    .arg(writtenTotal)
+                    .arg(size);
+            }
             return false;
         }
         if (written == 0) {
             if (!process->waitForBytesWritten(30000)) {
+                if (failureDetail != nullptr) {
+                    *failureDetail = QStringLiteral("waitForBytesWritten failed after %1/%2 bytes")
+                        .arg(writtenTotal)
+                        .arg(size);
+                }
                 return false;
             }
             continue;
@@ -3073,6 +3087,40 @@ QString ffmpegBaseArgsLog(const QString& ffmpegPath, const QStringList& args)
     return QString("%1 %2").arg(ffmpegPath, args.join(' '));
 }
 
+QString qProcessStateForLog(QProcess::ProcessState state)
+{
+    switch (state) {
+    case QProcess::NotRunning:
+        return QStringLiteral("NotRunning");
+    case QProcess::Starting:
+        return QStringLiteral("Starting");
+    case QProcess::Running:
+        return QStringLiteral("Running");
+    }
+    return QStringLiteral("Unknown(%1)").arg(static_cast<int>(state));
+}
+
+QString qProcessExitStatusForLog(QProcess::ExitStatus status)
+{
+    switch (status) {
+    case QProcess::NormalExit:
+        return QStringLiteral("NormalExit");
+    case QProcess::CrashExit:
+        return QStringLiteral("CrashExit");
+    }
+    return QStringLiteral("Unknown(%1)").arg(static_cast<int>(status));
+}
+
+QString describeProcessForLog(const QProcess& process)
+{
+    return QStringLiteral("state=%1 exitStatus=%2 exitCode=%3 processError=%4 pid=%5")
+        .arg(qProcessStateForLog(process.state()))
+        .arg(qProcessExitStatusForLog(process.exitStatus()))
+        .arg(process.exitCode())
+        .arg(truncateForLog(process.errorString().trimmed(), 400))
+        .arg(QString::number(process.processId()));
+}
+
 QString makeRemuxStageOutputPath(const QString& finalOutputPath)
 {
     const QFileInfo outputInfo(finalOutputPath);
@@ -3093,10 +3141,21 @@ QString makeRemuxStageOutputPath(const QString& finalOutputPath)
 QString processOutputAndErrorForLog(QProcess& process, int maxChars = 2000)
 {
     const QString output = QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+    const QString errorOutput = QString::fromUtf8(process.readAllStandardError()).trimmed();
+    QStringList parts;
     if (!output.isEmpty()) {
-        return truncateForLog(output, maxChars);
+        parts.append(QStringLiteral("stdout: %1").arg(truncateForLog(output, maxChars)));
     }
-    return truncateForLog(process.errorString(), maxChars);
+    if (!errorOutput.isEmpty()) {
+        parts.append(QStringLiteral("stderr: %1").arg(truncateForLog(errorOutput, maxChars)));
+    }
+    if (parts.isEmpty()) {
+        const QString processError = process.errorString().trimmed();
+        if (!processError.isEmpty()) {
+            parts.append(QStringLiteral("process_error: %1").arg(truncateForLog(processError, maxChars)));
+        }
+    }
+    return parts.join(QStringLiteral("\n"));
 }
 
 QString withExportLogPath(const QString& details);
@@ -3744,6 +3803,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         return result;
     }
     appendVideoExportLog(QStringLiteral("ffmpeg_encode_started"));
+    appendVideoExportLog(QStringLiteral("ffmpeg_process_started"), describeProcessForLog(ffmpeg));
 
     if (setProgressPercent(8, QStringLiteral("Rendering frames and encoding..."))) {
         ffmpeg.kill();
@@ -4188,23 +4248,31 @@ VideoExportResult VideoExportController::exportPreparedTask(
         }
 
         frameTimer.restart();
-        if (packedFrameSize > 0 && !writeAllToProcess(&ffmpeg, packedFrameData, packedFrameSize)) {
+        QString ffmpegWriteFailure;
+        if (packedFrameSize > 0 && !writeAllToProcess(&ffmpeg, packedFrameData, packedFrameSize, &ffmpegWriteFailure)) {
+            const QString processSnapshot = describeProcessForLog(ffmpeg);
             ffmpeg.kill();
             ffmpeg.waitForFinished(2000);
-            const QString ffmpegOutput = truncateForLog(QString::fromUtf8(ffmpeg.readAllStandardOutput()).trimmed());
+            const QString ffmpegOutput = processOutputAndErrorForLog(ffmpeg, 2000);
             result.message = QStringLiteral("Failed to write frame data to ffmpeg.");
-            result.details = ffmpeg.errorString();
-            if (!ffmpegOutput.isEmpty()) {
-                result.details = ffmpegOutput + QStringLiteral("\n") + result.details;
+            QStringList detailLines;
+            if (!ffmpegWriteFailure.trimmed().isEmpty()) {
+                detailLines.append(ffmpegWriteFailure.trimmed());
             }
+            detailLines.append(processSnapshot);
+            if (!ffmpegOutput.isEmpty()) {
+                detailLines.append(ffmpegOutput);
+            }
+            result.details = detailLines.join(QStringLiteral("\n"));
             result.details = withExportLogPath(result.details);
             appendVideoExportLog(
                 QStringLiteral("fail_ffmpeg_write"),
-                QStringLiteral("frame=%1 bytes=%2 hash=0x%3 error=%4 output=%5")
+                QStringLiteral("frame=%1 bytes=%2 hash=0x%3 failure=%4 %5 output=%6")
                     .arg(frameIndex)
                     .arg(packedFrameSize)
                     .arg(QString::number(packedHash, 16))
-                    .arg(ffmpeg.errorString())
+                    .arg(truncateForLog(ffmpegWriteFailure, 400))
+                    .arg(processSnapshot)
                     .arg(truncateForLog(ffmpegOutput, 1000))
             );
             return false;
@@ -4367,22 +4435,22 @@ VideoExportResult VideoExportController::exportPreparedTask(
 
     for (int frameIndex = 0; frameIndex < frameCount; ++frameIndex) {
         if (ffmpeg.state() != QProcess::Running) {
+            const QString processSnapshot = describeProcessForLog(ffmpeg);
             ffmpeg.waitForFinished(2000);
-            const QString ffmpegOutput = truncateForLog(QString::fromUtf8(ffmpeg.readAllStandardOutput()).trimmed());
+            const QString ffmpegOutput = processOutputAndErrorForLog(ffmpeg, 2000);
             result.message = QStringLiteral("ffmpeg exited unexpectedly during frame piping.");
-            result.details = ffmpegOutput;
-            if (result.details.isEmpty()) {
-                result.details = ffmpeg.errorString();
-            } else if (!ffmpeg.errorString().isEmpty()) {
-                result.details += QStringLiteral("\n") + ffmpeg.errorString();
+            QStringList detailLines;
+            detailLines.append(processSnapshot);
+            if (!ffmpegOutput.isEmpty()) {
+                detailLines.append(ffmpegOutput);
             }
+            result.details = detailLines.join(QStringLiteral("\n"));
             result.details = withExportLogPath(result.details);
             appendVideoExportLog(
                 QStringLiteral("fail_ffmpeg_early_exit"),
-                QStringLiteral("frame=%1 state=%2 exitCode=%3 output=%4")
+                QStringLiteral("frame=%1 %2 output=%3")
                     .arg(frameIndex)
-                    .arg(static_cast<int>(ffmpeg.state()))
-                    .arg(ffmpeg.exitCode())
+                    .arg(processSnapshot)
                     .arg(truncateForLog(ffmpegOutput, 1000))
             );
             return result;
@@ -4625,15 +4693,18 @@ VideoExportResult VideoExportController::exportPreparedTask(
     }
     if (ffmpeg.exitStatus() != QProcess::NormalExit) {
         result.message = QStringLiteral("ffmpeg process failed.");
+        const QString processSnapshot = describeProcessForLog(ffmpeg);
         const QString ffmpegOutput = processOutputAndErrorForLog(ffmpeg, 2000);
-        result.details = ffmpeg.errorString();
+        QStringList detailLines;
+        detailLines.append(processSnapshot);
         if (!ffmpegOutput.isEmpty()) {
-            result.details = ffmpegOutput + QStringLiteral("\n") + result.details;
+            detailLines.append(ffmpegOutput);
         }
+        result.details = detailLines.join(QStringLiteral("\n"));
         result.details = withExportLogPath(result.details);
         appendVideoExportLog(
             QStringLiteral("fail_ffmpeg_wait"),
-            QStringLiteral("error=%1 output=%2").arg(ffmpeg.errorString(), truncateForLog(ffmpegOutput, 1000))
+            QStringLiteral("%1 output=%2").arg(processSnapshot, truncateForLog(ffmpegOutput, 1000))
         );
         return result;
     }
@@ -4641,16 +4712,20 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const QString ffmpegOutput = processOutputAndErrorForLog(ffmpeg, 2000);
     if (ffmpeg.exitStatus() != QProcess::NormalExit || ffmpeg.exitCode() != 0) {
         result.message = QStringLiteral("ffmpeg encode failed.");
-        result.details = ffmpegOutput;
-        if (result.details.isEmpty()) {
-            result.details = ffmpegBaseArgsLog(ffmpegPath, args);
+        const QString processSnapshot = describeProcessForLog(ffmpeg);
+        QStringList detailLines;
+        detailLines.append(processSnapshot);
+        if (!ffmpegOutput.isEmpty()) {
+            detailLines.append(ffmpegOutput);
+        } else {
+            detailLines.append(ffmpegBaseArgsLog(ffmpegPath, args));
         }
+        result.details = detailLines.join(QStringLiteral("\n"));
         result.details = withExportLogPath(result.details);
         appendVideoExportLog(
             QStringLiteral("fail_ffmpeg_exit"),
-            QStringLiteral("status=%1 code=%2 output=%3")
-                .arg(static_cast<int>(ffmpeg.exitStatus()))
-                .arg(ffmpeg.exitCode())
+            QStringLiteral("%1 output=%2")
+                .arg(processSnapshot)
                 .arg(truncateForLog(ffmpegOutput, 1000))
         );
         return result;
@@ -4702,6 +4777,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         return result;
     }
     appendVideoExportLog(QStringLiteral("ffmpeg_remux_started"));
+    appendVideoExportLog(QStringLiteral("ffmpeg_remux_process_started"), describeProcessForLog(remuxProcess));
     if (!waitForProcessWithProgress(
             remuxProcess,
             QStringLiteral("ffmpeg_remux_wait_begin"),
@@ -4717,12 +4793,17 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const QString remuxOutput = processOutputAndErrorForLog(remuxProcess, 2000);
     if (remuxProcess.exitStatus() != QProcess::NormalExit || remuxProcess.exitCode() != 0) {
         result.message = QStringLiteral("ffmpeg remux failed.");
-        result.details = withExportLogPath(remuxOutput);
+        const QString processSnapshot = describeProcessForLog(remuxProcess);
+        QStringList detailLines;
+        detailLines.append(processSnapshot);
+        if (!remuxOutput.isEmpty()) {
+            detailLines.append(remuxOutput);
+        }
+        result.details = withExportLogPath(detailLines.join(QStringLiteral("\n")));
         appendVideoExportLog(
             QStringLiteral("fail_ffmpeg_remux_exit"),
-            QStringLiteral("status=%1 code=%2 output=%3")
-                .arg(static_cast<int>(remuxProcess.exitStatus()))
-                .arg(remuxProcess.exitCode())
+            QStringLiteral("%1 output=%2")
+                .arg(processSnapshot)
                 .arg(truncateForLog(remuxOutput, 1000))
         );
         QFile::remove(remuxStagePath);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDialog>
+#include <QList>
 #include <QSize>
 #include <QStringList>
 
@@ -14,6 +15,7 @@ class QSlider;
 class QLabel;
 class QToolButton;
 class QWidget;
+class QCheckBox;
 
 class BatchVideoExportDialog : public QDialog
 {
@@ -30,6 +32,7 @@ public:
     VideoExportTask requestedTaskTemplate() const { return requestedTask_; }
     QStringList selectedChartDirectories() const;
     QString outputDirectory() const;
+    QList<int> selectedDifficultyIds() const;
 
 private:
     void addChartDirectories(const QStringList& directories);
@@ -77,4 +80,6 @@ private:
     QLabel* brightnessOuterValueLabel_ = nullptr;
     QLabel* brightnessInnerValueLabel_ = nullptr;
     QLabel* layoutSquareScaleValueLabel_ = nullptr;
+    QList<QCheckBox*> difficultyChecks_;
+    QList<int> difficultyIds_;
 };
