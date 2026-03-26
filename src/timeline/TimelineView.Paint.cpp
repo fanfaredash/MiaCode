@@ -346,10 +346,21 @@ void TimelineView::paintEvent(QPaintEvent* event)
             if (baseTile.isNull()) {
                 continue;
             }
-            QPixmap drawTile = baseTile;
+            const qreal trackScale = qBound<qreal>(0.25, zoomScale(), 1.0);
+            QPixmap scaledBaseTile = baseTile;
+            if (!qFuzzyCompare(trackScale, 1.0)) {
+                scaledBaseTile = baseTile.scaled(
+                    qMax(1, qRound(static_cast<qreal>(baseTile.width()) * trackScale)),
+                    qMax(1, qRound(static_cast<qreal>(baseTile.height()) * trackScale)),
+                    Qt::IgnoreAspectRatio,
+                    Qt::SmoothTransformation
+                );
+            }
+
+            QPixmap drawTile = scaledBaseTile;
             if (!qFuzzyIsNull(dx) || !qFuzzyIsNull(dy)) {
                 const qreal angle = qRadiansToDegrees(qAtan2(dy, dx));
-                drawTile = baseTile.transformed(QTransform().rotate(angle), Qt::SmoothTransformation);
+                drawTile = scaledBaseTile.transformed(QTransform().rotate(angle), Qt::SmoothTransformation);
             }
 
             if (drawTile.isNull()) {
@@ -365,7 +376,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
                     drawTile
                 );
             } else {
-                const qreal spacing = qMax<qreal>(6.0, static_cast<qreal>(baseTile.width()) * 0.72 + 1.5);
+                const qreal spacing = qMax<qreal>(4.0, static_cast<qreal>(scaledBaseTile.width()) * 0.72 + 1.0);
                 const int steps = qMax(1, static_cast<int>(length / spacing));
                 for (int i = 0; i <= steps; ++i) {
                     const qreal t = static_cast<qreal>(i) / static_cast<qreal>(steps);
