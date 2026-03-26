@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/design-ledger.md -->
-<!-- translation-source-hash: 93065c06f52cd0d53e1ea2b2ab41fe0daa52deb9ed295ace221656cd8f17613a -->
+<!-- translation-source-hash: e2ccfbcebf0f595668025fa8a9af3b90a1a7cdddf5a5ca5a0143933e8697b728 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 设计账本
@@ -34,6 +34,7 @@
 - 自动导出编码器选择当前更偏向保守的 H.264 路径，再逐级 fallback。
 - 背景媒体命名当前限制在 `bg.*` 或 `pv.mp4` 一类约定。
 - 预览面板当前采用卡片式布局，分成 preview、controls、stats 三块。
+- 时间轴拖拽/拖动当前默认让播放头尽量保持在视口中线附近，并在两端补动态留白，保证中线仍能对齐到 0 秒和当前预览末尾。
 - 校验 UI 当前会在底部标签页展示问题，并在编辑器头部用 summary chips 汇总。
 
 这些都还能调整，但改完后要同步更新这里以及相关索引/联动文档。
