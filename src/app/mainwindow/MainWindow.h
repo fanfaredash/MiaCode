@@ -334,7 +334,8 @@ private:
         const VideoExportSnapshot& snapshot,
         QProgressDialog* progressDialog,
         bool* canceledByUser,
-        QString* errorMessage
+        QString* errorMessage,
+        const std::function<void(int percent, const QString& rawMessage)>& progressCallback = {}
     );
     bool launchVideoExportWorker(const VideoExportSnapshot& snapshot, QString* errorMessage);
     void showExportToolbarMenu();

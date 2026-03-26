@@ -18,6 +18,7 @@
 #include <QLineEdit>
 #include <QListView>
 #include <QListWidget>
+#include <QLocale>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
@@ -64,6 +65,12 @@ QString uiText(const char* key, const QString& fallback)
 {
     const QString translated = UiText::text(QString::fromLatin1(key));
     return translated.isEmpty() ? fallback : translated;
+}
+
+QString systemL10n(const QString& en, const QString& zh)
+{
+    const QLocale locale = QLocale::system();
+    return locale.language() == QLocale::Chinese ? zh : en;
 }
 
 QSettings exportDialogSettingsStore()
@@ -142,6 +149,11 @@ QString batchExportLineEditStyleSheet()
         .arg(c.inputBg.name(QColor::HexRgb))
         .arg(c.textPrimary.name(QColor::HexRgb))
         .arg(c.accent.name(QColor::HexRgb));
+}
+
+QString batchDifficultyLabel(int difficultyId)
+{
+    return SimaiDocument::difficultyShortName(difficultyId);
 }
 
 QString preferredChartFilePathInDirectory(const QString& directoryPath)
@@ -351,15 +363,30 @@ BatchVideoExportDialog::BatchVideoExportDialog(
 
     auto* difficultyLabelTitle = new QLabel(uiText("dialog.batch_export.difficulty", QStringLiteral("Difficulty")), this);
     difficultyLabelTitle->setFixedWidth(kFormLabelWidth);
-    auto* difficultyValueLabel = new QLabel(difficultyLabel_, this);
+    auto* difficultySelector = new QWidget(this);
+    auto* difficultyLayout = new QHBoxLayout(difficultySelector);
+    difficultyLayout->setContentsMargins(0, 0, 0, 0);
+    difficultyLayout->setSpacing(10);
+    for (int difficultyId = 1; difficultyId <= 7; ++difficultyId) {
+        auto* check = new QCheckBox(batchDifficultyLabel(difficultyId), difficultySelector);
+        check->setChecked(batchDifficultyLabel(difficultyId) == difficultyLabel_);
+        difficultyChecks_.append(check);
+        difficultyIds_.append(difficultyId);
+        difficultyLayout->addWidget(check, 0);
+    }
+    difficultyLayout->addStretch(1);
     topForm->addWidget(difficultyLabelTitle, row, 0);
-    topForm->addWidget(difficultyValueLabel, row, 1);
+    topForm->addWidget(difficultySelector, row, 1, 1, 2);
     ++row;
 
     auto* outputLabel = new QLabel(uiText("dialog.batch_export.output_dir", QStringLiteral("Output Folder")), this);
     outputLabel->setFixedWidth(kFormLabelWidth);
     outputDirectoryEdit_ = new QLineEdit(this);
-    outputDirectoryEdit_->setText(QDir::toNativeSeparators(exportBaseDirectory(baseTask_)));
+    const QString rememberedOutputDirectory = lastOutputBrowseDirectory();
+    const QString initialOutputDirectory = rememberedOutputDirectory.trimmed().isEmpty()
+        ? exportBaseDirectory(baseTask_)
+        : rememberedOutputDirectory;
+    outputDirectoryEdit_->setText(QDir::toNativeSeparators(initialOutputDirectory));
     outputDirectoryEdit_->setStyleSheet(batchExportLineEditStyleSheet());
     auto* outputBrowseButton = new QPushButton(uiText("action.browse", QStringLiteral("Browse...")), this);
     outputBrowseButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
@@ -481,7 +508,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
 
     QWidget* outerBrightnessOption = createSliderOption(
         optionsCard,
-        uiText("dialog.video_export.option.outer_brightness", QStringLiteral("Outer Brightness")),
+        uiText("dialog.video_export.option.brightness_outer", QStringLiteral("Brightness (Outer)")),
         qRound(qBound(0.0, baseTask_.backgroundBrightnessOuter, 1.0) * 100.0),
         &brightnessOuterSlider_,
         &brightnessOuterValueLabel_
@@ -491,7 +518,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
 
     QWidget* innerBrightnessOption = createSliderOption(
         optionsCard,
-        uiText("dialog.video_export.option.inner_brightness", QStringLiteral("Inner Brightness")),
+        uiText("dialog.video_export.option.brightness_inner", QStringLiteral("Brightness (Inner)")),
         qRound(qBound(0.0, baseTask_.backgroundBrightnessInner, 1.0) * 100.0),
         &brightnessInnerSlider_,
         &brightnessInnerValueLabel_
@@ -501,7 +528,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
 
     QWidget* judgeLineOption = createSliderOption(
         optionsCard,
-        uiText("dialog.video_export.option.judge_line_size", QStringLiteral("Judge Line Size")),
+        uiText("dialog.video_export.option.layout_size", QStringLiteral("Judge Line Size")),
         qRound(miacode::preview_video::normalizedLayoutSquareScale(baseTask_.layoutSquareScale) * 100.0),
         &layoutSquareScaleSlider_,
         &layoutSquareScaleValueLabel_
@@ -573,6 +600,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     buttons->addButton(exportButton, QDialogButtonBox::AcceptRole);
     if (QPushButton* cancelButton = buttons->button(QDialogButtonBox::Cancel); cancelButton != nullptr) {
         cancelButton->setMinimumWidth(kDialogActionButtonMinWidth);
+        cancelButton->setText(systemL10n(QStringLiteral("Cancel"), QStringLiteral("取消")));
         cancelButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
         connect(cancelButton, &QPushButton::clicked, this, &BatchVideoExportDialog::reject);
     }
@@ -601,6 +629,18 @@ QStringList BatchVideoExportDialog::selectedChartDirectories() const
 QString BatchVideoExportDialog::outputDirectory() const
 {
     return QDir::cleanPath(QDir::fromNativeSeparators(outputDirectoryEdit_->text().trimmed()));
+}
+
+QList<int> BatchVideoExportDialog::selectedDifficultyIds() const
+{
+    QList<int> result;
+    const int count = qMin(difficultyChecks_.size(), difficultyIds_.size());
+    for (int i = 0; i < count; ++i) {
+        if (difficultyChecks_.at(i) != nullptr && difficultyChecks_.at(i)->isChecked()) {
+            result.append(difficultyIds_.at(i));
+        }
+    }
+    return result;
 }
 
 void BatchVideoExportDialog::addChartDirectories(const QStringList& directories)
@@ -728,6 +768,15 @@ bool BatchVideoExportDialog::applyUiToTask(VideoExportTask* task, QString* error
 
 void BatchVideoExportDialog::startExport()
 {
+    if (selectedDifficultyIds().isEmpty()) {
+        QMessageBox::warning(
+            this,
+            uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
+            uiText("dialog.batch_export.error.no_difficulties", QStringLiteral("Please select at least one difficulty."))
+        );
+        return;
+    }
+
     if (selectedChartDirectories().isEmpty()) {
         QMessageBox::warning(
             this,
