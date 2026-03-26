@@ -1812,9 +1812,6 @@ void MainWindow::applyUiTheme()
         deleteDifficultyButton_->setStyleSheet(UiTheme::deleteDifficultyButtonStyleSheet());
         deleteDifficultyButton_->setIcon(makeOutlineCloseIcon(UiTheme::colors().iconSecondary));
     }
-    if (previewPanel_ != nullptr) {
-        previewPanel_->setStyleSheet(UiTheme::previewPanelStyleSheet());
-    }
     if (timelineView_ != nullptr) {
         timelineView_->refreshTheme();
     }
@@ -1849,6 +1846,7 @@ void MainWindow::applyUiTheme()
     if (previewVideoSettingsButton_ != nullptr) {
         previewVideoSettingsButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
     }
+    applyWorkspacePanelArrangement();
     applySystemWindowBackdrop();
     if (syntaxCheckButton_ != nullptr) {
         syntaxCheckButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
