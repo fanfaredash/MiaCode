@@ -5,6 +5,8 @@
 #include <QAction>
 #include <QContextMenuEvent>
 #include <QEvent>
+#include <QInputMethodEvent>
+#include <QKeyEvent>
 #include <QMenu>
 #include <QMimeData>
 #include <QPainter>
@@ -24,6 +26,37 @@ constexpr int kCurrentLineHighlightLeftInset = 3;
 constexpr int kCurrentLineHighlightRightInset = 0;
 constexpr int kEditorCursorVisibleWidth = 1;
 constexpr int kEditorCursorHiddenWidth = 0;
+
+QChar normalizedHalfWidthChar(QChar ch)
+{
+    const ushort code = ch.unicode();
+    if (code == 0x3000) {
+        return QLatin1Char(' ');
+    }
+    if (code >= 0xFF01 && code <= 0xFF5E) {
+        return QChar(code - 0xFEE0);
+    }
+    switch (code) {
+    case 0x3001:
+        return QLatin1Char(',');
+    case 0x3002:
+        return QLatin1Char('.');
+    case 0x3010:
+        return QLatin1Char('[');
+    case 0x3011:
+        return QLatin1Char(']');
+    default:
+        return ch;
+    }
+}
+
+QString normalizedHalfWidthText(QString text)
+{
+    for (int i = 0; i < text.size(); ++i) {
+        text[i] = normalizedHalfWidthChar(text.at(i));
+    }
+    return text;
+}
 }  // namespace
 
 class LineNumberArea : public QWidget
@@ -265,13 +298,38 @@ void PlainCodeEditor::contextMenuEvent(QContextMenuEvent* event)
     delete menu;
 }
 
+void PlainCodeEditor::inputMethodEvent(QInputMethodEvent* event)
+{
+    if (event == nullptr || !halfWidthInputEnabled_) {
+        QTextEdit::inputMethodEvent(event);
+        return;
+    }
+
+    const QString commitString = event->commitString();
+    const QString normalizedCommitString = normalizedHalfWidthText(commitString);
+    if (commitString == normalizedCommitString) {
+        QTextEdit::inputMethodEvent(event);
+        return;
+    }
+
+    QInputMethodEvent normalizedEvent(event->preeditString(), event->attributes());
+    normalizedEvent.setCommitString(
+        normalizedCommitString,
+        event->replacementStart(),
+        event->replacementLength()
+    );
+    QTextEdit::inputMethodEvent(&normalizedEvent);
+}
+
 void PlainCodeEditor::insertFromMimeData(const QMimeData* source)
 {
     if (source == nullptr) {
         return;
     }
 
-    const QString text = source->text();
+    const QString text = halfWidthInputEnabled_
+        ? normalizedHalfWidthText(source->text())
+        : source->text();
     if (text.isEmpty()) {
         QTextEdit::insertFromMimeData(source);
         return;
@@ -290,6 +348,38 @@ void PlainCodeEditor::insertFromMimeData(const QMimeData* source)
     blockCursor.mergeBlockFormat(fmt);
     cursor.endEditBlock();
     setTextCursor(cursor);
+}
+
+void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
+{
+    if (event == nullptr
+        || !halfWidthInputEnabled_
+        || (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
+        QTextEdit::keyPressEvent(event);
+        return;
+    }
+
+    const QString inputText = event->text();
+    if (inputText.isEmpty()) {
+        QTextEdit::keyPressEvent(event);
+        return;
+    }
+
+    const QString normalizedText = normalizedHalfWidthText(inputText);
+    if (normalizedText == inputText) {
+        QTextEdit::keyPressEvent(event);
+        return;
+    }
+
+    QKeyEvent normalizedEvent(
+        event->type(),
+        event->key(),
+        event->modifiers(),
+        normalizedText,
+        event->isAutoRepeat(),
+        event->count()
+    );
+    QTextEdit::keyPressEvent(&normalizedEvent);
 }
 
 void PlainCodeEditor::paintEvent(QPaintEvent* event)
