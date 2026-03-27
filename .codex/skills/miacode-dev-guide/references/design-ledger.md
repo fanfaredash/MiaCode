@@ -32,6 +32,7 @@ Use this file to separate hard contracts from adjustable implementation choices.
 - Export auto-encoder selection currently favors conservative H.264-oriented paths in automatic mode before falling back.
 - Background media naming is currently limited to `bg.*` or `pv.mp4` style conventions.
 - Preview panel layout is currently card-based, with preview, controls, and stats as separate blocks.
+- Timeline drag/scrub currently keeps the playhead near the viewport center and reserves dynamic edge padding so the center line can still reach 0s and the current preview end.
 - Validation UI currently emphasizes surfaced issues in the bottom tabs and summary chips in the editor header.
 
 These are adjustable, but if changed they should be documented here and in the relevant index/linkage files.

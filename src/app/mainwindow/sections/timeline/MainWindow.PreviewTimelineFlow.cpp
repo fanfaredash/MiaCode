@@ -4,74 +4,11 @@ constexpr double kTimelineZeroSecondTolerance = 1e-6;
 
 QString workspaceSwapPreviewPanelStyleSheet(bool swapped)
 {
-    const QString borderRule = swapped
-        ? QStringLiteral(" border-right: 1px solid #DEE4EC;")
-        : QStringLiteral(" border-left: 1px solid #DEE4EC;");
-    return QStringLiteral(
-        "QWidget#PreviewPanel {"
-        " background: #F5F7FA;%1"
-        "}"
-        "QFrame#PreviewCanvasFrame {"
-        " background: #000000;"
-        " border: 1px solid #D8E0EA;"
-        "}"
-        "QFrame#PreviewControlCard, QFrame#PreviewStatsCard {"
-        " background: #EDF2F8;"
-        " border: 1px solid #D5E0EC;"
-        " border-radius: 10px;"
-        "}"
-        "QFrame#PreviewControls {"
-        " background: transparent;"
-        " border: none;"
-        "}"
-        "QFrame#PreviewStats {"
-        " background: transparent;"
-        " border: none;"
-        "}"
-        "QLabel#PreviewStatChip {"
-        " color: #213246;"
-        " background: #F6F9FD;"
-        " border: 1px solid #D3DEEA;"
-        " border-radius: 9px;"
-        " padding: 2px 8px;"
-        " font-weight: 600;"
-        "}"
-        "QLabel#PreviewStatChipTotal {"
-        " color: #213246;"
-        " background: #F0F4FA;"
-        " border: 1px solid #CBD8E6;"
-        " border-radius: 9px;"
-        " padding: 2px 8px;"
-        " font-weight: 700;"
-        "}"
-        "QToolButton#PreviewControlButton {"
-        " color: #223042;"
-        " padding: 5px 8px;"
-        " min-height: 28px;"
-        " border: 1px solid #D8E0EA;"
-        " border-radius: 6px;"
-        " background: transparent;"
-        " font-weight: 600;"
-        "}"
-        "QToolButton#PreviewControlButton:hover { background: #F5F8FC; border-color: #BCD0E5; }"
-        "QToolButton#PreviewControlButton:pressed { background: #E8F1FB; }"
-        "QSlider::groove:horizontal {"
-        " height: 6px;"
-        " background: #D8E0EA;"
-        " border-radius: 3px;"
-        "}"
-        "QSlider::sub-page:horizontal {"
-        " background: #2E77D0;"
-        " border-radius: 3px;"
-        "}"
-        "QSlider::handle:horizontal {"
-        " width: 12px;"
-        " margin: -4px 0;"
-        " border-radius: 6px;"
-        " background: #FFFFFF;"
-        " border: 1px solid #AFC0D6;"
-        "}"
-    ).arg(borderRule);
+    QString style = UiTheme::previewPanelStyleSheet();
+    if (swapped) {
+        style.replace(QStringLiteral("border-left: 1px solid"), QStringLiteral("border-right: 1px solid"));
+    }
+    return style;
 }
 
 double shiftedTimelineSecond(double second, double offsetSeconds)
