@@ -1,6 +1,6 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/design-ledger.md -->
 <!-- translation-source-hash: 67bb235bcb35f0bf4dbc2e885149e32b47a4320b3886dda9cd2bbdef97b27d12 -->
-<!-- translation-source-hash: 39b78bc9ffc5f7c8d1d9c4b7f88c08acf99a01e0d14497ceac800b22c5910a7a -->
+<!-- translation-source-hash: d1399cd91221ac8b2ee4322655a748eb72103ce4cd2d1a3cbe09f98cb9a0b891 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 设计账本
@@ -32,7 +32,7 @@
 
 - 预览画布默认是正方形比例，除非导出 UI 临时改了它。
 - 预览 note 流速默认值来自 `PreviewGameplayConfig.h`。
-- Native“谱面确认”预览当前会在旧六边形判定 effect 上方额外叠一层 maimuri 风格判定 overlay。`MuriRenderOptions::showChartReviewSlideJudgeOverlay` 控制 slide/wifi 类效果，并包含 slide 头星对应的文字判定，默认开启；`MuriRenderOptions::showChartReviewSimpleJudgeOverlay` 控制 tap/hold/break 文字判定，默认关闭，等后续接入 UI 开关。
+- Native“谱面确认”预览当前会在旧六边形判定 effect 上方额外叠一层 maimuri 风格判定 overlay。`MuriRenderOptions::showChartReviewSlideJudgeOverlay` 控制 slide/wifi 类效果，默认开启；`MuriRenderOptions::showChartReviewSimpleJudgeOverlay` 控制 tap/hold/break 文字判定，并额外包含 slide 头星对应的文字判定，默认关闭，等后续接入 UI 开关。
 - 在 `RenderMode::MaimuriDxStyle` 下，wifi 轨道擦除当前跟随运行时三轨进度而不是静态 area checkpoint：共享轨道按三轨里最慢的一轨裁切，在进度数组缺失时回退到已判定 area，并且在运行时完成擦除后不再回放整条轨道的 full-track flash；如果 `MuriRenderOptions::wifiNeedC` 开启，最后一个 area 会一直保留到 `C` 真正抬起。
 - 自动导出编码器选择当前更偏向保守的 H.264 路径，再逐级 fallback。
 - 背景媒体命名当前限制在 `bg.*` 或 `pv.mp4` 一类约定。
