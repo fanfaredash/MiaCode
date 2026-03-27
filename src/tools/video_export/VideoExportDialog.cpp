@@ -122,17 +122,6 @@ QString exportDialogResolutionLabel(const QSize& size)
     return QStringLiteral("%1x%2").arg(qMax(1, size.width())).arg(qMax(1, size.height()));
 }
 
-QString exportDialogPerformanceProfileLabel(VideoExportPerformanceProfile profile)
-{
-    switch (profile) {
-    case VideoExportPerformanceProfile::Speed:
-        return uiText("dialog.video_export.performance.speed", QStringLiteral("Speed First"));
-    case VideoExportPerformanceProfile::Balanced:
-    default:
-        return uiText("dialog.video_export.performance.balanced", QStringLiteral("Balanced"));
-    }
-}
-
 QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
 {
     switch (mode) {
@@ -545,47 +534,6 @@ VideoExportDialog::VideoExportDialog(
     fpsRightPlaceholder->setFixedWidth(rightAlignedButtonWidth);
     fpsLayout->addWidget(fpsRightPlaceholder, 0);
     primaryPanelLayout->addWidget(fpsRow, 0);
-
-    selectedPerformanceProfile_ = baseTask_.performanceProfile;
-    performanceButton_ = createDialogMenuButton(primaryPanel, exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
-    performanceMenu_ = new QMenu(performanceButton_);
-    UiTheme::styleRoundedMenu(*performanceMenu_);
-    addDialogMenuChoice(
-        performanceMenu_,
-        uiText("dialog.video_export.performance.balanced", QStringLiteral("Balanced")),
-        [this]() {
-            selectedPerformanceProfile_ = VideoExportPerformanceProfile::Balanced;
-            if (performanceButton_ != nullptr) {
-                performanceButton_->setText(exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
-            }
-        }
-    );
-    addDialogMenuChoice(
-        performanceMenu_,
-        uiText("dialog.video_export.performance.speed", QStringLiteral("Speed First")),
-        [this]() {
-            selectedPerformanceProfile_ = VideoExportPerformanceProfile::Speed;
-            if (performanceButton_ != nullptr) {
-                performanceButton_->setText(exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
-            }
-        }
-    );
-    performanceButton_->setMenu(performanceMenu_);
-    auto* performanceRow = new QWidget(primaryPanel);
-    auto* performanceLayout = new QHBoxLayout(performanceRow);
-    performanceLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
-    performanceLayout->setSpacing(kFormRowSpacing);
-    auto* performanceLabel = new QLabel(
-        uiText("dialog.video_export.performance", QStringLiteral("Speed")),
-        performanceRow
-    );
-    performanceLabel->setFixedWidth(kFormLabelWidth);
-    performanceLayout->addWidget(performanceLabel, 0);
-    performanceLayout->addWidget(performanceButton_, 1);
-    auto* performanceRightPlaceholder = new QWidget(performanceRow);
-    performanceRightPlaceholder->setFixedWidth(rightAlignedButtonWidth);
-    performanceLayout->addWidget(performanceRightPlaceholder, 0);
-    primaryPanelLayout->addWidget(performanceRow, 0);
 
     rangeContent_ = new QWidget(this);
     auto* rangeLayout = new QVBoxLayout(rangeContent_);
@@ -1182,17 +1130,6 @@ void VideoExportDialog::loadPersistedSettings()
         fpsButton_->setText(QStringLiteral("%1 FPS").arg(selectedFps_));
     }
 
-    const int savedProfile = settings.value(
-        QStringLiteral("performance_profile"),
-        static_cast<int>(selectedPerformanceProfile_)
-    ).toInt();
-    selectedPerformanceProfile_ = savedProfile == static_cast<int>(VideoExportPerformanceProfile::Speed)
-        ? VideoExportPerformanceProfile::Speed
-        : VideoExportPerformanceProfile::Balanced;
-    if (performanceButton_ != nullptr) {
-        performanceButton_->setText(exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
-    }
-
     if (showTimestampCheck_ != nullptr) {
         showTimestampCheck_->setChecked(settings.value(QStringLiteral("show_timestamp"), showTimestampCheck_->isChecked()).toBool());
     }
@@ -1257,7 +1194,6 @@ void VideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
     settings.setValue(QStringLiteral("resolution_width"), task.outputWidth);
     settings.setValue(QStringLiteral("resolution_height"), task.outputHeight);
     settings.setValue(QStringLiteral("fps"), task.fps);
-    settings.setValue(QStringLiteral("performance_profile"), static_cast<int>(task.performanceProfile));
     settings.setValue(QStringLiteral("show_timestamp"), task.showTimestamp);
     settings.setValue(QStringLiteral("smooth_brightness"), task.smoothBrightness);
     settings.setValue(
@@ -1325,7 +1261,6 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     updated.outputWidth = selectedSize.width() > 0 ? selectedSize.width() : updated.outputWidth;
     updated.outputHeight = selectedSize.height() > 0 ? selectedSize.height() : updated.outputHeight;
     updated.fps = qMax(1, selectedFps_);
-    updated.performanceProfile = selectedPerformanceProfile_;
     updated.showTimestamp = showTimestampCheck_ != nullptr ? showTimestampCheck_->isChecked() : true;
     updated.backgroundBrightnessOuter = brightnessOuterSlider_ != nullptr
         ? qBound(0.0, static_cast<double>(brightnessOuterSlider_->value()) / 100.0, 1.0)
