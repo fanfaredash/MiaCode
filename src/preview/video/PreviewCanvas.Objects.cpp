@@ -3481,8 +3481,10 @@ void PreviewCanvas::drawMaimuriDxJudgeOverlay(QPainter& painter, const QRectF& p
 
 void PreviewCanvas::drawChartReviewJudgeOverlay(QPainter& painter, const QRectF& playfieldRect)
 {
+    const bool showSlideJudgeOverlay = muriRenderOptions_.showChartReviewSlideJudgeOverlay;
+    const bool showSimpleJudgeOverlay = muriRenderOptions_.showChartReviewSimpleJudgeOverlay;
     if (muriRenderOptions_.renderMode != RenderMode::Native
-        || !muriRenderOptions_.showChartReviewJudgeOverlay) {
+        || (!showSlideJudgeOverlay && !showSimpleJudgeOverlay)) {
         return;
     }
 
@@ -3526,6 +3528,9 @@ void PreviewCanvas::drawChartReviewJudgeOverlay(QPainter& painter, const QRectF&
         markerByKey.insert(markerKey, &marker);
 
         if (marker.type == QLatin1String("tap")) {
+            if (!showSimpleJudgeOverlay) {
+                continue;
+            }
             ReviewJudgeEvent event;
             event.kind = marker.isBreak ? ReviewJudgeKind::SimpleBreak : ReviewJudgeKind::SimpleNormal;
             event.second = static_cast<qreal>(marker.second);
@@ -3534,6 +3539,9 @@ void PreviewCanvas::drawChartReviewJudgeOverlay(QPainter& painter, const QRectF&
             continue;
         }
         if (marker.type == QLatin1String("hold")) {
+            if (!showSimpleJudgeOverlay) {
+                continue;
+            }
             if (marker.endSecond < 0.0) {
                 continue;
             }
@@ -3546,6 +3554,9 @@ void PreviewCanvas::drawChartReviewJudgeOverlay(QPainter& painter, const QRectF&
             continue;
         }
         if (marker.type != QLatin1String("slide") && marker.type != QLatin1String("wifi")) {
+            continue;
+        }
+        if (!showSlideJudgeOverlay) {
             continue;
         }
 

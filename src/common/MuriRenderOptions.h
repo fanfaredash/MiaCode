@@ -10,6 +10,7 @@ struct MuriRenderOptions {
     bool showSlideTracks = true;
     bool showJudgeMarkers = false;
     bool showTouchTrail = false;
-    bool showChartReviewJudgeOverlay = true;
+    bool showChartReviewSlideJudgeOverlay = true;
+    bool showChartReviewSimpleJudgeOverlay = false;
     bool wifiNeedC = false;
 };

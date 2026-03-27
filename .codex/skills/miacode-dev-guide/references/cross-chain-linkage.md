@@ -143,6 +143,7 @@ Shared render settings include:
 - smooth brightness
 - background scale mode
 - note flow speed
+- chart-review judge overlay toggles for slide/wifi-family and tap/hold-family effects
 - timestamp/object-stats HUD flags
 - Muri render options
 
