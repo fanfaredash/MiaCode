@@ -3556,11 +3556,8 @@ void PreviewCanvas::drawChartReviewJudgeOverlay(QPainter& painter, const QRectF&
         if (marker.type != QLatin1String("slide") && marker.type != QLatin1String("wifi")) {
             continue;
         }
-        if (!showSlideJudgeOverlay) {
-            continue;
-        }
 
-        if (marker.hasHeadStar) {
+        if (showSimpleJudgeOverlay && marker.hasHeadStar) {
             const QString helperKey = slideHeadEventKey(marker);
             if (!emittedHeadEvents.contains(helperKey)) {
                 emittedHeadEvents.insert(helperKey);
@@ -3570,6 +3567,9 @@ void PreviewCanvas::drawChartReviewJudgeOverlay(QPainter& painter, const QRectF&
                 headEvent.pad = lanePadToken(marker.lane);
                 events.append(headEvent);
             }
+        }
+        if (!showSlideJudgeOverlay) {
+            continue;
         }
 
         ReviewJudgeEvent event;
