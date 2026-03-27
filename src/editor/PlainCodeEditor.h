@@ -6,6 +6,8 @@
 class LineNumberArea;
 class QAction;
 class QContextMenuEvent;
+class QInputMethodEvent;
+class QKeyEvent;
 class QMimeData;
 
 class PlainCodeEditor : public QTextEdit
@@ -25,7 +27,9 @@ public:
 protected:
     void changeEvent(QEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
+    void inputMethodEvent(QInputMethodEvent* event) override;
     void insertFromMimeData(const QMimeData* source) override;
+    void keyPressEvent(QKeyEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
 
@@ -36,6 +40,7 @@ private slots:
 private:
     int blockSpacingPixels_ = 0;
     int topOverlayInsetPixels_ = 0;
+    bool halfWidthInputEnabled_ = true;
     QList<QAction*> batchTransformActions_;
     QList<QAction*> moreBatchTransformActions_;
     LineNumberArea* lineNumberArea_;
