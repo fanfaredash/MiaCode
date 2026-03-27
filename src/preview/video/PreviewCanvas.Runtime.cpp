@@ -433,6 +433,23 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     judgeEffectFireworkSourceRect_ = source.judgeEffectFireworkSourceRect_;
     judgeEffectFireworkColorBallImage_ = source.judgeEffectFireworkColorBallImage_;
     judgeEffectFireworkColorBallSourceRect_ = source.judgeEffectFireworkColorBallSourceRect_;
+    reviewJudgeSimpleNormalImage_ = source.reviewJudgeSimpleNormalImage_;
+    reviewJudgeSimpleNormalSourceRect_ = source.reviewJudgeSimpleNormalSourceRect_;
+    reviewJudgeSimpleBreakImage_ = source.reviewJudgeSimpleBreakImage_;
+    reviewJudgeSimpleBreakSourceRect_ = source.reviewJudgeSimpleBreakSourceRect_;
+    reviewJudgeStraightLeftImage_ = source.reviewJudgeStraightLeftImage_;
+    reviewJudgeStraightRightImage_ = source.reviewJudgeStraightRightImage_;
+    reviewJudgeCircleLeftImage_ = source.reviewJudgeCircleLeftImage_;
+    reviewJudgeCircleRightImage_ = source.reviewJudgeCircleRightImage_;
+    reviewJudgeWifiUpImage_ = source.reviewJudgeWifiUpImage_;
+    reviewJudgeWifiDownImage_ = source.reviewJudgeWifiDownImage_;
+    muriJudgeSimpleImage_ = source.muriJudgeSimpleImage_;
+    muriJudgeStraightLeftImage_ = source.muriJudgeStraightLeftImage_;
+    muriJudgeStraightRightImage_ = source.muriJudgeStraightRightImage_;
+    muriJudgeCircleLeftImage_ = source.muriJudgeCircleLeftImage_;
+    muriJudgeCircleRightImage_ = source.muriJudgeCircleRightImage_;
+    muriJudgeWifiUpImage_ = source.muriJudgeWifiUpImage_;
+    muriJudgeWifiDownImage_ = source.muriJudgeWifiDownImage_;
     outlineImage_ = source.outlineImage_;
     tapAtlasImage_ = source.tapAtlasImage_;
     trackAtlasImage_ = source.trackAtlasImage_;
@@ -1104,6 +1121,21 @@ struct PreviewCanvas::SkinLoadResult {
     QImage judgeEffectTouchPart02Image;
     QImage judgeEffectFireworkImage;
     QImage judgeEffectFireworkColorBallImage;
+    QImage reviewJudgeSimpleNormalImage;
+    QImage reviewJudgeSimpleBreakImage;
+    QImage reviewJudgeStraightLeftImage;
+    QImage reviewJudgeStraightRightImage;
+    QImage reviewJudgeCircleLeftImage;
+    QImage reviewJudgeCircleRightImage;
+    QImage reviewJudgeWifiUpImage;
+    QImage reviewJudgeWifiDownImage;
+    QImage muriJudgeSimpleImage;
+    QImage muriJudgeStraightLeftImage;
+    QImage muriJudgeStraightRightImage;
+    QImage muriJudgeCircleLeftImage;
+    QImage muriJudgeCircleRightImage;
+    QImage muriJudgeWifiUpImage;
+    QImage muriJudgeWifiDownImage;
     QImage tapAtlasImage;
     QImage trackAtlasImage;
     QImage touchAtlasImage;
@@ -1126,6 +1158,17 @@ QImage loadImageIfExists(const QString& path)
         return QImage();
     }
     return QImage(path);
+}
+
+QImage loadFirstImageIfExists(const QStringList& paths)
+{
+    for (const QString& path : paths) {
+        const QImage image = loadImageIfExists(path);
+        if (!image.isNull()) {
+            return image;
+        }
+    }
+    return QImage();
 }
 
 QImage loadGuideImageScaled(const QDir& noteGuideDir, const QString& name)
@@ -1289,6 +1332,60 @@ PreviewCanvas::SkinLoadResult loadSkinAssets(const QString& skinDir, quint64 gen
     if (result.judgeEffectFireworkColorBallImage.isNull()) {
         result.judgeEffectFireworkColorBallImage = loadImageIfExists(dir.filePath("ColorBall.png"));
     }
+    result.reviewJudgeSimpleNormalImage = loadFirstImageIfExists(QStringList{
+        dir.filePath("JudgeTextSkins/judge_text_normal.png"),
+        dir.filePath("judge_text_normal.png"),
+    });
+    result.reviewJudgeSimpleBreakImage = loadFirstImageIfExists(QStringList{
+        dir.filePath("JudgeTextSkins/judge_text_break.png"),
+        dir.filePath("judge_text_break.png"),
+    });
+    result.reviewJudgeStraightLeftImage = loadFirstImageIfExists(QStringList{
+        dir.filePath("just_str_l.png"),
+        dir.filePath("SlideOKSkins/just_str_l.png"),
+    });
+    result.reviewJudgeStraightRightImage = loadFirstImageIfExists(QStringList{
+        dir.filePath("just_str_r.png"),
+        dir.filePath("SlideOKSkins/just_str_r.png"),
+    });
+    result.reviewJudgeCircleLeftImage = loadFirstImageIfExists(QStringList{
+        dir.filePath("just_curv_l.png"),
+        dir.filePath("SlideOKSkins/just_curv_l.png"),
+    });
+    result.reviewJudgeCircleRightImage = loadFirstImageIfExists(QStringList{
+        dir.filePath("just_curv_r.png"),
+        dir.filePath("SlideOKSkins/just_curv_r.png"),
+    });
+    result.reviewJudgeWifiUpImage = loadFirstImageIfExists(QStringList{
+        dir.filePath("just_wifi_u.png"),
+        dir.filePath("SlideOKSkins/just_wifi_u.png"),
+    });
+    result.reviewJudgeWifiDownImage = loadFirstImageIfExists(QStringList{
+        dir.filePath("just_wifi_d.png"),
+        dir.filePath("SlideOKSkins/just_wifi_d.png"),
+    });
+    result.muriJudgeSimpleImage = loadFirstImageIfExists(QStringList{
+        dir.filePath("JudgeTextSkins/judge_text_good.png"),
+        dir.filePath("judge_text_good.png"),
+    });
+    result.muriJudgeStraightLeftImage = loadFirstImageIfExists(QStringList{
+        dir.filePath("SlideOKSkins/just_str_l_fast_gd.png"),
+    });
+    result.muriJudgeStraightRightImage = loadFirstImageIfExists(QStringList{
+        dir.filePath("SlideOKSkins/just_str_r_fast_gd.png"),
+    });
+    result.muriJudgeCircleLeftImage = loadFirstImageIfExists(QStringList{
+        dir.filePath("SlideOKSkins/just_curv_l_fast_gd.png"),
+    });
+    result.muriJudgeCircleRightImage = loadFirstImageIfExists(QStringList{
+        dir.filePath("SlideOKSkins/just_curv_r_fast_gd.png"),
+    });
+    result.muriJudgeWifiUpImage = loadFirstImageIfExists(QStringList{
+        dir.filePath("SlideOKSkins/just_wifi_u_fast_gd.png"),
+    });
+    result.muriJudgeWifiDownImage = loadFirstImageIfExists(QStringList{
+        dir.filePath("SlideOKSkins/just_wifi_d_fast_gd.png"),
+    });
 
     result.noteGuideNormalImage = loadGuideImageScaled(noteGuideDir, "Normal.png");
     result.noteGuideBreakImage = loadGuideImageScaled(noteGuideDir, "Break.png");

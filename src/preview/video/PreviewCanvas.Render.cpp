@@ -341,6 +341,7 @@ void PreviewCanvas::renderCanvas(
     drawHoldAndTapHeadLayer(painter, playfieldRect);
     drawTouchLayer(painter, playfieldRect);
     drawTouchHoldLayer(painter, playfieldRect);
+    drawMaimuriDxJudgeOverlay(painter, playfieldRect);
     if (batchNative) {
         endNativeBatch(painter);
     }

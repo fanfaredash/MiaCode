@@ -185,6 +185,7 @@ private:
     void drawJudgeEffectLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawJudgeEffectTouchLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF& playfieldRect);
+    void drawChartReviewJudgeOverlay(QPainter& painter, const QRectF& playfieldRect);
     void drawHud(QPainter& painter, const QRectF& stageRect);
     bool drawSpriteImage(
         QPainter& painter,
@@ -224,6 +225,7 @@ private:
     void drawTouchMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect, int overlapCount);
     void drawTapMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect);
     void drawHoldMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect);
+    void drawMaimuriDxJudgeOverlay(QPainter& painter, const QRectF& playfieldRect);
     TapApproachSample sampleTapApproach(qreal deltaSeconds) const;
     qreal sampleSlideTrackPreTraceOpacity(qreal markerSecond, qreal playheadSecond) const;
     void refreshTimingFromFlowSpeed();
@@ -317,6 +319,23 @@ private:
     QRectF judgeEffectFireworkSourceRect_;
     QImage judgeEffectFireworkColorBallImage_;
     QRectF judgeEffectFireworkColorBallSourceRect_;
+    QImage reviewJudgeSimpleNormalImage_;
+    QRectF reviewJudgeSimpleNormalSourceRect_;
+    QImage reviewJudgeSimpleBreakImage_;
+    QRectF reviewJudgeSimpleBreakSourceRect_;
+    QImage reviewJudgeStraightLeftImage_;
+    QImage reviewJudgeStraightRightImage_;
+    QImage reviewJudgeCircleLeftImage_;
+    QImage reviewJudgeCircleRightImage_;
+    QImage reviewJudgeWifiUpImage_;
+    QImage reviewJudgeWifiDownImage_;
+    QImage muriJudgeSimpleImage_;
+    QImage muriJudgeStraightLeftImage_;
+    QImage muriJudgeStraightRightImage_;
+    QImage muriJudgeCircleLeftImage_;
+    QImage muriJudgeCircleRightImage_;
+    QImage muriJudgeWifiUpImage_;
+    QImage muriJudgeWifiDownImage_;
     QImage outlineImage_;
     QImage tapAtlasImage_;
     QImage trackAtlasImage_;

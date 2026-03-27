@@ -28,6 +28,15 @@ enum class AreaJudgeCause {
     Unknown,
 };
 
+enum class MuriJudgeSpriteKind {
+    Simple,
+    SlideStraight,
+    SlideCircleCcw,
+    SlideCircleCw,
+    WifiUp,
+    WifiDown,
+};
+
 struct MuriPadWindow {
     QString pad;
     double startSecond = 0.0;
@@ -90,6 +99,15 @@ struct MuriDiagnostic {
     QString detail;
 };
 
+struct MuriJudgeSpriteEvent {
+    MuriJudgeSpriteKind kind = MuriJudgeSpriteKind::Simple;
+    double second = 0.0;
+    double spawnSecond = 0.0;
+    QString markerKey;
+    QString pad;
+    int lane = 1;
+};
+
 struct MuriStaticReferenceNote {
     QString markerKey;
     QString markerType;
@@ -114,6 +132,7 @@ struct MuriStaticReference {
 struct MuriAnalysisReport {
     QHash<QString, MarkerMuriState> markerStates;
     QVector<MuriDiagnostic> diagnostics;
+    QVector<MuriJudgeSpriteEvent> judgeSpriteEvents;
     QVector<MuriPadWindow> padWindows;
     QVector<MuriActionTrail> actionTrails;
     QString sourceSignature;
@@ -122,6 +141,7 @@ struct MuriAnalysisReport {
     {
         return markerStates.isEmpty()
             && diagnostics.isEmpty()
+            && judgeSpriteEvents.isEmpty()
             && padWindows.isEmpty()
             && actionTrails.isEmpty();
     }

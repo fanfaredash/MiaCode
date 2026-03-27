@@ -174,6 +174,127 @@ qreal muriFlashOpacity(const MarkerMuriState* state, double playheadSeconds)
     return qBound<qreal>(0.0, 0.45 * (1.0 - elapsed / kFlashDurationSeconds), 0.45);
 }
 
+qreal maimuriDxJudgeFadeOutAlpha(qreal elapsedSeconds)
+{
+    if (elapsedSeconds < 0.0 || elapsedSeconds > kMaimuriDxJudgeLifetimeSeconds) {
+        return 0.0;
+    }
+    if (elapsedSeconds <= kMaimuriDxJudgeFadeOutStartSeconds) {
+        return 1.0;
+    }
+    return qBound<qreal>(
+        0.0,
+        1.0 - (elapsedSeconds - kMaimuriDxJudgeFadeOutStartSeconds)
+            / qMax<qreal>(kRenderDurationEpsilon, kMaimuriDxJudgeLifetimeSeconds - kMaimuriDxJudgeFadeOutStartSeconds),
+        1.0
+    );
+}
+
+qreal maimuriDxSimpleJudgeAlpha(qreal elapsedSeconds)
+{
+    if (elapsedSeconds < 0.0 || elapsedSeconds > kMaimuriDxJudgeLifetimeSeconds) {
+        return 0.0;
+    }
+    if (elapsedSeconds < kMaimuriDxSimpleJudgeFadeInSeconds) {
+        return qBound<qreal>(
+            0.0,
+            elapsedSeconds / qMax<qreal>(kRenderDurationEpsilon, kMaimuriDxSimpleJudgeFadeInSeconds),
+            1.0
+        );
+    }
+    return maimuriDxJudgeFadeOutAlpha(elapsedSeconds);
+}
+
+QPointF normalizedLogicalVector(const QPointF& vector)
+{
+    const qreal length = std::hypot(vector.x(), vector.y());
+    if (length <= kRenderDurationEpsilon) {
+        return QPointF(0.0, 0.0);
+    }
+    return QPointF(vector.x() / length, vector.y() / length);
+}
+
+QPointF slideEndTangentLogical(const TimelineNoteMarker& marker)
+{
+    if (!marker.slideSegmentPoints.isEmpty()) {
+        const QVector<QPointF>& lastSegment = marker.slideSegmentPoints.constLast();
+        if (lastSegment.size() >= 2) {
+            return normalizedLogicalVector(lastSegment.constLast() - lastSegment.at(lastSegment.size() - 2));
+        }
+        if (!lastSegment.isEmpty()) {
+            return normalizedLogicalVector(lastSegment.constLast());
+        }
+    }
+    return normalizedLogicalVector(laneUnitVector(marker.endLane));
+}
+
+bool slideKeyUsesCcwJudgeSprite(const QString& key)
+{
+    if (key.isEmpty()) {
+        return false;
+    }
+    int startLane = key.at(0).digitValue();
+    if (startLane < 1 || startLane > 8) {
+        startLane = 1;
+    }
+    const bool outerStart = startLane == 1 || startLane == 2 || startLane == 7 || startLane == 8;
+    if (key.contains(QLatin1Char('<'))) {
+        return outerStart;
+    }
+    if (key.contains(QLatin1Char('>'))) {
+        return !outerStart;
+    }
+    return false;
+}
+
+bool slideKeyUsesCwJudgeSprite(const QString& key)
+{
+    if (key.isEmpty()) {
+        return false;
+    }
+    int startLane = key.at(0).digitValue();
+    if (startLane < 1 || startLane > 8) {
+        startLane = 1;
+    }
+    const bool outerStart = startLane == 1 || startLane == 2 || startLane == 7 || startLane == 8;
+    if (key.contains(QLatin1Char('>'))) {
+        return outerStart;
+    }
+    if (key.contains(QLatin1Char('<'))) {
+        return !outerStart;
+    }
+    return false;
+}
+
+qreal chartReviewSlideJudgeSecond(const TimelineNoteMarker& marker)
+{
+    if (marker.endSecond > marker.second) {
+        return static_cast<qreal>(marker.endSecond);
+    }
+    if (marker.slideTraceSecond > marker.second) {
+        return static_cast<qreal>(marker.slideTraceSecond);
+    }
+    return static_cast<qreal>(marker.second);
+}
+
+QString slideHeadEventKey(const TimelineNoteMarker& marker)
+{
+    return QStringLiteral("slide_head_star|%1|%2|%3|%4|%5")
+        .arg(marker.second, 0, 'f', 6)
+        .arg(marker.lane)
+        .arg(marker.sourceLine)
+        .arg(marker.sourceCol)
+        .arg(marker.eachGroupId);
+}
+
+QString lanePadToken(int lane)
+{
+    if (lane < 1 || lane > 8) {
+        return QString();
+    }
+    return QStringLiteral("A%1").arg(lane);
+}
+
 }  // namespace
 
 const MarkerMuriState* PreviewCanvas::markerMuriState(const TimelineNoteMarker& marker) const
@@ -184,7 +305,6 @@ const MarkerMuriState* PreviewCanvas::markerMuriState(const TimelineNoteMarker& 
     }
     return &it.value();
 }
-
 void PreviewCanvas::drawTouchLayer(QPainter& painter, const QRectF& playfieldRect)
 {
     QHash<quint64, int> overlapCounts;
@@ -3145,6 +3265,166 @@ void PreviewCanvas::drawMuriActionOverlay(QPainter& painter, const QRectF& playf
     if (resumeNativeBatch) {
         beginNativeBatch(painter);
     }
+}
+
+void PreviewCanvas::drawMaimuriDxJudgeOverlay(QPainter& painter, const QRectF& playfieldRect)
+{
+    if (muriRenderOptions_.renderMode != RenderMode::MaimuriDxStyle
+        || muriAnalysisReport_.judgeSpriteEvents.isEmpty()) {
+        return;
+    }
+
+    if (muriJudgeSimpleImage_.isNull()
+        && muriJudgeStraightLeftImage_.isNull()
+        && muriJudgeStraightRightImage_.isNull()
+        && muriJudgeCircleLeftImage_.isNull()
+        && muriJudgeCircleRightImage_.isNull()
+        && muriJudgeWifiUpImage_.isNull()
+        && muriJudgeWifiDownImage_.isNull()) {
+        return;
+    }
+
+    QHash<QString, const TimelineNoteMarker*> markerByKey;
+    markerByKey.reserve(noteMarkers_.size());
+    for (const TimelineNoteMarker& marker : noteMarkers_) {
+        markerByKey.insert(makeMarkerAnalysisKey(marker), &marker);
+    }
+
+    const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
+    const QPointF logicalCenterPoint(kLogicalCanvasCenter, kLogicalCanvasCenter);
+    painter.save();
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+
+    auto drawJudgeSprite =
+        [this, &painter, &playfieldRect, canvasScale](const QImage& image, const QPointF& logicalCenter, qreal logicalWidth, qreal angleDegrees, qreal opacity) {
+            if (image.isNull() || logicalWidth <= 0.0 || opacity <= kRenderAlphaEpsilon) {
+                return;
+            }
+            const QPointF center = mapLogicalPointToRect(logicalCenter, playfieldRect);
+            const int targetWidth = qMax(1, qRound(logicalWidth * canvasScale));
+            const qreal aspect = image.width() > 0
+                ? static_cast<qreal>(image.height()) / static_cast<qreal>(image.width())
+                : 1.0;
+            const int targetHeight = qMax(1, qRound(targetWidth * aspect));
+            drawSpriteImage(
+                painter,
+                image,
+                center,
+                targetWidth,
+                targetHeight,
+                -angleDegrees,
+                opacity
+            );
+        };
+
+    for (const MuriJudgeSpriteEvent& event : muriAnalysisReport_.judgeSpriteEvents) {
+        if (playheadSeconds_ + 1e-6 < event.spawnSecond) {
+            continue;
+        }
+
+        const qreal elapsedSeconds = static_cast<qreal>(playheadSeconds_ - event.second);
+        if (elapsedSeconds < 0.0 || elapsedSeconds > kMaimuriDxJudgeLifetimeSeconds) {
+            continue;
+        }
+
+        qreal alpha = 0.0;
+        QPointF logicalCenter;
+        qreal angleDegrees = 0.0;
+        qreal logicalWidth = 0.0;
+        const QImage* image = nullptr;
+
+        switch (event.kind) {
+        case MuriJudgeSpriteKind::Simple: {
+            if (event.pad.isEmpty()) {
+                continue;
+            }
+            image = &muriJudgeSimpleImage_;
+            alpha = maimuriDxSimpleJudgeAlpha(elapsedSeconds);
+            const QPointF base = miacode::muri::padCenter(event.pad);
+            const QPointF unit = padUnitVectorForToken(event.pad);
+            logicalCenter = base - unit * kMaimuriDxJudgeSimpleOffsetLogical;
+            logicalWidth = kMaimuriDxJudgeSimpleWidthLogical;
+            if (event.pad == QLatin1String("C")) {
+                angleDegrees = 0.0;
+                break;
+            }
+            const int lane = wrappedLane(event.pad.mid(1).toInt());
+            const int laneMod = lane & 7;
+            const QChar ring = event.pad.at(0).toUpper();
+            if (ring == QLatin1Char('A') || ring == QLatin1Char('B')) {
+                angleDegrees = 22.5 - 45.0 * laneMod;
+            } else if (ring == QLatin1Char('D') || ring == QLatin1Char('E')) {
+                angleDegrees = 45.0 - 45.0 * laneMod;
+            }
+            break;
+        }
+        case MuriJudgeSpriteKind::SlideStraight: {
+            const TimelineNoteMarker* marker = markerByKey.value(event.markerKey, nullptr);
+            if (marker == nullptr) {
+                continue;
+            }
+            const QPointF tangent = slideEndTangentLogical(*marker);
+            const qreal tangentAngleDegrees = qRadiansToDegrees(qAtan2(tangent.y(), tangent.x()));
+            const bool useRightImage =
+                tangentAngleDegrees >= -90.0 && tangentAngleDegrees <= 90.0;
+            image = useRightImage ? &muriJudgeStraightRightImage_ : &muriJudgeStraightLeftImage_;
+            alpha = maimuriDxJudgeFadeOutAlpha(elapsedSeconds);
+            const QPointF laneUnit = laneUnitVector(qBound(1, marker->endLane, 8));
+            logicalCenter =
+                logicalCenterPoint
+                + laneUnit * kLogicalDistanceEdge
+                - tangent * kMaimuriDxJudgeStraightOffsetLogical;
+            angleDegrees = useRightImage ? -tangentAngleDegrees : (180.0 - tangentAngleDegrees);
+            logicalWidth = kMaimuriDxJudgeStraightWidthLogical;
+            break;
+        }
+        case MuriJudgeSpriteKind::SlideCircleCcw: {
+            image = &muriJudgeCircleLeftImage_;
+            alpha = maimuriDxJudgeFadeOutAlpha(elapsedSeconds);
+            const QPointF unit = padUnitVectorForToken(padTokenForRing(QLatin1Char('E'), event.lane + 1));
+            logicalCenter = logicalCenterPoint + unit * kMaimuriDxJudgeCircleDistanceLogical;
+            angleDegrees = 45.0 * (8 - wrappedLane(event.lane));
+            logicalWidth = kMaimuriDxJudgeCircleWidthLogical;
+            break;
+        }
+        case MuriJudgeSpriteKind::SlideCircleCw: {
+            image = &muriJudgeCircleRightImage_;
+            alpha = maimuriDxJudgeFadeOutAlpha(elapsedSeconds);
+            const QPointF unit = padUnitVectorForToken(padTokenForRing(QLatin1Char('E'), event.lane));
+            logicalCenter = logicalCenterPoint + unit * kMaimuriDxJudgeCircleDistanceLogical;
+            angleDegrees = -45.0 * (wrappedLane(event.lane) - 1);
+            logicalWidth = kMaimuriDxJudgeCircleWidthLogical;
+            break;
+        }
+        case MuriJudgeSpriteKind::WifiUp: {
+            image = &muriJudgeWifiUpImage_;
+            alpha = maimuriDxJudgeFadeOutAlpha(elapsedSeconds);
+            const int lane = wrappedLane(event.lane);
+            const QPointF unit = laneUnitVector(lane);
+            logicalCenter = logicalCenterPoint + unit * kMaimuriDxJudgeWifiDistanceLogical;
+            angleDegrees = 22.5 - 45.0 * lane;
+            logicalWidth = kMaimuriDxJudgeWifiWidthLogical;
+            break;
+        }
+        case MuriJudgeSpriteKind::WifiDown: {
+            image = &muriJudgeWifiDownImage_;
+            alpha = maimuriDxJudgeFadeOutAlpha(elapsedSeconds);
+            const int lane = wrappedLane(event.lane);
+            const QPointF unit = laneUnitVector(lane);
+            logicalCenter = logicalCenterPoint + unit * kMaimuriDxJudgeWifiDistanceLogical;
+            angleDegrees = 202.5 - 45.0 * lane;
+            logicalWidth = kMaimuriDxJudgeWifiWidthLogical;
+            break;
+        }
+        }
+
+        if (image == nullptr || image->isNull()) {
+            continue;
+        }
+        drawJudgeSprite(*image, logicalCenter, logicalWidth, angleDegrees, alpha);
+    }
+
+    painter.restore();
 }
 
 void PreviewCanvas::drawSlideMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)
