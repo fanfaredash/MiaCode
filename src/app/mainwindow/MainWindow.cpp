@@ -4467,6 +4467,7 @@ void MainWindow::onExportPreviewVideo()
         }
         return second;
     };
+    const double previewAspectBeforeDialog = previewCanvasAspectRatio_;
 
     VideoExportDialog dialog(
         task,
@@ -4601,6 +4602,7 @@ void MainWindow::onExportPreviewVideo()
     if (previewCanvas_ != nullptr) {
         previewCanvas_->update();
     }
+    bool exportLaunched = false;
     if (dialog.exportRequested()) {
         VideoExportSnapshot snapshot;
         QString launchError;
@@ -4614,11 +4616,16 @@ void MainWindow::onExportPreviewVideo()
                     ? uiText("dialog.video_export.error.launch_failed", "Failed to start background export.")
                     : launchError
             );
+            setPreviewCanvasAspectRatio(previewAspectBeforeDialog, false);
+        } else {
+            exportLaunched = true;
+            restoreSquareAfterVideoExport_ = previewAutoRestoreSquareAfterExport_;
         }
+    } else {
+        setPreviewCanvasAspectRatio(previewAspectBeforeDialog, false);
     }
-    if (previewAutoRestoreSquareAfterExport_
-        && (dialog.exportRequested() || dialog.previewAspectChangedByDialog())) {
-        setPreviewCanvasAspectRatio(1.0, false);
+    if (!exportLaunched && !dialog.exportRequested()) {
+        restoreSquareAfterVideoExport_ = false;
     }
 }
 
@@ -5592,6 +5599,14 @@ void MainWindow::handleVideoExportWorkerProcessFinished(int exitCode, int exitSt
 {
     Q_UNUSED(exitCode);
 
+    const auto restorePreviewAspectIfNeeded = [this]() {
+        if (!restoreSquareAfterVideoExport_) {
+            return;
+        }
+        restoreSquareAfterVideoExport_ = false;
+        setPreviewCanvasAspectRatio(1.0, false);
+    };
+
     if (videoExportProgressDialog_ != nullptr) {
         videoExportProgressDialog_->hide();
     }
@@ -5609,6 +5624,7 @@ void MainWindow::handleVideoExportWorkerProcessFinished(int exitCode, int exitSt
         stdoutTailText
     );
     if (videoExportWorkerCancelRequested_ && !videoExportWorkerCompletionReceived_) {
+        restorePreviewAspectIfNeeded();
         showCenteredLocalizedMessageBox(
             QMessageBox::Information,
             this,
@@ -5672,6 +5688,7 @@ void MainWindow::handleVideoExportWorkerProcessFinished(int exitCode, int exitSt
         );
     }
 
+    restorePreviewAspectIfNeeded();
     clearVideoExportWorkerState();
 }
 
@@ -5736,6 +5753,7 @@ void MainWindow::clearVideoExportWorkerState()
     videoExportWorkerSuccess_ = false;
     videoExportWorkerCompletionReceived_ = false;
     videoExportWorkerCancelRequested_ = false;
+    restoreSquareAfterVideoExport_ = false;
     videoExportWorkerLastProgressPercent_ = 0;
     videoExportWorkerLastEtaSeconds_ = -1;
 }

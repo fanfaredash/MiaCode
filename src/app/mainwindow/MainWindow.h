@@ -572,6 +572,7 @@ private:
     bool videoExportWorkerSuccess_ = false;
     bool videoExportWorkerCompletionReceived_ = false;
     bool videoExportWorkerCancelRequested_ = false;
+    bool restoreSquareAfterVideoExport_ = false;
     int videoExportWorkerLastProgressPercent_ = 0;
     qint64 videoExportWorkerLastEtaSeconds_ = -1;
     int projectLastOpenedDifficultyId_ = 0;
