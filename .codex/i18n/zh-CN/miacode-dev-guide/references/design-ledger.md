@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/design-ledger.md -->
-<!-- translation-source-hash: 93065c06f52cd0d53e1ea2b2ab41fe0daa52deb9ed295ace221656cd8f17613a -->
+<!-- translation-source-hash: 67bb235bcb35f0bf4dbc2e885149e32b47a4320b3886dda9cd2bbdef97b27d12 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 设计账本
@@ -31,6 +31,8 @@
 
 - 预览画布默认是正方形比例，除非导出 UI 临时改了它。
 - 预览 note 流速默认值来自 `PreviewGameplayConfig.h`。
+- Native“谱面确认”预览当前会在旧六边形判定 effect 上方额外叠一层 maimuri 风格判定 overlay，覆盖 tap、hold、slide 和 wifi 的正常时机；它由 `MuriRenderOptions::showChartReviewJudgeOverlay` 控制，且在加入 UI 开关前默认开启。
+- 在 `RenderMode::MaimuriDxStyle` 下，wifi 轨道擦除当前跟随运行时三轨进度而不是静态 area checkpoint：共享轨道按三轨里最慢的一轨裁切，在进度数组缺失时回退到已判定 area，并且在运行时完成擦除后不再回放整条轨道的 full-track flash；如果 `MuriRenderOptions::wifiNeedC` 开启，最后一个 area 会一直保留到 `C` 真正抬起。
 - 自动导出编码器选择当前更偏向保守的 H.264 路径，再逐级 fallback。
 - 背景媒体命名当前限制在 `bg.*` 或 `pv.mp4` 一类约定。
 - 预览面板当前采用卡片式布局，分成 preview、controls、stats 三块。

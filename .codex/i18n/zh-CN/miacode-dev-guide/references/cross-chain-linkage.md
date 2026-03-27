@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/cross-chain-linkage.md -->
-<!-- translation-source-hash: b42203960d7e6ffa07aa31cf95b3fec0d9fb9c5b7384f9ae0b99051f9fc4dbc2 -->
+<!-- translation-source-hash: 198be1dae2823d81570b20556f887ddd5b93ff6f922fb10d5f64110e0e9bb322 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 跨链路联动
@@ -131,6 +131,13 @@
 - worker 协议一旦变化，`main.cpp` 和 MainWindow 的 worker 事件处理都要改。
 
 ## 8. 共享渲染状态会贯穿预览与导出
+
+Wifi 补充说明：
+
+- `RenderMode::MaimuriDxStyle` 下的 wifi 轨道擦除不是由静态 `wifiTrackAreaCheckpoints` 驱动。
+- `MuriAnalyzer` 会把运行时三轨进度写入 `MarkerMuriState::wifiLaneProgressSeconds`，把已判定的三轨 area 镜像到 `MarkerMuriState::wifiLaneAreas`，并把实际的 `C` 抬手时刻写入 `MarkerMuriState::wifiPadCSecond`。
+- `PreviewCanvas::drawWifiTrack` 必须按三轨里最慢的一轨来裁切共用的中线轨道，优先使用 `wifiLaneProgressSeconds`，在进度数组不可用时回退到 `wifiLaneAreas`。
+- 在 `RenderMode::MaimuriDxStyle` 下，wifi 轨道一旦按运行时状态完成擦除，就不应再叠加整条轨道的 flash 回补；如果 `wifiNeedC` 开启，则最后一个 area 仍要一直保留到 `wifiPadCSecond`。
 
 共享渲染设置包括：
 

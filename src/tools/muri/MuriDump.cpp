@@ -546,13 +546,11 @@ QJsonObject jsonFromMarkerState(const MarkerMuriState& state)
         slideSegments.append(jsonFromSegmentState(segment));
     }
     item.insert(QStringLiteral("slide_segments"), slideSegments);
-    item.insert(QStringLiteral("wifi_areas"), jsonFromCheckpointAreas(state.wifiAreas));
-    item.insert(QStringLiteral("wifi_judge_areas"), jsonFromJudgeAreas(state.wifiAreas));
     item.insert(QStringLiteral("wifi_lane_areas"), jsonFromLaneCheckpointAreas(state.wifiLaneAreas));
     item.insert(QStringLiteral("wifi_lane_judge_areas"), jsonFromLaneJudgeAreas(state.wifiLaneAreas));
     item.insert(QStringLiteral("wifi_lane_progress_seconds"), jsonFromLaneProgressSeconds(state.wifiLaneProgressSeconds));
     item.insert(QStringLiteral("wifi_completed_second"), state.wifiCompletedSecond);
-    item.insert(QStringLiteral("wifi_expected_completed_second"), state.wifiExpectedCompletedSecond);
+    item.insert(QStringLiteral("wifi_pad_c_second"), state.wifiPadCSecond);
     item.insert(QStringLiteral("wifi_critical_second"), state.wifiCriticalSecond);
     return item;
 }

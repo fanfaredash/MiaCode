@@ -924,10 +924,7 @@ MarkerMuriState buildSlideState(
     return state;
 }
 
-MarkerMuriState buildWifiState(
-    const TimelineNoteMarker& marker,
-    const QHash<QString, QVector<int>>& windowsByPad,
-    const QVector<MuriPadWindow>& allWindows)
+MarkerMuriState buildWifiState(const TimelineNoteMarker& marker)
 {
     MarkerMuriState state;
     state.markerKey = makeMarkerAnalysisKey(marker);
@@ -938,40 +935,11 @@ MarkerMuriState buildWifiState(
     state.endSecond = marker.endSecond;
 
     const double durationSecond = qMax(0.0, marker.endSecond - marker.slideTraceSecond);
-    double cursorSecond = marker.second;
-    bool sawCheckpoint = false;
-    state.wifiAreas.reserve(marker.wifiTrackAreaCheckpoints.size());
-    for (const QVector<double>& area : marker.wifiTrackAreaCheckpoints) {
-        const QVector<QStringList> pads = checkpointPadsForArea(marker.wifiPadEnterTimes, area);
-        QVector<MuriCheckpointState> checkpointStates = buildCheckpointStates(
-            area,
-            pads,
-            marker.slideTraceSecond,
-            durationSecond,
-            marker.second,
-            windowsByPad,
-            allWindows,
-            state.markerKey
-        );
-        if (!checkpointStates.isEmpty()) {
-            sawCheckpoint = true;
-            const double areaSecond = completionSecondForArea(checkpointStates);
-            if (areaSecond + kPadTimeEpsilon < cursorSecond) {
-                for (MuriCheckpointState& checkpointState : checkpointStates) {
-                    checkpointState.second = cursorSecond;
-                }
-            }
-            cursorSecond = qMax(cursorSecond, completionSecondForArea(checkpointStates));
-        }
-        state.wifiAreas.append(checkpointStates);
-    }
-
     double expectedCompleted = marker.slideTraceSecond;
     for (const MuriPadTimeEntry& entry : marker.wifiPadEnterTimes) {
         expectedCompleted = qMax(expectedCompleted, marker.slideTraceSecond + entry.proportion * durationSecond);
     }
-    state.wifiExpectedCompletedSecond = expectedCompleted;
-    state.wifiCompletedSecond = sawCheckpoint ? cursorSecond : expectedCompleted;
+    state.wifiCompletedSecond = expectedCompleted;
     state.wifiCriticalSecond = marker.slideTraceSecond + marker.wifiCriticalProportion * durationSecond;
     const double criticalDeltaSecond = slideCriticalDeltaSecond(
         (1.0 - marker.wifiCriticalProportion) * durationSecond
@@ -982,6 +950,7 @@ MarkerMuriState buildWifiState(
     }
     return state;
 }
+
 void addSlidePadWindowsAndTrails(
     const TimelineNoteMarker& marker,
     const QString& markerKey,
@@ -3642,7 +3611,7 @@ MuriAnalysisReport MuriAnalyzer::analyze(
         }
 
         if (marker.type == QLatin1String("wifi")) {
-            MarkerMuriState state = buildWifiState(marker, windowsByPad, report.padWindows);
+            MarkerMuriState state = buildWifiState(marker);
             const RuntimeSlideJudgeResult runtimeResult = runtimeSlideResults.value(markerKey);
             applyRuntimeJudgeResultToState(runtimeResult, &state);
             if (runtimeResult.valid) {

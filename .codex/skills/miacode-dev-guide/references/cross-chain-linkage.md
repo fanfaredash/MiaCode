@@ -129,6 +129,13 @@ Implication:
 
 ## 8. Shared Render State Flows Through Preview And Export
 
+Wifi-specific note:
+
+- `RenderMode::MaimuriDxStyle` wifi track erasure is not driven by static `wifiTrackAreaCheckpoints`.
+- `MuriAnalyzer` reconstructs runtime lane progress in `MarkerMuriState::wifiLaneProgressSeconds`, mirrors judged lane areas in `MarkerMuriState::wifiLaneAreas`, and records the actual `C` release time in `MarkerMuriState::wifiPadCSecond`.
+- `PreviewCanvas::drawWifiTrack` must trim the shared middle-track body by the slowest lane's current area index, using `wifiLaneProgressSeconds` first and `wifiLaneAreas` as a fallback if the progress array is unavailable.
+- In `RenderMode::MaimuriDxStyle`, wifi track completion should stay erased after the runtime clear; do not repaint a full-track flash on top of the erased body. When `wifiNeedC` is enabled, the last area must still remain visible until `wifiPadCSecond`.
+
 Shared render settings include:
 
 - background brightness outer and inner

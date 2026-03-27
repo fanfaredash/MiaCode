@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/debug-flags.md -->
-<!-- translation-source-hash: 60d4ad8013e225afcc94a46311479a5019052733c745ae7fc9150ac84e2a2e0e -->
+<!-- translation-source-hash: 66260980422b36d44a658a2fe178d462d8a777f274431044f97a525e4cad45f4 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 调试参数索引
