@@ -350,6 +350,8 @@ private:
     void clearVideoExportWorkerState();
     QString resolveProjectRenderStateFilePath() const;
     QString resolveInitialOpenDirectory() const;
+    void resetPortablePreviewSettingsToDefaults();
+    void applyPortablePreviewSettings(const QJsonObject& preview);
     void loadPortableState();
     void savePortableState() const;
     void applyEditorTextFontSize(int pointSize, bool persistPreference);

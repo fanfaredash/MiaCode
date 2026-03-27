@@ -497,27 +497,6 @@ enum class EditorValidationSummaryIconKind {
 
 QIcon makeMenuSelectionCheckIcon(const QColor& color, bool visible = true);
 
-void applyAccentCheckBoxIcon(QCheckBox* checkBox, const QColor& accentColor)
-{
-    if (checkBox == nullptr) {
-        return;
-    }
-
-    const QIcon checkedIcon = makeMenuSelectionCheckIcon(accentColor);
-    const QIcon uncheckedIcon = makeMenuSelectionCheckIcon(accentColor, false);
-    checkBox->setIcon(checkBox->isChecked() ? checkedIcon : uncheckedIcon);
-    checkBox->setIconSize(QSize(14, 14));
-    checkBox->setStyleSheet(
-        QStringLiteral(
-            "QCheckBox { spacing: 6px; }"
-            "QCheckBox::indicator { width: 0px; height: 0px; }"
-        )
-    );
-    QObject::connect(checkBox, &QCheckBox::toggled, checkBox, [checkBox, checkedIcon, uncheckedIcon](bool checked) {
-        checkBox->setIcon(checked ? checkedIcon : uncheckedIcon);
-    });
-}
-
 QPixmap makeEditorValidationSummaryIcon(const QColor& color, EditorValidationSummaryIconKind kind)
 {
     QPixmap pixmap(14, 14);
@@ -3168,119 +3147,133 @@ QString MainWindow::resolveInitialOpenDirectory() const
 #include "sections/editor/MainWindow.EditorDisplay.cpp"
 void MainWindow::loadProjectRenderState()
 {
-    previewAudioSettings_ = softwarePreviewAudioSettings_;
-    previewAudioSettings_.normalize();
+    const double previousCanvasAspectRatio = previewCanvasAspectRatio_;
+    const QJsonObject portableRoot = UiText::loadPreferencesObject();
+    const QJsonObject portablePreview = portableRoot.value("app").toObject().value("preview").toObject();
+    resetPortablePreviewSettingsToDefaults();
+    applyPortablePreviewSettings(portablePreview);
     projectLastOpenedDifficultyId_ = 0;
 
     const QString path = resolveProjectRenderStateFilePath();
-    if (path.isEmpty()) {
-        return;
+    if (!path.isEmpty()) {
+        QFile file(path);
+        if (file.exists() && file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QJsonParseError parseError;
+            const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+            if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+                const QJsonObject root = doc.object();
+                if (root.value("audio").isObject()) {
+                    previewAudioSettings_ = PreviewAudioSettings::fromJson(root.value("audio").toObject());
+                } else if (root.value("preview_audio").isObject()) {
+                    previewAudioSettings_ = PreviewAudioSettings::fromJson(root.value("preview_audio").toObject());
+                }
+                const QJsonObject render = root.value("render").toObject();
+                if (!render.isEmpty()) {
+                    const double legacyBrightness = qBound(
+                        0.0,
+                        render.value("background_brightness").toDouble(previewBackgroundBrightnessOuter_),
+                        1.0
+                    );
+                    if (render.value("background_brightness_outer").isDouble()) {
+                        previewBackgroundBrightnessOuter_ =
+                            qBound(0.0, render.value("background_brightness_outer").toDouble(legacyBrightness), 1.0);
+                    } else {
+                        previewBackgroundBrightnessOuter_ = legacyBrightness;
+                    }
+                    if (render.value("background_brightness_inner").isDouble()) {
+                        previewBackgroundBrightnessInner_ = qBound(
+                            0.0,
+                            render.value("background_brightness_inner").toDouble(previewBackgroundBrightnessOuter_),
+                            1.0
+                        );
+                    } else {
+                        previewBackgroundBrightnessInner_ = previewBackgroundBrightnessOuter_;
+                    }
+                    if (render.value("layout_square_scale").isDouble()) {
+                        previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(
+                            render.value("layout_square_scale").toDouble(previewLayoutSquareScale_)
+                        );
+                    }
+                    if (render.value("smooth_brightness").isBool()) {
+                        previewSmoothBrightness_ = render.value("smooth_brightness").toBool(previewSmoothBrightness_);
+                    }
+                    const QString scaleMode = render.value("background_scale_mode").toString().trimmed().toLower();
+                    if (scaleMode == QLatin1String("fit") || scaleMode == QLatin1String("contain")) {
+                        previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FitContain;
+                    } else if (!scaleMode.isEmpty()) {
+                        previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
+                    }
+                    if (render.value("note_flow_speed").isDouble()) {
+                        previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(
+                            render.value("note_flow_speed").toDouble(previewNoteFlowSpeed_)
+                        );
+                    }
+                    if (render.value("render_mode").isString()) {
+                        muriRenderOptions_.renderMode = renderModeFromToken(render.value("render_mode").toString());
+                    }
+                    if (render.value("show_chart_review_judge_overlay").isBool()) {
+                        muriRenderOptions_.showChartReviewJudgeOverlay =
+                            render.value("show_chart_review_judge_overlay").toBool(
+                                muriRenderOptions_.showChartReviewJudgeOverlay
+                            );
+                    }
+                    if (render.value("wifi_need_c").isBool()) {
+                        muriRenderOptions_.wifiNeedC = render.value("wifi_need_c").toBool(muriRenderOptions_.wifiNeedC);
+                    }
+                    showJudgeMarkers_ = false;
+                    showTouchTrail_ = false;
+                    if (render.value("canvas_frame_rate_mode").isString()) {
+                        previewCanvasFrameRateMode_ =
+                            previewCanvasFrameRateModeFromStorageValue(render.value("canvas_frame_rate_mode").toString());
+                    }
+                    if (render.value("follow_mode").isString()) {
+                        previewFollowMode_ = previewFollowModeFromStorageValue(render.value("follow_mode").toString());
+                    }
+                    if (render.value("show_debug_info").isBool()) {
+                        previewShowDebugInfo_ = render.value("show_debug_info").toBool(previewShowDebugInfo_);
+                    }
+                    if (render.value("show_timestamp").isBool()) {
+                        previewShowTimestamp_ = render.value("show_timestamp").toBool(previewShowTimestamp_);
+                    }
+                    if (render.value("show_object_stats_preview").isBool()) {
+                        previewShowObjectStatsHud_ =
+                            render.value("show_object_stats_preview").toBool(previewShowObjectStatsHud_);
+                    }
+                    if (render.value("show_object_stats_export").isBool()) {
+                        exportShowObjectStatsHud_ =
+                            render.value("show_object_stats_export").toBool(exportShowObjectStatsHud_);
+                    }
+                    if (render.value("show_validation_summary").isBool()) {
+                        previewShowValidationSummary_ =
+                            render.value("show_validation_summary").toBool(previewShowValidationSummary_);
+                    }
+                    const bool unifiedObjectStatsHud = previewShowObjectStatsHud_ || exportShowObjectStatsHud_;
+                    previewShowObjectStatsHud_ = unifiedObjectStatsHud;
+                    exportShowObjectStatsHud_ = unifiedObjectStatsHud;
+                    if (render.value("auto_restore_square_after_export").isBool()) {
+                        previewAutoRestoreSquareAfterExport_ =
+                            render.value("auto_restore_square_after_export").toBool(previewAutoRestoreSquareAfterExport_);
+                    }
+                    if (render.value("canvas_aspect_ratio").isDouble()) {
+                        setPreviewCanvasAspectRatio(
+                            render.value("canvas_aspect_ratio").toDouble(previewCanvasAspectRatio_),
+                            false
+                        );
+                    }
+                }
+                const int savedDifficultyId = root.value("last_opened_difficulty").toInt(0);
+                if (SimaiDocument::isDifficultyId(savedDifficultyId)) {
+                    projectLastOpenedDifficultyId_ = savedDifficultyId;
+                }
+            }
+        }
     }
-
-    QFile file(path);
-    if (!file.exists() || !file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return;
-    }
-
-    QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-        return;
-    }
-
-    const QJsonObject root = doc.object();
-    if (root.value("audio").isObject()) {
-        previewAudioSettings_ = PreviewAudioSettings::fromJson(root.value("audio").toObject());
-    } else if (root.value("preview_audio").isObject()) {
-        previewAudioSettings_ = PreviewAudioSettings::fromJson(root.value("preview_audio").toObject());
-    }
-    const QJsonObject render = root.value("render").toObject();
-    if (!render.isEmpty()) {
-        const double legacyBrightness = qBound(
-            0.0,
-            render.value("background_brightness").toDouble(previewBackgroundBrightnessOuter_),
-            1.0
-        );
-        if (render.value("background_brightness_outer").isDouble()) {
-            previewBackgroundBrightnessOuter_ =
-                qBound(0.0, render.value("background_brightness_outer").toDouble(legacyBrightness), 1.0);
+    if (qAbs(previewCanvasAspectRatio_ - previousCanvasAspectRatio) > 1e-6) {
+        if (previewCanvasAspectRatio_ + 1e-6 < previousCanvasAspectRatio) {
+            updatePreviewWorkspaceLayout();
         } else {
-            previewBackgroundBrightnessOuter_ = legacyBrightness;
+            updatePreviewPanelLayout();
         }
-        if (render.value("background_brightness_inner").isDouble()) {
-            previewBackgroundBrightnessInner_ =
-                qBound(0.0, render.value("background_brightness_inner").toDouble(previewBackgroundBrightnessOuter_), 1.0);
-        } else {
-            previewBackgroundBrightnessInner_ = previewBackgroundBrightnessOuter_;
-        }
-        if (render.value("layout_square_scale").isDouble()) {
-            previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(
-                render.value("layout_square_scale").toDouble(previewLayoutSquareScale_)
-            );
-        }
-        if (render.value("smooth_brightness").isBool()) {
-            previewSmoothBrightness_ = render.value("smooth_brightness").toBool(previewSmoothBrightness_);
-        }
-        const QString scaleMode = render.value("background_scale_mode").toString().trimmed().toLower();
-        if (scaleMode == QLatin1String("fit") || scaleMode == QLatin1String("contain")) {
-            previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FitContain;
-        } else if (!scaleMode.isEmpty()) {
-            previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
-        }
-        if (render.value("note_flow_speed").isDouble()) {
-            previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(
-                render.value("note_flow_speed").toDouble(previewNoteFlowSpeed_)
-            );
-        }
-        if (render.value("render_mode").isString()) {
-            muriRenderOptions_.renderMode = renderModeFromToken(render.value("render_mode").toString());
-        }
-        if (render.value("show_chart_review_judge_overlay").isBool()) {
-            muriRenderOptions_.showChartReviewJudgeOverlay =
-                render.value("show_chart_review_judge_overlay").toBool(muriRenderOptions_.showChartReviewJudgeOverlay);
-        }
-        if (render.value("wifi_need_c").isBool()) {
-            muriRenderOptions_.wifiNeedC = render.value("wifi_need_c").toBool(muriRenderOptions_.wifiNeedC);
-        }
-        showJudgeMarkers_ = false;
-        showTouchTrail_ = false;
-        if (render.value("canvas_frame_rate_mode").isString()) {
-            previewCanvasFrameRateMode_ =
-                previewCanvasFrameRateModeFromStorageValue(render.value("canvas_frame_rate_mode").toString());
-        }
-        previewFollowMode_ = PreviewFollowMode::NonEmptyComma;
-        if (render.value("show_debug_info").isBool()) {
-            previewShowDebugInfo_ = render.value("show_debug_info").toBool(previewShowDebugInfo_);
-        }
-        if (render.value("show_timestamp").isBool()) {
-            previewShowTimestamp_ = render.value("show_timestamp").toBool(previewShowTimestamp_);
-        }
-        if (render.value("show_object_stats_preview").isBool()) {
-            previewShowObjectStatsHud_ =
-                render.value("show_object_stats_preview").toBool(previewShowObjectStatsHud_);
-        }
-        if (render.value("show_object_stats_export").isBool()) {
-            exportShowObjectStatsHud_ =
-                render.value("show_object_stats_export").toBool(exportShowObjectStatsHud_);
-        }
-        if (render.value("show_validation_summary").isBool()) {
-            previewShowValidationSummary_ =
-                render.value("show_validation_summary").toBool(previewShowValidationSummary_);
-        }
-        const bool unifiedObjectStatsHud = previewShowObjectStatsHud_ || exportShowObjectStatsHud_;
-        previewShowObjectStatsHud_ = unifiedObjectStatsHud;
-        exportShowObjectStatsHud_ = unifiedObjectStatsHud;
-        if (render.value("auto_restore_square_after_export").isBool()) {
-            previewAutoRestoreSquareAfterExport_ =
-                render.value("auto_restore_square_after_export").toBool(previewAutoRestoreSquareAfterExport_);
-        }
-        if (render.value("canvas_aspect_ratio").isDouble()) {
-            setPreviewCanvasAspectRatio(render.value("canvas_aspect_ratio").toDouble(previewCanvasAspectRatio_), false);
-        }
-    }
-    const int savedDifficultyId = root.value("last_opened_difficulty").toInt(0);
-    if (SimaiDocument::isDifficultyId(savedDifficultyId)) {
-        projectLastOpenedDifficultyId_ = savedDifficultyId;
     }
     previewAudioSettings_.normalize();
     refreshPreviewFrameRateTimers();
@@ -6334,13 +6327,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         previewGroup
     );
     debugCheck->setChecked(previewShowDebugInfo_);
-    const QColor accentCheckColor = UiTheme::colors().accent;
-    applyAccentCheckBoxIcon(restoreSquareCheck, accentCheckColor);
-    applyAccentCheckBoxIcon(smoothBrightnessCheck, accentCheckColor);
-    applyAccentCheckBoxIcon(timestampCheck, accentCheckColor);
-    applyAccentCheckBoxIcon(objectStatsCheck, accentCheckColor);
-    applyAccentCheckBoxIcon(validationSummaryCheck, accentCheckColor);
-    applyAccentCheckBoxIcon(debugCheck, accentCheckColor);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_outer", "Outer Brightness"), outerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Inner Brightness"), innerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Layout Size"), layoutSquareScaleRow);
@@ -6395,6 +6381,24 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         rootLayout->addWidget(previewGroup, 0);
     }
     auto* buttonBox = new QDialogButtonBox(&dialog);
+    QPushButton* saveLocalAudioPresetButton = nullptr;
+    QPushButton* applyLocalAudioPresetButton = nullptr;
+    if (includeAudioSettings) {
+        saveLocalAudioPresetButton = buttonBox->addButton(
+            uiText("dialog.render_settings.button.set_software_default_audio", "Save Local Preset"),
+            QDialogButtonBox::ActionRole
+        );
+        applyLocalAudioPresetButton = buttonBox->addButton(
+            uiText("dialog.render_settings.button.restore_project_default", "Apply Local Preset"),
+            QDialogButtonBox::ActionRole
+        );
+        if (saveLocalAudioPresetButton != nullptr) {
+            saveLocalAudioPresetButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+        }
+        if (applyLocalAudioPresetButton != nullptr) {
+            applyLocalAudioPresetButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+        }
+    }
     if (QPushButton* closeButton = buttonBox->addButton(uiText("dialog.render_settings.button.close", "Close"), QDialogButtonBox::RejectRole)) {
         closeButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     }
@@ -6411,85 +6415,137 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         audioApplyTimer->start();
     };
 
-    const auto persistCurrentAudioAsSoftwareDefault = [this]() {
+    const auto syncAudioControlsFromCurrentSettings = [
+        this,
+        bgmSlider,
+        bgmLabel,
+        answerSlider,
+        answerLabel,
+        judgeSlider,
+        judgeLabel,
+        breakSlider,
+        breakLabel,
+        slideSlider,
+        slideLabel,
+        exSlider,
+        exLabel,
+        touchSlider,
+        touchLabel,
+        fireworkSlider,
+        fireworkLabel,
+        breakSlideSlider,
+        breakSlideLabel
+    ]() {
         previewAudioSettings_.normalize();
-        softwarePreviewAudioSettings_ = previewAudioSettings_;
-        softwarePreviewAudioSettings_.normalize();
-        savePortableState();
+        const auto syncAudioRow = [](QSlider* slider, QLabel* label, int valuePercent) {
+            if (slider == nullptr || label == nullptr) {
+                return;
+            }
+            const QSignalBlocker blocker(slider);
+            slider->setValue(valuePercent);
+            label->setText(QString::number(valuePercent) + "%");
+        };
+        syncAudioRow(bgmSlider, bgmLabel, previewAudioSettings_.bgmPercent());
+        syncAudioRow(answerSlider, answerLabel, previewAudioSettings_.answerPercent());
+        syncAudioRow(judgeSlider, judgeLabel, previewAudioSettings_.judgePercent());
+        syncAudioRow(breakSlider, breakLabel, previewAudioSettings_.breakPercent());
+        syncAudioRow(slideSlider, slideLabel, previewAudioSettings_.slidePercent());
+        syncAudioRow(exSlider, exLabel, previewAudioSettings_.exPercent());
+        syncAudioRow(touchSlider, touchLabel, previewAudioSettings_.touchPercent());
+        syncAudioRow(fireworkSlider, fireworkLabel, previewAudioSettings_.fireworkPercent());
+        syncAudioRow(breakSlideSlider, breakSlideLabel, previewAudioSettings_.breakSlidePercent());
     };
 
-    connect(bgmSlider, &QSlider::valueChanged, &dialog, [this, bgmLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
+    connect(bgmSlider, &QSlider::valueChanged, &dialog, [this, bgmLabel, queueAudioApply](int value) {
         previewAudioSettings_.setBgmPercent(value);
         bgmLabel->setText(QString::number(previewAudioSettings_.bgmPercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
-        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply(QString());
     });
-    connect(answerSlider, &QSlider::valueChanged, &dialog, [this, answerLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
+    connect(answerSlider, &QSlider::valueChanged, &dialog, [this, answerLabel, queueAudioApply](int value) {
         previewAudioSettings_.setAnswerPercent(value);
         answerLabel->setText(QString::number(previewAudioSettings_.answerPercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
-        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply("answer");
     });
-    connect(judgeSlider, &QSlider::valueChanged, &dialog, [this, judgeLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
+    connect(judgeSlider, &QSlider::valueChanged, &dialog, [this, judgeLabel, queueAudioApply](int value) {
         previewAudioSettings_.setJudgePercent(value);
         judgeLabel->setText(QString::number(previewAudioSettings_.judgePercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
-        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply("judge");
     });
-    connect(breakSlider, &QSlider::valueChanged, &dialog, [this, breakLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
+    connect(breakSlider, &QSlider::valueChanged, &dialog, [this, breakLabel, queueAudioApply](int value) {
         previewAudioSettings_.setBreakPercent(value);
         breakLabel->setText(QString::number(previewAudioSettings_.breakPercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
-        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply("break");
     });
-    connect(slideSlider, &QSlider::valueChanged, &dialog, [this, slideLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
+    connect(slideSlider, &QSlider::valueChanged, &dialog, [this, slideLabel, queueAudioApply](int value) {
         previewAudioSettings_.setSlidePercent(value);
         slideLabel->setText(QString::number(previewAudioSettings_.slidePercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
-        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply("slide");
     });
-    connect(exSlider, &QSlider::valueChanged, &dialog, [this, exLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
+    connect(exSlider, &QSlider::valueChanged, &dialog, [this, exLabel, queueAudioApply](int value) {
         previewAudioSettings_.setExPercent(value);
         exLabel->setText(QString::number(previewAudioSettings_.exPercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
-        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply("ex");
     });
-    connect(touchSlider, &QSlider::valueChanged, &dialog, [this, touchLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
+    connect(touchSlider, &QSlider::valueChanged, &dialog, [this, touchLabel, queueAudioApply](int value) {
         previewAudioSettings_.setTouchPercent(value);
         touchLabel->setText(QString::number(previewAudioSettings_.touchPercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
-        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply("touch");
     });
-    connect(fireworkSlider, &QSlider::valueChanged, &dialog, [this, fireworkLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
+    connect(fireworkSlider, &QSlider::valueChanged, &dialog, [this, fireworkLabel, queueAudioApply](int value) {
         previewAudioSettings_.setFireworkPercent(value);
         fireworkLabel->setText(QString::number(previewAudioSettings_.fireworkPercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
-        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply("firework");
     });
-    connect(breakSlideSlider, &QSlider::valueChanged, &dialog, [this, breakSlideLabel, queueAudioApply, persistCurrentAudioAsSoftwareDefault](int value) {
+    connect(breakSlideSlider, &QSlider::valueChanged, &dialog, [this, breakSlideLabel, queueAudioApply](int value) {
         previewAudioSettings_.setBreakSlidePercent(value);
         breakSlideLabel->setText(QString::number(previewAudioSettings_.breakSlidePercent()) + "%");
         applyPreviewAudioSettingsToRuntime();
         saveProjectRenderState();
-        persistCurrentAudioAsSoftwareDefault();
         queueAudioApply("break_slide");
     });
+    if (saveLocalAudioPresetButton != nullptr) {
+        connect(saveLocalAudioPresetButton, &QPushButton::clicked, &dialog, [this]() {
+            previewAudioSettings_.normalize();
+            softwarePreviewAudioSettings_ = previewAudioSettings_;
+            softwarePreviewAudioSettings_.normalize();
+            savePortableState();
+        });
+    }
+    if (applyLocalAudioPresetButton != nullptr) {
+        connect(
+            applyLocalAudioPresetButton,
+            &QPushButton::clicked,
+            &dialog,
+            [this, audioApplyTimer, &pendingAudition, syncAudioControlsFromCurrentSettings]() {
+                previewAudioSettings_ = softwarePreviewAudioSettings_;
+                previewAudioSettings_.normalize();
+                syncAudioControlsFromCurrentSettings();
+                applyPreviewAudioSettingsToRuntime();
+                saveProjectRenderState();
+                if (audioApplyTimer->isActive()) {
+                    audioApplyTimer->stop();
+                }
+                pendingAudition.clear();
+                sendPreviewConfigCommand(QString());
+            }
+        );
+    }
 
     connect(audioApplyTimer, &QTimer::timeout, &dialog, [this, audioApplyTimer, bgmSlider, answerSlider, judgeSlider, breakSlider, slideSlider, exSlider, touchSlider, fireworkSlider, breakSlideSlider, &pendingAudition]() {
         if (bgmSlider->isSliderDown()

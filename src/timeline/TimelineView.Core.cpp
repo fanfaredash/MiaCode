@@ -8,6 +8,11 @@ void TimelineView::updateHorizontalRange()
 
 int TimelineView::contentWidth() const
 {
+    return rawContentWidth() + leadingCenteringPadding() + trailingCenteringPadding();
+}
+
+int TimelineView::rawContentWidth() const
+{
     const double timelineSeconds = qMax(0.0, displayEndSeconds_ - displayStartSeconds_);
     return timelineLeft() + static_cast<int>(timelineSeconds * pixelsPerSecond_) + kTimelineRightPadding;
 }
@@ -37,9 +42,14 @@ int TimelineView::notePixelSize() const
     return kNoteSize;
 }
 
-int TimelineView::secondToX(double second) const
+int TimelineView::rawSecondToX(double second) const
 {
     return timelineLeft() + qRound((second - displayStartSeconds_) * pixelsPerSecond_);
+}
+
+int TimelineView::secondToX(double second) const
+{
+    return rawSecondToX(second) + leadingCenteringPadding();
 }
 
 double TimelineView::xToSecond(int x) const
@@ -47,8 +57,35 @@ double TimelineView::xToSecond(int x) const
     return qMax(
         0.0,
         displayStartSeconds_
-            + (static_cast<double>(x + horizontalScrollBar()->value() - timelineLeft()) / pixelsPerSecond_)
+            + (static_cast<double>(
+                   x + horizontalScrollBar()->value() - leadingCenteringPadding() - timelineLeft()
+               )
+               / pixelsPerSecond_)
     );
+}
+
+double TimelineView::maxNavigableSecond() const
+{
+    double maxSecond = qMax(0.0, qMax(durationSeconds_, qMax(playheadSeconds_, qMax(cursorSeconds_, 0.0))));
+    if (playheadUpperLimitSeconds_ > 0.0) {
+        maxSecond = qMax(maxSecond, playheadUpperLimitSeconds_);
+    }
+    if (waveformDurationSeconds_ > 0.0) {
+        maxSecond = qMax(maxSecond, waveformStartSeconds_ + waveformDurationSeconds_);
+    }
+    return maxSecond;
+}
+
+int TimelineView::leadingCenteringPadding() const
+{
+    const int viewportCenterX = viewport()->width() / 2;
+    return qMax(0, viewportCenterX - rawSecondToX(0.0));
+}
+
+int TimelineView::trailingCenteringPadding() const
+{
+    const int viewportCenterX = viewport()->width() / 2;
+    return qMax(0, rawSecondToX(maxNavigableSecond()) + viewportCenterX - rawContentWidth());
 }
 
 double TimelineView::viewportCenterSecond() const
@@ -225,7 +262,11 @@ void TimelineView::layoutHeaderButtons()
     }
     if (followPreviewCheckBox_ != nullptr) {
         followPreviewCheckBox_->adjustSize();
-        followPreviewCheckBox_->setFixedHeight(22);
+        const int checkBoxHeight = qMax(
+            followPreviewCheckBox_->minimumSizeHint().height(),
+            followPreviewCheckBox_->sizeHint().height()
+        );
+        followPreviewCheckBox_->setFixedHeight(checkBoxHeight);
         const int y = qMax(0, (timelineTop() - followPreviewCheckBox_->height()) / 2);
         const int rightX = qMax(leftBaseX, viewport()->width() - followPreviewCheckBox_->width() - rightMargin);
         followPreviewCheckBox_->move(rightX, y);

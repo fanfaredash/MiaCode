@@ -133,13 +133,18 @@ private:
     void updateDisplayBounds();
     void updateHorizontalRange();
     int contentWidth() const;
+    int rawContentWidth() const;
     int timelineLeft() const;
     int timelineTop() const;
     int laneHeight() const;
     int timelineHeight() const;
     int notePixelSize() const;
+    int rawSecondToX(double second) const;
     int secondToX(double second) const;
     double xToSecond(int x) const;
+    double maxNavigableSecond() const;
+    int leadingCenteringPadding() const;
+    int trailingCenteringPadding() const;
     double viewportCenterSecond() const;
     void updateCursorToViewportCenter(bool emitNavigate = true);
     void suppressPlayheadIndicatorForInteraction();
