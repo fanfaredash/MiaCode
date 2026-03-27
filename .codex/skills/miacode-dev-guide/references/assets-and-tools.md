@@ -41,6 +41,24 @@ If these conventions change, update both code and this file.
 - Skin textures:
   - Consumer: `PreviewCanvas`
   - Entry: `MainWindow::resolvePreviewSkinDir`, `PreviewCanvas::setSkinDirectory`
+  - Native chart-review judge overlays load from:
+    - `JudgeTextSkins/judge_text_normal.png`
+    - `JudgeTextSkins/judge_text_break.png`
+    - root-level `assets/skin/just_str_l.png`
+    - root-level `assets/skin/just_str_r.png`
+    - root-level `assets/skin/just_curv_l.png`
+    - root-level `assets/skin/just_curv_r.png`
+    - root-level `assets/skin/just_wifi_u.png`
+    - root-level `assets/skin/just_wifi_d.png`
+  - MaimuriDX-style bad-judge slide overlays load only from `assets/skin/SlideOKSkins/*.png`
+  - Canonical filenames:
+    - `just_str_l_fast_gd.png`
+    - `just_str_r_fast_gd.png`
+    - `just_curv_l_fast_gd.png`
+    - `just_curv_r_fast_gd.png`
+    - `just_wifi_u_fast_gd.png`
+    - `just_wifi_d_fast_gd.png`
+  - Do not add fallback from these overlays to root-level `assets/skin/just_*.png` or any `perfect`-style judge assets
 - SFX clips:
   - Consumer: `QtPreviewSfxRuntime`, export SFX mixing
   - Entry: `miacode::preview_sfx::resolveSfxDirectory`

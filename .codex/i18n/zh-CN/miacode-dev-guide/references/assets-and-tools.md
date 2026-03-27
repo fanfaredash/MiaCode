@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/assets-and-tools.md -->
-<!-- translation-source-hash: 4b35a994b78ddf84b2af45b55cd309cdd89d08945d790fc5391c6c98e32fc17c -->
+<!-- translation-source-hash: 912f0f6ea64a4c0f8bdce4aa523c66d87d5949ff695c86e99eaa3671cad99ed9 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 资源与工具
@@ -45,6 +45,24 @@
 - 皮肤纹理：
   - 消费者：`PreviewCanvas`
   - 入口：`MainWindow::resolvePreviewSkinDir`、`PreviewCanvas::setSkinDirectory`
+  - Native 谱面确认判定 overlay 当前从以下资源加载：
+    - `JudgeTextSkins/judge_text_normal.png`
+    - `JudgeTextSkins/judge_text_break.png`
+    - 根目录 `assets/skin/just_str_l.png`
+    - 根目录 `assets/skin/just_str_r.png`
+    - 根目录 `assets/skin/just_curv_l.png`
+    - 根目录 `assets/skin/just_curv_r.png`
+    - 根目录 `assets/skin/just_wifi_u.png`
+    - 根目录 `assets/skin/just_wifi_d.png`
+  - MaimuriDX 风格的 bad 判定 slide overlay 只从 `assets/skin/SlideOKSkins/*.png` 加载
+  - 当前规定的文件名：
+    - `just_str_l_fast_gd.png`
+    - `just_str_r_fast_gd.png`
+    - `just_curv_l_fast_gd.png`
+    - `just_curv_r_fast_gd.png`
+    - `just_wifi_u_fast_gd.png`
+    - `just_wifi_d_fast_gd.png`
+  - 不要再给这类 overlay 增加回退到根目录 `assets/skin/just_*.png` 或任何 `perfect` 风格判定素材的逻辑
 - SFX 音效：
   - 消费者：`QtPreviewSfxRuntime`、导出侧 SFX 混音
   - 入口：`miacode::preview_sfx::resolveSfxDirectory`
