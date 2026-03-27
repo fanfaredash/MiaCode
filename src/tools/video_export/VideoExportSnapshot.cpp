@@ -135,6 +135,7 @@ QJsonObject VideoExportSnapshot::toJson() const
     render.insert(QStringLiteral("show_slide_tracks"), muriRenderOptions.showSlideTracks);
     render.insert(QStringLiteral("show_judge_markers"), muriRenderOptions.showJudgeMarkers);
     render.insert(QStringLiteral("show_touch_trail"), muriRenderOptions.showTouchTrail);
+    render.insert(QStringLiteral("show_chart_review_judge_overlay"), muriRenderOptions.showChartReviewJudgeOverlay);
     render.insert(QStringLiteral("wifi_need_c"), muriRenderOptions.wifiNeedC);
     render.insert(QStringLiteral("show_timestamp"), showTimestamp);
     render.insert(QStringLiteral("show_object_stats_hud"), showObjectStatsHud);
@@ -213,6 +214,8 @@ bool VideoExportSnapshot::fromJson(
         render.value(QStringLiteral("show_judge_markers")).toBool(parsed.muriRenderOptions.showJudgeMarkers);
     parsed.muriRenderOptions.showTouchTrail =
         render.value(QStringLiteral("show_touch_trail")).toBool(parsed.muriRenderOptions.showTouchTrail);
+    parsed.muriRenderOptions.showChartReviewJudgeOverlay =
+        render.value(QStringLiteral("show_chart_review_judge_overlay")).toBool(parsed.muriRenderOptions.showChartReviewJudgeOverlay);
     parsed.muriRenderOptions.wifiNeedC =
         render.value(QStringLiteral("wifi_need_c")).toBool(parsed.muriRenderOptions.wifiNeedC);
     parsed.showTimestamp =
