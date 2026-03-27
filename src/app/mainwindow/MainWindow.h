@@ -287,6 +287,7 @@ private:
     void refreshLayoutAfterPageSwitch();
     void openPreviewSettingsDialog(bool includeAudioSettings, bool includeVideoSettings, const QString& title);
     double previewDurationSeconds() const;
+    double previewPlaybackEndSeconds() const;
     void applyPreviewPlaybackRate(double rate);
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
     double normalizedPreviewCanvasAspectRatio(double ratio) const;

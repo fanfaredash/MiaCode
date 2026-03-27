@@ -4082,9 +4082,7 @@ void MainWindow::arrangeWithPreviewWindow()
 
 void MainWindow::onStopPreview()
 {
-    const double returnSecond = timelineView_ != nullptr
-        ? qBound(0.0, timelineView_->cursorSeconds(), previewDurationSeconds())
-        : qBound(0.0, qtPreviewPlaybackReturnSecond_, previewDurationSeconds());
+    const double returnSecond = qBound(0.0, qtPreviewPlaybackReturnSecond_, previewDurationSeconds());
     stopQtPreviewPlayback(false);
     seekPreviewToSecond(returnSecond, true);
     statusBar()->showMessage("Qt preview stopped.");
