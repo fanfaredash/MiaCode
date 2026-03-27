@@ -3350,8 +3350,11 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const double segmentStartSecond = qMax(0.0, task.exportStartSeconds);
     const double segmentDurationSeconds = task.contentDurationSeconds;
     const double segmentEndSecond = segmentStartSecond + segmentDurationSeconds;
-    const double timelineOriginSecond = segmentStartSecond - miacode::video_export::kLeadInSeconds;
-    const double totalSeconds = miacode::video_export::kLeadInSeconds + segmentDurationSeconds;
+    const double leadInSeconds = segmentStartSecond <= kTimelineEpsilonSeconds
+        ? miacode::video_export::kLeadInSeconds
+        : 0.0;
+    const double timelineOriginSecond = segmentStartSecond - leadInSeconds;
+    const double totalSeconds = leadInSeconds + segmentDurationSeconds;
     const int frameCount = qMax(1, qRound(totalSeconds * task.fps));
     const double alignedTotalSeconds = static_cast<double>(frameCount) / qMax(1, task.fps);
     const int frameWidth = qMax(1, task.outputWidth);
@@ -3371,7 +3374,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         filteredMarkersForRange(task.noteMarkers, timelineOriginSecond, segmentEndSecond);
     appendVideoExportLog(
         QStringLiteral("input_probe"),
-        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 timelineOrigin=%8 totalSeconds=%9 alignedSeconds=%10 frameCount=%11 size=%12x%13")
+        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 leadIn=%8 timelineOrigin=%9 totalSeconds=%10 alignedSeconds=%11 frameCount=%12 size=%13x%14")
             .arg(mediaPath)
             .arg(hasMedia ? 1 : 0)
             .arg(mediaIsImage ? 1 : 0)
@@ -3379,6 +3382,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(hasTrack ? 1 : 0)
             .arg(segmentStartSecond, 0, 'f', 6)
             .arg(segmentEndSecond, 0, 'f', 6)
+            .arg(leadInSeconds, 0, 'f', 6)
             .arg(timelineOriginSecond, 0, 'f', 6)
             .arg(totalSeconds, 0, 'f', 6)
             .arg(alignedTotalSeconds, 0, 'f', 6)
