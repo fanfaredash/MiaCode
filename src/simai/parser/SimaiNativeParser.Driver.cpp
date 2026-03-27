@@ -180,6 +180,12 @@ const QString& kChartEmpty()
     return value;
 }
 
+const QString& kInvalidTerminalMarkerPrefix()
+{
+    static const QString value = QStringLiteral("Invalid terminal marker placement: ");
+    return value;
+}
+
 QString formatInvalidNote(const QString& token)
 {
     return QStringLiteral("%1%2").arg(kInvalidNotePrefix(), token);
@@ -232,6 +238,7 @@ const QHash<QString, QString>& zhPrefixMap()
         {kFullwidthSeparatorPrefix(), QStringLiteral("检测到全角分隔符，请改用半角分隔符：")},
         {kFullwidthSlideSymbolPrefix(), QStringLiteral("检测到全角 Slide 符号，请改用半角符号：")},
         {kFullwidthLatinLetterPrefix(), QStringLiteral("检测到全角字母，请改用半角字母：")},
+        {kInvalidTerminalMarkerPrefix(), QStringLiteral("终止标记 E 位置无效：")},
         {kInvalidNotePrefix(), QStringLiteral("音符无效：")},
         {kInvalidBeatValueStrictPrefix(), QStringLiteral("分拍数值可能导致转谱错误：")},
         {kBeatValueAbove384Prefix(), QStringLiteral("分拍数值大于 384，可能导致转谱错误：")},
@@ -263,6 +270,7 @@ const QVector<QString>& zhPrefixOrder()
         kFullwidthSeparatorPrefix(),
         kFullwidthSlideSymbolPrefix(),
         kFullwidthLatinLetterPrefix(),
+        kInvalidTerminalMarkerPrefix(),
         kInvalidNotePrefix(),
         kUnmatchedClosingBracketPrefix(),
         kUnclosedBracketPrefix(),
@@ -311,6 +319,25 @@ void parseToken(ParseState* state, const QString& token, int lineNumber, int col
     appendTokenError(state, lineNumber, column, classifyInvalidNoteMessage(token));
 }
 
+bool isTerminalMarkerText(QString text)
+{
+    text = text.trimmed();
+    return text.compare(QStringLiteral("E"), Qt::CaseInsensitive) == 0;
+}
+
+bool lineTailIsTerminalMarker(const QString& line, int startIndex)
+{
+    if (startIndex < 0 || startIndex >= line.size()) {
+        return false;
+    }
+    QString tail = line.mid(startIndex);
+    const int commentIndex = tail.indexOf(QStringLiteral("||"));
+    if (commentIndex >= 0) {
+        tail = tail.left(commentIndex);
+    }
+    return isTerminalMarkerText(tail);
+}
+
 SimaiNativeParseResult parseInternal(const QString& text, bool strictMode, bool allowInvalidStarFallback = false)
 {
     ParseState state;
@@ -336,7 +363,7 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode, bool 
             line.chop(1);
         }
         const int lineNumber = lineIndex + 1;
-        if (line.trimmed() == QChar('E')) {
+        if (isTerminalMarkerText(line)) {
             continue;
         }
         for (int i = 0; i < line.size(); ++i) {
@@ -449,6 +476,13 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode, bool 
                 state.result.durationSeconds = qMax(state.result.durationSeconds, state.second);
                 state.second += noteStepSeconds(state.bpm, state.beats);
                 continue;
+            }
+
+            if (token.isEmpty()
+                && (ch == QChar('E') || ch == QChar('e'))
+                && lineTailIsTerminalMarker(line, i)) {
+                flushToken(lineNumber);
+                break;
             }
 
             if (token.isEmpty()) {

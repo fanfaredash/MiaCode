@@ -187,6 +187,28 @@ int main(int argc, char** argv)
     }
 
     {
+        const SimaiNativeParseResult lenientInlineLowerTerminal = SimaiNativeParser::parseForTimeline(QStringLiteral("1,e"));
+        const SimaiNativeParseResult strictInlineLowerTerminal = SimaiNativeParser::validateSyntax(QStringLiteral("1,e"));
+        const SimaiNativeParseResult strictInlineUpperTerminal = SimaiNativeParser::validateSyntax(QStringLiteral("{1},E"));
+        const SimaiNativeParseResult strictTerminalWithComma = SimaiNativeParser::validateSyntax(QStringLiteral("E,"));
+
+        expect(lenientInlineLowerTerminal.ok, QStringLiteral("lenient parse accepts inline lowercase terminal marker"));
+        expect(strictInlineLowerTerminal.ok, QStringLiteral("validate accepts inline lowercase terminal marker"));
+        expect(strictInlineUpperTerminal.ok, QStringLiteral("validate accepts inline uppercase terminal marker"));
+        expect(!strictTerminalWithComma.ok, QStringLiteral("validate rejects terminal marker followed by comma"));
+
+        const QString terminalPrefix = QStringLiteral("Invalid terminal marker placement: ");
+        expect(lenientInlineLowerTerminal.errors.isEmpty(), QStringLiteral("inline lowercase terminal marker adds no lenient errors"));
+        expect(strictInlineLowerTerminal.errors.isEmpty(), QStringLiteral("inline lowercase terminal marker adds no strict errors"));
+        if (!strictTerminalWithComma.errors.isEmpty()) {
+            expect(
+                strictTerminalWithComma.errors.constFirst().message.startsWith(terminalPrefix),
+                QStringLiteral("terminal marker followed by comma stays terminal marker error")
+            );
+        }
+    }
+
+    {
         const SimaiNativeValidationReport strictOnlyReport = SimaiNativeParser::buildValidationReport(
             QStringLiteral("{10}1,\nE"),
             SimaiNativeValidationLocale::English
