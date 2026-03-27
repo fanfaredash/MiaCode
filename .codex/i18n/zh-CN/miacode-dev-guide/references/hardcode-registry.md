@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/hardcode-registry.md -->
-<!-- translation-source-hash: c276a58d4f4d4250c7ec3f86e9ad312c3bf0daeeaf6e62bcc68edd5f146916d6 -->
+<!-- translation-source-hash: 2bf7cdc84f3242d19608eaecf1918ef42c77784f6661390ff3927c106b3f5561 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 硬编码登记
@@ -16,7 +16,7 @@
   - 负责：逻辑画布大小、车道距离几何、预览流速归一化、tap 生命周期时序、slide 预显现时序、judge effect 时长
   - 作用域：预览与导出的共同时间假设
 - `src/common/PreviewVideoGeometryConfig.h`
-  - 负责：背景亮度默认值、layout square 缩放、压暗几何、平滑亮度混合
+  - 负责：背景亮度默认值、layout square 缩放（当前默认 `0.95`）、压暗几何、平滑亮度混合
   - 作用域：预览与导出的共同视觉几何
 - `src/common/PreviewSfxAssets.h`
   - 负责：SFX kind 到文件名的映射，以及 SFX 目录查找

@@ -12,7 +12,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: logical canvas size, lane-distance geometry, preview flow-speed normalization, tap lifecycle timing, slide pretrace timing, judge-effect durations
   - Scope: preview and export timing assumptions
 - `src/common/PreviewVideoGeometryConfig.h`
-  - Owns: background brightness defaults, layout square scaling, dimming geometry, smooth brightness blending
+  - Owns: background brightness defaults, layout square scaling (current default `0.95`), dimming geometry, smooth brightness blending
   - Scope: preview and export visual geometry
 - `src/common/PreviewSfxAssets.h`
   - Owns: SFX kind-to-filename mapping and SFX directory resolution

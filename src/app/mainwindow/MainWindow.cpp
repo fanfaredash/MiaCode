@@ -3211,11 +3211,15 @@ void MainWindow::loadProjectRenderState()
                     if (render.value("render_mode").isString()) {
                         muriRenderOptions_.renderMode = renderModeFromToken(render.value("render_mode").toString());
                     }
-                    if (render.value("show_chart_review_judge_overlay").isBool()) {
-                        muriRenderOptions_.showChartReviewJudgeOverlay =
-                            render.value("show_chart_review_judge_overlay").toBool(
-                                muriRenderOptions_.showChartReviewJudgeOverlay
-                            );
+                    if (render.value("show_chart_review_slide_judge_overlay").isBool()) {
+                        muriRenderOptions_.showChartReviewSlideJudgeOverlay =
+                            render.value("show_chart_review_slide_judge_overlay")
+                                .toBool(muriRenderOptions_.showChartReviewSlideJudgeOverlay);
+                    }
+                    if (render.value("show_chart_review_simple_judge_overlay").isBool()) {
+                        muriRenderOptions_.showChartReviewSimpleJudgeOverlay =
+                            render.value("show_chart_review_simple_judge_overlay")
+                                .toBool(muriRenderOptions_.showChartReviewSimpleJudgeOverlay);
                     }
                     if (render.value("wifi_need_c").isBool()) {
                         muriRenderOptions_.wifiNeedC = render.value("wifi_need_c").toBool(muriRenderOptions_.wifiNeedC);
@@ -3325,7 +3329,8 @@ void MainWindow::saveProjectRenderState() const
     );
     render.insert("note_flow_speed", previewNoteFlowSpeed_);
     render.insert("render_mode", renderModeToken(muriRenderOptions_.renderMode));
-    render.insert("show_chart_review_judge_overlay", muriRenderOptions_.showChartReviewJudgeOverlay);
+    render.insert("show_chart_review_slide_judge_overlay", muriRenderOptions_.showChartReviewSlideJudgeOverlay);
+    render.insert("show_chart_review_simple_judge_overlay", muriRenderOptions_.showChartReviewSimpleJudgeOverlay);
     render.insert("wifi_need_c", muriRenderOptions_.wifiNeedC);
     render.insert("canvas_frame_rate_mode", previewCanvasFrameRateModeStorageValue());
     render.insert("follow_mode", previewFollowModeStorageValue());

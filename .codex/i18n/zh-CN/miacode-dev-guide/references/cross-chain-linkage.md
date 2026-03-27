@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/cross-chain-linkage.md -->
-<!-- translation-source-hash: 198be1dae2823d81570b20556f887ddd5b93ff6f922fb10d5f64110e0e9bb322 -->
+<!-- translation-source-hash: cda65f70dfd7b8325036f87d884ad7ac3e062325e89a0f778b2ca4e33b29aad4 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 跨链路联动
@@ -146,6 +146,7 @@ Wifi 补充说明：
 - smooth brightness
 - background scale mode
 - note flow speed
+- 谱面确认判定 overlay 的 slide/wifi 类与 tap/hold 类开关
 - timestamp / object-stats HUD 开关
 - Muri render options
 
