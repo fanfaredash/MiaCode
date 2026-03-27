@@ -81,11 +81,10 @@ struct MarkerMuriState {
     bool earlyCleared = false;
     double flashSecond = -1.0;
     QVector<MuriSegmentState> slideSegments;
-    QVector<QVector<MuriCheckpointState>> wifiAreas;
     QVector<QVector<QVector<MuriCheckpointState>>> wifiLaneAreas;
     QVector<QVector<double>> wifiLaneProgressSeconds;
     double wifiCompletedSecond = -1.0;
-    double wifiExpectedCompletedSecond = -1.0;
+    double wifiPadCSecond = -1.0;
     double wifiCriticalSecond = -1.0;
 };
 

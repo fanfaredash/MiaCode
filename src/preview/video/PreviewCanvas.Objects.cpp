@@ -149,6 +149,45 @@ int passedCheckpointCount(const QVector<MuriCheckpointState>& checkpoints, doubl
     return passed;
 }
 
+QString markerAnalysisBaseKey(const TimelineNoteMarker& marker)
+{
+    return QStringLiteral("%1|%2|%3|%4|%5|%6|%7")
+        .arg(marker.type)
+        .arg(marker.second, 0, 'f', 6)
+        .arg(marker.lane)
+        .arg(marker.endLane)
+        .arg(marker.sourceLine)
+        .arg(marker.sourceCol)
+        .arg(marker.slideTrackKey);
+}
+
+int currentWifiLaneAreaIndexAt(
+    const QVector<double>& progressSeconds,
+    const QVector<QVector<MuriCheckpointState>>& laneAreas,
+    double playheadSeconds)
+{
+    if (!progressSeconds.isEmpty()) {
+        int areaIndex = 0;
+        for (int index = 1; index < progressSeconds.size(); ++index) {
+            const double second = progressSeconds.at(index);
+            if (second < 0.0 || second > playheadSeconds + 1e-6) {
+                break;
+            }
+            areaIndex = index;
+        }
+        return areaIndex;
+    }
+
+    int areaIndex = 0;
+    for (const QVector<MuriCheckpointState>& checkpoints : laneAreas) {
+        if (passedCheckpointCount(checkpoints, playheadSeconds) <= 0) {
+            break;
+        }
+        ++areaIndex;
+    }
+    return areaIndex;
+}
+
 int slideAreaCutForPassedCount(const QVector<int>& cutIndices, int passedCount, int pointCount)
 {
     if (passedCount <= 0) {
@@ -299,12 +338,26 @@ QString lanePadToken(int lane)
 
 const MarkerMuriState* PreviewCanvas::markerMuriState(const TimelineNoteMarker& marker) const
 {
-    const auto it = muriAnalysisReport_.markerStates.constFind(makeMarkerAnalysisKey(marker));
-    if (it == muriAnalysisReport_.markerStates.constEnd()) {
-        return nullptr;
+    const QString exactKey = makeMarkerAnalysisKey(marker);
+    auto it = muriAnalysisReport_.markerStates.constFind(exactKey);
+    if (it != muriAnalysisReport_.markerStates.constEnd()) {
+        return &it.value();
     }
-    return &it.value();
+
+    if (marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi")) {
+        const QString baseKey = markerAnalysisBaseKey(marker);
+        const QString prefix = baseKey + QLatin1Char('|');
+        for (auto stateIt = muriAnalysisReport_.markerStates.constBegin();
+             stateIt != muriAnalysisReport_.markerStates.constEnd();
+             ++stateIt) {
+            if (stateIt.key() == baseKey || stateIt.key().startsWith(prefix)) {
+                return &stateIt.value();
+            }
+        }
+    }
+    return nullptr;
 }
+
 void PreviewCanvas::drawTouchLayer(QPainter& painter, const QRectF& playfieldRect)
 {
     QHash<quint64, int> overlapCounts;
@@ -2992,40 +3045,39 @@ void PreviewCanvas::drawWifiTrack(QPainter& painter, const TimelineNoteMarker& m
 
     if (muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle
         && state != nullptr
-        && !state->wifiAreas.isEmpty()) {
+        && (!state->wifiLaneProgressSeconds.isEmpty() || !state->wifiLaneAreas.isEmpty())) {
+        const int totalAreaCount = marker.wifiTrackAreaPoints.size();
+        int startRuntimeAreaIndex = totalAreaCount;
+        const int laneCount = qMax(state->wifiLaneProgressSeconds.size(), state->wifiLaneAreas.size());
+        for (int laneIndex = 0; laneIndex < laneCount; ++laneIndex) {
+            startRuntimeAreaIndex = qMin(
+                startRuntimeAreaIndex,
+                qBound(
+                    0,
+                    currentWifiLaneAreaIndexAt(
+                        state->wifiLaneProgressSeconds.value(laneIndex),
+                        state->wifiLaneAreas.value(laneIndex),
+                        playheadSeconds_),
+                    totalAreaCount)
+            );
+        }
+        const bool padCPassed = !muriRenderOptions_.wifiNeedC
+            || (state->wifiPadCSecond >= 0.0 && playheadSeconds_ >= state->wifiPadCSecond - 1e-6);
+        if (padCPassed
+            && state->wifiCompletedSecond >= 0.0
+            && playheadSeconds_ >= state->wifiCompletedSecond - 1e-6) {
+            startRuntimeAreaIndex = totalAreaCount;
+        }
+        if (!padCPassed && totalAreaCount > 0) {
+            startRuntimeAreaIndex = qMin(startRuntimeAreaIndex, totalAreaCount - 1);
+        }
+
         painter.save();
         painter.setOpacity(opacity);
-        for (int areaIndex = marker.wifiTrackAreaPoints.size() - 1; areaIndex >= 0; --areaIndex) {
-            const QVector<MuriCheckpointState>& checkpoints = state->wifiAreas.value(areaIndex);
-            if (checkpoints.isEmpty()) {
-                if (state->wifiCompletedSecond >= 0.0 && playheadSeconds_ >= state->wifiCompletedSecond - 1e-6) {
-                    continue;
-                }
-                drawCachedWifiArea(painter, marker, areaIndex, 0, playfieldRect, opacity);
-                continue;
-            }
-
-            const int passed = passedCheckpointCount(checkpoints, playheadSeconds_);
-            if (passed >= checkpoints.size()) {
-                continue;
-            }
-            const int localCut = checkpoints.isEmpty()
-                ? 0
-                : qBound(
-                      0,
-                      qFloor(static_cast<qreal>(passed) * marker.wifiTrackAreaPoints[areaIndex].size() / checkpoints.size()),
-                      marker.wifiTrackAreaPoints[areaIndex].size()
-                  );
-            drawCachedWifiArea(painter, marker, areaIndex, localCut, playfieldRect, opacity);
+        for (int areaIndex = marker.wifiTrackAreaPoints.size() - 1; areaIndex >= startRuntimeAreaIndex; --areaIndex) {
+            drawCachedWifiArea(painter, marker, areaIndex, 0, playfieldRect, opacity);
         }
         painter.restore();
-
-        const qreal flashOpacity = muriFlashOpacity(state, playheadSeconds_);
-        if (flashOpacity > 0.0) {
-            for (int areaIndex = marker.wifiTrackAreaPoints.size() - 1; areaIndex >= 0; --areaIndex) {
-                drawCachedWifiArea(painter, marker, areaIndex, 0, playfieldRect, flashOpacity);
-            }
-        }
         return;
     }
 
