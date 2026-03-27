@@ -3484,13 +3484,6 @@ QString MainWindow::transformChartText(const QString& input, ChartTransformOp op
             if (in.isEmpty() || !isDigitLane(in.at(0))) {
                 return in;
             }
-
-            const int bracketPos = in.indexOf('[');
-            const QString core = bracketPos >= 0 ? in.left(bracketPos) : in;
-            const QString suffix = bracketPos >= 0 ? in.mid(bracketPos) : QString();
-            if (core.isEmpty()) {
-                return in;
-            }
             auto hasSlideOperatorAhead = [](const QString& text) -> bool {
                 static const QString ops = QStringLiteral("-^v<>Vpqszw");
                 for (QChar c : text) {
@@ -3500,110 +3493,168 @@ QString MainWindow::transformChartText(const QString& input, ChartTransformOp op
                 }
                 return false;
             };
-            if (!hasSlideOperatorAhead(core.mid(1))) {
+            if (!hasSlideOperatorAhead(in.mid(1))) {
                 return in;
             }
-
-            QString out;
-            out.reserve(core.size());
-            int i = 0;
-            const int startOriginal = core.at(0).digitValue();
-            int segmentStartOriginal = startOriginal;
-            int segmentStartMapped = mapLaneGeneral(startOriginal);
-            const QChar mappedStart = laneChar(segmentStartMapped);
-            out.append(mappedStart);
-            if (mappedStart != core.at(0)) {
-                ++changed;
-            }
-            i = 1;
-
-            while (i < core.size()) {
-                QString opToken;
-                int opLength = 0;
-                const QChar c = core.at(i);
-                if (i + 1 < core.size()
-                    && ((c == QChar('p') && core.at(i + 1) == QChar('p'))
-                        || (c == QChar('q') && core.at(i + 1) == QChar('q')))) {
-                    opToken = QString(c) + core.at(i + 1);
-                    opLength = 2;
-                } else if (QStringLiteral("-^vVpqsz<>w").contains(c)) {
-                    opToken = QString(c);
-                    opLength = 1;
+            const int headStartOriginal = in.at(0).digitValue();
+            const int headStartMapped = mapLaneGeneral(headStartOriginal);
+            const auto transformSlideCore = [&](const QString& core, int defaultStartOriginal, int defaultStartMapped) -> QString {
+                if (core.isEmpty()) {
+                    return core;
                 }
 
-                if (opLength == 0) {
-                    if (isDigitLane(c)) {
-                        const QChar mapped = laneChar(mapLaneGeneral(c.digitValue()));
-                        out.append(mapped);
-                        if (mapped != c) {
+                QString out;
+                out.reserve(core.size());
+                int i = 0;
+                int segmentStartOriginal = defaultStartOriginal;
+                int segmentStartMapped = defaultStartMapped;
+                if (isDigitLane(core.at(0))) {
+                    segmentStartOriginal = core.at(0).digitValue();
+                    segmentStartMapped = mapLaneGeneral(segmentStartOriginal);
+                    const QChar mappedStart = laneChar(segmentStartMapped);
+                    out.append(mappedStart);
+                    if (mappedStart != core.at(0)) {
+                        ++changed;
+                    }
+                    i = 1;
+                }
+
+                while (i < core.size()) {
+                    QString opToken;
+                    int opLength = 0;
+                    const QChar c = core.at(i);
+                    if (i + 1 < core.size()
+                        && ((c == QChar('p') && core.at(i + 1) == QChar('p'))
+                            || (c == QChar('q') && core.at(i + 1) == QChar('q')))) {
+                        opToken = QString(c) + core.at(i + 1);
+                        opLength = 2;
+                    } else if (QStringLiteral("-^vVpqsz<>w").contains(c)) {
+                        opToken = QString(c);
+                        opLength = 1;
+                    }
+
+                    if (opLength == 0) {
+                        if (isDigitLane(c)) {
+                            const QChar mapped = laneChar(mapLaneGeneral(c.digitValue()));
+                            out.append(mapped);
+                            if (mapped != c) {
+                                ++changed;
+                            }
+                        } else {
+                            out.append(c);
+                        }
+                        ++i;
+                        continue;
+                    }
+
+                    i += opLength;
+                    QString transformedOp = opToken;
+
+                    if (opToken == "<" || opToken == ">") {
+                        const bool clockwiseOriginal = isClockwiseArc(segmentStartOriginal, opToken.at(0));
+                        const bool clockwiseTarget = isMirrorOp(op) ? !clockwiseOriginal : clockwiseOriginal;
+                        transformedOp = QString(arcTypeFromDirection(segmentStartMapped, clockwiseTarget));
+                    } else if (isMirrorOp(op)) {
+                        if (opToken == "p") transformedOp = "q";
+                        else if (opToken == "q") transformedOp = "p";
+                        else if (opToken == "s") transformedOp = "z";
+                        else if (opToken == "z") transformedOp = "s";
+                        else if (opToken == "pp") transformedOp = "qq";
+                        else if (opToken == "qq") transformedOp = "pp";
+                    }
+
+                    out.append(transformedOp);
+                    if (transformedOp != opToken) {
+                        ++changed;
+                    }
+
+                    if (opToken == "V") {
+                        if (i + 1 >= core.size() || !isDigitLane(core.at(i)) || !isDigitLane(core.at(i + 1))) {
+                            out.append(core.mid(i));
+                            break;
+                        }
+                        const int midOriginal = core.at(i).digitValue();
+                        const int endOriginal = core.at(i + 1).digitValue();
+                        const QChar midMapped = laneChar(mapLaneGeneral(midOriginal));
+                        const QChar endMapped = laneChar(mapLaneGeneral(endOriginal));
+                        out.append(midMapped);
+                        out.append(endMapped);
+                        if (midMapped != core.at(i)) {
                             ++changed;
                         }
+                        if (endMapped != core.at(i + 1)) {
+                            ++changed;
+                        }
+                        segmentStartOriginal = endOriginal;
+                        segmentStartMapped = endMapped.digitValue();
+                        i += 2;
                     } else {
-                        out.append(c);
+                        if (i >= core.size() || !isDigitLane(core.at(i))) {
+                            out.append(core.mid(i));
+                            break;
+                        }
+                        const int endOriginal = core.at(i).digitValue();
+                        const QChar endMapped = laneChar(mapLaneGeneral(endOriginal));
+                        out.append(endMapped);
+                        if (endMapped != core.at(i)) {
+                            ++changed;
+                        }
+                        segmentStartOriginal = endOriginal;
+                        segmentStartMapped = endMapped.digitValue();
+                        ++i;
                     }
-                    ++i;
+                }
+
+                return out;
+            };
+
+            QStringList segments;
+            QString currentSegment;
+            int bracketDepth = 0;
+            for (QChar ch : in) {
+                if (ch == QChar('*') && bracketDepth == 0) {
+                    segments.append(currentSegment);
+                    currentSegment.clear();
+                    continue;
+                }
+                currentSegment.append(ch);
+                if (ch == QChar('[')) {
+                    ++bracketDepth;
+                } else if (ch == QChar(']') && bracketDepth > 0) {
+                    --bracketDepth;
+                }
+            }
+            segments.append(currentSegment);
+
+            QString out;
+            out.reserve(in.size());
+            for (int segmentIndex = 0; segmentIndex < segments.size(); ++segmentIndex) {
+                if (segmentIndex > 0) {
+                    out.append(QChar('*'));
+                }
+
+                const QString& segment = segments.at(segmentIndex);
+                const int bracketPos = segment.indexOf('[');
+                const QString core = bracketPos >= 0 ? segment.left(bracketPos) : segment;
+                const QString suffix = bracketPos >= 0 ? segment.mid(bracketPos) : QString();
+                if (core.isEmpty()) {
+                    out.append(segment);
                     continue;
                 }
 
-                i += opLength;
-                QString transformedOp = opToken;
-
-                if (opToken == "<" || opToken == ">") {
-                    const bool clockwiseOriginal = isClockwiseArc(segmentStartOriginal, opToken.at(0));
-                    const bool clockwiseTarget = isMirrorOp(op) ? !clockwiseOriginal : clockwiseOriginal;
-                    transformedOp = QString(arcTypeFromDirection(segmentStartMapped, clockwiseTarget));
-                } else if (isMirrorOp(op)) {
-                    if (opToken == "p") transformedOp = "q";
-                    else if (opToken == "q") transformedOp = "p";
-                    else if (opToken == "s") transformedOp = "z";
-                    else if (opToken == "z") transformedOp = "s";
-                    else if (opToken == "pp") transformedOp = "qq";
-                    else if (opToken == "qq") transformedOp = "pp";
+                const QString operatorScan = isDigitLane(core.at(0)) ? core.mid(1) : core;
+                if (!hasSlideOperatorAhead(operatorScan)) {
+                    out.append(segment);
+                    continue;
                 }
 
-                out.append(transformedOp);
-                if (transformedOp != opToken) {
-                    ++changed;
-                }
-
-                if (opToken == "V") {
-                    if (i + 1 >= core.size() || !isDigitLane(core.at(i)) || !isDigitLane(core.at(i + 1))) {
-                        out.append(core.mid(i));
-                        break;
-                    }
-                    const int midOriginal = core.at(i).digitValue();
-                    const int endOriginal = core.at(i + 1).digitValue();
-                    const QChar midMapped = laneChar(mapLaneGeneral(midOriginal));
-                    const QChar endMapped = laneChar(mapLaneGeneral(endOriginal));
-                    out.append(midMapped);
-                    out.append(endMapped);
-                    if (midMapped != core.at(i)) {
-                        ++changed;
-                    }
-                    if (endMapped != core.at(i + 1)) {
-                        ++changed;
-                    }
-                    segmentStartOriginal = endOriginal;
-                    segmentStartMapped = endMapped.digitValue();
-                    i += 2;
-                } else {
-                    if (i >= core.size() || !isDigitLane(core.at(i))) {
-                        out.append(core.mid(i));
-                        break;
-                    }
-                    const int endOriginal = core.at(i).digitValue();
-                    const QChar endMapped = laneChar(mapLaneGeneral(endOriginal));
-                    out.append(endMapped);
-                    if (endMapped != core.at(i)) {
-                        ++changed;
-                    }
-                    segmentStartOriginal = endOriginal;
-                    segmentStartMapped = endMapped.digitValue();
-                    ++i;
-                }
+                const int defaultStartOriginal = isDigitLane(core.at(0)) ? core.at(0).digitValue() : headStartOriginal;
+                const int defaultStartMapped = isDigitLane(core.at(0)) ? mapLaneGeneral(defaultStartOriginal) : headStartMapped;
+                out.append(transformSlideCore(core, defaultStartOriginal, defaultStartMapped));
+                out.append(suffix);
             }
 
-            return out + suffix;
+            return out;
         };
 
         if (token.at(0).toUpper() == QChar('C')) {
