@@ -71,6 +71,7 @@ struct RuntimeSlideJudgeResult {
     QVector<QVector<RuntimeJudgeHit>> wifiLaneAreaHits;
     QVector<QVector<QStringList>> wifiLaneJudgeSequence;
     QVector<QVector<double>> wifiLaneProgressSeconds;
+    double wifiPadCSecond = -1.0;
 };
 
 struct JudgeableSimpleNote {
@@ -273,6 +274,44 @@ QVector<QVector<QPointF>> loadRuntimeWifiActionPaths(const QString& key)
 bool isSlideLike(const TimelineNoteMarker& marker)
 {
     return marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi");
+}
+
+bool slideKeyUsesCcwJudgeSprite(const QString& key)
+{
+    if (key.isEmpty()) {
+        return false;
+    }
+    int startLane = key.at(0).digitValue();
+    if (startLane < 1 || startLane > 8) {
+        startLane = 1;
+    }
+    const bool outerStart = startLane == 1 || startLane == 2 || startLane == 7 || startLane == 8;
+    if (key.contains(QLatin1Char('<'))) {
+        return outerStart;
+    }
+    if (key.contains(QLatin1Char('>'))) {
+        return !outerStart;
+    }
+    return false;
+}
+
+bool slideKeyUsesCwJudgeSprite(const QString& key)
+{
+    if (key.isEmpty()) {
+        return false;
+    }
+    int startLane = key.at(0).digitValue();
+    if (startLane < 1 || startLane > 8) {
+        startLane = 1;
+    }
+    const bool outerStart = startLane == 1 || startLane == 2 || startLane == 7 || startLane == 8;
+    if (key.contains(QLatin1Char('>'))) {
+        return outerStart;
+    }
+    if (key.contains(QLatin1Char('<'))) {
+        return !outerStart;
+    }
+    return false;
 }
 
 QString slideHeadStarMarkerKey(const TimelineNoteMarker& marker)
@@ -943,7 +982,6 @@ MarkerMuriState buildWifiState(
     }
     return state;
 }
-
 void addSlidePadWindowsAndTrails(
     const TimelineNoteMarker& marker,
     const QString& markerKey,
@@ -1163,6 +1201,72 @@ void addSimpleNoteDiagnostic(
     diagnostic.title = muriKindDisplayName(kind, true);
     diagnostic.detail = detail;
     diagnostics->append(diagnostic);
+}
+
+void addSimpleJudgeSpriteEvent(
+    QVector<MuriJudgeSpriteEvent>* judgeSpriteEvents,
+    const JudgeableSimpleNote& note)
+{
+    if (judgeSpriteEvents == nullptr || !note.judged || !note.judgeBad || note.pad.isEmpty()) {
+        return;
+    }
+
+    MuriJudgeSpriteEvent event;
+    event.kind = MuriJudgeSpriteKind::Simple;
+    event.second = qMax(0.0, note.judgeSecond);
+    event.spawnSecond = event.second;
+    if (note.marker != nullptr
+        && (note.type == QLatin1String("hold") || note.type == QLatin1String("touch_hold"))
+        && note.marker->endSecond >= 0.0) {
+        event.spawnSecond = qMax(event.second, note.marker->endSecond);
+    }
+    event.markerKey = note.markerKey;
+    event.pad = note.pad;
+    judgeSpriteEvents->append(event);
+}
+
+bool appendSlideJudgeSpriteEvent(
+    QVector<MuriJudgeSpriteEvent>* judgeSpriteEvents,
+    const TimelineNoteMarker& marker,
+    double judgeSecond)
+{
+    if (judgeSpriteEvents == nullptr) {
+        return false;
+    }
+
+    const int lane = qBound(1, marker.endLane, 8);
+    if (lane < 1 || lane > 8) {
+        return false;
+    }
+
+    MuriJudgeSpriteEvent event;
+    event.second = qMax(0.0, judgeSecond);
+    event.spawnSecond = event.second;
+    event.markerKey = makeMarkerAnalysisKey(marker);
+    event.lane = lane;
+
+    if (marker.type == QLatin1String("wifi")) {
+        event.kind =
+            (lane == 1 || lane == 2 || lane == 7 || lane == 8)
+            ? MuriJudgeSpriteKind::WifiUp
+            : MuriJudgeSpriteKind::WifiDown;
+        judgeSpriteEvents->append(event);
+        return true;
+    }
+
+    const QString segmentKey = !marker.slideSegmentKeys.isEmpty()
+        ? marker.slideSegmentKeys.constLast()
+        : marker.slideTrackKey;
+    if (slideKeyUsesCcwJudgeSprite(segmentKey)) {
+        event.kind = MuriJudgeSpriteKind::SlideCircleCcw;
+    } else if (slideKeyUsesCwJudgeSprite(segmentKey)) {
+        event.kind = MuriJudgeSpriteKind::SlideCircleCw;
+    } else {
+        event.kind = MuriJudgeSpriteKind::SlideStraight;
+    }
+
+    judgeSpriteEvents->append(event);
+    return true;
 }
 
 QHash<QString, MarkerSourceRef> buildMarkerSourceRefs(const QVector<TimelineNoteMarker>& noteMarkers)
@@ -2250,6 +2354,7 @@ struct RuntimeWifiNoteState {
     QVector<bool> laneFinished;
     int totalAreaNum = 0;
     bool padCPassed = true;
+    double padCSecond = -1.0;
     bool judged = false;
     bool judgeBad = false;
     double judgeSecond = -1.0;
@@ -2707,6 +2812,7 @@ void updateRuntimeWifiNote(
         RuntimePadEvent cause;
         if (padReleasedThisTick(padUpThisTick, QStringLiteral("C"), &cause)) {
             note->padCPassed = true;
+            note->padCSecond = nowSecond;
             if (note->areaHits.size() > 1 && note->areaHits.at(1).size() > 2) {
                 note->areaHits[1][2].judged = true;
                 note->areaHits[1][2].second = nowSecond;
@@ -2972,6 +3078,7 @@ QHash<QString, RuntimeSlideJudgeResult> simulateRuntimeSlideAndWifiJudgments(
         result.wifiLaneAreaHits = note.areaHits;
         result.wifiLaneJudgeSequence = note.laneJudgeSequence;
         result.wifiLaneProgressSeconds = note.laneProgressSeconds;
+        result.wifiPadCSecond = note.padCSecond;
         results.insert(note.markerKey, result);
     }
 
@@ -3026,6 +3133,7 @@ void applyRuntimeJudgeResultToState(const RuntimeSlideJudgeResult& result, Marke
         if (!result.wifiLaneProgressSeconds.isEmpty()) {
             state->wifiLaneProgressSeconds = result.wifiLaneProgressSeconds;
         }
+        state->wifiPadCSecond = result.wifiPadCSecond;
     } else {
         int areaCursor = 0;
         for (int index = 0; index < result.segmentCompletedSeconds.size() && index < state->slideSegments.size(); ++index) {
@@ -3356,7 +3464,8 @@ void collectSimpleNoteMultiTouchDiagnostics(
 
 void collectSimpleNoteRuntimeDiagnostics(
     const QVector<TimelineNoteMarker>& noteMarkers,
-    QVector<MuriDiagnostic>* diagnostics)
+    QVector<MuriDiagnostic>* diagnostics,
+    QVector<MuriJudgeSpriteEvent>* judgeSpriteEvents)
 {
     if (diagnostics == nullptr) {
         return;
@@ -3383,6 +3492,13 @@ void collectSimpleNoteRuntimeDiagnostics(
         touchGroups,
         topLevelNotes,
         buildRuntimePadEvents(noteMarkers, runtimePadWindows, markerRefs));
+
+    if (judgeSpriteEvents != nullptr) {
+        judgeSpriteEvents->reserve(judgeSpriteEvents->size() + notes.size());
+        for (const JudgeableSimpleNote& note : notes) {
+            addSimpleJudgeSpriteEvent(judgeSpriteEvents, note);
+        }
+    }
 
     for (const RuntimeTopLevelNote& topLevel : topLevelNotes) {
         if (topLevel.touchGroupIndex >= 0) {
@@ -3445,7 +3561,7 @@ MuriAnalysisReport MuriAnalyzer::analyze(
     report.sourceSignature = signatureParts.join(QLatin1Char(';'));
 
     buildOverlayActions(noteMarkers, &report.padWindows, &report.actionTrails);
-    collectSimpleNoteRuntimeDiagnostics(noteMarkers, &report.diagnostics);
+    collectSimpleNoteRuntimeDiagnostics(noteMarkers, &report.diagnostics, &report.judgeSpriteEvents);
 
     const QHash<QString, MarkerSourceRef> markerRefs = buildMarkerSourceRefs(noteMarkers);
     QHash<QString, int> noteIndexByMarkerKey;
@@ -3495,6 +3611,7 @@ MuriAnalysisReport MuriAnalyzer::analyze(
                         marker,
                         markerKey,
                         QStringLiteral("Slide runtime judge resolved outside its critical window."));
+                    appendSlideJudgeSpriteEvent(&report.judgeSpriteEvents, marker, runtimeResult.judgeSecond);
                 }
             } else if (!state.slideSegments.isEmpty()) {
                 const MuriSegmentState& lastSegment = state.slideSegments.constLast();
@@ -3517,6 +3634,7 @@ MuriAnalysisReport MuriAnalyzer::analyze(
                         markerKey,
                         QStringLiteral("Slide was cleared earlier than its normal judge timing.")
                     );
+                    appendSlideJudgeSpriteEvent(&report.judgeSpriteEvents, marker, lastSegment.completedSecond);
                 }
             }
             report.markerStates.insert(markerKey, state);
@@ -3536,6 +3654,7 @@ MuriAnalysisReport MuriAnalyzer::analyze(
                         marker,
                         markerKey,
                         QStringLiteral("Wifi runtime judge resolved outside its critical window."));
+                    appendSlideJudgeSpriteEvent(&report.judgeSpriteEvents, marker, runtimeResult.judgeSecond);
                 }
             } else {
                 const double durationSecond = qMax(0.0, marker.endSecond - marker.slideTraceSecond);
@@ -3551,6 +3670,7 @@ MuriAnalysisReport MuriAnalyzer::analyze(
                         markerKey,
                         QStringLiteral("Wifi was cleared earlier than its normal judge timing.")
                     );
+                    appendSlideJudgeSpriteEvent(&report.judgeSpriteEvents, marker, state.wifiCompletedSecond);
                 }
             }
             report.markerStates.insert(markerKey, state);
@@ -3567,5 +3687,20 @@ MuriAnalysisReport MuriAnalyzer::analyze(
         return a.col < b.col;
     });
     report.diagnostics = dedupeDenseOverlapDiagnostics(report.diagnostics);
+    std::sort(report.judgeSpriteEvents.begin(), report.judgeSpriteEvents.end(), [](const MuriJudgeSpriteEvent& a, const MuriJudgeSpriteEvent& b) {
+        if (!qFuzzyCompare(a.second + 1.0, b.second + 1.0)) {
+            return a.second < b.second;
+        }
+        if (!qFuzzyCompare(a.spawnSecond + 1.0, b.spawnSecond + 1.0)) {
+            return a.spawnSecond < b.spawnSecond;
+        }
+        if (a.kind != b.kind) {
+            return static_cast<int>(a.kind) < static_cast<int>(b.kind);
+        }
+        if (a.pad != b.pad) {
+            return a.pad < b.pad;
+        }
+        return a.markerKey < b.markerKey;
+    });
     return report;
 }

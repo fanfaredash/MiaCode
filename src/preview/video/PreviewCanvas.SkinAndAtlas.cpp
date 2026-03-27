@@ -132,6 +132,23 @@ void PreviewCanvas::applySkinLoadResult(SkinLoadResult&& result)
         judgeEffectFireworkColorBallImage_ = buildJudgeEffectFireworkColorBallFallbackImage();
     }
     judgeEffectFireworkColorBallSourceRect_ = nonTransparentBounds(judgeEffectFireworkColorBallImage_);
+    reviewJudgeSimpleNormalImage_ = std::move(result.reviewJudgeSimpleNormalImage);
+    reviewJudgeSimpleNormalSourceRect_ = nonTransparentBounds(reviewJudgeSimpleNormalImage_);
+    reviewJudgeSimpleBreakImage_ = std::move(result.reviewJudgeSimpleBreakImage);
+    reviewJudgeSimpleBreakSourceRect_ = nonTransparentBounds(reviewJudgeSimpleBreakImage_);
+    reviewJudgeStraightLeftImage_ = std::move(result.reviewJudgeStraightLeftImage);
+    reviewJudgeStraightRightImage_ = std::move(result.reviewJudgeStraightRightImage);
+    reviewJudgeCircleLeftImage_ = std::move(result.reviewJudgeCircleLeftImage);
+    reviewJudgeCircleRightImage_ = std::move(result.reviewJudgeCircleRightImage);
+    reviewJudgeWifiUpImage_ = std::move(result.reviewJudgeWifiUpImage);
+    reviewJudgeWifiDownImage_ = std::move(result.reviewJudgeWifiDownImage);
+    muriJudgeSimpleImage_ = std::move(result.muriJudgeSimpleImage);
+    muriJudgeStraightLeftImage_ = std::move(result.muriJudgeStraightLeftImage);
+    muriJudgeStraightRightImage_ = std::move(result.muriJudgeStraightRightImage);
+    muriJudgeCircleLeftImage_ = std::move(result.muriJudgeCircleLeftImage);
+    muriJudgeCircleRightImage_ = std::move(result.muriJudgeCircleRightImage);
+    muriJudgeWifiUpImage_ = std::move(result.muriJudgeWifiUpImage);
+    muriJudgeWifiDownImage_ = std::move(result.muriJudgeWifiDownImage);
 
     tapAtlasImage_ = std::move(result.tapAtlasImage);
     trackAtlasImage_ = std::move(result.trackAtlasImage);

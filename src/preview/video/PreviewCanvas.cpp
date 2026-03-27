@@ -244,6 +244,17 @@ constexpr qreal kJudgeEffectFireworkHoleStartRadiusRatio = kFireworkInnerUB;
 constexpr qreal kJudgeEffectFireworkHoleEndRadiusRatio = 1.0;
 constexpr qreal kJudgeEffectFireworkHoleBandRatio =
     (kFireworkInnerUB - kFireworkInnerLB) + (kFireworkOuterUB - kFireworkOuterLB);
+constexpr qreal kMaimuriDxJudgeLifetimeSeconds = static_cast<qreal>(90.0 / miacode::muri::kJudgeTps);
+constexpr qreal kMaimuriDxJudgeFadeOutStartSeconds = static_cast<qreal>(45.0 / miacode::muri::kJudgeTps);
+constexpr qreal kMaimuriDxSimpleJudgeFadeInSeconds = static_cast<qreal>(22.5 / miacode::muri::kJudgeTps);
+constexpr qreal kMaimuriDxJudgeSimpleWidthLogical = 112.0;
+constexpr qreal kMaimuriDxJudgeStraightWidthLogical = 214.0;
+constexpr qreal kMaimuriDxJudgeCircleWidthLogical = 205.0;
+constexpr qreal kMaimuriDxJudgeWifiWidthLogical = 334.0;
+constexpr qreal kMaimuriDxJudgeSimpleOffsetLogical = kLogicalCanvasSize * 80.0 / 1080.0;
+constexpr qreal kMaimuriDxJudgeStraightOffsetLogical = kLogicalCanvasSize * 220.0 / 1080.0;
+constexpr qreal kMaimuriDxJudgeCircleDistanceLogical = kLogicalCanvasSize * 463.0 / 1080.0;
+constexpr qreal kMaimuriDxJudgeWifiDistanceLogical = kLogicalCanvasSize * 406.0 / 1080.0;
 const QColor kJudgeEffectTouchCircleTint = QColor::fromRgbF(1.0, 0.9943893, 0.4669811, 1.0);
 const QColor kJudgeEffectTouchPartTint = QColor::fromRgbF(1.0, 0.9000474, 0.4666667, 1.0);
 const std::array<QColor, 5> kJudgeEffectFireworkSectorColors = {{
@@ -961,6 +972,28 @@ QPointF mapLogicalPointToRect(const QPointF& logicalPoint, const QRectF& targetR
 qreal mapLogicalLengthToRect(qreal logicalLength, const QRectF& targetRect)
 {
     return logicalLength * (targetRect.width() / kLogicalCanvasSize);
+}
+
+int wrappedLane(int lane)
+{
+    const int normalized = (lane - 1) % 8;
+    return (normalized < 0 ? normalized + 8 : normalized) + 1;
+}
+
+QString padTokenForRing(QChar ring, int lane)
+{
+    return QStringLiteral("%1%2").arg(ring).arg(wrappedLane(lane));
+}
+
+QPointF padUnitVectorForToken(const QString& pad)
+{
+    const QPointF padCenter = miacode::muri::padCenter(pad);
+    const QPointF offset = padCenter - QPointF(kLogicalCanvasCenter, kLogicalCanvasCenter);
+    const qreal length = std::hypot(offset.x(), offset.y());
+    if (length <= kRenderDurationEpsilon) {
+        return QPointF(0.0, 0.0);
+    }
+    return QPointF(offset.x() / length, offset.y() / length);
 }
 
 qreal tapScaleForDistance(qreal distance)

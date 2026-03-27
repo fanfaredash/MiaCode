@@ -52,6 +52,21 @@ void PreviewCanvas::scheduleTexturePrewarm()
     pendingTexturePrewarmImages_.append(judgeEffectTouchPart02Image_);
     pendingTexturePrewarmImages_.append(judgeEffectFireworkImage_);
     pendingTexturePrewarmImages_.append(judgeEffectFireworkColorBallImage_);
+    pendingTexturePrewarmImages_.append(reviewJudgeSimpleNormalImage_);
+    pendingTexturePrewarmImages_.append(reviewJudgeSimpleBreakImage_);
+    pendingTexturePrewarmImages_.append(reviewJudgeStraightLeftImage_);
+    pendingTexturePrewarmImages_.append(reviewJudgeStraightRightImage_);
+    pendingTexturePrewarmImages_.append(reviewJudgeCircleLeftImage_);
+    pendingTexturePrewarmImages_.append(reviewJudgeCircleRightImage_);
+    pendingTexturePrewarmImages_.append(reviewJudgeWifiUpImage_);
+    pendingTexturePrewarmImages_.append(reviewJudgeWifiDownImage_);
+    pendingTexturePrewarmImages_.append(muriJudgeSimpleImage_);
+    pendingTexturePrewarmImages_.append(muriJudgeStraightLeftImage_);
+    pendingTexturePrewarmImages_.append(muriJudgeStraightRightImage_);
+    pendingTexturePrewarmImages_.append(muriJudgeCircleLeftImage_);
+    pendingTexturePrewarmImages_.append(muriJudgeCircleRightImage_);
+    pendingTexturePrewarmImages_.append(muriJudgeWifiUpImage_);
+    pendingTexturePrewarmImages_.append(muriJudgeWifiDownImage_);
     texturePrewarmStartMs_ = QDateTime::currentMSecsSinceEpoch();
     appendPreviewStartupTiming("preview_canvas/texture_prewarm_schedule", -1);
 
