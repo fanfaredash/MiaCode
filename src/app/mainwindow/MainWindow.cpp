@@ -246,17 +246,6 @@ QString sanitizeExportFileStem(QString text, const QString& fallback = QStringLi
     return sanitized.isEmpty() ? fallback : sanitized;
 }
 
-QString videoExportPerformanceProfileToken(VideoExportPerformanceProfile profile)
-{
-    switch (profile) {
-    case VideoExportPerformanceProfile::Speed:
-        return QStringLiteral("speed");
-    case VideoExportPerformanceProfile::Balanced:
-    default:
-        return QStringLiteral("balanced");
-    }
-}
-
 QString videoExportBackgroundScaleModeToken(PreviewBackgroundScaleMode mode)
 {
     switch (mode) {
@@ -4678,7 +4667,6 @@ void MainWindow::onBatchExportPreviewVideo()
     task.outputWidth = 1024;
     task.outputHeight = 1024;
     task.fps = 60;
-    task.performanceProfile = VideoExportPerformanceProfile::Balanced;
     task.showTimestamp = previewShowTimestamp_;
     task.showObjectStatsHud = exportShowObjectStatsHud_;
 
@@ -5162,7 +5150,6 @@ bool MainWindow::buildVideoExportSnapshotForChartDirectory(
     built.outputWidth = requestedTask.outputWidth;
     built.outputHeight = requestedTask.outputHeight;
     built.fps = requestedTask.fps;
-    built.performanceProfile = requestedTask.performanceProfile;
     built.outputPath = QDir(outputDirectory).filePath(defaultOutputName);
     built.showTimestamp = requestedTask.showTimestamp;
     built.showObjectStatsHud = requestedTask.showObjectStatsHud;
@@ -5931,7 +5918,6 @@ bool MainWindow::exportPreviewVideoFromCli(
     task.outputWidth = request.outputWidth;
     task.outputHeight = request.outputHeight;
     task.fps = request.fps;
-    task.performanceProfile = request.performanceProfile;
     task.showTimestamp = request.showTimestamp;
     task.showObjectStatsHud = request.showObjectStatsHud;
     task.outputPath = outputPath;
