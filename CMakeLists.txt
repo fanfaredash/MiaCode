@@ -53,6 +53,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/MuriTypes.cpp
     src/common/MuriRenderOptions.h
     src/common/MuriConfig.h
+    src/common/ChartAssetPaths.h
+    src/common/PreviewSfxTimeline.h
     src/editor/PlainCodeEditor.h
     src/editor/PlainCodeEditor.cpp
     src/editor/BracketScopeHighlighter.h
@@ -77,8 +79,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/video/PreviewGLRenderer.cpp
     src/preview/video/PreviewMediaController.h
     src/preview/video/PreviewMediaController.cpp
-    src/preview/PreviewIntegration.h
-    src/preview/PreviewIntegration.cpp
     src/preview/audio/PreviewAudioSettings.h
     src/preview/audio/PreviewAudioSettings.cpp
     src/preview/audio/QtPreviewSfxRuntime.h

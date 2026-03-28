@@ -1121,11 +1121,6 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
     QVector<FireworkTrigger> activeTriggers;
     activeTriggers.reserve(kPreviewSmallCollectionReserve);
 
-    QHash<quint64, FireworkTrigger> legacyPositionTriggers;
-    if (legacyFireworkStackingEnabled_) {
-        legacyPositionTriggers.reserve(kPreviewSmallCollectionReserve);
-    }
-
     FireworkTrigger latestTrigger;
     bool latestTriggerValid = false;
 
@@ -1156,30 +1151,14 @@ void PreviewCanvas::drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF
         trigger.marker = &marker;
         trigger.second = triggerSecond;
 
-        if (!legacyFireworkStackingEnabled_) {
-            if (!latestTriggerValid || triggerSecond >= latestTrigger.second) {
-                latestTrigger = trigger;
-                latestTriggerValid = true;
-            }
-            continue;
-        }
-
-        const quint64 key = touchPointKey(marker.touchPoint);
-        const auto existing = legacyPositionTriggers.constFind(key);
-        if (existing == legacyPositionTriggers.constEnd() || triggerSecond >= existing->second) {
-            legacyPositionTriggers.insert(key, trigger);
+        if (!latestTriggerValid || triggerSecond >= latestTrigger.second) {
+            latestTrigger = trigger;
+            latestTriggerValid = true;
         }
     }
 
-    if (!legacyFireworkStackingEnabled_) {
-        if (latestTriggerValid) {
-            activeTriggers.append(latestTrigger);
-        }
-    } else {
-        activeTriggers.reserve(legacyPositionTriggers.size());
-        for (auto it = legacyPositionTriggers.cbegin(); it != legacyPositionTriggers.cend(); ++it) {
-            activeTriggers.append(it.value());
-        }
+    if (latestTriggerValid) {
+        activeTriggers.append(latestTrigger);
     }
 
     if (activeTriggers.isEmpty()) {

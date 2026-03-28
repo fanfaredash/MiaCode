@@ -1052,31 +1052,6 @@ QColor exStarTintColor(bool isBreak, bool isEach)
     return QColor("#6FB6FF");
 }
 
-QString primaryOutlinePath()
-{
-    return miacode::assets::assetPath("background/outline.png");
-}
-
-QString legacyOutlinePath()
-{
-    return miacode::assets::assetPath("background/outline_2.png");
-}
-
-QString defaultOutlinePath(bool hasStageMedia)
-{
-    const QString preferredPath = hasStageMedia ? primaryOutlinePath() : legacyOutlinePath();
-    if (QFileInfo::exists(preferredPath)) {
-        return preferredPath;
-    }
-
-    const QString fallbackPath = hasStageMedia ? legacyOutlinePath() : primaryOutlinePath();
-    if (QFileInfo::exists(fallbackPath)) {
-        return fallbackPath;
-    }
-
-    return QString();
-}
-
 double detectLayoutRingDiameterRatio(const QImage& source)
 {
     if (source.isNull() || source.width() <= 2 || source.height() <= 2) {

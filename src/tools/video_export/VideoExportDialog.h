@@ -150,7 +150,6 @@ private:
     QDoubleSpinBox* startSecondSpin_ = nullptr;
     QDoubleSpinBox* endSecondSpin_ = nullptr;
     QLineEdit* startCurrentTimeEdit_ = nullptr;
-    QLineEdit* endCurrentTimeEdit_ = nullptr;
     QSlider* previewSlider_ = nullptr;
     QLabel* previewTimeLabel_ = nullptr;
     QWidget* optionsContent_ = nullptr;

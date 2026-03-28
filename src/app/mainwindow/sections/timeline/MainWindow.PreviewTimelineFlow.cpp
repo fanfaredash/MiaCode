@@ -270,10 +270,10 @@ void MainWindow::setCurrentFilePath(const QString& path)
     if (!currentFilePath_.isEmpty()) {
         setLastOpenDirectory(currentFilePath_);
 
-        const QString siblingTrack = QDir(QFileInfo(currentFilePath_).absolutePath()).filePath("track.mp3");
-        if (QFileInfo::exists(siblingTrack)) {
+        const QString siblingTrack = miacode::chart_assets::resolveTrackPath(currentFilePath_);
+        if (!siblingTrack.isEmpty()) {
             // Keep preview audio in sync with the currently opened chart directory.
-            lastTrackPath_ = QDir::cleanPath(siblingTrack);
+            lastTrackPath_ = siblingTrack;
         } else {
             lastTrackPath_.clear();
         }
@@ -281,7 +281,11 @@ void MainWindow::setCurrentFilePath(const QString& path)
         lastTrackPath_.clear();
     }
     if (previewCanvas_ != nullptr) {
-        previewCanvas_->setStageMediaAvailable(probeStageMediaAvailable(currentFilePath_));
+#ifdef HAVE_QT_MULTIMEDIA
+        previewCanvas_->setStageMediaAvailable(miacode::chart_assets::hasBackgroundMedia(currentFilePath_));
+#else
+        previewCanvas_->setStageMediaAvailable(miacode::chart_assets::hasBackgroundMedia(currentFilePath_, false));
+#endif
     }
     updateWindowTitle();
     updateCurrentFileLabel();
@@ -332,15 +336,6 @@ void MainWindow::updateCurrentFileLabel()
 QString MainWindow::editorText() const
 {
     return qobject_cast<PlainCodeEditor*>(editorWidget_)->toPlainText();
-}
-
-QString MainWindow::resolvePreviewSessionScriptPath() const
-{
-    const QString envPath = qEnvironmentVariable("MIACODE_PREVIEW_SESSION_SCRIPT", qEnvironmentVariable("MAIMURI_PREVIEW_SESSION_SCRIPT"));
-    if (!envPath.isEmpty() && QFileInfo::exists(envPath)) {
-        return envPath;
-    }
-    return QString();
 }
 
 void MainWindow::scheduleTimelineRefresh()
@@ -1323,7 +1318,6 @@ void MainWindow::scheduleNextQtPreviewTick()
 void MainWindow::requestNextDisplayRefreshPreviewFrame()
 {
     if (!qtPreviewPlaying_
-        || legacyPygamePreviewEnabled_
         || previewCanvas_ == nullptr
         || !previewCanvasUsesFrameSwappedPacing()) {
         return;
@@ -1361,7 +1355,7 @@ void MainWindow::setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, 
     qtPreviewAwaitingFrameSwapSinceMs_ = -1;
     resetQtPreviewFixedFramePacing();
     if (qtPreviewPlaying_) {
-        if (previewCanvas_ != nullptr && !legacyPygamePreviewEnabled_ && previewCanvasUsesFrameSwappedPacing()) {
+        if (previewCanvas_ != nullptr && previewCanvasUsesFrameSwappedPacing()) {
             requestNextDisplayRefreshPreviewFrame();
         } else {
             scheduleNextQtPreviewTick();
@@ -2594,11 +2588,10 @@ void MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
     qtPreviewAwaitingFrameSwap_ = false;
     qtPreviewAwaitingFrameSwapSinceMs_ = -1;
     resetQtPreviewFixedFramePacing();
-    if (previewCanvas_ != nullptr
-        && (!previewCanvasUsesFrameSwappedPacing() || legacyPygamePreviewEnabled_)) {
+    if (previewCanvas_ != nullptr && !previewCanvasUsesFrameSwappedPacing()) {
         previewCanvas_->update();
     }
-    if (previewCanvas_ != nullptr && !legacyPygamePreviewEnabled_ && previewCanvasUsesFrameSwappedPacing()) {
+    if (previewCanvas_ != nullptr && previewCanvasUsesFrameSwappedPacing()) {
         requestNextDisplayRefreshPreviewFrame();
     } else {
         scheduleNextQtPreviewTick();

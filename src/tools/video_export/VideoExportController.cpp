@@ -2,9 +2,11 @@
 
 #include "PreviewCanvas.h"
 #include "common/AssetPaths.h"
+#include "common/ChartAssetPaths.h"
 #include "common/LayoutRingConfig.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewSfxAssets.h"
+#include "common/PreviewSfxTimeline.h"
 #include "common/VideoExportConfig.h"
 
 #include <QCoreApplication>
@@ -46,20 +48,10 @@
 namespace {
 constexpr int kMixSampleRate = 48000;
 constexpr int kMixChannels = 2;
-constexpr double kTimelineEpsilonSeconds = 1e-6;
+constexpr double kTimelineEpsilonSeconds = miacode::preview_sfx_timeline::kTimelineEpsilonSeconds;
 
-struct ExportEvent {
-    double second = 0.0;
-    int priority = 0;
-    QString kind;
-    int spanIndex = -1;
-    double gain = 1.0;
-};
-
-struct ExportTouchholdSpan {
-    double startSecond = 0.0;
-    double endSecond = 0.0;
-};
+using ExportEvent = miacode::preview_sfx_timeline::Event;
+using ExportTouchholdSpan = miacode::preview_sfx_timeline::TouchholdSpan;
 
 struct AggregatedExportPlayback {
     QString kind;
@@ -1521,34 +1513,9 @@ double detectLayoutRingDiameterRatio(const QImage& source)
     );
 }
 
-QString primaryOutlinePath()
-{
-    return miacode::assets::assetPath("background/outline.png");
-}
-
-QString legacyOutlinePath()
-{
-    return miacode::assets::assetPath("background/outline_2.png");
-}
-
-QString outlinePathForStageMedia(bool hasMedia)
-{
-    const QString preferredPath = hasMedia ? primaryOutlinePath() : legacyOutlinePath();
-    if (QFileInfo::exists(preferredPath)) {
-        return preferredPath;
-    }
-
-    const QString fallbackPath = hasMedia ? legacyOutlinePath() : primaryOutlinePath();
-    if (QFileInfo::exists(fallbackPath)) {
-        return fallbackPath;
-    }
-
-    return QString();
-}
-
 double resolvedLayoutRingDiameterRatio(bool hasMedia)
 {
-    const QString outlinePath = outlinePathForStageMedia(hasMedia);
+    const QString outlinePath = miacode::assets::outlinePathForStageMedia(hasMedia);
     const QImage outline(outlinePath);
     const double textureRatio = detectLayoutRingDiameterRatio(outline);
     return qBound(
@@ -2033,28 +2000,6 @@ VideoEncoderConfig chooseVideoEncoder(
     return config;
 }
 
-QString resolveBackgroundMediaPath(const QString& chartPath)
-{
-    if (chartPath.isEmpty()) {
-        return QString();
-    }
-    const QDir chartDir(QFileInfo(chartPath).absolutePath());
-    const QStringList candidates{
-        QStringLiteral("bg.mp4"),
-        QStringLiteral("pv.mp4"),
-        QStringLiteral("bg.jpg"),
-        QStringLiteral("bg.png"),
-        QStringLiteral("bg.jpeg"),
-    };
-    for (const QString& name : candidates) {
-        const QString path = chartDir.filePath(name);
-        if (QFileInfo::exists(path)) {
-            return normalizePath(path);
-        }
-    }
-    return QString();
-}
-
 bool isImageMediaPath(const QString& path)
 {
     const QString suffix = QFileInfo(path).suffix().toLower();
@@ -2220,119 +2165,6 @@ QVector<TimelineNoteMarker> filteredMarkersForRange(
     return filtered;
 }
 
-void buildSfxTimeline(
-    const QVector<TimelineNoteMarker>& noteMarkers,
-    QVector<ExportEvent>* events,
-    QVector<ExportTouchholdSpan>* touchholdSpans
-)
-{
-    if (events == nullptr || touchholdSpans == nullptr) {
-        return;
-    }
-    events->clear();
-    touchholdSpans->clear();
-    events->reserve(noteMarkers.size() * 5);
-    touchholdSpans->reserve(noteMarkers.size());
-
-    const auto addEvent = [events](double second, const QString& kind, int priority = 1, int spanIndex = -1, double gain = 1.0) {
-        if (second < 0.0 || kind.isEmpty()) {
-            return;
-        }
-        ExportEvent event;
-        event.second = second;
-        event.priority = priority;
-        event.kind = kind;
-        event.spanIndex = spanIndex;
-        event.gain = qMax(0.0, gain);
-        events->append(event);
-    };
-
-    for (const TimelineNoteMarker& marker : noteMarkers) {
-        const QString type = marker.type.toLower();
-        if (type == QLatin1String("tap")) {
-            addEvent(marker.second, QStringLiteral("answer"));
-            addEvent(marker.second, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("judge"));
-            if (marker.isBreak) {
-                addEvent(marker.second, QStringLiteral("break"));
-            }
-            if (marker.isEx) {
-                addEvent(marker.second, QStringLiteral("ex"));
-            }
-            continue;
-        }
-        if (type == QLatin1String("hold")) {
-            addEvent(marker.second, QStringLiteral("answer"));
-            addEvent(marker.second, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("judge"));
-            if (marker.isBreak) {
-                addEvent(marker.second, QStringLiteral("break"));
-            }
-            if (marker.endSecond > marker.second) {
-                addEvent(marker.endSecond, QStringLiteral("answer"));
-            }
-            if (marker.isEx) {
-                addEvent(marker.second, QStringLiteral("ex"));
-            }
-            continue;
-        }
-        if (type == QLatin1String("touch")) {
-            addEvent(marker.second, QStringLiteral("answer"));
-            addEvent(marker.second, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("touch"));
-            if (marker.isFirework) {
-                addEvent(marker.second + 0.05, QStringLiteral("firework"));
-            }
-            continue;
-        }
-        if (type == QLatin1String("touch_hold")) {
-            addEvent(marker.second, QStringLiteral("answer"));
-            addEvent(marker.second, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("touch"));
-            if (marker.isFirework && marker.endSecond >= 0.0) {
-                addEvent(marker.endSecond, QStringLiteral("firework"));
-            }
-            if (marker.endSecond > marker.second) {
-                ExportTouchholdSpan span;
-                span.startSecond = marker.second;
-                span.endSecond = marker.endSecond;
-                const int spanIndex = touchholdSpans->size();
-                touchholdSpans->append(span);
-                addEvent(span.startSecond, QStringLiteral("touchhold_start"), 0, spanIndex);
-                addEvent(span.endSecond, QStringLiteral("touchhold_stop"), 2, spanIndex);
-            }
-            continue;
-        }
-        if (type == QLatin1String("slide") || type == QLatin1String("wifi")) {
-            if (marker.hasHeadStar) {
-                addEvent(marker.second, QStringLiteral("answer"));
-                addEvent(marker.second, marker.headBreak ? QStringLiteral("judge_break") : QStringLiteral("judge"));
-                if (marker.headBreak) {
-                    if (!marker.trackBreak) {
-                        addEvent(marker.second, QStringLiteral("break"));
-                    }
-                }
-                if (marker.headEx) {
-                    addEvent(marker.second, QStringLiteral("ex"));
-                }
-            }
-            const double traceSecond = marker.slideTraceSecond >= 0.0 ? marker.slideTraceSecond : marker.second;
-            addEvent(traceSecond, marker.trackBreak ? QStringLiteral("break_slide_start") : QStringLiteral("slide"));
-            if (marker.trackBreak && marker.endSecond > traceSecond) {
-                addEvent(marker.endSecond, QStringLiteral("break_slide_finish"), 1, -1, 0.5);
-                addEvent(marker.endSecond, QStringLiteral("judge_break_slide"), 1, -1, 0.5);
-            }
-            continue;
-        }
-    }
-
-    std::sort(events->begin(), events->end(), [](const ExportEvent& a, const ExportEvent& b) {
-        if (qAbs(a.second - b.second) > kTimelineEpsilonSeconds) {
-            return a.second < b.second;
-        }
-        if (a.priority != b.priority) {
-            return a.priority < b.priority;
-        }
-        return a.kind < b.kind;
-    });
-}
-
 bool mixSfxTrackToWav(
     const QString& outputPath,
     const QVector<TimelineNoteMarker>& noteMarkers,
@@ -2373,7 +2205,7 @@ bool mixSfxTrackToWav(
 
     QVector<ExportEvent> events;
     QVector<ExportTouchholdSpan> spans;
-    buildSfxTimeline(noteMarkers, &events, &spans);
+    miacode::preview_sfx_timeline::buildTimeline(noteMarkers, &events, &spans);
 
     const auto kindVolume = [&settings](const QString& kind) -> double {
         return previewSfxVolumeForKind(settings, kind);
@@ -3226,7 +3058,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const QString explicitMediaPath = normalizePath(task.backgroundMediaPath);
     const QString mediaPath = (!explicitMediaPath.isEmpty() && QFileInfo::exists(explicitMediaPath))
         ? explicitMediaPath
-        : resolveBackgroundMediaPath(task.chartPath);
+        : miacode::chart_assets::resolveBackgroundMediaPath(task.chartPath);
     const bool hasMedia = !mediaPath.isEmpty();
     const bool mediaIsImage = hasMedia && isImageMediaPath(mediaPath);
     const QString trackPath = (task.trackPath.isEmpty() || !QFileInfo::exists(task.trackPath))

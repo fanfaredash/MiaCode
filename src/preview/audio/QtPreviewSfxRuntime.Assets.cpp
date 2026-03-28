@@ -1,14 +1,6 @@
 QString QtPreviewSfxRuntime::resolveTrackPath(const QString& chartPath) const
 {
-    if (chartPath.isEmpty()) {
-        return QString();
-    }
-    const QFileInfo chartInfo(chartPath);
-    const QString path = QDir(chartInfo.absolutePath()).filePath("track.mp3");
-    if (QFileInfo::exists(path)) {
-        return QDir::cleanPath(path);
-    }
-    return QString();
+    return miacode::chart_assets::resolveTrackPath(chartPath);
 }
 
 QString QtPreviewSfxRuntime::resolveSfxDir() const

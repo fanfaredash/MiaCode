@@ -140,8 +140,6 @@ private slots:
     void onReplaceAll();
     void onErrorItemActivated(QListWidgetItem* item);
     void onMuriItemActivated(QListWidgetItem* item);
-    void onPreviewProcessFinished(int exitCode);
-
 private:
     using BatchTransform = std::function<QString(const QString&, int*)>;
     enum class ChartTransformOp {
@@ -182,16 +180,6 @@ private:
     bool saveToPath(const QString& path);
     bool applyBatchTransform(const QString& opName, const BatchTransform& transform);
     bool applySelectionBatchTransform(const QString& opName, const BatchTransform& transform);
-    bool ensurePreviewSessionStarted();
-    void stopPreviewSession();
-    bool sendPreviewCommand(const QString& mode, int cursorLine, int cursorCol, const QString& trackPath);
-    bool sendPreviewPrepareCommand();
-    bool sendPreviewConfigCommand(const QString& audition = QString());
-    void startPreviewProcess(const QString& mode, int cursorLine, int cursorCol);
-    bool handlePreviewSessionLine(const QString& line);
-    void bootstrapPreviewWindow();
-    void arrangeWithPreviewWindow();
-    void schedulePreviewArrange(int delayMs);
     std::pair<int, int> currentCursorLineCol() const;
     std::pair<int, int> currentSelectionOrCursorLineCol() const;
     bool currentSelectionRange(int* startPos, int* endPos) const;
@@ -328,7 +316,6 @@ private:
     void jumpToLocation(int line, int col);
     QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount = nullptr) const;
     QString editorText() const;
-    QString resolvePreviewSessionScriptPath() const;
     QString resolveDefaultTrackPath() const;
     QString resolvePreviewSkinDir() const;
     bool buildVideoExportSnapshot(
@@ -372,7 +359,6 @@ private:
     void applyUiTheme();
     void applySystemWindowBackdrop(QWidget* target = nullptr) const;
     void setInvalidStarPreviewEasterEggEnabled(bool enabled);
-    void setLegacyFireworkStackingEasterEggEnabled(bool enabled);
     void ensureInvalidStarPreviewEasterEggSounds();
     void playInvalidStarPreviewEasterEggSound(bool enabled);
     void persistEditorTextFontPreference() const;
@@ -545,14 +531,11 @@ private:
     QTimer* previewSeekDebounceTimer_ = nullptr;
     QTimer* exportVideoHoverMenuTimer_ = nullptr;
     QObject* editorViewport_ = nullptr;
-    QProcess* previewProcess_ = nullptr;
     QProcess* videoExportWorkerProcess_ = nullptr;
     QProgressDialog* videoExportProgressDialog_ = nullptr;
     QPointer<QLabel> aboutIconLabel_;
     QSoundEffect* invalidStarPreviewEnableSound_ = nullptr;
     QSoundEffect* invalidStarPreviewDisableSound_ = nullptr;
-    QString previewStdoutBuffer_;
-    QString previewStderrBuffer_;
     QByteArray videoExportWorkerStdoutBuffer_;
     QByteArray videoExportWorkerStderrBuffer_;
     QString videoExportWorkerJobId_;
@@ -573,9 +556,6 @@ private:
     QByteArray pendingMuriNoteMarkerSignature_;
     QByteArray lastPreviewNoteMarkerSignature_;
     TextEncoding currentEncoding_ = TextEncoding::Utf8;
-    int previewArrangeRetryCount_ = 0;
-    quint64 previewArrangeGeneration_ = 0;
-    bool legacyPygamePreviewEnabled_ = false;
     bool runtimeDebugOutputEnabled_ = false;
     quint64 windowEventDebugSequence_ = 0;
     bool previewSfxRuntimePrepared_ = false;
@@ -603,11 +583,8 @@ private:
     bool editorCtrlLeftJumpPending_ = false;
     bool editorCtrlLeftJumpDragged_ = false;
     bool invalidStarPreviewEasterEggEnabled_ = false;
-    bool legacyFireworkStackingEasterEggEnabled_ = false;
     int invalidStarPreviewAboutClickCount_ = 0;
-    int legacyFireworkStackingAboutClickCount_ = 0;
     QElapsedTimer invalidStarPreviewAboutClickElapsed_;
-    QElapsedTimer legacyFireworkStackingAboutClickElapsed_;
     QPoint editorCtrlLeftJumpPressPos_;
     int previewSeekHeldArrowKey_ = 0;
     QElapsedTimer previewSeekHeldArrowElapsed_;

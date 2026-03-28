@@ -1,4 +1,4 @@
-#include "VideoExportDialog.h"
+﻿#include "VideoExportDialog.h"
 
 #include "DialogLocalization.h"
 #include "PreviewCanvas.h"
@@ -432,12 +432,12 @@ VideoExportDialog::VideoExportDialog(
     auto* outputLayout = new QHBoxLayout(outputRow);
     outputLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     outputLayout->setSpacing(kFormRowSpacing);
-    auto* outputLabel = new QLabel(l10n(QStringLiteral("Output"), QStringLiteral("输出")), outputRow);
+    auto* outputLabel = new QLabel(l10n(QStringLiteral("Output"), QStringLiteral("杈撳嚭")), outputRow);
     outputLabel->setFixedWidth(kFormLabelWidth);
     outputLabel->setText(uiText("dialog.video_export.output", QStringLiteral("Output")));
     outputPathEdit_ = new QLineEdit(outputRow);
     outputPathEdit_->setText(displayOutputPathForDialog(baseTask_.outputPath, exportBaseDirectory(baseTask_)));
-    auto* browseButton = new QPushButton(l10n(QStringLiteral("Browse..."), QStringLiteral("浏览...")), outputRow);
+    auto* browseButton = new QPushButton(l10n(QStringLiteral("Browse..."), QStringLiteral("娴忚...")), outputRow);
     browseButton->setText(uiText("dialog.video_export.browse", QStringLiteral("Browse...")));
     browseButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
     const int rightAlignedButtonWidth = qMax(browseButton->sizeHint().width(), kDialogActionButtonMinWidth);
@@ -554,78 +554,39 @@ VideoExportDialog::VideoExportDialog(
     startSecondSpin_->setValue(defaultStart);
     endSecondSpin_->setValue(defaultEnd);
 
-    auto* startRow = new QWidget(rangeContent_);
-    auto* startRowLayout = new QHBoxLayout(startRow);
-    startRowLayout->setContentsMargins(0, 0, 0, 0);
-    startRowLayout->setSpacing(kSetButtonLeftGap);
-    auto* startLabel = new QLabel(l10n(QStringLiteral("Start"), QStringLiteral("起始")), startRow);
-    startLabel->setFixedWidth(kRangeLabelWidth);
-    startLabel->setText(uiText("dialog.video_export.range.start", QStringLiteral("Start")));
-    startLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    auto* setStartButton = new QPushButton(l10n(QStringLiteral("Set Start"), QStringLiteral("设定起始")), startRow);
-    setStartButton->setFixedWidth(kRangeSetButtonWidth);
-    setStartButton->setText(uiText("dialog.video_export.range.set_left", QStringLiteral("<- Set")));
-    setStartButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    startCurrentTimeEdit_ = new QLineEdit(startRow);
-    startCurrentTimeEdit_->setReadOnly(true);
-    startCurrentTimeEdit_->setFocusPolicy(Qt::NoFocus);
-    startCurrentTimeEdit_->setMinimumWidth(108);
-    startCurrentTimeEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    startCurrentTimeEdit_->setMinimumHeight(startSecondSpin_->sizeHint().height() * 2 + rangeLayout->spacing());
-    startCurrentTimeEdit_->setAlignment(Qt::AlignCenter);
-    startCurrentTimeEdit_->setStyleSheet(UiTheme::readOnlyLineEditStyleSheet());
-    startRowLayout->addWidget(startLabel, 0);
-    startRowLayout->addWidget(startSecondSpin_, 0, Qt::AlignLeft);
-    startRowLayout->addWidget(setStartButton, 0, Qt::AlignLeft);
-    startRowLayout->addWidget(startCurrentTimeEdit_, 0, Qt::AlignLeft);
-    startRowLayout->addStretch(1);
-    rangeLayout->addWidget(startRow, 0);
-
-    auto* endRow = new QWidget(rangeContent_);
-    auto* endRowLayout = new QHBoxLayout(endRow);
-    endRowLayout->setContentsMargins(0, 0, 0, 0);
-    endRowLayout->setSpacing(kSetButtonLeftGap);
-    auto* endLabel = new QLabel(l10n(QStringLiteral("End"), QStringLiteral("结束")), endRow);
-    endLabel->setFixedWidth(kRangeLabelWidth);
-    endLabel->setText(uiText("dialog.video_export.range.end", QStringLiteral("End")));
-    endLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    auto* setEndButton = new QPushButton(l10n(QStringLiteral("Set End"), QStringLiteral("设定结束")), endRow);
-    setEndButton->setFixedWidth(kRangeSetButtonWidth);
-    setEndButton->setText(uiText("dialog.video_export.range.set_left", QStringLiteral("<- Set")));
-    setEndButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
-    endCurrentTimeEdit_ = new QLineEdit(endRow);
-    endCurrentTimeEdit_->setReadOnly(true);
-    endCurrentTimeEdit_->setFocusPolicy(Qt::NoFocus);
-    endCurrentTimeEdit_->setMinimumWidth(108);
-    endCurrentTimeEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    endCurrentTimeEdit_->setAlignment(Qt::AlignCenter);
-    endCurrentTimeEdit_->setStyleSheet(UiTheme::readOnlyLineEditStyleSheet());
-    endCurrentTimeEdit_->hide();
-    endRowLayout->addWidget(endLabel, 0);
-    endRowLayout->addWidget(endSecondSpin_, 0, Qt::AlignLeft);
-    endRowLayout->addWidget(setEndButton, 0, Qt::AlignLeft);
-    endRowLayout->addWidget(endCurrentTimeEdit_, 0, Qt::AlignLeft);
-    endRowLayout->addStretch(1);
-    rangeLayout->addWidget(endRow, 0);
-    startRow->hide();
-    endRow->hide();
-
     auto* mergedRangeRows = new QWidget(rangeContent_);
     auto* mergedRangeLayout = new QGridLayout(mergedRangeRows);
     mergedRangeLayout->setContentsMargins(0, 0, 0, 0);
     mergedRangeLayout->setHorizontalSpacing(kSetButtonLeftGap);
     mergedRangeLayout->setVerticalSpacing(rangeLayout->spacing());
     mergedRangeLayout->setColumnStretch(3, 1);
-    startLabel->setParent(mergedRangeRows);
-    startSecondSpin_->setParent(mergedRangeRows);
-    setStartButton->setParent(mergedRangeRows);
-    startCurrentTimeEdit_->setParent(mergedRangeRows);
-    endLabel->setParent(mergedRangeRows);
-    endSecondSpin_->setParent(mergedRangeRows);
-    setEndButton->setParent(mergedRangeRows);
+
+    auto* startLabel = new QLabel(l10n(QStringLiteral("Start"), QStringLiteral("璧峰")), mergedRangeRows);
+    startLabel->setFixedWidth(kRangeLabelWidth);
+    startLabel->setText(uiText("dialog.video_export.range.start", QStringLiteral("Start")));
+    startLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    auto* setStartButton = new QPushButton(l10n(QStringLiteral("Set Start"), QStringLiteral("璁惧畾璧峰")), mergedRangeRows);
+    setStartButton->setFixedWidth(kRangeSetButtonWidth);
+    setStartButton->setText(uiText("dialog.video_export.range.set_left", QStringLiteral("<- Set")));
+    setStartButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+    startCurrentTimeEdit_ = new QLineEdit(mergedRangeRows);
+    startCurrentTimeEdit_->setReadOnly(true);
+    startCurrentTimeEdit_->setFocusPolicy(Qt::NoFocus);
+    startCurrentTimeEdit_->setMinimumWidth(108);
+    startCurrentTimeEdit_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     startCurrentTimeEdit_->setMinimumHeight(startSecondSpin_->sizeHint().height() * 2 + mergedRangeLayout->verticalSpacing() + 2);
-    startCurrentTimeEdit_->show();
-    endCurrentTimeEdit_->hide();
+    startCurrentTimeEdit_->setAlignment(Qt::AlignCenter);
+    startCurrentTimeEdit_->setStyleSheet(UiTheme::readOnlyLineEditStyleSheet());
+
+    auto* endLabel = new QLabel(l10n(QStringLiteral("End"), QStringLiteral("缁撴潫")), mergedRangeRows);
+    endLabel->setFixedWidth(kRangeLabelWidth);
+    endLabel->setText(uiText("dialog.video_export.range.end", QStringLiteral("End")));
+    endLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    auto* setEndButton = new QPushButton(l10n(QStringLiteral("Set End"), QStringLiteral("璁惧畾缁撴潫")), mergedRangeRows);
+    setEndButton->setFixedWidth(kRangeSetButtonWidth);
+    setEndButton->setText(uiText("dialog.video_export.range.set_left", QStringLiteral("<- Set")));
+    setEndButton->setStyleSheet(UiTheme::dialogPushButtonStyleSheet());
+
     mergedRangeLayout->addWidget(startLabel, 0, 0);
     mergedRangeLayout->addWidget(startSecondSpin_, 0, 1, Qt::AlignLeft);
     mergedRangeLayout->addWidget(setStartButton, 0, 2, Qt::AlignLeft);
@@ -634,7 +595,6 @@ VideoExportDialog::VideoExportDialog(
     mergedRangeLayout->addWidget(endSecondSpin_, 1, 1, Qt::AlignLeft);
     mergedRangeLayout->addWidget(setEndButton, 1, 2, Qt::AlignLeft);
     rangeLayout->addWidget(mergedRangeRows, 0);
-
     const int rangeControlWidth =
         kRangeLabelWidth
         + kSetButtonLeftGap
@@ -701,13 +661,13 @@ VideoExportDialog::VideoExportDialog(
     optionsLayout->setColumnStretch(0, 1);
     optionsLayout->setColumnStretch(1, 1);
     showTimestampCheck_ = new QCheckBox(
-        l10n(QStringLiteral("Show bottom-left timestamp"), QStringLiteral("显示左下角时间戳")),
+        l10n(QStringLiteral("Show bottom-left timestamp"), QStringLiteral("鏄剧ず宸︿笅瑙掓椂闂存埑")),
         optionsContent_
     );
     showTimestampCheck_->setChecked(baseTask_.showTimestamp);
     showTimestampCheck_->setText(uiText("dialog.video_export.option.show_timestamp", QStringLiteral("Show bottom-left timestamp")));
     smoothBrightnessCheck_ = new QCheckBox(
-        l10n(QStringLiteral("Smooth brightness"), QStringLiteral("平滑亮度")),
+        l10n(QStringLiteral("Smooth brightness"), QStringLiteral("骞虫粦浜害")),
         optionsContent_
     );
     smoothBrightnessCheck_->setChecked(baseTask_.smoothBrightness);
@@ -796,7 +756,7 @@ VideoExportDialog::VideoExportDialog(
     optionsLayout->addWidget(innerBrightnessOption, 1, 1, 1, 1);
     QWidget* layoutSquareScaleOption = addPercentSliderOption(
         optionsContent_,
-        l10n(QStringLiteral("Layout Size"), QStringLiteral("Layout整图大小")),
+        l10n(QStringLiteral("Layout Size"), QStringLiteral("Layout鏁村浘澶у皬")),
         qRound(miacode::preview_video::kLayoutSquareScaleMin * 100.0),
         qRound(miacode::preview_video::kLayoutSquareScaleMax * 100.0),
         qRound(miacode::preview_video::kLayoutSquareScaleStep * 100.0),
@@ -896,7 +856,7 @@ VideoExportDialog::VideoExportDialog(
     optionsLayout->addWidget(showTimestampCheck_, 5, 1, 1, 1, Qt::AlignLeft | Qt::AlignTop);
     rootLayout->addWidget(
         buildCollapsibleSection(
-            l10n(QStringLiteral("Options"), QStringLiteral("选项")),
+            l10n(QStringLiteral("Options"), QStringLiteral("閫夐」")),
             optionsContent_,
             false,
             &optionsToggle_
@@ -904,7 +864,7 @@ VideoExportDialog::VideoExportDialog(
     );
     rootLayout->addWidget(
         buildCollapsibleSection(
-            l10n(QStringLiteral("Export Range"), QStringLiteral("导出区间")),
+            l10n(QStringLiteral("Export Range"), QStringLiteral("瀵煎嚭鍖洪棿")),
             rangeContent_,
             false,
             &rangeToggle_
@@ -1232,7 +1192,7 @@ void VideoExportDialog::browseOutputPath()
         : QString();
     const QString selected = QFileDialog::getSaveFileName(
         this,
-        l10n(QStringLiteral("Export Video"), QStringLiteral("导出视频")),
+        l10n(QStringLiteral("Export Video"), QStringLiteral("瀵煎嚭瑙嗛")),
         initial,
         QStringLiteral("MP4 Video (*.mp4)")
     );
@@ -1505,9 +1465,6 @@ void VideoExportDialog::syncRangeUi()
     if (startCurrentTimeEdit_ != nullptr) {
         startCurrentTimeEdit_->setText(formatSecond(previewCursorSecond_));
     }
-    if (endCurrentTimeEdit_ != nullptr) {
-        endCurrentTimeEdit_->setText(formatSecond(previewCursorSecond_));
-    }
     if (stopPreviewButton_ != nullptr) {
         stopPreviewButton_->setEnabled(rangePreviewPlaying_ || previewCursorSecond_ > 0.0005);
     }
@@ -1671,3 +1628,4 @@ bool VideoExportDialog::eventFilter(QObject* watched, QEvent* event)
     }
     return QDialog::eventFilter(watched, event);
 }
+

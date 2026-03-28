@@ -1,5 +1,6 @@
 #include "BatchVideoExportDialog.h"
 
+#include "common/ChartAssetPaths.h"
 #include "SimaiNativeParser.h"
 #include "SimaiDocument.h"
 #include "UiText.h"
@@ -194,8 +195,7 @@ bool validateBatchChartDirectory(const QString& directoryPath, QString* chartPat
         return false;
     }
 
-    const QString trackPath = QDir(directoryInfo.absoluteFilePath()).filePath(QStringLiteral("track.mp3"));
-    if (!QFileInfo::exists(trackPath)) {
+    if (miacode::chart_assets::resolveTrackPathForDirectory(directoryInfo.absoluteFilePath()).isEmpty()) {
         if (errorMessage != nullptr) {
             *errorMessage = uiText(
                 "dialog.batch_export.error.missing_track_file",
