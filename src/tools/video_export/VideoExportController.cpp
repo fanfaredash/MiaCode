@@ -2185,17 +2185,10 @@ bool writeWav16(const QString& path, const QVector<float>& samples, int sampleRa
         return false;
     }
 
-    QByteArray pcmBytes;
-    pcmBytes.resize(samples.size() * static_cast<int>(sizeof(qint16)));
-    qint16* out = reinterpret_cast<qint16*>(pcmBytes.data());
-    for (int i = 0; i < samples.size(); ++i) {
-        const float clamped = qBound(-1.0f, samples.at(i), 1.0f);
-        out[i] = static_cast<qint16>(qRound(clamped * 32767.0f));
-    }
-
     QDataStream stream(&file);
     stream.setByteOrder(QDataStream::LittleEndian);
-    const quint32 dataBytes = static_cast<quint32>(pcmBytes.size());
+    const quint32 dataBytes =
+        static_cast<quint32>(samples.size() * static_cast<int>(sizeof(qint16)));
     const quint32 riffChunkSize = 36u + dataBytes;
     const quint16 bitsPerSample = 16;
     const quint16 blockAlign = static_cast<quint16>(channels * (bitsPerSample / 8));
@@ -2214,8 +2207,23 @@ bool writeWav16(const QString& path, const QVector<float>& samples, int sampleRa
     stream << bitsPerSample;
     stream.writeRawData("data", 4);
     stream << dataBytes;
-    if (file.write(pcmBytes) != pcmBytes.size()) {
-        return false;
+
+    constexpr int kPcmChunkSamples = 16384;
+    QByteArray pcmBytes;
+    pcmBytes.resize(kPcmChunkSamples * static_cast<int>(sizeof(qint16)));
+    int sampleIndex = 0;
+    while (sampleIndex < samples.size()) {
+        const int chunkSamples = qMin(kPcmChunkSamples, samples.size() - sampleIndex);
+        const int chunkBytes = chunkSamples * static_cast<int>(sizeof(qint16));
+        qint16* out = reinterpret_cast<qint16*>(pcmBytes.data());
+        for (int i = 0; i < chunkSamples; ++i) {
+            const float clamped = qBound(-1.0f, samples.at(sampleIndex + i), 1.0f);
+            out[i] = static_cast<qint16>(qRound(clamped * 32767.0f));
+        }
+        if (file.write(pcmBytes.constData(), chunkBytes) != chunkBytes) {
+            return false;
+        }
+        sampleIndex += chunkSamples;
     }
     return true;
 }
