@@ -1063,6 +1063,18 @@ double MainWindow::previewDurationSeconds() const
     return qMax(0.0, duration);
 }
 
+double MainWindow::previewPlaybackEndSeconds() const
+{
+    double duration = 0.0;
+    if (timelineView_ != nullptr) {
+        duration = qMax(duration, timelineView_->durationSeconds());
+    }
+    if (previewTrackDurationSeconds_ > 0.0) {
+        duration = qMax(duration, previewTrackDurationSeconds_);
+    }
+    return qMax(0.0, duration);
+}
+
 void MainWindow::updatePreviewSliderRange()
 {
     if (previewSlider_ == nullptr) {
@@ -2050,9 +2062,7 @@ void MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
 
 void MainWindow::finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage)
 {
-    const double returnSecond = timelineView_ != nullptr
-        ? qBound(0.0, timelineView_->cursorSeconds(), previewDurationSeconds())
-        : qBound(0.0, qtPreviewPlaybackReturnSecond_, previewDurationSeconds());
+    const double returnSecond = qBound(0.0, qtPreviewPlaybackReturnSecond_, previewDurationSeconds());
     stopQtPreviewPlayback(true);
     seekPreviewToSecond(returnSecond, true);
     if (statusBar() != nullptr && !statusMessage.isEmpty()) {
@@ -2215,9 +2225,10 @@ void MainWindow::onQtPreviewTick()
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->syncBackgroundTrack(second);
     }
-    const double duration = previewDurationSeconds();
-    if (duration > 0.0 && second > duration) {
-        second = duration;
+    const double playbackEndSecond = previewPlaybackEndSeconds();
+    if (playbackEndSecond > 0.0
+        && second + kTimelineZeroSecondTolerance >= playbackEndSecond) {
+        second = playbackEndSecond;
         applyQtPreviewPosition(second, true);
         if (previewSfxRuntime_ != nullptr) {
             previewSfxRuntime_->drainEvents(second);

@@ -9,11 +9,14 @@ enum class UnsavedChangesChoice {
 UnsavedChangesChoice showUnsavedChangesDialog(QWidget* parent, const QString& title, const QString& text)
 {
     QMessageBox dialog(QMessageBox::Warning, title, text, QMessageBox::NoButton, parent);
+    dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     QPushButton* saveButton = dialog.addButton(uiText("action.save", "Save"), QMessageBox::AcceptRole);
     QPushButton* discardButton = dialog.addButton(uiText("action.discard", "Discard"), QMessageBox::DestructiveRole);
     QPushButton* cancelButton = dialog.addButton(uiText("action.cancel", "Cancel"), QMessageBox::RejectRole);
     dialog.setDefaultButton(saveButton);
     dialog.setEscapeButton(cancelButton);
+    UiDialogs::localizeMessageBox(&dialog);
+    centerDialogOnAnchor(&dialog, parent);
     dialog.exec();
     if (dialog.clickedButton() == saveButton) {
         return UnsavedChangesChoice::Save;

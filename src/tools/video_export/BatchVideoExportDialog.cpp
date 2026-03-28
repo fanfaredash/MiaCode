@@ -98,17 +98,6 @@ QString exportDialogResolutionLabel(const QSize& size)
     return QStringLiteral("%1x%2").arg(qMax(1, size.width())).arg(qMax(1, size.height()));
 }
 
-QString exportDialogPerformanceProfileLabel(VideoExportPerformanceProfile profile)
-{
-    switch (profile) {
-    case VideoExportPerformanceProfile::Speed:
-        return uiText("dialog.video_export.performance.speed", QStringLiteral("Balanced"));
-    case VideoExportPerformanceProfile::Balanced:
-    default:
-        return uiText("dialog.video_export.performance.balanced", QStringLiteral("High Quality"));
-    }
-}
-
 QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
 {
     switch (mode) {
@@ -343,7 +332,6 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     , requestedTask_(baseTask)
     , selectedResolution_(QSize(qMax(1, baseTask.outputWidth), qMax(1, baseTask.outputHeight)))
     , selectedFps_(baseTask.fps >= 90 ? 120 : 60)
-    , selectedPerformanceProfile_(baseTask.performanceProfile)
     , selectedBackgroundScaleMode_(baseTask.backgroundScaleMode)
     , selectedFlowSpeed_(baseTask.noteFlowSpeed)
 {
@@ -429,26 +417,6 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     topForm->addWidget(fpsLabel, row, 0);
     topForm->addWidget(fpsButton_, row, 1, 1, 2);
     ++row;
-
-    auto* performanceLabel = new QLabel(uiText("dialog.video_export.performance", QStringLiteral("Quality")), this);
-    performanceLabel->setFixedWidth(kFormLabelWidth);
-    performanceButton_ = createDialogMenuButton(this, exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
-    performanceMenu_ = new QMenu(performanceButton_);
-    performanceButton_->setMenu(performanceMenu_);
-    addDialogMenuChoice(performanceMenu_, exportDialogPerformanceProfileLabel(VideoExportPerformanceProfile::Balanced), [this]() {
-        selectedPerformanceProfile_ = VideoExportPerformanceProfile::Balanced;
-        if (performanceButton_ != nullptr) {
-            performanceButton_->setText(exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
-        }
-    });
-    addDialogMenuChoice(performanceMenu_, exportDialogPerformanceProfileLabel(VideoExportPerformanceProfile::Speed), [this]() {
-        selectedPerformanceProfile_ = VideoExportPerformanceProfile::Speed;
-        if (performanceButton_ != nullptr) {
-            performanceButton_->setText(exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
-        }
-    });
-    topForm->addWidget(performanceLabel, row, 0);
-    topForm->addWidget(performanceButton_, row, 1, 1, 2);
 
     rootLayout->addLayout(topForm);
 
@@ -754,7 +722,6 @@ bool BatchVideoExportDialog::applyUiToTask(VideoExportTask* task, QString* error
     task->outputWidth = selectedResolution_.width();
     task->outputHeight = selectedResolution_.height();
     task->fps = selectedFps_;
-    task->performanceProfile = selectedPerformanceProfile_;
     task->showTimestamp = showTimestampCheck_ != nullptr && showTimestampCheck_->isChecked();
     task->showObjectStatsHud = showObjectStatsCheck_ != nullptr && showObjectStatsCheck_->isChecked();
     task->smoothBrightness = smoothBrightnessCheck_ != nullptr && smoothBrightnessCheck_->isChecked();
@@ -879,14 +846,6 @@ void BatchVideoExportDialog::loadPersistedSettings()
         fpsButton_->setText(QStringLiteral("%1 FPS").arg(selectedFps_));
     }
 
-    const int savedProfile = settings.value(QStringLiteral("performance_profile"), static_cast<int>(selectedPerformanceProfile_)).toInt();
-    selectedPerformanceProfile_ = savedProfile == static_cast<int>(VideoExportPerformanceProfile::Speed)
-        ? VideoExportPerformanceProfile::Speed
-        : VideoExportPerformanceProfile::Balanced;
-    if (performanceButton_ != nullptr) {
-        performanceButton_->setText(exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
-    }
-
     if (showTimestampCheck_ != nullptr) {
         showTimestampCheck_->setChecked(settings.value(QStringLiteral("show_timestamp"), showTimestampCheck_->isChecked()).toBool());
     }
@@ -937,7 +896,6 @@ void BatchVideoExportDialog::savePersistedSettings(const VideoExportTask& task) 
     settings.setValue(QStringLiteral("resolution_width"), task.outputWidth);
     settings.setValue(QStringLiteral("resolution_height"), task.outputHeight);
     settings.setValue(QStringLiteral("fps"), task.fps);
-    settings.setValue(QStringLiteral("performance_profile"), static_cast<int>(task.performanceProfile));
     settings.setValue(QStringLiteral("show_timestamp"), task.showTimestamp);
     settings.setValue(QStringLiteral("show_object_stats_export"), task.showObjectStatsHud);
     settings.setValue(QStringLiteral("smooth_brightness"), task.smoothBrightness);

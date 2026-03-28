@@ -83,6 +83,9 @@ QString detectFullwidthSyntaxIssueMessage(const QString& token)
 
 QString classifyInvalidNoteMessage(const QString& token)
 {
+    if (token.compare(QStringLiteral("E"), Qt::CaseInsensitive) == 0) {
+        return QStringLiteral("Invalid terminal marker placement: %1").arg(token);
+    }
     const QString fullwidthIssue = detectFullwidthSyntaxIssueMessage(token);
     if (!fullwidthIssue.isEmpty()) {
         return fullwidthIssue;

@@ -73,7 +73,6 @@ public:
         int outputWidth = 1024;
         int outputHeight = 1024;
         int fps = 60;
-        VideoExportPerformanceProfile performanceProfile = VideoExportPerformanceProfile::Speed;
         double exportStartSeconds = 0.0;
         double contentDurationSeconds = -1.0;
         bool showTimestamp = true;
@@ -288,6 +287,7 @@ private:
     void refreshLayoutAfterPageSwitch();
     void openPreviewSettingsDialog(bool includeAudioSettings, bool includeVideoSettings, const QString& title);
     double previewDurationSeconds() const;
+    double previewPlaybackEndSeconds() const;
     void applyPreviewPlaybackRate(double rate);
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
     double normalizedPreviewCanvasAspectRatio(double ratio) const;
@@ -572,6 +572,7 @@ private:
     bool videoExportWorkerSuccess_ = false;
     bool videoExportWorkerCompletionReceived_ = false;
     bool videoExportWorkerCancelRequested_ = false;
+    bool restoreSquareAfterVideoExport_ = false;
     int videoExportWorkerLastProgressPercent_ = 0;
     qint64 videoExportWorkerLastEtaSeconds_ = -1;
     int projectLastOpenedDifficultyId_ = 0;
