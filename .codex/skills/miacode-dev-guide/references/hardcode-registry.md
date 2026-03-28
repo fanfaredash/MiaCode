@@ -43,7 +43,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: parser-default geometry and timing assumptions used to derive marker behavior
   - Rule: parser-level constants can have repo-wide consequences; treat changes as cross-chain changes
 - `src/tools/video_export/VideoExportController.cpp`
-  - Owns: mix sample rate, encoder probe timeouts, bitrate heuristics, frame diagnostics thresholds, ffmpeg fallback behavior
+  - Owns: mix sample rate, encoder probe timeouts, bitrate heuristics, frame diagnostics thresholds, raw-video pipe queue depth and connect timeout, ffmpeg fallback behavior
   - Rule: export heuristics may stay local, but document behavior changes that affect output compatibility or packaging assumptions
 - `src/tools/video_export/VideoExportDialog.cpp`
   - Owns: export-dialog UI sizing and preview control constants
