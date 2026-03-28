@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/hardcode-registry.md -->
-<!-- translation-source-hash: 2bf7cdc84f3242d19608eaecf1918ef42c77784f6661390ff3927c106b3f5561 -->
+<!-- translation-source-hash: 9a3599aba5c1c1f0a3ae53dbaa2146a3c40e22e5ff5ea4b9f6a9fac34378d777 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 硬编码登记
@@ -47,7 +47,7 @@
   - 负责：用于派生 marker 行为的 parser 默认几何与时序假设
   - 规则：parser 级常量变化可能是全仓级影响，要按跨链路改动处理
 - `src/tools/video_export/VideoExportController.cpp`
-  - 负责：混音采样率、编码器 probe 超时、码率启发式、逐帧诊断阈值、ffmpeg fallback 行为
+  - 负责：混音采样率、编码器 probe 超时、码率启发式、逐帧诊断阈值、raw video 管道队列深度与连接超时、ffmpeg fallback 行为
   - 规则：导出启发式可以先留本地，但凡影响输出兼容性或打包假设的变化都要记录
 - `src/tools/video_export/VideoExportDialog.cpp`
   - 负责：导出对话框 UI 尺寸与预览控制常量

@@ -7,6 +7,7 @@
 #include "common/PreviewSfxAssets.h"
 #include "common/VideoExportConfig.h"
 
+#include <QByteArray>
 #include <QCoreApplication>
 #include <QDataStream>
 #include <QDateTime>
@@ -35,12 +36,26 @@
 #include "../../../third_party/miniaudio/miniaudio.h"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstring>
+#include <deque>
+#include <exception>
 #include <functional>
+#include <limits>
+#include <mutex>
+#include <thread>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#else
+#include <cerrno>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 #endif
 
 namespace {
@@ -168,6 +183,70 @@ struct ExportPipeBackpressureStats {
     int maxQueuedFrame = -1;
 };
 
+struct RawVideoPipePlan {
+    qint64 frameBytes = 0;
+    qint64 requestedBufferBytes = 0;
+    int maxBufferedFrames = 4;
+    qint64 writeChunkBytes = 1LL * 1024LL * 1024LL;
+    int connectTimeoutMs = 10000;
+    int connectPollMs = 20;
+};
+
+enum class RawVideoPipeTransport {
+    NamedPipe,
+    Fifo,
+};
+
+struct RawVideoPipe {
+    RawVideoPipeTransport transport =
+#ifdef Q_OS_WIN
+        RawVideoPipeTransport::NamedPipe;
+#else
+        RawVideoPipeTransport::Fifo;
+#endif
+    QString inputPath;
+    qint64 requestedBufferBytes = 0;
+    qint64 configuredBufferBytes = 0;
+#ifdef Q_OS_WIN
+    HANDLE handle = INVALID_HANDLE_VALUE;
+#else
+    int fd = -1;
+    QString fifoPath;
+#endif
+};
+
+struct RawVideoPipePacket {
+    QByteArray bytes;
+    int frameIndex = -1;
+};
+
+struct RawVideoPipeStats {
+    int maxQueuedFrames = 0;
+    qint64 totalProducerWaitNs = 0;
+    qint64 maxProducerWaitNs = 0;
+    int maxProducerWaitFrame = -1;
+    qint64 totalPipeWriteNs = 0;
+    qint64 maxPipeWriteNs = 0;
+    int maxPipeWriteFrame = -1;
+    qint64 connectElapsedMs = 0;
+};
+
+struct RawVideoPipePump {
+    RawVideoPipe pipe;
+    RawVideoPipePlan plan;
+    std::mutex mutex;
+    std::condition_variable notEmpty;
+    std::condition_variable notFull;
+    std::deque<RawVideoPipePacket> queue;
+    std::thread writerThread;
+    bool writerThreadStarted = false;
+    bool enqueueClosed = false;
+    bool writerFinished = false;
+    std::atomic<bool> abortRequested = false;
+    QString failureDetail;
+    RawVideoPipeStats stats;
+};
+
 struct FrameLayerActivityStats {
     int tapVisible = 0;
     int tapParked = 0;
@@ -217,6 +296,26 @@ struct FrameLayerActivityStats {
 bool envFlagEnabled(const QString& key);
 int envIntValue(const QString& key, int defaultValue);
 ExportPipeBackpressurePlan chooseExportPipeBackpressurePlan(const QSize& frameSize);
+RawVideoPipePlan chooseRawVideoPipePlan(const QSize& frameSize);
+QString rawVideoPipeTransportName(RawVideoPipeTransport transport);
+bool startRawVideoPipe(
+    RawVideoPipe* pipe,
+    const QString& tempDirPath,
+    const RawVideoPipePlan& plan,
+    QString* failureDetail = nullptr
+);
+bool startRawVideoPipePumpThread(RawVideoPipePump* pump, QString* failureDetail = nullptr);
+bool enqueueRawVideoFrame(
+    RawVideoPipePump* pump,
+    QByteArray frameBytes,
+    int frameIndex,
+    qint64* producerWaitNs = nullptr,
+    int* queuedFramesAfterEnqueue = nullptr,
+    QString* failureDetail = nullptr
+);
+bool finishRawVideoPipePump(RawVideoPipePump* pump, QString* failureDetail = nullptr);
+void shutdownRawVideoPipe(RawVideoPipe* pipe);
+void shutdownRawVideoPipePump(RawVideoPipePump* pump);
 bool waitForProcessBackpressureDrain(
     QProcess* process,
     const ExportPipeBackpressurePlan& plan,
@@ -2583,6 +2682,527 @@ quint64 fnv1a64Bytes(const char* data, qint64 size)
     return hash;
 }
 
+RawVideoPipePlan chooseRawVideoPipePlan(const QSize& frameSize)
+{
+    RawVideoPipePlan plan;
+    const qint64 width = qMax(1, frameSize.width());
+    const qint64 height = qMax(1, frameSize.height());
+    plan.frameBytes = width * height * 4LL;
+    plan.requestedBufferBytes = qMax(plan.frameBytes, 1LL * 1024LL * 1024LL);
+    return plan;
+}
+
+QString rawVideoPipeTransportName(RawVideoPipeTransport transport)
+{
+    switch (transport) {
+    case RawVideoPipeTransport::NamedPipe:
+        return QStringLiteral("named_pipe");
+    case RawVideoPipeTransport::Fifo:
+        return QStringLiteral("fifo");
+    }
+    return QStringLiteral("unknown");
+}
+
+bool startRawVideoPipe(
+    RawVideoPipe* pipe,
+    const QString& tempDirPath,
+    const RawVideoPipePlan& plan,
+    QString* failureDetail)
+{
+    if (pipe == nullptr) {
+        if (failureDetail != nullptr) {
+            *failureDetail = QStringLiteral("invalid raw video pipe");
+        }
+        return false;
+    }
+
+    pipe->requestedBufferBytes = plan.requestedBufferBytes;
+    pipe->configuredBufferBytes = 0;
+
+#ifdef Q_OS_WIN
+    const QString pipePath = QStringLiteral("\\\\.\\pipe\\miacode-export-%1")
+                                 .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    const DWORD bufferBytes = static_cast<DWORD>(qBound<qint64>(
+        64LL * 1024LL,
+        plan.requestedBufferBytes,
+        static_cast<qint64>(MAXDWORD)));
+    HANDLE handle = CreateNamedPipeW(
+        reinterpret_cast<LPCWSTR>(pipePath.utf16()),
+        PIPE_ACCESS_OUTBOUND,
+        PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+        1,
+        bufferBytes,
+        bufferBytes,
+        0,
+        nullptr);
+    if (handle == INVALID_HANDLE_VALUE) {
+        if (failureDetail != nullptr) {
+            *failureDetail = QStringLiteral("CreateNamedPipe failed error=%1").arg(GetLastError());
+        }
+        return false;
+    }
+    pipe->inputPath = pipePath;
+    pipe->configuredBufferBytes = bufferBytes;
+    pipe->handle = handle;
+#else
+    const QString fifoPath = QDir(tempDirPath).filePath(QStringLiteral("ffmpeg_rawvideo_fifo"));
+    QFile::remove(fifoPath);
+    const QByteArray fifoPathBytes = QFile::encodeName(fifoPath);
+    if (::mkfifo(fifoPathBytes.constData(), 0600) != 0) {
+        if (failureDetail != nullptr) {
+            *failureDetail = QStringLiteral("mkfifo failed path=%1 errno=%2").arg(fifoPath).arg(errno);
+        }
+        return false;
+    }
+    pipe->inputPath = fifoPath;
+    pipe->fifoPath = fifoPath;
+#endif
+    return true;
+}
+
+bool connectRawVideoPipe(
+    RawVideoPipe* pipe,
+    const RawVideoPipePlan& plan,
+    std::atomic<bool>* abortRequested,
+    QString* failureDetail)
+{
+    if (pipe == nullptr) {
+        if (failureDetail != nullptr) {
+            *failureDetail = QStringLiteral("invalid raw video pipe connection");
+        }
+        return false;
+    }
+
+    QElapsedTimer timer;
+    timer.start();
+
+#ifdef Q_OS_WIN
+    DWORD connectMode = PIPE_READMODE_BYTE | PIPE_NOWAIT;
+    if (pipe->handle == INVALID_HANDLE_VALUE
+        || !SetNamedPipeHandleState(pipe->handle, &connectMode, nullptr, nullptr)) {
+        if (failureDetail != nullptr) {
+            *failureDetail = QStringLiteral("SetNamedPipeHandleState(connect) failed error=%1")
+                                 .arg(GetLastError());
+        }
+        return false;
+    }
+
+    while (true) {
+        if (abortRequested != nullptr && abortRequested->load()) {
+            if (failureDetail != nullptr) {
+                *failureDetail = QStringLiteral("raw pipe connection aborted");
+            }
+            return false;
+        }
+        if (ConnectNamedPipe(pipe->handle, nullptr) != 0) {
+            break;
+        }
+        const DWORD error = GetLastError();
+        if (error == ERROR_PIPE_CONNECTED) {
+            break;
+        }
+        if (error != ERROR_PIPE_LISTENING && error != ERROR_NO_DATA) {
+            if (failureDetail != nullptr) {
+                *failureDetail = QStringLiteral("ConnectNamedPipe failed error=%1").arg(error);
+            }
+            return false;
+        }
+        if (timer.elapsed() >= plan.connectTimeoutMs) {
+            if (failureDetail != nullptr) {
+                *failureDetail = QStringLiteral("ConnectNamedPipe timeout after %1ms")
+                                     .arg(plan.connectTimeoutMs);
+            }
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(plan.connectPollMs));
+    }
+
+    DWORD writeMode = PIPE_READMODE_BYTE | PIPE_WAIT;
+    SetNamedPipeHandleState(pipe->handle, &writeMode, nullptr, nullptr);
+    return true;
+#else
+    const QByteArray fifoPathBytes = QFile::encodeName(pipe->inputPath);
+    while (true) {
+        if (abortRequested != nullptr && abortRequested->load()) {
+            if (failureDetail != nullptr) {
+                *failureDetail = QStringLiteral("raw pipe connection aborted");
+            }
+            return false;
+        }
+        const int fd = ::open(fifoPathBytes.constData(), O_WRONLY | O_NONBLOCK);
+        if (fd >= 0) {
+#ifdef F_SETPIPE_SZ
+            const int requestedSize = static_cast<int>(qBound<qint64>(
+                64LL * 1024LL,
+                plan.requestedBufferBytes,
+                static_cast<qint64>(std::numeric_limits<int>::max())));
+            const int configuredSize = ::fcntl(fd, F_SETPIPE_SZ, requestedSize);
+            if (configuredSize > 0) {
+                pipe->configuredBufferBytes = configuredSize;
+            }
+#endif
+            const int flags = ::fcntl(fd, F_GETFL, 0);
+            if (flags >= 0) {
+                ::fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
+            }
+            pipe->fd = fd;
+            if (pipe->configuredBufferBytes <= 0) {
+                pipe->configuredBufferBytes = plan.requestedBufferBytes;
+            }
+            return true;
+        }
+        if (errno != ENXIO && errno != ENOENT) {
+            if (failureDetail != nullptr) {
+                *failureDetail = QStringLiteral("open fifo failed path=%1 errno=%2")
+                                     .arg(pipe->inputPath)
+                                     .arg(errno);
+            }
+            return false;
+        }
+        if (timer.elapsed() >= plan.connectTimeoutMs) {
+            if (failureDetail != nullptr) {
+                *failureDetail = QStringLiteral("fifo connect timeout after %1ms path=%2")
+                                     .arg(plan.connectTimeoutMs)
+                                     .arg(pipe->inputPath);
+            }
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(plan.connectPollMs));
+    }
+#endif
+}
+
+bool writeAllToRawVideoPipe(
+    RawVideoPipe* pipe,
+    const char* data,
+    qint64 size,
+    const RawVideoPipePlan& plan,
+    qint64* elapsedNs,
+    QString* failureDetail)
+{
+    if (elapsedNs != nullptr) {
+        *elapsedNs = 0;
+    }
+    if (pipe == nullptr || data == nullptr || size < 0) {
+        if (failureDetail != nullptr) {
+            *failureDetail = QStringLiteral("invalid raw pipe write input");
+        }
+        return false;
+    }
+
+    QElapsedTimer timer;
+    timer.start();
+    qint64 writtenTotal = 0;
+    while (writtenTotal < size) {
+        const qint64 chunkBytes = qMin(plan.writeChunkBytes, size - writtenTotal);
+#ifdef Q_OS_WIN
+        DWORD written = 0;
+        if (!WriteFile(
+                pipe->handle,
+                data + writtenTotal,
+                static_cast<DWORD>(chunkBytes),
+                &written,
+                nullptr)) {
+            if (failureDetail != nullptr) {
+                *failureDetail = QStringLiteral("WriteFile failed after %1/%2 bytes error=%3")
+                                     .arg(writtenTotal)
+                                     .arg(size)
+                                     .arg(GetLastError());
+            }
+            return false;
+        }
+        if (written == 0) {
+            if (failureDetail != nullptr) {
+                *failureDetail = QStringLiteral("WriteFile wrote zero bytes after %1/%2 bytes")
+                                     .arg(writtenTotal)
+                                     .arg(size);
+            }
+            return false;
+        }
+        writtenTotal += written;
+#else
+        const ssize_t written = ::write(pipe->fd, data + writtenTotal, static_cast<size_t>(chunkBytes));
+        if (written < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            if (failureDetail != nullptr) {
+                *failureDetail = QStringLiteral("write failed after %1/%2 bytes errno=%3")
+                                     .arg(writtenTotal)
+                                     .arg(size)
+                                     .arg(errno);
+            }
+            return false;
+        }
+        if (written == 0) {
+            if (failureDetail != nullptr) {
+                *failureDetail = QStringLiteral("write wrote zero bytes after %1/%2 bytes")
+                                     .arg(writtenTotal)
+                                     .arg(size);
+            }
+            return false;
+        }
+        writtenTotal += written;
+#endif
+    }
+
+    if (elapsedNs != nullptr) {
+        *elapsedNs = timer.nsecsElapsed();
+    }
+    return true;
+}
+
+void shutdownRawVideoPipe(RawVideoPipe* pipe)
+{
+    if (pipe == nullptr) {
+        return;
+    }
+#ifdef Q_OS_WIN
+    if (pipe->handle != INVALID_HANDLE_VALUE) {
+        DisconnectNamedPipe(pipe->handle);
+        CloseHandle(pipe->handle);
+        pipe->handle = INVALID_HANDLE_VALUE;
+    }
+#else
+    if (pipe->fd >= 0) {
+        ::close(pipe->fd);
+        pipe->fd = -1;
+    }
+    if (!pipe->fifoPath.isEmpty()) {
+        QFile::remove(pipe->fifoPath);
+        pipe->fifoPath.clear();
+    }
+#endif
+}
+
+void rawVideoPipeWriterMain(RawVideoPipePump* pump)
+{
+    if (pump == nullptr) {
+        return;
+    }
+
+    QString failureDetail;
+    QElapsedTimer connectTimer;
+    connectTimer.start();
+    if (!connectRawVideoPipe(&pump->pipe, pump->plan, &pump->abortRequested, &failureDetail)) {
+        std::lock_guard<std::mutex> lock(pump->mutex);
+        if (!pump->abortRequested.load()) {
+            pump->failureDetail = failureDetail;
+        }
+        pump->writerFinished = true;
+        pump->stats.connectElapsedMs = connectTimer.elapsed();
+        pump->notFull.notify_all();
+        pump->notEmpty.notify_all();
+        shutdownRawVideoPipe(&pump->pipe);
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(pump->mutex);
+        pump->stats.connectElapsedMs = connectTimer.elapsed();
+    }
+
+    while (true) {
+        RawVideoPipePacket packet;
+        {
+            std::unique_lock<std::mutex> lock(pump->mutex);
+            while (pump->queue.empty() && !pump->enqueueClosed && !pump->abortRequested.load()) {
+                pump->notEmpty.wait(lock);
+            }
+            if (pump->abortRequested.load()) {
+                break;
+            }
+            if (pump->queue.empty()) {
+                break;
+            }
+            packet = std::move(pump->queue.front());
+            pump->queue.pop_front();
+            pump->notFull.notify_all();
+        }
+
+        qint64 writeNs = 0;
+        if (!writeAllToRawVideoPipe(
+                &pump->pipe,
+                packet.bytes.constData(),
+                packet.bytes.size(),
+                pump->plan,
+                &writeNs,
+                &failureDetail)) {
+            std::lock_guard<std::mutex> lock(pump->mutex);
+            if (!pump->abortRequested.load()) {
+                pump->failureDetail = failureDetail;
+            }
+            break;
+        }
+
+        std::lock_guard<std::mutex> lock(pump->mutex);
+        pump->stats.totalPipeWriteNs += writeNs;
+        if (writeNs > pump->stats.maxPipeWriteNs) {
+            pump->stats.maxPipeWriteNs = writeNs;
+            pump->stats.maxPipeWriteFrame = packet.frameIndex;
+        }
+    }
+
+    shutdownRawVideoPipe(&pump->pipe);
+    {
+        std::lock_guard<std::mutex> lock(pump->mutex);
+        pump->writerFinished = true;
+    }
+    pump->notFull.notify_all();
+    pump->notEmpty.notify_all();
+}
+
+bool startRawVideoPipePumpThread(RawVideoPipePump* pump, QString* failureDetail)
+{
+    if (pump == nullptr) {
+        if (failureDetail != nullptr) {
+            *failureDetail = QStringLiteral("invalid raw pipe pump");
+        }
+        return false;
+    }
+    try {
+        pump->writerThread = std::thread([pump]() { rawVideoPipeWriterMain(pump); });
+        pump->writerThreadStarted = true;
+    } catch (const std::exception& ex) {
+        if (failureDetail != nullptr) {
+            *failureDetail = QStringLiteral("failed to start raw pipe writer thread: %1")
+                                 .arg(QString::fromUtf8(ex.what()));
+        }
+        return false;
+    } catch (...) {
+        if (failureDetail != nullptr) {
+            *failureDetail = QStringLiteral("failed to start raw pipe writer thread");
+        }
+        return false;
+    }
+    return true;
+}
+
+bool enqueueRawVideoFrame(
+    RawVideoPipePump* pump,
+    QByteArray frameBytes,
+    int frameIndex,
+    qint64* producerWaitNs,
+    int* queuedFramesAfterEnqueue,
+    QString* failureDetail)
+{
+    if (producerWaitNs != nullptr) {
+        *producerWaitNs = 0;
+    }
+    if (queuedFramesAfterEnqueue != nullptr) {
+        *queuedFramesAfterEnqueue = 0;
+    }
+    if (pump == nullptr) {
+        if (failureDetail != nullptr) {
+            *failureDetail = QStringLiteral("invalid raw pipe pump enqueue");
+        }
+        return false;
+    }
+
+    QElapsedTimer waitTimer;
+    bool waited = false;
+    int queuedFrames = 0;
+    {
+        std::unique_lock<std::mutex> lock(pump->mutex);
+        while (true) {
+            if (!pump->failureDetail.isEmpty()) {
+                if (failureDetail != nullptr) {
+                    *failureDetail = pump->failureDetail;
+                }
+                return false;
+            }
+            if (pump->writerFinished && pump->queue.empty()) {
+                if (failureDetail != nullptr) {
+                    *failureDetail = QStringLiteral("raw pipe writer finished before enqueue");
+                }
+                return false;
+            }
+            if (pump->queue.size() < static_cast<size_t>(pump->plan.maxBufferedFrames)) {
+                break;
+            }
+            if (!waited) {
+                waitTimer.start();
+                waited = true;
+            }
+            pump->notFull.wait_for(lock, std::chrono::milliseconds(20));
+        }
+
+        RawVideoPipePacket packet;
+        packet.bytes = std::move(frameBytes);
+        packet.frameIndex = frameIndex;
+        pump->queue.emplace_back(std::move(packet));
+        queuedFrames = static_cast<int>(pump->queue.size());
+        pump->stats.maxQueuedFrames = qMax(pump->stats.maxQueuedFrames, queuedFrames);
+        if (waited) {
+            const qint64 waitedNs = waitTimer.nsecsElapsed();
+            pump->stats.totalProducerWaitNs += waitedNs;
+            if (waitedNs > pump->stats.maxProducerWaitNs) {
+                pump->stats.maxProducerWaitNs = waitedNs;
+                pump->stats.maxProducerWaitFrame = frameIndex;
+            }
+            if (producerWaitNs != nullptr) {
+                *producerWaitNs = waitedNs;
+            }
+        }
+    }
+
+    if (queuedFramesAfterEnqueue != nullptr) {
+        *queuedFramesAfterEnqueue = queuedFrames;
+    }
+    pump->notEmpty.notify_one();
+    return true;
+}
+
+void shutdownRawVideoPipePump(RawVideoPipePump* pump)
+{
+    if (pump == nullptr) {
+        return;
+    }
+    pump->abortRequested.store(true);
+    {
+        std::lock_guard<std::mutex> lock(pump->mutex);
+        pump->enqueueClosed = true;
+    }
+    pump->notEmpty.notify_all();
+    pump->notFull.notify_all();
+    if (pump->writerThreadStarted && pump->writerThread.joinable()) {
+        pump->writerThread.join();
+        pump->writerThreadStarted = false;
+    }
+    shutdownRawVideoPipe(&pump->pipe);
+}
+
+bool finishRawVideoPipePump(RawVideoPipePump* pump, QString* failureDetail)
+{
+    if (pump == nullptr) {
+        if (failureDetail != nullptr) {
+            *failureDetail = QStringLiteral("invalid raw pipe pump finalize");
+        }
+        return false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(pump->mutex);
+        pump->enqueueClosed = true;
+    }
+    pump->notEmpty.notify_all();
+    pump->notFull.notify_all();
+    if (pump->writerThreadStarted && pump->writerThread.joinable()) {
+        pump->writerThread.join();
+        pump->writerThreadStarted = false;
+    }
+    shutdownRawVideoPipe(&pump->pipe);
+
+    std::lock_guard<std::mutex> lock(pump->mutex);
+    if (!pump->failureDetail.isEmpty()) {
+        if (failureDetail != nullptr) {
+            *failureDetail = pump->failureDetail;
+        }
+        return false;
+    }
+    return true;
+}
+
 bool writeAllToProcess(QProcess* process, const char* data, qint64 size, QString* failureDetail = nullptr)
 {
     constexpr qint64 kWriteChunkBytes = 1LL * 1024LL * 1024LL;
@@ -3476,6 +4096,36 @@ VideoExportResult VideoExportController::exportPreparedTask(
         return result;
     }
 
+    const RawVideoPipePlan rawVideoPipePlan = chooseRawVideoPipePlan(frameSize);
+    RawVideoPipePump rawVideoPipePump;
+    rawVideoPipePump.plan = rawVideoPipePlan;
+    QString rawVideoPipeFailure;
+    if (!startRawVideoPipe(&rawVideoPipePump.pipe, tempDir.path(), rawVideoPipePlan, &rawVideoPipeFailure)) {
+        result.message = QStringLiteral("Failed to create raw video pipe.");
+        result.details = withExportLogPath(rawVideoPipeFailure);
+        appendVideoExportLog(
+            QStringLiteral("fail_raw_pipe_start"),
+            QStringLiteral("failure=%1").arg(truncateForLog(rawVideoPipeFailure, 400))
+        );
+        return result;
+    }
+    struct RawVideoPipePumpCleanup {
+        RawVideoPipePump* pump = nullptr;
+        ~RawVideoPipePumpCleanup()
+        {
+            shutdownRawVideoPipePump(pump);
+        }
+    } rawVideoPipePumpCleanup{&rawVideoPipePump};
+    appendVideoExportLog(
+        QStringLiteral("raw_pipe_plan"),
+        QStringLiteral("transport=%1 frameMiB=%2 bufferMiB=%3 maxBufferedFrames=%4 connectTimeoutMs=%5")
+            .arg(rawVideoPipeTransportName(rawVideoPipePump.pipe.transport))
+            .arg(rawVideoPipePlan.frameBytes / (1024.0 * 1024.0), 0, 'f', 2)
+            .arg(rawVideoPipePlan.requestedBufferBytes / (1024.0 * 1024.0), 0, 'f', 2)
+            .arg(rawVideoPipePlan.maxBufferedFrames)
+            .arg(rawVideoPipePlan.connectTimeoutMs)
+    );
+
     QStringList args;
     args << QStringLiteral("-y")
          << QStringLiteral("-hide_banner")
@@ -3490,7 +4140,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
          << QStringLiteral("-framerate")
          << QString::number(task.fps)
          << QStringLiteral("-i")
-         << QStringLiteral("pipe:0");
+         << rawVideoPipePump.pipe.inputPath;
 
     const double outerDimAlpha = qBound(0.0, 1.0 - task.backgroundBrightnessOuter, 1.0);
     const double innerDimAlpha = qBound(0.0, 1.0 - task.backgroundBrightnessInner, 1.0);
@@ -3822,7 +4472,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
 
     QProcess ffmpeg;
     ffmpeg.setProcessChannelMode(QProcess::MergedChannels);
-    ffmpeg.start(ffmpegPath, args, QIODevice::ReadWrite);
+    ffmpeg.start(ffmpegPath, args, QIODevice::ReadOnly);
     if (!ffmpeg.waitForStarted(5000)) {
         result.message = QStringLiteral("Failed to start ffmpeg.");
         result.details = withExportLogPath(ffmpeg.errorString());
@@ -3834,6 +4484,23 @@ VideoExportResult VideoExportController::exportPreparedTask(
     }
     appendVideoExportLog(QStringLiteral("ffmpeg_encode_started"));
     appendVideoExportLog(QStringLiteral("ffmpeg_process_started"), describeProcessForLog(ffmpeg));
+    if (!startRawVideoPipePumpThread(&rawVideoPipePump, &rawVideoPipeFailure)) {
+        ffmpeg.kill();
+        ffmpeg.waitForFinished(2000);
+        result.message = QStringLiteral("Failed to start raw pipe writer.");
+        result.details = withExportLogPath(rawVideoPipeFailure);
+        appendVideoExportLog(
+            QStringLiteral("fail_raw_pipe_writer_start"),
+            QStringLiteral("failure=%1").arg(truncateForLog(rawVideoPipeFailure, 400))
+        );
+        return result;
+    }
+    appendVideoExportLog(
+        QStringLiteral("raw_pipe_started"),
+        QStringLiteral("transport=%1 input=%2")
+            .arg(rawVideoPipeTransportName(rawVideoPipePump.pipe.transport))
+            .arg(rawVideoPipePump.pipe.inputPath)
+    );
 
     if (setProgressPercent(8, QStringLiteral("Rendering frames and encoding..."))) {
         ffmpeg.kill();
@@ -3848,17 +4515,6 @@ VideoExportResult VideoExportController::exportPreparedTask(
     static constexpr qint64 kFrameStallLogNs = 80000000;  // 80ms
     static constexpr int kFrameProgressStride = 120;
     FrameTimingStats frameStats;
-    const ExportPipeBackpressurePlan pipeBackpressurePlan = chooseExportPipeBackpressurePlan(frameSize);
-    ExportPipeBackpressureStats pipeBackpressureStats;
-    appendVideoExportLog(
-        QStringLiteral("pipe_backpressure_plan"),
-        QStringLiteral("frameMiB=%1 highWaterMiB=%2 lowWaterMiB=%3 waitSliceMs=%4 timeoutMs=%5")
-            .arg(pipeBackpressurePlan.frameBytes / (1024.0 * 1024.0), 0, 'f', 2)
-            .arg(pipeBackpressurePlan.highWaterBytes / (1024.0 * 1024.0), 0, 'f', 2)
-            .arg(pipeBackpressurePlan.lowWaterBytes / (1024.0 * 1024.0), 0, 'f', 2)
-            .arg(pipeBackpressurePlan.waitSliceMs)
-            .arg(pipeBackpressurePlan.waitTimeoutMs)
-    );
 
     const bool diagRepeatEnabled = envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DIAG_REPEAT"));
     const int diagCropBottom = qMax(0, envIntValue(QStringLiteral("MIACODE_EXPORT_DIAG_CROP_BOTTOM"), 0));
@@ -4290,22 +4946,21 @@ VideoExportResult VideoExportController::exportPreparedTask(
 
         frameTimer.restart();
         QString ffmpegWriteFailure;
-        qint64 backpressureWaitNs = 0;
-        qint64 backpressurePeakQueuedBytes = 0;
+        qint64 producerWaitNs = 0;
+        int queuedFramesAfterEnqueue = 0;
         if (packedFrameSize > 0
-            && !waitForProcessBackpressureDrain(
-                &ffmpeg,
-                pipeBackpressurePlan,
-                &pipeBackpressureStats,
+            && !enqueueRawVideoFrame(
+                &rawVideoPipePump,
+                QByteArray(packedFrameData, static_cast<qsizetype>(packedFrameSize)),
                 frameIndex,
-                &backpressureWaitNs,
-                &backpressurePeakQueuedBytes,
+                &producerWaitNs,
+                &queuedFramesAfterEnqueue,
                 &ffmpegWriteFailure)) {
             const QString processSnapshot = describeProcessForLog(ffmpeg);
             ffmpeg.kill();
             ffmpeg.waitForFinished(2000);
             const QString ffmpegOutput = processOutputAndErrorForLog(ffmpeg, 2000);
-            result.message = QStringLiteral("Failed to drain ffmpeg pipe backlog.");
+            result.message = QStringLiteral("Failed to queue frame data for ffmpeg.");
             QStringList detailLines;
             if (!ffmpegWriteFailure.trimmed().isEmpty()) {
                 detailLines.append(ffmpegWriteFailure.trimmed());
@@ -4317,36 +4972,10 @@ VideoExportResult VideoExportController::exportPreparedTask(
             result.details = detailLines.join(QStringLiteral("\n"));
             result.details = withExportLogPath(result.details);
             appendVideoExportLog(
-                QStringLiteral("fail_ffmpeg_backpressure"),
-                QStringLiteral("frame=%1 peakQueuedKiB=%2 failure=%3 %4 output=%5")
+                QStringLiteral("fail_raw_pipe_enqueue"),
+                QStringLiteral("frame=%1 queuedFrames=%2 bytes=%3 hash=0x%4 failure=%5 %6 output=%7")
                     .arg(frameIndex)
-                    .arg(backpressurePeakQueuedBytes / 1024.0, 0, 'f', 1)
-                    .arg(truncateForLog(ffmpegWriteFailure, 400))
-                    .arg(processSnapshot)
-                    .arg(truncateForLog(ffmpegOutput, 1000))
-            );
-            return false;
-        }
-        if (packedFrameSize > 0 && !writeAllToProcess(&ffmpeg, packedFrameData, packedFrameSize, &ffmpegWriteFailure)) {
-            const QString processSnapshot = describeProcessForLog(ffmpeg);
-            ffmpeg.kill();
-            ffmpeg.waitForFinished(2000);
-            const QString ffmpegOutput = processOutputAndErrorForLog(ffmpeg, 2000);
-            result.message = QStringLiteral("Failed to write frame data to ffmpeg.");
-            QStringList detailLines;
-            if (!ffmpegWriteFailure.trimmed().isEmpty()) {
-                detailLines.append(ffmpegWriteFailure.trimmed());
-            }
-            detailLines.append(processSnapshot);
-            if (!ffmpegOutput.isEmpty()) {
-                detailLines.append(ffmpegOutput);
-            }
-            result.details = detailLines.join(QStringLiteral("\n"));
-            result.details = withExportLogPath(result.details);
-            appendVideoExportLog(
-                QStringLiteral("fail_ffmpeg_write"),
-                QStringLiteral("frame=%1 bytes=%2 hash=0x%3 failure=%4 %5 output=%6")
-                    .arg(frameIndex)
+                    .arg(queuedFramesAfterEnqueue)
                     .arg(packedFrameSize)
                     .arg(QString::number(packedHash, 16))
                     .arg(truncateForLog(ffmpegWriteFailure, 400))
@@ -4467,15 +5096,15 @@ VideoExportResult VideoExportController::exportPreparedTask(
             || (frameIndex + 1 == frameCount)
             || (renderNs >= kFrameStallLogNs)
             || (writeNs >= kFrameStallLogNs);
-        if (backpressureWaitNs > 0 && (shouldLogProgress || backpressureWaitNs >= kFrameStallLogNs)) {
+        if (producerWaitNs > 0 && (shouldLogProgress || producerWaitNs >= kFrameStallLogNs)) {
             appendVideoExportLog(
-                QStringLiteral("pipe_backpressure"),
-                QStringLiteral("frame=%1/%2 waitMs=%3 peakQueuedKiB=%4 hits=%5")
+                QStringLiteral("raw_pipe_backpressure"),
+                QStringLiteral("frame=%1/%2 waitMs=%3 queuedFrames=%4 peakQueuedFrames=%5")
                     .arg(frameIndex + 1)
                     .arg(frameCount)
-                    .arg(backpressureWaitNs / 1000000.0, 0, 'f', 3)
-                    .arg(backpressurePeakQueuedBytes / 1024.0, 0, 'f', 1)
-                    .arg(pipeBackpressureStats.hitCount)
+                    .arg(producerWaitNs / 1000000.0, 0, 'f', 3)
+                    .arg(queuedFramesAfterEnqueue)
+                    .arg(rawVideoPipePump.stats.maxQueuedFrames)
             );
         }
         if (shouldLogProgress) {
@@ -4680,26 +5309,43 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(frameStats.offscreenReadbackMaxFrame)
     );
     appendVideoExportLog(
-        QStringLiteral("pipe_backpressure_summary"),
+        QStringLiteral("raw_pipe_summary"),
         QStringLiteral(
-            "frameMiB=%1 highWaterMiB=%2 lowWaterMiB=%3 hits=%4 totalWaitMs=%5 avgWaitMs=%6 "
-            "maxWaitMs=%7@%8 maxQueuedMiB=%9@%10")
-            .arg(pipeBackpressurePlan.frameBytes / (1024.0 * 1024.0), 0, 'f', 2)
-            .arg(pipeBackpressurePlan.highWaterBytes / (1024.0 * 1024.0), 0, 'f', 2)
-            .arg(pipeBackpressurePlan.lowWaterBytes / (1024.0 * 1024.0), 0, 'f', 2)
-            .arg(pipeBackpressureStats.hitCount)
-            .arg(pipeBackpressureStats.totalWaitNs / 1000000.0, 0, 'f', 3)
-            .arg(pipeBackpressureStats.hitCount > 0
-                    ? (pipeBackpressureStats.totalWaitNs / 1000000.0)
-                        / static_cast<double>(pipeBackpressureStats.hitCount)
+            "transport=%1 frameMiB=%2 bufferMiB=%3 maxBufferedFrames=%4 peakQueuedFrames=%5 "
+            "connectMs=%6 totalProducerWaitMs=%7 avgProducerWaitMs=%8 maxProducerWaitMs=%9@%10 "
+            "totalPipeWriteMs=%11 avgPipeWriteMs=%12 maxPipeWriteMs=%13@%14")
+            .arg(rawVideoPipeTransportName(rawVideoPipePump.pipe.transport))
+            .arg(rawVideoPipePlan.frameBytes / (1024.0 * 1024.0), 0, 'f', 2)
+            .arg((rawVideoPipePump.pipe.configuredBufferBytes > 0
+                      ? rawVideoPipePump.pipe.configuredBufferBytes
+                      : rawVideoPipePlan.requestedBufferBytes)
+                     / (1024.0 * 1024.0),
+                0,
+                'f',
+                2)
+            .arg(rawVideoPipePlan.maxBufferedFrames)
+            .arg(rawVideoPipePump.stats.maxQueuedFrames)
+            .arg(rawVideoPipePump.stats.connectElapsedMs)
+            .arg(rawVideoPipePump.stats.totalProducerWaitNs / 1000000.0, 0, 'f', 3)
+            .arg(frameCount > 0
+                    ? (rawVideoPipePump.stats.totalProducerWaitNs / 1000000.0)
+                        / static_cast<double>(frameCount)
                     : 0.0,
                 0,
                 'f',
                 3)
-            .arg(pipeBackpressureStats.maxWaitNs / 1000000.0, 0, 'f', 3)
-            .arg(pipeBackpressureStats.maxWaitFrame)
-            .arg(pipeBackpressureStats.maxQueuedBytes / (1024.0 * 1024.0), 0, 'f', 2)
-            .arg(pipeBackpressureStats.maxQueuedFrame)
+            .arg(rawVideoPipePump.stats.maxProducerWaitNs / 1000000.0, 0, 'f', 3)
+            .arg(rawVideoPipePump.stats.maxProducerWaitFrame)
+            .arg(rawVideoPipePump.stats.totalPipeWriteNs / 1000000.0, 0, 'f', 3)
+            .arg(frameCount > 0
+                    ? (rawVideoPipePump.stats.totalPipeWriteNs / 1000000.0)
+                        / static_cast<double>(frameCount)
+                    : 0.0,
+                0,
+                'f',
+                3)
+            .arg(rawVideoPipePump.stats.maxPipeWriteNs / 1000000.0, 0, 'f', 3)
+            .arg(rawVideoPipePump.stats.maxPipeWriteFrame)
     );
     if (diagRepeatEnabled) {
         appendVideoExportLog(
@@ -4790,7 +5436,30 @@ VideoExportResult VideoExportController::exportPreparedTask(
         );
     }
 
-    ffmpeg.closeWriteChannel();
+    if (!finishRawVideoPipePump(&rawVideoPipePump, &rawVideoPipeFailure)) {
+        const QString processSnapshot = describeProcessForLog(ffmpeg);
+        ffmpeg.kill();
+        ffmpeg.waitForFinished(2000);
+        const QString ffmpegOutput = processOutputAndErrorForLog(ffmpeg, 2000);
+        result.message = QStringLiteral("Failed to finalize raw pipe stream.");
+        QStringList detailLines;
+        if (!rawVideoPipeFailure.trimmed().isEmpty()) {
+            detailLines.append(rawVideoPipeFailure.trimmed());
+        }
+        detailLines.append(processSnapshot);
+        if (!ffmpegOutput.isEmpty()) {
+            detailLines.append(ffmpegOutput);
+        }
+        result.details = withExportLogPath(detailLines.join(QStringLiteral("\n")));
+        appendVideoExportLog(
+            QStringLiteral("fail_raw_pipe_finalize"),
+            QStringLiteral("failure=%1 %2 output=%3")
+                .arg(truncateForLog(rawVideoPipeFailure, 400))
+                .arg(processSnapshot)
+                .arg(truncateForLog(ffmpegOutput, 1000))
+        );
+        return result;
+    }
     if (!waitForProcessWithProgress(
             ffmpeg,
             QStringLiteral("ffmpeg_encode_finalize_wait_begin"),
