@@ -335,11 +335,6 @@ MainWindow::MainWindow(QWidget* parent)
     configureRuntimeDebugOutput();
     logStartupStage("configure_runtime_debug_output");
 
-    legacyPygamePreviewEnabled_ = miacode::debug_options::envFlagEnabled(
-        "MIACODE_ENABLE_PYGAME_PREVIEW",
-        "MAIMURI_ENABLE_PYGAME_PREVIEW"
-    );
-
     setWindowModified(false);
     updateWindowTitle();
     setupInitialWindowGeometry();
@@ -1030,7 +1025,6 @@ MainWindow::MainWindow(QWidget* parent)
     previewCanvas_ = new PreviewCanvas();
     logStartupStage("preview_canvas_created");
     previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
-    previewCanvas_->setLegacyFireworkStackingEnabled(legacyFireworkStackingEasterEggEnabled_);
     logStartupStage("preview_skin_async_dispatched");
     previewCanvasFrame_ = new QFrame(previewPanel_);
     previewCanvasFrame_->setObjectName("PreviewCanvasFrame");
@@ -1190,7 +1184,6 @@ MainWindow::MainWindow(QWidget* parent)
     logStartupStage("preview_sfx_runtime_created");
     connect(previewCanvas_, &QOpenGLWindow::frameSwapped, this, [this]() {
         if (!qtPreviewPlaying_
-            || legacyPygamePreviewEnabled_
             || !previewCanvasUsesFrameSwappedPacing()
             || !qtPreviewAwaitingFrameSwap_) {
             return;
@@ -1201,7 +1194,7 @@ MainWindow::MainWindow(QWidget* parent)
             qtPreviewTimer_->stop();
         }
         QTimer::singleShot(0, this, [this]() {
-            if (!qtPreviewPlaying_ || legacyPygamePreviewEnabled_) {
+            if (!qtPreviewPlaying_) {
                 return;
             }
             onQtPreviewTick();
@@ -1227,7 +1220,7 @@ MainWindow::MainWindow(QWidget* parent)
         navigateTimelineToSecond(second, true);
     });
     connect(timelineView_, &TimelineView::timelineUserInteractionStarted, this, [this]() {
-        if (!legacyPygamePreviewEnabled_ && qtPreviewPlaying_) {
+        if (qtPreviewPlaying_) {
             stopQtPreviewPlayback(true);
             updatePauseButtonAppearance();
         }
@@ -1500,13 +1493,13 @@ MainWindow::MainWindow(QWidget* parent)
             return;
         }
         const bool usingFrameSwapPacing =
-            previewCanvas_ != nullptr && !legacyPygamePreviewEnabled_ && previewCanvasUsesFrameSwappedPacing();
+            previewCanvas_ != nullptr && previewCanvasUsesFrameSwappedPacing();
         if (!usingFrameSwapPacing) {
             onQtPreviewTick();
             if (!qtPreviewPlaying_) {
                 return;
             }
-            if (previewCanvas_ != nullptr && !legacyPygamePreviewEnabled_ && !previewCanvasUsesFrameSwappedPacing()) {
+            if (previewCanvas_ != nullptr && !previewCanvasUsesFrameSwappedPacing()) {
                 previewCanvas_->update();
             }
             if (!previewCanvasUsesFrameSwappedPacing()) {
@@ -1736,18 +1729,6 @@ MainWindow::MainWindow(QWidget* parent)
     updatePreviewSliderPosition(0.0);
     logStartupStage("initial_document_loaded");
     qtPreviewWatchdogElapsed_.start();
-    if (legacyPygamePreviewEnabled_) {
-        appendOutput("preview/bootstrap", "initializing resident preview session");
-        bootstrapPreviewWindow();
-        QTimer::singleShot(1500, this, [this]() {
-            if (previewProcess_ == nullptr || previewProcess_->state() != QProcess::Running) {
-                appendOutput("preview/bootstrap", "startup retry");
-                bootstrapPreviewWindow();
-            }
-        });
-    } else {
-        appendOutput("preview/bootstrap", "legacy pygame preview disabled by default");
-    }
     logStartupStage("preview_media_controller_lazy_init_deferred");
     QTimer::singleShot(0, this, [this]() {
         schedulePreviewSubsystemWarmup();

@@ -1,5 +1,7 @@
 #include "PreviewMediaController.h"
 
+#include "common/ChartAssetPaths.h"
+
 #ifdef HAVE_QT_MULTIMEDIA
 #include <QAudioOutput>
 #endif
@@ -514,21 +516,12 @@ QString PreviewMediaController::profilingSummaryLines() const
 
 QString PreviewMediaController::resolveMediaPath(const QString& chartPath) const
 {
-    const QFileInfo chartInfo(chartPath);
-    const QDir chartDir(chartInfo.absolutePath());
-
-    QStringList candidates;
 #ifdef HAVE_QT_MULTIMEDIA
-    candidates << "bg.mp4" << "pv.mp4";
+    constexpr bool kIncludeVideoCandidates = true;
+#else
+    constexpr bool kIncludeVideoCandidates = false;
 #endif
-    candidates << "bg.jpg" << "bg.png" << "bg.jpeg";
-    for (const QString& name : candidates) {
-        const QString path = chartDir.filePath(name);
-        if (QFileInfo::exists(path)) {
-            return QDir::cleanPath(path);
-        }
-    }
-    return QString();
+    return miacode::chart_assets::resolveBackgroundMediaPath(chartPath, kIncludeVideoCandidates);
 }
 
 void PreviewMediaController::clearMedia()
