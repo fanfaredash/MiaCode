@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/hardcode-registry.md -->
-<!-- translation-source-hash: 9a3599aba5c1c1f0a3ae53dbaa2146a3c40e22e5ff5ea4b9f6a9fac34378d777 -->
+<!-- translation-source-hash: d0a250fe5cfcbee2486350bcd000d9df9911e5d5aa498ca3fef2a7bf29bd80b1 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 硬编码登记
@@ -48,6 +48,7 @@
   - 规则：parser 级常量变化可能是全仓级影响，要按跨链路改动处理
 - `src/tools/video_export/VideoExportController.cpp`
   - 负责：混音采样率、编码器 probe 超时、码率启发式、逐帧诊断阈值、raw video 管道队列深度与连接超时、ffmpeg fallback 行为
+  - 当前调参说明：`RawVideoPipePlan::maxBufferedFrames` 默认是 `32` 帧，用来限制应用侧 rawvideo 在触发生产者阻塞前的积压上限；它属于后续可以继续结合设备数据和长时导出日志调整的导出性能参数
   - 规则：导出启发式可以先留本地，但凡影响输出兼容性或打包假设的变化都要记录
 - `src/tools/video_export/VideoExportDialog.cpp`
   - 负责：导出对话框 UI 尺寸与预览控制常量

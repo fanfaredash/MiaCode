@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/feature-index.md -->
-<!-- translation-source-hash: 0e4994b08c5c8493b07142483aa1393826fbc23a4400f74e13fddffcccafef1b -->
+<!-- translation-source-hash: 434f826d05e7687fdadc92d8639dcac921a4c3086efb8657142075668b0606c3 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 功能索引

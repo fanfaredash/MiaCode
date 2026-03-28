@@ -44,6 +44,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Rule: parser-level constants can have repo-wide consequences; treat changes as cross-chain changes
 - `src/tools/video_export/VideoExportController.cpp`
   - Owns: mix sample rate, encoder probe timeouts, bitrate heuristics, frame diagnostics thresholds, raw-video pipe queue depth and connect timeout, ffmpeg fallback behavior
+  - Current tuning note: `RawVideoPipePlan::maxBufferedFrames` defaults to `32` frames and caps the app-side rawvideo backlog before producer-side blocking; treat it as an export-performance tuning knob that can continue to move as hardware data and long-export logs accumulate
   - Rule: export heuristics may stay local, but document behavior changes that affect output compatibility or packaging assumptions
 - `src/tools/video_export/VideoExportDialog.cpp`
   - Owns: export-dialog UI sizing and preview control constants
