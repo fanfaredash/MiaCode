@@ -204,7 +204,10 @@
     previewMenu->addAction(stopPreviewAction_);
 
     pausePreviewAction_ = new QAction(uiText("action.pause_preview", "Play/Pause Preview"), this);
-    pausePreviewAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Space));
+    pausePreviewAction_->setShortcuts({
+        QKeySequence(Qt::CTRL | Qt::Key_Return),
+        QKeySequence(Qt::CTRL | Qt::Key_Enter),
+    });
     pausePreviewAction_->setIcon(makePreviewPlayIcon(QColor("#2B3C4E")));
     pausePreviewAction_->setToolTip(QString());
     connect(pausePreviewAction_, &QAction::triggered, this, &MainWindow::onTogglePreviewPause);
@@ -398,6 +401,7 @@ MainWindow::MainWindow(QWidget* parent)
         transformToggleFireworkAction_,
         transformRandomRotateAction_,
     });
+    connect(editor, &PlainCodeEditor::previewPlayPauseRequested, this, &MainWindow::onTogglePreviewPause);
     chartBracketHighlighter_ = new BracketScopeHighlighter(editor->document());
     editorWidget_ = editor;
     editorWidget_->setFont(codeFont);
@@ -1627,7 +1631,6 @@ MainWindow::MainWindow(QWidget* parent)
         previewPanel_->setMouseTracking(true);
         previewPanel_->installEventFilter(this);
     }
-
     editorViewport_ = qobject_cast<PlainCodeEditor*>(editorWidget_)->viewport();
     if (editorViewport_ != nullptr) {
         editorViewport_->installEventFilter(this);

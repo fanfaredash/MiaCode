@@ -57,6 +57,17 @@ QString normalizedHalfWidthText(QString text)
     }
     return text;
 }
+
+bool isPreviewPlayPauseShortcut(const QKeyEvent* event)
+{
+    if (event == nullptr) {
+        return false;
+    }
+    const bool ctrlOnly =
+        (event->modifiers() & Qt::ControlModifier)
+        && !(event->modifiers() & (Qt::AltModifier | Qt::MetaModifier | Qt::ShiftModifier));
+    return ctrlOnly && (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter);
+}
 }  // namespace
 
 class LineNumberArea : public QWidget
@@ -113,6 +124,8 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
         format.setLeftMargin(kEditorDocumentLeftInset);
         frame->setFrameFormat(format);
     }
+    installEventFilter(this);
+    viewport()->installEventFilter(this);
     setCursorWidth(kEditorCursorVisibleWidth);
     applyCursorVisibility();
 }
@@ -158,6 +171,47 @@ void PlainCodeEditor::setBatchTransformActions(const QList<QAction*>& actions)
 void PlainCodeEditor::setMoreBatchTransformActions(const QList<QAction*>& actions)
 {
     moreBatchTransformActions_ = actions;
+}
+
+bool PlainCodeEditor::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched != this && watched != viewport()) {
+        return QTextEdit::eventFilter(watched, event);
+    }
+    if (event == nullptr) {
+        return QTextEdit::eventFilter(watched, event);
+    }
+    if (event->type() == QEvent::ShortcutOverride) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        previewShortcutPending_ = isPreviewPlayPauseShortcut(keyEvent);
+        if (previewShortcutPending_) {
+            event->accept();
+            return true;
+        }
+        return false;
+    }
+    if (event->type() == QEvent::KeyPress) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        const bool shouldTrigger = previewShortcutPending_ && isPreviewPlayPauseShortcut(keyEvent);
+        previewShortcutPending_ = false;
+        if (shouldTrigger && !keyEvent->isAutoRepeat()) {
+            emit previewPlayPauseRequested();
+            event->accept();
+            return true;
+        }
+        return false;
+    }
+    if (event->type() == QEvent::KeyRelease) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        const bool shouldConsume = previewShortcutPending_ && isPreviewPlayPauseShortcut(keyEvent);
+        previewShortcutPending_ = false;
+        if (shouldConsume) {
+            event->accept();
+            return true;
+        }
+        return false;
+    }
+    return QTextEdit::eventFilter(watched, event);
 }
 
 int PlainCodeEditor::lineNumberAreaWidth() const
