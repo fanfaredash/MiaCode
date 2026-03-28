@@ -21,6 +21,11 @@
 
 namespace miacode::video_export::raw_pipe {
 namespace {
+constexpr qint64 kRawPipeBaselineWidth = 1920;
+constexpr qint64 kRawPipeBaselineHeight = 1080;
+constexpr int kRawPipeBaselineBufferedFrames = 32;
+constexpr int kRawPipeMinBufferedFrames = 8;
+constexpr int kRawPipeMaxBufferedFrames = 128;
 
 #ifdef Q_OS_WIN
 HANDLE rawVideoPipeHandle(const RawVideoPipe& pipe)
@@ -308,8 +313,17 @@ RawVideoPipePlan chooseRawVideoPipePlan(const QSize& frameSize)
     RawVideoPipePlan plan;
     const qint64 width = qMax(1, frameSize.width());
     const qint64 height = qMax(1, frameSize.height());
+    const qint64 pixelCount = width * height;
+    const qint64 baselinePixelCount = kRawPipeBaselineWidth * kRawPipeBaselineHeight;
     plan.frameBytes = width * height * 4LL;
     plan.requestedBufferBytes = qMax(plan.frameBytes, 1LL * 1024LL * 1024LL);
+    const double scaledBufferedFrames =
+        static_cast<double>(kRawPipeBaselineBufferedFrames) * static_cast<double>(baselinePixelCount)
+        / static_cast<double>(qMax<qint64>(1, pixelCount));
+    plan.maxBufferedFrames = qBound(
+        kRawPipeMinBufferedFrames,
+        qRound(scaledBufferedFrames),
+        kRawPipeMaxBufferedFrames);
     return plan;
 }
 
