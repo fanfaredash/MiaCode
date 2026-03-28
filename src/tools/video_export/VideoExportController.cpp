@@ -151,6 +151,23 @@ struct FrameTimingStats {
     int offscreenReadbackMaxFrame = -1;
 };
 
+struct ExportPipeBackpressurePlan {
+    qint64 frameBytes = 0;
+    qint64 highWaterBytes = 0;
+    qint64 lowWaterBytes = 0;
+    int waitSliceMs = 50;
+    int waitTimeoutMs = 30000;
+};
+
+struct ExportPipeBackpressureStats {
+    int hitCount = 0;
+    qint64 totalWaitNs = 0;
+    qint64 maxWaitNs = 0;
+    int maxWaitFrame = -1;
+    qint64 maxQueuedBytes = 0;
+    int maxQueuedFrame = -1;
+};
+
 struct FrameLayerActivityStats {
     int tapVisible = 0;
     int tapParked = 0;
@@ -199,6 +216,16 @@ struct FrameLayerActivityStats {
 
 bool envFlagEnabled(const QString& key);
 int envIntValue(const QString& key, int defaultValue);
+ExportPipeBackpressurePlan chooseExportPipeBackpressurePlan(const QSize& frameSize);
+bool waitForProcessBackpressureDrain(
+    QProcess* process,
+    const ExportPipeBackpressurePlan& plan,
+    ExportPipeBackpressureStats* stats,
+    int frameIndex,
+    qint64* waitNs = nullptr,
+    qint64* peakQueuedBytes = nullptr,
+    QString* failureDetail = nullptr
+);
 
 bool shouldAggregateExportPlaybackKind(const QString& kind)
 {
@@ -2550,6 +2577,10 @@ quint64 fnv1a64Bytes(const char* data, qint64 size)
 
 bool writeAllToProcess(QProcess* process, const char* data, qint64 size, QString* failureDetail = nullptr)
 {
+    constexpr qint64 kWriteChunkBytes = 1LL * 1024LL * 1024LL;
+    constexpr qint64 kQueueHighWaterBytes = 4LL * 1024LL * 1024LL;
+    constexpr qint64 kQueueLowWaterBytes = 1LL * 1024LL * 1024LL;
+
     if (process == nullptr || data == nullptr || size < 0) {
         if (failureDetail != nullptr) {
             *failureDetail = QStringLiteral("invalid process write input");
@@ -2558,7 +2589,31 @@ bool writeAllToProcess(QProcess* process, const char* data, qint64 size, QString
     }
     qint64 writtenTotal = 0;
     while (writtenTotal < size) {
-        const qint64 written = process->write(data + writtenTotal, size - writtenTotal);
+        while (process->bytesToWrite() > kQueueHighWaterBytes) {
+            if (process->state() != QProcess::Running) {
+                if (failureDetail != nullptr) {
+                    *failureDetail = QStringLiteral("process exited while draining chunk queue after %1/%2 bytes")
+                        .arg(writtenTotal)
+                        .arg(size);
+                }
+                return false;
+            }
+            if (!process->waitForBytesWritten(30000)) {
+                if (failureDetail != nullptr) {
+                    *failureDetail = QStringLiteral("chunk queue drain timeout after %1/%2 bytes queued=%3")
+                        .arg(writtenTotal)
+                        .arg(size)
+                        .arg(process->bytesToWrite());
+                }
+                return false;
+            }
+            if (process->bytesToWrite() <= kQueueLowWaterBytes) {
+                break;
+            }
+        }
+
+        const qint64 chunkBytes = qMin(kWriteChunkBytes, size - writtenTotal);
+        const qint64 written = process->write(data + writtenTotal, chunkBytes);
         if (written < 0) {
             if (failureDetail != nullptr) {
                 *failureDetail = QStringLiteral("write returned %1 after %2/%3 bytes")
@@ -2580,6 +2635,112 @@ bool writeAllToProcess(QProcess* process, const char* data, qint64 size, QString
             continue;
         }
         writtenTotal += written;
+    }
+    return true;
+}
+
+ExportPipeBackpressurePlan chooseExportPipeBackpressurePlan(const QSize& frameSize)
+{
+    constexpr qint64 kHighWaterFloorBytes = 24LL * 1024LL * 1024LL;
+    constexpr qint64 kLowWaterFloorBytes = 8LL * 1024LL * 1024LL;
+
+    ExportPipeBackpressurePlan plan;
+    const qint64 width = qMax(1, frameSize.width());
+    const qint64 height = qMax(1, frameSize.height());
+    plan.frameBytes = width * height * 4LL;
+    plan.lowWaterBytes = qMax(kLowWaterFloorBytes, plan.frameBytes);
+    plan.highWaterBytes = qMax(kHighWaterFloorBytes, plan.frameBytes * 3LL);
+    if (plan.highWaterBytes <= plan.lowWaterBytes) {
+        plan.highWaterBytes = plan.lowWaterBytes + plan.frameBytes;
+    }
+    return plan;
+}
+
+bool waitForProcessBackpressureDrain(
+    QProcess* process,
+    const ExportPipeBackpressurePlan& plan,
+    ExportPipeBackpressureStats* stats,
+    int frameIndex,
+    qint64* waitNs,
+    qint64* peakQueuedBytes,
+    QString* failureDetail)
+{
+    if (waitNs != nullptr) {
+        *waitNs = 0;
+    }
+    if (peakQueuedBytes != nullptr) {
+        *peakQueuedBytes = 0;
+    }
+    if (process == nullptr) {
+        if (failureDetail != nullptr) {
+            *failureDetail = QStringLiteral("invalid process for backpressure wait");
+        }
+        return false;
+    }
+
+    const qint64 initialQueuedBytes = process->bytesToWrite();
+    if (initialQueuedBytes <= plan.highWaterBytes) {
+        return true;
+    }
+
+    if (stats != nullptr) {
+        ++stats->hitCount;
+    }
+
+    qint64 peakBytes = initialQueuedBytes;
+    QElapsedTimer timer;
+    timer.start();
+
+    while (true) {
+        if (process->state() != QProcess::Running) {
+            if (failureDetail != nullptr) {
+                *failureDetail = QStringLiteral(
+                                     "process exited during backpressure wait queued=%1 high=%2 low=%3")
+                                     .arg(process->bytesToWrite())
+                                     .arg(plan.highWaterBytes)
+                                     .arg(plan.lowWaterBytes);
+            }
+            return false;
+        }
+
+        const qint64 queuedBytes = process->bytesToWrite();
+        peakBytes = qMax(peakBytes, queuedBytes);
+        if (queuedBytes <= plan.lowWaterBytes) {
+            break;
+        }
+
+        if (timer.elapsed() >= plan.waitTimeoutMs) {
+            if (failureDetail != nullptr) {
+                *failureDetail = QStringLiteral(
+                                     "backpressure drain timeout queued=%1 high=%2 low=%3 timeoutMs=%4")
+                                     .arg(queuedBytes)
+                                     .arg(plan.highWaterBytes)
+                                     .arg(plan.lowWaterBytes)
+                                     .arg(plan.waitTimeoutMs);
+            }
+            return false;
+        }
+
+        process->waitForBytesWritten(plan.waitSliceMs);
+    }
+
+    const qint64 elapsedNs = timer.nsecsElapsed();
+    if (waitNs != nullptr) {
+        *waitNs = elapsedNs;
+    }
+    if (peakQueuedBytes != nullptr) {
+        *peakQueuedBytes = peakBytes;
+    }
+    if (stats != nullptr) {
+        stats->totalWaitNs += elapsedNs;
+        if (elapsedNs > stats->maxWaitNs) {
+            stats->maxWaitNs = elapsedNs;
+            stats->maxWaitFrame = frameIndex;
+        }
+        if (peakBytes > stats->maxQueuedBytes) {
+            stats->maxQueuedBytes = peakBytes;
+            stats->maxQueuedFrame = frameIndex;
+        }
     }
     return true;
 }
@@ -3679,6 +3840,17 @@ VideoExportResult VideoExportController::exportPreparedTask(
     static constexpr qint64 kFrameStallLogNs = 80000000;  // 80ms
     static constexpr int kFrameProgressStride = 120;
     FrameTimingStats frameStats;
+    const ExportPipeBackpressurePlan pipeBackpressurePlan = chooseExportPipeBackpressurePlan(frameSize);
+    ExportPipeBackpressureStats pipeBackpressureStats;
+    appendVideoExportLog(
+        QStringLiteral("pipe_backpressure_plan"),
+        QStringLiteral("frameMiB=%1 highWaterMiB=%2 lowWaterMiB=%3 waitSliceMs=%4 timeoutMs=%5")
+            .arg(pipeBackpressurePlan.frameBytes / (1024.0 * 1024.0), 0, 'f', 2)
+            .arg(pipeBackpressurePlan.highWaterBytes / (1024.0 * 1024.0), 0, 'f', 2)
+            .arg(pipeBackpressurePlan.lowWaterBytes / (1024.0 * 1024.0), 0, 'f', 2)
+            .arg(pipeBackpressurePlan.waitSliceMs)
+            .arg(pipeBackpressurePlan.waitTimeoutMs)
+    );
 
     const bool diagRepeatEnabled = envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DIAG_REPEAT"));
     const int diagCropBottom = qMax(0, envIntValue(QStringLiteral("MIACODE_EXPORT_DIAG_CROP_BOTTOM"), 0));
@@ -4110,6 +4282,43 @@ VideoExportResult VideoExportController::exportPreparedTask(
 
         frameTimer.restart();
         QString ffmpegWriteFailure;
+        qint64 backpressureWaitNs = 0;
+        qint64 backpressurePeakQueuedBytes = 0;
+        if (packedFrameSize > 0
+            && !waitForProcessBackpressureDrain(
+                &ffmpeg,
+                pipeBackpressurePlan,
+                &pipeBackpressureStats,
+                frameIndex,
+                &backpressureWaitNs,
+                &backpressurePeakQueuedBytes,
+                &ffmpegWriteFailure)) {
+            const QString processSnapshot = describeProcessForLog(ffmpeg);
+            ffmpeg.kill();
+            ffmpeg.waitForFinished(2000);
+            const QString ffmpegOutput = processOutputAndErrorForLog(ffmpeg, 2000);
+            result.message = QStringLiteral("Failed to drain ffmpeg pipe backlog.");
+            QStringList detailLines;
+            if (!ffmpegWriteFailure.trimmed().isEmpty()) {
+                detailLines.append(ffmpegWriteFailure.trimmed());
+            }
+            detailLines.append(processSnapshot);
+            if (!ffmpegOutput.isEmpty()) {
+                detailLines.append(ffmpegOutput);
+            }
+            result.details = detailLines.join(QStringLiteral("\n"));
+            result.details = withExportLogPath(result.details);
+            appendVideoExportLog(
+                QStringLiteral("fail_ffmpeg_backpressure"),
+                QStringLiteral("frame=%1 peakQueuedKiB=%2 failure=%3 %4 output=%5")
+                    .arg(frameIndex)
+                    .arg(backpressurePeakQueuedBytes / 1024.0, 0, 'f', 1)
+                    .arg(truncateForLog(ffmpegWriteFailure, 400))
+                    .arg(processSnapshot)
+                    .arg(truncateForLog(ffmpegOutput, 1000))
+            );
+            return false;
+        }
         if (packedFrameSize > 0 && !writeAllToProcess(&ffmpeg, packedFrameData, packedFrameSize, &ffmpegWriteFailure)) {
             const QString processSnapshot = describeProcessForLog(ffmpeg);
             ffmpeg.kill();
@@ -4250,6 +4459,17 @@ VideoExportResult VideoExportController::exportPreparedTask(
             || (frameIndex + 1 == frameCount)
             || (renderNs >= kFrameStallLogNs)
             || (writeNs >= kFrameStallLogNs);
+        if (backpressureWaitNs > 0 && (shouldLogProgress || backpressureWaitNs >= kFrameStallLogNs)) {
+            appendVideoExportLog(
+                QStringLiteral("pipe_backpressure"),
+                QStringLiteral("frame=%1/%2 waitMs=%3 peakQueuedKiB=%4 hits=%5")
+                    .arg(frameIndex + 1)
+                    .arg(frameCount)
+                    .arg(backpressureWaitNs / 1000000.0, 0, 'f', 3)
+                    .arg(backpressurePeakQueuedBytes / 1024.0, 0, 'f', 1)
+                    .arg(pipeBackpressureStats.hitCount)
+            );
+        }
         if (shouldLogProgress) {
             appendVideoExportLog(
                 QStringLiteral("frame_timing"),
@@ -4450,6 +4670,28 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(frameStats.offscreenDrawMaxFrame)
             .arg(frameStats.offscreenReadbackMaxNs / 1000000.0, 0, 'f', 3)
             .arg(frameStats.offscreenReadbackMaxFrame)
+    );
+    appendVideoExportLog(
+        QStringLiteral("pipe_backpressure_summary"),
+        QStringLiteral(
+            "frameMiB=%1 highWaterMiB=%2 lowWaterMiB=%3 hits=%4 totalWaitMs=%5 avgWaitMs=%6 "
+            "maxWaitMs=%7@%8 maxQueuedMiB=%9@%10")
+            .arg(pipeBackpressurePlan.frameBytes / (1024.0 * 1024.0), 0, 'f', 2)
+            .arg(pipeBackpressurePlan.highWaterBytes / (1024.0 * 1024.0), 0, 'f', 2)
+            .arg(pipeBackpressurePlan.lowWaterBytes / (1024.0 * 1024.0), 0, 'f', 2)
+            .arg(pipeBackpressureStats.hitCount)
+            .arg(pipeBackpressureStats.totalWaitNs / 1000000.0, 0, 'f', 3)
+            .arg(pipeBackpressureStats.hitCount > 0
+                    ? (pipeBackpressureStats.totalWaitNs / 1000000.0)
+                        / static_cast<double>(pipeBackpressureStats.hitCount)
+                    : 0.0,
+                0,
+                'f',
+                3)
+            .arg(pipeBackpressureStats.maxWaitNs / 1000000.0, 0, 'f', 3)
+            .arg(pipeBackpressureStats.maxWaitFrame)
+            .arg(pipeBackpressureStats.maxQueuedBytes / (1024.0 * 1024.0), 0, 'f', 2)
+            .arg(pipeBackpressureStats.maxQueuedFrame)
     );
     if (diagRepeatEnabled) {
         appendVideoExportLog(
