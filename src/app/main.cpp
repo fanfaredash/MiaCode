@@ -142,12 +142,6 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
         QStringLiteral("path")
     ));
     parser.addOption(QCommandLineOption(
-        QStringLiteral("performance"),
-        QStringLiteral("Export performance profile: balanced or speed."),
-        QStringLiteral("profile"),
-        QStringLiteral("balanced")
-    ));
-    parser.addOption(QCommandLineOption(
         QStringLiteral("start"),
         QStringLiteral("Export start second."),
         QStringLiteral("seconds"),
@@ -239,7 +233,6 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     const int fps = parser.value(QStringLiteral("fps")).toInt(&fpsOk);
     bool startOk = false;
     const double startSeconds = parser.value(QStringLiteral("start")).toDouble(&startOk);
-    const QString performanceToken = parser.value(QStringLiteral("performance")).trimmed().toLower();
     bool outerBrightnessOk = false;
     const double outerBrightness = parser.value(QStringLiteral("brightness-outer")).toDouble(&outerBrightnessOk);
     bool innerBrightnessOk = false;
@@ -279,12 +272,6 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     if (!skinWaitOk || skinWaitMs < 0) {
         if (errorMessage != nullptr) {
             *errorMessage = QStringLiteral("--skin-wait-ms must be a non-negative integer");
-        }
-        return 2;
-    }
-    if (performanceToken != QStringLiteral("balanced") && performanceToken != QStringLiteral("speed")) {
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("--performance must be either balanced or speed");
         }
         return 2;
     }
@@ -338,9 +325,6 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     request.outputWidth = outputWidth;
     request.outputHeight = outputHeight;
     request.fps = fps;
-    request.performanceProfile = performanceToken == QStringLiteral("speed")
-        ? VideoExportPerformanceProfile::Speed
-        : VideoExportPerformanceProfile::Balanced;
     request.exportStartSeconds = startSeconds;
     request.contentDurationSeconds = durationSeconds;
     request.showTimestamp = !parser.isSet(QStringLiteral("hide-timestamp"));

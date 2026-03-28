@@ -48,17 +48,6 @@ constexpr int kMixSampleRate = 48000;
 constexpr int kMixChannels = 2;
 constexpr double kTimelineEpsilonSeconds = 1e-6;
 
-QString performanceProfileToken(VideoExportPerformanceProfile profile)
-{
-    switch (profile) {
-    case VideoExportPerformanceProfile::Speed:
-        return QStringLiteral("speed");
-    case VideoExportPerformanceProfile::Balanced:
-    default:
-        return QStringLiteral("balanced");
-    }
-}
-
 struct ExportEvent {
     double second = 0.0;
     int priority = 0;
@@ -116,34 +105,9 @@ struct SystemMemoryInfo {
     quint64 availablePhysicalBytes = 0;
 };
 
-struct X265TuningPlan {
-    int pools = 4;
-    int frameThreads = 1;
-    int lookahead = 6;
-    int bframes = 1;
-    int lookaheadSlices = 1;
-    int wpp = 1;
-    int pmode = 0;
-    int pme = 0;
-
-    QString toParams() const
-    {
-        return QStringLiteral(
-                   "pools=%1:frame-threads=%2:rc-lookahead=%3:lookahead-slices=%4:bframes=%5:wpp=%6:pmode=%7:pme=%8")
-            .arg(pools)
-            .arg(frameThreads)
-            .arg(lookahead)
-            .arg(lookaheadSlices)
-            .arg(bframes)
-            .arg(wpp)
-            .arg(pmode)
-            .arg(pme);
-    }
-};
-
 struct X264TuningPlan {
-    QString preset = QStringLiteral("veryfast");
-    int crf = 23;
+    QString preset = QStringLiteral("fast");
+    int crf = 21;
     int bframes = 0;
 
     QStringList toArgs() const
@@ -392,80 +356,21 @@ QString memoryInfoToLog(const SystemMemoryInfo& info)
         .arg(bytesToMiB(info.availablePhysicalBytes));
 }
 
-X265TuningPlan chooseX265TuningPlan(
-    const SystemMemoryInfo& memoryInfo,
-    int outputWidth,
-    int outputHeight,
-    int idealThreadCount
-)
+QString fasterX264Preset(const QString& preset)
 {
-    const qint64 totalMiB = bytesToMiB(memoryInfo.totalPhysicalBytes);
-    const qint64 availMiB = bytesToMiB(memoryInfo.availablePhysicalBytes);
-
-    X265TuningPlan plan;
-    Q_UNUSED(outputWidth);
-    Q_UNUSED(outputHeight);
-    plan.bframes = 0;
-    if (memoryInfo.valid) {
-        if (availMiB >= 24576 && totalMiB >= 32768) {
-            plan.pools = 8;
-            plan.lookahead = 8;
-        } else if (availMiB >= 16384) {
-            plan.pools = 6;
-            plan.lookahead = 8;
-        } else if (availMiB >= 8192) {
-            plan.pools = 4;
-            plan.lookahead = 6;
-        } else if (availMiB >= 4096) {
-            plan.pools = 3;
-            plan.lookahead = 5;
-        } else {
-            plan.pools = 2;
-            plan.lookahead = 4;
-        }
+    if (preset == QLatin1String("medium")) {
+        return QStringLiteral("fast");
     }
-
-    plan.pools = qBound(
-        1,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_X265_POOLS"), qMin(plan.pools, qMax(1, idealThreadCount))),
-        8
-    );
-    plan.frameThreads = qBound(
-        1,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_X265_FRAME_THREADS"), plan.frameThreads),
-        4
-    );
-    plan.lookahead = qBound(
-        4,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_X265_LOOKAHEAD"), plan.lookahead),
-        20
-    );
-    plan.bframes = qBound(
-        0,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_X265_BFRAMES"), plan.bframes),
-        8
-    );
-    plan.lookaheadSlices = qBound(
-        0,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_X265_LOOKAHEAD_SLICES"), plan.lookaheadSlices),
-        16
-    );
-    plan.wpp = qBound(
-        0,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_X265_WPP"), plan.wpp),
-        1
-    );
-    plan.pmode = qBound(
-        0,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_X265_PMODE"), plan.pmode),
-        1
-    );
-    plan.pme = qBound(
-        0,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_X265_PME"), plan.pme),
-        1
-    );
-    return plan;
+    if (preset == QLatin1String("fast")) {
+        return QStringLiteral("faster");
+    }
+    if (preset == QLatin1String("faster")) {
+        return QStringLiteral("veryfast");
+    }
+    if (preset == QLatin1String("veryfast")) {
+        return QStringLiteral("superfast");
+    }
+    return preset;
 }
 
 QString encoderAutoModeToken(EncoderAutoMode mode)
@@ -550,7 +455,6 @@ bool shouldPreferHardwareEncoderInAutoMode(
 }
 
 X264TuningPlan chooseX264TuningPlan(
-    VideoExportPerformanceProfile performanceProfile,
     const SystemMemoryInfo& memoryInfo,
     int outputWidth,
     int outputHeight,
@@ -558,12 +462,46 @@ X264TuningPlan chooseX264TuningPlan(
     int idealThreadCount
 )
 {
+    const qint64 availMiB = bytesToMiB(memoryInfo.availablePhysicalBytes);
+    const qint64 totalMiB = bytesToMiB(memoryInfo.totalPhysicalBytes);
+    const qint64 pixelsPerSecond =
+        static_cast<qint64>(qMax(1, outputWidth)) * qMax(1, outputHeight) * qMax(1, fps);
+
     X264TuningPlan plan;
-    Q_UNUSED(memoryInfo);
-    Q_UNUSED(outputWidth);
-    Q_UNUSED(outputHeight);
-    Q_UNUSED(fps);
-    Q_UNUSED(idealThreadCount);
+    if (memoryInfo.valid) {
+        if (availMiB >= 24576 && totalMiB >= 32768) {
+            plan.preset = QStringLiteral("medium");
+        } else if (availMiB >= 12288) {
+            plan.preset = QStringLiteral("fast");
+        } else {
+            plan.preset = QStringLiteral("faster");
+        }
+    }
+
+    if (idealThreadCount <= 4) {
+        plan.preset = QStringLiteral("faster");
+    } else if (idealThreadCount <= 8 && plan.preset == QLatin1String("medium")) {
+        plan.preset = QStringLiteral("fast");
+    } else if (idealThreadCount <= 8 && plan.preset == QLatin1String("fast") && memoryInfo.valid && availMiB < 16384) {
+        plan.preset = QStringLiteral("faster");
+    }
+
+    if (memoryInfo.valid && availMiB < 8192) {
+        plan.preset = QStringLiteral("faster");
+    } else if (memoryInfo.valid && availMiB < 12288 && plan.preset == QLatin1String("medium")) {
+        plan.preset = QStringLiteral("fast");
+    }
+
+    if (memoryInfo.valid && totalMiB < 16384 && plan.preset == QLatin1String("medium")) {
+        plan.preset = QStringLiteral("fast");
+    }
+
+    if (pixelsPerSecond >= 120000000LL) {
+        plan.preset = fasterX264Preset(plan.preset);
+    }
+    if (pixelsPerSecond >= 180000000LL) {
+        plan.preset = fasterX264Preset(plan.preset);
+    }
 
     const QString presetOverride =
         qEnvironmentVariable("MIACODE_EXPORT_X264_PRESET").trimmed();
@@ -572,9 +510,7 @@ X264TuningPlan chooseX264TuningPlan(
     }
     plan.crf = qBound(
         16,
-        envIntValue(
-            QStringLiteral("MIACODE_EXPORT_X264_CRF"),
-            performanceProfile == VideoExportPerformanceProfile::Speed ? 23 : 20),
+        envIntValue(QStringLiteral("MIACODE_EXPORT_X264_CRF"), plan.crf),
         28
     );
     plan.bframes = qBound(
@@ -1773,7 +1709,6 @@ VideoEncoderConfig chooseVideoEncoder(
     int outputWidth,
     int outputHeight,
     int fps,
-    VideoExportPerformanceProfile performanceProfile,
     const SystemMemoryInfo& memoryInfo,
     QString* probeLog
 )
@@ -1787,13 +1722,8 @@ VideoEncoderConfig chooseVideoEncoder(
         QIODevice::ReadOnly
     );
     if (!probe.waitForStarted(5000)) {
-        config.codec = QStringLiteral("libx264");
-        config.extraArgs = {
-            QStringLiteral("-preset"), QStringLiteral("veryfast"),
-            QStringLiteral("-crf"),
-            QString::number(performanceProfile == VideoExportPerformanceProfile::Speed ? 23 : 20),
-            QStringLiteral("-bf"), QStringLiteral("0")
-        };
+        config.codec = QStringLiteral("mpeg4");
+        config.extraArgs = {QStringLiteral("-q:v"), QStringLiteral("4")};
         if (probeLog != nullptr) {
             *probeLog = QStringLiteral("encoder_probe_start_failed error=%1 fallback=%2")
                 .arg(probe.errorString(), config.codec);
@@ -1807,7 +1737,6 @@ VideoEncoderConfig chooseVideoEncoder(
     const bool hasHevcQsv = hasEncoderToken(output, QStringLiteral("hevc_qsv"));
     const bool hasHevcAmf = hasEncoderToken(output, QStringLiteral("hevc_amf"));
     const bool hasHevcMf = hasEncoderToken(output, QStringLiteral("hevc_mf"));
-    const bool hasLibx265 = hasEncoderToken(output, QStringLiteral("libx265"));
     const bool hasH264Nvenc = hasEncoderToken(output, QStringLiteral("h264_nvenc"));
     const bool hasH264Qsv = hasEncoderToken(output, QStringLiteral("h264_qsv"));
     const bool hasH264Amf = hasEncoderToken(output, QStringLiteral("h264_amf"));
@@ -1819,28 +1748,22 @@ VideoEncoderConfig chooseVideoEncoder(
     const int safeHeight = qMax(1, outputHeight);
     const int safeFps = qMax(1, fps);
     const int idealThreadCount = qMax(1, QThread::idealThreadCount());
-    const X264TuningPlan x264Plan = chooseX264TuningPlan(
-        performanceProfile,
-        memoryInfo,
-        safeWidth,
-        safeHeight,
-        safeFps,
-        idealThreadCount);
-    // Lean slightly more towards encode throughput than final fidelity.
+    const X264TuningPlan x264Plan = chooseX264TuningPlan(memoryInfo, safeWidth, safeHeight, safeFps, idealThreadCount);
+    // Keep export artifacts low while avoiding oversized files.
     const qint64 estimatedBitrateKbps = qBound<qint64>(
-        1800LL,
-        qRound64(static_cast<double>(safeWidth) * safeHeight * safeFps * 0.060 / 1000.0),
-        7000LL
+        2200LL,
+        qRound64(static_cast<double>(safeWidth) * safeHeight * safeFps * 0.075 / 1000.0),
+        8500LL
     );
     const qint64 maxRateKbps = qBound<qint64>(
         estimatedBitrateKbps,
-        qRound64(static_cast<double>(estimatedBitrateKbps) * 1.30),
-        8500LL
+        qRound64(static_cast<double>(estimatedBitrateKbps) * 1.40),
+        10500LL
     );
     const qint64 bufSizeKbps = qBound<qint64>(
         maxRateKbps,
-        qRound64(static_cast<double>(maxRateKbps) * 1.8),
-        12000LL
+        qRound64(static_cast<double>(maxRateKbps) * 2.0),
+        16000LL
     );
     const auto variableBitrateArgs = [estimatedBitrateKbps, maxRateKbps, bufSizeKbps]() {
         return QStringList{
@@ -1850,56 +1773,6 @@ VideoEncoderConfig chooseVideoEncoder(
         };
     };
     const QStringList x264Args = x264Plan.toArgs();
-    const int hardwareQualityValue =
-        performanceProfile == VideoExportPerformanceProfile::Speed ? 25 : 22;
-    const auto codecArgs = [&](const QString& codec) {
-        if (codec == QLatin1String("h264_nvenc") || codec == QLatin1String("hevc_nvenc")) {
-            return QStringList{
-                QStringLiteral("-preset"), QStringLiteral("p1"),
-                QStringLiteral("-rc"), QStringLiteral("vbr"),
-                QStringLiteral("-cq"), QString::number(hardwareQualityValue),
-                QStringLiteral("-b:v"), QString::number(estimatedBitrateKbps) + QLatin1String("k"),
-                QStringLiteral("-maxrate"), QString::number(maxRateKbps) + QLatin1String("k"),
-                QStringLiteral("-bufsize"), QString::number(bufSizeKbps) + QLatin1String("k")
-            };
-        }
-        if (codec == QLatin1String("h264_qsv") || codec == QLatin1String("hevc_qsv")) {
-            return QStringList{
-                QStringLiteral("-preset"), QStringLiteral("veryfast"),
-                QStringLiteral("-global_quality"), QString::number(hardwareQualityValue),
-                QStringLiteral("-b:v"), QString::number(estimatedBitrateKbps) + QLatin1String("k"),
-                QStringLiteral("-maxrate"), QString::number(maxRateKbps) + QLatin1String("k"),
-                QStringLiteral("-bufsize"), QString::number(bufSizeKbps) + QLatin1String("k")
-            };
-        }
-        if (codec == QLatin1String("h264_amf") || codec == QLatin1String("hevc_amf")) {
-            return QStringList{
-                QStringLiteral("-quality"), QStringLiteral("speed"),
-                QStringLiteral("-rc"), QStringLiteral("qvbr"),
-                QStringLiteral("-qvbr_quality_level"), QString::number(hardwareQualityValue),
-                QStringLiteral("-b:v"), QString::number(estimatedBitrateKbps) + QLatin1String("k"),
-                QStringLiteral("-maxrate"), QString::number(maxRateKbps) + QLatin1String("k"),
-                QStringLiteral("-bufsize"), QString::number(bufSizeKbps) + QLatin1String("k")
-            };
-        }
-        if (codec == QLatin1String("h264_mf") || codec == QLatin1String("hevc_mf")) {
-            return variableBitrateArgs();
-        }
-        if (codec == QLatin1String("libx264")) {
-            return x264Args;
-        }
-        if (codec == QLatin1String("libopenh264")) {
-            return QStringList{
-                QStringLiteral("-b:v"), QString::number(estimatedBitrateKbps) + QLatin1String("k")
-            };
-        }
-        if (codec == QLatin1String("mpeg4")) {
-            return QStringList{
-                QStringLiteral("-q:v"), QStringLiteral("4")
-            };
-        }
-        return variableBitrateArgs();
-    };
     const QString forcedEncoder = qEnvironmentVariable("MIACODE_EXPORT_FORCE_ENCODER").trimmed();
     const EncoderAutoMode encoderAutoMode = resolveEncoderAutoMode();
     QString encoderAutoModeReason;
@@ -1931,38 +1804,44 @@ VideoEncoderConfig chooseVideoEncoder(
     };
     const auto appendAutoHardwareCandidates = [&]() {
         if (hasH264Nvenc) {
-            pushCandidate(QStringLiteral("h264_nvenc"), codecArgs(QStringLiteral("h264_nvenc")), true);
+            pushCandidate(QStringLiteral("h264_nvenc"), variableBitrateArgs(), true);
         }
         if (hasH264Qsv) {
-            pushCandidate(QStringLiteral("h264_qsv"), codecArgs(QStringLiteral("h264_qsv")), true);
+            pushCandidate(QStringLiteral("h264_qsv"), variableBitrateArgs(), true);
         }
         if (hasH264Amf) {
-            pushCandidate(QStringLiteral("h264_amf"), codecArgs(QStringLiteral("h264_amf")), true);
+            pushCandidate(QStringLiteral("h264_amf"), variableBitrateArgs(), true);
         }
         if (hasH264Mf) {
-            pushCandidate(QStringLiteral("h264_mf"), codecArgs(QStringLiteral("h264_mf")), true);
+            pushCandidate(QStringLiteral("h264_mf"), variableBitrateArgs(), true);
         }
         if (encoderAutoMode == EncoderAutoMode::Hardware) {
             if (hasHevcNvenc) {
-                pushCandidate(QStringLiteral("hevc_nvenc"), codecArgs(QStringLiteral("hevc_nvenc")), true);
+                pushCandidate(QStringLiteral("hevc_nvenc"), variableBitrateArgs(), true);
             }
             if (hasHevcQsv) {
-                pushCandidate(QStringLiteral("hevc_qsv"), codecArgs(QStringLiteral("hevc_qsv")), true);
+                pushCandidate(QStringLiteral("hevc_qsv"), variableBitrateArgs(), true);
             }
             if (hasHevcAmf) {
-                pushCandidate(QStringLiteral("hevc_amf"), codecArgs(QStringLiteral("hevc_amf")), true);
+                pushCandidate(QStringLiteral("hevc_amf"), variableBitrateArgs(), true);
             }
             if (hasHevcMf) {
-                pushCandidate(QStringLiteral("hevc_mf"), codecArgs(QStringLiteral("hevc_mf")), true);
+                pushCandidate(QStringLiteral("hevc_mf"), variableBitrateArgs(), true);
             }
         }
     };
     const auto appendAutoSoftwareCandidates = [&]() {
         if (hasLibx264) {
-            pushCandidate(QStringLiteral("libx264"), codecArgs(QStringLiteral("libx264")), false);
+            pushCandidate(QStringLiteral("libx264"), x264Args, false);
         }
         if (hasOpenH264) {
-            pushCandidate(QStringLiteral("libopenh264"), codecArgs(QStringLiteral("libopenh264")), false);
+            pushCandidate(
+                QStringLiteral("libopenh264"),
+                QStringList{
+                    QStringLiteral("-b:v"), QString::number(estimatedBitrateKbps) + QLatin1String("k")
+                },
+                false
+            );
         }
     };
 
@@ -1977,41 +1856,59 @@ VideoEncoderConfig chooseVideoEncoder(
         }
     } else {
         if (forcedMatches(QStringLiteral("hevc_nvenc")) && hasHevcNvenc) {
-            pushCandidate(QStringLiteral("hevc_nvenc"), codecArgs(QStringLiteral("hevc_nvenc")), true);
+            pushCandidate(QStringLiteral("hevc_nvenc"), variableBitrateArgs(), true);
         }
         if (forcedMatches(QStringLiteral("hevc_qsv")) && hasHevcQsv) {
-            pushCandidate(QStringLiteral("hevc_qsv"), codecArgs(QStringLiteral("hevc_qsv")), true);
+            pushCandidate(QStringLiteral("hevc_qsv"), variableBitrateArgs(), true);
         }
         if (forcedMatches(QStringLiteral("hevc_amf")) && hasHevcAmf) {
-            pushCandidate(QStringLiteral("hevc_amf"), codecArgs(QStringLiteral("hevc_amf")), true);
+            pushCandidate(QStringLiteral("hevc_amf"), variableBitrateArgs(), true);
         }
         if (forcedMatches(QStringLiteral("hevc_mf")) && hasHevcMf) {
-            pushCandidate(QStringLiteral("hevc_mf"), codecArgs(QStringLiteral("hevc_mf")), true);
+            pushCandidate(QStringLiteral("hevc_mf"), variableBitrateArgs(), true);
         }
         if (forcedMatches(QStringLiteral("h264_nvenc")) && hasH264Nvenc) {
-            pushCandidate(QStringLiteral("h264_nvenc"), codecArgs(QStringLiteral("h264_nvenc")), true);
+            pushCandidate(QStringLiteral("h264_nvenc"), variableBitrateArgs(), true);
         }
         if (forcedMatches(QStringLiteral("h264_qsv")) && hasH264Qsv) {
-            pushCandidate(QStringLiteral("h264_qsv"), codecArgs(QStringLiteral("h264_qsv")), true);
+            pushCandidate(QStringLiteral("h264_qsv"), variableBitrateArgs(), true);
         }
         if (forcedMatches(QStringLiteral("h264_amf")) && hasH264Amf) {
-            pushCandidate(QStringLiteral("h264_amf"), codecArgs(QStringLiteral("h264_amf")), true);
+            pushCandidate(QStringLiteral("h264_amf"), variableBitrateArgs(), true);
         }
         if (forcedMatches(QStringLiteral("h264_mf")) && hasH264Mf) {
-            pushCandidate(QStringLiteral("h264_mf"), codecArgs(QStringLiteral("h264_mf")), true);
+            pushCandidate(QStringLiteral("h264_mf"), variableBitrateArgs(), true);
         }
         if (forcedMatches(QStringLiteral("libx264")) && hasLibx264) {
-            pushCandidate(QStringLiteral("libx264"), codecArgs(QStringLiteral("libx264")), false);
+            pushCandidate(QStringLiteral("libx264"), x264Args, false);
         }
         if (forcedMatches(QStringLiteral("libopenh264")) && hasOpenH264) {
-            pushCandidate(QStringLiteral("libopenh264"), codecArgs(QStringLiteral("libopenh264")), false);
+            pushCandidate(
+                QStringLiteral("libopenh264"),
+                QStringList{
+                    QStringLiteral("-b:v"), QString::number(estimatedBitrateKbps) + QLatin1String("k")
+                },
+                false
+            );
         }
         if (forcedMatches(QStringLiteral("mpeg4")) && hasMpeg4) {
-            pushCandidate(QStringLiteral("mpeg4"), codecArgs(QStringLiteral("mpeg4")), false);
+            pushCandidate(
+                QStringLiteral("mpeg4"),
+                QStringList{
+                    QStringLiteral("-q:v"), QStringLiteral("4")
+                },
+                false
+            );
         }
     }
     if (hasMpeg4 || candidates.isEmpty()) {
-        pushCandidate(QStringLiteral("mpeg4"), codecArgs(QStringLiteral("mpeg4")), false);
+        pushCandidate(
+            QStringLiteral("mpeg4"),
+            QStringList{
+                QStringLiteral("-q:v"), QStringLiteral("4")
+            },
+            false
+        );
     }
 
     if (!forcedEncoder.isEmpty()) {
@@ -2045,6 +1942,10 @@ VideoEncoderConfig chooseVideoEncoder(
         if (probeLog != nullptr) {
             *probeLog = QStringLiteral("encoder_probe forced=%1 unavailable").arg(forcedEncoder);
         }
+        config.codec = QStringLiteral("mpeg4");
+        config.extraArgs = {QStringLiteral("-q:v"), QStringLiteral("4")};
+        config.isHardware = false;
+        return config;
     }
 
     const bool skipRuntimeProbe = envFlagEnabled(QStringLiteral("MIACODE_EXPORT_SKIP_ENCODER_RUNTIME_PROBE"));
@@ -2086,37 +1987,21 @@ VideoEncoderConfig chooseVideoEncoder(
         }
     }
     if (!selected) {
-        if (hasLibx264) {
-            config.codec = QStringLiteral("libx264");
-            config.extraArgs = codecArgs(QStringLiteral("libx264"));
-            config.isHardware = false;
-            runtimeProbeLines.append(QStringLiteral("fallback=unverified:libx264"));
-        } else if (hasOpenH264) {
-            config.codec = QStringLiteral("libopenh264");
-            config.extraArgs = codecArgs(QStringLiteral("libopenh264"));
-            config.isHardware = false;
-            runtimeProbeLines.append(QStringLiteral("fallback=unverified:libopenh264"));
-        } else if (!candidates.isEmpty()) {
-            config = candidates.constFirst();
-            runtimeProbeLines.append(QStringLiteral("fallback=unverified:%1").arg(config.codec));
-        } else {
-            config.codec = QStringLiteral("mpeg4");
-            config.extraArgs = {QStringLiteral("-q:v"), QStringLiteral("4")};
-            config.isHardware = false;
-            runtimeProbeLines.append(QStringLiteral("fallback=hardcoded:mpeg4"));
-        }
+        config.codec = QStringLiteral("mpeg4");
+        config.extraArgs = {QStringLiteral("-q:v"), QStringLiteral("4")};
+        config.isHardware = false;
+        runtimeProbeLines.append(QStringLiteral("fallback=hardcoded:mpeg4"));
     }
 
     if (probeLog != nullptr) {
         QString detail = QStringLiteral(
-            "encoder_probe hevc_nvenc=%1 hevc_qsv=%2 hevc_amf=%3 hevc_mf=%4 libx265=%5 "
-            "h264_nvenc=%6 h264_qsv=%7 h264_amf=%8 h264_mf=%9 libx264=%10 libopenh264=%11 mpeg4=%12 "
-            "selected=%13 hw=%14 bitrateK=%15 maxrateK=%16 size=%17x%18 autoMode=%19 hwFirst=%20 modeReason=%21")
+            "encoder_probe hevc_nvenc=%1 hevc_qsv=%2 hevc_amf=%3 hevc_mf=%4 "
+            "h264_nvenc=%5 h264_qsv=%6 h264_amf=%7 h264_mf=%8 libx264=%9 libopenh264=%10 mpeg4=%11 "
+            "selected=%12 hw=%13 bitrateK=%14 maxrateK=%15 size=%16x%17 autoMode=%18 hwFirst=%19 modeReason=%20")
             .arg(hasHevcNvenc ? 1 : 0)
             .arg(hasHevcQsv ? 1 : 0)
             .arg(hasHevcAmf ? 1 : 0)
             .arg(hasHevcMf ? 1 : 0)
-            .arg(hasLibx265 ? 1 : 0)
             .arg(hasH264Nvenc ? 1 : 0)
             .arg(hasH264Qsv ? 1 : 0)
             .arg(hasH264Amf ? 1 : 0)
@@ -2273,10 +2158,17 @@ bool writeWav16(const QString& path, const QVector<float>& samples, int sampleRa
         return false;
     }
 
+    QByteArray pcmBytes;
+    pcmBytes.resize(samples.size() * static_cast<int>(sizeof(qint16)));
+    qint16* out = reinterpret_cast<qint16*>(pcmBytes.data());
+    for (int i = 0; i < samples.size(); ++i) {
+        const float clamped = qBound(-1.0f, samples.at(i), 1.0f);
+        out[i] = static_cast<qint16>(qRound(clamped * 32767.0f));
+    }
+
     QDataStream stream(&file);
     stream.setByteOrder(QDataStream::LittleEndian);
-    const quint32 dataBytes =
-        static_cast<quint32>(samples.size() * static_cast<int>(sizeof(qint16)));
+    const quint32 dataBytes = static_cast<quint32>(pcmBytes.size());
     const quint32 riffChunkSize = 36u + dataBytes;
     const quint16 bitsPerSample = 16;
     const quint16 blockAlign = static_cast<quint16>(channels * (bitsPerSample / 8));
@@ -2295,23 +2187,8 @@ bool writeWav16(const QString& path, const QVector<float>& samples, int sampleRa
     stream << bitsPerSample;
     stream.writeRawData("data", 4);
     stream << dataBytes;
-
-    constexpr int kPcmChunkSamples = 16384;
-    QByteArray pcmBytes;
-    pcmBytes.resize(kPcmChunkSamples * static_cast<int>(sizeof(qint16)));
-    int sampleIndex = 0;
-    while (sampleIndex < samples.size()) {
-        const int chunkSamples = qMin(kPcmChunkSamples, samples.size() - sampleIndex);
-        const int chunkBytes = chunkSamples * static_cast<int>(sizeof(qint16));
-        qint16* out = reinterpret_cast<qint16*>(pcmBytes.data());
-        for (int i = 0; i < chunkSamples; ++i) {
-            const float clamped = qBound(-1.0f, samples.at(sampleIndex + i), 1.0f);
-            out[i] = static_cast<qint16>(qRound(clamped * 32767.0f));
-        }
-        if (file.write(pcmBytes.constData(), chunkBytes) != chunkBytes) {
-            return false;
-        }
-        sampleIndex += chunkSamples;
+    if (file.write(pcmBytes) != pcmBytes.size()) {
+        return false;
     }
     return true;
 }
@@ -3273,7 +3150,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     exportTimer.start();
     appendVideoExportLog(
         QStringLiteral("export_begin"),
-        QStringLiteral("output=%1 chart=%2 media=%3 track=%4 skin=%5 notes=%6 start=%7 duration=%8 size=%9x%10 fps=%11 profile=%12 sourceCanvas=%13")
+        QStringLiteral("output=%1 chart=%2 media=%3 track=%4 skin=%5 notes=%6 start=%7 duration=%8 size=%9x%10 fps=%11 sourceCanvas=%12")
             .arg(task.outputPath, task.chartPath, task.backgroundMediaPath, task.trackPath, task.skinDirectory)
             .arg(task.noteMarkers.size())
             .arg(task.exportStartSeconds, 0, 'f', 6)
@@ -3281,7 +3158,6 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(task.outputWidth)
             .arg(task.outputHeight)
             .arg(task.fps)
-            .arg(performanceProfileToken(task.performanceProfile))
             .arg(sourceCanvas != nullptr ? 1 : 0)
     );
     if (sourceCanvas == nullptr && task.skinDirectory.trimmed().isEmpty()) {
@@ -3337,8 +3213,11 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const double segmentStartSecond = qMax(0.0, task.exportStartSeconds);
     const double segmentDurationSeconds = task.contentDurationSeconds;
     const double segmentEndSecond = segmentStartSecond + segmentDurationSeconds;
-    const double timelineOriginSecond = segmentStartSecond - miacode::video_export::kLeadInSeconds;
-    const double totalSeconds = miacode::video_export::kLeadInSeconds + segmentDurationSeconds;
+    const double leadInSeconds = segmentStartSecond <= kTimelineEpsilonSeconds
+        ? miacode::video_export::kLeadInSeconds
+        : 0.0;
+    const double timelineOriginSecond = segmentStartSecond - leadInSeconds;
+    const double totalSeconds = leadInSeconds + segmentDurationSeconds;
     const int frameCount = qMax(1, qRound(totalSeconds * task.fps));
     const double alignedTotalSeconds = static_cast<double>(frameCount) / qMax(1, task.fps);
     const int frameWidth = qMax(1, task.outputWidth);
@@ -3358,7 +3237,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         filteredMarkersForRange(task.noteMarkers, timelineOriginSecond, segmentEndSecond);
     appendVideoExportLog(
         QStringLiteral("input_probe"),
-        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 timelineOrigin=%8 totalSeconds=%9 alignedSeconds=%10 frameCount=%11 size=%12x%13")
+        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 leadIn=%8 timelineOrigin=%9 totalSeconds=%10 alignedSeconds=%11 frameCount=%12 size=%13x%14")
             .arg(mediaPath)
             .arg(hasMedia ? 1 : 0)
             .arg(mediaIsImage ? 1 : 0)
@@ -3366,6 +3245,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(hasTrack ? 1 : 0)
             .arg(segmentStartSecond, 0, 'f', 6)
             .arg(segmentEndSecond, 0, 'f', 6)
+            .arg(leadInSeconds, 0, 'f', 6)
             .arg(timelineOriginSecond, 0, 'f', 6)
             .arg(totalSeconds, 0, 'f', 6)
             .arg(alignedTotalSeconds, 0, 'f', 6)
@@ -3563,7 +3443,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         filterParts << QStringLiteral("[base_media]null[base]");
     }
 
-    filterParts << QStringLiteral("[0:v]vflip[overlay_src]");
+    filterParts << QStringLiteral("[0:v]vflip,format=rgba[overlay_src]");
     filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3[sfx]")
                        .arg(sfxInputIndex)
                        .arg(totalSecondsText)
@@ -3604,47 +3484,36 @@ VideoExportResult VideoExportController::exportPreparedTask(
         frameWidth,
         frameHeight,
         task.fps,
-        task.performanceProfile,
         memoryInfo,
         &encoderProbeLog
     );
     appendVideoExportLog(QStringLiteral("encoder_select"), encoderProbeLog);
     const int idealThreadCount = qMax(1, QThread::idealThreadCount());
-    const bool speedProfile = task.performanceProfile == VideoExportPerformanceProfile::Speed;
-    const bool softwareX265 = !encoderConfig.isHardware && encoderConfig.codec == QLatin1String("libx265");
     const qint64 availMiB = bytesToMiB(memoryInfo.availablePhysicalBytes);
     const int encoderThreads = qBound(
         1,
         envIntValue(QStringLiteral("MIACODE_EXPORT_ENCODER_THREADS"), idealThreadCount),
         32
     );
-    const int defaultFilterThreads = softwareX265
-        ? ((memoryInfo.valid && availMiB >= 16384) ? 2 : 1)
-        : (encoderConfig.isHardware
-            ? (speedProfile
-                ? qBound(1, qMax(1, idealThreadCount / 4), 4)
-                : qBound(1, qMax(1, idealThreadCount / 8), 2))
-            : (speedProfile
-                ? qBound(1, idealThreadCount, 16)
-                : qBound(1, qMax(1, idealThreadCount / 2), 8)));
+    const int defaultFilterThreads = encoderConfig.isHardware
+        ? qBound(2, qMax(1, idealThreadCount / 2), 4)
+        : qBound(1, qMax(1, idealThreadCount / 2), 8);
     const int filterThreads = qBound(
         1,
         envIntValue(QStringLiteral("MIACODE_EXPORT_FILTER_THREADS"), defaultFilterThreads),
-        softwareX265 ? 2 : 16
+        encoderConfig.isHardware ? 4 : 16
     );
-    const int effectiveEncoderThreads = softwareX265 ? 0 : encoderThreads;
+    const int effectiveEncoderThreads = encoderThreads;
     appendVideoExportLog(
         QStringLiteral("thread_plan"),
-        QStringLiteral("ideal=%1 encoderThreads=%2 effectiveEncoderThreads=%3 filterThreads=%4 encoder=%5 hw=%6 x265Managed=%7 availMiB=%8 profile=%9")
+        QStringLiteral("ideal=%1 encoderThreads=%2 effectiveEncoderThreads=%3 filterThreads=%4 encoder=%5 hw=%6 availMiB=%7")
             .arg(idealThreadCount)
             .arg(encoderThreads)
             .arg(effectiveEncoderThreads)
             .arg(filterThreads)
             .arg(encoderConfig.codec)
             .arg(encoderConfig.isHardware ? 1 : 0)
-            .arg(softwareX265 ? 1 : 0)
             .arg(memoryInfo.valid ? QString::number(availMiB) : QStringLiteral("na"))
-            .arg(performanceProfileToken(task.performanceProfile))
     );
 
     PreviewCanvas exportCanvas;
@@ -3688,7 +3557,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     exportCanvas.setNoteMarkers(exportMarkers);
     exportCanvas.setMuriRenderOptions(task.muriRenderOptions);
     exportCanvas.setMuriAnalysisReport(task.muriAnalysisReport);
-    exportCanvas.setCpuTrackAreaCachingEnabled(speedProfile);
+    exportCanvas.setCpuTrackAreaCachingEnabled(false);
     const QSurfaceFormat requestedFormat = sourceCanvas != nullptr
         ? sourceCanvas->format()
         : QSurfaceFormat::defaultFormat();
@@ -3772,7 +3641,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     if (encoderConfig.codec.startsWith(QStringLiteral("h264"))) {
         args << QStringLiteral("-bf") << QStringLiteral("0");
     }
-    if (!encoderConfig.isHardware && !softwareX265) {
+    if (!encoderConfig.isHardware) {
         args << QStringLiteral("-threads") << QString::number(effectiveEncoderThreads);
     }
     args << encoderConfig.extraArgs;
