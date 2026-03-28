@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/hardcode-registry.md -->
-<!-- translation-source-hash: b01ace2c765a4edc36f081377280db8210becbd9669afd867b20fc0e3c6123fc -->
+<!-- translation-source-hash: 4b192f933605acb65158185681def01bae7e34cf3bff181e365291f6465e7652 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 硬编码登记
@@ -51,7 +51,7 @@
   - 规则：导出启发式可以先留本地，但凡影响输出兼容性或打包假设的变化都要记录
 - `src/tools/video_export/RawVideoPipeTransport.cpp`
   - 负责：raw video 管道队列深度、pipe buffer 大小、连接超时、writer 分块大小，以及有界生产者阻塞行为
-  - 当前调参说明：`RawVideoPipePlan::maxBufferedFrames` 默认是 `32` 帧，用来限制应用侧 rawvideo 在触发生产者阻塞前的积压上限；它属于后续可以继续结合设备数据和长时导出日志调整的导出性能参数
+  - 当前调参说明：`RawVideoPipePlan::maxBufferedFrames` 按 `32 * (1920*1080) / (width*height)` 计算，并再钳制到 `8..128`；这样可以让应用侧 rawvideo 积压量尽量贴近“1080p=32 帧”的基准，同时它仍然是后续可以继续结合设备数据和长时导出日志调整的导出性能参数
   - 规则：只要这些调参仍然只影响 ffmpeg rawvideo 边界上的导出稳定性和性能，就可以继续留在本地 helper 中
 - `src/tools/video_export/VideoExportDialog.cpp`
   - 负责：导出对话框 UI 尺寸与预览控制常量

@@ -47,7 +47,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Rule: export heuristics may stay local, but document behavior changes that affect output compatibility or packaging assumptions
 - `src/tools/video_export/RawVideoPipeTransport.cpp`
   - Owns: raw-video pipe queue depth, pipe buffer sizing, connect timeout, writer chunk size, and bounded producer blocking behavior
-  - Current tuning note: `RawVideoPipePlan::maxBufferedFrames` defaults to `32` frames and caps the app-side rawvideo backlog before producer-side blocking; treat it as an export-performance tuning knob that can continue to move as hardware data and long-export logs accumulate
+  - Current tuning note: `RawVideoPipePlan::maxBufferedFrames` is derived from frame size using `32 * (1920*1080) / (width*height)` and then clamped to `8..128`; this keeps the app-side rawvideo backlog near the 1080p=32-frame baseline while remaining an export-performance tuning knob that can continue to move as hardware data and long-export logs accumulate
   - Rule: keep transport-level tuning local while it only shapes export stability/performance at the ffmpeg rawvideo boundary
 - `src/tools/video_export/VideoExportDialog.cpp`
   - Owns: export-dialog UI sizing and preview control constants
