@@ -73,7 +73,7 @@ public:
         int outputWidth = 1024;
         int outputHeight = 1024;
         int fps = 60;
-        VideoExportPerformanceProfile performanceProfile = VideoExportPerformanceProfile::Balanced;
+        VideoExportPerformanceProfile performanceProfile = VideoExportPerformanceProfile::Speed;
         double exportStartSeconds = 0.0;
         double contentDurationSeconds = -1.0;
         bool showTimestamp = true;

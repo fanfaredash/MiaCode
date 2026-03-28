@@ -4627,7 +4627,7 @@ void MainWindow::onBatchExportPreviewVideo()
     task.outputWidth = 1024;
     task.outputHeight = 1024;
     task.fps = 60;
-    task.performanceProfile = VideoExportPerformanceProfile::Balanced;
+    task.performanceProfile = VideoExportPerformanceProfile::Speed;
     task.showTimestamp = previewShowTimestamp_;
     task.showObjectStatsHud = exportShowObjectStatsHud_;
 
