@@ -31,6 +31,7 @@ struct VideoExportSnapshot {
     int outputWidth = 1024;
     int outputHeight = 1024;
     int fps = 60;
+    bool fullRangeExport = true;
     QString outputPath;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;

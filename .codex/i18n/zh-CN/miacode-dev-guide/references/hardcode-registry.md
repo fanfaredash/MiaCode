@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/hardcode-registry.md -->
-<!-- translation-source-hash: 4c388c567b6f7386b2e71830824406dc878f9a26388c026fd221c285891e6e6c -->
+<!-- translation-source-hash: b01ace2c765a4edc36f081377280db8210becbd9669afd867b20fc0e3c6123fc -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 硬编码登记
@@ -88,3 +88,8 @@
 - 导出编码器与码率启发式
 - parser 的几何/时序假设
 - 所有在 `src/common/` 之外重复出现的文件名或资源查找字面量
+## 5. 2026-03 导出常量补充
+
+- `src/common/VideoExportConfig.h`
+  - 还负责：起点为 `0` 时的 lead-in 常量，以及起点非 `0` 的部分导出预加载常量。
+  - 作用域：导出时间轴对齐与前导加载行为。

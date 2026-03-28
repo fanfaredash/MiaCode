@@ -384,6 +384,91 @@ QString sanitizeExportFileStem(QString text, const QString& fallback = QStringLi
     return sanitized.isEmpty() ? fallback : sanitized;
 }
 
+QString appendMp4SuffixIfMissing(QString outputPath)
+{
+    outputPath = QDir::cleanPath(QDir::fromNativeSeparators(outputPath.trimmed()));
+    if (outputPath.isEmpty()) {
+        return QString();
+    }
+    if (!outputPath.endsWith(QStringLiteral(".mp4"), Qt::CaseInsensitive)) {
+        outputPath += QStringLiteral(".mp4");
+    }
+    return outputPath;
+}
+
+QString makeUniqueVideoExportOutputPath(const QString& outputPath)
+{
+    const QString normalizedPath = appendMp4SuffixIfMissing(outputPath);
+    if (normalizedPath.isEmpty()) {
+        return QString();
+    }
+
+    const QFileInfo outputInfo(normalizedPath);
+    const QDir outputDir = outputInfo.absoluteDir();
+    QString fileStem = outputInfo.fileName().trimmed();
+    if (fileStem.endsWith(QStringLiteral(".mp4"), Qt::CaseInsensitive)) {
+        fileStem.chop(4);
+    }
+    if (fileStem.isEmpty()) {
+        fileStem = QStringLiteral("out");
+    }
+
+    const auto buildCandidatePath = [&outputDir, &fileStem](int duplicateIndex) {
+        const QString fileName = duplicateIndex <= 0
+            ? QStringLiteral("%1.mp4").arg(fileStem)
+            : QStringLiteral("%1(%2).mp4").arg(fileStem).arg(duplicateIndex);
+        return QDir::cleanPath(outputDir.filePath(fileName));
+    };
+
+    QString candidatePath = buildCandidatePath(0);
+    if (!QFileInfo::exists(candidatePath)) {
+        return candidatePath;
+    }
+
+    for (int duplicateIndex = 1;; ++duplicateIndex) {
+        candidatePath = buildCandidatePath(duplicateIndex);
+        if (!QFileInfo::exists(candidatePath)) {
+            return candidatePath;
+        }
+    }
+}
+
+QString resolveVideoExportOutputPath(
+    const QString& requestedOutputPath,
+    const QString& defaultDirectory,
+    const QString& defaultOutputName
+)
+{
+    const QString baseDirectory = defaultDirectory.trimmed().isEmpty()
+        ? QDir::currentPath()
+        : QDir::cleanPath(QDir::fromNativeSeparators(defaultDirectory.trimmed()));
+    const QString normalizedDefaultName = appendMp4SuffixIfMissing(
+        defaultOutputName.trimmed().isEmpty() ? QStringLiteral("out.mp4") : defaultOutputName
+    );
+
+    const QString trimmedRequestedOutput = requestedOutputPath.trimmed();
+    QString resolvedOutputPath = QDir::fromNativeSeparators(trimmedRequestedOutput);
+    if (resolvedOutputPath.isEmpty()) {
+        resolvedOutputPath = QDir(baseDirectory).filePath(normalizedDefaultName);
+    } else {
+        const bool trailingSeparator = trimmedRequestedOutput.endsWith('/') || trimmedRequestedOutput.endsWith('\\');
+        const QFileInfo requestedInfo(resolvedOutputPath);
+        if (requestedInfo.isRelative()) {
+            resolvedOutputPath = QDir(baseDirectory).absoluteFilePath(resolvedOutputPath);
+        }
+
+        const QFileInfo absoluteInfo(resolvedOutputPath);
+        if ((absoluteInfo.exists() && absoluteInfo.isDir()) || trailingSeparator) {
+            const QString outputDirPath = absoluteInfo.exists() && absoluteInfo.isDir()
+                ? absoluteInfo.absoluteFilePath()
+                : resolvedOutputPath;
+            resolvedOutputPath = QDir(outputDirPath).filePath(normalizedDefaultName);
+        }
+    }
+
+    return makeUniqueVideoExportOutputPath(resolvedOutputPath);
+}
+
 QString videoExportBackgroundScaleModeToken(PreviewBackgroundScaleMode mode)
 {
     switch (mode) {
@@ -4393,6 +4478,7 @@ void MainWindow::onExportPreviewVideo()
     task.noteFlowSpeed = previewNoteFlowSpeed_;
     task.exportStartSeconds = 0.0;
     task.contentDurationSeconds = cappedExportEndSecond;
+    task.fullRangeExport = true;
     task.outputWidth = 1024;
     task.outputHeight = 1024;
     task.fps = 60;
@@ -4620,6 +4706,7 @@ void MainWindow::onBatchExportPreviewVideo()
     task.noteFlowSpeed = previewNoteFlowSpeed_;
     task.exportStartSeconds = 0.0;
     task.contentDurationSeconds = 0.0;
+    task.fullRangeExport = true;
     task.outputWidth = 1024;
     task.outputHeight = 1024;
     task.fps = 60;
@@ -4925,7 +5012,15 @@ bool MainWindow::buildVideoExportSnapshot(
     built.outputWidth = requestedTask.outputWidth;
     built.outputHeight = requestedTask.outputHeight;
     built.fps = requestedTask.fps;
-    built.outputPath = requestedTask.outputPath;
+    built.fullRangeExport = requestedTask.fullRangeExport;
+    const QString exportStem = sanitizeExportFileStem(document_.title, QStringLiteral("out"));
+    const QString difficultyName = SimaiDocument::difficultyShortName(activeDifficultyId_).replace(':', '_');
+    const QString defaultOutputName = QStringLiteral("%1_%2.mp4").arg(exportStem, difficultyName);
+    built.outputPath = resolveVideoExportOutputPath(
+        requestedTask.outputPath,
+        built.projectDir,
+        defaultOutputName
+    );
     built.showTimestamp = requestedTask.showTimestamp;
     built.showObjectStatsHud = requestedTask.showObjectStatsHud;
     built.skinLoadWaitMs = requestedTask.skinLoadWaitMs;
@@ -5106,7 +5201,12 @@ bool MainWindow::buildVideoExportSnapshotForChartDirectory(
     built.outputWidth = requestedTask.outputWidth;
     built.outputHeight = requestedTask.outputHeight;
     built.fps = requestedTask.fps;
-    built.outputPath = QDir(outputDirectory).filePath(defaultOutputName);
+    built.fullRangeExport = true;
+    built.outputPath = resolveVideoExportOutputPath(
+        QString(),
+        outputDirectory,
+        defaultOutputName
+    );
     built.showTimestamp = requestedTask.showTimestamp;
     built.showObjectStatsHud = requestedTask.showObjectStatsHud;
     built.skinLoadWaitMs = requestedTask.skinLoadWaitMs;
@@ -5599,12 +5699,16 @@ void MainWindow::handleVideoExportWorkerProcessFinished(int exitCode, int exitSt
     }
 
     if (videoExportWorkerSuccess_) {
+        const QFileInfo resolvedOutputInfo(videoExportWorkerOutputPath_);
+        const QString resolvedOutputName = resolvedOutputInfo.fileName().trimmed().isEmpty()
+            ? QDir::toNativeSeparators(videoExportWorkerOutputPath_)
+            : resolvedOutputInfo.fileName();
         QMessageBox dialog(
             QMessageBox::Information,
             uiText("dialog.video_export.title", "Export Video"),
             QStringLiteral("%1\n\n%2")
                 .arg(uiText("dialog.video_export.message.completed", "Export completed."))
-                .arg(QDir::toNativeSeparators(videoExportWorkerOutputPath_)),
+                .arg(resolvedOutputName),
             QMessageBox::NoButton,
             this
         );
@@ -5813,20 +5917,11 @@ bool MainWindow::exportPreviewVideoFromCli(
         .arg(exportStem)
         .arg(difficultyName);
 
-    QString outputPath = request.outputPath.trimmed();
-    if (outputPath.isEmpty()) {
-        outputPath = chartInfo.absoluteDir().filePath(defaultOutputName);
-    } else {
-        const bool trailingSeparator = outputPath.endsWith('/') || outputPath.endsWith('\\');
-        const QFileInfo outputInfo(outputPath);
-        if ((outputInfo.exists() && outputInfo.isDir()) || trailingSeparator) {
-            const QString outputDirPath = outputInfo.exists() && outputInfo.isDir()
-                ? outputInfo.absoluteFilePath()
-                : outputPath;
-            outputPath = QDir(outputDirPath).filePath(defaultOutputName);
-        }
-    }
-    outputPath = QDir::cleanPath(outputPath);
+    QString outputPath = resolveVideoExportOutputPath(
+        request.outputPath,
+        chartInfo.absoluteDir().absolutePath(),
+        defaultOutputName
+    );
 
     const QFileInfo outputInfo(outputPath);
     const QString outputDirPath = outputInfo.absolutePath();
@@ -5858,6 +5953,9 @@ bool MainWindow::exportPreviewVideoFromCli(
     const double contentDurationSeconds = request.contentDurationSeconds > 0.0
         ? request.contentDurationSeconds
         : maxDuration;
+    const bool fullRangeExport =
+        exportStartSeconds <= 1e-6
+        && exportStartSeconds + contentDurationSeconds + 1e-6 >= cappedExportEndSecond;
     if (contentDurationSeconds <= 0.0) {
         return fail(
             QStringLiteral("content duration is not positive"),
@@ -5882,6 +5980,7 @@ bool MainWindow::exportPreviewVideoFromCli(
     task.noteFlowSpeed = request.noteFlowSpeed;
     task.exportStartSeconds = exportStartSeconds;
     task.contentDurationSeconds = contentDurationSeconds;
+    task.fullRangeExport = fullRangeExport;
     task.outputWidth = request.outputWidth;
     task.outputHeight = request.outputHeight;
     task.fps = request.fps;

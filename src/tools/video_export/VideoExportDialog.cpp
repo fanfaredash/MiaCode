@@ -1251,8 +1251,13 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
         flowSpeedMin + qRound((exportFlowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
         flowSpeedMax
     );
-    updated.exportStartSeconds = rangeStartSeconds();
-    updated.contentDurationSeconds = qMax(0.0, rangeEndSeconds() - updated.exportStartSeconds);
+    const double selectedRangeStart = rangeStartSeconds();
+    const double selectedRangeEnd = rangeEndSeconds();
+    updated.exportStartSeconds = selectedRangeStart;
+    updated.contentDurationSeconds = qMax(0.0, selectedRangeEnd - updated.exportStartSeconds);
+    updated.fullRangeExport =
+        selectedRangeStart <= 1e-6
+        && selectedRangeEnd + 1e-6 >= totalDurationSeconds_;
 
     const QFileInfo outputInfo(updated.outputPath);
     const QDir outputDir = outputInfo.absoluteDir();

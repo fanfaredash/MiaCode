@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/cross-chain-linkage.md -->
-<!-- translation-source-hash: 0ed4cfe4f9d47c93971f58db1d1a5fb63cccdaa6dd812935ff8030747ae5b1dc -->
+<!-- translation-source-hash: 04a053ad14d91ad7b163ec2c6e3dd59495570a961916bda26dd8b545d3bb8c32 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 跨链路联动
@@ -196,3 +196,9 @@ Wifi 补充说明：
 - 新增了导出序列化字段。
 - 某条重复的查找规则被集中化，或反过来被拆散。
 - 某条时序规则开始影响以前不依赖它的另一个子系统。
+## 11. 2026-03 导出补充同步说明
+
+- 当导出请求不是“完整导出”时，导出会增加 `1.5s` 预加载，但导出的物件集合会先按 `marker.second` 是否位于 `[L, R]` 内来筛选。
+- 预览导出渲染、Muri overlay 与导出 SFX 都要消费同一批已筛选 marker；不要再额外做 `L-1 ~ L` 的运行时激活判定。
+- slide 头部与轨迹视作同一个 `TimelineNoteMarker`，因此会一起保留或一起剔除，时间参考头部时间戳。
+- `snapshot.outputPath` 在 worker 启动前就应当已经是最终输出路径；主窗口会先补齐 `.mp4` 后缀并处理重名回退（如 `name(1).mp4`）。

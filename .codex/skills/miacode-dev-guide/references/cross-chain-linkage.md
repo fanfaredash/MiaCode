@@ -55,6 +55,7 @@ Shared concerns:
 - `trackBreak` vs `headBreak`
 - touchhold span semantics
 - firework timing offsets
+- partial export timing: when the export request is not marked as full-range, export now uses a 1.5-second preload, but the exported marker set is filtered up front by `marker.second` within `[L, R]`; preview/export rendering, Muri overlays, and export SFX all consume that same filtered marker set
 
 If one side changes, inspect the other side in the same patch.
 
@@ -126,6 +127,7 @@ Implication:
 
 - New export settings must be added on both serialization and deserialization sides.
 - Worker protocol changes must be reflected in both `main.cpp` and MainWindow worker-event handling.
+- `snapshot.outputPath` should already be the final `.mp4` path by the time the worker starts; `MainWindow` resolves missing suffixes and duplicate-name fallbacks before launching the worker so completion UI and worker results can treat it as authoritative.
 
 ## 8. Shared Render State Flows Through Preview And Export
 

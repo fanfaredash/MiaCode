@@ -139,6 +139,7 @@ QJsonObject VideoExportSnapshot::toJson() const
     exportObject.insert(QStringLiteral("output_width"), outputWidth);
     exportObject.insert(QStringLiteral("output_height"), outputHeight);
     exportObject.insert(QStringLiteral("fps"), fps);
+    exportObject.insert(QStringLiteral("full_range_export"), fullRangeExport);
     exportObject.insert(QStringLiteral("output_path"), outputPath);
     root.insert(QStringLiteral("export"), exportObject);
     return root;
@@ -226,6 +227,7 @@ bool VideoExportSnapshot::fromJson(
     parsed.outputWidth = exportObject.value(QStringLiteral("output_width")).toInt(parsed.outputWidth);
     parsed.outputHeight = exportObject.value(QStringLiteral("output_height")).toInt(parsed.outputHeight);
     parsed.fps = exportObject.value(QStringLiteral("fps")).toInt(parsed.fps);
+    parsed.fullRangeExport = exportObject.value(QStringLiteral("full_range_export")).toBool(parsed.fullRangeExport);
     parsed.outputPath = exportObject.value(QStringLiteral("output_path")).toString();
 
     if (parsed.chartTextUtf8.isEmpty()) {
@@ -297,6 +299,7 @@ bool buildVideoExportTaskFromSnapshot(
     built.outputWidth = snapshot.outputWidth;
     built.outputHeight = snapshot.outputHeight;
     built.fps = snapshot.fps;
+    built.fullRangeExport = snapshot.fullRangeExport;
     built.showTimestamp = snapshot.showTimestamp;
     built.showObjectStatsHud = snapshot.showObjectStatsHud;
     built.skinLoadWaitMs = qBound(0, snapshot.skinLoadWaitMs, 20000);

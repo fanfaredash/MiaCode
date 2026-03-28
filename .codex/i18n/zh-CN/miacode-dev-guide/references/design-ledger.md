@@ -1,6 +1,6 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/design-ledger.md -->
 <!-- translation-source-hash: 67bb235bcb35f0bf4dbc2e885149e32b47a4320b3886dda9cd2bbdef97b27d12 -->
-<!-- translation-source-hash: 69a82c254011821472ac303367333bae62e7c40b67a1e07ae6c81e63f5ebabb5 -->
+<!-- translation-source-hash: 2f8b5916efa4c687895605379278caaaed4f25eec7eb36861c28afbef7ed0c94 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 设计账本
@@ -73,3 +73,8 @@
 某个硬契约如果被有意放宽，不要在旧规则上叠加相互矛盾的新描述，而是直接改写或移除旧规则。
 
 某个设计点如果仍在讨论中，但当前代码已经依赖它，就把它写成“当前默认”或“开放/有风险”，不要写成永久规则。
+## 8. 2026-03 导出默认行为补充
+
+- 部分导出会保留起点为 `0` 时的旧 lead-in 行为。
+- 当导出请求不是“完整导出”时，会额外插入 `1.5s` 预加载，但实际导出的物件会先按 `marker.second` 是否落在 `[L, R]` 内来筛选；slide 头部与轨迹作为同一个 marker 一起保留或一起剔除。
+- 导出输出名现在会自动补 `.mp4`，并在重名时依次选择 `name(1).mp4`、`name(2).mp4` 等最终文件名，然后再启动 worker。
