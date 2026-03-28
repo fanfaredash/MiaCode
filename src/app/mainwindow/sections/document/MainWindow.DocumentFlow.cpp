@@ -615,7 +615,8 @@ void MainWindow::updatePauseButtonAppearance()
     if (pausePreviewAction_ == nullptr) {
         return;
     }
-    const QColor iconColor = UiTheme::colors().iconPrimary;
+    const QColor iconColor =
+        previewFullscreenActive_ ? previewFullscreenOverlayIconColor() : UiTheme::colors().iconPrimary;
     if (qtPreviewPlaying_) {
         pausePreviewAction_->setIcon(makePreviewPauseIcon(iconColor));
         pausePreviewAction_->setText(uiText("preview.pause", "Pause"));
@@ -629,7 +630,11 @@ void MainWindow::updatePauseButtonAppearance()
                 ? uiText("preview.pause", "Pause")
                 : uiText("preview.play", "Play")
         );
-        pausePreviewButton_->setStyleSheet(UiTheme::pausePreviewButtonStyleSheet(qtPreviewPlaying_));
+        pausePreviewButton_->setStyleSheet(
+            previewFullscreenActive_
+                ? previewFullscreenPauseButtonStyleSheet(qtPreviewPlaying_)
+                : UiTheme::pausePreviewButtonStyleSheet(qtPreviewPlaying_)
+        );
     }
 }
 

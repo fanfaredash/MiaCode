@@ -43,12 +43,23 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: parser-default geometry and timing assumptions used to derive marker behavior
   - Rule: parser-level constants can have repo-wide consequences; treat changes as cross-chain changes
 - `src/tools/video_export/VideoExportController.cpp`
-  - Owns: mix sample rate, encoder probe timeouts, bitrate heuristics, frame diagnostics thresholds, raw-video pipe queue depth and connect timeout, ffmpeg fallback behavior
-  - Current tuning note: `RawVideoPipePlan::maxBufferedFrames` defaults to `32` frames and caps the app-side rawvideo backlog before producer-side blocking; treat it as an export-performance tuning knob that can continue to move as hardware data and long-export logs accumulate
+  - Owns: mix sample rate, encoder probe timeouts, bitrate heuristics, frame diagnostics thresholds, ffmpeg fallback behavior
   - Rule: export heuristics may stay local, but document behavior changes that affect output compatibility or packaging assumptions
+- `src/tools/video_export/RawVideoPipeTransport.cpp`
+  - Owns: raw-video pipe queue depth, pipe buffer sizing, connect timeout, writer chunk size, and bounded producer blocking behavior
+  - Current tuning note: `RawVideoPipePlan::maxBufferedFrames` defaults to `32` frames and caps the app-side rawvideo backlog before producer-side blocking; treat it as an export-performance tuning knob that can continue to move as hardware data and long-export logs accumulate
+  - Rule: keep transport-level tuning local while it only shapes export stability/performance at the ffmpeg rawvideo boundary
 - `src/tools/video_export/VideoExportDialog.cpp`
   - Owns: export-dialog UI sizing and preview control constants
   - Rule: local UI constants usually stay local unless reused across dialogs
+- `src/app/mainwindow/MainWindow.cpp`
+  - Owns: embedded/fullscreen preview panel spacing plus fullscreen overlay timing, opacity, and reveal geometry constants
+  - Examples:
+    - fullscreen `Esc` hint top inset
+    - fullscreen control-bar side/bottom margins, max width, and bottom hot-zone height
+    - fullscreen control-bar hide offset, reveal animation duration, and opacity fade duration
+    - fullscreen control-bar auto-hide delay
+  - Rule: keep local while they only shape the main-window preview UX and do not need preview/export parity
 
 ## 3. Promotion Rules
 

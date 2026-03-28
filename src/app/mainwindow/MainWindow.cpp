@@ -3,7 +3,6 @@
 #include "BracketScopeHighlighter.h"
 #include "PlainCodeEditor.h"
 #include "PreviewCanvas.h"
-#include "PreviewIntegration.h"
 #include "PreviewMediaController.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
@@ -19,6 +18,7 @@
 #include "tools/video_export/BatchVideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
 #include "common/AssetPaths.h"
+#include "common/ChartAssetPaths.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewSfxAssets.h"
 #include "common/PreviewGameplayConfig.h"
@@ -35,6 +35,7 @@
 #include <QColor>
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QCursor>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDialog>
@@ -77,10 +78,11 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPlainTextEdit>
+#include <QPropertyAnimation>
 #include <QProcess>
-#include <QProcessEnvironment>
 #include <QProgressDialog>
 #include <QPushButton>
+#include <QEasingCurve>
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QShortcut>
@@ -104,7 +106,6 @@
 #include <QStyleOptionFrame>
 #include <QStyleOptionSlider>
 #include <QStringList>
-#include <QStringConverter>
 #include <QTimer>
 #include <QTextBlock>
 #include <QTextStream>
@@ -147,6 +148,15 @@ constexpr int kPreviewCanvasControlGap = 10;
 constexpr int kPreviewStatsBottomGap = 12;
 constexpr int kPreviewControlStatsGap = 10;
 constexpr int kPreviewControlStatsCardMinWidth = 280;
+constexpr int kPreviewFullscreenHintTopMargin = 28;
+constexpr int kPreviewFullscreenOverlaySideMargin = 18;
+constexpr int kPreviewFullscreenOverlayBottomMargin = 24;
+constexpr int kPreviewFullscreenOverlayMaxWidth = 10000;
+constexpr int kPreviewFullscreenOverlayHideOffset = 20;
+constexpr int kPreviewFullscreenControlsRevealHotzoneHeight = 120;
+constexpr int kPreviewFullscreenControlsAutoHideDelayMs = 1600;
+constexpr int kPreviewFullscreenControlsAnimationDurationMs = 180;
+constexpr int kPreviewFullscreenControlsOpacityAnimationDurationMs = 180;
 constexpr int kEditorTextFontSizeMin = 8;
 constexpr int kEditorTextFontSizeMax = 28;
 constexpr qreal kPreviewSeekInitialStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekInitialStepSeconds);
@@ -163,13 +173,141 @@ constexpr int kEditorFindBarTopMargin = 10;
 constexpr int kEditorFindBarOverlayGap = 8;
 constexpr int kPreviewScrubRenderIntervalMs = 33;
 constexpr qint64 kInvalidStarPreviewAboutClickWindowMs = 900;
-constexpr qint64 kLegacyFireworkStackingAboutClickWindowMs = 900;
 const QList<double> kEditorLineSpacingFactorOptions{
     0.0, 1.0, 1.5, 2.0, 3.0, 5.0,
 };
 const QList<double> kPreviewPlaybackRateOptions{
     0.25, 0.5, 0.75, 1.0, 1.25, 2.0,
 };
+
+QString cssRgba(const QColor& color, int alpha)
+{
+    return QStringLiteral("rgba(%1, %2, %3, %4)")
+        .arg(color.red())
+        .arg(color.green())
+        .arg(color.blue())
+        .arg(qBound(0, alpha, 255));
+}
+
+QString cssRgb(const QColor& color)
+{
+    return color.name(QColor::HexRgb);
+}
+
+QColor previewFullscreenOverlayIconColor()
+{
+    return QColor(QStringLiteral("#F8FAFC"));
+}
+
+QString previewFullscreenControlCardStyleSheet()
+{
+    const QColor overlayText = previewFullscreenOverlayIconColor();
+    const QColor accent = UiTheme::colors().accent;
+    return QStringLiteral(
+        "QFrame#PreviewControlCard {"
+        " background: rgba(0, 0, 0, 188);"
+        " border: 1px solid rgba(255, 255, 255, 42);"
+        " border-radius: 18px;"
+        "}"
+        "QFrame#PreviewControls {"
+        " background: transparent;"
+        " border: none;"
+        "}"
+        "QToolButton#PreviewControlButton {"
+        " color: %1;"
+        " padding: 7px 10px;"
+        " min-height: 32px;"
+        " border: 1px solid rgba(255, 255, 255, 40);"
+        " border-radius: 9px;"
+        " background: rgba(255, 255, 255, 18);"
+        " font-weight: 600;"
+        "}"
+        "QToolButton#PreviewControlButton:hover {"
+        " background: rgba(255, 255, 255, 32);"
+        " border-color: rgba(255, 255, 255, 76);"
+        "}"
+        "QToolButton#PreviewControlButton:pressed {"
+        " background: rgba(255, 255, 255, 46);"
+        "}"
+        "QSlider::groove:horizontal {"
+        " height: 6px;"
+        " background: rgba(255, 255, 255, 42);"
+        " border-radius: 3px;"
+        "}"
+        "QSlider::sub-page:horizontal {"
+        " background: %2;"
+        " border-radius: 3px;"
+        "}"
+        "QSlider::add-page:horizontal {"
+        " background: rgba(255, 255, 255, 22);"
+        " border-radius: 3px;"
+        "}"
+        "QSlider::handle:horizontal {"
+        " width: 12px;"
+        " margin: -4px 0;"
+        " border-radius: 6px;"
+        " background: %1;"
+        " border: 1px solid rgba(15, 23, 42, 102);"
+        "}"
+    )
+        .arg(cssRgb(overlayText))
+        .arg(cssRgb(accent));
+}
+
+QString previewFullscreenHintStyleSheet()
+{
+    return QStringLiteral(
+        "QLabel {"
+        " background: rgba(0, 0, 0, 188);"
+        " color: #F8FAFC;"
+        " border: 1px solid rgba(255, 255, 255, 52);"
+        " border-radius: 16px;"
+        " padding: 10px 16px;"
+        " font-size: 14px;"
+        " font-weight: 600;"
+        "}"
+    );
+}
+
+QString previewFullscreenPauseButtonStyleSheet(bool active)
+{
+    const QColor overlayText = previewFullscreenOverlayIconColor();
+    const QColor accent = UiTheme::colors().accent;
+    if (active) {
+        return QStringLiteral(
+            "QToolButton {"
+            " color: %1;"
+            " padding: 7px 10px;"
+            " min-height: 32px;"
+            " border: 1px solid %2;"
+            " border-radius: 9px;"
+            " background: %3;"
+            " font-weight: 700;"
+            "}"
+            "QToolButton:hover { background: %4; }"
+        )
+            .arg(cssRgb(overlayText))
+            .arg(cssRgba(accent, 220))
+            .arg(cssRgba(accent, 208))
+            .arg(cssRgba(accent, 255));
+    }
+    return QStringLiteral(
+        "QToolButton {"
+        " color: %1;"
+        " padding: 7px 10px;"
+        " min-height: 32px;"
+        " border: 1px solid rgba(255, 255, 255, 40);"
+        " border-radius: 9px;"
+        " background: rgba(255, 255, 255, 18);"
+        " font-weight: 600;"
+        "}"
+        "QToolButton:hover {"
+        " background: rgba(255, 255, 255, 32);"
+        " border-color: rgba(255, 255, 255, 76);"
+        "}"
+    )
+        .arg(cssRgb(overlayText));
+}
 
 double normalizeEditorLineSpacingFactor(double factor)
 {
@@ -1118,24 +1256,6 @@ QFont uiMonoFont(int pointSize, QFont::Weight weight = QFont::Medium)
 #endif
 }
 
-QProcessEnvironment pythonProcessEnvironment()
-{
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    env.insert("PYTHONIOENCODING", "utf-8");
-    env.insert("PYTHONUTF8", "1");
-    return env;
-}
-
-QString decodeProcessText(const QByteArray& data)
-{
-    QStringDecoder utf8Decoder(QStringConverter::Utf8);
-    const QString utf8Text = utf8Decoder.decode(data);
-    if (!utf8Decoder.hasError()) {
-        return utf8Text;
-    }
-    return QString::fromLocal8Bit(data);
-}
-
 QByteArray noteMarkerSignature(const QVector<TimelineNoteMarker>& notes)
 {
     QByteArray signature;
@@ -1561,6 +1681,50 @@ QIcon makePreviewResumeIcon(const QColor& color)
     return QIcon(pixmap);
 }
 
+QIcon makePreviewEnterFullscreenIcon(const QColor& color)
+{
+    QPixmap pixmap(20, 20);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QPen pen(color, 1.7);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawLine(QPointF(7.8, 4.8), QPointF(4.8, 4.8));
+    painter.drawLine(QPointF(4.8, 4.8), QPointF(4.8, 7.8));
+    painter.drawLine(QPointF(12.2, 4.8), QPointF(15.2, 4.8));
+    painter.drawLine(QPointF(15.2, 4.8), QPointF(15.2, 7.8));
+    painter.drawLine(QPointF(4.8, 12.2), QPointF(4.8, 15.2));
+    painter.drawLine(QPointF(4.8, 15.2), QPointF(7.8, 15.2));
+    painter.drawLine(QPointF(12.2, 15.2), QPointF(15.2, 15.2));
+    painter.drawLine(QPointF(15.2, 12.2), QPointF(15.2, 15.2));
+    return QIcon(pixmap);
+}
+
+QIcon makePreviewExitFullscreenIcon(const QColor& color)
+{
+    QPixmap pixmap(20, 20);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QPen pen(color, 1.7);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawLine(QPointF(8.2, 4.8), QPointF(8.2, 8.2));
+    painter.drawLine(QPointF(4.8, 8.2), QPointF(8.2, 8.2));
+    painter.drawLine(QPointF(11.8, 4.8), QPointF(11.8, 8.2));
+    painter.drawLine(QPointF(11.8, 8.2), QPointF(15.2, 8.2));
+    painter.drawLine(QPointF(4.8, 11.8), QPointF(8.2, 11.8));
+    painter.drawLine(QPointF(8.2, 11.8), QPointF(8.2, 15.2));
+    painter.drawLine(QPointF(11.8, 11.8), QPointF(15.2, 11.8));
+    painter.drawLine(QPointF(11.8, 11.8), QPointF(11.8, 15.2));
+    return QIcon(pixmap);
+}
+
 QIcon makeSettingsGearIcon(const QColor& color)
 {
     QPixmap pixmap(18, 18);
@@ -1884,9 +2048,11 @@ void MainWindow::applyUiTheme()
     }
 
     const QColor iconColor = UiTheme::colors().iconPrimary;
+    const QColor previewControlIconColor =
+        previewFullscreenActive_ ? previewFullscreenOverlayIconColor() : iconColor;
     const QColor secondaryIconColor = UiTheme::colors().iconSecondary;
     if (stopPreviewAction_ != nullptr) {
-        stopPreviewAction_->setIcon(makePreviewStopIcon(iconColor));
+        stopPreviewAction_->setIcon(makePreviewStopIcon(previewControlIconColor));
     }
     if (settingsPlaceholderAction_ != nullptr) {
         settingsPlaceholderAction_->setIcon(makeSettingsGearIcon(secondaryIconColor));
@@ -1905,8 +2071,17 @@ void MainWindow::applyUiTheme()
     if (exportVideoButton_ != nullptr) {
         exportVideoButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
     }
+    if (previewFullscreenHintLabel_ != nullptr) {
+        previewFullscreenHintLabel_->setStyleSheet(previewFullscreenHintStyleSheet());
+    }
+    if (previewFullscreenActive_
+        && previewControlCard_ != nullptr
+        && previewControlCard_->parentWidget() == previewFullscreenControlsWindow_) {
+        previewControlCard_->setStyleSheet(previewFullscreenControlCardStyleSheet());
+    }
     updateEditorValidationSummary();
     updatePauseButtonAppearance();
+    updatePreviewFullscreenButtonAppearance();
     update();
 }
 
@@ -1988,53 +2163,6 @@ QString startupTimingLogPath()
 QString runtimeDebugLogPath()
 {
     return miacode::debug_options::runtimeDebugLogPath();
-}
-
-bool probeStageMediaAvailable(const QString& chartPath)
-{
-    if (chartPath.isEmpty()) {
-        return false;
-    }
-
-    const QFileInfo chartInfo(chartPath);
-    const QDir chartDir(chartInfo.absolutePath());
-    QStringList candidates;
-#ifdef HAVE_QT_MULTIMEDIA
-    candidates << QStringLiteral("bg.mp4") << QStringLiteral("pv.mp4");
-#endif
-    candidates << QStringLiteral("bg.jpg")
-               << QStringLiteral("bg.png")
-               << QStringLiteral("bg.jpeg");
-    for (const QString& name : candidates) {
-        if (QFileInfo::exists(chartDir.filePath(name))) {
-            return true;
-        }
-    }
-    return false;
-}
-
-QString resolveExportBackgroundMediaPath(const QString& chartPath)
-{
-    if (chartPath.isEmpty()) {
-        return QString();
-    }
-
-    const QFileInfo chartInfo(chartPath);
-    const QDir chartDir(chartInfo.absolutePath());
-    QStringList candidates;
-#ifdef HAVE_QT_MULTIMEDIA
-    candidates << QStringLiteral("bg.mp4") << QStringLiteral("pv.mp4");
-#endif
-    candidates << QStringLiteral("bg.jpg")
-               << QStringLiteral("bg.png")
-               << QStringLiteral("bg.jpeg");
-    for (const QString& name : candidates) {
-        const QString candidatePath = chartDir.filePath(name);
-        if (QFileInfo::exists(candidatePath)) {
-            return QDir::cleanPath(candidatePath);
-        }
-    }
-    return QString();
 }
 
 bool startupTimingEnabled()
@@ -2303,8 +2431,8 @@ void MainWindow::logWindowGeometryDebug(const QString& tag, const QString& detai
         .arg(isMaximized() ? 1 : 0)
         .arg(isFullScreen() ? 1 : 0)
         .arg(0)
-        .arg(previewArrangeGeneration_)
-        .arg(previewArrangeRetryCount_);
+        .arg(0)
+        .arg(0);
 
     if (!detail.isEmpty()) {
         payload += " detail=" + detail;
@@ -2442,13 +2570,39 @@ void MainWindow::closeEvent(QCloseEvent* event)
     if (maybeSaveBeforeContinue()) {
         savePortableState();
         clearVideoExportWorkerState();
-        stopPreviewSession();
         event->accept();
         logWindowGeometryDebug("close_event_accept");
     } else {
         event->ignore();
         logWindowGeometryDebug("close_event_ignore");
     }
+}
+
+void MainWindow::appendOutput(const QString& title, const QString& payload)
+{
+    if (!runtimeDebugOutputEnabled_) {
+        return;
+    }
+    QFile logFile(runtimeDebugLogPath());
+    if (logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+        QTextStream out(&logFile);
+        out << timestampLine(title) << "\n";
+        out << payload << "\n\n";
+    }
+    if (outputView_ == nullptr) {
+        return;
+    }
+    outputView_->appendPlainText(timestampLine(title));
+    outputView_->appendPlainText(payload);
+    outputView_->appendPlainText(QString());
+}
+
+bool MainWindow::saveBeforePreviewStart()
+{
+    if (documentDirty_ || currentFieldDirty_) {
+        return onSaveFile();
+    }
+    return maybeSaveCurrentFieldChanges();
 }
 
 void MainWindow::setInvalidStarPreviewEasterEggEnabled(bool enabled)
@@ -2459,18 +2613,6 @@ void MainWindow::setInvalidStarPreviewEasterEggEnabled(bool enabled)
     invalidStarPreviewEasterEggEnabled_ = enabled;
     SimaiNativeParser::setInvalidStarPreviewEnabled(enabled);
     refreshTimelineMetadata();
-    playInvalidStarPreviewEasterEggSound(enabled);
-}
-
-void MainWindow::setLegacyFireworkStackingEasterEggEnabled(bool enabled)
-{
-    if (legacyFireworkStackingEasterEggEnabled_ == enabled) {
-        return;
-    }
-    legacyFireworkStackingEasterEggEnabled_ = enabled;
-    if (previewCanvas_ != nullptr) {
-        previewCanvas_->setLegacyFireworkStackingEnabled(enabled);
-    }
     playInvalidStarPreviewEasterEggSound(enabled);
 }
 
@@ -2535,30 +2677,6 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
         if (event->type() == QEvent::MouseButtonRelease) {
             auto* mouseEvent = static_cast<QMouseEvent*>(event);
             if (mouseEvent->button() == Qt::LeftButton) {
-                if (mouseEvent->modifiers().testFlag(Qt::ShiftModifier)) {
-                    if (legacyFireworkStackingEasterEggEnabled_) {
-                        legacyFireworkStackingAboutClickCount_ = 0;
-                        legacyFireworkStackingAboutClickElapsed_.invalidate();
-                        setLegacyFireworkStackingEasterEggEnabled(false);
-                    } else {
-                        if (!legacyFireworkStackingAboutClickElapsed_.isValid()
-                            || legacyFireworkStackingAboutClickElapsed_.elapsed() > kLegacyFireworkStackingAboutClickWindowMs) {
-                            legacyFireworkStackingAboutClickCount_ = 0;
-                        }
-                        ++legacyFireworkStackingAboutClickCount_;
-                        if (legacyFireworkStackingAboutClickElapsed_.isValid()) {
-                            legacyFireworkStackingAboutClickElapsed_.restart();
-                        } else {
-                            legacyFireworkStackingAboutClickElapsed_.start();
-                        }
-                        if (legacyFireworkStackingAboutClickCount_ >= 3) {
-                            legacyFireworkStackingAboutClickCount_ = 0;
-                            legacyFireworkStackingAboutClickElapsed_.invalidate();
-                            setLegacyFireworkStackingEasterEggEnabled(true);
-                        }
-                    }
-                    return true;
-                }
                 if (invalidStarPreviewEasterEggEnabled_) {
                     invalidStarPreviewAboutClickCount_ = 0;
                     invalidStarPreviewAboutClickElapsed_.invalidate();
@@ -2615,7 +2733,66 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
         || watched == previewCanvas_
         || watched == previewCanvasContainer_
         || watched == previewCanvasFrame_
-        || watched == previewPanel_;
+        || watched == previewPanel_
+        || watched == previewFullscreenWindow_
+        || watched == previewFullscreenHost_
+        || watched == previewFullscreenControlsWindow_
+        || watched == previewFullscreenButton_;
+    const bool previewFullscreenOverlayScope =
+        watched == previewFullscreenWindow_
+        || watched == previewFullscreenHost_
+        || watched == previewFullscreenControlsWindow_
+        || watched == previewFullscreenHintWindow_
+        || watched == previewCanvas_
+        || watched == previewCanvasContainer_
+        || watched == previewCanvasFrame_
+        || watched == previewControlCard_
+        || watched == previewSlider_
+        || watched == stopPreviewButton_
+        || watched == pausePreviewButton_
+        || watched == previewSpeedButton_
+        || watched == previewFullscreenButton_;
+    if (previewFullscreenActive_ && previewFullscreenOverlayScope) {
+        if (event->type() == QEvent::MouseMove
+            || event->type() == QEvent::MouseButtonPress
+            || event->type() == QEvent::Wheel) {
+            const QPoint globalCursorPos = QCursor::pos();
+            if (shouldRevealPreviewFullscreenControls(globalCursorPos)) {
+                showPreviewFullscreenControls(event->type() != QEvent::MouseButtonPress);
+            } else if (previewFullscreenControlsVisible_) {
+                schedulePreviewFullscreenControlsAutoHide();
+            }
+        }
+        if (event->type() == QEvent::KeyPress) {
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (!keyEvent->isAutoRepeat()
+                && keyEvent->modifiers() == Qt::NoModifier
+                && keyEvent->key() == Qt::Key_F11) {
+                togglePreviewFullscreen();
+                return true;
+            }
+            if (!keyEvent->isAutoRepeat()
+                && keyEvent->modifiers() == Qt::NoModifier
+                && keyEvent->key() == Qt::Key_Escape) {
+                exitPreviewFullscreen();
+                return true;
+            }
+        }
+    }
+    if (previewFullscreenWindow_ != nullptr && watched == previewFullscreenWindow_) {
+        if (event->type() == QEvent::Close) {
+            exitPreviewFullscreen();
+            event->ignore();
+            return true;
+        }
+        if (previewFullscreenActive_
+            && (event->type() == QEvent::Move
+                || event->type() == QEvent::Resize
+                || event->type() == QEvent::Show
+                || event->type() == QEvent::WindowStateChange)) {
+            updatePreviewFullscreenOverlayGeometry();
+        }
+    }
     if (previewSlider_ != nullptr && watched == previewSlider_) {
         if (event->type() == QEvent::MouseButtonPress) {
             auto* mouseEvent = static_cast<QMouseEvent*>(event);
@@ -2654,6 +2831,19 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
     if (previewKeyScope) {
         if (event->type() == QEvent::KeyPress) {
             auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (!keyEvent->isAutoRepeat()
+                && keyEvent->modifiers() == Qt::NoModifier
+                && keyEvent->key() == Qt::Key_F11) {
+                togglePreviewFullscreen();
+                return true;
+            }
+            if (previewFullscreenActive_
+                && !keyEvent->isAutoRepeat()
+                && keyEvent->modifiers() == Qt::NoModifier
+                && keyEvent->key() == Qt::Key_Escape) {
+                exitPreviewFullscreen();
+                return true;
+            }
             if (keyEvent->key() == Qt::Key_Space
                 && keyEvent->modifiers() == Qt::NoModifier
                 && !keyEvent->isAutoRepeat()) {
@@ -3063,8 +3253,8 @@ QString MainWindow::resolveDefaultTrackPath() const
         return envTrack;
     }
     if (!currentFilePath_.isEmpty()) {
-        const QString siblingTrack = QDir(QFileInfo(currentFilePath_).absolutePath()).filePath("track.mp3");
-        if (QFileInfo::exists(siblingTrack)) {
+        const QString siblingTrack = miacode::chart_assets::resolveTrackPath(currentFilePath_);
+        if (!siblingTrack.isEmpty()) {
             return siblingTrack;
         }
     }
@@ -3079,11 +3269,7 @@ QString MainWindow::resolveLatencyDetectorTrackPath() const
     if (currentFilePath_.isEmpty()) {
         return QString();
     }
-    const QString siblingTrack = QDir(QFileInfo(currentFilePath_).absolutePath()).filePath("track.mp3");
-    if (QFileInfo::exists(siblingTrack)) {
-        return QDir::cleanPath(siblingTrack);
-    }
-    return QString();
+    return miacode::chart_assets::resolveTrackPath(currentFilePath_);
 }
 
 void MainWindow::updateLatencyDetectorAvailability()
@@ -3283,7 +3469,6 @@ void MainWindow::loadProjectRenderState()
         previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
         previewCanvas_->setShowTimestamp(previewShowTimestamp_);
         previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
-        previewCanvas_->setLegacyFireworkStackingEnabled(legacyFireworkStackingEasterEggEnabled_);
     }
     applyMuriRenderOptions();
 }
@@ -3871,216 +4056,7 @@ void MainWindow::onRandomRotateSelection()
     });
 }
 
-void MainWindow::bootstrapPreviewWindow()
-{
-    const QString scriptPath = resolvePreviewSessionScriptPath();
-    appendOutput("preview/bootstrap", scriptPath.isEmpty() ? "script=(not found)" : ("script=" + scriptPath));
-    if (!ensurePreviewSessionStarted()) {
-        appendOutput("preview/bootstrap", "failed to start resident preview session");
-        return;
-    }
-    appendOutput(
-        "preview/bootstrap",
-        QString("resident preview session started, pid=%1").arg(previewProcess_ != nullptr ? previewProcess_->processId() : -1)
-    );
-    previewArrangeRetryCount_ = 0;
-    schedulePreviewArrange(80);
-}
-
-void MainWindow::schedulePreviewArrange(int delayMs)
-{
-    const int safeDelay = qMax(0, delayMs);
-    const quint64 generation = ++previewArrangeGeneration_;
-    if (runtimeDebugOutputEnabled_) {
-        appendOutput(
-            "preview/layout-schedule",
-            QString("queue generation=%1 delay_ms=%2 retry=%3")
-                .arg(generation)
-                .arg(safeDelay)
-                .arg(previewArrangeRetryCount_)
-        );
-        logNativeWindowDebug(
-            QString("schedule_queue generation=%1 delay=%2 retry=%3")
-                .arg(generation)
-                .arg(safeDelay)
-                .arg(previewArrangeRetryCount_)
-        );
-    }
-    QTimer::singleShot(safeDelay, this, [this, generation, safeDelay]() {
-        if (generation != previewArrangeGeneration_) {
-            if (runtimeDebugOutputEnabled_) {
-                appendOutput(
-                    "preview/layout-schedule",
-                    QString("drop generation_mismatch task=%1 latest=%2 delay_ms=%3")
-                        .arg(generation)
-                        .arg(previewArrangeGeneration_)
-                        .arg(safeDelay)
-                );
-                logNativeWindowDebug(
-                    QString("schedule_drop_generation task=%1 latest=%2 delay=%3")
-                        .arg(generation)
-                        .arg(previewArrangeGeneration_)
-                        .arg(safeDelay)
-                );
-            }
-            return;
-        }
-        if (runtimeDebugOutputEnabled_) {
-            appendOutput(
-                "preview/layout-schedule",
-                QString("execute generation=%1 delay_ms=%2").arg(generation).arg(safeDelay)
-            );
-            logNativeWindowDebug(QString("schedule_execute generation=%1 delay=%2").arg(generation).arg(safeDelay));
-        }
-        arrangeWithPreviewWindow();
-    });
-}
-
-void MainWindow::arrangeWithPreviewWindow()
-{
-#ifdef Q_OS_WIN
-    logWindowGeometryDebug("arrange_enter");
-    logNativeWindowDebug("arrange_enter");
-    if (QApplication::activeModalWidget() != nullptr) {
-        logWindowGeometryDebug("arrange_skip_active_modal_widget");
-        logNativeWindowDebug("arrange_skip_active_modal_widget");
-        if (runtimeDebugOutputEnabled_) {
-            appendOutput("preview/layout", "skip active_modal_widget");
-        }
-        return;
-    }
-    if (!isActiveWindow()) {
-        logWindowGeometryDebug("arrange_skip_mainwindow_not_active");
-        logNativeWindowDebug("arrange_skip_mainwindow_not_active");
-        if (runtimeDebugOutputEnabled_) {
-            appendOutput("preview/layout", "skip mainwindow_not_active");
-        }
-        return;
-    }
-    const HWND selfHwnd = reinterpret_cast<HWND>(winId());
-    const HWND foregroundHwnd = GetForegroundWindow();
-    if (foregroundHwnd != nullptr && foregroundHwnd != selfHwnd) {
-        const HWND foregroundRootOwner = GetAncestor(foregroundHwnd, GA_ROOTOWNER);
-        // Native/common dialogs may be wrapped in extra owner chains; use root owner
-        // instead of one-hop GW_OWNER to detect ownership robustly.
-        if (foregroundRootOwner == selfHwnd) {
-            logWindowGeometryDebug("arrange_skip_foreground_owned_dialog");
-            logNativeWindowDebug("arrange_skip_foreground_owned_dialog");
-            if (runtimeDebugOutputEnabled_) {
-                appendOutput(
-                    "preview/layout",
-                    QString("skip foreground_owned_dialog fg=0x%1 root_owner=0x%2")
-                        .arg(reinterpret_cast<quintptr>(foregroundHwnd), 0, 16)
-                        .arg(reinterpret_cast<quintptr>(foregroundRootOwner), 0, 16)
-                );
-            }
-            return;
-        }
-    }
-    if (previewProcess_ == nullptr || previewProcess_->state() != QProcess::Running) {
-        logWindowGeometryDebug("arrange_skip_preview_process_not_running");
-        logNativeWindowDebug("arrange_skip_preview_process_not_running");
-        if (runtimeDebugOutputEnabled_) {
-            appendOutput("preview/layout", "skip preview_process_not_running");
-        }
-        return;
-    }
-    QScreen* screen = this->screen();
-    if (screen == nullptr) {
-        screen = QGuiApplication::primaryScreen();
-    }
-    if (screen == nullptr) {
-        appendOutput("preview/layout", "no available screen");
-        return;
-    }
-
-    const QRect workArea = screen->availableGeometry();
-    const PreviewIntegration::SideBySideLayout layout = PreviewIntegration::computeSideBySideLayout(workArea);
-    QRect editorFrameRect = layout.editorRect;
-    const int frameLeftInset = qMax(0, geometry().left() - frameGeometry().left());
-    const int frameTopInset = qMax(0, geometry().top() - frameGeometry().top());
-    const int frameRightInset = qMax(0, frameGeometry().right() - geometry().right());
-    const int frameBottomInset = qMax(0, frameGeometry().bottom() - geometry().bottom());
-    const int frameExtraW = frameLeftInset + frameRightInset;
-    const int frameExtraH = frameTopInset + frameBottomInset;
-
-    // Strict frame-level alignment: editor frame starts exactly at layout.editorRect
-    // so preview/editor never overlap.
-    editorFrameRect.setTop(workArea.top());
-    editorFrameRect.setBottom(workArea.bottom());
-    if (editorFrameRect.left() < workArea.left()) {
-        editorFrameRect.moveLeft(workArea.left());
-    }
-    if (editorFrameRect.right() > workArea.right()) {
-        editorFrameRect.moveRight(workArea.right());
-    }
-
-    QRect editorRect(
-        editorFrameRect.left() + frameLeftInset,
-        editorFrameRect.top() + frameTopInset,
-        qMax(320, editorFrameRect.width() - frameExtraW),
-        qMax(320, editorFrameRect.height() - frameExtraH)
-    );
-
-    QString detail;
-    const qint64 pid = previewProcess_->processId();
-    if (!PreviewIntegration::placePreviewWindow(pid, layout.previewRect, &detail)) {
-        logWindowGeometryDebug("arrange_place_failed", detail);
-        logNativeWindowDebug("arrange_place_failed");
-        if (runtimeDebugOutputEnabled_) {
-            appendOutput(
-                "preview/layout",
-                QString("place_failed pid=%1 retry=%2 detail=%3")
-                    .arg(pid)
-                    .arg(previewArrangeRetryCount_)
-                    .arg(detail)
-            );
-        }
-        if (previewArrangeRetryCount_ < 30) {
-            ++previewArrangeRetryCount_;
-            schedulePreviewArrange(120);
-        } else {
-            appendOutput("preview/layout", "preview window placement failed: " + detail);
-        }
-        return;
-    }
-
-    if (geometry() != editorRect) {
-        if (runtimeDebugOutputEnabled_) {
-            appendOutput(
-                "preview/layout",
-                QString("apply_editor_geometry rect=[%1,%2 %3x%4]")
-                    .arg(editorRect.left())
-                    .arg(editorRect.top())
-                    .arg(editorRect.width())
-                    .arg(editorRect.height())
-            );
-        }
-        logNativeWindowDebug("arrange_before_set_geometry");
-        setGeometry(editorRect);
-        logWindowGeometryDebug(
-            "arrange_after_set_geometry",
-            QString("target=[%1,%2 %3x%4]")
-                .arg(editorRect.left())
-                .arg(editorRect.top())
-                .arg(editorRect.width())
-                .arg(editorRect.height())
-        );
-        logNativeWindowDebug("arrange_after_set_geometry");
-    }
-
-    if (previewArrangeRetryCount_ > 0) {
-        appendOutput("preview/layout", QString("arranged after retry=%1 (%2)").arg(previewArrangeRetryCount_).arg(detail));
-    } else {
-        appendOutput("preview/layout", "arranged (" + detail + ")");
-    }
-    logWindowGeometryDebug("arrange_success", detail);
-    logNativeWindowDebug("arrange_success");
-    previewArrangeRetryCount_ = 0;
-#endif
-}
-
-void MainWindow::onStopPreview()
+    void MainWindow::onStopPreview()
 {
     const double returnSecond = qBound(0.0, qtPreviewPlaybackReturnSecond_, previewDurationSeconds());
     stopQtPreviewPlayback(false);
@@ -4090,38 +4066,23 @@ void MainWindow::onStopPreview()
 
 void MainWindow::onTogglePreviewPause()
 {
-    if (!legacyPygamePreviewEnabled_) {
-        if (qtPreviewPlaying_) {
-            stopQtPreviewPlayback(true);
-            updatePauseButtonAppearance();
-            statusBar()->showMessage(QString("Qt preview paused at %1s.").arg(qtPreviewPauseSecond_, 0, 'f', 2));
-        } else {
-            if (!hasActiveDifficulty()) {
-                statusBar()->showMessage("Select a difficulty field first.");
-                return;
-            }
-            if (!saveBeforePreviewStart()) {
-                return;
-            }
-            startQtPreviewPlayback(qtPreviewPauseSecond_, true);
-            updatePauseButtonAppearance();
-            statusBar()->showMessage(QString("Qt preview resumed at %1s.").arg(qtPreviewPauseSecond_, 0, 'f', 2));
-        }
+    if (qtPreviewPlaying_) {
+        stopQtPreviewPlayback(true);
+        updatePauseButtonAppearance();
+        statusBar()->showMessage(QString("Qt preview paused at %1s.").arg(qtPreviewPauseSecond_, 0, 'f', 2));
         return;
     }
-    if (!ensurePreviewSessionStarted()) {
+
+    if (!hasActiveDifficulty()) {
+        statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
-    QJsonObject cmd{
-        {"cmd", "pause_toggle"},
-    };
-    QByteArray payload = QJsonDocument(cmd).toJson(QJsonDocument::Compact);
-    payload.append('\n');
-    if (previewProcess_->write(payload) < 0) {
-        appendOutput("preview/session-write-failed", "failed to send pause command");
+    if (!saveBeforePreviewStart()) {
         return;
     }
-    previewProcess_->waitForBytesWritten(1000);
+    startQtPreviewPlayback(qtPreviewPauseSecond_, true);
+    updatePauseButtonAppearance();
+    statusBar()->showMessage(QString("Qt preview resumed at %1s.").arg(qtPreviewPauseSecond_, 0, 'f', 2));
 }
 
 void MainWindow::onToggleJudgeMarkers(bool checked)
@@ -4130,7 +4091,6 @@ void MainWindow::onToggleJudgeMarkers(bool checked)
     applyMuriRenderOptions();
     savePortableState();
     saveProjectRenderState();
-    sendPreviewConfigCommand();
     statusBar()->showMessage(
         showJudgeMarkers_
             ? uiText("status.judge_marker_enabled", "Judge markers enabled.")
@@ -4144,7 +4104,6 @@ void MainWindow::onToggleTouchTrail(bool checked)
     applyMuriRenderOptions();
     savePortableState();
     saveProjectRenderState();
-    sendPreviewConfigCommand();
     statusBar()->showMessage(
         showTouchTrail_
             ? uiText("status.touch_trail_enabled", "Touch trail enabled.")
@@ -4383,8 +4342,6 @@ void MainWindow::onAbout()
     aboutIconLabel_.clear();
     invalidStarPreviewAboutClickCount_ = 0;
     invalidStarPreviewAboutClickElapsed_.invalidate();
-    legacyFireworkStackingAboutClickCount_ = 0;
-    legacyFireworkStackingAboutClickElapsed_.invalidate();
 }
 
 void MainWindow::onExportPreviewVideo()
@@ -4397,7 +4354,7 @@ void MainWindow::onExportPreviewVideo()
         statusBar()->showMessage(QStringLiteral("预览画布未初始化，无法导出视频。"));
         return;
     }
-    if (!legacyPygamePreviewEnabled_ && qtPreviewPlaying_) {
+    if (qtPreviewPlaying_) {
         onTogglePreviewPause();
     }
 
@@ -4476,23 +4433,17 @@ void MainWindow::onExportPreviewVideo()
             seekPreviewToSecond(second, false);
         },
         [this](double second) {
-            if (legacyPygamePreviewEnabled_) {
-                return;
-            }
             startQtPreviewPlayback(second, true);
             updatePauseButtonAppearance();
         },
         [this]() {
-            if (legacyPygamePreviewEnabled_) {
-                return;
-            }
             if (qtPreviewPlaying_) {
                 stopQtPreviewPlayback(true);
                 updatePauseButtonAppearance();
             }
         },
         [this]() -> bool {
-            return !legacyPygamePreviewEnabled_ && qtPreviewPlaying_;
+            return qtPreviewPlaying_;
         },
         currentPreviewSecond,
         [this](double ratio) {
@@ -4648,7 +4599,7 @@ void MainWindow::onBatchExportPreviewVideo()
         );
         return;
     }
-    if (!legacyPygamePreviewEnabled_ && qtPreviewPlaying_) {
+    if (qtPreviewPlaying_) {
         onTogglePreviewPause();
     }
 
@@ -4725,8 +4676,8 @@ void MainWindow::onBatchExportPreviewVideo()
     for (const QString& chartDirectory : chartDirectories) {
         const QFileInfo directoryInfo(chartDirectory);
         const QString folderName = directoryInfo.fileName();
-        const QString trackPath = QDir(directoryInfo.absoluteFilePath()).filePath(QStringLiteral("track.mp3"));
-        if (!QFileInfo::exists(trackPath)) {
+        const QString trackPath = miacode::chart_assets::resolveTrackPathForDirectory(directoryInfo.absoluteFilePath());
+        if (trackPath.isEmpty()) {
             failedCharts.append(
                 QDir::toNativeSeparators(chartDirectory)
                 + QStringLiteral(" - ")
@@ -4958,7 +4909,7 @@ bool MainWindow::buildVideoExportSnapshot(
         ? QString()
         : QFileInfo(currentFilePath_).absolutePath();
     built.trackPath = resolveDefaultTrackPath();
-    built.backgroundMediaPath = resolveExportBackgroundMediaPath(currentFilePath_);
+    built.backgroundMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(currentFilePath_);
     built.skinDirectory = resolvePreviewSkinDir();
     built.audioSettings = previewAudioSettings_;
     built.audioSettings.normalize();
@@ -5023,8 +4974,8 @@ bool MainWindow::buildVideoExportSnapshotForChartDirectory(
         return false;
     }
 
-    const QString trackPath = QDir(directoryInfo.absoluteFilePath()).filePath(QStringLiteral("track.mp3"));
-    if (!QFileInfo::exists(trackPath)) {
+    const QString trackPath = miacode::chart_assets::resolveTrackPathForDirectory(directoryInfo.absoluteFilePath());
+    if (trackPath.isEmpty()) {
         if (errorMessage != nullptr) {
             *errorMessage = uiText("dialog.batch_export.error.missing_track_file", "Missing track.mp3.");
         }
@@ -5139,7 +5090,7 @@ bool MainWindow::buildVideoExportSnapshotForChartDirectory(
     built.originalChartPath = chartPath;
     built.projectDir = QFileInfo(chartPath).absolutePath();
     built.trackPath = trackPath;
-    built.backgroundMediaPath = resolveExportBackgroundMediaPath(chartPath);
+    built.backgroundMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(chartPath);
     built.skinDirectory = resolvePreviewSkinDir();
     built.audioSettings = requestedTask.audioSettings;
     built.audioSettings.normalize();
@@ -6014,9 +5965,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         return;
     }
     previewAudioSettings_.normalize();
-    if (legacyPygamePreviewEnabled_) {
-        ensurePreviewSessionStarted();
-    }
 
     QDialog dialog(this);
     dialog.setWindowTitle(title);
@@ -6600,7 +6548,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
                     audioApplyTimer->stop();
                 }
                 pendingAudition.clear();
-                sendPreviewConfigCommand(QString());
             }
         );
     }
@@ -6624,7 +6571,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         const bool handledLocally = !pendingAudition.isEmpty()
             && previewSfxRuntime_ != nullptr
             && previewSfxRuntime_->audition(pendingAudition);
-        sendPreviewConfigCommand(handledLocally ? QString() : pendingAudition);
+        Q_UNUSED(handledLocally);
         pendingAudition.clear();
     });
     connect(&dialog, &QDialog::finished, &dialog, [this, audioApplyTimer, &pendingAudition]() {
@@ -6638,7 +6585,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         const bool handledLocally = !pendingAudition.isEmpty()
             && previewSfxRuntime_ != nullptr
             && previewSfxRuntime_->audition(pendingAudition);
-        sendPreviewConfigCommand(handledLocally ? QString() : pendingAudition);
+        Q_UNUSED(handledLocally);
         pendingAudition.clear();
     });
 
@@ -6737,5 +6684,3 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         previewCanvas_->update();
     }
 }
-
-#include "sections/preview/MainWindow.PreviewSessionFlow.cpp"

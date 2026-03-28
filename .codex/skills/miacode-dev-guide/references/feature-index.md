@@ -112,9 +112,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Class: `VideoExportDialog`
   - Owns: export parameters, preview-in-dialog, range selection, live preview controls
 - Export task and controller:
-  - Files: `src/tools/video_export/VideoExportController.h`, `src/tools/video_export/VideoExportController.cpp`
+  - Files: `src/tools/video_export/VideoExportController.h`, `src/tools/video_export/VideoExportController.cpp`, `src/tools/video_export/RawVideoPipeTransport.h`, `src/tools/video_export/RawVideoPipeTransport.cpp`
   - Class: `VideoExportController`
-  - Key functions: `exportFullPreview`, `exportPreparedTask`, `chooseVideoEncoder`, `buildSfxTimeline`
+  - Key functions: `exportFullPreview`, `exportPreparedTask`, `chooseVideoEncoder`, `miacode::video_export::raw_pipe::enqueueRawVideoFrame`
 - Export snapshot boundary:
   - Files: `src/tools/video_export/VideoExportSnapshot.h`, `src/tools/video_export/VideoExportSnapshot.cpp`
   - Struct: `VideoExportSnapshot`

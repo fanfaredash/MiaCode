@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/hardcode-registry.md -->
-<!-- translation-source-hash: d0a250fe5cfcbee2486350bcd000d9df9911e5d5aa498ca3fef2a7bf29bd80b1 -->
+<!-- translation-source-hash: 4c388c567b6f7386b2e71830824406dc878f9a26388c026fd221c285891e6e6c -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 硬编码登记
@@ -47,9 +47,12 @@
   - 负责：用于派生 marker 行为的 parser 默认几何与时序假设
   - 规则：parser 级常量变化可能是全仓级影响，要按跨链路改动处理
 - `src/tools/video_export/VideoExportController.cpp`
-  - 负责：混音采样率、编码器 probe 超时、码率启发式、逐帧诊断阈值、raw video 管道队列深度与连接超时、ffmpeg fallback 行为
-  - 当前调参说明：`RawVideoPipePlan::maxBufferedFrames` 默认是 `32` 帧，用来限制应用侧 rawvideo 在触发生产者阻塞前的积压上限；它属于后续可以继续结合设备数据和长时导出日志调整的导出性能参数
+  - 负责：混音采样率、编码器 probe 超时、码率启发式、逐帧诊断阈值、ffmpeg fallback 行为
   - 规则：导出启发式可以先留本地，但凡影响输出兼容性或打包假设的变化都要记录
+- `src/tools/video_export/RawVideoPipeTransport.cpp`
+  - 负责：raw video 管道队列深度、pipe buffer 大小、连接超时、writer 分块大小，以及有界生产者阻塞行为
+  - 当前调参说明：`RawVideoPipePlan::maxBufferedFrames` 默认是 `32` 帧，用来限制应用侧 rawvideo 在触发生产者阻塞前的积压上限；它属于后续可以继续结合设备数据和长时导出日志调整的导出性能参数
+  - 规则：只要这些调参仍然只影响 ffmpeg rawvideo 边界上的导出稳定性和性能，就可以继续留在本地 helper 中
 - `src/tools/video_export/VideoExportDialog.cpp`
   - 负责：导出对话框 UI 尺寸与预览控制常量
   - 规则：纯本地 UI 常量通常留本地，除非开始跨对话框复用
