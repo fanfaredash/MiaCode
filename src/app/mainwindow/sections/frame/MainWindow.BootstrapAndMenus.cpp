@@ -335,11 +335,6 @@ MainWindow::MainWindow(QWidget* parent)
     configureRuntimeDebugOutput();
     logStartupStage("configure_runtime_debug_output");
 
-    legacyPygamePreviewEnabled_ = miacode::debug_options::envFlagEnabled(
-        "MIACODE_ENABLE_PYGAME_PREVIEW",
-        "MAIMURI_ENABLE_PYGAME_PREVIEW"
-    );
-
     setWindowModified(false);
     updateWindowTitle();
     setupInitialWindowGeometry();
@@ -1030,7 +1025,6 @@ MainWindow::MainWindow(QWidget* parent)
     previewCanvas_ = new PreviewCanvas();
     logStartupStage("preview_canvas_created");
     previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
-    previewCanvas_->setLegacyFireworkStackingEnabled(legacyFireworkStackingEasterEggEnabled_);
     logStartupStage("preview_skin_async_dispatched");
     previewCanvasFrame_ = new QFrame(previewPanel_);
     previewCanvasFrame_->setObjectName("PreviewCanvasFrame");
@@ -1047,6 +1041,7 @@ MainWindow::MainWindow(QWidget* parent)
     previewControlCard_->setObjectName("PreviewControlCard");
     previewControlCard_->setMinimumWidth(kPreviewControlStatsCardMinWidth);
     previewControlCard_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    previewControlCard_->setMouseTracking(true);
     auto* previewControlCardLayout = new QVBoxLayout(previewControlCard_);
     previewControlCardLayout->setContentsMargins(8, 8, 8, 8);
     previewControlCardLayout->setSpacing(0);
@@ -1064,6 +1059,7 @@ MainWindow::MainWindow(QWidget* parent)
     stopPreviewButton_->setAutoRaise(false);
     stopPreviewButton_->setToolButtonStyle(Qt::ToolButtonIconOnly);
     stopPreviewButton_->setToolTip(QString());
+    stopPreviewButton_->setMouseTracking(true);
     previewControlsLayout->addWidget(stopPreviewButton_, 0);
 
     pausePreviewButton_ = new QToolButton(previewControls);
@@ -1073,6 +1069,7 @@ MainWindow::MainWindow(QWidget* parent)
     pausePreviewButton_->setAutoRaise(false);
     pausePreviewButton_->setToolButtonStyle(Qt::ToolButtonIconOnly);
     pausePreviewButton_->setToolTip(QString());
+    pausePreviewButton_->setMouseTracking(true);
     previewControlsLayout->addWidget(pausePreviewButton_, 0);
 
     previewSlider_ = new QSlider(Qt::Horizontal, previewControls);
@@ -1080,6 +1077,7 @@ MainWindow::MainWindow(QWidget* parent)
     previewSlider_->setSingleStep(25);
     previewSlider_->setPageStep(250);
     previewSlider_->setTracking(true);
+    previewSlider_->setMouseTracking(true);
     previewControlsLayout->addWidget(previewSlider_, 1);
 
     previewSpeedButton_ = new QToolButton(previewControls);
@@ -1088,6 +1086,7 @@ MainWindow::MainWindow(QWidget* parent)
     previewSpeedButton_->setText("1x");
     previewSpeedButton_->setFont(uiAccentFont(10));
     previewSpeedButton_->setFixedWidth(72);
+    previewSpeedButton_->setMouseTracking(true);
     auto* speedMenu = new QMenu(previewSpeedButton_);
     speedMenu->setFont(uiAccentFont(10));
     styleRoundedMenu(*speedMenu);
@@ -1119,6 +1118,18 @@ MainWindow::MainWindow(QWidget* parent)
     }
     previewSpeedButton_->setMenu(speedMenu);
     previewControlsLayout->addWidget(previewSpeedButton_, 0);
+    previewFullscreenButton_ = new QToolButton(previewControls);
+    previewFullscreenButton_->setObjectName("PreviewControlButton");
+    previewFullscreenButton_->setCheckable(true);
+    previewFullscreenButton_->setAutoRaise(false);
+    previewFullscreenButton_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    previewFullscreenButton_->setIconSize(QSize(20, 20));
+    previewFullscreenButton_->setMouseTracking(true);
+    connect(previewFullscreenButton_, &QToolButton::clicked, this, [this]() {
+        togglePreviewFullscreen();
+    });
+    updatePreviewFullscreenButtonAppearance();
+    previewControlsLayout->addWidget(previewFullscreenButton_, 0);
     previewControlCardLayout->addWidget(previewControls, 0);
 
     auto* previewStatsCard = new QFrame(previewPanel_);
@@ -1173,7 +1184,6 @@ MainWindow::MainWindow(QWidget* parent)
     logStartupStage("preview_sfx_runtime_created");
     connect(previewCanvas_, &QOpenGLWindow::frameSwapped, this, [this]() {
         if (!qtPreviewPlaying_
-            || legacyPygamePreviewEnabled_
             || !previewCanvasUsesFrameSwappedPacing()
             || !qtPreviewAwaitingFrameSwap_) {
             return;
@@ -1184,7 +1194,7 @@ MainWindow::MainWindow(QWidget* parent)
             qtPreviewTimer_->stop();
         }
         QTimer::singleShot(0, this, [this]() {
-            if (!qtPreviewPlaying_ || legacyPygamePreviewEnabled_) {
+            if (!qtPreviewPlaying_) {
                 return;
             }
             onQtPreviewTick();
@@ -1210,7 +1220,7 @@ MainWindow::MainWindow(QWidget* parent)
         navigateTimelineToSecond(second, true);
     });
     connect(timelineView_, &TimelineView::timelineUserInteractionStarted, this, [this]() {
-        if (!legacyPygamePreviewEnabled_ && qtPreviewPlaying_) {
+        if (qtPreviewPlaying_) {
             stopQtPreviewPlayback(true);
             updatePauseButtonAppearance();
         }
@@ -1483,13 +1493,13 @@ MainWindow::MainWindow(QWidget* parent)
             return;
         }
         const bool usingFrameSwapPacing =
-            previewCanvas_ != nullptr && !legacyPygamePreviewEnabled_ && previewCanvasUsesFrameSwappedPacing();
+            previewCanvas_ != nullptr && previewCanvasUsesFrameSwappedPacing();
         if (!usingFrameSwapPacing) {
             onQtPreviewTick();
             if (!qtPreviewPlaying_) {
                 return;
             }
-            if (previewCanvas_ != nullptr && !legacyPygamePreviewEnabled_ && !previewCanvasUsesFrameSwappedPacing()) {
+            if (previewCanvas_ != nullptr && !previewCanvasUsesFrameSwappedPacing()) {
                 previewCanvas_->update();
             }
             if (!previewCanvasUsesFrameSwappedPacing()) {
@@ -1538,6 +1548,9 @@ MainWindow::MainWindow(QWidget* parent)
         previewSlider_->setFocusPolicy(Qt::StrongFocus);
         previewSlider_->installEventFilter(this);
         connect(previewSlider_, &QSlider::sliderPressed, this, [this]() {
+            if (previewFullscreenActive_) {
+                showPreviewFullscreenControls(false);
+            }
             if (qtPreviewPlaying_) {
                 stopQtPreviewPlayback(true);
             }
@@ -1550,6 +1563,9 @@ MainWindow::MainWindow(QWidget* parent)
         connect(previewSlider_, &QSlider::sliderMoved, this, [this](int value) {
             if (previewSlider_ == nullptr) {
                 return;
+            }
+            if (previewFullscreenActive_) {
+                showPreviewFullscreenControls(false);
             }
             showPreviewSliderTimeHint(value);
             const double second = static_cast<double>(value) / 1000.0;
@@ -1571,6 +1587,9 @@ MainWindow::MainWindow(QWidget* parent)
             if (previewSlider_ == nullptr) {
                 return;
             }
+            if (previewFullscreenActive_) {
+                showPreviewFullscreenControls(false);
+            }
             showPreviewSliderTimeHint(previewSlider_->value());
             if (previewSeekDebounceTimer_ != nullptr) {
                 previewSeekDebounceTimer_->stop();
@@ -1578,16 +1597,34 @@ MainWindow::MainWindow(QWidget* parent)
             seekPreviewToSecond(static_cast<double>(previewSlider_->value()) / 1000.0, true);
         });
     }
+    if (previewControlCard_ != nullptr) {
+        previewControlCard_->installEventFilter(this);
+    }
+    if (stopPreviewButton_ != nullptr) {
+        stopPreviewButton_->installEventFilter(this);
+    }
+    if (pausePreviewButton_ != nullptr) {
+        pausePreviewButton_->installEventFilter(this);
+    }
+    if (previewSpeedButton_ != nullptr) {
+        previewSpeedButton_->installEventFilter(this);
+    }
+    if (previewFullscreenButton_ != nullptr) {
+        previewFullscreenButton_->installEventFilter(this);
+    }
     if (previewCanvasContainer_ != nullptr) {
+        previewCanvasContainer_->setMouseTracking(true);
         previewCanvasContainer_->installEventFilter(this);
     }
     if (previewCanvas_ != nullptr) {
         previewCanvas_->installEventFilter(this);
     }
     if (previewCanvasFrame_ != nullptr) {
+        previewCanvasFrame_->setMouseTracking(true);
         previewCanvasFrame_->installEventFilter(this);
     }
     if (previewPanel_ != nullptr) {
+        previewPanel_->setMouseTracking(true);
         previewPanel_->installEventFilter(this);
     }
 
@@ -1692,18 +1729,6 @@ MainWindow::MainWindow(QWidget* parent)
     updatePreviewSliderPosition(0.0);
     logStartupStage("initial_document_loaded");
     qtPreviewWatchdogElapsed_.start();
-    if (legacyPygamePreviewEnabled_) {
-        appendOutput("preview/bootstrap", "initializing resident preview session");
-        bootstrapPreviewWindow();
-        QTimer::singleShot(1500, this, [this]() {
-            if (previewProcess_ == nullptr || previewProcess_->state() != QProcess::Running) {
-                appendOutput("preview/bootstrap", "startup retry");
-                bootstrapPreviewWindow();
-            }
-        });
-    } else {
-        appendOutput("preview/bootstrap", "legacy pygame preview disabled by default");
-    }
     logStartupStage("preview_media_controller_lazy_init_deferred");
     QTimer::singleShot(0, this, [this]() {
         schedulePreviewSubsystemWarmup();

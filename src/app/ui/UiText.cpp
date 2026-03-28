@@ -366,6 +366,10 @@ const QHash<QString, QString>& zhMap()
 
         {"preview.play", "播放"},
         {"preview.pause", "暂停"},
+        {"preview.fullscreen.window_title", "全屏预览"},
+        {"preview.fullscreen.exit_hint", "按 Esc 退出全屏"},
+        {"preview.fullscreen.exit_tooltip", "退出全屏预览（Esc）"},
+        {"preview.fullscreen.enter_tooltip", "打开全屏预览"},
 
         {"editor.metadata", "谱面信息设置"},
         {"editor.welcome", "欢迎使用MiaCode！"},

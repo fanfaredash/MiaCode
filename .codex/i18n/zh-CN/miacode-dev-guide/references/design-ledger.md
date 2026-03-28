@@ -1,6 +1,6 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/design-ledger.md -->
 <!-- translation-source-hash: 67bb235bcb35f0bf4dbc2e885149e32b47a4320b3886dda9cd2bbdef97b27d12 -->
-<!-- translation-source-hash: d1399cd91221ac8b2ee4322655a748eb72103ce4cd2d1a3cbe09f98cb9a0b891 -->
+<!-- translation-source-hash: 69a82c254011821472ac303367333bae62e7c40b67a1e07ae6c81e63f5ebabb5 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 设计账本

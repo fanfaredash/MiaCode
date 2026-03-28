@@ -9,10 +9,10 @@ set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
     set(MIACODE_VERSION_STRING "${MIACODE_VERSION}-${MIACODE_VERSION_PRERELEASE}")
 endif()
-set(MIACODE_DISPLAY_PRERELEASE "")
+set(MIACODE_DISPLAY_PRERELEASE "dev1.2")
 set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_DISPLAY_PRERELEASE}" STREQUAL "")
-    set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_DISPLAY_VERSION_STRING}-${MIACODE_DISPLAY_PRERELEASE}")
+    set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_DISPLAY_VERSION_STRING}.${MIACODE_DISPLAY_PRERELEASE}")
 endif()
 
 project(MiaCode VERSION ${MIACODE_VERSION} LANGUAGES CXX)
@@ -53,6 +53,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/MuriTypes.cpp
     src/common/MuriRenderOptions.h
     src/common/MuriConfig.h
+    src/common/ChartAssetPaths.h
+    src/common/PreviewSfxTimeline.h
     src/editor/PlainCodeEditor.h
     src/editor/PlainCodeEditor.cpp
     src/editor/BracketScopeHighlighter.h
@@ -69,6 +71,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/BatchVideoExportDialog.cpp
     src/tools/video_export/VideoExportController.h
     src/tools/video_export/VideoExportController.cpp
+    src/tools/video_export/RawVideoPipeTransport.h
+    src/tools/video_export/RawVideoPipeTransport.cpp
     src/tools/video_export/VideoExportSnapshot.h
     src/tools/video_export/VideoExportSnapshot.cpp
     src/preview/video/PreviewCanvas.h
@@ -77,8 +81,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/video/PreviewGLRenderer.cpp
     src/preview/video/PreviewMediaController.h
     src/preview/video/PreviewMediaController.cpp
-    src/preview/PreviewIntegration.h
-    src/preview/PreviewIntegration.cpp
     src/preview/audio/PreviewAudioSettings.h
     src/preview/audio/PreviewAudioSettings.cpp
     src/preview/audio/QtPreviewSfxRuntime.h

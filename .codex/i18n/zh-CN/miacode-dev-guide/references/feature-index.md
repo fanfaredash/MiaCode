@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/feature-index.md -->
-<!-- translation-source-hash: 434f826d05e7687fdadc92d8639dcac921a4c3086efb8657142075668b0606c3 -->
+<!-- translation-source-hash: b9054a089f67ce88c9d41dd64e1e0f12ac6c26276114683aa1d77dbeebd39831 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 功能索引
@@ -116,9 +116,9 @@
   - 类：`VideoExportDialog`
   - 负责：导出参数、对话框内预览、范围选择、实时预览控制
 - 导出任务与控制器：
-  - 文件：`src/tools/video_export/VideoExportController.h`、`src/tools/video_export/VideoExportController.cpp`
+  - 文件：`src/tools/video_export/VideoExportController.h`、`src/tools/video_export/VideoExportController.cpp`、`src/tools/video_export/RawVideoPipeTransport.h`、`src/tools/video_export/RawVideoPipeTransport.cpp`
   - 类：`VideoExportController`
-  - 关键函数：`exportFullPreview`、`exportPreparedTask`、`chooseVideoEncoder`、`buildSfxTimeline`
+  - 关键函数：`exportFullPreview`、`exportPreparedTask`、`chooseVideoEncoder`、`miacode::video_export::raw_pipe::enqueueRawVideoFrame`
 - 导出 snapshot 边界：
   - 文件：`src/tools/video_export/VideoExportSnapshot.h`、`src/tools/video_export/VideoExportSnapshot.cpp`
   - 结构体：`VideoExportSnapshot`

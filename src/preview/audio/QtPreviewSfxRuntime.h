@@ -4,8 +4,8 @@
 #include <QString>
 #include <QVector>
 
+#include "common/PreviewSfxTimeline.h"
 #include "PreviewAudioSettings.h"
-#include "TimelineView.h"
 
 class QtPreviewSfxRuntime : public QObject
 {
@@ -36,18 +36,8 @@ public:
     void stopAll();
 
 private:
-    struct Event {
-        double second = 0.0;
-        int priority = 0;
-        QString kind;
-        int spanIndex = -1;
-        double gain = 1.0;
-    };
-
-    struct TouchholdSpan {
-        double startSecond = 0.0;
-        double endSecond = 0.0;
-    };
+    using Event = miacode::preview_sfx_timeline::Event;
+    using TouchholdSpan = miacode::preview_sfx_timeline::TouchholdSpan;
 
     struct EngineState;
     struct Voice;

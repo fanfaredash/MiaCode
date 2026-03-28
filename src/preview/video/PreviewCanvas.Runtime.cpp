@@ -134,7 +134,7 @@ void PreviewCanvas::setStageMediaAvailable(bool hasMedia)
 
 void PreviewCanvas::refreshOutlineAsset()
 {
-    const QString outlinePath = defaultOutlinePath(stageMediaAvailable_);
+    const QString outlinePath = miacode::assets::outlinePathForStageMedia(stageMediaAvailable_);
     outlineImage_ = outlinePath.isEmpty() ? QImage() : QImage(outlinePath);
     const double textureRingRatio = detectLayoutRingDiameterRatio(outlineImage_);
     layoutRingDiameterRatio_ = qBound(
@@ -350,15 +350,6 @@ void PreviewCanvas::setExportWifiTrackBrightnessCompensationEnabled(bool enabled
     update();
 }
 
-void PreviewCanvas::setLegacyFireworkStackingEnabled(bool enabled)
-{
-    if (legacyFireworkStackingEnabled_ == enabled) {
-        return;
-    }
-    legacyFireworkStackingEnabled_ = enabled;
-    update();
-}
-
 void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
 {
     tapImage_ = source.tapImage_;
@@ -477,7 +468,6 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     showTimestamp_ = source.showTimestamp_;
     showObjectStatsHud_ = source.showObjectStatsHud_;
     exportWifiTrackBrightnessCompensationEnabled_ = source.exportWifiTrackBrightnessCompensationEnabled_;
-    legacyFireworkStackingEnabled_ = source.legacyFireworkStackingEnabled_;
 
     overlayCache_.clear();
     animatedSpriteCache_.clear();
