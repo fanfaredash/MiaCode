@@ -35,6 +35,7 @@
 #include <QColor>
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QCursor>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDialog>
@@ -77,10 +78,12 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPlainTextEdit>
+#include <QPropertyAnimation>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QProgressDialog>
 #include <QPushButton>
+#include <QEasingCurve>
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QShortcut>
@@ -147,6 +150,15 @@ constexpr int kPreviewCanvasControlGap = 10;
 constexpr int kPreviewStatsBottomGap = 12;
 constexpr int kPreviewControlStatsGap = 10;
 constexpr int kPreviewControlStatsCardMinWidth = 280;
+constexpr int kPreviewFullscreenHintTopMargin = 28;
+constexpr int kPreviewFullscreenOverlaySideMargin = 18;
+constexpr int kPreviewFullscreenOverlayBottomMargin = 24;
+constexpr int kPreviewFullscreenOverlayMaxWidth = 10000;
+constexpr int kPreviewFullscreenOverlayHideOffset = 20;
+constexpr int kPreviewFullscreenControlsRevealHotzoneHeight = 120;
+constexpr int kPreviewFullscreenControlsAutoHideDelayMs = 1600;
+constexpr int kPreviewFullscreenControlsAnimationDurationMs = 180;
+constexpr int kPreviewFullscreenControlsOpacityAnimationDurationMs = 180;
 constexpr int kEditorTextFontSizeMin = 8;
 constexpr int kEditorTextFontSizeMax = 28;
 constexpr qreal kPreviewSeekInitialStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekInitialStepSeconds);
@@ -170,6 +182,135 @@ const QList<double> kEditorLineSpacingFactorOptions{
 const QList<double> kPreviewPlaybackRateOptions{
     0.25, 0.5, 0.75, 1.0, 1.25, 2.0,
 };
+
+QString cssRgba(const QColor& color, int alpha)
+{
+    return QStringLiteral("rgba(%1, %2, %3, %4)")
+        .arg(color.red())
+        .arg(color.green())
+        .arg(color.blue())
+        .arg(qBound(0, alpha, 255));
+}
+
+QString cssRgb(const QColor& color)
+{
+    return color.name(QColor::HexRgb);
+}
+
+QColor previewFullscreenOverlayIconColor()
+{
+    return QColor(QStringLiteral("#F8FAFC"));
+}
+
+QString previewFullscreenControlCardStyleSheet()
+{
+    const QColor overlayText = previewFullscreenOverlayIconColor();
+    const QColor accent = UiTheme::colors().accent;
+    return QStringLiteral(
+        "QFrame#PreviewControlCard {"
+        " background: rgba(0, 0, 0, 188);"
+        " border: 1px solid rgba(255, 255, 255, 42);"
+        " border-radius: 18px;"
+        "}"
+        "QFrame#PreviewControls {"
+        " background: transparent;"
+        " border: none;"
+        "}"
+        "QToolButton#PreviewControlButton {"
+        " color: %1;"
+        " padding: 7px 10px;"
+        " min-height: 32px;"
+        " border: 1px solid rgba(255, 255, 255, 40);"
+        " border-radius: 9px;"
+        " background: rgba(255, 255, 255, 18);"
+        " font-weight: 600;"
+        "}"
+        "QToolButton#PreviewControlButton:hover {"
+        " background: rgba(255, 255, 255, 32);"
+        " border-color: rgba(255, 255, 255, 76);"
+        "}"
+        "QToolButton#PreviewControlButton:pressed {"
+        " background: rgba(255, 255, 255, 46);"
+        "}"
+        "QSlider::groove:horizontal {"
+        " height: 6px;"
+        " background: rgba(255, 255, 255, 42);"
+        " border-radius: 3px;"
+        "}"
+        "QSlider::sub-page:horizontal {"
+        " background: %2;"
+        " border-radius: 3px;"
+        "}"
+        "QSlider::add-page:horizontal {"
+        " background: rgba(255, 255, 255, 22);"
+        " border-radius: 3px;"
+        "}"
+        "QSlider::handle:horizontal {"
+        " width: 12px;"
+        " margin: -4px 0;"
+        " border-radius: 6px;"
+        " background: %1;"
+        " border: 1px solid rgba(15, 23, 42, 102);"
+        "}"
+    )
+        .arg(cssRgb(overlayText))
+        .arg(cssRgb(accent));
+}
+
+QString previewFullscreenHintStyleSheet()
+{
+    return QStringLiteral(
+        "QLabel {"
+        " background: rgba(0, 0, 0, 188);"
+        " color: #F8FAFC;"
+        " border: 1px solid rgba(255, 255, 255, 52);"
+        " border-radius: 16px;"
+        " padding: 10px 16px;"
+        " font-size: 14px;"
+        " font-weight: 600;"
+        "}"
+    );
+}
+
+QString previewFullscreenPauseButtonStyleSheet(bool active)
+{
+    const QColor overlayText = previewFullscreenOverlayIconColor();
+    const QColor accent = UiTheme::colors().accent;
+    if (active) {
+        return QStringLiteral(
+            "QToolButton {"
+            " color: %1;"
+            " padding: 7px 10px;"
+            " min-height: 32px;"
+            " border: 1px solid %2;"
+            " border-radius: 9px;"
+            " background: %3;"
+            " font-weight: 700;"
+            "}"
+            "QToolButton:hover { background: %4; }"
+        )
+            .arg(cssRgb(overlayText))
+            .arg(cssRgba(accent, 220))
+            .arg(cssRgba(accent, 208))
+            .arg(cssRgba(accent, 255));
+    }
+    return QStringLiteral(
+        "QToolButton {"
+        " color: %1;"
+        " padding: 7px 10px;"
+        " min-height: 32px;"
+        " border: 1px solid rgba(255, 255, 255, 40);"
+        " border-radius: 9px;"
+        " background: rgba(255, 255, 255, 18);"
+        " font-weight: 600;"
+        "}"
+        "QToolButton:hover {"
+        " background: rgba(255, 255, 255, 32);"
+        " border-color: rgba(255, 255, 255, 76);"
+        "}"
+    )
+        .arg(cssRgb(overlayText));
+}
 
 double normalizeEditorLineSpacingFactor(double factor)
 {
@@ -1561,6 +1702,50 @@ QIcon makePreviewResumeIcon(const QColor& color)
     return QIcon(pixmap);
 }
 
+QIcon makePreviewEnterFullscreenIcon(const QColor& color)
+{
+    QPixmap pixmap(20, 20);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QPen pen(color, 1.7);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawLine(QPointF(7.8, 4.8), QPointF(4.8, 4.8));
+    painter.drawLine(QPointF(4.8, 4.8), QPointF(4.8, 7.8));
+    painter.drawLine(QPointF(12.2, 4.8), QPointF(15.2, 4.8));
+    painter.drawLine(QPointF(15.2, 4.8), QPointF(15.2, 7.8));
+    painter.drawLine(QPointF(4.8, 12.2), QPointF(4.8, 15.2));
+    painter.drawLine(QPointF(4.8, 15.2), QPointF(7.8, 15.2));
+    painter.drawLine(QPointF(12.2, 15.2), QPointF(15.2, 15.2));
+    painter.drawLine(QPointF(15.2, 12.2), QPointF(15.2, 15.2));
+    return QIcon(pixmap);
+}
+
+QIcon makePreviewExitFullscreenIcon(const QColor& color)
+{
+    QPixmap pixmap(20, 20);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QPen pen(color, 1.7);
+    pen.setCapStyle(Qt::RoundCap);
+    pen.setJoinStyle(Qt::RoundJoin);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawLine(QPointF(8.2, 4.8), QPointF(8.2, 8.2));
+    painter.drawLine(QPointF(4.8, 8.2), QPointF(8.2, 8.2));
+    painter.drawLine(QPointF(11.8, 4.8), QPointF(11.8, 8.2));
+    painter.drawLine(QPointF(11.8, 8.2), QPointF(15.2, 8.2));
+    painter.drawLine(QPointF(4.8, 11.8), QPointF(8.2, 11.8));
+    painter.drawLine(QPointF(8.2, 11.8), QPointF(8.2, 15.2));
+    painter.drawLine(QPointF(11.8, 11.8), QPointF(15.2, 11.8));
+    painter.drawLine(QPointF(11.8, 11.8), QPointF(11.8, 15.2));
+    return QIcon(pixmap);
+}
+
 QIcon makeSettingsGearIcon(const QColor& color)
 {
     QPixmap pixmap(18, 18);
@@ -1884,9 +2069,11 @@ void MainWindow::applyUiTheme()
     }
 
     const QColor iconColor = UiTheme::colors().iconPrimary;
+    const QColor previewControlIconColor =
+        previewFullscreenActive_ ? previewFullscreenOverlayIconColor() : iconColor;
     const QColor secondaryIconColor = UiTheme::colors().iconSecondary;
     if (stopPreviewAction_ != nullptr) {
-        stopPreviewAction_->setIcon(makePreviewStopIcon(iconColor));
+        stopPreviewAction_->setIcon(makePreviewStopIcon(previewControlIconColor));
     }
     if (settingsPlaceholderAction_ != nullptr) {
         settingsPlaceholderAction_->setIcon(makeSettingsGearIcon(secondaryIconColor));
@@ -1905,8 +2092,17 @@ void MainWindow::applyUiTheme()
     if (exportVideoButton_ != nullptr) {
         exportVideoButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
     }
+    if (previewFullscreenHintLabel_ != nullptr) {
+        previewFullscreenHintLabel_->setStyleSheet(previewFullscreenHintStyleSheet());
+    }
+    if (previewFullscreenActive_
+        && previewControlCard_ != nullptr
+        && previewControlCard_->parentWidget() == previewFullscreenControlsWindow_) {
+        previewControlCard_->setStyleSheet(previewFullscreenControlCardStyleSheet());
+    }
     updateEditorValidationSummary();
     updatePauseButtonAppearance();
+    updatePreviewFullscreenButtonAppearance();
     update();
 }
 
@@ -2615,7 +2811,66 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
         || watched == previewCanvas_
         || watched == previewCanvasContainer_
         || watched == previewCanvasFrame_
-        || watched == previewPanel_;
+        || watched == previewPanel_
+        || watched == previewFullscreenWindow_
+        || watched == previewFullscreenHost_
+        || watched == previewFullscreenControlsWindow_
+        || watched == previewFullscreenButton_;
+    const bool previewFullscreenOverlayScope =
+        watched == previewFullscreenWindow_
+        || watched == previewFullscreenHost_
+        || watched == previewFullscreenControlsWindow_
+        || watched == previewFullscreenHintWindow_
+        || watched == previewCanvas_
+        || watched == previewCanvasContainer_
+        || watched == previewCanvasFrame_
+        || watched == previewControlCard_
+        || watched == previewSlider_
+        || watched == stopPreviewButton_
+        || watched == pausePreviewButton_
+        || watched == previewSpeedButton_
+        || watched == previewFullscreenButton_;
+    if (previewFullscreenActive_ && previewFullscreenOverlayScope) {
+        if (event->type() == QEvent::MouseMove
+            || event->type() == QEvent::MouseButtonPress
+            || event->type() == QEvent::Wheel) {
+            const QPoint globalCursorPos = QCursor::pos();
+            if (shouldRevealPreviewFullscreenControls(globalCursorPos)) {
+                showPreviewFullscreenControls(event->type() != QEvent::MouseButtonPress);
+            } else if (previewFullscreenControlsVisible_) {
+                schedulePreviewFullscreenControlsAutoHide();
+            }
+        }
+        if (event->type() == QEvent::KeyPress) {
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (!keyEvent->isAutoRepeat()
+                && keyEvent->modifiers() == Qt::NoModifier
+                && keyEvent->key() == Qt::Key_F11) {
+                togglePreviewFullscreen();
+                return true;
+            }
+            if (!keyEvent->isAutoRepeat()
+                && keyEvent->modifiers() == Qt::NoModifier
+                && keyEvent->key() == Qt::Key_Escape) {
+                exitPreviewFullscreen();
+                return true;
+            }
+        }
+    }
+    if (previewFullscreenWindow_ != nullptr && watched == previewFullscreenWindow_) {
+        if (event->type() == QEvent::Close) {
+            exitPreviewFullscreen();
+            event->ignore();
+            return true;
+        }
+        if (previewFullscreenActive_
+            && (event->type() == QEvent::Move
+                || event->type() == QEvent::Resize
+                || event->type() == QEvent::Show
+                || event->type() == QEvent::WindowStateChange)) {
+            updatePreviewFullscreenOverlayGeometry();
+        }
+    }
     if (previewSlider_ != nullptr && watched == previewSlider_) {
         if (event->type() == QEvent::MouseButtonPress) {
             auto* mouseEvent = static_cast<QMouseEvent*>(event);
@@ -2654,6 +2909,19 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
     if (previewKeyScope) {
         if (event->type() == QEvent::KeyPress) {
             auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (!keyEvent->isAutoRepeat()
+                && keyEvent->modifiers() == Qt::NoModifier
+                && keyEvent->key() == Qt::Key_F11) {
+                togglePreviewFullscreen();
+                return true;
+            }
+            if (previewFullscreenActive_
+                && !keyEvent->isAutoRepeat()
+                && keyEvent->modifiers() == Qt::NoModifier
+                && keyEvent->key() == Qt::Key_Escape) {
+                exitPreviewFullscreen();
+                return true;
+            }
             if (keyEvent->key() == Qt::Key_Space
                 && keyEvent->modifiers() == Qt::NoModifier
                 && !keyEvent->isAutoRepeat()) {

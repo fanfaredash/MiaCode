@@ -8,6 +8,7 @@
 #include <QMainWindow>
 #include <QPointer>
 #include <QPoint>
+#include <QRect>
 #include <QSet>
 #include <QVector>
 
@@ -49,6 +50,7 @@ class PreviewMediaController;
 class QPlainTextEdit;
 class QProcess;
 class QProgressDialog;
+class QPropertyAnimation;
 class QResizeEvent;
 class QStackedWidget;
 class QSlider;
@@ -289,6 +291,17 @@ private:
     double previewDurationSeconds() const;
     double previewPlaybackEndSeconds() const;
     void applyPreviewPlaybackRate(double rate);
+    void togglePreviewFullscreen();
+    void enterPreviewFullscreen();
+    void exitPreviewFullscreen();
+    void updatePreviewFullscreenButtonAppearance();
+    void updatePreviewFullscreenOverlayGeometry();
+    void showPreviewFullscreenControls(bool animate = true);
+    void hidePreviewFullscreenControls(bool animate = true);
+    void schedulePreviewFullscreenControlsAutoHide();
+    void pollPreviewFullscreenCursor();
+    bool shouldRevealPreviewFullscreenControls(const QPoint& globalCursorPos) const;
+    QRect previewFullscreenControlCardRect(bool visible) const;
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
     double normalizedPreviewCanvasAspectRatio(double ratio) const;
     void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
@@ -705,6 +718,7 @@ private:
     QToolButton* latencyDetectorButton_ = nullptr;
     QSlider* previewSlider_ = nullptr;
     QToolButton* previewSpeedButton_ = nullptr;
+    QToolButton* previewFullscreenButton_ = nullptr;
     QLabel* previewTapStatsLabel_ = nullptr;
     QLabel* previewHoldStatsLabel_ = nullptr;
     QLabel* previewSlideStatsLabel_ = nullptr;
@@ -716,6 +730,20 @@ private:
     QVector<QLabel*> previewStatsChips_;
     int previewStatsLayoutRows_ = 0;
     int previewStatsLayoutCols_ = 0;
+    QWidget* previewFullscreenWindow_ = nullptr;
+    QWidget* previewFullscreenHost_ = nullptr;
+    QWidget* previewFullscreenControlsWindow_ = nullptr;
+    QWidget* previewFullscreenHintWindow_ = nullptr;
+    QLabel* previewFullscreenHintLabel_ = nullptr;
+    QTimer* previewFullscreenHintTimer_ = nullptr;
+    QTimer* previewFullscreenControlsTimer_ = nullptr;
+    QTimer* previewFullscreenCursorPollTimer_ = nullptr;
+    QPropertyAnimation* previewFullscreenControlsAnimation_ = nullptr;
+    QPropertyAnimation* previewFullscreenControlsOpacityAnimation_ = nullptr;
+    bool previewFullscreenActive_ = false;
+    bool previewFullscreenControlsVisible_ = false;
+    bool previewFullscreenCursorTrackingInitialized_ = false;
+    QPoint previewFullscreenLastCursorPos_;
     bool previewLayoutInitialized_ = false;
     int workspaceCachedLeftWidth_ = 0;
     int workspaceCachedRightWidth_ = 0;
