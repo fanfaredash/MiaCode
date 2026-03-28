@@ -9,6 +9,7 @@
 #include "common/PreviewSfxAssets.h"
 #include "common/PreviewSfxTimeline.h"
 #include "common/VideoExportConfig.h"
+#include "tools/muri/MuriAnalyzer.h"
 
 #include <QByteArray>
 #include <QCoreApplication>
@@ -2184,15 +2185,13 @@ bool writeWav16(const QString& path, const QVector<float>& samples, int sampleRa
     return true;
 }
 
-bool noteMarkerIntersectsRange(const TimelineNoteMarker& marker, double startSecond, double endSecond)
+bool noteMarkerTimestampInRange(const TimelineNoteMarker& marker, double startSecond, double endSecond)
 {
     if (endSecond <= startSecond) {
         return true;
     }
-    const double markerStart = marker.second;
-    const double markerEnd = qMax(marker.second, marker.endSecond);
-    return markerEnd >= startSecond - kTimelineEpsilonSeconds
-        && markerStart <= endSecond + kTimelineEpsilonSeconds;
+    return marker.second + kTimelineEpsilonSeconds >= startSecond
+        && marker.second <= endSecond + kTimelineEpsilonSeconds;
 }
 
 QVector<TimelineNoteMarker> filteredMarkersForRange(
@@ -2204,7 +2203,7 @@ QVector<TimelineNoteMarker> filteredMarkersForRange(
     QVector<TimelineNoteMarker> filtered;
     filtered.reserve(markers.size());
     for (const TimelineNoteMarker& marker : markers) {
-        if (noteMarkerIntersectsRange(marker, startSecond, endSecond)) {
+        if (noteMarkerTimestampInRange(marker, startSecond, endSecond)) {
             filtered.append(marker);
         }
     }
@@ -3225,9 +3224,10 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const double segmentStartSecond = qMax(0.0, task.exportStartSeconds);
     const double segmentDurationSeconds = task.contentDurationSeconds;
     const double segmentEndSecond = segmentStartSecond + segmentDurationSeconds;
-    const double leadInSeconds = segmentStartSecond <= kTimelineEpsilonSeconds
+    const bool keepFullExportBehavior = task.fullRangeExport;
+    const double leadInSeconds = keepFullExportBehavior
         ? miacode::video_export::kLeadInSeconds
-        : 0.0;
+        : miacode::video_export::kPartialRangePreloadSeconds;
     const double timelineOriginSecond = segmentStartSecond - leadInSeconds;
     const double totalSeconds = leadInSeconds + segmentDurationSeconds;
     const int frameCount = qMax(1, qRound(totalSeconds * task.fps));
@@ -3246,10 +3246,13 @@ VideoExportResult VideoExportController::exportPreparedTask(
         : normalizePath(task.trackPath);
     const bool hasTrack = !trackPath.isEmpty();
     const QVector<TimelineNoteMarker> exportMarkers =
-        filteredMarkersForRange(task.noteMarkers, timelineOriginSecond, segmentEndSecond);
+        filteredMarkersForRange(task.noteMarkers, segmentStartSecond, segmentEndSecond);
+    const MuriAnalysisReport exportMuriAnalysisReport = exportMarkers.isEmpty()
+        ? MuriAnalysisReport{}
+        : MuriAnalyzer::analyze(exportMarkers, task.muriRenderOptions);
     appendVideoExportLog(
         QStringLiteral("input_probe"),
-        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 leadIn=%8 timelineOrigin=%9 totalSeconds=%10 alignedSeconds=%11 frameCount=%12 size=%13x%14")
+        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 leadIn=%8 timelineOrigin=%9 fullRange=%10 markerFilter=marker.second frameWindow=%11..%12 totalSeconds=%13 alignedSeconds=%14 frameCount=%15 size=%16x%17")
             .arg(mediaPath)
             .arg(hasMedia ? 1 : 0)
             .arg(mediaIsImage ? 1 : 0)
@@ -3259,6 +3262,9 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(segmentEndSecond, 0, 'f', 6)
             .arg(leadInSeconds, 0, 'f', 6)
             .arg(timelineOriginSecond, 0, 'f', 6)
+            .arg(task.fullRangeExport ? 1 : 0)
+            .arg(segmentStartSecond, 0, 'f', 6)
+            .arg(segmentEndSecond, 0, 'f', 6)
             .arg(totalSeconds, 0, 'f', 6)
             .arg(alignedTotalSeconds, 0, 'f', 6)
             .arg(frameCount)
@@ -3598,7 +3604,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     exportCanvas.setExportWifiTrackBrightnessCompensationEnabled(true);
     exportCanvas.setNoteMarkers(exportMarkers);
     exportCanvas.setMuriRenderOptions(task.muriRenderOptions);
-    exportCanvas.setMuriAnalysisReport(task.muriAnalysisReport);
+    exportCanvas.setMuriAnalysisReport(exportMuriAnalysisReport);
     exportCanvas.setCpuTrackAreaCachingEnabled(false);
     const QSurfaceFormat requestedFormat = sourceCanvas != nullptr
         ? sourceCanvas->format()
@@ -3920,6 +3926,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         diagCpuCompareCanvas.setNoteFlowSpeed(task.noteFlowSpeed);
         diagCpuCompareCanvas.setShowDebugInfo(false);
         diagCpuCompareCanvas.setNoteMarkers(exportMarkers);
+        diagCpuCompareCanvas.setMuriAnalysisReport(exportMuriAnalysisReport);
         diagCpuCompareCanvas.setCpuTrackAreaCachingEnabled(false);
         diagCpuCompareReady = true;
         appendVideoExportLog(

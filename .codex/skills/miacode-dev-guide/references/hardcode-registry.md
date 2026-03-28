@@ -18,7 +18,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: SFX kind-to-filename mapping and SFX directory resolution
   - Scope: sound asset conventions
 - `src/common/VideoExportConfig.h`
-  - Owns: export lead-in constants
+  - Owns: export lead-in constants for zero-start exports and non-zero partial-export preload
   - Scope: export timeline alignment
 - `src/tools/muri/MuriStaticChecker.h`
   - Owns: static tap-on-slide threshold min/max/default

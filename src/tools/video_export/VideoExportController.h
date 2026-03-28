@@ -36,6 +36,7 @@ struct VideoExportTask {
     int outputWidth = 1024;
     int outputHeight = 1024;
     int fps = 60;
+    bool fullRangeExport = true;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;
     int skinLoadWaitMs = 2000;
