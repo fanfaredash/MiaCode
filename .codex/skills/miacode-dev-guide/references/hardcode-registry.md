@@ -48,6 +48,14 @@ Use this file to track where important constants live, what they mean, and wheth
 - `src/tools/video_export/VideoExportDialog.cpp`
   - Owns: export-dialog UI sizing and preview control constants
   - Rule: local UI constants usually stay local unless reused across dialogs
+- `src/app/mainwindow/MainWindow.cpp`
+  - Owns: embedded/fullscreen preview panel spacing plus fullscreen overlay timing, opacity, and reveal geometry constants
+  - Examples:
+    - fullscreen `Esc` hint top inset
+    - fullscreen control-bar side/bottom margins, max width, and bottom hot-zone height
+    - fullscreen control-bar hide offset, reveal animation duration, and opacity fade duration
+    - fullscreen control-bar auto-hide delay
+  - Rule: keep local while they only shape the main-window preview UX and do not need preview/export parity
 
 ## 3. Promotion Rules
 

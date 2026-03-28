@@ -1391,6 +1391,550 @@ void MainWindow::setPreviewCanvasAspectRatio(double ratio, bool persistState)
         savePortableState();
     }
 }
+void MainWindow::togglePreviewFullscreen()
+{
+    if (previewFullscreenActive_) {
+        exitPreviewFullscreen();
+        return;
+    }
+    enterPreviewFullscreen();
+}
+
+void MainWindow::enterPreviewFullscreen()
+{
+    if (previewFullscreenActive_ || previewCanvasContainer_ == nullptr || previewCanvasFrame_ == nullptr) {
+        return;
+    }
+    if (previewFullscreenWindow_ == nullptr) {
+        previewFullscreenWindow_ = new QWidget(this, Qt::Window);
+        previewFullscreenWindow_->setWindowTitle(uiText(
+            "preview.fullscreen.window_title",
+            QStringLiteral("Fullscreen Preview")
+        ));
+        previewFullscreenWindow_->setStyleSheet(QStringLiteral("background-color: #000000;"));
+        previewFullscreenWindow_->setAttribute(Qt::WA_DeleteOnClose, false);
+        previewFullscreenWindow_->setFocusPolicy(Qt::StrongFocus);
+        previewFullscreenWindow_->setMouseTracking(true);
+        previewFullscreenWindow_->installEventFilter(this);
+        auto* fullscreenLayout = new QVBoxLayout(previewFullscreenWindow_);
+        fullscreenLayout->setContentsMargins(0, 0, 0, 0);
+        fullscreenLayout->setSpacing(0);
+        previewFullscreenHost_ = new QWidget(previewFullscreenWindow_);
+        previewFullscreenHost_->setStyleSheet(QStringLiteral("background-color: #000000;"));
+        previewFullscreenHost_->setFocusPolicy(Qt::StrongFocus);
+        previewFullscreenHost_->setMouseTracking(true);
+        previewFullscreenHost_->installEventFilter(this);
+        auto* hostLayout = new QVBoxLayout(previewFullscreenHost_);
+        hostLayout->setContentsMargins(0, 0, 0, 0);
+        hostLayout->setSpacing(0);
+        fullscreenLayout->addWidget(previewFullscreenHost_);
+    }
+    if (previewFullscreenControlsWindow_ == nullptr && previewFullscreenWindow_ != nullptr) {
+        previewFullscreenControlsWindow_ = new QWidget(
+            previewFullscreenWindow_,
+            Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::NoDropShadowWindowHint
+        );
+        previewFullscreenControlsWindow_->setAttribute(Qt::WA_ShowWithoutActivating);
+        previewFullscreenControlsWindow_->setAttribute(Qt::WA_TranslucentBackground);
+        previewFullscreenControlsWindow_->setFocusPolicy(Qt::StrongFocus);
+        previewFullscreenControlsWindow_->setMouseTracking(true);
+        previewFullscreenControlsWindow_->installEventFilter(this);
+        auto* controlsLayout = new QVBoxLayout(previewFullscreenControlsWindow_);
+        controlsLayout->setContentsMargins(0, 0, 0, 0);
+        controlsLayout->setSpacing(0);
+        previewFullscreenControlsWindow_->hide();
+    }
+    if (previewFullscreenHintWindow_ == nullptr && previewFullscreenWindow_ != nullptr) {
+        previewFullscreenHintWindow_ = new QWidget(
+            previewFullscreenWindow_,
+            Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::NoDropShadowWindowHint
+        );
+        previewFullscreenHintWindow_->setAttribute(Qt::WA_ShowWithoutActivating);
+        previewFullscreenHintWindow_->setAttribute(Qt::WA_TranslucentBackground);
+        previewFullscreenHintWindow_->setAttribute(Qt::WA_TransparentForMouseEvents);
+        previewFullscreenHintWindow_->installEventFilter(this);
+        auto* hintLayout = new QVBoxLayout(previewFullscreenHintWindow_);
+        hintLayout->setContentsMargins(0, 0, 0, 0);
+        hintLayout->setSpacing(0);
+        previewFullscreenHintWindow_->hide();
+    }
+    if (previewFullscreenHintLabel_ == nullptr && previewFullscreenHintWindow_ != nullptr) {
+        previewFullscreenHintLabel_ = new QLabel(previewFullscreenHintWindow_);
+        previewFullscreenHintLabel_->setAttribute(Qt::WA_TransparentForMouseEvents);
+        previewFullscreenHintLabel_->setAttribute(Qt::WA_StyledBackground, true);
+        previewFullscreenHintLabel_->setAlignment(Qt::AlignCenter);
+        previewFullscreenHintLabel_->setStyleSheet(previewFullscreenHintStyleSheet());
+        if (previewFullscreenHintWindow_->layout() != nullptr) {
+            previewFullscreenHintWindow_->layout()->addWidget(previewFullscreenHintLabel_);
+        }
+        previewFullscreenHintLabel_->hide();
+    }
+    if (previewFullscreenHintTimer_ == nullptr) {
+        previewFullscreenHintTimer_ = new QTimer(this);
+        previewFullscreenHintTimer_->setSingleShot(true);
+        connect(previewFullscreenHintTimer_, &QTimer::timeout, this, [this]() {
+            if (previewFullscreenHintWindow_ != nullptr) {
+                previewFullscreenHintWindow_->hide();
+            }
+        });
+    }
+    if (previewFullscreenControlsTimer_ == nullptr) {
+        previewFullscreenControlsTimer_ = new QTimer(this);
+        previewFullscreenControlsTimer_->setSingleShot(true);
+        connect(previewFullscreenControlsTimer_, &QTimer::timeout, this, [this]() {
+            hidePreviewFullscreenControls(true);
+        });
+    }
+    if (previewFullscreenCursorPollTimer_ == nullptr) {
+        previewFullscreenCursorPollTimer_ = new QTimer(this);
+        previewFullscreenCursorPollTimer_->setInterval(120);
+        connect(previewFullscreenCursorPollTimer_, &QTimer::timeout, this, &MainWindow::pollPreviewFullscreenCursor);
+    }
+    if (previewFullscreenControlsWindow_ != nullptr
+        && (previewFullscreenControlsAnimation_ == nullptr
+            || previewFullscreenControlsAnimation_->targetObject() != previewFullscreenControlsWindow_)) {
+        delete previewFullscreenControlsAnimation_;
+        previewFullscreenControlsAnimation_ = new QPropertyAnimation(
+            previewFullscreenControlsWindow_,
+            "geometry",
+            this
+        );
+        previewFullscreenControlsAnimation_->setDuration(kPreviewFullscreenControlsAnimationDurationMs);
+        previewFullscreenControlsAnimation_->setEasingCurve(QEasingCurve::OutCubic);
+    }
+    if (previewFullscreenControlsWindow_ != nullptr
+        && (previewFullscreenControlsOpacityAnimation_ == nullptr
+            || previewFullscreenControlsOpacityAnimation_->targetObject() != previewFullscreenControlsWindow_)) {
+        delete previewFullscreenControlsOpacityAnimation_;
+        previewFullscreenControlsOpacityAnimation_ = new QPropertyAnimation(
+            previewFullscreenControlsWindow_,
+            "windowOpacity",
+            this
+        );
+        previewFullscreenControlsOpacityAnimation_->setDuration(kPreviewFullscreenControlsOpacityAnimationDurationMs);
+        previewFullscreenControlsOpacityAnimation_->setEasingCurve(QEasingCurve::OutCubic);
+        connect(previewFullscreenControlsOpacityAnimation_, &QPropertyAnimation::finished, this, [this]() {
+            if (!previewFullscreenControlsVisible_ && previewFullscreenControlsWindow_ != nullptr) {
+                previewFullscreenControlsWindow_->hide();
+                previewFullscreenControlsWindow_->setWindowOpacity(0.0);
+            }
+        });
+    }
+    if (previewFullscreenHost_ == nullptr || previewFullscreenHost_->layout() == nullptr) {
+        return;
+    }
+    previewCanvasContainer_->setParent(previewFullscreenHost_);
+    previewFullscreenHost_->layout()->addWidget(previewCanvasContainer_);
+    if (previewControlCard_ != nullptr && previewFullscreenControlsWindow_ != nullptr) {
+        previewControlCard_->setParent(previewFullscreenControlsWindow_);
+        previewControlCard_->setAttribute(Qt::WA_StyledBackground, true);
+        previewControlCard_->setStyleSheet(previewFullscreenControlCardStyleSheet());
+        if (previewFullscreenControlsWindow_->layout() != nullptr) {
+            previewFullscreenControlsWindow_->layout()->addWidget(previewControlCard_);
+        }
+        previewControlCard_->show();
+    }
+    previewCanvasContainer_->show();
+    previewFullscreenActive_ = true;
+    previewFullscreenControlsVisible_ = false;
+    previewFullscreenCursorTrackingInitialized_ = false;
+    if (stopPreviewAction_ != nullptr) {
+        stopPreviewAction_->setIcon(makePreviewStopIcon(previewFullscreenOverlayIconColor()));
+    }
+    updatePauseButtonAppearance();
+    updatePreviewFullscreenButtonAppearance();
+    previewFullscreenWindow_->showFullScreen();
+    previewFullscreenWindow_->raise();
+    previewFullscreenWindow_->activateWindow();
+    if (previewFullscreenHintLabel_ != nullptr
+        && previewFullscreenHintWindow_ != nullptr
+        && previewFullscreenWindow_ != nullptr) {
+        const QString exitHint = uiText(
+            "preview.fullscreen.exit_hint",
+            QStringLiteral("Press Esc to exit fullscreen")
+        );
+        QTimer::singleShot(0, this, [this, exitHint]() {
+            if (!previewFullscreenActive_
+                || previewFullscreenWindow_ == nullptr
+                || previewFullscreenHintWindow_ == nullptr
+                || previewFullscreenHintLabel_ == nullptr) {
+                return;
+            }
+            previewFullscreenHintLabel_->setText(exitHint);
+            previewFullscreenHintLabel_->setStyleSheet(previewFullscreenHintStyleSheet());
+            previewFullscreenHintLabel_->adjustSize();
+            previewFullscreenHintWindow_->show();
+            previewFullscreenHintWindow_->raise();
+            previewFullscreenHintLabel_->show();
+            updatePreviewFullscreenOverlayGeometry();
+            if (previewFullscreenHintTimer_ != nullptr) {
+                previewFullscreenHintTimer_->start(2200);
+            }
+        });
+    }
+    if (previewFullscreenControlsWindow_ != nullptr) {
+        previewFullscreenControlsWindow_->setWindowOpacity(0.0);
+        previewFullscreenControlsWindow_->hide();
+    }
+    updatePreviewFullscreenOverlayGeometry();
+    if (previewFullscreenCursorPollTimer_ != nullptr) {
+        previewFullscreenCursorPollTimer_->start();
+    }
+    previewCanvasContainer_->setFocus();
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->requestActivate();
+    }
+}
+
+void MainWindow::exitPreviewFullscreen()
+{
+    if (!previewFullscreenActive_ || previewCanvasContainer_ == nullptr || previewCanvasFrame_ == nullptr) {
+        return;
+    }
+    if (previewFullscreenControlsTimer_ != nullptr) {
+        previewFullscreenControlsTimer_->stop();
+    }
+    if (previewFullscreenCursorPollTimer_ != nullptr) {
+        previewFullscreenCursorPollTimer_->stop();
+    }
+    if (previewFullscreenControlsAnimation_ != nullptr) {
+        previewFullscreenControlsAnimation_->stop();
+    }
+    if (previewFullscreenControlsOpacityAnimation_ != nullptr) {
+        previewFullscreenControlsOpacityAnimation_->stop();
+    }
+    if (previewFullscreenHost_ != nullptr && previewFullscreenHost_->layout() != nullptr) {
+        previewFullscreenHost_->layout()->removeWidget(previewCanvasContainer_);
+    }
+    previewCanvasContainer_->setParent(previewCanvasFrame_);
+    if (previewControlCard_ != nullptr && previewControlCard_->parentWidget() == previewFullscreenControlsWindow_) {
+        if (previewFullscreenControlsWindow_ != nullptr && previewFullscreenControlsWindow_->layout() != nullptr) {
+            previewFullscreenControlsWindow_->layout()->removeWidget(previewControlCard_);
+        }
+        previewControlCard_->hide();
+        previewControlCard_->setParent(previewPanel_);
+        previewControlCard_->setStyleSheet(QString());
+    }
+    previewFullscreenActive_ = false;
+    previewFullscreenControlsVisible_ = false;
+    previewFullscreenCursorTrackingInitialized_ = false;
+    if (previewFullscreenHintTimer_ != nullptr) {
+        previewFullscreenHintTimer_->stop();
+    }
+    if (previewFullscreenHintLabel_ != nullptr) {
+        previewFullscreenHintLabel_->hide();
+    }
+    if (previewFullscreenHintWindow_ != nullptr) {
+        previewFullscreenHintWindow_->hide();
+    }
+    if (previewFullscreenControlsWindow_ != nullptr) {
+        previewFullscreenControlsWindow_->setWindowOpacity(0.0);
+        previewFullscreenControlsWindow_->hide();
+    }
+    if (previewFullscreenWindow_ != nullptr) {
+        previewFullscreenWindow_->hide();
+    }
+    if (stopPreviewAction_ != nullptr) {
+        stopPreviewAction_->setIcon(makePreviewStopIcon(UiTheme::colors().iconPrimary));
+    }
+    updatePauseButtonAppearance();
+    updatePreviewFullscreenButtonAppearance();
+    updatePreviewPanelLayout();
+    if (previewControlCard_ != nullptr) {
+        previewControlCard_->show();
+    }
+    previewCanvasContainer_->show();
+    previewCanvasContainer_->setFocus();
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->requestActivate();
+    }
+}
+
+void MainWindow::updatePreviewFullscreenButtonAppearance()
+{
+    if (previewFullscreenButton_ == nullptr) {
+        return;
+    }
+    const QSignalBlocker blocker(previewFullscreenButton_);
+    const QColor iconColor =
+        previewFullscreenActive_ ? previewFullscreenOverlayIconColor() : UiTheme::colors().iconPrimary;
+    previewFullscreenButton_->setChecked(previewFullscreenActive_);
+    previewFullscreenButton_->setText(QString());
+    previewFullscreenButton_->setIcon(
+        previewFullscreenActive_ ? makePreviewExitFullscreenIcon(iconColor) : makePreviewEnterFullscreenIcon(iconColor)
+    );
+    previewFullscreenButton_->setToolTip(QString());
+}
+
+bool MainWindow::shouldRevealPreviewFullscreenControls(const QPoint& globalCursorPos) const
+{
+    if (!previewFullscreenActive_ || previewFullscreenWindow_ == nullptr) {
+        return false;
+    }
+
+    const QRect windowGlobalRect(
+        previewFullscreenWindow_->mapToGlobal(QPoint(0, 0)),
+        previewFullscreenWindow_->size()
+    );
+    if (!windowGlobalRect.contains(globalCursorPos)) {
+        return false;
+    }
+
+    if (previewFullscreenControlsWindow_ != nullptr
+        && previewFullscreenControlsWindow_->isVisible()
+        && previewFullscreenControlsWindow_->geometry().contains(globalCursorPos)) {
+        return true;
+    }
+
+    const int controlsHeight =
+        previewControlCard_ != nullptr
+            ? qMax(previewControlCard_->minimumSizeHint().height(), previewControlCard_->sizeHint().height())
+            : 0;
+    const int revealHotzoneHeight = qMin(
+        windowGlobalRect.height(),
+        qMax(kPreviewFullscreenControlsRevealHotzoneHeight, controlsHeight + kPreviewFullscreenOverlayBottomMargin)
+    );
+    return globalCursorPos.y() >= windowGlobalRect.bottom() - revealHotzoneHeight;
+}
+
+QRect MainWindow::previewFullscreenControlCardRect(bool visible) const
+{
+    if (previewFullscreenWindow_ == nullptr || previewControlCard_ == nullptr) {
+        return QRect();
+    }
+    const QRect windowRect = previewFullscreenWindow_->contentsRect();
+    if (windowRect.width() <= 0 || windowRect.height() <= 0) {
+        return QRect();
+    }
+    const QPoint globalTopLeft = previewFullscreenWindow_->mapToGlobal(windowRect.topLeft());
+
+    const int horizontalMargin = qMin(kPreviewFullscreenOverlaySideMargin, qMax(12, windowRect.width() / 20));
+    const int availableWidth = qMax(0, windowRect.width() - horizontalMargin * 2);
+    if (availableWidth <= 0) {
+        return QRect();
+    }
+
+    const QSize preferredSize = previewControlCard_->sizeHint().expandedTo(previewControlCard_->minimumSizeHint());
+    const int cardWidth = qMax(
+        previewControlCard_->minimumSizeHint().width(),
+        qMin(availableWidth, kPreviewFullscreenOverlayMaxWidth)
+    );
+    const int cardHeight = qMax(preferredSize.height(), previewControlCard_->minimumSizeHint().height());
+    const int cardX = globalTopLeft.x() + qMax(0, (windowRect.width() - cardWidth) / 2);
+    const int visibleY = globalTopLeft.y() + windowRect.height() - cardHeight - kPreviewFullscreenOverlayBottomMargin;
+    const int hiddenY = globalTopLeft.y() + windowRect.height() + kPreviewFullscreenOverlayHideOffset;
+    return QRect(cardX, visible ? visibleY : hiddenY, cardWidth, cardHeight);
+}
+
+void MainWindow::showPreviewFullscreenControls(bool animate)
+{
+    if (!previewFullscreenActive_
+        || previewFullscreenWindow_ == nullptr
+        || previewFullscreenControlsWindow_ == nullptr
+        || previewControlCard_ == nullptr
+        || previewControlCard_->parentWidget() != previewFullscreenControlsWindow_) {
+        return;
+    }
+
+    const QRect targetRect = previewFullscreenControlCardRect(true);
+    if (!targetRect.isValid()) {
+        return;
+    }
+
+    if (previewFullscreenControlsAnimation_ != nullptr) {
+        previewFullscreenControlsAnimation_->stop();
+    }
+    if (previewFullscreenControlsOpacityAnimation_ != nullptr) {
+        previewFullscreenControlsOpacityAnimation_->stop();
+    }
+
+    QRect currentRect = previewFullscreenControlsWindow_->geometry();
+    if (!currentRect.isValid()) {
+        currentRect = previewFullscreenControlCardRect(false);
+    }
+    if (!previewFullscreenControlsWindow_->isVisible()) {
+        previewFullscreenControlsWindow_->setGeometry(currentRect);
+        previewFullscreenControlsWindow_->setWindowOpacity(0.0);
+    }
+
+    previewFullscreenControlsWindow_->show();
+    previewFullscreenControlsWindow_->raise();
+    previewControlCard_->show();
+
+    const qreal currentOpacity = previewFullscreenControlsWindow_->windowOpacity();
+    if (!animate || !currentRect.isValid() || currentRect == targetRect) {
+        previewFullscreenControlsWindow_->setGeometry(targetRect);
+        previewFullscreenControlsWindow_->setWindowOpacity(1.0);
+    } else {
+        if (previewFullscreenControlsAnimation_ != nullptr) {
+            previewFullscreenControlsAnimation_->setStartValue(currentRect);
+            previewFullscreenControlsAnimation_->setEndValue(targetRect);
+            previewFullscreenControlsAnimation_->start();
+        } else {
+            previewFullscreenControlsWindow_->setGeometry(targetRect);
+        }
+        if (previewFullscreenControlsOpacityAnimation_ != nullptr) {
+            previewFullscreenControlsOpacityAnimation_->setStartValue(currentOpacity);
+            previewFullscreenControlsOpacityAnimation_->setEndValue(1.0);
+            previewFullscreenControlsOpacityAnimation_->start();
+        } else {
+            previewFullscreenControlsWindow_->setWindowOpacity(1.0);
+        }
+    }
+
+    previewFullscreenControlsVisible_ = true;
+    schedulePreviewFullscreenControlsAutoHide();
+}
+
+void MainWindow::hidePreviewFullscreenControls(bool animate)
+{
+    if (!previewFullscreenActive_
+        || previewFullscreenWindow_ == nullptr
+        || previewFullscreenControlsWindow_ == nullptr
+        || previewControlCard_ == nullptr
+        || previewControlCard_->parentWidget() != previewFullscreenControlsWindow_) {
+        return;
+    }
+
+    const bool pointerOverControls =
+        previewControlCard_->underMouse()
+        || (previewSlider_ != nullptr && previewSlider_->underMouse())
+        || (stopPreviewButton_ != nullptr && stopPreviewButton_->underMouse())
+        || (pausePreviewButton_ != nullptr && pausePreviewButton_->underMouse())
+        || (previewSpeedButton_ != nullptr && previewSpeedButton_->underMouse())
+        || (previewFullscreenButton_ != nullptr && previewFullscreenButton_->underMouse());
+    const bool speedMenuVisible =
+        previewSpeedButton_ != nullptr
+        && previewSpeedButton_->menu() != nullptr
+        && previewSpeedButton_->menu()->isVisible();
+    if (previewSliderDragging_ || pointerOverControls || speedMenuVisible) {
+        schedulePreviewFullscreenControlsAutoHide();
+        return;
+    }
+
+    const QRect targetRect = previewFullscreenControlCardRect(false);
+    if (!targetRect.isValid()) {
+        return;
+    }
+
+    if (previewFullscreenControlsAnimation_ != nullptr) {
+        previewFullscreenControlsAnimation_->stop();
+    }
+    if (previewFullscreenControlsOpacityAnimation_ != nullptr) {
+        previewFullscreenControlsOpacityAnimation_->stop();
+    }
+
+    const QRect currentRect = previewFullscreenControlsWindow_->geometry();
+    if (!animate || !currentRect.isValid() || currentRect == targetRect) {
+        previewFullscreenControlsWindow_->setGeometry(targetRect);
+        previewFullscreenControlsWindow_->setWindowOpacity(0.0);
+        previewFullscreenControlsWindow_->hide();
+    } else {
+        if (previewFullscreenControlsAnimation_ != nullptr) {
+            previewFullscreenControlsAnimation_->setStartValue(currentRect);
+            previewFullscreenControlsAnimation_->setEndValue(targetRect);
+            previewFullscreenControlsAnimation_->start();
+        } else {
+            previewFullscreenControlsWindow_->setGeometry(targetRect);
+        }
+        if (previewFullscreenControlsOpacityAnimation_ != nullptr) {
+            previewFullscreenControlsOpacityAnimation_->setStartValue(previewFullscreenControlsWindow_->windowOpacity());
+            previewFullscreenControlsOpacityAnimation_->setEndValue(0.0);
+            previewFullscreenControlsOpacityAnimation_->start();
+        } else {
+            previewFullscreenControlsWindow_->setWindowOpacity(0.0);
+            previewFullscreenControlsWindow_->hide();
+        }
+    }
+
+    previewFullscreenControlsVisible_ = false;
+}
+
+void MainWindow::schedulePreviewFullscreenControlsAutoHide()
+{
+    if (!previewFullscreenActive_ || previewFullscreenControlsTimer_ == nullptr) {
+        return;
+    }
+    previewFullscreenControlsTimer_->start(kPreviewFullscreenControlsAutoHideDelayMs);
+}
+
+void MainWindow::pollPreviewFullscreenCursor()
+{
+    if (!previewFullscreenActive_ || previewFullscreenWindow_ == nullptr) {
+        return;
+    }
+
+    const QPoint globalCursorPos = QCursor::pos();
+    const QRect windowGlobalRect(
+        previewFullscreenWindow_->mapToGlobal(QPoint(0, 0)),
+        previewFullscreenWindow_->size()
+    );
+    const bool insideWindow = windowGlobalRect.contains(globalCursorPos);
+    if (!insideWindow) {
+        if (previewFullscreenControlsVisible_) {
+            schedulePreviewFullscreenControlsAutoHide();
+        }
+        previewFullscreenCursorTrackingInitialized_ = false;
+        return;
+    }
+
+    if (!previewFullscreenCursorTrackingInitialized_) {
+        previewFullscreenLastCursorPos_ = globalCursorPos;
+        previewFullscreenCursorTrackingInitialized_ = true;
+        return;
+    }
+
+    if (previewFullscreenLastCursorPos_ != globalCursorPos) {
+        previewFullscreenLastCursorPos_ = globalCursorPos;
+        if (shouldRevealPreviewFullscreenControls(globalCursorPos)) {
+            showPreviewFullscreenControls(true);
+        } else if (previewFullscreenControlsVisible_) {
+            schedulePreviewFullscreenControlsAutoHide();
+        }
+    }
+}
+
+void MainWindow::updatePreviewFullscreenOverlayGeometry()
+{
+    if (!previewFullscreenActive_ || previewFullscreenWindow_ == nullptr) {
+        return;
+    }
+
+    const QRect windowRect = previewFullscreenWindow_->contentsRect();
+    const QPoint globalTopLeft = previewFullscreenWindow_->mapToGlobal(windowRect.topLeft());
+
+    if (previewFullscreenHintWindow_ != nullptr
+        && previewFullscreenHintLabel_ != nullptr
+        && previewFullscreenHintLabel_->isVisible()) {
+        const QSize hintSize = previewFullscreenHintLabel_->sizeHint().expandedTo(QSize(220, 42));
+        previewFullscreenHintWindow_->resize(hintSize);
+        previewFullscreenHintWindow_->move(
+            globalTopLeft.x() + qMax(16, (windowRect.width() - hintSize.width()) / 2),
+            globalTopLeft.y() + kPreviewFullscreenHintTopMargin
+        );
+        previewFullscreenHintLabel_->resize(hintSize);
+        previewFullscreenHintLabel_->raise();
+        previewFullscreenHintWindow_->raise();
+    }
+
+    if (previewFullscreenControlsWindow_ != nullptr
+        && previewControlCard_ != nullptr
+        && previewControlCard_->parentWidget() == previewFullscreenControlsWindow_) {
+        const QRect targetRect = previewFullscreenControlCardRect(previewFullscreenControlsVisible_);
+        if (targetRect.isValid()) {
+            if (previewFullscreenControlsAnimation_ != nullptr
+                && previewFullscreenControlsAnimation_->state() == QAbstractAnimation::Running) {
+                previewFullscreenControlsAnimation_->stop();
+            }
+            previewFullscreenControlsWindow_->setGeometry(targetRect);
+            previewFullscreenControlsWindow_->setWindowOpacity(previewFullscreenControlsVisible_ ? 1.0 : 0.0);
+            if (previewFullscreenControlsVisible_) {
+                previewFullscreenControlsWindow_->show();
+            }
+            previewFullscreenControlsWindow_->raise();
+        }
+    }
+}
 
 void MainWindow::updatePreviewWorkspaceLayout()
 {
@@ -1705,8 +2249,14 @@ void MainWindow::updatePreviewPanelLayout()
     }
 
     previewCanvasFrame_->setGeometry(previewX, contentY, previewWidth, previewHeight);
-    previewCanvasContainer_->setGeometry(previewCanvasFrame_->rect().adjusted(1, 1, -1, -1));
-    previewControlCard_->setGeometry(contentX, controlY, contentWidth, controlHeight);
+    if (!previewFullscreenActive_) {
+        previewCanvasContainer_->setGeometry(previewCanvasFrame_->rect().adjusted(1, 1, -1, -1));
+    }
+    if (!previewFullscreenActive_) {
+        previewControlCard_->setGeometry(contentX, controlY, contentWidth, controlHeight);
+    } else {
+        updatePreviewFullscreenOverlayGeometry();
+    }
     previewStatsCard_->setGeometry(contentX, statsY, contentWidth, statsHeight);
     updatePreviewStatsLayoutMode(statsHostWidth);
 
