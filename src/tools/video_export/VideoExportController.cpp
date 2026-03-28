@@ -186,7 +186,7 @@ struct ExportPipeBackpressureStats {
 struct RawVideoPipePlan {
     qint64 frameBytes = 0;
     qint64 requestedBufferBytes = 0;
-    int maxBufferedFrames = 4;
+    int maxBufferedFrames = 32;
     qint64 writeChunkBytes = 1LL * 1024LL * 1024LL;
     int connectTimeoutMs = 10000;
     int connectPollMs = 20;

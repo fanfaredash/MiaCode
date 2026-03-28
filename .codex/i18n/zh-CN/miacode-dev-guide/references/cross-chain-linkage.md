@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/cross-chain-linkage.md -->
-<!-- translation-source-hash: cda65f70dfd7b8325036f87d884ad7ac3e062325e89a0f778b2ca4e33b29aad4 -->
+<!-- translation-source-hash: 0ed4cfe4f9d47c93971f58db1d1a5fb63cccdaa6dd812935ff8030747ae5b1dc -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 跨链路联动
