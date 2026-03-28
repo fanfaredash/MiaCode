@@ -102,10 +102,10 @@ QString exportDialogPerformanceProfileLabel(VideoExportPerformanceProfile profil
 {
     switch (profile) {
     case VideoExportPerformanceProfile::Speed:
-        return uiText("dialog.video_export.performance.speed", QStringLiteral("Speed First"));
+        return uiText("dialog.video_export.performance.speed", QStringLiteral("Balanced"));
     case VideoExportPerformanceProfile::Balanced:
     default:
-        return uiText("dialog.video_export.performance.balanced", QStringLiteral("Balanced"));
+        return uiText("dialog.video_export.performance.balanced", QStringLiteral("High Quality"));
     }
 }
 
@@ -430,7 +430,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     topForm->addWidget(fpsButton_, row, 1, 1, 2);
     ++row;
 
-    auto* performanceLabel = new QLabel(uiText("dialog.video_export.performance", QStringLiteral("Performance")), this);
+    auto* performanceLabel = new QLabel(uiText("dialog.video_export.performance", QStringLiteral("Quality")), this);
     performanceLabel->setFixedWidth(kFormLabelWidth);
     performanceButton_ = createDialogMenuButton(this, exportDialogPerformanceProfileLabel(selectedPerformanceProfile_));
     performanceMenu_ = new QMenu(performanceButton_);

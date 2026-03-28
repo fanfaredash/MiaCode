@@ -31,7 +31,7 @@ struct VideoExportSnapshot {
     int outputWidth = 1024;
     int outputHeight = 1024;
     int fps = 60;
-    VideoExportPerformanceProfile performanceProfile = VideoExportPerformanceProfile::Balanced;
+    VideoExportPerformanceProfile performanceProfile = VideoExportPerformanceProfile::Speed;
     QString outputPath;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;

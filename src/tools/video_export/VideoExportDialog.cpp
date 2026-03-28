@@ -126,10 +126,10 @@ QString exportDialogPerformanceProfileLabel(VideoExportPerformanceProfile profil
 {
     switch (profile) {
     case VideoExportPerformanceProfile::Speed:
-        return uiText("dialog.video_export.performance.speed", QStringLiteral("Speed First"));
+        return uiText("dialog.video_export.performance.speed", QStringLiteral("Balanced"));
     case VideoExportPerformanceProfile::Balanced:
     default:
-        return uiText("dialog.video_export.performance.balanced", QStringLiteral("Balanced"));
+        return uiText("dialog.video_export.performance.balanced", QStringLiteral("High Quality"));
     }
 }
 
@@ -552,7 +552,7 @@ VideoExportDialog::VideoExportDialog(
     UiTheme::styleRoundedMenu(*performanceMenu_);
     addDialogMenuChoice(
         performanceMenu_,
-        uiText("dialog.video_export.performance.balanced", QStringLiteral("Balanced")),
+        uiText("dialog.video_export.performance.balanced", QStringLiteral("High Quality")),
         [this]() {
             selectedPerformanceProfile_ = VideoExportPerformanceProfile::Balanced;
             if (performanceButton_ != nullptr) {
@@ -562,7 +562,7 @@ VideoExportDialog::VideoExportDialog(
     );
     addDialogMenuChoice(
         performanceMenu_,
-        uiText("dialog.video_export.performance.speed", QStringLiteral("Speed First")),
+        uiText("dialog.video_export.performance.speed", QStringLiteral("Balanced")),
         [this]() {
             selectedPerformanceProfile_ = VideoExportPerformanceProfile::Speed;
             if (performanceButton_ != nullptr) {
@@ -576,7 +576,7 @@ VideoExportDialog::VideoExportDialog(
     performanceLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     performanceLayout->setSpacing(kFormRowSpacing);
     auto* performanceLabel = new QLabel(
-        uiText("dialog.video_export.performance", QStringLiteral("Speed")),
+        uiText("dialog.video_export.performance", QStringLiteral("Quality")),
         performanceRow
     );
     performanceLabel->setFixedWidth(kFormLabelWidth);
