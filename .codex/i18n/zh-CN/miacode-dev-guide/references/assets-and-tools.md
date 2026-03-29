@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/assets-and-tools.md -->
-<!-- translation-source-hash: 912f0f6ea64a4c0f8bdce4aa523c66d87d5949ff695c86e99eaa3671cad99ed9 -->
+<!-- translation-source-hash: f2db3bee52d77d700cf23c723823c40cd1f8341a80d08d8bd514eade715ccf66 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 资源与工具
@@ -71,6 +71,7 @@
   - 当前引用包括 `background/outline.png` 和 `background/outline_2.png`
 - 生成的 slide 数据：
   - 存放于 `assets/generated`
+  - 当前合并后的资产文件为 `assets/generated/slide_data.json`
   - 应将其视作运行时输入数据，而不是普通装饰资源
 
 ## 4. SFX 命名约定
