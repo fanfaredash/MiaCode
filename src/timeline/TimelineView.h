@@ -4,6 +4,7 @@
 #include <QCheckBox>
 #include <QFont>
 #include <QHash>
+#include <QImage>
 #include <QMouseEvent>
 #include <QPixmap>
 #include <QPointF>
@@ -15,70 +16,8 @@
 #include <QVector>
 #include <QEvent>
 
+#include "timeline/TimelineRenderData.h"
 #include "common/MuriTypes.h"
-
-struct TimelineBeatMarker {
-    double second = 0.0;
-    bool major = false;
-    int sourceLine = 1;
-    int sourceCol = 1;
-};
-
-struct TimelineNoteMarker {
-    double second = 0.0;
-    double endSecond = -1.0;
-    double slideTraceSecond = -1.0;
-    double availableSecond = -1.0;
-    int parseOrder = -1;
-    int eachGroupId = -1;
-    int sourceLine = 1;
-    int sourceCol = 1;
-    int lane = 1;
-    int endLane = 1;
-    QString type;
-    QString slideTrackKey;
-    QStringList slideSegmentKeys;
-    QVector<double> slideSegmentShootSeconds;
-    QVector<double> slideSegmentDurations;
-    QVector<QVector<MuriPadTimeEntry>> slideSegmentPadEnterTimes;
-    QVector<double> slideSegmentCriticalProportions;
-    QVector<QVector<QPointF>> slideSegmentPoints;
-    QVector<QVector<double>> slideSegmentAngles;
-    QVector<QVector<QPointF>> wifiLanePoints;
-    QVector<QVector<double>> wifiLaneAngles;
-    QVector<QVector<QVector<QPointF>>> slideTrackAreaPoints;
-    QVector<QVector<QVector<double>>> slideTrackAreaRotations;
-    QVector<QVector<double>> slideTrackAreaThresholds;
-    QVector<QVector<QVector<double>>> slideTrackAreaCheckpoints;
-    QVector<QVector<QVector<int>>> slideTrackAreaCutIndices;
-    QVector<QVector<QPointF>> wifiTrackAreaPoints;
-    QVector<QVector<double>> wifiTrackAreaRotations;
-    QVector<QVector<int>> wifiTrackAreaImageIndices;
-    QVector<double> wifiTrackAreaThresholds;
-    QVector<QVector<double>> wifiTrackAreaCheckpoints;
-    QVector<MuriPadTimeEntry> wifiPadEnterTimes;
-    double wifiCriticalProportion = 1.0;
-    double slideNativeTrackLength = 0.0;
-    double slideRuntimeTrackLength = 0.0;
-    QPointF touchPoint;
-    QString touchPad;
-    bool isEach = false;
-    bool isBreak = false;
-    bool isEx = false;
-    bool isFirework = false;
-    bool onSlide = false;
-    bool slideHead = false;
-    bool tailOnSlideHead = false;
-    bool slideEach = false;
-    bool sameHeadSlide = false;
-    bool beforeSlide = false;
-    bool afterSlide = false;
-    bool headEach = false;
-    bool headBreak = false;
-    bool headEx = false;
-    bool trackBreak = false;
-    bool hasHeadStar = true;
-};
 
 class TimelineView : public QAbstractScrollArea
 {
@@ -89,11 +28,7 @@ public:
     QSize minimumSizeHint() const override;
     QSize sizeHint() const override;
     void setHeaderLineNumberFont(const QFont& font);
-    void setTimelineData(
-        const QVector<TimelineBeatMarker>& beats,
-        const QVector<TimelineNoteMarker>& notes,
-        double durationSeconds
-    );
+    void setTimelineData(const TimelineRenderSnapshot& snapshot);
     void setWaveformData(const QVector<float>& peaks, double startSecond = 0.0, double durationSeconds = 0.0);
     void clear();
     void setPlayheadUpperLimitSeconds(double second);
@@ -130,6 +65,24 @@ protected:
     void scrollContentsBy(int dx, int dy) override;
 
 private:
+    struct VisibleLineRange {
+        int begin = 0;
+        int end = 0;
+    };
+
+    struct HoveredNoteRef {
+        const TimelineRenderLine* line = nullptr;
+        const TimelineRenderNote* note = nullptr;
+    };
+
+    struct HoldPixmapParts {
+        QPixmap cap;
+        QPixmap leftHalf;
+        QPixmap rightHalf;
+        QImage bodySlice;
+        int rightHalfOffset = 0;
+    };
+
     void updateDisplayBounds();
     void updateHorizontalRange();
     int contentWidth() const;
@@ -157,24 +110,35 @@ private:
     void updateZoomButtonAppearance();
     void layoutHeaderButtons();
     int lineNumberForSecond(double second) const;
-    QPixmap iconForType(const QString& type) const;
+    VisibleLineRange visibleLineRange(double startSecond, double endSecond) const;
+    void updateTimelineMarkerStrip(double oldSecond, double newSecond, int halfWidth);
+    const QPixmap& iconForType(const QString& type) const;
+    const QPixmap& transformedIconForType(
+        const QString& type,
+        qreal scale = 1.0,
+        qreal rotationDegrees = 0.0,
+        bool mirrorX = false) const;
+    const HoldPixmapParts& holdPixmapPartsForType(const QString& type, qreal scale) const;
     void loadNoteIcons();
-    const TimelineNoteMarker* nearestNoteForViewportPos(const QPointF& pos) const;
+    HoveredNoteRef nearestNoteForViewportPos(const QPointF& pos) const;
     int minimumContentHeightForCurrentDevice() const;
     void refreshMinimumHeightForCurrentDevice();
 
-    QVector<TimelineBeatMarker> beats_;
-    QVector<TimelineNoteMarker> notes_;
+    QVector<TimelineRenderLine> lines_;
     double durationSeconds_ = 0.0;
     double playheadSeconds_ = 0.0;
     double cursorSeconds_ = 0.0;
     double playheadUpperLimitSeconds_ = -1.0;
+    double minimumDataSecond_ = 0.0;
+    double maximumDataSecond_ = 0.0;
     double displayStartSeconds_ = -0.5;
     double displayEndSeconds_ = 1.0;
     double pixelsPerSecond_ = 120.0;
     bool showSlideTracks_ = true;
-    QSet<QString> muriMarkerKeys_;
+    QSet<quint64> muriMarkerLocationIds_;
     QHash<QString, QPixmap> noteIcons_;
+    mutable QHash<QString, QPixmap> transformedIconCache_;
+    mutable QHash<QString, HoldPixmapParts> holdPixmapPartsCache_;
     QVector<float> waveformPeaks_;
     double waveformStartSeconds_ = 0.0;
     double waveformDurationSeconds_ = 0.0;

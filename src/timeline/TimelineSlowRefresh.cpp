@@ -1,0 +1,155 @@
+#include "timeline/TimelineSlowRefresh.h"
+
+#include "common/MuriTypes.h"
+#include "tools/muri/MuriAnalyzer.h"
+#include "tools/muri/MuriStaticChecker.h"
+
+namespace {
+
+double shiftedTimelineSecond(double second, double offsetSeconds)
+{
+    if (!qIsFinite(second) || !qIsFinite(offsetSeconds)) {
+        return second;
+    }
+    return second + offsetSeconds;
+}
+
+QVector<TimelineBeatMarker> shiftedBeatMarkers(
+    const QVector<TimelineBeatMarker>& beatMarkers,
+    double offsetSeconds)
+{
+    QVector<TimelineBeatMarker> shifted = beatMarkers;
+    for (TimelineBeatMarker& marker : shifted) {
+        marker.second = shiftedTimelineSecond(marker.second, offsetSeconds);
+    }
+    return shifted;
+}
+
+QVector<TimelineNoteMarker> shiftedNoteMarkers(
+    const QVector<TimelineNoteMarker>& noteMarkers,
+    double offsetSeconds)
+{
+    QVector<TimelineNoteMarker> shifted = noteMarkers;
+    for (TimelineNoteMarker& marker : shifted) {
+        marker.second = shiftedTimelineSecond(marker.second, offsetSeconds);
+        if (marker.endSecond >= 0.0) {
+            marker.endSecond = shiftedTimelineSecond(marker.endSecond, offsetSeconds);
+        }
+        if (marker.slideTraceSecond >= 0.0) {
+            marker.slideTraceSecond = shiftedTimelineSecond(marker.slideTraceSecond, offsetSeconds);
+        }
+        if (marker.availableSecond >= 0.0) {
+            marker.availableSecond = shiftedTimelineSecond(marker.availableSecond, offsetSeconds);
+        }
+        for (double& shootSecond : marker.slideSegmentShootSeconds) {
+            shootSecond = shiftedTimelineSecond(shootSecond, offsetSeconds);
+        }
+    }
+    return shifted;
+}
+
+QByteArray noteMarkerSignature(const QVector<TimelineNoteMarker>& notes)
+{
+    QByteArray signature;
+    signature.reserve(notes.size() * 128);
+    for (const TimelineNoteMarker& marker : notes) {
+        signature.append(QByteArray::number(marker.sourceLine));
+        signature.append('|');
+        signature.append(QByteArray::number(marker.sourceCol));
+        signature.append('|');
+        signature.append(QByteArray::number(marker.lane));
+        signature.append('|');
+        signature.append(QByteArray::number(marker.endLane));
+        signature.append('|');
+        signature.append(QByteArray::number(marker.second, 'f', 6));
+        signature.append('|');
+        signature.append(QByteArray::number(marker.endSecond, 'f', 6));
+        signature.append('|');
+        signature.append(QByteArray::number(marker.slideTraceSecond, 'f', 6));
+        signature.append('|');
+        signature.append(marker.type.toUtf8());
+        signature.append('|');
+        signature.append(marker.slideTrackKey.toUtf8());
+        signature.append('|');
+        signature.append(QByteArray::number(marker.slideSegmentKeys.size()));
+        signature.append('|');
+        for (int index = 0; index < marker.slideSegmentKeys.size(); ++index) {
+            signature.append(marker.slideSegmentKeys.at(index).toUtf8());
+            signature.append(',');
+        }
+        signature.append('|');
+        signature.append(QByteArray::number(marker.slideSegmentShootSeconds.size()));
+        signature.append('|');
+        for (double second : marker.slideSegmentShootSeconds) {
+            signature.append(QByteArray::number(second, 'f', 6));
+            signature.append(',');
+        }
+        signature.append('|');
+        signature.append(QByteArray::number(marker.slideSegmentDurations.size()));
+        signature.append('|');
+        for (double duration : marker.slideSegmentDurations) {
+            signature.append(QByteArray::number(duration, 'f', 6));
+            signature.append(',');
+        }
+        signature.append('\n');
+    }
+    return signature;
+}
+
+double computeDurationSeconds(
+    const SimaiNativeParseResult& parseResult,
+    const QVector<TimelineBeatMarker>& beatMarkers,
+    const QVector<TimelineNoteMarker>& noteMarkers,
+    double firstSeconds)
+{
+    double durationSeconds = qMax(0.0, parseResult.durationSeconds + firstSeconds);
+    for (const TimelineNoteMarker& marker : noteMarkers) {
+        durationSeconds = qMax(durationSeconds, marker.second);
+        if (marker.endSecond > marker.second) {
+            durationSeconds = qMax(durationSeconds, marker.endSecond);
+        }
+    }
+    for (const TimelineBeatMarker& marker : beatMarkers) {
+        durationSeconds = qMax(durationSeconds, marker.second);
+    }
+    return durationSeconds;
+}
+
+}  // namespace
+
+TimelineSlowRefreshResult buildTimelineSlowRefreshResult(const TimelineSlowRefreshRequest& request)
+{
+    TimelineSlowRefreshResult result;
+    result.revision = request.revision;
+    result.difficultyId = request.difficultyId;
+    result.chartText = request.chartText;
+    result.firstSeconds = request.firstSeconds;
+    result.chineseUi = request.chineseUi;
+    result.parseResult = SimaiNativeParser::parseForTimeline(request.chartText);
+    result.shiftedBeatMarkers = shiftedBeatMarkers(result.parseResult.beatMarkers, request.firstSeconds);
+    result.shiftedNoteMarkers = shiftedNoteMarkers(result.parseResult.noteMarkers, request.firstSeconds);
+    result.noteMarkerSignature = noteMarkerSignature(result.shiftedNoteMarkers);
+    result.durationSeconds = computeDurationSeconds(
+        result.parseResult,
+        result.shiftedBeatMarkers,
+        result.shiftedNoteMarkers,
+        request.firstSeconds);
+    result.validationReport = SimaiNativeParser::buildValidationReport(
+        request.chartText,
+        request.chineseUi ? SimaiNativeValidationLocale::Chinese : SimaiNativeValidationLocale::English,
+        &result.parseResult);
+    return result;
+}
+
+TimelineMuriRefreshResult buildTimelineMuriRefreshResult(const TimelineMuriRefreshRequest& request)
+{
+    TimelineMuriRefreshResult result;
+    result.revision = request.revision;
+    result.difficultyId = request.difficultyId;
+    result.noteMarkerSignature = request.noteMarkerSignature;
+    result.analysisReport = MuriAnalyzer::analyze(request.noteMarkers, request.renderOptions);
+    result.staticReferences = miacode::muri::buildStaticMuriReferences(
+        request.noteMarkers,
+        request.staticTapOnSlideThresholdSeconds);
+    return result;
+}

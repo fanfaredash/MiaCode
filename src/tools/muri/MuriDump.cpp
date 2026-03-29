@@ -16,7 +16,7 @@
 
 #include "SimaiDocument.h"
 #include "SimaiNativeParser.h"
-#include "TimelineView.h"
+#include "timeline/TimelineData.h"
 #include "common/MuriConfig.h"
 #include "common/MuriTypes.h"
 #include "tools/muri/MuriAnalyzer.h"

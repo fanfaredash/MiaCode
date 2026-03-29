@@ -178,7 +178,6 @@ void MainWindow::onNewFile()
     clearValidationCache();
     currentEncoding_ = TextEncoding::Utf8;
     setCurrentFilePath(targetPath);
-    (void)runValidateSimaiSilently(false);
     statusBar()->showMessage(QString("Created: %1").arg(targetPath));
 }
 
@@ -289,7 +288,6 @@ bool MainWindow::openFileAtPath(const QString& path, bool showStatusMessage, boo
     currentEncoding_ = encodingUsed;
     setCurrentFilePath(normalizedPath);
     loadDocument(SimaiDocument::fromText(text));
-    (void)runValidateSimaiSilently(false);
     refreshWaveformCache();
     if (showStatusMessage) {
         statusBar()->showMessage(
@@ -469,9 +467,6 @@ bool MainWindow::applyBatchTransform(const QString& opName, const BatchTransform
 
     markCurrentFieldDirty();
     lastPreviewNoteMarkerSignature_.clear();
-    if (metadataRefreshTimer_ != nullptr) {
-        metadataRefreshTimer_->stop();
-    }
     refreshTimelineMetadata();
     statusBar()->showMessage(QString("%1 applied: %2 replacement(s).").arg(opName).arg(changed));
     return true;
@@ -539,9 +534,6 @@ bool MainWindow::applySelectionBatchTransform(const QString& opName, const Batch
 
     markCurrentFieldDirty();
     lastPreviewNoteMarkerSignature_.clear();
-    if (metadataRefreshTimer_ != nullptr) {
-        metadataRefreshTimer_->stop();
-    }
     refreshTimelineMetadata();
     statusBar()->showMessage(QString("%1 applied on selection: %2 replacement(s).").arg(opName).arg(changed));
     return true;
@@ -1274,7 +1266,6 @@ bool MainWindow::switchToDifficultyField(int difficultyId)
         bottomTabs_->setVisible(true);
     }
     setValidationTabVisible(true);
-    (void)runValidateSimaiSilently(false);
     currentFieldDirty_ = false;
     updateDirtyState();
     rebuildFieldSidebar();
@@ -1336,17 +1327,13 @@ void MainWindow::loadDocument(const SimaiDocument& document)
 
 void MainWindow::clearTimelineAndPreview()
 {
-    if (metadataRefreshTimer_ != nullptr) {
-        metadataRefreshTimer_->stop();
-    }
-    if (validationRefreshTimer_ != nullptr) {
-        validationRefreshTimer_->stop();
-    }
-    if (muriRefreshTimer_ != nullptr) {
-        muriRefreshTimer_->stop();
-    }
-    timelineCursorNotes_.clear();
-    previewFollowCursorNotes_.clear();
+    timelineQuickModel_.clear();
+    pendingTimelineSlowRefresh_ = TimelineSlowRefreshRequest();
+    pendingTimelineMuriRefresh_ = TimelineMuriRefreshRequest();
+    timelineSlowRequestedRevision_ = 0;
+    timelineSlowRunningRevision_ = 0;
+    timelineMuriRequestedRevision_ = 0;
+    timelineMuriRunningRevision_ = 0;
     pendingMuriNoteMarkers_.clear();
     pendingMuriNoteMarkerSignature_.clear();
     lastPreviewNoteMarkerSignature_.clear();

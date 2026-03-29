@@ -7,7 +7,7 @@
 #include "common/PreviewVideoGeometryConfig.h"
 #include "PreviewRenderSettings.h"
 #include "PreviewGLRenderer.h"
-#include "TimelineView.h"
+#include "timeline/TimelineData.h"
 
 #include <QElapsedTimer>
 #include <QHash>

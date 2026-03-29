@@ -9,7 +9,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-#include "TimelineView.h"
+#include "timeline/TimelineData.h"
 #include "common/MuriConfig.h"
 
 namespace {

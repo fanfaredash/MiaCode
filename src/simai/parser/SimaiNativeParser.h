@@ -3,7 +3,7 @@
 #include <QString>
 #include <QVector>
 
-#include "TimelineView.h"
+#include "timeline/TimelineData.h"
 
 struct SimaiNativeMessage {
     int line = 1;

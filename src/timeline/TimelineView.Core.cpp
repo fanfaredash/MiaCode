@@ -66,7 +66,7 @@ double TimelineView::xToSecond(int x) const
 
 double TimelineView::maxNavigableSecond() const
 {
-    double maxSecond = qMax(0.0, qMax(durationSeconds_, qMax(playheadSeconds_, qMax(cursorSeconds_, 0.0))));
+    double maxSecond = qMax(0.0, qMax(maximumDataSecond_, qMax(durationSeconds_, qMax(playheadSeconds_, qMax(cursorSeconds_, 0.0)))));
     if (playheadUpperLimitSeconds_ > 0.0) {
         maxSecond = qMax(maxSecond, playheadUpperLimitSeconds_);
     }
@@ -275,28 +275,183 @@ void TimelineView::layoutHeaderButtons()
 
 int TimelineView::lineNumberForSecond(double second) const
 {
-    if (notes_.isEmpty()) {
+    if (lines_.isEmpty()) {
         return qMax(1, qRound(second));
     }
-    for (const TimelineNoteMarker& note : notes_) {
-        if (note.second + 1e-6 >= second) {
-            return qMax(1, note.sourceLine);
-        }
+    const auto it = std::upper_bound(
+        lines_.cbegin(),
+        lines_.cend(),
+        second,
+        [](double targetSecond, const TimelineRenderLine& line) {
+            return targetSecond < (line.startSecond + 1e-6);
+        });
+    if (it == lines_.cbegin()) {
+        return qMax(1, lines_.constFirst().lineNumber);
     }
-    return qMax(1, notes_.constLast().sourceLine);
+    return qMax(1, std::prev(it)->lineNumber);
 }
 
-QPixmap TimelineView::iconForType(const QString& type) const
+TimelineView::VisibleLineRange TimelineView::visibleLineRange(double startSecond, double endSecond) const
 {
-    const QString key = type.toLower();
-    if (noteIcons_.contains(key)) {
-        return noteIcons_.value(key);
+    VisibleLineRange range;
+    if (lines_.isEmpty()) {
+        return range;
     }
-    return noteIcons_.value("tap");
+
+    const double boundedStart = qMin(startSecond, endSecond);
+    const double boundedEnd = qMax(startSecond, endSecond);
+    const auto beginIt = std::lower_bound(
+        lines_.cbegin(),
+        lines_.cend(),
+        boundedStart,
+        [](const TimelineRenderLine& line, double targetSecond) {
+            return line.startSecond < targetSecond;
+        });
+    const auto endIt = std::upper_bound(
+        lines_.cbegin(),
+        lines_.cend(),
+        boundedEnd,
+        [](double targetSecond, const TimelineRenderLine& line) {
+            return targetSecond < line.startSecond;
+        });
+
+    range.begin = static_cast<int>(std::distance(lines_.cbegin(), beginIt));
+    range.end = static_cast<int>(std::distance(lines_.cbegin(), endIt));
+    while (range.begin > 0 && lines_.at(range.begin - 1).endSecond + 1e-6 >= boundedStart) {
+        --range.begin;
+    }
+    while (range.end < lines_.size() && lines_.at(range.end).startSecond <= boundedEnd + 1e-6) {
+        ++range.end;
+    }
+    return range;
+}
+
+void TimelineView::updateTimelineMarkerStrip(double oldSecond, double newSecond, int halfWidth)
+{
+    if (viewport() == nullptr) {
+        return;
+    }
+
+    QRect dirtyRect;
+    const int xOffset = horizontalScrollBar()->value();
+    const int top = timelineTop();
+    const int height = timelineHeight();
+    const QRect timelineRect(timelineLeft(), top, viewport()->width() - timelineLeft(), height);
+
+    const auto addSecondRect = [&](double second) {
+        if (!qIsFinite(second) || second < 0.0) {
+            return;
+        }
+        const int x = secondToX(second) - xOffset;
+        QRect lineRect(x - halfWidth - 2, top, halfWidth * 2 + 5, height);
+        lineRect = lineRect.intersected(timelineRect);
+        if (lineRect.isEmpty()) {
+            return;
+        }
+        dirtyRect = dirtyRect.isNull() ? lineRect : dirtyRect.united(lineRect);
+    };
+
+    addSecondRect(oldSecond);
+    addSecondRect(newSecond);
+    if (!dirtyRect.isNull()) {
+        viewport()->update(dirtyRect);
+    } else {
+        viewport()->update();
+    }
+}
+
+const QPixmap& TimelineView::iconForType(const QString& type) const
+{
+    auto directIt = noteIcons_.constFind(type);
+    if (directIt != noteIcons_.constEnd()) {
+        return directIt.value();
+    }
+    const QString lower = type.toLower();
+    if (lower != type) {
+        auto lowerIt = noteIcons_.constFind(lower);
+        if (lowerIt != noteIcons_.constEnd()) {
+            return lowerIt.value();
+        }
+    }
+    auto fallbackIt = noteIcons_.constFind(QStringLiteral("tap"));
+    if (fallbackIt != noteIcons_.constEnd()) {
+        return fallbackIt.value();
+    }
+    static const QPixmap kNullPixmap;
+    return kNullPixmap;
+}
+
+const QPixmap& TimelineView::transformedIconForType(
+    const QString& type,
+    qreal scale,
+    qreal rotationDegrees,
+    bool mirrorX) const
+{
+    const QPixmap& base = iconForType(type);
+    if (base.isNull()) {
+        return base;
+    }
+
+    const qreal normalizedScale = scale > 0.0 ? scale : 1.0;
+    const int rotationTenths = transformedPixmapRotationTenths(rotationDegrees);
+    if (!mirrorX && qFuzzyCompare(normalizedScale, 1.0) && rotationTenths == 0) {
+        return base;
+    }
+
+    const QString cacheKey = transformedPixmapCacheKey(type, normalizedScale, rotationDegrees, mirrorX);
+    auto cacheIt = transformedIconCache_.constFind(cacheKey);
+    if (cacheIt != transformedIconCache_.constEnd()) {
+        return cacheIt.value();
+    }
+
+    QPixmap transformed = base;
+    if (!qFuzzyCompare(normalizedScale, 1.0)) {
+        transformed = transformed.scaled(
+            qMax(1, qRound(static_cast<qreal>(transformed.width()) * normalizedScale)),
+            qMax(1, qRound(static_cast<qreal>(transformed.height()) * normalizedScale)),
+            Qt::IgnoreAspectRatio,
+            Qt::SmoothTransformation);
+    }
+    if (mirrorX) {
+        transformed = transformed.transformed(QTransform().scale(-1.0, 1.0), Qt::SmoothTransformation);
+    }
+    if (rotationTenths != 0) {
+        transformed = transformed.transformed(
+            QTransform().rotate(static_cast<qreal>(rotationTenths) / 10.0),
+            Qt::SmoothTransformation);
+    }
+    return transformedIconCache_.insert(cacheKey, transformed).value();
+}
+
+const TimelineView::HoldPixmapParts& TimelineView::holdPixmapPartsForType(const QString& type, qreal scale) const
+{
+    const qreal normalizedScale = scale > 0.0 ? scale : 1.0;
+    const QString cacheKey = holdPixmapCacheKey(type, normalizedScale);
+    auto cacheIt = holdPixmapPartsCache_.constFind(cacheKey);
+    if (cacheIt != holdPixmapPartsCache_.constEnd()) {
+        return cacheIt.value();
+    }
+
+    HoldPixmapParts parts;
+    const QPixmap& holdCapPixmap = transformedIconForType(type, normalizedScale, 90.0, false);
+    parts.cap = holdCapPixmap;
+    if (!holdCapPixmap.isNull()) {
+        const QImage capImage = holdCapPixmap.toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
+        const int sx = qBound(0, capImage.width() / 2, capImage.width() - 1);
+        parts.bodySlice = capImage.copy(sx, 0, 1, capImage.height());
+        const int splitX = qMax(1, capImage.width() / 2);
+        parts.leftHalf = holdCapPixmap.copy(0, 0, splitX, holdCapPixmap.height());
+        parts.rightHalf = holdCapPixmap.copy(splitX, 0, holdCapPixmap.width() - splitX, holdCapPixmap.height());
+        parts.rightHalfOffset = splitX;
+    }
+    return holdPixmapPartsCache_.insert(cacheKey, parts).value();
 }
 
 void TimelineView::loadNoteIcons()
 {
+    noteIcons_.clear();
+    transformedIconCache_.clear();
+    holdPixmapPartsCache_.clear();
     const QString notesDir = miacode::assets::assetPath("skin");
     if (!QFileInfo::exists(QDir(notesDir).filePath("tap.png"))) {
         return;
@@ -501,30 +656,37 @@ void TimelineView::loadNoteIcons()
 
 }
 
-const TimelineNoteMarker* TimelineView::nearestNoteForViewportPos(const QPointF& pos) const
+TimelineView::HoveredNoteRef TimelineView::nearestNoteForViewportPos(const QPointF& pos) const
 {
     const int xOffset = horizontalScrollBar()->value();
     const int top = timelineTop();
     const int laneH = laneHeight();
     const QRect timelineRect(timelineLeft(), top, viewport()->width() - timelineLeft(), timelineHeight());
     if (!timelineRect.contains(pos.toPoint())) {
-        return nullptr;
+        return {};
     }
 
-    const TimelineNoteMarker* best = nullptr;
+    HoveredNoteRef best;
     qreal bestDistanceSq = 0.0;
-    for (const TimelineNoteMarker& note : notes_) {
-        if (note.lane < 1 || note.lane > kLaneCount) {
-            continue;
-        }
-        const qreal noteX = secondToX(note.second) - xOffset;
-        const qreal noteY = top + (note.lane - 1) * laneH + (laneH / 2.0);
-        const qreal dx = noteX - pos.x();
-        const qreal dy = noteY - pos.y();
-        const qreal distanceSq = dx * dx + dy * dy;
-        if (best == nullptr || distanceSq < bestDistanceSq) {
-            best = &note;
-            bestDistanceSq = distanceSq;
+    const VisibleLineRange range = visibleLineRange(
+        xToSecond(timelineLeft()) - 1.0,
+        xToSecond(viewport()->width()) + 1.0);
+    for (int lineIndex = range.begin; lineIndex < range.end; ++lineIndex) {
+        const TimelineRenderLine& line = lines_.at(lineIndex);
+        for (const TimelineRenderNote& note : line.notes) {
+            if (note.lane < 1 || note.lane > kLaneCount) {
+                continue;
+            }
+            const qreal noteX = secondToX(timelineRenderAbsoluteSecond(line, note.secondOffset)) - xOffset;
+            const qreal noteY = top + (note.lane - 1) * laneH + (laneH / 2.0);
+            const qreal dx = noteX - pos.x();
+            const qreal dy = noteY - pos.y();
+            const qreal distanceSq = dx * dx + dy * dy;
+            if (best.note == nullptr || distanceSq < bestDistanceSq) {
+                best.line = &line;
+                best.note = &note;
+                bestDistanceSq = distanceSq;
+            }
         }
     }
     return best;

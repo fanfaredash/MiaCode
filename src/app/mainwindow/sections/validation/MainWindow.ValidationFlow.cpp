@@ -899,19 +899,6 @@ void MainWindow::refreshValidationPanelForActiveField()
     updateEditorValidationSummary();
 }
 
-void MainWindow::scheduleAutoValidation()
-{
-    if (validationRefreshTimer_ == nullptr) {
-        return;
-    }
-    validationRefreshTimer_->stop();
-    if (!hasActiveDifficulty()) {
-        refreshValidationPanelForActiveField();
-        return;
-    }
-    validationRefreshTimer_->start();
-}
-
 bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
 {
     if (!hasActiveDifficulty()) {

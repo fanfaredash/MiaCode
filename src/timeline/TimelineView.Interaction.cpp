@@ -34,8 +34,9 @@ void TimelineView::mousePressEvent(QMouseEvent* event)
     }
 
     if (hasTimelineNavigateModifier(event->modifiers())) {
-        if (const TimelineNoteMarker* note = nearestNoteForViewportPos(event->position())) {
-            emit noteNavigateRequested(note->sourceLine, note->sourceCol);
+        const HoveredNoteRef hovered = nearestNoteForViewportPos(event->position());
+        if (hovered.line != nullptr && hovered.note != nullptr) {
+            emit noteNavigateRequested(hovered.line->lineNumber, hovered.note->sourceCol);
         }
         event->accept();
         return;

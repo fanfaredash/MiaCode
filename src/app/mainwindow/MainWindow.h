@@ -16,6 +16,9 @@
 #include "PreviewRenderSettings.h"
 #include "SimaiDocument.h"
 #include "SimaiNativeParser.h"
+#include "timeline/TimelineData.h"
+#include "timeline/TimelineQuickModel.h"
+#include "timeline/TimelineSlowRefresh.h"
 #include "TimelineView.h"
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
@@ -228,8 +231,12 @@ private:
     void applyLatencyDetectorBpm(double bpm);
     void applyLatencyDetectorMeter(const QString& meterId);
     void refreshWaveformCache();
+    void applyTimelineQuickChange(int position, int charsRemoved, int charsAdded);
+    void refreshTimelineQuickModelFromCurrentText();
     void scheduleTimelineRefresh();
     void refreshTimelineMetadata();
+    void requestTimelineSlowRefresh();
+    void dispatchTimelineSlowRefresh();
     void scheduleDeferredMuriRefresh(const QVector<TimelineNoteMarker>& noteMarkers, const QByteArray& noteMarkerSignature);
     void refreshDeferredMuriDiagnostics();
     void seekTimelineToCursor(int line, int col);
@@ -302,16 +309,6 @@ private:
     void refreshPreviewFrameRateTimers();
     int computeBottomTabsDeviceHeight() const;
     void updateBottomTabsDeviceHeight();
-    bool findTimelineCursorNoteForTextPosition(int line, int col, int* indexOut) const;
-    bool resolveTimelineNoteFromCursorAnchor(
-        double second,
-        int anchorLine,
-        int anchorCol,
-        int lane,
-        int* line,
-        int* col,
-        double* noteSecond
-    ) const;
     double timelineSecondForCursor(int line, int col) const;
     void jumpToLocation(int line, int col);
     QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount = nullptr) const;
@@ -369,7 +366,6 @@ private:
     void setLastOpenDirectory(const QString& pathOrDir);
     bool runValidateSimai();
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
-    void scheduleAutoValidation();
     bool saveBeforePreviewStart();
     void appendOutput(const QString& title, const QString& payload);
     void logWindowGeometryDebug(const QString& tag, const QString& detail = QString());
@@ -413,38 +409,6 @@ private:
     void setValidationTabVisible(bool visible);
     void applyMuriRenderOptions();
     void setMuriRenderMode(RenderMode mode, bool persistState = true);
-    bool findCursorNoteForTextPosition(
-        const QVector<TimelineCursorNote>& notes,
-        int line,
-        int col,
-        int* indexOut
-    ) const;
-    bool resolveNearestCursorNote(
-        const QVector<TimelineCursorNote>& notes,
-        double second,
-        int lane,
-        int* line,
-        int* col,
-        double* noteSecond
-    ) const;
-    bool resolveCursorNoteFromAnchor(
-        const QVector<TimelineCursorNote>& notes,
-        double second,
-        int anchorLine,
-        int anchorCol,
-        int lane,
-        int* line,
-        int* col,
-        double* noteSecond
-    ) const;
-
-    struct TimelineCursorNote {
-        int line = 1;
-        int col = 1;
-        int lane = -1;
-        double second = 0.0;
-    };
-
     struct ValidationCachedIssue {
         int line = 1;
         int col = 1;
@@ -523,9 +487,6 @@ private:
     QAction* swapWorkspaceSidesAction_ = nullptr;
     QAction* aboutAction_ = nullptr;
     QLabel* currentFileLabel_ = nullptr;
-    QTimer* metadataRefreshTimer_ = nullptr;
-    QTimer* validationRefreshTimer_ = nullptr;
-    QTimer* muriRefreshTimer_ = nullptr;
     QTimer* qtPreviewTimer_ = nullptr;
     QTimer* qtPreviewTimelineTimer_ = nullptr;
     QTimer* previewSeekDebounceTimer_ = nullptr;
@@ -550,8 +511,16 @@ private:
     int lastTimelineParseDifficultyId_ = 0;
     QString lastTimelineParseChartText_;
     SimaiNativeParseResult lastTimelineParseResult_;
-    QVector<TimelineCursorNote> timelineCursorNotes_;
-    QVector<TimelineCursorNote> previewFollowCursorNotes_;
+    TimelineQuickModel timelineQuickModel_;
+    TimelineSlowRefreshRequest pendingTimelineSlowRefresh_;
+    TimelineMuriRefreshRequest pendingTimelineMuriRefresh_;
+    quint64 timelineRevision_ = 0;
+    quint64 timelineSlowRequestedRevision_ = 0;
+    quint64 timelineSlowRunningRevision_ = 0;
+    quint64 timelineMuriRequestedRevision_ = 0;
+    quint64 timelineMuriRunningRevision_ = 0;
+    bool timelineSlowWorkerRunning_ = false;
+    bool timelineMuriWorkerRunning_ = false;
     QVector<TimelineNoteMarker> pendingMuriNoteMarkers_;
     QByteArray pendingMuriNoteMarkerSignature_;
     QByteArray lastPreviewNoteMarkerSignature_;

@@ -340,214 +340,147 @@ QString MainWindow::editorText() const
 
 void MainWindow::scheduleTimelineRefresh()
 {
-    if (muriRefreshTimer_ != nullptr) {
-        muriRefreshTimer_->stop();
-    }
-    if (metadataRefreshTimer_ == nullptr) {
+    if (!hasActiveDifficulty() || timelineView_ == nullptr) {
         return;
     }
-    if (!hasActiveDifficulty()) {
-        return;
-    }
-    metadataRefreshTimer_->stop();
-    metadataRefreshTimer_->start();
+    ++timelineRevision_;
+    refreshTimelineQuickModelFromCurrentText();
+    requestTimelineSlowRefresh();
 }
 
 void MainWindow::refreshTimelineMetadata()
+{
+    scheduleTimelineRefresh();
+}
+
+void MainWindow::applyTimelineQuickChange(int position, int charsRemoved, int charsAdded)
 {
     if (timelineView_ == nullptr || !hasActiveDifficulty()) {
         return;
     }
 
-    QElapsedTimer totalTimer;
-    totalTimer.start();
-    qint64 stageStartNs = totalTimer.nsecsElapsed();
-    const auto finishStageMs = [&totalTimer, &stageStartNs]() -> double {
-        const qint64 nowNs = totalTimer.nsecsElapsed();
-        const double elapsedMs = static_cast<double>(nowNs - stageStartNs) / 1000000.0;
-        stageStartNs = nowNs;
-        return elapsedMs;
-    };
-
-    const QString chartText = activeChartText();
-    SimaiNativeParseResult nativeResult = SimaiNativeParser::parseForTimeline(chartText);
-    const double parseMs = finishStageMs();
     const double firstSeconds = parsedFirstSeconds();
-    QVector<TimelineBeatMarker> beatMarkers = shiftedBeatMarkers(nativeResult.beatMarkers, firstSeconds);
-    QVector<TimelineNoteMarker> noteMarkers = shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds);
-    const auto appendCursorNote = [](QVector<TimelineCursorNote>* target, int line, int col, int lane, double second) {
-        if (target == nullptr) {
-            return;
-        }
-        TimelineCursorNote cursorNote;
-        cursorNote.line = qMax(1, line);
-        cursorNote.col = qMax(1, col);
-        cursorNote.lane = lane;
-        cursorNote.second = second;
-        target->append(cursorNote);
-    };
-    const auto sortCursorNotes = [](QVector<TimelineCursorNote>* notes) {
-        if (notes == nullptr) {
-            return;
-        }
-        std::sort(notes->begin(), notes->end(), [](const TimelineCursorNote& a, const TimelineCursorNote& b) {
-            if (a.line != b.line) {
-                return a.line < b.line;
-            }
-            if (a.col != b.col) {
-                return a.col < b.col;
-            }
-            return a.second < b.second;
-        });
-    };
-
-    timelineCursorNotes_.clear();
-    timelineCursorNotes_.reserve(noteMarkers.size() + beatMarkers.size() + 1);
-    for (const TimelineNoteMarker& marker : noteMarkers) {
-        appendCursorNote(&timelineCursorNotes_, marker.sourceLine, marker.sourceCol, marker.lane, marker.second);
+    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
+    QTextDocument* document = editor != nullptr ? editor->document() : nullptr;
+    if (document != nullptr) {
+        timelineQuickModel_.applyContentsChange(document, position, charsRemoved, charsAdded, firstSeconds);
+    } else {
+        timelineQuickModel_.rebuildFromText(activeChartText(), firstSeconds);
     }
-    for (const TimelineBeatMarker& marker : beatMarkers) {
-        appendCursorNote(&timelineCursorNotes_, marker.sourceLine, marker.sourceCol, -1, marker.second);
-    }
-
-    bool hasRawZeroAnchor = false;
-    for (const TimelineNoteMarker& marker : nativeResult.noteMarkers) {
-        if (qAbs(marker.second) <= kTimelineZeroSecondTolerance) {
-            hasRawZeroAnchor = true;
-            break;
-        }
-    }
-    if (!hasRawZeroAnchor) {
-        for (const TimelineBeatMarker& marker : nativeResult.beatMarkers) {
-            if (qAbs(marker.second) <= kTimelineZeroSecondTolerance) {
-                hasRawZeroAnchor = true;
-                break;
-            }
-        }
-    }
-    if (!hasRawZeroAnchor) {
-        for (const TimelineCursorNote& note : timelineCursorNotes_) {
-            if (qAbs(note.second - shiftedTimelineSecond(0.0, firstSeconds)) <= kTimelineZeroSecondTolerance) {
-                hasRawZeroAnchor = true;
-                break;
-            }
-        }
-    }
-    if (!hasRawZeroAnchor) {
-        const int firstCommaOffset = chartText.indexOf(QLatin1Char(','));
-        if (firstCommaOffset >= 0) {
-            const auto [line, col] = lineColForTextOffset(chartText, firstCommaOffset);
-            appendCursorNote(&timelineCursorNotes_, line, col, -1, shiftedTimelineSecond(0.0, firstSeconds));
-        }
-    }
-    sortCursorNotes(&timelineCursorNotes_);
-
-    previewFollowCursorNotes_.clear();
-    switch (previewFollowMode_) {
-    case PreviewFollowMode::EveryComma:
-        previewFollowCursorNotes_ = timelineCursorNotes_;
-        break;
-    case PreviewFollowMode::NonEmptyComma: {
-        previewFollowCursorNotes_.reserve(noteMarkers.size() + beatMarkers.size());
-        QHash<qint64, bool> noteSecondKeys;
-        noteSecondKeys.reserve(noteMarkers.size());
-        for (const TimelineNoteMarker& marker : noteMarkers) {
-            appendCursorNote(&previewFollowCursorNotes_, marker.sourceLine, marker.sourceCol, marker.lane, marker.second);
-            noteSecondKeys.insert(qRound64(marker.second * 1000000.0), true);
-        }
-        for (const TimelineBeatMarker& marker : beatMarkers) {
-            const qint64 secondKey = qRound64(marker.second * 1000000.0);
-            if (!noteSecondKeys.contains(secondKey)) {
-                continue;
-            }
-            appendCursorNote(&previewFollowCursorNotes_, marker.sourceLine, marker.sourceCol, -1, marker.second);
-        }
-        sortCursorNotes(&previewFollowCursorNotes_);
-        break;
-    }
-    case PreviewFollowMode::LineOnly: {
-        previewFollowCursorNotes_.reserve(timelineCursorNotes_.size());
-        QHash<int, int> lineToIndex;
-        for (const TimelineCursorNote& note : timelineCursorNotes_) {
-            const int existingIndex = lineToIndex.value(note.line, -1);
-            if (existingIndex < 0) {
-                lineToIndex.insert(note.line, previewFollowCursorNotes_.size());
-                previewFollowCursorNotes_.append(note);
-                continue;
-            }
-
-            TimelineCursorNote& existing = previewFollowCursorNotes_[existingIndex];
-            if (note.second + kTimelineZeroSecondTolerance < existing.second
-                || (qAbs(note.second - existing.second) <= kTimelineZeroSecondTolerance && note.col < existing.col)) {
-                existing = note;
-            }
-        }
-        sortCursorNotes(&previewFollowCursorNotes_);
-        break;
-    }
-    }
-    const double cursorModelMs = finishStageMs();
-
-    double durationSeconds = qMax(0.0, nativeResult.durationSeconds + firstSeconds);
-    {
-        for (const TimelineNoteMarker& marker : noteMarkers) {
-            durationSeconds = qMax(durationSeconds, marker.second);
-            if (marker.endSecond > marker.second) {
-                durationSeconds = qMax(durationSeconds, marker.endSecond);
-            }
-        }
-        for (const TimelineBeatMarker& marker : beatMarkers) {
-            durationSeconds = qMax(durationSeconds, marker.second);
-        }
-    }
-    lastTimelineParseDifficultyId_ = activeDifficultyId();
-    lastTimelineParseChartText_ = chartText;
-    lastTimelineParseResult_ = nativeResult;
-
-    if (previewSfxRuntime_ != nullptr) {
-        previewSfxRuntime_->configureTimeline(noteMarkers);
-        if (qtPreviewPlaying_) {
-            double currentSecond = qMax(0.0, qtPreviewPauseSecond_);
-            if (previewSfxRuntime_->hasBackgroundTrack()) {
-                currentSecond = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-            } else if (previewMediaController_ != nullptr && previewMediaController_->hasVideoMedia()) {
-                currentSecond = qMax(0.0, previewMediaController_->currentPlaybackSecond());
-            }
-            qtPreviewPauseSecond_ = currentSecond;
-            previewSfxRuntime_->resetCursor(currentSecond, false);
-            previewSfxRuntime_->syncTouchholdVoices(currentSecond);
-        }
-    }
-    const double audioTimelineMs = finishStageMs();
-    refreshPreviewObjectStatsTotals(noteMarkers);
-
-    timelineView_->setTimelineData(beatMarkers, noteMarkers, durationSeconds);
+    timelineView_->setTimelineData(timelineQuickModel_.snapshot());
     updatePreviewSliderRange();
-    const QByteArray newSignature = noteMarkerSignature(noteMarkers);
-    if (previewCanvas_ != nullptr) {
-        if (newSignature != lastPreviewNoteMarkerSignature_) {
-            previewCanvas_->setNoteMarkers(noteMarkers);
-            lastPreviewNoteMarkerSignature_ = newSignature;
-        }
-    }
-    const double fastUiMs = finishStageMs();
-    scheduleDeferredMuriRefresh(noteMarkers, newSignature);
+}
 
-    if (runtimeDebugOutputEnabled_) {
-        appendOutput(
-            "edit/metadata_perf",
-            QStringLiteral(
-                "total=%1ms parse=%2ms cursor_model=%3ms audio_timeline=%4ms fast_ui=%5ms notes=%6 beats=%7"
-            )
-                .arg(QString::number(static_cast<double>(totalTimer.nsecsElapsed()) / 1000000.0, 'f', 2))
-                .arg(QString::number(parseMs, 'f', 2))
-                .arg(QString::number(cursorModelMs, 'f', 2))
-                .arg(QString::number(audioTimelineMs, 'f', 2))
-                .arg(QString::number(fastUiMs, 'f', 2))
-                .arg(noteMarkers.size())
-                .arg(beatMarkers.size())
-        );
+void MainWindow::refreshTimelineQuickModelFromCurrentText()
+{
+    if (timelineView_ == nullptr || !hasActiveDifficulty()) {
+        return;
     }
+    timelineQuickModel_.rebuildFromText(activeChartText(), parsedFirstSeconds());
+    timelineView_->setTimelineData(timelineQuickModel_.snapshot());
+    updatePreviewSliderRange();
+}
+
+void MainWindow::requestTimelineSlowRefresh()
+{
+    if (!hasActiveDifficulty()) {
+        return;
+    }
+
+    pendingTimelineSlowRefresh_.revision = timelineRevision_;
+    pendingTimelineSlowRefresh_.difficultyId = activeDifficultyId();
+    pendingTimelineSlowRefresh_.chartText = activeChartText();
+    pendingTimelineSlowRefresh_.firstSeconds = parsedFirstSeconds();
+    pendingTimelineSlowRefresh_.chineseUi = UiText::isChineseUi();
+    timelineSlowRequestedRevision_ = pendingTimelineSlowRefresh_.revision;
+    dispatchTimelineSlowRefresh();
+}
+
+void MainWindow::dispatchTimelineSlowRefresh()
+{
+    if (timelineSlowWorkerRunning_ || pendingTimelineSlowRefresh_.revision == 0) {
+        return;
+    }
+
+    const TimelineSlowRefreshRequest request = pendingTimelineSlowRefresh_;
+    pendingTimelineSlowRefresh_ = TimelineSlowRefreshRequest();
+    timelineSlowWorkerRunning_ = true;
+    timelineSlowRunningRevision_ = request.revision;
+    QPointer<MainWindow> guard(this);
+    QThreadPool::globalInstance()->start([guard, request]() {
+        TimelineSlowRefreshResult result = buildTimelineSlowRefreshResult(request);
+        if (guard.isNull()) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+            guard.data(),
+            [guard, result = std::move(result)]() mutable {
+                if (guard.isNull()) {
+                    return;
+                }
+
+                guard->timelineSlowWorkerRunning_ = false;
+                if (result.revision != guard->timelineSlowRequestedRevision_
+                    || !guard->hasActiveDifficulty()
+                    || result.difficultyId != guard->activeDifficultyId()
+                    || result.chartText != guard->activeChartText()) {
+                    guard->dispatchTimelineSlowRefresh();
+                    return;
+                }
+
+                guard->lastTimelineParseDifficultyId_ = result.difficultyId;
+                guard->lastTimelineParseChartText_ = result.chartText;
+                guard->lastTimelineParseResult_ = result.parseResult;
+
+                ValidationCacheEntry entry;
+                entry.chartText = result.chartText;
+                entry.chineseUi = result.validationReport.issues.isEmpty() ? UiText::isChineseUi() : result.chineseUi;
+                entry.ok = result.validationReport.ok;
+                entry.errorCount = result.validationReport.errorCount;
+                entry.warningCount = result.validationReport.warningCount;
+                entry.lenientNoteCount = result.validationReport.lenientNoteCount;
+                entry.lenientErrorCount = result.validationReport.lenientErrorCount;
+                entry.strictNoteCount = result.validationReport.strictNoteCount;
+                entry.strictErrorCount = result.validationReport.strictErrorCount;
+                entry.issues.reserve(result.validationReport.issues.size());
+                for (const SimaiNativeValidationIssue& issue : result.validationReport.issues) {
+                    ValidationCachedIssue cachedIssue;
+                    cachedIssue.line = issue.line;
+                    cachedIssue.col = issue.col;
+                    cachedIssue.endCol = issue.endCol;
+                    cachedIssue.rawMessage = issue.rawMessage;
+                    cachedIssue.displayMessage = issue.displayMessage;
+                    entry.issues.append(cachedIssue);
+                }
+                guard->validationCacheByDifficulty_.insert(result.difficultyId, entry);
+                guard->refreshValidationPanelForActiveField();
+
+                if (guard->previewSfxRuntime_ != nullptr) {
+                    guard->previewSfxRuntime_->configureTimeline(result.shiftedNoteMarkers);
+                    if (guard->qtPreviewPlaying_) {
+                        double currentSecond = qMax(0.0, guard->qtPreviewPauseSecond_);
+                        if (guard->previewSfxRuntime_->hasBackgroundTrack()) {
+                            currentSecond = qMax(0.0, guard->previewSfxRuntime_->backgroundPlaybackSecond());
+                        } else if (guard->previewMediaController_ != nullptr && guard->previewMediaController_->hasVideoMedia()) {
+                            currentSecond = qMax(0.0, guard->previewMediaController_->currentPlaybackSecond());
+                        }
+                        guard->qtPreviewPauseSecond_ = currentSecond;
+                        guard->previewSfxRuntime_->resetCursor(currentSecond, false);
+                        guard->previewSfxRuntime_->syncTouchholdVoices(currentSecond);
+                    }
+                }
+
+                guard->refreshPreviewObjectStatsTotals(result.shiftedNoteMarkers);
+                if (guard->previewCanvas_ != nullptr
+                    && result.noteMarkerSignature != guard->lastPreviewNoteMarkerSignature_) {
+                    guard->previewCanvas_->setNoteMarkers(result.shiftedNoteMarkers);
+                    guard->lastPreviewNoteMarkerSignature_ = result.noteMarkerSignature;
+                }
+                guard->scheduleDeferredMuriRefresh(result.shiftedNoteMarkers, result.noteMarkerSignature);
+            },
+            Qt::QueuedConnection
+        );
+    });
 }
 
 void MainWindow::scheduleDeferredMuriRefresh(
@@ -556,65 +489,63 @@ void MainWindow::scheduleDeferredMuriRefresh(
 {
     pendingMuriNoteMarkers_ = noteMarkers;
     pendingMuriNoteMarkerSignature_ = noteMarkerSignature;
-    if (muriRefreshTimer_ == nullptr) {
-        refreshDeferredMuriDiagnostics();
-        return;
-    }
-    muriRefreshTimer_->stop();
-    muriRefreshTimer_->start();
+    pendingTimelineMuriRefresh_.revision = timelineSlowRequestedRevision_;
+    pendingTimelineMuriRefresh_.difficultyId = activeDifficultyId();
+    pendingTimelineMuriRefresh_.noteMarkerSignature = noteMarkerSignature;
+    pendingTimelineMuriRefresh_.noteMarkers = noteMarkers;
+    pendingTimelineMuriRefresh_.renderOptions = muriRenderOptions_;
+    pendingTimelineMuriRefresh_.staticTapOnSlideThresholdSeconds =
+        static_cast<double>(staticTapOnSlideThresholdMs_) / 1000.0;
+    timelineMuriRequestedRevision_ = pendingTimelineMuriRefresh_.revision;
+    refreshDeferredMuriDiagnostics();
 }
 
 void MainWindow::refreshDeferredMuriDiagnostics()
 {
-    if (!hasActiveDifficulty()) {
+    if (!hasActiveDifficulty() || timelineMuriWorkerRunning_ || pendingTimelineMuriRefresh_.revision == 0) {
         return;
     }
 
-    const QVector<TimelineNoteMarker> noteMarkers = pendingMuriNoteMarkers_;
-    const QByteArray noteMarkerSignature = pendingMuriNoteMarkerSignature_;
-    if (previewCanvas_ != nullptr
-        && !noteMarkerSignature.isEmpty()
-        && noteMarkerSignature != lastPreviewNoteMarkerSignature_) {
-        return;
-    }
+    const TimelineMuriRefreshRequest request = pendingTimelineMuriRefresh_;
+    pendingTimelineMuriRefresh_ = TimelineMuriRefreshRequest();
+    timelineMuriWorkerRunning_ = true;
+    timelineMuriRunningRevision_ = request.revision;
+    QPointer<MainWindow> guard(this);
+    QThreadPool::globalInstance()->start([guard, request]() {
+        TimelineMuriRefreshResult result = buildTimelineMuriRefreshResult(request);
+        if (guard.isNull()) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+            guard.data(),
+            [guard, result = std::move(result)]() mutable {
+                if (guard.isNull()) {
+                    return;
+                }
 
-    QElapsedTimer totalTimer;
-    totalTimer.start();
-    qint64 stageStartNs = totalTimer.nsecsElapsed();
-    const auto finishStageMs = [&totalTimer, &stageStartNs]() -> double {
-        const qint64 nowNs = totalTimer.nsecsElapsed();
-        const double elapsedMs = static_cast<double>(nowNs - stageStartNs) / 1000000.0;
-        stageStartNs = nowNs;
-        return elapsedMs;
-    };
+                guard->timelineMuriWorkerRunning_ = false;
+                if (result.revision != guard->timelineMuriRequestedRevision_
+                    || !guard->hasActiveDifficulty()
+                    || result.difficultyId != guard->activeDifficultyId()
+                    || result.noteMarkerSignature != guard->lastPreviewNoteMarkerSignature_) {
+                    guard->refreshDeferredMuriDiagnostics();
+                    return;
+                }
 
-    muriAnalysisReport_ = MuriAnalyzer::analyze(noteMarkers, muriRenderOptions_);
-    const double analyzeMs = finishStageMs();
-    rebuildStaticMuriReferences(noteMarkers);
-    const double staticRefMs = finishStageMs();
-
-    if (timelineView_ != nullptr) {
-        timelineView_->setMuriAnalysisReport(muriAnalysisReport_);
-    }
-    refreshMuriDiagnosticsPanel();
-    if (previewCanvas_ != nullptr) {
-        previewCanvas_->setMuriAnalysisReport(muriAnalysisReport_);
-        previewCanvas_->setMuriRenderOptions(muriRenderOptions_);
-    }
-    const double uiApplyMs = finishStageMs();
-
-    if (runtimeDebugOutputEnabled_) {
-        appendOutput(
-            "edit/muri_perf",
-            QStringLiteral("total=%1ms analyze=%2ms static_refs=%3ms ui_apply=%4ms diagnostics=%5 static=%6")
-                .arg(QString::number(static_cast<double>(totalTimer.nsecsElapsed()) / 1000000.0, 'f', 2))
-                .arg(QString::number(analyzeMs, 'f', 2))
-                .arg(QString::number(staticRefMs, 'f', 2))
-                .arg(QString::number(uiApplyMs, 'f', 2))
-                .arg(muriAnalysisReport_.diagnostics.size())
-                .arg(muriStaticReferences_.size())
+                guard->muriAnalysisReport_ = result.analysisReport;
+                guard->muriStaticReferences_ = result.staticReferences;
+                if (guard->timelineView_ != nullptr) {
+                    guard->timelineView_->setMuriAnalysisReport(guard->muriAnalysisReport_);
+                }
+                guard->refreshMuriDiagnosticsPanel();
+                if (guard->previewCanvas_ != nullptr) {
+                    guard->previewCanvas_->setMuriAnalysisReport(guard->muriAnalysisReport_);
+                    guard->previewCanvas_->setMuriRenderOptions(guard->muriRenderOptions_);
+                }
+            },
+            Qt::QueuedConnection
         );
-    }
+    });
 }
 
 void MainWindow::rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& noteMarkers)
@@ -624,45 +555,9 @@ void MainWindow::rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& 
         static_cast<double>(staticTapOnSlideThresholdMs_) / 1000.0);
 }
 
-bool MainWindow::findCursorNoteForTextPosition(
-    const QVector<TimelineCursorNote>& notes,
-    int line,
-    int col,
-    int* indexOut
-) const
-{
-    if (notes.isEmpty()) {
-        return false;
-    }
-
-    for (int index = 0; index < notes.size(); ++index) {
-        const TimelineCursorNote& note = notes.at(index);
-        if (note.line > line || (note.line == line && note.col >= col)) {
-            if (indexOut != nullptr) {
-                *indexOut = index;
-            }
-            return true;
-        }
-    }
-
-    if (indexOut != nullptr) {
-        *indexOut = notes.size() - 1;
-    }
-    return true;
-}
-
-bool MainWindow::findTimelineCursorNoteForTextPosition(int line, int col, int* indexOut) const
-{
-    return findCursorNoteForTextPosition(timelineCursorNotes_, line, col, indexOut);
-}
-
 double MainWindow::timelineSecondForCursor(int line, int col) const
 {
-    int noteIndex = -1;
-    if (!findTimelineCursorNoteForTextPosition(line, col, &noteIndex) || noteIndex < 0) {
-        return -1.0;
-    }
-    return timelineCursorNotes_.at(noteIndex).second;
+    return timelineQuickModel_.timelineSecondForCursor(line, col);
 }
 
 void MainWindow::seekTimelineToCursor(int line, int col)
@@ -741,158 +636,9 @@ void MainWindow::navigateTimelineToSecond(double second, bool focusEditor)
     }
 }
 
-bool MainWindow::resolveNearestCursorNote(
-    const QVector<TimelineCursorNote>& notes,
-    double second,
-    int lane,
-    int* line,
-    int* col,
-    double* noteSecond
-) const
-{
-    if (notes.isEmpty()) {
-        return false;
-    }
-    const TimelineCursorNote* best = nullptr;
-    bool foundSameLane = false;
-    const bool preferLane = lane >= 1;
-    const double target = qMax(0.0, second);
-
-    for (const TimelineCursorNote& note : notes) {
-        const bool sameLane = preferLane && note.lane == lane;
-        if (preferLane) {
-            if (sameLane && !foundSameLane) {
-                best = &note;
-                foundSameLane = true;
-                continue;
-            }
-            if (!sameLane && foundSameLane) {
-                continue;
-            }
-        }
-
-        if (best == nullptr) {
-            best = &note;
-            continue;
-        }
-
-        const double bestDelta = qAbs(best->second - target);
-        const double noteDelta = qAbs(note.second - target);
-        if (noteDelta + 1e-9 < bestDelta) {
-            best = &note;
-            continue;
-        }
-        if (qAbs(noteDelta - bestDelta) <= 1e-9) {
-            if (note.line < best->line || (note.line == best->line && note.col < best->col)) {
-                best = &note;
-            }
-        }
-    }
-
-    if (best == nullptr) {
-        return false;
-    }
-    if (line != nullptr) {
-        *line = best->line;
-    }
-    if (col != nullptr) {
-        *col = best->col;
-    }
-    if (noteSecond != nullptr) {
-        *noteSecond = best->second;
-    }
-    return true;
-}
-
 bool MainWindow::resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const
 {
-    return resolveNearestCursorNote(timelineCursorNotes_, second, lane, line, col, noteSecond);
-}
-
-bool MainWindow::resolveCursorNoteFromAnchor(
-    const QVector<TimelineCursorNote>& notes,
-    double second,
-    int anchorLine,
-    int anchorCol,
-    int lane,
-    int* line,
-    int* col,
-    double* noteSecond
-) const
-{
-    if (notes.isEmpty()) {
-        return false;
-    }
-
-    const TimelineCursorNote* best = nullptr;
-    const TimelineCursorNote* fallbackLast = nullptr;
-    const TimelineCursorNote* fallbackLastSameLane = nullptr;
-    bool foundSameLane = false;
-    const bool preferLane = lane >= 1;
-    const double target = qMax(0.0, second);
-
-    for (const TimelineCursorNote& note : notes) {
-        fallbackLast = &note;
-        if (preferLane && note.lane == lane) {
-            fallbackLastSameLane = &note;
-        }
-        if (note.line < anchorLine || (note.line == anchorLine && note.col < anchorCol)) {
-            continue;
-        }
-
-        const bool sameLane = preferLane && note.lane == lane;
-        if (preferLane) {
-            if (sameLane && !foundSameLane) {
-                best = &note;
-                foundSameLane = true;
-                continue;
-            }
-            if (!sameLane && foundSameLane) {
-                continue;
-            }
-            if (!sameLane && !foundSameLane && best == nullptr) {
-                best = &note;
-                continue;
-            }
-        } else if (best == nullptr) {
-            best = &note;
-            continue;
-        }
-
-        if (best == nullptr) {
-            best = &note;
-            continue;
-        }
-
-        const double bestDelta = qAbs(best->second - target);
-        const double noteDelta = qAbs(note.second - target);
-        if (noteDelta + 1e-9 < bestDelta) {
-            best = &note;
-            continue;
-        }
-        if (qAbs(noteDelta - bestDelta) <= 1e-9) {
-            if (note.line < best->line || (note.line == best->line && note.col < best->col)) {
-                best = &note;
-            }
-        }
-    }
-
-    if (best == nullptr) {
-        best = (preferLane && fallbackLastSameLane != nullptr) ? fallbackLastSameLane : fallbackLast;
-    }
-    if (best == nullptr) {
-        return false;
-    }
-    if (line != nullptr) {
-        *line = best->line;
-    }
-    if (col != nullptr) {
-        *col = best->col;
-    }
-    if (noteSecond != nullptr) {
-        *noteSecond = best->second;
-    }
-    return true;
+    return timelineQuickModel_.resolveNearestTimelineNote(second, lane, line, col, noteSecond);
 }
 
 bool MainWindow::moveEditorCursorToTimelineLocation(
@@ -972,28 +718,6 @@ bool MainWindow::moveEditorCursorToTimelineLocation(
     return true;
 }
 
-bool MainWindow::resolveTimelineNoteFromCursorAnchor(
-    double second,
-    int anchorLine,
-    int anchorCol,
-    int lane,
-    int* line,
-    int* col,
-    double* noteSecond
-) const
-{
-    return resolveCursorNoteFromAnchor(
-        timelineCursorNotes_,
-        second,
-        anchorLine,
-        anchorCol,
-        lane,
-        line,
-        col,
-        noteSecond
-    );
-}
-
 void MainWindow::syncEditorCursorToPreviewSecond(double second, bool centerView)
 {
     if (suppressTimelineCursorSync_ || timelineView_ == nullptr || !timelineView_->followPreviewEnabled() || !hasActiveDifficulty()) {
@@ -1008,17 +732,27 @@ void MainWindow::syncEditorCursorToPreviewSecond(double second, bool centerView)
     int col = 1;
     double noteSecond = -1.0;
     const bool useAbsoluteSeekAnchor = !qtPreviewPlaying_;
-    const bool resolved = useAbsoluteSeekAnchor
-        ? resolveNearestCursorNote(previewFollowCursorNotes_, second, -1, &line, &col, &noteSecond)
-        : resolveCursorNoteFromAnchor(
-            previewFollowCursorNotes_,
-            second,
-            currentLine,
-            currentCol,
-            -1,
-            &line,
-            &col,
-            &noteSecond);
+    TimelineQuickModel::PreviewFollowMode quickMode = TimelineQuickModel::PreviewFollowMode::NonEmptyComma;
+    switch (previewFollowMode_) {
+    case PreviewFollowMode::EveryComma:
+        quickMode = TimelineQuickModel::PreviewFollowMode::EveryComma;
+        break;
+    case PreviewFollowMode::NonEmptyComma:
+        quickMode = TimelineQuickModel::PreviewFollowMode::NonEmptyComma;
+        break;
+    case PreviewFollowMode::LineOnly:
+        quickMode = TimelineQuickModel::PreviewFollowMode::LineOnly;
+        break;
+    }
+    const bool resolved = timelineQuickModel_.resolvePreviewFollowCursor(
+        quickMode,
+        second,
+        currentLine,
+        currentCol,
+        useAbsoluteSeekAnchor,
+        &line,
+        &col,
+        &noteSecond);
     if (!resolved) {
         return;
     }
@@ -1230,8 +964,6 @@ void MainWindow::setPreviewFollowMode(PreviewFollowMode mode, bool persistState)
     previewFollowMode_ = mode;
     if (hasActiveDifficulty()) {
         refreshTimelineMetadata();
-    } else {
-        previewFollowCursorNotes_.clear();
     }
 
     if (timelineView_ != nullptr && timelineView_->followPreviewEnabled() && hasActiveDifficulty()) {

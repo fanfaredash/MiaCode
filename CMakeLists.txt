@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.21)
 set(MIACODE_VERSION_MAJOR "0")
 set(MIACODE_VERSION_MINOR "3")
 set(MIACODE_VERSION_PATCH "6")
-set(MIACODE_VERSION_PRERELEASE "")
+set(MIACODE_VERSION_PRERELEASE "dev1")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
@@ -91,6 +91,12 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/simai/document/SimaiDocument.cpp
     src/simai/parser/SimaiNativeParser.h
     src/simai/parser/SimaiNativeParser.cpp
+    src/timeline/TimelineData.h
+    src/timeline/TimelineRenderData.h
+    src/timeline/TimelineQuickModel.h
+    src/timeline/TimelineQuickModel.cpp
+    src/timeline/TimelineSlowRefresh.h
+    src/timeline/TimelineSlowRefresh.cpp
     src/timeline/TimelineView.h
     src/timeline/TimelineView.cpp
     resources/app_icons.qrc

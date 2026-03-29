@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/cross-chain-linkage.md -->
-<!-- translation-source-hash: 04a053ad14d91ad7b163ec2c6e3dd59495570a961916bda26dd8b545d3bb8c32 -->
+<!-- translation-source-hash: 0888257b75580431b0d2c301e2b6daca1d549ba13bbd71e1e682a8586d2bc65b -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 跨链路联动
@@ -10,15 +10,17 @@
 
 主链路：
 
-1. `MainWindow::applyCurrentFieldToDocument`
-2. `MainWindow::refreshTimelineMetadata`
-3. `SimaiNativeParser::parseForTimeline`
-4. 位移后的 beat/note markers
-5. `TimelineView::setTimelineData`
-6. `QtPreviewSfxRuntime::configureTimeline`
-7. `MuriAnalyzer::analyze`
-8. `MainWindow::rebuildStaticMuriReferences`
-9. `PreviewCanvas::setNoteMarkers`
+1. 编辑器 `contentsChange`，或 `scheduleTimelineRefresh` 这样的显式全量刷新入口
+2. `MainWindow::applyTimelineQuickChange` / `MainWindow::refreshTimelineQuickModelFromCurrentText`
+3. `TimelineQuickModel::applyContentsChange` 或 `TimelineQuickModel::rebuildFromText`
+4. `TimelineView::setTimelineData`
+5. `MainWindow::requestTimelineSlowRefresh`
+6. `buildTimelineSlowRefreshResult`
+7. 位移后的 beat/note markers、validation report，以及预览统计输入
+8. `QtPreviewSfxRuntime::configureTimeline`
+9. `MainWindow::scheduleDeferredMuriRefresh`
+10. `buildTimelineMuriRefreshResult`
+11. `PreviewCanvas::setNoteMarkers`
 
 含义：
 
@@ -31,7 +33,8 @@
 
 - `SimaiDocument` 存储原始 `first`。
 - `MainWindow::parsedFirstSeconds` 是主 getter。
-- `MainWindow::refreshTimelineMetadata` 会按 `first` 平移 parser 产出的 beat/note markers。
+- `TimelineQuickModel` 会在每次快路径全量重建或增量编辑应用时接收 `first`。
+- `buildTimelineSlowRefreshResult` 会按 `first` 平移 parser 产出的 beat/note markers。
 - `MainWindow::applyLatencyDetectorOffset` 会把原始 `first` 写回文档。
 - `LatencyDetectorDialog` 读写原始值，不维护一个反相的影子值。
 - 导出任务重建时，会再次使用解析后的文档文本和位移后的 markers。
@@ -162,7 +165,7 @@ Wifi 补充说明：
 
 当前流向：
 
-- 实时预览路径：`refreshTimelineMetadata` -> `MuriAnalyzer::analyze`
+- 实时预览路径：`requestTimelineSlowRefresh` -> `buildTimelineSlowRefreshResult` -> `scheduleDeferredMuriRefresh` -> `buildTimelineMuriRefreshResult`
 - 导出路径：`buildVideoExportTaskFromSnapshot` -> `MuriAnalyzer::analyze`
 
 含义：

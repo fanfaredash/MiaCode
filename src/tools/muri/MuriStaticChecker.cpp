@@ -4,7 +4,7 @@
 #include <QString>
 #include <QtMath>
 
-#include "TimelineView.h"
+#include "timeline/TimelineData.h"
 #include "common/MuriConfig.h"
 #include "common/MuriTypes.h"
 
