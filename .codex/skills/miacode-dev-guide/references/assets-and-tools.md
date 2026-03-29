@@ -67,6 +67,7 @@ If these conventions change, update both code and this file.
   - Current references include `background/outline.png` and `background/outline_2.png`
 - Generated slide data:
   - Stored under `assets/generated`
+  - Current merged asset file: `assets/generated/slide_data.json`
   - Treat as runtime input data, not ordinary decorative assets
 
 ## 4. SFX Naming Convention

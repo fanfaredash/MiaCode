@@ -182,7 +182,7 @@ QVector<MuriDiagnostic> dedupeDenseOverlapDiagnostics(const QVector<MuriDiagnost
 const QJsonObject& slideRuntimeRoot()
 {
     static const QJsonObject root = []() {
-        QFile file(":/data/slide_runtime_data.json");
+        QFile file(":/data/slide_data.json");
         if (!file.open(QIODevice::ReadOnly)) {
             return QJsonObject();
         }

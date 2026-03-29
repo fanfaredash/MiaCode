@@ -19,7 +19,7 @@
 
 - `TimelineNoteMarker` 已包含 `slideTrackAreaPoints`、`slideTrackAreaThresholds`、`slideTrackAreaCheckpoints`、`wifiTrackAreaPoints`、`wifiTrackAreaThresholds` 等字段。
 - 位置：`src/timeline/TimelineView.h`
-- slide / wifi 原生数据来自 `assets/generated/slide_native_data.json`
+- slide / wifi 原生数据当前由合并后的 `assets/generated/slide_data.json` 提供
 - 读取与填充位置：
   - `src/simai/parser/SimaiNativeParser.cpp`
   - `src/simai/parser/SimaiNativeParser.Slide.cpp`
