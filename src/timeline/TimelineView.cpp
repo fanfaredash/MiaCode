@@ -72,6 +72,39 @@ QVector<double> makeTimelineButtonZoomPresets()
 {
     return {0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0};
 }
+
+int transformedPixmapScalePermille(qreal scale)
+{
+    return qMax(1, qRound(scale * 1000.0));
+}
+
+int transformedPixmapRotationTenths(qreal rotationDegrees)
+{
+    int tenths = qRound(rotationDegrees * 10.0);
+    tenths %= 3600;
+    if (tenths < 0) {
+        tenths += 3600;
+    }
+    return tenths;
+}
+
+QString transformedPixmapCacheKey(
+    const QString& type,
+    qreal scale,
+    qreal rotationDegrees,
+    bool mirrorX)
+{
+    return QStringLiteral("%1|%2|%3|%4")
+        .arg(type)
+        .arg(transformedPixmapScalePermille(scale))
+        .arg(transformedPixmapRotationTenths(rotationDegrees))
+        .arg(mirrorX ? 1 : 0);
+}
+
+QString holdPixmapCacheKey(const QString& type, qreal scale)
+{
+    return QStringLiteral("%1|%2").arg(type).arg(transformedPixmapScalePermille(scale));
+}
 }  // namespace
 
 TimelineView::TimelineView(QWidget* parent)
@@ -179,18 +212,12 @@ bool TimelineView::viewportEvent(QEvent* event)
     return QAbstractScrollArea::viewportEvent(event);
 }
 
-void TimelineView::setTimelineData(
-    const QVector<TimelineBeatMarker>& beats,
-    const QVector<TimelineNoteMarker>& notes,
-    double durationSeconds
-)
+void TimelineView::setTimelineData(const TimelineRenderSnapshot& snapshot)
 {
-    beats_ = beats;
-    notes_ = notes;
-    std::sort(beats_.begin(), beats_.end(), [](const TimelineBeatMarker& a, const TimelineBeatMarker& b) {
-        return a.second < b.second;
-    });
-    durationSeconds_ = qMax(0.0, durationSeconds);
+    lines_ = snapshot.lines;
+    durationSeconds_ = qMax(0.0, snapshot.durationSeconds);
+    minimumDataSecond_ = snapshot.minimumSecond;
+    maximumDataSecond_ = snapshot.maximumSecond;
     updateDisplayBounds();
     updateHorizontalRange();
     viewport()->update();
@@ -208,13 +235,14 @@ void TimelineView::setWaveformData(const QVector<float>& peaks, double startSeco
 
 void TimelineView::clear()
 {
-    beats_.clear();
-    notes_.clear();
-    muriMarkerKeys_.clear();
+    lines_.clear();
+    muriMarkerLocationIds_.clear();
     durationSeconds_ = 0.0;
     playheadSeconds_ = 0.0;
     cursorSeconds_ = 0.0;
     playheadUpperLimitSeconds_ = -1.0;
+    minimumDataSecond_ = 0.0;
+    maximumDataSecond_ = 0.0;
     displayStartSeconds_ = -kTimelineDisplayLeadInSeconds;
     displayEndSeconds_ = 1.0;
     waveformPeaks_.clear();
@@ -249,9 +277,9 @@ void TimelineView::setPlayheadSeconds(double second, bool centerView)
         return;
     }
 
+    const double previousSecond = playheadSeconds_;
+    const int previousScrollValue = horizontalScrollBar()->value();
     playheadSeconds_ = clamped;
-    updateDisplayBounds();
-    updateHorizontalRange();
     const int playheadX = secondToX(playheadSeconds_);
     if (centerView) {
         const int targetX = playheadX - (viewport()->width() / 2);
@@ -265,7 +293,11 @@ void TimelineView::setPlayheadSeconds(double second, bool centerView)
             horizontalScrollBar()->setValue(qBound(horizontalScrollBar()->minimum(), targetX, horizontalScrollBar()->maximum()));
         }
     }
-    viewport()->update();
+    if (horizontalScrollBar()->value() == previousScrollValue) {
+        updateTimelineMarkerStrip(previousSecond, playheadSeconds_, 3);
+    } else {
+        viewport()->update();
+    }
     emit playheadChanged(playheadSeconds_);
 }
 
@@ -273,10 +305,10 @@ void TimelineView::setCursorSeconds(double second, bool centerView)
 {
     const double clamped = qIsFinite(second) ? second : 0.0;
     const bool changed = !qFuzzyCompare(cursorSeconds_ + 1.0, clamped + 1.0);
+    const double previousSecond = cursorSeconds_;
+    const int previousScrollValue = horizontalScrollBar()->value();
     if (changed) {
         cursorSeconds_ = clamped;
-        updateDisplayBounds();
-        updateHorizontalRange();
     }
     if (centerView) {
         const int cursorX = secondToX(cursorSeconds_);
@@ -284,7 +316,11 @@ void TimelineView::setCursorSeconds(double second, bool centerView)
         horizontalScrollBar()->setValue(qBound(horizontalScrollBar()->minimum(), targetX, horizontalScrollBar()->maximum()));
     }
     if (changed || centerView) {
-        viewport()->update();
+        if (horizontalScrollBar()->value() == previousScrollValue) {
+            updateTimelineMarkerStrip(previousSecond, cursorSeconds_, 3);
+        } else {
+            viewport()->update();
+        }
     }
 }
 
@@ -319,16 +355,14 @@ bool TimelineView::showSlideTracks() const
 
 void TimelineView::setMuriAnalysisReport(const MuriAnalysisReport& report)
 {
-    QSet<QString> nextKeys;
+    QSet<quint64> nextLocationIds;
     for (const MuriDiagnostic& diagnostic : report.diagnostics) {
-        if (!diagnostic.markerKey.isEmpty()) {
-            nextKeys.insert(diagnostic.markerKey);
-        }
+        nextLocationIds.insert(timelineRenderLocationId(diagnostic.line, diagnostic.col));
     }
-    if (muriMarkerKeys_ == nextKeys) {
+    if (muriMarkerLocationIds_ == nextLocationIds) {
         return;
     }
-    muriMarkerKeys_ = nextKeys;
+    muriMarkerLocationIds_ = nextLocationIds;
     viewport()->update();
 }
 
@@ -367,30 +401,14 @@ void TimelineView::refreshMinimumHeightForCurrentDevice()
 
 void TimelineView::updateDisplayBounds()
 {
-    double minSecond = 0.0;
-    double maxSecond = qMax(durationSeconds_, qMax(playheadSeconds_, qMax(0.0, cursorSeconds_)));
+    double minSecond = qMin(0.0, minimumDataSecond_);
+    double maxSecond = qMax(maximumDataSecond_, qMax(durationSeconds_, qMax(playheadSeconds_, qMax(0.0, cursorSeconds_))));
     if (playheadUpperLimitSeconds_ > 0.0) {
         maxSecond = qMax(maxSecond, playheadUpperLimitSeconds_);
     }
     if (waveformDurationSeconds_ > 0.0) {
         minSecond = qMin(minSecond, waveformStartSeconds_);
         maxSecond = qMax(maxSecond, waveformStartSeconds_ + waveformDurationSeconds_);
-    }
-    for (const TimelineBeatMarker& beat : beats_) {
-        minSecond = qMin(minSecond, beat.second);
-        maxSecond = qMax(maxSecond, beat.second);
-    }
-    for (const TimelineNoteMarker& note : notes_) {
-        minSecond = qMin(minSecond, note.second);
-        maxSecond = qMax(maxSecond, note.second);
-        if (note.endSecond >= 0.0) {
-            minSecond = qMin(minSecond, note.endSecond);
-            maxSecond = qMax(maxSecond, note.endSecond);
-        }
-        if (note.slideTraceSecond >= 0.0) {
-            minSecond = qMin(minSecond, note.slideTraceSecond);
-            maxSecond = qMax(maxSecond, note.slideTraceSecond);
-        }
     }
     displayStartSeconds_ = qMin(-kTimelineDisplayLeadInSeconds, minSecond - kTimelineDisplayLeadInSeconds);
     displayEndSeconds_ = qMax(displayStartSeconds_ + 1.0, maxSecond + 1.0);

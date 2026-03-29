@@ -59,13 +59,20 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 
 ## 5. Timeline Data, Cursor Mapping, And Preview Synchronization
 
+- Timeline quick model:
+  - Files: `src/timeline/TimelineQuickModel.h`, `src/timeline/TimelineQuickModel.cpp`, `src/timeline/TimelineRenderData.h`
+  - Class: `TimelineQuickModel`
+  - Owns: lightweight timeline parsing, cursor anchors, preview-follow lookup, and incremental edit application for the editor fast path
 - Timeline data model and widget:
   - Files: `src/timeline/TimelineView.h`, `src/timeline/TimelineView.cpp`, `src/timeline/TimelineView.Core.cpp`, `src/timeline/TimelineView.Interaction.cpp`, `src/timeline/TimelineView.Paint.cpp`
   - Class: `TimelineView`
-  - Owns: beat/note visualization, playhead/cursor movement, waveform strip, follow-preview behavior
-- Timeline refresh and marker fan-out:
+  - Owns: lightweight timeline rendering, visible-range painting, playhead/cursor movement, waveform strip, follow-preview behavior
+- Timeline fast/slow refresh orchestration:
   - File: `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
-  - Key functions: `refreshWaveformCache`, `scheduleTimelineRefresh`, `refreshTimelineMetadata`, `seekTimelineToCursor`, `syncTimelineToEditorCursor`, `navigateTimelineToSecond`, `updatePreviewSliderRange`, `updatePreviewObjectStats`, `updatePreviewWorkspaceLayout`, `updatePreviewPanelLayout`
+  - Key functions: `applyTimelineQuickChange`, `refreshTimelineQuickModelFromCurrentText`, `scheduleTimelineRefresh`, `requestTimelineSlowRefresh`, `dispatchTimelineSlowRefresh`, `seekTimelineToCursor`, `syncTimelineToEditorCursor`, `navigateTimelineToSecond`, `updatePreviewSliderRange`, `updatePreviewObjectStats`, `updatePreviewWorkspaceLayout`, `updatePreviewPanelLayout`
+- Timeline slow refresh workers:
+  - Files: `src/timeline/TimelineSlowRefresh.h`, `src/timeline/TimelineSlowRefresh.cpp`
+  - Owns: full parser refresh, shifted marker generation, validation report building, and latest-only Muri background work
 - Timing getters and timing writes:
   - File: `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
   - Key functions: `parsedFirstSeconds`, `parsedWholeBpm`, `parsedLatencyMeterId`, `applyLatencyDetectorOffset`, `applyLatencyDetectorBpm`, `applyLatencyDetectorMeter`
@@ -150,7 +157,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Key function: `buildStaticMuriReferences`
 - Main window usage:
   - File: `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
-  - Key function: `rebuildStaticMuriReferences`
+  - Key functions: `scheduleDeferredMuriRefresh`, `refreshDeferredMuriDiagnostics`
 
 ## 11. Batch Transforms And Authoring Helpers
 

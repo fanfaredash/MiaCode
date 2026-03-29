@@ -1,6 +1,6 @@
 #include "common/MuriTypes.h"
 
-#include "TimelineView.h"
+#include "timeline/TimelineData.h"
 
 QString makeMarkerAnalysisKey(const TimelineNoteMarker& marker)
 {

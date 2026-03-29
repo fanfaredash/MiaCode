@@ -7,7 +7,7 @@
 #include <algorithm>
 
 #include "PreviewGameplayConfig.h"
-#include "TimelineView.h"
+#include "timeline/TimelineData.h"
 
 namespace miacode::preview_sfx_timeline {
 

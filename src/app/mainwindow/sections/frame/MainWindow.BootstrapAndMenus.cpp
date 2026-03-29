@@ -1262,7 +1262,7 @@ MainWindow::MainWindow(QWidget* parent)
     bottomTabs_->addTab(timelineView_, uiText("tab.timeline", "Timeline"));
 
     if (auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_); editor != nullptr) {
-        connect(editor->document(), &QTextDocument::contentsChange, this, [this](int, int charsRemoved, int charsAdded) {
+        connect(editor->document(), &QTextDocument::contentsChange, this, [this](int position, int charsRemoved, int charsAdded) {
             if (suppressTextDirtyTracking_) {
                 return;
             }
@@ -1270,12 +1270,11 @@ MainWindow::MainWindow(QWidget* parent)
                 return;
             }
             markCurrentFieldDirty();
-            scheduleTimelineRefresh();
+            ++timelineRevision_;
+            applyTimelineQuickChange(position, charsRemoved, charsAdded);
+            requestTimelineSlowRefresh();
             updateEditorEmptyState();
             updateEditorStatus();
-        });
-        connect(editor, &QTextEdit::textChanged, this, [this]() {
-            scheduleAutoValidation();
         });
     }
     connect(qobject_cast<PlainCodeEditor*>(editorWidget_), &QTextEdit::cursorPositionChanged, this, [this]() {
@@ -1470,23 +1469,6 @@ MainWindow::MainWindow(QWidget* parent)
     statusBar()->addPermanentWidget(currentFileLabel_, 1);
     updateCurrentFileLabel();
     updateLatencyDetectorAvailability();
-
-    metadataRefreshTimer_ = new QTimer(this);
-    metadataRefreshTimer_->setSingleShot(true);
-    metadataRefreshTimer_->setInterval(75);
-    connect(metadataRefreshTimer_, &QTimer::timeout, this, &MainWindow::refreshTimelineMetadata);
-
-    validationRefreshTimer_ = new QTimer(this);
-    validationRefreshTimer_->setSingleShot(true);
-    validationRefreshTimer_->setInterval(220);
-    connect(validationRefreshTimer_, &QTimer::timeout, this, [this]() {
-        (void)runValidateSimaiSilently(false);
-    });
-
-    muriRefreshTimer_ = new QTimer(this);
-    muriRefreshTimer_->setSingleShot(true);
-    muriRefreshTimer_->setInterval(280);
-    connect(muriRefreshTimer_, &QTimer::timeout, this, &MainWindow::refreshDeferredMuriDiagnostics);
 
     qtPreviewTimer_ = new QTimer(this);
     qtPreviewTimer_->setInterval(16);

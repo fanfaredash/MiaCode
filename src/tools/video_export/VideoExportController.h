@@ -6,7 +6,7 @@
 
 #include "PreviewRenderSettings.h"
 #include "PreviewAudioSettings.h"
-#include "TimelineView.h"
+#include "timeline/TimelineData.h"
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
 #include "common/PreviewVideoGeometryConfig.h"

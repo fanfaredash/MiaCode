@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/feature-index.md -->
-<!-- translation-source-hash: 03e37ef51ffb4435179a7bca30db8a9a4b6b5b8907e15da39babfebd4876d684 -->
+<!-- translation-source-hash: 27a1e146aca59f5497dfa503e644815ca8c2511bb763d7fbb1fca333f3b83f26 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 功能索引
@@ -63,13 +63,20 @@
 
 ## 5. 时间轴数据、光标映射与预览同步
 
+- 时间轴快模型：
+  - 文件：`src/timeline/TimelineQuickModel.h`、`src/timeline/TimelineQuickModel.cpp`、`src/timeline/TimelineRenderData.h`
+  - 类：`TimelineQuickModel`
+  - 负责：轻量时间轴解析、光标锚点、预览跟随定位，以及编辑器快路径的增量更新
 - 时间轴数据模型与控件：
   - 文件：`src/timeline/TimelineView.h`、`src/timeline/TimelineView.cpp`、`src/timeline/TimelineView.Core.cpp`、`src/timeline/TimelineView.Interaction.cpp`、`src/timeline/TimelineView.Paint.cpp`
   - 类：`TimelineView`
-  - 负责：beat/note 可视化、playhead/cursor 移动、波形条、跟随预览行为
-- 时间轴刷新与 marker 分发：
+  - 负责：轻量时间轴绘制、可见范围裁剪、playhead/cursor 移动、波形条、跟随预览行为
+- 时间轴快慢刷新编排：
   - 文件：`src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
-  - 关键函数：`refreshWaveformCache`、`scheduleTimelineRefresh`、`refreshTimelineMetadata`、`seekTimelineToCursor`、`syncTimelineToEditorCursor`、`navigateTimelineToSecond`、`updatePreviewSliderRange`、`updatePreviewObjectStats`、`updatePreviewWorkspaceLayout`、`updatePreviewPanelLayout`
+  - 关键函数：`applyTimelineQuickChange`、`refreshTimelineQuickModelFromCurrentText`、`scheduleTimelineRefresh`、`requestTimelineSlowRefresh`、`dispatchTimelineSlowRefresh`、`seekTimelineToCursor`、`syncTimelineToEditorCursor`、`navigateTimelineToSecond`、`updatePreviewSliderRange`、`updatePreviewObjectStats`、`updatePreviewWorkspaceLayout`、`updatePreviewPanelLayout`
+- 时间轴慢刷新 worker：
+  - 文件：`src/timeline/TimelineSlowRefresh.h`、`src/timeline/TimelineSlowRefresh.cpp`
+  - 负责：完整 parser 刷新、位移后 marker 生成、validation report 构建，以及 latest-only 的 Muri 后台任务
 - 时间 getter 与时间写回：
   - 文件：`src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
   - 关键函数：`parsedFirstSeconds`、`parsedWholeBpm`、`parsedLatencyMeterId`、`applyLatencyDetectorOffset`、`applyLatencyDetectorBpm`、`applyLatencyDetectorMeter`
@@ -154,7 +161,7 @@
   - 关键函数：`buildStaticMuriReferences`
 - 主窗口使用点：
   - 文件：`src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
-  - 关键函数：`rebuildStaticMuriReferences`
+  - 关键函数：`scheduleDeferredMuriRefresh`、`refreshDeferredMuriDiagnostics`
 
 ## 11. 批量变换与作者辅助
 

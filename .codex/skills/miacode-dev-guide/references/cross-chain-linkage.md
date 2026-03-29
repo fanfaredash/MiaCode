@@ -6,15 +6,17 @@ Use this file before changing behavior that crosses parser, preview, audio, expo
 
 Primary chain:
 
-1. `MainWindow::applyCurrentFieldToDocument`
-2. `MainWindow::refreshTimelineMetadata`
-3. `SimaiNativeParser::parseForTimeline`
-4. shifted beat/note markers
-5. `TimelineView::setTimelineData`
-6. `QtPreviewSfxRuntime::configureTimeline`
-7. `MuriAnalyzer::analyze`
-8. `MainWindow::rebuildStaticMuriReferences`
-9. `PreviewCanvas::setNoteMarkers`
+1. editor `contentsChange` or an explicit full refresh entry such as `scheduleTimelineRefresh`
+2. `MainWindow::applyTimelineQuickChange` / `MainWindow::refreshTimelineQuickModelFromCurrentText`
+3. `TimelineQuickModel::applyContentsChange` or `TimelineQuickModel::rebuildFromText`
+4. `TimelineView::setTimelineData`
+5. `MainWindow::requestTimelineSlowRefresh`
+6. `buildTimelineSlowRefreshResult`
+7. shifted beat/note markers, validation report, and preview stats inputs
+8. `QtPreviewSfxRuntime::configureTimeline`
+9. `MainWindow::scheduleDeferredMuriRefresh`
+10. `buildTimelineMuriRefreshResult`
+11. `PreviewCanvas::setNoteMarkers`
 
 Implication:
 
@@ -27,7 +29,8 @@ Current contract:
 
 - `SimaiDocument` stores raw `first`.
 - `MainWindow::parsedFirstSeconds` is the main getter.
-- `MainWindow::refreshTimelineMetadata` shifts parser-produced beat/note markers by `first`.
+- `TimelineQuickModel` receives `first` on every fast-path rebuild or incremental edit apply.
+- `buildTimelineSlowRefreshResult` shifts parser-produced beat/note markers by `first`.
 - `MainWindow::applyLatencyDetectorOffset` writes raw `first` back into the document.
 - `LatencyDetectorDialog` reads and writes the raw value rather than maintaining an inverted shadow value.
 - Export task reconstruction uses parsed document text plus shifted markers again.
@@ -161,7 +164,7 @@ If you add a new render setting, wire preview persistence and export reconstruct
 
 Current flow:
 
-- live preview path: `refreshTimelineMetadata` -> `MuriAnalyzer::analyze`
+- live preview path: `requestTimelineSlowRefresh` -> `buildTimelineSlowRefreshResult` -> `scheduleDeferredMuriRefresh` -> `buildTimelineMuriRefreshResult`
 - export path: `buildVideoExportTaskFromSnapshot` -> `MuriAnalyzer::analyze`
 
 Implication:
