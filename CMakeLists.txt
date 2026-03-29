@@ -209,6 +209,11 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/tools/chart_transform/ChartBatchTransformSpec.cpp
         src/simai/transform/ChartBatchTransform.h
         src/simai/transform/ChartBatchTransform.cpp
+        src/simai/document/SimaiDocument.h
+        src/simai/document/SimaiDocument.cpp
+        src/simai/parser/SimaiNativeParser.h
+        src/simai/parser/SimaiNativeParser.cpp
+        resources/fonts.qrc
     )
 
     target_link_libraries(miacode_muri_dump PRIVATE
@@ -270,11 +275,18 @@ if (MIACODE_BUILD_DEV_TOOLS)
 
     target_link_libraries(chart_batch_transform_spec PRIVATE
         Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
     )
     target_include_directories(chart_batch_transform_spec PRIVATE
         src
+        src/app/ui
+        src/common
         src/simai
+        src/simai/document
+        src/simai/parser
         src/simai/transform
+        src/timeline
     )
 endif()
 
