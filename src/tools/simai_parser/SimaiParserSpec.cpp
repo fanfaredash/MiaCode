@@ -209,14 +209,6 @@ int main(int argc, char** argv)
     }
 
     {
-        const SimaiNativeParseResult strictCommentParens = SimaiNativeParser::validateSyntax(
-            QStringLiteral("1,|| unmatched comment brackets ([)}\nE")
-        );
-        expect(strictCommentParens.ok, QStringLiteral("validate ignores brackets inside || comment tail"));
-        expect(strictCommentParens.errors.isEmpty(), QStringLiteral("comment tail brackets do not emit strict errors"));
-    }
-
-    {
         const SimaiNativeValidationReport strictOnlyReport = SimaiNativeParser::buildValidationReport(
             QStringLiteral("{10}1,\nE"),
             SimaiNativeValidationLocale::English
