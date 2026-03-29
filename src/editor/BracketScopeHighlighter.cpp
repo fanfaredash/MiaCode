@@ -20,6 +20,16 @@ QColor squareColor()
 {
     return UiTheme::isDarkTheme() ? QColor(QStringLiteral("#88A4FF")) : QColor(QStringLiteral("#282F60"));
 }
+
+QColor commentMarkerColor()
+{
+    return UiTheme::isDarkTheme() ? QColor(QStringLiteral("#71B77A")) : QColor(QStringLiteral("#368E4E"));
+}
+
+int commentStartIndex(const QString& text)
+{
+    return text.indexOf(QStringLiteral("||"));
+}
 }
 
 BracketScopeHighlighter::BracketScopeHighlighter(QTextDocument* parent)
@@ -109,7 +119,10 @@ void BracketScopeHighlighter::highlightBlock(const QString& text)
         }
     }
 
-    for (int index = 0; index < text.size(); ++index) {
+    const int commentStart = commentStartIndex(text);
+    const int scanEnd = commentStart >= 0 ? commentStart : text.size();
+
+    for (int index = 0; index < scanEnd; ++index) {
         const QChar ch = text.at(index);
 
         if (!stack.isEmpty()) {
@@ -148,6 +161,12 @@ void BracketScopeHighlighter::highlightBlock(const QString& text)
         if (matchingIndex >= 0) {
             stack.resize(matchingIndex);
         }
+    }
+
+    if (commentStart >= 0) {
+        QTextCharFormat commentFormat;
+        commentFormat.setForeground(commentMarkerColor());
+        setFormat(commentStart, text.size() - commentStart, commentFormat);
     }
 
     auto* data = new BlockData();
