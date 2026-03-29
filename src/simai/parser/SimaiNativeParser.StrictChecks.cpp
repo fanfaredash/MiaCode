@@ -72,6 +72,11 @@ void runStrictFormatChecks(ParseState* state, const QStringList& lines)
         return stripped;
     };
 
+    auto stripInlineComment = [](const QString& line) {
+        const int commentIndex = line.indexOf(QStringLiteral("||"));
+        return commentIndex >= 0 ? line.left(commentIndex) : line;
+    };
+
     auto noteLikeLine = [](const QString& line) {
         for (QChar ch : line) {
             if (isDigitLane(ch)) {
@@ -98,11 +103,9 @@ void runStrictFormatChecks(ParseState* state, const QStringList& lines)
             line.chop(1);
         }
         const int lineNumber = lineIndex + 1;
+        line = stripInlineComment(line);
         const QString trimmed = line.trimmed();
         if (trimmed.isEmpty()) {
-            continue;
-        }
-        if (trimmed.startsWith(QStringLiteral("||"))) {
             continue;
         }
 
