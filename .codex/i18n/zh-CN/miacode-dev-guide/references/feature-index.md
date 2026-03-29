@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/feature-index.md -->
-<!-- translation-source-hash: b9054a089f67ce88c9d41dd64e1e0f12ac6c26276114683aa1d77dbeebd39831 -->
+<!-- translation-source-hash: 03e37ef51ffb4435179a7bca30db8a9a4b6b5b8907e15da39babfebd4876d684 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 功能索引
@@ -161,7 +161,7 @@
 - 谱面变换：
   - 文件：`src/simai/transform/ChartBatchTransform.h`、`src/simai/transform/ChartBatchTransform.cpp`
   - 命名空间：`miacode::chart_transform`
-  - 关键函数：`toggleBreakForSelection`、`toggleExForSelection`、`toggleFireworkForSelection`、`randomRotateForSelection`
+  - 关键函数：`transformChartText`、`toggleBreakForSelection`、`toggleExForSelection`、`toggleFireworkForSelection`、`randomRotateForSelection`
 - 主窗口 action 入口：
   - 文件：`src/app/mainwindow/MainWindow.cpp`
   - 关键函数：`onMirrorLeftRight`、`onMirrorUpDown`、`onRotate180`、`onRotate45CounterClockwise`、`onRotate45Clockwise`、`onToggleBreakSelection`、`onToggleExSelection`、`onToggleFireworkSelection`、`onRandomRotateSelection`

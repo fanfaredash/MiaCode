@@ -157,7 +157,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Chart transforms:
   - Files: `src/simai/transform/ChartBatchTransform.h`, `src/simai/transform/ChartBatchTransform.cpp`
   - Namespace: `miacode::chart_transform`
-  - Key functions: `toggleBreakForSelection`, `toggleExForSelection`, `toggleFireworkForSelection`, `randomRotateForSelection`
+  - Key functions: `transformChartText`, `toggleBreakForSelection`, `toggleExForSelection`, `toggleFireworkForSelection`, `randomRotateForSelection`
 - Main window action entry points:
   - File: `src/app/mainwindow/MainWindow.cpp`
   - Key functions: `onMirrorLeftRight`, `onMirrorUpDown`, `onRotate180`, `onRotate45CounterClockwise`, `onRotate45Clockwise`, `onToggleBreakSelection`, `onToggleExSelection`, `onToggleFireworkSelection`, `onRandomRotateSelection`

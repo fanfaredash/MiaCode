@@ -6,6 +6,15 @@
 
 namespace miacode::chart_transform {
 
+enum class ChartTransformOp {
+    MirrorLeftRight,
+    MirrorUpDown,
+    Rotate180,
+    Rotate45CounterClockwise,
+    Rotate45Clockwise,
+};
+
+QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount = nullptr);
 QString toggleBreakForSelection(const QString& input, int* changedCount = nullptr);
 QString toggleExForSelection(const QString& input, int* changedCount = nullptr);
 QString toggleFireworkForSelection(const QString& input, int* changedCount = nullptr);
