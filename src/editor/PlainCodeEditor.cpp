@@ -406,8 +406,24 @@ void PlainCodeEditor::insertFromMimeData(const QMimeData* source)
 
 void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
 {
-    if (event == nullptr
-        || !halfWidthInputEnabled_
+    if (event == nullptr) {
+        QTextEdit::keyPressEvent(event);
+        return;
+    }
+
+    const bool plainEnterKey =
+        (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+        && !(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier));
+    if (plainEnterKey) {
+        QTextCursor cursor = textCursor();
+        cursor.beginEditBlock();
+        cursor.insertBlock(cursor.blockFormat(), cursor.charFormat());
+        cursor.endEditBlock();
+        setTextCursor(cursor);
+        return;
+    }
+
+    if (!halfWidthInputEnabled_
         || (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
         QTextEdit::keyPressEvent(event);
         return;
