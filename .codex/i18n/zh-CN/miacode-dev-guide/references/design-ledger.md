@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/design-ledger.md -->
-<!-- translation-source-hash: b5cb0cc1b137b4840761c0da49471bdca35a37af784372a36c05de06aa4b6a9d -->
+<!-- translation-source-hash: df406aab45bba76759a20cf01562b6629a120d2808d6fa40ac6a996030d09fb3 -->
 
 # 设计账本
 

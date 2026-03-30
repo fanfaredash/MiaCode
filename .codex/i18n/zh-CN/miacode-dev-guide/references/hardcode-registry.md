@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/hardcode-registry.md -->
-<!-- translation-source-hash: c549973d07c873634187dfa3cc575a1a1f9f3953ebbd1f4baeaa050b11227000 -->
+<!-- translation-source-hash: e71768672a40f533f6d9fcf1d6c3ffa62fa782c63c2b3839e67ed84a2a4d5b24 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 硬编码登记
