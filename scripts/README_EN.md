@@ -20,9 +20,15 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1 -QtRoot <QtRo
 ```
 
 Notes:
-- `package-win.ps1` only packages an existing build. It does not trigger a build or download Qt.
+- `package-win.ps1` defaults to the `build/` directory.
+- Before packaging, it checks whether `build/generated/AppVersion.h` and `build/<Config>/MiaCode.exe` match the current `CMakeLists.txt`; if the executable is missing, version-stale, or older than the generated version header, it automatically runs `cmake --build build --target MiaCode --config <Config> --parallel 8`.
 - If `-QtRoot` is omitted, the script tries to find `windeployqt` from the current `PATH`.
+- `-BuildJobs` defaults to `8`, and can be overridden per machine.
 - If you want Qt to be installed automatically and then build/package in one step, use `build-win.ps1`.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1 -QtRoot <QtRoot> -BuildJobs 8
+```
 
 Output:
 - `dist/MiaCode-v<version>-win64`

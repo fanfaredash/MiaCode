@@ -93,6 +93,7 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 - Windows build/package:
   - `scripts/build-win.ps1`
   - `scripts/package-win.ps1`
+  - `scripts/package-win.ps1` defaults to `build/`, prechecks version freshness against `CMakeLists.txt` and `build/generated/AppVersion.h`, and auto-runs `cmake --build <BuildDir> --target MiaCode --config <Config> --parallel 8` when the packaged executable is stale or missing
 - macOS build/package:
   - `scripts/build-macos.sh`
   - `scripts/package-mac.sh`
