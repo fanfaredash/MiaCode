@@ -402,36 +402,45 @@ const TimelineRenderSnapshot& TimelineQuickModel::snapshot() const
 
 double TimelineQuickModel::timelineSecondForCursor(int lineNumber, int col) const
 {
-    if (lines_.isEmpty() || linesWithEveryComma_.isEmpty()) {
-        return -1.0;
-    }
+    double second = 0.0;
+    resolvePreviousCursorAnchorForTextPosition(lineNumber, col, nullptr, nullptr, &second);
+    return second;
+}
 
-    const int targetLineIndex = qBound(0, lineNumber - 1, lines_.size() - 1);
-    const LineState& targetLine = lines_.at(targetLineIndex);
-    if (!targetLine.cursorCache.everyComma.isEmpty()) {
-        const auto it = std::lower_bound(
-            targetLine.cursorCache.everyComma.cbegin(),
-            targetLine.cursorCache.everyComma.cend(),
-            col,
-            [](const TimelineCursorAnchor& anchor, int sourceCol) { return anchor.sourceCol < sourceCol; });
-        if (it != targetLine.cursorCache.everyComma.cend()) {
-            return timelineRenderAbsoluteSecond(targetLine.render, it->secondOffset);
+bool TimelineQuickModel::resolveTimelineNavigateCursor(double second, int* line, int* col, double* cursorSecond) const
+{
+    const int targetLineIndex = resolveRecentPastLineIndex(second);
+    if (targetLineIndex >= 0) {
+        const LineState& targetLine = lines_.at(targetLineIndex);
+        if (!targetLine.cursorCache.everyComma.isEmpty()) {
+            const TimelineCursorAnchor& anchor = targetLine.cursorCache.everyComma.constFirst();
+            if (line != nullptr) {
+                *line = targetLine.lineNumber;
+            }
+            if (col != nullptr) {
+                *col = anchor.sourceCol;
+            }
+            if (cursorSecond != nullptr) {
+                *cursorSecond = qMax(0.0, timelineRenderAbsoluteSecond(targetLine.render, anchor.secondOffset));
+            }
+            return true;
         }
     }
 
-    const auto nextIt = std::lower_bound(linesWithEveryComma_.cbegin(), linesWithEveryComma_.cend(), targetLineIndex + 1);
-    if (nextIt != linesWithEveryComma_.cend()) {
-        const LineState& nextLine = lines_.at(*nextIt);
-        return timelineRenderAbsoluteSecond(nextLine.render, nextLine.cursorCache.everyComma.constFirst().secondOffset);
+    if (resolvePreviousCursorAnchorForSecond(second, line, col, cursorSecond)) {
+        return true;
     }
 
-    const auto prevIt = std::upper_bound(linesWithEveryComma_.cbegin(), linesWithEveryComma_.cend(), targetLineIndex);
-    if (prevIt == linesWithEveryComma_.cbegin()) {
-        const LineState& firstLine = lines_.at(linesWithEveryComma_.constFirst());
-        return timelineRenderAbsoluteSecond(firstLine.render, firstLine.cursorCache.everyComma.constFirst().secondOffset);
+    if (line != nullptr) {
+        *line = 1;
     }
-    const LineState& prevLine = lines_.at(*std::prev(prevIt));
-    return timelineRenderAbsoluteSecond(prevLine.render, prevLine.cursorCache.everyComma.constLast().secondOffset);
+    if (col != nullptr) {
+        *col = 1;
+    }
+    if (cursorSecond != nullptr) {
+        *cursorSecond = 0.0;
+    }
+    return false;
 }
 
 bool TimelineQuickModel::resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const
@@ -556,155 +565,23 @@ bool TimelineQuickModel::resolvePreviewFollowCursor(
     int* col,
     double* noteSecond) const
 {
-    const QVector<int>* lineIndices = nullptr;
-    switch (mode) {
-    case PreviewFollowMode::EveryComma:
-        lineIndices = &linesWithEveryComma_;
-        break;
-    case PreviewFollowMode::NonEmptyComma:
-        lineIndices = &linesWithNonEmptyComma_;
-        break;
-    case PreviewFollowMode::LineOnly:
-        lineIndices = &linesWithLineOnly_;
-        break;
-    }
-    if (lineIndices == nullptr || lineIndices->isEmpty()) {
-        return false;
-    }
+    Q_UNUSED(mode);
+    Q_UNUSED(anchorLine);
+    Q_UNUSED(anchorCol);
+    Q_UNUSED(useAbsoluteSeekAnchor);
 
-    const auto anchorsForMode = [mode](const LineState& lineState) -> const QVector<TimelineCursorAnchor>& {
-        return mode == PreviewFollowMode::EveryComma ? lineState.cursorCache.everyComma : lineState.cursorCache.nonEmptyComma;
-    };
-
-    const auto writeResult = [line, col, noteSecond](const LineState& lineState, const TimelineCursorAnchor& anchor) {
-        if (line != nullptr) {
-            *line = lineState.lineNumber;
-        }
-        if (col != nullptr) {
-            *col = anchor.sourceCol;
-        }
-        if (noteSecond != nullptr) {
-            *noteSecond = timelineRenderAbsoluteSecond(lineState.render, anchor.secondOffset);
-        }
-    };
-
-    if (useAbsoluteSeekAnchor) {
-        int nearestLine = 0;
-        int nearestCol = 0;
-        double nearestSecond = 0.0;
-        if (!resolveNearestTimelineNote(second, -1, &nearestLine, &nearestCol, &nearestSecond)) {
-            const LineState& firstLine = lines_.at(lineIndices->constFirst());
-            const TimelineCursorAnchor anchor = (mode == PreviewFollowMode::LineOnly)
-                ? firstLine.cursorCache.lineOnly
-                : anchorsForMode(firstLine).constFirst();
-            writeResult(firstLine, anchor);
-            return true;
-        }
-
-        const int nearestLineIndex = qBound(0, nearestLine - 1, lines_.size() - 1);
-        const LineState& lineState = lines_.at(nearestLineIndex);
-        if (mode == PreviewFollowMode::LineOnly && lineState.cursorCache.hasLineOnly) {
-            writeResult(lineState, lineState.cursorCache.lineOnly);
-            return true;
-        }
-
-        const QVector<TimelineCursorAnchor>& anchors = anchorsForMode(lineState);
-        if (anchors.isEmpty()) {
-            return false;
-        }
-        const auto it = std::lower_bound(
-            anchors.cbegin(),
-            anchors.cend(),
-            nearestCol,
-            [](const TimelineCursorAnchor& anchor, int sourceCol) { return anchor.sourceCol < sourceCol; });
-        writeResult(lineState, it != anchors.cend() ? *it : anchors.constLast());
+    if (resolvePreviousCursorAnchorForSecond(second, line, col, noteSecond)) {
         return true;
     }
 
-    const int startLineIndex = qBound(0, anchorLine - 1, lines_.size() - 1);
-    auto lineIt = std::lower_bound(lineIndices->cbegin(), lineIndices->cend(), startLineIndex);
-    if (lineIt == lineIndices->cend()) {
-        const LineState& lastLine = lines_.at(lineIndices->constLast());
-        writeResult(lastLine, mode == PreviewFollowMode::LineOnly ? lastLine.cursorCache.lineOnly : anchorsForMode(lastLine).constLast());
-        return true;
+    if (line != nullptr) {
+        *line = 1;
     }
-
-    const LineState* bestLine = nullptr;
-    TimelineCursorAnchor bestAnchor;
-    double bestDelta = 0.0;
-    bool found = false;
-    const LineState* fallbackLine = nullptr;
-    TimelineCursorAnchor fallbackAnchor;
-
-    for (auto it = lineIt; it != lineIndices->cend(); ++it) {
-        const LineState& lineState = lines_.at(*it);
-        if (mode == PreviewFollowMode::LineOnly) {
-            if (!lineState.cursorCache.hasLineOnly) {
-                continue;
-            }
-            const double anchorSecond = timelineRenderAbsoluteSecond(
-                lineState.render,
-                lineState.cursorCache.lineOnly.secondOffset);
-            const double delta = qAbs(anchorSecond - second);
-            if (!found || delta + kTimelineEpsilon < bestDelta) {
-                found = true;
-                bestDelta = delta;
-                bestLine = &lineState;
-                bestAnchor = lineState.cursorCache.lineOnly;
-            }
-            fallbackLine = &lineState;
-            fallbackAnchor = lineState.cursorCache.lineOnly;
-        } else {
-            const QVector<TimelineCursorAnchor>& anchors = anchorsForMode(lineState);
-            if (anchors.isEmpty()) {
-                continue;
-            }
-            int anchorStartIndex = 0;
-            if (lineState.lineNumber == anchorLine) {
-                anchorStartIndex = static_cast<int>(std::lower_bound(
-                                                        anchors.cbegin(),
-                                                        anchors.cend(),
-                                                        anchorCol,
-                                                        [](const TimelineCursorAnchor& anchor, int sourceCol) {
-                                                            return anchor.sourceCol < sourceCol;
-                                                        })
-                                                    - anchors.cbegin());
-            }
-            if (anchorStartIndex >= anchors.size()) {
-                continue;
-            }
-            fallbackLine = &lineState;
-            fallbackAnchor = anchors.constLast();
-            for (int anchorIndex = anchorStartIndex; anchorIndex < anchors.size(); ++anchorIndex) {
-                const TimelineCursorAnchor& anchor = anchors.at(anchorIndex);
-                const double anchorSecond = timelineRenderAbsoluteSecond(lineState.render, anchor.secondOffset);
-                const double delta = qAbs(anchorSecond - second);
-                if (!found
-                    || delta + kTimelineEpsilon < bestDelta
-                    || (qAbs(delta - bestDelta) <= kTimelineEpsilon
-                        && (lineState.lineNumber < bestLine->lineNumber
-                            || (lineState.lineNumber == bestLine->lineNumber && anchor.sourceCol < bestAnchor.sourceCol)))) {
-                    found = true;
-                    bestDelta = delta;
-                    bestLine = &lineState;
-                    bestAnchor = anchor;
-                }
-            }
-            if (found
-                && timelineRenderAbsoluteSecond(lineState.render, anchors.constFirst().secondOffset)
-                    > second + bestDelta + kTimelineEpsilon) {
-                break;
-            }
-        }
+    if (col != nullptr) {
+        *col = 1;
     }
-
-    if (found && bestLine != nullptr) {
-        writeResult(*bestLine, bestAnchor);
-        return true;
-    }
-    if (fallbackLine != nullptr) {
-        writeResult(*fallbackLine, fallbackAnchor);
-        return true;
+    if (noteSecond != nullptr) {
+        *noteSecond = 0.0;
     }
     return false;
 }
@@ -881,6 +758,136 @@ void TimelineQuickModel::rebuildAnchorLineIndices()
     }
 }
 
+bool TimelineQuickModel::resolvePreviousCursorAnchorForTextPosition(
+    int lineNumber,
+    int sourceCol,
+    int* line,
+    int* col,
+    double* second) const
+{
+    if (!lines_.isEmpty()) {
+        const int targetLineIndex = qBound(0, lineNumber - 1, lines_.size() - 1);
+        for (int lineIndex = targetLineIndex; lineIndex >= 0; --lineIndex) {
+            const LineState& lineState = lines_.at(lineIndex);
+            if (lineState.cursorCache.everyComma.isEmpty()) {
+                continue;
+            }
+
+            const QVector<TimelineCursorAnchor>& anchors = lineState.cursorCache.everyComma;
+            const TimelineCursorAnchor* resolvedAnchor = nullptr;
+            if (lineIndex == targetLineIndex) {
+                const auto it = std::upper_bound(
+                    anchors.cbegin(),
+                    anchors.cend(),
+                    sourceCol,
+                    [](int value, const TimelineCursorAnchor& anchor) { return value < anchor.sourceCol; });
+                if (it != anchors.cbegin()) {
+                    resolvedAnchor = &(*std::prev(it));
+                }
+            } else {
+                resolvedAnchor = &anchors.constLast();
+            }
+
+            if (resolvedAnchor == nullptr) {
+                continue;
+            }
+            if (line != nullptr) {
+                *line = lineState.lineNumber;
+            }
+            if (col != nullptr) {
+                *col = resolvedAnchor->sourceCol;
+            }
+            if (second != nullptr) {
+                *second = qMax(0.0, timelineRenderAbsoluteSecond(lineState.render, resolvedAnchor->secondOffset));
+            }
+            return true;
+        }
+    }
+
+    if (line != nullptr) {
+        *line = 1;
+    }
+    if (col != nullptr) {
+        *col = 1;
+    }
+    if (second != nullptr) {
+        *second = 0.0;
+    }
+    return false;
+}
+
+bool TimelineQuickModel::resolvePreviousCursorAnchorForSecond(
+    double second,
+    int* line,
+    int* col,
+    double* anchorSecond) const
+{
+    const double targetSecond = qMax(0.0, second);
+    const LineState* bestLine = nullptr;
+    const TimelineCursorAnchor* bestAnchor = nullptr;
+    double bestSecond = 0.0;
+
+    for (const LineState& lineState : lines_) {
+        for (const TimelineCursorAnchor& anchor : lineState.cursorCache.everyComma) {
+            const double absoluteSecond = qMax(0.0, timelineRenderAbsoluteSecond(lineState.render, anchor.secondOffset));
+            if (absoluteSecond > targetSecond + kTimelineEpsilon) {
+                break;
+            }
+            if (bestLine == nullptr || absoluteSecond > bestSecond + kTimelineEpsilon) {
+                bestLine = &lineState;
+                bestAnchor = &anchor;
+                bestSecond = absoluteSecond;
+            }
+        }
+    }
+
+    if (bestLine == nullptr || bestAnchor == nullptr) {
+        if (line != nullptr) {
+            *line = 1;
+        }
+        if (col != nullptr) {
+            *col = 1;
+        }
+        if (anchorSecond != nullptr) {
+            *anchorSecond = 0.0;
+        }
+        return false;
+    }
+
+    if (line != nullptr) {
+        *line = bestLine->lineNumber;
+    }
+    if (col != nullptr) {
+        *col = bestAnchor->sourceCol;
+    }
+    if (anchorSecond != nullptr) {
+        *anchorSecond = bestSecond;
+    }
+    return true;
+}
+
+int TimelineQuickModel::resolveRecentPastLineIndex(double second) const
+{
+    if (lines_.isEmpty()) {
+        return -1;
+    }
+
+    const double targetSecond = qMax(0.0, second);
+    int bestIndex = -1;
+    double bestStartSecond = 0.0;
+    for (int index = 0; index < lines_.size(); ++index) {
+        const double lineStartSecond = qMax(0.0, lines_.at(index).render.startSecond);
+        if (lineStartSecond > targetSecond + kTimelineEpsilon) {
+            break;
+        }
+        if (bestIndex < 0 || lineStartSecond > bestStartSecond + kTimelineEpsilon) {
+            bestIndex = index;
+            bestStartSecond = lineStartSecond;
+        }
+    }
+    return bestIndex;
+}
+
 bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& startState) const
 {
     if (lineState == nullptr) {
@@ -1016,12 +1023,6 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
     noteSecondKeys.reserve(lineState->render.notes.size());
     for (const TimelineRenderNote& note : lineState->render.notes) {
         const double noteSecond = timelineRenderAbsoluteSecond(lineState->render, note.secondOffset);
-        TimelineCursorAnchor anchor;
-        anchor.sourceCol = note.sourceCol;
-        anchor.lane = note.lane;
-        anchor.secondOffset = note.secondOffset;
-        lineState->cursorCache.everyComma.append(anchor);
-        lineState->cursorCache.nonEmptyComma.append(anchor);
         noteSecondKeys.insert(qRound64(noteSecond * 1000000.0));
     }
     for (const TimelineRenderBeat& beat : lineState->render.beats) {

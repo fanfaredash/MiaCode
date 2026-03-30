@@ -381,6 +381,28 @@ void MainWindow::refreshTimelineQuickModelFromCurrentText()
     updatePreviewSliderRange();
 }
 
+void MainWindow::applyLatestTimelinePreviewStateToPausedPreview()
+{
+    if (qtPreviewPlaying_) {
+        return;
+    }
+
+    if (previewSfxRuntime_ != nullptr) {
+        previewSfxRuntime_->configureTimeline(latestTimelineNoteMarkers_);
+        previewSfxRuntime_->resetCursor(qMax(0.0, qtPreviewPauseSecond_), false);
+        previewSfxRuntime_->syncTouchholdVoices(qMax(0.0, qtPreviewPauseSecond_));
+    }
+
+    refreshPreviewObjectStatsTotals(latestTimelineNoteMarkers_);
+    if (previewCanvas_ != nullptr && latestTimelineNoteMarkerSignature_ != lastPreviewNoteMarkerSignature_) {
+        previewCanvas_->setNoteMarkers(latestTimelineNoteMarkers_);
+    }
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->setMuriAnalysisReport(muriAnalysisReport_);
+    }
+    lastPreviewNoteMarkerSignature_ = latestTimelineNoteMarkerSignature_;
+}
+
 void MainWindow::requestTimelineSlowRefresh()
 {
     if (!hasActiveDifficulty()) {
@@ -455,26 +477,10 @@ void MainWindow::dispatchTimelineSlowRefresh()
                 guard->validationCacheByDifficulty_.insert(result.difficultyId, entry);
                 guard->refreshValidationPanelForActiveField();
 
-                if (guard->previewSfxRuntime_ != nullptr) {
-                    guard->previewSfxRuntime_->configureTimeline(result.shiftedNoteMarkers);
-                    if (guard->qtPreviewPlaying_) {
-                        double currentSecond = qMax(0.0, guard->qtPreviewPauseSecond_);
-                        if (guard->previewSfxRuntime_->hasBackgroundTrack()) {
-                            currentSecond = qMax(0.0, guard->previewSfxRuntime_->backgroundPlaybackSecond());
-                        } else if (guard->previewMediaController_ != nullptr && guard->previewMediaController_->hasVideoMedia()) {
-                            currentSecond = qMax(0.0, guard->previewMediaController_->currentPlaybackSecond());
-                        }
-                        guard->qtPreviewPauseSecond_ = currentSecond;
-                        guard->previewSfxRuntime_->resetCursor(currentSecond, false);
-                        guard->previewSfxRuntime_->syncTouchholdVoices(currentSecond);
-                    }
-                }
-
-                guard->refreshPreviewObjectStatsTotals(result.shiftedNoteMarkers);
-                if (guard->previewCanvas_ != nullptr
-                    && result.noteMarkerSignature != guard->lastPreviewNoteMarkerSignature_) {
-                    guard->previewCanvas_->setNoteMarkers(result.shiftedNoteMarkers);
-                    guard->lastPreviewNoteMarkerSignature_ = result.noteMarkerSignature;
+                guard->latestTimelineNoteMarkers_ = result.shiftedNoteMarkers;
+                guard->latestTimelineNoteMarkerSignature_ = result.noteMarkerSignature;
+                if (!guard->qtPreviewPlaying_) {
+                    guard->applyLatestTimelinePreviewStateToPausedPreview();
                 }
                 guard->scheduleDeferredMuriRefresh(result.shiftedNoteMarkers, result.noteMarkerSignature);
             },
@@ -527,7 +533,7 @@ void MainWindow::refreshDeferredMuriDiagnostics()
                 if (result.revision != guard->timelineMuriRequestedRevision_
                     || !guard->hasActiveDifficulty()
                     || result.difficultyId != guard->activeDifficultyId()
-                    || result.noteMarkerSignature != guard->lastPreviewNoteMarkerSignature_) {
+                    || result.noteMarkerSignature != guard->pendingMuriNoteMarkerSignature_) {
                     guard->refreshDeferredMuriDiagnostics();
                     return;
                 }
@@ -539,7 +545,9 @@ void MainWindow::refreshDeferredMuriDiagnostics()
                 }
                 guard->refreshMuriDiagnosticsPanel();
                 if (guard->previewCanvas_ != nullptr) {
-                    guard->previewCanvas_->setMuriAnalysisReport(guard->muriAnalysisReport_);
+                    if (!guard->qtPreviewPlaying_) {
+                        guard->previewCanvas_->setMuriAnalysisReport(guard->muriAnalysisReport_);
+                    }
                     guard->previewCanvas_->setMuriRenderOptions(guard->muriRenderOptions_);
                 }
             },
@@ -566,14 +574,8 @@ void MainWindow::seekTimelineToCursor(int line, int col)
         return;
     }
     const double second = timelineSecondForCursor(line, col);
-    if (second < -1e-6) {
-        timelineView_->setCursorSeconds(second, true);
-        return;
-    }
-    if (second < 0.0) {
-        return;
-    }
-    timelineView_->setCursorSeconds(second, true);
+    timelineView_->setCursorSeconds(second, false);
+    timelineView_->focusCursor(true);
 }
 
 void MainWindow::syncTimelineToEditorCursor(bool centerView)
@@ -583,14 +585,10 @@ void MainWindow::syncTimelineToEditorCursor(bool centerView)
     }
     const auto [line, col] = currentCursorLineCol();
     const double second = timelineSecondForCursor(line, col);
-    if (second < -1e-6) {
-        timelineView_->setCursorSeconds(second, centerView);
-        return;
+    timelineView_->setCursorSeconds(second, false);
+    if (!qtPreviewPlaying_) {
+        timelineView_->focusCursor(centerView);
     }
-    if (second < 0.0) {
-        return;
-    }
-    timelineView_->setCursorSeconds(second, centerView);
 }
 
 void MainWindow::navigateTimelineToSecond(double second, bool focusEditor)
@@ -602,8 +600,8 @@ void MainWindow::navigateTimelineToSecond(double second, bool focusEditor)
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     int line = 1;
     int col = 1;
-    double noteSecond = -1.0;
-    const bool hasNearestNote = resolveNearestTimelineNote(clampedSecond, -1, &line, &col, &noteSecond);
+    double cursorSecond = 0.0;
+    timelineQuickModel_.resolveTimelineNavigateCursor(clampedSecond, &line, &col, &cursorSecond);
     const bool previousSuppressState = suppressTimelineCursorSync_;
     suppressTimelineCursorSync_ = true;
 
@@ -613,27 +611,19 @@ void MainWindow::navigateTimelineToSecond(double second, bool focusEditor)
         previewSeekDebounceTimer_->stop();
     }
     seekPreviewToSecond(clampedSecond, true);
-    timelineView_->setCursorSeconds(noteSecond >= 0.0 ? noteSecond : clampedSecond);
+    timelineView_->setCursorSeconds(cursorSecond, false);
+    timelineView_->focusPlayhead(true);
 
-    if (hasNearestNote) {
-        moveEditorCursorToTimelineLocation(line, col, false, focusEditor, true, true);
-    }
+    moveEditorCursorToTimelineLocation(line, col, false, focusEditor, true, true);
 
     suppressTimelineCursorSync_ = previousSuppressState;
 
-    if (hasNearestNote) {
-        statusBar()->showMessage(
-            QString("Timeline jump: %1s -> L%2 C%3")
-                .arg(clampedSecond, 0, 'f', 3)
-                .arg(line)
-                .arg(col)
-        );
-    } else {
-        statusBar()->showMessage(
-            QString("Timeline centered at %1s (source location unavailable).")
-                .arg(clampedSecond, 0, 'f', 3)
-        );
-    }
+    statusBar()->showMessage(
+        QString("Timeline jump: %1s -> L%2 C%3")
+            .arg(clampedSecond, 0, 'f', 3)
+            .arg(line)
+            .arg(col)
+    );
 }
 
 bool MainWindow::resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const
@@ -720,72 +710,63 @@ bool MainWindow::moveEditorCursorToTimelineLocation(
 
 void MainWindow::syncEditorCursorToPreviewSecond(double second, bool centerView)
 {
-    if (suppressTimelineCursorSync_ || timelineView_ == nullptr || !timelineView_->followPreviewEnabled() || !hasActiveDifficulty()) {
-        if (timelineView_ == nullptr || !hasActiveDifficulty() || !timelineView_->followPreviewEnabled()) {
-            clearPreviewFollowDecoration();
-        }
+    if (suppressTimelineCursorSync_ || timelineView_ == nullptr || !hasActiveDifficulty()) {
+        clearPreviewFollowDecoration();
+        return;
+    }
+    if (!timelineView_->followPreviewEnabled()) {
+        clearPreviewFollowDecoration();
+        return;
+    }
+    if (!qtPreviewPlaying_) {
         return;
     }
 
     const auto [currentLine, currentCol] = currentCursorLineCol();
     int line = 1;
     int col = 1;
-    double noteSecond = -1.0;
-    const bool useAbsoluteSeekAnchor = !qtPreviewPlaying_;
-    TimelineQuickModel::PreviewFollowMode quickMode = TimelineQuickModel::PreviewFollowMode::NonEmptyComma;
-    switch (previewFollowMode_) {
-    case PreviewFollowMode::EveryComma:
-        quickMode = TimelineQuickModel::PreviewFollowMode::EveryComma;
-        break;
-    case PreviewFollowMode::NonEmptyComma:
-        quickMode = TimelineQuickModel::PreviewFollowMode::NonEmptyComma;
-        break;
-    case PreviewFollowMode::LineOnly:
-        quickMode = TimelineQuickModel::PreviewFollowMode::LineOnly;
-        break;
-    }
+    double cursorSecond = 0.0;
     const bool resolved = timelineQuickModel_.resolvePreviewFollowCursor(
-        quickMode,
+        TimelineQuickModel::PreviewFollowMode::EveryComma,
         second,
         currentLine,
         currentCol,
-        useAbsoluteSeekAnchor,
+        true,
         &line,
         &col,
-        &noteSecond);
-    if (!resolved) {
-        return;
-    }
-
-    const bool lineOnlyMode = previewFollowMode_ == PreviewFollowMode::LineOnly;
-    const bool alreadyAtAnchor = lineOnlyMode
-        ? (currentLine == line)
-        : (currentLine == line && currentCol == col);
+        &cursorSecond);
+    const bool alreadyAtAnchor = (currentLine == line && currentCol == col);
 
     if (alreadyAtAnchor) {
-        if (lineOnlyMode) {
-            clearPreviewFollowDecoration();
-        } else {
+        if (resolved) {
             setPreviewFollowDecoration(line, col);
+        } else {
+            clearPreviewFollowDecoration();
         }
-        timelineView_->setCursorSeconds(noteSecond >= 0.0 ? noteSecond : qMax(0.0, second));
+        timelineView_->setCursorSeconds(cursorSecond, false);
         return;
     }
 
     if (moveEditorCursorToTimelineLocation(line, col, false, false, centerView, false)) {
-        if (lineOnlyMode) {
+        if (!resolved) {
             clearPreviewFollowDecoration();
         }
-        timelineView_->setCursorSeconds(noteSecond >= 0.0 ? noteSecond : qMax(0.0, second));
+        timelineView_->setCursorSeconds(cursorSecond, false);
     }
 }
 
 double MainWindow::previewDurationSeconds() const
 {
     double duration = 0.0;
+    if (qtPreviewPlaying_ && qtPreviewPlaybackEndSecond_ > 0.0) {
+        duration = qMax(duration, qtPreviewPlaybackEndSecond_);
+    }
     if (timelineView_ != nullptr) {
         duration = qMax(duration, timelineView_->durationSeconds());
+        duration = qMax(duration, timelineView_->playheadSeconds());
+        duration = qMax(duration, timelineView_->playbackEntrySeconds());
     }
+    duration = qMax(duration, qMax(0.0, qtPreviewPauseSecond_));
     if (previewTrackDurationSeconds_ > 0.0) {
         duration = qMax(duration, previewTrackDurationSeconds_ + 3.0);
     }
@@ -794,6 +775,9 @@ double MainWindow::previewDurationSeconds() const
 
 double MainWindow::previewPlaybackEndSeconds() const
 {
+    if (qtPreviewPlaying_ && qtPreviewPlaybackEndSecond_ > 0.0) {
+        return qMax(0.0, qtPreviewPlaybackEndSecond_);
+    }
     double duration = 0.0;
     if (timelineView_ != nullptr) {
         duration = qMax(duration, timelineView_->durationSeconds());
@@ -949,34 +933,32 @@ QString MainWindow::previewCanvasFrameRateModeStorageValue() const
 MainWindow::PreviewFollowMode MainWindow::previewFollowModeFromStorageValue(const QString& value) const
 {
     Q_UNUSED(value);
-    return PreviewFollowMode::NonEmptyComma;
+    return PreviewFollowMode::EveryComma;
 }
 
 QString MainWindow::previewFollowModeStorageValue() const
 {
-    return QStringLiteral("non_empty");
+    return QStringLiteral("every_comma");
 }
 
 void MainWindow::setPreviewFollowMode(PreviewFollowMode mode, bool persistState)
 {
-    mode = PreviewFollowMode::NonEmptyComma;
+    mode = PreviewFollowMode::EveryComma;
     const bool changed = previewFollowMode_ != mode;
     previewFollowMode_ = mode;
     if (hasActiveDifficulty()) {
         refreshTimelineMetadata();
     }
 
-    if (timelineView_ != nullptr && timelineView_->followPreviewEnabled() && hasActiveDifficulty()) {
+    if (qtPreviewPlaying_ && timelineView_ != nullptr && timelineView_->followPreviewEnabled() && hasActiveDifficulty()) {
         double second = qMax(0.0, qtPreviewPauseSecond_);
-        if (qtPreviewPlaying_) {
-            if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
-                second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-            } else if (previewMediaController_ != nullptr) {
-                second = qMax(0.0, previewMediaController_->currentPlaybackSecond());
-            }
+        if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
+            second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
+        } else if (previewMediaController_ != nullptr) {
+            second = qMax(0.0, previewMediaController_->currentPlaybackSecond());
         }
         syncEditorCursorToPreviewSecond(second, false);
-    } else {
+    } else if (timelineView_ == nullptr || !timelineView_->followPreviewEnabled()) {
         clearPreviewFollowDecoration();
     }
 
@@ -2183,12 +2165,14 @@ void MainWindow::seekPreviewToSecond(double second, bool centerView)
     qtPreviewPendingTimelineSecond_ = clampedSecond;
     qtPreviewPendingTimelineCenterView_ = centerView;
     qtPreviewTimelineDirty_ = true;
-    qtPreviewPlaybackReturnSecond_ = clampedSecond;
     if (timelineView_ != nullptr) {
         timelineView_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
     }
     syncPausedPreviewMediaTimestamps(clampedSecond);
     applyQtPreviewPosition(clampedSecond, centerView);
+    if (timelineView_ != nullptr) {
+        timelineView_->focusPlayhead(centerView);
+    }
     if (previewCanvas_ != nullptr) {
         previewCanvas_->update();
     }
@@ -2244,7 +2228,10 @@ void MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
 {
     ensurePreviewMediaControllerInitialized();
     ensurePreviewSfxRuntimePrepared();
+    applyLatestTimelinePreviewStateToPausedPreview();
     const double startSecond = qBound(0.0, second, previewDurationSeconds());
+    qtPreviewPlaybackReturnSecond_ = startSecond;
+    qtPreviewPlaybackEndSecond_ = qMax(0.0, previewPlaybackEndSeconds());
     qtPreviewStartSecond_ = startSecond;
     qtPreviewPauseSecond_ = startSecond;
     qtPreviewLastTimelineSecond_ = startSecond;
@@ -2255,8 +2242,10 @@ void MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
     qtPreviewTimelineCenterNextTick_ = true;
     qtPreviewTimelineElapsed_.restart();
     if (timelineView_ != nullptr) {
-        timelineView_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
+        timelineView_->setPlaybackEntrySeconds(qtPreviewPlaybackReturnSecond_);
+        timelineView_->setPlayheadUpperLimitSeconds(qtPreviewPlaybackEndSecond_);
         timelineView_->setPlayheadSeconds(startSecond, true);
+        timelineView_->focusPlayhead(true);
     }
     if (previewCanvas_ != nullptr) {
         if (!resumeFromPause) {
@@ -2293,6 +2282,7 @@ void MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
             qtPreviewPendingAudioCalibration_ = true;
             if (timelineView_ != nullptr) {
                 timelineView_->setPlayheadSeconds(qtPreviewStartSecond_, true);
+                timelineView_->focusPlayhead(true);
             }
             if (previewCanvas_ != nullptr) {
                 previewCanvas_->setPlayheadSeconds(qtPreviewStartSecond_);
@@ -2331,15 +2321,14 @@ void MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
     if (qtPreviewTimelineTimer_ != nullptr && !qtPreviewTimelineTimer_->isActive()) {
         qtPreviewTimelineTimer_->start();
     }
+    syncEditorCursorToPreviewSecond(startSecond, false);
     updatePreviewSliderPosition(startSecond);
     updatePauseButtonAppearance();
 }
 
 void MainWindow::finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage)
 {
-    const double returnSecond = qBound(0.0, qtPreviewPlaybackReturnSecond_, previewDurationSeconds());
     stopQtPreviewPlayback(true);
-    seekPreviewToSecond(returnSecond, true);
     if (statusBar() != nullptr && !statusMessage.isEmpty()) {
         statusBar()->showMessage(statusMessage);
     }
@@ -2380,13 +2369,14 @@ void MainWindow::stopQtPreviewPlayback(bool keepPosition)
     qtPreviewNextFixedTickDueNs_ = -1;
     qtPreviewPendingAudioCalibration_ = false;
     flushQtPreviewTimelinePosition();
-    syncEditorCursorToPreviewSecond(qtPreviewPauseSecond_, false);
-    if (timelineView_ == nullptr || !timelineView_->followPreviewEnabled()) {
-        clearPreviewFollowDecoration();
+    if (timelineView_ != nullptr) {
+        timelineView_->focusPlayhead(false);
+        timelineView_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
     }
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->stopAll();
     }
+    applyLatestTimelinePreviewStateToPausedPreview();
     if (runtimeDebugOutputEnabled_ && wasPlaying && previewCanvas_ != nullptr) {
         const QString summaryPath = previewCanvas_->writeProfilingSummaryToFile();
         if (!summaryPath.isEmpty() && previewMediaController_ != nullptr) {
@@ -2418,7 +2408,9 @@ void MainWindow::applyQtPreviewPosition(double second, bool centerView)
     }
     updatePreviewSliderPosition(second);
     updatePreviewObjectStats(second);
-    syncEditorCursorToPreviewSecond(second, centerView);
+    if (qtPreviewPlaying_) {
+        syncEditorCursorToPreviewSecond(second, centerView);
+    }
 }
 
 void MainWindow::syncPausedPreviewMediaTimestamps(double second)
@@ -2445,6 +2437,7 @@ void MainWindow::flushQtPreviewTimelinePosition()
             second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
         }
         timelineView_->setPlayheadSeconds(second, qtPreviewTimelineCenterNextTick_);
+        timelineView_->focusPlayhead(qtPreviewTimelineCenterNextTick_);
         qtPreviewLastTimelineSecond_ = second;
         qtPreviewTimelineCenterNextTick_ = false;
         return;
@@ -2453,6 +2446,7 @@ void MainWindow::flushQtPreviewTimelinePosition()
         return;
     }
     timelineView_->setPlayheadSeconds(qtPreviewPendingTimelineSecond_, qtPreviewPendingTimelineCenterView_);
+    timelineView_->focusPlayhead(qtPreviewPendingTimelineCenterView_);
     qtPreviewLastTimelineSecond_ = qtPreviewPendingTimelineSecond_;
     qtPreviewPendingTimelineCenterView_ = false;
     qtPreviewTimelineDirty_ = false;

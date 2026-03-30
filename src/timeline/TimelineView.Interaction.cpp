@@ -12,17 +12,21 @@ void TimelineView::mousePressEvent(QMouseEvent* event)
         return;
     }
 
-    const QRect headerRect(timelineLeft(), 0, viewport()->width() - timelineLeft(), kHeaderHeight);
-    if (headerRect.contains(event->position().toPoint())) {
+    const auto clickSecondForX = [this](qreal x) {
+        double second = qMax(0.0, xToSecond(qRound(x)));
         const double maxSecond = playheadUpperLimitSeconds_ > 0.0
             ? playheadUpperLimitSeconds_
-            : qMax(durationSeconds_, playheadSeconds_);
-        double second = qMax(0.0, xToSecond(qRound(event->position().x())));
+            : maxNavigableSecond();
         if (maxSecond > 0.0) {
             second = qMin(second, maxSecond);
         }
+        return second;
+    };
+
+    const QRect headerRect(timelineLeft(), 0, viewport()->width() - timelineLeft(), kHeaderHeight);
+    if (headerRect.contains(event->position().toPoint())) {
         emit timelineUserInteractionStarted();
-        emit headerNavigateRequested(second);
+        emit headerNavigateRequested(clickSecondForX(event->position().x()));
         event->accept();
         return;
     }
@@ -34,21 +38,25 @@ void TimelineView::mousePressEvent(QMouseEvent* event)
     }
 
     if (hasTimelineNavigateModifier(event->modifiers())) {
-        const HoveredNoteRef hovered = nearestNoteForViewportPos(event->position());
-        if (hovered.line != nullptr && hovered.note != nullptr) {
-            emit noteNavigateRequested(hovered.line->lineNumber, hovered.note->sourceCol);
-        }
+        emit timelineUserInteractionStarted();
+        emit headerNavigateRequested(clickSecondForX(event->position().x()));
         event->accept();
         return;
     }
 
+    emit timelineUserInteractionStarted();
+    focusPlayhead(false);
+    if (!playheadNearViewportCenter()) {
+        const double centerSecond = viewportCenterSecond();
+        setPlayheadSeconds(centerSecond, false);
+        emit centerNavigateRequested(centerSecond);
+    }
     timelineDragActive_ = true;
     timelineDragStartX_ = qRound(event->position().x());
     timelineDragStartScrollValue_ = horizontalScrollBar()->value();
     viewport()->setCursor(Qt::ClosedHandCursor);
     suppressPlayheadIndicatorForInteraction();
     emit timelineDragStarted();
-    emit timelineUserInteractionStarted();
     event->accept();
 }
 
@@ -57,7 +65,7 @@ void TimelineView::mouseMoveEvent(QMouseEvent* event)
     if (event != nullptr && timelineDragActive_) {
         const int deltaX = qRound(event->position().x()) - timelineDragStartX_;
         horizontalScrollBar()->setValue(timelineDragStartScrollValue_ - deltaX);
-        updateCursorToViewportCenter();
+        updatePlayheadToViewportCenter();
         event->accept();
         return;
     }
@@ -69,7 +77,7 @@ void TimelineView::mouseReleaseEvent(QMouseEvent* event)
     if (event != nullptr && event->button() == Qt::LeftButton && timelineDragActive_) {
         timelineDragActive_ = false;
         viewport()->unsetCursor();
-        restorePlayheadIndicatorAfterInteraction();
+        restorePlayheadIndicatorAfterInteraction(true);
         event->accept();
         return;
     }
@@ -87,9 +95,15 @@ void TimelineView::wheelEvent(QWheelEvent* event)
     }
     if (delta != 0) {
         emit timelineUserInteractionStarted();
+        focusPlayhead(false);
+        if (!playheadNearViewportCenter()) {
+            const double centerSecond = viewportCenterSecond();
+            setPlayheadSeconds(centerSecond, false);
+            emit centerNavigateRequested(centerSecond);
+        }
         suppressPlayheadIndicatorForInteraction();
         horizontalScrollBar()->setValue(horizontalScrollBar()->value() - (delta / 2));
-        updateCursorToViewportCenter();
+        updatePlayheadToViewportCenter();
         restorePlayheadIndicatorAfterInteraction();
         event->accept();
         return;

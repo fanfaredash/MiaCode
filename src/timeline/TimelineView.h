@@ -31,9 +31,13 @@ public:
     void setTimelineData(const TimelineRenderSnapshot& snapshot);
     void setWaveformData(const QVector<float>& peaks, double startSecond = 0.0, double durationSeconds = 0.0);
     void clear();
+    void setPlaybackEntrySeconds(double second);
+    double playbackEntrySeconds() const;
     void setPlayheadUpperLimitSeconds(double second);
     void setPlayheadSeconds(double second, bool centerView);
     void setCursorSeconds(double second, bool centerView = false);
+    void focusPlayhead(bool centerView = false);
+    void focusCursor(bool centerView = false);
     double playheadSeconds() const;
     double cursorSeconds() const;
     double durationSeconds() const;
@@ -47,7 +51,6 @@ public:
 
 signals:
     void playheadChanged(double second);
-    void noteNavigateRequested(int line, int col);
     void headerNavigateRequested(double second);
     void centerNavigateRequested(double second);
     void timelineDragStarted();
@@ -70,17 +73,17 @@ private:
         int end = 0;
     };
 
-    struct HoveredNoteRef {
-        const TimelineRenderLine* line = nullptr;
-        const TimelineRenderNote* note = nullptr;
-    };
-
     struct HoldPixmapParts {
         QPixmap cap;
         QPixmap leftHalf;
         QPixmap rightHalf;
         QImage bodySlice;
         int rightHalfOffset = 0;
+    };
+
+    enum class FocusTarget {
+        Playhead,
+        Cursor,
     };
 
     void updateDisplayBounds();
@@ -99,9 +102,10 @@ private:
     int leadingCenteringPadding() const;
     int trailingCenteringPadding() const;
     double viewportCenterSecond() const;
-    void updateCursorToViewportCenter(bool emitNavigate = true);
+    void updatePlayheadToViewportCenter(bool emitNavigate = true);
+    bool playheadNearViewportCenter() const;
     void suppressPlayheadIndicatorForInteraction();
-    void restorePlayheadIndicatorAfterInteraction();
+    void restorePlayheadIndicatorAfterInteraction(bool immediate = false);
     bool effectiveShowSlideTracks() const;
     void cycleZoomPreset();
     void applyZoomPresetIndex(int nextIndex, double anchorSecond);
@@ -120,12 +124,12 @@ private:
         bool mirrorX = false) const;
     const HoldPixmapParts& holdPixmapPartsForType(const QString& type, qreal scale) const;
     void loadNoteIcons();
-    HoveredNoteRef nearestNoteForViewportPos(const QPointF& pos) const;
     int minimumContentHeightForCurrentDevice() const;
     void refreshMinimumHeightForCurrentDevice();
 
     QVector<TimelineRenderLine> lines_;
     double durationSeconds_ = 0.0;
+    double playbackEntrySeconds_ = 0.0;
     double playheadSeconds_ = 0.0;
     double cursorSeconds_ = 0.0;
     double playheadUpperLimitSeconds_ = -1.0;
@@ -148,6 +152,7 @@ private:
     QVector<double> zoomPresets_;
     QVector<double> buttonZoomPresets_;
     int zoomPresetIndex_ = 0;
+    FocusTarget focusTarget_ = FocusTarget::Playhead;
     bool timelineDragActive_ = false;
     int timelineDragStartX_ = 0;
     int timelineDragStartScrollValue_ = 0;

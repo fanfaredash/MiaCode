@@ -66,7 +66,10 @@ double TimelineView::xToSecond(int x) const
 
 double TimelineView::maxNavigableSecond() const
 {
-    double maxSecond = qMax(0.0, qMax(maximumDataSecond_, qMax(durationSeconds_, qMax(playheadSeconds_, qMax(cursorSeconds_, 0.0)))));
+    double maxSecond = qMax(
+        0.0,
+        qMax(maximumDataSecond_, qMax(durationSeconds_, qMax(playbackEntrySeconds_, qMax(playheadSeconds_, qMax(cursorSeconds_, 0.0)))))
+    );
     if (playheadUpperLimitSeconds_ > 0.0) {
         maxSecond = qMax(maxSecond, playheadUpperLimitSeconds_);
     }
@@ -93,14 +96,19 @@ double TimelineView::viewportCenterSecond() const
     return xToSecond(viewport()->width() / 2);
 }
 
-void TimelineView::updateCursorToViewportCenter(bool emitNavigate)
+void TimelineView::updatePlayheadToViewportCenter(bool emitNavigate)
 {
     const double centerSecond = viewportCenterSecond();
-    const bool changed = !qFuzzyCompare(cursorSeconds_ + 1.0, centerSecond + 1.0);
-    setCursorSeconds(centerSecond, false);
+    const bool changed = !qFuzzyCompare(playheadSeconds_ + 1.0, centerSecond + 1.0);
+    setPlayheadSeconds(centerSecond, false);
     if (emitNavigate && changed) {
         emit centerNavigateRequested(centerSecond);
     }
+}
+
+bool TimelineView::playheadNearViewportCenter() const
+{
+    return qAbs(playheadSeconds_ - viewportCenterSecond()) <= (0.5 / pixelsPerSecond_);
 }
 
 void TimelineView::suppressPlayheadIndicatorForInteraction()
@@ -112,16 +120,19 @@ void TimelineView::suppressPlayheadIndicatorForInteraction()
     viewport()->update();
 }
 
-void TimelineView::restorePlayheadIndicatorAfterInteraction()
+void TimelineView::restorePlayheadIndicatorAfterInteraction(bool immediate)
 {
     if (timelineDragActive_) {
         return;
     }
-    if (playheadIndicatorRestoreTimer_ != nullptr) {
-        playheadIndicatorRestoreTimer_->start();
-    } else {
+    if (immediate || playheadIndicatorRestoreTimer_ == nullptr) {
+        if (playheadIndicatorRestoreTimer_ != nullptr) {
+            playheadIndicatorRestoreTimer_->stop();
+        }
         playheadIndicatorSuppressed_ = false;
         viewport()->update();
+    } else {
+        playheadIndicatorRestoreTimer_->start();
     }
 }
 
@@ -168,7 +179,6 @@ void TimelineView::applyZoomPresetIndex(int nextIndex, double anchorSecond)
     horizontalScrollBar()->setValue(
         qBound(horizontalScrollBar()->minimum(), anchorX, horizontalScrollBar()->maximum())
     );
-    updateCursorToViewportCenter(false);
     viewport()->update();
 }
 
@@ -654,40 +664,4 @@ void TimelineView::loadNoteIcons()
         noteIcons_.insert("touch_hold_break", touchHoldComposite);
     }
 
-}
-
-TimelineView::HoveredNoteRef TimelineView::nearestNoteForViewportPos(const QPointF& pos) const
-{
-    const int xOffset = horizontalScrollBar()->value();
-    const int top = timelineTop();
-    const int laneH = laneHeight();
-    const QRect timelineRect(timelineLeft(), top, viewport()->width() - timelineLeft(), timelineHeight());
-    if (!timelineRect.contains(pos.toPoint())) {
-        return {};
-    }
-
-    HoveredNoteRef best;
-    qreal bestDistanceSq = 0.0;
-    const VisibleLineRange range = visibleLineRange(
-        xToSecond(timelineLeft()) - 1.0,
-        xToSecond(viewport()->width()) + 1.0);
-    for (int lineIndex = range.begin; lineIndex < range.end; ++lineIndex) {
-        const TimelineRenderLine& line = lines_.at(lineIndex);
-        for (const TimelineRenderNote& note : line.notes) {
-            if (note.lane < 1 || note.lane > kLaneCount) {
-                continue;
-            }
-            const qreal noteX = secondToX(timelineRenderAbsoluteSecond(line, note.secondOffset)) - xOffset;
-            const qreal noteY = top + (note.lane - 1) * laneH + (laneH / 2.0);
-            const qreal dx = noteX - pos.x();
-            const qreal dy = noteY - pos.y();
-            const qreal distanceSq = dx * dx + dy * dy;
-            if (best.note == nullptr || distanceSq < bestDistanceSq) {
-                best.line = &line;
-                best.note = &note;
-                bestDistanceSq = distanceSq;
-            }
-        }
-    }
-    return best;
 }

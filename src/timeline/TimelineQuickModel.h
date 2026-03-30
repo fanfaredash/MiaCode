@@ -31,6 +31,7 @@ public:
     const TimelineRenderSnapshot& snapshot() const;
 
     double timelineSecondForCursor(int lineNumber, int col) const;
+    bool resolveTimelineNavigateCursor(double second, int* line, int* col, double* cursorSecond) const;
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
     bool resolvePreviewFollowCursor(
         PreviewFollowMode mode,
@@ -85,6 +86,18 @@ private:
     void rebuildSnapshotDuration();
     void resequenceLineMetadata(int startIndex);
     void rebuildAnchorLineIndices();
+    bool resolvePreviousCursorAnchorForTextPosition(
+        int lineNumber,
+        int sourceCol,
+        int* line,
+        int* col,
+        double* second) const;
+    bool resolvePreviousCursorAnchorForSecond(
+        double second,
+        int* line,
+        int* col,
+        double* anchorSecond) const;
+    int resolveRecentPastLineIndex(double second) const;
     bool parseNoteToken(
         LineState* lineState,
         ParseState* state,

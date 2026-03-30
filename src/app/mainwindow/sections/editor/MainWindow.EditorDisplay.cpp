@@ -63,7 +63,7 @@ void MainWindow::resetPortablePreviewSettingsToDefaults()
     previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
-    previewFollowMode_ = PreviewFollowMode::NonEmptyComma;
+    previewFollowMode_ = PreviewFollowMode::EveryComma;
     previewCanvasAspectRatio_ = 1.0;
     previewAutoRestoreSquareAfterExport_ = true;
     previewShowDebugInfo_ = false;
