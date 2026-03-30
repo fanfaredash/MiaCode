@@ -843,6 +843,42 @@ void runInlineSpecs(QTextStream& err, int* failed)
         );
         expectTrue(changed == 5, QStringLiteral("rotate +45 counts transformed chart atoms"), failed, err);
     }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("8}1");
+        const QString output = miacode::chart_transform::transformChartText(
+            input,
+            miacode::chart_transform::ChartTransformOp::MirrorLeftRight,
+            &changed
+        );
+        expectEqual(
+            output,
+            QStringLiteral("8}8"),
+            QStringLiteral("mirror left/right keeps timing prefix digits before } unchanged and mirrors the note body after }"),
+            failed,
+            err
+        );
+        expectTrue(changed == 1, QStringLiteral("mirror left/right counts only the mirrored note body after }"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("8}1");
+        const QString output = miacode::chart_transform::transformChartText(
+            input,
+            miacode::chart_transform::ChartTransformOp::Rotate45Clockwise,
+            &changed
+        );
+        expectEqual(
+            output,
+            QStringLiteral("8}2"),
+            QStringLiteral("rotate +45 keeps timing prefix digits before } unchanged and rotates the note body after }"),
+            failed,
+            err
+        );
+        expectTrue(changed == 1, QStringLiteral("rotate +45 counts only the rotated note body after }"), failed, err);
+    }
 }
 
 }  // namespace
