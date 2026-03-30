@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/hardcode-registry.md -->
-<!-- translation-source-hash: 4b192f933605acb65158185681def01bae7e34cf3bff181e365291f6465e7652 -->
+<!-- translation-source-hash: c549973d07c873634187dfa3cc575a1a1f9f3953ebbd1f4baeaa050b11227000 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 硬编码登记
@@ -56,6 +56,9 @@
 - `src/tools/video_export/VideoExportDialog.cpp`
   - 负责：导出对话框 UI 尺寸与预览控制常量
   - 规则：纯本地 UI 常量通常留本地，除非开始跨对话框复用
+- `src/timeline/TimelineView.cpp`
+  - 负责：Timeline 缩放预设上下限、头部按钮的粗档位，以及由默认缩放推导出来的初始 `pixelsPerSecond_` 比例
+  - 规则：只要这些值仍然只影响 Timeline 控件自身的交互体验，就可以继续留在本地
 
 ## 3. 提升为共享常量的规则
 
