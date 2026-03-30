@@ -41,6 +41,7 @@ struct TimelineRenderNote {
     int sourceCol = 1;
     int lane = 1;
     int endLane = 1;
+    int eachGroupId = -1;
     TimelineRenderNoteKind kind = TimelineRenderNoteKind::Unknown;
     quint32 flags = TimelineRenderFlagHasHeadStar;
 };

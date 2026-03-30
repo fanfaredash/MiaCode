@@ -57,6 +57,7 @@ Shared concerns:
 - touch and touch-hold still emit `answer` when `isFirework` is set; firework is additive rather than replacing the hit-confirm sound
 - head-star behavior for slide and wifi
 - `sameHeadSlide` behavior
+- `headEach` vs `slideEach`: `headEach` comes from synchronous note-head grouping, while `slideEach` must stay aligned between `SimaiNativeParser` and `TimelineQuickModel` by grouping only slide/wifi notes that share both the same each-group and the same `slideTraceSecond`
 - `trackBreak` vs `headBreak`
 - touchhold span semantics
 - firework timing offsets

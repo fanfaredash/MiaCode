@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/cross-chain-linkage.md -->
-<!-- translation-source-hash: 3f1a9992d6bca7f038a21ae26f8e01c05305b28bdbac599b1d7837a73c4d8f4b -->
+<!-- translation-source-hash: 14a8666c6d335f2b4205f527770209fca06d2bf7cbea658b2265543d503b3540 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 跨链路联动
@@ -60,6 +60,7 @@
 - 各 note 类型会发出哪些 `answer`、`judge`、`break`、`ex`、`touch`、`touchhold`、`firework`
 - slide/wifi 头星行为
 - `sameHeadSlide` 行为
+- `headEach` 与 `slideEach`：`headEach` 来自 note head 的同步分组，而 `slideEach` 必须在 `SimaiNativeParser` 与 `TimelineQuickModel` 之间保持同一套“same each-group + same slideTraceSecond”的判定规则
 - `trackBreak` 与 `headBreak` 的区别
 - touchhold 持续段语义
 - firework 的触发时刻偏移

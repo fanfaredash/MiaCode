@@ -292,6 +292,7 @@ QString lineTextForBlock(const QTextBlock& block)
 void TimelineQuickModel::clear()
 {
     nextLineId_ = 1;
+    nextEachGroupId_ = 0;
     lines_.clear();
     snapshot_.lines.clear();
     snapshot_.durationSeconds = 0.0;
@@ -390,6 +391,7 @@ bool TimelineQuickModel::applyContentsChange(
         }
     }
 
+    rebuildSlideDerivedFlags();
     rebuildAnchorLineIndices();
     rebuildSnapshotDuration();
     return true;
@@ -611,6 +613,7 @@ bool TimelineQuickModel::rebuildFromLineTexts(const QVector<QString>& lines, dou
         lines_.append(line);
     }
 
+    rebuildSlideDerivedFlags();
     rebuildAnchorLineIndices();
     rebuildSnapshotDuration();
     return true;
@@ -888,7 +891,7 @@ int TimelineQuickModel::resolveRecentPastLineIndex(double second) const
     return bestIndex;
 }
 
-bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& startState) const
+bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& startState)
 {
     if (lineState == nullptr) {
         return false;
@@ -1272,11 +1275,52 @@ bool TimelineQuickModel::parseNoteToken(
     return true;
 }
 
-void TimelineQuickModel::finalizeEachGroup(LineState* lineState, const QVector<int>& groupIndices) const
+void TimelineQuickModel::rebuildSlideDerivedFlags()
+{
+    for (LineState& lineState : lines_) {
+        for (TimelineRenderNote& note : lineState.render.notes) {
+            note.flags &= ~static_cast<quint32>(TimelineRenderFlagSlideEach);
+        }
+    }
+
+    QHash<int, QHash<qint64, QVector<QPair<int, int>>>> slideTraceGroups;
+    for (int lineIndex = 0; lineIndex < lines_.size(); ++lineIndex) {
+        const LineState& lineState = lines_.at(lineIndex);
+        for (int noteIndex = 0; noteIndex < lineState.render.notes.size(); ++noteIndex) {
+            const TimelineRenderNote& note = lineState.render.notes.at(noteIndex);
+            if ((note.kind != TimelineRenderNoteKind::Slide && note.kind != TimelineRenderNoteKind::Wifi)
+                || note.slideTraceSecondOffset < 0.0
+                || note.eachGroupId < 0) {
+                continue;
+            }
+            const qint64 traceKey = qRound64(
+                timelineRenderAbsoluteSecond(lineState.render, note.slideTraceSecondOffset) * 1000000.0
+            );
+            slideTraceGroups[note.eachGroupId][traceKey].append(qMakePair(lineIndex, noteIndex));
+        }
+    }
+
+    for (auto groupIt = slideTraceGroups.begin(); groupIt != slideTraceGroups.end(); ++groupIt) {
+        auto& traceGroups = groupIt.value();
+        for (auto traceIt = traceGroups.begin(); traceIt != traceGroups.end(); ++traceIt) {
+            const QVector<QPair<int, int>>& group = traceIt.value();
+            if (group.size() < 2) {
+                continue;
+            }
+            for (const QPair<int, int>& ref : group) {
+                lines_[ref.first].render.notes[ref.second].flags |= static_cast<quint32>(TimelineRenderFlagSlideEach);
+            }
+        }
+    }
+}
+
+void TimelineQuickModel::finalizeEachGroup(LineState* lineState, const QVector<int>& groupIndices)
 {
     if (lineState == nullptr || groupIndices.isEmpty()) {
         return;
     }
+
+    const int eachGroupId = nextEachGroupId_++;
 
     QVector<int> touchIndices;
     QVector<int> tapIndices;
@@ -1290,6 +1334,7 @@ void TimelineQuickModel::finalizeEachGroup(LineState* lineState, const QVector<i
         if (index < 0 || index >= lineState->render.notes.size()) {
             continue;
         }
+        lineState->render.notes[index].eachGroupId = eachGroupId;
         const TimelineRenderNote& note = lineState->render.notes.at(index);
         switch (note.kind) {
         case TimelineRenderNoteKind::Touch:

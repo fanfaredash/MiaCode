@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/design-ledger.md -->
-<!-- translation-source-hash: df406aab45bba76759a20cf01562b6629a120d2808d6fa40ac6a996030d09fb3 -->
+<!-- translation-source-hash: e629b903d30be5a17afd713dbfcbcc9c0ec1ae31fb4aa853c9faf1b67782d8c7 -->
 
 # 设计账本
 
@@ -41,6 +41,7 @@
 - 当图表文本编辑器拥有焦点时，`Ctrl+Enter` 当前会转发到现有的 preview 播放/暂停控制，而不是留给文本控件自身处理。
 - Timeline 拖拽/拖动当前修改的是运行时 `R`，不是编辑器锚点 `C`：拖拽或滚轮平移在需要时会先把 `R` 重新绑定到视口中线，头部点击与 `Ctrl+点 Timeline` 则按点击时刻执行规格里的 `R -> C` 动作，编辑器侧的光标变更只会改 `C`。
 - Timeline 缩放当前提供 `25%..150%`、步进为 `5%` 的预设，默认起始于 `50%`，头部缩放按钮按 `25/50/75/100/125/150` 这些粗档位循环。
+- Slide / wifi 的同步配色当前区分“头星同步”和“轨迹同步”：`headEach` 跟随 note head 的同步分组，而 `slideEach` 只会在同一个 each-group 内、且 `slideTraceSecond` 也相同的 slide-like note 之间生效；更早出现的 slide 不会因为后一个 each-group 恰好在同一 shoot 时刻启动，就被继承成黄色轨迹。
 - Follow 当前只在播放中生效：开启后会把 `C` 绑定到 `R` 之前最近的逗号，而暂停态切换 Follow 不会自动改动 `L / R / C`。
 - Preview 播放当前会把预览视频 / SFX / 物件统计冻结在“点击播放”时的快照上，直到播放停止；播放期间的实时文本修改仍会重绘 Timeline 并刷新 validation / Muri 输入，但不会回写已经在播放中的内容。
 - Validation UI 当前重点强调底部标签页中的问题列表，以及编辑器头部的 summary chips。

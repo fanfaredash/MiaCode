@@ -514,22 +514,26 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode, bool 
         }
     );
 
-    QHash<qint64, QVector<int>> slideTraceGroups;
+    QHash<int, QHash<qint64, QVector<int>>> slideTraceGroups;
     for (int i = 0; i < state.result.noteMarkers.size(); ++i) {
         const TimelineNoteMarker& marker = state.result.noteMarkers.at(i);
         if ((marker.type != "slide" && marker.type != "wifi") || marker.slideTraceSecond < 0.0) {
             continue;
         }
         const qint64 key = qRound64(marker.slideTraceSecond * 1000000.0);
-        slideTraceGroups[key].append(i);
+        slideTraceGroups[marker.eachGroupId][key].append(i);
     }
-    for (const QVector<int>& group : slideTraceGroups) {
-        if (group.size() < 2) {
-            continue;
-        }
-        for (int index : group) {
-            if (index >= 0 && index < state.result.noteMarkers.size()) {
-                state.result.noteMarkers[index].slideEach = true;
+    for (auto groupIt = slideTraceGroups.cbegin(); groupIt != slideTraceGroups.cend(); ++groupIt) {
+        const auto& traceGroups = groupIt.value();
+        for (auto traceIt = traceGroups.cbegin(); traceIt != traceGroups.cend(); ++traceIt) {
+            const QVector<int>& group = traceIt.value();
+            if (group.size() < 2) {
+                continue;
+            }
+            for (int index : group) {
+                if (index >= 0 && index < state.result.noteMarkers.size()) {
+                    state.result.noteMarkers[index].slideEach = true;
+                }
             }
         }
     }
