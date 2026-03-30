@@ -196,9 +196,10 @@ void TimelineView::paintEvent(QPaintEvent* event)
         }
     }
 
-    for (int lineIndex = noteRange.begin; lineIndex < noteRange.end; ++lineIndex) {
+    for (int lineIndex = noteRange.end - 1; lineIndex >= noteRange.begin; --lineIndex) {
         const TimelineRenderLine& line = lines_.at(lineIndex);
-        for (const TimelineRenderNote& note : line.notes) {
+        for (int noteIndex = line.notes.size() - 1; noteIndex >= 0; --noteIndex) {
+            const TimelineRenderNote& note = line.notes.at(noteIndex);
             if (note.lane < 1 || note.lane > kLaneCount) {
                 continue;
             }
@@ -334,7 +335,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
                 QString baseTrackType = QStringLiteral("slide_track");
                 if (timelineRenderFlagSet(note, TimelineRenderFlagTrackBreak)) {
                     baseTrackType = QStringLiteral("slide_track_break");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadEach)) {
+                } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideEach)) {
                     baseTrackType = QStringLiteral("slide_track_each");
                 }
                 const qreal trackScale = qBound<qreal>(0.25, zoomScale(), 1.0);

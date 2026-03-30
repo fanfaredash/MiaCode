@@ -171,6 +171,38 @@ int main(int argc, char** argv)
     }
 
     {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("(61.5){16}1b/5bpp4[16:3],,,(246){4}3bqq4[4:3]/5?pp4[4:3],\nE")
+        );
+        expect(parsed.ok, QStringLiteral("shared shoot-moment slide repro parses"));
+
+        const TimelineNoteMarker* earlySlide = nullptr;
+        int laterSlideCount = 0;
+        int laterSlideEachCount = 0;
+        for (const TimelineNoteMarker& marker : parsed.noteMarkers) {
+            if (marker.type != QLatin1String("slide")) {
+                continue;
+            }
+            if (nearlyEqual(marker.second, 0.0)) {
+                earlySlide = &marker;
+                continue;
+            }
+            ++laterSlideCount;
+            if (marker.slideEach) {
+                ++laterSlideEachCount;
+            }
+        }
+
+        expect(earlySlide != nullptr, QStringLiteral("shared shoot-moment repro keeps the early slide marker"));
+        expect(laterSlideCount == 2, QStringLiteral("shared shoot-moment repro emits the two later slides"));
+        if (earlySlide != nullptr) {
+            expect(earlySlide->headEach, QStringLiteral("early slide head stays each when paired with tap"));
+            expect(!earlySlide->slideEach, QStringLiteral("early slide track stays blue when a later each-group shares its shoot moment"));
+        }
+        expect(laterSlideEachCount == laterSlideCount, QStringLiteral("only the later simultaneous slides keep yellow track state"));
+    }
+
+    {
         const SimaiNativeParseResult lenientInvalid = SimaiNativeParser::parseForTimeline(QStringLiteral("@,\nE"));
         const SimaiNativeParseResult strictInvalid = SimaiNativeParser::validateSyntax(QStringLiteral("@,\nE"));
         expect(!lenientInvalid.ok, QStringLiteral("lenient parse rejects illegal token"));

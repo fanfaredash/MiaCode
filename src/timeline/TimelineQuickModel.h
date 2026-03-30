@@ -81,8 +81,9 @@ private:
     QVector<QString> collectDocumentLines(const QTextDocument* document, int startLineIndex, int endLineIndex) const;
     int lineIndexForDocumentPosition(const QTextDocument* document, int position) const;
     int lineIndexForStoredPosition(int position) const;
-    bool parseLine(LineState* lineState, const ParseState& startState) const;
+    bool parseLine(LineState* lineState, const ParseState& startState);
     void shiftLineTiming(LineState* lineState, double deltaSeconds) const;
+    void rebuildSlideDerivedFlags();
     void rebuildSnapshotDuration();
     void resequenceLineMetadata(int startIndex);
     void rebuildAnchorLineIndices();
@@ -105,11 +106,12 @@ private:
         int lineNumber,
         int column,
         QVector<int>* groupIndices) const;
-    void finalizeEachGroup(LineState* lineState, const QVector<int>& groupIndices) const;
+    void finalizeEachGroup(LineState* lineState, const QVector<int>& groupIndices);
     int allocateLineId();
     static bool parseStatesEqual(const ParseState& a, const ParseState& b);
 
     int nextLineId_ = 1;
+    int nextEachGroupId_ = 0;
     QVector<LineState> lines_;
     TimelineRenderSnapshot snapshot_;
     QVector<int> linesWithEveryComma_;
