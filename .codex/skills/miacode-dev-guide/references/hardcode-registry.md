@@ -60,6 +60,9 @@ Use this file to track where important constants live, what they mean, and wheth
     - fullscreen control-bar hide offset, reveal animation duration, and opacity fade duration
     - fullscreen control-bar auto-hide delay
   - Rule: keep local while they only shape the main-window preview UX and do not need preview/export parity
+- `src/timeline/TimelineView.cpp`
+  - Owns: timeline zoom preset bounds, coarse button stops, and the initial `pixelsPerSecond_` scale derived from the default zoom
+  - Rule: keep local while these values only shape timeline widget UX and do not need cross-subsystem parity
 
 ## 3. Promotion Rules
 
