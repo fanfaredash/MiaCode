@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/assets-and-tools.md -->
-<!-- translation-source-hash: f2db3bee52d77d700cf23c723823c40cd1f8341a80d08d8bd514eade715ccf66 -->
+<!-- translation-source-hash: c18aa4e7b8f8e53b27d41e1cf36658e42fac4efa14f0d2e9be7aa1c3575d2f02 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 资源与工具
@@ -97,6 +97,7 @@
 - Windows 构建/打包：
   - `scripts/build-win.ps1`
   - `scripts/package-win.ps1`
+  - `scripts/package-win.ps1` 默认使用 `build/`，会对照 `CMakeLists.txt` 与 `build/generated/AppVersion.h` 预检查版本新鲜度；如果待打包的可执行文件缺失或过期，会自动执行 `cmake --build <BuildDir> --target MiaCode --config <Config> --parallel 8`
 - macOS 构建/打包：
   - `scripts/build-macos.sh`
   - `scripts/package-mac.sh`
