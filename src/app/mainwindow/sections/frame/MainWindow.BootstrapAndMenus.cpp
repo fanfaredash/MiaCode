@@ -1216,10 +1216,6 @@ MainWindow::MainWindow(QWidget* parent)
     timelineHeaderLineNumberFont.setPointSize(qMax(codeFont.pointSize() + 1, 12));
     timelineView_->setHeaderLineNumberFont(timelineHeaderLineNumberFont);
     timelineView_->setShowSlideTracks(true);
-    connect(timelineView_, &TimelineView::noteNavigateRequested, this, [this](int line, int col) {
-        jumpToLocation(line, col);
-        statusBar()->showMessage(QString("Timeline jump: nearest object -> L%1 C%2").arg(line).arg(col));
-    });
     connect(timelineView_, &TimelineView::headerNavigateRequested, this, [this](double second) {
         navigateTimelineToSecond(second, true);
     });
@@ -1246,18 +1242,18 @@ MainWindow::MainWindow(QWidget* parent)
     connect(timelineView_, &TimelineView::followPreviewToggled, this, [this](bool enabled) {
         if (!enabled) {
             clearPreviewFollowDecoration();
-            syncTimelineToEditorCursor(!qtPreviewPlaying_);
+            return;
+        }
+        if (!qtPreviewPlaying_ || !hasActiveDifficulty()) {
             return;
         }
         double second = qMax(0.0, qtPreviewPauseSecond_);
-        if (qtPreviewPlaying_) {
-            if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
-                second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-            } else if (previewMediaController_ != nullptr) {
-                second = qMax(0.0, previewMediaController_->currentPlaybackSecond());
-            }
+        if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
+            second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
+        } else if (previewMediaController_ != nullptr) {
+            second = qMax(0.0, previewMediaController_->currentPlaybackSecond());
         }
-        syncEditorCursorToPreviewSecond(second, true);
+        syncEditorCursorToPreviewSecond(second, false);
     });
     bottomTabs_->addTab(timelineView_, uiText("tab.timeline", "Timeline"));
 
@@ -1275,15 +1271,24 @@ MainWindow::MainWindow(QWidget* parent)
             requestTimelineSlowRefresh();
             updateEditorEmptyState();
             updateEditorStatus();
+            if (timelineView_ != nullptr && hasActiveDifficulty()) {
+                if (qtPreviewPlaying_ && timelineView_->followPreviewEnabled()) {
+                    double second = qMax(0.0, qtPreviewPauseSecond_);
+                    if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
+                        second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
+                    } else if (previewMediaController_ != nullptr && previewMediaController_->hasVideoMedia()) {
+                        second = qMax(0.0, previewMediaController_->currentPlaybackSecond());
+                    }
+                    syncEditorCursorToPreviewSecond(second, false);
+                } else {
+                    syncTimelineToEditorCursor(!qtPreviewPlaying_);
+                }
+            }
         });
     }
     connect(qobject_cast<PlainCodeEditor*>(editorWidget_), &QTextEdit::cursorPositionChanged, this, [this]() {
         updateEditorStatus();
-        if (!qtPreviewPlaying_) {
-            // Keep editor editable while paused even if "follow preview" is enabled.
-            // Preview takes over cursor only during active playback.
-            syncTimelineToEditorCursor(true);
-        }
+        syncTimelineToEditorCursor(!qtPreviewPlaying_);
     });
     connect(titleEdit_, &QLineEdit::textChanged, this, [this]() {
         markCurrentFieldDirty();

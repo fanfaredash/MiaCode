@@ -233,6 +233,7 @@ private:
     void refreshWaveformCache();
     void applyTimelineQuickChange(int position, int charsRemoved, int charsAdded);
     void refreshTimelineQuickModelFromCurrentText();
+    void applyLatestTimelinePreviewStateToPausedPreview();
     void scheduleTimelineRefresh();
     void refreshTimelineMetadata();
     void requestTimelineSlowRefresh();
@@ -511,6 +512,8 @@ private:
     int lastTimelineParseDifficultyId_ = 0;
     QString lastTimelineParseChartText_;
     SimaiNativeParseResult lastTimelineParseResult_;
+    QVector<TimelineNoteMarker> latestTimelineNoteMarkers_;
+    QByteArray latestTimelineNoteMarkerSignature_;
     TimelineQuickModel timelineQuickModel_;
     TimelineSlowRefreshRequest pendingTimelineSlowRefresh_;
     TimelineMuriRefreshRequest pendingTimelineMuriRefresh_;
@@ -561,6 +564,7 @@ private:
     double qtPreviewStartSecond_ = 0.0;
     double qtPreviewPauseSecond_ = 0.0;
     double qtPreviewPlaybackReturnSecond_ = 0.0;
+    double qtPreviewPlaybackEndSecond_ = 0.0;
     double qtPreviewLastTimelineSecond_ = -1.0;
     double qtPreviewPendingTimelineSecond_ = 0.0;
     bool qtPreviewPendingTimelineCenterView_ = true;
@@ -588,7 +592,7 @@ private:
     PreviewBackgroundScaleMode previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     double previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     PreviewCanvasFrameRateMode previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
-    PreviewFollowMode previewFollowMode_ = PreviewFollowMode::NonEmptyComma;
+    PreviewFollowMode previewFollowMode_ = PreviewFollowMode::EveryComma;
     double previewCanvasAspectRatio_ = 1.0;
     bool previewAutoRestoreSquareAfterExport_ = true;
     bool previewShowDebugInfo_ = false;

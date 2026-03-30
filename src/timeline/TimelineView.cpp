@@ -130,8 +130,8 @@ TimelineView::TimelineView(QWidget* parent)
     );
     followPreviewCheckBox_->setToolTip(
         UiText::isChineseUi()
-            ? QStringLiteral("\u6309\u9884\u89c8\u65f6\u95f4\u5f3a\u5236\u8ddf\u968f\u5b9a\u4f4d\u7f16\u8f91\u5668\u5149\u6807")
-            : QStringLiteral("Force editor cursor to follow current preview time")
+            ? QStringLiteral("\u4ec5\u5728\u64ad\u653e\u4e2d\u5c06\u7f16\u8f91\u5668\u5149\u6807\u7ed1\u5b9a\u5230\u9884\u89c8\u65f6\u95f4\u524d\u6700\u8fd1\u7684\u9017\u53f7")
+            : QStringLiteral("During playback, bind the editor cursor to the latest comma at or before preview time")
     );
     connect(followPreviewCheckBox_, &QCheckBox::toggled, this, [this](bool enabled) {
         emit followPreviewToggled(enabled);
@@ -238,8 +238,10 @@ void TimelineView::clear()
     lines_.clear();
     muriMarkerLocationIds_.clear();
     durationSeconds_ = 0.0;
+    playbackEntrySeconds_ = 0.0;
     playheadSeconds_ = 0.0;
     cursorSeconds_ = 0.0;
+    focusTarget_ = FocusTarget::Playhead;
     playheadUpperLimitSeconds_ = -1.0;
     minimumDataSecond_ = 0.0;
     maximumDataSecond_ = 0.0;
@@ -250,6 +252,23 @@ void TimelineView::clear()
     waveformDurationSeconds_ = 0.0;
     updateHorizontalRange();
     viewport()->update();
+}
+
+void TimelineView::setPlaybackEntrySeconds(double second)
+{
+    const double clamped = qMax(0.0, second);
+    if (qFuzzyCompare(playbackEntrySeconds_ + 1.0, clamped + 1.0)) {
+        return;
+    }
+    playbackEntrySeconds_ = clamped;
+    updateDisplayBounds();
+    updateHorizontalRange();
+    viewport()->update();
+}
+
+double TimelineView::playbackEntrySeconds() const
+{
+    return playbackEntrySeconds_;
 }
 
 void TimelineView::setPlayheadUpperLimitSeconds(double second)
@@ -322,6 +341,30 @@ void TimelineView::setCursorSeconds(double second, bool centerView)
             viewport()->update();
         }
     }
+}
+
+void TimelineView::focusPlayhead(bool centerView)
+{
+    focusTarget_ = FocusTarget::Playhead;
+    if (!centerView) {
+        return;
+    }
+    const int playheadX = secondToX(playheadSeconds_);
+    const int targetX = playheadX - (viewport()->width() / 2);
+    horizontalScrollBar()->setValue(qBound(horizontalScrollBar()->minimum(), targetX, horizontalScrollBar()->maximum()));
+    viewport()->update();
+}
+
+void TimelineView::focusCursor(bool centerView)
+{
+    focusTarget_ = FocusTarget::Cursor;
+    if (!centerView) {
+        return;
+    }
+    const int cursorX = secondToX(cursorSeconds_);
+    const int targetX = cursorX - (viewport()->width() / 2);
+    horizontalScrollBar()->setValue(qBound(horizontalScrollBar()->minimum(), targetX, horizontalScrollBar()->maximum()));
+    viewport()->update();
 }
 
 double TimelineView::playheadSeconds() const
@@ -402,7 +445,10 @@ void TimelineView::refreshMinimumHeightForCurrentDevice()
 void TimelineView::updateDisplayBounds()
 {
     double minSecond = qMin(0.0, minimumDataSecond_);
-    double maxSecond = qMax(maximumDataSecond_, qMax(durationSeconds_, qMax(playheadSeconds_, qMax(0.0, cursorSeconds_))));
+    double maxSecond = qMax(
+        maximumDataSecond_,
+        qMax(durationSeconds_, qMax(playbackEntrySeconds_, qMax(playheadSeconds_, qMax(0.0, cursorSeconds_))))
+    );
     if (playheadUpperLimitSeconds_ > 0.0) {
         maxSecond = qMax(maxSecond, playheadUpperLimitSeconds_);
     }

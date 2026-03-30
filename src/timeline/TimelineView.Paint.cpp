@@ -406,7 +406,33 @@ void TimelineView::paintEvent(QPaintEvent* event)
         }
     }
 
+    const int entryX = secondToX(playbackEntrySeconds_) - xOffset;
+    if (entryX > left) {
+        painter.save();
+        painter.setClipRect(QRect(left, 0, viewport()->width() - left, top));
+        painter.setPen(Qt::NoPen);
+        QColor entryColor = c.timelinePlayhead;
+        entryColor.setAlpha(220);
+        painter.setBrush(entryColor);
+        QPainterPath entryMarker;
+        entryMarker.moveTo(entryX, top - 1);
+        entryMarker.lineTo(entryX - 6, qMax(0, top - 9));
+        entryMarker.lineTo(entryX + 6, qMax(0, top - 9));
+        entryMarker.closeSubpath();
+        painter.drawPath(entryMarker);
+        painter.restore();
+    }
+
     const int playheadX = secondToX(playheadSeconds_) - xOffset;
+    const int cursorX = secondToX(cursorSeconds_) - xOffset;
+    if (cursorX > left) {
+        painter.save();
+        painter.setClipRect(timelineRect);
+        painter.setPen(QPen(c.timelineCursor, 2));
+        painter.drawLine(cursorX, top, cursorX, top + h);
+        painter.restore();
+    }
+
     if (!playheadIndicatorSuppressed_ && playheadX > left) {
         painter.save();
         painter.setClipRect(timelineRect);
@@ -415,13 +441,15 @@ void TimelineView::paintEvent(QPaintEvent* event)
         painter.restore();
     }
 
-    const int cursorX = secondToX(cursorSeconds_) - xOffset;
-    if (cursorX > left) {
-        painter.save();
-        painter.setClipRect(timelineRect);
-        painter.setPen(QPen(c.timelineCursor, 2));
-        painter.drawLine(cursorX, top, cursorX, top + h);
-        painter.restore();
+    if (timelineDragActive_) {
+        const int dragCenterX = viewport()->width() / 2;
+        if (dragCenterX > left) {
+            painter.save();
+            painter.setClipRect(timelineRect);
+            painter.setPen(QPen(c.timelinePlayhead, 2));
+            painter.drawLine(dragCenterX, top, dragCenterX, top + h);
+            painter.restore();
+        }
     }
 
     painter.fillRect(QRect(0, top - 1, left + 1, h + 2), c.timelineSidebar);

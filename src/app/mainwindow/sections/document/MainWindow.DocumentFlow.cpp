@@ -1337,6 +1337,8 @@ void MainWindow::clearTimelineAndPreview()
     pendingMuriNoteMarkers_.clear();
     pendingMuriNoteMarkerSignature_.clear();
     lastPreviewNoteMarkerSignature_.clear();
+    latestTimelineNoteMarkers_.clear();
+    latestTimelineNoteMarkerSignature_.clear();
     lastTimelineParseDifficultyId_ = 0;
     lastTimelineParseChartText_.clear();
     lastTimelineParseResult_ = SimaiNativeParseResult();
@@ -1351,6 +1353,8 @@ void MainWindow::clearTimelineAndPreview()
     qtPreviewLastTimelineSecond_ = -1.0;
     qtPreviewTimelineStartSecond_ = 0.0;
     qtPreviewTimelineCenterNextTick_ = true;
+    qtPreviewPlaybackReturnSecond_ = 0.0;
+    qtPreviewPlaybackEndSecond_ = 0.0;
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->clearTimeline();
     }

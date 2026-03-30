@@ -36,7 +36,9 @@ Use this file to separate hard contracts from adjustable implementation choices.
 - Preview panel layout is currently card-based, with preview, controls, and stats as separate blocks.
 - Preview fullscreen currently reuses the same transport controls as the embedded preview, adds a rounded translucent-black `Esc` hint bubble, and only reveals a near-full-width bottom overlay control bar when the cursor moves into the bottom hot zone, with fade-in/fade-out opacity animation before auto-hiding again.
 - While the chart text editor has focus, `Ctrl+Enter` currently forwards to the existing preview play/pause transport instead of being left to the text widget.
-- Timeline drag/scrub currently keeps the playhead near the viewport center and reserves dynamic edge padding so the center line can still reach 0s and the current preview end.
+- Timeline drag/scrub currently edits runtime `R`, not editor-anchor `C`: dragging or wheel panning first rebinds `R` to the viewport center when needed, header clicks and `Ctrl+click` on the timeline perform the spec's `R -> C` action by click second, and editor-side cursor updates only move `C`.
+- Preview follow currently only affects active playback: when enabled it binds `C` to the latest comma at or before `R`, while paused follow toggles do not move `L / R / C`.
+- Preview playback currently freezes a play-start snapshot for preview video/SFX/object stats until playback stops; live text edits still redraw the timeline and refresh validation/Muri inputs, but they do not rewrite the content that is already playing.
 - Validation UI currently emphasizes surfaced issues in the bottom tabs and summary chips in the editor header.
 
 These are adjustable, but if changed they should be documented here and in the relevant index/linkage files.

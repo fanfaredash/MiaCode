@@ -3043,13 +3043,13 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
                     const int line = cursor.blockNumber() + 1;
                     const int col = cursor.positionInBlock() + 1;
                     const double second = timelineSecondForCursor(line, col);
-                    if (second >= 0.0) {
-                        if (qtPreviewPlaying_) {
-                            stopQtPreviewPlayback(true);
-                        }
-                        schedulePreviewSeek(second, true);
-                    } else {
-                        seekTimelineToCursor(line, col);
+                    if (qtPreviewPlaying_) {
+                        stopQtPreviewPlayback(true);
+                    }
+                    seekPreviewToSecond(second, false);
+                    if (timelineView_ != nullptr) {
+                        timelineView_->setCursorSeconds(second, false);
+                        timelineView_->focusCursor(true);
                     }
                 });
             }
@@ -3779,7 +3779,9 @@ void MainWindow::onRandomRotateSelection()
     void MainWindow::onStopPreview()
 {
     const double returnSecond = qBound(0.0, qtPreviewPlaybackReturnSecond_, previewDurationSeconds());
-    stopQtPreviewPlayback(false);
+    if (qtPreviewPlaying_) {
+        stopQtPreviewPlayback(true);
+    }
     seekPreviewToSecond(returnSecond, true);
     statusBar()->showMessage("Qt preview stopped.");
 }

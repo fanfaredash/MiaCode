@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/design-ledger.md -->
-<!-- translation-source-hash: c0eaf8d7dbefdd4e12ebd9212dddd8a47141e826841b18a7131e333e85bc4654 -->
+<!-- translation-source-hash: 87b2065b682241a108b28b5e758bdd35fe80f37dc5dbf9721ee50aafd32c1390 -->
 
 # 设计账本
 
@@ -39,7 +39,9 @@
 - 预览面板当前采用卡片式布局，分成 preview、controls、stats 三块。
 - Preview 全屏当前复用与嵌入式预览相同的 transport controls，额外显示一个圆角半透明黑色 `Esc` 提示气泡，并且仅当光标移动到底部热区时才显示接近全宽的底部 overlay 控制条；控制条会先执行淡入/淡出透明度动画，再自动隐藏。
 - 当图表文本编辑器拥有焦点时，`Ctrl+Enter` 当前会转发到现有的 preview 播放/暂停控制，而不是留给文本控件自身处理。
-- Timeline 拖拽/拖动当前会尽量让播放头保持在视口中线附近，并在两端预留动态边距，确保中线仍能对齐 `0s` 和当前预览末尾。
+- Timeline 拖拽/拖动当前修改的是运行时 `R`，不是编辑器锚点 `C`：拖拽或滚轮平移在需要时会先把 `R` 重新绑定到视口中线，头部点击与 `Ctrl+点 Timeline` 则按点击时刻执行规格里的 `R -> C` 动作，编辑器侧的光标变更只会改 `C`。
+- Follow 当前只在播放中生效：开启后会把 `C` 绑定到 `R` 之前最近的逗号，而暂停态切换 Follow 不会自动改动 `L / R / C`。
+- Preview 播放当前会把预览视频 / SFX / 物件统计冻结在“点击播放”时的快照上，直到播放停止；播放期间的实时文本修改仍会重绘 Timeline 并刷新 validation / Muri 输入，但不会回写已经在播放中的内容。
 - Validation UI 当前重点强调底部标签页中的问题列表，以及编辑器头部的 summary chips。
 
 这些默认值都可以调整，但如果改了，需要同步更新这里以及相关索引/联动文档。
