@@ -301,9 +301,11 @@ void TimelineView::paintEvent(QPaintEvent* event)
             const qreal iconScale = zoomScale() <= 0.25 ? 0.5 : 1.0;
             const QPixmap& icon = transformedIconForType(iconType, iconScale);
 
+            bool holdCapsDrawn = false;
             if (isHold) {
                 const HoldPixmapParts& holdParts = holdPixmapPartsForType(iconType, iconScale);
                 if (!holdParts.cap.isNull() && !holdParts.bodySlice.isNull()) {
+                    holdCapsDrawn = true;
                     const int capY = rowTop + (laneH - holdParts.cap.height()) / 2;
                     const int leftCapX = extentLeft - holdParts.cap.width() / 2;
                     const int rightCapX = extentRight - holdParts.cap.width() / 2;
@@ -384,15 +386,17 @@ void TimelineView::paintEvent(QPaintEvent* event)
             const bool shouldDrawHead = !isSlideLike || timelineRenderFlagSet(note, TimelineRenderFlagHasHeadStar);
             if (shouldDrawHead && !icon.isNull()) {
                 const int iconY = rowTop + (laneH - icon.height()) / 2;
-                painter.drawPixmap(x - icon.width() / 2, iconY, icon);
-                if (isHold) {
+                if (!isHold || !holdCapsDrawn) {
+                    painter.drawPixmap(x - icon.width() / 2, iconY, icon);
+                }
+                if (isHold && !holdCapsDrawn) {
                     painter.drawPixmap(holdEndX - icon.width() / 2, iconY, icon);
                 }
             } else if (shouldDrawHead) {
                 painter.setPen(Qt::NoPen);
                 painter.setBrush(c.timelineCursor);
                 painter.drawEllipse(QRectF(x - 3, rowCenterY - 4, 8, 8));
-                if (isHold) {
+                if (isHold && !holdCapsDrawn) {
                     painter.drawEllipse(QRectF(holdEndX - 3, rowCenterY - 4, 8, 8));
                 }
             }
