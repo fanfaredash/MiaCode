@@ -63,7 +63,6 @@ void MainWindow::resetPortablePreviewSettingsToDefaults()
     previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
-    previewFollowMode_ = PreviewFollowMode::EveryComma;
     previewCanvasAspectRatio_ = 1.0;
     previewAutoRestoreSquareAfterExport_ = true;
     previewShowDebugInfo_ = false;
@@ -141,9 +140,6 @@ void MainWindow::applyPortablePreviewSettings(const QJsonObject& preview)
     if (preview.value("canvas_frame_rate_mode").isString()) {
         previewCanvasFrameRateMode_ =
             previewCanvasFrameRateModeFromStorageValue(preview.value("canvas_frame_rate_mode").toString());
-    }
-    if (preview.value("follow_mode").isString()) {
-        previewFollowMode_ = previewFollowModeFromStorageValue(preview.value("follow_mode").toString());
     }
     if (preview.value("show_debug_info").isBool()) {
         previewShowDebugInfo_ = preview.value("show_debug_info").toBool(false);
@@ -225,7 +221,6 @@ void MainWindow::savePortableState() const
     );
     preview.insert("note_flow_speed", previewNoteFlowSpeed_);
     preview.insert("canvas_frame_rate_mode", previewCanvasFrameRateModeStorageValue());
-    preview.insert("follow_mode", previewFollowModeStorageValue());
     preview.insert("show_debug_info", previewShowDebugInfo_);
     preview.insert("show_timestamp", previewShowTimestamp_);
     preview.insert("show_object_stats_preview", previewShowObjectStatsHud_);

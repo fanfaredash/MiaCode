@@ -1,5 +1,8 @@
 #pragma once
 
+#include <algorithm>
+#include <limits>
+
 #include <QString>
 #include <QtGlobal>
 #include <QVector>
@@ -52,6 +55,11 @@ struct TimelineCursorAnchor {
     double secondOffset = 0.0;
 };
 
+struct TimelineVisibleLineRange {
+    int begin = 0;
+    int end = 0;
+};
+
 struct TimelineRenderLine {
     int lineId = 0;
     int lineNumber = 1;
@@ -64,10 +72,14 @@ struct TimelineRenderLine {
 
 struct TimelineRenderSnapshot {
     QVector<TimelineRenderLine> lines;
+    QVector<double> noteVisualEndPrefixMaxWithSlideTracks;
+    QVector<double> noteVisualEndPrefixMaxWithoutSlideTracks;
     double durationSeconds = 0.0;
     double minimumSecond = -0.5;
     double maximumSecond = 1.0;
 };
+
+inline constexpr double kTimelineFireworkDurationSeconds = 1.3333334;
 
 inline bool timelineRenderFlagSet(const TimelineRenderNote& note, TimelineRenderNoteFlag flag)
 {
@@ -77,6 +89,71 @@ inline bool timelineRenderFlagSet(const TimelineRenderNote& note, TimelineRender
 inline double timelineRenderAbsoluteSecond(const TimelineRenderLine& line, double secondOffset)
 {
     return line.startSecond + secondOffset;
+}
+
+inline double timelineRenderLineVisualEndSecond(const TimelineRenderLine& line, bool includeSlideTracks)
+{
+    double visualEnd = -std::numeric_limits<double>::infinity();
+    for (const TimelineRenderNote& note : line.notes) {
+        const double startSecond = timelineRenderAbsoluteSecond(line, note.secondOffset);
+        const double endSecond = note.endSecondOffset >= 0.0
+            ? timelineRenderAbsoluteSecond(line, note.endSecondOffset)
+            : startSecond;
+        visualEnd = qMax(visualEnd, startSecond);
+
+        if ((note.kind == TimelineRenderNoteKind::Hold || note.kind == TimelineRenderNoteKind::TouchHold)
+            && endSecond > startSecond) {
+            visualEnd = qMax(visualEnd, endSecond);
+        }
+        if (includeSlideTracks && (note.kind == TimelineRenderNoteKind::Slide || note.kind == TimelineRenderNoteKind::Wifi)) {
+            visualEnd = qMax(visualEnd, endSecond);
+        }
+        if (timelineRenderFlagSet(note, TimelineRenderFlagIsFirework)
+            && (note.kind == TimelineRenderNoteKind::Touch || note.kind == TimelineRenderNoteKind::TouchHold)) {
+            const double triggerSecond = (note.kind == TimelineRenderNoteKind::TouchHold && endSecond > startSecond)
+                ? endSecond
+                : startSecond;
+            visualEnd = qMax(visualEnd, triggerSecond + kTimelineFireworkDurationSeconds);
+        }
+    }
+    return visualEnd;
+}
+
+inline TimelineVisibleLineRange timelineRenderVisibleNoteLineRange(
+    const QVector<TimelineRenderLine>& lines,
+    const QVector<double>& noteVisualEndPrefixMax,
+    double startSecond,
+    double endSecond)
+{
+    TimelineVisibleLineRange range;
+    if (lines.isEmpty()) {
+        return range;
+    }
+
+    const double boundedStart = qMin(startSecond, endSecond);
+    const double boundedEnd = qMax(startSecond, endSecond);
+    const auto endIt = std::upper_bound(
+        lines.cbegin(),
+        lines.cend(),
+        boundedEnd,
+        [](double targetSecond, const TimelineRenderLine& line) {
+            return targetSecond < line.startSecond;
+        });
+    range.end = static_cast<int>(std::distance(lines.cbegin(), endIt));
+    if (range.end <= 0 || noteVisualEndPrefixMax.size() < range.end) {
+        range.begin = range.end;
+        return range;
+    }
+
+    const auto beginIt = std::lower_bound(
+        noteVisualEndPrefixMax.cbegin(),
+        noteVisualEndPrefixMax.cbegin() + range.end,
+        boundedStart,
+        [](double prefixVisualEnd, double targetSecond) {
+            return prefixVisualEnd < targetSecond;
+        });
+    range.begin = static_cast<int>(std::distance(noteVisualEndPrefixMax.cbegin(), beginIt));
+    return range;
 }
 
 inline quint64 timelineRenderLocationId(int lineNumber, int sourceCol)

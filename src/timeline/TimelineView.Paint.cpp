@@ -26,7 +26,21 @@ void TimelineView::paintEvent(QPaintEvent* event)
         const double visibleEndSecond = xToSecond(qMax(left, dirtyRight));
         beatRange = visibleLineRange(visibleStartSecond - 1.0, visibleEndSecond + 1.0);
         if (dirtyRect.bottom() >= top && dirtyRect.top() <= top + h) {
-            noteRange = visibleLineRange(visibleStartSecond - 2.0, visibleEndSecond + 2.0);
+            const QVector<double>& noteVisualPrefixMax = drawSlideTracks
+                ? noteVisualEndPrefixMaxWithSlideTracks_
+                : noteVisualEndPrefixMaxWithoutSlideTracks_;
+            if (noteVisualPrefixMax.size() == lines_.size()) {
+                const TimelineVisibleLineRange sharedRange = timelineRenderVisibleNoteLineRange(
+                    lines_,
+                    noteVisualPrefixMax,
+                    visibleStartSecond - 2.0,
+                    visibleEndSecond + 2.0
+                );
+                noteRange.begin = sharedRange.begin;
+                noteRange.end = sharedRange.end;
+            } else {
+                noteRange = visibleLineRange(visibleStartSecond - 2.0, visibleEndSecond + 2.0);
+            }
         }
     }
 

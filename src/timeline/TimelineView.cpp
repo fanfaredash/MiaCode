@@ -36,7 +36,6 @@ constexpr int kTimelineTopMargin = 6;
 constexpr int kTimelineRightPadding = 24;
 constexpr int kNoteSize = 14;
 constexpr double kTimelineDisplayLeadInSeconds = 0.5;
-constexpr double kTimelineFireworkDurationSeconds = 1.3333334;
 const std::array<QColor, 5> kTimelineFireworkBandColors = {
     QColor(232, 124, 72),
     QColor(208, 106, 182),
@@ -219,6 +218,9 @@ bool TimelineView::viewportEvent(QEvent* event)
 void TimelineView::setTimelineData(const TimelineRenderSnapshot& snapshot)
 {
     lines_ = snapshot.lines;
+    noteVisualEndPrefixMaxWithSlideTracks_ = snapshot.noteVisualEndPrefixMaxWithSlideTracks;
+    noteVisualEndPrefixMaxWithoutSlideTracks_ = snapshot.noteVisualEndPrefixMaxWithoutSlideTracks;
+    muriMarkerLocationIds_.clear();
     durationSeconds_ = qMax(0.0, snapshot.durationSeconds);
     minimumDataSecond_ = snapshot.minimumSecond;
     maximumDataSecond_ = snapshot.maximumSecond;
@@ -240,6 +242,8 @@ void TimelineView::setWaveformData(const QVector<float>& peaks, double startSeco
 void TimelineView::clear()
 {
     lines_.clear();
+    noteVisualEndPrefixMaxWithSlideTracks_.clear();
+    noteVisualEndPrefixMaxWithoutSlideTracks_.clear();
     muriMarkerLocationIds_.clear();
     durationSeconds_ = 0.0;
     playbackEntrySeconds_ = 0.0;
