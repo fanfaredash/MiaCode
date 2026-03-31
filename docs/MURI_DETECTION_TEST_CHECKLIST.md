@@ -11,6 +11,21 @@
 - [ ] `muri_spec` 输出为 `Muri spec passed.`
 - [ ] 可以在应用内打开无理面板并点击条目跳转
 
+## 共享时间常量速查
+
+- 判定时基：`180 TPS`
+- 抬手延迟：`3 / 180 = 16.7 ms`
+- 额外 pad down 延迟：`9 / 180 = 50.0 ms`
+- tap critical：`3 / 180 = 16.7 ms`
+- tap available：`27 / 180 = 150.0 ms`
+- touch critical / available：`27 / 180 = 150.0 ms`
+- slide critical：`42 / 180 = 233.3 ms`
+- slide available：`108 / 180 = 600.0 ms`
+- slide leading：`15 / 180 = 83.3 ms`
+- tap-on-slide 起始阈值：`1 / 180 = 5.6 ms`
+- touch-on-slide 阈值：`24 / 180 = 133.3 ms`
+- slide-too-fast 阈值：`1 / 180 = 5.6 ms`
+
 ## 1. 基础类型覆盖
 
 - [ ] `SlideTooFast` 能作为运行时诊断出现
