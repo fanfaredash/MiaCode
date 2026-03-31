@@ -67,6 +67,9 @@ void unpremultiplyRgba8888InPlace(QImage* image)
 
 void clearOffscreenDarkHazeRgba8888InPlace(QImage* image)
 {
+    if (!miacode::debug_options::envFlagEnabled("MIACODE_EXPORT_CLEAR_DARK_HAZE")) {
+        return;
+    }
     if (image == nullptr || image->isNull()) {
         return;
     }
