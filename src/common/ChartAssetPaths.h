@@ -46,6 +46,27 @@ inline QStringList backgroundMediaCandidateFileNames(bool includeVideoCandidates
     return candidates;
 }
 
+inline bool isSupportedBackgroundMediaPath(const QString& path, bool includeVideoCandidates = true)
+{
+    if (path.isEmpty()) {
+        return false;
+    }
+
+    const QFileInfo info(path);
+    if (!info.exists() || !info.isFile()) {
+        return false;
+    }
+
+    const QString suffix = info.suffix().trimmed().toLower();
+    if (suffix == QStringLiteral("jpg")
+        || suffix == QStringLiteral("jpeg")
+        || suffix == QStringLiteral("png")) {
+        return true;
+    }
+
+    return includeVideoCandidates && suffix == QStringLiteral("mp4");
+}
+
 inline QString resolveBackgroundMediaPathForDirectory(const QString& directoryPath, bool includeVideoCandidates = true)
 {
     if (directoryPath.isEmpty()) {
@@ -68,6 +89,31 @@ inline QString resolveBackgroundMediaPath(const QString& chartPath, bool include
         return QString();
     }
     return resolveBackgroundMediaPathForDirectory(QFileInfo(chartPath).absolutePath(), includeVideoCandidates);
+}
+
+inline QString resolvePreferredBackgroundMediaPath(
+    const QString& chartPath,
+    const QString& explicitPath,
+    bool includeVideoCandidates = true)
+{
+    const QString resolvedChartMediaPath = resolveBackgroundMediaPath(chartPath, includeVideoCandidates);
+    if (!resolvedChartMediaPath.isEmpty()) {
+        return resolvedChartMediaPath;
+    }
+
+    const QString normalizedExplicitPath = explicitPath.isEmpty() ? QString() : QDir::cleanPath(explicitPath);
+    if (!isSupportedBackgroundMediaPath(normalizedExplicitPath, includeVideoCandidates)) {
+        return QString();
+    }
+
+    const QString resolvedTrackPath = resolveTrackPath(chartPath);
+    if ((!resolvedTrackPath.isEmpty()
+         && normalizedExplicitPath.compare(resolvedTrackPath, Qt::CaseInsensitive) == 0)
+        || QFileInfo(normalizedExplicitPath).fileName().compare(trackFileName(), Qt::CaseInsensitive) == 0) {
+        return QString();
+    }
+
+    return normalizedExplicitPath;
 }
 
 inline bool hasBackgroundMedia(const QString& chartPath, bool includeVideoCandidates = true)

@@ -50,8 +50,11 @@ private:
     void updateVisibleRange(bool centerOnPlayhead = false);
     void updateBpmEdit(double bpm, bool notify);
     void updateOffsetEdit(double seconds, bool notify);
+    bool applyOffsetValue(double seconds, bool notify, bool updateText);
+    void previewOffsetEdit();
     void applyOffsetEdit();
     void applyBpmEdit();
+    void restoreDetectedOffset();
     void showBpmHelpDialog();
     void seekToSecond(double second, bool centerView);
     void togglePlayback();
@@ -77,6 +80,7 @@ private:
     QPushButton* bpmHelpButton_ = nullptr;
     QLineEdit* offsetEdit_ = nullptr;
     QPushButton* detectOffsetButton_ = nullptr;
+    QPushButton* restoreDetectedOffsetButton_ = nullptr;
     QPushButton* playPauseButton_ = nullptr;
     QPushButton* stopButton_ = nullptr;
     QSlider* playbackSlider_ = nullptr;
@@ -116,10 +120,14 @@ private:
     double detectedMeterPhaseSecond_ = 0.0;
     bool detectedMeterPhaseValid_ = false;
     QString lastDetectedMeterId_ = "4/4";
+    double detectedOffsetRestoreSeconds_ = 0.0;
+    bool hasDetectedOffsetRestore_ = false;
     double beatSfxVolume_ = 1.0;
     bool playbackSliderDragging_ = false;
     double lastDetectedBpm_ = 0.0;
     QVector<QPair<double, double>> lastDetectedBpmCandidates_;
     double lastBeatAuditionSecond_ = -1.0;
+    double lastAppliedOffsetSeconds_ = 0.0;
+    bool hasLastAppliedOffset_ = false;
     bool playing_ = false;
 };

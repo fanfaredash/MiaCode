@@ -1,4 +1,4 @@
-﻿namespace ValidationMessage {
+namespace ValidationMessage {
 
 const QString& kInvalidNotePrefix()
 {
@@ -162,6 +162,18 @@ const QString& kMissingBeatSeparator()
     return value;
 }
 
+const QString& kRepeatedSlashSeparator()
+{
+    static const QString value = QStringLiteral("Repeated separator '//' is not allowed");
+    return value;
+}
+
+const QString& kRepeatedBacktickSeparator()
+{
+    static const QString value = QStringLiteral("Repeated separator '``' is not allowed");
+    return value;
+}
+
 const QString& kUnmatchedClosingBracketPrefix()
 {
     static const QString value = QStringLiteral("Unmatched closing bracket '");
@@ -213,9 +225,17 @@ const QHash<QString, QString>& zhExactMap()
         {kUnterminatedBeatBlock(), QStringLiteral("分拍块未闭合")},
         {kUnterminatedHsBlock(), QStringLiteral("HS* 块未闭合")},
         {kMissingBeatSeparator(), QStringLiteral("缺少拍间分隔符 ','")},
+        {kRepeatedSlashSeparator(), QStringLiteral("不允许使用连续分隔符 '//'")},
+        {kRepeatedBacktickSeparator(), QStringLiteral("不允许使用连续分隔符 '``'")},
         {kChartEmpty(), QStringLiteral("谱面为空。")},
     };
     return map;
+}
+
+bool shouldRemainValidationError(const QString& detail)
+{
+    return detail == kRepeatedSlashSeparator()
+        || detail == kRepeatedBacktickSeparator();
 }
 
 const QHash<QString, QString>& zhPrefixMap()
@@ -451,11 +471,25 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode, bool 
                 }
 
             if (ch == QChar('/')) {
+                if (strictMode && i + 1 < line.size() && line.at(i + 1) == QChar('/')) {
+                    flushToken(lineNumber);
+                    appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kRepeatedSlashSeparator(), i + 2);
+                    ++i;
+                    continue;
+                }
                 flushToken(lineNumber);
                 continue;
             }
 
             if (ch == QChar('`')) {
+                if (strictMode && i + 1 < line.size() && line.at(i + 1) == QChar('`')) {
+                    flushToken(lineNumber);
+                    appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kRepeatedBacktickSeparator(), i + 2);
+                    finalizeEachGroup(&state, currentGroup);
+                    currentGroup.clear();
+                    ++i;
+                    continue;
+                }
                 flushToken(lineNumber);
                 finalizeEachGroup(&state, currentGroup);
                 currentGroup.clear();
@@ -724,6 +758,7 @@ SimaiNativeValidationReport SimaiNativeParser::buildValidationReport(
     for (const SimaiNativeMessage& error : strictResult.errors) {
         const bool lenientAlsoFailed = lenientErrorKeys.contains(makeValidationMessageKey(error));
         const SimaiNativeValidationSeverity severity = lenientAlsoFailed
+            || ValidationMessage::shouldRemainValidationError(error.message)
             ? SimaiNativeValidationSeverity::Error
             : SimaiNativeValidationSeverity::Warning;
         if (severity == SimaiNativeValidationSeverity::Error) {

@@ -271,6 +271,33 @@ QString previewFullscreenHintStyleSheet()
     );
 }
 
+QString outlineCollapseButtonStyleSheet()
+{
+    const UiTheme::Colors& c = UiTheme::colors();
+    return QStringLiteral(
+        "QToolButton {"
+        " color: %1;"
+        " background: %2;"
+        " border: none;"
+        " border-left: 1px solid %3;"
+        " padding: 0px;"
+        " font-size: 12px;"
+        " font-weight: 700;"
+        "}"
+        "QToolButton:hover {"
+        " background: %4;"
+        "}"
+        "QToolButton:pressed {"
+        " background: %5;"
+        "}"
+    )
+        .arg(cssRgb(c.iconSecondary))
+        .arg(cssRgb(c.cardAltBg))
+        .arg(cssRgb(c.border))
+        .arg(cssRgb(c.menuHoverBg))
+        .arg(cssRgb(c.borderSoft));
+}
+
 QString previewFullscreenPauseButtonStyleSheet(bool active)
 {
     const QColor overlayText = previewFullscreenOverlayIconColor();
@@ -824,6 +851,15 @@ public:
             painter->drawRoundedRect(fillRect, 6.0, 6.0);
         }
         painter->restore();
+
+        const int listWidth = option.widget != nullptr ? option.widget->width() : option.rect.width();
+        constexpr int kIconOnlyThreshold = 120;
+        const bool iconOnly = listWidth > 0 && listWidth < kIconOnlyThreshold;
+        if (iconOnly) {
+            drawOption.text.clear();
+            drawOption.features &= ~QStyleOptionViewItem::HasDisplay;
+            drawOption.decorationAlignment = Qt::AlignLeft | Qt::AlignVCenter;
+        }
 
         drawOption.state &= ~QStyle::State_Selected;
         drawOption.state &= ~QStyle::State_MouseOver;
@@ -1833,6 +1869,40 @@ QIcon makeSettingsGearIcon(const QColor& color)
     return QIcon(pixmap);
 }
 
+QIcon makeToolboxAccessIcon(const QColor& toolboxColor, const QColor& gearColor)
+{
+    QPixmap pixmap(24, 24);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    QPen toolboxPen(toolboxColor, 1.8);
+    toolboxPen.setCapStyle(Qt::RoundCap);
+    toolboxPen.setJoinStyle(Qt::RoundJoin);
+    painter.setPen(toolboxPen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRoundedRect(QRectF(4.0, 9.0, 11.8, 7.8), 2.2, 2.2);
+    painter.drawRoundedRect(QRectF(6.6, 6.0, 6.4, 3.5), 1.3, 1.3);
+    painter.drawLine(QPointF(4.2, 10.9), QPointF(15.6, 10.9));
+
+    const QPointF gearCenter(17.0, 16.4);
+    QPen gearPen(gearColor, 1.35);
+    gearPen.setCapStyle(Qt::RoundCap);
+    gearPen.setJoinStyle(Qt::RoundJoin);
+    painter.setPen(gearPen);
+    painter.drawEllipse(gearCenter, 2.35, 2.35);
+    for (int i = 0; i < 8; ++i) {
+        const qreal angle = (i * 45.0) * 0.017453292519943295;
+        const QPointF inner(gearCenter.x() + qCos(angle) * 3.1, gearCenter.y() + qSin(angle) * 3.1);
+        const QPointF outer(gearCenter.x() + qCos(angle) * 4.25, gearCenter.y() + qSin(angle) * 4.25);
+        painter.drawLine(inner, outer);
+    }
+
+    painter.end();
+    return QIcon(pixmap);
+}
+
 QIcon makeTransformMirrorLeftRightIcon(const QColor& color)
 {
     QPixmap pixmap(20, 20);
@@ -2158,6 +2228,10 @@ void MainWindow::applyUiTheme()
     if (exportVideoButton_ != nullptr) {
         exportVideoButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
     }
+    if (outlineCollapseButton_ != nullptr) {
+        outlineCollapseButton_->setStyleSheet(outlineCollapseButtonStyleSheet());
+        updateOutlineDockCollapseButton();
+    }
     if (previewFullscreenHintLabel_ != nullptr) {
         previewFullscreenHintLabel_->setStyleSheet(previewFullscreenHintStyleSheet());
     }
@@ -2170,6 +2244,51 @@ void MainWindow::applyUiTheme()
     updatePauseButtonAppearance();
     updatePreviewFullscreenButtonAppearance();
     update();
+}
+
+void MainWindow::updateOutlineDockCollapseButton()
+{
+    if (outlineCollapseButton_ == nullptr) {
+        return;
+    }
+    outlineCollapseButton_->setText(outlineDockCollapsed_ ? QStringLiteral("▶") : QStringLiteral("◀"));
+    outlineCollapseButton_->setToolTip(
+        outlineDockCollapsed_
+            ? (UiText::isChineseUi() ? QStringLiteral("展开左侧字段栏") : QStringLiteral("Expand left sidebar"))
+            : (UiText::isChineseUi() ? QStringLiteral("折叠左侧字段栏") : QStringLiteral("Collapse left sidebar"))
+    );
+}
+
+void MainWindow::setOutlineDockCollapsed(bool collapsed)
+{
+    if (outlineDock_ == nullptr || outlineList_ == nullptr) {
+        return;
+    }
+
+    constexpr int kCollapsedWidth = 20;
+    constexpr int kExpandedMinWidth = 120;
+    if (collapsed) {
+        const int currentWidth = outlineDock_->width();
+        if (currentWidth > kCollapsedWidth) {
+            outlineDockExpandedWidth_ = currentWidth;
+        }
+    }
+
+    outlineDockCollapsed_ = collapsed;
+    outlineList_->setVisible(!collapsed);
+    if (collapsed) {
+        updateDifficultyDeleteButton(false);
+    }
+
+    const int targetWidth = collapsed ? kCollapsedWidth : qMax(kExpandedMinWidth, outlineDockExpandedWidth_);
+    outlineDock_->setMinimumWidth(collapsed ? kCollapsedWidth : kExpandedMinWidth);
+    outlineDock_->setMaximumWidth(collapsed ? kCollapsedWidth : QWIDGETSIZE_MAX);
+    outlineDock_->resize(targetWidth, outlineDock_->height());
+    if (QWidget* widget = outlineDock_->widget(); widget != nullptr) {
+        widget->updateGeometry();
+    }
+    outlineDock_->updateGeometry();
+    updateOutlineDockCollapseButton();
 }
 
 void MainWindow::applySystemWindowBackdrop(QWidget* target) const
@@ -3248,6 +3367,9 @@ void MainWindow::onReplaceAll()
 void MainWindow::resizeEvent(QResizeEvent* event)
 {
     QMainWindow::resizeEvent(event);
+    if (!outlineDockCollapsed_ && outlineDock_ != nullptr) {
+        outlineDockExpandedWidth_ = qMax(120, outlineDock_->width());
+    }
     updatePreviewWorkspaceLayout();
     updateEditorHeaderLayoutMode();
     updateEditorFindBarGeometry();

@@ -33,6 +33,7 @@ class QDockWidget;
 class QEvent;
 class QFrame;
 class QGridLayout;
+class QHBoxLayout;
 class QHideEvent;
 class QLabel;
 class LatencyDetectorDialog;
@@ -176,6 +177,8 @@ private:
     void tryFinalizePreviewSubsystemWarmup();
     void setupInitialWindowGeometry();
     void setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* transformMenu, QMenu* previewMenu, QMenu* helpMenu);
+    void setOutlineDockCollapsed(bool collapsed);
+    void updateOutlineDockCollapseButton();
     void updateLatencyDetectorAvailability();
     QString resolveLatencyDetectorTrackPath() const;
     bool maybeSaveCurrentFieldChanges();
@@ -527,6 +530,8 @@ private:
     QVector<TimelineNoteMarker> pendingMuriNoteMarkers_;
     QByteArray pendingMuriNoteMarkerSignature_;
     QByteArray lastPreviewNoteMarkerSignature_;
+    bool outlineDockCollapsed_ = false;
+    int outlineDockExpandedWidth_ = 190;
     TextEncoding currentEncoding_ = TextEncoding::Utf8;
     bool runtimeDebugOutputEnabled_ = false;
     quint64 windowEventDebugSequence_ = 0;
@@ -615,6 +620,7 @@ private:
     QStackedWidget* editorStack_ = nullptr;
     QDockWidget* outlineDock_ = nullptr;
     QListWidget* outlineList_ = nullptr;
+    QToolButton* outlineCollapseButton_ = nullptr;
     QLineEdit* titleEdit_ = nullptr;
     QLineEdit* artistEdit_ = nullptr;
     QLineEdit* firstEdit_ = nullptr;
@@ -658,11 +664,13 @@ private:
     QWidget* previewCanvasContainer_ = nullptr;
     QFrame* previewCanvasFrame_ = nullptr;
     QFrame* previewControlCard_ = nullptr;
+    QHBoxLayout* previewControlsLayout_ = nullptr;
     QToolButton* stopPreviewButton_ = nullptr;
     QToolButton* pausePreviewButton_ = nullptr;
     QToolButton* syntaxCheckButton_ = nullptr;
     QToolButton* exportVideoButton_ = nullptr;
     QMenu* exportVideoMenu_ = nullptr;
+    QMenu* toolboxMenu_ = nullptr;
     QToolButton* previewAudioSettingsButton_ = nullptr;
     QToolButton* previewVideoSettingsButton_ = nullptr;
     QToolButton* latencyDetectorButton_ = nullptr;
