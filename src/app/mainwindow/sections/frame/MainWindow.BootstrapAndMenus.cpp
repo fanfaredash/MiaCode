@@ -816,7 +816,20 @@ MainWindow::MainWindow(QWidget* parent)
         "}"
         "QListWidget::item:selected { color: #243447; }"
     );
-    outlineDock->setWidget(outlineList_);
+    auto* outlineDockShell = new QWidget(outlineDock);
+    auto* outlineDockShellLayout = new QHBoxLayout(outlineDockShell);
+    outlineDockShellLayout->setContentsMargins(0, 0, 0, 0);
+    outlineDockShellLayout->setSpacing(0);
+    outlineDockShellLayout->addWidget(outlineList_, 1);
+    outlineCollapseButton_ = new QToolButton(outlineDockShell);
+    outlineCollapseButton_->setFocusPolicy(Qt::NoFocus);
+    outlineCollapseButton_->setCursor(Qt::PointingHandCursor);
+    outlineCollapseButton_->setFixedWidth(20);
+    outlineCollapseButton_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    outlineCollapseButton_->setFont(uiAccentFont(10, QFont::Bold));
+    outlineCollapseButton_->setStyleSheet(outlineCollapseButtonStyleSheet());
+    outlineDockShellLayout->addWidget(outlineCollapseButton_, 0);
+    outlineDock->setWidget(outlineDockShell);
     outlineList_->setMouseTracking(true);
     outlineList_->viewport()->setMouseTracking(true);
     outlineList_->viewport()->installEventFilter(this);
@@ -843,6 +856,9 @@ MainWindow::MainWindow(QWidget* parent)
         if (hasActiveDifficulty()) {
             deleteDifficultyField(activeDifficultyId_);
         }
+    });
+    connect(outlineCollapseButton_, &QToolButton::clicked, this, [this]() {
+        setOutlineDockCollapsed(!outlineDockCollapsed_);
     });
     connect(outlineList_, &QListWidget::itemClicked, this, [this](QListWidgetItem* current) {
         updateDifficultyDeleteButton(false);
@@ -918,6 +934,17 @@ MainWindow::MainWindow(QWidget* parent)
             rebuildFieldSidebar();
             return;
         }
+        if (kind == "toolbox") {
+            if (toolboxMenu_ != nullptr) {
+                const QRect rowRect = outlineList_->visualItemRect(current);
+                const QPoint popupPos = outlineList_->viewport()->mapToGlobal(
+                    QPoint(rowRect.right(), rowRect.top() + rowRect.height() / 2)
+                );
+                toolboxMenu_->exec(popupPos);
+            }
+            rebuildFieldSidebar();
+            return;
+        }
         if (SimaiDocument::isDifficultyId(difficultyId)) {
             activeOutlineKey_ = "chart";
             if (switchToDifficultyField(difficultyId) && editorWidget_ != nullptr) {
@@ -950,9 +977,51 @@ MainWindow::MainWindow(QWidget* parent)
         });
         menu.exec(outlineList_->viewport()->mapToGlobal(pos));
     });
+
+    toolboxMenu_ = new QMenu(outlineList_);
+
+    QAction* toolboxMuriAction = toolboxMenu_->addAction(
+        UiText::isChineseUi() ? QStringLiteral("无理检测") : QStringLiteral("Muri Check")
+    );
+    connect(toolboxMuriAction, &QAction::triggered, this, [this]() {
+        setMuriRenderMode(RenderMode::MaimuriDxStyle);
+        if (bottomTabs_ != nullptr && muriList_ != nullptr) {
+            bottomTabs_->setCurrentWidget(muriList_);
+        }
+    });
+
+    toolboxMenu_->addSeparator();
+
+    QAction* toolboxExportAction = toolboxMenu_->addAction(
+        UiText::isChineseUi() ? QStringLiteral("视频导出") : QStringLiteral("Video Export")
+    );
+    connect(toolboxExportAction, &QAction::triggered, this, &MainWindow::onExportPreviewVideo);
+
+    QAction* toolboxBatchExportAction = toolboxMenu_->addAction(
+        UiText::isChineseUi() ? QStringLiteral("批量视频导出") : QStringLiteral("Batch Video Export")
+    );
+    connect(toolboxBatchExportAction, &QAction::triggered, this, &MainWindow::onBatchExportPreviewVideo);
+
+    toolboxMenu_->addSeparator();
+
+    QAction* toolboxLatencyAction = toolboxMenu_->addAction(
+        UiText::isChineseUi() ? QStringLiteral("BPM检测与偏移") : QStringLiteral("BPM & Offset")
+    );
+    connect(toolboxLatencyAction, &QAction::triggered, this, &MainWindow::onOpenLatencyDetector);
+    if (latencyDetectorAction_ != nullptr) {
+        toolboxLatencyAction->setEnabled(latencyDetectorAction_->isEnabled());
+        toolboxLatencyAction->setToolTip(latencyDetectorAction_->toolTip());
+        connect(latencyDetectorAction_, &QAction::changed, this, [this, toolboxLatencyAction]() {
+            if (latencyDetectorAction_ == nullptr || toolboxLatencyAction == nullptr) {
+                return;
+            }
+            toolboxLatencyAction->setEnabled(latencyDetectorAction_->isEnabled());
+            toolboxLatencyAction->setToolTip(latencyDetectorAction_->toolTip());
+        });
+    }
+
     addDockWidget(Qt::LeftDockWidgetArea, outlineDock);
-    outlineDock->setMinimumWidth(190);
-    outlineDock->setMaximumWidth(190);
+    setOutlineDockCollapsed(false);
     logStartupStage("outline_ready");
 
     previewPanel_ = new QWidget(this);
@@ -1053,6 +1122,7 @@ MainWindow::MainWindow(QWidget* parent)
     auto* previewControls = new QFrame(previewControlCard_);
     previewControls->setObjectName("PreviewControls");
     auto* previewControlsLayout = new QHBoxLayout(previewControls);
+    previewControlsLayout_ = previewControlsLayout;
     previewControlsLayout->setContentsMargins(0, 0, 0, 0);
     previewControlsLayout->setSpacing(8);
 
@@ -1352,6 +1422,7 @@ MainWindow::MainWindow(QWidget* parent)
         scheduleWrappedListRelayout(errorList_);
         scheduleWrappedListRelayout(muriList_);
     });
+
     updateBottomTabsDeviceHeight();
     logStartupStage("timeline_and_tabs_ready");
 

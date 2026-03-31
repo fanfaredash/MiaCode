@@ -219,6 +219,31 @@ int main(int argc, char** argv)
     }
 
     {
+        const SimaiNativeParseResult lenientDoubleSlash = SimaiNativeParser::parseForTimeline(QStringLiteral("1//2,\nE"));
+        const SimaiNativeParseResult strictDoubleSlash = SimaiNativeParser::validateSyntax(QStringLiteral("1//2,\nE"));
+        const SimaiNativeParseResult lenientDoubleBacktick = SimaiNativeParser::parseForTimeline(QStringLiteral("1``2,\nE"));
+        const SimaiNativeParseResult strictDoubleBacktick = SimaiNativeParser::validateSyntax(QStringLiteral("1``2,\nE"));
+
+        expect(lenientDoubleSlash.ok, QStringLiteral("lenient parse keeps accepting repeated slash separator for compatibility"));
+        expect(!strictDoubleSlash.ok, QStringLiteral("validate rejects repeated slash separator"));
+        expect(lenientDoubleBacktick.ok, QStringLiteral("lenient parse keeps accepting repeated backtick separator for compatibility"));
+        expect(!strictDoubleBacktick.ok, QStringLiteral("validate rejects repeated backtick separator"));
+
+        const SimaiNativeValidationReport doubleSlashReport = SimaiNativeParser::buildValidationReport(
+            QStringLiteral("1//2,\nE"),
+            SimaiNativeValidationLocale::English
+        );
+        const SimaiNativeValidationReport doubleBacktickReport = SimaiNativeParser::buildValidationReport(
+            QStringLiteral("1``2,\nE"),
+            SimaiNativeValidationLocale::English
+        );
+        expect(!doubleSlashReport.ok, QStringLiteral("validation report treats repeated slash separator as error"));
+        expect(doubleSlashReport.errorCount == 1, QStringLiteral("repeated slash separator counts as one validation error"));
+        expect(!doubleBacktickReport.ok, QStringLiteral("validation report treats repeated backtick separator as error"));
+        expect(doubleBacktickReport.errorCount == 1, QStringLiteral("repeated backtick separator counts as one validation error"));
+    }
+
+    {
         const SimaiNativeParseResult lenientInlineLowerTerminal = SimaiNativeParser::parseForTimeline(QStringLiteral("1,e"));
         const SimaiNativeParseResult strictInlineLowerTerminal = SimaiNativeParser::validateSyntax(QStringLiteral("1,e"));
         const SimaiNativeParseResult strictInlineUpperTerminal = SimaiNativeParser::validateSyntax(QStringLiteral("{1},E"));

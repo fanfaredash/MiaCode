@@ -623,7 +623,6 @@ void LatencyDetectorDialog::setMeterId(const QString& meterId)
 void LatencyDetectorDialog::setOffsetSeconds(double seconds)
 {
     updateOffsetEdit(seconds, false);
-    updateBeatOverlay();
 }
 
 
