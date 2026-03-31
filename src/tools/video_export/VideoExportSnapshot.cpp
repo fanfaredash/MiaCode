@@ -2,6 +2,7 @@
 
 #include "SimaiDocument.h"
 #include "SimaiNativeParser.h"
+#include "common/ChartAssetPaths.h"
 #include "tools/muri/MuriAnalyzer.h"
 
 #include <QDir>
@@ -281,7 +282,10 @@ bool buildVideoExportTaskFromSnapshot(
     VideoExportTask built;
     built.outputPath = snapshot.outputPath;
     built.chartPath = snapshot.originalChartPath;
-    built.backgroundMediaPath = snapshot.backgroundMediaPath;
+    built.backgroundMediaPath = miacode::chart_assets::resolvePreferredBackgroundMediaPath(
+        snapshot.originalChartPath,
+        snapshot.backgroundMediaPath
+    );
     built.trackPath = snapshot.trackPath;
     built.skinDirectory = snapshot.skinDirectory;
     built.noteMarkers = shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds);
