@@ -44,8 +44,7 @@ Use this skill as the repo memory layer for MiaCode. Start from the user-facing 
 - After introducing, removing, centralizing, or re-scoping constants, update `references/hardcode-registry.md`.
 - After changing filenames, lookup order, packaged dependencies, helper scripts, or debug tooling, update `references/assets-and-tools.md`.
 - After adding, removing, centralizing, or re-scoping debug flags, timing logs, or diagnostic env vars, update `references/debug-flags.md`.
-- After changing this skill or any of its reference Markdown files, update the Chinese mirror under `.codex/i18n/zh-CN/miacode-dev-guide/` in the same change.
-- After updating the Chinese mirror, run `python .codex/tools/check_translation_sync.py --stamp` to refresh the recorded source hashes.
+- The English files in this skill directory are the only maintained source of truth; do not create or update a mirrored translation tree for this skill.
 - When adding a new hardcoded value, first check whether an existing `src/common/*.h` config header should own it. If it must stay local, document the file, meaning, unit, and linked surfaces.
 - When adding a new feature path, record both its primary owner and every mirrored or downstream path that must stay in sync.
 - When removing a feature, delete stale breadcrumbs instead of leaving dead references behind.
