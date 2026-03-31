@@ -223,7 +223,7 @@ void QtPreviewSfxRuntime::drainEvents(double second)
     }
 }
 
-void QtPreviewSfxRuntime::syncTouchholdVoices(double second)
+void QtPreviewSfxRuntime::pauseTouchholdVoices()
 {
     for (TouchholdVoice& voice : touchholdVoices_) {
         if (voice.voice != nullptr && voice.voice->initialized) {
@@ -231,10 +231,14 @@ void QtPreviewSfxRuntime::syncTouchholdVoices(double second)
         }
         voice.activeSpanIndex = -1;
     }
+}
 
+void QtPreviewSfxRuntime::restoreTouchholdVoices(double second)
+{
+    pauseTouchholdVoices();
     for (int spanIndex = 0; spanIndex < touchholdSpans_.size(); ++spanIndex) {
         const TouchholdSpan& span = touchholdSpans_[spanIndex];
-        if (second <= span.startSecond + kQtPreviewSfxEpsilonSeconds) {
+        if (second + kQtPreviewSfxEpsilonSeconds < span.startSecond) {
             continue;
         }
         if (second >= span.endSecond - kQtPreviewSfxEpsilonSeconds) {

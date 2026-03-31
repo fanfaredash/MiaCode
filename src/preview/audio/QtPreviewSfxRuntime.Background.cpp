@@ -272,11 +272,6 @@ void QtPreviewSfxRuntime::stopAll()
     }
     backgroundTrackPendingStart_ = false;
     backgroundTrackRunning_ = false;
-    for (TouchholdVoice& voice : touchholdVoices_) {
-        if (voice.voice != nullptr && voice.voice->initialized) {
-            ma_sound_stop(&voice.voice->sound);
-        }
-        voice.activeSpanIndex = -1;
-    }
+    pauseTouchholdVoices();
 }
 

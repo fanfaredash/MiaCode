@@ -1196,6 +1196,11 @@ bool MainWindow::switchToMetadataField()
     }
     cacheWorkspaceLayoutSizes();
     stopQtPreviewPlayback(true);
+    pendingPreviewPlaybackStart_ = false;
+    pendingPreviewPlaybackResumeFromPause_ = false;
+    pendingPreviewPlaybackRevision_ = 0;
+    pendingPreviewPlaybackDifficultyId_ = 0;
+    pendingPreviewPlaybackSecond_ = 0.0;
     activeDifficultyId_ = 0;
     activeOutlineKey_ = "metadata";
     populateMetadataPage();
@@ -1232,6 +1237,11 @@ bool MainWindow::switchToWelcomePage()
     }
     cacheWorkspaceLayoutSizes();
     stopQtPreviewPlayback(true);
+    pendingPreviewPlaybackStart_ = false;
+    pendingPreviewPlaybackResumeFromPause_ = false;
+    pendingPreviewPlaybackRevision_ = 0;
+    pendingPreviewPlaybackDifficultyId_ = 0;
+    pendingPreviewPlaybackSecond_ = 0.0;
     activeDifficultyId_ = 0;
     activeOutlineKey_ = "welcome";
     if (editorStack_ != nullptr && welcomePage_ != nullptr) {
@@ -1269,6 +1279,11 @@ bool MainWindow::switchToDifficultyField(int difficultyId)
     }
     cacheWorkspaceLayoutSizes();
     stopQtPreviewPlayback(true);
+    pendingPreviewPlaybackStart_ = false;
+    pendingPreviewPlaybackResumeFromPause_ = false;
+    pendingPreviewPlaybackRevision_ = 0;
+    pendingPreviewPlaybackDifficultyId_ = 0;
+    pendingPreviewPlaybackSecond_ = 0.0;
     activeDifficultyId_ = difficultyId;
     projectLastOpenedDifficultyId_ = difficultyId;
     if (activeOutlineKey_.isEmpty() || activeOutlineKey_ == "metadata" || activeOutlineKey_ == "welcome") {
@@ -1352,9 +1367,12 @@ void MainWindow::clearTimelineAndPreview()
 {
     timelineQuickModel_.clear();
     pendingTimelineSlowRefresh_ = TimelineSlowRefreshRequest();
+    pendingTimelineValidationRefresh_ = TimelineValidationRefreshRequest();
     pendingTimelineMuriRefresh_ = TimelineMuriRefreshRequest();
     timelineSlowRequestedRevision_ = 0;
     timelineSlowRunningRevision_ = 0;
+    timelineValidationRequestedRevision_ = 0;
+    timelineValidationRunningRevision_ = 0;
     timelineMuriRequestedRevision_ = 0;
     timelineMuriRunningRevision_ = 0;
     pendingMuriNoteMarkers_.clear();
@@ -1362,6 +1380,8 @@ void MainWindow::clearTimelineAndPreview()
     lastPreviewNoteMarkerSignature_.clear();
     latestTimelineNoteMarkers_.clear();
     latestTimelineNoteMarkerSignature_.clear();
+    latestTimelinePreviewRevision_ = 0;
+    latestTimelinePreviewSnapshotReady_ = false;
     lastTimelineParseDifficultyId_ = 0;
     lastTimelineParseChartText_.clear();
     lastTimelineParseResult_ = SimaiNativeParseResult();
@@ -1373,9 +1393,13 @@ void MainWindow::clearTimelineAndPreview()
     qtPreviewTimelineDirty_ = false;
     qtPreviewPendingTimelineSecond_ = 0.0;
     qtPreviewPendingTimelineCenterView_ = true;
+    pendingPreviewPlaybackStart_ = false;
+    pendingPreviewPlaybackResumeFromPause_ = false;
+    pendingPreviewPlaybackRevision_ = 0;
+    pendingPreviewPlaybackDifficultyId_ = 0;
+    pendingPreviewPlaybackSecond_ = 0.0;
     qtPreviewLastTimelineSecond_ = -1.0;
     qtPreviewTimelineStartSecond_ = 0.0;
-    qtPreviewTimelineCenterNextTick_ = true;
     qtPreviewPlaybackReturnSecond_ = 0.0;
     qtPreviewPlaybackEndSecond_ = 0.0;
     if (previewSfxRuntime_ != nullptr) {

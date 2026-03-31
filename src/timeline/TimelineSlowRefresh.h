@@ -17,18 +17,37 @@ struct TimelineSlowRefreshRequest {
     bool chineseUi = false;
 };
 
-struct TimelineSlowRefreshResult {
+struct TimelinePreviewRefreshResult {
     quint64 revision = 0;
     int difficultyId = 0;
     QString chartText;
     double firstSeconds = 0.0;
-    bool chineseUi = false;
     SimaiNativeParseResult parseResult;
     QVector<TimelineBeatMarker> shiftedBeatMarkers;
     QVector<TimelineNoteMarker> shiftedNoteMarkers;
     QByteArray noteMarkerSignature;
-    SimaiNativeValidationReport validationReport;
     double durationSeconds = 0.0;
+};
+
+struct TimelinePreviewRefreshState {
+    QVector<TimelineNoteMarker> shiftedNoteMarkers;
+    QByteArray noteMarkerSignature;
+};
+
+struct TimelineValidationRefreshRequest {
+    quint64 revision = 0;
+    int difficultyId = 0;
+    QString chartText;
+    bool chineseUi = false;
+    SimaiNativeParseResult parseResult;
+};
+
+struct TimelineValidationRefreshResult {
+    quint64 revision = 0;
+    int difficultyId = 0;
+    QString chartText;
+    bool chineseUi = false;
+    SimaiNativeValidationReport validationReport;
 };
 
 struct TimelineMuriRefreshRequest {
@@ -48,5 +67,14 @@ struct TimelineMuriRefreshResult {
     QVector<MuriStaticReference> staticReferences;
 };
 
-TimelineSlowRefreshResult buildTimelineSlowRefreshResult(const TimelineSlowRefreshRequest& request);
+TimelinePreviewRefreshState buildTimelinePreviewRefreshState(
+    const SimaiNativeParseResult& parseResult,
+    double firstSeconds);
+TimelinePreviewRefreshResult buildTimelinePreviewRefreshResult(
+    const TimelineSlowRefreshRequest& request,
+    const SimaiNativeParseResult& parseResult,
+    const TimelinePreviewRefreshState& previewState);
+TimelinePreviewRefreshResult buildTimelinePreviewRefreshResult(const TimelineSlowRefreshRequest& request);
+TimelinePreviewRefreshState buildTimelinePreviewRefreshState(const QString& chartText, double firstSeconds);
+TimelineValidationRefreshResult buildTimelineValidationRefreshResult(const TimelineValidationRefreshRequest& request);
 TimelineMuriRefreshResult buildTimelineMuriRefreshResult(const TimelineMuriRefreshRequest& request);
