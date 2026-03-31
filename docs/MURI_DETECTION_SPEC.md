@@ -220,27 +220,44 @@ E
 
 ## 11. 共享时间常量串联例子
 
-固定使用这条 slide：
-
-```simai
-8>3[4:1]
-```
-
-按当前解析与分析逻辑，可以把它理解成：
+一个 Slide，形状为 1>4，时间信息如下：
 
 - `marker.second = 0 ms`：slide 头出现时刻
 - `slideTraceSecond = 250 ms`：轨迹真正开始跑的时刻
 - `endSecond = 500 ms`：正常完成时刻
 
-如果这条 slide 因为外部 pad 状态被提前满足，并且在 `467 ms` 就完成了最后一个判定区，那么 `467 ms` 就是“这条 slide 被提前判掉的时机”。共享时间常量在这条时间轴上的作用如下：
+完整判定过程时间轴示例如下：
 
-- `slide leading = 83.3 ms`：这条 slide 会在 `-83.3 ms` 就进入可判定状态，允许它一开始就继承更早已存在的 pad 状态。
-- `额外 pad down 延迟 = 50.0 ms`：会在 `slideTraceSecond + min(首个区域进入时间, 50 ms)` 注入 synthetic head pad-down。对这条 slide 来说，如果首区 25 ms 就进入，则额外 pad-down 落在 `275 ms`；如果首区更慢，则封顶到 `300 ms`。
-- `slide critical = 233.3 ms`：当 slide 在 `467 ms` 完成时，系统不会直接按“比 `500 ms` 早了多少”判坏，而是拿完成时刻去和 `criticalSecond ± criticalDeltaSecond` 比较。基础窗是 `233.3 ms`，再叠加末段区域时长的四分之一。
-- `抬手延迟 = 16.7 ms`：最后一个 pad window 和手部轨迹会额外保留到约 `516.7 ms`，避免边界 tick 上刚好抬手导致的漏判或显示过早消失。
-- `slide available = 600.0 ms`：如果一直没有完成，系统会继续等到 `1100 ms` 左右；超过这个时刻仍未完成，才会强制判坏。
+- -83.3 ms (slide leading)
 
-对于 `slide critical`，实现里另有一个独立的 `+50 ms shift` 容错分支。可等价理解为：
+这时 slide 已经进入 runtime 可判定状态，availableSecond = marker.second - 83.3ms。如果更早就有相关 pad-down (区域按下)，slide 可以从一开始就继承这些状态。注意，83.3 把抬手延迟 16.6 算在内了，等价于实际判定边界是 -100ms。
+
+- 0 ms (marker.second)
+slide 头出现。
+
+- 250 ms (slideTraceSecond)
+slide 启动。同时代码会发一次真实的 slide-head pad-down。
+
+275 ms 或 300 ms (extra pad down)
+这里会在 slideTraceSecond + min(首 area 进入时刻, 50ms) 再补一次 synthetic head down。它的作用是“再给一次更晚的头部 pad-down 机会”，让更靠后的后续 note 也可能被 slide 头提前吃到。
+可能影响的无理类型：SlideHeadTap (外无)
+
+...中间各个 area 起点...
+这不是那 5 个量，但时间轴里最好知道：slide/wifi 每进一个新 area，simple-note 模拟都会收到一次那个 area 的 pad-down。
+
+467 ms（本例“被提前判掉”的时机）
+如果最后一个 area 在这里就满足，slide 会在这一 tick 被判完成。此时真正发力的是 slide critical：系统拿这个完成时刻去和 criticalSecond ± criticalDeltaSecond 比。基础容忍是 233.3 ms + 末 area 时长的四分之一；实现里另有一个独立的 +50 ms shift 容错分支，在后面会解释。
+可能影响的无理类型：SlideTooFast (内无)
+
+500 ms (endSecond)
+正常结束参考线。到这还没完成，不会立刻判死，只是进入“还能继续等”的区间。
+可能影响的无理类型：SlideTooFast (内无)
+
+
+1100 ms (slide available)
+这是 endSecond + 600 ms 的最后等待点。到这还没完成，就强制 bad。
+
+对于 `slide critical`，实现里另有一个独立的 `+50 ms shift` 容错分支。这个分支不是简单给 `criticalDeltaSecond` 再加 `50 ms`，而是额外用一扇向前偏了 `50 ms` 的基础窗口再检查一次，因此主要只会多宽容一部分过早完成的 slide。`MaiMuriDX` 的 slide 判定里也有同款双分支实现；wifi 不使用这个分支。伪代码如下：
 
 ```text
 delta = judgeSecond - criticalSecond
@@ -252,4 +269,3 @@ else:
     bad
 ```
 
-这个分支不是简单给 `criticalDeltaSecond` 再加 `50 ms`，而是额外用一扇向前偏了 `50 ms` 的基础窗口再检查一次，因此主要只会多宽容一部分过早完成的 slide。`MaiMuriDX` 的 slide 判定里也有同款双分支实现；wifi 不使用这个分支。
