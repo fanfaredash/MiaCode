@@ -20,9 +20,9 @@ Use this file to track where important constants live, what they mean, and wheth
 - `src/common/VideoExportConfig.h`
   - Owns: export lead-in constants for zero-start exports and non-zero partial-export preload
   - Scope: export timeline alignment
-- `src/tools/muri/MuriStaticChecker.h`
-  - Owns: static tap-on-slide threshold min/max/default
-  - Scope: static Muri collision interpretation
+- `src/common/MuriConfig.h`
+  - Owns: static tap-on-slide threshold min/max/default plus shared Muri timing cutoffs such as tap-on-slide warning and slide-head warning boundaries
+  - Scope: static and runtime Muri collision interpretation across preview, timeline refresh, dump tooling, and export
 
 ## 2. Implementation-Local Hotspots
 

@@ -126,6 +126,7 @@ QJsonObject VideoExportSnapshot::toJson() const
         muriRenderOptions.showChartReviewSimpleJudgeOverlay
     );
     render.insert(QStringLiteral("wifi_need_c"), muriRenderOptions.wifiNeedC);
+    render.insert(QStringLiteral("static_tap_on_slide_threshold_seconds"), staticTapOnSlideThresholdSeconds);
     render.insert(QStringLiteral("show_timestamp"), showTimestamp);
     render.insert(QStringLiteral("show_object_stats_hud"), showObjectStatsHud);
     render.insert(QStringLiteral("skin_wait_ms"), skinLoadWaitMs);
@@ -211,6 +212,9 @@ bool VideoExportSnapshot::fromJson(
             .toBool(parsed.muriRenderOptions.showChartReviewSimpleJudgeOverlay);
     parsed.muriRenderOptions.wifiNeedC =
         render.value(QStringLiteral("wifi_need_c")).toBool(parsed.muriRenderOptions.wifiNeedC);
+    parsed.staticTapOnSlideThresholdSeconds =
+        render.value(QStringLiteral("static_tap_on_slide_threshold_seconds"))
+            .toDouble(parsed.staticTapOnSlideThresholdSeconds);
     parsed.showTimestamp =
         render.value(QStringLiteral("show_timestamp")).toBool(parsed.showTimestamp);
     parsed.showObjectStatsHud =
@@ -294,6 +298,7 @@ bool buildVideoExportTaskFromSnapshot(
     built.backgroundScaleMode = snapshot.backgroundScaleMode;
     built.noteFlowSpeed = snapshot.noteFlowSpeed;
     built.muriRenderOptions = snapshot.muriRenderOptions;
+    built.staticTapOnSlideThresholdSeconds = snapshot.staticTapOnSlideThresholdSeconds;
     built.exportStartSeconds = qMax(0.0, snapshot.exportStartSeconds);
     built.contentDurationSeconds = qMax(0.0, snapshot.contentDurationSeconds);
     built.outputWidth = snapshot.outputWidth;
@@ -303,7 +308,10 @@ bool buildVideoExportTaskFromSnapshot(
     built.showTimestamp = snapshot.showTimestamp;
     built.showObjectStatsHud = snapshot.showObjectStatsHud;
     built.skinLoadWaitMs = qBound(0, snapshot.skinLoadWaitMs, 20000);
-    built.muriAnalysisReport = MuriAnalyzer::analyze(built.noteMarkers, built.muriRenderOptions);
+    built.muriAnalysisReport = MuriAnalyzer::analyze(
+        built.noteMarkers,
+        built.muriRenderOptions,
+        built.staticTapOnSlideThresholdSeconds);
 
     if (built.noteMarkers.isEmpty()) {
         if (errorMessage != nullptr) {

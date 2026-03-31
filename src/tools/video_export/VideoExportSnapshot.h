@@ -3,6 +3,7 @@
 #include <QJsonObject>
 #include <QString>
 
+#include "common/MuriConfig.h"
 #include "common/MuriRenderOptions.h"
 #include "VideoExportController.h"
 
@@ -26,6 +27,8 @@ struct VideoExportSnapshot {
     PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
     double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     MuriRenderOptions muriRenderOptions;
+    double staticTapOnSlideThresholdSeconds =
+        static_cast<double>(miacode::muri::kStaticTapOnSlideThresholdDefaultMs) / 1000.0;
     double exportStartSeconds = 0.0;
     double contentDurationSeconds = 0.0;
     int outputWidth = 1024;

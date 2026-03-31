@@ -7,6 +7,9 @@
 namespace miacode::muri {
 
 constexpr double kJudgeTps = 180.0;
+constexpr int kStaticTapOnSlideThresholdMinMs = 150;
+constexpr int kStaticTapOnSlideThresholdMaxMs = 250;
+constexpr int kStaticTapOnSlideThresholdDefaultMs = 200;
 constexpr double kReleaseDelaySeconds = 3.0 / kJudgeTps;
 constexpr double kExtraPadDownDelaySeconds = 9.0 / kJudgeTps;
 constexpr double kTapCriticalSeconds = 3.0 / kJudgeTps;
@@ -18,8 +21,10 @@ constexpr double kSlideAvailableSeconds = 108.0 / kJudgeTps;
 constexpr double kSlideDeltaShiftSeconds = 9.0 / kJudgeTps;
 constexpr double kSlideLeadingSeconds = 15.0 / kJudgeTps;
 constexpr double kTapOnSlideThresholdSeconds = 1.0 / kJudgeTps;
+constexpr double kTapOnSlideWarningCutoffSeconds = 0.150;
 constexpr double kTouchOnSlideThresholdSeconds = 24.0 / kJudgeTps;
 constexpr double kSlideTooFastThresholdSeconds = 1.0 / kJudgeTps;
+constexpr double kSlideHeadTapWarningCutoffSeconds = 0.050;
 
 constexpr double kLogicalCanvasSize = 540.0;
 constexpr double kLogicalCanvasCenter = kLogicalCanvasSize / 2.0;

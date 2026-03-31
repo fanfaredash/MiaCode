@@ -42,6 +42,7 @@ Use this file to separate hard contracts from adjustable implementation choices.
 - Preview follow currently only affects active playback: when enabled it binds `C` to the latest comma at or before `R`, while paused follow toggles do not move `L / R / C`.
 - Preview playback currently freezes a play-start snapshot for preview video/SFX/object stats until playback stops; live text edits still redraw the timeline and refresh validation/Muri inputs, but they do not rewrite the content that is already playing.
 - Validation UI currently emphasizes surfaced issues in the bottom tabs and summary chips in the editor header.
+- Muri diagnostics UI currently merges runtime diagnostics and static references into one time-sorted list, but runtime entries win when the same Muri kind hits the same anchored `LxCy`; static references act as fallback-only supplements. Static references currently surface `SlideHeadTap`, `TapOnSlide`, and `Overlap`, panel display/jump anchors prefer the earliest involved object, same-moment overlaps collapse to at most one visible row, detail strings use chart-style source labels (for example `slide 8qq1` / `tap 4`) instead of raw source coordinates, and the Muri tab rows intentionally keep extra vertical breathing room beyond the text bounds.
 
 These are adjustable, but if changed they should be documented here and in the relevant index/linkage files.
 

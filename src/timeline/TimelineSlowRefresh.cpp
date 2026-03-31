@@ -183,7 +183,10 @@ TimelineMuriRefreshResult buildTimelineMuriRefreshResult(const TimelineMuriRefre
     result.revision = request.revision;
     result.difficultyId = request.difficultyId;
     result.noteMarkerSignature = request.noteMarkerSignature;
-    result.analysisReport = MuriAnalyzer::analyze(request.noteMarkers, request.renderOptions);
+    result.analysisReport = MuriAnalyzer::analyze(
+        request.noteMarkers,
+        request.renderOptions,
+        request.staticTapOnSlideThresholdSeconds);
     result.staticReferences = miacode::muri::buildStaticMuriReferences(
         request.noteMarkers,
         request.staticTapOnSlideThresholdSeconds);

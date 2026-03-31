@@ -22,15 +22,26 @@ QString muriKindDisplayName(MuriKind kind, bool chineseUi)
 {
     switch (kind) {
     case MuriKind::SlideTooFast:
-        return chineseUi ? QStringLiteral("内屏无理") : QStringLiteral("Slide Too Fast");
+        return chineseUi ? QStringLiteral("内无") : QStringLiteral("Inner");
     case MuriKind::SlideHeadTap:
-        return chineseUi ? QStringLiteral("外键无理") : QStringLiteral("Slide Head Tap");
+        return chineseUi ? QStringLiteral("外无") : QStringLiteral("Outer");
     case MuriKind::TapOnSlide:
-        return chineseUi ? QStringLiteral("撞尾无理") : QStringLiteral("Tap On Slide");
+        return chineseUi ? QStringLiteral("撞尾") : QStringLiteral("Tail");
     case MuriKind::Overlap:
-        return chineseUi ? QStringLiteral("叠键无理") : QStringLiteral("Overlap");
+        return chineseUi ? QStringLiteral("叠键") : QStringLiteral("Overlap");
     case MuriKind::MultiTouch:
-        return chineseUi ? QStringLiteral("多押无理") : QStringLiteral("Multi Touch");
+        return chineseUi ? QStringLiteral("多押") : QStringLiteral("Multi-touch");
+    }
+    return chineseUi ? QStringLiteral("无理") : QStringLiteral("Muri");
+}
+
+QString muriAlertLevelDisplayName(MuriAlertLevel level, bool chineseUi)
+{
+    switch (level) {
+    case MuriAlertLevel::Muri:
+        return chineseUi ? QStringLiteral("无理") : QStringLiteral("Muri");
+    case MuriAlertLevel::Warning:
+        return chineseUi ? QStringLiteral("警告") : QStringLiteral("Warning");
     }
     return chineseUi ? QStringLiteral("无理") : QStringLiteral("Muri");
 }

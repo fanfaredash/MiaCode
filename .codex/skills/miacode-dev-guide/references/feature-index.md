@@ -155,6 +155,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Static references and thresholds:
   - Files: `src/tools/muri/MuriStaticChecker.h`, `src/tools/muri/MuriStaticChecker.cpp`
   - Key function: `buildStaticMuriReferences`
+- Panel entry shaping and visible-list dedupe:
+  - Files: `src/tools/muri/MuriPanelEntries.h`, `src/tools/muri/MuriPanelEntries.cpp`
+  - Key function: `buildVisibleMuriPanelEntries`
 - Main window usage:
   - File: `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
   - Key functions: `scheduleDeferredMuriRefresh`, `refreshDeferredMuriDiagnostics`

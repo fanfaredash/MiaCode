@@ -3319,6 +3319,8 @@ void PreviewCanvas::drawMaimuriDxJudgeOverlay(QPainter& painter, const QRectF& p
     }
 
     if (muriJudgeSimpleImage_.isNull()
+        && reviewJudgeSimpleNormalImage_.isNull()
+        && reviewJudgeSimpleBreakImage_.isNull()
         && muriJudgeStraightLeftImage_.isNull()
         && muriJudgeStraightRightImage_.isNull()
         && muriJudgeCircleLeftImage_.isNull()
@@ -3330,8 +3332,15 @@ void PreviewCanvas::drawMaimuriDxJudgeOverlay(QPainter& painter, const QRectF& p
 
     QHash<QString, const TimelineNoteMarker*> markerByKey;
     markerByKey.reserve(noteMarkers_.size());
+    QHash<QString, bool> simpleBreakByKey;
+    simpleBreakByKey.reserve(noteMarkers_.size() * 2);
     for (const TimelineNoteMarker& marker : noteMarkers_) {
-        markerByKey.insert(makeMarkerAnalysisKey(marker), &marker);
+        const QString markerKey = makeMarkerAnalysisKey(marker);
+        markerByKey.insert(markerKey, &marker);
+        simpleBreakByKey.insert(markerKey, marker.isBreak);
+        if ((marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi")) && marker.hasHeadStar) {
+            simpleBreakByKey.insert(slideHeadEventKey(marker), marker.headBreak);
+        }
     }
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
@@ -3382,7 +3391,20 @@ void PreviewCanvas::drawMaimuriDxJudgeOverlay(QPainter& painter, const QRectF& p
             if (event.pad.isEmpty()) {
                 continue;
             }
-            image = &muriJudgeSimpleImage_;
+            if (event.simpleEffect == MuriSimpleJudgeEffect::Perfect) {
+                const bool isBreak = simpleBreakByKey.value(event.markerKey, false);
+                image = (isBreak && !reviewJudgeSimpleBreakImage_.isNull())
+                    ? &reviewJudgeSimpleBreakImage_
+                    : &reviewJudgeSimpleNormalImage_;
+                if ((image == nullptr || image->isNull()) && !reviewJudgeSimpleBreakImage_.isNull()) {
+                    image = &reviewJudgeSimpleBreakImage_;
+                }
+                if (image == nullptr || image->isNull()) {
+                    image = &muriJudgeSimpleImage_;
+                }
+            } else {
+                image = !muriJudgeSimpleImage_.isNull() ? &muriJudgeSimpleImage_ : &reviewJudgeSimpleNormalImage_;
+            }
             alpha = maimuriDxSimpleJudgeAlpha(elapsedSeconds);
             const QPointF base = miacode::muri::padCenter(event.pad);
             const QPointF unit = padUnitVectorForToken(event.pad);

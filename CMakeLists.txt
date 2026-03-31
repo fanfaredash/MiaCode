@@ -63,6 +63,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/latency/LatencyDetectorDialog.cpp
     src/tools/muri/MuriAnalyzer.h
     src/tools/muri/MuriAnalyzer.cpp
+    src/tools/muri/MuriPanelEntries.h
+    src/tools/muri/MuriPanelEntries.cpp
     src/tools/muri/MuriStaticChecker.h
     src/tools/muri/MuriStaticChecker.cpp
     src/tools/video_export/VideoExportDialog.h
@@ -222,6 +224,21 @@ if (MIACODE_BUILD_DEV_TOOLS)
         resources/fonts.qrc
     )
 
+    add_executable(muri_spec
+        src/tools/muri/MuriSpec.cpp
+        src/common/MuriTypes.h
+        src/common/MuriTypes.cpp
+        src/simai/parser/SimaiNativeParser.h
+        src/simai/parser/SimaiNativeParser.cpp
+        src/tools/muri/MuriAnalyzer.h
+        src/tools/muri/MuriAnalyzer.cpp
+        src/tools/muri/MuriPanelEntries.h
+        src/tools/muri/MuriPanelEntries.cpp
+        src/tools/muri/MuriStaticChecker.h
+        src/tools/muri/MuriStaticChecker.cpp
+        resources/fonts.qrc
+    )
+
     target_link_libraries(miacode_muri_dump PRIVATE
         Qt6::Core
         Qt6::Gui
@@ -293,6 +310,21 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/simai/parser
         src/simai/transform
         src/timeline
+    )
+
+    target_link_libraries(muri_spec PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+    )
+    target_include_directories(muri_spec PRIVATE
+        src
+        src/app/ui
+        src/common
+        src/simai
+        src/simai/parser
+        src/timeline
+        src/tools
     )
 endif()
 
