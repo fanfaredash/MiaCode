@@ -918,6 +918,17 @@ MainWindow::MainWindow(QWidget* parent)
             rebuildFieldSidebar();
             return;
         }
+        if (kind == "toolbox") {
+            if (toolboxMenu_ != nullptr) {
+                const QRect rowRect = outlineList_->visualItemRect(current);
+                const QPoint popupPos = outlineList_->viewport()->mapToGlobal(
+                    QPoint(rowRect.right(), rowRect.top() + rowRect.height() / 2)
+                );
+                toolboxMenu_->exec(popupPos);
+            }
+            rebuildFieldSidebar();
+            return;
+        }
         if (SimaiDocument::isDifficultyId(difficultyId)) {
             activeOutlineKey_ = "chart";
             if (switchToDifficultyField(difficultyId) && editorWidget_ != nullptr) {
@@ -950,6 +961,49 @@ MainWindow::MainWindow(QWidget* parent)
         });
         menu.exec(outlineList_->viewport()->mapToGlobal(pos));
     });
+
+    toolboxMenu_ = new QMenu(outlineList_);
+
+    QAction* toolboxMuriAction = toolboxMenu_->addAction(
+        UiText::isChineseUi() ? QStringLiteral("无理检测") : QStringLiteral("Muri Check")
+    );
+    connect(toolboxMuriAction, &QAction::triggered, this, [this]() {
+        setMuriRenderMode(RenderMode::MaimuriDxStyle);
+        if (bottomTabs_ != nullptr && muriList_ != nullptr) {
+            bottomTabs_->setCurrentWidget(muriList_);
+        }
+    });
+
+    toolboxMenu_->addSeparator();
+
+    QAction* toolboxExportAction = toolboxMenu_->addAction(
+        UiText::isChineseUi() ? QStringLiteral("视频导出") : QStringLiteral("Video Export")
+    );
+    connect(toolboxExportAction, &QAction::triggered, this, &MainWindow::onExportPreviewVideo);
+
+    QAction* toolboxBatchExportAction = toolboxMenu_->addAction(
+        UiText::isChineseUi() ? QStringLiteral("批量视频导出") : QStringLiteral("Batch Video Export")
+    );
+    connect(toolboxBatchExportAction, &QAction::triggered, this, &MainWindow::onBatchExportPreviewVideo);
+
+    toolboxMenu_->addSeparator();
+
+    QAction* toolboxLatencyAction = toolboxMenu_->addAction(
+        UiText::isChineseUi() ? QStringLiteral("BPM检测与偏移") : QStringLiteral("BPM & Offset")
+    );
+    connect(toolboxLatencyAction, &QAction::triggered, this, &MainWindow::onOpenLatencyDetector);
+    if (latencyDetectorAction_ != nullptr) {
+        toolboxLatencyAction->setEnabled(latencyDetectorAction_->isEnabled());
+        toolboxLatencyAction->setToolTip(latencyDetectorAction_->toolTip());
+        connect(latencyDetectorAction_, &QAction::changed, this, [this, toolboxLatencyAction]() {
+            if (latencyDetectorAction_ == nullptr || toolboxLatencyAction == nullptr) {
+                return;
+            }
+            toolboxLatencyAction->setEnabled(latencyDetectorAction_->isEnabled());
+            toolboxLatencyAction->setToolTip(latencyDetectorAction_->toolTip());
+        });
+    }
+
     addDockWidget(Qt::LeftDockWidgetArea, outlineDock);
     outlineDock->setMinimumWidth(190);
     outlineDock->setMaximumWidth(190);
@@ -1353,6 +1407,7 @@ MainWindow::MainWindow(QWidget* parent)
         scheduleWrappedListRelayout(errorList_);
         scheduleWrappedListRelayout(muriList_);
     });
+
     updateBottomTabsDeviceHeight();
     logStartupStage("timeline_and_tabs_ready");
 

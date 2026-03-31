@@ -1106,6 +1106,17 @@ void MainWindow::rebuildFieldSidebar()
         );
         addItem->setData(Qt::UserRole, "add");
     }
+    auto* toolboxItem = new QListWidgetItem(
+        makeToolboxAccessIcon(UiTheme::colors().iconPrimary, QColor(QStringLiteral("#E6B84A"))),
+        UiText::isChineseUi() ? QStringLiteral("工具箱") : QStringLiteral("Toolbox"),
+        outlineList_
+    );
+    toolboxItem->setData(Qt::UserRole, "toolbox");
+    toolboxItem->setToolTip(
+        UiText::isChineseUi()
+            ? QStringLiteral("打开工具箱：无理检测 / 视频导出 / BPM检测与偏移")
+            : QStringLiteral("Open toolbox: Muri Check / Video Export / BPM & Offset")
+    );
     if (activeOutlineKey_ == QLatin1String("metadata")) {
         selectedItem = metadataItem;
     }
