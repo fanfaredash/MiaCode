@@ -341,6 +341,9 @@ QJsonObject jsonFromStaticReferenceNote(const MuriStaticReferenceNote& note)
     if (note.slideTraceSecond >= 0.0) {
         item.insert(QStringLiteral("slide_trace_second"), note.slideTraceSecond);
     }
+    if (!note.slideTrackKey.isEmpty()) {
+        item.insert(QStringLiteral("slide_track_key"), note.slideTrackKey);
+    }
     if (!note.pad.isEmpty()) {
         item.insert(QStringLiteral("pad"), note.pad);
     }

@@ -135,6 +135,7 @@ Implication:
 - New export settings must be added on both serialization and deserialization sides.
 - Worker protocol changes must be reflected in both `main.cpp` and MainWindow worker-event handling.
 - `snapshot.outputPath` should already be the final `.mp4` path by the time the worker starts; `MainWindow` resolves missing suffixes and duplicate-name fallbacks before launching the worker so completion UI and worker results can treat it as authoritative.
+- Static Muri thresholds that affect analyzer timing, such as the tap-on-slide threshold, must also cross this boundary; otherwise preview-time diagnostics and export-time overlays will drift.
 
 ## 8. Shared Render State Flows Through Preview And Export
 
@@ -155,6 +156,11 @@ Shared render settings include:
 - chart-review judge overlay toggles for slide/wifi-family and tap/hold-family effects
 - timestamp/object-stats HUD flags
 - Muri render options
+
+Muri warning/render note:
+
+- `RenderMode::Native` chart-review overlays should stay parser-timed; do not retime them from Muri warning metadata.
+- `RenderMode::MaimuriDxStyle` simple-note Muri overlays may still use analyzer timing metadata to switch the rendered simple effect between early-`GOOD` and early-`PERFECT`.
 
 Owners:
 
@@ -193,8 +199,13 @@ Implication:
   - Check `PreviewCanvas.cpp`
   - Check `VideoExportController.cpp` diagnostics and timeline assumptions
 - Change Muri static thresholds:
-  - Check `MuriStaticChecker.h`
+  - Check `MuriConfig.h`
   - Check any UI or settings entry that surfaces the threshold
+  - Check `VideoExportSnapshot.cpp` and `VideoExportController.cpp` so export keeps the same analyzer threshold as preview
+- Change Muri list anchoring or overlap dedupe:
+  - Check `MuriPanelEntries.cpp`
+  - Check `MainWindow.ValidationFlow.cpp`
+  - Check `MuriSpec.cpp`
 
 ## Update This File When
 

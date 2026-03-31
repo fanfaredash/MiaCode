@@ -13,6 +13,7 @@
 #include "simai/transform/ChartBatchTransform.h"
 #include "tools/latency/LatencyDetectorDialog.h"
 #include "tools/muri/MuriAnalyzer.h"
+#include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
 #include "tools/video_export/VideoExportDialog.h"
 #include "tools/video_export/BatchVideoExportDialog.h"
@@ -31,6 +32,7 @@
 #include <QAbstractScrollArea>
 #include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QCloseEvent>
 #include <QColor>
 #include <QComboBox>
@@ -4106,6 +4108,7 @@ void MainWindow::onExportPreviewVideo()
     task.noteMarkers = previewStatsNoteMarkers_;
     task.muriAnalysisReport = muriAnalysisReport_;
     task.muriRenderOptions = muriRenderOptions_;
+    task.staticTapOnSlideThresholdSeconds = static_cast<double>(staticTapOnSlideThresholdMs_) / 1000.0;
     task.audioSettings = previewAudioSettings_;
     task.backgroundBrightnessOuter = previewBackgroundBrightnessOuter_;
     task.backgroundBrightnessInner = previewBackgroundBrightnessInner_;
@@ -4334,6 +4337,7 @@ void MainWindow::onBatchExportPreviewVideo()
     task.noteMarkers = previewStatsNoteMarkers_;
     task.muriAnalysisReport = muriAnalysisReport_;
     task.muriRenderOptions = muriRenderOptions_;
+    task.staticTapOnSlideThresholdSeconds = static_cast<double>(staticTapOnSlideThresholdMs_) / 1000.0;
     task.audioSettings = previewAudioSettings_;
     task.backgroundBrightnessOuter = previewBackgroundBrightnessOuter_;
     task.backgroundBrightnessInner = previewBackgroundBrightnessInner_;
@@ -4644,6 +4648,7 @@ bool MainWindow::buildVideoExportSnapshot(
     built.backgroundScaleMode = requestedTask.backgroundScaleMode;
     built.noteFlowSpeed = requestedTask.noteFlowSpeed;
     built.muriRenderOptions = requestedTask.muriRenderOptions;
+    built.staticTapOnSlideThresholdSeconds = requestedTask.staticTapOnSlideThresholdSeconds;
     built.exportStartSeconds = requestedTask.exportStartSeconds;
     built.contentDurationSeconds = requestedTask.contentDurationSeconds;
     built.outputWidth = requestedTask.outputWidth;
@@ -4833,6 +4838,7 @@ bool MainWindow::buildVideoExportSnapshotForChartDirectory(
     built.backgroundScaleMode = requestedTask.backgroundScaleMode;
     built.noteFlowSpeed = requestedTask.noteFlowSpeed;
     built.muriRenderOptions = requestedTask.muriRenderOptions;
+    built.staticTapOnSlideThresholdSeconds = requestedTask.staticTapOnSlideThresholdSeconds;
     built.exportStartSeconds = 0.0;
     built.contentDurationSeconds = contentDurationSeconds;
     built.outputWidth = requestedTask.outputWidth;
@@ -5608,6 +5614,7 @@ bool MainWindow::exportPreviewVideoFromCli(
     task.noteMarkers = previewStatsNoteMarkers_;
     task.muriAnalysisReport = muriAnalysisReport_;
     task.muriRenderOptions = muriRenderOptions_;
+    task.staticTapOnSlideThresholdSeconds = static_cast<double>(staticTapOnSlideThresholdMs_) / 1000.0;
     task.audioSettings = previewAudioSettings_;
     task.backgroundBrightnessOuter = request.backgroundBrightnessOuter;
     task.backgroundBrightnessInner = request.backgroundBrightnessInner;

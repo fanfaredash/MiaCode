@@ -1,5 +1,7 @@
 ﻿namespace {
 
+using miacode::muri::MuriPanelEntry;
+
 constexpr int kIssueLineRole = Qt::UserRole;
 constexpr int kIssueColRole = Qt::UserRole + 1;
 constexpr int kIssueAuxRole = Qt::UserRole + 2;
@@ -17,21 +19,6 @@ struct ValidationMessageParts {
     QString body;
     ValidationSeverityLevel severity = ValidationSeverityLevel::Error;
 };
-
-bool keepDenseOverlapUiIssue(MuriKind kind, double second, QHash<qint64, int>* keptOverlapCountBySecond)
-{
-    if (kind != MuriKind::Overlap || keptOverlapCountBySecond == nullptr) {
-        return true;
-    }
-
-    const qint64 secondKey = qRound64(second * 1000000.0);
-    const int keptCount = keptOverlapCountBySecond->value(secondKey, 0);
-    if (keptCount >= 2) {
-        return false;
-    }
-    keptOverlapCountBySecond->insert(secondKey, keptCount + 1);
-    return true;
-}
 
 QString issueTypeSegment(const QString& text)
 {
@@ -118,6 +105,260 @@ QString muriIssueTypeKey(MuriKind kind)
     return QStringLiteral("muri:%1").arg(static_cast<int>(kind));
 }
 
+struct WrappedListEntryText {
+    QString html;
+    QString plainText;
+};
+
+QString muriLocationText(int line, int col)
+{
+    return QStringLiteral("L%1C%2").arg(qMax(1, line)).arg(qMax(1, col));
+}
+
+QString localizeMuriDetail(QString rawDetail, bool chineseUi)
+{
+    rawDetail = rawDetail.trimmed();
+    if (!chineseUi || rawDetail.isEmpty()) {
+        return rawDetail;
+    }
+
+    const auto unwrap = [](const QString& text, const QString& prefix, const QString& suffix, QString* middle) {
+        if (middle == nullptr || !text.startsWith(prefix) || !text.endsWith(suffix)) {
+            return false;
+        }
+        *middle = text.mid(prefix.size(), text.size() - prefix.size() - suffix.size()).trimmed();
+        return true;
+    };
+    const auto trimTrailingPeriod = [](QString text) {
+        text = text.trimmed();
+        if (text.endsWith(QLatin1Char('.'))) {
+            text.chop(1);
+        }
+        return text.trimmed();
+    };
+    const auto splitText = [](const QString& text, const QString& separator, QString* left, QString* right) {
+        if (left == nullptr || right == nullptr) {
+            return false;
+        }
+        const int splitIndex = text.indexOf(separator);
+        if (splitIndex < 0) {
+            return false;
+        }
+        *left = text.left(splitIndex).trimmed();
+        *right = text.mid(splitIndex + separator.size()).trimmed();
+        return !left->isEmpty() && !right->isEmpty();
+    };
+    const auto splitGapText =
+        [&trimTrailingPeriod](const QString& text,
+                              const QString& separator,
+                              QString* left,
+                              QString* right,
+                              QString* gapText) {
+            if (left == nullptr || right == nullptr || gapText == nullptr) {
+                return false;
+            }
+            const int splitIndex = text.indexOf(separator);
+            const int gapIndex = text.lastIndexOf(QStringLiteral(", gap "));
+            if (splitIndex < 0 || gapIndex < 0 || gapIndex <= splitIndex) {
+                return false;
+            }
+            *left = text.left(splitIndex).trimmed();
+            *right =
+                text.mid(splitIndex + separator.size(), gapIndex - splitIndex - separator.size()).trimmed();
+            *gapText = trimTrailingPeriod(text.mid(gapIndex + QStringLiteral(", gap ").size()));
+            return !left->isEmpty() && !right->isEmpty() && gapText->endsWith(QStringLiteral(" ms"));
+        };
+    const auto splitSingleGapText =
+        [&trimTrailingPeriod](const QString& text,
+                              const QString& separator,
+                              QString* left,
+                              QString* gapText) {
+            if (left == nullptr || gapText == nullptr) {
+                return false;
+            }
+            const int splitIndex = text.indexOf(separator);
+            if (splitIndex < 0) {
+                return false;
+            }
+            *left = text.left(splitIndex).trimmed();
+            *gapText = trimTrailingPeriod(text.mid(splitIndex + separator.size()));
+            return !left->isEmpty() && gapText->endsWith(QStringLiteral(" ms"));
+        };
+
+    QString middle;
+    QString left;
+    QString right;
+    QString gapText;
+    if (splitSingleGapText(
+            rawDetail,
+            QStringLiteral(" start will early-judge a following tap, gap "),
+            &left,
+            &gapText)) {
+        return QStringLiteral("%1 启动，会提前判定后续 tap，间隔 %2。").arg(left, gapText);
+    }
+    if (splitSingleGapText(
+            rawDetail,
+            QStringLiteral(" jump-start will early-judge a following tap, gap "),
+            &left,
+            &gapText)) {
+        return QStringLiteral("%1 偷跑，会提前判定后续 tap，间隔 %2。").arg(left, gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" tail may collide with "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 结尾可能撞到 %2，间隔 %3。").arg(left, right, gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" was early-judged by "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 被 %2 提前判定，间隔 %3。").arg(left, right, gapText);
+    }
+    if (rawDetail.endsWith(QStringLiteral(" resolved outside its critical window."))
+        || rawDetail.contains(QStringLiteral(" resolved outside its critical window, gap "))) {
+        const int splitIndex = rawDetail.indexOf(QStringLiteral(" resolved outside its critical window"));
+        if (splitIndex > 0) {
+            const QString target = rawDetail.left(splitIndex).trimmed();
+            const int gapIndex = rawDetail.lastIndexOf(QStringLiteral(", gap "));
+            if (gapIndex > splitIndex) {
+                gapText = trimTrailingPeriod(rawDetail.mid(gapIndex + QStringLiteral(", gap ").size()));
+                return QStringLiteral("%1 提前完成，间隔 %2。").arg(target, gapText);
+            }
+            return QStringLiteral("%1 的判定落在临界窗之外。").arg(target);
+        }
+    }
+    if (unwrap(rawDetail, QStringLiteral("Multi-touch formed by "), QStringLiteral("."), &middle)) {
+        return QStringLiteral("%1 构成多押。").arg(middle);
+    }
+    if (rawDetail.endsWith(QStringLiteral(" formed overlap."))
+        && splitText(
+            trimTrailingPeriod(rawDetail.left(rawDetail.size() - QStringLiteral(" formed overlap.").size())),
+            QStringLiteral(" and same-position "),
+            &left,
+            &right)) {
+        return QStringLiteral("%1 与相同位置的 %2 构成叠键。").arg(left, right);
+    }
+    if (rawDetail.endsWith(QStringLiteral(" formed overlap at the same position."))) {
+        const QString target = rawDetail.left(
+            rawDetail.size() - QStringLiteral(" formed overlap at the same position.").size()).trimmed();
+        if (!target.isEmpty()) {
+            return QStringLiteral("%1 在相同位置构成叠键。").arg(target);
+        }
+    }
+
+    if (unwrap(
+            rawDetail,
+            QStringLiteral("Slide-head trigger from "),
+            QStringLiteral(" early-judged this note."),
+            &middle)) {
+        return QStringLiteral("来自 %1 的滑键头触发提前判定了此物件。").arg(middle);
+    }
+    if (unwrap(
+            rawDetail,
+            QStringLiteral("Pad trigger from "),
+            QStringLiteral(" early-judged this note."),
+            &middle)) {
+        return QStringLiteral("来自 %1 的按下触发提前判定了此物件。").arg(middle);
+    }
+    if (unwrap(
+            rawDetail,
+            QStringLiteral("Runtime simple-note judge for "),
+            QStringLiteral(" missed the critical window and resolved as overlap."),
+            &middle)) {
+        return QStringLiteral("运行时普通物件判定 %1 错过了判定临界窗，并最终判为叠键。").arg(middle);
+    }
+    if (unwrap(
+            rawDetail,
+            QStringLiteral("Slide runtime judge for "),
+            QStringLiteral(" resolved outside its critical window."),
+            &middle)) {
+        return QStringLiteral("Slide 运行时判定 %1 落在判定临界窗之外。").arg(middle);
+    }
+    if (unwrap(
+            rawDetail,
+            QStringLiteral("Slide "),
+            QStringLiteral(" was cleared earlier than its normal judge timing."),
+            &middle)) {
+        return QStringLiteral("Slide %1 的完成时间早于正常判定时机。").arg(middle);
+    }
+    if (unwrap(
+            rawDetail,
+            QStringLiteral("Wifi runtime judge for "),
+            QStringLiteral(" resolved outside its critical window."),
+            &middle)) {
+        return QStringLiteral("Wifi 运行时判定 %1 落在判定临界窗之外。").arg(middle);
+    }
+    if (unwrap(
+            rawDetail,
+            QStringLiteral("Wifi "),
+            QStringLiteral(" was cleared earlier than its normal judge timing."),
+            &middle)) {
+        return QStringLiteral("Wifi %1 的完成时间早于正常判定时机。").arg(middle);
+    }
+
+    if (rawDetail.startsWith(QStringLiteral("Static reference from "))) {
+        const QString tail = rawDetail.mid(QStringLiteral("Static reference from ").size()).trimmed();
+        const int deltaIndex = tail.lastIndexOf(QStringLiteral(", Δ "));
+        if (deltaIndex >= 0 && tail.endsWith(QStringLiteral(" ms"))) {
+            const QString source = tail.left(deltaIndex).trimmed();
+            const QString deltaText = tail.mid(deltaIndex + QStringLiteral(", Δ ").size());
+            return QStringLiteral("静态参考：%1，Δ %2").arg(source, deltaText);
+        }
+        return QStringLiteral("静态参考：%1").arg(tail);
+    }
+
+    if (rawDetail.startsWith(QStringLiteral("Runtime hand actions formed "))) {
+        const QString tail = rawDetail.mid(QStringLiteral("Runtime hand actions formed ").size()).trimmed();
+        const QString marker = QStringLiteral("-hand multi-touch: ");
+        const int split = tail.indexOf(marker);
+        if (split > 0) {
+            const QString handCount = tail.left(split).trimmed();
+            const QString actions = tail.mid(split + marker.size()).trimmed();
+            return QStringLiteral("运行时手部动作形成了 %1 手多押：%2").arg(handCount, actions);
+        }
+    }
+
+    return rawDetail;
+}
+
+WrappedListEntryText buildMuriPanelEntryText(const MuriPanelEntry& entry, bool ignoredInHeader)
+{
+    const bool chineseUi = UiText::isChineseUi();
+    const ValidationSeverityLevel severity = entry.alertLevel == MuriAlertLevel::Warning
+        ? ValidationSeverityLevel::Warning
+        : ValidationSeverityLevel::Error;
+    const QColor summaryColor = ignoredInHeader
+        ? UiTheme::colors().textMuted
+        : severityColor(severity);
+    const QString alertText = QStringLiteral("[%1]").arg(muriAlertLevelDisplayName(entry.alertLevel, chineseUi));
+    const QString typeText = muriKindDisplayName(entry.kind, chineseUi);
+    const QString locationText = muriLocationText(entry.line, entry.col);
+    const QString detailText = localizeMuriDetail(entry.rawDetail, chineseUi).trimmed();
+    const QString summaryText = QStringLiteral("%1 %2 %3").arg(alertText, typeText, locationText);
+    QString contentHtml = QStringLiteral("<span style=\"font-weight:700;color:%1;\">%2</span>")
+                              .arg(summaryColor.name(QColor::HexRgb), summaryText.toHtmlEscaped());
+
+    WrappedListEntryText text;
+    if (!detailText.isEmpty()) {
+        contentHtml += QStringLiteral("<br/><span style=\"color:%1;\">%2</span>")
+                           .arg(
+                               (ignoredInHeader ? UiTheme::colors().textSecondary : UiTheme::colors().textPrimary)
+                                   .name(QColor::HexRgb),
+                               detailText.toHtmlEscaped());
+    }
+    text.html = QStringLiteral("<div style=\"line-height:128%; margin:1px 0;\">%1</div>").arg(contentHtml);
+
+    text.plainText = detailText.isEmpty()
+        ? summaryText
+        : QStringLiteral("%1\n%2").arg(summaryText, detailText);
+    return text;
+}
+
+int wrappedRichTextHeight(const QString& html, const QFont& font, int width)
+{
+    QTextDocument document;
+    document.setDocumentMargin(0.0);
+    document.setDefaultFont(font);
+    document.setHtml(html);
+    document.setTextWidth(qMax(1, width));
+    return qMax(1, qCeil(document.size().height()));
+}
+
 bool buildEditorSelectionCursor(PlainCodeEditor* editor, int line, int col, int endCol, QTextCursor* cursorOut)
 {
     if (editor == nullptr || editor->document() == nullptr || cursorOut == nullptr) {
@@ -188,7 +429,8 @@ QListWidgetItem* MainWindow::addWrappedListEntry(
 
     auto* rowWidget = new QWidget(list);
     auto* rowLayout = new QVBoxLayout(rowWidget);
-    rowLayout->setContentsMargins(0, 0, 0, 0);
+    const bool roomyLayout = (list == muriList_);
+    rowLayout->setContentsMargins(roomyLayout ? 4 : 0, roomyLayout ? 3 : 0, roomyLayout ? 4 : 0, roomyLayout ? 4 : 0);
     rowLayout->setSpacing(0);
     rowLayout->addWidget(label);
 
@@ -205,6 +447,10 @@ void MainWindow::relayoutWrappedListRows(QListWidget* list)
     }
 
     const int rowWidth = qMax(220, list->viewport()->width());
+    const bool roomyLayout = (list == muriList_);
+    const int horizontalMargin = roomyLayout ? 8 : 0;
+    const int verticalMargin = roomyLayout ? 7 : 2;
+    const int labelWidth = qMax(1, rowWidth - horizontalMargin);
     for (int index = 0; index < list->count(); ++index) {
         QListWidgetItem* item = list->item(index);
         if (item == nullptr) {
@@ -218,9 +464,13 @@ void MainWindow::relayoutWrappedListRows(QListWidget* list)
         if (label == nullptr) {
             continue;
         }
-        label->setFixedWidth(rowWidth);
-        label->adjustSize();
-        item->setSizeHint(QSize(rowWidth, qMax(24, label->sizeHint().height() - 2)));
+        label->setFixedWidth(labelWidth);
+        const int labelHeight = wrappedRichTextHeight(label->text(), label->font(), labelWidth);
+        label->setFixedHeight(labelHeight);
+        const int rowHeight = qMax(roomyLayout ? 40 : 28, labelHeight + verticalMargin);
+        rowWidget->setMinimumHeight(rowHeight);
+        rowWidget->setMaximumHeight(rowHeight);
+        item->setSizeHint(QSize(rowWidth, rowHeight));
     }
 }
 
@@ -361,21 +611,10 @@ void MainWindow::updateEditorValidationSummary()
             }
         }
     }
-    QHash<qint64, int> keptOverlapCountBySecond;
-    for (const MuriDiagnostic& diagnostic : muriAnalysisReport_.diagnostics) {
-        if (ignoredTypes.contains(muriIssueTypeKey(diagnostic.kind))) {
-            continue;
-        }
-        if (!keepDenseOverlapUiIssue(diagnostic.kind, diagnostic.second, &keptOverlapCountBySecond)) {
-            continue;
-        }
-        ++muriIssueCount;
-    }
-    for (const MuriStaticReference& reference : muriStaticReferences_) {
-        if (ignoredTypes.contains(muriIssueTypeKey(reference.kind))) {
-            continue;
-        }
-        if (!keepDenseOverlapUiIssue(reference.kind, reference.affected.second, &keptOverlapCountBySecond)) {
+    const QVector<MuriPanelEntry> muriEntries =
+        miacode::muri::buildVisibleMuriPanelEntries(muriAnalysisReport_, muriStaticReferences_);
+    for (const MuriPanelEntry& entry : muriEntries) {
+        if (ignoredTypes.contains(muriIssueTypeKey(entry.kind))) {
             continue;
         }
         ++muriIssueCount;
@@ -626,6 +865,19 @@ void MainWindow::showIssueListContextMenu(QListWidget* list, const QPoint& pos, 
     QMenu menu(this);
     styleRoundedMenu(menu);
 
+    QAction* copyAction = menu.addAction(
+        UiText::isChineseUi() ? QStringLiteral("复制信息") : QStringLiteral("Copy Info")
+    );
+    connect(copyAction, &QAction::triggered, this, [this, item]() {
+        const QString text = item->toolTip().trimmed();
+        QGuiApplication::clipboard()->setText(text);
+        if (statusBar() != nullptr) {
+            statusBar()->showMessage(
+                UiText::isChineseUi() ? QStringLiteral("已复制信息。") : QStringLiteral("Issue info copied.")
+            );
+        }
+    });
+
     QAction* jumpAction = menu.addAction(
         UiText::isChineseUi() ? QStringLiteral("跳转到源") : QStringLiteral("Jump to Source")
     );
@@ -635,21 +887,6 @@ void MainWindow::showIssueListContextMenu(QListWidget* list, const QPoint& pos, 
         } else {
             onErrorItemActivated(item);
         }
-    });
-
-    QAction* detailAction = menu.addAction(
-        UiText::isChineseUi() ? QStringLiteral("显示问题详情") : QStringLiteral("Show Issue Details")
-    );
-    connect(detailAction, &QAction::triggered, this, [this, item, issueTypeLabel]() {
-        QMessageBox dialog(this);
-        dialog.setIcon(QMessageBox::Information);
-        dialog.setWindowTitle(UiText::isChineseUi() ? QStringLiteral("提示详情") : QStringLiteral("Issue Details"));
-        dialog.setWindowIcon(windowIcon());
-        dialog.setText(issueTypeLabel.isEmpty() ? item->toolTip() : issueTypeLabel);
-        dialog.setInformativeText(item->toolTip());
-        dialog.setStandardButtons(QMessageBox::Ok);
-        UiDialogs::localizeMessageBox(&dialog);
-        dialog.exec();
     });
 
     if (!issueTypeKey.isEmpty()) {
@@ -693,60 +930,9 @@ void MainWindow::refreshMuriDiagnosticsPanel()
         return;
     }
 
-    struct MuriPanelEntry {
-        bool isStatic = false;
-        MuriKind kind = MuriKind::Overlap;
-        double second = 0.0;
-        int line = 1;
-        int col = 1;
-        QString detail;
-    };
-
-    QVector<MuriPanelEntry> entries;
-    entries.reserve(muriAnalysisReport_.diagnostics.size() + muriStaticReferences_.size());
-    QHash<qint64, int> keptOverlapCountBySecond;
-    for (const MuriDiagnostic& diagnostic : muriAnalysisReport_.diagnostics) {
-        if (!keepDenseOverlapUiIssue(diagnostic.kind, diagnostic.second, &keptOverlapCountBySecond)) {
-            continue;
-        }
-        MuriPanelEntry entry;
-        entry.kind = diagnostic.kind;
-        entry.second = diagnostic.second;
-        entry.line = diagnostic.line;
-        entry.col = diagnostic.col;
-        entry.detail = diagnostic.detail;
-        entries.append(entry);
-    }
-    for (const MuriStaticReference& reference : muriStaticReferences_) {
-        if (!keepDenseOverlapUiIssue(reference.kind, reference.affected.second, &keptOverlapCountBySecond)) {
-            continue;
-        }
-        MuriPanelEntry entry;
-        entry.isStatic = true;
-        entry.kind = reference.kind;
-        entry.second = reference.affected.second;
-        entry.line = reference.affected.line;
-        entry.col = reference.affected.col;
-        const QString causeText = QStringLiteral("L%1 C%2")
-            .arg(reference.cause.line)
-            .arg(reference.cause.col);
-        if (reference.hasDelta) {
-            entry.detail = UiText::isChineseUi()
-                ? QStringLiteral("静态参考  Δ %1 ms  原因 %2")
-                      .arg(QString::number(reference.deltaSecond * 1000.0, 'f', 1), causeText)
-                : QStringLiteral("Static reference  Δ %1 ms  Cause %2")
-                      .arg(QString::number(reference.deltaSecond * 1000.0, 'f', 1), causeText);
-        } else {
-            entry.detail = UiText::isChineseUi()
-                ? QStringLiteral("静态参考  原因 %1").arg(causeText)
-                : QStringLiteral("Static reference  Cause %1").arg(causeText);
-        }
-        entries.append(entry);
-    }
+    QVector<MuriPanelEntry> entries =
+        miacode::muri::buildVisibleMuriPanelEntries(muriAnalysisReport_, muriStaticReferences_);
     std::sort(entries.begin(), entries.end(), [](const MuriPanelEntry& a, const MuriPanelEntry& b) {
-        if (a.isStatic != b.isStatic) {
-            return !a.isStatic && b.isStatic;
-        }
         if (!qFuzzyCompare(a.second + 1.0, b.second + 1.0)) {
             return a.second < b.second;
         }
@@ -762,49 +948,12 @@ void MainWindow::refreshMuriDiagnosticsPanel()
     for (const MuriPanelEntry& entry : entries) {
         const QString issueTypeKey = muriIssueTypeKey(entry.kind);
         const bool ignoredInHeader = isIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey);
-        const QColor badgeColor = ignoredInHeader
-            ? UiTheme::colors().textMuted
-            : (entry.isStatic ? QColor(QStringLiteral("#C48A1A")) : QColor(QStringLiteral("#D45B5B")));
         const QString title = muriKindDisplayName(entry.kind, UiText::isChineseUi());
-        const QString badgeText = entry.isStatic
-            ? (UiText::isChineseUi() ? QStringLiteral("[静态无理]") : QStringLiteral("[Static Muri]"))
-            : (UiText::isChineseUi() ? QStringLiteral("[无理]") : QStringLiteral("[Muri]"));
-        const QString headerHtml = QStringLiteral(
-            "<span style=\"font-weight:700;color:%1;\">%2</span> "
-            "<span style=\"color:%3;\">%4</span>  "
-            "<span style=\"color:%5;\">L%6 C%7</span>"
-        )
-            .arg(
-                badgeColor.name(QColor::HexRgb),
-                badgeText.toHtmlEscaped(),
-                (ignoredInHeader ? UiTheme::colors().textSecondary : UiTheme::colors().textPrimary)
-                    .name(QColor::HexRgb),
-                title.toHtmlEscaped(),
-                UiTheme::colors().textSecondary.name(QColor::HexRgb),
-                QString::number(entry.line),
-                QString::number(entry.col)
-            );
-        const QString detailText = entry.detail.isEmpty() ? QString() : entry.detail;
-        const QString detailHtml = QStringLiteral("<br/><span style=\"color:%1;\">%2</span>")
-              .arg(
-                  (ignoredInHeader ? UiTheme::colors().textSecondary : UiTheme::colors().textPrimary)
-                      .name(QColor::HexRgb),
-                  detailText.toHtmlEscaped()
-              );
-        const QString plainText = detailText.isEmpty()
-            ? QStringLiteral("%1 %2 L%3 C%4")
-                  .arg(badgeText, title)
-                  .arg(entry.line)
-                  .arg(entry.col)
-            : QStringLiteral("%1 %2 L%3 C%4\n%5")
-                  .arg(badgeText, title)
-                  .arg(entry.line)
-                  .arg(entry.col)
-                  .arg(detailText);
+        const WrappedListEntryText text = buildMuriPanelEntryText(entry, ignoredInHeader);
         QListWidgetItem* item = addWrappedListEntry(
             muriList_,
-            headerHtml + detailHtml,
-            plainText,
+            text.html,
+            text.plainText,
             entry.line,
             entry.col,
             entry.second,

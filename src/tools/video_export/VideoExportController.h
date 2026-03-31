@@ -7,6 +7,7 @@
 #include "PreviewRenderSettings.h"
 #include "PreviewAudioSettings.h"
 #include "timeline/TimelineData.h"
+#include "common/MuriConfig.h"
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
 #include "common/PreviewVideoGeometryConfig.h"
@@ -24,6 +25,8 @@ struct VideoExportTask {
     QVector<TimelineNoteMarker> noteMarkers;
     MuriAnalysisReport muriAnalysisReport;
     MuriRenderOptions muriRenderOptions;
+    double staticTapOnSlideThresholdSeconds =
+        static_cast<double>(miacode::muri::kStaticTapOnSlideThresholdDefaultMs) / 1000.0;
     PreviewAudioSettings audioSettings;
     double backgroundBrightnessOuter = miacode::preview_video::kBackgroundBrightnessDefault;
     double backgroundBrightnessInner = miacode::preview_video::kBackgroundBrightnessInnerDefault;

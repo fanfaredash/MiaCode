@@ -23,6 +23,7 @@ struct PadWindowIndex {
 
 struct MarkerSourceRef {
     int order = -1;
+    double second = 0.0;
     int line = 1;
     int col = 1;
     QString type;
@@ -153,6 +154,14 @@ struct CoveringCircle {
     bool valid = false;
 };
 
+struct DiagnosticAnchor {
+    bool valid = false;
+    double second = 0.0;
+    int order = std::numeric_limits<int>::max();
+    int line = 1;
+    int col = 1;
+};
+
 QVector<MuriDiagnostic> dedupeDenseOverlapDiagnostics(const QVector<MuriDiagnostic>& diagnostics)
 {
     QVector<MuriDiagnostic> deduped;
@@ -169,7 +178,7 @@ QVector<MuriDiagnostic> dedupeDenseOverlapDiagnostics(const QVector<MuriDiagnost
 
         const qint64 secondKey = static_cast<qint64>(std::llround(diagnostic.second * 1000000.0));
         const int keptCount = keptOverlapCountBySecond.value(secondKey, 0);
-        if (keptCount >= 2) {
+        if (keptCount >= 1) {
             continue;
         }
         keptOverlapCountBySecond.insert(secondKey, keptCount + 1);
@@ -490,6 +499,350 @@ QString slideHeadPad(int lane)
         return QString();
     }
     return QStringLiteral("A%1").arg(lane);
+}
+
+QString normalizedPadToken(const QString& pad)
+{
+    return pad.trimmed().toUpper();
+}
+
+bool diagnosticAnchorComesBefore(const DiagnosticAnchor& left, const DiagnosticAnchor& right)
+{
+    if (!left.valid) {
+        return false;
+    }
+    if (!right.valid) {
+        return true;
+    }
+    if (left.second + kPadTimeEpsilon < right.second) {
+        return true;
+    }
+    if (right.second + kPadTimeEpsilon < left.second) {
+        return false;
+    }
+    if (left.order != right.order) {
+        return left.order < right.order;
+    }
+    if (left.line != right.line) {
+        return left.line < right.line;
+    }
+    return left.col < right.col;
+}
+
+DiagnosticAnchor earlierDiagnosticAnchor(const DiagnosticAnchor& first, const DiagnosticAnchor& second)
+{
+    return diagnosticAnchorComesBefore(second, first) ? second : first;
+}
+
+DiagnosticAnchor diagnosticAnchorFromMarkerSourceRef(const MarkerSourceRef& ref)
+{
+    DiagnosticAnchor anchor;
+    anchor.valid = ref.order >= 0;
+    anchor.second = qMax(0.0, ref.second);
+    anchor.order = ref.order >= 0 ? ref.order : std::numeric_limits<int>::max();
+    anchor.line = ref.line;
+    anchor.col = ref.col;
+    return anchor;
+}
+
+DiagnosticAnchor diagnosticAnchorFromMarker(const TimelineNoteMarker& marker)
+{
+    DiagnosticAnchor anchor;
+    anchor.valid = true;
+    anchor.second = qMax(0.0, marker.second);
+    anchor.order = marker.parseOrder >= 0 ? marker.parseOrder : std::numeric_limits<int>::max();
+    anchor.line = marker.sourceLine;
+    anchor.col = marker.sourceCol;
+    return anchor;
+}
+
+DiagnosticAnchor diagnosticAnchorFromNote(const JudgeableSimpleNote& note)
+{
+    DiagnosticAnchor anchor;
+    anchor.valid = true;
+    anchor.second = qMax(0.0, note.momentSecond);
+    anchor.order = note.order >= 0 ? note.order : std::numeric_limits<int>::max();
+    anchor.line = note.line;
+    anchor.col = note.col;
+    return anchor;
+}
+
+DiagnosticAnchor diagnosticAnchorFromAction(const RuntimeHandAction& action)
+{
+    DiagnosticAnchor anchor;
+    anchor.valid = true;
+    anchor.second = qMax(0.0, action.startSecond);
+    anchor.order = action.order >= 0 ? action.order : std::numeric_limits<int>::max();
+    anchor.line = action.line;
+    anchor.col = action.col;
+    return anchor;
+}
+
+QString slideLikeDisplayKey(const TimelineNoteMarker& marker)
+{
+    const QString trackKey = marker.slideTrackKey.trimmed();
+    if (!trackKey.isEmpty()) {
+        return trackKey;
+    }
+    return QStringLiteral("%1->%2").arg(marker.lane).arg(marker.endLane);
+}
+
+QString noteTypeDisplayLabel(const QString& type)
+{
+    const QString normalized = type.trimmed().toLower();
+    if (normalized.isEmpty() || normalized == QLatin1String("tap")) {
+        return QStringLiteral("tap");
+    }
+    if (normalized == QLatin1String("hold")) {
+        return QStringLiteral("hold");
+    }
+    if (normalized == QLatin1String("touch")) {
+        return QStringLiteral("touch");
+    }
+    if (normalized == QLatin1String("touch_hold")) {
+        return QStringLiteral("touch-hold");
+    }
+    if (normalized == QLatin1String("slide")) {
+        return QStringLiteral("slide");
+    }
+    if (normalized == QLatin1String("wifi")) {
+        return QStringLiteral("wifi");
+    }
+    if (normalized == QLatin1String("touch_group")) {
+        return QStringLiteral("touch");
+    }
+    return normalized;
+}
+
+QString formatMarkerConfigLabel(const TimelineNoteMarker& marker, bool slideHead = false)
+{
+    Q_UNUSED(slideHead);
+    if (marker.type == QLatin1String("tap")) {
+        return QStringLiteral("tap %1").arg(marker.lane);
+    }
+    if (marker.type == QLatin1String("hold")) {
+        return QStringLiteral("hold %1").arg(marker.lane);
+    }
+    if (marker.type == QLatin1String("touch")) {
+        const QString pad = normalizedPadToken(marker.touchPad);
+        return pad.isEmpty() ? QStringLiteral("touch") : QStringLiteral("touch %1").arg(pad);
+    }
+    if (marker.type == QLatin1String("touch_hold")) {
+        const QString pad = normalizedPadToken(marker.touchPad);
+        return pad.isEmpty() ? QStringLiteral("touch-hold") : QStringLiteral("touch-hold %1").arg(pad);
+    }
+    if (marker.type == QLatin1String("slide")) {
+        return QStringLiteral("slide %1").arg(slideLikeDisplayKey(marker));
+    }
+    if (marker.type == QLatin1String("wifi")) {
+        return QStringLiteral("wifi %1").arg(slideLikeDisplayKey(marker));
+    }
+    return marker.type;
+}
+
+QHash<QString, const TimelineNoteMarker*> buildMarkerLookup(const QVector<TimelineNoteMarker>& noteMarkers)
+{
+    QHash<QString, const TimelineNoteMarker*> lookup;
+    lookup.reserve(noteMarkers.size());
+    for (const TimelineNoteMarker& marker : noteMarkers) {
+        lookup.insert(makeMarkerAnalysisKey(marker), &marker);
+    }
+    return lookup;
+}
+
+QHash<QString, QString> buildMarkerConfigLabels(const QVector<TimelineNoteMarker>& noteMarkers)
+{
+    QHash<QString, QString> labels;
+    labels.reserve(noteMarkers.size() * 2);
+
+    for (const TimelineNoteMarker& marker : noteMarkers) {
+        labels.insert(makeMarkerAnalysisKey(marker), formatMarkerConfigLabel(marker));
+        if (!shouldEmitSyntheticSlideHeadStar(marker, noteMarkers)) {
+            continue;
+        }
+        labels.insert(slideHeadStarMarkerKey(marker), formatMarkerConfigLabel(marker, true));
+    }
+
+    return labels;
+}
+
+QString markerConfigLabelForKey(
+    const QHash<QString, QString>& markerConfigLabels,
+    const QString& markerKey,
+    const QString& fallbackType)
+{
+    const QString label = markerConfigLabels.value(markerKey).trimmed();
+    if (!label.isEmpty()) {
+        return label;
+    }
+    return fallbackType.trimmed().isEmpty() ? QStringLiteral("source note") : fallbackType.trimmed();
+}
+
+int judgeTickForPadActiveStart(double second);
+
+QString slideStartLookupKey(int lane, double second)
+{
+    return QStringLiteral("%1|%2").arg(lane).arg(judgeTickForPadActiveStart(second));
+}
+
+QHash<QString, QString> buildSyntheticSlideHeadOwnerKeys(const QVector<TimelineNoteMarker>& noteMarkers)
+{
+    QHash<QString, QString> ownerKeys;
+    ownerKeys.reserve(noteMarkers.size());
+    for (const TimelineNoteMarker& marker : noteMarkers) {
+        if (!shouldEmitSyntheticSlideHeadStar(marker, noteMarkers)) {
+            continue;
+        }
+        ownerKeys.insert(slideHeadStarMarkerKey(marker), makeMarkerAnalysisKey(marker));
+    }
+    return ownerKeys;
+}
+
+QSet<QString> buildSlideKeysWithTapOnSlideHead(const QVector<TimelineNoteMarker>& noteMarkers)
+{
+    QHash<QString, QVector<QString>> slideKeysByStart;
+    slideKeysByStart.reserve(noteMarkers.size());
+
+    for (const TimelineNoteMarker& marker : noteMarkers) {
+        if (!isSlideLike(marker) || marker.slideTraceSecond < 0.0) {
+            continue;
+        }
+        slideKeysByStart[slideStartLookupKey(marker.lane, marker.slideTraceSecond)].append(makeMarkerAnalysisKey(marker));
+    }
+
+    QSet<QString> slideKeys;
+    slideKeys.reserve(noteMarkers.size());
+    for (const TimelineNoteMarker& marker : noteMarkers) {
+        if (marker.type != QLatin1String("tap") || !marker.slideHead) {
+            continue;
+        }
+        const QVector<QString> matchingSlideKeys = slideKeysByStart.value(slideStartLookupKey(marker.lane, marker.second));
+        for (const QString& slideKey : matchingSlideKeys) {
+            slideKeys.insert(slideKey);
+        }
+    }
+    return slideKeys;
+}
+
+QString slideStartOwnerKeyForSource(
+    const QString& sourceMarkerKey,
+    const QHash<QString, QString>& syntheticSlideHeadOwnerKeys)
+{
+    return syntheticSlideHeadOwnerKeys.value(sourceMarkerKey, sourceMarkerKey);
+}
+
+DiagnosticAnchor diagnosticAnchorForMarkerKey(
+    const QString& sourceMarkerKey,
+    const QHash<QString, MarkerSourceRef>& markerRefs,
+    const QHash<QString, QString>& syntheticSlideHeadOwnerKeys)
+{
+    if (sourceMarkerKey.isEmpty()) {
+        return DiagnosticAnchor();
+    }
+
+    const QString ownerKey = slideStartOwnerKeyForSource(sourceMarkerKey, syntheticSlideHeadOwnerKeys);
+    const auto it = markerRefs.constFind(ownerKey);
+    if (it == markerRefs.constEnd()) {
+        return DiagnosticAnchor();
+    }
+    return diagnosticAnchorFromMarkerSourceRef(it.value());
+}
+
+DiagnosticAnchor diagnosticAnchorForCause(
+    const RuntimePadEvent& cause,
+    const QHash<QString, MarkerSourceRef>& markerRefs,
+    const QHash<QString, QString>& syntheticSlideHeadOwnerKeys)
+{
+    DiagnosticAnchor anchor =
+        diagnosticAnchorForMarkerKey(cause.sourceMarkerKey, markerRefs, syntheticSlideHeadOwnerKeys);
+    if (anchor.valid) {
+        return anchor;
+    }
+    if (cause.second < 0.0) {
+        return DiagnosticAnchor();
+    }
+
+    anchor.valid = true;
+    anchor.second = qMax(0.0, cause.second);
+    anchor.order = cause.sourceOrder >= 0 ? cause.sourceOrder : std::numeric_limits<int>::max();
+    anchor.line = cause.line;
+    anchor.col = cause.col;
+    return anchor;
+}
+
+QString markerConfigLabelForSource(
+    const QHash<QString, QString>& markerConfigLabels,
+    const QHash<QString, QString>& syntheticSlideHeadOwnerKeys,
+    const QString& markerKey,
+    const QString& fallbackType)
+{
+    return markerConfigLabelForKey(
+        markerConfigLabels,
+        slideStartOwnerKeyForSource(markerKey, syntheticSlideHeadOwnerKeys),
+        fallbackType);
+}
+
+QString formatMultiTouchActionLabel(
+    const RuntimeHandAction& action,
+    const QHash<QString, const TimelineNoteMarker*>& markerLookup,
+    const QHash<QString, QString>& syntheticSlideHeadOwnerKeys)
+{
+    const QString ownerKey = syntheticSlideHeadOwnerKeys.value(action.markerKey);
+    const QString effectiveKey = ownerKey.isEmpty() ? action.markerKey : ownerKey;
+    const auto it = markerLookup.constFind(effectiveKey);
+    if (it != markerLookup.constEnd() && it.value() != nullptr) {
+        const TimelineNoteMarker& marker = *it.value();
+        if (!ownerKey.isEmpty() || marker.type == QLatin1String("tap")) {
+            return QStringLiteral("tap %1").arg(marker.lane);
+        }
+        return formatMarkerConfigLabel(marker);
+    }
+
+    const QString fallbackType = noteTypeDisplayLabel(action.sourceType);
+    return fallbackType.isEmpty() ? QStringLiteral("note") : fallbackType;
+}
+
+bool sourceTypeIsTouchLike(const QString& sourceType)
+{
+    const QString normalized = sourceType.trimmed().toLower();
+    return normalized == QLatin1String("touch")
+        || normalized == QLatin1String("touch_hold")
+        || normalized == QLatin1String("touch_group");
+}
+
+double slideStartSecondForSource(
+    const RuntimePadEvent& cause,
+    const QHash<QString, const TimelineNoteMarker*>& markerLookup,
+    const QHash<QString, QString>& syntheticSlideHeadOwnerKeys)
+{
+    const QString ownerKey = slideStartOwnerKeyForSource(cause.sourceMarkerKey, syntheticSlideHeadOwnerKeys);
+    const auto it = markerLookup.constFind(ownerKey);
+    if (it != markerLookup.constEnd()
+        && it.value() != nullptr
+        && isSlideLike(*it.value())
+        && it.value()->slideTraceSecond >= 0.0) {
+        return it.value()->slideTraceSecond;
+    }
+    return cause.second;
+}
+
+MuriAlertLevel slideHeadTapAlertLevel(bool hasTapOnSlideHead, double gapSecond)
+{
+    if (!hasTapOnSlideHead
+        && gapSecond > kPadTimeEpsilon
+        && gapSecond <= miacode::muri::kSlideHeadTapWarningCutoffSeconds + kPadTimeEpsilon) {
+        return MuriAlertLevel::Warning;
+    }
+    return MuriAlertLevel::Muri;
+}
+
+MuriAlertLevel tapOnSlideAlertLevel(double gapSecond, double thresholdSecond)
+{
+    if (gapSecond > miacode::muri::kTapOnSlideWarningCutoffSeconds + kPadTimeEpsilon
+        && gapSecond <= thresholdSecond + kPadTimeEpsilon) {
+        return MuriAlertLevel::Warning;
+    }
+    return MuriAlertLevel::Muri;
 }
 
 QString notePad(const TimelineNoteMarker& marker)
@@ -939,6 +1292,7 @@ MarkerMuriState buildWifiState(const TimelineNoteMarker& marker)
     for (const MuriPadTimeEntry& entry : marker.wifiPadEnterTimes) {
         expectedCompleted = qMax(expectedCompleted, marker.slideTraceSecond + entry.proportion * durationSecond);
     }
+    state.wifiExpectedCompletedSecond = expectedCompleted;
     state.wifiCompletedSecond = expectedCompleted;
     state.wifiCriticalSecond = marker.slideTraceSecond + marker.wifiCriticalProportion * durationSecond;
     const double criticalDeltaSecond = slideCriticalDeltaSecond(
@@ -1132,19 +1486,23 @@ void buildOverlayActions(
 void addDiagnostic(
     QVector<MuriDiagnostic>* diagnostics,
     MuriKind kind,
+    MuriAlertLevel alertLevel,
     double second,
     const TimelineNoteMarker& marker,
     const QString& markerKey,
-    const QString& detail)
+    const QString& detail,
+    const DiagnosticAnchor& anchor = DiagnosticAnchor())
 {
     if (diagnostics == nullptr) {
         return;
     }
     MuriDiagnostic diagnostic;
     diagnostic.kind = kind;
+    diagnostic.alertLevel = alertLevel;
     diagnostic.second = qMax(0.0, second);
-    diagnostic.line = marker.sourceLine;
-    diagnostic.col = marker.sourceCol;
+    diagnostic.anchorSecond = anchor.valid ? qMax(0.0, anchor.second) : diagnostic.second;
+    diagnostic.line = anchor.valid ? anchor.line : marker.sourceLine;
+    diagnostic.col = anchor.valid ? anchor.col : marker.sourceCol;
     diagnostic.markerKey = markerKey;
     diagnostic.title = muriKindDisplayName(kind, true);
     diagnostic.detail = detail;
@@ -1154,18 +1512,22 @@ void addDiagnostic(
 void addSimpleNoteDiagnostic(
     QVector<MuriDiagnostic>* diagnostics,
     MuriKind kind,
+    MuriAlertLevel alertLevel,
     double second,
     const JudgeableSimpleNote& note,
-    const QString& detail)
+    const QString& detail,
+    const DiagnosticAnchor& anchor = DiagnosticAnchor())
 {
     if (diagnostics == nullptr) {
         return;
     }
     MuriDiagnostic diagnostic;
     diagnostic.kind = kind;
+    diagnostic.alertLevel = alertLevel;
     diagnostic.second = qMax(0.0, second);
-    diagnostic.line = note.line;
-    diagnostic.col = note.col;
+    diagnostic.anchorSecond = anchor.valid ? qMax(0.0, anchor.second) : diagnostic.second;
+    diagnostic.line = anchor.valid ? anchor.line : note.line;
+    diagnostic.col = anchor.valid ? anchor.col : note.col;
     diagnostic.markerKey = note.markerKey;
     diagnostic.title = muriKindDisplayName(kind, true);
     diagnostic.detail = detail;
@@ -1174,7 +1536,8 @@ void addSimpleNoteDiagnostic(
 
 void addSimpleJudgeSpriteEvent(
     QVector<MuriJudgeSpriteEvent>* judgeSpriteEvents,
-    const JudgeableSimpleNote& note)
+    const JudgeableSimpleNote& note,
+    MuriSimpleJudgeEffect simpleEffect = MuriSimpleJudgeEffect::Good)
 {
     if (judgeSpriteEvents == nullptr || !note.judged || !note.judgeBad || note.pad.isEmpty()) {
         return;
@@ -1182,6 +1545,7 @@ void addSimpleJudgeSpriteEvent(
 
     MuriJudgeSpriteEvent event;
     event.kind = MuriJudgeSpriteKind::Simple;
+    event.simpleEffect = simpleEffect;
     event.second = qMax(0.0, note.judgeSecond);
     event.spawnSecond = event.second;
     if (note.marker != nullptr
@@ -1247,6 +1611,7 @@ QHash<QString, MarkerSourceRef> buildMarkerSourceRefs(const QVector<TimelineNote
         const TimelineNoteMarker& marker = noteMarkers.at(index);
         MarkerSourceRef ref;
         ref.order = marker.parseOrder >= 0 ? marker.parseOrder : index;
+        ref.second = marker.second;
         ref.line = marker.sourceLine;
         ref.col = marker.sourceCol;
         ref.type = marker.type;
@@ -1265,6 +1630,7 @@ QHash<QString, MarkerSourceRef> buildMarkerSourceRefs(const QVector<TimelineNote
         MarkerSourceRef helperRef = refs.value(helperKey);
         if (helperRef.order < 0 || ref.order < helperRef.order) {
             helperRef.order = ref.order;
+            helperRef.second = marker.second;
             helperRef.line = marker.sourceLine;
             helperRef.col = slideHeadStarSourceCol(marker);
             helperRef.type = QStringLiteral("tap");
@@ -3146,6 +3512,95 @@ void applyRuntimeJudgeResultToState(const RuntimeSlideJudgeResult& result, Marke
     state->flashSecond = result.judgeBad ? result.judgeSecond : -1.0;
 }
 
+struct EarlyJudgeCauseInfo {
+    bool valid = false;
+    double second = -1.0;
+    QString markerKey;
+    QString causeType;
+};
+
+void updateLatestEarlyJudgeCause(const MuriCheckpointState& checkpoint, EarlyJudgeCauseInfo* latestCause)
+{
+    if (latestCause == nullptr
+        || checkpoint.second < 0.0
+        || checkpoint.cause != AreaJudgeCause::Other
+        || checkpoint.causeMarkerKey.isEmpty()) {
+        return;
+    }
+
+    if (!latestCause->valid || checkpoint.second > latestCause->second + kPadTimeEpsilon) {
+        latestCause->valid = true;
+        latestCause->second = checkpoint.second;
+        latestCause->markerKey = checkpoint.causeMarkerKey;
+        latestCause->causeType = checkpoint.causeType;
+    }
+}
+
+EarlyJudgeCauseInfo latestEarlyJudgeCauseForState(const MarkerMuriState& state)
+{
+    EarlyJudgeCauseInfo latestCause;
+    for (const MuriSegmentState& segment : state.slideSegments) {
+        for (const QVector<MuriCheckpointState>& area : segment.areaCheckpoints) {
+            for (const MuriCheckpointState& checkpoint : area) {
+                updateLatestEarlyJudgeCause(checkpoint, &latestCause);
+            }
+        }
+    }
+    for (const QVector<QVector<MuriCheckpointState>>& laneAreas : state.wifiLaneAreas) {
+        for (const QVector<MuriCheckpointState>& area : laneAreas) {
+            for (const MuriCheckpointState& checkpoint : area) {
+                updateLatestEarlyJudgeCause(checkpoint, &latestCause);
+            }
+        }
+    }
+    return latestCause;
+}
+
+DiagnosticAnchor diagnosticAnchorForSlideJudge(
+    const TimelineNoteMarker& marker,
+    const MarkerMuriState& state,
+    const QHash<QString, MarkerSourceRef>& markerRefs,
+    const QHash<QString, QString>& syntheticSlideHeadOwnerKeys)
+{
+    DiagnosticAnchor anchor = diagnosticAnchorFromMarker(marker);
+    const EarlyJudgeCauseInfo latestCause = latestEarlyJudgeCauseForState(state);
+    if (!latestCause.valid) {
+        return anchor;
+    }
+    return earlierDiagnosticAnchor(
+        anchor,
+        diagnosticAnchorForMarkerKey(latestCause.markerKey, markerRefs, syntheticSlideHeadOwnerKeys));
+}
+
+QString formatSlideTooFastDetail(
+    const TimelineNoteMarker& marker,
+    const MarkerMuriState& state,
+    const QHash<QString, QString>& markerConfigLabels,
+    const QHash<QString, QString>& syntheticSlideHeadOwnerKeys)
+{
+    const EarlyJudgeCauseInfo latestCause = latestEarlyJudgeCauseForState(state);
+    const double expectedSecond = marker.type == QLatin1String("wifi")
+        ? state.wifiExpectedCompletedSecond
+        : (state.slideSegments.isEmpty() ? -1.0 : state.slideSegments.constLast().expectedCompletedSecond);
+    const double resolvedSecond = marker.type == QLatin1String("wifi")
+        ? state.wifiCompletedSecond
+        : (state.slideSegments.isEmpty() ? -1.0 : state.slideSegments.constLast().completedSecond);
+    const double normalJudgeSecond = marker.endSecond >= 0.0 ? marker.endSecond : expectedSecond;
+    const double gapMs = qMax(0.0, normalJudgeSecond - resolvedSecond) * 1000.0;
+    const QString targetLabel = formatMarkerConfigLabel(marker);
+    if (latestCause.valid) {
+        const QString causeLabel = markerConfigLabelForSource(
+            markerConfigLabels,
+            syntheticSlideHeadOwnerKeys,
+            latestCause.markerKey,
+            latestCause.causeType);
+        return QStringLiteral("%1 was early-judged by %2, gap %3 ms.")
+            .arg(targetLabel, causeLabel, QString::number(gapMs, 'f', 1));
+    }
+    return QStringLiteral("%1 resolved outside its critical window, gap %2 ms.")
+        .arg(targetLabel, QString::number(gapMs, 'f', 1));
+}
+
 bool judgeSimpleNoteOnPadDown(
     JudgeableSimpleNote* note,
     double nowSecond,
@@ -3314,12 +3769,115 @@ void simulateSimpleNoteJudgments(
     }
 }
 
+QSet<QString> buildSameMomentPadOverlapKeys(const QVector<JudgeableSimpleNote>& notes)
+{
+    QHash<QString, QVector<QString>> markerKeysByMomentPad;
+    markerKeysByMomentPad.reserve(notes.size());
+
+    for (const JudgeableSimpleNote& note : notes) {
+        const QString pad = normalizedPadToken(note.pad);
+        if (pad.isEmpty()) {
+            continue;
+        }
+        const QString lookupKey =
+            QStringLiteral("%1|%2").arg(pad).arg(qRound64(note.momentSecond * 1000000.0));
+        markerKeysByMomentPad[lookupKey].append(note.markerKey);
+    }
+
+    QSet<QString> overlapKeys;
+    overlapKeys.reserve(notes.size());
+    for (auto it = markerKeysByMomentPad.constBegin(); it != markerKeysByMomentPad.constEnd(); ++it) {
+        if (it.value().size() <= 1) {
+            continue;
+        }
+        for (const QString& markerKey : it.value()) {
+            overlapKeys.insert(markerKey);
+        }
+    }
+    return overlapKeys;
+}
+
+constexpr double kMultiTouchOverlapCenterEpsilon = 1e-3;
+constexpr double kMultiTouchOverlapRadiusEpsilon = 1e-3;
+
+struct MultiTouchActionCluster {
+    RuntimeTouchPoint representativePoint;
+    QVector<int> actionIndices;
+    int handCount = 0;
+};
+
+bool shouldMergeMultiTouchCluster(
+    const RuntimeTouchPoint& existingPoint,
+    const RuntimeHandAction& existingAction,
+    const RuntimeTouchPoint& candidatePoint,
+    const RuntimeHandAction& candidateAction)
+{
+    if (existingAction.kind != RuntimeHandActionKind::Press
+        || candidateAction.kind != RuntimeHandActionKind::Press) {
+        return false;
+    }
+    return pointDistance(existingPoint.center, candidatePoint.center) <= kMultiTouchOverlapCenterEpsilon
+        && qAbs(existingPoint.radius - candidatePoint.radius) <= kMultiTouchOverlapRadiusEpsilon;
+}
+
+QVector<MultiTouchActionCluster> buildMultiTouchActionClusters(
+    const QVector<RuntimeTouchPoint>& touchPoints,
+    const QVector<RuntimeHandAction>& actions)
+{
+    QVector<MultiTouchActionCluster> clusters;
+    clusters.reserve(touchPoints.size());
+
+    for (const RuntimeTouchPoint& touchPoint : touchPoints) {
+        if (touchPoint.actionIndex < 0 || touchPoint.actionIndex >= actions.size()) {
+            continue;
+        }
+
+        const RuntimeHandAction& action = actions.at(touchPoint.actionIndex);
+        bool merged = false;
+        for (MultiTouchActionCluster& cluster : clusters) {
+            if (cluster.representativePoint.actionIndex < 0
+                || cluster.representativePoint.actionIndex >= actions.size()) {
+                continue;
+            }
+            const RuntimeHandAction& representativeAction =
+                actions.at(cluster.representativePoint.actionIndex);
+            if (!shouldMergeMultiTouchCluster(
+                    cluster.representativePoint,
+                    representativeAction,
+                    touchPoint,
+                    action)) {
+                continue;
+            }
+
+            cluster.actionIndices.append(touchPoint.actionIndex);
+            cluster.handCount = qMax(cluster.handCount, action.requireTwoHands ? 2 : 1);
+            merged = true;
+            break;
+        }
+
+        if (merged) {
+            continue;
+        }
+
+        MultiTouchActionCluster cluster;
+        cluster.representativePoint = touchPoint;
+        cluster.actionIndices.append(touchPoint.actionIndex);
+        cluster.handCount = action.requireTwoHands ? 2 : 1;
+        clusters.append(cluster);
+    }
+
+    return clusters;
+}
+
 void collectSimpleNoteMultiTouchDiagnostics(
     const QVector<TimelineNoteMarker>& noteMarkers,
     const QVector<JudgeableSimpleNote>& notes,
     const QVector<RuntimeTouchGroup>& touchGroups,
     const QHash<int, int>& touchGroupByChildNoteIndex,
-    QVector<MuriDiagnostic>* diagnostics)
+    const QHash<QString, const TimelineNoteMarker*>& markerLookup,
+    const QHash<QString, QString>& syntheticSlideHeadOwnerKeys,
+    QVector<MuriDiagnostic>* diagnostics,
+    QSet<QString>* multiTouchMarkerKeys)
 {
     if (diagnostics == nullptr) {
         return;
@@ -3351,16 +3909,40 @@ void collectSimpleNoteMultiTouchDiagnostics(
 
         const QVector<RuntimeTouchPoint> touchPoints =
             buildRuntimeTouchPoints(actions, activeActionIndices, nowSecond);
+        const QVector<MultiTouchActionCluster> touchClusters =
+            buildMultiTouchActionClusters(touchPoints, actions);
         int handCount = 0;
         QVector<int> touchPointActionIndices;
-        touchPointActionIndices.reserve(touchPoints.size());
-        for (const RuntimeTouchPoint& touchPoint : touchPoints) {
-            if (touchPoint.actionIndex < 0 || touchPoint.actionIndex >= actions.size()) {
+        touchPointActionIndices.reserve(touchClusters.size());
+        int nonTouchHandCount = 0;
+        bool involvesTouch = false;
+        for (const MultiTouchActionCluster& cluster : touchClusters) {
+            if (cluster.representativePoint.actionIndex < 0
+                || cluster.representativePoint.actionIndex >= actions.size()) {
                 continue;
             }
-            const RuntimeHandAction& action = actions.at(touchPoint.actionIndex);
-            handCount += action.requireTwoHands ? 2 : 1;
-            touchPointActionIndices.append(touchPoint.actionIndex);
+
+            const int clusterHandCount = qMax(1, cluster.handCount);
+            handCount += clusterHandCount;
+            bool clusterHasTouchLike = false;
+            bool clusterHasNonTouch = false;
+            for (int actionIndex : cluster.actionIndices) {
+                if (actionIndex < 0 || actionIndex >= actions.size()) {
+                    continue;
+                }
+                if (sourceTypeIsTouchLike(actions.at(actionIndex).sourceType)) {
+                    clusterHasTouchLike = true;
+                } else {
+                    clusterHasNonTouch = true;
+                }
+            }
+            if (clusterHasTouchLike) {
+                involvesTouch = true;
+            }
+            if (clusterHasNonTouch) {
+                nonTouchHandCount += clusterHandCount;
+            }
+            touchPointActionIndices.append(cluster.representativePoint.actionIndex);
         }
         if (handCount > 2 && !touchPointActionIndices.isEmpty()) {
             std::sort(touchPointActionIndices.begin(), touchPointActionIndices.end(), [&actions](int a, int b) {
@@ -3385,6 +3967,9 @@ void collectSimpleNoteMultiTouchDiagnostics(
                 }
                 uniqueSources.insert(action.markerKey);
                 causeActionIndices.append(actionIndex);
+                if (multiTouchMarkerKeys != nullptr) {
+                    multiTouchMarkerKeys->insert(action.markerKey);
+                }
             }
 
             QStringList signatureParts;
@@ -3394,23 +3979,36 @@ void collectSimpleNoteMultiTouchDiagnostics(
             for (int actionIndex : causeActionIndices) {
                 const RuntimeHandAction& action = actions.at(actionIndex);
                 signatureParts.append(action.markerKey);
-                detailParts.append(QStringLiteral("L%1:C%2").arg(action.line).arg(action.col));
+                detailParts.append(
+                    formatMultiTouchActionLabel(action, markerLookup, syntheticSlideHeadOwnerKeys));
             }
             const QString signature = signatureParts.join(QLatin1Char('|'));
             if (!seenSignatures.contains(signature)) {
                 seenSignatures.insert(signature);
 
-                const RuntimeHandAction& anchor = actions.at(causeActionIndices.constFirst());
+                int anchorActionIndex = causeActionIndices.constFirst();
+                DiagnosticAnchor anchorInfo = diagnosticAnchorFromAction(actions.at(anchorActionIndex));
+                for (int actionIndex : causeActionIndices) {
+                    const DiagnosticAnchor candidateAnchor = diagnosticAnchorFromAction(actions.at(actionIndex));
+                    if (diagnosticAnchorComesBefore(candidateAnchor, anchorInfo)) {
+                        anchorInfo = candidateAnchor;
+                        anchorActionIndex = actionIndex;
+                    }
+                }
+
                 MuriDiagnostic diagnostic;
                 diagnostic.kind = MuriKind::MultiTouch;
                 diagnostic.second = qMax(0.0, nowSecond);
-                diagnostic.line = anchor.line;
-                diagnostic.col = anchor.col;
-                diagnostic.markerKey = anchor.markerKey;
+                diagnostic.anchorSecond = anchorInfo.valid ? qMax(0.0, anchorInfo.second) : diagnostic.second;
+                diagnostic.line = anchorInfo.valid ? anchorInfo.line : 1;
+                diagnostic.col = anchorInfo.valid ? anchorInfo.col : 1;
+                diagnostic.markerKey = actions.at(anchorActionIndex).markerKey;
                 diagnostic.title = muriKindDisplayName(MuriKind::MultiTouch, true);
-                diagnostic.detail = QStringLiteral("Runtime hand actions formed %1-hand multi-touch: %2")
-                                        .arg(handCount)
-                                        .arg(detailParts.join(QStringLiteral(", ")));
+                diagnostic.alertLevel = (involvesTouch && nonTouchHandCount <= 2)
+                    ? MuriAlertLevel::Warning
+                    : MuriAlertLevel::Muri;
+                diagnostic.detail =
+                    QStringLiteral("Multi-touch formed by %1.").arg(detailParts.join(QStringLiteral(", ")));
                 diagnostics->append(diagnostic);
             }
         }
@@ -3431,16 +4029,42 @@ void collectSimpleNoteMultiTouchDiagnostics(
     }
 }
 
+bool runtimeCauseIsSlideHeadTap(
+    const JudgeableSimpleNote& note,
+    const QHash<QString, const TimelineNoteMarker*>& markerLookup)
+{
+    if (note.cause.extraPadDown || note.cause.sourceMarkerKey.startsWith(QStringLiteral("slide_head_star|"))) {
+        return true;
+    }
+    if (note.pad.isEmpty()) {
+        return false;
+    }
+    const auto it = markerLookup.constFind(note.cause.sourceMarkerKey);
+    if (it == markerLookup.constEnd() || it.value() == nullptr || !isSlideLike(*it.value())) {
+        return false;
+    }
+    return normalizedPadToken(note.pad) == slideHeadPad(it.value()->lane);
+}
+
 void collectSimpleNoteRuntimeDiagnostics(
     const QVector<TimelineNoteMarker>& noteMarkers,
     QVector<MuriDiagnostic>* diagnostics,
-    QVector<MuriJudgeSpriteEvent>* judgeSpriteEvents)
+    QVector<MuriJudgeSpriteEvent>* judgeSpriteEvents,
+    double staticTapOnSlideThresholdSeconds)
 {
     if (diagnostics == nullptr) {
         return;
     }
 
+    const double normalizedStaticTapOnSlideThresholdSeconds = qBound(
+        static_cast<double>(miacode::muri::kStaticTapOnSlideThresholdMinMs) / 1000.0,
+        staticTapOnSlideThresholdSeconds,
+        static_cast<double>(miacode::muri::kStaticTapOnSlideThresholdMaxMs) / 1000.0);
     const QHash<QString, MarkerSourceRef> markerRefs = buildMarkerSourceRefs(noteMarkers);
+    const QHash<QString, const TimelineNoteMarker*> markerLookup = buildMarkerLookup(noteMarkers);
+    const QHash<QString, QString> markerConfigLabels = buildMarkerConfigLabels(noteMarkers);
+    const QHash<QString, QString> syntheticSlideHeadOwnerKeys = buildSyntheticSlideHeadOwnerKeys(noteMarkers);
+    const QSet<QString> slideKeysWithTapOnSlideHead = buildSlideKeysWithTapOnSlideHead(noteMarkers);
     QHash<QString, int> noteIndexByMarkerKey;
     QVector<JudgeableSimpleNote> notes = buildJudgeableSimpleNotes(noteMarkers, markerRefs, &noteIndexByMarkerKey);
     QHash<int, int> touchGroupByChildNoteIndex;
@@ -3450,22 +4074,31 @@ void collectSimpleNoteRuntimeDiagnostics(
         buildRuntimeTopLevelNotes(notes, touchGroups, touchGroupByChildNoteIndex);
     const QVector<MuriPadWindow> runtimePadWindows =
         buildRuntimePadWindows(noteMarkers, notes, noteIndexByMarkerKey, touchGroups, touchGroupByChildNoteIndex);
+    QSet<QString> multiTouchMarkerKeys;
     collectSimpleNoteMultiTouchDiagnostics(
         noteMarkers,
         notes,
         touchGroups,
         touchGroupByChildNoteIndex,
-        diagnostics);
+        markerLookup,
+        syntheticSlideHeadOwnerKeys,
+        diagnostics,
+        &multiTouchMarkerKeys);
     simulateSimpleNoteJudgments(
         &notes,
         touchGroups,
         topLevelNotes,
         buildRuntimePadEvents(noteMarkers, runtimePadWindows, markerRefs));
-
-    if (judgeSpriteEvents != nullptr) {
-        judgeSpriteEvents->reserve(judgeSpriteEvents->size() + notes.size());
-        for (const JudgeableSimpleNote& note : notes) {
-            addSimpleJudgeSpriteEvent(judgeSpriteEvents, note);
+    const QSet<QString> overlapRenderKeys = buildSameMomentPadOverlapKeys(notes);
+    QHash<QString, MuriSimpleJudgeEffect> simpleJudgeEffects;
+    simpleJudgeEffects.reserve(notes.size());
+    QSet<QString> suppressJudgeSpriteKeys;
+    QSet<QString> forceRenderJudgeSpriteKeys;
+    suppressJudgeSpriteKeys.reserve(multiTouchMarkerKeys.size());
+    forceRenderJudgeSpriteKeys.reserve(notes.size());
+    for (const QString& markerKey : multiTouchMarkerKeys) {
+        if (!overlapRenderKeys.contains(markerKey)) {
+            suppressJudgeSpriteKeys.insert(markerKey);
         }
     }
 
@@ -3485,18 +4118,51 @@ void collectSimpleNoteRuntimeDiagnostics(
         }
 
         if (note.judgeSecond + kPadTimeEpsilon < note.momentSecond && !note.cause.sourceMarkerKey.isEmpty()) {
+            const bool slideHeadTap = runtimeCauseIsSlideHeadTap(note, markerLookup);
+            const QString sourceOwnerKey =
+                slideStartOwnerKeyForSource(note.cause.sourceMarkerKey, syntheticSlideHeadOwnerKeys);
+            const bool hasTapOnSlideHead = slideKeysWithTapOnSlideHead.contains(sourceOwnerKey);
+            const QString causeConfig = markerConfigLabelForSource(
+                markerConfigLabels,
+                syntheticSlideHeadOwnerKeys,
+                note.cause.sourceMarkerKey,
+                note.cause.sourceType);
+            const double gapSecond = slideHeadTap
+                ? qMax(
+                      0.0,
+                      note.momentSecond
+                          - slideStartSecondForSource(
+                              note.cause,
+                              markerLookup,
+                              syntheticSlideHeadOwnerKeys))
+                : qMax(0.0, note.momentSecond - note.judgeSecond);
+            const double gapMs = gapSecond * 1000.0;
+            const MuriAlertLevel alertLevel = slideHeadTap
+                ? slideHeadTapAlertLevel(hasTapOnSlideHead, gapSecond)
+                : tapOnSlideAlertLevel(gapSecond, normalizedStaticTapOnSlideThresholdSeconds);
+            const QString detail = slideHeadTap
+                ? (hasTapOnSlideHead
+                       ? QStringLiteral("%1 start will early-judge a following tap, gap %2 ms.")
+                             .arg(causeConfig, QString::number(gapMs, 'f', 1))
+                       : QStringLiteral("%1 jump-start will early-judge a following tap, gap %2 ms.")
+                             .arg(causeConfig, QString::number(gapMs, 'f', 1)))
+                : QStringLiteral("%1 tail may collide with %2, gap %3 ms.")
+                      .arg(causeConfig, noteTypeDisplayLabel(note.type), QString::number(gapMs, 'f', 1));
+            const DiagnosticAnchor anchor = earlierDiagnosticAnchor(
+                diagnosticAnchorFromNote(note),
+                diagnosticAnchorForCause(note.cause, markerRefs, syntheticSlideHeadOwnerKeys));
             addSimpleNoteDiagnostic(
                 diagnostics,
-                note.cause.extraPadDown ? MuriKind::SlideHeadTap : MuriKind::TapOnSlide,
+                slideHeadTap ? MuriKind::SlideHeadTap : MuriKind::TapOnSlide,
+                alertLevel,
                 note.judgeSecond,
                 note,
-                note.cause.extraPadDown
-                    ? QStringLiteral("Slide head extra pad-down from L%1:C%2 early-judged this note.")
-                          .arg(note.cause.line)
-                          .arg(note.cause.col)
-                    : QStringLiteral("Pad-down from L%1:C%2 early-judged this note.")
-                          .arg(note.cause.line)
-                          .arg(note.cause.col));
+                detail,
+                anchor);
+            forceRenderJudgeSpriteKeys.insert(note.markerKey);
+            if (alertLevel == MuriAlertLevel::Warning) {
+                simpleJudgeEffects.insert(note.markerKey, MuriSimpleJudgeEffect::Perfect);
+            }
             continue;
         }
 
@@ -3506,12 +4172,45 @@ void collectSimpleNoteRuntimeDiagnostics(
             continue;
         }
 
+        const QString affectedConfig = markerConfigLabelForKey(markerConfigLabels, note.markerKey, note.type);
+        QString overlapDetail = QStringLiteral("%1 formed overlap at the same position.").arg(affectedConfig);
+        if (!note.cause.sourceMarkerKey.isEmpty()) {
+            const QString causeConfig = markerConfigLabelForSource(
+                markerConfigLabels,
+                syntheticSlideHeadOwnerKeys,
+                note.cause.sourceMarkerKey,
+                note.cause.sourceType);
+            if (!causeConfig.isEmpty() && causeConfig != affectedConfig) {
+                overlapDetail =
+                    QStringLiteral("%1 and same-position %2 formed overlap.").arg(affectedConfig, causeConfig);
+            }
+        }
+        const DiagnosticAnchor anchor = earlierDiagnosticAnchor(
+            diagnosticAnchorFromNote(note),
+            diagnosticAnchorForCause(note.cause, markerRefs, syntheticSlideHeadOwnerKeys));
         addSimpleNoteDiagnostic(
             diagnostics,
             MuriKind::Overlap,
+            MuriAlertLevel::Muri,
             note.judgeSecond,
             note,
-            QStringLiteral("Runtime simple-note judge missed the critical window and resolved as overlap."));
+            overlapDetail,
+            anchor);
+        forceRenderJudgeSpriteKeys.insert(note.markerKey);
+    }
+
+    if (judgeSpriteEvents != nullptr) {
+        judgeSpriteEvents->reserve(judgeSpriteEvents->size() + notes.size());
+        for (const JudgeableSimpleNote& note : notes) {
+            if (suppressJudgeSpriteKeys.contains(note.markerKey)
+                && !forceRenderJudgeSpriteKeys.contains(note.markerKey)) {
+                continue;
+            }
+            addSimpleJudgeSpriteEvent(
+                judgeSpriteEvents,
+                note,
+                simpleJudgeEffects.value(note.markerKey, MuriSimpleJudgeEffect::Good));
+        }
     }
 }
 
@@ -3520,6 +4219,17 @@ void collectSimpleNoteRuntimeDiagnostics(
 MuriAnalysisReport MuriAnalyzer::analyze(
     const QVector<TimelineNoteMarker>& noteMarkers,
     const MuriRenderOptions& renderOptions)
+{
+    return analyze(
+        noteMarkers,
+        renderOptions,
+        static_cast<double>(miacode::muri::kStaticTapOnSlideThresholdDefaultMs) / 1000.0);
+}
+
+MuriAnalysisReport MuriAnalyzer::analyze(
+    const QVector<TimelineNoteMarker>& noteMarkers,
+    const MuriRenderOptions& renderOptions,
+    double staticTapOnSlideThresholdSeconds)
 {
     MuriAnalysisReport report;
     QStringList signatureParts;
@@ -3530,9 +4240,15 @@ MuriAnalysisReport MuriAnalyzer::analyze(
     report.sourceSignature = signatureParts.join(QLatin1Char(';'));
 
     buildOverlayActions(noteMarkers, &report.padWindows, &report.actionTrails);
-    collectSimpleNoteRuntimeDiagnostics(noteMarkers, &report.diagnostics, &report.judgeSpriteEvents);
+    collectSimpleNoteRuntimeDiagnostics(
+        noteMarkers,
+        &report.diagnostics,
+        &report.judgeSpriteEvents,
+        staticTapOnSlideThresholdSeconds);
 
     const QHash<QString, MarkerSourceRef> markerRefs = buildMarkerSourceRefs(noteMarkers);
+    const QHash<QString, QString> markerConfigLabels = buildMarkerConfigLabels(noteMarkers);
+    const QHash<QString, QString> syntheticSlideHeadOwnerKeys = buildSyntheticSlideHeadOwnerKeys(noteMarkers);
     QHash<QString, int> noteIndexByMarkerKey;
     const QVector<JudgeableSimpleNote> runtimeNotes =
         buildJudgeableSimpleNotes(noteMarkers, markerRefs, &noteIndexByMarkerKey);
@@ -3576,10 +4292,20 @@ MuriAnalysisReport MuriAnalyzer::analyze(
                     addDiagnostic(
                         &report.diagnostics,
                         MuriKind::SlideTooFast,
+                        MuriAlertLevel::Muri,
                         runtimeResult.judgeSecond,
                         marker,
                         markerKey,
-                        QStringLiteral("Slide runtime judge resolved outside its critical window."));
+                        formatSlideTooFastDetail(
+                            marker,
+                            state,
+                            markerConfigLabels,
+                            syntheticSlideHeadOwnerKeys),
+                        diagnosticAnchorForSlideJudge(
+                            marker,
+                            state,
+                            markerRefs,
+                            syntheticSlideHeadOwnerKeys));
                     appendSlideJudgeSpriteEvent(&report.judgeSpriteEvents, marker, runtimeResult.judgeSecond);
                 }
             } else if (!state.slideSegments.isEmpty()) {
@@ -3598,10 +4324,20 @@ MuriAnalysisReport MuriAnalyzer::analyze(
                     addDiagnostic(
                         &report.diagnostics,
                         MuriKind::SlideTooFast,
+                        MuriAlertLevel::Muri,
                         lastSegment.completedSecond,
                         marker,
                         markerKey,
-                        QStringLiteral("Slide was cleared earlier than its normal judge timing.")
+                        formatSlideTooFastDetail(
+                            marker,
+                            state,
+                            markerConfigLabels,
+                            syntheticSlideHeadOwnerKeys),
+                        diagnosticAnchorForSlideJudge(
+                            marker,
+                            state,
+                            markerRefs,
+                            syntheticSlideHeadOwnerKeys)
                     );
                     appendSlideJudgeSpriteEvent(&report.judgeSpriteEvents, marker, lastSegment.completedSecond);
                 }
@@ -3619,10 +4355,20 @@ MuriAnalysisReport MuriAnalyzer::analyze(
                     addDiagnostic(
                         &report.diagnostics,
                         MuriKind::SlideTooFast,
+                        MuriAlertLevel::Muri,
                         runtimeResult.judgeSecond,
                         marker,
                         markerKey,
-                        QStringLiteral("Wifi runtime judge resolved outside its critical window."));
+                        formatSlideTooFastDetail(
+                            marker,
+                            state,
+                            markerConfigLabels,
+                            syntheticSlideHeadOwnerKeys),
+                        diagnosticAnchorForSlideJudge(
+                            marker,
+                            state,
+                            markerRefs,
+                            syntheticSlideHeadOwnerKeys));
                     appendSlideJudgeSpriteEvent(&report.judgeSpriteEvents, marker, runtimeResult.judgeSecond);
                 }
             } else {
@@ -3634,10 +4380,20 @@ MuriAnalysisReport MuriAnalyzer::analyze(
                     addDiagnostic(
                         &report.diagnostics,
                         MuriKind::SlideTooFast,
+                        MuriAlertLevel::Muri,
                         state.wifiCompletedSecond,
                         marker,
                         markerKey,
-                        QStringLiteral("Wifi was cleared earlier than its normal judge timing.")
+                        formatSlideTooFastDetail(
+                            marker,
+                            state,
+                            markerConfigLabels,
+                            syntheticSlideHeadOwnerKeys),
+                        diagnosticAnchorForSlideJudge(
+                            marker,
+                            state,
+                            markerRefs,
+                            syntheticSlideHeadOwnerKeys)
                     );
                     appendSlideJudgeSpriteEvent(&report.judgeSpriteEvents, marker, state.wifiCompletedSecond);
                 }

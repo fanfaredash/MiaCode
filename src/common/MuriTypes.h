@@ -21,6 +21,11 @@ enum class MuriKind {
     MultiTouch,
 };
 
+enum class MuriAlertLevel {
+    Muri,
+    Warning,
+};
+
 enum class AreaJudgeCause {
     Self,
     Other,
@@ -35,6 +40,11 @@ enum class MuriJudgeSpriteKind {
     SlideCircleCw,
     WifiUp,
     WifiDown,
+};
+
+enum class MuriSimpleJudgeEffect {
+    Good,
+    Perfect,
 };
 
 struct MuriPadWindow {
@@ -84,13 +94,16 @@ struct MarkerMuriState {
     QVector<QVector<QVector<MuriCheckpointState>>> wifiLaneAreas;
     QVector<QVector<double>> wifiLaneProgressSeconds;
     double wifiCompletedSecond = -1.0;
+    double wifiExpectedCompletedSecond = -1.0;
     double wifiPadCSecond = -1.0;
     double wifiCriticalSecond = -1.0;
 };
 
 struct MuriDiagnostic {
     MuriKind kind = MuriKind::SlideTooFast;
+    MuriAlertLevel alertLevel = MuriAlertLevel::Muri;
     double second = 0.0;
+    double anchorSecond = -1.0;
     int line = 1;
     int col = 1;
     QString markerKey;
@@ -100,6 +113,7 @@ struct MuriDiagnostic {
 
 struct MuriJudgeSpriteEvent {
     MuriJudgeSpriteKind kind = MuriJudgeSpriteKind::Simple;
+    MuriSimpleJudgeEffect simpleEffect = MuriSimpleJudgeEffect::Good;
     double second = 0.0;
     double spawnSecond = 0.0;
     QString markerKey;
@@ -111,6 +125,7 @@ struct MuriStaticReferenceNote {
     QString markerKey;
     QString markerType;
     QString pad;
+    QString slideTrackKey;
     int line = 1;
     int col = 1;
     int lane = 1;
@@ -122,10 +137,12 @@ struct MuriStaticReferenceNote {
 
 struct MuriStaticReference {
     MuriKind kind = MuriKind::Overlap;
+    MuriAlertLevel alertLevel = MuriAlertLevel::Muri;
     MuriStaticReferenceNote affected;
     MuriStaticReferenceNote cause;
     double deltaSecond = 0.0;
     bool hasDelta = false;
+    bool slideHeadHasTapOnSlide = false;
 };
 
 struct MuriAnalysisReport {
@@ -148,3 +165,4 @@ struct MuriAnalysisReport {
 
 QString makeMarkerAnalysisKey(const TimelineNoteMarker& marker);
 QString muriKindDisplayName(MuriKind kind, bool chineseUi);
+QString muriAlertLevelDisplayName(MuriAlertLevel level, bool chineseUi);
