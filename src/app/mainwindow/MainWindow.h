@@ -665,6 +665,8 @@ private:
     QToolButton* syntaxCheckButton_ = nullptr;
     QToolButton* exportVideoButton_ = nullptr;
     QMenu* exportVideoMenu_ = nullptr;
+    QToolButton* toolboxButton_ = nullptr;
+    QMenu* toolboxMenu_ = nullptr;
     QToolButton* previewAudioSettingsButton_ = nullptr;
     QToolButton* previewVideoSettingsButton_ = nullptr;
     QToolButton* latencyDetectorButton_ = nullptr;
