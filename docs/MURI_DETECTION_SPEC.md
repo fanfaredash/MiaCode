@@ -35,18 +35,18 @@
 
 ## 4. 共享时间常量
 
-- 判定时基：`180 TPS`
-- 抬手延迟：`3 / 180 = 16.7 ms`
-- 额外 pad down 延迟：`9 / 180 = 50.0 ms`
-- tap critical：`3 / 180 = 16.7 ms`
-- tap available：`27 / 180 = 150.0 ms`
-- touch critical / available：`27 / 180 = 150.0 ms`
-- slide critical：`42 / 180 = 233.3 ms`
-- slide available：`108 / 180 = 600.0 ms`
-- slide leading：`15 / 180 = 83.3 ms`
-- tap-on-slide 起始阈值：`1 / 180 = 5.6 ms`
-- touch-on-slide 阈值：`24 / 180 = 133.3 ms`
-- slide-too-fast 阈值：`1 / 180 = 5.6 ms`
+- 判定时基：`180 TPS`。用于把所有判定、窗口和延迟常量统一换算成 tick 与秒。
+- 抬手延迟：`3 / 180 = 16.7 ms`。用于普通按下动作结束后额外保留一小段按住时间，避免手部动作过早消失。
+- 额外 pad down 延迟：`9 / 180 = 50.0 ms`。用于模拟 slide 头等场景的额外按下触发时机。
+- tap critical：`3 / 180 = 16.7 ms`。用于判定 tap 何时开始落出 critical window。
+- tap available：`27 / 180 = 150.0 ms`。用于限制 tap 在运行时还能被判定的最晚可用窗口。
+- touch critical / available：`27 / 180 = 150.0 ms`。用于 touch 的 critical 判定和可判定窗口边界。
+- slide critical：`42 / 180 = 233.3 ms`。用于计算 slide 最终完成判定的核心临界窗基准。
+- slide available：`108 / 180 = 600.0 ms`。用于限定 slide 仍可被正常完成判定的整体可用窗口。
+- slide leading：`15 / 180 = 83.3 ms`。用于给 slide 相关运行时动作保留前导时间语义。
+- tap-on-slide 起始阈值：`1 / 180 = 5.6 ms`。用于过滤过于贴近 slide 起点的极小时间差，避免过早把物件算进撞头/撞尾区间。
+- touch-on-slide 阈值：`24 / 180 = 133.3 ms`。用于判定 touch 与 slide 之间的贴靠/碰撞时间边界。
+- slide-too-fast 阈值：`1 / 180 = 5.6 ms`。用于判断 slide / wifi 完成时机是否已经快到超出允许误差。
 
 ## 5. 运行时分析规则
 
@@ -217,3 +217,39 @@ E
 123,
 E
 ```
+
+## 11. 共享时间常量串联例子
+
+固定使用这条 slide：
+
+```simai
+8>3[4:1]
+```
+
+按当前解析与分析逻辑，可以把它理解成：
+
+- `marker.second = 0 ms`：slide 头出现时刻
+- `slideTraceSecond = 250 ms`：轨迹真正开始跑的时刻
+- `endSecond = 500 ms`：正常完成时刻
+
+如果这条 slide 因为外部 pad 状态被提前满足，并且在 `467 ms` 就完成了最后一个判定区，那么 `467 ms` 就是“这条 slide 被提前判掉的时机”。共享时间常量在这条时间轴上的作用如下：
+
+- `slide leading = 83.3 ms`：这条 slide 会在 `-83.3 ms` 就进入可判定状态，允许它一开始就继承更早已存在的 pad 状态。
+- `额外 pad down 延迟 = 50.0 ms`：会在 `slideTraceSecond + min(首个区域进入时间, 50 ms)` 注入 synthetic head pad-down。对这条 slide 来说，如果首区 25 ms 就进入，则额外 pad-down 落在 `275 ms`；如果首区更慢，则封顶到 `300 ms`。
+- `slide critical = 233.3 ms`：当 slide 在 `467 ms` 完成时，系统不会直接按“比 `500 ms` 早了多少”判坏，而是拿完成时刻去和 `criticalSecond ± criticalDeltaSecond` 比较。基础窗是 `233.3 ms`，再叠加末段区域时长的四分之一。
+- `抬手延迟 = 16.7 ms`：最后一个 pad window 和手部轨迹会额外保留到约 `516.7 ms`，避免边界 tick 上刚好抬手导致的漏判或显示过早消失。
+- `slide available = 600.0 ms`：如果一直没有完成，系统会继续等到 `1100 ms` 左右；超过这个时刻仍未完成，才会强制判坏。
+
+对于 `slide critical`，实现里另有一个独立的 `+50 ms shift` 容错分支。可等价理解为：
+
+```text
+delta = judgeSecond - criticalSecond
+if abs(delta) <= criticalDeltaSecond:
+    pass
+elif abs(delta + 50ms) <= 233.3ms:
+    pass
+else:
+    bad
+```
+
+这个分支不是简单给 `criticalDeltaSecond` 再加 `50 ms`，而是额外用一扇向前偏了 `50 ms` 的基础窗口再检查一次，因此主要只会多宽容一部分过早完成的 slide。`MaiMuriDX` 的 slide 判定里也有同款双分支实现；wifi 不使用这个分支。
