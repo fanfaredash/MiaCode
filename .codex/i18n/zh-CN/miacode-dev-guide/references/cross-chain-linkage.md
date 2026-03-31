@@ -1,5 +1,5 @@
 <!-- translation-source: .codex/skills/miacode-dev-guide/references/cross-chain-linkage.md -->
-<!-- translation-source-hash: 14a8666c6d335f2b4205f527770209fca06d2bf7cbea658b2265543d503b3540 -->
+<!-- translation-source-hash: fa4c0eb73eee4989d373e664d97b54874c2fd09d8751d8eeb14265dcced6f7f5 -->
 <!-- 说明：这是中文镜像，不作为 Codex skill 入口加载。 -->
 
 # 跨链路联动
@@ -27,6 +27,7 @@
 - parser 改动通常不是 parser-only。
 - 一个新的 note 属性或时序规则，通常还要联查 timeline、preview、audio、export 和 Muri。
 - `TimelineQuickModel` 现在负责“只认逗号”的 `C` 锚点寻址，覆盖编辑器光标同步、Timeline 头部 / `Ctrl+点 Timeline` 的 `R -> C` 跳转，以及播放中的 Follow 绑定。
+- `PreviewCanvas::drawNoteGuides` 在有 parser 产出的 `eachGroupId` 时，应按组号聚合 each 引导线；不要只因为 `marker.second` 相同，就把被反引号切开的分组重新并回去。
 - 当预览正在播放时，slow refresh 产生的 note-marker 更新仍会继续驱动 validation 和 Timeline 侧诊断，但 preview audio / canvas / 物件统计会继续使用点击播放时冻结的快照，直到本次播放停止。
 
 ## 2. `&first` 与时间偏移链

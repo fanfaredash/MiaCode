@@ -2102,10 +2102,17 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
         renderGuideImage(image, approach.scale, laneRotationDegrees(lane), logicalPos, true, 0.0);
     };
 
-    QHash<qint64, QVector<ActiveEachCandidate>> eachGroups;
-    const auto addEachCandidate = [&eachGroups](const TimelineNoteMarker& marker) {
-        const qint64 key = qRound64(marker.second * 1000000.0);
-        eachGroups[key].append(ActiveEachCandidate{&marker});
+    QHash<int, QVector<ActiveEachCandidate>> eachGroupsById;
+    QHash<qint64, QVector<ActiveEachCandidate>> fallbackEachGroupsBySecond;
+    const auto addEachCandidate = [&eachGroupsById, &fallbackEachGroupsBySecond](const TimelineNoteMarker& marker) {
+        // Preserve parser-derived backtick grouping when available so
+        // simultaneous each groups do not merge their guide connectors.
+        if (marker.eachGroupId >= 0) {
+            eachGroupsById[marker.eachGroupId].append(ActiveEachCandidate{&marker});
+            return;
+        }
+        const qint64 secondKey = qRound64(marker.second * 1000000.0);
+        fallbackEachGroupsBySecond[secondKey].append(ActiveEachCandidate{&marker});
     };
 
     for (const TimelineNoteMarker& marker : noteMarkers_) {
@@ -2155,10 +2162,9 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
         }
     }
 
-    for (auto it = eachGroups.cbegin(); it != eachGroups.cend(); ++it) {
-        const QVector<ActiveEachCandidate>& notes = it.value();
+    const auto drawEachGroupGuides = [this, &renderConcentricGuide](const QVector<ActiveEachCandidate>& notes) {
         if (notes.size() < 2) {
-            continue;
+            return;
         }
 
         const int groupSize = notes.size();
@@ -2186,12 +2192,12 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
             sourceRadius = kEachLine1SourceRadius;
         }
         if (lineImage == nullptr || lineImage->isNull()) {
-            continue;
+            return;
         }
 
         const TapApproachSample approach = sampleTapApproach(static_cast<qreal>(playheadSeconds_ - notes[0].marker->second));
         if (approach.scale <= 0.0) {
-            continue;
+            return;
         }
 
         qreal angleDegrees = 0.0;
@@ -2216,6 +2222,13 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
         }
 
         renderConcentricGuide(lineImage, approach.distance, sourceRadius, angleDegrees, true, 0.0);
+    };
+
+    for (auto it = eachGroupsById.cbegin(); it != eachGroupsById.cend(); ++it) {
+        drawEachGroupGuides(it.value());
+    }
+    for (auto it = fallbackEachGroupsBySecond.cbegin(); it != fallbackEachGroupsBySecond.cend(); ++it) {
+        drawEachGroupGuides(it.value());
     }
 }
 

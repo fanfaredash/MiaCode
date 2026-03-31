@@ -23,6 +23,7 @@ Implication:
 - A parser change is rarely parser-only.
 - A new note property or timing rule usually needs timeline, preview, audio, export, and Muri review.
 - `TimelineQuickModel` is now the owner of comma-only `C` anchor lookup for editor cursor sync, header/timeline `R -> C` jumps, and playback follow.
+- `PreviewCanvas::drawNoteGuides` should group each-guide connectors by parser-derived `eachGroupId` when available; do not merge backtick-separated groups just because their `marker.second` matches.
 - While preview playback is running, slow-refresh note-marker updates still feed validation and timeline-side diagnostics, but preview audio/canvas/object stats stay on the frozen play-start snapshot until playback stops.
 
 ## 2. `&first` And Timing Offset Chain
