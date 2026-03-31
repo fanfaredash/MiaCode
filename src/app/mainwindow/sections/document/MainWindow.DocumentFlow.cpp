@@ -1044,7 +1044,13 @@ void MainWindow::updateDifficultyDeleteButton(bool visible)
     if (deleteDifficultyButton_ == nullptr) {
         return;
     }
-    if (!visible || !hasActiveDifficulty() || outlineList_ == nullptr) {
+    constexpr int kOutlineIconOnlyThreshold = 120;
+    const int outlineListWidth =
+        outlineList_ != nullptr && outlineList_->viewport() != nullptr ? outlineList_->viewport()->width() : 0;
+    if (!visible
+        || !hasActiveDifficulty()
+        || outlineList_ == nullptr
+        || (outlineListWidth > 0 && outlineListWidth < kOutlineIconOnlyThreshold)) {
         deleteDifficultyButton_->hide();
         return;
     }
@@ -1073,21 +1079,25 @@ void MainWindow::rebuildFieldSidebar()
     updateDifficultyDeleteButton(false);
     QSignalBlocker blocker(outlineList_);
     outlineList_->clear();
+    const QString metadataLabel = uiText("sidebar.metadata", "Metadata");
     auto* metadataItem = new QListWidgetItem(
         style()->standardIcon(QStyle::SP_FileDialogDetailedView),
-        uiText("sidebar.metadata", "Metadata"),
+        metadataLabel,
         outlineList_
     );
     metadataItem->setData(Qt::UserRole, "metadata");
+    metadataItem->setToolTip(metadataLabel);
 
     QListWidgetItem* selectedItem = nullptr;
     bool hasMissingDifficulty = false;
     const QVector<int> ids = document_.difficultyIds();
     for (int id : ids) {
-        auto* difficultyItem = new QListWidgetItem(SimaiDocument::difficultyName(id), outlineList_);
+        const QString difficultyLabel = SimaiDocument::difficultyName(id);
+        auto* difficultyItem = new QListWidgetItem(difficultyLabel, outlineList_);
         difficultyItem->setIcon(makeDifficultyBadgeIcon(id));
         difficultyItem->setData(Qt::UserRole, "difficulty_chart");
         difficultyItem->setData(Qt::UserRole + 1, id);
+        difficultyItem->setToolTip(difficultyLabel);
         if (id == activeDifficultyId_) {
             selectedItem = difficultyItem;
         }
@@ -1099,12 +1109,14 @@ void MainWindow::rebuildFieldSidebar()
         }
     }
     if (hasMissingDifficulty) {
+        const QString addDifficultyLabel = uiText("sidebar.add_difficulty", "+ Add Difficulty");
         auto* addItem = new QListWidgetItem(
             style()->standardIcon(QStyle::SP_FileDialogNewFolder),
-            uiText("sidebar.add_difficulty", "+ Add Difficulty"),
+            addDifficultyLabel,
             outlineList_
         );
         addItem->setData(Qt::UserRole, "add");
+        addItem->setToolTip(addDifficultyLabel);
     }
     auto* toolboxItem = new QListWidgetItem(
         makeToolboxAccessIcon(UiTheme::colors().iconPrimary, QColor(QStringLiteral("#E6B84A"))),

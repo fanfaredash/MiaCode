@@ -816,7 +816,20 @@ MainWindow::MainWindow(QWidget* parent)
         "}"
         "QListWidget::item:selected { color: #243447; }"
     );
-    outlineDock->setWidget(outlineList_);
+    auto* outlineDockShell = new QWidget(outlineDock);
+    auto* outlineDockShellLayout = new QHBoxLayout(outlineDockShell);
+    outlineDockShellLayout->setContentsMargins(0, 0, 0, 0);
+    outlineDockShellLayout->setSpacing(0);
+    outlineDockShellLayout->addWidget(outlineList_, 1);
+    outlineCollapseButton_ = new QToolButton(outlineDockShell);
+    outlineCollapseButton_->setFocusPolicy(Qt::NoFocus);
+    outlineCollapseButton_->setCursor(Qt::PointingHandCursor);
+    outlineCollapseButton_->setFixedWidth(20);
+    outlineCollapseButton_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    outlineCollapseButton_->setFont(uiAccentFont(10, QFont::Bold));
+    outlineCollapseButton_->setStyleSheet(outlineCollapseButtonStyleSheet());
+    outlineDockShellLayout->addWidget(outlineCollapseButton_, 0);
+    outlineDock->setWidget(outlineDockShell);
     outlineList_->setMouseTracking(true);
     outlineList_->viewport()->setMouseTracking(true);
     outlineList_->viewport()->installEventFilter(this);
@@ -843,6 +856,9 @@ MainWindow::MainWindow(QWidget* parent)
         if (hasActiveDifficulty()) {
             deleteDifficultyField(activeDifficultyId_);
         }
+    });
+    connect(outlineCollapseButton_, &QToolButton::clicked, this, [this]() {
+        setOutlineDockCollapsed(!outlineDockCollapsed_);
     });
     connect(outlineList_, &QListWidget::itemClicked, this, [this](QListWidgetItem* current) {
         updateDifficultyDeleteButton(false);
@@ -1005,8 +1021,7 @@ MainWindow::MainWindow(QWidget* parent)
     }
 
     addDockWidget(Qt::LeftDockWidgetArea, outlineDock);
-    outlineDock->setMinimumWidth(190);
-    outlineDock->setMaximumWidth(190);
+    setOutlineDockCollapsed(false);
     logStartupStage("outline_ready");
 
     previewPanel_ = new QWidget(this);

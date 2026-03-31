@@ -110,6 +110,9 @@ QString holdPixmapCacheKey(const QString& type, qreal scale)
 TimelineView::TimelineView(QWidget* parent)
     : QAbstractScrollArea(parent)
 {
+    setFrameShape(QFrame::NoFrame);
+    setLineWidth(0);
+    setMidLineWidth(0);
     setAttribute(Qt::WA_OpaquePaintEvent, true);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);

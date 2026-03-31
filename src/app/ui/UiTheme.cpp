@@ -216,6 +216,7 @@ QString applicationStyleSheet()
         "QTabBar::tab { background: %8; color: %6; border: 1px solid %3; padding: 4px 10px; }"
         "QTabBar::tab:selected { background: %7; color: %2; }"
         "QDockWidget { color: %2; }"
+        "QMainWindow::separator { background: %3; width: 1px; height: 1px; }"
         "QToolTip { background: %9; color: %2; border: 1px solid %10; }"
     )
         .arg(css(c.toolbarBg))

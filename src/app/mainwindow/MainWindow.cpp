@@ -269,37 +269,31 @@ QString previewFullscreenHintStyleSheet()
     );
 }
 
-QString toolboxCornerButtonStyleSheet()
+QString outlineCollapseButtonStyleSheet()
 {
     const UiTheme::Colors& c = UiTheme::colors();
     return QStringLiteral(
         "QToolButton {"
         " color: %1;"
         " background: %2;"
-        " border: 1px solid %3;"
-        " border-radius: 11px;"
-        " padding: 5px 12px 5px 10px;"
-        " min-height: 30px;"
+        " border: none;"
+        " border-left: 1px solid %3;"
+        " padding: 0px;"
+        " font-size: 12px;"
         " font-weight: 700;"
         "}"
         "QToolButton:hover {"
         " background: %4;"
-        " border-color: %4;"
         "}"
         "QToolButton:pressed {"
         " background: %5;"
-        " border-color: %5;"
-        "}"
-        "QToolButton::menu-indicator {"
-        " image: none;"
-        " width: 0px;"
         "}"
     )
-        .arg(cssRgb(c.accentText))
-        .arg(cssRgb(c.accent))
-        .arg(cssRgb(c.accentHover))
-        .arg(cssRgb(c.accentHover))
-        .arg(cssRgb(c.accentPressed));
+        .arg(cssRgb(c.iconSecondary))
+        .arg(cssRgb(c.cardAltBg))
+        .arg(cssRgb(c.border))
+        .arg(cssRgb(c.menuHoverBg))
+        .arg(cssRgb(c.borderSoft));
 }
 
 QString previewFullscreenPauseButtonStyleSheet(bool active)
@@ -855,6 +849,15 @@ public:
             painter->drawRoundedRect(fillRect, 6.0, 6.0);
         }
         painter->restore();
+
+        const int listWidth = option.widget != nullptr ? option.widget->width() : option.rect.width();
+        constexpr int kIconOnlyThreshold = 120;
+        const bool iconOnly = listWidth > 0 && listWidth < kIconOnlyThreshold;
+        if (iconOnly) {
+            drawOption.text.clear();
+            drawOption.features &= ~QStyleOptionViewItem::HasDisplay;
+            drawOption.decorationAlignment = Qt::AlignLeft | Qt::AlignVCenter;
+        }
 
         drawOption.state &= ~QStyle::State_Selected;
         drawOption.state &= ~QStyle::State_MouseOver;
@@ -2223,9 +2226,9 @@ void MainWindow::applyUiTheme()
     if (exportVideoButton_ != nullptr) {
         exportVideoButton_->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
     }
-    if (toolboxButton_ != nullptr) {
-        toolboxButton_->setStyleSheet(toolboxCornerButtonStyleSheet());
-        toolboxButton_->setIcon(makeToolboxAccessIcon(UiTheme::colors().accentText, QColor(QStringLiteral("#FFD166"))));
+    if (outlineCollapseButton_ != nullptr) {
+        outlineCollapseButton_->setStyleSheet(outlineCollapseButtonStyleSheet());
+        updateOutlineDockCollapseButton();
     }
     if (previewFullscreenHintLabel_ != nullptr) {
         previewFullscreenHintLabel_->setStyleSheet(previewFullscreenHintStyleSheet());
@@ -2239,6 +2242,51 @@ void MainWindow::applyUiTheme()
     updatePauseButtonAppearance();
     updatePreviewFullscreenButtonAppearance();
     update();
+}
+
+void MainWindow::updateOutlineDockCollapseButton()
+{
+    if (outlineCollapseButton_ == nullptr) {
+        return;
+    }
+    outlineCollapseButton_->setText(outlineDockCollapsed_ ? QStringLiteral("▶") : QStringLiteral("◀"));
+    outlineCollapseButton_->setToolTip(
+        outlineDockCollapsed_
+            ? (UiText::isChineseUi() ? QStringLiteral("展开左侧字段栏") : QStringLiteral("Expand left sidebar"))
+            : (UiText::isChineseUi() ? QStringLiteral("折叠左侧字段栏") : QStringLiteral("Collapse left sidebar"))
+    );
+}
+
+void MainWindow::setOutlineDockCollapsed(bool collapsed)
+{
+    if (outlineDock_ == nullptr || outlineList_ == nullptr) {
+        return;
+    }
+
+    constexpr int kCollapsedWidth = 20;
+    constexpr int kExpandedMinWidth = 120;
+    if (collapsed) {
+        const int currentWidth = outlineDock_->width();
+        if (currentWidth > kCollapsedWidth) {
+            outlineDockExpandedWidth_ = currentWidth;
+        }
+    }
+
+    outlineDockCollapsed_ = collapsed;
+    outlineList_->setVisible(!collapsed);
+    if (collapsed) {
+        updateDifficultyDeleteButton(false);
+    }
+
+    const int targetWidth = collapsed ? kCollapsedWidth : qMax(kExpandedMinWidth, outlineDockExpandedWidth_);
+    outlineDock_->setMinimumWidth(collapsed ? kCollapsedWidth : kExpandedMinWidth);
+    outlineDock_->setMaximumWidth(collapsed ? kCollapsedWidth : QWIDGETSIZE_MAX);
+    outlineDock_->resize(targetWidth, outlineDock_->height());
+    if (QWidget* widget = outlineDock_->widget(); widget != nullptr) {
+        widget->updateGeometry();
+    }
+    outlineDock_->updateGeometry();
+    updateOutlineDockCollapseButton();
 }
 
 void MainWindow::applySystemWindowBackdrop(QWidget* target) const
@@ -3317,6 +3365,9 @@ void MainWindow::onReplaceAll()
 void MainWindow::resizeEvent(QResizeEvent* event)
 {
     QMainWindow::resizeEvent(event);
+    if (!outlineDockCollapsed_ && outlineDock_ != nullptr) {
+        outlineDockExpandedWidth_ = qMax(120, outlineDock_->width());
+    }
     updatePreviewWorkspaceLayout();
     updateEditorHeaderLayoutMode();
     updateEditorFindBarGeometry();
