@@ -1053,6 +1053,7 @@ MainWindow::MainWindow(QWidget* parent)
     auto* previewControls = new QFrame(previewControlCard_);
     previewControls->setObjectName("PreviewControls");
     auto* previewControlsLayout = new QHBoxLayout(previewControls);
+    previewControlsLayout_ = previewControlsLayout;
     previewControlsLayout->setContentsMargins(0, 0, 0, 0);
     previewControlsLayout->setSpacing(8);
 

@@ -33,6 +33,7 @@ class QDockWidget;
 class QEvent;
 class QFrame;
 class QGridLayout;
+class QHBoxLayout;
 class QHideEvent;
 class QLabel;
 class LatencyDetectorDialog;
@@ -658,6 +659,7 @@ private:
     QWidget* previewCanvasContainer_ = nullptr;
     QFrame* previewCanvasFrame_ = nullptr;
     QFrame* previewControlCard_ = nullptr;
+    QHBoxLayout* previewControlsLayout_ = nullptr;
     QToolButton* stopPreviewButton_ = nullptr;
     QToolButton* pausePreviewButton_ = nullptr;
     QToolButton* syntaxCheckButton_ = nullptr;
