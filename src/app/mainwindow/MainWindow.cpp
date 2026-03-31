@@ -3674,7 +3674,7 @@ QString MainWindow::transformChartText(const QString& input, ChartTransformOp op
         sharedOp = miacode::chart_transform::ChartTransformOp::Rotate45Clockwise;
         break;
     }
-    return miacode::chart_transform::transformChartText(input, sharedOp, changedCount);
+    return miacode::chart_transform::transformChartSelectionText(input, sharedOp, changedCount);
 }
 
 void MainWindow::onMirrorLeftRight()

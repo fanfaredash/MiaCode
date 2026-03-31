@@ -15,6 +15,7 @@ enum class ChartTransformOp {
 };
 
 QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount = nullptr);
+QString transformChartSelectionText(const QString& input, ChartTransformOp op, int* changedCount = nullptr);
 QString toggleBreakForSelection(const QString& input, int* changedCount = nullptr);
 QString toggleExForSelection(const QString& input, int* changedCount = nullptr);
 QString toggleFireworkForSelection(const QString& input, int* changedCount = nullptr);
