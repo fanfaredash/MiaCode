@@ -3236,9 +3236,10 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const int frameHeight = qMax(1, task.outputHeight);
     const QSize frameSize(frameWidth, frameHeight);
     const QString explicitMediaPath = normalizePath(task.backgroundMediaPath);
-    const QString mediaPath = (!explicitMediaPath.isEmpty() && QFileInfo::exists(explicitMediaPath))
-        ? explicitMediaPath
-        : miacode::chart_assets::resolveBackgroundMediaPath(task.chartPath);
+    const QString mediaPath = miacode::chart_assets::resolvePreferredBackgroundMediaPath(
+        task.chartPath,
+        explicitMediaPath
+    );
     const bool hasMedia = !mediaPath.isEmpty();
     const bool mediaIsImage = hasMedia && isImageMediaPath(mediaPath);
     const QString trackPath = (task.trackPath.isEmpty() || !QFileInfo::exists(task.trackPath))
