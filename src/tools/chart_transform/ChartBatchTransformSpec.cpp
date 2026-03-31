@@ -847,7 +847,7 @@ void runInlineSpecs(QTextStream& err, int* failed)
     {
         int changed = 0;
         const QString input = QStringLiteral("8}1");
-        const QString output = miacode::chart_transform::transformChartText(
+        const QString output = miacode::chart_transform::transformChartSelectionText(
             input,
             miacode::chart_transform::ChartTransformOp::MirrorLeftRight,
             &changed
@@ -865,7 +865,7 @@ void runInlineSpecs(QTextStream& err, int* failed)
     {
         int changed = 0;
         const QString input = QStringLiteral("8}1");
-        const QString output = miacode::chart_transform::transformChartText(
+        const QString output = miacode::chart_transform::transformChartSelectionText(
             input,
             miacode::chart_transform::ChartTransformOp::Rotate45Clockwise,
             &changed
@@ -878,6 +878,88 @@ void runInlineSpecs(QTextStream& err, int* failed)
             err
         );
         expectTrue(changed == 1, QStringLiteral("rotate +45 counts only the rotated note body after }"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("8:1)1");
+        const QString output = miacode::chart_transform::transformChartSelectionText(
+            input,
+            miacode::chart_transform::ChartTransformOp::MirrorLeftRight,
+            &changed
+        );
+        expectEqual(
+            output,
+            QStringLiteral("8:1)8"),
+            QStringLiteral("mirror left/right keeps unmatched timing suffix before ) unchanged inside a selection"),
+            failed,
+            err
+        );
+        expectTrue(changed == 1, QStringLiteral("mirror left/right counts only the mirrored note body after )"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("8:1]1");
+        const QString output = miacode::chart_transform::transformChartSelectionText(
+            input,
+            miacode::chart_transform::ChartTransformOp::Rotate45Clockwise,
+            &changed
+        );
+        expectEqual(
+            output,
+            QStringLiteral("8:1]2"),
+            QStringLiteral("rotate +45 keeps unmatched timing suffix before ] unchanged inside a selection"),
+            failed,
+            err
+        );
+        expectTrue(changed == 1, QStringLiteral("rotate +45 counts only the rotated note body after ]"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("8:1)12");
+        const QString output = miacode::chart_transform::toggleBreakForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("8:1)1b/2b"),
+            QStringLiteral("toggle break keeps unmatched timing suffix before ) unchanged inside a selection"),
+            failed,
+            err
+        );
+        expectTrue(changed == 2, QStringLiteral("toggle break counts only changed notes after )"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("8:1]1");
+        const QString output = miacode::chart_transform::toggleExForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("8:1]1x"),
+            QStringLiteral("toggle EX keeps unmatched timing suffix before ] unchanged inside a selection"),
+            failed,
+            err
+        );
+        expectTrue(changed == 1, QStringLiteral("toggle EX counts only changed notes after ]"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("1[8:1");
+        const QString output = miacode::chart_transform::transformChartSelectionText(
+            input,
+            miacode::chart_transform::ChartTransformOp::MirrorLeftRight,
+            &changed
+        );
+        expectEqual(
+            output,
+            QStringLiteral("8[8:1"),
+            QStringLiteral("mirror left/right keeps unmatched timing prefix after [ unchanged inside a selection"),
+            failed,
+            err
+        );
+        expectTrue(changed == 1, QStringLiteral("mirror left/right counts only the mirrored note body before unmatched ["), failed, err);
     }
 }
 

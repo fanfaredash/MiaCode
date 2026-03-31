@@ -93,6 +93,12 @@ struct ToggleStats {
     int flaggedObjects = 0;
 };
 
+struct SelectionEdgeSplit {
+    QString prefix;
+    QString core;
+    QString suffix;
+};
+
 bool parseTouchTokenParts(const QString& token, TouchTokenParts* parts)
 {
     if (parts == nullptr) {
@@ -320,43 +326,171 @@ QString rotateSlideCoreOutsideBrackets(const QString& coreWithoutTrackBreak, int
     return rotated;
 }
 
-bool splitTimingPrefixToken(const QString& token, QString* prefixWithBrace, QString* body)
+bool isLineBreakChar(QChar ch)
 {
-    const int separator = token.indexOf(QChar('}'));
-    if (separator <= 0 || separator + 1 >= token.size()) {
-        return false;
-    }
-    for (int i = 0; i < separator; ++i) {
-        if (!token.at(i).isDigit()) {
-            return false;
-        }
-    }
-    if (prefixWithBrace != nullptr) {
-        *prefixWithBrace = token.left(separator + 1);
-    }
-    if (body != nullptr) {
-        *body = token.mid(separator + 1);
-    }
-    return true;
+    return ch == QChar('\n')
+        || ch == QChar('\r')
+        || ch == QChar::LineSeparator
+        || ch == QChar::ParagraphSeparator;
 }
 
-bool rewriteTimingPrefixToken(
-    const QString& token,
-    const std::function<QString(const QString&)>& rewriteBody,
-    QString* rewritten)
+int commentStartIndexInLine(const QString& line)
 {
-    if (rewritten == nullptr || !rewriteBody) {
-        return false;
+    for (int i = 0; i + 1 < line.size(); ++i) {
+        if (line.at(i) == QChar('|') && line.at(i + 1) == QChar('|')) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int protectedPrefixLengthForSelectionStart(const QString& line)
+{
+    int parenDepth = 0;
+    int braceDepth = 0;
+    int squareDepth = 0;
+    const int commentStart = commentStartIndexInLine(line);
+    const int scanEnd = commentStart >= 0 ? commentStart : line.size();
+    for (int i = 0; i < scanEnd; ++i) {
+        const QChar ch = line.at(i);
+        if (ch == QChar('(')) {
+            ++parenDepth;
+            continue;
+        }
+        if (ch == QChar('{')) {
+            ++braceDepth;
+            continue;
+        }
+        if (ch == QChar('[')) {
+            ++squareDepth;
+            continue;
+        }
+        if (ch == QChar(')')) {
+            if (parenDepth > 0) {
+                --parenDepth;
+                continue;
+            }
+            return i + 1;
+        }
+        if (ch == QChar('}')) {
+            if (braceDepth > 0) {
+                --braceDepth;
+                continue;
+            }
+            return i + 1;
+        }
+        if (ch == QChar(']')) {
+            if (squareDepth > 0) {
+                --squareDepth;
+                continue;
+            }
+            return i + 1;
+        }
+    }
+    return 0;
+}
+
+int protectedSuffixStartForSelectionEnd(const QString& line)
+{
+    int parenDepth = 0;
+    int braceDepth = 0;
+    int squareDepth = 0;
+    int suffixStart = line.size();
+    bool found = false;
+    const int commentStart = commentStartIndexInLine(line);
+    const int scanEnd = commentStart >= 0 ? commentStart : line.size();
+    for (int i = scanEnd - 1; i >= 0; --i) {
+        const QChar ch = line.at(i);
+        if (ch == QChar(')')) {
+            ++parenDepth;
+            continue;
+        }
+        if (ch == QChar('}')) {
+            ++braceDepth;
+            continue;
+        }
+        if (ch == QChar(']')) {
+            ++squareDepth;
+            continue;
+        }
+        if (ch == QChar('(')) {
+            if (parenDepth > 0) {
+                --parenDepth;
+                continue;
+            }
+            suffixStart = i;
+            found = true;
+            continue;
+        }
+        if (ch == QChar('{')) {
+            if (braceDepth > 0) {
+                --braceDepth;
+                continue;
+            }
+            suffixStart = i;
+            found = true;
+            continue;
+        }
+        if (ch == QChar('[')) {
+            if (squareDepth > 0) {
+                --squareDepth;
+                continue;
+            }
+            suffixStart = i;
+            found = true;
+            continue;
+        }
+    }
+    return found ? suffixStart : line.size();
+}
+
+SelectionEdgeSplit splitSelectionEdges(const QString& input)
+{
+    SelectionEdgeSplit split;
+    if (input.isEmpty()) {
+        return split;
     }
 
-    QString prefix;
-    QString body;
-    if (!splitTimingPrefixToken(token, &prefix, &body)) {
-        return false;
+    int firstLineEnd = 0;
+    while (firstLineEnd < input.size() && !isLineBreakChar(input.at(firstLineEnd))) {
+        ++firstLineEnd;
+    }
+    const int protectedPrefixLength = protectedPrefixLengthForSelectionStart(input.left(firstLineEnd));
+
+    int lastLineStart = input.size();
+    while (lastLineStart > 0 && !isLineBreakChar(input.at(lastLineStart - 1))) {
+        --lastLineStart;
+    }
+    const int protectedSuffixStart = lastLineStart + protectedSuffixStartForSelectionEnd(input.mid(lastLineStart));
+
+    if (protectedPrefixLength >= protectedSuffixStart) {
+        split.prefix = input;
+        return split;
     }
 
-    *rewritten = prefix + rewriteBody(body);
-    return true;
+    split.prefix = input.left(protectedPrefixLength);
+    split.core = input.mid(protectedPrefixLength, protectedSuffixStart - protectedPrefixLength);
+    split.suffix = input.mid(protectedSuffixStart);
+    return split;
+}
+
+QString rewriteSelectionCore(const SelectionEdgeSplit& split, const std::function<QString(const QString&)>& rewriteCore)
+{
+    if (!rewriteCore) {
+        return split.prefix + split.core + split.suffix;
+    }
+
+    QString rewritten;
+    rewritten.reserve(split.prefix.size() + split.core.size() + split.suffix.size() + 32);
+    rewritten.append(split.prefix);
+    rewritten.append(rewriteCore(split.core));
+    rewritten.append(split.suffix);
+    return rewritten;
+}
+
+QString rewriteSelectionCore(const QString& input, const std::function<QString(const QString&)>& rewriteCore)
+{
+    return rewriteSelectionCore(splitSelectionEdges(input), rewriteCore);
 }
 
 void scanSelectionTokens(const QString& input, const std::function<void(const QString&)>& visitToken)
@@ -391,7 +525,7 @@ void scanSelectionTokens(const QString& input, const std::function<void(const QS
                 i = close;
                 continue;
             }
-            if (ch == QChar('{') && token.isEmpty()) {
+            if (ch == QChar('{')) {
                 flushToken();
                 const int close = line.indexOf(QChar('}'), i + 1);
                 if (close < 0) {
@@ -455,7 +589,7 @@ QString rewriteSelectionTokens(const QString& input, const std::function<QString
                 i = close;
                 continue;
             }
-            if (ch == QChar('{') && token.isEmpty()) {
+            if (ch == QChar('{')) {
                 flushToken();
                 const int close = line.indexOf(QChar('}'), i + 1);
                 if (close < 0) {
@@ -492,16 +626,13 @@ ToggleStats collectBreakStats(const QString& input)
 {
     ToggleStats stats;
     scanSelectionTokens(input, [&stats](const QString& token) {
-        QString analysisToken;
-        const QString& effectiveToken = splitTimingPrefixToken(token, nullptr, &analysisToken) ? analysisToken : token;
-
-        if (isSimpleDigitCluster(effectiveToken)) {
-            stats.eligibleObjects += effectiveToken.size();
+        if (isSimpleDigitCluster(token)) {
+            stats.eligibleObjects += token.size();
             return;
         }
 
         TouchTokenParts touch;
-        if (parseTouchTokenParts(effectiveToken, &touch) && touch.valid) {
+        if (parseTouchTokenParts(token, &touch) && touch.valid) {
             if (!touch.hasHold) {
                 ++stats.eligibleObjects;
                 if (touch.hasBreak) {
@@ -512,7 +643,7 @@ ToggleStats collectBreakStats(const QString& input)
         }
 
         SlideTokenParts slide;
-        if (parseSlideTokenParts(effectiveToken, &slide) && slide.valid) {
+        if (parseSlideTokenParts(token, &slide) && slide.valid) {
             stats.eligibleObjects += 2;
             if (slide.headBreak) {
                 ++stats.flaggedObjects;
@@ -524,7 +655,7 @@ ToggleStats collectBreakStats(const QString& input)
         }
 
         NoteTokenParts note;
-        if (parseNoteTokenParts(effectiveToken, &note) && note.valid) {
+        if (parseNoteTokenParts(token, &note) && note.valid) {
             ++stats.eligibleObjects;
             if (note.hasBreak) {
                 ++stats.flaggedObjects;
@@ -538,16 +669,13 @@ ToggleStats collectExStats(const QString& input)
 {
     ToggleStats stats;
     scanSelectionTokens(input, [&stats](const QString& token) {
-        QString analysisToken;
-        const QString& effectiveToken = splitTimingPrefixToken(token, nullptr, &analysisToken) ? analysisToken : token;
-
-        if (isSimpleDigitCluster(effectiveToken)) {
-            stats.eligibleObjects += effectiveToken.size();
+        if (isSimpleDigitCluster(token)) {
+            stats.eligibleObjects += token.size();
             return;
         }
 
         SlideTokenParts slide;
-        if (parseSlideTokenParts(effectiveToken, &slide) && slide.valid) {
+        if (parseSlideTokenParts(token, &slide) && slide.valid) {
             ++stats.eligibleObjects;
             if (slide.headEx) {
                 ++stats.flaggedObjects;
@@ -556,7 +684,7 @@ ToggleStats collectExStats(const QString& input)
         }
 
         NoteTokenParts note;
-        if (parseNoteTokenParts(effectiveToken, &note) && note.valid) {
+        if (parseNoteTokenParts(token, &note) && note.valid) {
             ++stats.eligibleObjects;
             if (note.hasEx) {
                 ++stats.flaggedObjects;
@@ -570,11 +698,8 @@ ToggleStats collectFireworkStats(const QString& input)
 {
     ToggleStats stats;
     scanSelectionTokens(input, [&stats](const QString& token) {
-        QString analysisToken;
-        const QString& effectiveToken = splitTimingPrefixToken(token, nullptr, &analysisToken) ? analysisToken : token;
-
         TouchTokenParts touch;
-        if (parseTouchTokenParts(effectiveToken, &touch) && touch.valid) {
+        if (parseTouchTokenParts(token, &touch) && touch.valid) {
             ++stats.eligibleObjects;
             if (touch.hasFirework) {
                 ++stats.flaggedObjects;
@@ -586,13 +711,6 @@ ToggleStats collectFireworkStats(const QString& input)
 
 QString toggleBreakToken(const QString& token, bool enable, int* changedCount)
 {
-    QString rewritten;
-    if (rewriteTimingPrefixToken(token, [enable, changedCount](const QString& body) {
-            return toggleBreakToken(body, enable, changedCount);
-        }, &rewritten)) {
-        return rewritten;
-    }
-
     if (isSimpleDigitCluster(token)) {
         if (!enable) {
             return token;
@@ -643,13 +761,6 @@ QString toggleBreakToken(const QString& token, bool enable, int* changedCount)
 
 QString toggleExToken(const QString& token, bool enable, int* changedCount)
 {
-    QString rewritten;
-    if (rewriteTimingPrefixToken(token, [enable, changedCount](const QString& body) {
-            return toggleExToken(body, enable, changedCount);
-        }, &rewritten)) {
-        return rewritten;
-    }
-
     if (isSimpleDigitCluster(token)) {
         if (!enable) {
             return token;
@@ -688,13 +799,6 @@ QString toggleExToken(const QString& token, bool enable, int* changedCount)
 
 QString toggleFireworkToken(const QString& token, bool enable, int* changedCount)
 {
-    QString rewritten;
-    if (rewriteTimingPrefixToken(token, [enable, changedCount](const QString& body) {
-            return toggleFireworkToken(body, enable, changedCount);
-        }, &rewritten)) {
-        return rewritten;
-    }
-
     TouchTokenParts touch;
     if (parseTouchTokenParts(token, &touch) && touch.valid) {
         const QString rebuilt = buildTouchToken(touch, touch.hasBreak, touch.hasEx, enable);
@@ -710,13 +814,6 @@ QString rotateRandomToken(const QString& token, const std::function<int()>& next
 {
     if (!nextStep) {
         return token;
-    }
-
-    QString rewritten;
-    if (rewriteTimingPrefixToken(token, [nextStep, changedCount](const QString& body) {
-            return rotateRandomToken(body, nextStep, changedCount);
-        }, &rewritten)) {
-        return rewritten;
     }
 
     if (isSimpleDigitCluster(token)) {
@@ -779,10 +876,13 @@ QString rotateRandomToken(const QString& token, const std::function<int()>& next
 QString toggleBreakForSelection(const QString& input, int* changedCount)
 {
     int changed = 0;
-    const ToggleStats stats = collectBreakStats(input);
+    const SelectionEdgeSplit split = splitSelectionEdges(input);
+    const ToggleStats stats = collectBreakStats(split.core);
     const bool enable = stats.eligibleObjects > 0 && stats.flaggedObjects != stats.eligibleObjects;
-    const QString output = rewriteSelectionTokens(input, [&](const QString& token) {
-        return toggleBreakToken(token, enable, &changed);
+    const QString output = rewriteSelectionCore(split, [&](const QString& core) {
+        return rewriteSelectionTokens(core, [&](const QString& token) {
+            return toggleBreakToken(token, enable, &changed);
+        });
     });
     if (changedCount != nullptr) {
         *changedCount = changed;
@@ -793,10 +893,13 @@ QString toggleBreakForSelection(const QString& input, int* changedCount)
 QString toggleExForSelection(const QString& input, int* changedCount)
 {
     int changed = 0;
-    const ToggleStats stats = collectExStats(input);
+    const SelectionEdgeSplit split = splitSelectionEdges(input);
+    const ToggleStats stats = collectExStats(split.core);
     const bool enable = stats.eligibleObjects > 0 && stats.flaggedObjects != stats.eligibleObjects;
-    const QString output = rewriteSelectionTokens(input, [&](const QString& token) {
-        return toggleExToken(token, enable, &changed);
+    const QString output = rewriteSelectionCore(split, [&](const QString& core) {
+        return rewriteSelectionTokens(core, [&](const QString& token) {
+            return toggleExToken(token, enable, &changed);
+        });
     });
     if (changedCount != nullptr) {
         *changedCount = changed;
@@ -807,10 +910,13 @@ QString toggleExForSelection(const QString& input, int* changedCount)
 QString toggleFireworkForSelection(const QString& input, int* changedCount)
 {
     int changed = 0;
-    const ToggleStats stats = collectFireworkStats(input);
+    const SelectionEdgeSplit split = splitSelectionEdges(input);
+    const ToggleStats stats = collectFireworkStats(split.core);
     const bool enable = stats.eligibleObjects > 0 && stats.flaggedObjects != stats.eligibleObjects;
-    const QString output = rewriteSelectionTokens(input, [&](const QString& token) {
-        return toggleFireworkToken(token, enable, &changed);
+    const QString output = rewriteSelectionCore(split, [&](const QString& core) {
+        return rewriteSelectionTokens(core, [&](const QString& token) {
+            return toggleFireworkToken(token, enable, &changed);
+        });
     });
     if (changedCount != nullptr) {
         *changedCount = changed;
@@ -832,8 +938,10 @@ QString randomRotateForSelection(const QString& input, int* changedCount)
 QString randomRotateForSelection(const QString& input, const std::function<int()>& nextStep, int* changedCount)
 {
     int changed = 0;
-    const QString output = rewriteSelectionTokens(input, [&](const QString& token) {
-        return rotateRandomToken(token, nextStep, &changed);
+    const QString output = rewriteSelectionCore(input, [&](const QString& core) {
+        return rewriteSelectionTokens(core, [&](const QString& token) {
+            return rotateRandomToken(token, nextStep, &changed);
+        });
     });
     if (changedCount != nullptr) {
         *changedCount = changed;
@@ -900,13 +1008,6 @@ QString transformChartText(const QString& input, ChartTransformOp op, int* chang
     std::function<QString(const QString&)> transformToken = [&](const QString& token) -> QString {
         if (token.isEmpty()) {
             return token;
-        }
-
-        QString rewritten;
-        if (rewriteTimingPrefixToken(token, [&transformToken](const QString& body) {
-                return transformToken(body);
-            }, &rewritten)) {
-            return rewritten;
         }
 
         const auto transformTouchToken = [&](const QString& in) -> QString {
@@ -1198,7 +1299,7 @@ QString transformChartText(const QString& input, ChartTransformOp op, int* chang
                 i = close;
                 continue;
             }
-            if (ch == QChar('{') && token.isEmpty()) {
+            if (ch == QChar('{')) {
                 flushToken();
                 const int close = line.indexOf('}', i + 1);
                 if (close < 0) {
@@ -1233,6 +1334,18 @@ QString transformChartText(const QString& input, ChartTransformOp op, int* chang
         *changedCount = changed;
     }
     return transformed;
+}
+
+QString transformChartSelectionText(const QString& input, ChartTransformOp op, int* changedCount)
+{
+    int changed = 0;
+    const QString output = rewriteSelectionCore(input, [&](const QString& core) {
+        return transformChartText(core, op, &changed);
+    });
+    if (changedCount != nullptr) {
+        *changedCount = changed;
+    }
+    return output;
 }
 
 }  // namespace miacode::chart_transform
