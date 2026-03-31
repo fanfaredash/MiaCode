@@ -2803,12 +2803,23 @@ void MainWindow::appendOutput(const QString& title, const QString& payload)
     outputView_->appendPlainText(QString());
 }
 
-bool MainWindow::saveBeforePreviewStart()
+bool MainWindow::preparePreviewStartState()
 {
-    if (documentDirty_ || currentFieldDirty_) {
-        return onSaveFile();
+    const bool chartFieldVisible = editorStack_ != nullptr && editorStack_->currentWidget() == chartPage_;
+    if (currentFieldDirty_ && !chartFieldVisible && !applyCurrentFieldToDocument()) {
+        return false;
     }
-    return maybeSaveCurrentFieldChanges();
+
+    if (!hasActiveDifficulty()) {
+        return false;
+    }
+
+    if (latestTimelinePreviewSnapshotReady_ && latestTimelinePreviewRevision_ == timelineRevision_) {
+        return true;
+    }
+
+    requestTimelineSlowRefresh();
+    return false;
 }
 
 void MainWindow::setInvalidStarPreviewEasterEggEnabled(bool enabled)
@@ -3902,6 +3913,11 @@ void MainWindow::onRandomRotateSelection()
     if (qtPreviewPlaying_) {
         stopQtPreviewPlayback(true);
     }
+    pendingPreviewPlaybackStart_ = false;
+    pendingPreviewPlaybackResumeFromPause_ = false;
+    pendingPreviewPlaybackRevision_ = 0;
+    pendingPreviewPlaybackDifficultyId_ = 0;
+    pendingPreviewPlaybackSecond_ = 0.0;
     seekPreviewToSecond(returnSecond, true);
     statusBar()->showMessage("Qt preview stopped.");
 }
@@ -3919,10 +3935,9 @@ void MainWindow::onTogglePreviewPause()
         statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
-    if (!saveBeforePreviewStart()) {
+    if (!startQtPreviewPlayback(qtPreviewPauseSecond_, true)) {
         return;
     }
-    startQtPreviewPlayback(qtPreviewPauseSecond_, true);
     updatePauseButtonAppearance();
     statusBar()->showMessage(QString("Qt preview resumed at %1s.").arg(qtPreviewPauseSecond_, 0, 'f', 2));
 }

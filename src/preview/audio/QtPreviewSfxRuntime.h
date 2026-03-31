@@ -24,7 +24,8 @@ public:
     void clearTimeline();
     void resetCursor(double second, bool includeCurrentSecond);
     void drainEvents(double second);
-    void syncTouchholdVoices(double second);
+    void pauseTouchholdVoices();
+    void restoreTouchholdVoices(double second);
     void syncBackgroundTrack(double timelineSecond);
     bool hasBackgroundTrack() const;
     bool isBackgroundTrackRunning() const;

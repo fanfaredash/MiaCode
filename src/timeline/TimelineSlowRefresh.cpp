@@ -153,27 +153,63 @@ double computeDurationSeconds(
 
 }  // namespace
 
-TimelineSlowRefreshResult buildTimelineSlowRefreshResult(const TimelineSlowRefreshRequest& request)
+TimelinePreviewRefreshState buildTimelinePreviewRefreshState(
+    const SimaiNativeParseResult& parseResult,
+    double firstSeconds)
 {
-    TimelineSlowRefreshResult result;
+    TimelinePreviewRefreshState state;
+    state.shiftedNoteMarkers = shiftedNoteMarkers(parseResult.noteMarkers, firstSeconds);
+    state.noteMarkerSignature = noteMarkerSignature(state.shiftedNoteMarkers);
+    return state;
+}
+
+TimelinePreviewRefreshResult buildTimelinePreviewRefreshResult(
+    const TimelineSlowRefreshRequest& request,
+    const SimaiNativeParseResult& parseResult,
+    const TimelinePreviewRefreshState& previewState)
+{
+    TimelinePreviewRefreshResult result;
     result.revision = request.revision;
     result.difficultyId = request.difficultyId;
     result.chartText = request.chartText;
     result.firstSeconds = request.firstSeconds;
-    result.chineseUi = request.chineseUi;
-    result.parseResult = SimaiNativeParser::parseForTimeline(request.chartText);
+    result.parseResult = parseResult;
     result.shiftedBeatMarkers = shiftedBeatMarkers(result.parseResult.beatMarkers, request.firstSeconds);
-    result.shiftedNoteMarkers = shiftedNoteMarkers(result.parseResult.noteMarkers, request.firstSeconds);
-    result.noteMarkerSignature = noteMarkerSignature(result.shiftedNoteMarkers);
+    result.shiftedNoteMarkers = previewState.shiftedNoteMarkers;
+    result.noteMarkerSignature = previewState.noteMarkerSignature;
     result.durationSeconds = computeDurationSeconds(
         result.parseResult,
         result.shiftedBeatMarkers,
         result.shiftedNoteMarkers,
         request.firstSeconds);
+    return result;
+}
+
+TimelinePreviewRefreshResult buildTimelinePreviewRefreshResult(const TimelineSlowRefreshRequest& request)
+{
+    const SimaiNativeParseResult parseResult = SimaiNativeParser::parseForTimeline(request.chartText);
+    const TimelinePreviewRefreshState previewState = buildTimelinePreviewRefreshState(
+        parseResult,
+        request.firstSeconds);
+    return buildTimelinePreviewRefreshResult(request, parseResult, previewState);
+}
+
+TimelinePreviewRefreshState buildTimelinePreviewRefreshState(const QString& chartText, double firstSeconds)
+{
+    return buildTimelinePreviewRefreshState(SimaiNativeParser::parseForTimeline(chartText), firstSeconds);
+}
+
+TimelineValidationRefreshResult buildTimelineValidationRefreshResult(const TimelineValidationRefreshRequest& request)
+{
+    TimelineValidationRefreshResult result;
+    result.revision = request.revision;
+    result.difficultyId = request.difficultyId;
+    result.chartText = request.chartText;
+    result.chineseUi = request.chineseUi;
     result.validationReport = SimaiNativeParser::buildValidationReport(
         request.chartText,
         request.chineseUi ? SimaiNativeValidationLocale::Chinese : SimaiNativeValidationLocale::English,
-        &result.parseResult);
+        &request.parseResult);
     return result;
 }
 
