@@ -42,6 +42,8 @@ void LatencyDetectorDialog::buildUi()
     offsetEdit_->setValidator(new QDoubleValidator(-9999.0, 9999.0, 3, offsetEdit_));
     offsetEdit_->setAlignment(Qt::AlignCenter);
     offsetEdit_->setFixedWidth(74);
+    restoreDetectedOffsetButton_ = new QPushButton(localizedText(QStringLiteral("\u8FD8\u539F"), "Restore"), this);
+    restoreDetectedOffsetButton_->setEnabled(false);
     detectOffsetButton_ = new QPushButton(localizedText("检测偏移", "Detect Offset"), this);
 
     const auto addAdjustButton = [this, offsetRow](const QString& text, double delta) {
@@ -62,6 +64,7 @@ void LatencyDetectorDialog::buildUi()
     addAdjustButton(">", 0.001);
     addAdjustButton(">>", 0.010);
     offsetRow->addWidget(detectOffsetButton_);
+    offsetRow->addWidget(restoreDetectedOffsetButton_);
     offsetRow->addStretch(1);
     rootLayout->addLayout(offsetRow);
 
@@ -197,9 +200,18 @@ void LatencyDetectorDialog::buildUi()
         if (!ok || bpm <= 0.0) {
             return;
         }
+        detectedOffsetRestoreSeconds_ = hasLastAppliedOffset_ ? lastAppliedOffsetSeconds_ : parsedOffset();
+        hasDetectedOffsetRestore_ = true;
+        if (restoreDetectedOffsetButton_ != nullptr) {
+            restoreDetectedOffsetButton_->setEnabled(true);
+        }
         const double offset = detectOffset(bpm);
         updateOffsetEdit(offset, true);
         restartPlaybackAfterOffsetChange();
+    });
+    connect(restoreDetectedOffsetButton_, &QPushButton::clicked, this, &LatencyDetectorDialog::restoreDetectedOffset);
+    connect(offsetEdit_, &QLineEdit::textEdited, this, [this]() {
+        previewOffsetEdit();
     });
     connect(offsetEdit_, &QLineEdit::editingFinished, this, [this]() {
         applyOffsetEdit();
@@ -423,18 +435,57 @@ void LatencyDetectorDialog::updateBpmEdit(double bpm, bool notify)
 
 void LatencyDetectorDialog::updateOffsetEdit(double seconds, bool notify)
 {
+    (void)applyOffsetValue(seconds, notify, true);
+}
+
+bool LatencyDetectorDialog::applyOffsetValue(double seconds, bool notify, bool updateText)
+{
     const double normalized = qIsFinite(seconds) ? seconds : 0.0;
-    offsetEdit_->setText(QString::number(normalized, 'f', 3));
+    const bool changed = !hasLastAppliedOffset_ || qAbs(lastAppliedOffsetSeconds_ - normalized) > 0.0000001;
+    if (updateText && offsetEdit_ != nullptr) {
+        const QSignalBlocker blocker(offsetEdit_);
+        offsetEdit_->setText(QString::number(normalized, 'f', 3));
+    }
     updateBeatOverlay();
-    if (notify) {
+    lastAppliedOffsetSeconds_ = normalized;
+    hasLastAppliedOffset_ = true;
+    if (notify && changed) {
         emit offsetChanged(normalized);
+    }
+    return changed;
+}
+
+void LatencyDetectorDialog::previewOffsetEdit()
+{
+    bool ok = false;
+    const double offset = parsedOffset(&ok);
+    if (!ok) {
+        return;
+    }
+    if (applyOffsetValue(offset, true, false)) {
+        restartPlaybackAfterOffsetChange();
     }
 }
 
 void LatencyDetectorDialog::applyOffsetEdit()
 {
-    updateOffsetEdit(parsedOffset(), true);
-    restartPlaybackAfterOffsetChange();
+    if (applyOffsetValue(parsedOffset(), true, true)) {
+        restartPlaybackAfterOffsetChange();
+    }
+}
+
+void LatencyDetectorDialog::restoreDetectedOffset()
+{
+    if (!hasDetectedOffsetRestore_) {
+        return;
+    }
+    if (restoreDetectedOffsetButton_ != nullptr) {
+        restoreDetectedOffsetButton_->setEnabled(false);
+    }
+    hasDetectedOffsetRestore_ = false;
+    if (applyOffsetValue(detectedOffsetRestoreSeconds_, true, true)) {
+        restartPlaybackAfterOffsetChange();
+    }
 }
 
 void LatencyDetectorDialog::applyBpmEdit()
