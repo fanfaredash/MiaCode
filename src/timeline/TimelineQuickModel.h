@@ -10,12 +10,6 @@ class QTextDocument;
 class TimelineQuickModel
 {
 public:
-    enum class PreviewFollowMode {
-        EveryComma,
-        NonEmptyComma,
-        LineOnly,
-    };
-
     TimelineQuickModel() = default;
 
     void clear();
@@ -34,11 +28,7 @@ public:
     bool resolveTimelineNavigateCursor(double second, int* line, int* col, double* cursorSecond) const;
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
     bool resolvePreviewFollowCursor(
-        PreviewFollowMode mode,
         double second,
-        int anchorLine,
-        int anchorCol,
-        bool useAbsoluteSeekAnchor,
         int* line,
         int* col,
         double* noteSecond) const;
@@ -50,11 +40,14 @@ private:
         int beats = 4;
     };
 
+    struct AbsoluteCursorAnchor {
+        int lineNumber = 1;
+        int sourceCol = 1;
+        double second = 0.0;
+    };
+
     struct LineCursorCache {
         QVector<TimelineCursorAnchor> everyComma;
-        QVector<TimelineCursorAnchor> nonEmptyComma;
-        TimelineCursorAnchor lineOnly;
-        bool hasLineOnly = false;
     };
 
     struct LineState {
@@ -114,8 +107,7 @@ private:
     int nextEachGroupId_ = 0;
     QVector<LineState> lines_;
     TimelineRenderSnapshot snapshot_;
+    QVector<AbsoluteCursorAnchor> everyCommaAnchorsBySecond_;
     QVector<int> linesWithEveryComma_;
-    QVector<int> linesWithNonEmptyComma_;
-    QVector<int> linesWithLineOnly_;
     QVector<int> linesWithNotes_;
 };

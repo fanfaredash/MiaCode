@@ -766,15 +766,7 @@ void MainWindow::syncEditorCursorToPreviewSecond(double second, bool centerView)
     int line = 1;
     int col = 1;
     double cursorSecond = 0.0;
-    const bool resolved = timelineQuickModel_.resolvePreviewFollowCursor(
-        TimelineQuickModel::PreviewFollowMode::EveryComma,
-        second,
-        currentLine,
-        currentCol,
-        true,
-        &line,
-        &col,
-        &cursorSecond);
+    const bool resolved = timelineQuickModel_.resolvePreviewFollowCursor(second, &line, &col, &cursorSecond);
     const bool alreadyAtAnchor = (currentLine == line && currentCol == col);
 
     if (alreadyAtAnchor) {
@@ -967,44 +959,6 @@ QString MainWindow::previewCanvasFrameRateModeStorageValue() const
     case PreviewCanvasFrameRateMode::Fps60:
     default:
         return QStringLiteral("60");
-    }
-}
-
-MainWindow::PreviewFollowMode MainWindow::previewFollowModeFromStorageValue(const QString& value) const
-{
-    Q_UNUSED(value);
-    return PreviewFollowMode::EveryComma;
-}
-
-QString MainWindow::previewFollowModeStorageValue() const
-{
-    return QStringLiteral("every_comma");
-}
-
-void MainWindow::setPreviewFollowMode(PreviewFollowMode mode, bool persistState)
-{
-    mode = PreviewFollowMode::EveryComma;
-    const bool changed = previewFollowMode_ != mode;
-    previewFollowMode_ = mode;
-    if (hasActiveDifficulty()) {
-        refreshTimelineMetadata();
-    }
-
-    if (qtPreviewPlaying_ && timelineView_ != nullptr && timelineView_->followPreviewEnabled() && hasActiveDifficulty()) {
-        double second = qMax(0.0, qtPreviewPauseSecond_);
-        if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
-            second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-        } else if (previewMediaController_ != nullptr) {
-            second = qMax(0.0, previewMediaController_->currentPlaybackSecond());
-        }
-        syncEditorCursorToPreviewSecond(second, false);
-    } else if (timelineView_ == nullptr || !timelineView_->followPreviewEnabled()) {
-        clearPreviewFollowDecoration();
-    }
-
-    if ((changed || persistState) && persistState) {
-        saveProjectRenderState();
-        savePortableState();
     }
 }
 
@@ -2485,8 +2439,8 @@ void MainWindow::flushQtPreviewTimelinePosition()
             && previewSfxRuntime_->isBackgroundTrackRunning()) {
             second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
         }
-        timelineView_->setPlayheadSeconds(second, qtPreviewTimelineCenterNextTick_);
-        timelineView_->focusPlayhead(qtPreviewTimelineCenterNextTick_);
+        timelineView_->setPlayheadSeconds(second, true);
+        timelineView_->focusPlayhead(false);
         qtPreviewLastTimelineSecond_ = second;
         qtPreviewTimelineCenterNextTick_ = false;
         return;

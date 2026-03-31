@@ -158,11 +158,6 @@ private:
         Fps120,
         DisplayRefresh,
     };
-    enum class PreviewFollowMode {
-        EveryComma,
-        NonEmptyComma,
-        LineOnly,
-    };
     enum class TextEncoding {
         Utf8,
         System,
@@ -306,9 +301,6 @@ private:
     void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     PreviewCanvasFrameRateMode previewCanvasFrameRateModeFromStorageValue(const QString& value) const;
     QString previewCanvasFrameRateModeStorageValue() const;
-    void setPreviewFollowMode(PreviewFollowMode mode, bool persistState);
-    PreviewFollowMode previewFollowModeFromStorageValue(const QString& value) const;
-    QString previewFollowModeStorageValue() const;
     double currentPreviewCanvasRefreshRate() const;
     void refreshPreviewFrameRateTimers();
     int computeBottomTabsDeviceHeight() const;
@@ -597,7 +589,6 @@ private:
     PreviewBackgroundScaleMode previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     double previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     PreviewCanvasFrameRateMode previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
-    PreviewFollowMode previewFollowMode_ = PreviewFollowMode::EveryComma;
     double previewCanvasAspectRatio_ = 1.0;
     bool previewAutoRestoreSquareAfterExport_ = true;
     bool previewShowDebugInfo_ = false;

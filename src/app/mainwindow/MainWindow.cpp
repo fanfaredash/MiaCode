@@ -3614,9 +3614,6 @@ void MainWindow::loadProjectRenderState()
                         previewCanvasFrameRateMode_ =
                             previewCanvasFrameRateModeFromStorageValue(render.value("canvas_frame_rate_mode").toString());
                     }
-                    if (render.value("follow_mode").isString()) {
-                        previewFollowMode_ = previewFollowModeFromStorageValue(render.value("follow_mode").toString());
-                    }
                     if (render.value("show_debug_info").isBool()) {
                         previewShowDebugInfo_ = render.value("show_debug_info").toBool(previewShowDebugInfo_);
                     }
@@ -3716,7 +3713,6 @@ void MainWindow::saveProjectRenderState() const
     render.insert("show_chart_review_simple_judge_overlay", muriRenderOptions_.showChartReviewSimpleJudgeOverlay);
     render.insert("wifi_need_c", muriRenderOptions_.wifiNeedC);
     render.insert("canvas_frame_rate_mode", previewCanvasFrameRateModeStorageValue());
-    render.insert("follow_mode", previewFollowModeStorageValue());
     render.insert("show_debug_info", previewShowDebugInfo_);
     render.insert("show_timestamp", previewShowTimestamp_);
     render.insert("show_object_stats_preview", previewShowObjectStatsHud_);
@@ -6202,9 +6198,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Inner Brightness"), innerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Layout Size"), layoutSquareScaleRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.flow_speed", "Flow Speed"), flowSpeedEdit);
-    /*
-        uiText("dialog.render_settings.video.follow_mode", "跟随模式"),
-    */
     videoFormLayout->addRow(uiText("dialog.render_settings.video.scale_mode", "Background / PV Scale Mode"), scaleModeButton);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.canvas_aspect", "Preview Canvas Aspect"), canvasAspectButton);
     auto* videoCheckRow = new QWidget(videoGroup);
