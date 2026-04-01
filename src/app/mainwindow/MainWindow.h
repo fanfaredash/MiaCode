@@ -267,9 +267,13 @@ private:
     void refreshTimelineMetadata();
     void requestTimelineSlowRefresh();
     void dispatchTimelineSlowRefresh();
-    void dispatchTimelineValidationRefresh();
-    void scheduleDeferredMuriRefresh(const QVector<TimelineNoteMarker>& noteMarkers, const QByteArray& noteMarkerSignature);
-    void refreshDeferredMuriDiagnostics();
+    void scheduleTimelineAnalysisRefresh(
+        const TimelineSlowRefreshRequest& request,
+        const SimaiNativeParseResult& parseResult,
+        const TimelinePreviewRefreshState& previewState);
+    bool scheduleTimelineAnalysisRefreshFromLatestPreviewState(int delayMs = -1);
+    void requestTimelineAnalysisDispatch(int delayMs = -1);
+    void dispatchTimelineAnalysisRefresh();
     void seekTimelineToCursor(int line, int col);
     void syncTimelineToEditorCursor(bool centerView = true);
     void navigateTimelineToSecond(double second, bool focusEditor = true);
@@ -523,6 +527,7 @@ private:
     QTimer* qtPreviewTimer_ = nullptr;
     QTimer* qtPreviewTimelineTimer_ = nullptr;
     QTimer* previewSeekDebounceTimer_ = nullptr;
+    QTimer* timelineAnalysisIdleTimer_ = nullptr;
     QTimer* exportVideoHoverMenuTimer_ = nullptr;
     QObject* editorViewport_ = nullptr;
     QProcess* videoExportWorkerProcess_ = nullptr;
@@ -550,20 +555,14 @@ private:
     bool latestTimelinePreviewSnapshotReady_ = false;
     TimelineQuickModel timelineQuickModel_;
     TimelineSlowRefreshRequest pendingTimelineSlowRefresh_;
-    TimelineValidationRefreshRequest pendingTimelineValidationRefresh_;
-    TimelineMuriRefreshRequest pendingTimelineMuriRefresh_;
+    TimelineAnalysisRefreshRequest pendingTimelineAnalysisRefresh_;
     quint64 timelineRevision_ = 0;
     quint64 timelineSlowRequestedRevision_ = 0;
     quint64 timelineSlowRunningRevision_ = 0;
-    quint64 timelineValidationRequestedRevision_ = 0;
-    quint64 timelineValidationRunningRevision_ = 0;
-    quint64 timelineMuriRequestedRevision_ = 0;
-    quint64 timelineMuriRunningRevision_ = 0;
+    quint64 timelineAnalysisRequestedRevision_ = 0;
+    quint64 timelineAnalysisRunningRevision_ = 0;
     bool timelineSlowWorkerRunning_ = false;
-    bool timelineValidationWorkerRunning_ = false;
-    bool timelineMuriWorkerRunning_ = false;
-    QVector<TimelineNoteMarker> pendingMuriNoteMarkers_;
-    QByteArray pendingMuriNoteMarkerSignature_;
+    bool timelineAnalysisWorkerRunning_ = false;
     QByteArray lastPreviewNoteMarkerSignature_;
     bool outlineDockCollapsed_ = false;
     int outlineDockExpandedWidth_ = 190;

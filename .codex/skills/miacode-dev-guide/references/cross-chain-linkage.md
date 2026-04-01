@@ -11,12 +11,13 @@ Primary chain:
 3. `TimelineQuickModel::applyContentsChange` or `TimelineQuickModel::rebuildFromText`
 4. `TimelineView::setTimelineData`
 5. `MainWindow::requestTimelineSlowRefresh`
-6. `buildTimelineSlowRefreshResult`
-7. shifted beat/note markers, validation report, and preview stats inputs
-8. `QtPreviewSfxRuntime::configureTimeline`
-9. `MainWindow::scheduleDeferredMuriRefresh`
-10. `buildTimelineMuriRefreshResult`
-11. `PreviewCanvas::setNoteMarkers`
+6. `SimaiNativeParser::parseForTimeline`
+7. `buildTimelinePreviewRefreshState`
+8. latest preview snapshot publication plus `MainWindow::applyLatestTimelinePreviewStateToPausedPreview` when playback is paused
+9. `MainWindow::scheduleTimelineAnalysisRefresh`
+10. `buildTimelineAnalysisRefreshResult`
+11. `MainWindow::applyDeferredAnalysisUiUpdates`
+12. `PreviewCanvas::setNoteMarkers`
 
 Implication:
 
@@ -25,6 +26,7 @@ Implication:
 - `TimelineQuickModel` is now the owner of comma-only `C` anchor lookup for editor cursor sync, header/timeline `R -> C` jumps, and playback follow.
 - `PreviewCanvas::drawNoteGuides` should group each-guide connectors by parser-derived `eachGroupId` when available; do not merge backtick-separated groups just because their `marker.second` matches.
 - While preview playback is running, slow-refresh note-marker updates still feed the latest validation and Muri worker inputs, but preview audio/canvas/object stats stay on the frozen play-start snapshot until playback stops; validation and Muri panel/decorations may defer their visible UI apply until playback returns to a paused state.
+- Analysis-only setting changes such as Muri render mode or the static tap-on-slide threshold should prefer reusing the latest preview snapshot and cached parse result instead of forcing another full slow refresh.
 - Preview play/resume must use the latest in-memory field state, not a forced disk save. If slow refresh is still behind `timelineRevision_`, playback start may synchronously rebuild a preview-only note-marker snapshot once before audio/video start so the next resume does not wait for validation or Muri workers.
 - Slow refresh may publish the preview-only note-marker snapshot before validation finishes. Resume-time preview freshness should not wait for the strict validation half of slow refresh.
 - If preview play/resume is requested before the current revision's preview snapshot is ready, the request should wait in memory and auto-start once the preview snapshot for that same revision and difficulty lands. Validation completion must not gate that auto-start.
@@ -178,7 +180,7 @@ If you add a new render setting, wire preview persistence and export reconstruct
 
 Current flow:
 
-- live preview path: `requestTimelineSlowRefresh` -> `buildTimelineSlowRefreshResult` -> `scheduleDeferredMuriRefresh` -> `buildTimelineMuriRefreshResult`
+- live preview path: `requestTimelineSlowRefresh` -> `SimaiNativeParser::parseForTimeline` -> `buildTimelinePreviewRefreshState` -> `scheduleTimelineAnalysisRefresh` -> `buildTimelineAnalysisRefreshResult`
 - export path: `buildVideoExportTaskFromSnapshot` -> `MuriAnalyzer::analyze`
 
 Implication:

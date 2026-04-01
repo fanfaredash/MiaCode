@@ -1,6 +1,7 @@
 namespace {
 
 constexpr double kTimelineZeroSecondTolerance = 1e-6;
+constexpr int kTimelineAnalysisIdleDelayMs = 180;
 
 QString workspaceSwapPreviewPanelStyleSheet(bool swapped)
 {
@@ -518,14 +519,7 @@ void MainWindow::dispatchTimelineSlowRefresh()
                 if (!guard->qtPreviewPlaying_) {
                     guard->applyLatestTimelinePreviewStateToPausedPreview();
                 }
-                guard->pendingTimelineValidationRefresh_.revision = request.revision;
-                guard->pendingTimelineValidationRefresh_.difficultyId = request.difficultyId;
-                guard->pendingTimelineValidationRefresh_.chartText = request.chartText;
-                guard->pendingTimelineValidationRefresh_.chineseUi = request.chineseUi;
-                guard->pendingTimelineValidationRefresh_.parseResult = parseResult;
-                guard->timelineValidationRequestedRevision_ = request.revision;
-                guard->dispatchTimelineValidationRefresh();
-                guard->scheduleDeferredMuriRefresh(previewState.shiftedNoteMarkers, previewState.noteMarkerSignature);
+                guard->scheduleTimelineAnalysisRefresh(request, parseResult, previewState);
                 if (guard->pendingPreviewPlaybackStart_
                     && !guard->qtPreviewPlaying_
                     && guard->pendingPreviewPlaybackRevision_ == request.revision
@@ -542,22 +536,90 @@ void MainWindow::dispatchTimelineSlowRefresh()
     });
 }
 
-void MainWindow::dispatchTimelineValidationRefresh()
+void MainWindow::scheduleTimelineAnalysisRefresh(
+    const TimelineSlowRefreshRequest& request,
+    const SimaiNativeParseResult& parseResult,
+    const TimelinePreviewRefreshState& previewState)
 {
-    if (timelineValidationWorkerRunning_ || pendingTimelineValidationRefresh_.revision == 0) {
+    pendingTimelineAnalysisRefresh_.revision = request.revision;
+    pendingTimelineAnalysisRefresh_.difficultyId = request.difficultyId;
+    pendingTimelineAnalysisRefresh_.chartText = request.chartText;
+    pendingTimelineAnalysisRefresh_.chineseUi = request.chineseUi;
+    pendingTimelineAnalysisRefresh_.parseResult = parseResult;
+    pendingTimelineAnalysisRefresh_.noteMarkerSignature = previewState.noteMarkerSignature;
+    pendingTimelineAnalysisRefresh_.noteMarkers = previewState.shiftedNoteMarkers;
+    pendingTimelineAnalysisRefresh_.renderOptions = muriRenderOptions_;
+    pendingTimelineAnalysisRefresh_.staticTapOnSlideThresholdSeconds =
+        static_cast<double>(staticTapOnSlideThresholdMs_) / 1000.0;
+    timelineAnalysisRequestedRevision_ = request.revision;
+    requestTimelineAnalysisDispatch();
+}
+
+bool MainWindow::scheduleTimelineAnalysisRefreshFromLatestPreviewState(int delayMs)
+{
+    if (!hasActiveDifficulty()
+        || !latestTimelinePreviewSnapshotReady_
+        || lastTimelineParseDifficultyId_ != activeDifficultyId()
+        || lastTimelineParseChartText_ != activeChartText()) {
+        return false;
+    }
+
+    TimelineSlowRefreshRequest request;
+    request.revision = latestTimelinePreviewRevision_;
+    request.difficultyId = activeDifficultyId();
+    request.chartText = lastTimelineParseChartText_;
+    request.chineseUi = UiText::isChineseUi();
+
+    pendingTimelineAnalysisRefresh_.revision = request.revision;
+    pendingTimelineAnalysisRefresh_.difficultyId = request.difficultyId;
+    pendingTimelineAnalysisRefresh_.chartText = request.chartText;
+    pendingTimelineAnalysisRefresh_.chineseUi = request.chineseUi;
+    pendingTimelineAnalysisRefresh_.parseResult = lastTimelineParseResult_;
+    pendingTimelineAnalysisRefresh_.noteMarkerSignature = latestTimelineNoteMarkerSignature_;
+    pendingTimelineAnalysisRefresh_.noteMarkers = latestTimelineNoteMarkers_;
+    pendingTimelineAnalysisRefresh_.renderOptions = muriRenderOptions_;
+    pendingTimelineAnalysisRefresh_.staticTapOnSlideThresholdSeconds =
+        static_cast<double>(staticTapOnSlideThresholdMs_) / 1000.0;
+    timelineAnalysisRequestedRevision_ = request.revision;
+    requestTimelineAnalysisDispatch(delayMs);
+    return true;
+}
+
+void MainWindow::requestTimelineAnalysisDispatch(int delayMs)
+{
+    if (pendingTimelineAnalysisRefresh_.revision == 0) {
+        return;
+    }
+    if (qtPreviewPlaying_) {
+        if (timelineAnalysisIdleTimer_ != nullptr) {
+            timelineAnalysisIdleTimer_->stop();
+        }
+        return;
+    }
+    if (timelineAnalysisIdleTimer_ != nullptr) {
+        const int effectiveDelayMs = delayMs >= 0 ? delayMs : kTimelineAnalysisIdleDelayMs;
+        timelineAnalysisIdleTimer_->start(effectiveDelayMs);
+        return;
+    }
+    dispatchTimelineAnalysisRefresh();
+}
+
+void MainWindow::dispatchTimelineAnalysisRefresh()
+{
+    if (!hasActiveDifficulty() || qtPreviewPlaying_ || timelineAnalysisWorkerRunning_ || pendingTimelineAnalysisRefresh_.revision == 0) {
         return;
     }
 
-    const TimelineValidationRefreshRequest request = pendingTimelineValidationRefresh_;
-    pendingTimelineValidationRefresh_ = TimelineValidationRefreshRequest();
-    timelineValidationWorkerRunning_ = true;
-    timelineValidationRunningRevision_ = request.revision;
+    const TimelineAnalysisRefreshRequest request = pendingTimelineAnalysisRefresh_;
+    pendingTimelineAnalysisRefresh_ = TimelineAnalysisRefreshRequest();
+    timelineAnalysisWorkerRunning_ = true;
+    timelineAnalysisRunningRevision_ = request.revision;
     QPointer<MainWindow> guard(this);
     QThreadPool* const pool = timelineAnalysisPool_ != nullptr
         ? timelineAnalysisPool_
         : QThreadPool::globalInstance();
     pool->start([guard, request]() {
-        TimelineValidationRefreshResult result = buildTimelineValidationRefreshResult(request);
+        TimelineAnalysisRefreshResult result = buildTimelineAnalysisRefreshResult(request);
         if (guard.isNull()) {
             return;
         }
@@ -568,12 +630,12 @@ void MainWindow::dispatchTimelineValidationRefresh()
                     return;
                 }
 
-                guard->timelineValidationWorkerRunning_ = false;
-                if (result.revision != guard->timelineValidationRequestedRevision_
+                guard->timelineAnalysisWorkerRunning_ = false;
+                if (result.revision != guard->timelineAnalysisRequestedRevision_
                     || !guard->hasActiveDifficulty()
                     || result.difficultyId != guard->activeDifficultyId()
                     || result.chartText != guard->activeChartText()) {
-                    guard->dispatchTimelineValidationRefresh();
+                    guard->requestTimelineAnalysisDispatch();
                     return;
                 }
 
@@ -599,74 +661,13 @@ void MainWindow::dispatchTimelineValidationRefresh()
                 }
                 guard->validationCacheByDifficulty_.insert(result.difficultyId, entry);
                 guard->pendingDeferredValidationUiRefresh_ = true;
-                if (!guard->qtPreviewPlaying_) {
-                    guard->applyDeferredAnalysisUiUpdates();
-                }
-                guard->dispatchTimelineValidationRefresh();
-            },
-            Qt::QueuedConnection
-        );
-    });
-}
-
-void MainWindow::scheduleDeferredMuriRefresh(
-    const QVector<TimelineNoteMarker>& noteMarkers,
-    const QByteArray& noteMarkerSignature)
-{
-    pendingMuriNoteMarkers_ = noteMarkers;
-    pendingMuriNoteMarkerSignature_ = noteMarkerSignature;
-    pendingTimelineMuriRefresh_.revision = timelineSlowRequestedRevision_;
-    pendingTimelineMuriRefresh_.difficultyId = activeDifficultyId();
-    pendingTimelineMuriRefresh_.noteMarkerSignature = noteMarkerSignature;
-    pendingTimelineMuriRefresh_.noteMarkers = noteMarkers;
-    pendingTimelineMuriRefresh_.renderOptions = muriRenderOptions_;
-    pendingTimelineMuriRefresh_.staticTapOnSlideThresholdSeconds =
-        static_cast<double>(staticTapOnSlideThresholdMs_) / 1000.0;
-    timelineMuriRequestedRevision_ = pendingTimelineMuriRefresh_.revision;
-    refreshDeferredMuriDiagnostics();
-}
-
-void MainWindow::refreshDeferredMuriDiagnostics()
-{
-    if (!hasActiveDifficulty() || timelineMuriWorkerRunning_ || pendingTimelineMuriRefresh_.revision == 0) {
-        return;
-    }
-
-    const TimelineMuriRefreshRequest request = pendingTimelineMuriRefresh_;
-    pendingTimelineMuriRefresh_ = TimelineMuriRefreshRequest();
-    timelineMuriWorkerRunning_ = true;
-    timelineMuriRunningRevision_ = request.revision;
-    QPointer<MainWindow> guard(this);
-    QThreadPool* const pool = timelineAnalysisPool_ != nullptr
-        ? timelineAnalysisPool_
-        : QThreadPool::globalInstance();
-    pool->start([guard, request]() {
-        TimelineMuriRefreshResult result = buildTimelineMuriRefreshResult(request);
-        if (guard.isNull()) {
-            return;
-        }
-        QMetaObject::invokeMethod(
-            guard.data(),
-            [guard, result = std::move(result)]() mutable {
-                if (guard.isNull()) {
-                    return;
-                }
-
-                guard->timelineMuriWorkerRunning_ = false;
-                if (result.revision != guard->timelineMuriRequestedRevision_
-                    || !guard->hasActiveDifficulty()
-                    || result.difficultyId != guard->activeDifficultyId()
-                    || result.noteMarkerSignature != guard->pendingMuriNoteMarkerSignature_) {
-                    guard->refreshDeferredMuriDiagnostics();
-                    return;
-                }
-
                 guard->muriAnalysisReport_ = result.analysisReport;
                 guard->muriStaticReferences_ = result.staticReferences;
                 guard->pendingDeferredMuriUiRefresh_ = true;
                 if (!guard->qtPreviewPlaying_) {
                     guard->applyDeferredAnalysisUiUpdates();
                 }
+                guard->requestTimelineAnalysisDispatch();
             },
             Qt::QueuedConnection
         );
@@ -2464,6 +2465,9 @@ void MainWindow::stopQtPreviewPlayback(bool keepPosition)
     }
     applyLatestTimelinePreviewStateToPausedPreview();
     applyDeferredAnalysisUiUpdates();
+    if (pendingTimelineAnalysisRefresh_.revision != 0) {
+        requestTimelineAnalysisDispatch(0);
+    }
     if (runtimeDebugOutputEnabled_ && wasPlaying && previewCanvas_ != nullptr) {
         const QString summaryPath = previewCanvas_->writeProfilingSummaryToFile();
         if (!summaryPath.isEmpty() && previewMediaController_ != nullptr) {

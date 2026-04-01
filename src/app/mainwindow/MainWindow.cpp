@@ -4284,7 +4284,9 @@ void MainWindow::onEditStaticTapOnSlideThreshold()
     staticTapOnSlideThresholdMs_ = newThresholdMs;
     savePortableState();
     if (hasActiveDifficulty()) {
-        refreshTimelineMetadata();
+        if (!scheduleTimelineAnalysisRefreshFromLatestPreviewState()) {
+            refreshTimelineMetadata();
+        }
     } else {
         muriStaticReferences_.clear();
         refreshMuriDiagnosticsPanel();
@@ -4338,6 +4340,9 @@ void MainWindow::setMuriRenderMode(RenderMode mode, bool persistState)
     if (persistState) {
         savePortableState();
         saveProjectRenderState();
+    }
+    if (hasActiveDifficulty() && !scheduleTimelineAnalysisRefreshFromLatestPreviewState()) {
+        refreshTimelineMetadata();
     }
     statusBar()->showMessage(
         mode == RenderMode::MaimuriDxStyle

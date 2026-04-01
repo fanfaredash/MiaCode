@@ -1367,16 +1367,11 @@ void MainWindow::clearTimelineAndPreview()
 {
     timelineQuickModel_.clear();
     pendingTimelineSlowRefresh_ = TimelineSlowRefreshRequest();
-    pendingTimelineValidationRefresh_ = TimelineValidationRefreshRequest();
-    pendingTimelineMuriRefresh_ = TimelineMuriRefreshRequest();
+    pendingTimelineAnalysisRefresh_ = TimelineAnalysisRefreshRequest();
     timelineSlowRequestedRevision_ = 0;
     timelineSlowRunningRevision_ = 0;
-    timelineValidationRequestedRevision_ = 0;
-    timelineValidationRunningRevision_ = 0;
-    timelineMuriRequestedRevision_ = 0;
-    timelineMuriRunningRevision_ = 0;
-    pendingMuriNoteMarkers_.clear();
-    pendingMuriNoteMarkerSignature_.clear();
+    timelineAnalysisRequestedRevision_ = 0;
+    timelineAnalysisRunningRevision_ = 0;
     lastPreviewNoteMarkerSignature_.clear();
     latestTimelineNoteMarkers_.clear();
     latestTimelineNoteMarkerSignature_.clear();
@@ -1388,6 +1383,9 @@ void MainWindow::clearTimelineAndPreview()
     muriAnalysisReport_ = MuriAnalysisReport();
     pendingDeferredValidationUiRefresh_ = false;
     pendingDeferredMuriUiRefresh_ = false;
+    if (timelineAnalysisIdleTimer_ != nullptr) {
+        timelineAnalysisIdleTimer_->stop();
+    }
     clearPreviewFollowDecoration();
     clearPreviewObjectStats();
     clearMuriDiagnostics();

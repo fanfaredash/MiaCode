@@ -69,10 +69,10 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Owns: lightweight timeline rendering, visible-range painting, playhead/cursor movement, waveform strip, follow-preview behavior
 - Timeline fast/slow refresh orchestration:
   - File: `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
-  - Key functions: `applyTimelineQuickChange`, `refreshTimelineQuickModelFromCurrentText`, `scheduleTimelineRefresh`, `requestTimelineSlowRefresh`, `dispatchTimelineSlowRefresh`, `seekTimelineToCursor`, `syncTimelineToEditorCursor`, `navigateTimelineToSecond`, `updatePreviewSliderRange`, `updatePreviewObjectStats`, `updatePreviewWorkspaceLayout`, `updatePreviewPanelLayout`
+  - Key functions: `applyTimelineQuickChange`, `refreshTimelineQuickModelFromCurrentText`, `scheduleTimelineRefresh`, `requestTimelineSlowRefresh`, `dispatchTimelineSlowRefresh`, `scheduleTimelineAnalysisRefresh`, `scheduleTimelineAnalysisRefreshFromLatestPreviewState`, `dispatchTimelineAnalysisRefresh`, `seekTimelineToCursor`, `syncTimelineToEditorCursor`, `navigateTimelineToSecond`, `updatePreviewSliderRange`, `updatePreviewObjectStats`, `updatePreviewWorkspaceLayout`, `updatePreviewPanelLayout`
 - Timeline slow refresh workers:
   - Files: `src/timeline/TimelineSlowRefresh.h`, `src/timeline/TimelineSlowRefresh.cpp`
-  - Owns: full parser refresh, shifted marker generation, validation report building, and latest-only Muri background work
+  - Owns: full parser refresh, preview snapshot publication, and combined latest-only analysis result building for validation plus Muri
 - Timing getters and timing writes:
   - File: `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
   - Key functions: `parsedFirstSeconds`, `parsedWholeBpm`, `parsedLatencyMeterId`, `applyLatencyDetectorOffset`, `applyLatencyDetectorBpm`, `applyLatencyDetectorMeter`
@@ -161,7 +161,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Key function: `buildVisibleMuriPanelEntries`
 - Main window usage:
   - File: `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
-  - Key functions: `scheduleDeferredMuriRefresh`, `refreshDeferredMuriDiagnostics`
+  - Key functions: `scheduleTimelineAnalysisRefresh`, `scheduleTimelineAnalysisRefreshFromLatestPreviewState`, `dispatchTimelineAnalysisRefresh`
 
 ## 11. Batch Transforms And Authoring Helpers
 

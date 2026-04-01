@@ -1621,6 +1621,10 @@ MainWindow::MainWindow(QWidget* parent)
     connect(previewSeekDebounceTimer_, &QTimer::timeout, this, [this]() {
         seekPreviewToSecond(previewPendingSeekSecond_, previewPendingSeekCenterView_);
     });
+
+    timelineAnalysisIdleTimer_ = new QTimer(this);
+    timelineAnalysisIdleTimer_->setSingleShot(true);
+    connect(timelineAnalysisIdleTimer_, &QTimer::timeout, this, &MainWindow::dispatchTimelineAnalysisRefresh);
     logStartupStage("timers_ready");
 
     if (previewSlider_ != nullptr) {

@@ -499,3 +499,14 @@ touchhold 在当前设计里不是普通的单次播放音效，而是一种持�
 4. 最后再考虑是否进一步引入更激进的异步镜像状态。
 
 如果后续要做线程化，建议优先把“语义保持不变”作为第一目标，而不是单纯追求接口形式上的异步化。
+## 21. 2026-04 Workflow Updates
+
+## 21. 2026-04 Workflow Updates
+
+- Preview warmup is now explicitly data-only. Worker threads resolve media/SFX paths and warm file caches, but the real media runtime is owned by `PreviewMediaController` on its dedicated thread and the real SFX runtime stays on the main-thread transaction path.
+- Slow refresh now has a clearer split between preview publication and analysis publication. One parser pass produces the preview snapshot first, and that same parse output then feeds one combined analysis request for validation plus Muri.
+- Validation and Muri are now latest-only consumers of that shared analysis request. They no longer maintain separate worker request types or separate stale-result matching paths.
+- Analysis UI is now idle-first. Rapid text edits coalesce behind a short analysis idle timer, and active preview playback is allowed to defer validation/Muri panel and decoration updates until the next paused edge.
+- Stopping preview playback now immediately flushes deferred validation/Muri UI and then dispatches any pending analysis request, so paused-state tooling catches up quickly without competing with the active playback path.
+- Analysis-only option changes such as Muri render mode and the static tap-on-slide threshold now try to reuse the latest cached parse result and preview snapshot instead of forcing a new full slow refresh.
+- Analysis subprocess isolation is still intentionally deferred. The current priority remains low startup latency, low play/pause latency, and better cross-device robustness without introducing process-boundary jitter or IPC cost into the preview-critical flow.

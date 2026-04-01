@@ -34,35 +34,25 @@ struct TimelinePreviewRefreshState {
     QByteArray noteMarkerSignature;
 };
 
-struct TimelineValidationRefreshRequest {
+struct TimelineAnalysisRefreshRequest {
     quint64 revision = 0;
     int difficultyId = 0;
     QString chartText;
     bool chineseUi = false;
     SimaiNativeParseResult parseResult;
-};
-
-struct TimelineValidationRefreshResult {
-    quint64 revision = 0;
-    int difficultyId = 0;
-    QString chartText;
-    bool chineseUi = false;
-    SimaiNativeValidationReport validationReport;
-};
-
-struct TimelineMuriRefreshRequest {
-    quint64 revision = 0;
-    int difficultyId = 0;
     QByteArray noteMarkerSignature;
     QVector<TimelineNoteMarker> noteMarkers;
     MuriRenderOptions renderOptions;
     double staticTapOnSlideThresholdSeconds = 0.0;
 };
 
-struct TimelineMuriRefreshResult {
+struct TimelineAnalysisRefreshResult {
     quint64 revision = 0;
     int difficultyId = 0;
+    QString chartText;
+    bool chineseUi = false;
     QByteArray noteMarkerSignature;
+    SimaiNativeValidationReport validationReport;
     MuriAnalysisReport analysisReport;
     QVector<MuriStaticReference> staticReferences;
 };
@@ -76,5 +66,4 @@ TimelinePreviewRefreshResult buildTimelinePreviewRefreshResult(
     const TimelinePreviewRefreshState& previewState);
 TimelinePreviewRefreshResult buildTimelinePreviewRefreshResult(const TimelineSlowRefreshRequest& request);
 TimelinePreviewRefreshState buildTimelinePreviewRefreshState(const QString& chartText, double firstSeconds);
-TimelineValidationRefreshResult buildTimelineValidationRefreshResult(const TimelineValidationRefreshRequest& request);
-TimelineMuriRefreshResult buildTimelineMuriRefreshResult(const TimelineMuriRefreshRequest& request);
+TimelineAnalysisRefreshResult buildTimelineAnalysisRefreshResult(const TimelineAnalysisRefreshRequest& request);
