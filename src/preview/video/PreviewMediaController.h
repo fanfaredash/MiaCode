@@ -48,6 +48,7 @@ signals:
     void mediaStateChanged(bool hasResolvedMedia, bool hasVideoMedia);
     void frameChanged(const QImage& frame);
     void videoFrameChanged(const QVideoFrame& frame);
+    void videoFallbackFrameChanged(const QImage& frame);
     void backgroundBrightnessChanged(double brightness);
     void playbackPositionChanged(double seconds);
     void playbackFinished();

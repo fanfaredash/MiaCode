@@ -1,7 +1,53 @@
 void PreviewCanvas::initializeGL()
 {
-    glRenderer_.initialize();
     QOpenGLContext* ctx = QOpenGLContext::currentContext();
+    setupWindowGlContext(ctx);
+    glRenderer_.initialize();
+    appendPreviewRuntimeLog(
+        QStringLiteral("gl/context_init"),
+        previewWindowContextSummary(ctx, glRenderer_)
+    );
+    if (glDebugLogger_ != nullptr) {
+        glDebugLogger_->stopLogging();
+        delete glDebugLogger_;
+        glDebugLogger_ = nullptr;
+    }
+    if (ctx != nullptr) {
+        auto* logger = new QOpenGLDebugLogger(this);
+        if (logger->initialize()) {
+            connect(logger, &QOpenGLDebugLogger::messageLogged, this, [this](const QOpenGLDebugMessage& message) {
+                if (shouldSuppressPreviewGlDebugMessage(message)) {
+                    return;
+                }
+                const bool warn = message.type() == QOpenGLDebugMessage::ErrorType
+                    || message.severity() == QOpenGLDebugMessage::HighSeverity;
+                appendPreviewRuntimeLog(
+                    QStringLiteral("gl/debug"),
+                    QStringLiteral("source=%1 type=%2 severity=%3 id=%4 text=%5")
+                        .arg(static_cast<int>(message.source()))
+                        .arg(static_cast<int>(message.type()))
+                        .arg(static_cast<int>(message.severity()))
+                        .arg(message.id())
+                        .arg(message.message()),
+                    warn
+                );
+            });
+            logger->startLogging(QOpenGLDebugLogger::SynchronousLogging);
+            logger->enableMessages();
+            glDebugLogger_ = logger;
+        } else {
+            delete logger;
+        }
+    }
+    if (!glRenderer_.isInitialized()) {
+        appendPreviewRuntimeLog(
+            QStringLiteral("gl/init_fail"),
+            QStringLiteral("renderer initialization failed: %1").arg(glRenderer_.lastError()),
+            true
+        );
+        gpuTimerQueriesSupported_ = false;
+        return;
+    }
     QOpenGLExtraFunctions* extra = ctx != nullptr ? ctx->extraFunctions() : nullptr;
     if (extra != nullptr && (ctx->hasExtension("GL_ARB_timer_query")
         || ctx->hasExtension("GL_EXT_disjoint_timer_query")

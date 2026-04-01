@@ -2580,6 +2580,15 @@ void MainWindow::ensurePreviewMediaControllerInitialized()
             previewCanvas_->update();
         }
     });
+    connect(previewMediaController_, &PreviewMediaController::videoFallbackFrameChanged, this, [this](const QImage& frame) {
+        if (previewCanvas_ == nullptr) {
+            return;
+        }
+        previewCanvas_->setRetainedVideoFallbackFrame(frame);
+        if (!qtPreviewPlaying_) {
+            previewCanvas_->update();
+        }
+    });
 #endif
     connect(
         previewMediaController_,

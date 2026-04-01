@@ -1772,7 +1772,41 @@ bool PreviewCanvas::drawSpriteImage(
         return true;
     }
     if (nativePaintingActive_) {
-        return false;
+        painter.endNativePainting();
+        nativePaintingActive_ = false;
+        const bool cpuRendered = highQualityRender_ || (resolvedSourceRect.isValid() && !resolvedSourceRect.isEmpty())
+            ? [&]() {
+                  ++cpuFallbackCount_;
+                  painter.save();
+                  painter.setOpacity(opacity);
+                  painter.translate(center);
+                  painter.rotate(angleDegrees);
+                  const QRectF drawRect(-targetWidth / 2.0, -targetHeight / 2.0, targetWidth, targetHeight);
+                  if (resolvedSourceRect.isValid() && !resolvedSourceRect.isEmpty()) {
+                      painter.drawImage(drawRect, *renderImage, resolvedSourceRect);
+                  } else {
+                      painter.drawImage(drawRect, *renderImage);
+                  }
+                  painter.restore();
+                  return true;
+              }()
+            : [&]() {
+                  const QImage transformed = cachedSpriteTransform(*renderImage, targetWidth, targetHeight, angleDegrees);
+                  if (transformed.isNull()) {
+                      return false;
+                  }
+                  ++cpuFallbackCount_;
+                  painter.save();
+                  painter.drawImage(
+                      QPointF(center.x() - transformed.width() / 2.0, center.y() - transformed.height() / 2.0),
+                      transformed
+                  );
+                  painter.restore();
+                  return true;
+              }();
+        painter.beginNativePainting();
+        nativePaintingActive_ = true;
+        return cpuRendered;
     }
 
     if (highQualityRender_ || (resolvedSourceRect.isValid() && !resolvedSourceRect.isEmpty())) {
@@ -2023,6 +2057,32 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
             return;
         }
         if (nativePaintingActive_) {
+            painter.endNativePainting();
+            nativePaintingActive_ = false;
+            if (atlasResolved && renderSourceRect.isValid() && !renderSourceRect.isEmpty()) {
+                ++cpuFallbackCount_;
+                painter.save();
+                painter.translate(point);
+                painter.rotate(angleDegrees);
+                painter.drawImage(
+                    QRectF(-targetWidth / 2.0, -targetHeight / 2.0, targetWidth, targetHeight),
+                    *renderImage,
+                    renderSourceRect
+                );
+                painter.restore();
+            } else {
+                ++cpuFallbackCount_;
+                painter.save();
+                painter.translate(point);
+                painter.rotate(angleDegrees);
+                painter.drawImage(
+                    QRectF(-targetWidth / 2.0, -targetHeight / 2.0, targetWidth, targetHeight),
+                    *renderImage
+                );
+                painter.restore();
+            }
+            painter.beginNativePainting();
+            nativePaintingActive_ = true;
             return;
         }
 
@@ -2567,6 +2627,27 @@ void PreviewCanvas::drawCachedSlideArea(
                 return;
             }
             if (nativePaintingActive_) {
+                painter.endNativePainting();
+                nativePaintingActive_ = false;
+                painter.save();
+                painter.setOpacity(opacity);
+                for (int pointIndex = startPointIndex; pointIndex < endPointIndex; ++pointIndex) {
+                    const QPointF center = centers.at(pointIndex - startPointIndex);
+                    painter.save();
+                    painter.translate(center);
+                    painter.rotate(angles.at(pointIndex - startPointIndex));
+                    const QRectF drawRect(-targetWidth / 2.0, -targetHeight / 2.0, targetWidth, targetHeight);
+                    if (resolvedSourceRect.isValid() && !resolvedSourceRect.isEmpty()) {
+                        painter.drawImage(drawRect, *renderImage, resolvedSourceRect);
+                    } else {
+                        painter.drawImage(drawRect, *renderImage);
+                    }
+                    painter.restore();
+                }
+                painter.restore();
+                ++cpuFallbackCount_;
+                painter.beginNativePainting();
+                nativePaintingActive_ = true;
                 return;
             }
         }

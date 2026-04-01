@@ -6,6 +6,7 @@
 #include <QOpenGLFunctions>
 #include <QRectF>
 #include <QSize>
+#include <QString>
 #include <QVector>
 
 class QImage;
@@ -49,8 +50,25 @@ public:
     bool isInitialized() const;
     QSize viewportSize() const;
     qreal devicePixelRatio() const;
+    QString lastError() const;
+    QString contextSummary() const;
 
 private:
+    enum class ShaderLanguage {
+        DesktopLegacy,
+        DesktopCore150,
+        Gles100,
+        Gles300,
+    };
+
+    enum class VideoTextureUploadMode {
+        LegacyLuminance,
+        RedGreen,
+    };
+
+    void resetGlObjects(bool deleteObjects);
+    void configureForCurrentContext(class QOpenGLContext* context);
+    void recordError(const QString& message, bool videoPath = false);
     bool ensureProgram();
     bool ensureVideoProgram();
     bool ensurePlanarVideoProgram();
@@ -95,6 +113,19 @@ private:
     QSize videoFrameSize_;
     QSize planarVideoFrameSize_;
     QHash<quint64, GLuint> textureCache_;
+    class QOpenGLContext* boundContext_ = nullptr;
+    ShaderLanguage shaderLanguage_ = ShaderLanguage::DesktopLegacy;
+    VideoTextureUploadMode videoTextureUploadMode_ = VideoTextureUploadMode::LegacyLuminance;
+    GLenum videoYInternalFormat_ = GL_LUMINANCE;
+    GLenum videoYExternalFormat_ = GL_LUMINANCE;
+    GLenum videoUvInternalFormat_ = GL_LUMINANCE_ALPHA;
+    GLenum videoUvExternalFormat_ = GL_LUMINANCE_ALPHA;
+    bool videoUvUseRgChannels_ = false;
+    bool useDesktopLegacyVersion120_ = false;
+    QString lastError_;
+    QString contextSummary_;
+    QString lastLoggedError_;
+    QString lastLoggedVideoError_;
     quint64 frameCpuUploadNs_ = 0;
     quint64 frameVideoMapNs_ = 0;
     quint64 frameVideoUploadNs_ = 0;

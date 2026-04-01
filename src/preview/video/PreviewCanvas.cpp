@@ -13,6 +13,7 @@
 #include <QImage>
 #include <QMetaObject>
 #include <QOpenGLContext>
+#include <QOpenGLDebugLogger>
 #include <QOpenGLFramebufferObject>
 #include <QOffscreenSurface>
 #include <QPainter>
@@ -32,6 +33,7 @@
 #ifdef HAVE_QT_MULTIMEDIA
 #include <QVideoFrame>
 #endif
+#include <QDebug>
 
 #include <algorithm>
 #include <array>
@@ -1270,6 +1272,81 @@ const QImage* animatedSpriteImage(
 QString startupTimingLogPath()
 {
     return miacode::debug_options::startupTimingLogPath();
+}
+
+void appendPreviewRuntimeLog(const QString& area, const QString& payload, bool warn = false)
+{
+    const QString message = QStringLiteral("[preview/%1] %2").arg(area, payload);
+    if (warn) {
+        qWarning().noquote() << message;
+    }
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    QFile logFile(miacode::debug_options::runtimeDebugLogPath());
+    if (!logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+        return;
+    }
+    QTextStream out(&logFile);
+    out << QDateTime::currentDateTime().toString(Qt::ISODateWithMs)
+        << ' '
+        << message
+        << '\n';
+}
+
+QString surfaceProfileName(QSurfaceFormat::OpenGLContextProfile profile)
+{
+    switch (profile) {
+    case QSurfaceFormat::NoProfile:
+        return QStringLiteral("NoProfile");
+    case QSurfaceFormat::CoreProfile:
+        return QStringLiteral("CoreProfile");
+    case QSurfaceFormat::CompatibilityProfile:
+        return QStringLiteral("CompatibilityProfile");
+    }
+    return QStringLiteral("UnknownProfile");
+}
+
+QString renderableTypeName(QSurfaceFormat::RenderableType renderableType)
+{
+    switch (renderableType) {
+    case QSurfaceFormat::DefaultRenderableType:
+        return QStringLiteral("Default");
+    case QSurfaceFormat::OpenGL:
+        return QStringLiteral("DesktopGL");
+    case QSurfaceFormat::OpenGLES:
+        return QStringLiteral("OpenGLES");
+    case QSurfaceFormat::OpenVG:
+        return QStringLiteral("OpenVG");
+    }
+    return QStringLiteral("UnknownRenderableType");
+}
+
+QString previewWindowContextSummary(QOpenGLContext* context, const PreviewGLRenderer& renderer)
+{
+    if (context == nullptr) {
+        return QStringLiteral("context=null");
+    }
+    const QSurfaceFormat format = context->format();
+    return QStringLiteral(
+               "valid=%1 version=%2.%3 profile=%4 renderable=%5 samples=%6 depth=%7 stencil=%8 renderer={%9}")
+        .arg(context->isValid() ? 1 : 0)
+        .arg(format.majorVersion())
+        .arg(format.minorVersion())
+        .arg(surfaceProfileName(format.profile()))
+        .arg(renderableTypeName(format.renderableType()))
+        .arg(format.samples())
+        .arg(format.depthBufferSize())
+        .arg(format.stencilBufferSize())
+        .arg(renderer.contextSummary());
+}
+
+bool shouldSuppressPreviewGlDebugMessage(const QOpenGLDebugMessage& message)
+{
+    const QString text = message.message();
+    return text.contains(QStringLiteral("API_ID_REDUNDANT_FBO"))
+        && text.contains(QStringLiteral("FBO 0"))
+        && message.type() == QOpenGLDebugMessage::PerformanceType;
 }
 
 void appendPreviewStartupTiming(const QString& stage, qint64 deltaMs)

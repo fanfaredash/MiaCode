@@ -25,6 +25,8 @@ class QPainter;
 class QRectF;
 class QTimer;
 class QOffscreenSurface;
+class QOpenGLContext;
+class QOpenGLDebugLogger;
 class QOpenGLFramebufferObject;
 class QSurfaceFormat;
 
@@ -42,6 +44,7 @@ public:
     void setPlayheadSeconds(double seconds, bool requestUpdate = true);
     void setMediaFrame(const QImage& frame);
     void setVideoFrame(const QVideoFrame& frame);
+    void setRetainedVideoFallbackFrame(const QImage& frame);
     void setNoteMarkers(const QVector<TimelineNoteMarker>& notes);
     void setMuriAnalysisReport(const MuriAnalysisReport& report);
     void setMuriRenderOptions(const MuriRenderOptions& options);
@@ -245,6 +248,9 @@ private:
     void updateFpsSample();
     void collectGpuProfilingResults(bool waitForAll);
     QString profilingSummaryPath() const;
+    void setupWindowGlContext(QOpenGLContext* context);
+    void cleanupWindowGlResources();
+    void handleWindowGlContextAboutToBeDestroyed();
 
     QImage tapImage_;
     QImage tapEachImage_;
@@ -426,6 +432,8 @@ private:
     QVector<QImage> pendingTexturePrewarmImages_;
     qint64 lastSkinLoadDispatchMs_ = -1;
     qint64 texturePrewarmStartMs_ = -1;
+    QOpenGLContext* observedWindowContext_ = nullptr;
+    QOpenGLDebugLogger* glDebugLogger_ = nullptr;
     QOffscreenSurface* offscreenSurface_ = nullptr;
     QOpenGLContext* offscreenContext_ = nullptr;
     QOpenGLFramebufferObject* offscreenFramebuffer_ = nullptr;
