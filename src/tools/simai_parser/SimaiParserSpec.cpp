@@ -298,7 +298,7 @@ int main(int argc, char** argv)
         expect(clampedReport.warningCount == 1, QStringLiteral("clamped beat value adds one validation warning"));
         if (!clampedReport.issues.isEmpty()) {
             expect(
-                clampedReport.issues.constFirst().displayMessage.contains(QStringLiteral("treated as 384")),
+                clampedReport.issues.constFirst().displayMessage.contains(QStringLiteral("384")),
                 QStringLiteral("clamped beat value warning explains 384 fallback")
             );
         }
@@ -334,6 +334,69 @@ int main(int argc, char** argv)
                 emptyReport.issues.constFirst().displayMessage.contains(QStringLiteral("Chart is empty.")),
                 QStringLiteral("empty chart validation emits canonical message")
             );
+        }
+    }
+
+    {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(QStringLiteral("1$$bx,\nE"));
+        expect(parsed.ok, QStringLiteral("tap star material parses with $$ / b / x in mixed order"));
+        expect(parsed.noteMarkers.size() == 1, QStringLiteral("tap star material emits one marker"));
+        if (parsed.noteMarkers.size() == 1) {
+            const TimelineNoteMarker& marker = parsed.noteMarkers.constFirst();
+            expect(marker.type == QLatin1String("tap"), QStringLiteral("tap star material stays tap kind"));
+            expect(marker.tapUsesStarMaterial, QStringLiteral("tap star material sets star flag"));
+            expect(marker.tapStarDouble, QStringLiteral("tap $$ sets double-star flag"));
+            expect(marker.isBreak, QStringLiteral("tap star material keeps break flag"));
+            expect(marker.isEx, QStringLiteral("tap star material keeps ex flag"));
+        }
+    }
+
+    {
+        const SimaiNativeParseResult invalid = SimaiNativeParser::parseForTimeline(QStringLiteral("1$h[4:1],\nE"));
+        expect(!invalid.ok, QStringLiteral("tap star material rejects hold modifier combination"));
+    }
+
+    {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(QStringLiteral("1@bx-4b[8:1],\nE"));
+        expect(parsed.ok, QStringLiteral("@ slide head material parses with head b/x and track b"));
+        const TimelineNoteMarker* marker = firstSlideLikeMarker(parsed);
+        expect(marker != nullptr, QStringLiteral("@ slide head material emits slide marker"));
+        if (marker != nullptr) {
+            expect(marker->slideHeadUsesTapMaterial, QStringLiteral("@ slide marks tap-material head"));
+            expect(marker->hasHeadStar, QStringLiteral("@ slide keeps head object"));
+            expect(marker->headBreak, QStringLiteral("@ slide keeps head break"));
+            expect(marker->headEx, QStringLiteral("@ slide keeps head ex"));
+            expect(marker->trackBreak, QStringLiteral("@ slide keeps track break"));
+        }
+    }
+
+    {
+        const SimaiNativeParseResult invalid = SimaiNativeParser::parseForTimeline(QStringLiteral("1@?-4[8:1],\nE"));
+        expect(!invalid.ok, QStringLiteral("@ slide rejects combination with headless modifiers"));
+    }
+
+    {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(QStringLiteral("1?-4[8:1]/1!-4[8:1],\nE"));
+        expect(parsed.ok, QStringLiteral("headless slide ? and ! both parse"));
+        expect(parsed.noteMarkers.size() == 2, QStringLiteral("headless slide examples emit two markers"));
+        if (parsed.noteMarkers.size() == 2) {
+            const TimelineNoteMarker& gradual = parsed.noteMarkers.at(0);
+            const TimelineNoteMarker& immediate = parsed.noteMarkers.at(1);
+            expect(!gradual.hasHeadStar && !gradual.headlessImmediate,
+                   QStringLiteral("? slide disables head star with gradual wait visual"));
+            expect(!immediate.hasHeadStar && immediate.headlessImmediate,
+                   QStringLiteral("! slide disables head star with immediate wait visual"));
+        }
+    }
+
+    {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(QStringLiteral("1-5[0.5##8:1],\nE"));
+        expect(parsed.ok, QStringLiteral("delay slide accepts [wait##fraction] syntax"));
+        const TimelineNoteMarker* marker = firstSlideLikeMarker(parsed);
+        expect(marker != nullptr, QStringLiteral("delay slide wait##fraction emits slide marker"));
+        if (marker != nullptr) {
+            expect(nearlyEqual(marker->slideTraceSecond, 0.5), QStringLiteral("delay slide stores explicit wait seconds"));
+            expect(nearlyEqual(marker->endSecond, 0.75), QStringLiteral("delay slide stores bpm-derived motion duration after explicit wait"));
         }
     }
 

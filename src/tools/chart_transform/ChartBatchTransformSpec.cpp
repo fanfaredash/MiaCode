@@ -279,6 +279,8 @@ QJsonObject dumpNoteMarker(const TimelineNoteMarker& marker)
     object.insert(QStringLiteral("touch_point"), touchPoint);
 
     object.insert(QStringLiteral("touch_pad"), marker.touchPad);
+    object.insert(QStringLiteral("tap_uses_star_material"), marker.tapUsesStarMaterial);
+    object.insert(QStringLiteral("tap_star_double"), marker.tapStarDouble);
     object.insert(QStringLiteral("is_each"), marker.isEach);
     object.insert(QStringLiteral("is_break"), marker.isBreak);
     object.insert(QStringLiteral("is_ex"), marker.isEx);
@@ -293,8 +295,10 @@ QJsonObject dumpNoteMarker(const TimelineNoteMarker& marker)
     object.insert(QStringLiteral("head_each"), marker.headEach);
     object.insert(QStringLiteral("head_break"), marker.headBreak);
     object.insert(QStringLiteral("head_ex"), marker.headEx);
+    object.insert(QStringLiteral("slide_head_uses_tap_material"), marker.slideHeadUsesTapMaterial);
     object.insert(QStringLiteral("track_break"), marker.trackBreak);
     object.insert(QStringLiteral("has_head_star"), marker.hasHeadStar);
+    object.insert(QStringLiteral("headless_immediate"), marker.headlessImmediate);
     return object;
 }
 
@@ -942,6 +946,38 @@ void runInlineSpecs(QTextStream& err, int* failed)
             err
         );
         expectTrue(changed == 1, QStringLiteral("toggle EX counts only changed notes after ]"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("1$$x 1@x-5[8:1]");
+        const QString output = miacode::chart_transform::toggleBreakForSelection(input, &changed);
+        expectEqual(
+            output,
+            QStringLiteral("1bx$$ 1bx@-5b[8:1]"),
+            QStringLiteral("toggle break preserves tap-star and @ slide-head material modifiers"),
+            failed,
+            err
+        );
+        expectTrue(changed == 3, QStringLiteral("toggle break counts star-tap and @ slide as changed"), failed, err);
+    }
+
+    {
+        int changed = 0;
+        const QString input = QStringLiteral("1$$ 1?-5[8:1] 1!-5[8:1]");
+        const QString output = miacode::chart_transform::transformChartText(
+            input,
+            miacode::chart_transform::ChartTransformOp::MirrorLeftRight,
+            &changed
+        );
+        expectEqual(
+            output,
+            QStringLiteral("8$$ 8?-4[8:1] 8!-4[8:1]"),
+            QStringLiteral("mirror keeps $$ / ? / ! modifiers while remapping note lanes"),
+            failed,
+            err
+        );
+        expectTrue(changed == 5, QStringLiteral("mirror counts transformed atoms with new material/headless modifiers"), failed, err);
     }
 
     {

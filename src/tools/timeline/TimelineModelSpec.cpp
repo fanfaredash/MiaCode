@@ -268,6 +268,49 @@ int main(int argc, char** argv)
                QStringLiteral("follow cursor advances to the next past comma while playback progresses"));
     }
 
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("1$$bx/1@bx-4[0.5##8:1]/1!-4[0.5##8:1],\nE"), 0.0);
+        const TimelineRenderSnapshot snapshot = model.snapshot();
+        expect(!snapshot.lines.isEmpty(), QStringLiteral("quick model builds snapshot for material/delay syntax"));
+        if (!snapshot.lines.isEmpty()) {
+            const QVector<TimelineRenderNote>& notes = snapshot.lines.constFirst().notes;
+            expect(notes.size() == 3, QStringLiteral("quick model keeps tap and both slides"));
+            if (notes.size() == 3) {
+                const TimelineRenderNote& tap = notes.at(0);
+                const TimelineRenderNote& headTapSlide = notes.at(1);
+                const TimelineRenderNote& headlessSlide = notes.at(2);
+
+                expect(timelineRenderFlagSet(tap, TimelineRenderFlagTapUsesStarMaterial),
+                       QStringLiteral("quick model preserves tap star-material flag"));
+                expect(timelineRenderFlagSet(tap, TimelineRenderFlagTapStarDouble),
+                       QStringLiteral("quick model preserves tap $$ flag"));
+                expect(timelineRenderFlagSet(tap, TimelineRenderFlagIsBreak)
+                           && timelineRenderFlagSet(tap, TimelineRenderFlagIsEx),
+                       QStringLiteral("quick model preserves tap b/x flags on star-material tap"));
+
+                expect(timelineRenderFlagSet(headTapSlide, TimelineRenderFlagHasHeadStar),
+                       QStringLiteral("quick model keeps @ slide head visible"));
+                expect(timelineRenderFlagSet(headTapSlide, TimelineRenderFlagSlideHeadUsesTapMaterial),
+                       QStringLiteral("quick model preserves @ head tap-material flag"));
+                expect(timelineRenderFlagSet(headTapSlide, TimelineRenderFlagHeadBreak)
+                           && timelineRenderFlagSet(headTapSlide, TimelineRenderFlagHeadEx),
+                       QStringLiteral("quick model preserves @ slide head b/x flags"));
+                expect(nearlyEqual(headTapSlide.slideTraceSecondOffset, 0.5)
+                           && nearlyEqual(headTapSlide.endSecondOffset, 0.75),
+                       QStringLiteral("quick model parses [wait##fraction] timing on @ slide"));
+
+                expect(!timelineRenderFlagSet(headlessSlide, TimelineRenderFlagHasHeadStar),
+                       QStringLiteral("quick model clears head icon flag for headless slide"));
+                expect(timelineRenderFlagSet(headlessSlide, TimelineRenderFlagHeadlessImmediate),
+                       QStringLiteral("quick model preserves ! immediate wait-visual flag"));
+                expect(nearlyEqual(headlessSlide.slideTraceSecondOffset, 0.5)
+                           && nearlyEqual(headlessSlide.endSecondOffset, 0.75),
+                       QStringLiteral("quick model parses [wait##fraction] timing on headless slide"));
+            }
+        }
+    }
+
     if (failed > 0) {
         err << "\nTimeline model spec failed: " << failed << " case(s)\n";
         return 1;
