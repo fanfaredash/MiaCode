@@ -23,6 +23,7 @@ Implication:
 
 - A parser change is rarely parser-only.
 - A new note property or timing rule usually needs timeline, preview, audio, export, and Muri review.
+- Slide/tap head-material flags such as `$`, `$$`, `@`, `?`, and `!` are mirrored data: keep `SimaiNativeParser`, `TimelineQuickModel`, `PreviewCanvas`, timeline icons, and chart-transform token preservation aligned in the same patch.
 - `TimelineQuickModel` is now the owner of comma-only `C` anchor lookup for editor cursor sync, header/timeline `R -> C` jumps, and playback follow.
 - `PreviewCanvas::drawNoteGuides` should group each-guide connectors by parser-derived `eachGroupId` when available; do not merge backtick-separated groups just because their `marker.second` matches.
 - While preview playback is running, slow-refresh note-marker updates still feed the latest validation and Muri worker inputs, but preview audio/canvas/object stats stay on the frozen play-start snapshot until playback stops; validation and Muri panel/decorations may defer their visible UI apply until playback returns to a paused state.
@@ -63,6 +64,7 @@ Shared concerns:
 - which note kinds emit `answer`, `judge`, `break`, `ex`, `touch`, `touchhold`, `firework`
 - touch and touch-hold still emit `answer` when `isFirework` is set; firework is additive rather than replacing the hit-confirm sound
 - head-star behavior for slide and wifi
+- `hasHeadStar` gates only the pre-head object / head SFX / head judge path; `headlessImmediate` only changes the waiting-star visual ramp
 - `sameHeadSlide` behavior
 - `headEach` vs `slideEach`: `headEach` comes from synchronous note-head grouping, while `slideEach` must stay aligned between `SimaiNativeParser` and `TimelineQuickModel` by grouping only slide/wifi notes that share both the same each-group and the same `slideTraceSecond`
 - `trackBreak` vs `headBreak`
