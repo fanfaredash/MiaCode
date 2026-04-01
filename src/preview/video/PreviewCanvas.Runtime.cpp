@@ -158,17 +158,72 @@ PreviewCanvas::~PreviewCanvas()
 
     if (context() != nullptr) {
         makeCurrent();
-        if (gpuTimerQueriesSupported_) {
-            QOpenGLContext* ctx = QOpenGLContext::currentContext();
-            QOpenGLExtraFunctions* extra = ctx != nullptr ? ctx->extraFunctions() : nullptr;
-            if (extra != nullptr) {
-                extra->glDeleteQueries(4, gpuTimeQueries_);
-            }
-        }
-        if (glRenderer_.isInitialized()) {
-            glRenderer_.shutdown();
-        }
+        cleanupWindowGlResources();
         doneCurrent();
+    } else {
+        cleanupWindowGlResources();
+    }
+}
+
+void PreviewCanvas::setupWindowGlContext(QOpenGLContext* context)
+{
+    if (context == nullptr || observedWindowContext_ == context) {
+        return;
+    }
+    if (observedWindowContext_ != nullptr) {
+        disconnect(observedWindowContext_, nullptr, this, nullptr);
+    }
+    observedWindowContext_ = context;
+    connect(
+        context,
+        &QOpenGLContext::aboutToBeDestroyed,
+        this,
+        &PreviewCanvas::handleWindowGlContextAboutToBeDestroyed,
+        Qt::DirectConnection
+    );
+}
+
+void PreviewCanvas::cleanupWindowGlResources()
+{
+    if (observedWindowContext_ != nullptr) {
+        disconnect(observedWindowContext_, nullptr, this, nullptr);
+    }
+    if (glDebugLogger_ != nullptr) {
+        glDebugLogger_->stopLogging();
+        delete glDebugLogger_;
+        glDebugLogger_ = nullptr;
+    }
+    if (gpuTimerQueriesSupported_) {
+        QOpenGLContext* ctx = QOpenGLContext::currentContext();
+        QOpenGLExtraFunctions* extra = ctx != nullptr ? ctx->extraFunctions() : nullptr;
+        if (extra != nullptr) {
+            extra->glDeleteQueries(4, gpuTimeQueries_);
+        }
+    }
+    gpuTimerQueriesSupported_ = false;
+    std::fill(std::begin(gpuTimeQueries_), std::end(gpuTimeQueries_), 0);
+    std::fill(std::begin(gpuTimeQueryPending_), std::end(gpuTimeQueryPending_), false);
+    gpuTimeQueryCursor_ = 0;
+    nativePaintingActive_ = false;
+    tapAtlasBatch_.clear();
+    if (glRenderer_.isInitialized()) {
+        glRenderer_.shutdown();
+    }
+    observedWindowContext_ = nullptr;
+}
+
+void PreviewCanvas::handleWindowGlContextAboutToBeDestroyed()
+{
+    appendPreviewRuntimeLog(
+        QStringLiteral("gl/context_destroy"),
+        previewWindowContextSummary(observedWindowContext_, glRenderer_)
+    );
+    if (context() != nullptr) {
+        makeCurrent();
+        cleanupWindowGlResources();
+        doneCurrent();
+    } else {
+        cleanupWindowGlResources();
     }
 }
 
@@ -282,6 +337,11 @@ void PreviewCanvas::setVideoFrame(const QVideoFrame& frame)
 #else
     Q_UNUSED(frame);
 #endif
+}
+
+void PreviewCanvas::setRetainedVideoFallbackFrame(const QImage& frame)
+{
+    retainedVideoFallbackFrame_ = frame;
 }
 
 void PreviewCanvas::setNoteMarkers(const QVector<TimelineNoteMarker>& notes)
@@ -571,6 +631,24 @@ bool PreviewCanvas::initializeOffscreenRenderer(
     }
 
     glRenderer_.initialize();
+    appendPreviewRuntimeLog(
+        QStringLiteral("gl/offscreen_init"),
+        previewWindowContextSummary(offscreenContext, glRenderer_)
+    );
+    if (!glRenderer_.isInitialized()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to initialize offscreen renderer: %1").arg(glRenderer_.lastError());
+        }
+        appendPreviewRuntimeLog(
+            QStringLiteral("gl/offscreen_init_fail"),
+            glRenderer_.lastError(),
+            true
+        );
+        offscreenContext->doneCurrent();
+        delete offscreenContext;
+        delete surface;
+        return false;
+    }
     const QVector<const QImage*> prewarmImages{
         &tapAtlasImage_,
         &trackAtlasImage_,
