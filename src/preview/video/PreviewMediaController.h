@@ -18,6 +18,8 @@ public:
     explicit PreviewMediaController(QObject* parent = nullptr);
     ~PreviewMediaController() override;
 
+    void initializeBackendObjects();
+    void setWarmupResolvedMediaPath(const QString& chartPath, const QString& mediaPath);
     bool hasResolvedMedia() const;
     bool hasVideoMedia() const;
     bool hasBackgroundTrack() const;
@@ -43,6 +45,7 @@ public:
     QString profilingSummaryLines() const;
 
 signals:
+    void mediaStateChanged(bool hasResolvedMedia, bool hasVideoMedia);
     void frameChanged(const QImage& frame);
     void videoFrameChanged(const QVideoFrame& frame);
     void backgroundBrightnessChanged(double brightness);
@@ -56,6 +59,7 @@ private:
         Video,
     };
 
+    void emitMediaStateChanged();
     QString resolveMediaPath(const QString& chartPath) const;
     void clearMedia();
     void publishFrame(const QImage& frame);
@@ -67,6 +71,8 @@ private:
     MediaKind mediaKind_ = MediaKind::None;
     QString chartPath_;
     QString mediaPath_;
+    QString warmupChartPath_;
+    QString warmupMediaPath_;
     QMediaPlayer* player_ = nullptr;
     QAudioOutput* audioOutput_ = nullptr;
     QVideoSink* videoSink_ = nullptr;

@@ -116,6 +116,7 @@
 #include <QTextDocument>
 #include <QTextEdit>
 #include <QTextOption>
+#include <QThread>
 #include <QToolBar>
 #include <QThreadPool>
 #include <QWidgetAction>
@@ -2377,6 +2378,67 @@ bool startupTimingEnabled()
     return enabled;
 }
 
+struct PreviewMediaWarmupResult {
+    quint64 generation = 0;
+    QString chartPath;
+    QString trackPath;
+    QString resolvedMediaPath;
+    qint64 workerElapsedMs = -1;
+};
+
+struct PreviewSfxWarmupResult {
+    quint64 generation = 0;
+    QString chartPath;
+    QString trackPath;
+    QString sfxDir;
+    qint64 workerElapsedMs = -1;
+};
+
+QStringList previewSfxWarmupKinds()
+{
+    static const QStringList kinds{
+        QStringLiteral("answer"),
+        QStringLiteral("judge"),
+        QStringLiteral("judge_break"),
+        QStringLiteral("slide"),
+        QStringLiteral("break"),
+        QStringLiteral("break_slide_start"),
+        QStringLiteral("break_slide"),
+        QStringLiteral("judge_break_slide"),
+        QStringLiteral("ex"),
+        QStringLiteral("touch"),
+        QStringLiteral("touchhold"),
+        QStringLiteral("firework"),
+    };
+    return kinds;
+}
+
+void warmupFileIntoOsCache(const QString& path, qint64 maxBytes = -1)
+{
+    if (path.isEmpty()) {
+        return;
+    }
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return;
+    }
+    constexpr qint64 kChunkBytes = 64 * 1024;
+    qint64 remainingBytes = maxBytes;
+    while (!file.atEnd()) {
+        if (remainingBytes == 0) {
+            break;
+        }
+        const qint64 requestBytes = remainingBytes > 0 ? qMin(remainingBytes, kChunkBytes) : kChunkBytes;
+        const QByteArray chunk = file.read(requestBytes);
+        if (chunk.isEmpty()) {
+            break;
+        }
+        if (remainingBytes > 0) {
+            remainingBytes -= chunk.size();
+        }
+    }
+}
+
 void appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 deltaMs)
 {
     if (!startupTimingEnabled()) {
@@ -2395,6 +2457,11 @@ void appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 del
 
 }  // namespace
 
+MainWindow::~MainWindow()
+{
+    shutdownPreviewMediaController();
+}
+
 void MainWindow::configureRuntimeDebugOutput()
 {
     const QStringList appArgs = QCoreApplication::arguments();
@@ -2407,16 +2474,87 @@ void MainWindow::configureRuntimeDebugOutput()
     }
 }
 
+void MainWindow::dispatchPreviewMediaControllerCall(
+    std::function<void(PreviewMediaController*)> call,
+    Qt::ConnectionType connectionType) const
+{
+    if (previewMediaController_ == nullptr || !call) {
+        return;
+    }
+    PreviewMediaController* controller = previewMediaController_;
+    if (connectionType == Qt::BlockingQueuedConnection && controller->thread() == QThread::currentThread()) {
+        call(controller);
+        return;
+    }
+    QMetaObject::invokeMethod(
+        controller,
+        [controller, call = std::move(call)]() mutable {
+            call(controller);
+        },
+        connectionType
+    );
+}
+
+bool MainWindow::queryPreviewMediaControllerHasVideoMedia() const
+{
+    bool hasVideoMedia = false;
+    dispatchPreviewMediaControllerCall(
+        [&hasVideoMedia](PreviewMediaController* controller) {
+            hasVideoMedia = controller->hasVideoMedia();
+        },
+        Qt::BlockingQueuedConnection
+    );
+    return hasVideoMedia;
+}
+
+double MainWindow::queryPreviewMediaControllerCurrentPlaybackSecond() const
+{
+    double second = 0.0;
+    dispatchPreviewMediaControllerCall(
+        [&second](PreviewMediaController* controller) {
+            second = controller->currentPlaybackSecond();
+        },
+        Qt::BlockingQueuedConnection
+    );
+    return second;
+}
+
+QString MainWindow::queryPreviewMediaControllerProfilingSummaryLines() const
+{
+    QString summary;
+    dispatchPreviewMediaControllerCall(
+        [&summary](PreviewMediaController* controller) {
+            summary = controller->profilingSummaryLines();
+        },
+        Qt::BlockingQueuedConnection
+    );
+    return summary;
+}
+
 void MainWindow::ensurePreviewMediaControllerInitialized()
 {
     if (previewMediaController_ != nullptr) {
         return;
     }
 
-    QElapsedTimer initTimer;
-    initTimer.start();
-    previewMediaController_ = new PreviewMediaController(this);
+    if (previewMediaControllerThread_ == nullptr) {
+        previewMediaControllerThread_ = new QThread(this);
+        previewMediaControllerThread_->setObjectName(QStringLiteral("PreviewMediaControllerThread"));
+        previewMediaControllerThread_->start();
+    }
 
+#ifdef HAVE_QT_MULTIMEDIA
+    qRegisterMetaType<QVideoFrame>("QVideoFrame");
+#endif
+
+    previewMediaController_ = new PreviewMediaController();
+    previewMediaController_->moveToThread(previewMediaControllerThread_);
+
+    connect(previewMediaController_, &PreviewMediaController::mediaStateChanged, this, [this](bool hasResolvedMedia, bool) {
+        if (previewCanvas_ != nullptr) {
+            previewCanvas_->setStageMediaAvailable(hasResolvedMedia);
+        }
+    });
     connect(previewMediaController_, &PreviewMediaController::frameChanged, this, [this](const QImage& frame) {
         if (previewCanvas_ == nullptr) {
             return;
@@ -2454,25 +2592,49 @@ void MainWindow::ensurePreviewMediaControllerInitialized()
         finishQtPreviewPlaybackAndReturnToEntry("Qt preview reached the end of current media.");
     });
 
-    previewMediaController_->setBackgroundTrackVolume(previewAudioSettings_.bgmVolume);
-    previewMediaController_->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
-    previewMediaController_->setBackgroundTrackPath(lastTrackPath_);
-    previewMediaController_->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
     if (previewCanvas_ != nullptr) {
         previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
         previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
         previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
         previewCanvas_->setNoteFlowSpeed(previewNoteFlowSpeed_);
     }
-    previewMediaController_->setTimelineOffsetSeconds(0.0);
-    previewMediaController_->setChartPath(currentFilePath_);
-    if (previewCanvas_ != nullptr) {
-        previewCanvas_->setStageMediaAvailable(previewMediaController_->hasResolvedMedia());
-    }
-    previewMediaController_->setPlayheadSeconds(qtPreviewPauseSecond_);
 
-    const qint64 elapsedMs = initTimer.elapsed();
-    appendStartupTimingStage("mainwindow/preview_media_controller_lazy_init", elapsedMs, elapsedMs);
+    dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
+        controller->initializeBackendObjects();
+        controller->setWarmupResolvedMediaPath(previewMediaWarmupChartPath_, previewMediaWarmupResolvedPath_);
+        controller->setBackgroundTrackVolume(previewAudioSettings_.bgmVolume);
+        controller->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
+        controller->setBackgroundTrackPath(lastTrackPath_);
+        controller->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
+        controller->setTimelineOffsetSeconds(0.0);
+        controller->setChartPath(currentFilePath_);
+        controller->setPlayheadSeconds(qtPreviewPauseSecond_);
+    });
+}
+
+void MainWindow::shutdownPreviewMediaController()
+{
+    if (previewMediaController_ != nullptr) {
+        PreviewMediaController* controller = previewMediaController_;
+        previewMediaController_ = nullptr;
+        if (previewMediaControllerThread_ != nullptr && previewMediaControllerThread_->isRunning()) {
+            QMetaObject::invokeMethod(
+                controller,
+                [controller]() {
+                    delete controller;
+                },
+                Qt::BlockingQueuedConnection
+            );
+        } else {
+            delete controller;
+        }
+    }
+    if (previewMediaControllerThread_ != nullptr) {
+        previewMediaControllerThread_->quit();
+        previewMediaControllerThread_->wait();
+        delete previewMediaControllerThread_;
+        previewMediaControllerThread_ = nullptr;
+    }
 }
 
 void MainWindow::ensurePreviewSfxRuntimePrepared()
@@ -2482,6 +2644,11 @@ void MainWindow::ensurePreviewSfxRuntimePrepared()
     }
     QElapsedTimer initTimer;
     initTimer.start();
+    previewSfxRuntime_->setWarmupResolvedPaths(
+        previewSfxWarmupChartPath_,
+        previewSfxWarmupTrackPath_,
+        previewSfxWarmupSfxDir_
+    );
     previewSfxRuntime_->reloadAssets(previewAudioSettings_);
     previewSfxRuntime_->setChartPath(currentFilePath_);
     previewSfxRuntime_->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
@@ -2492,82 +2659,165 @@ void MainWindow::ensurePreviewSfxRuntimePrepared()
 
 void MainWindow::schedulePreviewSubsystemWarmup()
 {
-    if (previewSubsystemWarmupScheduled_) {
+    if (previewWarmupPool_ == nullptr) {
         return;
     }
-    previewSubsystemWarmupScheduled_ = true;
-    previewSubsystemWarmupPendingTasks_ = 2;
-
-    const PreviewAudioSettings audioSettingsSnapshot = previewAudioSettings_;
+    const quint64 generation = ++previewWarmupGeneration_;
+    PreviewAudioSettings audioSettingsSnapshot = previewAudioSettings_;
+    audioSettingsSnapshot.normalize();
     const QString chartPathSnapshot = currentFilePath_;
+    const QString trackPathSnapshot = lastTrackPath_;
     const double playbackRateSnapshot = previewPlaybackRate_;
-    QPointer<MainWindow> guard(this);
-
-    QThreadPool::globalInstance()->start([guard]() {
-        QElapsedTimer timer;
-        timer.start();
-#ifdef HAVE_QT_MULTIMEDIA
-        PreviewMediaController controllerWarmup;
-#endif
-        const qint64 elapsedMs = timer.elapsed();
-        if (guard.isNull()) {
-            return;
-        }
-        QMetaObject::invokeMethod(
-            guard.data(),
-            [guard, elapsedMs]() {
-                if (guard.isNull()) {
-                    return;
-                }
-                appendStartupTimingStage("mainwindow/preview_media_controller_worker_warmup", elapsedMs, elapsedMs);
-                guard->previewSubsystemWarmupPendingTasks_ = qMax(0, guard->previewSubsystemWarmupPendingTasks_ - 1);
-                guard->tryFinalizePreviewSubsystemWarmup();
-            },
-            Qt::QueuedConnection
-        );
-    }, -1);
-
-    QThreadPool::globalInstance()->start([guard, audioSettingsSnapshot, chartPathSnapshot, playbackRateSnapshot]() {
-        QElapsedTimer timer;
-        timer.start();
-        QtPreviewSfxRuntime runtimeWarmup;
-        runtimeWarmup.setChartPath(chartPathSnapshot);
-        runtimeWarmup.setBackgroundTrackPlaybackRate(playbackRateSnapshot);
-        runtimeWarmup.reloadAssets(audioSettingsSnapshot);
-        const qint64 elapsedMs = timer.elapsed();
-        if (guard.isNull()) {
-            return;
-        }
-        QMetaObject::invokeMethod(
-            guard.data(),
-            [guard, elapsedMs]() {
-                if (guard.isNull()) {
-                    return;
-                }
-                appendStartupTimingStage("mainwindow/preview_sfx_worker_warmup", elapsedMs, elapsedMs);
-                guard->previewSubsystemWarmupPendingTasks_ = qMax(0, guard->previewSubsystemWarmupPendingTasks_ - 1);
-                guard->tryFinalizePreviewSubsystemWarmup();
-            },
-            Qt::QueuedConnection
-        );
-    }, -1);
+    schedulePreviewMediaWarmup(generation, chartPathSnapshot, trackPathSnapshot);
+    schedulePreviewSfxWarmup(generation, chartPathSnapshot, trackPathSnapshot, audioSettingsSnapshot, playbackRateSnapshot);
 }
 
-void MainWindow::tryFinalizePreviewSubsystemWarmup()
+void MainWindow::schedulePreviewMediaWarmup(
+    quint64 generation,
+    const QString& chartPathSnapshot,
+    const QString& trackPathSnapshot)
 {
-    if (!previewSubsystemWarmupScheduled_
-        || previewSubsystemWarmupFinalized_
-        || previewSubsystemWarmupPendingTasks_ > 0) {
+    if (previewWarmupPool_ == nullptr) {
         return;
     }
-    previewSubsystemWarmupFinalized_ = true;
+    QPointer<MainWindow> guard(this);
+    previewWarmupPool_->start([guard, generation, chartPathSnapshot, trackPathSnapshot]() {
+        QElapsedTimer timer;
+        timer.start();
+        PreviewMediaWarmupResult result;
+        result.generation = generation;
+        result.chartPath = chartPathSnapshot;
+        result.trackPath = trackPathSnapshot;
+#ifdef HAVE_QT_MULTIMEDIA
+        result.resolvedMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(chartPathSnapshot, true);
+#else
+        result.resolvedMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(chartPathSnapshot, false);
+#endif
+        if (!result.resolvedMediaPath.isEmpty()) {
+            const QString suffix = QFileInfo(result.resolvedMediaPath).suffix().toLower();
+            if (suffix == QStringLiteral("mp4")) {
+                warmupFileIntoOsCache(result.resolvedMediaPath, 256 * 1024);
+            } else {
+                warmupFileIntoOsCache(result.resolvedMediaPath);
+            }
+        }
+        result.workerElapsedMs = timer.elapsed();
+        if (guard.isNull()) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+            guard.data(),
+            [guard, result = std::move(result)]() mutable {
+                if (guard.isNull()) {
+                    return;
+                }
+                guard->applyPreviewMediaWarmupResult(
+                    result.generation,
+                    result.chartPath,
+                    result.resolvedMediaPath,
+                    result.trackPath,
+                    result.workerElapsedMs
+                );
+            },
+            Qt::QueuedConnection
+        );
+    });
+}
 
-    QElapsedTimer applyTimer;
-    applyTimer.start();
-    ensurePreviewSfxRuntimePrepared();
+void MainWindow::schedulePreviewSfxWarmup(
+    quint64 generation,
+    const QString& chartPathSnapshot,
+    const QString& trackPathSnapshot,
+    const PreviewAudioSettings& audioSettingsSnapshot,
+    double playbackRateSnapshot)
+{
+    Q_UNUSED(audioSettingsSnapshot);
+    Q_UNUSED(playbackRateSnapshot);
+    if (previewWarmupPool_ == nullptr) {
+        return;
+    }
+    QPointer<MainWindow> guard(this);
+    previewWarmupPool_->start([guard, generation, chartPathSnapshot, trackPathSnapshot]() {
+        QElapsedTimer timer;
+        timer.start();
+        PreviewSfxWarmupResult result;
+        result.generation = generation;
+        result.chartPath = chartPathSnapshot;
+        result.trackPath = trackPathSnapshot;
+        result.sfxDir = miacode::preview_sfx::resolveSfxDirectory();
+        for (const QString& kind : previewSfxWarmupKinds()) {
+            const QString path = miacode::preview_sfx::assetFilePathForKind(result.sfxDir, kind);
+            if (!path.isEmpty() && QFileInfo::exists(path)) {
+                warmupFileIntoOsCache(path);
+            }
+        }
+        if (!result.trackPath.isEmpty()) {
+            warmupFileIntoOsCache(result.trackPath, 256 * 1024);
+        }
+        result.workerElapsedMs = timer.elapsed();
+        if (guard.isNull()) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+            guard.data(),
+            [guard, result = std::move(result)]() mutable {
+                if (guard.isNull()) {
+                    return;
+                }
+                guard->applyPreviewSfxWarmupResult(
+                    result.generation,
+                    result.chartPath,
+                    result.trackPath,
+                    result.sfxDir,
+                    result.workerElapsedMs
+                );
+            },
+            Qt::QueuedConnection
+        );
+    });
+}
+
+void MainWindow::applyPreviewMediaWarmupResult(
+    quint64 generation,
+    const QString& chartPath,
+    const QString& resolvedMediaPath,
+    const QString& trackPath,
+    qint64 workerElapsedMs)
+{
+    if (generation != previewWarmupGeneration_) {
+        return;
+    }
+    previewMediaWarmupAppliedGeneration_ = generation;
+    previewMediaWarmupChartPath_ = chartPath;
+    previewMediaWarmupResolvedPath_ = resolvedMediaPath;
+    previewMediaWarmupTrackPath_ = trackPath;
+    appendStartupTimingStage("mainwindow/preview_media_data_warmup", workerElapsedMs, workerElapsedMs);
     ensurePreviewMediaControllerInitialized();
-    const qint64 elapsedMs = applyTimer.elapsed();
-    appendStartupTimingStage("mainwindow/preview_subsystem_warmup_apply", elapsedMs, elapsedMs);
+    dispatchPreviewMediaControllerCall([chartPath, resolvedMediaPath, trackPath](PreviewMediaController* controller) {
+        controller->setWarmupResolvedMediaPath(chartPath, resolvedMediaPath);
+        controller->setBackgroundTrackPath(trackPath);
+        controller->setChartPath(chartPath);
+    });
+}
+
+void MainWindow::applyPreviewSfxWarmupResult(
+    quint64 generation,
+    const QString& chartPath,
+    const QString& trackPath,
+    const QString& sfxDir,
+    qint64 workerElapsedMs)
+{
+    if (generation != previewWarmupGeneration_) {
+        return;
+    }
+    previewSfxWarmupAppliedGeneration_ = generation;
+    previewSfxWarmupChartPath_ = chartPath;
+    previewSfxWarmupTrackPath_ = trackPath;
+    previewSfxWarmupSfxDir_ = sfxDir;
+    appendStartupTimingStage("mainwindow/preview_sfx_data_warmup", workerElapsedMs, workerElapsedMs);
+    if (previewSfxRuntime_ != nullptr) {
+        previewSfxRuntime_->setWarmupResolvedPaths(chartPath, trackPath, sfxDir);
+    }
 }
 
 void MainWindow::setupInitialWindowGeometry()
@@ -3674,7 +3924,9 @@ void MainWindow::loadProjectRenderState()
     previewAudioSettings_.normalize();
     refreshPreviewFrameRateTimers();
     if (previewMediaController_ != nullptr) {
-        previewMediaController_->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
+        dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
+            controller->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
+        });
     }
     if (previewCanvas_ != nullptr) {
         previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
@@ -3754,7 +4006,9 @@ void MainWindow::applyPreviewAudioSettingsToRuntime()
 {
     previewAudioSettings_.normalize();
     if (previewMediaController_ != nullptr) {
-        previewMediaController_->setBackgroundTrackVolume(previewAudioSettings_.bgmVolume);
+        dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
+            controller->setBackgroundTrackVolume(previewAudioSettings_.bgmVolume);
+        });
     }
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->applyLevels(previewAudioSettings_);
@@ -4278,7 +4532,7 @@ void MainWindow::onExportPreviewVideo()
             if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
                 second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
             } else if (previewMediaController_ != nullptr) {
-                second = qMax(0.0, previewMediaController_->currentPlaybackSecond());
+                second = qMax(0.0, queryPreviewMediaControllerCurrentPlaybackSecond());
             }
         }
         return second;
@@ -4312,7 +4566,9 @@ void MainWindow::onExportPreviewVideo()
             previewBackgroundBrightnessOuter_ = qBound(0.0, outer, 1.0);
             previewBackgroundBrightnessInner_ = qBound(0.0, inner, 1.0);
             if (previewMediaController_ != nullptr) {
-                previewMediaController_->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
+                dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
+                    controller->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
+                });
             }
             if (previewCanvas_ != nullptr) {
                 previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
@@ -6466,7 +6722,9 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         previewBackgroundBrightnessOuter_ = qBound(0.0, static_cast<double>(value) / 100.0, 1.0);
         outerBrightnessLabel->setText(QString::number(value) + "%");
         if (previewMediaController_ != nullptr) {
-            previewMediaController_->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
+            dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
+                controller->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
+            });
         }
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);

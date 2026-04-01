@@ -50,6 +50,13 @@ QtPreviewSfxRuntime::~QtPreviewSfxRuntime()
     resetBanks();
 }
 
+void QtPreviewSfxRuntime::setWarmupResolvedPaths(const QString& chartPath, const QString& trackPath, const QString& sfxDir)
+{
+    warmupChartPath_ = chartPath.isEmpty() ? QString() : QDir::cleanPath(chartPath);
+    warmupTrackPath_ = trackPath.isEmpty() ? QString() : QDir::cleanPath(trackPath);
+    warmupSfxDir_ = sfxDir.isEmpty() ? QString() : QDir::cleanPath(sfxDir);
+}
+
 void QtPreviewSfxRuntime::reloadAssets(const PreviewAudioSettings& settings)
 {
     settings_ = settings;

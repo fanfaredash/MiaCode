@@ -92,7 +92,8 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Preview media controller:
   - Files: `src/preview/video/PreviewMediaController.h`, `src/preview/video/PreviewMediaController.cpp`
   - Class: `PreviewMediaController`
-  - Key functions: `setChartPath`, `setBackgroundTrackPath`, `setTimelineOffsetSeconds`, `startPlayback`, `syncPlayback`, `resolveMediaPath`
+  - Key functions: `initializeBackendObjects`, `setWarmupResolvedMediaPath`, `setChartPath`, `setBackgroundTrackPath`, `setTimelineOffsetSeconds`, `startPlayback`, `syncPlayback`, `resolveMediaPath`
+  - Owns: dedicated media-thread runtime objects (`QMediaPlayer` / `QVideoSink` / `QAudioOutput`) plus warmup-resolved media-path reuse
 - Preview integration helper:
   - Files: `src/preview/PreviewIntegration.h`, `src/preview/PreviewIntegration.cpp`
   - Owns: side-by-side legacy preview placement helpers

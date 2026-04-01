@@ -338,6 +338,12 @@ MainWindow::MainWindow(QWidget* parent)
     configureRuntimeDebugOutput();
     logStartupStage("configure_runtime_debug_output");
 
+    previewWarmupPool_ = new QThreadPool(this);
+    previewWarmupPool_->setObjectName(QStringLiteral("PreviewWarmupPool"));
+    previewWarmupPool_->setMaxThreadCount(2);
+    previewWarmupPool_->setExpiryTimeout(-1);
+    logStartupStage("preview_warmup_pool_ready");
+
     setWindowModified(false);
     updateWindowTitle();
     setupInitialWindowGeometry();
@@ -1321,7 +1327,7 @@ MainWindow::MainWindow(QWidget* parent)
         if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
             second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
         } else if (previewMediaController_ != nullptr) {
-            second = qMax(0.0, previewMediaController_->currentPlaybackSecond());
+            second = qMax(0.0, queryPreviewMediaControllerCurrentPlaybackSecond());
         }
         syncEditorCursorToPreviewSecond(second, false);
     });
@@ -1346,8 +1352,8 @@ MainWindow::MainWindow(QWidget* parent)
                     double second = qMax(0.0, qtPreviewPauseSecond_);
                     if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
                         second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-                    } else if (previewMediaController_ != nullptr && previewMediaController_->hasVideoMedia()) {
-                        second = qMax(0.0, previewMediaController_->currentPlaybackSecond());
+                    } else if (previewMediaController_ != nullptr && queryPreviewMediaControllerHasVideoMedia()) {
+                        second = qMax(0.0, queryPreviewMediaControllerCurrentPlaybackSecond());
                     }
                     syncEditorCursorToPreviewSecond(second, false);
                 } else {
@@ -1753,9 +1759,11 @@ MainWindow::MainWindow(QWidget* parent)
         previewShowDebugInfo_ = true;
     }
     if (previewMediaController_ != nullptr) {
-        previewMediaController_->setBackgroundTrackVolume(previewAudioSettings_.bgmVolume);
-        previewMediaController_->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
-        previewMediaController_->setBackgroundTrackPath(lastTrackPath_);
+        dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
+            controller->setBackgroundTrackVolume(previewAudioSettings_.bgmVolume);
+            controller->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
+            controller->setBackgroundTrackPath(lastTrackPath_);
+        });
     }
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->setChartPath(currentFilePath_);
@@ -1775,7 +1783,9 @@ MainWindow::MainWindow(QWidget* parent)
         previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
     }
     if (previewMediaController_ != nullptr) {
-        previewMediaController_->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
+        dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
+            controller->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
+        });
     }
     applyMuriRenderOptions();
     applyUiTheme();

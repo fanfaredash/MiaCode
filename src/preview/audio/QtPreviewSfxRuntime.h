@@ -15,6 +15,7 @@ public:
     explicit QtPreviewSfxRuntime(QObject* parent = nullptr);
     ~QtPreviewSfxRuntime() override;
 
+    void setWarmupResolvedPaths(const QString& chartPath, const QString& trackPath, const QString& sfxDir);
     void reloadAssets(const PreviewAudioSettings& settings);
     void setChartPath(const QString& chartPath);
     void setBackgroundTrackOffsetSeconds(double seconds);
@@ -78,6 +79,9 @@ private:
     QString chartPath_;
     QString sfxDir_;
     QString trackPath_;
+    QString warmupChartPath_;
+    QString warmupTrackPath_;
+    QString warmupSfxDir_;
     QVector<TouchholdSpan> touchholdSpans_;
     quint64 touchholdSoundLengthFrames_ = 0;
     quint32 deviceSampleRate_ = 48000;

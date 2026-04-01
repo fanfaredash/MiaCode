@@ -47,6 +47,8 @@ class QTabWidget;
 class QToolBar;
 class QPushButton;
 class QShowEvent;
+class QThread;
+class QThreadPool;
 class BracketScopeHighlighter;
 class PlainCodeEditor;
 class PreviewCanvas;
@@ -93,7 +95,7 @@ public:
     };
 
     explicit MainWindow(QWidget* parent = nullptr);
-    ~MainWindow() override = default;
+    ~MainWindow() override;
     bool exportPreviewVideoFromCli(
         const CliVideoExportRequest& request,
         QString* resolvedOutputPath,
@@ -167,9 +169,38 @@ private:
     bool maybeSaveBeforeContinue();
     void configureRuntimeDebugOutput();
     void ensurePreviewMediaControllerInitialized();
+    void shutdownPreviewMediaController();
+    void dispatchPreviewMediaControllerCall(
+        std::function<void(PreviewMediaController*)> call,
+        Qt::ConnectionType connectionType = Qt::QueuedConnection
+    ) const;
+    bool queryPreviewMediaControllerHasVideoMedia() const;
+    double queryPreviewMediaControllerCurrentPlaybackSecond() const;
+    QString queryPreviewMediaControllerProfilingSummaryLines() const;
     void ensurePreviewSfxRuntimePrepared();
     void schedulePreviewSubsystemWarmup();
-    void tryFinalizePreviewSubsystemWarmup();
+    void schedulePreviewMediaWarmup(quint64 generation, const QString& chartPathSnapshot, const QString& trackPathSnapshot);
+    void schedulePreviewSfxWarmup(
+        quint64 generation,
+        const QString& chartPathSnapshot,
+        const QString& trackPathSnapshot,
+        const PreviewAudioSettings& audioSettingsSnapshot,
+        double playbackRateSnapshot
+    );
+    void applyPreviewMediaWarmupResult(
+        quint64 generation,
+        const QString& chartPath,
+        const QString& resolvedMediaPath,
+        const QString& trackPath,
+        qint64 workerElapsedMs
+    );
+    void applyPreviewSfxWarmupResult(
+        quint64 generation,
+        const QString& chartPath,
+        const QString& trackPath,
+        const QString& sfxDir,
+        qint64 workerElapsedMs
+    );
     void setupInitialWindowGeometry();
     void setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* transformMenu, QMenu* previewMenu, QMenu* helpMenu);
     void setOutlineDockCollapsed(bool collapsed);
@@ -447,7 +478,9 @@ private:
     QWidget* editorWidget_ = nullptr;
     PreviewCanvas* previewCanvas_ = nullptr;
     PreviewMediaController* previewMediaController_ = nullptr;
+    QThread* previewMediaControllerThread_ = nullptr;
     QtPreviewSfxRuntime* previewSfxRuntime_ = nullptr;
+    QThreadPool* previewWarmupPool_ = nullptr;
     TimelineView* timelineView_ = nullptr;
     QPlainTextEdit* outputView_ = nullptr;
     QListWidget* errorList_ = nullptr;
@@ -535,9 +568,15 @@ private:
     bool runtimeDebugOutputEnabled_ = false;
     quint64 windowEventDebugSequence_ = 0;
     bool previewSfxRuntimePrepared_ = false;
-    bool previewSubsystemWarmupScheduled_ = false;
-    bool previewSubsystemWarmupFinalized_ = false;
-    int previewSubsystemWarmupPendingTasks_ = 0;
+    quint64 previewWarmupGeneration_ = 0;
+    quint64 previewMediaWarmupAppliedGeneration_ = 0;
+    quint64 previewSfxWarmupAppliedGeneration_ = 0;
+    QString previewMediaWarmupChartPath_;
+    QString previewMediaWarmupResolvedPath_;
+    QString previewMediaWarmupTrackPath_;
+    QString previewSfxWarmupChartPath_;
+    QString previewSfxWarmupTrackPath_;
+    QString previewSfxWarmupSfxDir_;
     bool videoExportWorkerSuccess_ = false;
     bool videoExportWorkerCompletionReceived_ = false;
     bool videoExportWorkerCancelRequested_ = false;
