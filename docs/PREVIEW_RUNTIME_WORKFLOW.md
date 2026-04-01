@@ -393,6 +393,7 @@ touchhold 在当前设计里不是普通的单次播放音效，而是一种持�
 - auto-start 只等待 preview snapshot
 - 不要求等待 validation 完成
 - 不额外弹出等待 UI
+- validation/Muri 的结果即使已经在后台算出，播放期间也允许暂缓到下一次 paused/idle 再刷新到可见 UI
 
 这个设计能保证播放尽量使用最新内存态，同时不被更慢的验证链路拖住。
 
@@ -415,6 +416,7 @@ touchhold 在当前设计里不是普通的单次播放音效，而是一种持�
 - 预览播放依赖稳定的 snapshot，而不是边编辑边直接改写正在播放的内容
 - media 后端已经迁移到专用 owner 线程，跨设备鲁棒性明显更好
 - warmup 已经从“初始化真实 runtime”收缩为“预热轻量数据与文件缓存”
+- validation / Muri 已明确降级为后台 latest-only 结果，播放期间不再追求可见 UI 的即时性
 - paused preview 语义明确，便于保证 seek、resume 和 touchhold 行为一致
 - SFX timeline 的事件生成和 drain 责任集中，逻辑边界清楚
 

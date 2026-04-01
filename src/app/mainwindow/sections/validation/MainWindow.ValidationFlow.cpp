@@ -982,6 +982,30 @@ void MainWindow::clearValidationCache()
     updateEditorValidationSummary();
 }
 
+void MainWindow::applyDeferredAnalysisUiUpdates()
+{
+    if (qtPreviewPlaying_) {
+        return;
+    }
+
+    if (pendingDeferredMuriUiRefresh_) {
+        if (timelineView_ != nullptr) {
+            timelineView_->setMuriAnalysisReport(muriAnalysisReport_);
+        }
+        refreshMuriDiagnosticsPanel();
+        if (previewCanvas_ != nullptr) {
+            previewCanvas_->setMuriAnalysisReport(muriAnalysisReport_);
+            previewCanvas_->setMuriRenderOptions(muriRenderOptions_);
+        }
+        pendingDeferredMuriUiRefresh_ = false;
+    }
+
+    if (pendingDeferredValidationUiRefresh_) {
+        refreshValidationPanelForActiveField();
+        pendingDeferredValidationUiRefresh_ = false;
+    }
+}
+
 void MainWindow::setValidationTabVisible(bool visible)
 {
     if (bottomTabs_ == nullptr || errorList_ == nullptr) {
