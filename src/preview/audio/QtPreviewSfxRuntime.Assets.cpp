@@ -1,10 +1,17 @@
 QString QtPreviewSfxRuntime::resolveTrackPath(const QString& chartPath) const
 {
+    const QString normalizedChartPath = chartPath.isEmpty() ? QString() : QDir::cleanPath(chartPath);
+    if (!warmupChartPath_.isEmpty() && normalizedChartPath == warmupChartPath_) {
+        return warmupTrackPath_;
+    }
     return miacode::chart_assets::resolveTrackPath(chartPath);
 }
 
 QString QtPreviewSfxRuntime::resolveSfxDir() const
 {
+    if (!warmupSfxDir_.isEmpty()) {
+        return warmupSfxDir_;
+    }
     return miacode::preview_sfx::resolveSfxDirectory();
 }
 

@@ -1415,7 +1415,9 @@ void MainWindow::clearTimelineAndPreview()
         previewCanvas_->setMuriAnalysisReport(muriAnalysisReport_);
     }
     if (previewMediaController_ != nullptr) {
-        previewMediaController_->reset();
+        dispatchPreviewMediaControllerCall([](PreviewMediaController* controller) {
+            controller->reset();
+        });
     }
     updatePreviewSliderRange();
     updatePreviewSliderPosition(0.0);

@@ -69,15 +69,21 @@ QMediaPlayer::PlaybackState playerPlaybackState(const QMediaPlayer* player)
 
 PreviewMediaController::PreviewMediaController(QObject* parent)
     : QObject(parent)
-#ifdef HAVE_QT_MULTIMEDIA
-    , player_(new QMediaPlayer(this))
-    , audioOutput_(new QAudioOutput(this))
-    , videoSink_(new QVideoSink(this))
-    , bgmPlayer_(new QMediaPlayer(this))
-    , bgmAudioOutput_(new QAudioOutput(this))
-#endif
+{
+}
+
+void PreviewMediaController::initializeBackendObjects()
 {
 #ifdef HAVE_QT_MULTIMEDIA
+    if (player_ != nullptr) {
+        return;
+    }
+
+    player_ = new QMediaPlayer(this);
+    audioOutput_ = new QAudioOutput(this);
+    videoSink_ = new QVideoSink(this);
+    bgmPlayer_ = new QMediaPlayer(this);
+    bgmAudioOutput_ = new QAudioOutput(this);
     audioOutput_->setMuted(true);
     audioOutput_->setVolume(0.0f);
     player_->setAudioOutput(audioOutput_);
@@ -117,6 +123,12 @@ PreviewMediaController::PreviewMediaController(QObject* parent)
 }
 
 PreviewMediaController::~PreviewMediaController() = default;
+
+void PreviewMediaController::setWarmupResolvedMediaPath(const QString& chartPath, const QString& mediaPath)
+{
+    warmupChartPath_ = normalizedLocalPath(chartPath);
+    warmupMediaPath_ = normalizedLocalPath(mediaPath);
+}
 
 bool PreviewMediaController::hasResolvedMedia() const
 {
@@ -175,6 +187,7 @@ void PreviewMediaController::setBackgroundTrackPath(const QString& trackPath)
     Q_UNUSED(trackPath);
     return;
 #else
+    initializeBackendObjects();
     const QString normalizedTrackPath = normalizedLocalPath(trackPath);
     if (normalizedTrackPath == bgmTrackPath_) {
         return;
@@ -204,6 +217,7 @@ void PreviewMediaController::setBackgroundTrackVolume(double volume)
     Q_UNUSED(volume);
     return;
 #else
+    initializeBackendObjects();
     bgmVolume_ = qBound(0.0, volume, 1.0);
     if (bgmAudioOutput_ != nullptr) {
         bgmAudioOutput_->setVolume(static_cast<float>(bgmVolume_));
@@ -217,6 +231,7 @@ void PreviewMediaController::setBackgroundTrackPlaybackRate(double rate)
     Q_UNUSED(rate);
     return;
 #else
+    initializeBackendObjects();
     if (bgmPlayer_ == nullptr) {
         return;
     }
@@ -249,6 +264,7 @@ void PreviewMediaController::setPlaybackRate(double rate)
     Q_UNUSED(rate);
     return;
 #else
+    initializeBackendObjects();
     if (player_ == nullptr) {
         return;
     }
@@ -263,6 +279,7 @@ void PreviewMediaController::setPlayheadSeconds(double seconds)
     Q_UNUSED(seconds);
     return;
 #else
+    initializeBackendObjects();
     if (mediaKind_ != MediaKind::Video || player_ == nullptr) {
         return;
     }
@@ -283,6 +300,7 @@ void PreviewMediaController::startPlayback(double seconds)
     Q_UNUSED(seconds);
     return;
 #else
+    initializeBackendObjects();
     if (mediaKind_ != MediaKind::Video || player_ == nullptr) {
         return;
     }
@@ -316,6 +334,7 @@ void PreviewMediaController::syncPlayback(double seconds)
     Q_UNUSED(seconds);
     return;
 #else
+    initializeBackendObjects();
     if (mediaKind_ != MediaKind::Video || player_ == nullptr) {
         return;
     }
@@ -345,6 +364,7 @@ void PreviewMediaController::startBackgroundTrack(double seconds)
     Q_UNUSED(seconds);
     return;
 #else
+    initializeBackendObjects();
     if (!hasBackgroundTrack() || bgmPlayer_ == nullptr) {
         return;
     }
@@ -378,6 +398,7 @@ void PreviewMediaController::syncBackgroundTrack(double seconds)
     Q_UNUSED(seconds);
     return;
 #else
+    initializeBackendObjects();
     if (!hasBackgroundTrack() || bgmPlayer_ == nullptr) {
         return;
     }
@@ -406,6 +427,7 @@ void PreviewMediaController::pausePlayback()
 #ifndef HAVE_QT_MULTIMEDIA
     return;
 #else
+    initializeBackendObjects();
     if (mediaKind_ == MediaKind::Video && player_ != nullptr) {
         player_->pause();
         videoPlaybackActive_ = false;
@@ -419,6 +441,7 @@ void PreviewMediaController::pauseBackgroundTrack()
 #ifndef HAVE_QT_MULTIMEDIA
     return;
 #else
+    initializeBackendObjects();
     if (bgmPlayer_ == nullptr) {
         return;
     }
@@ -516,12 +539,21 @@ QString PreviewMediaController::profilingSummaryLines() const
 
 QString PreviewMediaController::resolveMediaPath(const QString& chartPath) const
 {
+    const QString normalizedChartPath = normalizedLocalPath(chartPath);
+    if (normalizedChartPath == warmupChartPath_) {
+        return warmupMediaPath_;
+    }
 #ifdef HAVE_QT_MULTIMEDIA
     constexpr bool kIncludeVideoCandidates = true;
 #else
     constexpr bool kIncludeVideoCandidates = false;
 #endif
     return miacode::chart_assets::resolveBackgroundMediaPath(chartPath, kIncludeVideoCandidates);
+}
+
+void PreviewMediaController::emitMediaStateChanged()
+{
+    emit mediaStateChanged(hasResolvedMedia(), hasVideoMedia());
 }
 
 void PreviewMediaController::clearMedia()
@@ -545,6 +577,7 @@ void PreviewMediaController::clearMedia()
 #ifdef HAVE_QT_MULTIMEDIA
     publishVideoFrame(QVideoFrame());
 #endif
+    emitMediaStateChanged();
 }
 
 void PreviewMediaController::publishFrame(const QImage& frame)
@@ -568,6 +601,7 @@ void PreviewMediaController::loadImageMedia(const QString& path)
     publishVideoFrame(QVideoFrame());
 #endif
     publishFrame(image);
+    emitMediaStateChanged();
 }
 
 void PreviewMediaController::loadVideoMedia(const QString& path)
@@ -576,6 +610,7 @@ void PreviewMediaController::loadVideoMedia(const QString& path)
     Q_UNUSED(path);
     return;
 #else
+    initializeBackendObjects();
     if (player_ == nullptr) {
         return;
     }
@@ -587,6 +622,7 @@ void PreviewMediaController::loadVideoMedia(const QString& path)
     player_->setSource(QUrl::fromLocalFile(path));
     player_->pause();
     player_->setPosition(0);
+    emitMediaStateChanged();
 #endif
 }
 
