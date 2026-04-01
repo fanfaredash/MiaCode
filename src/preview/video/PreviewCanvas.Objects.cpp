@@ -49,6 +49,16 @@ qreal slideHeadFallRotationDegrees(
     return slideHeadRotateSpeedDegreesPerSecond(marker) * elapsedSeconds;
 }
 
+qreal tapDoubleStarRotationDegrees(qreal deltaSeconds, qreal tapLifecycleDurationSeconds)
+{
+    if (deltaSeconds >= 0.0 || tapLifecycleDurationSeconds <= 0.0) {
+        return 0.0;
+    }
+    const qreal elapsedSeconds =
+        qBound<qreal>(0.0, deltaSeconds + tapLifecycleDurationSeconds, tapLifecycleDurationSeconds);
+    return -360.0 * elapsedSeconds;
+}
+
 qreal exportWifiTrackCompensationOpacity(qreal opacity)
 {
     return qBound<qreal>(0.0, opacity * 0.18, 0.20);
@@ -2234,13 +2244,18 @@ void PreviewCanvas::drawNoteGuides(QPainter& painter, const QRectF& playfieldRec
 
 void PreviewCanvas::drawTapMarker(QPainter& painter, const TimelineNoteMarker& marker, const QRectF& playfieldRect)
 {
-    const bool slideHeadStar = marker.type == "slide" || marker.type == "wifi";
-    if (slideHeadStar && !marker.hasHeadStar) {
+    const bool slideLike = marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi");
+    if (slideLike && !marker.hasHeadStar) {
         return;
     }
+    const bool starMaterialHead = slideLike ? !marker.slideHeadUsesTapMaterial : marker.tapUsesStarMaterial;
+    const bool headBreak = slideLike ? marker.headBreak : marker.isBreak;
+    const bool headEach = slideLike ? marker.headEach : marker.isEach;
+    const bool headEx = slideLike ? marker.headEx : marker.isEx;
+    const bool doubleStarHead = starMaterialHead && (slideLike ? marker.sameHeadSlide : marker.tapStarDouble);
 
     const qreal deltaSeconds = static_cast<qreal>(playheadSeconds_ - marker.second);
-    if (slideHeadStar ? deltaSeconds >= 0.0 : deltaSeconds > 0.0) {
+    if (slideLike ? deltaSeconds >= 0.0 : deltaSeconds > 0.0) {
         return;
     }
 
@@ -2255,20 +2270,20 @@ void PreviewCanvas::drawTapMarker(QPainter& painter, const TimelineNoteMarker& m
         kLogicalCanvasCenter + unit.y() * approach.distance
     );
     const QPointF point = mapLogicalPointToRect(logicalPoint, playfieldRect);
-    const QImage* tapImage = slideHeadStar ? selectSlideStarImage(marker) : selectTapImage(marker);
+    const QImage* tapImage = starMaterialHead ? selectSlideStarImage(marker) : selectTapImage(marker);
     QImage renderImage = tapImage != nullptr ? *tapImage : QImage();
-    if (slideHeadStar && marker.headEx && !renderImage.isNull()) {
-        const QImage& overlay = (marker.sameHeadSlide && !starExDoubleImage_.isNull()) ? starExDoubleImage_ : starExImage_;
+    if (starMaterialHead && headEx && !renderImage.isNull()) {
+        const QImage& overlay = (doubleStarHead && !starExDoubleImage_.isNull()) ? starExDoubleImage_ : starExImage_;
         if (!overlay.isNull()) {
-            const QColor tint = exStarTintColor(marker.headBreak, marker.headEach);
+            const QColor tint = exStarTintColor(headBreak, headEach);
             renderImage = composeOverlay(renderImage, overlay, kTapOverlayBaseMix, kTapOverlayAlphaMix, nullptr, &tint);
         }
-    } else if (!slideHeadStar && marker.isEx && !renderImage.isNull() && !tapExImage_.isNull()) {
-        const QColor tint = exTintColor(marker.isBreak, marker.isEach);
+    } else if (!starMaterialHead && headEx && !renderImage.isNull() && !tapExImage_.isNull()) {
+        const QColor tint = exTintColor(headBreak, headEach);
         renderImage = composeOverlay(renderImage, tapExImage_, kTapOverlayBaseMix, kTapOverlayAlphaMix, nullptr, &tint);
     }
     const AnimatedSpriteEffect spriteEffect =
-        (slideHeadStar ? marker.headBreak : marker.isBreak)
+        headBreak
             ? AnimatedSpriteEffect::BreakAnimate
             : AnimatedSpriteEffect::None;
     const QImage* animatedTapImage =
@@ -2278,7 +2293,7 @@ void PreviewCanvas::drawTapMarker(QPainter& painter, const TimelineNoteMarker& m
         const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
         int targetWidth = 0;
         int targetHeight = 0;
-        if (slideHeadStar) {
+        if (starMaterialHead) {
             const qreal baseWidth = (!tapImage_.isNull() ? tapImage_.width() * kSkinAssetScale : animatedTapImage->width() * kStarAssetScale)
                 * kSlideSpawnStarRelativeScale;
             const qreal baseHeight = (!tapImage_.isNull() ? tapImage_.height() * kSkinAssetScale : animatedTapImage->height() * kStarAssetScale)
@@ -2297,13 +2312,19 @@ void PreviewCanvas::drawTapMarker(QPainter& painter, const TimelineNoteMarker& m
                 point,
                 targetWidth,
                 targetHeight,
-                slideHeadStar
+                starMaterialHead
                     ? mirroredStarAngleDegrees(
                         laneRotationDegrees(marker.lane)
-                        + slideHeadFallRotationDegrees(
-                            marker,
-                            deltaSeconds,
-                            static_cast<qreal>(tapLifecycleDurationSeconds_)))
+                        + (slideLike
+                            ? slideHeadFallRotationDegrees(
+                                marker,
+                                deltaSeconds,
+                                static_cast<qreal>(tapLifecycleDurationSeconds_))
+                            : (marker.tapStarDouble
+                                ? tapDoubleStarRotationDegrees(
+                                    deltaSeconds,
+                                    static_cast<qreal>(tapLifecycleDurationSeconds_))
+                                : 0.0)))
                     : laneRotationDegrees(marker.lane))) {
             return;
         }
@@ -3784,9 +3805,6 @@ void PreviewCanvas::drawSlideMarker(QPainter& painter, const TimelineNoteMarker&
     }
 
     if (playheadSeconds_ < marker.slideTraceSecond) {
-        if (!marker.hasHeadStar) {
-            return;
-        }
         starImage = selectSlideMovingStarImage(marker);
         if (starImage->isNull()) {
             return;
@@ -3798,11 +3816,16 @@ void PreviewCanvas::drawSlideMarker(QPainter& painter, const TimelineNoteMarker&
         }
         logicalPoint = points.constFirst();
         angle = angles.isEmpty() ? 0.0 : angles.constFirst();
-        const qreal waitDuration = qMax(kRenderDurationEpsilon, marker.slideTraceSecond - marker.second);
-        const qreal waitT = qBound<qreal>(0.0, (playheadSeconds_ - marker.second) / waitDuration, 1.0);
-        const qreal startScale = slideStartupStarInitialScale(*starImage);
-        imageScale = startScale + (kStarAssetScale - startScale) * waitT;
-        imageOpacity = kObjectWaitStateStartOpacity + kObjectWaitStateOpacityDelta * waitT;
+        if (marker.headlessImmediate) {
+            imageScale = kStarAssetScale;
+            imageOpacity = 1.0;
+        } else {
+            const qreal waitDuration = qMax(kRenderDurationEpsilon, marker.slideTraceSecond - marker.second);
+            const qreal waitT = qBound<qreal>(0.0, (playheadSeconds_ - marker.second) / waitDuration, 1.0);
+            const qreal startScale = slideStartupStarInitialScale(*starImage);
+            imageScale = startScale + (kStarAssetScale - startScale) * waitT;
+            imageOpacity = kObjectWaitStateStartOpacity + kObjectWaitStateOpacityDelta * waitT;
+        }
     } else {
         starImage = selectSlideMovingStarImage(marker);
         if (starImage->isNull()) {
@@ -3881,14 +3904,16 @@ void PreviewCanvas::drawWifiMarker(QPainter& painter, const TimelineNoteMarker& 
         return;
     }
     if (waiting) {
-        if (!marker.hasHeadStar) {
-            return;
+        if (marker.headlessImmediate) {
+            imageScale = kStarAssetScale;
+            imageOpacity = 1.0;
+        } else {
+            const qreal waitDuration = qMax(kRenderDurationEpsilon, marker.slideTraceSecond - marker.second);
+            const qreal waitT = qBound<qreal>(0.0, (playheadSeconds_ - marker.second) / waitDuration, 1.0);
+            const qreal startScale = slideStartupStarInitialScale(*starImage);
+            imageScale = startScale + (kStarAssetScale - startScale) * waitT;
+            imageOpacity = kObjectWaitStateStartOpacity + kObjectWaitStateOpacityDelta * waitT;
         }
-        const qreal waitDuration = qMax(kRenderDurationEpsilon, marker.slideTraceSecond - marker.second);
-        const qreal waitT = qBound<qreal>(0.0, (playheadSeconds_ - marker.second) / waitDuration, 1.0);
-        const qreal startScale = slideStartupStarInitialScale(*starImage);
-        imageScale = startScale + (kStarAssetScale - startScale) * waitT;
-        imageOpacity = kObjectWaitStateStartOpacity + kObjectWaitStateOpacityDelta * waitT;
     } else if (!marker.slideSegmentDurations.isEmpty()) {
         const qreal duration = qMax(kRenderDurationEpsilon, marker.slideSegmentDurations.constFirst());
         proportion = qBound<qreal>(0.0, (playheadSeconds_ - marker.slideTraceSecond) / duration, 1.0);

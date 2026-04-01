@@ -94,6 +94,10 @@ QByteArray noteMarkerSignature(const QVector<TimelineNoteMarker>& notes)
         signature.append('|');
         signature.append(QByteArray::number(marker.eachGroupId));
         signature.append('|');
+        signature.append(marker.tapUsesStarMaterial ? '1' : '0');
+        signature.append('|');
+        signature.append(marker.tapStarDouble ? '1' : '0');
+        signature.append('|');
         signature.append(marker.isEach ? '1' : '0');
         signature.append('|');
         signature.append(marker.isBreak ? '1' : '0');
@@ -110,6 +114,8 @@ QByteArray noteMarkerSignature(const QVector<TimelineNoteMarker>& notes)
         signature.append('|');
         signature.append(marker.headEach ? '1' : '0');
         signature.append('|');
+        signature.append(marker.slideHeadUsesTapMaterial ? '1' : '0');
+        signature.append('|');
         signature.append(marker.slideEach ? '1' : '0');
         signature.append('|');
         signature.append(marker.sameHeadSlide ? '1' : '0');
@@ -125,6 +131,8 @@ QByteArray noteMarkerSignature(const QVector<TimelineNoteMarker>& notes)
         signature.append(marker.afterSlide ? '1' : '0');
         signature.append('|');
         signature.append(marker.hasHeadStar ? '1' : '0');
+        signature.append('|');
+        signature.append(marker.headlessImmediate ? '1' : '0');
         signature.append('|');
         signature.append(marker.touchPad.toUtf8());
         signature.append('\n');

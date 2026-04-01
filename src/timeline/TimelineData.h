@@ -52,6 +52,8 @@ struct TimelineNoteMarker {
     double slideRuntimeTrackLength = 0.0;
     QPointF touchPoint;
     QString touchPad;
+    bool tapUsesStarMaterial = false;
+    bool tapStarDouble = false;
     bool isEach = false;
     bool isBreak = false;
     bool isEx = false;
@@ -66,6 +68,8 @@ struct TimelineNoteMarker {
     bool headEach = false;
     bool headBreak = false;
     bool headEx = false;
+    bool slideHeadUsesTapMaterial = false;
     bool trackBreak = false;
     bool hasHeadStar = true;
+    bool headlessImmediate = false;
 };

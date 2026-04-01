@@ -115,48 +115,23 @@ void parseTapOrHoldToken(ParseState* state, const QString& token, int lineNumber
 
     const QString prefixModifiers = hasOpenBracket ? suffix.left(openBracket) : suffix;
     const QString suffixModifiers = hasOpenBracket ? suffix.mid(closeBracket + 1) : QString();
-    int breakCount = 0;
-    int exCount = 0;
-    int holdCount = 0;
-    int firstHoldIndex = -1;
     bool hasNonCanonicalHoldModifierPlacement = false;
-
-    const auto registerModifier = [&](QChar ch, int globalIndex) -> bool {
-        const QChar lower = ch.toLower();
-        if (lower == QChar('b')) {
-            ++breakCount;
-            return breakCount <= 1;
-        }
-        if (lower == QChar('x')) {
-            ++exCount;
-            return exCount <= 1;
-        }
-        if (lower == QChar('h')) {
-            ++holdCount;
-            if (firstHoldIndex < 0) {
-                firstHoldIndex = globalIndex;
-            }
-            return holdCount <= 1;
-        }
-        return false;
-    };
-
-    for (int i = 0; i < prefixModifiers.size(); ++i) {
-        if (!registerModifier(prefixModifiers.at(i), i)) {
-            appendTokenError(state, lineNumber, column, QString("Invalid hold modifier sequence: %1").arg(token));
-            return;
-        }
-    }
-    for (int i = 0; i < suffixModifiers.size(); ++i) {
-        if (!registerModifier(suffixModifiers.at(i), prefixModifiers.size() + i)) {
-            appendTokenError(state, lineNumber, column, QString("Invalid hold modifier sequence: %1").arg(token));
-            return;
-        }
+    if (suffixModifiers.contains(QChar('h'), Qt::CaseInsensitive)) {
+        appendTokenError(state, lineNumber, column, QString("Invalid hold modifier sequence: %1").arg(token));
+        return;
     }
 
-    const bool hasHold = holdCount > 0;
-    marker.isBreak = breakCount > 0;
-    marker.isEx = exCount > 0;
+    TapModifierState modifierState;
+    if (!parseTapModifierSequence(prefixModifiers, suffixModifiers, &modifierState)) {
+        appendTokenError(state, lineNumber, column, QString("Invalid hold modifier sequence: %1").arg(token));
+        return;
+    }
+
+    const bool hasHold = modifierState.hasHold;
+    marker.tapUsesStarMaterial = modifierState.tapUsesStarMaterial;
+    marker.tapStarDouble = modifierState.tapStarDouble;
+    marker.isBreak = modifierState.hasBreak;
+    marker.isEx = modifierState.hasEx;
 
     if (!hasHold && hasOpenBracket) {
         appendTokenError(state, lineNumber, column, QString("Invalid hold duration: %1").arg(token));
@@ -164,10 +139,6 @@ void parseTapOrHoldToken(ParseState* state, const QString& token, int lineNumber
     }
 
     if (hasHold) {
-        if (suffixModifiers.contains(QChar('h'), Qt::CaseInsensitive)) {
-            appendTokenError(state, lineNumber, column, QString("Invalid hold modifier sequence: %1").arg(token));
-            return;
-        }
         double durationSecond = 0.0;
         bool durationOk = true;
         if (hasOpenBracket) {

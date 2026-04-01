@@ -77,6 +77,8 @@ struct NoteTokenParts {
     bool hasHold = false;
     bool hasBreak = false;
     bool hasEx = false;
+    bool tapUsesStarMaterial = false;
+    bool tapStarDouble = false;
     bool valid = false;
 };
 
@@ -84,6 +86,8 @@ struct SlideTokenParts {
     QString coreWithoutTrackBreak;
     bool headBreak = false;
     bool headEx = false;
+    bool headUsesTapMaterial = false;
+    QChar headlessModifier;
     bool trackBreak = false;
     bool valid = false;
 };
@@ -175,17 +179,37 @@ bool parseNoteTokenParts(const QString& token, NoteTokenParts* parts)
 
     parts->lane = core.at(0);
     parts->bracketSuffix = openBracket >= 0 ? token.mid(openBracket) : QString();
-    for (int i = 1; i < core.size(); ++i) {
-        const QChar lower = core.at(i).toLower();
+    for (int i = 1; i < core.size();) {
+        const QChar ch = core.at(i);
+        const QChar lower = ch.toLower();
         if (lower == QChar('b')) {
             parts->hasBreak = true;
+            ++i;
         } else if (lower == QChar('x')) {
             parts->hasEx = true;
+            ++i;
         } else if (lower == QChar('h')) {
             parts->hasHold = true;
-        } else if (!core.at(i).isSpace()) {
+            ++i;
+        } else if (ch == QChar('$')) {
+            if (parts->tapUsesStarMaterial) {
+                return false;
+            }
+            parts->tapUsesStarMaterial = true;
+            if (i + 1 < core.size() && core.at(i + 1) == QChar('$')) {
+                parts->tapStarDouble = true;
+                i += 2;
+            } else {
+                ++i;
+            }
+        } else if (!ch.isSpace()) {
             return false;
+        } else {
+            ++i;
         }
+    }
+    if (parts->hasHold && parts->tapUsesStarMaterial) {
+        return false;
     }
     parts->valid = true;
     return true;
@@ -203,12 +227,23 @@ bool parseSlideTokenParts(const QString& token, SlideTokenParts* parts)
 
     int prefixLength = 0;
     while ((1 + prefixLength) < token.size()) {
-        const QChar lower = token.at(1 + prefixLength).toLower();
-        if (lower != QChar('b') && lower != QChar('x') && lower != QChar('h')) {
+        const QChar ch = token.at(1 + prefixLength);
+        const QChar lower = ch.toLower();
+        if (lower != QChar('b')
+            && lower != QChar('x')
+            && ch != QChar('@')
+            && ch != QChar('?')
+            && ch != QChar('!')
+            && lower != QChar('h')) {
             break;
         }
         if (lower == QChar('h')) {
             return false;
+        }
+        if (ch == QChar('@')) {
+            parts->headUsesTapMaterial = true;
+        } else if (ch == QChar('?') || ch == QChar('!')) {
+            parts->headlessModifier = ch;
         }
         ++prefixLength;
     }
@@ -257,13 +292,25 @@ QString buildTouchToken(const TouchTokenParts& parts, bool hasBreak, bool hasEx,
 QString buildNoteToken(const NoteTokenParts& parts, bool hasBreak, bool hasEx)
 {
     QString token;
-    token.reserve(1 + (hasBreak ? 1 : 0) + (hasEx ? 1 : 0) + (parts.hasHold ? 1 : 0) + parts.bracketSuffix.size());
+    token.reserve(
+        1
+        + (hasBreak ? 1 : 0)
+        + (hasEx ? 1 : 0)
+        + (parts.tapUsesStarMaterial ? (parts.tapStarDouble ? 2 : 1) : 0)
+        + (parts.hasHold ? 1 : 0)
+        + parts.bracketSuffix.size());
     token.append(parts.lane);
     if (hasBreak) {
         token.append(QChar('b'));
     }
     if (hasEx) {
         token.append(QChar('x'));
+    }
+    if (parts.tapUsesStarMaterial) {
+        token.append(QChar('$'));
+        if (parts.tapStarDouble) {
+            token.append(QChar('$'));
+        }
     }
     if (parts.hasHold) {
         token.append(QChar('h'));
@@ -272,16 +319,27 @@ QString buildNoteToken(const NoteTokenParts& parts, bool hasBreak, bool hasEx)
     return token;
 }
 
-QString buildSlideToken(const SlideTokenParts& parts, bool headBreak, bool headEx, bool trackBreak, const QString& coreWithoutTrackBreak)
+QString buildSlideToken(
+    const SlideTokenParts& parts,
+    bool headBreak,
+    bool headEx,
+    bool trackBreak,
+    const QString& coreWithoutTrackBreak)
 {
     QString token;
-    token.reserve(coreWithoutTrackBreak.size() + 3);
+    token.reserve(coreWithoutTrackBreak.size() + 5);
     token.append(coreWithoutTrackBreak.at(0));
     if (headBreak) {
         token.append(QChar('b'));
     }
     if (headEx) {
         token.append(QChar('x'));
+    }
+    if (parts.headUsesTapMaterial) {
+        token.append(QChar('@'));
+    }
+    if (!parts.headlessModifier.isNull()) {
+        token.append(parts.headlessModifier);
     }
     QString remainder = coreWithoutTrackBreak.mid(1);
     if (trackBreak) {

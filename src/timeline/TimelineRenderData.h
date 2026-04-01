@@ -29,6 +29,10 @@ enum TimelineRenderNoteFlag : quint32 {
     TimelineRenderFlagHeadEx = 1u << 8,
     TimelineRenderFlagTrackBreak = 1u << 9,
     TimelineRenderFlagHasHeadStar = 1u << 10,
+    TimelineRenderFlagTapUsesStarMaterial = 1u << 11,
+    TimelineRenderFlagTapStarDouble = 1u << 12,
+    TimelineRenderFlagSlideHeadUsesTapMaterial = 1u << 13,
+    TimelineRenderFlagHeadlessImmediate = 1u << 14,
 };
 
 struct TimelineRenderBeat {

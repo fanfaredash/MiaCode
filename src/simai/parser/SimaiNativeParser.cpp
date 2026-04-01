@@ -38,7 +38,162 @@ struct ParseState {
     SimaiNativeParseResult result;
 };
 
+enum class SlideHeadlessMode {
+    None,
+    Gradual,
+    Immediate,
+};
+
+struct TapModifierState {
+    bool hasBreak = false;
+    bool hasEx = false;
+    bool hasHold = false;
+    bool tapUsesStarMaterial = false;
+    bool tapStarDouble = false;
+};
+
+struct SlideHeadModifierState {
+    QString rawModifiers;
+    bool headBreak = false;
+    bool headEx = false;
+    bool slideHeadUsesTapMaterial = false;
+    SlideHeadlessMode headlessMode = SlideHeadlessMode::None;
+};
+
 bool g_invalidStarPreviewEnabled = false;
+
+bool parseTapModifierSequence(
+    const QString& prefixModifiers,
+    const QString& suffixModifiers,
+    TapModifierState* state)
+{
+    if (state == nullptr) {
+        return false;
+    }
+    *state = TapModifierState();
+
+    const auto parsePart = [state](const QString& part) -> bool {
+        for (int i = 0; i < part.size();) {
+            const QChar ch = part.at(i);
+            const QChar lower = ch.toLower();
+            if (lower == QChar('b')) {
+                if (state->hasBreak) {
+                    return false;
+                }
+                state->hasBreak = true;
+                ++i;
+                continue;
+            }
+            if (lower == QChar('x')) {
+                if (state->hasEx) {
+                    return false;
+                }
+                state->hasEx = true;
+                ++i;
+                continue;
+            }
+            if (lower == QChar('h')) {
+                if (state->hasHold) {
+                    return false;
+                }
+                state->hasHold = true;
+                ++i;
+                continue;
+            }
+            if (ch == QChar('$')) {
+                if (state->tapUsesStarMaterial) {
+                    return false;
+                }
+                state->tapUsesStarMaterial = true;
+                if (i + 1 < part.size() && part.at(i + 1) == QChar('$')) {
+                    state->tapStarDouble = true;
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+                continue;
+            }
+            return false;
+        }
+        return true;
+    };
+
+    if (!parsePart(prefixModifiers) || !parsePart(suffixModifiers)) {
+        return false;
+    }
+    if (state->hasHold && state->tapUsesStarMaterial) {
+        return false;
+    }
+    return true;
+}
+
+bool parseSlideHeadModifierPrefix(const QString& token, int* modifierCount, SlideHeadModifierState* state)
+{
+    if (modifierCount == nullptr || state == nullptr) {
+        return false;
+    }
+    *modifierCount = 0;
+    *state = SlideHeadModifierState();
+
+    while ((1 + *modifierCount) < token.size()) {
+        const QChar ch = token.at(1 + *modifierCount);
+        const QChar lower = ch.toLower();
+        if (lower == QChar('b')) {
+            if (state->headBreak) {
+                return false;
+            }
+            state->headBreak = true;
+        } else if (lower == QChar('x')) {
+            if (state->headEx) {
+                return false;
+            }
+            state->headEx = true;
+        } else if (ch == QChar('@')) {
+            if (state->slideHeadUsesTapMaterial) {
+                return false;
+            }
+            state->slideHeadUsesTapMaterial = true;
+        } else if (ch == QChar('?')) {
+            if (state->headlessMode != SlideHeadlessMode::None) {
+                return false;
+            }
+            state->headlessMode = SlideHeadlessMode::Gradual;
+        } else if (ch == QChar('!')) {
+            if (state->headlessMode != SlideHeadlessMode::None) {
+                return false;
+            }
+            state->headlessMode = SlideHeadlessMode::Immediate;
+        } else if (lower == QChar('h')) {
+            return false;
+        } else {
+            break;
+        }
+        state->rawModifiers.append(ch);
+        ++(*modifierCount);
+    }
+
+    if (state->slideHeadUsesTapMaterial && state->headlessMode != SlideHeadlessMode::None) {
+        return false;
+    }
+    return true;
+}
+
+bool slideCoreHasDisallowedModifiers(const QString& core)
+{
+    for (int i = 1; i < core.size(); ++i) {
+        const QChar ch = core.at(i);
+        const QChar lower = ch.toLower();
+        if (lower == QChar('x')
+            || lower == QChar('h')
+            || ch == QChar('@')
+            || ch == QChar('?')
+            || ch == QChar('!')
+            || ch == QChar('$')) {
+            return true;
+        }
+    }
+    return false;
+}
 
 QString detectFullwidthSyntaxIssueMessage(const QString& token)
 {
@@ -1043,7 +1198,12 @@ QString normalizedSlideLookupKey(const QString& token)
     key.append(core.at(0));
     for (int i = 1; i < core.size(); ++i) {
         const QChar ch = core.at(i);
-        if (ch == QChar('b') || ch == QChar('x') || ch == QChar('h') || ch == QChar('?') || ch == QChar('!')) {
+        if (ch == QChar('b')
+            || ch == QChar('x')
+            || ch == QChar('h')
+            || ch == QChar('@')
+            || ch == QChar('?')
+            || ch == QChar('!')) {
             continue;
         }
         if (isDigitLane(ch)

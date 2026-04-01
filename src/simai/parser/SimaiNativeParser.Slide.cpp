@@ -23,22 +23,9 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
         return;
     }
 
-    QString prefixModifiers;
     int modifierCount = 0;
-    while ((1 + modifierCount) < token.size()) {
-        const QChar modifier = token.at(1 + modifierCount);
-        if (modifier != QChar('b') && modifier != QChar('x') && modifier != QChar('h')) {
-            break;
-        }
-        if (prefixModifiers.contains(modifier)) {
-            appendTokenError(state, lineNumber, column, classifyInvalidNoteMessage(token));
-            return;
-        }
-        prefixModifiers.append(modifier);
-        ++modifierCount;
-    }
-
-    if (prefixModifiers.contains(QChar('h'))) {
+    SlideHeadModifierState modifierState;
+    if (!parseSlideHeadModifierPrefix(token, &modifierCount, &modifierState)) {
         appendTokenError(state, lineNumber, column, classifyInvalidNoteMessage(token));
         return;
     }
@@ -49,7 +36,7 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     noteCore.append(token.mid(1 + modifierCount));
 
     if (noteCore.contains(QChar('*'))) {
-        const QString prefix = token.left(1) + prefixModifiers;
+        const QString prefix = token.left(1) + modifierState.rawModifiers;
         const QChar startLane = token.at(0);
         const QStringList branches = noteCore.split(QChar('*'), Qt::KeepEmptyParts);
         for (const QString& branchRaw : branches) {
@@ -63,6 +50,11 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
             const QString branchToken = prefix + branch.mid(1);
             parseSlideToken(state, branchToken, lineNumber, column, groupIndices);
         }
+        return;
+    }
+
+    if (slideCoreHasDisallowedModifiers(noteCore)) {
+        appendTokenError(state, lineNumber, column, classifyInvalidNoteMessage(token));
         return;
     }
 
@@ -108,11 +100,13 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     marker.sourceCol = qMax(1, column);
     marker.lane = lane;
     marker.type = sanitizedCore.contains('w', Qt::CaseInsensitive) ? "wifi" : "slide";
-    marker.hasHeadStar = !sanitizedCore.contains('?') && !sanitizedCore.contains('!');
-    marker.headBreak = prefixModifiers.contains(QChar('b'));
+    marker.hasHeadStar = modifierState.headlessMode == SlideHeadlessMode::None;
+    marker.headlessImmediate = modifierState.headlessMode == SlideHeadlessMode::Immediate;
+    marker.headBreak = modifierState.headBreak;
     marker.trackBreak = trackBreak;
     marker.isBreak = marker.headBreak || marker.trackBreak;
-    marker.headEx = prefixModifiers.contains(QChar('x'));
+    marker.headEx = modifierState.headEx;
+    marker.slideHeadUsesTapMaterial = modifierState.slideHeadUsesTapMaterial;
     marker.isEx = false;
 
     if (state->strictMode && marker.type == "slide" && sanitizedCore.count(QChar('[')) > 1) {
