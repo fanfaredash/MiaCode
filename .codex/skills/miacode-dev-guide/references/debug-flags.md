@@ -14,6 +14,9 @@ Use this file to locate repo-wide debug switches, timing logs, preview overrides
   - Current consumers:
     - `MainWindow::appendOutput`
     - `QtPreviewSfxRuntime::appendAudioDebugLog`
+    - `src/preview/video/PreviewCanvas.cpp`
+    - `src/preview/video/PreviewGLRenderer.cpp`
+    - `src/preview/video/PreviewMediaController.cpp`
 - Startup timing:
   - Env: `MIACODE_ENABLE_STARTUP_TIMING`
   - Legacy alias: `MAIMURI_ENABLE_STARTUP_TIMING`
