@@ -170,6 +170,40 @@ void QtPreviewSfxRuntime::clearTimeline()
     stopAll();
 }
 
+void QtPreviewSfxRuntime::applyPausedPreviewState(
+    const QVector<TimelineNoteMarker>& noteMarkers,
+    bool noteMarkersChanged,
+    double pauseSecond)
+{
+    if (noteMarkersChanged) {
+        rebuildPreparedTimeline(noteMarkers);
+    }
+    resetCursor(qMax(0.0, pauseSecond), false);
+    pauseTouchholdVoices();
+}
+
+double QtPreviewSfxRuntime::startPreviewPlaybackTransaction(
+    double startSecond,
+    bool resumeFromPause,
+    double playbackRate)
+{
+    const double clampedStartSecond = qMax(0.0, startSecond);
+    setBackgroundTrackPlaybackRate(playbackRate);
+    startBackgroundTrack(clampedStartSecond);
+
+    double effectiveStartSecond = clampedStartSecond;
+    if (hasBackgroundTrack() && isBackgroundTrackRunning()) {
+        effectiveStartSecond = qMax(0.0, backgroundPlaybackSecond());
+    }
+
+    resetCursor(effectiveStartSecond, !resumeFromPause);
+    if (!resumeFromPause) {
+        drainEvents(effectiveStartSecond);
+    }
+    restoreTouchholdVoices(effectiveStartSecond);
+    return effectiveStartSecond;
+}
+
 void QtPreviewSfxRuntime::resetCursor(double second, bool includeCurrentSecond)
 {
     playbackSession_.eventIndex = 0;

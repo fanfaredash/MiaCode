@@ -12,6 +12,11 @@ class QtPreviewSfxRuntime : public QObject
     Q_OBJECT
 
 public:
+    struct PausePreviewResult {
+        bool usedBackgroundTrack = false;
+        double pauseSecond = 0.0;
+    };
+
     explicit QtPreviewSfxRuntime(QObject* parent = nullptr);
     ~QtPreviewSfxRuntime() override;
 
@@ -23,6 +28,13 @@ public:
     void applyLevels(const PreviewAudioSettings& settings);
     void configureTimeline(const QVector<TimelineNoteMarker>& noteMarkers);
     void clearTimeline();
+    void applyPausedPreviewState(
+        const QVector<TimelineNoteMarker>& noteMarkers,
+        bool noteMarkersChanged,
+        double pauseSecond);
+    double startPreviewPlaybackTransaction(double startSecond, bool resumeFromPause, double playbackRate);
+    PausePreviewResult capturePausedPreviewTransaction();
+    double syncPreviewPlaybackClockTransaction(double fallbackSecond);
     void resetCursor(double second, bool includeCurrentSecond);
     void drainEvents(double second);
     void pauseTouchholdVoices();
