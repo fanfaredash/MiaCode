@@ -56,8 +56,37 @@ private:
         int activeSpanIndex = -1;
     };
 
+    struct WarmupPathState {
+        QString chartPath;
+        QString trackPath;
+        QString sfxDir;
+    };
+
+    struct PreparedAssetState {
+        QString chartPath;
+        QString sfxDir;
+        QString trackPath;
+    };
+
+    struct TimelineProgramState {
+        QVector<Event> events;
+        QVector<TouchholdSpan> touchholdSpans;
+    };
+
+    struct PlaybackSessionState {
+        int eventIndex = 0;
+        bool backgroundTrackRunning = false;
+        bool backgroundTrackPendingStart = false;
+        double backgroundTrackOffsetSeconds = 0.0;
+        double backgroundTrackPlaybackRate = 1.0;
+        double backgroundTrackLastTimelineSecond = 0.0;
+    };
+
     QString resolveTrackPath(const QString& chartPath) const;
     QString resolveSfxDir() const;
+    void rebuildPreparedTimeline(const QVector<TimelineNoteMarker>& noteMarkers);
+    void clearPreparedTimeline();
+    void resetBackgroundTrackSessionState(double timelineSecond = 0.0);
     void resetBackgroundTrack();
     void resetStretchedBackgroundTrack();
     void resetBanks();
@@ -74,25 +103,15 @@ private:
     bool playTouchholdAudition();
 
     PreviewAudioSettings settings_;
-    QVector<Event> events_;
-    int eventIndex_ = 0;
-    QString chartPath_;
-    QString sfxDir_;
-    QString trackPath_;
-    QString warmupChartPath_;
-    QString warmupTrackPath_;
-    QString warmupSfxDir_;
-    QVector<TouchholdSpan> touchholdSpans_;
+    WarmupPathState warmupPaths_;
+    PreparedAssetState preparedAssets_;
+    TimelineProgramState preparedTimeline_;
+    PlaybackSessionState playbackSession_;
     quint64 touchholdSoundLengthFrames_ = 0;
     quint32 deviceSampleRate_ = 48000;
     bool engineInitialized_ = false;
     Voice* backgroundTrackVoice_ = nullptr;
     bool backgroundTrackConfigured_ = false;
-    bool backgroundTrackRunning_ = false;
-    bool backgroundTrackPendingStart_ = false;
-    double backgroundTrackOffsetSeconds_ = 0.0;
-    double backgroundTrackPlaybackRate_ = 1.0;
-    double backgroundTrackLastTimelineSecond_ = 0.0;
     StretchedBackgroundState* stretchedBackgroundState_ = nullptr;
     SfxBank answerSfx_;
     SfxBank judgeSfx_;

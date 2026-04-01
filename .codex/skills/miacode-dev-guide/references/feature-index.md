@@ -103,7 +103,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Preview SFX runtime:
   - Files: `src/preview/audio/QtPreviewSfxRuntime.h`, `src/preview/audio/QtPreviewSfxRuntime.cpp`
   - Class: `QtPreviewSfxRuntime`
-  - Owns: miniaudio engine state, clip banks, touchhold voice control, background track playback
+  - Owns: miniaudio engine state, prepared asset paths, prepared timeline program, playback session state, clip banks, touchhold voice control, background track playback
 - Split responsibilities:
   - `QtPreviewSfxRuntime.Assets.cpp`: chart track resolution, SFX dir resolution, bank resets
   - `QtPreviewSfxRuntime.Timeline.cpp`: event generation from `TimelineNoteMarker`

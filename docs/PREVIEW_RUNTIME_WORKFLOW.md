@@ -83,6 +83,14 @@
 
 它现在既是“音频设备封装”，又是“预览音频逻辑状态机”。这也是它后续若要线程化，必须谨慎处理同步语义的原因。
 
+为了降低内部耦合，当前 runtime 已开始按职责拆成几块内部状态：
+
+- warmup 路径与 prepared assets
+- prepared timeline program
+- playback session
+
+其中 prepared 部分偏向“运行前配置与可复用结果”，session 部分偏向“本轮播放的游标、背景轨状态与 touchhold 生命周期”。
+
 ### 3.4 Warmup Pool
 
 主窗口还维护一个独立的 `previewWarmupPool_`，用于异步预热 preview 子系统。

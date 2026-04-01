@@ -1,16 +1,16 @@
 QString QtPreviewSfxRuntime::resolveTrackPath(const QString& chartPath) const
 {
     const QString normalizedChartPath = chartPath.isEmpty() ? QString() : QDir::cleanPath(chartPath);
-    if (!warmupChartPath_.isEmpty() && normalizedChartPath == warmupChartPath_) {
-        return warmupTrackPath_;
+    if (!warmupPaths_.chartPath.isEmpty() && normalizedChartPath == warmupPaths_.chartPath) {
+        return warmupPaths_.trackPath;
     }
     return miacode::chart_assets::resolveTrackPath(chartPath);
 }
 
 QString QtPreviewSfxRuntime::resolveSfxDir() const
 {
-    if (!warmupSfxDir_.isEmpty()) {
-        return warmupSfxDir_;
+    if (!warmupPaths_.sfxDir.isEmpty()) {
+        return warmupPaths_.sfxDir;
     }
     return miacode::preview_sfx::resolveSfxDirectory();
 }
@@ -26,9 +26,7 @@ void QtPreviewSfxRuntime::resetBackgroundTrack()
         backgroundTrackVoice_ = nullptr;
     }
     backgroundTrackConfigured_ = false;
-    backgroundTrackRunning_ = false;
-    backgroundTrackPendingStart_ = false;
-    backgroundTrackLastTimelineSecond_ = 0.0;
+    resetBackgroundTrackSessionState();
 }
 
 void QtPreviewSfxRuntime::resetStretchedBackgroundTrack()
