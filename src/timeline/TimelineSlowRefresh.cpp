@@ -199,9 +199,9 @@ TimelinePreviewRefreshState buildTimelinePreviewRefreshState(const QString& char
     return buildTimelinePreviewRefreshState(SimaiNativeParser::parseForTimeline(chartText), firstSeconds);
 }
 
-TimelineValidationRefreshResult buildTimelineValidationRefreshResult(const TimelineValidationRefreshRequest& request)
+TimelineAnalysisRefreshResult buildTimelineAnalysisRefreshResult(const TimelineAnalysisRefreshRequest& request)
 {
-    TimelineValidationRefreshResult result;
+    TimelineAnalysisRefreshResult result;
     result.revision = request.revision;
     result.difficultyId = request.difficultyId;
     result.chartText = request.chartText;
@@ -210,14 +210,6 @@ TimelineValidationRefreshResult buildTimelineValidationRefreshResult(const Timel
         request.chartText,
         request.chineseUi ? SimaiNativeValidationLocale::Chinese : SimaiNativeValidationLocale::English,
         &request.parseResult);
-    return result;
-}
-
-TimelineMuriRefreshResult buildTimelineMuriRefreshResult(const TimelineMuriRefreshRequest& request)
-{
-    TimelineMuriRefreshResult result;
-    result.revision = request.revision;
-    result.difficultyId = request.difficultyId;
     result.noteMarkerSignature = request.noteMarkerSignature;
     result.analysisReport = MuriAnalyzer::analyze(
         request.noteMarkers,

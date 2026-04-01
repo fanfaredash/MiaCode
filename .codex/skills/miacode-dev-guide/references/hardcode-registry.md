@@ -60,6 +60,10 @@ Use this file to track where important constants live, what they mean, and wheth
     - fullscreen control-bar hide offset, reveal animation duration, and opacity fade duration
     - fullscreen control-bar auto-hide delay
   - Rule: keep local while they only shape the main-window preview UX and do not need preview/export parity
+- `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
+  - Owns: analysis idle scheduling debounce for low-priority validation/Muri work
+  - Current tuning note: `kTimelineAnalysisIdleDelayMs` is `180 ms`, used to coalesce rapid edits before dispatching the combined validation+Muri analysis worker once preview snapshot publication has already completed
+  - Rule: keep local while it only expresses main-window preview-vs-analysis priority; promote it if the same debounce becomes shared across dialogs, subprocess workers, or user-facing settings
 - `src/timeline/TimelineView.cpp`
   - Owns: timeline zoom preset bounds, coarse button stops, and the initial `pixelsPerSecond_` scale derived from the default zoom
   - Rule: keep local while these values only shape timeline widget UX and do not need cross-subsystem parity
