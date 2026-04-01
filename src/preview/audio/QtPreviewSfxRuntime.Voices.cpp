@@ -59,14 +59,14 @@ void QtPreviewSfxRuntime::startTouchholdSpan(int spanIndex, double offsetSeconds
     if (settings_.touchVolume <= 0.0) {
         return;
     }
-    if (spanIndex < 0 || spanIndex >= touchholdSpans_.size()) {
+    if (spanIndex < 0 || spanIndex >= preparedTimeline_.touchholdSpans.size()) {
         return;
     }
     if (touchholdVoices_.isEmpty()) {
         return;
     }
 
-    const TouchholdSpan& span = touchholdSpans_[spanIndex];
+    const TouchholdSpan& span = preparedTimeline_.touchholdSpans[spanIndex];
     if (span.endSecond <= span.startSecond) {
         return;
     }

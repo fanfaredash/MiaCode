@@ -20,16 +20,17 @@ bool QtPreviewSfxRuntime::initializeAudioEngine()
 
 void QtPreviewSfxRuntime::initializeAssets()
 {
-    if (!engineInitialized_ || engineState_ == nullptr || sfxDir_.isEmpty()) {
+    if (!engineInitialized_ || engineState_ == nullptr || preparedAssets_.sfxDir.isEmpty()) {
         return;
     }
 
     const auto configureBank = [this](SfxBank& bank, const QString& kind, int voiceCount) {
-        const QString path = miacode::preview_sfx::assetFilePathForKind(sfxDir_, kind);
+        const QString path = miacode::preview_sfx::assetFilePathForKind(preparedAssets_.sfxDir, kind);
         if (!QFileInfo::exists(path)) {
             return;
         }
-        const QByteArray pathBytes = miacode::preview_sfx::encodedAssetFilePathForKind(sfxDir_, kind);
+        const QByteArray pathBytes =
+            miacode::preview_sfx::encodedAssetFilePathForKind(preparedAssets_.sfxDir, kind);
         bank.voices.reserve(voiceCount);
         for (int i = 0; i < voiceCount; ++i) {
             Voice* voice = new Voice();
@@ -63,9 +64,10 @@ void QtPreviewSfxRuntime::initializeAssets()
     // Firework cheers should also be latest-wins, matching break cheer behavior.
     configureBank(fireworkSfx_, "firework", 1);
 
-    const QString touchholdPath = miacode::preview_sfx::assetFilePathForKind(sfxDir_, "touchhold");
+    const QString touchholdPath = miacode::preview_sfx::assetFilePathForKind(preparedAssets_.sfxDir, "touchhold");
     if (QFileInfo::exists(touchholdPath)) {
-        const QByteArray pathBytes = miacode::preview_sfx::encodedAssetFilePathForKind(sfxDir_, "touchhold");
+        const QByteArray pathBytes =
+            miacode::preview_sfx::encodedAssetFilePathForKind(preparedAssets_.sfxDir, "touchhold");
         touchholdVoices_.reserve(8);
         for (int i = 0; i < 8; ++i) {
             TouchholdVoice touchholdVoice;
@@ -95,14 +97,14 @@ void QtPreviewSfxRuntime::initializeAssets()
 
 void QtPreviewSfxRuntime::initializeBackgroundTrack()
 {
-    if (!engineInitialized_ || engineState_ == nullptr || trackPath_.isEmpty()) {
+    if (!engineInitialized_ || engineState_ == nullptr || preparedAssets_.trackPath.isEmpty()) {
         return;
     }
 
     Voice* voice = new Voice();
     ma_result initResult = MA_ERROR;
 #ifdef Q_OS_WIN
-    const QString nativeTrackPath = QDir::toNativeSeparators(trackPath_);
+    const QString nativeTrackPath = QDir::toNativeSeparators(preparedAssets_.trackPath);
     initResult = ma_sound_init_from_file_w(
         &engineState_->engine,
         reinterpret_cast<const wchar_t*>(nativeTrackPath.utf16()),
@@ -112,7 +114,7 @@ void QtPreviewSfxRuntime::initializeBackgroundTrack()
         &voice->sound
     );
 #else
-    const QByteArray pathBytes = QFile::encodeName(trackPath_);
+    const QByteArray pathBytes = QFile::encodeName(preparedAssets_.trackPath);
     initResult = ma_sound_init_from_file(
         &engineState_->engine,
         pathBytes.constData(),
@@ -124,17 +126,16 @@ void QtPreviewSfxRuntime::initializeBackgroundTrack()
 #endif
     if (initResult != MA_SUCCESS) {
         delete voice;
-        appendAudioDebugLog(QString("initializeBackgroundTrack failed path=%1").arg(trackPath_));
+        appendAudioDebugLog(QString("initializeBackgroundTrack failed path=%1").arg(preparedAssets_.trackPath));
         return;
     }
     voice->initialized = true;
     backgroundTrackVoice_ = voice;
     backgroundTrackConfigured_ = true;
-    backgroundTrackRunning_ = false;
-    backgroundTrackPendingStart_ = false;
+    resetBackgroundTrackSessionState(playbackSession_.backgroundTrackLastTimelineSecond);
     ma_sound_set_volume(&backgroundTrackVoice_->sound, static_cast<float>(settings_.bgmVolume));
     appendAudioDebugLog(QString("initializeBackgroundTrack ok path=%1 volume=%2")
-                            .arg(trackPath_)
+                            .arg(preparedAssets_.trackPath)
                             .arg(settings_.bgmVolume, 0, 'f', 3));
 }
 
@@ -208,40 +209,41 @@ void QtPreviewSfxRuntime::updateTouchholdVoiceVolumes()
 bool QtPreviewSfxRuntime::prepareStretchedBackgroundTrack(double timelineSecond)
 {
     Q_UNUSED(timelineSecond);
-    if (qFuzzyCompare(backgroundTrackPlaybackRate_ + 1.0, 2.0)) {
+    if (qFuzzyCompare(playbackSession_.backgroundTrackPlaybackRate + 1.0, 2.0)) {
         return false;
     }
-    if (!engineInitialized_ || engineState_ == nullptr || trackPath_.isEmpty()) {
+    if (!engineInitialized_ || engineState_ == nullptr || preparedAssets_.trackPath.isEmpty()) {
         return false;
     }
     if (stretchedBackgroundState_ != nullptr
         && stretchedBackgroundState_->soundInitialized
-        && stretchedBackgroundState_->trackPath == trackPath_
-        && qAbs(stretchedBackgroundState_->playbackRate - backgroundTrackPlaybackRate_) <= kQtPreviewSfxEpsilonSeconds) {
+        && stretchedBackgroundState_->trackPath == preparedAssets_.trackPath
+        && qAbs(stretchedBackgroundState_->playbackRate - playbackSession_.backgroundTrackPlaybackRate)
+            <= kQtPreviewSfxEpsilonSeconds) {
         return true;
     }
     resetStretchedBackgroundTrack();
     StretchedBackgroundState* state = new StretchedBackgroundState();
-    state->trackPath = trackPath_;
-    state->playbackRate = backgroundTrackPlaybackRate_;
+    state->trackPath = preparedAssets_.trackPath;
+    state->playbackRate = playbackSession_.backgroundTrackPlaybackRate;
 
     ma_decoder_config decoderConfig = ma_decoder_config_init(ma_format_f32, 0, 0);
     ma_result decoderInitResult = MA_ERROR;
 #ifdef Q_OS_WIN
-    const QString nativeTrackPath = QDir::toNativeSeparators(trackPath_);
+    const QString nativeTrackPath = QDir::toNativeSeparators(preparedAssets_.trackPath);
     decoderInitResult = ma_decoder_init_file_w(
         reinterpret_cast<const wchar_t*>(nativeTrackPath.utf16()),
         &decoderConfig,
         &state->decoder
     );
 #else
-    const QByteArray pathBytes = QFile::encodeName(trackPath_);
+    const QByteArray pathBytes = QFile::encodeName(preparedAssets_.trackPath);
     decoderInitResult = ma_decoder_init_file(pathBytes.constData(), &decoderConfig, &state->decoder);
 #endif
     if (decoderInitResult != MA_SUCCESS) {
         appendAudioDebugLog(QString("prepareStretchedBackgroundTrack decoder_init_file failed rc=%1 track=%2")
                                 .arg(static_cast<int>(decoderInitResult))
-                                .arg(trackPath_));
+                                .arg(preparedAssets_.trackPath));
         delete state;
         return false;
     }
@@ -260,7 +262,7 @@ bool QtPreviewSfxRuntime::prepareStretchedBackgroundTrack(double timelineSecond)
         if (formatResult != MA_SUCCESS || state->channels == 0 || state->sampleRate == 0) {
             appendAudioDebugLog(QString("prepareStretchedBackgroundTrack get_data_format failed rc=%1 track=%2")
                                     .arg(static_cast<int>(formatResult))
-                                    .arg(trackPath_));
+                                    .arg(preparedAssets_.trackPath));
             ma_decoder_uninit(&state->decoder);
             delete state;
             return false;
@@ -323,19 +325,20 @@ bool QtPreviewSfxRuntime::prepareStretchedBackgroundTrack(double timelineSecond)
 double QtPreviewSfxRuntime::stretchedBackgroundPlaybackSecond() const
 {
     if (stretchedBackgroundState_ == nullptr || !stretchedBackgroundState_->soundInitialized) {
-        return qMax(0.0, backgroundTrackLastTimelineSecond_);
+        return qMax(0.0, playbackSession_.backgroundTrackLastTimelineSecond);
     }
-    if (!backgroundTrackRunning_) {
-        return qMax(0.0, backgroundTrackLastTimelineSecond_);
+    if (!playbackSession_.backgroundTrackRunning) {
+        return qMax(0.0, playbackSession_.backgroundTrackLastTimelineSecond);
     }
 
     float cursorSeconds = 0.0f;
     if (ma_sound_get_cursor_in_seconds(&stretchedBackgroundState_->sound, &cursorSeconds) != MA_SUCCESS) {
-        return qMax(0.0, backgroundTrackLastTimelineSecond_);
+        return qMax(0.0, playbackSession_.backgroundTrackLastTimelineSecond);
     }
 
     const double timelineSecond =
-        (static_cast<double>(cursorSeconds) * backgroundTrackPlaybackRate_) - backgroundTrackOffsetSeconds_;
+        (static_cast<double>(cursorSeconds) * playbackSession_.backgroundTrackPlaybackRate)
+        - playbackSession_.backgroundTrackOffsetSeconds;
     return qMax(0.0, timelineSecond);
 }
 
