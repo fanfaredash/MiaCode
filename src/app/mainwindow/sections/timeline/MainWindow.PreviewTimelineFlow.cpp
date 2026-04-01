@@ -483,7 +483,10 @@ void MainWindow::dispatchTimelineSlowRefresh()
     timelineSlowWorkerRunning_ = true;
     timelineSlowRunningRevision_ = request.revision;
     QPointer<MainWindow> guard(this);
-    QThreadPool::globalInstance()->start([guard, request]() {
+    QThreadPool* const pool = timelineSlowRefreshPool_ != nullptr
+        ? timelineSlowRefreshPool_
+        : QThreadPool::globalInstance();
+    pool->start([guard, request]() {
         const SimaiNativeParseResult parseResult = SimaiNativeParser::parseForTimeline(request.chartText);
         const TimelinePreviewRefreshState previewState =
             buildTimelinePreviewRefreshState(parseResult, request.firstSeconds);
@@ -551,7 +554,10 @@ void MainWindow::dispatchTimelineValidationRefresh()
     timelineValidationWorkerRunning_ = true;
     timelineValidationRunningRevision_ = request.revision;
     QPointer<MainWindow> guard(this);
-    QThreadPool::globalInstance()->start([guard, request]() {
+    QThreadPool* const pool = timelineAnalysisPool_ != nullptr
+        ? timelineAnalysisPool_
+        : QThreadPool::globalInstance();
+    pool->start([guard, request]() {
         TimelineValidationRefreshResult result = buildTimelineValidationRefreshResult(request);
         if (guard.isNull()) {
             return;
@@ -593,7 +599,10 @@ void MainWindow::dispatchTimelineValidationRefresh()
                     entry.issues.append(cachedIssue);
                 }
                 guard->validationCacheByDifficulty_.insert(result.difficultyId, entry);
-                guard->refreshValidationPanelForActiveField();
+                guard->pendingDeferredValidationUiRefresh_ = true;
+                if (!guard->qtPreviewPlaying_) {
+                    guard->applyDeferredAnalysisUiUpdates();
+                }
                 guard->dispatchTimelineValidationRefresh();
             },
             Qt::QueuedConnection
@@ -629,7 +638,10 @@ void MainWindow::refreshDeferredMuriDiagnostics()
     timelineMuriWorkerRunning_ = true;
     timelineMuriRunningRevision_ = request.revision;
     QPointer<MainWindow> guard(this);
-    QThreadPool::globalInstance()->start([guard, request]() {
+    QThreadPool* const pool = timelineAnalysisPool_ != nullptr
+        ? timelineAnalysisPool_
+        : QThreadPool::globalInstance();
+    pool->start([guard, request]() {
         TimelineMuriRefreshResult result = buildTimelineMuriRefreshResult(request);
         if (guard.isNull()) {
             return;
@@ -652,15 +664,9 @@ void MainWindow::refreshDeferredMuriDiagnostics()
 
                 guard->muriAnalysisReport_ = result.analysisReport;
                 guard->muriStaticReferences_ = result.staticReferences;
-                if (guard->timelineView_ != nullptr) {
-                    guard->timelineView_->setMuriAnalysisReport(guard->muriAnalysisReport_);
-                }
-                guard->refreshMuriDiagnosticsPanel();
-                if (guard->previewCanvas_ != nullptr) {
-                    if (!guard->qtPreviewPlaying_) {
-                        guard->previewCanvas_->setMuriAnalysisReport(guard->muriAnalysisReport_);
-                    }
-                    guard->previewCanvas_->setMuriRenderOptions(guard->muriRenderOptions_);
+                guard->pendingDeferredMuriUiRefresh_ = true;
+                if (!guard->qtPreviewPlaying_) {
+                    guard->applyDeferredAnalysisUiUpdates();
                 }
             },
             Qt::QueuedConnection
@@ -2457,6 +2463,7 @@ void MainWindow::stopQtPreviewPlayback(bool keepPosition)
         previewSfxRuntime_->stopAll();
     }
     applyLatestTimelinePreviewStateToPausedPreview();
+    applyDeferredAnalysisUiUpdates();
     if (runtimeDebugOutputEnabled_ && wasPlaying && previewCanvas_ != nullptr) {
         const QString summaryPath = previewCanvas_->writeProfilingSummaryToFile();
         if (!summaryPath.isEmpty() && previewMediaController_ != nullptr) {

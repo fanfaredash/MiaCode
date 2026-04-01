@@ -1386,6 +1386,8 @@ void MainWindow::clearTimelineAndPreview()
     lastTimelineParseChartText_.clear();
     lastTimelineParseResult_ = SimaiNativeParseResult();
     muriAnalysisReport_ = MuriAnalysisReport();
+    pendingDeferredValidationUiRefresh_ = false;
+    pendingDeferredMuriUiRefresh_ = false;
     clearPreviewFollowDecoration();
     clearPreviewObjectStats();
     clearMuriDiagnostics();

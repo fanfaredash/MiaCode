@@ -434,6 +434,7 @@ private:
     void rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& noteMarkers);
     void clearValidationCache();
     void refreshValidationPanelForActiveField();
+    void applyDeferredAnalysisUiUpdates();
     void setValidationTabVisible(bool visible);
     void applyMuriRenderOptions();
     void setMuriRenderMode(RenderMode mode, bool persistState = true);
@@ -481,6 +482,8 @@ private:
     QThread* previewMediaControllerThread_ = nullptr;
     QtPreviewSfxRuntime* previewSfxRuntime_ = nullptr;
     QThreadPool* previewWarmupPool_ = nullptr;
+    QThreadPool* timelineSlowRefreshPool_ = nullptr;
+    QThreadPool* timelineAnalysisPool_ = nullptr;
     TimelineView* timelineView_ = nullptr;
     QPlainTextEdit* outputView_ = nullptr;
     QListWidget* errorList_ = nullptr;
@@ -571,6 +574,8 @@ private:
     quint64 previewWarmupGeneration_ = 0;
     quint64 previewMediaWarmupAppliedGeneration_ = 0;
     quint64 previewSfxWarmupAppliedGeneration_ = 0;
+    bool pendingDeferredValidationUiRefresh_ = false;
+    bool pendingDeferredMuriUiRefresh_ = false;
     QString previewMediaWarmupChartPath_;
     QString previewMediaWarmupResolvedPath_;
     QString previewMediaWarmupTrackPath_;

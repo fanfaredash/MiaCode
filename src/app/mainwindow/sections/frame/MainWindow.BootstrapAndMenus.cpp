@@ -344,6 +344,17 @@ MainWindow::MainWindow(QWidget* parent)
     previewWarmupPool_->setExpiryTimeout(-1);
     logStartupStage("preview_warmup_pool_ready");
 
+    timelineSlowRefreshPool_ = new QThreadPool(this);
+    timelineSlowRefreshPool_->setObjectName(QStringLiteral("TimelineSlowRefreshPool"));
+    timelineSlowRefreshPool_->setMaxThreadCount(1);
+    timelineSlowRefreshPool_->setExpiryTimeout(-1);
+
+    timelineAnalysisPool_ = new QThreadPool(this);
+    timelineAnalysisPool_->setObjectName(QStringLiteral("TimelineAnalysisPool"));
+    timelineAnalysisPool_->setMaxThreadCount(1);
+    timelineAnalysisPool_->setExpiryTimeout(-1);
+    logStartupStage("timeline_analysis_pools_ready");
+
     setWindowModified(false);
     updateWindowTitle();
     setupInitialWindowGeometry();
