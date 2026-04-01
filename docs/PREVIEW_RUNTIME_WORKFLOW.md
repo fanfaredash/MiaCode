@@ -248,6 +248,8 @@ warmup 每次调度都会递增 generation。
 
 当前设计要求只有播放开始或继续播放时，才允许重新恢复 touchhold 声音。
 
+为减少关键时序分散在 `MainWindow` 多处，paused 状态的这组同步操作现在开始向 runtime 内部事务入口收敛：主窗口负责决定何时进入 paused preview，runtime 负责一次性完成 timeline 重配、cursor 归位与 touchhold 静音。
+
 ## 10. 播放启动工作流
 
 播放启动是预览链里最关键的事务之一。
@@ -290,6 +292,8 @@ warmup 每次调度都会递增 generation。
 - SFX 的实际起播秒数优先于理论输入秒数
 - 首拍事件和 touchhold 恢复必须在正式进入播放态前完成
 
+当前这组强同步步骤也开始通过 runtime 的 start transaction 收口，避免 `MainWindow` 在外部手工拼装过多细粒度调用顺序。
+
 ## 11. 播放中 Tick 工作流
 
 播放中的每个 tick，主窗口会做以下事情：
@@ -311,6 +315,8 @@ warmup 每次调度都会递增 generation。
 - 普通 SFX 的实际发声
 
 当前语义下，tick 并不是单纯刷新 UI，而是驱动实时音频时间线向前推进的重要环节。
+
+为了保持同线程起播与较低抖动，当前没有把 SFX runtime 迁到独立 owner 线程；相反，tick 路径正在通过同线程 transaction helper 收敛成更明确的同步边界。
 
 ## 12. 暂停与停止工作流
 

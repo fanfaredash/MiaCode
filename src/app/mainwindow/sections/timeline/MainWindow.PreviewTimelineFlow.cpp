@@ -436,11 +436,10 @@ void MainWindow::applyLatestTimelinePreviewStateToPausedPreview()
 
     const bool noteMarkersChanged = latestTimelineNoteMarkerSignature_ != lastPreviewNoteMarkerSignature_;
     if (previewSfxRuntime_ != nullptr) {
-        if (noteMarkersChanged) {
-            previewSfxRuntime_->configureTimeline(latestTimelineNoteMarkers_);
-        }
-        previewSfxRuntime_->resetCursor(qMax(0.0, qtPreviewPauseSecond_), false);
-        previewSfxRuntime_->pauseTouchholdVoices();
+        previewSfxRuntime_->applyPausedPreviewState(
+            latestTimelineNoteMarkers_,
+            noteMarkersChanged,
+            qtPreviewPauseSecond_);
     }
 
     refreshPreviewObjectStatsTotals(latestTimelineNoteMarkers_);
@@ -2352,17 +2351,10 @@ bool MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
 
     double effectiveStartSecond = startSecond;
     if (previewSfxRuntime_ != nullptr) {
-        previewSfxRuntime_->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
-        previewSfxRuntime_->startBackgroundTrack(startSecond);
-        if (previewSfxRuntime_->hasBackgroundTrack()
-            && previewSfxRuntime_->isBackgroundTrackRunning()) {
-            effectiveStartSecond = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-        }
-        previewSfxRuntime_->resetCursor(effectiveStartSecond, !resumeFromPause);
-        if (!resumeFromPause) {
-            previewSfxRuntime_->drainEvents(effectiveStartSecond);
-        }
-        previewSfxRuntime_->restoreTouchholdVoices(effectiveStartSecond);
+        effectiveStartSecond = previewSfxRuntime_->startPreviewPlaybackTransaction(
+            startSecond,
+            resumeFromPause,
+            previewPlaybackRate_);
     }
 
     applyPlaybackClockState(effectiveStartSecond);
@@ -2422,10 +2414,18 @@ void MainWindow::finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMe
 void MainWindow::stopQtPreviewPlayback(bool keepPosition)
 {
     const bool wasPlaying = qtPreviewPlaying_;
-    if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
-        qtPreviewPauseSecond_ = previewSfxRuntime_->backgroundPlaybackSecond();
-        previewSfxRuntime_->pauseBackgroundTrack();
-    } else if (previewMediaController_ != nullptr && queryPreviewMediaControllerHasVideoMedia()) {
+    bool pauseSecondCaptured = false;
+    if (previewSfxRuntime_ != nullptr) {
+        const QtPreviewSfxRuntime::PausePreviewResult pauseResult =
+            previewSfxRuntime_->capturePausedPreviewTransaction();
+        if (pauseResult.usedBackgroundTrack) {
+            qtPreviewPauseSecond_ = pauseResult.pauseSecond;
+            pauseSecondCaptured = true;
+        }
+    }
+    if (!pauseSecondCaptured
+        && previewMediaController_ != nullptr
+        && queryPreviewMediaControllerHasVideoMedia()) {
         qtPreviewPauseSecond_ = queryPreviewMediaControllerCurrentPlaybackSecond();
     }
     if (previewMediaController_ != nullptr && queryPreviewMediaControllerHasVideoMedia()) {
@@ -2546,21 +2546,18 @@ void MainWindow::onQtPreviewTick()
         return;
     }
     double second = 0.0;
-    if (previewSfxRuntime_ != nullptr
-        && previewSfxRuntime_->hasBackgroundTrack()
-        && previewSfxRuntime_->isBackgroundTrackRunning()) {
-        second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-    } else {
+    if (previewSfxRuntime_ == nullptr) {
         const double elapsedSeconds = static_cast<double>(qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
         second = qtPreviewStartSecond_ + (elapsedSeconds * previewPlaybackRate_);
+    } else {
+        const double elapsedSeconds = static_cast<double>(qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
+        const double fallbackSecond = qtPreviewStartSecond_ + (elapsedSeconds * previewPlaybackRate_);
+        second = previewSfxRuntime_->syncPreviewPlaybackClockTransaction(fallbackSecond);
     }
     if (previewMediaController_ != nullptr) {
         dispatchPreviewMediaControllerCall([second](PreviewMediaController* controller) {
             controller->syncPlayback(second);
         });
-    }
-    if (previewSfxRuntime_ != nullptr) {
-        previewSfxRuntime_->syncBackgroundTrack(second);
     }
     const double playbackEndSecond = previewPlaybackEndSeconds();
     if (playbackEndSecond > 0.0

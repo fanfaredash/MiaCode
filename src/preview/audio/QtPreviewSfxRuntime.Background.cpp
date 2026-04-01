@@ -150,6 +150,17 @@ void QtPreviewSfxRuntime::pauseBackgroundTrack()
     playbackSession_.backgroundTrackRunning = false;
 }
 
+QtPreviewSfxRuntime::PausePreviewResult QtPreviewSfxRuntime::capturePausedPreviewTransaction()
+{
+    PausePreviewResult result;
+    if (hasBackgroundTrack()) {
+        result.usedBackgroundTrack = true;
+        result.pauseSecond = backgroundPlaybackSecond();
+        pauseBackgroundTrack();
+    }
+    return result;
+}
+
 double QtPreviewSfxRuntime::backgroundPlaybackSecond() const
 {
     if (!hasBackgroundTrack()) {
@@ -236,6 +247,16 @@ void QtPreviewSfxRuntime::syncBackgroundTrack(double timelineSecond)
                                 .arg(mappedSecond, 0, 'f', 3)
                                 .arg(playbackSession_.backgroundTrackPlaybackRate, 0, 'f', 3));
     }
+}
+
+double QtPreviewSfxRuntime::syncPreviewPlaybackClockTransaction(double fallbackSecond)
+{
+    double second = qMax(0.0, fallbackSecond);
+    if (hasBackgroundTrack() && isBackgroundTrackRunning()) {
+        second = qMax(0.0, backgroundPlaybackSecond());
+    }
+    syncBackgroundTrack(second);
+    return second;
 }
 
 bool QtPreviewSfxRuntime::audition(const QString& kind, double gain)
