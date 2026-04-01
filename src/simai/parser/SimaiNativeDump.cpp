@@ -26,6 +26,8 @@ QJsonObject dumpMarker(const TimelineNoteMarker& marker)
     if (marker.type != QLatin1String("slide") && marker.type != QLatin1String("wifi")) {
         item.insert("is_each", marker.isEach);
     }
+    item.insert("tap_uses_star_material", marker.tapUsesStarMaterial);
+    item.insert("tap_star_double", marker.tapStarDouble);
     item.insert("is_break", marker.isBreak);
     item.insert("is_ex", marker.isEx);
     item.insert("is_firework", marker.isFirework);
@@ -33,6 +35,7 @@ QJsonObject dumpMarker(const TimelineNoteMarker& marker)
     item.insert("track_break", marker.trackBreak);
     item.insert("head_ex", marker.headEx);
     item.insert("head_each", marker.headEach);
+    item.insert("slide_head_uses_tap_material", marker.slideHeadUsesTapMaterial);
     item.insert("slide_each", marker.slideEach);
     item.insert("same_head_slide", marker.sameHeadSlide);
     item.insert("slide_head", marker.slideHead);
@@ -41,6 +44,7 @@ QJsonObject dumpMarker(const TimelineNoteMarker& marker)
     item.insert("before_slide", marker.beforeSlide);
     item.insert("after_slide", marker.afterSlide);
     item.insert("has_head_star", marker.hasHeadStar);
+    item.insert("headless_immediate", marker.headlessImmediate);
     item.insert("slide_track_key", marker.slideTrackKey);
     item.insert("touch_pad", marker.touchPad);
 

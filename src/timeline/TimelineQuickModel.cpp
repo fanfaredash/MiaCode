@@ -45,6 +45,161 @@ double noteStepSeconds(double bpm, int beats)
     return 240.0 / (clampedBpm * static_cast<double>(clampedBeats));
 }
 
+enum class SlideHeadlessMode {
+    None,
+    Gradual,
+    Immediate,
+};
+
+struct TapModifierState {
+    bool hasBreak = false;
+    bool hasEx = false;
+    bool hasHold = false;
+    bool tapUsesStarMaterial = false;
+    bool tapStarDouble = false;
+};
+
+struct SlideHeadModifierState {
+    QString rawModifiers;
+    bool headBreak = false;
+    bool headEx = false;
+    bool slideHeadUsesTapMaterial = false;
+    SlideHeadlessMode headlessMode = SlideHeadlessMode::None;
+};
+
+bool parseTapModifierSequence(
+    const QString& prefixModifiers,
+    const QString& suffixModifiers,
+    TapModifierState* state)
+{
+    if (state == nullptr) {
+        return false;
+    }
+    *state = TapModifierState();
+
+    const auto parsePart = [state](const QString& part) -> bool {
+        for (int i = 0; i < part.size();) {
+            const QChar ch = part.at(i);
+            const QChar lower = ch.toLower();
+            if (lower == QLatin1Char('b')) {
+                if (state->hasBreak) {
+                    return false;
+                }
+                state->hasBreak = true;
+                ++i;
+                continue;
+            }
+            if (lower == QLatin1Char('x')) {
+                if (state->hasEx) {
+                    return false;
+                }
+                state->hasEx = true;
+                ++i;
+                continue;
+            }
+            if (lower == QLatin1Char('h')) {
+                if (state->hasHold) {
+                    return false;
+                }
+                state->hasHold = true;
+                ++i;
+                continue;
+            }
+            if (ch == QLatin1Char('$')) {
+                if (state->tapUsesStarMaterial) {
+                    return false;
+                }
+                state->tapUsesStarMaterial = true;
+                if (i + 1 < part.size() && part.at(i + 1) == QLatin1Char('$')) {
+                    state->tapStarDouble = true;
+                    i += 2;
+                } else {
+                    ++i;
+                }
+                continue;
+            }
+            return false;
+        }
+        return true;
+    };
+
+    if (!parsePart(prefixModifiers) || !parsePart(suffixModifiers)) {
+        return false;
+    }
+    if (state->hasHold && state->tapUsesStarMaterial) {
+        return false;
+    }
+    return true;
+}
+
+bool parseSlideHeadModifierPrefix(const QString& token, int* modifierCount, SlideHeadModifierState* state)
+{
+    if (modifierCount == nullptr || state == nullptr) {
+        return false;
+    }
+    *modifierCount = 0;
+    *state = SlideHeadModifierState();
+
+    while ((1 + *modifierCount) < token.size()) {
+        const QChar ch = token.at(1 + *modifierCount);
+        const QChar lower = ch.toLower();
+        if (lower == QLatin1Char('b')) {
+            if (state->headBreak) {
+                return false;
+            }
+            state->headBreak = true;
+        } else if (lower == QLatin1Char('x')) {
+            if (state->headEx) {
+                return false;
+            }
+            state->headEx = true;
+        } else if (ch == QLatin1Char('@')) {
+            if (state->slideHeadUsesTapMaterial) {
+                return false;
+            }
+            state->slideHeadUsesTapMaterial = true;
+        } else if (ch == QLatin1Char('?')) {
+            if (state->headlessMode != SlideHeadlessMode::None) {
+                return false;
+            }
+            state->headlessMode = SlideHeadlessMode::Gradual;
+        } else if (ch == QLatin1Char('!')) {
+            if (state->headlessMode != SlideHeadlessMode::None) {
+                return false;
+            }
+            state->headlessMode = SlideHeadlessMode::Immediate;
+        } else if (lower == QLatin1Char('h')) {
+            return false;
+        } else {
+            break;
+        }
+        state->rawModifiers.append(ch);
+        ++(*modifierCount);
+    }
+
+    if (state->slideHeadUsesTapMaterial && state->headlessMode != SlideHeadlessMode::None) {
+        return false;
+    }
+    return true;
+}
+
+bool slideCoreHasDisallowedModifiers(const QString& core)
+{
+    for (int i = 1; i < core.size(); ++i) {
+        const QChar ch = core.at(i);
+        const QChar lower = ch.toLower();
+        if (lower == QLatin1Char('x')
+            || lower == QLatin1Char('h')
+            || ch == QLatin1Char('@')
+            || ch == QLatin1Char('?')
+            || ch == QLatin1Char('!')
+            || ch == QLatin1Char('$')) {
+            return true;
+        }
+    }
+    return false;
+}
+
 QString tokenInsideBrackets(const QString& token)
 {
     const int open = token.indexOf(QLatin1Char('['));
@@ -120,17 +275,21 @@ bool parseSlideWaitAndDuration(const QString& signature, double bpm, double* wai
         return true;
     };
 
-    const int starIndex = signature.indexOf(QLatin1Char('*'));
-    if (starIndex >= 0) {
-        bool ok = false;
-        const double explicitWait = signature.left(starIndex).toDouble(&ok);
-        if (!ok) {
+    if (signature.contains(QStringLiteral("###")) || signature.count(QLatin1Char('#')) > 3) {
+        return false;
+    }
+
+    const int doubleHashIndex = signature.indexOf(QStringLiteral("##"));
+    if (doubleHashIndex >= 0) {
+        bool waitOk = false;
+        const double explicitWait = signature.left(doubleHashIndex).toDouble(&waitOk);
+        if (!waitOk) {
             return false;
         }
         *waitSecond = std::max(0.0, explicitWait);
-        const QString tail = signature.mid(starIndex + 1);
-        if (tail.contains(QLatin1Char('#'))) {
-            const int hashIndex = tail.indexOf(QLatin1Char('#'));
+        const QString tail = signature.mid(doubleHashIndex + 2);
+        const int hashIndex = tail.indexOf(QLatin1Char('#'));
+        if (hashIndex >= 0) {
             bool bpmOk = false;
             const double tempBpm = tail.left(hashIndex).toDouble(&bpmOk);
             if (!bpmOk || tempBpm <= 0.0) {
@@ -138,7 +297,16 @@ bool parseSlideWaitAndDuration(const QString& signature, double bpm, double* wai
             }
             return parseFraction(tail.mid(hashIndex + 1), tempBpm, durationSecond);
         }
-        return parseFraction(tail, bpm, durationSecond);
+        if (parseFraction(tail, bpm, durationSecond)) {
+            return true;
+        }
+        bool durationOk = false;
+        const double seconds = tail.toDouble(&durationOk);
+        if (!durationOk) {
+            return false;
+        }
+        *durationSecond = std::max(0.0, seconds);
+        return true;
     }
 
     const int hashIndex = signature.indexOf(QLatin1Char('#'));
@@ -149,7 +317,17 @@ bool parseSlideWaitAndDuration(const QString& signature, double bpm, double* wai
             return false;
         }
         *waitSecond = 60.0 / tempBpm;
-        return parseFraction(signature.mid(hashIndex + 1), tempBpm, durationSecond);
+        const QString tail = signature.mid(hashIndex + 1);
+        if (parseFraction(tail, tempBpm, durationSecond)) {
+            return true;
+        }
+        bool durationOk = false;
+        const double seconds = tail.toDouble(&durationOk);
+        if (!durationOk) {
+            return false;
+        }
+        *durationSecond = std::max(0.0, seconds);
+        return true;
     }
 
     *waitSecond = 60.0 / std::max(1.0, bpm);
@@ -1170,17 +1348,9 @@ bool TimelineQuickModel::parseNoteToken(
             || token.contains(QLatin1Char('p')) || token.contains(QLatin1Char('q')) || token.contains(QLatin1Char('s'))
             || token.contains(QLatin1Char('z')) || token.contains(QLatin1Char('w')));
     if (slideLike) {
-        QString prefixModifiers;
         int modifierCount = 0;
-        while ((1 + modifierCount) < token.size()) {
-            const QChar modifier = token.at(1 + modifierCount);
-            if (modifier != QLatin1Char('b') && modifier != QLatin1Char('x') && modifier != QLatin1Char('h')) {
-                break;
-            }
-            prefixModifiers.append(modifier);
-            ++modifierCount;
-        }
-        if (prefixModifiers.contains(QLatin1Char('h'))) {
+        SlideHeadModifierState modifierState;
+        if (!parseSlideHeadModifierPrefix(token, &modifierCount, &modifierState)) {
             return false;
         }
 
@@ -1188,6 +1358,9 @@ bool TimelineQuickModel::parseNoteToken(
         core.reserve(token.size());
         core.append(token.at(0));
         core.append(token.mid(1 + modifierCount));
+        if (slideCoreHasDisallowedModifiers(core)) {
+            return false;
+        }
         QString sanitizedCore;
         sanitizedCore.reserve(core.size());
         bool trackBreak = false;
@@ -1216,14 +1389,20 @@ bool TimelineQuickModel::parseNoteToken(
         note.slideTraceSecondOffset = note.secondOffset + qMax(0.0, waitSecond);
         note.endSecondOffset = note.slideTraceSecondOffset + qMax(0.0, durationSecond);
         note.flags = 0u;
-        if (!sanitizedCore.contains(QLatin1Char('?')) && !sanitizedCore.contains(QLatin1Char('!'))) {
+        if (modifierState.headlessMode == SlideHeadlessMode::None) {
             note.flags |= TimelineRenderFlagHasHeadStar;
         }
-        if (prefixModifiers.contains(QLatin1Char('b'))) {
+        if (modifierState.headBreak) {
             note.flags |= TimelineRenderFlagHeadBreak | TimelineRenderFlagIsBreak;
         }
-        if (prefixModifiers.contains(QLatin1Char('x'))) {
+        if (modifierState.headEx) {
             note.flags |= TimelineRenderFlagHeadEx;
+        }
+        if (modifierState.slideHeadUsesTapMaterial) {
+            note.flags |= TimelineRenderFlagSlideHeadUsesTapMaterial;
+        }
+        if (modifierState.headlessMode == SlideHeadlessMode::Immediate) {
+            note.flags |= TimelineRenderFlagHeadlessImmediate;
         }
         if (trackBreak) {
             note.flags |= TimelineRenderFlagTrackBreak | TimelineRenderFlagIsBreak;
@@ -1251,13 +1430,23 @@ bool TimelineQuickModel::parseNoteToken(
         return false;
     }
 
-    const QString combinedModifiers = prefixModifiers + suffixModifiers;
-    const bool hasHold = combinedModifiers.contains(QLatin1Char('h'), Qt::CaseInsensitive);
-    if (combinedModifiers.contains(QLatin1Char('b'), Qt::CaseInsensitive)) {
+    TapModifierState modifierState;
+    if (!parseTapModifierSequence(prefixModifiers, suffixModifiers, &modifierState)) {
+        return false;
+    }
+
+    const bool hasHold = modifierState.hasHold;
+    if (modifierState.hasBreak) {
         note.flags |= TimelineRenderFlagIsBreak;
     }
-    if (combinedModifiers.contains(QLatin1Char('x'), Qt::CaseInsensitive)) {
+    if (modifierState.hasEx) {
         note.flags |= TimelineRenderFlagIsEx;
+    }
+    if (modifierState.tapUsesStarMaterial) {
+        note.flags |= TimelineRenderFlagTapUsesStarMaterial;
+    }
+    if (modifierState.tapStarDouble) {
+        note.flags |= TimelineRenderFlagTapStarDouble;
     }
 
     if (hasHold) {

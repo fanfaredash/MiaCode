@@ -112,10 +112,15 @@ void PreviewCanvas::processTexturePrewarmQueue()
 
 const QImage* PreviewCanvas::selectTapImage(const TimelineNoteMarker& marker) const
 {
+    const bool slideHeadTapMaterial =
+        (marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi"))
+        && marker.slideHeadUsesTapMaterial;
+    const bool isBreak = slideHeadTapMaterial ? marker.headBreak : marker.isBreak;
+    const bool isEach = slideHeadTapMaterial ? marker.headEach : marker.isEach;
     const QImage* tapImage = &tapImage_;
-    if (marker.isBreak && !tapBreakImage_.isNull()) {
+    if (isBreak && !tapBreakImage_.isNull()) {
         tapImage = &tapBreakImage_;
-    } else if (marker.isEach && !tapEachImage_.isNull()) {
+    } else if (isEach && !tapEachImage_.isNull()) {
         tapImage = &tapEachImage_;
     }
     return tapImage;
@@ -134,24 +139,23 @@ const QImage* PreviewCanvas::selectHoldImage(const TimelineNoteMarker& marker) c
 
 const QImage* PreviewCanvas::selectTapNoteGuideImage(const TimelineNoteMarker& marker) const
 {
-    const bool slideHeadStar = marker.type == "slide" || marker.type == "wifi";
-    if (slideHeadStar) {
-        if (!marker.hasHeadStar) {
-            return nullptr;
-        }
-        if (marker.headBreak && !noteGuideBreakImage_.isNull()) {
-            return &noteGuideBreakImage_;
-        }
-        if (marker.headEach && !noteGuideEachImage_.isNull()) {
-            return &noteGuideEachImage_;
-        }
-        return noteGuideSlideImage_.isNull() ? &noteGuideNormalImage_ : &noteGuideSlideImage_;
+    const bool slideLike = marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi");
+    if (slideLike && !marker.hasHeadStar) {
+        return nullptr;
     }
-    if (marker.isBreak && !noteGuideBreakImage_.isNull()) {
+
+    const bool starMaterialHead = slideLike ? !marker.slideHeadUsesTapMaterial : marker.tapUsesStarMaterial;
+    const bool isBreak = slideLike ? marker.headBreak : marker.isBreak;
+    const bool isEach = slideLike ? marker.headEach : marker.isEach;
+
+    if (isBreak && !noteGuideBreakImage_.isNull()) {
         return &noteGuideBreakImage_;
     }
-    if (marker.isEach && !noteGuideEachImage_.isNull()) {
+    if (isEach && !noteGuideEachImage_.isNull()) {
         return &noteGuideEachImage_;
+    }
+    if (starMaterialHead) {
+        return noteGuideSlideImage_.isNull() ? &noteGuideNormalImage_ : &noteGuideSlideImage_;
     }
     return &noteGuideNormalImage_;
 }
@@ -499,22 +503,27 @@ void PreviewCanvas::flushTapAtlasBatch(QPainter& painter)
 
 const QImage* PreviewCanvas::selectSlideStarImage(const TimelineNoteMarker& marker) const
 {
+    const bool slideLike = marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi");
+    const bool useHeadFlags = slideLike && !marker.slideHeadUsesTapMaterial;
+    const bool isBreak = useHeadFlags ? marker.headBreak : marker.isBreak;
+    const bool isEach = useHeadFlags ? marker.headEach : marker.isEach;
+    const bool useDouble = useHeadFlags ? marker.sameHeadSlide : marker.tapStarDouble;
     const QImage* starImage = &starImage_;
-    if (marker.headBreak) {
-        if (marker.sameHeadSlide && !starBreakDoubleImage_.isNull()) {
+    if (isBreak) {
+        if (useDouble && !starBreakDoubleImage_.isNull()) {
             starImage = &starBreakDoubleImage_;
         } else if (!starBreakImage_.isNull()) {
             starImage = &starBreakImage_;
         }
-    } else if (marker.headEach) {
-        if (marker.sameHeadSlide && !starEachDoubleImage_.isNull()) {
+    } else if (isEach) {
+        if (useDouble && !starEachDoubleImage_.isNull()) {
             starImage = &starEachDoubleImage_;
         } else if (!starEachImage_.isNull()) {
             starImage = &starEachImage_;
-        } else if (marker.sameHeadSlide && !starDoubleImage_.isNull()) {
+        } else if (useDouble && !starDoubleImage_.isNull()) {
             starImage = &starDoubleImage_;
         }
-    } else if (marker.sameHeadSlide && !starDoubleImage_.isNull()) {
+    } else if (useDouble && !starDoubleImage_.isNull()) {
         starImage = &starDoubleImage_;
     }
     return starImage;

@@ -253,7 +253,26 @@ void TimelineView::paintEvent(QPaintEvent* event)
             QString iconType;
             switch (note.kind) {
             case TimelineRenderNoteKind::Tap:
-                if (timelineRenderFlagSet(note, TimelineRenderFlagIsEx)) {
+                if (timelineRenderFlagSet(note, TimelineRenderFlagTapUsesStarMaterial)) {
+                    const bool doubleStar = timelineRenderFlagSet(note, TimelineRenderFlagTapStarDouble);
+                    if (timelineRenderFlagSet(note, TimelineRenderFlagIsBreak) && doubleStar) {
+                        iconType = QStringLiteral("star_break_double");
+                    } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsBreak)) {
+                        iconType = QStringLiteral("star_break");
+                    } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEx) && doubleStar) {
+                        iconType = QStringLiteral("star_ex_double");
+                    } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEx)) {
+                        iconType = QStringLiteral("star_ex");
+                    } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEach) && doubleStar) {
+                        iconType = QStringLiteral("star_each_double");
+                    } else if (doubleStar) {
+                        iconType = QStringLiteral("star_double");
+                    } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEach)) {
+                        iconType = QStringLiteral("star_each");
+                    } else {
+                        iconType = QStringLiteral("slide");
+                    }
+                } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEx)) {
                     iconType = QStringLiteral("tap_ex");
                 } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsBreak)) {
                     iconType = QStringLiteral("tap_break");
@@ -287,7 +306,18 @@ void TimelineView::paintEvent(QPaintEvent* event)
                 break;
             case TimelineRenderNoteKind::Slide:
             case TimelineRenderNoteKind::Wifi:
-                if (timelineRenderFlagSet(note, TimelineRenderFlagHeadBreak) && timelineRenderFlagSet(note, TimelineRenderFlagSameHeadSlide)) {
+                if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)
+                    && timelineRenderFlagSet(note, TimelineRenderFlagHeadEx)) {
+                    iconType = QStringLiteral("tap_ex");
+                } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)
+                           && timelineRenderFlagSet(note, TimelineRenderFlagHeadBreak)) {
+                    iconType = QStringLiteral("tap_break");
+                } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)
+                           && timelineRenderFlagSet(note, TimelineRenderFlagHeadEach)) {
+                    iconType = QStringLiteral("tap_each");
+                } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)) {
+                    iconType = QStringLiteral("tap");
+                } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadBreak) && timelineRenderFlagSet(note, TimelineRenderFlagSameHeadSlide)) {
                     iconType = QStringLiteral("star_break_double");
                 } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadBreak)) {
                     iconType = QStringLiteral("star_break");
