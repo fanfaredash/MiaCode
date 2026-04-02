@@ -112,10 +112,12 @@ TimelineView::TimelineView(QWidget* parent)
     setFrameShape(QFrame::NoFrame);
     setLineWidth(0);
     setMidLineWidth(0);
+    setFocusPolicy(Qt::StrongFocus);
     setAttribute(Qt::WA_OpaquePaintEvent, true);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setMouseTracking(true);
+    viewport()->setFocusPolicy(Qt::NoFocus);
     viewport()->setAttribute(Qt::WA_OpaquePaintEvent, true);
     viewport()->setAutoFillBackground(false);
 

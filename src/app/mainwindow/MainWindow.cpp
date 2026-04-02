@@ -3266,6 +3266,7 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
                         qMax(1, previewSlider_->width()),
                         false
                     );
+                    previewSlider_->setFocus(Qt::MouseFocusReason);
                     previewSlider_->setValue(value);
                     showPreviewSliderTimeHint(value);
                     seekPreviewToSecond(static_cast<double>(value) / 1000.0, true);

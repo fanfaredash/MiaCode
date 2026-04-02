@@ -1306,6 +1306,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(timelineView_, &TimelineView::headerNavigateRequested, this, [this](double second) {
         navigateTimelineToSecond(second, true);
     });
+    connect(timelineView_, &TimelineView::previewPlayPauseRequested, this, &MainWindow::onTogglePreviewPause);
     connect(timelineView_, &TimelineView::timelineUserInteractionStarted, this, [this]() {
         if (qtPreviewPlaying_) {
             stopQtPreviewPlayback(true);
@@ -1631,6 +1632,9 @@ MainWindow::MainWindow(QWidget* parent)
         previewSlider_->setFocusPolicy(Qt::StrongFocus);
         previewSlider_->installEventFilter(this);
         connect(previewSlider_, &QSlider::sliderPressed, this, [this]() {
+            if (previewSlider_ != nullptr) {
+                previewSlider_->setFocus(Qt::MouseFocusReason);
+            }
             if (previewFullscreenActive_) {
                 showPreviewFullscreenControls(false);
             }
