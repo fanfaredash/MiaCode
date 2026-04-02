@@ -125,6 +125,7 @@ struct MuriStaticReferenceNote {
     QString markerKey;
     QString markerType;
     QString pad;
+    QString slideDisplayKey;
     QString slideTrackKey;
     int line = 1;
     int col = 1;

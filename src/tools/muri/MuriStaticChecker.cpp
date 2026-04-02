@@ -216,6 +216,7 @@ MuriStaticReferenceNote staticReferenceNoteFromMarker(const TimelineNoteMarker& 
     note.markerKey = makeMarkerAnalysisKey(marker);
     note.markerType = marker.type;
     note.pad = markerPadToken(marker);
+    note.slideDisplayKey = marker.slideDisplayKey;
     note.slideTrackKey = marker.slideTrackKey;
     note.line = marker.sourceLine;
     note.col = marker.sourceCol;
@@ -235,6 +236,7 @@ MuriStaticReferenceNote staticReferenceNoteFromHeadStar(const TimelineNoteMarker
     note.endLane = marker.lane;
     note.endSecond = -1.0;
     note.slideTraceSecond = -1.0;
+    note.slideDisplayKey.clear();
     note.slideTrackKey.clear();
     note.headStarTapLike = true;
     return note;

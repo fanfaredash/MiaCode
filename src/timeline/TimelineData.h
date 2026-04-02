@@ -26,6 +26,7 @@ struct TimelineNoteMarker {
     int lane = 1;
     int endLane = 1;
     QString type;
+    QString slideDisplayKey;
     QString slideTrackKey;
     QStringList slideSegmentKeys;
     QVector<double> slideSegmentShootSeconds;

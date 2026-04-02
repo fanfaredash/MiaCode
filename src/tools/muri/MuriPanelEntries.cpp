@@ -91,15 +91,19 @@ QString muriStaticReferenceConfigText(const MuriStaticReferenceNote& note)
         return pad.isEmpty() ? QStringLiteral("touch-hold") : QStringLiteral("touch-hold %1").arg(pad);
     }
     if (markerType == QLatin1String("slide")) {
-        const QString trackKey = note.slideTrackKey.trimmed().isEmpty()
-            ? QStringLiteral("%1->%2").arg(note.lane).arg(note.endLane)
-            : note.slideTrackKey.trimmed();
+        const QString trackKey = !note.slideDisplayKey.trimmed().isEmpty()
+            ? note.slideDisplayKey.trimmed()
+            : (note.slideTrackKey.trimmed().isEmpty()
+                  ? QStringLiteral("%1->%2").arg(note.lane).arg(note.endLane)
+                  : note.slideTrackKey.trimmed());
         return QStringLiteral("slide %1").arg(trackKey);
     }
     if (markerType == QLatin1String("wifi")) {
-        const QString trackKey = note.slideTrackKey.trimmed().isEmpty()
-            ? QStringLiteral("%1w%2").arg(note.lane).arg(note.endLane)
-            : note.slideTrackKey.trimmed();
+        const QString trackKey = !note.slideDisplayKey.trimmed().isEmpty()
+            ? note.slideDisplayKey.trimmed()
+            : (note.slideTrackKey.trimmed().isEmpty()
+                  ? QStringLiteral("%1w%2").arg(note.lane).arg(note.endLane)
+                  : note.slideTrackKey.trimmed());
         return QStringLiteral("wifi %1").arg(trackKey);
     }
     return markerType;
