@@ -1,512 +1,472 @@
-# 预览运行时工作流说明
+# Preview Runtime Workflow
 
-## 1. 目的与范围
+## 1. 文档目的
 
-本文面向维护者说明当前预览子系统的运行方式，重点覆盖：
+本文描述当前预览运行时链路的真实工作方式，目标是帮助维护者理解：
 
-- `MainWindow` 如何编排预览相关状态
-- 时间轴快慢两条刷新链如何向预览提供数据
-- `PreviewCanvas`、`PreviewMediaController`、`QtPreviewSfxRuntime` 各自承担的职责
-- 启动预热、播放、暂停、拖动、试音等主要交互的工作流
-- 当前设计中的强同步语义
+- 预览相关状态由谁持有
+- 编辑、解析、预览、验证、Muri 之间如何衔接
+- 播放、暂停、拖动、继续播放时，哪些步骤必须强同步
+- 当前实现为什么这样分层，以及哪些地方是刻意保守的
 
-本文不强调具体代码位置，重点是帮助开发者理解“现在系统是怎么工作的”。
+本文关注“系统怎么工作”，不强调具体代码定位。
 
-## 2. 组件分工总览
+## 2. 设计原则
 
-当前预览链可以粗略分成五层：
+当前预览链遵循三条优先级：
 
-1. `MainWindow`
-   - 整个预览系统的编排者。
-   - 持有预览播放状态、暂停位置、待启动请求、时间轴快照状态、音频设置、播放倍率等顶层状态。
-   - 决定什么时候启动预热、什么时候允许播放、什么时候把 paused 状态应用回预览。
+1. 预览实时性和同步性最高。
+2. timeline 可视更新次之，可以略微落后。
+3. validation 和 Muri 最低，播放期间甚至可以不更新可见 UI。
 
-2. Timeline 快/慢刷新链
-   - 快链负责编辑器输入后的轻量刷新，让时间轴和光标联动尽快更新。
-   - 慢链负责完整解析、构建 preview snapshot、校验和 Muri 输入。
-   - 预览播放真正依赖的是慢链生成的 preview snapshot，而不是单纯依赖当前文本框内容。
+对应的核心目标是：
 
-3. `PreviewCanvas`
-   - 负责画面渲染。
-   - 它只消费已经准备好的预览数据和当前播放秒数，不负责决定“应该播放什么”。
-   - 画面中的 note、背景、HUD、统计信息，都是由外部状态驱动的。
+- 多种设备下保持鲁棒性
+- 主窗口启动低延迟
+- 播放、暂停、seek、resume 低延迟
 
-4. `PreviewMediaController`
-   - 负责背景媒体，包括视频帧和媒体侧背景音轨。
-   - 当前正式 runtime 固定运行在专用线程，由 `MainWindow` 通过代理下发调用。
-   - 它更偏向“媒体设备与解码后端”。
+这直接决定了当前实现不会为了“所有信息都实时”而牺牲预览主链，也不会轻易把 SFX 运行时拆到独立 owner 线程里引入起播抖动。
 
-5. `QtPreviewSfxRuntime`
-   - 负责实时 SFX、touchhold 持续音、背景音轨播放状态与 timeline 事件 drain。
-   - 当前正式实例仍由主线程持有和直接调用。
-   - 它更偏向“游戏音频时间线状态机”。
-
-## 3. 状态所有权与线程归属
+## 3. 核心组件分工
 
 ### 3.1 MainWindow
 
-`MainWindow` 是整个预览链的状态中心。它维护的核心状态包括：
+`MainWindow` 是预览系统的总编排者。它负责：
 
-- 当前预览是否在播放
-- 当前暂停秒数、启动秒数、返回秒数、结束秒数
-- 当前 preview snapshot 是否已经准备好
-- 待自动启动的播放请求
-- 当前音频设置、播放倍率、轨道时长
-- warmup generation 与 warmup 结果缓存
+- 管理当前文档、活动难度、预览播放状态、暂停位置和播放倍率
+- 驱动 timeline 快路径与慢路径刷新
+- 决定何时触发 warmup、何时允许播放、何时回到 paused preview
+- 把预览状态同步给 `PreviewCanvas`、`PreviewMediaController` 和 `QtPreviewSfxRuntime`
 
-这些状态决定了预览子系统的整体行为。其他组件更多是在执行具体子任务。
+可以把它理解成预览运行时的状态协调器，而不是单纯的 UI 外壳。
 
-### 3.2 PreviewMediaController
+### 3.2 TimelineQuickModel
 
-`PreviewMediaController` 的正式实例运行在专用线程中。
+`TimelineQuickModel` 是编辑态的轻量时间轴模型。它负责：
 
-当前设计思路是：
+- 响应编辑器输入后的快速时间轴更新
+- 支撑光标定位、follow preview、timeline 跳转等交互
+- 在慢速完整解析尚未返回前，维持一个尽量及时的 timeline 视图
 
-- 主窗口只保留指针和代理入口，不直接跨线程访问内部设备对象。
-- 初始化、媒体路径应用、播放同步等操作都投递到同一个 owner 线程。
-- 需要即时读回结果时，主窗口通过阻塞式查询拿到“当前是否有视频媒体”“当前媒体播放秒数”等状态。
+它不是播放时的最终数据源，只是编辑态的快速反馈层。
 
-这个设计已经把媒体后端从 UI 线程和线程池预热里剥离出来，减少了混合设备和多媒体后端初始化的随机性。
+### 3.3 Slow Refresh / Analysis Pipeline
 
-### 3.3 QtPreviewSfxRuntime
+慢刷新链负责完整解析和预览快照发布，分析链负责 validation 与 Muri。
 
-`QtPreviewSfxRuntime` 当前仍由主线程直接持有和调用。
+当前已经明确拆成两层：
 
-它的状态同时包含：
+- `slow refresh`
+  - 做一次完整 parse
+  - 生成带 `&first` 偏移的 preview snapshot
+  - 尽快发布给 paused preview 或待启动播放请求
+- `analysis`
+  - 复用同一次 parse 的结果和同一份 note marker snapshot
+  - 统一构建 validation 报告和 Muri 结果
+  - 作为 latest-only、idle-first 的低优先级后台链
 
-- miniaudio engine
-- 各类 SFX bank
-- touchhold 声音占用与活动 span
-- 背景音轨运行状态
-- 当前 timeline 事件列表
-- 当前事件游标
+这是当前“预览主链优先、分析次之”的关键结构。
 
-它现在既是“音频设备封装”，又是“预览音频逻辑状态机”。这也是它后续若要线程化，必须谨慎处理同步语义的原因。
+### 3.4 PreviewCanvas
 
-为了降低内部耦合，当前 runtime 已开始按职责拆成几块内部状态：
+`PreviewCanvas` 负责画面渲染，但不决定“应该播放什么”。它消费的是：
 
-- warmup 路径与 prepared assets
+- 当前 note marker snapshot
+- 当前播放秒数
+- 当前媒体帧
+- 当前 Muri 渲染选项与分析结果
+
+也就是说，`PreviewCanvas` 是渲染端，不是调度端。
+
+### 3.5 PreviewMediaController
+
+`PreviewMediaController` 管背景媒体和媒体侧背景音轨，包括：
+
+- 背景图片或视频
+- 视频播放位置
+- 媒体侧背景音轨
+- 与 `PreviewCanvas` 的媒体帧同步
+
+当前正式实例固定运行在专用 `QThread` 上。`MainWindow` 通过代理调用与它交互，避免把 Qt Multimedia 设备对象直接混在 UI 线程和线程池 warmup 中。
+
+### 3.6 QtPreviewSfxRuntime
+
+`QtPreviewSfxRuntime` 负责预览期的音频时序与事件驱动，包括：
+
+- SFX 资源加载
+- 背景轨播放
+- 事件时间线推进与 `drainEvents`
+- touchhold 持续音生命周期
+- 试听
+
+当前正式实例仍由主线程持有，不做独立 owner 线程迁移。原因很简单：预览物件渲染和 SFX 起播要求尽量从同一条同步链上同时起跑，过早线程化会放大起播抖动风险。
+
+## 4. 三层状态模型
+
+理解当前预览链，最重要的是区分三类状态。
+
+### 4.1 编辑态
+
+编辑态对应用户当前正在修改的文本，以及 `TimelineQuickModel` 提供的快速 timeline 视图。
+
+这层状态变化最快，但不是播放时直接使用的正式输入。
+
+### 4.2 Preview Snapshot
+
+preview snapshot 是慢刷新产物。它包含：
+
+- 当前 revision 对应的 note markers
+- 对应签名
+- 解析后的稳定预览输入
+
+播放只能基于某一份已经落地的 snapshot 启动。也就是说，播放不是“永远追着最新编辑态跑”，而是“基于某个稳定快照播放”。
+
+### 4.3 Playback Session
+
+playback session 是一次正在运行的播放会话状态。它包含：
+
+- 当前起播秒数
+- 当前暂停秒数
+- 当前实际播放时钟
+- 当前 play-start snapshot
+
+播放一旦开始，预览音频、画面和物件统计都冻结在本次 play-start snapshot 上，直到播放停止。
+
+## 5. 启动与 Warmup
+
+### 5.1 Warmup 的目标
+
+当前 warmup 的目标是“降低首次 prepare 和首次媒体接入的延迟”，不是“在后台抢先构造真实 runtime”。
+
+### 5.2 当前 Warmup 是 data-only
+
+现在的 warmup 已明确收缩为数据预热：
+
+- media warmup
+  - 解析背景媒体路径
+  - 对背景媒体文件做 OS cache 预热
+- SFX warmup
+  - 解析 SFX 目录
+  - 预热常用音效文件和背景轨文件
+
+它不再做这些事情：
+
+- 不在线程池里临时构造 `QMediaPlayer`
+- 不在线程池里临时构造 `QVideoSink` / `QAudioOutput`
+- 不在线程池里临时初始化 `ma_engine`
+- 不构造一次性 sacrificial runtime
+
+### 5.3 Warmup 结果如何应用
+
+warmup 通过 generation 驱动，只允许最新结果生效：
+
+- media warmup 结果会回填到 `MainWindow`，然后下发给正式 `PreviewMediaController`
+- SFX warmup 结果会回填解析出的 `chartPath / trackPath / sfxDir`，供正式 `QtPreviewSfxRuntime` 后续按需 prepare 时使用
+
+这种设计避免了旧 chart 或旧路径的 warmup 结果晚到后覆盖当前状态。
+
+## 6. 编辑到预览的数据流
+
+### 6.1 快路径
+
+用户编辑文本时，`TimelineQuickModel` 会先更新：
+
+- timeline 视图立即刷新
+- 光标映射、跳转和 follow 维持可用
+- slider 范围和基础时长估计同步更新
+
+这条链的目标是交互流畅，而不是提供正式播放输入。
+
+### 6.2 慢路径
+
+每次 schedule timeline refresh 后，慢路径会做：
+
+1. 读取当前 chart 文本和 `&first`
+2. 执行完整 parse
+3. 构建带偏移的 preview snapshot
+4. 生成最新 note marker signature
+5. 发布为当前 latest preview snapshot
+
+如果当前没有在播放，会立即把这份 snapshot 应用回 paused preview。
+
+### 6.3 分析路径
+
+slow refresh 完成后，不再分别派发 validation worker 和 Muri worker，而是统一调度一个 analysis request：
+
+- 输入
+  - 同一次 parseResult
+  - 同一份 shifted note markers
+  - 当前 Muri render options
+  - 当前 static tap-on-slide threshold
+- 输出
+  - validation report
+  - Muri analysis report
+  - Muri static references
+
+这是当前“单次 parse，多路消费”的正式形态。
+
+## 7. Analysis 的 latest-only 与 idle-first 语义
+
+### 7.1 Latest-only
+
+analysis 链明确只关心最新请求：
+
+- 新请求到来时，可以覆盖旧 pending request
+- worker 返回时，如果已经不是最新 revision，就直接丢弃
+
+它的目标不是逐条处理所有中间态，而是尽快收敛到最新稳定状态。
+
+### 7.2 Idle-first
+
+analysis 调度还带一个短延迟 idle timer。目前它的作用是：
+
+- 连续输入期间不急着频繁做 validation/Muri
+- 让 rapid edits 先合并
+- 把 CPU 时间优先留给编辑态和预览主链
+
+### 7.3 播放期间的可见 UI 延后
+
+播放期间允许 analysis 结果继续在后台更新缓存，但可见 UI 应用可以延后：
+
+- validation 列表和装饰不必立即刷新
+- Muri 面板不必立即刷新
+- `PreviewCanvas` 上的 Muri 分析显示也可以等到暂停态再同步
+
+停播后会立即：
+
+1. 先应用 deferred analysis UI
+2. 再补发仍然挂起的 analysis request
+
+因此 paused 状态下工具信息会很快追上，而 active playback 不会被低优先级分析干扰。
+
+### 7.4 纯分析参数变化的优化
+
+有些变化并不需要重新 parse，例如：
+
+- 切换 Muri render mode
+- 修改 static tap-on-slide threshold
+
+这些路径现在会优先复用“最近一次 parseResult + 最近一次 preview snapshot”，直接重跑 analysis，而不是强制触发整次 slow refresh。
+
+## 8. 播放前准备
+
+开始播放前，系统会先经过一个前置门槛：
+
+1. 如果当前字段有脏状态，先尽量同步到文档
+2. 确认存在活动难度
+3. 确认当前 revision 的 preview snapshot 已就绪
+
+如果 snapshot 尚未就绪，不会硬启动播放，而是：
+
+- 请求 slow refresh
+- 记录 pending playback 请求
+- 等匹配 revision 的 snapshot 落地后自动起播
+
+这保证了播放的输入总是来自明确的一份 preview snapshot。
+
+## 9. 播放启动事务
+
+### 9.1 先准备 runtime
+
+播放启动会先确保：
+
+- `PreviewMediaController` 已创建并初始化后端对象
+- `QtPreviewSfxRuntime` 已完成 on-demand prepare
+
+### 9.2 先回到一个干净的 paused preview
+
+正式起播前，会先应用一次 paused preview 状态，目的是：
+
+- 让 timeline program 与最新 snapshot 对齐
+- 把 cursor 重置到起播附近
+- 确保 touchhold 保持静音起点
+
+### 9.3 SFX 事务返回真实起播秒数
+
+`QtPreviewSfxRuntime` 会通过 `startPreviewPlaybackTransaction(...)` 一次性完成：
+
+- 同步背景轨倍率
+- 启动背景轨
+- 回读背景轨当前真实秒数
+- 重置事件 cursor
+- 非 resume 路径补首拍 `drain`
+- 恢复 touchhold 持续音
+
+这一步会返回 `effectiveStartSecond`。主窗口后续会用这个秒数作为本次播放的正式起点。
+
+这是当前保证“物件渲染与 SFX 尽量同时起跑”的关键同步点。
+
+### 9.4 媒体侧同步
+
+如果当前有视频媒体，则会把相同的 `effectiveStartSecond` 下发给 `PreviewMediaController` 开始播放。
+
+最终：
+
+- timeline playhead
+- preview canvas
+- slider
+- follow preview
+- 媒体播放
+
+都会围绕同一个 `effectiveStartSecond` 进入运行态。
+
+## 10. 播放中的时钟推进
+
+### 10.1 canonical second
+
+播放中，主窗口每个 tick 都要先决定当前的 canonical second。
+
+当前规则是：
+
+- 如果 SFX 背景轨存在且正在运行，优先以它的播放秒数为准
+- 否则退回本地 elapsed timer 根据倍率推算的秒数
+
+这让当前播放时钟更贴近真实音频时钟，而不是单纯依赖 UI 本地计时。
+
+### 10.2 Tick 做什么
+
+每个 tick 主要做四件事：
+
+1. 计算当前播放秒数
+2. 把该秒数同步给 `PreviewMediaController`
+3. 更新 `PreviewCanvas`、timeline、slider、editor follow
+4. 调用 `QtPreviewSfxRuntime::drainEvents(second)`
+
+如果已到末尾，则会补最后一次位置更新并结束播放。
+
+### 10.3 Timeline 单独刷新
+
+timeline 位置刷新和播放 tick 分离：
+
+- 播放 tick 负责运行时推进
+- timeline timer 负责按较稳定节奏刷新 playhead
+
+这样能避免 timeline 绘制和音频事件推进完全绑死在一条更新链上。
+
+## 11. 暂停、停止与回到 Paused Preview
+
+停播时系统不会只改一个布尔值，而是显式回到 paused preview。
+
+流程是：
+
+1. 优先从 `QtPreviewSfxRuntime` 捕获 pause second
+2. 若 SFX 背景轨不可用，则退回媒体当前秒数
+3. 暂停媒体播放
+4. 停掉 tick 和 timeline timer
+5. 停止所有 SFX
+6. 重新应用 paused preview 状态
+7. 刷新 deferred analysis UI
+8. 如有挂起的 analysis request，立即触发补跑
+
+paused preview 的语义是：
+
+- 画面停在当前秒数
+- timeline 对齐当前停点
+- touchhold 必须静音
+- 播放态 snapshot 与 paused 视图重新收敛
+
+## 12. Seek 与拖动
+
+seek 的目标是“立刻把预览定位到某个秒数”，而不是后台慢慢追上。
+
+当前做法是：
+
+- 如果正在播放，先停播并保留位置
+- 更新 pause second / start second / timeline pending second
+- 同步 paused 媒体时间戳
+- 更新 canvas、timeline、slider 和统计
+
+slider 拖动本身带 debounce，避免连续 seek 过于频繁，但最终落点仍然是强同步应用到 paused preview。
+
+## 13. QtPreviewSfxRuntime 的内部职责
+
+当前 `QtPreviewSfxRuntime` 内部已经不再是完全扁平的大一统状态，而是分成几块概念：
+
+- warmup 路径信息
+- prepared assets
 - prepared timeline program
 - playback session
 
-其中 prepared 部分偏向“运行前配置与可复用结果”，session 部分偏向“本轮播放的游标、背景轨状态与 touchhold 生命周期”。
+其中：
 
-### 3.4 Warmup Pool
+- prepared 部分更偏“可复用运行前状态”
+- session 部分更偏“当前这轮播放的动态状态”
 
-主窗口还维护一个独立的 `previewWarmupPool_`，用于异步预热 preview 子系统。
+它目前最关键的几个事务入口是：
 
-当前 warmup 已经不再初始化真实 runtime，而是只做可转移的数据预热，例如：
+- `applyPausedPreviewState`
+- `startPreviewPlaybackTransaction`
+- `capturePausedPreviewTransaction`
+- `syncPreviewPlaybackClockTransaction`
 
-- 背景媒体路径解析
-- SFX 目录解析
-- 资源文件和轨道文件的 OS 缓存预热
+这几组接口的意义不是“让 API 看起来整洁”，而是把强同步语义收口，避免主窗口层面手工拼装过细步骤。
 
-这条链通过 generation 保证只应用最新结果，避免旧谱面或旧路径的预热结果回填覆盖当前状态。
+## 14. PreviewMediaController 的当前语义
 
-## 4. 数据来源与快照模型
+`PreviewMediaController` 目前的边界比较清晰：
 
-### 4.1 编辑态与播放态不是同一个数据源
+- 它是正式 media runtime 的 owner
+- 它只在专用线程上创建真实 Qt Multimedia 后端对象
+- 主窗口通过 queued / blocking queued 代理与它通信
 
-系统同时存在两种“谱面相关状态”：
+它负责的主要事情包括：
 
-- 编辑态状态：文本框中的最新内容，以及快链更新出的时间轴轻量数据
-- 播放态状态：慢链生成的 preview snapshot
+- 解析并加载背景图片或视频
+- 推送媒体帧给 `PreviewCanvas`
+- 管媒体侧背景轨
+- 在播放态与 paused 态之间同步媒体时间戳
 
-当前设计明确要求：
+这个设计主要服务于跨设备鲁棒性，而不是单纯为了“代码更优雅”。
 
-- 编辑中可以继续刷新时间轴、校验和 Muri 输入
-- 一旦开始播放，预览音频、预览画面和物件统计会冻结在 play-start snapshot 上
-- 播放中后续文本修改不会直接改写正在播放的内容
+## 15. 当前最重要的运行时契约
 
-换句话说，预览播放不是“永远跟着最新文本跑”，而是“开始时取一份最新可用快照，然后在本次播放期间保持稳定”。
+维护预览链时，最应该牢记的是这些契约：
 
-### 4.2 Preview Snapshot 的作用
+- 播放必须基于已经落地的 preview snapshot 启动
+- 播放期间预览内容冻结在 play-start snapshot 上
+- validation / Muri 的优先级低于播放本身
+- paused preview 必须保持 touchhold 静音
+- 起播时 SFX 和物件渲染应尽量从同一条同步链同时起跑
+- warmup 只能做 data warmup，不应再偷偷构造真实 live runtime
 
-preview snapshot 的核心作用是给播放链提供稳定输入，包括：
+这些约束共同构成了当前预览 runtime 的稳定性边界。
 
-- note marker 集合
-- 对应签名
-- 与当前难度、当前 revision 对齐的播放数据
+## 16. 为什么现在不把 SFX 拆到独立线程
 
-`MainWindow` 只有在确认当前 revision 的 preview snapshot 已经就绪后，才允许真正进入播放流程。
+从结构上看，把 `QtPreviewSfxRuntime` 迁到固定 owner 线程似乎很自然，但当前仍然没有这样做，原因并不只是“工作量大”，而是语义风险很高：
 
-如果用户先按了播放，而 snapshot 还没准备好，系统不会立刻失败，而是把请求挂起，等待对应 revision 的 snapshot 落地后自动启动。
+- 播放启动要求画面与 SFX 尽量同时进入运行态
+- pause / resume / seek / audition 都有强同步语义
+- touchhold 恢复和首拍 drain 对时序非常敏感
 
-## 5. 启动与初始化工作流
+如果把它改成普通异步队列，很容易引入：
 
-应用启动时，预览链的大致流程如下：
+- 起播抖动
+- pause 后残响
+- audition 听到旧参数
+- timeline 时钟和音频时钟轻微漂移
 
-1. `MainWindow` 初始化预览相关 UI、计时器和状态。
-2. 创建独立的 preview warmup 线程池。
-3. 创建 `PreviewCanvas`。
-4. 创建 `QtPreviewSfxRuntime`。
-5. 首次把当前 chart path、播放倍率和画面设置同步到预览组件。
-6. 调度 preview subsystem warmup。
+因此当前策略是：先通过事务化入口整理语义，再决定是否需要进一步线程化，而不是为了线程化而线程化。
 
-这里需要特别注意：
+## 17. 对“流式传输谱面数据”的看法
 
-- media 正式 runtime 并不会在 warmup worker 中构造。
-- SFX 正式 runtime 也不会在 warmup worker 中构造。
-- warmup 只是提前解析路径、摸热文件缓存，让真正的首次 prepare 更顺滑。
+未来如果继续追求更低的编辑尾延迟，`流式传输谱面数据` 是一个值得认真考虑的方向，尤其是在这些场景下会显得有必要：
 
-## 6. 路径切换与谱面切换工作流
+- 谱面规模继续增大，完整 slow refresh 成本上升
+- 希望在长时间连续编辑时进一步降低 parse 和 analysis 尾延迟
+- 希望把更多低优先级分析做成增量式后台处理
 
-当当前谱面路径或活动难度发生变化时，`MainWindow` 会做几类同步动作：
+但它的难点也非常明确：
 
-- 把新的 chart path 下发给 media 与 SFX 侧
-- 重新应用音频设置
-- 重新构建波形缓存
-- 重新触发 timeline 刷新
-- 如果 preview warmup 已经启用过，则重新发起新 generation 的 warmup
+- 预览播放依赖“冻结的 play-start snapshot”，而流式数据天然偏向持续变动，两者目标相反
+- parser、slide/wifi 关系、touchhold span、`&first` 偏移、Muri 静态参考等逻辑并不天然适合简单按块切分
+- validation 和 Muri 比 preview 更适合流式化，但它们仍然依赖稳定、可复现的 marker 语义
+- export、preview runtime、analysis 三条链目前共享大量 parser 语义，流式化后很容易出现“增量链”和“完整链”结果漂移
 
-这一阶段的目标不是“立刻开始播放”，而是让后续 seek、试音、播放使用的都是和当前谱面对齐的资源解析结果。
+所以，如果以后真的要做这件事，更合理的路线通常不是“把当前播放核心直接改成流式”，而是：
 
-## 7. Warmup 工作流
+1. 先让 analysis 链更增量化、更流式化。
+2. 继续保留播放链基于封口 snapshot 的强同步模型。
+3. 在两者之间建立明确的 snapshot sealing 边界。
 
-### 7.1 Warmup 的目标
-
-当前 warmup 的目标是缩短首次真实 prepare 的阻塞时间，而不是直接构造并持有真正的 runtime。
-
-它被拆成两条独立子链：
-
-- media warmup
-- SFX warmup
-
-两者共享同一个 generation，但彼此独立应用结果。
-
-### 7.2 Media Warmup
-
-media warmup 负责：
-
-- 解析背景媒体路径
-- 对视频或图片等媒体文件做轻量缓存预热
-- 把解析结果回填到主窗口缓存
-- 把 warmup-resolved media path 下发给正式 `PreviewMediaController`
-
-如果此时正式 media controller 还没创建，主窗口会先确保它初始化，然后再把 warmup 结果应用过去。
-
-### 7.3 SFX Warmup
-
-SFX warmup 负责：
-
-- 解析 SFX 目录
-- 对常用 SFX 文件做缓存预热
-- 对背景音轨文件做轻量缓存预热
-- 把 chart path / track path / sfxDir 作为 warmup result 回填给主窗口
-- 如果 `QtPreviewSfxRuntime` 已存在，则把这组 warmup-resolved path 记进去
-
-需要强调的是：
-
-- 当前 SFX warmup 还不会初始化 miniaudio engine
-- 也不会创建正式 SFX bank
-- 真正的 prepare 仍在首次需要时由主线程执行
-
-### 7.4 Generation 机制
-
-warmup 每次调度都会递增 generation。
-
-只有 generation 与当前主窗口一致的结果，才允许被应用。这样可以避免以下问题：
-
-- 用户切了新谱面，但旧谱面的 warmup 较晚返回
-- 用户切了新路径，但旧路径的解析结果覆盖了新状态
-- 路径在 warmup 进行中被再次修改，导致结果回填顺序错乱
-
-## 8. SFX Runtime 的 prepare 工作流
-
-虽然 SFX warmup 会提前提供路径结果，但正式 `QtPreviewSfxRuntime` 仍采用按需 prepare。
-
-当前 prepare 过程大致是：
-
-1. 把 warmup-resolved path 写回 runtime
-2. 调用 `reloadAssets`
-3. 初始化音频 engine 和各类 SFX bank
-4. 初始化背景音轨或变速背景轨道
-5. 重新同步当前 chart path
-6. 同步当前播放倍率
-7. 标记 runtime 已准备完成
-
-因此，当前系统里的“异步 warmup”和“正式 prepare”并不是同一件事：
-
-- warmup 解决的是路径解析和文件缓存问题
-- prepare 解决的是正式 runtime 可用性问题
-
-## 9. 暂停态工作流
-
-暂停态是当前预览设计里一个非常重要的稳定状态。
-
-当系统处于 paused preview 时，`MainWindow` 会把 paused 状态显式应用回预览系统。这个过程至少包含三件事：
-
-1. 如果 note marker 已变化，则把最新 preview snapshot 重新配置到 SFX timeline
-2. 把 SFX 事件游标重置到当前暂停秒数
-3. 强制暂停所有 touchhold 持续音
-
-这意味着 paused preview 的语义不是“只是停表”，而是：
-
-- 预览画面停在当前秒数
-- 时间轴与统计面板和当前 paused 秒数对齐
-- touchhold 持续音必须保持静音
-
-当前设计要求只有播放开始或继续播放时，才允许重新恢复 touchhold 声音。
-
-为减少关键时序分散在 `MainWindow` 多处，paused 状态的这组同步操作现在开始向 runtime 内部事务入口收敛：主窗口负责决定何时进入 paused preview，runtime 负责一次性完成 timeline 重配、cursor 归位与 touchhold 静音。
-
-## 10. 播放启动工作流
-
-播放启动是预览链里最关键的事务之一。
-
-### 10.1 启动前门槛
-
-开始播放前，系统会先检查：
-
-- 当前 chart field 是否需要先写回文档
-- 当前是否存在活动难度
-- 当前 revision 的 preview snapshot 是否已准备好
-
-如果 snapshot 尚未准备好：
-
-- 主窗口会先触发 slow refresh
-- 把本次播放请求挂到 pending 状态
-- 等 snapshot 落地后自动重试启动
-
-### 10.2 启动事务
-
-当启动条件满足后，主窗口会依次完成：
-
-1. 确保 media runtime 已初始化
-2. 确保 SFX runtime 已 prepare
-3. 把 paused preview 状态应用一遍，保证 timeline 和 touchhold 状态干净
-4. 计算本次理论起播秒数
-5. 把播放倍率和背景音量同步给 media 与 SFX
-6. 启动 SFX 背景音轨
-7. 立即回读 SFX 的实际播放秒数，得到 `effectiveStartSecond`
-8. 以这个实际起播秒数重置 SFX 事件游标
-9. 若不是 resume，则补一次首拍 drain
-10. 恢复当前秒数处应当持续响起的 touchhold 声音
-11. 用最终起播秒数设置主窗口时钟、时间轴、画布和 slider
-12. 如有视频媒体，通知 media controller 从同一秒数开始播放
-13. 标记 `qtPreviewPlaying_ = true` 并启动 tick/timeline timer
-
-这里的核心思想是：
-
-- 视觉时钟和音频时钟应尽量从同一个实际秒数起步
-- SFX 的实际起播秒数优先于理论输入秒数
-- 首拍事件和 touchhold 恢复必须在正式进入播放态前完成
-
-当前这组强同步步骤也开始通过 runtime 的 start transaction 收口，避免 `MainWindow` 在外部手工拼装过多细粒度调用顺序。
-
-## 11. 播放中 Tick 工作流
-
-播放中的每个 tick，主窗口会做以下事情：
-
-1. 先决定“当前 canonical second 应该是多少”
-   - 如果 SFX 背景音轨存在且正在运行，则优先使用其当前播放秒数
-   - 否则退回到主窗口本地计时器按倍率推算的秒数
-2. 把这个秒数同步给 media controller
-3. 让 SFX runtime 根据当前秒数补做背景轨同步
-4. 检查是否到达播放终点
-5. 更新 `PreviewCanvas`、时间轴、统计、slider 和编辑器跟随
-6. 调用 `drainEvents(second)`，触发所有已经到时的音效事件
-
-其中 `drainEvents` 会完成：
-
-- 同秒事件分组
-- 可聚合音效的聚合播放
-- `touchhold_start` / `touchhold_stop` 这类内部控制事件的处理
-- 普通 SFX 的实际发声
-
-当前语义下，tick 并不是单纯刷新 UI，而是驱动实时音频时间线向前推进的重要环节。
-
-为了保持同线程起播与较低抖动，当前没有把 SFX runtime 迁到独立 owner 线程；相反，tick 路径正在通过同线程 transaction helper 收敛成更明确的同步边界。
-
-## 12. 暂停与停止工作流
-
-停止或暂停播放时，主窗口会做如下处理：
-
-1. 如果 SFX 背景音轨存在，优先从 SFX runtime 读取当前秒数作为 pause second
-2. 暂停 SFX 背景音轨
-3. 如果有媒体侧播放，通知 media controller 暂停
-4. 停掉 preview tick timer 和 timeline timer
-5. 更新主窗口内的播放状态标记
-6. 停止所有 SFX 与 touchhold 声音
-7. 再次把 paused preview 状态应用回预览系统
-8. 更新 slider、统计信息和暂停按钮样式
-
-这里有一个重要特点：
-
-- pause second 优先以真正的音频运行位置为准
-- 停止后不是只清掉“正在播放”的标记，而是要把预览系统重新归位到一个稳定的 paused 状态
-
-## 13. Seek 与拖动工作流
-
-seek 的目标是“立即把预览定位到某个秒数”，而不是“在后台慢慢追上”。
-
-当前流程大致如下：
-
-1. 确保 media runtime 和 SFX runtime 已可用
-2. 若当前正在播放，先停止播放并保留位置
-3. 更新主窗口内部的起播秒数、暂停秒数、timeline 起点等状态
-4. 同步 paused 状态下的媒体时间戳
-5. 更新画布、时间轴、统计和 slider
-
-seek 本身不直接恢复 touchhold 声音，因为 paused preview 的语义要求它保持静音。
-
-如果用户随后按播放，系统会从新的 paused second 重新进入播放启动事务。
-
-## 14. 播放倍率与音频设置工作流
-
-### 14.1 播放倍率
-
-当播放倍率变化时：
-
-- 主窗口更新自身倍率状态
-- 把倍率同步给 media controller
-- 把倍率同步给 SFX runtime
-- 若当前正在播放，则通过“先停后启”的方式，用新倍率重新启动预览
-
-这种设计的优点是简单、状态清晰；代价是倍率切换本身是一次完整的播放重建。
-
-### 14.2 音频设置
-
-音频设置变化时：
-
-- media 侧背景音量立即同步给 media controller
-- SFX 各类音量立即通过 `applyLevels` 更新到 runtime
-- 试音面板采用短延迟防抖，在用户停止拖动后触发试听
-
-当前语义默认：
-
-- 试音应尽量反映用户刚刚调完的参数
-- 试音使用的是正式 `QtPreviewSfxRuntime`
-- 如果 runtime 尚未 prepare，会先做一次 on-demand prepare
-
-## 15. Touchhold 的特殊语义
-
-touchhold 在当前设计里不是普通的单次播放音效，而是一种持续音状态。
-
-它的工作方式可以概括为：
-
-- timeline 构建阶段，会把 touchhold 转成 span 信息以及内部 start/stop 事件
-- drain 阶段遇到 `touchhold_start` 时启动对应 span
-- 遇到 `touchhold_stop` 时停止对应 span
-- 在 pause 或 stop 时，所有 touchhold voice 都会被强制停掉
-- 在播放开始或 resume 时，会根据当前秒数重新扫描 span，并恢复此刻应处于活动状态的 touchhold
-
-因此 touchhold 依赖的不是单个时刻，而是“当前秒数附近的一段连续状态”。这也是它对同步时序特别敏感的原因。
-
-## 16. 自动启动与慢刷新协同
-
-如果用户在最新 preview snapshot 尚未准备好的时候按下播放：
-
-1. 主窗口不会立刻播放
-2. 会保留一份待启动请求
-3. slow refresh 产出对应 revision 的 preview snapshot 后
-4. 若当前难度和 revision 仍匹配，则自动再次调用播放启动流程
-
-当前约束是：
-
-- auto-start 只等待 preview snapshot
-- 不要求等待 validation 完成
-- 不额外弹出等待 UI
-- validation/Muri 的结果即使已经在后台算出，播放期间也允许暂缓到下一次 paused/idle 再刷新到可见 UI
-
-这个设计能保证播放尽量使用最新内存态，同时不被更慢的验证链路拖住。
-
-## 17. Latency Detector 中的 QtPreviewSfxRuntime
-
-除了主预览链，延迟检测器也会单独创建自己的 `QtPreviewSfxRuntime` 实例。
-
-它主要用于：
-
-- 本地背景音轨播放
-- 当前秒数读取
-- beat audition
-
-这说明 `QtPreviewSfxRuntime` 当前不仅服务于主预览，还被当成一个可复用的同步音频服务组件使用。后续若改变其线程模型，需要同时评估主预览和延迟检测器两条链的行为差异。
-
-## 18. 当前架构的优点
-
-当前方案有几个明显优点：
-
-- 预览播放依赖稳定的 snapshot，而不是边编辑边直接改写正在播放的内容
-- media 后端已经迁移到专用 owner 线程，跨设备鲁棒性明显更好
-- warmup 已经从“初始化真实 runtime”收缩为“预热轻量数据与文件缓存”
-- validation / Muri 已明确降级为后台 latest-only 结果，播放期间不再追求可见 UI 的即时性
-- paused preview 语义明确，便于保证 seek、resume 和 touchhold 行为一致
-- SFX timeline 的事件生成和 drain 责任集中，逻辑边界清楚
-
-## 19. 当前架构的主要张力
-
-当前最主要的结构张力集中在 `QtPreviewSfxRuntime`：
-
-- 它同时承担资源管理、设备控制、背景轨同步、事件游标推进和 touchhold 生命周期管理
-- 它当前由主线程直接调用，因此很多调用路径天然依赖“调用完成即生效”的同步语义
-- 这让它很容易用，但也让后续线程化难度变高
-
-尤其是以下语义都强依赖同步顺序：
-
-- start/resume 时立刻得到实际起播秒数
-- pause 后 touchhold 必须立刻静音
-- tick 内 `drainEvents` 必须和当前 canonical second 保持一致
-- 音量滑杆调整后的试音应反映最新参数
-
-## 20. 优化思路与可能影响
-
-### 20.1 优化思路
-
-我建议后续把 `QtPreviewSfxRuntime` 的优化方向定为：
-
-1. 保留当前 snapshot 模型和 paused preview 语义，不改产品行为边界。
-2. 把 `QtPreviewSfxRuntime` 逐步改造成固定 owner 线程组件。
-3. 但不要把所有现有接口直接改成异步排队，而是先抽出少量“事务型接口”。
-
-更具体地说，可以考虑把最敏感的操作收敛为几个原子事务：
-
-- `preparePausedState`
-- `startPlaybackTransaction`
-- `stopPlaybackTransaction`
-- `tickTransaction`
-- `applyLevelsAndAudition`
-
-普通 setter 可以异步，强同步语义则通过事务接口保留。
-
-### 20.2 预期收益
-
-如果设计得当，这样做可能带来：
-
-- 更清晰的 owner 边界
-- 更低的线程/设备不确定性
-- 更容易隔离音频后端初始化和运行时状态
-- 更一致的跨设备表现
-- 后续继续优化首次 prepare 和后台重建时更容易控制副作用
-
-### 20.3 可能的风险
-
-这类优化也会带来明显风险，主要包括：
-
-- 若事务边界切得太碎，主线程与音频线程之间的频繁阻塞可能带来新的卡顿
-- 若把同步语义改成普通异步队列，可能出现首拍延后、pause 后仍短暂发声、touchhold 恢复晚一帧等问题
-- 若播放时钟改为读取异步镜像状态，可能导致时间轴、画布和音频实际时间出现轻微漂移
-- 若试音和音量应用顺序不能严格保证，用户可能听到旧参数下的 audition
-- 延迟检测器也依赖同一个 runtime 语义，线程化方案必须同步评估其交互体验
-
-### 20.4 建议的实施策略
-
-更稳妥的推进方式是：
-
-1. 先把现有同步语义写清楚并固化成文档与测试预期。
-2. 再把 `QtPreviewSfxRuntime` 的主预览调用面收敛为少数代理入口。
-3. 先保证播放、暂停、seek、resume、试音这些关键事务的语义不变。
-4. 最后再考虑是否进一步引入更激进的异步镜像状态。
-
-如果后续要做线程化，建议优先把“语义保持不变”作为第一目标，而不是单纯追求接口形式上的异步化。
-## 21. 2026-04 Workflow Updates
-
-## 21. 2026-04 Workflow Updates
-
-- Preview warmup is now explicitly data-only. Worker threads resolve media/SFX paths and warm file caches, but the real media runtime is owned by `PreviewMediaController` on its dedicated thread and the real SFX runtime stays on the main-thread transaction path.
-- Slow refresh now has a clearer split between preview publication and analysis publication. One parser pass produces the preview snapshot first, and that same parse output then feeds one combined analysis request for validation plus Muri.
-- Validation and Muri are now latest-only consumers of that shared analysis request. They no longer maintain separate worker request types or separate stale-result matching paths.
-- Analysis UI is now idle-first. Rapid text edits coalesce behind a short analysis idle timer, and active preview playback is allowed to defer validation/Muri panel and decoration updates until the next paused edge.
-- Stopping preview playback now immediately flushes deferred validation/Muri UI and then dispatches any pending analysis request, so paused-state tooling catches up quickly without competing with the active playback path.
-- Analysis-only option changes such as Muri render mode and the static tap-on-slide threshold now try to reuse the latest cached parse result and preview snapshot instead of forcing a new full slow refresh.
-- Analysis subprocess isolation is still intentionally deferred. The current priority remains low startup latency, low play/pause latency, and better cross-device robustness without introducing process-boundary jitter or IPC cost into the preview-critical flow.
+换句话说，流式传输谱面数据有必要，但它首先更适合改造低优先级分析链，而不是直接冲击当前预览 runtime 的核心同步语义。
