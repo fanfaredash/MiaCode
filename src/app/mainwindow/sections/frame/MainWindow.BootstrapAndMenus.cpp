@@ -240,13 +240,6 @@
     connect(exportVideoAction_, &QAction::triggered, this, &MainWindow::onExportPreviewVideo);
     previewMenu->addAction(exportVideoAction_);
 
-    batchExportVideoAction_ = new QAction(
-        uiText("action.batch_export", "Batch Export"),
-        this
-    );
-    connect(batchExportVideoAction_, &QAction::triggered, this, &MainWindow::onBatchExportPreviewVideo);
-    previewMenu->addAction(batchExportVideoAction_);
-
     previewMenu->addSeparator();
 
     auto* renderModeGroup = new QActionGroup(previewMenu);
@@ -1544,9 +1537,10 @@ MainWindow::MainWindow(QWidget* parent)
         if (exportVideoAction_ != nullptr) {
             exportVideoMenu_->addAction(exportVideoAction_);
         }
-        if (batchExportVideoAction_ != nullptr) {
-            exportVideoMenu_->addAction(batchExportVideoAction_);
-        }
+        QAction* toolbarBatchExportAction = exportVideoMenu_->addAction(
+            uiText("action.batch_export", "Batch Export")
+        );
+        connect(toolbarBatchExportAction, &QAction::triggered, this, &MainWindow::onBatchExportPreviewVideo);
         exportVideoButton_->installEventFilter(this);
         exportVideoButton_->setMouseTracking(true);
         if (exportVideoAction_ != nullptr) {
@@ -1826,3 +1820,4 @@ MainWindow::MainWindow(QWidget* parent)
     logStartupStage("preview_subsystem_warmup_scheduled");
     logStartupStage("constructor_done");
 }
+

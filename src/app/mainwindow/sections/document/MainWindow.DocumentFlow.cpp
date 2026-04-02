@@ -837,11 +837,42 @@ void MainWindow::updateEditorHeaderLayoutMode()
     const bool summaryHasContent =
         editorValidationSummaryWidget_ != nullptr
         && editorValidationSummaryWidget_->property("hasContent").toBool();
-    const int summaryExtraWidth = summaryHasContent && editorValidationSummaryWidget_ != nullptr
-        ? qMax(0, editorValidationSummaryWidget_->sizeHint().width() - 52)
-        : 0;
-    const int summaryIconOnlyThreshold = 436 + qMin(summaryExtraWidth, 48);
-    const int summaryHideThreshold = 384 + qMin(summaryExtraWidth / 2, 28);
+    const auto summaryGroupFullWidth = [](QLabel* icon, QLabel* count, int spacing) {
+        const bool hasContent = (icon != nullptr && icon->property("hasContent").toBool())
+            || (count != nullptr && count->property("hasContent").toBool());
+        if (!hasContent) {
+            return 0;
+        }
+        int width = 0;
+        if (icon != nullptr) {
+            width += icon->sizeHint().width();
+        }
+        if (count != nullptr) {
+            if (width > 0) {
+                width += spacing;
+            }
+            width += count->sizeHint().width();
+        }
+        return width;
+    };
+    int summaryFullWidth = 0;
+    int summaryVisibleGroups = 0;
+    for (const int groupWidth : {
+             summaryGroupFullWidth(editorValidationErrorIconLabel_, editorValidationErrorCountLabel_, 6),
+             summaryGroupFullWidth(editorValidationWarningIconLabel_, editorValidationWarningCountLabel_, 3),
+             summaryGroupFullWidth(editorValidationMuriIconLabel_, editorValidationMuriCountLabel_, 4)}) {
+        if (groupWidth <= 0) {
+            continue;
+        }
+        if (summaryVisibleGroups > 0) {
+            summaryFullWidth += 8;
+        }
+        summaryFullWidth += groupWidth;
+        ++summaryVisibleGroups;
+    }
+    const int summaryExtraWidth = summaryHasContent ? qMax(0, summaryFullWidth - 52) : 0;
+    const int summaryIconOnlyThreshold = 456 + qMin(summaryExtraWidth, 48);
+    const int summaryHideThreshold = 374 + qMin(summaryExtraWidth / 2, 28);
     const int compactCursorThreshold = 400 + qMin(summaryExtraWidth / 2, 28);
     const int cursorHideThreshold = 360 + qMin(summaryExtraWidth / 2, 20);
 
