@@ -1,5 +1,6 @@
 #include "PreviewCanvas.h"
 #include "common/AssetPaths.h"
+#include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewGameplayConfig.h"
 
@@ -1269,29 +1270,16 @@ const QImage* animatedSpriteImage(
     return &inserted.value();
 }
 
-QString startupTimingLogPath()
-{
-    return miacode::debug_options::startupTimingLogPath();
-}
-
 void appendPreviewRuntimeLog(const QString& area, const QString& payload, bool warn = false)
 {
-    const QString message = QStringLiteral("[preview/%1] %2").arg(area, payload);
-    if (warn) {
-        qWarning().noquote() << message;
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview/%1").arg(area),
+        payload
+    );
+    if (warn && (area.contains(QStringLiteral("init_fail")) || area.contains(QStringLiteral("offscreen_init_fail")))) {
+        miacode::debug_log::appendFatalMessage(QStringLiteral("preview/%1").arg(area), payload);
     }
-    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
-        return;
-    }
-    QFile logFile(miacode::debug_options::runtimeDebugLogPath());
-    if (!logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
-        return;
-    }
-    QTextStream out(&logFile);
-    out << QDateTime::currentDateTime().toString(Qt::ISODateWithMs)
-        << ' '
-        << message
-        << '\n';
 }
 
 QString surfaceProfileName(QSurfaceFormat::OpenGLContextProfile profile)
@@ -1364,15 +1352,7 @@ void appendPreviewStartupTiming(const QString& stage, qint64 deltaMs)
     const qint64 resolvedDeltaMs = deltaMs >= 0 ? deltaMs : (elapsedMs - lastMs);
     lastMs = elapsedMs;
 
-    QFile logFile(startupTimingLogPath());
-    if (!logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
-        return;
-    }
-    QTextStream out(&logFile);
-    out << "stage=" << stage
-        << ", elapsed_ms=" << elapsedMs
-        << ", delta_ms=" << resolvedDeltaMs
-        << "\n";
+    miacode::debug_log::appendStartupTimingStage(stage, elapsedMs, resolvedDeltaMs);
 }
 }
 

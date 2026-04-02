@@ -1,6 +1,7 @@
 #include "QtPreviewSfxRuntime.h"
 
 #include "common/ChartAssetPaths.h"
+#include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewSfxAssets.h"
@@ -8,15 +9,9 @@
 
 #include <algorithm>
 #include <cstring>
-#include <QCoreApplication>
-#include <QDateTime>
-#include <QDir>
-#include <QFile>
 #include <QFileInfo>
 #include <QMutex>
 #include <QMutexLocker>
-#include <QStandardPaths>
-#include <QTextStream>
 #include <QtMath>
 
 #include <SoundTouch.h>
@@ -29,18 +24,12 @@ constexpr double kQtPreviewSfxEpsilonSeconds = miacode::preview_sfx_timeline::kT
 
 bool runtimeAudioDebugEnabled()
 {
-    return miacode::debug_options::runtimeDebugOutputEnabled();
+    return miacode::debug_options::audioDebugOutputEnabled();
 }
 
 QString audioDebugLogPath()
 {
-    const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (baseDir.isEmpty()) {
-        return QDir::temp().filePath("miacode_audio_debug.log");
-    }
-    QDir dir(baseDir);
-    dir.mkpath(".");
-    return dir.filePath("miacode_audio_debug.log");
+    return miacode::debug_log::audioLogPath();
 }
 
 void appendAudioDebugLog(const QString& message)
@@ -48,17 +37,7 @@ void appendAudioDebugLog(const QString& message)
     if (!runtimeAudioDebugEnabled()) {
         return;
     }
-    static QMutex mutex;
-    QMutexLocker locker(&mutex);
-    QFile file(audioDebugLogPath());
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append)) {
-        return;
-    }
-    QTextStream stream(&file);
-    stream << QDateTime::currentDateTime().toString(Qt::ISODateWithMs)
-           << " [audio] "
-           << message
-           << "\n";
+    miacode::debug_log::appendLine(miacode::debug_log::Channel::Audio, QString(), message);
 }
 }
 

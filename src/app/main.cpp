@@ -3,6 +3,7 @@
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 
 #include <QApplication>
@@ -490,31 +491,27 @@ int runCliVideoExportWorker(QApplication& app, QString* errorMessage)
 
 int main(int argc, char* argv[])
 {
+    QStringList rawArgs;
+    rawArgs.reserve(argc);
+    for (int index = 0; index < argc; ++index) {
+        rawArgs.append(QString::fromLocal8Bit(argv[index]));
+    }
+    miacode::debug_options::setDebugModeEnabled(miacode::debug_options::hasDebugArg(rawArgs));
+    if (miacode::debug_options::debugModeEnabled()) {
+        miacode::debug_log::clearDebugSessionLogs();
+    }
+    if (miacode::debug_options::startupTimingEnabled()) {
+        miacode::debug_log::initializeStartupTimingLogSession();
+    }
+
     QElapsedTimer startupTimer;
     startupTimer.start();
     qint64 lastStageMs = 0;
-    const QString startupLogPath = QDir::toNativeSeparators(miacode::debug_options::startupTimingLogPath());
-    if (miacode::debug_options::startupTimingEnabled()) {
-        QFile logFile(startupLogPath);
-        if (logFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
-            QTextStream out(&logFile);
-            out << "timestamp=" << QDateTime::currentDateTime().toString(Qt::ISODate) << "\n";
-            out << "pid=" << QCoreApplication::applicationPid() << "\n";
-            out << "log_path=" << startupLogPath << "\n";
-        }
-    }
     const auto logStartupStage = [&](const QString& stage) {
-        if (!miacode::debug_options::startupTimingEnabled()) {
-            return;
-        }
         const qint64 nowMs = startupTimer.elapsed();
         const qint64 deltaMs = nowMs - lastStageMs;
         lastStageMs = nowMs;
-        QFile logFile(startupLogPath);
-        if (logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
-            QTextStream out(&logFile);
-            out << "stage=" << stage << ", elapsed_ms=" << nowMs << ", delta_ms=" << deltaMs << "\n";
-        }
+        miacode::debug_log::appendStartupTimingStage(stage, nowMs, deltaMs);
     };
     logStartupStage("process_entry");
 

@@ -1,23 +1,19 @@
 ﻿#include "PreviewAudioSettings.h"
 #include "QtPreviewSfxRuntime.h"
+#include "common/DebugLog.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
-#include <QStandardPaths>
 #include <QTextStream>
 #include <QThread>
 
 namespace {
 QString probeLogPath()
 {
-    const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (baseDir.isEmpty()) {
-        return QDir::temp().filePath("miacode_audio_debug.log");
-    }
-    return QDir(baseDir).filePath("miacode_audio_debug.log");
+    return miacode::debug_log::audioLogPath();
 }
 }
 

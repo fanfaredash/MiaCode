@@ -353,7 +353,7 @@ void PreviewCanvas::noteTickForProfiling()
 
 QString PreviewCanvas::writeProfilingSummaryToFile()
 {
-    if (profileFrameCount_ == 0) {
+    if (!miacode::debug_options::previewProfileOutputEnabled() || profileFrameCount_ == 0) {
         return QString();
     }
 

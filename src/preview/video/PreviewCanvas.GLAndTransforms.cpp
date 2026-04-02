@@ -12,7 +12,8 @@ void PreviewCanvas::initializeGL()
         delete glDebugLogger_;
         glDebugLogger_ = nullptr;
     }
-    if (ctx != nullptr) {
+    const bool enableGlDebugMessages = miacode::debug_options::glDebugMessagesEnabled();
+    if (ctx != nullptr && enableGlDebugMessages) {
         auto* logger = new QOpenGLDebugLogger(this);
         if (logger->initialize()) {
             connect(logger, &QOpenGLDebugLogger::messageLogged, this, [this](const QOpenGLDebugMessage& message) {

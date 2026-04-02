@@ -4,6 +4,8 @@
 #include "RawVideoPipeTransport.h"
 #include "common/AssetPaths.h"
 #include "common/ChartAssetPaths.h"
+#include "common/DebugLog.h"
+#include "common/DebugOptions.h"
 #include "common/LayoutRingConfig.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewSfxAssets.h"
@@ -43,6 +45,7 @@
 #include <cmath>
 #include <cstring>
 #include <functional>
+#include <optional>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -128,6 +131,42 @@ enum class EncoderAutoMode {
     Balanced,
     Compatibility,
     Hardware,
+};
+
+struct ExportRenderBackendOptions {
+    bool requestGpuRender = true;
+    bool requestOffscreenPboReadback = true;
+};
+
+struct ExportDiagOptions {
+    bool repeatEnabled = false;
+    int cropBottom = 0;
+    int maxLines = 400;
+    bool logAllRepeatPairs = false;
+    bool objectHashEnabled = true;
+    bool objectTraceEnabled = false;
+    int objectTraceMaxLines = 5000;
+    int objectDiffThreshold = 8;
+    bool compareRenderPathsEnabled = false;
+    int compareRadius = 24;
+    int compareMaxLines = 400;
+    double compareLogThreshold = 0.0010;
+    bool pipeHashEnabled = false;
+    int pipeHashMaxLines = 400;
+    QString rawDumpPath;
+};
+
+struct ExportRuntimeConfig {
+    EncoderAutoMode encoderMode = EncoderAutoMode::Balanced;
+    QString forcedEncoder;
+    bool skipEncoderRuntimeProbe = false;
+    int encoderThreadsOverride = -1;
+    int filterThreadsOverride = -1;
+    QString x264PresetOverride;
+    int x264CrfOverride = -1;
+    int x264BframesOverride = -1;
+    ExportRenderBackendOptions renderBackend;
+    ExportDiagOptions diag;
 };
 
 struct FrameTimingStats {
@@ -218,8 +257,6 @@ struct FrameLayerActivityStats {
     }
 };
 
-bool envFlagEnabled(const QString& key);
-int envIntValue(const QString& key, int defaultValue);
 ExportPipeBackpressurePlan chooseExportPipeBackpressurePlan(const QSize& frameSize);
 bool waitForProcessBackpressureDrain(
     QProcess* process,
@@ -430,7 +467,84 @@ EncoderAutoMode resolveEncoderAutoMode()
         || mode == QLatin1String("fast")) {
         return EncoderAutoMode::Hardware;
     }
-    return EncoderAutoMode::Hardware;
+    return EncoderAutoMode::Balanced;
+}
+
+ExportRuntimeConfig loadExportRuntimeConfig()
+{
+    ExportRuntimeConfig config;
+    config.encoderMode = resolveEncoderAutoMode();
+    config.forcedEncoder = qEnvironmentVariable("MIACODE_EXPORT_FORCE_ENCODER").trimmed();
+    config.skipEncoderRuntimeProbe =
+        miacode::debug_options::envFlagEnabled("MIACODE_EXPORT_SKIP_ENCODER_RUNTIME_PROBE");
+    config.encoderThreadsOverride =
+        miacode::debug_options::envIntValue("MIACODE_EXPORT_ENCODER_THREADS", -1);
+    config.filterThreadsOverride =
+        miacode::debug_options::envIntValue("MIACODE_EXPORT_FILTER_THREADS", -1);
+    config.x264PresetOverride = qEnvironmentVariable("MIACODE_EXPORT_X264_PRESET").trimmed();
+    config.x264CrfOverride = miacode::debug_options::envIntValue("MIACODE_EXPORT_X264_CRF", -1);
+    config.x264BframesOverride = miacode::debug_options::envIntValue("MIACODE_EXPORT_X264_BFRAMES", -1);
+
+    const std::optional<bool> gpuRenderOverride =
+        miacode::debug_options::envOptionalFlagValue("MIACODE_EXPORT_ENABLE_GPU_RENDER");
+    const std::optional<bool> enablePboOverride =
+        miacode::debug_options::envOptionalFlagValue("MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO");
+    const std::optional<bool> disablePboOverride =
+        miacode::debug_options::envOptionalFlagValue("MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO");
+    config.renderBackend.requestGpuRender =
+        enablePboOverride.value_or(false) ? true : gpuRenderOverride.value_or(true);
+    if (disablePboOverride.value_or(false)) {
+        config.renderBackend.requestOffscreenPboReadback = false;
+    } else if (enablePboOverride.has_value()) {
+        config.renderBackend.requestOffscreenPboReadback = enablePboOverride.value();
+    }
+
+    config.diag.repeatEnabled = miacode::debug_options::envFlagEnabled("MIACODE_EXPORT_DIAG_REPEAT");
+    config.diag.cropBottom = qMax(0, miacode::debug_options::envIntValue("MIACODE_EXPORT_DIAG_CROP_BOTTOM", 0));
+    config.diag.maxLines = qMax(0, miacode::debug_options::envIntValue("MIACODE_EXPORT_DIAG_MAX_LINES", 400));
+    config.diag.logAllRepeatPairs =
+        miacode::debug_options::envFlagEnabled("MIACODE_EXPORT_DIAG_LOG_ALL_REPEATS");
+    const std::optional<bool> objectHashOverride =
+        miacode::debug_options::envOptionalFlagValue("MIACODE_EXPORT_DIAG_OBJECT_HASH");
+    config.diag.objectHashEnabled = objectHashOverride.value_or(true);
+    config.diag.objectTraceEnabled =
+        miacode::debug_options::envFlagEnabled("MIACODE_EXPORT_DIAG_OBJECT_TRACE");
+    config.diag.objectTraceMaxLines = qMax(
+        0,
+        miacode::debug_options::envIntValue(
+            "MIACODE_EXPORT_DIAG_OBJECT_TRACE_MAX_LINES",
+            qMax(config.diag.maxLines, 5000)
+        )
+    );
+    config.diag.objectDiffThreshold = qBound(
+        0,
+        miacode::debug_options::envIntValue("MIACODE_EXPORT_DIAG_OBJECT_DIFF_THRESHOLD", 8),
+        4 * 255
+    );
+    config.diag.compareRenderPathsEnabled =
+        miacode::debug_options::envFlagEnabled("MIACODE_EXPORT_DIAG_COMPARE_RENDER_PATHS");
+    config.diag.compareRadius = qBound(
+        2,
+        miacode::debug_options::envIntValue("MIACODE_EXPORT_DIAG_COMPARE_RADIUS", 24),
+        512
+    );
+    config.diag.compareMaxLines = qMax(
+        0,
+        miacode::debug_options::envIntValue("MIACODE_EXPORT_DIAG_COMPARE_MAX_LINES", config.diag.maxLines)
+    );
+    config.diag.compareLogThreshold = qBound(
+        0.0,
+        miacode::debug_options::envDoubleValue("MIACODE_EXPORT_DIAG_COMPARE_LOG_THRESHOLD", 0.0010),
+        1.0
+    );
+    config.diag.pipeHashEnabled =
+        miacode::debug_options::envFlagEnabled("MIACODE_EXPORT_DIAG_PIPE_HASH");
+    config.diag.pipeHashMaxLines = qMax(
+        0,
+        miacode::debug_options::envIntValue("MIACODE_EXPORT_DIAG_PIPE_HASH_MAX_LINES", config.diag.maxLines)
+    );
+    config.diag.rawDumpPath = qEnvironmentVariable("MIACODE_EXPORT_DIAG_RAW_DUMP_PATH").trimmed();
+    return config;
 }
 
 bool shouldPreferHardwareEncoderInAutoMode(
@@ -486,6 +600,7 @@ bool shouldPreferHardwareEncoderInAutoMode(
 }
 
 X264TuningPlan chooseX264TuningPlan(
+    const ExportRuntimeConfig& exportConfig,
     const SystemMemoryInfo& memoryInfo,
     int outputWidth,
     int outputHeight,
@@ -534,19 +649,17 @@ X264TuningPlan chooseX264TuningPlan(
         plan.preset = fasterX264Preset(plan.preset);
     }
 
-    const QString presetOverride =
-        qEnvironmentVariable("MIACODE_EXPORT_X264_PRESET").trimmed();
-    if (!presetOverride.isEmpty()) {
-        plan.preset = presetOverride;
+    if (!exportConfig.x264PresetOverride.isEmpty()) {
+        plan.preset = exportConfig.x264PresetOverride;
     }
     plan.crf = qBound(
         16,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_X264_CRF"), plan.crf),
+        exportConfig.x264CrfOverride >= 0 ? exportConfig.x264CrfOverride : plan.crf,
         28
     );
     plan.bframes = qBound(
         0,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_X264_BFRAMES"), plan.bframes),
+        exportConfig.x264BframesOverride >= 0 ? exportConfig.x264BframesOverride : plan.bframes,
         2
     );
     return plan;
@@ -817,32 +930,6 @@ constexpr double kDiagLogicalCanvasSize = miacode::preview_gameplay::kLogicalCan
 constexpr double kDiagLogicalCanvasCenter = kDiagLogicalCanvasSize / 2.0;
 constexpr double kOutlineTargetToPlayfieldRatio =
     (kDiagLogicalCanvasSize - miacode::layout_ring::kOutlineInsetLogical * 2.0) / kDiagLogicalCanvasSize;
-
-bool envFlagEnabled(const QString& key)
-{
-    const QByteArray keyBytes = key.toUtf8();
-    const QString raw = qEnvironmentVariable(keyBytes.constData()).trimmed();
-    return raw == QLatin1String("1")
-        || raw.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0
-        || raw.compare(QStringLiteral("yes"), Qt::CaseInsensitive) == 0
-        || raw.compare(QStringLiteral("on"), Qt::CaseInsensitive) == 0;
-}
-
-int envIntValue(const QString& key, int defaultValue)
-{
-    const QByteArray keyBytes = key.toUtf8();
-    bool ok = false;
-    const int value = qEnvironmentVariableIntValue(keyBytes.constData(), &ok);
-    return ok ? value : defaultValue;
-}
-
-double envDoubleValue(const QString& key, double defaultValue)
-{
-    const QByteArray keyBytes = key.toUtf8();
-    bool ok = false;
-    const double value = qEnvironmentVariable(keyBytes.constData()).toDouble(&ok);
-    return ok ? value : defaultValue;
-}
 
 struct DiagTapApproachSample {
     double distance = kDiagLogicalDistanceTap;
@@ -1352,26 +1439,18 @@ QString normalizePath(const QString& path)
 
 QString videoExportDebugLogPath()
 {
-    const QString envPath = qEnvironmentVariable("MIACODE_EXPORT_LOG_PATH").trimmed();
-    if (!envPath.isEmpty()) {
-        return normalizePath(envPath);
-    }
-    return QDir::temp().filePath(QStringLiteral("miacode_video_export.log"));
+    return miacode::debug_log::exportLogPath();
 }
 
 void appendVideoExportLog(const QString& stage, const QString& detail = QString())
 {
-    QFile logFile(videoExportDebugLogPath());
-    if (!logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
-        return;
+    miacode::debug_log::appendLine(miacode::debug_log::Channel::Export, stage, detail);
+    if (stage.startsWith(QStringLiteral("fail_"))) {
+        miacode::debug_log::appendFatalMessage(
+            QStringLiteral("export/%1").arg(stage),
+            detail.isEmpty() ? QStringLiteral("See export debug log for details.") : detail
+        );
     }
-    QTextStream out(&logFile);
-    out << QDateTime::currentDateTime().toString(Qt::ISODateWithMs)
-        << " [video_export] " << stage;
-    if (!detail.isEmpty()) {
-        out << " | " << detail;
-    }
-    out << "\n";
 }
 
 QString truncateForLog(const QString& text, int maxChars = 4000)
@@ -1716,6 +1795,7 @@ VideoEncoderConfig chooseVideoEncoder(
     int outputHeight,
     int fps,
     const SystemMemoryInfo& memoryInfo,
+    const ExportRuntimeConfig& exportConfig,
     QString* probeLog
 )
 {
@@ -1754,7 +1834,8 @@ VideoEncoderConfig chooseVideoEncoder(
     const int safeHeight = qMax(1, outputHeight);
     const int safeFps = qMax(1, fps);
     const int idealThreadCount = qMax(1, QThread::idealThreadCount());
-    const X264TuningPlan x264Plan = chooseX264TuningPlan(memoryInfo, safeWidth, safeHeight, safeFps, idealThreadCount);
+    const X264TuningPlan x264Plan =
+        chooseX264TuningPlan(exportConfig, memoryInfo, safeWidth, safeHeight, safeFps, idealThreadCount);
     // Keep export artifacts low while avoiding oversized files.
     const qint64 estimatedBitrateKbps = qBound<qint64>(
         2200LL,
@@ -1779,8 +1860,8 @@ VideoEncoderConfig chooseVideoEncoder(
         };
     };
     const QStringList x264Args = x264Plan.toArgs();
-    const QString forcedEncoder = qEnvironmentVariable("MIACODE_EXPORT_FORCE_ENCODER").trimmed();
-    const EncoderAutoMode encoderAutoMode = resolveEncoderAutoMode();
+    const QString forcedEncoder = exportConfig.forcedEncoder;
+    const EncoderAutoMode encoderAutoMode = exportConfig.encoderMode;
     QString encoderAutoModeReason;
     const bool preferHardwareFirst = shouldPreferHardwareEncoderInAutoMode(
         encoderAutoMode,
@@ -1954,7 +2035,7 @@ VideoEncoderConfig chooseVideoEncoder(
         return config;
     }
 
-    const bool skipRuntimeProbe = envFlagEnabled(QStringLiteral("MIACODE_EXPORT_SKIP_ENCODER_RUNTIME_PROBE"));
+    const bool skipRuntimeProbe = exportConfig.skipEncoderRuntimeProbe;
     QStringList runtimeProbeLines;
     runtimeProbeLines.reserve(candidates.size());
     bool selected = false;
@@ -3118,11 +3199,15 @@ bool replaceOutputFileAtomicallyBestEffort(
 
 QString withExportLogPath(const QString& details)
 {
-    const QString logPathLine = QStringLiteral("Log: %1").arg(videoExportDebugLogPath());
-    if (details.trimmed().isEmpty()) {
-        return logPathLine;
+    QStringList lines;
+    if (!details.trimmed().isEmpty()) {
+        lines.append(details);
     }
-    return details + QStringLiteral("\n") + logPathLine;
+    if (miacode::debug_options::exportDebugOutputEnabled()) {
+        lines.append(QStringLiteral("Debug log: %1").arg(videoExportDebugLogPath()));
+    }
+    lines.append(QStringLiteral("Error log: %1").arg(miacode::debug_log::fatalLogPath()));
+    return lines.join(QStringLiteral("\n"));
 }
 
 }  // namespace
@@ -3157,6 +3242,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
 )
 {
     VideoExportResult result;
+    const ExportRuntimeConfig exportConfig = loadExportRuntimeConfig();
     QElapsedTimer exportTimer;
     exportTimer.start();
     appendVideoExportLog(
@@ -3537,6 +3623,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         frameHeight,
         task.fps,
         memoryInfo,
+        exportConfig,
         &encoderProbeLog
     );
     appendVideoExportLog(QStringLiteral("encoder_select"), encoderProbeLog);
@@ -3544,7 +3631,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const qint64 availMiB = bytesToMiB(memoryInfo.availablePhysicalBytes);
     const int encoderThreads = qBound(
         1,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_ENCODER_THREADS"), idealThreadCount),
+        exportConfig.encoderThreadsOverride > 0 ? exportConfig.encoderThreadsOverride : idealThreadCount,
         32
     );
     const int defaultFilterThreads = encoderConfig.isHardware
@@ -3552,7 +3639,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         : qBound(1, qMax(1, idealThreadCount / 2), 8);
     const int filterThreads = qBound(
         1,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_FILTER_THREADS"), defaultFilterThreads),
+        exportConfig.filterThreadsOverride > 0 ? exportConfig.filterThreadsOverride : defaultFilterThreads,
         encoderConfig.isHardware ? 4 : 16
     );
     const int effectiveEncoderThreads = encoderThreads;
@@ -3614,17 +3701,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         ? sourceCanvas->format()
         : QSurfaceFormat::defaultFormat();
     QOpenGLContext* shareContext = sourceCanvas != nullptr ? sourceCanvas->context() : nullptr;
-    const bool hasOffscreenPboReadbackOverride =
-        !qEnvironmentVariableIsEmpty("MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO");
-    const bool enableOffscreenPboReadback =
-        envFlagEnabled(QStringLiteral("MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO"));
-    const bool hasGpuRenderOverride =
-        !qEnvironmentVariableIsEmpty("MIACODE_EXPORT_ENABLE_GPU_RENDER");
-    const bool requestOffscreenGpu =
-        enableOffscreenPboReadback
-        || (hasGpuRenderOverride
-                ? envFlagEnabled(QStringLiteral("MIACODE_EXPORT_ENABLE_GPU_RENDER"))
-                : true);
+    const bool requestOffscreenGpu = exportConfig.renderBackend.requestGpuRender;
     QString offscreenInitError;
     bool useOffscreenGpu = false;
     if (requestOffscreenGpu) {
@@ -3636,12 +3713,9 @@ VideoExportResult VideoExportController::exportPreparedTask(
     } else {
         offscreenInitError = QStringLiteral("disabled_by_env");
     }
-    const bool disableOffscreenPboReadback =
-        envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO"));
     const bool requestOffscreenPboReadback =
         useOffscreenGpu
-        && !disableOffscreenPboReadback
-        && (hasOffscreenPboReadbackOverride ? enableOffscreenPboReadback : true);
+        && exportConfig.renderBackend.requestOffscreenPboReadback;
     QString offscreenPboError;
     bool useOffscreenPboReadback = false;
     if (requestOffscreenPboReadback) {
@@ -3749,26 +3823,14 @@ VideoExportResult VideoExportController::exportPreparedTask(
     static constexpr int kFrameProgressStride = 120;
     FrameTimingStats frameStats;
 
-    const bool diagRepeatEnabled = envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DIAG_REPEAT"));
-    const int diagCropBottom = qMax(0, envIntValue(QStringLiteral("MIACODE_EXPORT_DIAG_CROP_BOTTOM"), 0));
-    const int diagMaxLogLines = qMax(0, envIntValue(QStringLiteral("MIACODE_EXPORT_DIAG_MAX_LINES"), 400));
-    const bool diagLogAllRepeatPairs = envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DIAG_LOG_ALL_REPEATS"));
-    const bool hasObjectHashOverride = !qEnvironmentVariableIsEmpty("MIACODE_EXPORT_DIAG_OBJECT_HASH");
-    const bool diagObjectHashEnabled = diagRepeatEnabled
-        && (hasObjectHashOverride
-                ? envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DIAG_OBJECT_HASH"))
-                : true);
-    const bool diagObjectTraceEnabled = diagRepeatEnabled
-        && envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DIAG_OBJECT_TRACE"));
-    const int diagObjectTraceMaxLines = qMax(
-        0,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_DIAG_OBJECT_TRACE_MAX_LINES"), 5000)
-    );
-    const int diagObjectDiffThreshold = qBound(
-        0,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_DIAG_OBJECT_DIFF_THRESHOLD"), 8),
-        4 * 255
-    );
+    const bool diagRepeatEnabled = exportConfig.diag.repeatEnabled;
+    const int diagCropBottom = exportConfig.diag.cropBottom;
+    const int diagMaxLogLines = exportConfig.diag.maxLines;
+    const bool diagLogAllRepeatPairs = exportConfig.diag.logAllRepeatPairs;
+    const bool diagObjectHashEnabled = diagRepeatEnabled && exportConfig.diag.objectHashEnabled;
+    const bool diagObjectTraceEnabled = diagRepeatEnabled && exportConfig.diag.objectTraceEnabled;
+    const int diagObjectTraceMaxLines = exportConfig.diag.objectTraceMaxLines;
+    const int diagObjectDiffThreshold = exportConfig.diag.objectDiffThreshold;
     int diagRawRepeatedAdjacent = 0;
     int diagRawRepeatedRuns = 0;
     int diagRawLongestRun = 1;
@@ -3793,22 +3855,11 @@ VideoExportResult VideoExportController::exportPreparedTask(
     bool hasPreviousObjectSignature = false;
     int objectRepeatRunStartFrame = 0;
     int objectRepeatRunLength = 1;
-    const bool diagCompareRenderPathsEnabled = diagRepeatEnabled
-        && envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DIAG_COMPARE_RENDER_PATHS"));
-    const int diagCompareRadius = qBound(
-        2,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_DIAG_COMPARE_RADIUS"), 24),
-        512
-    );
-    const int diagCompareMaxLines = qMax(
-        0,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_DIAG_COMPARE_MAX_LINES"), 400)
-    );
-    const double diagCompareLogThreshold = qBound(
-        0.0,
-        envDoubleValue(QStringLiteral("MIACODE_EXPORT_DIAG_COMPARE_LOG_THRESHOLD"), 0.0010),
-        1.0
-    );
+    const bool diagCompareRenderPathsEnabled =
+        diagRepeatEnabled && exportConfig.diag.compareRenderPathsEnabled;
+    const int diagCompareRadius = exportConfig.diag.compareRadius;
+    const int diagCompareMaxLines = exportConfig.diag.compareMaxLines;
+    const double diagCompareLogThreshold = exportConfig.diag.compareLogThreshold;
     int diagCompareLoggedLines = 0;
     int diagCompareFrames = 0;
     int diagCompareObjectFrames = 0;
@@ -3818,19 +3869,14 @@ VideoExportResult VideoExportController::exportPreparedTask(
     double diagCompareObjectDiffSum = 0.0;
     double diagCompareObjectDiffMax = 0.0;
     int diagCompareObjectDiffMaxFrame = -1;
-    const bool diagPipeHashEnabled = diagRepeatEnabled
-        && envFlagEnabled(QStringLiteral("MIACODE_EXPORT_DIAG_PIPE_HASH"));
-    const int diagPipeHashMaxLines = qMax(
-        0,
-        envIntValue(QStringLiteral("MIACODE_EXPORT_DIAG_PIPE_HASH_MAX_LINES"), 400)
-    );
+    const bool diagPipeHashEnabled = diagRepeatEnabled && exportConfig.diag.pipeHashEnabled;
+    const int diagPipeHashMaxLines = exportConfig.diag.pipeHashMaxLines;
     int diagPipeHashLoggedLines = 0;
     int diagPipeHashObjectFrames = 0;
     int diagPipeHashObjectRepeatedAdj = 0;
     quint64 previousObjectPackedHash = 0;
     bool hasPreviousObjectPackedHash = false;
-    const QString diagRawDumpPath =
-        qEnvironmentVariable("MIACODE_EXPORT_DIAG_RAW_DUMP_PATH").trimmed();
+    const QString diagRawDumpPath = exportConfig.diag.rawDumpPath;
     QFile diagRawDumpFile;
     bool diagRawDumpEnabled = false;
     qint64 diagRawDumpBytes = 0;

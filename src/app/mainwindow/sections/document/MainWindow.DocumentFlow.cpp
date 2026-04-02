@@ -202,9 +202,6 @@ void MainWindow::onOpenFile()
     sampleTimer.setSingleShot(false);
     connect(&sampleTimer, &QTimer::timeout, this, [this, &sampleCount, &restoreCount]() {
         if (sampleCount >= 80) {
-            if (sampleCount == 80 && runtimeDebugOutputEnabled_) {
-                appendOutput("window/dialog_watch", "open_file_dialog sample_limit_reached");
-            }
             ++sampleCount;
             return;
         }
@@ -213,13 +210,15 @@ void MainWindow::onOpenFile()
         QString restoreDetail;
         if (tryRestoreOwnedNativeFileDialog(reinterpret_cast<HWND>(winId()), &restoreDetail)) {
             ++restoreCount;
-            appendOutput("window/dialog_watch", QString("open_file_dialog sample=%1 %2").arg(sampleCount).arg(restoreDetail));
+            appendOutput(
+                "window/dialog_watch",
+                QString("open_file_dialog restored sample=%1 count=%2 %3")
+                    .arg(sampleCount)
+                    .arg(restoreCount)
+                    .arg(restoreDetail)
+            );
         }
 #endif
-        if (runtimeDebugOutputEnabled_ && (sampleCount <= 12 || (sampleCount % 5) == 0)) {
-            logWindowGeometryDebug("open_file_dialog_poll");
-            logNativeWindowDebug(QString("open_file_dialog_poll sample=%1").arg(sampleCount));
-        }
     });
 
     logTopLevelWindowSnapshot("open_file_dialog_exec_begin");
@@ -331,9 +330,6 @@ bool MainWindow::onSaveFileAs()
     sampleTimer.setInterval(120);
     connect(&sampleTimer, &QTimer::timeout, this, [this, &sampleCount, &restoreCount]() {
         if (sampleCount >= 80) {
-            if (sampleCount == 80 && runtimeDebugOutputEnabled_) {
-                appendOutput("window/dialog_watch", "save_file_dialog sample_limit_reached");
-            }
             ++sampleCount;
             return;
         }
@@ -342,13 +338,15 @@ bool MainWindow::onSaveFileAs()
         QString restoreDetail;
         if (tryRestoreOwnedNativeFileDialog(reinterpret_cast<HWND>(winId()), &restoreDetail)) {
             ++restoreCount;
-            appendOutput("window/dialog_watch", QString("save_file_dialog sample=%1 %2").arg(sampleCount).arg(restoreDetail));
+            appendOutput(
+                "window/dialog_watch",
+                QString("save_file_dialog restored sample=%1 count=%2 %3")
+                    .arg(sampleCount)
+                    .arg(restoreCount)
+                    .arg(restoreDetail)
+            );
         }
 #endif
-        if (runtimeDebugOutputEnabled_ && (sampleCount <= 12 || (sampleCount % 5) == 0)) {
-            logWindowGeometryDebug("save_file_dialog_poll");
-            logNativeWindowDebug(QString("save_file_dialog_poll sample=%1").arg(sampleCount));
-        }
     });
 
     logTopLevelWindowSnapshot("save_file_dialog_exec_begin");

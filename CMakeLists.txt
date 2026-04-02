@@ -3,13 +3,13 @@ cmake_minimum_required(VERSION 3.21)
 set(MIACODE_VERSION_MAJOR "0")
 set(MIACODE_VERSION_MINOR "3")
 set(MIACODE_VERSION_PATCH "8")
-set(MIACODE_VERSION_PRERELEASE "dev8")
+set(MIACODE_VERSION_PRERELEASE "dev9")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
     set(MIACODE_VERSION_STRING "${MIACODE_VERSION}-${MIACODE_VERSION_PRERELEASE}")
 endif()
-set(MIACODE_DISPLAY_PRERELEASE "dev8")
+set(MIACODE_DISPLAY_PRERELEASE "dev9")
 set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_DISPLAY_PRERELEASE}" STREQUAL "")
     set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_DISPLAY_VERSION_STRING}.${MIACODE_DISPLAY_PRERELEASE}")
@@ -53,6 +53,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/MuriTypes.cpp
     src/common/MuriRenderOptions.h
     src/common/MuriConfig.h
+    src/common/DebugLog.h
+    src/common/DebugLog.cpp
     src/common/ChartAssetPaths.h
     src/common/PreviewSfxTimeline.h
     src/editor/PlainCodeEditor.h
@@ -204,6 +206,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/preview/audio/PreviewAudioSettings.cpp
         src/preview/audio/QtPreviewSfxRuntime.h
         src/preview/audio/QtPreviewSfxRuntime.cpp
+        src/common/DebugLog.h
+        src/common/DebugLog.cpp
     )
 
     add_executable(simai_parser_spec

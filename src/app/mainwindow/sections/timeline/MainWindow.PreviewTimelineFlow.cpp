@@ -1747,24 +1747,6 @@ void MainWindow::updatePreviewWorkspaceLayout()
 
     const int controlHeight = qMax(previewControlCard_->minimumSizeHint().height(), previewControlCard_->sizeHint().height());
     const double aspectRatio = normalizedPreviewCanvasAspectRatio(previewCanvasAspectRatio_);
-    if (runtimeDebugOutputEnabled_) {
-        appendOutput(
-            "preview/layout-calc/workspace-base",
-            QString("splitter_rect=%1x%2 handle=%3 available=%4x%5 left_min=%6 right_min=%7 right_max=%8 preferred_ratio=%.2f preferred_right=%9 control_h=%10 aspect=%11")
-                .arg(splitterRect.width())
-                .arg(splitterRect.height())
-                .arg(handleWidth)
-                .arg(availableWidth)
-                .arg(availableHeight)
-                .arg(leftMinWidth)
-                .arg(minimumRightWidth)
-                .arg(rightMaxWidth)
-                .arg(preferredRightWidth)
-                .arg(controlHeight)
-                .arg(aspectRatio, 0, 'f', 3)
-                .replace("%.2f", QString::number(kEmbeddedPreviewPanelWidthRatio, 'f', 2))
-        );
-    }
     int targetRightWidth = preferredRightWidth;
     for (int i = 0; i < 3; ++i) {
         const int panelContentWidth = qMax(0, targetRightWidth - kPreviewPanelMarginX * 2);
@@ -1785,21 +1767,6 @@ void MainWindow::updatePreviewWorkspaceLayout()
             qRound(static_cast<double>(availablePreviewHeight) * aspectRatio) + kPreviewPanelMarginX * 2
         );
         const int nextRightWidth = qMin(targetRightWidth, qMax(minimumRightWidth, heightLimitedWidth));
-        if (runtimeDebugOutputEnabled_) {
-            appendOutput(
-                "preview/layout-calc/workspace-iter",
-                QString("iter=%1 target_right=%2 panel_content_w=%3 stats_host_w=%4 stats_min_h=%5 available_preview_h=%6 height_limited_w=%7 next_right=%8 aspect=%9")
-                    .arg(i)
-                    .arg(targetRightWidth)
-                    .arg(panelContentWidth)
-                    .arg(statsHostWidth)
-                    .arg(minimumStatsHeight)
-                    .arg(availablePreviewHeight)
-                    .arg(heightLimitedWidth)
-                    .arg(nextRightWidth)
-                    .arg(aspectRatio, 0, 'f', 3)
-            );
-        }
         if (nextRightWidth == targetRightWidth) {
             break;
         }
@@ -1811,15 +1778,6 @@ void MainWindow::updatePreviewWorkspaceLayout()
         (availableWidth >= leftMinWidth + targetRightWidth)
         ? qMax(leftMinWidth, availableWidth - targetRightWidth)
         : qMax(0, availableWidth - targetRightWidth);
-    if (runtimeDebugOutputEnabled_) {
-        appendOutput(
-            "preview/layout-calc/workspace-final",
-            QString("target_left=%1 target_right=%2 total_available_w=%3")
-                .arg(targetLeftWidth)
-                .arg(targetRightWidth)
-                .arg(availableWidth)
-        );
-    }
     const QList<int> currentSizes = workspaceSplitter_->sizes();
     if (currentSizes.size() == 2
         && (qAbs(currentSizes.at(0) - targetLeftWidth) > 1 || qAbs(currentSizes.at(1) - targetRightWidth) > 1)) {
@@ -2013,30 +1971,6 @@ void MainWindow::updatePreviewPanelLayout()
     const int statsAreaHeight = qMax(0, panelRect.height() - (statsAreaY - panelRect.y()) - kPreviewStatsBottomGap);
     const int statsHeight = qMin(minimumStatsHeight, statsAreaHeight);
     const int statsY = statsAreaY + qMax(0, (statsAreaHeight - statsHeight) / 2);
-    if (runtimeDebugOutputEnabled_) {
-        appendOutput(
-            "preview/layout-calc/panel",
-            QString("panel=%1x%2 content=(x=%3,y=%4,w=%5) control_h=%6 stats_host_w=%7 stats_min_h=%8 available_preview_h=%9 preview=%10x%11 aspect=%12 control_y=%13 stats_area_y=%14 stats_area_h=%15 stats_y=%16 stats_h=%17")
-                .arg(panelRect.width())
-                .arg(panelRect.height())
-                .arg(contentX)
-                .arg(contentY)
-                .arg(contentWidth)
-                .arg(controlHeight)
-                .arg(statsHostWidth)
-                .arg(minimumStatsHeight)
-                .arg(availablePreviewHeight)
-                .arg(previewWidth)
-                .arg(previewHeight)
-                .arg(aspectRatio, 0, 'f', 3)
-                .arg(controlY)
-                .arg(statsAreaY)
-                .arg(statsAreaHeight)
-                .arg(statsY)
-                .arg(statsHeight)
-        );
-    }
-
     previewCanvasFrame_->setGeometry(previewX, contentY, previewWidth, previewHeight);
     if (!previewFullscreenActive_) {
         previewCanvasContainer_->setGeometry(previewCanvasFrame_->rect().adjusted(1, 1, -1, -1));

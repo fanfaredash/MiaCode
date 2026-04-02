@@ -1,15 +1,14 @@
 #include "PreviewMediaController.h"
 
 #include "common/ChartAssetPaths.h"
+#include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 
 #ifdef HAVE_QT_MULTIMEDIA
 #include <QAudioOutput>
 #endif
-#include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
-#include <QFile>
 #include <QFileInfo>
 #include <QImage>
 #include <QMetaObject>
@@ -18,8 +17,6 @@
 #include <QVideoFrame>
 #include <QVideoSink>
 #endif
-#include <QTextStream>
-#include <QDebug>
 #include <QtMath>
 #include <QUrl>
 
@@ -34,22 +31,14 @@ QString normalizedLocalPath(const QString& path)
 
 void appendPreviewMediaLog(const QString& area, const QString& payload, bool warn = false)
 {
-    const QString message = QStringLiteral("[preview_media/%1] %2").arg(area, payload);
-    if (warn) {
-        qWarning().noquote() << message;
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview_media/%1").arg(area),
+        payload
+    );
+    if (warn && area.contains(QStringLiteral("fail"))) {
+        miacode::debug_log::appendFatalMessage(QStringLiteral("preview_media/%1").arg(area), payload);
     }
-    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
-        return;
-    }
-    QFile logFile(miacode::debug_options::runtimeDebugLogPath());
-    if (!logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
-        return;
-    }
-    QTextStream stream(&logFile);
-    stream << QDateTime::currentDateTime().toString(Qt::ISODateWithMs)
-           << ' '
-           << message
-           << '\n';
 }
 
 struct SampleStats {
@@ -575,6 +564,7 @@ void PreviewMediaController::resetProfilingSession()
     profileVideoToImageTotalMs_ = 0.0;
     profileVideoToImageSampleCount_ = 0;
     profileVideoToImageSamplesMs_.clear();
+    videoFallbackConversionFailureLogged_ = false;
 }
 
 QString PreviewMediaController::profilingSummaryLines() const
@@ -706,17 +696,15 @@ void PreviewMediaController::onVideoFrameChanged(const QVideoFrame& frame)
             ++profileVideoToImageSampleCount_;
             profileVideoToImageSamplesMs_.append(elapsedMs);
             emit videoFallbackFrameChanged(fallbackImage);
-            appendPreviewMediaLog(
-                QStringLiteral("video_fallback"),
-                QStringLiteral("published fallback image in %1 ms; %2")
-                    .arg(QString::number(elapsedMs, 'f', 3), videoFrameSummary(frame))
-            );
         } else {
-            appendPreviewMediaLog(
-                QStringLiteral("video_fallback_fail"),
-                QStringLiteral("failed to build fallback image; %1").arg(videoFrameSummary(frame)),
-                true
-            );
+            if (!videoFallbackConversionFailureLogged_) {
+                videoFallbackConversionFailureLogged_ = true;
+                appendPreviewMediaLog(
+                    QStringLiteral("video_fallback_fail"),
+                    QStringLiteral("failed to build fallback image; %1").arg(videoFrameSummary(frame)),
+                    true
+                );
+            }
         }
     }
     publishVideoFrame(frame);
