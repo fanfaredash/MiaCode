@@ -5,6 +5,7 @@
 #include <QFont>
 #include <QHash>
 #include <QImage>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPixmap>
 #include <QPointF>
@@ -56,10 +57,13 @@ signals:
     void timelineDragStarted();
     void timelineUserInteractionStarted();
     void followPreviewToggled(bool enabled);
+    void previewPlayPauseRequested();
 
 protected:
     bool viewportEvent(QEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    void keyReleaseEvent(QKeyEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;

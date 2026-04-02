@@ -36,6 +36,8 @@ Use this file to separate hard contracts from adjustable implementation choices.
 - Preview panel layout is currently card-based, with preview, controls, and stats as separate blocks.
 - Preview fullscreen currently reuses the same transport controls as the embedded preview, adds a rounded translucent-black `Esc` hint bubble, and only reveals a near-full-width bottom overlay control bar when the cursor moves into the bottom hot zone, with fade-in/fade-out opacity animation before auto-hiding again.
 - While the chart text editor has focus, `Ctrl+Enter` currently forwards to the existing preview play/pause transport instead of being left to the text widget.
+- While the preview time slider has focus, pressing `Space` currently forwards to the same preview play/pause transport; clicking or dragging the slider keeps that focus on the slider.
+- While the Timeline view itself has focus, pressing `Space` currently forwards to the same preview play/pause transport; the Timeline header controls keep their own default widget behavior.
 - Timeline drag/scrub currently edits runtime `R`, not editor-anchor `C`: dragging or wheel panning first rebinds `R` to the viewport center when needed, header clicks and `Ctrl+click` on the timeline perform the spec's `R -> C` action by click second, and editor-side cursor updates only move `C`.
 - Timeline playback currently keeps runtime `R` visually centered in the Timeline viewport while preview playback is running; paused positioning still uses the existing explicit-center vs keep-margin rules from the caller.
 - Timeline zoom currently offers `25%..150%` presets in `5%` steps, starts at `50%`, and the header zoom button cycles the coarse stops `25/50/75/100/125/150`.
