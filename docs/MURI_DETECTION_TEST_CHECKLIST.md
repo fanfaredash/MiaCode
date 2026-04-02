@@ -123,6 +123,8 @@ E
 - [ ] slide / wifi 的 runtime available 窗口当前为 `24 h`
 - [ ] 在 `endSecond + 24 h` 之前，未完成 slide / wifi 不会仅因超时而被强制 bad
 - [ ] 超过 `endSecond + 24 h` 后，会被强制 bad
+- [ ] 对 `(128.6){1}3v1[1:11]/7v5[1:11],` 这类超长 slide，若最终完成并不是被其他物件的最后一拍 pad-down 收尾，则不报 `SlideTooFast`
+- [ ] 上述超长 slide 样例不会额外出现 slide `Good` 判定特效
 
 ## 10. 面板合并与排序
 
@@ -157,6 +159,7 @@ E
 - [ ] `111` 只保留 1 条 `Overlap`
 - [ ] `118` 不残留 `MultiTouch`
 - [ ] `123` 仍保留 `MultiTouch`
+- [ ] `(128.6){1}3v1[1:11]/7v5[1:11],` 不显示 `SlideTooFast`
 
 ## 14. 建议记录模板
 

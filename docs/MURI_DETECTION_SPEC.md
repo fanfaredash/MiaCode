@@ -58,6 +58,8 @@
 - slide / wifi 的最终完成秒数会与其 critical window 比较。
 - 若完成时机落在 critical window 之外，则报 `SlideTooFast`。
 - `SlideTooFast` 只来自运行时分析，不生成静态参考。
+- 只有当 slide / wifi 的最终完成判定区确实由其他 `slide` / `tap` / `touch` 的 pad-down 完成时，才应报 `SlideTooFast`。
+- 若超长 slide 在后半段已经没有有意义的外部 pad-down，剩余只会由自身轨迹自然收束，则视为正常通过，不报 `SlideTooFast`，也不应额外显示 slide `Good` 判定特效。
 - 若能追溯到“最后一个提前判定原因”，详情文本优先写成“被哪个物件提前判定”；否则写成“自身落在临界窗之外”。
 
 ### 5.2 SlideHeadTap

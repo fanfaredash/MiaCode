@@ -305,6 +305,20 @@ int main(int argc, char** argv)
 
     {
         const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(128.6){1}3v1[1:11]/7v5[1:11],\nE\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("long-slide repro chart parses"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::SlideTooFast) == 0,
+            QStringLiteral("long-slide repro no longer reports runtime slide-too-fast"));
+        expect(countStaticReferences(analyzed.staticReferences, MuriKind::SlideTooFast) == 0,
+            QStringLiteral("long-slide repro stays dynamic-only"));
+        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::SlideTooFast) == 0,
+            QStringLiteral("long-slide repro keeps no visible slide-too-fast entry"));
+        expect(analyzed.report.judgeSpriteEvents.isEmpty(),
+            QStringLiteral("long-slide repro emits no slide judge sprite"));
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
             QStringLiteral("(240){16}\n111,\nE\n"));
         expect(analyzed.parsed.ok, QStringLiteral("dense overlap repro chart parses"));
         expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::Overlap) == 1,

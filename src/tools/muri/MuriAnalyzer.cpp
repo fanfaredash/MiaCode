@@ -2715,6 +2715,25 @@ struct RuntimeWifiNoteState {
     RuntimePadEvent judgeAction;
 };
 
+bool runtimePadEventIsForeignJudge(const RuntimePadEvent& event, const QString& ownerMarkerKey)
+{
+    return !event.sourceMarkerKey.isEmpty() && event.sourceMarkerKey != ownerMarkerKey;
+}
+
+bool slideFinalAreaWasJudgedByOther(const RuntimeSlideNoteState& note)
+{
+    if (note.areaHits.isEmpty()) {
+        return false;
+    }
+    const RuntimeJudgeHit& finalHit = note.areaHits.constLast();
+    return finalHit.judged && runtimePadEventIsForeignJudge(finalHit.cause, note.markerKey);
+}
+
+bool wifiFinalJudgeWasByOther(const RuntimeWifiNoteState& note)
+{
+    return runtimePadEventIsForeignJudge(note.judgeAction, note.markerKey);
+}
+
 bool padStateForTick(
     const QHash<QString, RuntimePadEvent>& padStates,
     const QString& pad,
@@ -3062,7 +3081,9 @@ void updateRuntimeSlideNote(
     if (note->curAreaIdx >= note->totalAreaNum) {
         note->judged = true;
         note->judgeSecond = nowSecond;
-        note->judgeBad = slideJudgeIsBad(nowSecond, note->criticalSecond, note->criticalDeltaSecond);
+        note->judgeBad =
+            slideJudgeIsBad(nowSecond, note->criticalSecond, note->criticalDeltaSecond)
+            && slideFinalAreaWasJudgedByOther(*note);
         return;
     }
 
@@ -3179,7 +3200,9 @@ void updateRuntimeWifiNote(
         && note->padCPassed) {
         note->judged = true;
         note->judgeSecond = nowSecond;
-        note->judgeBad = wifiJudgeIsBad(nowSecond, note->criticalSecond, note->criticalDeltaSecond);
+        note->judgeBad =
+            wifiJudgeIsBad(nowSecond, note->criticalSecond, note->criticalDeltaSecond)
+            && wifiFinalJudgeWasByOther(*note);
         return;
     }
 
@@ -3399,18 +3422,16 @@ QHash<QString, RuntimeSlideJudgeResult> simulateRuntimeSlideAndWifiJudgments(
             continue;
         }
         note.judged = true;
-        note.judgeBad = true;
-        note.judgeSecond =
-            tickToSecond(judgeTickForNoteExpiry(note.endSecond, miacode::muri::kSlideAvailableSeconds));
+        note.judgeBad = false;
+        note.judgeSecond = qMax(note.endSecond, note.criticalSecond);
     }
     for (RuntimeWifiNoteState& note : wifiNotes) {
         if (note.judged) {
             continue;
         }
         note.judged = true;
-        note.judgeBad = true;
-        note.judgeSecond =
-            tickToSecond(judgeTickForNoteExpiry(note.endSecond, miacode::muri::kSlideAvailableSeconds));
+        note.judgeBad = false;
+        note.judgeSecond = qMax(note.endSecond, note.criticalSecond);
     }
 
     for (const RuntimeSlideNoteState& note : slideNotes) {
