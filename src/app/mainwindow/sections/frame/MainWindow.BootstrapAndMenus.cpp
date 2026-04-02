@@ -493,7 +493,7 @@ MainWindow::MainWindow(QWidget* parent)
     auto* difficultyLevelLineEdit = new LeftPlaceholderLineEdit(editorDifficultyControls_);
     difficultyLevelLineEdit->setLeftPlaceholderText("&lv_n=");
     difficultyLevelEdit_ = difficultyLevelLineEdit;
-    difficultyLevelEdit_->setFixedWidth(72);
+    difficultyLevelEdit_->setFixedWidth(48);
     difficultyLevelEdit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     difficultyLevelEdit_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     auto* difficultyDesignerLabel = new QLabel(uiText("editor.des", "Des"), editorDifficultyControls_);
@@ -502,7 +502,7 @@ MainWindow::MainWindow(QWidget* parent)
     auto* difficultyDesignerLineEdit = new LeftPlaceholderLineEdit(editorDifficultyControls_);
     difficultyDesignerLineEdit->setLeftPlaceholderText("&des_n=");
     difficultyDesignerEdit_ = difficultyDesignerLineEdit;
-    difficultyDesignerEdit_->setFixedWidth(140);
+    difficultyDesignerEdit_->setFixedWidth(105);
     difficultyDesignerEdit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     difficultyDesignerEdit_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     editorDifficultyLayout->addWidget(difficultyLevelLabel);

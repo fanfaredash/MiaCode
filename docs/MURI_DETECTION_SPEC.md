@@ -113,9 +113,10 @@
   - `slide 1>5 jump-start will early-judge hold 8, gap 170.5 ms.`
   - `slide 1>5 jump-start will early-judge star 1, gap 170.5 ms.`
 - `TapOnSlide` 详情同样会明确写出受影响目标：
-  - `slide 8>4 tail may collide with tap 8, gap 187.5 ms.`
-  - `slide 8>4 tail may collide with hold 8, gap 187.5 ms.`
-  - `slide 8>4 tail may collide with star 1, gap 187.5 ms.`
+- `slide 8>4 trajectory may collide with tap 8, gap 187.5 ms.`
+- `slide 8>4 trajectory may collide with hold 8, gap 187.5 ms.`
+- `slide 8>4 trajectory may collide with star 1, gap 187.5 ms.`
+- `Warning` 文案使用“可能”类措辞，`Muri` 文案使用确定措辞。
 - `star N` 专门用于显示头星目标，不应退化成普通 `tap` 文案。
 
 ## 6. 告警级别规则
@@ -128,6 +129,7 @@
 ### 6.2 SlideHeadTap 的 Warning 条件
 
 满足以下任一条件时，`SlideHeadTap` 为 `Warning`：
+- 受影响目标包含保护（当前实现对应 EX / head-EX）
 
 - `0 < gap <= 50.0 ms`，且该 slide head 没有启动时 tap
 - `gap >= 150.0 ms`
@@ -140,6 +142,7 @@
 
 - `gap > 150.0 ms`
 - `gap <= staticTapOnSlideThresholdSeconds`
+- 或受影响目标包含保护（当前实现对应 EX / head-EX）
 
 默认静态阈值：
 
