@@ -605,6 +605,10 @@ DiagnosticAnchor diagnosticAnchorFromAction(const RuntimeHandAction& action)
 
 QString slideLikeDisplayKey(const TimelineNoteMarker& marker)
 {
+    const QString displayKey = marker.slideDisplayKey.trimmed();
+    if (!displayKey.isEmpty()) {
+        return displayKey;
+    }
     const QString trackKey = marker.slideTrackKey.trimmed();
     if (!trackKey.isEmpty()) {
         return trackKey;

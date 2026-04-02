@@ -100,6 +100,7 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     marker.sourceCol = qMax(1, column);
     marker.lane = lane;
     marker.type = sanitizedCore.contains('w', Qt::CaseInsensitive) ? "wifi" : "slide";
+    marker.slideDisplayKey = normalizedSlideLookupKey(sanitizedCore);
     marker.hasHeadStar = modifierState.headlessMode == SlideHeadlessMode::None;
     marker.headlessImmediate = modifierState.headlessMode == SlideHeadlessMode::Immediate;
     marker.headBreak = modifierState.headBreak;

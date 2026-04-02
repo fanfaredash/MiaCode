@@ -305,6 +305,36 @@ int main(int argc, char** argv)
 
     {
         const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(240){16}\n3^5pp4[4:1],,,,,\n4,\nE\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("chain-slide label repro chart parses"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::TapOnSlide) >= 1,
+            QStringLiteral("chain-slide label repro emits tap-on-slide diagnostics"));
+        expect(countStaticReferences(analyzed.staticReferences, MuriKind::TapOnSlide) >= 1,
+            QStringLiteral("chain-slide label repro emits static tap-on-slide references"));
+        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::TapOnSlide) >= 1,
+            QStringLiteral("chain-slide label repro keeps tap-on-slide visible"));
+
+        if (const MuriDiagnostic* diagnostic =
+                firstDiagnostic(analyzed.report.diagnostics, MuriKind::TapOnSlide)) {
+            expect(diagnostic->detail.contains(QStringLiteral("3^5pp4")),
+                QStringLiteral("chain-slide label repro runtime detail keeps the full chained slide token"));
+        }
+
+        if (const MuriStaticReference* reference =
+                firstStaticReference(analyzed.staticReferences, MuriKind::TapOnSlide)) {
+            expect(reference->cause.slideDisplayKey == QStringLiteral("3^5pp4"),
+                QStringLiteral("chain-slide label repro static cause keeps the full chained slide token"));
+        }
+
+        if (const miacode::muri::MuriPanelEntry* entry =
+                firstVisibleEntry(analyzed.visibleEntries, MuriKind::TapOnSlide)) {
+            expect(entry->rawDetail.contains(QStringLiteral("3^5pp4")),
+                QStringLiteral("chain-slide label repro visible detail keeps the full chained slide token"));
+        }
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
             QStringLiteral("(128.6){1}3v1[1:11]/7v5[1:11],\nE\n"));
         expect(analyzed.parsed.ok, QStringLiteral("long-slide repro chart parses"));
         expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::SlideTooFast) == 0,
