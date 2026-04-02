@@ -94,6 +94,7 @@ struct JudgeableSimpleNote {
     bool onSlide = false;
     bool tailOnSlideHead = false;
     bool headStarTapLike = false;
+    bool hasProtection = false;
     bool judged = false;
     bool judgeBad = false;
     bool lateBad = false;
@@ -910,6 +911,14 @@ MuriAlertLevel slideHeadTapAlertLevel(bool hasTapOnSlideHead, double gapSecond)
     return MuriAlertLevel::Muri;
 }
 
+MuriAlertLevel downgradeProtectedSimpleNoteAlertLevel(MuriAlertLevel alertLevel, bool hasProtection)
+{
+    if (hasProtection) {
+        return MuriAlertLevel::Warning;
+    }
+    return alertLevel;
+}
+
 MuriAlertLevel tapOnSlideAlertLevel(double gapSecond, double thresholdSecond)
 {
     if (gapSecond > miacode::muri::kTapOnSlideWarningCutoffSeconds + kPadTimeEpsilon
@@ -917,6 +926,41 @@ MuriAlertLevel tapOnSlideAlertLevel(double gapSecond, double thresholdSecond)
         return MuriAlertLevel::Warning;
     }
     return MuriAlertLevel::Muri;
+}
+
+QString slideHeadTapDetailText(
+    bool hasTapOnSlideHead,
+    MuriAlertLevel alertLevel,
+    const QString& causeConfig,
+    const QString& affectedTarget,
+    double gapMs)
+{
+    const QString gapText = QString::number(gapMs, 'f', 1);
+    if (hasTapOnSlideHead) {
+        return alertLevel == MuriAlertLevel::Warning
+            ? QStringLiteral("%1 start may early-judge %2, gap %3 ms.")
+                  .arg(causeConfig, affectedTarget, gapText)
+            : QStringLiteral("%1 start early-judges %2, gap %3 ms.")
+                  .arg(causeConfig, affectedTarget, gapText);
+    }
+    return alertLevel == MuriAlertLevel::Warning
+        ? QStringLiteral("%1 jump-start may early-judge %2, gap %3 ms.")
+              .arg(causeConfig, affectedTarget, gapText)
+        : QStringLiteral("%1 jump-start early-judges %2, gap %3 ms.")
+              .arg(causeConfig, affectedTarget, gapText);
+}
+
+QString tapOnSlideDetailText(
+    MuriAlertLevel alertLevel,
+    const QString& causeConfig,
+    const QString& affectedTarget,
+    double gapMs)
+{
+    return alertLevel == MuriAlertLevel::Warning
+        ? QStringLiteral("%1 trajectory may collide with %2, gap %3 ms.")
+              .arg(causeConfig, affectedTarget, QString::number(gapMs, 'f', 1))
+        : QStringLiteral("%1 trajectory collides with %2, gap %3 ms.")
+              .arg(causeConfig, affectedTarget, QString::number(gapMs, 'f', 1));
 }
 
 QString notePad(const TimelineNoteMarker& marker)
@@ -1699,6 +1743,7 @@ QVector<JudgeableSimpleNote> buildJudgeableSimpleNotes(
         note.slideHead = marker.slideHead;
         note.onSlide = marker.onSlide;
         note.tailOnSlideHead = marker.tailOnSlideHead;
+        note.hasProtection = marker.isEx;
         const int noteIndex = notes.size();
         notes.append(note);
         if (noteIndexByMarkerKey != nullptr) {
@@ -1738,6 +1783,7 @@ QVector<JudgeableSimpleNote> buildJudgeableSimpleNotes(
         note.availableSeconds = miacode::muri::kTapAvailableSeconds;
         note.expiryTick = judgeTickForNoteExpiry(marker.second, note.availableSeconds);
         note.headStarTapLike = true;
+        note.hasProtection = marker.headEx;
         const int noteIndex = notes.size();
         notes.append(note);
         if (noteIndexByMarkerKey != nullptr) {
@@ -4205,18 +4251,16 @@ void collectSimpleNoteRuntimeDiagnostics(
                               syntheticSlideHeadOwnerKeys))
                 : qMax(0.0, note.momentSecond - note.judgeSecond);
             const double gapMs = gapSecond * 1000.0;
-            const MuriAlertLevel alertLevel = slideHeadTap
+            const MuriAlertLevel baseAlertLevel = slideHeadTap
                 ? slideHeadTapAlertLevel(hasTapOnSlideHead, gapSecond)
                 : tapOnSlideAlertLevel(gapSecond, normalizedStaticTapOnSlideThresholdSeconds);
+            const MuriAlertLevel alertLevel =
+                downgradeProtectedSimpleNoteAlertLevel(baseAlertLevel, note.hasProtection);
             const QString affectedTarget = simpleNoteTargetLabel(note);
             const QString detail = slideHeadTap
-                ? (hasTapOnSlideHead
-                       ? QStringLiteral("%1 start will early-judge %2, gap %3 ms.")
-                             .arg(causeConfig, affectedTarget, QString::number(gapMs, 'f', 1))
-                       : QStringLiteral("%1 jump-start will early-judge %2, gap %3 ms.")
-                             .arg(causeConfig, affectedTarget, QString::number(gapMs, 'f', 1)))
-                : QStringLiteral("%1 tail may collide with %2, gap %3 ms.")
-                      .arg(causeConfig, affectedTarget, QString::number(gapMs, 'f', 1));
+                ? slideHeadTapDetailText(
+                      hasTapOnSlideHead, alertLevel, causeConfig, affectedTarget, gapMs)
+                : tapOnSlideDetailText(alertLevel, causeConfig, affectedTarget, gapMs);
             const DiagnosticAnchor anchor = earlierDiagnosticAnchor(
                 diagnosticAnchorFromNote(note),
                 diagnosticAnchorForCause(note.cause, markerRefs, syntheticSlideHeadOwnerKeys));

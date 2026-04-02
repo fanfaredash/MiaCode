@@ -109,7 +109,9 @@ E
 - [ ] `Overlap` 始终显示为 `Muri`
 - [ ] `SlideHeadTap` 在 `0 < gap <= 50 ms` 且无启动时 tap 时可降为 `Warning`
 - [ ] `SlideHeadTap` 在 `gap >= 150 ms` 时可降为 `Warning`
+- [ ] `SlideHeadTap` 的受影响目标带保护时可降为 `Warning`
 - [ ] `TapOnSlide` 在 `150 ms < gap <= staticTapOnSlideThresholdSeconds` 时可降为 `Warning`
+- [ ] `TapOnSlide` 的受影响目标带保护时可降为 `Warning`
 - [ ] `MultiTouch` 在涉及 touch 且非 touch hand count 不超过 2 时可降为 `Warning`
 
 ## 8. 静态阈值

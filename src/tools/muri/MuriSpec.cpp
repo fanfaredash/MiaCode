@@ -184,6 +184,8 @@ int main(int argc, char** argv)
                 QStringLiteral("runtime anchor repro points at the first involved object"));
             expect(diagnostic->detail.contains(QStringLiteral("tap 8")),
                 QStringLiteral("runtime anchor repro detail names the affected tap lane"));
+            expect(diagnostic->detail.contains(QStringLiteral("early-judges")),
+                QStringLiteral("runtime anchor repro uses definite slide-head-tap wording for muri"));
         }
 
         if (const MuriStaticReference* reference =
@@ -300,6 +302,68 @@ int main(int argc, char** argv)
                 firstVisibleEntry(analyzed.visibleEntries, MuriKind::TapOnSlide)) {
             expect(entry->rawDetail.contains(QStringLiteral("star 3")),
                 QStringLiteral("head-star tap-on-slide repro visible detail names the affected star lane"));
+            expect(entry->rawDetail.contains(QStringLiteral("trajectory may collide with")),
+                QStringLiteral("head-star tap-on-slide repro visible detail uses warning wording when severity is warning"));
+        }
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(240){16}\n8>3[4:1],,,,,\n8x,\nE\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("protected slide-head repro chart parses"));
+        expect(countDiagnosticsWithAlertLevel(
+                   analyzed.report.diagnostics,
+                   MuriKind::SlideHeadTap,
+                   MuriAlertLevel::Warning)
+                >= 1,
+            QStringLiteral("protected slide-head repro downgrades runtime slide-head-tap to warning"));
+        expect(countStaticReferencesWithAlertLevel(
+                   analyzed.staticReferences,
+                   MuriKind::SlideHeadTap,
+                   MuriAlertLevel::Warning)
+                >= 1,
+            QStringLiteral("protected slide-head repro downgrades static slide-head-tap to warning"));
+        expect(countVisibleEntriesWithAlertLevel(
+                   analyzed.visibleEntries,
+                   MuriKind::SlideHeadTap,
+                   MuriAlertLevel::Warning)
+                >= 1,
+            QStringLiteral("protected slide-head repro keeps warning slide-head-tap visible"));
+
+        if (const MuriDiagnostic* diagnostic =
+                firstDiagnostic(analyzed.report.diagnostics, MuriKind::SlideHeadTap)) {
+            expect(diagnostic->detail.contains(QStringLiteral("may early-judge")),
+                QStringLiteral("protected slide-head repro runtime detail uses warning wording"));
+        }
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(240){16}\n3^5pp4[4:1],,,,,\n4x,\nE\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("protected tap-on-slide repro chart parses"));
+        expect(countDiagnosticsWithAlertLevel(
+                   analyzed.report.diagnostics,
+                   MuriKind::TapOnSlide,
+                   MuriAlertLevel::Warning)
+                >= 1,
+            QStringLiteral("protected tap-on-slide repro downgrades runtime tap-on-slide to warning"));
+        expect(countStaticReferencesWithAlertLevel(
+                   analyzed.staticReferences,
+                   MuriKind::TapOnSlide,
+                   MuriAlertLevel::Warning)
+                >= 1,
+            QStringLiteral("protected tap-on-slide repro downgrades static tap-on-slide to warning"));
+        expect(countVisibleEntriesWithAlertLevel(
+                   analyzed.visibleEntries,
+                   MuriKind::TapOnSlide,
+                   MuriAlertLevel::Warning)
+                >= 1,
+            QStringLiteral("protected tap-on-slide repro keeps warning tap-on-slide visible"));
+
+        if (const MuriDiagnostic* diagnostic =
+                firstDiagnostic(analyzed.report.diagnostics, MuriKind::TapOnSlide)) {
+            expect(diagnostic->detail.contains(QStringLiteral("trajectory may collide with")),
+                QStringLiteral("protected tap-on-slide repro runtime detail uses warning wording"));
         }
     }
 
@@ -318,6 +382,8 @@ int main(int argc, char** argv)
                 firstDiagnostic(analyzed.report.diagnostics, MuriKind::TapOnSlide)) {
             expect(diagnostic->detail.contains(QStringLiteral("3^5pp4")),
                 QStringLiteral("chain-slide label repro runtime detail keeps the full chained slide token"));
+            expect(diagnostic->detail.contains(QStringLiteral("trajectory collides with")),
+                QStringLiteral("chain-slide label repro runtime detail uses definite wording for muri"));
         }
 
         if (const MuriStaticReference* reference =
@@ -330,6 +396,8 @@ int main(int argc, char** argv)
                 firstVisibleEntry(analyzed.visibleEntries, MuriKind::TapOnSlide)) {
             expect(entry->rawDetail.contains(QStringLiteral("3^5pp4")),
                 QStringLiteral("chain-slide label repro visible detail keeps the full chained slide token"));
+            expect(entry->rawDetail.contains(QStringLiteral("trajectory collides with")),
+                QStringLiteral("chain-slide label repro visible detail uses definite wording for muri"));
         }
     }
 

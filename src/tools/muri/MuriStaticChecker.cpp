@@ -178,6 +178,14 @@ MuriAlertLevel slideHeadTapAlertLevel(bool hasTapOnSlideHead, double gapSecond)
     return MuriAlertLevel::Muri;
 }
 
+MuriAlertLevel downgradeProtectedReferenceAlertLevel(MuriAlertLevel alertLevel, bool hasProtection)
+{
+    if (hasProtection) {
+        return MuriAlertLevel::Warning;
+    }
+    return alertLevel;
+}
+
 MuriAlertLevel tapOnSlideAlertLevel(double gapSecond, double thresholdSecond)
 {
     if (gapSecond > miacode::muri::kTapOnSlideWarningCutoffSeconds + kStaticTimeEpsilonSeconds
@@ -225,6 +233,7 @@ MuriStaticReferenceNote staticReferenceNoteFromMarker(const TimelineNoteMarker& 
     note.second = marker.second;
     note.endSecond = marker.endSecond;
     note.slideTraceSecond = marker.slideTraceSecond;
+    note.hasProtection = marker.isEx;
     return note;
 }
 
@@ -238,6 +247,7 @@ MuriStaticReferenceNote staticReferenceNoteFromHeadStar(const TimelineNoteMarker
     note.slideTraceSecond = -1.0;
     note.slideDisplayKey.clear();
     note.slideTrackKey.clear();
+    note.hasProtection = marker.headEx;
     note.headStarTapLike = true;
     return note;
 }
@@ -376,11 +386,14 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
                 && headDeltaSecond + kStaticTimeEpsilonSeconds >= miacode::muri::kTapOnSlideThresholdSeconds
                 && headDeltaSecond <= normalizedCollideThresholdSeconds + kStaticTimeEpsilonSeconds) {
                 MuriStaticReference record;
+                const MuriStaticReferenceNote affected = staticReferenceNoteFromMarker(note);
                 record.kind = MuriKind::SlideHeadTap;
-                record.alertLevel = slideHeadTapAlertLevel(
-                    slideKeysWithTapOnSlideHead.contains(makeMarkerAnalysisKey(slide)),
-                    qAbs(slide.slideTraceSecond - note.second));
-                record.affected = staticReferenceNoteFromMarker(note);
+                record.alertLevel = downgradeProtectedReferenceAlertLevel(
+                    slideHeadTapAlertLevel(
+                        slideKeysWithTapOnSlideHead.contains(makeMarkerAnalysisKey(slide)),
+                        qAbs(slide.slideTraceSecond - note.second)),
+                    affected.hasProtection);
+                record.affected = affected;
                 record.cause = staticReferenceNoteFromMarker(slide);
                 record.deltaSecond = slide.slideTraceSecond - note.second;
                 record.hasDelta = true;
@@ -397,11 +410,14 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
                     continue;
                 }
                 MuriStaticReference record;
+                const MuriStaticReferenceNote affected = staticReferenceNoteFromMarker(note);
                 record.kind = MuriKind::TapOnSlide;
-                record.alertLevel = tapOnSlideAlertLevel(
-                    qAbs(collide.enterSecond - note.second),
-                    normalizedCollideThresholdSeconds);
-                record.affected = staticReferenceNoteFromMarker(note);
+                record.alertLevel = downgradeProtectedReferenceAlertLevel(
+                    tapOnSlideAlertLevel(
+                        qAbs(collide.enterSecond - note.second),
+                        normalizedCollideThresholdSeconds),
+                    affected.hasProtection);
+                record.affected = affected;
                 record.cause = staticReferenceNoteFromMarker(slide);
                 record.deltaSecond = collide.enterSecond - note.second;
                 record.hasDelta = true;
@@ -414,11 +430,14 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
                 && note.second > criticalSecond + normalizedCollideThresholdSeconds + kStaticTimeEpsilonSeconds
                 && note.second <= slide.endSecond + collideExtraDeltaSeconds + kStaticTimeEpsilonSeconds) {
                 MuriStaticReference record;
+                const MuriStaticReferenceNote affected = staticReferenceNoteFromMarker(note);
                 record.kind = MuriKind::TapOnSlide;
-                record.alertLevel = tapOnSlideAlertLevel(
-                    qAbs(criticalSecond - note.second),
-                    normalizedCollideThresholdSeconds);
-                record.affected = staticReferenceNoteFromMarker(note);
+                record.alertLevel = downgradeProtectedReferenceAlertLevel(
+                    tapOnSlideAlertLevel(
+                        qAbs(criticalSecond - note.second),
+                        normalizedCollideThresholdSeconds),
+                    affected.hasProtection);
+                record.affected = affected;
                 record.cause = staticReferenceNoteFromMarker(slide);
                 record.deltaSecond = criticalSecond - note.second;
                 record.hasDelta = true;
@@ -441,11 +460,14 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
                 && headDeltaSecond + kStaticTimeEpsilonSeconds >= miacode::muri::kTapOnSlideThresholdSeconds
                 && headDeltaSecond <= normalizedCollideThresholdSeconds + kStaticTimeEpsilonSeconds) {
                 MuriStaticReference record;
+                const MuriStaticReferenceNote affected = target.note;
                 record.kind = MuriKind::SlideHeadTap;
-                record.alertLevel = slideHeadTapAlertLevel(
-                    slideKeysWithTapOnSlideHead.contains(makeMarkerAnalysisKey(slide)),
-                    qAbs(slide.slideTraceSecond - target.second));
-                record.affected = target.note;
+                record.alertLevel = downgradeProtectedReferenceAlertLevel(
+                    slideHeadTapAlertLevel(
+                        slideKeysWithTapOnSlideHead.contains(makeMarkerAnalysisKey(slide)),
+                        qAbs(slide.slideTraceSecond - target.second)),
+                    affected.hasProtection);
+                record.affected = affected;
                 record.cause = staticReferenceNoteFromMarker(slide);
                 record.deltaSecond = slide.slideTraceSecond - target.second;
                 record.hasDelta = true;
@@ -462,11 +484,14 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
                     continue;
                 }
                 MuriStaticReference record;
+                const MuriStaticReferenceNote affected = target.note;
                 record.kind = MuriKind::TapOnSlide;
-                record.alertLevel = tapOnSlideAlertLevel(
-                    qAbs(collide.enterSecond - target.second),
-                    normalizedCollideThresholdSeconds);
-                record.affected = target.note;
+                record.alertLevel = downgradeProtectedReferenceAlertLevel(
+                    tapOnSlideAlertLevel(
+                        qAbs(collide.enterSecond - target.second),
+                        normalizedCollideThresholdSeconds),
+                    affected.hasProtection);
+                record.affected = affected;
                 record.cause = staticReferenceNoteFromMarker(slide);
                 record.deltaSecond = collide.enterSecond - target.second;
                 record.hasDelta = true;
@@ -479,11 +504,14 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
                 && target.second > criticalSecond + normalizedCollideThresholdSeconds + kStaticTimeEpsilonSeconds
                 && target.second <= slide.endSecond + collideExtraDeltaSeconds + kStaticTimeEpsilonSeconds) {
                 MuriStaticReference record;
+                const MuriStaticReferenceNote affected = target.note;
                 record.kind = MuriKind::TapOnSlide;
-                record.alertLevel = tapOnSlideAlertLevel(
-                    qAbs(criticalSecond - target.second),
-                    normalizedCollideThresholdSeconds);
-                record.affected = target.note;
+                record.alertLevel = downgradeProtectedReferenceAlertLevel(
+                    tapOnSlideAlertLevel(
+                        qAbs(criticalSecond - target.second),
+                        normalizedCollideThresholdSeconds),
+                    affected.hasProtection);
+                record.affected = affected;
                 record.cause = staticReferenceNoteFromMarker(slide);
                 record.deltaSecond = criticalSecond - target.second;
                 record.hasDelta = true;
@@ -527,11 +555,14 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
                 && headDeltaSecond + kStaticTimeEpsilonSeconds >= miacode::muri::kTapOnSlideThresholdSeconds
                 && headDeltaSecond <= normalizedCollideThresholdSeconds + kStaticTimeEpsilonSeconds) {
                 MuriStaticReference record;
+                const MuriStaticReferenceNote affected = staticReferenceNoteFromMarker(note);
                 record.kind = MuriKind::SlideHeadTap;
-                record.alertLevel = slideHeadTapAlertLevel(
-                    slideKeysWithTapOnSlideHead.contains(makeMarkerAnalysisKey(wifi)),
-                    qAbs(wifi.slideTraceSecond - note.second));
-                record.affected = staticReferenceNoteFromMarker(note);
+                record.alertLevel = downgradeProtectedReferenceAlertLevel(
+                    slideHeadTapAlertLevel(
+                        slideKeysWithTapOnSlideHead.contains(makeMarkerAnalysisKey(wifi)),
+                        qAbs(wifi.slideTraceSecond - note.second)),
+                    affected.hasProtection);
+                record.affected = affected;
                 record.cause = staticReferenceNoteFromMarker(wifi);
                 record.deltaSecond = wifi.slideTraceSecond - note.second;
                 record.hasDelta = true;
@@ -542,11 +573,14 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
 
             if (endLanes.contains(note.lane) && markerMomentInRange(note.second, startSecond, endSecond)) {
                 MuriStaticReference record;
+                const MuriStaticReferenceNote affected = staticReferenceNoteFromMarker(note);
                 record.kind = MuriKind::TapOnSlide;
-                record.alertLevel = tapOnSlideAlertLevel(
-                    qAbs(criticalSecond - note.second),
-                    normalizedCollideThresholdSeconds);
-                record.affected = staticReferenceNoteFromMarker(note);
+                record.alertLevel = downgradeProtectedReferenceAlertLevel(
+                    tapOnSlideAlertLevel(
+                        qAbs(criticalSecond - note.second),
+                        normalizedCollideThresholdSeconds),
+                    affected.hasProtection);
+                record.affected = affected;
                 record.cause = staticReferenceNoteFromMarker(wifi);
                 record.deltaSecond = criticalSecond - note.second;
                 record.hasDelta = true;
@@ -565,11 +599,14 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
                 && headDeltaSecond + kStaticTimeEpsilonSeconds >= miacode::muri::kTapOnSlideThresholdSeconds
                 && headDeltaSecond <= normalizedCollideThresholdSeconds + kStaticTimeEpsilonSeconds) {
                 MuriStaticReference record;
+                const MuriStaticReferenceNote affected = target.note;
                 record.kind = MuriKind::SlideHeadTap;
-                record.alertLevel = slideHeadTapAlertLevel(
-                    slideKeysWithTapOnSlideHead.contains(makeMarkerAnalysisKey(wifi)),
-                    qAbs(wifi.slideTraceSecond - target.second));
-                record.affected = target.note;
+                record.alertLevel = downgradeProtectedReferenceAlertLevel(
+                    slideHeadTapAlertLevel(
+                        slideKeysWithTapOnSlideHead.contains(makeMarkerAnalysisKey(wifi)),
+                        qAbs(wifi.slideTraceSecond - target.second)),
+                    affected.hasProtection);
+                record.affected = affected;
                 record.cause = staticReferenceNoteFromMarker(wifi);
                 record.deltaSecond = wifi.slideTraceSecond - target.second;
                 record.hasDelta = true;
@@ -580,11 +617,14 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
 
             if (endLanes.contains(target.note.lane) && markerMomentInRange(target.second, startSecond, endSecond)) {
                 MuriStaticReference record;
+                const MuriStaticReferenceNote affected = target.note;
                 record.kind = MuriKind::TapOnSlide;
-                record.alertLevel = tapOnSlideAlertLevel(
-                    qAbs(criticalSecond - target.second),
-                    normalizedCollideThresholdSeconds);
-                record.affected = target.note;
+                record.alertLevel = downgradeProtectedReferenceAlertLevel(
+                    tapOnSlideAlertLevel(
+                        qAbs(criticalSecond - target.second),
+                        normalizedCollideThresholdSeconds),
+                    affected.hasProtection);
+                record.affected = affected;
                 record.cause = staticReferenceNoteFromMarker(wifi);
                 record.deltaSecond = criticalSecond - target.second;
                 record.hasDelta = true;

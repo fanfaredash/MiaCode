@@ -840,39 +840,44 @@ void MainWindow::updateEditorHeaderLayoutMode()
     const int summaryExtraWidth = summaryHasContent && editorValidationSummaryWidget_ != nullptr
         ? qMax(0, editorValidationSummaryWidget_->sizeHint().width() - 52)
         : 0;
-    const int summaryHideThreshold = 480 + qMin(summaryExtraWidth, 56);
+    const int summaryIconOnlyThreshold = 436 + qMin(summaryExtraWidth, 48);
+    const int summaryHideThreshold = 384 + qMin(summaryExtraWidth / 2, 28);
     const int compactCursorThreshold = 400 + qMin(summaryExtraWidth / 2, 28);
     const int cursorHideThreshold = 360 + qMin(summaryExtraWidth / 2, 20);
 
     bool showLevelControls = true;
     bool showDesignerControls = true;
     bool showSummary = summaryHasContent;
+    bool showSummaryCounts = summaryHasContent;
     bool showCursor = true;
     bool compactCursor = false;
-    int levelWidth = 72;
-    int designerWidth = 140;
+    int levelWidth = 48;
+    int designerWidth = 105;
 
     if (headerWidth < 700) {
-        designerWidth = 128;
+        designerWidth = 96;
     }
     if (headerWidth < 640) {
-        designerWidth = 112;
-        levelWidth = 68;
+        designerWidth = 84;
+        levelWidth = 45;
+    }
+    if (headerWidth < summaryIconOnlyThreshold) {
+        showSummaryCounts = false;
     }
     if (headerWidth < summaryHideThreshold) {
         showSummary = false;
-        levelWidth = 58;
-        designerWidth = 92;
+        levelWidth = 39;
+        designerWidth = 69;
     }
     if (headerWidth < compactCursorThreshold) {
         compactCursor = true;
-        designerWidth = 100;
-        levelWidth = 62;
+        designerWidth = 75;
+        levelWidth = 41;
     }
     if (headerWidth < cursorHideThreshold) {
         showCursor = false;
-        levelWidth = 54;
-        designerWidth = 84;
+        levelWidth = 36;
+        designerWidth = 63;
         showDesignerControls = false;
     }
     if (headerWidth < 310) {
@@ -895,6 +900,20 @@ void MainWindow::updateEditorHeaderLayoutMode()
     }
     if (editorValidationSummaryWidget_ != nullptr) {
         editorValidationSummaryWidget_->setVisible(summaryHasContent && showSummary);
+        const auto applySummaryVisibility = [showSummary, showSummaryCounts](QLabel* icon, QLabel* count) {
+            const bool hasContent = (icon != nullptr && icon->property("hasContent").toBool())
+                || (count != nullptr && count->property("hasContent").toBool());
+            if (icon != nullptr) {
+                icon->setVisible(showSummary && hasContent);
+            }
+            if (count != nullptr) {
+                count->setVisible(showSummary && showSummaryCounts && hasContent);
+            }
+        };
+        applySummaryVisibility(editorValidationErrorIconLabel_, editorValidationErrorCountLabel_);
+        applySummaryVisibility(editorValidationWarningIconLabel_, editorValidationWarningCountLabel_);
+        applySummaryVisibility(editorValidationMuriIconLabel_, editorValidationMuriCountLabel_);
+        editorValidationSummaryWidget_->adjustSize();
     }
     if (showCursor) {
         const auto [line, col] = currentCursorLineCol();

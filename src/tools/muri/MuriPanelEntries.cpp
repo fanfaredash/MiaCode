@@ -116,14 +116,23 @@ QString buildMuriStaticReferenceDetail(const MuriStaticReference& reference)
     const double gapMs = qAbs(reference.deltaSecond) * 1000.0;
     if (reference.kind == MuriKind::SlideHeadTap) {
         return reference.slideHeadHasTapOnSlide
-            ? QStringLiteral("%1 start will early-judge %2, gap %3 ms.")
-                  .arg(causeText, affectedText, QString::number(gapMs, 'f', 1))
-            : QStringLiteral("%1 jump-start will early-judge %2, gap %3 ms.")
-                  .arg(causeText, affectedText, QString::number(gapMs, 'f', 1));
+            ? (reference.alertLevel == MuriAlertLevel::Warning
+                   ? QStringLiteral("%1 start may early-judge %2, gap %3 ms.")
+                         .arg(causeText, affectedText, QString::number(gapMs, 'f', 1))
+                   : QStringLiteral("%1 start early-judges %2, gap %3 ms.")
+                         .arg(causeText, affectedText, QString::number(gapMs, 'f', 1)))
+            : (reference.alertLevel == MuriAlertLevel::Warning
+                   ? QStringLiteral("%1 jump-start may early-judge %2, gap %3 ms.")
+                         .arg(causeText, affectedText, QString::number(gapMs, 'f', 1))
+                   : QStringLiteral("%1 jump-start early-judges %2, gap %3 ms.")
+                         .arg(causeText, affectedText, QString::number(gapMs, 'f', 1)));
     }
     if (reference.kind == MuriKind::TapOnSlide) {
-        return QStringLiteral("%1 tail may collide with %2, gap %3 ms.")
-            .arg(causeText, affectedText, QString::number(gapMs, 'f', 1));
+        return reference.alertLevel == MuriAlertLevel::Warning
+            ? QStringLiteral("%1 trajectory may collide with %2, gap %3 ms.")
+                  .arg(causeText, affectedText, QString::number(gapMs, 'f', 1))
+            : QStringLiteral("%1 trajectory collides with %2, gap %3 ms.")
+                  .arg(causeText, affectedText, QString::number(gapMs, 'f', 1));
     }
     if (reference.kind == MuriKind::Overlap) {
         return QStringLiteral("%1 and same-position %2 formed overlap.")

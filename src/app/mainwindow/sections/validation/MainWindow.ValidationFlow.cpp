@@ -206,11 +206,26 @@ QString localizeMuriDetail(QString rawDetail, bool chineseUi)
     if (splitGapText(rawDetail, QStringLiteral(" start will early-judge "), &left, &right, &gapText)) {
         return QStringLiteral("%1 启动，会提前判定 %2，间隔 %3。").arg(left, right, gapText);
     }
+    if (splitGapText(rawDetail, QStringLiteral(" start may early-judge "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 启动，可能提前判定 %2，间隔 %3。").arg(left, right, gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" start early-judges "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 启动，提前判定 %2，间隔 %3。").arg(left, right, gapText);
+    }
     if (splitGapText(rawDetail, QStringLiteral(" jump-start will early-judge "), &left, &right, &gapText)) {
         return QStringLiteral("%1 偷跑，会提前判定 %2，间隔 %3。").arg(left, right, gapText);
     }
-    if (splitGapText(rawDetail, QStringLiteral(" tail may collide with "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 结尾可能撞到 %2，间隔 %3。").arg(left, right, gapText);
+    if (splitGapText(rawDetail, QStringLiteral(" jump-start may early-judge "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 偷跑，可能提前判定 %2，间隔 %3。").arg(left, right, gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" jump-start early-judges "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 偷跑，提前判定 %2，间隔 %3。").arg(left, right, gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" trajectory may collide with "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 运行轨迹可能撞到 %2，间隔 %3。").arg(left, right, gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" trajectory collides with "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 运行轨迹撞到 %2，间隔 %3。").arg(left, right, gapText);
     }
     if (splitGapText(rawDetail, QStringLiteral(" was early-judged by "), &left, &right, &gapText)) {
         return QStringLiteral("%1 被 %2 提前判定，间隔 %3。").arg(left, right, gapText);
@@ -638,6 +653,8 @@ void MainWindow::updateEditorValidationSummary()
         makeEditorValidationSummaryIcon(errorColor, EditorValidationSummaryIconKind::Error));
     editorValidationErrorCountLabel_->setText(QString::number(errorCount));
     editorValidationErrorCountLabel_->setStyleSheet(QStringLiteral("color: %1;").arg(errorColor.name(QColor::HexRgb)));
+    editorValidationErrorIconLabel_->setProperty("hasContent", showError);
+    editorValidationErrorCountLabel_->setProperty("hasContent", showError);
     editorValidationErrorIconLabel_->setVisible(showError);
     editorValidationErrorCountLabel_->setVisible(showError);
 
@@ -646,6 +663,8 @@ void MainWindow::updateEditorValidationSummary()
     editorValidationWarningCountLabel_->setText(QString::number(warningCount));
     editorValidationWarningCountLabel_->setStyleSheet(
         QStringLiteral("color: %1;").arg(warningColor.name(QColor::HexRgb)));
+    editorValidationWarningIconLabel_->setProperty("hasContent", showWarning);
+    editorValidationWarningCountLabel_->setProperty("hasContent", showWarning);
     editorValidationWarningIconLabel_->setVisible(showWarning);
     editorValidationWarningCountLabel_->setVisible(showWarning);
 
@@ -653,6 +672,8 @@ void MainWindow::updateEditorValidationSummary()
         makeEditorValidationSummaryIcon(muriColor, EditorValidationSummaryIconKind::Muri));
     editorValidationMuriCountLabel_->setText(QString::number(muriIssueCount));
     editorValidationMuriCountLabel_->setStyleSheet(QStringLiteral("color: %1;").arg(muriColor.name(QColor::HexRgb)));
+    editorValidationMuriIconLabel_->setProperty("hasContent", showMuri);
+    editorValidationMuriCountLabel_->setProperty("hasContent", showMuri);
     editorValidationMuriIconLabel_->setVisible(showMuri);
     editorValidationMuriCountLabel_->setVisible(showMuri);
 
