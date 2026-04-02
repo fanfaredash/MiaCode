@@ -1,8 +1,10 @@
 #pragma once
 
-#include <QDir>
 #include <QString>
 #include <QStringList>
+
+#include <atomic>
+#include <optional>
 
 namespace miacode::debug_options {
 
@@ -13,6 +15,15 @@ inline bool isTruthyValue(const QString& value)
         || normalized == QStringLiteral("true")
         || normalized == QStringLiteral("yes")
         || normalized == QStringLiteral("on");
+}
+
+inline bool isFalseyValue(const QString& value)
+{
+    const QString normalized = value.trimmed().toLower();
+    return normalized == QStringLiteral("0")
+        || normalized == QStringLiteral("false")
+        || normalized == QStringLiteral("no")
+        || normalized == QStringLiteral("off");
 }
 
 inline QString envValue(const char* key, const char* legacyKey = nullptr)
@@ -28,31 +39,94 @@ inline bool envFlagEnabled(const char* key, const char* legacyKey = nullptr)
     return isTruthyValue(envValue(key, legacyKey));
 }
 
+inline std::optional<bool> envOptionalFlagValue(const char* key, const char* legacyKey = nullptr)
+{
+    const QString value = envValue(key, legacyKey);
+    if (value.isEmpty()) {
+        return std::nullopt;
+    }
+    if (isTruthyValue(value)) {
+        return true;
+    }
+    if (isFalseyValue(value)) {
+        return false;
+    }
+    return std::nullopt;
+}
+
+inline int envIntValue(const char* key, int defaultValue, const char* legacyKey = nullptr)
+{
+    bool ok = false;
+    const int value = envValue(key, legacyKey).toInt(&ok);
+    return ok ? value : defaultValue;
+}
+
+inline double envDoubleValue(const char* key, double defaultValue, const char* legacyKey = nullptr)
+{
+    bool ok = false;
+    const double value = envValue(key, legacyKey).toDouble(&ok);
+    return ok ? value : defaultValue;
+}
+
+inline std::atomic_bool& debugModeState()
+{
+    static std::atomic_bool enabled{false};
+    return enabled;
+}
+
+inline void setDebugModeEnabled(bool enabled)
+{
+    debugModeState().store(enabled, std::memory_order_relaxed);
+}
+
+inline bool debugModeEnabled()
+{
+    return debugModeState().load(std::memory_order_relaxed);
+}
+
+inline bool debugCategoryEnabled(const char* disableKey)
+{
+    return debugModeEnabled() && !envFlagEnabled(disableKey);
+}
+
 inline bool startupTimingEnabled()
 {
-    return envFlagEnabled("MIACODE_ENABLE_STARTUP_TIMING", "MAIMURI_ENABLE_STARTUP_TIMING");
+    return debugCategoryEnabled("MIACODE_DISABLE_STARTUP_TIMING");
 }
 
 inline bool runtimeDebugOutputEnabled()
 {
-    return envFlagEnabled("MIACODE_ENABLE_RUNTIME_DEBUG_OUTPUT");
+    return debugCategoryEnabled("MIACODE_DISABLE_RUNTIME_DEBUG_OUTPUT");
+}
+
+inline bool audioDebugOutputEnabled()
+{
+    return debugCategoryEnabled("MIACODE_DISABLE_AUDIO_DEBUG_OUTPUT");
+}
+
+inline bool exportDebugOutputEnabled()
+{
+    return debugCategoryEnabled("MIACODE_DISABLE_EXPORT_DEBUG_OUTPUT");
+}
+
+inline bool previewProfileOutputEnabled()
+{
+    return debugCategoryEnabled("MIACODE_DISABLE_PREVIEW_PROFILE_OUTPUT");
+}
+
+inline bool glDebugMessagesEnabled()
+{
+    return debugCategoryEnabled("MIACODE_DISABLE_GL_DEBUG_MESSAGES");
+}
+
+inline bool hasDebugArg(const QStringList& args)
+{
+    return args.contains(QStringLiteral("--debug"));
 }
 
 inline bool hasRuntimeDebugArg(const QStringList& args)
 {
-    return args.contains(QStringLiteral("--miacode-debug"))
-        || args.contains(QStringLiteral("--debug-runtime"))
-        || args.contains(QStringLiteral("--enable-debug-output"));
-}
-
-inline QString startupTimingLogPath()
-{
-    return QDir::temp().filePath(QStringLiteral("miacode_startup_timing.log"));
-}
-
-inline QString runtimeDebugLogPath()
-{
-    return QDir::temp().filePath(QStringLiteral("miacode_runtime_debug.log"));
+    return hasDebugArg(args);
 }
 
 }  // namespace miacode::debug_options

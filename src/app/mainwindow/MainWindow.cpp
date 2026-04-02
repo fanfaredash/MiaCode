@@ -20,6 +20,7 @@
 #include "tools/video_export/VideoExportController.h"
 #include "common/AssetPaths.h"
 #include "common/ChartAssetPaths.h"
+#include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewSfxAssets.h"
 #include "common/PreviewGameplayConfig.h"
@@ -523,11 +524,7 @@ QByteArray buildVideoExportWorkerStartPayload(const VideoExportSnapshot& snapsho
 
 QString videoExportWorkerLogPathForUi()
 {
-    const QString envPath = qEnvironmentVariable("MIACODE_EXPORT_LOG_PATH").trimmed();
-    if (!envPath.isEmpty()) {
-        return QDir::cleanPath(envPath);
-    }
-    return QDir::temp().filePath(QStringLiteral("miacode_video_export.log"));
+    return miacode::debug_log::exportLogPath();
 }
 
 QString qProcessExitStatusForUi(QProcess::ExitStatus status)
@@ -586,7 +583,10 @@ QString buildWorkerProcessDiagnostics(
     if (!stdoutTailText.trimmed().isEmpty()) {
         lines.append(QStringLiteral("stdout_tail: %1").arg(truncateProcessTextForUi(stdoutTailText, 1000)));
     }
-    lines.append(QStringLiteral("Log: %1").arg(videoExportWorkerLogPathForUi()));
+    if (miacode::debug_options::exportDebugOutputEnabled()) {
+        lines.append(QStringLiteral("Debug log: %1").arg(videoExportWorkerLogPathForUi()));
+    }
+    lines.append(QStringLiteral("Error log: %1").arg(miacode::debug_log::fatalLogPath()));
     return lines.join(QStringLiteral("\n"));
 }
 
@@ -907,9 +907,7 @@ private:
 
 QString timestampLine(const QString& title)
 {
-    return QString("[%1] %2")
-        .arg(QDateTime::currentDateTime().toString(Qt::ISODate))
-        .arg(title);
+    return miacode::debug_log::formatTitleLine(title);
 }
 
 QString uiText(const QString& key, const QString& fallback)
@@ -2370,22 +2368,6 @@ void MainWindow::updateBottomTabsDeviceHeight()
 
 namespace {
 
-QString startupTimingLogPath()
-{
-    return miacode::debug_options::startupTimingLogPath();
-}
-
-QString runtimeDebugLogPath()
-{
-    return miacode::debug_options::runtimeDebugLogPath();
-}
-
-bool startupTimingEnabled()
-{
-    static const bool enabled = miacode::debug_options::startupTimingEnabled();
-    return enabled;
-}
-
 struct PreviewMediaWarmupResult {
     quint64 generation = 0;
     QString chartPath;
@@ -2449,18 +2431,7 @@ void warmupFileIntoOsCache(const QString& path, qint64 maxBytes = -1)
 
 void appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 deltaMs)
 {
-    if (!startupTimingEnabled()) {
-        return;
-    }
-    QFile logFile(startupTimingLogPath());
-    if (!logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
-        return;
-    }
-    QTextStream out(&logFile);
-    out << "stage=" << stage
-        << ", elapsed_ms=" << elapsedMs
-        << ", delta_ms=" << deltaMs
-        << "\n";
+    miacode::debug_log::appendStartupTimingStage(stage, elapsedMs, deltaMs);
 }
 
 }  // namespace
@@ -2472,14 +2443,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::configureRuntimeDebugOutput()
 {
-    const QStringList appArgs = QCoreApplication::arguments();
-    runtimeDebugOutputEnabled_ = miacode::debug_options::hasRuntimeDebugArg(appArgs);
-    if (runtimeDebugOutputEnabled_) {
-        qputenv("MIACODE_ENABLE_RUNTIME_DEBUG_OUTPUT", "1");
-        QFile::remove(runtimeDebugLogPath());
-    } else {
-        qunsetenv("MIACODE_ENABLE_RUNTIME_DEBUG_OUTPUT");
-    }
+    runtimeDebugOutputEnabled_ = miacode::debug_options::runtimeDebugOutputEnabled();
 }
 
 void MainWindow::dispatchPreviewMediaControllerCall(
@@ -3056,12 +3020,10 @@ void MainWindow::appendOutput(const QString& title, const QString& payload)
     if (!runtimeDebugOutputEnabled_) {
         return;
     }
-    QFile logFile(runtimeDebugLogPath());
-    if (logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
-        QTextStream out(&logFile);
-        out << timestampLine(title) << "\n";
-        out << payload << "\n\n";
-    }
+    miacode::debug_log::appendText(
+        miacode::debug_log::Channel::Runtime,
+        timestampLine(title) + QStringLiteral("\n") + payload + QStringLiteral("\n")
+    );
     if (outputView_ == nullptr) {
         return;
     }
@@ -5297,7 +5259,12 @@ bool MainWindow::startVideoExportWorkerProcess(QProcess* process, const VideoExp
     }
 
     process->setProcessChannelMode(QProcess::SeparateChannels);
-    process->start(executablePath, QStringList{QStringLiteral("--export-video-worker")}, QIODevice::ReadWrite);
+    QStringList workerArgs;
+    if (miacode::debug_options::debugModeEnabled()) {
+        workerArgs.append(QStringLiteral("--debug"));
+    }
+    workerArgs.append(QStringLiteral("--export-video-worker"));
+    process->start(executablePath, workerArgs, QIODevice::ReadWrite);
     if (!process->waitForStarted(5000)) {
         if (errorMessage != nullptr) {
             *errorMessage = process->errorString();
@@ -5750,6 +5717,13 @@ void MainWindow::handleVideoExportWorkerProcessFinished(int exitCode, int exitSt
         videoExportWorkerResultDetails_ = appendVideoExportDiagnostics(videoExportWorkerResultDetails_, workerDiagnostics);
     } else if (!videoExportWorkerSuccess_) {
         videoExportWorkerResultDetails_ = appendVideoExportDiagnostics(videoExportWorkerResultDetails_, workerDiagnostics);
+    }
+    if (!videoExportWorkerSuccess_) {
+        miacode::debug_log::appendFatalMessage(
+            QStringLiteral("export/worker"),
+            QStringLiteral("%1 | %2")
+                .arg(videoExportWorkerResultMessage_.trimmed(), videoExportWorkerResultDetails_.trimmed())
+        );
     }
 
     if (videoExportWorkerSuccess_) {

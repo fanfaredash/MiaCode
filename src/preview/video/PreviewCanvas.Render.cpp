@@ -391,8 +391,7 @@ void PreviewCanvas::collectGpuProfilingResults(bool waitForAll)
 
 QString PreviewCanvas::profilingSummaryPath() const
 {
-    const QDir appDir(QCoreApplication::applicationDirPath());
-    return QDir::cleanPath(appDir.filePath("preview_profile_summary.txt"));
+    return miacode::debug_log::previewProfileSummaryPath();
 }
 
 QSize PreviewCanvas::preferredSize() const

@@ -1,20 +1,17 @@
 #include "PreviewGLRenderer.h"
 
+#include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 
 #include <QByteArray>
-#include <QDateTime>
-#include <QFile>
 #include <QImage>
 #include <QOpenGLContext>
 #include <QOpenGLExtraFunctions>
 #include <QSurfaceFormat>
-#include <QTextStream>
 #ifdef HAVE_QT_MULTIMEDIA
 #include <QVideoFrame>
 #include <QVideoFrameFormat>
 #endif
-#include <QDebug>
 #include <QtMath>
 #include <QtGlobal>
 
@@ -30,23 +27,14 @@ struct QuadVertex {
 
 void appendPreviewGlLog(const QString& area, const QString& payload, bool warn = false)
 {
-    const QString message = QStringLiteral("[preview_gl/%1] %2").arg(area, payload);
-    if (warn) {
-        qWarning().noquote() << message;
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview_gl/%1").arg(area),
+        payload
+    );
+    if (warn && payload.contains(QStringLiteral("failed"), Qt::CaseInsensitive)) {
+        miacode::debug_log::appendFatalMessage(QStringLiteral("preview_gl/%1").arg(area), payload);
     }
-    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
-        return;
-    }
-
-    QFile logFile(miacode::debug_options::runtimeDebugLogPath());
-    if (!logFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
-        return;
-    }
-    QTextStream stream(&logFile);
-    stream << QDateTime::currentDateTime().toString(Qt::ISODateWithMs)
-           << ' '
-           << message
-           << '\n';
 }
 
 QString surfaceProfileName(QSurfaceFormat::OpenGLContextProfile profile)

@@ -30,6 +30,7 @@ install_manifest.txt
 
 # Keep only docs spec/checklist files under version control.
 docs/*
+!docs/DEBUG_INDEX.md
 !docs/*SPEC.md
 !docs/*CHECKLIST.md
 
@@ -41,11 +42,13 @@ third_party/ffmpeg/**/ffprobe.exe
 
 # scripts whitelist: ignore all by default, allow only release/infra scripts.
 scripts/*
+!scripts/Start_MiaCode_Debug.bat
 !scripts/build-macos.sh
 !scripts/build-win.ps1
 !scripts/compare-export-encode-profiles.ps1
 !scripts/ensure-macos-ffmpeg.sh
 !scripts/ensure-windows-ffmpeg.ps1
+!scripts/export_and_analyze_duplicates.py
 !scripts/package-mac.sh
 !scripts/package-win.ps1
 !scripts/README.md

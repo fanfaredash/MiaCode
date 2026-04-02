@@ -94,4 +94,5 @@ private:
     double profileVideoToImageTotalMs_ = 0.0;
     quint64 profileVideoToImageSampleCount_ = 0;
     QVector<double> profileVideoToImageSamplesMs_;
+    bool videoFallbackConversionFailureLogged_ = false;
 };

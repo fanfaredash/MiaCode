@@ -190,6 +190,12 @@ New-Item -ItemType Directory -Path $DistDir | Out-Null
 
 Copy-Item $exePath (Join-Path $DistDir "MiaCode.exe") -Force
 
+$debugLauncherSrc = Join-Path $repoRoot "scripts\\Start_MiaCode_Debug.bat"
+if (Test-Path $debugLauncherSrc) {
+    Copy-Item $debugLauncherSrc (Join-Path $DistDir "Start_MiaCode_Debug.bat") -Force
+}
+New-Item -ItemType Directory -Path (Join-Path $DistDir "logs") -Force | Out-Null
+
 if ($Config -eq "Debug") {
     $deployMode = "--debug"
 } else {
@@ -257,10 +263,13 @@ if (Test-Path $ffmpegSrc) {
 
 $docsDir = Join-Path $DistDir "docs"
 New-Item -ItemType Directory -Path $docsDir -Force | Out-Null
-foreach ($docFile in @("README.md", "README_EN.md")) {
-    $srcDoc = Join-Path $repoRoot $docFile
-    if (Test-Path $srcDoc) {
-        Copy-Item $srcDoc (Join-Path $docsDir $docFile) -Force
+foreach ($docSpec in @(
+    @{ Source = Join-Path $repoRoot "README.md"; Destination = Join-Path $docsDir "README.md" },
+    @{ Source = Join-Path $repoRoot "README_EN.md"; Destination = Join-Path $docsDir "README_EN.md" },
+    @{ Source = Join-Path $repoRoot "docs\\DEBUG_INDEX.md"; Destination = Join-Path $docsDir "DEBUG_INDEX.md" }
+)) {
+    if (Test-Path $docSpec.Source) {
+        Copy-Item $docSpec.Source $docSpec.Destination -Force
     }
 }
 $releaseReadme = Join-Path $docsDir "RELEASE_README.txt"
@@ -269,13 +278,23 @@ $releaseLines = @(
     ""
     "Run:"
     "  MiaCode.exe"
+    "  Start_MiaCode_Debug.bat"
+    ""
+    "Debug logs:"
+    "  .\\logs\\miacode_runtime_debug.log"
+    "  .\\logs\\miacode_audio_debug.log"
+    "  .\\logs\\miacode_video_export.log"
+    "  .\\logs\\miacode_startup_timing.log"
+    "  .\\logs\\miacode_fatal.log"
     ""
     "Included:"
     "  - MiaCode.exe (main app)"
+    "  - Start_MiaCode_Debug.bat"
     "  - Qt runtime DLLs and plugin folders"
     "  - ffmpeg/ffmpeg.exe"
     "  - assets/"
     "  - docs/"
+    "  - logs/"
 )
 if ($IncludeDevTools) {
     $releaseLines += @(
