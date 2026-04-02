@@ -1,6 +1,8 @@
 #include "timeline/TimelineQuickModel.h"
+#include "simai/parser/SimaiNativeParser.h"
 
 #include <QCoreApplication>
+#include <QStringList>
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QTextStream>
@@ -11,6 +13,315 @@ namespace {
 bool nearlyEqual(double a, double b, double epsilon = 1e-6)
 {
     return qAbs(a - b) <= epsilon;
+}
+
+struct ComparableNote {
+    int line = 1;
+    int col = 1;
+    double second = 0.0;
+    double endSecond = -1.0;
+    double slideTraceSecond = -1.0;
+    int lane = 1;
+    int endLane = 1;
+    TimelineRenderNoteKind kind = TimelineRenderNoteKind::Unknown;
+    quint32 flags = 0u;
+};
+
+QString kindLabel(TimelineRenderNoteKind kind)
+{
+    switch (kind) {
+    case TimelineRenderNoteKind::Tap:
+        return QStringLiteral("tap");
+    case TimelineRenderNoteKind::Hold:
+        return QStringLiteral("hold");
+    case TimelineRenderNoteKind::Slide:
+        return QStringLiteral("slide");
+    case TimelineRenderNoteKind::Wifi:
+        return QStringLiteral("wifi");
+    case TimelineRenderNoteKind::Touch:
+        return QStringLiteral("touch");
+    case TimelineRenderNoteKind::TouchHold:
+        return QStringLiteral("touch_hold");
+    default:
+        return QStringLiteral("unknown");
+    }
+}
+
+QString flagsLabel(quint32 flags)
+{
+    QStringList parts;
+    const auto appendIf = [&parts, flags](TimelineRenderNoteFlag flag, const QString& label) {
+        if ((flags & static_cast<quint32>(flag)) != 0u) {
+            parts.append(label);
+        }
+    };
+    appendIf(TimelineRenderFlagIsEach, QStringLiteral("is_each"));
+    appendIf(TimelineRenderFlagIsBreak, QStringLiteral("is_break"));
+    appendIf(TimelineRenderFlagIsEx, QStringLiteral("is_ex"));
+    appendIf(TimelineRenderFlagIsFirework, QStringLiteral("is_firework"));
+    appendIf(TimelineRenderFlagSlideEach, QStringLiteral("slide_each"));
+    appendIf(TimelineRenderFlagSameHeadSlide, QStringLiteral("same_head"));
+    appendIf(TimelineRenderFlagHeadEach, QStringLiteral("head_each"));
+    appendIf(TimelineRenderFlagHeadBreak, QStringLiteral("head_break"));
+    appendIf(TimelineRenderFlagHeadEx, QStringLiteral("head_ex"));
+    appendIf(TimelineRenderFlagTrackBreak, QStringLiteral("track_break"));
+    appendIf(TimelineRenderFlagHasHeadStar, QStringLiteral("has_head_star"));
+    appendIf(TimelineRenderFlagTapUsesStarMaterial, QStringLiteral("tap_star_material"));
+    appendIf(TimelineRenderFlagTapStarDouble, QStringLiteral("tap_star_double"));
+    appendIf(TimelineRenderFlagSlideHeadUsesTapMaterial, QStringLiteral("slide_head_tap_material"));
+    appendIf(TimelineRenderFlagHeadlessImmediate, QStringLiteral("headless_immediate"));
+    return parts.join(QLatin1Char('|'));
+}
+
+QString describeComparableNote(const ComparableNote& note)
+{
+    return QStringLiteral(
+               "L%1C%2 %3 lane=%4 end=%5 second=%6 trace=%7 end_second=%8 flags=%9")
+        .arg(note.line)
+        .arg(note.col)
+        .arg(kindLabel(note.kind))
+        .arg(note.lane)
+        .arg(note.endLane)
+        .arg(note.second, 0, 'f', 6)
+        .arg(note.slideTraceSecond, 0, 'f', 6)
+        .arg(note.endSecond, 0, 'f', 6)
+        .arg(flagsLabel(note.flags));
+}
+
+TimelineRenderNoteKind kindForMarkerType(const QString& type)
+{
+    if (type == QLatin1String("tap")) {
+        return TimelineRenderNoteKind::Tap;
+    }
+    if (type == QLatin1String("hold")) {
+        return TimelineRenderNoteKind::Hold;
+    }
+    if (type == QLatin1String("slide")) {
+        return TimelineRenderNoteKind::Slide;
+    }
+    if (type == QLatin1String("wifi")) {
+        return TimelineRenderNoteKind::Wifi;
+    }
+    if (type == QLatin1String("touch")) {
+        return TimelineRenderNoteKind::Touch;
+    }
+    if (type == QLatin1String("touch_hold")) {
+        return TimelineRenderNoteKind::TouchHold;
+    }
+    return TimelineRenderNoteKind::Unknown;
+}
+
+quint32 flagsForMarker(const TimelineNoteMarker& marker)
+{
+    quint32 flags = 0u;
+    if (marker.isEach) {
+        flags |= TimelineRenderFlagIsEach;
+    }
+    if (marker.isBreak) {
+        flags |= TimelineRenderFlagIsBreak;
+    }
+    if (marker.isEx) {
+        flags |= TimelineRenderFlagIsEx;
+    }
+    if (marker.isFirework) {
+        flags |= TimelineRenderFlagIsFirework;
+    }
+    if (marker.slideEach) {
+        flags |= TimelineRenderFlagSlideEach;
+    }
+    if (marker.sameHeadSlide) {
+        flags |= TimelineRenderFlagSameHeadSlide;
+    }
+    if (marker.headEach) {
+        flags |= TimelineRenderFlagHeadEach;
+    }
+    if (marker.headBreak) {
+        flags |= TimelineRenderFlagHeadBreak;
+    }
+    if (marker.headEx) {
+        flags |= TimelineRenderFlagHeadEx;
+    }
+    if (marker.trackBreak) {
+        flags |= TimelineRenderFlagTrackBreak;
+    }
+    if (marker.hasHeadStar && (marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi"))) {
+        flags |= TimelineRenderFlagHasHeadStar;
+    }
+    if (marker.tapUsesStarMaterial) {
+        flags |= TimelineRenderFlagTapUsesStarMaterial;
+    }
+    if (marker.tapStarDouble) {
+        flags |= TimelineRenderFlagTapStarDouble;
+    }
+    if (marker.slideHeadUsesTapMaterial) {
+        flags |= TimelineRenderFlagSlideHeadUsesTapMaterial;
+    }
+    if (marker.headlessImmediate) {
+        flags |= TimelineRenderFlagHeadlessImmediate;
+    }
+    return flags;
+}
+
+QVector<ComparableNote> flattenSnapshotNotes(const TimelineRenderSnapshot& snapshot)
+{
+    QVector<ComparableNote> notes;
+    for (const TimelineRenderLine& line : snapshot.lines) {
+        for (const TimelineRenderNote& note : line.notes) {
+            ComparableNote item;
+            item.line = line.lineNumber;
+            item.col = note.sourceCol;
+            item.second = timelineRenderAbsoluteSecond(line, note.secondOffset);
+            item.endSecond = note.endSecondOffset >= 0.0
+                ? timelineRenderAbsoluteSecond(line, note.endSecondOffset)
+                : -1.0;
+            item.slideTraceSecond = note.slideTraceSecondOffset >= 0.0
+                ? timelineRenderAbsoluteSecond(line, note.slideTraceSecondOffset)
+                : -1.0;
+            item.lane = note.lane;
+            item.endLane = note.endLane;
+            item.kind = note.kind;
+            item.flags = note.flags;
+            notes.append(item);
+        }
+    }
+    return notes;
+}
+
+QVector<ComparableNote> flattenParserNotes(const SimaiNativeParseResult& parsed)
+{
+    QVector<ComparableNote> notes;
+    notes.reserve(parsed.noteMarkers.size());
+    for (const TimelineNoteMarker& marker : parsed.noteMarkers) {
+        const TimelineRenderNoteKind kind = kindForMarkerType(marker.type);
+        if (kind == TimelineRenderNoteKind::Unknown) {
+            continue;
+        }
+        ComparableNote item;
+        item.line = marker.sourceLine;
+        item.col = marker.sourceCol;
+        item.second = marker.second;
+        item.endSecond = marker.endSecond;
+        item.slideTraceSecond = marker.slideTraceSecond;
+        item.lane = marker.lane;
+        item.endLane = marker.endLane;
+        item.kind = kind;
+        item.flags = flagsForMarker(marker);
+        notes.append(item);
+    }
+    return notes;
+}
+
+void sortComparableNotes(QVector<ComparableNote>* notes)
+{
+    if (notes == nullptr) {
+        return;
+    }
+    std::sort(notes->begin(), notes->end(), [](const ComparableNote& left, const ComparableNote& right) {
+        if (left.line != right.line) {
+            return left.line < right.line;
+        }
+        if (left.col != right.col) {
+            return left.col < right.col;
+        }
+        if (!nearlyEqual(left.second, right.second)) {
+            return left.second < right.second;
+        }
+        if (left.lane != right.lane) {
+            return left.lane < right.lane;
+        }
+        if (left.endLane != right.endLane) {
+            return left.endLane < right.endLane;
+        }
+        if (left.kind != right.kind) {
+            return static_cast<int>(left.kind) < static_cast<int>(right.kind);
+        }
+        return left.flags < right.flags;
+    });
+}
+
+QString comparableNotesDiff(const QVector<ComparableNote>& expected, const QVector<ComparableNote>& actual)
+{
+    QStringList lines;
+    lines.append(QStringLiteral("expected=%1 actual=%2").arg(expected.size()).arg(actual.size()));
+    const int limit = qMax(expected.size(), actual.size());
+    for (int i = 0; i < limit; ++i) {
+        const QString left = i < expected.size() ? describeComparableNote(expected.at(i)) : QStringLiteral("<none>");
+        const QString right = i < actual.size() ? describeComparableNote(actual.at(i)) : QStringLiteral("<none>");
+        if (i < expected.size() && i < actual.size()) {
+            const ComparableNote& a = expected.at(i);
+            const ComparableNote& b = actual.at(i);
+            if (a.line == b.line
+                && a.col == b.col
+                && nearlyEqual(a.second, b.second)
+                && nearlyEqual(a.endSecond, b.endSecond)
+                && nearlyEqual(a.slideTraceSecond, b.slideTraceSecond)
+                && a.lane == b.lane
+                && a.endLane == b.endLane
+                && a.kind == b.kind
+                && a.flags == b.flags) {
+                continue;
+            }
+        }
+        lines.append(QStringLiteral("[%1] parser=%2").arg(i).arg(left));
+        lines.append(QStringLiteral("[%1] quick =%2").arg(i).arg(right));
+    }
+    return lines.join(QLatin1Char('\n'));
+}
+
+bool snapshotMatchesParser(const QString& chartText, QString* diff = nullptr)
+{
+    const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(chartText);
+    if (!parsed.ok) {
+        if (diff != nullptr) {
+            QStringList messages;
+            messages.append(QStringLiteral("parser failed"));
+            for (const SimaiNativeMessage& error : parsed.errors) {
+                messages.append(QStringLiteral("L%1C%2 %3").arg(error.line).arg(error.col).arg(error.message));
+            }
+            *diff = messages.join(QLatin1Char('\n'));
+        }
+        return false;
+    }
+
+    TimelineQuickModel model;
+    if (!model.rebuildFromText(chartText, 0.0)) {
+        if (diff != nullptr) {
+            *diff = QStringLiteral("quick model rebuild failed");
+        }
+        return false;
+    }
+
+    QVector<ComparableNote> parserNotes = flattenParserNotes(parsed);
+    QVector<ComparableNote> quickNotes = flattenSnapshotNotes(model.snapshot());
+    sortComparableNotes(&parserNotes);
+    sortComparableNotes(&quickNotes);
+
+    if (parserNotes.size() != quickNotes.size()) {
+        if (diff != nullptr) {
+            *diff = comparableNotesDiff(parserNotes, quickNotes);
+        }
+        return false;
+    }
+
+    for (int i = 0; i < parserNotes.size(); ++i) {
+        const ComparableNote& a = parserNotes.at(i);
+        const ComparableNote& b = quickNotes.at(i);
+        if (a.line != b.line
+            || a.col != b.col
+            || !nearlyEqual(a.second, b.second)
+            || !nearlyEqual(a.endSecond, b.endSecond)
+            || !nearlyEqual(a.slideTraceSecond, b.slideTraceSecond)
+            || a.lane != b.lane
+            || a.endLane != b.endLane
+            || a.kind != b.kind
+            || a.flags != b.flags) {
+            if (diff != nullptr) {
+                *diff = comparableNotesDiff(parserNotes, quickNotes);
+            }
+            return false;
+        }
+    }
+    return true;
 }
 
 QVector<double> buildNoteVisualEndPrefixMax(const QVector<TimelineRenderLine>& lines, bool includeSlideTracks)
@@ -219,6 +530,40 @@ int main(int argc, char** argv)
     }
 
     {
+        TimelineRenderLine earlyLine;
+        earlyLine.startSecond = 0.0;
+        TimelineRenderNote earlySlide;
+        earlySlide.kind = TimelineRenderNoteKind::Slide;
+        earlySlide.secondOffset = 0.0;
+        earlySlide.slideTraceSecondOffset = 0.2;
+        earlySlide.endSecondOffset = 2.0;
+        earlyLine.notes.append(earlySlide);
+
+        TimelineRenderLine laterLine;
+        laterLine.startSecond = 1.0;
+        TimelineRenderNote laterSlide;
+        laterSlide.kind = TimelineRenderNoteKind::Slide;
+        laterSlide.secondOffset = 0.0;
+        laterSlide.slideTraceSecondOffset = 0.1;
+        laterSlide.endSecondOffset = 0.6;
+        laterLine.notes.append(laterSlide);
+
+        const QVector<TimelineRenderLine> lines{earlyLine, laterLine};
+        const TimelineVisibleLineRange range = timelineRenderVisibleNoteLineRange(
+            lines,
+            buildNoteVisualEndPrefixMax(lines, true),
+            1.1,
+            1.2
+        );
+        const QVector<TimelineVisibleNoteRef> order = timelineRenderVisibleNotePaintOrder(lines, range);
+        expect(order.size() == 2, QStringLiteral("paint-order helper returns both overlapping visible notes"));
+        if (order.size() == 2) {
+            expect(order.at(0).lineIndex == 0 && order.at(1).lineIndex == 1,
+                   QStringLiteral("paint-order helper keeps later source lines on top of earlier long slides"));
+        }
+    }
+
+    {
         const QString original = QStringLiteral("1,\n2,\nE");
         const int position = original.indexOf(QLatin1Char('\n'));
         expect(
@@ -309,6 +654,70 @@ int main(int argc, char** argv)
                        QStringLiteral("quick model parses [wait##fraction] timing on headless slide"));
             }
         }
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("1<5[4:1],8-3[8:1],\nE"), 0.0);
+        const TimelineRenderSnapshot snapshot = model.snapshot();
+        expect(!snapshot.lines.isEmpty(), QStringLiteral("quick model builds snapshot for bracketed slides"));
+        if (!snapshot.lines.isEmpty()) {
+            const QVector<TimelineRenderNote>& notes = snapshot.lines.constFirst().notes;
+            expect(notes.size() == 2, QStringLiteral("quick model keeps both bracketed slides"));
+            if (notes.size() == 2) {
+                expect(notes.at(0).kind == TimelineRenderNoteKind::Slide && notes.at(0).endLane == 5,
+                       QStringLiteral("quick model ignores slide timing digits when inferring < slide end lane"));
+                expect(notes.at(1).kind == TimelineRenderNoteKind::Slide && notes.at(1).endLane == 3,
+                       QStringLiteral("quick model ignores slide timing digits when inferring - slide end lane"));
+            }
+        }
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("8-3[8:1]*-5[8:1],\nE"), 0.0);
+        const TimelineRenderSnapshot snapshot = model.snapshot();
+        expect(!snapshot.lines.isEmpty(), QStringLiteral("quick model builds snapshot for same-head slide branches"));
+        if (!snapshot.lines.isEmpty()) {
+            const QVector<TimelineRenderNote>& notes = snapshot.lines.constFirst().notes;
+            expect(notes.size() == 2, QStringLiteral("quick model splits same-head slide token into two branches"));
+            if (notes.size() == 2) {
+                const TimelineRenderNote& left = notes.at(0);
+                const TimelineRenderNote& right = notes.at(1);
+                expect(left.kind == TimelineRenderNoteKind::Slide && right.kind == TimelineRenderNoteKind::Slide,
+                       QStringLiteral("quick model keeps same-head branches as slides"));
+                expect(left.endLane == 3 && right.endLane == 5,
+                       QStringLiteral("quick model preserves per-branch end lanes for same-head slides"));
+                expect(nearlyEqual(left.slideTraceSecondOffset, right.slideTraceSecondOffset)
+                           && nearlyEqual(left.endSecondOffset, right.endSecondOffset),
+                       QStringLiteral("quick model keeps same-head branch timing independent instead of stacking durations"));
+                expect(timelineRenderFlagSet(left, TimelineRenderFlagSameHeadSlide)
+                           && timelineRenderFlagSet(right, TimelineRenderFlagSameHeadSlide),
+                       QStringLiteral("quick model marks same-head slide branches with same-head flag"));
+                expect(timelineRenderFlagSet(left, TimelineRenderFlagSlideEach)
+                           && timelineRenderFlagSet(right, TimelineRenderFlagSlideEach),
+                       QStringLiteral("quick model marks same-head slide branches as shared-track slides"));
+                expect(!timelineRenderFlagSet(left, TimelineRenderFlagHeadEach)
+                           && !timelineRenderFlagSet(right, TimelineRenderFlagHeadEach),
+                       QStringLiteral("quick model does not mistake same-head-only groups for head-each groups"));
+            }
+        }
+    }
+
+    {
+        const QString chart = QStringLiteral(
+            "(264) {80},,,,,,,,8-4[8:1],,,,,,,,,,,,,,,,,,,,8,,,,,,,,,,,,,,,,,,,,3/5,,,,,,,,,,,,,,,,,,,,8>4[4:1],,,,,1>5[4:1],,,,,2>6[4:1],,\n"
+            "{80},,,3<7[4:1],,,,,,,,,,,,,,,,,,,,,,,,,1-5[8:1],,,,,,,,,,,,,,,,,,,,1,,,,,,,,,,,,,,,,,,,,3/7,,,,,,,,,,,,\n"
+            "{80},,,,,,,,1<5[4:1],,,,,8<4[4:1],,,,,7<3[4:1],,,,,6>2[4:1],,,,,1,,,,,,,,,,,,,,,,,,,,8-3[8:1]*-5[8:1],,,,,,,,,,,,,,,,,,,,8,,,,,,,,,,,,\n"
+            "{80},,,,,,,,2/6,,,,,,,,,,,,,,,,,,,,8>4[4:1],,,,,1>5[4:1],,,,,2>6[4:1],,,,,3<7[4:1],,,,,8,,,,,,,,,,,,,,,,,,,,1-4[8:1]*-6[8:1],,,,,,,,,,,,,\n"
+            "E");
+        QString diff;
+        const bool matches = snapshotMatchesParser(chart, &diff);
+        if (!matches) {
+            err << diff << '\n';
+        }
+        expect(matches,
+               QStringLiteral("quick model matches parser-visible timeline semantics for the Prophesy One UTG slide repro"));
     }
 
     if (failed > 0) {

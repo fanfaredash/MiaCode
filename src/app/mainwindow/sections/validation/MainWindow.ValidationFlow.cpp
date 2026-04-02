@@ -203,6 +203,12 @@ QString localizeMuriDetail(QString rawDetail, bool chineseUi)
             &gapText)) {
         return QStringLiteral("%1 偷跑，会提前判定后续 tap，间隔 %2。").arg(left, gapText);
     }
+    if (splitGapText(rawDetail, QStringLiteral(" start will early-judge "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 启动，会提前判定 %2，间隔 %3。").arg(left, right, gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" jump-start will early-judge "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 偷跑，会提前判定 %2，间隔 %3。").arg(left, right, gapText);
+    }
     if (splitGapText(rawDetail, QStringLiteral(" tail may collide with "), &left, &right, &gapText)) {
         return QStringLiteral("%1 结尾可能撞到 %2，间隔 %3。").arg(left, right, gapText);
     }
@@ -841,11 +847,24 @@ void MainWindow::onMuriItemActivated(QListWidgetItem* item)
     const int line = item->data(kIssueLineRole).toInt();
     const int col = item->data(kIssueColRole).toInt();
     const double second = item->data(kIssueAuxRole).toDouble();
-    if (second >= 0.0) {
-        navigateTimelineToSecond(second, true);
+    const bool previousSuppressState = suppressTimelineCursorSync_;
+    suppressTimelineCursorSync_ = true;
+    jumpToLocation(line, col);
+    suppressTimelineCursorSync_ = previousSuppressState;
+
+    if (second < 0.0 || timelineView_ == nullptr) {
         return;
     }
-    jumpToLocation(line, col);
+
+    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    previewPendingSeekSecond_ = clampedSecond;
+    previewPendingSeekCenterView_ = true;
+    if (previewSeekDebounceTimer_ != nullptr) {
+        previewSeekDebounceTimer_->stop();
+    }
+    seekPreviewToSecond(clampedSecond, true);
+    timelineView_->setCursorSeconds(clampedSecond, false);
+    timelineView_->focusPlayhead(true);
 }
 
 void MainWindow::showIssueListContextMenu(QListWidget* list, const QPoint& pos, bool muriList)

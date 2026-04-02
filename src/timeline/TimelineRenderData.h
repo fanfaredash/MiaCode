@@ -64,6 +64,11 @@ struct TimelineVisibleLineRange {
     int end = 0;
 };
 
+struct TimelineVisibleNoteRef {
+    int lineIndex = 0;
+    int noteIndex = 0;
+};
+
 struct TimelineRenderLine {
     int lineId = 0;
     int lineNumber = 1;
@@ -158,6 +163,32 @@ inline TimelineVisibleLineRange timelineRenderVisibleNoteLineRange(
         });
     range.begin = static_cast<int>(std::distance(noteVisualEndPrefixMax.cbegin(), beginIt));
     return range;
+}
+
+inline QVector<TimelineVisibleNoteRef> timelineRenderVisibleNotePaintOrder(
+    const QVector<TimelineRenderLine>& lines,
+    const TimelineVisibleLineRange& range)
+{
+    QVector<TimelineVisibleNoteRef> refs;
+    if (lines.isEmpty()) {
+        return refs;
+    }
+
+    const int begin = qBound(0, range.begin, lines.size());
+    const int end = qBound(begin, range.end, lines.size());
+    int reserveCount = 0;
+    for (int lineIndex = begin; lineIndex < end; ++lineIndex) {
+        reserveCount += lines.at(lineIndex).notes.size();
+    }
+    refs.reserve(reserveCount);
+
+    for (int lineIndex = begin; lineIndex < end; ++lineIndex) {
+        const TimelineRenderLine& line = lines.at(lineIndex);
+        for (int noteIndex = 0; noteIndex < line.notes.size(); ++noteIndex) {
+            refs.append(TimelineVisibleNoteRef{lineIndex, noteIndex});
+        }
+    }
+    return refs;
 }
 
 inline quint64 timelineRenderLocationId(int lineNumber, int sourceCol)

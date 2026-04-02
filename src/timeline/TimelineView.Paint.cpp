@@ -210,7 +210,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
         }
     }
 
-    for (int lineIndex = noteRange.end - 1; lineIndex >= noteRange.begin; --lineIndex) {
+    for (int lineIndex = noteRange.begin; lineIndex < noteRange.end; ++lineIndex) {
         const TimelineRenderLine& line = lines_.at(lineIndex);
         for (int noteIndex = line.notes.size() - 1; noteIndex >= 0; --noteIndex) {
             const TimelineRenderNote& note = line.notes.at(noteIndex);

@@ -448,9 +448,26 @@ bool parseTouchSuffix(
 
 int inferSlideEndLane(const QString& token, int fallbackLane)
 {
-    for (int i = token.size() - 1; i >= 0; --i) {
-        if (isDigitLane(token.at(i))) {
-            return token.at(i).digitValue();
+    QString stripped;
+    stripped.reserve(token.size());
+    bool insideBracket = false;
+    for (QChar ch : token) {
+        if (ch == QLatin1Char('[')) {
+            insideBracket = true;
+            continue;
+        }
+        if (ch == QLatin1Char(']')) {
+            insideBracket = false;
+            continue;
+        }
+        if (!insideBracket) {
+            stripped.append(ch);
+        }
+    }
+
+    for (int i = stripped.size() - 1; i >= 0; --i) {
+        if (isDigitLane(stripped.at(i))) {
+            return stripped.at(i).digitValue();
         }
     }
     return fallbackLane;
@@ -1358,6 +1375,25 @@ bool TimelineQuickModel::parseNoteToken(
         core.reserve(token.size());
         core.append(token.at(0));
         core.append(token.mid(1 + modifierCount));
+        if (core.contains(QLatin1Char('*'))) {
+            const QString prefix = token.left(1) + modifierState.rawModifiers;
+            const QChar startLane = token.at(0);
+            const QStringList branches = core.split(QLatin1Char('*'), Qt::KeepEmptyParts);
+            for (const QString& branchRaw : branches) {
+                QString branch = branchRaw;
+                if (branch.isEmpty()) {
+                    continue;
+                }
+                if (!isDigitLane(branch.at(0))) {
+                    branch.prepend(startLane);
+                }
+                const QString branchToken = prefix + branch.mid(1);
+                if (!parseNoteToken(lineState, state, branchToken, lineNumber, column, groupIndices)) {
+                    return false;
+                }
+            }
+            return true;
+        }
         if (slideCoreHasDisallowedModifiers(core)) {
             return false;
         }
@@ -1555,27 +1591,6 @@ void TimelineQuickModel::finalizeEachGroup(LineState* lineState, const QVector<i
         }
     }
 
-    const int logicalUnitCount =
-        tapIndices.size() + holdIndices.size() + touchHoldIndices.size() + headStarLanes.size() + headlessSlideCount;
-    const int noteEachGroupCount = touchIndices.size() + logicalUnitCount;
-    if (noteEachGroupCount < 2) {
-        return;
-    }
-
-    const auto setFlagForIndices = [lineState](const QVector<int>& indices, TimelineRenderNoteFlag flag) {
-        for (int index : indices) {
-            if (index >= 0 && index < lineState->render.notes.size()) {
-                lineState->render.notes[index].flags |= static_cast<quint32>(flag);
-            }
-        }
-    };
-
-    setFlagForIndices(tapIndices, TimelineRenderFlagIsEach);
-    setFlagForIndices(holdIndices, TimelineRenderFlagIsEach);
-    setFlagForIndices(touchHoldIndices, TimelineRenderFlagIsEach);
-    setFlagForIndices(touchIndices, TimelineRenderFlagIsEach);
-    setFlagForIndices(slideIndices, TimelineRenderFlagHeadEach);
-
     for (int i = 0; i < groupIndices.size(); ++i) {
         const int leftIndex = groupIndices.at(i);
         if (leftIndex < 0 || leftIndex >= lineState->render.notes.size()) {
@@ -1601,6 +1616,27 @@ void TimelineQuickModel::finalizeEachGroup(LineState* lineState, const QVector<i
             }
         }
     }
+
+    const int logicalUnitCount =
+        tapIndices.size() + holdIndices.size() + touchHoldIndices.size() + headStarLanes.size() + headlessSlideCount;
+    const int noteEachGroupCount = touchIndices.size() + logicalUnitCount;
+    if (noteEachGroupCount < 2) {
+        return;
+    }
+
+    const auto setFlagForIndices = [lineState](const QVector<int>& indices, TimelineRenderNoteFlag flag) {
+        for (int index : indices) {
+            if (index >= 0 && index < lineState->render.notes.size()) {
+                lineState->render.notes[index].flags |= static_cast<quint32>(flag);
+            }
+        }
+    };
+
+    setFlagForIndices(tapIndices, TimelineRenderFlagIsEach);
+    setFlagForIndices(holdIndices, TimelineRenderFlagIsEach);
+    setFlagForIndices(touchHoldIndices, TimelineRenderFlagIsEach);
+    setFlagForIndices(touchIndices, TimelineRenderFlagIsEach);
+    setFlagForIndices(slideIndices, TimelineRenderFlagHeadEach);
 }
 
 int TimelineQuickModel::allocateLineId()

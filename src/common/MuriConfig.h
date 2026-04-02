@@ -17,14 +17,15 @@ constexpr double kTapAvailableSeconds = 27.0 / kJudgeTps;
 constexpr double kTouchCriticalSeconds = 27.0 / kJudgeTps;
 constexpr double kTouchAvailableSeconds = 27.0 / kJudgeTps;
 constexpr double kSlideCriticalSeconds = 42.0 / kJudgeTps;
-constexpr double kSlideAvailableSeconds = 108.0 / kJudgeTps;
+constexpr double kSlideAvailableSeconds = 24.0 * 60.0 * 60.0;
 constexpr double kSlideDeltaShiftSeconds = 9.0 / kJudgeTps;
 constexpr double kSlideLeadingSeconds = 15.0 / kJudgeTps;
 constexpr double kTapOnSlideThresholdSeconds = 1.0 / kJudgeTps;
 constexpr double kTapOnSlideWarningCutoffSeconds = 0.150;
 constexpr double kTouchOnSlideThresholdSeconds = 24.0 / kJudgeTps;
 constexpr double kSlideTooFastThresholdSeconds = 1.0 / kJudgeTps;
-constexpr double kSlideHeadTapWarningCutoffSeconds = 0.050;
+constexpr double kSlideHeadTapNoTapWarningCutoffSeconds = 0.050;
+constexpr double kSlideHeadTapLateWarningCutoffSeconds = 0.150;
 
 constexpr double kLogicalCanvasSize = 540.0;
 constexpr double kLogicalCanvasCenter = kLogicalCanvasSize / 2.0;
