@@ -93,7 +93,7 @@ struct JudgeableSimpleNote {
     bool slideHead = false;
     bool onSlide = false;
     bool tailOnSlideHead = false;
-    bool syntheticSlideHeadStar = false;
+    bool headStarTapLike = false;
     bool judged = false;
     bool judgeBad = false;
     bool lateBad = false;
@@ -361,6 +361,31 @@ bool shouldEmitSyntheticSlideHeadStar(
     return true;
 }
 
+QString headStarJudgeEmitKey(const TimelineNoteMarker& marker)
+{
+    if (marker.sameHeadSlide) {
+        return QStringLiteral("same_head_star_note|%1|%2|%3|%4|%5|%6")
+            .arg(marker.second, 0, 'f', 6)
+            .arg(marker.sourceLine)
+            .arg(marker.lane)
+            .arg(marker.headBreak ? 1 : 0)
+            .arg(marker.headEx ? 1 : 0)
+            .arg(marker.headEach ? 1 : 0);
+    }
+
+    return QStringLiteral("head_star_note|%1|%2|%3|%4|%5")
+        .arg(marker.second, 0, 'f', 6)
+        .arg(marker.sourceLine)
+        .arg(marker.sourceCol)
+        .arg(marker.lane)
+        .arg(marker.parseOrder);
+}
+
+bool shouldCreateHeadStarJudgeNote(const TimelineNoteMarker& marker)
+{
+    return isSlideLike(marker) && marker.hasHeadStar && marker.lane >= 1 && marker.lane <= 8;
+}
+
 QVector<QPointF> centeredPathPoints(const QVector<QPointF>& points)
 {
     QVector<QPointF> result;
@@ -614,6 +639,48 @@ QString noteTypeDisplayLabel(const QString& type)
     return normalized;
 }
 
+QString laneDisplayTokenFromPad(const QString& pad)
+{
+    const QString normalizedPad = normalizedPadToken(pad);
+    if (normalizedPad.size() >= 2
+        && normalizedPad.at(1) >= QLatin1Char('1')
+        && normalizedPad.at(1) <= QLatin1Char('8')) {
+        return normalizedPad.mid(1);
+    }
+    return QString();
+}
+
+QString simpleNoteTargetLabel(const JudgeableSimpleNote& note)
+{
+    if (note.headStarTapLike) {
+        const QString laneToken =
+            (note.marker != nullptr && note.marker->lane >= 1 && note.marker->lane <= 8)
+            ? QString::number(note.marker->lane)
+            : laneDisplayTokenFromPad(note.pad);
+        return laneToken.isEmpty()
+            ? QStringLiteral("star")
+            : QStringLiteral("star %1").arg(laneToken);
+    }
+
+    const QString normalizedType = note.type.trimmed().toLower();
+    if (normalizedType == QLatin1String("tap") || normalizedType == QLatin1String("hold")) {
+        const QString laneToken =
+            (note.marker != nullptr && note.marker->lane >= 1 && note.marker->lane <= 8)
+            ? QString::number(note.marker->lane)
+            : laneDisplayTokenFromPad(note.pad);
+        const QString typeText = noteTypeDisplayLabel(note.type);
+        return laneToken.isEmpty() ? typeText : QStringLiteral("%1 %2").arg(typeText, laneToken);
+    }
+
+    if (normalizedType == QLatin1String("touch") || normalizedType == QLatin1String("touch_hold")) {
+        const QString pad = normalizedPadToken(note.pad);
+        const QString typeText = noteTypeDisplayLabel(note.type);
+        return pad.isEmpty() ? typeText : QStringLiteral("%1 %2").arg(typeText, pad);
+    }
+
+    return noteTypeDisplayLabel(note.type);
+}
+
 QString formatMarkerConfigLabel(const TimelineNoteMarker& marker, bool slideHead = false)
 {
     Q_UNUSED(slideHead);
@@ -830,7 +897,10 @@ MuriAlertLevel slideHeadTapAlertLevel(bool hasTapOnSlideHead, double gapSecond)
 {
     if (!hasTapOnSlideHead
         && gapSecond > kPadTimeEpsilon
-        && gapSecond <= miacode::muri::kSlideHeadTapWarningCutoffSeconds + kPadTimeEpsilon) {
+        && gapSecond <= miacode::muri::kSlideHeadTapNoTapWarningCutoffSeconds + kPadTimeEpsilon) {
+        return MuriAlertLevel::Warning;
+    }
+    if (gapSecond + kPadTimeEpsilon >= miacode::muri::kSlideHeadTapLateWarningCutoffSeconds) {
         return MuriAlertLevel::Warning;
     }
     return MuriAlertLevel::Muri;
@@ -1448,39 +1518,6 @@ void buildOverlayActions(
         }
     }
 
-    QSet<QString> emittedHelperKeys;
-    for (const TimelineNoteMarker& marker : noteMarkers) {
-        if (!shouldEmitSyntheticSlideHeadStar(marker, noteMarkers)) {
-            continue;
-        }
-
-        const QString pad = slideHeadPad(marker.lane);
-        if (pad.isEmpty()) {
-            continue;
-        }
-
-        const QString helperKey = slideHeadStarMarkerKey(marker);
-        if (emittedHelperKeys.contains(helperKey)) {
-            continue;
-        }
-        emittedHelperKeys.insert(helperKey);
-
-        addPadWindow(
-            padWindows,
-            pad,
-            marker.second,
-            marker.second + miacode::muri::kReleaseDelaySeconds,
-            helperKey,
-            QStringLiteral("tap"));
-        addActionTrail(
-            actionTrails,
-            helperKey,
-            QStringLiteral("tap"),
-            marker.second,
-            marker.second + miacode::muri::kReleaseDelaySeconds,
-            kHandRadiusNormal,
-            {miacode::muri::padCenter(pad)});
-    }
 }
 
 void addDiagnostic(
@@ -1605,7 +1642,7 @@ bool appendSlideJudgeSpriteEvent(
 QHash<QString, MarkerSourceRef> buildMarkerSourceRefs(const QVector<TimelineNoteMarker>& noteMarkers)
 {
     QHash<QString, MarkerSourceRef> refs;
-    refs.reserve(noteMarkers.size() * 2);
+    refs.reserve(noteMarkers.size());
 
     for (int index = 0; index < noteMarkers.size(); ++index) {
         const TimelineNoteMarker& marker = noteMarkers.at(index);
@@ -1616,26 +1653,6 @@ QHash<QString, MarkerSourceRef> buildMarkerSourceRefs(const QVector<TimelineNote
         ref.col = marker.sourceCol;
         ref.type = marker.type;
         refs.insert(makeMarkerAnalysisKey(marker), ref);
-
-        if (!shouldEmitSyntheticSlideHeadStar(marker, noteMarkers)) {
-            continue;
-        }
-
-        const QString helperPad = slideHeadPad(marker.lane);
-        if (helperPad.isEmpty()) {
-            continue;
-        }
-
-        const QString helperKey = slideHeadStarMarkerKey(marker);
-        MarkerSourceRef helperRef = refs.value(helperKey);
-        if (helperRef.order < 0 || ref.order < helperRef.order) {
-            helperRef.order = ref.order;
-            helperRef.second = marker.second;
-            helperRef.line = marker.sourceLine;
-            helperRef.col = slideHeadStarSourceCol(marker);
-            helperRef.type = QStringLiteral("tap");
-            refs.insert(helperKey, helperRef);
-        }
     }
 
     return refs;
@@ -1685,40 +1702,38 @@ QVector<JudgeableSimpleNote> buildJudgeableSimpleNotes(
         }
     }
 
-    QSet<QString> emittedHelperKeys;
+    QSet<QString> emittedHeadStarKeys;
     for (int markerIndex = 0; markerIndex < noteMarkers.size(); ++markerIndex) {
         const TimelineNoteMarker& marker = noteMarkers.at(markerIndex);
-        if (!shouldEmitSyntheticSlideHeadStar(marker, noteMarkers)) {
+        if (!shouldCreateHeadStarJudgeNote(marker)) {
             continue;
         }
 
-        const QString pad = slideHeadPad(marker.lane);
-        if (pad.isEmpty()) {
+        const QString emitKey = headStarJudgeEmitKey(marker);
+        if (emittedHeadStarKeys.contains(emitKey)) {
             continue;
         }
+        emittedHeadStarKeys.insert(emitKey);
 
-        const QString markerKey = slideHeadStarMarkerKey(marker);
-        if (emittedHelperKeys.contains(markerKey)) {
-            continue;
-        }
-        emittedHelperKeys.insert(markerKey);
+        const QString markerKey = makeMarkerAnalysisKey(marker);
         const MarkerSourceRef ref = markerRefs.value(markerKey);
 
         JudgeableSimpleNote note;
+        note.marker = &marker;
         note.markerKey = markerKey;
         note.type = QStringLiteral("tap");
-        note.pad = pad;
+        note.pad = slideHeadPad(marker.lane);
         note.order = ref.order;
         note.parseOrder = marker.parseOrder;
         note.eachGroupId = marker.eachGroupId;
         note.line = marker.sourceLine;
-        note.col = slideHeadStarSourceCol(marker);
+        note.col = marker.sourceCol;
         note.momentSecond = marker.second;
         note.pressEndSecond = marker.second + miacode::muri::kReleaseDelaySeconds;
         note.criticalSeconds = miacode::muri::kTapCriticalSeconds;
         note.availableSeconds = miacode::muri::kTapAvailableSeconds;
         note.expiryTick = judgeTickForNoteExpiry(marker.second, note.availableSeconds);
-        note.syntheticSlideHeadStar = true;
+        note.headStarTapLike = true;
         const int noteIndex = notes.size();
         notes.append(note);
         if (noteIndexByMarkerKey != nullptr) {
@@ -2054,7 +2069,7 @@ QVector<MuriPadWindow> buildRuntimePadWindows(
     }
 
     for (const JudgeableSimpleNote& note : notes) {
-        if (!note.syntheticSlideHeadStar) {
+        if (!note.headStarTapLike) {
             continue;
         }
         addPadWindow(
@@ -2152,7 +2167,8 @@ QVector<RuntimeHandAction> buildRuntimeHandActions(
     const QVector<JudgeableSimpleNote>& notes,
     const QVector<RuntimeTouchGroup>& touchGroups,
     const QHash<int, int>& touchGroupByChildNoteIndex,
-    bool includeSlideLike = false)
+    bool includeSlideLike = false,
+    bool includeHeadStarTapLikeNotes = true)
 {
     using namespace miacode::muri;
 
@@ -2161,7 +2177,10 @@ QVector<RuntimeHandAction> buildRuntimeHandActions(
 
     for (int noteIndex = 0; noteIndex < notes.size(); ++noteIndex) {
         const JudgeableSimpleNote& note = notes.at(noteIndex);
-        if (note.syntheticSlideHeadStar) {
+        if (note.headStarTapLike) {
+            if (!includeHeadStarTapLikeNotes) {
+                continue;
+            }
             appendPressHandAction(
                 &actions,
                 note.markerKey,
@@ -3278,20 +3297,16 @@ QHash<QString, RuntimeSlideJudgeResult> simulateRuntimeSlideAndWifiJudgments(
     }
 
     const QVector<RuntimeHandAction> actions =
-        buildRuntimeHandActions(noteMarkers, notes, touchGroups, touchGroupByChildNoteIndex, true);
-    int maxTick = 0;
+        buildRuntimeHandActions(
+            noteMarkers,
+            notes,
+            touchGroups,
+            touchGroupByChildNoteIndex,
+            true);
+    int maxActionTick = 0;
     for (const RuntimeHandAction& action : actions) {
-        maxTick = qMax(maxTick, judgeTickForPadActiveEnd(action.endSecond));
-    }
-    for (const RuntimeSlideNoteState& note : slideNotes) {
-        maxTick = qMax(
-            maxTick,
-            judgeTickForNoteExpiry(note.endSecond, miacode::muri::kSlideAvailableSeconds));
-    }
-    for (const RuntimeWifiNoteState& note : wifiNotes) {
-        maxTick = qMax(
-            maxTick,
-            judgeTickForNoteExpiry(note.endSecond, miacode::muri::kSlideAvailableSeconds));
+        const int actionEndTick = judgeTickForPadActiveEnd(action.endSecond);
+        maxActionTick = qMax(maxActionTick, actionEndTick);
     }
 
     static const QStringList allPads = []() {
@@ -3309,7 +3324,7 @@ QHash<QString, RuntimeSlideJudgeResult> simulateRuntimeSlideAndWifiJudgments(
     QHash<QString, RuntimePadEvent> previousPadStates;
     QVector<int> activeActionIndices;
     int actionPointer = 0;
-    for (int tick = 0; tick <= maxTick; ++tick) {
+    for (int tick = 0; tick <= maxActionTick; ++tick) {
         const double nowSecond = tickToSecond(tick);
         while (actionPointer < actions.size()) {
             const RuntimeHandAction& action = actions.at(actionPointer);
@@ -3377,6 +3392,25 @@ QHash<QString, RuntimeSlideJudgeResult> simulateRuntimeSlideAndWifiJudgments(
         for (int actionIndex : finishedActionIndices) {
             activeActionIndices.removeAll(actionIndex);
         }
+    }
+
+    for (RuntimeSlideNoteState& note : slideNotes) {
+        if (note.judged) {
+            continue;
+        }
+        note.judged = true;
+        note.judgeBad = true;
+        note.judgeSecond =
+            tickToSecond(judgeTickForNoteExpiry(note.endSecond, miacode::muri::kSlideAvailableSeconds));
+    }
+    for (RuntimeWifiNoteState& note : wifiNotes) {
+        if (note.judged) {
+            continue;
+        }
+        note.judged = true;
+        note.judgeBad = true;
+        note.judgeSecond =
+            tickToSecond(judgeTickForNoteExpiry(note.endSecond, miacode::muri::kSlideAvailableSeconds));
     }
 
     for (const RuntimeSlideNoteState& note : slideNotes) {
@@ -3775,6 +3809,9 @@ QSet<QString> buildSameMomentPadOverlapKeys(const QVector<JudgeableSimpleNote>& 
     markerKeysByMomentPad.reserve(notes.size());
 
     for (const JudgeableSimpleNote& note : notes) {
+        if (note.headStarTapLike) {
+            continue;
+        }
         const QString pad = normalizedPadToken(note.pad);
         if (pad.isEmpty()) {
             continue;
@@ -3884,7 +3921,13 @@ void collectSimpleNoteMultiTouchDiagnostics(
     }
 
     const QVector<RuntimeHandAction> actions =
-        buildRuntimeHandActions(noteMarkers, notes, touchGroups, touchGroupByChildNoteIndex, true);
+        buildRuntimeHandActions(
+            noteMarkers,
+            notes,
+            touchGroups,
+            touchGroupByChildNoteIndex,
+            true,
+            false);
     if (actions.isEmpty()) {
         return;
     }
@@ -4140,14 +4183,15 @@ void collectSimpleNoteRuntimeDiagnostics(
             const MuriAlertLevel alertLevel = slideHeadTap
                 ? slideHeadTapAlertLevel(hasTapOnSlideHead, gapSecond)
                 : tapOnSlideAlertLevel(gapSecond, normalizedStaticTapOnSlideThresholdSeconds);
+            const QString affectedTarget = simpleNoteTargetLabel(note);
             const QString detail = slideHeadTap
                 ? (hasTapOnSlideHead
-                       ? QStringLiteral("%1 start will early-judge a following tap, gap %2 ms.")
-                             .arg(causeConfig, QString::number(gapMs, 'f', 1))
-                       : QStringLiteral("%1 jump-start will early-judge a following tap, gap %2 ms.")
-                             .arg(causeConfig, QString::number(gapMs, 'f', 1)))
+                       ? QStringLiteral("%1 start will early-judge %2, gap %3 ms.")
+                             .arg(causeConfig, affectedTarget, QString::number(gapMs, 'f', 1))
+                       : QStringLiteral("%1 jump-start will early-judge %2, gap %3 ms.")
+                             .arg(causeConfig, affectedTarget, QString::number(gapMs, 'f', 1)))
                 : QStringLiteral("%1 tail may collide with %2, gap %3 ms.")
-                      .arg(causeConfig, noteTypeDisplayLabel(note.type), QString::number(gapMs, 'f', 1));
+                      .arg(causeConfig, affectedTarget, QString::number(gapMs, 'f', 1));
             const DiagnosticAnchor anchor = earlierDiagnosticAnchor(
                 diagnosticAnchorFromNote(note),
                 diagnosticAnchorForCause(note.cause, markerRefs, syntheticSlideHeadOwnerKeys));

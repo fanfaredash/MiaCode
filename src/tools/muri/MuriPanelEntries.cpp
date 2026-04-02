@@ -72,6 +72,10 @@ MuriPanelAnchor muriPanelAnchorFromReferenceNote(const MuriStaticReferenceNote& 
 
 QString muriStaticReferenceConfigText(const MuriStaticReferenceNote& note)
 {
+    if (note.headStarTapLike) {
+        return QStringLiteral("star %1").arg(note.lane);
+    }
+
     const QString markerType = note.markerType.trimmed().toLower();
     const QString pad = note.pad.trimmed().toUpper();
     if (markerType == QLatin1String("tap")) {
@@ -101,30 +105,6 @@ QString muriStaticReferenceConfigText(const MuriStaticReferenceNote& note)
     return markerType;
 }
 
-QString muriStaticReferenceTypeText(const MuriStaticReferenceNote& note)
-{
-    const QString markerType = note.markerType.trimmed().toLower();
-    if (markerType == QLatin1String("tap")) {
-        return QStringLiteral("tap");
-    }
-    if (markerType == QLatin1String("hold")) {
-        return QStringLiteral("hold");
-    }
-    if (markerType == QLatin1String("touch")) {
-        return QStringLiteral("touch");
-    }
-    if (markerType == QLatin1String("touch_hold")) {
-        return QStringLiteral("touch-hold");
-    }
-    if (markerType == QLatin1String("slide")) {
-        return QStringLiteral("slide");
-    }
-    if (markerType == QLatin1String("wifi")) {
-        return QStringLiteral("wifi");
-    }
-    return markerType;
-}
-
 QString buildMuriStaticReferenceDetail(const MuriStaticReference& reference)
 {
     const QString affectedText = muriStaticReferenceConfigText(reference.affected);
@@ -132,17 +112,14 @@ QString buildMuriStaticReferenceDetail(const MuriStaticReference& reference)
     const double gapMs = qAbs(reference.deltaSecond) * 1000.0;
     if (reference.kind == MuriKind::SlideHeadTap) {
         return reference.slideHeadHasTapOnSlide
-            ? QStringLiteral("%1 start will early-judge a following tap, gap %2 ms.")
-                  .arg(causeText, QString::number(gapMs, 'f', 1))
-            : QStringLiteral("%1 jump-start will early-judge a following tap, gap %2 ms.")
-                  .arg(causeText, QString::number(gapMs, 'f', 1));
+            ? QStringLiteral("%1 start will early-judge %2, gap %3 ms.")
+                  .arg(causeText, affectedText, QString::number(gapMs, 'f', 1))
+            : QStringLiteral("%1 jump-start will early-judge %2, gap %3 ms.")
+                  .arg(causeText, affectedText, QString::number(gapMs, 'f', 1));
     }
     if (reference.kind == MuriKind::TapOnSlide) {
         return QStringLiteral("%1 tail may collide with %2, gap %3 ms.")
-            .arg(
-                causeText,
-                muriStaticReferenceTypeText(reference.affected),
-                QString::number(gapMs, 'f', 1));
+            .arg(causeText, affectedText, QString::number(gapMs, 'f', 1));
     }
     if (reference.kind == MuriKind::Overlap) {
         return QStringLiteral("%1 and same-position %2 formed overlap.")

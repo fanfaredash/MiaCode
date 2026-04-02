@@ -133,6 +133,7 @@ struct MuriStaticReferenceNote {
     double second = 0.0;
     double endSecond = -1.0;
     double slideTraceSecond = -1.0;
+    bool headStarTapLike = false;
 };
 
 struct MuriStaticReference {

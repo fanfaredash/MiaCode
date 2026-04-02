@@ -287,6 +287,17 @@ QString muriKindKey(MuriKind kind)
     return QStringLiteral("Unknown");
 }
 
+QString muriAlertLevelKey(MuriAlertLevel alertLevel)
+{
+    switch (alertLevel) {
+    case MuriAlertLevel::Muri:
+        return QStringLiteral("Muri");
+    case MuriAlertLevel::Warning:
+        return QStringLiteral("Warning");
+    }
+    return QStringLiteral("Unknown");
+}
+
 QString areaJudgeCauseKey(AreaJudgeCause cause)
 {
     switch (cause) {
@@ -347,6 +358,7 @@ QJsonObject jsonFromStaticReferenceNote(const MuriStaticReferenceNote& note)
     if (!note.pad.isEmpty()) {
         item.insert(QStringLiteral("pad"), note.pad);
     }
+    item.insert(QStringLiteral("head_star_tap_like"), note.headStarTapLike);
     return item;
 }
 
@@ -354,6 +366,7 @@ QJsonObject jsonFromStaticReferenceRecord(const MuriStaticReference& record)
 {
     QJsonObject item;
     item.insert(QStringLiteral("kind"), muriKindKey(record.kind));
+    item.insert(QStringLiteral("alert_level"), muriAlertLevelKey(record.alertLevel));
     item.insert(QStringLiteral("affected"), jsonFromStaticReferenceNote(record.affected));
     item.insert(QStringLiteral("cause"), jsonFromStaticReferenceNote(record.cause));
     if (record.hasDelta) {
@@ -429,6 +442,7 @@ QJsonObject jsonFromDiagnostic(const MuriDiagnostic& diagnostic)
 {
     QJsonObject item;
     item.insert(QStringLiteral("kind"), muriKindKey(diagnostic.kind));
+    item.insert(QStringLiteral("alert_level"), muriAlertLevelKey(diagnostic.alertLevel));
     item.insert(QStringLiteral("second"), diagnostic.second);
     item.insert(QStringLiteral("line"), diagnostic.line);
     item.insert(QStringLiteral("col"), diagnostic.col);

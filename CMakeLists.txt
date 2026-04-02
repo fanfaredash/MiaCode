@@ -3,13 +3,13 @@ cmake_minimum_required(VERSION 3.21)
 set(MIACODE_VERSION_MAJOR "0")
 set(MIACODE_VERSION_MINOR "3")
 set(MIACODE_VERSION_PATCH "8")
-set(MIACODE_VERSION_PRERELEASE "dev6")
+set(MIACODE_VERSION_PRERELEASE "dev7")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
     set(MIACODE_VERSION_STRING "${MIACODE_VERSION}-${MIACODE_VERSION_PRERELEASE}")
 endif()
-set(MIACODE_DISPLAY_PRERELEASE "dev6")
+set(MIACODE_DISPLAY_PRERELEASE "dev7")
 set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_DISPLAY_PRERELEASE}" STREQUAL "")
     set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_DISPLAY_VERSION_STRING}.${MIACODE_DISPLAY_PRERELEASE}")
@@ -241,8 +241,11 @@ if (MIACODE_BUILD_DEV_TOOLS)
 
     add_executable(timeline_model_spec
         src/tools/timeline/TimelineModelSpec.cpp
+        src/simai/parser/SimaiNativeParser.h
+        src/simai/parser/SimaiNativeParser.cpp
         src/timeline/TimelineQuickModel.h
         src/timeline/TimelineQuickModel.cpp
+        resources/fonts.qrc
     )
 
     target_link_libraries(miacode_muri_dump PRIVATE
@@ -340,6 +343,9 @@ if (MIACODE_BUILD_DEV_TOOLS)
     )
     target_include_directories(timeline_model_spec PRIVATE
         src
+        src/app/ui
+        src/simai
+        src/simai/parser
         src/timeline
         src/tools
     )

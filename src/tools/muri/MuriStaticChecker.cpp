@@ -81,6 +81,31 @@ bool isNonSlideMarker(const TimelineNoteMarker& marker)
     return isTapLikeMarker(marker) || isHoldLikeMarker(marker);
 }
 
+QString headStarJudgeEmitKey(const TimelineNoteMarker& marker)
+{
+    if (marker.sameHeadSlide) {
+        return QStringLiteral("same_head_star_note|%1|%2|%3|%4|%5|%6")
+            .arg(marker.second, 0, 'f', 6)
+            .arg(marker.sourceLine)
+            .arg(marker.lane)
+            .arg(marker.headBreak ? 1 : 0)
+            .arg(marker.headEx ? 1 : 0)
+            .arg(marker.headEach ? 1 : 0);
+    }
+
+    return QStringLiteral("head_star_note|%1|%2|%3|%4|%5")
+        .arg(marker.second, 0, 'f', 6)
+        .arg(marker.sourceLine)
+        .arg(marker.sourceCol)
+        .arg(marker.lane)
+        .arg(marker.parseOrder);
+}
+
+bool shouldCreateHeadStarTarget(const TimelineNoteMarker& marker)
+{
+    return isSlideLike(marker) && marker.hasHeadStar && marker.lane >= 1 && marker.lane <= 8;
+}
+
 QString lanePadToken(int lane)
 {
     if (lane < 1 || lane > 8) {
@@ -143,7 +168,11 @@ MuriAlertLevel slideHeadTapAlertLevel(bool hasTapOnSlideHead, double gapSecond)
 {
     if (!hasTapOnSlideHead
         && gapSecond > kStaticTimeEpsilonSeconds
-        && gapSecond <= miacode::muri::kSlideHeadTapWarningCutoffSeconds + kStaticTimeEpsilonSeconds) {
+        && gapSecond <= miacode::muri::kSlideHeadTapNoTapWarningCutoffSeconds + kStaticTimeEpsilonSeconds) {
+        return MuriAlertLevel::Warning;
+    }
+    if (gapSecond + kStaticTimeEpsilonSeconds
+        >= miacode::muri::kSlideHeadTapLateWarningCutoffSeconds) {
         return MuriAlertLevel::Warning;
     }
     return MuriAlertLevel::Muri;
@@ -198,62 +227,50 @@ MuriStaticReferenceNote staticReferenceNoteFromMarker(const TimelineNoteMarker& 
     return note;
 }
 
-TimelineNoteMarker makeStaticHelperHeadTapMarker(const TimelineNoteMarker& marker)
+MuriStaticReferenceNote staticReferenceNoteFromHeadStar(const TimelineNoteMarker& marker)
 {
-    TimelineNoteMarker helper;
-    helper.second = marker.second;
-    helper.endSecond = -1.0;
-    helper.slideTraceSecond = -1.0;
-    helper.availableSecond = -1.0;
-    helper.parseOrder = marker.parseOrder;
-    helper.eachGroupId = marker.eachGroupId;
-    helper.sourceLine = marker.sourceLine;
-    helper.sourceCol = qMax(1, marker.sourceCol + 1);
-    helper.lane = marker.lane;
-    helper.endLane = marker.lane;
-    helper.type = QStringLiteral("tap");
-    helper.isEach = marker.headEach;
-    helper.isBreak = marker.headBreak;
-    helper.isEx = marker.headEx;
-    helper.hasHeadStar = true;
-    helper.slideTrackKey = QStringLiteral("__static_helper_head_tap__");
-    return helper;
+    MuriStaticReferenceNote note = staticReferenceNoteFromMarker(marker);
+    note.markerType = QStringLiteral("tap");
+    note.pad = lanePadToken(marker.lane);
+    note.endLane = marker.lane;
+    note.endSecond = -1.0;
+    note.slideTraceSecond = -1.0;
+    note.slideTrackKey.clear();
+    note.headStarTapLike = true;
+    return note;
 }
 
-QVector<TimelineNoteMarker> markersWithStaticHelperHeadTaps(const QVector<TimelineNoteMarker>& noteMarkers)
+struct StaticHeadStarTarget {
+    MuriStaticReferenceNote note;
+    QString pad;
+    double second = -1.0;
+};
+
+QVector<StaticHeadStarTarget> buildStaticHeadStarTargets(const QVector<TimelineNoteMarker>& noteMarkers)
 {
-    QVector<TimelineNoteMarker> augmented = noteMarkers;
-    augmented.reserve(noteMarkers.size() * 2);
+    QVector<StaticHeadStarTarget> targets;
+    targets.reserve(noteMarkers.size());
 
     QSet<QString> emittedKeys;
     for (const TimelineNoteMarker& marker : noteMarkers) {
-        if (!isSlideLike(marker) || !marker.hasHeadStar) {
+        if (!shouldCreateHeadStarTarget(marker)) {
             continue;
         }
 
-        const int helperCol = qMax(1, marker.sourceCol + 1);
-        const QString emitKey = marker.sameHeadSlide
-            ? QStringLiteral("same_head_helper|%1|%2|%3|%4|%5|%6")
-                  .arg(marker.second, 0, 'f', 6)
-                  .arg(marker.sourceLine)
-                  .arg(marker.lane)
-                  .arg(marker.headBreak ? 1 : 0)
-                  .arg(marker.headEx ? 1 : 0)
-                  .arg(marker.headEach ? 1 : 0)
-            : QStringLiteral("helper|%1|%2|%3|%4|%5")
-                  .arg(marker.second, 0, 'f', 6)
-                  .arg(marker.sourceLine)
-                  .arg(helperCol)
-                  .arg(marker.lane)
-                  .arg(marker.parseOrder);
+        const QString emitKey = headStarJudgeEmitKey(marker);
         if (emittedKeys.contains(emitKey)) {
             continue;
         }
         emittedKeys.insert(emitKey);
-        augmented.append(makeStaticHelperHeadTapMarker(marker));
+
+        StaticHeadStarTarget target;
+        target.note = staticReferenceNoteFromHeadStar(marker);
+        target.pad = target.note.pad;
+        target.second = marker.second;
+        targets.append(target);
     }
 
-    return augmented;
+    return targets;
 }
 
 }  // namespace
@@ -264,7 +281,7 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
     const QVector<TimelineNoteMarker>& noteMarkers,
     double collideThresholdSeconds)
 {
-    const QVector<TimelineNoteMarker> augmentedMarkers = markersWithStaticHelperHeadTaps(noteMarkers);
+    const QVector<StaticHeadStarTarget> headStarTargets = buildStaticHeadStarTargets(noteMarkers);
     const QSet<QString> slideKeysWithTapOnSlideHead = buildSlideKeysWithTapOnSlideHead(noteMarkers);
     const double normalizedCollideThresholdSeconds = qBound(
         static_cast<double>(kStaticTapOnSlideThresholdMinMs) / 1000.0,
@@ -276,12 +293,12 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
     QVector<int> slideIndices;
     QVector<int> wifiIndices;
     QVector<int> nonSlideIndices;
-    slideIndices.reserve(augmentedMarkers.size());
-    wifiIndices.reserve(augmentedMarkers.size());
-    nonSlideIndices.reserve(augmentedMarkers.size());
+    slideIndices.reserve(noteMarkers.size());
+    wifiIndices.reserve(noteMarkers.size());
+    nonSlideIndices.reserve(noteMarkers.size());
 
-    for (int index = 0; index < augmentedMarkers.size(); ++index) {
-        const TimelineNoteMarker& marker = augmentedMarkers.at(index);
+    for (int index = 0; index < noteMarkers.size(); ++index) {
+        const TimelineNoteMarker& marker = noteMarkers.at(index);
         if (marker.type == QLatin1String("slide")) {
             slideIndices.append(index);
             continue;
@@ -306,7 +323,7 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
     };
 
     for (int slideIndex : slideIndices) {
-        const TimelineNoteMarker& slide = augmentedMarkers.at(slideIndex);
+        const TimelineNoteMarker& slide = noteMarkers.at(slideIndex);
         const double criticalSecond = slideCriticalSecondForMarker(slide);
         if (slide.slideTraceSecond < 0.0 || slide.endSecond < slide.slideTraceSecond || criticalSecond < 0.0) {
             continue;
@@ -338,7 +355,7 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
         }
 
         for (int noteIndex : nonSlideIndices) {
-            const TimelineNoteMarker& note = augmentedMarkers.at(noteIndex);
+            const TimelineNoteMarker& note = noteMarkers.at(noteIndex);
             const QString notePad = markerPadToken(note);
             if (notePad.isEmpty()) {
                 continue;
@@ -406,10 +423,75 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
                 records.append(record);
             }
         }
+
+        for (const StaticHeadStarTarget& target : headStarTargets) {
+            if (target.pad.isEmpty()) {
+                continue;
+            }
+            if (target.second + kStaticTimeEpsilonSeconds < slide.slideTraceSecond
+                || target.second > slide.endSecond + normalizedCollideThresholdSeconds + kStaticTimeEpsilonSeconds) {
+                continue;
+            }
+
+            const double headDeltaSecond = target.second - slide.slideTraceSecond;
+            if (!headPad.isEmpty()
+                && target.pad == headPad
+                && headDeltaSecond + kStaticTimeEpsilonSeconds >= miacode::muri::kTapOnSlideThresholdSeconds
+                && headDeltaSecond <= normalizedCollideThresholdSeconds + kStaticTimeEpsilonSeconds) {
+                MuriStaticReference record;
+                record.kind = MuriKind::SlideHeadTap;
+                record.alertLevel = slideHeadTapAlertLevel(
+                    slideKeysWithTapOnSlideHead.contains(makeMarkerAnalysisKey(slide)),
+                    qAbs(slide.slideTraceSecond - target.second));
+                record.affected = target.note;
+                record.cause = staticReferenceNoteFromMarker(slide);
+                record.deltaSecond = slide.slideTraceSecond - target.second;
+                record.hasDelta = true;
+                record.slideHeadHasTapOnSlide =
+                    slideKeysWithTapOnSlideHead.contains(makeMarkerAnalysisKey(slide));
+                records.append(record);
+            }
+
+            for (const CollideEntry& collide : collideEntries) {
+                if (target.pad != collide.pad) {
+                    continue;
+                }
+                if (!markerMomentInRange(target.second, collide.startSecond, collide.endSecond)) {
+                    continue;
+                }
+                MuriStaticReference record;
+                record.kind = MuriKind::TapOnSlide;
+                record.alertLevel = tapOnSlideAlertLevel(
+                    qAbs(collide.enterSecond - target.second),
+                    normalizedCollideThresholdSeconds);
+                record.affected = target.note;
+                record.cause = staticReferenceNoteFromMarker(slide);
+                record.deltaSecond = collide.enterSecond - target.second;
+                record.hasDelta = true;
+                records.append(record);
+            }
+
+            if (!endPad.isEmpty()
+                && target.pad == endPad
+                && criticalSecond >= 0.0
+                && target.second > criticalSecond + normalizedCollideThresholdSeconds + kStaticTimeEpsilonSeconds
+                && target.second <= slide.endSecond + collideExtraDeltaSeconds + kStaticTimeEpsilonSeconds) {
+                MuriStaticReference record;
+                record.kind = MuriKind::TapOnSlide;
+                record.alertLevel = tapOnSlideAlertLevel(
+                    qAbs(criticalSecond - target.second),
+                    normalizedCollideThresholdSeconds);
+                record.affected = target.note;
+                record.cause = staticReferenceNoteFromMarker(slide);
+                record.deltaSecond = criticalSecond - target.second;
+                record.hasDelta = true;
+                records.append(record);
+            }
+        }
     }
 
     for (int wifiIndex : wifiIndices) {
-        const TimelineNoteMarker& wifi = augmentedMarkers.at(wifiIndex);
+        const TimelineNoteMarker& wifi = noteMarkers.at(wifiIndex);
         const double criticalSecond = slideCriticalSecondForMarker(wifi);
         if (wifi.slideTraceSecond < 0.0 || wifi.endSecond < wifi.slideTraceSecond || criticalSecond < 0.0) {
             continue;
@@ -429,7 +511,7 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
             wifi.endSecond + collideExtraDeltaSeconds);
 
         for (int noteIndex : nonSlideIndices) {
-            const TimelineNoteMarker& note = augmentedMarkers.at(noteIndex);
+            const TimelineNoteMarker& note = noteMarkers.at(noteIndex);
             if (!isTapMarker(note) && !isHoldMarker(note)) {
                 continue;
             }
@@ -469,14 +551,49 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
                 records.append(record);
             }
         }
+
+        for (const StaticHeadStarTarget& target : headStarTargets) {
+            if (target.second + kStaticTimeEpsilonSeconds < wifi.slideTraceSecond
+                || target.second > wifi.endSecond + normalizedCollideThresholdSeconds + kStaticTimeEpsilonSeconds) {
+                continue;
+            }
+
+            const double headDeltaSecond = target.second - wifi.slideTraceSecond;
+            if (target.note.lane == wifi.lane
+                && headDeltaSecond + kStaticTimeEpsilonSeconds >= miacode::muri::kTapOnSlideThresholdSeconds
+                && headDeltaSecond <= normalizedCollideThresholdSeconds + kStaticTimeEpsilonSeconds) {
+                MuriStaticReference record;
+                record.kind = MuriKind::SlideHeadTap;
+                record.alertLevel = slideHeadTapAlertLevel(
+                    slideKeysWithTapOnSlideHead.contains(makeMarkerAnalysisKey(wifi)),
+                    qAbs(wifi.slideTraceSecond - target.second));
+                record.affected = target.note;
+                record.cause = staticReferenceNoteFromMarker(wifi);
+                record.deltaSecond = wifi.slideTraceSecond - target.second;
+                record.hasDelta = true;
+                record.slideHeadHasTapOnSlide =
+                    slideKeysWithTapOnSlideHead.contains(makeMarkerAnalysisKey(wifi));
+                records.append(record);
+            }
+
+            if (endLanes.contains(target.note.lane) && markerMomentInRange(target.second, startSecond, endSecond)) {
+                MuriStaticReference record;
+                record.kind = MuriKind::TapOnSlide;
+                record.alertLevel = tapOnSlideAlertLevel(
+                    qAbs(criticalSecond - target.second),
+                    normalizedCollideThresholdSeconds);
+                record.affected = target.note;
+                record.cause = staticReferenceNoteFromMarker(wifi);
+                record.deltaSecond = criticalSecond - target.second;
+                record.hasDelta = true;
+                records.append(record);
+            }
+        }
     }
 
     for (int i = 0; i < nonSlideIndices.size(); ++i) {
         const int noteIndex = nonSlideIndices.at(i);
-        const TimelineNoteMarker& note = augmentedMarkers.at(noteIndex);
-        if (note.slideTrackKey == QLatin1String("__static_helper_head_tap__")) {
-            continue;
-        }
+        const TimelineNoteMarker& note = noteMarkers.at(noteIndex);
         const QString notePad = markerPadToken(note);
         if (notePad.isEmpty()) {
             continue;
@@ -487,10 +604,7 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
             if (noteIndex == note2Index) {
                 continue;
             }
-            const TimelineNoteMarker& note2 = augmentedMarkers.at(note2Index);
-            if (note2.slideTrackKey == QLatin1String("__static_helper_head_tap__")) {
-                continue;
-            }
+            const TimelineNoteMarker& note2 = noteMarkers.at(note2Index);
             if (notePad != markerPadToken(note2)) {
                 continue;
             }
