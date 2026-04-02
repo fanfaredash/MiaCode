@@ -512,7 +512,6 @@ private:
     QAction* stopPreviewAction_ = nullptr;
     QAction* pausePreviewAction_ = nullptr;
     QAction* exportVideoAction_ = nullptr;
-    QAction* batchExportVideoAction_ = nullptr;
     QAction* latencyDetectorAction_ = nullptr;
     QAction* toggleJudgeMarkersAction_ = nullptr;
     QAction* toggleTouchTrailAction_ = nullptr;
