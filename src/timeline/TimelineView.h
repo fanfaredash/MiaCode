@@ -132,6 +132,7 @@ private:
     void refreshMinimumHeightForCurrentDevice();
 
     QVector<TimelineRenderLine> lines_;
+    QVector<double> measureLineSeconds_;
     QVector<double> noteVisualEndPrefixMaxWithSlideTracks_;
     QVector<double> noteVisualEndPrefixMaxWithoutSlideTracks_;
     double durationSeconds_ = 0.0;

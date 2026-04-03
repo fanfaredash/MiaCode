@@ -58,6 +58,9 @@ E
 - [ ] `SlideHeadTap` 文案会写出受影响目标为 `tap N` / `hold N` / `star N`
 - [ ] `TapOnSlide` 文案会写出受影响目标为 `tap N` / `hold N` / `star N`
 - [ ] 同头星目标显示为 `star N`，不会退化成裸 `tap`
+- [ ] 带保护的 tap 目标显示为 `protected tap Nx`，不会退回 `EX` 一类旧称呼
+- [ ] 带保护的 hold 目标显示为 `protected hold Nxh`
+- [ ] 带保护的头星目标显示为 `protected star Nx`
 - [ ] 中文文案与英文原始 detail 语义一致
 
 ## 4. 叠键去重
@@ -112,6 +115,7 @@ E
 - [ ] `SlideHeadTap` 的受影响目标带保护时可降为 `Warning`
 - [ ] `TapOnSlide` 在 `150 ms < gap <= staticTapOnSlideThresholdSeconds` 时可降为 `Warning`
 - [ ] `TapOnSlide` 的受影响目标带保护时可降为 `Warning`
+- [ ] 因“受影响目标带保护”而降级为 `Warning` 时，详情文案仍保留 `protected ...` 与 `x/xh` 记法
 - [ ] `MultiTouch` 在涉及 touch 且非 touch hand count 不超过 2 时可降为 `Warning`
 
 ## 8. 静态阈值

@@ -184,7 +184,7 @@ int main(int argc, char** argv)
                 QStringLiteral("runtime anchor repro points at the first involved object"));
             expect(diagnostic->detail.contains(QStringLiteral("tap 8")),
                 QStringLiteral("runtime anchor repro detail names the affected tap lane"));
-            expect(diagnostic->detail.contains(QStringLiteral("early-judges")),
+            expect(diagnostic->detail.contains(QStringLiteral("will early-judge")),
                 QStringLiteral("runtime anchor repro uses definite slide-head-tap wording for muri"));
         }
 
@@ -334,6 +334,20 @@ int main(int argc, char** argv)
                 firstDiagnostic(analyzed.report.diagnostics, MuriKind::SlideHeadTap)) {
             expect(diagnostic->detail.contains(QStringLiteral("may early-judge")),
                 QStringLiteral("protected slide-head repro runtime detail uses warning wording"));
+            expect(diagnostic->detail.contains(QStringLiteral("protected tap 8x")),
+                QStringLiteral("protected slide-head repro runtime detail names the protected tap target"));
+        }
+
+        if (const MuriStaticReference* reference =
+                firstStaticReference(analyzed.staticReferences, MuriKind::SlideHeadTap)) {
+            expect(reference->affected.hasProtection,
+                QStringLiteral("protected slide-head repro static reference keeps the protection flag"));
+        }
+
+        if (const miacode::muri::MuriPanelEntry* entry =
+                firstVisibleEntry(analyzed.visibleEntries, MuriKind::SlideHeadTap)) {
+            expect(entry->rawDetail.contains(QStringLiteral("protected tap 8x")),
+                QStringLiteral("protected slide-head repro visible detail names the protected tap target"));
         }
     }
 
@@ -364,6 +378,32 @@ int main(int argc, char** argv)
                 firstDiagnostic(analyzed.report.diagnostics, MuriKind::TapOnSlide)) {
             expect(diagnostic->detail.contains(QStringLiteral("trajectory may collide with")),
                 QStringLiteral("protected tap-on-slide repro runtime detail uses warning wording"));
+            expect(diagnostic->detail.contains(QStringLiteral("protected tap 4x")),
+                QStringLiteral("protected tap-on-slide repro runtime detail names the protected tap target"));
+        }
+
+        if (const miacode::muri::MuriPanelEntry* entry =
+                firstVisibleEntry(analyzed.visibleEntries, MuriKind::TapOnSlide)) {
+            expect(entry->rawDetail.contains(QStringLiteral("protected tap 4x")),
+                QStringLiteral("protected tap-on-slide repro visible detail names the protected tap target"));
+        }
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(240){16}\n3^5pp4[4:1],,,,,\n4xh[8:1],\nE\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("protected hold tap-on-slide repro chart parses"));
+        expect(countDiagnosticsWithAlertLevel(
+                   analyzed.report.diagnostics,
+                   MuriKind::TapOnSlide,
+                   MuriAlertLevel::Warning)
+                >= 1,
+            QStringLiteral("protected hold tap-on-slide repro downgrades runtime tap-on-slide to warning"));
+
+        if (const MuriDiagnostic* diagnostic =
+                firstDiagnostic(analyzed.report.diagnostics, MuriKind::TapOnSlide)) {
+            expect(diagnostic->detail.contains(QStringLiteral("protected hold 4xh")),
+                QStringLiteral("protected hold tap-on-slide repro runtime detail keeps the protected hold token"));
         }
     }
 
@@ -382,7 +422,7 @@ int main(int argc, char** argv)
                 firstDiagnostic(analyzed.report.diagnostics, MuriKind::TapOnSlide)) {
             expect(diagnostic->detail.contains(QStringLiteral("3^5pp4")),
                 QStringLiteral("chain-slide label repro runtime detail keeps the full chained slide token"));
-            expect(diagnostic->detail.contains(QStringLiteral("trajectory collides with")),
+            expect(diagnostic->detail.contains(QStringLiteral("trajectory will collide with")),
                 QStringLiteral("chain-slide label repro runtime detail uses definite wording for muri"));
         }
 
@@ -396,7 +436,7 @@ int main(int argc, char** argv)
                 firstVisibleEntry(analyzed.visibleEntries, MuriKind::TapOnSlide)) {
             expect(entry->rawDetail.contains(QStringLiteral("3^5pp4")),
                 QStringLiteral("chain-slide label repro visible detail keeps the full chained slide token"));
-            expect(entry->rawDetail.contains(QStringLiteral("trajectory collides with")),
+            expect(entry->rawDetail.contains(QStringLiteral("trajectory will collide with")),
                 QStringLiteral("chain-slide label repro visible detail uses definite wording for muri"));
         }
     }

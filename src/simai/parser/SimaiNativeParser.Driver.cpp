@@ -367,6 +367,7 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode, bool 
     QString token;
     int tokenColumn = 1;
     QVector<int> currentGroup;
+    bool initializedMeasureLines = false;
 
     const auto flushToken = [&](int lineNumber) {
         if (token.isEmpty()) {
@@ -374,6 +375,16 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode, bool 
         }
         parseToken(&state, token, lineNumber, tokenColumn, &currentGroup);
         token.clear();
+    };
+    const auto advanceMeasureLinesTo = [&](double targetSecond) {
+        const double measureDuration = measureDurationSeconds(
+            state.bpm,
+            state.meterNumerator,
+            state.meterDenominator);
+        while (state.currentMeasureStartSecond + measureDuration <= targetSecond + kTimelineEpsilon) {
+            state.currentMeasureStartSecond += measureDuration;
+            appendDistinctSecond(&state.result.measureLineSeconds, state.currentMeasureStartSecond);
+        }
     };
 
     const QStringList lines = text.split('\n');
@@ -385,6 +396,10 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode, bool 
         const int lineNumber = lineIndex + 1;
         if (isTerminalMarkerText(line)) {
             continue;
+        }
+        if (!initializedMeasureLines) {
+            appendDistinctSecond(&state.result.measureLineSeconds, state.currentMeasureStartSecond);
+            initializedMeasureLines = true;
         }
         for (int i = 0; i < line.size(); ++i) {
             const QChar ch = line.at(i);
@@ -411,6 +426,10 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode, bool 
                 if (!bpmOk || bpm <= 0.0) {
                     appendTokenError(&state, lineNumber, i + 1, ValidationMessage::kInvalidBpmValue());
                 } else {
+                    if (qAbs(state.bpm - bpm) > kTimelineEpsilon) {
+                        state.currentMeasureStartSecond = state.second;
+                        appendDistinctSecond(&state.result.measureLineSeconds, state.currentMeasureStartSecond);
+                    }
                     state.bpm = bpm;
                 }
                 i = close;
@@ -504,11 +523,11 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode, bool 
                 marker.second = state.second;
                 marker.sourceLine = qMax(1, lineNumber);
                 marker.sourceCol = qMax(1, i + 1);
-                marker.major = (state.lastBeatSourceLine != marker.sourceLine);
+                marker.major = false;
                 state.result.beatMarkers.append(marker);
-                state.lastBeatSourceLine = marker.sourceLine;
                 state.result.durationSeconds = qMax(state.result.durationSeconds, state.second);
                 state.second += noteStepSeconds(state.bpm, state.beats);
+                advanceMeasureLinesTo(state.second);
                 continue;
             }
 

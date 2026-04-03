@@ -16,6 +16,7 @@ struct SimaiNativeParseResult {
     bool ok = true;
     QVector<SimaiNativeMessage> errors;
     QVector<SimaiNativeMessage> warnings;
+    QVector<double> measureLineSeconds;
     QVector<TimelineBeatMarker> beatMarkers;
     QVector<TimelineNoteMarker> noteMarkers;
     double durationSeconds = 0.0;

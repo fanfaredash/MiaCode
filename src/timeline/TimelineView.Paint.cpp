@@ -20,10 +20,12 @@ void TimelineView::paintEvent(QPaintEvent* event)
     const QRect timelineRect(left, top, viewport()->width() - left, h);
     VisibleLineRange beatRange;
     VisibleLineRange noteRange;
+    double visibleStartSecond = xToSecond(left);
+    double visibleEndSecond = xToSecond(viewport()->width());
     if (dirtyRect.right() >= left) {
         const int dirtyRight = qMin(viewport()->width(), dirtyRect.right() + 1);
-        const double visibleStartSecond = xToSecond(qMax(left, dirtyRect.left()));
-        const double visibleEndSecond = xToSecond(qMax(left, dirtyRight));
+        visibleStartSecond = xToSecond(qMax(left, dirtyRect.left()));
+        visibleEndSecond = xToSecond(qMax(left, dirtyRight));
         beatRange = visibleLineRange(visibleStartSecond - 1.0, visibleEndSecond + 1.0);
         if (dirtyRect.bottom() >= top && dirtyRect.top() <= top + h) {
             const QVector<double>& noteVisualPrefixMax = drawSlideTracks
@@ -57,7 +59,15 @@ void TimelineView::paintEvent(QPaintEvent* event)
     painter.fillRect(QRect(0, 0, viewport()->width(), top), c.timelineHeader);
     painter.fillRect(QRect(0, top, left, h), c.timelineSidebar);
     painter.fillRect(timelineRect, c.timelineBase);
-    painter.setPen(c.timelineBorder);
+    const QPen borderPen(c.timelineBorder, 1.0);
+    const QPen axisPen(c.timelineAxis, 1.0);
+    const QPen majorBeatPen(c.timelineGridMajor, kTimelineBeatLineWidth);
+    QColor laneDividerColor = c.timelineBorder;
+    laneDividerColor.setAlpha(qMin(laneDividerColor.alpha(), 96));
+    const QPen laneDividerPen(laneDividerColor, 1.0);
+    const QPen minorBeatPen(laneDividerColor, 1.0);
+    const QPen waveformPen(c.timelineWaveStroke, 1.0);
+    painter.setPen(borderPen);
     painter.drawLine(0, top - 1, viewport()->width(), top - 1);
 
     QFont laneLabelFont(QStringLiteral("Consolas"));
@@ -96,7 +106,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
         }
         waveformPath.closeSubpath();
         painter.fillPath(waveformPath, c.timelineWaveFill);
-        painter.setPen(QPen(c.timelineWaveStroke, 1.0));
+        painter.setPen(waveformPen);
         painter.drawPath(waveformPath);
         painter.restore();
     }
@@ -106,13 +116,13 @@ void TimelineView::paintEvent(QPaintEvent* event)
         const int y = top + lane * laneH;
         const QColor rowColor = (lane % 2 == 0) ? c.timelineLaneEven : c.timelineLaneOdd;
         painter.fillRect(QRect(left, y, viewport()->width() - left, laneH), rowColor);
-        painter.setPen(c.timelineBorder);
+        painter.setPen(laneDividerPen);
         painter.drawLine(0, y + laneH, viewport()->width(), y + laneH);
         painter.setPen(c.timelineLabel);
         painter.drawText(4, y + 1, left - 8, laneH - 1, Qt::AlignRight | Qt::AlignVCenter, laneLabelForIndex(lane));
     }
 
-    painter.setPen(c.timelineAxis);
+    painter.setPen(axisPen);
     painter.drawLine(left, top - 1, left, top + h);
 
     int lastLabelScreenX = -1000000;
@@ -133,22 +143,39 @@ void TimelineView::paintEvent(QPaintEvent* event)
             if (x < left - 1 || x > viewport()->width()) {
                 continue;
             }
-            painter.setPen(marker.major ? c.timelineGridMajor : c.timelineGridMinor);
+            painter.setPen(minorBeatPen);
             painter.drawLine(x, top, x, top + h);
-            if (marker.major) {
-                const QString labelText = QString::number(line.lineNumber);
-                const int labelWidth = 56;
-                const int labelX = x - (labelWidth / 2);
-                if (labelX >= headerLeftLimit
-                    && labelX + labelWidth <= headerRightLimit
-                    && labelX - lastLabelScreenX >= 22) {
-                    painter.setFont(headerLineNumberFont_);
-                    painter.setPen(c.textSecondary);
-                    painter.drawText(labelX, 0, labelWidth, top, Qt::AlignHCenter | Qt::AlignVCenter, labelText);
-                    painter.setFont(laneLabelFont);
-                    lastLabelScreenX = labelX;
-                }
-            }
+        }
+    }
+
+    const auto measureBeginIt = std::lower_bound(
+        measureLineSeconds_.cbegin(),
+        measureLineSeconds_.cend(),
+        visibleStartSecond - 1.0);
+    const auto measureEndIt = std::upper_bound(
+        measureLineSeconds_.cbegin(),
+        measureLineSeconds_.cend(),
+        visibleEndSecond + 1.0);
+    for (auto it = measureBeginIt; it != measureEndIt; ++it) {
+        const double measureSecond = *it;
+        const int x = secondToX(measureSecond) - xOffset;
+        if (x < left - 1 || x > viewport()->width()) {
+            continue;
+        }
+        painter.setPen(majorBeatPen);
+        painter.drawLine(x, top, x, top + h);
+
+        const QString labelText = QString::number(lineNumberForSecond(measureSecond));
+        const int labelWidth = 56;
+        const int labelX = x - (labelWidth / 2);
+        if (labelX >= headerLeftLimit
+            && labelX + labelWidth <= headerRightLimit
+            && labelX - lastLabelScreenX >= 22) {
+            painter.setFont(headerLineNumberFont_);
+            painter.setPen(c.textSecondary);
+            painter.drawText(labelX, 0, labelWidth, top, Qt::AlignHCenter | Qt::AlignVCenter, labelText);
+            painter.setFont(laneLabelFont);
+            lastLabelScreenX = labelX;
         }
     }
 
@@ -210,248 +237,310 @@ void TimelineView::paintEvent(QPaintEvent* event)
         }
     }
 
-    for (int lineIndex = noteRange.begin; lineIndex < noteRange.end; ++lineIndex) {
-        const TimelineRenderLine& line = lines_.at(lineIndex);
-        for (int noteIndex = line.notes.size() - 1; noteIndex >= 0; --noteIndex) {
-            const TimelineRenderNote& note = line.notes.at(noteIndex);
-            if (note.lane < 1 || note.lane > kLaneCount) {
-                continue;
-            }
+    const TimelineVisibleLineRange visibleNoteRange{noteRange.begin, noteRange.end};
+    const QVector<TimelineVisibleNoteRef> visibleNoteRefs = timelineRenderVisibleNotePaintOrder(lines_, visibleNoteRange);
+    struct TimelineHeadLayerNoteRef {
+        TimelineVisibleNoteRef ref;
+        double second = 0.0;
+        int sourceSequence = 0;
+    };
+    QVector<TimelineHeadLayerNoteRef> holdTapHeadRefs;
+    holdTapHeadRefs.reserve(visibleNoteRefs.size());
+    for (int sequence = 0; sequence < visibleNoteRefs.size(); ++sequence) {
+        const TimelineVisibleNoteRef& visibleRef = visibleNoteRefs.at(sequence);
+        const TimelineRenderLine& line = lines_.at(visibleRef.lineIndex);
+        const TimelineRenderNote& note = line.notes.at(visibleRef.noteIndex);
+        switch (note.kind) {
+        case TimelineRenderNoteKind::Tap:
+        case TimelineRenderNoteKind::Hold:
+        case TimelineRenderNoteKind::Slide:
+        case TimelineRenderNoteKind::Wifi:
+            holdTapHeadRefs.append(TimelineHeadLayerNoteRef{visibleRef, noteSecond(line, note), sequence});
+            break;
+        default:
+            break;
+        }
+    }
+    std::sort(holdTapHeadRefs.begin(), holdTapHeadRefs.end(), [](const TimelineHeadLayerNoteRef& a, const TimelineHeadLayerNoteRef& b) {
+        if (!qFuzzyCompare(a.second + 1.0, b.second + 1.0)) {
+            return a.second > b.second;
+        }
+        return a.sourceSequence > b.sourceSequence;
+    });
 
-            const double startSecond = noteSecond(line, note);
-            const double endSecond = noteEndSecond(line, note);
-            const double traceSecond = noteTraceSecond(line, note);
-            const bool isHold = note.kind == TimelineRenderNoteKind::Hold && endSecond > startSecond;
-            const bool isTouchHold = note.kind == TimelineRenderNoteKind::TouchHold && endSecond > startSecond;
-            const bool isSlideLike = note.kind == TimelineRenderNoteKind::Slide || note.kind == TimelineRenderNoteKind::Wifi;
-            const bool isSlideTrack = isSlideLike && traceSecond > startSecond && endSecond > traceSecond;
+    const auto paintVisibleNote = [&](const TimelineVisibleNoteRef& visibleRef, bool drawTrackLayer) {
+        const TimelineRenderLine& line = lines_.at(visibleRef.lineIndex);
+        const TimelineRenderNote& note = line.notes.at(visibleRef.noteIndex);
+        if (note.lane < 1 || note.lane > kLaneCount) {
+            return;
+        }
 
-            const int x = secondToX(startSecond) - xOffset;
-            const int holdEndX = isHold ? (secondToX(endSecond) - xOffset) : x;
-            const int slideStartX = isSlideTrack ? (secondToX(traceSecond) - xOffset) : x;
-            const int slideEndX = isSlideTrack ? (secondToX(endSecond) - xOffset) : x;
-            int extentLeft = x;
-            int extentRight = x;
-            if (isHold || isTouchHold) {
-                const int endX = secondToX(endSecond) - xOffset;
-                extentLeft = qMin(extentLeft, endX);
-                extentRight = qMax(extentRight, endX);
-            }
-            if (drawSlideTracks && isSlideTrack) {
-                extentLeft = qMin(extentLeft, qMin(slideStartX, slideEndX));
-                extentRight = qMax(extentRight, qMax(slideStartX, slideEndX));
-            }
-            if (extentRight < left - kNoteSize || extentLeft > viewport()->width() + kNoteSize) {
-                continue;
-            }
+        const double startSecond = noteSecond(line, note);
+        const double endSecond = noteEndSecond(line, note);
+        const double traceSecond = noteTraceSecond(line, note);
+        const bool isHold = note.kind == TimelineRenderNoteKind::Hold && endSecond > startSecond;
+        const bool isTouchHold = note.kind == TimelineRenderNoteKind::TouchHold && endSecond > startSecond;
+        const bool isSlideLike = note.kind == TimelineRenderNoteKind::Slide || note.kind == TimelineRenderNoteKind::Wifi;
+        const bool isSlideTrack = isSlideLike && traceSecond > startSecond && endSecond > traceSecond;
 
-            const bool hasMuriWarning = muriMarkerLocationIds_.contains(timelineRenderLocationId(line, note));
+        const int x = secondToX(startSecond) - xOffset;
+        const int holdEndX = isHold ? (secondToX(endSecond) - xOffset) : x;
+        const int slideStartX = isSlideTrack ? (secondToX(traceSecond) - xOffset) : x;
+        const int slideEndX = isSlideTrack ? (secondToX(endSecond) - xOffset) : x;
+        int extentLeft = x;
+        int extentRight = x;
+        if (isHold || isTouchHold) {
+            const int endX = secondToX(endSecond) - xOffset;
+            extentLeft = qMin(extentLeft, endX);
+            extentRight = qMax(extentRight, endX);
+        }
+        if (drawSlideTracks && isSlideTrack) {
+            extentLeft = qMin(extentLeft, qMin(slideStartX, slideEndX));
+            extentRight = qMax(extentRight, qMax(slideStartX, slideEndX));
+        }
+        if (extentRight < left - kNoteSize || extentLeft > viewport()->width() + kNoteSize) {
+            return;
+        }
 
-            const int rowTop = top + (note.lane - 1) * laneH;
-            const int rowCenterY = rowTop + (laneH / 2);
+        const int rowTop = top + (note.lane - 1) * laneH;
+        const int rowCenterY = rowTop + (laneH / 2);
 
-            QString iconType;
-            switch (note.kind) {
-            case TimelineRenderNoteKind::Tap:
-                if (timelineRenderFlagSet(note, TimelineRenderFlagTapUsesStarMaterial)) {
-                    const bool doubleStar = timelineRenderFlagSet(note, TimelineRenderFlagTapStarDouble);
-                    if (timelineRenderFlagSet(note, TimelineRenderFlagIsBreak) && doubleStar) {
-                        iconType = QStringLiteral("star_break_double");
-                    } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsBreak)) {
-                        iconType = QStringLiteral("star_break");
-                    } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEx) && doubleStar) {
-                        iconType = QStringLiteral("star_ex_double");
-                    } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEx)) {
-                        iconType = QStringLiteral("star_ex");
-                    } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEach) && doubleStar) {
-                        iconType = QStringLiteral("star_each_double");
-                    } else if (doubleStar) {
-                        iconType = QStringLiteral("star_double");
-                    } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEach)) {
-                        iconType = QStringLiteral("star_each");
-                    } else {
-                        iconType = QStringLiteral("slide");
-                    }
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEx)) {
-                    iconType = QStringLiteral("tap_ex");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsBreak)) {
-                    iconType = QStringLiteral("tap_break");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEach)) {
-                    iconType = QStringLiteral("tap_each");
-                } else {
-                    iconType = QStringLiteral("tap");
-                }
-                break;
-            case TimelineRenderNoteKind::Hold:
-                if (timelineRenderFlagSet(note, TimelineRenderFlagIsEx)) {
-                    iconType = QStringLiteral("hold_ex");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsBreak)) {
-                    iconType = QStringLiteral("hold_break");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEach)) {
-                    iconType = QStringLiteral("hold_each");
-                } else {
-                    iconType = QStringLiteral("hold");
-                }
-                break;
-            case TimelineRenderNoteKind::Touch:
-                iconType = timelineRenderFlagSet(note, TimelineRenderFlagIsBreak)
-                    ? QStringLiteral("touch_break")
-                    : (timelineRenderFlagSet(note, TimelineRenderFlagIsEach) ? QStringLiteral("touch_each") : QStringLiteral("touch"));
-                break;
-            case TimelineRenderNoteKind::TouchHold:
-                iconType = timelineRenderFlagSet(note, TimelineRenderFlagIsBreak)
-                    ? QStringLiteral("touch_hold_break")
-                    : (timelineRenderFlagSet(note, TimelineRenderFlagIsEach) ? QStringLiteral("touch_hold_each")
-                                                                             : QStringLiteral("touch_hold"));
-                break;
-            case TimelineRenderNoteKind::Slide:
-            case TimelineRenderNoteKind::Wifi:
-                if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)
-                    && timelineRenderFlagSet(note, TimelineRenderFlagHeadEx)) {
-                    iconType = QStringLiteral("tap_ex");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)
-                           && timelineRenderFlagSet(note, TimelineRenderFlagHeadBreak)) {
-                    iconType = QStringLiteral("tap_break");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)
-                           && timelineRenderFlagSet(note, TimelineRenderFlagHeadEach)) {
-                    iconType = QStringLiteral("tap_each");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)) {
-                    iconType = QStringLiteral("tap");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadBreak) && timelineRenderFlagSet(note, TimelineRenderFlagSameHeadSlide)) {
+        QString iconType;
+        switch (note.kind) {
+        case TimelineRenderNoteKind::Tap:
+            if (timelineRenderFlagSet(note, TimelineRenderFlagTapUsesStarMaterial)) {
+                const bool doubleStar = timelineRenderFlagSet(note, TimelineRenderFlagTapStarDouble);
+                if (timelineRenderFlagSet(note, TimelineRenderFlagIsBreak) && doubleStar) {
                     iconType = QStringLiteral("star_break_double");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadBreak)) {
+                } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsBreak)) {
                     iconType = QStringLiteral("star_break");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadEx)
-                           && timelineRenderFlagSet(note, TimelineRenderFlagSameHeadSlide)) {
+                } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEx) && doubleStar) {
                     iconType = QStringLiteral("star_ex_double");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadEx)) {
+                } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEx)) {
                     iconType = QStringLiteral("star_ex");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadEach)
-                           && timelineRenderFlagSet(note, TimelineRenderFlagSameHeadSlide)) {
+                } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEach) && doubleStar) {
                     iconType = QStringLiteral("star_each_double");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagSameHeadSlide)) {
+                } else if (doubleStar) {
                     iconType = QStringLiteral("star_double");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadEach)) {
+                } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEach)) {
                     iconType = QStringLiteral("star_each");
                 } else {
                     iconType = QStringLiteral("slide");
                 }
-                break;
-            default:
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEx)) {
+                iconType = QStringLiteral("tap_ex");
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsBreak)) {
+                iconType = QStringLiteral("tap_break");
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEach)) {
+                iconType = QStringLiteral("tap_each");
+            } else {
                 iconType = QStringLiteral("tap");
-                break;
             }
-
-            const qreal iconScale = zoomScale() <= 0.25 ? 0.5 : 1.0;
-            const QPixmap& icon = transformedIconForType(iconType, iconScale);
-
-            bool holdCapsDrawn = false;
-            if (isHold) {
-                const HoldPixmapParts& holdParts = holdPixmapPartsForType(iconType, iconScale);
-                if (!holdParts.cap.isNull() && !holdParts.bodySlice.isNull()) {
-                    holdCapsDrawn = true;
-                    const int capY = rowTop + (laneH - holdParts.cap.height()) / 2;
-                    const int leftCapX = extentLeft - holdParts.cap.width() / 2;
-                    const int rightCapX = extentRight - holdParts.cap.width() / 2;
-                    const int splitX = holdParts.leftHalf.width();
-                    const int bodyStartX = leftCapX + splitX - 1;
-                    const int bodyEndX = rightCapX + splitX + 1;
-                    const int bodyWidth = qMax(0, bodyEndX - bodyStartX);
-                    if (bodyWidth > 0) {
-                        painter.drawImage(
-                            QRect(bodyStartX, capY, bodyWidth, holdParts.bodySlice.height()),
-                            holdParts.bodySlice,
-                            QRect(0, 0, 1, holdParts.bodySlice.height())
-                        );
-                    }
-                    painter.drawPixmap(leftCapX, capY, holdParts.leftHalf);
-                    painter.drawPixmap(rightCapX + holdParts.rightHalfOffset, capY, holdParts.rightHalf);
-                }
+            break;
+        case TimelineRenderNoteKind::Hold:
+            if (timelineRenderFlagSet(note, TimelineRenderFlagIsEx)) {
+                iconType = QStringLiteral("hold_ex");
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsBreak)) {
+                iconType = QStringLiteral("hold_break");
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEach)) {
+                iconType = QStringLiteral("hold_each");
+            } else {
+                iconType = QStringLiteral("hold");
             }
-
-            if (drawSlideTracks && isSlideTrack) {
-                const int startLane = qBound(1, note.lane, kPlayableLaneCount);
-                const int endLane = qBound(1, note.endLane, kPlayableLaneCount);
-                const int startY = top + (startLane - 1) * laneH + laneH / 2;
-                const int endY = top + (endLane - 1) * laneH + laneH / 2;
-                const qreal dx = static_cast<qreal>(slideEndX - slideStartX);
-                const qreal dy = static_cast<qreal>(endY - startY);
-                const qreal length = qSqrt(dx * dx + dy * dy);
-                const bool forward = slideEndX >= slideStartX;
-                QString baseTrackType = QStringLiteral("slide_track");
-                if (timelineRenderFlagSet(note, TimelineRenderFlagTrackBreak)) {
-                    baseTrackType = QStringLiteral("slide_track_break");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideEach)) {
-                    baseTrackType = QStringLiteral("slide_track_each");
-                }
-                const qreal trackScale = qBound<qreal>(0.25, zoomScale(), 1.0);
-                const qreal angleDegrees = (!qFuzzyIsNull(dx) || !qFuzzyIsNull(dy))
-                    ? qRadiansToDegrees(qAtan2(dy, dx))
-                    : 0.0;
-                const QPixmap& drawTile = transformedIconForType(baseTrackType, trackScale, angleDegrees, forward);
-                const QPixmap& spacingTile = transformedIconForType(baseTrackType, trackScale, 0.0, forward);
-                if (!drawTile.isNull()) {
-                    if (length < 1.0) {
-                        painter.drawPixmap(
-                            QPointF(
-                                static_cast<qreal>(slideStartX) - static_cast<qreal>(drawTile.width()) / 2.0,
-                                static_cast<qreal>(startY) - static_cast<qreal>(drawTile.height()) / 2.0),
-                            drawTile);
-                    } else {
-                        const qreal spacing = qMax<qreal>(4.0, static_cast<qreal>(spacingTile.width()) * 0.72 + 1.0);
-                        const int steps = qMax(1, static_cast<int>(length / spacing));
-                        for (int step = 0; step <= steps; ++step) {
-                            const qreal t = static_cast<qreal>(step) / static_cast<qreal>(steps);
-                            const qreal cx = static_cast<qreal>(slideStartX) + dx * t;
-                            const qreal cy = static_cast<qreal>(startY) + dy * t;
-                            painter.drawPixmap(
-                                QPointF(
-                                    cx - static_cast<qreal>(drawTile.width()) / 2.0,
-                                    cy - static_cast<qreal>(drawTile.height()) / 2.0),
-                                drawTile);
-                        }
-                    }
-                }
+            break;
+        case TimelineRenderNoteKind::Touch:
+            iconType = timelineRenderFlagSet(note, TimelineRenderFlagIsBreak)
+                ? QStringLiteral("touch_break")
+                : (timelineRenderFlagSet(note, TimelineRenderFlagIsEach) ? QStringLiteral("touch_each") : QStringLiteral("touch"));
+            break;
+        case TimelineRenderNoteKind::TouchHold:
+            iconType = timelineRenderFlagSet(note, TimelineRenderFlagIsBreak)
+                ? QStringLiteral("touch_hold_break")
+                : (timelineRenderFlagSet(note, TimelineRenderFlagIsEach) ? QStringLiteral("touch_hold_each")
+                                                                         : QStringLiteral("touch_hold"));
+            break;
+        case TimelineRenderNoteKind::Slide:
+        case TimelineRenderNoteKind::Wifi:
+            if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)
+                && timelineRenderFlagSet(note, TimelineRenderFlagHeadEx)) {
+                iconType = QStringLiteral("tap_ex");
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)
+                       && timelineRenderFlagSet(note, TimelineRenderFlagHeadBreak)) {
+                iconType = QStringLiteral("tap_break");
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)
+                       && timelineRenderFlagSet(note, TimelineRenderFlagHeadEach)) {
+                iconType = QStringLiteral("tap_each");
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)) {
+                iconType = QStringLiteral("tap");
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadBreak)
+                       && timelineRenderFlagSet(note, TimelineRenderFlagSameHeadSlide)) {
+                iconType = QStringLiteral("star_break_double");
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadBreak)) {
+                iconType = QStringLiteral("star_break");
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadEx)
+                       && timelineRenderFlagSet(note, TimelineRenderFlagSameHeadSlide)) {
+                iconType = QStringLiteral("star_ex_double");
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadEx)) {
+                iconType = QStringLiteral("star_ex");
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadEach)
+                       && timelineRenderFlagSet(note, TimelineRenderFlagSameHeadSlide)) {
+                iconType = QStringLiteral("star_each_double");
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagSameHeadSlide)) {
+                iconType = QStringLiteral("star_double");
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadEach)) {
+                iconType = QStringLiteral("star_each");
+            } else {
+                iconType = QStringLiteral("slide");
             }
+            break;
+        default:
+            iconType = QStringLiteral("tap");
+            break;
+        }
 
-            if (isTouchHold) {
-                const QPen holdPen(
-                    timelineRenderFlagSet(note, TimelineRenderFlagIsEach) ? QColor(255, 214, 64, 120) : QColor(44, 214, 255, 120),
-                    4.0,
-                    Qt::SolidLine,
-                    Qt::RoundCap
-                );
-                painter.save();
-                painter.setPen(holdPen);
-                painter.drawLine(QPointF(x, rowCenterY), QPointF(secondToX(endSecond) - xOffset, rowCenterY));
-                painter.restore();
+        if (drawTrackLayer) {
+            if (!drawSlideTracks || !isSlideTrack) {
+                return;
             }
+            const int startLane = qBound(1, note.lane, kPlayableLaneCount);
+            const int endLane = qBound(1, note.endLane, kPlayableLaneCount);
+            const int startY = top + (startLane - 1) * laneH + laneH / 2;
+            const int endY = top + (endLane - 1) * laneH + laneH / 2;
+            const qreal dx = static_cast<qreal>(slideEndX - slideStartX);
+            const qreal dy = static_cast<qreal>(endY - startY);
+            const qreal length = qSqrt(dx * dx + dy * dy);
+            const bool forward = slideEndX >= slideStartX;
+            QString baseTrackType = QStringLiteral("slide_track");
+            if (timelineRenderFlagSet(note, TimelineRenderFlagTrackBreak)) {
+                baseTrackType = QStringLiteral("slide_track_break");
+            } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideEach)) {
+                baseTrackType = QStringLiteral("slide_track_each");
+            }
+            const qreal trackScale = qBound<qreal>(0.25, zoomScale(), 1.0);
+            const qreal angleDegrees = (!qFuzzyIsNull(dx) || !qFuzzyIsNull(dy))
+                ? qRadiansToDegrees(qAtan2(dy, dx))
+                : 0.0;
+            const QPixmap& drawTile = transformedIconForType(baseTrackType, trackScale, angleDegrees, forward);
+            const QPixmap& spacingTile = transformedIconForType(baseTrackType, trackScale, 0.0, forward);
+            if (drawTile.isNull()) {
+                return;
+            }
+            if (length < 1.0) {
+                painter.drawPixmap(
+                    QPointF(
+                        static_cast<qreal>(slideStartX) - static_cast<qreal>(drawTile.width()) / 2.0,
+                        static_cast<qreal>(startY) - static_cast<qreal>(drawTile.height()) / 2.0),
+                    drawTile);
+                return;
+            }
+            const qreal spacing = qMax<qreal>(4.0, static_cast<qreal>(spacingTile.width()) * 0.72 + 1.0);
+            const int steps = qMax(1, static_cast<int>(length / spacing));
+            for (int step = 0; step <= steps; ++step) {
+                const qreal t = static_cast<qreal>(step) / static_cast<qreal>(steps);
+                const qreal cx = static_cast<qreal>(slideStartX) + dx * t;
+                const qreal cy = static_cast<qreal>(startY) + dy * t;
+                painter.drawPixmap(
+                    QPointF(
+                        cx - static_cast<qreal>(drawTile.width()) / 2.0,
+                        cy - static_cast<qreal>(drawTile.height()) / 2.0),
+                    drawTile);
+            }
+            return;
+        }
 
-            const bool shouldDrawHead = !isSlideLike || timelineRenderFlagSet(note, TimelineRenderFlagHasHeadStar);
-            if (shouldDrawHead && !icon.isNull()) {
-                const int iconY = rowTop + (laneH - icon.height()) / 2;
-                if (!isHold || !holdCapsDrawn) {
-                    painter.drawPixmap(x - icon.width() / 2, iconY, icon);
-                }
-                if (isHold && !holdCapsDrawn) {
-                    painter.drawPixmap(holdEndX - icon.width() / 2, iconY, icon);
-                }
-            } else if (shouldDrawHead) {
-                painter.setPen(Qt::NoPen);
-                painter.setBrush(c.timelineCursor);
-                painter.drawEllipse(QRectF(x - 3, rowCenterY - 4, 8, 8));
-                if (isHold && !holdCapsDrawn) {
-                    painter.drawEllipse(QRectF(holdEndX - 3, rowCenterY - 4, 8, 8));
-                }
+        const qreal baseIconScale = zoomScale() <= 0.25 ? 0.5 : 1.0;
+        qreal iconScale = baseIconScale;
+        if (isHold) {
+            const QPixmap& tapReference = transformedIconForType(QStringLiteral("tap"), baseIconScale);
+            const QPixmap& holdReference = transformedIconForType(iconType, baseIconScale, 90.0, false);
+            if (!tapReference.isNull() && !holdReference.isNull() && holdReference.height() > 0) {
+                const qreal desiredThickness =
+                    static_cast<qreal>(tapReference.height()) * kTimelineHoldThicknessRelativeToTap;
+                iconScale *= desiredThickness / static_cast<qreal>(holdReference.height());
             }
+        }
+        const QPixmap& icon = transformedIconForType(iconType, iconScale);
 
-            if (hasMuriWarning) {
-                painter.save();
-                painter.setPen(Qt::NoPen);
-                painter.setBrush(QColor(255, 146, 43, 230));
-                painter.drawEllipse(QRectF(x + 4, rowCenterY - 8, 7, 7));
-                painter.restore();
+        bool holdCapsDrawn = false;
+        if (isHold) {
+            const HoldPixmapParts& holdParts = holdPixmapPartsForType(iconType, iconScale);
+            if (!holdParts.cap.isNull() && !holdParts.bodySlice.isNull()) {
+                holdCapsDrawn = true;
+                const int capY = rowTop + (laneH - holdParts.cap.height()) / 2;
+                const int leftCapX = extentLeft - holdParts.cap.width() / 2;
+                const int rightCapX = extentRight - holdParts.cap.width() / 2;
+                const int splitX = holdParts.leftHalf.width();
+                const int bodyStartX = leftCapX + splitX - 1;
+                const int bodyEndX = rightCapX + splitX + 1;
+                const int bodyWidth = qMax(0, bodyEndX - bodyStartX);
+                if (bodyWidth > 0) {
+                    painter.drawImage(
+                        QRect(bodyStartX, capY, bodyWidth, holdParts.bodySlice.height()),
+                        holdParts.bodySlice,
+                        QRect(0, 0, 1, holdParts.bodySlice.height())
+                    );
+                }
+                painter.drawPixmap(leftCapX, capY, holdParts.leftHalf);
+                painter.drawPixmap(rightCapX + holdParts.rightHalfOffset, capY, holdParts.rightHalf);
             }
+        }
+
+        if (isTouchHold) {
+            const QPen holdPen(
+                timelineRenderFlagSet(note, TimelineRenderFlagIsEach) ? QColor(255, 214, 64, 120) : QColor(44, 214, 255, 120),
+                4.0,
+                Qt::SolidLine,
+                Qt::RoundCap
+            );
+            painter.save();
+            painter.setPen(holdPen);
+            painter.drawLine(QPointF(x, rowCenterY), QPointF(secondToX(endSecond) - xOffset, rowCenterY));
+            painter.restore();
+        }
+
+        const bool shouldDrawHead = !isSlideLike || timelineRenderFlagSet(note, TimelineRenderFlagHasHeadStar);
+        if (shouldDrawHead && !icon.isNull()) {
+            const int iconY = rowTop + (laneH - icon.height()) / 2;
+            if (!isHold || !holdCapsDrawn) {
+                painter.drawPixmap(x - icon.width() / 2, iconY, icon);
+            }
+            if (isHold && !holdCapsDrawn) {
+                painter.drawPixmap(holdEndX - icon.width() / 2, iconY, icon);
+            }
+        } else if (shouldDrawHead) {
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(c.timelineCursor);
+            painter.drawEllipse(QRectF(x - 3, rowCenterY - 4, 8, 8));
+            if (isHold && !holdCapsDrawn) {
+                painter.drawEllipse(QRectF(holdEndX - 3, rowCenterY - 4, 8, 8));
+            }
+        }
+
+        if (muriMarkerLocationIds_.contains(timelineRenderLocationId(line, note))) {
+            painter.save();
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(255, 146, 43, 230));
+            painter.drawEllipse(QRectF(x + 4, rowCenterY - 8, 7, 7));
+            painter.restore();
+        }
+    };
+
+    for (int refIndex = visibleNoteRefs.size() - 1; refIndex >= 0; --refIndex) {
+        paintVisibleNote(visibleNoteRefs.at(refIndex), true);
+    }
+    for (const TimelineHeadLayerNoteRef& headRef : holdTapHeadRefs) {
+        paintVisibleNote(headRef.ref, false);
+    }
+    for (const TimelineVisibleNoteRef& visibleRef : visibleNoteRefs) {
+        const TimelineRenderLine& line = lines_.at(visibleRef.lineIndex);
+        if (line.notes.at(visibleRef.noteIndex).kind == TimelineRenderNoteKind::Touch) {
+            paintVisibleNote(visibleRef, false);
+        }
+    }
+    for (const TimelineVisibleNoteRef& visibleRef : visibleNoteRefs) {
+        const TimelineRenderLine& line = lines_.at(visibleRef.lineIndex);
+        if (line.notes.at(visibleRef.noteIndex).kind == TimelineRenderNoteKind::TouchHold) {
+            paintVisibleNote(visibleRef, false);
         }
     }
 
@@ -505,7 +594,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
     painter.setFont(laneLabelFont);
     for (int lane = 0; lane < kLaneCount; ++lane) {
         const int y = top + lane * laneH;
-        painter.setPen(c.timelineBorder);
+        painter.setPen(laneDividerPen);
         painter.drawLine(0, y + laneH, left, y + laneH);
         painter.setPen(c.timelineLabel);
         painter.drawText(4, y + 1, left - 8, laneH - 1, Qt::AlignRight | Qt::AlignVCenter, laneLabelForIndex(lane));

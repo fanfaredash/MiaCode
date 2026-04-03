@@ -14,6 +14,8 @@ namespace {
 
 constexpr double kDefaultBpm = 120.0;
 constexpr int kDefaultBeats = 4;
+constexpr int kDefaultMeterNumerator = 4;
+constexpr int kDefaultMeterDenominator = 4;
 constexpr double kTouchCanvasCenter = 270.0;
 constexpr double kLaneAngleBaseDegrees = -67.5;
 constexpr double kLaneAngleStepDegrees = 45.0;
@@ -26,17 +28,40 @@ constexpr int kPathSampleCount = 33;
 constexpr double kJudgeTps = 180.0;
 constexpr double kTapOnSlideThresholdSeconds = 1.0 / kJudgeTps;
 constexpr double kTouchOnSlideThresholdSeconds = 24.0 / kJudgeTps;
+constexpr double kTimelineEpsilon = 1e-6;
 
 struct ParseState {
     double bpm = kDefaultBpm;
     int beats = kDefaultBeats;
     double second = 0.0;
     int nextEachGroupId = 0;
-    int lastBeatSourceLine = -1;
+    int meterNumerator = kDefaultMeterNumerator;
+    int meterDenominator = kDefaultMeterDenominator;
+    double currentMeasureStartSecond = 0.0;
     bool strictMode = false;
     bool allowInvalidStarFallback = false;
     SimaiNativeParseResult result;
 };
+
+double measureDurationSeconds(double bpm, int meterNumerator, int meterDenominator)
+{
+    const int clampedNumerator = std::max(1, meterNumerator);
+    const double clampedBpm = bpm > 0.0 ? bpm : kDefaultBpm;
+    const int clampedDenominator = std::max(1, meterDenominator);
+    return 240.0 * static_cast<double>(clampedNumerator)
+        / (clampedBpm * static_cast<double>(clampedDenominator));
+}
+
+void appendDistinctSecond(QVector<double>* seconds, double second)
+{
+    if (seconds == nullptr) {
+        return;
+    }
+    if (!seconds->isEmpty() && qAbs(seconds->constLast() - second) <= kTimelineEpsilon) {
+        return;
+    }
+    seconds->append(second);
+}
 
 enum class SlideHeadlessMode {
     None,

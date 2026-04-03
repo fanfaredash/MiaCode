@@ -2165,6 +2165,102 @@ void MainWindow::schedulePreviewSeek(double second, bool centerView)
     }
 }
 
+bool MainWindow::stepPreviewSliderBySeconds(double deltaSeconds, bool centerView)
+{
+    if (previewSlider_ == nullptr || !qIsFinite(deltaSeconds)) {
+        return false;
+    }
+    const int deltaMs = qRound(deltaSeconds * 1000.0);
+    if (deltaMs == 0) {
+        return false;
+    }
+    const int value = qBound(
+        previewSlider_->minimum(),
+        previewSlider_->value() + deltaMs,
+        previewSlider_->maximum()
+    );
+    if (value == previewSlider_->value()) {
+        showPreviewSliderTimeHint(value);
+        return true;
+    }
+    previewSlider_->setValue(value);
+    showPreviewSliderTimeHint(value);
+    seekPreviewToSecond(static_cast<double>(value) / 1000.0, centerView);
+    return true;
+}
+
+bool MainWindow::handlePreviewSliderWheel(QWheelEvent* event)
+{
+    if (previewSlider_ == nullptr || event == nullptr) {
+        return false;
+    }
+    int delta = event->angleDelta().y();
+    if (delta == 0) {
+        delta = event->angleDelta().x();
+    }
+    if (delta == 0) {
+        delta = event->pixelDelta().y();
+    }
+    if (delta == 0) {
+        delta = event->pixelDelta().x();
+    }
+    if (delta == 0) {
+        return false;
+    }
+    const int steps = delta > 0 ? qMax(1, qRound(static_cast<double>(delta) / 120.0))
+                                : qMin(-1, qRound(static_cast<double>(delta) / 120.0));
+    previewSlider_->setFocus(Qt::MouseFocusReason);
+    const bool handled = stepPreviewSliderBySeconds(
+        static_cast<double>(steps) * miacode::preview_interaction::kSeekSingleStepSeconds,
+        true
+    );
+    if (handled) {
+        event->accept();
+    }
+    return handled;
+}
+
+void MainWindow::beginPreviewHeldSeek(int direction, int key)
+{
+    if (direction == 0 || previewSlider_ == nullptr) {
+        return;
+    }
+    previewHeldSeekDirection_ = direction > 0 ? 1 : -1;
+    previewSeekHeldArrowKey_ = key;
+    previewSeekHeldArrowElapsed_.restart();
+    if (previewHeldSeekTimer_ != nullptr && !previewHeldSeekTimer_->isActive()) {
+        previewHeldSeekTimer_->start();
+    }
+}
+
+void MainWindow::stopPreviewHeldSeek(int key)
+{
+    if (key != 0 && previewSeekHeldArrowKey_ != key) {
+        return;
+    }
+    previewHeldSeekDirection_ = 0;
+    previewSeekHeldArrowKey_ = 0;
+    previewSeekHeldArrowElapsed_.invalidate();
+    if (previewHeldSeekTimer_ != nullptr) {
+        previewHeldSeekTimer_->stop();
+    }
+}
+
+void MainWindow::applyPreviewHeldSeekTick()
+{
+    if (previewHeldSeekDirection_ == 0
+        || previewSeekHeldArrowKey_ == 0
+        || !previewSeekHeldArrowElapsed_.isValid()) {
+        return;
+    }
+    const double heldSeconds = static_cast<double>(previewSeekHeldArrowElapsed_.elapsed()) / 1000.0;
+    stepPreviewSliderBySeconds(
+        static_cast<double>(previewHeldSeekDirection_)
+            * miacode::preview_interaction::heldSeekStepSeconds(heldSeconds),
+        true
+    );
+}
+
 void MainWindow::seekPreviewToSecond(double second, bool centerView)
 {
     ensurePreviewMediaControllerInitialized();

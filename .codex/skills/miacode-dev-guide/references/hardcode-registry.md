@@ -64,8 +64,13 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: analysis idle scheduling debounce for low-priority validation/Muri work
   - Current tuning note: `kTimelineAnalysisIdleDelayMs` is `180 ms`, used to coalesce rapid edits before dispatching the combined validation+Muri analysis worker once preview snapshot publication has already completed
   - Rule: keep local while it only expresses main-window preview-vs-analysis priority; promote it if the same debounce becomes shared across dialogs, subprocess workers, or user-facing settings
+- `src/common/PreviewInteractionConfig.h`
+  - Owns: shared preview-slider keyboard and wheel seek defaults for the main window plus export dialog
+  - Current tuning note: discrete seek steps use a `60 FPS` frame (`1 / 60 s`), held seeking ramps linearly at `+1.0x / s` up to `2.0x`, and the held-seek timer currently ticks every `16 ms`
+  - Rule: keep shared here because the main preview and export-dialog preview must feel identical
 - `src/timeline/TimelineView.cpp`
   - Owns: timeline zoom preset bounds, coarse button stops, and the initial `pixelsPerSecond_` scale derived from the default zoom
+  - Current tuning note: the fixed zoom presets are now `25/50/75/100/150/200`; Timeline minor beat lines currently use `1.4 px`; hold-strip thickness currently targets the preview's `60:61` hold-to-tap ratio
   - Rule: keep local while these values only shape timeline widget UX and do not need cross-subsystem parity
 
 ## 3. Promotion Rules
