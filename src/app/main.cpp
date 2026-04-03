@@ -60,6 +60,16 @@ bool wantsCliVideoExportWorker(const QStringList& arguments)
     return arguments.contains(QStringLiteral("--export-video-worker"));
 }
 
+void addSharedCliDebugOption(QCommandLineParser& parser)
+{
+    // main() already enables debug mode before CLI dispatch. We still declare
+    // this option here so subcommand parsers accept forwarded "--debug".
+    parser.addOption(QCommandLineOption(
+        QStringLiteral("debug"),
+        QStringLiteral("Enable debug mode and debug-only log output.")
+    ));
+}
+
 void writeWorkerJsonLine(const QJsonObject& object)
 {
     QTextStream out(stdout);
@@ -110,6 +120,7 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
     parser.setApplicationDescription(QStringLiteral("MiaCode CLI video export"));
     parser.addHelpOption();
     parser.addVersionOption();
+    addSharedCliDebugOption(parser);
     parser.addOption(QCommandLineOption(
         QStringLiteral("export-video"),
         QStringLiteral("Run single-pass video export and exit.")
@@ -365,6 +376,7 @@ int runCliVideoExportWorker(QApplication& app, QString* errorMessage)
     parser.setApplicationDescription(QStringLiteral("MiaCode export worker"));
     parser.addHelpOption();
     parser.addVersionOption();
+    addSharedCliDebugOption(parser);
     parser.addOption(QCommandLineOption(
         QStringLiteral("export-video-worker"),
         QStringLiteral("Run background export worker and exit.")

@@ -1,5 +1,6 @@
 #include "PreviewGLRenderer.h"
 
+#include "common/DebugImageCompare.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 
@@ -7,6 +8,7 @@
 #include <QImage>
 #include <QOpenGLContext>
 #include <QOpenGLExtraFunctions>
+#include <QPainter>
 #include <QSurfaceFormat>
 #ifdef HAVE_QT_MULTIMEDIA
 #include <QVideoFrame>
@@ -16,6 +18,7 @@
 #include <QtGlobal>
 
 #include <cstddef>
+#include <cmath>
 #include <cstring>
 #include <limits>
 
@@ -92,6 +95,20 @@ QString glStringOrUnavailable(QOpenGLContext* context, GLenum name)
         return QStringLiteral("unavailable");
     }
     return QString::fromLatin1(reinterpret_cast<const char*>(value));
+}
+
+QImage renderFallbackVideoSample(const QImage& source, const QSize& targetSize)
+{
+    const QSize safeSize(qMax(1, targetSize.width()), qMax(1, targetSize.height()));
+    QImage output(safeSize, QImage::Format_RGBA8888);
+    if (output.isNull()) {
+        return QImage();
+    }
+    output.fill(Qt::black);
+    QPainter painter(&output);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.drawImage(QRect(QPoint(0, 0), safeSize), source);
+    return output;
 }
 
 #ifdef HAVE_QT_MULTIMEDIA
@@ -261,6 +278,8 @@ void PreviewGLRenderer::resetGlObjects(bool deleteObjects)
     planarVideoOpacityLocation_ = -1;
     videoFrameSize_ = QSize();
     planarVideoFrameSize_ = QSize();
+    directVideoFrameCounter_ = 0;
+    videoFallbackCompareSampleCounter_ = 0;
     vaoSupported_ = false;
     initialized_ = false;
 }
@@ -279,6 +298,9 @@ void PreviewGLRenderer::configureForCurrentContext(QOpenGLContext* context)
         supportsUnpackRowLength_ = false;
         useDesktopLegacyVersion120_ = false;
         loggedFirstDirectVideoFrame_ = false;
+        videoFallbackCompareEvery_ = 0;
+        directVideoFrameCounter_ = 0;
+        videoFallbackCompareSampleCounter_ = 0;
         contextSummary_.clear();
         return;
     }
@@ -351,6 +373,9 @@ void PreviewGLRenderer::configureForCurrentContext(QOpenGLContext* context)
     supportsUnpackRowLength_ = false;
 #endif
     loggedFirstDirectVideoFrame_ = false;
+    videoFallbackCompareEvery_ = miacode::debug_options::previewVideoFallbackCompareEveryFrames();
+    directVideoFrameCounter_ = 0;
+    videoFallbackCompareSampleCounter_ = 0;
     const QString shaderLanguageName = [this]() {
         switch (shaderLanguage_) {
         case ShaderLanguage::DesktopLegacy:
@@ -390,6 +415,14 @@ void PreviewGLRenderer::configureForCurrentContext(QOpenGLContext* context)
         .arg(supportsUnpackRowLength_ ? 1 : 0);
     lastLoggedError_.clear();
     lastLoggedVideoError_.clear();
+    if (videoFallbackCompareEvery_ > 0) {
+        appendPreviewGlLog(
+            QStringLiteral("video_compare"),
+            QStringLiteral("enabled every=%1; %2")
+                .arg(videoFallbackCompareEvery_)
+                .arg(contextSummary_)
+        );
+    }
 }
 
 void PreviewGLRenderer::recordError(const QString& message, bool videoPath)
@@ -947,6 +980,7 @@ bool PreviewGLRenderer::drawVideoFrame(const QVideoFrame& frame, const QRectF& t
         }
         return QStringLiteral("unknown");
     }();
+    QString directKind;
     const auto maybeLogDirectUploadFrame = [this, &mappedFrame, &uploadModeName](
                                                const QString& directKind,
                                                const QVector<int>& strides,
@@ -974,6 +1008,7 @@ bool PreviewGLRenderer::drawVideoFrame(const QVideoFrame& frame, const QRectF& t
     };
 
     if (isNv12) {
+        directKind = QStringLiteral("nv12");
         if (!ensureVideoProgram() || !ensureVideoTextures(frameSize)) {
             mappedFrame.unmap();
             return fallbackToImage(QStringLiteral("failed to prepare NV12 upload resources"));
@@ -992,7 +1027,7 @@ bool PreviewGLRenderer::drawVideoFrame(const QVideoFrame& frame, const QRectF& t
         }
 
         maybeLogDirectUploadFrame(
-            QStringLiteral("nv12"),
+            directKind,
             QVector<int>{yStride, uvStride},
             QVector<int>{yMappedBytes, uvMappedBytes}
         );
@@ -1024,6 +1059,7 @@ bool PreviewGLRenderer::drawVideoFrame(const QVideoFrame& frame, const QRectF& t
             return fallbackToImage(uploadError);
         }
     } else if (isPlanar420) {
+        directKind = isYv12 ? QStringLiteral("yv12") : QStringLiteral("yuv420p");
         if (!ensurePlanarVideoProgram() || !ensurePlanarVideoTextures(frameSize)) {
             mappedFrame.unmap();
             return fallbackToImage(QStringLiteral("failed to prepare planar YUV upload resources"));
@@ -1061,7 +1097,7 @@ bool PreviewGLRenderer::drawVideoFrame(const QVideoFrame& frame, const QRectF& t
         }
 
         maybeLogDirectUploadFrame(
-            isYv12 ? QStringLiteral("yv12") : QStringLiteral("yuv420p"),
+            directKind,
             QVector<int>{yStride, uStride, vStride},
             QVector<int>{yMappedBytes, uMappedBytes, vMappedBytes}
         );
@@ -1213,9 +1249,187 @@ bool PreviewGLRenderer::drawVideoFrame(const QVideoFrame& frame, const QRectF& t
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
     glUseProgram(0);
 
+    maybeCompareVideoFallbackSample(frame, targetRect, directKind);
     lastError_.clear();
     return true;
 #endif
+}
+
+void PreviewGLRenderer::maybeCompareVideoFallbackSample(
+    const QVideoFrame& frame,
+    const QRectF& targetRect,
+    const QString& directKind
+)
+{
+#ifndef HAVE_QT_MULTIMEDIA
+    Q_UNUSED(frame);
+    Q_UNUSED(targetRect);
+    Q_UNUSED(directKind);
+#else
+    if (videoFallbackCompareEvery_ <= 0) {
+        return;
+    }
+    ++directVideoFrameCounter_;
+    if ((directVideoFrameCounter_ % static_cast<quint64>(videoFallbackCompareEvery_)) != 0) {
+        return;
+    }
+    ++videoFallbackCompareSampleCounter_;
+
+    const QImage fallbackFrame = frame.toImage();
+    if (fallbackFrame.isNull()) {
+        appendPreviewGlLog(
+            QStringLiteral("video_compare"),
+            QStringLiteral("sample=%1 directFrame=%2 skipped=toImage_failed kind=%3; %4")
+                .arg(videoFallbackCompareSampleCounter_)
+                .arg(directVideoFrameCounter_)
+                .arg(directKind, videoFrameSummary(frame))
+        );
+        return;
+    }
+
+    QImage gpuFrame;
+    QString readbackError;
+    if (!readFramebufferRegion(targetRect, &gpuFrame, &readbackError) || gpuFrame.isNull()) {
+        appendPreviewGlLog(
+            QStringLiteral("video_compare"),
+            QStringLiteral("sample=%1 directFrame=%2 skipped=readback_failed kind=%3 reason=%4; %5")
+                .arg(videoFallbackCompareSampleCounter_)
+                .arg(directVideoFrameCounter_)
+                .arg(directKind, readbackError, videoFrameSummary(frame))
+        );
+        return;
+    }
+
+    const QImage cpuFrame = renderFallbackVideoSample(fallbackFrame, gpuFrame.size());
+    if (cpuFrame.isNull()) {
+        appendPreviewGlLog(
+            QStringLiteral("video_compare"),
+            QStringLiteral("sample=%1 directFrame=%2 skipped=cpu_render_failed kind=%3 size=%4x%5; %6")
+                .arg(videoFallbackCompareSampleCounter_)
+                .arg(directVideoFrameCounter_)
+                .arg(directKind)
+                .arg(gpuFrame.width())
+                .arg(gpuFrame.height())
+                .arg(videoFrameSummary(frame))
+        );
+        return;
+    }
+
+    const double diff = miacode::debug_image_compare::meanAbsDiffNormalized(gpuFrame, cpuFrame);
+    const auto gpuStats = miacode::debug_image_compare::analyzeImageIntensity(gpuFrame);
+    const auto cpuStats = miacode::debug_image_compare::analyzeImageIntensity(cpuFrame);
+    const auto dumpOutcome = miacode::debug_image_compare::dumpComparisonFrames(
+        QStringLiteral("video_compare"),
+        videoFallbackCompareSampleCounter_,
+        gpuFrame,
+        cpuFrame
+    );
+    const QString uploadModeName = [this]() {
+        switch (videoTextureUploadMode_) {
+        case VideoTextureUploadMode::LegacyLuminance:
+            return QStringLiteral("legacy_luminance");
+        case VideoTextureUploadMode::RedGreen:
+            return QStringLiteral("red_green");
+        }
+        return QStringLiteral("unknown");
+    }();
+    const QString dumpFields = [dumpOutcome]() {
+        if (dumpOutcome.status == miacode::debug_image_compare::DumpStatus::Disabled) {
+            return QString();
+        }
+        QString fields = QStringLiteral(" dump=%1")
+            .arg(miacode::debug_image_compare::dumpStatusLabel(dumpOutcome.status));
+        if (!dumpOutcome.sampleDirPath.isEmpty()) {
+            fields += QStringLiteral(" dumpDir=%1").arg(dumpOutcome.sampleDirPath);
+        }
+        if (!dumpOutcome.error.isEmpty()) {
+            fields += QStringLiteral(" dumpError=%1").arg(dumpOutcome.error);
+        }
+        return fields;
+    }();
+    appendPreviewGlLog(
+        QStringLiteral("video_compare"),
+        QStringLiteral(
+            "sample=%1 directFrame=%2 every=%3 kind=%4 upload=%5 diff=%6 gpuSig=0x%7 cpuSig=0x%8 gpuLuma=%9 cpuLuma=%10 gpuNearBlack=%11 cpuNearBlack=%12 sampleSize=%13x%14 logicalTarget=%15x%16 dpr=%17%18; %19")
+            .arg(videoFallbackCompareSampleCounter_)
+            .arg(directVideoFrameCounter_)
+            .arg(videoFallbackCompareEvery_)
+            .arg(directKind)
+            .arg(uploadModeName)
+            .arg(diff, 0, 'f', 8)
+            .arg(QString::number(miacode::debug_image_compare::sampledFrameSignature(gpuFrame), 16))
+            .arg(QString::number(miacode::debug_image_compare::sampledFrameSignature(cpuFrame), 16))
+            .arg(gpuStats.meanLuma, 0, 'f', 6)
+            .arg(cpuStats.meanLuma, 0, 'f', 6)
+            .arg(gpuStats.nearBlackRatio, 0, 'f', 6)
+            .arg(cpuStats.nearBlackRatio, 0, 'f', 6)
+            .arg(gpuFrame.width())
+            .arg(gpuFrame.height())
+            .arg(targetRect.width(), 0, 'f', 2)
+            .arg(targetRect.height(), 0, 'f', 2)
+            .arg(devicePixelRatio_, 0, 'f', 2)
+            .arg(dumpFields)
+            .arg(videoFrameSummary(frame))
+    );
+#endif
+}
+
+bool PreviewGLRenderer::readFramebufferRegion(
+    const QRectF& targetRect,
+    QImage* image,
+    QString* errorMessage
+)
+{
+    if (image == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("image output pointer was null");
+        }
+        return false;
+    }
+
+    const int framebufferWidth = qMax(1, qRound(viewportSize_.width() * devicePixelRatio_));
+    const int framebufferHeight = qMax(1, qRound(viewportSize_.height() * devicePixelRatio_));
+    const double scaledLeft = targetRect.left() * devicePixelRatio_;
+    const double scaledTop = targetRect.top() * devicePixelRatio_;
+    const double scaledRight = (targetRect.left() + targetRect.width()) * devicePixelRatio_;
+    const double scaledBottom = (targetRect.top() + targetRect.height()) * devicePixelRatio_;
+    const int left = qBound(0, static_cast<int>(std::floor(scaledLeft)), framebufferWidth);
+    const int top = qBound(0, static_cast<int>(std::floor(scaledTop)), framebufferHeight);
+    const int right = qBound(0, static_cast<int>(std::ceil(scaledRight)), framebufferWidth);
+    const int bottom = qBound(0, static_cast<int>(std::ceil(scaledBottom)), framebufferHeight);
+    const int width = right - left;
+    const int height = bottom - top;
+    if (width <= 0 || height <= 0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("resolved framebuffer region was empty");
+        }
+        return false;
+    }
+
+    QImage readback(width, height, QImage::Format_RGBA8888);
+    if (readback.isNull()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to allocate readback image");
+        }
+        return false;
+    }
+
+    GLint previousPackAlignment = 4;
+    glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(
+        left,
+        framebufferHeight - bottom,
+        width,
+        height,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        readback.bits()
+    );
+    glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
+
+    *image = readback.mirrored(false, true);
+    return true;
 }
 
 bool PreviewGLRenderer::isInitialized() const

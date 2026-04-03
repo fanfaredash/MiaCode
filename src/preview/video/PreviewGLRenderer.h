@@ -88,6 +88,16 @@ private:
     GLuint ensureTexture(const QImage& image, bool useCache);
     bool ensureVideoTextures(const QSize& frameSize);
     bool ensurePlanarVideoTextures(const QSize& frameSize);
+    void maybeCompareVideoFallbackSample(
+        const QVideoFrame& frame,
+        const QRectF& targetRect,
+        const QString& directKind
+    );
+    bool readFramebufferRegion(
+        const QRectF& targetRect,
+        QImage* image,
+        QString* errorMessage = nullptr
+    );
 
     bool initialized_ = false;
     QSize viewportSize_;
@@ -137,6 +147,9 @@ private:
     bool supportsUnpackRowLength_ = false;
     bool useDesktopLegacyVersion120_ = false;
     bool loggedFirstDirectVideoFrame_ = false;
+    int videoFallbackCompareEvery_ = 0;
+    quint64 directVideoFrameCounter_ = 0;
+    quint64 videoFallbackCompareSampleCounter_ = 0;
     QString lastError_;
     QString contextSummary_;
     QString lastLoggedError_;

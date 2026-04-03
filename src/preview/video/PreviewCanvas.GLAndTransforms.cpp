@@ -2,6 +2,9 @@ void PreviewCanvas::initializeGL()
 {
     QOpenGLContext* ctx = QOpenGLContext::currentContext();
     setupWindowGlContext(ctx);
+    presentCompareEvery_ = 0;
+    presentFrameCounter_ = 0;
+    presentCompareSampleCounter_ = 0;
     glRenderer_.initialize();
     appendPreviewRuntimeLog(
         QStringLiteral("gl/context_init"),
@@ -48,6 +51,15 @@ void PreviewCanvas::initializeGL()
         );
         gpuTimerQueriesSupported_ = false;
         return;
+    }
+    presentCompareEvery_ = miacode::debug_options::previewPresentCompareEveryFrames();
+    if (presentCompareEvery_ > 0) {
+        appendPreviewRuntimeLog(
+            QStringLiteral("present_compare"),
+            QStringLiteral("enabled every=%1; %2")
+                .arg(presentCompareEvery_)
+                .arg(previewWindowContextSummary(ctx, glRenderer_))
+        );
     }
     QOpenGLExtraFunctions* extra = ctx != nullptr ? ctx->extraFunctions() : nullptr;
     if (extra != nullptr && (ctx->hasExtension("GL_ARB_timer_query")

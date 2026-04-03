@@ -205,6 +205,7 @@ Pipe 诊断：
 ## 9. 辅助脚本
 
 - `scripts/Start_MiaCode_Debug.bat`
+- `scripts/Start_MiaCode_Debug_CompareDump.bat`
   - 会被打包到 Windows release 根目录
 - `scripts/export_and_analyze_duplicates.py`
   - 使用 `--debug` 启动导出
@@ -212,6 +213,33 @@ Pipe 诊断：
 - `scripts/analyze_video_duplicate_frames.py`
 - `scripts/compare_log_vs_video_trajectory.py`
 - `scripts/analyze_ffmpeg_chain_variants.py`
+
+## Preview Video Compare
+
+- `MIACODE_PREVIEW_DIAG_COMPARE_VIDEO_FALLBACK_EVERY`
+  - Debug-only. Sample every Nth direct-upload preview video frame.
+  - Compares GPU `glReadPixels` readback against a CPU `QVideoFrame::toImage()` fallback render.
+  - Writes per-sample diff, signatures, and near-black stats to runtime log scope `preview_gl/video_compare`.
+  - Example: `set MIACODE_PREVIEW_DIAG_COMPARE_VIDEO_FALLBACK_EVERY=60`
+
+## Preview Present Compare And Dumps
+
+- `MIACODE_PREVIEW_DIAG_COMPARE_PRESENT_EVERY`
+  - Debug-only. Sample every Nth final preview `paintGL` present after the frame is fully drawn.
+  - Compares the final GPU framebuffer against a cloned CPU-only `PreviewCanvas` render.
+  - Writes per-sample diff, signatures, and near-black stats to runtime log scope `preview/present_compare`.
+- `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_FRAMES`
+  - Debug-only. Enables PNG dumps for compare samples.
+  - Saves `gpu.png`, `cpu.png`, and `abs_diff.png` for both `video_compare` and `present_compare`.
+- `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_MAX_SAMPLES`
+  - Per compare stream dump cap. Default `8`; set `0` for no cap.
+- `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_DIR`
+  - Optional dump root override.
+  - Default root is under `MIACODE_LOG_DIR` when set, otherwise the system temp directory.
+- Example:
+  - `set MIACODE_PREVIEW_DIAG_COMPARE_PRESENT_EVERY=120`
+  - `set MIACODE_PREVIEW_DIAG_COMPARE_DUMP_FRAMES=1`
+  - `set MIACODE_PREVIEW_DIAG_COMPARE_DUMP_MAX_SAMPLES=4`
 
 ## 10. 代码锚点
 

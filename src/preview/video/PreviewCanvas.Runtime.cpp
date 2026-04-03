@@ -513,7 +513,13 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     noteMarkers_ = source.noteMarkers_;
     muriAnalysisReport_ = source.muriAnalysisReport_;
     muriRenderOptions_ = source.muriRenderOptions_;
+    mediaFrame_ = source.mediaFrame_;
+    retainedVideoFallbackFrame_ = source.retainedVideoFallbackFrame_;
+#ifdef HAVE_QT_MULTIMEDIA
+    videoFrame_ = source.videoFrame_;
+#endif
     stageMediaAvailable_ = source.stageMediaAvailable_;
+    playheadSeconds_ = source.playheadSeconds_;
     backgroundBrightnessOuter_ = source.backgroundBrightnessOuter_;
     backgroundBrightnessInner_ = source.backgroundBrightnessInner_;
     layoutSquareScale_ = source.layoutSquareScale_;
@@ -527,10 +533,15 @@ void PreviewCanvas::copyRenderStateFrom(const PreviewCanvas& source)
     slideTrackAppearLeadInSeconds_ = source.slideTrackAppearLeadInSeconds_;
     slideTrackFullBrightLeadInSeconds_ = source.slideTrackFullBrightLeadInSeconds_;
     layoutRingDiameterRatio_ = source.layoutRingDiameterRatio_;
+    fpsDisplay_ = source.fpsDisplay_;
+    frameMsAverage_ = source.frameMsAverage_;
+    frameMsP95_ = source.frameMsP95_;
+    frameMsMax_ = source.frameMsMax_;
     showDebugInfo_ = source.showDebugInfo_;
     showTimestamp_ = source.showTimestamp_;
     showObjectStatsHud_ = source.showObjectStatsHud_;
     exportWifiTrackBrightnessCompensationEnabled_ = source.exportWifiTrackBrightnessCompensationEnabled_;
+    highQualityRender_ = source.highQualityRender_;
 
     overlayCache_.clear();
     animatedSpriteCache_.clear();
