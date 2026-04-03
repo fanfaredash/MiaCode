@@ -125,6 +125,7 @@
 #include <QToolTip>
 #include <QUrl>
 #include <QWheelEvent>
+#include <QWindow>
 #include <QWindowStateChangeEvent>
 #include <QUuid>
 #include <QtMath>
@@ -3194,6 +3195,27 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
         || watched == pausePreviewButton_
         || watched == previewSpeedButton_
         || watched == previewFullscreenButton_;
+    const bool previewHostGeometryScope =
+        watched == previewCanvasContainer_
+        || watched == previewCanvasFrame_
+        || watched == previewPanel_
+        || watched == previewFullscreenWindow_
+        || watched == previewFullscreenHost_;
+    if (previewCanvasUsesOverlayHost() && previewHostGeometryScope) {
+        switch (event->type()) {
+        case QEvent::Move:
+        case QEvent::Resize:
+        case QEvent::Show:
+        case QEvent::Hide:
+        case QEvent::LayoutRequest:
+        case QEvent::WindowStateChange:
+        case QEvent::ZOrderChange:
+            syncPreviewCanvasHostWindow();
+            break;
+        default:
+            break;
+        }
+    }
     if (previewFullscreenActive_ && previewFullscreenOverlayScope) {
         if (event->type() == QEvent::MouseMove
             || event->type() == QEvent::MouseButtonPress
@@ -3613,6 +3635,7 @@ void MainWindow::resizeEvent(QResizeEvent* event)
             .arg(event->size().width())
             .arg(event->size().height())
     );
+    syncPreviewCanvasHostWindow();
 }
 
 void MainWindow::moveEvent(QMoveEvent* event)
@@ -3627,6 +3650,7 @@ void MainWindow::moveEvent(QMoveEvent* event)
             .arg(event->pos().x())
             .arg(event->pos().y())
     );
+    syncPreviewCanvasHostWindow();
 }
 
 void MainWindow::showEvent(QShowEvent* event)
@@ -3636,12 +3660,14 @@ void MainWindow::showEvent(QShowEvent* event)
     refreshPreviewFrameRateTimers();
     applySystemWindowBackdrop();
     logWindowGeometryDebug("show_event");
+    syncPreviewCanvasHostWindow();
 }
 
 void MainWindow::hideEvent(QHideEvent* event)
 {
     QMainWindow::hideEvent(event);
     logWindowGeometryDebug("hide_event");
+    syncPreviewCanvasHostWindow();
 }
 
 void MainWindow::changeEvent(QEvent* event)
@@ -3678,6 +3704,75 @@ void MainWindow::changeEvent(QEvent* event)
         logWindowGeometryDebug("activation_change", QString("is_active=%1").arg(isActiveWindow() ? 1 : 0));
     } else if (type == QEvent::ZOrderChange) {
         logWindowGeometryDebug("zorder_change");
+    }
+    syncPreviewCanvasHostWindow();
+}
+
+bool MainWindow::previewCanvasUsesOverlayHost() const
+{
+    return previewCanvasOverlayHostEnabled_;
+}
+
+QRect MainWindow::previewCanvasHostGlobalRect() const
+{
+    if (!previewCanvasUsesOverlayHost()
+        || previewCanvasContainer_ == nullptr
+        || !previewCanvasContainer_->isVisible()) {
+        return QRect();
+    }
+
+    const QSize size = previewCanvasContainer_->size();
+    if (size.width() <= 0 || size.height() <= 0) {
+        return QRect();
+    }
+
+    return QRect(previewCanvasContainer_->mapToGlobal(QPoint(0, 0)), size);
+}
+
+QWindow* MainWindow::previewCanvasOverlayParentWindow() const
+{
+    if (!previewCanvasUsesOverlayHost()) {
+        return nullptr;
+    }
+    if (previewFullscreenActive_ && previewFullscreenWindow_ != nullptr) {
+        return previewFullscreenWindow_->windowHandle();
+    }
+    return windowHandle();
+}
+
+void MainWindow::syncPreviewCanvasHostWindow()
+{
+    if (!previewCanvasUsesOverlayHost() || previewCanvas_ == nullptr) {
+        return;
+    }
+
+    QWindow* parentWindow = previewCanvasOverlayParentWindow();
+    const QRect targetRect = previewCanvasHostGlobalRect();
+    const bool shouldShow = parentWindow != nullptr
+        && targetRect.isValid()
+        && isVisible()
+        && !windowState().testFlag(Qt::WindowMinimized)
+        && (previewFullscreenActive_ || isActiveWindow());
+    if (!shouldShow) {
+        previewCanvas_->hide();
+        return;
+    }
+
+    if (previewCanvas_->transientParent() != parentWindow) {
+        previewCanvas_->setTransientParent(parentWindow);
+    }
+    if (previewCanvas_->geometry() != targetRect) {
+        previewCanvas_->setGeometry(targetRect);
+    }
+    if (!previewCanvas_->isVisible()) {
+        previewCanvas_->show();
+    }
+    previewCanvas_->raise();
+    if (previewFullscreenHintWindow_ != nullptr && previewFullscreenHintWindow_->isVisible()) {
+        previewFullscreenHintWindow_->raise();
+    }
+    if (previewFullscreenControlsWindow_ != nullptr && previewFullscreenControlsWindow_->isVisible()) {
+        previewFullscreenControlsWindow_->raise();
     }
 }
 
