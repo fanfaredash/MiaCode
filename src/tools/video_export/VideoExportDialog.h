@@ -18,6 +18,7 @@ class QPushButton;
 class QSlider;
 class QTimer;
 class QToolButton;
+class QWheelEvent;
 class QWidget;
 class PreviewCanvas;
 
@@ -31,6 +32,7 @@ public:
     using PausePreviewCallback = std::function<void()>;
     using IsPreviewPlayingCallback = std::function<bool()>;
     using CurrentPreviewSecondCallback = std::function<double()>;
+    using PreviewTimestampCallback = std::function<void(bool showTimestamp)>;
     using PreviewAspectRatioCallback = std::function<void(double ratio)>;
     using PreviewBrightnessCallback = std::function<void(double outer, double inner)>;
     using PreviewLayoutScaleCallback = std::function<void(double scale)>;
@@ -46,6 +48,7 @@ public:
         PausePreviewCallback pausePreviewCallback = {},
         IsPreviewPlayingCallback isPreviewPlayingCallback = {},
         CurrentPreviewSecondCallback currentPreviewSecondCallback = {},
+        PreviewTimestampCallback previewTimestampCallback = {},
         PreviewAspectRatioCallback previewAspectRatioCallback = {},
         PreviewBrightnessCallback previewBrightnessCallback = {},
         PreviewLayoutScaleCallback previewLayoutScaleCallback = {},
@@ -68,7 +71,13 @@ private:
     void restoreLivePreviewState();
     void loadPersistedSettings();
     void savePersistedSettings(const VideoExportTask& task) const;
+    void persistExportOnlySettings() const;
     void applySelectedAspectRatioToPreview(bool markChanged);
+    bool stepPreviewSliderBySeconds(double deltaSeconds);
+    bool handlePreviewSliderWheel(QWheelEvent* event);
+    void beginPreviewHeldSeek(int direction, int key);
+    void stopPreviewHeldSeek(int key = 0);
+    void applyPreviewHeldSeekTick();
 
     void onRangeSpinChanged();
     void onPreviewSliderChanged(int sliderValue);
@@ -104,6 +113,7 @@ private:
     PausePreviewCallback pausePreviewCallback_;
     IsPreviewPlayingCallback isPreviewPlayingCallback_;
     CurrentPreviewSecondCallback currentPreviewSecondCallback_;
+    PreviewTimestampCallback previewTimestampCallback_;
     PreviewAspectRatioCallback previewAspectRatioCallback_;
     PreviewBrightnessCallback previewBrightnessCallback_;
     PreviewLayoutScaleCallback previewLayoutScaleCallback_;
@@ -122,6 +132,7 @@ private:
     bool previewStateRestored_ = false;
     bool initialShowTimestamp_ = true;
     bool initialShowObjectStatsHud_ = false;
+    int previewHeldSeekDirection_ = 0;
     int previewSeekHeldArrowKey_ = 0;
     QElapsedTimer previewSeekHeldArrowElapsed_;
     QElapsedTimer previewScrubRenderElapsed_;
@@ -160,4 +171,5 @@ private:
     QToolButton* stopPreviewButton_ = nullptr;
     QPushButton* exportButton_ = nullptr;
     QTimer* previewTimer_ = nullptr;
+    QTimer* previewHeldSeekTimer_ = nullptr;
 };

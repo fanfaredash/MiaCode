@@ -66,6 +66,7 @@ class QTimer;
 class QTextEdit;
 class QToolButton;
 class QWidget;
+class QWheelEvent;
 class QtPreviewSfxRuntime;
 class TimelineView;
 
@@ -302,6 +303,11 @@ private:
     void requestNextDisplayRefreshPreviewFrame();
     void seekPreviewToSecond(double second, bool centerView);
     void schedulePreviewSeek(double second, bool centerView);
+    bool stepPreviewSliderBySeconds(double deltaSeconds, bool centerView);
+    bool handlePreviewSliderWheel(QWheelEvent* event);
+    void beginPreviewHeldSeek(int direction, int key);
+    void stopPreviewHeldSeek(int key = 0);
+    void applyPreviewHeldSeekTick();
     void updatePreviewSliderRange();
     void updatePreviewSliderPosition(double second);
     QString formatPreviewTimestamp(double second) const;
@@ -318,6 +324,7 @@ private:
     void restoreWorkspaceLayoutSizes();
     void refreshLayoutAfterPageSwitch();
     void openPreviewSettingsDialog(bool includeAudioSettings, bool includeVideoSettings, const QString& title);
+    void applySharedExportTaskSettings(const VideoExportTask& task);
     double previewDurationSeconds() const;
     double previewPlaybackEndSeconds() const;
     void applyPreviewPlaybackRate(double rate);
@@ -603,6 +610,7 @@ private:
     int invalidStarPreviewAboutClickCount_ = 0;
     QElapsedTimer invalidStarPreviewAboutClickElapsed_;
     QPoint editorCtrlLeftJumpPressPos_;
+    int previewHeldSeekDirection_ = 0;
     int previewSeekHeldArrowKey_ = 0;
     QElapsedTimer previewSeekHeldArrowElapsed_;
     QElapsedTimer previewScrubRenderElapsed_;
@@ -642,7 +650,7 @@ private:
     double previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     PreviewCanvasFrameRateMode previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
     double previewCanvasAspectRatio_ = 1.0;
-    bool previewAutoRestoreSquareAfterExport_ = true;
+    bool previewAutoRestoreSquareAfterExport_ = false;
     bool previewShowDebugInfo_ = false;
     bool previewShowTimestamp_ = true;
     bool previewShowObjectStatsHud_ = false;
@@ -720,6 +728,7 @@ private:
     QSlider* previewSlider_ = nullptr;
     QToolButton* previewSpeedButton_ = nullptr;
     QToolButton* previewFullscreenButton_ = nullptr;
+    QTimer* previewHeldSeekTimer_ = nullptr;
     QLabel* previewTapStatsLabel_ = nullptr;
     QLabel* previewHoldStatsLabel_ = nullptr;
     QLabel* previewSlideStatsLabel_ = nullptr;

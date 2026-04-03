@@ -123,6 +123,7 @@
 #include <QWidgetAction>
 #include <QToolTip>
 #include <QUrl>
+#include <QWheelEvent>
 #include <QWindowStateChangeEvent>
 #include <QUuid>
 #include <QtMath>
@@ -163,12 +164,6 @@ constexpr int kPreviewFullscreenControlsAnimationDurationMs = 180;
 constexpr int kPreviewFullscreenControlsOpacityAnimationDurationMs = 180;
 constexpr int kEditorTextFontSizeMin = 8;
 constexpr int kEditorTextFontSizeMax = 28;
-constexpr qreal kPreviewSeekInitialStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekInitialStepSeconds);
-constexpr qreal kPreviewSeekMaxStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekMaxStepSeconds);
-constexpr qreal kPreviewSeekLinearAccelerationSecondsPerMs =
-    static_cast<qreal>(miacode::preview_interaction::kSeekLinearAccelerationSecondsPerMs);
-constexpr qreal kPreviewSeekHeldRepeatSpeedScale =
-    static_cast<qreal>(miacode::preview_interaction::kSeekHeldRepeatSpeedScale);
 constexpr double kEditorLineSpacingFactorDefault = 1.5;
 constexpr int kEditorFindBarMinWidth = 300;
 constexpr int kEditorFindBarMaxWidth = 500;
@@ -3240,7 +3235,13 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
         }
     }
     if (previewSlider_ != nullptr && watched == previewSlider_) {
-        if (event->type() == QEvent::MouseButtonPress) {
+        if (event->type() == QEvent::Wheel) {
+            stopPreviewHeldSeek();
+            if (handlePreviewSliderWheel(static_cast<QWheelEvent*>(event))) {
+                return true;
+            }
+        } else if (event->type() == QEvent::MouseButtonPress) {
+            stopPreviewHeldSeek();
             auto* mouseEvent = static_cast<QMouseEvent*>(event);
             if (mouseEvent->button() == Qt::LeftButton) {
                 QStyleOptionSlider option;
@@ -3307,30 +3308,17 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
                 direction = 1;
             }
             if (direction != 0) {
-                if (!keyEvent->isAutoRepeat() || previewSeekHeldArrowKey_ != keyEvent->key()) {
-                    previewSeekHeldArrowKey_ = keyEvent->key();
-                    previewSeekHeldArrowElapsed_.restart();
-                } else if (!previewSeekHeldArrowElapsed_.isValid()) {
-                    previewSeekHeldArrowElapsed_.restart();
+                if (keyEvent->modifiers() != Qt::NoModifier) {
+                    return QMainWindow::eventFilter(watched, event);
                 }
-
-                const qreal heldMs = previewSeekHeldArrowElapsed_.isValid()
-                    ? static_cast<qreal>(previewSeekHeldArrowElapsed_.elapsed())
-                    : 0.0;
-                const qreal acceleratedStep = qMin(
-                    kPreviewSeekMaxStepSeconds,
-                    kPreviewSeekInitialStepSeconds + (heldMs * kPreviewSeekLinearAccelerationSecondsPerMs)
+                if (keyEvent->isAutoRepeat()) {
+                    return true;
+                }
+                beginPreviewHeldSeek(direction, keyEvent->key());
+                stepPreviewSliderBySeconds(
+                    static_cast<double>(direction) * miacode::preview_interaction::kSeekSingleStepSeconds,
+                    true
                 );
-                const qreal stepScale = keyEvent->isAutoRepeat() ? kPreviewSeekHeldRepeatSpeedScale : 1.0;
-                const int deltaMs = direction * qRound(acceleratedStep * stepScale * 1000.0);
-                const int value = qBound(
-                    previewSlider_->minimum(),
-                    previewSlider_->value() + deltaMs,
-                    previewSlider_->maximum()
-                );
-                previewSlider_->setValue(value);
-                showPreviewSliderTimeHint(value);
-                seekPreviewToSecond(static_cast<double>(value) / 1000.0, true);
                 return true;
             }
         } else if (event->type() == QEvent::KeyRelease) {
@@ -3344,8 +3332,7 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             if (!keyEvent->isAutoRepeat()
                 && (keyEvent->key() == Qt::Key_Left || keyEvent->key() == Qt::Key_Right)
                 && previewSeekHeldArrowKey_ == keyEvent->key()) {
-                previewSeekHeldArrowKey_ = 0;
-                previewSeekHeldArrowElapsed_.invalidate();
+                stopPreviewHeldSeek(keyEvent->key());
                 return true;
             }
         }
@@ -3876,16 +3863,8 @@ void MainWindow::loadProjectRenderState()
                     const bool unifiedObjectStatsHud = previewShowObjectStatsHud_ || exportShowObjectStatsHud_;
                     previewShowObjectStatsHud_ = unifiedObjectStatsHud;
                     exportShowObjectStatsHud_ = unifiedObjectStatsHud;
-                    if (render.value("auto_restore_square_after_export").isBool()) {
-                        previewAutoRestoreSquareAfterExport_ =
-                            render.value("auto_restore_square_after_export").toBool(previewAutoRestoreSquareAfterExport_);
-                    }
-                    if (render.value("canvas_aspect_ratio").isDouble()) {
-                        setPreviewCanvasAspectRatio(
-                            render.value("canvas_aspect_ratio").toDouble(previewCanvasAspectRatio_),
-                            false
-                        );
-                    }
+                    previewAutoRestoreSquareAfterExport_ = false;
+                    setPreviewCanvasAspectRatio(1.0, false);
                 }
                 const int savedDifficultyId = root.value("last_opened_difficulty").toInt(0);
                 if (SimaiDocument::isDifficultyId(savedDifficultyId)) {
@@ -3961,8 +3940,8 @@ void MainWindow::saveProjectRenderState() const
     render.insert("show_object_stats_preview", previewShowObjectStatsHud_);
     render.insert("show_object_stats_export", exportShowObjectStatsHud_);
     render.insert("show_validation_summary", previewShowValidationSummary_);
-    render.insert("canvas_aspect_ratio", previewCanvasAspectRatio_);
-    render.insert("auto_restore_square_after_export", previewAutoRestoreSquareAfterExport_);
+    render.insert("canvas_aspect_ratio", 1.0);
+    render.insert("auto_restore_square_after_export", false);
     root.insert("render", render);
     root.insert("last_opened_difficulty", projectLastOpenedDifficultyId_);
     root.insert("schema", "miacode_render_settings_v1");
@@ -4440,6 +4419,38 @@ void MainWindow::onAbout()
     invalidStarPreviewAboutClickElapsed_.invalidate();
 }
 
+void MainWindow::applySharedExportTaskSettings(const VideoExportTask& task)
+{
+    previewShowTimestamp_ = task.showTimestamp;
+    previewShowObjectStatsHud_ = task.showObjectStatsHud;
+    exportShowObjectStatsHud_ = task.showObjectStatsHud;
+    previewBackgroundBrightnessOuter_ = qBound(0.0, task.backgroundBrightnessOuter, 1.0);
+    previewBackgroundBrightnessInner_ = qBound(0.0, task.backgroundBrightnessInner, 1.0);
+    previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(task.layoutSquareScale);
+    previewSmoothBrightness_ = task.smoothBrightness;
+    previewBackgroundScaleMode_ = task.backgroundScaleMode;
+    previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(task.noteFlowSpeed);
+
+    if (previewMediaController_ != nullptr) {
+        dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
+            controller->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
+        });
+    }
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->setShowTimestamp(previewShowTimestamp_);
+        previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
+        previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
+        previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
+        previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
+        previewCanvas_->setSmoothBrightness(previewSmoothBrightness_);
+        previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
+        previewCanvas_->setNoteFlowSpeed(previewNoteFlowSpeed_);
+    }
+
+    saveProjectRenderState();
+    savePortableState();
+}
+
 void MainWindow::onExportPreviewVideo()
 {
     if (!hasActiveDifficulty()) {
@@ -4522,8 +4533,6 @@ void MainWindow::onExportPreviewVideo()
         }
         return second;
     };
-    const double previewAspectBeforeDialog = previewCanvasAspectRatio_;
-
     VideoExportDialog dialog(
         task,
         previewCanvas_,
@@ -4544,6 +4553,14 @@ void MainWindow::onExportPreviewVideo()
             return qtPreviewPlaying_;
         },
         currentPreviewSecond,
+        [this](bool showTimestamp) {
+            previewShowTimestamp_ = showTimestamp;
+            if (previewCanvas_ != nullptr) {
+                previewCanvas_->setShowTimestamp(previewShowTimestamp_);
+            }
+            saveProjectRenderState();
+            savePortableState();
+        },
         [this](double ratio) {
             setPreviewCanvasAspectRatio(ratio, false);
         },
@@ -4653,11 +4670,14 @@ void MainWindow::onExportPreviewVideo()
     if (previewCanvas_ != nullptr) {
         previewCanvas_->update();
     }
-    bool exportLaunched = false;
+    setPreviewCanvasAspectRatio(1.0, false);
+    restoreSquareAfterVideoExport_ = false;
     if (dialog.exportRequested()) {
+        const VideoExportTask requestedTask = dialog.requestedExportTask();
+        applySharedExportTaskSettings(requestedTask);
         VideoExportSnapshot snapshot;
         QString launchError;
-        if (!buildVideoExportSnapshot(dialog.requestedExportTask(), &snapshot, &launchError)
+        if (!buildVideoExportSnapshot(requestedTask, &snapshot, &launchError)
             || !launchVideoExportWorker(snapshot, &launchError)) {
             UiDialogs::showMessageBox(
                 QMessageBox::Critical,
@@ -4667,16 +4687,7 @@ void MainWindow::onExportPreviewVideo()
                     ? uiText("dialog.video_export.error.launch_failed", "Failed to start background export.")
                     : launchError
             );
-            setPreviewCanvasAspectRatio(previewAspectBeforeDialog, false);
-        } else {
-            exportLaunched = true;
-            restoreSquareAfterVideoExport_ = previewAutoRestoreSquareAfterExport_;
         }
-    } else {
-        setPreviewCanvasAspectRatio(previewAspectBeforeDialog, false);
-    }
-    if (!exportLaunched && !dialog.exportRequested()) {
-        restoreSquareAfterVideoExport_ = false;
     }
 }
 
@@ -4729,7 +4740,14 @@ void MainWindow::onBatchExportPreviewVideo()
     task.showObjectStatsHud = exportShowObjectStatsHud_;
 
     const QString difficultyToken = SimaiDocument::difficultyShortName(activeDifficultyId_);
-    BatchVideoExportDialog dialog(task, difficultyToken, this);
+    BatchVideoExportDialog dialog(
+        task,
+        difficultyToken,
+        [this](const VideoExportTask& sharedTask) {
+            applySharedExportTaskSettings(sharedTask);
+        },
+        this
+    );
     dialog.adjustSize();
     dialog.exec();
     if (!dialog.exportRequested()) {
@@ -4740,6 +4758,7 @@ void MainWindow::onBatchExportPreviewVideo()
     const QList<int> selectedDifficultyIds = dialog.selectedDifficultyIds();
     const QString outputDirectory = dialog.outputDirectory();
     const VideoExportTask requestedTask = dialog.requestedTaskTemplate();
+    applySharedExportTaskSettings(requestedTask);
     if (chartDirectories.isEmpty()) {
         return;
     }
@@ -6396,44 +6415,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     });
     scaleModeButton->setMenu(scaleModeMenu);
 
-    struct CanvasAspectOption {
-        double ratio;
-        QString label;
-    };
-    const QList<CanvasAspectOption> canvasAspectOptions{
-        {1.0, uiText("dialog.render_settings.video.canvas_aspect.square", "1:1 (Square)")},
-        {(4.0 / 3.0), uiText("dialog.render_settings.video.canvas_aspect.4_3", "4:3")},
-        {(16.0 / 9.0), uiText("dialog.render_settings.video.canvas_aspect.16_9", "16:9")},
-    };
-    double selectedCanvasAspect = previewCanvasAspectRatio_;
-    QString selectedCanvasAspectLabel = canvasAspectOptions.front().label;
-    double bestAspectDiff = 1e9;
-    for (const CanvasAspectOption& option : canvasAspectOptions) {
-        const double diff = qAbs(option.ratio - previewCanvasAspectRatio_);
-        if (diff < bestAspectDiff) {
-            bestAspectDiff = diff;
-            selectedCanvasAspect = option.ratio;
-            selectedCanvasAspectLabel = option.label;
-        }
-    }
-    auto* canvasAspectButton = createDialogMenuButton(videoGroup, selectedCanvasAspectLabel);
-    auto* canvasAspectMenu = new QMenu(canvasAspectButton);
-    styleRoundedMenu(*canvasAspectMenu);
-    for (const CanvasAspectOption& option : canvasAspectOptions) {
-        const double ratio = option.ratio;
-        const QString label = option.label;
-        addDialogMenuChoice(canvasAspectMenu, label, [&, ratio, label]() {
-            selectedCanvasAspect = ratio;
-            canvasAspectButton->setText(label);
-            setPreviewCanvasAspectRatio(ratio, true);
-        });
-    }
-    canvasAspectButton->setMenu(canvasAspectMenu);
-    auto* restoreSquareCheck = new QCheckBox(
-        uiText("dialog.render_settings.video.auto_restore_square", "Auto restore 1:1 after export"),
-        videoGroup
-    );
-    restoreSquareCheck->setChecked(previewAutoRestoreSquareAfterExport_);
     auto* smoothBrightnessCheck = new QCheckBox(
         uiText("dialog.render_settings.video.smooth_brightness", "Smooth brightness"),
         videoGroup
@@ -6467,7 +6448,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Layout Size"), layoutSquareScaleRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.flow_speed", "Flow Speed"), flowSpeedEdit);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.scale_mode", "Background / PV Scale Mode"), scaleModeButton);
-    videoFormLayout->addRow(uiText("dialog.render_settings.video.canvas_aspect", "Preview Canvas Aspect"), canvasAspectButton);
     auto* videoCheckRow = new QWidget(videoGroup);
     auto* videoCheckLayout = new QGridLayout(videoCheckRow);
     videoCheckLayout->setContentsMargins(0, 0, 0, 0);
@@ -6477,7 +6457,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     videoCheckLayout->setColumnStretch(1, 1);
     videoCheckLayout->addWidget(smoothBrightnessCheck, 0, 0, Qt::AlignLeft);
     videoCheckLayout->addWidget(timestampCheck, 0, 1, Qt::AlignLeft);
-    videoCheckLayout->addWidget(restoreSquareCheck, 1, 0, Qt::AlignLeft);
     videoCheckLayout->addWidget(debugCheck, 1, 1, Qt::AlignLeft);
     videoFormLayout->addRow(QString(), videoCheckRow);
 
@@ -6744,11 +6723,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
         }
-        saveProjectRenderState();
-        savePortableState();
-    });
-    connect(restoreSquareCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
-        previewAutoRestoreSquareAfterExport_ = checked;
         saveProjectRenderState();
         savePortableState();
     });

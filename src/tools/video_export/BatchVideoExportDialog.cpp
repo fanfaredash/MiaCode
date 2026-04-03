@@ -5,6 +5,7 @@
 #include "SimaiDocument.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "tools/video_export/VideoExportPreferences.h"
 
 #include <QAbstractItemView>
 #include <QCheckBox>
@@ -15,6 +16,7 @@
 #include <QFileInfo>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListView>
@@ -324,11 +326,13 @@ QWidget* createSliderOption(
 BatchVideoExportDialog::BatchVideoExportDialog(
     const VideoExportTask& baseTask,
     const QString& difficultyLabel,
+    SharedSettingsChangedCallback sharedSettingsChangedCallback,
     QWidget* parent
 )
     : QDialog(parent)
     , baseTask_(baseTask)
     , difficultyLabel_(difficultyLabel)
+    , sharedSettingsChangedCallback_(std::move(sharedSettingsChangedCallback))
     , requestedTask_(baseTask)
     , selectedResolution_(QSize(qMax(1, baseTask.outputWidth), qMax(1, baseTask.outputHeight)))
     , selectedFps_(baseTask.fps >= 90 ? 120 : 60)
@@ -395,6 +399,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
             if (resolutionButton_ != nullptr) {
                 resolutionButton_->setText(QString::fromLatin1(preset.label));
             }
+            persistExportOnlySettings();
         });
     }
     topForm->addWidget(resolutionLabel, row, 0);
@@ -412,6 +417,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
             if (fpsButton_ != nullptr) {
                 fpsButton_->setText(QStringLiteral("%1 FPS").arg(selectedFps_));
             }
+            persistExportOnlySettings();
         });
     }
     topForm->addWidget(fpsLabel, row, 0);
@@ -516,12 +522,14 @@ BatchVideoExportDialog::BatchVideoExportDialog(
         if (backgroundScaleModeButton_ != nullptr) {
             backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
         }
+        notifySharedSettingsChanged();
     });
     addDialogMenuChoice(backgroundScaleModeMenu_, exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode::FitContain), [this]() {
         selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FitContain;
         if (backgroundScaleModeButton_ != nullptr) {
             backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
         }
+        notifySharedSettingsChanged();
     });
     optionsLayout->addWidget(scaleModeLabel, optionRow, 0);
     optionsLayout->addWidget(backgroundScaleModeButton_, optionRow, 1);
@@ -542,21 +550,47 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     flowSpeedEdit_->setValidator(flowValidator);
     optionsLayout->addWidget(flowSpeedLabel, optionRow, 0);
     optionsLayout->addWidget(flowSpeedEdit_, optionRow, 1);
+    connect(flowSpeedEdit_, &QLineEdit::editingFinished, this, [this]() {
+        if (flowSpeedEdit_ == nullptr) {
+            return;
+        }
+        bool ok = false;
+        const double typedSpeed = flowSpeedEdit_->text().trimmed().toDouble(&ok);
+        if (!ok) {
+            flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
+            return;
+        }
+        selectedFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(typedSpeed);
+        flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
+        notifySharedSettingsChanged();
+    });
 
     connect(brightnessOuterSlider_, &QSlider::valueChanged, this, [this](int value) {
         if (brightnessOuterValueLabel_ != nullptr) {
             brightnessOuterValueLabel_->setText(QStringLiteral("%1%").arg(value));
         }
+        notifySharedSettingsChanged();
     });
     connect(brightnessInnerSlider_, &QSlider::valueChanged, this, [this](int value) {
         if (brightnessInnerValueLabel_ != nullptr) {
             brightnessInnerValueLabel_->setText(QStringLiteral("%1%").arg(value));
         }
+        notifySharedSettingsChanged();
     });
     connect(layoutSquareScaleSlider_, &QSlider::valueChanged, this, [this](int value) {
         if (layoutSquareScaleValueLabel_ != nullptr) {
             layoutSquareScaleValueLabel_->setText(QStringLiteral("%1%").arg(value));
         }
+        notifySharedSettingsChanged();
+    });
+    connect(showTimestampCheck_, &QCheckBox::toggled, this, [this](bool) {
+        notifySharedSettingsChanged();
+    });
+    connect(showObjectStatsCheck_, &QCheckBox::toggled, this, [this](bool) {
+        notifySharedSettingsChanged();
+    });
+    connect(smoothBrightnessCheck_, &QCheckBox::toggled, this, [this](bool) {
+        notifySharedSettingsChanged();
     });
 
     rootLayout->addWidget(optionsCard);
@@ -828,11 +862,10 @@ void BatchVideoExportDialog::saveLastOutputBrowseDirectory(const QString& direct
 
 void BatchVideoExportDialog::loadPersistedSettings()
 {
-    QSettings settings = exportDialogSettingsStore();
-    settings.beginGroup(QStringLiteral("video_export_dialog"));
+    const QJsonObject settings = miacode::video_export::loadDialogPreferences();
 
-    const int savedWidth = settings.value(QStringLiteral("resolution_width"), selectedResolution_.width()).toInt();
-    const int savedHeight = settings.value(QStringLiteral("resolution_height"), selectedResolution_.height()).toInt();
+    const int savedWidth = settings.value(QStringLiteral("resolution_width")).toInt(selectedResolution_.width());
+    const int savedHeight = settings.value(QStringLiteral("resolution_height")).toInt(selectedResolution_.height());
     if (savedWidth > 0 && savedHeight > 0) {
         selectedResolution_ = QSize(savedWidth, savedHeight);
         if (resolutionButton_ != nullptr) {
@@ -840,69 +873,55 @@ void BatchVideoExportDialog::loadPersistedSettings()
         }
     }
 
-    const int savedFps = settings.value(QStringLiteral("fps"), selectedFps_).toInt();
+    const int savedFps = settings.value(QStringLiteral("fps")).toInt(selectedFps_);
     selectedFps_ = savedFps >= 90 ? 120 : 60;
     if (fpsButton_ != nullptr) {
         fpsButton_->setText(QStringLiteral("%1 FPS").arg(selectedFps_));
     }
-
-    if (showTimestampCheck_ != nullptr) {
-        showTimestampCheck_->setChecked(settings.value(QStringLiteral("show_timestamp"), showTimestampCheck_->isChecked()).toBool());
-    }
-    if (showObjectStatsCheck_ != nullptr) {
-        showObjectStatsCheck_->setChecked(settings.value(QStringLiteral("show_object_stats_export"), showObjectStatsCheck_->isChecked()).toBool());
-    }
-    if (smoothBrightnessCheck_ != nullptr) {
-        smoothBrightnessCheck_->setChecked(settings.value(QStringLiteral("smooth_brightness"), smoothBrightnessCheck_->isChecked()).toBool());
-    }
-    if (brightnessOuterSlider_ != nullptr) {
-        brightnessOuterSlider_->setValue(settings.value(QStringLiteral("brightness_outer"), brightnessOuterSlider_->value()).toInt());
-    }
-    if (brightnessInnerSlider_ != nullptr) {
-        brightnessInnerSlider_->setValue(settings.value(QStringLiteral("brightness_inner"), brightnessInnerSlider_->value()).toInt());
-    }
-    if (layoutSquareScaleSlider_ != nullptr) {
-        layoutSquareScaleSlider_->setValue(settings.value(QStringLiteral("layout_square_scale"), layoutSquareScaleSlider_->value()).toInt());
-    }
-
-    const int savedScaleMode = settings.value(QStringLiteral("background_scale_mode"), static_cast<int>(selectedBackgroundScaleMode_)).toInt();
-    selectedBackgroundScaleMode_ = savedScaleMode == static_cast<int>(PreviewBackgroundScaleMode::FitContain)
-        ? PreviewBackgroundScaleMode::FitContain
-        : PreviewBackgroundScaleMode::FillCrop;
-    if (backgroundScaleModeButton_ != nullptr) {
-        backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
-    }
-
-    const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
-    const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
-    const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
-    const double savedFlowSpeed = settings.value(QStringLiteral("flow_speed"), selectedFlowSpeed_).toDouble();
-    selectedFlowSpeed_ = qBound(
-        flowSpeedMin,
-        flowSpeedMin + qRound((savedFlowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
-        flowSpeedMax
-    );
-    if (flowSpeedEdit_ != nullptr) {
-        flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
-    }
-
-    settings.endGroup();
 }
 
 void BatchVideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
 {
-    QSettings settings = exportDialogSettingsStore();
-    settings.beginGroup(QStringLiteral("video_export_dialog"));
-    settings.setValue(QStringLiteral("resolution_width"), task.outputWidth);
-    settings.setValue(QStringLiteral("resolution_height"), task.outputHeight);
-    settings.setValue(QStringLiteral("fps"), task.fps);
-    settings.setValue(QStringLiteral("show_timestamp"), task.showTimestamp);
-    settings.setValue(QStringLiteral("show_object_stats_export"), task.showObjectStatsHud);
-    settings.setValue(QStringLiteral("smooth_brightness"), task.smoothBrightness);
-    settings.setValue(QStringLiteral("brightness_outer"), qRound(qBound(0.0, task.backgroundBrightnessOuter, 1.0) * 100.0));
-    settings.setValue(QStringLiteral("brightness_inner"), qRound(qBound(0.0, task.backgroundBrightnessInner, 1.0) * 100.0));
-    settings.setValue(QStringLiteral("layout_square_scale"), qRound(miacode::preview_video::normalizedLayoutSquareScale(task.layoutSquareScale) * 100.0));
-    settings.setValue(QStringLiteral("background_scale_mode"), static_cast<int>(task.backgroundScaleMode));
-    settings.setValue(QStringLiteral("flow_speed"), task.noteFlowSpeed);
-    settings.endGroup();
+    QJsonObject settings = miacode::video_export::loadDialogPreferences();
+    settings.insert(QStringLiteral("resolution_width"), task.outputWidth);
+    settings.insert(QStringLiteral("resolution_height"), task.outputHeight);
+    settings.insert(QStringLiteral("fps"), task.fps);
+    miacode::video_export::saveDialogPreferences(settings);
+}
+
+void BatchVideoExportDialog::persistExportOnlySettings() const
+{
+    QJsonObject settings = miacode::video_export::loadDialogPreferences();
+    settings.insert(QStringLiteral("resolution_width"), selectedResolution_.width());
+    settings.insert(QStringLiteral("resolution_height"), selectedResolution_.height());
+    settings.insert(QStringLiteral("fps"), selectedFps_);
+    miacode::video_export::saveDialogPreferences(settings);
+}
+
+void BatchVideoExportDialog::notifySharedSettingsChanged()
+{
+    if (sharedSettingsChangedCallback_) {
+        sharedSettingsChangedCallback_(currentSharedSettingsTask());
+    }
+}
+
+VideoExportTask BatchVideoExportDialog::currentSharedSettingsTask() const
+{
+    VideoExportTask task = baseTask_;
+    task.showTimestamp = showTimestampCheck_ != nullptr && showTimestampCheck_->isChecked();
+    task.showObjectStatsHud = showObjectStatsCheck_ != nullptr && showObjectStatsCheck_->isChecked();
+    task.smoothBrightness = smoothBrightnessCheck_ != nullptr && smoothBrightnessCheck_->isChecked();
+    task.backgroundBrightnessOuter =
+        brightnessOuterSlider_ != nullptr ? qBound(0.0, brightnessOuterSlider_->value() / 100.0, 1.0)
+                                          : task.backgroundBrightnessOuter;
+    task.backgroundBrightnessInner =
+        brightnessInnerSlider_ != nullptr ? qBound(0.0, brightnessInnerSlider_->value() / 100.0, 1.0)
+                                          : task.backgroundBrightnessInner;
+    task.layoutSquareScale =
+        layoutSquareScaleSlider_ != nullptr
+        ? miacode::preview_video::normalizedLayoutSquareScale(layoutSquareScaleSlider_->value() / 100.0)
+        : task.layoutSquareScale;
+    task.backgroundScaleMode = selectedBackgroundScaleMode_;
+    task.noteFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(selectedFlowSpeed_);
+    return task;
 }
