@@ -11,6 +11,7 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "simai/transform/ChartBatchTransform.h"
+#include "simai/transform/ChartNormalization.h"
 #include "tools/latency/LatencyDetectorDialog.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
@@ -4076,6 +4077,71 @@ void MainWindow::onRotate45Clockwise()
     });
 }
 
+void MainWindow::onNormalizeWholeChart()
+{
+    if (!hasActiveDifficulty()) {
+        statusBar()->showMessage(
+            uiText("status.normalize.no_difficulty", QStringLiteral("Select a difficulty field first."))
+        );
+        return;
+    }
+
+    if (!runValidateSimaiSilently(false)) {
+        UiDialogs::showMessageBox(
+            QMessageBox::Warning,
+            this,
+            uiText("dialog.normalize.title", QStringLiteral("Format Chart")),
+            uiText(
+                "dialog.normalize.fix_syntax_first",
+                QStringLiteral("Fix syntax errors before normalizing this chart."))
+        );
+        return;
+    }
+
+    const miacode::chart_transform::ChartNormalizationResult normalized =
+        miacode::chart_transform::normalizeChartText(activeChartText(), currentTimingMetadata());
+    if (!normalized.ok) {
+        UiDialogs::showMessageBox(
+            QMessageBox::Warning,
+            this,
+            uiText("dialog.normalize.title", QStringLiteral("Format Chart")),
+            normalized.errorMessage.isEmpty()
+                ? uiText(
+                    "dialog.normalize.failed",
+                    QStringLiteral("Failed to normalize the current chart."))
+                : normalized.errorMessage
+        );
+        return;
+    }
+
+    if (normalized.text == activeChartText()) {
+        statusBar()->showMessage(
+            uiText(
+                "status.normalize.already_normalized",
+                QStringLiteral("Format Chart: already normalized."))
+        );
+        return;
+    }
+
+    if (!applyBatchTransform(
+            uiText("action.normalize_chart", QStringLiteral("Format Chart")),
+            [normalized](const QString&, int* changedCount) {
+                if (changedCount != nullptr) {
+                    *changedCount = normalized.changedCount;
+                }
+                return normalized.text;
+            })) {
+        return;
+    }
+
+    statusBar()->showMessage(
+        uiText(
+            "status.normalize.applied",
+            QStringLiteral("Format Chart applied: %1 measure line(s)."))
+            .arg(normalized.measureLineCount)
+    );
+}
+
 void MainWindow::onToggleBreakSelection()
 {
     if (!hasActiveDifficulty()) {
@@ -5140,8 +5206,9 @@ bool MainWindow::buildVideoExportSnapshotForChartDirectory(
     const auto validationLocale = UiText::isChineseUi()
         ? SimaiNativeValidationLocale::Chinese
         : SimaiNativeValidationLocale::English;
+    const miacode::simai::SimaiTimingMetadata timingMetadata = miacode::simai::buildTimingMetadata(document);
     const SimaiNativeValidationReport report =
-        SimaiNativeParser::buildValidationReport(difficulty->chart, validationLocale);
+        SimaiNativeParser::buildValidationReport(difficulty->chart, validationLocale, nullptr, timingMetadata);
     if (report.errorCount > 0) {
         QString issueSummary;
         if (!report.issues.isEmpty()) {
@@ -5161,7 +5228,9 @@ bool MainWindow::buildVideoExportSnapshotForChartDirectory(
         return false;
     }
 
-    const SimaiNativeParseResult parsedTimeline = SimaiNativeParser::parseForTimeline(difficulty->chart);
+    const SimaiNativeParseResult parsedTimeline = SimaiNativeParser::parseForTimeline(
+        difficulty->chart,
+        timingMetadata);
     if (parsedTimeline.noteMarkers.isEmpty()) {
         if (errorMessage != nullptr) {
             *errorMessage = uiText(
@@ -6097,9 +6166,6 @@ void MainWindow::onOpenLatencyDetector()
     });
     connect(latencyDetectorDialog_, &LatencyDetectorDialog::bpmChanged, this, [this](double bpm) {
         applyLatencyDetectorBpm(bpm);
-    });
-    connect(latencyDetectorDialog_, &LatencyDetectorDialog::meterIdChanged, this, [this](const QString& value) {
-        applyLatencyDetectorMeter(value);
     });
     connect(latencyDetectorDialog_, &QObject::destroyed, this, [this]() {
         latencyDetectorDialog_.clear();

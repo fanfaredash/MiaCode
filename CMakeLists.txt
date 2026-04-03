@@ -91,8 +91,12 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/audio/QtPreviewSfxRuntime.cpp
     src/simai/transform/ChartBatchTransform.h
     src/simai/transform/ChartBatchTransform.cpp
+    src/simai/transform/ChartNormalization.h
+    src/simai/transform/ChartNormalization.cpp
     src/simai/document/SimaiDocument.h
     src/simai/document/SimaiDocument.cpp
+    src/simai/document/SimaiTimingMetadata.h
+    src/simai/document/SimaiTimingMetadata.cpp
     src/simai/parser/SimaiNativeParser.h
     src/simai/parser/SimaiNativeParser.cpp
     src/timeline/TimelineData.h
@@ -184,6 +188,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/common/MuriTypes.cpp
         src/simai/document/SimaiDocument.h
         src/simai/document/SimaiDocument.cpp
+        src/simai/document/SimaiTimingMetadata.h
+        src/simai/document/SimaiTimingMetadata.cpp
         src/simai/parser/SimaiNativeParser.h
         src/simai/parser/SimaiNativeParser.cpp
         src/tools/muri/MuriAnalyzer.h
@@ -195,8 +201,12 @@ if (MIACODE_BUILD_DEV_TOOLS)
 
     add_executable(simai_native_dump
         src/simai/parser/SimaiNativeDump.cpp
+        src/simai/document/SimaiDocument.h
+        src/simai/document/SimaiDocument.cpp
         src/simai/parser/SimaiNativeParser.h
         src/simai/parser/SimaiNativeParser.cpp
+        src/simai/document/SimaiTimingMetadata.h
+        src/simai/document/SimaiTimingMetadata.cpp
         resources/fonts.qrc
     )
 
@@ -212,8 +222,12 @@ if (MIACODE_BUILD_DEV_TOOLS)
 
     add_executable(simai_parser_spec
         src/tools/simai_parser/SimaiParserSpec.cpp
+        src/simai/document/SimaiDocument.h
+        src/simai/document/SimaiDocument.cpp
         src/simai/parser/SimaiNativeParser.h
         src/simai/parser/SimaiNativeParser.cpp
+        src/simai/document/SimaiTimingMetadata.h
+        src/simai/document/SimaiTimingMetadata.cpp
         resources/fonts.qrc
     )
 
@@ -221,8 +235,12 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/tools/chart_transform/ChartBatchTransformSpec.cpp
         src/simai/transform/ChartBatchTransform.h
         src/simai/transform/ChartBatchTransform.cpp
+        src/simai/transform/ChartNormalization.h
+        src/simai/transform/ChartNormalization.cpp
         src/simai/document/SimaiDocument.h
         src/simai/document/SimaiDocument.cpp
+        src/simai/document/SimaiTimingMetadata.h
+        src/simai/document/SimaiTimingMetadata.cpp
         src/simai/parser/SimaiNativeParser.h
         src/simai/parser/SimaiNativeParser.cpp
         resources/fonts.qrc
@@ -232,8 +250,12 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/tools/muri/MuriSpec.cpp
         src/common/MuriTypes.h
         src/common/MuriTypes.cpp
+        src/simai/document/SimaiDocument.h
+        src/simai/document/SimaiDocument.cpp
         src/simai/parser/SimaiNativeParser.h
         src/simai/parser/SimaiNativeParser.cpp
+        src/simai/document/SimaiTimingMetadata.h
+        src/simai/document/SimaiTimingMetadata.cpp
         src/tools/muri/MuriAnalyzer.h
         src/tools/muri/MuriAnalyzer.cpp
         src/tools/muri/MuriPanelEntries.h
@@ -245,8 +267,12 @@ if (MIACODE_BUILD_DEV_TOOLS)
 
     add_executable(timeline_model_spec
         src/tools/timeline/TimelineModelSpec.cpp
+        src/simai/document/SimaiDocument.h
+        src/simai/document/SimaiDocument.cpp
         src/simai/parser/SimaiNativeParser.h
         src/simai/parser/SimaiNativeParser.cpp
+        src/simai/document/SimaiTimingMetadata.h
+        src/simai/document/SimaiTimingMetadata.cpp
         src/timeline/TimelineQuickModel.h
         src/timeline/TimelineQuickModel.cpp
         resources/fonts.qrc

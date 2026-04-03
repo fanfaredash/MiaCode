@@ -4,6 +4,10 @@
         return;
     }
 
+    const auto openExternalUrl = [](const QString& url) {
+        QDesktopServices::openUrl(QUrl(url));
+    };
+
     newAction_ = new QAction(uiText("action.new", "New"), this);
     newAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+N")));
     connect(newAction_, &QAction::triggered, this, &MainWindow::onNewFile);
@@ -150,6 +154,12 @@
     validateAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
     connect(validateAction_, &QAction::triggered, this, &MainWindow::onValidateSimai);
     editMenu->addAction(validateAction_);
+
+    normalizeWholeChartAction_ = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("谱面格式整理") : QStringLiteral("Format Chart"),
+        this
+    );
+    connect(normalizeWholeChartAction_, &QAction::triggered, this, &MainWindow::onNormalizeWholeChart);
 
     transformMirrorLeftRightAction_ = new QAction(uiText("action.transform.mirror_lr", "Mirror Left/Right"), this);
     transformMirrorLeftRightAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_J));
@@ -311,6 +321,25 @@
     });
     previewMenu->addAction(swapWorkspaceSidesAction_);
 
+    auto* officialChartMirrorAction = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("官谱镜像站") : QStringLiteral("Official Chart Mirror"),
+        this
+    );
+    connect(officialChartMirrorAction, &QAction::triggered, this, [openExternalUrl]() {
+        openExternalUrl(QStringLiteral("https://www.maiviewer.net/"));
+    });
+    helpMenu->addAction(officialChartMirrorAction);
+
+    auto* simaiWikiAction = new QAction(
+        UiText::isChineseUi() ? QStringLiteral("simaiwiki") : QStringLiteral("simaiwiki"),
+        this
+    );
+    connect(simaiWikiAction, &QAction::triggered, this, [openExternalUrl]() {
+        openExternalUrl(QStringLiteral("https://w.atwiki.jp/simai/"));
+    });
+    helpMenu->addAction(simaiWikiAction);
+    helpMenu->addSeparator();
+
     aboutAction_ = new QAction(uiText("action.about", "About"), this);
     connect(aboutAction_, &QAction::triggered, this, &MainWindow::onAbout);
     helpMenu->addAction(aboutAction_);
@@ -377,6 +406,9 @@ MainWindow::MainWindow(QWidget* parent)
         editMenu->removeAction(validateAction_);
         toolsMenu->addSeparator();
         toolsMenu->addAction(validateAction_);
+        if (normalizeWholeChartAction_ != nullptr) {
+            toolsMenu->addAction(normalizeWholeChartAction_);
+        }
     }
     if (exportVideoAction_ != nullptr) {
         previewMenu->removeAction(exportVideoAction_);
@@ -989,6 +1021,9 @@ MainWindow::MainWindow(QWidget* parent)
     });
 
     toolboxMenu_ = new QMenu(outlineList_);
+    const auto openToolboxUrl = [](const QString& url) {
+        QDesktopServices::openUrl(QUrl(url));
+    };
 
     QAction* toolboxMuriAction = toolboxMenu_->addAction(
         UiText::isChineseUi() ? QStringLiteral("无理检测") : QStringLiteral("Muri Check")
@@ -1000,12 +1035,9 @@ MainWindow::MainWindow(QWidget* parent)
         }
     });
 
-    toolboxMenu_->addSeparator();
-
-    QAction* toolboxExportAction = toolboxMenu_->addAction(
-        UiText::isChineseUi() ? QStringLiteral("视频导出") : QStringLiteral("Video Export")
-    );
-    connect(toolboxExportAction, &QAction::triggered, this, &MainWindow::onExportPreviewVideo);
+    if (normalizeWholeChartAction_ != nullptr) {
+        toolboxMenu_->addAction(normalizeWholeChartAction_);
+    }
 
     QAction* toolboxBatchExportAction = toolboxMenu_->addAction(
         UiText::isChineseUi() ? QStringLiteral("批量视频导出") : QStringLiteral("Batch Video Export")
@@ -1014,21 +1046,12 @@ MainWindow::MainWindow(QWidget* parent)
 
     toolboxMenu_->addSeparator();
 
-    QAction* toolboxLatencyAction = toolboxMenu_->addAction(
-        UiText::isChineseUi() ? QStringLiteral("BPM检测与偏移") : QStringLiteral("BPM & Offset")
+    QAction* toolboxOfficialChartMirrorAction = toolboxMenu_->addAction(
+        UiText::isChineseUi() ? QStringLiteral("官谱镜像站") : QStringLiteral("Official Chart Mirror")
     );
-    connect(toolboxLatencyAction, &QAction::triggered, this, &MainWindow::onOpenLatencyDetector);
-    if (latencyDetectorAction_ != nullptr) {
-        toolboxLatencyAction->setEnabled(latencyDetectorAction_->isEnabled());
-        toolboxLatencyAction->setToolTip(latencyDetectorAction_->toolTip());
-        connect(latencyDetectorAction_, &QAction::changed, this, [this, toolboxLatencyAction]() {
-            if (latencyDetectorAction_ == nullptr || toolboxLatencyAction == nullptr) {
-                return;
-            }
-            toolboxLatencyAction->setEnabled(latencyDetectorAction_->isEnabled());
-            toolboxLatencyAction->setToolTip(latencyDetectorAction_->toolTip());
-        });
-    }
+    connect(toolboxOfficialChartMirrorAction, &QAction::triggered, this, [openToolboxUrl]() {
+        openToolboxUrl(QStringLiteral("https://www.maiviewer.net/"));
+    });
 
     addDockWidget(Qt::LeftDockWidgetArea, outlineDock);
     setOutlineDockCollapsed(false);

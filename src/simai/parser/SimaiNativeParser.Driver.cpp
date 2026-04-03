@@ -358,11 +358,31 @@ bool lineTailIsTerminalMarker(const QString& line, int startIndex)
     return isTerminalMarkerText(tail);
 }
 
-SimaiNativeParseResult parseInternal(const QString& text, bool strictMode, bool allowInvalidStarFallback = false)
+void applyInitialTimingMetadata(
+    ParseState* state,
+    const miacode::simai::SimaiTimingMetadata& timingMetadata)
+{
+    if (state == nullptr) {
+        return;
+    }
+    state->meterNumerator = timingMetadata.wholeTimeSignatureValid
+        ? timingMetadata.wholeTimeSignatureNumerator
+        : kDefaultMeterNumerator;
+    state->meterDenominator = timingMetadata.wholeTimeSignatureValid
+        ? timingMetadata.wholeTimeSignatureDenominator
+        : kDefaultMeterDenominator;
+}
+
+SimaiNativeParseResult parseInternal(
+    const QString& text,
+    bool strictMode,
+    bool allowInvalidStarFallback,
+    const miacode::simai::SimaiTimingMetadata& timingMetadata)
 {
     ParseState state;
     state.strictMode = strictMode;
     state.allowInvalidStarFallback = allowInvalidStarFallback;
+    applyInitialTimingMetadata(&state, timingMetadata);
 
     QString token;
     int tokenColumn = 1;
@@ -406,6 +426,19 @@ SimaiNativeParseResult parseInternal(const QString& text, bool strictMode, bool 
 
             if (ch == QChar('|') && i + 1 < line.size() && line.at(i + 1) == QChar('|')) {
                 flushToken(lineNumber);
+                int numerator = 0;
+                int denominator = 0;
+                if (miacode::simai::parseInlineTimeSignatureComment(
+                        line,
+                        i,
+                        &numerator,
+                        &denominator,
+                        nullptr)) {
+                    state.meterNumerator = numerator;
+                    state.meterDenominator = denominator;
+                    state.currentMeasureStartSecond = state.second;
+                    appendDistinctSecond(&state.result.measureLineSeconds, state.currentMeasureStartSecond);
+                }
                 break;
             }
 
@@ -711,14 +744,18 @@ QString validationSeverityPrefix(SimaiNativeValidationSeverity severity, SimaiNa
 
 }  // namespace
 
-SimaiNativeParseResult SimaiNativeParser::parseForTimeline(const QString& text)
+SimaiNativeParseResult SimaiNativeParser::parseForTimeline(
+    const QString& text,
+    const miacode::simai::SimaiTimingMetadata& timingMetadata)
 {
-    return parseInternal(text, false, g_invalidStarPreviewEnabled);
+    return parseInternal(text, false, g_invalidStarPreviewEnabled, timingMetadata);
 }
 
-SimaiNativeParseResult SimaiNativeParser::validateSyntax(const QString& text)
+SimaiNativeParseResult SimaiNativeParser::validateSyntax(
+    const QString& text,
+    const miacode::simai::SimaiTimingMetadata& timingMetadata)
 {
-    SimaiNativeParseResult result = parseInternal(text, true, false);
+    SimaiNativeParseResult result = parseInternal(text, true, false, timingMetadata);
     return result;
 }
 
@@ -735,7 +772,8 @@ bool SimaiNativeParser::invalidStarPreviewEnabled()
 SimaiNativeValidationReport SimaiNativeParser::buildValidationReport(
     const QString& text,
     SimaiNativeValidationLocale locale,
-    const SimaiNativeParseResult* lenientResult)
+    const SimaiNativeParseResult* lenientResult,
+    const miacode::simai::SimaiTimingMetadata& timingMetadata)
 {
     SimaiNativeValidationReport report;
 
@@ -758,10 +796,10 @@ SimaiNativeValidationReport SimaiNativeParser::buildValidationReport(
     SimaiNativeParseResult lenientOwned;
     const SimaiNativeParseResult* effectiveLenientResult = lenientResult;
     if (effectiveLenientResult == nullptr) {
-        lenientOwned = parseForTimeline(text);
+        lenientOwned = parseForTimeline(text, timingMetadata);
         effectiveLenientResult = &lenientOwned;
     }
-    const SimaiNativeParseResult strictResult = validateSyntax(text);
+    const SimaiNativeParseResult strictResult = validateSyntax(text, timingMetadata);
 
     report.lenientNoteCount = effectiveLenientResult->noteMarkers.size();
     report.lenientErrorCount = effectiveLenientResult->errors.size();

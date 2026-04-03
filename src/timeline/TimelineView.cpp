@@ -35,6 +35,7 @@ constexpr int kLaneHeight = 20;
 constexpr int kTimelineLeftMargin = 40;
 constexpr int kTimelineTopMargin = 6;
 constexpr int kTimelineRightPadding = 24;
+constexpr int kTimelineMaxRenderedSubdivisionBeats = 32;
 constexpr int kNoteSize = 14;
 constexpr int kSlideTrackBasePixelSize =
     static_cast<int>((static_cast<double>(kNoteSize) * miacode::preview_skin::kSlideTrackLongSideRelativeToTap) + 0.5);
@@ -84,6 +85,31 @@ QVector<double> makeTimelineZoomPresets()
 QVector<double> makeTimelineButtonZoomPresets()
 {
     return {0.25, 0.5, 0.75, 1.0, 1.5, 2.0};
+}
+
+int preferredRenderedSubdivisionBeats(int sourceSubdivisionBeats)
+{
+    const int normalizedSource = qMax(1, sourceSubdivisionBeats);
+    if (normalizedSource <= kTimelineMaxRenderedSubdivisionBeats) {
+        return normalizedSource;
+    }
+    for (int candidate = kTimelineMaxRenderedSubdivisionBeats; candidate >= 1; --candidate) {
+        if ((normalizedSource % candidate) == 0) {
+            return candidate;
+        }
+    }
+    return 1;
+}
+
+bool shouldPaintTimelineBeatMarker(const TimelineRenderBeat& beat)
+{
+    const int sourceSubdivisionBeats = qMax(1, beat.subdivisionBeats);
+    const int renderedSubdivisionBeats = preferredRenderedSubdivisionBeats(sourceSubdivisionBeats);
+    if (renderedSubdivisionBeats >= sourceSubdivisionBeats) {
+        return true;
+    }
+    const int stride = qMax(1, sourceSubdivisionBeats / renderedSubdivisionBeats);
+    return (beat.subdivisionIndex % stride) == 0;
 }
 
 int transformedPixmapScalePermille(qreal scale)

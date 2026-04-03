@@ -1,4 +1,5 @@
 #include "timeline/TimelineQuickModel.h"
+#include "simai/document/SimaiTimingMetadata.h"
 #include "simai/parser/SimaiNativeParser.h"
 
 #include <QCoreApplication>
@@ -390,9 +391,12 @@ QString comparableSecondsDiff(const QVector<double>& expected, const QVector<dou
     return lines.join(QLatin1Char('\n'));
 }
 
-bool snapshotMatchesParser(const QString& chartText, QString* diff = nullptr)
+bool snapshotMatchesParser(
+    const QString& chartText,
+    QString* diff = nullptr,
+    const miacode::simai::SimaiTimingMetadata& timingMetadata = miacode::simai::SimaiTimingMetadata())
 {
-    const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(chartText);
+    const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(chartText, timingMetadata);
     if (!parsed.ok) {
         if (diff != nullptr) {
             QStringList messages;
@@ -406,7 +410,7 @@ bool snapshotMatchesParser(const QString& chartText, QString* diff = nullptr)
     }
 
     TimelineQuickModel model;
-    if (!model.rebuildFromText(chartText, 0.0)) {
+    if (!model.rebuildFromText(chartText, 0.0, timingMetadata)) {
         if (diff != nullptr) {
             *diff = QStringLiteral("quick model rebuild failed");
         }
@@ -602,15 +606,16 @@ bool incrementalMatchesRebuild(
     int position,
     int charsRemoved,
     const QString& insertedText,
-    double firstSeconds)
+    double firstSeconds,
+    const miacode::simai::SimaiTimingMetadata& timingMetadata = miacode::simai::SimaiTimingMetadata())
 {
     QTextDocument document(originalText);
     TimelineQuickModel incremental;
     TimelineQuickModel rebuilt;
-    incremental.rebuildFromDocument(&document, firstSeconds);
+    incremental.rebuildFromDocument(&document, firstSeconds, timingMetadata);
     applyDocumentChange(&document, position, charsRemoved, insertedText);
-    incremental.applyContentsChange(&document, position, charsRemoved, insertedText.size(), firstSeconds);
-    rebuilt.rebuildFromDocument(&document, firstSeconds);
+    incremental.applyContentsChange(&document, position, charsRemoved, insertedText.size(), firstSeconds, timingMetadata);
+    rebuilt.rebuildFromDocument(&document, firstSeconds, timingMetadata);
     return sameSnapshot(incremental.snapshot(), rebuilt.snapshot());
 }
 
@@ -869,6 +874,64 @@ int main(int argc, char** argv)
     }
 
     {
+        const QString chartText = QStringLiteral("{48},,,,,,\n,,,,,,\nE");
+        TimelineQuickModel model;
+        model.rebuildFromText(chartText, 0.0);
+        const TimelineRenderSnapshot snapshot = model.snapshot();
+        expect(snapshot.lines.size() >= 2, QStringLiteral("quick model builds dense subdivision beat metadata across line breaks"));
+        if (snapshot.lines.size() >= 2) {
+            const QVector<TimelineRenderBeat>& firstLineBeats = snapshot.lines.at(0).beats;
+            const QVector<TimelineRenderBeat>& secondLineBeats = snapshot.lines.at(1).beats;
+            expect(firstLineBeats.size() == 6 && secondLineBeats.size() == 6,
+                   QStringLiteral("dense subdivision chart keeps all comma markers on both source lines"));
+            if (firstLineBeats.size() == 6 && secondLineBeats.size() == 6) {
+                bool indicesOk = true;
+                for (int index = 0; index < firstLineBeats.size(); ++index) {
+                    indicesOk = indicesOk
+                        && firstLineBeats.at(index).subdivisionBeats == 48
+                        && firstLineBeats.at(index).subdivisionIndex == index;
+                }
+                for (int index = 0; index < secondLineBeats.size(); ++index) {
+                    indicesOk = indicesOk
+                        && secondLineBeats.at(index).subdivisionBeats == 48
+                        && secondLineBeats.at(index).subdivisionIndex == index + 6;
+                }
+                expect(indicesOk,
+                       QStringLiteral("dense subdivision beat metadata carries forward across line breaks without resetting"));
+            }
+        }
+    }
+
+    {
+        const QString chartText = QStringLiteral("{48},,,\n{48},,,\nE");
+        TimelineQuickModel model;
+        model.rebuildFromText(chartText, 0.0);
+        const TimelineRenderSnapshot snapshot = model.snapshot();
+        expect(snapshot.lines.size() >= 2, QStringLiteral("quick model keeps subdivision reset metadata when {beats} restarts"));
+        if (snapshot.lines.size() >= 2) {
+            const QVector<TimelineRenderBeat>& firstLineBeats = snapshot.lines.at(0).beats;
+            const QVector<TimelineRenderBeat>& secondLineBeats = snapshot.lines.at(1).beats;
+            expect(firstLineBeats.size() == 3 && secondLineBeats.size() == 3,
+                   QStringLiteral("explicit dense {beats} restarts still keep comma markers on each line"));
+            if (firstLineBeats.size() == 3 && secondLineBeats.size() == 3) {
+                bool resetOk = true;
+                for (int index = 0; index < firstLineBeats.size(); ++index) {
+                    resetOk = resetOk
+                        && firstLineBeats.at(index).subdivisionBeats == 48
+                        && firstLineBeats.at(index).subdivisionIndex == index;
+                }
+                for (int index = 0; index < secondLineBeats.size(); ++index) {
+                    resetOk = resetOk
+                        && secondLineBeats.at(index).subdivisionBeats == 48
+                        && secondLineBeats.at(index).subdivisionIndex == index;
+                }
+                expect(resetOk,
+                       QStringLiteral("explicit {beats} tokens reset dense subdivision metadata for later rendering"));
+            }
+        }
+    }
+
+    {
         const QString chartText = QStringLiteral(",,(150),\n,\nE");
         TimelineQuickModel model;
         model.rebuildFromText(chartText, 0.0);
@@ -892,6 +955,46 @@ int main(int argc, char** argv)
         QString diff;
         expect(snapshotMatchesParser(chartText, &diff),
                QStringLiteral("parser and quick model agree on BPM-reset measure-line semantics: %1").arg(diff));
+    }
+
+    {
+        const miacode::simai::SimaiTimingMetadata timingMetadata =
+            miacode::simai::buildTimingMetadataFromRawText(QStringLiteral("&whole_time_signature=3/4"), true);
+        const QString chartText = QStringLiteral(",,,\n,,,\nE");
+        TimelineQuickModel model;
+        model.rebuildFromText(chartText, 0.0, timingMetadata);
+        QVector<double> quickMeasures = flattenSnapshotMeasureLines(model.snapshot());
+        std::sort(quickMeasures.begin(), quickMeasures.end());
+        expect(quickMeasures.size() == 3, QStringLiteral("quick model keeps whole_time_signature-driven measure markers"));
+        if (quickMeasures.size() == 3) {
+            expect(nearlyEqual(quickMeasures.at(0), 0.0)
+                       && nearlyEqual(quickMeasures.at(1), 1.5)
+                       && nearlyEqual(quickMeasures.at(2), 3.0),
+                   QStringLiteral("whole_time_signature metadata shifts quick-model measure timing to 3/4"));
+        }
+
+        QString diff;
+        expect(snapshotMatchesParser(chartText, &diff, timingMetadata),
+               QStringLiteral("parser and quick model agree on whole_time_signature semantics: %1").arg(diff));
+    }
+
+    {
+        const QString chartText = QStringLiteral(",,|| 3 / 4\n,,,\nE");
+        TimelineQuickModel model;
+        model.rebuildFromText(chartText, 0.0);
+        QVector<double> quickMeasures = flattenSnapshotMeasureLines(model.snapshot());
+        std::sort(quickMeasures.begin(), quickMeasures.end());
+        expect(quickMeasures.size() == 3, QStringLiteral("quick model accepts inline time-signature comments"));
+        if (quickMeasures.size() == 3) {
+            expect(nearlyEqual(quickMeasures.at(0), 0.0)
+                       && nearlyEqual(quickMeasures.at(1), 1.0)
+                       && nearlyEqual(quickMeasures.at(2), 2.5),
+                   QStringLiteral("inline time-signature comments truncate and restart quick-model measure timing"));
+        }
+
+        QString diff;
+        expect(snapshotMatchesParser(chartText, &diff),
+               QStringLiteral("parser and quick model agree on inline time-signature semantics: %1").arg(diff));
     }
 
     {

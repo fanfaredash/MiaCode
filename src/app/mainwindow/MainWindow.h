@@ -15,6 +15,7 @@
 #include "PreviewAudioSettings.h"
 #include "PreviewRenderSettings.h"
 #include "SimaiDocument.h"
+#include "SimaiTimingMetadata.h"
 #include "SimaiNativeParser.h"
 #include "timeline/TimelineData.h"
 #include "timeline/TimelineQuickModel.h"
@@ -124,6 +125,7 @@ private slots:
     void onRotate180();
     void onRotate45CounterClockwise();
     void onRotate45Clockwise();
+    void onNormalizeWholeChart();
     void onToggleBreakSelection();
     void onToggleExSelection();
     void onToggleFireworkSelection();
@@ -254,12 +256,12 @@ private:
     bool hasActiveDifficulty() const;
     int activeDifficultyId() const;
     QString activeChartText() const;
+    miacode::simai::SimaiTimingMetadata currentTimingMetadata() const;
     double parsedFirstSeconds(bool* ok = nullptr) const;
     double parsedWholeBpm(bool* ok = nullptr) const;
     QString parsedLatencyMeterId() const;
     void applyLatencyDetectorOffset(double seconds);
     void applyLatencyDetectorBpm(double bpm);
-    void applyLatencyDetectorMeter(const QString& meterId);
     void refreshWaveformCache();
     void applyTimelineQuickChange(int position, int charsRemoved, int charsAdded);
     void refreshTimelineQuickModelFromCurrentText();
@@ -470,6 +472,7 @@ private:
     struct ValidationCacheEntry {
         QString chartText;
         bool chineseUi = false;
+        miacode::simai::SimaiTimingMetadata timingMetadata;
         bool ok = true;
         int errorCount = 0;
         int warningCount = 0;
@@ -511,6 +514,7 @@ private:
     QAction* transformRotate180Action_ = nullptr;
     QAction* transformRotate45CounterClockwiseAction_ = nullptr;
     QAction* transformRotate45ClockwiseAction_ = nullptr;
+    QAction* normalizeWholeChartAction_ = nullptr;
     QAction* transformToggleBreakAction_ = nullptr;
     QAction* transformToggleExAction_ = nullptr;
     QAction* transformToggleFireworkAction_ = nullptr;
@@ -554,6 +558,7 @@ private:
     QString lastTrackPath_;
     int lastTimelineParseDifficultyId_ = 0;
     QString lastTimelineParseChartText_;
+    miacode::simai::SimaiTimingMetadata lastTimelineParseTimingMetadata_;
     SimaiNativeParseResult lastTimelineParseResult_;
     QVector<TimelineNoteMarker> latestTimelineNoteMarkers_;
     QByteArray latestTimelineNoteMarkerSignature_;

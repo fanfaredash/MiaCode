@@ -36,6 +36,10 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Files: `src/simai/document/SimaiDocument.h`, `src/simai/document/SimaiDocument.cpp`
   - Class: `SimaiDocument`
   - Key functions: `createEmpty`, `fromText`, `toText`, `parseRawFields`, `serializeRawFields`, `ensureDifficulty`, `removeDifficulty`
+- Timing metadata extraction for parser / timeline / normalization:
+  - Files: `src/simai/document/SimaiTimingMetadata.h`, `src/simai/document/SimaiTimingMetadata.cpp`
+  - Namespace: `miacode::simai`
+  - Key functions: `buildTimingMetadata`, `buildTimingMetadataFromRawText`, `parseInlineTimeSignatureComment`, `latencyMeterIdForTimingMetadata`
 - File open/save/new and field switching:
   - File: `src/app/mainwindow/sections/document/MainWindow.DocumentFlow.cpp`
   - Key functions: `applyCurrentFieldToDocument`, `onNewFile`, `onOpenFile`, `onSaveFile`, `onSaveFileAs`, `rebuildFieldSidebar`, `populateMetadataPage`, `populateDifficultyPage`, `switchToMetadataField`, `switchToDifficultyField`, `loadDocument`
@@ -50,6 +54,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Files: `src/simai/parser/SimaiNativeParser.h`, `src/simai/parser/SimaiNativeParser.Driver.cpp`
   - Class: `SimaiNativeParser`
   - Key functions: `parseForTimeline`, `validateSyntax`, `buildValidationReport`
+  - Owns: metadata-aware default meter input, inline `|| x/y` measure restarts, validation/strict-check awareness for time-signature comments
 - Parser internals:
   - Files: `src/simai/parser/SimaiNativeParser.cpp`, `src/simai/parser/SimaiNativeParser.Slide.cpp`, `src/simai/parser/SimaiNativeParser.TouchTap.cpp`, `src/simai/parser/SimaiNativeParser.StrictChecks.cpp`
   - Owns: note parsing, slide/wifi semantics, touch/tap parsing, strict-vs-lenient checks
@@ -75,7 +80,8 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Owns: full parser refresh, preview snapshot publication, and combined latest-only analysis result building for validation plus Muri
 - Timing getters and timing writes:
   - File: `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
-  - Key functions: `parsedFirstSeconds`, `parsedWholeBpm`, `parsedLatencyMeterId`, `applyLatencyDetectorOffset`, `applyLatencyDetectorBpm`, `applyLatencyDetectorMeter`
+  - Key functions: `currentTimingMetadata`, `parsedFirstSeconds`, `parsedWholeBpm`, `parsedLatencyMeterId`, `applyLatencyDetectorOffset`, `applyLatencyDetectorBpm`
+  - Owns: metadata-driven default meter read path for timeline / validation / latency-detector defaults; latency detector no longer writes meter fields back into the document
 
 ## 6. Preview Video, Media, And Render State
 
@@ -173,9 +179,14 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Files: `src/simai/transform/ChartBatchTransform.h`, `src/simai/transform/ChartBatchTransform.cpp`
   - Namespace: `miacode::chart_transform`
   - Key functions: `transformChartText`, `toggleBreakForSelection`, `toggleExForSelection`, `toggleFireworkForSelection`, `randomRotateForSelection`
+- Whole-chart normalization:
+  - Files: `src/simai/transform/ChartNormalization.h`, `src/simai/transform/ChartNormalization.cpp`
+  - Namespace: `miacode::chart_transform`
+  - Key function: `normalizeChartText`
+  - Owns: current-difficulty full-chart normalization, one-measure-per-line rebuild, canonical modifier order, metadata-aware measure splitting, ordinary `||` comment preservation via standalone-line splits, per-beat subdivision minimization, and syntax-error blocking
 - Main window action entry points:
   - File: `src/app/mainwindow/MainWindow.cpp`
-  - Key functions: `onMirrorLeftRight`, `onMirrorUpDown`, `onRotate180`, `onRotate45CounterClockwise`, `onRotate45Clockwise`, `onToggleBreakSelection`, `onToggleExSelection`, `onToggleFireworkSelection`, `onRandomRotateSelection`
+  - Key functions: `onMirrorLeftRight`, `onMirrorUpDown`, `onRotate180`, `onRotate45CounterClockwise`, `onRotate45Clockwise`, `onNormalizeWholeChart`, `onToggleBreakSelection`, `onToggleExSelection`, `onToggleFireworkSelection`, `onRandomRotateSelection`
 
 ## 12. Build, Packaging, And Dev-Only Helper Binaries
 

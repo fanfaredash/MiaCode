@@ -38,6 +38,8 @@ enum TimelineRenderNoteFlag : quint32 {
 struct TimelineRenderBeat {
     double secondOffset = 0.0;
     int sourceCol = 1;
+    int subdivisionBeats = 4;
+    int subdivisionIndex = 0;
     bool major = false;
 };
 

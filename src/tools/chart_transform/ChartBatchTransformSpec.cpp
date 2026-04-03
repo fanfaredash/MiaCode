@@ -17,6 +17,7 @@
 
 #include "SimaiDocument.h"
 #include "SimaiNativeParser.h"
+#include "simai/transform/ChartNormalization.h"
 
 namespace {
 
@@ -502,7 +503,11 @@ QJsonObject dumpDocumentSemantics(const SimaiDocument& document)
         item.insert(QStringLiteral("id"), difficulty->id);
         item.insert(QStringLiteral("level"), difficulty->level);
         item.insert(QStringLiteral("designer"), difficulty->designer);
-        item.insert(QStringLiteral("chart_parse"), dumpParseResult(SimaiNativeParser::parseForTimeline(difficulty->chart)));
+        item.insert(
+            QStringLiteral("chart_parse"),
+            dumpParseResult(SimaiNativeParser::parseForTimeline(
+                difficulty->chart,
+                miacode::simai::buildTimingMetadata(document))));
         difficulties.append(item);
     }
     object.insert(QStringLiteral("difficulties"), difficulties);
@@ -701,7 +706,9 @@ bool runFolderMatchSpec(const QString& inputPath, QTextStream& out, QTextStream&
             } else {
                 const SimaiDifficultyData* actualDifficulty = actualDocument.difficulty(actualIds.constFirst());
                 if (actualDifficulty != nullptr) {
-                    const QJsonObject actualParseDump = dumpParseResult(SimaiNativeParser::parseForTimeline(actualDifficulty->chart));
+                    const QJsonObject actualParseDump = dumpParseResult(SimaiNativeParser::parseForTimeline(
+                        actualDifficulty->chart,
+                        miacode::simai::buildTimingMetadata(actualDocument)));
                     const QJsonObject expectedParseDump = dumpParseResult(SimaiNativeParser::parseForTimeline(expectedText));
                     same = compareJsonValues(actualParseDump, expectedParseDump, QStringLiteral("$.chart"), &diff);
                     if (!same) {
@@ -996,6 +1003,79 @@ void runInlineSpecs(QTextStream& err, int* failed)
             err
         );
         expectTrue(changed == 1, QStringLiteral("mirror left/right counts only the mirrored note body before unmatched ["), failed, err);
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(QStringLiteral("A1fxh[4:1],,,,\nE"));
+        expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts a simple valid chart"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16}A1xhf[4:1],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize whole chart emits a single 4/4 measure line with canonical touch modifier order"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(QStringLiteral(",,(180)|| 3 / 4\n,,,\nE"));
+        expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts BPM plus inline time-signature control syntax"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16},,,, ,,,,\n(180) || 3/4\n{16},,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize whole chart splits partial measures and merges adjacent BPM/time-signature lines"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(QStringLiteral("1,2, || hello\n3,4,\nE"));
+        expectTrue(normalized.ok, QStringLiteral("normalize whole chart keeps ordinary mid-measure comments"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16}1,,,, 2,,,,\n|| hello\n{16}3,,,, 4,,,,\nE"),
+            QStringLiteral("normalize whole chart splits ordinary mid-measure comments into a standalone line without reordering nearby chart text"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(QStringLiteral("{24},1,,,,,{16},,,,,,,,,,,,\nE"));
+        expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts mixed local subdivisions within one measure"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{24},1,,,,, {16},,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize whole chart minimizes subdivisions per beat instead of promoting the whole measure"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(QStringLiteral("@\nE"));
+        expectTrue(!normalized.ok, QStringLiteral("normalize whole chart blocks charts with syntax errors"), failed, err);
+    }
+
+    {
+        const miacode::simai::SimaiTimingMetadata timingMetadata =
+            miacode::simai::buildTimingMetadataFromRawText(QStringLiteral("&whole_time_signature=3/4"), true);
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(QStringLiteral(",,,,,,\nE"), timingMetadata);
+        expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts metadata-driven default time signatures"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16},,,, ,,,, ,,,,\n{16},,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize whole chart uses metadata-driven 3/4 measure boundaries"),
+            failed,
+            err
+        );
     }
 }
 

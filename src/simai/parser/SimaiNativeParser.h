@@ -3,6 +3,7 @@
 #include <QString>
 #include <QVector>
 
+#include "simai/document/SimaiTimingMetadata.h"
 #include "timeline/TimelineData.h"
 
 struct SimaiNativeMessage {
@@ -55,13 +56,18 @@ struct SimaiNativeValidationReport {
 class SimaiNativeParser
 {
 public:
-    static SimaiNativeParseResult parseForTimeline(const QString& text);
-    static SimaiNativeParseResult validateSyntax(const QString& text);
+    static SimaiNativeParseResult parseForTimeline(
+        const QString& text,
+        const miacode::simai::SimaiTimingMetadata& timingMetadata = miacode::simai::SimaiTimingMetadata());
+    static SimaiNativeParseResult validateSyntax(
+        const QString& text,
+        const miacode::simai::SimaiTimingMetadata& timingMetadata = miacode::simai::SimaiTimingMetadata());
     static void setInvalidStarPreviewEnabled(bool enabled);
     static bool invalidStarPreviewEnabled();
     static SimaiNativeValidationReport buildValidationReport(
         const QString& text,
         SimaiNativeValidationLocale locale,
-        const SimaiNativeParseResult* lenientResult = nullptr
+        const SimaiNativeParseResult* lenientResult = nullptr,
+        const miacode::simai::SimaiTimingMetadata& timingMetadata = miacode::simai::SimaiTimingMetadata()
     );
 };

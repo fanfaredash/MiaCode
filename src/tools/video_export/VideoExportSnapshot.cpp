@@ -306,7 +306,10 @@ bool buildVideoExportTaskFromSnapshot(
         return false;
     }
 
-    const SimaiNativeParseResult nativeResult = SimaiNativeParser::parseForTimeline(difficulty->chart);
+    const miacode::simai::SimaiTimingMetadata timingMetadata = miacode::simai::buildTimingMetadata(document);
+    const SimaiNativeParseResult nativeResult = SimaiNativeParser::parseForTimeline(
+        difficulty->chart,
+        timingMetadata);
     const double firstSeconds = parsedFirstSeconds(document.first);
 
     VideoExportTask built;

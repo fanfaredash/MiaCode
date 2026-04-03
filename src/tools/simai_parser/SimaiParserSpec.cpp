@@ -40,6 +40,49 @@ int main(int argc, char** argv)
     };
 
     {
+        const miacode::simai::SimaiTimingMetadata timingMetadata =
+            miacode::simai::buildTimingMetadataFromRawText(QStringLiteral("&whole_time_signature=3/4"), true);
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral(",,,\n,,,\nE"),
+            timingMetadata);
+        expect(parsed.ok, QStringLiteral("timeline parse accepts whole_time_signature metadata"));
+        expect(parsed.measureLineSeconds.size() == 3, QStringLiteral("whole_time_signature metadata creates 3/4 measure markers"));
+        if (parsed.measureLineSeconds.size() == 3) {
+            expect(
+                nearlyEqual(parsed.measureLineSeconds.at(0), 0.0)
+                    && nearlyEqual(parsed.measureLineSeconds.at(1), 1.5)
+                    && nearlyEqual(parsed.measureLineSeconds.at(2), 3.0),
+                QStringLiteral("whole_time_signature metadata shifts measure markers to 3/4 timing"));
+        }
+    }
+
+    {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(QStringLiteral(",,|| 3 / 4\n,,,\nE"));
+        expect(parsed.ok, QStringLiteral("timeline parse accepts inline time-signature comments"));
+        expect(parsed.measureLineSeconds.size() == 3, QStringLiteral("inline time-signature comment truncates and restarts measure timing"));
+        if (parsed.measureLineSeconds.size() == 3) {
+            expect(
+                nearlyEqual(parsed.measureLineSeconds.at(0), 0.0)
+                    && nearlyEqual(parsed.measureLineSeconds.at(1), 1.0)
+                    && nearlyEqual(parsed.measureLineSeconds.at(2), 2.5),
+                QStringLiteral("inline time-signature comment restarts measure markers at the comment position"));
+        }
+
+        const SimaiNativeValidationReport controlReport = SimaiNativeParser::buildValidationReport(
+            QStringLiteral("1, || 3 / 4\n,,,\nE"),
+            SimaiNativeValidationLocale::English
+        );
+        const SimaiNativeValidationReport commentReport = SimaiNativeParser::buildValidationReport(
+            QStringLiteral("1, || just a comment\nE"),
+            SimaiNativeValidationLocale::English
+        );
+        expect(controlReport.ok, QStringLiteral("validation accepts canonical inline time-signature comments"));
+        expect(controlReport.warningCount == 0, QStringLiteral("inline time-signature comments do not create warnings"));
+        expect(commentReport.ok, QStringLiteral("validation keeps ordinary || comments as plain comments"));
+        expect(commentReport.warningCount == 0, QStringLiteral("ordinary || comments do not create warnings"));
+    }
+
+    {
         const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(QStringLiteral("A1xhf[4:1],\nE"));
         expect(parsed.ok, QStringLiteral("touch supports mixed modifier order x/h/f"));
         expect(!parsed.noteMarkers.isEmpty(), QStringLiteral("touch mixed modifier creates marker"));

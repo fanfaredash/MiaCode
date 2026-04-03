@@ -778,6 +778,9 @@ void MainWindow::updateDifficultyScopedActionStates()
     if (transformRotate45ClockwiseAction_ != nullptr) {
         transformRotate45ClockwiseAction_->setEnabled(enabled);
     }
+    if (normalizeWholeChartAction_ != nullptr) {
+        normalizeWholeChartAction_->setEnabled(enabled);
+    }
     if (transformToggleBreakAction_ != nullptr) {
         transformToggleBreakAction_->setEnabled(enabled);
     }
@@ -1177,6 +1180,12 @@ void MainWindow::rebuildFieldSidebar()
             ? QStringLiteral("打开工具箱：无理检测 / 视频导出 / BPM检测与偏移")
             : QStringLiteral("Open toolbox: Muri Check / Video Export / BPM & Offset")
     );
+    toolboxItem->setText(UiText::isChineseUi() ? QStringLiteral("工具箱") : QStringLiteral("Toolbox"));
+    toolboxItem->setToolTip(
+        UiText::isChineseUi()
+            ? QStringLiteral("打开工具箱：无理检测 / 谱面格式整理 / 批量视频导出 / 官谱镜像站")
+            : QStringLiteral("Open toolbox: Muri Check / Format Chart / Batch Video Export / Official Chart Mirror")
+    );
     if (activeOutlineKey_ == QLatin1String("metadata")) {
         selectedItem = metadataItem;
     }
@@ -1427,6 +1436,7 @@ void MainWindow::clearTimelineAndPreview()
     latestTimelinePreviewSnapshotReady_ = false;
     lastTimelineParseDifficultyId_ = 0;
     lastTimelineParseChartText_.clear();
+    lastTimelineParseTimingMetadata_ = miacode::simai::SimaiTimingMetadata();
     lastTimelineParseResult_ = SimaiNativeParseResult();
     muriAnalysisReport_ = MuriAnalysisReport();
     pendingDeferredValidationUiRefresh_ = false;

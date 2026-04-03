@@ -25,7 +25,7 @@ Implication:
 - A new note property or timing rule usually needs timeline, preview, audio, export, and Muri review.
 - Slide/tap head-material flags such as `$`, `$$`, `@`, `?`, and `!` are mirrored data: keep `SimaiNativeParser`, `TimelineQuickModel`, `PreviewCanvas`, timeline icons, and chart-transform token preservation aligned in the same patch.
 - `TimelineQuickModel` is now the owner of comma-only `C` anchor lookup for editor cursor sync, header/timeline `R -> C` jumps, and playback follow.
-- Timeline beat-grid semantics are mirrored between `SimaiNativeParser` and `TimelineQuickModel`: every comma remains a beat line, while measure lines are generated on an independent meter timeline (currently defaulting to 4/4 through meter numerator/denominator state). `{beats}` only changes comma spacing, and `(BPM)` changes restart the independent measure-line timeline at the BPM-change position.
+- Timeline beat-grid semantics are mirrored between `SimaiNativeParser` and `TimelineQuickModel`: every comma remains a beat line, while measure lines are generated on an independent meter timeline. The current meter now comes from shared `SimaiTimingMetadata` (`&whole_time_signature=`), inline `|| x/y` comments restart that meter timeline at the exact comment position, `{beats}` only changes comma spacing, and `(BPM)` changes restart the independent measure-line timeline at the BPM-change position.
 - `PreviewCanvas::drawNoteGuides` should group each-guide connectors by parser-derived `eachGroupId` when available; do not merge backtick-separated groups just because their `marker.second` matches.
 - Timeline note sprite stacking is intentionally preview-mirrored for overlapping markers: `TimelineView::paintEvent` keeps slide/wifi tracks behind note heads, uses the preview-style descending-`second` stack for tap/hold/slide/wifi heads, and then draws touch above that stack with touch-hold above touch. If preview object-layer order changes, review `src/timeline/TimelineView.Paint.cpp`, `src/preview/video/PreviewCanvas.Render.cpp`, and `src/preview/video/PreviewCanvas.Objects.cpp` together.
 - While preview playback is running, slow-refresh note-marker updates still feed the latest validation and Muri worker inputs, but preview audio/canvas/object stats stay on the frozen play-start snapshot until playback stops; validation and Muri panel/decorations may defer their visible UI apply until playback returns to a paused state.
@@ -54,7 +54,26 @@ If you change `&first` semantics, review all of:
 - `src/tools/video_export/VideoExportSnapshot.cpp`
 - `DEVELOPMENT_PLAN.md` section 11
 
-## 3. Runtime SFX And Export SFX Must Stay In Sync
+## 3. Timing Metadata And Default Meter Chain
+
+Current contract:
+
+- `SimaiTimingMetadata` is the shared payload for parser, quick timeline, slow refresh, validation cache, normalization, export snapshot rebuild, and CLI/dev helpers.
+- `MainWindow::currentTimingMetadata` reads live metadata text from the metadata editor when available, so unsaved `&whole_time_signature=` edits still affect validation and timeline refresh.
+- `parsedLatencyMeterId` now reads the effective chart default meter from timing metadata for latency-detector defaults; latency detection still writes `&first` and `&wholebpm`, but it no longer writes meter metadata back into the chart.
+- Any caller that uses `SimaiNativeParser::parseForTimeline` or `buildValidationReport` should pass timing metadata when document metadata is available, or fast/slow preview, export, and tooling timelines will drift.
+
+If you change timing-metadata semantics, review all of:
+
+- `src/simai/document/SimaiTimingMetadata.cpp`
+- `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
+- `src/app/mainwindow/sections/validation/MainWindow.ValidationFlow.cpp`
+- `src/timeline/TimelineQuickModel.cpp`
+- `src/timeline/TimelineSlowRefresh.cpp`
+- `src/tools/video_export/VideoExportSnapshot.cpp`
+- `src/tools/muri/MuriDump.cpp`
+
+## 4. Runtime SFX And Export SFX Must Stay In Sync
 
 Canonical sync pair:
 
@@ -76,7 +95,7 @@ Shared concerns:
 
 If one side changes, inspect the other side in the same patch.
 
-## 4. Background Media Resolution Exists In Two Places
+## 5. Background Media Resolution Exists In Two Places
 
 Current duplicated logic:
 
@@ -93,7 +112,7 @@ Current filename convention:
 
 If you add or remove supported media names, keep preview and export aligned.
 
-## 5. Track Path Resolution Exists In Multiple Places
+## 6. Track Path Resolution Exists In Multiple Places
 
 Current lookup owners:
 
@@ -108,7 +127,7 @@ Current convention:
 
 If you support new track filenames or lookup rules, update all relevant owners and `assets-and-tools.md`.
 
-## 6. Skin And Asset Lookup Flows Into Both Preview And Export
+## 7. Skin And Asset Lookup Flows Into Both Preview And Export
 
 Asset root:
 
@@ -129,7 +148,7 @@ Export-time consumers:
 
 If skin or SFX lookup changes, review both preview and export.
 
-## 7. Export Snapshot Boundary Is A Contract
+## 8. Export Snapshot Boundary Is A Contract
 
 Export worker boundary:
 
@@ -147,7 +166,7 @@ Implication:
 - `snapshot.outputPath` should already be the final `.mp4` path by the time the worker starts; `MainWindow` resolves missing suffixes and duplicate-name fallbacks before launching the worker so completion UI and worker results can treat it as authoritative.
 - Static Muri thresholds that affect analyzer timing, such as the tap-on-slide threshold, must also cross this boundary; otherwise preview-time diagnostics and export-time overlays will drift.
 
-## 8. Shared Render State Flows Through Preview And Export
+## 9. Shared Render State Flows Through Preview And Export
 
 Wifi-specific note:
 
@@ -180,22 +199,26 @@ Owners:
 
 If you add a new render setting, wire preview persistence and export reconstruction together. Shared preview/export settings should stay canonical in the preview state; export-only choices such as resolution/FPS should persist through `VideoExportPreferences` without overriding those shared preview values on dialog open.
 
-## 9. Parser Output Feeds Muri On Both Preview And Export Paths
+## 10. Parser Output Feeds Muri On Both Preview And Export Paths
 
 Current flow:
 
 - live preview path: `requestTimelineSlowRefresh` -> `SimaiNativeParser::parseForTimeline` -> `buildTimelinePreviewRefreshState` -> `scheduleTimelineAnalysisRefresh` -> `buildTimelineAnalysisRefreshResult`
 - export path: `buildVideoExportTaskFromSnapshot` -> `MuriAnalyzer::analyze`
+- full-chart normalization path: `MainWindow::onNormalizeWholeChart` -> `normalizeChartText` -> `SimaiNativeParser::buildValidationReport`
 
 Implication:
 
 - A marker-field change affects both live diagnostics and exported overlay behavior.
+- Parser timing changes also affect whole-chart normalization output because the normalizer validates first and then rebuilds measures using the same metadata-driven timing defaults.
 
-## 10. Common "Change Here, Check There" Pairs
+## 11. Common "Change Here, Check There" Pairs
 
 - Change `SimaiNativeParser`:
   - Check `MainWindow.ValidationFlow.cpp`
   - Check `MainWindow.PreviewTimelineFlow.cpp`
+  - Check `TimelineQuickModel.cpp`
+  - Check `ChartNormalization.cpp`
   - Check `VideoExportSnapshot.cpp`
   - Check `MuriAnalyzer.cpp`
 - Change preview SFX mapping:
