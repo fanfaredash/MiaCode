@@ -1330,13 +1330,17 @@ void MainWindow::enterPreviewFullscreen()
         previewFullscreenControlsWindow_->hide();
     }
     updatePreviewFullscreenOverlayGeometry();
+    syncPreviewCanvasHostWindow();
     if (previewFullscreenCursorPollTimer_ != nullptr) {
         previewFullscreenCursorPollTimer_->start();
     }
     previewCanvasContainer_->setFocus();
-    if (previewCanvas_ != nullptr) {
+    if (!previewCanvasUsesOverlayHost() && previewCanvas_ != nullptr) {
         previewCanvas_->requestActivate();
     }
+    QTimer::singleShot(0, this, [this]() {
+        syncPreviewCanvasHostWindow();
+    });
 }
 
 void MainWindow::exitPreviewFullscreen()
@@ -1398,7 +1402,8 @@ void MainWindow::exitPreviewFullscreen()
     }
     previewCanvasContainer_->show();
     previewCanvasContainer_->setFocus();
-    if (previewCanvas_ != nullptr) {
+    syncPreviewCanvasHostWindow();
+    if (!previewCanvasUsesOverlayHost() && previewCanvas_ != nullptr) {
         previewCanvas_->requestActivate();
     }
 }
@@ -1687,6 +1692,7 @@ void MainWindow::updatePreviewFullscreenOverlayGeometry()
             previewFullscreenControlsWindow_->raise();
         }
     }
+    syncPreviewCanvasHostWindow();
 }
 
 void MainWindow::updatePreviewWorkspaceLayout()
@@ -1960,6 +1966,7 @@ void MainWindow::updatePreviewPanelLayout()
         previewCanvasContainer_->show();
         previewLayoutInitialized_ = true;
     }
+    syncPreviewCanvasHostWindow();
 }
 
 void MainWindow::updatePreviewObjectStats(double second)

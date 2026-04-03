@@ -1129,6 +1129,7 @@ MainWindow::MainWindow(QWidget* parent)
     previewPanel_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
     previewCanvas_ = new PreviewCanvas();
+    previewCanvas_->installEventFilter(this);
     logStartupStage("preview_canvas_created");
     previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
     logStartupStage("preview_skin_async_dispatched");
@@ -1136,7 +1137,21 @@ MainWindow::MainWindow(QWidget* parent)
     previewCanvasFrame_->setObjectName("PreviewCanvasFrame");
     previewCanvasFrame_->setMinimumSize(QSize(1, 1));
     previewCanvasFrame_->setFocusPolicy(Qt::StrongFocus);
-    previewCanvasContainer_ = QWidget::createWindowContainer(previewCanvas_, previewCanvasFrame_);
+    if (previewCanvasUsesOverlayHost()) {
+        previewCanvasContainer_ = new QWidget(previewCanvasFrame_);
+        previewCanvasContainer_->setObjectName("PreviewCanvasHostProxy");
+        previewCanvasContainer_->setAttribute(Qt::WA_StyledBackground, true);
+        previewCanvasContainer_->setStyleSheet(QStringLiteral("background-color: #000000;"));
+        previewCanvas_->setFlags(
+            Qt::Tool
+            | Qt::FramelessWindowHint
+            | Qt::NoDropShadowWindowHint
+            | Qt::WindowTransparentForInput
+        );
+        previewCanvas_->hide();
+    } else {
+        previewCanvasContainer_ = QWidget::createWindowContainer(previewCanvas_, previewCanvasFrame_);
+    }
     previewCanvasContainer_->setMinimumSize(QSize(1, 1));
     previewCanvasContainer_->setFocusPolicy(Qt::StrongFocus);
     previewPanel_->setFocusPolicy(Qt::StrongFocus);

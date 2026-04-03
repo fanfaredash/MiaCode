@@ -28,7 +28,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Owns: where each MainWindow feature slice lives
 - Window frame, menus, toolbar, layout shell:
   - File: `src/app/mainwindow/sections/frame/MainWindow.BootstrapAndMenus.cpp`
-  - Owns: actions, menu wiring, splitter/dock/card composition, preview canvas bootstrap
+  - Owns: actions, menu wiring, splitter/dock/card composition, preview canvas bootstrap, and preview host setup (`createWindowContainer` vs overlay host shell)
 
 ## 3. Document Model, Fields, And File Flow
 
@@ -74,7 +74,8 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Owns: lightweight timeline rendering, visible-range painting, playhead/cursor movement, waveform strip, follow-preview behavior
 - Timeline fast/slow refresh orchestration:
   - File: `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
-  - Key functions: `applyTimelineQuickChange`, `refreshTimelineQuickModelFromCurrentText`, `scheduleTimelineRefresh`, `requestTimelineSlowRefresh`, `dispatchTimelineSlowRefresh`, `scheduleTimelineAnalysisRefresh`, `scheduleTimelineAnalysisRefreshFromLatestPreviewState`, `dispatchTimelineAnalysisRefresh`, `seekTimelineToCursor`, `syncTimelineToEditorCursor`, `navigateTimelineToSecond`, `updatePreviewSliderRange`, `updatePreviewObjectStats`, `updatePreviewWorkspaceLayout`, `updatePreviewPanelLayout`
+  - Key functions: `applyTimelineQuickChange`, `refreshTimelineQuickModelFromCurrentText`, `scheduleTimelineRefresh`, `requestTimelineSlowRefresh`, `dispatchTimelineSlowRefresh`, `scheduleTimelineAnalysisRefresh`, `scheduleTimelineAnalysisRefreshFromLatestPreviewState`, `dispatchTimelineAnalysisRefresh`, `seekTimelineToCursor`, `syncTimelineToEditorCursor`, `navigateTimelineToSecond`, `updatePreviewSliderRange`, `updatePreviewObjectStats`, `updatePreviewWorkspaceLayout`, `updatePreviewPanelLayout`, `togglePreviewFullscreen`, `enterPreviewFullscreen`, `exitPreviewFullscreen`
+  - Owns: preview/timeline layout orchestration, preview host geometry sync, and fullscreen host transitions
 - Timeline slow refresh workers:
   - Files: `src/timeline/TimelineSlowRefresh.h`, `src/timeline/TimelineSlowRefresh.cpp`
   - Owns: full parser refresh, preview snapshot publication, and combined latest-only analysis result building for validation plus Muri
