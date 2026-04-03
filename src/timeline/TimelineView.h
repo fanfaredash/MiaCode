@@ -2,6 +2,7 @@
 
 #include <QAbstractScrollArea>
 #include <QCheckBox>
+#include <QElapsedTimer>
 #include <QFont>
 #include <QHash>
 #include <QImage>
@@ -133,6 +134,10 @@ private:
     void prewarmTransformedIconCache();
     int minimumContentHeightForCurrentDevice() const;
     void refreshMinimumHeightForCurrentDevice();
+    bool stepViewportBySeconds(double deltaSeconds);
+    void beginHeldHorizontalKeyScroll(int direction, int key);
+    void stopHeldHorizontalKeyScroll(int key = 0);
+    void applyHeldHorizontalKeyScrollTick();
 
     QVector<TimelineRenderLine> lines_;
     QVector<double> measureLineSeconds_;
@@ -167,6 +172,12 @@ private:
     bool timelineDragActive_ = false;
     int timelineDragStartX_ = 0;
     int timelineDragStartScrollValue_ = 0;
+    int heldHorizontalKeyScrollDirection_ = 0;
+    int heldHorizontalKeyScrollKey_ = 0;
+    int heldHorizontalKeyScrollLastElapsedMs_ = 0;
+    double heldHorizontalKeyScrollRemainderPixels_ = 0.0;
     bool playheadIndicatorSuppressed_ = false;
+    QElapsedTimer heldHorizontalKeyScrollElapsed_;
     QTimer* playheadIndicatorRestoreTimer_ = nullptr;
+    QTimer* heldHorizontalKeyScrollTimer_ = nullptr;
 };

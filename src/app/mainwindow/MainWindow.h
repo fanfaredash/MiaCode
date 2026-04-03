@@ -612,6 +612,7 @@ private:
     QPoint editorCtrlLeftJumpPressPos_;
     int previewHeldSeekDirection_ = 0;
     int previewSeekHeldArrowKey_ = 0;
+    int previewSeekHeldArrowLastElapsedMs_ = 0;
     QElapsedTimer previewSeekHeldArrowElapsed_;
     QElapsedTimer previewScrubRenderElapsed_;
     double qtPreviewStartSecond_ = 0.0;

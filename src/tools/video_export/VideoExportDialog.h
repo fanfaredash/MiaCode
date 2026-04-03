@@ -134,6 +134,7 @@ private:
     bool initialShowObjectStatsHud_ = false;
     int previewHeldSeekDirection_ = 0;
     int previewSeekHeldArrowKey_ = 0;
+    int previewSeekHeldArrowLastElapsedMs_ = 0;
     QElapsedTimer previewSeekHeldArrowElapsed_;
     QElapsedTimer previewScrubRenderElapsed_;
     VideoExportTask requestedExportTask_;

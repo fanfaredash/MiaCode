@@ -42,6 +42,8 @@ constexpr qreal kTimelineBeatLineWidth = 1.2;
 constexpr qreal kTimelineHoldThicknessRelativeToTap =
     static_cast<qreal>(miacode::preview_skin::kHoldWidthRelativeToTap);
 constexpr double kTimelineDisplayLeadInSeconds = 0.5;
+constexpr double kTimelineKeyHoldAccelerationPerSecond = 1.0;
+constexpr int kTimelineKeyHoldTickIntervalMs = 16;
 const std::array<QColor, 5> kTimelineFireworkBandColors = {
     QColor(232, 124, 72),
     QColor(208, 106, 182),
@@ -49,6 +51,17 @@ const std::array<QColor, 5> kTimelineFireworkBandColors = {
     QColor(178, 202, 84),
     QColor(226, 206, 104),
 };
+
+double timelineHeldKeyPlaybackRate(double heldSeconds, double maxPlaybackRate)
+{
+    if (heldSeconds <= 0.0) {
+        return 1.0;
+    }
+    const double accelerated = 1.0 + heldSeconds * kTimelineKeyHoldAccelerationPerSecond;
+    return accelerated > maxPlaybackRate
+        ? maxPlaybackRate
+        : accelerated;
+}
 
 QString laneLabelForIndex(int laneIndex)
 {
@@ -164,6 +177,11 @@ TimelineView::TimelineView(QWidget* parent)
         playheadIndicatorSuppressed_ = false;
         viewport()->update();
     });
+    heldHorizontalKeyScrollTimer_ = new QTimer(this);
+    heldHorizontalKeyScrollTimer_->setSingleShot(false);
+    heldHorizontalKeyScrollTimer_->setTimerType(Qt::PreciseTimer);
+    heldHorizontalKeyScrollTimer_->setInterval(kTimelineKeyHoldTickIntervalMs);
+    connect(heldHorizontalKeyScrollTimer_, &QTimer::timeout, this, &TimelineView::applyHeldHorizontalKeyScrollTick);
     updateHorizontalRange();
 }
 
