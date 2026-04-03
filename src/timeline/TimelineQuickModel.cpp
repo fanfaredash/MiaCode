@@ -10,6 +10,8 @@ namespace {
 
 constexpr double kDefaultBpm = 120.0;
 constexpr int kDefaultBeats = 4;
+constexpr int kDefaultMeterNumerator = 4;
+constexpr int kDefaultMeterDenominator = 4;
 constexpr double kTimelineEpsilon = 1e-6;
 
 bool isDigitLane(QChar ch)
@@ -43,6 +45,23 @@ double noteStepSeconds(double bpm, int beats)
     const double clampedBpm = bpm > 0.0 ? bpm : kDefaultBpm;
     const int clampedBeats = std::max(1, beats);
     return 240.0 / (clampedBpm * static_cast<double>(clampedBeats));
+}
+
+double measureDurationSeconds(double bpm, int meterNumerator, int meterDenominator)
+{
+    const int clampedNumerator = std::max(1, meterNumerator);
+    return noteStepSeconds(bpm, meterDenominator) * static_cast<double>(clampedNumerator);
+}
+
+void appendDistinctSecond(QVector<double>* seconds, double second)
+{
+    if (seconds == nullptr) {
+        return;
+    }
+    if (!seconds->isEmpty() && qAbs(seconds->constLast() - second) <= kTimelineEpsilon) {
+        return;
+    }
+    seconds->append(second);
 }
 
 enum class SlideHeadlessMode {
@@ -563,6 +582,9 @@ bool TimelineQuickModel::applyContentsChange(
         currentState.second = firstSeconds;
         currentState.bpm = kDefaultBpm;
         currentState.beats = kDefaultBeats;
+        currentState.meterNumerator = kDefaultMeterNumerator;
+        currentState.meterDenominator = kDefaultMeterDenominator;
+        currentState.currentMeasureStartSecond = firstSeconds;
     }
 
     const int guaranteedReparseEnd = qMin(lines_.size() - 1, startLineIndex + inserted.size() - 1);
@@ -572,7 +594,10 @@ bool TimelineQuickModel::applyContentsChange(
         const ParseState oldEndState = line.endState;
         const bool mustReparse = index <= guaranteedReparseEnd
             || qAbs(currentState.bpm - oldStartState.bpm) > kTimelineEpsilon
-            || currentState.beats != oldStartState.beats;
+            || currentState.beats != oldStartState.beats
+            || currentState.meterNumerator != oldStartState.meterNumerator
+            || currentState.meterDenominator != oldStartState.meterDenominator
+            || qAbs(currentState.currentMeasureStartSecond - oldStartState.currentMeasureStartSecond) > kTimelineEpsilon;
 
         if (mustReparse) {
             parseLine(&line, currentState);
@@ -581,6 +606,8 @@ bool TimelineQuickModel::applyContentsChange(
             line.startState = currentState;
             line.endState.bpm = oldEndState.bpm;
             line.endState.beats = oldEndState.beats;
+            line.endState.meterNumerator = oldEndState.meterNumerator;
+            line.endState.meterDenominator = oldEndState.meterDenominator;
         }
 
         currentState = line.endState;
@@ -789,6 +816,9 @@ bool TimelineQuickModel::rebuildFromLineTexts(const QVector<QString>& lines, dou
     state.second = firstSeconds;
     state.bpm = kDefaultBpm;
     state.beats = kDefaultBeats;
+    state.meterNumerator = kDefaultMeterNumerator;
+    state.meterDenominator = kDefaultMeterDenominator;
+    state.currentMeasureStartSecond = firstSeconds;
     int startPosition = 0;
     for (int index = 0; index < lines.size(); ++index) {
         LineState line;
@@ -876,6 +906,8 @@ void TimelineQuickModel::shiftLineTiming(LineState* lineState, double deltaSecon
     }
     lineState->startState.second += deltaSeconds;
     lineState->endState.second += deltaSeconds;
+    lineState->startState.currentMeasureStartSecond += deltaSeconds;
+    lineState->endState.currentMeasureStartSecond += deltaSeconds;
     lineState->render.startSecond += deltaSeconds;
     lineState->render.endSecond += deltaSeconds;
     if (lineState->hasNotes) {
@@ -887,6 +919,7 @@ void TimelineQuickModel::shiftLineTiming(LineState* lineState, double deltaSecon
 void TimelineQuickModel::rebuildSnapshotDuration()
 {
     snapshot_.lines.clear();
+    snapshot_.measureLineSeconds.clear();
     snapshot_.noteVisualEndPrefixMaxWithSlideTracks.clear();
     snapshot_.noteVisualEndPrefixMaxWithoutSlideTracks.clear();
     snapshot_.lines.reserve(lines_.size());
@@ -900,6 +933,9 @@ void TimelineQuickModel::rebuildSnapshotDuration()
     bool hasData = false;
     for (const LineState& lineState : lines_) {
         snapshot_.lines.append(lineState.render);
+        for (double secondOffset : lineState.render.measureLineSecondOffsets) {
+            appendDistinctSecond(&snapshot_.measureLineSeconds, lineState.render.startSecond + secondOffset);
+        }
         minSecond = hasData ? qMin(minSecond, lineState.render.startSecond) : lineState.render.startSecond;
         maxSecond = hasData ? qMax(maxSecond, lineState.render.endSecond) : lineState.render.endSecond;
         noteVisualEndPrefixWithSlideTracks = qMax(
@@ -1127,6 +1163,7 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
     lineState->render.startPosition = lineState->startPosition;
     lineState->render.startSecond = startState.second;
     lineState->render.endSecond = startState.second;
+    lineState->render.measureLineSecondOffsets.clear();
     lineState->render.beats.clear();
     lineState->render.notes.clear();
     lineState->cursorCache.everyComma.clear();
@@ -1140,7 +1177,6 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
     QString token;
     int tokenColumn = 1;
     QVector<int> currentGroup;
-    bool lineHasBeat = false;
 
     if (lineState->text.trimmed().compare(QStringLiteral("E"), Qt::CaseInsensitive) == 0) {
         return true;
@@ -1153,6 +1189,25 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
         parseNoteToken(lineState, &state, token, lineState->lineNumber, tokenColumn, &currentGroup);
         token.clear();
     };
+    const auto appendMeasureLine = [&](double absoluteSecond) {
+        appendDistinctSecond(
+            &lineState->render.measureLineSecondOffsets,
+            absoluteSecond - lineState->render.startSecond);
+    };
+    const auto advanceMeasureLinesTo = [&](double targetSecond) {
+        const double measureDuration = measureDurationSeconds(
+            state.bpm,
+            state.meterNumerator,
+            state.meterDenominator);
+        while (state.currentMeasureStartSecond + measureDuration <= targetSecond + kTimelineEpsilon) {
+            state.currentMeasureStartSecond += measureDuration;
+            appendMeasureLine(state.currentMeasureStartSecond);
+        }
+    };
+
+    if (lineState->lineNumber == 1) {
+        appendMeasureLine(state.currentMeasureStartSecond);
+    }
 
     for (int index = 0; index < lineState->text.size(); ++index) {
         const QChar ch = lineState->text.at(index);
@@ -1173,6 +1228,10 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
             bool bpmOk = false;
             const double bpm = lineState->text.mid(index + 1, close - index - 1).trimmed().toDouble(&bpmOk);
             if (bpmOk && bpm > 0.0) {
+                if (qAbs(state.bpm - bpm) > kTimelineEpsilon) {
+                    state.currentMeasureStartSecond = state.second;
+                    appendMeasureLine(state.currentMeasureStartSecond);
+                }
                 state.bpm = bpm;
             }
             index = close;
@@ -1219,12 +1278,12 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
             TimelineRenderBeat beat;
             beat.secondOffset = state.second - lineState->render.startSecond;
             beat.sourceCol = index + 1;
-            beat.major = !lineHasBeat;
+            beat.major = false;
             lineState->render.beats.append(beat);
             lineState->hasRawZeroAnchor = lineState->hasRawZeroAnchor || qAbs(beat.secondOffset) <= kTimelineEpsilon;
             lineMaxSecond = qMax(lineMaxSecond, state.second);
             state.second += noteStepSeconds(state.bpm, state.beats);
-            lineHasBeat = true;
+            advanceMeasureLinesTo(state.second);
             continue;
         }
         if (token.isEmpty()
@@ -1648,5 +1707,8 @@ bool TimelineQuickModel::parseStatesEqual(const ParseState& a, const ParseState&
 {
     return qAbs(a.second - b.second) <= kTimelineEpsilon
         && qAbs(a.bpm - b.bpm) <= kTimelineEpsilon
-        && a.beats == b.beats;
+        && a.beats == b.beats
+        && a.meterNumerator == b.meterNumerator
+        && a.meterDenominator == b.meterDenominator
+        && qAbs(a.currentMeasureStartSecond - b.currentMeasureStartSecond) <= kTimelineEpsilon;
 }

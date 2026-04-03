@@ -38,6 +38,9 @@ private:
         double second = 0.0;
         double bpm = 120.0;
         int beats = 4;
+        int meterNumerator = 4;
+        int meterDenominator = 4;
+        double currentMeasureStartSecond = 0.0;
     };
 
     struct AbsoluteCursorAnchor {

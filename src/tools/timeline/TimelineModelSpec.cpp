@@ -27,6 +27,18 @@ struct ComparableNote {
     quint32 flags = 0u;
 };
 
+struct ComparableBeat {
+    int line = 1;
+    int col = 1;
+    double second = 0.0;
+    bool major = false;
+};
+
+QString describeSecond(double second)
+{
+    return QStringLiteral("second=%1").arg(second, 0, 'f', 6);
+}
+
 QString kindLabel(TimelineRenderNoteKind kind)
 {
     switch (kind) {
@@ -86,6 +98,15 @@ QString describeComparableNote(const ComparableNote& note)
         .arg(note.slideTraceSecond, 0, 'f', 6)
         .arg(note.endSecond, 0, 'f', 6)
         .arg(flagsLabel(note.flags));
+}
+
+QString describeComparableBeat(const ComparableBeat& beat)
+{
+    return QStringLiteral("L%1C%2 second=%3 major=%4")
+        .arg(beat.line)
+        .arg(beat.col)
+        .arg(beat.second, 0, 'f', 6)
+        .arg(beat.major ? QStringLiteral("true") : QStringLiteral("false"));
 }
 
 TimelineRenderNoteKind kindForMarkerType(const QString& type)
@@ -211,6 +232,47 @@ QVector<ComparableNote> flattenParserNotes(const SimaiNativeParseResult& parsed)
     return notes;
 }
 
+QVector<ComparableBeat> flattenSnapshotBeats(const TimelineRenderSnapshot& snapshot)
+{
+    QVector<ComparableBeat> beats;
+    for (const TimelineRenderLine& line : snapshot.lines) {
+        for (const TimelineRenderBeat& beat : line.beats) {
+            ComparableBeat item;
+            item.line = line.lineNumber;
+            item.col = beat.sourceCol;
+            item.second = timelineRenderAbsoluteSecond(line, beat.secondOffset);
+            item.major = beat.major;
+            beats.append(item);
+        }
+    }
+    return beats;
+}
+
+QVector<ComparableBeat> flattenParserBeats(const SimaiNativeParseResult& parsed)
+{
+    QVector<ComparableBeat> beats;
+    beats.reserve(parsed.beatMarkers.size());
+    for (const TimelineBeatMarker& marker : parsed.beatMarkers) {
+        ComparableBeat item;
+        item.line = marker.sourceLine;
+        item.col = marker.sourceCol;
+        item.second = marker.second;
+        item.major = marker.major;
+        beats.append(item);
+    }
+    return beats;
+}
+
+QVector<double> flattenSnapshotMeasureLines(const TimelineRenderSnapshot& snapshot)
+{
+    return snapshot.measureLineSeconds;
+}
+
+QVector<double> flattenParserMeasureLines(const SimaiNativeParseResult& parsed)
+{
+    return parsed.measureLineSeconds;
+}
+
 void sortComparableNotes(QVector<ComparableNote>* notes)
 {
     if (notes == nullptr) {
@@ -239,6 +301,25 @@ void sortComparableNotes(QVector<ComparableNote>* notes)
     });
 }
 
+void sortComparableBeats(QVector<ComparableBeat>* beats)
+{
+    if (beats == nullptr) {
+        return;
+    }
+    std::sort(beats->begin(), beats->end(), [](const ComparableBeat& left, const ComparableBeat& right) {
+        if (!nearlyEqual(left.second, right.second)) {
+            return left.second < right.second;
+        }
+        if (left.line != right.line) {
+            return left.line < right.line;
+        }
+        if (left.col != right.col) {
+            return left.col < right.col;
+        }
+        return left.major < right.major;
+    });
+}
+
 QString comparableNotesDiff(const QVector<ComparableNote>& expected, const QVector<ComparableNote>& actual)
 {
     QStringList lines;
@@ -261,6 +342,47 @@ QString comparableNotesDiff(const QVector<ComparableNote>& expected, const QVect
                 && a.flags == b.flags) {
                 continue;
             }
+        }
+        lines.append(QStringLiteral("[%1] parser=%2").arg(i).arg(left));
+        lines.append(QStringLiteral("[%1] quick =%2").arg(i).arg(right));
+    }
+    return lines.join(QLatin1Char('\n'));
+}
+
+QString comparableBeatsDiff(const QVector<ComparableBeat>& expected, const QVector<ComparableBeat>& actual)
+{
+    QStringList lines;
+    lines.append(QStringLiteral("expected=%1 actual=%2").arg(expected.size()).arg(actual.size()));
+    const int limit = qMax(expected.size(), actual.size());
+    for (int i = 0; i < limit; ++i) {
+        const QString left = i < expected.size() ? describeComparableBeat(expected.at(i)) : QStringLiteral("<none>");
+        const QString right = i < actual.size() ? describeComparableBeat(actual.at(i)) : QStringLiteral("<none>");
+        if (i < expected.size() && i < actual.size()) {
+            const ComparableBeat& a = expected.at(i);
+            const ComparableBeat& b = actual.at(i);
+            if (a.line == b.line
+                && a.col == b.col
+                && nearlyEqual(a.second, b.second)
+                && a.major == b.major) {
+                continue;
+            }
+        }
+        lines.append(QStringLiteral("[%1] parser=%2").arg(i).arg(left));
+        lines.append(QStringLiteral("[%1] quick =%2").arg(i).arg(right));
+    }
+    return lines.join(QLatin1Char('\n'));
+}
+
+QString comparableSecondsDiff(const QVector<double>& expected, const QVector<double>& actual)
+{
+    QStringList lines;
+    lines.append(QStringLiteral("expected=%1 actual=%2").arg(expected.size()).arg(actual.size()));
+    const int limit = qMax(expected.size(), actual.size());
+    for (int i = 0; i < limit; ++i) {
+        const QString left = i < expected.size() ? describeSecond(expected.at(i)) : QStringLiteral("<none>");
+        const QString right = i < actual.size() ? describeSecond(actual.at(i)) : QStringLiteral("<none>");
+        if (i < expected.size() && i < actual.size() && nearlyEqual(expected.at(i), actual.at(i))) {
+            continue;
         }
         lines.append(QStringLiteral("[%1] parser=%2").arg(i).arg(left));
         lines.append(QStringLiteral("[%1] quick =%2").arg(i).arg(right));
@@ -295,6 +417,14 @@ bool snapshotMatchesParser(const QString& chartText, QString* diff = nullptr)
     QVector<ComparableNote> quickNotes = flattenSnapshotNotes(model.snapshot());
     sortComparableNotes(&parserNotes);
     sortComparableNotes(&quickNotes);
+    QVector<ComparableBeat> parserBeats = flattenParserBeats(parsed);
+    QVector<ComparableBeat> quickBeats = flattenSnapshotBeats(model.snapshot());
+    QVector<double> parserMeasures = flattenParserMeasureLines(parsed);
+    QVector<double> quickMeasures = flattenSnapshotMeasureLines(model.snapshot());
+    sortComparableBeats(&parserBeats);
+    sortComparableBeats(&quickBeats);
+    std::sort(parserMeasures.begin(), parserMeasures.end());
+    std::sort(quickMeasures.begin(), quickMeasures.end());
 
     if (parserNotes.size() != quickNotes.size()) {
         if (diff != nullptr) {
@@ -317,6 +447,43 @@ bool snapshotMatchesParser(const QString& chartText, QString* diff = nullptr)
             || a.flags != b.flags) {
             if (diff != nullptr) {
                 *diff = comparableNotesDiff(parserNotes, quickNotes);
+            }
+            return false;
+        }
+    }
+
+    if (parserBeats.size() != quickBeats.size()) {
+        if (diff != nullptr) {
+            *diff = comparableBeatsDiff(parserBeats, quickBeats);
+        }
+        return false;
+    }
+
+    for (int i = 0; i < parserBeats.size(); ++i) {
+        const ComparableBeat& a = parserBeats.at(i);
+        const ComparableBeat& b = quickBeats.at(i);
+        if (a.line != b.line
+            || a.col != b.col
+            || !nearlyEqual(a.second, b.second)
+            || a.major != b.major) {
+            if (diff != nullptr) {
+                *diff = comparableBeatsDiff(parserBeats, quickBeats);
+            }
+            return false;
+        }
+    }
+
+    if (parserMeasures.size() != quickMeasures.size()) {
+        if (diff != nullptr) {
+            *diff = comparableSecondsDiff(parserMeasures, quickMeasures);
+        }
+        return false;
+    }
+
+    for (int i = 0; i < parserMeasures.size(); ++i) {
+        if (!nearlyEqual(parserMeasures.at(i), quickMeasures.at(i))) {
+            if (diff != nullptr) {
+                *diff = comparableSecondsDiff(parserMeasures, quickMeasures);
             }
             return false;
         }
@@ -355,12 +522,15 @@ bool sameNote(const TimelineRenderNote& left, const TimelineRenderNote& right)
         && left.flags == right.flags;
 }
 
+bool sameDoubleVector(const QVector<double>& left, const QVector<double>& right);
+
 bool sameLine(const TimelineRenderLine& left, const TimelineRenderLine& right)
 {
     if (left.lineNumber != right.lineNumber
         || left.startPosition != right.startPosition
         || !nearlyEqual(left.startSecond, right.startSecond)
         || !nearlyEqual(left.endSecond, right.endSecond)
+        || !sameDoubleVector(left.measureLineSecondOffsets, right.measureLineSecondOffsets)
         || left.beats.size() != right.beats.size()
         || left.notes.size() != right.notes.size()) {
         return false;
@@ -403,6 +573,7 @@ bool sameSnapshot(const TimelineRenderSnapshot& left, const TimelineRenderSnapsh
         || !nearlyEqual(left.minimumSecond, right.minimumSecond)
         || !nearlyEqual(left.maximumSecond, right.maximumSecond)
         || left.lines.size() != right.lines.size()
+        || !sameDoubleVector(left.measureLineSeconds, right.measureLineSeconds)
         || !sameDoubleVector(left.noteVisualEndPrefixMaxWithSlideTracks, right.noteVisualEndPrefixMaxWithSlideTracks)
         || !sameDoubleVector(left.noteVisualEndPrefixMaxWithoutSlideTracks, right.noteVisualEndPrefixMaxWithoutSlideTracks)) {
         return false;
@@ -611,6 +782,124 @@ int main(int argc, char** argv)
         const bool secondResolved = model.resolvePreviewFollowCursor(0.6, &line, &col, &second);
         expect(secondResolved && line == 2 && col == 2 && nearlyEqual(second, 0.5),
                QStringLiteral("follow cursor advances to the next past comma while playback progresses"));
+    }
+
+    {
+        const QString chartText = QStringLiteral("1,\n2,\n3,\n4,\n5,\nE");
+        TimelineQuickModel model;
+        model.rebuildFromText(chartText, 0.0);
+        QVector<ComparableBeat> quickBeats = flattenSnapshotBeats(model.snapshot());
+        QVector<double> quickMeasures = flattenSnapshotMeasureLines(model.snapshot());
+        sortComparableBeats(&quickBeats);
+        expect(quickBeats.size() == 5, QStringLiteral("quick model keeps all comma beat markers across lines"));
+        if (quickBeats.size() == 5) {
+            expect(!quickBeats.at(0).major && !quickBeats.at(1).major && !quickBeats.at(2).major
+                       && !quickBeats.at(3).major && !quickBeats.at(4).major,
+                   QStringLiteral("comma beat markers stay independent from measure-line styling"));
+        }
+        expect(quickMeasures.size() == 2, QStringLiteral("quick model builds independent 4/4 measure lines across source lines"));
+        if (quickMeasures.size() == 2) {
+            expect(nearlyEqual(quickMeasures.at(0), 0.0) && nearlyEqual(quickMeasures.at(1), 2.0),
+                   QStringLiteral("measure lines continue by meter time instead of resetting per text line"));
+        }
+
+        QString diff;
+        expect(snapshotMatchesParser(chartText, &diff),
+               QStringLiteral("parser and quick model agree on cross-line measure-line semantics: %1").arg(diff));
+    }
+
+    {
+        const QString chartText = QStringLiteral("{4},,{8},,,,,\nE");
+        TimelineQuickModel model;
+        model.rebuildFromText(chartText, 0.0);
+        QVector<ComparableBeat> quickBeats = flattenSnapshotBeats(model.snapshot());
+        QVector<double> quickMeasures = flattenSnapshotMeasureLines(model.snapshot());
+        sortComparableBeats(&quickBeats);
+        expect(quickBeats.size() == 7, QStringLiteral("quick model keeps mixed-subdivision comma markers"));
+        if (quickBeats.size() == 7) {
+            expect(!quickBeats.at(0).major
+                       && !quickBeats.at(1).major
+                       && !quickBeats.at(2).major
+                       && !quickBeats.at(3).major
+                       && !quickBeats.at(4).major
+                       && !quickBeats.at(5).major
+                       && !quickBeats.at(6).major,
+                   QStringLiteral("changing {beats} does not turn comma beat markers into measure lines"));
+        }
+        expect(quickMeasures.size() == 2, QStringLiteral("quick model keeps meter-based measure lines across {beats} changes"));
+        if (quickMeasures.size() == 2) {
+            expect(nearlyEqual(quickMeasures.at(0), 0.0) && nearlyEqual(quickMeasures.at(1), 2.0),
+                   QStringLiteral("changing {beats} does not move independent 4/4 measure lines"));
+        }
+
+        QString diff;
+        expect(snapshotMatchesParser(chartText, &diff),
+               QStringLiteral("parser and quick model agree on mixed-subdivision measure-line semantics: %1").arg(diff));
+    }
+
+    {
+        const QString chartText = QStringLiteral("{3},,,,,,,\nE");
+        TimelineQuickModel model;
+        model.rebuildFromText(chartText, 0.0);
+        QVector<ComparableBeat> quickBeats = flattenSnapshotBeats(model.snapshot());
+        QVector<double> quickMeasures = flattenSnapshotMeasureLines(model.snapshot());
+        sortComparableBeats(&quickBeats);
+        expect(quickBeats.size() == 7, QStringLiteral("quick model keeps comma markers for 3-beat subdivisions"));
+        if (quickBeats.size() == 7) {
+            expect(!quickBeats.at(0).major
+                       && !quickBeats.at(1).major
+                       && !quickBeats.at(2).major
+                       && !quickBeats.at(3).major
+                       && !quickBeats.at(4).major
+                       && !quickBeats.at(5).major
+                       && !quickBeats.at(6).major,
+                   QStringLiteral("3-beat comma markers remain separate from measure-line styling"));
+        }
+        expect(quickMeasures.size() == 3, QStringLiteral("quick model keeps independent measure lines under {3}"));
+        if (quickMeasures.size() == 3) {
+            expect(nearlyEqual(quickMeasures.at(0), 0.0)
+                       && nearlyEqual(quickMeasures.at(1), 2.0)
+                       && nearlyEqual(quickMeasures.at(2), 4.0),
+                   QStringLiteral("independent 4/4 measure lines keep their own timing under {3}"));
+        }
+
+        QString diff;
+        expect(snapshotMatchesParser(chartText, &diff),
+               QStringLiteral("parser and quick model agree on 3-beat measure-line semantics: %1").arg(diff));
+    }
+
+    {
+        const QString chartText = QStringLiteral(",,(150),\n,\nE");
+        TimelineQuickModel model;
+        model.rebuildFromText(chartText, 0.0);
+        QVector<ComparableBeat> quickBeats = flattenSnapshotBeats(model.snapshot());
+        QVector<double> quickMeasures = flattenSnapshotMeasureLines(model.snapshot());
+        sortComparableBeats(&quickBeats);
+        expect(quickBeats.size() == 4, QStringLiteral("quick model keeps comma markers across BPM changes"));
+        if (quickBeats.size() == 4) {
+            expect(!quickBeats.at(0).major
+                       && !quickBeats.at(1).major
+                       && !quickBeats.at(2).major
+                       && !quickBeats.at(3).major,
+                   QStringLiteral("BPM changes do not promote comma markers into measure lines"));
+        }
+        expect(quickMeasures.size() == 2, QStringLiteral("quick model keeps independent measure markers across BPM changes"));
+        if (quickMeasures.size() == 2) {
+            expect(nearlyEqual(quickMeasures.at(0), 0.0) && nearlyEqual(quickMeasures.at(1), 1.0),
+                   QStringLiteral("a BPM change resets the independent measure-line timeline at the BPM position"));
+        }
+
+        QString diff;
+        expect(snapshotMatchesParser(chartText, &diff),
+               QStringLiteral("parser and quick model agree on BPM-reset measure-line semantics: %1").arg(diff));
+    }
+
+    {
+        const QString original = QStringLiteral(",\n,\n,\n,\nE");
+        const int position = 0;
+        expect(
+            incrementalMatchesRebuild(original, position, 1, QStringLiteral("(240),(120){8},{4}"), 0.0),
+            QStringLiteral("incremental reparse propagates changed measure-line state even when downstream seconds stay aligned"));
     }
 
     {

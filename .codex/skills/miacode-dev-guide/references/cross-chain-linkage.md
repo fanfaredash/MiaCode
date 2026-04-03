@@ -25,7 +25,9 @@ Implication:
 - A new note property or timing rule usually needs timeline, preview, audio, export, and Muri review.
 - Slide/tap head-material flags such as `$`, `$$`, `@`, `?`, and `!` are mirrored data: keep `SimaiNativeParser`, `TimelineQuickModel`, `PreviewCanvas`, timeline icons, and chart-transform token preservation aligned in the same patch.
 - `TimelineQuickModel` is now the owner of comma-only `C` anchor lookup for editor cursor sync, header/timeline `R -> C` jumps, and playback follow.
+- Timeline beat-grid semantics are mirrored between `SimaiNativeParser` and `TimelineQuickModel`: every comma remains a beat line, while measure lines are generated on an independent meter timeline (currently defaulting to 4/4 through meter numerator/denominator state). `{beats}` only changes comma spacing, and `(BPM)` changes restart the independent measure-line timeline at the BPM-change position.
 - `PreviewCanvas::drawNoteGuides` should group each-guide connectors by parser-derived `eachGroupId` when available; do not merge backtick-separated groups just because their `marker.second` matches.
+- Timeline note sprite stacking is intentionally preview-mirrored for overlapping markers: `TimelineView::paintEvent` keeps slide/wifi tracks behind note heads, uses the preview-style descending-`second` stack for tap/hold/slide/wifi heads, and then draws touch above that stack with touch-hold above touch. If preview object-layer order changes, review `src/timeline/TimelineView.Paint.cpp`, `src/preview/video/PreviewCanvas.Render.cpp`, and `src/preview/video/PreviewCanvas.Objects.cpp` together.
 - While preview playback is running, slow-refresh note-marker updates still feed the latest validation and Muri worker inputs, but preview audio/canvas/object stats stay on the frozen play-start snapshot until playback stops; validation and Muri panel/decorations may defer their visible UI apply until playback returns to a paused state.
 - Analysis-only setting changes such as Muri render mode or the static tap-on-slide threshold should prefer reusing the latest preview snapshot and cached parse result instead of forcing another full slow refresh.
 - Preview play/resume must use the latest in-memory field state, not a forced disk save. If slow refresh is still behind `timelineRevision_`, playback start may synchronously rebuild a preview-only note-marker snapshot once before audio/video start so the next resume does not wait for validation or Muri workers.
@@ -172,11 +174,11 @@ Muri warning/render note:
 
 Owners:
 
-- Persistent state: `MainWindow::loadProjectRenderState`, `saveProjectRenderState`
+- Persistent state: `MainWindow::loadProjectRenderState`, `saveProjectRenderState`, `MainWindow::loadPortableState`, `MainWindow::savePortableState`, `miacode::video_export::loadDialogPreferences`, `miacode::video_export::saveDialogPreferences`
 - Preview application: `PreviewCanvas` setters and `PreviewMediaController`
 - Export application: `MainWindow::buildVideoExportSnapshot`, `buildVideoExportTaskFromSnapshot`, `VideoExportController`
 
-If you add a new render setting, wire preview persistence and export reconstruction together.
+If you add a new render setting, wire preview persistence and export reconstruction together. Shared preview/export settings should stay canonical in the preview state; export-only choices such as resolution/FPS should persist through `VideoExportPreferences` without overriding those shared preview values on dialog open.
 
 ## 9. Parser Output Feeds Muri On Both Preview And Export Paths
 

@@ -655,6 +655,21 @@ QString laneDisplayTokenFromPad(const QString& pad)
     return QString();
 }
 
+QString simpleNoteLaneConfigToken(const QString& laneToken, bool hasProtection, bool isHold)
+{
+    if (laneToken.isEmpty()) {
+        return QString();
+    }
+    QString token = laneToken;
+    if (hasProtection) {
+        token += QLatin1Char('x');
+    }
+    if (isHold) {
+        token += QLatin1Char('h');
+    }
+    return token;
+}
+
 QString simpleNoteTargetLabel(const JudgeableSimpleNote& note)
 {
     if (note.headStarTapLike) {
@@ -662,9 +677,11 @@ QString simpleNoteTargetLabel(const JudgeableSimpleNote& note)
             (note.marker != nullptr && note.marker->lane >= 1 && note.marker->lane <= 8)
             ? QString::number(note.marker->lane)
             : laneDisplayTokenFromPad(note.pad);
-        return laneToken.isEmpty()
+        const QString token = simpleNoteLaneConfigToken(laneToken, note.hasProtection, false);
+        const QString base = token.isEmpty()
             ? QStringLiteral("star")
-            : QStringLiteral("star %1").arg(laneToken);
+            : QStringLiteral("star %1").arg(token);
+        return note.hasProtection ? QStringLiteral("protected %1").arg(base) : base;
     }
 
     const QString normalizedType = note.type.trimmed().toLower();
@@ -673,8 +690,11 @@ QString simpleNoteTargetLabel(const JudgeableSimpleNote& note)
             (note.marker != nullptr && note.marker->lane >= 1 && note.marker->lane <= 8)
             ? QString::number(note.marker->lane)
             : laneDisplayTokenFromPad(note.pad);
+        const bool isHold = normalizedType == QLatin1String("hold");
+        const QString configToken = simpleNoteLaneConfigToken(laneToken, note.hasProtection, isHold);
         const QString typeText = noteTypeDisplayLabel(note.type);
-        return laneToken.isEmpty() ? typeText : QStringLiteral("%1 %2").arg(typeText, laneToken);
+        const QString base = configToken.isEmpty() ? typeText : QStringLiteral("%1 %2").arg(typeText, configToken);
+        return note.hasProtection ? QStringLiteral("protected %1").arg(base) : base;
     }
 
     if (normalizedType == QLatin1String("touch") || normalizedType == QLatin1String("touch_hold")) {
@@ -940,13 +960,13 @@ QString slideHeadTapDetailText(
         return alertLevel == MuriAlertLevel::Warning
             ? QStringLiteral("%1 start may early-judge %2, gap %3 ms.")
                   .arg(causeConfig, affectedTarget, gapText)
-            : QStringLiteral("%1 start early-judges %2, gap %3 ms.")
+            : QStringLiteral("%1 start will early-judge %2, gap %3 ms.")
                   .arg(causeConfig, affectedTarget, gapText);
     }
     return alertLevel == MuriAlertLevel::Warning
         ? QStringLiteral("%1 jump-start may early-judge %2, gap %3 ms.")
               .arg(causeConfig, affectedTarget, gapText)
-        : QStringLiteral("%1 jump-start early-judges %2, gap %3 ms.")
+        : QStringLiteral("%1 jump-start will early-judge %2, gap %3 ms.")
               .arg(causeConfig, affectedTarget, gapText);
 }
 
@@ -959,7 +979,7 @@ QString tapOnSlideDetailText(
     return alertLevel == MuriAlertLevel::Warning
         ? QStringLiteral("%1 trajectory may collide with %2, gap %3 ms.")
               .arg(causeConfig, affectedTarget, QString::number(gapMs, 'f', 1))
-        : QStringLiteral("%1 trajectory collides with %2, gap %3 ms.")
+        : QStringLiteral("%1 trajectory will collide with %2, gap %3 ms.")
               .arg(causeConfig, affectedTarget, QString::number(gapMs, 'f', 1));
 }
 

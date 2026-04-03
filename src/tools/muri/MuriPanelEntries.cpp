@@ -70,19 +70,49 @@ MuriPanelAnchor muriPanelAnchorFromReferenceNote(const MuriStaticReferenceNote& 
     return anchor;
 }
 
+QString simpleNoteConfigToken(int lane, bool hasProtection, bool isHold)
+{
+    QString token;
+    if (lane >= 1 && lane <= 8) {
+        token = QString::number(lane);
+    }
+    if (token.isEmpty()) {
+        return token;
+    }
+    if (hasProtection) {
+        token += QLatin1Char('x');
+    }
+    if (isHold) {
+        token += QLatin1Char('h');
+    }
+    return token;
+}
+
 QString muriStaticReferenceConfigText(const MuriStaticReferenceNote& note)
 {
     if (note.headStarTapLike) {
-        return QStringLiteral("star %1").arg(note.lane);
+        const QString token = simpleNoteConfigToken(note.lane, note.hasProtection, false);
+        const QString base = token.isEmpty()
+            ? QStringLiteral("star")
+            : QStringLiteral("star %1").arg(token);
+        return note.hasProtection ? QStringLiteral("protected %1").arg(base) : base;
     }
 
     const QString markerType = note.markerType.trimmed().toLower();
     const QString pad = note.pad.trimmed().toUpper();
     if (markerType == QLatin1String("tap")) {
-        return QStringLiteral("tap %1").arg(note.lane);
+        const QString token = simpleNoteConfigToken(note.lane, note.hasProtection, false);
+        const QString base = token.isEmpty()
+            ? QStringLiteral("tap")
+            : QStringLiteral("tap %1").arg(token);
+        return note.hasProtection ? QStringLiteral("protected %1").arg(base) : base;
     }
     if (markerType == QLatin1String("hold")) {
-        return QStringLiteral("hold %1").arg(note.lane);
+        const QString token = simpleNoteConfigToken(note.lane, note.hasProtection, true);
+        const QString base = token.isEmpty()
+            ? QStringLiteral("hold")
+            : QStringLiteral("hold %1").arg(token);
+        return note.hasProtection ? QStringLiteral("protected %1").arg(base) : base;
     }
     if (markerType == QLatin1String("touch")) {
         return pad.isEmpty() ? QStringLiteral("touch") : QStringLiteral("touch %1").arg(pad);
@@ -119,19 +149,19 @@ QString buildMuriStaticReferenceDetail(const MuriStaticReference& reference)
             ? (reference.alertLevel == MuriAlertLevel::Warning
                    ? QStringLiteral("%1 start may early-judge %2, gap %3 ms.")
                          .arg(causeText, affectedText, QString::number(gapMs, 'f', 1))
-                   : QStringLiteral("%1 start early-judges %2, gap %3 ms.")
+                   : QStringLiteral("%1 start will early-judge %2, gap %3 ms.")
                          .arg(causeText, affectedText, QString::number(gapMs, 'f', 1)))
             : (reference.alertLevel == MuriAlertLevel::Warning
                    ? QStringLiteral("%1 jump-start may early-judge %2, gap %3 ms.")
                          .arg(causeText, affectedText, QString::number(gapMs, 'f', 1))
-                   : QStringLiteral("%1 jump-start early-judges %2, gap %3 ms.")
+                   : QStringLiteral("%1 jump-start will early-judge %2, gap %3 ms.")
                          .arg(causeText, affectedText, QString::number(gapMs, 'f', 1)));
     }
     if (reference.kind == MuriKind::TapOnSlide) {
         return reference.alertLevel == MuriAlertLevel::Warning
             ? QStringLiteral("%1 trajectory may collide with %2, gap %3 ms.")
                   .arg(causeText, affectedText, QString::number(gapMs, 'f', 1))
-            : QStringLiteral("%1 trajectory collides with %2, gap %3 ms.")
+            : QStringLiteral("%1 trajectory will collide with %2, gap %3 ms.")
                   .arg(causeText, affectedText, QString::number(gapMs, 'f', 1));
     }
     if (reference.kind == MuriKind::Overlap) {

@@ -118,6 +118,10 @@
 - `slide 8>4 trajectory may collide with star 1, gap 187.5 ms.`
 - `Warning` 文案使用“可能”类措辞，`Muri` 文案使用确定措辞。
 - `star N` 专门用于显示头星目标，不应退化成普通 `tap` 文案。
+- 带保护的简单目标当前统一显示为 `protected ...`，并保留配置 token：
+  - `protected tap 8x`
+  - `protected hold 4xh`
+  - `protected star 1x`
 
 ## 6. 告警级别规则
 
@@ -129,7 +133,7 @@
 ### 6.2 SlideHeadTap 的 Warning 条件
 
 满足以下任一条件时，`SlideHeadTap` 为 `Warning`：
-- 受影响目标包含保护（当前实现对应 EX / head-EX）
+- 受影响目标包含保护（当前实现详情会显示为 `protected tap 8x` / `protected hold 4xh` / `protected star 1x` 这类形式）
 
 - `0 < gap <= 50.0 ms`，且该 slide head 没有启动时 tap
 - `gap >= 150.0 ms`
@@ -142,7 +146,7 @@
 
 - `gap > 150.0 ms`
 - `gap <= staticTapOnSlideThresholdSeconds`
-- 或受影响目标包含保护（当前实现对应 EX / head-EX）
+- 或受影响目标包含保护（当前实现详情会显示为 `protected tap 8x` / `protected hold 4xh` / `protected star 1x` 这类形式）
 
 默认静态阈值：
 

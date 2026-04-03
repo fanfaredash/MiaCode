@@ -115,6 +115,19 @@ QString muriLocationText(int line, int col)
     return QStringLiteral("L%1C%2").arg(qMax(1, line)).arg(qMax(1, col));
 }
 
+QString localizeMuriEntityText(QString text, bool chineseUi)
+{
+    text = text.trimmed();
+    if (!chineseUi || text.isEmpty()) {
+        return text;
+    }
+    static const QString kProtectedPrefix = QStringLiteral("protected ");
+    if (text.startsWith(kProtectedPrefix, Qt::CaseInsensitive)) {
+        text = QStringLiteral("保护 %1").arg(text.mid(kProtectedPrefix.size()).trimmed());
+    }
+    return text;
+}
+
 QString localizeMuriDetail(QString rawDetail, bool chineseUi)
 {
     rawDetail = rawDetail.trimmed();
@@ -204,31 +217,44 @@ QString localizeMuriDetail(QString rawDetail, bool chineseUi)
         return QStringLiteral("%1 偷跑，会提前判定后续 tap，间隔 %2。").arg(left, gapText);
     }
     if (splitGapText(rawDetail, QStringLiteral(" start will early-judge "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 启动，会提前判定 %2，间隔 %3。").arg(left, right, gapText);
+        return QStringLiteral("%1 启动，会提前判定 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
     }
     if (splitGapText(rawDetail, QStringLiteral(" start may early-judge "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 启动，可能提前判定 %2，间隔 %3。").arg(left, right, gapText);
+        return QStringLiteral("%1 启动，可能会提前判定 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
     }
     if (splitGapText(rawDetail, QStringLiteral(" start early-judges "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 启动，提前判定 %2，间隔 %3。").arg(left, right, gapText);
+        return QStringLiteral("%1 启动，会提前判定 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
     }
     if (splitGapText(rawDetail, QStringLiteral(" jump-start will early-judge "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 偷跑，会提前判定 %2，间隔 %3。").arg(left, right, gapText);
+        return QStringLiteral("%1 偷跑，会提前判定 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
     }
     if (splitGapText(rawDetail, QStringLiteral(" jump-start may early-judge "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 偷跑，可能提前判定 %2，间隔 %3。").arg(left, right, gapText);
+        return QStringLiteral("%1 偷跑，可能会提前判定 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
     }
     if (splitGapText(rawDetail, QStringLiteral(" jump-start early-judges "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 偷跑，提前判定 %2，间隔 %3。").arg(left, right, gapText);
+        return QStringLiteral("%1 偷跑，会提前判定 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
     }
     if (splitGapText(rawDetail, QStringLiteral(" trajectory may collide with "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 运行轨迹可能撞到 %2，间隔 %3。").arg(left, right, gapText);
+        return QStringLiteral("%1 运行轨迹可能会撞到 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" trajectory will collide with "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 运行轨迹会撞到 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
     }
     if (splitGapText(rawDetail, QStringLiteral(" trajectory collides with "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 运行轨迹撞到 %2，间隔 %3。").arg(left, right, gapText);
+        return QStringLiteral("%1 运行轨迹会撞到 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
     }
     if (splitGapText(rawDetail, QStringLiteral(" was early-judged by "), &left, &right, &gapText)) {
-        return QStringLiteral("%1 被 %2 提前判定，间隔 %3。").arg(left, right, gapText);
+        return QStringLiteral("%1 被 %2 提前判定，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
     }
     if (rawDetail.endsWith(QStringLiteral(" resolved outside its critical window."))
         || rawDetail.contains(QStringLiteral(" resolved outside its critical window, gap "))) {

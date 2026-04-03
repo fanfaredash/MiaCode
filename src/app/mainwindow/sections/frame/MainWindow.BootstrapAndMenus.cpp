@@ -1616,6 +1616,10 @@ MainWindow::MainWindow(QWidget* parent)
     connect(previewSeekDebounceTimer_, &QTimer::timeout, this, [this]() {
         seekPreviewToSecond(previewPendingSeekSecond_, previewPendingSeekCenterView_);
     });
+    previewHeldSeekTimer_ = new QTimer(this);
+    previewHeldSeekTimer_->setTimerType(Qt::PreciseTimer);
+    previewHeldSeekTimer_->setInterval(miacode::preview_interaction::kSeekHoldTickIntervalMs);
+    connect(previewHeldSeekTimer_, &QTimer::timeout, this, &MainWindow::applyPreviewHeldSeekTick);
 
     timelineAnalysisIdleTimer_ = new QTimer(this);
     timelineAnalysisIdleTimer_->setSingleShot(true);
@@ -1626,6 +1630,7 @@ MainWindow::MainWindow(QWidget* parent)
         previewSlider_->setFocusPolicy(Qt::StrongFocus);
         previewSlider_->installEventFilter(this);
         connect(previewSlider_, &QSlider::sliderPressed, this, [this]() {
+            stopPreviewHeldSeek();
             if (previewSlider_ != nullptr) {
                 previewSlider_->setFocus(Qt::MouseFocusReason);
             }
@@ -1663,6 +1668,7 @@ MainWindow::MainWindow(QWidget* parent)
             }
         });
         connect(previewSlider_, &QSlider::sliderReleased, this, [this]() {
+            stopPreviewHeldSeek();
             previewSliderDragging_ = false;
             previewScrubRenderElapsed_.invalidate();
             if (previewSlider_ == nullptr) {

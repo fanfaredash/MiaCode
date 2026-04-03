@@ -35,6 +35,9 @@ constexpr int kTimelineLeftMargin = 40;
 constexpr int kTimelineTopMargin = 6;
 constexpr int kTimelineRightPadding = 24;
 constexpr int kNoteSize = 14;
+constexpr qreal kTimelineBeatLineWidth = 1.2;
+// Match PreviewCanvas hold thickness: 60 px hold width vs 122 px * 0.5 = 61 px tap width.
+constexpr qreal kTimelineHoldThicknessRelativeToTap = 60.0 / 61.0;
 constexpr double kTimelineDisplayLeadInSeconds = 0.5;
 const std::array<QColor, 5> kTimelineFireworkBandColors = {
     QColor(232, 124, 72),
@@ -59,17 +62,12 @@ bool hasTimelineNavigateModifier(Qt::KeyboardModifiers modifiers)
 
 QVector<double> makeTimelineZoomPresets()
 {
-    QVector<double> presets;
-    presets.reserve(((150 - 25) / 5) + 1);
-    for (int percent = 25; percent <= 150; percent += 5) {
-        presets.append(static_cast<double>(percent) / 100.0);
-    }
-    return presets;
+    return {0.25, 0.5, 0.75, 1.0, 1.5, 2.0};
 }
 
 QVector<double> makeTimelineButtonZoomPresets()
 {
-    return {0.25, 0.5, 0.75, 1.0, 1.25, 1.5};
+    return {0.25, 0.5, 0.75, 1.0, 1.5, 2.0};
 }
 
 int transformedPixmapScalePermille(qreal scale)
@@ -220,6 +218,7 @@ bool TimelineView::viewportEvent(QEvent* event)
 void TimelineView::setTimelineData(const TimelineRenderSnapshot& snapshot)
 {
     lines_ = snapshot.lines;
+    measureLineSeconds_ = snapshot.measureLineSeconds;
     noteVisualEndPrefixMaxWithSlideTracks_ = snapshot.noteVisualEndPrefixMaxWithSlideTracks;
     noteVisualEndPrefixMaxWithoutSlideTracks_ = snapshot.noteVisualEndPrefixMaxWithoutSlideTracks;
     muriMarkerLocationIds_.clear();
@@ -244,6 +243,7 @@ void TimelineView::setWaveformData(const QVector<float>& peaks, double startSeco
 void TimelineView::clear()
 {
     lines_.clear();
+    measureLineSeconds_.clear();
     noteVisualEndPrefixMaxWithSlideTracks_.clear();
     noteVisualEndPrefixMaxWithoutSlideTracks_.clear();
     muriMarkerLocationIds_.clear();
