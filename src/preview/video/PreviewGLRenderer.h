@@ -72,6 +72,19 @@ private:
     bool ensureProgram();
     bool ensureVideoProgram();
     bool ensurePlanarVideoProgram();
+    void restoreDefaultUnpackState();
+    bool uploadVideoPlane(
+        GLuint texture,
+        int width,
+        int height,
+        GLenum externalFormat,
+        const uchar* bits,
+        int strideBytes,
+        int mappedBytes,
+        int bytesPerPixel,
+        const QString& planeLabel,
+        QString* errorMessage
+    );
     GLuint ensureTexture(const QImage& image, bool useCache);
     bool ensureVideoTextures(const QSize& frameSize);
     bool ensurePlanarVideoTextures(const QSize& frameSize);
@@ -121,7 +134,9 @@ private:
     GLenum videoUvInternalFormat_ = GL_LUMINANCE_ALPHA;
     GLenum videoUvExternalFormat_ = GL_LUMINANCE_ALPHA;
     bool videoUvUseRgChannels_ = false;
+    bool supportsUnpackRowLength_ = false;
     bool useDesktopLegacyVersion120_ = false;
+    bool loggedFirstDirectVideoFrame_ = false;
     QString lastError_;
     QString contextSummary_;
     QString lastLoggedError_;

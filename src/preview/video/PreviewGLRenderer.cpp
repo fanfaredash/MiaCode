@@ -16,6 +16,8 @@
 #include <QtGlobal>
 
 #include <cstddef>
+#include <cstring>
+#include <limits>
 
 namespace {
 struct QuadVertex {
@@ -77,6 +79,19 @@ QString formatSummary(const QSurfaceFormat& format)
         .arg(format.depthBufferSize())
         .arg(format.stencilBufferSize())
         .arg(format.swapInterval());
+}
+
+QString glStringOrUnavailable(QOpenGLContext* context, GLenum name)
+{
+    QOpenGLFunctions* functions = context != nullptr ? context->functions() : nullptr;
+    if (functions == nullptr) {
+        return QStringLiteral("unavailable");
+    }
+    const GLubyte* value = functions->glGetString(name);
+    if (value == nullptr) {
+        return QStringLiteral("unavailable");
+    }
+    return QString::fromLatin1(reinterpret_cast<const char*>(value));
 }
 
 #ifdef HAVE_QT_MULTIMEDIA
@@ -261,13 +276,18 @@ void PreviewGLRenderer::configureForCurrentContext(QOpenGLContext* context)
         videoUvInternalFormat_ = GL_LUMINANCE_ALPHA;
         videoUvExternalFormat_ = GL_LUMINANCE_ALPHA;
         videoUvUseRgChannels_ = false;
+        supportsUnpackRowLength_ = false;
         useDesktopLegacyVersion120_ = false;
+        loggedFirstDirectVideoFrame_ = false;
         contextSummary_.clear();
         return;
     }
 
     const bool isOpenGles = context->isOpenGLES();
     const QSurfaceFormat format = context->format();
+    const auto hasExtension = [context](const char* extensionName) {
+        return context->hasExtension(QByteArray(extensionName));
+    };
     if (isOpenGles) {
         shaderLanguage_ = format.majorVersion() >= 3 ? ShaderLanguage::Gles300 : ShaderLanguage::Gles100;
     } else if (format.profile() == QSurfaceFormat::CoreProfile) {
@@ -279,8 +299,15 @@ void PreviewGLRenderer::configureForCurrentContext(QOpenGLContext* context)
         shaderLanguage_ == ShaderLanguage::DesktopLegacy
         && (format.majorVersion() > 2 || (format.majorVersion() == 2 && format.minorVersion() >= 1));
 
+    const bool supportsTextureRgRuntime =
+        !isOpenGles
+        && (format.majorVersion() >= 3
+            || hasExtension("GL_ARB_texture_rg")
+            || hasExtension("GL_EXT_texture_rg"));
     const bool useRedGreenVideoTexturesRequested =
-        shaderLanguage_ == ShaderLanguage::DesktopCore150 || shaderLanguage_ == ShaderLanguage::Gles300;
+        shaderLanguage_ == ShaderLanguage::DesktopCore150
+        || shaderLanguage_ == ShaderLanguage::Gles300
+        || supportsTextureRgRuntime;
 #if defined(GL_RED) && defined(GL_RG)
     const bool useRedGreenVideoTextures = useRedGreenVideoTexturesRequested;
 #else
@@ -314,6 +341,16 @@ void PreviewGLRenderer::configureForCurrentContext(QOpenGLContext* context)
     videoUvExternalFormat_ = GL_LUMINANCE_ALPHA;
 #endif
     videoUvUseRgChannels_ = useRedGreenVideoTextures;
+#ifdef GL_UNPACK_ROW_LENGTH
+    supportsUnpackRowLength_ = isOpenGles
+        ? (format.majorVersion() >= 3 || hasExtension("GL_EXT_unpack_subimage"))
+        : (format.majorVersion() > 1
+            || (format.majorVersion() == 1 && format.minorVersion() >= 2)
+            || hasExtension("GL_EXT_unpack_subimage"));
+#else
+    supportsUnpackRowLength_ = false;
+#endif
+    loggedFirstDirectVideoFrame_ = false;
     const QString shaderLanguageName = [this]() {
         switch (shaderLanguage_) {
         case ShaderLanguage::DesktopLegacy:
@@ -338,10 +375,19 @@ void PreviewGLRenderer::configureForCurrentContext(QOpenGLContext* context)
         }
         return QStringLiteral("unknown");
     }();
-    contextSummary_ = QStringLiteral("%1 shader=%2 video_upload=%3")
+    const QString vendorName = glStringOrUnavailable(context, GL_VENDOR);
+    const QString rendererName = glStringOrUnavailable(context, GL_RENDERER);
+    const QString glVersionName = glStringOrUnavailable(context, GL_VERSION);
+    contextSummary_ = QStringLiteral(
+                          "%1 vendor=%2 renderer=%3 gl=%4 shader=%5 video_upload=%6 texture_rg=%7 unpack_row_length=%8")
         .arg(formatSummary(format))
+        .arg(vendorName)
+        .arg(rendererName)
+        .arg(glVersionName)
         .arg(shaderLanguageName)
-        .arg(videoUploadModeName);
+        .arg(videoUploadModeName)
+        .arg(useRedGreenVideoTextures ? 1 : 0)
+        .arg(supportsUnpackRowLength_ ? 1 : 0);
     lastLoggedError_.clear();
     lastLoggedVideoError_.clear();
 }
@@ -355,6 +401,141 @@ void PreviewGLRenderer::recordError(const QString& message, bool videoPath)
     }
     lastLogged = message;
     appendPreviewGlLog(videoPath ? QStringLiteral("video") : QStringLiteral("renderer"), message, true);
+}
+
+void PreviewGLRenderer::restoreDefaultUnpackState()
+{
+#ifdef GL_UNPACK_ROW_LENGTH
+    if (supportsUnpackRowLength_) {
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+#if defined(GL_UNPACK_SKIP_PIXELS)
+        glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+#endif
+#if defined(GL_UNPACK_SKIP_ROWS)
+        glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+#endif
+    }
+#endif
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+}
+
+bool PreviewGLRenderer::uploadVideoPlane(
+    GLuint texture,
+    int width,
+    int height,
+    GLenum externalFormat,
+    const uchar* bits,
+    int strideBytes,
+    int mappedBytes,
+    int bytesPerPixel,
+    const QString& planeLabel,
+    QString* errorMessage)
+{
+    if (texture == 0 || bits == nullptr || width <= 0 || height <= 0 || strideBytes <= 0 || mappedBytes <= 0
+        || bytesPerPixel <= 0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral(
+                                "%1 plane upload had invalid inputs: texture=%2 size=%3x%4 stride=%5 mapped=%6 bpp=%7")
+                                .arg(planeLabel)
+                                .arg(texture)
+                                .arg(width)
+                                .arg(height)
+                                .arg(strideBytes)
+                                .arg(mappedBytes)
+                                .arg(bytesPerPixel);
+        }
+        return false;
+    }
+
+    const qint64 packedRowBytes = static_cast<qint64>(width) * bytesPerPixel;
+    if (strideBytes < packedRowBytes) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("%1 plane stride=%2 was smaller than packed_row_bytes=%3")
+                                .arg(planeLabel)
+                                .arg(strideBytes)
+                                .arg(packedRowBytes);
+        }
+        return false;
+    }
+
+    const qint64 minimumMappedBytes =
+        static_cast<qint64>(strideBytes) * qMax(0, height - 1) + packedRowBytes;
+    if (minimumMappedBytes > mappedBytes) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("%1 plane mappedBytes=%2 was smaller than required_bytes=%3")
+                                .arg(planeLabel)
+                                .arg(mappedBytes)
+                                .arg(minimumMappedBytes);
+        }
+        return false;
+    }
+
+    QByteArray tightlyPackedBytes;
+    const void* uploadBits = bits;
+    int rowLengthPixels = 0;
+    if (strideBytes != packedRowBytes) {
+        if (supportsUnpackRowLength_ && strideBytes % bytesPerPixel == 0) {
+            rowLengthPixels = strideBytes / bytesPerPixel;
+        } else {
+            const qint64 tightlyPackedSize = packedRowBytes * height;
+            if (tightlyPackedSize <= 0 || tightlyPackedSize > std::numeric_limits<int>::max()) {
+                if (errorMessage != nullptr) {
+                    *errorMessage = QStringLiteral("%1 plane repack size=%2 was out of range")
+                                        .arg(planeLabel)
+                                        .arg(tightlyPackedSize);
+                }
+                return false;
+            }
+            tightlyPackedBytes.resize(static_cast<int>(tightlyPackedSize));
+            char* dst = tightlyPackedBytes.data();
+            for (int row = 0; row < height; ++row) {
+                std::memcpy(
+                    dst + static_cast<ptrdiff_t>(row) * packedRowBytes,
+                    bits + static_cast<ptrdiff_t>(row) * strideBytes,
+                    static_cast<size_t>(packedRowBytes)
+                );
+            }
+            uploadBits = tightlyPackedBytes.constData();
+        }
+    }
+
+    QElapsedTimer uploadTimer;
+    if (profilingFrameActive_) {
+        uploadTimer.start();
+    }
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+#ifdef GL_UNPACK_ROW_LENGTH
+    if (supportsUnpackRowLength_) {
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, rowLengthPixels);
+#if defined(GL_UNPACK_SKIP_PIXELS)
+        glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+#endif
+#if defined(GL_UNPACK_SKIP_ROWS)
+        glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+#endif
+    }
+#endif
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexSubImage2D(
+        GL_TEXTURE_2D,
+        0,
+        0,
+        0,
+        width,
+        height,
+        externalFormat,
+        GL_UNSIGNED_BYTE,
+        uploadBits
+    );
+    restoreDefaultUnpackState();
+
+    if (profilingFrameActive_) {
+        const quint64 elapsedNs = static_cast<quint64>(uploadTimer.nsecsElapsed());
+        frameCpuUploadNs_ += elapsedNs;
+        frameVideoUploadNs_ += elapsedNs;
+    }
+    return true;
 }
 
 void PreviewGLRenderer::beginFrame(const QSize& viewportSize, qreal devicePixelRatio)
@@ -757,6 +938,41 @@ bool PreviewGLRenderer::drawVideoFrame(const QVideoFrame& frame, const QRectF& t
         return fallbackToImage(QStringLiteral("video frame reported an empty size"));
     }
 
+    const auto uploadModeName = [this]() {
+        switch (videoTextureUploadMode_) {
+        case VideoTextureUploadMode::LegacyLuminance:
+            return QStringLiteral("legacy_luminance");
+        case VideoTextureUploadMode::RedGreen:
+            return QStringLiteral("red_green");
+        }
+        return QStringLiteral("unknown");
+    }();
+    const auto maybeLogDirectUploadFrame = [this, &mappedFrame, &uploadModeName](
+                                               const QString& directKind,
+                                               const QVector<int>& strides,
+                                               const QVector<int>& mappedBytes) {
+        if (loggedFirstDirectVideoFrame_) {
+            return;
+        }
+        QString planeSummary = QStringLiteral("plane_count=%1").arg(strides.size());
+        for (int plane = 0; plane < strides.size() && plane < mappedBytes.size(); ++plane) {
+            planeSummary += QStringLiteral(" p%1_stride=%2 p%1_mapped=%3")
+                                .arg(plane)
+                                .arg(strides.at(plane))
+                                .arg(mappedBytes.at(plane));
+        }
+        appendPreviewGlLog(
+            QStringLiteral("video"),
+            QStringLiteral("first_direct_upload_frame; kind=%1 upload=%2 unpack_row_length=%3; %4; %5")
+                .arg(directKind)
+                .arg(uploadModeName)
+                .arg(supportsUnpackRowLength_ ? 1 : 0)
+                .arg(videoFrameSummary(mappedFrame))
+                .arg(planeSummary)
+        );
+        loggedFirstDirectVideoFrame_ = true;
+    };
+
     if (isNv12) {
         if (!ensureVideoProgram() || !ensureVideoTextures(frameSize)) {
             mappedFrame.unmap();
@@ -767,85 +983,46 @@ bool PreviewGLRenderer::drawVideoFrame(const QVideoFrame& frame, const QRectF& t
         const uchar* uvBits = mappedFrame.bits(1);
         const int yStride = mappedFrame.bytesPerLine(0);
         const int uvStride = mappedFrame.bytesPerLine(1);
-        if (yBits == nullptr || uvBits == nullptr || yStride <= 0 || uvStride <= 0) {
+        const int yMappedBytes = mappedFrame.mappedBytes(0);
+        const int uvMappedBytes = mappedFrame.mappedBytes(1);
+        if (yBits == nullptr || uvBits == nullptr || yStride <= 0 || uvStride <= 0
+            || yMappedBytes <= 0 || uvMappedBytes <= 0) {
             mappedFrame.unmap();
             return fallbackToImage(QStringLiteral("NV12 frame planes were unavailable after mapping"));
         }
 
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-#ifdef GL_UNPACK_ROW_LENGTH
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, yStride);
-#endif
-        glBindTexture(GL_TEXTURE_2D, videoYTexture_);
-        if (profilingFrameActive_) {
-            QElapsedTimer uploadTimer;
-            uploadTimer.start();
-            glTexSubImage2D(
-                GL_TEXTURE_2D,
-                0,
-                0,
-                0,
-                frameSize.width(),
-                frameSize.height(),
-                videoYExternalFormat_,
-                GL_UNSIGNED_BYTE,
-                yBits
-            );
-            const quint64 elapsedNs = static_cast<quint64>(uploadTimer.nsecsElapsed());
-            frameCpuUploadNs_ += elapsedNs;
-            frameVideoUploadNs_ += elapsedNs;
-        } else {
-            glTexSubImage2D(
-                GL_TEXTURE_2D,
-                0,
-                0,
-                0,
-                frameSize.width(),
-                frameSize.height(),
-                videoYExternalFormat_,
-                GL_UNSIGNED_BYTE,
-                yBits
-            );
-        }
+        maybeLogDirectUploadFrame(
+            QStringLiteral("nv12"),
+            QVector<int>{yStride, uvStride},
+            QVector<int>{yMappedBytes, uvMappedBytes}
+        );
 
-#ifdef GL_UNPACK_ROW_LENGTH
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, qMax(1, uvStride / 2));
-#endif
-        glBindTexture(GL_TEXTURE_2D, videoUvTexture_);
-        if (profilingFrameActive_) {
-            QElapsedTimer uploadTimer;
-            uploadTimer.start();
-            glTexSubImage2D(
-                GL_TEXTURE_2D,
-                0,
-                0,
-                0,
+        QString uploadError;
+        if (!uploadVideoPlane(
+                videoYTexture_,
+                frameSize.width(),
+                frameSize.height(),
+                videoYExternalFormat_,
+                yBits,
+                yStride,
+                yMappedBytes,
+                1,
+                QStringLiteral("NV12 Y"),
+                &uploadError)
+            || !uploadVideoPlane(
+                videoUvTexture_,
                 qMax(1, frameSize.width() / 2),
                 qMax(1, frameSize.height() / 2),
                 videoUvExternalFormat_,
-                GL_UNSIGNED_BYTE,
-                uvBits
-            );
-            const quint64 elapsedNs = static_cast<quint64>(uploadTimer.nsecsElapsed());
-            frameCpuUploadNs_ += elapsedNs;
-            frameVideoUploadNs_ += elapsedNs;
-        } else {
-            glTexSubImage2D(
-                GL_TEXTURE_2D,
-                0,
-                0,
-                0,
-                qMax(1, frameSize.width() / 2),
-                qMax(1, frameSize.height() / 2),
-                videoUvExternalFormat_,
-                GL_UNSIGNED_BYTE,
-                uvBits
-            );
+                uvBits,
+                uvStride,
+                uvMappedBytes,
+                2,
+                QStringLiteral("NV12 UV"),
+                &uploadError)) {
+            mappedFrame.unmap();
+            return fallbackToImage(uploadError);
         }
-#ifdef GL_UNPACK_ROW_LENGTH
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-#endif
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     } else if (isPlanar420) {
         if (!ensurePlanarVideoProgram() || !ensurePlanarVideoTextures(frameSize)) {
             mappedFrame.unmap();
@@ -858,8 +1035,12 @@ bool PreviewGLRenderer::drawVideoFrame(const QVideoFrame& frame, const QRectF& t
         const int yStride = mappedFrame.bytesPerLine(0);
         const int plane1Stride = mappedFrame.bytesPerLine(1);
         const int plane2Stride = mappedFrame.bytesPerLine(2);
+        const int yMappedBytes = mappedFrame.mappedBytes(0);
+        const int plane1MappedBytes = mappedFrame.mappedBytes(1);
+        const int plane2MappedBytes = mappedFrame.mappedBytes(2);
         if (yBits == nullptr || plane1Bits == nullptr || plane2Bits == nullptr
-            || yStride <= 0 || plane1Stride <= 0 || plane2Stride <= 0) {
+            || yStride <= 0 || plane1Stride <= 0 || plane2Stride <= 0
+            || yMappedBytes <= 0 || plane1MappedBytes <= 0 || plane2MappedBytes <= 0) {
             mappedFrame.unmap();
             return fallbackToImage(QStringLiteral("planar YUV frame planes were unavailable after mapping"));
         }
@@ -868,122 +1049,60 @@ bool PreviewGLRenderer::drawVideoFrame(const QVideoFrame& frame, const QRectF& t
         const uchar* vBits = plane2Bits;
         int uStride = plane1Stride;
         int vStride = plane2Stride;
+        int uMappedBytes = plane1MappedBytes;
+        int vMappedBytes = plane2MappedBytes;
         if (isYv12) {
             uBits = plane2Bits;
             vBits = plane1Bits;
             uStride = plane2Stride;
             vStride = plane1Stride;
+            uMappedBytes = plane2MappedBytes;
+            vMappedBytes = plane1MappedBytes;
         }
 
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-#ifdef GL_UNPACK_ROW_LENGTH
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, yStride);
-#endif
-        glBindTexture(GL_TEXTURE_2D, planarVideoYTexture_);
-        if (profilingFrameActive_) {
-            QElapsedTimer uploadTimer;
-            uploadTimer.start();
-            glTexSubImage2D(
-                GL_TEXTURE_2D,
-                0,
-                0,
-                0,
+        maybeLogDirectUploadFrame(
+            isYv12 ? QStringLiteral("yv12") : QStringLiteral("yuv420p"),
+            QVector<int>{yStride, uStride, vStride},
+            QVector<int>{yMappedBytes, uMappedBytes, vMappedBytes}
+        );
+
+        QString uploadError;
+        if (!uploadVideoPlane(
+                planarVideoYTexture_,
                 frameSize.width(),
                 frameSize.height(),
                 videoYExternalFormat_,
-                GL_UNSIGNED_BYTE,
-                yBits
-            );
-            const quint64 elapsedNs = static_cast<quint64>(uploadTimer.nsecsElapsed());
-            frameCpuUploadNs_ += elapsedNs;
-            frameVideoUploadNs_ += elapsedNs;
-        } else {
-            glTexSubImage2D(
-                GL_TEXTURE_2D,
-                0,
-                0,
-                0,
-                frameSize.width(),
-                frameSize.height(),
+                yBits,
+                yStride,
+                yMappedBytes,
+                1,
+                QStringLiteral("planar Y"),
+                &uploadError)
+            || !uploadVideoPlane(
+                planarVideoUTexture_,
+                qMax(1, frameSize.width() / 2),
+                qMax(1, frameSize.height() / 2),
                 videoYExternalFormat_,
-                GL_UNSIGNED_BYTE,
-                yBits
-            );
+                uBits,
+                uStride,
+                uMappedBytes,
+                1,
+                QStringLiteral("planar U"),
+                &uploadError)
+            || !uploadVideoPlane(
+                planarVideoVTexture_,
+                qMax(1, frameSize.width() / 2),
+                qMax(1, frameSize.height() / 2),
+                videoYExternalFormat_,
+                vBits,
+                vStride,
+                vMappedBytes,
+                1,
+                QStringLiteral("planar V"),
+                &uploadError)) {
+            mappedFrame.unmap();
+            return fallbackToImage(uploadError);
         }
-
-#ifdef GL_UNPACK_ROW_LENGTH
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, uStride);
-#endif
-        glBindTexture(GL_TEXTURE_2D, planarVideoUTexture_);
-        if (profilingFrameActive_) {
-            QElapsedTimer uploadTimer;
-            uploadTimer.start();
-            glTexSubImage2D(
-                GL_TEXTURE_2D,
-                0,
-                0,
-                0,
-                qMax(1, frameSize.width() / 2),
-                qMax(1, frameSize.height() / 2),
-                videoYExternalFormat_,
-                GL_UNSIGNED_BYTE,
-                uBits
-            );
-            const quint64 elapsedNs = static_cast<quint64>(uploadTimer.nsecsElapsed());
-            frameCpuUploadNs_ += elapsedNs;
-            frameVideoUploadNs_ += elapsedNs;
-        } else {
-            glTexSubImage2D(
-                GL_TEXTURE_2D,
-                0,
-                0,
-                0,
-                qMax(1, frameSize.width() / 2),
-                qMax(1, frameSize.height() / 2),
-                videoYExternalFormat_,
-                GL_UNSIGNED_BYTE,
-                uBits
-            );
-        }
-
-#ifdef GL_UNPACK_ROW_LENGTH
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, vStride);
-#endif
-        glBindTexture(GL_TEXTURE_2D, planarVideoVTexture_);
-        if (profilingFrameActive_) {
-            QElapsedTimer uploadTimer;
-            uploadTimer.start();
-            glTexSubImage2D(
-                GL_TEXTURE_2D,
-                0,
-                0,
-                0,
-                qMax(1, frameSize.width() / 2),
-                qMax(1, frameSize.height() / 2),
-                videoYExternalFormat_,
-                GL_UNSIGNED_BYTE,
-                vBits
-            );
-            const quint64 elapsedNs = static_cast<quint64>(uploadTimer.nsecsElapsed());
-            frameCpuUploadNs_ += elapsedNs;
-            frameVideoUploadNs_ += elapsedNs;
-        } else {
-            glTexSubImage2D(
-                GL_TEXTURE_2D,
-                0,
-                0,
-                0,
-                qMax(1, frameSize.width() / 2),
-                qMax(1, frameSize.height() / 2),
-                videoYExternalFormat_,
-                GL_UNSIGNED_BYTE,
-                vBits
-            );
-        }
-#ifdef GL_UNPACK_ROW_LENGTH
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-#endif
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     } else {
         mappedFrame.unmap();
         return fallbackToImage(
@@ -1413,6 +1532,9 @@ bool PreviewGLRenderer::ensureVideoProgram()
         const QString uvExpr = videoUvUseRgChannels_
             ? QStringLiteral("texture(u_uvTexture, v_texCoord).rg")
             : QStringLiteral("vec2(texture(u_uvTexture, v_texCoord).r, texture(u_uvTexture, v_texCoord).a)");
+        const QString uvExprLegacy = videoUvUseRgChannels_
+            ? QStringLiteral("vec2(texture2D(u_uvTexture, v_texCoord).r, texture2D(u_uvTexture, v_texCoord).g)")
+            : QStringLiteral("vec2(texture2D(u_uvTexture, v_texCoord).r, texture2D(u_uvTexture, v_texCoord).a)");
         switch (shaderLanguage_) {
         case ShaderLanguage::DesktopCore150:
             return QString(
@@ -1454,7 +1576,7 @@ bool PreviewGLRenderer::ensureVideoProgram()
                 "}\n"
             ).arg(uvExpr).toUtf8();
         case ShaderLanguage::Gles100:
-            return QByteArray(
+            return QString(
                 "precision mediump float;\n"
                 "uniform sampler2D u_yTexture;\n"
                 "uniform sampler2D u_uvTexture;\n"
@@ -1462,7 +1584,7 @@ bool PreviewGLRenderer::ensureVideoProgram()
                 "varying vec2 v_texCoord;\n"
                 "void main() {\n"
                 "    float y = texture2D(u_yTexture, v_texCoord).r;\n"
-                "    vec2 uv = vec2(texture2D(u_uvTexture, v_texCoord).r, texture2D(u_uvTexture, v_texCoord).a) - vec2(0.5, 0.5);\n"
+                "    vec2 uv = %1 - vec2(0.5, 0.5);\n"
                 "    y = 1.16438356 * (y - 0.0625);\n"
                 "    vec3 rgb;\n"
                 "    rgb.r = y + 1.79274107 * uv.y;\n"
@@ -1470,17 +1592,17 @@ bool PreviewGLRenderer::ensureVideoProgram()
                 "    rgb.b = y + 2.11240179 * uv.x;\n"
                 "    gl_FragColor = vec4(rgb, 1.0) * u_opacity;\n"
                 "}\n"
-            );
+            ).arg(uvExprLegacy).toUtf8();
         case ShaderLanguage::DesktopLegacy:
         default:
-            return desktopLegacyPreamble + QByteArray(
+            return (desktopLegacyPreamble + QString(
                 "uniform sampler2D u_yTexture;\n"
                 "uniform sampler2D u_uvTexture;\n"
                 "uniform float u_opacity;\n"
                 "varying vec2 v_texCoord;\n"
                 "void main() {\n"
                 "    float y = texture2D(u_yTexture, v_texCoord).r;\n"
-                "    vec2 uv = vec2(texture2D(u_uvTexture, v_texCoord).r, texture2D(u_uvTexture, v_texCoord).a) - vec2(0.5, 0.5);\n"
+                "    vec2 uv = %1 - vec2(0.5, 0.5);\n"
                 "    y = 1.16438356 * (y - 0.0625);\n"
                 "    vec3 rgb;\n"
                 "    rgb.r = y + 1.79274107 * uv.y;\n"
@@ -1488,7 +1610,7 @@ bool PreviewGLRenderer::ensureVideoProgram()
                 "    rgb.b = y + 2.11240179 * uv.x;\n"
                 "    gl_FragColor = vec4(rgb, 1.0) * u_opacity;\n"
                 "}\n"
-            );
+            ).arg(uvExprLegacy).toUtf8());
         }
     }();
     const auto shaderInfoLog = [this](GLuint shader) {
@@ -1872,7 +1994,7 @@ bool PreviewGLRenderer::ensureVideoTextures(const QSize& frameSize)
     );
 
     glBindTexture(GL_TEXTURE_2D, 0);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    restoreDefaultUnpackState();
     videoFrameSize_ = frameSize;
     return true;
 }
@@ -1959,7 +2081,7 @@ bool PreviewGLRenderer::ensurePlanarVideoTextures(const QSize& frameSize)
     );
 
     glBindTexture(GL_TEXTURE_2D, 0);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    restoreDefaultUnpackState();
     planarVideoFrameSize_ = frameSize;
     return true;
 }
@@ -2027,7 +2149,7 @@ GLuint PreviewGLRenderer::ensureTexture(const QImage& image, bool useCache)
     if (useCache) {
         glGenerateMipmap(GL_TEXTURE_2D);
     }
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    restoreDefaultUnpackState();
     glBindTexture(GL_TEXTURE_2D, 0);
 
     if (useCache) {
