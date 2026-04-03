@@ -68,7 +68,6 @@ class QTextEdit;
 class QToolButton;
 class QWidget;
 class QWheelEvent;
-class QWindow;
 class QtPreviewSfxRuntime;
 class TimelineView;
 
@@ -334,10 +333,6 @@ private:
     void togglePreviewFullscreen();
     void enterPreviewFullscreen();
     void exitPreviewFullscreen();
-    bool previewCanvasUsesOverlayHost() const;
-    QRect previewCanvasHostGlobalRect() const;
-    QWindow* previewCanvasOverlayParentWindow() const;
-    void syncPreviewCanvasHostWindow();
     void updatePreviewFullscreenButtonAppearance();
     void updatePreviewFullscreenOverlayGeometry();
     void showPreviewFullscreenControls(bool animate = true);
@@ -725,11 +720,6 @@ private:
     QWidget* previewLeftColumn_ = nullptr;
     QWidget* previewCanvasContainer_ = nullptr;
     QFrame* previewCanvasFrame_ = nullptr;
-#ifdef Q_OS_WIN
-    bool previewCanvasOverlayHostEnabled_ = true;
-#else
-    bool previewCanvasOverlayHostEnabled_ = false;
-#endif
     QFrame* previewControlCard_ = nullptr;
     QHBoxLayout* previewControlsLayout_ = nullptr;
     QToolButton* stopPreviewButton_ = nullptr;
