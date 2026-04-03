@@ -5047,6 +5047,7 @@ bool MainWindow::buildVideoExportSnapshot(
     built.outputWidth = requestedTask.outputWidth;
     built.outputHeight = requestedTask.outputHeight;
     built.fps = requestedTask.fps;
+    built.preset = requestedTask.preset;
     built.fullRangeExport = requestedTask.fullRangeExport;
     const QString exportStem = sanitizeExportFileStem(document_.title, QStringLiteral("out"));
     const QString difficultyName = SimaiDocument::difficultyShortName(activeDifficultyId_).replace(':', '_');
@@ -5237,6 +5238,7 @@ bool MainWindow::buildVideoExportSnapshotForChartDirectory(
     built.outputWidth = requestedTask.outputWidth;
     built.outputHeight = requestedTask.outputHeight;
     built.fps = requestedTask.fps;
+    built.preset = requestedTask.preset;
     built.fullRangeExport = true;
     built.outputPath = resolveVideoExportOutputPath(
         QString(),

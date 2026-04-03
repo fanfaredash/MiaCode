@@ -34,6 +34,7 @@ struct VideoExportSnapshot {
     int outputWidth = 1024;
     int outputHeight = 1024;
     int fps = 60;
+    VideoExportPreset preset = VideoExportPreset::Fast;
     bool fullRangeExport = true;
     QString outputPath;
     bool showTimestamp = true;

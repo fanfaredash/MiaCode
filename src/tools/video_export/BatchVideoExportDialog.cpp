@@ -101,6 +101,49 @@ QString exportDialogResolutionLabel(const QSize& size)
     return QStringLiteral("%1x%2").arg(qMax(1, size.width())).arg(qMax(1, size.height()));
 }
 
+QString videoExportPresetToken(VideoExportPreset preset)
+{
+    switch (preset) {
+    case VideoExportPreset::HighQuality:
+        return QStringLiteral("high_quality");
+    case VideoExportPreset::HighCompression:
+        return QStringLiteral("high_compression");
+    case VideoExportPreset::Fast:
+    default:
+        return QStringLiteral("fast");
+    }
+}
+
+VideoExportPreset videoExportPresetFromStoredValue(const QJsonValue& value, VideoExportPreset fallback)
+{
+    if (value.isString()) {
+        const QString token = value.toString().trimmed();
+        if (token.compare(QStringLiteral("high_quality"), Qt::CaseInsensitive) == 0) {
+            return VideoExportPreset::HighQuality;
+        }
+        if (token.compare(QStringLiteral("high_compression"), Qt::CaseInsensitive) == 0) {
+            return VideoExportPreset::HighCompression;
+        }
+        if (token.compare(QStringLiteral("fast"), Qt::CaseInsensitive) == 0) {
+            return VideoExportPreset::Fast;
+        }
+    }
+    return fallback;
+}
+
+QString exportDialogPresetLabel(VideoExportPreset preset)
+{
+    switch (preset) {
+    case VideoExportPreset::HighQuality:
+        return uiText("dialog.video_export.preset.high_quality", QStringLiteral("High Quality"));
+    case VideoExportPreset::HighCompression:
+        return uiText("dialog.video_export.preset.high_compression", QStringLiteral("High Compression"));
+    case VideoExportPreset::Fast:
+    default:
+        return uiText("dialog.video_export.preset.fast", QStringLiteral("Fast"));
+    }
+}
+
 QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
 {
     switch (mode) {
@@ -336,6 +379,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     , requestedTask_(baseTask)
     , selectedResolution_(QSize(qMax(1, baseTask.outputWidth), qMax(1, baseTask.outputHeight)))
     , selectedFps_(baseTask.fps >= 90 ? 120 : 60)
+    , selectedPreset_(baseTask.preset)
     , selectedBackgroundScaleMode_(baseTask.backgroundScaleMode)
     , selectedFlowSpeed_(baseTask.noteFlowSpeed)
 {
@@ -422,6 +466,44 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     }
     topForm->addWidget(fpsLabel, row, 0);
     topForm->addWidget(fpsButton_, row, 1, 1, 2);
+    ++row;
+
+    auto* presetLabel = new QLabel(uiText("dialog.video_export.preset", QStringLiteral("Export Settings")), this);
+    presetLabel->setFixedWidth(kFormLabelWidth);
+    presetButton_ = createDialogMenuButton(this, exportDialogPresetLabel(selectedPreset_));
+    presetMenu_ = new QMenu(presetButton_);
+    presetButton_->setMenu(presetMenu_);
+    addDialogMenuChoice(presetMenu_, uiText("dialog.video_export.preset.fast", QStringLiteral("Fast")), [this]() {
+        selectedPreset_ = VideoExportPreset::Fast;
+        if (presetButton_ != nullptr) {
+            presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
+        }
+        persistExportOnlySettings();
+    });
+    addDialogMenuChoice(
+        presetMenu_,
+        uiText("dialog.video_export.preset.high_quality", QStringLiteral("High Quality")),
+        [this]() {
+            selectedPreset_ = VideoExportPreset::HighQuality;
+            if (presetButton_ != nullptr) {
+                presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
+            }
+            persistExportOnlySettings();
+        }
+    );
+    addDialogMenuChoice(
+        presetMenu_,
+        uiText("dialog.video_export.preset.high_compression", QStringLiteral("High Compression")),
+        [this]() {
+            selectedPreset_ = VideoExportPreset::HighCompression;
+            if (presetButton_ != nullptr) {
+                presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
+            }
+            persistExportOnlySettings();
+        }
+    );
+    topForm->addWidget(presetLabel, row, 0);
+    topForm->addWidget(presetButton_, row, 1, 1, 2);
     ++row;
 
     rootLayout->addLayout(topForm);
@@ -756,6 +838,7 @@ bool BatchVideoExportDialog::applyUiToTask(VideoExportTask* task, QString* error
     task->outputWidth = selectedResolution_.width();
     task->outputHeight = selectedResolution_.height();
     task->fps = selectedFps_;
+    task->preset = selectedPreset_;
     task->showTimestamp = showTimestampCheck_ != nullptr && showTimestampCheck_->isChecked();
     task->showObjectStatsHud = showObjectStatsCheck_ != nullptr && showObjectStatsCheck_->isChecked();
     task->smoothBrightness = smoothBrightnessCheck_ != nullptr && smoothBrightnessCheck_->isChecked();
@@ -878,6 +961,14 @@ void BatchVideoExportDialog::loadPersistedSettings()
     if (fpsButton_ != nullptr) {
         fpsButton_->setText(QStringLiteral("%1 FPS").arg(selectedFps_));
     }
+
+    selectedPreset_ = videoExportPresetFromStoredValue(
+        settings.value(QStringLiteral("preset")),
+        selectedPreset_
+    );
+    if (presetButton_ != nullptr) {
+        presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
+    }
 }
 
 void BatchVideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
@@ -886,6 +977,7 @@ void BatchVideoExportDialog::savePersistedSettings(const VideoExportTask& task) 
     settings.insert(QStringLiteral("resolution_width"), task.outputWidth);
     settings.insert(QStringLiteral("resolution_height"), task.outputHeight);
     settings.insert(QStringLiteral("fps"), task.fps);
+    settings.insert(QStringLiteral("preset"), videoExportPresetToken(task.preset));
     miacode::video_export::saveDialogPreferences(settings);
 }
 
@@ -895,6 +987,7 @@ void BatchVideoExportDialog::persistExportOnlySettings() const
     settings.insert(QStringLiteral("resolution_width"), selectedResolution_.width());
     settings.insert(QStringLiteral("resolution_height"), selectedResolution_.height());
     settings.insert(QStringLiteral("fps"), selectedFps_);
+    settings.insert(QStringLiteral("preset"), videoExportPresetToken(selectedPreset_));
     miacode::video_export::saveDialogPreferences(settings);
 }
 
@@ -908,6 +1001,7 @@ void BatchVideoExportDialog::notifySharedSettingsChanged()
 VideoExportTask BatchVideoExportDialog::currentSharedSettingsTask() const
 {
     VideoExportTask task = baseTask_;
+    task.preset = selectedPreset_;
     task.showTimestamp = showTimestampCheck_ != nullptr && showTimestampCheck_->isChecked();
     task.showObjectStatsHud = showObjectStatsCheck_ != nullptr && showObjectStatsCheck_->isChecked();
     task.smoothBrightness = smoothBrightnessCheck_ != nullptr && smoothBrightnessCheck_->isChecked();

@@ -16,6 +16,12 @@
 class PreviewCanvas;
 class QProgressDialog;
 
+enum class VideoExportPreset {
+    Fast,
+    HighQuality,
+    HighCompression,
+};
+
 struct VideoExportTask {
     QString outputPath;
     QString chartPath;
@@ -39,6 +45,7 @@ struct VideoExportTask {
     int outputWidth = 1024;
     int outputHeight = 1024;
     int fps = 60;
+    VideoExportPreset preset = VideoExportPreset::Fast;
     bool fullRangeExport = true;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;

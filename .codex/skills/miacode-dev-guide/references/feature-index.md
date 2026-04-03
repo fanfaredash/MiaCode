@@ -119,6 +119,10 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Files: `src/tools/video_export/VideoExportDialog.h`, `src/tools/video_export/VideoExportDialog.cpp`, `src/tools/video_export/VideoExportPreferences.h`
   - Class: `VideoExportDialog`
   - Owns: export parameters, export-only preference persistence, preview-in-dialog, range selection, live preview controls
+- Batch export dialog:
+  - Files: `src/tools/video_export/BatchVideoExportDialog.h`, `src/tools/video_export/BatchVideoExportDialog.cpp`, `src/tools/video_export/VideoExportPreferences.h`
+  - Class: `BatchVideoExportDialog`
+  - Owns: chart-folder batch export setup, shared export settings UI, and application-scoped export preset / resolution / FPS persistence for batch runs
 - Export task and controller:
   - Files: `src/tools/video_export/VideoExportController.h`, `src/tools/video_export/VideoExportController.cpp`, `src/tools/video_export/RawVideoPipeTransport.h`, `src/tools/video_export/RawVideoPipeTransport.cpp`
   - Class: `VideoExportController`
