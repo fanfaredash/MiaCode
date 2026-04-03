@@ -920,12 +920,14 @@ bool loadChartFromArgs(
     const QCommandLineParser& parser,
     QString* outChartText,
     double* outFirstSeconds,
+    miacode::simai::SimaiTimingMetadata* outTimingMetadata,
     QString* outSourceDescription,
     QString* outDifficultyName,
     QString* outErrorMessage)
 {
     if (outChartText == nullptr
         || outFirstSeconds == nullptr
+        || outTimingMetadata == nullptr
         || outSourceDescription == nullptr
         || outDifficultyName == nullptr
         || outErrorMessage == nullptr) {
@@ -981,6 +983,7 @@ bool loadChartFromArgs(
 
         *outChartText = difficulty->chart;
         *outFirstSeconds = firstOverrideSet ? firstOverride : parsedFirst;
+        *outTimingMetadata = miacode::simai::buildTimingMetadata(document);
         *outDifficultyName = SimaiDocument::difficultyShortName(difficultyId);
         *outSourceDescription = QStringLiteral("maidata=%1 difficulty=%2")
                                     .arg(maidataPath, *outDifficultyName);
@@ -995,6 +998,7 @@ bool loadChartFromArgs(
         }
         *outChartText = QString::fromUtf8(file.readAll());
         *outFirstSeconds = firstOverrideSet ? firstOverride : 0.0;
+        *outTimingMetadata = miacode::simai::SimaiTimingMetadata();
         *outDifficultyName = QStringLiteral("N/A");
         *outSourceDescription = QStringLiteral("file=%1").arg(filePath);
         return true;
@@ -1007,6 +1011,7 @@ bool loadChartFromArgs(
     }
     *outChartText = QString::fromUtf8(stdinFile.readAll());
     *outFirstSeconds = firstOverrideSet ? firstOverride : 0.0;
+    *outTimingMetadata = miacode::simai::SimaiTimingMetadata();
     *outDifficultyName = QStringLiteral("N/A");
     *outSourceDescription = QStringLiteral("stdin");
     return true;
@@ -1063,6 +1068,7 @@ int main(int argc, char* argv[])
 
     QString chartText;
     double firstSeconds = 0.0;
+    miacode::simai::SimaiTimingMetadata timingMetadata;
     QString sourceDescription;
     QString difficultyName;
     QString loadError;
@@ -1070,6 +1076,7 @@ int main(int argc, char* argv[])
             parser,
             &chartText,
             &firstSeconds,
+            &timingMetadata,
             &sourceDescription,
             &difficultyName,
             &loadError)) {
@@ -1077,7 +1084,7 @@ int main(int argc, char* argv[])
         return 2;
     }
 
-    const SimaiNativeParseResult nativeResult = SimaiNativeParser::parseForTimeline(chartText);
+    const SimaiNativeParseResult nativeResult = SimaiNativeParser::parseForTimeline(chartText, timingMetadata);
     const QVector<TimelineNoteMarker> shiftedMarkers = shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds);
     const MuriAnalysisReport report = MuriAnalyzer::analyze(shiftedMarkers);
 

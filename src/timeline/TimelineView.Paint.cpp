@@ -138,6 +138,9 @@ void TimelineView::paintEvent(QPaintEvent* event)
     for (int lineIndex = beatRange.begin; lineIndex < beatRange.end; ++lineIndex) {
         const TimelineRenderLine& line = lines_.at(lineIndex);
         for (const TimelineRenderBeat& marker : line.beats) {
+            if (!shouldPaintTimelineBeatMarker(marker)) {
+                continue;
+            }
             const double absoluteSecond = timelineRenderAbsoluteSecond(line, marker.secondOffset);
             const int x = secondToX(absoluteSecond) - xOffset;
             if (x < left - 1 || x > viewport()->width()) {

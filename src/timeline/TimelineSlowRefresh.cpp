@@ -195,7 +195,9 @@ TimelinePreviewRefreshResult buildTimelinePreviewRefreshResult(
 
 TimelinePreviewRefreshResult buildTimelinePreviewRefreshResult(const TimelineSlowRefreshRequest& request)
 {
-    const SimaiNativeParseResult parseResult = SimaiNativeParser::parseForTimeline(request.chartText);
+    const SimaiNativeParseResult parseResult = SimaiNativeParser::parseForTimeline(
+        request.chartText,
+        request.timingMetadata);
     const TimelinePreviewRefreshState previewState = buildTimelinePreviewRefreshState(
         parseResult,
         request.firstSeconds);
@@ -214,10 +216,12 @@ TimelineAnalysisRefreshResult buildTimelineAnalysisRefreshResult(const TimelineA
     result.difficultyId = request.difficultyId;
     result.chartText = request.chartText;
     result.chineseUi = request.chineseUi;
+    result.timingMetadata = request.timingMetadata;
     result.validationReport = SimaiNativeParser::buildValidationReport(
         request.chartText,
         request.chineseUi ? SimaiNativeValidationLocale::Chinese : SimaiNativeValidationLocale::English,
-        &request.parseResult);
+        &request.parseResult,
+        request.timingMetadata);
     result.noteMarkerSignature = request.noteMarkerSignature;
     result.analysisReport = MuriAnalyzer::analyze(
         request.noteMarkers,

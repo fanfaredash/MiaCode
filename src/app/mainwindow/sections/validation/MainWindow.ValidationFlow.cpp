@@ -641,7 +641,9 @@ void MainWindow::updateEditorValidationSummary()
     const auto cacheIt = validationCacheByDifficulty_.constFind(activeDifficultyId());
     if (cacheIt != validationCacheByDifficulty_.constEnd()) {
         const ValidationCacheEntry& entry = cacheIt.value();
-        if (entry.chartText == activeChartText() && entry.chineseUi == UiText::isChineseUi()) {
+        if (entry.chartText == activeChartText()
+            && entry.chineseUi == UiText::isChineseUi()
+            && entry.timingMetadata == currentTimingMetadata()) {
             for (const ValidationCachedIssue& issue : entry.issues) {
                 const QString issueTypeKey = issue.issueTypeKey.isEmpty()
                     ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)
@@ -1106,8 +1108,11 @@ void MainWindow::refreshValidationPanelForActiveField()
 
     const QString chartText = activeChartText();
     const bool chineseUi = UiText::isChineseUi();
+    const miacode::simai::SimaiTimingMetadata timingMetadata = currentTimingMetadata();
     const ValidationCacheEntry& entry = it.value();
-    if (entry.chartText != chartText || entry.chineseUi != chineseUi) {
+    if (entry.chartText != chartText
+        || entry.chineseUi != chineseUi
+        || entry.timingMetadata != timingMetadata) {
         clearValidationErrors();
         clearValidationDecorations();
         updateEditorValidationSummary();
@@ -1148,8 +1153,11 @@ bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
     const int difficultyId = activeDifficultyId();
     const QString chartText = activeChartText();
     const bool chineseUi = UiText::isChineseUi();
+    const miacode::simai::SimaiTimingMetadata timingMetadata = currentTimingMetadata();
     const SimaiNativeParseResult* cachedLenientResult =
-        (lastTimelineParseDifficultyId_ == difficultyId && lastTimelineParseChartText_ == chartText)
+        (lastTimelineParseDifficultyId_ == difficultyId
+            && lastTimelineParseChartText_ == chartText
+            && lastTimelineParseTimingMetadata_ == timingMetadata)
         ? &lastTimelineParseResult_
         : nullptr;
 
@@ -1157,7 +1165,8 @@ bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
     const auto cacheIt = validationCacheByDifficulty_.constFind(difficultyId);
     if (cacheIt != validationCacheByDifficulty_.constEnd()
         && cacheIt->chartText == chartText
-        && cacheIt->chineseUi == chineseUi) {
+        && cacheIt->chineseUi == chineseUi
+        && cacheIt->timingMetadata == timingMetadata) {
         entry = cacheIt.value();
     } else {
         QElapsedTimer reportTimer;
@@ -1166,9 +1175,10 @@ bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
             ? SimaiNativeValidationLocale::Chinese
             : SimaiNativeValidationLocale::English;
         const SimaiNativeValidationReport report =
-            SimaiNativeParser::buildValidationReport(chartText, locale, cachedLenientResult);
+            SimaiNativeParser::buildValidationReport(chartText, locale, cachedLenientResult, timingMetadata);
         entry.chartText = chartText;
         entry.chineseUi = chineseUi;
+        entry.timingMetadata = timingMetadata;
         entry.ok = report.ok;
         entry.errorCount = report.errorCount;
         entry.warningCount = report.warningCount;
@@ -1256,8 +1266,11 @@ bool MainWindow::runValidateSimai()
     const int difficultyId = activeDifficultyId();
     const QString chartText = activeChartText();
     const bool chineseUi = UiText::isChineseUi();
+    const miacode::simai::SimaiTimingMetadata timingMetadata = currentTimingMetadata();
     const SimaiNativeParseResult* cachedLenientResult =
-        (lastTimelineParseDifficultyId_ == difficultyId && lastTimelineParseChartText_ == chartText)
+        (lastTimelineParseDifficultyId_ == difficultyId
+            && lastTimelineParseChartText_ == chartText
+            && lastTimelineParseTimingMetadata_ == timingMetadata)
         ? &lastTimelineParseResult_
         : nullptr;
 
@@ -1265,7 +1278,8 @@ bool MainWindow::runValidateSimai()
     const auto cacheIt = validationCacheByDifficulty_.constFind(difficultyId);
     if (cacheIt != validationCacheByDifficulty_.constEnd()
         && cacheIt->chartText == chartText
-        && cacheIt->chineseUi == chineseUi) {
+        && cacheIt->chineseUi == chineseUi
+        && cacheIt->timingMetadata == timingMetadata) {
         entry = cacheIt.value();
     } else {
         QElapsedTimer reportTimer;
@@ -1274,9 +1288,10 @@ bool MainWindow::runValidateSimai()
             ? SimaiNativeValidationLocale::Chinese
             : SimaiNativeValidationLocale::English;
         const SimaiNativeValidationReport report =
-            SimaiNativeParser::buildValidationReport(chartText, locale, cachedLenientResult);
+            SimaiNativeParser::buildValidationReport(chartText, locale, cachedLenientResult, timingMetadata);
         entry.chartText = chartText;
         entry.chineseUi = chineseUi;
+        entry.timingMetadata = timingMetadata;
         entry.ok = report.ok;
         entry.errorCount = report.errorCount;
         entry.warningCount = report.warningCount;

@@ -53,6 +53,22 @@ double measureDurationSeconds(double bpm, int meterNumerator, int meterDenominat
     return noteStepSeconds(bpm, meterDenominator) * static_cast<double>(clampedNumerator);
 }
 
+void applyInitialTimingMetadata(
+    int* meterNumerator,
+    int* meterDenominator,
+    const miacode::simai::SimaiTimingMetadata& timingMetadata)
+{
+    if (meterNumerator == nullptr || meterDenominator == nullptr) {
+        return;
+    }
+    *meterNumerator = timingMetadata.wholeTimeSignatureValid
+        ? timingMetadata.wholeTimeSignatureNumerator
+        : kDefaultMeterNumerator;
+    *meterDenominator = timingMetadata.wholeTimeSignatureValid
+        ? timingMetadata.wholeTimeSignatureDenominator
+        : kDefaultMeterDenominator;
+}
+
 void appendDistinctSecond(QVector<double>* seconds, double second)
 {
     if (seconds == nullptr) {
@@ -519,24 +535,34 @@ void TimelineQuickModel::clear()
     linesWithNotes_.clear();
 }
 
-bool TimelineQuickModel::replaceDocumentTail(const QTextDocument* document, int startLineIndex, double firstSeconds)
+bool TimelineQuickModel::replaceDocumentTail(
+    const QTextDocument* document,
+    int startLineIndex,
+    double firstSeconds,
+    const miacode::simai::SimaiTimingMetadata& timingMetadata)
 {
     Q_UNUSED(startLineIndex);
-    return rebuildFromDocument(document, firstSeconds);
+    return rebuildFromDocument(document, firstSeconds, timingMetadata);
 }
 
-bool TimelineQuickModel::rebuildFromText(const QString& text, double firstSeconds)
+bool TimelineQuickModel::rebuildFromText(
+    const QString& text,
+    double firstSeconds,
+    const miacode::simai::SimaiTimingMetadata& timingMetadata)
 {
     QVector<QString> lines = text.split(QLatin1Char('\n')).toVector();
     if (lines.isEmpty()) {
         lines.append(QString());
     }
-    return rebuildFromLineTexts(lines, firstSeconds);
+    return rebuildFromLineTexts(lines, firstSeconds, timingMetadata);
 }
 
-bool TimelineQuickModel::rebuildFromDocument(const QTextDocument* document, double firstSeconds)
+bool TimelineQuickModel::rebuildFromDocument(
+    const QTextDocument* document,
+    double firstSeconds,
+    const miacode::simai::SimaiTimingMetadata& timingMetadata)
 {
-    return rebuildFromLineTexts(collectDocumentLines(document), firstSeconds);
+    return rebuildFromLineTexts(collectDocumentLines(document), firstSeconds, timingMetadata);
 }
 
 bool TimelineQuickModel::applyContentsChange(
@@ -544,10 +570,11 @@ bool TimelineQuickModel::applyContentsChange(
     int position,
     int charsRemoved,
     int charsAdded,
-    double firstSeconds)
+    double firstSeconds,
+    const miacode::simai::SimaiTimingMetadata& timingMetadata)
 {
     if (document == nullptr || lines_.isEmpty()) {
-        return rebuildFromDocument(document, firstSeconds);
+        return rebuildFromDocument(document, firstSeconds, timingMetadata);
     }
 
     const int startLineIndex = lineIndexForStoredPosition(position);
@@ -582,8 +609,11 @@ bool TimelineQuickModel::applyContentsChange(
         currentState.second = firstSeconds;
         currentState.bpm = kDefaultBpm;
         currentState.beats = kDefaultBeats;
-        currentState.meterNumerator = kDefaultMeterNumerator;
-        currentState.meterDenominator = kDefaultMeterDenominator;
+        currentState.subdivisionIndex = 0;
+        applyInitialTimingMetadata(
+            &currentState.meterNumerator,
+            &currentState.meterDenominator,
+            timingMetadata);
         currentState.currentMeasureStartSecond = firstSeconds;
     }
 
@@ -595,6 +625,7 @@ bool TimelineQuickModel::applyContentsChange(
         const bool mustReparse = index <= guaranteedReparseEnd
             || qAbs(currentState.bpm - oldStartState.bpm) > kTimelineEpsilon
             || currentState.beats != oldStartState.beats
+            || currentState.subdivisionIndex != oldStartState.subdivisionIndex
             || currentState.meterNumerator != oldStartState.meterNumerator
             || currentState.meterDenominator != oldStartState.meterDenominator
             || qAbs(currentState.currentMeasureStartSecond - oldStartState.currentMeasureStartSecond) > kTimelineEpsilon;
@@ -606,6 +637,7 @@ bool TimelineQuickModel::applyContentsChange(
             line.startState = currentState;
             line.endState.bpm = oldEndState.bpm;
             line.endState.beats = oldEndState.beats;
+            line.endState.subdivisionIndex = oldEndState.subdivisionIndex;
             line.endState.meterNumerator = oldEndState.meterNumerator;
             line.endState.meterDenominator = oldEndState.meterDenominator;
         }
@@ -804,7 +836,10 @@ bool TimelineQuickModel::resolvePreviewFollowCursor(
     return false;
 }
 
-bool TimelineQuickModel::rebuildFromLineTexts(const QVector<QString>& lines, double firstSeconds)
+bool TimelineQuickModel::rebuildFromLineTexts(
+    const QVector<QString>& lines,
+    double firstSeconds,
+    const miacode::simai::SimaiTimingMetadata& timingMetadata)
 {
     clear();
     if (lines.isEmpty()) {
@@ -816,8 +851,8 @@ bool TimelineQuickModel::rebuildFromLineTexts(const QVector<QString>& lines, dou
     state.second = firstSeconds;
     state.bpm = kDefaultBpm;
     state.beats = kDefaultBeats;
-    state.meterNumerator = kDefaultMeterNumerator;
-    state.meterDenominator = kDefaultMeterDenominator;
+    state.subdivisionIndex = 0;
+    applyInitialTimingMetadata(&state.meterNumerator, &state.meterDenominator, timingMetadata);
     state.currentMeasureStartSecond = firstSeconds;
     int startPosition = 0;
     for (int index = 0; index < lines.size(); ++index) {
@@ -1213,6 +1248,19 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
         const QChar ch = lineState->text.at(index);
         if (ch == QLatin1Char('|') && index + 1 < lineState->text.size() && lineState->text.at(index + 1) == QLatin1Char('|')) {
             flushToken();
+            int numerator = 0;
+            int denominator = 0;
+            if (miacode::simai::parseInlineTimeSignatureComment(
+                    lineState->text,
+                    index,
+                    &numerator,
+                    &denominator,
+                    nullptr)) {
+                state.meterNumerator = numerator;
+                state.meterDenominator = denominator;
+                state.currentMeasureStartSecond = state.second;
+                appendMeasureLine(state.currentMeasureStartSecond);
+            }
             break;
         }
         if (ch.isSpace()) {
@@ -1247,6 +1295,7 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
             const int beats = lineState->text.mid(index + 1, close - index - 1).trimmed().toInt(&beatsOk);
             if (beatsOk && beats > 0) {
                 state.beats = beats;
+                state.subdivisionIndex = 0;
             }
             index = close;
             continue;
@@ -1278,10 +1327,13 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
             TimelineRenderBeat beat;
             beat.secondOffset = state.second - lineState->render.startSecond;
             beat.sourceCol = index + 1;
+            beat.subdivisionBeats = qMax(1, state.beats);
+            beat.subdivisionIndex = qBound(0, beat.subdivisionBeats - 1, state.subdivisionIndex);
             beat.major = false;
             lineState->render.beats.append(beat);
             lineState->hasRawZeroAnchor = lineState->hasRawZeroAnchor || qAbs(beat.secondOffset) <= kTimelineEpsilon;
             lineMaxSecond = qMax(lineMaxSecond, state.second);
+            state.subdivisionIndex = (state.subdivisionIndex + 1) % qMax(1, state.beats);
             state.second += noteStepSeconds(state.bpm, state.beats);
             advanceMeasureLinesTo(state.second);
             continue;
@@ -1708,6 +1760,7 @@ bool TimelineQuickModel::parseStatesEqual(const ParseState& a, const ParseState&
     return qAbs(a.second - b.second) <= kTimelineEpsilon
         && qAbs(a.bpm - b.bpm) <= kTimelineEpsilon
         && a.beats == b.beats
+        && a.subdivisionIndex == b.subdivisionIndex
         && a.meterNumerator == b.meterNumerator
         && a.meterDenominator == b.meterDenominator
         && qAbs(a.currentMeasureStartSecond - b.currentMeasureStartSecond) <= kTimelineEpsilon;

@@ -106,6 +106,20 @@ void runStrictFormatChecks(ParseState* state, const QStringList& lines)
             continue;
         }
 
+        const int commentStart = line.indexOf(QStringLiteral("||"));
+        if (commentStart >= 0) {
+            int numerator = 0;
+            int denominator = 0;
+            if (miacode::simai::parseInlineTimeSignatureComment(
+                    line,
+                    commentStart,
+                    &numerator,
+                    &denominator,
+                    nullptr)) {
+                line = line.left(commentStart);
+            }
+        }
+
         const QString strippedLine = stripControlBlocks(line);
         if (trimmed != QLatin1String("E")
             && noteLikeLine(strippedLine)

@@ -155,6 +155,14 @@ QString MainWindow::activeChartText() const
     return difficultyData != nullptr ? difficultyData->chart : QString();
 }
 
+miacode::simai::SimaiTimingMetadata MainWindow::currentTimingMetadata() const
+{
+    if (metadataExtraEdit_ != nullptr) {
+        return miacode::simai::buildTimingMetadataFromRawText(metadataExtraEdit_->toPlainText(), true);
+    }
+    return miacode::simai::buildTimingMetadata(document_);
+}
+
 double MainWindow::parsedFirstSeconds(bool* ok) const
 {
     QString rawValue = document_.first;
@@ -197,25 +205,7 @@ double MainWindow::parsedWholeBpm(bool* ok) const
 
 QString MainWindow::parsedLatencyMeterId() const
 {
-    const QVector<SimaiRawField> fields = SimaiDocument::parseRawFields(
-        metadataExtraEdit_ != nullptr ? metadataExtraEdit_->toPlainText() : QString(),
-        true
-    );
-    for (const SimaiRawField& field : fields) {
-        if (field.key.compare(QStringLiteral("meter"), Qt::CaseInsensitive) != 0) {
-            continue;
-        }
-        const QString value = field.value.trimmed();
-        if (value == QLatin1String("4/4")
-            || value == QLatin1String("3/4")
-            || value == QLatin1String("6/8")
-            || value == QLatin1String("7/4")
-            || value == QLatin1String("auto")) {
-            return value;
-        }
-        return QStringLiteral("auto");
-    }
-    return QStringLiteral("auto");
+    return miacode::simai::latencyMeterIdForTimingMetadata(currentTimingMetadata());
 }
 
 void MainWindow::applyLatencyDetectorOffset(double seconds)
@@ -254,39 +244,6 @@ void MainWindow::applyLatencyDetectorBpm(double bpm)
     }
     if (!foundWholeBpm) {
         fields.append(SimaiRawField{QStringLiteral("wholebpm"), serializedBpm});
-    }
-    document_.extraFields = fields;
-    setMetadataExtraText(SimaiDocument::serializeRawFields(fields));
-    documentDirty_ = true;
-    updateDirtyState();
-}
-
-void MainWindow::applyLatencyDetectorMeter(const QString& meterId)
-{
-    QString normalized = meterId.trimmed();
-    if (normalized != QLatin1String("4/4")
-        && normalized != QLatin1String("3/4")
-        && normalized != QLatin1String("6/8")
-        && normalized != QLatin1String("7/4")
-        && normalized != QLatin1String("auto")) {
-        normalized = QStringLiteral("auto");
-    }
-
-    QVector<SimaiRawField> fields = SimaiDocument::parseRawFields(
-        metadataExtraEdit_ != nullptr ? metadataExtraEdit_->toPlainText() : QString(),
-        true
-    );
-    bool found = false;
-    for (SimaiRawField& field : fields) {
-        if (field.key.compare(QStringLiteral("meter"), Qt::CaseInsensitive) != 0) {
-            continue;
-        }
-        field.value = normalized;
-        found = true;
-        break;
-    }
-    if (!found) {
-        fields.append(SimaiRawField{QStringLiteral("meter"), normalized});
     }
     document_.extraFields = fields;
     setMetadataExtraText(SimaiDocument::serializeRawFields(fields));
@@ -408,12 +365,19 @@ void MainWindow::applyTimelineQuickChange(int position, int charsRemoved, int ch
     }
 
     const double firstSeconds = parsedFirstSeconds();
+    const miacode::simai::SimaiTimingMetadata timingMetadata = currentTimingMetadata();
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
     QTextDocument* document = editor != nullptr ? editor->document() : nullptr;
     if (document != nullptr) {
-        timelineQuickModel_.applyContentsChange(document, position, charsRemoved, charsAdded, firstSeconds);
+        timelineQuickModel_.applyContentsChange(
+            document,
+            position,
+            charsRemoved,
+            charsAdded,
+            firstSeconds,
+            timingMetadata);
     } else {
-        timelineQuickModel_.rebuildFromText(activeChartText(), firstSeconds);
+        timelineQuickModel_.rebuildFromText(activeChartText(), firstSeconds, timingMetadata);
     }
     timelineView_->setTimelineData(timelineQuickModel_.snapshot());
     updatePreviewSliderRange();
@@ -424,7 +388,7 @@ void MainWindow::refreshTimelineQuickModelFromCurrentText()
     if (timelineView_ == nullptr || !hasActiveDifficulty()) {
         return;
     }
-    timelineQuickModel_.rebuildFromText(activeChartText(), parsedFirstSeconds());
+    timelineQuickModel_.rebuildFromText(activeChartText(), parsedFirstSeconds(), currentTimingMetadata());
     timelineView_->setTimelineData(timelineQuickModel_.snapshot());
     updatePreviewSliderRange();
 }
@@ -463,6 +427,7 @@ void MainWindow::requestTimelineSlowRefresh()
     pendingTimelineSlowRefresh_.difficultyId = activeDifficultyId();
     pendingTimelineSlowRefresh_.chartText = activeChartText();
     pendingTimelineSlowRefresh_.firstSeconds = parsedFirstSeconds();
+    pendingTimelineSlowRefresh_.timingMetadata = currentTimingMetadata();
     pendingTimelineSlowRefresh_.chineseUi = UiText::isChineseUi();
     timelineSlowRequestedRevision_ = pendingTimelineSlowRefresh_.revision;
     if (pendingPreviewPlaybackStart_) {
@@ -487,7 +452,9 @@ void MainWindow::dispatchTimelineSlowRefresh()
         ? timelineSlowRefreshPool_
         : QThreadPool::globalInstance();
     pool->start([guard, request]() {
-        const SimaiNativeParseResult parseResult = SimaiNativeParser::parseForTimeline(request.chartText);
+        const SimaiNativeParseResult parseResult = SimaiNativeParser::parseForTimeline(
+            request.chartText,
+            request.timingMetadata);
         const TimelinePreviewRefreshState previewState =
             buildTimelinePreviewRefreshState(parseResult, request.firstSeconds);
         if (guard.isNull()) {
@@ -511,6 +478,7 @@ void MainWindow::dispatchTimelineSlowRefresh()
 
                 guard->lastTimelineParseDifficultyId_ = request.difficultyId;
                 guard->lastTimelineParseChartText_ = request.chartText;
+                guard->lastTimelineParseTimingMetadata_ = request.timingMetadata;
                 guard->lastTimelineParseResult_ = parseResult;
                 guard->latestTimelineNoteMarkers_ = previewState.shiftedNoteMarkers;
                 guard->latestTimelineNoteMarkerSignature_ = previewState.noteMarkerSignature;
@@ -545,6 +513,7 @@ void MainWindow::scheduleTimelineAnalysisRefresh(
     pendingTimelineAnalysisRefresh_.difficultyId = request.difficultyId;
     pendingTimelineAnalysisRefresh_.chartText = request.chartText;
     pendingTimelineAnalysisRefresh_.chineseUi = request.chineseUi;
+    pendingTimelineAnalysisRefresh_.timingMetadata = request.timingMetadata;
     pendingTimelineAnalysisRefresh_.parseResult = parseResult;
     pendingTimelineAnalysisRefresh_.noteMarkerSignature = previewState.noteMarkerSignature;
     pendingTimelineAnalysisRefresh_.noteMarkers = previewState.shiftedNoteMarkers;
@@ -560,7 +529,8 @@ bool MainWindow::scheduleTimelineAnalysisRefreshFromLatestPreviewState(int delay
     if (!hasActiveDifficulty()
         || !latestTimelinePreviewSnapshotReady_
         || lastTimelineParseDifficultyId_ != activeDifficultyId()
-        || lastTimelineParseChartText_ != activeChartText()) {
+        || lastTimelineParseChartText_ != activeChartText()
+        || lastTimelineParseTimingMetadata_ != currentTimingMetadata()) {
         return false;
     }
 
@@ -568,12 +538,14 @@ bool MainWindow::scheduleTimelineAnalysisRefreshFromLatestPreviewState(int delay
     request.revision = latestTimelinePreviewRevision_;
     request.difficultyId = activeDifficultyId();
     request.chartText = lastTimelineParseChartText_;
+    request.timingMetadata = lastTimelineParseTimingMetadata_;
     request.chineseUi = UiText::isChineseUi();
 
     pendingTimelineAnalysisRefresh_.revision = request.revision;
     pendingTimelineAnalysisRefresh_.difficultyId = request.difficultyId;
     pendingTimelineAnalysisRefresh_.chartText = request.chartText;
     pendingTimelineAnalysisRefresh_.chineseUi = request.chineseUi;
+    pendingTimelineAnalysisRefresh_.timingMetadata = request.timingMetadata;
     pendingTimelineAnalysisRefresh_.parseResult = lastTimelineParseResult_;
     pendingTimelineAnalysisRefresh_.noteMarkerSignature = latestTimelineNoteMarkerSignature_;
     pendingTimelineAnalysisRefresh_.noteMarkers = latestTimelineNoteMarkers_;
@@ -642,6 +614,7 @@ void MainWindow::dispatchTimelineAnalysisRefresh()
                 ValidationCacheEntry entry;
                 entry.chartText = result.chartText;
                 entry.chineseUi = result.validationReport.issues.isEmpty() ? UiText::isChineseUi() : result.chineseUi;
+                entry.timingMetadata = result.timingMetadata;
                 entry.ok = result.validationReport.ok;
                 entry.errorCount = result.validationReport.errorCount;
                 entry.warningCount = result.validationReport.warningCount;

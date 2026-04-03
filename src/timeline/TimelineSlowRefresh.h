@@ -6,6 +6,7 @@
 
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
+#include "simai/document/SimaiTimingMetadata.h"
 #include "simai/parser/SimaiNativeParser.h"
 #include "timeline/TimelineData.h"
 
@@ -14,6 +15,7 @@ struct TimelineSlowRefreshRequest {
     int difficultyId = 0;
     QString chartText;
     double firstSeconds = 0.0;
+    miacode::simai::SimaiTimingMetadata timingMetadata;
     bool chineseUi = false;
 };
 
@@ -39,6 +41,7 @@ struct TimelineAnalysisRefreshRequest {
     int difficultyId = 0;
     QString chartText;
     bool chineseUi = false;
+    miacode::simai::SimaiTimingMetadata timingMetadata;
     SimaiNativeParseResult parseResult;
     QByteArray noteMarkerSignature;
     QVector<TimelineNoteMarker> noteMarkers;
@@ -51,6 +54,7 @@ struct TimelineAnalysisRefreshResult {
     int difficultyId = 0;
     QString chartText;
     bool chineseUi = false;
+    miacode::simai::SimaiTimingMetadata timingMetadata;
     QByteArray noteMarkerSignature;
     SimaiNativeValidationReport validationReport;
     MuriAnalysisReport analysisReport;

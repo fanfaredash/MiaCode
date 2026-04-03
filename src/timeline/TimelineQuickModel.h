@@ -3,6 +3,7 @@
 #include <QString>
 #include <QVector>
 
+#include "simai/document/SimaiTimingMetadata.h"
 #include "timeline/TimelineRenderData.h"
 
 class QTextDocument;
@@ -13,14 +14,21 @@ public:
     TimelineQuickModel() = default;
 
     void clear();
-    bool rebuildFromText(const QString& text, double firstSeconds);
-    bool rebuildFromDocument(const QTextDocument* document, double firstSeconds);
+    bool rebuildFromText(
+        const QString& text,
+        double firstSeconds,
+        const miacode::simai::SimaiTimingMetadata& timingMetadata = miacode::simai::SimaiTimingMetadata());
+    bool rebuildFromDocument(
+        const QTextDocument* document,
+        double firstSeconds,
+        const miacode::simai::SimaiTimingMetadata& timingMetadata = miacode::simai::SimaiTimingMetadata());
     bool applyContentsChange(
         const QTextDocument* document,
         int position,
         int charsRemoved,
         int charsAdded,
-        double firstSeconds);
+        double firstSeconds,
+        const miacode::simai::SimaiTimingMetadata& timingMetadata = miacode::simai::SimaiTimingMetadata());
 
     const TimelineRenderSnapshot& snapshot() const;
 
@@ -38,6 +46,7 @@ private:
         double second = 0.0;
         double bpm = 120.0;
         int beats = 4;
+        int subdivisionIndex = 0;
         int meterNumerator = 4;
         int meterDenominator = 4;
         double currentMeasureStartSecond = 0.0;
@@ -71,8 +80,12 @@ private:
     bool replaceDocumentTail(
         const QTextDocument* document,
         int startLineIndex,
-        double firstSeconds);
-    bool rebuildFromLineTexts(const QVector<QString>& lines, double firstSeconds);
+        double firstSeconds,
+        const miacode::simai::SimaiTimingMetadata& timingMetadata);
+    bool rebuildFromLineTexts(
+        const QVector<QString>& lines,
+        double firstSeconds,
+        const miacode::simai::SimaiTimingMetadata& timingMetadata);
     QVector<QString> collectDocumentLines(const QTextDocument* document) const;
     QVector<QString> collectDocumentLines(const QTextDocument* document, int startLineIndex, int endLineIndex) const;
     int lineIndexForDocumentPosition(const QTextDocument* document, int position) const;
