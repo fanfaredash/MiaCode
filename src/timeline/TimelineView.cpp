@@ -1,5 +1,6 @@
 #include "TimelineView.h"
 #include "common/AssetPaths.h"
+#include "common/PreviewSkinConfig.h"
 #include "UiText.h"
 #include "UiTheme.h"
 
@@ -35,9 +36,11 @@ constexpr int kTimelineLeftMargin = 40;
 constexpr int kTimelineTopMargin = 6;
 constexpr int kTimelineRightPadding = 24;
 constexpr int kNoteSize = 14;
+constexpr int kSlideTrackBasePixelSize =
+    static_cast<int>((static_cast<double>(kNoteSize) * miacode::preview_skin::kSlideTrackLongSideRelativeToTap) + 0.5);
 constexpr qreal kTimelineBeatLineWidth = 1.2;
-// Match PreviewCanvas hold thickness: 60 px hold width vs 122 px * 0.5 = 61 px tap width.
-constexpr qreal kTimelineHoldThicknessRelativeToTap = 60.0 / 61.0;
+constexpr qreal kTimelineHoldThicknessRelativeToTap =
+    static_cast<qreal>(miacode::preview_skin::kHoldWidthRelativeToTap);
 constexpr double kTimelineDisplayLeadInSeconds = 0.5;
 const std::array<QColor, 5> kTimelineFireworkBandColors = {
     QColor(232, 124, 72),

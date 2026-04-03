@@ -391,6 +391,42 @@ const QPixmap& TimelineView::iconForType(const QString& type) const
     return kNullPixmap;
 }
 
+int TimelineView::iconBasePixelSizeForType(const QString& type) const
+{
+    auto directIt = noteIconBasePixelSizes_.constFind(type);
+    if (directIt != noteIconBasePixelSizes_.constEnd()) {
+        return directIt.value();
+    }
+    const QString lower = type.toLower();
+    if (lower != type) {
+        auto lowerIt = noteIconBasePixelSizes_.constFind(lower);
+        if (lowerIt != noteIconBasePixelSizes_.constEnd()) {
+            return lowerIt.value();
+        }
+    }
+    auto fallbackIt = noteIconBasePixelSizes_.constFind(QStringLiteral("tap"));
+    if (fallbackIt != noteIconBasePixelSizes_.constEnd()) {
+        return fallbackIt.value();
+    }
+    return notePixelSize();
+}
+
+QSize TimelineView::targetSizeForIconType(const QString& type, qreal scale) const
+{
+    const QPixmap& base = iconForType(type);
+    if (base.isNull()) {
+        return QSize();
+    }
+
+    const qreal normalizedScale = scale > 0.0 ? scale : 1.0;
+    const int targetBox = qMax(1, qRound(static_cast<qreal>(iconBasePixelSizeForType(type)) * normalizedScale));
+    QSize targetSize(base.width(), base.height());
+    targetSize.scale(targetBox, targetBox, Qt::KeepAspectRatio);
+    targetSize.setWidth(qMax(1, targetSize.width()));
+    targetSize.setHeight(qMax(1, targetSize.height()));
+    return targetSize;
+}
+
 const QPixmap& TimelineView::transformedIconForType(
     const QString& type,
     qreal scale,
@@ -403,8 +439,12 @@ const QPixmap& TimelineView::transformedIconForType(
     }
 
     const qreal normalizedScale = scale > 0.0 ? scale : 1.0;
+    const QSize targetSize = targetSizeForIconType(type, normalizedScale);
+    if (!targetSize.isValid()) {
+        return base;
+    }
     const int rotationTenths = transformedPixmapRotationTenths(rotationDegrees);
-    if (!mirrorX && qFuzzyCompare(normalizedScale, 1.0) && rotationTenths == 0) {
+    if (!mirrorX && rotationTenths == 0 && targetSize == base.size()) {
         return base;
     }
 
@@ -415,12 +455,8 @@ const QPixmap& TimelineView::transformedIconForType(
     }
 
     QPixmap transformed = base;
-    if (!qFuzzyCompare(normalizedScale, 1.0)) {
-        transformed = transformed.scaled(
-            qMax(1, qRound(static_cast<qreal>(transformed.width()) * normalizedScale)),
-            qMax(1, qRound(static_cast<qreal>(transformed.height()) * normalizedScale)),
-            Qt::IgnoreAspectRatio,
-            Qt::SmoothTransformation);
+    if (targetSize != base.size()) {
+        transformed = transformed.scaled(targetSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
     }
     if (mirrorX) {
         transformed = transformed.transformed(QTransform().scale(-1.0, 1.0), Qt::SmoothTransformation);
@@ -431,6 +467,20 @@ const QPixmap& TimelineView::transformedIconForType(
             Qt::SmoothTransformation);
     }
     return transformedIconCache_.insert(cacheKey, transformed).value();
+}
+
+qreal TimelineView::holdScaleForBaseIconScale(const QString& type, qreal baseIconScale) const
+{
+    const qreal normalizedBaseScale = baseIconScale > 0.0 ? baseIconScale : 1.0;
+    const QPixmap& tapReference = transformedIconForType(QStringLiteral("tap"), normalizedBaseScale);
+    const QPixmap& holdReference = transformedIconForType(type, normalizedBaseScale, 90.0, false);
+    if (tapReference.isNull() || holdReference.isNull() || holdReference.height() <= 0) {
+        return normalizedBaseScale;
+    }
+
+    const qreal desiredThickness =
+        static_cast<qreal>(tapReference.height()) * kTimelineHoldThicknessRelativeToTap;
+    return normalizedBaseScale * (desiredThickness / static_cast<qreal>(holdReference.height()));
 }
 
 const TimelineView::HoldPixmapParts& TimelineView::holdPixmapPartsForType(const QString& type, qreal scale) const
@@ -444,15 +494,26 @@ const TimelineView::HoldPixmapParts& TimelineView::holdPixmapPartsForType(const 
 
     HoldPixmapParts parts;
     const QPixmap& holdCapPixmap = transformedIconForType(type, normalizedScale, 90.0, false);
-    parts.cap = holdCapPixmap;
     if (!holdCapPixmap.isNull()) {
         const QImage capImage = holdCapPixmap.toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
-        const int sx = qBound(0, capImage.width() / 2, capImage.width() - 1);
-        parts.bodySlice = capImage.copy(sx, 0, 1, capImage.height());
-        const int splitX = qMax(1, capImage.width() / 2);
-        parts.leftHalf = holdCapPixmap.copy(0, 0, splitX, holdCapPixmap.height());
-        parts.rightHalf = holdCapPixmap.copy(splitX, 0, holdCapPixmap.width() - splitX, holdCapPixmap.height());
-        parts.rightHalfOffset = splitX;
+        const int midX = qBound(0, capImage.width() / 2, capImage.width() - 1);
+        const int maxCapWidth = qMax(1, capImage.width() / 2);
+        const int capWidth = qMax(
+            1,
+            qMin(
+                maxCapWidth,
+                qRound(
+                    static_cast<qreal>(capImage.width())
+                    * static_cast<qreal>(miacode::preview_skin::kHoldCapSliceRatioNumerator)
+                    / static_cast<qreal>(miacode::preview_skin::kHoldCapSliceRatioDenominator))
+            ));
+        parts.bodySlice = capImage.copy(midX, 0, 1, capImage.height());
+        parts.leftCap = holdCapPixmap.copy(0, 0, capWidth, holdCapPixmap.height());
+        parts.rightCap = holdCapPixmap.copy(
+            qMax(0, holdCapPixmap.width() - capWidth),
+            0,
+            capWidth,
+            holdCapPixmap.height());
     }
     return holdPixmapPartsCache_.insert(cacheKey, parts).value();
 }
@@ -460,6 +521,7 @@ const TimelineView::HoldPixmapParts& TimelineView::holdPixmapPartsForType(const 
 void TimelineView::loadNoteIcons()
 {
     noteIcons_.clear();
+    noteIconBasePixelSizes_.clear();
     transformedIconCache_.clear();
     holdPixmapPartsCache_.clear();
     const QString notesDir = miacode::assets::assetPath("skin");
@@ -479,85 +541,72 @@ void TimelineView::loadNoteIcons()
         return QPixmap();
     };
 
-    const auto putScaledIcon = [this](const QString& key, const QPixmap& pix, int pixelSize) {
+    const auto putIcon = [this](const QString& key, const QPixmap& pix, int basePixelSize) {
         if (pix.isNull()) {
             return;
         }
-        noteIcons_.insert(key, pix.scaled(pixelSize, pixelSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        noteIcons_.insert(key, pix);
+        noteIconBasePixelSizes_.insert(key, qMax(1, basePixelSize));
     };
 
-    const auto loadIcon = [&loadRawIcon, &putScaledIcon](const QString& key, const QStringList& fileNames, int pixelSize) {
-        putScaledIcon(key, loadRawIcon(fileNames), pixelSize);
+    const auto loadIcon = [&loadRawIcon, &putIcon](const QString& key, const QStringList& fileNames, int basePixelSize) {
+        putIcon(key, loadRawIcon(fileNames), basePixelSize);
     };
 
-    const auto buildTouchCompositeIcon = [this](const QPixmap& borderBase, const QPixmap& pointBase) -> QPixmap {
+    const auto buildCenteredCompositeIcon = [](std::initializer_list<const QPixmap*> layers) -> QPixmap {
+        int canvasWidth = 0;
+        int canvasHeight = 0;
+        for (const QPixmap* layer : layers) {
+            if (layer == nullptr || layer->isNull()) {
+                continue;
+            }
+            canvasWidth = qMax(canvasWidth, layer->width());
+            canvasHeight = qMax(canvasHeight, layer->height());
+        }
+        if (canvasWidth <= 0 || canvasHeight <= 0) {
+            return QPixmap();
+        }
+
+        QPixmap canvas(canvasWidth, canvasHeight);
+        canvas.fill(Qt::transparent);
+
+        QPainter p(&canvas);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        p.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        for (const QPixmap* layer : layers) {
+            if (layer == nullptr || layer->isNull()) {
+                continue;
+            }
+            p.drawPixmap((canvasWidth - layer->width()) / 2, (canvasHeight - layer->height()) / 2, *layer);
+        }
+        p.end();
+        return canvas;
+    };
+
+    const auto buildTouchCompositeIcon = [&buildCenteredCompositeIcon](const QPixmap& borderBase, const QPixmap& pointBase) -> QPixmap {
         if (borderBase.isNull() || pointBase.isNull()) {
             return QPixmap();
         }
-        const int iconSize = kNoteSize + 3;
-        QPixmap canvas(iconSize, iconSize);
-        canvas.fill(Qt::transparent);
-
-        QPainter p(&canvas);
-        p.setRenderHint(QPainter::Antialiasing, true);
-        p.setRenderHint(QPainter::SmoothPixmapTransform, true);
-
-        const QPixmap border = borderBase.scaled(iconSize, iconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        p.drawPixmap((iconSize - border.width()) / 2, (iconSize - border.height()) / 2, border);
-
-        const int pointSize = qMax(1, qRound(static_cast<qreal>(iconSize) * 0.30));
-        const QPixmap point = pointBase.scaled(pointSize, pointSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        p.drawPixmap((iconSize - point.width()) / 2, (iconSize - point.height()) / 2, point);
-        p.end();
-        return canvas;
+        return buildCenteredCompositeIcon({&borderBase, &pointBase});
     };
 
-    const auto buildTouchHoldCompositeIcon = [this](const QPixmap& borderBase, const QPixmap& holdBodyBase, const QPixmap& pointBase) -> QPixmap {
+    const auto buildTouchHoldCompositeIcon = [&buildCenteredCompositeIcon](const QPixmap& borderBase, const QPixmap& holdBodyBase, const QPixmap& pointBase) -> QPixmap {
         if (borderBase.isNull() || holdBodyBase.isNull()) {
             return QPixmap();
         }
-        const int iconSize = kNoteSize + 3;
-        QPixmap canvas(iconSize, iconSize);
-        canvas.fill(Qt::transparent);
-
-        QPainter p(&canvas);
-        p.setRenderHint(QPainter::Antialiasing, true);
-        p.setRenderHint(QPainter::SmoothPixmapTransform, true);
-
-        const QPixmap border = borderBase.scaled(iconSize, iconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        p.drawPixmap((iconSize - border.width()) / 2, (iconSize - border.height()) / 2, border);
-
-        const int bodySize = qMax(1, qRound(static_cast<qreal>(iconSize) * 0.30));
-        const QPixmap body = holdBodyBase.scaled(bodySize, bodySize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        p.drawPixmap((iconSize - body.width()) / 2, (iconSize - body.height()) / 2, body);
-
-        if (!pointBase.isNull()) {
-            const int pointSize = qMax(1, qRound(static_cast<qreal>(iconSize) * 0.24));
-            const QPixmap point = pointBase.scaled(pointSize, pointSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            p.drawPixmap((iconSize - point.width()) / 2, (iconSize - point.height()) / 2, point);
+        if (pointBase.isNull()) {
+            return buildCenteredCompositeIcon({&borderBase, &holdBodyBase});
         }
-
-        p.end();
-        return canvas;
+        return buildCenteredCompositeIcon({&borderBase, &holdBodyBase, &pointBase});
     };
 
-    const auto buildOverlayCompositeIcon = [](const QPixmap& base, const QPixmap& overlay, int iconSize) -> QPixmap {
+    const auto buildOverlayCompositeIcon = [&buildCenteredCompositeIcon](const QPixmap& base, const QPixmap& overlay) -> QPixmap {
         if (base.isNull()) {
             return QPixmap();
         }
-        QPixmap canvas(iconSize, iconSize);
-        canvas.fill(Qt::transparent);
-        QPainter p(&canvas);
-        p.setRenderHint(QPainter::Antialiasing, true);
-        p.setRenderHint(QPainter::SmoothPixmapTransform, true);
-        const QPixmap scaledBase = base.scaled(iconSize, iconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        p.drawPixmap((iconSize - scaledBase.width()) / 2, (iconSize - scaledBase.height()) / 2, scaledBase);
-        if (!overlay.isNull()) {
-            const QPixmap scaledOverlay = overlay.scaled(iconSize, iconSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-            p.drawPixmap((iconSize - scaledOverlay.width()) / 2, (iconSize - scaledOverlay.height()) / 2, scaledOverlay);
-        }
-        p.end();
-        return canvas;
+        return overlay.isNull()
+            ? buildCenteredCompositeIcon({&base})
+            : buildCenteredCompositeIcon({&base, &overlay});
     };
 
     loadIcon("tap", {"tap.png"}, kNoteSize);
@@ -573,38 +622,37 @@ void TimelineView::loadNoteIcons()
     loadIcon("star_each", {"star_each.png", "star.png"}, kNoteSize + 3);
     loadIcon("star_double", {"star_double.png", "star.png"}, kNoteSize + 3);
     loadIcon("star_each_double", {"star_each_double.png", "star_double.png", "star_each.png", "star.png"}, kNoteSize + 3);
-    loadIcon("slide_track", {"slide.png"}, kNoteSize + 1);
-    loadIcon("slide_track_each", {"slide_each.png", "slide.png"}, kNoteSize + 1);
-    loadIcon("slide_track_break", {"slide_break.png", "slide.png"}, kNoteSize + 1);
-    loadIcon("wifi_track", {"wifi_0.png", "slide.png"}, kNoteSize + 1);
-    loadIcon("wifi_track_each", {"wifi_each_0.png", "wifi_0.png", "slide_each.png", "slide.png"}, kNoteSize + 1);
-    loadIcon("wifi_track_break", {"wifi_break_0.png", "wifi_0.png", "slide_break.png", "slide.png"}, kNoteSize + 1);
+    loadIcon("slide_track", {"slide.png"}, kSlideTrackBasePixelSize);
+    loadIcon("slide_track_each", {"slide_each.png", "slide.png"}, kSlideTrackBasePixelSize);
+    loadIcon("slide_track_break", {"slide_break.png", "slide.png"}, kSlideTrackBasePixelSize);
+    loadIcon("wifi_track", {"wifi_0.png", "slide.png"}, kSlideTrackBasePixelSize);
+    loadIcon("wifi_track_each", {"wifi_each_0.png", "wifi_0.png", "slide_each.png", "slide.png"}, kSlideTrackBasePixelSize);
+    loadIcon("wifi_track_break", {"wifi_break_0.png", "wifi_0.png", "slide_break.png", "slide.png"}, kSlideTrackBasePixelSize);
 
-    const QPixmap tapExComposite = buildOverlayCompositeIcon(loadRawIcon({"tap.png"}), loadRawIcon({"tap_ex.png"}), kNoteSize);
+    const QPixmap tapExComposite = buildOverlayCompositeIcon(loadRawIcon({"tap.png"}), loadRawIcon({"tap_ex.png"}));
     if (!tapExComposite.isNull()) {
-        noteIcons_.insert("tap_ex", tapExComposite);
+        putIcon("tap_ex", tapExComposite, kNoteSize);
     } else {
         loadIcon("tap_ex", {"tap.png"}, kNoteSize);
     }
-    const QPixmap holdExComposite = buildOverlayCompositeIcon(loadRawIcon({"hold.png"}), loadRawIcon({"hold_ex.png"}), kNoteSize);
+    const QPixmap holdExComposite = buildOverlayCompositeIcon(loadRawIcon({"hold.png"}), loadRawIcon({"hold_ex.png"}));
     if (!holdExComposite.isNull()) {
-        noteIcons_.insert("hold_ex", holdExComposite);
+        putIcon("hold_ex", holdExComposite, kNoteSize);
     } else {
         loadIcon("hold_ex", {"hold.png"}, kNoteSize);
     }
-    const QPixmap starExComposite = buildOverlayCompositeIcon(loadRawIcon({"star.png"}), loadRawIcon({"star_ex.png"}), kNoteSize + 3);
+    const QPixmap starExComposite = buildOverlayCompositeIcon(loadRawIcon({"star.png"}), loadRawIcon({"star_ex.png"}));
     if (!starExComposite.isNull()) {
-        noteIcons_.insert("star_ex", starExComposite);
+        putIcon("star_ex", starExComposite, kNoteSize + 3);
     } else {
         loadIcon("star_ex", {"star.png"}, kNoteSize + 3);
     }
     const QPixmap starExDoubleComposite = buildOverlayCompositeIcon(
         loadRawIcon({"star_double.png", "star.png"}),
-        loadRawIcon({"star_ex_double.png", "star_ex.png"}),
-        kNoteSize + 3
+        loadRawIcon({"star_ex_double.png", "star_ex.png"})
     );
     if (!starExDoubleComposite.isNull()) {
-        noteIcons_.insert("star_ex_double", starExDoubleComposite);
+        putIcon("star_ex_double", starExDoubleComposite, kNoteSize + 3);
     } else {
         loadIcon("star_ex_double", {"star_double.png", "star.png"}, kNoteSize + 3);
     }
@@ -620,19 +668,19 @@ void TimelineView::loadNoteIcons()
     const QPixmap touchBreakComposite = buildTouchCompositeIcon(touchBreakBorder, touchBreakPoint);
     const QPixmap touchEachComposite = buildTouchCompositeIcon(touchEachBorder, touchEachPoint);
     if (!touchComposite.isNull()) {
-        noteIcons_.insert("touch", touchComposite);
+        putIcon("touch", touchComposite, kNoteSize + 3);
     } else {
-        loadIcon("touch", {"touch.png", "touch_each.png", "each.png", "tap.png"}, kNoteSize);
+        loadIcon("touch", {"touch.png", "touch_each.png", "each.png", "tap.png"}, kNoteSize + 3);
     }
     if (!touchEachComposite.isNull()) {
-        noteIcons_.insert("touch_each", touchEachComposite);
+        putIcon("touch_each", touchEachComposite, kNoteSize + 3);
     } else {
-        loadIcon("touch_each", {"touch_each.png", "touch.png", "each.png", "tap.png"}, kNoteSize);
+        loadIcon("touch_each", {"touch_each.png", "touch.png", "each.png", "tap.png"}, kNoteSize + 3);
     }
     if (!touchBreakComposite.isNull()) {
-        noteIcons_.insert("touch_break", touchBreakComposite);
+        putIcon("touch_break", touchBreakComposite, kNoteSize + 3);
     } else {
-        loadIcon("touch_break", {"touch_break.png", "touch.png", "touch_each.png", "each.png", "tap.png"}, kNoteSize);
+        loadIcon("touch_break", {"touch_break.png", "touch.png", "touch_each.png", "each.png", "tap.png"}, kNoteSize + 3);
     }
 
     const QPixmap touchHoldComposite = buildTouchHoldCompositeIcon(
@@ -641,7 +689,7 @@ void TimelineView::loadNoteIcons()
         loadRawIcon({"touch_point.png", "tap.png"})
     );
     if (!touchHoldComposite.isNull()) {
-        noteIcons_.insert("touch_hold", touchHoldComposite);
+        putIcon("touch_hold", touchHoldComposite, kNoteSize + 3);
     }
     const QPixmap touchHoldEachComposite = buildTouchHoldCompositeIcon(
         loadRawIcon({"touchhold_border.png", "touch_border_2.png", "touch.png", "tap.png"}),
@@ -649,9 +697,9 @@ void TimelineView::loadNoteIcons()
         loadRawIcon({"touch_point_each.png", "touch_point.png", "tap.png"})
     );
     if (!touchHoldEachComposite.isNull()) {
-        noteIcons_.insert("touch_hold_each", touchHoldEachComposite);
+        putIcon("touch_hold_each", touchHoldEachComposite, kNoteSize + 3);
     } else if (!touchHoldComposite.isNull()) {
-        noteIcons_.insert("touch_hold_each", touchHoldComposite);
+        putIcon("touch_hold_each", touchHoldComposite, kNoteSize + 3);
     }
     const QPixmap touchHoldBreakComposite = buildTouchHoldCompositeIcon(
         loadRawIcon({"touchhold_border.png", "touch_break.png", "touch_border_2.png", "touch.png", "tap.png"}),
@@ -659,9 +707,61 @@ void TimelineView::loadNoteIcons()
         loadRawIcon({"touch_break_point.png", "touch_point.png", "tap.png"})
     );
     if (!touchHoldBreakComposite.isNull()) {
-        noteIcons_.insert("touch_hold_break", touchHoldBreakComposite);
+        putIcon("touch_hold_break", touchHoldBreakComposite, kNoteSize + 3);
     } else if (!touchHoldComposite.isNull()) {
-        noteIcons_.insert("touch_hold_break", touchHoldComposite);
+        putIcon("touch_hold_break", touchHoldComposite, kNoteSize + 3);
+    }
+    prewarmTransformedIconCache();
+}
+
+void TimelineView::prewarmTransformedIconCache()
+{
+    if (noteIcons_.isEmpty()) {
+        return;
     }
 
+    const QVector<qreal> baseScales = {0.5, 1.0};
+    const QStringList iconTypes = noteIcons_.keys();
+    for (const QString& iconType : iconTypes) {
+        for (qreal baseScale : baseScales) {
+            transformedIconForType(iconType, baseScale);
+        }
+    }
+
+    const QStringList holdTypes = {
+        QStringLiteral("hold"),
+        QStringLiteral("hold_break"),
+        QStringLiteral("hold_each"),
+        QStringLiteral("hold_ex"),
+    };
+    for (const QString& holdType : holdTypes) {
+        if (!noteIcons_.contains(holdType)) {
+            continue;
+        }
+        for (qreal baseScale : baseScales) {
+            const qreal holdScale = holdScaleForBaseIconScale(holdType, baseScale);
+            transformedIconForType(holdType, holdScale);
+            transformedIconForType(holdType, holdScale, 90.0, false);
+            holdPixmapPartsForType(holdType, holdScale);
+        }
+    }
+
+    const QVector<qreal> trackScales = {0.25, 0.5, 0.75, 1.0};
+    const QStringList trackTypes = {
+        QStringLiteral("slide_track"),
+        QStringLiteral("slide_track_each"),
+        QStringLiteral("slide_track_break"),
+        QStringLiteral("wifi_track"),
+        QStringLiteral("wifi_track_each"),
+        QStringLiteral("wifi_track_break"),
+    };
+    for (const QString& trackType : trackTypes) {
+        if (!noteIcons_.contains(trackType)) {
+            continue;
+        }
+        for (qreal trackScale : trackScales) {
+            transformedIconForType(trackType, trackScale, 0.0, false);
+            transformedIconForType(trackType, trackScale, 0.0, true);
+        }
+    }
 }
