@@ -5,6 +5,7 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/PreviewInteractionConfig.h"
+#include "tools/video_export/VideoExportPreferences.h"
 
 #include <QAbstractItemView>
 #include <QAbstractSpinBox>
@@ -20,6 +21,7 @@
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QJsonObject>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLayout>
@@ -31,13 +33,13 @@
 #include <QPushButton>
 #include <QPixmap>
 #include <QRegularExpression>
-#include <QSettings>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSplitter>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 #include <QWidget>
 #include <QWidgetAction>
 
@@ -61,10 +63,6 @@ constexpr int kPreviewControlsToSliderGap = 8;
 constexpr int kDialogActionButtonMinWidth = 92;
 constexpr int kRangeSetButtonWidth = 72;
 constexpr int kPreviewScrubRenderIntervalMs = 33;
-constexpr qreal kPreviewSeekInitialStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekInitialStepSeconds);
-constexpr qreal kPreviewSeekMaxStepSeconds = static_cast<qreal>(miacode::preview_interaction::kSeekMaxStepSeconds);
-constexpr qreal kPreviewSeekLinearAccelerationSecondsPerMs =
-    static_cast<qreal>(miacode::preview_interaction::kSeekLinearAccelerationSecondsPerMs);
 
 struct ResolutionPreset {
     int width = 1080;
@@ -105,11 +103,6 @@ QString flowSpeedValueLabel(double flowSpeed)
     const double roundedOneDecimal = qRound(snapped * 10.0) / 10.0;
     const bool useSingleDecimal = qAbs(snapped - roundedOneDecimal) < 0.001;
     return QString::number(snapped, 'f', useSingleDecimal ? 1 : 2);
-}
-
-QSettings exportDialogSettingsStore()
-{
-    return QSettings(QStringLiteral("fanfaredash"), QStringLiteral("MiaCode"));
 }
 
 QString exportDialogResolutionLabel(const QSize& size)
@@ -382,6 +375,7 @@ VideoExportDialog::VideoExportDialog(
     PausePreviewCallback pausePreviewCallback,
     IsPreviewPlayingCallback isPreviewPlayingCallback,
     CurrentPreviewSecondCallback currentPreviewSecondCallback,
+    PreviewTimestampCallback previewTimestampCallback,
     PreviewAspectRatioCallback previewAspectRatioCallback,
     PreviewBrightnessCallback previewBrightnessCallback,
     PreviewLayoutScaleCallback previewLayoutScaleCallback,
@@ -398,6 +392,7 @@ VideoExportDialog::VideoExportDialog(
     , pausePreviewCallback_(std::move(pausePreviewCallback))
     , isPreviewPlayingCallback_(std::move(isPreviewPlayingCallback))
     , currentPreviewSecondCallback_(std::move(currentPreviewSecondCallback))
+    , previewTimestampCallback_(std::move(previewTimestampCallback))
     , previewAspectRatioCallback_(std::move(previewAspectRatioCallback))
     , previewBrightnessCallback_(std::move(previewBrightnessCallback))
     , previewLayoutScaleCallback_(std::move(previewLayoutScaleCallback))
@@ -498,6 +493,7 @@ VideoExportDialog::VideoExportDialog(
                 resolutionButton_->setText(label);
             }
             applySelectedAspectRatioToPreview(true);
+            persistExportOnlySettings();
         });
     }
     resolutionButton_->setMenu(resolutionMenu_);
@@ -519,6 +515,7 @@ VideoExportDialog::VideoExportDialog(
             if (fpsButton_ != nullptr) {
                 fpsButton_->setText(label);
             }
+            persistExportOnlySettings();
         });
     }
     fpsButton_->setMenu(fpsMenu_);
@@ -894,14 +891,20 @@ VideoExportDialog::VideoExportDialog(
     previewTimer_ = new QTimer(this);
     previewTimer_->setInterval(kPreviewTickIntervalMs);
     connect(previewTimer_, &QTimer::timeout, this, &VideoExportDialog::onRangePreviewTick);
+    previewHeldSeekTimer_ = new QTimer(this);
+    previewHeldSeekTimer_->setTimerType(Qt::PreciseTimer);
+    previewHeldSeekTimer_->setInterval(miacode::preview_interaction::kSeekHoldTickIntervalMs);
+    connect(previewHeldSeekTimer_, &QTimer::timeout, this, &VideoExportDialog::applyPreviewHeldSeekTick);
 
     connect(startSecondSpin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &VideoExportDialog::onRangeSpinChanged);
     connect(endSecondSpin_, qOverload<double>(&QDoubleSpinBox::valueChanged), this, &VideoExportDialog::onRangeSpinChanged);
     connect(previewSlider_, &QSlider::valueChanged, this, &VideoExportDialog::onPreviewSliderChanged);
     connect(previewSlider_, &QSlider::sliderPressed, this, [this]() {
+        stopPreviewHeldSeek();
         previewScrubRenderElapsed_.invalidate();
     });
     connect(previewSlider_, &QSlider::sliderReleased, this, [this]() {
+        stopPreviewHeldSeek();
         previewScrubRenderElapsed_.invalidate();
         seekPreview(previewCursorSecond_);
         syncRangeUi();
@@ -910,8 +913,12 @@ VideoExportDialog::VideoExportDialog(
     connect(setEndButton, &QPushButton::clicked, this, &VideoExportDialog::setRangeEndFromPreview);
     connect(previewRangeButton_, &QToolButton::clicked, this, &VideoExportDialog::toggleRangePreview);
     connect(stopPreviewButton_, &QToolButton::clicked, this, &VideoExportDialog::stopRangePreviewToStart);
-    connect(showTimestampCheck_, &QCheckBox::toggled, this, [this](bool) {
+    connect(showTimestampCheck_, &QCheckBox::toggled, this, [this](bool checked) {
         syncLivePreviewTimestampVisibility();
+        initialShowTimestamp_ = checked;
+        if (previewTimestampCallback_) {
+            previewTimestampCallback_(checked);
+        }
     });
     connect(smoothBrightnessCheck_, &QCheckBox::toggled, this, [this](bool checked) {
         if (previewSmoothBrightnessCallback_) {
@@ -1071,11 +1078,10 @@ void VideoExportDialog::restoreLivePreviewState()
 
 void VideoExportDialog::loadPersistedSettings()
 {
-    QSettings settings = exportDialogSettingsStore();
-    settings.beginGroup(QStringLiteral("video_export_dialog"));
+    const QJsonObject settings = miacode::video_export::loadDialogPreferences();
 
-    const int savedWidth = settings.value(QStringLiteral("resolution_width"), selectedResolution_.width()).toInt();
-    const int savedHeight = settings.value(QStringLiteral("resolution_height"), selectedResolution_.height()).toInt();
+    const int savedWidth = settings.value(QStringLiteral("resolution_width")).toInt(selectedResolution_.width());
+    const int savedHeight = settings.value(QStringLiteral("resolution_height")).toInt(selectedResolution_.height());
     if (savedWidth > 0 && savedHeight > 0) {
         selectedResolution_ = QSize(savedWidth, savedHeight);
         if (resolutionButton_ != nullptr) {
@@ -1084,93 +1090,120 @@ void VideoExportDialog::loadPersistedSettings()
         applySelectedAspectRatioToPreview(false);
     }
 
-    const int savedFps = settings.value(QStringLiteral("fps"), selectedFps_).toInt();
+    const int savedFps = settings.value(QStringLiteral("fps")).toInt(selectedFps_);
     selectedFps_ = savedFps >= 90 ? 120 : 60;
     if (fpsButton_ != nullptr) {
         fpsButton_->setText(QStringLiteral("%1 FPS").arg(selectedFps_));
     }
-
-    if (showTimestampCheck_ != nullptr) {
-        showTimestampCheck_->setChecked(settings.value(QStringLiteral("show_timestamp"), showTimestampCheck_->isChecked()).toBool());
-    }
-    if (smoothBrightnessCheck_ != nullptr) {
-        smoothBrightnessCheck_->setChecked(
-            settings.value(QStringLiteral("smooth_brightness"), smoothBrightnessCheck_->isChecked()).toBool()
-        );
-    }
-    if (brightnessOuterSlider_ != nullptr) {
-        brightnessOuterSlider_->setValue(
-            settings.value(QStringLiteral("brightness_outer"), brightnessOuterSlider_->value()).toInt()
-        );
-    }
-    if (brightnessInnerSlider_ != nullptr) {
-        brightnessInnerSlider_->setValue(
-            settings.value(QStringLiteral("brightness_inner"), brightnessInnerSlider_->value()).toInt()
-        );
-    }
-    if (layoutSquareScaleSlider_ != nullptr) {
-        layoutSquareScaleSlider_->setValue(
-            settings.value(QStringLiteral("layout_square_scale"), layoutSquareScaleSlider_->value()).toInt()
-        );
-    }
-
-    const int savedScaleMode = settings.value(
-        QStringLiteral("background_scale_mode"),
-        static_cast<int>(selectedBackgroundScaleMode_)
-    ).toInt();
-    selectedBackgroundScaleMode_ = savedScaleMode == static_cast<int>(PreviewBackgroundScaleMode::FitContain)
-        ? PreviewBackgroundScaleMode::FitContain
-        : PreviewBackgroundScaleMode::FillCrop;
-    if (backgroundScaleModeButton_ != nullptr) {
-        backgroundScaleModeButton_->setText(exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
-    }
-    if (previewScaleModeCallback_) {
-        previewScaleModeCallback_(selectedBackgroundScaleMode_);
-    }
-
-    const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
-    const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
-    const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
-    const double savedFlowSpeed = settings.value(QStringLiteral("flow_speed"), selectedFlowSpeed_).toDouble();
-    selectedFlowSpeed_ = qBound(
-        flowSpeedMin,
-        flowSpeedMin + qRound((savedFlowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
-        flowSpeedMax
-    );
-    if (flowSpeedEdit_ != nullptr) {
-        flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
-    }
-    if (previewFlowSpeedCallback_) {
-        previewFlowSpeedCallback_(selectedFlowSpeed_);
-    }
-
-    settings.endGroup();
 }
 
 void VideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
 {
-    QSettings settings = exportDialogSettingsStore();
-    settings.beginGroup(QStringLiteral("video_export_dialog"));
-    settings.setValue(QStringLiteral("resolution_width"), task.outputWidth);
-    settings.setValue(QStringLiteral("resolution_height"), task.outputHeight);
-    settings.setValue(QStringLiteral("fps"), task.fps);
-    settings.setValue(QStringLiteral("show_timestamp"), task.showTimestamp);
-    settings.setValue(QStringLiteral("smooth_brightness"), task.smoothBrightness);
-    settings.setValue(
-        QStringLiteral("brightness_outer"),
-        qRound(qBound(0.0, task.backgroundBrightnessOuter, 1.0) * 100.0)
+    QJsonObject settings = miacode::video_export::loadDialogPreferences();
+    settings.insert(QStringLiteral("resolution_width"), task.outputWidth);
+    settings.insert(QStringLiteral("resolution_height"), task.outputHeight);
+    settings.insert(QStringLiteral("fps"), task.fps);
+    miacode::video_export::saveDialogPreferences(settings);
+}
+
+void VideoExportDialog::persistExportOnlySettings() const
+{
+    QJsonObject settings = miacode::video_export::loadDialogPreferences();
+    settings.insert(QStringLiteral("resolution_width"), selectedResolution().width());
+    settings.insert(QStringLiteral("resolution_height"), selectedResolution().height());
+    settings.insert(QStringLiteral("fps"), selectedFps_);
+    miacode::video_export::saveDialogPreferences(settings);
+}
+
+bool VideoExportDialog::stepPreviewSliderBySeconds(double deltaSeconds)
+{
+    if (previewSlider_ == nullptr || !qIsFinite(deltaSeconds)) {
+        return false;
+    }
+    const int deltaMs = qRound(deltaSeconds * 1000.0);
+    if (deltaMs == 0) {
+        return false;
+    }
+    const int value = qBound(
+        previewSlider_->minimum(),
+        previewSlider_->value() + deltaMs,
+        previewSlider_->maximum()
     );
-    settings.setValue(
-        QStringLiteral("brightness_inner"),
-        qRound(qBound(0.0, task.backgroundBrightnessInner, 1.0) * 100.0)
+    if (value == previewSlider_->value()) {
+        return true;
+    }
+    previewSlider_->setValue(value);
+    return true;
+}
+
+bool VideoExportDialog::handlePreviewSliderWheel(QWheelEvent* event)
+{
+    if (previewSlider_ == nullptr || event == nullptr) {
+        return false;
+    }
+    int delta = event->angleDelta().y();
+    if (delta == 0) {
+        delta = event->angleDelta().x();
+    }
+    if (delta == 0) {
+        delta = event->pixelDelta().y();
+    }
+    if (delta == 0) {
+        delta = event->pixelDelta().x();
+    }
+    if (delta == 0) {
+        return false;
+    }
+    const int steps = delta > 0 ? qMax(1, qRound(static_cast<double>(delta) / 120.0))
+                                : qMin(-1, qRound(static_cast<double>(delta) / 120.0));
+    previewSlider_->setFocus(Qt::MouseFocusReason);
+    const bool handled = stepPreviewSliderBySeconds(
+        static_cast<double>(steps) * miacode::preview_interaction::kSeekSingleStepSeconds
     );
-    settings.setValue(
-        QStringLiteral("layout_square_scale"),
-        qRound(miacode::preview_video::normalizedLayoutSquareScale(task.layoutSquareScale) * 100.0)
+    if (handled) {
+        event->accept();
+    }
+    return handled;
+}
+
+void VideoExportDialog::beginPreviewHeldSeek(int direction, int key)
+{
+    if (direction == 0 || previewSlider_ == nullptr) {
+        return;
+    }
+    previewHeldSeekDirection_ = direction > 0 ? 1 : -1;
+    previewSeekHeldArrowKey_ = key;
+    previewSeekHeldArrowElapsed_.restart();
+    if (previewHeldSeekTimer_ != nullptr && !previewHeldSeekTimer_->isActive()) {
+        previewHeldSeekTimer_->start();
+    }
+}
+
+void VideoExportDialog::stopPreviewHeldSeek(int key)
+{
+    if (key != 0 && previewSeekHeldArrowKey_ != key) {
+        return;
+    }
+    previewHeldSeekDirection_ = 0;
+    previewSeekHeldArrowKey_ = 0;
+    previewSeekHeldArrowElapsed_.invalidate();
+    if (previewHeldSeekTimer_ != nullptr) {
+        previewHeldSeekTimer_->stop();
+    }
+}
+
+void VideoExportDialog::applyPreviewHeldSeekTick()
+{
+    if (previewHeldSeekDirection_ == 0
+        || previewSeekHeldArrowKey_ == 0
+        || !previewSeekHeldArrowElapsed_.isValid()) {
+        return;
+    }
+    const double heldSeconds = static_cast<double>(previewSeekHeldArrowElapsed_.elapsed()) / 1000.0;
+    stepPreviewSliderBySeconds(
+        static_cast<double>(previewHeldSeekDirection_)
+            * miacode::preview_interaction::heldSeekStepSeconds(heldSeconds)
     );
-    settings.setValue(QStringLiteral("background_scale_mode"), static_cast<int>(task.backgroundScaleMode));
-    settings.setValue(QStringLiteral("flow_speed"), task.noteFlowSpeed);
-    settings.endGroup();
 }
 
 void VideoExportDialog::applySelectedAspectRatioToPreview(bool markChanged)
@@ -1588,7 +1621,12 @@ void VideoExportDialog::done(int result)
 bool VideoExportDialog::eventFilter(QObject* watched, QEvent* event)
 {
     if (previewSlider_ != nullptr && watched == previewSlider_) {
-        if (event->type() == QEvent::KeyPress) {
+        if (event->type() == QEvent::Wheel) {
+            stopPreviewHeldSeek();
+            if (handlePreviewSliderWheel(static_cast<QWheelEvent*>(event))) {
+                return true;
+            }
+        } else if (event->type() == QEvent::KeyPress) {
             auto* keyEvent = static_cast<QKeyEvent*>(event);
             int direction = 0;
             if (keyEvent->key() == Qt::Key_Left) {
@@ -1597,27 +1635,16 @@ bool VideoExportDialog::eventFilter(QObject* watched, QEvent* event)
                 direction = 1;
             }
             if (direction != 0) {
-                if (!keyEvent->isAutoRepeat() || previewSeekHeldArrowKey_ != keyEvent->key()) {
-                    previewSeekHeldArrowKey_ = keyEvent->key();
-                    previewSeekHeldArrowElapsed_.restart();
-                } else if (!previewSeekHeldArrowElapsed_.isValid()) {
-                    previewSeekHeldArrowElapsed_.restart();
+                if (keyEvent->modifiers() != Qt::NoModifier) {
+                    return QDialog::eventFilter(watched, event);
                 }
-
-                const qreal heldMs = previewSeekHeldArrowElapsed_.isValid()
-                    ? static_cast<qreal>(previewSeekHeldArrowElapsed_.elapsed())
-                    : 0.0;
-                const qreal acceleratedStep = qMin(
-                    kPreviewSeekMaxStepSeconds,
-                    kPreviewSeekInitialStepSeconds + (heldMs * kPreviewSeekLinearAccelerationSecondsPerMs)
+                if (keyEvent->isAutoRepeat()) {
+                    return true;
+                }
+                beginPreviewHeldSeek(direction, keyEvent->key());
+                stepPreviewSliderBySeconds(
+                    static_cast<double>(direction) * miacode::preview_interaction::kSeekSingleStepSeconds
                 );
-                const int deltaMs = direction * qRound(acceleratedStep * 1000.0);
-                const int value = qBound(
-                    previewSlider_->minimum(),
-                    previewSlider_->value() + deltaMs,
-                    previewSlider_->maximum()
-                );
-                previewSlider_->setValue(value);
                 return true;
             }
         } else if (event->type() == QEvent::KeyRelease) {
@@ -1625,8 +1652,7 @@ bool VideoExportDialog::eventFilter(QObject* watched, QEvent* event)
             if (!keyEvent->isAutoRepeat()
                 && (keyEvent->key() == Qt::Key_Left || keyEvent->key() == Qt::Key_Right)
                 && previewSeekHeldArrowKey_ == keyEvent->key()) {
-                previewSeekHeldArrowKey_ = 0;
-                previewSeekHeldArrowElapsed_.invalidate();
+                stopPreviewHeldSeek(keyEvent->key());
                 return true;
             }
         }

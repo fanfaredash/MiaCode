@@ -5,6 +5,8 @@
 #include <QSize>
 #include <QStringList>
 
+#include <functional>
+
 #include "VideoExportController.h"
 
 class QCheckBox;
@@ -22,9 +24,12 @@ class BatchVideoExportDialog : public QDialog
     Q_OBJECT
 
 public:
+    using SharedSettingsChangedCallback = std::function<void(const VideoExportTask& task)>;
+
     explicit BatchVideoExportDialog(
         const VideoExportTask& baseTask,
         const QString& difficultyLabel,
+        SharedSettingsChangedCallback sharedSettingsChangedCallback = {},
         QWidget* parent = nullptr
     );
 
@@ -44,6 +49,9 @@ private:
     bool applyUiToTask(VideoExportTask* task, QString* errorMessage) const;
     void loadPersistedSettings();
     void savePersistedSettings(const VideoExportTask& task) const;
+    void persistExportOnlySettings() const;
+    void notifySharedSettingsChanged();
+    VideoExportTask currentSharedSettingsTask() const;
     QSize selectedResolution() const;
     QString lastChartBrowseDirectory() const;
     QString lastOutputBrowseDirectory() const;
@@ -52,6 +60,7 @@ private:
 
     VideoExportTask baseTask_;
     QString difficultyLabel_;
+    SharedSettingsChangedCallback sharedSettingsChangedCallback_;
     bool exportRequested_ = false;
     VideoExportTask requestedTask_;
 
