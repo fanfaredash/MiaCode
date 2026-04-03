@@ -96,6 +96,7 @@ Do not rename sound files casually; both preview-time and export-time behavior d
   - `scripts/package-win.ps1` defaults to `build/`, prechecks version freshness against `CMakeLists.txt` and `build/generated/AppVersion.h`, and auto-runs `cmake --build <BuildDir> --target MiaCode --config <Config> --parallel 8` when the packaged executable is stale or missing
   - Windows release packages now also include:
     - root-level `Start_MiaCode_Debug.bat`
+    - root-level `Start_MiaCode_Debug_CompareDump.bat`
     - root-level `logs/`
     - `docs/DEBUG_INDEX.md`
 - macOS build/package:
@@ -113,6 +114,7 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 Current repo-local helper scripts include:
 
 - `scripts/Start_MiaCode_Debug.bat`
+- `scripts/Start_MiaCode_Debug_CompareDump.bat`
 - `scripts/analyze_ffmpeg_chain_variants.py`
 - `scripts/analyze_video_duplicate_frames.py`
 - `scripts/compare_log_vs_video_trajectory.py`

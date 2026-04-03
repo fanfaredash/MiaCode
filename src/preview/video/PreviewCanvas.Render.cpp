@@ -266,6 +266,7 @@ void PreviewCanvas::paintGL()
     QElapsedTimer cpuFrameTimer;
     cpuFrameTimer.start();
     glRenderer_.beginFrame(size(), devicePixelRatioF());
+    const QRectF stageRect = stageRectForSize(size());
     {
         QPainter painter(this);
         renderCanvas(painter);
@@ -281,6 +282,7 @@ void PreviewCanvas::paintGL()
         gpuTimeQueryPending_[gpuTimeQueryCursor_] = true;
         gpuTimeQueryCursor_ = (gpuTimeQueryCursor_ + 1) % 4;
     }
+    maybeComparePresentFrame(size(), stageRect);
 
     const double cpuUploadMs = static_cast<double>(cpuUploadNs) / 1000000.0;
     const double cpuPrepMs = static_cast<double>(qMax<qint64>(0, cpuFrameNs - cpuUploadNs)) / 1000000.0;
@@ -296,6 +298,100 @@ void PreviewCanvas::paintGL()
         profileVideoUploadSamplesMs_.append(static_cast<double>(videoUploadNs) / 1000000.0);
     }
     ++profileFrameCount_;
+}
+
+void PreviewCanvas::maybeComparePresentFrame(const QSize& canvasSize, const QRectF& stageRect)
+{
+    if (presentCompareEvery_ <= 0 || !glRenderer_.isInitialized()) {
+        return;
+    }
+    ++presentFrameCounter_;
+    if ((presentFrameCounter_ % static_cast<quint64>(presentCompareEvery_)) != 0) {
+        return;
+    }
+    ++presentCompareSampleCounter_;
+
+    QImage gpuFrame;
+    QString readbackError;
+    if (!readCurrentFramebuffer(&gpuFrame, &readbackError) || gpuFrame.isNull()) {
+        appendPreviewRuntimeLog(
+            QStringLiteral("present_compare"),
+            QStringLiteral("sample=%1 presentFrame=%2 skipped=readback_failed reason=%3 canvas=%4x%5 dpr=%6")
+                .arg(presentCompareSampleCounter_)
+                .arg(presentFrameCounter_)
+                .arg(readbackError)
+                .arg(canvasSize.width())
+                .arg(canvasSize.height())
+                .arg(devicePixelRatioF(), 0, 'f', 2)
+        );
+        return;
+    }
+
+    const QImage cpuFrame = renderCpuFallbackPresentFrame(canvasSize);
+    if (cpuFrame.isNull()) {
+        appendPreviewRuntimeLog(
+            QStringLiteral("present_compare"),
+            QStringLiteral("sample=%1 presentFrame=%2 skipped=cpu_render_failed canvas=%3x%4 dpr=%5")
+                .arg(presentCompareSampleCounter_)
+                .arg(presentFrameCounter_)
+                .arg(canvasSize.width())
+                .arg(canvasSize.height())
+                .arg(devicePixelRatioF(), 0, 'f', 2)
+        );
+        return;
+    }
+
+    const double diff = miacode::debug_image_compare::meanAbsDiffNormalized(gpuFrame, cpuFrame);
+    const auto gpuStats = miacode::debug_image_compare::analyzeImageIntensity(gpuFrame);
+    const auto cpuStats = miacode::debug_image_compare::analyzeImageIntensity(cpuFrame);
+    const auto dumpOutcome = miacode::debug_image_compare::dumpComparisonFrames(
+        QStringLiteral("present_compare"),
+        presentCompareSampleCounter_,
+        gpuFrame,
+        cpuFrame
+    );
+    const QString dumpFields = [dumpOutcome]() {
+        if (dumpOutcome.status == miacode::debug_image_compare::DumpStatus::Disabled) {
+            return QString();
+        }
+        QString fields = QStringLiteral(" dump=%1")
+            .arg(miacode::debug_image_compare::dumpStatusLabel(dumpOutcome.status));
+        if (!dumpOutcome.sampleDirPath.isEmpty()) {
+            fields += QStringLiteral(" dumpDir=%1").arg(dumpOutcome.sampleDirPath);
+        }
+        if (!dumpOutcome.error.isEmpty()) {
+            fields += QStringLiteral(" dumpError=%1").arg(dumpOutcome.error);
+        }
+        return fields;
+    }();
+    appendPreviewRuntimeLog(
+        QStringLiteral("present_compare"),
+        QStringLiteral(
+            "sample=%1 presentFrame=%2 every=%3 diff=%4 gpuSig=0x%5 cpuSig=0x%6 gpuLuma=%7 cpuLuma=%8 gpuNearBlack=%9 cpuNearBlack=%10 sampleSize=%11x%12 logicalCanvas=%13x%14 logicalStage=%15x%16 dpr=%17 rendererUsedGpu=%18 cpuFallbacks=%19 showDebug=%20 showTimestamp=%21 showStats=%22%23")
+            .arg(presentCompareSampleCounter_)
+            .arg(presentFrameCounter_)
+            .arg(presentCompareEvery_)
+            .arg(diff, 0, 'f', 8)
+            .arg(QString::number(miacode::debug_image_compare::sampledFrameSignature(gpuFrame), 16))
+            .arg(QString::number(miacode::debug_image_compare::sampledFrameSignature(cpuFrame), 16))
+            .arg(gpuStats.meanLuma, 0, 'f', 6)
+            .arg(cpuStats.meanLuma, 0, 'f', 6)
+            .arg(gpuStats.nearBlackRatio, 0, 'f', 6)
+            .arg(cpuStats.nearBlackRatio, 0, 'f', 6)
+            .arg(gpuFrame.width())
+            .arg(gpuFrame.height())
+            .arg(canvasSize.width())
+            .arg(canvasSize.height())
+            .arg(stageRect.width(), 0, 'f', 2)
+            .arg(stageRect.height(), 0, 'f', 2)
+            .arg(devicePixelRatioF(), 0, 'f', 2)
+            .arg(usedGpuRendererThisFrame_ ? 1 : 0)
+            .arg(cpuFallbackCount_)
+            .arg(showDebugInfo_ ? 1 : 0)
+            .arg(showTimestamp_ ? 1 : 0)
+            .arg(showObjectStatsHud_ ? 1 : 0)
+            .arg(dumpFields)
+    );
 }
 
 void PreviewCanvas::renderCanvas(QPainter& painter)
@@ -349,6 +445,78 @@ void PreviewCanvas::renderCanvas(
 
     updateFpsSample();
     drawHud(painter, stageRect);
+}
+
+QImage PreviewCanvas::renderCpuFallbackPresentFrame(const QSize& canvasSize) const
+{
+    const QSize safeCanvasSize(qMax(1, canvasSize.width()), qMax(1, canvasSize.height()));
+    const qreal dpr = qMax<qreal>(1.0, devicePixelRatioF());
+    const QSize framebufferSize(
+        qMax(1, qRound(safeCanvasSize.width() * dpr)),
+        qMax(1, qRound(safeCanvasSize.height() * dpr))
+    );
+
+    PreviewCanvas cpuCanvas;
+    cpuCanvas.copyRenderStateFrom(*this);
+
+    QImage frame(framebufferSize, QImage::Format_RGBA8888);
+    if (frame.isNull()) {
+        return QImage();
+    }
+    frame.setDevicePixelRatio(dpr);
+    frame.fill(Qt::transparent);
+    {
+        QPainter painter(&frame);
+        cpuCanvas.renderCanvas(painter, safeCanvasSize, true, true, highQualityRender_);
+    }
+    return frame;
+}
+
+bool PreviewCanvas::readCurrentFramebuffer(QImage* image, QString* errorMessage) const
+{
+    if (image == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("image output pointer was null");
+        }
+        return false;
+    }
+
+    const qreal dpr = qMax<qreal>(1.0, devicePixelRatioF());
+    const int framebufferWidth = qMax(1, qRound(size().width() * dpr));
+    const int framebufferHeight = qMax(1, qRound(size().height() * dpr));
+    QImage readback(framebufferWidth, framebufferHeight, QImage::Format_RGBA8888);
+    if (readback.isNull()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to allocate readback image");
+        }
+        return false;
+    }
+
+    QOpenGLContext* ctx = QOpenGLContext::currentContext();
+    auto* functions = ctx != nullptr ? ctx->functions() : nullptr;
+    if (functions == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("current OpenGL functions were unavailable");
+        }
+        return false;
+    }
+
+    GLint previousPackAlignment = 4;
+    functions->glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
+    functions->glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    functions->glReadPixels(
+        0,
+        0,
+        framebufferWidth,
+        framebufferHeight,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        readback.bits()
+    );
+    functions->glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
+
+    *image = readback.mirrored(false, true);
+    return true;
 }
 
 void PreviewCanvas::collectGpuProfilingResults(bool waitForAll)

@@ -54,7 +54,12 @@ Debug subcategories now default to on inside debug mode and are disabled with:
 - Preview profile summary:
   - default file: `miacode_preview_profile_summary.txt`
 
-The Windows release package also ships `Start_MiaCode_Debug.bat`, which sets debug mode, creates a local `logs/` directory, and launches `MiaCode.exe --debug`.
+The Windows release package also ships:
+
+- `Start_MiaCode_Debug.bat`
+  - sets debug mode, creates a local `logs/` directory, and launches `MiaCode.exe --debug`
+- `Start_MiaCode_Debug_CompareDump.bat`
+  - also enables preview compare sampling and PNG dumps under `logs/preview_compare_png`
 
 ## 3. Preview And Runtime Overrides
 
@@ -70,6 +75,26 @@ The Windows release package also ships `Start_MiaCode_Debug.bat`, which sets deb
 - `MIACODE_TRACK_PATH`
   - preview track-path override
   - owner: `src/app/mainwindow/MainWindow.cpp`
+- `MIACODE_PREVIEW_DIAG_COMPARE_VIDEO_FALLBACK_EVERY`
+  - samples every Nth direct-upload preview video frame
+  - compares GPU framebuffer readback against a CPU `QVideoFrame::toImage()` fallback render
+  - writes `preview_gl/video_compare` lines into the runtime log
+  - owner: `src/preview/video/PreviewGLRenderer.cpp`
+- `MIACODE_PREVIEW_DIAG_COMPARE_PRESENT_EVERY`
+  - samples every Nth preview `paintGL` present after the main frame is drawn
+  - compares the final GPU framebuffer against a cloned CPU-only `PreviewCanvas` render
+  - writes `preview/present_compare` lines into the runtime log
+  - owner: `src/preview/video/PreviewCanvas.Render.cpp`
+- `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_FRAMES`
+  - enables PNG dumps for preview compare samples
+  - applies to both `preview_gl/video_compare` and `preview/present_compare`
+  - owner: `src/common/DebugImageCompare.h`
+- `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_MAX_SAMPLES`
+  - caps dumped samples per compare stream; `0` means no cap
+  - owner: `src/common/DebugImageCompare.h`
+- `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_DIR`
+  - overrides the preview compare PNG dump root directory
+  - owner: `src/common/DebugImageCompare.h`
 - `MIACODE_DISABLE_GL_DEBUG_MESSAGES`
   - disables OpenGL driver message logging inside debug mode
   - owner: `src/preview/video/PreviewCanvas.GLAndTransforms.cpp`
@@ -143,6 +168,7 @@ Current normalization rules:
   - `soundtouch_probe`
 - Common debug scripts:
   - `scripts/Start_MiaCode_Debug.bat`
+  - `scripts/Start_MiaCode_Debug_CompareDump.bat`
   - `scripts/analyze_ffmpeg_chain_variants.py`
   - `scripts/analyze_video_duplicate_frames.py`
   - `scripts/compare_log_vs_video_trajectory.py`

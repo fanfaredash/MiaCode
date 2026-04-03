@@ -1,5 +1,6 @@
 #include "PreviewCanvas.h"
 #include "common/AssetPaths.h"
+#include "common/DebugImageCompare.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewGameplayConfig.h"

@@ -194,6 +194,10 @@ $debugLauncherSrc = Join-Path $repoRoot "scripts\\Start_MiaCode_Debug.bat"
 if (Test-Path $debugLauncherSrc) {
     Copy-Item $debugLauncherSrc (Join-Path $DistDir "Start_MiaCode_Debug.bat") -Force
 }
+$debugCompareLauncherSrc = Join-Path $repoRoot "scripts\\Start_MiaCode_Debug_CompareDump.bat"
+if (Test-Path $debugCompareLauncherSrc) {
+    Copy-Item $debugCompareLauncherSrc (Join-Path $DistDir "Start_MiaCode_Debug_CompareDump.bat") -Force
+}
 New-Item -ItemType Directory -Path (Join-Path $DistDir "logs") -Force | Out-Null
 
 if ($Config -eq "Debug") {
@@ -279,6 +283,7 @@ $releaseLines = @(
     "Run:"
     "  MiaCode.exe"
     "  Start_MiaCode_Debug.bat"
+    "  Start_MiaCode_Debug_CompareDump.bat"
     ""
     "Debug logs:"
     "  .\\logs\\miacode_runtime_debug.log"
@@ -290,6 +295,7 @@ $releaseLines = @(
     "Included:"
     "  - MiaCode.exe (main app)"
     "  - Start_MiaCode_Debug.bat"
+    "  - Start_MiaCode_Debug_CompareDump.bat"
     "  - Qt runtime DLLs and plugin folders"
     "  - ffmpeg/ffmpeg.exe"
     "  - assets/"

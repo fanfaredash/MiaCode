@@ -189,6 +189,7 @@ private:
     void drawJudgeEffectFireworkLayer(QPainter& painter, const QRectF& playfieldRect);
     void drawChartReviewJudgeOverlay(QPainter& painter, const QRectF& playfieldRect);
     void drawHud(QPainter& painter, const QRectF& stageRect);
+    void maybeComparePresentFrame(const QSize& canvasSize, const QRectF& stageRect);
     bool drawSpriteImage(
         QPainter& painter,
         const QImage& image,
@@ -239,6 +240,8 @@ private:
         bool clearToStageColor,
         bool highQualityRender
     );
+    QImage renderCpuFallbackPresentFrame(const QSize& canvasSize) const;
+    bool readCurrentFramebuffer(QImage* image, QString* errorMessage = nullptr) const;
     bool ensureOffscreenFramebuffer(const QSize& framebufferSize, QString* errorMessage = nullptr);
     bool ensureOffscreenReadbackPbos(const QSize& framebufferSize, QString* errorMessage = nullptr);
     bool mapOffscreenReadbackPbo(int pboIndex, const QSize& imageSize, QImage* frame, QString* errorMessage = nullptr);
@@ -404,6 +407,9 @@ private:
     bool exportWifiTrackBrightnessCompensationEnabled_ = false;
     double layoutRingDiameterRatio_ = miacode::layout_ring::kFallbackPlayfieldDiameterRatio;
     bool highQualityRender_ = false;
+    int presentCompareEvery_ = 0;
+    quint64 presentFrameCounter_ = 0;
+    quint64 presentCompareSampleCounter_ = 0;
     bool nativePaintingActive_ = false;
     bool tapAtlasBatchingActive_ = false;
     QVector<BatchedSprite> tapAtlasBatch_;

@@ -119,6 +119,46 @@ inline bool glDebugMessagesEnabled()
     return debugCategoryEnabled("MIACODE_DISABLE_GL_DEBUG_MESSAGES");
 }
 
+inline int previewVideoFallbackCompareEveryFrames()
+{
+    if (!runtimeDebugOutputEnabled()) {
+        return 0;
+    }
+    const int value = envIntValue("MIACODE_PREVIEW_DIAG_COMPARE_VIDEO_FALLBACK_EVERY", 0);
+    return value > 0 ? value : 0;
+}
+
+inline int previewPresentCompareEveryFrames()
+{
+    if (!runtimeDebugOutputEnabled()) {
+        return 0;
+    }
+    const int value = envIntValue("MIACODE_PREVIEW_DIAG_COMPARE_PRESENT_EVERY", 0);
+    return value > 0 ? value : 0;
+}
+
+inline bool previewCompareDumpFramesEnabled()
+{
+    return runtimeDebugOutputEnabled() && envFlagEnabled("MIACODE_PREVIEW_DIAG_COMPARE_DUMP_FRAMES");
+}
+
+inline int previewCompareDumpMaxSamples()
+{
+    if (!runtimeDebugOutputEnabled()) {
+        return 0;
+    }
+    const int value = envIntValue("MIACODE_PREVIEW_DIAG_COMPARE_DUMP_MAX_SAMPLES", 8);
+    return value >= 0 ? value : 8;
+}
+
+inline QString previewCompareDumpDirectoryOverride()
+{
+    if (!runtimeDebugOutputEnabled()) {
+        return QString();
+    }
+    return envValue("MIACODE_PREVIEW_DIAG_COMPARE_DUMP_DIR");
+}
+
 inline bool hasDebugArg(const QStringList& args)
 {
     return args.contains(QStringLiteral("--debug"));
