@@ -10,6 +10,7 @@
 #include <QPixmap>
 #include <QPointF>
 #include <QSet>
+#include <QSize>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -78,11 +79,9 @@ private:
     };
 
     struct HoldPixmapParts {
-        QPixmap cap;
-        QPixmap leftHalf;
-        QPixmap rightHalf;
+        QPixmap leftCap;
+        QPixmap rightCap;
         QImage bodySlice;
-        int rightHalfOffset = 0;
     };
 
     enum class FocusTarget {
@@ -121,13 +120,17 @@ private:
     VisibleLineRange visibleLineRange(double startSecond, double endSecond) const;
     void updateTimelineMarkerStrip(double oldSecond, double newSecond, int halfWidth);
     const QPixmap& iconForType(const QString& type) const;
+    int iconBasePixelSizeForType(const QString& type) const;
+    QSize targetSizeForIconType(const QString& type, qreal scale = 1.0) const;
     const QPixmap& transformedIconForType(
         const QString& type,
         qreal scale = 1.0,
         qreal rotationDegrees = 0.0,
         bool mirrorX = false) const;
+    qreal holdScaleForBaseIconScale(const QString& type, qreal baseIconScale) const;
     const HoldPixmapParts& holdPixmapPartsForType(const QString& type, qreal scale) const;
     void loadNoteIcons();
+    void prewarmTransformedIconCache();
     int minimumContentHeightForCurrentDevice() const;
     void refreshMinimumHeightForCurrentDevice();
 
@@ -148,6 +151,7 @@ private:
     bool showSlideTracks_ = true;
     QSet<quint64> muriMarkerLocationIds_;
     QHash<QString, QPixmap> noteIcons_;
+    QHash<QString, int> noteIconBasePixelSizes_;
     mutable QHash<QString, QPixmap> transformedIconCache_;
     mutable QHash<QString, HoldPixmapParts> holdPixmapPartsCache_;
     QVector<float> waveformPeaks_;

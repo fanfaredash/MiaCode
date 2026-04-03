@@ -11,6 +11,9 @@ Use this file to track where important constants live, what they mean, and wheth
 - `src/common/PreviewGameplayConfig.h`
   - Owns: logical canvas size, lane-distance geometry, preview flow-speed normalization, tap lifecycle timing, slide pretrace timing, judge-effect durations
   - Scope: preview and export timing assumptions
+- `src/common/PreviewSkinConfig.h`
+  - Owns: shared tap-head scale plus hold-width, hold-cap-slice, and slide-track sizing ratios used to keep preview and timeline skin geometry aligned
+  - Scope: preview and timeline skin-asset visual parity
 - `src/common/PreviewVideoGeometryConfig.h`
   - Owns: background brightness defaults, layout square scaling (current default `0.95`), dimming geometry, smooth brightness blending
   - Scope: preview and export visual geometry
@@ -70,7 +73,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Rule: keep shared here because the main preview and export-dialog preview must feel identical
 - `src/timeline/TimelineView.cpp`
   - Owns: timeline zoom preset bounds, coarse button stops, and the initial `pixelsPerSecond_` scale derived from the default zoom
-  - Current tuning note: the fixed zoom presets are now `25/50/75/100/150/200`; Timeline minor beat lines currently use `1.4 px`; hold-strip thickness currently targets the preview's `60:61` hold-to-tap ratio
+  - Current tuning note: the fixed zoom presets are now `25/50/75/100/150/200`; Timeline minor beat lines currently use `1.4 px`
   - Rule: keep local while these values only shape timeline widget UX and do not need cross-subsystem parity
 
 ## 3. Promotion Rules

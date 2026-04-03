@@ -278,7 +278,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
         const double startSecond = noteSecond(line, note);
         const double endSecond = noteEndSecond(line, note);
         const double traceSecond = noteTraceSecond(line, note);
-        const bool isHold = note.kind == TimelineRenderNoteKind::Hold && endSecond > startSecond;
+        const bool isHold = note.kind == TimelineRenderNoteKind::Hold && endSecond >= startSecond;
         const bool isTouchHold = note.kind == TimelineRenderNoteKind::TouchHold && endSecond > startSecond;
         const bool isSlideLike = note.kind == TimelineRenderNoteKind::Slide || note.kind == TimelineRenderNoteKind::Wifi;
         const bool isSlideTrack = isSlideLike && traceSecond > startSecond && endSecond > traceSecond;
@@ -449,29 +449,19 @@ void TimelineView::paintEvent(QPaintEvent* event)
         }
 
         const qreal baseIconScale = zoomScale() <= 0.25 ? 0.5 : 1.0;
-        qreal iconScale = baseIconScale;
-        if (isHold) {
-            const QPixmap& tapReference = transformedIconForType(QStringLiteral("tap"), baseIconScale);
-            const QPixmap& holdReference = transformedIconForType(iconType, baseIconScale, 90.0, false);
-            if (!tapReference.isNull() && !holdReference.isNull() && holdReference.height() > 0) {
-                const qreal desiredThickness =
-                    static_cast<qreal>(tapReference.height()) * kTimelineHoldThicknessRelativeToTap;
-                iconScale *= desiredThickness / static_cast<qreal>(holdReference.height());
-            }
-        }
+        const qreal iconScale = isHold ? holdScaleForBaseIconScale(iconType, baseIconScale) : baseIconScale;
         const QPixmap& icon = transformedIconForType(iconType, iconScale);
 
         bool holdCapsDrawn = false;
         if (isHold) {
             const HoldPixmapParts& holdParts = holdPixmapPartsForType(iconType, iconScale);
-            if (!holdParts.cap.isNull() && !holdParts.bodySlice.isNull()) {
+            if (!holdParts.leftCap.isNull() && !holdParts.rightCap.isNull() && !holdParts.bodySlice.isNull()) {
                 holdCapsDrawn = true;
-                const int capY = rowTop + (laneH - holdParts.cap.height()) / 2;
-                const int leftCapX = extentLeft - holdParts.cap.width() / 2;
-                const int rightCapX = extentRight - holdParts.cap.width() / 2;
-                const int splitX = holdParts.leftHalf.width();
-                const int bodyStartX = leftCapX + splitX - 1;
-                const int bodyEndX = rightCapX + splitX + 1;
+                const int capY = rowTop + (laneH - holdParts.leftCap.height()) / 2;
+                const int leftCapX = extentLeft - holdParts.leftCap.width();
+                const int rightCapX = extentRight;
+                const int bodyStartX = leftCapX + holdParts.leftCap.width();
+                const int bodyEndX = rightCapX;
                 const int bodyWidth = qMax(0, bodyEndX - bodyStartX);
                 if (bodyWidth > 0) {
                     painter.drawImage(
@@ -480,8 +470,8 @@ void TimelineView::paintEvent(QPaintEvent* event)
                         QRect(0, 0, 1, holdParts.bodySlice.height())
                     );
                 }
-                painter.drawPixmap(leftCapX, capY, holdParts.leftHalf);
-                painter.drawPixmap(rightCapX + holdParts.rightHalfOffset, capY, holdParts.rightHalf);
+                painter.drawPixmap(leftCapX, capY, holdParts.leftCap);
+                painter.drawPixmap(rightCapX, capY, holdParts.rightCap);
             }
         }
 

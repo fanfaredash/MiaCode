@@ -3,6 +3,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewGameplayConfig.h"
+#include "common/PreviewSkinConfig.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -66,7 +67,7 @@ constexpr qreal kDistanceToScaleSlope = static_cast<qreal>(miacode::preview_game
 constexpr qreal kDistanceToScaleOffset = static_cast<qreal>(miacode::preview_gameplay::kDistanceToScaleOffset);
 constexpr qreal kSlideStarFadeBaseScale = 0.45;
 constexpr qreal kSlideStarFadeScaleDelta = 0.55;
-constexpr qreal kSkinAssetScale = 0.5;
+constexpr qreal kSkinAssetScale = static_cast<qreal>(miacode::preview_skin::kTapHeadScale);
 constexpr qreal kStarAssetScale = 90.0 / 126.0;
 constexpr qreal kSlideSpawnStarRelativeScale = 1.08;
 constexpr qreal kLogicalOutlineInset = miacode::layout_ring::kOutlineInsetLogical;
@@ -77,10 +78,10 @@ constexpr qreal kEachLine1SourceRadius = 240.02;
 constexpr qreal kEachLine2SourceRadius = 239.89;
 constexpr qreal kEachLine3SourceRadius = 239.65;
 constexpr qreal kEachLine4SourceRadius = 239.92;
-constexpr int kHoldTargetWidth = 60;
+constexpr int kHoldTargetWidth = static_cast<int>(miacode::preview_skin::kDefaultHoldTargetWidth + 0.5);
 constexpr int kFpsSampleWindowMs = 250;
 constexpr int kFrameStatsWindowSize = 120;
-constexpr qreal kSlideTrackScale = 0.5;
+constexpr qreal kSlideTrackScale = static_cast<qreal>(miacode::preview_skin::kSlideTrackScale);
 constexpr qreal kTouchLifecyclePhaseCount = 5.0;
 constexpr qreal kTouchPhaseDivisionEpsilonSeconds = 0.001;
 constexpr qreal kRenderAlphaEpsilon = 0.001;
@@ -170,8 +171,10 @@ constexpr qreal kTapFallbackInnerStrokeScale = 0.10;
 constexpr qreal kTapFallbackInnerRadiusScale = 0.58;
 constexpr qreal kHoldOverlayBaseMix = 0.85;
 constexpr qreal kHoldOverlayAlphaMix = 0.20;
-constexpr qreal kHoldCapSliceRatioNumerator = 71.0;
-constexpr qreal kHoldCapSliceRatioDenominator = 200.0;
+constexpr qreal kHoldCapSliceRatioNumerator =
+    static_cast<qreal>(miacode::preview_skin::kHoldCapSliceRatioNumerator);
+constexpr qreal kHoldCapSliceRatioDenominator =
+    static_cast<qreal>(miacode::preview_skin::kHoldCapSliceRatioDenominator);
 constexpr qreal kHoldFallbackCapRadiusLogical = 18.0;
 constexpr qreal kHoldFallbackBodyWidthLogical = 30.0;
 constexpr qreal kHoldFallbackBodyMinWidth = 4.0;
