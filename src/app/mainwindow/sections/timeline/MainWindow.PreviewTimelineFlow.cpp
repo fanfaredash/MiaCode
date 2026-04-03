@@ -2227,6 +2227,7 @@ void MainWindow::beginPreviewHeldSeek(int direction, int key)
     }
     previewHeldSeekDirection_ = direction > 0 ? 1 : -1;
     previewSeekHeldArrowKey_ = key;
+    previewSeekHeldArrowLastElapsedMs_ = 0;
     previewSeekHeldArrowElapsed_.restart();
     if (previewHeldSeekTimer_ != nullptr && !previewHeldSeekTimer_->isActive()) {
         previewHeldSeekTimer_->start();
@@ -2240,6 +2241,7 @@ void MainWindow::stopPreviewHeldSeek(int key)
     }
     previewHeldSeekDirection_ = 0;
     previewSeekHeldArrowKey_ = 0;
+    previewSeekHeldArrowLastElapsedMs_ = 0;
     previewSeekHeldArrowElapsed_.invalidate();
     if (previewHeldSeekTimer_ != nullptr) {
         previewHeldSeekTimer_->stop();
@@ -2253,10 +2255,15 @@ void MainWindow::applyPreviewHeldSeekTick()
         || !previewSeekHeldArrowElapsed_.isValid()) {
         return;
     }
-    const double heldSeconds = static_cast<double>(previewSeekHeldArrowElapsed_.elapsed()) / 1000.0;
+    const int elapsedMs = static_cast<int>(previewSeekHeldArrowElapsed_.elapsed());
+    const int deltaMs = previewSeekHeldArrowLastElapsedMs_ > 0
+        ? (elapsedMs - previewSeekHeldArrowLastElapsedMs_)
+        : miacode::preview_interaction::kSeekHoldTickIntervalMs;
+    previewSeekHeldArrowLastElapsedMs_ = elapsedMs;
+    const double heldSeconds = static_cast<double>(elapsedMs) / 1000.0;
     stepPreviewSliderBySeconds(
         static_cast<double>(previewHeldSeekDirection_)
-            * miacode::preview_interaction::heldSeekStepSeconds(heldSeconds),
+            * miacode::preview_interaction::heldSeekStepSecondsForDeltaMs(deltaMs, heldSeconds),
         true
     );
 }

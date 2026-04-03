@@ -69,11 +69,11 @@ Use this file to track where important constants live, what they mean, and wheth
   - Rule: keep local while it only expresses main-window preview-vs-analysis priority; promote it if the same debounce becomes shared across dialogs, subprocess workers, or user-facing settings
 - `src/common/PreviewInteractionConfig.h`
   - Owns: shared preview-slider keyboard and wheel seek defaults for the main window plus export dialog
-  - Current tuning note: discrete seek steps use a `60 FPS` frame (`1 / 60 s`), held seeking ramps linearly at `+1.0x / s` up to `2.0x`, and the held-seek timer currently ticks every `16 ms`
+  - Current tuning note: discrete seek steps use a `120 FPS` frame (`1 / 120 s`), held seeking ramps linearly at `+1.0x / s` up to `3.0x`, and the held-seek timer currently ticks every `16 ms`
   - Rule: keep shared here because the main preview and export-dialog preview must feel identical
 - `src/timeline/TimelineView.cpp`
   - Owns: timeline zoom preset bounds, coarse button stops, and the initial `pixelsPerSecond_` scale derived from the default zoom
-  - Current tuning note: the fixed zoom presets are now `25/50/75/100/150/200`; Timeline minor beat lines currently use `1.4 px`
+  - Current tuning note: the fixed zoom presets are now `25/50/75/100/150/200`; keyboard `Left` / `Right` keep viewport-scroll semantics and the existing single-step behavior, while held-scroll speed caps at `2 * zoomScale()` (for example `25% -> 0.5x`, `50% -> 1.0x`, `100% -> 2.0x`); Timeline minor beat lines currently use `1.4 px`
   - Rule: keep local while these values only shape timeline widget UX and do not need cross-subsystem parity
 
 ## 3. Promotion Rules
