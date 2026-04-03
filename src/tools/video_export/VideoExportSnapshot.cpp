@@ -18,6 +18,30 @@ QString backgroundScaleModeToken(PreviewBackgroundScaleMode mode)
         : QStringLiteral("fill");
 }
 
+QString videoExportPresetToken(VideoExportPreset preset)
+{
+    switch (preset) {
+    case VideoExportPreset::HighQuality:
+        return QStringLiteral("high_quality");
+    case VideoExportPreset::HighCompression:
+        return QStringLiteral("high_compression");
+    case VideoExportPreset::Fast:
+    default:
+        return QStringLiteral("fast");
+    }
+}
+
+VideoExportPreset videoExportPresetFromToken(const QString& token)
+{
+    if (token.compare(QStringLiteral("high_quality"), Qt::CaseInsensitive) == 0) {
+        return VideoExportPreset::HighQuality;
+    }
+    if (token.compare(QStringLiteral("high_compression"), Qt::CaseInsensitive) == 0) {
+        return VideoExportPreset::HighCompression;
+    }
+    return VideoExportPreset::Fast;
+}
+
 PreviewBackgroundScaleMode backgroundScaleModeFromToken(const QString& token)
 {
     return token.trimmed().compare(QStringLiteral("fit"), Qt::CaseInsensitive) == 0
@@ -141,6 +165,7 @@ QJsonObject VideoExportSnapshot::toJson() const
     exportObject.insert(QStringLiteral("output_width"), outputWidth);
     exportObject.insert(QStringLiteral("output_height"), outputHeight);
     exportObject.insert(QStringLiteral("fps"), fps);
+    exportObject.insert(QStringLiteral("preset"), videoExportPresetToken(preset));
     exportObject.insert(QStringLiteral("full_range_export"), fullRangeExport);
     exportObject.insert(QStringLiteral("output_path"), outputPath);
     root.insert(QStringLiteral("export"), exportObject);
@@ -232,6 +257,7 @@ bool VideoExportSnapshot::fromJson(
     parsed.outputWidth = exportObject.value(QStringLiteral("output_width")).toInt(parsed.outputWidth);
     parsed.outputHeight = exportObject.value(QStringLiteral("output_height")).toInt(parsed.outputHeight);
     parsed.fps = exportObject.value(QStringLiteral("fps")).toInt(parsed.fps);
+    parsed.preset = videoExportPresetFromToken(exportObject.value(QStringLiteral("preset")).toString());
     parsed.fullRangeExport = exportObject.value(QStringLiteral("full_range_export")).toBool(parsed.fullRangeExport);
     parsed.outputPath = exportObject.value(QStringLiteral("output_path")).toString();
 
@@ -308,6 +334,7 @@ bool buildVideoExportTaskFromSnapshot(
     built.outputWidth = snapshot.outputWidth;
     built.outputHeight = snapshot.outputHeight;
     built.fps = snapshot.fps;
+    built.preset = snapshot.preset;
     built.fullRangeExport = snapshot.fullRangeExport;
     built.showTimestamp = snapshot.showTimestamp;
     built.showObjectStatsHud = snapshot.showObjectStatsHud;

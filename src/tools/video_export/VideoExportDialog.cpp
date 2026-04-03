@@ -115,6 +115,49 @@ QString exportDialogResolutionLabel(const QSize& size)
     return QStringLiteral("%1x%2").arg(qMax(1, size.width())).arg(qMax(1, size.height()));
 }
 
+QString videoExportPresetToken(VideoExportPreset preset)
+{
+    switch (preset) {
+    case VideoExportPreset::HighQuality:
+        return QStringLiteral("high_quality");
+    case VideoExportPreset::HighCompression:
+        return QStringLiteral("high_compression");
+    case VideoExportPreset::Fast:
+    default:
+        return QStringLiteral("fast");
+    }
+}
+
+VideoExportPreset videoExportPresetFromStoredValue(const QJsonValue& value, VideoExportPreset fallback)
+{
+    if (value.isString()) {
+        const QString token = value.toString().trimmed();
+        if (token.compare(QStringLiteral("high_quality"), Qt::CaseInsensitive) == 0) {
+            return VideoExportPreset::HighQuality;
+        }
+        if (token.compare(QStringLiteral("high_compression"), Qt::CaseInsensitive) == 0) {
+            return VideoExportPreset::HighCompression;
+        }
+        if (token.compare(QStringLiteral("fast"), Qt::CaseInsensitive) == 0) {
+            return VideoExportPreset::Fast;
+        }
+    }
+    return fallback;
+}
+
+QString exportDialogPresetLabel(VideoExportPreset preset)
+{
+    switch (preset) {
+    case VideoExportPreset::HighQuality:
+        return uiText("dialog.video_export.preset.high_quality", QStringLiteral("High Quality"));
+    case VideoExportPreset::HighCompression:
+        return uiText("dialog.video_export.preset.high_compression", QStringLiteral("High Compression"));
+    case VideoExportPreset::Fast:
+    default:
+        return uiText("dialog.video_export.preset.fast", QStringLiteral("Fast"));
+    }
+}
+
 QString exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode mode)
 {
     switch (mode) {
@@ -531,6 +574,60 @@ VideoExportDialog::VideoExportDialog(
     fpsRightPlaceholder->setFixedWidth(rightAlignedButtonWidth);
     fpsLayout->addWidget(fpsRightPlaceholder, 0);
     primaryPanelLayout->addWidget(fpsRow, 0);
+
+    selectedPreset_ = baseTask_.preset;
+    presetButton_ = createDialogMenuButton(primaryPanel, exportDialogPresetLabel(selectedPreset_));
+    presetMenu_ = new QMenu(presetButton_);
+    UiTheme::styleRoundedMenu(*presetMenu_);
+    addDialogMenuChoice(
+        presetMenu_,
+        uiText("dialog.video_export.preset.fast", QStringLiteral("Fast")),
+        [this]() {
+            selectedPreset_ = VideoExportPreset::Fast;
+            if (presetButton_ != nullptr) {
+                presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
+            }
+            persistExportOnlySettings();
+        }
+    );
+    addDialogMenuChoice(
+        presetMenu_,
+        uiText("dialog.video_export.preset.high_quality", QStringLiteral("High Quality")),
+        [this]() {
+            selectedPreset_ = VideoExportPreset::HighQuality;
+            if (presetButton_ != nullptr) {
+                presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
+            }
+            persistExportOnlySettings();
+        }
+    );
+    addDialogMenuChoice(
+        presetMenu_,
+        uiText("dialog.video_export.preset.high_compression", QStringLiteral("High Compression")),
+        [this]() {
+            selectedPreset_ = VideoExportPreset::HighCompression;
+            if (presetButton_ != nullptr) {
+                presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
+            }
+            persistExportOnlySettings();
+        }
+    );
+    presetButton_->setMenu(presetMenu_);
+    auto* presetRow = new QWidget(primaryPanel);
+    auto* presetLayout = new QHBoxLayout(presetRow);
+    presetLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
+    presetLayout->setSpacing(kFormRowSpacing);
+    auto* presetLabel = new QLabel(
+        uiText("dialog.video_export.preset", QStringLiteral("Export Settings")),
+        presetRow
+    );
+    presetLabel->setFixedWidth(kFormLabelWidth);
+    presetLayout->addWidget(presetLabel, 0);
+    presetLayout->addWidget(presetButton_, 1);
+    auto* presetRightPlaceholder = new QWidget(presetRow);
+    presetRightPlaceholder->setFixedWidth(rightAlignedButtonWidth);
+    presetLayout->addWidget(presetRightPlaceholder, 0);
+    primaryPanelLayout->addWidget(presetRow, 0);
 
     rangeContent_ = new QWidget(this);
     auto* rangeLayout = new QVBoxLayout(rangeContent_);
@@ -1095,6 +1192,14 @@ void VideoExportDialog::loadPersistedSettings()
     if (fpsButton_ != nullptr) {
         fpsButton_->setText(QStringLiteral("%1 FPS").arg(selectedFps_));
     }
+
+    selectedPreset_ = videoExportPresetFromStoredValue(
+        settings.value(QStringLiteral("preset")),
+        selectedPreset_
+    );
+    if (presetButton_ != nullptr) {
+        presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
+    }
 }
 
 void VideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
@@ -1103,6 +1208,7 @@ void VideoExportDialog::savePersistedSettings(const VideoExportTask& task) const
     settings.insert(QStringLiteral("resolution_width"), task.outputWidth);
     settings.insert(QStringLiteral("resolution_height"), task.outputHeight);
     settings.insert(QStringLiteral("fps"), task.fps);
+    settings.insert(QStringLiteral("preset"), videoExportPresetToken(task.preset));
     miacode::video_export::saveDialogPreferences(settings);
 }
 
@@ -1112,6 +1218,7 @@ void VideoExportDialog::persistExportOnlySettings() const
     settings.insert(QStringLiteral("resolution_width"), selectedResolution().width());
     settings.insert(QStringLiteral("resolution_height"), selectedResolution().height());
     settings.insert(QStringLiteral("fps"), selectedFps_);
+    settings.insert(QStringLiteral("preset"), videoExportPresetToken(selectedPreset_));
     miacode::video_export::saveDialogPreferences(settings);
 }
 
@@ -1261,6 +1368,7 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     updated.outputWidth = selectedSize.width() > 0 ? selectedSize.width() : updated.outputWidth;
     updated.outputHeight = selectedSize.height() > 0 ? selectedSize.height() : updated.outputHeight;
     updated.fps = qMax(1, selectedFps_);
+    updated.preset = selectedPreset_;
     updated.showTimestamp = showTimestampCheck_ != nullptr ? showTimestampCheck_->isChecked() : true;
     updated.backgroundBrightnessOuter = brightnessOuterSlider_ != nullptr
         ? qBound(0.0, static_cast<double>(brightnessOuterSlider_->value()) / 100.0, 1.0)
