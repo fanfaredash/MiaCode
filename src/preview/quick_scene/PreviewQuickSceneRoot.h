@@ -3,11 +3,9 @@
 #include <QQuickItem>
 
 #include "preview/quick_scene/PreviewQuickBackdropLayer.h"
-#include "preview/quick_scene/PreviewQuickJudgeFireworkLayer.h"
-#include "preview/quick_scene/PreviewQuickMuriActionLayer.h"
-#include "preview/quick_scene/PreviewQuickMuriPadLayer.h"
-#include "preview/quick_scene/PreviewQuickTouchJudgeLayer.h"
+#include "preview/quick_scene/PreviewQuickGuideLayer.h"
 #include "preview/quick_scene/PreviewQuickStageBackgroundLayer.h"
+#include "preview/quick_scene/PreviewQuickTouchLayer.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
 
 class PreviewRuntime;
@@ -30,8 +28,6 @@ private:
     PreviewTextureRepository textures_;
     PreviewQuickStageBackgroundLayer stageBackgroundLayer_;
     PreviewQuickBackdropLayer backdropLayer_;
-    PreviewQuickMuriPadLayer muriPadLayer_;
-    PreviewQuickMuriActionLayer muriActionLayer_;
-    PreviewQuickJudgeFireworkLayer judgeFireworkLayer_;
-    PreviewQuickTouchJudgeLayer touchJudgeLayer_;
+    PreviewQuickGuideLayer guideLayer_;
+    PreviewQuickTouchLayer touchLayer_;
 };

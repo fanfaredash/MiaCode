@@ -91,4 +91,5 @@ private:
     QVector<double> presentedFrameIntervalsMs_;
     int presentedFrameIntervalWriteIndex_ = 0;
     int presentedFrameIntervalCount_ = 0;
+    bool pendingPresentedStatsRefresh_ = true;
 };

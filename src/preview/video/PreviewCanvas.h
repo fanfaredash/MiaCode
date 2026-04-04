@@ -5,6 +5,7 @@
 #include "common/MuriRenderOptions.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
+#include "preview/scene/PreviewFrameState.h"
 #include "preview/scene/PreviewLayerOrder.h"
 #include "PreviewRenderSettings.h"
 #include "PreviewGLRenderer.h"
@@ -116,6 +117,7 @@ public:
     {
         return !tapImage_.isNull() && !holdImage_.isNull() && !starImage_.isNull();
     }
+    miacode::preview::scene::PreviewSkinAssets buildSkinAssetsForScene() const;
     const QImage& outlineImageForScene() const { return outlineImage_; }
     double layoutRingDiameterRatioForScene() const { return layoutRingDiameterRatio_; }
     double fpsDisplayForScene() const { return fpsDisplay_; }
