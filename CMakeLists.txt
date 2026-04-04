@@ -82,18 +82,20 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/BatchVideoExportDialog.cpp
     src/tools/video_export/VideoExportController.h
     src/tools/video_export/VideoExportController.cpp
+    src/tools/video_export/VideoExportQuickRenderBackend.h
+    src/tools/video_export/VideoExportQuickRenderBackend.cpp
     src/tools/video_export/RawVideoPipeTransport.h
     src/tools/video_export/RawVideoPipeTransport.cpp
     src/tools/video_export/VideoExportSnapshot.h
     src/tools/video_export/VideoExportSnapshot.cpp
-    src/preview/video/PreviewCanvas.h
-    src/preview/video/PreviewCanvas.cpp
-    src/preview/video/PreviewGLRenderer.h
-    src/preview/video/PreviewGLRenderer.cpp
     src/preview/video/PreviewMediaController.h
     src/preview/video/PreviewMediaController.cpp
-    src/preview/runtime/PreviewQuickItem.h
-    src/preview/runtime/PreviewQuickItem.cpp
+    src/preview/runtime/PreviewQuickExportSession.h
+    src/preview/runtime/PreviewQuickExportSession.cpp
+    src/preview/runtime/PreviewSceneAssetLoader.h
+    src/preview/runtime/PreviewSceneAssetLoader.cpp
+    src/preview/runtime/PreviewSceneAssetRepository.h
+    src/preview/runtime/PreviewSceneAssetRepository.cpp
     src/preview/runtime/PreviewQuickRuntimeSurface.h
     src/preview/runtime/PreviewQuickRuntimeSurface.cpp
     src/preview/runtime/PreviewRuntime.h
@@ -191,8 +193,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/quick_scene/PreviewQuickHudLayer.cpp
     src/preview/quick_scene/PreviewQuickSceneRoot.h
     src/preview/quick_scene/PreviewQuickSceneRoot.cpp
-    src/preview/quick_scene/PreviewQuickLayerRenderNode.h
-    src/preview/quick_scene/PreviewQuickLayerRenderNode.cpp
     src/preview/quick_scene/PreviewQuickSceneInvalidationPolicy.h
     src/preview/audio/PreviewAudioSettings.h
     src/preview/audio/PreviewAudioSettings.cpp

@@ -484,7 +484,7 @@ int runCliVideoExportWorker(QApplication& app, QString* errorMessage)
         return false;
     };
 
-    const VideoExportResult result = VideoExportController::exportPreparedTask(task, nullptr, progressCallback);
+    const VideoExportResult result = VideoExportController::exportPreparedTask(task, progressCallback);
 
     QJsonObject finishedObject{
         {QStringLiteral("event"), QStringLiteral("finished")},

@@ -13,17 +13,10 @@ Rectangle {
         z: 0
     }
 
-    PreviewQuickItem {
-        id: previewLegacyBridgeItem
-        objectName: "previewQuickItem"
-        anchors.fill: parent
-        z: 1
-    }
-
     PreviewQuickHudLayer {
         id: previewQuickHudLayer
         objectName: "previewQuickHudLayer"
         anchors.fill: parent
-        z: 2
+        z: 1
     }
 }

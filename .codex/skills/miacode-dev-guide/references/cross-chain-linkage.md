@@ -23,13 +23,13 @@ Implication:
 
 - A parser change is rarely parser-only.
 - A new note property or timing rule usually needs timeline, preview, audio, export, and Muri review.
-- Slide/tap head-material flags such as `$`, `$$`, `@`, `?`, and `!` are mirrored data: keep `SimaiNativeParser`, `TimelineQuickModel`, `PreviewCanvas`, timeline icons, and chart-transform token preservation aligned in the same patch.
+- Slide/tap head-material flags such as `$`, `$$`, `@`, `?`, and `!` are mirrored data: keep `SimaiNativeParser`, `TimelineQuickModel`, `PreviewSkinSelectors`, timeline icons, and chart-transform token preservation aligned in the same patch.
 - `TimelineQuickModel` is now the owner of comma-only `C` anchor lookup for editor cursor sync, header/timeline `R -> C` jumps, and playback follow.
 - Timeline beat-grid semantics are mirrored between `SimaiNativeParser` and `TimelineQuickModel`: every comma remains a beat line, while measure lines are generated on an independent meter timeline. The current meter now comes from shared `SimaiTimingMetadata` (`&whole_time_signature=`), inline `|| x/y` comments restart that meter timeline at the exact comment position, `{beats}` only changes comma spacing, and `(BPM)` changes restart the independent measure-line timeline at the BPM-change position.
-- `PreviewCanvas::drawNoteGuides` should group each-guide connectors by parser-derived `eachGroupId` when available; do not merge backtick-separated groups just because their `marker.second` matches.
-- Timeline note sprite stacking is intentionally preview-mirrored for overlapping markers: `TimelineView::paintEvent` keeps slide/wifi tracks behind note heads, uses the preview-style descending-`second` stack for tap/hold/slide/wifi heads, and then draws touch above that stack with touch-hold above touch. If preview object-layer order changes, review `src/timeline/TimelineView.Paint.cpp`, `src/preview/video/PreviewCanvas.Render.cpp`, and `src/preview/video/PreviewCanvas.Objects.cpp` together.
-- On-screen preview now flows through `PreviewRuntime` and a Qt Quick host, but the actual frame content still comes from the legacy `PreviewCanvas` renderer. If you change preview setters, frame pacing hooks, or full-frame rendering behavior, review both `src/preview/runtime/*` and `src/preview/video/PreviewCanvas.*` in the same patch.
-- The first-batch Quick migration now draws `StageBackground`, `Backdrop`, and `Hud` through `src/preview/quick_scene/*`, while the remaining object/effect layers still come from the masked legacy bridge in `PreviewCanvas::paintPresentFrame(...)`. If you change layer ordering or add a new visible layer, review `src/preview/scene/PreviewLayerOrder.h`, `src/preview/quick_scene/*`, and `src/preview/video/PreviewCanvas.Render.cpp` together.
+- Guide-layer state should group each-guide connectors by parser-derived `eachGroupId` when available; do not merge backtick-separated groups just because their `marker.second` matches.
+- Timeline note sprite stacking is intentionally preview-mirrored for overlapping markers: `TimelineView::paintEvent` keeps slide/wifi tracks behind note heads, uses the preview-style descending-`second` stack for tap/hold/slide/wifi heads, and then draws touch above that stack with touch-hold above touch. If preview object-layer order changes, review `src/timeline/TimelineView.Paint.cpp`, `src/preview/scene/PreviewLayerOrder.h`, and `src/preview/quick_scene/*` together.
+- On-screen preview and export now flow through `PreviewRuntime` / `PreviewQuickExportSession` plus the active layers in `src/preview/quick_scene/*`. Shared assets now come from `PreviewSceneAssetLoader` and `PreviewSceneAssetRepository`. If you change preview setters, frame pacing hooks, layer data contracts, or export-session ownership, review both `src/preview/runtime/*` and `src/preview/quick_scene/*` in the same patch.
+- Runtime and export layer order are both owned by `PreviewQuickSceneRoot` plus `PreviewLayerOrder.h`. If you change layer ordering or add a new visible layer, review `src/preview/scene/PreviewLayerOrder.h`, `src/preview/quick_scene/*`, and `src/tools/video_export/VideoExportQuickRenderBackend.*` together.
 - While preview playback is running, slow-refresh note-marker updates still feed the latest validation and Muri worker inputs, but preview audio/canvas/object stats stay on the frozen play-start snapshot until playback stops; validation and Muri panel/decorations may defer their visible UI apply until playback returns to a paused state.
 - Analysis-only setting changes such as Muri render mode or the static tap-on-slide threshold should prefer reusing the latest preview snapshot and cached parse result instead of forcing another full slow refresh.
 - Preview play/resume must use the latest in-memory field state, not a forced disk save. If slow refresh is still behind `timelineRevision_`, playback start may synchronously rebuild a preview-only note-marker snapshot once before audio/video start so the next resume does not wait for validation or Muri workers.
@@ -140,7 +140,7 @@ Asset root:
 Preview-time consumers:
 
 - `MainWindow::resolvePreviewSkinDir`
-- `PreviewCanvas::setSkinDirectory`
+- `PreviewRuntime::setSkinDirectory`
 - `miacode::preview_sfx::resolveSfxDirectory`
 
 Export-time consumers:
@@ -175,7 +175,7 @@ Wifi-specific note:
 
 - `RenderMode::MaimuriDxStyle` wifi track erasure is not driven by static `wifiTrackAreaCheckpoints`.
 - `MuriAnalyzer` reconstructs runtime lane progress in `MarkerMuriState::wifiLaneProgressSeconds`, mirrors judged lane areas in `MarkerMuriState::wifiLaneAreas`, and records the actual `C` release time in `MarkerMuriState::wifiPadCSecond`.
-- `PreviewCanvas::drawWifiTrack` must trim the shared middle-track body by the slowest lane's current area index, using `wifiLaneProgressSeconds` first and `wifiLaneAreas` as a fallback if the progress array is unavailable.
+- `PreviewTrackLayerState` must trim the shared middle-track body by the slowest lane's current area index, using `wifiLaneProgressSeconds` first and `wifiLaneAreas` as a fallback if the progress array is unavailable.
 - In `RenderMode::MaimuriDxStyle`, wifi track completion should stay erased after the runtime clear; do not repaint a full-track flash on top of the erased body. When `wifiNeedC` is enabled, the last area must still remain visible until `wifiPadCSecond`.
 
 Shared render settings include:
@@ -197,8 +197,8 @@ Muri warning/render note:
 Owners:
 
 - Persistent state: `MainWindow::loadProjectRenderState`, `saveProjectRenderState`, `MainWindow::loadPortableState`, `MainWindow::savePortableState`, `miacode::video_export::loadDialogPreferences`, `miacode::video_export::saveDialogPreferences`
-- Preview application: `PreviewCanvas` setters and `PreviewMediaController`
-- Runtime host application: `PreviewRuntime` setters, cached-frame refresh, and `PreviewQuickRuntimeSurface`
+- Preview application: `PreviewRuntime` setters, `PreviewSceneAssetRepository`, and `PreviewMediaController`
+- Runtime host application: `PreviewRuntime`, cached-frame refresh, and `PreviewQuickRuntimeSurface`
 - Quick layer application: `PreviewQuickSceneRoot`, `PreviewQuickStageBackgroundLayer`, `PreviewQuickBackdropLayer`, `PreviewQuickHudLayer`
 - Export application: `MainWindow::buildVideoExportSnapshot`, `buildVideoExportTaskFromSnapshot`, `VideoExportController`
 
@@ -234,7 +234,7 @@ Implication:
   - Check packaging or ffmpeg assumptions if format support changes
 - Change preview timing constants:
   - Check `PreviewGameplayConfig.h`
-  - Check `PreviewCanvas.cpp`
+  - Check `src/preview/scene/PreviewOpacityCurves.cpp`
   - Check `VideoExportController.cpp` diagnostics and timeline assumptions
 - Change Muri static thresholds:
   - Check `MuriConfig.h`

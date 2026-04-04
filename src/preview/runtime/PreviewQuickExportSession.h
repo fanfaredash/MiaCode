@@ -1,0 +1,75 @@
+#pragma once
+
+#include <QObject>
+#include <QImage>
+#include <QSize>
+#include <QSurfaceFormat>
+
+#include "preview/scene/PreviewFrameState.h"
+#include "preview/scene/PreviewLayerOrder.h"
+
+class QOffscreenSurface;
+class QOpenGLContext;
+class QOpenGLFramebufferObject;
+class QQuickItem;
+class QQuickRenderControl;
+class QQuickWindow;
+class PreviewQuickHudLayer;
+class PreviewQuickSceneRoot;
+
+struct PreviewQuickExportRenderStats {
+    qint64 renderNs = 0;
+    qint64 readbackNs = 0;
+};
+
+class PreviewQuickExportSession : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit PreviewQuickExportSession(QObject* parent = nullptr);
+    ~PreviewQuickExportSession() override;
+
+    void setFrameState(const miacode::preview::scene::PreviewFrameState& state);
+    const miacode::preview::scene::PreviewFrameState& frameState() const { return frameState_; }
+    void setLayerFlags(miacode::preview::scene::PreviewRenderLayerFlags layerFlags);
+    miacode::preview::scene::PreviewRenderLayerFlags layerFlags() const { return layerFlags_; }
+
+    void setFrameSize(const QSize& size);
+    QSize frameSize() const { return frameSize_; }
+
+    bool initialize(
+        const QSurfaceFormat& requestedFormat = QSurfaceFormat(),
+        QOpenGLContext* shareContext = nullptr,
+        QString* errorMessage = nullptr
+    );
+    void invalidate();
+    bool isInitialized() const;
+
+    QImage renderFrame(QString* errorMessage = nullptr);
+    const PreviewQuickExportRenderStats& lastRenderStats() const { return lastRenderStats_; }
+    qint64 lastRenderNs() const { return lastRenderStats_.renderNs; }
+
+private:
+    bool ensureFramebuffer(QString* errorMessage);
+    void destroyFramebuffer();
+    void applyFrameSize();
+    void applyFrameState();
+    QSize framebufferPixelSize() const;
+
+    miacode::preview::scene::PreviewFrameState frameState_;
+    miacode::preview::scene::PreviewRenderLayerFlags layerFlags_ =
+        miacode::preview::scene::kPreviewAllRenderLayers;
+    QSize frameSize_{1, 1};
+    QSurfaceFormat requestedFormat_;
+    QOpenGLContext* shareContext_ = nullptr;
+    QQuickRenderControl* renderControl_ = nullptr;
+    QQuickWindow* quickWindow_ = nullptr;
+    QQuickItem* rootItem_ = nullptr;
+    PreviewQuickSceneRoot* sceneRoot_ = nullptr;
+    PreviewQuickHudLayer* hudLayer_ = nullptr;
+    QOffscreenSurface* offscreenSurface_ = nullptr;
+    QOpenGLContext* context_ = nullptr;
+    QOpenGLFramebufferObject* framebuffer_ = nullptr;
+    PreviewQuickExportRenderStats lastRenderStats_;
+};

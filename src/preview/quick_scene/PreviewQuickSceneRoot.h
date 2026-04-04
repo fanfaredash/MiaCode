@@ -18,8 +18,12 @@
 #include "preview/quick_scene/PreviewQuickTouchHoldLayer.h"
 #include "preview/quick_scene/PreviewQuickTouchLayer.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
+#include "preview/scene/PreviewLayerOrder.h"
 
 class PreviewRuntime;
+namespace miacode::preview::scene {
+struct PreviewFrameState;
+}
 
 class PreviewQuickSceneRoot : public QQuickItem
 {
@@ -29,6 +33,8 @@ public:
     explicit PreviewQuickSceneRoot(QQuickItem* parent = nullptr);
 
     void setRuntime(PreviewRuntime* runtime);
+    void setFrameState(const miacode::preview::scene::PreviewFrameState* frameState);
+    void setLayerFlags(miacode::preview::scene::PreviewRenderLayerFlags layerFlags);
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* updatePaintNodeData) override;
@@ -36,6 +42,9 @@ protected:
 
 private:
     PreviewRuntime* runtime_ = nullptr;
+    const miacode::preview::scene::PreviewFrameState* frameState_ = nullptr;
+    miacode::preview::scene::PreviewRenderLayerFlags layerFlags_ =
+        miacode::preview::scene::kPreviewAllRenderLayers;
     PreviewTextureRepository textures_;
     PreviewQuickStageBackgroundLayer stageBackgroundLayer_;
     PreviewQuickBackdropLayer backdropLayer_;

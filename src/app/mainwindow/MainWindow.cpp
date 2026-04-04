@@ -38,6 +38,7 @@
 #include <QCloseEvent>
 #include <QColor>
 #include <QComboBox>
+#include <QWindow>
 #include <QCoreApplication>
 #include <QCursor>
 #include <QDateTime>
@@ -6119,7 +6120,7 @@ bool MainWindow::exportPreviewVideoFromCli(
     task.showObjectStatsHud = request.showObjectStatsHud;
     task.outputPath = outputPath;
 
-    const VideoExportResult exportResult = VideoExportController::exportFullPreview(task, nullptr, nullptr);
+    const VideoExportResult exportResult = VideoExportController::exportFullPreview(task, nullptr);
     if (!exportResult.success) {
         return fail(exportResult.message, exportResult.details);
     }

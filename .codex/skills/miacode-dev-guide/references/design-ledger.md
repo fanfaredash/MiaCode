@@ -35,8 +35,8 @@ Use this file to separate hard contracts from adjustable implementation choices.
 - Export output naming currently auto-appends `.mp4` when missing and avoids collisions by choosing `name(1).mp4`, `name(2).mp4`, and so on before the worker starts.
 - Background media naming is currently limited to `bg.*` or `pv.mp4` style conventions.
 - Preview panel layout is currently card-based, with preview, controls, and stats as separate blocks.
-- On-screen preview is currently hosted by `PreviewRuntime` through `QQuickView + QWidget::createWindowContainer(...)`, and the app currently forces the Qt Quick graphics API to OpenGL so `PreviewQuickItem` can render directly through the legacy `PreviewCanvas` draw stack inside a Quick FBO. Export still uses the same legacy renderer family.
-- The current migration split is explicit: `StageBackground`, `Backdrop`, and `Hud` already render as separate Quick layers, while guide/track/motion/object/effect/judge layers still come from the masked legacy bridge. New preview work should prefer adding another dedicated Quick layer file instead of expanding `PreviewCanvas.Objects.cpp`.
+- On-screen preview is currently hosted by `PreviewRuntime` through `QQuickView + QWidget::createWindowContainer(...)`, and both realtime preview and export now render through the Qt Quick scene graph plus `PreviewQuickExportSession`.
+- New preview or export rendering work should prefer adding another dedicated `scene/` state builder or `quick_scene/` layer file instead of reintroducing a painter/OpenGL fallback path.
 - Preview fullscreen currently reuses the same transport controls as the embedded preview, adds a rounded translucent-black `Esc` hint bubble, and only reveals a near-full-width bottom overlay control bar when the cursor moves into the bottom hot zone, with fade-in/fade-out opacity animation before auto-hiding again.
 - While the chart text editor has focus, `Ctrl+Enter` currently forwards to the existing preview play/pause transport instead of being left to the text widget.
 - While the preview time slider has focus, pressing `Space` currently forwards to the same preview play/pause transport; clicking or dragging the slider keeps that focus on the slider.
@@ -78,7 +78,7 @@ These are adjustable, but if changed they should be documented here and in the r
 ## 5. Areas That Need Guardrails
 
 - Path resolution rules are still duplicated in a few places, especially for media and track files.
-- A large amount of visual tuning still lives in implementation-local constants in `PreviewCanvas.cpp`.
+- A large amount of visual tuning still lives in implementation-local constants across `src/preview/scene/*.cpp` and `src/tools/video_export/VideoExportController.cpp`.
 - Latency detection carries algorithm-specific constants that are meaningful but still mostly local to the tool.
 - `DEVELOPMENT_PLAN.md` contains useful design notes, but some path references and structure descriptions already drifted from the current tree.
 

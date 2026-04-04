@@ -2,18 +2,15 @@
 
 #include <QObject>
 #include <QElapsedTimer>
-#include <QImage>
 #include <QSize>
 #include <QVector>
 
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
 #include "preview/scene/PreviewFrameState.h"
-#include "preview/scene/PreviewLayerOrder.h"
-#include "preview/video/PreviewCanvas.h"
+#include "preview/runtime/PreviewSceneAssetRepository.h"
 
 class PreviewQuickRuntimeSurface;
-class QPainter;
 class QWindow;
 
 class PreviewRuntime : public QObject
@@ -57,32 +54,16 @@ public:
     bool hasCoreSkinAssetsLoadedForDebug() const;
 
     void setFrameSize(const QSize& size);
-    void paintFrame(QPainter& painter, const QSize& outputSize, qreal devicePixelRatio = 1.0);
-    void paintLegacyFrame(
-        QPainter& painter,
-        const QSize& outputSize,
-        qreal devicePixelRatio = 1.0,
-        miacode::preview::scene::PreviewRenderLayerFlags layerFlags =
-            miacode::preview::scene::kPreviewLegacyBridgeLayers,
-        bool allowGpuDrawing = true,
-        bool collectFrameStats = true
-    );
-    QImage renderLayerImage(
-        const QSize& outputSize,
-        qreal devicePixelRatio = 1.0,
-        miacode::preview::scene::PreviewRenderLayerFlags layerFlags =
-            miacode::preview::scene::kPreviewLegacyBridgeLayers
-    );
     const miacode::preview::scene::PreviewFrameState& frameState() const { return frameState_; }
 
 signals:
     void framePresented();
 
 private:
-    void refreshAssetStateFromRenderer();
+    void refreshAssetStateFromRepository();
     void updatePresentedFrameStats();
 
-    PreviewCanvas* renderer_ = nullptr;
+    miacode::preview::runtime::PreviewSceneAssetRepository* assets_ = nullptr;
     PreviewQuickRuntimeSurface* surface_ = nullptr;
     QSize frameSize_;
     miacode::preview::scene::PreviewFrameState frameState_;

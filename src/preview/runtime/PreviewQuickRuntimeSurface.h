@@ -5,7 +5,6 @@
 
 class QQuickView;
 class QWindow;
-class PreviewQuickItem;
 class PreviewQuickHudLayer;
 class PreviewQuickSceneRoot;
 class PreviewRuntime;
@@ -31,7 +30,6 @@ private:
 
     PreviewRuntime* runtime_ = nullptr;
     QQuickView* view_ = nullptr;
-    QPointer<PreviewQuickItem> quickItem_;
     QPointer<PreviewQuickSceneRoot> sceneRoot_;
     QPointer<PreviewQuickHudLayer> hudLayer_;
 };

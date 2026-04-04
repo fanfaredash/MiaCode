@@ -40,8 +40,8 @@ If these conventions change, update both code and this file.
 ## 3. Asset Consumers
 
 - Skin textures:
-  - Consumers: `PreviewRuntime`, `PreviewCanvas`
-  - Entry: `MainWindow::resolvePreviewSkinDir`, `PreviewRuntime::setSkinDirectory`, `PreviewCanvas::setSkinDirectory`
+  - Consumers: `PreviewRuntime`, `PreviewQuickExportSession`, `VideoExportQuickRenderBackend`
+  - Entry: `MainWindow::resolvePreviewSkinDir`, `PreviewRuntime::setSkinDirectory`, `PreviewSceneAssetRepository::setSkinDirectory`, `PreviewSceneAssetLoader::load`
   - Quick scene textures are currently uploaded through `PreviewTextureRepository` per Quick item/window, with static texture reuse keyed by `QImage::cacheKey()`
   - Native chart-review judge overlays load from:
     - `JudgeTextSkins/judge_text_normal.png`
