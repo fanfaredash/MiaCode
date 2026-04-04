@@ -116,7 +116,11 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/scene/PreviewGuideLayerState.cpp
     src/preview/scene/PreviewTouchLayerState.h
     src/preview/scene/PreviewTouchLayerState.cpp
+    src/preview/scene/PreviewAnimatedSpriteHelpers.h
+    src/preview/scene/PreviewAnimatedSpriteHelpers.cpp
     src/preview/scene/PreviewArcDescriptor.h
+    src/preview/scene/PreviewHeadLayerState.h
+    src/preview/scene/PreviewHeadLayerState.cpp
     src/preview/scene/PreviewTouchHoldLayerState.h
     src/preview/scene/PreviewTouchHoldLayerState.cpp
     src/preview/quick_scene/PreviewTextureRepository.h
@@ -131,6 +135,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/quick_scene/PreviewQuickArcNodes.cpp
     src/preview/quick_scene/PreviewQuickGuideLayer.h
     src/preview/quick_scene/PreviewQuickGuideLayer.cpp
+    src/preview/quick_scene/PreviewQuickHeadLayer.h
+    src/preview/quick_scene/PreviewQuickHeadLayer.cpp
     src/preview/quick_scene/PreviewQuickTouchLayer.h
     src/preview/quick_scene/PreviewQuickTouchLayer.cpp
     src/preview/quick_scene/PreviewQuickTouchHoldLayer.h

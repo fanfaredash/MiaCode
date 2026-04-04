@@ -60,9 +60,6 @@ inline constexpr PreviewRenderLayerFlags kPreviewLegacyLowerBridgeLayers =
     | SlideMotionLayer
     | JudgeLayer;
 
-inline constexpr PreviewRenderLayerFlags kPreviewLegacyHeadBridgeLayers =
-    HeadLayer;
-
 inline constexpr PreviewRenderLayerFlags kPreviewLegacyPostTouchBridgeLayers =
     ChartReviewLayer
     | MaimuriDxJudgeLayer;
@@ -71,6 +68,7 @@ inline constexpr PreviewRenderLayerFlags kPreviewLegacyBridgeLayers =
     kPreviewAllRenderLayers
     & ~kPreviewSceneGraphSecondBatchLayers
     & ~GuideLayer
+    & ~HeadLayer
     & ~TouchLayer
     & ~TouchHoldLayer;
 

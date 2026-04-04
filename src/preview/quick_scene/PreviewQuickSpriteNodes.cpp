@@ -50,6 +50,14 @@ QSGNode* buildPreviewSpriteNodeTree(
         textureNode->setTexture(textures->textureForImage(*sprite.image, sprite.cacheable));
         textureNode->setFiltering(QSGTexture::Linear);
         textureNode->setRect(QRectF(-sprite.width / 2.0, -sprite.height / 2.0, sprite.width, sprite.height));
+        if (sprite.sourceRect.isValid() && !sprite.sourceRect.isEmpty() && sprite.image->width() > 0 && sprite.image->height() > 0) {
+            textureNode->setSourceRect(QRectF(
+                sprite.sourceRect.x() / static_cast<qreal>(sprite.image->width()),
+                sprite.sourceRect.y() / static_cast<qreal>(sprite.image->height()),
+                sprite.sourceRect.width() / static_cast<qreal>(sprite.image->width()),
+                sprite.sourceRect.height() / static_cast<qreal>(sprite.image->height())
+            ));
+        }
 
         transformNode->appendChildNode(textureNode);
         opacityNode->appendChildNode(transformNode);
