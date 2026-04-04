@@ -59,6 +59,18 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
     if (QSGNode* backdropNode = backdropLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
         root->appendChildNode(backdropNode);
     }
+    if (QSGNode* muriPadNode =
+            muriPadLayer_.updateNode(nullptr, runtime_, state, boundingRect().size().toSize(), window(), &textures_)) {
+        root->appendChildNode(muriPadNode);
+    }
+    if (QSGNode* muriActionNode =
+            muriActionLayer_.updateNode(nullptr, runtime_, state, boundingRect().size().toSize(), window(), &textures_)) {
+        root->appendChildNode(muriActionNode);
+    }
+    if (QSGNode* judgeFireworkNode =
+            judgeFireworkLayer_.updateNode(nullptr, runtime_, state, boundingRect().size().toSize(), window(), &textures_)) {
+        root->appendChildNode(judgeFireworkNode);
+    }
     if (QSGNode* guideNode = guideLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
         root->appendChildNode(guideNode);
     }
@@ -70,13 +82,12 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
             miacode::preview::scene::kPreviewLegacyLowerBridgeLayers)) {
         root->appendChildNode(legacyCompositeNode);
     }
-    if (QSGNode* legacyHeadNode = buildLegacyMaskedNode(
-            runtime_,
-            textures_,
-            window(),
-            boundingRect().size().toSize(),
-            miacode::preview::scene::kPreviewLegacyHeadBridgeLayers)) {
-        root->appendChildNode(legacyHeadNode);
+    if (QSGNode* touchJudgeNode =
+            touchJudgeLayer_.updateNode(nullptr, runtime_, state, boundingRect().size().toSize(), window(), &textures_)) {
+        root->appendChildNode(touchJudgeNode);
+    }
+    if (QSGNode* headNode = headLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
+        root->appendChildNode(headNode);
     }
     if (QSGNode* touchNode = touchLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
         root->appendChildNode(touchNode);
