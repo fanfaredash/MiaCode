@@ -2,12 +2,9 @@
 
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
-#include "preview/scene/PreviewLayerOrder.h"
-#include "preview/runtime/PreviewQuickItem.h"
 #include "preview/runtime/PreviewRuntime.h"
 
 #include <QQuickView>
-#include <QQmlContext>
 #include <QtQml/qqml.h>
 
 namespace {
@@ -18,7 +15,6 @@ void ensurePreviewQuickTypeRegistered()
     if (registered) {
         return;
     }
-    qmlRegisterType<PreviewQuickItem>("MiaCode.Preview", 1, 0, "PreviewQuickItem");
     qmlRegisterType<PreviewQuickSceneRoot>("MiaCode.Preview", 1, 0, "PreviewQuickSceneRoot");
     qmlRegisterType<PreviewQuickHudLayer>("MiaCode.Preview", 1, 0, "PreviewQuickHudLayer");
     registered = true;
@@ -77,13 +73,10 @@ void PreviewQuickRuntimeSurface::requestFrame()
     if (sceneRoot_ != nullptr) {
         sceneRoot_->update();
     }
-    if (quickItem_ != nullptr) {
-        quickItem_->update();
-    }
     if (hudLayer_ != nullptr) {
         hudLayer_->update();
     }
-    if (sceneRoot_ == nullptr && quickItem_ == nullptr && hudLayer_ == nullptr && view_ != nullptr) {
+    if (sceneRoot_ == nullptr && hudLayer_ == nullptr && view_ != nullptr) {
         view_->update();
     }
 }
@@ -97,17 +90,6 @@ void PreviewQuickRuntimeSurface::bindQuickItem()
     QObject* root = view_->rootObject();
     if (root == nullptr) {
         return;
-    }
-
-    PreviewQuickItem* item = root->findChild<PreviewQuickItem*>(QStringLiteral("previewQuickItem"));
-    if (item == nullptr) {
-        return;
-    }
-
-    quickItem_ = item;
-    if (quickItem_ != nullptr) {
-        quickItem_->setVisible(false);
-        quickItem_->setRuntime(nullptr);
     }
 
     sceneRoot_ = root->findChild<PreviewQuickSceneRoot*>(QStringLiteral("previewQuickSceneRoot"));

@@ -12,8 +12,6 @@
 #include "common/MuriTypes.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "common/PreviewGameplayConfig.h"
-
-class PreviewCanvas;
 class QProgressDialog;
 
 enum class VideoExportPreset {
@@ -65,12 +63,10 @@ class VideoExportController
 public:
     static VideoExportResult exportFullPreview(
         const VideoExportTask& task,
-        const PreviewCanvas* sourceCanvas,
         QProgressDialog* progress
     );
     static VideoExportResult exportPreparedTask(
         const VideoExportTask& task,
-        const PreviewCanvas* sourceCanvas = nullptr,
         const VideoExportProgressCallback& progressCallback = {}
     );
 };

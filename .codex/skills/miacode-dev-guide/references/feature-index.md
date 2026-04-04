@@ -86,25 +86,15 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 ## 6. Preview Video, Media, And Render State
 
 - Runtime preview host and Quick bridge:
-  - Files: `src/preview/runtime/PreviewRuntime.h`, `src/preview/runtime/PreviewRuntime.cpp`, `src/preview/runtime/PreviewQuickRuntimeSurface.h`, `src/preview/runtime/PreviewQuickRuntimeSurface.cpp`, `src/preview/runtime/PreviewQuickItem.h`, `src/preview/runtime/PreviewQuickItem.cpp`, `src/preview/runtime/qml/PreviewRuntimeView.qml`
-  - Classes: `PreviewRuntime`, `PreviewQuickRuntimeSurface`, `PreviewQuickItem`
-  - Owns: on-screen preview host window (`QQuickView`), frame-swapped pacing signal, the runtime-facing preview setter surface used by `MainWindow`, and the legacy-bridge item for unmigrated layers
+  - Files: `src/preview/runtime/PreviewRuntime.h`, `src/preview/runtime/PreviewRuntime.cpp`, `src/preview/runtime/PreviewSceneAssetLoader.h`, `src/preview/runtime/PreviewSceneAssetLoader.cpp`, `src/preview/runtime/PreviewSceneAssetRepository.h`, `src/preview/runtime/PreviewSceneAssetRepository.cpp`, `src/preview/runtime/PreviewQuickRuntimeSurface.h`, `src/preview/runtime/PreviewQuickRuntimeSurface.cpp`, `src/preview/runtime/PreviewQuickExportSession.h`, `src/preview/runtime/PreviewQuickExportSession.cpp`, `src/preview/runtime/qml/PreviewRuntimeView.qml`
+  - Classes: `PreviewRuntime`, `PreviewSceneAssetLoader`, `PreviewSceneAssetRepository`, `PreviewQuickRuntimeSurface`, `PreviewQuickExportSession`
+  - Owns: on-screen preview host window (`QQuickView`), frame-swapped pacing signal, the runtime-facing preview setter surface used by `MainWindow`, shared skin/outline/judge asset ownership for both realtime preview and export, and the headless Qt Quick export session that renders `PreviewQuickSceneRoot` from a direct `PreviewFrameState` plus layer flags
 - Backend-neutral scene-state and timing helpers:
   - Files: `src/preview/scene/PreviewFrameState.h`, `src/preview/scene/PreviewLayerOrder.h`, `src/preview/scene/PreviewOpacityCurves.h`, `src/preview/scene/PreviewOpacityCurves.cpp`, `src/preview/scene/PreviewSceneGeometry.h`, `src/preview/scene/PreviewSceneGeometry.cpp`, `src/preview/scene/PreviewHudState.h`, `src/preview/scene/PreviewHudState.cpp`
   - Owns: shared preview frame payloads, layer flags/order, opacity/time curves, stage/playfield geometry helpers, and HUD stats/time formatting used by Quick layers
 - Quick scene-graph layers:
   - Files: `src/preview/quick_scene/PreviewQuickSceneRoot.h`, `src/preview/quick_scene/PreviewQuickSceneRoot.cpp`, `src/preview/quick_scene/PreviewQuickStageBackgroundLayer.h`, `src/preview/quick_scene/PreviewQuickStageBackgroundLayer.cpp`, `src/preview/quick_scene/PreviewQuickBackdropLayer.h`, `src/preview/quick_scene/PreviewQuickBackdropLayer.cpp`, `src/preview/quick_scene/PreviewQuickGuideLayer.h`, `src/preview/quick_scene/PreviewQuickGuideLayer.cpp`, `src/preview/quick_scene/PreviewQuickTrackLayer.h`, `src/preview/quick_scene/PreviewQuickTrackLayer.cpp`, `src/preview/quick_scene/PreviewQuickSlideMotionLayer.h`, `src/preview/quick_scene/PreviewQuickSlideMotionLayer.cpp`, `src/preview/quick_scene/PreviewQuickJudgeEffectLayer.h`, `src/preview/quick_scene/PreviewQuickJudgeEffectLayer.cpp`, `src/preview/quick_scene/PreviewQuickTouchJudgeLayer.h`, `src/preview/quick_scene/PreviewQuickTouchJudgeLayer.cpp`, `src/preview/quick_scene/PreviewQuickHeadLayer.h`, `src/preview/quick_scene/PreviewQuickHeadLayer.cpp`, `src/preview/quick_scene/PreviewQuickTouchLayer.h`, `src/preview/quick_scene/PreviewQuickTouchLayer.cpp`, `src/preview/quick_scene/PreviewQuickTouchHoldLayer.h`, `src/preview/quick_scene/PreviewQuickTouchHoldLayer.cpp`, `src/preview/quick_scene/PreviewQuickChartReviewLayer.h`, `src/preview/quick_scene/PreviewQuickChartReviewLayer.cpp`, `src/preview/quick_scene/PreviewQuickMaimuriDxJudgeLayer.h`, `src/preview/quick_scene/PreviewQuickMaimuriDxJudgeLayer.cpp`, `src/preview/quick_scene/PreviewQuickMuriPadLayer.h`, `src/preview/quick_scene/PreviewQuickMuriPadLayer.cpp`, `src/preview/quick_scene/PreviewQuickMuriActionLayer.h`, `src/preview/quick_scene/PreviewQuickMuriActionLayer.cpp`, `src/preview/quick_scene/PreviewQuickJudgeFireworkLayer.h`, `src/preview/quick_scene/PreviewQuickJudgeFireworkLayer.cpp`, `src/preview/quick_scene/PreviewQuickCircleNodes.h`, `src/preview/quick_scene/PreviewQuickCircleNodes.cpp`, `src/preview/quick_scene/PreviewQuickSpriteNodes.h`, `src/preview/quick_scene/PreviewQuickSpriteNodes.cpp`, `src/preview/quick_scene/PreviewQuickArcNodes.h`, `src/preview/quick_scene/PreviewQuickArcNodes.cpp`, `src/preview/quick_scene/PreviewQuickSectorNodes.h`, `src/preview/quick_scene/PreviewQuickSectorNodes.cpp`, `src/preview/quick_scene/PreviewQuickHudLayer.h`, `src/preview/quick_scene/PreviewQuickHudLayer.cpp`, `src/preview/quick_scene/PreviewTextureRepository.h`, `src/preview/quick_scene/PreviewTextureRepository.cpp`, `src/preview/quick_scene/PreviewQuickSceneInvalidationPolicy.h`
-  - Owns: the active Qt Quick/QSG realtime preview stack, including migrated object/effect/diagnostic overlays, shared QSG helper node builders for sprites/arcs/circles/sectors, texture caching for Quick textures, and invalidation flags; the remaining legacy-painted compatibility shell is `PreviewQuickItem`
-- Preview canvas core:
-  - Files: `src/preview/video/PreviewCanvas.h`, `src/preview/video/PreviewCanvas.cpp`
-  - Class: `PreviewCanvas`
-  - Owns: legacy scene renderer and export renderer, asset-backed drawing, effect curves, caches, masked legacy-bridge rendering for unmigrated Quick layers, and offscreen export rendering support
-- Preview canvas split files:
-  - `PreviewCanvas.Runtime.cpp`: state mutation, offscreen renderer setup, frame generation
-  - `PreviewCanvas.Objects.cpp`: actual object/effect/HUD drawing
-  - `PreviewCanvas.Render.cpp`: render loop and painter path
-  - `PreviewCanvas.GLAndTransforms.cpp`: GL and transform helpers
-  - `PreviewCanvas.SkinAndAtlas.cpp`: async skin load, atlas rebuild, texture prewarm
+  - Owns: the active Qt Quick/QSG realtime preview and export render stack, including object/effect/diagnostic overlays, shared QSG helper node builders for sprites/arcs/circles/sectors, texture caching for Quick textures, invalidation flags, and layer-flag driven sub-selection for headless export
 - Preview media controller:
   - Files: `src/preview/video/PreviewMediaController.h`, `src/preview/video/PreviewMediaController.cpp`
   - Class: `PreviewMediaController`
@@ -140,9 +130,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Class: `BatchVideoExportDialog`
   - Owns: chart-folder batch export setup, shared export settings UI, and application-scoped export preset / resolution / FPS persistence for batch runs
 - Export task and controller:
-  - Files: `src/tools/video_export/VideoExportController.h`, `src/tools/video_export/VideoExportController.cpp`, `src/tools/video_export/RawVideoPipeTransport.h`, `src/tools/video_export/RawVideoPipeTransport.cpp`
-  - Class: `VideoExportController`
-  - Key functions: `exportFullPreview`, `exportPreparedTask`, `chooseVideoEncoder`, `miacode::video_export::raw_pipe::enqueueRawVideoFrame`
+  - Files: `src/tools/video_export/VideoExportController.h`, `src/tools/video_export/VideoExportController.cpp`, `src/tools/video_export/VideoExportQuickRenderBackend.h`, `src/tools/video_export/VideoExportQuickRenderBackend.cpp`, `src/tools/video_export/RawVideoPipeTransport.h`, `src/tools/video_export/RawVideoPipeTransport.cpp`
+  - Classes: `VideoExportController`, `VideoExportQuickRenderBackend`
+  - Key functions: `exportFullPreview`, `exportPreparedTask`, `chooseVideoEncoder`, `VideoExportQuickRenderBackend::bootstrap`, `miacode::video_export::raw_pipe::enqueueRawVideoFrame`
 - Export snapshot boundary:
   - Files: `src/tools/video_export/VideoExportSnapshot.h`, `src/tools/video_export/VideoExportSnapshot.cpp`
   - Struct: `VideoExportSnapshot`

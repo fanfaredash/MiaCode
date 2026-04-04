@@ -47,7 +47,7 @@ Debug subcategories now default to on inside debug mode and are disabled with:
 - Startup timing:
   - default file: `miacode_startup_timing.log`
   - extra disable gate: `MIACODE_DISABLE_STARTUP_TIMING`
-  - producers: `src/app/main.cpp`, `MainWindow`, `PreviewCanvas`
+  - producers: `src/app/main.cpp`, `MainWindow`, `PreviewSceneAssetRepository`
 - Fatal log:
   - default file: `miacode_fatal.log`
   - used for critical preview/export failures and worker failures
@@ -79,12 +79,12 @@ The Windows release package also ships:
   - samples every Nth direct-upload preview video frame
   - compares GPU framebuffer readback against a CPU `QVideoFrame::toImage()` fallback render
   - writes `preview_gl/video_compare` lines into the runtime log
-  - owner: `src/preview/video/PreviewGLRenderer.cpp`
+  - owner: legacy path removed; the variable is currently stale and should not be reintroduced without a new Quick-side owner
 - `MIACODE_PREVIEW_DIAG_COMPARE_PRESENT_EVERY`
   - samples every Nth preview `paintGL` present after the main frame is drawn
-  - compares the final GPU framebuffer against a cloned CPU-only `PreviewCanvas` render
+  - compares the final presented preview against a diagnostic reference render
   - writes `preview/present_compare` lines into the runtime log
-  - owner: `src/preview/video/PreviewCanvas.Render.cpp`
+  - owner: legacy path removed; the variable is currently stale and should not be reintroduced without a new Quick-side owner
 - `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_FRAMES`
   - enables PNG dumps for preview compare samples
   - applies to both `preview_gl/video_compare` and `preview/present_compare`
@@ -97,7 +97,7 @@ The Windows release package also ships:
   - owner: `src/common/DebugImageCompare.h`
 - `MIACODE_DISABLE_GL_DEBUG_MESSAGES`
   - disables OpenGL driver message logging inside debug mode
-  - owner: `src/preview/video/PreviewCanvas.GLAndTransforms.cpp`
+  - owner: no active preview-specific owner after the PreviewCanvas removal
 
 ## 4. Editor Runtime Performance Logging
 

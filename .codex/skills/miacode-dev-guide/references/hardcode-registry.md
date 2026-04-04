@@ -29,7 +29,7 @@ Use this file to track where important constants live, what they mean, and wheth
 
 ## 2. Implementation-Local Hotspots
 
-- `src/preview/video/PreviewCanvas.cpp`
+- `src/preview/scene/*.cpp`
   - Owns: large volume of render tuning constants
   - Examples:
     - lane angle base and step
@@ -37,7 +37,7 @@ Use this file to track where important constants live, what they mean, and wheth
     - touch/touchhold close curve parameters
     - judge-effect curve timing and geometry
     - firework visual tuning
-    - cache limits and atlas packing numbers
+    - descriptor sizing and animation curve parameters
   - Rule: keep local only when the values are render-internal and not consumed elsewhere
 - `src/tools/latency/LatencyDetectorDialog.cpp`
   - Owns: detection windows, hop sizes, BPM scan range, offset penalties, snap thresholds
@@ -103,7 +103,7 @@ It is acceptable to keep a constant local when:
 
 ## 6. Current High-Attention Areas
 
-- Preview effect tuning in `PreviewCanvas.cpp`
+- Preview effect tuning in `src/preview/scene/*.cpp`
 - Latency detection scan parameters
 - Export encoder and bitrate heuristics
 - Parser geometry/timing assumptions

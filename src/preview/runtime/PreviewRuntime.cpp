@@ -1,18 +1,33 @@
 #include "preview/runtime/PreviewRuntime.h"
 
+#include "common/DebugOptions.h"
+#include "common/PreviewGameplayConfig.h"
+#include "common/PreviewVideoGeometryConfig.h"
 #include "preview/runtime/PreviewQuickRuntimeSurface.h"
 
-#include <QPainter>
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QStandardPaths>
+#include <QTextStream>
 #include <QWindow>
+
+namespace {
+
+QString previewRuntimeProfilingPath()
+{
+    const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir().mkpath(baseDir);
+    return QDir(baseDir).filePath(QStringLiteral("preview_runtime_profile.txt"));
+}
+
+}  // namespace
 
 PreviewRuntime::PreviewRuntime(QObject* parent)
     : QObject(parent)
 {
-    renderer_ = new PreviewCanvas();
-    refreshAssetStateFromRenderer();
-    frameState_.render.noteFlowSpeed = renderer_->noteFlowSpeed();
-    frameState_.render.showTimestamp = renderer_->showTimestamp();
-    frameState_.render.showObjectStatsHud = renderer_->showObjectStatsHud();
+    assets_ = new miacode::preview::runtime::PreviewSceneAssetRepository(this);
+    refreshAssetStateFromRepository();
     presentedFrameIntervalsMs_.resize(120);
     presentedFrameIntervalsMs_.fill(0.0);
     surface_ = new PreviewQuickRuntimeSurface(this);
@@ -26,17 +41,13 @@ PreviewRuntime::PreviewRuntime(QObject* parent)
         }
         emit framePresented();
     });
-    connect(renderer_, &PreviewCanvas::skinAssetsChanged, this, [this]() {
-        refreshAssetStateFromRenderer();
+    connect(assets_, &miacode::preview::runtime::PreviewSceneAssetRepository::assetsChanged, this, [this]() {
+        refreshAssetStateFromRepository();
         update();
     });
 }
 
-PreviewRuntime::~PreviewRuntime()
-{
-    delete renderer_;
-    renderer_ = nullptr;
-}
+PreviewRuntime::~PreviewRuntime() = default;
 
 QWindow* PreviewRuntime::hostWindow() const
 {
@@ -60,19 +71,15 @@ void PreviewRuntime::update()
 
 void PreviewRuntime::setStageMediaAvailable(bool hasMedia)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setStageMediaAvailable(hasMedia);
+    if (assets_ != nullptr) {
+        assets_->setStageMediaAvailable(hasMedia);
     }
     frameState_.media.stageMediaAvailable = hasMedia;
-    refreshAssetStateFromRenderer();
     update();
 }
 
 void PreviewRuntime::setPlayheadSeconds(double seconds, bool requestUpdate)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setPlayheadSeconds(seconds, false);
-    }
     frameState_.playheadSeconds = qMax(0.0, seconds);
     if (requestUpdate) {
         update();
@@ -81,203 +88,193 @@ void PreviewRuntime::setPlayheadSeconds(double seconds, bool requestUpdate)
 
 void PreviewRuntime::setMediaFrame(const QImage& frame)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setMediaFrame(frame);
-    }
     frameState_.media.mediaFrame = frame;
 #ifdef HAVE_QT_MULTIMEDIA
     frameState_.media.videoFrame = QVideoFrame();
 #endif
     frameState_.media.retainedVideoFallbackFrame = QImage();
-    update();
+    setStageMediaAvailable(!frame.isNull());
 }
 
 void PreviewRuntime::setVideoFrame(const QVideoFrame& frame)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setVideoFrame(frame);
-    }
 #ifdef HAVE_QT_MULTIMEDIA
     frameState_.media.videoFrame = frame;
+    if (!frame.isValid()) {
+        frameState_.media.retainedVideoFallbackFrame = QImage();
+    }
+    setStageMediaAvailable(frame.isValid());
+#else
+    Q_UNUSED(frame);
 #endif
 }
 
 void PreviewRuntime::setRetainedVideoFallbackFrame(const QImage& frame)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setRetainedVideoFallbackFrame(frame);
-    }
     frameState_.media.retainedVideoFallbackFrame = frame;
+    update();
 }
 
 void PreviewRuntime::setNoteMarkers(const QVector<TimelineNoteMarker>& notes)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setNoteMarkers(notes);
-    }
     frameState_.noteMarkers = notes;
     update();
 }
 
 void PreviewRuntime::setMuriAnalysisReport(const MuriAnalysisReport& report)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setMuriAnalysisReport(report);
-    }
     frameState_.muriAnalysisReport = report;
     update();
 }
 
 void PreviewRuntime::setMuriRenderOptions(const MuriRenderOptions& options)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setMuriRenderOptions(options);
-    }
     frameState_.muriRenderOptions = options;
     update();
 }
 
 void PreviewRuntime::setSkinDirectory(const QString& skinDir)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setSkinDirectory(skinDir);
+    if (assets_ != nullptr) {
+        assets_->setSkinDirectory(skinDir);
     }
 }
 
 void PreviewRuntime::setBackgroundBrightness(double brightness)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setBackgroundBrightness(brightness);
-    }
-    frameState_.render.backgroundBrightnessOuter = brightness;
-    frameState_.render.backgroundBrightnessInner = brightness;
+    frameState_.render.backgroundBrightnessOuter = qBound(0.0, brightness, 1.0);
+    frameState_.render.backgroundBrightnessInner = qBound(0.0, brightness, 1.0);
     update();
 }
 
 void PreviewRuntime::setBackgroundBrightnessOuter(double brightness)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setBackgroundBrightnessOuter(brightness);
-    }
-    frameState_.render.backgroundBrightnessOuter = brightness;
+    frameState_.render.backgroundBrightnessOuter = qBound(0.0, brightness, 1.0);
     update();
 }
 
 void PreviewRuntime::setBackgroundBrightnessInner(double brightness)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setBackgroundBrightnessInner(brightness);
-    }
-    frameState_.render.backgroundBrightnessInner = brightness;
+    frameState_.render.backgroundBrightnessInner = qBound(0.0, brightness, 1.0);
     update();
 }
 
 void PreviewRuntime::setLayoutSquareScale(double scale)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setLayoutSquareScale(scale);
-    }
-    frameState_.render.layoutSquareScale = scale;
+    frameState_.render.layoutSquareScale = miacode::preview_video::normalizedLayoutSquareScale(scale);
     update();
 }
 
 void PreviewRuntime::setSmoothBrightness(bool smooth)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setSmoothBrightness(smooth);
-    }
     frameState_.render.smoothBrightness = smooth;
     update();
 }
 
 void PreviewRuntime::setBackgroundScaleMode(PreviewBackgroundScaleMode mode)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setBackgroundScaleMode(mode);
-    }
     frameState_.render.backgroundScaleMode = mode;
     update();
 }
 
 void PreviewRuntime::setNoteFlowSpeed(double flowSpeed)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setNoteFlowSpeed(flowSpeed);
-    }
-    frameState_.render.noteFlowSpeed = flowSpeed;
+    frameState_.render.noteFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
     update();
 }
 
 void PreviewRuntime::setShowDebugInfo(bool show)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setShowDebugInfo(show);
-    }
     frameState_.render.showDebugInfo = show;
     update();
 }
 
 void PreviewRuntime::setShowTimestamp(bool show)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setShowTimestamp(show);
-    }
     frameState_.render.showTimestamp = show;
     update();
 }
 
 void PreviewRuntime::setShowObjectStatsHud(bool show)
 {
-    if (renderer_ != nullptr) {
-        renderer_->setShowObjectStatsHud(show);
-    }
     frameState_.render.showObjectStatsHud = show;
     update();
 }
 
 bool PreviewRuntime::showTimestamp() const
 {
-    return renderer_ != nullptr ? renderer_->showTimestamp() : true;
+    return frameState_.render.showTimestamp;
 }
 
 bool PreviewRuntime::showObjectStatsHud() const
 {
-    return renderer_ != nullptr ? renderer_->showObjectStatsHud() : false;
+    return frameState_.render.showObjectStatsHud;
 }
 
 void PreviewRuntime::reset()
 {
-    if (renderer_ != nullptr) {
-        renderer_->reset();
+    frameState_.noteMarkers.clear();
+    frameState_.muriAnalysisReport = MuriAnalysisReport();
+    frameState_.playheadSeconds = 0.0;
+    frameState_.media = miacode::preview::scene::PreviewMediaFrameState();
+    frameState_.fpsDisplay = 0.0;
+    frameState_.cpuFallbackCount = 0;
+    frameState_.usedGpuRendererThisFrame = false;
+    if (assets_ != nullptr) {
+        assets_->setStageMediaAvailable(false);
     }
-    frameState_ = miacode::preview::scene::PreviewFrameState();
-    refreshAssetStateFromRenderer();
+    refreshAssetStateFromRepository();
     pendingPresentedStatsRefresh_ = true;
     update();
 }
 
 void PreviewRuntime::noteTickForProfiling()
 {
-    if (renderer_ != nullptr) {
-        renderer_->noteTickForProfiling();
-    }
 }
 
 void PreviewRuntime::resetProfilingSession()
 {
-    if (renderer_ != nullptr) {
-        renderer_->resetProfilingSession();
-    }
+    presentTimer_.invalidate();
+    lastPresentedNs_ = -1;
+    presentedFrameIntervalsMs_.fill(0.0);
+    presentedFrameIntervalWriteIndex_ = 0;
+    presentedFrameIntervalCount_ = 0;
+    frameState_.fpsDisplay = 0.0;
 }
 
 QString PreviewRuntime::writeProfilingSummaryToFile()
 {
-    return renderer_ != nullptr ? renderer_->writeProfilingSummaryToFile() : QString();
+    if (!miacode::debug_options::previewProfileOutputEnabled() || presentedFrameIntervalCount_ <= 0) {
+        return QString();
+    }
+
+    QFile file(previewRuntimeProfilingPath());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        return QString();
+    }
+
+    double sumMs = 0.0;
+    double maxMs = 0.0;
+    for (int index = 0; index < presentedFrameIntervalCount_; ++index) {
+        const double sample = presentedFrameIntervalsMs_[index];
+        sumMs += sample;
+        maxMs = qMax(maxMs, sample);
+    }
+    const double avgMs = sumMs / static_cast<double>(presentedFrameIntervalCount_);
+
+    QTextStream stream(&file);
+    stream << "timestamp=" << QDateTime::currentDateTime().toString(Qt::ISODate) << '\n';
+    stream << "frame_samples=" << presentedFrameIntervalCount_ << '\n';
+    stream << "present_avg_ms=" << QString::number(avgMs, 'f', 4) << '\n';
+    stream << "present_max_ms=" << QString::number(maxMs, 'f', 4) << '\n';
+    stream << "fps=" << QString::number(frameState_.fpsDisplay, 'f', 4) << '\n';
+    file.close();
+    return file.fileName();
 }
 
 bool PreviewRuntime::hasCoreSkinAssetsLoadedForDebug() const
 {
-    return renderer_ != nullptr && renderer_->hasCoreSkinAssetsLoadedForDebug();
+    return assets_ != nullptr && assets_->hasCoreSkinAssetsLoaded();
 }
 
 void PreviewRuntime::setFrameSize(const QSize& size)
@@ -291,69 +288,15 @@ void PreviewRuntime::setFrameSize(const QSize& size)
     update();
 }
 
-void PreviewRuntime::paintFrame(QPainter& painter, const QSize& outputSize, qreal devicePixelRatio)
+void PreviewRuntime::refreshAssetStateFromRepository()
 {
-    paintLegacyFrame(
-        painter,
-        outputSize,
-        devicePixelRatio,
-        miacode::preview::scene::kPreviewAllRenderLayers
-    );
-}
-
-void PreviewRuntime::paintLegacyFrame(
-    QPainter& painter,
-    const QSize& outputSize,
-    qreal devicePixelRatio,
-    miacode::preview::scene::PreviewRenderLayerFlags layerFlags,
-    bool allowGpuDrawing,
-    bool collectFrameStats
-)
-{
-    if (renderer_ == nullptr) {
+    if (assets_ == nullptr) {
         return;
     }
-    renderer_->paintPresentFrame(
-        painter,
-        outputSize,
-        devicePixelRatio,
-        layerFlags,
-        allowGpuDrawing,
-        collectFrameStats
-    );
-}
-
-QImage PreviewRuntime::renderLayerImage(
-    const QSize& outputSize,
-    qreal devicePixelRatio,
-    miacode::preview::scene::PreviewRenderLayerFlags layerFlags
-)
-{
-    const QSize safeSize(qMax(1, outputSize.width()), qMax(1, outputSize.height()));
-    const QSize pixelSize(
-        qMax(1, qRound(static_cast<qreal>(safeSize.width()) * qMax<qreal>(1.0, devicePixelRatio))),
-        qMax(1, qRound(static_cast<qreal>(safeSize.height()) * qMax<qreal>(1.0, devicePixelRatio)))
-    );
-    QImage image(pixelSize, QImage::Format_RGBA8888);
-    image.fill(Qt::transparent);
-    image.setDevicePixelRatio(qMax<qreal>(1.0, devicePixelRatio));
-    {
-        QPainter painter(&image);
-        renderer_->paintPresentFrame(painter, safeSize, devicePixelRatio, layerFlags, false, false);
-    }
-    return image;
-}
-
-void PreviewRuntime::refreshAssetStateFromRenderer()
-{
-    if (renderer_ == nullptr) {
-        return;
-    }
-    frameState_.assets.outlineImage = renderer_->outlineImageForScene();
-    frameState_.assets.layoutRingDiameterRatio = renderer_->layoutRingDiameterRatioForScene();
-    frameState_.skin = renderer_->buildSkinAssetsForScene();
-    frameState_.judgeOverlay = renderer_->buildJudgeOverlayAssetsForScene();
-    frameState_.judgeEffect = renderer_->buildJudgeEffectAssetsForScene();
+    frameState_.assets = assets_->assetState();
+    frameState_.skin = assets_->skinAssets();
+    frameState_.judgeOverlay = assets_->judgeOverlayAssets();
+    frameState_.judgeEffect = assets_->judgeEffectAssets();
 }
 
 void PreviewRuntime::updatePresentedFrameStats()

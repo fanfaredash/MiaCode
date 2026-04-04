@@ -33,17 +33,49 @@ PreviewQuickHudLayer::PreviewQuickHudLayer(QQuickItem* parent)
 void PreviewQuickHudLayer::setRuntime(PreviewRuntime* runtime)
 {
     runtime_ = runtime;
+    if (runtime_ != nullptr) {
+        frameState_ = nullptr;
+    }
+    update();
+}
+
+void PreviewQuickHudLayer::setFrameState(const miacode::preview::scene::PreviewFrameState* frameState)
+{
+    frameState_ = frameState;
+    if (frameState_ != nullptr) {
+        runtime_ = nullptr;
+    }
+    update();
+}
+
+void PreviewQuickHudLayer::setLayerFlags(miacode::preview::scene::PreviewRenderLayerFlags layerFlags)
+{
+    if (layerFlags_ == layerFlags) {
+        return;
+    }
+    layerFlags_ = layerFlags;
     update();
 }
 
 void PreviewQuickHudLayer::paint(QPainter* painter)
 {
-    if (painter == nullptr || runtime_ == nullptr) {
+    if (painter == nullptr) {
         return;
     }
 
-    const miacode::preview::scene::PreviewFrameState& state = runtime_->frameState();
-    if (!state.render.showTimestamp && !state.render.showDebugInfo && !state.render.showObjectStatsHud) {
+    const miacode::preview::scene::PreviewFrameState* state = nullptr;
+    if (runtime_ != nullptr) {
+        state = &runtime_->frameState();
+    } else {
+        state = frameState_;
+    }
+    if (state == nullptr
+        || !miacode::preview::scene::previewRenderLayerEnabled(
+            layerFlags_,
+            miacode::preview::scene::HudLayer)) {
+        return;
+    }
+    if (!state->render.showTimestamp && !state->render.showDebugInfo && !state->render.showObjectStatsHud) {
         return;
     }
 
@@ -61,7 +93,7 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
     const int debugFontPointSize = qMax(8, qRound(static_cast<qreal>(kHudReferenceDebugFontPointSize) * hudScale));
     QFont timeFont = miacode::preview::scene::previewHudMonoFont(timeFontPointSize, QFont::DemiBold);
 
-    if (state.render.showDebugInfo) {
+    if (state->render.showDebugInfo) {
         QFont fpsFont = miacode::preview::scene::previewHudMonoFont(debugFontPointSize, QFont::Medium);
         const QFontMetrics metrics(fpsFont);
         const qreal leftX = stageRect.left() + hudPadding;
@@ -69,7 +101,7 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
         drawHudText(
             *painter,
             QPointF(leftX, baseline0),
-            state.usedGpuRendererThisFrame ? QStringLiteral("Renderer: GPU") : QStringLiteral("Renderer: CPU")
+            state->usedGpuRendererThisFrame ? QStringLiteral("Renderer: GPU") : QStringLiteral("Renderer: CPU")
             ,
             fpsFont,
             qMax<qreal>(1.0, 2.0 * hudScale)
@@ -77,30 +109,30 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
         drawHudText(
             *painter,
             QPointF(leftX, baseline0 + metrics.height()),
-            QString::number(state.fpsDisplay, 'f', 1) + QStringLiteral(" FPS"),
+            QString::number(state->fpsDisplay, 'f', 1) + QStringLiteral(" FPS"),
             fpsFont,
             qMax<qreal>(1.0, 2.0 * hudScale)
         );
         drawHudText(
             *painter,
             QPointF(leftX, baseline0 + metrics.height() * 2),
-            QStringLiteral("Fallback: %1").arg(state.cpuFallbackCount),
+            QStringLiteral("Fallback: %1").arg(state->cpuFallbackCount),
             fpsFont,
             qMax<qreal>(1.0, 2.0 * hudScale)
         );
     }
 
-    if (state.render.showTimestamp) {
+    if (state->render.showTimestamp) {
         drawHudText(
             *painter,
             QPointF(stageRect.left() + hudPadding, stageRect.bottom() - hudPadding),
-            miacode::preview::scene::formatPreviewHudTimeLabel(state.playheadSeconds),
+            miacode::preview::scene::formatPreviewHudTimeLabel(state->playheadSeconds),
             timeFont,
             qMax<qreal>(1.0, 2.0 * hudScale)
         );
     }
 
-    if (!state.render.showObjectStatsHud) {
+    if (!state->render.showObjectStatsHud) {
         return;
     }
 
@@ -109,7 +141,7 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
         return;
     }
 
-    const QRectF playfieldRect = miacode::preview::scene::playfieldRectForStage(stageRect, state.render.layoutSquareScale);
+    const QRectF playfieldRect = miacode::preview::scene::playfieldRectForStage(stageRect, state->render.layoutSquareScale);
     const qreal statsLeftLimit = playfieldRect.right() + hudPadding;
     const qreal statsRightLimit = stageRect.right() - hudPadding;
     const qreal availableStatsWidth = statsRightLimit - statsLeftLimit;
@@ -118,7 +150,7 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
     }
 
     const miacode::preview::scene::PreviewHudStats stats =
-        miacode::preview::scene::computePreviewHudStats(state.noteMarkers, state.playheadSeconds);
+        miacode::preview::scene::computePreviewHudStats(state->noteMarkers, state->playheadSeconds);
 
     int baseFontPointSize = qMax(10, qRound(static_cast<qreal>(kHudReferenceStatsFontPointSize) * hudScale));
     QFont titleFont;

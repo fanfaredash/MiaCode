@@ -23,12 +23,26 @@ src/
       QtPreviewSfxRuntime.*
       QtPreviewSfxRuntime.*.cpp
     video/
-      PreviewCanvas.*
-      PreviewCanvas.*.cpp
-      PreviewGLRenderer.*
       PreviewMediaController.*
-    layout/
-      PreviewIntegration.*
+      PreviewRenderSettings.h
+    scene/
+      PreviewFrameState.h
+      Preview*LayerState.*
+      PreviewOpacityCurves.*
+      PreviewScene*.*
+      PreviewSkinSelectors.*
+      PreviewTrackShared.*
+    quick_scene/
+      PreviewQuick*Layer.*
+      PreviewQuick*Nodes.*
+      PreviewQuickSceneRoot.*
+      PreviewTextureRepository.*
+    runtime/
+      PreviewRuntime.*
+      PreviewQuickRuntimeSurface.*
+      PreviewQuickExportSession.*
+      PreviewSceneAssetLoader.*
+      PreviewSceneAssetRepository.*
 
   simai/
     document/
@@ -55,6 +69,9 @@ src/
 
 ## Conventions
 - `app/` is for app entry and window orchestration only.
-- `preview/` keeps exactly three categories: `audio`, `video`, `layout`.
+- `preview/scene` owns pure frame-state math and per-layer descriptor building.
+- `preview/quick_scene` owns QSG/QQuick rendering only.
+- `preview/runtime` owns live/runtime sessions, asset ownership, and headless Quick export session wiring.
+- `preview/video` is now limited to media transport and shared preview render settings.
 - `simai/parser` stores parser entry, parser internal fragments, and native dump tooling.
 - Prefer existing second-level folders instead of creating parallel aliases.

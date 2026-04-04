@@ -1,7 +1,7 @@
 #include "VideoExportController.h"
 
-#include "PreviewCanvas.h"
 #include "RawVideoPipeTransport.h"
+#include "VideoExportQuickRenderBackend.h"
 #include "common/AssetPaths.h"
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
@@ -11,6 +11,7 @@
 #include "common/PreviewSfxAssets.h"
 #include "common/PreviewSfxTimeline.h"
 #include "common/VideoExportConfig.h"
+#include "preview/runtime/PreviewSceneAssetLoader.h"
 #include "tools/muri/MuriAnalyzer.h"
 
 #include <QByteArray>
@@ -819,16 +820,8 @@ struct ReadyFramePayload {
     bool usedGpuRenderer = false;
 };
 
-struct PendingPboFrame {
-    bool valid = false;
-    int frameIndex = -1;
-    double exportSecond = 0.0;
-    QVector<ObjectTraceItem> traceItems;
-};
-
 enum class ExportFrameRenderStatus {
     Ready,
-    Deferred,
     Failed,
 };
 
@@ -845,11 +838,11 @@ void appendRenderBackendFallbackDetail(QString* detail, const QString& entry)
 }
 
 ReadyFramePayload buildReadyFramePayload(
-    PreviewCanvas* exportCanvas,
+    VideoExportQuickRenderBackend* exportBackend,
     int frameIndex,
     double exportSecond,
     QVector<ObjectTraceItem>&& traceItems,
-    QImage&& frame,
+    QImage frame,
     qint64 renderNs,
     bool usedOffscreenPath
 )
@@ -861,20 +854,18 @@ ReadyFramePayload buildReadyFramePayload(
     readyFrame.frame = std::move(frame);
     readyFrame.renderNs = renderNs;
     readyFrame.usedOffscreenPath = usedOffscreenPath;
-    if (exportCanvas != nullptr) {
-        readyFrame.offscreenDrawNs = exportCanvas->offscreenDrawNsLastFrameForDebug();
-        readyFrame.offscreenReadbackNs = exportCanvas->offscreenReadbackNsLastFrameForDebug();
-        readyFrame.fallbackCount = exportCanvas->cpuFallbackCountLastFrameForDebug();
-        readyFrame.usedGpuRenderer = exportCanvas->usedGpuRendererLastFrameForDebug();
+    if (exportBackend != nullptr) {
+        readyFrame.offscreenDrawNs = exportBackend->offscreenDrawNsLastFrameForDebug();
+        readyFrame.offscreenReadbackNs = exportBackend->offscreenReadbackNsLastFrameForDebug();
+        readyFrame.fallbackCount = exportBackend->cpuFallbackCountLastFrameForDebug();
+        readyFrame.usedGpuRenderer = exportBackend->usedGpuRendererLastFrameForDebug();
     }
     return readyFrame;
 }
 
 ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
-    PreviewCanvas* exportCanvas,
-    bool* useOffscreenGpu,
-    bool* useOffscreenPboReadback,
-    PendingPboFrame* pendingPboFrame,
+    VideoExportQuickRenderBackend* exportBackend,
+    bool useOffscreenGpu,
     const QSize& frameSize,
     int frameIndex,
     double exportSecond,
@@ -885,149 +876,33 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
     QString* fallbackDetail
 )
 {
-    if (exportCanvas == nullptr
-        || useOffscreenGpu == nullptr
-        || useOffscreenPboReadback == nullptr
-        || pendingPboFrame == nullptr
-        || readyFrame == nullptr) {
+    if (exportBackend == nullptr || readyFrame == nullptr) {
         return ExportFrameRenderStatus::Failed;
     }
 
     *readyFrame = ReadyFramePayload{};
     QElapsedTimer frameTimer;
     frameTimer.start();
-    bool usedOffscreenPath = false;
-    QImage frame;
-
-    if (*useOffscreenGpu && *useOffscreenPboReadback) {
-        QImage completedFrame;
-        bool completedFrameReady = false;
-        QString pboStepError;
-        const bool pboStepOk = exportCanvas->renderOverlayFrameOffscreenPboStep(
-            frameSize,
-            exportSecond,
-            showTimestamp,
-            showObjectStatsHud,
-            &completedFrame,
-            &completedFrameReady,
-            false,
-            &pboStepError
-        );
-        const qint64 renderNs = frameTimer.nsecsElapsed();
-        if (pboStepOk) {
-            usedOffscreenPath = true;
-            const bool producedReadyFrame = completedFrameReady && pendingPboFrame->valid;
-            if (producedReadyFrame) {
-                *readyFrame = buildReadyFramePayload(
-                    exportCanvas,
-                    pendingPboFrame->frameIndex,
-                    pendingPboFrame->exportSecond,
-                    std::move(pendingPboFrame->traceItems),
-                    std::move(completedFrame),
-                    renderNs,
-                    true
-                );
-            }
-            pendingPboFrame->valid = true;
-            pendingPboFrame->frameIndex = frameIndex;
-            pendingPboFrame->exportSecond = exportSecond;
-            pendingPboFrame->traceItems = std::move(traceItems);
-            return producedReadyFrame ? ExportFrameRenderStatus::Ready : ExportFrameRenderStatus::Deferred;
-        }
-
+    const QImage frame = useOffscreenGpu
+        ? exportBackend->renderOverlayFrameOffscreen(frameSize, exportSecond, showTimestamp, showObjectStatsHud)
+        : exportBackend->renderOverlayFrame(frameSize, exportSecond, showTimestamp, showObjectStatsHud);
+    if (frame.isNull()) {
         appendRenderBackendFallbackDetail(
             fallbackDetail,
-            QStringLiteral("frame=%1 reason=offscreen_pbo_failed error=%2")
-                .arg(frameIndex)
-                .arg(pboStepError)
-        );
-        exportCanvas->resetOffscreenPboReadback();
-        *useOffscreenPboReadback = false;
-    }
-
-    if (*useOffscreenGpu) {
-        frame = exportCanvas->renderOverlayFrameOffscreen(frameSize, exportSecond, showTimestamp, showObjectStatsHud);
-        if (!frame.isNull()) {
-            usedOffscreenPath = true;
-        } else {
-            appendRenderBackendFallbackDetail(
-                fallbackDetail,
-                QStringLiteral("frame=%1 reason=offscreen_render_failed").arg(frameIndex)
-            );
-            exportCanvas->shutdownOffscreenRenderer();
-            *useOffscreenGpu = false;
-        }
-    }
-
-    if (frame.isNull()) {
-        frame = exportCanvas->renderOverlayFrame(frameSize, exportSecond, showTimestamp, showObjectStatsHud);
+            QStringLiteral("frame=%1 reason=quick_render_failed").arg(frameIndex));
+        return ExportFrameRenderStatus::Failed;
     }
 
     *readyFrame = buildReadyFramePayload(
-        exportCanvas,
+        exportBackend,
         frameIndex,
         exportSecond,
         std::move(traceItems),
         std::move(frame),
         frameTimer.nsecsElapsed(),
-        usedOffscreenPath
+        useOffscreenGpu
     );
     return ExportFrameRenderStatus::Ready;
-}
-
-bool drainPendingExportFrame(
-    PreviewCanvas* exportCanvas,
-    PendingPboFrame* pendingPboFrame,
-    const QSize& frameSize,
-    bool showTimestamp,
-    bool showObjectStatsHud,
-    ReadyFramePayload* readyFrame,
-    QString* errorMessage
-)
-{
-    if (exportCanvas == nullptr || pendingPboFrame == nullptr || readyFrame == nullptr || !pendingPboFrame->valid) {
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("no pending PBO frame to drain");
-        }
-        return false;
-    }
-
-    *readyFrame = ReadyFramePayload{};
-    QElapsedTimer frameTimer;
-    frameTimer.start();
-    QImage drainedFrame;
-    bool drainedFrameReady = false;
-    QString drainError;
-    const bool drainOk = exportCanvas->renderOverlayFrameOffscreenPboStep(
-        frameSize,
-        pendingPboFrame->exportSecond,
-        showTimestamp,
-        showObjectStatsHud,
-        &drainedFrame,
-        &drainedFrameReady,
-        true,
-        &drainError
-    );
-    if (!drainOk || !drainedFrameReady) {
-        if (errorMessage != nullptr) {
-            *errorMessage = drainError.isEmpty() ? QStringLiteral("failed to drain PBO readback") : drainError;
-        }
-        return false;
-    }
-
-    *readyFrame = buildReadyFramePayload(
-        exportCanvas,
-        pendingPboFrame->frameIndex,
-        pendingPboFrame->exportSecond,
-        std::move(pendingPboFrame->traceItems),
-        std::move(drainedFrame),
-        frameTimer.nsecsElapsed(),
-        true
-    );
-    pendingPboFrame->valid = false;
-    pendingPboFrame->frameIndex = -1;
-    pendingPboFrame->exportSecond = 0.0;
-    return true;
 }
 
 constexpr double kDiagTapUnitsPerSecond = miacode::preview_gameplay::kTapUnitsPerSecond;
@@ -1045,8 +920,6 @@ constexpr double kDiagJudgeEffectFireworkTouchTriggerDelaySeconds =
 constexpr double kDiagJudgeEffectFireworkDurationSeconds = miacode::preview_gameplay::kJudgeEffectFireworkDurationSeconds;
 constexpr double kDiagLogicalCanvasSize = miacode::preview_gameplay::kLogicalCanvasSize;
 constexpr double kDiagLogicalCanvasCenter = kDiagLogicalCanvasSize / 2.0;
-constexpr double kOutlineTargetToPlayfieldRatio =
-    (kDiagLogicalCanvasSize - miacode::layout_ring::kOutlineInsetLogical * 2.0) / kDiagLogicalCanvasSize;
 
 struct DiagTapApproachSample {
     double distance = kDiagLogicalDistanceTap;
@@ -1648,116 +1521,6 @@ bool hasEncoderToken(const QString& encodersOutput, const QString& encoderName)
         QStringLiteral("(?m)^\\s*\\S{6}\\s+%1(?:\\s|$)").arg(QRegularExpression::escape(encoderName))
     );
     return pattern.match(encodersOutput).hasMatch();
-}
-
-double detectLayoutRingDiameterRatio(const QImage& source)
-{
-    if (source.isNull() || source.width() <= 2 || source.height() <= 2) {
-        return miacode::layout_ring::kFallbackTextureDiameterRatio;
-    }
-    QImage image = source;
-    if (image.format() != QImage::Format_RGBA8888) {
-        image = source.convertToFormat(QImage::Format_RGBA8888);
-    }
-    if (image.isNull()) {
-        return miacode::layout_ring::kFallbackTextureDiameterRatio;
-    }
-
-    const int width = image.width();
-    const int height = image.height();
-    const int maxRadius = qMax(1, qMin(width, height) / 2);
-    QVector<double> histogram(maxRadius + 1, 0.0);
-    const double cx = (static_cast<double>(width) - 1.0) * 0.5;
-    const double cy = (static_cast<double>(height) - 1.0) * 0.5;
-
-    for (int y = 0; y < height; ++y) {
-        const uchar* row = image.constScanLine(y);
-        for (int x = 0; x < width; ++x) {
-            const int offset = x * 4;
-            const int r = row[offset + 0];
-            const int g = row[offset + 1];
-            const int b = row[offset + 2];
-            const int a = row[offset + 3];
-            if (a < miacode::layout_ring::kDetectMinAlpha) {
-                continue;
-            }
-            const int luminance = (r * 3 + g * 4 + b) / 8;
-            if (luminance < miacode::layout_ring::kDetectMinLuminance) {
-                continue;
-            }
-            const double dx = static_cast<double>(x) - cx;
-            const double dy = static_cast<double>(y) - cy;
-            const int radius = qBound(0, qRound(std::sqrt(dx * dx + dy * dy)), maxRadius);
-            histogram[radius] += static_cast<double>(a) * static_cast<double>(luminance);
-        }
-    }
-
-    QVector<double> smooth(histogram.size(), 0.0);
-    for (int i = 0; i < histogram.size(); ++i) {
-        double sum = histogram[i] * 2.0;
-        double weight = 2.0;
-        if (i > 0) {
-            sum += histogram[i - 1];
-            weight += 1.0;
-        }
-        if (i + 1 < histogram.size()) {
-            sum += histogram[i + 1];
-            weight += 1.0;
-        }
-        smooth[i] = sum / qMax(1.0, weight);
-    }
-
-    const int searchStart = qBound(
-        0,
-        qRound(maxRadius * miacode::layout_ring::kDetectSearchStartRadiusRatio),
-        maxRadius
-    );
-    const int searchEnd = qBound(
-        searchStart,
-        qRound(maxRadius * miacode::layout_ring::kDetectSearchEndRadiusRatio),
-        maxRadius
-    );
-    int peakIndex = -1;
-    double peakValue = 0.0;
-    for (int i = searchStart; i <= searchEnd; ++i) {
-        if (smooth[i] > peakValue) {
-            peakValue = smooth[i];
-            peakIndex = i;
-        }
-    }
-    if (peakIndex < 0 || peakValue <= 1.0) {
-        return miacode::layout_ring::kFallbackTextureDiameterRatio;
-    }
-
-    const double edgeThreshold = peakValue * miacode::layout_ring::kDetectEdgeThresholdRatio;
-    int innerRadius = peakIndex;
-    while (innerRadius > searchStart && smooth[innerRadius - 1] >= edgeThreshold) {
-        --innerRadius;
-    }
-    int outerRadius = peakIndex;
-    while (outerRadius < searchEnd && smooth[outerRadius + 1] >= edgeThreshold) {
-        ++outerRadius;
-    }
-
-    const double averageRadius = (static_cast<double>(innerRadius) + static_cast<double>(outerRadius)) * 0.5;
-    const double diameterRatio = (averageRadius * 2.0) / static_cast<double>(qMax(1, qMin(width, height)));
-    return qBound(
-        miacode::layout_ring::kDetectDiameterRatioMin,
-        diameterRatio,
-        miacode::layout_ring::kDetectDiameterRatioMax
-    );
-}
-
-double resolvedLayoutRingDiameterRatio(bool hasMedia)
-{
-    const QString outlinePath = miacode::assets::outlinePathForStageMedia(hasMedia);
-    const QImage outline(outlinePath);
-    const double textureRatio = detectLayoutRingDiameterRatio(outline);
-    return qBound(
-        miacode::layout_ring::kPlayfieldRatioMin,
-        textureRatio * kOutlineTargetToPlayfieldRatio,
-        miacode::layout_ring::kPlayfieldRatioMax
-    );
 }
 
 QImage buildCircularDimMaskImage(
@@ -3386,7 +3149,6 @@ QString withExportLogPath(const QString& details)
 
 VideoExportResult VideoExportController::exportFullPreview(
     const VideoExportTask& task,
-    const PreviewCanvas* sourceCanvas,
     QProgressDialog* progress
 )
 {
@@ -3404,12 +3166,11 @@ VideoExportResult VideoExportController::exportFullPreview(
         QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
         return progress->wasCanceled();
     };
-    return exportPreparedTask(task, sourceCanvas, progressCallback);
+    return exportPreparedTask(task, progressCallback);
 }
 
 VideoExportResult VideoExportController::exportPreparedTask(
     const VideoExportTask& task,
-    const PreviewCanvas* sourceCanvas,
     const VideoExportProgressCallback& progressCallback
 )
 {
@@ -3419,7 +3180,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     exportTimer.start();
     appendVideoExportLog(
         QStringLiteral("export_begin"),
-        QStringLiteral("output=%1 chart=%2 media=%3 track=%4 skin=%5 notes=%6 start=%7 duration=%8 size=%9x%10 fps=%11 preset=%12 sourceCanvas=%13")
+        QStringLiteral("output=%1 chart=%2 media=%3 track=%4 skin=%5 notes=%6 start=%7 duration=%8 size=%9x%10 fps=%11 preset=%12")
             .arg(task.outputPath, task.chartPath, task.backgroundMediaPath, task.trackPath, task.skinDirectory)
             .arg(task.noteMarkers.size())
             .arg(task.exportStartSeconds, 0, 'f', 6)
@@ -3428,9 +3189,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(task.outputHeight)
             .arg(task.fps)
             .arg(videoExportPresetToken(task.preset))
-            .arg(sourceCanvas != nullptr ? 1 : 0)
     );
-    if (sourceCanvas == nullptr && task.skinDirectory.trimmed().isEmpty()) {
+    if (task.skinDirectory.trimmed().isEmpty()) {
         result.message = QStringLiteral("Skin directory is empty.");
         result.details = withExportLogPath(result.details);
         appendVideoExportLog(QStringLiteral("fail_validation"), result.message);
@@ -3655,7 +3415,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
     }
     if (hasDimMask) {
         const QString dimMaskPath = QDir(tempDir.path()).filePath(QStringLiteral("dim_mask.png"));
-        const double ringRatio = resolvedLayoutRingDiameterRatio(hasMedia);
+        const double ringRatio =
+            miacode::preview::runtime::PreviewSceneAssetLoader::loadAssetState(hasMedia).layoutRingDiameterRatio;
         const QImage dimMask = buildCircularDimMaskImage(
             frameWidth,
             frameHeight,
@@ -3830,89 +3591,60 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(videoExportPresetToken(task.preset))
     );
 
-    PreviewCanvas exportCanvas;
-    if (sourceCanvas != nullptr) {
-        exportCanvas.copyRenderStateFrom(*sourceCanvas);
-    } else {
-        exportCanvas.setSkinDirectory(task.skinDirectory);
-        const int skinWaitMs = qBound(0, task.skinLoadWaitMs, 20000);
-        bool skinLoaded = exportCanvas.hasCoreSkinAssetsLoadedForDebug();
-        if (!skinLoaded && skinWaitMs > 0) {
-            QElapsedTimer skinWaitTimer;
-            skinWaitTimer.start();
-            while (!skinLoaded && skinWaitTimer.elapsed() < skinWaitMs) {
-                QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-                skinLoaded = exportCanvas.hasCoreSkinAssetsLoadedForDebug();
-            }
-        }
+    VideoExportQuickRenderBackend exportCanvas;
+    QString quickBootstrapError;
+    if (!exportCanvas.bootstrap(
+            task,
+            hasMedia,
+            exportMarkers,
+            exportMuriAnalysisReport,
+            frameSize,
+            &quickBootstrapError)) {
+        result.message = QStringLiteral("Failed to load export skin assets.");
+        result.details = withExportLogPath(
+            quickBootstrapError.isEmpty()
+                ? QStringLiteral("skin_dir=%1").arg(task.skinDirectory)
+                : quickBootstrapError);
         appendVideoExportLog(
-            QStringLiteral("skin_bootstrap"),
-            QStringLiteral("standalone=1 loaded=%1 waitMs=%2 dir=%3")
-                .arg(skinLoaded ? 1 : 0)
-                .arg(skinWaitMs)
-                .arg(task.skinDirectory)
-        );
-        if (!skinLoaded) {
-            result.message = QStringLiteral("Failed to load export skin assets.");
-            result.details = withExportLogPath(QStringLiteral("skin_dir=%1").arg(task.skinDirectory));
-            appendVideoExportLog(QStringLiteral("fail_skin_load"), result.message);
-            return result;
-        }
+            QStringLiteral("fail_skin_load"),
+            quickBootstrapError.isEmpty() ? result.message : quickBootstrapError);
+        return result;
     }
-    exportCanvas.setStageMediaAvailable(hasMedia);
-    exportCanvas.setBackgroundBrightnessOuter(task.backgroundBrightnessOuter);
-    exportCanvas.setBackgroundBrightnessInner(task.backgroundBrightnessInner);
-    exportCanvas.setLayoutSquareScale(task.layoutSquareScale);
-    exportCanvas.setSmoothBrightness(task.smoothBrightness);
-    exportCanvas.setBackgroundScaleMode(task.backgroundScaleMode);
-    exportCanvas.setNoteFlowSpeed(task.noteFlowSpeed);
-    exportCanvas.setShowDebugInfo(false);
-    exportCanvas.setExportWifiTrackBrightnessCompensationEnabled(true);
-    exportCanvas.setNoteMarkers(exportMarkers);
-    exportCanvas.setMuriRenderOptions(task.muriRenderOptions);
-    exportCanvas.setMuriAnalysisReport(exportMuriAnalysisReport);
-    exportCanvas.setCpuTrackAreaCachingEnabled(false);
-    const QSurfaceFormat requestedFormat = sourceCanvas != nullptr
-        ? sourceCanvas->format()
-        : QSurfaceFormat::defaultFormat();
-    QOpenGLContext* shareContext = sourceCanvas != nullptr ? sourceCanvas->context() : nullptr;
-    const bool requestOffscreenGpu = exportConfig.renderBackend.requestGpuRender;
+    appendVideoExportLog(
+        QStringLiteral("skin_bootstrap"),
+        QStringLiteral("quick=1 loaded=%1 dir=%2")
+            .arg(exportCanvas.hasCoreSkinAssetsLoadedForDebug() ? 1 : 0)
+            .arg(task.skinDirectory));
+    const QSurfaceFormat requestedFormat = QSurfaceFormat::defaultFormat();
+    QOpenGLContext* shareContext = nullptr;
     QString offscreenInitError;
-    bool useOffscreenGpu = false;
-    if (requestOffscreenGpu) {
-        useOffscreenGpu = exportCanvas.initializeOffscreenRenderer(
-            requestedFormat,
-            shareContext,
-            &offscreenInitError
-        );
-    } else {
-        offscreenInitError = QStringLiteral("disabled_by_env");
-    }
-    const bool requestOffscreenPboReadback =
-        useOffscreenGpu
-        && exportConfig.renderBackend.requestOffscreenPboReadback;
-    QString offscreenPboError;
-    bool useOffscreenPboReadback = false;
-    if (requestOffscreenPboReadback) {
-        useOffscreenPboReadback = exportCanvas.supportsOffscreenPboReadback(&offscreenPboError);
+    const bool useOffscreenGpu = exportCanvas.initializeOffscreenRenderer(
+        requestedFormat,
+        shareContext,
+        &offscreenInitError
+    );
+    if (!useOffscreenGpu) {
+        result.message = QStringLiteral("Failed to initialize Quick export renderer.");
+        result.details = withExportLogPath(
+            offscreenInitError.isEmpty()
+                ? QStringLiteral("quick_export_session_init_failed")
+                : offscreenInitError);
+        appendVideoExportLog(
+            QStringLiteral("fail_export_backend_init"),
+            offscreenInitError.isEmpty() ? result.message : offscreenInitError);
+        return result;
     }
     appendVideoExportLog(
         QStringLiteral("render_backend"),
-        QStringLiteral("gpuRequested=%1 sourceGpuReady=%2 sourceCtx=%3 offscreenInit=%4 exportGpuReady=%5 pboRequested=%6 pboEnabled=%7 initError=%8 pboError=%9")
-            .arg(requestOffscreenGpu ? 1 : 0)
-            .arg(sourceCanvas != nullptr && sourceCanvas->isGpuRendererReadyForDebug() ? 1 : 0)
+        QStringLiteral("quickRequired=1 envGpuRequested=%1 sourceCtx=%2 offscreenInit=%3 exportGpuReady=%4 initError=%5")
+            .arg(exportConfig.renderBackend.requestGpuRender ? 1 : 0)
             .arg(shareContext != nullptr ? 1 : 0)
             .arg(useOffscreenGpu ? 1 : 0)
             .arg(exportCanvas.isGpuRendererReadyForDebug() ? 1 : 0)
-            .arg(requestOffscreenPboReadback ? 1 : 0)
-            .arg(useOffscreenPboReadback ? 1 : 0)
             .arg(offscreenInitError.isEmpty() ? QStringLiteral("ok") : offscreenInitError)
-            .arg(offscreenPboError.isEmpty() ? QStringLiteral("ok") : offscreenPboError)
     );
 
-    const QString overlayAlphaMode = useOffscreenGpu
-        ? QStringLiteral("premultiplied")
-        : QStringLiteral("straight");
+    const QString overlayAlphaMode = QStringLiteral("premultiplied");
     filterParts << QStringLiteral("[base][overlay_src]overlay=0:0:format=rgb:alpha=%1[vout]")
                        .arg(overlayAlphaMode);
 
@@ -4030,20 +3762,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
     bool hasPreviousObjectSignature = false;
     int objectRepeatRunStartFrame = 0;
     int objectRepeatRunLength = 1;
-    const bool diagCompareRenderPathsEnabled =
+    const bool diagCompareRenderPathsRequested =
         diagRepeatEnabled && exportConfig.diag.compareRenderPathsEnabled;
-    const int diagCompareRadius = exportConfig.diag.compareRadius;
-    const int diagCompareMaxLines = exportConfig.diag.compareMaxLines;
-    const double diagCompareLogThreshold = exportConfig.diag.compareLogThreshold;
-    int diagCompareLoggedLines = 0;
-    int diagCompareFrames = 0;
-    int diagCompareObjectFrames = 0;
-    double diagCompareFullDiffSum = 0.0;
-    double diagCompareFullDiffMax = 0.0;
-    int diagCompareFullDiffMaxFrame = -1;
-    double diagCompareObjectDiffSum = 0.0;
-    double diagCompareObjectDiffMax = 0.0;
-    int diagCompareObjectDiffMaxFrame = -1;
     const bool diagPipeHashEnabled = diagRepeatEnabled && exportConfig.diag.pipeHashEnabled;
     const int diagPipeHashMaxLines = exportConfig.diag.pipeHashMaxLines;
     int diagPipeHashLoggedLines = 0;
@@ -4080,11 +3800,9 @@ VideoExportResult VideoExportController::exportPreparedTask(
     int repeatRunStartFrame = 0;
     int repeatRunLength = 1;
     QElapsedTimer frameTimer;
-    PreviewCanvas diagReferenceCanvas;
-    PreviewCanvas diagCpuCompareCanvas;
+    VideoExportQuickRenderBackend diagReferenceCanvas;
     bool diagReferenceUseOffscreen = false;
     bool diagReferenceReady = false;
-    bool diagCpuCompareReady = false;
 
     if (useOffscreenGpu) {
         frameTimer.start();
@@ -4103,9 +3821,6 @@ VideoExportResult VideoExportController::exportPreparedTask(
                 .arg(exportCanvas.offscreenDrawNsLastFrameForDebug() / 1000000.0, 0, 'f', 3)
                 .arg(exportCanvas.offscreenReadbackNsLastFrameForDebug() / 1000000.0, 0, 'f', 3)
         );
-        if (useOffscreenPboReadback) {
-            exportCanvas.resetOffscreenPboReadback();
-        }
     }
     if (diagObjectHashEnabled) {
         diagReferenceCanvas.copyRenderStateFrom(exportCanvas);
@@ -4117,7 +3832,6 @@ VideoExportResult VideoExportController::exportPreparedTask(
         diagReferenceCanvas.setNoteFlowSpeed(task.noteFlowSpeed);
         diagReferenceCanvas.setShowDebugInfo(false);
         diagReferenceCanvas.setNoteMarkers({});
-        diagReferenceCanvas.setCpuTrackAreaCachingEnabled(false);
         QString diagInitError;
         if (useOffscreenGpu) {
             diagReferenceUseOffscreen = diagReferenceCanvas.initializeOffscreenRenderer(
@@ -4141,26 +3855,13 @@ VideoExportResult VideoExportController::exportPreparedTask(
             );
         }
     }
-    if (diagCompareRenderPathsEnabled) {
-        diagCpuCompareCanvas.copyRenderStateFrom(exportCanvas);
-        diagCpuCompareCanvas.setBackgroundBrightnessOuter(task.backgroundBrightnessOuter);
-        diagCpuCompareCanvas.setBackgroundBrightnessInner(task.backgroundBrightnessInner);
-        diagCpuCompareCanvas.setLayoutSquareScale(task.layoutSquareScale);
-        diagCpuCompareCanvas.setSmoothBrightness(task.smoothBrightness);
-        diagCpuCompareCanvas.setBackgroundScaleMode(task.backgroundScaleMode);
-        diagCpuCompareCanvas.setNoteFlowSpeed(task.noteFlowSpeed);
-        diagCpuCompareCanvas.setShowDebugInfo(false);
-        diagCpuCompareCanvas.setNoteMarkers(exportMarkers);
-        diagCpuCompareCanvas.setMuriAnalysisReport(exportMuriAnalysisReport);
-        diagCpuCompareCanvas.setCpuTrackAreaCachingEnabled(false);
-        diagCpuCompareReady = true;
+    if (diagCompareRenderPathsRequested) {
         appendVideoExportLog(
             QStringLiteral("render_path_compare_backend"),
-            QStringLiteral("cpuCompareReady=1")
+            QStringLiteral("ignored=1 reason=legacy_path_removed")
         );
     }
 
-    PendingPboFrame pendingPboFrame;
     QImage convertedRgbaFrame;
     QByteArray packedFrameScratch;
 
@@ -4276,64 +3977,6 @@ VideoExportResult VideoExportController::exportPreparedTask(
             }
             previousObjectSignature = objectSignature;
             hasPreviousObjectSignature = true;
-        }
-
-        if (diagCompareRenderPathsEnabled && diagCpuCompareReady) {
-            const QImage cpuFrame = diagCpuCompareCanvas.renderOverlayFrame(
-                frameSize,
-                exportSecond,
-                task.showTimestamp,
-                task.showObjectStatsHud
-            );
-            const double fullDiff = meanAbsDiffNormalized(frame, cpuFrame);
-            if (fullDiff >= 0.0) {
-                ++diagCompareFrames;
-                diagCompareFullDiffSum += fullDiff;
-                if (fullDiff > diagCompareFullDiffMax) {
-                    diagCompareFullDiffMax = fullDiff;
-                    diagCompareFullDiffMaxFrame = frameIndex;
-                }
-            }
-
-            double objectDiffMax = -1.0;
-            const double objectDiff = meanAbsDiffAroundTraceItems(
-                frame,
-                cpuFrame,
-                traceItems,
-                diagCompareRadius,
-                &objectDiffMax
-            );
-            if (objectDiff >= 0.0) {
-                ++diagCompareObjectFrames;
-                diagCompareObjectDiffSum += objectDiff;
-                if (objectDiff > diagCompareObjectDiffMax) {
-                    diagCompareObjectDiffMax = objectDiff;
-                    diagCompareObjectDiffMaxFrame = frameIndex;
-                }
-            }
-
-            if (diagCompareLoggedLines < diagCompareMaxLines) {
-                const bool shouldLog = !traceItems.isEmpty()
-                    || (fullDiff >= diagCompareLogThreshold)
-                    || (objectDiff >= diagCompareLogThreshold);
-                if (shouldLog) {
-                    appendVideoExportLog(
-                        QStringLiteral("render_path_compare"),
-                        QStringLiteral(
-                            "frame=%1 t=%2 hasObjects=%3 fullDiff=%4 objDiff=%5 objMax=%6 radius=%7 offSig=0x%8 cpuSig=0x%9")
-                            .arg(frameIndex)
-                            .arg(exportSecond, 0, 'f', 6)
-                            .arg(traceItems.isEmpty() ? 0 : 1)
-                            .arg(fullDiff, 0, 'f', 8)
-                            .arg(objectDiff, 0, 'f', 8)
-                            .arg(objectDiffMax, 0, 'f', 8)
-                            .arg(diagCompareRadius)
-                            .arg(QString::number(sampledFrameSignature(frame), 16))
-                            .arg(QString::number(sampledFrameSignature(cpuFrame), 16))
-                    );
-                    ++diagCompareLoggedLines;
-                }
-            }
         }
 
         const char* packedFrameData = nullptr;
@@ -4670,9 +4313,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         QString renderBackendFallbackDetail;
         const ExportFrameRenderStatus renderStatus = renderExportFrameWithConfiguredBackend(
             &exportCanvas,
-            &useOffscreenGpu,
-            &useOffscreenPboReadback,
-            &pendingPboFrame,
+            useOffscreenGpu,
             frameSize,
             frameIndex,
             exportSecond,
@@ -4693,37 +4334,6 @@ VideoExportResult VideoExportController::exportPreparedTask(
             appendVideoExportLog(
                 QStringLiteral("fail_render_frame"),
                 QStringLiteral("frame=%1 offscreen=%2").arg(frameIndex).arg(useOffscreenGpu ? 1 : 0)
-            );
-            return result;
-        }
-        if (renderStatus == ExportFrameRenderStatus::Deferred) {
-            continue;
-        }
-        if (!processReadyFrame(readyFrame)) {
-            return result;
-        }
-    }
-
-    if (useOffscreenPboReadback && pendingPboFrame.valid) {
-        ReadyFramePayload readyFrame;
-        QString drainError;
-        if (!drainPendingExportFrame(
-                &exportCanvas,
-                &pendingPboFrame,
-                frameSize,
-                task.showTimestamp,
-                task.showObjectStatsHud,
-                &readyFrame,
-                &drainError)) {
-            ffmpeg.kill();
-            ffmpeg.waitForFinished(2000);
-            result.message = QStringLiteral("Render frame failed.");
-            result.details = withExportLogPath(drainError.isEmpty() ? QStringLiteral("failed to drain PBO readback") : drainError);
-            appendVideoExportLog(
-                QStringLiteral("fail_render_frame"),
-                QStringLiteral("frame=%1 offscreen=1 drain=1 error=%2")
-                    .arg(pendingPboFrame.frameIndex)
-                    .arg(drainError.isEmpty() ? QStringLiteral("unknown") : drainError)
             );
             return result;
         }
@@ -4841,33 +4451,10 @@ VideoExportResult VideoExportController::exportPreparedTask(
             );
         }
     }
-    if (diagCompareRenderPathsEnabled) {
+    if (diagCompareRenderPathsRequested) {
         appendVideoExportLog(
             QStringLiteral("render_path_compare_summary"),
-            QStringLiteral(
-                "frames=%1 objectFrames=%2 avgFullDiff=%3 maxFullDiff=%4@%5 "
-                "avgObjDiff=%6 maxObjDiff=%7@%8 logged=%9 radius=%10 threshold=%11")
-                .arg(diagCompareFrames)
-                .arg(diagCompareObjectFrames)
-                .arg(diagCompareFrames > 0
-                        ? (diagCompareFullDiffSum / static_cast<double>(diagCompareFrames))
-                        : 0.0,
-                    0,
-                    'f',
-                    8)
-                .arg(diagCompareFullDiffMax, 0, 'f', 8)
-                .arg(diagCompareFullDiffMaxFrame)
-                .arg(diagCompareObjectFrames > 0
-                        ? (diagCompareObjectDiffSum / static_cast<double>(diagCompareObjectFrames))
-                        : 0.0,
-                    0,
-                    'f',
-                    8)
-                .arg(diagCompareObjectDiffMax, 0, 'f', 8)
-                .arg(diagCompareObjectDiffMaxFrame)
-                .arg(diagCompareLoggedLines)
-                .arg(diagCompareRadius)
-                .arg(diagCompareLogThreshold, 0, 'f', 8)
+            QStringLiteral("ignored=1 reason=legacy_path_removed")
         );
     }
     if (diagPipeHashEnabled) {

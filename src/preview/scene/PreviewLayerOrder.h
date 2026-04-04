@@ -43,6 +43,9 @@ inline constexpr PreviewRenderLayerFlags kPreviewAllRenderLayers =
     | MaimuriDxJudgeLayer
     | HudLayer;
 
+inline constexpr PreviewRenderLayerFlags kPreviewExportOverlayRenderLayers =
+    kPreviewAllRenderLayers & ~StageBackgroundLayer;
+
 inline constexpr PreviewRenderLayerFlags kPreviewSceneGraphFirstBatchLayers =
     StageBackgroundLayer
     | BackdropLayer
