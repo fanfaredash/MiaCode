@@ -5,6 +5,7 @@
 #include "preview/quick_scene/PreviewQuickBackdropLayer.h"
 #include "preview/quick_scene/PreviewQuickGuideLayer.h"
 #include "preview/quick_scene/PreviewQuickStageBackgroundLayer.h"
+#include "preview/quick_scene/PreviewQuickTouchHoldLayer.h"
 #include "preview/quick_scene/PreviewQuickTouchLayer.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
 
@@ -30,4 +31,5 @@ private:
     PreviewQuickBackdropLayer backdropLayer_;
     PreviewQuickGuideLayer guideLayer_;
     PreviewQuickTouchLayer touchLayer_;
+    PreviewQuickTouchHoldLayer touchHoldLayer_;
 };
