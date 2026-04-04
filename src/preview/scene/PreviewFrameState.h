@@ -3,6 +3,7 @@
 #include <QImage>
 #include <QVector>
 
+#include "common/PreviewGameplayConfig.h"
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
 #include "preview/video/PreviewRenderSettings.h"
@@ -97,7 +98,7 @@ struct PreviewRenderState {
     double layoutSquareScale = 0.95;
     bool smoothBrightness = false;
     PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
-    double noteFlowSpeed = 1.0;
+    double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     bool showDebugInfo = false;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;

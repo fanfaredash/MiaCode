@@ -9,6 +9,14 @@ struct TapApproachSample {
     qreal scale = 0.0;
 };
 
+struct PreviewTapTiming {
+    qreal lifecycleDurationSeconds = 0.0;
+    qreal spawnDurationSeconds = 0.0;
+    qreal flyDurationSeconds = 0.0;
+    qreal unitsPerSecond = 0.0;
+};
+
+PreviewTapTiming previewTapTimingForFlowSpeed(qreal flowSpeed);
 qreal touchPreHitAlpha(qreal deltaSeconds, qreal touchDurationSeconds, qreal touchShowDurationSeconds);
 qreal touchCloseProgress(qreal deltaSeconds, qreal touchDurationSeconds, qreal touchShowDurationSeconds, qreal touchCloseDurationSeconds);
 qreal touchCloseAmount(qreal progress, qreal range);

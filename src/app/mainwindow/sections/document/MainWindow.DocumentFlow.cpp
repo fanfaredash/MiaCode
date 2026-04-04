@@ -1439,6 +1439,7 @@ void MainWindow::clearTimelineAndPreview()
     lastTimelineParseTimingMetadata_ = miacode::simai::SimaiTimingMetadata();
     lastTimelineParseResult_ = SimaiNativeParseResult();
     muriAnalysisReport_ = MuriAnalysisReport();
+    muriAnalysisReportNoteMarkerSignature_.clear();
     pendingDeferredValidationUiRefresh_ = false;
     pendingDeferredMuriUiRefresh_ = false;
     if (timelineAnalysisIdleTimer_ != nullptr) {

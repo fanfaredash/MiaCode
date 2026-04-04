@@ -17,6 +17,12 @@ void PreviewTextureRepository::setWindow(QQuickWindow* window)
     window_ = window;
 }
 
+void PreviewTextureRepository::beginFrame()
+{
+    qDeleteAll(transientTextures_);
+    transientTextures_.clear();
+}
+
 QSGTexture* PreviewTextureRepository::textureForImage(const QImage& image, bool cacheable)
 {
     if (window_ == nullptr || image.isNull()) {
@@ -32,7 +38,12 @@ QSGTexture* PreviewTextureRepository::textureForImage(const QImage& image, bool 
         cachedTextures_.insert(key, texture);
         return texture;
     }
-    return createOwnedTexture(image);
+    if (QSGTexture* existing = transientTextures_.value(key, nullptr); existing != nullptr) {
+        return existing;
+    }
+    QSGTexture* texture = createOwnedTexture(image);
+    transientTextures_.insert(key, texture);
+    return texture;
 }
 
 QSGTexture* PreviewTextureRepository::createOwnedTexture(const QImage& image) const
@@ -47,4 +58,6 @@ void PreviewTextureRepository::clear()
 {
     qDeleteAll(cachedTextures_);
     cachedTextures_.clear();
+    qDeleteAll(transientTextures_);
+    transientTextures_.clear();
 }

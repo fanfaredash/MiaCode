@@ -1,11 +1,18 @@
 #pragma once
 
+#include <QSharedPointer>
+
 #include "preview/scene/PreviewFrameState.h"
 #include "preview/scene/PreviewSpriteDescriptor.h"
 
 namespace miacode::preview::scene {
 
-PreviewSpriteDescriptors buildPreviewTouchLayerSprites(
+struct PreviewTouchLayerState {
+    PreviewSpriteDescriptors sprites;
+    QVector<QSharedPointer<QImage>> ownedImages;
+};
+
+PreviewTouchLayerState buildPreviewTouchLayerState(
     const PreviewFrameState& state,
     const QRectF& playfieldRect
 );

@@ -411,9 +411,7 @@ void MainWindow::applyLatestTimelinePreviewStateToPausedPreview()
     if (previewCanvas_ != nullptr && noteMarkersChanged) {
         previewCanvas_->setNoteMarkers(latestTimelineNoteMarkers_);
     }
-    if (previewCanvas_ != nullptr) {
-        previewCanvas_->setMuriAnalysisReport(muriAnalysisReport_);
-    }
+    applyAlignedMuriAnalysisReportToViews();
     lastPreviewNoteMarkerSignature_ = latestTimelineNoteMarkerSignature_;
 }
 
@@ -635,6 +633,7 @@ void MainWindow::dispatchTimelineAnalysisRefresh()
                 guard->validationCacheByDifficulty_.insert(result.difficultyId, entry);
                 guard->pendingDeferredValidationUiRefresh_ = true;
                 guard->muriAnalysisReport_ = result.analysisReport;
+                guard->muriAnalysisReportNoteMarkerSignature_ = result.noteMarkerSignature;
                 guard->muriStaticReferences_ = result.staticReferences;
                 guard->pendingDeferredMuriUiRefresh_ = true;
                 if (!guard->qtPreviewPlaying_) {

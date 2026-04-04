@@ -63,30 +63,40 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
 
     if (state.render.showDebugInfo) {
         QFont fpsFont = miacode::preview::scene::previewHudMonoFont(debugFontPointSize, QFont::Medium);
-        painter->setFont(fpsFont);
         const QFontMetrics metrics(fpsFont);
         const qreal leftX = stageRect.left() + hudPadding;
         const qreal baseline0 = stageRect.top() + hudPadding + metrics.ascent();
-        painter->drawText(
+        drawHudText(
+            *painter,
             QPointF(leftX, baseline0),
             state.usedGpuRendererThisFrame ? QStringLiteral("Renderer: GPU") : QStringLiteral("Renderer: CPU")
+            ,
+            fpsFont,
+            qMax<qreal>(1.0, 2.0 * hudScale)
         );
-        painter->drawText(
+        drawHudText(
+            *painter,
             QPointF(leftX, baseline0 + metrics.height()),
-            QString::number(state.fpsDisplay, 'f', 1) + QStringLiteral(" FPS")
+            QString::number(state.fpsDisplay, 'f', 1) + QStringLiteral(" FPS"),
+            fpsFont,
+            qMax<qreal>(1.0, 2.0 * hudScale)
         );
-        painter->drawText(
+        drawHudText(
+            *painter,
             QPointF(leftX, baseline0 + metrics.height() * 2),
-            QStringLiteral("Fallback: %1").arg(state.cpuFallbackCount)
+            QStringLiteral("Fallback: %1").arg(state.cpuFallbackCount),
+            fpsFont,
+            qMax<qreal>(1.0, 2.0 * hudScale)
         );
     }
 
     if (state.render.showTimestamp) {
-        painter->setFont(timeFont);
-        painter->setPen(QColor(QStringLiteral("#FFFFFF")));
-        painter->drawText(
+        drawHudText(
+            *painter,
             QPointF(stageRect.left() + hudPadding, stageRect.bottom() - hudPadding),
-            miacode::preview::scene::formatPreviewHudTimeLabel(state.playheadSeconds)
+            miacode::preview::scene::formatPreviewHudTimeLabel(state.playheadSeconds),
+            timeFont,
+            qMax<qreal>(1.0, 2.0 * hudScale)
         );
     }
 

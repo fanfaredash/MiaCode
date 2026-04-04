@@ -1,15 +1,9 @@
 #include "preview/scene/PreviewOpacityCurves.h"
+#include "preview/scene/PreviewSceneConstants.h"
 
 #include <QtMath>
 
 namespace {
-
-constexpr qreal kRenderDurationEpsilon = 1e-4;
-constexpr qreal kTouchPhaseDivisionEpsilonSeconds = 1e-6;
-constexpr qreal kTouchCloseCurveResidualBias = 1.35;
-constexpr qreal kTouchCloseCurveExponent = 3.0;
-constexpr qreal kTouchCloseCurveProgressBias = 0.60;
-constexpr qreal kTouchPrefabMaxCloseAmountNormalized = 0.94;
 
 qreal touchPreHitElapsedSeconds(qreal deltaSeconds, qreal touchDurationSeconds)
 {
@@ -20,6 +14,28 @@ qreal touchPreHitElapsedSeconds(qreal deltaSeconds, qreal touchDurationSeconds)
 
 namespace miacode::preview::scene {
 
+PreviewTapTiming previewTapTimingForFlowSpeed(qreal flowSpeed)
+{
+    const double normalizedFlowSpeed =
+        miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(static_cast<double>(flowSpeed));
+    const double timingScaleFrames =
+        miacode::preview_gameplay::previewTimingScaleFramesAt120Fps(normalizedFlowSpeed);
+
+    PreviewTapTiming timing;
+    timing.spawnDurationSeconds = static_cast<qreal>(
+        miacode::preview_gameplay::previewTimingSecondsFromFramesAt120Fps(timingScaleFrames)
+    );
+    timing.flyDurationSeconds = timing.spawnDurationSeconds;
+    timing.lifecycleDurationSeconds = static_cast<qreal>(
+        miacode::preview_gameplay::previewTimingSecondsFromFramesAt120Fps(timingScaleFrames * 2.0)
+    );
+    timing.unitsPerSecond = static_cast<qreal>(
+        (miacode::preview_gameplay::kLogicalDistanceEdge - miacode::preview_gameplay::kLogicalDistanceTap)
+        / qMax(0.0001, static_cast<double>(timing.flyDurationSeconds))
+    );
+    return timing;
+}
+
 qreal touchPreHitAlpha(qreal deltaSeconds, qreal touchDurationSeconds, qreal touchShowDurationSeconds)
 {
     if (deltaSeconds >= 0.0) {
@@ -28,7 +44,7 @@ qreal touchPreHitAlpha(qreal deltaSeconds, qreal touchDurationSeconds, qreal tou
     return qBound<qreal>(
         0.0,
         touchPreHitElapsedSeconds(deltaSeconds, touchDurationSeconds)
-            / qMax<qreal>(kTouchPhaseDivisionEpsilonSeconds, touchShowDurationSeconds),
+            / qMax<qreal>(miacode::preview::scene::kTouchPhaseDivisionEpsilonSeconds, touchShowDurationSeconds),
         1.0
     );
 }
@@ -45,7 +61,7 @@ qreal touchCloseProgress(qreal deltaSeconds, qreal touchDurationSeconds, qreal t
     return qBound<qreal>(
         0.0,
         (preHitElapsed - touchShowDurationSeconds)
-            / qMax<qreal>(kTouchPhaseDivisionEpsilonSeconds, touchCloseDurationSeconds),
+            / qMax<qreal>(miacode::preview::scene::kTouchPhaseDivisionEpsilonSeconds, touchCloseDurationSeconds),
         1.0
     );
 }
@@ -58,10 +74,14 @@ qreal touchCloseAmount(qreal progress, qreal range)
     const qreal clampedProgress = qBound<qreal>(0.0, progress, 1.0);
     const qreal closeResidualNormalized = qBound<qreal>(
         0.0,
-        kTouchCloseCurveResidualBias - qExp(kTouchCloseCurveExponent * clampedProgress - kTouchCloseCurveProgressBias),
-        kTouchPrefabMaxCloseAmountNormalized
+        miacode::preview::scene::kTouchCloseCurveResidualBias
+            - qExp(
+                miacode::preview::scene::kTouchCloseCurveExponent * clampedProgress
+                - miacode::preview::scene::kTouchCloseCurveProgressBias
+            ),
+        miacode::preview::scene::kTouchPrefabMaxCloseAmountNormalized
     );
-    return range * (1.0 - closeResidualNormalized / kTouchPrefabMaxCloseAmountNormalized);
+    return range * (1.0 - closeResidualNormalized / miacode::preview::scene::kTouchPrefabMaxCloseAmountNormalized);
 }
 
 qreal touchLogicalOffsetForDelta(
@@ -107,7 +127,7 @@ qreal maimuriDxJudgeFadeOutAlpha(qreal elapsedSeconds, qreal lifetimeSeconds, qr
     return qBound<qreal>(
         0.0,
         1.0 - (elapsedSeconds - fadeOutStartSeconds)
-            / qMax<qreal>(kRenderDurationEpsilon, lifetimeSeconds - fadeOutStartSeconds),
+            / qMax<qreal>(miacode::preview::scene::kRenderDurationEpsilon, lifetimeSeconds - fadeOutStartSeconds),
         1.0
     );
 }
@@ -120,7 +140,7 @@ qreal maimuriDxSimpleJudgeAlpha(qreal elapsedSeconds, qreal lifetimeSeconds, qre
     if (elapsedSeconds < fadeInSeconds) {
         return qBound<qreal>(
             0.0,
-            elapsedSeconds / qMax<qreal>(kRenderDurationEpsilon, fadeInSeconds),
+            elapsedSeconds / qMax<qreal>(miacode::preview::scene::kRenderDurationEpsilon, fadeInSeconds),
             1.0
         );
     }
@@ -138,27 +158,33 @@ TapApproachSample sampleTapApproach(
 )
 {
     TapApproachSample approach;
-    if (tapLifecycleDurationSeconds <= 0.0 || deltaSeconds < -tapLifecycleDurationSeconds || deltaSeconds > 0.0) {
+    approach.distance = logicalDistanceTap;
+    if (tapLifecycleDurationSeconds <= 0.0 || deltaSeconds <= -tapLifecycleDurationSeconds) {
         return approach;
     }
 
-    const qreal elapsed = deltaSeconds + tapLifecycleDurationSeconds;
-    if (elapsed <= tapSpawnDurationSeconds) {
-        const qreal t = qBound<qreal>(0.0, elapsed / qMax<qreal>(kRenderDurationEpsilon, tapSpawnDurationSeconds), 1.0);
-        approach.distance = logicalDistanceTap;
-        approach.scale = t;
+    if (deltaSeconds < -tapFlyDurationSeconds) {
+        approach.scale = qBound<qreal>(
+            0.0,
+            (deltaSeconds + tapLifecycleDurationSeconds)
+                / qMax<qreal>(miacode::preview::scene::kRenderDurationEpsilon, tapSpawnDurationSeconds),
+            1.0
+        );
         return approach;
     }
 
-    const qreal flyElapsed = elapsed - tapSpawnDurationSeconds;
-    const qreal rawDistance = logicalDistanceTap + flyElapsed * tapUnitsPerSecond;
-    approach.distance = qBound<qreal>(logicalDistanceTap, rawDistance, logicalDistanceEdge);
+    if (deltaSeconds < 0.0) {
+        approach.distance = qBound<qreal>(
+            logicalDistanceTap,
+            logicalDistanceTap + (deltaSeconds + tapFlyDurationSeconds) * tapUnitsPerSecond,
+            logicalDistanceEdge
+        );
+        approach.scale = 1.0;
+        return approach;
+    }
+
+    approach.distance = logicalDistanceEdge;
     approach.scale = 1.0;
-    if (tapFlyDurationSeconds > 0.0 && flyElapsed > tapFlyDurationSeconds) {
-        const qreal fadeElapsed = flyElapsed - tapFlyDurationSeconds;
-        const qreal fadeDuration = qMax<qreal>(kRenderDurationEpsilon, tapLifecycleDurationSeconds - tapSpawnDurationSeconds - tapFlyDurationSeconds);
-        approach.scale = qBound<qreal>(0.0, 1.0 - fadeElapsed / fadeDuration, 1.0);
-    }
     return approach;
 }
 
@@ -180,7 +206,7 @@ qreal sampleSlideTrackPreTraceOpacity(
     return qBound<qreal>(
         0.0,
         (playheadSecond - startSecond)
-            / qMax<qreal>(kRenderDurationEpsilon, brightStartSecond - startSecond),
+            / qMax<qreal>(miacode::preview::scene::kRenderDurationEpsilon, brightStartSecond - startSecond),
         1.0
     );
 }

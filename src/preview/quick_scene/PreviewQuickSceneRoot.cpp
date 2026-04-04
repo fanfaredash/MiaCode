@@ -47,11 +47,12 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
 
     delete oldNode;
     auto* root = new QSGNode();
+    textures_.setWindow(window());
+    textures_.beginFrame();
     if (runtime_ == nullptr || window() == nullptr) {
         return root;
     }
 
-    textures_.setWindow(window());
     const miacode::preview::scene::PreviewFrameState& state = runtime_->frameState();
     if (QSGNode* stageNode = stageBackgroundLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
         root->appendChildNode(stageNode);

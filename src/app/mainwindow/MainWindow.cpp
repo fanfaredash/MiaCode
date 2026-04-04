@@ -2432,6 +2432,26 @@ void appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 del
 
 }  // namespace
 
+const MuriAnalysisReport& MainWindow::alignedMuriAnalysisReportForPreview() const
+{
+    static const MuriAnalysisReport kEmptyReport;
+    if (latestTimelineNoteMarkerSignature_ != muriAnalysisReportNoteMarkerSignature_) {
+        return kEmptyReport;
+    }
+    return muriAnalysisReport_;
+}
+
+void MainWindow::applyAlignedMuriAnalysisReportToViews()
+{
+    const MuriAnalysisReport& alignedReport = alignedMuriAnalysisReportForPreview();
+    if (timelineView_ != nullptr) {
+        timelineView_->setMuriAnalysisReport(alignedReport);
+    }
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->setMuriAnalysisReport(alignedReport);
+    }
+}
+
 MainWindow::~MainWindow()
 {
     shutdownPreviewMediaController();
@@ -4347,12 +4367,11 @@ void MainWindow::applyMuriRenderOptions()
     }
     if (timelineView_ != nullptr) {
         timelineView_->setShowSlideTracks(muriRenderOptions_.showSlideTracks);
-        timelineView_->setMuriAnalysisReport(muriAnalysisReport_);
     }
     if (previewCanvas_ != nullptr) {
         previewCanvas_->setMuriRenderOptions(muriRenderOptions_);
-        previewCanvas_->setMuriAnalysisReport(muriAnalysisReport_);
     }
+    applyAlignedMuriAnalysisReportToViews();
 }
 
 void MainWindow::setMuriRenderMode(RenderMode mode, bool persistState)

@@ -3,56 +3,73 @@
 #include "preview/quick_scene/PreviewTextureRepository.h"
 
 #include <QQuickWindow>
+#include <QSGClipNode>
 #include <QSGGeometry>
-#include <QSGGeometryNode>
 #include <QSGNode>
 #include <QSGOpacityNode>
+#include <QSGSimpleTextureNode>
 #include <QSGTexture>
-#include <QSGTextureMaterial>
 #include <QtMath>
 
 namespace {
 
-QSGGeometryNode* buildArcNode(
+QSGClipNode* buildArcClipNode(
     const miacode::preview::scene::PreviewArcDescriptor& arc,
-    PreviewTextureRepository* textures
+    QSGTexture* texture
 )
 {
-    if (arc.image == nullptr || arc.image->isNull() || textures == nullptr) {
+    if (arc.image == nullptr || arc.image->isNull() || texture == nullptr) {
         return nullptr;
     }
 
     constexpr int kSegments = 48;
-    auto* geometry = new QSGGeometry(QSGGeometry::defaultAttributes_TexturedPoint2D(), kSegments + 2);
-    geometry->setDrawingMode(QSGGeometry::DrawTriangleFan);
-    auto* vertices = geometry->vertexDataAsTexturedPoint2D();
+    auto* geometry = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), kSegments * 3);
+    geometry->setDrawingMode(QSGGeometry::DrawTriangles);
+    auto* vertices = geometry->vertexDataAsPoint2D();
 
     const float rx = static_cast<float>(arc.width * 0.5);
     const float ry = static_cast<float>(arc.height * 0.5);
-    vertices[0].set(static_cast<float>(arc.center.x()), static_cast<float>(arc.center.y()), 0.5f, 0.5f);
-
-    for (int index = 0; index <= kSegments; ++index) {
-        const qreal t = static_cast<qreal>(index) / static_cast<qreal>(kSegments);
-        const qreal angleDegrees = arc.startDegrees + arc.sweepDegrees * t;
+    const auto pointForAngleDegrees = [&](qreal angleDegrees) {
         const qreal radians = qDegreesToRadians(-angleDegrees);
-        const float x = rx * static_cast<float>(qCos(radians));
-        const float y = ry * static_cast<float>(qSin(radians));
-        const float px = static_cast<float>(arc.center.x()) + x;
-        const float py = static_cast<float>(arc.center.y()) + y;
-        const float u = 0.5f + (arc.width > 0.0 ? x / static_cast<float>(arc.width) : 0.0f);
-        const float v = 0.5f + (arc.height > 0.0 ? y / static_cast<float>(arc.height) : 0.0f);
-        vertices[index + 1].set(px, py, u, v);
+        return QPointF(
+            arc.center.x() + rx * static_cast<float>(qCos(radians)),
+            arc.center.y() + ry * static_cast<float>(qSin(radians))
+        );
+    };
+
+    for (int index = 0; index < kSegments; ++index) {
+        const qreal t0 = static_cast<qreal>(index) / static_cast<qreal>(kSegments);
+        const qreal t1 = static_cast<qreal>(index + 1) / static_cast<qreal>(kSegments);
+        const QPointF p0 = pointForAngleDegrees(arc.startDegrees + arc.sweepDegrees * t0);
+        const QPointF p1 = pointForAngleDegrees(arc.startDegrees + arc.sweepDegrees * t1);
+        const int vertexIndex = index * 3;
+        vertices[vertexIndex + 0].set(static_cast<float>(arc.center.x()), static_cast<float>(arc.center.y()));
+        vertices[vertexIndex + 1].set(static_cast<float>(p0.x()), static_cast<float>(p0.y()));
+        vertices[vertexIndex + 2].set(static_cast<float>(p1.x()), static_cast<float>(p1.y()));
     }
 
-    auto* material = new QSGTextureMaterial();
-    material->setTexture(textures->textureForImage(*arc.image, arc.cacheable));
-    material->setFiltering(QSGTexture::Linear);
-
-    auto* node = new QSGGeometryNode();
+    auto* node = new QSGClipNode();
     node->setGeometry(geometry);
     node->setFlag(QSGNode::OwnsGeometry, true);
-    node->setMaterial(material);
-    node->setFlag(QSGNode::OwnsMaterial, true);
+    node->setIsRectangular(false);
+    node->setClipRect(QRectF(
+        arc.center.x() - arc.width / 2.0,
+        arc.center.y() - arc.height / 2.0,
+        arc.width,
+        arc.height
+    ));
+
+    auto* textureNode = new QSGSimpleTextureNode();
+    textureNode->setOwnsTexture(false);
+    textureNode->setTexture(texture);
+    textureNode->setFiltering(QSGTexture::Linear);
+    textureNode->setRect(QRectF(
+        arc.center.x() - arc.width / 2.0,
+        arc.center.y() - arc.height / 2.0,
+        arc.width,
+        arc.height
+    ));
+    node->appendChildNode(textureNode);
     return node;
 }
 
@@ -75,9 +92,13 @@ QSGNode* buildPreviewArcNodeTree(
         if (arc.image == nullptr || arc.image->isNull() || arc.opacity <= 0.0 || arc.width <= 0.0 || arc.height <= 0.0 || qFuzzyIsNull(arc.sweepDegrees)) {
             continue;
         }
+        QSGTexture* texture = textures->textureForImage(*arc.image, arc.cacheable);
+        if (texture == nullptr) {
+            continue;
+        }
         auto* opacityNode = new QSGOpacityNode();
         opacityNode->setOpacity(arc.opacity);
-        if (QSGGeometryNode* node = buildArcNode(arc, textures)) {
+        if (QSGClipNode* node = buildArcClipNode(arc, texture)) {
             opacityNode->appendChildNode(node);
             root->appendChildNode(opacityNode);
         } else {

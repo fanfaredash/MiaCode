@@ -60,25 +60,23 @@ qreal slideHeadRotateSpeedDegreesPerSecond(const TimelineNoteMarker& marker)
 
 qreal slideHeadFallRotationDegrees(
     const TimelineNoteMarker& marker,
-    qreal deltaSeconds
+    qreal deltaSeconds,
+    qreal tapLifecycleDurationSeconds
 )
 {
     if ((marker.type != QLatin1String("slide") && marker.type != QLatin1String("wifi"))
-        || deltaSeconds >= 0.0) {
+        || deltaSeconds >= 0.0
+        || tapLifecycleDurationSeconds <= 0.0) {
         return 0.0;
     }
-    const qreal tapLifecycleDurationSeconds =
-        static_cast<qreal>(miacode::preview_gameplay::kTapLifecycleDurationSeconds);
     const qreal elapsedSeconds =
         qBound<qreal>(0.0, deltaSeconds + tapLifecycleDurationSeconds, tapLifecycleDurationSeconds);
     return slideHeadRotateSpeedDegreesPerSecond(marker) * elapsedSeconds;
 }
 
-qreal tapDoubleStarRotationDegrees(qreal deltaSeconds)
+qreal tapDoubleStarRotationDegrees(qreal deltaSeconds, qreal tapLifecycleDurationSeconds)
 {
-    const qreal tapLifecycleDurationSeconds =
-        static_cast<qreal>(miacode::preview_gameplay::kTapLifecycleDurationSeconds);
-    if (deltaSeconds >= 0.0) {
+    if (deltaSeconds >= 0.0 || tapLifecycleDurationSeconds <= 0.0) {
         return 0.0;
     }
     const qreal elapsedSeconds =
@@ -108,13 +106,13 @@ QColor exStarTintColor(bool isBreak, bool isEach)
     return QColor("#6FB6FF");
 }
 
-QImage* appendOwnedImage(PreviewHeadLayerState* state, QImage image)
+const QImage* appendOwnedImage(PreviewHeadLayerState* state, QImage image)
 {
     if (state == nullptr || image.isNull()) {
         return nullptr;
     }
-    state->ownedImages.append(std::move(image));
-    return &state->ownedImages.last();
+    state->ownedImages.append(QSharedPointer<QImage>(new QImage(std::move(image))));
+    return state->ownedImages.last().data();
 }
 
 void appendSprite(
@@ -125,7 +123,8 @@ void appendSprite(
     qreal height,
     qreal rotation,
     qreal opacity = 1.0,
-    const QRectF& sourceRect = QRectF()
+    const QRectF& sourceRect = QRectF(),
+    bool cacheable = true
 )
 {
     if (state == nullptr || image == nullptr || image->isNull() || width <= 0.0 || height <= 0.0 || opacity <= 0.0) {
@@ -139,7 +138,7 @@ void appendSprite(
     sprite.rotationDegrees = rotation;
     sprite.opacity = opacity;
     sprite.sourceRect = sourceRect;
-    sprite.cacheable = sourceRect.isEmpty();
+    sprite.cacheable = cacheable;
     state->sprites.append(sprite);
 }
 
@@ -175,13 +174,15 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
         return a > b;
     });
 
-    const auto tapApproachFor = [](qreal deltaSeconds) {
+    const PreviewTapTiming tapTiming = previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.noteFlowSpeed));
+
+    const auto tapApproachFor = [tapTiming](qreal deltaSeconds) {
         return sampleTapApproach(
             deltaSeconds,
-            static_cast<qreal>(miacode::preview_gameplay::kTapLifecycleDurationSeconds),
-            static_cast<qreal>(miacode::preview_gameplay::kTapSpawnDurationSeconds),
-            static_cast<qreal>(miacode::preview_gameplay::kTapFlyDurationSeconds),
-            static_cast<qreal>(miacode::preview_gameplay::kTapUnitsPerSecond),
+            tapTiming.lifecycleDurationSeconds,
+            tapTiming.spawnDurationSeconds,
+            tapTiming.flyDurationSeconds,
+            tapTiming.unitsPerSecond,
             kLogicalDistanceTap,
             kLogicalDistanceEdge
         );
@@ -217,20 +218,28 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
             if (holdImage == nullptr || holdImage->isNull()) {
                 continue;
             }
+            const PreviewAnimatedSpriteEffect holdEffect = marker.isBreak
+                ? PreviewAnimatedSpriteEffect::BreakAnimate
+                : (holdActive ? PreviewAnimatedSpriteEffect::HoldShine : PreviewAnimatedSpriteEffect::None);
             QImage holdCapImage = *holdImage;
+            bool ownsHoldImage = false;
             if (marker.isEx && !state.skin.holdExImage.isNull()) {
                 const QColor tint = exTintColor(marker.isBreak, marker.isEach);
                 holdCapImage = composeOverlayImage(holdCapImage, state.skin.holdExImage, kHoldOverlayBaseMix, kHoldOverlayAlphaMix, &tint);
+                ownsHoldImage = true;
             }
-            const QImage animatedHoldImage = buildAnimatedSpriteImage(
-                holdCapImage,
-                marker.isBreak
-                    ? PreviewAnimatedSpriteEffect::BreakAnimate
-                    : (holdActive ? PreviewAnimatedSpriteEffect::HoldShine : PreviewAnimatedSpriteEffect::None),
-                state.playheadSeconds
-            );
-            const QImage* renderHoldImage = appendOwnedImage(&layerState, animatedHoldImage);
-            if (renderHoldImage == nullptr) {
+            if (holdEffect != PreviewAnimatedSpriteEffect::None) {
+                holdCapImage = buildAnimatedSpriteImage(holdCapImage, holdEffect, state.playheadSeconds);
+                ownsHoldImage = true;
+            }
+
+            const QImage* renderHoldImage = holdImage;
+            bool renderHoldImageCacheable = true;
+            if (ownsHoldImage) {
+                renderHoldImage = appendOwnedImage(&layerState, std::move(holdCapImage));
+                renderHoldImageCacheable = false;
+            }
+            if (renderHoldImage == nullptr || renderHoldImage->isNull()) {
                 continue;
             }
 
@@ -239,7 +248,7 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
                 const int srcH = qMax(1, renderHoldImage->height());
                 const int capRaw = qMax(1, qMin(srcH / 2, qRound(srcH * kHoldCapSliceRatioNumerator / kHoldCapSliceRatioDenominator)));
                 const int midY = qBound(0, srcH / 2, srcH - 1);
-                const qreal targetWidth = qMax<qreal>(1.0, kHoldTargetWidth * canvasScale * scale);
+                const qreal targetWidth = qMax<qreal>(1.0, qRound(kHoldTargetWidth * canvasScale * scale));
                 const qreal targetCapHeight = qMax<qreal>(
                     1.0,
                     qRound(static_cast<qreal>(qRound(static_cast<qreal>(capRaw) * kHoldTargetWidth / srcW)) * canvasScale * scale)
@@ -258,7 +267,8 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
                         targetBodyHeight,
                         angle,
                         1.0,
-                        QRectF(0.0, midY, srcW, 1.0)
+                        QRectF(0.0, midY, srcW, 1.0),
+                        renderHoldImageCacheable
                     );
                 }
                 appendSprite(
@@ -269,7 +279,8 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
                     targetCapHeight,
                     angle,
                     1.0,
-                    QRectF(0.0, 0.0, srcW, capRaw)
+                    QRectF(0.0, 0.0, srcW, capRaw),
+                    renderHoldImageCacheable
                 );
                 appendSprite(
                     &layerState,
@@ -279,11 +290,12 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
                     targetCapHeight,
                     angle,
                     1.0,
-                    QRectF(0.0, srcH - capRaw, srcW, capRaw)
+                    QRectF(0.0, srcH - capRaw, srcW, capRaw),
+                    renderHoldImageCacheable
                 );
             };
 
-            if (deltaSeconds < -static_cast<qreal>(miacode::preview_gameplay::kTapFlyDurationSeconds)) {
+            if (deltaSeconds < -tapTiming.flyDurationSeconds) {
                 const QPointF logicalPoint(
                     kLogicalCanvasCenter + unit.x() * kLogicalDistanceTap,
                     kLogicalCanvasCenter + unit.y() * kLogicalDistanceTap
@@ -340,6 +352,7 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
             continue;
         }
         QImage renderImage = *baseImage;
+        bool ownsHeadImage = false;
         if (starMaterialHead && headEx) {
             const QImage& overlay = (doubleStarHead && !state.skin.starExDoubleImage.isNull())
                 ? state.skin.starExDoubleImage
@@ -347,18 +360,24 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
             if (!overlay.isNull()) {
                 const QColor tint = exStarTintColor(headBreak, headEach);
                 renderImage = composeOverlayImage(renderImage, overlay, kTapOverlayBaseMix, kTapOverlayAlphaMix, &tint);
+                ownsHeadImage = true;
             }
         } else if (!starMaterialHead && headEx && !state.skin.tapExImage.isNull()) {
             const QColor tint = exTintColor(headBreak, headEach);
             renderImage = composeOverlayImage(renderImage, state.skin.tapExImage, kTapOverlayBaseMix, kTapOverlayAlphaMix, &tint);
+            ownsHeadImage = true;
         }
-        const QImage animatedImage = buildAnimatedSpriteImage(
-            renderImage,
-            headBreak ? PreviewAnimatedSpriteEffect::BreakAnimate : PreviewAnimatedSpriteEffect::None,
-            state.playheadSeconds
-        );
-        const QImage* headImage = appendOwnedImage(&layerState, animatedImage);
-        if (headImage == nullptr) {
+        if (headBreak) {
+            renderImage = buildAnimatedSpriteImage(renderImage, PreviewAnimatedSpriteEffect::BreakAnimate, state.playheadSeconds);
+            ownsHeadImage = true;
+        }
+        const QImage* headImage = baseImage;
+        bool headImageCacheable = true;
+        if (ownsHeadImage) {
+            headImage = appendOwnedImage(&layerState, std::move(renderImage));
+            headImageCacheable = false;
+        }
+        if (headImage == nullptr || headImage->isNull()) {
             continue;
         }
 
@@ -370,21 +389,21 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
                 * kSlideSpawnStarRelativeScale;
             const qreal baseHeight = (!state.skin.tapImage.isNull() ? state.skin.tapImage.height() * kSkinAssetScale : headImage->height() * kStarAssetScale)
                 * kSlideSpawnStarRelativeScale;
-            targetWidth = qMax<qreal>(1.0, baseWidth * canvasScale * approach.scale);
-            targetHeight = qMax<qreal>(1.0, baseHeight * canvasScale * approach.scale);
+            targetWidth = qMax<qreal>(1.0, qRound(baseWidth * canvasScale * approach.scale));
+            targetHeight = qMax<qreal>(1.0, qRound(baseHeight * canvasScale * approach.scale));
             rotation = mirroredStarAngleDegrees(
                 laneRotationDegrees(marker.lane)
                 + (slideLike
-                    ? slideHeadFallRotationDegrees(marker, deltaSeconds)
-                    : (marker.tapStarDouble ? tapDoubleStarRotationDegrees(deltaSeconds) : 0.0))
+                    ? slideHeadFallRotationDegrees(marker, deltaSeconds, tapTiming.lifecycleDurationSeconds)
+                    : (marker.tapStarDouble ? tapDoubleStarRotationDegrees(deltaSeconds, tapTiming.lifecycleDurationSeconds) : 0.0))
             );
         } else {
             const qreal imageScale = canvasScale * approach.scale * kSkinAssetScale;
-            targetWidth = qMax<qreal>(1.0, headImage->width() * imageScale);
-            targetHeight = qMax<qreal>(1.0, headImage->height() * imageScale);
+            targetWidth = qMax<qreal>(1.0, qRound(headImage->width() * imageScale));
+            targetHeight = qMax<qreal>(1.0, qRound(headImage->height() * imageScale));
         }
 
-        appendSprite(&layerState, headImage, point, targetWidth, targetHeight, rotation);
+        appendSprite(&layerState, headImage, point, targetWidth, targetHeight, rotation, 1.0, QRectF(), headImageCacheable);
     }
 
     return layerState;

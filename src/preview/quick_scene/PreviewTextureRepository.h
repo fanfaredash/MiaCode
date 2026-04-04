@@ -12,6 +12,7 @@ public:
     ~PreviewTextureRepository();
 
     void setWindow(QQuickWindow* window);
+    void beginFrame();
     QSGTexture* textureForImage(const QImage& image, bool cacheable = true);
     QSGTexture* createOwnedTexture(const QImage& image) const;
     void clear();
@@ -19,4 +20,5 @@ public:
 private:
     QQuickWindow* window_ = nullptr;
     QHash<quint64, QSGTexture*> cachedTextures_;
+    QHash<quint64, QSGTexture*> transientTextures_;
 };

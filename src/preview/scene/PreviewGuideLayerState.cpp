@@ -13,6 +13,29 @@ using miacode::preview::scene::PreviewSpriteDescriptor;
 using miacode::preview::scene::PreviewSpriteDescriptors;
 using miacode::preview::scene::TapApproachSample;
 
+TapApproachSample sampleHoldTailGuideApproach(qreal deltaSeconds, const miacode::preview::scene::PreviewTapTiming& tapTiming)
+{
+    TapApproachSample approach;
+    approach.distance = miacode::preview::scene::kLogicalDistanceTap;
+    approach.scale = 0.0;
+    if (tapTiming.flyDurationSeconds <= 0.0 || deltaSeconds < -tapTiming.flyDurationSeconds) {
+        return approach;
+    }
+    if (deltaSeconds < 0.0) {
+        approach.distance = qBound<qreal>(
+            miacode::preview::scene::kLogicalDistanceTap,
+            miacode::preview::scene::kLogicalDistanceTap
+                + (deltaSeconds + tapTiming.flyDurationSeconds) * tapTiming.unitsPerSecond,
+            miacode::preview::scene::kLogicalDistanceEdge
+        );
+        approach.scale = 1.0;
+        return approach;
+    }
+    approach.distance = miacode::preview::scene::kLogicalDistanceEdge;
+    approach.scale = 1.0;
+    return approach;
+}
+
 void appendGuideSprite(
     PreviewSpriteDescriptors* sprites,
     const QImage* image,
@@ -29,8 +52,8 @@ void appendGuideSprite(
     PreviewSpriteDescriptor sprite;
     sprite.image = image;
     sprite.center = miacode::preview::scene::mapLogicalPointToRect(logicalPos, playfieldRect);
-    sprite.width = qMax<qreal>(1.0, image->width() * canvasScale * scale);
-    sprite.height = qMax<qreal>(1.0, image->height() * canvasScale * scale);
+    sprite.width = qMax<qreal>(1.0, qRound(image->width() * canvasScale * scale));
+    sprite.height = qMax<qreal>(1.0, qRound(image->height() * canvasScale * scale));
     sprite.rotationDegrees = angleDegrees;
     sprites->append(sprite);
 }
@@ -87,13 +110,15 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
         fallbackEachGroupsBySecond[secondKey].append(ActiveEachCandidate{&marker});
     };
 
-    const auto tapApproachFor = [](qreal deltaSeconds) {
+    const PreviewTapTiming tapTiming = previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.noteFlowSpeed));
+
+    const auto tapApproachFor = [tapTiming](qreal deltaSeconds) {
         return sampleTapApproach(
             deltaSeconds,
-            static_cast<qreal>(miacode::preview_gameplay::kTapLifecycleDurationSeconds),
-            static_cast<qreal>(miacode::preview_gameplay::kTapSpawnDurationSeconds),
-            static_cast<qreal>(miacode::preview_gameplay::kTapFlyDurationSeconds),
-            static_cast<qreal>(miacode::preview_gameplay::kTapUnitsPerSecond),
+            tapTiming.lifecycleDurationSeconds,
+            tapTiming.spawnDurationSeconds,
+            tapTiming.flyDurationSeconds,
+            tapTiming.unitsPerSecond,
             kLogicalDistanceTap,
             kLogicalDistanceEdge
         );
@@ -144,7 +169,7 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
             );
 
             const qreal deltaEndSeconds = static_cast<qreal>(state.playheadSeconds - marker.endSecond);
-            const TapApproachSample tailApproach = tapApproachFor(deltaEndSeconds);
+            const TapApproachSample tailApproach = sampleHoldTailGuideApproach(deltaEndSeconds, tapTiming);
             if (tailApproach.scale > 0.0) {
                 const QPointF unit = laneUnitVector(marker.lane);
                 appendGuideSprite(
