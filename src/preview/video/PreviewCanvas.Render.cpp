@@ -396,7 +396,15 @@ void PreviewCanvas::maybeComparePresentFrame(const QSize& canvasSize, const QRec
 
 void PreviewCanvas::renderCanvas(QPainter& painter)
 {
-    renderCanvas(painter, size(), true, true, false);
+    renderCanvas(
+        painter,
+        size(),
+        true,
+        true,
+        false,
+        miacode::preview::scene::kPreviewAllRenderLayers,
+        true
+    );
 }
 
 void PreviewCanvas::renderCanvas(
@@ -404,7 +412,9 @@ void PreviewCanvas::renderCanvas(
     const QSize& canvasSize,
     bool drawStageBackgroundEnabled,
     bool clearToStageColor,
-    bool highQualityRender
+    bool highQualityRender,
+    miacode::preview::scene::PreviewRenderLayerFlags layerFlags,
+    bool collectFrameStats
 )
 {
     usedGpuRendererThisFrame_ = false;
@@ -418,33 +428,66 @@ void PreviewCanvas::renderCanvas(
     const QRectF stageRect = stageRectForSize(canvasSize);
     const QRectF playfieldRect = stagePlayfieldRect(stageRect);
 
-    if (drawStageBackgroundEnabled) {
+    if (drawStageBackgroundEnabled
+        && miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::StageBackgroundLayer)) {
         drawStageBackground(painter, canvasSize, stageRect);
     }
-    drawPlayfieldBackdrop(painter, playfieldRect);
-    drawMuriPadStateOverlay(painter, playfieldRect);
-    drawMuriActionOverlay(painter, playfieldRect);
+    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::BackdropLayer)) {
+        drawPlayfieldBackdrop(painter, playfieldRect);
+    }
+    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::MuriPadStateLayer)) {
+        drawMuriPadStateOverlay(painter, playfieldRect);
+    }
+    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::MuriActionLayer)) {
+        drawMuriActionOverlay(painter, playfieldRect);
+    }
     const bool batchNative = glRenderer_.isInitialized();
     if (batchNative) {
         beginNativeBatch(painter);
     }
-    drawJudgeEffectFireworkLayer(painter, playfieldRect);
-    drawGuideLayer(painter, playfieldRect);
-    drawTrackLayer(painter, playfieldRect);
-    drawSlideMotionLayer(painter, playfieldRect);
-    drawJudgeEffectLayer(painter, playfieldRect);
-    drawJudgeEffectTouchLayer(painter, playfieldRect);
-    drawHoldAndTapHeadLayer(painter, playfieldRect);
-    drawTouchLayer(painter, playfieldRect);
-    drawTouchHoldLayer(painter, playfieldRect);
-    drawChartReviewJudgeOverlay(painter, playfieldRect);
-    drawMaimuriDxJudgeOverlay(painter, playfieldRect);
+    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::JudgeFireworkLayer)) {
+        drawJudgeEffectFireworkLayer(painter, playfieldRect);
+    }
+    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::GuideLayer)) {
+        drawGuideLayer(painter, playfieldRect);
+    }
+    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::TrackLayer)) {
+        drawTrackLayer(painter, playfieldRect);
+    }
+    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::SlideMotionLayer)) {
+        drawSlideMotionLayer(painter, playfieldRect);
+    }
+    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::JudgeLayer)) {
+        drawJudgeEffectLayer(painter, playfieldRect);
+    }
+    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::JudgeTouchLayer)) {
+        drawJudgeEffectTouchLayer(painter, playfieldRect);
+    }
+    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::HeadLayer)) {
+        drawHoldAndTapHeadLayer(painter, playfieldRect);
+    }
+    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::TouchLayer)) {
+        drawTouchLayer(painter, playfieldRect);
+    }
+    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::TouchHoldLayer)) {
+        drawTouchHoldLayer(painter, playfieldRect);
+    }
+    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::ChartReviewLayer)) {
+        drawChartReviewJudgeOverlay(painter, playfieldRect);
+    }
+    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::MaimuriDxJudgeLayer)) {
+        drawMaimuriDxJudgeOverlay(painter, playfieldRect);
+    }
     if (batchNative) {
         endNativeBatch(painter);
     }
 
-    updateFpsSample();
-    drawHud(painter, stageRect);
+    if (collectFrameStats) {
+        updateFpsSample();
+    }
+    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::HudLayer)) {
+        drawHud(painter, stageRect);
+    }
 }
 
 QImage PreviewCanvas::renderCpuFallbackPresentFrame(const QSize& canvasSize) const
@@ -467,7 +510,15 @@ QImage PreviewCanvas::renderCpuFallbackPresentFrame(const QSize& canvasSize) con
     frame.fill(Qt::transparent);
     {
         QPainter painter(&frame);
-        cpuCanvas.renderCanvas(painter, safeCanvasSize, true, true, highQualityRender_);
+        cpuCanvas.renderCanvas(
+            painter,
+            safeCanvasSize,
+            true,
+            true,
+            highQualityRender_,
+            miacode::preview::scene::kPreviewAllRenderLayers,
+            false
+        );
     }
     return frame;
 }

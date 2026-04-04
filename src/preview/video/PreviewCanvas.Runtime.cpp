@@ -588,6 +588,57 @@ QImage PreviewCanvas::renderOverlayFrame(
     return frame;
 }
 
+QImage PreviewCanvas::renderPresentFrame(const QSize& outputSize)
+{
+    const QSize safeSize(qMax(1, outputSize.width()), qMax(1, outputSize.height()));
+
+    QImage frame(safeSize, QImage::Format_RGBA8888);
+    frame.fill(Qt::transparent);
+    {
+        QPainter painter(&frame);
+        paintPresentFrame(painter, safeSize);
+    }
+    return frame;
+}
+
+void PreviewCanvas::paintPresentFrame(
+    QPainter& painter,
+    const QSize& outputSize,
+    qreal devicePixelRatio,
+    miacode::preview::scene::PreviewRenderLayerFlags layerFlags,
+    bool allowGpuDrawing,
+    bool collectFrameStats
+)
+{
+    const QSize safeSize(qMax(1, outputSize.width()), qMax(1, outputSize.height()));
+    const bool originalHighQualityRender = highQualityRender_;
+    const bool canUseCurrentGlContext = allowGpuDrawing && QOpenGLContext::currentContext() != nullptr;
+
+    if (canUseCurrentGlContext) {
+        glRenderer_.initialize();
+        if (glRenderer_.isInitialized()) {
+            glRenderer_.beginFrame(safeSize, qMax<qreal>(1.0, devicePixelRatio));
+        }
+    }
+
+    const bool drawStageBackgroundEnabled =
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags, miacode::preview::scene::StageBackgroundLayer);
+    renderCanvas(
+        painter,
+        safeSize,
+        drawStageBackgroundEnabled,
+        drawStageBackgroundEnabled,
+        false,
+        layerFlags,
+        collectFrameStats
+    );
+
+    if (canUseCurrentGlContext && glRenderer_.isInitialized()) {
+        glRenderer_.endFrame();
+    }
+    highQualityRender_ = originalHighQualityRender;
+}
+
 bool PreviewCanvas::initializeOffscreenRenderer(
     const QSurfaceFormat& requestedFormat,
     QOpenGLContext* shareContext,

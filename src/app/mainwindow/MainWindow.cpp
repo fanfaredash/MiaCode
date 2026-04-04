@@ -2,7 +2,7 @@
 #include "AppVersion.h"
 #include "BracketScopeHighlighter.h"
 #include "PlainCodeEditor.h"
-#include "PreviewCanvas.h"
+#include "preview/runtime/PreviewRuntime.h"
 #include "PreviewMediaController.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
@@ -2554,7 +2554,7 @@ void MainWindow::ensurePreviewMediaControllerInitialized()
         previewMediaController_,
         &PreviewMediaController::backgroundBrightnessChanged,
         previewCanvas_,
-        &PreviewCanvas::setBackgroundBrightnessOuter
+        &PreviewRuntime::setBackgroundBrightnessOuter
     );
     connect(previewMediaController_, &PreviewMediaController::playbackPositionChanged, this, [this](double second) {
         if (qtPreviewPlaying_) {
@@ -3170,9 +3170,10 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             );
         }
     }
+    QObject* previewWindowObject = previewCanvas_ != nullptr ? previewCanvas_->hostWindow() : nullptr;
     const bool previewKeyScope =
         watched == previewSlider_
-        || watched == previewCanvas_
+        || watched == previewWindowObject
         || watched == previewCanvasContainer_
         || watched == previewCanvasFrame_
         || watched == previewPanel_
@@ -3185,7 +3186,7 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
         || watched == previewFullscreenHost_
         || watched == previewFullscreenControlsWindow_
         || watched == previewFullscreenHintWindow_
-        || watched == previewCanvas_
+        || watched == previewWindowObject
         || watched == previewCanvasContainer_
         || watched == previewCanvasFrame_
         || watched == previewControlCard_
@@ -4601,7 +4602,6 @@ void MainWindow::onExportPreviewVideo()
     };
     VideoExportDialog dialog(
         task,
-        previewCanvas_,
         [this](double second) {
             seekPreviewToSecond(second, false);
         },
@@ -5959,9 +5959,6 @@ bool MainWindow::exportPreviewVideoFromCli(
         return false;
     };
 
-    if (previewCanvas_ == nullptr) {
-        return fail(QStringLiteral("preview canvas is not initialized"));
-    }
     if (request.outputWidth <= 0 || request.outputHeight <= 0 || request.fps <= 0) {
         return fail(QStringLiteral("output width/height and fps must be positive integers"));
     }
@@ -6018,15 +6015,9 @@ bool MainWindow::exportPreviewVideoFromCli(
         return fail(QStringLiteral("no parsed note markers for requested difficulty"));
     }
 
-    bool skinLoaded = previewCanvas_->hasCoreSkinAssetsLoadedForDebug();
-    const int skinWaitMs = qBound(0, request.skinLoadWaitMs, 20000);
-    if (!skinLoaded && skinWaitMs > 0) {
-        QElapsedTimer waitTimer;
-        waitTimer.start();
-        while (!skinLoaded && waitTimer.elapsed() < skinWaitMs) {
-            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
-            skinLoaded = previewCanvas_->hasCoreSkinAssetsLoadedForDebug();
-        }
+    const QString previewSkinDir = resolvePreviewSkinDir();
+    if (previewSkinDir.trimmed().isEmpty()) {
+        return fail(QStringLiteral("preview skin directory is empty"));
     }
 
     const QFileInfo chartInfo(currentFilePath_);
@@ -6087,6 +6078,7 @@ bool MainWindow::exportPreviewVideoFromCli(
     VideoExportTask task;
     task.chartPath = currentFilePath_;
     task.trackPath = resolveDefaultTrackPath();
+    task.skinDirectory = previewSkinDir;
     task.noteMarkers = previewStatsNoteMarkers_;
     task.muriAnalysisReport = muriAnalysisReport_;
     task.muriRenderOptions = muriRenderOptions_;
@@ -6108,7 +6100,7 @@ bool MainWindow::exportPreviewVideoFromCli(
     task.showObjectStatsHud = request.showObjectStatsHud;
     task.outputPath = outputPath;
 
-    const VideoExportResult exportResult = VideoExportController::exportFullPreview(task, previewCanvas_, nullptr);
+    const VideoExportResult exportResult = VideoExportController::exportFullPreview(task, nullptr, nullptr);
     if (!exportResult.success) {
         return fail(exportResult.message, exportResult.details);
     }
@@ -6123,7 +6115,7 @@ bool MainWindow::exportPreviewVideoFromCli(
         detailLines << QStringLiteral("encoding=%1").arg(usedSystemEncoding ? QStringLiteral("system") : QStringLiteral("utf8"));
         detailLines << QStringLiteral("noteCount=%1").arg(previewStatsNoteMarkers_.size());
         detailLines << QStringLiteral("trackPath=%1").arg(task.trackPath.isEmpty() ? QStringLiteral("(none)") : task.trackPath);
-        detailLines << QStringLiteral("skinLoaded=%1").arg(skinLoaded ? 1 : 0);
+        detailLines << QStringLiteral("skinLoaded=%1").arg(previewSkinDir.isEmpty() ? 0 : 1);
         *details = detailLines.join('\n');
     }
     return true;

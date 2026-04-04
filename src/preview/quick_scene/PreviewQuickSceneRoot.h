@@ -1,0 +1,37 @@
+#pragma once
+
+#include <QQuickItem>
+
+#include "preview/quick_scene/PreviewQuickBackdropLayer.h"
+#include "preview/quick_scene/PreviewQuickJudgeFireworkLayer.h"
+#include "preview/quick_scene/PreviewQuickMuriActionLayer.h"
+#include "preview/quick_scene/PreviewQuickMuriPadLayer.h"
+#include "preview/quick_scene/PreviewQuickTouchJudgeLayer.h"
+#include "preview/quick_scene/PreviewQuickStageBackgroundLayer.h"
+#include "preview/quick_scene/PreviewTextureRepository.h"
+
+class PreviewRuntime;
+
+class PreviewQuickSceneRoot : public QQuickItem
+{
+    Q_OBJECT
+
+public:
+    explicit PreviewQuickSceneRoot(QQuickItem* parent = nullptr);
+
+    void setRuntime(PreviewRuntime* runtime);
+
+protected:
+    QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* updatePaintNodeData) override;
+    void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
+
+private:
+    PreviewRuntime* runtime_ = nullptr;
+    PreviewTextureRepository textures_;
+    PreviewQuickStageBackgroundLayer stageBackgroundLayer_;
+    PreviewQuickBackdropLayer backdropLayer_;
+    PreviewQuickMuriPadLayer muriPadLayer_;
+    PreviewQuickMuriActionLayer muriActionLayer_;
+    PreviewQuickJudgeFireworkLayer judgeFireworkLayer_;
+    PreviewQuickTouchJudgeLayer touchJudgeLayer_;
+};

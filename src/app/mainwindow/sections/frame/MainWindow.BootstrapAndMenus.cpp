@@ -1128,7 +1128,7 @@ MainWindow::MainWindow(QWidget* parent)
     previewPanel_->setMinimumWidth(kEmbeddedPreviewPanelMinWidth);
     previewPanel_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
-    previewCanvas_ = new PreviewCanvas();
+    previewCanvas_ = new PreviewRuntime(this);
     logStartupStage("preview_canvas_created");
     previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
     logStartupStage("preview_skin_async_dispatched");
@@ -1136,7 +1136,7 @@ MainWindow::MainWindow(QWidget* parent)
     previewCanvasFrame_->setObjectName("PreviewCanvasFrame");
     previewCanvasFrame_->setMinimumSize(QSize(1, 1));
     previewCanvasFrame_->setFocusPolicy(Qt::StrongFocus);
-    previewCanvasContainer_ = QWidget::createWindowContainer(previewCanvas_, previewCanvasFrame_);
+    previewCanvasContainer_ = QWidget::createWindowContainer(previewCanvas_->hostWindow(), previewCanvasFrame_);
     previewCanvasContainer_->setMinimumSize(QSize(1, 1));
     previewCanvasContainer_->setFocusPolicy(Qt::StrongFocus);
     previewPanel_->setFocusPolicy(Qt::StrongFocus);
@@ -1289,7 +1289,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     previewSfxRuntime_ = new QtPreviewSfxRuntime(this);
     logStartupStage("preview_sfx_runtime_created");
-    connect(previewCanvas_, &QOpenGLWindow::frameSwapped, this, [this]() {
+    connect(previewCanvas_, &PreviewRuntime::framePresented, this, [this]() {
         if (!qtPreviewPlaying_
             || !previewCanvasUsesFrameSwappedPacing()
             || !qtPreviewAwaitingFrameSwap_) {
@@ -1726,8 +1726,8 @@ MainWindow::MainWindow(QWidget* parent)
         previewCanvasContainer_->setMouseTracking(true);
         previewCanvasContainer_->installEventFilter(this);
     }
-    if (previewCanvas_ != nullptr) {
-        previewCanvas_->installEventFilter(this);
+    if (previewCanvas_ != nullptr && previewCanvas_->hostWindow() != nullptr) {
+        previewCanvas_->hostWindow()->installEventFilter(this);
     }
     if (previewCanvasFrame_ != nullptr) {
         previewCanvasFrame_->setMouseTracking(true);

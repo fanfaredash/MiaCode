@@ -20,7 +20,6 @@ class QTimer;
 class QToolButton;
 class QWheelEvent;
 class QWidget;
-class PreviewCanvas;
 
 class VideoExportDialog : public QDialog
 {
@@ -42,7 +41,6 @@ public:
 
     VideoExportDialog(
         const VideoExportTask& baseTask,
-        PreviewCanvas* sourceCanvas,
         SeekPreviewCallback seekPreviewCallback = {},
         PlayPreviewCallback playPreviewCallback = {},
         PausePreviewCallback pausePreviewCallback = {},
@@ -107,7 +105,6 @@ private:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
     VideoExportTask baseTask_;
-    PreviewCanvas* sourceCanvas_ = nullptr;
     SeekPreviewCallback seekPreviewCallback_;
     PlayPreviewCallback playPreviewCallback_;
     PausePreviewCallback pausePreviewCallback_;
@@ -131,7 +128,6 @@ private:
     bool previewAspectChangedByDialog_ = false;
     bool previewStateRestored_ = false;
     bool initialShowTimestamp_ = true;
-    bool initialShowObjectStatsHud_ = false;
     int previewHeldSeekDirection_ = 0;
     int previewSeekHeldArrowKey_ = 0;
     int previewSeekHeldArrowLastElapsedMs_ = 0;
