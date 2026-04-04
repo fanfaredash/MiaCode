@@ -3515,7 +3515,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
         filterParts << QStringLiteral("[base_media]null[base]");
     }
 
-    filterParts << QStringLiteral("[0:v]vflip,format=rgba[overlay_src]");
+    // Quick export frames are already read back in top-left raster order.
+    filterParts << QStringLiteral("[0:v]format=rgba[overlay_src]");
     filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3[sfx]")
                        .arg(sfxInputIndex)
                        .arg(totalSecondsText)
@@ -3644,7 +3645,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(offscreenInitError.isEmpty() ? QStringLiteral("ok") : offscreenInitError)
     );
 
-    const QString overlayAlphaMode = QStringLiteral("premultiplied");
+    // Raw RGBA frames are packed after conversion to non-premultiplied RGBA8888.
+    const QString overlayAlphaMode = QStringLiteral("straight");
     filterParts << QStringLiteral("[base][overlay_src]overlay=0:0:format=rgb:alpha=%1[vout]")
                        .arg(overlayAlphaMode);
 
