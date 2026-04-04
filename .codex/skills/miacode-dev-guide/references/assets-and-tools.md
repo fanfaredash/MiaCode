@@ -96,15 +96,19 @@ Do not rename sound files casually; both preview-time and export-time behavior d
   - `scripts/build-win.ps1`
   - `scripts/package-win.ps1`
   - `scripts/package-win.ps1` defaults to `build/`, prechecks version freshness against `CMakeLists.txt` and `build/generated/AppVersion.h`, and auto-runs `cmake --build <BuildDir> --target MiaCode --config <Config> --parallel 8` when the packaged executable is stale or missing
+  - `scripts/build-win.ps1` now installs `qtmultimedia`, `qtdeclarative`, and `qtsvg` so the Qt Quick runtime can be reproduced from a clean machine
   - both the CMake post-build deploy step and `scripts/package-win.ps1` now pass `--qmldir src/preview/runtime/qml` to `windeployqt` so the Qt Quick runtime imports are deployed
+  - both the CMake post-build deploy step and `scripts/package-win.ps1` explicitly keep the Qt Quick runtime DLL set (`Qt6Quick`, `Qt6Qml`, `Qt6QmlMeta`, `Qt6QmlModels`, `Qt6QmlWorkerScript`) and remove stale `Qt6OpenGLWidgets.dll`
   - Windows release packages now also include:
     - root-level `Start_MiaCode_Debug.bat`
     - root-level `Start_MiaCode_Debug_CompareDump.bat`
     - root-level `logs/`
     - `docs/DEBUG_INDEX.md`
+    - `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
 - macOS build/package:
   - `scripts/build-macos.sh`
   - `scripts/package-mac.sh`
+  - `scripts/build-macos.sh` now installs `qtmultimedia`, `qtdeclarative`, and `qtsvg`
 - ffmpeg provisioning:
   - `scripts/ensure-windows-ffmpeg.ps1`
   - `scripts/ensure-macos-ffmpeg.sh`

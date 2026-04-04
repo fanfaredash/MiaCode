@@ -71,9 +71,22 @@ function Invoke-MiaCodeBuild {
     }
 
     Write-Host "Precheck: building MiaCode ($Config) in $BuildDir with --parallel $BuildJobs ..."
-    & cmake --build $BuildDir --target MiaCode --config $Config --parallel $BuildJobs
+    & cmake --build $BuildDir --target MiaCode --config $Config --parallel $BuildJobs | Out-Host
     if ($LASTEXITCODE -ne 0) {
         throw "cmake --build failed with exit code $LASTEXITCODE"
+    }
+}
+
+function Invoke-MiaCodeConfigure {
+    param(
+        [string]$RepoRoot,
+        [string]$BuildDir
+    )
+
+    Write-Host "Precheck: reconfiguring CMake in $BuildDir ..."
+    & cmake -S $RepoRoot -B $BuildDir | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "cmake configure failed with exit code $LASTEXITCODE"
     }
 }
 
@@ -132,6 +145,7 @@ function Ensure-PackageBuildReady {
         foreach ($reason in $needsBuildReasons) {
             Write-Host "  - $reason"
         }
+        Invoke-MiaCodeConfigure -RepoRoot $RepoRoot -BuildDir $BuildDir
         Invoke-MiaCodeBuild -BuildDir $BuildDir -Config $Config -BuildJobs $BuildJobs
     } else {
         Write-Host "Precheck: package build is up to date."
@@ -153,6 +167,70 @@ function Ensure-PackageBuildReady {
     }
 
     return $exePath
+}
+
+function Get-QtRuntimeDllName {
+    param(
+        [string]$BaseName,
+        [string]$Config
+    )
+
+    if ($Config -eq "Debug") {
+        return "$($BaseName)d.dll"
+    }
+    return "$BaseName.dll"
+}
+
+function Copy-QtRuntimeDllSet {
+    param(
+        [string]$QtBinDir,
+        [string]$DistDir,
+        [string[]]$BaseNames,
+        [string]$Config
+    )
+
+    foreach ($baseName in $BaseNames) {
+        $dllName = Get-QtRuntimeDllName -BaseName $baseName -Config $Config
+        $srcPath = Join-Path $QtBinDir $dllName
+        if (!(Test-Path $srcPath)) {
+            throw "Missing required Qt runtime DLL: $srcPath"
+        }
+        Copy-Item $srcPath (Join-Path $DistDir $dllName) -Force
+    }
+}
+
+function Remove-PackagedDllIfPresent {
+    param(
+        [string]$DistDir,
+        [string]$DllName
+    )
+
+    $dllPath = Join-Path $DistDir $DllName
+    if (Test-Path $dllPath) {
+        Remove-Item -Force $dllPath
+    }
+}
+
+function Assert-PackageEntries {
+    param(
+        [string]$DistDir,
+        [string[]]$RequiredRelativePaths,
+        [string[]]$UnexpectedRelativePaths
+    )
+
+    foreach ($relativePath in $RequiredRelativePaths) {
+        $fullPath = Join-Path $DistDir $relativePath
+        if (!(Test-Path $fullPath)) {
+            throw "Packaged artifact is missing required path: $fullPath"
+        }
+    }
+
+    foreach ($relativePath in $UnexpectedRelativePaths) {
+        $fullPath = Join-Path $DistDir $relativePath
+        if (Test-Path $fullPath) {
+            throw "Packaged artifact still contains deprecated path: $fullPath"
+        }
+    }
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -182,6 +260,7 @@ if ([string]::IsNullOrWhiteSpace($deployTool) -or !(Test-Path $deployTool)) {
 if ([string]::IsNullOrWhiteSpace($deployTool) -or !(Test-Path $deployTool)) {
     throw "windeployqt not found. Add Qt/bin to PATH or pass -QtRoot <qt-root>."
 }
+$qtBinDir = Split-Path -Parent $deployTool
 
 if (Test-Path $DistDir) {
     Remove-Item -Recurse -Force $DistDir
@@ -213,6 +292,26 @@ if ($Config -eq "Debug") {
     --no-translations `
     --qmldir (Join-Path $repoRoot "src\\preview\\runtime\\qml") `
     (Join-Path $DistDir "MiaCode.exe")
+
+$requiredQtRuntimeDllBaseNames = @(
+    "Qt6Core",
+    "Qt6Gui",
+    "Qt6Widgets",
+    "Qt6Multimedia",
+    "Qt6Network",
+    "Qt6OpenGL",
+    "Qt6Quick",
+    "Qt6Qml",
+    "Qt6QmlMeta",
+    "Qt6QmlModels",
+    "Qt6QmlWorkerScript",
+    "Qt6Svg"
+)
+Copy-QtRuntimeDllSet -QtBinDir $qtBinDir -DistDir $DistDir -BaseNames $requiredQtRuntimeDllBaseNames -Config $Config
+foreach ($deprecatedBaseName in @("Qt6OpenGLWidgets", "Qt6Concurrent")) {
+    $deprecatedDll = Get-QtRuntimeDllName -BaseName $deprecatedBaseName -Config $Config
+    Remove-PackagedDllIfPresent -DistDir $DistDir -DllName $deprecatedDll
+}
 
 $buildOutputDir = Join-Path $BuildDir $Config
 foreach ($runtimeDll in @("dxcompiler.dll", "dxil.dll")) {
@@ -271,7 +370,8 @@ New-Item -ItemType Directory -Path $docsDir -Force | Out-Null
 foreach ($docSpec in @(
     @{ Source = Join-Path $repoRoot "README.md"; Destination = Join-Path $docsDir "README.md" },
     @{ Source = Join-Path $repoRoot "README_EN.md"; Destination = Join-Path $docsDir "README_EN.md" },
-    @{ Source = Join-Path $repoRoot "docs\\DEBUG_INDEX.md"; Destination = Join-Path $docsDir "DEBUG_INDEX.md" }
+    @{ Source = Join-Path $repoRoot "docs\\DEBUG_INDEX.md"; Destination = Join-Path $docsDir "DEBUG_INDEX.md" },
+    @{ Source = Join-Path $repoRoot "docs\\PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md"; Destination = Join-Path $docsDir "PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md" }
 )) {
     if (Test-Path $docSpec.Source) {
         Copy-Item $docSpec.Source $docSpec.Destination -Force
@@ -297,7 +397,7 @@ $releaseLines = @(
     "  - MiaCode.exe (main app)"
     "  - Start_MiaCode_Debug.bat"
     "  - Start_MiaCode_Debug_CompareDump.bat"
-    "  - Qt runtime DLLs and plugin folders"
+    "  - Qt runtime DLLs, plugin folders, and QML modules"
     "  - ffmpeg/ffmpeg.exe"
     "  - assets/"
     "  - docs/"
@@ -317,6 +417,36 @@ if ($IncludeDevTools) {
     )
 }
 $releaseLines | Set-Content -Path $releaseReadme -Encoding UTF8
+
+$requiredPackagePaths = @(
+    "MiaCode.exe",
+    (Get-QtRuntimeDllName -BaseName "Qt6Core" -Config $Config),
+    (Get-QtRuntimeDllName -BaseName "Qt6Gui" -Config $Config),
+    (Get-QtRuntimeDllName -BaseName "Qt6Widgets" -Config $Config),
+    (Get-QtRuntimeDllName -BaseName "Qt6Multimedia" -Config $Config),
+    (Get-QtRuntimeDllName -BaseName "Qt6Network" -Config $Config),
+    (Get-QtRuntimeDllName -BaseName "Qt6OpenGL" -Config $Config),
+    (Get-QtRuntimeDllName -BaseName "Qt6Quick" -Config $Config),
+    (Get-QtRuntimeDllName -BaseName "Qt6Qml" -Config $Config),
+    (Get-QtRuntimeDllName -BaseName "Qt6QmlMeta" -Config $Config),
+    (Get-QtRuntimeDllName -BaseName "Qt6QmlModels" -Config $Config),
+    (Get-QtRuntimeDllName -BaseName "Qt6QmlWorkerScript" -Config $Config),
+    (Get-QtRuntimeDllName -BaseName "Qt6Svg" -Config $Config),
+    "D3Dcompiler_47.dll",
+    "dxcompiler.dll",
+    "dxil.dll",
+    "opengl32sw.dll",
+    "platforms\\qwindows.dll",
+    "qml\\QtQuick\\qtquick2plugin.dll",
+    "qml\\QtQml\\Models\\modelsplugin.dll",
+    "qml\\QtQml\\WorkerScript\\workerscriptplugin.dll",
+    "docs\\PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md"
+)
+$unexpectedPackagePaths = @(
+    (Get-QtRuntimeDllName -BaseName "Qt6OpenGLWidgets" -Config $Config),
+    (Get-QtRuntimeDllName -BaseName "Qt6Concurrent" -Config $Config)
+)
+Assert-PackageEntries -DistDir $DistDir -RequiredRelativePaths $requiredPackagePaths -UnexpectedRelativePaths $unexpectedPackagePaths
 
 $zipPath = "$DistDir.zip"
 if (Test-Path $zipPath) {

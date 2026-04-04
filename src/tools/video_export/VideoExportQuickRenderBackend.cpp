@@ -155,6 +155,39 @@ void VideoExportQuickRenderBackend::shutdownOffscreenRenderer()
     session_.invalidate();
 }
 
+bool VideoExportQuickRenderBackend::supportsOffscreenPboReadback(QString* errorMessage) const
+{
+    return session_.supportsOffscreenPboReadback(errorMessage);
+}
+
+void VideoExportQuickRenderBackend::resetOffscreenPboReadback()
+{
+    session_.resetOffscreenPboReadback();
+}
+
+bool VideoExportQuickRenderBackend::renderOverlayFrameOffscreenPboStep(
+    const QSize& outputSize,
+    double playheadSeconds,
+    bool showTimestamp,
+    bool showObjectStatsHud,
+    QImage* completedFrame,
+    bool* completedFrameReady,
+    bool drainOnly,
+    QString* errorMessage)
+{
+    session_.setFrameSize(outputSize);
+    updateFrameStateForRender(playheadSeconds, showTimestamp, showObjectStatsHud);
+    session_.setFrameState(frameState_);
+    const bool ok = session_.renderFramePboStep(
+        completedFrame,
+        completedFrameReady,
+        drainOnly,
+        errorMessage
+    );
+    lastRenderStats_ = session_.lastRenderStats();
+    return ok;
+}
+
 QImage VideoExportQuickRenderBackend::renderOverlayFrame(
     const QSize& outputSize,
     double playheadSeconds,

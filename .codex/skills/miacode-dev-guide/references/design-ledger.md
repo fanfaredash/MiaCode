@@ -5,7 +5,7 @@ Use this file to separate hard contracts from adjustable implementation choices.
 ## 1. Source Of Truth Rule
 
 - Code is the source of truth.
-- `DEVELOPMENT_PLAN.md`, `MURI_INTEGRATION_PLAN.md`, and other notes are guidance and memory aids.
+- `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md` and other notes are guidance and memory aids.
 - When docs and code diverge, trust code first, then update the docs.
 
 ## 2. Must-Keep Contracts
@@ -80,7 +80,7 @@ These are adjustable, but if changed they should be documented here and in the r
 - Path resolution rules are still duplicated in a few places, especially for media and track files.
 - A large amount of visual tuning still lives in implementation-local constants across `src/preview/scene/*.cpp` and `src/tools/video_export/VideoExportController.cpp`.
 - Latency detection carries algorithm-specific constants that are meaningful but still mostly local to the tool.
-- `DEVELOPMENT_PLAN.md` contains useful design notes, but some path references and structure descriptions already drifted from the current tree.
+- Packaging and debug docs still need occasional sync when Qt Quick runtime requirements or export diagnostics change.
 
 Treat these areas as change-sensitive even when the underlying behavior is adjustable.
 

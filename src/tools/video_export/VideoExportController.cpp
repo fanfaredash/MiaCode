@@ -820,8 +820,16 @@ struct ReadyFramePayload {
     bool usedGpuRenderer = false;
 };
 
+struct PendingPboFrame {
+    bool valid = false;
+    int frameIndex = -1;
+    double exportSecond = 0.0;
+    QVector<ObjectTraceItem> traceItems;
+};
+
 enum class ExportFrameRenderStatus {
     Ready,
+    Deferred,
     Failed,
 };
 
@@ -865,7 +873,9 @@ ReadyFramePayload buildReadyFramePayload(
 
 ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
     VideoExportQuickRenderBackend* exportBackend,
-    bool useOffscreenGpu,
+    bool* useOffscreenGpu,
+    bool* useOffscreenPboReadback,
+    PendingPboFrame* pendingPboFrame,
     const QSize& frameSize,
     int frameIndex,
     double exportSecond,
@@ -876,14 +886,67 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
     QString* fallbackDetail
 )
 {
-    if (exportBackend == nullptr || readyFrame == nullptr) {
+    if (exportBackend == nullptr
+        || useOffscreenGpu == nullptr
+        || useOffscreenPboReadback == nullptr
+        || pendingPboFrame == nullptr
+        || readyFrame == nullptr) {
         return ExportFrameRenderStatus::Failed;
     }
 
     *readyFrame = ReadyFramePayload{};
     QElapsedTimer frameTimer;
     frameTimer.start();
-    const QImage frame = useOffscreenGpu
+    bool usedOffscreenPath = false;
+    QImage frame;
+
+    if (*useOffscreenGpu && *useOffscreenPboReadback) {
+        QImage completedFrame;
+        bool completedFrameReady = false;
+        QString pboStepError;
+        const bool pboStepOk = exportBackend->renderOverlayFrameOffscreenPboStep(
+            frameSize,
+            exportSecond,
+            showTimestamp,
+            showObjectStatsHud,
+            &completedFrame,
+            &completedFrameReady,
+            false,
+            &pboStepError
+        );
+        const qint64 renderNs = frameTimer.nsecsElapsed();
+        if (pboStepOk) {
+            usedOffscreenPath = true;
+            const bool producedReadyFrame = completedFrameReady && pendingPboFrame->valid;
+            if (producedReadyFrame) {
+                *readyFrame = buildReadyFramePayload(
+                    exportBackend,
+                    pendingPboFrame->frameIndex,
+                    pendingPboFrame->exportSecond,
+                    std::move(pendingPboFrame->traceItems),
+                    std::move(completedFrame),
+                    renderNs,
+                    true
+                );
+            }
+            pendingPboFrame->valid = true;
+            pendingPboFrame->frameIndex = frameIndex;
+            pendingPboFrame->exportSecond = exportSecond;
+            pendingPboFrame->traceItems = std::move(traceItems);
+            return producedReadyFrame ? ExportFrameRenderStatus::Ready : ExportFrameRenderStatus::Deferred;
+        }
+
+        appendRenderBackendFallbackDetail(
+            fallbackDetail,
+            QStringLiteral("frame=%1 reason=offscreen_pbo_failed error=%2")
+                .arg(frameIndex)
+                .arg(pboStepError)
+        );
+        exportBackend->resetOffscreenPboReadback();
+        *useOffscreenPboReadback = false;
+    }
+
+    frame = *useOffscreenGpu
         ? exportBackend->renderOverlayFrameOffscreen(frameSize, exportSecond, showTimestamp, showObjectStatsHud)
         : exportBackend->renderOverlayFrame(frameSize, exportSecond, showTimestamp, showObjectStatsHud);
     if (frame.isNull()) {
@@ -900,9 +963,64 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
         std::move(traceItems),
         std::move(frame),
         frameTimer.nsecsElapsed(),
-        useOffscreenGpu
+        usedOffscreenPath || *useOffscreenGpu
     );
     return ExportFrameRenderStatus::Ready;
+}
+
+bool drainPendingExportFrame(
+    VideoExportQuickRenderBackend* exportBackend,
+    PendingPboFrame* pendingPboFrame,
+    const QSize& frameSize,
+    bool showTimestamp,
+    bool showObjectStatsHud,
+    ReadyFramePayload* readyFrame,
+    QString* errorMessage
+)
+{
+    if (exportBackend == nullptr || pendingPboFrame == nullptr || readyFrame == nullptr || !pendingPboFrame->valid) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("no pending PBO frame to drain");
+        }
+        return false;
+    }
+
+    *readyFrame = ReadyFramePayload{};
+    QElapsedTimer frameTimer;
+    frameTimer.start();
+    QImage drainedFrame;
+    bool drainedFrameReady = false;
+    QString drainError;
+    const bool drainOk = exportBackend->renderOverlayFrameOffscreenPboStep(
+        frameSize,
+        pendingPboFrame->exportSecond,
+        showTimestamp,
+        showObjectStatsHud,
+        &drainedFrame,
+        &drainedFrameReady,
+        true,
+        &drainError
+    );
+    if (!drainOk || !drainedFrameReady) {
+        if (errorMessage != nullptr) {
+            *errorMessage = drainError.isEmpty() ? QStringLiteral("failed to drain PBO readback") : drainError;
+        }
+        return false;
+    }
+
+    *readyFrame = buildReadyFramePayload(
+        exportBackend,
+        pendingPboFrame->frameIndex,
+        pendingPboFrame->exportSecond,
+        std::move(pendingPboFrame->traceItems),
+        std::move(drainedFrame),
+        frameTimer.nsecsElapsed(),
+        true
+    );
+    pendingPboFrame->valid = false;
+    pendingPboFrame->frameIndex = -1;
+    pendingPboFrame->exportSecond = 0.0;
+    return true;
 }
 
 constexpr double kDiagTapUnitsPerSecond = miacode::preview_gameplay::kTapUnitsPerSecond;
@@ -3619,7 +3737,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const QSurfaceFormat requestedFormat = QSurfaceFormat::defaultFormat();
     QOpenGLContext* shareContext = nullptr;
     QString offscreenInitError;
-    const bool useOffscreenGpu = exportCanvas.initializeOffscreenRenderer(
+    bool useOffscreenGpu = exportCanvas.initializeOffscreenRenderer(
         requestedFormat,
         shareContext,
         &offscreenInitError
@@ -3635,14 +3753,24 @@ VideoExportResult VideoExportController::exportPreparedTask(
             offscreenInitError.isEmpty() ? result.message : offscreenInitError);
         return result;
     }
+    const bool requestOffscreenPboReadback =
+        useOffscreenGpu && exportConfig.renderBackend.requestOffscreenPboReadback;
+    QString offscreenPboError;
+    bool useOffscreenPboReadback = false;
+    if (requestOffscreenPboReadback) {
+        useOffscreenPboReadback = exportCanvas.supportsOffscreenPboReadback(&offscreenPboError);
+    }
     appendVideoExportLog(
         QStringLiteral("render_backend"),
-        QStringLiteral("quickRequired=1 envGpuRequested=%1 sourceCtx=%2 offscreenInit=%3 exportGpuReady=%4 initError=%5")
+        QStringLiteral("quickRequired=1 envGpuRequested=%1 sourceCtx=%2 offscreenInit=%3 exportGpuReady=%4 pboRequested=%5 pboEnabled=%6 initError=%7 pboError=%8")
             .arg(exportConfig.renderBackend.requestGpuRender ? 1 : 0)
             .arg(shareContext != nullptr ? 1 : 0)
             .arg(useOffscreenGpu ? 1 : 0)
             .arg(exportCanvas.isGpuRendererReadyForDebug() ? 1 : 0)
+            .arg(requestOffscreenPboReadback ? 1 : 0)
+            .arg(useOffscreenPboReadback ? 1 : 0)
             .arg(offscreenInitError.isEmpty() ? QStringLiteral("ok") : offscreenInitError)
+            .arg(offscreenPboError.isEmpty() ? QStringLiteral("ok") : offscreenPboError)
     );
 
     // Raw RGBA frames are packed after conversion to non-premultiplied RGBA8888.
@@ -3823,6 +3951,9 @@ VideoExportResult VideoExportController::exportPreparedTask(
                 .arg(exportCanvas.offscreenDrawNsLastFrameForDebug() / 1000000.0, 0, 'f', 3)
                 .arg(exportCanvas.offscreenReadbackNsLastFrameForDebug() / 1000000.0, 0, 'f', 3)
         );
+        if (useOffscreenPboReadback) {
+            exportCanvas.resetOffscreenPboReadback();
+        }
     }
     if (diagObjectHashEnabled) {
         diagReferenceCanvas.copyRenderStateFrom(exportCanvas);
@@ -3864,6 +3995,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         );
     }
 
+    PendingPboFrame pendingPboFrame;
     QImage convertedRgbaFrame;
     QByteArray packedFrameScratch;
 
@@ -4315,7 +4447,9 @@ VideoExportResult VideoExportController::exportPreparedTask(
         QString renderBackendFallbackDetail;
         const ExportFrameRenderStatus renderStatus = renderExportFrameWithConfiguredBackend(
             &exportCanvas,
-            useOffscreenGpu,
+            &useOffscreenGpu,
+            &useOffscreenPboReadback,
+            &pendingPboFrame,
             frameSize,
             frameIndex,
             exportSecond,
@@ -4336,6 +4470,38 @@ VideoExportResult VideoExportController::exportPreparedTask(
             appendVideoExportLog(
                 QStringLiteral("fail_render_frame"),
                 QStringLiteral("frame=%1 offscreen=%2").arg(frameIndex).arg(useOffscreenGpu ? 1 : 0)
+            );
+            return result;
+        }
+        if (renderStatus == ExportFrameRenderStatus::Deferred) {
+            continue;
+        }
+        if (!processReadyFrame(readyFrame)) {
+            return result;
+        }
+    }
+
+    if (useOffscreenPboReadback && pendingPboFrame.valid) {
+        ReadyFramePayload readyFrame;
+        QString drainError;
+        if (!drainPendingExportFrame(
+                &exportCanvas,
+                &pendingPboFrame,
+                frameSize,
+                task.showTimestamp,
+                task.showObjectStatsHud,
+                &readyFrame,
+                &drainError)) {
+            ffmpeg.kill();
+            ffmpeg.waitForFinished(2000);
+            result.message = QStringLiteral("Render frame failed.");
+            result.details = withExportLogPath(
+                drainError.isEmpty() ? QStringLiteral("failed to drain PBO readback") : drainError);
+            appendVideoExportLog(
+                QStringLiteral("fail_render_frame"),
+                QStringLiteral("frame=%1 offscreen=1 drain=1 error=%2")
+                    .arg(pendingPboFrame.frameIndex)
+                    .arg(drainError.isEmpty() ? QStringLiteral("unknown") : drainError)
             );
             return result;
         }

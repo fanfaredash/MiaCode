@@ -63,9 +63,6 @@ The Windows release package also ships:
 
 ## 3. Preview And Runtime Overrides
 
-- `MIACODE_ENABLE_PYGAME_PREVIEW`
-  - legacy preview backend toggle
-  - owner: `src/app/mainwindow/sections/frame/MainWindow.BootstrapAndMenus.cpp`
 - `MIACODE_PREVIEW_SESSION_SCRIPT`
   - preview session script override
   - owner: `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
@@ -97,7 +94,7 @@ The Windows release package also ships:
   - owner: `src/common/DebugImageCompare.h`
 - `MIACODE_DISABLE_GL_DEBUG_MESSAGES`
   - disables OpenGL driver message logging inside debug mode
-  - owner: no active preview-specific owner after the PreviewCanvas removal
+  - current impact is limited because the active preview/export path is Qt Quick on an explicitly forced OpenGL backend, not the removed `PreviewCanvas` logger stack
 
 ## 4. Editor Runtime Performance Logging
 
@@ -142,6 +139,7 @@ Owner: `src/tools/video_export/VideoExportController.cpp`
   - `MIACODE_EXPORT_ENABLE_GPU_RENDER`
   - `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO`
   - `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO`
+  - these now drive `VideoExportQuickRenderBackend` plus `PreviewQuickExportSession`, not the removed legacy offscreen renderer
 - Encoder selection and tuning:
   - `MIACODE_EXPORT_SKIP_ENCODER_RUNTIME_PROBE`
   - `MIACODE_EXPORT_FORCE_ENCODER`

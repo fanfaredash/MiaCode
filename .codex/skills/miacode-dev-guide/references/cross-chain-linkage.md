@@ -55,7 +55,7 @@ If you change `&first` semantics, review all of:
 - `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
 - `src/tools/latency/LatencyDetectorDialog.Analysis.cpp`
 - `src/tools/video_export/VideoExportSnapshot.cpp`
-- `DEVELOPMENT_PLAN.md` section 11
+- `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
 
 ## 3. Timing Metadata And Default Meter Chain
 
@@ -228,7 +228,7 @@ Implication:
   - Check `MuriAnalyzer.cpp`
 - Change preview SFX mapping:
   - Check `VideoExportController.cpp::buildSfxTimeline`
-  - Check `DEVELOPMENT_PLAN.md` section 12
+  - Check `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
 - Change export media rules:
   - Check `PreviewMediaController.cpp`
   - Check packaging or ffmpeg assumptions if format support changes
