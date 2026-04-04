@@ -4,6 +4,7 @@
 #include <QImage>
 #include <QSize>
 #include <QSurfaceFormat>
+#include <QtGui/qopengl.h>
 
 #include "preview/scene/PreviewFrameState.h"
 #include "preview/scene/PreviewLayerOrder.h"
@@ -47,12 +48,25 @@ public:
     bool isInitialized() const;
 
     QImage renderFrame(QString* errorMessage = nullptr);
+    bool supportsOffscreenPboReadback(QString* errorMessage = nullptr) const;
+    void resetOffscreenPboReadback();
+    bool renderFramePboStep(
+        QImage* completedFrame,
+        bool* completedFrameReady,
+        bool drainOnly,
+        QString* errorMessage = nullptr
+    );
     const PreviewQuickExportRenderStats& lastRenderStats() const { return lastRenderStats_; }
     qint64 lastRenderNs() const { return lastRenderStats_.renderNs; }
 
 private:
     bool ensureFramebuffer(QString* errorMessage);
+    bool ensureOffscreenReadbackPbos(const QSize& imageSize, QString* errorMessage);
+    bool mapOffscreenReadbackPbo(int pboIndex, const QSize& imageSize, QImage* frame, QString* errorMessage);
+    bool renderSceneIntoFramebuffer(QString* errorMessage);
+    bool ensureContextCurrent(QString* errorMessage);
     void destroyFramebuffer();
+    void destroyOffscreenReadbackPbos();
     void applyFrameSize();
     void applyFrameState();
     QSize framebufferPixelSize() const;
@@ -71,5 +85,10 @@ private:
     QOffscreenSurface* offscreenSurface_ = nullptr;
     QOpenGLContext* context_ = nullptr;
     QOpenGLFramebufferObject* framebuffer_ = nullptr;
+    GLuint offscreenReadbackPbos_[2] = {0, 0};
+    QSize offscreenReadbackPboSize_;
+    qsizetype offscreenReadbackPboBytes_ = 0;
+    int offscreenReadbackPboWriteIndex_ = 0;
+    int offscreenReadbackPendingIndex_ = -1;
     PreviewQuickExportRenderStats lastRenderStats_;
 };

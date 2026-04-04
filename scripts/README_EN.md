@@ -21,10 +21,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1 -QtRoot D:\Qt
 
 Notes:
 - `package-win.ps1` defaults to the `build/` directory.
+- `build-win.ps1` now installs `qtmultimedia`, `qtdeclarative`, and `qtsvg` so the Qt Quick runtime and export session can be packaged from a clean machine.
 - Before packaging, it checks whether `build/generated/AppVersion.h` and `build/<Config>/MiaCode.exe` match the current `CMakeLists.txt`; if the executable is missing, version-stale, or older than the generated version header, it automatically runs `cmake --build build --target MiaCode --config <Config> --parallel 8`.
 - If `-QtRoot` is omitted, the script tries to find `windeployqt` from the current `PATH`.
 - `-BuildJobs` defaults to `8`, and can be overridden per machine.
 - If you want Qt to be installed automatically and then build/package in one step, use `build-win.ps1`.
+- The packaged Windows artifact explicitly keeps the Qt Quick / QML runtime DLL set (`Qt6Quick`, `Qt6Qml`, `Qt6QmlMeta`, `Qt6QmlModels`, `Qt6QmlWorkerScript`) and rejects stale legacy DLLs such as `Qt6OpenGLWidgets.dll`.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1 -QtRoot D:\Qt\6.8.3\msvc2022_64 -BuildJobs 8
@@ -38,6 +40,7 @@ Output:
 
 - `build-macos.sh`: installs Qt automatically, builds the project, and then calls `package-mac.sh`
 - `package-mac.sh`: runs `macdeployqt`, signs the packaged app, and writes release artifacts to `dist/`
+- `build-macos.sh` now installs `qtmultimedia`, `qtdeclarative`, and `qtsvg` for the same Qt Quick packaging baseline as Windows.
 
 Common examples:
 

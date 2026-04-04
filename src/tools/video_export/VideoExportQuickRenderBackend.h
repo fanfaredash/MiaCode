@@ -45,6 +45,18 @@ public:
         QString* errorMessage = nullptr
     );
     void shutdownOffscreenRenderer();
+    bool supportsOffscreenPboReadback(QString* errorMessage = nullptr) const;
+    void resetOffscreenPboReadback();
+    bool renderOverlayFrameOffscreenPboStep(
+        const QSize& outputSize,
+        double playheadSeconds,
+        bool showTimestamp,
+        bool showObjectStatsHud,
+        QImage* completedFrame,
+        bool* completedFrameReady,
+        bool drainOnly,
+        QString* errorMessage = nullptr
+    );
 
     QImage renderOverlayFrame(const QSize& outputSize, double playheadSeconds, bool showTimestamp, bool showObjectStatsHud);
     QImage renderOverlayFrameOffscreen(

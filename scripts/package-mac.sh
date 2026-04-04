@@ -198,9 +198,9 @@ else
   exit 1
 fi
 
-for doc in README.md README_EN.md; do
+for doc in README.md README_EN.md docs/DEBUG_INDEX.md docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md; do
   if [[ -f "$ROOT_DIR/$doc" ]]; then
-    cp "$ROOT_DIR/$doc" "$DIST_DIR/docs/$doc"
+    cp "$ROOT_DIR/$doc" "$DIST_DIR/docs/$(basename "$doc")"
   fi
 done
 

@@ -31,7 +31,6 @@ install_manifest.txt
 # Keep only docs spec/checklist files under version control.
 docs/*
 !docs/DEBUG_INDEX.md
-!docs/PREVIEW_EXPORT_QT_QUICK_MILESTONES.md
 !docs/*SPEC.md
 !docs/*CHECKLIST.md
 

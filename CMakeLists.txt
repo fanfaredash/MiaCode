@@ -2,14 +2,14 @@ cmake_minimum_required(VERSION 3.21)
 
 set(MIACODE_VERSION_MAJOR "0")
 set(MIACODE_VERSION_MINOR "3")
-set(MIACODE_VERSION_PATCH "8")
-set(MIACODE_VERSION_PRERELEASE "dev17")
+set(MIACODE_VERSION_PATCH "9")
+set(MIACODE_VERSION_PRERELEASE "")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
     set(MIACODE_VERSION_STRING "${MIACODE_VERSION}-${MIACODE_VERSION_PRERELEASE}")
 endif()
-set(MIACODE_DISPLAY_PRERELEASE "dev17")
+set(MIACODE_DISPLAY_PRERELEASE "")
 set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_DISPLAY_PRERELEASE}" STREQUAL "")
     set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_DISPLAY_VERSION_STRING}.${MIACODE_DISPLAY_PRERELEASE}")
@@ -45,7 +45,7 @@ configure_file(
     @ONLY
 )
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets Concurrent Multimedia Quick Qml)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets OpenGL Multimedia Quick Qml)
 
 add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
@@ -264,10 +264,8 @@ target_include_directories(soundtouch PUBLIC
 target_compile_definitions(soundtouch PUBLIC SOUNDTOUCH_FLOAT_SAMPLES=1)
 
 target_link_libraries(MiaCode PRIVATE
-    Qt6::Concurrent
     Qt6::Core
     Qt6::Gui
-    Qt6::OpenGLWidgets
     Qt6::Qml
     Qt6::Quick
     Qt6::Widgets
@@ -504,6 +502,17 @@ if (WIN32)
     get_target_property(QT_QMAKE_EXECUTABLE Qt6::qmake IMPORTED_LOCATION)
     get_filename_component(QT_BIN_DIR "${QT_QMAKE_EXECUTABLE}" DIRECTORY)
     find_program(WINDEPLOYQT_EXECUTABLE NAMES windeployqt HINTS "${QT_BIN_DIR}")
+    set(MIACODE_REQUIRED_QT_RUNTIME_DLLS
+        Qt6Quick
+        Qt6Qml
+        Qt6QmlMeta
+        Qt6QmlModels
+        Qt6QmlWorkerScript
+    )
+    set(MIACODE_REMOVED_QT_RUNTIME_DLLS
+        Qt6OpenGLWidgets
+        Qt6Concurrent
+    )
 
     if (WINDEPLOYQT_EXECUTABLE)
         add_custom_command(TARGET MiaCode POST_BUILD
@@ -516,6 +525,21 @@ if (WIN32)
             COMMENT "Deploying Qt runtime next to MiaCode.exe"
             VERBATIM
         )
+        foreach(runtime_dll_base IN LISTS MIACODE_REQUIRED_QT_RUNTIME_DLLS)
+            add_custom_command(TARGET MiaCode POST_BUILD
+                COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                    "${QT_BIN_DIR}/${runtime_dll_base}$<$<CONFIG:Debug>:d>.dll"
+                    "$<TARGET_FILE_DIR:MiaCode>/${runtime_dll_base}$<$<CONFIG:Debug>:d>.dll"
+                VERBATIM
+            )
+        endforeach()
+        foreach(runtime_dll_base IN LISTS MIACODE_REMOVED_QT_RUNTIME_DLLS)
+            add_custom_command(TARGET MiaCode POST_BUILD
+                COMMAND "${CMAKE_COMMAND}" -E rm -f
+                    "$<TARGET_FILE_DIR:MiaCode>/${runtime_dll_base}$<$<CONFIG:Debug>:d>.dll"
+                VERBATIM
+            )
+        endforeach()
     else()
         message(WARNING "windeployqt not found. Qt runtime DLLs will not be auto-deployed.")
     endif()

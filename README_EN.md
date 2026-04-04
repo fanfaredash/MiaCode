@@ -2,7 +2,7 @@
 
 [中文](README.md) | [English](README_EN.md)
 
-`MiaCode` is a simai editor and preview tool built with Qt 6 + OpenGL.
+`MiaCode` is a simai editor and preview tool built on Qt 6 with a Qt Quick scene-graph preview/export pipeline. The current Windows build keeps Qt Quick on the OpenGL backend for parity with the existing desktop renderer assumptions.
 
 ## Features
 
@@ -13,14 +13,14 @@
   - Zoom levels
   - Playback line and cursor line
   - Tap, hold, slide, wifi, touch, and touch-hold preview
-- Native OpenGL preview
+- Qt Quick realtime preview and headless Qt Quick export
 - Local render settings for audio and video
 
 ## Build
 
 Requirements:
 - CMake 3.21+
-- Qt 6.8+ with `Core`, `Gui`, `Widgets`, `OpenGLWidgets`, `Multimedia`
+- Qt 6.8+ with `Core`, `Gui`, `Widgets`, `OpenGL`, `Qml`, `Quick`, `Multimedia`
 
 ### Windows Build
 
