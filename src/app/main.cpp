@@ -23,6 +23,8 @@
 #include <QStyleFactory>
 #include <QDir>
 #include <QRegularExpression>
+#include <QQuickWindow>
+#include <QSGRendererInterface>
 
 #include <cmath>
 #include <cstdio>
@@ -534,6 +536,8 @@ int main(int argc, char* argv[])
     logStartupStage("surface_format_ready");
 
     QApplication app(argc, argv);
+
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
     logStartupStage("qapplication_constructed");
 #ifdef Q_OS_WIN
     setWindowsAppUserModelId();

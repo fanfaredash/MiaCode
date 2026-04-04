@@ -52,7 +52,7 @@ class QThread;
 class QThreadPool;
 class BracketScopeHighlighter;
 class PlainCodeEditor;
-class PreviewCanvas;
+class PreviewRuntime;
 class PreviewMediaController;
 class QPlainTextEdit;
 class QProcess;
@@ -491,7 +491,7 @@ private:
     };
 
     QWidget* editorWidget_ = nullptr;
-    PreviewCanvas* previewCanvas_ = nullptr;
+    PreviewRuntime* previewCanvas_ = nullptr;
     PreviewMediaController* previewMediaController_ = nullptr;
     QThread* previewMediaControllerThread_ = nullptr;
     QtPreviewSfxRuntime* previewSfxRuntime_ = nullptr;

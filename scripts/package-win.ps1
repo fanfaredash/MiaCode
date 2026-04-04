@@ -211,6 +211,7 @@ if ($Config -eq "Debug") {
     $deployMode `
     --compiler-runtime `
     --no-translations `
+    --qmldir (Join-Path $repoRoot "src\\preview\\runtime\\qml") `
     (Join-Path $DistDir "MiaCode.exe")
 
 $buildOutputDir = Join-Path $BuildDir $Config

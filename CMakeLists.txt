@@ -25,6 +25,12 @@ if (APPLE AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.14" CACHE STRING "Minimum macOS deployment version" FORCE)
 endif()
 
+if (MSVC)
+    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
+        "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>"
+    )
+endif()
+
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
@@ -39,7 +45,7 @@ configure_file(
     @ONLY
 )
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets Concurrent Multimedia)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets Concurrent Multimedia Quick Qml)
 
 add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
@@ -86,6 +92,41 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/video/PreviewGLRenderer.cpp
     src/preview/video/PreviewMediaController.h
     src/preview/video/PreviewMediaController.cpp
+    src/preview/runtime/PreviewQuickItem.h
+    src/preview/runtime/PreviewQuickItem.cpp
+    src/preview/runtime/PreviewQuickRuntimeSurface.h
+    src/preview/runtime/PreviewQuickRuntimeSurface.cpp
+    src/preview/runtime/PreviewRuntime.h
+    src/preview/runtime/PreviewRuntime.cpp
+    src/preview/scene/PreviewFrameState.h
+    src/preview/scene/PreviewHudState.h
+    src/preview/scene/PreviewHudState.cpp
+    src/preview/scene/PreviewLayerOrder.h
+    src/preview/scene/PreviewOpacityCurves.h
+    src/preview/scene/PreviewOpacityCurves.cpp
+    src/preview/scene/PreviewSceneGeometry.h
+    src/preview/scene/PreviewSceneGeometry.cpp
+    src/preview/quick_scene/PreviewTextureRepository.h
+    src/preview/quick_scene/PreviewTextureRepository.cpp
+    src/preview/quick_scene/PreviewQuickStageBackgroundLayer.h
+    src/preview/quick_scene/PreviewQuickStageBackgroundLayer.cpp
+    src/preview/quick_scene/PreviewQuickBackdropLayer.h
+    src/preview/quick_scene/PreviewQuickBackdropLayer.cpp
+    src/preview/quick_scene/PreviewQuickMuriPadLayer.h
+    src/preview/quick_scene/PreviewQuickMuriPadLayer.cpp
+    src/preview/quick_scene/PreviewQuickMuriActionLayer.h
+    src/preview/quick_scene/PreviewQuickMuriActionLayer.cpp
+    src/preview/quick_scene/PreviewQuickJudgeFireworkLayer.h
+    src/preview/quick_scene/PreviewQuickJudgeFireworkLayer.cpp
+    src/preview/quick_scene/PreviewQuickTouchJudgeLayer.h
+    src/preview/quick_scene/PreviewQuickTouchJudgeLayer.cpp
+    src/preview/quick_scene/PreviewQuickHudLayer.h
+    src/preview/quick_scene/PreviewQuickHudLayer.cpp
+    src/preview/quick_scene/PreviewQuickSceneRoot.h
+    src/preview/quick_scene/PreviewQuickSceneRoot.cpp
+    src/preview/quick_scene/PreviewQuickLayerRenderNode.h
+    src/preview/quick_scene/PreviewQuickLayerRenderNode.cpp
+    src/preview/quick_scene/PreviewQuickSceneInvalidationPolicy.h
     src/preview/audio/PreviewAudioSettings.h
     src/preview/audio/PreviewAudioSettings.cpp
     src/preview/audio/QtPreviewSfxRuntime.h
@@ -110,6 +151,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/TimelineView.cpp
     resources/app_icons.qrc
     resources/fonts.qrc
+    resources/preview_runtime_qml.qrc
 )
 set_target_properties(MiaCode PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "MiaCode"
@@ -159,6 +201,8 @@ target_link_libraries(MiaCode PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::OpenGLWidgets
+    Qt6::Qml
+    Qt6::Quick
     Qt6::Widgets
     soundtouch
 )
@@ -170,6 +214,9 @@ target_include_directories(MiaCode PRIVATE
     src/editor
     src/preview
     src/preview/audio
+    src/preview/quick_scene
+    src/preview/runtime
+    src/preview/scene
     src/preview/video
     src/simai
     src/simai/document
@@ -181,6 +228,10 @@ target_include_directories(MiaCode PRIVATE
 
 target_link_libraries(MiaCode PRIVATE Qt6::Multimedia)
 target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
+
+if (MSVC)
+    target_compile_options(MiaCode PRIVATE /FS)
+endif()
 
 if (MIACODE_BUILD_DEV_TOOLS)
     add_executable(miacode_muri_dump
@@ -393,6 +444,7 @@ if (WIN32)
                 "$<$<CONFIG:Debug>:--debug>$<$<NOT:$<CONFIG:Debug>>:--release>"
                 --compiler-runtime
                 --no-translations
+                --qmldir "${CMAKE_CURRENT_SOURCE_DIR}/src/preview/runtime/qml"
                 "$<TARGET_FILE:MiaCode>"
             COMMENT "Deploying Qt runtime next to MiaCode.exe"
             VERBATIM

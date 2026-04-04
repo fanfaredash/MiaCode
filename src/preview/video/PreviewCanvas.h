@@ -5,6 +5,7 @@
 #include "common/MuriRenderOptions.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
+#include "preview/scene/PreviewLayerOrder.h"
 #include "PreviewRenderSettings.h"
 #include "PreviewGLRenderer.h"
 #include "timeline/TimelineData.h"
@@ -64,6 +65,16 @@ public:
     void setExportWifiTrackBrightnessCompensationEnabled(bool enabled);
     bool showTimestamp() const;
     bool showObjectStatsHud() const;
+    QImage renderPresentFrame(const QSize& outputSize);
+    void paintPresentFrame(
+        QPainter& painter,
+        const QSize& outputSize,
+        qreal devicePixelRatio = 1.0,
+        miacode::preview::scene::PreviewRenderLayerFlags layerFlags =
+            miacode::preview::scene::kPreviewAllRenderLayers,
+        bool allowGpuDrawing = true,
+        bool collectFrameStats = true
+    );
     void copyRenderStateFrom(const PreviewCanvas& source);
     QImage renderOverlayFrame(
         const QSize& outputSize,
@@ -105,11 +116,17 @@ public:
     {
         return !tapImage_.isNull() && !holdImage_.isNull() && !starImage_.isNull();
     }
+    const QImage& outlineImageForScene() const { return outlineImage_; }
+    double layoutRingDiameterRatioForScene() const { return layoutRingDiameterRatio_; }
+    double fpsDisplayForScene() const { return fpsDisplay_; }
     void reset();
     void noteTickForProfiling();
     void resetProfilingSession();
     QString writeProfilingSummaryToFile();
     QSize preferredSize() const;
+
+signals:
+    void skinAssetsChanged();
 
 protected:
     void initializeGL() override;
@@ -238,7 +255,10 @@ private:
         const QSize& canvasSize,
         bool drawStageBackground,
         bool clearToStageColor,
-        bool highQualityRender
+        bool highQualityRender,
+        miacode::preview::scene::PreviewRenderLayerFlags layerFlags =
+            miacode::preview::scene::kPreviewAllRenderLayers,
+        bool collectFrameStats = true
     );
     QImage renderCpuFallbackPresentFrame(const QSize& canvasSize) const;
     bool readCurrentFramebuffer(QImage* image, QString* errorMessage = nullptr) const;

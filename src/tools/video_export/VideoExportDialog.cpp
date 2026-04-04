@@ -1,7 +1,6 @@
 ﻿#include "VideoExportDialog.h"
 
 #include "DialogLocalization.h"
-#include "PreviewCanvas.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/PreviewInteractionConfig.h"
@@ -412,7 +411,6 @@ protected:
 
 VideoExportDialog::VideoExportDialog(
     const VideoExportTask& baseTask,
-    PreviewCanvas* sourceCanvas,
     SeekPreviewCallback seekPreviewCallback,
     PlayPreviewCallback playPreviewCallback,
     PausePreviewCallback pausePreviewCallback,
@@ -429,7 +427,6 @@ VideoExportDialog::VideoExportDialog(
 )
     : QDialog(parent)
     , baseTask_(baseTask)
-    , sourceCanvas_(sourceCanvas)
     , seekPreviewCallback_(std::move(seekPreviewCallback))
     , playPreviewCallback_(std::move(playPreviewCallback))
     , pausePreviewCallback_(std::move(pausePreviewCallback))
@@ -449,10 +446,7 @@ VideoExportDialog::VideoExportDialog(
     setMinimumWidth(kDialogMinWidth);
     resize(680, 360);
     setStyleSheet(UiTheme::exportDialogStyleSheet());
-    if (sourceCanvas_ != nullptr) {
-        initialShowTimestamp_ = sourceCanvas_->showTimestamp();
-        initialShowObjectStatsHud_ = sourceCanvas_->showObjectStatsHud();
-    }
+    initialShowTimestamp_ = baseTask_.showTimestamp;
 
     auto* rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(12, 10, 12, 10);
@@ -1013,9 +1007,6 @@ VideoExportDialog::VideoExportDialog(
     connect(showTimestampCheck_, &QCheckBox::toggled, this, [this](bool checked) {
         syncLivePreviewTimestampVisibility();
         initialShowTimestamp_ = checked;
-        if (previewTimestampCallback_) {
-            previewTimestampCallback_(checked);
-        }
     });
     connect(smoothBrightnessCheck_, &QCheckBox::toggled, this, [this](bool checked) {
         if (previewSmoothBrightnessCallback_) {
@@ -1155,10 +1146,10 @@ void VideoExportDialog::refreshDialogGeometry()
 
 void VideoExportDialog::syncLivePreviewTimestampVisibility()
 {
-    if (sourceCanvas_ == nullptr || showTimestampCheck_ == nullptr) {
+    if (showTimestampCheck_ == nullptr || !previewTimestampCallback_) {
         return;
     }
-    sourceCanvas_->setShowTimestamp(showTimestampCheck_->isChecked());
+    previewTimestampCallback_(showTimestampCheck_->isChecked());
 }
 
 void VideoExportDialog::restoreLivePreviewState()
@@ -1167,9 +1158,8 @@ void VideoExportDialog::restoreLivePreviewState()
         return;
     }
     previewStateRestored_ = true;
-    if (sourceCanvas_ != nullptr) {
-        sourceCanvas_->setShowTimestamp(initialShowTimestamp_);
-        sourceCanvas_->setShowObjectStatsHud(initialShowObjectStatsHud_);
+    if (previewTimestampCallback_) {
+        previewTimestampCallback_(initialShowTimestamp_);
     }
 }
 
@@ -1635,11 +1625,6 @@ void VideoExportDialog::seekPreview(double second)
     }
     if (seekPreviewCallback_) {
         seekPreviewCallback_(clamped);
-        return;
-    }
-    if (sourceCanvas_ != nullptr) {
-        sourceCanvas_->setPlayheadSeconds(clamped);
-        sourceCanvas_->update();
     }
 }
 

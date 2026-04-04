@@ -192,6 +192,7 @@ void PreviewCanvas::applySkinLoadResult(SkinLoadResult&& result)
     } else {
         appendPreviewStartupTiming("preview_canvas/skin_load_apply_done", -1);
     }
+    emit skinAssetsChanged();
     update();
 }
 
