@@ -4,7 +4,6 @@
 
 class QQuickWindow;
 class QSGNode;
-class PreviewRuntime;
 class PreviewTextureRepository;
 
 class PreviewQuickMuriPadLayer
@@ -12,7 +11,6 @@ class PreviewQuickMuriPadLayer
 public:
     QSGNode* updateNode(
         QSGNode* oldNode,
-        PreviewRuntime* runtime,
         const miacode::preview::scene::PreviewFrameState& state,
         const QSize& renderSize,
         QQuickWindow* window,

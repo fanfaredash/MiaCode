@@ -2,32 +2,9 @@
 
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/scene/PreviewFrameState.h"
-#include "preview/scene/PreviewLayerOrder.h"
 
 #include <QQuickWindow>
 #include <QSGNode>
-#include "preview/quick_scene/PreviewQuickLayerRenderNode.h"
-
-namespace {
-
-QSGNode* buildLegacyMaskedNode(
-    PreviewRuntime* runtime,
-    PreviewTextureRepository& textures,
-    QQuickWindow* window,
-    const QSize& renderSize,
-    miacode::preview::scene::PreviewRenderLayerFlags layerFlags
-)
-{
-    if (runtime == nullptr || window == nullptr) {
-        return nullptr;
-    }
-    Q_UNUSED(textures);
-    auto* node = new PreviewQuickLayerRenderNode();
-    node->configure(runtime, renderSize, qMax<qreal>(1.0, window->devicePixelRatio()), layerFlags);
-    return node;
-}
-
-}  // namespace
 
 PreviewQuickSceneRoot::PreviewQuickSceneRoot(QQuickItem* parent)
     : QQuickItem(parent)
@@ -61,30 +38,33 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         root->appendChildNode(backdropNode);
     }
     if (QSGNode* muriPadNode =
-            muriPadLayer_.updateNode(nullptr, runtime_, state, boundingRect().size().toSize(), window(), &textures_)) {
+            muriPadLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
         root->appendChildNode(muriPadNode);
     }
     if (QSGNode* muriActionNode =
-            muriActionLayer_.updateNode(nullptr, runtime_, state, boundingRect().size().toSize(), window(), &textures_)) {
+            muriActionLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
         root->appendChildNode(muriActionNode);
     }
     if (QSGNode* judgeFireworkNode =
-            judgeFireworkLayer_.updateNode(nullptr, runtime_, state, boundingRect().size().toSize(), window(), &textures_)) {
+            judgeFireworkLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
         root->appendChildNode(judgeFireworkNode);
     }
     if (QSGNode* guideNode = guideLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
         root->appendChildNode(guideNode);
     }
-    if (QSGNode* legacyCompositeNode = buildLegacyMaskedNode(
-            runtime_,
-            textures_,
-            window(),
-            boundingRect().size().toSize(),
-            miacode::preview::scene::kPreviewLegacyLowerBridgeLayers)) {
-        root->appendChildNode(legacyCompositeNode);
+    if (QSGNode* trackNode = trackLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
+        root->appendChildNode(trackNode);
+    }
+    if (QSGNode* slideMotionNode =
+            slideMotionLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
+        root->appendChildNode(slideMotionNode);
+    }
+    if (QSGNode* judgeEffectNode =
+            judgeEffectLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
+        root->appendChildNode(judgeEffectNode);
     }
     if (QSGNode* touchJudgeNode =
-            touchJudgeLayer_.updateNode(nullptr, runtime_, state, boundingRect().size().toSize(), window(), &textures_)) {
+            touchJudgeLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
         root->appendChildNode(touchJudgeNode);
     }
     if (QSGNode* headNode = headLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
@@ -96,13 +76,13 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
     if (QSGNode* touchHoldNode = touchHoldLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
         root->appendChildNode(touchHoldNode);
     }
-    if (QSGNode* legacyPostTouchNode = buildLegacyMaskedNode(
-            runtime_,
-            textures_,
-            window(),
-            boundingRect().size().toSize(),
-            miacode::preview::scene::kPreviewLegacyPostTouchBridgeLayers)) {
-        root->appendChildNode(legacyPostTouchNode);
+    if (QSGNode* chartReviewNode =
+            chartReviewLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
+        root->appendChildNode(chartReviewNode);
+    }
+    if (QSGNode* maimuriDxJudgeNode =
+            maimuriDxJudgeLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
+        root->appendChildNode(maimuriDxJudgeNode);
     }
     return root;
 }

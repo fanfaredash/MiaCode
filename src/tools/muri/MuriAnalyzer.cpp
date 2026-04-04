@@ -2884,7 +2884,10 @@ bool buildRuntimeSlideJudgeSequence(
                 (*partition)[partition->size() - 1] = true;
             }
 
-            for (int areaIndex = sharedHead ? 1 : 0; areaIndex < segmentSequence.size(); ++areaIndex) {
+            // Preserve the shared A-head at chained-segment boundaries.
+            // MaiMuriDX treats entering the previous segment's terminal A area
+            // as also judging the next segment's opening head.
+            for (int areaIndex = 0; areaIndex < segmentSequence.size(); ++areaIndex) {
                 judgeSequence->append(segmentSequence.at(areaIndex));
                 partition->append(false);
             }

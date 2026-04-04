@@ -16,7 +16,13 @@ struct PreviewTapTiming {
     qreal unitsPerSecond = 0.0;
 };
 
+struct PreviewSlideTrackTiming {
+    qreal appearLeadInSeconds = 0.0;
+    qreal fullBrightLeadInSeconds = 0.0;
+};
+
 PreviewTapTiming previewTapTimingForFlowSpeed(qreal flowSpeed);
+PreviewSlideTrackTiming previewSlideTrackTimingForFlowSpeed(qreal flowSpeed);
 qreal touchPreHitAlpha(qreal deltaSeconds, qreal touchDurationSeconds, qreal touchShowDurationSeconds);
 qreal touchCloseProgress(qreal deltaSeconds, qreal touchDurationSeconds, qreal touchShowDurationSeconds, qreal touchCloseDurationSeconds);
 qreal touchCloseAmount(qreal progress, qreal range);

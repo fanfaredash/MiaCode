@@ -1,52 +1,28 @@
 #include "preview/quick_scene/PreviewQuickTouchJudgeLayer.h"
 
-#include "preview/quick_scene/PreviewQuickLayerRenderNode.h"
-#include "preview/runtime/PreviewRuntime.h"
-#include "preview/scene/PreviewLayerOrder.h"
-
-#include <QQuickWindow>
-
-namespace {
-
-bool hasTouchMarkers(const QVector<TimelineNoteMarker>& noteMarkers)
-{
-    for (const TimelineNoteMarker& marker : noteMarkers) {
-        if (marker.type == QLatin1String("touch")) {
-            return true;
-        }
-    }
-    return false;
-}
-
-}  // namespace
+#include "preview/quick_scene/PreviewQuickSpriteNodes.h"
+#include "preview/quick_scene/PreviewTextureRepository.h"
+#include "preview/scene/PreviewSceneGeometry.h"
+#include "preview/scene/PreviewTouchJudgeLayerState.h"
 
 QSGNode* PreviewQuickTouchJudgeLayer::updateNode(
     QSGNode* oldNode,
-    PreviewRuntime* runtime,
     const miacode::preview::scene::PreviewFrameState& state,
     const QSize& renderSize,
     QQuickWindow* window,
     PreviewTextureRepository* textures
 ) const
 {
-    delete oldNode;
-    if (runtime == nullptr
-        || window == nullptr
-        || textures == nullptr
-        || !hasTouchMarkers(state.noteMarkers)) {
-        return nullptr;
-    }
-    Q_UNUSED(textures);
-    auto* node = oldNode != nullptr ? dynamic_cast<PreviewQuickLayerRenderNode*>(oldNode) : nullptr;
-    if (node == nullptr) {
-        delete oldNode;
-        node = new PreviewQuickLayerRenderNode();
-    }
-    node->configure(
-        runtime,
-        renderSize,
-        qMax<qreal>(1.0, window->devicePixelRatio()),
-        miacode::preview::scene::JudgeTouchLayer
+    return buildPreviewSpriteNodeTree(
+        oldNode,
+        miacode::preview::scene::buildPreviewTouchJudgeLayerState(
+            state,
+            miacode::preview::scene::playfieldRectForStage(
+                miacode::preview::scene::stageRectForSize(renderSize),
+                state.render.layoutSquareScale
+            )
+        ).sprites,
+        window,
+        textures
     );
-    return node;
 }

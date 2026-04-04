@@ -36,6 +36,25 @@ PreviewTapTiming previewTapTimingForFlowSpeed(qreal flowSpeed)
     return timing;
 }
 
+PreviewSlideTrackTiming previewSlideTrackTimingForFlowSpeed(qreal flowSpeed)
+{
+    const double normalizedFlowSpeed =
+        miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(static_cast<double>(flowSpeed));
+    const double timingScaleFrames =
+        miacode::preview_gameplay::previewTimingScaleFramesAt120Fps(normalizedFlowSpeed);
+
+    PreviewSlideTrackTiming timing;
+    timing.appearLeadInSeconds = static_cast<qreal>(
+        miacode::preview_gameplay::previewTimingSecondsFromFramesAt120Fps(timingScaleFrames + 2.0)
+    );
+    timing.fullBrightLeadInSeconds = static_cast<qreal>(
+        miacode::preview_gameplay::previewTimingSecondsFromFramesAt120Fps(
+            miacode::preview_gameplay::kSlideTrackFullBrightLeadInFramesAt120Fps
+        )
+    );
+    return timing;
+}
+
 qreal touchPreHitAlpha(qreal deltaSeconds, qreal touchDurationSeconds, qreal touchShowDurationSeconds)
 {
     if (deltaSeconds >= 0.0) {
@@ -196,8 +215,8 @@ qreal sampleSlideTrackPreTraceOpacity(
 )
 {
     const qreal startSecond = markerSecond - appearLeadInSeconds;
-    if (playheadSecond < startSecond || playheadSecond >= markerSecond) {
-        return 0.0;
+    if (playheadSecond < startSecond) {
+        return -1.0;
     }
     const qreal brightStartSecond = markerSecond - fullBrightLeadInSeconds;
     if (playheadSecond >= brightStartSecond) {

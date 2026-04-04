@@ -3,12 +3,17 @@
 #include <QQuickItem>
 
 #include "preview/quick_scene/PreviewQuickBackdropLayer.h"
+#include "preview/quick_scene/PreviewQuickChartReviewLayer.h"
 #include "preview/quick_scene/PreviewQuickGuideLayer.h"
 #include "preview/quick_scene/PreviewQuickHeadLayer.h"
+#include "preview/quick_scene/PreviewQuickJudgeEffectLayer.h"
 #include "preview/quick_scene/PreviewQuickJudgeFireworkLayer.h"
+#include "preview/quick_scene/PreviewQuickMaimuriDxJudgeLayer.h"
 #include "preview/quick_scene/PreviewQuickMuriActionLayer.h"
 #include "preview/quick_scene/PreviewQuickMuriPadLayer.h"
+#include "preview/quick_scene/PreviewQuickSlideMotionLayer.h"
 #include "preview/quick_scene/PreviewQuickStageBackgroundLayer.h"
+#include "preview/quick_scene/PreviewQuickTrackLayer.h"
 #include "preview/quick_scene/PreviewQuickTouchJudgeLayer.h"
 #include "preview/quick_scene/PreviewQuickTouchHoldLayer.h"
 #include "preview/quick_scene/PreviewQuickTouchLayer.h"
@@ -38,8 +43,13 @@ private:
     PreviewQuickMuriActionLayer muriActionLayer_;
     PreviewQuickJudgeFireworkLayer judgeFireworkLayer_;
     PreviewQuickGuideLayer guideLayer_;
+    PreviewQuickTrackLayer trackLayer_;
+    PreviewQuickSlideMotionLayer slideMotionLayer_;
+    PreviewQuickJudgeEffectLayer judgeEffectLayer_;
     PreviewQuickTouchJudgeLayer touchJudgeLayer_;
     PreviewQuickHeadLayer headLayer_;
     PreviewQuickTouchLayer touchLayer_;
     PreviewQuickTouchHoldLayer touchHoldLayer_;
+    PreviewQuickChartReviewLayer chartReviewLayer_;
+    PreviewQuickMaimuriDxJudgeLayer maimuriDxJudgeLayer_;
 };

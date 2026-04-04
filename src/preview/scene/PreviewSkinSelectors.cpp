@@ -1,5 +1,7 @@
 #include "preview/scene/PreviewSkinSelectors.h"
 
+#include "preview/scene/PreviewSceneConstants.h"
+
 namespace miacode::preview::scene {
 
 const QImage* selectTapNoteGuideImage(const PreviewSkinAssets& skin, const TimelineNoteMarker& marker)
@@ -100,6 +102,50 @@ const QImage* selectSlideMovingStarImage(const PreviewSkinAssets& skin, const Ti
         starImage = &skin.starEachImage;
     }
     return starImage->isNull() ? nullptr : starImage;
+}
+
+const QImage* selectSlideTrackImage(const PreviewSkinAssets& skin, const TimelineNoteMarker& marker)
+{
+    const QImage* image = &skin.slideTrackImage;
+    if (marker.trackBreak && !skin.slideTrackBreakImage.isNull()) {
+        image = &skin.slideTrackBreakImage;
+    } else if (marker.slideEach && !skin.slideTrackEachImage.isNull()) {
+        image = &skin.slideTrackEachImage;
+    }
+    return image->isNull() ? nullptr : image;
+}
+
+const QImage* selectWifiTrackImage(const PreviewSkinAssets& skin, const TimelineNoteMarker& marker, int sampleIndex, int sampleCount)
+{
+    const QVector<QImage>* images = &skin.wifiImages;
+    if (marker.trackBreak && !skin.wifiBreakImages.isEmpty()) {
+        images = &skin.wifiBreakImages;
+    } else if (marker.slideEach && !skin.wifiEachImages.isEmpty()) {
+        images = &skin.wifiEachImages;
+    }
+    if (images->isEmpty()) {
+        return nullptr;
+    }
+
+    const int maxIndex = images->size() - 1;
+    const int sourceIndex = sampleCount <= 0
+        ? qBound(0, sampleIndex, maxIndex)
+        : sampleCount <= 1
+        ? 0
+        : qBound(0, qRound(static_cast<qreal>(sampleIndex) * maxIndex / qMax(1, sampleCount - 1)), maxIndex);
+    return &images->at(sourceIndex);
+}
+
+qreal slideStartupStarInitialScale(const PreviewSkinAssets& skin, const QImage& starImage)
+{
+    if (starImage.isNull()) {
+        return kStarAssetScale;
+    }
+
+    const qreal headWidth =
+        (!skin.tapImage.isNull() ? skin.tapImage.width() * kSkinAssetScale : starImage.width() * kStarAssetScale)
+        * kSlideSpawnStarRelativeScale;
+    return qMax<qreal>(0.01, headWidth / qMax(1, starImage.width()));
 }
 
 }  // namespace miacode::preview::scene
