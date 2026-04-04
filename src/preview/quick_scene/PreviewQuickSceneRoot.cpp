@@ -81,6 +81,9 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
     if (QSGNode* touchNode = touchLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
         root->appendChildNode(touchNode);
     }
+    if (QSGNode* touchHoldNode = touchHoldLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
+        root->appendChildNode(touchHoldNode);
+    }
     if (QSGNode* legacyPostTouchNode = buildLegacyMaskedNode(
             runtime_,
             textures_,

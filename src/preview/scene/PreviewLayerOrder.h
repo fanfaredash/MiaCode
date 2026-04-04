@@ -64,15 +64,15 @@ inline constexpr PreviewRenderLayerFlags kPreviewLegacyHeadBridgeLayers =
     HeadLayer;
 
 inline constexpr PreviewRenderLayerFlags kPreviewLegacyPostTouchBridgeLayers =
-    TouchHoldLayer
-    | ChartReviewLayer
+    ChartReviewLayer
     | MaimuriDxJudgeLayer;
 
 inline constexpr PreviewRenderLayerFlags kPreviewLegacyBridgeLayers =
     kPreviewAllRenderLayers
     & ~kPreviewSceneGraphSecondBatchLayers
     & ~GuideLayer
-    & ~TouchLayer;
+    & ~TouchLayer
+    & ~TouchHoldLayer;
 
 inline bool previewRenderLayerEnabled(PreviewRenderLayerFlags flags, PreviewRenderLayer layer)
 {
