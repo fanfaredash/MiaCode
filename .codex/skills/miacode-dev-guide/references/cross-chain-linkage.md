@@ -36,6 +36,7 @@ Implication:
 - Slow refresh may publish the preview-only note-marker snapshot before validation finishes. Resume-time preview freshness should not wait for the strict validation half of slow refresh.
 - If preview play/resume is requested before the current revision's preview snapshot is ready, the request should wait in memory and auto-start once the preview snapshot for that same revision and difficulty lands. Validation completion must not gate that auto-start.
 - Paused preview is intentionally silent for touch-hold sustain audio: `MainWindow::applyLatestTimelinePreviewStateToPausedPreview` must keep touch-hold voices paused, and only playback-start/resume paths should call `QtPreviewSfxRuntime::restoreTouchholdVoices`.
+- Paused preview and timeline overlays must only apply a `MuriAnalysisReport` whose `noteMarkerSignature` matches the currently published preview snapshot. If slow refresh publishes new note markers before analysis finishes, clear/rehold the review overlay instead of mixing a stale report with fresh markers.
 
 ## 2. `&first` And Timing Offset Chain
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QSharedPointer>
+
 #include "preview/scene/PreviewFrameState.h"
 #include "preview/scene/PreviewSpriteDescriptor.h"
 
@@ -7,7 +9,7 @@ namespace miacode::preview::scene {
 
 struct PreviewHeadLayerState {
     PreviewSpriteDescriptors sprites;
-    QVector<QImage> ownedImages;
+    QVector<QSharedPointer<QImage>> ownedImages;
 };
 
 PreviewHeadLayerState buildPreviewHeadLayerState(

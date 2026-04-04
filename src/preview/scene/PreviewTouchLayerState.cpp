@@ -1,5 +1,6 @@
 #include "preview/scene/PreviewTouchLayerState.h"
 
+#include "preview/scene/PreviewAnimatedSpriteHelpers.h"
 #include "preview/scene/PreviewOpacityCurves.h"
 #include "preview/scene/PreviewSceneConstants.h"
 #include "preview/scene/PreviewSceneMath.h"
@@ -8,12 +9,12 @@
 
 namespace miacode::preview::scene {
 
-PreviewSpriteDescriptors buildPreviewTouchLayerSprites(
+PreviewTouchLayerState buildPreviewTouchLayerState(
     const PreviewFrameState& state,
     const QRectF& playfieldRect
 )
 {
-    PreviewSpriteDescriptors sprites;
+    PreviewTouchLayerState layerState;
     QHash<quint64, int> overlapCounts;
     overlapCounts.reserve(16);
 
@@ -29,18 +30,35 @@ PreviewSpriteDescriptors buildPreviewTouchLayerSprites(
     }
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-    const auto appendSprite = [&sprites](const QImage& image, const QPointF& center, qreal width, qreal height, qreal rotation, qreal opacity) {
-        if (image.isNull() || opacity <= 0.0 || width <= 0.0 || height <= 0.0) {
+    const auto appendOwnedImage = [&layerState](QImage image) -> const QImage* {
+        if (image.isNull()) {
+            return nullptr;
+        }
+        layerState.ownedImages.append(QSharedPointer<QImage>(new QImage(std::move(image))));
+        return layerState.ownedImages.last().data();
+    };
+
+    const auto appendSprite = [&layerState](
+                                  const QImage* image,
+                                  const QPointF& center,
+                                  qreal width,
+                                  qreal height,
+                                  qreal rotation,
+                                  qreal opacity,
+                                  bool cacheable = true
+                              ) {
+        if (image == nullptr || image->isNull() || opacity <= 0.0 || width <= 0.0 || height <= 0.0) {
             return;
         }
         PreviewSpriteDescriptor sprite;
-        sprite.image = &image;
+        sprite.image = image;
         sprite.center = center;
         sprite.width = width;
         sprite.height = height;
         sprite.rotationDegrees = rotation;
         sprite.opacity = opacity;
-        sprites.append(sprite);
+        sprite.cacheable = cacheable;
+        layerState.sprites.append(sprite);
     };
 
     for (const TimelineNoteMarker& marker : state.noteMarkers) {
@@ -70,6 +88,19 @@ PreviewSpriteDescriptors buildPreviewTouchLayerSprites(
         if (basePointImage.isNull() || baseCornerImage.isNull()) {
             continue;
         }
+        const QImage* cornerImage = &baseCornerImage;
+        bool cornerImageCacheable = true;
+        if (marker.isBreak) {
+            cornerImage = appendOwnedImage(buildAnimatedSpriteImage(
+                baseCornerImage,
+                PreviewAnimatedSpriteEffect::BreakAnimate,
+                state.playheadSeconds
+            ));
+            cornerImageCacheable = false;
+            if (cornerImage == nullptr) {
+                continue;
+            }
+        }
 
         const QPointF point = mapLogicalPointToRect(marker.touchPoint, playfieldRect);
         const qreal alpha = touchPreHitAlpha(deltaSeconds, kTouchDurationSeconds, kTouchShowDurationSeconds);
@@ -84,10 +115,10 @@ PreviewSpriteDescriptors buildPreviewTouchLayerSprites(
         const qreal offset = mapLogicalLengthToRect(logicalOffset, playfieldRect);
         const int overlapCount = overlapCounts.value(touchRegionKey(marker), 0);
 
-        const qreal pointWidth = qMax<qreal>(1.0, basePointImage.width() * kTouchAssetScale * canvasScale);
-        const qreal pointHeight = qMax<qreal>(1.0, basePointImage.height() * kTouchAssetScale * canvasScale);
-        const qreal cornerWidth = qMax<qreal>(1.0, baseCornerImage.width() * kTouchAssetScale * canvasScale);
-        const qreal cornerHeight = qMax<qreal>(1.0, baseCornerImage.height() * kTouchAssetScale * canvasScale);
+        const qreal pointWidth = qMax<qreal>(1.0, qRound(basePointImage.width() * kTouchAssetScale * canvasScale));
+        const qreal pointHeight = qMax<qreal>(1.0, qRound(basePointImage.height() * kTouchAssetScale * canvasScale));
+        const qreal cornerWidth = qMax<qreal>(1.0, qRound(cornerImage->width() * kTouchAssetScale * canvasScale));
+        const qreal cornerHeight = qMax<qreal>(1.0, qRound(cornerImage->height() * kTouchAssetScale * canvasScale));
 
         const struct {
             qreal dx;
@@ -101,38 +132,39 @@ PreviewSpriteDescriptors buildPreviewTouchLayerSprites(
         };
         for (const auto& pieceLayout : layout) {
             appendSprite(
-                baseCornerImage,
+                cornerImage,
                 QPointF(point.x() + pieceLayout.dx, point.y() + pieceLayout.dy),
                 cornerWidth,
                 cornerHeight,
                 pieceLayout.angle,
-                alpha
+                alpha,
+                cornerImageCacheable
             );
         }
         if (overlapCount >= kTouchOverlapBorder2Threshold && border2Image != nullptr && !border2Image->isNull()) {
             appendSprite(
-                *border2Image,
+                border2Image,
                 point,
-                border2Image->width() * kTouchAssetScale * canvasScale,
-                border2Image->height() * kTouchAssetScale * canvasScale,
+                qMax<qreal>(1.0, qRound(border2Image->width() * kTouchAssetScale * canvasScale)),
+                qMax<qreal>(1.0, qRound(border2Image->height() * kTouchAssetScale * canvasScale)),
                 0.0,
                 alpha
             );
         }
         if (overlapCount >= kTouchOverlapBorder3Threshold && border3Image != nullptr && !border3Image->isNull()) {
             appendSprite(
-                *border3Image,
+                border3Image,
                 point,
-                border3Image->width() * kTouchAssetScale * canvasScale,
-                border3Image->height() * kTouchAssetScale * canvasScale,
+                qMax<qreal>(1.0, qRound(border3Image->width() * kTouchAssetScale * canvasScale)),
+                qMax<qreal>(1.0, qRound(border3Image->height() * kTouchAssetScale * canvasScale)),
                 0.0,
                 alpha
             );
         }
-        appendSprite(basePointImage, point, pointWidth, pointHeight, 0.0, alpha);
+        appendSprite(&basePointImage, point, pointWidth, pointHeight, 0.0, alpha);
     }
 
-    return sprites;
+    return layerState;
 }
 
 }  // namespace miacode::preview::scene

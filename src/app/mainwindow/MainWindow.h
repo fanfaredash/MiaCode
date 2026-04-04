@@ -277,6 +277,8 @@ private:
     bool scheduleTimelineAnalysisRefreshFromLatestPreviewState(int delayMs = -1);
     void requestTimelineAnalysisDispatch(int delayMs = -1);
     void dispatchTimelineAnalysisRefresh();
+    const MuriAnalysisReport& alignedMuriAnalysisReportForPreview() const;
+    void applyAlignedMuriAnalysisReportToViews();
     void seekTimelineToCursor(int line, int col);
     void syncTimelineToEditorCursor(bool centerView = true);
     void navigateTimelineToSecond(double second, bool focusEditor = true);
@@ -575,6 +577,7 @@ private:
     bool timelineSlowWorkerRunning_ = false;
     bool timelineAnalysisWorkerRunning_ = false;
     QByteArray lastPreviewNoteMarkerSignature_;
+    QByteArray muriAnalysisReportNoteMarkerSignature_;
     bool outlineDockCollapsed_ = false;
     int outlineDockExpandedWidth_ = 190;
     TextEncoding currentEncoding_ = TextEncoding::Utf8;

@@ -4,11 +4,23 @@ namespace miacode::preview::scene {
 
 const QImage* selectTapNoteGuideImage(const PreviewSkinAssets& skin, const TimelineNoteMarker& marker)
 {
-    if (marker.isBreak && !skin.noteGuideBreakImage.isNull()) {
+    const bool slideLike = marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi");
+    if (slideLike && !marker.hasHeadStar) {
+        return nullptr;
+    }
+
+    const bool starMaterialHead = slideLike ? !marker.slideHeadUsesTapMaterial : marker.tapUsesStarMaterial;
+    const bool isBreak = slideLike ? marker.headBreak : marker.isBreak;
+    const bool isEach = slideLike ? marker.headEach : marker.isEach;
+
+    if (isBreak && !skin.noteGuideBreakImage.isNull()) {
         return &skin.noteGuideBreakImage;
     }
-    if (marker.isEach && !skin.noteGuideEachImage.isNull()) {
+    if (isEach && !skin.noteGuideEachImage.isNull()) {
         return &skin.noteGuideEachImage;
+    }
+    if (starMaterialHead) {
+        return skin.noteGuideSlideImage.isNull() ? &skin.noteGuideNormalImage : &skin.noteGuideSlideImage;
     }
     return skin.noteGuideNormalImage.isNull() ? nullptr : &skin.noteGuideNormalImage;
 }

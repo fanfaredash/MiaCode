@@ -13,15 +13,17 @@ QSGNode* PreviewQuickTouchLayer::updateNode(
     PreviewTextureRepository* textures
 ) const
 {
-    return buildPreviewSpriteNodeTree(
-        oldNode,
-        miacode::preview::scene::buildPreviewTouchLayerSprites(
+    const miacode::preview::scene::PreviewTouchLayerState layerState =
+        miacode::preview::scene::buildPreviewTouchLayerState(
             state,
             miacode::preview::scene::playfieldRectForStage(
                 miacode::preview::scene::stageRectForSize(renderSize),
                 state.render.layoutSquareScale
             )
-        ),
+        );
+    return buildPreviewSpriteNodeTree(
+        oldNode,
+        layerState.sprites,
         window,
         textures
     );

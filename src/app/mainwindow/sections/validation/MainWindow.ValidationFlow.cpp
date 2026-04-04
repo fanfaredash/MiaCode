@@ -1057,14 +1057,11 @@ void MainWindow::applyDeferredAnalysisUiUpdates()
     }
 
     if (pendingDeferredMuriUiRefresh_) {
-        if (timelineView_ != nullptr) {
-            timelineView_->setMuriAnalysisReport(muriAnalysisReport_);
-        }
         refreshMuriDiagnosticsPanel();
         if (previewCanvas_ != nullptr) {
-            previewCanvas_->setMuriAnalysisReport(muriAnalysisReport_);
             previewCanvas_->setMuriRenderOptions(muriRenderOptions_);
         }
+        applyAlignedMuriAnalysisReportToViews();
         pendingDeferredMuriUiRefresh_ = false;
     }
 
