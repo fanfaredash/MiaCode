@@ -2368,6 +2368,7 @@ bool MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
     }
 
     applyPlaybackClockState(effectiveStartSecond);
+    pausedPreviewMediaSeekPending_ = false;
     qtPreviewElapsed_.restart();
     qtPreviewTimelineElapsed_.restart();
     if (timelineView_ != nullptr) {
@@ -2455,6 +2456,7 @@ void MainWindow::stopQtPreviewPlayback(bool keepPosition)
     if (!keepPosition) {
         qtPreviewPauseSecond_ = 0.0;
     }
+    pausedPreviewMediaSeekPending_ = false;
     if (wasPlaying) {
         qtPreviewPendingTimelineSecond_ = qtPreviewPauseSecond_;
         qtPreviewPendingTimelineCenterView_ = false;
@@ -2516,11 +2518,15 @@ void MainWindow::applyQtPreviewPosition(double second, bool centerView)
 void MainWindow::syncPausedPreviewMediaTimestamps(double second)
 {
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
-    if (previewMediaController_ != nullptr) {
+    if (previewMediaController_ != nullptr && queryPreviewMediaControllerHasVideoMedia()) {
+        pausedPreviewMediaSeekPending_ = true;
+        pausedPreviewMediaSeekSecond_ = clampedSecond;
         dispatchPreviewMediaControllerCall([clampedSecond](PreviewMediaController* controller) {
             controller->setPlayheadSeconds(clampedSecond);
         });
+        return;
     }
+    pausedPreviewMediaSeekPending_ = false;
 }
 
 void MainWindow::flushQtPreviewTimelinePosition()

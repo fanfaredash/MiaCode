@@ -31,6 +31,9 @@ install_manifest.txt
 # Keep only docs spec/checklist files under version control.
 docs/*
 !docs/DEBUG_INDEX.md
+!docs/PREVIEW_RUNTIME_WORKFLOW.md
+!docs/VIDEO_EXPORT_MEMORY_ANALYSIS.md
+!docs/VIDEO_EXPORT_SUBPROCESS_ISOLATION.md
 !docs/*SPEC.md
 !docs/*CHECKLIST.md
 

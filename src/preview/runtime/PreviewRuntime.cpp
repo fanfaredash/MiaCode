@@ -35,10 +35,7 @@ PreviewRuntime::PreviewRuntime(QObject* parent)
 
     connect(surface_, &PreviewQuickRuntimeSurface::framePresented, this, [this]() {
         updatePresentedFrameStats();
-        if (pendingPresentedStatsRefresh_) {
-            pendingPresentedStatsRefresh_ = false;
-            update();
-        }
+        pendingPresentedStatsRefresh_ = false;
         emit framePresented();
     });
     connect(assets_, &miacode::preview::runtime::PreviewSceneAssetRepository::assetsChanged, this, [this]() {

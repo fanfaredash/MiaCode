@@ -6,6 +6,72 @@
 #include <QQuickWindow>
 #include <QSGNode>
 
+namespace {
+
+constexpr int kPreviewQuickSceneLayerSlotCount = 15;
+
+QSGNode* ensureLayerSlotRoot(QSGNode* oldNode)
+{
+    auto childCountFor = [](QSGNode* node) {
+        int count = 0;
+        for (QSGNode* child = node != nullptr ? node->firstChild() : nullptr; child != nullptr; child = child->nextSibling()) {
+            ++count;
+        }
+        return count;
+    };
+
+    if (oldNode != nullptr && childCountFor(oldNode) == kPreviewQuickSceneLayerSlotCount) {
+        return oldNode;
+    }
+
+    delete oldNode;
+    auto* root = new QSGNode();
+    for (int index = 0; index < kPreviewQuickSceneLayerSlotCount; ++index) {
+        root->appendChildNode(new QSGNode());
+    }
+    return root;
+}
+
+QSGNode* layerSlotAt(QSGNode* root, int index)
+{
+    if (root == nullptr || index < 0) {
+        return nullptr;
+    }
+
+    QSGNode* slot = root->firstChild();
+    for (int currentIndex = 0; slot != nullptr && currentIndex < index; ++currentIndex) {
+        slot = slot->nextSibling();
+    }
+    return slot;
+}
+
+template <typename UpdateFn>
+void updateLayerSlot(QSGNode* slot, bool enabled, UpdateFn&& updateFn)
+{
+    if (slot == nullptr) {
+        return;
+    }
+
+    QSGNode* oldChild = slot->firstChild();
+    QSGNode* newChild = enabled ? updateFn(oldChild) : nullptr;
+
+    QSGNode* child = slot->firstChild();
+    while (child != nullptr) {
+        QSGNode* next = child->nextSibling();
+        if (child != newChild) {
+            slot->removeChildNode(child);
+            delete child;
+        }
+        child = next;
+    }
+
+    if (newChild != nullptr && newChild->parent() != slot) {
+        slot->appendChildNode(newChild);
+    }
+}
+
+}  // namespace
+
 PreviewQuickSceneRoot::PreviewQuickSceneRoot(QQuickItem* parent)
     : QQuickItem(parent)
 {
@@ -43,8 +109,7 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
 {
     Q_UNUSED(updatePaintNodeData);
 
-    delete oldNode;
-    auto* root = new QSGNode();
+    auto* root = ensureLayerSlotRoot(oldNode);
     textures_.setWindow(window());
     textures_.beginFrame();
     const miacode::preview::scene::PreviewFrameState* state = nullptr;
@@ -57,170 +122,98 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         return root;
     }
 
-    if (miacode::preview::scene::previewRenderLayerEnabled(
-            layerFlags_,
-            miacode::preview::scene::StageBackgroundLayer)) {
-        if (QSGNode* stageNode = stageBackgroundLayer_.updateNode(
-                nullptr,
-                *state,
-                boundingRect().size().toSize(),
-                window(),
-                &textures_)) {
-            root->appendChildNode(stageNode);
-        }
-    }
-    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::BackdropLayer)) {
-        if (QSGNode* backdropNode = backdropLayer_.updateNode(
-                nullptr,
-                *state,
-                boundingRect().size().toSize(),
-                window(),
-                &textures_)) {
-            root->appendChildNode(backdropNode);
-        }
-    }
-    if (miacode::preview::scene::previewRenderLayerEnabled(
-            layerFlags_,
-            miacode::preview::scene::MuriPadStateLayer)) {
-        if (QSGNode* muriPadNode =
-                muriPadLayer_.updateNode(nullptr, *state, boundingRect().size().toSize(), window(), &textures_)) {
-            root->appendChildNode(muriPadNode);
-        }
-    }
-    if (miacode::preview::scene::previewRenderLayerEnabled(
-            layerFlags_,
-            miacode::preview::scene::MuriActionLayer)) {
-        if (QSGNode* muriActionNode = muriActionLayer_.updateNode(
-                nullptr,
-                *state,
-                boundingRect().size().toSize(),
-                window(),
-                &textures_)) {
-            root->appendChildNode(muriActionNode);
-        }
-    }
-    if (miacode::preview::scene::previewRenderLayerEnabled(
-            layerFlags_,
-            miacode::preview::scene::JudgeFireworkLayer)) {
-        if (QSGNode* judgeFireworkNode = judgeFireworkLayer_.updateNode(
-                nullptr,
-                *state,
-                boundingRect().size().toSize(),
-                window(),
-                &textures_)) {
-            root->appendChildNode(judgeFireworkNode);
-        }
-    }
-    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::GuideLayer)) {
-        if (QSGNode* guideNode = guideLayer_.updateNode(
-                nullptr,
-                *state,
-                boundingRect().size().toSize(),
-                window(),
-                &textures_)) {
-            root->appendChildNode(guideNode);
-        }
-    }
-    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::TrackLayer)) {
-        if (QSGNode* trackNode = trackLayer_.updateNode(
-                nullptr,
-                *state,
-                boundingRect().size().toSize(),
-                window(),
-                &textures_)) {
-            root->appendChildNode(trackNode);
-        }
-    }
-    if (miacode::preview::scene::previewRenderLayerEnabled(
-            layerFlags_,
-            miacode::preview::scene::SlideMotionLayer)) {
-        if (QSGNode* slideMotionNode = slideMotionLayer_.updateNode(
-                nullptr,
-                *state,
-                boundingRect().size().toSize(),
-                window(),
-                &textures_)) {
-            root->appendChildNode(slideMotionNode);
-        }
-    }
-    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::JudgeLayer)) {
-        if (QSGNode* judgeEffectNode = judgeEffectLayer_.updateNode(
-                nullptr,
-                *state,
-                boundingRect().size().toSize(),
-                window(),
-                &textures_)) {
-            root->appendChildNode(judgeEffectNode);
-        }
-    }
-    if (miacode::preview::scene::previewRenderLayerEnabled(
-            layerFlags_,
-            miacode::preview::scene::JudgeTouchLayer)) {
-        if (QSGNode* touchJudgeNode = touchJudgeLayer_.updateNode(
-                nullptr,
-                *state,
-                boundingRect().size().toSize(),
-                window(),
-                &textures_)) {
-            root->appendChildNode(touchJudgeNode);
-        }
-    }
-    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::HeadLayer)) {
-        if (QSGNode* headNode = headLayer_.updateNode(
-                nullptr,
-                *state,
-                boundingRect().size().toSize(),
-                window(),
-                &textures_)) {
-            root->appendChildNode(headNode);
-        }
-    }
-    if (miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::TouchLayer)) {
-        if (QSGNode* touchNode = touchLayer_.updateNode(
-                nullptr,
-                *state,
-                boundingRect().size().toSize(),
-                window(),
-                &textures_)) {
-            root->appendChildNode(touchNode);
-        }
-    }
-    if (miacode::preview::scene::previewRenderLayerEnabled(
-            layerFlags_,
-            miacode::preview::scene::TouchHoldLayer)) {
-        if (QSGNode* touchHoldNode = touchHoldLayer_.updateNode(
-                nullptr,
-                *state,
-                boundingRect().size().toSize(),
-                window(),
-                &textures_)) {
-            root->appendChildNode(touchHoldNode);
-        }
-    }
-    if (miacode::preview::scene::previewRenderLayerEnabled(
-            layerFlags_,
-            miacode::preview::scene::ChartReviewLayer)) {
-        if (QSGNode* chartReviewNode = chartReviewLayer_.updateNode(
-                nullptr,
-                *state,
-                boundingRect().size().toSize(),
-                window(),
-                &textures_)) {
-            root->appendChildNode(chartReviewNode);
-        }
-    }
-    if (miacode::preview::scene::previewRenderLayerEnabled(
-            layerFlags_,
-            miacode::preview::scene::MaimuriDxJudgeLayer)) {
-        if (QSGNode* maimuriDxJudgeNode = maimuriDxJudgeLayer_.updateNode(
-                nullptr,
-                *state,
-                boundingRect().size().toSize(),
-                window(),
-                &textures_)) {
-            root->appendChildNode(maimuriDxJudgeNode);
-        }
-    }
+    const QSize renderSize = boundingRect().size().toSize();
+    int slotIndex = 0;
+    updateLayerSlot(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::StageBackgroundLayer),
+        [&](QSGNode* oldChild) {
+            return stageBackgroundLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+        });
+    updateLayerSlot(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::BackdropLayer),
+        [&](QSGNode* oldChild) {
+            return backdropLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+        });
+    updateLayerSlot(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::MuriPadStateLayer),
+        [&](QSGNode* oldChild) {
+            return muriPadLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+        });
+    updateLayerSlot(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::MuriActionLayer),
+        [&](QSGNode* oldChild) {
+            return muriActionLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+        });
+    updateLayerSlot(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::JudgeFireworkLayer),
+        [&](QSGNode* oldChild) {
+            return judgeFireworkLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+        });
+    updateLayerSlot(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::GuideLayer),
+        [&](QSGNode* oldChild) {
+            return guideLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+        });
+    updateLayerSlot(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::TrackLayer),
+        [&](QSGNode* oldChild) {
+            return trackLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+        });
+    updateLayerSlot(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::SlideMotionLayer),
+        [&](QSGNode* oldChild) {
+            return slideMotionLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+        });
+    updateLayerSlot(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::JudgeLayer),
+        [&](QSGNode* oldChild) {
+            return judgeEffectLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+        });
+    updateLayerSlot(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::JudgeTouchLayer),
+        [&](QSGNode* oldChild) {
+            return touchJudgeLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+        });
+    updateLayerSlot(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::HeadLayer),
+        [&](QSGNode* oldChild) {
+            return headLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+        });
+    updateLayerSlot(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::TouchLayer),
+        [&](QSGNode* oldChild) {
+            return touchLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+        });
+    updateLayerSlot(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::TouchHoldLayer),
+        [&](QSGNode* oldChild) {
+            return touchHoldLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+        });
+    updateLayerSlot(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::ChartReviewLayer),
+        [&](QSGNode* oldChild) {
+            return chartReviewLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+        });
+    updateLayerSlot(
+        layerSlotAt(root, slotIndex++),
+        miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::MaimuriDxJudgeLayer),
+        [&](QSGNode* oldChild) {
+            return maimuriDxJudgeLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+        });
     return root;
 }
 

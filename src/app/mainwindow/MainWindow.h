@@ -642,6 +642,8 @@ private:
     QElapsedTimer qtPreviewTimelineElapsed_;
     double previewPendingSeekSecond_ = 0.0;
     bool previewPendingSeekCenterView_ = true;
+    bool pausedPreviewMediaSeekPending_ = false;
+    double pausedPreviewMediaSeekSecond_ = 0.0;
     double previewPlaybackRate_ = 1.0;
     double previewTrackDurationSeconds_ = 0.0;
     bool showSlideTracks_ = true;

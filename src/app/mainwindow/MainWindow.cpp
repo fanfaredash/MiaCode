@@ -2581,9 +2581,15 @@ void MainWindow::ensurePreviewMediaControllerInitialized()
         if (qtPreviewPlaying_) {
             return;
         }
+        if (pausedPreviewMediaSeekPending_) {
+            if (qAbs(second - pausedPreviewMediaSeekSecond_) > 0.05) {
+                return;
+            }
+            second = pausedPreviewMediaSeekSecond_;
+            pausedPreviewMediaSeekPending_ = false;
+        }
         qtPreviewStartSecond_ = second;
         qtPreviewElapsed_.restart();
-        syncPausedPreviewMediaTimestamps(second);
         applyQtPreviewPosition(second, true);
     });
     connect(previewMediaController_, &PreviewMediaController::playbackFinished, this, [this]() {
