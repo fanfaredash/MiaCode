@@ -118,6 +118,8 @@ public:
         return !tapImage_.isNull() && !holdImage_.isNull() && !starImage_.isNull();
     }
     miacode::preview::scene::PreviewSkinAssets buildSkinAssetsForScene() const;
+    miacode::preview::scene::PreviewJudgeOverlayAssets buildJudgeOverlayAssetsForScene() const;
+    miacode::preview::scene::PreviewJudgeEffectAssets buildJudgeEffectAssetsForScene() const;
     const QImage& outlineImageForScene() const { return outlineImage_; }
     double layoutRingDiameterRatioForScene() const { return layoutRingDiameterRatio_; }
     double fpsDisplayForScene() const { return fpsDisplay_; }

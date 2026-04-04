@@ -6,7 +6,7 @@ class QQuickWindow;
 class QSGNode;
 class PreviewTextureRepository;
 
-class PreviewQuickJudgeFireworkLayer
+class PreviewQuickJudgeEffectLayer
 {
 public:
     QSGNode* updateNode(

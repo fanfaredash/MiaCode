@@ -56,21 +56,13 @@ inline constexpr PreviewRenderLayerFlags kPreviewSceneGraphSecondBatchLayers =
     | JudgeTouchLayer;
 
 inline constexpr PreviewRenderLayerFlags kPreviewLegacyLowerBridgeLayers =
-    TrackLayer
-    | SlideMotionLayer
-    | JudgeLayer;
+    0u;
 
 inline constexpr PreviewRenderLayerFlags kPreviewLegacyPostTouchBridgeLayers =
-    ChartReviewLayer
-    | MaimuriDxJudgeLayer;
+    0u;
 
 inline constexpr PreviewRenderLayerFlags kPreviewLegacyBridgeLayers =
-    kPreviewAllRenderLayers
-    & ~kPreviewSceneGraphSecondBatchLayers
-    & ~GuideLayer
-    & ~HeadLayer
-    & ~TouchLayer
-    & ~TouchHoldLayer;
+    0u;
 
 inline bool previewRenderLayerEnabled(PreviewRenderLayerFlags flags, PreviewRenderLayer layer)
 {

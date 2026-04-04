@@ -443,6 +443,45 @@ int main(int argc, char** argv)
 
     {
         const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(193){1}\n1pp3pp5pp7pp1[4:13],\nE\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("chain-slide segment-head repro chart parses"));
+        expect(analyzed.report.markerStates.size() == 1,
+            QStringLiteral("chain-slide segment-head repro keeps one slide marker state"));
+
+        if (!analyzed.report.markerStates.isEmpty()) {
+            const MarkerMuriState state = analyzed.report.markerStates.constBegin().value();
+            expect(state.slideSegments.size() >= 2,
+                QStringLiteral("chain-slide segment-head repro exposes multiple runtime segments"));
+
+            if (state.slideSegments.size() >= 2) {
+                const QVector<QVector<MuriCheckpointState>>& firstAreas =
+                    state.slideSegments.at(0).areaCheckpoints;
+                const QVector<QVector<MuriCheckpointState>>& secondAreas =
+                    state.slideSegments.at(1).areaCheckpoints;
+                expect(!firstAreas.isEmpty() && !secondAreas.isEmpty(),
+                    QStringLiteral("chain-slide segment-head repro keeps both segment checkpoints"));
+
+                if (!firstAreas.isEmpty() && !secondAreas.isEmpty()) {
+                    const QVector<MuriCheckpointState>& firstTail = firstAreas.constLast();
+                    const QVector<MuriCheckpointState>& secondHead = secondAreas.constFirst();
+                    expect(!firstTail.isEmpty() && !secondHead.isEmpty(),
+                        QStringLiteral("chain-slide segment-head repro keeps concrete boundary checkpoints"));
+
+                    if (!firstTail.isEmpty() && !secondHead.isEmpty()) {
+                        expect(firstTail.constFirst().pads.contains(QStringLiteral("A3")),
+                            QStringLiteral("chain-slide segment-head repro ends first segment on A3"));
+                        expect(secondHead.constFirst().pads.contains(QStringLiteral("A3")),
+                            QStringLiteral("chain-slide segment-head repro also starts second segment on A3"));
+                        expect(nearlyEqual(secondHead.constFirst().second, firstTail.constFirst().second),
+                            QStringLiteral("chain-slide segment-head repro judges the second head at the same A3 moment"));
+                    }
+                }
+            }
+        }
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
             QStringLiteral("(128.6){1}3v1[1:11]/7v5[1:11],\nE\n"));
         expect(analyzed.parsed.ok, QStringLiteral("long-slide repro chart parses"));
         expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::SlideTooFast) == 0,

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QImage>
+#include <QRectF>
 #include <QVector>
 
 #include "common/PreviewGameplayConfig.h"
@@ -78,6 +79,39 @@ struct PreviewSkinAssets {
     QImage touchHoldOffImage;
 };
 
+struct PreviewJudgeOverlayAssets {
+    QImage reviewJudgeSimpleNormalImage;
+    QRectF reviewJudgeSimpleNormalSourceRect;
+    QImage reviewJudgeSimpleBreakImage;
+    QRectF reviewJudgeSimpleBreakSourceRect;
+    QImage reviewJudgeStraightLeftImage;
+    QImage reviewJudgeStraightRightImage;
+    QImage reviewJudgeCircleLeftImage;
+    QImage reviewJudgeCircleRightImage;
+    QImage reviewJudgeWifiUpImage;
+    QImage reviewJudgeWifiDownImage;
+    QImage muriJudgeSimpleImage;
+    QImage muriJudgeStraightLeftImage;
+    QImage muriJudgeStraightRightImage;
+    QImage muriJudgeCircleLeftImage;
+    QImage muriJudgeCircleRightImage;
+    QImage muriJudgeWifiUpImage;
+    QImage muriJudgeWifiDownImage;
+};
+
+struct PreviewJudgeEffectAssets {
+    QImage tapImage;
+    QRectF tapSourceRect;
+    QImage tapBreakImage;
+    QRectF tapBreakSourceRect;
+    QImage holdSustainCircleImage;
+    QImage touchCircleImage;
+    QImage touchPart01Image;
+    QImage touchPart02Image;
+    QImage fireworkColorBallImage;
+    QRectF fireworkColorBallSourceRect;
+};
+
 struct PreviewMediaFrameState {
     QImage mediaFrame;
     QImage retainedVideoFallbackFrame;
@@ -111,6 +145,8 @@ struct PreviewFrameState {
     PreviewMediaFrameState media;
     PreviewAssetState assets;
     PreviewSkinAssets skin;
+    PreviewJudgeOverlayAssets judgeOverlay;
+    PreviewJudgeEffectAssets judgeEffect;
     PreviewRenderState render;
     double playheadSeconds = 0.0;
     double fpsDisplay = 0.0;

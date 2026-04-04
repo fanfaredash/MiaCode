@@ -9,8 +9,7 @@ PreviewRuntime::PreviewRuntime(QObject* parent)
     : QObject(parent)
 {
     renderer_ = new PreviewCanvas();
-    frameState_.assets.outlineImage = renderer_->outlineImageForScene();
-    frameState_.assets.layoutRingDiameterRatio = renderer_->layoutRingDiameterRatioForScene();
+    refreshAssetStateFromRenderer();
     frameState_.render.noteFlowSpeed = renderer_->noteFlowSpeed();
     frameState_.render.showTimestamp = renderer_->showTimestamp();
     frameState_.render.showObjectStatsHud = renderer_->showObjectStatsHud();
@@ -353,6 +352,8 @@ void PreviewRuntime::refreshAssetStateFromRenderer()
     frameState_.assets.outlineImage = renderer_->outlineImageForScene();
     frameState_.assets.layoutRingDiameterRatio = renderer_->layoutRingDiameterRatioForScene();
     frameState_.skin = renderer_->buildSkinAssetsForScene();
+    frameState_.judgeOverlay = renderer_->buildJudgeOverlayAssetsForScene();
+    frameState_.judgeEffect = renderer_->buildJudgeEffectAssetsForScene();
 }
 
 void PreviewRuntime::updatePresentedFrameStats()

@@ -667,6 +667,45 @@ miacode::preview::scene::PreviewSkinAssets PreviewCanvas::buildSkinAssetsForScen
     return skin;
 }
 
+miacode::preview::scene::PreviewJudgeOverlayAssets PreviewCanvas::buildJudgeOverlayAssetsForScene() const
+{
+    miacode::preview::scene::PreviewJudgeOverlayAssets assets;
+    assets.reviewJudgeSimpleNormalImage = reviewJudgeSimpleNormalImage_;
+    assets.reviewJudgeSimpleNormalSourceRect = reviewJudgeSimpleNormalSourceRect_;
+    assets.reviewJudgeSimpleBreakImage = reviewJudgeSimpleBreakImage_;
+    assets.reviewJudgeSimpleBreakSourceRect = reviewJudgeSimpleBreakSourceRect_;
+    assets.reviewJudgeStraightLeftImage = reviewJudgeStraightLeftImage_;
+    assets.reviewJudgeStraightRightImage = reviewJudgeStraightRightImage_;
+    assets.reviewJudgeCircleLeftImage = reviewJudgeCircleLeftImage_;
+    assets.reviewJudgeCircleRightImage = reviewJudgeCircleRightImage_;
+    assets.reviewJudgeWifiUpImage = reviewJudgeWifiUpImage_;
+    assets.reviewJudgeWifiDownImage = reviewJudgeWifiDownImage_;
+    assets.muriJudgeSimpleImage = muriJudgeSimpleImage_;
+    assets.muriJudgeStraightLeftImage = muriJudgeStraightLeftImage_;
+    assets.muriJudgeStraightRightImage = muriJudgeStraightRightImage_;
+    assets.muriJudgeCircleLeftImage = muriJudgeCircleLeftImage_;
+    assets.muriJudgeCircleRightImage = muriJudgeCircleRightImage_;
+    assets.muriJudgeWifiUpImage = muriJudgeWifiUpImage_;
+    assets.muriJudgeWifiDownImage = muriJudgeWifiDownImage_;
+    return assets;
+}
+
+miacode::preview::scene::PreviewJudgeEffectAssets PreviewCanvas::buildJudgeEffectAssetsForScene() const
+{
+    miacode::preview::scene::PreviewJudgeEffectAssets assets;
+    assets.tapImage = judgeEffectTapImage_;
+    assets.tapSourceRect = judgeEffectTapSourceRect_;
+    assets.tapBreakImage = judgeEffectTapBreakImage_;
+    assets.tapBreakSourceRect = judgeEffectTapBreakSourceRect_;
+    assets.holdSustainCircleImage = judgeEffectHoldSustainCircleImage_;
+    assets.touchCircleImage = judgeEffectTouchCircleImage_;
+    assets.touchPart01Image = judgeEffectTouchPart01Image_;
+    assets.touchPart02Image = judgeEffectTouchPart02Image_;
+    assets.fireworkColorBallImage = judgeEffectFireworkColorBallImage_;
+    assets.fireworkColorBallSourceRect = judgeEffectFireworkColorBallSourceRect_;
+    return assets;
+}
+
 void PreviewCanvas::paintPresentFrame(
     QPainter& painter,
     const QSize& outputSize,

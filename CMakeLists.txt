@@ -112,8 +112,30 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/scene/PreviewSkinSelectors.h
     src/preview/scene/PreviewSkinSelectors.cpp
     src/preview/scene/PreviewSpriteDescriptor.h
+    src/preview/scene/PreviewCircleDescriptor.h
+    src/preview/scene/PreviewSectorDescriptor.h
+    src/preview/scene/PreviewTrackShared.h
+    src/preview/scene/PreviewTrackShared.cpp
+    src/preview/scene/PreviewJudgeOverlayShared.h
+    src/preview/scene/PreviewJudgeOverlayShared.cpp
     src/preview/scene/PreviewGuideLayerState.h
     src/preview/scene/PreviewGuideLayerState.cpp
+    src/preview/scene/PreviewTrackLayerState.h
+    src/preview/scene/PreviewTrackLayerState.cpp
+    src/preview/scene/PreviewSlideMotionLayerState.h
+    src/preview/scene/PreviewSlideMotionLayerState.cpp
+    src/preview/scene/PreviewJudgeEffectLayerState.h
+    src/preview/scene/PreviewJudgeEffectLayerState.cpp
+    src/preview/scene/PreviewChartReviewLayerState.h
+    src/preview/scene/PreviewChartReviewLayerState.cpp
+    src/preview/scene/PreviewJudgeFireworkLayerState.h
+    src/preview/scene/PreviewJudgeFireworkLayerState.cpp
+    src/preview/scene/PreviewMuriPadLayerState.h
+    src/preview/scene/PreviewMuriPadLayerState.cpp
+    src/preview/scene/PreviewMuriActionLayerState.h
+    src/preview/scene/PreviewMuriActionLayerState.cpp
+    src/preview/scene/PreviewTouchJudgeLayerState.h
+    src/preview/scene/PreviewTouchJudgeLayerState.cpp
     src/preview/scene/PreviewTouchLayerState.h
     src/preview/scene/PreviewTouchLayerState.cpp
     src/preview/scene/PreviewAnimatedSpriteHelpers.h
@@ -123,24 +145,40 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/scene/PreviewHeadLayerState.cpp
     src/preview/scene/PreviewTouchHoldLayerState.h
     src/preview/scene/PreviewTouchHoldLayerState.cpp
+    src/preview/scene/PreviewMaimuriDxJudgeLayerState.h
+    src/preview/scene/PreviewMaimuriDxJudgeLayerState.cpp
     src/preview/quick_scene/PreviewTextureRepository.h
     src/preview/quick_scene/PreviewTextureRepository.cpp
     src/preview/quick_scene/PreviewQuickStageBackgroundLayer.h
     src/preview/quick_scene/PreviewQuickStageBackgroundLayer.cpp
     src/preview/quick_scene/PreviewQuickBackdropLayer.h
     src/preview/quick_scene/PreviewQuickBackdropLayer.cpp
+    src/preview/quick_scene/PreviewQuickCircleNodes.h
+    src/preview/quick_scene/PreviewQuickCircleNodes.cpp
     src/preview/quick_scene/PreviewQuickSpriteNodes.h
     src/preview/quick_scene/PreviewQuickSpriteNodes.cpp
     src/preview/quick_scene/PreviewQuickArcNodes.h
     src/preview/quick_scene/PreviewQuickArcNodes.cpp
+    src/preview/quick_scene/PreviewQuickSectorNodes.h
+    src/preview/quick_scene/PreviewQuickSectorNodes.cpp
     src/preview/quick_scene/PreviewQuickGuideLayer.h
     src/preview/quick_scene/PreviewQuickGuideLayer.cpp
+    src/preview/quick_scene/PreviewQuickTrackLayer.h
+    src/preview/quick_scene/PreviewQuickTrackLayer.cpp
+    src/preview/quick_scene/PreviewQuickSlideMotionLayer.h
+    src/preview/quick_scene/PreviewQuickSlideMotionLayer.cpp
+    src/preview/quick_scene/PreviewQuickJudgeEffectLayer.h
+    src/preview/quick_scene/PreviewQuickJudgeEffectLayer.cpp
+    src/preview/quick_scene/PreviewQuickChartReviewLayer.h
+    src/preview/quick_scene/PreviewQuickChartReviewLayer.cpp
     src/preview/quick_scene/PreviewQuickHeadLayer.h
     src/preview/quick_scene/PreviewQuickHeadLayer.cpp
     src/preview/quick_scene/PreviewQuickTouchLayer.h
     src/preview/quick_scene/PreviewQuickTouchLayer.cpp
     src/preview/quick_scene/PreviewQuickTouchHoldLayer.h
     src/preview/quick_scene/PreviewQuickTouchHoldLayer.cpp
+    src/preview/quick_scene/PreviewQuickMaimuriDxJudgeLayer.h
+    src/preview/quick_scene/PreviewQuickMaimuriDxJudgeLayer.cpp
     src/preview/quick_scene/PreviewQuickMuriPadLayer.h
     src/preview/quick_scene/PreviewQuickMuriPadLayer.cpp
     src/preview/quick_scene/PreviewQuickMuriActionLayer.h
