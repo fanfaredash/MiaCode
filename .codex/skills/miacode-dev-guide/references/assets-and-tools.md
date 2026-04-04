@@ -17,6 +17,7 @@ Use this file for asset lookup rules, chart-directory conventions, scripts, help
 - Qt resources:
   - `resources/app_icons.qrc`
   - `resources/fonts.qrc`
+  - `resources/preview_runtime_qml.qrc`
   - `resources/icons/*`
 
 ## 2. Runtime File Conventions Near A Chart
@@ -39,8 +40,9 @@ If these conventions change, update both code and this file.
 ## 3. Asset Consumers
 
 - Skin textures:
-  - Consumer: `PreviewCanvas`
-  - Entry: `MainWindow::resolvePreviewSkinDir`, `PreviewCanvas::setSkinDirectory`
+  - Consumers: `PreviewRuntime`, `PreviewCanvas`
+  - Entry: `MainWindow::resolvePreviewSkinDir`, `PreviewRuntime::setSkinDirectory`, `PreviewCanvas::setSkinDirectory`
+  - Quick scene textures are currently uploaded through `PreviewTextureRepository` per Quick item/window, with static texture reuse keyed by `QImage::cacheKey()`
   - Native chart-review judge overlays load from:
     - `JudgeTextSkins/judge_text_normal.png`
     - `JudgeTextSkins/judge_text_break.png`
@@ -94,6 +96,7 @@ Do not rename sound files casually; both preview-time and export-time behavior d
   - `scripts/build-win.ps1`
   - `scripts/package-win.ps1`
   - `scripts/package-win.ps1` defaults to `build/`, prechecks version freshness against `CMakeLists.txt` and `build/generated/AppVersion.h`, and auto-runs `cmake --build <BuildDir> --target MiaCode --config <Config> --parallel 8` when the packaged executable is stale or missing
+  - both the CMake post-build deploy step and `scripts/package-win.ps1` now pass `--qmldir src/preview/runtime/qml` to `windeployqt` so the Qt Quick runtime imports are deployed
   - Windows release packages now also include:
     - root-level `Start_MiaCode_Debug.bat`
     - root-level `Start_MiaCode_Debug_CompareDump.bat`

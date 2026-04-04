@@ -85,10 +85,20 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 
 ## 6. Preview Video, Media, And Render State
 
+- Runtime preview host and Quick bridge:
+  - Files: `src/preview/runtime/PreviewRuntime.h`, `src/preview/runtime/PreviewRuntime.cpp`, `src/preview/runtime/PreviewQuickRuntimeSurface.h`, `src/preview/runtime/PreviewQuickRuntimeSurface.cpp`, `src/preview/runtime/PreviewQuickItem.h`, `src/preview/runtime/PreviewQuickItem.cpp`, `src/preview/runtime/qml/PreviewRuntimeView.qml`
+  - Classes: `PreviewRuntime`, `PreviewQuickRuntimeSurface`, `PreviewQuickItem`
+  - Owns: on-screen preview host window (`QQuickView`), frame-swapped pacing signal, the runtime-facing preview setter surface used by `MainWindow`, and the legacy-bridge item for unmigrated layers
+- Backend-neutral scene-state and timing helpers:
+  - Files: `src/preview/scene/PreviewFrameState.h`, `src/preview/scene/PreviewLayerOrder.h`, `src/preview/scene/PreviewOpacityCurves.h`, `src/preview/scene/PreviewOpacityCurves.cpp`, `src/preview/scene/PreviewSceneGeometry.h`, `src/preview/scene/PreviewSceneGeometry.cpp`, `src/preview/scene/PreviewHudState.h`, `src/preview/scene/PreviewHudState.cpp`
+  - Owns: shared preview frame payloads, layer flags/order, opacity/time curves, stage/playfield geometry helpers, and HUD stats/time formatting used by Quick layers
+- Quick scene-graph layers:
+  - Files: `src/preview/quick_scene/PreviewQuickSceneRoot.h`, `src/preview/quick_scene/PreviewQuickSceneRoot.cpp`, `src/preview/quick_scene/PreviewQuickStageBackgroundLayer.h`, `src/preview/quick_scene/PreviewQuickStageBackgroundLayer.cpp`, `src/preview/quick_scene/PreviewQuickBackdropLayer.h`, `src/preview/quick_scene/PreviewQuickBackdropLayer.cpp`, `src/preview/quick_scene/PreviewQuickHudLayer.h`, `src/preview/quick_scene/PreviewQuickHudLayer.cpp`, `src/preview/quick_scene/PreviewTextureRepository.h`, `src/preview/quick_scene/PreviewTextureRepository.cpp`, `src/preview/quick_scene/PreviewQuickSceneInvalidationPolicy.h`
+  - Owns: first-batch true scene-graph preview layers (stage background, backdrop, HUD), texture caching for Quick textures, and invalidation flags for subsequent layer migration
 - Preview canvas core:
   - Files: `src/preview/video/PreviewCanvas.h`, `src/preview/video/PreviewCanvas.cpp`
   - Class: `PreviewCanvas`
-  - Owns: render state, asset-backed drawing, effect curves, caches, offscreen export rendering support
+  - Owns: legacy scene renderer and export renderer, asset-backed drawing, effect curves, caches, masked legacy-bridge rendering for unmigrated Quick layers, and offscreen export rendering support
 - Preview canvas split files:
   - `PreviewCanvas.Runtime.cpp`: state mutation, offscreen renderer setup, frame generation
   - `PreviewCanvas.Objects.cpp`: actual object/effect/HUD drawing
