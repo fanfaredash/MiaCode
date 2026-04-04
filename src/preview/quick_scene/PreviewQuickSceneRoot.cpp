@@ -59,37 +59,35 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
     if (QSGNode* backdropNode = backdropLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
         root->appendChildNode(backdropNode);
     }
-    if (QSGNode* muriPadNode =
-            muriPadLayer_.updateNode(nullptr, runtime_, state, boundingRect().size().toSize(), window(), &textures_)) {
-        root->appendChildNode(muriPadNode);
+    if (QSGNode* guideNode = guideLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
+        root->appendChildNode(guideNode);
     }
-    if (QSGNode* muriActionNode =
-            muriActionLayer_.updateNode(nullptr, runtime_, state, boundingRect().size().toSize(), window(), &textures_)) {
-        root->appendChildNode(muriActionNode);
-    }
-    if (QSGNode* judgeFireworkNode =
-            judgeFireworkLayer_.updateNode(nullptr, runtime_, state, boundingRect().size().toSize(), window(), &textures_)) {
-        root->appendChildNode(judgeFireworkNode);
-    }
-    if (QSGNode* legacyLowerNode = buildLegacyMaskedNode(
+    if (QSGNode* legacyCompositeNode = buildLegacyMaskedNode(
             runtime_,
             textures_,
             window(),
             boundingRect().size().toSize(),
             miacode::preview::scene::kPreviewLegacyLowerBridgeLayers)) {
-        root->appendChildNode(legacyLowerNode);
+        root->appendChildNode(legacyCompositeNode);
     }
-    if (QSGNode* touchJudgeNode =
-            touchJudgeLayer_.updateNode(nullptr, runtime_, state, boundingRect().size().toSize(), window(), &textures_)) {
-        root->appendChildNode(touchJudgeNode);
-    }
-    if (QSGNode* legacyUpperNode = buildLegacyMaskedNode(
+    if (QSGNode* legacyHeadNode = buildLegacyMaskedNode(
             runtime_,
             textures_,
             window(),
             boundingRect().size().toSize(),
-            miacode::preview::scene::kPreviewLegacyUpperBridgeLayers)) {
-        root->appendChildNode(legacyUpperNode);
+            miacode::preview::scene::kPreviewLegacyHeadBridgeLayers)) {
+        root->appendChildNode(legacyHeadNode);
+    }
+    if (QSGNode* touchNode = touchLayer_.updateNode(nullptr, state, boundingRect().size().toSize(), window(), &textures_)) {
+        root->appendChildNode(touchNode);
+    }
+    if (QSGNode* legacyPostTouchNode = buildLegacyMaskedNode(
+            runtime_,
+            textures_,
+            window(),
+            boundingRect().size().toSize(),
+            miacode::preview::scene::kPreviewLegacyPostTouchBridgeLayers)) {
+        root->appendChildNode(legacyPostTouchNode);
     }
     return root;
 }

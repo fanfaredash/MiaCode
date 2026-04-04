@@ -104,14 +104,30 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/scene/PreviewLayerOrder.h
     src/preview/scene/PreviewOpacityCurves.h
     src/preview/scene/PreviewOpacityCurves.cpp
+    src/preview/scene/PreviewSceneConstants.h
+    src/preview/scene/PreviewSceneMath.h
+    src/preview/scene/PreviewSceneMath.cpp
     src/preview/scene/PreviewSceneGeometry.h
     src/preview/scene/PreviewSceneGeometry.cpp
+    src/preview/scene/PreviewSkinSelectors.h
+    src/preview/scene/PreviewSkinSelectors.cpp
+    src/preview/scene/PreviewSpriteDescriptor.h
+    src/preview/scene/PreviewGuideLayerState.h
+    src/preview/scene/PreviewGuideLayerState.cpp
+    src/preview/scene/PreviewTouchLayerState.h
+    src/preview/scene/PreviewTouchLayerState.cpp
     src/preview/quick_scene/PreviewTextureRepository.h
     src/preview/quick_scene/PreviewTextureRepository.cpp
     src/preview/quick_scene/PreviewQuickStageBackgroundLayer.h
     src/preview/quick_scene/PreviewQuickStageBackgroundLayer.cpp
     src/preview/quick_scene/PreviewQuickBackdropLayer.h
     src/preview/quick_scene/PreviewQuickBackdropLayer.cpp
+    src/preview/quick_scene/PreviewQuickSpriteNodes.h
+    src/preview/quick_scene/PreviewQuickSpriteNodes.cpp
+    src/preview/quick_scene/PreviewQuickGuideLayer.h
+    src/preview/quick_scene/PreviewQuickGuideLayer.cpp
+    src/preview/quick_scene/PreviewQuickTouchLayer.h
+    src/preview/quick_scene/PreviewQuickTouchLayer.cpp
     src/preview/quick_scene/PreviewQuickMuriPadLayer.h
     src/preview/quick_scene/PreviewQuickMuriPadLayer.cpp
     src/preview/quick_scene/PreviewQuickMuriActionLayer.h

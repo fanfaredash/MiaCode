@@ -601,6 +601,72 @@ QImage PreviewCanvas::renderPresentFrame(const QSize& outputSize)
     return frame;
 }
 
+miacode::preview::scene::PreviewSkinAssets PreviewCanvas::buildSkinAssetsForScene() const
+{
+    miacode::preview::scene::PreviewSkinAssets skin;
+    skin.tapImage = tapImage_;
+    skin.tapEachImage = tapEachImage_;
+    skin.tapBreakImage = tapBreakImage_;
+    skin.tapExImage = tapExImage_;
+    skin.holdImage = holdImage_;
+    skin.holdOnImage = holdOnImage_;
+    skin.holdOffImage = holdOffImage_;
+    skin.holdEachImage = holdEachImage_;
+    skin.holdEachOnImage = holdEachOnImage_;
+    skin.holdBreakImage = holdBreakImage_;
+    skin.holdBreakOnImage = holdBreakOnImage_;
+    skin.holdExImage = holdExImage_;
+    skin.starImage = starImage_;
+    skin.starEachImage = starEachImage_;
+    skin.starBreakImage = starBreakImage_;
+    skin.starBreakDoubleImage = starBreakDoubleImage_;
+    skin.starDoubleImage = starDoubleImage_;
+    skin.starEachDoubleImage = starEachDoubleImage_;
+    skin.starExImage = starExImage_;
+    skin.starExDoubleImage = starExDoubleImage_;
+    skin.slideTrackImage = slideTrackImage_;
+    skin.slideTrackEachImage = slideTrackEachImage_;
+    skin.slideTrackBreakImage = slideTrackBreakImage_;
+    skin.wifiImages = wifiImages_;
+    skin.wifiEachImages = wifiEachImages_;
+    skin.wifiBreakImages = wifiBreakImages_;
+    skin.noteGuideNormalImage = noteGuideNormalImage_;
+    skin.noteGuideBreakImage = noteGuideBreakImage_;
+    skin.noteGuideEachImage = noteGuideEachImage_;
+    skin.noteGuideEachLine1Image = noteGuideEachLine1Image_;
+    skin.noteGuideEachLine2Image = noteGuideEachLine2Image_;
+    skin.noteGuideEachLine3Image = noteGuideEachLine3Image_;
+    skin.noteGuideEachLine4Image = noteGuideEachLine4Image_;
+    skin.noteGuideHoldEndImage = noteGuideHoldEndImage_;
+    skin.noteGuideHoldEachEndImage = noteGuideHoldEachEndImage_;
+    skin.noteGuideHoldBreakEndImage = noteGuideHoldBreakEndImage_;
+    skin.noteGuideSlideImage = noteGuideSlideImage_;
+    skin.touchCornerImage = touchCornerImage_;
+    skin.touchCornerEachImage = touchCornerEachImage_;
+    skin.touchCornerBreakImage = touchCornerBreakImage_;
+    skin.touchBorder2Image = touchBorder2Image_;
+    skin.touchBorder2EachImage = touchBorder2EachImage_;
+    skin.touchBorder2BreakImage = touchBorder2BreakImage_;
+    skin.touchBorder3Image = touchBorder3Image_;
+    skin.touchBorder3EachImage = touchBorder3EachImage_;
+    skin.touchBorder3BreakImage = touchBorder3BreakImage_;
+    skin.touchPointImage = touchPointImage_;
+    skin.touchPointEachImage = touchPointEachImage_;
+    skin.touchPointBreakImage = touchPointBreakImage_;
+    skin.touchHold0Image = touchHold0Image_;
+    skin.touchHold1Image = touchHold1Image_;
+    skin.touchHold2Image = touchHold2Image_;
+    skin.touchHold3Image = touchHold3Image_;
+    skin.touchHoldBorderImage = touchHoldBorderImage_;
+    skin.touchHoldBreak0Image = touchHoldBreak0Image_;
+    skin.touchHoldBreak1Image = touchHoldBreak1Image_;
+    skin.touchHoldBreak2Image = touchHoldBreak2Image_;
+    skin.touchHoldBreak3Image = touchHoldBreak3Image_;
+    skin.touchHoldBreakBorderImage = touchHoldBreakBorderImage_;
+    skin.touchHoldOffImage = touchHoldOffImage_;
+    return skin;
+}
+
 void PreviewCanvas::paintPresentFrame(
     QPainter& painter,
     const QSize& outputSize,

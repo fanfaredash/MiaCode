@@ -21,6 +21,10 @@ PreviewRuntime::PreviewRuntime(QObject* parent)
 
     connect(surface_, &PreviewQuickRuntimeSurface::framePresented, this, [this]() {
         updatePresentedFrameStats();
+        if (pendingPresentedStatsRefresh_) {
+            pendingPresentedStatsRefresh_ = false;
+            update();
+        }
         emit framePresented();
     });
     connect(renderer_, &PreviewCanvas::skinAssetsChanged, this, [this]() {
@@ -49,6 +53,7 @@ void PreviewRuntime::requestActivate()
 
 void PreviewRuntime::update()
 {
+    pendingPresentedStatsRefresh_ = true;
     if (surface_ != nullptr) {
         surface_->requestFrame();
     }
@@ -248,6 +253,7 @@ void PreviewRuntime::reset()
     }
     frameState_ = miacode::preview::scene::PreviewFrameState();
     refreshAssetStateFromRenderer();
+    pendingPresentedStatsRefresh_ = true;
     update();
 }
 
@@ -282,6 +288,7 @@ void PreviewRuntime::setFrameSize(const QSize& size)
         return;
     }
     frameSize_ = safeSize;
+    pendingPresentedStatsRefresh_ = true;
     update();
 }
 
@@ -345,6 +352,7 @@ void PreviewRuntime::refreshAssetStateFromRenderer()
     }
     frameState_.assets.outlineImage = renderer_->outlineImageForScene();
     frameState_.assets.layoutRingDiameterRatio = renderer_->layoutRingDiameterRatioForScene();
+    frameState_.skin = renderer_->buildSkinAssetsForScene();
 }
 
 void PreviewRuntime::updatePresentedFrameStats()
