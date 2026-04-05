@@ -1,12 +1,14 @@
 #include "preview/quick_scene/PreviewQuickSectorNodes.h"
 
-#include <QSGFlatColorMaterial>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
 #include <QSGNode>
+#include <QSGVertexColorMaterial>
 #include <QtMath>
 
 namespace {
+
+using miacode::preview::scene::PreviewSectorDescriptor;
 
 constexpr qreal kSectorEpsilon = 0.001;
 
@@ -19,7 +21,42 @@ QPointF circlePoint(const QPointF& center, qreal radius, qreal angleDegrees)
     );
 }
 
-QSGGeometryNode* buildSectorNode(const miacode::preview::scene::PreviewSectorDescriptor& sector)
+struct PremultipliedVertexColor {
+    uchar r = 0;
+    uchar g = 0;
+    uchar b = 0;
+    uchar a = 0;
+};
+
+PremultipliedVertexColor premultipliedVertexColor(const QColor& color, qreal alphaScale)
+{
+    const qreal alpha01 = qBound<qreal>(0.0, color.alphaF() * alphaScale, 1.0);
+    return {
+        static_cast<uchar>(qBound(0, qRound(color.redF() * alpha01 * 255.0), 255)),
+        static_cast<uchar>(qBound(0, qRound(color.greenF() * alpha01 * 255.0), 255)),
+        static_cast<uchar>(qBound(0, qRound(color.blueF() * alpha01 * 255.0), 255)),
+        static_cast<uchar>(qBound(0, qRound(alpha01 * 255.0), 255))
+    };
+}
+
+void setVertex(
+    QSGGeometry::ColoredPoint2D* vertices,
+    int index,
+    const QPointF& point,
+    const PremultipliedVertexColor& color
+)
+{
+    vertices[index].set(
+        static_cast<float>(point.x()),
+        static_cast<float>(point.y()),
+        color.r,
+        color.g,
+        color.b,
+        color.a
+    );
+}
+
+QSGGeometryNode* buildSectorNode(const PreviewSectorDescriptor& sector)
 {
     if (sector.outerRadius <= kSectorEpsilon
         || qAbs(sector.sweepDegrees) <= kSectorEpsilon
@@ -28,11 +65,22 @@ QSGGeometryNode* buildSectorNode(const miacode::preview::scene::PreviewSectorDes
     }
 
     const int segmentCount = qMax(1, qCeil(qAbs(sector.sweepDegrees) / 8.0));
-    const bool annulus = sector.innerRadius > kSectorEpsilon;
-    const int vertexCount = segmentCount * (annulus ? 6 : 3);
-    auto* geometry = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), vertexCount);
+    const qreal innerRadius = qBound<qreal>(0.0, sector.innerRadius, sector.outerRadius);
+    const qreal fadeOuterRadius = qBound<qreal>(innerRadius, sector.innerFadeOuterRadius, sector.outerRadius);
+    const bool hasHole = innerRadius > kSectorEpsilon;
+    const bool hasFadeBand = fadeOuterRadius > innerRadius + kSectorEpsilon;
+    const int trianglesPerSegment =
+        hasHole ? (hasFadeBand ? 4 : 2) : (hasFadeBand ? 3 : 1);
+
+    auto* geometry = new QSGGeometry(
+        QSGGeometry::defaultAttributes_ColoredPoint2D(),
+        segmentCount * trianglesPerSegment * 3
+    );
     geometry->setDrawingMode(QSGGeometry::DrawTriangles);
-    auto* vertices = geometry->vertexDataAsPoint2D();
+    auto* vertices = geometry->vertexDataAsColoredPoint2D();
+
+    const PremultipliedVertexColor solidColor = premultipliedVertexColor(sector.color, 1.0);
+    const PremultipliedVertexColor transparentColor;
 
     for (int segmentIndex = 0; segmentIndex < segmentCount; ++segmentIndex) {
         const qreal t0 = static_cast<qreal>(segmentIndex) / static_cast<qreal>(segmentCount);
@@ -48,35 +96,87 @@ QSGGeometryNode* buildSectorNode(const miacode::preview::scene::PreviewSectorDes
             sector.startDegrees + sector.sweepDegrees * t1
         );
 
-        if (!annulus) {
-            const int vertexIndex = segmentIndex * 3;
-            vertices[vertexIndex + 0].set(static_cast<float>(sector.center.x()), static_cast<float>(sector.center.y()));
-            vertices[vertexIndex + 1].set(static_cast<float>(outer0.x()), static_cast<float>(outer0.y()));
-            vertices[vertexIndex + 2].set(static_cast<float>(outer1.x()), static_cast<float>(outer1.y()));
+        int vertexIndex = segmentIndex * trianglesPerSegment * 3;
+        if (!hasHole) {
+            const QPointF center = sector.center;
+            if (hasFadeBand) {
+                const QPointF fade0 = circlePoint(
+                    sector.center,
+                    fadeOuterRadius,
+                    sector.startDegrees + sector.sweepDegrees * t0
+                );
+                const QPointF fade1 = circlePoint(
+                    sector.center,
+                    fadeOuterRadius,
+                    sector.startDegrees + sector.sweepDegrees * t1
+                );
+
+                setVertex(vertices, vertexIndex + 0, center, transparentColor);
+                setVertex(vertices, vertexIndex + 1, fade0, solidColor);
+                setVertex(vertices, vertexIndex + 2, fade1, solidColor);
+                setVertex(vertices, vertexIndex + 3, outer0, solidColor);
+                setVertex(vertices, vertexIndex + 4, outer1, solidColor);
+                setVertex(vertices, vertexIndex + 5, fade0, solidColor);
+                setVertex(vertices, vertexIndex + 6, outer1, solidColor);
+                setVertex(vertices, vertexIndex + 7, fade1, solidColor);
+                setVertex(vertices, vertexIndex + 8, fade0, solidColor);
+            } else {
+                setVertex(vertices, vertexIndex + 0, center, solidColor);
+                setVertex(vertices, vertexIndex + 1, outer0, solidColor);
+                setVertex(vertices, vertexIndex + 2, outer1, solidColor);
+            }
             continue;
         }
 
         const QPointF inner0 = circlePoint(
             sector.center,
-            sector.innerRadius,
+            innerRadius,
             sector.startDegrees + sector.sweepDegrees * t0
         );
         const QPointF inner1 = circlePoint(
             sector.center,
-            sector.innerRadius,
+            innerRadius,
             sector.startDegrees + sector.sweepDegrees * t1
         );
-        const int vertexIndex = segmentIndex * 6;
-        vertices[vertexIndex + 0].set(static_cast<float>(outer0.x()), static_cast<float>(outer0.y()));
-        vertices[vertexIndex + 1].set(static_cast<float>(outer1.x()), static_cast<float>(outer1.y()));
-        vertices[vertexIndex + 2].set(static_cast<float>(inner0.x()), static_cast<float>(inner0.y()));
-        vertices[vertexIndex + 3].set(static_cast<float>(outer1.x()), static_cast<float>(outer1.y()));
-        vertices[vertexIndex + 4].set(static_cast<float>(inner1.x()), static_cast<float>(inner1.y()));
-        vertices[vertexIndex + 5].set(static_cast<float>(inner0.x()), static_cast<float>(inner0.y()));
+
+        if (hasFadeBand) {
+            const QPointF fade0 = circlePoint(
+                sector.center,
+                fadeOuterRadius,
+                sector.startDegrees + sector.sweepDegrees * t0
+            );
+            const QPointF fade1 = circlePoint(
+                sector.center,
+                fadeOuterRadius,
+                sector.startDegrees + sector.sweepDegrees * t1
+            );
+
+            setVertex(vertices, vertexIndex + 0, fade0, solidColor);
+            setVertex(vertices, vertexIndex + 1, fade1, solidColor);
+            setVertex(vertices, vertexIndex + 2, inner0, transparentColor);
+            setVertex(vertices, vertexIndex + 3, fade1, solidColor);
+            setVertex(vertices, vertexIndex + 4, inner1, transparentColor);
+            setVertex(vertices, vertexIndex + 5, inner0, transparentColor);
+            vertexIndex += 6;
+
+            setVertex(vertices, vertexIndex + 0, outer0, solidColor);
+            setVertex(vertices, vertexIndex + 1, outer1, solidColor);
+            setVertex(vertices, vertexIndex + 2, fade0, solidColor);
+            setVertex(vertices, vertexIndex + 3, outer1, solidColor);
+            setVertex(vertices, vertexIndex + 4, fade1, solidColor);
+            setVertex(vertices, vertexIndex + 5, fade0, solidColor);
+            continue;
+        }
+
+        setVertex(vertices, vertexIndex + 0, outer0, solidColor);
+        setVertex(vertices, vertexIndex + 1, outer1, solidColor);
+        setVertex(vertices, vertexIndex + 2, inner0, solidColor);
+        setVertex(vertices, vertexIndex + 3, outer1, solidColor);
+        setVertex(vertices, vertexIndex + 4, inner1, solidColor);
+        setVertex(vertices, vertexIndex + 5, inner0, solidColor);
     }
 
-    auto* material = new QSGFlatColorMaterial();
-    material->setColor(sector.color);
+    auto* material = new QSGVertexColorMaterial();
 
     auto* node = new QSGGeometryNode();
     node->setGeometry(geometry);
@@ -99,7 +199,7 @@ QSGNode* buildPreviewSectorNodeTree(
     }
 
     auto* root = new QSGNode();
-    for (const miacode::preview::scene::PreviewSectorDescriptor& sector : sectors) {
+    for (const PreviewSectorDescriptor& sector : sectors) {
         if (QSGGeometryNode* node = buildSectorNode(sector)) {
             root->appendChildNode(node);
         }
