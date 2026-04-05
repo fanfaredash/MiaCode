@@ -402,6 +402,13 @@ if (MIACODE_BUILD_DEV_TOOLS)
         resources/fonts.qrc
     )
 
+    add_executable(preview_asset_loader_spec
+        src/tools/preview/PreviewSceneAssetLoaderSpec.cpp
+        src/preview/runtime/PreviewSceneAssetLoader.h
+        src/preview/runtime/PreviewSceneAssetLoader.cpp
+        src/preview/scene/PreviewFrameState.h
+    )
+
     target_link_libraries(miacode_muri_dump PRIVATE
         Qt6::Core
         Qt6::Gui
@@ -502,6 +509,20 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/simai/parser
         src/timeline
         src/tools
+    )
+
+    target_link_libraries(preview_asset_loader_spec PRIVATE
+        Qt6::Core
+        Qt6::Gui
+    )
+    target_include_directories(preview_asset_loader_spec PRIVATE
+        src
+        src/common
+        src/preview
+        src/preview/runtime
+        src/preview/scene
+        src/preview/video
+        src/timeline
     )
 endif()
 

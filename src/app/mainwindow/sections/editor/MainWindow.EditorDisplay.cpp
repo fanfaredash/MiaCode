@@ -65,6 +65,7 @@ void MainWindow::resetPortablePreviewSettingsToDefaults()
     previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
     previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    previewSkinVariant_ = PreviewSkinVariant::Standard;
     previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
     previewCanvasAspectRatio_ = 1.0;
     previewAutoRestoreSquareAfterExport_ = false;
@@ -139,6 +140,9 @@ void MainWindow::applyPortablePreviewSettings(const QJsonObject& preview)
         previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(
             preview.value("note_flow_speed").toDouble(previewNoteFlowSpeed_)
         );
+    }
+    if (preview.value("skin_variant").isString()) {
+        previewSkinVariant_ = previewSkinVariantFromStorageValue(preview.value("skin_variant").toString());
     }
     if (preview.value("canvas_frame_rate_mode").isString()) {
         previewCanvasFrameRateMode_ =
@@ -217,6 +221,7 @@ void MainWindow::savePortableState() const
             : QStringLiteral("fill")
     );
     preview.insert("note_flow_speed", previewNoteFlowSpeed_);
+    preview.insert("skin_variant", previewSkinVariantStorageValue());
     preview.insert("canvas_frame_rate_mode", previewCanvasFrameRateModeStorageValue());
     preview.insert("show_debug_info", previewShowDebugInfo_);
     preview.insert("show_timestamp", previewShowTimestamp_);
