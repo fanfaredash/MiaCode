@@ -73,6 +73,35 @@ QSGTexture* PreviewTextureRepository::textureForImage(const QImage& image, bool 
     return texture;
 }
 
+QSGTexture* PreviewTextureRepository::retainedTextureForImage(const QString& slotName, const QImage& image)
+{
+    if (window_ == nullptr || image.isNull() || slotName.isEmpty()) {
+        return nullptr;
+    }
+
+    const quint64 key = static_cast<quint64>(image.cacheKey());
+    PreviewRetainedTextureEntry& entry = retainedTextures_[slotName];
+    if (entry.texture != nullptr && entry.key == key) {
+        return entry.texture;
+    }
+
+    delete entry.texture;
+    entry.texture = createOwnedTexture(image);
+    entry.key = key;
+    return entry.texture;
+}
+
+void PreviewTextureRepository::releaseRetainedTexture(const QString& slotName)
+{
+    auto it = retainedTextures_.find(slotName);
+    if (it == retainedTextures_.end()) {
+        return;
+    }
+
+    delete it->texture;
+    retainedTextures_.erase(it);
+}
+
 QSGTexture* PreviewTextureRepository::createOwnedTexture(const QImage& image) const
 {
     if (window_ == nullptr || image.isNull()) {
@@ -92,6 +121,11 @@ void PreviewTextureRepository::noteSpriteBatchStats(const char* layerName, qint6
     }
 }
 
+void PreviewTextureRepository::setStageBackgroundFrameProfile(const PreviewStageBackgroundFrameProfile& profile)
+{
+    stats_.stageBackground = profile;
+}
+
 PreviewTextureStats PreviewTextureRepository::stats() const
 {
     return stats_;
@@ -103,5 +137,9 @@ void PreviewTextureRepository::clear()
     cachedTextures_.clear();
     qDeleteAll(transientTextures_);
     transientTextures_.clear();
+    for (auto it = retainedTextures_.begin(); it != retainedTextures_.end(); ++it) {
+        delete it->texture;
+    }
+    retainedTextures_.clear();
     stats_ = PreviewTextureStats();
 }

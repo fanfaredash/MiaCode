@@ -53,6 +53,7 @@ Debug subcategories now default to on inside debug mode and are disabled with:
   - used for critical preview/export failures and worker failures
 - Preview profile summary:
   - default file: `miacode_preview_profile_summary.txt`
+  - current summary now includes `stage_bg.*` sub-metrics for stage-background media conversion, media texture work, dim-mask rebuilds/uploads, node-update time, and media/mask frame counters
 
 The Windows release package also ships:
 
@@ -119,6 +120,7 @@ Runtime black-screen / dialog tracing currently writes these tags into the runti
 - `preview/quick_scene`
 
 The `preview/quick_runtime` stream now also emits `action=frame_stall` when the embedded Quick window stays visible/exposed but stops presenting for an extended interval.
+The `preview/embedded_refresh` stream now also marks resize-throttling transitions with `action=resize_degrade_begin` / `action=resize_degrade_end`.
 The `startup/qt_config` runtime tag logs the active Qt graphics/render-loop experiment flags at process start, including whether the default native-sibling workaround was opted out.
 
 Primary owners:
