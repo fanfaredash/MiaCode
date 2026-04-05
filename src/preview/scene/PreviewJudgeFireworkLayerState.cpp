@@ -33,11 +33,14 @@ constexpr qreal kJudgeEffectFireworkSectorStepDegrees = kJudgeEffectFireworkSect
 constexpr qreal kJudgeEffectFireworkSectorPhaseDegrees = -102.0;
 constexpr int kJudgeEffectFireworkStepRotationSegmentCount = 3;
 constexpr qreal kJudgeEffectFireworkStepRotationDegrees = 24.0;
-constexpr qreal kFireworkInnerUB = 0.16;
+constexpr qreal kFireworkInnerLB = 0.018;
+constexpr qreal kFireworkInnerUB = 0.054;
+constexpr qreal kFireworkOuterLB = 0.36;
+constexpr qreal kFireworkOuterUB = 0.429;
 constexpr qreal kJudgeEffectFireworkHoleStartRadiusRatio = kFireworkInnerUB;
 constexpr qreal kJudgeEffectFireworkHoleEndRadiusRatio = 1.0;
 constexpr qreal kJudgeEffectFireworkHoleBandRatio =
-    (1.0 - kJudgeEffectFireworkHoleStartRadiusRatio) * 0.06;
+    (kFireworkInnerUB - kFireworkInnerLB) + (kFireworkOuterUB - kFireworkOuterLB);
 
 struct ScalarCurveKey {
     qreal time = 0.0;
@@ -319,6 +322,7 @@ PreviewJudgeFireworkLayerState buildPreviewJudgeFireworkLayerState(
                 PreviewSectorDescriptor sector;
                 sector.center = center;
                 sector.innerRadius = qBound<qreal>(0.0, holeRadius, outerRadius - kRenderDurationEpsilon);
+                sector.innerFadeOuterRadius = qBound<qreal>(sector.innerRadius, holeMaskRadius, outerRadius);
                 sector.outerRadius = outerRadius;
                 sector.startDegrees =
                     kJudgeEffectFireworkSectorPhaseDegrees
