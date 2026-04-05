@@ -4376,11 +4376,33 @@ void MainWindow::updateLatencyDetectorAvailability()
     }
 }
 
+MainWindow::PreviewSkinVariant MainWindow::previewSkinVariantFromStorageValue(const QString& value) const
+{
+    const QString normalized = value.trimmed().toLower();
+    return normalized == QLatin1String("dx")
+        || normalized == QLatin1String("skin_dx")
+        || normalized == QLatin1String("skindx")
+        ? PreviewSkinVariant::Dx
+        : PreviewSkinVariant::Standard;
+}
+
+QString MainWindow::previewSkinVariantStorageValue() const
+{
+    return previewSkinVariant_ == PreviewSkinVariant::Dx
+        ? QStringLiteral("dx")
+        : QStringLiteral("standard");
+}
+
 QString MainWindow::resolvePreviewSkinDir() const
 {
-    const QString assetSkinDir = miacode::assets::assetPath("skin");
-    if (QFileInfo::exists(QDir(assetSkinDir).filePath("tap.png"))) {
-        return assetSkinDir;
+    const QStringList candidateDirs = previewSkinVariant_ == PreviewSkinVariant::Dx
+        ? QStringList{QStringLiteral("skinDX"), QStringLiteral("skin")}
+        : QStringList{QStringLiteral("skin"), QStringLiteral("skinDX")};
+    for (const QString& candidateDirName : candidateDirs) {
+        const QString candidateDir = miacode::assets::assetPath(candidateDirName);
+        if (QFileInfo::exists(QDir(candidateDir).filePath("tap.png"))) {
+            return candidateDir;
+        }
     }
     return QString();
 }
@@ -4476,6 +4498,11 @@ void MainWindow::loadProjectRenderState()
                             render.value("note_flow_speed").toDouble(previewNoteFlowSpeed_)
                         );
                     }
+                    if (render.value("skin_variant").isString()) {
+                        previewSkinVariant_ = previewSkinVariantFromStorageValue(
+                            render.value("skin_variant").toString()
+                        );
+                    }
                     if (render.value("render_mode").isString()) {
                         muriRenderOptions_.renderMode = renderModeFromToken(render.value("render_mode").toString());
                     }
@@ -4544,6 +4571,7 @@ void MainWindow::loadProjectRenderState()
         });
     }
     if (previewCanvas_ != nullptr) {
+        previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
         previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
         previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
         previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
@@ -4586,6 +4614,7 @@ void MainWindow::saveProjectRenderState() const
             : QStringLiteral("fill")
     );
     render.insert("note_flow_speed", previewNoteFlowSpeed_);
+    render.insert("skin_variant", previewSkinVariantStorageValue());
     render.insert("render_mode", renderModeToken(muriRenderOptions_.renderMode));
     render.insert("show_chart_review_slide_judge_overlay", muriRenderOptions_.showChartReviewSlideJudgeOverlay);
     render.insert("show_chart_review_simple_judge_overlay", muriRenderOptions_.showChartReviewSimpleJudgeOverlay);
@@ -7091,6 +7120,33 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
 
     const QString scaleFillLabel = uiText("dialog.render_settings.video.scale.fill", "Fill (crop if needed)");
     const QString scaleFitLabel = uiText("dialog.render_settings.video.scale.fit", "Fit (keep full image, may letterbox)");
+    const QString standardSkinLabel = uiText("dialog.render_settings.video.skin.standard", "Standard");
+    const QString dxSkinLabel = uiText("dialog.render_settings.video.skin.dx", "DX");
+    auto* skinButton = createDialogMenuButton(
+        videoGroup,
+        previewSkinVariant_ == PreviewSkinVariant::Dx ? dxSkinLabel : standardSkinLabel
+    );
+    auto* skinMenu = new QMenu(skinButton);
+    styleRoundedMenu(*skinMenu);
+    addDialogMenuChoice(skinMenu, standardSkinLabel, [this, skinButton, standardSkinLabel]() {
+        previewSkinVariant_ = PreviewSkinVariant::Standard;
+        skinButton->setText(standardSkinLabel);
+        if (previewCanvas_ != nullptr) {
+            previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
+        }
+        saveProjectRenderState();
+        savePortableState();
+    });
+    addDialogMenuChoice(skinMenu, dxSkinLabel, [this, skinButton, dxSkinLabel]() {
+        previewSkinVariant_ = PreviewSkinVariant::Dx;
+        skinButton->setText(dxSkinLabel);
+        if (previewCanvas_ != nullptr) {
+            previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
+        }
+        saveProjectRenderState();
+        savePortableState();
+    });
+    skinButton->setMenu(skinMenu);
     PreviewBackgroundScaleMode selectedScaleMode = previewBackgroundScaleMode_;
     auto* scaleModeButton = createDialogMenuButton(
         videoGroup,
@@ -7152,6 +7208,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Inner Brightness"), innerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Layout Size"), layoutSquareScaleRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.flow_speed", "Flow Speed"), flowSpeedEdit);
+    videoFormLayout->addRow(uiText("dialog.render_settings.video.skin", "Skin"), skinButton);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.scale_mode", "Background / PV Scale Mode"), scaleModeButton);
     auto* videoCheckRow = new QWidget(videoGroup);
     auto* videoCheckLayout = new QGridLayout(videoCheckRow);

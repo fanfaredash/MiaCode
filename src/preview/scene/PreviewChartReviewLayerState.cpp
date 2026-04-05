@@ -8,14 +8,14 @@ namespace {
 
 bool hasAnyChartReviewJudgeAssets(const miacode::preview::scene::PreviewJudgeOverlayAssets& assets)
 {
-    return !assets.reviewJudgeSimpleNormalImage.isNull()
-        || !assets.reviewJudgeSimpleBreakImage.isNull()
-        || !assets.reviewJudgeStraightLeftImage.isNull()
-        || !assets.reviewJudgeStraightRightImage.isNull()
-        || !assets.reviewJudgeCircleLeftImage.isNull()
-        || !assets.reviewJudgeCircleRightImage.isNull()
-        || !assets.reviewJudgeWifiUpImage.isNull()
-        || !assets.reviewJudgeWifiDownImage.isNull();
+    return !assets.simpleText.normal.image.isNull()
+        || !assets.simpleText.breakText.image.isNull()
+        || !assets.neutral.straightLeftImage.isNull()
+        || !assets.neutral.straightRightImage.isNull()
+        || !assets.neutral.circleLeftImage.isNull()
+        || !assets.neutral.circleRightImage.isNull()
+        || !assets.neutral.wifiUpImage.isNull()
+        || !assets.neutral.wifiDownImage.isNull();
 }
 
 }  // namespace
@@ -168,18 +168,18 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
         case PreviewChartReviewPreparedKind::SimpleBreak: {
             const bool isBreak = event.kind == PreviewChartReviewPreparedKind::SimpleBreak;
             image = isBreak
-                ? &state.judgeOverlay.reviewJudgeSimpleBreakImage
-                : &state.judgeOverlay.reviewJudgeSimpleNormalImage;
+                ? &state.judgeOverlay.simpleText.breakText.image
+                : &state.judgeOverlay.simpleText.normal.image;
             sourceRect = isBreak
-                ? state.judgeOverlay.reviewJudgeSimpleBreakSourceRect
-                : state.judgeOverlay.reviewJudgeSimpleNormalSourceRect;
+                ? state.judgeOverlay.simpleText.breakText.sourceRect
+                : state.judgeOverlay.simpleText.normal.sourceRect;
             if (image->isNull()) {
                 image = isBreak
-                    ? &state.judgeOverlay.reviewJudgeSimpleNormalImage
-                    : &state.judgeOverlay.reviewJudgeSimpleBreakImage;
+                    ? &state.judgeOverlay.simpleText.normal.image
+                    : &state.judgeOverlay.simpleText.breakText.image;
                 sourceRect = isBreak
-                    ? state.judgeOverlay.reviewJudgeSimpleNormalSourceRect
-                    : state.judgeOverlay.reviewJudgeSimpleBreakSourceRect;
+                    ? state.judgeOverlay.simpleText.normal.sourceRect
+                    : state.judgeOverlay.simpleText.breakText.sourceRect;
             }
             alpha = maimuriDxSimpleJudgeAlpha(
                 elapsedSeconds,
@@ -190,7 +190,7 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
             break;
         }
         case PreviewChartReviewPreparedKind::StraightLeft:
-            image = &state.judgeOverlay.reviewJudgeStraightLeftImage;
+            image = &state.judgeOverlay.neutral.straightLeftImage;
             alpha = maimuriDxJudgeFadeOutAlpha(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,
@@ -198,7 +198,7 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
             );
             break;
         case PreviewChartReviewPreparedKind::StraightRight:
-            image = &state.judgeOverlay.reviewJudgeStraightRightImage;
+            image = &state.judgeOverlay.neutral.straightRightImage;
             alpha = maimuriDxJudgeFadeOutAlpha(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,
@@ -206,7 +206,7 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
             );
             break;
         case PreviewChartReviewPreparedKind::CircleLeft:
-            image = &state.judgeOverlay.reviewJudgeCircleLeftImage;
+            image = &state.judgeOverlay.neutral.circleLeftImage;
             alpha = maimuriDxJudgeFadeOutAlpha(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,
@@ -214,7 +214,7 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
             );
             break;
         case PreviewChartReviewPreparedKind::CircleRight:
-            image = &state.judgeOverlay.reviewJudgeCircleRightImage;
+            image = &state.judgeOverlay.neutral.circleRightImage;
             alpha = maimuriDxJudgeFadeOutAlpha(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,
@@ -222,7 +222,7 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
             );
             break;
         case PreviewChartReviewPreparedKind::WifiUp:
-            image = &state.judgeOverlay.reviewJudgeWifiUpImage;
+            image = &state.judgeOverlay.neutral.wifiUpImage;
             alpha = maimuriDxJudgeFadeOutAlpha(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,
@@ -230,7 +230,7 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
             );
             break;
         case PreviewChartReviewPreparedKind::WifiDown:
-            image = &state.judgeOverlay.reviewJudgeWifiDownImage;
+            image = &state.judgeOverlay.neutral.wifiDownImage;
             alpha = maimuriDxJudgeFadeOutAlpha(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,

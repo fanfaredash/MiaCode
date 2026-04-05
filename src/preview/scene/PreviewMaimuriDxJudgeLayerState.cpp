@@ -9,15 +9,15 @@ namespace {
 
 bool hasAnyMaimuriDxJudgeAssets(const miacode::preview::scene::PreviewJudgeOverlayAssets& assets)
 {
-    return !assets.muriJudgeSimpleImage.isNull()
-        || !assets.reviewJudgeSimpleNormalImage.isNull()
-        || !assets.reviewJudgeSimpleBreakImage.isNull()
-        || !assets.muriJudgeStraightLeftImage.isNull()
-        || !assets.muriJudgeStraightRightImage.isNull()
-        || !assets.muriJudgeCircleLeftImage.isNull()
-        || !assets.muriJudgeCircleRightImage.isNull()
-        || !assets.muriJudgeWifiUpImage.isNull()
-        || !assets.muriJudgeWifiDownImage.isNull();
+    return !assets.simpleText.good.image.isNull()
+        || !assets.simpleText.normal.image.isNull()
+        || !assets.simpleText.breakText.image.isNull()
+        || !assets.fastGood.straightLeftImage.isNull()
+        || !assets.fastGood.straightRightImage.isNull()
+        || !assets.fastGood.circleLeftImage.isNull()
+        || !assets.fastGood.circleRightImage.isNull()
+        || !assets.fastGood.wifiUpImage.isNull()
+        || !assets.fastGood.wifiDownImage.isNull();
 }
 
 }  // namespace
@@ -77,19 +77,19 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
             }
             if (event.simpleEffect == MuriSimpleJudgeEffect::Perfect) {
                 const bool isBreak = simpleBreakByKey.value(event.markerKey, false);
-                image = (isBreak && !state.judgeOverlay.reviewJudgeSimpleBreakImage.isNull())
-                    ? &state.judgeOverlay.reviewJudgeSimpleBreakImage
-                    : &state.judgeOverlay.reviewJudgeSimpleNormalImage;
-                if ((image == nullptr || image->isNull()) && !state.judgeOverlay.reviewJudgeSimpleBreakImage.isNull()) {
-                    image = &state.judgeOverlay.reviewJudgeSimpleBreakImage;
+                image = (isBreak && !state.judgeOverlay.simpleText.breakText.image.isNull())
+                    ? &state.judgeOverlay.simpleText.breakText.image
+                    : &state.judgeOverlay.simpleText.normal.image;
+                if ((image == nullptr || image->isNull()) && !state.judgeOverlay.simpleText.breakText.image.isNull()) {
+                    image = &state.judgeOverlay.simpleText.breakText.image;
                 }
                 if (image == nullptr || image->isNull()) {
-                    image = &state.judgeOverlay.muriJudgeSimpleImage;
+                    image = &state.judgeOverlay.simpleText.good.image;
                 }
             } else {
-                image = !state.judgeOverlay.muriJudgeSimpleImage.isNull()
-                    ? &state.judgeOverlay.muriJudgeSimpleImage
-                    : &state.judgeOverlay.reviewJudgeSimpleNormalImage;
+                image = !state.judgeOverlay.simpleText.good.image.isNull()
+                    ? &state.judgeOverlay.simpleText.good.image
+                    : &state.judgeOverlay.simpleText.normal.image;
             }
             alpha = maimuriDxSimpleJudgeAlpha(
                 elapsedSeconds,
@@ -106,8 +106,8 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
                 continue;
             }
             image = useRightImage
-                ? &state.judgeOverlay.muriJudgeStraightRightImage
-                : &state.judgeOverlay.muriJudgeStraightLeftImage;
+                ? &state.judgeOverlay.fastGood.straightRightImage
+                : &state.judgeOverlay.fastGood.straightLeftImage;
             alpha = maimuriDxJudgeFadeOutAlpha(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,
@@ -117,7 +117,7 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
         }
         case MuriJudgeSpriteKind::SlideCircleCcw:
             placement = buildJudgeOverlayCircleCcwPlacement(event.lane);
-            image = &state.judgeOverlay.muriJudgeCircleLeftImage;
+            image = &state.judgeOverlay.fastGood.circleLeftImage;
             alpha = maimuriDxJudgeFadeOutAlpha(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,
@@ -126,7 +126,7 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
             break;
         case MuriJudgeSpriteKind::SlideCircleCw:
             placement = buildJudgeOverlayCircleCwPlacement(event.lane);
-            image = &state.judgeOverlay.muriJudgeCircleRightImage;
+            image = &state.judgeOverlay.fastGood.circleRightImage;
             alpha = maimuriDxJudgeFadeOutAlpha(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,
@@ -135,7 +135,7 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
             break;
         case MuriJudgeSpriteKind::WifiUp:
             placement = buildJudgeOverlayWifiPlacement(event.lane, true);
-            image = &state.judgeOverlay.muriJudgeWifiUpImage;
+            image = &state.judgeOverlay.fastGood.wifiUpImage;
             alpha = maimuriDxJudgeFadeOutAlpha(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,
@@ -144,7 +144,7 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
             break;
         case MuriJudgeSpriteKind::WifiDown:
             placement = buildJudgeOverlayWifiPlacement(event.lane, false);
-            image = &state.judgeOverlay.muriJudgeWifiDownImage;
+            image = &state.judgeOverlay.fastGood.wifiDownImage;
             alpha = maimuriDxJudgeFadeOutAlpha(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,

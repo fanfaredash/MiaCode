@@ -79,24 +79,40 @@ struct PreviewSkinAssets {
     QImage touchHoldOffImage;
 };
 
+struct PreviewJudgeTextSprite {
+    QImage image;
+    QRectF sourceRect;
+};
+
+struct PreviewJudgeDirectionalSpriteSet {
+    QImage straightLeftImage;
+    QImage straightRightImage;
+    QImage circleLeftImage;
+    QImage circleRightImage;
+    QImage wifiUpImage;
+    QImage wifiDownImage;
+};
+
+struct PreviewJudgeSimpleTextAssets {
+    PreviewJudgeTextSprite normal;
+    PreviewJudgeTextSprite breakText;
+    PreviewJudgeTextSprite good;
+    PreviewJudgeTextSprite great;
+    PreviewJudgeTextSprite perfect;
+    PreviewJudgeTextSprite cPerfect;
+    PreviewJudgeTextSprite miss;
+    PreviewJudgeTextSprite fast;
+    PreviewJudgeTextSprite late;
+};
+
 struct PreviewJudgeOverlayAssets {
-    QImage reviewJudgeSimpleNormalImage;
-    QRectF reviewJudgeSimpleNormalSourceRect;
-    QImage reviewJudgeSimpleBreakImage;
-    QRectF reviewJudgeSimpleBreakSourceRect;
-    QImage reviewJudgeStraightLeftImage;
-    QImage reviewJudgeStraightRightImage;
-    QImage reviewJudgeCircleLeftImage;
-    QImage reviewJudgeCircleRightImage;
-    QImage reviewJudgeWifiUpImage;
-    QImage reviewJudgeWifiDownImage;
-    QImage muriJudgeSimpleImage;
-    QImage muriJudgeStraightLeftImage;
-    QImage muriJudgeStraightRightImage;
-    QImage muriJudgeCircleLeftImage;
-    QImage muriJudgeCircleRightImage;
-    QImage muriJudgeWifiUpImage;
-    QImage muriJudgeWifiDownImage;
+    PreviewJudgeSimpleTextAssets simpleText;
+    PreviewJudgeDirectionalSpriteSet neutral;
+    PreviewJudgeDirectionalSpriteSet fastGood;
+    PreviewJudgeDirectionalSpriteSet fastGreat;
+    PreviewJudgeDirectionalSpriteSet lateGood;
+    PreviewJudgeDirectionalSpriteSet lateGreat;
+    PreviewJudgeDirectionalSpriteSet miss;
 };
 
 struct PreviewJudgeEffectAssets {

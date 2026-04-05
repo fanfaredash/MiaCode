@@ -39,6 +39,54 @@ QImage loadFirstImageIfExists(const QStringList& paths)
     return QImage();
 }
 
+QRectF nonTransparentBounds(const QImage& image);
+
+miacode::preview::scene::PreviewJudgeTextSprite loadJudgeTextSprite(const QStringList& paths)
+{
+    miacode::preview::scene::PreviewJudgeTextSprite sprite;
+    sprite.image = loadFirstImageIfExists(paths);
+    sprite.sourceRect = nonTransparentBounds(sprite.image);
+    return sprite;
+}
+
+QStringList rootThenLegacyJudgeTextPaths(const QDir& dir, const QString& fileName)
+{
+    return QStringList{
+        dir.filePath(fileName),
+        dir.filePath(QStringLiteral("JudgeTextSkins/%1").arg(fileName)),
+    };
+}
+
+QStringList rootThenLegacySlideJudgePaths(const QDir& dir, const QString& fileName)
+{
+    return QStringList{
+        dir.filePath(fileName),
+        dir.filePath(QStringLiteral("SlideOKSkins/%1").arg(fileName)),
+    };
+}
+
+void loadDirectionalSpriteSet(
+    const QDir& dir,
+    const QString& straightLeftFile,
+    const QString& straightRightFile,
+    const QString& circleLeftFile,
+    const QString& circleRightFile,
+    const QString& wifiUpFile,
+    const QString& wifiDownFile,
+    miacode::preview::scene::PreviewJudgeDirectionalSpriteSet* set
+)
+{
+    if (set == nullptr) {
+        return;
+    }
+    set->straightLeftImage = loadFirstImageIfExists(rootThenLegacySlideJudgePaths(dir, straightLeftFile));
+    set->straightRightImage = loadFirstImageIfExists(rootThenLegacySlideJudgePaths(dir, straightRightFile));
+    set->circleLeftImage = loadFirstImageIfExists(rootThenLegacySlideJudgePaths(dir, circleLeftFile));
+    set->circleRightImage = loadFirstImageIfExists(rootThenLegacySlideJudgePaths(dir, circleRightFile));
+    set->wifiUpImage = loadFirstImageIfExists(rootThenLegacySlideJudgePaths(dir, wifiUpFile));
+    set->wifiDownImage = loadFirstImageIfExists(rootThenLegacySlideJudgePaths(dir, wifiDownFile));
+}
+
 QImage loadGuideImageScaled(const QDir& noteGuideDir, const QString& name)
 {
     const QString path = noteGuideDir.filePath(name);
@@ -304,34 +352,76 @@ void populateJudgeOverlayAssets(const QString& skinDirectory, miacode::preview::
         return;
     }
     const QDir dir(skinDirectory);
-    overlay->reviewJudgeSimpleNormalImage = loadFirstImageIfExists(QStringList{
-        dir.filePath("JudgeTextSkins/judge_text_normal.png"),
-        dir.filePath("judge_text_normal.png")});
-    overlay->reviewJudgeSimpleNormalSourceRect = nonTransparentBounds(overlay->reviewJudgeSimpleNormalImage);
-    overlay->reviewJudgeSimpleBreakImage = loadFirstImageIfExists(QStringList{
-        dir.filePath("JudgeTextSkins/judge_text_break.png"),
-        dir.filePath("judge_text_break.png")});
-    overlay->reviewJudgeSimpleBreakSourceRect = nonTransparentBounds(overlay->reviewJudgeSimpleBreakImage);
-    overlay->reviewJudgeStraightLeftImage = loadFirstImageIfExists(QStringList{
-        dir.filePath("just_str_l.png"), dir.filePath("SlideOKSkins/just_str_l.png")});
-    overlay->reviewJudgeStraightRightImage = loadFirstImageIfExists(QStringList{
-        dir.filePath("just_str_r.png"), dir.filePath("SlideOKSkins/just_str_r.png")});
-    overlay->reviewJudgeCircleLeftImage = loadFirstImageIfExists(QStringList{
-        dir.filePath("just_curv_l.png"), dir.filePath("SlideOKSkins/just_curv_l.png")});
-    overlay->reviewJudgeCircleRightImage = loadFirstImageIfExists(QStringList{
-        dir.filePath("just_curv_r.png"), dir.filePath("SlideOKSkins/just_curv_r.png")});
-    overlay->reviewJudgeWifiUpImage = loadFirstImageIfExists(QStringList{
-        dir.filePath("just_wifi_u.png"), dir.filePath("SlideOKSkins/just_wifi_u.png")});
-    overlay->reviewJudgeWifiDownImage = loadFirstImageIfExists(QStringList{
-        dir.filePath("just_wifi_d.png"), dir.filePath("SlideOKSkins/just_wifi_d.png")});
-    overlay->muriJudgeSimpleImage = loadFirstImageIfExists(QStringList{
-        dir.filePath("JudgeTextSkins/judge_text_good.png"), dir.filePath("judge_text_good.png")});
-    overlay->muriJudgeStraightLeftImage = loadFirstImageIfExists(QStringList{dir.filePath("SlideOKSkins/just_str_l_fast_gd.png")});
-    overlay->muriJudgeStraightRightImage = loadFirstImageIfExists(QStringList{dir.filePath("SlideOKSkins/just_str_r_fast_gd.png")});
-    overlay->muriJudgeCircleLeftImage = loadFirstImageIfExists(QStringList{dir.filePath("SlideOKSkins/just_curv_l_fast_gd.png")});
-    overlay->muriJudgeCircleRightImage = loadFirstImageIfExists(QStringList{dir.filePath("SlideOKSkins/just_curv_r_fast_gd.png")});
-    overlay->muriJudgeWifiUpImage = loadFirstImageIfExists(QStringList{dir.filePath("SlideOKSkins/just_wifi_u_fast_gd.png")});
-    overlay->muriJudgeWifiDownImage = loadFirstImageIfExists(QStringList{dir.filePath("SlideOKSkins/just_wifi_d_fast_gd.png")});
+    overlay->simpleText.normal = loadJudgeTextSprite(rootThenLegacyJudgeTextPaths(dir, "judge_text_normal.png"));
+    overlay->simpleText.breakText = loadJudgeTextSprite(rootThenLegacyJudgeTextPaths(dir, "judge_text_break.png"));
+    overlay->simpleText.good = loadJudgeTextSprite(rootThenLegacyJudgeTextPaths(dir, "judge_text_good.png"));
+    overlay->simpleText.great = loadJudgeTextSprite(rootThenLegacyJudgeTextPaths(dir, "judge_text_great.png"));
+    overlay->simpleText.perfect = loadJudgeTextSprite(rootThenLegacyJudgeTextPaths(dir, "judge_text_perfect.png"));
+    overlay->simpleText.cPerfect = loadJudgeTextSprite(rootThenLegacyJudgeTextPaths(dir, "judge_text_cPerfect.png"));
+    overlay->simpleText.miss = loadJudgeTextSprite(rootThenLegacyJudgeTextPaths(dir, "judge_text_miss.png"));
+    overlay->simpleText.fast = loadJudgeTextSprite(QStringList{dir.filePath("fast.png")});
+    overlay->simpleText.late = loadJudgeTextSprite(QStringList{dir.filePath("late.png")});
+
+    loadDirectionalSpriteSet(
+        dir,
+        "just_str_l.png",
+        "just_str_r.png",
+        "just_curv_l.png",
+        "just_curv_r.png",
+        "just_wifi_u.png",
+        "just_wifi_d.png",
+        &overlay->neutral
+    );
+    loadDirectionalSpriteSet(
+        dir,
+        "just_str_l_fast_gd.png",
+        "just_str_r_fast_gd.png",
+        "just_curv_l_fast_gd.png",
+        "just_curv_r_fast_gd.png",
+        "just_wifi_u_fast_gd.png",
+        "just_wifi_d_fast_gd.png",
+        &overlay->fastGood
+    );
+    loadDirectionalSpriteSet(
+        dir,
+        "just_str_l_fast_gr.png",
+        "just_str_r_fast_gr.png",
+        "just_curv_l_fast_gr.png",
+        "just_curv_r_fast_gr.png",
+        "just_wifi_u_fast_gr.png",
+        "just_wifi_d_fast_gr.png",
+        &overlay->fastGreat
+    );
+    loadDirectionalSpriteSet(
+        dir,
+        "just_str_l_late_gd.png",
+        "just_str_r_late_gd.png",
+        "just_curv_l_late_gd.png",
+        "just_curv_r_late_gd.png",
+        "just_wifi_u_late_gd.png",
+        "just_wifi_d_late_gd.png",
+        &overlay->lateGood
+    );
+    loadDirectionalSpriteSet(
+        dir,
+        "just_str_l_late_gr.png",
+        "just_str_r_late_gr.png",
+        "just_curv_l_late_gr.png",
+        "just_curv_r_late_gr.png",
+        "just_wifi_u_late_gr.png",
+        "just_wifi_d_late_gr.png",
+        &overlay->lateGreat
+    );
+    loadDirectionalSpriteSet(
+        dir,
+        "miss_str_l.png",
+        "miss_str_r.png",
+        "miss_curv_l.png",
+        "miss_curv_r.png",
+        "miss_wifi_u.png",
+        "miss_wifi_d.png",
+        &overlay->miss
+    );
 }
 
 void populateJudgeEffectAssets(const QString& skinDirectory, miacode::preview::scene::PreviewJudgeEffectAssets* effect)

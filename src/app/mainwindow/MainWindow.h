@@ -164,6 +164,10 @@ private:
         Fps120,
         DisplayRefresh,
     };
+    enum class PreviewSkinVariant {
+        Standard,
+        Dx,
+    };
     enum class TextEncoding {
         Utf8,
         System,
@@ -395,6 +399,8 @@ private:
     void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     PreviewCanvasFrameRateMode previewCanvasFrameRateModeFromStorageValue(const QString& value) const;
     QString previewCanvasFrameRateModeStorageValue() const;
+    PreviewSkinVariant previewSkinVariantFromStorageValue(const QString& value) const;
+    QString previewSkinVariantStorageValue() const;
     double currentPreviewCanvasRefreshRate() const;
     void refreshPreviewFrameRateTimers();
     int computeBottomTabsDeviceHeight() const;
@@ -715,6 +721,7 @@ private:
     bool previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
     PreviewBackgroundScaleMode previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     double previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    PreviewSkinVariant previewSkinVariant_ = PreviewSkinVariant::Standard;
     PreviewCanvasFrameRateMode previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
     double previewCanvasAspectRatio_ = 1.0;
     bool previewAutoRestoreSquareAfterExport_ = false;
