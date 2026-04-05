@@ -30,14 +30,6 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
     }
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-    const auto appendOwnedImage = [&layerState](QImage image) -> const QImage* {
-        if (image.isNull()) {
-            return nullptr;
-        }
-        layerState.ownedImages.append(QSharedPointer<QImage>(new QImage(std::move(image))));
-        return layerState.ownedImages.last().data();
-    };
-
     const auto appendSprite = [&layerState](
                                   const QImage* image,
                                   const QPointF& center,
@@ -45,6 +37,7 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
                                   qreal height,
                                   qreal rotation,
                                   qreal opacity,
+                                  PreviewAnimatedSpriteEffect effect = PreviewAnimatedSpriteEffect::None,
                                   bool cacheable = true
                               ) {
         if (image == nullptr || image->isNull() || opacity <= 0.0 || width <= 0.0 || height <= 0.0) {
@@ -57,6 +50,7 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
         sprite.height = height;
         sprite.rotationDegrees = rotation;
         sprite.opacity = opacity;
+        sprite.effect = effect;
         sprite.cacheable = cacheable;
         layerState.sprites.append(sprite);
     };
@@ -89,18 +83,10 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
             continue;
         }
         const QImage* cornerImage = &baseCornerImage;
-        bool cornerImageCacheable = true;
-        if (marker.isBreak) {
-            cornerImage = appendOwnedImage(buildAnimatedSpriteImage(
-                baseCornerImage,
-                PreviewAnimatedSpriteEffect::BreakAnimate,
-                state.playheadSeconds
-            ));
-            cornerImageCacheable = false;
-            if (cornerImage == nullptr) {
-                continue;
-            }
-        }
+        const PreviewAnimatedSpriteEffect cornerEffect = marker.isBreak
+            ? PreviewAnimatedSpriteEffect::BreakAnimate
+            : PreviewAnimatedSpriteEffect::None;
+        const bool cornerImageCacheable = true;
 
         const QPointF point = mapLogicalPointToRect(marker.touchPoint, playfieldRect);
         const qreal alpha = touchPreHitAlpha(deltaSeconds, kTouchDurationSeconds, kTouchShowDurationSeconds);
@@ -138,6 +124,7 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
                 cornerHeight,
                 pieceLayout.angle,
                 alpha,
+                cornerEffect,
                 cornerImageCacheable
             );
         }

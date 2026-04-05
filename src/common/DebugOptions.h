@@ -119,6 +119,16 @@ inline bool glDebugMessagesEnabled()
     return debugCategoryEnabled("MIACODE_DISABLE_GL_DEBUG_MESSAGES");
 }
 
+inline bool forceDontCreateNativeWidgetSiblings()
+{
+    return envFlagEnabled("MIACODE_FORCE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS");
+}
+
+inline bool forceBasicQsgRenderLoop()
+{
+    return envFlagEnabled("MIACODE_FORCE_BASIC_QSG_RENDER_LOOP");
+}
+
 inline int previewVideoFallbackCompareEveryFrames()
 {
     if (!runtimeDebugOutputEnabled()) {

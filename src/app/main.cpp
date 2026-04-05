@@ -518,6 +518,39 @@ int main(int argc, char* argv[])
         miacode::debug_log::initializeStartupTimingLogSession();
     }
 
+    const bool forceBasicRenderLoop = miacode::debug_options::envFlagEnabled(
+        "MIACODE_PREVIEW_FORCE_BASIC_RENDER_LOOP"
+    );
+    const bool disableDontCreateNativeWidgetSiblings = miacode::debug_options::envFlagEnabled(
+        "MIACODE_PREVIEW_DISABLE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS"
+    );
+    const bool dontCreateNativeWidgetSiblingsEnabled = !disableDontCreateNativeWidgetSiblings;
+    const QString requestedRenderLoop = qEnvironmentVariable("QSG_RENDER_LOOP").trimmed();
+    if (forceBasicRenderLoop && requestedRenderLoop.isEmpty()) {
+        qputenv("QSG_RENDER_LOOP", QByteArrayLiteral("basic"));
+    }
+    if (dontCreateNativeWidgetSiblingsEnabled) {
+        QApplication::setAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
+    }
+    if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("startup/qt_config"),
+            QString(
+                "force_basic_render_loop=%1 qsg_render_loop=%2 "
+                "dont_create_native_widget_siblings_default=1 "
+                "disable_dont_create_native_widget_siblings=%3 "
+                "effective_dont_create_native_widget_siblings=%4"
+            )
+                .arg(forceBasicRenderLoop ? 1 : 0)
+                .arg(qEnvironmentVariable("QSG_RENDER_LOOP").trimmed().isEmpty()
+                         ? QStringLiteral("(default)")
+                         : qEnvironmentVariable("QSG_RENDER_LOOP").trimmed())
+                .arg(disableDontCreateNativeWidgetSiblings ? 1 : 0)
+                .arg(dontCreateNativeWidgetSiblingsEnabled ? 1 : 0)
+        );
+    }
+
     QElapsedTimer startupTimer;
     startupTimer.start();
     qint64 lastStageMs = 0;
@@ -539,6 +572,14 @@ int main(int argc, char* argv[])
 
     QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
     logStartupStage("qapplication_constructed");
+    if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("startup/qt_config"),
+            QString("graphics_api=OpenGL dont_create_native_widget_siblings=%1")
+                .arg(QApplication::testAttribute(Qt::AA_DontCreateNativeWidgetSiblings) ? 1 : 0)
+        );
+    }
 #ifdef Q_OS_WIN
     setWindowsAppUserModelId();
 #endif

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QQuickItem>
+#include <QSize>
 
 #include "preview/quick_scene/PreviewQuickBackdropLayer.h"
 #include "preview/quick_scene/PreviewQuickChartReviewLayer.h"
@@ -35,6 +36,8 @@ public:
     void setRuntime(PreviewRuntime* runtime);
     void setFrameState(const miacode::preview::scene::PreviewFrameState* frameState);
     void setLayerFlags(miacode::preview::scene::PreviewRenderLayerFlags layerFlags);
+    void invalidateTextureCache();
+    PreviewTextureStats textureStats() const;
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* updatePaintNodeData) override;
@@ -45,6 +48,7 @@ private:
     const miacode::preview::scene::PreviewFrameState* frameState_ = nullptr;
     miacode::preview::scene::PreviewRenderLayerFlags layerFlags_ =
         miacode::preview::scene::kPreviewAllRenderLayers;
+    QVector<PreviewTextureLayerStats> layerProfileStats_;
     PreviewTextureRepository textures_;
     PreviewQuickStageBackgroundLayer stageBackgroundLayer_;
     PreviewQuickBackdropLayer backdropLayer_;
@@ -61,4 +65,10 @@ private:
     PreviewQuickTouchHoldLayer touchHoldLayer_;
     PreviewQuickChartReviewLayer chartReviewLayer_;
     PreviewQuickMaimuriDxJudgeLayer maimuriDxJudgeLayer_;
+    quint64 updatePaintNodeCount_ = 0;
+    quint64 geometryChangeCount_ = 0;
+    bool lastLoggedHasWindow_ = false;
+    bool lastLoggedHasState_ = false;
+    QSize lastLoggedRenderSize_;
+    quintptr lastLoggedWindowHandle_ = 0;
 };

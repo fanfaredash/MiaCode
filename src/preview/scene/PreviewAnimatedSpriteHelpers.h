@@ -11,6 +11,8 @@ enum class PreviewAnimatedSpriteEffect {
     BreakAnimate = 2,
 };
 
+qreal previewAnimatedSpriteWave(double playheadSeconds);
+
 QImage composeOverlayImage(
     const QImage& base,
     const QImage& overlay,

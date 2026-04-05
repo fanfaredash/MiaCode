@@ -1,24 +1,50 @@
 #include "preview/runtime/PreviewRuntime.h"
 
+#include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
+#include "preview/quick_scene/PreviewTextureRepository.h"
 #include "preview/runtime/PreviewQuickRuntimeSurface.h"
 
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
-#include <QStandardPaths>
+#include <QFileInfo>
 #include <QTextStream>
 #include <QWindow>
 
 namespace {
 
-QString previewRuntimeProfilingPath()
+PreviewRuntimeLayerProfileAggregate& ensureLayerAggregate(
+    QVector<PreviewRuntimeLayerProfileAggregate>* aggregates,
+    const QString& name
+)
 {
-    const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    QDir().mkpath(baseDir);
-    return QDir(baseDir).filePath(QStringLiteral("preview_runtime_profile.txt"));
+    Q_ASSERT(aggregates != nullptr);
+
+    for (PreviewRuntimeLayerProfileAggregate& aggregate : *aggregates) {
+        if (aggregate.name == name) {
+            return aggregate;
+        }
+    }
+
+    aggregates->append(PreviewRuntimeLayerProfileAggregate{name});
+    return aggregates->last();
+}
+
+double averageOrZero(double total, qint64 count)
+{
+    return count > 0 ? total / static_cast<double>(count) : 0.0;
+}
+
+double frameLayerBuildMs(const PreviewTextureStats& frameStats)
+{
+    double total = 0.0;
+    for (const PreviewTextureLayerStats& layerStat : frameStats.layerStats) {
+        total += layerStat.buildMs;
+    }
+    return total;
 }
 
 }  // namespace
@@ -34,6 +60,9 @@ PreviewRuntime::PreviewRuntime(QObject* parent)
     surface_->setRuntime(this);
 
     connect(surface_, &PreviewQuickRuntimeSurface::framePresented, this, [this]() {
+        if (surface_ != nullptr) {
+            updateTextureProfilingStats(surface_->textureStats());
+        }
         updatePresentedFrameStats();
         pendingPresentedStatsRefresh_ = false;
         emit framePresented();
@@ -44,7 +73,12 @@ PreviewRuntime::PreviewRuntime(QObject* parent)
     });
 }
 
-PreviewRuntime::~PreviewRuntime() = default;
+PreviewRuntime::~PreviewRuntime()
+{
+    if (profilingSummaryDirty_) {
+        writeProfilingSummaryToFile();
+    }
+}
 
 QWindow* PreviewRuntime::hostWindow() const
 {
@@ -221,6 +255,7 @@ void PreviewRuntime::reset()
         assets_->setStageMediaAvailable(false);
     }
     refreshAssetStateFromRepository();
+    resetProfilingSession();
     pendingPresentedStatsRefresh_ = true;
     update();
 }
@@ -237,16 +272,88 @@ void PreviewRuntime::resetProfilingSession()
     presentedFrameIntervalWriteIndex_ = 0;
     presentedFrameIntervalCount_ = 0;
     frameState_.fpsDisplay = 0.0;
+    profilingSummaryDirty_ = false;
+    profiledTextureFrameCount_ = 0;
+    profiledActiveSpriteFrameCount_ = 0;
+    cachedTextureHitTotal_ = 0;
+    cachedTextureCreateTotal_ = 0;
+    transientTextureHitTotal_ = 0;
+    transientTextureCreateTotal_ = 0;
+    spriteCountTotal_ = 0;
+    spriteBatchCountTotal_ = 0;
+    spriteCountMax_ = 0;
+    spriteBatchCountMax_ = 0;
+    layerBuildMsTotal_ = 0.0;
+    layerBuildMsMax_ = 0.0;
+    peakFrameSpriteCount_ = 0;
+    peakFrameSpriteBatchCount_ = 0;
+    peakFrameLayerBuildMs_ = 0.0;
+    layerProfileAggregates_.clear();
+}
+
+void PreviewRuntime::updateTextureProfilingStats(const PreviewTextureStats& frameStats)
+{
+    profilingSummaryDirty_ = true;
+    profiledTextureFrameCount_ += 1;
+    cachedTextureHitTotal_ += frameStats.cachedHitCount;
+    cachedTextureCreateTotal_ += frameStats.cachedCreateCount;
+    transientTextureHitTotal_ += frameStats.transientHitCount;
+    transientTextureCreateTotal_ += frameStats.transientCreateCount;
+    spriteCountTotal_ += frameStats.spriteCount;
+    spriteBatchCountTotal_ += frameStats.spriteBatchCount;
+    spriteCountMax_ = qMax(spriteCountMax_, frameStats.spriteCount);
+    spriteBatchCountMax_ = qMax(spriteBatchCountMax_, frameStats.spriteBatchCount);
+
+    const double totalBuildMs = frameLayerBuildMs(frameStats);
+    layerBuildMsTotal_ += totalBuildMs;
+    layerBuildMsMax_ = qMax(layerBuildMsMax_, totalBuildMs);
+
+    if (frameStats.spriteCount > 0) {
+        profiledActiveSpriteFrameCount_ += 1;
+    }
+    if (frameStats.spriteCount > peakFrameSpriteCount_
+        || (frameStats.spriteCount == peakFrameSpriteCount_ && totalBuildMs > peakFrameLayerBuildMs_)) {
+        peakFrameSpriteCount_ = frameStats.spriteCount;
+        peakFrameSpriteBatchCount_ = frameStats.spriteBatchCount;
+        peakFrameLayerBuildMs_ = totalBuildMs;
+    }
+
+    for (const PreviewTextureLayerStats& layerStat : frameStats.layerStats) {
+        PreviewRuntimeLayerProfileAggregate& aggregate =
+            ensureLayerAggregate(&layerProfileAggregates_, layerStat.name);
+        aggregate.spriteCountSum += layerStat.spriteCount;
+        aggregate.spriteBatchCountSum += layerStat.spriteBatchCount;
+        aggregate.buildMsSum += layerStat.buildMs;
+        aggregate.spriteCountMax = qMax(aggregate.spriteCountMax, layerStat.spriteCount);
+        aggregate.spriteBatchCountMax = qMax(aggregate.spriteBatchCountMax, layerStat.spriteBatchCount);
+        aggregate.buildMsMax = qMax(aggregate.buildMsMax, layerStat.buildMs);
+        if (layerStat.spriteCount > 0) {
+            aggregate.spriteActiveFrameCount += 1;
+        }
+    }
 }
 
 QString PreviewRuntime::writeProfilingSummaryToFile()
 {
-    if (!miacode::debug_options::previewProfileOutputEnabled() || presentedFrameIntervalCount_ <= 0) {
+    if (!miacode::debug_options::previewProfileOutputEnabled()
+        || presentedFrameIntervalCount_ <= 0
+        || profiledTextureFrameCount_ <= 0) {
         return QString();
     }
 
-    QFile file(previewRuntimeProfilingPath());
+    const QString summaryPath = miacode::debug_log::previewProfileSummaryPath();
+    const QFileInfo summaryInfo(summaryPath);
+    if (!summaryInfo.absolutePath().isEmpty()) {
+        QDir().mkpath(summaryInfo.absolutePath());
+    }
+
+    QFile file(summaryPath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("preview_profile"),
+            QStringLiteral("failed_to_open path=%1").arg(summaryPath)
+        );
         return QString();
     }
 
@@ -258,14 +365,43 @@ QString PreviewRuntime::writeProfilingSummaryToFile()
         maxMs = qMax(maxMs, sample);
     }
     const double avgMs = sumMs / static_cast<double>(presentedFrameIntervalCount_);
-
     QTextStream stream(&file);
     stream << "timestamp=" << QDateTime::currentDateTime().toString(Qt::ISODate) << '\n';
+    stream << "profile_scope=session_accumulated" << '\n';
     stream << "frame_samples=" << presentedFrameIntervalCount_ << '\n';
     stream << "present_avg_ms=" << QString::number(avgMs, 'f', 4) << '\n';
     stream << "present_max_ms=" << QString::number(maxMs, 'f', 4) << '\n';
     stream << "fps=" << QString::number(frameState_.fpsDisplay, 'f', 4) << '\n';
+    stream << "texture_profiled_frames=" << profiledTextureFrameCount_ << '\n';
+    stream << "texture_active_sprite_frames=" << profiledActiveSpriteFrameCount_ << '\n';
+    stream << "texture_cached_hits_total=" << cachedTextureHitTotal_ << '\n';
+    stream << "texture_cached_creates_total=" << cachedTextureCreateTotal_ << '\n';
+    stream << "texture_transient_hits_total=" << transientTextureHitTotal_ << '\n';
+    stream << "texture_transient_creates_total=" << transientTextureCreateTotal_ << '\n';
+    stream << "sprite_count_avg=" << QString::number(averageOrZero(static_cast<double>(spriteCountTotal_), profiledTextureFrameCount_), 'f', 4) << '\n';
+    stream << "sprite_count_max=" << spriteCountMax_ << '\n';
+    stream << "sprite_batch_count_avg=" << QString::number(averageOrZero(static_cast<double>(spriteBatchCountTotal_), profiledTextureFrameCount_), 'f', 4) << '\n';
+    stream << "sprite_batch_count_max=" << spriteBatchCountMax_ << '\n';
+    stream << "layer_build_total_avg_ms=" << QString::number(averageOrZero(layerBuildMsTotal_, profiledTextureFrameCount_), 'f', 4) << '\n';
+    stream << "layer_build_total_max_ms=" << QString::number(layerBuildMsMax_, 'f', 4) << '\n';
+    stream << "peak_frame.sprite_count=" << peakFrameSpriteCount_ << '\n';
+    stream << "peak_frame.sprite_batch_count=" << peakFrameSpriteBatchCount_ << '\n';
+    stream << "peak_frame.layer_build_total_ms=" << QString::number(peakFrameLayerBuildMs_, 'f', 4) << '\n';
+    for (const PreviewRuntimeLayerProfileAggregate& layerStat : layerProfileAggregates_) {
+        stream << "layer." << layerStat.name << ".sprite_count_avg="
+               << QString::number(averageOrZero(static_cast<double>(layerStat.spriteCountSum), profiledTextureFrameCount_), 'f', 4) << '\n';
+        stream << "layer." << layerStat.name << ".sprite_count_max=" << layerStat.spriteCountMax << '\n';
+        stream << "layer." << layerStat.name << ".sprite_batch_count_avg="
+               << QString::number(averageOrZero(static_cast<double>(layerStat.spriteBatchCountSum), profiledTextureFrameCount_), 'f', 4) << '\n';
+        stream << "layer." << layerStat.name << ".sprite_batch_count_max=" << layerStat.spriteBatchCountMax << '\n';
+        stream << "layer." << layerStat.name << ".build_ms_avg="
+               << QString::number(averageOrZero(layerStat.buildMsSum, profiledTextureFrameCount_), 'f', 4) << '\n';
+        stream << "layer." << layerStat.name << ".build_ms_max="
+               << QString::number(layerStat.buildMsMax, 'f', 4) << '\n';
+        stream << "layer." << layerStat.name << ".active_sprite_frames=" << layerStat.spriteActiveFrameCount << '\n';
+    }
     file.close();
+    profilingSummaryDirty_ = false;
     return file.fileName();
 }
 

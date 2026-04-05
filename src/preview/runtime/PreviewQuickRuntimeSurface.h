@@ -1,9 +1,13 @@
 #pragma once
 
+#include "preview/quick_scene/PreviewTextureRepository.h"
+
+#include <QElapsedTimer>
 #include <QObject>
 #include <QPointer>
 
 class QQuickView;
+class QTimer;
 class QWindow;
 class PreviewQuickHudLayer;
 class PreviewQuickSceneRoot;
@@ -19,6 +23,7 @@ public:
 
     void setRuntime(PreviewRuntime* runtime);
     QWindow* hostWindow() const;
+    PreviewTextureStats textureStats() const;
     void requestActivate();
     void requestFrame();
 
@@ -32,4 +37,9 @@ private:
     QQuickView* view_ = nullptr;
     QPointer<PreviewQuickSceneRoot> sceneRoot_;
     QPointer<PreviewQuickHudLayer> hudLayer_;
+    quint64 framePresentedCount_ = 0;
+    QElapsedTimer frameSwapElapsed_;
+    QTimer* frameSwapWatchdog_ = nullptr;
+    qint64 lastLoggedFrameStallBucket_ = -1;
+    bool frameStallActive_ = false;
 };

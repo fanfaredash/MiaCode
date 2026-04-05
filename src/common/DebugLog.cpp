@@ -96,6 +96,25 @@ QString channelPathOverride(Channel channel)
     return QString();
 }
 
+QString resolvedOverridePath(Channel channel, const QString& overridePath)
+{
+    const QString trimmed = overridePath.trimmed();
+    if (trimmed.isEmpty()) {
+        return QString();
+    }
+
+    const bool looksLikeDirectory = trimmed.endsWith(QLatin1Char('/')) || trimmed.endsWith(QLatin1Char('\\'));
+    const QString cleanPath = QDir::cleanPath(trimmed);
+    const QFileInfo info(cleanPath);
+    const bool looksLikeDirectoryName = !info.exists()
+        && info.suffix().isEmpty()
+        && !info.fileName().contains(QLatin1Char('.'));
+    if (looksLikeDirectory || (info.exists() && info.isDir()) || looksLikeDirectoryName) {
+        return QDir(cleanPath).filePath(channelFileName(channel));
+    }
+    return cleanPath;
+}
+
 bool shouldWrite(Channel channel, bool force)
 {
     return force || channelEnabled(channel);
@@ -128,9 +147,9 @@ QString logDirectory()
 
 QString logPath(Channel channel)
 {
-    const QString overridePath = channelPathOverride(channel);
+    const QString overridePath = resolvedOverridePath(channel, channelPathOverride(channel));
     if (!overridePath.isEmpty()) {
-        return QDir::cleanPath(overridePath);
+        return overridePath;
     }
     return QDir(logDirectory()).filePath(channelFileName(channel));
 }

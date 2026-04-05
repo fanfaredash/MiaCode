@@ -23,6 +23,8 @@ QSGNode* PreviewQuickTouchJudgeLayer::updateNode(
             )
         ).sprites,
         window,
-        textures
+        textures,
+        state.playheadSeconds,
+        "touch_judge"
     );
 }

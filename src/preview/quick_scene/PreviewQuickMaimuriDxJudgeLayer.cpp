@@ -23,6 +23,8 @@ QSGNode* PreviewQuickMaimuriDxJudgeLayer::updateNode(
             )
         ),
         window,
-        textures
+        textures,
+        state.playheadSeconds,
+        "maimuri_dx_judge"
     );
 }

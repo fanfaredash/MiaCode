@@ -4,6 +4,8 @@
 #include <QRectF>
 #include <QVector>
 
+#include "preview/scene/PreviewAnimatedSpriteHelpers.h"
+
 class QImage;
 
 namespace miacode::preview::scene {
@@ -16,6 +18,7 @@ struct PreviewSpriteDescriptor {
     qreal rotationDegrees = 0.0;
     qreal opacity = 1.0;
     QRectF sourceRect;
+    PreviewAnimatedSpriteEffect effect = PreviewAnimatedSpriteEffect::None;
     bool cacheable = true;
 };
 

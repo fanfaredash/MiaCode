@@ -124,6 +124,7 @@ void appendSprite(
     qreal rotation,
     qreal opacity = 1.0,
     const QRectF& sourceRect = QRectF(),
+    PreviewAnimatedSpriteEffect effect = PreviewAnimatedSpriteEffect::None,
     bool cacheable = true
 )
 {
@@ -138,6 +139,7 @@ void appendSprite(
     sprite.rotationDegrees = rotation;
     sprite.opacity = opacity;
     sprite.sourceRect = sourceRect;
+    sprite.effect = effect;
     sprite.cacheable = cacheable;
     state->sprites.append(sprite);
 }
@@ -228,16 +230,11 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
                 holdCapImage = composeOverlayImage(holdCapImage, state.skin.holdExImage, kHoldOverlayBaseMix, kHoldOverlayAlphaMix, &tint);
                 ownsHoldImage = true;
             }
-            if (holdEffect != PreviewAnimatedSpriteEffect::None) {
-                holdCapImage = buildAnimatedSpriteImage(holdCapImage, holdEffect, state.playheadSeconds);
-                ownsHoldImage = true;
-            }
 
             const QImage* renderHoldImage = holdImage;
             bool renderHoldImageCacheable = true;
             if (ownsHoldImage) {
                 renderHoldImage = appendOwnedImage(&layerState, std::move(holdCapImage));
-                renderHoldImageCacheable = false;
             }
             if (renderHoldImage == nullptr || renderHoldImage->isNull()) {
                 continue;
@@ -268,6 +265,7 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
                         angle,
                         1.0,
                         QRectF(0.0, midY, srcW, 1.0),
+                        holdEffect,
                         renderHoldImageCacheable
                     );
                 }
@@ -280,6 +278,7 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
                     angle,
                     1.0,
                     QRectF(0.0, 0.0, srcW, capRaw),
+                    holdEffect,
                     renderHoldImageCacheable
                 );
                 appendSprite(
@@ -291,6 +290,7 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
                     angle,
                     1.0,
                     QRectF(0.0, srcH - capRaw, srcW, capRaw),
+                    holdEffect,
                     renderHoldImageCacheable
                 );
             };
@@ -367,15 +367,12 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
             renderImage = composeOverlayImage(renderImage, state.skin.tapExImage, kTapOverlayBaseMix, kTapOverlayAlphaMix, &tint);
             ownsHeadImage = true;
         }
-        if (headBreak) {
-            renderImage = buildAnimatedSpriteImage(renderImage, PreviewAnimatedSpriteEffect::BreakAnimate, state.playheadSeconds);
-            ownsHeadImage = true;
-        }
+        const PreviewAnimatedSpriteEffect headEffect =
+            headBreak ? PreviewAnimatedSpriteEffect::BreakAnimate : PreviewAnimatedSpriteEffect::None;
         const QImage* headImage = baseImage;
         bool headImageCacheable = true;
         if (ownsHeadImage) {
             headImage = appendOwnedImage(&layerState, std::move(renderImage));
-            headImageCacheable = false;
         }
         if (headImage == nullptr || headImage->isNull()) {
             continue;
@@ -403,7 +400,18 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
             targetHeight = qMax<qreal>(1.0, qRound(headImage->height() * imageScale));
         }
 
-        appendSprite(&layerState, headImage, point, targetWidth, targetHeight, rotation, 1.0, QRectF(), headImageCacheable);
+        appendSprite(
+            &layerState,
+            headImage,
+            point,
+            targetWidth,
+            targetHeight,
+            rotation,
+            1.0,
+            QRectF(),
+            headEffect,
+            headImageCacheable
+        );
     }
 
     return layerState;

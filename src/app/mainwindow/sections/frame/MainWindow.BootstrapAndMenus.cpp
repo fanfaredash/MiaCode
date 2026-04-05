@@ -1795,6 +1795,7 @@ MainWindow::MainWindow(QWidget* parent)
     statusBar()->showMessage("PlainCodeEditor ready.");
 
     loadPortableState();
+    scheduleStartupRestoreLastSessionFile();
     applyWorkspacePanelArrangement();
     logStartupStage("portable_state_loaded");
     if (runtimeDebugOutputEnabled_) {
@@ -1832,12 +1833,8 @@ MainWindow::MainWindow(QWidget* parent)
     applyMuriRenderOptions();
     applyUiTheme();
     updatePauseButtonAppearance();
-    if (restoreLastSessionFile()) {
-        logStartupStage("restored_last_document_applied");
-    } else {
-        loadDocument(SimaiDocument::createEmpty());
-        logStartupStage("initial_empty_document_applied");
-    }
+    loadDocument(SimaiDocument::createEmpty());
+    logStartupStage("initial_empty_document_applied");
     updatePreviewSliderRange();
     updatePreviewSliderPosition(0.0);
     logStartupStage("initial_document_loaded");

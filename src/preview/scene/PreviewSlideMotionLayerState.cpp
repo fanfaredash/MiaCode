@@ -62,23 +62,15 @@ PreviewSlideMotionLayerState buildPreviewSlideMotionLayerState(
 {
     PreviewSlideMotionLayerState layerState;
     layerState.sprites.reserve(state.noteMarkers.size() * 8);
-    layerState.ownedImages.reserve(state.noteMarkers.size() * 2);
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-    const auto appendOwnedImage = [&layerState](QImage image) -> const QImage* {
-        if (image.isNull()) {
-            return nullptr;
-        }
-        layerState.ownedImages.append(QSharedPointer<QImage>(new QImage(std::move(image))));
-        return layerState.ownedImages.last().data();
-    };
-
     const auto appendSprite = [&layerState, &playfieldRect, canvasScale](
                                   const QImage* image,
                                   const QPointF& logicalPoint,
                                   qreal angleDegrees,
                                   qreal imageScale,
                                   qreal imageOpacity,
+                                  PreviewAnimatedSpriteEffect effect,
                                   bool cacheable
                               ) {
         if (image == nullptr || image->isNull() || imageOpacity <= 0.0 || imageScale <= 0.0) {
@@ -94,6 +86,7 @@ PreviewSlideMotionLayerState buildPreviewSlideMotionLayerState(
         sprite.height = qMax<qreal>(1.0, qRound(image->height() * canvasScale * imageScale));
         sprite.rotationDegrees = angleDegrees;
         sprite.opacity = imageOpacity;
+        sprite.effect = effect;
         sprite.cacheable = cacheable;
         layerState.sprites.append(sprite);
     };
@@ -118,16 +111,10 @@ PreviewSlideMotionLayerState buildPreviewSlideMotionLayerState(
             continue;
         }
         const QImage* renderImage = baseImage;
-        bool cacheable = true;
-        if (marker.trackBreak) {
-            renderImage = appendOwnedImage(
-                buildAnimatedSpriteImage(*baseImage, PreviewAnimatedSpriteEffect::BreakAnimate, state.playheadSeconds)
-            );
-            cacheable = false;
-        }
-        if (renderImage == nullptr || renderImage->isNull()) {
-            continue;
-        }
+        const PreviewAnimatedSpriteEffect effect = marker.trackBreak
+            ? PreviewAnimatedSpriteEffect::BreakAnimate
+            : PreviewAnimatedSpriteEffect::None;
+        const bool cacheable = true;
 
         if (slideMarker) {
             qreal angle = 0.0;
@@ -191,6 +178,7 @@ PreviewSlideMotionLayerState buildPreviewSlideMotionLayerState(
                 mirroredStarAngleDegrees(angle),
                 imageScale,
                 imageOpacity,
+                effect,
                 cacheable
             );
             continue;
@@ -244,6 +232,7 @@ PreviewSlideMotionLayerState buildPreviewSlideMotionLayerState(
                 mirroredStarAngleDegrees(angle),
                 imageScale,
                 imageOpacity,
+                effect,
                 cacheable
             );
         }
