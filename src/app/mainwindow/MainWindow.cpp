@@ -165,6 +165,7 @@ constexpr int kPreviewFullscreenControlsRevealHotzoneHeight = 120;
 constexpr int kPreviewFullscreenControlsAutoHideDelayMs = 1600;
 constexpr int kPreviewFullscreenControlsAnimationDurationMs = 180;
 constexpr int kPreviewFullscreenControlsOpacityAnimationDurationMs = 180;
+constexpr int kEmbeddedPreviewResizeSettleDelayMs = 120;
 constexpr int kEditorTextFontSizeMin = 8;
 constexpr int kEditorTextFontSizeMax = 28;
 constexpr int kWaveformPeakCount = 1024;
@@ -3591,12 +3592,20 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
                     .arg(surfaceDetail.isEmpty() ? QString() : QStringLiteral(" ") + surfaceDetail)
             );
         }
+        if (event->type() == QEvent::Resize) {
+            noteEmbeddedPreviewResizeActivity("preview_host_window");
+        }
         if (event->type() == QEvent::Show
             || event->type() == QEvent::Expose
             || event->type() == QEvent::PlatformSurface) {
-            scheduleEmbeddedPreviewSurfaceRefresh(0);
-            scheduleEmbeddedPreviewSurfaceRefresh(120);
+            scheduleEmbeddedPreviewSurfaceRefresh();
         }
+    }
+    if ((watched == previewCanvasContainer_
+            || watched == previewCanvasFrame_
+            || watched == previewPanel_)
+        && event->type() == QEvent::Resize) {
+        noteEmbeddedPreviewResizeActivity("embedded_preview_widget");
     }
     if (auto* fileDialog = qobject_cast<QFileDialog*>(watched); fileDialog != nullptr) {
         const QString debugScope = fileDialog->property("miacode_debug_scope").toString();
@@ -4116,6 +4125,7 @@ void MainWindow::resizeEvent(QResizeEvent* event)
             .arg(event->size().width())
             .arg(event->size().height())
     );
+    noteEmbeddedPreviewResizeActivity("main_window");
 }
 
 void MainWindow::moveEvent(QMoveEvent* event)
@@ -4160,8 +4170,7 @@ bool MainWindow::event(QEvent* event)
         );
         logNativeWindowDebug(QStringLiteral("window_blocked"));
         logOwnedNativeWindowSnapshot(QStringLiteral("window_blocked"), 16);
-        scheduleEmbeddedPreviewSurfaceRefresh(0);
-        scheduleEmbeddedPreviewSurfaceRefresh(120);
+        scheduleEmbeddedPreviewSurfaceRefresh();
     } else if (type == QEvent::WindowUnblocked) {
         logWindowGeometryDebug(
             "window_unblocked",
@@ -4171,15 +4180,21 @@ bool MainWindow::event(QEvent* event)
         );
         logNativeWindowDebug(QStringLiteral("window_unblocked"));
         logOwnedNativeWindowSnapshot(QStringLiteral("window_unblocked"), 16);
-        refreshEmbeddedPreviewSurface();
-        scheduleEmbeddedPreviewSurfaceRefresh(0);
-        scheduleEmbeddedPreviewSurfaceRefresh(120);
+        scheduleEmbeddedPreviewSurfaceRefresh();
     }
     return handled;
 }
 
-void MainWindow::refreshEmbeddedPreviewSurface()
+void MainWindow::refreshEmbeddedPreviewSurface(bool force)
 {
+    if (!force && embeddedPreviewResizeActive_) {
+        embeddedPreviewRefreshPending_ = true;
+        if (embeddedPreviewResizeSettleTimer_ != nullptr) {
+            embeddedPreviewResizeSettleTimer_->start(kEmbeddedPreviewResizeSettleDelayMs);
+        }
+        return;
+    }
+    embeddedPreviewRefreshPending_ = false;
     if (runtimeDebugOutputEnabled_) {
         QWindow* hostWindow = previewCanvas_ != nullptr ? previewCanvas_->hostWindow() : nullptr;
         appendOutput(
@@ -4223,47 +4238,50 @@ void MainWindow::refreshEmbeddedPreviewSurface()
 
 void MainWindow::scheduleEmbeddedPreviewSurfaceRefresh(int delayMs)
 {
-    if (delayMs < 0) {
-        if (runtimeDebugOutputEnabled_) {
-            appendOutput(
-                "preview/embedded_refresh",
-                QString("action=schedule_immediate delay_ms=%1 visible=%2 minimized=%3")
-                    .arg(delayMs)
-                    .arg(isVisible() ? 1 : 0)
-                    .arg(windowState().testFlag(Qt::WindowMinimized) ? 1 : 0)
-            );
+    const int effectiveDelayMs = qMax(0, delayMs);
+    embeddedPreviewRefreshPending_ = true;
+    if (embeddedPreviewResizeActive_) {
+        if (embeddedPreviewResizeSettleTimer_ != nullptr) {
+            embeddedPreviewResizeSettleTimer_->start(kEmbeddedPreviewResizeSettleDelayMs);
         }
+        return;
+    }
+    if (embeddedPreviewRefreshTimer_ == nullptr) {
         refreshEmbeddedPreviewSurface();
         return;
     }
+    const int remainingMs =
+        embeddedPreviewRefreshTimer_->isActive() ? embeddedPreviewRefreshTimer_->remainingTime() : -1;
+    if (remainingMs >= 0 && remainingMs <= effectiveDelayMs) {
+        return;
+    }
+    embeddedPreviewRefreshTimer_->start(effectiveDelayMs);
+}
 
-    if (runtimeDebugOutputEnabled_) {
+void MainWindow::noteEmbeddedPreviewResizeActivity(const char* source)
+{
+    if (previewCanvas_ == nullptr || !isVisible() || windowState().testFlag(Qt::WindowMinimized)) {
+        return;
+    }
+
+    const bool wasActive = embeddedPreviewResizeActive_;
+    embeddedPreviewResizeActive_ = true;
+    embeddedPreviewRefreshPending_ = true;
+    if (embeddedPreviewRefreshTimer_ != nullptr && embeddedPreviewRefreshTimer_->isActive()) {
+        embeddedPreviewRefreshTimer_->stop();
+    }
+    if (embeddedPreviewResizeSettleTimer_ != nullptr) {
+        embeddedPreviewResizeSettleTimer_->start(kEmbeddedPreviewResizeSettleDelayMs);
+    }
+    if (!wasActive && runtimeDebugOutputEnabled_) {
         appendOutput(
             "preview/embedded_refresh",
-            QString("action=schedule delay_ms=%1 visible=%2 minimized=%3")
-                .arg(delayMs)
+            QString("action=resize_degrade_begin source=%1 visible=%2 minimized=%3")
+                .arg(QString::fromLatin1(source != nullptr ? source : "unknown"))
                 .arg(isVisible() ? 1 : 0)
                 .arg(windowState().testFlag(Qt::WindowMinimized) ? 1 : 0)
         );
     }
-
-    QTimer::singleShot(delayMs, this, [this, delayMs]() {
-        const bool skip = !isVisible() || windowState().testFlag(Qt::WindowMinimized);
-        if (runtimeDebugOutputEnabled_) {
-            appendOutput(
-                "preview/embedded_refresh",
-                QString("action=timer_fire delay_ms=%1 skip=%2 visible=%3 minimized=%4")
-                    .arg(delayMs)
-                    .arg(skip ? 1 : 0)
-                    .arg(isVisible() ? 1 : 0)
-                    .arg(windowState().testFlag(Qt::WindowMinimized) ? 1 : 0)
-            );
-        }
-        if (skip) {
-            return;
-        }
-        refreshEmbeddedPreviewSurface();
-    });
 }
 
 void MainWindow::changeEvent(QEvent* event)
@@ -4284,8 +4302,7 @@ void MainWindow::changeEvent(QEvent* event)
         if (!isNowMinimized && wasMinimized) {
             refreshPreviewFrameRateTimers();
             applySystemWindowBackdrop();
-            refreshEmbeddedPreviewSurface();
-            scheduleEmbeddedPreviewSurfaceRefresh(120);
+            scheduleEmbeddedPreviewSurfaceRefresh();
         }
     } else if (type == QEvent::ScreenChangeInternal
         || type == QEvent::DevicePixelRatioChange
@@ -4312,9 +4329,7 @@ void MainWindow::changeEvent(QEvent* event)
             16
         );
         if (active) {
-            refreshEmbeddedPreviewSurface();
-            scheduleEmbeddedPreviewSurfaceRefresh(0);
-            scheduleEmbeddedPreviewSurfaceRefresh(120);
+            scheduleEmbeddedPreviewSurfaceRefresh();
         }
     } else if (type == QEvent::ZOrderChange) {
         logWindowGeometryDebug("zorder_change");
@@ -5362,9 +5377,7 @@ void MainWindow::onExportPreviewVideo()
     }
     dialog.move(targetTopLeft);
     dialog.exec();
-    refreshEmbeddedPreviewSurface();
-    scheduleEmbeddedPreviewSurfaceRefresh(0);
-    scheduleEmbeddedPreviewSurfaceRefresh(120);
+    scheduleEmbeddedPreviewSurfaceRefresh();
     setPreviewCanvasAspectRatio(1.0, false);
     restoreSquareAfterVideoExport_ = false;
     if (dialog.exportRequested()) {
@@ -6415,7 +6428,10 @@ void MainWindow::handleVideoExportWorkerProcessFinished(int exitCode, int exitSt
         stderrText,
         stdoutTailText
     );
-    if (videoExportWorkerCancelRequested_ && !videoExportWorkerCompletionReceived_) {
+    const bool canceledOutcome =
+        videoExportWorkerCancelRequested_
+        && (!videoExportWorkerCompletionReceived_ || !videoExportWorkerSuccess_);
+    if (canceledOutcome) {
         restorePreviewAspectIfNeeded();
         showCenteredLocalizedMessageBox(
             QMessageBox::Information,
@@ -7462,7 +7478,5 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     });
     dialog.adjustSize();
     dialog.exec();
-    refreshEmbeddedPreviewSurface();
-    scheduleEmbeddedPreviewSurfaceRefresh(0);
-    scheduleEmbeddedPreviewSurfaceRefresh(120);
+    scheduleEmbeddedPreviewSurfaceRefresh();
 }

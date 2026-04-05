@@ -360,8 +360,9 @@ private:
     void updatePreviewSliderPosition(double second);
     QString formatPreviewTimestamp(double second) const;
     void showPreviewSliderTimeHint(int sliderValue);
-    void refreshEmbeddedPreviewSurface();
+    void refreshEmbeddedPreviewSurface(bool force = false);
     void scheduleEmbeddedPreviewSurfaceRefresh(int delayMs = 0);
+    void noteEmbeddedPreviewResizeActivity(const char* source = nullptr);
     void refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers);
     void updatePreviewObjectStats(double second);
     void clearPreviewObjectStats();
@@ -588,6 +589,8 @@ private:
     QTimer* previewSeekDebounceTimer_ = nullptr;
     QTimer* timelineAnalysisIdleTimer_ = nullptr;
     QTimer* exportVideoHoverMenuTimer_ = nullptr;
+    QTimer* embeddedPreviewRefreshTimer_ = nullptr;
+    QTimer* embeddedPreviewResizeSettleTimer_ = nullptr;
     QObject* editorViewport_ = nullptr;
     QProcess* videoExportWorkerProcess_ = nullptr;
     QProgressDialog* videoExportProgressDialog_ = nullptr;
@@ -659,6 +662,8 @@ private:
     bool qtPreviewAwaitingFrameSwap_ = false;
     qint64 qtPreviewAwaitingFrameSwapSinceMs_ = -1;
     bool previewSliderDragging_ = false;
+    bool embeddedPreviewRefreshPending_ = false;
+    bool embeddedPreviewResizeActive_ = false;
     bool suppressTimelineCursorSync_ = false;
     bool suppressTextDirtyTracking_ = false;
     bool autoRestoreLastSessionFile_ = true;

@@ -25,6 +25,29 @@ struct PreviewRuntimeLayerProfileAggregate {
     qint64 spriteActiveFrameCount = 0;
 };
 
+struct PreviewRuntimeStageBackgroundAggregate {
+    double mediaToImageMsSum = 0.0;
+    double mediaToImageMsMax = 0.0;
+    qint64 mediaToImageSampleCount = 0;
+    double mediaTextureMsSum = 0.0;
+    double mediaTextureMsMax = 0.0;
+    qint64 mediaTextureSampleCount = 0;
+    double maskBuildMsSum = 0.0;
+    double maskBuildMsMax = 0.0;
+    qint64 maskBuildSampleCount = 0;
+    double maskTextureUploadMsSum = 0.0;
+    double maskTextureUploadMsMax = 0.0;
+    qint64 maskTextureUploadSampleCount = 0;
+    double nodeUpdateMsSum = 0.0;
+    double nodeUpdateMsMax = 0.0;
+    qint64 nodeUpdateSampleCount = 0;
+    qint64 mediaFrameCount = 0;
+    qint64 maskFrameCount = 0;
+    qint64 videoFrameCount = 0;
+    qint64 staticImageFrameCount = 0;
+    qint64 maskRebuildCount = 0;
+};
+
 class PreviewRuntime : public QObject
 {
     Q_OBJECT
@@ -103,4 +126,5 @@ private:
     qint64 peakFrameSpriteBatchCount_ = 0;
     double peakFrameLayerBuildMs_ = 0.0;
     QVector<PreviewRuntimeLayerProfileAggregate> layerProfileAggregates_;
+    PreviewRuntimeStageBackgroundAggregate stageBackgroundProfile_;
 };

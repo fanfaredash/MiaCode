@@ -1647,6 +1647,52 @@ MainWindow::MainWindow(QWidget* parent)
     timelineAnalysisIdleTimer_ = new QTimer(this);
     timelineAnalysisIdleTimer_->setSingleShot(true);
     connect(timelineAnalysisIdleTimer_, &QTimer::timeout, this, &MainWindow::dispatchTimelineAnalysisRefresh);
+
+    embeddedPreviewRefreshTimer_ = new QTimer(this);
+    embeddedPreviewRefreshTimer_->setSingleShot(true);
+    connect(embeddedPreviewRefreshTimer_, &QTimer::timeout, this, [this]() {
+        const bool skip = !isVisible() || windowState().testFlag(Qt::WindowMinimized);
+        if (runtimeDebugOutputEnabled_) {
+            appendOutput(
+                "preview/embedded_refresh",
+                QString("action=timer_fire delay_ms=%1 skip=%2 visible=%3 minimized=%4 resize_active=%5 pending=%6")
+                    .arg(embeddedPreviewRefreshTimer_ != nullptr ? embeddedPreviewRefreshTimer_->interval() : 0)
+                    .arg(skip ? 1 : 0)
+                    .arg(isVisible() ? 1 : 0)
+                    .arg(windowState().testFlag(Qt::WindowMinimized) ? 1 : 0)
+                    .arg(embeddedPreviewResizeActive_ ? 1 : 0)
+                    .arg(embeddedPreviewRefreshPending_ ? 1 : 0)
+            );
+        }
+        if (skip || !embeddedPreviewRefreshPending_) {
+            return;
+        }
+        refreshEmbeddedPreviewSurface();
+    });
+
+    embeddedPreviewResizeSettleTimer_ = new QTimer(this);
+    embeddedPreviewResizeSettleTimer_->setSingleShot(true);
+    embeddedPreviewResizeSettleTimer_->setInterval(kEmbeddedPreviewResizeSettleDelayMs);
+    connect(embeddedPreviewResizeSettleTimer_, &QTimer::timeout, this, [this]() {
+        const bool wasActive = embeddedPreviewResizeActive_;
+        embeddedPreviewResizeActive_ = false;
+        if (runtimeDebugOutputEnabled_ && wasActive) {
+            appendOutput(
+                "preview/embedded_refresh",
+                QString("action=resize_degrade_end pending=%1 visible=%2 minimized=%3")
+                    .arg(embeddedPreviewRefreshPending_ ? 1 : 0)
+                    .arg(isVisible() ? 1 : 0)
+                    .arg(windowState().testFlag(Qt::WindowMinimized) ? 1 : 0)
+            );
+        }
+        if (!embeddedPreviewRefreshPending_) {
+            return;
+        }
+        if (!isVisible() || windowState().testFlag(Qt::WindowMinimized)) {
+            return;
+        }
+        refreshEmbeddedPreviewSurface(true);
+    });
     logStartupStage("timers_ready");
 
     if (previewSlider_ != nullptr) {
