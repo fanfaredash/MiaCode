@@ -271,6 +271,79 @@ void TimelineView::paintEvent(QPaintEvent* event)
         return a.sourceSequence > b.sourceSequence;
     });
 
+    const auto tapIconTypeForFlags = [](bool isBreak, bool isEach, bool isEx) {
+        if (isEx && isBreak) {
+            return QStringLiteral("tap_break_ex");
+        }
+        if (isEx && isEach) {
+            return QStringLiteral("tap_each_ex");
+        }
+        if (isEx) {
+            return QStringLiteral("tap_ex");
+        }
+        if (isBreak) {
+            return QStringLiteral("tap_break");
+        }
+        if (isEach) {
+            return QStringLiteral("tap_each");
+        }
+        return QStringLiteral("tap");
+    };
+    const auto holdIconTypeForFlags = [](bool isBreak, bool isEach, bool isEx) {
+        if (isEx && isBreak) {
+            return QStringLiteral("hold_break_ex");
+        }
+        if (isEx && isEach) {
+            return QStringLiteral("hold_each_ex");
+        }
+        if (isEx) {
+            return QStringLiteral("hold_ex");
+        }
+        if (isBreak) {
+            return QStringLiteral("hold_break");
+        }
+        if (isEach) {
+            return QStringLiteral("hold_each");
+        }
+        return QStringLiteral("hold");
+    };
+    const auto starIconTypeForFlags = [](bool isBreak, bool isEach, bool isEx, bool isDouble) {
+        if (isEx && isBreak && isDouble) {
+            return QStringLiteral("star_break_ex_double");
+        }
+        if (isEx && isBreak) {
+            return QStringLiteral("star_break_ex");
+        }
+        if (isEx && isEach && isDouble) {
+            return QStringLiteral("star_each_ex_double");
+        }
+        if (isEx && isEach) {
+            return QStringLiteral("star_each_ex");
+        }
+        if (isEx && isDouble) {
+            return QStringLiteral("star_ex_double");
+        }
+        if (isEx) {
+            return QStringLiteral("star_ex");
+        }
+        if (isBreak && isDouble) {
+            return QStringLiteral("star_break_double");
+        }
+        if (isBreak) {
+            return QStringLiteral("star_break");
+        }
+        if (isEach && isDouble) {
+            return QStringLiteral("star_each_double");
+        }
+        if (isDouble) {
+            return QStringLiteral("star_double");
+        }
+        if (isEach) {
+            return QStringLiteral("star_each");
+        }
+        return QStringLiteral("slide");
+    };
+
     const auto paintVisibleNote = [&](const TimelineVisibleNoteRef& visibleRef, bool drawTrackLayer) {
         const TimelineRenderLine& line = lines_.at(visibleRef.lineIndex);
         const TimelineRenderNote& note = line.notes.at(visibleRef.noteIndex);
@@ -312,44 +385,26 @@ void TimelineView::paintEvent(QPaintEvent* event)
         switch (note.kind) {
         case TimelineRenderNoteKind::Tap:
             if (timelineRenderFlagSet(note, TimelineRenderFlagTapUsesStarMaterial)) {
-                const bool doubleStar = timelineRenderFlagSet(note, TimelineRenderFlagTapStarDouble);
-                if (timelineRenderFlagSet(note, TimelineRenderFlagIsBreak) && doubleStar) {
-                    iconType = QStringLiteral("star_break_double");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsBreak)) {
-                    iconType = QStringLiteral("star_break");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEx) && doubleStar) {
-                    iconType = QStringLiteral("star_ex_double");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEx)) {
-                    iconType = QStringLiteral("star_ex");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEach) && doubleStar) {
-                    iconType = QStringLiteral("star_each_double");
-                } else if (doubleStar) {
-                    iconType = QStringLiteral("star_double");
-                } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEach)) {
-                    iconType = QStringLiteral("star_each");
-                } else {
-                    iconType = QStringLiteral("slide");
-                }
-            } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEx)) {
-                iconType = QStringLiteral("tap_ex");
-            } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsBreak)) {
-                iconType = QStringLiteral("tap_break");
-            } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEach)) {
-                iconType = QStringLiteral("tap_each");
+                iconType = starIconTypeForFlags(
+                    timelineRenderFlagSet(note, TimelineRenderFlagIsBreak),
+                    timelineRenderFlagSet(note, TimelineRenderFlagIsEach),
+                    timelineRenderFlagSet(note, TimelineRenderFlagIsEx),
+                    timelineRenderFlagSet(note, TimelineRenderFlagTapStarDouble)
+                );
             } else {
-                iconType = QStringLiteral("tap");
+                iconType = tapIconTypeForFlags(
+                    timelineRenderFlagSet(note, TimelineRenderFlagIsBreak),
+                    timelineRenderFlagSet(note, TimelineRenderFlagIsEach),
+                    timelineRenderFlagSet(note, TimelineRenderFlagIsEx)
+                );
             }
             break;
         case TimelineRenderNoteKind::Hold:
-            if (timelineRenderFlagSet(note, TimelineRenderFlagIsEx)) {
-                iconType = QStringLiteral("hold_ex");
-            } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsBreak)) {
-                iconType = QStringLiteral("hold_break");
-            } else if (timelineRenderFlagSet(note, TimelineRenderFlagIsEach)) {
-                iconType = QStringLiteral("hold_each");
-            } else {
-                iconType = QStringLiteral("hold");
-            }
+            iconType = holdIconTypeForFlags(
+                timelineRenderFlagSet(note, TimelineRenderFlagIsBreak),
+                timelineRenderFlagSet(note, TimelineRenderFlagIsEach),
+                timelineRenderFlagSet(note, TimelineRenderFlagIsEx)
+            );
             break;
         case TimelineRenderNoteKind::Touch:
             iconType = timelineRenderFlagSet(note, TimelineRenderFlagIsBreak)
@@ -364,36 +419,19 @@ void TimelineView::paintEvent(QPaintEvent* event)
             break;
         case TimelineRenderNoteKind::Slide:
         case TimelineRenderNoteKind::Wifi:
-            if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)
-                && timelineRenderFlagSet(note, TimelineRenderFlagHeadEx)) {
-                iconType = QStringLiteral("tap_ex");
-            } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)
-                       && timelineRenderFlagSet(note, TimelineRenderFlagHeadBreak)) {
-                iconType = QStringLiteral("tap_break");
-            } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)
-                       && timelineRenderFlagSet(note, TimelineRenderFlagHeadEach)) {
-                iconType = QStringLiteral("tap_each");
-            } else if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)) {
-                iconType = QStringLiteral("tap");
-            } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadBreak)
-                       && timelineRenderFlagSet(note, TimelineRenderFlagSameHeadSlide)) {
-                iconType = QStringLiteral("star_break_double");
-            } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadBreak)) {
-                iconType = QStringLiteral("star_break");
-            } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadEx)
-                       && timelineRenderFlagSet(note, TimelineRenderFlagSameHeadSlide)) {
-                iconType = QStringLiteral("star_ex_double");
-            } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadEx)) {
-                iconType = QStringLiteral("star_ex");
-            } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadEach)
-                       && timelineRenderFlagSet(note, TimelineRenderFlagSameHeadSlide)) {
-                iconType = QStringLiteral("star_each_double");
-            } else if (timelineRenderFlagSet(note, TimelineRenderFlagSameHeadSlide)) {
-                iconType = QStringLiteral("star_double");
-            } else if (timelineRenderFlagSet(note, TimelineRenderFlagHeadEach)) {
-                iconType = QStringLiteral("star_each");
+            if (timelineRenderFlagSet(note, TimelineRenderFlagSlideHeadUsesTapMaterial)) {
+                iconType = tapIconTypeForFlags(
+                    timelineRenderFlagSet(note, TimelineRenderFlagHeadBreak),
+                    timelineRenderFlagSet(note, TimelineRenderFlagHeadEach),
+                    timelineRenderFlagSet(note, TimelineRenderFlagHeadEx)
+                );
             } else {
-                iconType = QStringLiteral("slide");
+                iconType = starIconTypeForFlags(
+                    timelineRenderFlagSet(note, TimelineRenderFlagHeadBreak),
+                    timelineRenderFlagSet(note, TimelineRenderFlagHeadEach),
+                    timelineRenderFlagSet(note, TimelineRenderFlagHeadEx),
+                    timelineRenderFlagSet(note, TimelineRenderFlagSameHeadSlide)
+                );
             }
             break;
         default:

@@ -417,120 +417,17 @@ void MainWindow::onOpenFile()
     logWindowGeometryDebug("open_file_before_dialog");
     logTopLevelWindowSnapshot("open_file_before_dialog");
     logNativeWindowDebug("open_file_before_dialog");
-    logOwnedNativeWindowSnapshot("open_file_before_dialog", 16);
-    int sampleCount = 0;
-    int restoreCount = 0;
-#ifdef Q_OS_WIN
-    quintptr lastForegroundHwnd = 0;
-    quintptr lastForegroundRootOwnerHwnd = 0;
-#endif
-    QTimer sampleTimer;
-    sampleTimer.setInterval(120);
-    sampleTimer.setSingleShot(false);
-    connect(&sampleTimer, &QTimer::timeout, this, [this, &sampleCount, &restoreCount
-#ifdef Q_OS_WIN
-        , &lastForegroundHwnd, &lastForegroundRootOwnerHwnd
-#endif
-    ]() {
-        if (sampleCount >= 80) {
-            ++sampleCount;
-            return;
-        }
-        ++sampleCount;
-#ifdef Q_OS_WIN
-        const HWND foregroundHwnd = GetForegroundWindow();
-        const HWND foregroundRootOwner = foregroundHwnd != nullptr ? GetAncestor(foregroundHwnd, GA_ROOTOWNER) : nullptr;
-        const quintptr foregroundValue = reinterpret_cast<quintptr>(foregroundHwnd);
-        const quintptr foregroundRootOwnerValue = reinterpret_cast<quintptr>(foregroundRootOwner);
-        QString restoreDetail;
-        if (tryRestoreOwnedNativeFileDialog(reinterpret_cast<HWND>(winId()), &restoreDetail)) {
-            ++restoreCount;
-            appendOutput(
-                "window/dialog_watch",
-                QString("open_file_dialog restored sample=%1 count=%2 %3")
-                    .arg(sampleCount)
-                    .arg(restoreCount)
-                    .arg(restoreDetail)
-            );
-        }
-        const bool shouldLogNativeSample =
-            sampleCount <= 8
-            || (sampleCount % 5) == 0
-            || foregroundValue != lastForegroundHwnd
-            || foregroundRootOwnerValue != lastForegroundRootOwnerHwnd;
-        if (shouldLogNativeSample) {
-            const QString tag = QStringLiteral("open_file_dialog/sample_%1").arg(sampleCount);
-            logNativeWindowDebug(tag);
-            logOwnedNativeWindowSnapshot(tag, 16);
-        }
-        lastForegroundHwnd = foregroundValue;
-        lastForegroundRootOwnerHwnd = foregroundRootOwnerValue;
-#endif
-    });
-
-    QFileDialog dialog(
+    suspendEmbeddedPreviewForNativeDialog("open_file_dialog");
+    const QString path = QFileDialog::getOpenFileName(
         this,
         QStringLiteral("Open simai file"),
         resolveInitialOpenDirectory(),
         QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)")
     );
-    dialog.setObjectName(QStringLiteral("miacode_open_file_dialog"));
-    dialog.setProperty("miacode_debug_scope", QStringLiteral("open_file_dialog"));
-    dialog.setAcceptMode(QFileDialog::AcceptOpen);
-    dialog.setFileMode(QFileDialog::ExistingFile);
-    dialog.setModal(true);
-    dialog.installEventFilter(this);
-    if (runtimeDebugOutputEnabled_) {
-        appendOutput(
-            "window/dialog_watch",
-            QString("scope=open_file_dialog configured widget=%1 directory=%2 native_window=%3")
-                .arg(pointerHex(&dialog))
-                .arg(dialog.directory().absolutePath())
-                .arg(dialog.windowHandle() != nullptr ? 1 : 0)
-        );
-    }
-    if (QWindow* dialogWindow = dialog.windowHandle(); dialogWindow != nullptr) {
-        dialogWindow->setProperty("miacode_debug_scope", QStringLiteral("open_file_dialog/window"));
-        dialogWindow->setProperty("miacode_debug_filter_installed", true);
-        dialogWindow->installEventFilter(this);
-    }
-
-#ifdef Q_OS_WIN
-    ScopedNativeDialogWinEventTrace nativeDialogTrace(
-        QStringLiteral("open_file_dialog"),
-        reinterpret_cast<HWND>(winId())
-    );
-#endif
-
-    logTopLevelWindowSnapshot("open_file_dialog_exec_begin");
-    logNativeWindowDebug("open_file_dialog_exec_begin");
-    logOwnedNativeWindowSnapshot("open_file_dialog_exec_begin", 16);
-    sampleTimer.start();
-    scheduleEmbeddedPreviewSurfaceRefresh(0);
-    scheduleEmbeddedPreviewSurfaceRefresh(120);
-    const QString path = (dialog.exec() == QDialog::Accepted && !dialog.selectedFiles().isEmpty())
-        ? dialog.selectedFiles().constFirst()
-        : QString();
-    sampleTimer.stop();
-    refreshEmbeddedPreviewSurface();
-    scheduleEmbeddedPreviewSurfaceRefresh(0);
-    scheduleEmbeddedPreviewSurfaceRefresh(120);
-    if (runtimeDebugOutputEnabled_) {
-        appendOutput(
-            "window/dialog_watch",
-            QString("open_file_dialog finished selected_empty=%1 samples=%2 restores=%3")
-                .arg(path.isEmpty() ? 1 : 0)
-                .arg(qMin(sampleCount, 80))
-                .arg(restoreCount)
-        );
-    }
-    logTopLevelWindowSnapshot("open_file_dialog_exec_end");
-    logNativeWindowDebug("open_file_dialog_exec_end");
-    logOwnedNativeWindowSnapshot("open_file_dialog_exec_end", 16);
+    resumeEmbeddedPreviewForNativeDialog("open_file_dialog");
     logWindowGeometryDebug("open_file_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
     logTopLevelWindowSnapshot("open_file_after_dialog");
     logNativeWindowDebug("open_file_after_dialog");
-    logOwnedNativeWindowSnapshot("open_file_after_dialog", 16);
     if (path.isEmpty()) {
         return;
     }
@@ -719,119 +616,17 @@ bool MainWindow::onSaveFileAs()
     logTopLevelWindowSnapshot("save_file_as_dialog/begin");
     logWindowGeometryDebug("save_file_as_before_dialog");
     logNativeWindowDebug("save_file_as_before_dialog");
-    logOwnedNativeWindowSnapshot("save_file_as_before_dialog", 16);
-    int sampleCount = 0;
-    int restoreCount = 0;
-#ifdef Q_OS_WIN
-    quintptr lastForegroundHwnd = 0;
-    quintptr lastForegroundRootOwnerHwnd = 0;
-#endif
-    QTimer sampleTimer;
-    sampleTimer.setInterval(120);
-    connect(&sampleTimer, &QTimer::timeout, this, [this, &sampleCount, &restoreCount
-#ifdef Q_OS_WIN
-        , &lastForegroundHwnd, &lastForegroundRootOwnerHwnd
-#endif
-    ]() {
-        if (sampleCount >= 80) {
-            ++sampleCount;
-            return;
-        }
-        ++sampleCount;
-#ifdef Q_OS_WIN
-        const HWND foregroundHwnd = GetForegroundWindow();
-        const HWND foregroundRootOwner = foregroundHwnd != nullptr ? GetAncestor(foregroundHwnd, GA_ROOTOWNER) : nullptr;
-        const quintptr foregroundValue = reinterpret_cast<quintptr>(foregroundHwnd);
-        const quintptr foregroundRootOwnerValue = reinterpret_cast<quintptr>(foregroundRootOwner);
-        QString restoreDetail;
-        if (tryRestoreOwnedNativeFileDialog(reinterpret_cast<HWND>(winId()), &restoreDetail)) {
-            ++restoreCount;
-            appendOutput(
-                "window/dialog_watch",
-                QString("save_file_dialog restored sample=%1 count=%2 %3")
-                    .arg(sampleCount)
-                    .arg(restoreCount)
-                    .arg(restoreDetail)
-            );
-        }
-        const bool shouldLogNativeSample =
-            sampleCount <= 8
-            || (sampleCount % 5) == 0
-            || foregroundValue != lastForegroundHwnd
-            || foregroundRootOwnerValue != lastForegroundRootOwnerHwnd;
-        if (shouldLogNativeSample) {
-            const QString tag = QStringLiteral("save_file_dialog/sample_%1").arg(sampleCount);
-            logNativeWindowDebug(tag);
-            logOwnedNativeWindowSnapshot(tag, 16);
-        }
-        lastForegroundHwnd = foregroundValue;
-        lastForegroundRootOwnerHwnd = foregroundRootOwnerValue;
-#endif
-    });
-
-    QFileDialog dialog(
+    suspendEmbeddedPreviewForNativeDialog("save_file_dialog");
+    const QString path = QFileDialog::getSaveFileName(
         this,
         QStringLiteral("Save simai file"),
         currentFilePath_.isEmpty() ? QStringLiteral("chart.txt") : currentFilePath_,
         QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)")
     );
-    dialog.setObjectName(QStringLiteral("miacode_save_file_dialog"));
-    dialog.setProperty("miacode_debug_scope", QStringLiteral("save_file_dialog"));
-    dialog.setAcceptMode(QFileDialog::AcceptSave);
-    dialog.setFileMode(QFileDialog::AnyFile);
-    dialog.setModal(true);
-    dialog.installEventFilter(this);
-    if (runtimeDebugOutputEnabled_) {
-        appendOutput(
-            "window/dialog_watch",
-            QString("scope=save_file_dialog configured widget=%1 directory=%2 native_window=%3")
-                .arg(pointerHex(&dialog))
-                .arg(dialog.directory().absolutePath())
-                .arg(dialog.windowHandle() != nullptr ? 1 : 0)
-        );
-    }
-    if (QWindow* dialogWindow = dialog.windowHandle(); dialogWindow != nullptr) {
-        dialogWindow->setProperty("miacode_debug_scope", QStringLiteral("save_file_dialog/window"));
-        dialogWindow->setProperty("miacode_debug_filter_installed", true);
-        dialogWindow->installEventFilter(this);
-    }
-
-#ifdef Q_OS_WIN
-    ScopedNativeDialogWinEventTrace nativeDialogTrace(
-        QStringLiteral("save_file_dialog"),
-        reinterpret_cast<HWND>(winId())
-    );
-#endif
-
-    logTopLevelWindowSnapshot("save_file_dialog_exec_begin");
-    logNativeWindowDebug("save_file_dialog_exec_begin");
-    logOwnedNativeWindowSnapshot("save_file_dialog_exec_begin", 16);
-    sampleTimer.start();
-    scheduleEmbeddedPreviewSurfaceRefresh(0);
-    scheduleEmbeddedPreviewSurfaceRefresh(120);
-    const QString path = (dialog.exec() == QDialog::Accepted && !dialog.selectedFiles().isEmpty())
-        ? dialog.selectedFiles().constFirst()
-        : QString();
-    sampleTimer.stop();
-    refreshEmbeddedPreviewSurface();
-    scheduleEmbeddedPreviewSurfaceRefresh(0);
-    scheduleEmbeddedPreviewSurfaceRefresh(120);
-    if (runtimeDebugOutputEnabled_) {
-        appendOutput(
-            "window/dialog_watch",
-            QString("save_file_dialog finished selected_empty=%1 samples=%2 restores=%3")
-                .arg(path.isEmpty() ? 1 : 0)
-                .arg(qMin(sampleCount, 80))
-                .arg(restoreCount)
-        );
-    }
-    logTopLevelWindowSnapshot("save_file_dialog_exec_end");
-    logNativeWindowDebug("save_file_dialog_exec_end");
-    logOwnedNativeWindowSnapshot("save_file_dialog_exec_end", 16);
+    resumeEmbeddedPreviewForNativeDialog("save_file_dialog");
     logWindowGeometryDebug("save_file_as_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
     logTopLevelWindowSnapshot("save_file_as_dialog/after_dialog");
     logNativeWindowDebug("save_file_as_after_dialog");
-    logOwnedNativeWindowSnapshot("save_file_as_after_dialog", 16);
     if (path.isEmpty()) {
         return false;
     }

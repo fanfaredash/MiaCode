@@ -1025,15 +1025,9 @@ MainWindow::MainWindow(QWidget* parent)
         QDesktopServices::openUrl(QUrl(url));
     };
 
-    QAction* toolboxMuriAction = toolboxMenu_->addAction(
-        UiText::isChineseUi() ? QStringLiteral("无理检测") : QStringLiteral("Muri Check")
-    );
-    connect(toolboxMuriAction, &QAction::triggered, this, [this]() {
-        setMuriRenderMode(RenderMode::MaimuriDxStyle);
-        if (bottomTabs_ != nullptr && muriList_ != nullptr) {
-            bottomTabs_->setCurrentWidget(muriList_);
-        }
-    });
+    if (latencyDetectorAction_ != nullptr) {
+        toolboxMenu_->addAction(latencyDetectorAction_);
+    }
 
     if (normalizeWholeChartAction_ != nullptr) {
         toolboxMenu_->addAction(normalizeWholeChartAction_);
@@ -1651,17 +1645,22 @@ MainWindow::MainWindow(QWidget* parent)
     embeddedPreviewRefreshTimer_ = new QTimer(this);
     embeddedPreviewRefreshTimer_->setSingleShot(true);
     connect(embeddedPreviewRefreshTimer_, &QTimer::timeout, this, [this]() {
-        const bool skip = !isVisible() || windowState().testFlag(Qt::WindowMinimized);
+        const bool skip =
+            embeddedPreviewRefreshSuspended_ || !isVisible() || windowState().testFlag(Qt::WindowMinimized);
         if (runtimeDebugOutputEnabled_) {
             appendOutput(
                 "preview/embedded_refresh",
-                QString("action=timer_fire delay_ms=%1 skip=%2 visible=%3 minimized=%4 resize_active=%5 pending=%6")
+                QString(
+                    "action=timer_fire delay_ms=%1 skip=%2 visible=%3 minimized=%4 resize_active=%5 pending=%6 "
+                    "suspended=%7"
+                )
                     .arg(embeddedPreviewRefreshTimer_ != nullptr ? embeddedPreviewRefreshTimer_->interval() : 0)
                     .arg(skip ? 1 : 0)
                     .arg(isVisible() ? 1 : 0)
                     .arg(windowState().testFlag(Qt::WindowMinimized) ? 1 : 0)
                     .arg(embeddedPreviewResizeActive_ ? 1 : 0)
                     .arg(embeddedPreviewRefreshPending_ ? 1 : 0)
+                    .arg(embeddedPreviewRefreshSuspended_ ? 1 : 0)
             );
         }
         if (skip || !embeddedPreviewRefreshPending_) {
@@ -1674,6 +1673,11 @@ MainWindow::MainWindow(QWidget* parent)
     embeddedPreviewResizeSettleTimer_->setSingleShot(true);
     embeddedPreviewResizeSettleTimer_->setInterval(kEmbeddedPreviewResizeSettleDelayMs);
     connect(embeddedPreviewResizeSettleTimer_, &QTimer::timeout, this, [this]() {
+        if (embeddedPreviewRefreshSuspended_) {
+            embeddedPreviewResizeActive_ = false;
+            embeddedPreviewRefreshPending_ = true;
+            return;
+        }
         const bool wasActive = embeddedPreviewResizeActive_;
         embeddedPreviewResizeActive_ = false;
         if (runtimeDebugOutputEnabled_ && wasActive) {
