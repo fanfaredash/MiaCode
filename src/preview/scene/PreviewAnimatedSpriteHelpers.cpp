@@ -1,5 +1,7 @@
 #include "preview/scene/PreviewAnimatedSpriteHelpers.h"
 
+#include <QHash>
+#include <QMutex>
 #include <QPainter>
 #include <QtMath>
 
@@ -13,10 +15,56 @@ struct AnimatedSpriteAdjustParams {
 
 constexpr qreal kMaterialAnimationTimeScale = 1.0 / 20.0;
 constexpr qreal kMaterialAnimationPhaseScale = (kMaterialAnimationTimeScale / 0.0008) * 0.2;
+constexpr qreal kOverlayCacheScalarQuantization = 4096.0;
+constexpr qsizetype kOverlayCacheMaxEntries = 128;
 
-qreal animatedSpriteWave(double playheadSeconds)
+struct OverlayCacheKey {
+    quint64 baseImageKey = 0;
+    quint64 overlayImageKey = 0;
+    qint64 mixKey = 0;
+    qint64 lightenKey = 0;
+    QRgb tintRgba = 0;
+
+    bool operator==(const OverlayCacheKey& other) const
+    {
+        return baseImageKey == other.baseImageKey
+            && overlayImageKey == other.overlayImageKey
+            && mixKey == other.mixKey
+            && lightenKey == other.lightenKey
+            && tintRgba == other.tintRgba;
+    }
+};
+
+size_t hashCombine(size_t seed, quint64 value) noexcept
 {
-    return qSin(static_cast<qreal>(playheadSeconds) * kMaterialAnimationPhaseScale);
+    return seed ^ (static_cast<size_t>(value) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2));
+}
+
+size_t qHash(const OverlayCacheKey& key, size_t seed = 0) noexcept
+{
+    seed = hashCombine(seed, key.baseImageKey);
+    seed = hashCombine(seed, key.overlayImageKey);
+    seed = hashCombine(seed, static_cast<quint64>(key.mixKey));
+    seed = hashCombine(seed, static_cast<quint64>(key.lightenKey));
+    seed = hashCombine(seed, key.tintRgba);
+    return seed;
+}
+
+QMutex& animatedSpriteCacheMutex()
+{
+    static QMutex mutex;
+    return mutex;
+}
+
+QHash<OverlayCacheKey, QImage>& overlayImageCache()
+{
+    static QHash<OverlayCacheKey, QImage> cache;
+    return cache;
+}
+
+qint64 quantizeOverlayCacheScalar(qreal value)
+{
+    return qRound64(value * kOverlayCacheScalarQuantization);
 }
 
 AnimatedSpriteAdjustParams animatedSpriteAdjustParams(
@@ -29,7 +77,7 @@ AnimatedSpriteAdjustParams animatedSpriteAdjustParams(
         return params;
     }
 
-    const qreal wave = animatedSpriteWave(playheadSeconds);
+    const qreal wave = miacode::preview::scene::previewAnimatedSpriteWave(playheadSeconds);
     if (effect == miacode::preview::scene::PreviewAnimatedSpriteEffect::HoldShine) {
         params.brightness = 0.95 + qAbs(wave) * 0.5;
         return params;
@@ -85,6 +133,11 @@ QImage applyAnimatedSpriteAdjustments(const QImage& source, const AnimatedSprite
 
 namespace miacode::preview::scene {
 
+qreal previewAnimatedSpriteWave(double playheadSeconds)
+{
+    return qSin(static_cast<qreal>(playheadSeconds) * kMaterialAnimationPhaseScale);
+}
+
 QImage composeOverlayImage(
     const QImage& base,
     const QImage& overlay,
@@ -98,6 +151,21 @@ QImage composeOverlayImage(
     }
 
     const QColor tint = accentOverride != nullptr ? *accentOverride : QColor(255, 255, 255);
+    const OverlayCacheKey cacheKey{
+        static_cast<quint64>(base.cacheKey()),
+        static_cast<quint64>(overlay.cacheKey()),
+        quantizeOverlayCacheScalar(mix),
+        quantizeOverlayCacheScalar(lighten),
+        tint.rgba()
+    };
+    {
+        QMutexLocker locker(&animatedSpriteCacheMutex());
+        if (const auto it = overlayImageCache().constFind(cacheKey); it != overlayImageCache().constEnd()) {
+            const QImage& cached = it.value();
+            return cached;
+        }
+    }
+
     QImage overlayTinted = overlay.convertToFormat(QImage::Format_ARGB32);
     for (int y = 0; y < overlayTinted.height(); ++y) {
         QRgb* line = reinterpret_cast<QRgb*>(overlayTinted.scanLine(y));
@@ -127,6 +195,18 @@ QImage composeOverlayImage(
     p.drawImage(baseTopLeft, base);
     p.drawImage(overlayTopLeft, overlayTinted);
     p.end();
+
+    {
+        QMutexLocker locker(&animatedSpriteCacheMutex());
+        if (const auto it = overlayImageCache().constFind(cacheKey); it != overlayImageCache().constEnd()) {
+            const QImage& cached = it.value();
+            return cached;
+        }
+        if (overlayImageCache().size() >= kOverlayCacheMaxEntries) {
+            overlayImageCache().clear();
+        }
+        overlayImageCache().insert(cacheKey, composed);
+    }
     return composed;
 }
 

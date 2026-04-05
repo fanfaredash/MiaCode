@@ -83,6 +83,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPlainTextEdit>
+#include <QPlatformSurfaceEvent>
 #include <QPropertyAnimation>
 #include <QProcess>
 #include <QProgressDialog>
@@ -166,6 +167,7 @@ constexpr int kPreviewFullscreenControlsAnimationDurationMs = 180;
 constexpr int kPreviewFullscreenControlsOpacityAnimationDurationMs = 180;
 constexpr int kEditorTextFontSizeMin = 8;
 constexpr int kEditorTextFontSizeMax = 28;
+constexpr int kWaveformPeakCount = 1024;
 constexpr double kEditorLineSpacingFactorDefault = 1.5;
 constexpr int kEditorFindBarMinWidth = 300;
 constexpr int kEditorFindBarMaxWidth = 500;
@@ -180,6 +182,173 @@ const QList<double> kEditorLineSpacingFactorOptions{
 const QList<double> kPreviewPlaybackRateOptions{
     0.25, 0.5, 0.75, 1.0, 1.25, 2.0,
 };
+
+QString pointerHex(const void* pointer)
+{
+    return QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(pointer), 0, 16);
+}
+
+QString qEventTypeName(QEvent::Type type)
+{
+    switch (type) {
+    case QEvent::None:
+        return QStringLiteral("None");
+    case QEvent::Show:
+        return QStringLiteral("Show");
+    case QEvent::Hide:
+        return QStringLiteral("Hide");
+    case QEvent::Close:
+        return QStringLiteral("Close");
+    case QEvent::Move:
+        return QStringLiteral("Move");
+    case QEvent::Resize:
+        return QStringLiteral("Resize");
+    case QEvent::Polish:
+        return QStringLiteral("Polish");
+    case QEvent::PolishRequest:
+        return QStringLiteral("PolishRequest");
+    case QEvent::UpdateRequest:
+        return QStringLiteral("UpdateRequest");
+    case QEvent::WinIdChange:
+        return QStringLiteral("WinIdChange");
+    case QEvent::PlatformSurface:
+        return QStringLiteral("PlatformSurface");
+    case QEvent::Expose:
+        return QStringLiteral("Expose");
+    case QEvent::WindowActivate:
+        return QStringLiteral("WindowActivate");
+    case QEvent::WindowDeactivate:
+        return QStringLiteral("WindowDeactivate");
+    case QEvent::ActivationChange:
+        return QStringLiteral("ActivationChange");
+    case QEvent::FocusIn:
+        return QStringLiteral("FocusIn");
+    case QEvent::FocusOut:
+        return QStringLiteral("FocusOut");
+    case QEvent::ParentChange:
+        return QStringLiteral("ParentChange");
+    case QEvent::ShowToParent:
+        return QStringLiteral("ShowToParent");
+    case QEvent::HideToParent:
+        return QStringLiteral("HideToParent");
+    case QEvent::WindowStateChange:
+        return QStringLiteral("WindowStateChange");
+    case QEvent::WindowBlocked:
+        return QStringLiteral("WindowBlocked");
+    case QEvent::WindowUnblocked:
+        return QStringLiteral("WindowUnblocked");
+    case QEvent::Destroy:
+        return QStringLiteral("Destroy");
+    default:
+        break;
+    }
+    return QStringLiteral("Type(%1)").arg(static_cast<int>(type));
+}
+
+QString platformSurfaceEventTypeName(QPlatformSurfaceEvent::SurfaceEventType type)
+{
+    switch (type) {
+    case QPlatformSurfaceEvent::SurfaceCreated:
+        return QStringLiteral("SurfaceCreated");
+    case QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed:
+        return QStringLiteral("SurfaceAboutToBeDestroyed");
+    }
+    return QStringLiteral("SurfaceType(%1)").arg(static_cast<int>(type));
+}
+
+QString windowVisibilityName(QWindow::Visibility visibility)
+{
+    switch (visibility) {
+    case QWindow::Hidden:
+        return QStringLiteral("Hidden");
+    case QWindow::AutomaticVisibility:
+        return QStringLiteral("Automatic");
+    case QWindow::Windowed:
+        return QStringLiteral("Windowed");
+    case QWindow::Minimized:
+        return QStringLiteral("Minimized");
+    case QWindow::Maximized:
+        return QStringLiteral("Maximized");
+    case QWindow::FullScreen:
+        return QStringLiteral("FullScreen");
+    }
+    return QStringLiteral("Visibility(%1)").arg(static_cast<int>(visibility));
+}
+
+QString platformSurfaceDetail(const QEvent* event)
+{
+    if (event == nullptr || event->type() != QEvent::PlatformSurface) {
+        return QString();
+    }
+    const auto* surfaceEvent = static_cast<const QPlatformSurfaceEvent*>(event);
+    return QStringLiteral("surface_event=%1")
+        .arg(platformSurfaceEventTypeName(surfaceEvent->surfaceEventType()));
+}
+
+bool shouldTracePreviewHostWindowEvent(QEvent::Type type)
+{
+    switch (type) {
+    case QEvent::Show:
+    case QEvent::Hide:
+    case QEvent::Expose:
+    case QEvent::PlatformSurface:
+    case QEvent::FocusIn:
+    case QEvent::FocusOut:
+    case QEvent::WindowActivate:
+    case QEvent::WindowDeactivate:
+    case QEvent::Destroy:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool shouldTraceDebugDialogWidgetEvent(QEvent::Type type)
+{
+    switch (type) {
+    case QEvent::Show:
+    case QEvent::Hide:
+    case QEvent::Close:
+    case QEvent::Move:
+    case QEvent::Resize:
+    case QEvent::Polish:
+    case QEvent::PolishRequest:
+    case QEvent::WinIdChange:
+    case QEvent::WindowActivate:
+    case QEvent::WindowDeactivate:
+    case QEvent::ActivationChange:
+    case QEvent::FocusIn:
+    case QEvent::FocusOut:
+    case QEvent::ParentChange:
+    case QEvent::ShowToParent:
+    case QEvent::HideToParent:
+    case QEvent::Destroy:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool shouldTraceDebugDialogWindowEvent(QEvent::Type type)
+{
+    switch (type) {
+    case QEvent::Show:
+    case QEvent::Hide:
+    case QEvent::Expose:
+    case QEvent::Move:
+    case QEvent::Resize:
+    case QEvent::PlatformSurface:
+    case QEvent::FocusIn:
+    case QEvent::FocusOut:
+    case QEvent::WindowActivate:
+    case QEvent::WindowDeactivate:
+    case QEvent::WindowStateChange:
+    case QEvent::Destroy:
+        return true;
+    default:
+        return false;
+    }
+}
 
 QString cssRgba(const QColor& color, int alpha)
 {
@@ -817,6 +986,59 @@ bool tryRestoreOwnedNativeFileDialog(HWND ownerHwnd, QString* detailOut)
                          .arg(hasAfter ? static_cast<int>(after.showCmd) : -1);
     }
     return true;
+}
+
+struct RelatedNativeWindowEnumContext {
+    HWND ownerHwnd = nullptr;
+    HWND foregroundHwnd = nullptr;
+    HWND activeHwnd = nullptr;
+    HWND focusHwnd = nullptr;
+    HWND foregroundRootOwner = nullptr;
+    DWORD ownerPid = 0;
+    QSet<quintptr> seen;
+    QList<HWND> matches;
+};
+
+BOOL CALLBACK collectRelatedNativeWindowProc(HWND hwnd, LPARAM lParam)
+{
+    auto* context = reinterpret_cast<RelatedNativeWindowEnumContext*>(lParam);
+    if (context == nullptr || hwnd == nullptr) {
+        return TRUE;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    const HWND owner = GetWindow(hwnd, GW_OWNER);
+    const HWND root = GetAncestor(hwnd, GA_ROOT);
+    const HWND rootOwner = GetAncestor(hwnd, GA_ROOTOWNER);
+
+    const bool relevantByHandle =
+        hwnd == context->ownerHwnd
+        || hwnd == context->foregroundHwnd
+        || hwnd == context->activeHwnd
+        || hwnd == context->focusHwnd;
+    const bool relevantByOwnerChain =
+        owner == context->ownerHwnd
+        || root == context->ownerHwnd
+        || rootOwner == context->ownerHwnd
+        || owner == context->foregroundHwnd
+        || rootOwner == context->foregroundRootOwner;
+    const bool relevantByProcess = context->ownerPid != 0 && pid == context->ownerPid;
+    const bool visibleInteresting =
+        IsWindowVisible(hwnd)
+        && (relevantByOwnerChain || hwnd == context->foregroundHwnd);
+
+    if (!(relevantByHandle || relevantByOwnerChain || relevantByProcess || visibleInteresting)) {
+        return TRUE;
+    }
+
+    const quintptr key = reinterpret_cast<quintptr>(hwnd);
+    if (context->seen.contains(key)) {
+        return TRUE;
+    }
+    context->seen.insert(key);
+    context->matches.append(hwnd);
+    return TRUE;
 }
 #endif
 
@@ -1552,6 +1774,104 @@ QString readTextFileWithFallbackEncoding(const QString& path, bool* usedSystemEn
     }
     QStringDecoder systemDecoder(QStringConverter::System);
     return systemDecoder.decode(bytes);
+}
+
+struct PreparedDocumentOpenPayload {
+    bool success = false;
+    bool usedSystemEncoding = false;
+    QString normalizedPath;
+    SimaiDocument document;
+    QString resolvedTrackPath;
+    double trackDurationSeconds = 0.0;
+    bool hasTrackDuration = false;
+    qint64 readElapsedMs = 0;
+    qint64 decodeElapsedMs = 0;
+    qint64 parseElapsedMs = 0;
+    qint64 trackProbeElapsedMs = 0;
+    qint64 totalElapsedMs = 0;
+};
+
+qint64 fileLastModifiedMs(const QFileInfo& fileInfo)
+{
+    return fileInfo.exists() ? fileInfo.lastModified().toMSecsSinceEpoch() : -1;
+}
+
+double probeAudioDurationSeconds(const QString& trackPath)
+{
+    if (trackPath.isEmpty() || !QFileInfo::exists(trackPath)) {
+        return 0.0;
+    }
+
+    const QByteArray pathBytes = QFile::encodeName(trackPath);
+    ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 1, 48000);
+    ma_decoder decoder;
+    if (ma_decoder_init_file(pathBytes.constData(), &config, &decoder) != MA_SUCCESS) {
+        return 0.0;
+    }
+
+    ma_uint64 totalFrames = 0;
+    const bool ok = ma_decoder_get_length_in_pcm_frames(&decoder, &totalFrames) == MA_SUCCESS
+        && totalFrames > 0;
+    ma_decoder_uninit(&decoder);
+    if (!ok) {
+        return 0.0;
+    }
+
+    return static_cast<double>(totalFrames) / 48000.0;
+}
+
+PreparedDocumentOpenPayload prepareDocumentOpenPayload(const QString& path, bool probeTrackDuration)
+{
+    PreparedDocumentOpenPayload payload;
+    payload.normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
+    if (payload.normalizedPath.isEmpty()) {
+        return payload;
+    }
+
+    QFile file(payload.normalizedPath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return payload;
+    }
+
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    QElapsedTimer phaseTimer;
+    phaseTimer.start();
+    const QByteArray bytes = file.readAll();
+    payload.readElapsedMs = phaseTimer.elapsed();
+
+    phaseTimer.restart();
+    QString text;
+    if (bytes.startsWith("\xEF\xBB\xBF")) {
+        text = QString::fromUtf8(bytes.mid(3));
+    } else {
+        QStringDecoder utf8Decoder(QStringConverter::Utf8);
+        text = utf8Decoder.decode(bytes);
+        if (utf8Decoder.hasError()) {
+            QStringDecoder systemDecoder(QStringConverter::System);
+            text = systemDecoder.decode(bytes);
+            payload.usedSystemEncoding = true;
+        }
+    }
+    payload.decodeElapsedMs = phaseTimer.elapsed();
+
+    phaseTimer.restart();
+    payload.document = SimaiDocument::fromText(text);
+    payload.parseElapsedMs = phaseTimer.elapsed();
+
+    if (probeTrackDuration) {
+        payload.resolvedTrackPath = miacode::chart_assets::resolveTrackPath(payload.normalizedPath);
+        phaseTimer.restart();
+        if (!payload.resolvedTrackPath.isEmpty()) {
+            payload.trackDurationSeconds = probeAudioDurationSeconds(payload.resolvedTrackPath);
+            payload.hasTrackDuration = payload.trackDurationSeconds > 0.0;
+        }
+        payload.trackProbeElapsedMs = phaseTimer.elapsed();
+    }
+
+    payload.totalElapsedMs = totalTimer.elapsed();
+    payload.success = true;
+    return payload;
 }
 
 QVector<float> buildWaveformPeaks(const QString& trackPath, double* durationSeconds, int peakCount = 1024)
@@ -3023,6 +3343,55 @@ void MainWindow::logNativeWindowDebug(const QString& tag, WId dialogWId)
 #endif
 }
 
+void MainWindow::logOwnedNativeWindowSnapshot(const QString& tag, int maxWindows)
+{
+    if (!runtimeDebugOutputEnabled_) {
+        return;
+    }
+#ifdef Q_OS_WIN
+    const HWND ownerHwnd = reinterpret_cast<HWND>(winId());
+    if (ownerHwnd == nullptr) {
+        appendOutput("window/native_related", QString("tag=%1 owner=0x0 count=0").arg(tag));
+        return;
+    }
+
+    RelatedNativeWindowEnumContext context;
+    context.ownerHwnd = ownerHwnd;
+    context.foregroundHwnd = GetForegroundWindow();
+    context.activeHwnd = GetActiveWindow();
+    context.focusHwnd = GetFocus();
+    context.foregroundRootOwner =
+        context.foregroundHwnd != nullptr ? GetAncestor(context.foregroundHwnd, GA_ROOTOWNER) : nullptr;
+    GetWindowThreadProcessId(ownerHwnd, &context.ownerPid);
+    EnumWindows(&collectRelatedNativeWindowProc, reinterpret_cast<LPARAM>(&context));
+
+    QStringList lines;
+    lines.reserve(qMin(maxWindows, context.matches.size()) + 2);
+    lines.append(
+        QString("tag=%1 owner=0x%2 owner_pid=%3 count=%4 fg=0x%5 active=0x%6 focus=0x%7 fg_root_owner=0x%8")
+            .arg(tag)
+            .arg(reinterpret_cast<quintptr>(ownerHwnd), 0, 16)
+            .arg(context.ownerPid)
+            .arg(context.matches.size())
+            .arg(reinterpret_cast<quintptr>(context.foregroundHwnd), 0, 16)
+            .arg(reinterpret_cast<quintptr>(context.activeHwnd), 0, 16)
+            .arg(reinterpret_cast<quintptr>(context.focusHwnd), 0, 16)
+            .arg(reinterpret_cast<quintptr>(context.foregroundRootOwner), 0, 16)
+    );
+    const int limit = maxWindows <= 0 ? context.matches.size() : qMin(maxWindows, context.matches.size());
+    for (int index = 0; index < limit; ++index) {
+        lines.append(QString("[%1] %2").arg(index).arg(describeNativeWindowHandle(context.matches[index])));
+    }
+    if (limit < context.matches.size()) {
+        lines.append(QString("... truncated=%1").arg(context.matches.size() - limit));
+    }
+    appendOutput("window/native_related", lines.join('\n'));
+#else
+    Q_UNUSED(tag);
+    Q_UNUSED(maxWindows);
+#endif
+}
+
 #include "sections/frame/MainWindow.BootstrapAndMenus.cpp"
 void MainWindow::closeEvent(QCloseEvent* event)
 {
@@ -3198,6 +3567,112 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
         }
     }
     QObject* previewWindowObject = previewCanvas_ != nullptr ? previewCanvas_->hostWindow() : nullptr;
+    if (watched == previewWindowObject) {
+        if (runtimeDebugOutputEnabled_ && shouldTracePreviewHostWindowEvent(event->type())) {
+            auto* previewWindow = qobject_cast<QWindow*>(previewWindowObject);
+            const QString surfaceDetail = platformSurfaceDetail(event);
+            appendOutput(
+                "preview/host_window_event",
+                QString(
+                    "event=%1 watched=%2 spontaneous=%3 visible=%4 exposed=%5 active=%6 visibility=%7 "
+                    "pos=(%8,%9) size=%10x%11%12"
+                )
+                    .arg(qEventTypeName(event->type()))
+                    .arg(pointerHex(previewWindow))
+                    .arg(event->spontaneous() ? 1 : 0)
+                    .arg(previewWindow != nullptr && previewWindow->isVisible() ? 1 : 0)
+                    .arg(previewWindow != nullptr && previewWindow->isExposed() ? 1 : 0)
+                    .arg(previewWindow != nullptr && previewWindow->isActive() ? 1 : 0)
+                    .arg(previewWindow != nullptr ? windowVisibilityName(previewWindow->visibility()) : QStringLiteral("null"))
+                    .arg(previewWindow != nullptr ? previewWindow->x() : 0)
+                    .arg(previewWindow != nullptr ? previewWindow->y() : 0)
+                    .arg(previewWindow != nullptr ? previewWindow->width() : 0)
+                    .arg(previewWindow != nullptr ? previewWindow->height() : 0)
+                    .arg(surfaceDetail.isEmpty() ? QString() : QStringLiteral(" ") + surfaceDetail)
+            );
+        }
+        if (event->type() == QEvent::Show
+            || event->type() == QEvent::Expose
+            || event->type() == QEvent::PlatformSurface) {
+            scheduleEmbeddedPreviewSurfaceRefresh(0);
+            scheduleEmbeddedPreviewSurfaceRefresh(120);
+        }
+    }
+    if (auto* fileDialog = qobject_cast<QFileDialog*>(watched); fileDialog != nullptr) {
+        const QString debugScope = fileDialog->property("miacode_debug_scope").toString();
+        if (!debugScope.isEmpty()) {
+            if (runtimeDebugOutputEnabled_ && shouldTraceDebugDialogWidgetEvent(event->type())) {
+                const QRect geom = fileDialog->geometry();
+                appendOutput(
+                    "window/dialog_event",
+                    QString(
+                        "scope=%1 kind=widget event=%2 watched=%3 spontaneous=%4 visible=%5 active=%6 modal=%7 "
+                        "result=%8 selected_count=%9 handle=%10 geom=[%11,%12 %13x%14] title=%15"
+                    )
+                        .arg(debugScope)
+                        .arg(qEventTypeName(event->type()))
+                        .arg(pointerHex(fileDialog))
+                        .arg(event->spontaneous() ? 1 : 0)
+                        .arg(fileDialog->isVisible() ? 1 : 0)
+                        .arg(fileDialog->isActiveWindow() ? 1 : 0)
+                        .arg(fileDialog->isModal() ? 1 : 0)
+                        .arg(fileDialog->result())
+                        .arg(fileDialog->selectedFiles().size())
+                        .arg(pointerHex(fileDialog->windowHandle()))
+                        .arg(geom.left())
+                        .arg(geom.top())
+                        .arg(geom.width())
+                        .arg(geom.height())
+                        .arg(fileDialog->windowTitle().isEmpty() ? QStringLiteral("(empty)") : fileDialog->windowTitle())
+                );
+            }
+            if (QWindow* dialogWindow = fileDialog->windowHandle();
+                dialogWindow != nullptr && !dialogWindow->property("miacode_debug_filter_installed").toBool()) {
+                dialogWindow->setProperty(
+                    "miacode_debug_scope",
+                    debugScope + QStringLiteral("/window")
+                );
+                dialogWindow->setProperty("miacode_debug_filter_installed", true);
+                dialogWindow->installEventFilter(this);
+                if (runtimeDebugOutputEnabled_) {
+                    appendOutput(
+                        "window/dialog_watch",
+                        QString("scope=%1 attach_window_handle handle=%2 visibility=%3")
+                            .arg(debugScope)
+                            .arg(pointerHex(dialogWindow))
+                            .arg(windowVisibilityName(dialogWindow->visibility()))
+                    );
+                }
+            }
+        }
+    } else if (auto* watchedWindow = qobject_cast<QWindow*>(watched); watchedWindow != nullptr) {
+        const QString debugScope = watchedWindow->property("miacode_debug_scope").toString();
+        if (runtimeDebugOutputEnabled_
+            && !debugScope.isEmpty()
+            && shouldTraceDebugDialogWindowEvent(event->type())) {
+            const QString surfaceDetail = platformSurfaceDetail(event);
+            appendOutput(
+                "window/dialog_event",
+                QString(
+                    "scope=%1 kind=window event=%2 watched=%3 spontaneous=%4 visible=%5 exposed=%6 active=%7 "
+                    "visibility=%8 pos=(%9,%10) size=%11x%12%13"
+                )
+                    .arg(debugScope)
+                    .arg(qEventTypeName(event->type()))
+                    .arg(pointerHex(watchedWindow))
+                    .arg(event->spontaneous() ? 1 : 0)
+                    .arg(watchedWindow->isVisible() ? 1 : 0)
+                    .arg(watchedWindow->isExposed() ? 1 : 0)
+                    .arg(watchedWindow->isActive() ? 1 : 0)
+                    .arg(windowVisibilityName(watchedWindow->visibility()))
+                    .arg(watchedWindow->x())
+                    .arg(watchedWindow->y())
+                    .arg(watchedWindow->width())
+                    .arg(watchedWindow->height())
+                    .arg(surfaceDetail.isEmpty() ? QString() : QStringLiteral(" ") + surfaceDetail)
+            );
+        }
+    }
     const bool previewKeyScope =
         watched == previewSlider_
         || watched == previewWindowObject
@@ -3672,6 +4147,125 @@ void MainWindow::hideEvent(QHideEvent* event)
     logWindowGeometryDebug("hide_event");
 }
 
+bool MainWindow::event(QEvent* event)
+{
+    const QEvent::Type type = event != nullptr ? event->type() : QEvent::None;
+    const bool handled = QMainWindow::event(event);
+    if (type == QEvent::WindowBlocked) {
+        logWindowGeometryDebug(
+            "window_blocked",
+            QString("handled=%1 spontaneous=%2")
+                .arg(handled ? 1 : 0)
+                .arg(event != nullptr && event->spontaneous() ? 1 : 0)
+        );
+        logNativeWindowDebug(QStringLiteral("window_blocked"));
+        logOwnedNativeWindowSnapshot(QStringLiteral("window_blocked"), 16);
+        scheduleEmbeddedPreviewSurfaceRefresh(0);
+        scheduleEmbeddedPreviewSurfaceRefresh(120);
+    } else if (type == QEvent::WindowUnblocked) {
+        logWindowGeometryDebug(
+            "window_unblocked",
+            QString("handled=%1 spontaneous=%2")
+                .arg(handled ? 1 : 0)
+                .arg(event != nullptr && event->spontaneous() ? 1 : 0)
+        );
+        logNativeWindowDebug(QStringLiteral("window_unblocked"));
+        logOwnedNativeWindowSnapshot(QStringLiteral("window_unblocked"), 16);
+        refreshEmbeddedPreviewSurface();
+        scheduleEmbeddedPreviewSurfaceRefresh(0);
+        scheduleEmbeddedPreviewSurfaceRefresh(120);
+    }
+    return handled;
+}
+
+void MainWindow::refreshEmbeddedPreviewSurface()
+{
+    if (runtimeDebugOutputEnabled_) {
+        QWindow* hostWindow = previewCanvas_ != nullptr ? previewCanvas_->hostWindow() : nullptr;
+        appendOutput(
+            "preview/embedded_refresh",
+            QString(
+                "action=refresh panel_visible=%1 frame_visible=%2 container_visible=%3 host=%4 host_visible=%5 "
+                "host_exposed=%6 host_active=%7 host_visibility=%8 container_size=%9x%10 host_size=%11x%12"
+            )
+                .arg(previewPanel_ != nullptr && previewPanel_->isVisible() ? 1 : 0)
+                .arg(previewCanvasFrame_ != nullptr && previewCanvasFrame_->isVisible() ? 1 : 0)
+                .arg(previewCanvasContainer_ != nullptr && previewCanvasContainer_->isVisible() ? 1 : 0)
+                .arg(pointerHex(hostWindow))
+                .arg(hostWindow != nullptr && hostWindow->isVisible() ? 1 : 0)
+                .arg(hostWindow != nullptr && hostWindow->isExposed() ? 1 : 0)
+                .arg(hostWindow != nullptr && hostWindow->isActive() ? 1 : 0)
+                .arg(hostWindow != nullptr ? windowVisibilityName(hostWindow->visibility()) : QStringLiteral("null"))
+                .arg(previewCanvasContainer_ != nullptr ? previewCanvasContainer_->width() : 0)
+                .arg(previewCanvasContainer_ != nullptr ? previewCanvasContainer_->height() : 0)
+                .arg(hostWindow != nullptr ? hostWindow->width() : 0)
+                .arg(hostWindow != nullptr ? hostWindow->height() : 0)
+        );
+    }
+    if (previewPanel_ != nullptr && previewPanel_->isVisible()) {
+        updatePreviewWorkspaceLayout();
+    }
+    if (previewCanvasFrame_ != nullptr) {
+        previewCanvasFrame_->update();
+    }
+    if (previewCanvasContainer_ != nullptr) {
+        previewCanvasContainer_->show();
+        previewCanvasContainer_->updateGeometry();
+        previewCanvasContainer_->update();
+    }
+    if (previewCanvas_ != nullptr) {
+        if (QWindow* hostWindow = previewCanvas_->hostWindow(); hostWindow != nullptr) {
+            hostWindow->requestUpdate();
+        }
+        previewCanvas_->update();
+    }
+}
+
+void MainWindow::scheduleEmbeddedPreviewSurfaceRefresh(int delayMs)
+{
+    if (delayMs < 0) {
+        if (runtimeDebugOutputEnabled_) {
+            appendOutput(
+                "preview/embedded_refresh",
+                QString("action=schedule_immediate delay_ms=%1 visible=%2 minimized=%3")
+                    .arg(delayMs)
+                    .arg(isVisible() ? 1 : 0)
+                    .arg(windowState().testFlag(Qt::WindowMinimized) ? 1 : 0)
+            );
+        }
+        refreshEmbeddedPreviewSurface();
+        return;
+    }
+
+    if (runtimeDebugOutputEnabled_) {
+        appendOutput(
+            "preview/embedded_refresh",
+            QString("action=schedule delay_ms=%1 visible=%2 minimized=%3")
+                .arg(delayMs)
+                .arg(isVisible() ? 1 : 0)
+                .arg(windowState().testFlag(Qt::WindowMinimized) ? 1 : 0)
+        );
+    }
+
+    QTimer::singleShot(delayMs, this, [this, delayMs]() {
+        const bool skip = !isVisible() || windowState().testFlag(Qt::WindowMinimized);
+        if (runtimeDebugOutputEnabled_) {
+            appendOutput(
+                "preview/embedded_refresh",
+                QString("action=timer_fire delay_ms=%1 skip=%2 visible=%3 minimized=%4")
+                    .arg(delayMs)
+                    .arg(skip ? 1 : 0)
+                    .arg(isVisible() ? 1 : 0)
+                    .arg(windowState().testFlag(Qt::WindowMinimized) ? 1 : 0)
+            );
+        }
+        if (skip) {
+            return;
+        }
+        refreshEmbeddedPreviewSurface();
+    });
+}
+
 void MainWindow::changeEvent(QEvent* event)
 {
     const QEvent::Type type = event != nullptr ? event->type() : QEvent::None;
@@ -3690,6 +4284,8 @@ void MainWindow::changeEvent(QEvent* event)
         if (!isNowMinimized && wasMinimized) {
             refreshPreviewFrameRateTimers();
             applySystemWindowBackdrop();
+            refreshEmbeddedPreviewSurface();
+            scheduleEmbeddedPreviewSurfaceRefresh(120);
         }
     } else if (type == QEvent::ScreenChangeInternal
         || type == QEvent::DevicePixelRatioChange
@@ -3703,7 +4299,23 @@ void MainWindow::changeEvent(QEvent* event)
         applySystemWindowBackdrop();
     } else if (type == QEvent::ActivationChange) {
         applySystemWindowBackdrop();
-        logWindowGeometryDebug("activation_change", QString("is_active=%1").arg(isActiveWindow() ? 1 : 0));
+        const bool active = isActiveWindow();
+        logWindowGeometryDebug(
+            "activation_change",
+            QString("is_active=%1 spontaneous=%2")
+                .arg(active ? 1 : 0)
+                .arg(event != nullptr && event->spontaneous() ? 1 : 0)
+        );
+        logNativeWindowDebug(active ? QStringLiteral("activation_change_active") : QStringLiteral("activation_change_inactive"));
+        logOwnedNativeWindowSnapshot(
+            active ? QStringLiteral("activation_change_active") : QStringLiteral("activation_change_inactive"),
+            16
+        );
+        if (active) {
+            refreshEmbeddedPreviewSurface();
+            scheduleEmbeddedPreviewSurfaceRefresh(0);
+            scheduleEmbeddedPreviewSurfaceRefresh(120);
+        }
     } else if (type == QEvent::ZOrderChange) {
         logWindowGeometryDebug("zorder_change");
     }
@@ -4750,18 +5362,9 @@ void MainWindow::onExportPreviewVideo()
     }
     dialog.move(targetTopLeft);
     dialog.exec();
-    if (previewPanel_ != nullptr && previewPanel_->isVisible()) {
-        updatePreviewWorkspaceLayout();
-    }
-    if (previewCanvasFrame_ != nullptr) {
-        previewCanvasFrame_->update();
-    }
-    if (previewCanvasContainer_ != nullptr) {
-        previewCanvasContainer_->update();
-    }
-    if (previewCanvas_ != nullptr) {
-        previewCanvas_->update();
-    }
+    refreshEmbeddedPreviewSurface();
+    scheduleEmbeddedPreviewSurfaceRefresh(0);
+    scheduleEmbeddedPreviewSurfaceRefresh(120);
     setPreviewCanvasAspectRatio(1.0, false);
     restoreSquareAfterVideoExport_ = false;
     if (dialog.exportRequested()) {
@@ -6859,16 +7462,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     });
     dialog.adjustSize();
     dialog.exec();
-    if (previewPanel_ != nullptr && previewPanel_->isVisible()) {
-        updatePreviewWorkspaceLayout();
-    }
-    if (previewCanvasFrame_ != nullptr) {
-        previewCanvasFrame_->update();
-    }
-    if (previewCanvasContainer_ != nullptr) {
-        previewCanvasContainer_->update();
-    }
-    if (previewCanvas_ != nullptr) {
-        previewCanvas_->update();
-    }
+    refreshEmbeddedPreviewSurface();
+    scheduleEmbeddedPreviewSurfaceRefresh(0);
+    scheduleEmbeddedPreviewSurfaceRefresh(120);
 }

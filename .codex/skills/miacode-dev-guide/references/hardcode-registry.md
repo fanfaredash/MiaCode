@@ -39,6 +39,14 @@ Use this file to track where important constants live, what they mean, and wheth
     - firework visual tuning
     - descriptor sizing and animation curve parameters
   - Rule: keep local only when the values are render-internal and not consumed elsewhere
+- `src/preview/scene/PreviewAnimatedSpriteHelpers.cpp`
+  - Owns: continuous animated-sprite wave timing (`kMaterialAnimationTimeScale`, `kMaterialAnimationPhaseScale`) plus helper-side overlay cache quantization/cap for EX-style CPU composites
+  - Current tuning note: overlay cache quantization stays local at `4096.0`, and the helper-side overlay cache is currently capped at `128` entries because it is a Quick-preview reuse detail rather than shared product behavior
+  - Rule: keep local while the preview/export pipelines only need shared animation timing and overlay reuse policy, but document changes if another subsystem must reason about the same wave scaling or cache budget
+- `src/preview/quick_scene/PreviewQuickSpriteNodes.cpp`
+  - Owns: shader-side `BreakAnimate` / `HoldShine` brightness and contrast coefficients, custom sprite-material uniform layout, and the layer-local contiguous batch policy keyed by `(texture, effect)`
+  - Current tuning note: this file is now the owner for runtime sprite effect math and for the “merge only adjacent compatible sprites, never reorder” rule; changes here affect both runtime preview and export preview because both share the Quick scene graph path
+  - Rule: keep local while the values are renderer-internal, but document any changes that alter visual parity or layer-order guarantees
 - `src/tools/latency/LatencyDetectorDialog.cpp`
   - Owns: detection windows, hop sizes, BPM scan range, offset penalties, snap thresholds
   - Rule: keep local when the values are intrinsic to the latency tool, but document any user-visible range changes

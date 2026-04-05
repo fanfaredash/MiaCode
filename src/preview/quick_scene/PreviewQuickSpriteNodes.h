@@ -10,5 +10,7 @@ QSGNode* buildPreviewSpriteNodeTree(
     QSGNode* oldNode,
     const miacode::preview::scene::PreviewSpriteDescriptors& sprites,
     QQuickWindow* window,
-    PreviewTextureRepository* textures
+    PreviewTextureRepository* textures,
+    double playheadSeconds,
+    const char* profileLayerName
 );

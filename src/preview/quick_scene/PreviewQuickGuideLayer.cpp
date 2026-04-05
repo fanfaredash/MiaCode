@@ -23,6 +23,8 @@ QSGNode* PreviewQuickGuideLayer::updateNode(
             )
         ),
         window,
-        textures
+        textures,
+        state.playheadSeconds,
+        "guide"
     );
 }

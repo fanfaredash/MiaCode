@@ -45,7 +45,7 @@ configure_file(
     @ONLY
 )
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets OpenGL Multimedia Quick Qml)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets OpenGL Multimedia Quick Qml ShaderTools)
 
 add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
@@ -219,6 +219,13 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     resources/app_icons.qrc
     resources/fonts.qrc
     resources/preview_runtime_qml.qrc
+)
+
+qt_add_shaders(MiaCode "preview_sprite_shaders"
+    PREFIX "/"
+    FILES
+        src/preview/quick_scene/shaders/PreviewSpriteMaterial.vert
+        src/preview/quick_scene/shaders/PreviewSpriteMaterial.frag
 )
 set_target_properties(MiaCode PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "MiaCode"

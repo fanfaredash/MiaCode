@@ -228,18 +228,9 @@
     rootLayout->addWidget(buttonBox, 0, Qt::AlignRight);
 
     const int dialogResult = dialog.exec();
-    if (previewPanel_ != nullptr && previewPanel_->isVisible()) {
-        updatePreviewWorkspaceLayout();
-    }
-    if (previewCanvasFrame_ != nullptr) {
-        previewCanvasFrame_->update();
-    }
-    if (previewCanvasContainer_ != nullptr) {
-        previewCanvasContainer_->update();
-    }
-    if (previewCanvas_ != nullptr) {
-        previewCanvas_->update();
-    }
+    refreshEmbeddedPreviewSurface();
+    scheduleEmbeddedPreviewSurfaceRefresh(0);
+    scheduleEmbeddedPreviewSurfaceRefresh(120);
     if (dialogResult != QDialog::Accepted) {
         applyEditorLineSpacingFactor(originalEditorLineSpacingFactor, false);
         applyEditorTextFontSize(originalEditorFontSize, false);

@@ -95,6 +95,38 @@ The Windows release package also ships:
 - `MIACODE_DISABLE_GL_DEBUG_MESSAGES`
   - disables OpenGL driver message logging inside debug mode
   - current impact is limited because the active preview/export path is Qt Quick on an explicitly forced OpenGL backend, not the removed `PreviewCanvas` logger stack
+- `MIACODE_PREVIEW_FORCE_BASIC_RENDER_LOOP`
+  - if `QSG_RENDER_LOOP` is otherwise unset, forces `basic` render loop before `QApplication` construction
+  - intended for A/B diagnosis of embedded `QQuickView` present stalls around native dialogs
+  - owner: `src/app/main.cpp`
+- `MIACODE_PREVIEW_DISABLE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS`
+  - disables the default-on `Qt::AA_DontCreateNativeWidgetSiblings` startup workaround before `QApplication` construction
+  - intended for regression A/B around `createWindowContainer` and native-dialog interaction on Windows
+  - owner: `src/app/main.cpp`
+- `MIACODE_PREVIEW_DONT_CREATE_NATIVE_WIDGET_SIBLINGS`
+  - historical enable-only A/B flag used during investigation
+  - no longer required because `Qt::AA_DontCreateNativeWidgetSiblings` is now enabled by default
+  - owner: legacy debug launch snippets only; the active startup switch lives in `src/app/main.cpp`
+
+Runtime black-screen / dialog tracing currently writes these tags into the runtime log:
+
+- `window/dialog_event`
+- `window/native_hook`
+- `window/native_related`
+- `preview/host_window_event`
+- `preview/embedded_refresh`
+- `preview/quick_runtime`
+- `preview/quick_scene`
+
+The `preview/quick_runtime` stream now also emits `action=frame_stall` when the embedded Quick window stays visible/exposed but stops presenting for an extended interval.
+The `startup/qt_config` runtime tag logs the active Qt graphics/render-loop experiment flags at process start, including whether the default native-sibling workaround was opted out.
+
+Primary owners:
+
+- `src/app/mainwindow/MainWindow.cpp`
+- `src/app/mainwindow/sections/document/MainWindow.DocumentFlow.cpp`
+- `src/preview/runtime/PreviewQuickRuntimeSurface.cpp`
+- `src/preview/quick_scene/PreviewQuickSceneRoot.cpp`
 
 ## 4. Editor Runtime Performance Logging
 

@@ -20,5 +20,5 @@ QSGNode* PreviewQuickTrackLayer::updateNode(
             state.render.layoutSquareScale
         )
     );
-    return buildPreviewSpriteNodeTree(oldNode, layerState.sprites, window, textures);
+    return buildPreviewSpriteNodeTree(oldNode, layerState.sprites, window, textures, state.playheadSeconds, "track");
 }

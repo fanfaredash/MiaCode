@@ -27,6 +27,227 @@ UnsavedChangesChoice showUnsavedChangesDialog(QWidget* parent, const QString& ti
     return UnsavedChangesChoice::Cancel;
 }
 
+#ifdef Q_OS_WIN
+QString nativeDialogWinEventName(DWORD event)
+{
+    switch (event) {
+    case EVENT_SYSTEM_FOREGROUND:
+        return QStringLiteral("EVENT_SYSTEM_FOREGROUND");
+    case EVENT_SYSTEM_DIALOGSTART:
+        return QStringLiteral("EVENT_SYSTEM_DIALOGSTART");
+    case EVENT_SYSTEM_DIALOGEND:
+        return QStringLiteral("EVENT_SYSTEM_DIALOGEND");
+    case EVENT_SYSTEM_CAPTURESTART:
+        return QStringLiteral("EVENT_SYSTEM_CAPTURESTART");
+    case EVENT_SYSTEM_CAPTUREEND:
+        return QStringLiteral("EVENT_SYSTEM_CAPTUREEND");
+    case EVENT_OBJECT_CREATE:
+        return QStringLiteral("EVENT_OBJECT_CREATE");
+    case EVENT_OBJECT_DESTROY:
+        return QStringLiteral("EVENT_OBJECT_DESTROY");
+    case EVENT_OBJECT_SHOW:
+        return QStringLiteral("EVENT_OBJECT_SHOW");
+    case EVENT_OBJECT_HIDE:
+        return QStringLiteral("EVENT_OBJECT_HIDE");
+    case EVENT_OBJECT_FOCUS:
+        return QStringLiteral("EVENT_OBJECT_FOCUS");
+    case EVENT_OBJECT_LOCATIONCHANGE:
+        return QStringLiteral("EVENT_OBJECT_LOCATIONCHANGE");
+    case EVENT_OBJECT_NAMECHANGE:
+        return QStringLiteral("EVENT_OBJECT_NAMECHANGE");
+    default:
+        return QStringLiteral("EVENT(0x%1)").arg(static_cast<qulonglong>(event), 0, 16);
+    }
+}
+
+QString nativeDialogObjectIdName(LONG objectId)
+{
+    switch (objectId) {
+    case OBJID_WINDOW:
+        return QStringLiteral("OBJID_WINDOW");
+    case OBJID_CLIENT:
+        return QStringLiteral("OBJID_CLIENT");
+    case OBJID_TITLEBAR:
+        return QStringLiteral("OBJID_TITLEBAR");
+    case OBJID_SYSMENU:
+        return QStringLiteral("OBJID_SYSMENU");
+    case OBJID_MENU:
+        return QStringLiteral("OBJID_MENU");
+    case OBJID_CARET:
+        return QStringLiteral("OBJID_CARET");
+    case OBJID_CURSOR:
+        return QStringLiteral("OBJID_CURSOR");
+    default:
+        return QStringLiteral("OBJID(%1)").arg(objectId);
+    }
+}
+
+struct NativeDialogWinEventTraceState {
+    QString scope;
+    HWND ownerHwnd = nullptr;
+    DWORD ownerPid = 0;
+};
+
+NativeDialogWinEventTraceState* g_nativeDialogWinEventTraceState = nullptr;
+
+bool shouldTraceNativeDialogEvent(
+    const NativeDialogWinEventTraceState* state,
+    HWND hwnd,
+    LONG objectId
+)
+{
+    if (state == nullptr) {
+        return false;
+    }
+
+    if (objectId != OBJID_WINDOW
+        && objectId != OBJID_CLIENT
+        && objectId != OBJID_CARET
+        && objectId != OBJID_CURSOR
+        && objectId != OBJID_SYSMENU
+        && objectId != 0) {
+        return false;
+    }
+
+    if (hwnd == nullptr) {
+        return true;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    const HWND owner = GetWindow(hwnd, GW_OWNER);
+    const HWND root = GetAncestor(hwnd, GA_ROOT);
+    const HWND rootOwner = GetAncestor(hwnd, GA_ROOTOWNER);
+    const HWND foreground = GetForegroundWindow();
+
+    return hwnd == state->ownerHwnd
+        || owner == state->ownerHwnd
+        || root == state->ownerHwnd
+        || rootOwner == state->ownerHwnd
+        || hwnd == foreground
+        || rootOwner == foreground
+        || (state->ownerPid != 0 && pid == state->ownerPid);
+}
+
+void appendNativeDialogHookLog(
+    const QString& scope,
+    const QString& payload
+)
+{
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("window/native_hook"),
+        QStringLiteral("scope=%1 %2").arg(scope, payload)
+    );
+}
+
+void CALLBACK nativeDialogWinEventProc(
+    HWINEVENTHOOK hook,
+    DWORD event,
+    HWND hwnd,
+    LONG idObject,
+    LONG idChild,
+    DWORD eventThread,
+    DWORD eventTime
+)
+{
+    Q_UNUSED(hook);
+
+    const NativeDialogWinEventTraceState* state = g_nativeDialogWinEventTraceState;
+    if (!shouldTraceNativeDialogEvent(state, hwnd, idObject)) {
+        return;
+    }
+
+    appendNativeDialogHookLog(
+        state != nullptr ? state->scope : QStringLiteral("unknown"),
+        QString("event=%1 object=%2 child=%3 event_thread=%4 event_time=%5 hwnd={%6}")
+            .arg(nativeDialogWinEventName(event))
+            .arg(nativeDialogObjectIdName(idObject))
+            .arg(idChild)
+            .arg(eventThread)
+            .arg(eventTime)
+            .arg(describeNativeWindowHandle(hwnd))
+    );
+}
+
+class ScopedNativeDialogWinEventTrace {
+public:
+    ScopedNativeDialogWinEventTrace(const QString& scope, HWND ownerHwnd)
+    {
+        state_.scope = scope;
+        state_.ownerHwnd = ownerHwnd;
+        if (ownerHwnd != nullptr) {
+            GetWindowThreadProcessId(ownerHwnd, &state_.ownerPid);
+        }
+
+        g_nativeDialogWinEventTraceState = &state_;
+        appendNativeDialogHookLog(
+            state_.scope,
+            QString("trace_start owner={%1} owner_pid=%2")
+                .arg(describeNativeWindowHandle(ownerHwnd))
+                .arg(state_.ownerPid)
+        );
+
+        hooks_.append(SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND,
+            EVENT_SYSTEM_DIALOGEND,
+            nullptr,
+            &nativeDialogWinEventProc,
+            0,
+            0,
+            WINEVENT_OUTOFCONTEXT
+        ));
+        hooks_.append(SetWinEventHook(
+            EVENT_OBJECT_CREATE,
+            EVENT_OBJECT_HIDE,
+            nullptr,
+            &nativeDialogWinEventProc,
+            0,
+            0,
+            WINEVENT_OUTOFCONTEXT
+        ));
+        hooks_.append(SetWinEventHook(
+            EVENT_OBJECT_FOCUS,
+            EVENT_OBJECT_NAMECHANGE,
+            nullptr,
+            &nativeDialogWinEventProc,
+            0,
+            0,
+            WINEVENT_OUTOFCONTEXT
+        ));
+        hooks_.append(SetWinEventHook(
+            EVENT_SYSTEM_CAPTURESTART,
+            EVENT_SYSTEM_CAPTUREEND,
+            nullptr,
+            &nativeDialogWinEventProc,
+            0,
+            0,
+            WINEVENT_OUTOFCONTEXT
+        ));
+    }
+
+    ~ScopedNativeDialogWinEventTrace()
+    {
+        for (HWINEVENTHOOK hook : hooks_) {
+            if (hook != nullptr) {
+                UnhookWinEvent(hook);
+            }
+        }
+        appendNativeDialogHookLog(
+            state_.scope,
+            QStringLiteral("trace_end")
+        );
+        if (g_nativeDialogWinEventTraceState == &state_) {
+            g_nativeDialogWinEventTraceState = nullptr;
+        }
+    }
+
+private:
+    NativeDialogWinEventTraceState state_;
+    QVector<HWINEVENTHOOK> hooks_;
+};
+#endif
+
 }  // namespace
 
 bool MainWindow::maybeSaveBeforeContinue()
@@ -174,6 +395,7 @@ void MainWindow::onNewFile()
         return;
     }
 
+    cancelPendingStartupRestore();
     loadDocument(newDocument);
     clearValidationCache();
     currentEncoding_ = TextEncoding::Utf8;
@@ -195,18 +417,31 @@ void MainWindow::onOpenFile()
     logWindowGeometryDebug("open_file_before_dialog");
     logTopLevelWindowSnapshot("open_file_before_dialog");
     logNativeWindowDebug("open_file_before_dialog");
+    logOwnedNativeWindowSnapshot("open_file_before_dialog", 16);
     int sampleCount = 0;
     int restoreCount = 0;
+#ifdef Q_OS_WIN
+    quintptr lastForegroundHwnd = 0;
+    quintptr lastForegroundRootOwnerHwnd = 0;
+#endif
     QTimer sampleTimer;
     sampleTimer.setInterval(120);
     sampleTimer.setSingleShot(false);
-    connect(&sampleTimer, &QTimer::timeout, this, [this, &sampleCount, &restoreCount]() {
+    connect(&sampleTimer, &QTimer::timeout, this, [this, &sampleCount, &restoreCount
+#ifdef Q_OS_WIN
+        , &lastForegroundHwnd, &lastForegroundRootOwnerHwnd
+#endif
+    ]() {
         if (sampleCount >= 80) {
             ++sampleCount;
             return;
         }
         ++sampleCount;
 #ifdef Q_OS_WIN
+        const HWND foregroundHwnd = GetForegroundWindow();
+        const HWND foregroundRootOwner = foregroundHwnd != nullptr ? GetAncestor(foregroundHwnd, GA_ROOTOWNER) : nullptr;
+        const quintptr foregroundValue = reinterpret_cast<quintptr>(foregroundHwnd);
+        const quintptr foregroundRootOwnerValue = reinterpret_cast<quintptr>(foregroundRootOwner);
         QString restoreDetail;
         if (tryRestoreOwnedNativeFileDialog(reinterpret_cast<HWND>(winId()), &restoreDetail)) {
             ++restoreCount;
@@ -218,20 +453,68 @@ void MainWindow::onOpenFile()
                     .arg(restoreDetail)
             );
         }
+        const bool shouldLogNativeSample =
+            sampleCount <= 8
+            || (sampleCount % 5) == 0
+            || foregroundValue != lastForegroundHwnd
+            || foregroundRootOwnerValue != lastForegroundRootOwnerHwnd;
+        if (shouldLogNativeSample) {
+            const QString tag = QStringLiteral("open_file_dialog/sample_%1").arg(sampleCount);
+            logNativeWindowDebug(tag);
+            logOwnedNativeWindowSnapshot(tag, 16);
+        }
+        lastForegroundHwnd = foregroundValue;
+        lastForegroundRootOwnerHwnd = foregroundRootOwnerValue;
 #endif
     });
 
+    QFileDialog dialog(
+        this,
+        QStringLiteral("Open simai file"),
+        resolveInitialOpenDirectory(),
+        QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)")
+    );
+    dialog.setObjectName(QStringLiteral("miacode_open_file_dialog"));
+    dialog.setProperty("miacode_debug_scope", QStringLiteral("open_file_dialog"));
+    dialog.setAcceptMode(QFileDialog::AcceptOpen);
+    dialog.setFileMode(QFileDialog::ExistingFile);
+    dialog.setModal(true);
+    dialog.installEventFilter(this);
+    if (runtimeDebugOutputEnabled_) {
+        appendOutput(
+            "window/dialog_watch",
+            QString("scope=open_file_dialog configured widget=%1 directory=%2 native_window=%3")
+                .arg(pointerHex(&dialog))
+                .arg(dialog.directory().absolutePath())
+                .arg(dialog.windowHandle() != nullptr ? 1 : 0)
+        );
+    }
+    if (QWindow* dialogWindow = dialog.windowHandle(); dialogWindow != nullptr) {
+        dialogWindow->setProperty("miacode_debug_scope", QStringLiteral("open_file_dialog/window"));
+        dialogWindow->setProperty("miacode_debug_filter_installed", true);
+        dialogWindow->installEventFilter(this);
+    }
+
+#ifdef Q_OS_WIN
+    ScopedNativeDialogWinEventTrace nativeDialogTrace(
+        QStringLiteral("open_file_dialog"),
+        reinterpret_cast<HWND>(winId())
+    );
+#endif
+
     logTopLevelWindowSnapshot("open_file_dialog_exec_begin");
     logNativeWindowDebug("open_file_dialog_exec_begin");
+    logOwnedNativeWindowSnapshot("open_file_dialog_exec_begin", 16);
     sampleTimer.start();
-    const QString path = QFileDialog::getOpenFileName(
-        this,
-        "Open simai file",
-        resolveInitialOpenDirectory(),
-        "Simai (*.txt *.simai);;All Files (*.*)",
-        nullptr
-    );
+    scheduleEmbeddedPreviewSurfaceRefresh(0);
+    scheduleEmbeddedPreviewSurfaceRefresh(120);
+    const QString path = (dialog.exec() == QDialog::Accepted && !dialog.selectedFiles().isEmpty())
+        ? dialog.selectedFiles().constFirst()
+        : QString();
     sampleTimer.stop();
+    refreshEmbeddedPreviewSurface();
+    scheduleEmbeddedPreviewSurfaceRefresh(0);
+    scheduleEmbeddedPreviewSurfaceRefresh(120);
     if (runtimeDebugOutputEnabled_) {
         appendOutput(
             "window/dialog_watch",
@@ -243,9 +526,11 @@ void MainWindow::onOpenFile()
     }
     logTopLevelWindowSnapshot("open_file_dialog_exec_end");
     logNativeWindowDebug("open_file_dialog_exec_end");
+    logOwnedNativeWindowSnapshot("open_file_dialog_exec_end", 16);
     logWindowGeometryDebug("open_file_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
     logTopLevelWindowSnapshot("open_file_after_dialog");
     logNativeWindowDebug("open_file_after_dialog");
+    logOwnedNativeWindowSnapshot("open_file_after_dialog", 16);
     if (path.isEmpty()) {
         return;
     }
@@ -259,42 +544,22 @@ bool MainWindow::openFileAtPath(const QString& path, bool showStatusMessage, boo
         return false;
     }
 
-    setLastOpenDirectory(normalizedPath);
-
-    QFile file(normalizedPath);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    cancelPendingStartupRestore();
+    const PreparedDocumentOpenPayload payload = prepareDocumentOpenPayload(normalizedPath, true);
+    if (!payload.success) {
         if (showErrors) {
             UiDialogs::showMessageBox(QMessageBox::Critical, this, "Open Failed", "Cannot open file:\n" + normalizedPath);
         }
         return false;
     }
 
-    const QByteArray bytes = file.readAll();
-    QString text;
-    TextEncoding encodingUsed = TextEncoding::Utf8;
-    if (bytes.startsWith("\xEF\xBB\xBF")) {
-        text = QString::fromUtf8(bytes.mid(3));
-    } else {
-        QStringDecoder utf8Decoder(QStringConverter::Utf8);
-        text = utf8Decoder.decode(bytes);
-        if (utf8Decoder.hasError()) {
-            QStringDecoder systemDecoder(QStringConverter::System);
-            text = systemDecoder.decode(bytes);
-            encodingUsed = TextEncoding::System;
-        }
-    }
-
-    currentEncoding_ = encodingUsed;
-    setCurrentFilePath(normalizedPath);
-    loadDocument(SimaiDocument::fromText(text));
-    refreshWaveformCache();
-    if (showStatusMessage) {
-        statusBar()->showMessage(
-            QString("Opened: %1 (%2)")
-                .arg(QFileInfo(normalizedPath).fileName())
-                .arg(encodingUsed == TextEncoding::Utf8 ? "UTF-8" : "System encoding")
-        );
-    }
+    applyOpenedDocumentState(
+        payload.normalizedPath,
+        payload.usedSystemEncoding ? TextEncoding::System : TextEncoding::Utf8,
+        payload.document,
+        showStatusMessage,
+        payload.hasTrackDuration ? payload.trackDurationSeconds : -1.0
+    );
     return true;
 }
 
@@ -308,7 +573,137 @@ bool MainWindow::restoreLastSessionFile()
         lastSessionFilePath_.clear();
         return false;
     }
-    return openFileAtPath(fileInfo.absoluteFilePath(), false, false);
+    const PreparedDocumentOpenPayload payload = prepareDocumentOpenPayload(fileInfo.absoluteFilePath(), true);
+    if (!payload.success) {
+        return false;
+    }
+    applyOpenedDocumentState(
+        payload.normalizedPath,
+        payload.usedSystemEncoding ? TextEncoding::System : TextEncoding::Utf8,
+        payload.document,
+        false,
+        payload.hasTrackDuration ? payload.trackDurationSeconds : -1.0
+    );
+    return true;
+}
+
+void MainWindow::scheduleStartupRestoreLastSessionFile()
+{
+    if (!autoRestoreLastSessionFile_ || lastSessionFilePath_.isEmpty()) {
+        startupRestorePending_ = false;
+        return;
+    }
+
+    const QFileInfo fileInfo(lastSessionFilePath_);
+    if (!fileInfo.exists() || !fileInfo.isFile()) {
+        lastSessionFilePath_.clear();
+        startupRestorePending_ = false;
+        return;
+    }
+
+    startupRestorePending_ = true;
+    const quint64 generation = ++startupRestoreGeneration_;
+    const QString normalizedPath = fileInfo.absoluteFilePath();
+    QPointer<MainWindow> guard(this);
+    QThreadPool* const pool = previewWarmupPool_ != nullptr
+        ? previewWarmupPool_
+        : QThreadPool::globalInstance();
+    pool->start([guard, generation, normalizedPath]() {
+        const PreparedDocumentOpenPayload payload = prepareDocumentOpenPayload(normalizedPath, true);
+        if (guard.isNull()) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+            guard.data(),
+            [guard, generation, payload]() {
+                if (guard.isNull() || generation != guard->startupRestoreGeneration_ || !guard->startupRestorePending_) {
+                    return;
+                }
+
+                guard->startupRestorePending_ = false;
+                if (!payload.success) {
+                    appendStartupTimingStage("mainwindow/startup_restore_prepare_failed", 0, 0);
+                    return;
+                }
+
+                PreparedStartupRestoreDocument prepared;
+                prepared.generation = generation;
+                prepared.normalizedPath = payload.normalizedPath;
+                prepared.document = payload.document;
+                prepared.encodingUsed = payload.usedSystemEncoding ? TextEncoding::System : TextEncoding::Utf8;
+                prepared.resolvedTrackPath = payload.resolvedTrackPath;
+                prepared.trackDurationSeconds = payload.trackDurationSeconds;
+                prepared.hasTrackDuration = payload.hasTrackDuration;
+                prepared.readElapsedMs = payload.readElapsedMs;
+                prepared.decodeElapsedMs = payload.decodeElapsedMs;
+                prepared.parseElapsedMs = payload.parseElapsedMs;
+                prepared.trackProbeElapsedMs = payload.trackProbeElapsedMs;
+                prepared.totalElapsedMs = payload.totalElapsedMs;
+                guard->applyPreparedStartupRestoreDocument(prepared);
+            },
+            Qt::QueuedConnection
+        );
+    });
+}
+
+void MainWindow::cancelPendingStartupRestore()
+{
+    if (!startupRestorePending_) {
+        return;
+    }
+    startupRestorePending_ = false;
+    ++startupRestoreGeneration_;
+}
+
+void MainWindow::applyPreparedStartupRestoreDocument(const PreparedStartupRestoreDocument& prepared)
+{
+    if (prepared.generation != startupRestoreGeneration_) {
+        return;
+    }
+
+    appendStartupTimingStage("mainwindow/startup_restore_read_bytes", prepared.readElapsedMs, prepared.readElapsedMs);
+    appendStartupTimingStage("mainwindow/startup_restore_decode_text", prepared.decodeElapsedMs, prepared.decodeElapsedMs);
+    appendStartupTimingStage("mainwindow/startup_restore_parse_document", prepared.parseElapsedMs, prepared.parseElapsedMs);
+    appendStartupTimingStage("mainwindow/startup_restore_probe_track_duration", prepared.trackProbeElapsedMs, prepared.trackProbeElapsedMs);
+    appendStartupTimingStage("mainwindow/startup_restore_prepare_total", prepared.totalElapsedMs, prepared.totalElapsedMs);
+
+    QElapsedTimer applyTimer;
+    applyTimer.start();
+    applyOpenedDocumentState(
+        prepared.normalizedPath,
+        prepared.encodingUsed,
+        prepared.document,
+        false,
+        prepared.hasTrackDuration ? prepared.trackDurationSeconds : -1.0
+    );
+    const qint64 applyElapsedMs = applyTimer.elapsed();
+    appendStartupTimingStage("mainwindow/startup_restore_apply_document_ui", applyElapsedMs, applyElapsedMs);
+    appendStartupTimingStage(
+        "mainwindow/restored_last_document_applied",
+        prepared.totalElapsedMs + applyElapsedMs,
+        prepared.totalElapsedMs + applyElapsedMs
+    );
+}
+
+void MainWindow::applyOpenedDocumentState(
+    const QString& normalizedPath,
+    TextEncoding encodingUsed,
+    const SimaiDocument& document,
+    bool showStatusMessage,
+    double knownTrackDurationSeconds)
+{
+    currentEncoding_ = encodingUsed;
+    applyWaveformData(QVector<float>(), knownTrackDurationSeconds > 0.0 ? knownTrackDurationSeconds : 0.0);
+    setCurrentFilePath(normalizedPath, true);
+    loadDocument(document);
+    refreshWaveformCache(knownTrackDurationSeconds);
+    if (showStatusMessage) {
+        statusBar()->showMessage(
+            QString("Opened: %1 (%2)")
+                .arg(QFileInfo(normalizedPath).fileName())
+                .arg(encodingUsed == TextEncoding::Utf8 ? "UTF-8" : "System encoding")
+        );
+    }
 }
 
 bool MainWindow::onSaveFile()
@@ -324,17 +719,30 @@ bool MainWindow::onSaveFileAs()
     logTopLevelWindowSnapshot("save_file_as_dialog/begin");
     logWindowGeometryDebug("save_file_as_before_dialog");
     logNativeWindowDebug("save_file_as_before_dialog");
+    logOwnedNativeWindowSnapshot("save_file_as_before_dialog", 16);
     int sampleCount = 0;
     int restoreCount = 0;
+#ifdef Q_OS_WIN
+    quintptr lastForegroundHwnd = 0;
+    quintptr lastForegroundRootOwnerHwnd = 0;
+#endif
     QTimer sampleTimer;
     sampleTimer.setInterval(120);
-    connect(&sampleTimer, &QTimer::timeout, this, [this, &sampleCount, &restoreCount]() {
+    connect(&sampleTimer, &QTimer::timeout, this, [this, &sampleCount, &restoreCount
+#ifdef Q_OS_WIN
+        , &lastForegroundHwnd, &lastForegroundRootOwnerHwnd
+#endif
+    ]() {
         if (sampleCount >= 80) {
             ++sampleCount;
             return;
         }
         ++sampleCount;
 #ifdef Q_OS_WIN
+        const HWND foregroundHwnd = GetForegroundWindow();
+        const HWND foregroundRootOwner = foregroundHwnd != nullptr ? GetAncestor(foregroundHwnd, GA_ROOTOWNER) : nullptr;
+        const quintptr foregroundValue = reinterpret_cast<quintptr>(foregroundHwnd);
+        const quintptr foregroundRootOwnerValue = reinterpret_cast<quintptr>(foregroundRootOwner);
         QString restoreDetail;
         if (tryRestoreOwnedNativeFileDialog(reinterpret_cast<HWND>(winId()), &restoreDetail)) {
             ++restoreCount;
@@ -346,20 +754,68 @@ bool MainWindow::onSaveFileAs()
                     .arg(restoreDetail)
             );
         }
+        const bool shouldLogNativeSample =
+            sampleCount <= 8
+            || (sampleCount % 5) == 0
+            || foregroundValue != lastForegroundHwnd
+            || foregroundRootOwnerValue != lastForegroundRootOwnerHwnd;
+        if (shouldLogNativeSample) {
+            const QString tag = QStringLiteral("save_file_dialog/sample_%1").arg(sampleCount);
+            logNativeWindowDebug(tag);
+            logOwnedNativeWindowSnapshot(tag, 16);
+        }
+        lastForegroundHwnd = foregroundValue;
+        lastForegroundRootOwnerHwnd = foregroundRootOwnerValue;
 #endif
     });
 
+    QFileDialog dialog(
+        this,
+        QStringLiteral("Save simai file"),
+        currentFilePath_.isEmpty() ? QStringLiteral("chart.txt") : currentFilePath_,
+        QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)")
+    );
+    dialog.setObjectName(QStringLiteral("miacode_save_file_dialog"));
+    dialog.setProperty("miacode_debug_scope", QStringLiteral("save_file_dialog"));
+    dialog.setAcceptMode(QFileDialog::AcceptSave);
+    dialog.setFileMode(QFileDialog::AnyFile);
+    dialog.setModal(true);
+    dialog.installEventFilter(this);
+    if (runtimeDebugOutputEnabled_) {
+        appendOutput(
+            "window/dialog_watch",
+            QString("scope=save_file_dialog configured widget=%1 directory=%2 native_window=%3")
+                .arg(pointerHex(&dialog))
+                .arg(dialog.directory().absolutePath())
+                .arg(dialog.windowHandle() != nullptr ? 1 : 0)
+        );
+    }
+    if (QWindow* dialogWindow = dialog.windowHandle(); dialogWindow != nullptr) {
+        dialogWindow->setProperty("miacode_debug_scope", QStringLiteral("save_file_dialog/window"));
+        dialogWindow->setProperty("miacode_debug_filter_installed", true);
+        dialogWindow->installEventFilter(this);
+    }
+
+#ifdef Q_OS_WIN
+    ScopedNativeDialogWinEventTrace nativeDialogTrace(
+        QStringLiteral("save_file_dialog"),
+        reinterpret_cast<HWND>(winId())
+    );
+#endif
+
     logTopLevelWindowSnapshot("save_file_dialog_exec_begin");
     logNativeWindowDebug("save_file_dialog_exec_begin");
+    logOwnedNativeWindowSnapshot("save_file_dialog_exec_begin", 16);
     sampleTimer.start();
-    const QString path = QFileDialog::getSaveFileName(
-        this,
-        "Save simai file",
-        currentFilePath_.isEmpty() ? QString("chart.txt") : currentFilePath_,
-        "Simai (*.txt *.simai);;All Files (*.*)",
-        nullptr
-    );
+    scheduleEmbeddedPreviewSurfaceRefresh(0);
+    scheduleEmbeddedPreviewSurfaceRefresh(120);
+    const QString path = (dialog.exec() == QDialog::Accepted && !dialog.selectedFiles().isEmpty())
+        ? dialog.selectedFiles().constFirst()
+        : QString();
     sampleTimer.stop();
+    refreshEmbeddedPreviewSurface();
+    scheduleEmbeddedPreviewSurfaceRefresh(0);
+    scheduleEmbeddedPreviewSurfaceRefresh(120);
     if (runtimeDebugOutputEnabled_) {
         appendOutput(
             "window/dialog_watch",
@@ -371,9 +827,11 @@ bool MainWindow::onSaveFileAs()
     }
     logTopLevelWindowSnapshot("save_file_dialog_exec_end");
     logNativeWindowDebug("save_file_dialog_exec_end");
+    logOwnedNativeWindowSnapshot("save_file_dialog_exec_end", 16);
     logWindowGeometryDebug("save_file_as_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
     logTopLevelWindowSnapshot("save_file_as_dialog/after_dialog");
     logNativeWindowDebug("save_file_as_after_dialog");
+    logOwnedNativeWindowSnapshot("save_file_as_after_dialog", 16);
     if (path.isEmpty()) {
         return false;
     }
@@ -1364,9 +1822,6 @@ bool MainWindow::switchToDifficultyField(int difficultyId)
     currentFieldDirty_ = false;
     updateDirtyState();
     rebuildFieldSidebar();
-    updateEditorHeader();
-    updateEditorEmptyState();
-    updateEditorStatus();
     scheduleTimelineRefresh();
     saveProjectRenderState();
     refreshLayoutAfterPageSwitch();
@@ -1410,14 +1865,10 @@ void MainWindow::loadDocument(const SimaiDocument& document)
     currentFieldDirty_ = false;
     activeDifficultyId_ = 0;
     activeOutlineKey_ = document_.difficultyIds().isEmpty() ? QStringLiteral("welcome") : QStringLiteral("chart");
-    rebuildFieldSidebar();
     activateInitialField();
     updateMetadataPageMode();
     updateDirtyState();
     updateWindowTitle();
-    updateEditorHeader();
-    updateEditorEmptyState();
-    updateEditorStatus();
 }
 
 void MainWindow::clearTimelineAndPreview()

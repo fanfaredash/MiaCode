@@ -159,8 +159,8 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
         }
 
         auto* maskNode = new QSGSimpleTextureNode();
-        maskNode->setOwnsTexture(false);
-        maskNode->setTexture(textures->textureForImage(brightnessMaskCache_, true));
+        maskNode->setOwnsTexture(true);
+        maskNode->setTexture(textures->createOwnedTexture(brightnessMaskCache_));
         maskNode->setRect(QRectF(QPointF(0.0, 0.0), QSizeF(renderSize)));
         maskNode->setFiltering(QSGTexture::Linear);
         root->appendChildNode(maskNode);

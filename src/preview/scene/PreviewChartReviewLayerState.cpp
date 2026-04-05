@@ -1,30 +1,10 @@
 #include "preview/scene/PreviewChartReviewLayerState.h"
 
-#include "preview/scene/PreviewJudgeOverlayShared.h"
 #include "preview/scene/PreviewOpacityCurves.h"
 
-#include <QHash>
 #include <QSet>
 
 namespace {
-
-enum class ReviewJudgeKind {
-    SimpleNormal,
-    SimpleBreak,
-    SlideStraight,
-    SlideCircleCcw,
-    SlideCircleCw,
-    WifiUp,
-    WifiDown,
-};
-
-struct ReviewJudgeEvent {
-    ReviewJudgeKind kind = ReviewJudgeKind::SimpleNormal;
-    qreal second = -1.0;
-    QString markerKey;
-    QString pad;
-    int lane = 0;
-};
 
 bool hasAnyChartReviewJudgeAssets(const miacode::preview::scene::PreviewJudgeOverlayAssets& assets)
 {
@@ -42,9 +22,118 @@ bool hasAnyChartReviewJudgeAssets(const miacode::preview::scene::PreviewJudgeOve
 
 namespace miacode::preview::scene {
 
+PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
+    const QVector<TimelineNoteMarker>& noteMarkers,
+    bool showSlideJudgeOverlay,
+    bool showSimpleJudgeOverlay
+)
+{
+    PreviewChartReviewPreparedEvents events;
+    if ((!showSlideJudgeOverlay && !showSimpleJudgeOverlay) || noteMarkers.isEmpty()) {
+        return events;
+    }
+
+    events.reserve(noteMarkers.size() * 2);
+
+    QSet<QString> emittedHeadEvents;
+    emittedHeadEvents.reserve(noteMarkers.size());
+
+    for (const TimelineNoteMarker& marker : noteMarkers) {
+        if (marker.type == QLatin1String("tap")) {
+            if (!showSimpleJudgeOverlay) {
+                continue;
+            }
+            PreviewChartReviewPreparedEvent event;
+            event.kind = marker.isBreak
+                ? PreviewChartReviewPreparedKind::SimpleBreak
+                : PreviewChartReviewPreparedKind::SimpleNormal;
+            event.second = static_cast<qreal>(marker.second);
+            if (buildJudgeOverlaySimplePlacement(lanePadToken(marker.lane), &event.placement)) {
+                events.append(event);
+            }
+            continue;
+        }
+        if (marker.type == QLatin1String("hold")) {
+            if (!showSimpleJudgeOverlay || marker.endSecond < 0.0) {
+                continue;
+            }
+            PreviewChartReviewPreparedEvent event;
+            event.kind = marker.isBreak
+                ? PreviewChartReviewPreparedKind::SimpleBreak
+                : PreviewChartReviewPreparedKind::SimpleNormal;
+            event.second = static_cast<qreal>(marker.endSecond);
+            if (buildJudgeOverlaySimplePlacement(
+                    lanePadToken((marker.endLane >= 1 && marker.endLane <= 8) ? marker.endLane : marker.lane),
+                    &event.placement)) {
+                events.append(event);
+            }
+            continue;
+        }
+        if (marker.type != QLatin1String("slide") && marker.type != QLatin1String("wifi")) {
+            continue;
+        }
+
+        if (showSimpleJudgeOverlay && marker.hasHeadStar) {
+            const QString helperKey = slideHeadEventKey(marker);
+            if (!emittedHeadEvents.contains(helperKey)) {
+                emittedHeadEvents.insert(helperKey);
+                PreviewChartReviewPreparedEvent headEvent;
+                headEvent.kind = marker.headBreak
+                    ? PreviewChartReviewPreparedKind::SimpleBreak
+                    : PreviewChartReviewPreparedKind::SimpleNormal;
+                headEvent.second = static_cast<qreal>(marker.second);
+                if (buildJudgeOverlaySimplePlacement(lanePadToken(marker.lane), &headEvent.placement)) {
+                    events.append(headEvent);
+                }
+            }
+        }
+        if (!showSlideJudgeOverlay) {
+            continue;
+        }
+
+        PreviewChartReviewPreparedEvent event;
+        event.second = chartReviewSlideJudgeSecond(marker);
+        const int lane = qBound(1, marker.endLane, 8);
+        if (marker.type == QLatin1String("wifi")) {
+            event.kind =
+                (lane == 1 || lane == 2 || lane == 7 || lane == 8)
+                ? PreviewChartReviewPreparedKind::WifiUp
+                : PreviewChartReviewPreparedKind::WifiDown;
+            event.placement = buildJudgeOverlayWifiPlacement(lane, event.kind == PreviewChartReviewPreparedKind::WifiUp);
+            events.append(event);
+            continue;
+        }
+
+        const QString segmentKey = !marker.slideSegmentKeys.isEmpty()
+            ? marker.slideSegmentKeys.constLast()
+            : marker.slideTrackKey;
+        bool appendEvent = true;
+        if (slideKeyUsesCcwJudgeSprite(segmentKey)) {
+            event.kind = PreviewChartReviewPreparedKind::CircleLeft;
+            event.placement = buildJudgeOverlayCircleCcwPlacement(lane);
+        } else if (slideKeyUsesCwJudgeSprite(segmentKey)) {
+            event.kind = PreviewChartReviewPreparedKind::CircleRight;
+            event.placement = buildJudgeOverlayCircleCwPlacement(lane);
+        } else {
+            bool useRightImage = false;
+            appendEvent = buildJudgeOverlayStraightPlacement(marker, false, &event.placement, &useRightImage);
+            event.kind = useRightImage
+                ? PreviewChartReviewPreparedKind::StraightRight
+                : PreviewChartReviewPreparedKind::StraightLeft;
+        }
+
+        if (appendEvent) {
+            events.append(event);
+        }
+    }
+
+    return events;
+}
+
 PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
     const PreviewFrameState& state,
-    const QRectF& playfieldRect
+    const QRectF& playfieldRect,
+    const PreviewChartReviewPreparedEvents* preparedEvents
 )
 {
     PreviewSpriteDescriptors sprites;
@@ -56,105 +145,28 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
         return sprites;
     }
 
-    QHash<QString, const TimelineNoteMarker*> markerByKey;
-    markerByKey.reserve(state.noteMarkers.size());
-
-    QVector<ReviewJudgeEvent> events;
-    events.reserve(state.noteMarkers.size() * 2);
-
-    QSet<QString> emittedHeadEvents;
-    emittedHeadEvents.reserve(state.noteMarkers.size());
-
-    for (const TimelineNoteMarker& marker : state.noteMarkers) {
-        const QString markerKey = makeMarkerAnalysisKey(marker);
-        markerByKey.insert(markerKey, &marker);
-
-        if (marker.type == QLatin1String("tap")) {
-            if (!showSimpleJudgeOverlay) {
-                continue;
-            }
-            ReviewJudgeEvent event;
-            event.kind = marker.isBreak ? ReviewJudgeKind::SimpleBreak : ReviewJudgeKind::SimpleNormal;
-            event.second = static_cast<qreal>(marker.second);
-            event.pad = lanePadToken(marker.lane);
-            events.append(event);
-            continue;
-        }
-        if (marker.type == QLatin1String("hold")) {
-            if (!showSimpleJudgeOverlay || marker.endSecond < 0.0) {
-                continue;
-            }
-            ReviewJudgeEvent event;
-            event.kind = marker.isBreak ? ReviewJudgeKind::SimpleBreak : ReviewJudgeKind::SimpleNormal;
-            event.second = static_cast<qreal>(marker.endSecond);
-            event.pad = lanePadToken((marker.endLane >= 1 && marker.endLane <= 8) ? marker.endLane : marker.lane);
-            events.append(event);
-            continue;
-        }
-        if (marker.type != QLatin1String("slide") && marker.type != QLatin1String("wifi")) {
-            continue;
-        }
-
-        if (showSimpleJudgeOverlay && marker.hasHeadStar) {
-            const QString helperKey = slideHeadEventKey(marker);
-            if (!emittedHeadEvents.contains(helperKey)) {
-                emittedHeadEvents.insert(helperKey);
-                ReviewJudgeEvent headEvent;
-                headEvent.kind = marker.headBreak ? ReviewJudgeKind::SimpleBreak : ReviewJudgeKind::SimpleNormal;
-                headEvent.second = static_cast<qreal>(marker.second);
-                headEvent.pad = lanePadToken(marker.lane);
-                events.append(headEvent);
-            }
-        }
-        if (!showSlideJudgeOverlay) {
-            continue;
-        }
-
-        ReviewJudgeEvent event;
-        event.second = chartReviewSlideJudgeSecond(marker);
-        event.markerKey = markerKey;
-        event.lane = qBound(1, marker.endLane, 8);
-        if (marker.type == QLatin1String("wifi")) {
-            event.kind =
-                (event.lane == 1 || event.lane == 2 || event.lane == 7 || event.lane == 8)
-                ? ReviewJudgeKind::WifiUp
-                : ReviewJudgeKind::WifiDown;
-            events.append(event);
-            continue;
-        }
-
-        const QString segmentKey = !marker.slideSegmentKeys.isEmpty()
-            ? marker.slideSegmentKeys.constLast()
-            : marker.slideTrackKey;
-        if (slideKeyUsesCcwJudgeSprite(segmentKey)) {
-            event.kind = ReviewJudgeKind::SlideCircleCcw;
-        } else if (slideKeyUsesCwJudgeSprite(segmentKey)) {
-            event.kind = ReviewJudgeKind::SlideCircleCw;
-        } else {
-            event.kind = ReviewJudgeKind::SlideStraight;
-        }
-        events.append(event);
-    }
+    const PreviewChartReviewPreparedEvents ownedPreparedEvents =
+        preparedEvents != nullptr
+        ? PreviewChartReviewPreparedEvents()
+        : buildPreviewChartReviewPreparedEvents(state.noteMarkers, showSlideJudgeOverlay, showSimpleJudgeOverlay);
+    const PreviewChartReviewPreparedEvents& events =
+        preparedEvents != nullptr ? *preparedEvents : ownedPreparedEvents;
 
     sprites.reserve(events.size());
-    for (const ReviewJudgeEvent& event : events) {
+    for (const PreviewChartReviewPreparedEvent& event : events) {
         const qreal elapsedSeconds = static_cast<qreal>(state.playheadSeconds - event.second);
         if (elapsedSeconds < 0.0 || elapsedSeconds > kMaimuriDxJudgeLifetimeSeconds) {
             continue;
         }
 
-        PreviewJudgeOverlayPlacement placement;
         const QImage* image = nullptr;
         QRectF sourceRect;
         qreal alpha = 0.0;
 
         switch (event.kind) {
-        case ReviewJudgeKind::SimpleNormal:
-        case ReviewJudgeKind::SimpleBreak: {
-            const bool isBreak = event.kind == ReviewJudgeKind::SimpleBreak;
-            if (!buildJudgeOverlaySimplePlacement(event.pad, &placement)) {
-                continue;
-            }
+        case PreviewChartReviewPreparedKind::SimpleNormal:
+        case PreviewChartReviewPreparedKind::SimpleBreak: {
+            const bool isBreak = event.kind == PreviewChartReviewPreparedKind::SimpleBreak;
             image = isBreak
                 ? &state.judgeOverlay.reviewJudgeSimpleBreakImage
                 : &state.judgeOverlay.reviewJudgeSimpleNormalImage;
@@ -177,24 +189,23 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
             );
             break;
         }
-        case ReviewJudgeKind::SlideStraight: {
-            const TimelineNoteMarker* marker = markerByKey.value(event.markerKey, nullptr);
-            bool useRightImage = false;
-            if (marker == nullptr || !buildJudgeOverlayStraightPlacement(*marker, false, &placement, &useRightImage)) {
-                continue;
-            }
-            image = useRightImage
-                ? &state.judgeOverlay.reviewJudgeStraightRightImage
-                : &state.judgeOverlay.reviewJudgeStraightLeftImage;
+        case PreviewChartReviewPreparedKind::StraightLeft:
+            image = &state.judgeOverlay.reviewJudgeStraightLeftImage;
             alpha = maimuriDxJudgeFadeOutAlpha(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,
                 kMaimuriDxJudgeFadeOutStartSeconds
             );
             break;
-        }
-        case ReviewJudgeKind::SlideCircleCcw:
-            placement = buildJudgeOverlayCircleCcwPlacement(event.lane);
+        case PreviewChartReviewPreparedKind::StraightRight:
+            image = &state.judgeOverlay.reviewJudgeStraightRightImage;
+            alpha = maimuriDxJudgeFadeOutAlpha(
+                elapsedSeconds,
+                kMaimuriDxJudgeLifetimeSeconds,
+                kMaimuriDxJudgeFadeOutStartSeconds
+            );
+            break;
+        case PreviewChartReviewPreparedKind::CircleLeft:
             image = &state.judgeOverlay.reviewJudgeCircleLeftImage;
             alpha = maimuriDxJudgeFadeOutAlpha(
                 elapsedSeconds,
@@ -202,8 +213,7 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
                 kMaimuriDxJudgeFadeOutStartSeconds
             );
             break;
-        case ReviewJudgeKind::SlideCircleCw:
-            placement = buildJudgeOverlayCircleCwPlacement(event.lane);
+        case PreviewChartReviewPreparedKind::CircleRight:
             image = &state.judgeOverlay.reviewJudgeCircleRightImage;
             alpha = maimuriDxJudgeFadeOutAlpha(
                 elapsedSeconds,
@@ -211,8 +221,7 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
                 kMaimuriDxJudgeFadeOutStartSeconds
             );
             break;
-        case ReviewJudgeKind::WifiUp:
-            placement = buildJudgeOverlayWifiPlacement(event.lane, true);
+        case PreviewChartReviewPreparedKind::WifiUp:
             image = &state.judgeOverlay.reviewJudgeWifiUpImage;
             alpha = maimuriDxJudgeFadeOutAlpha(
                 elapsedSeconds,
@@ -220,8 +229,7 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
                 kMaimuriDxJudgeFadeOutStartSeconds
             );
             break;
-        case ReviewJudgeKind::WifiDown:
-            placement = buildJudgeOverlayWifiPlacement(event.lane, false);
+        case PreviewChartReviewPreparedKind::WifiDown:
             image = &state.judgeOverlay.reviewJudgeWifiDownImage;
             alpha = maimuriDxJudgeFadeOutAlpha(
                 elapsedSeconds,
@@ -232,7 +240,7 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
         }
 
         const PreviewSpriteDescriptor sprite =
-            buildJudgeOverlaySpriteDescriptor(image, sourceRect, placement, alpha, playfieldRect);
+            buildJudgeOverlaySpriteDescriptor(image, sourceRect, event.placement, alpha, playfieldRect);
         if (sprite.image != nullptr) {
             sprites.append(sprite);
         }

@@ -56,24 +56,16 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
 {
     PreviewTrackLayerState layerState;
     layerState.sprites.reserve(state.noteMarkers.size() * 32);
-    layerState.ownedImages.reserve(state.noteMarkers.size() * 4);
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
     const PreviewSlideTrackTiming trackTiming = previewSlideTrackTimingForFlowSpeed(state.render.noteFlowSpeed);
-
-    const auto appendOwnedImage = [&layerState](QImage image) -> const QImage* {
-        if (image.isNull()) {
-            return nullptr;
-        }
-        layerState.ownedImages.append(QSharedPointer<QImage>(new QImage(std::move(image))));
-        return layerState.ownedImages.last().data();
-    };
 
     const auto appendSprite = [&layerState, &playfieldRect, canvasScale](
                                   const QImage* image,
                                   const QPointF& logicalPoint,
                                   qreal rotationDegrees,
                                   qreal opacity,
+                                  PreviewAnimatedSpriteEffect effect,
                                   bool cacheable
                               ) {
         if (image == nullptr || image->isNull() || opacity <= 0.0) {
@@ -89,6 +81,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
         sprite.height = qMax<qreal>(1.0, qRound(image->height() * canvasScale * kSlideTrackScale));
         sprite.rotationDegrees = rotationDegrees;
         sprite.opacity = opacity;
+        sprite.effect = effect;
         sprite.cacheable = cacheable;
         layerState.sprites.append(sprite);
     };
@@ -99,6 +92,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
                                      int localCut,
                                      const QImage* image,
                                      qreal opacity,
+                                     PreviewAnimatedSpriteEffect effect,
                                      bool trimFromTail,
                                      bool cacheable) {
         if (image == nullptr || image->isNull() || opacity <= 0.0) {
@@ -125,7 +119,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
         const int startPointIndex = trimFromTail ? 0 : clampedCut;
         const int endPointIndex = trimFromTail ? points.size() - clampedCut : points.size();
         for (int pointIndex = startPointIndex; pointIndex < endPointIndex; ++pointIndex) {
-            appendSprite(image, points[pointIndex], -rotations.value(pointIndex), opacity, cacheable);
+            appendSprite(image, points[pointIndex], -rotations.value(pointIndex), opacity, effect, cacheable);
         }
     };
 
@@ -147,7 +141,9 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
             return;
         }
 
-        QHash<quint64, const QImage*> animatedImages;
+        const PreviewAnimatedSpriteEffect effect = marker.trackBreak
+            ? PreviewAnimatedSpriteEffect::BreakAnimate
+            : PreviewAnimatedSpriteEffect::None;
         for (int pointIndex = clampedCut; pointIndex < points.size(); ++pointIndex) {
             const int imageIndex = imageIndices.value(pointIndex, pointIndex);
             const QImage* baseImage = selectWifiTrackImage(state.skin, marker, imageIndex, 0);
@@ -155,25 +151,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
                 continue;
             }
 
-            const QImage* renderImage = baseImage;
-            bool cacheable = true;
-            if (marker.trackBreak) {
-                const quint64 key = static_cast<quint64>(baseImage->cacheKey());
-                if (const QImage* existing = animatedImages.value(key, nullptr); existing != nullptr) {
-                    renderImage = existing;
-                } else {
-                    renderImage = appendOwnedImage(
-                        buildAnimatedSpriteImage(*baseImage, PreviewAnimatedSpriteEffect::BreakAnimate, state.playheadSeconds)
-                    );
-                    animatedImages.insert(key, renderImage);
-                }
-                cacheable = false;
-            }
-            if (renderImage == nullptr || renderImage->isNull()) {
-                continue;
-            }
-
-            appendSprite(renderImage, points[pointIndex], -rotations.value(pointIndex), opacity, cacheable);
+            appendSprite(baseImage, points[pointIndex], -rotations.value(pointIndex), opacity, effect, true);
         }
     };
 
@@ -193,17 +171,11 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
             if (baseImage == nullptr || baseImage->isNull()) {
                 continue;
             }
+            const PreviewAnimatedSpriteEffect effect = marker.trackBreak
+                ? PreviewAnimatedSpriteEffect::BreakAnimate
+                : PreviewAnimatedSpriteEffect::None;
             const QImage* renderImage = baseImage;
-            bool cacheable = true;
-            if (marker.trackBreak) {
-                renderImage = appendOwnedImage(
-                    buildAnimatedSpriteImage(*baseImage, PreviewAnimatedSpriteEffect::BreakAnimate, state.playheadSeconds)
-                );
-                cacheable = false;
-            }
-            if (renderImage == nullptr || renderImage->isNull()) {
-                continue;
-            }
+            const bool cacheable = true;
 
             if (state.muriRenderOptions.renderMode == RenderMode::MaimuriDxStyle) {
                 const MarkerMuriState* muriState = findMarkerMuriState(state.muriAnalysisReport, marker);
@@ -236,7 +208,17 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
                                         && state.playheadSeconds >= segmentState.completedSecond - 1e-6) {
                                         continue;
                                     }
-                                    appendSlideArea(marker, segmentIndex, areaIndex, 0, renderImage, areaOpacity, false, cacheable);
+                                    appendSlideArea(
+                                        marker,
+                                        segmentIndex,
+                                        areaIndex,
+                                        0,
+                                        renderImage,
+                                        areaOpacity,
+                                        effect,
+                                        false,
+                                        cacheable
+                                    );
                                     continue;
                                 }
 
@@ -249,7 +231,17 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
                                     passed,
                                     areas[areaIndex].size()
                                 );
-                                appendSlideArea(marker, segmentIndex, areaIndex, localCut, renderImage, areaOpacity, false, cacheable);
+                                appendSlideArea(
+                                    marker,
+                                    segmentIndex,
+                                    areaIndex,
+                                    localCut,
+                                    renderImage,
+                                    areaOpacity,
+                                    effect,
+                                    false,
+                                    cacheable
+                                );
                             }
                         }
                     };
@@ -328,7 +320,17 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
                 for (int segmentIndex = marker.slideTrackAreaPoints.size() - 1; segmentIndex > startSegment; --segmentIndex) {
                     const QVector<QVector<QPointF>>& areas = marker.slideTrackAreaPoints[segmentIndex];
                     for (int areaIndex = areas.size() - 1; areaIndex >= 0; --areaIndex) {
-                        appendSlideArea(marker, segmentIndex, areaIndex, 0, renderImage, opacity, false, cacheable);
+                        appendSlideArea(
+                            marker,
+                            segmentIndex,
+                            areaIndex,
+                            0,
+                            renderImage,
+                            opacity,
+                            effect,
+                            false,
+                            cacheable
+                        );
                     }
                 }
                 if (startSegment >= 0 && startSegment < marker.slideTrackAreaPoints.size()) {
@@ -346,7 +348,17 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
                     }
                     for (int areaIndex = areas.size() - 1; areaIndex >= clampedStartArea; --areaIndex) {
                         const int localCut = areaIndex == clampedStartArea ? partialTrimCount : 0;
-                        appendSlideArea(marker, startSegment, areaIndex, localCut, renderImage, opacity, false, cacheable);
+                        appendSlideArea(
+                            marker,
+                            startSegment,
+                            areaIndex,
+                            localCut,
+                            renderImage,
+                            opacity,
+                            effect,
+                            false,
+                            cacheable
+                        );
                     }
                 }
             } else {
@@ -381,7 +393,17 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
                 for (int segmentIndex = marker.slideTrackAreaPoints.size() - 1; segmentIndex > trimSegment; --segmentIndex) {
                     const QVector<QVector<QPointF>>& areas = marker.slideTrackAreaPoints[segmentIndex];
                     for (int areaIndex = areas.size() - 1; areaIndex >= 0; --areaIndex) {
-                        appendSlideArea(marker, segmentIndex, areaIndex, 0, renderImage, opacity, false, cacheable);
+                        appendSlideArea(
+                            marker,
+                            segmentIndex,
+                            areaIndex,
+                            0,
+                            renderImage,
+                            opacity,
+                            effect,
+                            false,
+                            cacheable
+                        );
                     }
                 }
                 if (trimSegment >= 0 && trimSegment < marker.slideTrackAreaPoints.size()) {
@@ -395,6 +417,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
                             localCut,
                             renderImage,
                             opacity,
+                            effect,
                             areaIndex == trimArea,
                             cacheable
                         );

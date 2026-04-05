@@ -29,7 +29,14 @@ QSGNode* PreviewQuickTouchHoldLayer::updateNode(
     if (QSGNode* arcs = buildPreviewArcNodeTree(nullptr, layerState.arcs, window, textures)) {
         root->appendChildNode(arcs);
     }
-    if (QSGNode* sprites = buildPreviewSpriteNodeTree(nullptr, layerState.sprites, window, textures)) {
+    if (QSGNode* sprites = buildPreviewSpriteNodeTree(
+            nullptr,
+            layerState.sprites,
+            window,
+            textures,
+            state.playheadSeconds,
+            "touch_hold"
+        )) {
         root->appendChildNode(sprites);
     }
     if (root->firstChild() == nullptr) {

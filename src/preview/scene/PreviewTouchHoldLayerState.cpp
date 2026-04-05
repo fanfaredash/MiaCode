@@ -15,17 +15,8 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
     PreviewTouchHoldLayerState layerState;
     layerState.sprites.reserve(state.noteMarkers.size() * 5);
     layerState.arcs.reserve(state.noteMarkers.size());
-    layerState.ownedImages.reserve(state.noteMarkers.size() * 4);
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-    const auto appendOwnedImage = [&layerState](QImage image) -> const QImage* {
-        if (image.isNull()) {
-            return nullptr;
-        }
-        layerState.ownedImages.append(QSharedPointer<QImage>(new QImage(std::move(image))));
-        return layerState.ownedImages.last().data();
-    };
-
     const auto appendSprite = [&layerState](
                                   const QImage* image,
                                   const QPointF& center,
@@ -33,6 +24,7 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
                                   qreal height,
                                   qreal rotation,
                                   qreal opacity,
+                                  PreviewAnimatedSpriteEffect effect = PreviewAnimatedSpriteEffect::None,
                                   bool cacheable = true
                               ) {
         if (image == nullptr || image->isNull() || opacity <= 0.0 || width <= 0.0 || height <= 0.0) {
@@ -45,6 +37,7 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
         sprite.height = height;
         sprite.rotationDegrees = rotation;
         sprite.opacity = opacity;
+        sprite.effect = effect;
         sprite.cacheable = cacheable;
         layerState.sprites.append(sprite);
     };
@@ -90,14 +83,10 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
         const QImage* renderFan1 = &fan1Base;
         const QImage* renderFan2 = &fan2Base;
         const QImage* renderFan3 = &fan3Base;
-        bool fansCacheable = true;
-        if (marker.isBreak) {
-            renderFan0 = appendOwnedImage(buildAnimatedSpriteImage(fan0Base, PreviewAnimatedSpriteEffect::BreakAnimate, state.playheadSeconds));
-            renderFan1 = appendOwnedImage(buildAnimatedSpriteImage(fan1Base, PreviewAnimatedSpriteEffect::BreakAnimate, state.playheadSeconds));
-            renderFan2 = appendOwnedImage(buildAnimatedSpriteImage(fan2Base, PreviewAnimatedSpriteEffect::BreakAnimate, state.playheadSeconds));
-            renderFan3 = appendOwnedImage(buildAnimatedSpriteImage(fan3Base, PreviewAnimatedSpriteEffect::BreakAnimate, state.playheadSeconds));
-            fansCacheable = false;
-        }
+        const PreviewAnimatedSpriteEffect fansEffect = marker.isBreak
+            ? PreviewAnimatedSpriteEffect::BreakAnimate
+            : PreviewAnimatedSpriteEffect::None;
+        const bool fansCacheable = true;
         if (renderFan0 == nullptr || renderFan1 == nullptr || renderFan2 == nullptr || renderFan3 == nullptr) {
             continue;
         }
@@ -145,6 +134,7 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
                 qMax<qreal>(1.0, qRound(pieceLayout.image->height() * kTouchAssetScale * canvasScale)),
                 pieceLayout.angle,
                 alpha,
+                fansEffect,
                 fansCacheable
             );
         }

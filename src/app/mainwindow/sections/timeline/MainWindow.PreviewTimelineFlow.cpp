@@ -113,7 +113,8 @@ std::pair<int, int> lineColForTextOffset(const QString& text, int offset)
 }
 
 }  // namespace
-void MainWindow::refreshWaveformCache()
+
+void MainWindow::resetPreviewTrackTimelineOffsets()
 {
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->setBackgroundTrackOffsetSeconds(0.0);
@@ -123,14 +124,128 @@ void MainWindow::refreshWaveformCache()
             controller->setTimelineOffsetSeconds(0.0);
         });
     }
+}
+
+void MainWindow::applyWaveformData(const QVector<float>& peaks, double durationSeconds)
+{
+    previewTrackDurationSeconds_ = qMax(0.0, durationSeconds);
+    if (timelineView_ != nullptr) {
+        timelineView_->setWaveformData(peaks, 0.0, previewTrackDurationSeconds_);
+    }
+    updatePreviewSliderRange();
+}
+
+void MainWindow::refreshWaveformCache()
+{
+    refreshWaveformCache(-1.0);
+}
+
+void MainWindow::refreshWaveformCache(double knownDurationSeconds)
+{
+    resetPreviewTrackTimelineOffsets();
     if (timelineView_ == nullptr) {
         return;
     }
-    double audioDurationSeconds = 0.0;
-    const QVector<float> waveform = buildWaveformPeaks(lastTrackPath_, &audioDurationSeconds);
-    previewTrackDurationSeconds_ = qMax(0.0, audioDurationSeconds);
-    timelineView_->setWaveformData(waveform, 0.0, audioDurationSeconds);
-    updatePreviewSliderRange();
+
+    ++waveformRefreshGeneration_;
+    const quint64 generation = waveformRefreshGeneration_;
+    const QString trackPath = lastTrackPath_;
+    if (trackPath.isEmpty()) {
+        applyWaveformData(QVector<float>(), 0.0);
+        return;
+    }
+
+    const QFileInfo trackInfo(trackPath);
+    if (!trackInfo.exists() || !trackInfo.isFile()) {
+        applyWaveformData(QVector<float>(), 0.0);
+        return;
+    }
+
+    const qint64 fileSize = trackInfo.size();
+    const qint64 lastModifiedMs = fileLastModifiedMs(trackInfo);
+    const bool cacheMatches =
+        waveformCacheEntry_.trackPath == trackPath
+        && waveformCacheEntry_.fileSize == fileSize
+        && waveformCacheEntry_.lastModifiedMs == lastModifiedMs;
+    const bool cacheHasPeaks = cacheMatches && !waveformCacheEntry_.peaks.isEmpty();
+    if (cacheHasPeaks) {
+        applyWaveformData(
+            waveformCacheEntry_.peaks,
+            knownDurationSeconds > 0.0 ? knownDurationSeconds : waveformCacheEntry_.durationSeconds
+        );
+        return;
+    }
+
+    if (knownDurationSeconds > 0.0) {
+        applyWaveformData(QVector<float>(), knownDurationSeconds);
+    } else if (cacheMatches && waveformCacheEntry_.durationSeconds > 0.0) {
+        applyWaveformData(QVector<float>(), waveformCacheEntry_.durationSeconds);
+    } else {
+        applyWaveformData(QVector<float>(), 0.0);
+    }
+
+    QPointer<MainWindow> guard(this);
+    QThreadPool* const pool = previewWarmupPool_ != nullptr
+        ? previewWarmupPool_
+        : QThreadPool::globalInstance();
+    pool->start([guard, generation, trackPath, fileSize, lastModifiedMs]() {
+        double audioDurationSeconds = 0.0;
+        QElapsedTimer timer;
+        timer.start();
+        const QVector<float> peaks = buildWaveformPeaks(trackPath, &audioDurationSeconds, kWaveformPeakCount);
+        const qint64 buildElapsedMs = timer.elapsed();
+        if (guard.isNull()) {
+            return;
+        }
+        QMetaObject::invokeMethod(
+            guard.data(),
+            [guard, generation, trackPath, fileSize, lastModifiedMs, audioDurationSeconds, peaks, buildElapsedMs]() {
+                if (guard.isNull()) {
+                    return;
+                }
+                guard->applyWaveformCacheEntry(
+                    generation,
+                    trackPath,
+                    fileSize,
+                    lastModifiedMs,
+                    audioDurationSeconds,
+                    peaks,
+                    buildElapsedMs
+                );
+            },
+            Qt::QueuedConnection
+        );
+    });
+}
+
+void MainWindow::applyWaveformCacheEntry(
+    quint64 generation,
+    const QString& trackPath,
+    qint64 fileSize,
+    qint64 lastModifiedMs,
+    double durationSeconds,
+    const QVector<float>& peaks,
+    qint64 buildElapsedMs)
+{
+    Q_UNUSED(buildElapsedMs);
+
+    if (generation != waveformRefreshGeneration_ || lastTrackPath_ != trackPath) {
+        return;
+    }
+
+    const QFileInfo currentTrackInfo(trackPath);
+    if (!currentTrackInfo.exists()
+        || currentTrackInfo.size() != fileSize
+        || fileLastModifiedMs(currentTrackInfo) != lastModifiedMs) {
+        return;
+    }
+
+    waveformCacheEntry_.trackPath = trackPath;
+    waveformCacheEntry_.fileSize = fileSize;
+    waveformCacheEntry_.lastModifiedMs = lastModifiedMs;
+    waveformCacheEntry_.durationSeconds = qMax(0.0, durationSeconds);
+    waveformCacheEntry_.peaks = peaks;
+    applyWaveformData(peaks, waveformCacheEntry_.durationSeconds);
 }
 
 bool MainWindow::hasActiveDifficulty() const
@@ -219,7 +334,7 @@ void MainWindow::applyLatencyDetectorOffset(double seconds)
     }
     documentDirty_ = true;
     updateDirtyState();
-    refreshWaveformCache();
+    resetPreviewTrackTimelineOffsets();
     refreshTimelineMetadata();
 }
 
@@ -251,7 +366,7 @@ void MainWindow::applyLatencyDetectorBpm(double bpm)
     updateDirtyState();
 }
 
-void MainWindow::setCurrentFilePath(const QString& path)
+void MainWindow::setCurrentFilePath(const QString& path, bool suppressImmediateRefresh)
 {
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
     const bool pathChanged = normalizedPath != currentFilePath_;
@@ -294,17 +409,24 @@ void MainWindow::setCurrentFilePath(const QString& path)
         loadProjectRenderState();
     }
     if (previewMediaController_ != nullptr) {
-        dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
+        const double pausedSecond = qMax(0.0, qtPreviewPauseSecond_);
+        dispatchPreviewMediaControllerCall([this, pausedSecond](PreviewMediaController* controller) {
             controller->setChartPath(currentFilePath_);
             controller->setBackgroundTrackPath(lastTrackPath_);
+            controller->setPlayheadSeconds(pausedSecond);
         });
+    }
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->setPlayheadSeconds(qMax(0.0, qtPreviewPauseSecond_), false);
     }
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->setChartPath(currentFilePath_);
     }
     applyPreviewAudioSettingsToRuntime();
-    refreshWaveformCache();
-    refreshTimelineMetadata();
+    if (!suppressImmediateRefresh) {
+        refreshWaveformCache();
+        refreshTimelineMetadata();
+    }
     if (pathChanged && previewWarmupGeneration_ > 0) {
         schedulePreviewSubsystemWarmup();
     }

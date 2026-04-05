@@ -86,7 +86,14 @@ QSGNode* PreviewQuickJudgeFireworkLayer::updateNode(
     if (QSGNode* sectorNode = buildPreviewSectorNodeTree(nullptr, layerState.sectors)) {
         contentRoot->appendChildNode(sectorNode);
     }
-    if (QSGNode* spriteNode = buildPreviewSpriteNodeTree(nullptr, layerState.sprites, window, textures)) {
+    if (QSGNode* spriteNode = buildPreviewSpriteNodeTree(
+            nullptr,
+            layerState.sprites,
+            window,
+            textures,
+            state.playheadSeconds,
+            "judge_firework"
+        )) {
         contentRoot->appendChildNode(spriteNode);
     }
 

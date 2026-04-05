@@ -12,6 +12,18 @@
 
 class PreviewQuickRuntimeSurface;
 class QWindow;
+struct PreviewTextureStats;
+
+struct PreviewRuntimeLayerProfileAggregate {
+    QString name;
+    qint64 spriteCountSum = 0;
+    qint64 spriteBatchCountSum = 0;
+    double buildMsSum = 0.0;
+    qint64 spriteCountMax = 0;
+    qint64 spriteBatchCountMax = 0;
+    double buildMsMax = 0.0;
+    qint64 spriteActiveFrameCount = 0;
+};
 
 class PreviewRuntime : public QObject
 {
@@ -62,6 +74,7 @@ signals:
 private:
     void refreshAssetStateFromRepository();
     void updatePresentedFrameStats();
+    void updateTextureProfilingStats(const PreviewTextureStats& frameStats);
 
     miacode::preview::runtime::PreviewSceneAssetRepository* assets_ = nullptr;
     PreviewQuickRuntimeSurface* surface_ = nullptr;
@@ -73,4 +86,21 @@ private:
     int presentedFrameIntervalWriteIndex_ = 0;
     int presentedFrameIntervalCount_ = 0;
     bool pendingPresentedStatsRefresh_ = true;
+    bool profilingSummaryDirty_ = false;
+    qint64 profiledTextureFrameCount_ = 0;
+    qint64 profiledActiveSpriteFrameCount_ = 0;
+    qint64 cachedTextureHitTotal_ = 0;
+    qint64 cachedTextureCreateTotal_ = 0;
+    qint64 transientTextureHitTotal_ = 0;
+    qint64 transientTextureCreateTotal_ = 0;
+    qint64 spriteCountTotal_ = 0;
+    qint64 spriteBatchCountTotal_ = 0;
+    qint64 spriteCountMax_ = 0;
+    qint64 spriteBatchCountMax_ = 0;
+    double layerBuildMsTotal_ = 0.0;
+    double layerBuildMsMax_ = 0.0;
+    qint64 peakFrameSpriteCount_ = 0;
+    qint64 peakFrameSpriteBatchCount_ = 0;
+    double peakFrameLayerBuildMs_ = 0.0;
+    QVector<PreviewRuntimeLayerProfileAggregate> layerProfileAggregates_;
 };

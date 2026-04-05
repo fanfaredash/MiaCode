@@ -99,9 +99,17 @@ Still active:
 - `MIACODE_PREVIEW_SESSION_SCRIPT`
 - `MIACODE_PREVIEW_SFX_DIR`
 - `MIACODE_TRACK_PATH`
+- `MIACODE_PREVIEW_DISABLE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS`
 - `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_FRAMES`
 - `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_MAX_SAMPLES`
 - `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_DIR`
+
+Startup default:
+
+- The embedded realtime preview now enables `Qt::AA_DontCreateNativeWidgetSiblings` by default before `QApplication` construction.
+- This is the current workaround for Windows black-screen regressions around `QQuickView` hosted through `QWidget::createWindowContainer()` when native dialogs or sibling native windows appear.
+- Use `MIACODE_PREVIEW_DISABLE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS=1` only for regression A/B.
+- The old debug-only enable snippet `MIACODE_PREVIEW_DONT_CREATE_NATIVE_WIDGET_SIBLINGS=1` is now redundant because the workaround is already on by default.
 
 Retired with the old preview renderer and not recommended anymore:
 
@@ -132,6 +140,11 @@ Force export PBO on:
 
 - `set MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO=1`
 
+Opt out of the default embedded-preview native-sibling workaround for regression A/B:
+
+- `set MIACODE_PREVIEW_DISABLE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS=1`
+- `MiaCode.exe --debug`
+
 ## Code Anchors
 
 - debug options:
@@ -149,3 +162,4 @@ Force export PBO on:
   - `src/preview/runtime/PreviewQuickExportSession.cpp`
 
 For architecture details, see `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`.
+For the native-window investigation and rollout plan, see `docs/PREVIEW_NATIVE_WINDOW_DEVELOPMENT_PLAN_SPEC.md`.

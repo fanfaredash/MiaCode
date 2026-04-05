@@ -25,6 +25,8 @@ QSGNode* PreviewQuickTouchLayer::updateNode(
         oldNode,
         layerState.sprites,
         window,
-        textures
+        textures,
+        state.playheadSeconds,
+        "touch"
     );
 }

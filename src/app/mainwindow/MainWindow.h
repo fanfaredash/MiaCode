@@ -107,6 +107,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* event) override;
+    bool event(QEvent* event) override;
     bool eventFilter(QObject* watched, QEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void moveEvent(QMoveEvent* event) override;
@@ -168,6 +169,27 @@ private:
         System,
     };
     struct TimelineCursorNote;
+    struct PreparedStartupRestoreDocument {
+        quint64 generation = 0;
+        QString normalizedPath;
+        SimaiDocument document;
+        TextEncoding encodingUsed = TextEncoding::Utf8;
+        QString resolvedTrackPath;
+        double trackDurationSeconds = 0.0;
+        bool hasTrackDuration = false;
+        qint64 readElapsedMs = 0;
+        qint64 decodeElapsedMs = 0;
+        qint64 parseElapsedMs = 0;
+        qint64 trackProbeElapsedMs = 0;
+        qint64 totalElapsedMs = 0;
+    };
+    struct WaveformCacheEntry {
+        QString trackPath;
+        qint64 fileSize = -1;
+        qint64 lastModifiedMs = -1;
+        double durationSeconds = 0.0;
+        QVector<float> peaks;
+    };
 
     bool maybeSaveBeforeContinue();
     void configureRuntimeDebugOutput();
@@ -222,7 +244,17 @@ private:
     void setMetadataExtraText(const QString& text);
     bool openFileAtPath(const QString& path, bool showStatusMessage = true, bool showErrors = true);
     bool restoreLastSessionFile();
-    void setCurrentFilePath(const QString& path);
+    void scheduleStartupRestoreLastSessionFile();
+    void cancelPendingStartupRestore();
+    void applyPreparedStartupRestoreDocument(const PreparedStartupRestoreDocument& prepared);
+    void applyOpenedDocumentState(
+        const QString& normalizedPath,
+        TextEncoding encodingUsed,
+        const SimaiDocument& document,
+        bool showStatusMessage,
+        double knownTrackDurationSeconds = -1.0
+    );
+    void setCurrentFilePath(const QString& path, bool suppressImmediateRefresh = false);
     void updateWindowTitle();
     void updateCurrentFileLabel();
     void updatePauseButtonAppearance();
@@ -262,7 +294,19 @@ private:
     QString parsedLatencyMeterId() const;
     void applyLatencyDetectorOffset(double seconds);
     void applyLatencyDetectorBpm(double bpm);
+    void resetPreviewTrackTimelineOffsets();
+    void applyWaveformData(const QVector<float>& peaks, double durationSeconds);
     void refreshWaveformCache();
+    void refreshWaveformCache(double knownDurationSeconds);
+    void applyWaveformCacheEntry(
+        quint64 generation,
+        const QString& trackPath,
+        qint64 fileSize,
+        qint64 lastModifiedMs,
+        double durationSeconds,
+        const QVector<float>& peaks,
+        qint64 buildElapsedMs
+    );
     void applyTimelineQuickChange(int position, int charsRemoved, int charsAdded);
     void refreshTimelineQuickModelFromCurrentText();
     void applyLatestTimelinePreviewStateToPausedPreview();
@@ -316,6 +360,8 @@ private:
     void updatePreviewSliderPosition(double second);
     QString formatPreviewTimestamp(double second) const;
     void showPreviewSliderTimeHint(int sliderValue);
+    void refreshEmbeddedPreviewSurface();
+    void scheduleEmbeddedPreviewSurfaceRefresh(int delayMs = 0);
     void refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers);
     void updatePreviewObjectStats(double second);
     void clearPreviewObjectStats();
@@ -415,6 +461,7 @@ private:
     QString formatWindowStateFlags(Qt::WindowStates states) const;
     void logTopLevelWindowSnapshot(const QString& tag);
     void logNativeWindowDebug(const QString& tag, WId dialogWId = 0);
+    void logOwnedNativeWindowSnapshot(const QString& tag, int maxWindows = 12);
     void refreshEditorExtraSelections();
     void setPreviewFollowDecoration(int line, int col);
     void clearPreviewFollowDecoration();
@@ -587,6 +634,9 @@ private:
     quint64 previewWarmupGeneration_ = 0;
     quint64 previewMediaWarmupAppliedGeneration_ = 0;
     quint64 previewSfxWarmupAppliedGeneration_ = 0;
+    quint64 startupRestoreGeneration_ = 0;
+    bool startupRestorePending_ = false;
+    quint64 waveformRefreshGeneration_ = 0;
     bool pendingDeferredValidationUiRefresh_ = false;
     bool pendingDeferredMuriUiRefresh_ = false;
     QString previewMediaWarmupChartPath_;
@@ -646,6 +696,7 @@ private:
     double pausedPreviewMediaSeekSecond_ = 0.0;
     double previewPlaybackRate_ = 1.0;
     double previewTrackDurationSeconds_ = 0.0;
+    WaveformCacheEntry waveformCacheEntry_;
     bool showSlideTracks_ = true;
     bool showJudgeMarkers_ = false;
     bool showTouchTrail_ = false;
