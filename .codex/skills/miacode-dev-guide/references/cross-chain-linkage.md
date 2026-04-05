@@ -24,6 +24,7 @@ Implication:
 - A parser change is rarely parser-only.
 - A new note property or timing rule usually needs timeline, preview, audio, export, and Muri review.
 - Slide/tap head-material flags such as `$`, `$$`, `@`, `?`, and `!` are mirrored data: keep `SimaiNativeParser`, `TimelineQuickModel`, `PreviewSkinSelectors`, timeline icons, and chart-transform token preservation aligned in the same patch.
+- Timeline note-head art selection should mirror preview base/overlay precedence: break or each chooses the base icon first, and EX overlays on top of that base instead of replacing break/each state in the timeline.
 - `TimelineQuickModel` is now the owner of comma-only `C` anchor lookup for editor cursor sync, header/timeline `R -> C` jumps, and playback follow.
 - Timeline beat-grid semantics are mirrored between `SimaiNativeParser` and `TimelineQuickModel`: every comma remains a beat line, while measure lines are generated on an independent meter timeline. The current meter now comes from shared `SimaiTimingMetadata` (`&whole_time_signature=`), inline `|| x/y` comments restart that meter timeline at the exact comment position, `{beats}` only changes comma spacing, and `(BPM)` changes restart the independent measure-line timeline at the BPM-change position.
 - Guide-layer state should group each-guide connectors by parser-derived `eachGroupId` when available; do not merge backtick-separated groups just because their `marker.second` matches.

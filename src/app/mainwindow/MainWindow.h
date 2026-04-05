@@ -367,6 +367,8 @@ private:
     void refreshEmbeddedPreviewSurface(bool force = false);
     void scheduleEmbeddedPreviewSurfaceRefresh(int delayMs = 0);
     void noteEmbeddedPreviewResizeActivity(const char* source = nullptr);
+    void suspendEmbeddedPreviewForNativeDialog(const char* source = nullptr);
+    void resumeEmbeddedPreviewForNativeDialog(const char* source = nullptr);
     void refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers);
     void updatePreviewObjectStats(double second);
     void clearPreviewObjectStats();
@@ -670,6 +672,7 @@ private:
     bool previewSliderDragging_ = false;
     bool embeddedPreviewRefreshPending_ = false;
     bool embeddedPreviewResizeActive_ = false;
+    bool embeddedPreviewRefreshSuspended_ = false;
     bool suppressTimelineCursorSync_ = false;
     bool suppressTextDirtyTracking_ = false;
     bool autoRestoreLastSessionFile_ = true;

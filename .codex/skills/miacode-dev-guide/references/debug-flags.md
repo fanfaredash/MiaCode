@@ -109,7 +109,7 @@ The Windows release package also ships:
   - no longer required because `Qt::AA_DontCreateNativeWidgetSiblings` is now enabled by default
   - owner: legacy debug launch snippets only; the active startup switch lives in `src/app/main.cpp`
 
-Runtime black-screen / dialog tracing currently writes these tags into the runtime log:
+Runtime black-screen / dialog tracing can write these tags into the runtime log when the relevant investigation hooks are enabled in code:
 
 - `window/dialog_event`
 - `window/native_hook`
@@ -122,6 +122,7 @@ Runtime black-screen / dialog tracing currently writes these tags into the runti
 The `preview/quick_runtime` stream now also emits `action=frame_stall` when the embedded Quick window stays visible/exposed but stops presenting for an extended interval.
 The `preview/embedded_refresh` stream now also marks resize-throttling transitions with `action=resize_degrade_begin` / `action=resize_degrade_end`.
 The `startup/qt_config` runtime tag logs the active Qt graphics/render-loop experiment flags at process start, including whether the default native-sibling workaround was opted out.
+Normal document open/save now uses the direct native `QFileDialog::getOpenFileName` / `getSaveFileName` path instead of installing per-dialog event filters, WinEvent hooks, and sample timers by default.
 
 Primary owners:
 

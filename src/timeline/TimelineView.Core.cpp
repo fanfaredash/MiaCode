@@ -609,6 +609,20 @@ void TimelineView::loadNoteIcons()
             : buildCenteredCompositeIcon({&base, &overlay});
     };
 
+    const auto putOverlayCompositeIcon =
+        [&buildOverlayCompositeIcon, &loadRawIcon, &loadIcon, &putIcon](
+            const QString& key,
+            const QStringList& baseFileNames,
+            const QStringList& overlayFileNames,
+            int basePixelSize) {
+            const QPixmap composite = buildOverlayCompositeIcon(loadRawIcon(baseFileNames), loadRawIcon(overlayFileNames));
+            if (!composite.isNull()) {
+                putIcon(key, composite, basePixelSize);
+            } else {
+                loadIcon(key, baseFileNames, basePixelSize);
+            }
+        };
+
     loadIcon("tap", {"tap.png"}, kNoteSize);
     loadIcon("tap_break", {"tap_break.png", "tap.png"}, kNoteSize);
     loadIcon("tap_each", {"tap_each.png", "each.png", "tap.png"}, kNoteSize);
@@ -629,33 +643,33 @@ void TimelineView::loadNoteIcons()
     loadIcon("wifi_track_each", {"wifi_each_0.png", "wifi_0.png", "slide_each.png", "slide.png"}, kSlideTrackBasePixelSize);
     loadIcon("wifi_track_break", {"wifi_break_0.png", "wifi_0.png", "slide_break.png", "slide.png"}, kSlideTrackBasePixelSize);
 
-    const QPixmap tapExComposite = buildOverlayCompositeIcon(loadRawIcon({"tap.png"}), loadRawIcon({"tap_ex.png"}));
-    if (!tapExComposite.isNull()) {
-        putIcon("tap_ex", tapExComposite, kNoteSize);
-    } else {
-        loadIcon("tap_ex", {"tap.png"}, kNoteSize);
-    }
-    const QPixmap holdExComposite = buildOverlayCompositeIcon(loadRawIcon({"hold.png"}), loadRawIcon({"hold_ex.png"}));
-    if (!holdExComposite.isNull()) {
-        putIcon("hold_ex", holdExComposite, kNoteSize);
-    } else {
-        loadIcon("hold_ex", {"hold.png"}, kNoteSize);
-    }
-    const QPixmap starExComposite = buildOverlayCompositeIcon(loadRawIcon({"star.png"}), loadRawIcon({"star_ex.png"}));
-    if (!starExComposite.isNull()) {
-        putIcon("star_ex", starExComposite, kNoteSize + 3);
-    } else {
-        loadIcon("star_ex", {"star.png"}, kNoteSize + 3);
-    }
-    const QPixmap starExDoubleComposite = buildOverlayCompositeIcon(
-        loadRawIcon({"star_double.png", "star.png"}),
-        loadRawIcon({"star_ex_double.png", "star_ex.png"})
+    putOverlayCompositeIcon("tap_ex", {"tap.png"}, {"tap_ex.png"}, kNoteSize);
+    putOverlayCompositeIcon("tap_break_ex", {"tap_break.png", "tap.png"}, {"tap_ex.png"}, kNoteSize);
+    putOverlayCompositeIcon("tap_each_ex", {"tap_each.png", "each.png", "tap.png"}, {"tap_ex.png"}, kNoteSize);
+    putOverlayCompositeIcon("hold_ex", {"hold.png"}, {"hold_ex.png"}, kNoteSize);
+    putOverlayCompositeIcon("hold_break_ex", {"hold_break.png", "hold.png"}, {"hold_ex.png"}, kNoteSize);
+    putOverlayCompositeIcon("hold_each_ex", {"hold_each.png", "hold.png"}, {"hold_ex.png"}, kNoteSize);
+    putOverlayCompositeIcon("star_ex", {"star.png"}, {"star_ex.png"}, kNoteSize + 3);
+    putOverlayCompositeIcon("star_break_ex", {"star_break.png", "star.png"}, {"star_ex.png"}, kNoteSize + 3);
+    putOverlayCompositeIcon("star_each_ex", {"star_each.png", "star.png"}, {"star_ex.png"}, kNoteSize + 3);
+    putOverlayCompositeIcon(
+        "star_ex_double",
+        {"star_double.png", "star.png"},
+        {"star_ex_double.png", "star_ex.png"},
+        kNoteSize + 3
     );
-    if (!starExDoubleComposite.isNull()) {
-        putIcon("star_ex_double", starExDoubleComposite, kNoteSize + 3);
-    } else {
-        loadIcon("star_ex_double", {"star_double.png", "star.png"}, kNoteSize + 3);
-    }
+    putOverlayCompositeIcon(
+        "star_break_ex_double",
+        {"star_break_double.png", "star_break.png", "star.png"},
+        {"star_ex_double.png", "star_ex.png"},
+        kNoteSize + 3
+    );
+    putOverlayCompositeIcon(
+        "star_each_ex_double",
+        {"star_each_double.png", "star_double.png", "star_each.png", "star.png"},
+        {"star_ex_double.png", "star_ex.png"},
+        kNoteSize + 3
+    );
 
     const QPixmap touchBorder = loadRawIcon({"touch_border_2.png", "touch.png", "touch_each.png", "each.png", "tap.png"});
     const QPixmap touchPoint = loadRawIcon({"touch_point.png", "touch_point_each.png", "tap.png"});
@@ -733,6 +747,8 @@ void TimelineView::prewarmTransformedIconCache()
         QStringLiteral("hold_break"),
         QStringLiteral("hold_each"),
         QStringLiteral("hold_ex"),
+        QStringLiteral("hold_break_ex"),
+        QStringLiteral("hold_each_ex"),
     };
     for (const QString& holdType : holdTypes) {
         if (!noteIcons_.contains(holdType)) {

@@ -4187,6 +4187,16 @@ bool MainWindow::event(QEvent* event)
 
 void MainWindow::refreshEmbeddedPreviewSurface(bool force)
 {
+    if (embeddedPreviewRefreshSuspended_) {
+        embeddedPreviewRefreshPending_ = true;
+        if (runtimeDebugOutputEnabled_) {
+            appendOutput(
+                "preview/embedded_refresh",
+                QString("action=refresh_skipped_suspended force=%1").arg(force ? 1 : 0)
+            );
+        }
+        return;
+    }
     if (!force && embeddedPreviewResizeActive_) {
         embeddedPreviewRefreshPending_ = true;
         if (embeddedPreviewResizeSettleTimer_ != nullptr) {
@@ -4236,10 +4246,66 @@ void MainWindow::refreshEmbeddedPreviewSurface(bool force)
     }
 }
 
+void MainWindow::suspendEmbeddedPreviewForNativeDialog(const char* source)
+{
+    if (embeddedPreviewRefreshSuspended_) {
+        return;
+    }
+
+    embeddedPreviewRefreshSuspended_ = true;
+    embeddedPreviewRefreshPending_ = false;
+    embeddedPreviewResizeActive_ = false;
+    if (embeddedPreviewRefreshTimer_ != nullptr && embeddedPreviewRefreshTimer_->isActive()) {
+        embeddedPreviewRefreshTimer_->stop();
+    }
+    if (embeddedPreviewResizeSettleTimer_ != nullptr && embeddedPreviewResizeSettleTimer_->isActive()) {
+        embeddedPreviewResizeSettleTimer_->stop();
+    }
+    if (runtimeDebugOutputEnabled_) {
+        appendOutput(
+            "preview/embedded_refresh",
+            QString("action=suspend_for_native_dialog source=%1 container_visible=%2 fullscreen=%3")
+                .arg(QString::fromLatin1(source != nullptr ? source : "unknown"))
+                .arg(previewCanvasContainer_ != nullptr && previewCanvasContainer_->isVisible() ? 1 : 0)
+                .arg(previewFullscreenActive_ ? 1 : 0)
+        );
+    }
+    if (previewCanvasContainer_ != nullptr) {
+        previewCanvasContainer_->hide();
+    }
+}
+
+void MainWindow::resumeEmbeddedPreviewForNativeDialog(const char* source)
+{
+    if (!embeddedPreviewRefreshSuspended_) {
+        return;
+    }
+
+    embeddedPreviewRefreshSuspended_ = false;
+    if (runtimeDebugOutputEnabled_) {
+        appendOutput(
+            "preview/embedded_refresh",
+            QString("action=resume_after_native_dialog source=%1 visible=%2 minimized=%3")
+                .arg(QString::fromLatin1(source != nullptr ? source : "unknown"))
+                .arg(isVisible() ? 1 : 0)
+                .arg(windowState().testFlag(Qt::WindowMinimized) ? 1 : 0)
+        );
+    }
+    if (!isVisible() || windowState().testFlag(Qt::WindowMinimized)) {
+        embeddedPreviewRefreshPending_ = true;
+        return;
+    }
+    refreshEmbeddedPreviewSurface(true);
+    scheduleEmbeddedPreviewSurfaceRefresh(120);
+}
+
 void MainWindow::scheduleEmbeddedPreviewSurfaceRefresh(int delayMs)
 {
     const int effectiveDelayMs = qMax(0, delayMs);
     embeddedPreviewRefreshPending_ = true;
+    if (embeddedPreviewRefreshSuspended_) {
+        return;
+    }
     if (embeddedPreviewResizeActive_) {
         if (embeddedPreviewResizeSettleTimer_ != nullptr) {
             embeddedPreviewResizeSettleTimer_->start(kEmbeddedPreviewResizeSettleDelayMs);
@@ -4261,6 +4327,10 @@ void MainWindow::scheduleEmbeddedPreviewSurfaceRefresh(int delayMs)
 void MainWindow::noteEmbeddedPreviewResizeActivity(const char* source)
 {
     if (previewCanvas_ == nullptr || !isVisible() || windowState().testFlag(Qt::WindowMinimized)) {
+        return;
+    }
+    if (embeddedPreviewRefreshSuspended_) {
+        embeddedPreviewRefreshPending_ = true;
         return;
     }
 
