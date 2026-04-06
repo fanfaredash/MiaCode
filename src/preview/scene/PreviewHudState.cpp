@@ -133,8 +133,8 @@ PreviewHudStats computePreviewHudStats(const QVector<TimelineNoteMarker>& noteMa
                     marker.endSecond > marker.second ? marker.endSecond : marker.second,
                     1000,
                     2,
-                    &stats.touchTotal,
-                    &stats.touchPlayed
+                    &stats.holdTotal,
+                    &stats.holdPlayed
                 );
             }
             continue;

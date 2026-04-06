@@ -232,16 +232,15 @@ void PreviewProgressStatsCache::rebuild(const QVector<TimelineNoteMarker>& marke
         }
 
         if (type == QLatin1String("hold") || type == QLatin1String("touch_hold")) {
-            const double panelJudgeSecond = marker.second;
-            const double hudJudgeSecond = marker.endSecond > marker.second ? marker.endSecond : marker.second;
+            const double judgeSecond = marker.endSecond > marker.second ? marker.endSecond : marker.second;
             if (marker.isBreak) {
-                addObjectEvent(panelJudgeSecond, StatsCategory::Break);
-                addHudBreakEvent(hudJudgeSecond);
+                addObjectEvent(judgeSecond, StatsCategory::Break);
+                addHudBreakEvent(judgeSecond);
             } else {
-                addObjectEvent(panelJudgeSecond, StatsCategory::Hold);
+                addObjectEvent(judgeSecond, StatsCategory::Hold);
                 addHudNormalEvent(
-                    hudJudgeSecond,
-                    type == QLatin1String("hold") ? StatsCategory::Hold : StatsCategory::Touch,
+                    judgeSecond,
+                    StatsCategory::Hold,
                     1000,
                     2
                 );
