@@ -87,6 +87,22 @@ The scene is assembled from dedicated layers rather than a monolithic renderer:
 
 Each visual family should be edited through its `scene/Preview*LayerState.*` builder first, then its matching `quick_scene/PreviewQuick*Layer.*` renderer.
 
+### Judge Firework Compatibility
+
+The active firework renderer is the custom-material path under:
+
+- `src/preview/scene/PreviewJudgeFireworkLayerState.*`
+- `src/preview/quick_scene/PreviewQuickJudgeFireworkLayer.*`
+- `src/preview/quick_scene/shaders/PreviewFireworkMaterial.*`
+
+Compatibility note:
+
+- The reference behavior for firework lifecycle tuning is the real `v0.3.7-dev5` implementation at commit `50c1a55ddcdd7e8aec2f574d63579674b1fe03ee`.
+- The matching legacy owners are `src/preview/video/PreviewCanvas.cpp` for the firework curves and `src/preview/video/PreviewCanvas.Objects.cpp` for the draw order and clip semantics.
+- A later quick-preview restore commit, `0d6dd1d`, reintroduced zero-start color-ball ramps that made the center ball appear too small when the effect first spawned. The active Quick path should not preserve that regression.
+- The firework visible region is bounded by the playfield-centered judgment-ring interior, using the same `kLogicalDistanceEdge`-derived stage clip as the legacy `PreviewCanvas` layer. It must not apply a second local circle or rectangle clip around the trigger point.
+- If you change firework shader math, keep the stage-bound clip in `PreviewQuickJudgeFireworkLayer` aligned with the historical `PreviewCanvas::drawJudgeEffectFireworkLayer` layer clip and keep the color-ball curves aligned with the legacy dev5 source unless there is an intentional product decision to retune them.
+
 ## Export Chain
 
 Headless export path:

@@ -232,6 +232,8 @@ qt_add_shaders(MiaCode "preview_sprite_shaders"
         src/preview/quick_scene/shaders/PreviewSpriteMaterial.frag
         src/preview/quick_scene/shaders/PreviewStageDimMaterial.vert
         src/preview/quick_scene/shaders/PreviewStageDimMaterial.frag
+        src/preview/quick_scene/shaders/PreviewFireworkMaterial.vert
+        src/preview/quick_scene/shaders/PreviewFireworkMaterial.frag
 )
 set_target_properties(MiaCode PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "MiaCode"
@@ -415,6 +417,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/preview/scene/PreviewFrameState.h
     )
 
+    add_executable(preview_firework_lifecycle_spec
+        src/tools/preview/PreviewFireworkLifecycleSpec.cpp
+        src/preview/scene/PreviewFrameState.h
+        src/preview/scene/PreviewJudgeFireworkLayerState.h
+        src/preview/scene/PreviewJudgeFireworkLayerState.cpp
+        src/preview/scene/PreviewSceneMath.h
+        src/preview/scene/PreviewSceneMath.cpp
+    )
+
     target_link_libraries(miacode_muri_dump PRIVATE
         Qt6::Core
         Qt6::Gui
@@ -526,6 +537,19 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/common
         src/preview
         src/preview/runtime
+        src/preview/scene
+        src/preview/video
+        src/timeline
+    )
+
+    target_link_libraries(preview_firework_lifecycle_spec PRIVATE
+        Qt6::Core
+        Qt6::Gui
+    )
+    target_include_directories(preview_firework_lifecycle_spec PRIVATE
+        src
+        src/common
+        src/preview
         src/preview/scene
         src/preview/video
         src/timeline
