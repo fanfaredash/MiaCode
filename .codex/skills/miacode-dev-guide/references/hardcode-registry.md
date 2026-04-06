@@ -38,7 +38,7 @@ Use this file to track where important constants live, what they mean, and wheth
     - judge-effect curve timing and geometry
     - firework visual tuning
     - descriptor sizing and animation curve parameters
-  - Current tuning note: `src/preview/scene/PreviewJudgeFireworkLayerState.cpp` keeps the firework color-ball hole ratios local, but they are intentionally pinned to the legacy pre-Qt Quick material bounds (`_InnerLB/_InnerUB/_OuterLB/_OuterUB`) so the center cutout and the 15 colored sector spokes both stay visually aligned with the old `PreviewCanvas` hole-mask fade
+  - Current tuning note: `src/preview/scene/PreviewJudgeFireworkLayerState.cpp` keeps the firework color-ball hole ratios local, but they are intentionally pinned to the legacy pre-Qt Quick material bounds (`_InnerLB/_InnerUB/_OuterLB/_OuterUB`) so the center cutout and the 15 colored sector spokes both stay visually aligned with the old `PreviewCanvas` hole-mask fade. The color-ball scale/alpha curves are intentionally aligned to the true `v0.3.7-dev5` `PreviewCanvas.cpp` values rather than the later `0d6dd1d` zero-start quick-restore ramps, because that later ramp made the center ball read too small before the spokes came in.
   - Rule: keep local only when the values are render-internal and not consumed elsewhere
 - `src/preview/scene/PreviewAnimatedSpriteHelpers.cpp`
   - Owns: continuous animated-sprite wave timing (`kMaterialAnimationTimeScale`, `kMaterialAnimationPhaseScale`) plus helper-side overlay cache quantization/cap for EX-style CPU composites
