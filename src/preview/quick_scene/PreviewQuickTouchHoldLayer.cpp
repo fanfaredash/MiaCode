@@ -9,6 +9,54 @@
 
 #include <QSGNode>
 
+namespace {
+
+class PreviewQuickTouchHoldRootNode final : public QSGNode
+{
+public:
+    PreviewQuickTouchHoldRootNode()
+    {
+        arcSlot = new QSGNode();
+        spriteSlot = new QSGNode();
+        appendChildNode(arcSlot);
+        appendChildNode(spriteSlot);
+    }
+
+    QSGNode* arcSlot = nullptr;
+    QSGNode* spriteSlot = nullptr;
+};
+
+PreviewQuickTouchHoldRootNode* ensureTouchHoldRoot(QSGNode* oldNode)
+{
+    if (auto* root = dynamic_cast<PreviewQuickTouchHoldRootNode*>(oldNode)) {
+        return root;
+    }
+    return new PreviewQuickTouchHoldRootNode();
+}
+
+void replaceSlotChild(QSGNode* slot, QSGNode* newChild)
+{
+    if (slot == nullptr) {
+        return;
+    }
+
+    QSGNode* child = slot->firstChild();
+    while (child != nullptr) {
+        QSGNode* next = child->nextSibling();
+        if (child != newChild) {
+            slot->removeChildNode(child);
+            delete child;
+        }
+        child = next;
+    }
+
+    if (newChild != nullptr && newChild->parent() != slot) {
+        slot->appendChildNode(newChild);
+    }
+}
+
+}  // namespace
+
 QSGNode* PreviewQuickTouchHoldLayer::updateNode(
     QSGNode* oldNode,
     const miacode::preview::scene::PreviewFrameState& state,
@@ -19,8 +67,9 @@ QSGNode* PreviewQuickTouchHoldLayer::updateNode(
     PreviewTextureRepository* textures
 ) const
 {
-    delete oldNode;
-    auto* root = new QSGNode();
+    auto* root = ensureTouchHoldRoot(oldNode);
+    const bool reusedRoot = root == oldNode;
+
     miacode::preview::scene::PreviewFrameState filteredState = state;
     QVector<TimelineNoteMarker> filteredMarkers;
     if (preparedCache != nullptr && cursor != nullptr) {
@@ -40,21 +89,27 @@ QSGNode* PreviewQuickTouchHoldLayer::updateNode(
                 state.render.layoutSquareScale
             )
         );
-    if (QSGNode* arcs = buildPreviewArcNodeTree(nullptr, layerState.arcs, window, textures)) {
-        root->appendChildNode(arcs);
-    }
-    if (QSGNode* sprites = buildPreviewSpriteNodeTree(
-            nullptr,
+
+    replaceSlotChild(
+        root->arcSlot,
+        buildPreviewArcNodeTree(root->arcSlot->firstChild(), layerState.arcs, window, textures)
+    );
+    replaceSlotChild(
+        root->spriteSlot,
+        buildPreviewSpriteNodeTree(
+            root->spriteSlot->firstChild(),
             layerState.sprites,
             window,
             textures,
             filteredState.playheadSeconds,
             "touch_hold"
-        )) {
-        root->appendChildNode(sprites);
-    }
-    if (root->firstChild() == nullptr) {
-        delete root;
+        )
+    );
+
+    if (root->arcSlot->firstChild() == nullptr && root->spriteSlot->firstChild() == nullptr) {
+        if (!reusedRoot) {
+            delete root;
+        }
         return nullptr;
     }
     return root;

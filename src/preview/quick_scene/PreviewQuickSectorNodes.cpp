@@ -4,6 +4,7 @@
 #include <QSGGeometryNode>
 #include <QSGNode>
 #include <QSGVertexColorMaterial>
+#include <QVector>
 #include <QtMath>
 
 namespace {
@@ -56,14 +57,15 @@ void setVertex(
     );
 }
 
-QSGGeometryNode* buildSectorNode(const PreviewSectorDescriptor& sector)
+bool isRenderableSector(const PreviewSectorDescriptor& sector)
 {
-    if (sector.outerRadius <= kSectorEpsilon
-        || qAbs(sector.sweepDegrees) <= kSectorEpsilon
-        || sector.color.alpha() <= 0) {
-        return nullptr;
-    }
+    return sector.outerRadius > kSectorEpsilon
+        && qAbs(sector.sweepDegrees) > kSectorEpsilon
+        && sector.color.alpha() > 0;
+}
 
+int requiredSectorVertexCount(const PreviewSectorDescriptor& sector)
+{
     const int segmentCount = qMax(1, qCeil(qAbs(sector.sweepDegrees) / 8.0));
     const qreal innerRadius = qBound<qreal>(0.0, sector.innerRadius, sector.outerRadius);
     const qreal fadeOuterRadius = qBound<qreal>(innerRadius, sector.innerFadeOuterRadius, sector.outerRadius);
@@ -71,13 +73,21 @@ QSGGeometryNode* buildSectorNode(const PreviewSectorDescriptor& sector)
     const bool hasFadeBand = fadeOuterRadius > innerRadius + kSectorEpsilon;
     const int trianglesPerSegment =
         hasHole ? (hasFadeBand ? 4 : 2) : (hasFadeBand ? 3 : 1);
+    return segmentCount * trianglesPerSegment * 3;
+}
 
-    auto* geometry = new QSGGeometry(
-        QSGGeometry::defaultAttributes_ColoredPoint2D(),
-        segmentCount * trianglesPerSegment * 3
-    );
-    geometry->setDrawingMode(QSGGeometry::DrawTriangles);
-    auto* vertices = geometry->vertexDataAsColoredPoint2D();
+void updateSectorVertices(
+    QSGGeometry::ColoredPoint2D* vertices,
+    const PreviewSectorDescriptor& sector
+)
+{
+    const int segmentCount = qMax(1, qCeil(qAbs(sector.sweepDegrees) / 8.0));
+    const qreal innerRadius = qBound<qreal>(0.0, sector.innerRadius, sector.outerRadius);
+    const qreal fadeOuterRadius = qBound<qreal>(innerRadius, sector.innerFadeOuterRadius, sector.outerRadius);
+    const bool hasHole = innerRadius > kSectorEpsilon;
+    const bool hasFadeBand = fadeOuterRadius > innerRadius + kSectorEpsilon;
+    const int trianglesPerSegment =
+        hasHole ? (hasFadeBand ? 4 : 2) : (hasFadeBand ? 3 : 1);
 
     const PremultipliedVertexColor solidColor = premultipliedVertexColor(sector.color, 1.0);
     const PremultipliedVertexColor transparentColor;
@@ -175,16 +185,59 @@ QSGGeometryNode* buildSectorNode(const PreviewSectorDescriptor& sector)
         setVertex(vertices, vertexIndex + 4, inner1, solidColor);
         setVertex(vertices, vertexIndex + 5, inner0, solidColor);
     }
-
-    auto* material = new QSGVertexColorMaterial();
-
-    auto* node = new QSGGeometryNode();
-    node->setGeometry(geometry);
-    node->setMaterial(material);
-    node->setFlag(QSGNode::OwnsGeometry, true);
-    node->setFlag(QSGNode::OwnsMaterial, true);
-    return node;
 }
+
+void fillDegenerateTriangles(
+    QSGGeometry::ColoredPoint2D* vertices,
+    int startVertex,
+    int totalVertexCount,
+    const QPointF& point
+)
+{
+    const PremultipliedVertexColor transparentColor;
+    for (int vertexIndex = startVertex; vertexIndex < totalVertexCount; vertexIndex += 3) {
+        setVertex(vertices, vertexIndex + 0, point, transparentColor);
+        setVertex(vertices, vertexIndex + 1, point, transparentColor);
+        setVertex(vertices, vertexIndex + 2, point, transparentColor);
+    }
+}
+
+class PreviewQuickSectorNode final : public QSGGeometryNode
+{
+public:
+    PreviewQuickSectorNode()
+    {
+        geometry_ = new QSGGeometry(QSGGeometry::defaultAttributes_ColoredPoint2D(), 0);
+        geometry_->setDrawingMode(QSGGeometry::DrawTriangles);
+        geometry_->setVertexDataPattern(QSGGeometry::DynamicPattern);
+        setGeometry(geometry_);
+        setFlag(QSGNode::OwnsGeometry, true);
+
+        material_ = new QSGVertexColorMaterial();
+        setMaterial(material_);
+        setFlag(QSGNode::OwnsMaterial, true);
+    }
+
+    void updateSector(const PreviewSectorDescriptor& sector)
+    {
+        const int requiredVertexCount = requiredSectorVertexCount(sector);
+        if (requiredVertexCount > geometry_->vertexCount()) {
+            geometry_->allocate(requiredVertexCount);
+        }
+
+        auto* vertices = geometry_->vertexDataAsColoredPoint2D();
+        updateSectorVertices(vertices, sector);
+        if (requiredVertexCount < geometry_->vertexCount()) {
+            fillDegenerateTriangles(vertices, requiredVertexCount, geometry_->vertexCount(), sector.center);
+        }
+        geometry_->markVertexDataDirty();
+        markDirty(QSGNode::DirtyGeometry);
+    }
+
+private:
+    QSGGeometry* geometry_ = nullptr;
+    QSGVertexColorMaterial* material_ = nullptr;
+};
 
 }  // namespace
 
@@ -193,21 +246,54 @@ QSGNode* buildPreviewSectorNodeTree(
     const miacode::preview::scene::PreviewSectorDescriptors& sectors
 )
 {
-    delete oldNode;
     if (sectors.isEmpty()) {
         return nullptr;
     }
 
-    auto* root = new QSGNode();
-    for (const PreviewSectorDescriptor& sector : sectors) {
-        if (QSGGeometryNode* node = buildSectorNode(sector)) {
-            root->appendChildNode(node);
-        }
+    auto* root = oldNode != nullptr ? oldNode : new QSGNode();
+    const bool reusedRoot = root == oldNode;
+    QVector<QSGNode*> existingChildren;
+    for (QSGNode* child = root->firstChild(); child != nullptr; child = child->nextSibling()) {
+        existingChildren.append(child);
     }
 
-    if (root->firstChild() == nullptr) {
-        delete root;
+    int nodeIndex = 0;
+    for (const PreviewSectorDescriptor& sector : sectors) {
+        if (!isRenderableSector(sector)) {
+            continue;
+        }
+
+        QSGNode* existing = nodeIndex < existingChildren.size() ? existingChildren.at(nodeIndex) : nullptr;
+        auto* sectorNode = dynamic_cast<PreviewQuickSectorNode*>(existing);
+        if (sectorNode == nullptr) {
+            auto* newNode = new PreviewQuickSectorNode();
+            if (existing != nullptr) {
+                root->insertChildNodeBefore(newNode, existing);
+                root->removeChildNode(existing);
+                delete existing;
+                existingChildren[nodeIndex] = newNode;
+            } else {
+                root->appendChildNode(newNode);
+                existingChildren.append(newNode);
+            }
+            sectorNode = newNode;
+        }
+
+        sectorNode->updateSector(sector);
+        ++nodeIndex;
+    }
+
+    if (nodeIndex == 0) {
+        if (!reusedRoot) {
+            delete root;
+        }
         return nullptr;
+    }
+
+    for (int index = existingChildren.size() - 1; index >= nodeIndex; --index) {
+        QSGNode* child = existingChildren.at(index);
+        root->removeChildNode(child);
+        delete child;
     }
     return root;
 }
