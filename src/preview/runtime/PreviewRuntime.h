@@ -5,6 +5,8 @@
 #include <QSize>
 #include <QVector>
 
+#include <memory>
+
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
 #include "preview/scene/PreviewFrameState.h"
@@ -70,6 +72,7 @@ public:
     );
     void setRetainedVideoFallbackFrame(const QImage& frame);
     void setNoteMarkers(const QVector<TimelineNoteMarker>& notes);
+    void setProgressStatsCache(std::shared_ptr<const miacode::preview::scene::PreviewProgressStatsCache> cache);
     void setMuriAnalysisReport(const MuriAnalysisReport& report);
     void setMuriRenderOptions(const MuriRenderOptions& options);
     void setSkinDirectory(const QString& skinDir);
