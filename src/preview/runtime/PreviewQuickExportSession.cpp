@@ -17,6 +17,50 @@
 
 #include <cstring>
 
+namespace {
+
+inline uchar unpremultiplyChannel(uchar channel, uchar alpha)
+{
+    if (alpha == 0) {
+        return 0;
+    }
+    if (alpha == 255) {
+        return channel;
+    }
+    return static_cast<uchar>(qBound(0, (static_cast<int>(channel) * 255 + alpha / 2) / alpha, 255));
+}
+
+void unpremultiplyRgba8888InPlace(QImage* image)
+{
+    if (image == nullptr || image->isNull()) {
+        return;
+    }
+    if (image->format() != QImage::Format_RGBA8888) {
+        *image = image->convertToFormat(QImage::Format_RGBA8888);
+    }
+    for (int y = 0; y < image->height(); ++y) {
+        uchar* row = image->scanLine(y);
+        for (int x = 0; x < image->width(); ++x) {
+            uchar* px = row + x * 4;
+            const uchar alpha = px[3];
+            if (alpha == 0) {
+                px[0] = 0;
+                px[1] = 0;
+                px[2] = 0;
+                continue;
+            }
+            if (alpha == 255) {
+                continue;
+            }
+            px[0] = unpremultiplyChannel(px[0], alpha);
+            px[1] = unpremultiplyChannel(px[1], alpha);
+            px[2] = unpremultiplyChannel(px[2], alpha);
+        }
+    }
+}
+
+}  // namespace
+
 PreviewQuickExportSession::PreviewQuickExportSession(QObject* parent)
     : QObject(parent)
 {
@@ -480,6 +524,9 @@ bool PreviewQuickExportSession::mapOffscreenReadbackPbo(
     }
     extra->glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
     extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    // Qt Quick renders into a premultiplied-alpha target. Export frames are
+    // packed downstream as straight RGBA for ffmpeg overlay compositing.
+    unpremultiplyRgba8888InPlace(&output);
     *frame = std::move(output);
     return true;
 }
