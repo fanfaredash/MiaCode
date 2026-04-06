@@ -19,6 +19,7 @@
 #include "preview/quick_scene/PreviewQuickTouchHoldLayer.h"
 #include "preview/quick_scene/PreviewQuickTouchLayer.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
+#include "preview/scene/PreviewPreparedSceneCache.h"
 #include "preview/scene/PreviewLayerOrder.h"
 
 class PreviewRuntime;
@@ -65,6 +66,18 @@ private:
     PreviewQuickTouchHoldLayer touchHoldLayer_;
     PreviewQuickChartReviewLayer chartReviewLayer_;
     PreviewQuickMaimuriDxJudgeLayer maimuriDxJudgeLayer_;
+    miacode::preview::scene::PreviewPreparedSceneCache preparedCache_;
+    miacode::preview::scene::PreviewLayerWindowCursor guideCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor headCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor trackCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor slideMotionCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor judgeEffectCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor judgeFireworkCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor touchCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor touchJudgeCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor touchHoldCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor chartReviewCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor maimuriDxJudgeCursor_;
     quint64 updatePaintNodeCount_ = 0;
     quint64 geometryChangeCount_ = 0;
     bool lastLoggedHasWindow_ = false;

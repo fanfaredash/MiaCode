@@ -50,6 +50,7 @@ bool VideoExportQuickRenderBackend::bootstrap(
     frameState_.progressStatsCache = buildProgressStatsCache(noteMarkers);
     frameState_.muriAnalysisReport = muriAnalysisReport;
     frameState_.muriRenderOptions = task.muriRenderOptions;
+    frameState_.sceneContentRevision = 1;
     frameState_.media.stageMediaAvailable = stageMediaAvailable;
     frameState_.render.backgroundBrightnessOuter = task.backgroundBrightnessOuter;
     frameState_.render.backgroundBrightnessInner = task.backgroundBrightnessInner;
@@ -136,16 +137,19 @@ void VideoExportQuickRenderBackend::setNoteMarkers(const QVector<TimelineNoteMar
 {
     frameState_.noteMarkers = notes;
     frameState_.progressStatsCache = buildProgressStatsCache(notes);
+    frameState_.sceneContentRevision += 1;
 }
 
 void VideoExportQuickRenderBackend::setMuriAnalysisReport(const MuriAnalysisReport& report)
 {
     frameState_.muriAnalysisReport = report;
+    frameState_.sceneContentRevision += 1;
 }
 
 void VideoExportQuickRenderBackend::setMuriRenderOptions(const MuriRenderOptions& options)
 {
     frameState_.muriRenderOptions = options;
+    frameState_.sceneContentRevision += 1;
 }
 
 bool VideoExportQuickRenderBackend::hasCoreSkinAssetsLoadedForDebug() const

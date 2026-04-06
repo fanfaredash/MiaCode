@@ -174,6 +174,7 @@ void PreviewRuntime::setRetainedVideoFallbackFrame(const QImage& frame)
 void PreviewRuntime::setNoteMarkers(const QVector<TimelineNoteMarker>& notes)
 {
     frameState_.noteMarkers = notes;
+    frameState_.sceneContentRevision += 1;
     update();
 }
 
@@ -188,12 +189,14 @@ void PreviewRuntime::setProgressStatsCache(
 void PreviewRuntime::setMuriAnalysisReport(const MuriAnalysisReport& report)
 {
     frameState_.muriAnalysisReport = report;
+    frameState_.sceneContentRevision += 1;
     update();
 }
 
 void PreviewRuntime::setMuriRenderOptions(const MuriRenderOptions& options)
 {
     frameState_.muriRenderOptions = options;
+    frameState_.sceneContentRevision += 1;
     update();
 }
 
@@ -281,6 +284,7 @@ void PreviewRuntime::reset()
     frameState_.progressStatsCache.reset();
     frameState_.muriAnalysisReport = MuriAnalysisReport();
     frameState_.playheadSeconds = 0.0;
+    frameState_.sceneContentRevision = 0;
     frameState_.media = miacode::preview::scene::PreviewMediaFrameState();
     frameState_.fpsDisplay = 0.0;
     frameState_.cpuFallbackCount = 0;
@@ -388,9 +392,13 @@ void PreviewRuntime::updateTextureProfilingStats(const PreviewTextureStats& fram
             ensureLayerAggregate(&layerProfileAggregates_, layerStat.name);
         aggregate.spriteCountSum += layerStat.spriteCount;
         aggregate.spriteBatchCountSum += layerStat.spriteBatchCount;
+        aggregate.candidateCountSum += layerStat.candidateCount;
+        aggregate.activeCountSum += layerStat.activeCount;
         aggregate.buildMsSum += layerStat.buildMs;
         aggregate.spriteCountMax = qMax(aggregate.spriteCountMax, layerStat.spriteCount);
         aggregate.spriteBatchCountMax = qMax(aggregate.spriteBatchCountMax, layerStat.spriteBatchCount);
+        aggregate.candidateCountMax = qMax(aggregate.candidateCountMax, layerStat.candidateCount);
+        aggregate.activeCountMax = qMax(aggregate.activeCountMax, layerStat.activeCount);
         aggregate.buildMsMax = qMax(aggregate.buildMsMax, layerStat.buildMs);
         if (layerStat.spriteCount > 0) {
             aggregate.spriteActiveFrameCount += 1;
@@ -503,6 +511,12 @@ QString PreviewRuntime::writeProfilingSummaryToFile()
         stream << "layer." << layerStat.name << ".sprite_batch_count_avg="
                << QString::number(averageOrZero(static_cast<double>(layerStat.spriteBatchCountSum), profiledTextureFrameCount_), 'f', 4) << '\n';
         stream << "layer." << layerStat.name << ".sprite_batch_count_max=" << layerStat.spriteBatchCountMax << '\n';
+        stream << "layer." << layerStat.name << ".candidate_count_avg="
+               << QString::number(averageOrZero(static_cast<double>(layerStat.candidateCountSum), profiledTextureFrameCount_), 'f', 4) << '\n';
+        stream << "layer." << layerStat.name << ".candidate_count_max=" << layerStat.candidateCountMax << '\n';
+        stream << "layer." << layerStat.name << ".active_count_avg="
+               << QString::number(averageOrZero(static_cast<double>(layerStat.activeCountSum), profiledTextureFrameCount_), 'f', 4) << '\n';
+        stream << "layer." << layerStat.name << ".active_count_max=" << layerStat.activeCountMax << '\n';
         stream << "layer." << layerStat.name << ".build_ms_avg="
                << QString::number(averageOrZero(layerStat.buildMsSum, profiledTextureFrameCount_), 'f', 4) << '\n';
         stream << "layer." << layerStat.name << ".build_ms_max="

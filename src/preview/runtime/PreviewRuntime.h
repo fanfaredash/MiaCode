@@ -20,9 +20,13 @@ struct PreviewRuntimeLayerProfileAggregate {
     QString name;
     qint64 spriteCountSum = 0;
     qint64 spriteBatchCountSum = 0;
+    qint64 candidateCountSum = 0;
+    qint64 activeCountSum = 0;
     double buildMsSum = 0.0;
     qint64 spriteCountMax = 0;
     qint64 spriteBatchCountMax = 0;
+    qint64 candidateCountMax = 0;
+    qint64 activeCountMax = 0;
     double buildMsMax = 0.0;
     qint64 spriteActiveFrameCount = 0;
 };
