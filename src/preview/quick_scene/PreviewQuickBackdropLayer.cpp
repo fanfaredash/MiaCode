@@ -6,6 +6,7 @@
 #include <QQuickWindow>
 #include <QSGNode>
 #include <QSGSimpleTextureNode>
+#include <QSGTexture>
 
 QSGNode* PreviewQuickBackdropLayer::updateNode(
     QSGNode* oldNode,
@@ -16,14 +17,22 @@ QSGNode* PreviewQuickBackdropLayer::updateNode(
 ) const
 {
     if (state.assets.outlineImage.isNull() || window == nullptr || textures == nullptr) {
-        delete oldNode;
         return nullptr;
     }
 
-    delete oldNode;
-    auto* node = new QSGSimpleTextureNode();
-    node->setOwnsTexture(false);
-    node->setTexture(textures->textureForImage(state.assets.outlineImage));
+    QSGTexture* texture = textures->textureForImage(state.assets.outlineImage);
+    if (texture == nullptr) {
+        return nullptr;
+    }
+    texture->setFiltering(QSGTexture::Linear);
+
+    auto* node = dynamic_cast<QSGSimpleTextureNode*>(oldNode);
+    if (node == nullptr) {
+        node = new QSGSimpleTextureNode();
+        node->setOwnsTexture(false);
+    }
+
+    node->setTexture(texture);
     node->setRect(
         miacode::preview::scene::outlineRectForPlayfield(
             miacode::preview::scene::playfieldRectForStage(

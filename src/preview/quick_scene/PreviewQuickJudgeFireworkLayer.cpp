@@ -22,6 +22,7 @@ namespace {
 
 constexpr int kFireworkMaterialUniformBufferSize = 144;
 constexpr qreal kFireworkQuadRadiusMin = 1.0;
+constexpr int kFireworkClipSegments = 64;
 constexpr int kFireworkRenderFlagDrawStripe = 0x1;
 constexpr int kFireworkRenderFlagDrawBigBall = 0x2;
 constexpr int kFireworkRenderFlagDrawSmallBall = 0x4;
@@ -61,43 +62,48 @@ QImage& fallbackFireworkTextureImage()
     return image;
 }
 
-QSGClipNode* buildEllipseClipNode(const QPointF& center, qreal radius)
+class PreviewQuickEllipseClipNode final : public QSGClipNode
 {
-    if (radius <= 0.0) {
-        return nullptr;
+public:
+    PreviewQuickEllipseClipNode()
+    {
+        geometry_ = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), kFireworkClipSegments * 3);
+        geometry_->setDrawingMode(QSGGeometry::DrawTriangles);
+        geometry_->setVertexDataPattern(QSGGeometry::DynamicPattern);
+        setGeometry(geometry_);
+        setFlag(QSGNode::OwnsGeometry, true);
+        setIsRectangular(false);
     }
 
-    constexpr int kSegments = 64;
-    auto* geometry = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), kSegments * 3);
-    geometry->setDrawingMode(QSGGeometry::DrawTriangles);
-    auto* vertices = geometry->vertexDataAsPoint2D();
-
-    for (int segmentIndex = 0; segmentIndex < kSegments; ++segmentIndex) {
-        const qreal t0 = static_cast<qreal>(segmentIndex) / static_cast<qreal>(kSegments);
-        const qreal t1 = static_cast<qreal>(segmentIndex + 1) / static_cast<qreal>(kSegments);
-        const qreal angle0 = -t0 * 360.0;
-        const qreal angle1 = -t1 * 360.0;
-        const QPointF p0(
-            center.x() + radius * qCos(qDegreesToRadians(angle0)),
-            center.y() + radius * qSin(qDegreesToRadians(angle0))
-        );
-        const QPointF p1(
-            center.x() + radius * qCos(qDegreesToRadians(angle1)),
-            center.y() + radius * qSin(qDegreesToRadians(angle1))
-        );
-        const int vertexIndex = segmentIndex * 3;
-        vertices[vertexIndex + 0].set(static_cast<float>(center.x()), static_cast<float>(center.y()));
-        vertices[vertexIndex + 1].set(static_cast<float>(p0.x()), static_cast<float>(p0.y()));
-        vertices[vertexIndex + 2].set(static_cast<float>(p1.x()), static_cast<float>(p1.y()));
+    void updateClip(const QPointF& center, qreal radius)
+    {
+        auto* vertices = geometry_->vertexDataAsPoint2D();
+        for (int segmentIndex = 0; segmentIndex < kFireworkClipSegments; ++segmentIndex) {
+            const qreal t0 = static_cast<qreal>(segmentIndex) / static_cast<qreal>(kFireworkClipSegments);
+            const qreal t1 = static_cast<qreal>(segmentIndex + 1) / static_cast<qreal>(kFireworkClipSegments);
+            const qreal angle0 = -t0 * 360.0;
+            const qreal angle1 = -t1 * 360.0;
+            const QPointF p0(
+                center.x() + radius * qCos(qDegreesToRadians(angle0)),
+                center.y() + radius * qSin(qDegreesToRadians(angle0))
+            );
+            const QPointF p1(
+                center.x() + radius * qCos(qDegreesToRadians(angle1)),
+                center.y() + radius * qSin(qDegreesToRadians(angle1))
+            );
+            const int vertexIndex = segmentIndex * 3;
+            vertices[vertexIndex + 0].set(static_cast<float>(center.x()), static_cast<float>(center.y()));
+            vertices[vertexIndex + 1].set(static_cast<float>(p0.x()), static_cast<float>(p0.y()));
+            vertices[vertexIndex + 2].set(static_cast<float>(p1.x()), static_cast<float>(p1.y()));
+        }
+        geometry_->markVertexDataDirty();
+        setClipRect(QRectF(center.x() - radius, center.y() - radius, radius * 2.0, radius * 2.0));
+        markDirty(QSGNode::DirtyGeometry);
     }
 
-    auto* node = new QSGClipNode();
-    node->setGeometry(geometry);
-    node->setFlag(QSGNode::OwnsGeometry, true);
-    node->setIsRectangular(false);
-    node->setClipRect(QRectF(center.x() - radius, center.y() - radius, radius * 2.0, radius * 2.0));
-    return node;
-}
+private:
+    QSGGeometry* geometry_ = nullptr;
+};
 
 class PreviewQuickJudgeFireworkMaterialShader final : public QSGMaterialShader
 {
@@ -448,6 +454,110 @@ private:
     PreviewQuickJudgeFireworkMaterial* material_ = nullptr;
 };
 
+class PreviewQuickJudgeFireworkRootNode final : public QSGNode
+{
+public:
+    PreviewQuickJudgeFireworkRootNode()
+    {
+        contentSlot_ = new QSGNode();
+        appendChildNode(contentSlot_);
+    }
+
+    PreviewQuickEllipseClipNode* ensureClipNode()
+    {
+        if (clipNode_ == nullptr) {
+            clipNode_ = new PreviewQuickEllipseClipNode();
+        }
+        return clipNode_;
+    }
+
+    PreviewQuickJudgeFireworkNode* ensureFireworkNode()
+    {
+        if (fireworkNode_ == nullptr) {
+            fireworkNode_ = new PreviewQuickJudgeFireworkNode();
+        }
+        return fireworkNode_;
+    }
+
+    void useClip(bool enabled)
+    {
+        auto* fireworkNode = ensureFireworkNode();
+        if (enabled) {
+            auto* clipNode = ensureClipNode();
+            if (clipNode->parent() != contentSlot_) {
+                if (clipNode->parent() != nullptr) {
+                    clipNode->parent()->removeChildNode(clipNode);
+                }
+                contentSlot_->appendChildNode(clipNode);
+            }
+            if (fireworkNode->parent() != clipNode) {
+                if (fireworkNode->parent() != nullptr) {
+                    fireworkNode->parent()->removeChildNode(fireworkNode);
+                }
+                clipNode->appendChildNode(fireworkNode);
+            }
+            pruneChildren(contentSlot_, clipNode);
+            pruneChildren(clipNode, fireworkNode);
+            return;
+        }
+
+        if (fireworkNode->parent() != contentSlot_) {
+            if (fireworkNode->parent() != nullptr) {
+                fireworkNode->parent()->removeChildNode(fireworkNode);
+            }
+            contentSlot_->appendChildNode(fireworkNode);
+        }
+        if (clipNode_ != nullptr) {
+            if (clipNode_->parent() != nullptr) {
+                clipNode_->parent()->removeChildNode(clipNode_);
+            }
+            delete clipNode_;
+            clipNode_ = nullptr;
+        }
+        pruneChildren(contentSlot_, fireworkNode);
+    }
+
+    PreviewQuickEllipseClipNode* clipNode() const
+    {
+        return clipNode_;
+    }
+
+    PreviewQuickJudgeFireworkNode* fireworkNode() const
+    {
+        return fireworkNode_;
+    }
+
+private:
+    static void pruneChildren(QSGNode* parent, QSGNode* keepChild)
+    {
+        if (parent == nullptr) {
+            return;
+        }
+
+        QSGNode* child = parent->firstChild();
+        while (child != nullptr) {
+            QSGNode* next = child->nextSibling();
+            if (child != keepChild) {
+                parent->removeChildNode(child);
+                delete child;
+            }
+            child = next;
+        }
+    }
+
+    QSGNode* contentSlot_ = nullptr;
+    PreviewQuickEllipseClipNode* clipNode_ = nullptr;
+    PreviewQuickJudgeFireworkNode* fireworkNode_ = nullptr;
+};
+
+PreviewQuickJudgeFireworkRootNode* ensureJudgeFireworkRoot(QSGNode* oldNode)
+{
+    if (auto* root = dynamic_cast<PreviewQuickJudgeFireworkRootNode*>(oldNode)) {
+        return root;
+    }
+    return new PreviewQuickJudgeFireworkRootNode();
+}
+
 QRectF normalizedSourceRectFor(
     const QImage* sourceImage,
     const QRectF& sourceRect
@@ -499,9 +609,6 @@ QSGNode* PreviewQuickJudgeFireworkLayer::updateNode(
     PreviewTextureRepository* textures
 ) const
 {
-    Q_UNUSED(renderSize);
-
-    delete oldNode;
     if (window == nullptr || textures == nullptr) {
         return nullptr;
     }
@@ -541,21 +648,18 @@ QSGNode* PreviewQuickJudgeFireworkLayer::updateNode(
     }
     texture->setFiltering(QSGTexture::Linear);
 
-    auto* root = new QSGNode();
-    QSGNode* contentRoot = root;
-    if (QSGClipNode* clipNode = buildEllipseClipNode(layerState.clipCenter, layerState.clipRadius)) {
-        root->appendChildNode(clipNode);
-        contentRoot = clipNode;
+    auto* root = ensureJudgeFireworkRoot(oldNode);
+    root->useClip(layerState.clipRadius > 0.0);
+    if (root->clipNode() != nullptr) {
+        root->clipNode()->updateClip(layerState.clipCenter, layerState.clipRadius);
     }
 
-    auto* fireworkNode = new PreviewQuickJudgeFireworkNode();
-    fireworkNode->updateNode(
+    root->ensureFireworkNode()->updateNode(
         layerState,
         texture,
         useTexture,
         normalizedSourceRectFor(sourceImage, layerState.colorBallSourceRect),
         static_cast<float>(sourceAspectFor(sourceImage, layerState.colorBallSourceRect))
     );
-    contentRoot->appendChildNode(fireworkNode);
     return root;
 }
