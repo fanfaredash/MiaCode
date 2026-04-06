@@ -9,6 +9,7 @@
 #include <QQuickItem>
 #include <QQuickView>
 #include <QQuickWindow>
+#include <QSGRendererInterface>
 #include <QTimer>
 #include <QtQml/qqml.h>
 
@@ -51,6 +52,39 @@ QString windowVisibilityName(QWindow::Visibility visibility)
         return QStringLiteral("FullScreen");
     }
     return QStringLiteral("Visibility(%1)").arg(static_cast<int>(visibility));
+}
+
+QString graphicsApiName(QSGRendererInterface::GraphicsApi api)
+{
+    switch (api) {
+    case QSGRendererInterface::Unknown:
+        return QStringLiteral("Unknown");
+    case QSGRendererInterface::Software:
+        return QStringLiteral("Software");
+    case QSGRendererInterface::OpenVG:
+        return QStringLiteral("OpenVG");
+    case QSGRendererInterface::OpenGL:
+        return QStringLiteral("OpenGL");
+    case QSGRendererInterface::Direct3D11:
+        return QStringLiteral("Direct3D11");
+    case QSGRendererInterface::Vulkan:
+        return QStringLiteral("Vulkan");
+    case QSGRendererInterface::Metal:
+        return QStringLiteral("Metal");
+    case QSGRendererInterface::Null:
+        return QStringLiteral("Null");
+    case QSGRendererInterface::Direct3D12:
+        return QStringLiteral("Direct3D12");
+    }
+    return QStringLiteral("GraphicsApi(%1)").arg(static_cast<int>(api));
+}
+
+QString resolvedQuickGraphicsApiName(const QQuickWindow* window)
+{
+    if (window == nullptr || window->rendererInterface() == nullptr) {
+        return QStringLiteral("Unavailable");
+    }
+    return graphicsApiName(window->rendererInterface()->graphicsApi());
 }
 
 QString describeQuickWindow(const QQuickWindow* window)
@@ -204,9 +238,10 @@ PreviewQuickRuntimeSurface::PreviewQuickRuntimeSurface(QObject* parent)
     connect(view_, &QQuickWindow::sceneGraphInitialized, this, [this]() {
         appendQuickRuntimeLog(
             QStringLiteral("scene_graph_initialized"),
-            QString("scene_root=%1 hud=%2 %3")
+            QString("scene_root=%1 hud=%2 graphics_api=%3 %4")
                 .arg(sceneRoot_ != nullptr ? 1 : 0)
                 .arg(hudLayer_ != nullptr ? 1 : 0)
+                .arg(resolvedQuickGraphicsApiName(view_))
                 .arg(describeQuickWindow(view_))
         );
         if (sceneRoot_ != nullptr) {
