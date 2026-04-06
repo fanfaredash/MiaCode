@@ -603,6 +603,122 @@ void MainWindow::applyOpenedDocumentState(
     }
 }
 
+void MainWindow::resetAutosaveState(const QString& referenceText)
+{
+    autosaveReferenceContentSignature_ = autosaveContentSignature(referenceText);
+    autosaveLastContentSignature_.clear();
+}
+
+QString MainWindow::resolveAutosaveDirectoryPath() const
+{
+    if (currentFilePath_.isEmpty()) {
+        return QString();
+    }
+
+    const QFileInfo currentFileInfo(currentFilePath_);
+    const QString projectDirectoryPath = currentFileInfo.absolutePath();
+    if (projectDirectoryPath.isEmpty()) {
+        return QString();
+    }
+
+    return QDir(projectDirectoryPath).filePath(QStringLiteral(".autosave"));
+}
+
+QString MainWindow::currentDocumentTextForAutosave() const
+{
+    SimaiDocument snapshot = document_;
+    if (hasActiveDifficulty()) {
+        SimaiDifficultyData& difficultyData = snapshot.ensureDifficulty(activeDifficultyId_);
+        difficultyData.level = difficultyLevelEdit_ != nullptr ? difficultyLevelEdit_->text() : QString();
+        difficultyData.designer = difficultyDesignerEdit_ != nullptr ? difficultyDesignerEdit_->text() : QString();
+        difficultyData.chart = editorText();
+    } else if (activeOutlineKey_ == QLatin1String("metadata")) {
+        snapshot.title = titleEdit_ != nullptr ? titleEdit_->text() : QString();
+        snapshot.artist = artistEdit_ != nullptr ? artistEdit_->text() : QString();
+        snapshot.first = firstEdit_ != nullptr ? firstEdit_->text() : QString();
+        snapshot.designer = designerEdit_ != nullptr ? designerEdit_->text() : QString();
+        snapshot.extraFields = SimaiDocument::parseRawFields(
+            metadataExtraEdit_ != nullptr ? metadataExtraEdit_->toPlainText() : QString(),
+            true
+        );
+    }
+    return snapshot.toText();
+}
+
+void MainWindow::pruneAutosaveFiles(const QString& autosaveDirectoryPath) const
+{
+    QDir autosaveDir(autosaveDirectoryPath);
+    QFileInfoList autosaveFiles = autosaveDir.entryInfoList(
+        QStringList{QStringLiteral("autosave_*.txt")},
+        QDir::Files | QDir::NoDotAndDotDot
+    );
+    if (autosaveFiles.size() <= kAutosaveMaxVersions) {
+        return;
+    }
+
+    std::sort(
+        autosaveFiles.begin(),
+        autosaveFiles.end(),
+        [](const QFileInfo& lhs, const QFileInfo& rhs) {
+            if (lhs.lastModified() == rhs.lastModified()) {
+                return lhs.fileName() < rhs.fileName();
+            }
+            return lhs.lastModified() < rhs.lastModified();
+        }
+    );
+
+    const int removeCount = autosaveFiles.size() - kAutosaveMaxVersions;
+    for (int index = 0; index < removeCount; ++index) {
+        autosaveDir.remove(autosaveFiles.at(index).fileName());
+    }
+}
+
+void MainWindow::runAutosaveCheck()
+{
+    if (currentFilePath_.isEmpty()) {
+        return;
+    }
+
+    const QString snapshotText = currentDocumentTextForAutosave();
+    const QByteArray snapshotSignature = autosaveContentSignature(snapshotText);
+    if (snapshotSignature == autosaveReferenceContentSignature_
+        || snapshotSignature == autosaveLastContentSignature_) {
+        return;
+    }
+
+    const QString autosaveDirectoryPath = resolveAutosaveDirectoryPath();
+    if (autosaveDirectoryPath.isEmpty()) {
+        return;
+    }
+
+    QDir autosaveDir(autosaveDirectoryPath);
+    if (!autosaveDir.exists() && !autosaveDir.mkpath(QStringLiteral("."))) {
+        return;
+    }
+
+    QString autosaveBaseName = QFileInfo(currentFilePath_).completeBaseName();
+    if (autosaveBaseName.trimmed().isEmpty()) {
+        autosaveBaseName = QStringLiteral("maidata");
+    }
+    const QString autosaveFileName = QStringLiteral("autosave_%1_%2.txt")
+        .arg(
+            autosaveBaseName,
+            QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss_zzz"))
+        );
+    QSaveFile autosaveFile(autosaveDir.filePath(autosaveFileName));
+    if (!autosaveFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        return;
+    }
+
+    const QByteArray payload = snapshotText.toUtf8();
+    if (autosaveFile.write(payload) != payload.size() || !autosaveFile.commit()) {
+        return;
+    }
+
+    autosaveLastContentSignature_ = snapshotSignature;
+    pruneAutosaveFiles(autosaveDirectoryPath);
+}
+
 bool MainWindow::onSaveFile()
 {
     if (currentFilePath_.isEmpty()) {
@@ -667,6 +783,7 @@ bool MainWindow::saveToPath(const QString& path)
     if (normalizedPath != currentFilePath_) {
         setCurrentFilePath(normalizedPath);
     }
+    resetAutosaveState(serialized);
     documentDirty_ = false;
     currentFieldDirty_ = false;
     updateDirtyState();
@@ -1436,8 +1553,8 @@ void MainWindow::rebuildFieldSidebar()
     toolboxItem->setText(UiText::isChineseUi() ? QStringLiteral("工具箱") : QStringLiteral("Toolbox"));
     toolboxItem->setToolTip(
         UiText::isChineseUi()
-            ? QStringLiteral("打开工具箱：无理检测 / 谱面格式整理 / 批量视频导出 / 官谱镜像站")
-            : QStringLiteral("Open toolbox: Muri Check / Format Chart / Batch Video Export / Official Chart Mirror")
+            ? QStringLiteral("打开工具箱：无理检测 / 谱面整理 / 官谱镜像站")
+            : QStringLiteral("Open toolbox: Muri Check / Format Chart / Official Chart Mirror")
     );
     if (activeOutlineKey_ == QLatin1String("metadata")) {
         selectedItem = metadataItem;
@@ -1656,6 +1773,7 @@ void MainWindow::loadDocument(const SimaiDocument& document)
 {
     clearDeletedDifficultyUndoState();
     document_ = document;
+    resetAutosaveState(document_.toText());
     documentDirty_ = false;
     currentFieldDirty_ = false;
     activeDifficultyId_ = 0;

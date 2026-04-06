@@ -156,7 +156,7 @@
     editMenu->addAction(validateAction_);
 
     normalizeWholeChartAction_ = new QAction(
-        UiText::isChineseUi() ? QStringLiteral("谱面格式整理") : QStringLiteral("Format Chart"),
+        UiText::isChineseUi() ? QStringLiteral("谱面整理") : QStringLiteral("Format Chart"),
         this
     );
     connect(normalizeWholeChartAction_, &QAction::triggered, this, &MainWindow::onNormalizeWholeChart);
@@ -414,6 +414,8 @@ MainWindow::MainWindow(QWidget* parent)
         previewMenu->removeAction(exportVideoAction_);
         toolsMenu->addSeparator();
         toolsMenu->addAction(exportVideoAction_);
+        QAction* batchExportAction = toolsMenu->addAction(uiText("action.batch_export", "Batch Export"));
+        connect(batchExportAction, &QAction::triggered, this, &MainWindow::onBatchExportPreviewVideo);
     }
     const QList<QAction*> editActions = editMenu->actions();
     if (!editActions.isEmpty() && editActions.constLast()->isSeparator()) {
@@ -1033,11 +1035,6 @@ MainWindow::MainWindow(QWidget* parent)
         toolboxMenu_->addAction(normalizeWholeChartAction_);
     }
 
-    QAction* toolboxBatchExportAction = toolboxMenu_->addAction(
-        UiText::isChineseUi() ? QStringLiteral("批量视频导出") : QStringLiteral("Batch Video Export")
-    );
-    connect(toolboxBatchExportAction, &QAction::triggered, this, &MainWindow::onBatchExportPreviewVideo);
-
     toolboxMenu_->addSeparator();
 
     QAction* toolboxOfficialChartMirrorAction = toolboxMenu_->addAction(
@@ -1574,6 +1571,11 @@ MainWindow::MainWindow(QWidget* parent)
     statusBar()->addPermanentWidget(currentFileLabel_, 1);
     updateCurrentFileLabel();
     updateLatencyDetectorAvailability();
+
+    autosaveTimer_ = new QTimer(this);
+    autosaveTimer_->setInterval(kAutosaveIntervalMs);
+    connect(autosaveTimer_, &QTimer::timeout, this, &MainWindow::runAutosaveCheck);
+    autosaveTimer_->start();
 
     qtPreviewTimer_ = new QTimer(this);
     qtPreviewTimer_->setInterval(16);

@@ -40,6 +40,7 @@
 #include <QComboBox>
 #include <QWindow>
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QCursor>
 #include <QDateTime>
 #include <QDesktopServices>
@@ -177,6 +178,8 @@ constexpr int kEditorFindBarTopMargin = 10;
 constexpr int kEditorFindBarOverlayGap = 8;
 constexpr int kPreviewScrubRenderIntervalMs = 33;
 constexpr qint64 kInvalidStarPreviewAboutClickWindowMs = 900;
+constexpr int kAutosaveIntervalMs = 15 * 60 * 1000;
+constexpr int kAutosaveMaxVersions = 10;
 const QList<double> kEditorLineSpacingFactorOptions{
     0.0, 1.0, 1.5, 2.0, 3.0, 5.0,
 };
@@ -187,6 +190,11 @@ const QList<double> kPreviewPlaybackRateOptions{
 QString pointerHex(const void* pointer)
 {
     return QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(pointer), 0, 16);
+}
+
+QByteArray autosaveContentSignature(const QString& text)
+{
+    return QCryptographicHash::hash(text.toUtf8(), QCryptographicHash::Sha256);
 }
 
 QString qEventTypeName(QEvent::Type type)
