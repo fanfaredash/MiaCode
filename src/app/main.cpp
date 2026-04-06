@@ -510,6 +510,9 @@ int main(int argc, char* argv[])
     for (int index = 0; index < argc; ++index) {
         rawArgs.append(QString::fromLocal8Bit(argv[index]));
     }
+    const bool cliVideoExportRequested = wantsCliVideoExport(rawArgs);
+    const bool cliVideoExportWorkerRequested = wantsCliVideoExportWorker(rawArgs);
+    const bool forceOpenGlGraphicsApi = cliVideoExportRequested || cliVideoExportWorkerRequested;
     miacode::debug_options::setDebugModeEnabled(miacode::debug_options::hasDebugArg(rawArgs));
     if (miacode::debug_options::debugModeEnabled()) {
         miacode::debug_log::clearDebugSessionLogs();
@@ -570,14 +573,19 @@ int main(int argc, char* argv[])
 
     QApplication app(argc, argv);
 
-    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+    if (forceOpenGlGraphicsApi) {
+        QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+    }
     logStartupStage("qapplication_constructed");
     if (miacode::debug_options::runtimeDebugOutputEnabled()) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("startup/qt_config"),
-            QString("graphics_api=OpenGL dont_create_native_widget_siblings=%1")
+            QString("graphics_api=%1 dont_create_native_widget_siblings=%2 cli_export=%3 cli_export_worker=%4")
+                .arg(forceOpenGlGraphicsApi ? QStringLiteral("OpenGL") : QStringLiteral("PlatformDefault"))
                 .arg(QApplication::testAttribute(Qt::AA_DontCreateNativeWidgetSiblings) ? 1 : 0)
+                .arg(cliVideoExportRequested ? 1 : 0)
+                .arg(cliVideoExportWorkerRequested ? 1 : 0)
         );
     }
 #ifdef Q_OS_WIN
@@ -605,7 +613,7 @@ int main(int argc, char* argv[])
     }
     logStartupStage("ui_font_ready");
 
-    if (wantsCliVideoExportWorker(app.arguments())) {
+    if (cliVideoExportWorkerRequested) {
         QString cliError;
         const int exitCode = runCliVideoExportWorker(app, &cliError);
         if (exitCode != 0 && !cliError.trimmed().isEmpty()) {
@@ -614,7 +622,7 @@ int main(int argc, char* argv[])
         return exitCode;
     }
 
-    if (wantsCliVideoExport(app.arguments())) {
+    if (cliVideoExportRequested) {
         QString cliError;
         const int exitCode = runCliVideoExport(app, &cliError);
         if (exitCode != 0 && !cliError.trimmed().isEmpty()) {

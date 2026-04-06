@@ -312,6 +312,7 @@ foreach ($deprecatedBaseName in @("Qt6OpenGLWidgets", "Qt6Concurrent")) {
     $deprecatedDll = Get-QtRuntimeDllName -BaseName $deprecatedBaseName -Config $Config
     Remove-PackagedDllIfPresent -DistDir $DistDir -DllName $deprecatedDll
 }
+Remove-PackagedDllIfPresent -DistDir $DistDir -DllName "opengl32sw.dll"
 
 $buildOutputDir = Join-Path $BuildDir $Config
 foreach ($runtimeDll in @("dxcompiler.dll", "dxil.dll")) {
@@ -435,7 +436,6 @@ $requiredPackagePaths = @(
     "D3Dcompiler_47.dll",
     "dxcompiler.dll",
     "dxil.dll",
-    "opengl32sw.dll",
     "platforms\\qwindows.dll",
     "qml\\QtQuick\\qtquick2plugin.dll",
     "qml\\QtQml\\Models\\modelsplugin.dll",
@@ -444,7 +444,8 @@ $requiredPackagePaths = @(
 )
 $unexpectedPackagePaths = @(
     (Get-QtRuntimeDllName -BaseName "Qt6OpenGLWidgets" -Config $Config),
-    (Get-QtRuntimeDllName -BaseName "Qt6Concurrent" -Config $Config)
+    (Get-QtRuntimeDllName -BaseName "Qt6Concurrent" -Config $Config),
+    "opengl32sw.dll"
 )
 Assert-PackageEntries -DistDir $DistDir -RequiredRelativePaths $requiredPackagePaths -UnexpectedRelativePaths $unexpectedPackagePaths
 
