@@ -239,6 +239,11 @@ private:
     bool maybeSaveCurrentFieldChanges();
     bool applyCurrentFieldToDocument();
     bool saveToPath(const QString& path);
+    void runAutosaveCheck();
+    QString resolveAutosaveDirectoryPath() const;
+    QString currentDocumentTextForAutosave() const;
+    void pruneAutosaveFiles(const QString& autosaveDirectoryPath) const;
+    void resetAutosaveState(const QString& referenceText);
     bool applyBatchTransform(const QString& opName, const BatchTransform& transform);
     bool applySelectionBatchTransform(const QString& opName, const BatchTransform& transform);
     std::pair<int, int> currentCursorLineCol() const;
@@ -592,6 +597,7 @@ private:
     QAction* swapWorkspaceSidesAction_ = nullptr;
     QAction* aboutAction_ = nullptr;
     QLabel* currentFileLabel_ = nullptr;
+    QTimer* autosaveTimer_ = nullptr;
     QTimer* qtPreviewTimer_ = nullptr;
     QTimer* qtPreviewTimelineTimer_ = nullptr;
     QTimer* previewSeekDebounceTimer_ = nullptr;
@@ -616,6 +622,8 @@ private:
     QString currentFilePath_;
     QString lastOpenDir_;
     QString lastTrackPath_;
+    QByteArray autosaveReferenceContentSignature_;
+    QByteArray autosaveLastContentSignature_;
     int lastTimelineParseDifficultyId_ = 0;
     QString lastTimelineParseChartText_;
     miacode::simai::SimaiTimingMetadata lastTimelineParseTimingMetadata_;

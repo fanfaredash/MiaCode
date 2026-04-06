@@ -34,6 +34,7 @@ Use this file to separate hard contracts from adjustable implementation choices.
 - Partial export currently keeps the full-range export lead-in behavior untouched, but when a request is not marked as full-range it prepends a 1.5-second preload and filters exported objects up front by `marker.second` within `[L, R]`; slides and their tracks stay coupled to the head timestamp because the whole `TimelineNoteMarker` is either kept or dropped as one unit.
 - Export output naming currently auto-appends `.mp4` when missing and avoids collisions by choosing `name(1).mp4`, `name(2).mp4`, and so on before the worker starts.
 - Background media naming is currently limited to `bg.*` or `pv.mp4` style conventions.
+- Project editing currently runs a timer-driven autosave every 15 minutes for named charts only, writes UTF-8 document snapshots to `<chart dir>/.autosave/`, skips snapshots whose serialized content matches the last saved baseline or the newest autosave, and keeps at most 10 autosave files.
 - Preview panel layout is currently card-based, with preview, controls, and stats as separate blocks.
 - On-screen preview is currently hosted by `PreviewRuntime` through `QQuickView + QWidget::createWindowContainer(...)`, and both realtime preview and export now render through the Qt Quick scene graph plus `PreviewQuickExportSession`.
 - New preview or export rendering work should prefer adding another dedicated `scene/` state builder or `quick_scene/` layer file instead of reintroducing a painter/OpenGL fallback path.
