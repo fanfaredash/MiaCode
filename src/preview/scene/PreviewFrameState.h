@@ -175,6 +175,7 @@ struct PreviewFrameState {
     PreviewJudgeEffectAssets judgeEffect;
     PreviewRenderState render;
     double playheadSeconds = 0.0;
+    quint64 sceneContentRevision = 0;
     double fpsDisplay = 0.0;
     int cpuFallbackCount = 0;
     bool usedGpuRendererThisFrame = false;

@@ -12,6 +12,8 @@ struct PreviewTextureLayerStats {
     QString name;
     qint64 spriteCount = 0;
     qint64 spriteBatchCount = 0;
+    qint64 candidateCount = 0;
+    qint64 activeCount = 0;
     double buildMs = 0.0;
 };
 

@@ -3,33 +3,22 @@
 #include "preview/quick_scene/PreviewQuickSpriteNodes.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
 #include "preview/scene/PreviewChartReviewLayerState.h"
+#include "preview/scene/PreviewPreparedSceneCache.h"
 #include "preview/scene/PreviewSceneGeometry.h"
 
 QSGNode* PreviewQuickChartReviewLayer::updateNode(
     QSGNode* oldNode,
     const miacode::preview::scene::PreviewFrameState& state,
+    const miacode::preview::scene::PreviewPreparedSceneCache* preparedCache,
+    const miacode::preview::scene::PreviewLayerWindowCursor* cursor,
     const QSize& renderSize,
     QQuickWindow* window,
     PreviewTextureRepository* textures
 ) const
 {
-    const bool showSlideJudgeOverlay = state.muriRenderOptions.showChartReviewSlideJudgeOverlay;
-    const bool showSimpleJudgeOverlay = state.muriRenderOptions.showChartReviewSimpleJudgeOverlay;
-    const TimelineNoteMarker* noteMarkerData = state.noteMarkers.constData();
-    const qsizetype noteMarkerCount = state.noteMarkers.size();
-    if (cachedNoteMarkersData_ != noteMarkerData
-        || cachedNoteMarkersSize_ != noteMarkerCount
-        || cachedShowSlideJudgeOverlay_ != showSlideJudgeOverlay
-        || cachedShowSimpleJudgeOverlay_ != showSimpleJudgeOverlay) {
-        preparedEventsCache_ = miacode::preview::scene::buildPreviewChartReviewPreparedEvents(
-            state.noteMarkers,
-            showSlideJudgeOverlay,
-            showSimpleJudgeOverlay
-        );
-        cachedNoteMarkersData_ = noteMarkerData;
-        cachedNoteMarkersSize_ = noteMarkerCount;
-        cachedShowSlideJudgeOverlay_ = showSlideJudgeOverlay;
-        cachedShowSimpleJudgeOverlay_ = showSimpleJudgeOverlay;
+    miacode::preview::scene::PreviewChartReviewPreparedEvents activeEvents;
+    if (preparedCache != nullptr && cursor != nullptr) {
+        preparedCache->collectChartReviewEvents(cursor->activePreparedIndices, &activeEvents);
     }
 
     return buildPreviewSpriteNodeTree(
@@ -40,7 +29,7 @@ QSGNode* PreviewQuickChartReviewLayer::updateNode(
                 miacode::preview::scene::stageRectForSize(renderSize),
                 state.render.layoutSquareScale
             ),
-            &preparedEventsCache_
+            &activeEvents
         ),
         window,
         textures,

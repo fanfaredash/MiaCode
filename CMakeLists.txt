@@ -105,6 +105,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/scene/PreviewHudState.cpp
     src/preview/scene/PreviewProgressStatsCache.h
     src/preview/scene/PreviewProgressStatsCache.cpp
+    src/preview/scene/PreviewPreparedSceneCache.h
+    src/preview/scene/PreviewPreparedSceneCache.cpp
     src/preview/scene/PreviewLayerOrder.h
     src/preview/scene/PreviewOpacityCurves.h
     src/preview/scene/PreviewOpacityCurves.cpp

@@ -3,6 +3,7 @@
 #include "common/DebugLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/scene/PreviewFrameState.h"
+#include "preview/scene/PreviewPreparedSceneCache.h"
 
 #include <QElapsedTimer>
 #include <QQuickWindow>
@@ -242,6 +243,41 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         return root;
     }
 
+    const bool cacheRebuilt = preparedCache_.sync(*state);
+    if (cacheRebuilt) {
+        guideCursor_.reset();
+        headCursor_.reset();
+        trackCursor_.reset();
+        slideMotionCursor_.reset();
+        judgeEffectCursor_.reset();
+        judgeFireworkCursor_.reset();
+        touchCursor_.reset();
+        touchJudgeCursor_.reset();
+        touchHoldCursor_.reset();
+        chartReviewCursor_.reset();
+        maimuriDxJudgeCursor_.reset();
+    }
+
+    const double playheadSeconds = state->playheadSeconds;
+    miacode::preview::scene::syncPreviewLayerWindowCursor(preparedCache_.guideLayer(), playheadSeconds, &guideCursor_);
+    miacode::preview::scene::syncPreviewLayerWindowCursor(preparedCache_.headLayer(), playheadSeconds, &headCursor_);
+    miacode::preview::scene::syncPreviewLayerWindowCursor(preparedCache_.slideLikeLayer(), playheadSeconds, &trackCursor_);
+    miacode::preview::scene::syncPreviewLayerWindowCursor(preparedCache_.slideLikeLayer(), playheadSeconds, &slideMotionCursor_);
+    miacode::preview::scene::syncPreviewLayerWindowCursor(preparedCache_.judgeEffectLayer(), playheadSeconds, &judgeEffectCursor_);
+    miacode::preview::scene::syncPreviewLayerWindowCursor(preparedCache_.judgeFireworkLayer(), playheadSeconds, &judgeFireworkCursor_);
+    miacode::preview::scene::syncPreviewLayerWindowCursor(preparedCache_.touchLayer(), playheadSeconds, &touchCursor_);
+    miacode::preview::scene::syncPreviewLayerWindowCursor(preparedCache_.touchJudgeLayer(), playheadSeconds, &touchJudgeCursor_);
+    miacode::preview::scene::syncPreviewLayerWindowCursor(preparedCache_.touchHoldLayer(), playheadSeconds, &touchHoldCursor_);
+    miacode::preview::scene::syncPreviewLayerWindowCursor(preparedCache_.chartReviewLayer(), playheadSeconds, &chartReviewCursor_);
+    miacode::preview::scene::syncPreviewLayerWindowCursor(preparedCache_.maimuriDxJudgeLayer(), playheadSeconds, &maimuriDxJudgeCursor_);
+
+    const auto applyWindowCounts =
+        [this](const char* layerName, qint64 candidateCount, qint64 activeCount) {
+            PreviewTextureLayerStats& layerStat = ensureLayerProfileStat(&layerProfileStats_, layerName);
+            layerStat.candidateCount = candidateCount;
+            layerStat.activeCount = activeCount;
+        };
+
     int slotIndex = 0;
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
@@ -281,88 +317,208 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         "judge_firework",
         &layerProfileStats_,
         [&](QSGNode* oldChild) {
-            return judgeFireworkLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+            return judgeFireworkLayer_.updateNode(
+                oldChild,
+                *state,
+                &preparedCache_,
+                &judgeFireworkCursor_,
+                renderSize,
+                window(),
+                &textures_);
         });
+    applyWindowCounts(
+        "judge_firework",
+        preparedCache_.judgeFireworkLayer().entries.size(),
+        judgeFireworkCursor_.activePreparedIndices.size()
+    );
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::GuideLayer),
         "guide",
         &layerProfileStats_,
         [&](QSGNode* oldChild) {
-            return guideLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+            return guideLayer_.updateNode(
+                oldChild,
+                *state,
+                &preparedCache_,
+                &guideCursor_,
+                renderSize,
+                window(),
+                &textures_);
         });
+    applyWindowCounts("guide", preparedCache_.guideLayer().entries.size(), guideCursor_.activePreparedIndices.size());
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::TrackLayer),
         "track",
         &layerProfileStats_,
         [&](QSGNode* oldChild) {
-            return trackLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+            return trackLayer_.updateNode(
+                oldChild,
+                *state,
+                &preparedCache_,
+                &trackCursor_,
+                renderSize,
+                window(),
+                &textures_);
         });
+    applyWindowCounts(
+        "track",
+        preparedCache_.slideLikeLayer().entries.size(),
+        trackCursor_.activePreparedIndices.size()
+    );
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::SlideMotionLayer),
         "slide_motion",
         &layerProfileStats_,
         [&](QSGNode* oldChild) {
-            return slideMotionLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+            return slideMotionLayer_.updateNode(
+                oldChild,
+                *state,
+                &preparedCache_,
+                &slideMotionCursor_,
+                renderSize,
+                window(),
+                &textures_);
         });
+    applyWindowCounts(
+        "slide_motion",
+        preparedCache_.slideLikeLayer().entries.size(),
+        slideMotionCursor_.activePreparedIndices.size()
+    );
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::JudgeLayer),
         "judge_effect",
         &layerProfileStats_,
         [&](QSGNode* oldChild) {
-            return judgeEffectLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+            return judgeEffectLayer_.updateNode(
+                oldChild,
+                *state,
+                &preparedCache_,
+                &judgeEffectCursor_,
+                renderSize,
+                window(),
+                &textures_);
         });
+    applyWindowCounts(
+        "judge_effect",
+        preparedCache_.judgeEffectLayer().entries.size(),
+        judgeEffectCursor_.activePreparedIndices.size()
+    );
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::JudgeTouchLayer),
         "touch_judge",
         &layerProfileStats_,
         [&](QSGNode* oldChild) {
-            return touchJudgeLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+            return touchJudgeLayer_.updateNode(
+                oldChild,
+                *state,
+                &preparedCache_,
+                &touchJudgeCursor_,
+                renderSize,
+                window(),
+                &textures_);
         });
+    applyWindowCounts(
+        "touch_judge",
+        preparedCache_.touchJudgeLayer().entries.size(),
+        touchJudgeCursor_.activePreparedIndices.size()
+    );
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::HeadLayer),
         "head",
         &layerProfileStats_,
         [&](QSGNode* oldChild) {
-            return headLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+            return headLayer_.updateNode(
+                oldChild,
+                *state,
+                &preparedCache_,
+                &headCursor_,
+                renderSize,
+                window(),
+                &textures_);
         });
+    applyWindowCounts("head", preparedCache_.headLayer().entries.size(), headCursor_.activePreparedIndices.size());
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::TouchLayer),
         "touch",
         &layerProfileStats_,
         [&](QSGNode* oldChild) {
-            return touchLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+            return touchLayer_.updateNode(
+                oldChild,
+                *state,
+                &preparedCache_,
+                &touchCursor_,
+                renderSize,
+                window(),
+                &textures_);
         });
+    applyWindowCounts("touch", preparedCache_.touchLayer().entries.size(), touchCursor_.activePreparedIndices.size());
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::TouchHoldLayer),
         "touch_hold",
         &layerProfileStats_,
         [&](QSGNode* oldChild) {
-            return touchHoldLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+            return touchHoldLayer_.updateNode(
+                oldChild,
+                *state,
+                &preparedCache_,
+                &touchHoldCursor_,
+                renderSize,
+                window(),
+                &textures_);
         });
+    applyWindowCounts(
+        "touch_hold",
+        preparedCache_.touchHoldLayer().entries.size(),
+        touchHoldCursor_.activePreparedIndices.size()
+    );
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::ChartReviewLayer),
         "chart_review",
         &layerProfileStats_,
         [&](QSGNode* oldChild) {
-            return chartReviewLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+            return chartReviewLayer_.updateNode(
+                oldChild,
+                *state,
+                &preparedCache_,
+                &chartReviewCursor_,
+                renderSize,
+                window(),
+                &textures_);
         });
+    applyWindowCounts(
+        "chart_review",
+        preparedCache_.chartReviewLayer().entries.size(),
+        chartReviewCursor_.activePreparedIndices.size()
+    );
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::MaimuriDxJudgeLayer),
         "maimuri_dx_judge",
         &layerProfileStats_,
         [&](QSGNode* oldChild) {
-            return maimuriDxJudgeLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
+            return maimuriDxJudgeLayer_.updateNode(
+                oldChild,
+                *state,
+                &preparedCache_,
+                &maimuriDxJudgeCursor_,
+                renderSize,
+                window(),
+                &textures_);
         });
+    applyWindowCounts(
+        "maimuri_dx_judge",
+        preparedCache_.maimuriDxJudgeLayer().entries.size(),
+        maimuriDxJudgeCursor_.activePreparedIndices.size()
+    );
     return root;
 }
 

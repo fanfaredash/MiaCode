@@ -4,6 +4,7 @@
 #include "preview/quick_scene/PreviewQuickSpriteNodes.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
 #include "preview/scene/PreviewJudgeFireworkLayerState.h"
+#include "preview/scene/PreviewPreparedSceneCache.h"
 #include "preview/scene/PreviewSceneGeometry.h"
 
 #include <QSGClipNode>
@@ -55,6 +56,8 @@ QSGClipNode* buildEllipseClipNode(const QPointF& center, qreal radius)
 QSGNode* PreviewQuickJudgeFireworkLayer::updateNode(
     QSGNode* oldNode,
     const miacode::preview::scene::PreviewFrameState& state,
+    const miacode::preview::scene::PreviewPreparedSceneCache* preparedCache,
+    const miacode::preview::scene::PreviewLayerWindowCursor* cursor,
     const QSize& renderSize,
     QQuickWindow* window,
     PreviewTextureRepository* textures
@@ -65,9 +68,20 @@ QSGNode* PreviewQuickJudgeFireworkLayer::updateNode(
         return nullptr;
     }
 
+    miacode::preview::scene::PreviewFrameState filteredState = state;
+    QVector<TimelineNoteMarker> filteredMarkers;
+    if (preparedCache != nullptr && cursor != nullptr) {
+        preparedCache->collectMarkers(
+            state.noteMarkers,
+            preparedCache->judgeFireworkLayer(),
+            cursor->activePreparedIndices,
+            &filteredMarkers
+        );
+        filteredState.noteMarkers = filteredMarkers;
+    }
     const miacode::preview::scene::PreviewJudgeFireworkLayerState layerState =
         miacode::preview::scene::buildPreviewJudgeFireworkLayerState(
-            state,
+            filteredState,
             miacode::preview::scene::playfieldRectForStage(
                 miacode::preview::scene::stageRectForSize(renderSize),
                 state.render.layoutSquareScale
@@ -91,7 +105,7 @@ QSGNode* PreviewQuickJudgeFireworkLayer::updateNode(
             layerState.sprites,
             window,
             textures,
-            state.playheadSeconds,
+            filteredState.playheadSeconds,
             "judge_firework"
         )) {
         contentRoot->appendChildNode(spriteNode);

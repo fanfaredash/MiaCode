@@ -54,6 +54,7 @@ Debug subcategories now default to on inside debug mode and are disabled with:
 - Preview profile summary:
   - default file: `miacode_preview_profile_summary.txt`
   - current summary now includes `stage_bg.*` sub-metrics for stage-background media conversion, media texture work, dim-uniform updates, node-update time, and media/dim frame counters
+  - layer summary rows now also include `candidate_count_*` and `active_count_*` so prepared-window efficiency can be compared against sprite/batch counts
 
 The Windows release package also ships:
 
