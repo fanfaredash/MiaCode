@@ -2,6 +2,8 @@
 
 #include "preview/scene/PreviewFrameState.h"
 
+#include <QtGlobal>
+
 class QImage;
 class QQuickWindow;
 class QSGNode;
@@ -19,11 +21,6 @@ public:
     ) const;
 
 private:
-    mutable QImage brightnessMaskCache_;
-    mutable QSize brightnessMaskCacheSize_;
-    mutable double brightnessMaskCacheOuter_ = -1.0;
-    mutable double brightnessMaskCacheInner_ = -1.0;
-    mutable double brightnessMaskCacheLayoutScale_ = -1.0;
-    mutable double brightnessMaskCacheRingRatio_ = -1.0;
-    mutable bool brightnessMaskCacheSmooth_ = false;
+    mutable quint64 lastDynamicStageMediaKey_ = 0;
+    mutable quint64 lastProfiledResolvedStageMediaSerial_ = 0;
 };

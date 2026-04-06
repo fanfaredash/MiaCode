@@ -18,14 +18,13 @@ struct PreviewTextureLayerStats {
 struct PreviewStageBackgroundFrameProfile {
     double mediaToImageMs = 0.0;
     double mediaTextureMs = 0.0;
-    double maskBuildMs = 0.0;
-    double maskTextureUploadMs = 0.0;
+    double dimUniformUpdateMs = 0.0;
     double nodeUpdateMs = 0.0;
     qint64 mediaFrameCount = 0;
-    qint64 maskFrameCount = 0;
+    qint64 dimFrameCount = 0;
     qint64 videoFrameCount = 0;
     qint64 staticImageFrameCount = 0;
-    qint64 maskRebuildCount = 0;
+    qint64 dimUniformUpdateCount = 0;
 };
 
 struct PreviewTextureStats {
@@ -52,6 +51,7 @@ public:
     void setWindow(QQuickWindow* window);
     void beginFrame();
     QSGTexture* textureForImage(const QImage& image, bool cacheable = true);
+    QSGTexture* retainedTexture(const QString& slotName) const;
     QSGTexture* retainedTextureForImage(const QString& slotName, const QImage& image);
     void releaseRetainedTexture(const QString& slotName);
     QSGTexture* createOwnedTexture(const QImage& image) const;

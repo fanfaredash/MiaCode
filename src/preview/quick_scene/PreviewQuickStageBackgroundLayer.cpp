@@ -7,19 +7,23 @@
 #include <QColor>
 #include <QElapsedTimer>
 #include <QImage>
+#include <QMatrix4x4>
 #include <QQuickWindow>
+#include <QSGGeometry>
+#include <QSGMaterial>
+#include <QSGMaterialShader>
 #include <QSGNode>
 #include <QSGSimpleRectNode>
 #include <QSGSimpleTextureNode>
 #include <QSGTexture>
 
-#include <cmath>
+#include <cstring>
 
 namespace {
 
 enum class StageMediaSourceKind {
     None,
-    VideoFrame,
+    ResolvedFrame,
     StaticImage,
     RetainedFallback,
 };
@@ -27,7 +31,154 @@ enum class StageMediaSourceKind {
 struct StageMediaFrameResult {
     QImage image;
     StageMediaSourceKind sourceKind = StageMediaSourceKind::None;
+    bool cacheable = false;
     double toImageMs = 0.0;
+    quint64 retainedTextureKey = 0;
+};
+
+struct StageDimParams {
+    QRectF stageRect;
+    QSize renderSize;
+    float outerDarkAlpha = 0.0f;
+    float innerDarkAlpha = 0.0f;
+    float layoutSquareScale = 1.0f;
+    float ringRatio = 1.0f;
+    float smoothBrightness = 0.0f;
+};
+
+constexpr int kStageDimUniformBufferSize = 112;
+
+class StageBackgroundDimMaterial;
+
+class StageBackgroundDimMaterialShader final : public QSGMaterialShader
+{
+public:
+    StageBackgroundDimMaterialShader()
+    {
+        setShaderFileName(VertexStage, QStringLiteral(":/src/preview/quick_scene/shaders/PreviewStageDimMaterial.vert.qsb"));
+        setShaderFileName(FragmentStage, QStringLiteral(":/src/preview/quick_scene/shaders/PreviewStageDimMaterial.frag.qsb"));
+    }
+
+    bool updateUniformData(RenderState& state, QSGMaterial* newMaterial, QSGMaterial* oldMaterial) override;
+};
+
+class StageBackgroundDimMaterial final : public QSGMaterial
+{
+public:
+    StageBackgroundDimMaterial()
+    {
+        setFlag(Blending, true);
+        setFlag(RequiresFullMatrix, true);
+        setFlag(NoBatching, true);
+    }
+
+    QSGMaterialType* type() const override
+    {
+        static QSGMaterialType materialType;
+        return &materialType;
+    }
+
+    QSGMaterialShader* createShader(QSGRendererInterface::RenderMode) const override
+    {
+        return new StageBackgroundDimMaterialShader();
+    }
+
+    int compare(const QSGMaterial* other) const override
+    {
+        return this == other ? 0 : 1;
+    }
+
+    void setParams(const StageDimParams& params)
+    {
+        params_ = params;
+    }
+
+    StageDimParams params() const
+    {
+        return params_;
+    }
+
+private:
+    StageDimParams params_;
+};
+
+bool StageBackgroundDimMaterialShader::updateUniformData(
+    RenderState& state,
+    QSGMaterial* newMaterial,
+    QSGMaterial* oldMaterial
+)
+{
+    Q_UNUSED(oldMaterial);
+
+    QByteArray* uniformData = state.uniformData();
+    if (uniformData == nullptr || uniformData->size() < kStageDimUniformBufferSize) {
+        return false;
+    }
+
+    if (state.isMatrixDirty()) {
+        const QMatrix4x4 matrix = state.combinedMatrix();
+        std::memcpy(uniformData->data(), matrix.constData(), sizeof(float) * 16);
+    }
+
+    const auto* material = static_cast<const StageBackgroundDimMaterial*>(newMaterial);
+    const StageDimParams params = material->params();
+    const float opacity = state.opacity();
+    const float stageRectValues[4] = {
+        static_cast<float>(params.stageRect.x()),
+        static_cast<float>(params.stageRect.y()),
+        static_cast<float>(params.stageRect.width()),
+        static_cast<float>(params.stageRect.height()),
+    };
+    const float geometryValues[4] = {
+        static_cast<float>(params.renderSize.width()),
+        static_cast<float>(params.renderSize.height()),
+        params.layoutSquareScale,
+        params.ringRatio,
+    };
+
+    std::memcpy(uniformData->data() + 64, &opacity, sizeof(float));
+    std::memcpy(uniformData->data() + 68, &params.outerDarkAlpha, sizeof(float));
+    std::memcpy(uniformData->data() + 72, &params.innerDarkAlpha, sizeof(float));
+    std::memcpy(uniformData->data() + 76, &params.smoothBrightness, sizeof(float));
+    std::memcpy(uniformData->data() + 80, stageRectValues, sizeof(stageRectValues));
+    std::memcpy(uniformData->data() + 96, geometryValues, sizeof(geometryValues));
+    return true;
+}
+
+class StageBackgroundDimNode final : public QSGGeometryNode
+{
+public:
+    StageBackgroundDimNode()
+    {
+        geometry_ = new QSGGeometry(QSGGeometry::defaultAttributes_Point2D(), 4);
+        geometry_->setDrawingMode(QSGGeometry::DrawTriangleStrip);
+        geometry_->setVertexDataPattern(QSGGeometry::DynamicPattern);
+        setGeometry(geometry_);
+        setFlag(QSGNode::OwnsGeometry, true);
+
+        material_ = new StageBackgroundDimMaterial();
+        setMaterial(material_);
+        setFlag(QSGNode::OwnsMaterial, true);
+    }
+
+    void updateNode(const QSize& renderSize, const StageDimParams& params)
+    {
+        const float width = static_cast<float>(qMax(1, renderSize.width()));
+        const float height = static_cast<float>(qMax(1, renderSize.height()));
+        auto* vertices = geometry_->vertexDataAsPoint2D();
+        vertices[0].set(0.0f, 0.0f);
+        vertices[1].set(width, 0.0f);
+        vertices[2].set(0.0f, height);
+        vertices[3].set(width, height);
+        geometry_->markVertexDataDirty();
+
+        material_->setParams(params);
+        markDirty(QSGNode::DirtyGeometry | QSGNode::DirtyMaterial);
+    }
+
+private:
+    QSGGeometry* geometry_ = nullptr;
+    StageBackgroundDimMaterial* material_ = nullptr;
 };
 
 class StageBackgroundRootNode : public QSGNode
@@ -41,94 +192,45 @@ public:
 
     QSGSimpleRectNode* baseNode = nullptr;
     QSGSimpleTextureNode* mediaNode = nullptr;
-    QSGSimpleTextureNode* maskNode = nullptr;
+    StageBackgroundDimNode* dimNode = nullptr;
 };
 
-const QString& stageBackgroundMaskTextureSlotName()
+const QString& stageBackgroundMediaTextureSlotName()
 {
-    static const QString slotName = QStringLiteral("stage_background_mask");
+    static const QString slotName = QStringLiteral("stage_background_media");
     return slotName;
 }
 
 StageMediaFrameResult stageMediaImage(const miacode::preview::scene::PreviewFrameState& state)
 {
     StageMediaFrameResult result;
-#ifdef HAVE_QT_MULTIMEDIA
-    if (state.media.videoFrame.isValid()) {
-        QElapsedTimer timer;
-        timer.start();
-        const QImage image = state.media.videoFrame.toImage();
-        result.toImageMs = static_cast<double>(timer.nsecsElapsed()) / 1000000.0;
-        if (!image.isNull()) {
-            result.image = image;
-            result.sourceKind = StageMediaSourceKind::VideoFrame;
-            return result;
-        }
+    if (!state.media.resolvedStageImage.isNull()) {
+        result.image = state.media.resolvedStageImage;
+        result.sourceKind = StageMediaSourceKind::ResolvedFrame;
+        result.cacheable = state.media.resolvedStageImageCacheable;
+        result.toImageMs = state.media.resolvedStageImageToImageMs;
+        result.retainedTextureKey = state.media.stageMediaSerial > 0
+            ? state.media.stageMediaSerial
+            : static_cast<quint64>(state.media.resolvedStageImage.cacheKey());
+        return result;
     }
-#endif
     if (!state.media.mediaFrame.isNull()) {
         result.image = state.media.mediaFrame;
         result.sourceKind = StageMediaSourceKind::StaticImage;
+        result.cacheable = true;
         return result;
     }
     if (!state.media.retainedVideoFallbackFrame.isNull()) {
         result.image = state.media.retainedVideoFallbackFrame;
         result.sourceKind = StageMediaSourceKind::RetainedFallback;
+        result.retainedTextureKey = static_cast<quint64>(state.media.retainedVideoFallbackFrame.cacheKey());
     }
     return result;
 }
 
 bool stageMediaUsesCachedTexture(const StageMediaFrameResult& media)
 {
-    return media.sourceKind == StageMediaSourceKind::StaticImage;
-}
-
-QImage buildBrightnessMask(
-    const QSize& renderSize,
-    const QRectF& stageRect,
-    double outerDarkAlpha,
-    double innerDarkAlpha,
-    double layoutSquareScale,
-    double ringRatio,
-    bool smoothBrightness
-)
-{
-    QImage mask(renderSize, QImage::Format_RGBA8888);
-    mask.fill(Qt::transparent);
-    const double layoutSide = miacode::preview_video::layoutSquareSideForCanvasHeight(
-        static_cast<double>(renderSize.height()),
-        layoutSquareScale
-    );
-    const double centerX = stageRect.center().x();
-    const double centerY = stageRect.center().y();
-    for (int y = 0; y < renderSize.height(); ++y) {
-        uchar* row = mask.scanLine(y);
-        const double dy = static_cast<double>(y) - centerY;
-        for (int x = 0; x < renderSize.width(); ++x) {
-            const double dx = static_cast<double>(x) - centerX;
-            const double radius = std::sqrt(dx * dx + dy * dy);
-            const int alpha = qBound(
-                0,
-                qRound(
-                    miacode::preview_video::dimAlphaForRadius(
-                        radius,
-                        outerDarkAlpha,
-                        innerDarkAlpha,
-                        layoutSide,
-                        ringRatio,
-                        smoothBrightness
-                    ) * 255.0
-                ),
-                255
-            );
-            const int offset = x * 4;
-            row[offset + 0] = 0;
-            row[offset + 1] = 0;
-            row[offset + 2] = 0;
-            row[offset + 3] = static_cast<uchar>(alpha);
-        }
-    }
-    return mask;
+    return media.sourceKind == StageMediaSourceKind::StaticImage && media.cacheable;
 }
 
 StageBackgroundRootNode* ensureStageBackgroundRoot(QSGNode* oldNode)
@@ -144,8 +246,8 @@ QSGSimpleTextureNode* ensureMediaNode(StageBackgroundRootNode* root)
     Q_ASSERT(root != nullptr);
     if (root->mediaNode == nullptr) {
         root->mediaNode = new QSGSimpleTextureNode();
-        if (root->maskNode != nullptr) {
-            root->insertChildNodeBefore(root->mediaNode, root->maskNode);
+        if (root->dimNode != nullptr) {
+            root->insertChildNodeBefore(root->mediaNode, root->dimNode);
         } else {
             root->appendChildNode(root->mediaNode);
         }
@@ -153,14 +255,14 @@ QSGSimpleTextureNode* ensureMediaNode(StageBackgroundRootNode* root)
     return root->mediaNode;
 }
 
-QSGSimpleTextureNode* ensureMaskNode(StageBackgroundRootNode* root)
+StageBackgroundDimNode* ensureDimNode(StageBackgroundRootNode* root)
 {
     Q_ASSERT(root != nullptr);
-    if (root->maskNode == nullptr) {
-        root->maskNode = new QSGSimpleTextureNode();
-        root->appendChildNode(root->maskNode);
+    if (root->dimNode == nullptr) {
+        root->dimNode = new StageBackgroundDimNode();
+        root->appendChildNode(root->dimNode);
     }
-    return root->maskNode;
+    return root->dimNode;
 }
 
 void removeMediaNode(StageBackgroundRootNode* root)
@@ -173,14 +275,14 @@ void removeMediaNode(StageBackgroundRootNode* root)
     root->mediaNode = nullptr;
 }
 
-void removeMaskNode(StageBackgroundRootNode* root)
+void removeDimNode(StageBackgroundRootNode* root)
 {
-    if (root == nullptr || root->maskNode == nullptr) {
+    if (root == nullptr || root->dimNode == nullptr) {
         return;
     }
-    root->removeChildNode(root->maskNode);
-    delete root->maskNode;
-    root->maskNode = nullptr;
+    root->removeChildNode(root->dimNode);
+    delete root->dimNode;
+    root->dimNode = nullptr;
 }
 
 }  // namespace
@@ -193,6 +295,8 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
     PreviewTextureRepository* textures
 ) const
 {
+    Q_UNUSED(window);
+
     QElapsedTimer nodeTimer;
     nodeTimer.start();
 
@@ -204,7 +308,14 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
     const bool hasMedia = !mediaImage.isNull();
     const double outerDarkAlpha = qBound(0.0, 1.0 - state.render.backgroundBrightnessOuter, 1.0);
     const double innerDarkAlpha = qBound(0.0, 1.0 - state.render.backgroundBrightnessInner, 1.0);
-    profile.mediaToImageMs = media.toImageMs;
+    if (media.sourceKind == StageMediaSourceKind::ResolvedFrame
+        && state.media.stageMediaSerial > 0
+        && state.media.stageMediaSerial != lastProfiledResolvedStageMediaSerial_) {
+        profile.mediaToImageMs = media.toImageMs;
+        lastProfiledResolvedStageMediaSerial_ = state.media.stageMediaSerial;
+    } else {
+        profile.mediaToImageMs = 0.0;
+    }
     profile.mediaFrameCount = hasMedia ? 1 : 0;
 #ifdef HAVE_QT_MULTIMEDIA
     profile.videoFrameCount = state.media.videoFrame.isValid() ? 1 : 0;
@@ -214,16 +325,35 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
     root->baseNode->setRect(stageRect);
     root->baseNode->setColor(hasMedia ? QColor(QStringLiteral("#000000")) : QColor(QStringLiteral("#1F2833")));
 
+    if (!hasMedia && textures != nullptr) {
+        textures->releaseRetainedTexture(stageBackgroundMediaTextureSlotName());
+        lastDynamicStageMediaKey_ = 0;
+    }
+
     if (hasMedia && window != nullptr && textures != nullptr) {
         QElapsedTimer mediaTextureTimer;
         mediaTextureTimer.start();
         auto* mediaNode = ensureMediaNode(root);
-        const QSGTexture* texture =
-            textures->textureForImage(mediaImage, stageMediaUsesCachedTexture(media));
+        QSGTexture* texture = nullptr;
+        if (stageMediaUsesCachedTexture(media)) {
+            textures->releaseRetainedTexture(stageBackgroundMediaTextureSlotName());
+            lastDynamicStageMediaKey_ = 0;
+            texture = textures->textureForImage(mediaImage, true);
+        } else {
+            if (media.retainedTextureKey == lastDynamicStageMediaKey_) {
+                texture = textures->retainedTexture(stageBackgroundMediaTextureSlotName());
+            }
+            if (texture == nullptr) {
+                texture = textures->retainedTextureForImage(stageBackgroundMediaTextureSlotName(), mediaImage);
+            }
+            if (texture != nullptr) {
+                lastDynamicStageMediaKey_ = media.retainedTextureKey;
+            }
+        }
         profile.mediaTextureMs = static_cast<double>(mediaTextureTimer.nsecsElapsed()) / 1000000.0;
         if (texture != nullptr) {
             mediaNode->setOwnsTexture(false);
-            mediaNode->setTexture(const_cast<QSGTexture*>(texture));
+            mediaNode->setTexture(texture);
             mediaNode->setRect(
                 miacode::preview::scene::mediaTargetRect(
                     mediaImage.size(),
@@ -240,61 +370,27 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
     }
 
     if (outerDarkAlpha > 1e-6 || innerDarkAlpha > 1e-6) {
-        const double normalizedLayoutScale = miacode::preview_video::normalizedLayoutSquareScale(state.render.layoutSquareScale);
-        const double ringRatio = miacode::preview_video::effectiveLayoutRingDiameterRatio(state.assets.layoutRingDiameterRatio);
-        profile.maskFrameCount = 1;
-        if (brightnessMaskCache_.isNull()
-            || brightnessMaskCacheSize_ != renderSize
-            || qAbs(brightnessMaskCacheOuter_ - outerDarkAlpha) > 1e-6
-            || qAbs(brightnessMaskCacheInner_ - innerDarkAlpha) > 1e-6
-            || qAbs(brightnessMaskCacheLayoutScale_ - normalizedLayoutScale) > 1e-6
-            || qAbs(brightnessMaskCacheRingRatio_ - ringRatio) > 1e-6
-            || brightnessMaskCacheSmooth_ != state.render.smoothBrightness) {
-            QElapsedTimer maskBuildTimer;
-            maskBuildTimer.start();
-            // Keep the existing dimming contract intact; optimize only cache lifetimes around it.
-            brightnessMaskCache_ = buildBrightnessMask(
-                renderSize,
-                stageRect,
-                outerDarkAlpha,
-                innerDarkAlpha,
-                normalizedLayoutScale,
-                ringRatio,
-                state.render.smoothBrightness
-            );
-            profile.maskBuildMs = static_cast<double>(maskBuildTimer.nsecsElapsed()) / 1000000.0;
-            profile.maskRebuildCount = 1;
-            brightnessMaskCacheSize_ = renderSize;
-            brightnessMaskCacheOuter_ = outerDarkAlpha;
-            brightnessMaskCacheInner_ = innerDarkAlpha;
-            brightnessMaskCacheLayoutScale_ = normalizedLayoutScale;
-            brightnessMaskCacheRingRatio_ = ringRatio;
-            brightnessMaskCacheSmooth_ = state.render.smoothBrightness;
-        }
-
-        if (window != nullptr && textures != nullptr) {
-            QElapsedTimer maskTextureTimer;
-            maskTextureTimer.start();
-            auto* maskNode = ensureMaskNode(root);
-            QSGTexture* maskTexture =
-                textures->retainedTextureForImage(stageBackgroundMaskTextureSlotName(), brightnessMaskCache_);
-            profile.maskTextureUploadMs = static_cast<double>(maskTextureTimer.nsecsElapsed()) / 1000000.0;
-            if (maskTexture != nullptr) {
-                maskNode->setOwnsTexture(false);
-                maskNode->setTexture(maskTexture);
-                maskNode->setRect(QRectF(QPointF(0.0, 0.0), QSizeF(renderSize)));
-                maskNode->setFiltering(QSGTexture::Linear);
-            } else {
-                removeMaskNode(root);
-            }
-        } else {
-            removeMaskNode(root);
-        }
+        QElapsedTimer dimUpdateTimer;
+        dimUpdateTimer.start();
+        auto* dimNode = ensureDimNode(root);
+        StageDimParams params;
+        params.stageRect = stageRect;
+        params.renderSize = renderSize;
+        params.outerDarkAlpha = static_cast<float>(outerDarkAlpha);
+        params.innerDarkAlpha = static_cast<float>(innerDarkAlpha);
+        params.layoutSquareScale = static_cast<float>(
+            miacode::preview_video::normalizedLayoutSquareScale(state.render.layoutSquareScale)
+        );
+        params.ringRatio = static_cast<float>(
+            miacode::preview_video::effectiveLayoutRingDiameterRatio(state.assets.layoutRingDiameterRatio)
+        );
+        params.smoothBrightness = state.render.smoothBrightness ? 1.0f : 0.0f;
+        dimNode->updateNode(renderSize, params);
+        profile.dimUniformUpdateMs = static_cast<double>(dimUpdateTimer.nsecsElapsed()) / 1000000.0;
+        profile.dimFrameCount = 1;
+        profile.dimUniformUpdateCount = 1;
     } else {
-        if (textures != nullptr) {
-            textures->releaseRetainedTexture(stageBackgroundMaskTextureSlotName());
-        }
-        removeMaskNode(root);
+        removeDimNode(root);
     }
 
     profile.nodeUpdateMs = static_cast<double>(nodeTimer.nsecsElapsed()) / 1000000.0;

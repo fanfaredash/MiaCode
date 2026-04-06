@@ -73,6 +73,15 @@ QSGTexture* PreviewTextureRepository::textureForImage(const QImage& image, bool 
     return texture;
 }
 
+QSGTexture* PreviewTextureRepository::retainedTexture(const QString& slotName) const
+{
+    const auto it = retainedTextures_.constFind(slotName);
+    if (it == retainedTextures_.constEnd()) {
+        return nullptr;
+    }
+    return it->texture;
+}
+
 QSGTexture* PreviewTextureRepository::retainedTextureForImage(const QString& slotName, const QImage& image)
 {
     if (window_ == nullptr || image.isNull() || slotName.isEmpty()) {

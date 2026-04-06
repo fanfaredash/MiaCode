@@ -32,20 +32,17 @@ struct PreviewRuntimeStageBackgroundAggregate {
     double mediaTextureMsSum = 0.0;
     double mediaTextureMsMax = 0.0;
     qint64 mediaTextureSampleCount = 0;
-    double maskBuildMsSum = 0.0;
-    double maskBuildMsMax = 0.0;
-    qint64 maskBuildSampleCount = 0;
-    double maskTextureUploadMsSum = 0.0;
-    double maskTextureUploadMsMax = 0.0;
-    qint64 maskTextureUploadSampleCount = 0;
+    double dimUniformUpdateMsSum = 0.0;
+    double dimUniformUpdateMsMax = 0.0;
+    qint64 dimUniformUpdateSampleCount = 0;
     double nodeUpdateMsSum = 0.0;
     double nodeUpdateMsMax = 0.0;
     qint64 nodeUpdateSampleCount = 0;
     qint64 mediaFrameCount = 0;
-    qint64 maskFrameCount = 0;
+    qint64 dimFrameCount = 0;
     qint64 videoFrameCount = 0;
     qint64 staticImageFrameCount = 0;
-    qint64 maskRebuildCount = 0;
+    qint64 dimUniformUpdateCount = 0;
 };
 
 class PreviewRuntime : public QObject
@@ -64,6 +61,13 @@ public:
     void setPlayheadSeconds(double seconds, bool requestUpdate = true);
     void setMediaFrame(const QImage& frame);
     void setVideoFrame(const QVideoFrame& frame);
+    void setResolvedStageVideoFrame(
+        const QVideoFrame& frame,
+        const QImage& resolvedImage,
+        bool cacheable,
+        quint64 serial,
+        double toImageMs
+    );
     void setRetainedVideoFallbackFrame(const QImage& frame);
     void setNoteMarkers(const QVector<TimelineNoteMarker>& notes);
     void setMuriAnalysisReport(const MuriAnalysisReport& report);

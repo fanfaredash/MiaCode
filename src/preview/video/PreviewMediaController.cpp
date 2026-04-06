@@ -543,6 +543,7 @@ void PreviewMediaController::reset()
     videoPlaybackActive_ = false;
     videoPlaybackPendingStart_ = false;
     lastTimelineSecond_ = 0.0;
+    stageMediaSerial_ = 0;
     bgmLastSeekMs_ = -1;
     bgmPlaybackActive_ = false;
     bgmPlaybackPendingStart_ = false;
@@ -611,6 +612,7 @@ void PreviewMediaController::clearMedia()
     lastTimelineSecond_ = 0.0;
     mediaKind_ = MediaKind::None;
     mediaPath_.clear();
+    stageMediaSerial_ = 0;
 #ifdef HAVE_QT_MULTIMEDIA
     if (player_ != nullptr) {
         player_->stop();
@@ -623,6 +625,7 @@ void PreviewMediaController::clearMedia()
     publishFrame(QImage());
 #ifdef HAVE_QT_MULTIMEDIA
     publishVideoFrame(QVideoFrame());
+    emit resolvedStageVideoFrameChanged(QVideoFrame(), QImage(), false, stageMediaSerial_, 0.0);
     emit videoFallbackFrameChanged(QImage());
 #endif
     emitMediaStateChanged();
@@ -645,8 +648,10 @@ void PreviewMediaController::loadImageMedia(const QString& path)
         return;
     }
     mediaKind_ = MediaKind::Image;
+    stageMediaSerial_ = 0;
 #ifdef HAVE_QT_MULTIMEDIA
     publishVideoFrame(QVideoFrame());
+    emit resolvedStageVideoFrameChanged(QVideoFrame(), QImage(), false, stageMediaSerial_, 0.0);
 #endif
     publishFrame(image);
     emitMediaStateChanged();
@@ -667,6 +672,7 @@ void PreviewMediaController::loadVideoMedia(const QString& path)
     videoPlaybackActive_ = false;
     videoPlaybackPendingStart_ = false;
     lastTimelineSecond_ = 0.0;
+    stageMediaSerial_ = 0;
     player_->setSource(QUrl::fromLocalFile(path));
     player_->pause();
     player_->setPosition(0);
@@ -684,28 +690,34 @@ void PreviewMediaController::onVideoFrameChanged(const QVideoFrame& frame)
         return;
     }
     if (!frame.isValid()) {
+        emit resolvedStageVideoFrameChanged(frame, QImage(), false, stageMediaSerial_, 0.0);
+        publishVideoFrame(frame);
         return;
     }
-    if (shouldPublishVideoFallbackFrame(frame)) {
-        QElapsedTimer timer;
-        timer.start();
-        const QImage fallbackImage = frame.toImage();
-        const double elapsedMs = static_cast<double>(timer.nsecsElapsed()) / 1000000.0;
-        if (!fallbackImage.isNull()) {
-            profileVideoToImageTotalMs_ += elapsedMs;
-            ++profileVideoToImageSampleCount_;
-            profileVideoToImageSamplesMs_.append(elapsedMs);
-            emit videoFallbackFrameChanged(fallbackImage);
-        } else {
-            if (!videoFallbackConversionFailureLogged_) {
-                videoFallbackConversionFailureLogged_ = true;
-                appendPreviewMediaLog(
-                    QStringLiteral("video_fallback_fail"),
-                    QStringLiteral("failed to build fallback image; %1").arg(videoFrameSummary(frame)),
-                    true
-                );
-            }
+
+    QElapsedTimer timer;
+    timer.start();
+    const QImage resolvedImage = frame.toImage();
+    const double elapsedMs = static_cast<double>(timer.nsecsElapsed()) / 1000000.0;
+    if (!resolvedImage.isNull()) {
+        profileVideoToImageTotalMs_ += elapsedMs;
+        ++profileVideoToImageSampleCount_;
+        profileVideoToImageSamplesMs_.append(elapsedMs);
+        ++stageMediaSerial_;
+        emit resolvedStageVideoFrameChanged(frame, resolvedImage, false, stageMediaSerial_, elapsedMs);
+        if (shouldPublishVideoFallbackFrame(frame)) {
+            emit videoFallbackFrameChanged(resolvedImage);
         }
+    } else if (!videoFallbackConversionFailureLogged_) {
+        videoFallbackConversionFailureLogged_ = true;
+        appendPreviewMediaLog(
+            QStringLiteral("video_fallback_fail"),
+            QStringLiteral("failed to build fallback image; %1").arg(videoFrameSummary(frame)),
+            true
+        );
+        emit resolvedStageVideoFrameChanged(frame, QImage(), false, stageMediaSerial_, 0.0);
+    } else {
+        emit resolvedStageVideoFrameChanged(frame, QImage(), false, stageMediaSerial_, 0.0);
     }
     publishVideoFrame(frame);
 #endif

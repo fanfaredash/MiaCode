@@ -53,7 +53,7 @@ Debug subcategories now default to on inside debug mode and are disabled with:
   - used for critical preview/export failures and worker failures
 - Preview profile summary:
   - default file: `miacode_preview_profile_summary.txt`
-  - current summary now includes `stage_bg.*` sub-metrics for stage-background media conversion, media texture work, dim-mask rebuilds/uploads, node-update time, and media/mask frame counters
+  - current summary now includes `stage_bg.*` sub-metrics for stage-background media conversion, media texture work, dim-uniform updates, node-update time, and media/dim frame counters
 
 The Windows release package also ships:
 

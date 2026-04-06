@@ -120,6 +120,10 @@ void PreviewRuntime::setPlayheadSeconds(double seconds, bool requestUpdate)
 void PreviewRuntime::setMediaFrame(const QImage& frame)
 {
     frameState_.media.mediaFrame = frame;
+    frameState_.media.resolvedStageImage = QImage();
+    frameState_.media.stageMediaSerial = 0;
+    frameState_.media.resolvedStageImageCacheable = false;
+    frameState_.media.resolvedStageImageToImageMs = 0.0;
 #ifdef HAVE_QT_MULTIMEDIA
     frameState_.media.videoFrame = QVideoFrame();
 #endif
@@ -132,12 +136,33 @@ void PreviewRuntime::setVideoFrame(const QVideoFrame& frame)
 #ifdef HAVE_QT_MULTIMEDIA
     frameState_.media.videoFrame = frame;
     if (!frame.isValid()) {
-        frameState_.media.retainedVideoFallbackFrame = QImage();
+        frameState_.media.resolvedStageImage = QImage();
+        frameState_.media.resolvedStageImageCacheable = false;
+        frameState_.media.resolvedStageImageToImageMs = 0.0;
     }
-    setStageMediaAvailable(frame.isValid());
 #else
     Q_UNUSED(frame);
 #endif
+}
+
+void PreviewRuntime::setResolvedStageVideoFrame(
+    const QVideoFrame& frame,
+    const QImage& resolvedImage,
+    bool cacheable,
+    quint64 serial,
+    double toImageMs
+)
+{
+#ifdef HAVE_QT_MULTIMEDIA
+    frameState_.media.videoFrame = frame;
+#else
+    Q_UNUSED(frame);
+#endif
+    frameState_.media.resolvedStageImage = resolvedImage;
+    frameState_.media.resolvedStageImageCacheable = !resolvedImage.isNull() && cacheable;
+    frameState_.media.stageMediaSerial = serial;
+    frameState_.media.resolvedStageImageToImageMs = !resolvedImage.isNull() ? qMax(0.0, toImageMs) : 0.0;
+    update();
 }
 
 void PreviewRuntime::setRetainedVideoFallbackFrame(const QImage& frame)
@@ -321,12 +346,12 @@ void PreviewRuntime::updateTextureProfilingStats(const PreviewTextureStats& fram
 
     const PreviewStageBackgroundFrameProfile& stage = frameStats.stageBackground;
     stageBackgroundProfile_.mediaFrameCount += stage.mediaFrameCount;
-    stageBackgroundProfile_.maskFrameCount += stage.maskFrameCount;
+    stageBackgroundProfile_.dimFrameCount += stage.dimFrameCount;
     stageBackgroundProfile_.videoFrameCount += stage.videoFrameCount;
     stageBackgroundProfile_.staticImageFrameCount += stage.staticImageFrameCount;
-    stageBackgroundProfile_.maskRebuildCount += stage.maskRebuildCount;
+    stageBackgroundProfile_.dimUniformUpdateCount += stage.dimUniformUpdateCount;
 
-    if (stage.videoFrameCount > 0) {
+    if (stage.videoFrameCount > 0 && stage.mediaToImageMs > 0.0) {
         stageBackgroundProfile_.mediaToImageMsSum += stage.mediaToImageMs;
         stageBackgroundProfile_.mediaToImageMsMax =
             qMax(stageBackgroundProfile_.mediaToImageMsMax, stage.mediaToImageMs);
@@ -338,17 +363,11 @@ void PreviewRuntime::updateTextureProfilingStats(const PreviewTextureStats& fram
             qMax(stageBackgroundProfile_.mediaTextureMsMax, stage.mediaTextureMs);
         stageBackgroundProfile_.mediaTextureSampleCount += 1;
     }
-    if (stage.maskRebuildCount > 0) {
-        stageBackgroundProfile_.maskBuildMsSum += stage.maskBuildMs;
-        stageBackgroundProfile_.maskBuildMsMax =
-            qMax(stageBackgroundProfile_.maskBuildMsMax, stage.maskBuildMs);
-        stageBackgroundProfile_.maskBuildSampleCount += 1;
-    }
-    if (stage.maskFrameCount > 0) {
-        stageBackgroundProfile_.maskTextureUploadMsSum += stage.maskTextureUploadMs;
-        stageBackgroundProfile_.maskTextureUploadMsMax =
-            qMax(stageBackgroundProfile_.maskTextureUploadMsMax, stage.maskTextureUploadMs);
-        stageBackgroundProfile_.maskTextureUploadSampleCount += 1;
+    if (stage.dimFrameCount > 0) {
+        stageBackgroundProfile_.dimUniformUpdateMsSum += stage.dimUniformUpdateMs;
+        stageBackgroundProfile_.dimUniformUpdateMsMax =
+            qMax(stageBackgroundProfile_.dimUniformUpdateMsMax, stage.dimUniformUpdateMs);
+        stageBackgroundProfile_.dimUniformUpdateSampleCount += 1;
     }
     stageBackgroundProfile_.nodeUpdateMsSum += stage.nodeUpdateMs;
     stageBackgroundProfile_.nodeUpdateMsMax =
@@ -420,10 +439,10 @@ QString PreviewRuntime::writeProfilingSummaryToFile()
     stream << "sprite_batch_count_avg=" << QString::number(averageOrZero(static_cast<double>(spriteBatchCountTotal_), profiledTextureFrameCount_), 'f', 4) << '\n';
     stream << "sprite_batch_count_max=" << spriteBatchCountMax_ << '\n';
     stream << "stage_bg.media_frames=" << stageBackgroundProfile_.mediaFrameCount << '\n';
-    stream << "stage_bg.mask_frames=" << stageBackgroundProfile_.maskFrameCount << '\n';
+    stream << "stage_bg.dim_frames=" << stageBackgroundProfile_.dimFrameCount << '\n';
     stream << "stage_bg.video_frames=" << stageBackgroundProfile_.videoFrameCount << '\n';
     stream << "stage_bg.static_image_frames=" << stageBackgroundProfile_.staticImageFrameCount << '\n';
-    stream << "stage_bg.mask_rebuilds=" << stageBackgroundProfile_.maskRebuildCount << '\n';
+    stream << "stage_bg.dim_uniform_updates=" << stageBackgroundProfile_.dimUniformUpdateCount << '\n';
     stream << "stage_bg.media_to_image_avg_ms="
            << QString::number(
                   averageOrZero(stageBackgroundProfile_.mediaToImageMsSum, stageBackgroundProfile_.mediaToImageSampleCount),
@@ -442,27 +461,18 @@ QString PreviewRuntime::writeProfilingSummaryToFile()
            << '\n';
     stream << "stage_bg.media_texture_max_ms="
            << QString::number(stageBackgroundProfile_.mediaTextureMsMax, 'f', 4) << '\n';
-    stream << "stage_bg.mask_build_avg_ms="
-           << QString::number(
-                  averageOrZero(stageBackgroundProfile_.maskBuildMsSum, stageBackgroundProfile_.maskBuildSampleCount),
-                  'f',
-                  4
-              )
-           << '\n';
-    stream << "stage_bg.mask_build_max_ms="
-           << QString::number(stageBackgroundProfile_.maskBuildMsMax, 'f', 4) << '\n';
-    stream << "stage_bg.mask_texture_upload_avg_ms="
+    stream << "stage_bg.dim_uniform_update_avg_ms="
            << QString::number(
                   averageOrZero(
-                      stageBackgroundProfile_.maskTextureUploadMsSum,
-                      stageBackgroundProfile_.maskTextureUploadSampleCount
+                      stageBackgroundProfile_.dimUniformUpdateMsSum,
+                      stageBackgroundProfile_.dimUniformUpdateSampleCount
                   ),
                   'f',
                   4
               )
            << '\n';
-    stream << "stage_bg.mask_texture_upload_max_ms="
-           << QString::number(stageBackgroundProfile_.maskTextureUploadMsMax, 'f', 4) << '\n';
+    stream << "stage_bg.dim_uniform_update_max_ms="
+           << QString::number(stageBackgroundProfile_.dimUniformUpdateMsMax, 'f', 4) << '\n';
     stream << "stage_bg.node_update_avg_ms="
            << QString::number(
                   averageOrZero(stageBackgroundProfile_.nodeUpdateMsSum, stageBackgroundProfile_.nodeUpdateSampleCount),
