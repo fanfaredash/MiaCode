@@ -2,6 +2,9 @@
 
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
+#include "preview/scene/PreviewProgressStatsCache.h"
+
+#include <memory>
 
 namespace {
 
@@ -13,6 +16,15 @@ double normalizedFlowSpeed(double flowSpeed)
 double normalizedLayoutScale(double scale)
 {
     return miacode::preview_video::normalizedLayoutSquareScale(scale);
+}
+
+std::shared_ptr<const miacode::preview::scene::PreviewProgressStatsCache> buildProgressStatsCache(
+    const QVector<TimelineNoteMarker>& noteMarkers
+)
+{
+    auto cache = std::make_shared<miacode::preview::scene::PreviewProgressStatsCache>();
+    cache->rebuild(noteMarkers);
+    return cache;
 }
 
 }  // namespace
@@ -35,6 +47,7 @@ bool VideoExportQuickRenderBackend::bootstrap(
 
     frameState_ = miacode::preview::scene::PreviewFrameState();
     frameState_.noteMarkers = noteMarkers;
+    frameState_.progressStatsCache = buildProgressStatsCache(noteMarkers);
     frameState_.muriAnalysisReport = muriAnalysisReport;
     frameState_.muriRenderOptions = task.muriRenderOptions;
     frameState_.media.stageMediaAvailable = stageMediaAvailable;
@@ -122,6 +135,7 @@ void VideoExportQuickRenderBackend::setShowObjectStatsHud(bool show)
 void VideoExportQuickRenderBackend::setNoteMarkers(const QVector<TimelineNoteMarker>& notes)
 {
     frameState_.noteMarkers = notes;
+    frameState_.progressStatsCache = buildProgressStatsCache(notes);
 }
 
 void VideoExportQuickRenderBackend::setMuriAnalysisReport(const MuriAnalysisReport& report)

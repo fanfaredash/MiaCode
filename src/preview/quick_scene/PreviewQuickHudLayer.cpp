@@ -3,6 +3,7 @@
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/scene/PreviewFrameState.h"
 #include "preview/scene/PreviewHudState.h"
+#include "preview/scene/PreviewProgressStatsCache.h"
 #include "preview/scene/PreviewSceneGeometry.h"
 
 #include <QFontMetrics>
@@ -150,7 +151,9 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
     }
 
     const miacode::preview::scene::PreviewHudStats stats =
-        miacode::preview::scene::computePreviewHudStats(state->noteMarkers, state->playheadSeconds);
+        state->progressStatsCache != nullptr
+        ? state->progressStatsCache->hudStatsAt(state->playheadSeconds)
+        : miacode::preview::scene::PreviewHudStats();
 
     int baseFontPointSize = qMax(10, qRound(static_cast<qreal>(kHudReferenceStatsFontPointSize) * hudScale));
     QFont titleFont;

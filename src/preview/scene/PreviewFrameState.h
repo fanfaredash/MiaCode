@@ -5,6 +5,8 @@
 #include <QVector>
 #include <QtGlobal>
 
+#include <memory>
+
 #include "common/PreviewGameplayConfig.h"
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
@@ -16,6 +18,8 @@
 #endif
 
 namespace miacode::preview::scene {
+
+class PreviewProgressStatsCache;
 
 struct PreviewSkinAssets {
     QImage tapImage;
@@ -161,6 +165,7 @@ struct PreviewRenderState {
 
 struct PreviewFrameState {
     QVector<TimelineNoteMarker> noteMarkers;
+    std::shared_ptr<const PreviewProgressStatsCache> progressStatsCache;
     MuriAnalysisReport muriAnalysisReport;
     MuriRenderOptions muriRenderOptions;
     PreviewMediaFrameState media;

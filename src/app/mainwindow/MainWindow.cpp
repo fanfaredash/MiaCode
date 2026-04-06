@@ -7,6 +7,7 @@
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "TimelineView.h"
+#include "preview/scene/PreviewProgressStatsCache.h"
 #include "DialogLocalization.h"
 #include "UiText.h"
 #include "UiTheme.h"
@@ -5306,7 +5307,7 @@ void MainWindow::onExportPreviewVideo()
         return qMax(0.0, markerEnd);
     };
     double lastMarkerEndSecond = 0.0;
-    for (const TimelineNoteMarker& marker : previewStatsNoteMarkers_) {
+    for (const TimelineNoteMarker& marker : latestTimelineNoteMarkers_) {
         lastMarkerEndSecond = qMax(lastMarkerEndSecond, previewMarkerEndSecond(marker));
     }
     const double cappedExportEndSecond = qMax(
@@ -5317,7 +5318,7 @@ void MainWindow::onExportPreviewVideo()
     VideoExportTask task;
     task.chartPath = currentFilePath_;
     task.trackPath = resolveDefaultTrackPath();
-    task.noteMarkers = previewStatsNoteMarkers_;
+    task.noteMarkers = latestTimelineNoteMarkers_;
     task.muriAnalysisReport = muriAnalysisReport_;
     task.muriRenderOptions = muriRenderOptions_;
     task.staticTapOnSlideThresholdSeconds = static_cast<double>(staticTapOnSlideThresholdMs_) / 1000.0;
@@ -5536,7 +5537,7 @@ void MainWindow::onBatchExportPreviewVideo()
     VideoExportTask task;
     task.chartPath = currentFilePath_;
     task.trackPath = resolveDefaultTrackPath();
-    task.noteMarkers = previewStatsNoteMarkers_;
+    task.noteMarkers = latestTimelineNoteMarkers_;
     task.muriAnalysisReport = muriAnalysisReport_;
     task.muriRenderOptions = muriRenderOptions_;
     task.staticTapOnSlideThresholdSeconds = static_cast<double>(staticTapOnSlideThresholdMs_) / 1000.0;
@@ -5829,7 +5830,7 @@ bool MainWindow::buildVideoExportSnapshot(
     }
 
     refreshTimelineMetadata();
-    if (previewStatsNoteMarkers_.isEmpty()) {
+    if (latestTimelineNoteMarkers_.isEmpty()) {
         if (errorMessage != nullptr) {
             *errorMessage = uiText("dialog.video_export.error.no_markers", "No parsed note markers are available for export.");
         }
@@ -6765,7 +6766,7 @@ bool MainWindow::exportPreviewVideoFromCli(
     }
 
     refreshTimelineMetadata();
-    if (previewStatsNoteMarkers_.isEmpty()) {
+    if (latestTimelineNoteMarkers_.isEmpty()) {
         return fail(QStringLiteral("no parsed note markers for requested difficulty"));
     }
 
@@ -6806,7 +6807,7 @@ bool MainWindow::exportPreviewVideoFromCli(
         return qMax(0.0, markerEnd);
     };
     double lastMarkerEndSecond = 0.0;
-    for (const TimelineNoteMarker& marker : previewStatsNoteMarkers_) {
+    for (const TimelineNoteMarker& marker : latestTimelineNoteMarkers_) {
         lastMarkerEndSecond = qMax(lastMarkerEndSecond, previewMarkerEndSecond(marker));
     }
     const double cappedExportEndSecond = qMax(
@@ -6833,7 +6834,7 @@ bool MainWindow::exportPreviewVideoFromCli(
     task.chartPath = currentFilePath_;
     task.trackPath = resolveDefaultTrackPath();
     task.skinDirectory = previewSkinDir;
-    task.noteMarkers = previewStatsNoteMarkers_;
+    task.noteMarkers = latestTimelineNoteMarkers_;
     task.muriAnalysisReport = muriAnalysisReport_;
     task.muriRenderOptions = muriRenderOptions_;
     task.staticTapOnSlideThresholdSeconds = static_cast<double>(staticTapOnSlideThresholdMs_) / 1000.0;
@@ -6867,7 +6868,7 @@ bool MainWindow::exportPreviewVideoFromCli(
         detailLines << QStringLiteral("chart=%1").arg(chartPath);
         detailLines << QStringLiteral("difficulty=%1").arg(SimaiDocument::difficultyShortName(difficultyId));
         detailLines << QStringLiteral("encoding=%1").arg(usedSystemEncoding ? QStringLiteral("system") : QStringLiteral("utf8"));
-        detailLines << QStringLiteral("noteCount=%1").arg(previewStatsNoteMarkers_.size());
+        detailLines << QStringLiteral("noteCount=%1").arg(latestTimelineNoteMarkers_.size());
         detailLines << QStringLiteral("trackPath=%1").arg(task.trackPath.isEmpty() ? QStringLiteral("(none)") : task.trackPath);
         detailLines << QStringLiteral("skinLoaded=%1").arg(previewSkinDir.isEmpty() ? 0 : 1);
         *details = detailLines.join('\n');

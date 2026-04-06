@@ -1629,6 +1629,19 @@ MainWindow::MainWindow(QWidget* parent)
     qtPreviewTimelineTimer_->setTimerType(Qt::PreciseTimer);
     connect(qtPreviewTimelineTimer_, &QTimer::timeout, this, &MainWindow::flushQtPreviewTimelinePosition);
 
+    previewStatsUiTimer_ = new QTimer(this);
+    previewStatsUiTimer_->setInterval(67);
+    previewStatsUiTimer_->setTimerType(Qt::PreciseTimer);
+    connect(previewStatsUiTimer_, &QTimer::timeout, this, [this]() {
+        if (!qtPreviewPlaying_) {
+            if (previewStatsUiTimer_ != nullptr) {
+                previewStatsUiTimer_->stop();
+            }
+            return;
+        }
+        updatePreviewObjectStats(qtPreviewPauseSecond_);
+    });
+
     previewSeekDebounceTimer_ = new QTimer(this);
     previewSeekDebounceTimer_->setSingleShot(true);
     previewSeekDebounceTimer_->setInterval(120);

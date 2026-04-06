@@ -1014,13 +1014,21 @@ void MainWindow::updatePreviewSliderPosition(double second)
 
 void MainWindow::refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers)
 {
-    previewStatsNoteMarkers_ = noteMarkers;
+    auto cache = std::make_shared<miacode::preview::scene::PreviewProgressStatsCache>();
+    cache->rebuild(noteMarkers);
+    previewProgressStatsCache_ = cache;
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->setProgressStatsCache(previewProgressStatsCache_);
+    }
     updatePreviewObjectStats(qtPreviewPauseSecond_);
 }
 
 void MainWindow::clearPreviewObjectStats()
 {
-    previewStatsNoteMarkers_.clear();
+    previewProgressStatsCache_.reset();
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->setProgressStatsCache(previewProgressStatsCache_);
+    }
     updatePreviewObjectStats(0.0);
 }
 
@@ -2094,106 +2102,10 @@ void MainWindow::updatePreviewObjectStats(double second)
         return;
     }
 
-    int tapTotal = 0;
-    int tapPlayed = 0;
-    int holdTotal = 0;
-    int holdPlayed = 0;
-    int slideTotal = 0;
-    int slidePlayed = 0;
-    int touchTotal = 0;
-    int touchPlayed = 0;
-    int breakTotal = 0;
-    int breakPlayed = 0;
-    int totalCount = 0;
-    int totalPlayed = 0;
-    QHash<QString, bool> helperHeadSeen;
-    const auto slideJudgeSecondFor = [](const TimelineNoteMarker& marker) {
-        if (marker.endSecond > marker.second) {
-            return marker.endSecond;
-        }
-        if (marker.slideTraceSecond > marker.second) {
-            return marker.slideTraceSecond;
-        }
-        return marker.second;
-    };
-    const auto slideHeadEventKey = [](const TimelineNoteMarker& marker) {
-        return QStringLiteral("slide_head_star|%1|%2|%3|%4|%5")
-            .arg(marker.second, 0, 'f', 6)
-            .arg(marker.lane)
-            .arg(marker.sourceLine)
-            .arg(marker.sourceCol)
-            .arg(marker.eachGroupId);
-    };
-    const auto addCount = [&totalCount, &totalPlayed](bool played, int* total, int* playedCount) {
-        ++(*total);
-        ++totalCount;
-        if (played) {
-            ++(*playedCount);
-            ++totalPlayed;
-        }
-    };
-
-    for (const TimelineNoteMarker& marker : previewStatsNoteMarkers_) {
-        const QString type = marker.type.toLower();
-        const bool isTap = (type == "tap");
-        const bool isHold = (type == "hold" || type == "touch_hold");
-        const bool isSlide = (type == "slide" || type == "wifi");
-        const bool isTouch = (type == "touch");
-        if (isTap) {
-            const bool played = marker.second <= (second + 1e-6);
-            if (marker.isBreak) {
-                addCount(played, &breakTotal, &breakPlayed);
-            } else {
-                addCount(played, &tapTotal, &tapPlayed);
-            }
-            continue;
-        }
-
-        if (isTouch) {
-            const bool played = marker.second <= (second + 1e-6);
-            if (marker.isBreak) {
-                addCount(played, &breakTotal, &breakPlayed);
-            } else {
-                addCount(played, &touchTotal, &touchPlayed);
-            }
-            continue;
-        }
-
-        if (isHold) {
-            const bool played = marker.second <= (second + 1e-6);
-            if (marker.isBreak) {
-                addCount(played, &breakTotal, &breakPlayed);
-            } else {
-                addCount(played, &holdTotal, &holdPlayed);
-            }
-            continue;
-        }
-
-        if (!isSlide) {
-            continue;
-        }
-
-        if (marker.hasHeadStar) {
-            const QString helperKey = slideHeadEventKey(marker);
-            if (!helperHeadSeen.contains(helperKey)) {
-                helperHeadSeen.insert(helperKey, true);
-                const bool helperPlayed = marker.second <= (second + 1e-6);
-                if (marker.headBreak) {
-                    addCount(helperPlayed, &breakTotal, &breakPlayed);
-                } else {
-                    addCount(helperPlayed, &tapTotal, &tapPlayed);
-                }
-            }
-        }
-
-        const double slideJudgeSecond = slideJudgeSecondFor(marker);
-        const bool slideEventPlayed = slideJudgeSecond <= (second + 1e-6);
-        if (marker.trackBreak) {
-            addCount(slideEventPlayed, &breakTotal, &breakPlayed);
-        } else {
-            addCount(slideEventPlayed, &slideTotal, &slidePlayed);
-        }
-    }
+    const miacode::preview::scene::PreviewObjectStatsSnapshot stats =
+        previewProgressStatsCache_ != nullptr
+        ? previewProgressStatsCache_->snapshotAt(second)
+        : miacode::preview::scene::PreviewObjectStatsSnapshot();
 
     const auto fmt = [](const QString& name, int played, int total) {
         return QString("%1  %2/%3")
@@ -2201,12 +2113,12 @@ void MainWindow::updatePreviewObjectStats(double second)
             .arg(played)
             .arg(total);
     };
-    previewTapStatsLabel_->setText(fmt("Tap", tapPlayed, tapTotal));
-    previewHoldStatsLabel_->setText(fmt("Hold", holdPlayed, holdTotal));
-    previewSlideStatsLabel_->setText(fmt("Slide", slidePlayed, slideTotal));
-    previewTouchStatsLabel_->setText(fmt("Touch", touchPlayed, touchTotal));
-    previewBreakStatsLabel_->setText(fmt("Break", breakPlayed, breakTotal));
-    previewTotalStatsLabel_->setText(fmt("Total", totalPlayed, totalCount));
+    previewTapStatsLabel_->setText(fmt("Tap", stats.tapPlayed, stats.tapTotal));
+    previewHoldStatsLabel_->setText(fmt("Hold", stats.holdPlayed, stats.holdTotal));
+    previewSlideStatsLabel_->setText(fmt("Slide", stats.slidePlayed, stats.slideTotal));
+    previewTouchStatsLabel_->setText(fmt("Touch", stats.touchPlayed, stats.touchTotal));
+    previewBreakStatsLabel_->setText(fmt("Break", stats.breakPlayed, stats.breakTotal));
+    previewTotalStatsLabel_->setText(fmt("Total", stats.totalPlayed, stats.totalCount));
 }
 
 QString MainWindow::formatPreviewTimestamp(double second) const
@@ -2530,6 +2442,9 @@ bool MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
     if (qtPreviewTimelineTimer_ != nullptr && !qtPreviewTimelineTimer_->isActive()) {
         qtPreviewTimelineTimer_->start();
     }
+    if (previewStatsUiTimer_ != nullptr && !previewStatsUiTimer_->isActive()) {
+        previewStatsUiTimer_->start();
+    }
     syncEditorCursorToPreviewSecond(effectiveStartSecond, false);
     updatePreviewSliderPosition(effectiveStartSecond);
     updatePauseButtonAppearance();
@@ -2574,6 +2489,9 @@ void MainWindow::stopQtPreviewPlayback(bool keepPosition)
     }
     if (qtPreviewTimelineTimer_ != nullptr) {
         qtPreviewTimelineTimer_->stop();
+    }
+    if (previewStatsUiTimer_ != nullptr) {
+        previewStatsUiTimer_->stop();
     }
     if (!keepPosition) {
         qtPreviewPauseSecond_ = 0.0;
@@ -2631,7 +2549,9 @@ void MainWindow::applyQtPreviewPosition(double second, bool centerView)
         previewCanvas_->setPlayheadSeconds(second, !qtPreviewPlaying_);
     }
     updatePreviewSliderPosition(second);
-    updatePreviewObjectStats(second);
+    if (!qtPreviewPlaying_) {
+        updatePreviewObjectStats(second);
+    }
     if (qtPreviewPlaying_) {
         syncEditorCursorToPreviewSecond(second, centerView);
     }

@@ -177,6 +177,14 @@ void PreviewRuntime::setNoteMarkers(const QVector<TimelineNoteMarker>& notes)
     update();
 }
 
+void PreviewRuntime::setProgressStatsCache(
+    std::shared_ptr<const miacode::preview::scene::PreviewProgressStatsCache> cache
+)
+{
+    frameState_.progressStatsCache = std::move(cache);
+    update();
+}
+
 void PreviewRuntime::setMuriAnalysisReport(const MuriAnalysisReport& report)
 {
     frameState_.muriAnalysisReport = report;
@@ -270,6 +278,7 @@ bool PreviewRuntime::showObjectStatsHud() const
 void PreviewRuntime::reset()
 {
     frameState_.noteMarkers.clear();
+    frameState_.progressStatsCache.reset();
     frameState_.muriAnalysisReport = MuriAnalysisReport();
     frameState_.playheadSeconds = 0.0;
     frameState_.media = miacode::preview::scene::PreviewMediaFrameState();

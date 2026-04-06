@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <utility>
 
 #include <QElapsedTimer>
@@ -70,6 +71,10 @@ class QWidget;
 class QWheelEvent;
 class QtPreviewSfxRuntime;
 class TimelineView;
+
+namespace miacode::preview::scene {
+class PreviewProgressStatsCache;
+}
 
 class MainWindow : public QMainWindow
 {
@@ -600,6 +605,7 @@ private:
     QTimer* autosaveTimer_ = nullptr;
     QTimer* qtPreviewTimer_ = nullptr;
     QTimer* qtPreviewTimelineTimer_ = nullptr;
+    QTimer* previewStatsUiTimer_ = nullptr;
     QTimer* previewSeekDebounceTimer_ = nullptr;
     QTimer* timelineAnalysisIdleTimer_ = nullptr;
     QTimer* exportVideoHoverMenuTimer_ = nullptr;
@@ -842,7 +848,7 @@ private:
     bool previewLayoutInitialized_ = false;
     int workspaceCachedLeftWidth_ = 0;
     int workspaceCachedRightWidth_ = 0;
-    QVector<TimelineNoteMarker> previewStatsNoteMarkers_;
+    std::shared_ptr<const miacode::preview::scene::PreviewProgressStatsCache> previewProgressStatsCache_;
     QPointer<LatencyDetectorDialog> latencyDetectorDialog_;
     BracketScopeHighlighter* chartBracketHighlighter_ = nullptr;
     BracketScopeHighlighter* metadataBracketHighlighter_ = nullptr;
