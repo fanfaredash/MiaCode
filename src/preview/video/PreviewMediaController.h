@@ -48,6 +48,13 @@ signals:
     void mediaStateChanged(bool hasResolvedMedia, bool hasVideoMedia);
     void frameChanged(const QImage& frame);
     void videoFrameChanged(const QVideoFrame& frame);
+    void resolvedStageVideoFrameChanged(
+        const QVideoFrame& frame,
+        const QImage& resolvedImage,
+        bool cacheable,
+        quint64 serial,
+        double toImageMs
+    );
     void videoFallbackFrameChanged(const QImage& frame);
     void backgroundBrightnessChanged(double brightness);
     void playbackPositionChanged(double seconds);
@@ -95,4 +102,5 @@ private:
     quint64 profileVideoToImageSampleCount_ = 0;
     QVector<double> profileVideoToImageSamplesMs_;
     bool videoFallbackConversionFailureLogged_ = false;
+    quint64 stageMediaSerial_ = 0;
 };

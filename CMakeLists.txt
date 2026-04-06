@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.21)
 
 set(MIACODE_VERSION_MAJOR "0")
 set(MIACODE_VERSION_MINOR "3")
-set(MIACODE_VERSION_PATCH "9")
-set(MIACODE_VERSION_PRERELEASE "")
+set(MIACODE_VERSION_PATCH "10")
+set(MIACODE_VERSION_PRERELEASE "dev1")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
@@ -226,6 +226,8 @@ qt_add_shaders(MiaCode "preview_sprite_shaders"
     FILES
         src/preview/quick_scene/shaders/PreviewSpriteMaterial.vert
         src/preview/quick_scene/shaders/PreviewSpriteMaterial.frag
+        src/preview/quick_scene/shaders/PreviewStageDimMaterial.vert
+        src/preview/quick_scene/shaders/PreviewStageDimMaterial.frag
 )
 set_target_properties(MiaCode PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "MiaCode"

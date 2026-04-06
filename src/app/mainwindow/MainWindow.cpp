@@ -2881,23 +2881,25 @@ void MainWindow::ensurePreviewMediaControllerInitialized()
         previewCanvas_->update();
     });
 #ifdef HAVE_QT_MULTIMEDIA
-    connect(previewMediaController_, &PreviewMediaController::videoFrameChanged, this, [this](const QVideoFrame& frame) {
-        if (previewCanvas_ == nullptr) {
-            return;
+    connect(
+        previewMediaController_,
+        &PreviewMediaController::resolvedStageVideoFrameChanged,
+        this,
+        [this](const QVideoFrame& frame, const QImage& resolvedImage, bool cacheable, quint64 serial, double toImageMs) {
+            if (previewCanvas_ == nullptr) {
+                return;
+            }
+            previewCanvas_->setResolvedStageVideoFrame(frame, resolvedImage, cacheable, serial, toImageMs);
+            if (!qtPreviewPlaying_) {
+                previewCanvas_->update();
+            }
         }
-        previewCanvas_->setVideoFrame(frame);
-        if (!qtPreviewPlaying_) {
-            previewCanvas_->update();
-        }
-    });
+    );
     connect(previewMediaController_, &PreviewMediaController::videoFallbackFrameChanged, this, [this](const QImage& frame) {
         if (previewCanvas_ == nullptr) {
             return;
         }
         previewCanvas_->setRetainedVideoFallbackFrame(frame);
-        if (!qtPreviewPlaying_) {
-            previewCanvas_->update();
-        }
     });
 #endif
     connect(

@@ -3,6 +3,7 @@
 #include <QImage>
 #include <QRectF>
 #include <QVector>
+#include <QtGlobal>
 
 #include "common/PreviewGameplayConfig.h"
 #include "common/MuriRenderOptions.h"
@@ -131,6 +132,10 @@ struct PreviewJudgeEffectAssets {
 struct PreviewMediaFrameState {
     QImage mediaFrame;
     QImage retainedVideoFallbackFrame;
+    QImage resolvedStageImage;
+    quint64 stageMediaSerial = 0;
+    bool resolvedStageImageCacheable = false;
+    double resolvedStageImageToImageMs = 0.0;
 #ifdef HAVE_QT_MULTIMEDIA
     QVideoFrame videoFrame;
 #endif
