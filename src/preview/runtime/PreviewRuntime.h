@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QElapsedTimer>
+#include <QPointer>
 #include <QSize>
 #include <QVector>
 
@@ -14,6 +15,7 @@
 
 class PreviewQuickRuntimeSurface;
 class QWindow;
+class QQuickWindow;
 struct PreviewTextureStats;
 
 struct PreviewRuntimeLayerProfileAggregate {
@@ -56,10 +58,13 @@ class PreviewRuntime : public QObject
     Q_OBJECT
 
 public:
-    explicit PreviewRuntime(QObject* parent = nullptr);
+    explicit PreviewRuntime(bool enableLegacySurface = true, QObject* parent = nullptr);
     ~PreviewRuntime() override;
 
     QWindow* hostWindow() const;
+    void setVisibleHostWindow(QQuickWindow* window);
+    void clearVisibleHostWindow(QQuickWindow* window);
+    void notifyVisibleFramePresented();
     void requestActivate();
     void update();
 
@@ -103,15 +108,19 @@ public:
     const miacode::preview::scene::PreviewFrameState& frameState() const { return frameState_; }
 
 signals:
+    void frameStateChanged();
     void framePresented();
 
 private:
+    void handlePresentedFrame(const PreviewTextureStats* frameStats = nullptr);
     void refreshAssetStateFromRepository();
     void updatePresentedFrameStats();
     void updateTextureProfilingStats(const PreviewTextureStats& frameStats);
 
     miacode::preview::runtime::PreviewSceneAssetRepository* assets_ = nullptr;
+    bool legacySurfaceEnabled_ = true;
     PreviewQuickRuntimeSurface* surface_ = nullptr;
+    QPointer<QQuickWindow> visibleHostWindow_;
     QSize frameSize_;
     miacode::preview::scene::PreviewFrameState frameState_;
     QElapsedTimer presentTimer_;

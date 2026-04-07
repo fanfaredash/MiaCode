@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.21)
 set(MIACODE_VERSION_MAJOR "0")
 set(MIACODE_VERSION_MINOR "3")
 set(MIACODE_VERSION_PATCH "10")
-set(MIACODE_VERSION_PRERELEASE "dev2")
+set(MIACODE_VERSION_PRERELEASE "dev3")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
@@ -53,6 +53,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/quick_shell/QuickShellBootstrap.cpp
     src/app/quick_shell/QuickShellController.h
     src/app/quick_shell/QuickShellController.cpp
+    src/app/quick_shell/QuickShellStyleBridge.h
+    src/app/quick_shell/QuickShellStyleBridge.cpp
     src/app/quick_shell/OutlineListModel.h
     src/app/quick_shell/OutlineListModel.cpp
     src/app/quick_shell/IssueListModel.h
@@ -67,6 +69,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/ui/UiText.cpp
     src/app/ui/UiTheme.h
     src/app/ui/UiTheme.cpp
+    src/app/ui/WindowParityMetrics.h
+    src/app/ui/WindowParityMetrics.cpp
     src/common/MuriTypes.h
     src/common/MuriTypes.cpp
     src/common/MuriRenderOptions.h

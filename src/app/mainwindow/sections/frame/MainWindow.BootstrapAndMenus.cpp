@@ -402,6 +402,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
 
     auto* toolBar = addToolBar("Main");
     toolBar->setMovable(false);
+    toolBar->setFloatable(false);
     setupMenusAndActions(fileMenu, editMenu, transformMenu, previewMenu, helpMenu);
     if (latencyDetectorAction_ != nullptr) {
         editMenu->removeAction(latencyDetectorAction_);
@@ -472,23 +473,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     logStartupStage("editor_widget_ready");
 
     auto* central = new QWidget(this);
-    central->setStyleSheet(
-        "QWidget#EditorShell { background: #F5F7FA; }"
-        "QFrame#EditorHeader { background: #FFFFFF; border-bottom: 1px solid #DEE4EC; }"
-        "QLabel#EditorContext { color: #1F2D3D; font-weight: 700; }"
-        "QLabel#EditorMeta { color: #5F6B7A; }"
-        "QWidget#EditorDifficultyControls QLabel { color: #5F6B7A; }"
-        "QWidget#EditorDifficultyControls QLineEdit {"
-        " background: #FFFFFF;"
-        " color: #1F1F1F;"
-        " border: 1px solid #CCD6E2;"
-        " border-radius: 6px;"
-        " padding: 4px 6px;"
-        " selection-background-color: #B8CCE5;"
-        " selection-color: #1F1F1F;"
-        "}"
-        "QWidget#EditorDifficultyControls QLineEdit:focus { border-color: #3B82F6; }"
-    );
+    central->setStyleSheet(UiTheme::editorShellStyleSheet());
     central->setObjectName("EditorShell");
     auto* centralLayout = new QVBoxLayout(central);
     centralLayout->setContentsMargins(0, 4, 0, 0);
@@ -1125,7 +1110,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     previewPanel_->setMinimumWidth(kEmbeddedPreviewPanelMinWidth);
     previewPanel_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
-    previewCanvas_ = new PreviewRuntime(this);
+    previewCanvas_ = new PreviewRuntime(!isQuickShellBackendMode(), this);
     logStartupStage("preview_canvas_created");
     previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
     logStartupStage("preview_skin_async_dispatched");
@@ -1724,7 +1709,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     });
     logStartupStage("timers_ready");
 
-    initializeQuickShellBridgeSurfaces();
+    initializeQuickShellNativeRegions();
 
     if (previewSlider_ != nullptr) {
         previewSlider_->setFocusPolicy(Qt::StrongFocus);

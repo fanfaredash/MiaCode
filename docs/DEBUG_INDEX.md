@@ -7,8 +7,8 @@ This document is the current user-facing index for MiaCode debug mode, log files
 - Preferred CLI switch: `--debug`
 - Windows release helper:
   - `Start_MiaCode_Debug.bat`
-- Compare/dump helper:
-  - `Start_MiaCode_Debug_CompareDump.bat`
+- Windows quick-shell-beta debug helper:
+  - `Start_MiaCode_QuickShell_Debug.bat`
 
 Inside debug mode, runtime, audio, export, startup-timing, and preview-profile outputs are enabled unless they are individually disabled.
 
@@ -122,6 +122,10 @@ Retired with the old preview renderer and not recommended anymore:
 Launch the app in debug mode:
 
 - `MiaCode.exe --debug`
+
+Launch the Qt Quick hybrid host in debug mode:
+
+- `MiaCode.exe --quick-shell-beta --debug`
 
 Force export logging into a local directory:
 

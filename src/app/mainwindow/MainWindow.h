@@ -72,6 +72,7 @@ class QWheelEvent;
 class QtPreviewSfxRuntime;
 class TimelineView;
 class QuickShellController;
+class QuickShellStyleBridge;
 
 namespace miacode::preview::scene {
 class PreviewProgressStatsCache;
@@ -163,6 +164,7 @@ private slots:
     void onMuriItemActivated(QListWidgetItem* item);
 private:
     friend class QuickShellController;
+    friend class QuickShellStyleBridge;
 
     using BatchTransform = std::function<QString(const QString&, int*)>;
     enum class ChartTransformOp {
@@ -484,7 +486,7 @@ private:
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
     bool preparePreviewStartState();
     bool isQuickShellBackendMode() const;
-    void initializeQuickShellBridgeSurfaces();
+    void initializeQuickShellNativeRegions();
     void appendOutput(const QString& title, const QString& payload);
     void logWindowGeometryDebug(const QString& tag, const QString& detail = QString());
     QString formatWindowStateFlags(Qt::WindowStates states) const;
@@ -860,6 +862,10 @@ private:
     bool previewLayoutInitialized_ = false;
     int workspaceCachedLeftWidth_ = 0;
     int workspaceCachedRightWidth_ = 0;
+    QWidget* quickShellTopChromeSurfaceWidget_ = nullptr;
+    QWidget* quickShellWorkspaceSurfaceWidget_ = nullptr;
+    QWidget* quickShellPreviewControlsSurfaceWidget_ = nullptr;
+    QWidget* quickShellStatusSurfaceWidget_ = nullptr;
     QWidget* quickShellChartSurfaceWidget_ = nullptr;
     QWidget* quickShellTimelineSurfaceWidget_ = nullptr;
     std::shared_ptr<const miacode::preview::scene::PreviewProgressStatsCache> previewProgressStatsCache_;

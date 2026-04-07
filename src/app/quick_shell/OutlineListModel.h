@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QAbstractListModel>
+#include <QColor>
 #include <QVector>
 
 class QListWidget;
@@ -16,6 +17,10 @@ public:
         DifficultyIdRole,
         SelectedRole,
         CanDeleteRole,
+        BadgeVisibleRole,
+        BadgeColorRole,
+        GlyphRole,
+        GlyphColorRole,
     };
 
     explicit OutlineListModel(QObject* parent = nullptr);
@@ -33,6 +38,10 @@ private:
         int difficultyId = 0;
         bool selected = false;
         bool canDelete = false;
+        bool badgeVisible = false;
+        QColor badgeColor;
+        QString glyph;
+        QColor glyphColor;
     };
 
     QVector<Entry> entries_;

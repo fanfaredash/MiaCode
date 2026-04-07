@@ -25,6 +25,7 @@
 #include <QDir>
 #include <QRegularExpression>
 #include <QQuickWindow>
+#include <QQuickStyle>
 #include <QSGRendererInterface>
 
 #include <cmath>
@@ -639,6 +640,7 @@ int main(int argc, char* argv[])
 
     const bool quickShellBetaRequested = wantsQuickShellBeta(app.arguments());
     if (quickShellBetaRequested) {
+        QQuickStyle::setStyle(QStringLiteral("Basic"));
         QuickShellBootstrap quickShellBootstrap(appIcon);
         if (!quickShellBootstrap.start()) {
             QTextStream(stderr) << "Failed to start Quick Shell Beta.\n";

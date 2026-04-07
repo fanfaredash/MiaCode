@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QMetaObject>
+#include <QPointer>
 #include <QQuickItem>
 #include <QSize>
 
@@ -30,22 +32,35 @@ struct PreviewFrameState;
 class PreviewQuickSceneRoot : public QQuickItem
 {
     Q_OBJECT
+    Q_PROPERTY(QObject* runtime READ runtimeObject WRITE setRuntimeObject NOTIFY runtimeChanged)
 
 public:
     explicit PreviewQuickSceneRoot(QQuickItem* parent = nullptr);
+    ~PreviewQuickSceneRoot() override;
 
     void setRuntime(PreviewRuntime* runtime);
+    QObject* runtimeObject() const;
+    void setRuntimeObject(QObject* runtimeObject);
     void setFrameState(const miacode::preview::scene::PreviewFrameState* frameState);
     void setLayerFlags(miacode::preview::scene::PreviewRenderLayerFlags layerFlags);
     void invalidateTextureCache();
     PreviewTextureStats textureStats() const;
+
+signals:
+    void runtimeChanged();
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* updatePaintNodeData) override;
     void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
 
 private:
+    void syncVisibleHostWindowBinding();
+
     PreviewRuntime* runtime_ = nullptr;
+    QMetaObject::Connection runtimeUpdateConnection_;
+    QMetaObject::Connection frameSwapConnection_;
+    QMetaObject::Connection windowVisibilityConnection_;
+    QPointer<QQuickWindow> boundWindow_;
     const miacode::preview::scene::PreviewFrameState* frameState_ = nullptr;
     miacode::preview::scene::PreviewRenderLayerFlags layerFlags_ =
         miacode::preview::scene::kPreviewAllRenderLayers;

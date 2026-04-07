@@ -11,6 +11,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QQuickWindow>
 #include <QTextStream>
 #include <QWindow>
 
@@ -49,24 +50,26 @@ double frameLayerBuildMs(const PreviewTextureStats& frameStats)
 
 }  // namespace
 
-PreviewRuntime::PreviewRuntime(QObject* parent)
+PreviewRuntime::PreviewRuntime(bool enableLegacySurface, QObject* parent)
     : QObject(parent)
+    , legacySurfaceEnabled_(enableLegacySurface)
 {
     assets_ = new miacode::preview::runtime::PreviewSceneAssetRepository(this);
     refreshAssetStateFromRepository();
     presentedFrameIntervalsMs_.resize(120);
     presentedFrameIntervalsMs_.fill(0.0);
-    surface_ = new PreviewQuickRuntimeSurface(this);
-    surface_->setRuntime(this);
+    if (legacySurfaceEnabled_) {
+        surface_ = new PreviewQuickRuntimeSurface(this);
+        surface_->setRuntime(this);
 
-    connect(surface_, &PreviewQuickRuntimeSurface::framePresented, this, [this]() {
-        if (surface_ != nullptr) {
-            updateTextureProfilingStats(surface_->textureStats());
-        }
-        updatePresentedFrameStats();
-        pendingPresentedStatsRefresh_ = false;
-        emit framePresented();
-    });
+        connect(surface_, &PreviewQuickRuntimeSurface::framePresented, this, [this]() {
+            PreviewTextureStats stats;
+            if (surface_ != nullptr) {
+                stats = surface_->textureStats();
+            }
+            handlePresentedFrame(surface_ != nullptr ? &stats : nullptr);
+        });
+    }
     connect(assets_, &miacode::preview::runtime::PreviewSceneAssetRepository::assetsChanged, this, [this]() {
         refreshAssetStateFromRepository();
         update();
@@ -85,8 +88,33 @@ QWindow* PreviewRuntime::hostWindow() const
     return surface_ != nullptr ? surface_->hostWindow() : nullptr;
 }
 
+void PreviewRuntime::setVisibleHostWindow(QQuickWindow* window)
+{
+    if (visibleHostWindow_ == window) {
+        return;
+    }
+    visibleHostWindow_ = window;
+}
+
+void PreviewRuntime::clearVisibleHostWindow(QQuickWindow* window)
+{
+    if (visibleHostWindow_ != window) {
+        return;
+    }
+    visibleHostWindow_.clear();
+}
+
+void PreviewRuntime::notifyVisibleFramePresented()
+{
+    handlePresentedFrame();
+}
+
 void PreviewRuntime::requestActivate()
 {
+    if (visibleHostWindow_ != nullptr) {
+        visibleHostWindow_->requestActivate();
+        return;
+    }
     if (surface_ != nullptr) {
         surface_->requestActivate();
     }
@@ -95,6 +123,10 @@ void PreviewRuntime::requestActivate()
 void PreviewRuntime::update()
 {
     pendingPresentedStatsRefresh_ = true;
+    emit frameStateChanged();
+    if (visibleHostWindow_ != nullptr) {
+        visibleHostWindow_->requestUpdate();
+    }
     if (surface_ != nullptr) {
         surface_->requestFrame();
     }
@@ -542,6 +574,16 @@ void PreviewRuntime::setFrameSize(const QSize& size)
     frameSize_ = safeSize;
     pendingPresentedStatsRefresh_ = true;
     update();
+}
+
+void PreviewRuntime::handlePresentedFrame(const PreviewTextureStats* frameStats)
+{
+    if (frameStats != nullptr) {
+        updateTextureProfilingStats(*frameStats);
+    }
+    updatePresentedFrameStats();
+    pendingPresentedStatsRefresh_ = false;
+    emit framePresented();
 }
 
 void PreviewRuntime::refreshAssetStateFromRepository()

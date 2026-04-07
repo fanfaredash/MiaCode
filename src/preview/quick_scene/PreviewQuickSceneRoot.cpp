@@ -130,26 +130,78 @@ PreviewQuickSceneRoot::PreviewQuickSceneRoot(QQuickItem* parent)
     : QQuickItem(parent)
 {
     setFlag(ItemHasContents, true);
+    connect(this, &QQuickItem::windowChanged, this, [this](QQuickWindow*) {
+        syncVisibleHostWindowBinding();
+        update();
+    });
+    connect(this, &QQuickItem::visibleChanged, this, [this]() {
+        syncVisibleHostWindowBinding();
+        update();
+    });
+}
+
+PreviewQuickSceneRoot::~PreviewQuickSceneRoot()
+{
+    if (runtime_ != nullptr && boundWindow_ != nullptr) {
+        runtime_->clearVisibleHostWindow(boundWindow_);
+    }
 }
 
 void PreviewQuickSceneRoot::setRuntime(PreviewRuntime* runtime)
 {
+    if (runtime_ == runtime) {
+        return;
+    }
+    if (runtime_ != nullptr && boundWindow_ != nullptr) {
+        runtime_->clearVisibleHostWindow(boundWindow_);
+    }
+    if (runtimeUpdateConnection_) {
+        QObject::disconnect(runtimeUpdateConnection_);
+    }
     runtime_ = runtime;
     if (runtime_ != nullptr) {
         frameState_ = nullptr;
+        runtimeUpdateConnection_ = QObject::connect(runtime_, &PreviewRuntime::frameStateChanged, this, [this]() {
+            update();
+        });
+        runtime_->setFrameSize(boundingRect().size().toSize());
     }
+    syncVisibleHostWindowBinding();
     appendQuickSceneLog(
         QStringLiteral("set_runtime"),
         QString("runtime=%1 frame_state=%2").arg(pointerHex(runtime_)).arg(pointerHex(frameState_))
     );
+    emit runtimeChanged();
     update();
+}
+
+QObject* PreviewQuickSceneRoot::runtimeObject() const
+{
+    return runtime_;
+}
+
+void PreviewQuickSceneRoot::setRuntimeObject(QObject* runtimeObject)
+{
+    setRuntime(qobject_cast<PreviewRuntime*>(runtimeObject));
 }
 
 void PreviewQuickSceneRoot::setFrameState(const miacode::preview::scene::PreviewFrameState* frameState)
 {
+    if (runtime_ != nullptr && boundWindow_ != nullptr) {
+        runtime_->clearVisibleHostWindow(boundWindow_);
+    }
+    if (runtimeUpdateConnection_) {
+        QObject::disconnect(runtimeUpdateConnection_);
+        runtimeUpdateConnection_ = QMetaObject::Connection();
+    }
+    if (frameSwapConnection_) {
+        QObject::disconnect(frameSwapConnection_);
+        frameSwapConnection_ = QMetaObject::Connection();
+    }
     frameState_ = frameState;
     if (frameState_ != nullptr) {
         runtime_ = nullptr;
+        boundWindow_.clear();
     }
     appendQuickSceneLog(
         QStringLiteral("set_frame_state"),
@@ -193,6 +245,44 @@ PreviewTextureStats PreviewQuickSceneRoot::textureStats() const
         merged.buildMs = buildStat.buildMs;
     }
     return stats;
+}
+
+void PreviewQuickSceneRoot::syncVisibleHostWindowBinding()
+{
+    if (frameSwapConnection_) {
+        QObject::disconnect(frameSwapConnection_);
+        frameSwapConnection_ = QMetaObject::Connection();
+    }
+    if (windowVisibilityConnection_) {
+        QObject::disconnect(windowVisibilityConnection_);
+        windowVisibilityConnection_ = QMetaObject::Connection();
+    }
+    if (runtime_ != nullptr && boundWindow_ != nullptr) {
+        runtime_->clearVisibleHostWindow(boundWindow_);
+    }
+
+    boundWindow_ = window();
+    if (runtime_ == nullptr || boundWindow_ == nullptr || !isVisible() || !boundWindow_->isVisible()) {
+        if (boundWindow_ != nullptr) {
+            windowVisibilityConnection_ = QObject::connect(boundWindow_, &QWindow::visibilityChanged, this, [this](QWindow::Visibility) {
+                syncVisibleHostWindowBinding();
+                update();
+            });
+        }
+        return;
+    }
+
+    runtime_->setVisibleHostWindow(boundWindow_);
+    windowVisibilityConnection_ = QObject::connect(boundWindow_, &QWindow::visibilityChanged, this, [this](QWindow::Visibility) {
+        syncVisibleHostWindowBinding();
+        update();
+    });
+    frameSwapConnection_ = QObject::connect(boundWindow_, &QQuickWindow::frameSwapped, this, [this]() {
+        if (runtime_ == nullptr || boundWindow_ == nullptr || window() != boundWindow_) {
+            return;
+        }
+        runtime_->notifyVisibleFramePresented();
+    });
 }
 
 QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* updatePaintNodeData)
@@ -526,6 +616,9 @@ void PreviewQuickSceneRoot::geometryChange(const QRectF& newGeometry, const QRec
 {
     QQuickItem::geometryChange(newGeometry, oldGeometry);
     if (newGeometry.size() != oldGeometry.size()) {
+        if (runtime_ != nullptr) {
+            runtime_->setFrameSize(newGeometry.size().toSize());
+        }
         ++geometryChangeCount_;
         appendQuickSceneLog(
             QStringLiteral("geometry_change"),

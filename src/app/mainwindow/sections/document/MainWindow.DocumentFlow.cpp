@@ -787,6 +787,7 @@ bool MainWindow::saveToPath(const QString& path)
     documentDirty_ = false;
     currentFieldDirty_ = false;
     updateDirtyState();
+    updateWindowTitle();
     statusBar()->showMessage("Saved: " + QFileInfo(path).fileName());
     return true;
 }
@@ -1244,49 +1245,17 @@ void MainWindow::updateEditorHeaderLayoutMode()
         ++summaryVisibleGroups;
     }
     const int summaryExtraWidth = summaryHasContent ? qMax(0, summaryFullWidth - 52) : 0;
-    const int summaryIconOnlyThreshold = 456 + qMin(summaryExtraWidth, 48);
-    const int summaryHideThreshold = 374 + qMin(summaryExtraWidth / 2, 28);
-    const int compactCursorThreshold = 400 + qMin(summaryExtraWidth / 2, 28);
-    const int cursorHideThreshold = 360 + qMin(summaryExtraWidth / 2, 20);
 
-    bool showLevelControls = true;
-    bool showDesignerControls = true;
-    bool showSummary = summaryHasContent;
-    bool showSummaryCounts = summaryHasContent;
-    bool showCursor = true;
-    bool compactCursor = false;
-    int levelWidth = 48;
-    int designerWidth = 105;
-
-    if (headerWidth < 700) {
-        designerWidth = 96;
-    }
-    if (headerWidth < 640) {
-        designerWidth = 84;
-        levelWidth = 45;
-    }
-    if (headerWidth < summaryIconOnlyThreshold) {
-        showSummaryCounts = false;
-    }
-    if (headerWidth < summaryHideThreshold) {
-        showSummary = false;
-        levelWidth = 39;
-        designerWidth = 69;
-    }
-    if (headerWidth < compactCursorThreshold) {
-        compactCursor = true;
-        designerWidth = 75;
-        levelWidth = 41;
-    }
-    if (headerWidth < cursorHideThreshold) {
-        showCursor = false;
-        levelWidth = 36;
-        designerWidth = 63;
-        showDesignerControls = false;
-    }
-    if (headerWidth < 310) {
-        showLevelControls = false;
-    }
+    const miacode::window_parity::EditorHeaderLayoutMode layoutMode =
+        miacode::window_parity::computeEditorHeaderLayoutMode(headerWidth, summaryHasContent, summaryExtraWidth);
+    const bool showLevelControls = layoutMode.showLevelControls;
+    const bool showDesignerControls = layoutMode.showDesignerControls;
+    const bool showSummary = layoutMode.showSummary;
+    const bool showSummaryCounts = layoutMode.showSummaryCounts;
+    const bool showCursor = layoutMode.showCursor;
+    const bool compactCursor = layoutMode.compactCursor;
+    const int levelWidth = layoutMode.levelWidth;
+    const int designerWidth = layoutMode.designerWidth;
 
     if (difficultyLevelLabel_ != nullptr) {
         difficultyLevelLabel_->setVisible(showLevelControls);
