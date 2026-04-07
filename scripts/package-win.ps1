@@ -291,7 +291,7 @@ if ($Config -eq "Debug") {
     $deployMode `
     --compiler-runtime `
     --no-translations `
-    --qmldir (Join-Path $repoRoot "src\\preview\\runtime\\qml") `
+    --qmldir (Join-Path $repoRoot "src") `
     (Join-Path $DistDir "MiaCode.exe")
 
 $requiredQtRuntimeDllBaseNames = @(
