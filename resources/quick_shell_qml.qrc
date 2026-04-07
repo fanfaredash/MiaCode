@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="quick_shell/qml/QuickShellMain.qml">../src/app/quick_shell/qml/QuickShellMain.qml</file>
+    </qresource>
+</RCC>

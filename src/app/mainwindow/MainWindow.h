@@ -71,6 +71,7 @@ class QWidget;
 class QWheelEvent;
 class QtPreviewSfxRuntime;
 class TimelineView;
+class QuickShellController;
 
 namespace miacode::preview::scene {
 class PreviewProgressStatsCache;
@@ -81,6 +82,11 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
+    enum class FrontendHostMode {
+        WidgetShell,
+        QuickShellBackend,
+    };
+
     struct CliVideoExportRequest {
         QString chartPathOrDirectory;
         QString difficulty = QStringLiteral("MAS");
@@ -101,7 +107,7 @@ public:
         int skinLoadWaitMs = 2000;
     };
 
-    explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(FrontendHostMode hostMode = FrontendHostMode::WidgetShell, QWidget* parent = nullptr);
     ~MainWindow() override;
     bool exportPreviewVideoFromCli(
         const CliVideoExportRequest& request,
@@ -156,6 +162,8 @@ private slots:
     void onErrorItemActivated(QListWidgetItem* item);
     void onMuriItemActivated(QListWidgetItem* item);
 private:
+    friend class QuickShellController;
+
     using BatchTransform = std::function<QString(const QString&, int*)>;
     enum class ChartTransformOp {
         MirrorLeftRight,
@@ -475,6 +483,8 @@ private:
     bool runValidateSimai();
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
     bool preparePreviewStartState();
+    bool isQuickShellBackendMode() const;
+    void initializeQuickShellBridgeSurfaces();
     void appendOutput(const QString& title, const QString& payload);
     void logWindowGeometryDebug(const QString& tag, const QString& detail = QString());
     QString formatWindowStateFlags(Qt::WindowStates states) const;
@@ -753,6 +763,7 @@ private:
     int editorTextFontPointSize_ = 0;
     double editorLineSpacingFactor_ = 1.5;
     SimaiDocument document_;
+    FrontendHostMode frontendHostMode_ = FrontendHostMode::WidgetShell;
     QWidget* welcomePage_ = nullptr;
     QLabel* welcomeEmptyHintLabel_ = nullptr;
     QWidget* metadataPage_ = nullptr;
@@ -774,6 +785,7 @@ private:
     QLabel* difficultyDesignerLabel_ = nullptr;
     QLineEdit* difficultyDesignerEdit_ = nullptr;
     QWidget* editorHeaderWidget_ = nullptr;
+    QWidget* editorFindGeometryHost_ = nullptr;
     QWidget* editorBatchTransformControls_ = nullptr;
     QToolButton* transformMirrorLeftRightButton_ = nullptr;
     QToolButton* transformMirrorUpDownButton_ = nullptr;
@@ -848,6 +860,8 @@ private:
     bool previewLayoutInitialized_ = false;
     int workspaceCachedLeftWidth_ = 0;
     int workspaceCachedRightWidth_ = 0;
+    QWidget* quickShellChartSurfaceWidget_ = nullptr;
+    QWidget* quickShellTimelineSurfaceWidget_ = nullptr;
     std::shared_ptr<const miacode::preview::scene::PreviewProgressStatsCache> previewProgressStatsCache_;
     QPointer<LatencyDetectorDialog> latencyDetectorDialog_;
     BracketScopeHighlighter* chartBracketHighlighter_ = nullptr;

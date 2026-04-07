@@ -1,4 +1,5 @@
 ﻿#include "AppVersion.h"
+#include "quick_shell/QuickShellBootstrap.h"
 #include "mainwindow/MainWindow.h"
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "UiText.h"
@@ -60,6 +61,11 @@ bool wantsCliVideoExport(const QStringList& arguments)
 bool wantsCliVideoExportWorker(const QStringList& arguments)
 {
     return arguments.contains(QStringLiteral("--export-video-worker"));
+}
+
+bool wantsQuickShellBeta(const QStringList& arguments)
+{
+    return arguments.contains(QStringLiteral("--quick-shell-beta"));
 }
 
 void addSharedCliDebugOption(QCommandLineParser& parser)
@@ -629,6 +635,20 @@ int main(int argc, char* argv[])
             QTextStream(stderr) << "CLI argument error: " << cliError << "\n";
         }
         return exitCode;
+    }
+
+    const bool quickShellBetaRequested = wantsQuickShellBeta(app.arguments());
+    if (quickShellBetaRequested) {
+        QuickShellBootstrap quickShellBootstrap(appIcon);
+        if (!quickShellBootstrap.start()) {
+            QTextStream(stderr) << "Failed to start Quick Shell Beta.\n";
+            return 1;
+        }
+        logStartupStage("quick_shell_bootstrap_started");
+        QTimer::singleShot(0, &app, [&logStartupStage]() {
+            logStartupStage("event_loop_first_tick");
+        });
+        return app.exec();
     }
 
     MainWindow window;

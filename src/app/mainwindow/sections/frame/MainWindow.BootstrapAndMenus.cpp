@@ -344,8 +344,9 @@
     connect(aboutAction_, &QAction::triggered, this, &MainWindow::onAbout);
     helpMenu->addAction(aboutAction_);
 }
-MainWindow::MainWindow(QWidget* parent)
+MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     : QMainWindow(parent)
+    , frontendHostMode_(hostMode)
 {
     QElapsedTimer startupStageTimer;
     startupStageTimer.start();
@@ -359,6 +360,10 @@ MainWindow::MainWindow(QWidget* parent)
 
     configureRuntimeDebugOutput();
     logStartupStage("configure_runtime_debug_output");
+    if (isQuickShellBackendMode()) {
+        setAttribute(Qt::WA_NativeWindow);
+        winId();
+    }
 
     previewWarmupPool_ = new QThreadPool(this);
     previewWarmupPool_->setObjectName(QStringLiteral("PreviewWarmupPool"));
@@ -608,6 +613,7 @@ MainWindow::MainWindow(QWidget* parent)
     editorStack_ = new QStackedWidget(central);
     editorStack_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
     editorStack_->setMinimumWidth(0);
+    editorFindGeometryHost_ = editorStack_;
 
     auto* findBar = new QFrame(editorStack_);
     findBar->setObjectName("EditorFindBar");
@@ -1127,7 +1133,11 @@ MainWindow::MainWindow(QWidget* parent)
     previewCanvasFrame_->setObjectName("PreviewCanvasFrame");
     previewCanvasFrame_->setMinimumSize(QSize(1, 1));
     previewCanvasFrame_->setFocusPolicy(Qt::StrongFocus);
-    previewCanvasContainer_ = QWidget::createWindowContainer(previewCanvas_->hostWindow(), previewCanvasFrame_);
+    if (isQuickShellBackendMode()) {
+        previewCanvasContainer_ = new QWidget(previewCanvasFrame_);
+    } else {
+        previewCanvasContainer_ = QWidget::createWindowContainer(previewCanvas_->hostWindow(), previewCanvasFrame_);
+    }
     previewCanvasContainer_->setMinimumSize(QSize(1, 1));
     previewCanvasContainer_->setFocusPolicy(Qt::StrongFocus);
     previewPanel_->setFocusPolicy(Qt::StrongFocus);
@@ -1713,6 +1723,8 @@ MainWindow::MainWindow(QWidget* parent)
         refreshEmbeddedPreviewSurface(true);
     });
     logStartupStage("timers_ready");
+
+    initializeQuickShellBridgeSurfaces();
 
     if (previewSlider_ != nullptr) {
         previewSlider_->setFocusPolicy(Qt::StrongFocus);

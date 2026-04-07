@@ -2786,6 +2786,10 @@ void MainWindow::applyAlignedMuriAnalysisReportToViews()
 MainWindow::~MainWindow()
 {
     shutdownPreviewMediaController();
+    delete quickShellChartSurfaceWidget_;
+    quickShellChartSurfaceWidget_ = nullptr;
+    delete quickShellTimelineSurfaceWidget_;
+    quickShellTimelineSurfaceWidget_ = nullptr;
 }
 
 void MainWindow::configureRuntimeDebugOutput()
@@ -3455,6 +3459,73 @@ bool MainWindow::preparePreviewStartState()
     return false;
 }
 
+bool MainWindow::isQuickShellBackendMode() const
+{
+    return frontendHostMode_ == FrontendHostMode::QuickShellBackend;
+}
+
+void MainWindow::initializeQuickShellBridgeSurfaces()
+{
+    if (!isQuickShellBackendMode()) {
+        return;
+    }
+
+    const auto ensureBridgeSurface = [this](QWidget*& bridgeRoot, const QString& objectName) {
+        if (bridgeRoot != nullptr) {
+            return;
+        }
+        bridgeRoot = new QWidget(nullptr, Qt::Tool | Qt::FramelessWindowHint);
+        bridgeRoot->setObjectName(objectName);
+        bridgeRoot->setAttribute(Qt::WA_NativeWindow);
+        bridgeRoot->setContentsMargins(0, 0, 0, 0);
+        bridgeRoot->setMinimumSize(QSize(64, 64));
+        auto* layout = new QVBoxLayout(bridgeRoot);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(0);
+        bridgeRoot->resize(960, 720);
+        bridgeRoot->installEventFilter(this);
+        bridgeRoot->winId();
+    };
+
+    if (editorWidget_ != nullptr) {
+        ensureBridgeSurface(quickShellChartSurfaceWidget_, QStringLiteral("QuickShellChartSurface"));
+        if (chartPage_ != nullptr && chartPage_->layout() != nullptr) {
+            chartPage_->layout()->removeWidget(editorWidget_);
+        }
+        if (editorWidget_->parentWidget() != quickShellChartSurfaceWidget_) {
+            editorWidget_->setParent(quickShellChartSurfaceWidget_);
+            if (quickShellChartSurfaceWidget_->layout() != nullptr) {
+                quickShellChartSurfaceWidget_->layout()->addWidget(editorWidget_);
+            }
+        }
+        editorWidget_->show();
+        if (editorFindBar_ != nullptr) {
+            editorFindBar_->setParent(quickShellChartSurfaceWidget_);
+            if (editorFindBar_->isVisible()) {
+                editorFindBar_->raise();
+            }
+        }
+        editorFindGeometryHost_ = quickShellChartSurfaceWidget_;
+    }
+
+    if (timelineView_ != nullptr) {
+        ensureBridgeSurface(quickShellTimelineSurfaceWidget_, QStringLiteral("QuickShellTimelineSurface"));
+        if (bottomTabs_ != nullptr) {
+            const int timelineTabIndex = bottomTabs_->indexOf(timelineView_);
+            if (timelineTabIndex >= 0) {
+                bottomTabs_->removeTab(timelineTabIndex);
+            }
+        }
+        if (timelineView_->parentWidget() != quickShellTimelineSurfaceWidget_) {
+            timelineView_->setParent(quickShellTimelineSurfaceWidget_);
+            if (quickShellTimelineSurfaceWidget_->layout() != nullptr) {
+                quickShellTimelineSurfaceWidget_->layout()->addWidget(timelineView_);
+            }
+        }
+        timelineView_->show();
+    }
+}
+
 void MainWindow::setInvalidStarPreviewEasterEggEnabled(bool enabled)
 {
     if (invalidStarPreviewEasterEggEnabled_ == enabled) {
@@ -3507,6 +3578,13 @@ void MainWindow::playInvalidStarPreviewEasterEggSound(bool enabled)
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event)
 {
+    if (editorFindGeometryHost_ != nullptr
+        && watched == editorFindGeometryHost_
+        && event != nullptr
+        && event->type() == QEvent::Resize) {
+        updateEditorFindBarGeometry();
+        applyFindOverlayInset();
+    }
     if (bottomTabs_ != nullptr && watched == bottomTabs_->tabBar() && event->type() == QEvent::Wheel) {
         return true;
     }
@@ -3985,10 +4063,11 @@ bool MainWindow::runFindInEditor(bool backward)
 
 void MainWindow::updateEditorFindBarGeometry()
 {
-    if (editorFindBar_ == nullptr || editorStack_ == nullptr) {
+    QWidget* geometryHost = editorFindGeometryHost_ != nullptr ? editorFindGeometryHost_ : editorStack_;
+    if (editorFindBar_ == nullptr || geometryHost == nullptr) {
         return;
     }
-    const int availableWidth = qMax(0, editorStack_->width() - (kEditorFindBarHorizontalMargin * 2));
+    const int availableWidth = qMax(0, geometryHost->width() - (kEditorFindBarHorizontalMargin * 2));
     if (availableWidth <= 0) {
         return;
     }
@@ -3996,7 +4075,7 @@ void MainWindow::updateEditorFindBarGeometry()
     if (availableWidth >= kEditorFindBarMinWidth) {
         width = qMax(kEditorFindBarMinWidth, width);
     }
-    const int x = qMax(kEditorFindBarHorizontalMargin, editorStack_->width() - kEditorFindBarHorizontalMargin - width);
+    const int x = qMax(kEditorFindBarHorizontalMargin, geometryHost->width() - kEditorFindBarHorizontalMargin - width);
     const int y = kEditorFindBarTopMargin;
     const int height = editorFindBar_->sizeHint().height();
     editorFindBar_->setGeometry(x, y, width, height);
