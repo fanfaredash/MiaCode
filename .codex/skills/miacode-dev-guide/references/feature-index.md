@@ -24,12 +24,12 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Class: `MainWindow`
   - Owns: top-level state, shared widgets, preview runtime instances, export worker process, portable/project settings, and the hidden Quick-shell backend mode that rehosts legacy editor/timeline surfaces for QML
 - Quick shell beta bootstrap and controller bridge:
-  - Files: `src/app/quick_shell/QuickShellBootstrap.h`, `src/app/quick_shell/QuickShellBootstrap.cpp`, `src/app/quick_shell/QuickShellController.h`, `src/app/quick_shell/QuickShellController.cpp`
-  - Classes: `QuickShellBootstrap`, `QuickShellController`
-  - Owns: `QQmlApplicationEngine` startup, QML-facing shell actions/properties, beta-window lifetime, and shell-state polling from the shared `MainWindow` backend
-- Quick shell list and bridge models:
+  - Files: `src/app/quick_shell/QuickShellBootstrap.h`, `src/app/quick_shell/QuickShellBootstrap.cpp`, `src/app/quick_shell/QuickShellController.h`, `src/app/quick_shell/QuickShellController.cpp`, `src/app/quick_shell/QuickShellStyleBridge.h`, `src/app/quick_shell/QuickShellStyleBridge.cpp`, `src/app/ui/WindowParityMetrics.h`, `src/app/ui/WindowParityMetrics.cpp`
+  - Classes: `QuickShellBootstrap`, `QuickShellController`, `QuickShellStyleBridge`
+  - Owns: `QQmlApplicationEngine` startup, hybrid-host beta window lifetime, coarse-grained native-region window exposure, preview transport/fullscreen bridge state, and host sizing/theme tokens shared with the `MainWindow` backend
+- Quick shell legacy bridge leftovers:
   - Files: `src/app/quick_shell/OutlineListModel.h`, `src/app/quick_shell/OutlineListModel.cpp`, `src/app/quick_shell/IssueListModel.h`, `src/app/quick_shell/IssueListModel.cpp`, `src/app/quick_shell/LegacyChartEditorSurface.h`, `src/app/quick_shell/LegacyChartEditorSurface.cpp`, `src/app/quick_shell/LegacyTimelineSurface.h`, `src/app/quick_shell/LegacyTimelineSurface.cpp`, `src/app/quick_shell/qml/QuickShellMain.qml`
-  - Owns: Quick sidebar data, Quick validation/Muri data, and `QWindow*` bridge exposure for the legacy chart editor plus timeline surfaces
+  - Owns: the retained legacy quick-shell bridge helpers that are no longer on the active hybrid-host path; `QuickShellMain.qml` is now the coarse-grained host that embeds native top chrome, workspace, preview-controls regions, plus the same-window Quick preview
 - Section map:
   - File: `src/app/mainwindow/sections/README.md`
   - Owns: where each MainWindow feature slice lives

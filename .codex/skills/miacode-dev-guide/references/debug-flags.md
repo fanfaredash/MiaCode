@@ -60,8 +60,8 @@ The Windows release package also ships:
 
 - `Start_MiaCode_Debug.bat`
   - sets debug mode, creates a local `logs/` directory, and launches `MiaCode.exe --debug`
-- `Start_MiaCode_Debug_CompareDump.bat`
-  - also enables preview compare sampling and PNG dumps under `logs/preview_compare_png`
+- `Start_MiaCode_QuickShell_Debug.bat`
+  - sets debug mode, creates a dedicated `logs/quick-shell-beta/` directory, and launches `MiaCode.exe --quick-shell-beta --debug`
 
 ## 3. Preview And Runtime Overrides
 
@@ -202,6 +202,7 @@ Current normalization rules:
   - `soundtouch_probe`
 - Common debug scripts:
   - `scripts/Start_MiaCode_Debug.bat`
+  - `scripts/Start_MiaCode_QuickShell_Debug.bat`
   - `scripts/Start_MiaCode_Debug_CompareDump.bat`
   - `scripts/analyze_ffmpeg_chain_variants.py`
   - `scripts/analyze_video_duplicate_frames.py`

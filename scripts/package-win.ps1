@@ -273,11 +273,12 @@ $debugLauncherSrc = Join-Path $repoRoot "scripts\\Start_MiaCode_Debug.bat"
 if (Test-Path $debugLauncherSrc) {
     Copy-Item $debugLauncherSrc (Join-Path $DistDir "Start_MiaCode_Debug.bat") -Force
 }
-$debugCompareLauncherSrc = Join-Path $repoRoot "scripts\\Start_MiaCode_Debug_CompareDump.bat"
-if (Test-Path $debugCompareLauncherSrc) {
-    Copy-Item $debugCompareLauncherSrc (Join-Path $DistDir "Start_MiaCode_Debug_CompareDump.bat") -Force
+$quickShellDebugLauncherSrc = Join-Path $repoRoot "scripts\\Start_MiaCode_QuickShell_Debug.bat"
+if (Test-Path $quickShellDebugLauncherSrc) {
+    Copy-Item $quickShellDebugLauncherSrc (Join-Path $DistDir "Start_MiaCode_QuickShell_Debug.bat") -Force
 }
 New-Item -ItemType Directory -Path (Join-Path $DistDir "logs") -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $DistDir "logs\\quick-shell-beta") -Force | Out-Null
 
 if ($Config -eq "Debug") {
     $deployMode = "--debug"
@@ -385,7 +386,7 @@ $releaseLines = @(
     "Run:"
     "  MiaCode.exe"
     "  Start_MiaCode_Debug.bat"
-    "  Start_MiaCode_Debug_CompareDump.bat"
+    "  Start_MiaCode_QuickShell_Debug.bat"
     ""
     "Debug logs:"
     "  .\\logs\\miacode_runtime_debug.log"
@@ -393,11 +394,16 @@ $releaseLines = @(
     "  .\\logs\\miacode_video_export.log"
     "  .\\logs\\miacode_startup_timing.log"
     "  .\\logs\\miacode_fatal.log"
+    "  .\\logs\\quick-shell-beta\\miacode_runtime_debug.log"
+    "  .\\logs\\quick-shell-beta\\miacode_audio_debug.log"
+    "  .\\logs\\quick-shell-beta\\miacode_video_export.log"
+    "  .\\logs\\quick-shell-beta\\miacode_startup_timing.log"
+    "  .\\logs\\quick-shell-beta\\miacode_fatal.log"
     ""
     "Included:"
     "  - MiaCode.exe (main app)"
     "  - Start_MiaCode_Debug.bat"
-    "  - Start_MiaCode_Debug_CompareDump.bat"
+    "  - Start_MiaCode_QuickShell_Debug.bat"
     "  - Qt runtime DLLs, plugin folders, and QML modules"
     "  - ffmpeg/ffmpeg.exe"
     "  - assets/"
@@ -421,6 +427,10 @@ $releaseLines | Set-Content -Path $releaseReadme -Encoding UTF8
 
 $requiredPackagePaths = @(
     "MiaCode.exe",
+    "Start_MiaCode_Debug.bat",
+    "Start_MiaCode_QuickShell_Debug.bat",
+    "logs",
+    "logs\\quick-shell-beta",
     (Get-QtRuntimeDllName -BaseName "Qt6Core" -Config $Config),
     (Get-QtRuntimeDllName -BaseName "Qt6Gui" -Config $Config),
     (Get-QtRuntimeDllName -BaseName "Qt6Widgets" -Config $Config),
@@ -443,6 +453,9 @@ $requiredPackagePaths = @(
     "docs\\PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md"
 )
 $unexpectedPackagePaths = @(
+    "Start_MiaCode_Debug_CompareDump.bat",
+    "Start_MiaCode_Debug_View.bat",
+    "Start_MiaCode_Debug_Widget.bat",
     (Get-QtRuntimeDllName -BaseName "Qt6OpenGLWidgets" -Config $Config),
     (Get-QtRuntimeDllName -BaseName "Qt6Concurrent" -Config $Config),
     "opengl32sw.dll"

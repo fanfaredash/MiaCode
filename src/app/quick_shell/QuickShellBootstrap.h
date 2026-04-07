@@ -9,6 +9,7 @@ class QQmlApplicationEngine;
 
 class MainWindow;
 class QuickShellController;
+class QuickShellStyleBridge;
 
 class QuickShellBootstrap : public QObject
 {
@@ -20,10 +21,12 @@ public:
 
     bool start();
     QuickShellController* controller() const;
+    QuickShellStyleBridge* styleBridge() const;
 
 private:
     QIcon appIcon_;
     std::unique_ptr<MainWindow> backend_;
     std::unique_ptr<QuickShellController> controller_;
+    std::unique_ptr<QuickShellStyleBridge> styleBridge_;
     std::unique_ptr<QQmlApplicationEngine> engine_;
 };

@@ -11,6 +11,7 @@
 #include "DialogLocalization.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "WindowParityMetrics.h"
 #include "simai/transform/ChartBatchTransform.h"
 #include "simai/transform/ChartNormalization.h"
 #include "tools/latency/LatencyDetectorDialog.h"
@@ -148,23 +149,23 @@
 #endif
 
 namespace {
-constexpr int kEmbeddedPreviewPanelMinWidth = 320;
-constexpr qreal kEmbeddedPreviewPanelWidthRatio = 0.50;
-constexpr int kEmbeddedPreviewPanelWidthMax = 900;
-constexpr int kPreviewPanelMarginX = 8;
-constexpr int kPreviewPanelMarginTop = 12;
+constexpr int kEmbeddedPreviewPanelMinWidth = miacode::window_parity::kEmbeddedPreviewPanelMinWidth;
+constexpr qreal kEmbeddedPreviewPanelWidthRatio = miacode::window_parity::kEmbeddedPreviewPanelWidthRatio;
+constexpr int kEmbeddedPreviewPanelWidthMax = miacode::window_parity::kEmbeddedPreviewPanelWidthMax;
+constexpr int kPreviewPanelMarginX = miacode::window_parity::kPreviewPanelMarginX;
+constexpr int kPreviewPanelMarginTop = miacode::window_parity::kPreviewPanelMarginTop;
 constexpr int kPreviewPanelMarginBottom = 12;
-constexpr int kPreviewCanvasControlGap = 10;
-constexpr int kPreviewStatsBottomGap = 12;
-constexpr int kPreviewControlStatsGap = 10;
-constexpr int kPreviewControlStatsCardMinWidth = 280;
-constexpr int kPreviewFullscreenHintTopMargin = 28;
-constexpr int kPreviewFullscreenOverlaySideMargin = 18;
-constexpr int kPreviewFullscreenOverlayBottomMargin = 24;
-constexpr int kPreviewFullscreenOverlayMaxWidth = 10000;
-constexpr int kPreviewFullscreenOverlayHideOffset = 20;
-constexpr int kPreviewFullscreenControlsRevealHotzoneHeight = 120;
-constexpr int kPreviewFullscreenControlsAutoHideDelayMs = 1600;
+constexpr int kPreviewCanvasControlGap = miacode::window_parity::kPreviewCanvasControlGap;
+constexpr int kPreviewStatsBottomGap = miacode::window_parity::kPreviewStatsBottomGap;
+constexpr int kPreviewControlStatsGap = miacode::window_parity::kPreviewControlStatsGap;
+constexpr int kPreviewControlStatsCardMinWidth = miacode::window_parity::kPreviewControlStatsCardMinWidth;
+constexpr int kPreviewFullscreenHintTopMargin = miacode::window_parity::kPreviewFullscreenHintTopMargin;
+constexpr int kPreviewFullscreenOverlaySideMargin = miacode::window_parity::kPreviewFullscreenOverlaySideMargin;
+constexpr int kPreviewFullscreenOverlayBottomMargin = miacode::window_parity::kPreviewFullscreenOverlayBottomMargin;
+constexpr int kPreviewFullscreenOverlayMaxWidth = miacode::window_parity::kPreviewFullscreenOverlayMaxWidth;
+constexpr int kPreviewFullscreenOverlayHideOffset = miacode::window_parity::kPreviewFullscreenOverlayHideOffset;
+constexpr int kPreviewFullscreenControlsRevealHotzoneHeight = miacode::window_parity::kPreviewFullscreenControlsRevealHotzoneHeight;
+constexpr int kPreviewFullscreenControlsAutoHideDelayMs = miacode::window_parity::kPreviewFullscreenControlsAutoHideDelayMs;
 constexpr int kPreviewFullscreenControlsAnimationDurationMs = 180;
 constexpr int kPreviewFullscreenControlsOpacityAnimationDurationMs = 180;
 constexpr int kEmbeddedPreviewResizeSettleDelayMs = 120;
@@ -2599,8 +2600,8 @@ void MainWindow::setOutlineDockCollapsed(bool collapsed)
         return;
     }
 
-    constexpr int kCollapsedWidth = 20;
-    constexpr int kExpandedMinWidth = 120;
+    constexpr int kCollapsedWidth = miacode::window_parity::kOutlineCollapsedWidth;
+    constexpr int kExpandedMinWidth = miacode::window_parity::kOutlineExpandedMinWidth;
     if (collapsed) {
         const int currentWidth = outlineDock_->width();
         if (currentWidth > kCollapsedWidth) {
@@ -2667,8 +2668,7 @@ int MainWindow::computeBottomTabsDeviceHeight() const
         ? qMax(tabBar->minimumSizeHint().height(), tabBar->sizeHint().height())
         : 0;
     const int frameWidth = qMax(0, bottomTabs_->style()->pixelMetric(QStyle::PM_DefaultFrameWidth, nullptr, bottomTabs_));
-    constexpr int kSafetyPadding = 4;
-    return timelineHeight + tabBarHeight + frameWidth * 2 + kSafetyPadding;
+    return miacode::window_parity::computeBottomTabsDeviceHeight(timelineHeight, tabBarHeight, frameWidth);
 }
 
 void MainWindow::updateBottomTabsDeviceHeight()
@@ -2786,6 +2786,14 @@ void MainWindow::applyAlignedMuriAnalysisReportToViews()
 MainWindow::~MainWindow()
 {
     shutdownPreviewMediaController();
+    delete quickShellTopChromeSurfaceWidget_;
+    quickShellTopChromeSurfaceWidget_ = nullptr;
+    delete quickShellWorkspaceSurfaceWidget_;
+    quickShellWorkspaceSurfaceWidget_ = nullptr;
+    delete quickShellPreviewControlsSurfaceWidget_;
+    quickShellPreviewControlsSurfaceWidget_ = nullptr;
+    delete quickShellStatusSurfaceWidget_;
+    quickShellStatusSurfaceWidget_ = nullptr;
     delete quickShellChartSurfaceWidget_;
     quickShellChartSurfaceWidget_ = nullptr;
     delete quickShellTimelineSurfaceWidget_;
@@ -3162,11 +3170,20 @@ void MainWindow::applyPreviewSfxWarmupResult(
 
 void MainWindow::setupInitialWindowGeometry()
 {
-    QSize initialSize(1280, 800);
+    QSize initialSize(
+        miacode::window_parity::kInitialWindowWidth,
+        miacode::window_parity::kInitialWindowHeight
+    );
     if (QScreen* screen = QGuiApplication::primaryScreen(); screen != nullptr) {
         const QRect workArea = screen->availableGeometry();
-        initialSize.setWidth(qMin(initialSize.width(), qMax(960, workArea.width() - 120)));
-        initialSize.setHeight(qMin(initialSize.height(), qMax(640, workArea.height() - 120)));
+        initialSize.setWidth(qMin(
+            initialSize.width(),
+            qMax(miacode::window_parity::kInitialWindowFloorWidth, workArea.width() - 120)
+        ));
+        initialSize.setHeight(qMin(
+            initialSize.height(),
+            qMax(miacode::window_parity::kInitialWindowFloorHeight, workArea.height() - 120)
+        ));
         resize(initialSize);
         move(workArea.center() - QPoint(width() / 2, height() / 2));
         return;
@@ -3464,7 +3481,7 @@ bool MainWindow::isQuickShellBackendMode() const
     return frontendHostMode_ == FrontendHostMode::QuickShellBackend;
 }
 
-void MainWindow::initializeQuickShellBridgeSurfaces()
+void MainWindow::initializeQuickShellNativeRegions()
 {
     if (!isQuickShellBackendMode()) {
         return;
@@ -3477,53 +3494,145 @@ void MainWindow::initializeQuickShellBridgeSurfaces()
         bridgeRoot = new QWidget(nullptr, Qt::Tool | Qt::FramelessWindowHint);
         bridgeRoot->setObjectName(objectName);
         bridgeRoot->setAttribute(Qt::WA_NativeWindow);
+        bridgeRoot->setAttribute(Qt::WA_StyledBackground, true);
         bridgeRoot->setContentsMargins(0, 0, 0, 0);
         bridgeRoot->setMinimumSize(QSize(64, 64));
-        auto* layout = new QVBoxLayout(bridgeRoot);
-        layout->setContentsMargins(0, 0, 0, 0);
-        layout->setSpacing(0);
         bridgeRoot->resize(960, 720);
         bridgeRoot->installEventFilter(this);
         bridgeRoot->winId();
+        bridgeRoot->hide();
     };
 
-    if (editorWidget_ != nullptr) {
-        ensureBridgeSurface(quickShellChartSurfaceWidget_, QStringLiteral("QuickShellChartSurface"));
-        if (chartPage_ != nullptr && chartPage_->layout() != nullptr) {
-            chartPage_->layout()->removeWidget(editorWidget_);
-        }
-        if (editorWidget_->parentWidget() != quickShellChartSurfaceWidget_) {
-            editorWidget_->setParent(quickShellChartSurfaceWidget_);
-            if (quickShellChartSurfaceWidget_->layout() != nullptr) {
-                quickShellChartSurfaceWidget_->layout()->addWidget(editorWidget_);
-            }
-        }
-        editorWidget_->show();
-        if (editorFindBar_ != nullptr) {
-            editorFindBar_->setParent(quickShellChartSurfaceWidget_);
-            if (editorFindBar_->isVisible()) {
-                editorFindBar_->raise();
-            }
-        }
-        editorFindGeometryHost_ = quickShellChartSurfaceWidget_;
+    ensureBridgeSurface(quickShellTopChromeSurfaceWidget_, QStringLiteral("QuickShellTopChromeSurface"));
+    ensureBridgeSurface(quickShellWorkspaceSurfaceWidget_, QStringLiteral("QuickShellWorkspaceSurface"));
+    ensureBridgeSurface(quickShellPreviewControlsSurfaceWidget_, QStringLiteral("QuickShellPreviewControlsSurface"));
+    ensureBridgeSurface(quickShellStatusSurfaceWidget_, QStringLiteral("QuickShellStatusSurface"));
+    if (previewPanel_ != nullptr) {
+        quickShellPreviewControlsSurfaceWidget_->setStyleSheet(previewPanel_->styleSheet());
     }
 
-    if (timelineView_ != nullptr) {
-        ensureBridgeSurface(quickShellTimelineSurfaceWidget_, QStringLiteral("QuickShellTimelineSurface"));
-        if (bottomTabs_ != nullptr) {
-            const int timelineTabIndex = bottomTabs_->indexOf(timelineView_);
-            if (timelineTabIndex >= 0) {
-                bottomTabs_->removeTab(timelineTabIndex);
-            }
-        }
-        if (timelineView_->parentWidget() != quickShellTimelineSurfaceWidget_) {
-            timelineView_->setParent(quickShellTimelineSurfaceWidget_);
-            if (quickShellTimelineSurfaceWidget_->layout() != nullptr) {
-                quickShellTimelineSurfaceWidget_->layout()->addWidget(timelineView_);
-            }
-        }
-        timelineView_->show();
+    if (quickShellTopChromeSurfaceWidget_->layout() == nullptr) {
+        auto* layout = new QVBoxLayout(quickShellTopChromeSurfaceWidget_);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(0);
     }
+    if (quickShellWorkspaceSurfaceWidget_->layout() == nullptr) {
+        auto* layout = new QHBoxLayout(quickShellWorkspaceSurfaceWidget_);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(0);
+    }
+    if (quickShellPreviewControlsSurfaceWidget_->layout() == nullptr) {
+        auto* layout = new QVBoxLayout(quickShellPreviewControlsSurfaceWidget_);
+        layout->setContentsMargins(8, 12, 8, 12);
+        layout->setSpacing(10);
+    }
+    if (quickShellStatusSurfaceWidget_->layout() == nullptr) {
+        auto* layout = new QVBoxLayout(quickShellStatusSurfaceWidget_);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(0);
+    }
+
+    auto* topChromeLayout = qobject_cast<QBoxLayout*>(quickShellTopChromeSurfaceWidget_->layout());
+    auto* workspaceLayout = qobject_cast<QBoxLayout*>(quickShellWorkspaceSurfaceWidget_->layout());
+    auto* previewControlsLayout = qobject_cast<QBoxLayout*>(quickShellPreviewControlsSurfaceWidget_->layout());
+    auto* statusLayout = qobject_cast<QBoxLayout*>(quickShellStatusSurfaceWidget_->layout());
+    if (topChromeLayout == nullptr || workspaceLayout == nullptr || previewControlsLayout == nullptr || statusLayout == nullptr) {
+        return;
+    }
+
+    if (QMenuBar* windowMenuBar = menuBar(); windowMenuBar != nullptr) {
+        windowMenuBar->setNativeMenuBar(false);
+        if (windowMenuBar->parentWidget() != quickShellTopChromeSurfaceWidget_) {
+            windowMenuBar->setParent(quickShellTopChromeSurfaceWidget_);
+        }
+        if (topChromeLayout->indexOf(windowMenuBar) < 0) {
+            topChromeLayout->addWidget(windowMenuBar);
+        }
+        windowMenuBar->show();
+    }
+
+    if (const QList<QToolBar*> toolBars = findChildren<QToolBar*>(); !toolBars.isEmpty()) {
+        if (QToolBar* toolBar = toolBars.constFirst(); toolBar != nullptr) {
+            removeToolBar(toolBar);
+            if (toolBar->parentWidget() != quickShellTopChromeSurfaceWidget_) {
+                toolBar->setParent(quickShellTopChromeSurfaceWidget_);
+            }
+            if (topChromeLayout->indexOf(toolBar) < 0) {
+                topChromeLayout->addWidget(toolBar);
+            }
+            toolBar->show();
+        }
+    }
+
+    if (QStatusBar* windowStatusBar = statusBar(); windowStatusBar != nullptr) {
+        if (windowStatusBar->parentWidget() != quickShellStatusSurfaceWidget_) {
+            windowStatusBar->setParent(quickShellStatusSurfaceWidget_);
+        }
+        if (statusLayout->indexOf(windowStatusBar) < 0) {
+            statusLayout->addWidget(windowStatusBar);
+        }
+        windowStatusBar->show();
+    }
+
+    if (outlineDock_ != nullptr) {
+        removeDockWidget(outlineDock_);
+        if (outlineDock_->parentWidget() != quickShellWorkspaceSurfaceWidget_) {
+            outlineDock_->setParent(quickShellWorkspaceSurfaceWidget_);
+        }
+        if (workspaceLayout->indexOf(outlineDock_) < 0) {
+            workspaceLayout->addWidget(outlineDock_);
+        }
+        outlineDock_->show();
+    }
+
+    if (previewLeftColumn_ != nullptr) {
+        if (previewLeftColumn_->parentWidget() != quickShellWorkspaceSurfaceWidget_) {
+            previewLeftColumn_->setParent(quickShellWorkspaceSurfaceWidget_);
+        }
+        if (workspaceLayout->indexOf(previewLeftColumn_) < 0) {
+            workspaceLayout->addWidget(previewLeftColumn_, 1);
+        }
+        previewLeftColumn_->show();
+    }
+
+    if (previewControlCard_ != nullptr) {
+        if (previewControlCard_->parentWidget() != quickShellPreviewControlsSurfaceWidget_) {
+            previewControlCard_->setParent(quickShellPreviewControlsSurfaceWidget_);
+        }
+        if (previewControlsLayout->indexOf(previewControlCard_) < 0) {
+            previewControlsLayout->addWidget(previewControlCard_);
+        }
+        previewControlCard_->show();
+    }
+
+    if (previewStatsCard_ != nullptr) {
+        if (previewStatsCard_->parentWidget() != quickShellPreviewControlsSurfaceWidget_) {
+            previewStatsCard_->setParent(quickShellPreviewControlsSurfaceWidget_);
+        }
+        if (previewControlsLayout->indexOf(previewStatsCard_) < 0) {
+            previewControlsLayout->addWidget(previewStatsCard_);
+        }
+        previewStatsCard_->show();
+    }
+
+    if (previewPanel_ != nullptr) {
+        previewPanel_->hide();
+    }
+    if (previewCanvasFrame_ != nullptr) {
+        previewCanvasFrame_->hide();
+    }
+    if (previewCanvasContainer_ != nullptr) {
+        previewCanvasContainer_->hide();
+    }
+
+    topChromeLayout->activate();
+    workspaceLayout->activate();
+    previewControlsLayout->activate();
+    statusLayout->activate();
+    quickShellTopChromeSurfaceWidget_->show();
+    quickShellWorkspaceSurfaceWidget_->show();
+    quickShellPreviewControlsSurfaceWidget_->show();
+    quickShellStatusSurfaceWidget_->show();
 }
 
 void MainWindow::setInvalidStarPreviewEasterEggEnabled(bool enabled)
@@ -4277,6 +4386,10 @@ bool MainWindow::event(QEvent* event)
 
 void MainWindow::refreshEmbeddedPreviewSurface(bool force)
 {
+    if (isQuickShellBackendMode()) {
+        Q_UNUSED(force);
+        return;
+    }
     if (embeddedPreviewRefreshSuspended_) {
         embeddedPreviewRefreshPending_ = true;
         if (runtimeDebugOutputEnabled_) {
@@ -4338,6 +4451,10 @@ void MainWindow::refreshEmbeddedPreviewSurface(bool force)
 
 void MainWindow::suspendEmbeddedPreviewForNativeDialog(const char* source)
 {
+    if (isQuickShellBackendMode()) {
+        Q_UNUSED(source);
+        return;
+    }
     if (embeddedPreviewRefreshSuspended_) {
         return;
     }
@@ -4367,6 +4484,10 @@ void MainWindow::suspendEmbeddedPreviewForNativeDialog(const char* source)
 
 void MainWindow::resumeEmbeddedPreviewForNativeDialog(const char* source)
 {
+    if (isQuickShellBackendMode()) {
+        Q_UNUSED(source);
+        return;
+    }
     if (!embeddedPreviewRefreshSuspended_) {
         return;
     }
@@ -4391,6 +4512,10 @@ void MainWindow::resumeEmbeddedPreviewForNativeDialog(const char* source)
 
 void MainWindow::scheduleEmbeddedPreviewSurfaceRefresh(int delayMs)
 {
+    if (isQuickShellBackendMode()) {
+        Q_UNUSED(delayMs);
+        return;
+    }
     const int effectiveDelayMs = qMax(0, delayMs);
     embeddedPreviewRefreshPending_ = true;
     if (embeddedPreviewRefreshSuspended_) {
@@ -4416,6 +4541,10 @@ void MainWindow::scheduleEmbeddedPreviewSurfaceRefresh(int delayMs)
 
 void MainWindow::noteEmbeddedPreviewResizeActivity(const char* source)
 {
+    if (isQuickShellBackendMode()) {
+        Q_UNUSED(source);
+        return;
+    }
     if (previewCanvas_ == nullptr || !isVisible() || windowState().testFlag(Qt::WindowMinimized)) {
         return;
     }

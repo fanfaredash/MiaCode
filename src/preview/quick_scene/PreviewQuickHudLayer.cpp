@@ -8,6 +8,7 @@
 
 #include <QFontMetrics>
 #include <QPainter>
+#include <QQuickWindow>
 
 namespace {
 
@@ -29,15 +30,42 @@ PreviewQuickHudLayer::PreviewQuickHudLayer(QQuickItem* parent)
 {
     setOpaquePainting(false);
     setAntialiasing(true);
+    connect(this, &QQuickItem::windowChanged, this, [this](QQuickWindow*) {
+        if (runtime_ != nullptr) {
+            runtime_->setFrameSize(boundingRect().size().toSize());
+        }
+        update();
+    });
 }
 
 void PreviewQuickHudLayer::setRuntime(PreviewRuntime* runtime)
 {
+    if (runtime_ == runtime) {
+        return;
+    }
+    if (runtimeUpdateConnection_) {
+        QObject::disconnect(runtimeUpdateConnection_);
+    }
     runtime_ = runtime;
     if (runtime_ != nullptr) {
         frameState_ = nullptr;
+        runtimeUpdateConnection_ = QObject::connect(runtime_, &PreviewRuntime::frameStateChanged, this, [this]() {
+            update();
+        });
+        runtime_->setFrameSize(boundingRect().size().toSize());
     }
+    emit runtimeChanged();
     update();
+}
+
+QObject* PreviewQuickHudLayer::runtimeObject() const
+{
+    return runtime_;
+}
+
+void PreviewQuickHudLayer::setRuntimeObject(QObject* runtimeObject)
+{
+    setRuntime(qobject_cast<PreviewRuntime*>(runtimeObject));
 }
 
 void PreviewQuickHudLayer::setFrameState(const miacode::preview::scene::PreviewFrameState* frameState)

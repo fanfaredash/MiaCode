@@ -2,205 +2,126 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
+import MiaCode.Preview
 
 ApplicationWindow {
     id: root
 
-    visible: true
-    width: 1680
-    height: 980
-    minimumWidth: 1280
-    minimumHeight: 800
-    title: controller.windowTitle
-    color: "#e9eef4"
+    property var paletteMap: styleBridge.palette
+    property var metricsMap: styleBridge.metrics
+    property bool fullscreenControlsVisible: controller.previewFullscreen
+    property bool fullscreenHintVisible: false
 
-    property color chromeBg: "#f7fafc"
-    property color panelBg: "#ffffff"
-    property color panelAltBg: "#f1f5f9"
-    property color edgeColor: "#d5dee8"
-    property color accent: "#117a8b"
-    property color accentSoft: "#dff1f4"
-    property color warning: "#d97706"
-    property color danger: "#c2410c"
-    property color ink: "#132033"
-    property color inkSoft: "#5b6778"
+    function metric(key, fallback) {
+        return metricsMap && metricsMap[key] !== undefined ? metricsMap[key] : fallback
+    }
+
+    function tone(key, fallback) {
+        return paletteMap && paletteMap[key] !== undefined ? paletteMap[key] : fallback
+    }
+
+    function showFullscreenControls() {
+        if (!controller.previewFullscreen)
+            return
+        fullscreenControlsVisible = true
+        fullscreenControlsHideTimer.restart()
+    }
+
+    visible: true
+    width: metric("initialWindowWidth", 1280)
+    height: metric("initialWindowHeight", 800)
+    minimumWidth: metric("minimumWindowWidth", 960)
+    minimumHeight: metric("minimumWindowHeight", 640)
+    title: controller.windowTitle
+    color: tone("windowBg", "#f8fafd")
+
+    palette.window: tone("windowBg", "#f8fafd")
+    palette.base: tone("inputBg", "#ffffff")
+    palette.button: tone("cardBg", "#ffffff")
+    palette.windowText: tone("textPrimary", "#203040")
+    palette.text: tone("textPrimary", "#203040")
+    palette.buttonText: tone("textPrimary", "#203040")
+    palette.highlight: tone("accent", "#2e77d0")
+    palette.highlightedText: tone("accentText", "#ffffff")
+
+    Component.onCompleted: {
+        styleBridge.syncWindowSize(width, height)
+        controller.refresh()
+    }
+    onWidthChanged: styleBridge.syncWindowSize(width, height)
+    onHeightChanged: styleBridge.syncWindowSize(width, height)
 
     onClosing: function(close) {
         if (!controller.confirmClose())
             close.accepted = false
     }
 
-    menuBar: MenuBar {
-        Menu {
-            title: qsTr("&File")
-            Action { text: qsTr("New"); onTriggered: controller.newFile() }
-            Action { text: qsTr("Open..."); onTriggered: controller.openFile() }
-            Action { text: qsTr("Save"); onTriggered: controller.saveFile() }
-            Action { text: qsTr("Save As..."); onTriggered: controller.saveFileAs() }
-            MenuSeparator {}
-            Action { text: qsTr("Preferences..."); onTriggered: controller.openPreferences() }
-        }
-        Menu {
-            title: qsTr("&Edit")
-            Action { text: qsTr("Syntax Check"); onTriggered: controller.runSyntaxCheck() }
-            Action { text: qsTr("Format Chart"); onTriggered: controller.normalizeWholeChart() }
-            MenuSeparator {}
-            Action { text: qsTr("Mirror Left/Right"); onTriggered: controller.mirrorLeftRight() }
-            Action { text: qsTr("Mirror Up/Down"); onTriggered: controller.mirrorUpDown() }
-            Action { text: qsTr("Rotate 180"); onTriggered: controller.rotate180() }
-            Action { text: qsTr("Rotate -45"); onTriggered: controller.rotate45CounterClockwise() }
-            Action { text: qsTr("Rotate +45"); onTriggered: controller.rotate45Clockwise() }
-            MenuSeparator {}
-            Action { text: qsTr("Toggle Break"); onTriggered: controller.toggleBreakSelection() }
-            Action { text: qsTr("Toggle EX"); onTriggered: controller.toggleExSelection() }
-            Action { text: qsTr("Toggle Firework"); onTriggered: controller.toggleFireworkSelection() }
-            Action { text: qsTr("Random Rotate"); onTriggered: controller.randomRotateSelection() }
-        }
-        Menu {
-            title: qsTr("&Preview")
-            Action { text: qsTr("Play / Pause"); onTriggered: controller.togglePreviewPlayback() }
-            Action { text: qsTr("Stop"); onTriggered: controller.stopPreview() }
-            MenuSeparator {}
-            Action { text: qsTr("Swap Side Panels"); onTriggered: controller.toggleWorkspacePanelsSwapped() }
-            Action {
-                text: controller.previewFullscreen ? qsTr("Exit Fullscreen Preview") : qsTr("Fullscreen Preview")
-                onTriggered: controller.previewFullscreen = !controller.previewFullscreen
+    Connections {
+        target: controller
+
+        function onPreviewFullscreenChanged() {
+            if (!controller.previewFullscreen) {
+                fullscreenControlsVisible = false
+                fullscreenHintVisible = false
+                fullscreenControlsHideTimer.stop()
+                fullscreenHintHideTimer.stop()
+                return
             }
-            MenuSeparator {}
-            Action { text: qsTr("Audio Settings..."); onTriggered: controller.openPreviewAudioSettings() }
-            Action { text: qsTr("Preview Settings..."); onTriggered: controller.openPreviewVideoSettings() }
-        }
-        Menu {
-            title: qsTr("&Tools")
-            Action { text: qsTr("BPM && Offset Detection"); onTriggered: controller.openLatencyDetector() }
-            Action { text: qsTr("Export Chart"); onTriggered: controller.exportPreviewVideo() }
-            Action { text: qsTr("Batch Export"); onTriggered: controller.batchExportPreviewVideo() }
-            MenuSeparator {}
-            Action { text: qsTr("Official Chart Mirror"); onTriggered: controller.openOfficialChartMirror() }
-            Action { text: qsTr("simaiwiki"); onTriggered: controller.openSimaiWiki() }
-        }
-        Menu {
-            title: qsTr("&Help")
-            Action { text: qsTr("About"); onTriggered: controller.openAbout() }
+            fullscreenControlsVisible = true
+            fullscreenHintVisible = true
+            fullscreenControlsHideTimer.restart()
+            fullscreenHintHideTimer.restart()
         }
     }
 
-    header: ToolBar {
-        background: Rectangle {
-            color: root.chromeBg
-            border.color: root.edgeColor
-        }
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 16
-            anchors.rightMargin: 16
-            spacing: 12
-
-            ColumnLayout {
-                spacing: 2
-
-                Label {
-                    text: controller.currentFileLabel
-                    color: root.ink
-                    font.pixelSize: 17
-                    font.bold: true
-                    Layout.maximumWidth: 780
-                    elide: Text.ElideMiddle
-                }
-
-                Label {
-                    text: controller.hasActiveDifficulty
-                        ? controller.activeDifficultyName + "  |  " + controller.cursorLabel
-                        : (controller.currentPage === "metadata" ? qsTr("Metadata") : qsTr("Welcome"))
-                    color: root.inkSoft
-                    font.pixelSize: 12
-                    Layout.maximumWidth: 780
-                    elide: Text.ElideRight
-                }
-            }
-
-            Item { Layout.fillWidth: true }
-
-            Button {
-                text: qsTr("Save")
-                onClicked: controller.saveFile()
-            }
-
-            Button {
-                text: controller.workspacePanelsSwapped ? qsTr("Preview Left") : qsTr("Preview Right")
-                visible: controller.currentPage === "chart"
-                onClicked: controller.toggleWorkspacePanelsSwapped()
-            }
-
-            Button {
-                text: controller.previewFullscreen ? qsTr("Exit Fullscreen") : qsTr("Fullscreen")
-                visible: controller.currentPage === "chart"
-                onClicked: controller.previewFullscreen = !controller.previewFullscreen
-            }
-        }
+    Timer {
+        id: fullscreenControlsHideTimer
+        interval: metric("fullscreenControlsAutoHideDelayMs", 1600)
+        repeat: false
+        onTriggered: fullscreenControlsVisible = false
     }
 
-    footer: Rectangle {
-        color: root.chromeBg
-        border.color: root.edgeColor
-        implicitHeight: 36
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: 16
-            anchors.rightMargin: 16
-            spacing: 10
-
-            Label {
-                text: controller.statusText.length > 0 ? controller.statusText : qsTr("Quick Shell Beta")
-                color: root.inkSoft
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-            }
-
-            Label {
-                visible: controller.currentPage === "chart"
-                text: controller.previewSpeedLabel
-                color: root.ink
-                font.bold: true
-            }
-        }
+    Timer {
+        id: fullscreenHintHideTimer
+        interval: metric("fullscreenHintAutoHideDelayMs", 2200)
+        repeat: false
+        onTriggered: fullscreenHintVisible = false
     }
 
-    Menu {
-        id: toolboxMenu
-
-        MenuItem { text: qsTr("BPM && Offset Detection"); onTriggered: controller.openLatencyDetector() }
-        MenuItem { text: qsTr("Export Chart"); onTriggered: controller.exportPreviewVideo() }
-        MenuItem { text: qsTr("Batch Export"); onTriggered: controller.batchExportPreviewVideo() }
-        MenuSeparator {}
-        MenuItem { text: qsTr("Format Chart"); onTriggered: controller.normalizeWholeChart() }
-        MenuItem { text: qsTr("Official Chart Mirror"); onTriggered: controller.openOfficialChartMirror() }
+    Shortcut {
+        sequence: "Esc"
+        enabled: controller.previewFullscreen
+        context: Qt.ApplicationShortcut
+        onActivated: controller.previewFullscreen = false
     }
 
-    Menu {
-        id: addDifficultyMenu
+    Shortcut {
+        sequence: "F11"
+        context: Qt.ApplicationShortcut
+        onActivated: controller.previewFullscreen = !controller.previewFullscreen
+    }
 
-        Instantiator {
-            model: controller.availableDifficultyOptions
-
-            delegate: MenuItem {
-                required property var modelData
-
-                text: modelData.label
-                onTriggered: controller.addDifficulty(modelData.id)
-            }
-
-            onObjectAdded: function(index, object) { addDifficultyMenu.insertItem(index, object) }
-            onObjectRemoved: function(index, object) {
-                addDifficultyMenu.removeItem(object)
-            }
-        }
+    Shortcut {
+        sequence: "Space"
+        context: Qt.ApplicationShortcut
+        onActivated: controller.togglePreviewPlayback()
     }
 
     Menu {
         id: previewSpeedMenu
+        popupType: Popup.Window
+        palette.window: tone("cardBg", "#ffffff")
+        palette.base: tone("cardBg", "#ffffff")
+        palette.text: tone("textPrimary", "#203040")
+        palette.windowText: tone("textPrimary", "#203040")
+        palette.buttonText: tone("textPrimary", "#203040")
+        palette.highlight: tone("accent", "#2e77d0")
+        palette.highlightedText: tone("accentText", "#ffffff")
+        background: Rectangle {
+            color: tone("cardBg", "#ffffff")
+            border.color: tone("border", "#d5e0ec")
+            radius: 8
+        }
 
         MenuItem { text: "0.25x"; onTriggered: controller.setPreviewRate(0.25) }
         MenuItem { text: "0.5x"; onTriggered: controller.setPreviewRate(0.5) }
@@ -210,537 +131,117 @@ ApplicationWindow {
         MenuItem { text: "2x"; onTriggered: controller.setPreviewRate(2.0) }
     }
 
-    SplitView {
+    ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 12
-        orientation: Qt.Horizontal
-
-        Rectangle {
-            SplitView.preferredWidth: 260
-            SplitView.minimumWidth: 220
-            color: root.panelBg
-            radius: 16
-            border.color: root.edgeColor
-
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 14
-                spacing: 12
-
-                Label {
-                    text: qsTr("Outline")
-                    color: root.ink
-                    font.pixelSize: 18
-                    font.bold: true
-                }
-
-                ListView {
-                    id: outlineView
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    spacing: 8
-                    clip: true
-                    model: controller.outlineModel
-
-                    delegate: Rectangle {
-                        radius: 12
-                        color: selected ? root.accentSoft : root.panelAltBg
-                        border.color: selected ? root.accent : root.edgeColor
-                        implicitHeight: 52
-                        width: outlineView.width
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 14
-                            anchors.rightMargin: 10
-                            spacing: 10
-
-                            Label {
-                                text: label
-                                color: selected ? root.accent : root.ink
-                                font.pixelSize: 14
-                                font.bold: selected
-                                Layout.fillWidth: true
-                                elide: Text.ElideRight
-                            }
-
-                            ToolButton {
-                                visible: canDelete
-                                text: qsTr("Delete")
-                                onClicked: controller.deleteDifficulty(difficultyId)
-                            }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: {
-                                if (kind === "add")
-                                    addDifficultyMenu.popup()
-                                else if (kind === "toolbox")
-                                    toolboxMenu.popup()
-                                else
-                                    controller.activateOutlineRow(index)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Rectangle {
-            SplitView.fillWidth: true
-            SplitView.minimumWidth: 900
-            color: "transparent"
-
-            StackLayout {
-                anchors.fill: parent
-                currentIndex: controller.currentPage === "metadata" ? 1 : (controller.currentPage === "chart" ? 2 : 0)
-
-                Rectangle {
-                    color: root.panelBg
-                    radius: 20
-                    border.color: root.edgeColor
-
-                    ColumnLayout {
-                        anchors.centerIn: parent
-                        spacing: 12
-
-                        Label {
-                            text: qsTr("Quick Shell Beta")
-                            font.pixelSize: 34
-                            font.bold: true
-                            color: root.ink
-                        }
-
-                        Label {
-                            text: qsTr("Open a chart folder or start a new maidata.txt project.")
-                            color: root.inkSoft
-                            horizontalAlignment: Text.AlignHCenter
-                        }
-
-                        RowLayout {
-                            spacing: 10
-
-                            Button { text: qsTr("Open"); onClicked: controller.openFile() }
-                            Button { text: qsTr("New"); onClicked: controller.newFile() }
-                        }
-                    }
-                }
-
-                Rectangle {
-                    color: root.panelBg
-                    radius: 20
-                    border.color: root.edgeColor
-
-                    ScrollView {
-                        anchors.fill: parent
-                        anchors.margins: 18
-                        clip: true
-
-                        ColumnLayout {
-                            width: parent.width
-                            spacing: 14
-
-                            Label {
-                                text: qsTr("Metadata")
-                                font.pixelSize: 24
-                                font.bold: true
-                                color: root.ink
-                            }
-
-                            TextField {
-                                text: controller.titleDraft
-                                placeholderText: qsTr("Title")
-                                onTextEdited: controller.titleDraft = text
-                            }
-
-                            TextField {
-                                text: controller.artistDraft
-                                placeholderText: qsTr("Artist")
-                                onTextEdited: controller.artistDraft = text
-                            }
-
-                            TextField {
-                                text: controller.firstDraft
-                                placeholderText: qsTr("&first")
-                                onTextEdited: controller.firstDraft = text
-                            }
-
-                            TextField {
-                                text: controller.designerDraft
-                                placeholderText: qsTr("Designer")
-                                onTextEdited: controller.designerDraft = text
-                            }
-
-                            TextArea {
-                                id: metadataExtraArea
-                                Layout.fillWidth: true
-                                Layout.minimumHeight: 420
-                                wrapMode: TextEdit.NoWrap
-                                text: controller.metadataExtraDraft
-                                onTextChanged: {
-                                    if (activeFocus && text !== controller.metadataExtraDraft)
-                                        controller.metadataExtraDraft = text
-                                }
-                            }
-                        }
-                    }
-                }
-
-                ColumnLayout {
-                    spacing: 12
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        color: root.panelBg
-                        radius: 18
-                        border.color: root.edgeColor
-                        implicitHeight: 84
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 18
-                            anchors.rightMargin: 18
-                            spacing: 12
-
-                            ColumnLayout {
-                                spacing: 4
-
-                                Label {
-                                    text: controller.activeDifficultyName
-                                    color: root.ink
-                                    font.pixelSize: 22
-                                    font.bold: true
-                                }
-
-                                RowLayout {
-                                    spacing: 8
-
-                                    Label {
-                                        text: controller.cursorLabel
-                                        color: root.inkSoft
-                                    }
-
-                                    Label {
-                                        text: qsTr("Errors %1").arg(controller.validationErrorCount)
-                                        color: root.danger
-                                        visible: controller.validationErrorCount > 0
-                                    }
-
-                                    Label {
-                                        text: qsTr("Warnings %1").arg(controller.validationWarningCount)
-                                        color: root.warning
-                                        visible: controller.validationWarningCount > 0
-                                    }
-
-                                    Label {
-                                        text: qsTr("Muri %1").arg(controller.muriIssueCount)
-                                        color: root.accent
-                                        visible: controller.muriIssueCount > 0
-                                    }
-                                }
-                            }
-
-                            Item { Layout.fillWidth: true }
-
-                            TextField {
-                                text: controller.difficultyLevelDraft
-                                placeholderText: qsTr("Level")
-                                Layout.preferredWidth: 120
-                                onTextEdited: controller.difficultyLevelDraft = text
-                            }
-
-                            TextField {
-                                text: controller.difficultyDesignerDraft
-                                placeholderText: qsTr("Difficulty Designer")
-                                Layout.preferredWidth: 220
-                                onTextEdited: controller.difficultyDesignerDraft = text
-                            }
-                        }
-                    }
-
-                    SplitView {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        orientation: Qt.Horizontal
-
-                        Item {
-                            SplitView.fillWidth: true
-                            SplitView.minimumWidth: 480
-
-                            Loader {
-                                anchors.fill: parent
-                                sourceComponent: controller.workspacePanelsSwapped ? previewPaneComponent : editorPaneComponent
-                            }
-                        }
-
-                        Item {
-                            SplitView.preferredWidth: 460
-                            SplitView.minimumWidth: 360
-
-                            Loader {
-                                anchors.fill: parent
-                                sourceComponent: controller.workspacePanelsSwapped ? editorPaneComponent : previewPaneComponent
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 340
-                        visible: controller.showBottomTabs
-                        color: root.panelBg
-                        radius: 18
-                        border.color: root.edgeColor
-
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 12
-                            spacing: 12
-
-                            TabBar {
-                                Layout.fillWidth: true
-                                currentIndex: controller.bottomTabIndex
-                                onCurrentIndexChanged: controller.bottomTabIndex = currentIndex
-
-                                TabButton { text: qsTr("Timeline") }
-                                TabButton { text: qsTr("Validation") }
-                                TabButton { text: qsTr("Muri") }
-                            }
-
-                            StackLayout {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                currentIndex: controller.bottomTabIndex
-
-                                Rectangle {
-                                    color: root.panelAltBg
-                                    radius: 14
-                                    border.color: root.edgeColor
-
-                                    WindowContainer {
-                                        anchors.fill: parent
-                                        anchors.margins: 6
-                                        window: controller.timelineSurface.window
-                                    }
-                                }
-
-                                ListView {
-                                    clip: true
-                                    spacing: 10
-                                    model: controller.validationModel
-
-                                    delegate: Rectangle {
-                                        width: ListView.view.width
-                                        radius: 14
-                                        color: issueEnabled ? root.panelBg : root.panelAltBg
-                                        border.color: ignored ? root.edgeColor : (warning ? root.warning : root.edgeColor)
-                                        implicitHeight: validationContentColumn.implicitHeight + 22
-
-                                        ColumnLayout {
-                                            id: validationContentColumn
-                                            anchors.fill: parent
-                                            anchors.margins: 12
-                                            spacing: 8
-
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: richText
-                                                textFormat: Text.RichText
-                                                wrapMode: Text.Wrap
-                                                color: root.ink
-                                            }
-
-                                            RowLayout {
-                                                spacing: 8
-
-                                                Button {
-                                                    text: qsTr("Jump")
-                                                    enabled: issueEnabled
-                                                    onClicked: controller.activateIssue(false, index)
-                                                }
-
-                                                Button {
-                                                    text: qsTr("Copy")
-                                                    onClicked: controller.copyIssue(false, index)
-                                                }
-
-                                                Button {
-                                                    text: ignored ? qsTr("Unignore") : qsTr("Ignore")
-                                                    enabled: issueTypeKey.length > 0
-                                                    onClicked: controller.toggleIssueIgnored(false, index)
-                                                }
-
-                                                Item { Layout.fillWidth: true }
-
-                                                Label {
-                                                    text: line > 0 ? ("L" + line + " C" + col) : ""
-                                                    color: root.inkSoft
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                ListView {
-                                    clip: true
-                                    spacing: 10
-                                    model: controller.muriModel
-
-                                    delegate: Rectangle {
-                                        width: ListView.view.width
-                                        radius: 14
-                                        color: issueEnabled ? root.panelBg : root.panelAltBg
-                                        border.color: ignored ? root.edgeColor : root.accent
-                                        implicitHeight: muriContentColumn.implicitHeight + 22
-
-                                        ColumnLayout {
-                                            id: muriContentColumn
-                                            anchors.fill: parent
-                                            anchors.margins: 12
-                                            spacing: 8
-
-                                            Text {
-                                                Layout.fillWidth: true
-                                                text: richText
-                                                textFormat: Text.RichText
-                                                wrapMode: Text.Wrap
-                                                color: root.ink
-                                            }
-
-                                            RowLayout {
-                                                spacing: 8
-
-                                                Button {
-                                                    text: qsTr("Jump")
-                                                    enabled: issueEnabled
-                                                    onClicked: controller.activateIssue(true, index)
-                                                }
-
-                                                Button {
-                                                    text: qsTr("Copy")
-                                                    onClicked: controller.copyIssue(true, index)
-                                                }
-
-                                                Button {
-                                                    text: ignored ? qsTr("Unignore") : qsTr("Ignore")
-                                                    enabled: issueTypeKey.length > 0
-                                                    onClicked: controller.toggleIssueIgnored(true, index)
-                                                }
-
-                                                Item { Layout.fillWidth: true }
-
-                                                Label {
-                                                    text: line > 0 ? ("L" + line + " C" + col) : ""
-                                                    color: root.inkSoft
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Component {
-        id: editorPaneComponent
-
-        Rectangle {
-            color: root.panelBg
-            radius: 18
-            border.color: root.edgeColor
+        spacing: 0
+
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: metric("topChromeHeight", 106)
+            Layout.minimumHeight: metric("topChromeHeight", 106)
+            Layout.maximumHeight: metric("topChromeHeight", 106)
 
             WindowContainer {
                 anchors.fill: parent
-                anchors.margins: 6
-                window: controller.chartEditorSurface.window
+                window: controller.topChromeWindow
+                Component.onCompleted: controller.syncTopChromeSurfaceSize(width, height)
+                onWidthChanged: controller.syncTopChromeSurfaceSize(width, height)
+                onHeightChanged: controller.syncTopChromeSurfaceSize(width, height)
             }
         }
-    }
 
-    Component {
-        id: previewPaneComponent
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: 0
+            layoutDirection: controller.workspacePanelsSwapped ? Qt.RightToLeft : Qt.LeftToRight
 
-        Rectangle {
-            color: root.panelBg
-            radius: 18
-            border.color: root.edgeColor
+            WindowContainer {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                window: controller.workspaceWindow
+                Component.onCompleted: controller.syncWorkspaceSurfaceSize(width, height)
+                onWidthChanged: controller.syncWorkspaceSurfaceSize(width, height)
+                onHeightChanged: controller.syncWorkspaceSurfaceSize(width, height)
+            }
 
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 12
-                spacing: 10
+            Rectangle {
+                Layout.preferredWidth: Math.max(metric("previewShellWidth", 360), 320)
+                Layout.minimumWidth: Math.max(metric("previewShellWidth", 360), 320)
+                Layout.maximumWidth: Math.max(metric("previewShellWidth", 360), 320)
+                Layout.fillHeight: true
+                color: tone("panelBg", "#f5f7fa")
+                border.color: tone("border", "#d5e0ec")
 
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    color: "#111827"
-                    radius: 14
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    anchors.topMargin: 12
+                    anchors.bottomMargin: 12
+                    spacing: 10
 
-                    WindowContainer {
-                        anchors.fill: parent
-                        anchors.margins: 4
-                        window: controller.previewFullscreen ? null : controller.previewWindow
-                    }
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 8
-
-                    Button {
-                        text: controller.previewPlaying ? qsTr("Pause") : qsTr("Play")
-                        onClicked: controller.togglePreviewPlayback()
-                    }
-
-                    Button {
-                        text: qsTr("Stop")
-                        onClicked: controller.stopPreview()
-                    }
-
-                    Slider {
-                        id: previewSlider
+                    Item {
                         Layout.fillWidth: true
-                        from: 0
-                        to: Math.max(controller.previewDurationSeconds, 0.001)
-                        value: controller.previewPositionSeconds
-                        onMoved: controller.seekPreview(value)
-                    }
-
-                    Button {
-                        text: controller.previewSpeedLabel
-                        onClicked: previewSpeedMenu.popup()
-                    }
-                }
-
-                Flow {
-                    Layout.fillWidth: true
-                    spacing: 6
-
-                    Repeater {
-                        model: controller.previewStats
+                        Layout.fillHeight: true
 
                         Rectangle {
-                            radius: 999
-                            color: root.panelAltBg
-                            border.color: root.edgeColor
-                            height: 28
-                            implicitWidth: statLabel.implicitWidth + 18
+                            id: embeddedPreviewFrame
 
-                            Label {
-                                id: statLabel
-                                anchors.centerIn: parent
-                                text: modelData
-                                color: root.inkSoft
-                                font.pixelSize: 11
+                            readonly property real canvasSide: Math.max(1, Math.min(parent.width, parent.height))
+
+                            visible: !controller.previewFullscreen
+                            width: canvasSide
+                            height: canvasSide
+                            anchors.centerIn: parent
+                            color: tone("canvasBg", "#000000")
+                            border.color: tone("borderSoft", "#ccd6e2")
+                            clip: true
+
+                            PreviewQuickSceneRoot {
+                                anchors.fill: parent
+                                anchors.margins: 1
+                                runtime: controller.previewRuntime
+                            }
+
+                            PreviewQuickHudLayer {
+                                anchors.fill: parent
+                                anchors.margins: 1
+                                runtime: controller.previewRuntime
                             }
                         }
                     }
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: metric("previewControlsHeight", 220)
+                        Layout.minimumHeight: metric("previewControlsHeight", 220)
+                        Layout.maximumHeight: metric("previewControlsHeight", 220)
+
+                        WindowContainer {
+                            anchors.fill: parent
+                            window: controller.previewControlsWindow
+                            Component.onCompleted: controller.syncPreviewControlsSurfaceSize(width, height)
+                            onWidthChanged: controller.syncPreviewControlsSurfaceSize(width, height)
+                            onHeightChanged: controller.syncPreviewControlsSurfaceSize(width, height)
+                        }
+                    }
                 }
+            }
+        }
+
+        Item {
+            Layout.fillWidth: true
+            Layout.preferredHeight: metric("statusHeight", 28)
+            Layout.minimumHeight: metric("statusHeight", 28)
+            Layout.maximumHeight: metric("statusHeight", 28)
+
+            WindowContainer {
+                anchors.fill: parent
+                window: controller.statusWindow
+                Component.onCompleted: controller.syncStatusSurfaceSize(width, height)
+                onWidthChanged: controller.syncStatusSurfaceSize(width, height)
+                onHeightChanged: controller.syncStatusSurfaceSize(width, height)
             }
         }
     }
@@ -748,70 +249,216 @@ ApplicationWindow {
     Window {
         id: fullscreenPreviewWindow
 
+        visible: controller.previewFullscreen
         visibility: controller.previewFullscreen ? Window.FullScreen : Window.Hidden
-        color: "#020617"
+        color: "black"
         title: root.title
+
+        Shortcut {
+            sequence: "Esc"
+            enabled: controller.previewFullscreen
+            context: Qt.ApplicationShortcut
+            onActivated: controller.previewFullscreen = false
+        }
+
+        Shortcut {
+            sequence: "Space"
+            enabled: controller.previewFullscreen
+            context: Qt.ApplicationShortcut
+            onActivated: controller.togglePreviewPlayback()
+        }
 
         onClosing: function(close) {
             close.accepted = false
             controller.previewFullscreen = false
         }
 
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            onPositionChanged: {
+                if (mouseY >= height - metric("fullscreenControlsRevealHotzoneHeight", 120))
+                    showFullscreenControls()
+            }
+        }
+
         Rectangle {
             anchors.fill: parent
-            color: "#020617"
+            color: "black"
 
-            ColumnLayout {
+            Loader {
                 anchors.fill: parent
-                anchors.margins: 18
-                spacing: 12
+                active: controller.previewFullscreen
 
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    color: "#020617"
-                    radius: 18
-                    border.color: "#1f2937"
+                sourceComponent: Item {
+                    anchors.fill: parent
 
-                    WindowContainer {
+                    PreviewQuickSceneRoot {
                         anchors.fill: parent
-                        anchors.margins: 4
-                        window: controller.previewFullscreen ? controller.previewWindow : null
+                        runtime: controller.previewRuntime
+                    }
+
+                    PreviewQuickHudLayer {
+                        anchors.fill: parent
+                        runtime: controller.previewRuntime
+                    }
+                }
+            }
+        }
+    }
+
+    Window {
+        id: fullscreenControlsWindow
+
+        transientParent: fullscreenPreviewWindow
+        flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint
+        color: "transparent"
+        width: Math.min(
+            metric("fullscreenOverlayMaxWidth", 10000),
+            Math.max(0, fullscreenPreviewWindow.width - metric("fullscreenOverlaySideMargin", 18) * 2)
+        )
+        height: fullscreenControlsCard.implicitHeight
+        x: fullscreenPreviewWindow.x + metric("fullscreenOverlaySideMargin", 18)
+        y: fullscreenPreviewWindow.y + fullscreenPreviewWindow.height - height
+            - metric("fullscreenOverlayBottomMargin", 24)
+            + (fullscreenControlsVisible ? 0 : metric("fullscreenOverlayHideOffset", 20))
+        opacity: fullscreenControlsVisible ? 1.0 : 0.0
+        visible: controller.previewFullscreen && (fullscreenControlsVisible || opacity > 0.0)
+
+        Behavior on y {
+            NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+        }
+
+        Behavior on opacity {
+            NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+        }
+
+        Rectangle {
+            id: fullscreenControlsCard
+            anchors.fill: parent
+            color: tone("cardAltBg", "#edf2f8")
+            border.color: tone("border", "#d5e0ec")
+            radius: 10
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 8
+                spacing: 8
+
+                ToolButton {
+                    Layout.preferredWidth: 30
+                    Layout.preferredHeight: metric("previewControlButtonMinHeight", 28)
+                    text: "\u25a0"
+                    onClicked: controller.stopPreview()
+                    padding: 0
+                    background: Rectangle {
+                        color: parent.down ? tone("menuHoverBg", "#eef5ff") : "transparent"
+                        border.color: tone("border", "#d5e0ec")
+                        radius: 6
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        color: tone("textPrimary", "#203040")
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
                 }
 
-                RowLayout {
+                ToolButton {
+                    Layout.preferredWidth: 30
+                    Layout.preferredHeight: metric("previewControlButtonMinHeight", 28)
+                    text: controller.previewPlaying ? "\u2161" : "\u25b6"
+                    onClicked: controller.togglePreviewPlayback()
+                    padding: 0
+                    background: Rectangle {
+                        color: parent.down ? tone("menuHoverBg", "#eef5ff") : "transparent"
+                        border.color: tone("border", "#d5e0ec")
+                        radius: 6
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        color: tone("textPrimary", "#203040")
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+
+                Slider {
                     Layout.fillWidth: true
-                    spacing: 8
+                    from: 0
+                    to: Math.max(controller.previewDurationSeconds, 0.001)
+                    value: controller.previewPositionSeconds
+                    onMoved: controller.seekPreview(value)
+                }
 
-                    Button {
-                        text: controller.previewPlaying ? qsTr("Pause") : qsTr("Play")
-                        onClicked: controller.togglePreviewPlayback()
+                Button {
+                    text: controller.previewSpeedLabel
+                    Layout.preferredWidth: metric("previewSpeedButtonWidth", 72)
+                    onClicked: previewSpeedMenu.popup()
+                    background: Rectangle {
+                        color: parent.down ? tone("menuHoverBg", "#eef5ff") : "transparent"
+                        border.color: tone("border", "#d5e0ec")
+                        radius: 6
                     }
-
-                    Button {
-                        text: qsTr("Stop")
-                        onClicked: controller.stopPreview()
-                    }
-
-                    Slider {
-                        Layout.fillWidth: true
-                        from: 0
-                        to: Math.max(controller.previewDurationSeconds, 0.001)
-                        value: controller.previewPositionSeconds
-                        onMoved: controller.seekPreview(value)
-                    }
-
-                    Button {
-                        text: controller.previewSpeedLabel
-                        onClicked: previewSpeedMenu.popup()
-                    }
-
-                    Button {
-                        text: qsTr("Exit Fullscreen")
-                        onClicked: controller.previewFullscreen = false
+                    contentItem: Text {
+                        text: parent.text
+                        color: tone("textPrimary", "#203040")
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
                     }
                 }
+
+                ToolButton {
+                    Layout.preferredWidth: 48
+                    Layout.preferredHeight: metric("previewControlButtonMinHeight", 28)
+                    text: qsTr("Exit")
+                    onClicked: controller.previewFullscreen = false
+                    background: Rectangle {
+                        color: parent.down ? tone("menuHoverBg", "#eef5ff") : "transparent"
+                        border.color: tone("border", "#d5e0ec")
+                        radius: 6
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        color: tone("textPrimary", "#203040")
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+            }
+        }
+    }
+
+    Window {
+        id: fullscreenHintWindow
+
+        transientParent: fullscreenPreviewWindow
+        flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint
+        color: "transparent"
+        width: fullscreenHintLabel.implicitWidth
+        height: fullscreenHintLabel.implicitHeight
+        x: fullscreenPreviewWindow.x + Math.round((fullscreenPreviewWindow.width - width) / 2)
+        y: fullscreenPreviewWindow.y + metric("fullscreenHintTopMargin", 28)
+        visible: controller.previewFullscreen && fullscreenHintVisible
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 12
+            color: "#B0000000"
+            border.color: "#40FFFFFF"
+
+            Label {
+                id: fullscreenHintLabel
+                anchors.fill: parent
+                anchors.leftMargin: 14
+                anchors.rightMargin: 14
+                anchors.topMargin: 8
+                anchors.bottomMargin: 8
+                text: qsTr("Press Esc to exit fullscreen")
+                color: "white"
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
             }
         }
     }
