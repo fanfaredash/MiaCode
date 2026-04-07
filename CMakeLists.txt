@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.21)
 set(MIACODE_VERSION_MAJOR "0")
 set(MIACODE_VERSION_MINOR "3")
 set(MIACODE_VERSION_PATCH "10")
-set(MIACODE_VERSION_PRERELEASE "dev1")
+set(MIACODE_VERSION_PRERELEASE "dev2")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
@@ -45,10 +45,22 @@ configure_file(
     @ONLY
 )
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets OpenGL Multimedia Quick Qml ShaderTools)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets OpenGL Multimedia Quick Qml QuickControls2 ShaderTools)
 
 add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
+    src/app/quick_shell/QuickShellBootstrap.h
+    src/app/quick_shell/QuickShellBootstrap.cpp
+    src/app/quick_shell/QuickShellController.h
+    src/app/quick_shell/QuickShellController.cpp
+    src/app/quick_shell/OutlineListModel.h
+    src/app/quick_shell/OutlineListModel.cpp
+    src/app/quick_shell/IssueListModel.h
+    src/app/quick_shell/IssueListModel.cpp
+    src/app/quick_shell/LegacyChartEditorSurface.h
+    src/app/quick_shell/LegacyChartEditorSurface.cpp
+    src/app/quick_shell/LegacyTimelineSurface.h
+    src/app/quick_shell/LegacyTimelineSurface.cpp
     src/app/mainwindow/MainWindow.h
     src/app/mainwindow/MainWindow.cpp
     src/app/ui/UiText.h
@@ -223,6 +235,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     resources/app_icons.qrc
     resources/fonts.qrc
     resources/preview_runtime_qml.qrc
+    resources/quick_shell_qml.qrc
 )
 
 qt_add_shaders(MiaCode "preview_sprite_shaders"
@@ -283,6 +296,7 @@ target_link_libraries(MiaCode PRIVATE
     Qt6::Gui
     Qt6::Qml
     Qt6::Quick
+    Qt6::QuickControls2
     Qt6::Widgets
     soundtouch
 )
@@ -290,6 +304,7 @@ target_include_directories(MiaCode PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/generated
     src
     src/app
+    src/app/quick_shell
     src/app/ui
     src/editor
     src/preview
@@ -578,7 +593,7 @@ if (WIN32)
                 "$<$<CONFIG:Debug>:--debug>$<$<NOT:$<CONFIG:Debug>>:--release>"
                 --compiler-runtime
                 --no-translations
-                --qmldir "${CMAKE_CURRENT_SOURCE_DIR}/src/preview/runtime/qml"
+                --qmldir "${CMAKE_CURRENT_SOURCE_DIR}/src"
                 "$<TARGET_FILE:MiaCode>"
             COMMENT "Deploying Qt runtime next to MiaCode.exe"
             VERBATIM

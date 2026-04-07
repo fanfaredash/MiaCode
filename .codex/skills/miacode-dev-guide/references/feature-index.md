@@ -6,8 +6,8 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 
 - App startup and GUI entry:
   - File: `src/app/main.cpp`
-  - Functions: `main`, `setWindowsAppUserModelId`
-  - Owns: Qt app startup, theme/font setup, window launch, startup timing log
+  - Functions: `main`, `setWindowsAppUserModelId`, `wantsQuickShellBeta`
+  - Owns: Qt app startup, theme/font setup, window launch, startup timing log, `--quick-shell-beta` routing
 - CLI export entry:
   - File: `src/app/main.cpp`
   - Functions: `wantsCliVideoExport`, `runCliVideoExport`
@@ -22,7 +22,14 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Main window surface and shared state:
   - Files: `src/app/mainwindow/MainWindow.h`, `src/app/mainwindow/MainWindow.cpp`
   - Class: `MainWindow`
-  - Owns: top-level state, shared widgets, preview runtime instances, export worker process, portable/project settings
+  - Owns: top-level state, shared widgets, preview runtime instances, export worker process, portable/project settings, and the hidden Quick-shell backend mode that rehosts legacy editor/timeline surfaces for QML
+- Quick shell beta bootstrap and controller bridge:
+  - Files: `src/app/quick_shell/QuickShellBootstrap.h`, `src/app/quick_shell/QuickShellBootstrap.cpp`, `src/app/quick_shell/QuickShellController.h`, `src/app/quick_shell/QuickShellController.cpp`
+  - Classes: `QuickShellBootstrap`, `QuickShellController`
+  - Owns: `QQmlApplicationEngine` startup, QML-facing shell actions/properties, beta-window lifetime, and shell-state polling from the shared `MainWindow` backend
+- Quick shell list and bridge models:
+  - Files: `src/app/quick_shell/OutlineListModel.h`, `src/app/quick_shell/OutlineListModel.cpp`, `src/app/quick_shell/IssueListModel.h`, `src/app/quick_shell/IssueListModel.cpp`, `src/app/quick_shell/LegacyChartEditorSurface.h`, `src/app/quick_shell/LegacyChartEditorSurface.cpp`, `src/app/quick_shell/LegacyTimelineSurface.h`, `src/app/quick_shell/LegacyTimelineSurface.cpp`, `src/app/quick_shell/qml/QuickShellMain.qml`
+  - Owns: Quick sidebar data, Quick validation/Muri data, and `QWindow*` bridge exposure for the legacy chart editor plus timeline surfaces
 - Section map:
   - File: `src/app/mainwindow/sections/README.md`
   - Owns: where each MainWindow feature slice lives
