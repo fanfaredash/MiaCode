@@ -6,11 +6,11 @@
 #include "preview/quick_scene/PreviewTextureRepository.h"
 #include "preview/runtime/PreviewRuntime.h"
 
-#include <QQuickItem>
 #include <QQuickView>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
 #include <QTimer>
+#include <QVariant>
 #include <QtQml/qqml.h>
 
 namespace {

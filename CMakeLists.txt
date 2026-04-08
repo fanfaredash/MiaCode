@@ -112,6 +112,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/runtime/PreviewSceneAssetLoader.cpp
     src/preview/runtime/PreviewSceneAssetRepository.h
     src/preview/runtime/PreviewSceneAssetRepository.cpp
+    src/preview/runtime/PreviewStageMediaHost.h
+    src/preview/runtime/PreviewStageMediaHost.cpp
     src/preview/runtime/PreviewQuickRuntimeSurface.h
     src/preview/runtime/PreviewQuickRuntimeSurface.cpp
     src/preview/runtime/PreviewRuntime.h

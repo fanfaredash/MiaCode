@@ -272,6 +272,16 @@ void PreviewQuickSceneRoot::syncVisibleHostWindowBinding()
         return;
     }
 
+    const bool runtimeOwnsBoundWindow =
+        runtime_->hostWindow() != nullptr && runtime_->hostWindow() == boundWindow_;
+    if (runtimeOwnsBoundWindow) {
+        windowVisibilityConnection_ = QObject::connect(boundWindow_, &QWindow::visibilityChanged, this, [this](QWindow::Visibility) {
+            syncVisibleHostWindowBinding();
+            update();
+        });
+        return;
+    }
+
     runtime_->setVisibleHostWindow(boundWindow_);
     windowVisibilityConnection_ = QObject::connect(boundWindow_, &QWindow::visibilityChanged, this, [this](QWindow::Visibility) {
         syncVisibleHostWindowBinding();

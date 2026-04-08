@@ -304,11 +304,14 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
     auto* root = ensureStageBackgroundRoot(oldNode);
     const QRectF stageRect = miacode::preview::scene::stageRectForSize(renderSize);
     const StageMediaFrameResult media = stageMediaImage(state);
-    const QImage mediaImage = media.image;
+    const bool usesExternalMedia =
+        state.media.presentationMode == miacode::preview::scene::PreviewStageMediaPresentationMode::ExternalQuickMediaItem;
+    const QImage mediaImage = usesExternalMedia ? QImage() : media.image;
     const bool hasMedia = !mediaImage.isNull();
     const double outerDarkAlpha = qBound(0.0, 1.0 - state.render.backgroundBrightnessOuter, 1.0);
     const double innerDarkAlpha = qBound(0.0, 1.0 - state.render.backgroundBrightnessInner, 1.0);
-    if (media.sourceKind == StageMediaSourceKind::ResolvedFrame
+    if (!usesExternalMedia
+        && media.sourceKind == StageMediaSourceKind::ResolvedFrame
         && state.media.stageMediaSerial > 0
         && state.media.stageMediaSerial != lastProfiledResolvedStageMediaSerial_) {
         profile.mediaToImageMs = media.toImageMs;
@@ -318,19 +321,24 @@ QSGNode* PreviewQuickStageBackgroundLayer::updateNode(
     }
     profile.mediaFrameCount = hasMedia ? 1 : 0;
 #ifdef HAVE_QT_MULTIMEDIA
-    profile.videoFrameCount = state.media.videoFrame.isValid() ? 1 : 0;
+    profile.videoFrameCount = usesExternalMedia ? 0 : (state.media.videoFrame.isValid() ? 1 : 0);
 #endif
-    profile.staticImageFrameCount = media.sourceKind == StageMediaSourceKind::StaticImage ? 1 : 0;
+    profile.staticImageFrameCount =
+        !usesExternalMedia && media.sourceKind == StageMediaSourceKind::StaticImage ? 1 : 0;
 
     root->baseNode->setRect(stageRect);
-    root->baseNode->setColor(hasMedia ? QColor(QStringLiteral("#000000")) : QColor(QStringLiteral("#1F2833")));
+    if (usesExternalMedia && state.media.stageMediaAvailable) {
+        root->baseNode->setColor(Qt::transparent);
+    } else {
+        root->baseNode->setColor(hasMedia ? QColor(QStringLiteral("#000000")) : QColor(QStringLiteral("#1F2833")));
+    }
 
-    if (!hasMedia && textures != nullptr) {
+    if ((!hasMedia || usesExternalMedia) && textures != nullptr) {
         textures->releaseRetainedTexture(stageBackgroundMediaTextureSlotName());
         lastDynamicStageMediaKey_ = 0;
     }
 
-    if (hasMedia && window != nullptr && textures != nullptr) {
+    if (hasMedia && !usesExternalMedia && window != nullptr && textures != nullptr) {
         QElapsedTimer mediaTextureTimer;
         mediaTextureTimer.start();
         auto* mediaNode = ensureMediaNode(root);

@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/">
         <file alias="preview/runtime/qml/PreviewRuntimeView.qml">../src/preview/runtime/qml/PreviewRuntimeView.qml</file>
+        <file alias="preview/runtime/qml/PreviewStageMediaItem.qml">../src/preview/runtime/qml/PreviewStageMediaItem.qml</file>
     </qresource>
 </RCC>

@@ -149,6 +149,48 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
             fpsFont,
             qMax<qreal>(1.0, 2.0 * hudScale)
         );
+        if (state->media.presentationMode == miacode::preview::scene::PreviewStageMediaPresentationMode::ExternalQuickMediaItem) {
+            QString mediaType = QStringLiteral("none");
+            switch (state->media.externalMediaType) {
+            case miacode::preview::scene::PreviewExternalStageMediaType::Image:
+                mediaType = QStringLiteral("image");
+                break;
+            case miacode::preview::scene::PreviewExternalStageMediaType::Video:
+                mediaType = QStringLiteral("video");
+                break;
+            case miacode::preview::scene::PreviewExternalStageMediaType::None:
+            default:
+                break;
+            }
+            drawHudText(
+                *painter,
+                QPointF(leftX, baseline0 + metrics.height() * 3),
+                QStringLiteral("Media: external/%1").arg(mediaType),
+                fpsFont,
+                qMax<qreal>(1.0, 2.0 * hudScale)
+            );
+            drawHudText(
+                *painter,
+                QPointF(leftX, baseline0 + metrics.height() * 4),
+                QStringLiteral("Video: %1  Delta: %2 s")
+                    .arg(state->media.externalVideoPlaybackActive ? QStringLiteral("active") : QStringLiteral("idle"))
+                    .arg(QString::number(state->media.externalClockDeltaSeconds, 'f', 3)),
+                fpsFont,
+                qMax<qreal>(1.0, 2.0 * hudScale)
+            );
+            const QString frameAgeText = state->media.externalVideoFrameAgeMs >= 0
+                ? QString::number(state->media.externalVideoFrameAgeMs)
+                : QStringLiteral("na");
+            drawHudText(
+                *painter,
+                QPointF(leftX, baseline0 + metrics.height() * 5),
+                QStringLiteral("FrameAge: %1 ms  MediaT: %2 s")
+                    .arg(frameAgeText)
+                    .arg(QString::number(state->media.externalPlaybackSecond, 'f', 3)),
+                fpsFont,
+                qMax<qreal>(1.0, 2.0 * hudScale)
+            );
+        }
     }
 
     if (state->render.showTimestamp) {

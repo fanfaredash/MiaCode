@@ -119,11 +119,7 @@ void MainWindow::resetPreviewTrackTimelineOffsets()
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->setBackgroundTrackOffsetSeconds(0.0);
     }
-    if (previewMediaController_ != nullptr) {
-        dispatchPreviewMediaControllerCall([](PreviewMediaController* controller) {
-            controller->setTimelineOffsetSeconds(0.0);
-        });
-    }
+    resetPreviewStageMediaRouteTimelineOffset();
 }
 
 void MainWindow::applyWaveformData(const QVector<float>& peaks, double durationSeconds)
@@ -408,14 +404,7 @@ void MainWindow::setCurrentFilePath(const QString& path, bool suppressImmediateR
     if (pathChanged) {
         loadProjectRenderState();
     }
-    if (previewMediaController_ != nullptr) {
-        const double pausedSecond = qMax(0.0, qtPreviewPauseSecond_);
-        dispatchPreviewMediaControllerCall([this, pausedSecond](PreviewMediaController* controller) {
-            controller->setChartPath(currentFilePath_);
-            controller->setBackgroundTrackPath(lastTrackPath_);
-            controller->setPlayheadSeconds(pausedSecond);
-        });
-    }
+    syncPreviewStageMediaRouteChartPath(currentFilePath_, lastTrackPath_, qtPreviewPauseSecond_);
     if (previewCanvas_ != nullptr) {
         previewCanvas_->setPlayheadSeconds(qMax(0.0, qtPreviewPauseSecond_), false);
     }
@@ -1211,7 +1200,8 @@ void MainWindow::requestNextDisplayRefreshPreviewFrame()
 {
     if (!qtPreviewPlaying_
         || previewCanvas_ == nullptr
-        || !previewCanvasUsesFrameSwappedPacing()) {
+        || !previewCanvasUsesFrameSwappedPacing()
+        || qtPreviewAwaitingFrameSwap_) {
         return;
     }
     qtPreviewAwaitingFrameSwap_ = true;
@@ -2330,7 +2320,7 @@ void MainWindow::applyPreviewHeldSeekTick()
 
 void MainWindow::seekPreviewToSecond(double second, bool centerView)
 {
-    ensurePreviewMediaControllerInitialized();
+    ensurePreviewStageMediaRouteInitialized();
     ensurePreviewSfxRuntimePrepared();
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     if (qtPreviewPlaying_) {
@@ -2359,7 +2349,7 @@ void MainWindow::seekPreviewToSecond(double second, bool centerView)
 
 void MainWindow::applyPreviewPlaybackRate(double rate)
 {
-    ensurePreviewMediaControllerInitialized();
+    ensurePreviewStageMediaRouteInitialized();
     const double clampedRate = qMax(0.25, rate);
     if (qFuzzyCompare(previewPlaybackRate_ + 1.0, clampedRate + 1.0)) {
         return;
@@ -2389,12 +2379,7 @@ void MainWindow::applyPreviewPlaybackRate(double rate)
             }
         }
     }
-    if (previewMediaController_ != nullptr) {
-        dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
-            controller->setPlaybackRate(previewPlaybackRate_);
-            controller->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
-        });
-    }
+    applyPreviewStageMediaRoutePlaybackRate(previewPlaybackRate_);
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
     }
@@ -2417,11 +2402,11 @@ bool MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
 
     pendingPreviewPlaybackStart_ = false;
 
-    ensurePreviewMediaControllerInitialized();
+    ensurePreviewStageMediaRouteInitialized();
     ensurePreviewSfxRuntimePrepared();
     applyLatestTimelinePreviewStateToPausedPreview();
     const double startSecond = qBound(0.0, second, previewDurationSeconds());
-    const bool hasVideoMedia = previewMediaController_ != nullptr && queryPreviewMediaControllerHasVideoMedia();
+    const bool hasVideoMedia = previewStageMediaRouteHasVideo();
     const auto applyPlaybackClockState = [this](double initialSecond) {
         qtPreviewStartSecond_ = initialSecond;
         qtPreviewPauseSecond_ = initialSecond;
@@ -2434,18 +2419,7 @@ bool MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
 
     qtPreviewPlaybackReturnSecond_ = startSecond;
     qtPreviewPlaybackEndSecond_ = qMax(0.0, previewPlaybackEndSeconds());
-    if (!resumeFromPause && previewMediaController_ != nullptr) {
-        dispatchPreviewMediaControllerCall([](PreviewMediaController* controller) {
-            controller->resetProfilingSession();
-        });
-    }
-    if (previewMediaController_ != nullptr) {
-        dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
-            controller->setPlaybackRate(previewPlaybackRate_);
-            controller->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
-            controller->setBackgroundTrackVolume(previewAudioSettings_.bgmVolume);
-        });
-    }
+    applyPreviewStageMediaRoutePlaybackRate(previewPlaybackRate_);
 
     double effectiveStartSecond = startSecond;
     if (previewSfxRuntime_ != nullptr) {
@@ -2476,9 +2450,7 @@ bool MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
         previewCanvas_->setPlayheadSeconds(effectiveStartSecond, false);
     }
     if (hasVideoMedia) {
-        dispatchPreviewMediaControllerCall([effectiveStartSecond](PreviewMediaController* controller) {
-            controller->startPlayback(effectiveStartSecond);
-        });
+        startPreviewStageMediaRoutePlayback(effectiveStartSecond);
     }
 
     qtPreviewPlaying_ = true;
@@ -2525,16 +2497,12 @@ void MainWindow::stopQtPreviewPlayback(bool keepPosition)
             pauseSecondCaptured = true;
         }
     }
-    if (!pauseSecondCaptured
-        && previewMediaController_ != nullptr
-        && queryPreviewMediaControllerHasVideoMedia()) {
-        qtPreviewPauseSecond_ = queryPreviewMediaControllerCurrentPlaybackSecond();
+    if (!pauseSecondCaptured) {
+        if (previewStageMediaRouteHasVideo()) {
+            qtPreviewPauseSecond_ = previewStageMediaRouteCurrentPlaybackSecond();
+        }
     }
-    if (previewMediaController_ != nullptr && queryPreviewMediaControllerHasVideoMedia()) {
-        dispatchPreviewMediaControllerCall([](PreviewMediaController* controller) {
-            controller->pausePlayback();
-        });
-    }
+    pausePreviewStageMediaRoutePlayback();
     if (previewSeekDebounceTimer_ != nullptr) {
         previewSeekDebounceTimer_->stop();
     }
@@ -2574,14 +2542,7 @@ void MainWindow::stopQtPreviewPlayback(bool keepPosition)
         requestTimelineAnalysisDispatch(0);
     }
     if (runtimeDebugOutputEnabled_ && wasPlaying && previewCanvas_ != nullptr) {
-        const QString summaryPath = previewCanvas_->writeProfilingSummaryToFile();
-        if (!summaryPath.isEmpty() && previewMediaController_ != nullptr) {
-            QFile file(summaryPath);
-            if (file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append)) {
-                QTextStream stream(&file);
-                stream << queryPreviewMediaControllerProfilingSummaryLines();
-            }
-        }
+        previewCanvas_->writeProfilingSummaryToFile();
     }
     updatePreviewSliderPosition(qtPreviewPauseSecond_);
     updatePreviewObjectStats(qtPreviewPauseSecond_);
@@ -2602,6 +2563,8 @@ void MainWindow::applyQtPreviewPosition(double second, bool centerView)
     if (previewCanvas_ != nullptr) {
         previewCanvas_->setPlayheadSeconds(second, !qtPreviewPlaying_);
     }
+    setPreviewStageMediaRouteObservedPlayheadSecond(second);
+    refreshPreviewStageMediaRouteDebugState(!qtPreviewPlaying_);
     updatePreviewSliderPosition(second);
     if (!qtPreviewPlaying_) {
         updatePreviewObjectStats(second);
@@ -2613,16 +2576,7 @@ void MainWindow::applyQtPreviewPosition(double second, bool centerView)
 
 void MainWindow::syncPausedPreviewMediaTimestamps(double second)
 {
-    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
-    if (previewMediaController_ != nullptr && queryPreviewMediaControllerHasVideoMedia()) {
-        pausedPreviewMediaSeekPending_ = true;
-        pausedPreviewMediaSeekSecond_ = clampedSecond;
-        dispatchPreviewMediaControllerCall([clampedSecond](PreviewMediaController* controller) {
-            controller->setPlayheadSeconds(clampedSecond);
-        });
-        return;
-    }
-    pausedPreviewMediaSeekPending_ = false;
+    seekPreviewStageMediaRouteWhilePaused(second);
 }
 
 void MainWindow::flushQtPreviewTimelinePosition()
@@ -2669,11 +2623,7 @@ void MainWindow::onQtPreviewTick()
         const double fallbackSecond = qtPreviewStartSecond_ + (elapsedSeconds * previewPlaybackRate_);
         second = previewSfxRuntime_->syncPreviewPlaybackClockTransaction(fallbackSecond);
     }
-    if (previewMediaController_ != nullptr) {
-        dispatchPreviewMediaControllerCall([second](PreviewMediaController* controller) {
-            controller->syncPlayback(second);
-        });
-    }
+    syncPreviewStageMediaRoutePlayback(second);
     const double playbackEndSecond = previewPlaybackEndSeconds();
     if (playbackEndSecond > 0.0
         && second + kTimelineZeroSecondTolerance >= playbackEndSecond) {

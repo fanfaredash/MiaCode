@@ -198,16 +198,11 @@ ApplicationWindow {
                             border.color: tone("borderSoft", "#ccd6e2")
                             clip: true
 
-                            PreviewQuickSceneRoot {
+                            QuickShellPreviewSurface {
                                 anchors.fill: parent
                                 anchors.margins: 1
                                 runtime: controller.previewRuntime
-                            }
-
-                            PreviewQuickHudLayer {
-                                anchors.fill: parent
-                                anchors.margins: 1
-                                runtime: controller.previewRuntime
+                                mediaHost: controller.previewStageMediaHost
                             }
                         }
                     }
@@ -293,14 +288,10 @@ ApplicationWindow {
                 sourceComponent: Item {
                     anchors.fill: parent
 
-                    PreviewQuickSceneRoot {
+                    QuickShellPreviewSurface {
                         anchors.fill: parent
                         runtime: controller.previewRuntime
-                    }
-
-                    PreviewQuickHudLayer {
-                        anchors.fill: parent
-                        runtime: controller.previewRuntime
+                        mediaHost: controller.previewStageMediaHost
                     }
                 }
             }

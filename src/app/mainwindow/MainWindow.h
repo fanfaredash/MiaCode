@@ -55,6 +55,7 @@ class BracketScopeHighlighter;
 class PlainCodeEditor;
 class PreviewRuntime;
 class PreviewMediaController;
+class PreviewStageMediaHost;
 class QPlainTextEdit;
 class QProcess;
 class QProgressDialog;
@@ -183,6 +184,10 @@ private:
         Standard,
         Dx,
     };
+    enum class PreviewStageMediaRoute {
+        WidgetMediaController,
+        QuickShellStageHost,
+    };
     enum class TextEncoding {
         Utf8,
         System,
@@ -212,6 +217,34 @@ private:
 
     bool maybeSaveBeforeContinue();
     void configureRuntimeDebugOutput();
+    PreviewStageMediaRoute previewStageMediaRoute() const;
+    bool previewUsesStageMediaHostRoute() const;
+    void updatePreviewStageMediaPresentationMode(bool requestUpdate = true);
+    void ensurePreviewStageMediaRouteInitialized();
+    void syncPreviewStageMediaRouteChartPath(
+        const QString& chartPath,
+        const QString& trackPath,
+        double pausedSecond
+    );
+    void clearPreviewStageMediaRoute();
+    void applyPreviewMediaWarmupToStageMediaRoute(
+        const QString& chartPath,
+        const QString& resolvedMediaPath,
+        const QString& trackPath
+    );
+    void resetPreviewStageMediaRouteTimelineOffset();
+    void applyPreviewStageMediaRoutePlaybackRate(double rate);
+    void applyPreviewStageMediaRouteVisualSettings();
+    bool previewStageMediaRouteHasVideo() const;
+    double previewStageMediaRouteCurrentPlaybackSecond() const;
+    void startPreviewStageMediaRoutePlayback(double second);
+    void syncPreviewStageMediaRoutePlayback(double second);
+    void pausePreviewStageMediaRoutePlayback();
+    void seekPreviewStageMediaRouteWhilePaused(double second);
+    void setPreviewStageMediaRouteObservedPlayheadSecond(double second);
+    void ensurePreviewStageMediaHostInitialized();
+    void shutdownPreviewStageMediaHost();
+    void refreshPreviewStageMediaRouteDebugState(bool requestUpdate = true);
     void ensurePreviewMediaControllerInitialized();
     void shutdownPreviewMediaController();
     void dispatchPreviewMediaControllerCall(
@@ -220,7 +253,6 @@ private:
     ) const;
     bool queryPreviewMediaControllerHasVideoMedia() const;
     double queryPreviewMediaControllerCurrentPlaybackSecond() const;
-    QString queryPreviewMediaControllerProfilingSummaryLines() const;
     void ensurePreviewSfxRuntimePrepared();
     void schedulePreviewSubsystemWarmup();
     void schedulePreviewMediaWarmup(quint64 generation, const QString& chartPathSnapshot, const QString& trackPathSnapshot);
@@ -572,6 +604,7 @@ private:
 
     QWidget* editorWidget_ = nullptr;
     PreviewRuntime* previewCanvas_ = nullptr;
+    PreviewStageMediaHost* previewStageMediaHost_ = nullptr;
     PreviewMediaController* previewMediaController_ = nullptr;
     QThread* previewMediaControllerThread_ = nullptr;
     QtPreviewSfxRuntime* previewSfxRuntime_ = nullptr;
