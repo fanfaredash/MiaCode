@@ -72,7 +72,8 @@ If these conventions change, update both code and this file.
     - `background/outline_point.png`
     - `background/outline_line.png`
     - `background/outline_area.png`
-    - `background/region_labels_overlay_transparent_v3.png` (forced background-media overlay for the labeled-area mode)
+    - `background/outline_area_labeled.png`
+  - Source helper art for rebuilding the labeled-area variant currently lives at `background/region_labels_overlay_transparent_v3.png`, and `scripts/build_outline_area_labeled.py` regenerates the final labeled outline by compositing that overlay over `outline_area.png`
   - The active outline assets are currently `1080x1080` canvases with built-in transparent border; preview/export map them across the full playfield square, and the selected variant is a shared render setting rather than an asset-size inference
 - Generated slide data:
   - Stored under `assets/generated`

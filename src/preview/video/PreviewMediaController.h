@@ -20,7 +20,6 @@ public:
 
     void initializeBackendObjects();
     void setWarmupResolvedMediaPath(const QString& chartPath, const QString& mediaPath);
-    void setForcedMediaPath(const QString& mediaPath);
     bool hasResolvedMedia() const;
     bool hasVideoMedia() const;
     bool hasBackgroundTrack() const;
@@ -82,7 +81,6 @@ private:
     QString mediaPath_;
     QString warmupChartPath_;
     QString warmupMediaPath_;
-    QString forcedMediaPath_;
     QMediaPlayer* player_ = nullptr;
     QAudioOutput* audioOutput_ = nullptr;
     QVideoSink* videoSink_ = nullptr;

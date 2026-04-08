@@ -103,20 +103,6 @@ void PreviewStageMediaHost::setWarmupResolvedMediaPath(const QString& chartPath,
     warmupMediaPath_ = normalizedLocalPath(mediaPath);
 }
 
-void PreviewStageMediaHost::setForcedMediaPath(const QString& mediaPath)
-{
-    const QString normalizedMediaPath = normalizedLocalPath(mediaPath);
-    if (forcedMediaPath_ == normalizedMediaPath) {
-        return;
-    }
-    forcedMediaPath_ = normalizedMediaPath;
-    if (!chartPath_.isEmpty()) {
-        const QString currentChartPath = chartPath_;
-        chartPath_.clear();
-        setChartPath(currentChartPath);
-    }
-}
-
 void PreviewStageMediaHost::attachVideoOutputObject(QObject* videoOutputObject)
 {
     if (videoOutputObject_ == videoOutputObject) {
@@ -445,9 +431,6 @@ void PreviewStageMediaHost::clearMedia()
 
 QString PreviewStageMediaHost::resolveMediaPath(const QString& chartPath) const
 {
-    if (!forcedMediaPath_.isEmpty() && QFileInfo::exists(forcedMediaPath_)) {
-        return forcedMediaPath_;
-    }
     const QString normalizedChartPath = normalizedLocalPath(chartPath);
     if (normalizedChartPath == warmupChartPath_) {
         return warmupMediaPath_;

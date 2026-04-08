@@ -2942,7 +2942,6 @@ void MainWindow::ensurePreviewMediaControllerInitialized()
 
     dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
         controller->initializeBackendObjects();
-        controller->setForcedMediaPath(forcedPreviewBackgroundMediaPath(previewOutlineVariant_));
         controller->setWarmupResolvedMediaPath(previewMediaWarmupChartPath_, previewMediaWarmupResolvedPath_);
         controller->setBackgroundTrackVolume(previewAudioSettings_.bgmVolume);
         controller->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
@@ -4698,27 +4697,6 @@ PreviewOutlineVariant MainWindow::autoPreviewOutlineVariantForChart(const QStrin
         : PreviewOutlineVariant::JudgeAreaLabeled;
 }
 
-QString MainWindow::forcedPreviewBackgroundMediaPath(PreviewOutlineVariant variant) const
-{
-    if (variant != PreviewOutlineVariant::JudgeAreaLabeled) {
-        return QString();
-    }
-    const QString overlayPath = miacode::assets::regionLabelsOverlayPath();
-    return QFileInfo::exists(overlayPath) ? overlayPath : QString();
-}
-
-QString MainWindow::effectiveBackgroundMediaPathForVariant(
-    const QString& chartPath,
-    const QString& explicitPath,
-    PreviewOutlineVariant variant) const
-{
-    const QString forcedPath = forcedPreviewBackgroundMediaPath(variant);
-    if (!forcedPath.isEmpty()) {
-        return forcedPath;
-    }
-    return miacode::chart_assets::resolvePreferredBackgroundMediaPath(chartPath, explicitPath);
-}
-
 void MainWindow::applyPreviewOutlineVariant(
     PreviewOutlineVariant variant,
     bool useAutoSelection,
@@ -4728,18 +4706,6 @@ void MainWindow::applyPreviewOutlineVariant(
     previewOutlineVariantUsesAutoSelection_ = useAutoSelection;
     if (previewCanvas_ != nullptr) {
         previewCanvas_->setOutlineVariant(previewOutlineVariant_);
-    }
-    const QString forcedBackgroundMediaPath = forcedPreviewBackgroundMediaPath(previewOutlineVariant_);
-    if (previewMediaController_ != nullptr) {
-        dispatchPreviewMediaControllerCall([forcedBackgroundMediaPath](PreviewMediaController* controller) {
-            controller->setForcedMediaPath(forcedBackgroundMediaPath);
-        });
-    }
-    if (previewStageMediaHost_ != nullptr) {
-        previewStageMediaHost_->setForcedMediaPath(forcedBackgroundMediaPath);
-    }
-    if (!currentFilePath_.isEmpty()) {
-        syncPreviewStageMediaRouteChartPath(currentFilePath_, resolveDefaultTrackPath(), qtPreviewPauseSecond_);
     }
     if (persistState) {
         saveProjectRenderState();
@@ -6141,11 +6107,7 @@ bool MainWindow::buildVideoExportSnapshot(
         ? QString()
         : QFileInfo(currentFilePath_).absolutePath();
     built.trackPath = resolveDefaultTrackPath();
-    built.backgroundMediaPath = effectiveBackgroundMediaPathForVariant(
-        currentFilePath_,
-        requestedTask.backgroundMediaPath,
-        requestedTask.outlineVariant
-    );
+    built.backgroundMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(currentFilePath_);
     built.skinDirectory = resolvePreviewSkinDir();
     built.audioSettings = previewAudioSettings_;
     built.audioSettings.normalize();
@@ -6340,11 +6302,7 @@ bool MainWindow::buildVideoExportSnapshotForChartDirectory(
     built.originalChartPath = chartPath;
     built.projectDir = QFileInfo(chartPath).absolutePath();
     built.trackPath = trackPath;
-    built.backgroundMediaPath = effectiveBackgroundMediaPathForVariant(
-        chartPath,
-        requestedTask.backgroundMediaPath,
-        requestedTask.outlineVariant
-    );
+    built.backgroundMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(chartPath);
     built.skinDirectory = resolvePreviewSkinDir();
     built.audioSettings = requestedTask.audioSettings;
     built.audioSettings.normalize();
