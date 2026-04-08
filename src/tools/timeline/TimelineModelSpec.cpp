@@ -269,9 +269,29 @@ QVector<double> flattenSnapshotMeasureLines(const TimelineRenderSnapshot& snapsh
     return snapshot.measureLineSeconds;
 }
 
+QVector<double> flattenSnapshotLineStarts(const TimelineRenderSnapshot& snapshot)
+{
+    QVector<double> starts;
+    starts.reserve(snapshot.lines.size());
+    for (const TimelineRenderLine& line : snapshot.lines) {
+        starts.append(line.startSecond);
+    }
+    return starts;
+}
+
 QVector<double> flattenParserMeasureLines(const SimaiNativeParseResult& parsed)
 {
     return parsed.measureLineSeconds;
+}
+
+bool lineStartsNondecreasing(const QVector<double>& starts)
+{
+    for (int index = 1; index < starts.size(); ++index) {
+        if (starts.at(index) + 1e-6 < starts.at(index - 1)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void sortComparableNotes(QVector<ComparableNote>* notes)
@@ -787,6 +807,84 @@ int main(int argc, char** argv)
         const bool secondResolved = model.resolvePreviewFollowCursor(0.6, &line, &col, &second);
         expect(secondResolved && line == 2 && col == 2 && nearlyEqual(second, 0.5),
                QStringLiteral("follow cursor advances to the next past comma while playback progresses"));
+    }
+
+    {
+        const QString chartText = QStringLiteral("(150)\n\n|| 3 / 4\n1,\nE");
+        TimelineQuickModel model;
+        model.rebuildFromText(chartText, 0.0);
+        const QVector<double> starts = flattenSnapshotLineStarts(model.snapshot());
+        expect(starts.size() == 5, QStringLiteral("quick model keeps line-start timing for empty/control-only lines"));
+        expect(lineStartsNondecreasing(starts),
+               QStringLiteral("line-start timing stays nondecreasing across empty/control-only lines"));
+        if (starts.size() == 5) {
+            expect(nearlyEqual(starts.at(0), 0.0)
+                       && nearlyEqual(starts.at(1), 0.0)
+                       && nearlyEqual(starts.at(2), 0.0)
+                       && nearlyEqual(starts.at(3), 0.0)
+                       && nearlyEqual(starts.at(4), 0.4),
+                   QStringLiteral("control-only and empty lines keep the correct shared line-start timing"));
+        }
+    }
+
+    {
+        const QString chartText = QStringLiteral("(240),\n,\nE");
+        TimelineQuickModel model;
+        model.rebuildFromText(chartText, 0.0);
+        const QVector<double> starts = flattenSnapshotLineStarts(model.snapshot());
+        expect(lineStartsNondecreasing(starts),
+               QStringLiteral("line-start timing stays nondecreasing after BPM control tokens"));
+        if (starts.size() == 3) {
+            expect(nearlyEqual(starts.at(0), 0.0)
+                       && nearlyEqual(starts.at(1), 0.25)
+                       && nearlyEqual(starts.at(2), 0.5),
+                   QStringLiteral("BPM control tokens shift downstream line starts correctly"));
+        } else {
+            expect(false, QStringLiteral("BPM control token chart keeps three rendered lines"));
+        }
+    }
+
+    {
+        const QString chartText = QStringLiteral("{8},\n,\nE");
+        TimelineQuickModel model;
+        model.rebuildFromText(chartText, 0.0);
+        const QVector<double> starts = flattenSnapshotLineStarts(model.snapshot());
+        expect(lineStartsNondecreasing(starts),
+               QStringLiteral("line-start timing stays nondecreasing after {beats} control tokens"));
+        if (starts.size() == 3) {
+            expect(nearlyEqual(starts.at(0), 0.0)
+                       && nearlyEqual(starts.at(1), 0.25)
+                       && nearlyEqual(starts.at(2), 0.5),
+                   QStringLiteral("{beats} control tokens shift downstream line starts correctly"));
+        } else {
+            expect(false, QStringLiteral("{beats} control token chart keeps three rendered lines"));
+        }
+    }
+
+    {
+        const QString originalText = QStringLiteral(",\n,\n,\nE");
+        QTextDocument document(originalText);
+        TimelineQuickModel incremental;
+        TimelineQuickModel rebuilt;
+        incremental.rebuildFromDocument(&document, 0.0);
+        applyDocumentChange(&document, 0, 0, QStringLiteral("(240){8}"));
+        incremental.applyContentsChange(&document, 0, 0, QStringLiteral("(240){8}").size(), 0.0);
+        rebuilt.rebuildFromDocument(&document, 0.0);
+
+        const QVector<double> incrementalStarts = flattenSnapshotLineStarts(incremental.snapshot());
+        const QVector<double> rebuiltStarts = flattenSnapshotLineStarts(rebuilt.snapshot());
+        expect(
+            sameDoubleVector(incrementalStarts, rebuiltStarts),
+            QStringLiteral("incremental edits keep per-line startSecond aligned with full rebuild across later lines"));
+        if (rebuiltStarts.size() == 4) {
+            expect(nearlyEqual(rebuiltStarts.at(0), 0.0)
+                       && nearlyEqual(rebuiltStarts.at(1), 0.125)
+                       && nearlyEqual(rebuiltStarts.at(2), 0.25)
+                       && nearlyEqual(rebuiltStarts.at(3), 0.375),
+                   QStringLiteral("combined BPM/{beats} edits propagate the expected line-start timing"));
+        } else {
+            expect(false, QStringLiteral("combined BPM/{beats} edit keeps four rendered lines"));
+        }
     }
 
     {

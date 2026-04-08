@@ -36,6 +36,16 @@ constexpr int kTimelineLeftMargin = 40;
 constexpr int kTimelineTopMargin = 6;
 constexpr int kTimelineRightPadding = 24;
 constexpr int kTimelineMaxRenderedSubdivisionBeats = 32;
+constexpr int kTimelineHeaderLineLabelWidth = 56;
+constexpr int kTimelineHeaderLineLabelMinSpacingPx = 22;
+constexpr qreal kTimelineTopMarkerTipOffsetPx = 1.0;
+constexpr qreal kTimelinePlaybackEntryMarkerHalfWidthPx = 6.0;
+constexpr qreal kTimelinePlaybackEntryMarkerHeightPx = 8.0;
+constexpr qreal kTimelineTopMarkerHalfWidthPerHeight =
+    kTimelinePlaybackEntryMarkerHalfWidthPx / kTimelinePlaybackEntryMarkerHeightPx;
+constexpr qreal kTimelineHeaderAnchorMarkerLegacyWidthFactor = 0.85;
+constexpr qreal kTimelineHeaderAnchorMarkerLegacyHeightFactor = 0.7;
+constexpr int kTimelineHeaderAnchorMarkerTextGapPx = 0;
 constexpr int kNoteSize = 14;
 constexpr int kSlideTrackBasePixelSize =
     static_cast<int>((static_cast<double>(kNoteSize) * miacode::preview_skin::kSlideTrackLongSideRelativeToTap) + 0.5);
@@ -43,6 +53,7 @@ constexpr qreal kTimelineBeatLineWidth = 1.2;
 constexpr qreal kTimelineHoldThicknessRelativeToTap =
     static_cast<qreal>(miacode::preview_skin::kHoldWidthRelativeToTap);
 constexpr double kTimelineDisplayLeadInSeconds = 0.5;
+constexpr double kTimelineHeaderLineAnchorToleranceSeconds = 1e-6;
 constexpr double kTimelineKeyHoldAccelerationPerSecond = 1.0;
 constexpr int kTimelineKeyHoldTickIntervalMs = 16;
 const std::array<QColor, 5> kTimelineFireworkBandColors = {
