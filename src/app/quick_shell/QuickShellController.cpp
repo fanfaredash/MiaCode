@@ -257,7 +257,8 @@ void QuickShellController::syncPreviewControlsSurfaceSize(int width, int height)
     if (backend_->quickShellPreviewControlsSurfaceWidget_->size() != nextSize) {
         backend_->quickShellPreviewControlsSurfaceWidget_->resize(nextSize);
     }
-    if (QLayout* layout = backend_->quickShellPreviewControlsSurfaceWidget_->layout(); layout != nullptr) {
+    QLayout* layout = backend_->quickShellPreviewControlsSurfaceWidget_->layout();
+    if (layout != nullptr) {
         layout->activate();
     }
     if (backend_->previewControlCard_ != nullptr) {
@@ -268,6 +269,10 @@ void QuickShellController::syncPreviewControlsSurfaceSize(int width, int height)
         backend_->previewStatsCard_->updateGeometry();
         backend_->previewStatsCard_->show();
     }
+    if (layout != nullptr) {
+        layout->activate();
+    }
+    backend_->updatePreviewStatsLayoutMode(-1);
     backend_->quickShellPreviewControlsSurfaceWidget_->updateGeometry();
     backend_->quickShellPreviewControlsSurfaceWidget_->update();
     backend_->quickShellPreviewControlsSurfaceWidget_->show();

@@ -24,6 +24,8 @@ public:
     QuickShellStyleBridge* styleBridge() const;
 
 private:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
     QIcon appIcon_;
     std::unique_ptr<MainWindow> backend_;
     std::unique_ptr<QuickShellController> controller_;

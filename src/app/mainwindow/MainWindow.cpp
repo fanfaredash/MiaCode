@@ -2536,6 +2536,37 @@ void MainWindow::applyUiTheme()
     if (QWidget* editorShell = findChild<QWidget*>(QStringLiteral("EditorShell")); editorShell != nullptr) {
         editorShell->setStyleSheet(UiTheme::editorShellStyleSheet());
     }
+    const UiTheme::Colors& themeColors = UiTheme::colors();
+    if (editorHeaderWidget_ != nullptr) {
+        editorHeaderWidget_->setAttribute(Qt::WA_StyledBackground, true);
+        editorHeaderWidget_->setStyleSheet(
+            QStringLiteral(
+                "QFrame#EditorHeader { background: %1; border-bottom: 1px solid %2; }"
+                "QLabel#EditorContext { color: %3; font-weight: 700; background: transparent; }"
+                "QLabel#EditorMeta { color: %4; background: transparent; }"
+                "QWidget#EditorDifficultyControls { background: transparent; }"
+                "QWidget#EditorDifficultyControls QLabel { color: %4; background: transparent; }"
+                "QWidget#EditorDifficultyControls QLineEdit { background: %5; color: %3; border: 1px solid %6; border-radius: 6px; padding: 4px 6px; selection-background-color: %7; selection-color: %8; }"
+                "QWidget#EditorDifficultyControls QLineEdit:focus { border-color: %9; }"
+            )
+                .arg(themeColors.cardBg.name(QColor::HexRgb))
+                .arg(themeColors.border.name(QColor::HexRgb))
+                .arg(themeColors.textPrimary.name(QColor::HexRgb))
+                .arg(themeColors.textSecondary.name(QColor::HexRgb))
+                .arg(themeColors.inputBg.name(QColor::HexRgb))
+                .arg(themeColors.borderSoft.name(QColor::HexRgb))
+                .arg(themeColors.selection.name(QColor::HexRgb))
+                .arg(themeColors.selectionText.name(QColor::HexRgb))
+                .arg(themeColors.accent.name(QColor::HexRgb))
+        );
+    }
+    const QString previewPanelStyle = UiTheme::previewPanelStyleSheet();
+    if (previewPanel_ != nullptr) {
+        previewPanel_->setStyleSheet(previewPanelStyle);
+    }
+    if (quickShellPreviewControlsSurfaceWidget_ != nullptr) {
+        quickShellPreviewControlsSurfaceWidget_->setStyleSheet(previewPanelStyle);
+    }
     const QList<QMenu*> menus = findChildren<QMenu*>();
     for (QMenu* menu : menus) {
         if (menu != nullptr) {
@@ -2578,6 +2609,11 @@ void MainWindow::applyUiTheme()
         && previewControlCard_ != nullptr
         && previewControlCard_->parentWidget() == previewFullscreenControlsWindow_) {
         previewControlCard_->setStyleSheet(previewFullscreenControlCardStyleSheet());
+    } else if (previewControlCard_ != nullptr) {
+        previewControlCard_->setStyleSheet(QString());
+    }
+    if (previewStatsCard_ != nullptr) {
+        previewStatsCard_->setStyleSheet(QString());
     }
     updateEditorValidationSummary();
     updatePauseButtonAppearance();
@@ -2620,8 +2656,13 @@ void MainWindow::setOutlineDockCollapsed(bool collapsed)
     }
 
     const int targetWidth = collapsed ? kCollapsedWidth : qMax(kExpandedMinWidth, outlineDockExpandedWidth_);
-    outlineDock_->setMinimumWidth(collapsed ? kCollapsedWidth : kExpandedMinWidth);
-    outlineDock_->setMaximumWidth(collapsed ? kCollapsedWidth : QWIDGETSIZE_MAX);
+    if (isQuickShellBackendMode()) {
+        outlineDock_->setMinimumWidth(targetWidth);
+        outlineDock_->setMaximumWidth(targetWidth);
+    } else {
+        outlineDock_->setMinimumWidth(collapsed ? kCollapsedWidth : kExpandedMinWidth);
+        outlineDock_->setMaximumWidth(collapsed ? kCollapsedWidth : QWIDGETSIZE_MAX);
+    }
     outlineDock_->resize(targetWidth, outlineDock_->height());
     if (QWidget* widget = outlineDock_->widget(); widget != nullptr) {
         widget->updateGeometry();
@@ -3617,6 +3658,7 @@ void MainWindow::initializeQuickShellNativeRegions()
     workspaceLayout->activate();
     previewControlsLayout->activate();
     statusLayout->activate();
+    setOutlineDockCollapsed(outlineDockCollapsed_);
     quickShellTopChromeSurfaceWidget_->show();
     quickShellWorkspaceSurfaceWidget_->show();
     quickShellPreviewControlsSurfaceWidget_->show();
@@ -5283,6 +5325,7 @@ void MainWindow::onEditStaticTapOnSlideThreshold()
     dialog.setModal(true);
     dialog.setMinimumWidth(360);
     dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
+    applySystemWindowBackdrop(&dialog);
 
     auto* rootLayout = new QVBoxLayout(&dialog);
     rootLayout->setContentsMargins(16, 14, 16, 14);
@@ -5439,6 +5482,7 @@ void MainWindow::onAbout()
     dialog.setModal(true);
     dialog.setMinimumWidth(500);
     dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
+    applySystemWindowBackdrop(&dialog);
 
     auto* rootLayout = new QVBoxLayout(&dialog);
     rootLayout->setContentsMargins(14, 14, 14, 12);
@@ -5744,6 +5788,7 @@ void MainWindow::onExportPreviewVideo()
         targetTopLeft.setY(qBound(avail.top(), targetTopLeft.y(), avail.bottom() - dialog.height() + 1));
     }
     dialog.move(targetTopLeft);
+    applySystemWindowBackdrop(&dialog);
     dialog.exec();
     scheduleEmbeddedPreviewSurfaceRefresh();
     setPreviewCanvasAspectRatio(1.0, false);
@@ -5826,6 +5871,7 @@ void MainWindow::onBatchExportPreviewVideo()
         this
     );
     dialog.adjustSize();
+    applySystemWindowBackdrop(&dialog);
     dialog.exec();
     if (!dialog.exportRequested()) {
         return;
@@ -5953,6 +5999,7 @@ void MainWindow::onBatchExportPreviewVideo()
     progress.setAutoClose(false);
     progress.setAutoReset(false);
     progress.setValue(0);
+    applySystemWindowBackdrop(&progress);
     progress.show();
 
     QStringList exportedFiles;
@@ -6576,6 +6623,7 @@ bool MainWindow::launchVideoExportWorker(const VideoExportSnapshot& snapshot, QS
     progress->setMinimumWidth(320);
     progress->setMaximumWidth(360);
     progress->setValue(0);
+    applySystemWindowBackdrop(progress);
     if (QLabel* label = progress->findChild<QLabel*>(); label != nullptr) {
         label->setWordWrap(true);
     }
@@ -7167,6 +7215,7 @@ void MainWindow::onOpenLatencyDetector()
     }
 
     latencyDetectorDialog_ = new LatencyDetectorDialog(trackPath, currentFilePath_, previewAudioSettings_, this);
+    applySystemWindowBackdrop(latencyDetectorDialog_);
     latencyDetectorDialog_->setOffsetSeconds(offsetSeconds);
     latencyDetectorDialog_->setBpm(wholeBpmOk ? wholeBpm : 0.0);
     latencyDetectorDialog_->setMeterId(meterId);
@@ -7196,6 +7245,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     dialog.setModal(true);
     dialog.setMinimumWidth(520);
     dialog.setStyleSheet(UiTheme::settingsDialogStyleSheet());
+    applySystemWindowBackdrop(&dialog);
 
     const auto createDialogMenuButton = [](QWidget* parent, const QString& text) {
         auto* button = new QToolButton(parent);
