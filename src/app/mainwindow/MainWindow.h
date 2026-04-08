@@ -104,6 +104,7 @@ public:
         double backgroundBrightnessOuter = miacode::preview_video::kBackgroundBrightnessDefault;
         double backgroundBrightnessInner = miacode::preview_video::kBackgroundBrightnessInnerDefault;
         double layoutSquareScale = miacode::preview_video::kLayoutSquareScaleDefault;
+        PreviewOutlineVariant outlineVariant = PreviewOutlineVariant::Line;
         PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
         double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
         int skinLoadWaitMs = 2000;
@@ -453,6 +454,15 @@ private:
     void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     PreviewCanvasFrameRateMode previewCanvasFrameRateModeFromStorageValue(const QString& value) const;
     QString previewCanvasFrameRateModeStorageValue() const;
+    PreviewOutlineVariant previewOutlineVariantFromStorageValue(const QString& value) const;
+    QString previewOutlineVariantStorageValue() const;
+    PreviewOutlineVariant autoPreviewOutlineVariantForChart(const QString& chartPath) const;
+    void applyPreviewOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection, bool persistState);
+    QString forcedPreviewBackgroundMediaPath(PreviewOutlineVariant variant) const;
+    QString effectiveBackgroundMediaPathForVariant(
+        const QString& chartPath,
+        const QString& explicitPath,
+        PreviewOutlineVariant variant) const;
     PreviewSkinVariant previewSkinVariantFromStorageValue(const QString& value) const;
     QString previewSkinVariantStorageValue() const;
     double currentPreviewCanvasRefreshRate() const;
@@ -781,6 +791,8 @@ private:
     double previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessInnerDefault;
     double previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
     bool previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
+    PreviewOutlineVariant previewOutlineVariant_ = PreviewOutlineVariant::Line;
+    bool previewOutlineVariantUsesAutoSelection_ = true;
     PreviewBackgroundScaleMode previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     double previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     PreviewSkinVariant previewSkinVariant_ = PreviewSkinVariant::Standard;

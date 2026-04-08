@@ -29,6 +29,7 @@ public:
     void setBackgroundBrightnessInner(double brightness);
     void setLayoutSquareScale(double scale);
     void setSmoothBrightness(bool smooth);
+    void setOutlineVariant(PreviewOutlineVariant variant);
     void setBackgroundScaleMode(PreviewBackgroundScaleMode mode);
     void setNoteFlowSpeed(double flowSpeed);
     void setShowDebugInfo(bool show);

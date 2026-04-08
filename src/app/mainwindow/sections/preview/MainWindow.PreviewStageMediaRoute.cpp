@@ -61,7 +61,8 @@ void MainWindow::syncPreviewStageMediaRouteChartPath(
     switch (previewStageMediaRoute()) {
     case PreviewStageMediaRoute::WidgetMediaController:
         ensurePreviewMediaControllerInitialized();
-        dispatchPreviewMediaControllerCall([chartPath, trackPath, clampedPausedSecond](PreviewMediaController* controller) {
+        dispatchPreviewMediaControllerCall([this, chartPath, trackPath, clampedPausedSecond](PreviewMediaController* controller) {
+            controller->setForcedMediaPath(forcedPreviewBackgroundMediaPath(previewOutlineVariant_));
             controller->setChartPath(chartPath);
             controller->setBackgroundTrackPath(trackPath);
             controller->setPlayheadSeconds(clampedPausedSecond);
@@ -69,6 +70,7 @@ void MainWindow::syncPreviewStageMediaRouteChartPath(
         break;
     case PreviewStageMediaRoute::QuickShellStageHost:
         ensurePreviewStageMediaHostInitialized();
+        previewStageMediaHost_->setForcedMediaPath(forcedPreviewBackgroundMediaPath(previewOutlineVariant_));
         previewStageMediaHost_->setChartPath(chartPath);
         previewStageMediaHost_->setPlayheadSeconds(clampedPausedSecond);
         break;
@@ -108,7 +110,8 @@ void MainWindow::applyPreviewMediaWarmupToStageMediaRoute(
     switch (previewStageMediaRoute()) {
     case PreviewStageMediaRoute::WidgetMediaController:
         ensurePreviewMediaControllerInitialized();
-        dispatchPreviewMediaControllerCall([chartPath, resolvedMediaPath, trackPath](PreviewMediaController* controller) {
+        dispatchPreviewMediaControllerCall([this, chartPath, resolvedMediaPath, trackPath](PreviewMediaController* controller) {
+            controller->setForcedMediaPath(forcedPreviewBackgroundMediaPath(previewOutlineVariant_));
             controller->setWarmupResolvedMediaPath(chartPath, resolvedMediaPath);
             controller->setBackgroundTrackPath(trackPath);
             controller->setChartPath(chartPath);
@@ -116,6 +119,7 @@ void MainWindow::applyPreviewMediaWarmupToStageMediaRoute(
         break;
     case PreviewStageMediaRoute::QuickShellStageHost:
         ensurePreviewStageMediaHostInitialized();
+        previewStageMediaHost_->setForcedMediaPath(forcedPreviewBackgroundMediaPath(previewOutlineVariant_));
         previewStageMediaHost_->setWarmupResolvedMediaPath(chartPath, resolvedMediaPath);
         previewStageMediaHost_->setChartPath(chartPath);
         break;
@@ -285,6 +289,7 @@ void MainWindow::ensurePreviewStageMediaHostInitialized()
 
     previewStageMediaHost_ = new PreviewStageMediaHost(this);
     previewStageMediaHost_->setBackgroundScaleMode(previewBackgroundScaleMode_);
+    previewStageMediaHost_->setForcedMediaPath(forcedPreviewBackgroundMediaPath(previewOutlineVariant_));
     connect(previewStageMediaHost_, &PreviewStageMediaHost::mediaStateChanged, this, [this]() {
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setStageMediaAvailable(previewStageMediaHost_->hasResolvedMedia());

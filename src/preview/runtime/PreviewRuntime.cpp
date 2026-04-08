@@ -272,6 +272,13 @@ void PreviewRuntime::setSkinDirectory(const QString& skinDir)
     }
 }
 
+void PreviewRuntime::setOutlineVariant(PreviewOutlineVariant variant)
+{
+    if (assets_ != nullptr) {
+        assets_->setOutlineVariant(variant);
+    }
+}
+
 void PreviewRuntime::setBackgroundBrightness(double brightness)
 {
     frameState_.render.backgroundBrightnessOuter = qBound(0.0, brightness, 1.0);

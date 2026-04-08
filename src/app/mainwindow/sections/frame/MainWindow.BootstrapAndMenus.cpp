@@ -1112,6 +1112,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
 
     previewCanvas_ = new PreviewRuntime(!isQuickShellBackendMode(), this);
     logStartupStage("preview_canvas_created");
+    previewCanvas_->setOutlineVariant(previewOutlineVariant_);
     previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
     updatePreviewStageMediaPresentationMode(false);
     if (previewUsesStageMediaHostRoute()) {
@@ -1873,6 +1874,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
         logStartupStage("preview_sfx_set_playback_rate_done");
     }
     if (previewCanvas_ != nullptr) {
+        previewCanvas_->setOutlineVariant(previewOutlineVariant_);
         previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
         previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
         previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);

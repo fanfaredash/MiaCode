@@ -34,11 +34,9 @@ QSGNode* PreviewQuickBackdropLayer::updateNode(
 
     node->setTexture(texture);
     node->setRect(
-        miacode::preview::scene::outlineRectForPlayfield(
-            miacode::preview::scene::playfieldRectForStage(
-                miacode::preview::scene::stageRectForSize(renderSize),
-                state.render.layoutSquareScale
-            )
+        miacode::preview::scene::playfieldRectForStage(
+            miacode::preview::scene::stageRectForSize(renderSize),
+            state.render.layoutSquareScale
         )
     );
     node->setFiltering(QSGTexture::Linear);

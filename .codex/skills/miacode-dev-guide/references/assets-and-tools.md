@@ -68,7 +68,12 @@ If these conventions change, update both code and this file.
   - Entry: `miacode::preview_sfx::resolveSfxDirectory`
 - Background outlines and auxiliary background art:
   - Consumers: preview and export overlay composition
-  - Current references include `background/outline.png` and `background/outline_2.png`
+  - Current active variant files:
+    - `background/outline_point.png`
+    - `background/outline_line.png`
+    - `background/outline_area.png`
+    - `background/region_labels_overlay_transparent_v3.png` (forced background-media overlay for the labeled-area mode)
+  - The active outline assets are currently `1080x1080` canvases with built-in transparent border; preview/export map them across the full playfield square, and the selected variant is a shared render setting rather than an asset-size inference
 - Generated slide data:
   - Stored under `assets/generated`
   - Current merged asset file: `assets/generated/slide_data.json`

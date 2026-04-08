@@ -15,6 +15,8 @@ public:
 
     void setStageMediaAvailable(bool hasMedia);
     bool stageMediaAvailable() const { return stageMediaAvailable_; }
+    void setOutlineVariant(PreviewOutlineVariant variant);
+    PreviewOutlineVariant outlineVariant() const { return outlineVariant_; }
 
     void setSkinDirectory(const QString& skinDirectory);
     bool loadSkinDirectorySync(const QString& skinDirectory);
@@ -37,6 +39,7 @@ private:
     QString skinDirectory_;
     quint64 loadGeneration_ = 0;
     bool stageMediaAvailable_ = false;
+    PreviewOutlineVariant outlineVariant_ = PreviewOutlineVariant::Line;
     PreviewSceneAssetLoadResult currentAssets_;
 };
 

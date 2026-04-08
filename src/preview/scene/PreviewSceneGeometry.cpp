@@ -1,14 +1,10 @@
 #include "preview/scene/PreviewSceneGeometry.h"
 
-#include "common/LayoutRingConfig.h"
-#include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
 
 namespace {
 
 constexpr int kMargin = 0;
-constexpr qreal kLogicalCanvasSize = static_cast<qreal>(miacode::preview_gameplay::kLogicalCanvasSize);
-constexpr qreal kLogicalOutlineInset = miacode::layout_ring::kOutlineInsetLogical;
 
 }  // namespace
 
@@ -29,16 +25,6 @@ QRectF stageRectForSize(const QSize& renderSize)
 QRectF playfieldRectForStage(const QRectF& stageRect, double layoutSquareScale)
 {
     return miacode::preview_video::centeredLayoutRectForStage(stageRect, layoutSquareScale);
-}
-
-QRectF outlineRectForPlayfield(const QRectF& playfieldRect)
-{
-    const QPointF outlineTopLeft = QPointF(
-        playfieldRect.left() + (kLogicalOutlineInset / kLogicalCanvasSize) * playfieldRect.width(),
-        playfieldRect.top() + (kLogicalOutlineInset / kLogicalCanvasSize) * playfieldRect.height()
-    );
-    const qreal outlineSide = (kLogicalCanvasSize - kLogicalOutlineInset * 2.0) * (playfieldRect.width() / kLogicalCanvasSize);
-    return QRectF(outlineTopLeft.x(), outlineTopLeft.y(), outlineSide, outlineSide);
 }
 
 QRectF mediaTargetRect(

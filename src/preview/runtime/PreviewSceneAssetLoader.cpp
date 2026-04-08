@@ -15,10 +15,6 @@ namespace miacode::preview::runtime {
 namespace {
 
 constexpr qreal kSkinAssetScale = static_cast<qreal>(miacode::preview_skin::kTapHeadScale);
-constexpr qreal kOutlineTargetToPlayfieldRatio =
-    (static_cast<qreal>(miacode::preview_gameplay::kLogicalCanvasSize)
-        - miacode::layout_ring::kOutlineInsetLogical * 2.0)
-    / static_cast<qreal>(miacode::preview_gameplay::kLogicalCanvasSize);
 constexpr qreal kJudgeEffectHoldSustainAlphaTightenGamma = 1.0;
 const QColor kJudgeEffectTouchCircleTint = QColor::fromRgbF(1.0, 0.9943893, 0.4669811, 1.0);
 const QColor kJudgeEffectTouchPartTint = QColor::fromRgbF(1.0, 0.9000474, 0.4666667, 1.0);
@@ -466,109 +462,26 @@ void populateJudgeEffectAssets(const QString& skinDirectory, miacode::preview::s
 
 PreviewSceneAssetLoadResult PreviewSceneAssetLoader::load(
     const QString& skinDirectory,
-    bool stageMediaAvailable,
+    PreviewOutlineVariant outlineVariant,
     quint64 generation)
 {
     PreviewSceneAssetLoadResult result;
     result.generation = generation;
     result.skinDirectory = skinDirectory;
-    result.assetState = loadAssetState(stageMediaAvailable);
+    result.assetState = loadAssetState(outlineVariant);
     populateSkinAssets(skinDirectory, &result.skinAssets);
     populateJudgeOverlayAssets(skinDirectory, &result.judgeOverlayAssets);
     populateJudgeEffectAssets(skinDirectory, &result.judgeEffectAssets);
     return result;
 }
 
-miacode::preview::scene::PreviewAssetState PreviewSceneAssetLoader::loadAssetState(bool stageMediaAvailable)
+miacode::preview::scene::PreviewAssetState PreviewSceneAssetLoader::loadAssetState(PreviewOutlineVariant outlineVariant)
 {
     miacode::preview::scene::PreviewAssetState assets;
-    const QString outlinePath = miacode::assets::outlinePathForStageMedia(stageMediaAvailable);
+    const QString outlinePath = miacode::assets::outlinePathForVariant(outlineVariant);
     assets.outlineImage = outlinePath.isEmpty() ? QImage() : QImage(outlinePath);
-    const double textureRingRatio = detectLayoutRingDiameterRatio(assets.outlineImage);
-    assets.layoutRingDiameterRatio = qBound(
-        miacode::layout_ring::kPlayfieldRatioMin,
-        static_cast<double>(kOutlineTargetToPlayfieldRatio) * textureRingRatio,
-        miacode::layout_ring::kPlayfieldRatioMax);
+    assets.layoutRingDiameterRatio = miacode::layout_ring::kOutlinePlayfieldDiameterRatio;
     return assets;
-}
-
-double PreviewSceneAssetLoader::detectLayoutRingDiameterRatio(const QImage& source)
-{
-    if (source.isNull() || source.width() <= 2 || source.height() <= 2) {
-        return miacode::layout_ring::kFallbackTextureDiameterRatio;
-    }
-    QImage image = source.format() == QImage::Format_RGBA8888
-        ? source
-        : source.convertToFormat(QImage::Format_RGBA8888);
-    if (image.isNull()) {
-        return miacode::layout_ring::kFallbackTextureDiameterRatio;
-    }
-    const int width = image.width();
-    const int height = image.height();
-    const int maxRadius = qMax(1, qMin(width, height) / 2);
-    QVector<double> histogram(maxRadius + 1, 0.0);
-    const double cx = (static_cast<double>(width) - 1.0) * 0.5;
-    const double cy = (static_cast<double>(height) - 1.0) * 0.5;
-    for (int y = 0; y < height; ++y) {
-        const uchar* row = image.constScanLine(y);
-        for (int x = 0; x < width; ++x) {
-            const int offset = x * 4;
-            const int a = row[offset + 3];
-            if (a < miacode::layout_ring::kDetectMinAlpha) {
-                continue;
-            }
-            const int luminance = (row[offset + 0] * 3 + row[offset + 1] * 4 + row[offset + 2]) / 8;
-            if (luminance < miacode::layout_ring::kDetectMinLuminance) {
-                continue;
-            }
-            const double dx = static_cast<double>(x) - cx;
-            const double dy = static_cast<double>(y) - cy;
-            const int radius = qBound(0, qRound(std::sqrt(dx * dx + dy * dy)), maxRadius);
-            histogram[radius] += static_cast<double>(a) * static_cast<double>(luminance);
-        }
-    }
-    QVector<double> smooth(histogram.size(), 0.0);
-    for (int i = 0; i < histogram.size(); ++i) {
-        double sum = histogram[i] * 2.0;
-        double weight = 2.0;
-        if (i > 0) {
-            sum += histogram[i - 1];
-            weight += 1.0;
-        }
-        if (i + 1 < histogram.size()) {
-            sum += histogram[i + 1];
-            weight += 1.0;
-        }
-        smooth[i] = sum / qMax(1.0, weight);
-    }
-    const int searchStart = qBound(0, qRound(maxRadius * miacode::layout_ring::kDetectSearchStartRadiusRatio), maxRadius);
-    const int searchEnd = qBound(searchStart, qRound(maxRadius * miacode::layout_ring::kDetectSearchEndRadiusRatio), maxRadius);
-    int peakIndex = -1;
-    double peakValue = 0.0;
-    for (int i = searchStart; i <= searchEnd; ++i) {
-        if (smooth[i] > peakValue) {
-            peakValue = smooth[i];
-            peakIndex = i;
-        }
-    }
-    if (peakIndex < 0 || peakValue <= 1.0) {
-        return miacode::layout_ring::kFallbackTextureDiameterRatio;
-    }
-    const double edgeThreshold = peakValue * miacode::layout_ring::kDetectEdgeThresholdRatio;
-    int innerRadius = peakIndex;
-    while (innerRadius > searchStart && smooth[innerRadius - 1] >= edgeThreshold) {
-        --innerRadius;
-    }
-    int outerRadius = peakIndex;
-    while (outerRadius < searchEnd && smooth[outerRadius + 1] >= edgeThreshold) {
-        ++outerRadius;
-    }
-    const double averageRadius = (static_cast<double>(innerRadius) + static_cast<double>(outerRadius)) * 0.5;
-    const double diameterRatio = (averageRadius * 2.0) / static_cast<double>(qMax(1, qMin(width, height)));
-    return qBound(
-        miacode::layout_ring::kDetectDiameterRatioMin,
-        diameterRatio,
-        miacode::layout_ring::kDetectDiameterRatioMax);
 }
 
 }  // namespace miacode::preview::runtime

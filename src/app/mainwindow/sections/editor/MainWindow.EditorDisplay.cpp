@@ -63,6 +63,8 @@ void MainWindow::resetPortablePreviewSettingsToDefaults()
     previewBackgroundBrightnessInner_ = miacode::preview_video::kBackgroundBrightnessInnerDefault;
     previewLayoutSquareScale_ = miacode::preview_video::kLayoutSquareScaleDefault;
     previewSmoothBrightness_ = miacode::preview_video::kSmoothBrightnessDefault;
+    previewOutlineVariant_ = PreviewOutlineVariant::Line;
+    previewOutlineVariantUsesAutoSelection_ = true;
     previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     previewSkinVariant_ = PreviewSkinVariant::Standard;
@@ -104,6 +106,13 @@ void MainWindow::applyPortablePreviewSettings(const QJsonObject& preview)
     }
     if (preview.value("wifi_need_c").isBool()) {
         muriRenderOptions_.wifiNeedC = preview.value("wifi_need_c").toBool(muriRenderOptions_.wifiNeedC);
+    }
+    if (preview.value("outline_variant").isString()) {
+        const QString outlineVariant = preview.value("outline_variant").toString().trimmed();
+        if (!outlineVariant.isEmpty()) {
+            previewOutlineVariant_ = previewOutlineVariantFromStorageValue(outlineVariant);
+            previewOutlineVariantUsesAutoSelection_ = false;
+        }
     }
     const double legacyBrightness = qBound(
         0.0,
@@ -214,6 +223,11 @@ void MainWindow::savePortableState() const
     preview.insert("background_brightness_inner", previewBackgroundBrightnessInner_);
     preview.insert("layout_square_scale", previewLayoutSquareScale_);
     preview.insert("smooth_brightness", previewSmoothBrightness_);
+    if (previewOutlineVariantUsesAutoSelection_) {
+        preview.remove("outline_variant");
+    } else {
+        preview.insert("outline_variant", previewOutlineVariantStorageValue());
+    }
     preview.insert(
         "background_scale_mode",
         previewBackgroundScaleMode_ == PreviewBackgroundScaleMode::FitContain

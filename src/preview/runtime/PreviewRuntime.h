@@ -95,6 +95,7 @@ public:
     void setMuriAnalysisReport(const MuriAnalysisReport& report);
     void setMuriRenderOptions(const MuriRenderOptions& options);
     void setSkinDirectory(const QString& skinDir);
+    void setOutlineVariant(PreviewOutlineVariant variant);
     void setBackgroundBrightness(double brightness);
     void setBackgroundBrightnessOuter(double brightness);
     void setBackgroundBrightnessInner(double brightness);

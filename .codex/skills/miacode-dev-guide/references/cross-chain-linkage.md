@@ -191,6 +191,8 @@ Shared render settings include:
 
 - background brightness outer and inner
 - layout square scale
+- fixed outline playfield diameter ratio from `src/common/LayoutRingConfig.h`; preview and export should not diverge by re-detecting ring size from texture pixels
+- outline variant / judge-line background overlay selection
 - smooth brightness
 - background scale mode
 - note flow speed
