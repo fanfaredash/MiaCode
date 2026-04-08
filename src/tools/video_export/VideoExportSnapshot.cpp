@@ -354,12 +354,10 @@ bool buildVideoExportTaskFromSnapshot(
     VideoExportTask built;
     built.outputPath = snapshot.outputPath;
     built.chartPath = snapshot.originalChartPath;
-    built.backgroundMediaPath = snapshot.outlineVariant == PreviewOutlineVariant::JudgeAreaLabeled
-        ? snapshot.backgroundMediaPath
-        : miacode::chart_assets::resolvePreferredBackgroundMediaPath(
-            snapshot.originalChartPath,
-            snapshot.backgroundMediaPath
-        );
+    built.backgroundMediaPath = miacode::chart_assets::resolvePreferredBackgroundMediaPath(
+        snapshot.originalChartPath,
+        snapshot.backgroundMediaPath
+    );
     built.trackPath = snapshot.trackPath;
     built.skinDirectory = snapshot.skinDirectory;
     built.noteMarkers = shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds);

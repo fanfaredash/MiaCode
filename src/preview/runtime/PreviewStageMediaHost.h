@@ -39,7 +39,6 @@ public:
 
     void initializeBackendObjects();
     void setWarmupResolvedMediaPath(const QString& chartPath, const QString& mediaPath);
-    void setForcedMediaPath(const QString& mediaPath);
     Q_INVOKABLE void attachVideoOutputObject(QObject* videoOutputObject);
     Q_INVOKABLE void detachVideoOutputObject(QObject* videoOutputObject);
 
@@ -88,7 +87,6 @@ private:
     QString mediaPath_;
     QString warmupChartPath_;
     QString warmupMediaPath_;
-    QString forcedMediaPath_;
     QUrl imageSource_;
     PreviewBackgroundScaleMode backgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     QMediaPlayer* player_ = nullptr;

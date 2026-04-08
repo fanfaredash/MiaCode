@@ -56,9 +56,9 @@ inline QString outlineJudgeAreaPath()
     return assetPath(QStringLiteral("background/outline_area.png"));
 }
 
-inline QString regionLabelsOverlayPath()
+inline QString outlineJudgeAreaLabeledPath()
 {
-    return assetPath(QStringLiteral("background/region_labels_overlay_transparent_v3.png"));
+    return assetPath(QStringLiteral("background/outline_area_labeled.png"));
 }
 
 inline QString outlinePathForVariant(PreviewOutlineVariant variant)
@@ -69,8 +69,10 @@ inline QString outlinePathForVariant(PreviewOutlineVariant variant)
         preferredPath = outlinePointPath();
         break;
     case PreviewOutlineVariant::JudgeArea:
-    case PreviewOutlineVariant::JudgeAreaLabeled:
         preferredPath = outlineJudgeAreaPath();
+        break;
+    case PreviewOutlineVariant::JudgeAreaLabeled:
+        preferredPath = outlineJudgeAreaLabeledPath();
         break;
     case PreviewOutlineVariant::Line:
     default:

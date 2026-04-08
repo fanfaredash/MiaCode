@@ -458,11 +458,6 @@ private:
     QString previewOutlineVariantStorageValue() const;
     PreviewOutlineVariant autoPreviewOutlineVariantForChart(const QString& chartPath) const;
     void applyPreviewOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection, bool persistState);
-    QString forcedPreviewBackgroundMediaPath(PreviewOutlineVariant variant) const;
-    QString effectiveBackgroundMediaPathForVariant(
-        const QString& chartPath,
-        const QString& explicitPath,
-        PreviewOutlineVariant variant) const;
     PreviewSkinVariant previewSkinVariantFromStorageValue(const QString& value) const;
     QString previewSkinVariantStorageValue() const;
     double currentPreviewCanvasRefreshRate() const;

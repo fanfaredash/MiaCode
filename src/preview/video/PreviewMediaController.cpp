@@ -585,25 +585,8 @@ QString PreviewMediaController::profilingSummaryLines() const
     return text;
 }
 
-void PreviewMediaController::setForcedMediaPath(const QString& mediaPath)
-{
-    const QString normalizedMediaPath = normalizedLocalPath(mediaPath);
-    if (forcedMediaPath_ == normalizedMediaPath) {
-        return;
-    }
-    forcedMediaPath_ = normalizedMediaPath;
-    if (!chartPath_.isEmpty()) {
-        const QString currentChartPath = chartPath_;
-        chartPath_.clear();
-        setChartPath(currentChartPath);
-    }
-}
-
 QString PreviewMediaController::resolveMediaPath(const QString& chartPath) const
 {
-    if (!forcedMediaPath_.isEmpty() && QFileInfo::exists(forcedMediaPath_)) {
-        return forcedMediaPath_;
-    }
     const QString normalizedChartPath = normalizedLocalPath(chartPath);
     if (normalizedChartPath == warmupChartPath_) {
         return warmupMediaPath_;
