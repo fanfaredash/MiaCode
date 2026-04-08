@@ -175,15 +175,44 @@ void TimelineView::paintEvent(QPaintEvent* event)
     }
 
     if (!headerLabels.isEmpty()) {
-        painter.setFont(headerLineNumberFont_);
-        const QFontMetrics headerMetrics(headerLineNumberFont_);
+        const QFontMetricsF baseHeaderMetrics(headerLineNumberFont_);
+        auto scaledHeaderFont = [](const QFont& sourceFont, qreal scale) {
+            QFont scaledFont(sourceFont);
+            const qreal clampedScale = qMax(0.1, scale);
+            if (scaledFont.pointSizeF() > 0.0) {
+                scaledFont.setPointSizeF(qMax(1.0, scaledFont.pointSizeF() * clampedScale));
+            } else if (scaledFont.pointSize() > 0) {
+                scaledFont.setPointSizeF(qMax(1.0, static_cast<qreal>(scaledFont.pointSize()) * clampedScale));
+            } else if (scaledFont.pixelSize() > 0) {
+                scaledFont.setPixelSize(qMax(1, qRound(static_cast<qreal>(scaledFont.pixelSize()) * clampedScale)));
+            }
+            return scaledFont;
+        };
+        const QFont oneDigitFont = scaledHeaderFont(headerLineNumberFont_, kTimelineHeaderSingleDigitFontScale);
+        const QFontMetricsF oneDigitMetrics(oneDigitFont);
         qreal singleDigitWidth = 0.0;
         for (QChar digit = QLatin1Char('0'); digit <= QLatin1Char('9'); digit = QChar(digit.unicode() + 1)) {
-            singleDigitWidth = qMax(singleDigitWidth, static_cast<qreal>(headerMetrics.horizontalAdvance(digit)));
+            singleDigitWidth = qMax(singleDigitWidth, static_cast<qreal>(oneDigitMetrics.horizontalAdvance(digit)));
         }
+        const qreal multiDigitWidthBudget = qMax<qreal>(
+            8.0,
+            static_cast<qreal>(kTimelineHeaderLineLabelMinSpacingPx - kTimelineHeaderMultiDigitLabelSideGapPx)
+        );
+        auto headerFontForDigitCount = [&](int digitCount) {
+            if (digitCount <= 1) {
+                return oneDigitFont;
+            }
+            const QString widthSample(digitCount, QLatin1Char('8'));
+            const qreal widthScale = multiDigitWidthBudget
+                / qMax<qreal>(1.0, static_cast<qreal>(baseHeaderMetrics.horizontalAdvance(widthSample)));
+            return scaledHeaderFont(
+                headerLineNumberFont_,
+                qMin(kTimelineHeaderMultiDigitBaseFontScale, widthScale)
+            );
+        };
         const qreal markerTipY = static_cast<qreal>(top) - kTimelineTopMarkerTipOffsetPx;
-        const qreal headerTextBottom = (static_cast<qreal>(top - headerMetrics.height()) * 0.5)
-            + headerMetrics.height();
+        const qreal headerTextBottom = (static_cast<qreal>(top - oneDigitMetrics.height()) * 0.5)
+            + oneDigitMetrics.height();
         const qreal maxMarkerHeight = qMax(
             0.0,
             markerTipY - headerTextBottom - kTimelineHeaderAnchorMarkerTextGapPx);
@@ -211,14 +240,13 @@ void TimelineView::paintEvent(QPaintEvent* event)
         }
         painter.setPen(c.textSecondary);
         for (const HeaderLineLabel& label : headerLabels) {
-            const int labelX = label.screenX - (kTimelineHeaderLineLabelWidth / 2);
-            painter.drawText(
-                labelX,
-                0,
-                kTimelineHeaderLineLabelWidth,
-                top,
-                Qt::AlignHCenter | Qt::AlignVCenter,
-                QString::number(label.lineNumber));
+            const QString labelText = QString::number(label.lineNumber);
+            const QFont labelFont = headerFontForDigitCount(labelText.size());
+            const QFontMetricsF labelMetrics(labelFont);
+            const qreal baselineY = headerTextBottom - labelMetrics.descent();
+            const qreal textLeft = static_cast<qreal>(label.screenX) - (labelMetrics.horizontalAdvance(labelText) * 0.5);
+            painter.setFont(labelFont);
+            painter.drawText(QPointF(textLeft, baselineY), labelText);
         }
         painter.setFont(laneLabelFont);
     }
