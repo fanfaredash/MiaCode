@@ -9,7 +9,7 @@ namespace miacode::preview::runtime {
 PreviewSceneAssetRepository::PreviewSceneAssetRepository(QObject* parent)
     : QObject(parent)
 {
-    currentAssets_ = PreviewSceneAssetLoader::load(QString(), stageMediaAvailable_, loadGeneration_);
+    currentAssets_ = PreviewSceneAssetLoader::load(QString(), outlineVariant_, loadGeneration_);
 }
 
 void PreviewSceneAssetRepository::setStageMediaAvailable(bool hasMedia)
@@ -18,7 +18,15 @@ void PreviewSceneAssetRepository::setStageMediaAvailable(bool hasMedia)
         return;
     }
     stageMediaAvailable_ = hasMedia;
-    currentAssets_.assetState = PreviewSceneAssetLoader::loadAssetState(stageMediaAvailable_);
+}
+
+void PreviewSceneAssetRepository::setOutlineVariant(PreviewOutlineVariant variant)
+{
+    if (outlineVariant_ == variant) {
+        return;
+    }
+    outlineVariant_ = variant;
+    currentAssets_.assetState = PreviewSceneAssetLoader::loadAssetState(outlineVariant_);
     emit assetsChanged();
 }
 
@@ -27,8 +35,8 @@ void PreviewSceneAssetRepository::setSkinDirectory(const QString& skinDirectory)
     skinDirectory_ = skinDirectory;
     const quint64 generation = ++loadGeneration_;
     QPointer<PreviewSceneAssetRepository> guard(this);
-    QThreadPool::globalInstance()->start([guard, skinDirectory, stageMedia = stageMediaAvailable_, generation]() {
-        PreviewSceneAssetLoadResult result = PreviewSceneAssetLoader::load(skinDirectory, stageMedia, generation);
+    QThreadPool::globalInstance()->start([guard, skinDirectory, outlineVariant = outlineVariant_, generation]() {
+        PreviewSceneAssetLoadResult result = PreviewSceneAssetLoader::load(skinDirectory, outlineVariant, generation);
         if (guard.isNull()) {
             return;
         }
@@ -48,7 +56,7 @@ bool PreviewSceneAssetRepository::loadSkinDirectorySync(const QString& skinDirec
 {
     skinDirectory_ = skinDirectory;
     const quint64 generation = ++loadGeneration_;
-    applyLoadResult(PreviewSceneAssetLoader::load(skinDirectory, stageMediaAvailable_, generation));
+    applyLoadResult(PreviewSceneAssetLoader::load(skinDirectory, outlineVariant_, generation));
     return hasCoreSkinAssetsLoaded();
 }
 
@@ -64,7 +72,7 @@ void PreviewSceneAssetRepository::applyLoadResult(PreviewSceneAssetLoadResult&& 
     if (result.generation != loadGeneration_) {
         return;
     }
-    result.assetState = PreviewSceneAssetLoader::loadAssetState(stageMediaAvailable_);
+    result.assetState = PreviewSceneAssetLoader::loadAssetState(outlineVariant_);
     currentAssets_ = std::move(result);
     emit assetsChanged();
 }

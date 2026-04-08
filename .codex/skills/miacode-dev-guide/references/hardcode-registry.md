@@ -17,6 +17,9 @@ Use this file to track where important constants live, what they mean, and wheth
 - `src/common/PreviewVideoGeometryConfig.h`
   - Owns: background brightness defaults, layout square scaling (current default `0.95`), dimming geometry, smooth brightness blending
   - Scope: preview and export visual geometry
+- `src/common/LayoutRingConfig.h`
+  - Owns: fixed outline-to-playfield diameter ratio shared by realtime preview and export dim-mask geometry
+  - Scope: preview and export outline/dimming alignment
 - `src/common/PreviewSfxAssets.h`
   - Owns: SFX kind-to-filename mapping and SFX directory resolution
   - Scope: sound asset conventions

@@ -20,12 +20,11 @@ class PreviewSceneAssetLoader
 public:
     static PreviewSceneAssetLoadResult load(
         const QString& skinDirectory,
-        bool stageMediaAvailable,
+        PreviewOutlineVariant outlineVariant,
         quint64 generation = 0
     );
 
-    static scene::PreviewAssetState loadAssetState(bool stageMediaAvailable);
-    static double detectLayoutRingDiameterRatio(const QImage& source);
+    static scene::PreviewAssetState loadAssetState(PreviewOutlineVariant outlineVariant);
 };
 
 }  // namespace miacode::preview::runtime

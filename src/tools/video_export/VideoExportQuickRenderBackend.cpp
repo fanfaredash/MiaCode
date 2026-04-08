@@ -37,6 +37,7 @@ bool VideoExportQuickRenderBackend::bootstrap(
     const QSize& frameSize,
     QString* errorMessage)
 {
+    assets_.setOutlineVariant(task.outlineVariant);
     assets_.setStageMediaAvailable(stageMediaAvailable);
     if (!assets_.loadSkinDirectorySync(task.skinDirectory)) {
         if (errorMessage != nullptr) {
@@ -74,11 +75,14 @@ bool VideoExportQuickRenderBackend::bootstrap(
 
 void VideoExportQuickRenderBackend::copyRenderStateFrom(const VideoExportQuickRenderBackend& source)
 {
+    assets_.setOutlineVariant(source.assets_.outlineVariant());
+    assets_.setStageMediaAvailable(source.assets_.stageMediaAvailable());
     frameState_ = source.frameState_;
     lastRenderStats_ = source.lastRenderStats_;
     requestedFormat_ = source.requestedFormat_;
     shareContext_ = source.shareContext_;
     session_.setLayerFlags(source.session_.layerFlags());
+    refreshAssetState();
 }
 
 void VideoExportQuickRenderBackend::setStageMediaAvailable(bool hasMedia)
@@ -106,6 +110,12 @@ void VideoExportQuickRenderBackend::setLayoutSquareScale(double scale)
 void VideoExportQuickRenderBackend::setSmoothBrightness(bool smooth)
 {
     frameState_.render.smoothBrightness = smooth;
+}
+
+void VideoExportQuickRenderBackend::setOutlineVariant(PreviewOutlineVariant variant)
+{
+    assets_.setOutlineVariant(variant);
+    refreshAssetState();
 }
 
 void VideoExportQuickRenderBackend::setBackgroundScaleMode(PreviewBackgroundScaleMode mode)

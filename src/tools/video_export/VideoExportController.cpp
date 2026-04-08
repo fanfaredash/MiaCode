@@ -3534,7 +3534,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
     if (hasDimMask) {
         const QString dimMaskPath = QDir(tempDir.path()).filePath(QStringLiteral("dim_mask.png"));
         const double ringRatio =
-            miacode::preview::runtime::PreviewSceneAssetLoader::loadAssetState(hasMedia).layoutRingDiameterRatio;
+            miacode::preview::runtime::PreviewSceneAssetLoader::loadAssetState(task.outlineVariant).layoutRingDiameterRatio;
         const QImage dimMask = buildCircularDimMaskImage(
             frameWidth,
             frameHeight,

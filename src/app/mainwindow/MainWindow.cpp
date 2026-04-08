@@ -2942,6 +2942,7 @@ void MainWindow::ensurePreviewMediaControllerInitialized()
 
     dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
         controller->initializeBackendObjects();
+        controller->setForcedMediaPath(forcedPreviewBackgroundMediaPath(previewOutlineVariant_));
         controller->setWarmupResolvedMediaPath(previewMediaWarmupChartPath_, previewMediaWarmupResolvedPath_);
         controller->setBackgroundTrackVolume(previewAudioSettings_.bgmVolume);
         controller->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
@@ -4654,6 +4655,98 @@ void MainWindow::updateLatencyDetectorAvailability()
     }
 }
 
+PreviewOutlineVariant MainWindow::previewOutlineVariantFromStorageValue(const QString& value) const
+{
+    const QString normalized = value.trimmed().toLower();
+    if (normalized == QLatin1String("point")) {
+        return PreviewOutlineVariant::Point;
+    }
+    if (normalized == QLatin1String("judge_area")
+        || normalized == QLatin1String("judgearea")
+        || normalized == QLatin1String("area")) {
+        return PreviewOutlineVariant::JudgeArea;
+    }
+    if (normalized == QLatin1String("judge_area_labeled")
+        || normalized == QLatin1String("judgearea_labeled")
+        || normalized == QLatin1String("judge_area_numbered")
+        || normalized == QLatin1String("numbered_area")
+        || normalized == QLatin1String("area_labeled")) {
+        return PreviewOutlineVariant::JudgeAreaLabeled;
+    }
+    return PreviewOutlineVariant::Line;
+}
+
+QString MainWindow::previewOutlineVariantStorageValue() const
+{
+    switch (previewOutlineVariant_) {
+    case PreviewOutlineVariant::Point:
+        return QStringLiteral("point");
+    case PreviewOutlineVariant::JudgeArea:
+        return QStringLiteral("judge_area");
+    case PreviewOutlineVariant::JudgeAreaLabeled:
+        return QStringLiteral("judge_area_labeled");
+    case PreviewOutlineVariant::Line:
+    default:
+        return QStringLiteral("line");
+    }
+}
+
+PreviewOutlineVariant MainWindow::autoPreviewOutlineVariantForChart(const QString& chartPath) const
+{
+    return miacode::chart_assets::hasBackgroundMedia(chartPath)
+        ? PreviewOutlineVariant::Line
+        : PreviewOutlineVariant::JudgeAreaLabeled;
+}
+
+QString MainWindow::forcedPreviewBackgroundMediaPath(PreviewOutlineVariant variant) const
+{
+    if (variant != PreviewOutlineVariant::JudgeAreaLabeled) {
+        return QString();
+    }
+    const QString overlayPath = miacode::assets::regionLabelsOverlayPath();
+    return QFileInfo::exists(overlayPath) ? overlayPath : QString();
+}
+
+QString MainWindow::effectiveBackgroundMediaPathForVariant(
+    const QString& chartPath,
+    const QString& explicitPath,
+    PreviewOutlineVariant variant) const
+{
+    const QString forcedPath = forcedPreviewBackgroundMediaPath(variant);
+    if (!forcedPath.isEmpty()) {
+        return forcedPath;
+    }
+    return miacode::chart_assets::resolvePreferredBackgroundMediaPath(chartPath, explicitPath);
+}
+
+void MainWindow::applyPreviewOutlineVariant(
+    PreviewOutlineVariant variant,
+    bool useAutoSelection,
+    bool persistState)
+{
+    previewOutlineVariant_ = variant;
+    previewOutlineVariantUsesAutoSelection_ = useAutoSelection;
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->setOutlineVariant(previewOutlineVariant_);
+    }
+    const QString forcedBackgroundMediaPath = forcedPreviewBackgroundMediaPath(previewOutlineVariant_);
+    if (previewMediaController_ != nullptr) {
+        dispatchPreviewMediaControllerCall([forcedBackgroundMediaPath](PreviewMediaController* controller) {
+            controller->setForcedMediaPath(forcedBackgroundMediaPath);
+        });
+    }
+    if (previewStageMediaHost_ != nullptr) {
+        previewStageMediaHost_->setForcedMediaPath(forcedBackgroundMediaPath);
+    }
+    if (!currentFilePath_.isEmpty()) {
+        syncPreviewStageMediaRouteChartPath(currentFilePath_, resolveDefaultTrackPath(), qtPreviewPauseSecond_);
+    }
+    if (persistState) {
+        saveProjectRenderState();
+        savePortableState();
+    }
+}
+
 MainWindow::PreviewSkinVariant MainWindow::previewSkinVariantFromStorageValue(const QString& value) const
 {
     const QString normalized = value.trimmed().toLower();
@@ -4781,6 +4874,13 @@ void MainWindow::loadProjectRenderState()
                             render.value("skin_variant").toString()
                         );
                     }
+                    if (render.value("outline_variant").isString()) {
+                        const QString outlineVariant = render.value("outline_variant").toString().trimmed();
+                        if (!outlineVariant.isEmpty()) {
+                            previewOutlineVariant_ = previewOutlineVariantFromStorageValue(outlineVariant);
+                            previewOutlineVariantUsesAutoSelection_ = false;
+                        }
+                    }
                     if (render.value("render_mode").isString()) {
                         muriRenderOptions_.renderMode = renderModeFromToken(render.value("render_mode").toString());
                     }
@@ -4834,6 +4934,9 @@ void MainWindow::loadProjectRenderState()
             }
         }
     }
+    if (previewOutlineVariantUsesAutoSelection_) {
+        previewOutlineVariant_ = autoPreviewOutlineVariantForChart(currentFilePath_);
+    }
     if (qAbs(previewCanvasAspectRatio_ - previousCanvasAspectRatio) > 1e-6) {
         if (previewCanvasAspectRatio_ + 1e-6 < previousCanvasAspectRatio) {
             updatePreviewWorkspaceLayout();
@@ -4845,6 +4948,7 @@ void MainWindow::loadProjectRenderState()
     refreshPreviewFrameRateTimers();
     applyPreviewStageMediaRouteVisualSettings();
     if (previewCanvas_ != nullptr) {
+        previewCanvas_->setOutlineVariant(previewOutlineVariant_);
         previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
         previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
         previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
@@ -4889,6 +4993,11 @@ void MainWindow::saveProjectRenderState() const
     );
     render.insert("note_flow_speed", previewNoteFlowSpeed_);
     render.insert("skin_variant", previewSkinVariantStorageValue());
+    if (previewOutlineVariantUsesAutoSelection_) {
+        render.remove("outline_variant");
+    } else {
+        render.insert("outline_variant", previewOutlineVariantStorageValue());
+    }
     render.insert("render_mode", renderModeToken(muriRenderOptions_.renderMode));
     render.insert("show_chart_review_slide_judge_overlay", muriRenderOptions_.showChartReviewSlideJudgeOverlay);
     render.insert("show_chart_review_simple_judge_overlay", muriRenderOptions_.showChartReviewSimpleJudgeOverlay);
@@ -5512,6 +5621,7 @@ void MainWindow::onExportPreviewVideo()
     task.backgroundBrightnessInner = previewBackgroundBrightnessInner_;
     task.layoutSquareScale = previewLayoutSquareScale_;
     task.smoothBrightness = previewSmoothBrightness_;
+    task.outlineVariant = previewOutlineVariant_;
     task.backgroundScaleMode = previewBackgroundScaleMode_;
     task.noteFlowSpeed = previewNoteFlowSpeed_;
     task.exportStartSeconds = 0.0;
@@ -5728,6 +5838,7 @@ void MainWindow::onBatchExportPreviewVideo()
     task.backgroundBrightnessInner = previewBackgroundBrightnessInner_;
     task.layoutSquareScale = previewLayoutSquareScale_;
     task.smoothBrightness = previewSmoothBrightness_;
+    task.outlineVariant = previewOutlineVariant_;
     task.backgroundScaleMode = previewBackgroundScaleMode_;
     task.noteFlowSpeed = previewNoteFlowSpeed_;
     task.exportStartSeconds = 0.0;
@@ -6030,7 +6141,11 @@ bool MainWindow::buildVideoExportSnapshot(
         ? QString()
         : QFileInfo(currentFilePath_).absolutePath();
     built.trackPath = resolveDefaultTrackPath();
-    built.backgroundMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(currentFilePath_);
+    built.backgroundMediaPath = effectiveBackgroundMediaPathForVariant(
+        currentFilePath_,
+        requestedTask.backgroundMediaPath,
+        requestedTask.outlineVariant
+    );
     built.skinDirectory = resolvePreviewSkinDir();
     built.audioSettings = previewAudioSettings_;
     built.audioSettings.normalize();
@@ -6038,6 +6153,7 @@ bool MainWindow::buildVideoExportSnapshot(
     built.backgroundBrightnessInner = requestedTask.backgroundBrightnessInner;
     built.layoutSquareScale = requestedTask.layoutSquareScale;
     built.smoothBrightness = requestedTask.smoothBrightness;
+    built.outlineVariant = requestedTask.outlineVariant;
     built.backgroundScaleMode = requestedTask.backgroundScaleMode;
     built.noteFlowSpeed = requestedTask.noteFlowSpeed;
     built.muriRenderOptions = requestedTask.muriRenderOptions;
@@ -6224,7 +6340,11 @@ bool MainWindow::buildVideoExportSnapshotForChartDirectory(
     built.originalChartPath = chartPath;
     built.projectDir = QFileInfo(chartPath).absolutePath();
     built.trackPath = trackPath;
-    built.backgroundMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(chartPath);
+    built.backgroundMediaPath = effectiveBackgroundMediaPathForVariant(
+        chartPath,
+        requestedTask.backgroundMediaPath,
+        requestedTask.outlineVariant
+    );
     built.skinDirectory = resolvePreviewSkinDir();
     built.audioSettings = requestedTask.audioSettings;
     built.audioSettings.normalize();
@@ -6232,6 +6352,7 @@ bool MainWindow::buildVideoExportSnapshotForChartDirectory(
     built.backgroundBrightnessInner = requestedTask.backgroundBrightnessInner;
     built.layoutSquareScale = requestedTask.layoutSquareScale;
     built.smoothBrightness = requestedTask.smoothBrightness;
+    built.outlineVariant = requestedTask.outlineVariant;
     built.backgroundScaleMode = requestedTask.backgroundScaleMode;
     built.noteFlowSpeed = requestedTask.noteFlowSpeed;
     built.muriRenderOptions = requestedTask.muriRenderOptions;
@@ -7025,6 +7146,7 @@ bool MainWindow::exportPreviewVideoFromCli(
     task.backgroundBrightnessInner = request.backgroundBrightnessInner;
     task.layoutSquareScale = request.layoutSquareScale;
     task.smoothBrightness = request.smoothBrightness;
+    task.outlineVariant = request.outlineVariant;
     task.backgroundScaleMode = request.backgroundScaleMode;
     task.noteFlowSpeed = request.noteFlowSpeed;
     task.exportStartSeconds = exportStartSeconds;
@@ -7260,6 +7382,13 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     videoFormLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     videoFormLayout->setHorizontalSpacing(10);
     videoFormLayout->setVerticalSpacing(8);
+    auto* gameplayGroup = new QGroupBox(uiText("dialog.render_settings.gameplay_group", "Gameplay"), &dialog);
+    auto* gameplayLayout = new QGridLayout(gameplayGroup);
+    gameplayLayout->setContentsMargins(10, 8, 10, 8);
+    gameplayLayout->setHorizontalSpacing(10);
+    gameplayLayout->setVerticalSpacing(8);
+    gameplayLayout->setColumnStretch(0, 1);
+    gameplayLayout->setColumnStretch(1, 1);
 
     QSlider* outerBrightnessSlider = nullptr;
     QLabel* outerBrightnessLabel = nullptr;
@@ -7306,10 +7435,11 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         flowSpeedMin + qRound((selectedFlowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
         flowSpeedMax
     );
-    auto* flowSpeedEdit = new QLineEdit(videoGroup);
+    auto* flowSpeedEdit = new QLineEdit(gameplayGroup);
     flowSpeedEdit->setAlignment(Qt::AlignCenter);
     flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed));
     flowSpeedEdit->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet());
+    flowSpeedEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     auto* flowSpeedValidator = new QDoubleValidator(flowSpeedMin, flowSpeedMax, 2, flowSpeedEdit);
     flowSpeedValidator->setNotation(QDoubleValidator::StandardNotation);
     flowSpeedEdit->setValidator(flowSpeedValidator);
@@ -7334,12 +7464,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         savePortableState();
     });
 
-    auto* previewGroup = new QGroupBox(uiText("dialog.render_settings.preview_group", "Preview"), &dialog);
-    auto* previewFormLayout = new QFormLayout(previewGroup);
-    previewFormLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
-    previewFormLayout->setHorizontalSpacing(10);
-    previewFormLayout->setVerticalSpacing(8);
-
     struct CanvasFrameRateOption {
         PreviewCanvasFrameRateMode mode;
         QString label;
@@ -7363,7 +7487,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
             break;
         }
     }
-    auto* canvasFrameRateButton = createDialogMenuButton(previewGroup, selectedCanvasFrameRateLabel);
+    auto* canvasFrameRateButton = createDialogMenuButton(videoGroup, selectedCanvasFrameRateLabel);
     canvasFrameRateButton->setFixedHeight(flowSpeedEdit->sizeHint().height());
     canvasFrameRateButton->setStyleSheet(
         UiTheme::dialogMenuButtonStyleSheet()
@@ -7386,9 +7510,10 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     const QString standardSkinLabel = uiText("dialog.render_settings.video.skin.standard", "Standard");
     const QString dxSkinLabel = uiText("dialog.render_settings.video.skin.dx", "DX");
     auto* skinButton = createDialogMenuButton(
-        videoGroup,
+        gameplayGroup,
         previewSkinVariant_ == PreviewSkinVariant::Dx ? dxSkinLabel : standardSkinLabel
     );
+    skinButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     auto* skinMenu = new QMenu(skinButton);
     styleRoundedMenu(*skinMenu);
     addDialogMenuChoice(skinMenu, standardSkinLabel, [this, skinButton, standardSkinLabel]() {
@@ -7410,6 +7535,82 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         savePortableState();
     });
     skinButton->setMenu(skinMenu);
+    const QString enabledLabel = uiText("dialog.render_settings.option.enabled", "Enabled");
+    const QString disabledLabel = uiText("dialog.render_settings.option.disabled", "Disabled");
+    auto* slideJudgeEffectButton = createDialogMenuButton(
+        gameplayGroup,
+        muriRenderOptions_.showChartReviewSlideJudgeOverlay ? enabledLabel : disabledLabel
+    );
+    slideJudgeEffectButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto* slideJudgeEffectMenu = new QMenu(slideJudgeEffectButton);
+    styleRoundedMenu(*slideJudgeEffectMenu);
+    const auto setSlideJudgeEffectEnabled = [this, slideJudgeEffectButton, enabledLabel, disabledLabel](bool enabled) {
+        slideJudgeEffectButton->setText(enabled ? enabledLabel : disabledLabel);
+        if (muriRenderOptions_.showChartReviewSlideJudgeOverlay == enabled) {
+            return;
+        }
+        muriRenderOptions_.showChartReviewSlideJudgeOverlay = enabled;
+        applyMuriRenderOptions();
+        saveProjectRenderState();
+        savePortableState();
+    };
+    addDialogMenuChoice(slideJudgeEffectMenu, enabledLabel, [setSlideJudgeEffectEnabled]() {
+        setSlideJudgeEffectEnabled(true);
+    });
+    addDialogMenuChoice(slideJudgeEffectMenu, disabledLabel, [setSlideJudgeEffectEnabled]() {
+        setSlideJudgeEffectEnabled(false);
+    });
+    slideJudgeEffectButton->setMenu(slideJudgeEffectMenu);
+    const QString judgeLinePointLabel = uiText("dialog.render_settings.gameplay.judge_line.point", "Point");
+    const QString judgeLineLineLabel = uiText("dialog.render_settings.gameplay.judge_line.line", "Line");
+    const QString judgeLineAreaLabel = uiText("dialog.render_settings.gameplay.judge_line.area", "Judge Area");
+    const QString judgeLineAreaLabeledLabel = uiText(
+        "dialog.render_settings.gameplay.judge_line.area_labeled",
+        "Judge Area (Labeled)"
+    );
+    const auto judgeLineLabelForVariant = [
+        judgeLinePointLabel,
+        judgeLineLineLabel,
+        judgeLineAreaLabel,
+        judgeLineAreaLabeledLabel
+    ](PreviewOutlineVariant variant) {
+        switch (variant) {
+        case PreviewOutlineVariant::Point:
+            return judgeLinePointLabel;
+        case PreviewOutlineVariant::JudgeArea:
+            return judgeLineAreaLabel;
+        case PreviewOutlineVariant::JudgeAreaLabeled:
+            return judgeLineAreaLabeledLabel;
+        case PreviewOutlineVariant::Line:
+        default:
+            return judgeLineLineLabel;
+        }
+    };
+    auto* judgeLineButton = createDialogMenuButton(gameplayGroup, judgeLineLabelForVariant(previewOutlineVariant_));
+    judgeLineButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto* judgeLineMenu = new QMenu(judgeLineButton);
+    styleRoundedMenu(*judgeLineMenu);
+    addDialogMenuChoice(judgeLineMenu, judgeLinePointLabel, [this, judgeLineButton, judgeLineLabelForVariant]() {
+        applyPreviewOutlineVariant(PreviewOutlineVariant::Point, false, true);
+        judgeLineButton->setText(judgeLineLabelForVariant(previewOutlineVariant_));
+    });
+    addDialogMenuChoice(judgeLineMenu, judgeLineLineLabel, [this, judgeLineButton, judgeLineLabelForVariant]() {
+        applyPreviewOutlineVariant(PreviewOutlineVariant::Line, false, true);
+        judgeLineButton->setText(judgeLineLabelForVariant(previewOutlineVariant_));
+    });
+    addDialogMenuChoice(judgeLineMenu, judgeLineAreaLabel, [this, judgeLineButton, judgeLineLabelForVariant]() {
+        applyPreviewOutlineVariant(PreviewOutlineVariant::JudgeArea, false, true);
+        judgeLineButton->setText(judgeLineLabelForVariant(previewOutlineVariant_));
+    });
+    addDialogMenuChoice(
+        judgeLineMenu,
+        judgeLineAreaLabeledLabel,
+        [this, judgeLineButton, judgeLineLabelForVariant]() {
+            applyPreviewOutlineVariant(PreviewOutlineVariant::JudgeAreaLabeled, false, true);
+            judgeLineButton->setText(judgeLineLabelForVariant(previewOutlineVariant_));
+        }
+    );
+    judgeLineButton->setMenu(judgeLineMenu);
     PreviewBackgroundScaleMode selectedScaleMode = previewBackgroundScaleMode_;
     auto* scaleModeButton = createDialogMenuButton(
         videoGroup,
@@ -7448,7 +7649,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     smoothBrightnessCheck->setChecked(previewSmoothBrightness_);
     auto* timestampCheck = new QCheckBox(
         uiText("dialog.video_export.option.show_timestamp", "Show bottom-left timestamp"),
-        previewGroup
+        videoGroup
     );
     timestampCheck->setChecked(previewShowTimestamp_);
     const bool unifiedObjectStatsChecked = previewShowObjectStatsHud_ || exportShowObjectStatsHud_;
@@ -7456,67 +7657,70 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     exportShowObjectStatsHud_ = unifiedObjectStatsChecked;
     auto* objectStatsCheck = new QCheckBox(
         uiText("dialog.render_settings.preview.show_object_stats", "Show object stats in preview/export"),
-        previewGroup
+        videoGroup
     );
     objectStatsCheck->setChecked(unifiedObjectStatsChecked);
-    auto* validationSummaryCheck = new QCheckBox(
-        uiText("dialog.render_settings.preview.show_validation_summary", "Show header error/warning summary"),
-        previewGroup
-    );
-    validationSummaryCheck->setChecked(previewShowValidationSummary_);
     auto* debugCheck = new QCheckBox(
         uiText("dialog.render_settings.preview.debug", "Show preview debug info"),
-        previewGroup
+        videoGroup
     );
     debugCheck->setChecked(previewShowDebugInfo_);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_outer", "Outer Brightness"), outerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.brightness_inner", "Inner Brightness"), innerBrightnessRow);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.layout_square_scale", "Layout Size"), layoutSquareScaleRow);
-    videoFormLayout->addRow(uiText("dialog.render_settings.video.flow_speed", "Flow Speed"), flowSpeedEdit);
-    videoFormLayout->addRow(uiText("dialog.render_settings.video.skin", "Skin"), skinButton);
     videoFormLayout->addRow(uiText("dialog.render_settings.video.scale_mode", "Background / PV Scale Mode"), scaleModeButton);
+    videoFormLayout->addRow(
+        uiText("dialog.render_settings.preview.canvas_frame_rate", "Preview Refresh Rate"),
+        canvasFrameRateButton
+    );
     auto* videoCheckRow = new QWidget(videoGroup);
     auto* videoCheckLayout = new QGridLayout(videoCheckRow);
     videoCheckLayout->setContentsMargins(0, 0, 0, 0);
-    videoCheckLayout->setHorizontalSpacing(10);
+    videoCheckLayout->setHorizontalSpacing(6);
     videoCheckLayout->setVerticalSpacing(6);
     videoCheckLayout->setColumnStretch(0, 1);
     videoCheckLayout->setColumnStretch(1, 1);
     videoCheckLayout->addWidget(smoothBrightnessCheck, 0, 0, Qt::AlignLeft);
     videoCheckLayout->addWidget(timestampCheck, 0, 1, Qt::AlignLeft);
-    videoCheckLayout->addWidget(debugCheck, 1, 1, Qt::AlignLeft);
+    videoCheckLayout->addWidget(debugCheck, 1, 0, Qt::AlignLeft);
+    videoCheckLayout->addWidget(objectStatsCheck, 1, 1, Qt::AlignLeft);
     videoFormLayout->addRow(QString(), videoCheckRow);
 
-    videoCheckLayout->removeWidget(timestampCheck);
-    videoCheckLayout->removeWidget(debugCheck);
-
-    previewFormLayout->addRow(
-        uiText("dialog.render_settings.preview.canvas_frame_rate", "Preview Refresh Rate"),
-        canvasFrameRateButton
+    const auto addGameplayField = [gameplayGroup, gameplayLayout](int row, int column, const QString& labelText, QWidget* control) {
+        auto* field = new QWidget(gameplayGroup);
+        auto* fieldLayout = new QVBoxLayout(field);
+        fieldLayout->setContentsMargins(0, 0, 0, 0);
+        fieldLayout->setSpacing(6);
+        auto* label = new QLabel(labelText, field);
+        fieldLayout->addWidget(label, 0);
+        fieldLayout->addWidget(control, 0);
+        gameplayLayout->addWidget(field, row, column);
+    };
+    addGameplayField(0, 0, uiText("dialog.render_settings.video.flow_speed", "Flow Speed"), flowSpeedEdit);
+    addGameplayField(0, 1, uiText("dialog.render_settings.video.skin", "Skin"), skinButton);
+    addGameplayField(
+        1,
+        0,
+        uiText("dialog.render_settings.gameplay.slide_judge_effect", "Slide Judge Effect"),
+        slideJudgeEffectButton
     );
-    auto* previewCheckRow = new QWidget(previewGroup);
-    auto* previewCheckLayout = new QGridLayout(previewCheckRow);
-    previewCheckLayout->setContentsMargins(0, 0, 0, 0);
-    previewCheckLayout->setHorizontalSpacing(6);
-    previewCheckLayout->setVerticalSpacing(6);
-    previewCheckLayout->setColumnStretch(0, 1);
-    previewCheckLayout->setColumnStretch(1, 1);
-    previewCheckLayout->addWidget(timestampCheck, 0, 0, Qt::AlignLeft);
-    previewCheckLayout->addWidget(debugCheck, 0, 1, Qt::AlignLeft);
-    previewCheckLayout->addWidget(objectStatsCheck, 1, 0, Qt::AlignLeft);
-    previewCheckLayout->addWidget(validationSummaryCheck, 1, 1, Qt::AlignLeft);
-    previewFormLayout->addRow(QString(), previewCheckRow);
+    addGameplayField(
+        1,
+        1,
+        uiText("dialog.render_settings.gameplay.judge_line", "Judge Line"),
+        judgeLineButton
+    );
 
     audioGroup->setVisible(includeAudioSettings);
     videoGroup->setVisible(includeVideoSettings);
-    previewGroup->setVisible(includeVideoSettings);
+    gameplayGroup->setVisible(includeVideoSettings);
 
     if (includeAudioSettings) {
         rootLayout->addWidget(audioGroup, 0);
     }
     if (includeVideoSettings) {
         rootLayout->addWidget(videoGroup, 0);
-        rootLayout->addWidget(previewGroup, 0);
+        rootLayout->addWidget(gameplayGroup, 0);
     }
     auto* buttonBox = new QDialogButtonBox(&dialog);
     QPushButton* saveLocalAudioPresetButton = nullptr;
@@ -7787,12 +7991,6 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     };
     connect(objectStatsCheck, &QCheckBox::toggled, &dialog, [setObjectStatsHudEnabled](bool checked) {
         setObjectStatsHudEnabled(checked);
-    });
-    connect(validationSummaryCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
-        previewShowValidationSummary_ = checked;
-        saveProjectRenderState();
-        savePortableState();
-        updateEditorValidationSummary();
     });
     dialog.adjustSize();
     dialog.exec();

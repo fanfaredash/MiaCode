@@ -6,6 +6,8 @@
 #include <QString>
 #include <QStringList>
 
+#include "preview/video/PreviewRenderSettings.h"
+
 namespace miacode::assets {
 
 inline QString findAssetRoot()
@@ -39,28 +41,56 @@ inline QString assetPath(const QString& relativePath)
     return QDir::cleanPath(QDir(root).filePath(relativePath));
 }
 
-inline QString primaryOutlinePath()
+inline QString outlinePointPath()
 {
-    return assetPath(QStringLiteral("background/outline.png"));
+    return assetPath(QStringLiteral("background/outline_point.png"));
 }
 
-inline QString legacyOutlinePath()
+inline QString outlineLinePath()
 {
-    return assetPath(QStringLiteral("background/outline_2.png"));
+    return assetPath(QStringLiteral("background/outline_line.png"));
 }
 
-inline QString outlinePathForStageMedia(bool hasStageMedia)
+inline QString outlineJudgeAreaPath()
 {
-    const QString preferredPath = hasStageMedia ? primaryOutlinePath() : legacyOutlinePath();
+    return assetPath(QStringLiteral("background/outline_area.png"));
+}
+
+inline QString regionLabelsOverlayPath()
+{
+    return assetPath(QStringLiteral("background/region_labels_overlay_transparent_v3.png"));
+}
+
+inline QString outlinePathForVariant(PreviewOutlineVariant variant)
+{
+    QString preferredPath;
+    switch (variant) {
+    case PreviewOutlineVariant::Point:
+        preferredPath = outlinePointPath();
+        break;
+    case PreviewOutlineVariant::JudgeArea:
+    case PreviewOutlineVariant::JudgeAreaLabeled:
+        preferredPath = outlineJudgeAreaPath();
+        break;
+    case PreviewOutlineVariant::Line:
+    default:
+        preferredPath = outlineLinePath();
+        break;
+    }
     if (QFileInfo::exists(preferredPath)) {
         return preferredPath;
     }
 
-    const QString fallbackPath = hasStageMedia ? legacyOutlinePath() : primaryOutlinePath();
-    if (QFileInfo::exists(fallbackPath)) {
-        return fallbackPath;
+    const QStringList fallbacks{
+        outlineLinePath(),
+        assetPath(QStringLiteral("background/outline.png")),
+        assetPath(QStringLiteral("background/outline_2.png")),
+    };
+    for (const QString& fallbackPath : fallbacks) {
+        if (QFileInfo::exists(fallbackPath)) {
+            return fallbackPath;
+        }
     }
-
     return QString();
 }
 

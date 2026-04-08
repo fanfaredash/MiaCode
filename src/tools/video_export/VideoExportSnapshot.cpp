@@ -18,6 +18,42 @@ QString backgroundScaleModeToken(PreviewBackgroundScaleMode mode)
         : QStringLiteral("fill");
 }
 
+QString outlineVariantToken(PreviewOutlineVariant variant)
+{
+    switch (variant) {
+    case PreviewOutlineVariant::Point:
+        return QStringLiteral("point");
+    case PreviewOutlineVariant::JudgeArea:
+        return QStringLiteral("judge_area");
+    case PreviewOutlineVariant::JudgeAreaLabeled:
+        return QStringLiteral("judge_area_labeled");
+    case PreviewOutlineVariant::Line:
+    default:
+        return QStringLiteral("line");
+    }
+}
+
+PreviewOutlineVariant outlineVariantFromToken(const QString& token)
+{
+    const QString normalized = token.trimmed().toLower();
+    if (normalized == QLatin1String("point")) {
+        return PreviewOutlineVariant::Point;
+    }
+    if (normalized == QLatin1String("judge_area")
+        || normalized == QLatin1String("judgearea")
+        || normalized == QLatin1String("area")) {
+        return PreviewOutlineVariant::JudgeArea;
+    }
+    if (normalized == QLatin1String("judge_area_labeled")
+        || normalized == QLatin1String("judgearea_labeled")
+        || normalized == QLatin1String("judge_area_numbered")
+        || normalized == QLatin1String("numbered_area")
+        || normalized == QLatin1String("area_labeled")) {
+        return PreviewOutlineVariant::JudgeAreaLabeled;
+    }
+    return PreviewOutlineVariant::Line;
+}
+
 QString videoExportPresetToken(VideoExportPreset preset)
 {
     switch (preset) {
@@ -136,6 +172,7 @@ QJsonObject VideoExportSnapshot::toJson() const
     render.insert(QStringLiteral("background_brightness_inner"), backgroundBrightnessInner);
     render.insert(QStringLiteral("layout_square_scale"), layoutSquareScale);
     render.insert(QStringLiteral("smooth_brightness"), smoothBrightness);
+    render.insert(QStringLiteral("outline_variant"), outlineVariantToken(outlineVariant));
     render.insert(QStringLiteral("background_scale_mode"), backgroundScaleModeToken(backgroundScaleMode));
     render.insert(QStringLiteral("note_flow_speed"), noteFlowSpeed);
     render.insert(QStringLiteral("render_mode"), renderModeToken(muriRenderOptions.renderMode));
@@ -218,6 +255,8 @@ bool VideoExportSnapshot::fromJson(
         render.value(QStringLiteral("layout_square_scale")).toDouble(parsed.layoutSquareScale);
     parsed.smoothBrightness =
         render.value(QStringLiteral("smooth_brightness")).toBool(parsed.smoothBrightness);
+    parsed.outlineVariant =
+        outlineVariantFromToken(render.value(QStringLiteral("outline_variant")).toString());
     parsed.backgroundScaleMode =
         backgroundScaleModeFromToken(render.value(QStringLiteral("background_scale_mode")).toString());
     parsed.noteFlowSpeed =
@@ -315,10 +354,12 @@ bool buildVideoExportTaskFromSnapshot(
     VideoExportTask built;
     built.outputPath = snapshot.outputPath;
     built.chartPath = snapshot.originalChartPath;
-    built.backgroundMediaPath = miacode::chart_assets::resolvePreferredBackgroundMediaPath(
-        snapshot.originalChartPath,
-        snapshot.backgroundMediaPath
-    );
+    built.backgroundMediaPath = snapshot.outlineVariant == PreviewOutlineVariant::JudgeAreaLabeled
+        ? snapshot.backgroundMediaPath
+        : miacode::chart_assets::resolvePreferredBackgroundMediaPath(
+            snapshot.originalChartPath,
+            snapshot.backgroundMediaPath
+        );
     built.trackPath = snapshot.trackPath;
     built.skinDirectory = snapshot.skinDirectory;
     built.noteMarkers = shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds);
@@ -328,6 +369,7 @@ bool buildVideoExportTaskFromSnapshot(
     built.backgroundBrightnessInner = snapshot.backgroundBrightnessInner;
     built.layoutSquareScale = snapshot.layoutSquareScale;
     built.smoothBrightness = snapshot.smoothBrightness;
+    built.outlineVariant = snapshot.outlineVariant;
     built.backgroundScaleMode = snapshot.backgroundScaleMode;
     built.noteFlowSpeed = snapshot.noteFlowSpeed;
     built.muriRenderOptions = snapshot.muriRenderOptions;

@@ -36,6 +36,7 @@ struct VideoExportTask {
     double backgroundBrightnessInner = miacode::preview_video::kBackgroundBrightnessInnerDefault;
     double layoutSquareScale = miacode::preview_video::kLayoutSquareScaleDefault;
     bool smoothBrightness = miacode::preview_video::kSmoothBrightnessDefault;
+    PreviewOutlineVariant outlineVariant = PreviewOutlineVariant::Line;
     PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
     double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     double exportStartSeconds = 0.0;
