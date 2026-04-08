@@ -473,14 +473,16 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     logStartupStage("editor_widget_ready");
 
     auto* central = new QWidget(this);
-    central->setStyleSheet(UiTheme::editorShellStyleSheet());
     central->setObjectName("EditorShell");
+    central->setAttribute(Qt::WA_StyledBackground, true);
+    central->setStyleSheet(UiTheme::editorShellStyleSheet());
     auto* centralLayout = new QVBoxLayout(central);
     centralLayout->setContentsMargins(0, 4, 0, 0);
     centralLayout->setSpacing(0);
 
     auto* editorHeader = new QFrame(central);
     editorHeader->setObjectName("EditorHeader");
+    editorHeader->setAttribute(Qt::WA_StyledBackground, true);
     editorHeaderWidget_ = editorHeader;
     auto* editorHeaderLayout = new QHBoxLayout(editorHeader);
     editorHeaderLayout->setContentsMargins(12, 8, 12, 8);
@@ -501,6 +503,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
 
     editorDifficultyControls_ = new QWidget(editorHeader);
     editorDifficultyControls_->setObjectName("EditorDifficultyControls");
+    editorDifficultyControls_->setAttribute(Qt::WA_StyledBackground, true);
     auto* editorDifficultyLayout = new QHBoxLayout(editorDifficultyControls_);
     editorDifficultyLayout->setContentsMargins(0, 0, 0, 0);
     editorDifficultyLayout->setSpacing(8);

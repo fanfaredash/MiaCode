@@ -5,6 +5,7 @@
     dialog.setModal(true);
     dialog.setMinimumWidth(400);
     dialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
+    applySystemWindowBackdrop(&dialog);
 
     auto* rootLayout = new QVBoxLayout(&dialog);
     rootLayout->setContentsMargins(12, 12, 12, 12);

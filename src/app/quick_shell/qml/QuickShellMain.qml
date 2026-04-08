@@ -11,6 +11,17 @@ ApplicationWindow {
     property var metricsMap: styleBridge.metrics
     property bool fullscreenControlsVisible: controller.previewFullscreen
     property bool fullscreenHintVisible: false
+    property bool initialGeometryApplied: false
+    property real previewPaneWidth: previewPaneInitialWidth(
+        metric("initialWindowWidth", 1280),
+        Math.max(
+            1,
+            metric("initialWindowHeight", 800)
+                - metric("topChromeHeight", 106)
+                - metric("statusHeight", 28)
+        )
+    )
+    property bool previewPaneUserResized: false
 
     function metric(key, fallback) {
         return metricsMap && metricsMap[key] !== undefined ? metricsMap[key] : fallback
@@ -27,11 +38,59 @@ ApplicationWindow {
         fullscreenControlsHideTimer.restart()
     }
 
+    function previewPaneHandleWidth() {
+        return metric("previewSplitterHandleWidth", 6)
+    }
+
+    function previewPaneMinWidth() {
+        return metric("previewPanelMinWidth", 320)
+    }
+
+    function previewPaneMaxWidth(totalWidth, totalHeight) {
+        const minWidth = previewPaneMinWidth()
+        const leftMinWidth = metric("leftColumnMinWidth", 320)
+        const maxByWindow = Math.max(
+            minWidth,
+            Math.floor(totalWidth - leftMinWidth - previewPaneHandleWidth())
+        )
+        const maxBySquare = Math.max(minWidth, Math.floor(totalHeight))
+        return Math.max(
+            minWidth,
+            Math.min(metric("previewPanelMaxWidth", 900), maxByWindow, maxBySquare)
+        )
+    }
+
+    function clampPreviewPaneWidth(candidate, totalWidth, totalHeight) {
+        const minWidth = previewPaneMinWidth()
+        const maxWidth = previewPaneMaxWidth(totalWidth, totalHeight)
+        if (maxWidth <= minWidth)
+            return minWidth
+        return Math.max(minWidth, Math.min(candidate, maxWidth))
+    }
+
+    function previewPaneInitialWidth(totalWidth, totalHeight) {
+        const availableWidth = Math.max(
+            0,
+            totalWidth - previewPaneHandleWidth() - metric("outlineDockWidth", 190)
+        )
+        return clampPreviewPaneWidth(Math.floor(availableWidth / 2), totalWidth, totalHeight)
+    }
+
+    function syncPreviewPaneWidth(totalWidth, totalHeight, preserveUserChoice) {
+        const defaultWidth = previewPaneInitialWidth(totalWidth, totalHeight)
+        if (!preserveUserChoice) {
+            previewPaneWidth = defaultWidth
+            previewPaneUserResized = false
+            return
+        }
+        if (previewPaneWidth <= 0) {
+            previewPaneWidth = defaultWidth
+            return
+        }
+        previewPaneWidth = clampPreviewPaneWidth(previewPaneWidth, totalWidth, totalHeight)
+    }
+
     visible: true
-    width: metric("initialWindowWidth", 1280)
-    height: metric("initialWindowHeight", 800)
-    minimumWidth: metric("minimumWindowWidth", 960)
-    minimumHeight: metric("minimumWindowHeight", 640)
     title: controller.windowTitle
     color: tone("windowBg", "#f8fafd")
 
@@ -45,6 +104,15 @@ ApplicationWindow {
     palette.highlightedText: tone("accentText", "#ffffff")
 
     Component.onCompleted: {
+        if (!initialGeometryApplied) {
+            width = metric("initialWindowWidth", 1280)
+            height = metric("initialWindowHeight", 800)
+            minimumWidth = metric("minimumWindowWidth", 960)
+            minimumHeight = metric("minimumWindowHeight", 640)
+            x = metric("initialWindowX", 120)
+            y = metric("initialWindowY", 120)
+            initialGeometryApplied = true
+        }
         styleBridge.syncWindowSize(width, height)
         controller.refresh()
     }
@@ -110,16 +178,16 @@ ApplicationWindow {
     Menu {
         id: previewSpeedMenu
         popupType: Popup.Window
-        palette.window: tone("cardBg", "#ffffff")
-        palette.base: tone("cardBg", "#ffffff")
+        palette.window: tone("menuBg", "#ffffff")
+        palette.base: tone("menuBg", "#ffffff")
         palette.text: tone("textPrimary", "#203040")
         palette.windowText: tone("textPrimary", "#203040")
         palette.buttonText: tone("textPrimary", "#203040")
         palette.highlight: tone("accent", "#2e77d0")
         palette.highlightedText: tone("accentText", "#ffffff")
         background: Rectangle {
-            color: tone("cardBg", "#ffffff")
-            border.color: tone("border", "#d5e0ec")
+            color: tone("menuBg", "#ffffff")
+            border.color: tone("menuBorder", "#d5e0ec")
             radius: 8
         }
 
@@ -151,10 +219,15 @@ ApplicationWindow {
         }
 
         RowLayout {
+            id: workspaceRow
+
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
             layoutDirection: controller.workspacePanelsSwapped ? Qt.RightToLeft : Qt.LeftToRight
+
+            onWidthChanged: syncPreviewPaneWidth(width, height, true)
+            onHeightChanged: syncPreviewPaneWidth(width, height, true)
 
             WindowContainer {
                 Layout.fillWidth: true
@@ -166,9 +239,61 @@ ApplicationWindow {
             }
 
             Rectangle {
-                Layout.preferredWidth: Math.max(metric("previewShellWidth", 360), 320)
-                Layout.minimumWidth: Math.max(metric("previewShellWidth", 360), 320)
-                Layout.maximumWidth: Math.max(metric("previewShellWidth", 360), 320)
+                id: previewResizeHandle
+
+                Layout.preferredWidth: previewPaneHandleWidth()
+                Layout.minimumWidth: previewPaneHandleWidth()
+                Layout.maximumWidth: previewPaneHandleWidth()
+                Layout.fillHeight: true
+                color: previewResizeMouseArea.pressed
+                    ? tone("accent", "#2e77d0")
+                    : (previewResizeMouseArea.containsMouse
+                        ? tone("menuHoverBg", "#eef5ff")
+                        : tone("border", "#d5e0ec"))
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 2
+                    height: 64
+                    radius: 1
+                    color: tone("borderSoft", "#ccd6e2")
+                }
+
+                MouseArea {
+                    id: previewResizeMouseArea
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.SizeHorCursor
+
+                    property real dragStartSceneX: 0
+                    property real dragStartWidth: 0
+
+                    onPressed: function(mouse) {
+                        dragStartSceneX = previewResizeHandle.mapToItem(root.contentItem, mouse.x, mouse.y).x
+                        dragStartWidth = previewPaneWidth
+                    }
+
+                    onPositionChanged: function(mouse) {
+                        if (!pressed)
+                            return
+                        const sceneX = previewResizeHandle.mapToItem(root.contentItem, mouse.x, mouse.y).x
+                        const deltaX = sceneX - dragStartSceneX
+                        const signedDelta = controller.workspacePanelsSwapped ? deltaX : -deltaX
+                        previewPaneWidth = clampPreviewPaneWidth(
+                            dragStartWidth + signedDelta,
+                            workspaceRow.width,
+                            workspaceRow.height
+                        )
+                        previewPaneUserResized = true
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.preferredWidth: previewPaneWidth
+                Layout.minimumWidth: previewPaneMinWidth()
+                Layout.maximumWidth: previewPaneMaxWidth(workspaceRow.width, workspaceRow.height)
                 Layout.fillHeight: true
                 color: tone("panelBg", "#f5f7fa")
                 border.color: tone("border", "#d5e0ec")
@@ -211,7 +336,6 @@ ApplicationWindow {
                         Layout.fillWidth: true
                         Layout.preferredHeight: metric("previewControlsHeight", 220)
                         Layout.minimumHeight: metric("previewControlsHeight", 220)
-                        Layout.maximumHeight: metric("previewControlsHeight", 220)
 
                         WindowContainer {
                             anchors.fill: parent
@@ -248,6 +372,7 @@ ApplicationWindow {
         visibility: controller.previewFullscreen ? Window.FullScreen : Window.Hidden
         color: "black"
         title: root.title
+        flags: Qt.Window | Qt.FramelessWindowHint
 
         Shortcut {
             sequence: "Esc"
@@ -263,14 +388,57 @@ ApplicationWindow {
             onActivated: controller.togglePreviewPlayback()
         }
 
+        Shortcut {
+            sequence: "Esc"
+            enabled: controller.previewFullscreen
+            context: Qt.WindowShortcut
+            onActivated: controller.previewFullscreen = false
+        }
+
+        Shortcut {
+            sequence: "Space"
+            enabled: controller.previewFullscreen
+            context: Qt.WindowShortcut
+            onActivated: controller.togglePreviewPlayback()
+        }
+
         onClosing: function(close) {
             close.accepted = false
             controller.previewFullscreen = false
         }
 
+        onVisibleChanged: {
+            if (!visible)
+                return
+            requestActivate()
+            fullscreenInteractionRoot.forceActiveFocus()
+            showFullscreenControls()
+        }
+
+        Item {
+            id: fullscreenInteractionRoot
+            anchors.fill: parent
+            focus: controller.previewFullscreen
+
+            Keys.onEscapePressed: function(event) {
+                event.accepted = true
+                controller.previewFullscreen = false
+            }
+
+            Keys.onSpacePressed: function(event) {
+                event.accepted = true
+                controller.togglePreviewPlayback()
+            }
+        }
+
         MouseArea {
             anchors.fill: parent
             hoverEnabled: true
+            onPressed: {
+                fullscreenPreviewWindow.requestActivate()
+                fullscreenInteractionRoot.forceActiveFocus()
+                showFullscreenControls()
+            }
             onPositionChanged: {
                 if (mouseY >= height - metric("fullscreenControlsRevealHotzoneHeight", 120))
                     showFullscreenControls()
@@ -302,19 +470,41 @@ ApplicationWindow {
         id: fullscreenControlsWindow
 
         transientParent: fullscreenPreviewWindow
-        flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint
+        flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint | Qt.WindowDoesNotAcceptFocus
         color: "transparent"
         width: Math.min(
             metric("fullscreenOverlayMaxWidth", 10000),
             Math.max(0, fullscreenPreviewWindow.width - metric("fullscreenOverlaySideMargin", 18) * 2)
         )
-        height: fullscreenControlsCard.implicitHeight
+        height: Math.max(
+            metric("previewControlButtonMinHeight", 28) + 16,
+            fullscreenControlsCard.implicitHeight
+        )
         x: fullscreenPreviewWindow.x + metric("fullscreenOverlaySideMargin", 18)
         y: fullscreenPreviewWindow.y + fullscreenPreviewWindow.height - height
             - metric("fullscreenOverlayBottomMargin", 24)
             + (fullscreenControlsVisible ? 0 : metric("fullscreenOverlayHideOffset", 20))
         opacity: fullscreenControlsVisible ? 1.0 : 0.0
         visible: controller.previewFullscreen && (fullscreenControlsVisible || opacity > 0.0)
+
+        Shortcut {
+            sequence: "Esc"
+            enabled: controller.previewFullscreen
+            context: Qt.ApplicationShortcut
+            onActivated: controller.previewFullscreen = false
+        }
+
+        Shortcut {
+            sequence: "Space"
+            enabled: controller.previewFullscreen
+            context: Qt.ApplicationShortcut
+            onActivated: controller.togglePreviewPlayback()
+        }
+
+        onVisibleChanged: {
+            if (visible)
+                fullscreenPreviewWindow.requestActivate()
+        }
 
         Behavior on y {
             NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
@@ -326,12 +516,14 @@ ApplicationWindow {
 
         Rectangle {
             id: fullscreenControlsCard
+            implicitHeight: fullscreenControlsRow.implicitHeight + 16
             anchors.fill: parent
             color: tone("cardAltBg", "#edf2f8")
             border.color: tone("border", "#d5e0ec")
             radius: 10
 
             RowLayout {
+                id: fullscreenControlsRow
                 anchors.fill: parent
                 anchors.margins: 8
                 spacing: 8
@@ -347,18 +539,24 @@ ApplicationWindow {
                         border.color: tone("border", "#d5e0ec")
                         radius: 6
                     }
-                    contentItem: Text {
-                        text: parent.text
-                        color: tone("textPrimary", "#203040")
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
+                    contentItem: Item {
+                        implicitWidth: 18
+                        implicitHeight: 18
+
+                        Rectangle {
+                            width: 10
+                            height: 10
+                            radius: 1
+                            color: tone("textPrimary", "#203040")
+                            anchors.centerIn: parent
+                        }
                     }
                 }
 
                 ToolButton {
                     Layout.preferredWidth: 30
                     Layout.preferredHeight: metric("previewControlButtonMinHeight", 28)
-                    text: controller.previewPlaying ? "\u2161" : "\u25b6"
+                    text: controller.previewPlaying ? "\u23f8" : "\u25b6"
                     onClicked: controller.togglePreviewPlayback()
                     padding: 0
                     background: Rectangle {
@@ -366,11 +564,45 @@ ApplicationWindow {
                         border.color: tone("border", "#d5e0ec")
                         radius: 6
                     }
-                    contentItem: Text {
-                        text: parent.text
-                        color: tone("textPrimary", "#203040")
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
+                    contentItem: Item {
+                        implicitWidth: 18
+                        implicitHeight: 18
+
+                        Canvas {
+                            anchors.fill: parent
+                            visible: !controller.previewPlaying
+                            onPaint: {
+                                const ctx = getContext("2d")
+                                ctx.reset()
+                                ctx.fillStyle = tone("textPrimary", "#203040")
+                                ctx.beginPath()
+                                ctx.moveTo(width * 0.34, height * 0.22)
+                                ctx.lineTo(width * 0.34, height * 0.78)
+                                ctx.lineTo(width * 0.76, height * 0.50)
+                                ctx.closePath()
+                                ctx.fill()
+                            }
+                        }
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 3
+                            visible: controller.previewPlaying
+
+                            Rectangle {
+                                width: 4
+                                height: 12
+                                radius: 1
+                                color: tone("textPrimary", "#203040")
+                            }
+
+                            Rectangle {
+                                width: 4
+                                height: 12
+                                radius: 1
+                                color: tone("textPrimary", "#203040")
+                            }
+                        }
                     }
                 }
 
@@ -401,10 +633,11 @@ ApplicationWindow {
                 }
 
                 ToolButton {
-                    Layout.preferredWidth: 48
+                    Layout.preferredWidth: 30
                     Layout.preferredHeight: metric("previewControlButtonMinHeight", 28)
-                    text: qsTr("Exit")
+                    text: "\u26f6"
                     onClicked: controller.previewFullscreen = false
+                    padding: 0
                     background: Rectangle {
                         color: parent.down ? tone("menuHoverBg", "#eef5ff") : "transparent"
                         border.color: tone("border", "#d5e0ec")
@@ -413,6 +646,7 @@ ApplicationWindow {
                     contentItem: Text {
                         text: parent.text
                         color: tone("textPrimary", "#203040")
+                        font.pixelSize: 16
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
@@ -425,13 +659,27 @@ ApplicationWindow {
         id: fullscreenHintWindow
 
         transientParent: fullscreenPreviewWindow
-        flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint
+        flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint | Qt.WindowDoesNotAcceptFocus
         color: "transparent"
         width: fullscreenHintLabel.implicitWidth
         height: fullscreenHintLabel.implicitHeight
         x: fullscreenPreviewWindow.x + Math.round((fullscreenPreviewWindow.width - width) / 2)
         y: fullscreenPreviewWindow.y + metric("fullscreenHintTopMargin", 28)
         visible: controller.previewFullscreen && fullscreenHintVisible
+
+        Shortcut {
+            sequence: "Esc"
+            enabled: controller.previewFullscreen
+            context: Qt.ApplicationShortcut
+            onActivated: controller.previewFullscreen = false
+        }
+
+        Shortcut {
+            sequence: "Space"
+            enabled: controller.previewFullscreen
+            context: Qt.ApplicationShortcut
+            onActivated: controller.togglePreviewPlayback()
+        }
 
         Rectangle {
             anchors.fill: parent

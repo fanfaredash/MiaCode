@@ -12,6 +12,7 @@
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QIcon>
+#include <QKeyEvent>
 #include <QQmlError>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -142,6 +143,9 @@ bool QuickShellBootstrap::start()
     appendQuickShellRuntimeLog(QStringLiteral("style_bridge_ready"));
     engine_ = std::make_unique<QQmlApplicationEngine>(this);
     appendQuickShellRuntimeLog(QStringLiteral("engine_ready"));
+    if (qApp != nullptr) {
+        qApp->installEventFilter(this);
+    }
     engine_->addImportPath(QCoreApplication::applicationDirPath() + QStringLiteral("/qml"));
     ensurePreviewQuickTypesRegisteredForQuickShell();
 
@@ -246,6 +250,45 @@ bool QuickShellBootstrap::start()
         }
     }
     return true;
+}
+
+bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
+{
+    Q_UNUSED(watched);
+
+    if (controller_ == nullptr || !controller_->previewFullscreen() || event == nullptr) {
+        return QObject::eventFilter(watched, event);
+    }
+
+    if (event->type() == QEvent::ShortcutOverride) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (keyEvent != nullptr
+            && keyEvent->modifiers() == Qt::NoModifier
+            && (keyEvent->key() == Qt::Key_Escape || keyEvent->key() == Qt::Key_Space)) {
+            keyEvent->accept();
+            return true;
+        }
+    }
+
+    if (event->type() == QEvent::KeyPress) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (keyEvent != nullptr && !keyEvent->isAutoRepeat() && keyEvent->modifiers() == Qt::NoModifier) {
+            if (keyEvent->key() == Qt::Key_Escape) {
+                appendQuickShellRuntimeLog(QStringLiteral("global_fullscreen_key"), QStringLiteral("key=Esc"));
+                controller_->setPreviewFullscreen(false);
+                keyEvent->accept();
+                return true;
+            }
+            if (keyEvent->key() == Qt::Key_Space) {
+                appendQuickShellRuntimeLog(QStringLiteral("global_fullscreen_key"), QStringLiteral("key=Space"));
+                controller_->togglePreviewPlayback();
+                keyEvent->accept();
+                return true;
+            }
+        }
+    }
+
+    return QObject::eventFilter(watched, event);
 }
 
 QuickShellController* QuickShellBootstrap::controller() const

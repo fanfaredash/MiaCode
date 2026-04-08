@@ -1036,13 +1036,16 @@ int MainWindow::updatePreviewStatsLayoutMode(int hostWidth)
         (hostWidth >= 0)
         ? hostWidth
         : ((gridHost != nullptr) ? gridHost->contentsRect().width() : previewStatsCard_->contentsRect().width());
+    if (resolvedHostWidth <= 0) {
+        return previewStatsCard_->minimumHeight();
+    }
     const int chipHeight = qMax(
         miacode::window_parity::kPreviewStatsChipHeight,
         !previewStatsChips_.isEmpty() && previewStatsChips_.constFirst() != nullptr
             ? previewStatsChips_.constFirst()->sizeHint().height()
             : miacode::window_parity::kPreviewStatsChipHeight
     );
-    const miacode::window_parity::PreviewStatsLayout layout = miacode::window_parity::computePreviewStatsLayout(
+    const miacode::window_parity::PreviewStatsLayout baseLayout = miacode::window_parity::computePreviewStatsLayout(
         resolvedHostWidth,
         itemCount,
         horizontalSpacing,
@@ -1051,13 +1054,41 @@ int MainWindow::updatePreviewStatsLayoutMode(int hostWidth)
         gridMargins.top(),
         gridMargins.bottom()
     );
-    const int cols = layout.columns;
-    const int rows = layout.rows;
+    int cols = baseLayout.columns;
+    int rows = baseLayout.rows;
+
+    const QLabel* widthTemplateLabel =
+        previewTotalStatsLabel_ != nullptr ? previewTotalStatsLabel_ : previewStatsChips_.constFirst();
+    const QFontMetrics chipMetrics(widthTemplateLabel != nullptr ? widthTemplateLabel->font() : font());
+    constexpr int kPreviewStatsChipHorizontalPadding = 18;
+    const int maxChipHintWidth =
+        chipMetrics.horizontalAdvance(QStringLiteral("Total  xxxxx/xxxxx"))
+        + kPreviewStatsChipHorizontalPadding;
+
+    auto availableWidthForColumns = [&](int columnCount) {
+        const int totalSpacing = horizontalSpacing * qMax(0, columnCount - 1);
+        return qMax(0, resolvedHostWidth - gridMargins.left() - gridMargins.right() - totalSpacing);
+    };
+
+    constexpr int kMinimumAllowedStatsColumns = 2;
+    while (cols > kMinimumAllowedStatsColumns) {
+        const int availableWidth = availableWidthForColumns(cols);
+        const int columnWidth = cols > 0 ? (availableWidth / cols) : 0;
+        if (columnWidth >= maxChipHintWidth) {
+            break;
+        }
+        --cols;
+    }
+    rows = qMax(1, (itemCount + cols - 1) / cols);
     const bool structureChanged = (rows != previewStatsLayoutRows_) || (cols != previewStatsLayoutCols_);
     previewStatsLayoutRows_ = rows;
     previewStatsLayoutCols_ = cols;
 
-    const int cardHeight = layout.minCardHeight;
+    const int cardHeight = 16
+        + qMax(0, gridMargins.top())
+        + qMax(0, gridMargins.bottom())
+        + rows * chipHeight
+        + qMax(0, rows - 1) * verticalSpacing;
     previewStatsCard_->setMinimumHeight(cardHeight);
 
     if (structureChanged) {
@@ -2160,6 +2191,14 @@ void MainWindow::updatePreviewObjectStats(double second)
     previewTouchStatsLabel_->setText(fmt("Touch", stats.touchPlayed, stats.touchTotal));
     previewBreakStatsLabel_->setText(fmt("Break", stats.breakPlayed, stats.breakTotal));
     previewTotalStatsLabel_->setText(fmt("Total", stats.totalPlayed, stats.totalCount));
+    updatePreviewStatsLayoutMode(-1);
+    if (isQuickShellBackendMode() && quickShellPreviewControlsSurfaceWidget_ != nullptr) {
+        if (QLayout* layout = quickShellPreviewControlsSurfaceWidget_->layout(); layout != nullptr) {
+            layout->activate();
+        }
+        quickShellPreviewControlsSurfaceWidget_->updateGeometry();
+        quickShellPreviewControlsSurfaceWidget_->update();
+    }
 }
 
 QString MainWindow::formatPreviewTimestamp(double second) const

@@ -31,10 +31,14 @@ signals:
     void metricsChanged();
 
 private:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+    void scheduleRefresh();
     void refreshFromBackend();
 
     QPointer<MainWindow> backend_;
     QTimer* refreshTimer_ = nullptr;
     QVariantMap palette_;
     QVariantMap metrics_;
+    bool refreshScheduled_ = false;
+    bool refreshInProgress_ = false;
 };
