@@ -1806,11 +1806,7 @@ void MainWindow::clearTimelineAndPreview()
         previewCanvas_->reset();
         previewCanvas_->setMuriAnalysisReport(muriAnalysisReport_);
     }
-    if (previewMediaController_ != nullptr) {
-        dispatchPreviewMediaControllerCall([](PreviewMediaController* controller) {
-            controller->reset();
-        });
-    }
+    clearPreviewStageMediaRoute();
     updatePreviewSliderRange();
     updatePreviewSliderPosition(0.0);
 }

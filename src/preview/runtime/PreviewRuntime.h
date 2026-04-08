@@ -69,6 +69,16 @@ public:
     void update();
 
     void setStageMediaAvailable(bool hasMedia);
+    void setStageMediaPresentationMode(
+        miacode::preview::scene::PreviewStageMediaPresentationMode mode,
+        bool requestUpdate = true);
+    void setExternalStageMediaDebugState(
+        miacode::preview::scene::PreviewExternalStageMediaType mediaType,
+        bool videoPlaybackActive,
+        double playbackSecond,
+        double clockDeltaSeconds,
+        qint64 videoFrameAgeMs,
+        bool requestUpdate = true);
     void setPlayheadSeconds(double seconds, bool requestUpdate = true);
     void setMediaFrame(const QImage& frame);
     void setVideoFrame(const QVideoFrame& frame);

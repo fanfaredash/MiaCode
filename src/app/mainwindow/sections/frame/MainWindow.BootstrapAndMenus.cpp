@@ -1113,6 +1113,10 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     previewCanvas_ = new PreviewRuntime(!isQuickShellBackendMode(), this);
     logStartupStage("preview_canvas_created");
     previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
+    updatePreviewStageMediaPresentationMode(false);
+    if (previewUsesStageMediaHostRoute()) {
+        ensurePreviewStageMediaRouteInitialized();
+    }
     logStartupStage("preview_skin_async_dispatched");
     previewCanvasFrame_ = new QFrame(previewPanel_);
     previewCanvasFrame_->setObjectName("PreviewCanvasFrame");
@@ -1283,15 +1287,6 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
         }
         qtPreviewAwaitingFrameSwap_ = false;
         qtPreviewAwaitingFrameSwapSinceMs_ = -1;
-        if (qtPreviewTimer_ != nullptr) {
-            qtPreviewTimer_->stop();
-        }
-        QTimer::singleShot(0, this, [this]() {
-            if (!qtPreviewPlaying_) {
-                return;
-            }
-            onQtPreviewTick();
-        });
     });
     logStartupStage("preview_runtime_connections_ready");
     logStartupStage("preview_runtime_ready");
@@ -1340,8 +1335,8 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
         double second = qMax(0.0, qtPreviewPauseSecond_);
         if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
             second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-        } else if (previewMediaController_ != nullptr) {
-            second = qMax(0.0, queryPreviewMediaControllerCurrentPlaybackSecond());
+        } else if (previewStageMediaRouteHasVideo()) {
+            second = qMax(0.0, previewStageMediaRouteCurrentPlaybackSecond());
         }
         syncEditorCursorToPreviewSecond(second, false);
     });
@@ -1366,8 +1361,8 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
                     double second = qMax(0.0, qtPreviewPauseSecond_);
                     if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
                         second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-                    } else if (previewMediaController_ != nullptr && queryPreviewMediaControllerHasVideoMedia()) {
-                        second = qMax(0.0, queryPreviewMediaControllerCurrentPlaybackSecond());
+                    } else if (previewStageMediaRouteHasVideo()) {
+                        second = qMax(0.0, previewStageMediaRouteCurrentPlaybackSecond());
                     }
                     syncEditorCursorToPreviewSecond(second, false);
                 } else {
@@ -1605,17 +1600,20 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
             return;
         }
         if (!qtPreviewAwaitingFrameSwap_) {
-            scheduleNextQtPreviewTick();
+            onQtPreviewTick();
             return;
         }
         const qint64 nowMs = qtPreviewWatchdogElapsed_.elapsed();
-        if (qtPreviewAwaitingFrameSwapSinceMs_ >= 0 && nowMs - qtPreviewAwaitingFrameSwapSinceMs_ >= 40) {
+        const int stallTimeoutMs = qMax(
+            24,
+            qMax(1, qRound(static_cast<double>(previewCanvasTargetFrameIntervalNs()) / 1000000.0)) * 2
+        );
+        if (qtPreviewAwaitingFrameSwapSinceMs_ >= 0 && nowMs - qtPreviewAwaitingFrameSwapSinceMs_ >= stallTimeoutMs) {
             qtPreviewAwaitingFrameSwap_ = false;
             qtPreviewAwaitingFrameSwapSinceMs_ = -1;
             onQtPreviewTick();
             return;
         }
-        previewCanvas_->update();
         scheduleNextQtPreviewTick();
     });
 
@@ -1863,13 +1861,11 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     if (runtimeDebugOutputEnabled_) {
         previewShowDebugInfo_ = true;
     }
-    if (previewMediaController_ != nullptr) {
-        dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
-            controller->setBackgroundTrackVolume(previewAudioSettings_.bgmVolume);
-            controller->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
-            controller->setBackgroundTrackPath(lastTrackPath_);
-        });
+    if (previewUsesStageMediaHostRoute()) {
+        ensurePreviewStageMediaRouteInitialized();
     }
+    applyPreviewStageMediaRoutePlaybackRate(previewPlaybackRate_);
+    applyPreviewStageMediaRouteVisualSettings();
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->setChartPath(currentFilePath_);
         logStartupStage("preview_sfx_set_chart_path_done");
@@ -1886,11 +1882,6 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
         previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
         previewCanvas_->setShowTimestamp(previewShowTimestamp_);
         previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
-    }
-    if (previewMediaController_ != nullptr) {
-        dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
-            controller->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
-        });
     }
     applyMuriRenderOptions();
     applyUiTheme();

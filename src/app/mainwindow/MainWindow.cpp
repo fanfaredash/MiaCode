@@ -3,6 +3,7 @@
 #include "BracketScopeHighlighter.h"
 #include "PlainCodeEditor.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "preview/runtime/PreviewStageMediaHost.h"
 #include "PreviewMediaController.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
@@ -2785,6 +2786,7 @@ void MainWindow::applyAlignedMuriAnalysisReportToViews()
 
 MainWindow::~MainWindow()
 {
+    shutdownPreviewStageMediaHost();
     shutdownPreviewMediaController();
     delete quickShellTopChromeSurfaceWidget_;
     quickShellTopChromeSurfaceWidget_ = nullptr;
@@ -2848,18 +2850,6 @@ double MainWindow::queryPreviewMediaControllerCurrentPlaybackSecond() const
         Qt::BlockingQueuedConnection
     );
     return second;
-}
-
-QString MainWindow::queryPreviewMediaControllerProfilingSummaryLines() const
-{
-    QString summary;
-    dispatchPreviewMediaControllerCall(
-        [&summary](PreviewMediaController* controller) {
-            summary = controller->profilingSummaryLines();
-        },
-        Qt::BlockingQueuedConnection
-    );
-    return summary;
 }
 
 void MainWindow::ensurePreviewMediaControllerInitialized()
@@ -3140,12 +3130,7 @@ void MainWindow::applyPreviewMediaWarmupResult(
     previewMediaWarmupResolvedPath_ = resolvedMediaPath;
     previewMediaWarmupTrackPath_ = trackPath;
     appendStartupTimingStage("mainwindow/preview_media_data_warmup", workerElapsedMs, workerElapsedMs);
-    ensurePreviewMediaControllerInitialized();
-    dispatchPreviewMediaControllerCall([chartPath, resolvedMediaPath, trackPath](PreviewMediaController* controller) {
-        controller->setWarmupResolvedMediaPath(chartPath, resolvedMediaPath);
-        controller->setBackgroundTrackPath(trackPath);
-        controller->setChartPath(chartPath);
-    });
+    applyPreviewMediaWarmupToStageMediaRoute(chartPath, resolvedMediaPath, trackPath);
 }
 
 void MainWindow::applyPreviewSfxWarmupResult(
@@ -4626,6 +4611,7 @@ void MainWindow::changeEvent(QEvent* event)
 }
 
 #include "sections/document/MainWindow.DocumentFlow.cpp"
+#include "sections/preview/MainWindow.PreviewStageMediaRoute.cpp"
 #include "sections/timeline/MainWindow.PreviewTimelineFlow.cpp"
 #include "sections/validation/MainWindow.ValidationFlow.cpp"
 QString MainWindow::resolveDefaultTrackPath() const
@@ -4854,11 +4840,7 @@ void MainWindow::loadProjectRenderState()
     }
     previewAudioSettings_.normalize();
     refreshPreviewFrameRateTimers();
-    if (previewMediaController_ != nullptr) {
-        dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
-            controller->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
-        });
-    }
+    applyPreviewStageMediaRouteVisualSettings();
     if (previewCanvas_ != nullptr) {
         previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
         previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
@@ -4938,11 +4920,7 @@ void MainWindow::removeProjectRenderState() const
 void MainWindow::applyPreviewAudioSettingsToRuntime()
 {
     previewAudioSettings_.normalize();
-    if (previewMediaController_ != nullptr) {
-        dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
-            controller->setBackgroundTrackVolume(previewAudioSettings_.bgmVolume);
-        });
-    }
+    applyPreviewStageMediaRoutePlaybackRate(previewPlaybackRate_);
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->applyLevels(previewAudioSettings_);
     }
@@ -5469,11 +5447,7 @@ void MainWindow::applySharedExportTaskSettings(const VideoExportTask& task)
     previewBackgroundScaleMode_ = task.backgroundScaleMode;
     previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(task.noteFlowSpeed);
 
-    if (previewMediaController_ != nullptr) {
-        dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
-            controller->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
-        });
-    }
+    applyPreviewStageMediaRouteVisualSettings();
     if (previewCanvas_ != nullptr) {
         previewCanvas_->setShowTimestamp(previewShowTimestamp_);
         previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
@@ -5565,8 +5539,8 @@ void MainWindow::onExportPreviewVideo()
         if (qtPreviewPlaying_) {
             if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
                 second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-            } else if (previewMediaController_ != nullptr) {
-                second = qMax(0.0, queryPreviewMediaControllerCurrentPlaybackSecond());
+            } else if (previewStageMediaRouteHasVideo()) {
+                second = qMax(0.0, previewStageMediaRouteCurrentPlaybackSecond());
             }
         }
         return second;
@@ -5604,11 +5578,7 @@ void MainWindow::onExportPreviewVideo()
         [this](double outer, double inner) {
             previewBackgroundBrightnessOuter_ = qBound(0.0, outer, 1.0);
             previewBackgroundBrightnessInner_ = qBound(0.0, inner, 1.0);
-            if (previewMediaController_ != nullptr) {
-                dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
-                    controller->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
-                });
-            }
+            applyPreviewStageMediaRouteVisualSettings();
             if (previewCanvas_ != nullptr) {
                 previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
                 previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
@@ -5634,6 +5604,7 @@ void MainWindow::onExportPreviewVideo()
         },
         [this](PreviewBackgroundScaleMode mode) {
             previewBackgroundScaleMode_ = mode;
+            applyPreviewStageMediaRouteVisualSettings();
             if (previewCanvas_ != nullptr) {
                 previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
             }
@@ -7447,6 +7418,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         selectedScaleMode = PreviewBackgroundScaleMode::FillCrop;
         scaleModeButton->setText(scaleFillLabel);
         previewBackgroundScaleMode_ = selectedScaleMode;
+        applyPreviewStageMediaRouteVisualSettings();
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setBackgroundScaleMode(selectedScaleMode);
         }
@@ -7457,6 +7429,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         selectedScaleMode = PreviewBackgroundScaleMode::FitContain;
         scaleModeButton->setText(scaleFitLabel);
         previewBackgroundScaleMode_ = selectedScaleMode;
+        applyPreviewStageMediaRouteVisualSettings();
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setBackgroundScaleMode(selectedScaleMode);
         }
@@ -7748,11 +7721,7 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     connect(outerBrightnessSlider, &QSlider::valueChanged, &dialog, [this, outerBrightnessLabel](int value) {
         previewBackgroundBrightnessOuter_ = qBound(0.0, static_cast<double>(value) / 100.0, 1.0);
         outerBrightnessLabel->setText(QString::number(value) + "%");
-        if (previewMediaController_ != nullptr) {
-            dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
-                controller->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
-            });
-        }
+        applyPreviewStageMediaRouteVisualSettings();
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
         }

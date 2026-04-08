@@ -20,6 +20,7 @@ class QuickShellController : public QObject
     Q_PROPERTY(double previewDurationSeconds READ previewDurationSeconds NOTIFY shellStateChanged)
     Q_PROPERTY(bool previewFullscreen READ previewFullscreen WRITE setPreviewFullscreen NOTIFY previewFullscreenChanged)
     Q_PROPERTY(QObject* previewRuntime READ previewRuntime CONSTANT)
+    Q_PROPERTY(QObject* previewStageMediaHost READ previewStageMediaHost CONSTANT)
     Q_PROPERTY(QWindow* topChromeWindow READ topChromeWindow CONSTANT)
     Q_PROPERTY(QWindow* workspaceWindow READ workspaceWindow CONSTANT)
     Q_PROPERTY(QWindow* previewControlsWindow READ previewControlsWindow CONSTANT)
@@ -36,6 +37,7 @@ public:
     double previewDurationSeconds() const;
     bool previewFullscreen() const;
     QObject* previewRuntime() const;
+    QObject* previewStageMediaHost() const;
     QWindow* topChromeWindow() const;
     QWindow* workspaceWindow() const;
     QWindow* previewControlsWindow() const;

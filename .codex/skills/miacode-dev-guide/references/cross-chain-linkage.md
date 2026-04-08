@@ -30,6 +30,7 @@ Implication:
 - Guide-layer state should group each-guide connectors by parser-derived `eachGroupId` when available; do not merge backtick-separated groups just because their `marker.second` matches.
 - Timeline note sprite stacking is intentionally preview-mirrored for overlapping markers: `TimelineView::paintEvent` keeps slide/wifi tracks behind note heads, uses the preview-style descending-`second` stack for tap/hold/slide/wifi heads, and then draws touch above that stack with touch-hold above touch. If preview object-layer order changes, review `src/timeline/TimelineView.Paint.cpp`, `src/preview/scene/PreviewLayerOrder.h`, and `src/preview/quick_scene/*` together.
 - On-screen preview and export now flow through `PreviewRuntime` / `PreviewQuickExportSession` plus the active layers in `src/preview/quick_scene/*`. Shared assets now come from `PreviewSceneAssetLoader` and `PreviewSceneAssetRepository`. If you change preview setters, frame pacing hooks, layer data contracts, or export-session ownership, review both `src/preview/runtime/*` and `src/preview/quick_scene/*` in the same patch.
+- Preview-time background media is now selected once from `MainWindow::FrontendHostMode`: widget shell keeps the internal-layer `PreviewMediaController` path for both images and videos, while `--quickshell-beta` keeps the external `PreviewStageMediaHost` plus `PreviewStageMediaItem.qml` route for both images and videos. Do not reintroduce media-type-based switching between those host routes.
 - The realtime and export Quick scene roots now also share `PreviewPreparedSceneCache`-driven note windows. If you change note-driven layer inputs, visible-window timing, or scene-content revision invalidation, review `src/preview/scene/PreviewPreparedSceneCache.*`, `src/preview/quick_scene/PreviewQuickSceneRoot.*`, and the affected `PreviewQuick*Layer` wrappers together.
 - Runtime and export layer order are both owned by `PreviewQuickSceneRoot` plus `PreviewLayerOrder.h`. If you change layer ordering or add a new visible layer, review `src/preview/scene/PreviewLayerOrder.h`, `src/preview/quick_scene/*`, and `src/tools/video_export/VideoExportQuickRenderBackend.*` together.
 - Firework overlay visuals now depend on the custom `PreviewQuickJudgeFireworkLayer` material path rather than pie-sector geometry plus sprite overlays. If you change firework timing curves, additive blending, source texture use, hole-mask math, or stage clipping, review `src/preview/scene/PreviewJudgeFireworkLayerState.*`, `src/preview/quick_scene/PreviewQuickJudgeFireworkLayer.*`, `src/preview/quick_scene/shaders/PreviewFireworkMaterial.*`, and the historical `PreviewCanvas` reference behavior together. The legacy contract is a playfield-centered judgment-ring clip, not a second local clip around the trigger point.
@@ -102,12 +103,15 @@ Shared concerns:
 
 If one side changes, inspect the other side in the same patch.
 
-## 5. Background Media Resolution Exists In Two Places
+## 5. Background Media Resolution And Host Route Ownership
 
-Current duplicated logic:
+Current contract:
 
-- Preview-time: `PreviewMediaController::resolveMediaPath`
-- Export-time: `resolveBackgroundMediaPath` in `VideoExportController.cpp`
+- Shared resolver: `miacode::chart_assets::resolveBackgroundMediaPath`
+- Route coordinator: `src/app/mainwindow/sections/preview/MainWindow.PreviewStageMediaRoute.cpp`
+- Widget-shell preview route: `MainWindow::previewStageMediaRoute` selects `PreviewMediaController`, and `PreviewRuntime` keeps background media on the internal stage layer for both `bg.png` and `bg.mp4` / `pv.mp4`
+- Quickshell-beta preview route: `MainWindow::previewStageMediaRoute` selects `PreviewStageMediaHost`, and `QuickShellPreviewSurface.qml` plus `PreviewStageMediaItem.qml` own the external QML presentation path for both background images and videos
+- Export route: export stays separate from the preview host split and still consumes the shared resolver through `VideoExportController`
 
 Current filename convention:
 
@@ -118,6 +122,7 @@ Current filename convention:
 - `bg.jpeg`
 
 If you add or remove supported media names, keep preview and export aligned.
+If you change preview-time background-media ownership or media lookup, review `MainWindow.*`, `sections/preview/MainWindow.PreviewStageMediaRoute.cpp`, `PreviewMediaController.*`, `PreviewStageMediaHost.*`, `PreviewStageMediaItem.qml`, `QuickShellPreviewSurface.qml`, and the export path in the same patch.
 
 ## 6. Track Path Resolution Exists In Multiple Places
 

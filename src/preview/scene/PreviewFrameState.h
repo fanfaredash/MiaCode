@@ -133,6 +133,17 @@ struct PreviewJudgeEffectAssets {
     QRectF fireworkColorBallSourceRect;
 };
 
+enum class PreviewStageMediaPresentationMode {
+    InternalLayer = 0,
+    ExternalQuickMediaItem = 1,
+};
+
+enum class PreviewExternalStageMediaType {
+    None = 0,
+    Image = 1,
+    Video = 2,
+};
+
 struct PreviewMediaFrameState {
     QImage mediaFrame;
     QImage retainedVideoFallbackFrame;
@@ -144,6 +155,12 @@ struct PreviewMediaFrameState {
     QVideoFrame videoFrame;
 #endif
     bool stageMediaAvailable = false;
+    PreviewStageMediaPresentationMode presentationMode = PreviewStageMediaPresentationMode::InternalLayer;
+    PreviewExternalStageMediaType externalMediaType = PreviewExternalStageMediaType::None;
+    bool externalVideoPlaybackActive = false;
+    double externalPlaybackSecond = 0.0;
+    double externalClockDeltaSeconds = 0.0;
+    qint64 externalVideoFrameAgeMs = -1;
 };
 
 struct PreviewAssetState {

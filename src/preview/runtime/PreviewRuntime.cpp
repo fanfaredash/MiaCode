@@ -111,7 +111,8 @@ void PreviewRuntime::notifyVisibleFramePresented()
 
 void PreviewRuntime::requestActivate()
 {
-    if (visibleHostWindow_ != nullptr) {
+    if (visibleHostWindow_ != nullptr
+        && (surface_ == nullptr || visibleHostWindow_ != surface_->hostWindow())) {
         visibleHostWindow_->requestActivate();
         return;
     }
@@ -124,7 +125,8 @@ void PreviewRuntime::update()
 {
     pendingPresentedStatsRefresh_ = true;
     emit frameStateChanged();
-    if (visibleHostWindow_ != nullptr) {
+    if (visibleHostWindow_ != nullptr
+        && (surface_ == nullptr || visibleHostWindow_ != surface_->hostWindow())) {
         visibleHostWindow_->requestUpdate();
     }
     if (surface_ != nullptr) {
@@ -139,6 +141,37 @@ void PreviewRuntime::setStageMediaAvailable(bool hasMedia)
     }
     frameState_.media.stageMediaAvailable = hasMedia;
     update();
+}
+
+void PreviewRuntime::setStageMediaPresentationMode(
+    miacode::preview::scene::PreviewStageMediaPresentationMode mode,
+    bool requestUpdate)
+{
+    if (frameState_.media.presentationMode == mode) {
+        return;
+    }
+    frameState_.media.presentationMode = mode;
+    if (requestUpdate) {
+        update();
+    }
+}
+
+void PreviewRuntime::setExternalStageMediaDebugState(
+    miacode::preview::scene::PreviewExternalStageMediaType mediaType,
+    bool videoPlaybackActive,
+    double playbackSecond,
+    double clockDeltaSeconds,
+    qint64 videoFrameAgeMs,
+    bool requestUpdate)
+{
+    frameState_.media.externalMediaType = mediaType;
+    frameState_.media.externalVideoPlaybackActive = videoPlaybackActive;
+    frameState_.media.externalPlaybackSecond = qMax(0.0, playbackSecond);
+    frameState_.media.externalClockDeltaSeconds = clockDeltaSeconds;
+    frameState_.media.externalVideoFrameAgeMs = videoFrameAgeMs;
+    if (requestUpdate) {
+        update();
+    }
 }
 
 void PreviewRuntime::setPlayheadSeconds(double seconds, bool requestUpdate)
@@ -312,12 +345,14 @@ bool PreviewRuntime::showObjectStatsHud() const
 
 void PreviewRuntime::reset()
 {
+    const auto presentationMode = frameState_.media.presentationMode;
     frameState_.noteMarkers.clear();
     frameState_.progressStatsCache.reset();
     frameState_.muriAnalysisReport = MuriAnalysisReport();
     frameState_.playheadSeconds = 0.0;
     frameState_.sceneContentRevision = 0;
     frameState_.media = miacode::preview::scene::PreviewMediaFrameState();
+    frameState_.media.presentationMode = presentationMode;
     frameState_.fpsDisplay = 0.0;
     frameState_.cpuFallbackCount = 0;
     frameState_.usedGpuRendererThisFrame = false;

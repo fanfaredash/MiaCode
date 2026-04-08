@@ -1,0 +1,106 @@
+#pragma once
+
+#include "preview/video/PreviewRenderSettings.h"
+
+#include <QElapsedTimer>
+#include <QMetaObject>
+#include <QObject>
+#include <QPointer>
+#include <QUrl>
+
+class QAudioOutput;
+class QMediaPlayer;
+class QVideoFrame;
+class QVideoSink;
+
+class PreviewStageMediaHost : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(bool hasResolvedMedia READ hasResolvedMedia NOTIFY mediaStateChanged)
+    Q_PROPERTY(bool hasVideoMedia READ hasVideoMedia NOTIFY mediaStateChanged)
+    Q_PROPERTY(QUrl imageSource READ imageSource NOTIFY imageSourceChanged)
+    Q_PROPERTY(int backgroundScaleMode READ backgroundScaleMode WRITE setBackgroundScaleModeValue NOTIFY backgroundScaleModeChanged)
+    Q_PROPERTY(bool videoPlaybackActive READ videoPlaybackActive NOTIFY diagnosticsChanged)
+    Q_PROPERTY(bool hasVideoFrame READ hasVideoFrame NOTIFY diagnosticsChanged)
+    Q_PROPERTY(double currentPlaybackSecond READ currentPlaybackSecond NOTIFY diagnosticsChanged)
+    Q_PROPERTY(double clockDeltaSeconds READ clockDeltaSeconds NOTIFY diagnosticsChanged)
+    Q_PROPERTY(qint64 videoFrameAgeMs READ videoFrameAgeMs NOTIFY diagnosticsChanged)
+
+public:
+    enum class MediaKind {
+        None,
+        Image,
+        Video,
+    };
+    Q_ENUM(MediaKind)
+
+    explicit PreviewStageMediaHost(QObject* parent = nullptr);
+    ~PreviewStageMediaHost() override;
+
+    void initializeBackendObjects();
+    void setWarmupResolvedMediaPath(const QString& chartPath, const QString& mediaPath);
+    Q_INVOKABLE void attachVideoOutputObject(QObject* videoOutputObject);
+    Q_INVOKABLE void detachVideoOutputObject(QObject* videoOutputObject);
+
+    bool hasResolvedMedia() const;
+    bool hasVideoMedia() const;
+    QUrl imageSource() const;
+    int backgroundScaleMode() const;
+    void setBackgroundScaleModeValue(int mode);
+    void setBackgroundScaleMode(PreviewBackgroundScaleMode mode);
+
+    void setChartPath(const QString& chartPath);
+    void setPlaybackRate(double rate);
+    void setTimelineOffsetSeconds(double seconds);
+    void setPlayheadSeconds(double seconds);
+    void startPlayback(double seconds);
+    void syncPlayback(double seconds);
+    void pausePlayback();
+
+    double currentPlaybackSecond() const;
+    bool videoPlaybackActive() const;
+    bool hasVideoFrame() const;
+    double clockDeltaSeconds() const;
+    qint64 videoFrameAgeMs() const;
+    void setObservedPlayheadSecond(double second);
+    QString debugMediaTypeName() const;
+
+signals:
+    void mediaStateChanged();
+    void imageSourceChanged();
+    void backgroundScaleModeChanged();
+    void playbackPositionChanged(double seconds);
+    void playbackFinished();
+    void diagnosticsChanged();
+
+private:
+    void clearMedia();
+    QString resolveMediaPath(const QString& chartPath) const;
+    void loadImageMedia(const QString& path);
+    void loadVideoMedia(const QString& path);
+    void bindVideoOutput();
+    void updateClockDelta();
+    void noteVideoFrameArrived(const QVideoFrame& frame);
+
+    MediaKind mediaKind_ = MediaKind::None;
+    QString chartPath_;
+    QString mediaPath_;
+    QString warmupChartPath_;
+    QString warmupMediaPath_;
+    QUrl imageSource_;
+    PreviewBackgroundScaleMode backgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
+    QMediaPlayer* player_ = nullptr;
+    QAudioOutput* audioOutput_ = nullptr;
+    QPointer<QObject> videoOutputObject_;
+    QPointer<QVideoSink> videoSink_;
+    QMetaObject::Connection videoSinkFrameConnection_;
+    double timelineOffsetSeconds_ = 0.0;
+    double playbackRate_ = 1.0;
+    double lastTimelineSecond_ = 0.0;
+    qint64 lastSeekMs_ = -1;
+    bool videoPlaybackActive_ = false;
+    bool videoPlaybackPendingStart_ = false;
+    double observedPlayheadSecond_ = 0.0;
+    double clockDeltaSeconds_ = 0.0;
+    QElapsedTimer videoFrameElapsed_;
+};

@@ -3,6 +3,7 @@
 #include "common/DebugLog.h"
 #include "mainwindow/MainWindow.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "preview/runtime/PreviewStageMediaHost.h"
 
 #include <QDockWidget>
 #include <QLayout>
@@ -94,6 +95,11 @@ bool QuickShellController::previewFullscreen() const
 QObject* QuickShellController::previewRuntime() const
 {
     return backend_ != nullptr ? backend_->previewCanvas_ : nullptr;
+}
+
+QObject* QuickShellController::previewStageMediaHost() const
+{
+    return backend_ != nullptr ? backend_->previewStageMediaHost_ : nullptr;
 }
 
 QWindow* QuickShellController::topChromeWindow() const
