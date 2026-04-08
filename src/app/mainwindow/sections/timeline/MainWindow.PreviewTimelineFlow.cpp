@@ -1217,9 +1217,6 @@ void MainWindow::refreshPreviewFrameRateTimers()
     if (qtPreviewTimer_ != nullptr) {
         qtPreviewTimer_->setInterval(intervalMs);
     }
-    if (qtPreviewTimelineTimer_ != nullptr) {
-        qtPreviewTimelineTimer_->setInterval(intervalMs);
-    }
 }
 
 void MainWindow::setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
@@ -2554,7 +2551,8 @@ void MainWindow::applyQtPreviewPosition(double second, bool centerView)
     qtPreviewPauseSecond_ = second;
     if (!qtPreviewPlaying_
         && timelineView_ != nullptr
-        && (qtPreviewLastTimelineSecond_ < 0.0 || qAbs(second - qtPreviewLastTimelineSecond_) >= (1.0 / 30.0))) {
+        && (qtPreviewLastTimelineSecond_ < 0.0
+            || qAbs(second - qtPreviewLastTimelineSecond_) >= kTimelineUiCadenceSeconds)) {
         qtPreviewPendingTimelineSecond_ = second;
         qtPreviewPendingTimelineCenterView_ = qtPreviewPendingTimelineCenterView_ || centerView;
         qtPreviewTimelineDirty_ = true;

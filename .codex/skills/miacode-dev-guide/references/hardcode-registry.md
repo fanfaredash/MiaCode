@@ -66,12 +66,13 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: export-dialog UI sizing and preview control constants
   - Rule: local UI constants usually stay local unless reused across dialogs
 - `src/app/mainwindow/MainWindow.cpp`
-  - Owns: embedded/fullscreen preview panel spacing plus fullscreen overlay timing, opacity, and reveal geometry constants
+  - Owns: embedded/fullscreen preview panel spacing, fullscreen overlay timing/opacity/reveal geometry constants, and the fixed Timeline-side preview UI cadence used by scrubbing/timeline refresh
   - Examples:
     - fullscreen `Esc` hint top inset
     - fullscreen control-bar side/bottom margins, max width, and bottom hot-zone height
     - fullscreen control-bar hide offset, reveal animation duration, and opacity fade duration
     - fullscreen control-bar auto-hide delay
+    - fixed `30 Hz` Timeline UI cadence (`33 ms` timer interval / `1/30 s` seek-throttle threshold)
   - Rule: keep local while they only shape the main-window preview UX and do not need preview/export parity
 - `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
   - Owns: analysis idle scheduling debounce for low-priority validation/Muri work
@@ -83,7 +84,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Rule: keep shared here because the main preview and export-dialog preview must feel identical
 - `src/timeline/TimelineView.cpp`
   - Owns: timeline zoom preset bounds, coarse button stops, and the initial `pixelsPerSecond_` scale derived from the default zoom
-  - Current tuning note: the fixed zoom presets are now `25/50/75/100/150/200`; keyboard `Left` / `Right` keep viewport-scroll semantics and the existing single-step behavior, while held-scroll speed caps at `2 * zoomScale()` (for example `25% -> 0.5x`, `50% -> 1.0x`, `100% -> 2.0x`); Timeline minor beat lines currently use `1.4 px`; dense comma grids now render at most `32` subdivisions by collapsing to the largest divisor of the source `{beats}` value that does not exceed that cap
+  - Current tuning note: the fixed zoom presets are now `25/50/75/100/150/200`; keyboard `Left` / `Right` keep viewport-scroll semantics and the existing single-step behavior, while held-scroll speed caps at `2 * zoomScale()` (for example `25% -> 0.5x`, `50% -> 1.0x`, `100% -> 2.0x`); Timeline header line numbers now anchor to per-line `startSecond` values and keep a local minimum spacing of `22 px`, with same-anchor collisions favoring the later source line; each displayed line-start anchor also draws a local inverted triangle marker whose tip offset and side angle reuse the playback-entry triangle, while the marker height keeps the earlier header-local `0.85 * digitWidth * 0.7` cap; Timeline minor beat lines currently use `1.4 px`; dense comma grids now render at most `32` subdivisions by collapsing to the largest divisor of the source `{beats}` value that does not exceed that cap
   - Rule: keep local while these values only shape timeline widget UX and do not need cross-subsystem parity
 
 ## 3. Promotion Rules

@@ -125,7 +125,6 @@ void TimelineView::paintEvent(QPaintEvent* event)
     painter.setPen(axisPen);
     painter.drawLine(left, top - 1, left, top + h);
 
-    int lastLabelScreenX = -1000000;
     int headerLeftLimit = 0;
     if (zoomButton_ != nullptr) {
         headerLeftLimit = qMax(headerLeftLimit, zoomButton_->x() + zoomButton_->width() + 8);
@@ -134,6 +133,12 @@ void TimelineView::paintEvent(QPaintEvent* event)
     if (followPreviewCheckBox_ != nullptr) {
         headerRightLimit = qMin(headerRightLimit, followPreviewCheckBox_->x() - 8);
     }
+    const QVector<HeaderLineLabel> headerLabels = visibleHeaderLineLabels(
+        visibleStartSecond,
+        visibleEndSecond,
+        xOffset,
+        headerLeftLimit,
+        headerRightLimit);
 
     for (int lineIndex = beatRange.begin; lineIndex < beatRange.end; ++lineIndex) {
         const TimelineRenderLine& line = lines_.at(lineIndex);
@@ -167,19 +172,55 @@ void TimelineView::paintEvent(QPaintEvent* event)
         }
         painter.setPen(majorBeatPen);
         painter.drawLine(x, top, x, top + h);
+    }
 
-        const QString labelText = QString::number(lineNumberForSecond(measureSecond));
-        const int labelWidth = 56;
-        const int labelX = x - (labelWidth / 2);
-        if (labelX >= headerLeftLimit
-            && labelX + labelWidth <= headerRightLimit
-            && labelX - lastLabelScreenX >= 22) {
-            painter.setFont(headerLineNumberFont_);
-            painter.setPen(c.textSecondary);
-            painter.drawText(labelX, 0, labelWidth, top, Qt::AlignHCenter | Qt::AlignVCenter, labelText);
-            painter.setFont(laneLabelFont);
-            lastLabelScreenX = labelX;
+    if (!headerLabels.isEmpty()) {
+        painter.setFont(headerLineNumberFont_);
+        const QFontMetrics headerMetrics(headerLineNumberFont_);
+        qreal singleDigitWidth = 0.0;
+        for (QChar digit = QLatin1Char('0'); digit <= QLatin1Char('9'); digit = QChar(digit.unicode() + 1)) {
+            singleDigitWidth = qMax(singleDigitWidth, static_cast<qreal>(headerMetrics.horizontalAdvance(digit)));
         }
+        const qreal markerTipY = static_cast<qreal>(top) - kTimelineTopMarkerTipOffsetPx;
+        const qreal headerTextBottom = (static_cast<qreal>(top - headerMetrics.height()) * 0.5)
+            + headerMetrics.height();
+        const qreal maxMarkerHeight = qMax(
+            0.0,
+            markerTipY - headerTextBottom - kTimelineHeaderAnchorMarkerTextGapPx);
+        const qreal legacyHeightLimitedMarkerHeight =
+            singleDigitWidth * kTimelineHeaderAnchorMarkerLegacyWidthFactor
+            * kTimelineHeaderAnchorMarkerLegacyHeightFactor;
+        const qreal markerHeight = qMin(maxMarkerHeight, legacyHeightLimitedMarkerHeight);
+        if (markerHeight >= 2.0) {
+            painter.save();
+            painter.setRenderHint(QPainter::Antialiasing, true);
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(c.textSecondary);
+            const qreal markerBaseY = markerTipY - markerHeight;
+            const qreal markerHalfWidth = markerHeight * kTimelineTopMarkerHalfWidthPerHeight;
+            for (const HeaderLineLabel& label : headerLabels) {
+                const qreal markerCenterX = static_cast<qreal>(label.screenX);
+                const QPointF markerPoints[3] = {
+                    QPointF(markerCenterX - markerHalfWidth, markerBaseY),
+                    QPointF(markerCenterX + markerHalfWidth, markerBaseY),
+                    QPointF(markerCenterX, markerTipY),
+                };
+                painter.drawConvexPolygon(markerPoints, 3);
+            }
+            painter.restore();
+        }
+        painter.setPen(c.textSecondary);
+        for (const HeaderLineLabel& label : headerLabels) {
+            const int labelX = label.screenX - (kTimelineHeaderLineLabelWidth / 2);
+            painter.drawText(
+                labelX,
+                0,
+                kTimelineHeaderLineLabelWidth,
+                top,
+                Qt::AlignHCenter | Qt::AlignVCenter,
+                QString::number(label.lineNumber));
+        }
+        painter.setFont(laneLabelFont);
     }
 
     for (int lineIndex = noteRange.begin; lineIndex < noteRange.end; ++lineIndex) {
@@ -583,10 +624,14 @@ void TimelineView::paintEvent(QPaintEvent* event)
         QColor entryColor = c.timelinePlayhead;
         entryColor.setAlpha(220);
         painter.setBrush(entryColor);
+        const qreal entryMarkerTipY = static_cast<qreal>(top) - kTimelineTopMarkerTipOffsetPx;
+        const qreal entryMarkerBaseY = qMax<qreal>(
+            0.0,
+            entryMarkerTipY - kTimelinePlaybackEntryMarkerHeightPx);
         QPainterPath entryMarker;
-        entryMarker.moveTo(entryX, top - 1);
-        entryMarker.lineTo(entryX - 6, qMax(0, top - 9));
-        entryMarker.lineTo(entryX + 6, qMax(0, top - 9));
+        entryMarker.moveTo(entryX, entryMarkerTipY);
+        entryMarker.lineTo(entryX - kTimelinePlaybackEntryMarkerHalfWidthPx, entryMarkerBaseY);
+        entryMarker.lineTo(entryX + kTimelinePlaybackEntryMarkerHalfWidthPx, entryMarkerBaseY);
         entryMarker.closeSubpath();
         painter.drawPath(entryMarker);
         painter.restore();

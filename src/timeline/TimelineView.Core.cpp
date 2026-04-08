@@ -283,22 +283,78 @@ void TimelineView::layoutHeaderButtons()
     }
 }
 
-int TimelineView::lineNumberForSecond(double second) const
+QVector<TimelineView::HeaderLineLabel> TimelineView::visibleHeaderLineLabels(
+    double startSecond,
+    double endSecond,
+    int xOffset,
+    int headerLeftLimit,
+    int headerRightLimit) const
 {
-    if (lines_.isEmpty()) {
-        return qMax(1, qRound(second));
+    QVector<HeaderLineLabel> labels;
+    if (lines_.isEmpty() || viewport() == nullptr || headerRightLimit < headerLeftLimit) {
+        return labels;
     }
-    const auto it = std::upper_bound(
+
+    const double boundedStart = qMin(startSecond, endSecond);
+    const double boundedEnd = qMax(startSecond, endSecond);
+    const auto beginIt = std::lower_bound(
         lines_.cbegin(),
         lines_.cend(),
-        second,
-        [](double targetSecond, const TimelineRenderLine& line) {
-            return targetSecond < (line.startSecond + 1e-6);
+        boundedStart - kTimelineHeaderLineAnchorToleranceSeconds,
+        [](const TimelineRenderLine& line, double targetSecond) {
+            return line.startSecond < targetSecond;
         });
-    if (it == lines_.cbegin()) {
-        return qMax(1, lines_.constFirst().lineNumber);
+    const auto endIt = std::upper_bound(
+        lines_.cbegin(),
+        lines_.cend(),
+        boundedEnd + kTimelineHeaderLineAnchorToleranceSeconds,
+        [](double targetSecond, const TimelineRenderLine& line) {
+            return targetSecond < line.startSecond;
+        });
+
+    QVector<HeaderLineLabel> collapsed;
+    collapsed.reserve(static_cast<int>(std::distance(beginIt, endIt)));
+    const int left = timelineLeft();
+    const int viewWidth = viewport()->width();
+
+    for (auto it = beginIt; it != endIt; ++it) {
+        const TimelineRenderLine& line = *it;
+        const int screenX = secondToX(line.startSecond) - xOffset;
+        if (screenX < left - 1 || screenX > viewWidth) {
+            continue;
+        }
+
+        HeaderLineLabel label;
+        label.lineNumber = qMax(1, line.lineNumber);
+        label.second = line.startSecond;
+        label.screenX = screenX;
+
+        if (!collapsed.isEmpty()) {
+            HeaderLineLabel& previous = collapsed.last();
+            if (previous.screenX == label.screenX
+                || qAbs(previous.second - label.second) <= kTimelineHeaderLineAnchorToleranceSeconds) {
+                previous = label;
+                continue;
+            }
+        }
+
+        collapsed.append(label);
     }
-    return qMax(1, std::prev(it)->lineNumber);
+
+    labels.reserve(collapsed.size());
+    for (const HeaderLineLabel& label : collapsed) {
+        const int labelX = label.screenX - (kTimelineHeaderLineLabelWidth / 2);
+        if (labelX < headerLeftLimit || labelX + kTimelineHeaderLineLabelWidth > headerRightLimit) {
+            continue;
+        }
+        if (!labels.isEmpty()
+            && label.screenX - labels.constLast().screenX < kTimelineHeaderLineLabelMinSpacingPx) {
+            continue;
+        }
+        labels.append(label);
+    }
+
+    return labels;
 }
 
 TimelineView::VisibleLineRange TimelineView::visibleLineRange(double startSecond, double endSecond) const

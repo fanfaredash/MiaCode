@@ -1618,7 +1618,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     });
 
     qtPreviewTimelineTimer_ = new QTimer(this);
-    qtPreviewTimelineTimer_->setInterval(16);
+    qtPreviewTimelineTimer_->setInterval(kTimelineUiCadenceMs);
     qtPreviewTimelineTimer_->setTimerType(Qt::PreciseTimer);
     connect(qtPreviewTimelineTimer_, &QTimer::timeout, this, &MainWindow::flushQtPreviewTimelinePosition);
 

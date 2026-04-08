@@ -79,6 +79,12 @@ private:
         int end = 0;
     };
 
+    struct HeaderLineLabel {
+        int lineNumber = 1;
+        double second = 0.0;
+        int screenX = 0;
+    };
+
     struct HoldPixmapParts {
         QPixmap leftCap;
         QPixmap rightCap;
@@ -117,7 +123,12 @@ private:
     bool handleAltZoomWheel(QWheelEvent* event);
     void updateZoomButtonAppearance();
     void layoutHeaderButtons();
-    int lineNumberForSecond(double second) const;
+    QVector<HeaderLineLabel> visibleHeaderLineLabels(
+        double startSecond,
+        double endSecond,
+        int xOffset,
+        int headerLeftLimit,
+        int headerRightLimit) const;
     VisibleLineRange visibleLineRange(double startSecond, double endSecond) const;
     void updateTimelineMarkerStrip(double oldSecond, double newSecond, int halfWidth);
     const QPixmap& iconForType(const QString& type) const;
