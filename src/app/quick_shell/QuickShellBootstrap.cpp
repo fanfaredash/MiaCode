@@ -210,6 +210,9 @@ bool QuickShellBootstrap::start()
 
     if (!appIcon_.isNull()) {
         if (QQuickWindow* window = qobject_cast<QQuickWindow*>(engine_->rootObjects().constFirst()); window != nullptr) {
+            if (backend_ != nullptr) {
+                backend_->quickShellRootWindowFrameGeometry_ = window->frameGeometry();
+            }
             appendQuickShellRuntimeLog(
                 QStringLiteral("root_window_ready"),
                 QString("visible=%1 width=%2 height=%3 title=%4")
@@ -287,6 +290,26 @@ bool QuickShellBootstrap::start()
                     applySystemBackdropToQuickWindow(window);
                 });
             }
+            QObject::connect(window, &QQuickWindow::xChanged, this, [this, window]() {
+                if (backend_ != nullptr) {
+                    backend_->quickShellRootWindowFrameGeometry_ = window->frameGeometry();
+                }
+            });
+            QObject::connect(window, &QQuickWindow::yChanged, this, [this, window]() {
+                if (backend_ != nullptr) {
+                    backend_->quickShellRootWindowFrameGeometry_ = window->frameGeometry();
+                }
+            });
+            QObject::connect(window, &QQuickWindow::widthChanged, this, [this, window]() {
+                if (backend_ != nullptr) {
+                    backend_->quickShellRootWindowFrameGeometry_ = window->frameGeometry();
+                }
+            });
+            QObject::connect(window, &QQuickWindow::heightChanged, this, [this, window]() {
+                if (backend_ != nullptr) {
+                    backend_->quickShellRootWindowFrameGeometry_ = window->frameGeometry();
+                }
+            });
             QObject::connect(qApp, &QGuiApplication::applicationStateChanged, this, [window](Qt::ApplicationState) {
                 applySystemBackdropToQuickWindow(window);
             });
@@ -296,6 +319,9 @@ bool QuickShellBootstrap::start()
             window->raise();
             window->requestActivate();
             QTimer::singleShot(0, this, [this, window]() {
+                if (backend_ != nullptr) {
+                    backend_->quickShellRootWindowFrameGeometry_ = window->frameGeometry();
+                }
                 appendQuickShellRuntimeLog(
                     QStringLiteral("root_window_post_show"),
                     QString("visible=%1 exposed=%2 active=%3 width=%4 height=%5")
@@ -318,7 +344,29 @@ bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
 {
     Q_UNUSED(watched);
 
-    if (controller_ == nullptr || !controller_->previewFullscreen() || event == nullptr) {
+    if (controller_ == nullptr || event == nullptr) {
+        return QObject::eventFilter(watched, event);
+    }
+
+    if ((event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress)
+        && !controller_->previewFullscreen()) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (keyEvent != nullptr && !keyEvent->isAutoRepeat()) {
+            const QKeySequence sequence(keyEvent->modifiers() | keyEvent->key());
+            if (controller_->hasShortcut(sequence)) {
+                if (event->type() == QEvent::ShortcutOverride) {
+                    keyEvent->accept();
+                    return true;
+                }
+                if (controller_->triggerShortcut(sequence)) {
+                    keyEvent->accept();
+                    return true;
+                }
+            }
+        }
+    }
+
+    if (!controller_->previewFullscreen()) {
         return QObject::eventFilter(watched, event);
     }
 

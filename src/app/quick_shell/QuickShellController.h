@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QKeySequence>
 
 class QTimer;
 class QWindow;
@@ -55,6 +56,8 @@ public:
     Q_INVOKABLE void syncWorkspaceSurfaceSize(int width, int height);
     Q_INVOKABLE void syncPreviewControlsSurfaceSize(int width, int height);
     Q_INVOKABLE void syncStatusSurfaceSize(int width, int height);
+    bool hasShortcut(const QKeySequence& sequence) const;
+    bool triggerShortcut(const QKeySequence& sequence);
 
 signals:
     void shellStateChanged();
