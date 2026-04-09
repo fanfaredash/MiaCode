@@ -10,7 +10,7 @@ set "MIACODE_LOG_DIR=%APP_DIR%\logs"
 
 if not exist "%MIACODE_LOG_DIR%" mkdir "%MIACODE_LOG_DIR%"
 
-echo MiaCode debug mode
+echo MiaCode debug mode - default quick shell
 echo   App : %APP_DIR%\MiaCode.exe
 echo   Logs: %MIACODE_LOG_DIR%
 echo.

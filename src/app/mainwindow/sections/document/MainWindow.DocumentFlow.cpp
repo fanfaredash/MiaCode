@@ -27,227 +27,6 @@ UnsavedChangesChoice showUnsavedChangesDialog(QWidget* parent, const QString& ti
     return UnsavedChangesChoice::Cancel;
 }
 
-#ifdef Q_OS_WIN
-QString nativeDialogWinEventName(DWORD event)
-{
-    switch (event) {
-    case EVENT_SYSTEM_FOREGROUND:
-        return QStringLiteral("EVENT_SYSTEM_FOREGROUND");
-    case EVENT_SYSTEM_DIALOGSTART:
-        return QStringLiteral("EVENT_SYSTEM_DIALOGSTART");
-    case EVENT_SYSTEM_DIALOGEND:
-        return QStringLiteral("EVENT_SYSTEM_DIALOGEND");
-    case EVENT_SYSTEM_CAPTURESTART:
-        return QStringLiteral("EVENT_SYSTEM_CAPTURESTART");
-    case EVENT_SYSTEM_CAPTUREEND:
-        return QStringLiteral("EVENT_SYSTEM_CAPTUREEND");
-    case EVENT_OBJECT_CREATE:
-        return QStringLiteral("EVENT_OBJECT_CREATE");
-    case EVENT_OBJECT_DESTROY:
-        return QStringLiteral("EVENT_OBJECT_DESTROY");
-    case EVENT_OBJECT_SHOW:
-        return QStringLiteral("EVENT_OBJECT_SHOW");
-    case EVENT_OBJECT_HIDE:
-        return QStringLiteral("EVENT_OBJECT_HIDE");
-    case EVENT_OBJECT_FOCUS:
-        return QStringLiteral("EVENT_OBJECT_FOCUS");
-    case EVENT_OBJECT_LOCATIONCHANGE:
-        return QStringLiteral("EVENT_OBJECT_LOCATIONCHANGE");
-    case EVENT_OBJECT_NAMECHANGE:
-        return QStringLiteral("EVENT_OBJECT_NAMECHANGE");
-    default:
-        return QStringLiteral("EVENT(0x%1)").arg(static_cast<qulonglong>(event), 0, 16);
-    }
-}
-
-QString nativeDialogObjectIdName(LONG objectId)
-{
-    switch (objectId) {
-    case OBJID_WINDOW:
-        return QStringLiteral("OBJID_WINDOW");
-    case OBJID_CLIENT:
-        return QStringLiteral("OBJID_CLIENT");
-    case OBJID_TITLEBAR:
-        return QStringLiteral("OBJID_TITLEBAR");
-    case OBJID_SYSMENU:
-        return QStringLiteral("OBJID_SYSMENU");
-    case OBJID_MENU:
-        return QStringLiteral("OBJID_MENU");
-    case OBJID_CARET:
-        return QStringLiteral("OBJID_CARET");
-    case OBJID_CURSOR:
-        return QStringLiteral("OBJID_CURSOR");
-    default:
-        return QStringLiteral("OBJID(%1)").arg(objectId);
-    }
-}
-
-struct NativeDialogWinEventTraceState {
-    QString scope;
-    HWND ownerHwnd = nullptr;
-    DWORD ownerPid = 0;
-};
-
-NativeDialogWinEventTraceState* g_nativeDialogWinEventTraceState = nullptr;
-
-bool shouldTraceNativeDialogEvent(
-    const NativeDialogWinEventTraceState* state,
-    HWND hwnd,
-    LONG objectId
-)
-{
-    if (state == nullptr) {
-        return false;
-    }
-
-    if (objectId != OBJID_WINDOW
-        && objectId != OBJID_CLIENT
-        && objectId != OBJID_CARET
-        && objectId != OBJID_CURSOR
-        && objectId != OBJID_SYSMENU
-        && objectId != 0) {
-        return false;
-    }
-
-    if (hwnd == nullptr) {
-        return true;
-    }
-
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    const HWND owner = GetWindow(hwnd, GW_OWNER);
-    const HWND root = GetAncestor(hwnd, GA_ROOT);
-    const HWND rootOwner = GetAncestor(hwnd, GA_ROOTOWNER);
-    const HWND foreground = GetForegroundWindow();
-
-    return hwnd == state->ownerHwnd
-        || owner == state->ownerHwnd
-        || root == state->ownerHwnd
-        || rootOwner == state->ownerHwnd
-        || hwnd == foreground
-        || rootOwner == foreground
-        || (state->ownerPid != 0 && pid == state->ownerPid);
-}
-
-void appendNativeDialogHookLog(
-    const QString& scope,
-    const QString& payload
-)
-{
-    miacode::debug_log::appendLine(
-        miacode::debug_log::Channel::Runtime,
-        QStringLiteral("window/native_hook"),
-        QStringLiteral("scope=%1 %2").arg(scope, payload)
-    );
-}
-
-void CALLBACK nativeDialogWinEventProc(
-    HWINEVENTHOOK hook,
-    DWORD event,
-    HWND hwnd,
-    LONG idObject,
-    LONG idChild,
-    DWORD eventThread,
-    DWORD eventTime
-)
-{
-    Q_UNUSED(hook);
-
-    const NativeDialogWinEventTraceState* state = g_nativeDialogWinEventTraceState;
-    if (!shouldTraceNativeDialogEvent(state, hwnd, idObject)) {
-        return;
-    }
-
-    appendNativeDialogHookLog(
-        state != nullptr ? state->scope : QStringLiteral("unknown"),
-        QString("event=%1 object=%2 child=%3 event_thread=%4 event_time=%5 hwnd={%6}")
-            .arg(nativeDialogWinEventName(event))
-            .arg(nativeDialogObjectIdName(idObject))
-            .arg(idChild)
-            .arg(eventThread)
-            .arg(eventTime)
-            .arg(describeNativeWindowHandle(hwnd))
-    );
-}
-
-class ScopedNativeDialogWinEventTrace {
-public:
-    ScopedNativeDialogWinEventTrace(const QString& scope, HWND ownerHwnd)
-    {
-        state_.scope = scope;
-        state_.ownerHwnd = ownerHwnd;
-        if (ownerHwnd != nullptr) {
-            GetWindowThreadProcessId(ownerHwnd, &state_.ownerPid);
-        }
-
-        g_nativeDialogWinEventTraceState = &state_;
-        appendNativeDialogHookLog(
-            state_.scope,
-            QString("trace_start owner={%1} owner_pid=%2")
-                .arg(describeNativeWindowHandle(ownerHwnd))
-                .arg(state_.ownerPid)
-        );
-
-        hooks_.append(SetWinEventHook(
-            EVENT_SYSTEM_FOREGROUND,
-            EVENT_SYSTEM_DIALOGEND,
-            nullptr,
-            &nativeDialogWinEventProc,
-            0,
-            0,
-            WINEVENT_OUTOFCONTEXT
-        ));
-        hooks_.append(SetWinEventHook(
-            EVENT_OBJECT_CREATE,
-            EVENT_OBJECT_HIDE,
-            nullptr,
-            &nativeDialogWinEventProc,
-            0,
-            0,
-            WINEVENT_OUTOFCONTEXT
-        ));
-        hooks_.append(SetWinEventHook(
-            EVENT_OBJECT_FOCUS,
-            EVENT_OBJECT_NAMECHANGE,
-            nullptr,
-            &nativeDialogWinEventProc,
-            0,
-            0,
-            WINEVENT_OUTOFCONTEXT
-        ));
-        hooks_.append(SetWinEventHook(
-            EVENT_SYSTEM_CAPTURESTART,
-            EVENT_SYSTEM_CAPTUREEND,
-            nullptr,
-            &nativeDialogWinEventProc,
-            0,
-            0,
-            WINEVENT_OUTOFCONTEXT
-        ));
-    }
-
-    ~ScopedNativeDialogWinEventTrace()
-    {
-        for (HWINEVENTHOOK hook : hooks_) {
-            if (hook != nullptr) {
-                UnhookWinEvent(hook);
-            }
-        }
-        appendNativeDialogHookLog(
-            state_.scope,
-            QStringLiteral("trace_end")
-        );
-        if (g_nativeDialogWinEventTraceState == &state_) {
-            g_nativeDialogWinEventTraceState = nullptr;
-        }
-    }
-
-private:
-    NativeDialogWinEventTraceState state_;
-    QVector<HWINEVENTHOOK> hooks_;
-};
-#endif
-
 }  // namespace
 
 bool MainWindow::maybeSaveBeforeContinue()
@@ -406,17 +185,14 @@ void MainWindow::onNewFile()
 void MainWindow::onOpenFile()
 {
     logTopLevelWindowSnapshot("open_file_flow/begin");
-    logNativeWindowDebug("open_file_flow/begin");
     const bool canContinue = maybeSaveBeforeContinue();
     if (!canContinue) {
         logTopLevelWindowSnapshot("open_file_flow/cancelled_before_dialog");
-        logNativeWindowDebug("open_file_flow/cancelled_before_dialog");
         return;
     }
 
     logWindowGeometryDebug("open_file_before_dialog");
     logTopLevelWindowSnapshot("open_file_before_dialog");
-    logNativeWindowDebug("open_file_before_dialog");
     suspendEmbeddedPreviewForNativeDialog("open_file_dialog");
     const QString path = QFileDialog::getOpenFileName(
         this,
@@ -427,7 +203,6 @@ void MainWindow::onOpenFile()
     resumeEmbeddedPreviewForNativeDialog("open_file_dialog");
     logWindowGeometryDebug("open_file_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
     logTopLevelWindowSnapshot("open_file_after_dialog");
-    logNativeWindowDebug("open_file_after_dialog");
     if (path.isEmpty()) {
         return;
     }
@@ -520,6 +295,7 @@ void MainWindow::scheduleStartupRestoreLastSessionFile()
                 guard->startupRestorePending_ = false;
                 if (!payload.success) {
                     appendStartupTimingStage("mainwindow/startup_restore_prepare_failed", 0, 0);
+                    guard->scheduleDeferredQuickShellStartupStageMediaLoadIfReady();
                     return;
                 }
 
@@ -580,6 +356,7 @@ void MainWindow::applyPreparedStartupRestoreDocument(const PreparedStartupRestor
         prepared.totalElapsedMs + applyElapsedMs,
         prepared.totalElapsedMs + applyElapsedMs
     );
+    scheduleDeferredQuickShellStartupStageMediaLoadIfReady();
 }
 
 void MainWindow::applyOpenedDocumentState(
@@ -731,7 +508,6 @@ bool MainWindow::onSaveFileAs()
 {
     logTopLevelWindowSnapshot("save_file_as_dialog/begin");
     logWindowGeometryDebug("save_file_as_before_dialog");
-    logNativeWindowDebug("save_file_as_before_dialog");
     suspendEmbeddedPreviewForNativeDialog("save_file_dialog");
     const QString path = QFileDialog::getSaveFileName(
         this,
@@ -742,7 +518,6 @@ bool MainWindow::onSaveFileAs()
     resumeEmbeddedPreviewForNativeDialog("save_file_dialog");
     logWindowGeometryDebug("save_file_as_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
     logTopLevelWindowSnapshot("save_file_as_dialog/after_dialog");
-    logNativeWindowDebug("save_file_as_after_dialog");
     if (path.isEmpty()) {
         return false;
     }
@@ -1204,6 +979,7 @@ void MainWindow::updateEditorHeaderLayoutMode()
         if (editorValidationSummaryWidget_ != nullptr) {
             editorValidationSummaryWidget_->setVisible(false);
         }
+        syncEditorHeaderMinimumWidth();
         return;
     }
 
@@ -1219,22 +995,22 @@ void MainWindow::updateEditorHeaderLayoutMode()
         }
         int width = 0;
         if (icon != nullptr) {
-            width += icon->sizeHint().width();
+            width += qMax(icon->sizeHint().width(), icon->minimumWidth());
         }
         if (count != nullptr) {
             if (width > 0) {
                 width += spacing;
             }
-            width += count->sizeHint().width();
+            width += qMax(count->sizeHint().width(), count->minimumWidth());
         }
         return width;
     };
     int summaryFullWidth = 0;
     int summaryVisibleGroups = 0;
     for (const int groupWidth : {
-             summaryGroupFullWidth(editorValidationErrorIconLabel_, editorValidationErrorCountLabel_, 6),
+             summaryGroupFullWidth(editorValidationMuriIconLabel_, editorValidationMuriCountLabel_, 4),
              summaryGroupFullWidth(editorValidationWarningIconLabel_, editorValidationWarningCountLabel_, 3),
-             summaryGroupFullWidth(editorValidationMuriIconLabel_, editorValidationMuriCountLabel_, 4)}) {
+             summaryGroupFullWidth(editorValidationErrorIconLabel_, editorValidationErrorCountLabel_, 6)}) {
         if (groupWidth <= 0) {
             continue;
         }
@@ -1244,50 +1020,172 @@ void MainWindow::updateEditorHeaderLayoutMode()
         summaryFullWidth += groupWidth;
         ++summaryVisibleGroups;
     }
-    const int summaryExtraWidth = summaryHasContent ? qMax(0, summaryFullWidth - 52) : 0;
-
-    const miacode::window_parity::EditorHeaderLayoutMode layoutMode =
-        miacode::window_parity::computeEditorHeaderLayoutMode(headerWidth, summaryHasContent, summaryExtraWidth);
-    const bool showLevelControls = layoutMode.showLevelControls;
-    const bool showDesignerControls = layoutMode.showDesignerControls;
-    const bool showSummary = layoutMode.showSummary;
-    const bool showSummaryCounts = layoutMode.showSummaryCounts;
-    const bool showCursor = layoutMode.showCursor;
-    const bool compactCursor = layoutMode.compactCursor;
-    const int levelWidth = layoutMode.levelWidth;
-    const int designerWidth = layoutMode.designerWidth;
 
     if (difficultyLevelLabel_ != nullptr) {
-        difficultyLevelLabel_->setVisible(showLevelControls);
+        difficultyLevelLabel_->setVisible(true);
     }
     if (difficultyDesignerLabel_ != nullptr) {
-        difficultyDesignerLabel_->setVisible(showDesignerControls);
+        difficultyDesignerLabel_->setVisible(true);
     }
     if (difficultyLevelEdit_ != nullptr) {
-        difficultyLevelEdit_->setFixedWidth(levelWidth);
-        difficultyLevelEdit_->setVisible(showLevelControls);
+        difficultyLevelEdit_->setFixedWidth(48);
+        difficultyLevelEdit_->setVisible(true);
     }
     if (difficultyDesignerEdit_ != nullptr) {
-        difficultyDesignerEdit_->setFixedWidth(designerWidth);
-        difficultyDesignerEdit_->setVisible(showDesignerControls);
+        difficultyDesignerEdit_->setFixedWidth(96);
+        difficultyDesignerEdit_->setVisible(true);
     }
+    if (editorDifficultyControls_ != nullptr) {
+        editorDifficultyControls_->setVisible(true);
+    }
+
     if (editorValidationSummaryWidget_ != nullptr) {
-        editorValidationSummaryWidget_->setVisible(summaryHasContent && showSummary);
-        const auto applySummaryVisibility = [showSummary, showSummaryCounts](QLabel* icon, QLabel* count) {
+        const auto applySummaryVisibility = [](QLabel* icon, QLabel* count) {
             const bool hasContent = (icon != nullptr && icon->property("hasContent").toBool())
                 || (count != nullptr && count->property("hasContent").toBool());
             if (icon != nullptr) {
-                icon->setVisible(showSummary && hasContent);
+                icon->setVisible(hasContent);
             }
             if (count != nullptr) {
-                count->setVisible(showSummary && showSummaryCounts && hasContent);
+                count->setVisible(hasContent);
             }
         };
         applySummaryVisibility(editorValidationErrorIconLabel_, editorValidationErrorCountLabel_);
         applySummaryVisibility(editorValidationWarningIconLabel_, editorValidationWarningCountLabel_);
         applySummaryVisibility(editorValidationMuriIconLabel_, editorValidationMuriCountLabel_);
+        const int reservedSummaryWidth = qMax(
+            editorValidationSummaryWidget_->minimumSizeHint().width(),
+            editorValidationSummaryWidget_->sizeHint().width()
+        );
+        editorValidationSummaryWidget_->setVisible(true);
+        editorValidationSummaryWidget_->setMinimumWidth(reservedSummaryWidth);
+        editorValidationSummaryWidget_->setMaximumWidth(reservedSummaryWidth);
         editorValidationSummaryWidget_->adjustSize();
     }
+
+    const auto [line, col] = currentCursorLineCol();
+    const QString cursorText = UiText::isChineseUi()
+        ? QStringLiteral("%1行 %2列").arg(line).arg(col)
+        : QStringLiteral("Ln %1, Col %2").arg(line).arg(col);
+    editorCursorLabel_->setText(cursorText);
+    editorCursorLabel_->setFixedWidth(QFontMetrics(editorCursorLabel_->font()).horizontalAdvance(cursorText) + 10);
+    editorCursorLabel_->setVisible(true);
+    const QString correctedCursorText = UiText::isChineseUi()
+        ? QStringLiteral("%1行 %2列").arg(line).arg(col)
+        : QStringLiteral("Ln %1, Col %2").arg(line).arg(col);
+    const QString correctedCursorWidthTemplate = UiText::isChineseUi()
+        ? QStringLiteral("9999行 9999列")
+        : QStringLiteral("Ln 9999, Col 9999");
+    editorCursorLabel_->setText(correctedCursorText);
+    editorCursorLabel_->setFixedWidth(
+        QFontMetrics(editorCursorLabel_->font()).horizontalAdvance(correctedCursorWidthTemplate) + 10);
+
+    if (QLayout* headerLayout = editorHeaderWidget_->layout(); headerLayout != nullptr) {
+        headerLayout->activate();
+    }
+    syncEditorHeaderMinimumWidth();
+    return;
+
+    struct HeaderLayoutCandidate {
+        bool showLevelControls = true;
+        bool showDesignerControls = true;
+        bool showSummary = false;
+        bool showSummaryCounts = false;
+        bool showCursor = false;
+        bool compactCursor = false;
+    };
+
+    const auto applyCandidate = [this, summaryHasContent](const HeaderLayoutCandidate& candidate) {
+        constexpr int kLevelWidth = 48;
+        constexpr int kDesignerWidth = 96;
+
+        if (difficultyLevelLabel_ != nullptr) {
+            difficultyLevelLabel_->setVisible(candidate.showLevelControls);
+        }
+        if (difficultyDesignerLabel_ != nullptr) {
+            difficultyDesignerLabel_->setVisible(candidate.showDesignerControls);
+        }
+        if (difficultyLevelEdit_ != nullptr) {
+            difficultyLevelEdit_->setFixedWidth(kLevelWidth);
+            difficultyLevelEdit_->setVisible(candidate.showLevelControls);
+        }
+        if (difficultyDesignerEdit_ != nullptr) {
+            difficultyDesignerEdit_->setFixedWidth(kDesignerWidth);
+            difficultyDesignerEdit_->setVisible(candidate.showDesignerControls);
+        }
+        if (editorDifficultyControls_ != nullptr) {
+            editorDifficultyControls_->setVisible(candidate.showLevelControls || candidate.showDesignerControls);
+        }
+
+        if (editorValidationSummaryWidget_ != nullptr) {
+            const bool showSummary = summaryHasContent && candidate.showSummary;
+            editorValidationSummaryWidget_->setVisible(showSummary);
+            const auto applySummaryVisibility = [showSummary, candidate](QLabel* icon, QLabel* count) {
+                const bool hasContent = (icon != nullptr && icon->property("hasContent").toBool())
+                    || (count != nullptr && count->property("hasContent").toBool());
+                if (icon != nullptr) {
+                    icon->setVisible(showSummary && hasContent);
+                }
+                if (count != nullptr) {
+                    count->setVisible(showSummary && candidate.showSummaryCounts && hasContent);
+                }
+            };
+            applySummaryVisibility(editorValidationErrorIconLabel_, editorValidationErrorCountLabel_);
+            applySummaryVisibility(editorValidationWarningIconLabel_, editorValidationWarningCountLabel_);
+            applySummaryVisibility(editorValidationMuriIconLabel_, editorValidationMuriCountLabel_);
+            editorValidationSummaryWidget_->adjustSize();
+        }
+    };
+
+    const QVector<HeaderLayoutCandidate> candidates = summaryHasContent
+        ? QVector<HeaderLayoutCandidate>{
+              HeaderLayoutCandidate{true, true, true, true, true, false},
+              HeaderLayoutCandidate{true, true, true, false, true, false},
+              HeaderLayoutCandidate{true, true, false, false, true, false},
+              HeaderLayoutCandidate{true, true, false, false, true, true},
+              HeaderLayoutCandidate{true, true, false, false, false, false},
+              HeaderLayoutCandidate{true, false, false, false, false, false},
+              HeaderLayoutCandidate{false, false, false, false, false, false},
+          }
+        : QVector<HeaderLayoutCandidate>{
+              HeaderLayoutCandidate{true, true, false, false, true, false},
+              HeaderLayoutCandidate{true, true, false, false, true, true},
+              HeaderLayoutCandidate{true, true, false, false, false, false},
+              HeaderLayoutCandidate{true, false, false, false, false, false},
+              HeaderLayoutCandidate{false, false, false, false, false, false},
+          };
+
+    for (int index = 0; index < candidates.size(); ++index) {
+        const HeaderLayoutCandidate& candidate = candidates.at(index);
+        applyCandidate(candidate);
+
+        if (candidate.showCursor) {
+            const auto [line, col] = currentCursorLineCol();
+            if (candidate.compactCursor) {
+                editorCursorLabel_->setText(QStringLiteral("%1:%2").arg(line).arg(col));
+            } else if (UiText::isChineseUi()) {
+                editorCursorLabel_->setText(QStringLiteral("%1琛?%2鍒?").arg(line).arg(col));
+            } else {
+                editorCursorLabel_->setText(QStringLiteral("Ln %1, Col %2").arg(line).arg(col));
+            }
+            editorCursorLabel_->setFixedWidth(
+                QFontMetrics(editorCursorLabel_->font()).horizontalAdvance(editorCursorLabel_->text()) + 10);
+        }
+        editorCursorLabel_->setVisible(candidate.showCursor);
+
+        if (QLayout* headerLayout = editorHeaderWidget_->layout(); headerLayout != nullptr) {
+            headerLayout->activate();
+        }
+        const int requiredWidth = editorHeaderWidget_->minimumSizeHint().width();
+        if (headerWidth >= requiredWidth || index == candidates.size() - 1) {
+            break;
+        }
+    }
+
+    const bool showCursor = editorCursorLabel_->isVisible();
+    const bool compactCursor = showCursor
+        && editorCursorLabel_->text().contains(QLatin1Char(':'))
+        && !editorCursorLabel_->text().contains(QLatin1Char(','));
     if (showCursor) {
         const auto [line, col] = currentCursorLineCol();
         if (compactCursor) {
@@ -1301,6 +1199,50 @@ void MainWindow::updateEditorHeaderLayoutMode()
             QFontMetrics(editorCursorLabel_->font()).horizontalAdvance(editorCursorLabel_->text()) + 10);
     }
     editorCursorLabel_->setVisible(showCursor);
+    syncEditorHeaderMinimumWidth();
+}
+
+void MainWindow::syncEditorHeaderMinimumWidth()
+{
+    if (editorHeaderWidget_ == nullptr) {
+        return;
+    }
+
+    int headerMinimumWidth = 0;
+    if (QLayout* headerLayout = editorHeaderWidget_->layout(); headerLayout != nullptr) {
+        headerLayout->activate();
+        headerMinimumWidth = qMax(0, headerLayout->minimumSize().width());
+        editorHeaderWidget_->setMinimumWidth(headerMinimumWidth);
+    }
+    editorHeaderWidget_->updateGeometry();
+
+    if (previewLeftColumn_ != nullptr) {
+        const int baseMinimumWidth = qMax(0, previewLeftColumn_->property("baseMinimumWidth").toInt());
+        const int previousMinimumWidth = previewLeftColumn_->minimumWidth();
+        if (QLayout* leftColumnLayout = previewLeftColumn_->layout(); leftColumnLayout != nullptr) {
+            leftColumnLayout->activate();
+        }
+        const int nextMinimumWidth = qMax(
+            baseMinimumWidth,
+            qMax(headerMinimumWidth, previewLeftColumn_->minimumSizeHint().width())
+        );
+        previewLeftColumn_->setMinimumWidth(nextMinimumWidth);
+        previewLeftColumn_->updateGeometry();
+        if (nextMinimumWidth != previousMinimumWidth && workspaceSplitter_ != nullptr && !isQuickShellBackendMode()) {
+            updatePreviewWorkspaceLayout();
+        }
+    }
+
+    if (quickShellWorkspaceSurfaceWidget_ != nullptr) {
+        if (QLayout* workspaceLayout = quickShellWorkspaceSurfaceWidget_->layout(); workspaceLayout != nullptr) {
+            workspaceLayout->activate();
+        }
+        quickShellWorkspaceSurfaceWidget_->updateGeometry();
+    }
+
+    if (workspaceSplitter_ != nullptr) {
+        workspaceSplitter_->updateGeometry();
+    }
 }
 
 void MainWindow::updateEditorStatus()

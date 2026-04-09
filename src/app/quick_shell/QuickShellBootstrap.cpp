@@ -217,6 +217,15 @@ bool QuickShellBootstrap::start()
                     .arg(window->height())
                     .arg(window->title())
             );
+            if (styleBridge_ != nullptr && window->width() > 0 && window->height() > 0) {
+                styleBridge_->syncWindowSize(window->width(), window->height());
+                styleBridge_->refreshNow();
+            } else if (styleBridge_ != nullptr) {
+                styleBridge_->refreshNow();
+            }
+            if (controller_ != nullptr) {
+                controller_->refresh();
+            }
             window->setIcon(appIcon_);
 #ifdef Q_OS_WIN
             applySystemBackdropToQuickWindow(window);
@@ -236,7 +245,7 @@ bool QuickShellBootstrap::start()
             window->show();
             window->raise();
             window->requestActivate();
-            QTimer::singleShot(0, this, [window]() {
+            QTimer::singleShot(0, this, [this, window]() {
                 appendQuickShellRuntimeLog(
                     QStringLiteral("root_window_post_show"),
                     QString("visible=%1 exposed=%2 active=%3 width=%4 height=%5")
@@ -246,6 +255,9 @@ bool QuickShellBootstrap::start()
                         .arg(window->width())
                         .arg(window->height())
                 );
+                if (backend_ != nullptr) {
+                    backend_->noteQuickShellStartupUiReady();
+                }
             });
         }
     }

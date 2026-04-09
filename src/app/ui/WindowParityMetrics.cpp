@@ -85,6 +85,67 @@ int computePreviewPanelTargetWidth(
     return qBound(minimumRightWidth, targetRightWidth, rightMaxWidth);
 }
 
+int computePreviewPanelTargetWidthForAdaptiveStats(
+    int availableWidth,
+    int availableHeight,
+    int leftMinWidth,
+    int controlHeight,
+    double aspectRatio
+)
+{
+    const int resolvedAvailableWidth = qMax(0, availableWidth);
+    const int resolvedLeftMinWidth = qMax(0, leftMinWidth);
+    const int minimumRightWidth =
+        (resolvedAvailableWidth >= resolvedLeftMinWidth + kPreviewControlStatsCardMinWidth + kPreviewPanelMarginX * 2)
+        ? (kPreviewControlStatsCardMinWidth + kPreviewPanelMarginX * 2)
+        : qMin(resolvedAvailableWidth, kPreviewControlStatsCardMinWidth + kPreviewPanelMarginX * 2);
+    const int rightMaxWidth =
+        (resolvedAvailableWidth >= resolvedLeftMinWidth + minimumRightWidth)
+        ? qMin(kEmbeddedPreviewPanelWidthMax, resolvedAvailableWidth - resolvedLeftMinWidth)
+        : resolvedAvailableWidth;
+    if (rightMaxWidth <= 0) {
+        return 0;
+    }
+
+    const auto minimumStatsHeightForRightWidth = [](int rightWidth) {
+        const int statsHostWidth = qMax(0, rightWidth - kPreviewPanelMarginX * 2 - 16);
+        return computePreviewStatsLayout(statsHostWidth).minCardHeight;
+    };
+
+    int targetRightWidth = qBound(
+        minimumRightWidth,
+        computePreviewPanelTargetWidth(
+            resolvedAvailableWidth,
+            qMax(0, availableHeight),
+            resolvedLeftMinWidth,
+            qMax(0, controlHeight),
+            minimumStatsHeightForRightWidth(rightMaxWidth),
+            aspectRatio
+        ),
+        rightMaxWidth
+    );
+    for (int iteration = 0; iteration < 4; ++iteration) {
+        const int nextRightWidth = qBound(
+            minimumRightWidth,
+            computePreviewPanelTargetWidth(
+                resolvedAvailableWidth,
+                qMax(0, availableHeight),
+                resolvedLeftMinWidth,
+                qMax(0, controlHeight),
+                minimumStatsHeightForRightWidth(targetRightWidth),
+                aspectRatio
+            ),
+            rightMaxWidth
+        );
+        if (nextRightWidth == targetRightWidth) {
+            break;
+        }
+        targetRightWidth = nextRightWidth;
+    }
+
+    return targetRightWidth;
+}
+
 PreviewPanelLayout computePreviewPanelLayout(
     int panelWidth,
     int panelHeight,
@@ -138,56 +199,6 @@ PreviewPanelLayout computePreviewPanelLayout(
     layout.statsHostWidth = statsHostWidth;
     layout.minimumStatsHeight = statsLayout.minCardHeight;
     return layout;
-}
-
-EditorHeaderLayoutMode computeEditorHeaderLayoutMode(
-    int headerWidth,
-    bool summaryHasContent,
-    int summaryExtraWidth
-)
-{
-    EditorHeaderLayoutMode mode;
-    mode.showSummary = summaryHasContent;
-    mode.showSummaryCounts = summaryHasContent;
-    mode.showCursor = true;
-
-    const int clampedSummaryExtraWidth = qMax(0, summaryExtraWidth);
-    const int summaryIconOnlyThreshold = 456 + qMin(clampedSummaryExtraWidth, 48);
-    const int summaryHideThreshold = 374 + qMin(clampedSummaryExtraWidth / 2, 28);
-    const int compactCursorThreshold = 400 + qMin(clampedSummaryExtraWidth / 2, 28);
-    const int cursorHideThreshold = 360 + qMin(clampedSummaryExtraWidth / 2, 20);
-
-    if (headerWidth < 700) {
-        mode.designerWidth = 96;
-    }
-    if (headerWidth < 640) {
-        mode.designerWidth = 84;
-        mode.levelWidth = 45;
-    }
-    if (headerWidth < summaryIconOnlyThreshold) {
-        mode.showSummaryCounts = false;
-    }
-    if (headerWidth < summaryHideThreshold) {
-        mode.showSummary = false;
-        mode.levelWidth = 39;
-        mode.designerWidth = 69;
-    }
-    if (headerWidth < compactCursorThreshold) {
-        mode.compactCursor = true;
-        mode.designerWidth = 75;
-        mode.levelWidth = 41;
-    }
-    if (headerWidth < cursorHideThreshold) {
-        mode.showCursor = false;
-        mode.levelWidth = 36;
-        mode.designerWidth = 63;
-        mode.showDesignerControls = false;
-    }
-    if (headerWidth < 310) {
-        mode.showLevelControls = false;
-    }
-
-    return mode;
 }
 
 int computeBottomTabsDeviceHeight(int timelineHeight, int tabBarHeight, int frameWidth)

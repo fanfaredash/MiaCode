@@ -22,6 +22,7 @@ ApplicationWindow {
         )
     )
     property bool previewPaneUserResized: false
+    property bool previewPaneStartupBalancePending: true
 
     function metric(key, fallback) {
         return metricsMap && metricsMap[key] !== undefined ? metricsMap[key] : fallback
@@ -46,6 +47,10 @@ ApplicationWindow {
         return metric("previewPanelMinWidth", 320)
     }
 
+    function previewPaneAvailableWidth(totalWidth) {
+        return Math.max(0, totalWidth - previewPaneHandleWidth())
+    }
+
     function previewPaneMaxWidth(totalWidth, totalHeight) {
         const minWidth = previewPaneMinWidth()
         const leftMinWidth = metric("leftColumnMinWidth", 320)
@@ -68,31 +73,55 @@ ApplicationWindow {
         return Math.max(minWidth, Math.min(candidate, maxWidth))
     }
 
+    function previewPaneDefaultWidth(totalWidth, totalHeight) {
+        const leftMinWidth = metric("leftColumnMinWidth", 320)
+        return Math.max(0, previewPaneAvailableWidth(totalWidth) - leftMinWidth)
+    }
+
     function previewPaneInitialWidth(totalWidth, totalHeight) {
-        const availableWidth = Math.max(
-            0,
-            totalWidth - previewPaneHandleWidth() - metric("outlineDockWidth", 190)
+        const leftMinWidth = metric("leftColumnMinWidth", 320)
+        const availableWidth = previewPaneAvailableWidth(totalWidth)
+        const initialLeftWidth = Math.min(
+            availableWidth,
+            Math.max(leftMinWidth, Math.floor(availableWidth / 2))
         )
-        return clampPreviewPaneWidth(Math.floor(availableWidth / 2), totalWidth, totalHeight)
+        const startupRightMaxWidth = Math.max(0, availableWidth - initialLeftWidth)
+        const preferredPreviewWidth = metric("previewShellWidth", startupRightMaxWidth)
+        return Math.max(0, Math.min(startupRightMaxWidth, preferredPreviewWidth))
     }
 
     function syncPreviewPaneWidth(totalWidth, totalHeight, preserveUserChoice) {
-        const defaultWidth = previewPaneInitialWidth(totalWidth, totalHeight)
-        if (!preserveUserChoice) {
-            previewPaneWidth = defaultWidth
-            previewPaneUserResized = false
+        if (totalWidth <= 0)
+            return
+        const defaultWidth = previewPaneStartupBalancePending
+            ? previewPaneInitialWidth(totalWidth, totalHeight)
+            : previewPaneDefaultWidth(totalWidth, totalHeight)
+        if (!preserveUserChoice || !previewPaneUserResized) {
+            previewPaneWidth = previewPaneStartupBalancePending
+                ? defaultWidth
+                : clampPreviewPaneWidth(defaultWidth, totalWidth, totalHeight)
+            if (!preserveUserChoice)
+                previewPaneUserResized = false
+            previewPaneStartupBalancePending = false
             return
         }
         if (previewPaneWidth <= 0) {
-            previewPaneWidth = defaultWidth
+            previewPaneWidth = previewPaneStartupBalancePending
+                ? defaultWidth
+                : clampPreviewPaneWidth(defaultWidth, totalWidth, totalHeight)
+            previewPaneStartupBalancePending = false
             return
         }
         previewPaneWidth = clampPreviewPaneWidth(previewPaneWidth, totalWidth, totalHeight)
+        previewPaneStartupBalancePending = false
     }
 
-    visible: true
+    visible: false
     title: controller.windowTitle
     color: tone("windowBg", "#f8fafd")
+    minimumWidth: metric("minimumWindowWidth", 960)
+    minimumHeight: metric("minimumWindowHeight", 640)
+    onMetricsMapChanged: syncPreviewPaneWidth(workspaceRow.width, workspaceRow.height, true)
 
     palette.window: tone("windowBg", "#f8fafd")
     palette.base: tone("inputBg", "#ffffff")
@@ -107,8 +136,6 @@ ApplicationWindow {
         if (!initialGeometryApplied) {
             width = metric("initialWindowWidth", 1280)
             height = metric("initialWindowHeight", 800)
-            minimumWidth = metric("minimumWindowWidth", 960)
-            minimumHeight = metric("minimumWindowHeight", 640)
             x = metric("initialWindowX", 120)
             y = metric("initialWindowY", 120)
             initialGeometryApplied = true

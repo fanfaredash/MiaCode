@@ -385,6 +385,7 @@ $releaseLines = @(
     ""
     "Run:"
     "  MiaCode.exe"
+    "  MiaCode.exe --qt-native"
     "  Start_MiaCode_Debug.bat"
     "  Start_MiaCode_QuickShell_Debug.bat"
     ""

@@ -69,6 +69,11 @@ bool wantsQuickShellBeta(const QStringList& arguments)
     return arguments.contains(QStringLiteral("--quick-shell-beta"));
 }
 
+bool wantsQtNativeFrontend(const QStringList& arguments)
+{
+    return arguments.contains(QStringLiteral("--qt-native"));
+}
+
 void addSharedCliDebugOption(QCommandLineParser& parser)
 {
     // main() already enables debug mode before CLI dispatch. We still declare
@@ -638,8 +643,10 @@ int main(int argc, char* argv[])
         return exitCode;
     }
 
+    const bool qtNativeFrontendRequested = wantsQtNativeFrontend(app.arguments());
     const bool quickShellBetaRequested = wantsQuickShellBeta(app.arguments());
-    if (quickShellBetaRequested) {
+    Q_UNUSED(quickShellBetaRequested);
+    if (!qtNativeFrontendRequested) {
         QQuickStyle::setStyle(QStringLiteral("Basic"));
         QuickShellBootstrap quickShellBootstrap(appIcon);
         if (!quickShellBootstrap.start()) {

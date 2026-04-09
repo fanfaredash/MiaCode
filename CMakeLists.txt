@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.21)
 set(MIACODE_VERSION_MAJOR "0")
 set(MIACODE_VERSION_MINOR "3")
 set(MIACODE_VERSION_PATCH "10")
-set(MIACODE_VERSION_PRERELEASE "dev4")
+set(MIACODE_VERSION_PRERELEASE "dev6")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
@@ -447,6 +447,13 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/preview/scene/PreviewSceneMath.cpp
     )
 
+    add_executable(preview_sfx_timeline_spec
+        src/tools/preview/PreviewSfxTimelineSpec.cpp
+        src/common/PreviewSfxTimeline.h
+        src/common/PreviewGameplayConfig.h
+        src/timeline/TimelineData.h
+    )
+
     target_link_libraries(miacode_muri_dump PRIVATE
         Qt6::Core
         Qt6::Gui
@@ -573,6 +580,15 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/preview
         src/preview/scene
         src/preview/video
+        src/timeline
+    )
+
+    target_link_libraries(preview_sfx_timeline_spec PRIVATE
+        Qt6::Core
+    )
+    target_include_directories(preview_sfx_timeline_spec PRIVATE
+        src
+        src/common
         src/timeline
     )
 endif()

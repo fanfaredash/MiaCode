@@ -23,7 +23,7 @@ echo   VideoCmp : every %MIACODE_PREVIEW_DIAG_COMPARE_VIDEO_FALLBACK_EVERY% fram
 echo   Present  : every %MIACODE_PREVIEW_DIAG_COMPARE_PRESENT_EVERY% frames
 echo.
 
-start "" /wait "%APP_DIR%\MiaCode.exe" --debug %*
+start "" /wait "%APP_DIR%\MiaCode.exe" --qt-native --debug %*
 set "EXIT_CODE=%ERRORLEVEL%"
 
 echo.

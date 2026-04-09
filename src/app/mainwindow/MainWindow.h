@@ -72,6 +72,7 @@ class QWidget;
 class QWheelEvent;
 class QtPreviewSfxRuntime;
 class TimelineView;
+class QuickShellBootstrap;
 class QuickShellController;
 class QuickShellStyleBridge;
 
@@ -167,6 +168,7 @@ private slots:
 private:
     friend class QuickShellController;
     friend class QuickShellStyleBridge;
+    friend class QuickShellBootstrap;
 
     using BatchTransform = std::function<QString(const QString&, int*)>;
     enum class ChartTransformOp {
@@ -220,6 +222,9 @@ private:
     void configureRuntimeDebugOutput();
     PreviewStageMediaRoute previewStageMediaRoute() const;
     bool previewUsesStageMediaHostRoute() const;
+    bool shouldDeferQuickShellStartupStageMediaLoad() const;
+    void noteQuickShellStartupUiReady();
+    void scheduleDeferredQuickShellStartupStageMediaLoadIfReady();
     void updatePreviewStageMediaPresentationMode(bool requestUpdate = true);
     void ensurePreviewStageMediaRouteInitialized();
     void syncPreviewStageMediaRouteChartPath(
@@ -327,6 +332,7 @@ private:
     void rebuildFieldSidebar();
     void updateEditorHeader();
     void updateEditorHeaderLayoutMode();
+    void syncEditorHeaderMinimumWidth();
     void updateEditorStatus();
     void updateEditorValidationSummary();
     void updateEditorEmptyState();
@@ -426,8 +432,9 @@ private:
     void updatePreviewObjectStats(double second);
     void clearPreviewObjectStats();
     int updatePreviewStatsLayoutMode(int hostWidth = -1);
+    int previewStatsMinimumHeightForPanelWidth(int panelWidth) const;
     void updatePreviewWorkspaceLayout();
-    void updatePreviewPanelLayout();
+    void updatePreviewPanelLayout(int panelWidthOverride = -1, int panelHeightOverride = -1);
     void setWorkspacePanelsSwapped(bool swapped, bool persistState);
     void applyWorkspacePanelArrangement();
     void cacheWorkspaceLayoutSizes();
@@ -528,8 +535,6 @@ private:
     void logWindowGeometryDebug(const QString& tag, const QString& detail = QString());
     QString formatWindowStateFlags(Qt::WindowStates states) const;
     void logTopLevelWindowSnapshot(const QString& tag);
-    void logNativeWindowDebug(const QString& tag, WId dialogWId = 0);
-    void logOwnedNativeWindowSnapshot(const QString& tag, int maxWindows = 12);
     void refreshEditorExtraSelections();
     void setPreviewFollowDecoration(int line, int col);
     void clearPreviewFollowDecoration();
@@ -711,6 +716,12 @@ private:
     quint64 previewSfxWarmupAppliedGeneration_ = 0;
     quint64 startupRestoreGeneration_ = 0;
     bool startupRestorePending_ = false;
+    bool quickShellStartupUiReady_ = false;
+    bool quickShellStartupStageMediaLoadDeferred_ = false;
+    bool deferredQuickShellStartupStageMediaPending_ = false;
+    bool deferredQuickShellStartupStageMediaFlushScheduled_ = false;
+    QString deferredQuickShellStartupStageMediaChartPath_;
+    double deferredQuickShellStartupStageMediaPausedSecond_ = 0.0;
     quint64 waveformRefreshGeneration_ = 0;
     bool pendingDeferredValidationUiRefresh_ = false;
     bool pendingDeferredMuriUiRefresh_ = false;
@@ -902,6 +913,7 @@ private:
     bool previewLayoutInitialized_ = false;
     int workspaceCachedLeftWidth_ = 0;
     int workspaceCachedRightWidth_ = 0;
+    bool workspaceStartupBalancePending_ = true;
     QWidget* quickShellTopChromeSurfaceWidget_ = nullptr;
     QWidget* quickShellWorkspaceSurfaceWidget_ = nullptr;
     QWidget* quickShellPreviewControlsSurfaceWidget_ = nullptr;

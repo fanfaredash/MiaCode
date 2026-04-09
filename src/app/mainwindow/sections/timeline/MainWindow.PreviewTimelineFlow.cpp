@@ -1130,6 +1130,59 @@ int MainWindow::updatePreviewStatsLayoutMode(int hostWidth)
     return cardHeight;
 }
 
+int MainWindow::previewStatsMinimumHeightForPanelWidth(int panelWidth) const
+{
+    const int statsHostWidth = qMax(0, panelWidth - kPreviewPanelMarginX * 2 - 16);
+    if (previewStatsGridLayout_ == nullptr || previewStatsChips_.isEmpty()) {
+        return miacode::window_parity::computePreviewStatsLayout(statsHostWidth).minCardHeight;
+    }
+
+    const int itemCount = previewStatsChips_.size();
+    const int horizontalSpacing = qMax(0, previewStatsGridLayout_->horizontalSpacing());
+    const int verticalSpacing = qMax(0, previewStatsGridLayout_->verticalSpacing());
+    const QMargins gridMargins = previewStatsGridLayout_->contentsMargins();
+    const int chipHeight = qMax(
+        miacode::window_parity::kPreviewStatsChipHeight,
+        previewStatsChips_.constFirst() != nullptr
+            ? previewStatsChips_.constFirst()->sizeHint().height()
+            : miacode::window_parity::kPreviewStatsChipHeight
+    );
+    const QLabel* widthTemplateLabel =
+        previewTotalStatsLabel_ != nullptr ? previewTotalStatsLabel_ : previewStatsChips_.constFirst();
+    const QFontMetrics chipMetrics(widthTemplateLabel != nullptr ? widthTemplateLabel->font() : font());
+    constexpr int kPreviewStatsChipHorizontalPadding = 18;
+    const int minChipWidth =
+        chipMetrics.horizontalAdvance(QStringLiteral("Total  xxxxx/xxxxx"))
+        + kPreviewStatsChipHorizontalPadding;
+    int cols = qMin(
+        itemCount,
+        statsHostWidth >= minChipWidth * miacode::window_parity::kPreviewStatsWideLayoutCols
+                + horizontalSpacing * qMax(0, miacode::window_parity::kPreviewStatsWideLayoutCols - 1)
+            ? miacode::window_parity::kPreviewStatsWideLayoutCols
+            : miacode::window_parity::kPreviewStatsNarrowLayoutCols
+    );
+    constexpr int kMinimumAllowedStatsColumns = 2;
+    const auto availableWidthForColumns = [&](int columnCount) {
+        const int totalSpacing = horizontalSpacing * qMax(0, columnCount - 1);
+        return qMax(0, statsHostWidth - gridMargins.left() - gridMargins.right() - totalSpacing);
+    };
+    while (cols > kMinimumAllowedStatsColumns) {
+        const int availableColumnWidth = availableWidthForColumns(cols);
+        const int columnWidth = cols > 0 ? (availableColumnWidth / cols) : 0;
+        if (columnWidth >= minChipWidth) {
+            break;
+        }
+        --cols;
+    }
+    cols = qMax(1, cols);
+    const int rows = qMax(1, (itemCount + cols - 1) / cols);
+    return 16
+        + qMax(0, gridMargins.top())
+        + qMax(0, gridMargins.bottom())
+        + rows * chipHeight
+        + qMax(0, rows - 1) * verticalSpacing;
+}
+
 double MainWindow::normalizedPreviewCanvasAspectRatio(double ratio) const
 {
     if (!qIsFinite(ratio)) {
@@ -1903,24 +1956,80 @@ void MainWindow::updatePreviewWorkspaceLayout()
         : availableWidth;
     const int controlHeight = qMax(previewControlCard_->minimumSizeHint().height(), previewControlCard_->sizeHint().height());
     const double aspectRatio = normalizedPreviewCanvasAspectRatio(previewCanvasAspectRatio_);
-    const int statsHostWidth = qMax(
-        0,
-        qMax(minimumRightWidth, qMin(kEmbeddedPreviewPanelWidthMax, availableWidth)) - kPreviewPanelMarginX * 2 - 16
-    );
-    const int minimumStatsHeight = updatePreviewStatsLayoutMode(statsHostWidth);
-    int targetRightWidth = miacode::window_parity::computePreviewPanelTargetWidth(
-        availableWidth,
-        availableHeight,
-        leftMinWidth,
-        controlHeight,
-        minimumStatsHeight,
-        aspectRatio
-    );
-    targetRightWidth = qBound(minimumRightWidth, targetRightWidth, rightMaxWidth);
-    const int targetLeftWidth =
-        (availableWidth >= leftMinWidth + targetRightWidth)
-        ? qMax(leftMinWidth, availableWidth - targetRightWidth)
-        : qMax(0, availableWidth - targetRightWidth);
+    const auto resolvePreviewPanelWidth = [&](int leftFloor, int rightUpperBound) {
+        if (rightUpperBound <= 0) {
+            return 0;
+        }
+        if (availableWidth < leftFloor + minimumRightWidth) {
+            return rightUpperBound;
+        }
+        int targetWidth = qBound(
+            minimumRightWidth,
+            qMin(
+                rightUpperBound,
+                miacode::window_parity::computePreviewPanelTargetWidth(
+                    availableWidth,
+                    availableHeight,
+                    leftFloor,
+                    controlHeight,
+                    previewStatsMinimumHeightForPanelWidth(rightUpperBound),
+                    aspectRatio
+                )
+            ),
+            rightUpperBound
+        );
+        for (int iteration = 0; iteration < 4; ++iteration) {
+            const int nextWidth = qBound(
+                minimumRightWidth,
+                qMin(
+                    rightUpperBound,
+                    miacode::window_parity::computePreviewPanelTargetWidth(
+                        availableWidth,
+                        availableHeight,
+                        leftFloor,
+                        controlHeight,
+                        previewStatsMinimumHeightForPanelWidth(targetWidth),
+                        aspectRatio
+                    )
+                ),
+                rightUpperBound
+            );
+            if (nextWidth == targetWidth) {
+                break;
+            }
+            targetWidth = nextWidth;
+        }
+        return targetWidth;
+    };
+    const bool useInitialWorkspaceSplit =
+        workspaceCachedLeftWidth_ <= 0
+        || workspaceCachedRightWidth_ <= 0
+        || workspaceCachedLeftWidth_ < leftMinWidth;
+    int targetLeftWidth = 0;
+    int targetRightWidth = 0;
+    if (useInitialWorkspaceSplit) {
+        const int startupLeftFloor =
+            workspaceStartupBalancePending_
+                ? qBound(0, qMax(qBound(0, leftMinWidth, availableWidth), availableWidth / 2), availableWidth)
+                : qBound(0, leftMinWidth, availableWidth);
+        const int startupRightMaxWidth = qMax(0, availableWidth - startupLeftFloor);
+        targetLeftWidth = startupLeftFloor;
+        if (startupRightMaxWidth <= 0) {
+            targetRightWidth = 0;
+        } else if (availableWidth >= startupLeftFloor + minimumRightWidth) {
+            targetRightWidth = resolvePreviewPanelWidth(startupLeftFloor, startupRightMaxWidth);
+        } else {
+            targetRightWidth = startupRightMaxWidth;
+        }
+        targetLeftWidth = qMax(startupLeftFloor, qMax(0, availableWidth - targetRightWidth));
+    } else {
+        targetRightWidth = resolvePreviewPanelWidth(leftMinWidth, rightMaxWidth);
+        targetRightWidth = qBound(minimumRightWidth, targetRightWidth, rightMaxWidth);
+        targetLeftWidth =
+            (availableWidth >= leftMinWidth + targetRightWidth)
+                ? qMax(leftMinWidth, availableWidth - targetRightWidth)
+                : qMax(0, availableWidth - targetRightWidth);
+    }
     const QList<int> currentSizes = workspaceSplitter_->sizes();
     if (currentSizes.size() == 2
         && (qAbs(currentSizes.at(0) - targetLeftWidth) > 1 || qAbs(currentSizes.at(1) - targetRightWidth) > 1)) {
@@ -1936,10 +2045,13 @@ void MainWindow::updatePreviewWorkspaceLayout()
             );
         }
     }
+    if (useInitialWorkspaceSplit && workspaceStartupBalancePending_) {
+        workspaceStartupBalancePending_ = false;
+    }
     workspaceCachedLeftWidth_ = targetLeftWidth;
     workspaceCachedRightWidth_ = targetRightWidth;
 
-    updatePreviewPanelLayout();
+    updatePreviewPanelLayout(targetRightWidth, availableHeight);
     updateEditorFindBarGeometry();
     applyFindOverlayInset();
 }
@@ -1975,7 +2087,10 @@ void MainWindow::restoreWorkspaceLayoutSizes()
         return;
     }
     workspaceSplitter_->setSizes({workspaceCachedLeftWidth_, workspaceCachedRightWidth_});
-    updatePreviewPanelLayout();
+    updatePreviewPanelLayout(
+        workspaceCachedRightWidth_,
+        workspaceSplitter_ != nullptr ? qMax(0, workspaceSplitter_->contentsRect().height()) : -1
+    );
     updateEditorFindBarGeometry();
     applyFindOverlayInset();
 }
@@ -2112,7 +2227,7 @@ void MainWindow::refreshLayoutAfterPageSwitch()
     }
 }
 
-void MainWindow::updatePreviewPanelLayout()
+void MainWindow::updatePreviewPanelLayout(int panelWidthOverride, int panelHeightOverride)
 {
     if (isQuickShellBackendMode()) {
         if (quickShellPreviewControlsSurfaceWidget_ != nullptr) {
@@ -2132,19 +2247,50 @@ void MainWindow::updatePreviewPanelLayout()
     }
 
     const QRect panelRect = previewPanel_->contentsRect();
-    if (panelRect.width() <= 0 || panelRect.height() <= 0) {
+    const int panelWidth = panelWidthOverride > 0 ? panelWidthOverride : panelRect.width();
+    const int panelHeight = panelHeightOverride > 0 ? panelHeightOverride : panelRect.height();
+    if (panelWidth <= 0 || panelHeight <= 0) {
         return;
     }
 
     const int controlHeight = qMax(previewControlCard_->minimumSizeHint().height(), previewControlCard_->sizeHint().height());
     const double aspectRatio = normalizedPreviewCanvasAspectRatio(previewCanvasAspectRatio_);
-    const miacode::window_parity::PreviewPanelLayout layout = miacode::window_parity::computePreviewPanelLayout(
-        panelRect.width(),
-        panelRect.height(),
-        controlHeight,
-        aspectRatio
+    miacode::window_parity::PreviewPanelLayout layout;
+    const int contentX = kPreviewPanelMarginX;
+    const int contentY = kPreviewPanelMarginTop;
+    const int contentWidth = qMax(0, panelWidth - kPreviewPanelMarginX * 2);
+    const int minimumStatsHeight = previewStatsMinimumHeightForPanelWidth(panelWidth);
+    const int availablePreviewHeight = qMax(
+        0,
+        panelHeight
+            - kPreviewPanelMarginTop
+            - kPreviewCanvasControlGap
+            - qMax(0, controlHeight)
+            - kPreviewControlStatsGap
+            - minimumStatsHeight
+            - kPreviewStatsBottomGap
     );
-    updatePreviewStatsLayoutMode(layout.statsHostWidth);
+    const int previewWidth = qMax(
+        1,
+        qMin(contentWidth, qRound(static_cast<qreal>(availablePreviewHeight) * aspectRatio))
+    );
+    const int previewHeight = qMax(1, qRound(static_cast<qreal>(previewWidth) / aspectRatio));
+    const int controlY = contentY + previewHeight + kPreviewCanvasControlGap;
+    const int statsAreaY = controlY + qMax(0, controlHeight) + kPreviewControlStatsGap;
+    const int statsAreaHeight = qMax(0, panelHeight - statsAreaY - kPreviewStatsBottomGap);
+    layout.previewX = contentX + qMax(0, (contentWidth - previewWidth) / 2);
+    layout.previewY = contentY;
+    layout.previewWidth = previewWidth;
+    layout.previewHeight = previewHeight;
+    layout.controlX = contentX;
+    layout.controlY = controlY;
+    layout.controlWidth = contentWidth;
+    layout.statsX = contentX;
+    layout.statsY = statsAreaY + qMax(0, (statsAreaHeight - minimumStatsHeight) / 2);
+    layout.statsWidth = contentWidth;
+    layout.statsHeight = qMin(minimumStatsHeight, statsAreaHeight);
+    layout.statsHostWidth = qMax(0, contentWidth - 16);
+    layout.minimumStatsHeight = minimumStatsHeight;
     previewCanvasFrame_->setGeometry(layout.previewX, layout.previewY, layout.previewWidth, layout.previewHeight);
     if (!previewFullscreenActive_) {
         previewCanvasContainer_->setGeometry(previewCanvasFrame_->rect().adjusted(1, 1, -1, -1));
