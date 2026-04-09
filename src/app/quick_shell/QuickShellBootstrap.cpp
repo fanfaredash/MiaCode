@@ -19,6 +19,7 @@
 #include <QQuickWindow>
 #include <QTextStream>
 #include <QTimer>
+#include <QEventLoop>
 #include <QtQml>
 
 #ifdef Q_OS_WIN
@@ -225,6 +226,55 @@ bool QuickShellBootstrap::start()
             }
             if (controller_ != nullptr) {
                 controller_->refresh();
+            }
+            const auto warmupStartupSurfaceLayout = [this, window]() {
+                if (backend_ == nullptr || controller_ == nullptr || styleBridge_ == nullptr || window == nullptr) {
+                    return;
+                }
+                const QVariantMap metrics = styleBridge_->metrics();
+                const int topChromeHeight = qMax(0, metrics.value(QStringLiteral("topChromeHeight")).toInt());
+                const int statusHeight = qMax(0, metrics.value(QStringLiteral("statusHeight")).toInt());
+                const int handleWidth = qMax(0, metrics.value(QStringLiteral("previewSplitterHandleWidth")).toInt());
+                const int previewPaneWidth = qMax(0, qRound(window->property("previewPaneWidth").toReal()));
+                const int workspaceHeight = qMax(1, window->height() - topChromeHeight - statusHeight);
+                const int workspaceWidth = qMax(1, window->width() - handleWidth - previewPaneWidth);
+                controller_->syncWorkspaceSurfaceSize(workspaceWidth, workspaceHeight);
+
+                const int previewControlsWidth = qMax(1, previewPaneWidth - 16);
+                int previewControlsHeight = qMax(180, metrics.value(QStringLiteral("previewControlsHeight"), 180).toInt());
+                if (backend_->previewControlCard_ != nullptr) {
+                    const int controlCardHeight = qMax(
+                        backend_->previewControlCard_->minimumSizeHint().height(),
+                        backend_->previewControlCard_->sizeHint().height()
+                    );
+                    previewControlsHeight = qMax(
+                        previewControlsHeight,
+                        controlCardHeight + backend_->previewStatsMinimumHeightForPanelWidth(previewPaneWidth) + 34
+                    );
+                }
+                controller_->syncPreviewControlsSurfaceSize(previewControlsWidth, previewControlsHeight);
+                styleBridge_->refreshNow();
+                controller_->refresh();
+            };
+            for (int iteration = 0; iteration < 3; ++iteration) {
+                warmupStartupSurfaceLayout();
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+                if (styleBridge_ != nullptr) {
+                    styleBridge_->refreshNow();
+                }
+                if (controller_ != nullptr) {
+                    controller_->refresh();
+                }
+            }
+            if (window->minimumWidth() > 0 && window->width() < window->minimumWidth()) {
+                const int deltaWidth = window->minimumWidth() - window->width();
+                window->setX(window->x() - deltaWidth / 2);
+                window->setWidth(window->minimumWidth());
+            }
+            if (window->minimumHeight() > 0 && window->height() < window->minimumHeight()) {
+                const int deltaHeight = window->minimumHeight() - window->height();
+                window->setY(window->y() - deltaHeight / 2);
+                window->setHeight(window->minimumHeight());
             }
             window->setIcon(appIcon_);
 #ifdef Q_OS_WIN

@@ -2012,16 +2012,8 @@ void MainWindow::updatePreviewWorkspaceLayout()
             workspaceStartupBalancePending_
                 ? qBound(0, qMax(qBound(0, leftMinWidth, availableWidth), availableWidth / 2), availableWidth)
                 : qBound(0, leftMinWidth, availableWidth);
-        const int startupRightMaxWidth = qMax(0, availableWidth - startupLeftFloor);
         targetLeftWidth = startupLeftFloor;
-        if (startupRightMaxWidth <= 0) {
-            targetRightWidth = 0;
-        } else if (availableWidth >= startupLeftFloor + minimumRightWidth) {
-            targetRightWidth = resolvePreviewPanelWidth(startupLeftFloor, startupRightMaxWidth);
-        } else {
-            targetRightWidth = startupRightMaxWidth;
-        }
-        targetLeftWidth = qMax(startupLeftFloor, qMax(0, availableWidth - targetRightWidth));
+        targetRightWidth = qMax(0, availableWidth - targetLeftWidth);
     } else {
         targetRightWidth = resolvePreviewPanelWidth(leftMinWidth, rightMaxWidth);
         targetRightWidth = qBound(minimumRightWidth, targetRightWidth, rightMaxWidth);

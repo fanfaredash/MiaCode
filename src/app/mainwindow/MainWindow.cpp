@@ -950,10 +950,34 @@ void centerDialogOnAnchor(QDialog* dialog, QWidget* parent)
 
     QWidget* anchorWidget = parent != nullptr ? parent->window() : nullptr;
     QRect anchorRect;
-    if (anchorWidget != nullptr && anchorWidget->isVisible()) {
+    if (anchorWidget != nullptr && anchorWidget->isVisible() && !anchorWidget->windowState().testFlag(Qt::WindowMinimized)) {
         anchorRect = anchorWidget->frameGeometry();
-    } else if (anchorWidget != nullptr) {
+    } else if (anchorWidget != nullptr && anchorWidget->isVisible()) {
         anchorRect = QRect(anchorWidget->mapToGlobal(QPoint(0, 0)), anchorWidget->size());
+    }
+    if (!anchorRect.isValid()) {
+        if (QWidget* activeWidget = QApplication::activeWindow();
+            activeWidget != nullptr
+            && activeWidget != dialog
+            && activeWidget->isVisible()
+            && !activeWidget->windowState().testFlag(Qt::WindowMinimized)) {
+            anchorRect = activeWidget->frameGeometry();
+            anchorWidget = activeWidget;
+        }
+    }
+    if (!anchorRect.isValid()) {
+        const auto windows = QGuiApplication::topLevelWindows();
+        for (QWindow* window : windows) {
+            if (window == nullptr
+                || window == dialog->windowHandle()
+                || !window->isVisible()
+                || window->visibility() == QWindow::Hidden
+                || window->visibility() == QWindow::Minimized) {
+                continue;
+            }
+            anchorRect = window->frameGeometry();
+            break;
+        }
     }
     if (!anchorRect.isValid()) {
         if (QScreen* screen = QGuiApplication::primaryScreen(); screen != nullptr) {

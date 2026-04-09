@@ -208,19 +208,12 @@ void QuickShellStyleBridge::refreshFromBackend()
                         backend_->outlineDockExpandedWidth_
                     ));
         nextMetrics.insert(QStringLiteral("outlineDockWidth"), qMax(0, outlineWidth));
+        int stableLeftColumnMinWidth = 0;
+        stableLeftColumnMinWidth += qMax(0, outlineWidth);
         if (backend_->previewLeftColumn_ != nullptr) {
-            leftColumnMinWidth = qMax(leftColumnMinWidth, backend_->previewLeftColumn_->minimumWidth());
+            stableLeftColumnMinWidth += qMax(0, backend_->previewLeftColumn_->minimumWidth());
         }
-        if (backend_->quickShellWorkspaceSurfaceWidget_ != nullptr) {
-            if (QLayout* workspaceLayout = backend_->quickShellWorkspaceSurfaceWidget_->layout();
-                workspaceLayout != nullptr) {
-                workspaceLayout->activate();
-            }
-            leftColumnMinWidth = qMax(
-                leftColumnMinWidth,
-                backend_->quickShellWorkspaceSurfaceWidget_->minimumSizeHint().width()
-            );
-        }
+        leftColumnMinWidth = qMax(leftColumnMinWidth, stableLeftColumnMinWidth);
         nextMetrics.insert(QStringLiteral("leftColumnMinWidth"), leftColumnMinWidth);
 
         const int menuHeight =
