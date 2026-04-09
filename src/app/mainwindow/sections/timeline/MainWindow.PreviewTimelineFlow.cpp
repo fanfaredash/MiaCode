@@ -434,7 +434,8 @@ void MainWindow::updateWindowTitle()
     }
     const QFontMetrics metrics(font());
     const QString elided = metrics.elidedText(titleText, Qt::ElideRight, 420);
-    setWindowTitle(QString("MiaCode - %1[*]").arg(elided));
+    const bool dirty = documentDirty_ || currentFieldDirty_;
+    setWindowTitle(QString("MiaCode - %1%2").arg(elided, dirty ? QStringLiteral("[*]") : QString()));
 }
 
 void MainWindow::updateCurrentFileLabel()
