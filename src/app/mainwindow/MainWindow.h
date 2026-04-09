@@ -327,6 +327,8 @@ friend class QuickShellBootstrap;
     void applyFindOverlayInset();
     void hideFindReplaceBar();
     void updateDirtyState();
+    bool currentFieldHasUndoChanges() const;
+    void refreshCurrentFieldDirtyState();
     void markCurrentFieldDirty();
     bool undoDeletedDifficultyField();
     void clearDeletedDifficultyUndoState();

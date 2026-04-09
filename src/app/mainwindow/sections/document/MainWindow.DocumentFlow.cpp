@@ -727,6 +727,7 @@ void MainWindow::setMetadataExtraText(const QString& text)
     QSignalBlocker blocker(metadataExtraEdit_);
     metadataExtraEdit_->setPlainText(text);
     metadataExtraEdit_->document()->clearUndoRedoStacks();
+    metadataExtraEdit_->document()->setModified(false);
     applyBlockSpacingToTextEdit(metadataExtraEdit_, blockSpacingPixelsForPointSize(editorTextFontPointSize_, editorLineSpacingFactor_));
     suppressTextDirtyTracking_ = previousSuppress;
 }
@@ -741,6 +742,7 @@ void MainWindow::setEditorText(const QString& text)
     editor->setPlainText(text);
     editor->setBlockSpacingPixels(blockSpacingPixels);
     editor->document()->clearUndoRedoStacks();
+    editor->document()->setModified(false);
     // QSignalBlocker suppresses blockCountChanged, so force line-number gutter recompute.
     editor->refreshLineNumberAreaLayout();
     suppressTextDirtyTracking_ = previousSuppress;
@@ -777,12 +779,46 @@ void MainWindow::updatePauseButtonAppearance()
 void MainWindow::updateDirtyState()
 {
     setWindowModified(documentDirty_ || currentFieldDirty_);
+    updateWindowTitle();
+}
+
+bool MainWindow::currentFieldHasUndoChanges() const
+{
+    if (hasActiveDifficulty()) {
+        const bool levelDirty = difficultyLevelEdit_ != nullptr && difficultyLevelEdit_->isUndoAvailable();
+        const bool designerDirty = difficultyDesignerEdit_ != nullptr && difficultyDesignerEdit_->isUndoAvailable();
+        bool chartDirty = false;
+        if (auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
+            editor != nullptr && editor->document() != nullptr) {
+            chartDirty = editor->document()->isUndoAvailable();
+        }
+        return levelDirty || designerDirty || chartDirty;
+    }
+
+    if (activeOutlineKey_ == QLatin1String("metadata")) {
+        const bool titleDirty = titleEdit_ != nullptr && titleEdit_->isUndoAvailable();
+        const bool artistDirty = artistEdit_ != nullptr && artistEdit_->isUndoAvailable();
+        const bool firstDirty = firstEdit_ != nullptr && firstEdit_->isUndoAvailable();
+        const bool designerDirty = designerEdit_ != nullptr && designerEdit_->isUndoAvailable();
+        bool extraDirty = false;
+        if (metadataExtraEdit_ != nullptr && metadataExtraEdit_->document() != nullptr) {
+            extraDirty = metadataExtraEdit_->document()->isUndoAvailable();
+        }
+        return titleDirty || artistDirty || firstDirty || designerDirty || extraDirty;
+    }
+
+    return false;
+}
+
+void MainWindow::refreshCurrentFieldDirtyState()
+{
+    currentFieldDirty_ = currentFieldHasUndoChanges();
+    updateDirtyState();
 }
 
 void MainWindow::markCurrentFieldDirty()
 {
-    currentFieldDirty_ = true;
-    updateDirtyState();
+    refreshCurrentFieldDirtyState();
 }
 
 void MainWindow::clearDeletedDifficultyUndoState()
