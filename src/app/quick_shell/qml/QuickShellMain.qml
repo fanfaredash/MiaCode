@@ -23,6 +23,12 @@ ApplicationWindow {
     )
     property bool previewPaneUserResized: false
     property bool previewPaneStartupBalancePending: true
+    property bool startupLayoutLocked: true
+    property bool startupContentReady: false
+    property real pendingStartupLayoutWidth: 0
+    property real pendingStartupLayoutHeight: 0
+    property real startupMinimumWindowWidth: 960
+    property real startupMinimumWindowHeight: 640
 
     function metric(key, fallback) {
         return metricsMap && metricsMap[key] !== undefined ? metricsMap[key] : fallback
@@ -85,14 +91,78 @@ ApplicationWindow {
             availableWidth,
             Math.max(leftMinWidth, Math.floor(availableWidth / 2))
         )
-        const startupRightMaxWidth = Math.max(0, availableWidth - initialLeftWidth)
-        const preferredPreviewWidth = metric("previewShellWidth", startupRightMaxWidth)
-        return Math.max(0, Math.min(startupRightMaxWidth, preferredPreviewWidth))
+        return Math.max(0, availableWidth - initialLeftWidth)
+    }
+
+    function noteStartupLayoutActivity(totalWidth, totalHeight) {
+        if (!startupLayoutLocked)
+            return
+        startupMinimumWindowWidth = metric("minimumWindowWidth", 960)
+        startupMinimumWindowHeight = metric("minimumWindowHeight", 640)
+        applyWindowMinimumSize()
+        if (totalWidth > 0)
+            pendingStartupLayoutWidth = totalWidth
+        if (totalHeight > 0)
+            pendingStartupLayoutHeight = totalHeight
+        startupLayoutSettleTimer.restart()
+    }
+
+    function applyWindowMinimumSize() {
+        const nextMinimumWidth = startupLayoutLocked ? startupMinimumWindowWidth : metric("minimumWindowWidth", 960)
+        const nextMinimumHeight = startupLayoutLocked ? startupMinimumWindowHeight : metric("minimumWindowHeight", 640)
+        root.minimumWidth = nextMinimumWidth
+        root.minimumHeight = nextMinimumHeight
+        if (!root.visible) {
+            if (root.width < nextMinimumWidth) {
+                root.x -= Math.round((nextMinimumWidth - root.width) / 2)
+                root.width = nextMinimumWidth
+            }
+            if (root.height < nextMinimumHeight) {
+                root.y -= Math.round((nextMinimumHeight - root.height) / 2)
+                root.height = nextMinimumHeight
+            }
+        }
+    }
+
+    function finalizeStartupLayout() {
+        if (!startupLayoutLocked)
+            return
+        const resolvedWidth = pendingStartupLayoutWidth > 0 ? pendingStartupLayoutWidth : workspaceRow.width
+        const resolvedHeight = pendingStartupLayoutHeight > 0 ? pendingStartupLayoutHeight : workspaceRow.height
+        if (!root.visible || resolvedWidth <= 0 || resolvedHeight <= 0) {
+            startupLayoutSettleTimer.restart()
+            return
+        }
+        previewPaneUserResized = false
+        previewPaneStartupBalancePending = true
+        startupMinimumWindowWidth = metric("minimumWindowWidth", 960)
+        startupMinimumWindowHeight = metric("minimumWindowHeight", 640)
+        applyWindowMinimumSize()
+        previewPaneWidth = clampPreviewPaneWidth(
+            previewPaneInitialWidth(resolvedWidth, resolvedHeight),
+            resolvedWidth,
+            resolvedHeight
+        )
+        previewPaneStartupBalancePending = false
+        startupLayoutLocked = false
+        startupContentReady = true
+        applyWindowMinimumSize()
+        styleBridge.refreshNow()
+        controller.refresh()
     }
 
     function syncPreviewPaneWidth(totalWidth, totalHeight, preserveUserChoice) {
         if (totalWidth <= 0)
             return
+        noteStartupLayoutActivity(totalWidth, totalHeight)
+        if (startupLayoutLocked) {
+            previewPaneWidth = clampPreviewPaneWidth(
+                previewPaneInitialWidth(totalWidth, totalHeight),
+                totalWidth,
+                totalHeight
+            )
+            return
+        }
         const defaultWidth = previewPaneStartupBalancePending
             ? previewPaneInitialWidth(totalWidth, totalHeight)
             : previewPaneDefaultWidth(totalWidth, totalHeight)
@@ -119,9 +189,21 @@ ApplicationWindow {
     visible: false
     title: controller.windowTitle
     color: tone("windowBg", "#f8fafd")
-    minimumWidth: metric("minimumWindowWidth", 960)
-    minimumHeight: metric("minimumWindowHeight", 640)
-    onMetricsMapChanged: syncPreviewPaneWidth(workspaceRow.width, workspaceRow.height, true)
+    onMetricsMapChanged: {
+        applyWindowMinimumSize()
+        syncPreviewPaneWidth(workspaceRow.width, workspaceRow.height, true)
+    }
+    onVisibleChanged: {
+        if (visible)
+            noteStartupLayoutActivity(width, Math.max(1, height - metric("topChromeHeight", 106) - metric("statusHeight", 28)))
+    }
+
+    Timer {
+        id: startupLayoutSettleTimer
+        interval: 120
+        repeat: false
+        onTriggered: finalizeStartupLayout()
+    }
 
     palette.window: tone("windowBg", "#f8fafd")
     palette.base: tone("inputBg", "#ffffff")
@@ -140,8 +222,12 @@ ApplicationWindow {
             y = metric("initialWindowY", 120)
             initialGeometryApplied = true
         }
+        startupMinimumWindowWidth = metric("minimumWindowWidth", 960)
+        startupMinimumWindowHeight = metric("minimumWindowHeight", 640)
+        applyWindowMinimumSize()
         styleBridge.syncWindowSize(width, height)
         controller.refresh()
+        noteStartupLayoutActivity(width, Math.max(1, height - metric("topChromeHeight", 106) - metric("statusHeight", 28)))
     }
     onWidthChanged: styleBridge.syncWindowSize(width, height)
     onHeightChanged: styleBridge.syncWindowSize(width, height)
@@ -229,6 +315,7 @@ ApplicationWindow {
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
+        opacity: startupContentReady ? 1 : 0
 
         Item {
             Layout.fillWidth: true

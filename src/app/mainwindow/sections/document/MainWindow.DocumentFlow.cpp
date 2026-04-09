@@ -1211,7 +1211,30 @@ void MainWindow::syncEditorHeaderMinimumWidth()
     int headerMinimumWidth = 0;
     if (QLayout* headerLayout = editorHeaderWidget_->layout(); headerLayout != nullptr) {
         headerLayout->activate();
-        headerMinimumWidth = qMax(0, headerLayout->minimumSize().width());
+        const auto widgetMinimumWidth = [](const QWidget* widget) {
+            if (widget == nullptr || widget->isHidden()) {
+                return 0;
+            }
+            return qMax(widget->minimumSizeHint().width(), widget->sizeHint().width());
+        };
+        const QMargins margins = headerLayout->contentsMargins();
+        headerMinimumWidth = margins.left() + margins.right();
+        int visibleSectionCount = 0;
+        const auto addSectionWidth = [&](int width) {
+            if (width <= 0) {
+                return;
+            }
+            if (visibleSectionCount > 0) {
+                headerMinimumWidth += qMax(0, headerLayout->spacing());
+            }
+            headerMinimumWidth += width;
+            ++visibleSectionCount;
+        };
+        addSectionWidth(widgetMinimumWidth(editorContextLabel_));
+        addSectionWidth(widgetMinimumWidth(editorDifficultyControls_));
+        addSectionWidth(widgetMinimumWidth(editorValidationSummaryWidget_));
+        addSectionWidth(widgetMinimumWidth(editorCursorLabel_ != nullptr ? editorCursorLabel_->parentWidget() : nullptr));
+        headerMinimumWidth = qMax(headerMinimumWidth, margins.left() + margins.right());
         editorHeaderWidget_->setMinimumWidth(headerMinimumWidth);
     }
     editorHeaderWidget_->updateGeometry();
@@ -1224,7 +1247,7 @@ void MainWindow::syncEditorHeaderMinimumWidth()
         }
         const int nextMinimumWidth = qMax(
             baseMinimumWidth,
-            qMax(headerMinimumWidth, previewLeftColumn_->minimumSizeHint().width())
+            headerMinimumWidth
         );
         previewLeftColumn_->setMinimumWidth(nextMinimumWidth);
         previewLeftColumn_->updateGeometry();

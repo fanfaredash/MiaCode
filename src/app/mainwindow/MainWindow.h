@@ -166,8 +166,9 @@ private slots:
     void onErrorItemActivated(QListWidgetItem* item);
     void onMuriItemActivated(QListWidgetItem* item);
 private:
-    friend class QuickShellController;
-    friend class QuickShellStyleBridge;
+friend class QuickShellController;
+friend class QuickShellStyleBridge;
+friend class QuickShellBootstrap;
     friend class QuickShellBootstrap;
 
     using BatchTransform = std::function<QString(const QString&, int*)>;
