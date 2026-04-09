@@ -947,25 +947,44 @@ void centerDialogOnAnchor(QDialog* dialog, QWidget* parent)
         return;
     }
     dialog->adjustSize();
+    const bool debugDialogAnchor = miacode::debug_options::runtimeDebugOutputEnabled();
+    const auto appendDialogAnchorLog = [debugDialogAnchor](const QString& text) {
+        if (!debugDialogAnchor) {
+            return;
+        }
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("dialog/anchor"),
+            text
+        );
+    };
 
     QWidget* anchorWidget = parent != nullptr ? parent->window() : nullptr;
     QRect anchorRect;
-    if (anchorWidget != nullptr && anchorWidget->isVisible() && !anchorWidget->windowState().testFlag(Qt::WindowMinimized)) {
-        anchorRect = anchorWidget->frameGeometry();
-    } else if (anchorWidget != nullptr && anchorWidget->isVisible()) {
-        anchorRect = QRect(anchorWidget->mapToGlobal(QPoint(0, 0)), anchorWidget->size());
-    }
-    if (!anchorRect.isValid()) {
-        if (QWidget* activeWidget = QApplication::activeWindow();
-            activeWidget != nullptr
-            && activeWidget != dialog
-            && activeWidget->isVisible()
-            && !activeWidget->windowState().testFlag(Qt::WindowMinimized)) {
-            anchorRect = activeWidget->frameGeometry();
-            anchorWidget = activeWidget;
+    QScreen* targetScreen = nullptr;
+    QString anchorSource;
+    if (anchorWidget != nullptr) {
+        if (auto* mainWindow = qobject_cast<MainWindow*>(anchorWidget);
+            mainWindow != nullptr
+            && mainWindow->quickShellRootWindowFrameGeometryAvailable()) {
+            anchorRect = mainWindow->quickShellRootWindowFrameGeometry();
+            targetScreen = QGuiApplication::screenAt(anchorRect.center());
+            anchorSource = QStringLiteral("quick_shell_root_window");
         }
     }
-    if (!anchorRect.isValid()) {
+    if (anchorWidget != nullptr
+        && !anchorRect.isValid()
+        && anchorWidget->isVisible()
+        && !anchorWidget->windowState().testFlag(Qt::WindowMinimized)
+        && !anchorWidget->windowFlags().testFlag(Qt::Tool)) {
+        anchorRect = anchorWidget->frameGeometry();
+        if (anchorWidget->windowHandle() != nullptr) {
+            targetScreen = anchorWidget->windowHandle()->screen();
+        }
+        anchorSource = QStringLiteral("parent_window");
+    }
+
+    const auto tryFindTopLevelWindow = [dialog](bool requireActive, bool allowToolWindows) -> QWindow* {
         const auto windows = QGuiApplication::topLevelWindows();
         for (QWindow* window : windows) {
             if (window == nullptr
@@ -975,21 +994,80 @@ void centerDialogOnAnchor(QDialog* dialog, QWidget* parent)
                 || window->visibility() == QWindow::Minimized) {
                 continue;
             }
-            anchorRect = window->frameGeometry();
-            break;
+            const Qt::WindowFlags flags = window->flags();
+            if (!allowToolWindows && (flags.testFlag(Qt::Tool) || flags.testFlag(Qt::Popup))) {
+                continue;
+            }
+            if (requireActive && !window->isActive()) {
+                continue;
+            }
+            return window;
+        }
+        return nullptr;
+    };
+
+    if (!anchorRect.isValid()) {
+        if (QWindow* topLevelWindow = tryFindTopLevelWindow(true, false); topLevelWindow != nullptr) {
+            anchorRect = topLevelWindow->frameGeometry();
+            targetScreen = topLevelWindow->screen();
+            anchorSource = QStringLiteral("active_non_tool_qwindow");
+        }
+    }
+    if (!anchorRect.isValid()) {
+        if (QWindow* topLevelWindow = tryFindTopLevelWindow(false, false); topLevelWindow != nullptr) {
+            anchorRect = topLevelWindow->frameGeometry();
+            targetScreen = topLevelWindow->screen();
+            anchorSource = QStringLiteral("visible_non_tool_qwindow");
+        }
+    }
+    if (!anchorRect.isValid()) {
+        if (QWidget* activeWidget = QApplication::activeWindow();
+            activeWidget != nullptr
+            && activeWidget != dialog
+            && activeWidget->isVisible()
+            && !activeWidget->windowState().testFlag(Qt::WindowMinimized)
+            && !activeWidget->windowFlags().testFlag(Qt::Tool)) {
+            anchorRect = activeWidget->frameGeometry();
+            anchorWidget = activeWidget;
+            if (activeWidget->windowHandle() != nullptr) {
+                targetScreen = activeWidget->windowHandle()->screen();
+            }
+            anchorSource = QStringLiteral("active_qwidget");
+        }
+    }
+    if (!anchorRect.isValid()) {
+        if (QWindow* topLevelWindow = tryFindTopLevelWindow(false, true); topLevelWindow != nullptr) {
+            anchorRect = topLevelWindow->frameGeometry();
+            targetScreen = topLevelWindow->screen();
+            anchorSource = QStringLiteral("visible_tool_qwindow");
         }
     }
     if (!anchorRect.isValid()) {
         if (QScreen* screen = QGuiApplication::primaryScreen(); screen != nullptr) {
             anchorRect = screen->availableGeometry();
+            targetScreen = screen;
+            anchorSource = QStringLiteral("primary_screen");
         }
     }
+    appendDialogAnchorLog(
+        QString("title=%1 source=%2 rect=[%3,%4 %5x%6] parent_vis=%7 parent_title=%8")
+            .arg(dialog->windowTitle())
+            .arg(anchorSource.isEmpty() ? QStringLiteral("none") : anchorSource)
+            .arg(anchorRect.x())
+            .arg(anchorRect.y())
+            .arg(anchorRect.width())
+            .arg(anchorRect.height())
+            .arg(parent != nullptr && parent->window() != nullptr && parent->window()->isVisible() ? 1 : 0)
+            .arg(parent != nullptr && parent->window() != nullptr ? parent->window()->windowTitle() : QStringLiteral("(null)"))
+    );
     if (anchorRect.isValid()) {
         QPoint targetTopLeft(
             anchorRect.center().x() - dialog->width() / 2,
             anchorRect.center().y() - dialog->height() / 2
         );
-        QScreen* targetScreen = QGuiApplication::screenAt(anchorRect.center());
+        if (targetScreen == nullptr) {
+            targetScreen = QGuiApplication::screenAt(anchorRect.center());
+        }
         if (targetScreen == nullptr && anchorWidget != nullptr && anchorWidget->windowHandle() != nullptr) {
             targetScreen = anchorWidget->windowHandle()->screen();
         }
@@ -998,6 +1076,15 @@ void centerDialogOnAnchor(QDialog* dialog, QWidget* parent)
             targetTopLeft.setX(qBound(avail.left(), targetTopLeft.x(), avail.right() - dialog->width() + 1));
             targetTopLeft.setY(qBound(avail.top(), targetTopLeft.y(), avail.bottom() - dialog->height() + 1));
         }
+        appendDialogAnchorLog(
+            QString("title=%1 target=[%2,%3 %4x%5] screen=%6")
+                .arg(dialog->windowTitle())
+                .arg(targetTopLeft.x())
+                .arg(targetTopLeft.y())
+                .arg(dialog->width())
+                .arg(dialog->height())
+                .arg(targetScreen != nullptr ? targetScreen->name() : QStringLiteral("(null)"))
+        );
         dialog->move(targetTopLeft);
     }
 }
@@ -2260,6 +2347,16 @@ void applySystemBackdropToWidget(QWidget* widget, bool enabled, bool darkTheme)
 #endif
 
 }  // namespace
+
+bool MainWindow::quickShellRootWindowFrameGeometryAvailable() const
+{
+    return isQuickShellBackendMode() && quickShellRootWindowFrameGeometry_.isValid();
+}
+
+QRect MainWindow::quickShellRootWindowFrameGeometry() const
+{
+    return quickShellRootWindowFrameGeometry_;
+}
 
 void MainWindow::applyUiTheme()
 {

@@ -227,6 +227,7 @@
         uiText("action.preview_speed_down", "Playback Speed -"),
         this
     );
+    previewSlowerAction_ = previewSlowerAction;
     previewSlowerAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+O")));
     connect(previewSlowerAction, &QAction::triggered, this, [this]() {
         applyPreviewPlaybackRate(steppedPreviewPlaybackRate(previewPlaybackRate_, -1));
@@ -237,6 +238,7 @@
         uiText("action.preview_speed_up", "Playback Speed +"),
         this
     );
+    previewFasterAction_ = previewFasterAction;
     previewFasterAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+P")));
     connect(previewFasterAction, &QAction::triggered, this, [this]() {
         applyPreviewPlaybackRate(steppedPreviewPlaybackRate(previewPlaybackRate_, 1));

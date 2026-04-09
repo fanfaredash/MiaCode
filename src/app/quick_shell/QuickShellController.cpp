@@ -38,6 +38,23 @@ void appendQuickShellControllerLog(const QString& action, const QString& payload
     );
 }
 
+bool actionMatchesShortcut(QAction* action, const QKeySequence& sequence)
+{
+    if (action == nullptr || sequence.isEmpty()) {
+        return false;
+    }
+    QList<QKeySequence> shortcuts = action->shortcuts();
+    if (shortcuts.isEmpty() && !action->shortcut().isEmpty()) {
+        shortcuts.append(action->shortcut());
+    }
+    for (const QKeySequence& shortcut : shortcuts) {
+        if (!shortcut.isEmpty() && shortcut == sequence) {
+            return true;
+        }
+    }
+    return false;
+}
+
 }  // namespace
 
 QuickShellController::QuickShellController(MainWindow* backend, QObject* parent)
@@ -311,6 +328,96 @@ void QuickShellController::syncStatusSurfaceSize(int width, int height)
             .arg(nextSize.height())
             .arg(static_cast<quintptr>(backend_->quickShellStatusSurfaceWidget_->winId()), 0, 16)
     );
+}
+
+bool QuickShellController::hasShortcut(const QKeySequence& sequence) const
+{
+    if (backend_ == nullptr || sequence.isEmpty()) {
+        return false;
+    }
+    const QList<QAction*> actions{
+        backend_->newAction_,
+        backend_->openAction_,
+        backend_->saveAction_,
+        backend_->saveAsAction_,
+        backend_->findReplaceAction_,
+        backend_->validateAction_,
+        backend_->transformMirrorLeftRightAction_,
+        backend_->transformMirrorUpDownAction_,
+        backend_->transformRotate180Action_,
+        backend_->transformRotate45CounterClockwiseAction_,
+        backend_->transformRotate45ClockwiseAction_,
+        backend_->normalizeWholeChartAction_,
+        backend_->transformToggleBreakAction_,
+        backend_->transformToggleExAction_,
+        backend_->transformToggleFireworkAction_,
+        backend_->transformRandomRotateAction_,
+        backend_->stopPreviewAction_,
+        backend_->pausePreviewAction_,
+        backend_->previewSlowerAction_,
+        backend_->previewFasterAction_,
+        backend_->exportVideoAction_,
+        backend_->latencyDetectorAction_,
+        backend_->previewAudioSettingsAction_,
+        backend_->previewVideoSettingsAction_,
+        backend_->swapWorkspaceSidesAction_,
+        backend_->preferencesAction_,
+        backend_->aboutAction_,
+    };
+    for (QAction* action : actions) {
+        if (actionMatchesShortcut(action, sequence)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool QuickShellController::triggerShortcut(const QKeySequence& sequence)
+{
+    if (backend_ == nullptr || sequence.isEmpty()) {
+        return false;
+    }
+    const QList<QAction*> actions{
+        backend_->newAction_,
+        backend_->openAction_,
+        backend_->saveAction_,
+        backend_->saveAsAction_,
+        backend_->findReplaceAction_,
+        backend_->validateAction_,
+        backend_->transformMirrorLeftRightAction_,
+        backend_->transformMirrorUpDownAction_,
+        backend_->transformRotate180Action_,
+        backend_->transformRotate45CounterClockwiseAction_,
+        backend_->transformRotate45ClockwiseAction_,
+        backend_->normalizeWholeChartAction_,
+        backend_->transformToggleBreakAction_,
+        backend_->transformToggleExAction_,
+        backend_->transformToggleFireworkAction_,
+        backend_->transformRandomRotateAction_,
+        backend_->stopPreviewAction_,
+        backend_->pausePreviewAction_,
+        backend_->previewSlowerAction_,
+        backend_->previewFasterAction_,
+        backend_->exportVideoAction_,
+        backend_->latencyDetectorAction_,
+        backend_->previewAudioSettingsAction_,
+        backend_->previewVideoSettingsAction_,
+        backend_->swapWorkspaceSidesAction_,
+        backend_->preferencesAction_,
+        backend_->aboutAction_,
+    };
+    for (QAction* action : actions) {
+        if (!actionMatchesShortcut(action, sequence)) {
+            continue;
+        }
+        if (!action->isEnabled()) {
+            return true;
+        }
+        action->trigger();
+        refreshFromBackend();
+        return true;
+    }
+    return false;
 }
 
 QWindow* QuickShellController::createForeignWindowForSurface(QWidget* surface) const

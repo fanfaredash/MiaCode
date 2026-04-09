@@ -119,6 +119,8 @@ public:
         QString* errorMessage,
         QString* details = nullptr
     );
+    bool quickShellRootWindowFrameGeometryAvailable() const;
+    QRect quickShellRootWindowFrameGeometry() const;
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -648,6 +650,8 @@ friend class QuickShellBootstrap;
     QAction* findReplaceAction_ = nullptr;
     QAction* stopPreviewAction_ = nullptr;
     QAction* pausePreviewAction_ = nullptr;
+    QAction* previewSlowerAction_ = nullptr;
+    QAction* previewFasterAction_ = nullptr;
     QAction* exportVideoAction_ = nullptr;
     QAction* latencyDetectorAction_ = nullptr;
     QAction* toggleJudgeMarkersAction_ = nullptr;
@@ -917,6 +921,7 @@ friend class QuickShellBootstrap;
     int workspaceCachedLeftWidth_ = 0;
     int workspaceCachedRightWidth_ = 0;
     bool workspaceStartupBalancePending_ = true;
+    QRect quickShellRootWindowFrameGeometry_;
     QWidget* quickShellTopChromeSurfaceWidget_ = nullptr;
     QWidget* quickShellWorkspaceSurfaceWidget_ = nullptr;
     QWidget* quickShellPreviewControlsSurfaceWidget_ = nullptr;
