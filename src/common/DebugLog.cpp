@@ -11,6 +11,14 @@
 #include <QMutexLocker>
 #include <QTextStream>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#elif defined(Q_OS_MAC)
+#include <mach-o/dyld.h>
+#elif defined(Q_OS_UNIX)
+#include <unistd.h>
+#endif
+
 namespace miacode::debug_log {
 namespace {
 
@@ -129,6 +137,50 @@ void ensureParentDirectory(const QString& path)
     }
 }
 
+QString executableDirectoryPath()
+{
+    if (QCoreApplication::instance() != nullptr) {
+        const QString appDir = QCoreApplication::applicationDirPath().trimmed();
+        if (!appDir.isEmpty()) {
+            return QDir::cleanPath(appDir);
+        }
+    }
+
+#ifdef Q_OS_WIN
+    wchar_t modulePath[MAX_PATH] = {};
+    const DWORD pathLength = ::GetModuleFileNameW(nullptr, modulePath, MAX_PATH);
+    if (pathLength > 0 && pathLength < MAX_PATH) {
+        return QFileInfo(QString::fromWCharArray(modulePath, pathLength)).absolutePath();
+    }
+#elif defined(Q_OS_MAC)
+    uint32_t size = 0;
+    if (_NSGetExecutablePath(nullptr, &size) == -1 && size > 0) {
+        QByteArray buffer(static_cast<int>(size), '\0');
+        if (_NSGetExecutablePath(buffer.data(), &size) == 0) {
+            return QFileInfo(QString::fromLocal8Bit(buffer.constData())).absolutePath();
+        }
+    }
+#elif defined(Q_OS_UNIX)
+    QByteArray buffer(4096, '\0');
+    const ssize_t pathLength = ::readlink("/proc/self/exe", buffer.data(), static_cast<size_t>(buffer.size() - 1));
+    if (pathLength > 0) {
+        buffer[static_cast<int>(pathLength)] = '\0';
+        return QFileInfo(QString::fromLocal8Bit(buffer.constData())).absolutePath();
+    }
+#endif
+
+    return QString();
+}
+
+QString defaultDebugLogDirectory()
+{
+    const QString executableDir = executableDirectoryPath();
+    if (executableDir.isEmpty()) {
+        return QString();
+    }
+    return QDir(executableDir).filePath(QStringLiteral("logs"));
+}
+
 }  // namespace
 
 QString timestampString()
@@ -142,6 +194,14 @@ QString logDirectory()
     if (!envDir.isEmpty()) {
         return QDir::cleanPath(envDir);
     }
+
+    if (miacode::debug_options::debugModeEnabled()) {
+        const QString appDebugDir = defaultDebugLogDirectory();
+        if (!appDebugDir.isEmpty()) {
+            return QDir::cleanPath(appDebugDir);
+        }
+    }
+
     return QDir::tempPath();
 }
 

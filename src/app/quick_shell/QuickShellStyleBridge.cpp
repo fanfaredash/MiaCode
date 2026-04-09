@@ -154,6 +154,7 @@ void QuickShellStyleBridge::refreshFromBackend()
     int initialWindowX = 120;
     int initialWindowY = 120;
     int previewPanelMinWidth = miacode::window_parity::kEmbeddedPreviewPanelMinWidth;
+    int leftColumnMinWidth = 320;
     if (QScreen* screen = QApplication::primaryScreen(); screen != nullptr) {
         const QRect workArea = screen->availableGeometry();
         initialWindowWidth = qMin(
@@ -175,7 +176,7 @@ void QuickShellStyleBridge::refreshFromBackend()
         {QStringLiteral("initialWindowY"), initialWindowY},
         {QStringLiteral("minimumWindowWidth"), miacode::window_parity::kInitialWindowFloorWidth},
         {QStringLiteral("minimumWindowHeight"), miacode::window_parity::kInitialWindowFloorHeight},
-        {QStringLiteral("leftColumnMinWidth"), 320},
+        {QStringLiteral("leftColumnMinWidth"), leftColumnMinWidth},
         {QStringLiteral("outlineDockWidth"), miacode::window_parity::kOutlineExpandedDefaultWidth},
         {QStringLiteral("topChromeHeight"), 78},
         {QStringLiteral("statusHeight"), 28},
@@ -207,6 +208,20 @@ void QuickShellStyleBridge::refreshFromBackend()
                         backend_->outlineDockExpandedWidth_
                     ));
         nextMetrics.insert(QStringLiteral("outlineDockWidth"), qMax(0, outlineWidth));
+        if (backend_->previewLeftColumn_ != nullptr) {
+            leftColumnMinWidth = qMax(leftColumnMinWidth, backend_->previewLeftColumn_->minimumWidth());
+        }
+        if (backend_->quickShellWorkspaceSurfaceWidget_ != nullptr) {
+            if (QLayout* workspaceLayout = backend_->quickShellWorkspaceSurfaceWidget_->layout();
+                workspaceLayout != nullptr) {
+                workspaceLayout->activate();
+            }
+            leftColumnMinWidth = qMax(
+                leftColumnMinWidth,
+                backend_->quickShellWorkspaceSurfaceWidget_->minimumSizeHint().width()
+            );
+        }
+        nextMetrics.insert(QStringLiteral("leftColumnMinWidth"), leftColumnMinWidth);
 
         const int menuHeight =
             backend_->menuBar() != nullptr ? qMax(24, backend_->menuBar()->sizeHint().height()) : 30;
@@ -252,6 +267,16 @@ void QuickShellStyleBridge::refreshFromBackend()
         }
     }
 
+    nextMetrics.insert(
+        QStringLiteral("minimumWindowWidth"),
+        qMax(
+            miacode::window_parity::kInitialWindowFloorWidth,
+            leftColumnMinWidth
+                + nextMetrics.value(QStringLiteral("previewSplitterHandleWidth")).toInt()
+                + previewPanelMinWidth
+        )
+    );
+
     if (backend_ != nullptr) {
         const int availableWidth = qMax(0, backend_->width());
         const int availableHeight = qMax(
@@ -261,13 +286,11 @@ void QuickShellStyleBridge::refreshFromBackend()
                 - nextMetrics.value(QStringLiteral("statusHeight")).toInt()
         );
         const int controlHeight = nextMetrics.value(QStringLiteral("previewControlsHeight")).toInt();
-        const int minimumStatsHeight = miacode::window_parity::computePreviewStatsLayout(320).minCardHeight;
-        const int shellWidth = miacode::window_parity::computePreviewPanelTargetWidth(
+        const int shellWidth = miacode::window_parity::computePreviewPanelTargetWidthForAdaptiveStats(
             availableWidth,
             availableHeight,
-            320,
+            leftColumnMinWidth,
             controlHeight,
-            minimumStatsHeight,
             backend_->normalizedPreviewCanvasAspectRatio(backend_->previewCanvasAspectRatio_)
         );
         nextMetrics.insert(

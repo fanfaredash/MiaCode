@@ -28,6 +28,50 @@ bool MainWindow::previewUsesStageMediaHostRoute() const
     return previewStageMediaRoute() == PreviewStageMediaRoute::QuickShellStageHost;
 }
 
+bool MainWindow::shouldDeferQuickShellStartupStageMediaLoad() const
+{
+    return previewUsesStageMediaHostRoute() && quickShellStartupStageMediaLoadDeferred_;
+}
+
+void MainWindow::noteQuickShellStartupUiReady()
+{
+    if (!previewUsesStageMediaHostRoute()) {
+        return;
+    }
+    quickShellStartupUiReady_ = true;
+    scheduleDeferredQuickShellStartupStageMediaLoadIfReady();
+}
+
+void MainWindow::scheduleDeferredQuickShellStartupStageMediaLoadIfReady()
+{
+    if (!shouldDeferQuickShellStartupStageMediaLoad()
+        || !quickShellStartupUiReady_
+        || startupRestorePending_
+        || deferredQuickShellStartupStageMediaFlushScheduled_) {
+        return;
+    }
+
+    deferredQuickShellStartupStageMediaFlushScheduled_ = true;
+    QTimer::singleShot(0, this, [this]() {
+        deferredQuickShellStartupStageMediaFlushScheduled_ = false;
+        if (!shouldDeferQuickShellStartupStageMediaLoad()
+            || !quickShellStartupUiReady_
+            || startupRestorePending_) {
+            return;
+        }
+
+        quickShellStartupStageMediaLoadDeferred_ = false;
+        if (!deferredQuickShellStartupStageMediaPending_ || previewStageMediaHost_ == nullptr) {
+            return;
+        }
+
+        deferredQuickShellStartupStageMediaPending_ = false;
+        previewStageMediaHost_->setChartPath(deferredQuickShellStartupStageMediaChartPath_);
+        previewStageMediaHost_->setPlayheadSeconds(deferredQuickShellStartupStageMediaPausedSecond_);
+        refreshPreviewStageMediaRouteDebugState(false);
+    });
+}
+
 void MainWindow::updatePreviewStageMediaPresentationMode(bool requestUpdate)
 {
     if (previewCanvas_ == nullptr) {
@@ -69,8 +113,14 @@ void MainWindow::syncPreviewStageMediaRouteChartPath(
         break;
     case PreviewStageMediaRoute::QuickShellStageHost:
         ensurePreviewStageMediaHostInitialized();
-        previewStageMediaHost_->setChartPath(chartPath);
-        previewStageMediaHost_->setPlayheadSeconds(clampedPausedSecond);
+        deferredQuickShellStartupStageMediaChartPath_ = chartPath;
+        deferredQuickShellStartupStageMediaPausedSecond_ = clampedPausedSecond;
+        deferredQuickShellStartupStageMediaPending_ = true;
+        if (!shouldDeferQuickShellStartupStageMediaLoad()) {
+            deferredQuickShellStartupStageMediaPending_ = false;
+            previewStageMediaHost_->setChartPath(chartPath);
+            previewStageMediaHost_->setPlayheadSeconds(clampedPausedSecond);
+        }
         break;
     }
 
@@ -91,6 +141,9 @@ void MainWindow::clearPreviewStageMediaRoute()
         }
         break;
     case PreviewStageMediaRoute::QuickShellStageHost:
+        deferredQuickShellStartupStageMediaPending_ = false;
+        deferredQuickShellStartupStageMediaChartPath_.clear();
+        deferredQuickShellStartupStageMediaPausedSecond_ = 0.0;
         if (previewStageMediaHost_ != nullptr) {
             previewStageMediaHost_->setChartPath(QString());
         }
@@ -117,7 +170,12 @@ void MainWindow::applyPreviewMediaWarmupToStageMediaRoute(
     case PreviewStageMediaRoute::QuickShellStageHost:
         ensurePreviewStageMediaHostInitialized();
         previewStageMediaHost_->setWarmupResolvedMediaPath(chartPath, resolvedMediaPath);
-        previewStageMediaHost_->setChartPath(chartPath);
+        deferredQuickShellStartupStageMediaChartPath_ = chartPath;
+        deferredQuickShellStartupStageMediaPending_ = true;
+        if (!shouldDeferQuickShellStartupStageMediaLoad()) {
+            deferredQuickShellStartupStageMediaPending_ = false;
+            previewStageMediaHost_->setChartPath(chartPath);
+        }
         break;
     }
 
@@ -314,8 +372,14 @@ void MainWindow::ensurePreviewStageMediaHostInitialized()
         refreshPreviewStageMediaRouteDebugState(!qtPreviewPlaying_);
     });
     previewStageMediaHost_->setWarmupResolvedMediaPath(previewMediaWarmupChartPath_, previewMediaWarmupResolvedPath_);
-    previewStageMediaHost_->setChartPath(currentFilePath_);
-    previewStageMediaHost_->setPlayheadSeconds(qtPreviewPauseSecond_);
+    deferredQuickShellStartupStageMediaChartPath_ = currentFilePath_;
+    deferredQuickShellStartupStageMediaPausedSecond_ = qMax(0.0, qtPreviewPauseSecond_);
+    deferredQuickShellStartupStageMediaPending_ = !currentFilePath_.isEmpty();
+    if (!shouldDeferQuickShellStartupStageMediaLoad()) {
+        deferredQuickShellStartupStageMediaPending_ = false;
+        previewStageMediaHost_->setChartPath(currentFilePath_);
+        previewStageMediaHost_->setPlayheadSeconds(qtPreviewPauseSecond_);
+    }
     refreshPreviewStageMediaRouteDebugState(false);
 }
 

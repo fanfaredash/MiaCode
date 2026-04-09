@@ -361,6 +361,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     configureRuntimeDebugOutput();
     logStartupStage("configure_runtime_debug_output");
     if (isQuickShellBackendMode()) {
+        quickShellStartupStageMediaLoadDeferred_ = true;
         setAttribute(Qt::WA_NativeWindow);
         winId();
     }
@@ -477,7 +478,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     central->setAttribute(Qt::WA_StyledBackground, true);
     central->setStyleSheet(UiTheme::editorShellStyleSheet());
     auto* centralLayout = new QVBoxLayout(central);
-    centralLayout->setContentsMargins(0, 4, 0, 0);
+    centralLayout->setContentsMargins(0, 0, 0, 0);
     centralLayout->setSpacing(0);
 
     auto* editorHeader = new QFrame(central);
@@ -522,7 +523,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     auto* difficultyDesignerLineEdit = new LeftPlaceholderLineEdit(editorDifficultyControls_);
     difficultyDesignerLineEdit->setLeftPlaceholderText("&des_n=");
     difficultyDesignerEdit_ = difficultyDesignerLineEdit;
-    difficultyDesignerEdit_->setFixedWidth(105);
+    difficultyDesignerEdit_->setFixedWidth(96);
     difficultyDesignerEdit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     difficultyDesignerEdit_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     editorDifficultyLayout->addWidget(difficultyLevelLabel);
@@ -533,17 +534,16 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     editorDifficultyControls_->hide();
     editorHeaderLayout->addWidget(editorDifficultyControls_, 0);
 
-    editorHeaderLayout->addStretch(1);
-
-    auto* editorHeaderTrailingWidget = new QWidget(editorHeader);
-    auto* editorHeaderTrailingLayout = new QHBoxLayout(editorHeaderTrailingWidget);
-    editorHeaderTrailingLayout->setContentsMargins(0, 0, 0, 0);
-    editorHeaderTrailingLayout->setSpacing(16);
-
-    editorValidationSummaryWidget_ = new QWidget(editorHeaderTrailingWidget);
+    editorValidationSummaryWidget_ = new QWidget(editorHeader);
     auto* editorValidationSummaryLayout = new QHBoxLayout(editorValidationSummaryWidget_);
     editorValidationSummaryLayout->setContentsMargins(0, 0, 0, 0);
     editorValidationSummaryLayout->setSpacing(8);
+    constexpr int kEditorValidationSummaryEdgeGap = 4;
+    auto* editorValidationSummaryLeadingGap = new QWidget(editorValidationSummaryWidget_);
+    editorValidationSummaryLeadingGap->setFixedWidth(kEditorValidationSummaryEdgeGap);
+    editorValidationSummaryLeadingGap->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    const int summaryCountReserveWidth =
+        QFontMetrics(uiMonoFont(10, QFont::DemiBold)).horizontalAdvance(QStringLiteral("999"));
 
     auto* editorValidationErrorGroup = new QWidget(editorValidationSummaryWidget_);
     auto* editorValidationErrorLayout = new QHBoxLayout(editorValidationErrorGroup);
@@ -553,8 +553,12 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     editorValidationErrorIconLabel_->setFixedSize(14, 14);
     editorValidationErrorCountLabel_ = new QLabel(QStringLiteral("0"), editorValidationErrorGroup);
     editorValidationErrorCountLabel_->setFont(uiMonoFont(10, QFont::DemiBold));
+    editorValidationErrorCountLabel_->setFixedWidth(summaryCountReserveWidth);
+    editorValidationErrorCountLabel_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     editorValidationErrorLayout->addWidget(editorValidationErrorIconLabel_, 0, Qt::AlignVCenter);
     editorValidationErrorLayout->addWidget(editorValidationErrorCountLabel_, 0, Qt::AlignVCenter);
+    editorValidationErrorGroup->setFixedWidth(14 + 6 + summaryCountReserveWidth);
+    editorValidationErrorGroup->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
     auto* editorValidationWarningGroup = new QWidget(editorValidationSummaryWidget_);
     auto* editorValidationWarningLayout = new QHBoxLayout(editorValidationWarningGroup);
@@ -564,8 +568,12 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     editorValidationWarningIconLabel_->setFixedSize(14, 14);
     editorValidationWarningCountLabel_ = new QLabel(QStringLiteral("0"), editorValidationWarningGroup);
     editorValidationWarningCountLabel_->setFont(uiMonoFont(10, QFont::DemiBold));
+    editorValidationWarningCountLabel_->setFixedWidth(summaryCountReserveWidth);
+    editorValidationWarningCountLabel_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     editorValidationWarningLayout->addWidget(editorValidationWarningIconLabel_, 0, Qt::AlignVCenter);
     editorValidationWarningLayout->addWidget(editorValidationWarningCountLabel_, 0, Qt::AlignVCenter);
+    editorValidationWarningGroup->setFixedWidth(14 + 3 + summaryCountReserveWidth);
+    editorValidationWarningGroup->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
     auto* editorValidationMuriGroup = new QWidget(editorValidationSummaryWidget_);
     auto* editorValidationMuriLayout = new QHBoxLayout(editorValidationMuriGroup);
@@ -575,15 +583,32 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     editorValidationMuriIconLabel_->setFixedSize(14, 14);
     editorValidationMuriCountLabel_ = new QLabel(QStringLiteral("0"), editorValidationMuriGroup);
     editorValidationMuriCountLabel_->setFont(uiMonoFont(10, QFont::DemiBold));
+    editorValidationMuriCountLabel_->setFixedWidth(summaryCountReserveWidth);
+    editorValidationMuriCountLabel_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     editorValidationMuriLayout->addWidget(editorValidationMuriIconLabel_, 0, Qt::AlignVCenter);
     editorValidationMuriLayout->addWidget(editorValidationMuriCountLabel_, 0, Qt::AlignVCenter);
+    editorValidationMuriGroup->setFixedWidth(14 + 4 + summaryCountReserveWidth);
+    editorValidationMuriGroup->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
-    editorValidationSummaryLayout->addWidget(editorValidationErrorGroup, 0, Qt::AlignVCenter);
-    editorValidationSummaryLayout->addWidget(editorValidationWarningGroup, 0, Qt::AlignVCenter);
+    auto* editorValidationSummaryTrailingGap = new QWidget(editorValidationSummaryWidget_);
+    editorValidationSummaryTrailingGap->setFixedWidth(kEditorValidationSummaryEdgeGap);
+    editorValidationSummaryTrailingGap->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+
+    editorValidationSummaryLayout->addWidget(editorValidationSummaryLeadingGap, 0, Qt::AlignVCenter);
     editorValidationSummaryLayout->addWidget(editorValidationMuriGroup, 0, Qt::AlignVCenter);
-    editorValidationSummaryWidget_->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    editorValidationSummaryLayout->addWidget(editorValidationWarningGroup, 0, Qt::AlignVCenter);
+    editorValidationSummaryLayout->addWidget(editorValidationErrorGroup, 0, Qt::AlignVCenter);
+    editorValidationSummaryLayout->addWidget(editorValidationSummaryTrailingGap, 0, Qt::AlignVCenter);
+    editorValidationSummaryWidget_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     editorValidationSummaryWidget_->hide();
-    editorHeaderTrailingLayout->addWidget(editorValidationSummaryWidget_, 0, Qt::AlignRight);
+    editorHeaderLayout->addWidget(editorValidationSummaryWidget_, 0, Qt::AlignLeft);
+
+    editorHeaderLayout->addStretch(1);
+
+    auto* editorHeaderTrailingWidget = new QWidget(editorHeader);
+    auto* editorHeaderTrailingLayout = new QHBoxLayout(editorHeaderTrailingWidget);
+    editorHeaderTrailingLayout->setContentsMargins(0, 0, 0, 0);
+    editorHeaderTrailingLayout->setSpacing(16);
 
     editorCursorLabel_ = new QLabel(
         UiText::isChineseUi() ? QStringLiteral("1行 1列") : QStringLiteral("Ln 1, Col 1"),
@@ -1447,6 +1472,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
 
     previewLeftColumn_ = new QWidget(this);
     previewLeftColumn_->setMinimumWidth(320);
+    previewLeftColumn_->setProperty("baseMinimumWidth", previewLeftColumn_->minimumWidth());
     previewLeftColumn_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
     auto* leftColumnLayout = new QVBoxLayout(previewLeftColumn_);
     leftColumnLayout->setContentsMargins(0, 0, 0, 0);
@@ -1466,6 +1492,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
         handle->hide();
     }
     setCentralWidget(workspaceSplitter_);
+    syncEditorHeaderMinimumWidth();
     applyWorkspacePanelArrangement();
     updatePreviewWorkspaceLayout();
     logStartupStage("workspace_and_central_widget_ready");
@@ -1560,6 +1587,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     exportVideoHoverMenuTimer_->setSingleShot(true);
     exportVideoHoverMenuTimer_->setInterval(250);
     connect(exportVideoHoverMenuTimer_, &QTimer::timeout, this, &MainWindow::showExportToolbarMenu);
+    statusBar()->setSizeGripEnabled(false);
     statusBar()->addPermanentWidget(new QLabel("Current File:", this));
     currentFileLabel_ = new QLabel(this);
     statusBar()->addPermanentWidget(currentFileLabel_, 1);
@@ -1859,7 +1887,6 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     statusBar()->showMessage("PlainCodeEditor ready.");
 
     loadPortableState();
-    scheduleStartupRestoreLastSessionFile();
     applyWorkspacePanelArrangement();
     logStartupStage("portable_state_loaded");
     if (runtimeDebugOutputEnabled_) {
@@ -1891,8 +1918,13 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     applyMuriRenderOptions();
     applyUiTheme();
     updatePauseButtonAppearance();
-    loadDocument(SimaiDocument::createEmpty());
-    logStartupStage("initial_empty_document_applied");
+    const bool restoredStartupDocument = restoreLastSessionFile();
+    if (!restoredStartupDocument) {
+        loadDocument(SimaiDocument::createEmpty());
+        logStartupStage("initial_empty_document_applied");
+    } else {
+        logStartupStage("initial_last_session_document_applied");
+    }
     updatePreviewSliderRange();
     updatePreviewSliderPosition(0.0);
     logStartupStage("initial_document_loaded");

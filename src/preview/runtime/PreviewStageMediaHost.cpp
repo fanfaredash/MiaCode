@@ -206,7 +206,6 @@ void PreviewStageMediaHost::setPlaybackRate(double rate)
 {
     playbackRate_ = qMax(0.05, rate);
 #ifdef HAVE_QT_MULTIMEDIA
-    initializeBackendObjects();
     if (player_ != nullptr) {
         player_->setPlaybackRate(static_cast<qreal>(playbackRate_));
     }

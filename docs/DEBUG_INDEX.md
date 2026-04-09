@@ -18,7 +18,8 @@ Default directory order:
 
 1. channel-specific override path
 2. `MIACODE_LOG_DIR`
-3. system temp directory
+3. app-local `logs/` next to `MiaCode.exe` while `--debug` is active
+4. system temp directory
 
 Default filenames:
 
@@ -111,6 +112,11 @@ Startup default:
 - Use `MIACODE_PREVIEW_DISABLE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS=1` only for regression A/B.
 - The old debug-only enable snippet `MIACODE_PREVIEW_DONT_CREATE_NATIVE_WIDGET_SIBLINGS=1` is now redundant because the workaround is already on by default.
 
+Retired from the main app:
+
+- The old native-dialog WinEvent hook and related `window/native*` investigation traces are no longer built into `MiaCode.exe`.
+- If Windows dialog investigation needs to return, it must live in a separate dev-only tool and must not ship in the release `dist/` package.
+
 Retired with the old preview renderer and not recommended anymore:
 
 - `MIACODE_ENABLE_PYGAME_PREVIEW`
@@ -119,11 +125,15 @@ Retired with the old preview renderer and not recommended anymore:
 
 ## Useful Workflows
 
-Launch the app in debug mode:
+Launch the default Quick Shell app in debug mode:
 
 - `MiaCode.exe --debug`
 
-Launch the Qt Quick hybrid host in debug mode:
+Launch the legacy Qt native widget shell in debug mode:
+
+- `MiaCode.exe --qt-native --debug`
+
+Launch the Qt Quick hybrid host explicitly in debug mode:
 
 - `MiaCode.exe --quick-shell-beta --debug`
 

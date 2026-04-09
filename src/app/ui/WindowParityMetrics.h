@@ -101,17 +101,6 @@ struct PreviewPanelLayout {
     int minimumStatsHeight = 0;
 };
 
-struct EditorHeaderLayoutMode {
-    bool showLevelControls = true;
-    bool showDesignerControls = true;
-    bool showSummary = false;
-    bool showSummaryCounts = false;
-    bool showCursor = false;
-    bool compactCursor = false;
-    int levelWidth = 48;
-    int designerWidth = 105;
-};
-
 PreviewStatsLayout computePreviewStatsLayout(
     int hostWidth,
     int itemCount = 6,
@@ -131,17 +120,19 @@ int computePreviewPanelTargetWidth(
     double aspectRatio
 );
 
+int computePreviewPanelTargetWidthForAdaptiveStats(
+    int availableWidth,
+    int availableHeight,
+    int leftMinWidth,
+    int controlHeight,
+    double aspectRatio
+);
+
 PreviewPanelLayout computePreviewPanelLayout(
     int panelWidth,
     int panelHeight,
     int controlHeight,
     double aspectRatio
-);
-
-EditorHeaderLayoutMode computeEditorHeaderLayoutMode(
-    int headerWidth,
-    bool summaryHasContent,
-    int summaryExtraWidth
 );
 
 int computeBottomTabsDeviceHeight(int timelineHeight, int tabBarHeight, int frameWidth);

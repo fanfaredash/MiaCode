@@ -98,6 +98,9 @@ inline void buildTimeline(
                 addEvent(marker.endSecond, QStringLiteral("firework"));
             }
             if (marker.endSecond > marker.second) {
+                addEvent(marker.endSecond, QStringLiteral("answer"));
+            }
+            if (marker.endSecond > marker.second) {
                 TouchholdSpan span;
                 span.startSecond = marker.second;
                 span.endSecond = marker.endSecond;
