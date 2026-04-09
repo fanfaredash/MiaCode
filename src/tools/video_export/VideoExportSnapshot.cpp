@@ -188,6 +188,10 @@ QJsonObject VideoExportSnapshot::toJson() const
         muriRenderOptions.showChartReviewSimpleJudgeOverlay
     );
     render.insert(QStringLiteral("wifi_need_c"), muriRenderOptions.wifiNeedC);
+    render.insert(
+        QStringLiteral("exclude_touch_from_multi_touch"),
+        muriRenderOptions.excludeTouchFromMultiTouch
+    );
     render.insert(QStringLiteral("static_tap_on_slide_threshold_seconds"), staticTapOnSlideThresholdSeconds);
     render.insert(QStringLiteral("show_timestamp"), showTimestamp);
     render.insert(QStringLiteral("show_object_stats_hud"), showObjectStatsHud);
@@ -277,6 +281,9 @@ bool VideoExportSnapshot::fromJson(
             .toBool(parsed.muriRenderOptions.showChartReviewSimpleJudgeOverlay);
     parsed.muriRenderOptions.wifiNeedC =
         render.value(QStringLiteral("wifi_need_c")).toBool(parsed.muriRenderOptions.wifiNeedC);
+    parsed.muriRenderOptions.excludeTouchFromMultiTouch =
+        render.value(QStringLiteral("exclude_touch_from_multi_touch"))
+            .toBool(parsed.muriRenderOptions.excludeTouchFromMultiTouch);
     parsed.staticTapOnSlideThresholdSeconds =
         render.value(QStringLiteral("static_tap_on_slide_threshold_seconds"))
             .toDouble(parsed.staticTapOnSlideThresholdSeconds);
