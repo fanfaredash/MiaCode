@@ -4606,6 +4606,10 @@ void MainWindow::loadProjectRenderState()
                     if (render.value("wifi_need_c").isBool()) {
                         muriRenderOptions_.wifiNeedC = render.value("wifi_need_c").toBool(muriRenderOptions_.wifiNeedC);
                     }
+                    if (render.value("exclude_touch_from_multi_touch").isBool()) {
+                        muriRenderOptions_.excludeTouchFromMultiTouch = render.value("exclude_touch_from_multi_touch")
+                            .toBool(muriRenderOptions_.excludeTouchFromMultiTouch);
+                    }
                     showJudgeMarkers_ = false;
                     showTouchTrail_ = false;
                     if (render.value("canvas_frame_rate_mode").isString()) {
@@ -4711,6 +4715,7 @@ void MainWindow::saveProjectRenderState() const
     render.insert("show_chart_review_slide_judge_overlay", muriRenderOptions_.showChartReviewSlideJudgeOverlay);
     render.insert("show_chart_review_simple_judge_overlay", muriRenderOptions_.showChartReviewSimpleJudgeOverlay);
     render.insert("wifi_need_c", muriRenderOptions_.wifiNeedC);
+    render.insert("exclude_touch_from_multi_touch", muriRenderOptions_.excludeTouchFromMultiTouch);
     render.insert("canvas_frame_rate_mode", previewCanvasFrameRateModeStorageValue());
     render.insert("show_debug_info", previewShowDebugInfo_);
     render.insert("show_timestamp", previewShowTimestamp_);
@@ -7270,6 +7275,46 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         setSlideJudgeEffectEnabled(false);
     });
     slideJudgeEffectButton->setMenu(slideJudgeEffectMenu);
+    auto* excludeTouchFromMultiTouchButton = createDialogMenuButton(
+        gameplayGroup,
+        muriRenderOptions_.excludeTouchFromMultiTouch ? enabledLabel : disabledLabel
+    );
+    excludeTouchFromMultiTouchButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto* excludeTouchFromMultiTouchMenu = new QMenu(excludeTouchFromMultiTouchButton);
+    styleRoundedMenu(*excludeTouchFromMultiTouchMenu);
+    const auto setExcludeTouchFromMultiTouchEnabled = [
+        this,
+        excludeTouchFromMultiTouchButton,
+        enabledLabel,
+        disabledLabel
+    ](bool enabled) {
+        excludeTouchFromMultiTouchButton->setText(enabled ? enabledLabel : disabledLabel);
+        if (muriRenderOptions_.excludeTouchFromMultiTouch == enabled) {
+            return;
+        }
+        muriRenderOptions_.excludeTouchFromMultiTouch = enabled;
+        applyMuriRenderOptions();
+        saveProjectRenderState();
+        savePortableState();
+        if (hasActiveDifficulty() && !scheduleTimelineAnalysisRefreshFromLatestPreviewState()) {
+            refreshTimelineMetadata();
+        } else if (!hasActiveDifficulty()) {
+            refreshMuriDiagnosticsPanel();
+        }
+    };
+    addDialogMenuChoice(
+        excludeTouchFromMultiTouchMenu,
+        enabledLabel,
+        [setExcludeTouchFromMultiTouchEnabled]() {
+            setExcludeTouchFromMultiTouchEnabled(true);
+        });
+    addDialogMenuChoice(
+        excludeTouchFromMultiTouchMenu,
+        disabledLabel,
+        [setExcludeTouchFromMultiTouchEnabled]() {
+            setExcludeTouchFromMultiTouchEnabled(false);
+        });
+    excludeTouchFromMultiTouchButton->setMenu(excludeTouchFromMultiTouchMenu);
     const QString judgeLinePointLabel = uiText("dialog.render_settings.gameplay.judge_line.point", "Point");
     const QString judgeLineLineLabel = uiText("dialog.render_settings.gameplay.judge_line.line", "Line");
     const QString judgeLineAreaLabel = uiText("dialog.render_settings.gameplay.judge_line.area", "Judge Area");
@@ -7418,6 +7463,15 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
         1,
         uiText("dialog.render_settings.gameplay.judge_line", "Judge Line"),
         judgeLineButton
+    );
+    addGameplayField(
+        2,
+        0,
+        uiText(
+            "dialog.render_settings.gameplay.exclude_touch_multi_touch",
+            "Exclude Touch From Multi-Touch"
+        ),
+        excludeTouchFromMultiTouchButton
     );
 
     audioGroup->setVisible(includeAudioSettings);

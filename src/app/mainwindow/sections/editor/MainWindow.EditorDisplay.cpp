@@ -107,6 +107,10 @@ void MainWindow::applyPortablePreviewSettings(const QJsonObject& preview)
     if (preview.value("wifi_need_c").isBool()) {
         muriRenderOptions_.wifiNeedC = preview.value("wifi_need_c").toBool(muriRenderOptions_.wifiNeedC);
     }
+    if (preview.value("exclude_touch_from_multi_touch").isBool()) {
+        muriRenderOptions_.excludeTouchFromMultiTouch = preview.value("exclude_touch_from_multi_touch")
+            .toBool(muriRenderOptions_.excludeTouchFromMultiTouch);
+    }
     if (preview.value("outline_variant").isString()) {
         const QString outlineVariant = preview.value("outline_variant").toString().trimmed();
         if (!outlineVariant.isEmpty()) {
@@ -218,6 +222,7 @@ void MainWindow::savePortableState() const
     preview.insert("show_chart_review_slide_judge_overlay", muriRenderOptions_.showChartReviewSlideJudgeOverlay);
     preview.insert("show_chart_review_simple_judge_overlay", muriRenderOptions_.showChartReviewSimpleJudgeOverlay);
     preview.insert("wifi_need_c", muriRenderOptions_.wifiNeedC);
+    preview.insert("exclude_touch_from_multi_touch", muriRenderOptions_.excludeTouchFromMultiTouch);
     preview.insert("background_brightness", previewBackgroundBrightnessOuter_);
     preview.insert("background_brightness_outer", previewBackgroundBrightnessOuter_);
     preview.insert("background_brightness_inner", previewBackgroundBrightnessInner_);

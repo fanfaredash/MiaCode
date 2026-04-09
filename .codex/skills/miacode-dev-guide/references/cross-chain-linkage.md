@@ -36,7 +36,7 @@ Implication:
 - Firework overlay visuals now depend on the custom `PreviewQuickJudgeFireworkLayer` material path rather than pie-sector geometry plus sprite overlays. If you change firework timing curves, additive blending, source texture use, hole-mask math, or stage clipping, review `src/preview/scene/PreviewJudgeFireworkLayerState.*`, `src/preview/quick_scene/PreviewQuickJudgeFireworkLayer.*`, `src/preview/quick_scene/shaders/PreviewFireworkMaterial.*`, and the historical `PreviewCanvas` reference behavior together. The legacy contract is a playfield-centered judgment-ring clip, not a second local clip around the trigger point.
 - While preview playback is running, slow-refresh note-marker updates still feed the latest validation and Muri worker inputs, but preview audio/canvas/object stats stay on the frozen play-start snapshot until playback stops; validation and Muri panel/decorations may defer their visible UI apply until playback returns to a paused state.
 - Preview object stats now share one `PreviewProgressStatsCache` across realtime HUD, the main-window side stats card, and export HUD rendering. Hold-family played counts and score-style progress must use judge/end timing in every consumer; if you touch the cache, keep that timing aligned with the HUD's finale/deluxe progression.
-- Analysis-only setting changes such as Muri render mode or the static tap-on-slide threshold should prefer reusing the latest preview snapshot and cached parse result instead of forcing another full slow refresh.
+- Analysis-only setting changes such as Muri render mode, the static tap-on-slide threshold, or touch-exclusion rules for multi-touch should prefer reusing the latest preview snapshot and cached parse result instead of forcing another full slow refresh.
 - Preview play/resume must use the latest in-memory field state, not a forced disk save. If slow refresh is still behind `timelineRevision_`, playback start may synchronously rebuild a preview-only note-marker snapshot once before audio/video start so the next resume does not wait for validation or Muri workers.
 - Slow refresh may publish the preview-only note-marker snapshot before validation finishes. Resume-time preview freshness should not wait for the strict validation half of slow refresh.
 - If preview play/resume is requested before the current revision's preview snapshot is ready, the request should wait in memory and auto-start once the preview snapshot for that same revision and difficulty lands. Validation completion must not gate that auto-start.
@@ -92,6 +92,7 @@ Shared concerns:
 
 - which note kinds emit `answer`, `judge`, `break`, `ex`, `touch`, `touchhold`, `firework`
 - touch and touch-hold still emit `answer` when `isFirework` is set; firework is additive rather than replacing the hit-confirm sound
+- touch-hold tail timing must mirror hold tail timing for `answer`: when `endSecond > second`, both note kinds emit a second `answer` at the tail while touch-hold still keeps its sustain start/stop span events
 - head-star behavior for slide and wifi
 - `hasHeadStar` gates only the pre-head object / head SFX / head judge path; `headlessImmediate` only changes the waiting-star visual ramp
 - `sameHeadSlide` behavior
@@ -199,6 +200,8 @@ Shared render settings include:
 - chart-review judge overlay toggles for slide/wifi-family and tap/hold-family effects
 - timestamp/object-stats HUD flags
 - Muri render options
+
+Current Muri render-option sync points include `wifiNeedC` and `excludeTouchFromMultiTouch`; both must stay aligned across preview persistence, export snapshots, and any analyzer entry point that reconstructs runtime Muri results.
 
 Muri warning/render note:
 

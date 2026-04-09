@@ -4007,6 +4007,7 @@ void collectSimpleNoteMultiTouchDiagnostics(
     const QHash<int, int>& touchGroupByChildNoteIndex,
     const QHash<QString, const TimelineNoteMarker*>& markerLookup,
     const QHash<QString, QString>& syntheticSlideHeadOwnerKeys,
+    const MuriRenderOptions& renderOptions,
     QVector<MuriDiagnostic>* diagnostics,
     QSet<QString>* multiTouchMarkerKeys)
 {
@@ -4014,7 +4015,7 @@ void collectSimpleNoteMultiTouchDiagnostics(
         return;
     }
 
-    const QVector<RuntimeHandAction> actions =
+    QVector<RuntimeHandAction> actions =
         buildRuntimeHandActions(
             noteMarkers,
             notes,
@@ -4022,6 +4023,13 @@ void collectSimpleNoteMultiTouchDiagnostics(
             touchGroupByChildNoteIndex,
             true,
             false);
+    if (renderOptions.excludeTouchFromMultiTouch) {
+        actions.erase(
+            std::remove_if(actions.begin(), actions.end(), [](const RuntimeHandAction& action) {
+                return sourceTypeIsTouchLike(action.sourceType);
+            }),
+            actions.end());
+    }
     if (actions.isEmpty()) {
         return;
     }
@@ -4185,6 +4193,7 @@ bool runtimeCauseIsSlideHeadTap(
 
 void collectSimpleNoteRuntimeDiagnostics(
     const QVector<TimelineNoteMarker>& noteMarkers,
+    const MuriRenderOptions& renderOptions,
     QVector<MuriDiagnostic>* diagnostics,
     QVector<MuriJudgeSpriteEvent>* judgeSpriteEvents,
     double staticTapOnSlideThresholdSeconds)
@@ -4219,6 +4228,7 @@ void collectSimpleNoteRuntimeDiagnostics(
         touchGroupByChildNoteIndex,
         markerLookup,
         syntheticSlideHeadOwnerKeys,
+        renderOptions,
         diagnostics,
         &multiTouchMarkerKeys);
     simulateSimpleNoteJudgments(
@@ -4378,6 +4388,7 @@ MuriAnalysisReport MuriAnalyzer::analyze(
     buildOverlayActions(noteMarkers, &report.padWindows, &report.actionTrails);
     collectSimpleNoteRuntimeDiagnostics(
         noteMarkers,
+        renderOptions,
         &report.diagnostics,
         &report.judgeSpriteEvents,
         staticTapOnSlideThresholdSeconds);
