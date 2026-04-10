@@ -1011,7 +1011,8 @@ bool touchHitsSlide(const TimelineNoteMarker& touch, const TimelineNoteMarker& s
         return false;
     };
 
-    if (!slide.slideSegmentKeys.isEmpty()
+    if (slide.type == "slide"
+        && !slide.slideSegmentKeys.isEmpty()
         && slide.slideSegmentKeys.size() == slide.slideSegmentShootSeconds.size()
         && slide.slideSegmentKeys.size() == slide.slideSegmentDurations.size()) {
         const QJsonObject slides = slideDataRoot().value("slides").toObject();
@@ -1022,6 +1023,19 @@ bool touchHitsSlide(const TimelineNoteMarker& touch, const TimelineNoteMarker& s
             }
         }
         return false;
+    }
+
+    if (slide.type == "wifi" && slide.endSecond >= slide.slideTraceSecond) {
+        const double durationSecond = slide.endSecond - slide.slideTraceSecond;
+        for (const MuriPadTimeEntry& entry : slide.wifiPadEnterTimes) {
+            if (entry.pad != touch.touchPad) {
+                continue;
+            }
+            const double enterSecond = slide.slideTraceSecond + entry.proportion * durationSecond;
+            if (qAbs(touch.second - enterSecond) < kTouchOnSlideThresholdSeconds) {
+                return true;
+            }
+        }
     }
 
     const QJsonObject entry = slideLookupEntry(slide);

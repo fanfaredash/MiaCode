@@ -373,6 +373,71 @@ void applyInitialTimingMetadata(
         : kDefaultMeterDenominator;
 }
 
+struct TimedMarkerRef {
+    int markerIndex = -1;
+    double second = 0.0;
+};
+
+struct TouchWindowBuckets {
+    QVector<TimedMarkerRef> slideHead;
+    QVector<TimedMarkerRef> wifiHead;
+    QVector<TimedMarkerRef> padEnter;
+};
+
+void sortTimedMarkerRefs(QVector<TimedMarkerRef>* refs)
+{
+    if (refs == nullptr || refs->size() < 2) {
+        return;
+    }
+    std::sort(refs->begin(), refs->end(), [](const TimedMarkerRef& a, const TimedMarkerRef& b) {
+        if (a.second != b.second) {
+            return a.second < b.second;
+        }
+        return a.markerIndex < b.markerIndex;
+    });
+}
+
+template<typename MarkFn>
+void markOpenIntervalMatches(
+    const QVector<TimedMarkerRef>& centers,
+    const QVector<TimedMarkerRef>& queries,
+    double lowerRadius,
+    double upperRadius,
+    MarkFn&& markFn,
+    bool excludeSelf = false)
+{
+    if (centers.isEmpty() || queries.isEmpty()) {
+        return;
+    }
+
+    int left = 0;
+    int right = 0;
+    const int centerCount = centers.size();
+    for (const TimedMarkerRef& query : queries) {
+        const double lowerBound = query.second - lowerRadius;
+        const double upperBound = query.second + upperRadius;
+
+        while (left < centerCount && !(centers[left].second > lowerBound)) {
+            ++left;
+        }
+        if (right < left) {
+            right = left;
+        }
+        while (right < centerCount && centers[right].second < upperBound) {
+            ++right;
+        }
+
+        const int matchCount = right - left;
+        if (matchCount <= 0) {
+            continue;
+        }
+        if (excludeSelf && matchCount == 1 && centers[left].markerIndex == query.markerIndex) {
+            continue;
+        }
+        markFn(query.markerIndex);
+    }
+}
+
 SimaiNativeParseResult parseInternal(
     const QString& text,
     bool strictMode,
@@ -624,65 +689,209 @@ SimaiNativeParseResult parseInternal(
         }
     }
 
-    QVector<int> slideIndices;
-    slideIndices.reserve(state.result.noteMarkers.size());
-    for (int i = 0; i < state.result.noteMarkers.size(); ++i) {
-        if (markerIsSlideLike(state.result.noteMarkers.at(i))) {
-            slideIndices.append(i);
-        }
-    }
+    QHash<int, QVector<TimedMarkerRef>> traceByLane;
+    QHash<int, QVector<TimedMarkerRef>> endByLane;
+    QHash<QString, TouchWindowBuckets> touchWindowsByPad;
+    QHash<int, QVector<TimedMarkerRef>> tapsByLane;
+    QHash<int, QVector<TimedMarkerRef>> holdTailsByLane;
+    QHash<QString, QVector<TimedMarkerRef>> touchesByPad;
+    QHash<int, QVector<TimedMarkerRef>> traceQueriesByLane;
+    QHash<int, QVector<TimedMarkerRef>> endQueriesByLane;
 
     for (int i = 0; i < state.result.noteMarkers.size(); ++i) {
-        TimelineNoteMarker& marker = state.result.noteMarkers[i];
-
+        const TimelineNoteMarker& marker = state.result.noteMarkers.at(i);
         if (marker.type == "tap") {
-            for (int slideIndex : slideIndices) {
-                const TimelineNoteMarker& slide = state.result.noteMarkers.at(slideIndex);
-                if (marker.lane == slide.lane
-                    && qAbs(marker.second - slide.slideTraceSecond) < kTapOnSlideThresholdSeconds) {
-                    marker.slideHead = true;
-                    break;
-                }
-            }
+            tapsByLane[marker.lane].append(TimedMarkerRef{i, marker.second});
+            continue;
         }
-
         if (marker.type == "hold" && marker.endSecond >= 0.0) {
-            for (int slideIndex : slideIndices) {
-                const TimelineNoteMarker& slide = state.result.noteMarkers.at(slideIndex);
-                if (marker.lane == slide.lane
-                    && qAbs(marker.endSecond - slide.slideTraceSecond) < kTapOnSlideThresholdSeconds) {
-                    marker.tailOnSlideHead = true;
-                    break;
+            holdTailsByLane[marker.lane].append(TimedMarkerRef{i, marker.endSecond});
+            continue;
+        }
+        if (marker.type == "touch") {
+            if (!marker.touchPad.isEmpty()) {
+                touchesByPad[marker.touchPad.toUpper()].append(TimedMarkerRef{i, marker.second});
+            }
+            continue;
+        }
+        if (!markerIsSlideLike(marker)) {
+            continue;
+        }
+
+        if (marker.slideTraceSecond >= 0.0) {
+            traceByLane[marker.lane].append(TimedMarkerRef{i, marker.slideTraceSecond});
+            traceQueriesByLane[marker.lane].append(TimedMarkerRef{i, marker.slideTraceSecond});
+
+            const QString headPad = slideHeadPad(marker.lane);
+            if (!headPad.isEmpty()) {
+                TouchWindowBuckets& buckets = touchWindowsByPad[headPad.toUpper()];
+                if (marker.type == "slide") {
+                    buckets.slideHead.append(TimedMarkerRef{i, marker.slideTraceSecond});
+                } else if (marker.type == "wifi") {
+                    buckets.wifiHead.append(TimedMarkerRef{i, marker.slideTraceSecond});
                 }
             }
         }
 
-        if (marker.type == "touch") {
-            for (int slideIndex : slideIndices) {
-                if (touchHitsSlide(marker, state.result.noteMarkers.at(slideIndex))) {
-                    marker.onSlide = true;
-                    break;
+        if (marker.endSecond >= marker.slideTraceSecond) {
+            endByLane[marker.endLane].append(TimedMarkerRef{i, marker.endSecond});
+            endQueriesByLane[marker.endLane].append(TimedMarkerRef{i, marker.endSecond});
+        }
+
+        if (marker.type == "slide") {
+            const int segmentCount = qMin(
+                marker.slideSegmentPadEnterTimes.size(),
+                qMin(marker.slideSegmentShootSeconds.size(), marker.slideSegmentDurations.size()));
+            for (int segmentIndex = 0; segmentIndex < segmentCount; ++segmentIndex) {
+                const double shootSecond = marker.slideSegmentShootSeconds.at(segmentIndex);
+                const double durationSecond = marker.slideSegmentDurations.at(segmentIndex);
+                for (const MuriPadTimeEntry& entry : marker.slideSegmentPadEnterTimes.at(segmentIndex)) {
+                    if (entry.pad.isEmpty()) {
+                        continue;
+                    }
+                    touchWindowsByPad[entry.pad.toUpper()].padEnter.append(
+                        TimedMarkerRef{i, shootSecond + entry.proportion * durationSecond});
                 }
+            }
+        } else if (marker.type == "wifi" && marker.endSecond >= marker.slideTraceSecond) {
+            const double durationSecond = marker.endSecond - marker.slideTraceSecond;
+            for (const MuriPadTimeEntry& entry : marker.wifiPadEnterTimes) {
+                if (entry.pad.isEmpty()) {
+                    continue;
+                }
+                touchWindowsByPad[entry.pad.toUpper()].padEnter.append(
+                    TimedMarkerRef{i, marker.slideTraceSecond + entry.proportion * durationSecond});
             }
         }
     }
 
-    for (int i = 0; i < slideIndices.size(); ++i) {
-        TimelineNoteMarker& note = state.result.noteMarkers[slideIndices[i]];
-        for (int j = 0; j < slideIndices.size(); ++j) {
-            if (i == j) {
-                continue;
-            }
-            TimelineNoteMarker& note2 = state.result.noteMarkers[slideIndices[j]];
-            // This currently ports only the strict "tail hits next shoot moment"
-            // single-stroke linkage. The more complex embedded-track merge checks
-            // from Python post_parse_workup are still pending.
-            if (note.endLane == note2.lane
-                && qAbs(note.endSecond - note2.slideTraceSecond) < kTapOnSlideThresholdSeconds) {
-                note.beforeSlide = true;
-                note2.afterSlide = true;
-            }
+    for (auto it = traceByLane.begin(); it != traceByLane.end(); ++it) {
+        sortTimedMarkerRefs(&it.value());
+    }
+    for (auto it = endByLane.begin(); it != endByLane.end(); ++it) {
+        sortTimedMarkerRefs(&it.value());
+    }
+    for (auto it = tapsByLane.begin(); it != tapsByLane.end(); ++it) {
+        sortTimedMarkerRefs(&it.value());
+    }
+    for (auto it = holdTailsByLane.begin(); it != holdTailsByLane.end(); ++it) {
+        sortTimedMarkerRefs(&it.value());
+    }
+    for (auto it = touchesByPad.begin(); it != touchesByPad.end(); ++it) {
+        sortTimedMarkerRefs(&it.value());
+    }
+    for (auto it = traceQueriesByLane.begin(); it != traceQueriesByLane.end(); ++it) {
+        sortTimedMarkerRefs(&it.value());
+    }
+    for (auto it = endQueriesByLane.begin(); it != endQueriesByLane.end(); ++it) {
+        sortTimedMarkerRefs(&it.value());
+    }
+    for (auto it = touchWindowsByPad.begin(); it != touchWindowsByPad.end(); ++it) {
+        sortTimedMarkerRefs(&it.value().slideHead);
+        sortTimedMarkerRefs(&it.value().wifiHead);
+        sortTimedMarkerRefs(&it.value().padEnter);
+    }
+
+    for (auto it = tapsByLane.cbegin(); it != tapsByLane.cend(); ++it) {
+        const auto traceIt = traceByLane.constFind(it.key());
+        if (traceIt == traceByLane.constEnd()) {
+            continue;
         }
+        markOpenIntervalMatches(
+            traceIt.value(),
+            it.value(),
+            kTapOnSlideThresholdSeconds,
+            kTapOnSlideThresholdSeconds,
+            [&state](int markerIndex) {
+                state.result.noteMarkers[markerIndex].slideHead = true;
+            }
+        );
+    }
+
+    for (auto it = holdTailsByLane.cbegin(); it != holdTailsByLane.cend(); ++it) {
+        const auto traceIt = traceByLane.constFind(it.key());
+        if (traceIt == traceByLane.constEnd()) {
+            continue;
+        }
+        markOpenIntervalMatches(
+            traceIt.value(),
+            it.value(),
+            kTapOnSlideThresholdSeconds,
+            kTapOnSlideThresholdSeconds,
+            [&state](int markerIndex) {
+                state.result.noteMarkers[markerIndex].tailOnSlideHead = true;
+            }
+        );
+    }
+
+    for (auto it = touchesByPad.cbegin(); it != touchesByPad.cend(); ++it) {
+        const auto bucketIt = touchWindowsByPad.constFind(it.key());
+        if (bucketIt == touchWindowsByPad.constEnd()) {
+            continue;
+        }
+        const TouchWindowBuckets& buckets = bucketIt.value();
+        const QVector<TimedMarkerRef>& queries = it.value();
+        markOpenIntervalMatches(
+            buckets.slideHead,
+            queries,
+            kTouchOnSlideThresholdSeconds,
+            kTapOnSlideThresholdSeconds,
+            [&state](int markerIndex) {
+                state.result.noteMarkers[markerIndex].onSlide = true;
+            }
+        );
+        markOpenIntervalMatches(
+            buckets.wifiHead,
+            queries,
+            kTouchOnSlideThresholdSeconds,
+            kTouchOnSlideThresholdSeconds,
+            [&state](int markerIndex) {
+                state.result.noteMarkers[markerIndex].onSlide = true;
+            }
+        );
+        markOpenIntervalMatches(
+            buckets.padEnter,
+            queries,
+            kTouchOnSlideThresholdSeconds,
+            kTouchOnSlideThresholdSeconds,
+            [&state](int markerIndex) {
+                state.result.noteMarkers[markerIndex].onSlide = true;
+            }
+        );
+    }
+
+    for (auto it = traceQueriesByLane.cbegin(); it != traceQueriesByLane.cend(); ++it) {
+        const auto endIt = endByLane.constFind(it.key());
+        if (endIt == endByLane.constEnd()) {
+            continue;
+        }
+        markOpenIntervalMatches(
+            endIt.value(),
+            it.value(),
+            kTapOnSlideThresholdSeconds,
+            kTapOnSlideThresholdSeconds,
+            [&state](int markerIndex) {
+                state.result.noteMarkers[markerIndex].afterSlide = true;
+            },
+            true
+        );
+    }
+
+    for (auto it = endQueriesByLane.cbegin(); it != endQueriesByLane.cend(); ++it) {
+        const auto traceIt = traceByLane.constFind(it.key());
+        if (traceIt == traceByLane.constEnd()) {
+            continue;
+        }
+        markOpenIntervalMatches(
+            traceIt.value(),
+            it.value(),
+            kTapOnSlideThresholdSeconds,
+            kTapOnSlideThresholdSeconds,
+            [&state](int markerIndex) {
+                state.result.noteMarkers[markerIndex].beforeSlide = true;
+            },
+            true
+        );
     }
 
     state.result.durationSeconds = qMax(
