@@ -235,7 +235,9 @@ const QHash<QString, QString>& zhExactMap()
 bool shouldRemainValidationError(const QString& detail)
 {
     return detail == kRepeatedSlashSeparator()
-        || detail == kRepeatedBacktickSeparator();
+        || detail == kRepeatedBacktickSeparator()
+        || detail.startsWith(kUnmatchedClosingBracketPrefix())
+        || detail.startsWith(kUnclosedBracketPrefix());
 }
 
 const QHash<QString, QString>& zhPrefixMap()

@@ -100,6 +100,80 @@ QString validationIssueTypeLabelFromDisplayMessage(const QString& displayMessage
     return issueTypeSegment(parts.body.isEmpty() ? displayMessage : parts.body);
 }
 
+QString validationLocationText(int line, int col)
+{
+    return QStringLiteral("L%1 C%2").arg(qMax(1, line)).arg(qMax(1, col));
+}
+
+QString firstQuotedValidationToken(const QString& text)
+{
+    const int firstQuote = text.indexOf(QLatin1Char('\''));
+    if (firstQuote < 0) {
+        return QString();
+    }
+    const int secondQuote = text.indexOf(QLatin1Char('\''), firstQuote + 1);
+    if (secondQuote <= firstQuote + 1) {
+        return QString();
+    }
+    return text.mid(firstQuote + 1, secondQuote - firstQuote - 1).trimmed();
+}
+
+QString extractValidationSummaryFocusText(
+    const QString& rawMessage,
+    const QString& displayMessage,
+    const QString& issueTypeLabel)
+{
+    const QString normalizedRaw = rawMessage.trimmed();
+    if (!normalizedRaw.isEmpty()) {
+        QString tail = issueDetailTail(normalizedRaw);
+        if (!tail.isEmpty()) {
+            const int unknownShapeIndex = tail.indexOf(QStringLiteral(" unknown shape "));
+            if (unknownShapeIndex > 0) {
+                tail = tail.left(unknownShapeIndex).trimmed();
+            }
+            const QString strictBeatSuffix = QStringLiteral(" (must be a positive divisor of 384)");
+            if (tail.endsWith(strictBeatSuffix)) {
+                tail.chop(strictBeatSuffix.size());
+                tail = tail.trimmed();
+            }
+            if (!tail.isEmpty()) {
+                return tail;
+            }
+        }
+
+        const QString quotedToken = firstQuotedValidationToken(normalizedRaw);
+        if (!quotedToken.isEmpty()) {
+            return quotedToken;
+        }
+
+        if (normalizedRaw == QStringLiteral("Unterminated BPM block")) {
+            return QStringLiteral("(");
+        }
+        if (normalizedRaw == QStringLiteral("Unterminated beat block")) {
+            return QStringLiteral("{");
+        }
+        if (normalizedRaw == QStringLiteral("Unterminated HS* block")) {
+            return QStringLiteral("HS*");
+        }
+        if (normalizedRaw == QStringLiteral("Invalid BPM value")) {
+            return QStringLiteral("BPM");
+        }
+        if (normalizedRaw == QStringLiteral("Invalid beat value")) {
+            return QStringLiteral("beat");
+        }
+    }
+
+    const ValidationMessageParts displayParts = parseValidationMessage(displayMessage);
+    const QString displayTail = issueDetailTail(displayParts.body);
+    if (!displayTail.isEmpty()) {
+        return displayTail;
+    }
+    if (!issueTypeLabel.trimmed().isEmpty()) {
+        return issueTypeLabel.trimmed();
+    }
+    return displayParts.body.trimmed();
+}
+
 QString muriIssueTypeKey(MuriKind kind)
 {
     return QStringLiteral("muri:%1").arg(static_cast<int>(kind));
@@ -414,6 +488,42 @@ WrappedListEntryText buildMuriPanelEntryText(const MuriPanelEntry& entry, bool i
     return text;
 }
 
+WrappedListEntryText buildValidationPanelEntryText(
+    const ValidationMessageParts& parts,
+    const QString& summaryFocusText,
+    const QString& detailText,
+    int line,
+    int col,
+    bool ignoredInHeader)
+{
+    const QColor summaryColor = ignoredInHeader
+        ? UiTheme::colors().textMuted
+        : severityColor(parts.severity);
+    const QString normalizedDetailText = detailText.trimmed();
+    const QString normalizedSummaryFocus = summaryFocusText.trimmed().isEmpty()
+        ? parts.body.trimmed()
+        : summaryFocusText.trimmed();
+    const QString summaryText = QStringLiteral("%1 %2 %3")
+                                    .arg(parts.severityPrefix, normalizedSummaryFocus, validationLocationText(line, col));
+
+    QString contentHtml = QStringLiteral("<span style=\"font-weight:700;color:%1;\">%2</span>")
+                              .arg(summaryColor.name(QColor::HexRgb), summaryText.toHtmlEscaped());
+
+    WrappedListEntryText text;
+    if (!normalizedDetailText.isEmpty()) {
+        contentHtml += QStringLiteral("<br/><span style=\"color:%1;\">%2</span>")
+                           .arg(
+                               (ignoredInHeader ? UiTheme::colors().textSecondary : UiTheme::colors().textPrimary)
+                                   .name(QColor::HexRgb),
+                               normalizedDetailText.toHtmlEscaped());
+    }
+    text.html = QStringLiteral("<div style=\"line-height:128%; margin:1px 0;\">%1</div>").arg(contentHtml);
+    text.plainText = normalizedDetailText.isEmpty()
+        ? summaryText
+        : QStringLiteral("%1\n%2").arg(summaryText, normalizedDetailText);
+    return text;
+}
+
 int wrappedRichTextHeight(const QString& html, const QFont& font, int width)
 {
     QTextDocument document;
@@ -494,7 +604,7 @@ QListWidgetItem* MainWindow::addWrappedListEntry(
 
     auto* rowWidget = new QWidget(list);
     auto* rowLayout = new QVBoxLayout(rowWidget);
-    const bool roomyLayout = (list == muriList_);
+    const bool roomyLayout = (list == muriList_ || list == errorList_);
     rowLayout->setContentsMargins(roomyLayout ? 4 : 0, roomyLayout ? 3 : 0, roomyLayout ? 4 : 0, roomyLayout ? 4 : 0);
     rowLayout->setSpacing(0);
     rowLayout->addWidget(label);
@@ -512,7 +622,7 @@ void MainWindow::relayoutWrappedListRows(QListWidget* list)
     }
 
     const int rowWidth = qMax(220, list->viewport()->width());
-    const bool roomyLayout = (list == muriList_);
+    const bool roomyLayout = (list == muriList_ || list == errorList_);
     const int horizontalMargin = roomyLayout ? 8 : 0;
     const int verticalMargin = roomyLayout ? 7 : 2;
     const int labelWidth = qMax(1, rowWidth - horizontalMargin);
@@ -820,7 +930,8 @@ void MainWindow::clearValidationDecorations()
 void MainWindow::addValidationError(
     int line,
     int col,
-    const QString& message,
+    const QString& rawMessage,
+    const QString& displayMessage,
     const QString& issueTypeKey,
     const QString& issueTypeLabel,
     bool ignoredInHeader)
@@ -829,39 +940,14 @@ void MainWindow::addValidationError(
         return;
     }
 
-    const ValidationMessageParts parts = parseValidationMessage(message);
-    const QColor sevColor = ignoredInHeader ? UiTheme::colors().textMuted : severityColor(parts.severity);
-    const QColor detailColor = ignoredInHeader ? UiTheme::colors().textSecondary : UiTheme::colors().textPrimary;
+    const ValidationMessageParts parts = parseValidationMessage(displayMessage);
     const QString issueTitle = issueTypeLabel.isEmpty() ? issueTypeSegment(parts.body) : issueTypeLabel;
     const QString detailTail = issueDetailTail(parts.body);
     const QString detailText = detailTail.isEmpty() ? parts.body : detailTail;
-    const QString headerText = QStringLiteral("%1 %2 L%3 C%4")
-        .arg(parts.severityPrefix, issueTitle, QString::number(line), QString::number(col));
-    const QString plainText = detailText.isEmpty()
-        ? headerText
-        : QStringLiteral("%1\n%2").arg(headerText, detailText);
-
-    const QString headerHtml = QStringLiteral(
-        "<span style=\"font-weight:700;color:%1;\">%2</span> "
-        "<span style=\"color:%5;\">%6</span>  "
-        "<span style=\"color:%5;\">L%3 C%4</span>"
-    )
-        .arg(
-            sevColor.name(),
-            parts.severityPrefix.toHtmlEscaped(),
-            QString::number(line),
-            QString::number(col),
-            UiTheme::colors().textSecondary.name(QColor::HexRgb),
-            issueTitle.toHtmlEscaped()
-        );
-    const QString detailHtml = detailText.isEmpty()
-        ? QString()
-        : QStringLiteral("<br/><span style=\"color:%1;\">%2</span>")
-              .arg(
-                  detailColor.name(QColor::HexRgb),
-                  ignoredInHeader ? detailText.toHtmlEscaped() : detailText.toHtmlEscaped()
-              );
-    QListWidgetItem* item = addWrappedListEntry(errorList_, headerHtml + detailHtml, plainText, line, col, -1.0, true);
+    const QString summaryFocusText = extractValidationSummaryFocusText(rawMessage, displayMessage, issueTitle);
+    const WrappedListEntryText text =
+        buildValidationPanelEntryText(parts, summaryFocusText, detailText, line, col, ignoredInHeader);
+    QListWidgetItem* item = addWrappedListEntry(errorList_, text.html, text.plainText, line, col, -1.0, true);
     if (item != nullptr) {
         item->setData(kIssueAuxRole, parts.severity == ValidationSeverityLevel::Warning ? 1 : 0);
         item->setData(kIssueTypeKeyRole, issueTypeKey);
@@ -1184,6 +1270,7 @@ void MainWindow::refreshValidationPanelForActiveField()
         addValidationError(
             issue.line,
             issue.col,
+            issue.rawMessage,
             issue.displayMessage,
             issueTypeKey,
             issueTypeLabel,
@@ -1279,6 +1366,7 @@ bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
         addValidationError(
             issue.line,
             issue.col,
+            issue.rawMessage,
             issue.displayMessage,
             issueTypeKey,
             issueTypeLabel,
@@ -1401,6 +1489,7 @@ bool MainWindow::runValidateSimai()
         addValidationError(
             issue.line,
             issue.col,
+            issue.rawMessage,
             issue.displayMessage,
             issueTypeKey,
             issueTypeLabel,
