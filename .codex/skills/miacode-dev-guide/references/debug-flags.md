@@ -14,6 +14,8 @@ The user-facing canonical doc lives at `docs/DEBUG_INDEX.md`. This file stays sh
   - `--debug`
 - Shared log directory env:
   - `MIACODE_LOG_DIR`
+- Default debug-mode fallback:
+  - app-local `logs/` directory next to the running executable when `MIACODE_LOG_DIR` and per-channel overrides are unset
 - Channel-specific path overrides:
   - `MIACODE_RUNTIME_LOG_PATH`
   - `MIACODE_AUDIO_LOG_PATH`
@@ -110,11 +112,8 @@ The Windows release package also ships:
   - no longer required because `Qt::AA_DontCreateNativeWidgetSiblings` is now enabled by default
   - owner: legacy debug launch snippets only; the active startup switch lives in `src/app/main.cpp`
 
-Runtime black-screen / dialog tracing can write these tags into the runtime log when the relevant investigation hooks are enabled in code:
+Runtime black-screen / dialog tracing in the main app currently uses these tags:
 
-- `window/dialog_event`
-- `window/native_hook`
-- `window/native_related`
 - `preview/host_window_event`
 - `preview/embedded_refresh`
 - `preview/quick_runtime`
@@ -123,12 +122,11 @@ Runtime black-screen / dialog tracing can write these tags into the runtime log 
 The `preview/quick_runtime` stream now also emits `action=frame_stall` when the embedded Quick window stays visible/exposed but stops presenting for an extended interval.
 The `preview/embedded_refresh` stream now also marks resize-throttling transitions with `action=resize_degrade_begin` / `action=resize_degrade_end`.
 The `startup/qt_config` runtime tag logs the active Qt graphics/render-loop experiment flags at process start, including whether the default native-sibling workaround was opted out.
-Normal document open/save now uses the direct native `QFileDialog::getOpenFileName` / `getSaveFileName` path instead of installing per-dialog event filters, WinEvent hooks, and sample timers by default.
+Normal document open/save now uses the direct native `QFileDialog::getOpenFileName` / `getSaveFileName` path. The old `window/dialog_event`, `window/native`, `window/native_hook`, and `window/native_related` probes were retired from the main app and should only return through a separate dev-only tool that is not packaged into release artifacts.
 
 Primary owners:
 
 - `src/app/mainwindow/MainWindow.cpp`
-- `src/app/mainwindow/sections/document/MainWindow.DocumentFlow.cpp`
 - `src/preview/runtime/PreviewQuickRuntimeSurface.cpp`
 - `src/preview/quick_scene/PreviewQuickSceneRoot.cpp`
 
