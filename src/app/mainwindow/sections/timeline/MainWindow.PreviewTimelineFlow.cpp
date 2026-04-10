@@ -716,7 +716,8 @@ void MainWindow::dispatchTimelineAnalysisRefresh()
                 if (result.revision != guard->timelineAnalysisRequestedRevision_
                     || !guard->hasActiveDifficulty()
                     || result.difficultyId != guard->activeDifficultyId()
-                    || result.chartText != guard->activeChartText()) {
+                    || result.chartText != guard->activeChartText()
+                    || result.noteMarkerSignature != guard->latestTimelineNoteMarkerSignature_) {
                     guard->requestTimelineAnalysisDispatch();
                     return;
                 }
