@@ -43,7 +43,7 @@ struct PadWindowInterval {
 struct RuntimePadEvent {
     QString pad;
     int tick = 0;
-    double second = 0.0;
+    double second = -1.0;
     QString sourceMarkerKey;
     QString sourceType;
     int sourceOrder = -1;
@@ -845,6 +845,10 @@ DiagnosticAnchor diagnosticAnchorForCause(
     const QHash<QString, MarkerSourceRef>& markerRefs,
     const QHash<QString, QString>& syntheticSlideHeadOwnerKeys)
 {
+    if (cause.sourceMarkerKey.isEmpty()) {
+        return DiagnosticAnchor();
+    }
+
     DiagnosticAnchor anchor =
         diagnosticAnchorForMarkerKey(cause.sourceMarkerKey, markerRefs, syntheticSlideHeadOwnerKeys);
     if (anchor.valid) {
@@ -2113,8 +2117,8 @@ QVector<MuriPadWindow> buildRuntimePadWindows(
                         child.pad,
                         group.momentSecond,
                         group.momentSecond + miacode::muri::kReleaseDelaySeconds,
-                        group.sourceMarkerKey,
-                        QStringLiteral("touch_group"));
+                        child.markerKey,
+                        child.type);
                 }
                 continue;
             }
@@ -3846,7 +3850,15 @@ void updateRuntimeTopLevelNote(
                 if (child.judged) {
                     continue;
                 }
-                judgeSimpleNoteOnPadDown(&child, nowSecond, child.pad, nullptr);
+                RuntimePadEvent syntheticCause;
+                syntheticCause.pad = child.pad;
+                syntheticCause.second = nowSecond;
+                syntheticCause.sourceMarkerKey = child.markerKey;
+                syntheticCause.sourceType = child.type;
+                syntheticCause.sourceOrder = child.order;
+                syntheticCause.line = child.line;
+                syntheticCause.col = child.col;
+                judgeSimpleNoteOnPadDown(&child, nowSecond, child.pad, &syntheticCause);
             }
         }
         return;

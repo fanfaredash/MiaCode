@@ -110,6 +110,24 @@ struct WrappedListEntryText {
     QString plainText;
 };
 
+const MuriAnalysisReport& alignedMuriAnalysisReportForUi(
+    const QByteArray& latestSignature,
+    const QByteArray& analysisSignature,
+    const MuriAnalysisReport& report)
+{
+    static const MuriAnalysisReport kEmptyReport;
+    return latestSignature == analysisSignature ? report : kEmptyReport;
+}
+
+const QVector<MuriStaticReference>& alignedMuriStaticReferencesForUi(
+    const QByteArray& latestSignature,
+    const QByteArray& analysisSignature,
+    const QVector<MuriStaticReference>& references)
+{
+    static const QVector<MuriStaticReference> kEmptyReferences;
+    return latestSignature == analysisSignature ? references : kEmptyReferences;
+}
+
 QString muriLocationText(int line, int col)
 {
     return QStringLiteral("L%1C%2").arg(qMax(1, line)).arg(qMax(1, col));
@@ -660,8 +678,16 @@ void MainWindow::updateEditorValidationSummary()
             }
         }
     }
+    const MuriAnalysisReport& alignedMuriReport = alignedMuriAnalysisReportForUi(
+        latestTimelineNoteMarkerSignature_,
+        muriAnalysisReportNoteMarkerSignature_,
+        muriAnalysisReport_);
+    const QVector<MuriStaticReference>& alignedStaticReferences = alignedMuriStaticReferencesForUi(
+        latestTimelineNoteMarkerSignature_,
+        muriAnalysisReportNoteMarkerSignature_,
+        muriStaticReferences_);
     const QVector<MuriPanelEntry> muriEntries =
-        miacode::muri::buildVisibleMuriPanelEntries(muriAnalysisReport_, muriStaticReferences_);
+        miacode::muri::buildVisibleMuriPanelEntries(alignedMuriReport, alignedStaticReferences);
     for (const MuriPanelEntry& entry : muriEntries) {
         if (ignoredTypes.contains(muriIssueTypeKey(entry.kind))) {
             continue;
@@ -1008,7 +1034,15 @@ void MainWindow::refreshMuriDiagnosticsPanel()
     }
 
     muriList_->clear();
-    if (muriAnalysisReport_.diagnostics.isEmpty() && muriStaticReferences_.isEmpty()) {
+    const MuriAnalysisReport& alignedMuriReport = alignedMuriAnalysisReportForUi(
+        latestTimelineNoteMarkerSignature_,
+        muriAnalysisReportNoteMarkerSignature_,
+        muriAnalysisReport_);
+    const QVector<MuriStaticReference>& alignedStaticReferences = alignedMuriStaticReferencesForUi(
+        latestTimelineNoteMarkerSignature_,
+        muriAnalysisReportNoteMarkerSignature_,
+        muriStaticReferences_);
+    if (alignedMuriReport.diagnostics.isEmpty() && alignedStaticReferences.isEmpty()) {
         auto* item = new QListWidgetItem(
             UiText::isChineseUi()
                 ? QStringLiteral("未检测到无理。")
@@ -1021,7 +1055,7 @@ void MainWindow::refreshMuriDiagnosticsPanel()
     }
 
     QVector<MuriPanelEntry> entries =
-        miacode::muri::buildVisibleMuriPanelEntries(muriAnalysisReport_, muriStaticReferences_);
+        miacode::muri::buildVisibleMuriPanelEntries(alignedMuriReport, alignedStaticReferences);
     std::sort(entries.begin(), entries.end(), [](const MuriPanelEntry& a, const MuriPanelEntry& b) {
         if (!qFuzzyCompare(a.second + 1.0, b.second + 1.0)) {
             return a.second < b.second;
