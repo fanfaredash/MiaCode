@@ -6,9 +6,57 @@
 #include <QString>
 #include <QTextStream>
 
+#include "simai/document/SimaiDocument.h"
+#include "simai/document/SimaiTimingMetadata.h"
 #include "SimaiNativeParser.h"
 
 namespace {
+
+QJsonObject dumpMessage(const SimaiNativeMessage& message)
+{
+    QJsonObject item;
+    item.insert("line", message.line);
+    item.insert("col", message.col);
+    item.insert("end_col", message.endCol);
+    item.insert("message", message.message);
+    return item;
+}
+
+QJsonObject dumpBeatMarker(const TimelineBeatMarker& marker)
+{
+    QJsonObject item;
+    item.insert("second", marker.second);
+    item.insert("line", marker.sourceLine);
+    item.insert("col", marker.sourceCol);
+    item.insert("major", marker.major);
+    return item;
+}
+
+QJsonObject dumpPadEntry(const MuriPadTimeEntry& entry)
+{
+    QJsonObject item;
+    item.insert("pad", entry.pad);
+    item.insert("proportion", entry.proportion);
+    return item;
+}
+
+QJsonArray dumpPadEntryVector(const QVector<MuriPadTimeEntry>& entries)
+{
+    QJsonArray array;
+    for (const MuriPadTimeEntry& entry : entries) {
+        array.append(dumpPadEntry(entry));
+    }
+    return array;
+}
+
+QJsonArray dumpPadEntryMatrix(const QVector<QVector<MuriPadTimeEntry>>& entries)
+{
+    QJsonArray array;
+    for (const QVector<MuriPadTimeEntry>& group : entries) {
+        array.append(dumpPadEntryVector(group));
+    }
+    return array;
+}
 
 QJsonObject dumpMarker(const TimelineNoteMarker& marker)
 {
@@ -65,28 +113,93 @@ QJsonObject dumpMarker(const TimelineNoteMarker& marker)
         segmentDurations.append(value);
     }
     item.insert("segment_durations", segmentDurations);
+    item.insert("slide_segment_pad_enter_times", dumpPadEntryMatrix(marker.slideSegmentPadEnterTimes));
+    item.insert("wifi_pad_enter_times", dumpPadEntryVector(marker.wifiPadEnterTimes));
 
     return item;
 }
 
-}  // namespace
-
-int main(int argc, char* argv[])
+QJsonObject dumpParseResult(const SimaiNativeParseResult& result)
 {
-    QCoreApplication app(argc, argv);
-    const QStringList args = app.arguments();
-    if (args.size() < 2) {
-        QTextStream(stderr) << "usage: simai_native_dump <maidata.txt>\n";
-        return 1;
-    }
+    QJsonObject root;
+    root.insert("ok", result.ok);
+    root.insert("duration_seconds", result.durationSeconds);
+    root.insert("error_count", result.errors.size());
+    root.insert("warning_count", result.warnings.size());
+    root.insert("beat_count", result.beatMarkers.size());
+    root.insert("note_count", result.noteMarkers.size());
 
-    QFile file(args.at(1));
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        QTextStream(stderr) << "failed to open: " << args.at(1) << "\n";
-        return 2;
+    QJsonArray errors;
+    for (const SimaiNativeMessage& error : result.errors) {
+        errors.append(dumpMessage(error));
     }
+    root.insert("errors", errors);
 
-    const QString text = QString::fromUtf8(file.readAll());
+    QJsonArray warnings;
+    for (const SimaiNativeMessage& warning : result.warnings) {
+        warnings.append(dumpMessage(warning));
+    }
+    root.insert("warnings", warnings);
+
+    QJsonArray beatMarkers;
+    for (const TimelineBeatMarker& marker : result.beatMarkers) {
+        beatMarkers.append(dumpBeatMarker(marker));
+    }
+    root.insert("beat_markers", beatMarkers);
+
+    QJsonArray notes;
+    for (const TimelineNoteMarker& marker : result.noteMarkers) {
+        notes.append(dumpMarker(marker));
+    }
+    root.insert("note_markers", notes);
+    return root;
+}
+
+QJsonObject dumpDocumentParse(const QString& sourcePath, const QString& text)
+{
+    const SimaiDocument document = SimaiDocument::fromText(text);
+    const miacode::simai::SimaiTimingMetadata timingMetadata = miacode::simai::buildTimingMetadata(document);
+
+    QJsonObject root;
+    root.insert("mode", QStringLiteral("document"));
+    root.insert("source_path", sourcePath);
+    root.insert("title", document.title);
+    root.insert("artist", document.artist);
+    root.insert("first", document.first);
+    root.insert("designer", document.designer);
+    root.insert("difficulty_count", document.difficultyIds().size());
+
+    QJsonObject timingObject;
+    timingObject.insert("whole_time_signature_text", timingMetadata.wholeTimeSignatureText);
+    timingObject.insert("whole_time_signature_numerator", timingMetadata.wholeTimeSignatureNumerator);
+    timingObject.insert("whole_time_signature_denominator", timingMetadata.wholeTimeSignatureDenominator);
+    timingObject.insert("whole_time_signature_valid", timingMetadata.wholeTimeSignatureValid);
+    root.insert("timing_metadata", timingObject);
+
+    QJsonArray difficulties;
+    const QVector<int> ids = document.difficultyIds();
+    for (int id : ids) {
+        const SimaiDifficultyData* difficulty = document.difficulty(id);
+        if (difficulty == nullptr) {
+            continue;
+        }
+        QJsonObject item;
+        item.insert("id", difficulty->id);
+        item.insert("level", difficulty->level);
+        item.insert("designer", difficulty->designer);
+        item.insert(
+            "chart_parse",
+            dumpParseResult(SimaiNativeParser::parseForTimeline(
+                difficulty->chart,
+                timingMetadata)));
+        difficulties.append(item);
+    }
+    root.insert("difficulties", difficulties);
+    return root;
+}
+
+QJsonObject dumpLegacySingleChartParse(const QString& text)
+{
     const SimaiNativeParseResult result = SimaiNativeParser::parseForTimeline(text);
 
     QJsonObject root;
@@ -110,6 +223,44 @@ int main(int argc, char* argv[])
         notes.append(dumpMarker(marker));
     }
     root.insert("notes", notes);
+    return root;
+}
+
+}  // namespace
+
+int main(int argc, char* argv[])
+{
+    QCoreApplication app(argc, argv);
+    const QStringList args = app.arguments();
+    bool documentMode = false;
+    QString sourcePath;
+    for (int i = 1; i < args.size(); ++i) {
+        const QString arg = args.at(i);
+        if (arg == QStringLiteral("--document")) {
+            documentMode = true;
+            continue;
+        }
+        if (sourcePath.isEmpty()) {
+            sourcePath = arg;
+            continue;
+        }
+    }
+
+    if (sourcePath.isEmpty()) {
+        QTextStream(stderr) << "usage: simai_native_dump [--document] <maidata.txt>\n";
+        return 1;
+    }
+
+    QFile file(sourcePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream(stderr) << "failed to open: " << sourcePath << "\n";
+        return 2;
+    }
+
+    const QString text = QString::fromUtf8(file.readAll());
+    const QJsonObject root = documentMode
+        ? dumpDocumentParse(sourcePath, text)
+        : dumpLegacySingleChartParse(text);
 
     QTextStream(stdout) << QJsonDocument(root).toJson(QJsonDocument::Compact);
     return 0;

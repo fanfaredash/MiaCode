@@ -16,6 +16,16 @@ const TimelineNoteMarker* firstSlideLikeMarker(const SimaiNativeParseResult& res
     return nullptr;
 }
 
+const TimelineNoteMarker* firstMarkerOfType(const SimaiNativeParseResult& result, const QString& type)
+{
+    for (const TimelineNoteMarker& marker : result.noteMarkers) {
+        if (marker.type == type) {
+            return &marker;
+        }
+    }
+    return nullptr;
+}
+
 bool nearlyEqual(double a, double b, double epsilon = 1e-6)
 {
     return qAbs(a - b) <= epsilon;
@@ -243,6 +253,103 @@ int main(int argc, char** argv)
             expect(!earlySlide->slideEach, QStringLiteral("early slide track stays blue when a later each-group shares its shoot moment"));
         }
         expect(laterSlideEachCount == laterSlideCount, QStringLiteral("only the later simultaneous slides keep yellow track state"));
+    }
+
+    {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("1-5[8:1],1,\nE")
+        );
+        expect(parsed.ok, QStringLiteral("tap-on-slide-head repro parses"));
+        const TimelineNoteMarker* tap = firstMarkerOfType(parsed, QLatin1String("tap"));
+        expect(tap != nullptr, QStringLiteral("tap-on-slide-head repro emits tap marker"));
+        if (tap != nullptr) {
+            expect(tap->slideHead, QStringLiteral("tap on slide shoot moment sets slideHead"));
+        }
+    }
+
+    {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("1h[4:1]/1-5[8:1],\nE")
+        );
+        expect(parsed.ok, QStringLiteral("hold-tail-on-slide-head repro parses"));
+        const TimelineNoteMarker* hold = firstMarkerOfType(parsed, QLatin1String("hold"));
+        expect(hold != nullptr, QStringLiteral("hold-tail-on-slide-head repro emits hold marker"));
+        if (hold != nullptr) {
+            expect(hold->tailOnSlideHead, QStringLiteral("hold tail at slide shoot moment sets tailOnSlideHead"));
+        }
+    }
+
+    {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("1-5[8:1],A1,\nE")
+        );
+        expect(parsed.ok, QStringLiteral("touch-on-slide-head repro parses"));
+        const TimelineNoteMarker* touch = firstMarkerOfType(parsed, QLatin1String("touch"));
+        expect(touch != nullptr, QStringLiteral("touch-on-slide-head repro emits touch marker"));
+        if (touch != nullptr) {
+            expect(touch->onSlide, QStringLiteral("touch at slide head window sets onSlide"));
+        }
+    }
+
+    {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("1w5[8:1],A1,\nE")
+        );
+        expect(parsed.ok, QStringLiteral("touch-on-wifi-head repro parses"));
+        const TimelineNoteMarker* touch = firstMarkerOfType(parsed, QLatin1String("touch"));
+        expect(touch != nullptr, QStringLiteral("touch-on-wifi-head repro emits touch marker"));
+        if (touch != nullptr) {
+            expect(touch->onSlide, QStringLiteral("touch at wifi head window sets onSlide"));
+        }
+    }
+
+    {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("1w5[8:1],B1,\nE")
+        );
+        expect(parsed.ok, QStringLiteral("touch-on-wifi-pad-enter repro parses"));
+        const TimelineNoteMarker* touch = firstMarkerOfType(parsed, QLatin1String("touch"));
+        expect(touch != nullptr, QStringLiteral("touch-on-wifi-pad-enter repro emits touch marker"));
+        if (touch != nullptr) {
+            expect(touch->onSlide, QStringLiteral("touch at wifi pad-enter window sets onSlide"));
+        }
+    }
+
+    {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("1-5[8:1],B1,\nE")
+        );
+        expect(parsed.ok, QStringLiteral("touch-on-slide-pad-enter repro parses"));
+        const TimelineNoteMarker* touch = firstMarkerOfType(parsed, QLatin1String("touch"));
+        expect(touch != nullptr, QStringLiteral("touch-on-slide-pad-enter repro emits touch marker"));
+        if (touch != nullptr) {
+            expect(touch->onSlide, QStringLiteral("touch at slide pad-enter window sets onSlide"));
+        }
+    }
+
+    {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("1-5[384:1]/5-1[8:1],\nE")
+        );
+        expect(parsed.ok, QStringLiteral("before-after-slide repro parses"));
+        const TimelineNoteMarker* firstSlide = nullptr;
+        const TimelineNoteMarker* secondSlide = nullptr;
+        for (const TimelineNoteMarker& marker : parsed.noteMarkers) {
+            if (marker.type != QLatin1String("slide")) {
+                continue;
+            }
+            if (firstSlide == nullptr) {
+                firstSlide = &marker;
+            } else {
+                secondSlide = &marker;
+                break;
+            }
+        }
+        expect(firstSlide != nullptr && secondSlide != nullptr, QStringLiteral("before-after-slide repro emits both slide markers"));
+        if (firstSlide != nullptr && secondSlide != nullptr) {
+            expect(firstSlide->beforeSlide, QStringLiteral("earlier short slide sets beforeSlide when its tail hits next shoot moment"));
+            expect(secondSlide->afterSlide, QStringLiteral("later slide sets afterSlide when previous tail hits its shoot moment"));
+        }
     }
 
     {
