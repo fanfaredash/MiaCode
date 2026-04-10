@@ -51,6 +51,9 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
     src/app/quick_shell/QuickShellBootstrap.h
     src/app/quick_shell/QuickShellBootstrap.cpp
+    src/app/quick_shell/QuickShellPreviewCompositeSurface.h
+    src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp
+    src/app/quick_shell/QuickShellPreviewSurfacePolicy.h
     src/app/quick_shell/QuickShellController.h
     src/app/quick_shell/QuickShellController.cpp
     src/app/quick_shell/QuickShellStyleBridge.h
@@ -482,6 +485,11 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/timeline/TimelineData.h
     )
 
+    add_executable(quickshell_preview_surface_policy_spec
+        src/tools/preview/QuickShellPreviewSurfacePolicySpec.cpp
+        src/app/quick_shell/QuickShellPreviewSurfacePolicy.h
+    )
+
     target_link_libraries(miacode_muri_dump PRIVATE
         Qt6::Core
         Qt6::Gui
@@ -634,6 +642,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src
         src/common
         src/timeline
+    )
+
+    target_link_libraries(quickshell_preview_surface_policy_spec PRIVATE
+        Qt6::Core
+    )
+    target_include_directories(quickshell_preview_surface_policy_spec PRIVATE
+        src
+        src/app/quick_shell
     )
 endif()
 

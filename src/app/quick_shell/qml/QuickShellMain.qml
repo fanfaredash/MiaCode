@@ -437,11 +437,26 @@ ApplicationWindow {
                             border.color: tone("borderSoft", "#ccd6e2")
                             clip: true
 
-                            QuickShellPreviewSurface {
+                            Loader {
                                 anchors.fill: parent
                                 anchors.margins: 1
-                                runtime: controller.previewRuntime
-                                mediaHost: controller.previewStageMediaHost
+                                active: !controller.previewFullscreen && !controller.previewUsesSeparateSurface
+
+                                sourceComponent: QuickShellPreviewSurface {
+                                    runtime: controller.previewRuntime
+                                    mediaHost: controller.previewStageMediaHost
+                                }
+                            }
+
+                            Loader {
+                                anchors.fill: parent
+                                anchors.margins: 1
+                                active: !controller.previewFullscreen && controller.previewUsesSeparateSurface
+
+                                sourceComponent: WindowContainer {
+                                    anchors.fill: parent
+                                    window: controller.previewCompositeWindow
+                                }
                             }
                         }
                     }
@@ -570,10 +585,24 @@ ApplicationWindow {
                 sourceComponent: Item {
                     anchors.fill: parent
 
-                    QuickShellPreviewSurface {
+                    Loader {
                         anchors.fill: parent
-                        runtime: controller.previewRuntime
-                        mediaHost: controller.previewStageMediaHost
+                        active: controller.previewFullscreen && !controller.previewUsesSeparateSurface
+
+                        sourceComponent: QuickShellPreviewSurface {
+                            runtime: controller.previewRuntime
+                            mediaHost: controller.previewStageMediaHost
+                        }
+                    }
+
+                    Loader {
+                        anchors.fill: parent
+                        active: controller.previewFullscreen && controller.previewUsesSeparateSurface
+
+                        sourceComponent: WindowContainer {
+                            anchors.fill: parent
+                            window: controller.previewCompositeWindow
+                        }
                     }
                 }
             }

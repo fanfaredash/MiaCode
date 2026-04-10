@@ -62,6 +62,7 @@ public:
     bool hasVideoFrame() const;
     double clockDeltaSeconds() const;
     qint64 videoFrameAgeMs() const;
+    qint64 videoFrameCountTotal() const;
     void setObservedPlayheadSecond(double second);
     QString debugMediaTypeName() const;
 
@@ -103,4 +104,5 @@ private:
     double observedPlayheadSecond_ = 0.0;
     double clockDeltaSeconds_ = 0.0;
     QElapsedTimer videoFrameElapsed_;
+    qint64 videoFrameCountTotal_ = 0;
 };

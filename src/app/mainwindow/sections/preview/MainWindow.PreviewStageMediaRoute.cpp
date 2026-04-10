@@ -28,6 +28,21 @@ bool MainWindow::previewUsesStageMediaHostRoute() const
     return previewStageMediaRoute() == PreviewStageMediaRoute::QuickShellStageHost;
 }
 
+bool MainWindow::quickShellPreviewUsesSeparateSurface() const
+{
+    return miacode::quick_shell::shouldUseSeparatePreviewSurface(
+        isQuickShellBackendMode(),
+        previewStageMediaHost_ != nullptr && previewStageMediaHost_->hasVideoMedia()
+    );
+}
+
+QWindow* MainWindow::quickShellPreviewCompositeWindow() const
+{
+    return quickShellPreviewCompositeSurface_ != nullptr
+        ? quickShellPreviewCompositeSurface_->hostWindow()
+        : nullptr;
+}
+
 bool MainWindow::shouldDeferQuickShellStartupStageMediaLoad() const
 {
     return previewUsesStageMediaHostRoute() && quickShellStartupStageMediaLoadDeferred_;
@@ -335,9 +350,53 @@ void MainWindow::setPreviewStageMediaRouteObservedPlayheadSecond(double second)
     previewStageMediaHost_->setObservedPlayheadSecond(second);
 }
 
+void MainWindow::ensureQuickShellPreviewCompositeSurfaceInitialized()
+{
+    if (!isQuickShellBackendMode()) {
+        return;
+    }
+    if (quickShellPreviewCompositeSurface_ == nullptr) {
+        quickShellPreviewCompositeSurface_ = new QuickShellPreviewCompositeSurface(this);
+    }
+    quickShellPreviewCompositeSurface_->setRuntime(previewCanvas_);
+    quickShellPreviewCompositeSurface_->setMediaHost(previewStageMediaHost_);
+}
+
+void MainWindow::refreshQuickShellPreviewCompositeSurfaceState()
+{
+    if (!isQuickShellBackendMode()) {
+        return;
+    }
+
+    ensureQuickShellPreviewCompositeSurfaceInitialized();
+    if (quickShellPreviewCompositeSurface_ == nullptr) {
+        return;
+    }
+
+    const bool nextActive = quickShellPreviewUsesSeparateSurface();
+    quickShellPreviewCompositeSurface_->setRuntime(previewCanvas_);
+    quickShellPreviewCompositeSurface_->setMediaHost(previewStageMediaHost_);
+    quickShellPreviewCompositeSurface_->setActive(nextActive);
+
+    if (quickShellPreviewCompositeSurfaceActive_ == nextActive) {
+        return;
+    }
+
+    quickShellPreviewCompositeSurfaceActive_ = nextActive;
+    if (runtimeDebugOutputEnabled_) {
+        appendOutput(
+            "preview/stage_media",
+            QString("action=presentation_mode mode=%1")
+                .arg(nextActive ? QStringLiteral("separate_surface") : QStringLiteral("inline"))
+        );
+    }
+}
+
 void MainWindow::ensurePreviewStageMediaHostInitialized()
 {
     if (previewStageMediaHost_ != nullptr) {
+        ensureQuickShellPreviewCompositeSurfaceInitialized();
+        refreshQuickShellPreviewCompositeSurfaceState();
         return;
     }
 
@@ -347,6 +406,7 @@ void MainWindow::ensurePreviewStageMediaHostInitialized()
         if (previewCanvas_ != nullptr) {
             previewCanvas_->setStageMediaAvailable(previewStageMediaHost_->hasResolvedMedia());
         }
+        refreshQuickShellPreviewCompositeSurfaceState();
         refreshPreviewStageMediaRouteDebugState(false);
     });
     connect(previewStageMediaHost_, &PreviewStageMediaHost::playbackPositionChanged, this, [this](double second) {
@@ -371,6 +431,7 @@ void MainWindow::ensurePreviewStageMediaHostInitialized()
     connect(previewStageMediaHost_, &PreviewStageMediaHost::diagnosticsChanged, this, [this]() {
         refreshPreviewStageMediaRouteDebugState(!qtPreviewPlaying_);
     });
+    ensureQuickShellPreviewCompositeSurfaceInitialized();
     previewStageMediaHost_->setWarmupResolvedMediaPath(previewMediaWarmupChartPath_, previewMediaWarmupResolvedPath_);
     deferredQuickShellStartupStageMediaChartPath_ = currentFilePath_;
     deferredQuickShellStartupStageMediaPausedSecond_ = qMax(0.0, qtPreviewPauseSecond_);
@@ -380,6 +441,7 @@ void MainWindow::ensurePreviewStageMediaHostInitialized()
         previewStageMediaHost_->setChartPath(currentFilePath_);
         previewStageMediaHost_->setPlayheadSeconds(qtPreviewPauseSecond_);
     }
+    refreshQuickShellPreviewCompositeSurfaceState();
     refreshPreviewStageMediaRouteDebugState(false);
 }
 
@@ -388,6 +450,11 @@ void MainWindow::shutdownPreviewStageMediaHost()
     if (previewStageMediaHost_ == nullptr) {
         return;
     }
+    if (quickShellPreviewCompositeSurface_ != nullptr) {
+        quickShellPreviewCompositeSurface_->setMediaHost(nullptr);
+        quickShellPreviewCompositeSurface_->setActive(false);
+    }
+    quickShellPreviewCompositeSurfaceActive_ = false;
     delete previewStageMediaHost_;
     previewStageMediaHost_ = nullptr;
 }
@@ -403,17 +470,31 @@ void MainWindow::refreshPreviewStageMediaRouteDebugState(bool requestUpdate)
     double playbackSecond = 0.0;
     double clockDeltaSeconds = 0.0;
     qint64 videoFrameAgeMs = -1;
+    bool hasResolvedMedia = false;
+    bool hasVideoMedia = false;
+    QString mediaTypeName = QStringLiteral("none");
     if (previewUsesStageMediaHostRoute() && previewStageMediaHost_ != nullptr) {
+        hasResolvedMedia = previewStageMediaHost_->hasResolvedMedia();
+        hasVideoMedia = previewStageMediaHost_->hasVideoMedia();
         if (previewStageMediaHost_->hasVideoMedia()) {
             mediaType = miacode::preview::scene::PreviewExternalStageMediaType::Video;
+            mediaTypeName = QStringLiteral("video");
         } else if (previewStageMediaHost_->hasResolvedMedia()) {
             mediaType = miacode::preview::scene::PreviewExternalStageMediaType::Image;
+            mediaTypeName = QStringLiteral("image");
         }
         videoPlaybackActive = previewStageMediaHost_->videoPlaybackActive();
         playbackSecond = previewStageMediaHost_->currentPlaybackSecond();
         clockDeltaSeconds = previewStageMediaHost_->clockDeltaSeconds();
         videoFrameAgeMs = previewStageMediaHost_->videoFrameAgeMs();
     }
+    previewCanvas_->setExternalStageMediaProfileSummary(
+        quickShellPreviewUsesSeparateSurface(),
+        hasResolvedMedia,
+        hasVideoMedia,
+        mediaTypeName,
+        previewStageMediaHost_ != nullptr ? previewStageMediaHost_->videoFrameCountTotal() : 0
+    );
     previewCanvas_->setExternalStageMediaDebugState(
         mediaType,
         videoPlaybackActive,

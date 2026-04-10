@@ -67,6 +67,11 @@ QuickShellController::QuickShellController(MainWindow* backend, QObject* parent)
         workspaceWindow_ = createForeignWindowForSurface(backend_->quickShellWorkspaceSurfaceWidget_);
         previewControlsWindow_ = createForeignWindowForSurface(backend_->quickShellPreviewControlsSurfaceWidget_);
         statusWindow_ = createForeignWindowForSurface(backend_->quickShellStatusSurfaceWidget_);
+        if (backend_->previewStageMediaHost_ != nullptr) {
+            connect(backend_->previewStageMediaHost_, &PreviewStageMediaHost::mediaStateChanged, this, [this]() {
+                refreshFromBackend();
+            });
+        }
     }
     refreshTimer_->setInterval(150);
     connect(refreshTimer_, &QTimer::timeout, this, &QuickShellController::refreshFromBackend);
@@ -117,6 +122,16 @@ QObject* QuickShellController::previewRuntime() const
 QObject* QuickShellController::previewStageMediaHost() const
 {
     return backend_ != nullptr ? backend_->previewStageMediaHost_ : nullptr;
+}
+
+QWindow* QuickShellController::previewCompositeWindow() const
+{
+    return backend_ != nullptr ? backend_->quickShellPreviewCompositeWindow() : nullptr;
+}
+
+bool QuickShellController::previewUsesSeparateSurface() const
+{
+    return previewUsesSeparateSurface_;
 }
 
 QWindow* QuickShellController::topChromeWindow() const
@@ -457,6 +472,7 @@ void QuickShellController::refreshFromBackend()
             : backend_->qtPreviewPauseSecond_
     );
     stateChanged |= assignIfChanged(previewDurationSeconds_, backend_->previewDurationSeconds());
+    stateChanged |= assignIfChanged(previewUsesSeparateSurface_, backend_->quickShellPreviewUsesSeparateSurface());
 
     const bool nextPreviewFullscreen = backend_->previewFullscreenActive_;
     if (assignIfChanged(previewFullscreen_, nextPreviewFullscreen)) {

@@ -22,6 +22,8 @@ class QuickShellController : public QObject
     Q_PROPERTY(bool previewFullscreen READ previewFullscreen WRITE setPreviewFullscreen NOTIFY previewFullscreenChanged)
     Q_PROPERTY(QObject* previewRuntime READ previewRuntime CONSTANT)
     Q_PROPERTY(QObject* previewStageMediaHost READ previewStageMediaHost CONSTANT)
+    Q_PROPERTY(QWindow* previewCompositeWindow READ previewCompositeWindow CONSTANT)
+    Q_PROPERTY(bool previewUsesSeparateSurface READ previewUsesSeparateSurface NOTIFY shellStateChanged)
     Q_PROPERTY(QWindow* topChromeWindow READ topChromeWindow CONSTANT)
     Q_PROPERTY(QWindow* workspaceWindow READ workspaceWindow CONSTANT)
     Q_PROPERTY(QWindow* previewControlsWindow READ previewControlsWindow CONSTANT)
@@ -39,6 +41,8 @@ public:
     bool previewFullscreen() const;
     QObject* previewRuntime() const;
     QObject* previewStageMediaHost() const;
+    QWindow* previewCompositeWindow() const;
+    bool previewUsesSeparateSurface() const;
     QWindow* topChromeWindow() const;
     QWindow* workspaceWindow() const;
     QWindow* previewControlsWindow() const;
@@ -80,4 +84,5 @@ private:
     double previewPositionSeconds_ = 0.0;
     double previewDurationSeconds_ = 0.0;
     bool previewFullscreen_ = false;
+    bool previewUsesSeparateSurface_ = false;
 };
