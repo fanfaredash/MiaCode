@@ -1,10 +1,13 @@
 #include "preview/scene/PreviewHeadLayerState.h"
 
 #include "preview/scene/PreviewAnimatedSpriteHelpers.h"
+#include "preview/scene/PreviewJudgeOverlayShared.h"
 #include "preview/scene/PreviewOpacityCurves.h"
 #include "preview/scene/PreviewSceneConstants.h"
 #include "preview/scene/PreviewSceneMath.h"
 #include "preview/scene/PreviewSkinSelectors.h"
+
+#include <QHash>
 
 #include <algorithm>
 
@@ -72,6 +75,37 @@ qreal slideHeadFallRotationDegrees(
     const qreal elapsedSeconds =
         qBound<qreal>(0.0, deltaSeconds + tapLifecycleDurationSeconds, tapLifecycleDurationSeconds);
     return slideHeadRotateSpeedDegreesPerSecond(marker) * elapsedSeconds;
+}
+
+struct SlideHeadRepresentative {
+    qsizetype markerIndex = -1;
+    qreal rotateSpeedDegreesPerSecond = 0.0;
+};
+
+QHash<QString, SlideHeadRepresentative> buildSlideHeadRepresentatives(
+    const QVector<TimelineNoteMarker>& noteMarkers
+)
+{
+    QHash<QString, SlideHeadRepresentative> representatives;
+    representatives.reserve(noteMarkers.size());
+
+    for (qsizetype markerIndex = 0; markerIndex < noteMarkers.size(); ++markerIndex) {
+        const TimelineNoteMarker& marker = noteMarkers.at(markerIndex);
+        if ((marker.type != QLatin1String("slide") && marker.type != QLatin1String("wifi")) || !marker.hasHeadStar) {
+            continue;
+        }
+
+        const QString key = miacode::preview::scene::slideHeadEventKey(marker);
+        const qreal rotateSpeed = slideHeadRotateSpeedDegreesPerSecond(marker);
+        auto it = representatives.find(key);
+        if (it == representatives.end()
+            || rotateSpeed < it->rotateSpeedDegreesPerSecond
+            || (qFuzzyCompare(rotateSpeed + 1.0, it->rotateSpeedDegreesPerSecond + 1.0) && markerIndex > it->markerIndex)) {
+            representatives.insert(key, SlideHeadRepresentative{markerIndex, rotateSpeed});
+        }
+    }
+
+    return representatives;
 }
 
 qreal tapDoubleStarRotationDegrees(qreal deltaSeconds, qreal tapLifecycleDurationSeconds)
@@ -191,6 +225,8 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
     };
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
+    const QHash<QString, SlideHeadRepresentative> slideHeadRepresentatives =
+        buildSlideHeadRepresentatives(state.noteMarkers);
 
     for (qsizetype markerIndex : layerOrder) {
         const TimelineNoteMarker& marker = state.noteMarkers[markerIndex];
@@ -325,6 +361,13 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
         const bool slideLike = marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi");
         if (slideLike && !marker.hasHeadStar) {
             continue;
+        }
+        if (slideLike) {
+            const auto representativeIt = slideHeadRepresentatives.constFind(slideHeadEventKey(marker));
+            if (representativeIt != slideHeadRepresentatives.constEnd()
+                && representativeIt->markerIndex != markerIndex) {
+                continue;
+            }
         }
         const bool starMaterialHead = slideLike ? !marker.slideHeadUsesTapMaterial : marker.tapUsesStarMaterial;
         const bool headBreak = slideLike ? marker.headBreak : marker.isBreak;
