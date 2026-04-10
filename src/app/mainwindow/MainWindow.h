@@ -548,7 +548,8 @@ friend class QuickShellBootstrap;
     void addValidationError(
         int line,
         int col,
-        const QString& message,
+        const QString& rawMessage,
+        const QString& displayMessage,
         const QString& issueTypeKey = QString(),
         const QString& issueTypeLabel = QString(),
         bool ignoredInHeader = false

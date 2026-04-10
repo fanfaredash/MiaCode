@@ -108,15 +108,9 @@ void runStrictFormatChecks(ParseState* state, const QStringList& lines)
 
         const int commentStart = line.indexOf(QStringLiteral("||"));
         if (commentStart >= 0) {
-            int numerator = 0;
-            int denominator = 0;
-            if (miacode::simai::parseInlineTimeSignatureComment(
-                    line,
-                    commentStart,
-                    &numerator,
-                    &denominator,
-                    nullptr)) {
-                line = line.left(commentStart);
+            line = line.left(commentStart);
+            if (line.trimmed().isEmpty()) {
+                continue;
             }
         }
 
