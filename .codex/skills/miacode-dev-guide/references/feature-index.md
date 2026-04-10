@@ -24,9 +24,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Class: `MainWindow`
   - Owns: top-level state, shared widgets, preview runtime instances, export worker process, portable/project settings, the route-specific preview stage-media coordinator, and the hidden Quick-shell backend mode that rehosts legacy editor/timeline surfaces for QML
 - Quick shell beta bootstrap and controller bridge:
-  - Files: `src/app/quick_shell/QuickShellBootstrap.h`, `src/app/quick_shell/QuickShellBootstrap.cpp`, `src/app/quick_shell/QuickShellController.h`, `src/app/quick_shell/QuickShellController.cpp`, `src/app/quick_shell/QuickShellStyleBridge.h`, `src/app/quick_shell/QuickShellStyleBridge.cpp`, `src/app/quick_shell/qml/QuickShellPreviewSurface.qml`, `src/app/ui/WindowParityMetrics.h`, `src/app/ui/WindowParityMetrics.cpp`
-  - Classes: `QuickShellBootstrap`, `QuickShellController`, `QuickShellStyleBridge`
-  - Owns: `QQmlApplicationEngine` startup, hybrid-host beta window lifetime, coarse-grained native-region window exposure, preview transport/fullscreen bridge state, the quickshell-only preview surface that stacks background media plus scene plus HUD, and host sizing/theme tokens shared with the `MainWindow` backend
+  - Files: `src/app/quick_shell/QuickShellBootstrap.h`, `src/app/quick_shell/QuickShellBootstrap.cpp`, `src/app/quick_shell/QuickShellController.h`, `src/app/quick_shell/QuickShellController.cpp`, `src/app/quick_shell/QuickShellPreviewCompositeSurface.h`, `src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp`, `src/app/quick_shell/QuickShellStyleBridge.h`, `src/app/quick_shell/QuickShellStyleBridge.cpp`, `src/app/quick_shell/qml/QuickShellPreviewSurface.qml`, `src/app/ui/WindowParityMetrics.h`, `src/app/ui/WindowParityMetrics.cpp`
+  - Classes: `QuickShellBootstrap`, `QuickShellController`, `QuickShellPreviewCompositeSurface`, `QuickShellStyleBridge`
+  - Owns: `QQmlApplicationEngine` startup, hybrid-host beta window lifetime, coarse-grained native-region window exposure, preview transport/fullscreen bridge state, the quickshell-only inline preview surface that stacks background media plus scene plus HUD, the dedicated quickshell composite preview window used for video media, and host sizing/theme tokens shared with the `MainWindow` backend
 - Quick shell legacy bridge leftovers:
   - Files: `src/app/quick_shell/OutlineListModel.h`, `src/app/quick_shell/OutlineListModel.cpp`, `src/app/quick_shell/IssueListModel.h`, `src/app/quick_shell/IssueListModel.cpp`, `src/app/quick_shell/LegacyChartEditorSurface.h`, `src/app/quick_shell/LegacyChartEditorSurface.cpp`, `src/app/quick_shell/LegacyTimelineSurface.h`, `src/app/quick_shell/LegacyTimelineSurface.cpp`, `src/app/quick_shell/qml/QuickShellMain.qml`
   - Owns: the retained legacy quick-shell bridge helpers that are no longer on the active hybrid-host path; `QuickShellMain.qml` is now the coarse-grained host that embeds native top chrome, workspace, preview-controls regions, plus the same-window Quick preview
@@ -101,7 +101,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Files: `src/preview/runtime/PreviewStageMediaHost.h`, `src/preview/runtime/PreviewStageMediaHost.cpp`, `src/preview/runtime/qml/PreviewStageMediaItem.qml`, `src/app/quick_shell/qml/QuickShellPreviewSurface.qml`
   - Class: `PreviewStageMediaHost`
   - Key functions: `setWarmupResolvedMediaPath`, `setChartPath`, `attachVideoOutputObject`, `detachVideoOutputObject`, `startPlayback`, `syncPlayback`
-  - Owns: the quickshell-beta-only background-media route for both images and videos, including shared media resolution, external `VideoOutput` binding, and embedded/fullscreen handoff for the active quickshell preview instance
+  - Owns: the quickshell-beta-only background-media route for both images and videos, including shared media resolution, external `VideoOutput` binding, inline quickshell image presentation, and the media side of the dedicated quickshell video composite-surface handoff
 - Backend-neutral scene-state and timing helpers:
   - Files: `src/preview/scene/PreviewFrameState.h`, `src/preview/scene/PreviewLayerOrder.h`, `src/preview/scene/PreviewOpacityCurves.h`, `src/preview/scene/PreviewOpacityCurves.cpp`, `src/preview/scene/PreviewSceneGeometry.h`, `src/preview/scene/PreviewSceneGeometry.cpp`, `src/preview/scene/PreviewHudState.h`, `src/preview/scene/PreviewHudState.cpp`, `src/preview/scene/PreviewProgressStatsCache.h`, `src/preview/scene/PreviewProgressStatsCache.cpp`, `src/preview/scene/PreviewPreparedSceneCache.h`, `src/preview/scene/PreviewPreparedSceneCache.cpp`
   - Owns: shared preview frame payloads, layer flags/order, opacity/time curves, stage/playfield geometry helpers, HUD stats/time formatting, the prebuilt stats cache shared by Quick HUD/main-window side stats/export HUD rendering, and the per-layer prepared note windows used by realtime preview and export Quick scene roots
@@ -112,7 +112,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Files: `src/preview/video/PreviewMediaController.h`, `src/preview/video/PreviewMediaController.cpp`
   - Class: `PreviewMediaController`
   - Key functions: `initializeBackendObjects`, `setWarmupResolvedMediaPath`, `setChartPath`, `setBackgroundTrackPath`, `setTimelineOffsetSeconds`, `startPlayback`, `syncPlayback`, `resolveMediaPath`
-  - Owns: dedicated media-thread runtime objects (`QMediaPlayer` / `QVideoSink` / `QAudioOutput`), warmup-resolved media-path reuse, and the widget-shell background-media path for both background images and videos
+  - Owns: dedicated media-thread runtime objects (`QMediaPlayer` / `QVideoSink` / `QAudioOutput`), warmup-resolved media-path reuse, and the widget-shell background-media path for both background images and videos; quickshell video no longer uses this controller for stage-video presentation
 - Preview integration helper:
   - Files: `src/preview/PreviewIntegration.h`, `src/preview/PreviewIntegration.cpp`
   - Owns: side-by-side legacy preview placement helpers

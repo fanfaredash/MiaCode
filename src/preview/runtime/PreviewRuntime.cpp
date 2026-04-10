@@ -174,6 +174,22 @@ void PreviewRuntime::setExternalStageMediaDebugState(
     }
 }
 
+void PreviewRuntime::setExternalStageMediaProfileSummary(
+    bool separateSurfaceActive,
+    bool hasResolvedMedia,
+    bool hasVideoMedia,
+    const QString& mediaTypeName,
+    qint64 videoFrameCountTotal)
+{
+    externalStageMediaSeparateSurfaceActive_ = separateSurfaceActive;
+    externalStageMediaHasResolvedMedia_ = hasResolvedMedia;
+    externalStageMediaHasVideoMedia_ = hasVideoMedia;
+    externalStageMediaMediaTypeName_ = mediaTypeName.trimmed().isEmpty()
+        ? QStringLiteral("none")
+        : mediaTypeName.trimmed();
+    externalStageMediaVideoFrameCountTotal_ = qMax<qint64>(0, videoFrameCountTotal);
+}
+
 void PreviewRuntime::setPlayheadSeconds(double seconds, bool requestUpdate)
 {
     frameState_.playheadSeconds = qMax(0.0, seconds);
@@ -402,6 +418,8 @@ void PreviewRuntime::resetProfilingSession()
     peakFrameLayerBuildMs_ = 0.0;
     layerProfileAggregates_.clear();
     stageBackgroundProfile_ = PreviewRuntimeStageBackgroundAggregate();
+    externalStageMediaVideoFrameCountTotal_ = 0;
+    presentedFrameCountTotal_ = 0;
 }
 
 void PreviewRuntime::updateTextureProfilingStats(const PreviewTextureStats& frameStats)
@@ -483,8 +501,7 @@ void PreviewRuntime::updateTextureProfilingStats(const PreviewTextureStats& fram
 QString PreviewRuntime::writeProfilingSummaryToFile()
 {
     if (!miacode::debug_options::previewProfileOutputEnabled()
-        || presentedFrameIntervalCount_ <= 0
-        || profiledTextureFrameCount_ <= 0) {
+        || presentedFrameIntervalCount_ <= 0) {
         return QString();
     }
 
@@ -516,9 +533,18 @@ QString PreviewRuntime::writeProfilingSummaryToFile()
     stream << "timestamp=" << QDateTime::currentDateTime().toString(Qt::ISODate) << '\n';
     stream << "profile_scope=session_accumulated" << '\n';
     stream << "frame_samples=" << presentedFrameIntervalCount_ << '\n';
+    stream << "presented_total=" << presentedFrameCountTotal_ << '\n';
     stream << "present_avg_ms=" << QString::number(avgMs, 'f', 4) << '\n';
     stream << "present_max_ms=" << QString::number(maxMs, 'f', 4) << '\n';
     stream << "fps=" << QString::number(frameState_.fpsDisplay, 'f', 4) << '\n';
+    stream << "external_stage_media.separate_surface_active="
+           << (externalStageMediaSeparateSurfaceActive_ ? 1 : 0) << '\n';
+    stream << "external_stage_media.has_resolved_media="
+           << (externalStageMediaHasResolvedMedia_ ? 1 : 0) << '\n';
+    stream << "external_stage_media.has_video_media="
+           << (externalStageMediaHasVideoMedia_ ? 1 : 0) << '\n';
+    stream << "external_stage_media.media_type=" << externalStageMediaMediaTypeName_ << '\n';
+    stream << "external_stage_media.video_frames_total=" << externalStageMediaVideoFrameCountTotal_ << '\n';
     stream << "texture_profiled_frames=" << profiledTextureFrameCount_ << '\n';
     stream << "texture_active_sprite_frames=" << profiledActiveSpriteFrameCount_ << '\n';
     stream << "texture_cached_hits_total=" << cachedTextureHitTotal_ << '\n';
@@ -623,6 +649,7 @@ void PreviewRuntime::handlePresentedFrame(const PreviewTextureStats* frameStats)
     if (frameStats != nullptr) {
         updateTextureProfilingStats(*frameStats);
     }
+    presentedFrameCountTotal_ += 1;
     updatePresentedFrameStats();
     pendingPresentedStatsRefresh_ = false;
     emit framePresented();

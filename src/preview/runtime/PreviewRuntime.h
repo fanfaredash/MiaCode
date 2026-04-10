@@ -79,6 +79,12 @@ public:
         double clockDeltaSeconds,
         qint64 videoFrameAgeMs,
         bool requestUpdate = true);
+    void setExternalStageMediaProfileSummary(
+        bool separateSurfaceActive,
+        bool hasResolvedMedia,
+        bool hasVideoMedia,
+        const QString& mediaTypeName,
+        qint64 videoFrameCountTotal);
     void setPlayheadSeconds(double seconds, bool requestUpdate = true);
     void setMediaFrame(const QImage& frame);
     void setVideoFrame(const QVideoFrame& frame);
@@ -158,4 +164,10 @@ private:
     double peakFrameLayerBuildMs_ = 0.0;
     QVector<PreviewRuntimeLayerProfileAggregate> layerProfileAggregates_;
     PreviewRuntimeStageBackgroundAggregate stageBackgroundProfile_;
+    bool externalStageMediaSeparateSurfaceActive_ = false;
+    bool externalStageMediaHasResolvedMedia_ = false;
+    bool externalStageMediaHasVideoMedia_ = false;
+    QString externalStageMediaMediaTypeName_ = QStringLiteral("none");
+    qint64 externalStageMediaVideoFrameCountTotal_ = 0;
+    qint64 presentedFrameCountTotal_ = 0;
 };

@@ -2,6 +2,8 @@
 #include "AppVersion.h"
 #include "BracketScopeHighlighter.h"
 #include "PlainCodeEditor.h"
+#include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
+#include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "PreviewMediaController.h"

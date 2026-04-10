@@ -278,13 +278,6 @@ void PreviewStageMediaHost::startPlayback(double seconds)
     }
     updateClockDelta();
     emit diagnosticsChanged();
-    appendPreviewStageMediaLog(
-        QStringLiteral("start_playback"),
-        QStringLiteral("second=%1 active=%2 pending=%3")
-            .arg(seconds, 0, 'f', 3)
-            .arg(videoPlaybackActive_ ? 1 : 0)
-            .arg(videoPlaybackPendingStart_ ? 1 : 0)
-    );
 #endif
 }
 
@@ -383,6 +376,11 @@ qint64 PreviewStageMediaHost::videoFrameAgeMs() const
     return videoFrameElapsed_.elapsed();
 }
 
+qint64 PreviewStageMediaHost::videoFrameCountTotal() const
+{
+    return videoFrameCountTotal_;
+}
+
 void PreviewStageMediaHost::setObservedPlayheadSecond(double second)
 {
     observedPlayheadSecond_ = qMax(0.0, second);
@@ -421,6 +419,7 @@ void PreviewStageMediaHost::clearMedia()
     observedPlayheadSecond_ = 0.0;
     clockDeltaSeconds_ = 0.0;
     videoFrameElapsed_.invalidate();
+    videoFrameCountTotal_ = 0;
     emit imageSourceChanged();
     emit mediaStateChanged();
     emit diagnosticsChanged();
@@ -444,6 +443,7 @@ void PreviewStageMediaHost::loadImageMedia(const QString& path)
     videoPlaybackActive_ = false;
     videoPlaybackPendingStart_ = false;
     videoFrameElapsed_.invalidate();
+    videoFrameCountTotal_ = 0;
     updateClockDelta();
     emit imageSourceChanged();
     emit mediaStateChanged();
@@ -538,9 +538,8 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame)
     }
     const bool firstFrame = !videoFrameElapsed_.isValid();
     videoFrameElapsed_.restart();
-    if (firstFrame) {
-        appendPreviewStageMediaLog(QStringLiteral("video_frame"), QStringLiteral("first=1"));
-    }
+    Q_UNUSED(firstFrame);
+    ++videoFrameCountTotal_;
     emit diagnosticsChanged();
 #endif
 }
