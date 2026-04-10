@@ -28,7 +28,7 @@ We added runtime instrumentation in these files:
 - `src/preview/quick_scene/PreviewQuickSceneRoot.cpp`
 - `src/app/main.cpp`
 
-Primary runtime tags:
+Primary runtime tags used during the original investigation:
 
 - `window/dialog_event`
 - `window/native`
@@ -77,12 +77,13 @@ Status: Done in code.
 - Enable `Qt::AA_DontCreateNativeWidgetSiblings` by default in `src/app/main.cpp`.
 - Log the default state, opt-out state, and effective state through `startup/qt_config`.
 
-### Step 2. Keep Investigation Hooks
+### Step 2. Retire Sensitive Investigation Hooks
 
-Status: Keep for now.
+Status: Retired from the main app.
 
-- Retain the runtime black-screen instrumentation while we continue validating dialog flows and mixed-DPI/multi-monitor machines.
-- Do not remove the A/B env knobs until we have enough confidence from user reports.
+- The sensitive native-dialog WinEvent hook and related `window/native*` probes were removed from `MiaCode.exe`.
+- If that level of Windows investigation is needed again, it must live in a separate dev-only helper and must not ship in release `dist/` artifacts.
+- Keep the safer preview/runtime tracing (`preview/host_window_event`, `preview/embedded_refresh`, `preview/quick_runtime`, `startup/qt_config`) for ongoing validation.
 
 ### Step 3. Validation Sweep
 

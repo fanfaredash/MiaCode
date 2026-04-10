@@ -64,7 +64,6 @@ void PreviewStageMediaHost::initializeBackendObjects()
     return;
 #else
     if (player_ != nullptr) {
-        bindVideoOutput();
         return;
     }
 
@@ -93,7 +92,6 @@ void PreviewStageMediaHost::initializeBackendObjects()
         emit diagnosticsChanged();
         emit playbackFinished();
     });
-    bindVideoOutput();
 #endif
 }
 
