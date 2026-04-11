@@ -68,6 +68,15 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/quick_shell/LegacyTimelineSurface.cpp
     src/app/mainwindow/MainWindow.h
     src/app/mainwindow/MainWindow.cpp
+    src/app/mainwindow/MainWindowShared.h
+    src/app/mainwindow/MainWindowShared.cpp
+    src/app/mainwindow/sections/document/MainWindow.DocumentFlow.cpp
+    src/app/mainwindow/sections/editor/MainWindow.EditorDisplay.cpp
+    src/app/mainwindow/sections/frame/MainWindow.BootstrapAndMenus.cpp
+    src/app/mainwindow/sections/preferences/MainWindow.PreferencesDialog.cpp
+    src/app/mainwindow/sections/preview/MainWindow.PreviewStageMediaRoute.cpp
+    src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp
+    src/app/mainwindow/sections/validation/MainWindow.ValidationFlow.cpp
     src/app/ui/UiText.h
     src/app/ui/UiText.cpp
     src/app/ui/UiTheme.h

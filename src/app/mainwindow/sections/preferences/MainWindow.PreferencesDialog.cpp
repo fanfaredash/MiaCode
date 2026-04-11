@@ -1,11 +1,52 @@
-﻿void MainWindow::onPreferences()
+﻿#include "MainWindow.PreferencesSection.h"
+#include "../../MainWindowShared.h"
+
+#include "BracketScopeHighlighter.h"
+#include "DialogLocalization.h"
+#include "PlainCodeEditor.h"
+#include "QtPreviewSfxRuntime.h"
+#include "SimaiNativeParser.h"
+#include "TimelineView.h"
+#include "UiText.h"
+#include "UiTheme.h"
+#include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
+#include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
+#include "common/ChartAssetPaths.h"
+#include "common/DebugLog.h"
+#include "common/DebugOptions.h"
+#include "preview/runtime/PreviewRuntime.h"
+#include "preview/runtime/PreviewStageMediaHost.h"
+#include "preview/scene/PreviewProgressStatsCache.h"
+#include "simai/transform/ChartBatchTransform.h"
+#include "simai/transform/ChartNormalization.h"
+#include "tools/muri/MuriAnalyzer.h"
+#include "tools/muri/MuriPanelEntries.h"
+#include "tools/muri/MuriStaticChecker.h"
+
+#include <QtCore>
+#include <QtGui>
+#include <QtWidgets>
+
+using namespace miacode::mainwindow::shared;
+
+MainWindow::PreferencesSection::PreferencesSection(
+    MainWindow& owner,
+    MainWindow::MainWindowUiRefs& ui,
+    MainWindow::MainWindowState& state)
+    : owner_(owner)
+    , ui_(ui)
+    , state_(state)
+{}
+
+void MainWindow::PreferencesSection::onPreferences()
 {
-    QDialog dialog(this);
+    QDialog dialog(UiDialogs::effectiveParentWidget(&owner_));
     dialog.setWindowTitle(uiText("dialog.preferences.title", "Preferences"));
     dialog.setModal(true);
     dialog.setMinimumWidth(400);
     dialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
-    applySystemWindowBackdrop(&dialog);
+    owner_.applySystemWindowBackdrop(&dialog);
+    UiDialogs::prepareDialogWindow(&dialog, &owner_);
 
     auto* rootLayout = new QVBoxLayout(&dialog);
     rootLayout->setContentsMargins(12, 12, 12, 12);
@@ -158,8 +199,8 @@
     editorLayout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
     editorLayout->setHorizontalSpacing(12);
     editorLayout->setVerticalSpacing(8);
-    const int originalEditorFontSize = editorTextFontPointSize_;
-    const double originalEditorLineSpacingFactor = editorLineSpacingFactor_;
+    const int originalEditorFontSize = state_.editorTextFontPointSize_;
+    const double originalEditorLineSpacingFactor = state_.editorLineSpacingFactor_;
     int selectedEditorFontSize = originalEditorFontSize;
     double selectedEditorLineSpacingFactor = originalEditorLineSpacingFactor;
 
@@ -176,7 +217,7 @@
     shortcutHint->setStyleSheet(QStringLiteral("color: %1;").arg(UiTheme::colors().textMuted.name(QColor::HexRgb)));
     connect(editorFontSizeSpin, qOverload<int>(&QSpinBox::valueChanged), &dialog, [&](int value) {
         selectedEditorFontSize = value;
-        applyEditorTextFontSize(selectedEditorFontSize, false);
+        owner_.applyEditorTextFontSize(selectedEditorFontSize, false);
     });
     fontSizeRowLayout->addWidget(editorFontSizeSpin, 0);
     fontSizeRowLayout->addWidget(shortcutHint, 0);
@@ -201,7 +242,7 @@
             return;
         }
         selectedEditorLineSpacingFactor = lineSpacingCombo->itemData(index).toDouble();
-        applyEditorLineSpacingFactor(selectedEditorLineSpacingFactor, false);
+        owner_.applyEditorLineSpacingFactor(selectedEditorLineSpacingFactor, false);
     });
     editorLayout->addRow(lineSpacingLabel, lineSpacingCombo);
 
@@ -229,12 +270,9 @@
     rootLayout->addWidget(buttonBox, 0, Qt::AlignRight);
 
     const int dialogResult = dialog.exec();
-    refreshEmbeddedPreviewSurface();
-    scheduleEmbeddedPreviewSurfaceRefresh(0);
-    scheduleEmbeddedPreviewSurfaceRefresh(120);
     if (dialogResult != QDialog::Accepted) {
-        applyEditorLineSpacingFactor(originalEditorLineSpacingFactor, false);
-        applyEditorTextFontSize(originalEditorFontSize, false);
+        owner_.applyEditorLineSpacingFactor(originalEditorLineSpacingFactor, false);
+        owner_.applyEditorTextFontSize(originalEditorFontSize, false);
         return;
     }
 
@@ -250,23 +288,28 @@
     }
 
     if (editorFontChanged || editorLineSpacingChanged) {
-        persistEditorTextFontPreference();
-        statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+        owner_.persistEditorTextFontPreference();
+        owner_.statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
     }
     if (themeChanged) {
         UiText::setPreferredTheme(selectedThemePreference);
-        applyUiTheme();
-        statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
+        owner_.applyUiTheme();
+        owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
     }
     if (languageChanged) {
         UiText::setPreferredLanguage(selectedPreference);
-        statusBar()->showMessage(uiText("status.preferences_saved", "Preferences saved. Restart to apply."));
+        owner_.statusBar()->showMessage(uiText("status.preferences_saved", "Preferences saved. Restart to apply."));
         UiDialogs::showMessageBox(
             QMessageBox::Information,
-            this,
+            &owner_,
             uiText("dialog.preferences.restart_title", "Restart Required"),
             uiText("dialog.preferences.restart_message", "Language preference saved. Restart MiaCode to apply menu, font, and UI text updates.")
         );
     }
+}
+
+void MainWindow::onPreferences()
+{
+    preferencesSection_->onPreferences();
 }
 

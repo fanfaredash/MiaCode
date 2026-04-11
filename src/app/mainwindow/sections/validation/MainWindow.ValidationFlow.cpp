@@ -1,4 +1,95 @@
-﻿namespace {
+﻿#include "MainWindow.ValidationSection.h"
+#include "../../MainWindowShared.h"
+
+#include "BracketScopeHighlighter.h"
+#include "DialogLocalization.h"
+#include "PlainCodeEditor.h"
+#include "QtPreviewSfxRuntime.h"
+#include "SimaiNativeParser.h"
+#include "TimelineView.h"
+#include "UiText.h"
+#include "UiTheme.h"
+#include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
+#include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
+#include "common/ChartAssetPaths.h"
+#include "common/DebugLog.h"
+#include "common/DebugOptions.h"
+#include "preview/runtime/PreviewRuntime.h"
+#include "preview/runtime/PreviewStageMediaHost.h"
+#include "preview/scene/PreviewProgressStatsCache.h"
+#include "simai/transform/ChartBatchTransform.h"
+#include "simai/transform/ChartNormalization.h"
+#include "tools/muri/MuriAnalyzer.h"
+#include "tools/muri/MuriPanelEntries.h"
+#include "tools/muri/MuriStaticChecker.h"
+
+#include <QtCore>
+#include <QtGui>
+#include <QtWidgets>
+
+using namespace miacode::mainwindow::shared;
+
+MainWindow::ValidationSection::ValidationSection(
+    MainWindow& owner,
+    MainWindow::MainWindowUiRefs& ui,
+    MainWindow::MainWindowState& state)
+    : owner_(owner)
+    , ui_(ui)
+    , state_(state)
+{}
+
+#define errorList_ ui_.errorList_
+#define muriList_ ui_.muriList_
+#define bottomTabs_ ui_.bottomTabs_
+#define editorValidationSummaryWidget_ ui_.editorValidationSummaryWidget_
+#define editorValidationErrorIconLabel_ ui_.editorValidationErrorIconLabel_
+#define editorValidationErrorCountLabel_ ui_.editorValidationErrorCountLabel_
+#define editorValidationWarningIconLabel_ ui_.editorValidationWarningIconLabel_
+#define editorValidationWarningCountLabel_ ui_.editorValidationWarningCountLabel_
+#define editorValidationMuriIconLabel_ ui_.editorValidationMuriIconLabel_
+#define editorValidationMuriCountLabel_ ui_.editorValidationMuriCountLabel_
+#define editorWidget_ ui_.editorWidget_
+#define timelineView_ ui_.timelineView_
+#define previewCanvas_ state_.previewCanvas_
+#define validateAction_ ui_.validateAction_
+#define currentFilePath_ state_.currentFilePath_
+#define validationCacheByDifficulty_ state_.validationCacheByDifficulty_
+#define ignoredHeaderIssueTypesByFile_ state_.ignoredHeaderIssueTypesByFile_
+#define validationDecorations_ state_.validationDecorations_
+#define previewFollowDecorationActive_ state_.previewFollowDecorationActive_
+#define previewFollowDecorationLine_ state_.previewFollowDecorationLine_
+#define previewFollowDecorationCol_ state_.previewFollowDecorationCol_
+#define latestTimelineNoteMarkerSignature_ state_.latestTimelineNoteMarkerSignature_
+#define muriAnalysisReportNoteMarkerSignature_ state_.muriAnalysisReportNoteMarkerSignature_
+#define muriAnalysisReport_ state_.muriAnalysisReport_
+#define muriStaticReferences_ state_.muriStaticReferences_
+#define runtimeDebugOutputEnabled_ state_.runtimeDebugOutputEnabled_
+#define suppressTimelineCursorSync_ state_.suppressTimelineCursorSync_
+#define previewSeekDebounceTimer_ ui_.previewSeekDebounceTimer_
+#define previewPendingSeekSecond_ state_.previewPendingSeekSecond_
+#define previewPendingSeekCenterView_ state_.previewPendingSeekCenterView_
+#define pendingDeferredValidationUiRefresh_ state_.pendingDeferredValidationUiRefresh_
+#define pendingDeferredMuriUiRefresh_ state_.pendingDeferredMuriUiRefresh_
+#define qtPreviewPlaying_ state_.qtPreviewPlaying_
+#define muriRenderOptions_ state_.muriRenderOptions_
+#define previewShowValidationSummary_ state_.previewShowValidationSummary_
+#define lastTimelineParseDifficultyId_ state_.lastTimelineParseDifficultyId_
+#define lastTimelineParseChartText_ state_.lastTimelineParseChartText_
+#define lastTimelineParseTimingMetadata_ state_.lastTimelineParseTimingMetadata_
+#define lastTimelineParseResult_ state_.lastTimelineParseResult_
+
+#define statusBar() owner_.statusBar()
+#define windowIcon() owner_.windowIcon()
+#define hasActiveDifficulty() owner_.hasActiveDifficulty()
+#define activeDifficultyId() owner_.activeDifficultyId()
+#define activeChartText() owner_.activeChartText()
+#define currentTimingMetadata() owner_.currentTimingMetadata()
+#define previewDurationSeconds() owner_.previewDurationSeconds()
+#define seekPreviewToSecond(...) owner_.seekPreviewToSecond(__VA_ARGS__)
+#define appendOutput(...) owner_.appendOutput(__VA_ARGS__)
+#define applyAlignedMuriAnalysisReportToViews() owner_.applyAlignedMuriAnalysisReportToViews()
+
+namespace {
 
 using miacode::muri::MuriPanelEntry;
 
@@ -14,11 +105,55 @@ enum class ValidationSeverityLevel {
     Warning,
 };
 
+enum class EditorValidationSummaryIconKind {
+    Error,
+    Warning,
+    Muri,
+};
+
 struct ValidationMessageParts {
     QString severityPrefix;
     QString body;
     ValidationSeverityLevel severity = ValidationSeverityLevel::Error;
 };
+
+QPixmap makeEditorValidationSummaryIcon(const QColor& color, EditorValidationSummaryIconKind kind)
+{
+    QPixmap pixmap(14, 14);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+
+    if (kind == EditorValidationSummaryIconKind::Warning) {
+        QPainterPath triangle;
+        triangle.moveTo(7.0, 1.2);
+        triangle.lineTo(12.8, 12.0);
+        triangle.lineTo(1.2, 12.0);
+        triangle.closeSubpath();
+        painter.drawPath(triangle);
+        painter.setBrush(Qt::white);
+        painter.drawRoundedRect(QRectF(6.2, 4.0, 1.6, 4.0), 0.8, 0.8);
+        painter.drawEllipse(QRectF(6.1, 9.2, 1.8, 1.8));
+    } else if (kind == EditorValidationSummaryIconKind::Muri) {
+        painter.drawEllipse(QRectF(1.2, 1.2, 11.6, 11.6));
+        painter.setPen(Qt::white);
+        QFont font = painter.font();
+        font.setBold(true);
+        font.setPixelSize(11);
+        painter.setFont(font);
+        painter.drawText(QRectF(0.2, 0.6, 13.6, 12.8), Qt::AlignCenter, QStringLiteral("?"));
+    } else {
+        painter.drawEllipse(QRectF(1.2, 1.2, 11.6, 11.6));
+        painter.setBrush(Qt::white);
+        painter.drawRoundedRect(QRectF(6.1, 3.4, 1.8, 5.0), 0.9, 0.9);
+        painter.drawEllipse(QRectF(6.0, 9.5, 2.0, 2.0));
+    }
+
+    return pixmap;
+}
 
 QString issueTypeSegment(const QString& text)
 {
@@ -571,7 +706,7 @@ bool buildEditorSelectionCursor(PlainCodeEditor* editor, int line, int col, int 
 
 }  // namespace
 
-QListWidgetItem* MainWindow::addWrappedListEntry(
+QListWidgetItem* MainWindow::ValidationSection::addWrappedListEntry(
     QListWidget* list,
     const QString& html,
     const QString& plainText,
@@ -615,7 +750,7 @@ QListWidgetItem* MainWindow::addWrappedListEntry(
     return item;
 }
 
-void MainWindow::relayoutWrappedListRows(QListWidget* list)
+void MainWindow::ValidationSection::relayoutWrappedListRows(QListWidget* list)
 {
     if (list == nullptr) {
         return;
@@ -649,7 +784,7 @@ void MainWindow::relayoutWrappedListRows(QListWidget* list)
     }
 }
 
-void MainWindow::scheduleWrappedListRelayout(QListWidget* list)
+void MainWindow::ValidationSection::scheduleWrappedListRelayout(QListWidget* list)
 {
     if (list == nullptr) {
         return;
@@ -667,12 +802,12 @@ void MainWindow::scheduleWrappedListRelayout(QListWidget* list)
     });
 }
 
-QString MainWindow::currentValidationIgnoreScopeKey() const
+QString MainWindow::ValidationSection::currentValidationIgnoreScopeKey() const
 {
     return currentFilePath_.isEmpty() ? QStringLiteral("<unsaved>") : currentFilePath_;
 }
 
-bool MainWindow::isIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey) const
+bool MainWindow::ValidationSection::isIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey) const
 {
     if (issueTypeKey.isEmpty()) {
         return false;
@@ -681,7 +816,7 @@ bool MainWindow::isIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTy
     return it != ignoredHeaderIssueTypesByFile_.constEnd() && it->contains(issueTypeKey);
 }
 
-void MainWindow::setIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey, bool ignored)
+void MainWindow::ValidationSection::setIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey, bool ignored)
 {
     if (issueTypeKey.isEmpty()) {
         return;
@@ -698,7 +833,7 @@ void MainWindow::setIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueT
     }
 }
 
-void MainWindow::refreshEditorExtraSelections()
+void MainWindow::ValidationSection::refreshEditorExtraSelections()
 {
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
     if (editor == nullptr) {
@@ -745,7 +880,7 @@ void MainWindow::refreshEditorExtraSelections()
     editor->setExtraSelections(selections);
 }
 
-void MainWindow::updateEditorValidationSummary()
+void MainWindow::ValidationSection::updateEditorValidationSummary()
 {
     if (editorValidationSummaryWidget_ == nullptr
         || editorValidationErrorIconLabel_ == nullptr
@@ -883,10 +1018,10 @@ void MainWindow::updateEditorValidationSummary()
     applySlot(editorValidationErrorIconLabel_, editorValidationErrorCountLabel_, slot2);
     editorValidationSummaryWidget_->setVisible(showSummary);
     editorValidationSummaryWidget_->adjustSize();
-    updateEditorHeaderLayoutMode();
+    owner_.updateEditorHeaderLayoutMode();
 }
 
-void MainWindow::setPreviewFollowDecoration(int line, int col)
+void MainWindow::ValidationSection::setPreviewFollowDecoration(int line, int col)
 {
     previewFollowDecorationActive_ = true;
     previewFollowDecorationLine_ = qMax(1, line);
@@ -894,7 +1029,7 @@ void MainWindow::setPreviewFollowDecoration(int line, int col)
     refreshEditorExtraSelections();
 }
 
-void MainWindow::clearPreviewFollowDecoration()
+void MainWindow::ValidationSection::clearPreviewFollowDecoration()
 {
     if (!previewFollowDecorationActive_) {
         return;
@@ -903,7 +1038,7 @@ void MainWindow::clearPreviewFollowDecoration()
     refreshEditorExtraSelections();
 }
 
-void MainWindow::clearValidationErrors()
+void MainWindow::ValidationSection::clearValidationErrors()
 {
     if (errorList_ == nullptr) {
         return;
@@ -911,7 +1046,7 @@ void MainWindow::clearValidationErrors()
     errorList_->clear();
 }
 
-void MainWindow::clearMuriDiagnostics()
+void MainWindow::ValidationSection::clearMuriDiagnostics()
 {
     if (muriList_ == nullptr) {
         updateEditorValidationSummary();
@@ -921,13 +1056,13 @@ void MainWindow::clearMuriDiagnostics()
     updateEditorValidationSummary();
 }
 
-void MainWindow::clearValidationDecorations()
+void MainWindow::ValidationSection::clearValidationDecorations()
 {
     validationDecorations_.clear();
     refreshEditorExtraSelections();
 }
 
-void MainWindow::addValidationError(
+void MainWindow::ValidationSection::addValidationError(
     int line,
     int col,
     const QString& rawMessage,
@@ -963,7 +1098,7 @@ void MainWindow::addValidationError(
     }
 }
 
-void MainWindow::addValidationDecoration(int line, int col, const QString& message, int endCol)
+void MainWindow::ValidationSection::addValidationDecoration(int line, int col, const QString& message, int endCol)
 {
     if (line < 1) {
         line = 1;
@@ -985,7 +1120,7 @@ void MainWindow::addValidationDecoration(int line, int col, const QString& messa
     validationDecorations_.append(decoration);
 }
 
-void MainWindow::jumpToLocation(int line, int col)
+void MainWindow::ValidationSection::jumpToLocation(int line, int col)
 {
     if (line < 1) {
         line = 1;
@@ -1012,7 +1147,7 @@ void MainWindow::jumpToLocation(int line, int col)
     clearPreviewFollowDecoration();
 }
 
-void MainWindow::onErrorItemActivated(QListWidgetItem* item)
+void MainWindow::ValidationSection::onErrorItemActivated(QListWidgetItem* item)
 {
     if (item == nullptr) {
         return;
@@ -1022,7 +1157,7 @@ void MainWindow::onErrorItemActivated(QListWidgetItem* item)
     jumpToLocation(line, col);
 }
 
-void MainWindow::onMuriItemActivated(QListWidgetItem* item)
+void MainWindow::ValidationSection::onMuriItemActivated(QListWidgetItem* item)
 {
     if (item == nullptr || !item->flags().testFlag(Qt::ItemIsEnabled)) {
         return;
@@ -1050,7 +1185,7 @@ void MainWindow::onMuriItemActivated(QListWidgetItem* item)
     timelineView_->focusPlayhead(true);
 }
 
-void MainWindow::showIssueListContextMenu(QListWidget* list, const QPoint& pos, bool muriList)
+void MainWindow::ValidationSection::showIssueListContextMenu(QListWidget* list, const QPoint& pos, bool muriList)
 {
     if (list == nullptr) {
         return;
@@ -1064,13 +1199,13 @@ void MainWindow::showIssueListContextMenu(QListWidget* list, const QPoint& pos, 
     const QString issueTypeLabel = item->data(kIssueTypeLabelRole).toString();
     const bool ignoredInHeader = item->data(kIssueIgnoredRole).toBool();
 
-    QMenu menu(this);
+    QMenu menu(&owner_);
     styleRoundedMenu(menu);
 
     QAction* copyAction = menu.addAction(
         UiText::isChineseUi() ? QStringLiteral("复制信息") : QStringLiteral("Copy Info")
     );
-    connect(copyAction, &QAction::triggered, this, [this, item]() {
+    connect(copyAction, &QAction::triggered, &owner_, [this, item]() {
         const QString text = item->toolTip().trimmed();
         QGuiApplication::clipboard()->setText(text);
         if (statusBar() != nullptr) {
@@ -1083,7 +1218,7 @@ void MainWindow::showIssueListContextMenu(QListWidget* list, const QPoint& pos, 
     QAction* jumpAction = menu.addAction(
         UiText::isChineseUi() ? QStringLiteral("跳转到源") : QStringLiteral("Jump to Source")
     );
-    connect(jumpAction, &QAction::triggered, this, [this, item, muriList]() {
+    connect(jumpAction, &QAction::triggered, &owner_, [this, item, muriList]() {
         if (muriList) {
             onMuriItemActivated(item);
         } else {
@@ -1099,7 +1234,7 @@ void MainWindow::showIssueListContextMenu(QListWidget* list, const QPoint& pos, 
                 : (UiText::isChineseUi() ? QStringLiteral("忽视该类型提示")
                                          : QStringLiteral("Ignore This Issue Type"))
         );
-        connect(ignoreAction, &QAction::triggered, this, [this, issueTypeKey, ignoredInHeader]() {
+        connect(ignoreAction, &QAction::triggered, &owner_, [this, issueTypeKey, ignoredInHeader]() {
             const int currentTabIndex = bottomTabs_ != nullptr ? bottomTabs_->currentIndex() : -1;
             setIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey, !ignoredInHeader);
             refreshValidationPanelForActiveField();
@@ -1113,7 +1248,7 @@ void MainWindow::showIssueListContextMenu(QListWidget* list, const QPoint& pos, 
     menu.exec(list->viewport()->mapToGlobal(pos));
 }
 
-void MainWindow::refreshMuriDiagnosticsPanel()
+void MainWindow::ValidationSection::refreshMuriDiagnosticsPanel()
 {
     if (muriList_ == nullptr) {
         return;
@@ -1186,13 +1321,13 @@ void MainWindow::refreshMuriDiagnosticsPanel()
     updateEditorValidationSummary();
 }
 
-void MainWindow::clearValidationCache()
+void MainWindow::ValidationSection::clearValidationCache()
 {
     validationCacheByDifficulty_.clear();
     updateEditorValidationSummary();
 }
 
-void MainWindow::applyDeferredAnalysisUiUpdates()
+void MainWindow::ValidationSection::applyDeferredAnalysisUiUpdates()
 {
     if (qtPreviewPlaying_) {
         return;
@@ -1213,7 +1348,7 @@ void MainWindow::applyDeferredAnalysisUiUpdates()
     }
 }
 
-void MainWindow::setValidationTabVisible(bool visible)
+void MainWindow::ValidationSection::setValidationTabVisible(bool visible)
 {
     if (bottomTabs_ == nullptr || errorList_ == nullptr) {
         return;
@@ -1225,7 +1360,7 @@ void MainWindow::setValidationTabVisible(bool visible)
     bottomTabs_->setTabVisible(errorTabIndex, visible);
 }
 
-void MainWindow::refreshValidationPanelForActiveField()
+void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
 {
     if (!hasActiveDifficulty()) {
         setValidationTabVisible(false);
@@ -1283,7 +1418,7 @@ void MainWindow::refreshValidationPanelForActiveField()
     updateEditorValidationSummary();
 }
 
-bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
+bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssue)
 {
     if (!hasActiveDifficulty()) {
         refreshValidationPanelForActiveField();
@@ -1395,7 +1530,7 @@ bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
     return entry.ok;
 }
 
-bool MainWindow::runValidateSimai()
+bool MainWindow::ValidationSection::runValidateSimai()
 {
     if (!hasActiveDifficulty()) {
         statusBar()->showMessage(
@@ -1510,13 +1645,14 @@ bool MainWindow::runValidateSimai()
 
     if (entry.ok) {
         statusBar()->showMessage(uiText("status.syntax.passed", "Syntax check passed."));
-        QMessageBox okDialog(this);
+        QMessageBox okDialog(UiDialogs::effectiveParentWidget(&owner_));
         okDialog.setIcon(QMessageBox::Information);
         okDialog.setWindowTitle(validateAction_ != nullptr ? validateAction_->text() : QStringLiteral("Syntax Check"));
         okDialog.setWindowIcon(windowIcon());
         okDialog.setText(uiText("dialog.syntax_ok.message", "No syntax errors or warnings found."));
         okDialog.setStandardButtons(QMessageBox::Ok);
         okDialog.setDefaultButton(QMessageBox::Ok);
+        UiDialogs::prepareDialogWindow(&okDialog, &owner_);
         UiDialogs::localizeMessageBox(&okDialog);
         auto* closeOnSpace = new QShortcut(QKeySequence(Qt::Key_Space), &okDialog);
         connect(closeOnSpace, &QShortcut::activated, &okDialog, &QDialog::accept);
@@ -1536,7 +1672,206 @@ bool MainWindow::runValidateSimai()
     return false;
 }
 
-void MainWindow::onValidateSimai()
+void MainWindow::ValidationSection::onValidateSimai()
 {
     (void)runValidateSimai();
+}
+
+#undef errorList_
+#undef muriList_
+#undef bottomTabs_
+#undef editorValidationSummaryWidget_
+#undef editorValidationErrorIconLabel_
+#undef editorValidationErrorCountLabel_
+#undef editorValidationWarningIconLabel_
+#undef editorValidationWarningCountLabel_
+#undef editorValidationMuriIconLabel_
+#undef editorValidationMuriCountLabel_
+#undef editorWidget_
+#undef timelineView_
+#undef previewCanvas_
+#undef validateAction_
+#undef currentFilePath_
+#undef validationCacheByDifficulty_
+#undef ignoredHeaderIssueTypesByFile_
+#undef validationDecorations_
+#undef previewFollowDecorationActive_
+#undef previewFollowDecorationLine_
+#undef previewFollowDecorationCol_
+#undef latestTimelineNoteMarkerSignature_
+#undef muriAnalysisReportNoteMarkerSignature_
+#undef muriAnalysisReport_
+#undef muriStaticReferences_
+#undef runtimeDebugOutputEnabled_
+#undef suppressTimelineCursorSync_
+#undef previewSeekDebounceTimer_
+#undef previewPendingSeekSecond_
+#undef previewPendingSeekCenterView_
+#undef pendingDeferredValidationUiRefresh_
+#undef pendingDeferredMuriUiRefresh_
+#undef qtPreviewPlaying_
+#undef muriRenderOptions_
+#undef previewShowValidationSummary_
+#undef lastTimelineParseDifficultyId_
+#undef lastTimelineParseChartText_
+#undef lastTimelineParseTimingMetadata_
+#undef lastTimelineParseResult_
+#undef statusBar
+#undef windowIcon
+#undef hasActiveDifficulty
+#undef activeDifficultyId
+#undef activeChartText
+#undef currentTimingMetadata
+#undef previewDurationSeconds
+#undef seekPreviewToSecond
+#undef appendOutput
+#undef applyAlignedMuriAnalysisReportToViews
+
+QListWidgetItem* MainWindow::addWrappedListEntry(
+    QListWidget* list,
+    const QString& html,
+    const QString& plainText,
+    int line,
+    int col,
+    double second,
+    bool enabled)
+{
+    return validationSection_->addWrappedListEntry(list, html, plainText, line, col, second, enabled);
+}
+
+void MainWindow::relayoutWrappedListRows(QListWidget* list)
+{
+    validationSection_->relayoutWrappedListRows(list);
+}
+
+void MainWindow::scheduleWrappedListRelayout(QListWidget* list)
+{
+    validationSection_->scheduleWrappedListRelayout(list);
+}
+
+QString MainWindow::currentValidationIgnoreScopeKey() const
+{
+    return validationSection_->currentValidationIgnoreScopeKey();
+}
+
+bool MainWindow::isIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey) const
+{
+    return validationSection_->isIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey);
+}
+
+void MainWindow::setIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey, bool ignored)
+{
+    validationSection_->setIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey, ignored);
+}
+
+void MainWindow::refreshEditorExtraSelections()
+{
+    validationSection_->refreshEditorExtraSelections();
+}
+
+void MainWindow::updateEditorValidationSummary()
+{
+    validationSection_->updateEditorValidationSummary();
+}
+
+void MainWindow::setPreviewFollowDecoration(int line, int col)
+{
+    validationSection_->setPreviewFollowDecoration(line, col);
+}
+
+void MainWindow::clearPreviewFollowDecoration()
+{
+    validationSection_->clearPreviewFollowDecoration();
+}
+
+void MainWindow::clearValidationErrors()
+{
+    validationSection_->clearValidationErrors();
+}
+
+void MainWindow::clearMuriDiagnostics()
+{
+    validationSection_->clearMuriDiagnostics();
+}
+
+void MainWindow::clearValidationDecorations()
+{
+    validationSection_->clearValidationDecorations();
+}
+
+void MainWindow::addValidationError(
+    int line,
+    int col,
+    const QString& rawMessage,
+    const QString& displayMessage,
+    const QString& issueTypeKey,
+    const QString& issueTypeLabel,
+    bool ignoredInHeader)
+{
+    validationSection_->addValidationError(line, col, rawMessage, displayMessage, issueTypeKey, issueTypeLabel, ignoredInHeader);
+}
+
+void MainWindow::addValidationDecoration(int line, int col, const QString& message, int endCol)
+{
+    validationSection_->addValidationDecoration(line, col, message, endCol);
+}
+
+void MainWindow::jumpToLocation(int line, int col)
+{
+    validationSection_->jumpToLocation(line, col);
+}
+
+void MainWindow::onErrorItemActivated(QListWidgetItem* item)
+{
+    validationSection_->onErrorItemActivated(item);
+}
+
+void MainWindow::onMuriItemActivated(QListWidgetItem* item)
+{
+    validationSection_->onMuriItemActivated(item);
+}
+
+void MainWindow::showIssueListContextMenu(QListWidget* list, const QPoint& pos, bool muriList)
+{
+    validationSection_->showIssueListContextMenu(list, pos, muriList);
+}
+
+void MainWindow::refreshMuriDiagnosticsPanel()
+{
+    validationSection_->refreshMuriDiagnosticsPanel();
+}
+
+void MainWindow::clearValidationCache()
+{
+    validationSection_->clearValidationCache();
+}
+
+void MainWindow::applyDeferredAnalysisUiUpdates()
+{
+    validationSection_->applyDeferredAnalysisUiUpdates();
+}
+
+void MainWindow::setValidationTabVisible(bool visible)
+{
+    validationSection_->setValidationTabVisible(visible);
+}
+
+void MainWindow::refreshValidationPanelForActiveField()
+{
+    validationSection_->refreshValidationPanelForActiveField();
+}
+
+bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
+{
+    return validationSection_->runValidateSimaiSilently(focusFirstIssue);
+}
+
+bool MainWindow::runValidateSimai()
+{
+    return validationSection_->runValidateSimai();
+}
+
+void MainWindow::onValidateSimai()
+{
+    validationSection_->onValidateSimai();
 }

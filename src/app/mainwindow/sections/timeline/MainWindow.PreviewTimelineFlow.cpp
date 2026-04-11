@@ -1,3 +1,223 @@
+﻿#include "MainWindow.TimelineSection.h"
+#include "../../MainWindowShared.h"
+
+#include "BracketScopeHighlighter.h"
+#include "DialogLocalization.h"
+#include "PlainCodeEditor.h"
+#include "QtPreviewSfxRuntime.h"
+#include "SimaiNativeParser.h"
+#include "TimelineView.h"
+#include "UiText.h"
+#include "UiTheme.h"
+#include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
+#include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
+#include "common/ChartAssetPaths.h"
+#include "common/DebugLog.h"
+#include "common/DebugOptions.h"
+#include "common/PreviewInteractionConfig.h"
+#include "preview/runtime/PreviewRuntime.h"
+#include "preview/runtime/PreviewStageMediaHost.h"
+#include "preview/scene/PreviewProgressStatsCache.h"
+#include "simai/transform/ChartBatchTransform.h"
+#include "simai/transform/ChartNormalization.h"
+#include "tools/muri/MuriAnalyzer.h"
+#include "tools/muri/MuriPanelEntries.h"
+#include "tools/muri/MuriStaticChecker.h"
+#include "tools/latency/LatencyDetectorDialog.h"
+
+#include <QtCore>
+#include <QtGui>
+#include <QtWidgets>
+
+using namespace miacode::mainwindow::shared;
+
+MainWindow::TimelineSection::TimelineSection(
+    MainWindow& owner,
+    MainWindow::MainWindowUiRefs& ui,
+    MainWindow::MainWindowState& state)
+    : owner_(owner)
+    , ui_(ui)
+    , state_(state)
+{}
+
+#define timelineView_ ui_.timelineView_
+#define previewFullscreenControlsWindow_ ui_.previewFullscreenControlsWindow_
+#define previewSlider_ ui_.previewSlider_
+#define previewCanvas_ state_.previewCanvas_
+#define qtPreviewPlaying_ state_.qtPreviewPlaying_
+#define pendingTimelineAnalysisRefresh_ state_.pendingTimelineAnalysisRefresh_
+#define previewSfxRuntime_ state_.previewSfxRuntime_
+#define previewControlCard_ ui_.previewControlCard_
+#define previewStatsGridLayout_ ui_.previewStatsGridLayout_
+#define qtPreviewPauseSecond_ state_.qtPreviewPauseSecond_
+#define previewFullscreenControlsAnimation_ ui_.previewFullscreenControlsAnimation_
+#define waveformCacheEntry_ state_.waveformCacheEntry_
+#define currentFilePath_ state_.currentFilePath_
+#define previewFullscreenActive_ state_.previewFullscreenActive_
+#define previewFullscreenWindow_ ui_.previewFullscreenWindow_
+#define previewStatsChips_ ui_.previewStatsChips_
+#define previewPlaybackRate_ state_.previewPlaybackRate_
+#define previewFullscreenControlsOpacityAnimation_ ui_.previewFullscreenControlsOpacityAnimation_
+#define qtPreviewTimer_ ui_.qtPreviewTimer_
+#define pendingTimelineSlowRefresh_ state_.pendingTimelineSlowRefresh_
+#define timelineQuickModel_ state_.timelineQuickModel_
+#define swapWorkspaceSidesAction_ ui_.swapWorkspaceSidesAction_
+#define previewFullscreenControlsVisible_ state_.previewFullscreenControlsVisible_
+#define previewFullscreenButton_ ui_.previewFullscreenButton_
+#define previewSpeedButton_ ui_.previewSpeedButton_
+#define qtPreviewPendingTimelineCenterView_ state_.qtPreviewPendingTimelineCenterView_
+#define previewStatsCard_ ui_.previewStatsCard_
+#define editorStack_ ui_.editorStack_
+#define previewSeekDebounceTimer_ ui_.previewSeekDebounceTimer_
+#define qtPreviewPendingTimelineSecond_ state_.qtPreviewPendingTimelineSecond_
+#define metadataExtraEdit_ ui_.metadataExtraEdit_
+#define qtPreviewPlaybackEndSecond_ state_.qtPreviewPlaybackEndSecond_
+#define previewProgressStatsCache_ state_.previewProgressStatsCache_
+#define previewTotalStatsLabel_ ui_.previewTotalStatsLabel_
+#define qtPreviewTimelineDirty_ state_.qtPreviewTimelineDirty_
+#define previewTrackDurationSeconds_ state_.previewTrackDurationSeconds_
+#define lastTrackPath_ state_.lastTrackPath_
+#define suppressTimelineCursorSync_ state_.suppressTimelineCursorSync_
+#define workspacePanelsSwapped_ state_.workspacePanelsSwapped_
+#define previewCanvasFrameRateMode_ state_.previewCanvasFrameRateMode_
+#define previewFullscreenHintLabel_ ui_.previewFullscreenHintLabel_
+#define latestTimelineNoteMarkerSignature_ state_.latestTimelineNoteMarkerSignature_
+#define previewLeftColumn_ ui_.previewLeftColumn_
+#define latestTimelineNoteMarkers_ state_.latestTimelineNoteMarkers_
+#define firstEdit_ ui_.firstEdit_
+#define previewStatsUiTimer_ ui_.previewStatsUiTimer_
+#define qtPreviewTimelineTimer_ ui_.qtPreviewTimelineTimer_
+#define previewFullscreenCursorTrackingInitialized_ state_.previewFullscreenCursorTrackingInitialized_
+#define pendingPreviewPlaybackStart_ state_.pendingPreviewPlaybackStart_
+#define qtPreviewLastTimelineSecond_ state_.qtPreviewLastTimelineSecond_
+#define qtPreviewNextFixedTickDueNs_ state_.qtPreviewNextFixedTickDueNs_
+#define previewSeekHeldArrowLastElapsedMs_ state_.previewSeekHeldArrowLastElapsedMs_
+#define qtPreviewAwaitingFrameSwap_ state_.qtPreviewAwaitingFrameSwap_
+#define previewHeldSeekTimer_ ui_.previewHeldSeekTimer_
+#define previewSeekHeldArrowKey_ state_.previewSeekHeldArrowKey_
+#define qtPreviewAwaitingFrameSwapSinceMs_ state_.qtPreviewAwaitingFrameSwapSinceMs_
+#define activeDifficultyId_ state_.activeDifficultyId_
+#define previewFullscreenHintWindow_ ui_.previewFullscreenHintWindow_
+#define previewHeldSeekDirection_ state_.previewHeldSeekDirection_
+#define timelineRevision_ state_.timelineRevision_
+#define timelineAnalysisIdleTimer_ ui_.timelineAnalysisIdleTimer_
+#define qtPreviewStartSecond_ state_.qtPreviewStartSecond_
+#define previewSeekHeldArrowElapsed_ state_.previewSeekHeldArrowElapsed_
+#define qtPreviewWatchdogElapsed_ state_.qtPreviewWatchdogElapsed_
+#define pendingPreviewPlaybackRevision_ state_.pendingPreviewPlaybackRevision_
+#define lastTimelineParseChartText_ state_.lastTimelineParseChartText_
+#define currentFileLabel_ ui_.currentFileLabel_
+#define pendingPreviewPlaybackDifficultyId_ state_.pendingPreviewPlaybackDifficultyId_
+#define qtPreviewTimelineElapsed_ state_.qtPreviewTimelineElapsed_
+#define qtPreviewTimelineStartSecond_ state_.qtPreviewTimelineStartSecond_
+#define previewCanvasAspectRatio_ state_.previewCanvasAspectRatio_
+#define lastTimelineParseTimingMetadata_ state_.lastTimelineParseTimingMetadata_
+#define timelineSlowWorkerRunning_ state_.timelineSlowWorkerRunning_
+#define latencyDetectorDialog_ ui_.latencyDetectorDialog_
+#define editorWidget_ ui_.editorWidget_
+#define waveformRefreshGeneration_ state_.waveformRefreshGeneration_
+#define workspaceSplitter_ ui_.workspaceSplitter_
+#define previewFullscreenLastCursorPos_ state_.previewFullscreenLastCursorPos_
+#define timelineAnalysisRequestedRevision_ state_.timelineAnalysisRequestedRevision_
+#define staticTapOnSlideThresholdMs_ state_.staticTapOnSlideThresholdMs_
+#define qtPreviewElapsed_ state_.qtPreviewElapsed_
+#define timelineAnalysisWorkerRunning_ state_.timelineAnalysisWorkerRunning_
+#define documentDirty_ state_.documentDirty_
+#define previewFullscreenControlsTimer_ ui_.previewFullscreenControlsTimer_
+#define pausedPreviewMediaSeekPending_ state_.pausedPreviewMediaSeekPending_
+#define previewSlideStatsLabel_ ui_.previewSlideStatsLabel_
+#define previewTouchStatsLabel_ ui_.previewTouchStatsLabel_
+#define previewTapStatsLabel_ ui_.previewTapStatsLabel_
+#define previewHoldStatsLabel_ ui_.previewHoldStatsLabel_
+#define qtPreviewPlaybackReturnSecond_ state_.qtPreviewPlaybackReturnSecond_
+#define bottomTabs_ ui_.bottomTabs_
+#define previewBreakStatsLabel_ ui_.previewBreakStatsLabel_
+#define outlineDock_ ui_.outlineDock_
+#define latestTimelinePreviewSnapshotReady_ state_.latestTimelinePreviewSnapshotReady_
+#define latestTimelinePreviewRevision_ state_.latestTimelinePreviewRevision_
+#define lastTimelineParseResult_ state_.lastTimelineParseResult_
+#define muriRenderOptions_ state_.muriRenderOptions_
+#define pendingPreviewPlaybackResumeFromPause_ state_.pendingPreviewPlaybackResumeFromPause_
+#define pendingPreviewPlaybackSecond_ state_.pendingPreviewPlaybackSecond_
+#define lastTimelineParseDifficultyId_ state_.lastTimelineParseDifficultyId_
+#define titleEdit_ ui_.titleEdit_
+#define metadataPage_ ui_.metadataPage_
+#define previewWarmupPool_ state_.previewWarmupPool_
+#define timelineSlowRefreshPool_ state_.timelineSlowRefreshPool_
+#define timelineSlowRequestedRevision_ state_.timelineSlowRequestedRevision_
+#define lastPreviewNoteMarkerSignature_ state_.lastPreviewNoteMarkerSignature_
+#define timelineAnalysisPool_ state_.timelineAnalysisPool_
+#define previewPendingSeekSecond_ state_.previewPendingSeekSecond_
+#define previewStatsLayoutRows_ state_.previewStatsLayoutRows_
+#define previewPendingSeekCenterView_ state_.previewPendingSeekCenterView_
+#define previewSliderDragging_ state_.previewSliderDragging_
+#define previewStatsLayoutCols_ state_.previewStatsLayoutCols_
+#define stopPreviewButton_ ui_.stopPreviewButton_
+#define pausePreviewButton_ ui_.pausePreviewButton_
+#define muriStaticReferences_ state_.muriStaticReferences_
+#define runtimeDebugOutputEnabled_ state_.runtimeDebugOutputEnabled_
+#define lastSessionFilePath_ state_.lastSessionFilePath_
+#define previewWarmupGeneration_ state_.previewWarmupGeneration_
+#define chartPage_ ui_.chartPage_
+#define currentFieldDirty_ state_.currentFieldDirty_
+#define pendingDeferredValidationUiRefresh_ state_.pendingDeferredValidationUiRefresh_
+#define validationCacheByDifficulty_ state_.validationCacheByDifficulty_
+#define timelineAnalysisRunningRevision_ state_.timelineAnalysisRunningRevision_
+#define muriAnalysisReport_ state_.muriAnalysisReport_
+#define timelineSlowRunningRevision_ state_.timelineSlowRunningRevision_
+#define pendingDeferredMuriUiRefresh_ state_.pendingDeferredMuriUiRefresh_
+#define muriAnalysisReportNoteMarkerSignature_ state_.muriAnalysisReportNoteMarkerSignature_
+#define document_ state_.document_
+
+#define statusBar() owner_.statusBar()
+#define appendOutput(...) owner_.appendOutput(__VA_ARGS__)
+#define clearValidationCache() owner_.clearValidationCache()
+#define clearValidationErrors() owner_.clearValidationErrors()
+#define clearValidationDecorations() owner_.clearValidationDecorations()
+#define updateDirtyState() owner_.updateDirtyState()
+#define setMetadataExtraText(...) owner_.setMetadataExtraText(__VA_ARGS__)
+#define setLastOpenDirectory(...) owner_.setLastOpenDirectory(__VA_ARGS__)
+#define updateLatencyDetectorAvailability() owner_.updateLatencyDetectorAvailability()
+#define loadProjectRenderState() owner_.loadProjectRenderState()
+#define syncPreviewStageMediaRouteChartPath(...) owner_.syncPreviewStageMediaRouteChartPath(__VA_ARGS__)
+#define applyPreviewAudioSettingsToRuntime() owner_.applyPreviewAudioSettingsToRuntime()
+#define schedulePreviewSubsystemWarmup() owner_.schedulePreviewSubsystemWarmup()
+#define saveProjectRenderState() owner_.saveProjectRenderState()
+#define savePortableState() owner_.savePortableState()
+#define currentCursorLineCol() owner_.currentCursorLineCol()
+#define clearPreviewFollowDecoration() owner_.clearPreviewFollowDecoration()
+#define setPreviewFollowDecoration(...) owner_.setPreviewFollowDecoration(__VA_ARGS__)
+#define updatePauseButtonAppearance() owner_.updatePauseButtonAppearance()
+#define refreshQuickShellRehostedWidgetParent(...) owner_.refreshQuickShellRehostedWidgetParent(__VA_ARGS__)
+#define updateEditorFindBarGeometry() owner_.updateEditorFindBarGeometry()
+#define applyFindOverlayInset() owner_.applyFindOverlayInset()
+#define refreshValidationPanelForActiveField() owner_.refreshValidationPanelForActiveField()
+#define refreshMuriDiagnosticsPanel() owner_.refreshMuriDiagnosticsPanel()
+#define applyAlignedMuriAnalysisReportToViews() owner_.applyAlignedMuriAnalysisReportToViews()
+#define updateEditorValidationSummary() owner_.updateEditorValidationSummary()
+#define refreshEditorExtraSelections() owner_.refreshEditorExtraSelections()
+#define setValidationTabVisible(...) owner_.setValidationTabVisible(__VA_ARGS__)
+#define jumpToLocation(...) owner_.jumpToLocation(__VA_ARGS__)
+#define quickShellPreviewUsesSeparateSurface() owner_.quickShellPreviewUsesSeparateSurface()
+#define refreshQuickShellPreviewCompositeSurfaceState() owner_.refreshQuickShellPreviewCompositeSurfaceState()
+#define quickShellPreviewCompositeWindow() owner_.quickShellPreviewCompositeWindow()
+#define previewStageMediaRouteHasVideo() owner_.previewStageMediaRouteHasVideo()
+#define startPreviewStageMediaRoutePlayback(...) owner_.startPreviewStageMediaRoutePlayback(__VA_ARGS__)
+#define syncPreviewStageMediaRoutePlayback(...) owner_.syncPreviewStageMediaRoutePlayback(__VA_ARGS__)
+#define pausePreviewStageMediaRoutePlayback() owner_.pausePreviewStageMediaRoutePlayback()
+#define seekPreviewStageMediaRouteWhilePaused(...) owner_.seekPreviewStageMediaRouteWhilePaused(__VA_ARGS__)
+#define setPreviewStageMediaRouteObservedPlayheadSecond(...) owner_.setPreviewStageMediaRouteObservedPlayheadSecond(__VA_ARGS__)
+#define previewStageMediaRouteCurrentPlaybackSecond() owner_.previewStageMediaRouteCurrentPlaybackSecond()
+#define previewUsesStageMediaHostRoute() owner_.previewUsesStageMediaHostRoute()
+#define refreshPreviewStageMediaRouteDebugState(...) owner_.refreshPreviewStageMediaRouteDebugState(__VA_ARGS__)
+#define updatePreviewStageMediaPresentationMode(...) owner_.updatePreviewStageMediaPresentationMode(__VA_ARGS__)
+#define resetPreviewStageMediaRouteTimelineOffset() owner_.resetPreviewStageMediaRouteTimelineOffset()
+#define ensurePreviewStageMediaRouteInitialized() owner_.ensurePreviewStageMediaRouteInitialized()
+#define ensurePreviewSfxRuntimePrepared() owner_.ensurePreviewSfxRuntimePrepared()
+#define applyPreviewStageMediaRoutePlaybackRate(...) owner_.applyPreviewStageMediaRoutePlaybackRate(__VA_ARGS__)
+#define preparePreviewStartState() owner_.preparePreviewStartState()
+#define updateEditorHeaderLayoutMode() owner_.updateEditorHeaderLayoutMode()
+
 namespace {
 
 constexpr double kTimelineZeroSecondTolerance = 1e-6;
@@ -114,7 +334,7 @@ std::pair<int, int> lineColForTextOffset(const QString& text, int offset)
 
 }  // namespace
 
-void MainWindow::resetPreviewTrackTimelineOffsets()
+void MainWindow::TimelineSection::resetPreviewTrackTimelineOffsets()
 {
     if (previewSfxRuntime_ != nullptr) {
         previewSfxRuntime_->setBackgroundTrackOffsetSeconds(0.0);
@@ -122,7 +342,7 @@ void MainWindow::resetPreviewTrackTimelineOffsets()
     resetPreviewStageMediaRouteTimelineOffset();
 }
 
-void MainWindow::applyWaveformData(const QVector<float>& peaks, double durationSeconds)
+void MainWindow::TimelineSection::applyWaveformData(const QVector<float>& peaks, double durationSeconds)
 {
     previewTrackDurationSeconds_ = qMax(0.0, durationSeconds);
     if (timelineView_ != nullptr) {
@@ -131,12 +351,12 @@ void MainWindow::applyWaveformData(const QVector<float>& peaks, double durationS
     updatePreviewSliderRange();
 }
 
-void MainWindow::refreshWaveformCache()
+void MainWindow::TimelineSection::refreshWaveformCache()
 {
     refreshWaveformCache(-1.0);
 }
 
-void MainWindow::refreshWaveformCache(double knownDurationSeconds)
+void MainWindow::TimelineSection::refreshWaveformCache(double knownDurationSeconds)
 {
     resetPreviewTrackTimelineOffsets();
     if (timelineView_ == nullptr) {
@@ -180,7 +400,7 @@ void MainWindow::refreshWaveformCache(double knownDurationSeconds)
         applyWaveformData(QVector<float>(), 0.0);
     }
 
-    QPointer<MainWindow> guard(this);
+    QPointer<MainWindow> guard(&owner_);
     QThreadPool* const pool = previewWarmupPool_ != nullptr
         ? previewWarmupPool_
         : QThreadPool::globalInstance();
@@ -214,7 +434,7 @@ void MainWindow::refreshWaveformCache(double knownDurationSeconds)
     });
 }
 
-void MainWindow::applyWaveformCacheEntry(
+void MainWindow::TimelineSection::applyWaveformCacheEntry(
     quint64 generation,
     const QString& trackPath,
     qint64 fileSize,
@@ -244,17 +464,17 @@ void MainWindow::applyWaveformCacheEntry(
     applyWaveformData(peaks, waveformCacheEntry_.durationSeconds);
 }
 
-bool MainWindow::hasActiveDifficulty() const
+bool MainWindow::TimelineSection::hasActiveDifficulty() const
 {
     return activeDifficultyId_ > 0 && document_.difficulty(activeDifficultyId_) != nullptr;
 }
 
-int MainWindow::activeDifficultyId() const
+int MainWindow::TimelineSection::activeDifficultyId() const
 {
     return activeDifficultyId_;
 }
 
-QString MainWindow::activeChartText() const
+QString MainWindow::TimelineSection::activeChartText() const
 {
     if (!hasActiveDifficulty()) {
         return QString();
@@ -266,7 +486,7 @@ QString MainWindow::activeChartText() const
     return difficultyData != nullptr ? difficultyData->chart : QString();
 }
 
-miacode::simai::SimaiTimingMetadata MainWindow::currentTimingMetadata() const
+miacode::simai::SimaiTimingMetadata MainWindow::TimelineSection::currentTimingMetadata() const
 {
     if (metadataExtraEdit_ != nullptr) {
         return miacode::simai::buildTimingMetadataFromRawText(metadataExtraEdit_->toPlainText(), true);
@@ -274,7 +494,7 @@ miacode::simai::SimaiTimingMetadata MainWindow::currentTimingMetadata() const
     return miacode::simai::buildTimingMetadata(document_);
 }
 
-double MainWindow::parsedFirstSeconds(bool* ok) const
+double MainWindow::TimelineSection::parsedFirstSeconds(bool* ok) const
 {
     QString rawValue = document_.first;
     if (editorStack_ != nullptr && editorStack_->currentWidget() == metadataPage_ && firstEdit_ != nullptr) {
@@ -291,7 +511,7 @@ double MainWindow::parsedFirstSeconds(bool* ok) const
     return localOk ? value : 0.0;
 }
 
-double MainWindow::parsedWholeBpm(bool* ok) const
+double MainWindow::TimelineSection::parsedWholeBpm(bool* ok) const
 {
     const QVector<SimaiRawField> fields = SimaiDocument::parseRawFields(
         metadataExtraEdit_ != nullptr ? metadataExtraEdit_->toPlainText() : QString(),
@@ -314,12 +534,12 @@ double MainWindow::parsedWholeBpm(bool* ok) const
     return 0.0;
 }
 
-QString MainWindow::parsedLatencyMeterId() const
+QString MainWindow::TimelineSection::parsedLatencyMeterId() const
 {
     return miacode::simai::latencyMeterIdForTimingMetadata(currentTimingMetadata());
 }
 
-void MainWindow::applyLatencyDetectorOffset(double seconds)
+void MainWindow::TimelineSection::applyLatencyDetectorOffset(double seconds)
 {
     const double normalized = qIsFinite(seconds) ? seconds : 0.0;
     const QString serialized = QString::number(normalized, 'f', 3);
@@ -334,7 +554,7 @@ void MainWindow::applyLatencyDetectorOffset(double seconds)
     refreshTimelineMetadata();
 }
 
-void MainWindow::applyLatencyDetectorBpm(double bpm)
+void MainWindow::TimelineSection::applyLatencyDetectorBpm(double bpm)
 {
     if (!qIsFinite(bpm) || bpm <= 0.0) {
         return;
@@ -362,7 +582,7 @@ void MainWindow::applyLatencyDetectorBpm(double bpm)
     updateDirtyState();
 }
 
-void MainWindow::setCurrentFilePath(const QString& path, bool suppressImmediateRefresh)
+void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool suppressImmediateRefresh)
 {
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
     const bool pathChanged = normalizedPath != currentFilePath_;
@@ -421,7 +641,7 @@ void MainWindow::setCurrentFilePath(const QString& path, bool suppressImmediateR
     }
 }
 
-void MainWindow::updateWindowTitle()
+void MainWindow::TimelineSection::updateWindowTitle()
 {
     QString titleText = document_.title;
     if (editorStack_ != nullptr && editorStack_->currentWidget() == metadataPage_ && titleEdit_ != nullptr) {
@@ -432,13 +652,13 @@ void MainWindow::updateWindowTitle()
             ? QString("Untitled.simai")
             : QFileInfo(currentFilePath_).fileName();
     }
-    const QFontMetrics metrics(font());
+    const QFontMetrics metrics(owner_.font());
     const QString elided = metrics.elidedText(titleText, Qt::ElideRight, 420);
     const bool dirty = documentDirty_ || currentFieldDirty_;
-    setWindowTitle(QString("MiaCode - %1%2").arg(elided, dirty ? QStringLiteral("[*]") : QString()));
+    owner_.setWindowTitle(QString("MiaCode - %1%2").arg(elided, dirty ? QStringLiteral("[*]") : QString()));
 }
 
-void MainWindow::updateCurrentFileLabel()
+void MainWindow::TimelineSection::updateCurrentFileLabel()
 {
     if (currentFileLabel_ == nullptr) {
         return;
@@ -450,12 +670,12 @@ void MainWindow::updateCurrentFileLabel()
     }
 }
 
-QString MainWindow::editorText() const
+QString MainWindow::TimelineSection::editorText() const
 {
     return qobject_cast<PlainCodeEditor*>(editorWidget_)->toPlainText();
 }
 
-void MainWindow::scheduleTimelineRefresh()
+void MainWindow::TimelineSection::scheduleTimelineRefresh()
 {
     if (!hasActiveDifficulty() || timelineView_ == nullptr) {
         return;
@@ -465,12 +685,12 @@ void MainWindow::scheduleTimelineRefresh()
     requestTimelineSlowRefresh();
 }
 
-void MainWindow::refreshTimelineMetadata()
+void MainWindow::TimelineSection::refreshTimelineMetadata()
 {
     scheduleTimelineRefresh();
 }
 
-void MainWindow::applyTimelineQuickChange(int position, int charsRemoved, int charsAdded)
+void MainWindow::TimelineSection::applyTimelineQuickChange(int position, int charsRemoved, int charsAdded)
 {
     if (timelineView_ == nullptr || !hasActiveDifficulty()) {
         return;
@@ -495,7 +715,7 @@ void MainWindow::applyTimelineQuickChange(int position, int charsRemoved, int ch
     updatePreviewSliderRange();
 }
 
-void MainWindow::refreshTimelineQuickModelFromCurrentText()
+void MainWindow::TimelineSection::refreshTimelineQuickModelFromCurrentText()
 {
     if (timelineView_ == nullptr || !hasActiveDifficulty()) {
         return;
@@ -505,7 +725,7 @@ void MainWindow::refreshTimelineQuickModelFromCurrentText()
     updatePreviewSliderRange();
 }
 
-void MainWindow::applyLatestTimelinePreviewStateToPausedPreview()
+void MainWindow::TimelineSection::applyLatestTimelinePreviewStateToPausedPreview()
 {
     if (qtPreviewPlaying_) {
         return;
@@ -527,7 +747,7 @@ void MainWindow::applyLatestTimelinePreviewStateToPausedPreview()
     lastPreviewNoteMarkerSignature_ = latestTimelineNoteMarkerSignature_;
 }
 
-void MainWindow::requestTimelineSlowRefresh()
+void MainWindow::TimelineSection::requestTimelineSlowRefresh()
 {
     if (!hasActiveDifficulty()) {
         return;
@@ -547,7 +767,7 @@ void MainWindow::requestTimelineSlowRefresh()
     dispatchTimelineSlowRefresh();
 }
 
-void MainWindow::dispatchTimelineSlowRefresh()
+void MainWindow::TimelineSection::dispatchTimelineSlowRefresh()
 {
     if (timelineSlowWorkerRunning_ || pendingTimelineSlowRefresh_.revision == 0) {
         return;
@@ -557,7 +777,7 @@ void MainWindow::dispatchTimelineSlowRefresh()
     pendingTimelineSlowRefresh_ = TimelineSlowRefreshRequest();
     timelineSlowWorkerRunning_ = true;
     timelineSlowRunningRevision_ = request.revision;
-    QPointer<MainWindow> guard(this);
+    QPointer<MainWindow> guard(&owner_);
     QThreadPool* const pool = timelineSlowRefreshPool_ != nullptr
         ? timelineSlowRefreshPool_
         : QThreadPool::globalInstance();
@@ -614,7 +834,7 @@ void MainWindow::dispatchTimelineSlowRefresh()
     });
 }
 
-void MainWindow::scheduleTimelineAnalysisRefresh(
+void MainWindow::TimelineSection::scheduleTimelineAnalysisRefresh(
     const TimelineSlowRefreshRequest& request,
     const SimaiNativeParseResult& parseResult,
     const TimelinePreviewRefreshState& previewState)
@@ -634,7 +854,7 @@ void MainWindow::scheduleTimelineAnalysisRefresh(
     requestTimelineAnalysisDispatch();
 }
 
-bool MainWindow::scheduleTimelineAnalysisRefreshFromLatestPreviewState(int delayMs)
+bool MainWindow::TimelineSection::scheduleTimelineAnalysisRefreshFromLatestPreviewState(int delayMs)
 {
     if (!hasActiveDifficulty()
         || !latestTimelinePreviewSnapshotReady_
@@ -667,7 +887,7 @@ bool MainWindow::scheduleTimelineAnalysisRefreshFromLatestPreviewState(int delay
     return true;
 }
 
-void MainWindow::requestTimelineAnalysisDispatch(int delayMs)
+void MainWindow::TimelineSection::requestTimelineAnalysisDispatch(int delayMs)
 {
     if (pendingTimelineAnalysisRefresh_.revision == 0) {
         return;
@@ -686,7 +906,7 @@ void MainWindow::requestTimelineAnalysisDispatch(int delayMs)
     dispatchTimelineAnalysisRefresh();
 }
 
-void MainWindow::dispatchTimelineAnalysisRefresh()
+void MainWindow::TimelineSection::dispatchTimelineAnalysisRefresh()
 {
     if (!hasActiveDifficulty() || qtPreviewPlaying_ || timelineAnalysisWorkerRunning_ || pendingTimelineAnalysisRefresh_.revision == 0) {
         return;
@@ -696,7 +916,7 @@ void MainWindow::dispatchTimelineAnalysisRefresh()
     pendingTimelineAnalysisRefresh_ = TimelineAnalysisRefreshRequest();
     timelineAnalysisWorkerRunning_ = true;
     timelineAnalysisRunningRevision_ = request.revision;
-    QPointer<MainWindow> guard(this);
+    QPointer<MainWindow> guard(&owner_);
     QThreadPool* const pool = timelineAnalysisPool_ != nullptr
         ? timelineAnalysisPool_
         : QThreadPool::globalInstance();
@@ -759,19 +979,19 @@ void MainWindow::dispatchTimelineAnalysisRefresh()
     });
 }
 
-void MainWindow::rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& noteMarkers)
+void MainWindow::TimelineSection::rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& noteMarkers)
 {
     muriStaticReferences_ = miacode::muri::buildStaticMuriReferences(
         noteMarkers,
         static_cast<double>(staticTapOnSlideThresholdMs_) / 1000.0);
 }
 
-double MainWindow::timelineSecondForCursor(int line, int col) const
+double MainWindow::TimelineSection::timelineSecondForCursor(int line, int col) const
 {
     return timelineQuickModel_.timelineSecondForCursor(line, col);
 }
 
-void MainWindow::seekTimelineToCursor(int line, int col)
+void MainWindow::TimelineSection::seekTimelineToCursor(int line, int col)
 {
     if (timelineView_ == nullptr) {
         return;
@@ -781,7 +1001,7 @@ void MainWindow::seekTimelineToCursor(int line, int col)
     timelineView_->focusCursor(true);
 }
 
-void MainWindow::syncTimelineToEditorCursor(bool centerView)
+void MainWindow::TimelineSection::syncTimelineToEditorCursor(bool centerView)
 {
     if (suppressTimelineCursorSync_ || !hasActiveDifficulty() || timelineView_ == nullptr) {
         return;
@@ -794,7 +1014,7 @@ void MainWindow::syncTimelineToEditorCursor(bool centerView)
     }
 }
 
-void MainWindow::navigateTimelineToSecond(double second, bool focusEditor)
+void MainWindow::TimelineSection::navigateTimelineToSecond(double second, bool focusEditor)
 {
     if (timelineView_ == nullptr) {
         return;
@@ -829,12 +1049,12 @@ void MainWindow::navigateTimelineToSecond(double second, bool focusEditor)
     );
 }
 
-bool MainWindow::resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const
+bool MainWindow::TimelineSection::resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const
 {
     return timelineQuickModel_.resolveNearestTimelineNote(second, lane, line, col, noteSecond);
 }
 
-bool MainWindow::moveEditorCursorToTimelineLocation(
+bool MainWindow::TimelineSection::moveEditorCursorToTimelineLocation(
     int line,
     int col,
     bool selectToken,
@@ -911,7 +1131,7 @@ bool MainWindow::moveEditorCursorToTimelineLocation(
     return true;
 }
 
-void MainWindow::syncEditorCursorToPreviewSecond(double second, bool centerView)
+void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(double second, bool centerView)
 {
     if (suppressTimelineCursorSync_ || timelineView_ == nullptr || !hasActiveDifficulty()) {
         clearPreviewFollowDecoration();
@@ -950,7 +1170,7 @@ void MainWindow::syncEditorCursorToPreviewSecond(double second, bool centerView)
     }
 }
 
-double MainWindow::previewDurationSeconds() const
+double MainWindow::TimelineSection::previewDurationSeconds() const
 {
     double duration = 0.0;
     if (qtPreviewPlaying_ && qtPreviewPlaybackEndSecond_ > 0.0) {
@@ -968,7 +1188,7 @@ double MainWindow::previewDurationSeconds() const
     return qMax(0.0, duration);
 }
 
-double MainWindow::previewPlaybackEndSeconds() const
+double MainWindow::TimelineSection::previewPlaybackEndSeconds() const
 {
     if (qtPreviewPlaying_ && qtPreviewPlaybackEndSecond_ > 0.0) {
         return qMax(0.0, qtPreviewPlaybackEndSecond_);
@@ -983,7 +1203,7 @@ double MainWindow::previewPlaybackEndSeconds() const
     return qMax(0.0, duration);
 }
 
-void MainWindow::updatePreviewSliderRange()
+void MainWindow::TimelineSection::updatePreviewSliderRange()
 {
     if (previewSlider_ == nullptr) {
         return;
@@ -993,7 +1213,7 @@ void MainWindow::updatePreviewSliderRange()
     previewSlider_->setMaximum(maximum);
 }
 
-void MainWindow::updatePreviewSliderPosition(double second)
+void MainWindow::TimelineSection::updatePreviewSliderPosition(double second)
 {
     if (previewSlider_ == nullptr || previewSliderDragging_) {
         return;
@@ -1003,7 +1223,7 @@ void MainWindow::updatePreviewSliderPosition(double second)
     previewSlider_->setValue(value);
 }
 
-void MainWindow::refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers)
+void MainWindow::TimelineSection::refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers)
 {
     auto cache = std::make_shared<miacode::preview::scene::PreviewProgressStatsCache>();
     cache->rebuild(noteMarkers);
@@ -1014,7 +1234,7 @@ void MainWindow::refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarke
     updatePreviewObjectStats(qtPreviewPauseSecond_);
 }
 
-void MainWindow::clearPreviewObjectStats()
+void MainWindow::TimelineSection::clearPreviewObjectStats()
 {
     previewProgressStatsCache_.reset();
     if (previewCanvas_ != nullptr) {
@@ -1023,7 +1243,7 @@ void MainWindow::clearPreviewObjectStats()
     updatePreviewObjectStats(0.0);
 }
 
-int MainWindow::updatePreviewStatsLayoutMode(int hostWidth)
+int MainWindow::TimelineSection::updatePreviewStatsLayoutMode(int hostWidth)
 {
     if (previewStatsCard_ == nullptr || previewStatsGridLayout_ == nullptr || previewStatsChips_.isEmpty()) {
         return 0;
@@ -1061,7 +1281,7 @@ int MainWindow::updatePreviewStatsLayoutMode(int hostWidth)
 
     const QLabel* widthTemplateLabel =
         previewTotalStatsLabel_ != nullptr ? previewTotalStatsLabel_ : previewStatsChips_.constFirst();
-    const QFontMetrics chipMetrics(widthTemplateLabel != nullptr ? widthTemplateLabel->font() : font());
+    const QFontMetrics chipMetrics(widthTemplateLabel != nullptr ? widthTemplateLabel->font() : owner_.font());
     constexpr int kPreviewStatsChipHorizontalPadding = 18;
     const int maxChipHintWidth =
         chipMetrics.horizontalAdvance(QStringLiteral("Total  xxxxx/xxxxx"))
@@ -1132,7 +1352,7 @@ int MainWindow::updatePreviewStatsLayoutMode(int hostWidth)
     return cardHeight;
 }
 
-int MainWindow::previewStatsMinimumHeightForPanelWidth(int panelWidth) const
+int MainWindow::TimelineSection::previewStatsMinimumHeightForPanelWidth(int panelWidth) const
 {
     const int statsHostWidth = qMax(0, panelWidth - kPreviewPanelMarginX * 2 - 16);
     if (previewStatsGridLayout_ == nullptr || previewStatsChips_.isEmpty()) {
@@ -1151,7 +1371,7 @@ int MainWindow::previewStatsMinimumHeightForPanelWidth(int panelWidth) const
     );
     const QLabel* widthTemplateLabel =
         previewTotalStatsLabel_ != nullptr ? previewTotalStatsLabel_ : previewStatsChips_.constFirst();
-    const QFontMetrics chipMetrics(widthTemplateLabel != nullptr ? widthTemplateLabel->font() : font());
+    const QFontMetrics chipMetrics(widthTemplateLabel != nullptr ? widthTemplateLabel->font() : owner_.font());
     constexpr int kPreviewStatsChipHorizontalPadding = 18;
     const int minChipWidth =
         chipMetrics.horizontalAdvance(QStringLiteral("Total  xxxxx/xxxxx"))
@@ -1185,7 +1405,7 @@ int MainWindow::previewStatsMinimumHeightForPanelWidth(int panelWidth) const
         + qMax(0, rows - 1) * verticalSpacing;
 }
 
-double MainWindow::normalizedPreviewCanvasAspectRatio(double ratio) const
+double MainWindow::TimelineSection::normalizedPreviewCanvasAspectRatio(double ratio) const
 {
     if (!qIsFinite(ratio)) {
         return 1.0;
@@ -1208,7 +1428,7 @@ MainWindow::PreviewCanvasFrameRateMode MainWindow::previewCanvasFrameRateModeFro
     return PreviewCanvasFrameRateMode::Fps60;
 }
 
-QString MainWindow::previewCanvasFrameRateModeStorageValue() const
+QString MainWindow::TimelineSection::previewCanvasFrameRateModeStorageValue() const
 {
     switch (previewCanvasFrameRateMode_) {
     case PreviewCanvasFrameRateMode::Fps120:
@@ -1221,11 +1441,11 @@ QString MainWindow::previewCanvasFrameRateModeStorageValue() const
     }
 }
 
-double MainWindow::currentPreviewCanvasRefreshRate() const
+double MainWindow::TimelineSection::currentPreviewCanvasRefreshRate() const
 {
-    QScreen* targetScreen = screen();
-    if (windowHandle() != nullptr && windowHandle()->screen() != nullptr) {
-        targetScreen = windowHandle()->screen();
+    QScreen* targetScreen = owner_.screen();
+    if (owner_.windowHandle() != nullptr && owner_.windowHandle()->screen() != nullptr) {
+        targetScreen = owner_.windowHandle()->screen();
     }
     if (targetScreen == nullptr) {
         targetScreen = QGuiApplication::primaryScreen();
@@ -1237,12 +1457,12 @@ double MainWindow::currentPreviewCanvasRefreshRate() const
     return refreshRate;
 }
 
-bool MainWindow::previewCanvasUsesFrameSwappedPacing() const
+bool MainWindow::TimelineSection::previewCanvasUsesFrameSwappedPacing() const
 {
     return previewCanvasFrameRateMode_ == PreviewCanvasFrameRateMode::DisplayRefresh;
 }
 
-qint64 MainWindow::previewCanvasTargetFrameIntervalNs() const
+qint64 MainWindow::TimelineSection::previewCanvasTargetFrameIntervalNs() const
 {
     switch (previewCanvasFrameRateMode_) {
     case PreviewCanvasFrameRateMode::Fps120:
@@ -1255,7 +1475,7 @@ qint64 MainWindow::previewCanvasTargetFrameIntervalNs() const
     }
 }
 
-void MainWindow::resetQtPreviewFixedFramePacing()
+void MainWindow::TimelineSection::resetQtPreviewFixedFramePacing()
 {
     qtPreviewNextFixedTickDueNs_ = -1;
     if (previewCanvasUsesFrameSwappedPacing()) {
@@ -1264,7 +1484,7 @@ void MainWindow::resetQtPreviewFixedFramePacing()
     qtPreviewNextFixedTickDueNs_ = qtPreviewWatchdogElapsed_.nsecsElapsed() + previewCanvasTargetFrameIntervalNs();
 }
 
-void MainWindow::scheduleNextQtPreviewTick()
+void MainWindow::TimelineSection::scheduleNextQtPreviewTick()
 {
     if (qtPreviewTimer_ == nullptr || !qtPreviewPlaying_) {
         return;
@@ -1282,7 +1502,7 @@ void MainWindow::scheduleNextQtPreviewTick()
     qtPreviewTimer_->start(delayMs);
 }
 
-void MainWindow::requestNextDisplayRefreshPreviewFrame()
+void MainWindow::TimelineSection::requestNextDisplayRefreshPreviewFrame()
 {
     if (!qtPreviewPlaying_
         || previewCanvas_ == nullptr
@@ -1296,7 +1516,7 @@ void MainWindow::requestNextDisplayRefreshPreviewFrame()
     scheduleNextQtPreviewTick();
 }
 
-void MainWindow::refreshPreviewFrameRateTimers()
+void MainWindow::TimelineSection::refreshPreviewFrameRateTimers()
 {
     const int intervalMs = qMax(1, qRound(static_cast<double>(previewCanvasTargetFrameIntervalNs()) / 1000000.0));
 
@@ -1305,7 +1525,7 @@ void MainWindow::refreshPreviewFrameRateTimers()
     }
 }
 
-void MainWindow::setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
+void MainWindow::TimelineSection::setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
 {
     if (previewCanvasFrameRateMode_ == mode) {
         refreshPreviewFrameRateTimers();
@@ -1332,7 +1552,7 @@ void MainWindow::setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, 
     }
 }
 
-void MainWindow::setPreviewCanvasAspectRatio(double ratio, bool persistState)
+void MainWindow::TimelineSection::setPreviewCanvasAspectRatio(double ratio, bool persistState)
 {
     const double normalized = normalizedPreviewCanvasAspectRatio(ratio);
     if (qAbs(previewCanvasAspectRatio_ - normalized) <= 1e-6) {
@@ -1350,7 +1570,7 @@ void MainWindow::setPreviewCanvasAspectRatio(double ratio, bool persistState)
         savePortableState();
     }
 }
-void MainWindow::togglePreviewFullscreen()
+void MainWindow::TimelineSection::togglePreviewFullscreen()
 {
     if (previewFullscreenActive_) {
         exitPreviewFullscreen();
@@ -1359,277 +1579,31 @@ void MainWindow::togglePreviewFullscreen()
     enterPreviewFullscreen();
 }
 
-void MainWindow::enterPreviewFullscreen()
+void MainWindow::TimelineSection::enterPreviewFullscreen()
 {
-    if (isQuickShellBackendMode()) {
-        if (previewFullscreenActive_) {
-            return;
-        }
-        previewFullscreenActive_ = true;
-        updatePauseButtonAppearance();
-        updatePreviewFullscreenButtonAppearance();
+    if (previewFullscreenActive_) {
         return;
     }
-    if (previewFullscreenActive_ || previewCanvasContainer_ == nullptr || previewCanvasFrame_ == nullptr) {
-        return;
-    }
-    if (previewFullscreenWindow_ == nullptr) {
-        previewFullscreenWindow_ = new QWidget(this, Qt::Window);
-        previewFullscreenWindow_->setWindowTitle(uiText(
-            "preview.fullscreen.window_title",
-            QStringLiteral("Fullscreen Preview")
-        ));
-        previewFullscreenWindow_->setStyleSheet(QStringLiteral("background-color: #000000;"));
-        previewFullscreenWindow_->setAttribute(Qt::WA_DeleteOnClose, false);
-        previewFullscreenWindow_->setFocusPolicy(Qt::StrongFocus);
-        previewFullscreenWindow_->setMouseTracking(true);
-        previewFullscreenWindow_->installEventFilter(this);
-        auto* fullscreenLayout = new QVBoxLayout(previewFullscreenWindow_);
-        fullscreenLayout->setContentsMargins(0, 0, 0, 0);
-        fullscreenLayout->setSpacing(0);
-        previewFullscreenHost_ = new QWidget(previewFullscreenWindow_);
-        previewFullscreenHost_->setStyleSheet(QStringLiteral("background-color: #000000;"));
-        previewFullscreenHost_->setFocusPolicy(Qt::StrongFocus);
-        previewFullscreenHost_->setMouseTracking(true);
-        previewFullscreenHost_->installEventFilter(this);
-        auto* hostLayout = new QVBoxLayout(previewFullscreenHost_);
-        hostLayout->setContentsMargins(0, 0, 0, 0);
-        hostLayout->setSpacing(0);
-        fullscreenLayout->addWidget(previewFullscreenHost_);
-    }
-    if (previewFullscreenControlsWindow_ == nullptr && previewFullscreenWindow_ != nullptr) {
-        previewFullscreenControlsWindow_ = new QWidget(
-            previewFullscreenWindow_,
-            Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::NoDropShadowWindowHint
-        );
-        previewFullscreenControlsWindow_->setAttribute(Qt::WA_ShowWithoutActivating);
-        previewFullscreenControlsWindow_->setAttribute(Qt::WA_TranslucentBackground);
-        previewFullscreenControlsWindow_->setFocusPolicy(Qt::StrongFocus);
-        previewFullscreenControlsWindow_->setMouseTracking(true);
-        previewFullscreenControlsWindow_->installEventFilter(this);
-        auto* controlsLayout = new QVBoxLayout(previewFullscreenControlsWindow_);
-        controlsLayout->setContentsMargins(0, 0, 0, 0);
-        controlsLayout->setSpacing(0);
-        previewFullscreenControlsWindow_->hide();
-    }
-    if (previewFullscreenHintWindow_ == nullptr && previewFullscreenWindow_ != nullptr) {
-        previewFullscreenHintWindow_ = new QWidget(
-            previewFullscreenWindow_,
-            Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::NoDropShadowWindowHint
-        );
-        previewFullscreenHintWindow_->setAttribute(Qt::WA_ShowWithoutActivating);
-        previewFullscreenHintWindow_->setAttribute(Qt::WA_TranslucentBackground);
-        previewFullscreenHintWindow_->setAttribute(Qt::WA_TransparentForMouseEvents);
-        previewFullscreenHintWindow_->installEventFilter(this);
-        auto* hintLayout = new QVBoxLayout(previewFullscreenHintWindow_);
-        hintLayout->setContentsMargins(0, 0, 0, 0);
-        hintLayout->setSpacing(0);
-        previewFullscreenHintWindow_->hide();
-    }
-    if (previewFullscreenHintLabel_ == nullptr && previewFullscreenHintWindow_ != nullptr) {
-        previewFullscreenHintLabel_ = new QLabel(previewFullscreenHintWindow_);
-        previewFullscreenHintLabel_->setAttribute(Qt::WA_TransparentForMouseEvents);
-        previewFullscreenHintLabel_->setAttribute(Qt::WA_StyledBackground, true);
-        previewFullscreenHintLabel_->setAlignment(Qt::AlignCenter);
-        previewFullscreenHintLabel_->setStyleSheet(previewFullscreenHintStyleSheet());
-        if (previewFullscreenHintWindow_->layout() != nullptr) {
-            previewFullscreenHintWindow_->layout()->addWidget(previewFullscreenHintLabel_);
-        }
-        previewFullscreenHintLabel_->hide();
-    }
-    if (previewFullscreenHintTimer_ == nullptr) {
-        previewFullscreenHintTimer_ = new QTimer(this);
-        previewFullscreenHintTimer_->setSingleShot(true);
-        connect(previewFullscreenHintTimer_, &QTimer::timeout, this, [this]() {
-            if (previewFullscreenHintWindow_ != nullptr) {
-                previewFullscreenHintWindow_->hide();
-            }
-        });
-    }
-    if (previewFullscreenControlsTimer_ == nullptr) {
-        previewFullscreenControlsTimer_ = new QTimer(this);
-        previewFullscreenControlsTimer_->setSingleShot(true);
-        connect(previewFullscreenControlsTimer_, &QTimer::timeout, this, [this]() {
-            hidePreviewFullscreenControls(true);
-        });
-    }
-    if (previewFullscreenCursorPollTimer_ == nullptr) {
-        previewFullscreenCursorPollTimer_ = new QTimer(this);
-        previewFullscreenCursorPollTimer_->setInterval(120);
-        connect(previewFullscreenCursorPollTimer_, &QTimer::timeout, this, &MainWindow::pollPreviewFullscreenCursor);
-    }
-    if (previewFullscreenControlsWindow_ != nullptr
-        && (previewFullscreenControlsAnimation_ == nullptr
-            || previewFullscreenControlsAnimation_->targetObject() != previewFullscreenControlsWindow_)) {
-        delete previewFullscreenControlsAnimation_;
-        previewFullscreenControlsAnimation_ = new QPropertyAnimation(
-            previewFullscreenControlsWindow_,
-            "geometry",
-            this
-        );
-        previewFullscreenControlsAnimation_->setDuration(kPreviewFullscreenControlsAnimationDurationMs);
-        previewFullscreenControlsAnimation_->setEasingCurve(QEasingCurve::OutCubic);
-    }
-    if (previewFullscreenControlsWindow_ != nullptr
-        && (previewFullscreenControlsOpacityAnimation_ == nullptr
-            || previewFullscreenControlsOpacityAnimation_->targetObject() != previewFullscreenControlsWindow_)) {
-        delete previewFullscreenControlsOpacityAnimation_;
-        previewFullscreenControlsOpacityAnimation_ = new QPropertyAnimation(
-            previewFullscreenControlsWindow_,
-            "windowOpacity",
-            this
-        );
-        previewFullscreenControlsOpacityAnimation_->setDuration(kPreviewFullscreenControlsOpacityAnimationDurationMs);
-        previewFullscreenControlsOpacityAnimation_->setEasingCurve(QEasingCurve::OutCubic);
-        connect(previewFullscreenControlsOpacityAnimation_, &QPropertyAnimation::finished, this, [this]() {
-            if (!previewFullscreenControlsVisible_ && previewFullscreenControlsWindow_ != nullptr) {
-                previewFullscreenControlsWindow_->hide();
-                previewFullscreenControlsWindow_->setWindowOpacity(0.0);
-            }
-        });
-    }
-    if (previewFullscreenHost_ == nullptr || previewFullscreenHost_->layout() == nullptr) {
-        return;
-    }
-    previewCanvasContainer_->setParent(previewFullscreenHost_);
-    previewFullscreenHost_->layout()->addWidget(previewCanvasContainer_);
-    if (previewControlCard_ != nullptr && previewFullscreenControlsWindow_ != nullptr) {
-        previewControlCard_->setParent(previewFullscreenControlsWindow_);
-        previewControlCard_->setAttribute(Qt::WA_StyledBackground, true);
-        previewControlCard_->setStyleSheet(previewFullscreenControlCardStyleSheet());
-        if (previewFullscreenControlsWindow_->layout() != nullptr) {
-            previewFullscreenControlsWindow_->layout()->addWidget(previewControlCard_);
-        }
-        previewControlCard_->show();
-    }
-    previewCanvasContainer_->show();
     previewFullscreenActive_ = true;
     previewFullscreenControlsVisible_ = false;
     previewFullscreenCursorTrackingInitialized_ = false;
-    if (stopPreviewAction_ != nullptr) {
-        stopPreviewAction_->setIcon(makePreviewStopIcon(previewFullscreenOverlayIconColor()));
-    }
     updatePauseButtonAppearance();
     updatePreviewFullscreenButtonAppearance();
-    previewFullscreenWindow_->showFullScreen();
-    previewFullscreenWindow_->raise();
-    previewFullscreenWindow_->activateWindow();
-    if (previewFullscreenHintLabel_ != nullptr
-        && previewFullscreenHintWindow_ != nullptr
-        && previewFullscreenWindow_ != nullptr) {
-        const QString exitHint = uiText(
-            "preview.fullscreen.exit_hint",
-            QStringLiteral("Press Esc to exit fullscreen")
-        );
-        QTimer::singleShot(0, this, [this, exitHint]() {
-            if (!previewFullscreenActive_
-                || previewFullscreenWindow_ == nullptr
-                || previewFullscreenHintWindow_ == nullptr
-                || previewFullscreenHintLabel_ == nullptr) {
-                return;
-            }
-            previewFullscreenHintLabel_->setText(exitHint);
-            previewFullscreenHintLabel_->setStyleSheet(previewFullscreenHintStyleSheet());
-            previewFullscreenHintLabel_->adjustSize();
-            previewFullscreenHintWindow_->show();
-            previewFullscreenHintWindow_->raise();
-            previewFullscreenHintLabel_->show();
-            updatePreviewFullscreenOverlayGeometry();
-            if (previewFullscreenHintTimer_ != nullptr) {
-                previewFullscreenHintTimer_->start(2200);
-            }
-        });
-    }
-    if (previewFullscreenControlsWindow_ != nullptr) {
-        previewFullscreenControlsWindow_->setWindowOpacity(0.0);
-        previewFullscreenControlsWindow_->hide();
-    }
-    updatePreviewFullscreenOverlayGeometry();
-    if (previewFullscreenCursorPollTimer_ != nullptr) {
-        previewFullscreenCursorPollTimer_->start();
-    }
-    previewCanvasContainer_->setFocus();
-    if (previewCanvas_ != nullptr) {
-        previewCanvas_->requestActivate();
-    }
 }
 
-void MainWindow::exitPreviewFullscreen()
+void MainWindow::TimelineSection::exitPreviewFullscreen()
 {
-    if (isQuickShellBackendMode()) {
-        if (!previewFullscreenActive_) {
-            return;
-        }
-        previewFullscreenActive_ = false;
-        previewFullscreenControlsVisible_ = false;
-        previewFullscreenCursorTrackingInitialized_ = false;
-        updatePauseButtonAppearance();
-        updatePreviewFullscreenButtonAppearance();
+    if (!previewFullscreenActive_) {
         return;
-    }
-    if (!previewFullscreenActive_ || previewCanvasContainer_ == nullptr || previewCanvasFrame_ == nullptr) {
-        return;
-    }
-    if (previewFullscreenControlsTimer_ != nullptr) {
-        previewFullscreenControlsTimer_->stop();
-    }
-    if (previewFullscreenCursorPollTimer_ != nullptr) {
-        previewFullscreenCursorPollTimer_->stop();
-    }
-    if (previewFullscreenControlsAnimation_ != nullptr) {
-        previewFullscreenControlsAnimation_->stop();
-    }
-    if (previewFullscreenControlsOpacityAnimation_ != nullptr) {
-        previewFullscreenControlsOpacityAnimation_->stop();
-    }
-    if (previewFullscreenHost_ != nullptr && previewFullscreenHost_->layout() != nullptr) {
-        previewFullscreenHost_->layout()->removeWidget(previewCanvasContainer_);
-    }
-    previewCanvasContainer_->setParent(previewCanvasFrame_);
-    if (previewControlCard_ != nullptr && previewControlCard_->parentWidget() == previewFullscreenControlsWindow_) {
-        if (previewFullscreenControlsWindow_ != nullptr && previewFullscreenControlsWindow_->layout() != nullptr) {
-            previewFullscreenControlsWindow_->layout()->removeWidget(previewControlCard_);
-        }
-        previewControlCard_->hide();
-        previewControlCard_->setParent(previewPanel_);
-        previewControlCard_->setStyleSheet(QString());
     }
     previewFullscreenActive_ = false;
     previewFullscreenControlsVisible_ = false;
     previewFullscreenCursorTrackingInitialized_ = false;
-    if (previewFullscreenHintTimer_ != nullptr) {
-        previewFullscreenHintTimer_->stop();
-    }
-    if (previewFullscreenHintLabel_ != nullptr) {
-        previewFullscreenHintLabel_->hide();
-    }
-    if (previewFullscreenHintWindow_ != nullptr) {
-        previewFullscreenHintWindow_->hide();
-    }
-    if (previewFullscreenControlsWindow_ != nullptr) {
-        previewFullscreenControlsWindow_->setWindowOpacity(0.0);
-        previewFullscreenControlsWindow_->hide();
-    }
-    if (previewFullscreenWindow_ != nullptr) {
-        previewFullscreenWindow_->hide();
-    }
-    if (stopPreviewAction_ != nullptr) {
-        stopPreviewAction_->setIcon(makePreviewStopIcon(UiTheme::colors().iconPrimary));
-    }
     updatePauseButtonAppearance();
     updatePreviewFullscreenButtonAppearance();
-    updatePreviewPanelLayout();
-    if (previewControlCard_ != nullptr) {
-        previewControlCard_->show();
-    }
-    previewCanvasContainer_->show();
-    previewCanvasContainer_->setFocus();
-    if (previewCanvas_ != nullptr) {
-        previewCanvas_->requestActivate();
-    }
 }
 
-void MainWindow::updatePreviewFullscreenButtonAppearance()
+void MainWindow::TimelineSection::updatePreviewFullscreenButtonAppearance()
 {
     if (previewFullscreenButton_ == nullptr) {
         return;
@@ -1645,7 +1619,7 @@ void MainWindow::updatePreviewFullscreenButtonAppearance()
     previewFullscreenButton_->setToolTip(QString());
 }
 
-bool MainWindow::shouldRevealPreviewFullscreenControls(const QPoint& globalCursorPos) const
+bool MainWindow::TimelineSection::shouldRevealPreviewFullscreenControls(const QPoint& globalCursorPos) const
 {
     if (!previewFullscreenActive_ || previewFullscreenWindow_ == nullptr) {
         return false;
@@ -1676,7 +1650,7 @@ bool MainWindow::shouldRevealPreviewFullscreenControls(const QPoint& globalCurso
     return globalCursorPos.y() >= windowGlobalRect.bottom() - revealHotzoneHeight;
 }
 
-QRect MainWindow::previewFullscreenControlCardRect(bool visible) const
+QRect MainWindow::TimelineSection::previewFullscreenControlCardRect(bool visible) const
 {
     if (previewFullscreenWindow_ == nullptr || previewControlCard_ == nullptr) {
         return QRect();
@@ -1705,7 +1679,7 @@ QRect MainWindow::previewFullscreenControlCardRect(bool visible) const
     return QRect(cardX, visible ? visibleY : hiddenY, cardWidth, cardHeight);
 }
 
-void MainWindow::showPreviewFullscreenControls(bool animate)
+void MainWindow::TimelineSection::showPreviewFullscreenControls(bool animate)
 {
     if (!previewFullscreenActive_
         || previewFullscreenWindow_ == nullptr
@@ -1765,7 +1739,7 @@ void MainWindow::showPreviewFullscreenControls(bool animate)
     schedulePreviewFullscreenControlsAutoHide();
 }
 
-void MainWindow::hidePreviewFullscreenControls(bool animate)
+void MainWindow::TimelineSection::hidePreviewFullscreenControls(bool animate)
 {
     if (!previewFullscreenActive_
         || previewFullscreenWindow_ == nullptr
@@ -1829,7 +1803,7 @@ void MainWindow::hidePreviewFullscreenControls(bool animate)
     previewFullscreenControlsVisible_ = false;
 }
 
-void MainWindow::schedulePreviewFullscreenControlsAutoHide()
+void MainWindow::TimelineSection::schedulePreviewFullscreenControlsAutoHide()
 {
     if (!previewFullscreenActive_ || previewFullscreenControlsTimer_ == nullptr) {
         return;
@@ -1837,7 +1811,7 @@ void MainWindow::schedulePreviewFullscreenControlsAutoHide()
     previewFullscreenControlsTimer_->start(kPreviewFullscreenControlsAutoHideDelayMs);
 }
 
-void MainWindow::pollPreviewFullscreenCursor()
+void MainWindow::TimelineSection::pollPreviewFullscreenCursor()
 {
     if (!previewFullscreenActive_ || previewFullscreenWindow_ == nullptr) {
         return;
@@ -1873,7 +1847,7 @@ void MainWindow::pollPreviewFullscreenCursor()
     }
 }
 
-void MainWindow::updatePreviewFullscreenOverlayGeometry()
+void MainWindow::TimelineSection::updatePreviewFullscreenOverlayGeometry()
 {
     if (!previewFullscreenActive_ || previewFullscreenWindow_ == nullptr) {
         return;
@@ -1915,181 +1889,25 @@ void MainWindow::updatePreviewFullscreenOverlayGeometry()
     }
 }
 
-void MainWindow::updatePreviewWorkspaceLayout()
+void MainWindow::TimelineSection::updatePreviewWorkspaceLayout()
 {
-    if (isQuickShellBackendMode()) {
-        if (quickShellWorkspaceSurfaceWidget_ != nullptr) {
-            quickShellWorkspaceSurfaceWidget_->updateGeometry();
-            if (QLayout* layout = quickShellWorkspaceSurfaceWidget_->layout(); layout != nullptr) {
-                layout->activate();
-            }
-        }
-        if (quickShellPreviewControlsSurfaceWidget_ != nullptr) {
-            quickShellPreviewControlsSurfaceWidget_->updateGeometry();
-            if (QLayout* layout = quickShellPreviewControlsSurfaceWidget_->layout(); layout != nullptr) {
-                layout->activate();
-            }
-        }
-        updateEditorFindBarGeometry();
-        applyFindOverlayInset();
-        return;
-    }
-    if (workspaceSplitter_ == nullptr || previewPanel_ == nullptr || previewControlCard_ == nullptr) {
-        return;
-    }
-
-    const QRect splitterRect = workspaceSplitter_->contentsRect();
-    if (splitterRect.width() <= 0 || splitterRect.height() <= 0) {
-        updatePreviewPanelLayout();
-        return;
-    }
-
-    const int handleWidth = qMax(0, workspaceSplitter_->handleWidth());
-    const int availableWidth = qMax(0, splitterRect.width() - handleWidth);
-    const int availableHeight = qMax(0, splitterRect.height());
-    const int leftMinWidth = (previewLeftColumn_ != nullptr) ? previewLeftColumn_->minimumWidth() : 320;
-    const int minimumRightWidth =
-        (availableWidth >= leftMinWidth + kPreviewControlStatsCardMinWidth + kPreviewPanelMarginX * 2)
-        ? (kPreviewControlStatsCardMinWidth + kPreviewPanelMarginX * 2)
-        : qMin(availableWidth, kPreviewControlStatsCardMinWidth + kPreviewPanelMarginX * 2);
-    const int rightMaxWidth =
-        (availableWidth >= leftMinWidth + minimumRightWidth)
-        ? qMin(kEmbeddedPreviewPanelWidthMax, availableWidth - leftMinWidth)
-        : availableWidth;
-    const int controlHeight = qMax(previewControlCard_->minimumSizeHint().height(), previewControlCard_->sizeHint().height());
-    const double aspectRatio = normalizedPreviewCanvasAspectRatio(previewCanvasAspectRatio_);
-    const auto resolvePreviewPanelWidth = [&](int leftFloor, int rightUpperBound) {
-        if (rightUpperBound <= 0) {
-            return 0;
-        }
-        if (availableWidth < leftFloor + minimumRightWidth) {
-            return rightUpperBound;
-        }
-        int targetWidth = qBound(
-            minimumRightWidth,
-            qMin(
-                rightUpperBound,
-                miacode::window_parity::computePreviewPanelTargetWidth(
-                    availableWidth,
-                    availableHeight,
-                    leftFloor,
-                    controlHeight,
-                    previewStatsMinimumHeightForPanelWidth(rightUpperBound),
-                    aspectRatio
-                )
-            ),
-            rightUpperBound
-        );
-        for (int iteration = 0; iteration < 4; ++iteration) {
-            const int nextWidth = qBound(
-                minimumRightWidth,
-                qMin(
-                    rightUpperBound,
-                    miacode::window_parity::computePreviewPanelTargetWidth(
-                        availableWidth,
-                        availableHeight,
-                        leftFloor,
-                        controlHeight,
-                        previewStatsMinimumHeightForPanelWidth(targetWidth),
-                        aspectRatio
-                    )
-                ),
-                rightUpperBound
-            );
-            if (nextWidth == targetWidth) {
-                break;
-            }
-            targetWidth = nextWidth;
-        }
-        return targetWidth;
-    };
-    const bool useInitialWorkspaceSplit =
-        workspaceCachedLeftWidth_ <= 0
-        || workspaceCachedRightWidth_ <= 0
-        || workspaceCachedLeftWidth_ < leftMinWidth;
-    int targetLeftWidth = 0;
-    int targetRightWidth = 0;
-    if (useInitialWorkspaceSplit) {
-        const int startupLeftFloor =
-            workspaceStartupBalancePending_
-                ? qBound(0, qMax(qBound(0, leftMinWidth, availableWidth), availableWidth / 2), availableWidth)
-                : qBound(0, leftMinWidth, availableWidth);
-        targetLeftWidth = startupLeftFloor;
-        targetRightWidth = qMax(0, availableWidth - targetLeftWidth);
-    } else {
-        targetRightWidth = resolvePreviewPanelWidth(leftMinWidth, rightMaxWidth);
-        targetRightWidth = qBound(minimumRightWidth, targetRightWidth, rightMaxWidth);
-        targetLeftWidth =
-            (availableWidth >= leftMinWidth + targetRightWidth)
-                ? qMax(leftMinWidth, availableWidth - targetRightWidth)
-                : qMax(0, availableWidth - targetRightWidth);
-    }
-    const QList<int> currentSizes = workspaceSplitter_->sizes();
-    if (currentSizes.size() == 2
-        && (qAbs(currentSizes.at(0) - targetLeftWidth) > 1 || qAbs(currentSizes.at(1) - targetRightWidth) > 1)) {
-        workspaceSplitter_->setSizes({targetLeftWidth, targetRightWidth});
-        if (runtimeDebugOutputEnabled_) {
-            appendOutput(
-                "preview/layout-calc/workspace-apply",
-                QString("applied_sizes=[%1,%2] previous=[%3,%4]")
-                    .arg(targetLeftWidth)
-                    .arg(targetRightWidth)
-                    .arg(currentSizes.value(0))
-                    .arg(currentSizes.value(1))
-            );
-        }
-    }
-    if (useInitialWorkspaceSplit && workspaceStartupBalancePending_) {
-        workspaceStartupBalancePending_ = false;
-    }
-    workspaceCachedLeftWidth_ = targetLeftWidth;
-    workspaceCachedRightWidth_ = targetRightWidth;
-
-    updatePreviewPanelLayout(targetRightWidth, availableHeight);
+    refreshQuickShellRehostedWidgetParent(outlineDock_);
+    refreshQuickShellRehostedWidgetParent(previewLeftColumn_);
+    refreshQuickShellRehostedWidgetParent(previewControlCard_);
+    refreshQuickShellRehostedWidgetParent(previewStatsCard_);
     updateEditorFindBarGeometry();
     applyFindOverlayInset();
 }
 
-void MainWindow::cacheWorkspaceLayoutSizes()
+void MainWindow::TimelineSection::cacheWorkspaceLayoutSizes()
 {
-    if (isQuickShellBackendMode()) {
-        return;
-    }
-    if (workspaceSplitter_ == nullptr) {
-        return;
-    }
-    const QList<int> sizes = workspaceSplitter_->sizes();
-    if (sizes.size() != 2) {
-        return;
-    }
-    workspaceCachedLeftWidth_ = qMax(0, sizes.at(0));
-    workspaceCachedRightWidth_ = qMax(0, sizes.at(1));
 }
 
-void MainWindow::restoreWorkspaceLayoutSizes()
+void MainWindow::TimelineSection::restoreWorkspaceLayoutSizes()
 {
-    if (isQuickShellBackendMode()) {
-        return;
-    }
-    if (workspaceSplitter_ == nullptr || workspaceCachedLeftWidth_ <= 0 || workspaceCachedRightWidth_ <= 0) {
-        return;
-    }
-    const QList<int> currentSizes = workspaceSplitter_->sizes();
-    if (currentSizes.size() == 2
-        && qAbs(currentSizes.at(0) - workspaceCachedLeftWidth_) <= 1
-        && qAbs(currentSizes.at(1) - workspaceCachedRightWidth_) <= 1) {
-        return;
-    }
-    workspaceSplitter_->setSizes({workspaceCachedLeftWidth_, workspaceCachedRightWidth_});
-    updatePreviewPanelLayout(
-        workspaceCachedRightWidth_,
-        workspaceSplitter_ != nullptr ? qMax(0, workspaceSplitter_->contentsRect().height()) : -1
-    );
-    updateEditorFindBarGeometry();
-    applyFindOverlayInset();
 }
 
-void MainWindow::setWorkspacePanelsSwapped(bool swapped, bool persistState)
+void MainWindow::TimelineSection::setWorkspacePanelsSwapped(bool swapped, bool persistState)
 {
     if (workspacePanelsSwapped_ == swapped) {
         if (swapWorkspaceSidesAction_ != nullptr) {
@@ -2108,59 +1926,8 @@ void MainWindow::setWorkspacePanelsSwapped(bool swapped, bool persistState)
     }
 }
 
-void MainWindow::applyWorkspacePanelArrangement()
+void MainWindow::TimelineSection::applyWorkspacePanelArrangement()
 {
-    if (isQuickShellBackendMode()) {
-        if (swapWorkspaceSidesAction_ != nullptr) {
-            swapWorkspaceSidesAction_->blockSignals(true);
-            swapWorkspaceSidesAction_->setChecked(workspacePanelsSwapped_);
-            swapWorkspaceSidesAction_->setIcon(
-                makeMenuSelectionCheckIcon(UiTheme::colors().accent, workspacePanelsSwapped_)
-            );
-            swapWorkspaceSidesAction_->blockSignals(false);
-        }
-        refreshLayoutAfterPageSwitch();
-        return;
-    }
-    if (previewPanel_ != nullptr) {
-        previewPanel_->setStyleSheet(workspaceSwapPreviewPanelStyleSheet(workspacePanelsSwapped_));
-        previewPanel_->setLayoutDirection(Qt::LeftToRight);
-    }
-    if (previewLeftColumn_ != nullptr) {
-        previewLeftColumn_->setLayoutDirection(Qt::LeftToRight);
-    }
-    if (previewCanvasContainer_ != nullptr) {
-        previewCanvasContainer_->setLayoutDirection(Qt::LeftToRight);
-    }
-    if (previewControlCard_ != nullptr) {
-        previewControlCard_->setLayoutDirection(Qt::LeftToRight);
-    }
-    if (previewStatsCard_ != nullptr) {
-        previewStatsCard_->setLayoutDirection(Qt::LeftToRight);
-    }
-    if (bottomTabs_ != nullptr) {
-        bottomTabs_->setLayoutDirection(Qt::LeftToRight);
-    }
-    updatePreviewControlsLayout(
-        previewControlsLayout_,
-        stopPreviewButton_,
-        pausePreviewButton_,
-        previewSlider_,
-        previewSpeedButton_,
-        previewFullscreenButton_,
-        workspacePanelsSwapped_
-    );
-    if (workspaceSplitter_ != nullptr) {
-        workspaceSplitter_->setLayoutDirection(
-            workspacePanelsSwapped_ ? Qt::RightToLeft : Qt::LeftToRight
-        );
-    }
-    if (outlineDock_ != nullptr) {
-        addDockWidget(
-            Qt::LeftDockWidgetArea,
-            outlineDock_
-        );
-    }
     if (swapWorkspaceSidesAction_ != nullptr) {
         swapWorkspaceSidesAction_->blockSignals(true);
         swapWorkspaceSidesAction_->setChecked(workspacePanelsSwapped_);
@@ -2172,7 +1939,7 @@ void MainWindow::applyWorkspacePanelArrangement()
     refreshLayoutAfterPageSwitch();
 }
 
-void MainWindow::refreshLayoutAfterPageSwitch()
+void MainWindow::TimelineSection::refreshLayoutAfterPageSwitch()
 {
     if (previewLeftColumn_ != nullptr) {
         previewLeftColumn_->updateGeometry();
@@ -2192,28 +1959,10 @@ void MainWindow::refreshLayoutAfterPageSwitch()
             layout->activate();
         }
     }
-    if (isQuickShellBackendMode()) {
-        if (quickShellWorkspaceSurfaceWidget_ != nullptr) {
-            quickShellWorkspaceSurfaceWidget_->updateGeometry();
-            if (QLayout* layout = quickShellWorkspaceSurfaceWidget_->layout(); layout != nullptr) {
-                layout->activate();
-            }
-        }
-        if (quickShellPreviewControlsSurfaceWidget_ != nullptr) {
-            quickShellPreviewControlsSurfaceWidget_->updateGeometry();
-            if (QLayout* layout = quickShellPreviewControlsSurfaceWidget_->layout(); layout != nullptr) {
-                layout->activate();
-            }
-        }
-        updateEditorHeaderLayoutMode();
-        if (timelineView_ != nullptr) {
-            timelineView_->updateGeometry();
-            timelineView_->viewport()->update();
-        }
-        return;
-    }
-    restoreWorkspaceLayoutSizes();
-    updatePreviewWorkspaceLayout();
+    refreshQuickShellRehostedWidgetParent(outlineDock_);
+    refreshQuickShellRehostedWidgetParent(previewLeftColumn_);
+    refreshQuickShellRehostedWidgetParent(previewControlCard_);
+    refreshQuickShellRehostedWidgetParent(previewStatsCard_);
     updateEditorHeaderLayoutMode();
     if (timelineView_ != nullptr) {
         timelineView_->updateGeometry();
@@ -2221,89 +1970,15 @@ void MainWindow::refreshLayoutAfterPageSwitch()
     }
 }
 
-void MainWindow::updatePreviewPanelLayout(int panelWidthOverride, int panelHeightOverride)
+void MainWindow::TimelineSection::updatePreviewPanelLayout(int panelWidthOverride, int panelHeightOverride)
 {
-    if (isQuickShellBackendMode()) {
-        if (quickShellPreviewControlsSurfaceWidget_ != nullptr) {
-            quickShellPreviewControlsSurfaceWidget_->updateGeometry();
-            if (QLayout* layout = quickShellPreviewControlsSurfaceWidget_->layout(); layout != nullptr) {
-                layout->activate();
-            }
-        }
-        return;
-    }
-    if (previewPanel_ == nullptr
-        || previewCanvasFrame_ == nullptr
-        || previewCanvasContainer_ == nullptr
-        || previewControlCard_ == nullptr
-        || previewStatsCard_ == nullptr) {
-        return;
-    }
-
-    const QRect panelRect = previewPanel_->contentsRect();
-    const int panelWidth = panelWidthOverride > 0 ? panelWidthOverride : panelRect.width();
-    const int panelHeight = panelHeightOverride > 0 ? panelHeightOverride : panelRect.height();
-    if (panelWidth <= 0 || panelHeight <= 0) {
-        return;
-    }
-
-    const int controlHeight = qMax(previewControlCard_->minimumSizeHint().height(), previewControlCard_->sizeHint().height());
-    const double aspectRatio = normalizedPreviewCanvasAspectRatio(previewCanvasAspectRatio_);
-    miacode::window_parity::PreviewPanelLayout layout;
-    const int contentX = kPreviewPanelMarginX;
-    const int contentY = kPreviewPanelMarginTop;
-    const int contentWidth = qMax(0, panelWidth - kPreviewPanelMarginX * 2);
-    const int minimumStatsHeight = previewStatsMinimumHeightForPanelWidth(panelWidth);
-    const int availablePreviewHeight = qMax(
-        0,
-        panelHeight
-            - kPreviewPanelMarginTop
-            - kPreviewCanvasControlGap
-            - qMax(0, controlHeight)
-            - kPreviewControlStatsGap
-            - minimumStatsHeight
-            - kPreviewStatsBottomGap
-    );
-    const int previewWidth = qMax(
-        1,
-        qMin(contentWidth, qRound(static_cast<qreal>(availablePreviewHeight) * aspectRatio))
-    );
-    const int previewHeight = qMax(1, qRound(static_cast<qreal>(previewWidth) / aspectRatio));
-    const int controlY = contentY + previewHeight + kPreviewCanvasControlGap;
-    const int statsAreaY = controlY + qMax(0, controlHeight) + kPreviewControlStatsGap;
-    const int statsAreaHeight = qMax(0, panelHeight - statsAreaY - kPreviewStatsBottomGap);
-    layout.previewX = contentX + qMax(0, (contentWidth - previewWidth) / 2);
-    layout.previewY = contentY;
-    layout.previewWidth = previewWidth;
-    layout.previewHeight = previewHeight;
-    layout.controlX = contentX;
-    layout.controlY = controlY;
-    layout.controlWidth = contentWidth;
-    layout.statsX = contentX;
-    layout.statsY = statsAreaY + qMax(0, (statsAreaHeight - minimumStatsHeight) / 2);
-    layout.statsWidth = contentWidth;
-    layout.statsHeight = qMin(minimumStatsHeight, statsAreaHeight);
-    layout.statsHostWidth = qMax(0, contentWidth - 16);
-    layout.minimumStatsHeight = minimumStatsHeight;
-    previewCanvasFrame_->setGeometry(layout.previewX, layout.previewY, layout.previewWidth, layout.previewHeight);
-    if (!previewFullscreenActive_) {
-        previewCanvasContainer_->setGeometry(previewCanvasFrame_->rect().adjusted(1, 1, -1, -1));
-    }
-    if (!previewFullscreenActive_) {
-        previewControlCard_->setGeometry(layout.controlX, layout.controlY, layout.controlWidth, controlHeight);
-    } else {
-        updatePreviewFullscreenOverlayGeometry();
-    }
-    previewStatsCard_->setGeometry(layout.statsX, layout.statsY, layout.statsWidth, layout.statsHeight);
-    updatePreviewStatsLayoutMode(layout.statsHostWidth);
-
-    if (!previewLayoutInitialized_) {
-        previewCanvasContainer_->show();
-        previewLayoutInitialized_ = true;
-    }
+    Q_UNUSED(panelWidthOverride);
+    Q_UNUSED(panelHeightOverride);
+    refreshQuickShellRehostedWidgetParent(previewControlCard_);
+    refreshQuickShellRehostedWidgetParent(previewStatsCard_);
 }
 
-void MainWindow::updatePreviewObjectStats(double second)
+void MainWindow::TimelineSection::updatePreviewObjectStats(double second)
 {
     if (previewTapStatsLabel_ == nullptr
         || previewHoldStatsLabel_ == nullptr
@@ -2332,16 +2007,11 @@ void MainWindow::updatePreviewObjectStats(double second)
     previewBreakStatsLabel_->setText(fmt("Break", stats.breakPlayed, stats.breakTotal));
     previewTotalStatsLabel_->setText(fmt("Total", stats.totalPlayed, stats.totalCount));
     updatePreviewStatsLayoutMode(-1);
-    if (isQuickShellBackendMode() && quickShellPreviewControlsSurfaceWidget_ != nullptr) {
-        if (QLayout* layout = quickShellPreviewControlsSurfaceWidget_->layout(); layout != nullptr) {
-            layout->activate();
-        }
-        quickShellPreviewControlsSurfaceWidget_->updateGeometry();
-        quickShellPreviewControlsSurfaceWidget_->update();
-    }
+    refreshQuickShellRehostedWidgetParent(previewControlCard_);
+    refreshQuickShellRehostedWidgetParent(previewStatsCard_);
 }
 
-QString MainWindow::formatPreviewTimestamp(double second) const
+QString MainWindow::TimelineSection::formatPreviewTimestamp(double second) const
 {
     const int totalCentiseconds = qMax(0, qRound(second * 100.0));
     const int minutes = totalCentiseconds / 6000;
@@ -2353,7 +2023,7 @@ QString MainWindow::formatPreviewTimestamp(double second) const
         .arg(centiseconds, 2, 10, QChar('0'));
 }
 
-void MainWindow::showPreviewSliderTimeHint(int sliderValue)
+void MainWindow::TimelineSection::showPreviewSliderTimeHint(int sliderValue)
 {
     if (previewSlider_ == nullptr) {
         return;
@@ -2378,7 +2048,7 @@ void MainWindow::showPreviewSliderTimeHint(int sliderValue)
     QToolTip::showText(global, formatPreviewTimestamp(second), previewSlider_, previewSlider_->rect(), 600);
 }
 
-void MainWindow::schedulePreviewSeek(double second, bool centerView)
+void MainWindow::TimelineSection::schedulePreviewSeek(double second, bool centerView)
 {
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     previewPendingSeekSecond_ = clampedSecond;
@@ -2391,7 +2061,7 @@ void MainWindow::schedulePreviewSeek(double second, bool centerView)
     }
 }
 
-bool MainWindow::stepPreviewSliderBySeconds(double deltaSeconds, bool centerView)
+bool MainWindow::TimelineSection::stepPreviewSliderBySeconds(double deltaSeconds, bool centerView)
 {
     if (previewSlider_ == nullptr || !qIsFinite(deltaSeconds)) {
         return false;
@@ -2415,7 +2085,7 @@ bool MainWindow::stepPreviewSliderBySeconds(double deltaSeconds, bool centerView
     return true;
 }
 
-bool MainWindow::handlePreviewSliderWheel(QWheelEvent* event)
+bool MainWindow::TimelineSection::handlePreviewSliderWheel(QWheelEvent* event)
 {
     if (previewSlider_ == nullptr || event == nullptr) {
         return false;
@@ -2446,7 +2116,7 @@ bool MainWindow::handlePreviewSliderWheel(QWheelEvent* event)
     return handled;
 }
 
-void MainWindow::beginPreviewHeldSeek(int direction, int key)
+void MainWindow::TimelineSection::beginPreviewHeldSeek(int direction, int key)
 {
     if (direction == 0 || previewSlider_ == nullptr) {
         return;
@@ -2460,7 +2130,7 @@ void MainWindow::beginPreviewHeldSeek(int direction, int key)
     }
 }
 
-void MainWindow::stopPreviewHeldSeek(int key)
+void MainWindow::TimelineSection::stopPreviewHeldSeek(int key)
 {
     if (key != 0 && previewSeekHeldArrowKey_ != key) {
         return;
@@ -2474,7 +2144,7 @@ void MainWindow::stopPreviewHeldSeek(int key)
     }
 }
 
-void MainWindow::applyPreviewHeldSeekTick()
+void MainWindow::TimelineSection::applyPreviewHeldSeekTick()
 {
     if (previewHeldSeekDirection_ == 0
         || previewSeekHeldArrowKey_ == 0
@@ -2494,7 +2164,7 @@ void MainWindow::applyPreviewHeldSeekTick()
     );
 }
 
-void MainWindow::seekPreviewToSecond(double second, bool centerView)
+void MainWindow::TimelineSection::seekPreviewToSecond(double second, bool centerView)
 {
     ensurePreviewStageMediaRouteInitialized();
     ensurePreviewSfxRuntimePrepared();
@@ -2523,7 +2193,7 @@ void MainWindow::seekPreviewToSecond(double second, bool centerView)
     updatePreviewSliderPosition(clampedSecond);
 }
 
-void MainWindow::applyPreviewPlaybackRate(double rate)
+void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
 {
     ensurePreviewStageMediaRouteInitialized();
     const double clampedRate = qMax(0.25, rate);
@@ -2565,7 +2235,7 @@ void MainWindow::applyPreviewPlaybackRate(double rate)
     }
 }
 
-bool MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
+bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool resumeFromPause)
 {
     if (!preparePreviewStartState()) {
         pendingPreviewPlaybackStart_ = hasActiveDifficulty();
@@ -2653,7 +2323,7 @@ bool MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
     return true;
 }
 
-void MainWindow::finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage)
+void MainWindow::TimelineSection::finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage)
 {
     stopQtPreviewPlayback(true);
     if (statusBar() != nullptr && !statusMessage.isEmpty()) {
@@ -2661,7 +2331,7 @@ void MainWindow::finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMe
     }
 }
 
-void MainWindow::stopQtPreviewPlayback(bool keepPosition)
+void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
 {
     const bool wasPlaying = qtPreviewPlaying_;
     bool pauseSecondCaptured = false;
@@ -2713,7 +2383,7 @@ void MainWindow::stopQtPreviewPlayback(bool keepPosition)
         previewSfxRuntime_->stopAll();
     }
     applyLatestTimelinePreviewStateToPausedPreview();
-    applyDeferredAnalysisUiUpdates();
+    owner_.applyDeferredAnalysisUiUpdates();
     if (pendingTimelineAnalysisRefresh_.revision != 0) {
         requestTimelineAnalysisDispatch(0);
     }
@@ -2725,7 +2395,7 @@ void MainWindow::stopQtPreviewPlayback(bool keepPosition)
     updatePauseButtonAppearance();
 }
 
-void MainWindow::applyQtPreviewPosition(double second, bool centerView)
+void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool centerView)
 {
     qtPreviewPauseSecond_ = second;
     if (!qtPreviewPlaying_
@@ -2751,12 +2421,12 @@ void MainWindow::applyQtPreviewPosition(double second, bool centerView)
     }
 }
 
-void MainWindow::syncPausedPreviewMediaTimestamps(double second)
+void MainWindow::TimelineSection::syncPausedPreviewMediaTimestamps(double second)
 {
     seekPreviewStageMediaRouteWhilePaused(second);
 }
 
-void MainWindow::flushQtPreviewTimelinePosition()
+void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()
 {
     if (timelineView_ == nullptr) {
         return;
@@ -2786,7 +2456,7 @@ void MainWindow::flushQtPreviewTimelinePosition()
     qtPreviewTimelineDirty_ = false;
 }
 
-void MainWindow::onQtPreviewTick()
+void MainWindow::TimelineSection::onQtPreviewTick()
 {
     if (!qtPreviewPlaying_) {
         return;
@@ -2823,7 +2493,7 @@ void MainWindow::onQtPreviewTick()
     requestNextDisplayRefreshPreviewFrame();
 }
 
-void MainWindow::jumpToNearestTimelineNote(double second, int lane)
+void MainWindow::TimelineSection::jumpToNearestTimelineNote(double second, int lane)
 {
     int line = 1;
     int col = 1;
@@ -2841,4 +2511,500 @@ void MainWindow::jumpToNearestTimelineNote(double second, int lane)
             .arg(line)
             .arg(col)
     );
+}
+
+bool MainWindow::hasActiveDifficulty() const
+{
+    return timelineSection_->hasActiveDifficulty();
+}
+
+int MainWindow::activeDifficultyId() const
+{
+    return timelineSection_->activeDifficultyId();
+}
+
+QString MainWindow::activeChartText() const
+{
+    return timelineSection_->activeChartText();
+}
+
+miacode::simai::SimaiTimingMetadata MainWindow::currentTimingMetadata() const
+{
+    return timelineSection_->currentTimingMetadata();
+}
+
+double MainWindow::parsedFirstSeconds(bool* ok) const
+{
+    return timelineSection_->parsedFirstSeconds(ok);
+}
+
+double MainWindow::parsedWholeBpm(bool* ok) const
+{
+    return timelineSection_->parsedWholeBpm(ok);
+}
+
+QString MainWindow::parsedLatencyMeterId() const
+{
+    return timelineSection_->parsedLatencyMeterId();
+}
+
+void MainWindow::resetPreviewTrackTimelineOffsets()
+{
+    timelineSection_->resetPreviewTrackTimelineOffsets();
+}
+
+void MainWindow::applyWaveformData(const QVector<float>& peaks, double durationSeconds)
+{
+    timelineSection_->applyWaveformData(peaks, durationSeconds);
+}
+
+void MainWindow::refreshWaveformCache()
+{
+    timelineSection_->refreshWaveformCache();
+}
+
+void MainWindow::refreshWaveformCache(double knownDurationSeconds)
+{
+    timelineSection_->refreshWaveformCache(knownDurationSeconds);
+}
+
+void MainWindow::applyWaveformCacheEntry(
+    quint64 generation,
+    const QString& trackPath,
+    qint64 fileSize,
+    qint64 lastModifiedMs,
+    double durationSeconds,
+    const QVector<float>& peaks,
+    qint64 buildElapsedMs)
+{
+    timelineSection_->applyWaveformCacheEntry(
+        generation,
+        trackPath,
+        fileSize,
+        lastModifiedMs,
+        durationSeconds,
+        peaks,
+        buildElapsedMs
+    );
+}
+
+void MainWindow::applyLatencyDetectorOffset(double seconds)
+{
+    timelineSection_->applyLatencyDetectorOffset(seconds);
+}
+
+void MainWindow::applyLatencyDetectorBpm(double bpm)
+{
+    timelineSection_->applyLatencyDetectorBpm(bpm);
+}
+
+void MainWindow::setCurrentFilePath(const QString& path, bool suppressImmediateRefresh)
+{
+    timelineSection_->setCurrentFilePath(path, suppressImmediateRefresh);
+}
+
+void MainWindow::updateWindowTitle()
+{
+    timelineSection_->updateWindowTitle();
+}
+
+void MainWindow::updateCurrentFileLabel()
+{
+    timelineSection_->updateCurrentFileLabel();
+}
+
+QString MainWindow::editorText() const
+{
+    return timelineSection_->editorText();
+}
+
+void MainWindow::scheduleTimelineRefresh()
+{
+    timelineSection_->scheduleTimelineRefresh();
+}
+
+void MainWindow::refreshTimelineMetadata()
+{
+    timelineSection_->refreshTimelineMetadata();
+}
+
+void MainWindow::applyTimelineQuickChange(int position, int charsRemoved, int charsAdded)
+{
+    timelineSection_->applyTimelineQuickChange(position, charsRemoved, charsAdded);
+}
+
+void MainWindow::refreshTimelineQuickModelFromCurrentText()
+{
+    timelineSection_->refreshTimelineQuickModelFromCurrentText();
+}
+
+void MainWindow::applyLatestTimelinePreviewStateToPausedPreview()
+{
+    timelineSection_->applyLatestTimelinePreviewStateToPausedPreview();
+}
+
+void MainWindow::requestTimelineSlowRefresh()
+{
+    timelineSection_->requestTimelineSlowRefresh();
+}
+
+void MainWindow::dispatchTimelineSlowRefresh()
+{
+    timelineSection_->dispatchTimelineSlowRefresh();
+}
+
+void MainWindow::scheduleTimelineAnalysisRefresh(
+    const TimelineSlowRefreshRequest& request,
+    const SimaiNativeParseResult& parseResult,
+    const TimelinePreviewRefreshState& previewState)
+{
+    timelineSection_->scheduleTimelineAnalysisRefresh(request, parseResult, previewState);
+}
+
+bool MainWindow::scheduleTimelineAnalysisRefreshFromLatestPreviewState(int delayMs)
+{
+    return timelineSection_->scheduleTimelineAnalysisRefreshFromLatestPreviewState(delayMs);
+}
+
+void MainWindow::requestTimelineAnalysisDispatch(int delayMs)
+{
+    timelineSection_->requestTimelineAnalysisDispatch(delayMs);
+}
+
+void MainWindow::dispatchTimelineAnalysisRefresh()
+{
+    timelineSection_->dispatchTimelineAnalysisRefresh();
+}
+
+void MainWindow::rebuildStaticMuriReferences(const QVector<TimelineNoteMarker>& noteMarkers)
+{
+    timelineSection_->rebuildStaticMuriReferences(noteMarkers);
+}
+
+double MainWindow::timelineSecondForCursor(int line, int col) const
+{
+    return timelineSection_->timelineSecondForCursor(line, col);
+}
+
+void MainWindow::seekTimelineToCursor(int line, int col)
+{
+    timelineSection_->seekTimelineToCursor(line, col);
+}
+
+void MainWindow::syncTimelineToEditorCursor(bool centerView)
+{
+    timelineSection_->syncTimelineToEditorCursor(centerView);
+}
+
+void MainWindow::navigateTimelineToSecond(double second, bool focusEditor)
+{
+    timelineSection_->navigateTimelineToSecond(second, focusEditor);
+}
+
+bool MainWindow::resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const
+{
+    return timelineSection_->resolveNearestTimelineNote(second, lane, line, col, noteSecond);
+}
+
+bool MainWindow::moveEditorCursorToTimelineLocation(
+    int line,
+    int col,
+    bool selectToken,
+    bool focusEditor,
+    bool centerView,
+    bool suppressSignals)
+{
+    return timelineSection_->moveEditorCursorToTimelineLocation(
+        line,
+        col,
+        selectToken,
+        focusEditor,
+        centerView,
+        suppressSignals
+    );
+}
+
+void MainWindow::syncEditorCursorToPreviewSecond(double second, bool centerView)
+{
+    timelineSection_->syncEditorCursorToPreviewSecond(second, centerView);
+}
+
+double MainWindow::previewDurationSeconds() const
+{
+    return timelineSection_->previewDurationSeconds();
+}
+
+double MainWindow::previewPlaybackEndSeconds() const
+{
+    return timelineSection_->previewPlaybackEndSeconds();
+}
+
+void MainWindow::updatePreviewSliderRange()
+{
+    timelineSection_->updatePreviewSliderRange();
+}
+
+void MainWindow::updatePreviewSliderPosition(double second)
+{
+    timelineSection_->updatePreviewSliderPosition(second);
+}
+
+void MainWindow::refreshPreviewObjectStatsTotals(const QVector<TimelineNoteMarker>& noteMarkers)
+{
+    timelineSection_->refreshPreviewObjectStatsTotals(noteMarkers);
+}
+
+void MainWindow::clearPreviewObjectStats()
+{
+    timelineSection_->clearPreviewObjectStats();
+}
+
+int MainWindow::updatePreviewStatsLayoutMode(int hostWidth)
+{
+    return timelineSection_->updatePreviewStatsLayoutMode(hostWidth);
+}
+
+int MainWindow::previewStatsMinimumHeightForPanelWidth(int panelWidth) const
+{
+    return timelineSection_->previewStatsMinimumHeightForPanelWidth(panelWidth);
+}
+
+double MainWindow::normalizedPreviewCanvasAspectRatio(double ratio) const
+{
+    return timelineSection_->normalizedPreviewCanvasAspectRatio(ratio);
+}
+
+QString MainWindow::previewCanvasFrameRateModeStorageValue() const
+{
+    return timelineSection_->previewCanvasFrameRateModeStorageValue();
+}
+
+double MainWindow::currentPreviewCanvasRefreshRate() const
+{
+    return timelineSection_->currentPreviewCanvasRefreshRate();
+}
+
+bool MainWindow::previewCanvasUsesFrameSwappedPacing() const
+{
+    return timelineSection_->previewCanvasUsesFrameSwappedPacing();
+}
+
+qint64 MainWindow::previewCanvasTargetFrameIntervalNs() const
+{
+    return timelineSection_->previewCanvasTargetFrameIntervalNs();
+}
+
+void MainWindow::resetQtPreviewFixedFramePacing()
+{
+    timelineSection_->resetQtPreviewFixedFramePacing();
+}
+
+void MainWindow::scheduleNextQtPreviewTick()
+{
+    timelineSection_->scheduleNextQtPreviewTick();
+}
+
+void MainWindow::requestNextDisplayRefreshPreviewFrame()
+{
+    timelineSection_->requestNextDisplayRefreshPreviewFrame();
+}
+
+void MainWindow::refreshPreviewFrameRateTimers()
+{
+    timelineSection_->refreshPreviewFrameRateTimers();
+}
+
+void MainWindow::setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
+{
+    timelineSection_->setPreviewCanvasFrameRateMode(mode, persistState);
+}
+
+void MainWindow::setPreviewCanvasAspectRatio(double ratio, bool persistState)
+{
+    timelineSection_->setPreviewCanvasAspectRatio(ratio, persistState);
+}
+
+void MainWindow::togglePreviewFullscreen()
+{
+    timelineSection_->togglePreviewFullscreen();
+}
+
+void MainWindow::enterPreviewFullscreen()
+{
+    timelineSection_->enterPreviewFullscreen();
+}
+
+void MainWindow::exitPreviewFullscreen()
+{
+    timelineSection_->exitPreviewFullscreen();
+}
+
+void MainWindow::updatePreviewFullscreenButtonAppearance()
+{
+    timelineSection_->updatePreviewFullscreenButtonAppearance();
+}
+
+bool MainWindow::shouldRevealPreviewFullscreenControls(const QPoint& globalCursorPos) const
+{
+    return timelineSection_->shouldRevealPreviewFullscreenControls(globalCursorPos);
+}
+
+QRect MainWindow::previewFullscreenControlCardRect(bool visible) const
+{
+    return timelineSection_->previewFullscreenControlCardRect(visible);
+}
+
+void MainWindow::showPreviewFullscreenControls(bool animate)
+{
+    timelineSection_->showPreviewFullscreenControls(animate);
+}
+
+void MainWindow::hidePreviewFullscreenControls(bool animate)
+{
+    timelineSection_->hidePreviewFullscreenControls(animate);
+}
+
+void MainWindow::schedulePreviewFullscreenControlsAutoHide()
+{
+    timelineSection_->schedulePreviewFullscreenControlsAutoHide();
+}
+
+void MainWindow::pollPreviewFullscreenCursor()
+{
+    timelineSection_->pollPreviewFullscreenCursor();
+}
+
+void MainWindow::updatePreviewFullscreenOverlayGeometry()
+{
+    timelineSection_->updatePreviewFullscreenOverlayGeometry();
+}
+
+void MainWindow::updatePreviewWorkspaceLayout()
+{
+    timelineSection_->updatePreviewWorkspaceLayout();
+}
+
+void MainWindow::cacheWorkspaceLayoutSizes()
+{
+    timelineSection_->cacheWorkspaceLayoutSizes();
+}
+
+void MainWindow::restoreWorkspaceLayoutSizes()
+{
+    timelineSection_->restoreWorkspaceLayoutSizes();
+}
+
+void MainWindow::setWorkspacePanelsSwapped(bool swapped, bool persistState)
+{
+    timelineSection_->setWorkspacePanelsSwapped(swapped, persistState);
+}
+
+void MainWindow::applyWorkspacePanelArrangement()
+{
+    timelineSection_->applyWorkspacePanelArrangement();
+}
+
+void MainWindow::refreshLayoutAfterPageSwitch()
+{
+    timelineSection_->refreshLayoutAfterPageSwitch();
+}
+
+void MainWindow::updatePreviewPanelLayout(int panelWidthOverride, int panelHeightOverride)
+{
+    timelineSection_->updatePreviewPanelLayout(panelWidthOverride, panelHeightOverride);
+}
+
+void MainWindow::updatePreviewObjectStats(double second)
+{
+    timelineSection_->updatePreviewObjectStats(second);
+}
+
+QString MainWindow::formatPreviewTimestamp(double second) const
+{
+    return timelineSection_->formatPreviewTimestamp(second);
+}
+
+void MainWindow::showPreviewSliderTimeHint(int sliderValue)
+{
+    timelineSection_->showPreviewSliderTimeHint(sliderValue);
+}
+
+void MainWindow::schedulePreviewSeek(double second, bool centerView)
+{
+    timelineSection_->schedulePreviewSeek(second, centerView);
+}
+
+bool MainWindow::stepPreviewSliderBySeconds(double deltaSeconds, bool centerView)
+{
+    return timelineSection_->stepPreviewSliderBySeconds(deltaSeconds, centerView);
+}
+
+bool MainWindow::handlePreviewSliderWheel(QWheelEvent* event)
+{
+    return timelineSection_->handlePreviewSliderWheel(event);
+}
+
+void MainWindow::beginPreviewHeldSeek(int direction, int key)
+{
+    timelineSection_->beginPreviewHeldSeek(direction, key);
+}
+
+void MainWindow::stopPreviewHeldSeek(int key)
+{
+    timelineSection_->stopPreviewHeldSeek(key);
+}
+
+void MainWindow::applyPreviewHeldSeekTick()
+{
+    timelineSection_->applyPreviewHeldSeekTick();
+}
+
+void MainWindow::seekPreviewToSecond(double second, bool centerView)
+{
+    timelineSection_->seekPreviewToSecond(second, centerView);
+}
+
+void MainWindow::applyPreviewPlaybackRate(double rate)
+{
+    timelineSection_->applyPreviewPlaybackRate(rate);
+}
+
+bool MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)
+{
+    return timelineSection_->startQtPreviewPlayback(second, resumeFromPause);
+}
+
+void MainWindow::finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage)
+{
+    timelineSection_->finishQtPreviewPlaybackAndReturnToEntry(statusMessage);
+}
+
+void MainWindow::stopQtPreviewPlayback(bool keepPosition)
+{
+    timelineSection_->stopQtPreviewPlayback(keepPosition);
+}
+
+void MainWindow::applyQtPreviewPosition(double second, bool centerView)
+{
+    timelineSection_->applyQtPreviewPosition(second, centerView);
+}
+
+void MainWindow::syncPausedPreviewMediaTimestamps(double second)
+{
+    timelineSection_->syncPausedPreviewMediaTimestamps(second);
+}
+
+void MainWindow::flushQtPreviewTimelinePosition()
+{
+    timelineSection_->flushQtPreviewTimelinePosition();
+}
+
+void MainWindow::onQtPreviewTick()
+{
+    timelineSection_->onQtPreviewTick();
+}
+
+void MainWindow::jumpToNearestTimelineNote(double second, int lane)
+{
+    timelineSection_->jumpToNearestTimelineNote(second, lane);
 }

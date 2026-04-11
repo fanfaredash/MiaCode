@@ -1,3 +1,197 @@
+﻿#include "MainWindow.DocumentSection.h"
+#include "../../MainWindowShared.h"
+
+#include "BracketScopeHighlighter.h"
+#include "DialogLocalization.h"
+#include "PlainCodeEditor.h"
+#include "QtPreviewSfxRuntime.h"
+#include "SimaiNativeParser.h"
+#include "TimelineView.h"
+#include "UiText.h"
+#include "UiTheme.h"
+#include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
+#include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
+#include "common/ChartAssetPaths.h"
+#include "common/DebugLog.h"
+#include "common/DebugOptions.h"
+#include "preview/runtime/PreviewRuntime.h"
+#include "preview/runtime/PreviewStageMediaHost.h"
+#include "preview/scene/PreviewProgressStatsCache.h"
+#include "simai/transform/ChartBatchTransform.h"
+#include "simai/transform/ChartNormalization.h"
+#include "tools/muri/MuriAnalyzer.h"
+#include "tools/muri/MuriPanelEntries.h"
+#include "tools/muri/MuriStaticChecker.h"
+
+#include <QtCore>
+#include <QtGui>
+#include <QtWidgets>
+
+using namespace miacode::mainwindow::shared;
+
+MainWindow::DocumentSection::DocumentSection(
+    MainWindow& owner,
+    MainWindow::MainWindowUiRefs& ui,
+    MainWindow::MainWindowState& state)
+    : owner_(owner)
+    , ui_(ui)
+    , state_(state)
+{}
+
+#define document_ state_.document_
+#define editorCursorLabel_ ui_.editorCursorLabel_
+#define outlineList_ ui_.outlineList_
+#define bottomTabs_ ui_.bottomTabs_
+#define difficultyDesignerEdit_ ui_.difficultyDesignerEdit_
+#define difficultyLevelEdit_ ui_.difficultyLevelEdit_
+#define activeOutlineKey_ state_.activeOutlineKey_
+#define editorValidationSummaryWidget_ ui_.editorValidationSummaryWidget_
+#define editorContextLabel_ ui_.editorContextLabel_
+#define currentFilePath_ state_.currentFilePath_
+#define metadataExtraEdit_ ui_.metadataExtraEdit_
+#define currentFieldDirty_ state_.currentFieldDirty_
+#define activeDifficultyId_ state_.activeDifficultyId_
+#define deletedDifficultyUndoState_ state_.deletedDifficultyUndoState_
+#define editorHeaderWidget_ ui_.editorHeaderWidget_
+#define titleEdit_ ui_.titleEdit_
+#define editorDifficultyControls_ ui_.editorDifficultyControls_
+#define firstEdit_ ui_.firstEdit_
+#define deleteDifficultyButton_ ui_.deleteDifficultyButton_
+#define timelineView_ ui_.timelineView_
+#define designerEdit_ ui_.designerEdit_
+#define artistEdit_ ui_.artistEdit_
+#define editorWidget_ ui_.editorWidget_
+#define editorStack_ ui_.editorStack_
+#define pausePreviewAction_ ui_.pausePreviewAction_
+#define previewLeftColumn_ ui_.previewLeftColumn_
+#define documentDirty_ state_.documentDirty_
+#define startupRestorePending_ state_.startupRestorePending_
+#define suppressTextDirtyTracking_ state_.suppressTextDirtyTracking_
+#define lastSessionFilePath_ state_.lastSessionFilePath_
+#define pausePreviewButton_ ui_.pausePreviewButton_
+#define pendingPreviewPlaybackRevision_ state_.pendingPreviewPlaybackRevision_
+#define pendingPreviewPlaybackDifficultyId_ state_.pendingPreviewPlaybackDifficultyId_
+#define pendingPreviewPlaybackSecond_ state_.pendingPreviewPlaybackSecond_
+#define difficultyLevelLabel_ ui_.difficultyLevelLabel_
+#define welcomePage_ ui_.welcomePage_
+#define startupRestoreGeneration_ state_.startupRestoreGeneration_
+#define pendingPreviewPlaybackResumeFromPause_ state_.pendingPreviewPlaybackResumeFromPause_
+#define difficultyDesignerLabel_ ui_.difficultyDesignerLabel_
+#define editorBatchTransformControls_ ui_.editorBatchTransformControls_
+#define qtPreviewPlaying_ state_.qtPreviewPlaying_
+#define pendingPreviewPlaybackStart_ state_.pendingPreviewPlaybackStart_
+#define projectLastOpenedDifficultyId_ state_.projectLastOpenedDifficultyId_
+#define editorValidationWarningIconLabel_ ui_.editorValidationWarningIconLabel_
+#define workspaceSplitter_ ui_.workspaceSplitter_
+#define editorValidationWarningCountLabel_ ui_.editorValidationWarningCountLabel_
+#define autosaveLastContentSignature_ state_.autosaveLastContentSignature_
+#define editorValidationErrorCountLabel_ ui_.editorValidationErrorCountLabel_
+#define editorValidationErrorIconLabel_ ui_.editorValidationErrorIconLabel_
+#define editorValidationMuriCountLabel_ ui_.editorValidationMuriCountLabel_
+#define editorValidationMuriIconLabel_ ui_.editorValidationMuriIconLabel_
+#define muriAnalysisReport_ state_.muriAnalysisReport_
+#define previewCanvas_ state_.previewCanvas_
+#define lastPreviewNoteMarkerSignature_ state_.lastPreviewNoteMarkerSignature_
+#define currentEncoding_ state_.currentEncoding_
+#define timelineAnalysisIdleTimer_ ui_.timelineAnalysisIdleTimer_
+#define previewSfxRuntime_ state_.previewSfxRuntime_
+#define editorLineSpacingFactor_ state_.editorLineSpacingFactor_
+#define chartPage_ ui_.chartPage_
+#define metadataEmptyHintLabel_ ui_.metadataEmptyHintLabel_
+#define editorEmptyStateLabel_ ui_.editorEmptyStateLabel_
+#define previewWarmupPool_ state_.previewWarmupPool_
+#define metadataCard_ ui_.metadataCard_
+#define metadataPage_ ui_.metadataPage_
+#define transformRotate45CounterClockwiseAction_ ui_.transformRotate45CounterClockwiseAction_
+#define transformRotate180Action_ ui_.transformRotate180Action_
+#define transformMirrorUpDownAction_ ui_.transformMirrorUpDownAction_
+#define transformRotate45ClockwiseAction_ ui_.transformRotate45ClockwiseAction_
+#define transformToggleExAction_ ui_.transformToggleExAction_
+#define transformToggleBreakAction_ ui_.transformToggleBreakAction_
+#define normalizeWholeChartAction_ ui_.normalizeWholeChartAction_
+#define validateAction_ ui_.validateAction_
+#define validationCacheByDifficulty_ state_.validationCacheByDifficulty_
+#define editorTextFontPointSize_ state_.editorTextFontPointSize_
+#define previewFullscreenActive_ state_.previewFullscreenActive_
+#define transformMirrorLeftRightAction_ ui_.transformMirrorLeftRightAction_
+#define stopPreviewAction_ ui_.stopPreviewAction_
+#define exportVideoAction_ ui_.exportVideoAction_
+#define exportVideoButton_ ui_.exportVideoButton_
+#define syntaxCheckButton_ ui_.syntaxCheckButton_
+#define transformRotate45CounterClockwiseButton_ ui_.transformRotate45CounterClockwiseButton_
+#define transformRotate180Button_ ui_.transformRotate180Button_
+#define transformMirrorUpDownButton_ ui_.transformMirrorUpDownButton_
+#define transformRotate45ClockwiseButton_ ui_.transformRotate45ClockwiseButton_
+#define autosaveReferenceContentSignature_ state_.autosaveReferenceContentSignature_
+#define transformMirrorLeftRightButton_ ui_.transformMirrorLeftRightButton_
+#define transformToggleFireworkAction_ ui_.transformToggleFireworkAction_
+#define stopPreviewButton_ ui_.stopPreviewButton_
+#define transformRandomRotateAction_ ui_.transformRandomRotateAction_
+#define previewTrackDurationSeconds_ state_.previewTrackDurationSeconds_
+#define pendingDeferredMuriUiRefresh_ state_.pendingDeferredMuriUiRefresh_
+#define lastTimelineParseResult_ state_.lastTimelineParseResult_
+#define muriAnalysisReportNoteMarkerSignature_ state_.muriAnalysisReportNoteMarkerSignature_
+#define pendingDeferredValidationUiRefresh_ state_.pendingDeferredValidationUiRefresh_
+#define qtPreviewTimelineDirty_ state_.qtPreviewTimelineDirty_
+#define qtPreviewPlaybackReturnSecond_ state_.qtPreviewPlaybackReturnSecond_
+#define qtPreviewPlaybackEndSecond_ state_.qtPreviewPlaybackEndSecond_
+#define pendingTimelineSlowRefresh_ state_.pendingTimelineSlowRefresh_
+#define qtPreviewTimelineStartSecond_ state_.qtPreviewTimelineStartSecond_
+#define qtPreviewPendingTimelineSecond_ state_.qtPreviewPendingTimelineSecond_
+#define qtPreviewPendingTimelineCenterView_ state_.qtPreviewPendingTimelineCenterView_
+#define qtPreviewLastTimelineSecond_ state_.qtPreviewLastTimelineSecond_
+#define lastTimelineParseTimingMetadata_ state_.lastTimelineParseTimingMetadata_
+#define pendingTimelineAnalysisRefresh_ state_.pendingTimelineAnalysisRefresh_
+#define timelineQuickModel_ state_.timelineQuickModel_
+#define timelineSlowRunningRevision_ state_.timelineSlowRunningRevision_
+#define timelineSlowRequestedRevision_ state_.timelineSlowRequestedRevision_
+#define autoRestoreLastSessionFile_ state_.autoRestoreLastSessionFile_
+#define outlineDock_ ui_.outlineDock_
+#define latestTimelinePreviewSnapshotReady_ state_.latestTimelinePreviewSnapshotReady_
+#define latestTimelinePreviewRevision_ state_.latestTimelinePreviewRevision_
+#define lastTimelineParseChartText_ state_.lastTimelineParseChartText_
+#define lastTimelineParseDifficultyId_ state_.lastTimelineParseDifficultyId_
+#define timelineAnalysisRunningRevision_ state_.timelineAnalysisRunningRevision_
+#define timelineAnalysisRequestedRevision_ state_.timelineAnalysisRequestedRevision_
+#define latestTimelineNoteMarkerSignature_ state_.latestTimelineNoteMarkerSignature_
+#define latestTimelineNoteMarkers_ state_.latestTimelineNoteMarkers_
+
+#define statusBar() owner_.statusBar()
+#define hasActiveDifficulty() owner_.hasActiveDifficulty()
+#define activeDifficultyId() owner_.activeDifficultyId()
+#define editorText() owner_.editorText()
+#define setCurrentFilePath(...) owner_.setCurrentFilePath(__VA_ARGS__)
+#define updateWindowTitle() owner_.updateWindowTitle()
+#define resolveInitialOpenDirectory() owner_.resolveInitialOpenDirectory()
+#define setLastOpenDirectory(...) owner_.setLastOpenDirectory(__VA_ARGS__)
+#define parsedFirstSeconds(...) owner_.parsedFirstSeconds(__VA_ARGS__)
+#define logTopLevelWindowSnapshot(...) owner_.logTopLevelWindowSnapshot(__VA_ARGS__)
+#define logWindowGeometryDebug(...) owner_.logWindowGeometryDebug(__VA_ARGS__)
+#define saveProjectRenderState() owner_.saveProjectRenderState()
+#define cacheWorkspaceLayoutSizes() owner_.cacheWorkspaceLayoutSizes()
+#define setValidationTabVisible(...) owner_.setValidationTabVisible(__VA_ARGS__)
+#define refreshValidationPanelForActiveField() owner_.refreshValidationPanelForActiveField()
+#define refreshMuriDiagnosticsPanel() owner_.refreshMuriDiagnosticsPanel()
+#define updateEditorValidationSummary() owner_.updateEditorValidationSummary()
+#define clearValidationCache() owner_.clearValidationCache()
+#define clearValidationDecorations() owner_.clearValidationDecorations()
+#define applyWaveformData(...) owner_.applyWaveformData(__VA_ARGS__)
+#define refreshWaveformCache(...) owner_.refreshWaveformCache(__VA_ARGS__)
+#define refreshTimelineMetadata() owner_.refreshTimelineMetadata()
+#define scheduleTimelineRefresh() owner_.scheduleTimelineRefresh()
+#define refreshLayoutAfterPageSwitch() owner_.refreshLayoutAfterPageSwitch()
+#define updatePreviewWorkspaceLayout() owner_.updatePreviewWorkspaceLayout()
+#define refreshQuickShellRehostedWidgetParent(...) owner_.refreshQuickShellRehostedWidgetParent(__VA_ARGS__)
+#define stopQtPreviewPlayback(...) owner_.stopQtPreviewPlayback(__VA_ARGS__)
+#define clearPreviewFollowDecoration() owner_.clearPreviewFollowDecoration()
+#define clearPreviewObjectStats() owner_.clearPreviewObjectStats()
+#define clearMuriDiagnostics() owner_.clearMuriDiagnostics()
+#define clearPreviewStageMediaRoute() owner_.clearPreviewStageMediaRoute()
+#define updatePreviewSliderRange() owner_.updatePreviewSliderRange()
+#define updatePreviewSliderPosition(...) owner_.updatePreviewSliderPosition(__VA_ARGS__)
+#define setWindowModified(...) owner_.setWindowModified(__VA_ARGS__)
+#define style() owner_.style()
+
 namespace {
 
 enum class UnsavedChangesChoice {
@@ -6,10 +200,86 @@ enum class UnsavedChangesChoice {
     Cancel,
 };
 
+struct PreparedDocumentOpenPayload {
+    bool success = false;
+    bool usedSystemEncoding = false;
+    QString normalizedPath;
+    SimaiDocument document;
+    QString resolvedTrackPath;
+    double trackDurationSeconds = 0.0;
+    bool hasTrackDuration = false;
+    qint64 readElapsedMs = 0;
+    qint64 decodeElapsedMs = 0;
+    qint64 parseElapsedMs = 0;
+    qint64 trackProbeElapsedMs = 0;
+    qint64 totalElapsedMs = 0;
+};
+
+PreparedDocumentOpenPayload prepareDocumentOpenPayload(const QString& path, bool probeTrackDuration)
+{
+    PreparedDocumentOpenPayload payload;
+    payload.normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
+    if (payload.normalizedPath.isEmpty()) {
+        return payload;
+    }
+
+    QFile file(payload.normalizedPath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return payload;
+    }
+
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    QElapsedTimer phaseTimer;
+    phaseTimer.start();
+    const QByteArray bytes = file.readAll();
+    payload.readElapsedMs = phaseTimer.elapsed();
+
+    phaseTimer.restart();
+    QString text;
+    if (bytes.startsWith("\xEF\xBB\xBF")) {
+        text = QString::fromUtf8(bytes.mid(3));
+    } else {
+        QStringDecoder utf8Decoder(QStringConverter::Utf8);
+        text = utf8Decoder.decode(bytes);
+        if (utf8Decoder.hasError()) {
+            QStringDecoder systemDecoder(QStringConverter::System);
+            text = systemDecoder.decode(bytes);
+            payload.usedSystemEncoding = true;
+        }
+    }
+    payload.decodeElapsedMs = phaseTimer.elapsed();
+
+    phaseTimer.restart();
+    payload.document = SimaiDocument::fromText(text);
+    payload.parseElapsedMs = phaseTimer.elapsed();
+
+    if (probeTrackDuration) {
+        payload.resolvedTrackPath = miacode::chart_assets::resolveTrackPath(payload.normalizedPath);
+        phaseTimer.restart();
+        if (!payload.resolvedTrackPath.isEmpty()) {
+            payload.trackDurationSeconds = probeAudioDurationSeconds(payload.resolvedTrackPath);
+            payload.hasTrackDuration = payload.trackDurationSeconds > 0.0;
+        }
+        payload.trackProbeElapsedMs = phaseTimer.elapsed();
+    }
+
+    payload.totalElapsedMs = totalTimer.elapsed();
+    payload.success = true;
+    return payload;
+}
+
 UnsavedChangesChoice showUnsavedChangesDialog(QWidget* parent, const QString& title, const QString& text)
 {
-    QMessageBox dialog(QMessageBox::Warning, title, text, QMessageBox::NoButton, parent);
+    QMessageBox dialog(
+        QMessageBox::Warning,
+        title,
+        text,
+        QMessageBox::NoButton,
+        UiDialogs::effectiveParentWidget(parent)
+    );
     dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+    UiDialogs::applyDetachedParentBehavior(&dialog, parent);
     QPushButton* saveButton = dialog.addButton(uiText("action.save", "Save"), QMessageBox::AcceptRole);
     QPushButton* discardButton = dialog.addButton(uiText("action.discard", "Discard"), QMessageBox::DestructiveRole);
     QPushButton* cancelButton = dialog.addButton(uiText("action.cancel", "Cancel"), QMessageBox::RejectRole);
@@ -29,7 +299,7 @@ UnsavedChangesChoice showUnsavedChangesDialog(QWidget* parent, const QString& ti
 
 }  // namespace
 
-bool MainWindow::maybeSaveBeforeContinue()
+bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
 {
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
@@ -39,7 +309,7 @@ bool MainWindow::maybeSaveBeforeContinue()
     }
 
     const UnsavedChangesChoice choice = showUnsavedChangesDialog(
-        this,
+        &owner_,
         uiText("dialog.unsaved_changes.title", "Unsaved Changes"),
         uiText("dialog.unsaved_changes.message", "Current document has unsaved changes. Save before continue?")
     );
@@ -49,7 +319,7 @@ bool MainWindow::maybeSaveBeforeContinue()
     return choice == UnsavedChangesChoice::Discard;
 }
 
-bool MainWindow::maybeSaveCurrentFieldChanges()
+bool MainWindow::DocumentSection::maybeSaveCurrentFieldChanges()
 {
     if (!currentFieldDirty_) {
         return true;
@@ -59,7 +329,7 @@ bool MainWindow::maybeSaveCurrentFieldChanges()
         ? SimaiDocument::difficultyName(activeDifficultyId_)
         : uiText("dialog.unsaved_field_changes.field.metadata", "Metadata");
     const UnsavedChangesChoice choice = showUnsavedChangesDialog(
-        this,
+        &owner_,
         uiText("dialog.unsaved_field_changes.title", "Unsaved Field Changes"),
         uiText("dialog.unsaved_field_changes.message", "%1 has unsaved changes. Save before switch?").arg(fieldName)
     );
@@ -74,7 +344,7 @@ bool MainWindow::maybeSaveCurrentFieldChanges()
     return false;
 }
 
-bool MainWindow::applyCurrentFieldToDocument()
+bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
 {
     bool changed = false;
     bool metadataTimingChanged = false;
@@ -127,14 +397,14 @@ bool MainWindow::applyCurrentFieldToDocument()
     return true;
 }
 
-void MainWindow::onNewFile()
+void MainWindow::DocumentSection::onNewFile()
 {
     if (!maybeSaveBeforeContinue()) {
         return;
     }
 
     const QString targetDirectory = QFileDialog::getExistingDirectory(
-        this,
+        &owner_,
         UiText::isChineseUi() ? QStringLiteral("选择谱面文件夹") : QStringLiteral("Select Chart Folder"),
         resolveInitialOpenDirectory(),
         QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
@@ -148,7 +418,7 @@ void MainWindow::onNewFile()
     if (QFileInfo::exists(targetPath)) {
         const QMessageBox::StandardButton choice = UiDialogs::showMessageBox(
             QMessageBox::Warning,
-            this,
+            &owner_,
             UiText::isChineseUi() ? QStringLiteral("文件已存在") : QStringLiteral("File Already Exists"),
             UiText::isChineseUi()
                 ? QStringLiteral("所选文件夹下已存在 maidata.txt，是否覆盖？")
@@ -166,11 +436,11 @@ void MainWindow::onNewFile()
     const QByteArray payload = encoder.encode(newDocument.toText());
     QSaveFile file(targetPath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        UiDialogs::showMessageBox(QMessageBox::Critical, this, "Create Failed", "Cannot write file:\n" + targetPath);
+            UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Create Failed", "Cannot write file:\n" + targetPath);
         return;
     }
     if (file.write(payload) != payload.size() || !file.commit()) {
-        UiDialogs::showMessageBox(QMessageBox::Critical, this, "Create Failed", "Write failed:\n" + targetPath);
+        UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Create Failed", "Write failed:\n" + targetPath);
         return;
     }
 
@@ -182,7 +452,7 @@ void MainWindow::onNewFile()
     statusBar()->showMessage(QString("Created: %1").arg(targetPath));
 }
 
-void MainWindow::onOpenFile()
+void MainWindow::DocumentSection::onOpenFile()
 {
     logTopLevelWindowSnapshot("open_file_flow/begin");
     const bool canContinue = maybeSaveBeforeContinue();
@@ -193,14 +463,12 @@ void MainWindow::onOpenFile()
 
     logWindowGeometryDebug("open_file_before_dialog");
     logTopLevelWindowSnapshot("open_file_before_dialog");
-    suspendEmbeddedPreviewForNativeDialog("open_file_dialog");
     const QString path = QFileDialog::getOpenFileName(
-        this,
+        &owner_,
         QStringLiteral("Open simai file"),
         resolveInitialOpenDirectory(),
         QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)")
     );
-    resumeEmbeddedPreviewForNativeDialog("open_file_dialog");
     logWindowGeometryDebug("open_file_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
     logTopLevelWindowSnapshot("open_file_after_dialog");
     if (path.isEmpty()) {
@@ -209,7 +477,7 @@ void MainWindow::onOpenFile()
     openFileAtPath(path, true, true);
 }
 
-bool MainWindow::openFileAtPath(const QString& path, bool showStatusMessage, bool showErrors)
+bool MainWindow::DocumentSection::openFileAtPath(const QString& path, bool showStatusMessage, bool showErrors)
 {
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
     if (normalizedPath.isEmpty()) {
@@ -220,7 +488,7 @@ bool MainWindow::openFileAtPath(const QString& path, bool showStatusMessage, boo
     const PreparedDocumentOpenPayload payload = prepareDocumentOpenPayload(normalizedPath, true);
     if (!payload.success) {
         if (showErrors) {
-            UiDialogs::showMessageBox(QMessageBox::Critical, this, "Open Failed", "Cannot open file:\n" + normalizedPath);
+            UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Open Failed", "Cannot open file:\n" + normalizedPath);
         }
         return false;
     }
@@ -235,7 +503,7 @@ bool MainWindow::openFileAtPath(const QString& path, bool showStatusMessage, boo
     return true;
 }
 
-bool MainWindow::restoreLastSessionFile()
+bool MainWindow::DocumentSection::restoreLastSessionFile()
 {
     if (lastSessionFilePath_.isEmpty()) {
         return false;
@@ -259,7 +527,7 @@ bool MainWindow::restoreLastSessionFile()
     return true;
 }
 
-void MainWindow::scheduleStartupRestoreLastSessionFile()
+void MainWindow::DocumentSection::scheduleStartupRestoreLastSessionFile()
 {
     if (!autoRestoreLastSessionFile_ || lastSessionFilePath_.isEmpty()) {
         startupRestorePending_ = false;
@@ -276,7 +544,7 @@ void MainWindow::scheduleStartupRestoreLastSessionFile()
     startupRestorePending_ = true;
     const quint64 generation = ++startupRestoreGeneration_;
     const QString normalizedPath = fileInfo.absoluteFilePath();
-    QPointer<MainWindow> guard(this);
+    QPointer<MainWindow> guard(&owner_);
     QThreadPool* const pool = previewWarmupPool_ != nullptr
         ? previewWarmupPool_
         : QThreadPool::globalInstance();
@@ -319,7 +587,7 @@ void MainWindow::scheduleStartupRestoreLastSessionFile()
     });
 }
 
-void MainWindow::cancelPendingStartupRestore()
+void MainWindow::DocumentSection::cancelPendingStartupRestore()
 {
     if (!startupRestorePending_) {
         return;
@@ -328,7 +596,7 @@ void MainWindow::cancelPendingStartupRestore()
     ++startupRestoreGeneration_;
 }
 
-void MainWindow::applyPreparedStartupRestoreDocument(const PreparedStartupRestoreDocument& prepared)
+void MainWindow::DocumentSection::applyPreparedStartupRestoreDocument(const PreparedStartupRestoreDocument& prepared)
 {
     if (prepared.generation != startupRestoreGeneration_) {
         return;
@@ -356,10 +624,10 @@ void MainWindow::applyPreparedStartupRestoreDocument(const PreparedStartupRestor
         prepared.totalElapsedMs + applyElapsedMs,
         prepared.totalElapsedMs + applyElapsedMs
     );
-    scheduleDeferredQuickShellStartupStageMediaLoadIfReady();
+    owner_.scheduleDeferredQuickShellStartupStageMediaLoadIfReady();
 }
 
-void MainWindow::applyOpenedDocumentState(
+void MainWindow::DocumentSection::applyOpenedDocumentState(
     const QString& normalizedPath,
     TextEncoding encodingUsed,
     const SimaiDocument& document,
@@ -380,13 +648,13 @@ void MainWindow::applyOpenedDocumentState(
     }
 }
 
-void MainWindow::resetAutosaveState(const QString& referenceText)
+void MainWindow::DocumentSection::resetAutosaveState(const QString& referenceText)
 {
     autosaveReferenceContentSignature_ = autosaveContentSignature(referenceText);
     autosaveLastContentSignature_.clear();
 }
 
-QString MainWindow::resolveAutosaveDirectoryPath() const
+QString MainWindow::DocumentSection::resolveAutosaveDirectoryPath() const
 {
     if (currentFilePath_.isEmpty()) {
         return QString();
@@ -401,7 +669,7 @@ QString MainWindow::resolveAutosaveDirectoryPath() const
     return QDir(projectDirectoryPath).filePath(QStringLiteral(".autosave"));
 }
 
-QString MainWindow::currentDocumentTextForAutosave() const
+QString MainWindow::DocumentSection::currentDocumentTextForAutosave() const
 {
     SimaiDocument snapshot = document_;
     if (hasActiveDifficulty()) {
@@ -422,7 +690,7 @@ QString MainWindow::currentDocumentTextForAutosave() const
     return snapshot.toText();
 }
 
-void MainWindow::pruneAutosaveFiles(const QString& autosaveDirectoryPath) const
+void MainWindow::DocumentSection::pruneAutosaveFiles(const QString& autosaveDirectoryPath) const
 {
     QDir autosaveDir(autosaveDirectoryPath);
     QFileInfoList autosaveFiles = autosaveDir.entryInfoList(
@@ -450,7 +718,7 @@ void MainWindow::pruneAutosaveFiles(const QString& autosaveDirectoryPath) const
     }
 }
 
-void MainWindow::runAutosaveCheck()
+void MainWindow::DocumentSection::runAutosaveCheck()
 {
     if (currentFilePath_.isEmpty()) {
         return;
@@ -496,7 +764,7 @@ void MainWindow::runAutosaveCheck()
     pruneAutosaveFiles(autosaveDirectoryPath);
 }
 
-bool MainWindow::onSaveFile()
+bool MainWindow::DocumentSection::onSaveFile()
 {
     if (currentFilePath_.isEmpty()) {
         return onSaveFileAs();
@@ -504,18 +772,16 @@ bool MainWindow::onSaveFile()
     return saveToPath(currentFilePath_);
 }
 
-bool MainWindow::onSaveFileAs()
+bool MainWindow::DocumentSection::onSaveFileAs()
 {
     logTopLevelWindowSnapshot("save_file_as_dialog/begin");
     logWindowGeometryDebug("save_file_as_before_dialog");
-    suspendEmbeddedPreviewForNativeDialog("save_file_dialog");
     const QString path = QFileDialog::getSaveFileName(
-        this,
+        &owner_,
         QStringLiteral("Save simai file"),
         currentFilePath_.isEmpty() ? QStringLiteral("chart.txt") : currentFilePath_,
         QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)")
     );
-    resumeEmbeddedPreviewForNativeDialog("save_file_dialog");
     logWindowGeometryDebug("save_file_as_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
     logTopLevelWindowSnapshot("save_file_as_dialog/after_dialog");
     if (path.isEmpty()) {
@@ -525,7 +791,7 @@ bool MainWindow::onSaveFileAs()
     return saveToPath(path);
 }
 
-bool MainWindow::saveToPath(const QString& path)
+bool MainWindow::DocumentSection::saveToPath(const QString& path)
 {
     if (!applyCurrentFieldToDocument()) {
         return false;
@@ -534,12 +800,12 @@ bool MainWindow::saveToPath(const QString& path)
     bool firstOk = false;
     (void)parsedFirstSeconds(&firstOk);
     if (!firstOk) {
-        UiDialogs::showMessageBox(QMessageBox::Critical, this, "Save Failed", "&first must be a valid number of seconds.");
+        UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Save Failed", "&first must be a valid number of seconds.");
         return false;
     }
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        UiDialogs::showMessageBox(QMessageBox::Critical, this, "Save Failed", "Cannot write file:\n" + path);
+        UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Save Failed", "Cannot write file:\n" + path);
         return false;
     }
     QByteArray data;
@@ -552,7 +818,7 @@ bool MainWindow::saveToPath(const QString& path)
         data = encoder.encode(serialized);
     }
     if (file.write(data) != data.size() || !file.commit()) {
-        UiDialogs::showMessageBox(QMessageBox::Critical, this, "Save Failed", "Write failed:\n" + path);
+        UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Save Failed", "Write failed:\n" + path);
         return false;
     }
     if (normalizedPath != currentFilePath_) {
@@ -567,7 +833,7 @@ bool MainWindow::saveToPath(const QString& path)
     return true;
 }
 
-bool MainWindow::applyBatchTransform(const QString& opName, const BatchTransform& transform)
+bool MainWindow::DocumentSection::applyBatchTransform(const QString& opName, const BatchTransform& transform)
 {
     const QString original = editorText();
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
@@ -616,7 +882,7 @@ bool MainWindow::applyBatchTransform(const QString& opName, const BatchTransform
     return true;
 }
 
-bool MainWindow::applySelectionBatchTransform(const QString& opName, const BatchTransform& transform)
+bool MainWindow::DocumentSection::applySelectionBatchTransform(const QString& opName, const BatchTransform& transform)
 {
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
     const QTextCursor oldCursor = editor->textCursor();
@@ -683,14 +949,14 @@ bool MainWindow::applySelectionBatchTransform(const QString& opName, const Batch
     return true;
 }
 
-std::pair<int, int> MainWindow::currentCursorLineCol() const
+std::pair<int, int> MainWindow::DocumentSection::currentCursorLineCol() const
 {
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
     const QTextCursor cursor = editor->textCursor();
     return {cursor.blockNumber() + 1, cursor.positionInBlock() + 1};
 }
 
-bool MainWindow::currentSelectionRange(int* startPos, int* endPos) const
+bool MainWindow::DocumentSection::currentSelectionRange(int* startPos, int* endPos) const
 {
     if (startPos == nullptr || endPos == nullptr) {
         return false;
@@ -706,7 +972,7 @@ bool MainWindow::currentSelectionRange(int* startPos, int* endPos) const
     return *endPos > *startPos;
 }
 
-std::pair<int, int> MainWindow::currentSelectionOrCursorLineCol() const
+std::pair<int, int> MainWindow::DocumentSection::currentSelectionOrCursorLineCol() const
 {
     auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
     QTextCursor cursor = editor->textCursor();
@@ -717,7 +983,7 @@ std::pair<int, int> MainWindow::currentSelectionOrCursorLineCol() const
     return {cursor.blockNumber() + 1, cursor.positionInBlock() + 1};
 }
 
-void MainWindow::setMetadataExtraText(const QString& text)
+void MainWindow::DocumentSection::setMetadataExtraText(const QString& text)
 {
     if (metadataExtraEdit_ == nullptr) {
         return;
@@ -732,7 +998,7 @@ void MainWindow::setMetadataExtraText(const QString& text)
     suppressTextDirtyTracking_ = previousSuppress;
 }
 
-void MainWindow::setEditorText(const QString& text)
+void MainWindow::DocumentSection::setEditorText(const QString& text)
 {
     const bool previousSuppress = suppressTextDirtyTracking_;
     suppressTextDirtyTracking_ = true;
@@ -748,7 +1014,7 @@ void MainWindow::setEditorText(const QString& text)
     suppressTextDirtyTracking_ = previousSuppress;
 }
 
-void MainWindow::updatePauseButtonAppearance()
+void MainWindow::DocumentSection::updatePauseButtonAppearance()
 {
     if (pausePreviewAction_ == nullptr) {
         return;
@@ -776,13 +1042,13 @@ void MainWindow::updatePauseButtonAppearance()
     }
 }
 
-void MainWindow::updateDirtyState()
+void MainWindow::DocumentSection::updateDirtyState()
 {
     setWindowModified(documentDirty_ || currentFieldDirty_);
     updateWindowTitle();
 }
 
-bool MainWindow::currentFieldHasUndoChanges() const
+bool MainWindow::DocumentSection::currentFieldHasUndoChanges() const
 {
     if (hasActiveDifficulty()) {
         const bool levelDirty = difficultyLevelEdit_ != nullptr && difficultyLevelEdit_->isUndoAvailable();
@@ -810,23 +1076,23 @@ bool MainWindow::currentFieldHasUndoChanges() const
     return false;
 }
 
-void MainWindow::refreshCurrentFieldDirtyState()
+void MainWindow::DocumentSection::refreshCurrentFieldDirtyState()
 {
     currentFieldDirty_ = currentFieldHasUndoChanges();
     updateDirtyState();
 }
 
-void MainWindow::markCurrentFieldDirty()
+void MainWindow::DocumentSection::markCurrentFieldDirty()
 {
     refreshCurrentFieldDirtyState();
 }
 
-void MainWindow::clearDeletedDifficultyUndoState()
+void MainWindow::DocumentSection::clearDeletedDifficultyUndoState()
 {
     deletedDifficultyUndoState_ = DeletedDifficultyUndoState{};
 }
 
-bool MainWindow::undoDeletedDifficultyField()
+bool MainWindow::DocumentSection::undoDeletedDifficultyField()
 {
     if (!deletedDifficultyUndoState_.valid) {
         return false;
@@ -870,7 +1136,7 @@ bool MainWindow::undoDeletedDifficultyField()
         updateEditorStatus();
         saveProjectRenderState();
         refreshLayoutAfterPageSwitch();
-        QTimer::singleShot(0, this, [this]() { refreshLayoutAfterPageSwitch(); });
+        QTimer::singleShot(0, &owner_, [this]() { refreshLayoutAfterPageSwitch(); });
     }
 
     clearDeletedDifficultyUndoState();
@@ -887,7 +1153,7 @@ bool MainWindow::undoDeletedDifficultyField()
     return true;
 }
 
-void MainWindow::updateEditorHeader()
+void MainWindow::DocumentSection::updateEditorHeader()
 {
     updateDifficultyScopedActionStates();
     if (editorContextLabel_ == nullptr) {
@@ -929,7 +1195,7 @@ void MainWindow::updateEditorHeader()
     updateEditorValidationSummary();
 }
 
-void MainWindow::updateDifficultyScopedActionStates()
+void MainWindow::DocumentSection::updateDifficultyScopedActionStates()
 {
     const bool enabled = hasActiveDifficulty();
 
@@ -1004,7 +1270,7 @@ void MainWindow::updateDifficultyScopedActionStates()
     }
 }
 
-void MainWindow::updateEditorHeaderLayoutMode()
+void MainWindow::DocumentSection::updateEditorHeaderLayoutMode()
 {
     if (editorHeaderWidget_ == nullptr || editorCursorLabel_ == nullptr || editorContextLabel_ == nullptr) {
         return;
@@ -1238,7 +1504,7 @@ void MainWindow::updateEditorHeaderLayoutMode()
     syncEditorHeaderMinimumWidth();
 }
 
-void MainWindow::syncEditorHeaderMinimumWidth()
+void MainWindow::DocumentSection::syncEditorHeaderMinimumWidth()
 {
     if (editorHeaderWidget_ == nullptr) {
         return;
@@ -1287,24 +1553,20 @@ void MainWindow::syncEditorHeaderMinimumWidth()
         );
         previewLeftColumn_->setMinimumWidth(nextMinimumWidth);
         previewLeftColumn_->updateGeometry();
-        if (nextMinimumWidth != previousMinimumWidth && workspaceSplitter_ != nullptr && !isQuickShellBackendMode()) {
+        if (nextMinimumWidth != previousMinimumWidth && workspaceSplitter_ != nullptr) {
             updatePreviewWorkspaceLayout();
         }
     }
 
-    if (quickShellWorkspaceSurfaceWidget_ != nullptr) {
-        if (QLayout* workspaceLayout = quickShellWorkspaceSurfaceWidget_->layout(); workspaceLayout != nullptr) {
-            workspaceLayout->activate();
-        }
-        quickShellWorkspaceSurfaceWidget_->updateGeometry();
-    }
+    refreshQuickShellRehostedWidgetParent(outlineDock_);
+    refreshQuickShellRehostedWidgetParent(previewLeftColumn_);
 
     if (workspaceSplitter_ != nullptr) {
         workspaceSplitter_->updateGeometry();
     }
 }
 
-void MainWindow::updateEditorStatus()
+void MainWindow::DocumentSection::updateEditorStatus()
 {
     if (editorCursorLabel_ == nullptr) {
         return;
@@ -1317,14 +1579,14 @@ void MainWindow::updateEditorStatus()
     updateEditorHeaderLayoutMode();
 }
 
-void MainWindow::updateEditorEmptyState()
+void MainWindow::DocumentSection::updateEditorEmptyState()
 {
     if (editorEmptyStateLabel_ != nullptr) {
         editorEmptyStateLabel_->hide();
     }
 }
 
-void MainWindow::updateMetadataPageMode()
+void MainWindow::DocumentSection::updateMetadataPageMode()
 {
     if (metadataCard_ == nullptr || metadataEmptyHintLabel_ == nullptr) {
         return;
@@ -1333,7 +1595,7 @@ void MainWindow::updateMetadataPageMode()
     metadataEmptyHintLabel_->hide();
 }
 
-bool MainWindow::deleteDifficultyField(int difficultyId)
+bool MainWindow::DocumentSection::deleteDifficultyField(int difficultyId)
 {
     const SimaiDifficultyData* difficultyData = document_.difficulty(difficultyId);
     if (!SimaiDocument::isDifficultyId(difficultyId) || difficultyData == nullptr) {
@@ -1354,7 +1616,7 @@ bool MainWindow::deleteDifficultyField(int difficultyId)
     if (!emptyDifficulty) {
         const QMessageBox::StandardButton choice = UiDialogs::showMessageBox(
             QMessageBox::Question,
-            this,
+            &owner_,
             "Delete Difficulty",
             QString("Delete %1?").arg(difficultyName),
             QMessageBox::Yes | QMessageBox::No,
@@ -1399,7 +1661,7 @@ bool MainWindow::deleteDifficultyField(int difficultyId)
                 outlineList_->setFocus();
             }
             refreshLayoutAfterPageSwitch();
-            QTimer::singleShot(0, this, [this]() { refreshLayoutAfterPageSwitch(); });
+        QTimer::singleShot(0, &owner_, [this]() { refreshLayoutAfterPageSwitch(); });
         } else {
             int fallbackId = remainingIds.constFirst();
             int bestDistance = qAbs(fallbackId - difficultyId);
@@ -1430,7 +1692,7 @@ bool MainWindow::deleteDifficultyField(int difficultyId)
     return true;
 }
 
-void MainWindow::updateDifficultyDeleteButton(bool visible)
+void MainWindow::DocumentSection::updateDifficultyDeleteButton(bool visible)
 {
     if (deleteDifficultyButton_ == nullptr) {
         return;
@@ -1462,7 +1724,7 @@ void MainWindow::updateDifficultyDeleteButton(bool visible)
     deleteDifficultyButton_->show();
 }
 
-void MainWindow::rebuildFieldSidebar()
+void MainWindow::DocumentSection::rebuildFieldSidebar()
 {
     if (outlineList_ == nullptr) {
         return;
@@ -1542,7 +1804,7 @@ void MainWindow::rebuildFieldSidebar()
     }
 }
 
-void MainWindow::populateMetadataPage()
+void MainWindow::DocumentSection::populateMetadataPage()
 {
     if (titleEdit_ == nullptr || artistEdit_ == nullptr || firstEdit_ == nullptr || designerEdit_ == nullptr) {
         return;
@@ -1560,7 +1822,7 @@ void MainWindow::populateMetadataPage()
     updateEditorHeader();
 }
 
-void MainWindow::populateDifficultyPage(int difficultyId)
+void MainWindow::DocumentSection::populateDifficultyPage(int difficultyId)
 {
     const SimaiDifficultyData* difficultyData = document_.difficulty(difficultyId);
     if (difficultyData == nullptr) {
@@ -1586,7 +1848,7 @@ void MainWindow::populateDifficultyPage(int difficultyId)
     updateEditorStatus();
 }
 
-bool MainWindow::switchToMetadataField()
+bool MainWindow::DocumentSection::switchToMetadataField()
 {
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
@@ -1623,11 +1885,11 @@ bool MainWindow::switchToMetadataField()
     updateEditorEmptyState();
     updateEditorStatus();
     refreshLayoutAfterPageSwitch();
-    QTimer::singleShot(0, this, [this]() { refreshLayoutAfterPageSwitch(); });
+        QTimer::singleShot(0, &owner_, [this]() { refreshLayoutAfterPageSwitch(); });
     return true;
 }
 
-bool MainWindow::switchToWelcomePage()
+bool MainWindow::DocumentSection::switchToWelcomePage()
 {
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
@@ -1662,11 +1924,11 @@ bool MainWindow::switchToWelcomePage()
     updateEditorEmptyState();
     updateEditorStatus();
     refreshLayoutAfterPageSwitch();
-    QTimer::singleShot(0, this, [this]() { refreshLayoutAfterPageSwitch(); });
+        QTimer::singleShot(0, &owner_, [this]() { refreshLayoutAfterPageSwitch(); });
     return true;
 }
 
-bool MainWindow::switchToDifficultyField(int difficultyId)
+bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
 {
     if (!SimaiDocument::isDifficultyId(difficultyId) || document_.difficulty(difficultyId) == nullptr) {
         return false;
@@ -1707,11 +1969,11 @@ bool MainWindow::switchToDifficultyField(int difficultyId)
     scheduleTimelineRefresh();
     saveProjectRenderState();
     refreshLayoutAfterPageSwitch();
-    QTimer::singleShot(0, this, [this]() { refreshLayoutAfterPageSwitch(); });
+        QTimer::singleShot(0, &owner_, [this]() { refreshLayoutAfterPageSwitch(); });
     return true;
 }
 
-void MainWindow::activateInitialField()
+void MainWindow::DocumentSection::activateInitialField()
 {
     const QVector<int> ids = document_.difficultyIds();
     if (!ids.isEmpty()) {
@@ -1739,7 +2001,7 @@ void MainWindow::activateInitialField()
     }
 }
 
-void MainWindow::loadDocument(const SimaiDocument& document)
+void MainWindow::DocumentSection::loadDocument(const SimaiDocument& document)
 {
     clearDeletedDifficultyUndoState();
     document_ = document;
@@ -1754,7 +2016,7 @@ void MainWindow::loadDocument(const SimaiDocument& document)
     updateWindowTitle();
 }
 
-void MainWindow::clearTimelineAndPreview()
+void MainWindow::DocumentSection::clearTimelineAndPreview()
 {
     timelineQuickModel_.clear();
     pendingTimelineSlowRefresh_ = TimelineSlowRefreshRequest();
@@ -1810,4 +2072,416 @@ void MainWindow::clearTimelineAndPreview()
     clearPreviewStageMediaRoute();
     updatePreviewSliderRange();
     updatePreviewSliderPosition(0.0);
+}
+
+#undef document_
+#undef editorCursorLabel_
+#undef outlineList_
+#undef bottomTabs_
+#undef difficultyDesignerEdit_
+#undef difficultyLevelEdit_
+#undef activeOutlineKey_
+#undef editorValidationSummaryWidget_
+#undef editorContextLabel_
+#undef currentFilePath_
+#undef metadataExtraEdit_
+#undef currentFieldDirty_
+#undef activeDifficultyId_
+#undef deletedDifficultyUndoState_
+#undef editorHeaderWidget_
+#undef titleEdit_
+#undef editorDifficultyControls_
+#undef firstEdit_
+#undef deleteDifficultyButton_
+#undef timelineView_
+#undef designerEdit_
+#undef artistEdit_
+#undef editorWidget_
+#undef editorStack_
+#undef pausePreviewAction_
+#undef previewLeftColumn_
+#undef documentDirty_
+#undef startupRestorePending_
+#undef suppressTextDirtyTracking_
+#undef lastSessionFilePath_
+#undef pausePreviewButton_
+#undef pendingPreviewPlaybackRevision_
+#undef pendingPreviewPlaybackDifficultyId_
+#undef pendingPreviewPlaybackSecond_
+#undef difficultyLevelLabel_
+#undef welcomePage_
+#undef startupRestoreGeneration_
+#undef pendingPreviewPlaybackResumeFromPause_
+#undef difficultyDesignerLabel_
+#undef editorBatchTransformControls_
+#undef qtPreviewPlaying_
+#undef pendingPreviewPlaybackStart_
+#undef projectLastOpenedDifficultyId_
+#undef editorValidationWarningIconLabel_
+#undef workspaceSplitter_
+#undef editorValidationWarningCountLabel_
+#undef autosaveLastContentSignature_
+#undef editorValidationErrorCountLabel_
+#undef editorValidationErrorIconLabel_
+#undef editorValidationMuriCountLabel_
+#undef editorValidationMuriIconLabel_
+#undef muriAnalysisReport_
+#undef previewCanvas_
+#undef lastPreviewNoteMarkerSignature_
+#undef currentEncoding_
+#undef timelineAnalysisIdleTimer_
+#undef previewSfxRuntime_
+#undef editorLineSpacingFactor_
+#undef chartPage_
+#undef metadataEmptyHintLabel_
+#undef editorEmptyStateLabel_
+#undef previewWarmupPool_
+#undef metadataCard_
+#undef metadataPage_
+#undef transformRotate45CounterClockwiseAction_
+#undef transformRotate180Action_
+#undef transformMirrorUpDownAction_
+#undef transformRotate45ClockwiseAction_
+#undef transformToggleExAction_
+#undef transformToggleBreakAction_
+#undef normalizeWholeChartAction_
+#undef validateAction_
+#undef validationCacheByDifficulty_
+#undef editorTextFontPointSize_
+#undef previewFullscreenActive_
+#undef transformMirrorLeftRightAction_
+#undef stopPreviewAction_
+#undef exportVideoAction_
+#undef exportVideoButton_
+#undef syntaxCheckButton_
+#undef transformRotate45CounterClockwiseButton_
+#undef transformRotate180Button_
+#undef transformMirrorUpDownButton_
+#undef transformRotate45ClockwiseButton_
+#undef autosaveReferenceContentSignature_
+#undef transformMirrorLeftRightButton_
+#undef transformToggleFireworkAction_
+#undef stopPreviewButton_
+#undef transformRandomRotateAction_
+#undef previewTrackDurationSeconds_
+#undef pendingDeferredMuriUiRefresh_
+#undef lastTimelineParseResult_
+#undef muriAnalysisReportNoteMarkerSignature_
+#undef pendingDeferredValidationUiRefresh_
+#undef qtPreviewTimelineDirty_
+#undef qtPreviewPlaybackReturnSecond_
+#undef qtPreviewPlaybackEndSecond_
+#undef pendingTimelineSlowRefresh_
+#undef qtPreviewTimelineStartSecond_
+#undef qtPreviewPendingTimelineSecond_
+#undef qtPreviewPendingTimelineCenterView_
+#undef qtPreviewLastTimelineSecond_
+#undef lastTimelineParseTimingMetadata_
+#undef pendingTimelineAnalysisRefresh_
+#undef timelineQuickModel_
+#undef timelineSlowRunningRevision_
+#undef timelineSlowRequestedRevision_
+#undef autoRestoreLastSessionFile_
+#undef outlineDock_
+#undef latestTimelinePreviewSnapshotReady_
+#undef latestTimelinePreviewRevision_
+#undef lastTimelineParseChartText_
+#undef lastTimelineParseDifficultyId_
+#undef timelineAnalysisRunningRevision_
+#undef timelineAnalysisRequestedRevision_
+#undef latestTimelineNoteMarkerSignature_
+#undef latestTimelineNoteMarkers_
+#undef statusBar
+#undef hasActiveDifficulty
+#undef activeDifficultyId
+#undef editorText
+#undef setCurrentFilePath
+#undef updateWindowTitle
+#undef resolveInitialOpenDirectory
+#undef setLastOpenDirectory
+#undef parsedFirstSeconds
+#undef logTopLevelWindowSnapshot
+#undef logWindowGeometryDebug
+#undef saveProjectRenderState
+#undef cacheWorkspaceLayoutSizes
+#undef setValidationTabVisible
+#undef refreshValidationPanelForActiveField
+#undef refreshMuriDiagnosticsPanel
+#undef updateEditorValidationSummary
+#undef clearValidationCache
+#undef refreshWaveformCache
+#undef refreshTimelineMetadata
+#undef refreshLayoutAfterPageSwitch
+#undef stopQtPreviewPlayback
+#undef clearPreviewFollowDecoration
+#undef clearPreviewObjectStats
+#undef clearMuriDiagnostics
+#undef clearPreviewStageMediaRoute
+#undef updatePreviewSliderRange
+#undef updatePreviewSliderPosition
+
+bool MainWindow::maybeSaveBeforeContinue()
+{
+    return documentSection_->maybeSaveBeforeContinue();
+}
+
+bool MainWindow::maybeSaveCurrentFieldChanges()
+{
+    return documentSection_->maybeSaveCurrentFieldChanges();
+}
+
+bool MainWindow::applyCurrentFieldToDocument()
+{
+    return documentSection_->applyCurrentFieldToDocument();
+}
+
+void MainWindow::onNewFile()
+{
+    documentSection_->onNewFile();
+}
+
+void MainWindow::onOpenFile()
+{
+    documentSection_->onOpenFile();
+}
+
+bool MainWindow::openFileAtPath(const QString& path, bool showStatusMessage, bool showErrors)
+{
+    return documentSection_->openFileAtPath(path, showStatusMessage, showErrors);
+}
+
+bool MainWindow::restoreLastSessionFile()
+{
+    return documentSection_->restoreLastSessionFile();
+}
+
+void MainWindow::scheduleStartupRestoreLastSessionFile()
+{
+    documentSection_->scheduleStartupRestoreLastSessionFile();
+}
+
+void MainWindow::cancelPendingStartupRestore()
+{
+    documentSection_->cancelPendingStartupRestore();
+}
+
+void MainWindow::applyPreparedStartupRestoreDocument(const PreparedStartupRestoreDocument& prepared)
+{
+    documentSection_->applyPreparedStartupRestoreDocument(prepared);
+}
+
+void MainWindow::applyOpenedDocumentState(
+    const QString& normalizedPath,
+    TextEncoding encodingUsed,
+    const SimaiDocument& document,
+    bool showStatusMessage,
+    double knownTrackDurationSeconds)
+{
+    documentSection_->applyOpenedDocumentState(
+        normalizedPath,
+        encodingUsed,
+        document,
+        showStatusMessage,
+        knownTrackDurationSeconds
+    );
+}
+
+void MainWindow::resetAutosaveState(const QString& referenceText)
+{
+    documentSection_->resetAutosaveState(referenceText);
+}
+
+QString MainWindow::resolveAutosaveDirectoryPath() const
+{
+    return documentSection_->resolveAutosaveDirectoryPath();
+}
+
+QString MainWindow::currentDocumentTextForAutosave() const
+{
+    return documentSection_->currentDocumentTextForAutosave();
+}
+
+void MainWindow::pruneAutosaveFiles(const QString& autosaveDirectoryPath) const
+{
+    documentSection_->pruneAutosaveFiles(autosaveDirectoryPath);
+}
+
+void MainWindow::runAutosaveCheck()
+{
+    documentSection_->runAutosaveCheck();
+}
+
+bool MainWindow::onSaveFile()
+{
+    return documentSection_->onSaveFile();
+}
+
+bool MainWindow::onSaveFileAs()
+{
+    return documentSection_->onSaveFileAs();
+}
+
+bool MainWindow::saveToPath(const QString& path)
+{
+    return documentSection_->saveToPath(path);
+}
+
+bool MainWindow::applyBatchTransform(const QString& opName, const BatchTransform& transform)
+{
+    return documentSection_->applyBatchTransform(opName, transform);
+}
+
+bool MainWindow::applySelectionBatchTransform(const QString& opName, const BatchTransform& transform)
+{
+    return documentSection_->applySelectionBatchTransform(opName, transform);
+}
+
+std::pair<int, int> MainWindow::currentCursorLineCol() const
+{
+    return documentSection_->currentCursorLineCol();
+}
+
+std::pair<int, int> MainWindow::currentSelectionOrCursorLineCol() const
+{
+    return documentSection_->currentSelectionOrCursorLineCol();
+}
+
+bool MainWindow::currentSelectionRange(int* startPos, int* endPos) const
+{
+    return documentSection_->currentSelectionRange(startPos, endPos);
+}
+
+void MainWindow::setMetadataExtraText(const QString& text)
+{
+    documentSection_->setMetadataExtraText(text);
+}
+
+void MainWindow::setEditorText(const QString& text)
+{
+    documentSection_->setEditorText(text);
+}
+
+void MainWindow::updatePauseButtonAppearance()
+{
+    documentSection_->updatePauseButtonAppearance();
+}
+
+void MainWindow::updateDirtyState()
+{
+    documentSection_->updateDirtyState();
+}
+
+bool MainWindow::currentFieldHasUndoChanges() const
+{
+    return documentSection_->currentFieldHasUndoChanges();
+}
+
+void MainWindow::refreshCurrentFieldDirtyState()
+{
+    documentSection_->refreshCurrentFieldDirtyState();
+}
+
+void MainWindow::markCurrentFieldDirty()
+{
+    documentSection_->markCurrentFieldDirty();
+}
+
+void MainWindow::clearDeletedDifficultyUndoState()
+{
+    documentSection_->clearDeletedDifficultyUndoState();
+}
+
+bool MainWindow::undoDeletedDifficultyField()
+{
+    return documentSection_->undoDeletedDifficultyField();
+}
+
+void MainWindow::updateEditorHeader()
+{
+    documentSection_->updateEditorHeader();
+}
+
+void MainWindow::updateDifficultyScopedActionStates()
+{
+    documentSection_->updateDifficultyScopedActionStates();
+}
+
+void MainWindow::updateEditorHeaderLayoutMode()
+{
+    documentSection_->updateEditorHeaderLayoutMode();
+}
+
+void MainWindow::syncEditorHeaderMinimumWidth()
+{
+    documentSection_->syncEditorHeaderMinimumWidth();
+}
+
+void MainWindow::updateEditorStatus()
+{
+    documentSection_->updateEditorStatus();
+}
+
+void MainWindow::updateEditorEmptyState()
+{
+    documentSection_->updateEditorEmptyState();
+}
+
+void MainWindow::updateMetadataPageMode()
+{
+    documentSection_->updateMetadataPageMode();
+}
+
+bool MainWindow::deleteDifficultyField(int difficultyId)
+{
+    return documentSection_->deleteDifficultyField(difficultyId);
+}
+
+void MainWindow::updateDifficultyDeleteButton(bool visible)
+{
+    documentSection_->updateDifficultyDeleteButton(visible);
+}
+
+void MainWindow::rebuildFieldSidebar()
+{
+    documentSection_->rebuildFieldSidebar();
+}
+
+void MainWindow::populateMetadataPage()
+{
+    documentSection_->populateMetadataPage();
+}
+
+void MainWindow::populateDifficultyPage(int difficultyId)
+{
+    documentSection_->populateDifficultyPage(difficultyId);
+}
+
+bool MainWindow::switchToMetadataField()
+{
+    return documentSection_->switchToMetadataField();
+}
+
+bool MainWindow::switchToWelcomePage()
+{
+    return documentSection_->switchToWelcomePage();
+}
+
+bool MainWindow::switchToDifficultyField(int difficultyId)
+{
+    return documentSection_->switchToDifficultyField(difficultyId);
+}
+
+void MainWindow::activateInitialField()
+{
+    documentSection_->activateInitialField();
+}
+
+void MainWindow::loadDocument(const SimaiDocument& document)
+{
+    documentSection_->loadDocument(document);
+}
+
+void MainWindow::clearTimelineAndPreview()
+{
+    documentSection_->clearTimelineAndPreview();
 }
