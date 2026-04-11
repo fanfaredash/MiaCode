@@ -49,20 +49,35 @@ ApplicationWindow {
         return metric("previewSplitterHandleWidth", 6)
     }
 
+    function sidebarPaneWidth() {
+        return metric("workspaceSidebarWidth", metric("outlineDockWidth", 190))
+    }
+
+    function contentPaneMinWidth() {
+        return metric("workspaceContentMinWidth", 320)
+    }
+
+    function workspacePaneMinWidth() {
+        return metric(
+            "workspaceCompositeMinWidth",
+            sidebarPaneWidth() + contentPaneMinWidth()
+        )
+    }
+
     function previewPaneMinWidth() {
         return metric("previewPanelMinWidth", 320)
     }
 
     function previewPaneAvailableWidth(totalWidth) {
-        return Math.max(0, totalWidth - previewPaneHandleWidth())
+        return Math.max(0, totalWidth - sidebarPaneWidth() - previewPaneHandleWidth())
     }
 
     function previewPaneMaxWidth(totalWidth, totalHeight) {
         const minWidth = previewPaneMinWidth()
-        const leftMinWidth = metric("leftColumnMinWidth", 320)
+        const textMinWidth = contentPaneMinWidth()
         const maxByWindow = Math.max(
             minWidth,
-            Math.floor(totalWidth - leftMinWidth - previewPaneHandleWidth())
+            Math.floor(totalWidth - sidebarPaneWidth() - textMinWidth - previewPaneHandleWidth())
         )
         const maxBySquare = Math.max(minWidth, Math.floor(totalHeight))
         return Math.max(
@@ -80,18 +95,17 @@ ApplicationWindow {
     }
 
     function previewPaneDefaultWidth(totalWidth, totalHeight) {
-        const leftMinWidth = metric("leftColumnMinWidth", 320)
-        return Math.max(0, previewPaneAvailableWidth(totalWidth) - leftMinWidth)
+        return Math.max(0, previewPaneAvailableWidth(totalWidth) - contentPaneMinWidth())
     }
 
     function previewPaneInitialWidth(totalWidth, totalHeight) {
-        const leftMinWidth = metric("leftColumnMinWidth", 320)
-        const availableWidth = previewPaneAvailableWidth(totalWidth)
-        const initialLeftWidth = Math.min(
+        const workspaceMinWidth = workspacePaneMinWidth()
+        const availableWidth = Math.max(0, totalWidth - previewPaneHandleWidth())
+        const initialWorkspaceWidth = Math.min(
             availableWidth,
-            Math.max(leftMinWidth, Math.floor(availableWidth / 2))
+            Math.max(workspaceMinWidth, Math.floor(availableWidth / 2))
         )
-        return Math.max(0, availableWidth - initialLeftWidth)
+        return Math.max(0, availableWidth - initialWorkspaceWidth)
     }
 
     function noteStartupLayoutActivity(totalWidth, totalHeight) {
@@ -151,7 +165,7 @@ ApplicationWindow {
         controller.refresh()
     }
 
-    function syncPreviewPaneWidth(totalWidth, totalHeight, preserveUserChoice) {
+    function syncPreviewPaneWidth(totalWidth, totalHeight, preserveUserChoice, preserveCurrentWidth) {
         if (totalWidth <= 0)
             return
         noteStartupLayoutActivity(totalWidth, totalHeight)
@@ -166,19 +180,23 @@ ApplicationWindow {
         const defaultWidth = previewPaneStartupBalancePending
             ? previewPaneInitialWidth(totalWidth, totalHeight)
             : previewPaneDefaultWidth(totalWidth, totalHeight)
+        const fallbackWidth = previewPaneStartupBalancePending
+            ? defaultWidth
+            : clampPreviewPaneWidth(defaultWidth, totalWidth, totalHeight)
+        if (preserveCurrentWidth && previewPaneWidth > 0) {
+            previewPaneWidth = clampPreviewPaneWidth(previewPaneWidth, totalWidth, totalHeight)
+            previewPaneStartupBalancePending = false
+            return
+        }
         if (!preserveUserChoice || !previewPaneUserResized) {
-            previewPaneWidth = previewPaneStartupBalancePending
-                ? defaultWidth
-                : clampPreviewPaneWidth(defaultWidth, totalWidth, totalHeight)
+            previewPaneWidth = fallbackWidth
             if (!preserveUserChoice)
                 previewPaneUserResized = false
             previewPaneStartupBalancePending = false
             return
         }
         if (previewPaneWidth <= 0) {
-            previewPaneWidth = previewPaneStartupBalancePending
-                ? defaultWidth
-                : clampPreviewPaneWidth(defaultWidth, totalWidth, totalHeight)
+            previewPaneWidth = fallbackWidth
             previewPaneStartupBalancePending = false
             return
         }
@@ -191,7 +209,7 @@ ApplicationWindow {
     color: tone("windowBg", "#f8fafd")
     onMetricsMapChanged: {
         applyWindowMinimumSize()
-        syncPreviewPaneWidth(workspaceRow.width, workspaceRow.height, true)
+        syncPreviewPaneWidth(workspaceRow.width, workspaceRow.height, true, !startupLayoutLocked)
     }
     onVisibleChanged: {
         if (visible)
@@ -338,140 +356,159 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 0
-            layoutDirection: controller.workspacePanelsSwapped ? Qt.RightToLeft : Qt.LeftToRight
 
             onWidthChanged: syncPreviewPaneWidth(width, height, true)
             onHeightChanged: syncPreviewPaneWidth(width, height, true)
 
             WindowContainer {
+                Layout.preferredWidth: sidebarPaneWidth()
+                Layout.minimumWidth: sidebarPaneWidth()
+                Layout.maximumWidth: sidebarPaneWidth()
+                Layout.fillHeight: true
+                window: controller.sidebarWindow
+                Component.onCompleted: controller.syncSidebarSurfaceSize(width, height)
+                onWidthChanged: controller.syncSidebarSurfaceSize(width, height)
+                onHeightChanged: controller.syncSidebarSurfaceSize(width, height)
+            }
+
+            RowLayout {
+                id: workspaceContentRow
+
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                window: controller.workspaceWindow
-                Component.onCompleted: controller.syncWorkspaceSurfaceSize(width, height)
-                onWidthChanged: controller.syncWorkspaceSurfaceSize(width, height)
-                onHeightChanged: controller.syncWorkspaceSurfaceSize(width, height)
-            }
+                spacing: 0
+                layoutDirection: controller.workspacePanelsSwapped ? Qt.RightToLeft : Qt.LeftToRight
 
-            Rectangle {
-                id: previewResizeHandle
-
-                Layout.preferredWidth: previewPaneHandleWidth()
-                Layout.minimumWidth: previewPaneHandleWidth()
-                Layout.maximumWidth: previewPaneHandleWidth()
-                Layout.fillHeight: true
-                color: previewResizeMouseArea.pressed
-                    ? tone("accent", "#2e77d0")
-                    : (previewResizeMouseArea.containsMouse
-                        ? tone("menuHoverBg", "#eef5ff")
-                        : tone("border", "#d5e0ec"))
+                WindowContainer {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    window: controller.workspaceWindow
+                    Component.onCompleted: controller.syncWorkspaceSurfaceSize(width, height)
+                    onWidthChanged: controller.syncWorkspaceSurfaceSize(width, height)
+                    onHeightChanged: controller.syncWorkspaceSurfaceSize(width, height)
+                }
 
                 Rectangle {
-                    anchors.centerIn: parent
-                    width: 2
-                    height: 64
-                    radius: 1
-                    color: tone("borderSoft", "#ccd6e2")
-                }
+                    id: previewResizeHandle
 
-                MouseArea {
-                    id: previewResizeMouseArea
+                    Layout.preferredWidth: previewPaneHandleWidth()
+                    Layout.minimumWidth: previewPaneHandleWidth()
+                    Layout.maximumWidth: previewPaneHandleWidth()
+                    Layout.fillHeight: true
+                    color: previewResizeMouseArea.pressed
+                        ? tone("accent", "#2e77d0")
+                        : (previewResizeMouseArea.containsMouse
+                            ? tone("menuHoverBg", "#eef5ff")
+                            : tone("border", "#d5e0ec"))
 
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.SizeHorCursor
-
-                    property real dragStartSceneX: 0
-                    property real dragStartWidth: 0
-
-                    onPressed: function(mouse) {
-                        dragStartSceneX = previewResizeHandle.mapToItem(root.contentItem, mouse.x, mouse.y).x
-                        dragStartWidth = previewPaneWidth
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 2
+                        height: 64
+                        radius: 1
+                        color: tone("borderSoft", "#ccd6e2")
                     }
 
-                    onPositionChanged: function(mouse) {
-                        if (!pressed)
-                            return
-                        const sceneX = previewResizeHandle.mapToItem(root.contentItem, mouse.x, mouse.y).x
-                        const deltaX = sceneX - dragStartSceneX
-                        const signedDelta = controller.workspacePanelsSwapped ? deltaX : -deltaX
-                        previewPaneWidth = clampPreviewPaneWidth(
-                            dragStartWidth + signedDelta,
-                            workspaceRow.width,
-                            workspaceRow.height
-                        )
-                        previewPaneUserResized = true
+                    MouseArea {
+                        id: previewResizeMouseArea
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.SizeHorCursor
+
+                        property real dragStartSceneX: 0
+                        property real dragStartWidth: 0
+
+                        onPressed: function(mouse) {
+                            dragStartSceneX = previewResizeHandle.mapToItem(root.contentItem, mouse.x, mouse.y).x
+                            dragStartWidth = previewPaneWidth
+                        }
+
+                        onPositionChanged: function(mouse) {
+                            if (!pressed)
+                                return
+                            const sceneX = previewResizeHandle.mapToItem(root.contentItem, mouse.x, mouse.y).x
+                            const deltaX = sceneX - dragStartSceneX
+                            const signedDelta = controller.workspacePanelsSwapped ? deltaX : -deltaX
+                            previewPaneWidth = clampPreviewPaneWidth(
+                                dragStartWidth + signedDelta,
+                                workspaceRow.width,
+                                workspaceRow.height
+                            )
+                            previewPaneUserResized = true
+                        }
                     }
                 }
-            }
 
-            Rectangle {
-                Layout.preferredWidth: previewPaneWidth
-                Layout.minimumWidth: previewPaneMinWidth()
-                Layout.maximumWidth: previewPaneMaxWidth(workspaceRow.width, workspaceRow.height)
-                Layout.fillHeight: true
-                color: tone("panelBg", "#f5f7fa")
-                border.color: tone("border", "#d5e0ec")
+                Rectangle {
+                    Layout.preferredWidth: previewPaneWidth
+                    Layout.minimumWidth: previewPaneMinWidth()
+                    Layout.maximumWidth: previewPaneMaxWidth(workspaceRow.width, workspaceRow.height)
+                    Layout.fillHeight: true
+                    color: tone("panelBg", "#f5f7fa")
+                    border.color: tone("border", "#d5e0ec")
 
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 8
-                    anchors.topMargin: 12
-                    anchors.bottomMargin: 12
-                    spacing: 10
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 8
+                        anchors.rightMargin: 8
+                        anchors.topMargin: 12
+                        anchors.bottomMargin: 12
+                        spacing: 10
 
-                    Item {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
 
-                        Rectangle {
-                            id: embeddedPreviewFrame
+                            Rectangle {
+                                id: embeddedPreviewFrame
 
-                            readonly property real canvasSide: Math.max(1, Math.min(parent.width, parent.height))
+                                readonly property real canvasSide: Math.max(1, Math.min(parent.width, parent.height))
 
-                            visible: !controller.previewFullscreen
-                            width: canvasSide
-                            height: canvasSide
-                            anchors.centerIn: parent
-                            color: tone("canvasBg", "#000000")
-                            border.color: tone("borderSoft", "#ccd6e2")
-                            clip: true
+                                visible: !controller.previewFullscreen
+                                width: canvasSide
+                                height: canvasSide
+                                anchors.centerIn: parent
+                                color: tone("canvasBg", "#000000")
+                                border.color: tone("borderSoft", "#ccd6e2")
+                                clip: true
 
-                            Loader {
-                                anchors.fill: parent
-                                anchors.margins: 1
-                                active: !controller.previewFullscreen && !controller.previewUsesSeparateSurface
-
-                                sourceComponent: QuickShellPreviewSurface {
-                                    runtime: controller.previewRuntime
-                                    mediaHost: controller.previewStageMediaHost
-                                }
-                            }
-
-                            Loader {
-                                anchors.fill: parent
-                                anchors.margins: 1
-                                active: !controller.previewFullscreen && controller.previewUsesSeparateSurface
-
-                                sourceComponent: WindowContainer {
+                                Loader {
                                     anchors.fill: parent
-                                    window: controller.previewCompositeWindow
+                                    anchors.margins: 1
+                                    active: !controller.previewFullscreen && !controller.previewUsesSeparateSurface
+
+                                    sourceComponent: QuickShellPreviewSurface {
+                                        runtime: controller.previewRuntime
+                                        mediaHost: controller.previewStageMediaHost
+                                    }
+                                }
+
+                                Loader {
+                                    anchors.fill: parent
+                                    anchors.margins: 1
+                                    active: !controller.previewFullscreen && controller.previewUsesSeparateSurface
+
+                                    sourceComponent: WindowContainer {
+                                        anchors.fill: parent
+                                        window: controller.previewCompositeWindow
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    Item {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: metric("previewControlsHeight", 220)
-                        Layout.minimumHeight: metric("previewControlsHeight", 220)
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: metric("previewControlsHeight", 220)
+                            Layout.minimumHeight: metric("previewControlsHeight", 220)
 
-                        WindowContainer {
-                            anchors.fill: parent
-                            window: controller.previewControlsWindow
-                            Component.onCompleted: controller.syncPreviewControlsSurfaceSize(width, height)
-                            onWidthChanged: controller.syncPreviewControlsSurfaceSize(width, height)
-                            onHeightChanged: controller.syncPreviewControlsSurfaceSize(width, height)
+                            WindowContainer {
+                                anchors.fill: parent
+                                window: controller.previewControlsWindow
+                                Component.onCompleted: controller.syncPreviewControlsSurfaceSize(width, height)
+                                onWidthChanged: controller.syncPreviewControlsSurfaceSize(width, height)
+                                onHeightChanged: controller.syncPreviewControlsSurfaceSize(width, height)
+                            }
                         }
                     }
                 }

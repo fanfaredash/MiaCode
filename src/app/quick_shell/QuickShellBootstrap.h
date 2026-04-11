@@ -9,6 +9,7 @@ class QQmlApplicationEngine;
 
 class MainWindow;
 class QuickShellController;
+class QuickShellNativeSurfaceHost;
 class QuickShellStyleBridge;
 
 class QuickShellBootstrap : public QObject
@@ -28,6 +29,7 @@ private:
 
     QIcon appIcon_;
     std::unique_ptr<MainWindow> backend_;
+    std::unique_ptr<QuickShellNativeSurfaceHost> surfaceHost_;
     std::unique_ptr<QuickShellController> controller_;
     std::unique_ptr<QuickShellStyleBridge> styleBridge_;
     std::unique_ptr<QQmlApplicationEngine> engine_;

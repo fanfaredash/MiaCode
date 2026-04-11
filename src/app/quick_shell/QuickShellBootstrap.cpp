@@ -1,5 +1,6 @@
 #include "QuickShellBootstrap.h"
 
+#include "QuickShellNativeSurfaceHost.h"
 #include "QuickShellController.h"
 #include "QuickShellStyleBridge.h"
 #include "UiText.h"
@@ -136,12 +137,26 @@ QuickShellBootstrap::~QuickShellBootstrap() = default;
 bool QuickShellBootstrap::start()
 {
     appendQuickShellRuntimeLog(QStringLiteral("start_enter"));
-    backend_ = std::make_unique<MainWindow>(MainWindow::FrontendHostMode::QuickShellBackend);
+    backend_ = std::make_unique<MainWindow>();
+    backend_->hide();
+    backend_->setVisible(false);
     appendQuickShellRuntimeLog(QStringLiteral("backend_ready"));
-    controller_ = std::make_unique<QuickShellController>(backend_.get(), this);
+    surfaceHost_ = std::make_unique<QuickShellNativeSurfaceHost>(backend_.get(), backend_.get(), this);
+    backend_->hide();
+    backend_->setVisible(false);
+    appendQuickShellRuntimeLog(QStringLiteral("surface_host_ready"));
+    controller_ = std::make_unique<QuickShellController>(backend_.get(), backend_.get(), surfaceHost_.get(), this);
     appendQuickShellRuntimeLog(QStringLiteral("controller_ready"));
-    styleBridge_ = std::make_unique<QuickShellStyleBridge>(backend_.get(), this);
+    styleBridge_ = std::make_unique<QuickShellStyleBridge>(backend_.get(), surfaceHost_.get(), this);
     appendQuickShellRuntimeLog(QStringLiteral("style_bridge_ready"));
+    if (surfaceHost_ != nullptr && styleBridge_ != nullptr) {
+        QObject::connect(
+            styleBridge_.get(),
+            &QuickShellStyleBridge::appearanceChanged,
+            surfaceHost_.get(),
+            &QuickShellNativeSurfaceHost::refreshSurfaceStyles
+        );
+    }
     engine_ = std::make_unique<QQmlApplicationEngine>(this);
     appendQuickShellRuntimeLog(QStringLiteral("engine_ready"));
     if (qApp != nullptr) {
@@ -204,14 +219,15 @@ bool QuickShellBootstrap::start()
         engine_.reset();
         styleBridge_.reset();
         controller_.reset();
+        surfaceHost_.reset();
         backend_.reset();
         return false;
     }
 
     if (!appIcon_.isNull()) {
         if (QQuickWindow* window = qobject_cast<QQuickWindow*>(engine_->rootObjects().constFirst()); window != nullptr) {
-            if (backend_ != nullptr) {
-                backend_->quickShellRootWindowFrameGeometry_ = window->frameGeometry();
+            if (surfaceHost_ != nullptr) {
+                surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
             }
             appendQuickShellRuntimeLog(
                 QStringLiteral("root_window_ready"),
@@ -231,30 +247,32 @@ bool QuickShellBootstrap::start()
                 controller_->refresh();
             }
             const auto warmupStartupSurfaceLayout = [this, window]() {
-                if (backend_ == nullptr || controller_ == nullptr || styleBridge_ == nullptr || window == nullptr) {
+                if (surfaceHost_ == nullptr || controller_ == nullptr || styleBridge_ == nullptr || window == nullptr) {
                     return;
                 }
                 const QVariantMap metrics = styleBridge_->metrics();
                 const int topChromeHeight = qMax(0, metrics.value(QStringLiteral("topChromeHeight")).toInt());
                 const int statusHeight = qMax(0, metrics.value(QStringLiteral("statusHeight")).toInt());
+                const int sidebarWidth = qMax(
+                    1,
+                    metrics.value(
+                        QStringLiteral("workspaceSidebarWidth"),
+                        metrics.value(QStringLiteral("outlineDockWidth"), 190)
+                    ).toInt()
+                );
                 const int handleWidth = qMax(0, metrics.value(QStringLiteral("previewSplitterHandleWidth")).toInt());
                 const int previewPaneWidth = qMax(0, qRound(window->property("previewPaneWidth").toReal()));
                 const int workspaceHeight = qMax(1, window->height() - topChromeHeight - statusHeight);
-                const int workspaceWidth = qMax(1, window->width() - handleWidth - previewPaneWidth);
+                const int workspaceWidth = qMax(1, window->width() - sidebarWidth - handleWidth - previewPaneWidth);
+                controller_->syncSidebarSurfaceSize(sidebarWidth, workspaceHeight);
                 controller_->syncWorkspaceSurfaceSize(workspaceWidth, workspaceHeight);
 
                 const int previewControlsWidth = qMax(1, previewPaneWidth - 16);
                 int previewControlsHeight = qMax(180, metrics.value(QStringLiteral("previewControlsHeight"), 180).toInt());
-                if (backend_->previewControlCard_ != nullptr) {
-                    const int controlCardHeight = qMax(
-                        backend_->previewControlCard_->minimumSizeHint().height(),
-                        backend_->previewControlCard_->sizeHint().height()
-                    );
-                    previewControlsHeight = qMax(
-                        previewControlsHeight,
-                        controlCardHeight + backend_->previewStatsMinimumHeightForPanelWidth(previewPaneWidth) + 34
-                    );
-                }
+                previewControlsHeight = surfaceHost_->recommendedPreviewControlsHeight(
+                    previewPaneWidth,
+                    previewControlsHeight
+                );
                 controller_->syncPreviewControlsSurfaceSize(previewControlsWidth, previewControlsHeight);
                 styleBridge_->refreshNow();
                 controller_->refresh();
@@ -291,23 +309,23 @@ bool QuickShellBootstrap::start()
                 });
             }
             QObject::connect(window, &QQuickWindow::xChanged, this, [this, window]() {
-                if (backend_ != nullptr) {
-                    backend_->quickShellRootWindowFrameGeometry_ = window->frameGeometry();
+                if (surfaceHost_ != nullptr) {
+                    surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
                 }
             });
             QObject::connect(window, &QQuickWindow::yChanged, this, [this, window]() {
-                if (backend_ != nullptr) {
-                    backend_->quickShellRootWindowFrameGeometry_ = window->frameGeometry();
+                if (surfaceHost_ != nullptr) {
+                    surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
                 }
             });
             QObject::connect(window, &QQuickWindow::widthChanged, this, [this, window]() {
-                if (backend_ != nullptr) {
-                    backend_->quickShellRootWindowFrameGeometry_ = window->frameGeometry();
+                if (surfaceHost_ != nullptr) {
+                    surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
                 }
             });
             QObject::connect(window, &QQuickWindow::heightChanged, this, [this, window]() {
-                if (backend_ != nullptr) {
-                    backend_->quickShellRootWindowFrameGeometry_ = window->frameGeometry();
+                if (surfaceHost_ != nullptr) {
+                    surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
                 }
             });
             QObject::connect(qApp, &QGuiApplication::applicationStateChanged, this, [window](Qt::ApplicationState) {
@@ -319,8 +337,8 @@ bool QuickShellBootstrap::start()
             window->raise();
             window->requestActivate();
             QTimer::singleShot(0, this, [this, window]() {
-                if (backend_ != nullptr) {
-                    backend_->quickShellRootWindowFrameGeometry_ = window->frameGeometry();
+                if (surfaceHost_ != nullptr) {
+                    surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
                 }
                 appendQuickShellRuntimeLog(
                     QStringLiteral("root_window_post_show"),
@@ -331,8 +349,8 @@ bool QuickShellBootstrap::start()
                         .arg(window->width())
                         .arg(window->height())
                 );
-                if (backend_ != nullptr) {
-                    backend_->noteQuickShellStartupUiReady();
+                if (surfaceHost_ != nullptr) {
+                    surfaceHost_->noteQuickShellUiReady();
                 }
             });
         }

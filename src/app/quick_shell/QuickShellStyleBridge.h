@@ -1,5 +1,7 @@
 #pragma once
 
+#include "QuickShellContracts.h"
+
 #include <QPointer>
 #include <QVariantMap>
 
@@ -7,8 +9,7 @@
 
 class QEvent;
 class QTimer;
-
-class MainWindow;
+class QuickShellNativeSurfaceHost;
 
 class QuickShellStyleBridge : public QObject
 {
@@ -18,7 +19,11 @@ class QuickShellStyleBridge : public QObject
     Q_PROPERTY(QVariantMap metrics READ metrics NOTIFY metricsChanged)
 
 public:
-    explicit QuickShellStyleBridge(MainWindow* backend, QObject* parent = nullptr);
+    QuickShellStyleBridge(
+        QuickShellNativeContentProvider* contentProvider,
+        QuickShellNativeSurfaceHost* surfaceHost,
+        QObject* parent = nullptr
+    );
 
     QVariantMap palette() const;
     QVariantMap metrics() const;
@@ -35,7 +40,8 @@ private:
     void scheduleRefresh();
     void refreshFromBackend();
 
-    QPointer<MainWindow> backend_;
+    QuickShellNativeContentProvider* contentProvider_ = nullptr;
+    QuickShellNativeSurfaceHost* surfaceHost_ = nullptr;
     QTimer* refreshTimer_ = nullptr;
     QVariantMap palette_;
     QVariantMap metrics_;

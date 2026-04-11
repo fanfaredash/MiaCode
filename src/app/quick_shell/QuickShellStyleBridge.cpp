@@ -1,6 +1,6 @@
 #include "QuickShellStyleBridge.h"
 
-#include "mainwindow/MainWindow.h"
+#include "QuickShellNativeSurfaceHost.h"
 #include "UiTheme.h"
 #include "ui/WindowParityMetrics.h"
 
@@ -10,12 +10,14 @@
 #include <QFontMetrics>
 #include <QGridLayout>
 #include <QLabel>
+#include <QMainWindow>
 #include <QMenuBar>
 #include <QMetaObject>
 #include <QScreen>
 #include <QStatusBar>
 #include <QTimer>
 #include <QToolBar>
+#include <QWidget>
 
 namespace {
 
@@ -52,13 +54,43 @@ QVariantMap buildPaletteMap()
 
 }  // namespace
 
-QuickShellStyleBridge::QuickShellStyleBridge(MainWindow* backend, QObject* parent)
+QuickShellStyleBridge::QuickShellStyleBridge(
+    QuickShellNativeContentProvider* contentProvider,
+    QuickShellNativeSurfaceHost* surfaceHost,
+    QObject* parent)
     : QObject(parent)
-    , backend_(backend)
+    , contentProvider_(contentProvider)
+    , surfaceHost_(surfaceHost)
     , refreshTimer_(new QTimer(this))
 {
-    if (backend_ != nullptr) {
-        backend_->installEventFilter(this);
+    if (contentProvider_ != nullptr) {
+        if (QWidget* shellWindow = contentProvider_->shellWindowWidget(); shellWindow != nullptr) {
+            shellWindow->installEventFilter(this);
+        }
+        if (QDockWidget* outlineDock = contentProvider_->shellOutlineDockWidget(); outlineDock != nullptr) {
+            outlineDock->installEventFilter(this);
+        }
+        if (QWidget* workspace = contentProvider_->shellWorkspaceWidget(); workspace != nullptr) {
+            workspace->installEventFilter(this);
+        }
+        if (QWidget* controlCard = contentProvider_->shellPreviewControlCardWidget(); controlCard != nullptr) {
+            controlCard->installEventFilter(this);
+        }
+        if (QWidget* statsCard = contentProvider_->shellPreviewStatsCardWidget(); statsCard != nullptr) {
+            statsCard->installEventFilter(this);
+        }
+    }
+    if (surfaceHost_ != nullptr) {
+        if (QWidget* sidebarSurface = surfaceHost_->sidebarSurfaceWidget(); sidebarSurface != nullptr) {
+            sidebarSurface->installEventFilter(this);
+        }
+        if (QWidget* workspaceSurface = surfaceHost_->workspaceSurfaceWidget(); workspaceSurface != nullptr) {
+            workspaceSurface->installEventFilter(this);
+        }
+        if (QWidget* previewControlsSurface = surfaceHost_->previewControlsSurfaceWidget();
+            previewControlsSurface != nullptr) {
+            previewControlsSurface->installEventFilter(this);
+        }
     }
 
     refreshTimer_->setInterval(1000);
@@ -79,13 +111,14 @@ QVariantMap QuickShellStyleBridge::metrics() const
 
 void QuickShellStyleBridge::syncWindowSize(int width, int height)
 {
-    if (backend_ == nullptr) {
+    if (contentProvider_ == nullptr) {
         return;
     }
     const QSize nextSize(qMax(width, 1), qMax(height, 1));
-    if (backend_->size() != nextSize) {
-        backend_->resize(nextSize);
-        backend_->refreshLayoutAfterPageSwitch();
+    if (QWidget* shellWindow = contentProvider_->shellWindowWidget();
+        shellWindow != nullptr && shellWindow->size() != nextSize) {
+        shellWindow->resize(nextSize);
+        contentProvider_->shellRefreshLayoutAfterResize();
     }
     refreshFromBackend();
 }
@@ -143,6 +176,10 @@ void QuickShellStyleBridge::refreshFromBackend()
     }
     refreshInProgress_ = true;
 
+    if (surfaceHost_ != nullptr) {
+        surfaceHost_->refreshSurfaceStyles();
+    }
+
     const QVariantMap nextPalette = buildPaletteMap();
     if (nextPalette != palette_) {
         palette_ = nextPalette;
@@ -154,7 +191,9 @@ void QuickShellStyleBridge::refreshFromBackend()
     int initialWindowX = 120;
     int initialWindowY = 120;
     int previewPanelMinWidth = miacode::window_parity::kEmbeddedPreviewPanelMinWidth;
-    int leftColumnMinWidth = 320;
+    int workspaceSidebarWidth = miacode::window_parity::kOutlineExpandedDefaultWidth;
+    int workspaceContentMinWidth = 320;
+    int workspaceCompositeMinWidth = workspaceSidebarWidth + workspaceContentMinWidth;
     if (QScreen* screen = QApplication::primaryScreen(); screen != nullptr) {
         const QRect workArea = screen->availableGeometry();
         initialWindowWidth = qMin(
@@ -176,8 +215,11 @@ void QuickShellStyleBridge::refreshFromBackend()
         {QStringLiteral("initialWindowY"), initialWindowY},
         {QStringLiteral("minimumWindowWidth"), miacode::window_parity::kInitialWindowFloorWidth},
         {QStringLiteral("minimumWindowHeight"), miacode::window_parity::kInitialWindowFloorHeight},
-        {QStringLiteral("leftColumnMinWidth"), leftColumnMinWidth},
-        {QStringLiteral("outlineDockWidth"), miacode::window_parity::kOutlineExpandedDefaultWidth},
+        {QStringLiteral("leftColumnMinWidth"), workspaceCompositeMinWidth},
+        {QStringLiteral("outlineDockWidth"), workspaceSidebarWidth},
+        {QStringLiteral("workspaceSidebarWidth"), workspaceSidebarWidth},
+        {QStringLiteral("workspaceContentMinWidth"), workspaceContentMinWidth},
+        {QStringLiteral("workspaceCompositeMinWidth"), workspaceCompositeMinWidth},
         {QStringLiteral("topChromeHeight"), 78},
         {QStringLiteral("statusHeight"), 28},
         {QStringLiteral("previewPanelMinWidth"), previewPanelMinWidth},
@@ -197,55 +239,61 @@ void QuickShellStyleBridge::refreshFromBackend()
         {QStringLiteral("fullscreenHintAutoHideDelayMs"), miacode::window_parity::kPreviewFullscreenHintAutoHideDelayMs},
     };
 
-    if (backend_ != nullptr) {
+    if (contentProvider_ != nullptr) {
         const int outlineWidth =
-            backend_->outlineDock_ != nullptr
-                ? backend_->outlineDock_->width()
-                : (backend_->outlineDockCollapsed_
+            contentProvider_->shellOutlineDockWidget() != nullptr
+                ? contentProvider_->shellOutlineDockWidget()->width()
+                : (contentProvider_->shellOutlineDockCollapsed()
                     ? miacode::window_parity::kOutlineCollapsedWidth
                     : qMax(
                         miacode::window_parity::kOutlineExpandedMinWidth,
-                        backend_->outlineDockExpandedWidth_
+                        contentProvider_->shellOutlineDockExpandedWidth()
                     ));
-        nextMetrics.insert(QStringLiteral("outlineDockWidth"), qMax(0, outlineWidth));
-        int stableLeftColumnMinWidth = 0;
-        stableLeftColumnMinWidth += qMax(0, outlineWidth);
-        if (backend_->previewLeftColumn_ != nullptr) {
-            stableLeftColumnMinWidth += qMax(0, backend_->previewLeftColumn_->minimumWidth());
+        workspaceSidebarWidth = qMax(0, outlineWidth);
+        nextMetrics.insert(QStringLiteral("outlineDockWidth"), workspaceSidebarWidth);
+        nextMetrics.insert(QStringLiteral("workspaceSidebarWidth"), workspaceSidebarWidth);
+        if (QWidget* workspace = contentProvider_->shellWorkspaceWidget(); workspace != nullptr) {
+            workspaceContentMinWidth = qMax(workspaceContentMinWidth, qMax(0, workspace->minimumWidth()));
         }
-        leftColumnMinWidth = qMax(leftColumnMinWidth, stableLeftColumnMinWidth);
-        nextMetrics.insert(QStringLiteral("leftColumnMinWidth"), leftColumnMinWidth);
+        workspaceCompositeMinWidth = workspaceSidebarWidth + workspaceContentMinWidth;
+        nextMetrics.insert(QStringLiteral("workspaceContentMinWidth"), workspaceContentMinWidth);
+        nextMetrics.insert(QStringLiteral("workspaceCompositeMinWidth"), workspaceCompositeMinWidth);
+        nextMetrics.insert(QStringLiteral("leftColumnMinWidth"), workspaceCompositeMinWidth);
 
-        const int menuHeight =
-            backend_->menuBar() != nullptr ? qMax(24, backend_->menuBar()->sizeHint().height()) : 30;
-        QToolBar* mainToolBar = backend_->findChild<QToolBar*>();
-        const int toolBarHeight =
-            mainToolBar != nullptr ? qMax(28, mainToolBar->sizeHint().height()) : 32;
-        const int statusHeight =
-            backend_->statusBar() != nullptr ? qMax(24, backend_->statusBar()->sizeHint().height()) : 24;
-        nextMetrics.insert(QStringLiteral("topChromeHeight"), menuHeight + toolBarHeight + 2);
-        nextMetrics.insert(QStringLiteral("statusHeight"), statusHeight);
+        if (QMainWindow* mainWindow = qobject_cast<QMainWindow*>(contentProvider_->shellWindowWidget());
+            mainWindow != nullptr) {
+            const int menuHeight =
+                mainWindow->menuBar() != nullptr ? qMax(24, mainWindow->menuBar()->sizeHint().height()) : 30;
+            QToolBar* mainToolBar = mainWindow->findChild<QToolBar*>();
+            const int toolBarHeight =
+                mainToolBar != nullptr ? qMax(28, mainToolBar->sizeHint().height()) : 32;
+            const int statusHeight =
+                mainWindow->statusBar() != nullptr ? qMax(24, mainWindow->statusBar()->sizeHint().height()) : 24;
+            nextMetrics.insert(QStringLiteral("topChromeHeight"), menuHeight + toolBarHeight + 2);
+            nextMetrics.insert(QStringLiteral("statusHeight"), statusHeight);
+        }
     }
 
-    if (backend_ != nullptr
-        && backend_->previewControlCard_ != nullptr
-        && backend_->previewStatsCard_ != nullptr) {
+    if (contentProvider_ != nullptr
+        && contentProvider_->shellPreviewControlCardWidget() != nullptr
+        && contentProvider_->shellPreviewStatsCardWidget() != nullptr) {
         nextMetrics.insert(
             QStringLiteral("previewControlsHeight"),
             qMax(
                 180,
-                backend_->previewControlCard_->sizeHint().height()
-                    + backend_->previewStatsCard_->sizeHint().height()
+                contentProvider_->shellPreviewControlCardWidget()->sizeHint().height()
+                    + contentProvider_->shellPreviewStatsCardWidget()->sizeHint().height()
                     + 22
             )
         );
 
-        if (backend_->previewTotalStatsLabel_ != nullptr && backend_->previewStatsGridLayout_ != nullptr) {
-            const QFontMetrics chipMetrics(backend_->previewTotalStatsLabel_->font());
+        if (contentProvider_->shellPreviewTotalStatsLabel() != nullptr
+            && contentProvider_->shellPreviewStatsGridLayout() != nullptr) {
+            const QFontMetrics chipMetrics(contentProvider_->shellPreviewTotalStatsLabel()->font());
             const int templateChipWidth =
                 chipMetrics.horizontalAdvance(QStringLiteral("Total  xxxxx/xxxxx")) + 18;
-            const int horizontalSpacing = qMax(0, backend_->previewStatsGridLayout_->horizontalSpacing());
-            const QMargins gridMargins = backend_->previewStatsGridLayout_->contentsMargins();
+            const int horizontalSpacing = qMax(0, contentProvider_->shellPreviewStatsGridLayout()->horizontalSpacing());
+            const QMargins gridMargins = contentProvider_->shellPreviewStatsGridLayout()->contentsMargins();
             const int statsHostWidthMin =
                 templateChipWidth * miacode::window_parity::kPreviewStatsNarrowLayoutCols
                 + horizontalSpacing * qMax(0, miacode::window_parity::kPreviewStatsNarrowLayoutCols - 1)
@@ -264,17 +312,17 @@ void QuickShellStyleBridge::refreshFromBackend()
         QStringLiteral("minimumWindowWidth"),
         qMax(
             miacode::window_parity::kInitialWindowFloorWidth,
-            leftColumnMinWidth
+            workspaceCompositeMinWidth
                 + nextMetrics.value(QStringLiteral("previewSplitterHandleWidth")).toInt()
                 + previewPanelMinWidth
         )
     );
 
-    if (backend_ != nullptr) {
-        const int availableWidth = qMax(0, backend_->width());
+    if (contentProvider_ != nullptr && contentProvider_->shellWindowWidget() != nullptr) {
+        const int availableWidth = qMax(0, contentProvider_->shellWindowWidget()->width());
         const int availableHeight = qMax(
             0,
-            backend_->height()
+            contentProvider_->shellWindowWidget()->height()
                 - nextMetrics.value(QStringLiteral("topChromeHeight")).toInt()
                 - nextMetrics.value(QStringLiteral("statusHeight")).toInt()
         );
@@ -282,9 +330,9 @@ void QuickShellStyleBridge::refreshFromBackend()
         const int shellWidth = miacode::window_parity::computePreviewPanelTargetWidthForAdaptiveStats(
             availableWidth,
             availableHeight,
-            leftColumnMinWidth,
+            workspaceCompositeMinWidth,
             controlHeight,
-            backend_->normalizedPreviewCanvasAspectRatio(backend_->previewCanvasAspectRatio_)
+            contentProvider_->shellNormalizedPreviewCanvasAspectRatio()
         );
         nextMetrics.insert(
             QStringLiteral("previewShellWidth"),

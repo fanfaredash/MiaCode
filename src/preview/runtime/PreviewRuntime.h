@@ -13,10 +13,7 @@
 #include "preview/scene/PreviewFrameState.h"
 #include "preview/runtime/PreviewSceneAssetRepository.h"
 
-class PreviewQuickRuntimeSurface;
-class QWindow;
 class QQuickWindow;
-struct PreviewTextureStats;
 
 struct PreviewRuntimeLayerProfileAggregate {
     QString name;
@@ -58,10 +55,9 @@ class PreviewRuntime : public QObject
     Q_OBJECT
 
 public:
-    explicit PreviewRuntime(bool enableLegacySurface = true, QObject* parent = nullptr);
+    explicit PreviewRuntime(QObject* parent = nullptr);
     ~PreviewRuntime() override;
 
-    QWindow* hostWindow() const;
     void setVisibleHostWindow(QQuickWindow* window);
     void clearVisibleHostWindow(QQuickWindow* window);
     void notifyVisibleFramePresented();
@@ -129,14 +125,11 @@ signals:
     void framePresented();
 
 private:
-    void handlePresentedFrame(const PreviewTextureStats* frameStats = nullptr);
+    void handlePresentedFrame();
     void refreshAssetStateFromRepository();
     void updatePresentedFrameStats();
-    void updateTextureProfilingStats(const PreviewTextureStats& frameStats);
 
     miacode::preview::runtime::PreviewSceneAssetRepository* assets_ = nullptr;
-    bool legacySurfaceEnabled_ = true;
-    PreviewQuickRuntimeSurface* surface_ = nullptr;
     QPointer<QQuickWindow> visibleHostWindow_;
     QSize frameSize_;
     miacode::preview::scene::PreviewFrameState frameState_;

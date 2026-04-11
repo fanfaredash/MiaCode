@@ -1,13 +1,13 @@
 #pragma once
 
+#include "QuickShellContracts.h"
+
 #include <QObject>
-#include <QPointer>
 #include <QKeySequence>
+#include <QWindow>
 
 class QTimer;
-class QWindow;
-
-class MainWindow;
+class QuickShellNativeSurfaceHost;
 
 class QuickShellController : public QObject
 {
@@ -25,12 +25,18 @@ class QuickShellController : public QObject
     Q_PROPERTY(QWindow* previewCompositeWindow READ previewCompositeWindow CONSTANT)
     Q_PROPERTY(bool previewUsesSeparateSurface READ previewUsesSeparateSurface NOTIFY shellStateChanged)
     Q_PROPERTY(QWindow* topChromeWindow READ topChromeWindow CONSTANT)
+    Q_PROPERTY(QWindow* sidebarWindow READ sidebarWindow CONSTANT)
     Q_PROPERTY(QWindow* workspaceWindow READ workspaceWindow CONSTANT)
     Q_PROPERTY(QWindow* previewControlsWindow READ previewControlsWindow CONSTANT)
     Q_PROPERTY(QWindow* statusWindow READ statusWindow CONSTANT)
 
 public:
-    explicit QuickShellController(MainWindow* backend, QObject* parent = nullptr);
+    QuickShellController(
+        QuickShellCommandSink* commandSink,
+        QuickShellStateSource* stateSource,
+        QuickShellNativeSurfaceHost* surfaceHost,
+        QObject* parent = nullptr
+    );
 
     QString windowTitle() const;
     bool workspacePanelsSwapped() const;
@@ -44,6 +50,7 @@ public:
     QWindow* previewCompositeWindow() const;
     bool previewUsesSeparateSurface() const;
     QWindow* topChromeWindow() const;
+    QWindow* sidebarWindow() const;
     QWindow* workspaceWindow() const;
     QWindow* previewControlsWindow() const;
     QWindow* statusWindow() const;
@@ -57,6 +64,7 @@ public:
     Q_INVOKABLE void seekPreview(double second);
     Q_INVOKABLE void setPreviewRate(double rate);
     Q_INVOKABLE void syncTopChromeSurfaceSize(int width, int height);
+    Q_INVOKABLE void syncSidebarSurfaceSize(int width, int height);
     Q_INVOKABLE void syncWorkspaceSurfaceSize(int width, int height);
     Q_INVOKABLE void syncPreviewControlsSurfaceSize(int width, int height);
     Q_INVOKABLE void syncStatusSurfaceSize(int width, int height);
@@ -68,15 +76,12 @@ signals:
     void previewFullscreenChanged();
 
 private:
-    QWindow* createForeignWindowForSurface(QWidget* surface) const;
-    void refreshFromBackend();
+    void refreshFromStateSource();
 
-    QPointer<MainWindow> backend_;
+    QuickShellCommandSink* commandSink_ = nullptr;
+    QuickShellStateSource* stateSource_ = nullptr;
+    QuickShellNativeSurfaceHost* surfaceHost_ = nullptr;
     QTimer* refreshTimer_ = nullptr;
-    QWindow* topChromeWindow_ = nullptr;
-    QWindow* workspaceWindow_ = nullptr;
-    QWindow* previewControlsWindow_ = nullptr;
-    QWindow* statusWindow_ = nullptr;
     QString windowTitle_;
     bool workspacePanelsSwapped_ = false;
     QString previewSpeedLabel_;
