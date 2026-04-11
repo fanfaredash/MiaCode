@@ -455,7 +455,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.gameplay.judge_line.area_labeled", "判定区（带编号）"},
         {
             "dialog.render_settings.gameplay.force_labeled_judge_line_when_paused",
-            "谱面预览暂停时不显示 PV/BG，并强制显示判定区（带编号）"
+            "暂停时不显示PV/BG"
         },
         {"dialog.render_settings.preview.debug", "显示预览调试信息"},
         {"dialog.render_settings.preview.canvas_frame_rate", "预览刷新率"},
