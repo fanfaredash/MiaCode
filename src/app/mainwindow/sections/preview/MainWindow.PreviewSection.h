@@ -6,6 +6,30 @@ class MainWindow::PreviewSection {
 public:
     PreviewSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state);
 
+    void ensurePreviewSfxRuntimePrepared();
+    void schedulePreviewSubsystemWarmup();
+    void schedulePreviewMediaWarmup(quint64 generation, const QString& chartPathSnapshot, const QString& trackPathSnapshot);
+    void schedulePreviewSfxWarmup(
+        quint64 generation,
+        const QString& chartPathSnapshot,
+        const QString& trackPathSnapshot,
+        const PreviewAudioSettings& audioSettingsSnapshot,
+        double playbackRateSnapshot
+    );
+    void applyPreviewMediaWarmupResult(
+        quint64 generation,
+        const QString& chartPath,
+        const QString& resolvedMediaPath,
+        const QString& trackPath,
+        qint64 workerElapsedMs
+    );
+    void applyPreviewSfxWarmupResult(
+        quint64 generation,
+        const QString& chartPath,
+        const QString& trackPath,
+        const QString& sfxDir,
+        qint64 workerElapsedMs
+    );
     MainWindow::PreviewStageMediaRoute previewStageMediaRoute() const;
     void applyPreviewStageMediaRouteVisualSettings();
     bool previewUsesStageMediaHostRoute() const;
@@ -37,6 +61,15 @@ public:
     void ensurePreviewStageMediaHostInitialized();
     void shutdownPreviewStageMediaHost();
     void refreshPreviewStageMediaRouteDebugState(bool requestUpdate = true);
+    QString resolveDefaultTrackPath() const;
+    PreviewOutlineVariant previewOutlineVariantFromStorageValue(const QString& value) const;
+    QString previewOutlineVariantStorageValue() const;
+    PreviewOutlineVariant autoPreviewOutlineVariantForChart(const QString& chartPath) const;
+    void applyPreviewOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection, bool persistState);
+    MainWindow::PreviewSkinVariant previewSkinVariantFromStorageValue(const QString& value) const;
+    QString previewSkinVariantStorageValue() const;
+    QString resolvePreviewSkinDir() const;
+    void applyPreviewAudioSettingsToRuntime();
 
 private:
     MainWindow& owner_;

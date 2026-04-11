@@ -13,6 +13,10 @@ public:
     void persistEditorTextFontPreference() const;
     void applyEditorTextFontSize(int pointSize, bool persistPreference);
     void applyEditorLineSpacingFactor(double factor, bool persistPreference);
+    QString resolveProjectRenderStateFilePath() const;
+    void loadProjectRenderState();
+    void saveProjectRenderState() const;
+    void removeProjectRenderState() const;
 
 private:
     MainWindow& owner_;

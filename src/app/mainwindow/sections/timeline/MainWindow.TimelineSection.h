@@ -110,6 +110,9 @@ public:
     void applyPreviewHeldSeekTick();
     void seekPreviewToSecond(double second, bool centerView);
     void applyPreviewPlaybackRate(double rate);
+    bool preparePreviewStartState();
+    void onStopPreview();
+    void onTogglePreviewPause();
     bool startQtPreviewPlayback(double second, bool resumeFromPause = false);
     void finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage);
     void stopQtPreviewPlayback(bool keepPosition = true);
