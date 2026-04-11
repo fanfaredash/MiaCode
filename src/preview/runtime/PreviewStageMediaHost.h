@@ -18,6 +18,7 @@ class PreviewStageMediaHost : public QObject
     Q_OBJECT
     Q_PROPERTY(bool hasResolvedMedia READ hasResolvedMedia NOTIFY mediaStateChanged)
     Q_PROPERTY(bool hasVideoMedia READ hasVideoMedia NOTIFY mediaStateChanged)
+    Q_PROPERTY(bool mediaVisible READ mediaVisible WRITE setMediaVisible NOTIFY mediaVisibilityChanged)
     Q_PROPERTY(QUrl imageSource READ imageSource NOTIFY imageSourceChanged)
     Q_PROPERTY(int backgroundScaleMode READ backgroundScaleMode WRITE setBackgroundScaleModeValue NOTIFY backgroundScaleModeChanged)
     Q_PROPERTY(bool videoPlaybackActive READ videoPlaybackActive NOTIFY diagnosticsChanged)
@@ -44,6 +45,8 @@ public:
 
     bool hasResolvedMedia() const;
     bool hasVideoMedia() const;
+    bool mediaVisible() const;
+    void setMediaVisible(bool visible);
     QUrl imageSource() const;
     int backgroundScaleMode() const;
     void setBackgroundScaleModeValue(int mode);
@@ -68,6 +71,7 @@ public:
 
 signals:
     void mediaStateChanged();
+    void mediaVisibilityChanged();
     void imageSourceChanged();
     void backgroundScaleModeChanged();
     void playbackPositionChanged(double seconds);
@@ -89,6 +93,7 @@ private:
     QString warmupChartPath_;
     QString warmupMediaPath_;
     QUrl imageSource_;
+    bool mediaVisible_ = true;
     PreviewBackgroundScaleMode backgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     QMediaPlayer* player_ = nullptr;
     QAudioOutput* audioOutput_ = nullptr;

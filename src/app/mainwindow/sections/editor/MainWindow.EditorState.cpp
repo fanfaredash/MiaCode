@@ -134,6 +134,15 @@ void MainWindow::EditorSection::loadProjectRenderState()
                         state_.previewCanvasFrameRateMode_ =
                             owner_.previewCanvasFrameRateModeFromStorageValue(render.value("canvas_frame_rate_mode").toString());
                     }
+                    if (render.value("force_labeled_judge_line_when_paused").isBool()) {
+                        state_.previewForceLabeledJudgeLineWhenPaused_ =
+                            render.value("force_labeled_judge_line_when_paused")
+                                .toBool(state_.previewForceLabeledJudgeLineWhenPaused_);
+                    } else if (render.value("hide_stage_media_when_paused").isBool()) {
+                        state_.previewForceLabeledJudgeLineWhenPaused_ =
+                            render.value("hide_stage_media_when_paused")
+                                .toBool(state_.previewForceLabeledJudgeLineWhenPaused_);
+                    }
                     if (render.value("show_debug_info").isBool()) {
                         state_.previewShowDebugInfo_ = render.value("show_debug_info").toBool(state_.previewShowDebugInfo_);
                     }
@@ -179,7 +188,7 @@ void MainWindow::EditorSection::loadProjectRenderState()
     owner_.refreshPreviewFrameRateTimers();
     owner_.applyPreviewStageMediaRouteVisualSettings();
     if (state_.previewCanvas_ != nullptr) {
-        state_.previewCanvas_->setOutlineVariant(state_.previewOutlineVariant_);
+        owner_.applyEffectivePreviewOutlineVariantToCanvas();
         state_.previewCanvas_->setSkinDirectory(owner_.resolvePreviewSkinDir());
         state_.previewCanvas_->setBackgroundBrightnessOuter(state_.previewBackgroundBrightnessOuter_);
         state_.previewCanvas_->setBackgroundBrightnessInner(state_.previewBackgroundBrightnessInner_);
@@ -234,6 +243,10 @@ void MainWindow::EditorSection::saveProjectRenderState() const
     render.insert("show_chart_review_simple_judge_overlay", state_.muriRenderOptions_.showChartReviewSimpleJudgeOverlay);
     render.insert("wifi_need_c", state_.muriRenderOptions_.wifiNeedC);
     render.insert("canvas_frame_rate_mode", owner_.previewCanvasFrameRateModeStorageValue());
+    render.insert(
+        "force_labeled_judge_line_when_paused",
+        state_.previewForceLabeledJudgeLineWhenPaused_
+    );
     render.insert("show_debug_info", state_.previewShowDebugInfo_);
     render.insert("show_timestamp", state_.previewShowTimestamp_);
     render.insert("show_object_stats_preview", state_.previewShowObjectStatsHud_);

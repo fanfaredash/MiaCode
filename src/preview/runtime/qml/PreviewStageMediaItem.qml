@@ -12,14 +12,17 @@ Item {
     Rectangle {
         anchors.fill: parent
         color: root.mediaHost && root.mediaHost.hasResolvedMedia ? "#000000" : "transparent"
-        visible: root.mediaHost && root.mediaHost.hasResolvedMedia
+        visible: root.mediaHost && root.mediaHost.mediaVisible && root.mediaHost.hasResolvedMedia
     }
 
     Image {
         id: previewStageImage
         objectName: "previewStageImage"
         anchors.fill: parent
-        visible: root.mediaHost && root.mediaHost.hasResolvedMedia && !root.mediaHost.hasVideoMedia
+        visible: root.mediaHost
+            && root.mediaHost.mediaVisible
+            && root.mediaHost.hasResolvedMedia
+            && !root.mediaHost.hasVideoMedia
         fillMode: root.mediaHost && root.mediaHost.backgroundScaleMode === 1
             ? Image.PreserveAspectFit
             : Image.PreserveAspectCrop
@@ -34,7 +37,10 @@ Item {
         id: previewStageVideoOutput
         objectName: "previewStageVideoOutput"
         anchors.fill: parent
-        visible: root.mediaHost && root.mediaHost.hasVideoMedia && root.mediaHost.hasVideoFrame
+        visible: root.mediaHost
+            && root.mediaHost.mediaVisible
+            && root.mediaHost.hasVideoMedia
+            && root.mediaHost.hasVideoFrame
         fillMode: root.mediaHost && root.mediaHost.backgroundScaleMode === 1
             ? VideoOutput.PreserveAspectFit
             : VideoOutput.PreserveAspectCrop

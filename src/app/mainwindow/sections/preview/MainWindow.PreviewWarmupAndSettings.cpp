@@ -335,6 +335,21 @@ PreviewOutlineVariant MainWindow::PreviewSection::autoPreviewOutlineVariantForCh
         : PreviewOutlineVariant::JudgeAreaLabeled;
 }
 
+PreviewOutlineVariant MainWindow::PreviewSection::effectivePreviewOutlineVariant() const
+{
+    if (state_.previewForceLabeledJudgeLineWhenPaused_ && !state_.qtPreviewPlaying_) {
+        return PreviewOutlineVariant::JudgeAreaLabeled;
+    }
+    return state_.previewOutlineVariant_;
+}
+
+void MainWindow::PreviewSection::applyEffectivePreviewOutlineVariantToCanvas()
+{
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->setOutlineVariant(effectivePreviewOutlineVariant());
+    }
+}
+
 void MainWindow::PreviewSection::applyPreviewOutlineVariant(
     PreviewOutlineVariant variant,
     bool useAutoSelection,
@@ -342,9 +357,7 @@ void MainWindow::PreviewSection::applyPreviewOutlineVariant(
 {
     state_.previewOutlineVariant_ = variant;
     state_.previewOutlineVariantUsesAutoSelection_ = useAutoSelection;
-    if (state_.previewCanvas_ != nullptr) {
-        state_.previewCanvas_->setOutlineVariant(state_.previewOutlineVariant_);
-    }
+    applyEffectivePreviewOutlineVariantToCanvas();
     if (persistState) {
         owner_.saveProjectRenderState();
         owner_.savePortableState();
@@ -469,6 +482,16 @@ QString MainWindow::previewOutlineVariantStorageValue() const
 PreviewOutlineVariant MainWindow::autoPreviewOutlineVariantForChart(const QString& chartPath) const
 {
     return previewSection_->autoPreviewOutlineVariantForChart(chartPath);
+}
+
+PreviewOutlineVariant MainWindow::effectivePreviewOutlineVariant() const
+{
+    return previewSection_->effectivePreviewOutlineVariant();
+}
+
+void MainWindow::applyEffectivePreviewOutlineVariantToCanvas()
+{
+    previewSection_->applyEffectivePreviewOutlineVariantToCanvas();
 }
 
 void MainWindow::applyPreviewOutlineVariant(

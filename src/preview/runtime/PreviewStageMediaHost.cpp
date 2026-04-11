@@ -132,6 +132,20 @@ bool PreviewStageMediaHost::hasVideoMedia() const
     return mediaKind_ == MediaKind::Video;
 }
 
+bool PreviewStageMediaHost::mediaVisible() const
+{
+    return mediaVisible_;
+}
+
+void PreviewStageMediaHost::setMediaVisible(bool visible)
+{
+    if (mediaVisible_ == visible) {
+        return;
+    }
+    mediaVisible_ = visible;
+    emit mediaVisibilityChanged();
+}
+
 QUrl PreviewStageMediaHost::imageSource() const
 {
     return imageSource_;

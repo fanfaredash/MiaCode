@@ -270,6 +270,8 @@ private:
     PreviewOutlineVariant previewOutlineVariantFromStorageValue(const QString& value) const;
     QString previewOutlineVariantStorageValue() const;
     PreviewOutlineVariant autoPreviewOutlineVariantForChart(const QString& chartPath) const;
+    PreviewOutlineVariant effectivePreviewOutlineVariant() const;
+    void applyEffectivePreviewOutlineVariantToCanvas();
     void applyPreviewOutlineVariant(PreviewOutlineVariant variant, bool useAutoSelection, bool persistState);
     PreviewSkinVariant previewSkinVariantFromStorageValue(const QString& value) const;
     QString previewSkinVariantStorageValue() const;

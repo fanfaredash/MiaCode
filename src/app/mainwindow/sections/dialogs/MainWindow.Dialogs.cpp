@@ -594,6 +594,14 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         }
     );
     judgeLineButton->setMenu(judgeLineMenu);
+    auto* forceLabeledJudgeLineWhenPausedCheck = new QCheckBox(
+        uiText(
+            "dialog.render_settings.gameplay.force_labeled_judge_line_when_paused",
+            "Hide PV / BG and force labeled judge area while preview is paused"
+        ),
+        gameplayGroup
+    );
+    forceLabeledJudgeLineWhenPausedCheck->setChecked(owner_.previewForceLabeledJudgeLineWhenPaused_);
     PreviewBackgroundScaleMode selectedScaleMode = owner_.previewBackgroundScaleMode_;
     auto* scaleModeButton = createDialogMenuButton(
         videoGroup,
@@ -693,6 +701,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         uiText("dialog.render_settings.gameplay.judge_line", "Judge Line"),
         judgeLineButton
     );
+    gameplayLayout->addWidget(forceLabeledJudgeLineWhenPausedCheck, 2, 0, 1, 2, Qt::AlignLeft);
     audioGroup->setVisible(includeAudioSettings);
     videoGroup->setVisible(includeVideoSettings);
     gameplayGroup->setVisible(includeVideoSettings);
@@ -948,6 +957,13 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         if (owner_.previewCanvas_ != nullptr) {
             owner_.previewCanvas_->setShowTimestamp(owner_.previewShowTimestamp_);
         }
+        owner_.saveProjectRenderState();
+        owner_.savePortableState();
+    });
+    connect(forceLabeledJudgeLineWhenPausedCheck, &QCheckBox::toggled, &dialog, [this](bool checked) {
+        owner_.previewForceLabeledJudgeLineWhenPaused_ = checked;
+        owner_.applyEffectivePreviewOutlineVariantToCanvas();
+        owner_.applyPreviewStageMediaRouteVisualSettings();
         owner_.saveProjectRenderState();
         owner_.savePortableState();
     });
