@@ -597,7 +597,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     auto* forceLabeledJudgeLineWhenPausedCheck = new QCheckBox(
         uiText(
             "dialog.render_settings.gameplay.force_labeled_judge_line_when_paused",
-            "Hide PV / BG and force labeled judge area while preview is paused"
+            "Hide PV / BG while preview is paused"
         ),
         gameplayGroup
     );
