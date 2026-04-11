@@ -5,7 +5,6 @@
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
-#include "preview/runtime/PreviewQuickRuntimeSurface.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -13,63 +12,23 @@
 #include <QFileInfo>
 #include <QQuickWindow>
 #include <QTextStream>
-#include <QWindow>
 
 namespace {
-
-PreviewRuntimeLayerProfileAggregate& ensureLayerAggregate(
-    QVector<PreviewRuntimeLayerProfileAggregate>* aggregates,
-    const QString& name
-)
-{
-    Q_ASSERT(aggregates != nullptr);
-
-    for (PreviewRuntimeLayerProfileAggregate& aggregate : *aggregates) {
-        if (aggregate.name == name) {
-            return aggregate;
-        }
-    }
-
-    aggregates->append(PreviewRuntimeLayerProfileAggregate{name});
-    return aggregates->last();
-}
 
 double averageOrZero(double total, qint64 count)
 {
     return count > 0 ? total / static_cast<double>(count) : 0.0;
 }
 
-double frameLayerBuildMs(const PreviewTextureStats& frameStats)
-{
-    double total = 0.0;
-    for (const PreviewTextureLayerStats& layerStat : frameStats.layerStats) {
-        total += layerStat.buildMs;
-    }
-    return total;
-}
-
 }  // namespace
 
-PreviewRuntime::PreviewRuntime(bool enableLegacySurface, QObject* parent)
+PreviewRuntime::PreviewRuntime(QObject* parent)
     : QObject(parent)
-    , legacySurfaceEnabled_(enableLegacySurface)
 {
     assets_ = new miacode::preview::runtime::PreviewSceneAssetRepository(this);
     refreshAssetStateFromRepository();
     presentedFrameIntervalsMs_.resize(120);
     presentedFrameIntervalsMs_.fill(0.0);
-    if (legacySurfaceEnabled_) {
-        surface_ = new PreviewQuickRuntimeSurface(this);
-        surface_->setRuntime(this);
-
-        connect(surface_, &PreviewQuickRuntimeSurface::framePresented, this, [this]() {
-            PreviewTextureStats stats;
-            if (surface_ != nullptr) {
-                stats = surface_->textureStats();
-            }
-            handlePresentedFrame(surface_ != nullptr ? &stats : nullptr);
-        });
-    }
     connect(assets_, &miacode::preview::runtime::PreviewSceneAssetRepository::assetsChanged, this, [this]() {
         refreshAssetStateFromRepository();
         update();
@@ -81,11 +40,6 @@ PreviewRuntime::~PreviewRuntime()
     if (profilingSummaryDirty_) {
         writeProfilingSummaryToFile();
     }
-}
-
-QWindow* PreviewRuntime::hostWindow() const
-{
-    return surface_ != nullptr ? surface_->hostWindow() : nullptr;
 }
 
 void PreviewRuntime::setVisibleHostWindow(QQuickWindow* window)
@@ -111,13 +65,8 @@ void PreviewRuntime::notifyVisibleFramePresented()
 
 void PreviewRuntime::requestActivate()
 {
-    if (visibleHostWindow_ != nullptr
-        && (surface_ == nullptr || visibleHostWindow_ != surface_->hostWindow())) {
+    if (visibleHostWindow_ != nullptr) {
         visibleHostWindow_->requestActivate();
-        return;
-    }
-    if (surface_ != nullptr) {
-        surface_->requestActivate();
     }
 }
 
@@ -125,12 +74,8 @@ void PreviewRuntime::update()
 {
     pendingPresentedStatsRefresh_ = true;
     emit frameStateChanged();
-    if (visibleHostWindow_ != nullptr
-        && (surface_ == nullptr || visibleHostWindow_ != surface_->hostWindow())) {
+    if (visibleHostWindow_ != nullptr) {
         visibleHostWindow_->requestUpdate();
-    }
-    if (surface_ != nullptr) {
-        surface_->requestFrame();
     }
 }
 
@@ -422,82 +367,6 @@ void PreviewRuntime::resetProfilingSession()
     presentedFrameCountTotal_ = 0;
 }
 
-void PreviewRuntime::updateTextureProfilingStats(const PreviewTextureStats& frameStats)
-{
-    profilingSummaryDirty_ = true;
-    profiledTextureFrameCount_ += 1;
-    cachedTextureHitTotal_ += frameStats.cachedHitCount;
-    cachedTextureCreateTotal_ += frameStats.cachedCreateCount;
-    transientTextureHitTotal_ += frameStats.transientHitCount;
-    transientTextureCreateTotal_ += frameStats.transientCreateCount;
-    spriteCountTotal_ += frameStats.spriteCount;
-    spriteBatchCountTotal_ += frameStats.spriteBatchCount;
-    spriteCountMax_ = qMax(spriteCountMax_, frameStats.spriteCount);
-    spriteBatchCountMax_ = qMax(spriteBatchCountMax_, frameStats.spriteBatchCount);
-
-    const double totalBuildMs = frameLayerBuildMs(frameStats);
-    layerBuildMsTotal_ += totalBuildMs;
-    layerBuildMsMax_ = qMax(layerBuildMsMax_, totalBuildMs);
-
-    if (frameStats.spriteCount > 0) {
-        profiledActiveSpriteFrameCount_ += 1;
-    }
-    if (frameStats.spriteCount > peakFrameSpriteCount_
-        || (frameStats.spriteCount == peakFrameSpriteCount_ && totalBuildMs > peakFrameLayerBuildMs_)) {
-        peakFrameSpriteCount_ = frameStats.spriteCount;
-        peakFrameSpriteBatchCount_ = frameStats.spriteBatchCount;
-        peakFrameLayerBuildMs_ = totalBuildMs;
-    }
-
-    const PreviewStageBackgroundFrameProfile& stage = frameStats.stageBackground;
-    stageBackgroundProfile_.mediaFrameCount += stage.mediaFrameCount;
-    stageBackgroundProfile_.dimFrameCount += stage.dimFrameCount;
-    stageBackgroundProfile_.videoFrameCount += stage.videoFrameCount;
-    stageBackgroundProfile_.staticImageFrameCount += stage.staticImageFrameCount;
-    stageBackgroundProfile_.dimUniformUpdateCount += stage.dimUniformUpdateCount;
-
-    if (stage.videoFrameCount > 0 && stage.mediaToImageMs > 0.0) {
-        stageBackgroundProfile_.mediaToImageMsSum += stage.mediaToImageMs;
-        stageBackgroundProfile_.mediaToImageMsMax =
-            qMax(stageBackgroundProfile_.mediaToImageMsMax, stage.mediaToImageMs);
-        stageBackgroundProfile_.mediaToImageSampleCount += 1;
-    }
-    if (stage.mediaFrameCount > 0) {
-        stageBackgroundProfile_.mediaTextureMsSum += stage.mediaTextureMs;
-        stageBackgroundProfile_.mediaTextureMsMax =
-            qMax(stageBackgroundProfile_.mediaTextureMsMax, stage.mediaTextureMs);
-        stageBackgroundProfile_.mediaTextureSampleCount += 1;
-    }
-    if (stage.dimFrameCount > 0) {
-        stageBackgroundProfile_.dimUniformUpdateMsSum += stage.dimUniformUpdateMs;
-        stageBackgroundProfile_.dimUniformUpdateMsMax =
-            qMax(stageBackgroundProfile_.dimUniformUpdateMsMax, stage.dimUniformUpdateMs);
-        stageBackgroundProfile_.dimUniformUpdateSampleCount += 1;
-    }
-    stageBackgroundProfile_.nodeUpdateMsSum += stage.nodeUpdateMs;
-    stageBackgroundProfile_.nodeUpdateMsMax =
-        qMax(stageBackgroundProfile_.nodeUpdateMsMax, stage.nodeUpdateMs);
-    stageBackgroundProfile_.nodeUpdateSampleCount += 1;
-
-    for (const PreviewTextureLayerStats& layerStat : frameStats.layerStats) {
-        PreviewRuntimeLayerProfileAggregate& aggregate =
-            ensureLayerAggregate(&layerProfileAggregates_, layerStat.name);
-        aggregate.spriteCountSum += layerStat.spriteCount;
-        aggregate.spriteBatchCountSum += layerStat.spriteBatchCount;
-        aggregate.candidateCountSum += layerStat.candidateCount;
-        aggregate.activeCountSum += layerStat.activeCount;
-        aggregate.buildMsSum += layerStat.buildMs;
-        aggregate.spriteCountMax = qMax(aggregate.spriteCountMax, layerStat.spriteCount);
-        aggregate.spriteBatchCountMax = qMax(aggregate.spriteBatchCountMax, layerStat.spriteBatchCount);
-        aggregate.candidateCountMax = qMax(aggregate.candidateCountMax, layerStat.candidateCount);
-        aggregate.activeCountMax = qMax(aggregate.activeCountMax, layerStat.activeCount);
-        aggregate.buildMsMax = qMax(aggregate.buildMsMax, layerStat.buildMs);
-        if (layerStat.spriteCount > 0) {
-            aggregate.spriteActiveFrameCount += 1;
-        }
-    }
-}
-
 QString PreviewRuntime::writeProfilingSummaryToFile()
 {
     if (!miacode::debug_options::previewProfileOutputEnabled()
@@ -644,11 +513,8 @@ void PreviewRuntime::setFrameSize(const QSize& size)
     update();
 }
 
-void PreviewRuntime::handlePresentedFrame(const PreviewTextureStats* frameStats)
+void PreviewRuntime::handlePresentedFrame()
 {
-    if (frameStats != nullptr) {
-        updateTextureProfilingStats(*frameStats);
-    }
     presentedFrameCountTotal_ += 1;
     updatePresentedFrameStats();
     pendingPresentedStatsRefresh_ = false;

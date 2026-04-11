@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.21)
 
 set(MIACODE_VERSION_MAJOR "0")
 set(MIACODE_VERSION_MINOR "3")
-set(MIACODE_VERSION_PATCH "11")
-set(MIACODE_VERSION_PRERELEASE "")
+set(MIACODE_VERSION_PATCH "12")
+set(MIACODE_VERSION_PRERELEASE "dev1")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
@@ -51,6 +51,9 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/main.cpp
     src/app/quick_shell/QuickShellBootstrap.h
     src/app/quick_shell/QuickShellBootstrap.cpp
+    src/app/quick_shell/QuickShellContracts.h
+    src/app/quick_shell/QuickShellNativeSurfaceHost.h
+    src/app/quick_shell/QuickShellNativeSurfaceHost.cpp
     src/app/quick_shell/QuickShellPreviewCompositeSurface.h
     src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp
     src/app/quick_shell/QuickShellPreviewSurfacePolicy.h
@@ -58,14 +61,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/quick_shell/QuickShellController.cpp
     src/app/quick_shell/QuickShellStyleBridge.h
     src/app/quick_shell/QuickShellStyleBridge.cpp
-    src/app/quick_shell/OutlineListModel.h
-    src/app/quick_shell/OutlineListModel.cpp
-    src/app/quick_shell/IssueListModel.h
-    src/app/quick_shell/IssueListModel.cpp
-    src/app/quick_shell/LegacyChartEditorSurface.h
-    src/app/quick_shell/LegacyChartEditorSurface.cpp
-    src/app/quick_shell/LegacyTimelineSurface.h
-    src/app/quick_shell/LegacyTimelineSurface.cpp
     src/app/mainwindow/MainWindow.h
     src/app/mainwindow/MainWindow.cpp
     src/app/mainwindow/MainWindowShared.h
@@ -139,8 +134,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/RawVideoPipeTransport.cpp
     src/tools/video_export/VideoExportSnapshot.h
     src/tools/video_export/VideoExportSnapshot.cpp
-    src/preview/video/PreviewMediaController.h
-    src/preview/video/PreviewMediaController.cpp
     src/preview/runtime/PreviewQuickExportSession.h
     src/preview/runtime/PreviewQuickExportSession.cpp
     src/preview/runtime/PreviewSceneAssetLoader.h
@@ -149,8 +142,6 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/runtime/PreviewSceneAssetRepository.cpp
     src/preview/runtime/PreviewStageMediaHost.h
     src/preview/runtime/PreviewStageMediaHost.cpp
-    src/preview/runtime/PreviewQuickRuntimeSurface.h
-    src/preview/runtime/PreviewQuickRuntimeSurface.cpp
     src/preview/runtime/PreviewRuntime.h
     src/preview/runtime/PreviewRuntime.cpp
     src/preview/scene/PreviewFrameState.h

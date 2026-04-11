@@ -23,7 +23,6 @@ src/
       QtPreviewSfxRuntime.*
       QtPreviewSfxRuntime.*.cpp
     video/
-      PreviewMediaController.*
       PreviewRenderSettings.h
     scene/
       PreviewFrameState.h
@@ -39,7 +38,6 @@ src/
       PreviewTextureRepository.*
     runtime/
       PreviewRuntime.*
-      PreviewQuickRuntimeSurface.*
       PreviewQuickExportSession.*
       PreviewSceneAssetLoader.*
       PreviewSceneAssetRepository.*

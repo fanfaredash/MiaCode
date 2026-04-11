@@ -69,11 +69,6 @@ bool wantsQuickShellBeta(const QStringList& arguments)
     return arguments.contains(QStringLiteral("--quick-shell-beta"));
 }
 
-bool wantsQtNativeFrontend(const QStringList& arguments)
-{
-    return arguments.contains(QStringLiteral("--qt-native"));
-}
-
 void addSharedCliDebugOption(QCommandLineParser& parser)
 {
     // main() already enables debug mode before CLI dispatch. We still declare
@@ -643,30 +638,15 @@ int main(int argc, char* argv[])
         return exitCode;
     }
 
-    const bool qtNativeFrontendRequested = wantsQtNativeFrontend(app.arguments());
     const bool quickShellBetaRequested = wantsQuickShellBeta(app.arguments());
     Q_UNUSED(quickShellBetaRequested);
-    if (!qtNativeFrontendRequested) {
-        QQuickStyle::setStyle(QStringLiteral("Basic"));
-        QuickShellBootstrap quickShellBootstrap(appIcon);
-        if (!quickShellBootstrap.start()) {
-            QTextStream(stderr) << "Failed to start Quick Shell Beta.\n";
-            return 1;
-        }
-        logStartupStage("quick_shell_bootstrap_started");
-        QTimer::singleShot(0, &app, [&logStartupStage]() {
-            logStartupStage("event_loop_first_tick");
-        });
-        return app.exec();
+    QQuickStyle::setStyle(QStringLiteral("Basic"));
+    QuickShellBootstrap quickShellBootstrap(appIcon);
+    if (!quickShellBootstrap.start()) {
+        QTextStream(stderr) << "Failed to start Quick Shell Beta.\n";
+        return 1;
     }
-
-    MainWindow window;
-    if (!appIcon.isNull()) {
-        window.setWindowIcon(appIcon);
-    }
-    logStartupStage("mainwindow_constructed");
-    window.show();
-    logStartupStage("mainwindow_show_called");
+    logStartupStage("quick_shell_bootstrap_started");
     QTimer::singleShot(0, &app, [&logStartupStage]() {
         logStartupStage("event_loop_first_tick");
     });

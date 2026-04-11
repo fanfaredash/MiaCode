@@ -1,14 +1,10 @@
 #include "QuickShellController.h"
 
+#include "QuickShellNativeSurfaceHost.h"
+
 #include "common/DebugLog.h"
-#include "mainwindow/MainWindow.h"
-#include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 
-#include <QDockWidget>
-#include <QLayout>
-#include <QSlider>
-#include <QStatusBar>
 #include <QTimer>
 #include <QWidget>
 #include <QWindow>
@@ -38,45 +34,32 @@ void appendQuickShellControllerLog(const QString& action, const QString& payload
     );
 }
 
-bool actionMatchesShortcut(QAction* action, const QKeySequence& sequence)
-{
-    if (action == nullptr || sequence.isEmpty()) {
-        return false;
-    }
-    QList<QKeySequence> shortcuts = action->shortcuts();
-    if (shortcuts.isEmpty() && !action->shortcut().isEmpty()) {
-        shortcuts.append(action->shortcut());
-    }
-    for (const QKeySequence& shortcut : shortcuts) {
-        if (!shortcut.isEmpty() && shortcut == sequence) {
-            return true;
-        }
-    }
-    return false;
-}
-
 }  // namespace
 
-QuickShellController::QuickShellController(MainWindow* backend, QObject* parent)
+QuickShellController::QuickShellController(
+    QuickShellCommandSink* commandSink,
+    QuickShellStateSource* stateSource,
+    QuickShellNativeSurfaceHost* surfaceHost,
+    QObject* parent)
     : QObject(parent)
-    , backend_(backend)
+    , commandSink_(commandSink)
+    , stateSource_(stateSource)
+    , surfaceHost_(surfaceHost)
     , refreshTimer_(new QTimer(this))
 {
-    if (backend_ != nullptr) {
-        topChromeWindow_ = createForeignWindowForSurface(backend_->quickShellTopChromeSurfaceWidget_);
-        workspaceWindow_ = createForeignWindowForSurface(backend_->quickShellWorkspaceSurfaceWidget_);
-        previewControlsWindow_ = createForeignWindowForSurface(backend_->quickShellPreviewControlsSurfaceWidget_);
-        statusWindow_ = createForeignWindowForSurface(backend_->quickShellStatusSurfaceWidget_);
-        if (backend_->previewStageMediaHost_ != nullptr) {
-            connect(backend_->previewStageMediaHost_, &PreviewStageMediaHost::mediaStateChanged, this, [this]() {
-                refreshFromBackend();
+    if (stateSource_ != nullptr) {
+        if (auto* mediaHost =
+                qobject_cast<PreviewStageMediaHost*>(stateSource_->shellPreviewStageMediaHostObject());
+            mediaHost != nullptr) {
+            connect(mediaHost, &PreviewStageMediaHost::mediaStateChanged, this, [this]() {
+                refreshFromStateSource();
             });
         }
     }
     refreshTimer_->setInterval(150);
-    connect(refreshTimer_, &QTimer::timeout, this, &QuickShellController::refreshFromBackend);
+    connect(refreshTimer_, &QTimer::timeout, this, &QuickShellController::refreshFromStateSource);
     refreshTimer_->start();
-    refreshFromBackend();
+    refreshFromStateSource();
 }
 
 QString QuickShellController::windowTitle() const
@@ -116,17 +99,17 @@ bool QuickShellController::previewFullscreen() const
 
 QObject* QuickShellController::previewRuntime() const
 {
-    return backend_ != nullptr ? backend_->previewCanvas_ : nullptr;
+    return stateSource_ != nullptr ? stateSource_->shellPreviewRuntimeObject() : nullptr;
 }
 
 QObject* QuickShellController::previewStageMediaHost() const
 {
-    return backend_ != nullptr ? backend_->previewStageMediaHost_ : nullptr;
+    return stateSource_ != nullptr ? stateSource_->shellPreviewStageMediaHostObject() : nullptr;
 }
 
 QWindow* QuickShellController::previewCompositeWindow() const
 {
-    return backend_ != nullptr ? backend_->quickShellPreviewCompositeWindow() : nullptr;
+    return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().previewCompositeWindow : nullptr;
 }
 
 bool QuickShellController::previewUsesSeparateSurface() const
@@ -136,345 +119,205 @@ bool QuickShellController::previewUsesSeparateSurface() const
 
 QWindow* QuickShellController::topChromeWindow() const
 {
-    return topChromeWindow_;
+    return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().topChrome : nullptr;
+}
+
+QWindow* QuickShellController::sidebarWindow() const
+{
+    return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().sidebar : nullptr;
 }
 
 QWindow* QuickShellController::workspaceWindow() const
 {
-    return workspaceWindow_;
+    return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().workspace : nullptr;
 }
 
 QWindow* QuickShellController::previewControlsWindow() const
 {
-    return previewControlsWindow_;
+    return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().previewControls : nullptr;
 }
 
 QWindow* QuickShellController::statusWindow() const
 {
-    return statusWindow_;
+    return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().status : nullptr;
 }
 
 void QuickShellController::setPreviewFullscreen(bool fullscreen)
 {
-    if (backend_ == nullptr) {
+    if (commandSink_ == nullptr || stateSource_ == nullptr) {
         return;
     }
-    if (backend_->previewFullscreenActive_ == fullscreen) {
+    if (stateSource_->shellPreviewFullscreen() == fullscreen) {
         return;
     }
-    if (fullscreen) {
-        backend_->enterPreviewFullscreen();
-    } else {
-        backend_->exitPreviewFullscreen();
-    }
-    refreshFromBackend();
+    commandSink_->setShellPreviewFullscreen(fullscreen);
+    refreshFromStateSource();
 }
 
 void QuickShellController::refresh()
 {
-    refreshFromBackend();
+    refreshFromStateSource();
 }
 
 bool QuickShellController::confirmClose()
 {
-    if (backend_ == nullptr) {
-        return true;
-    }
-    if (!backend_->maybeSaveBeforeContinue()) {
-        return false;
-    }
-    backend_->savePortableState();
-    backend_->clearVideoExportWorkerState();
-    return true;
+    return commandSink_ != nullptr ? commandSink_->confirmShellClose() : true;
 }
 
 void QuickShellController::togglePreviewPlayback()
 {
-    if (backend_ == nullptr) {
+    if (commandSink_ == nullptr) {
         return;
     }
-    backend_->onTogglePreviewPause();
-    refreshFromBackend();
+    commandSink_->toggleShellPreviewPlayback();
+    refreshFromStateSource();
 }
 
 void QuickShellController::stopPreview()
 {
-    if (backend_ == nullptr) {
+    if (commandSink_ == nullptr) {
         return;
     }
-    backend_->onStopPreview();
-    refreshFromBackend();
+    commandSink_->stopShellPreview();
+    refreshFromStateSource();
 }
 
 void QuickShellController::seekPreview(double second)
 {
-    if (backend_ == nullptr) {
+    if (commandSink_ == nullptr) {
         return;
     }
-    backend_->seekPreviewToSecond(second, true);
-    refreshFromBackend();
+    commandSink_->seekShellPreview(second);
+    refreshFromStateSource();
 }
 
 void QuickShellController::setPreviewRate(double rate)
 {
-    if (backend_ == nullptr) {
+    if (commandSink_ == nullptr) {
         return;
     }
-    backend_->applyPreviewPlaybackRate(rate);
-    refreshFromBackend();
+    commandSink_->setShellPreviewRate(rate);
+    refreshFromStateSource();
 }
 
 void QuickShellController::syncTopChromeSurfaceSize(int width, int height)
 {
-    if (backend_ == nullptr || backend_->quickShellTopChromeSurfaceWidget_ == nullptr) {
+    if (surfaceHost_ == nullptr) {
         return;
     }
-    const QSize nextSize(qMax(1, width), qMax(1, height));
-    if (backend_->quickShellTopChromeSurfaceWidget_->size() != nextSize) {
-        backend_->quickShellTopChromeSurfaceWidget_->resize(nextSize);
-    }
-    if (QLayout* layout = backend_->quickShellTopChromeSurfaceWidget_->layout(); layout != nullptr) {
-        layout->activate();
-    }
-    backend_->quickShellTopChromeSurfaceWidget_->updateGeometry();
-    backend_->quickShellTopChromeSurfaceWidget_->update();
-    backend_->quickShellTopChromeSurfaceWidget_->show();
-    appendQuickShellControllerLog(
-        QStringLiteral("sync_top_chrome"),
+    surfaceHost_->syncTopChromeSurfaceSize(width, height);
+    if (QWidget* surface = surfaceHost_->topChromeSurfaceWidget(); surface != nullptr) {
+        appendQuickShellControllerLog(
+            QStringLiteral("sync_top_chrome"),
             QString("size=%1x%2 handle=0x%3")
-                .arg(nextSize.width())
-                .arg(nextSize.height())
-            .arg(static_cast<quintptr>(backend_->quickShellTopChromeSurfaceWidget_->winId()), 0, 16)
-    );
+                .arg(surface->width())
+                .arg(surface->height())
+                .arg(static_cast<quintptr>(surface->winId()), 0, 16)
+        );
+    }
+}
+
+void QuickShellController::syncSidebarSurfaceSize(int width, int height)
+{
+    if (surfaceHost_ == nullptr) {
+        return;
+    }
+    surfaceHost_->syncSidebarSurfaceSize(width, height);
+    if (QWidget* surface = surfaceHost_->sidebarSurfaceWidget(); surface != nullptr) {
+        appendQuickShellControllerLog(
+            QStringLiteral("sync_sidebar"),
+            QString("size=%1x%2 handle=0x%3")
+                .arg(surface->width())
+                .arg(surface->height())
+                .arg(static_cast<quintptr>(surface->winId()), 0, 16)
+        );
+    }
 }
 
 void QuickShellController::syncWorkspaceSurfaceSize(int width, int height)
 {
-    if (backend_ == nullptr || backend_->quickShellWorkspaceSurfaceWidget_ == nullptr) {
+    if (surfaceHost_ == nullptr) {
         return;
     }
-    const QSize nextSize(qMax(1, width), qMax(1, height));
-    if (backend_->quickShellWorkspaceSurfaceWidget_->size() != nextSize) {
-        backend_->quickShellWorkspaceSurfaceWidget_->resize(nextSize);
-    }
-    if (QLayout* layout = backend_->quickShellWorkspaceSurfaceWidget_->layout(); layout != nullptr) {
-        layout->activate();
-    }
-    if (backend_->previewLeftColumn_ != nullptr) {
-        backend_->previewLeftColumn_->updateGeometry();
-        backend_->previewLeftColumn_->show();
-    }
-    if (backend_->outlineDock_ != nullptr) {
-        backend_->outlineDock_->updateGeometry();
-        backend_->outlineDock_->show();
-    }
-    backend_->quickShellWorkspaceSurfaceWidget_->updateGeometry();
-    backend_->quickShellWorkspaceSurfaceWidget_->update();
-    backend_->quickShellWorkspaceSurfaceWidget_->show();
-    appendQuickShellControllerLog(
-        QStringLiteral("sync_workspace"),
+    surfaceHost_->syncWorkspaceSurfaceSize(width, height);
+    if (QWidget* surface = surfaceHost_->workspaceSurfaceWidget(); surface != nullptr) {
+        appendQuickShellControllerLog(
+            QStringLiteral("sync_workspace"),
             QString("size=%1x%2 handle=0x%3")
-                .arg(nextSize.width())
-                .arg(nextSize.height())
-            .arg(static_cast<quintptr>(backend_->quickShellWorkspaceSurfaceWidget_->winId()), 0, 16)
-    );
+                .arg(surface->width())
+                .arg(surface->height())
+                .arg(static_cast<quintptr>(surface->winId()), 0, 16)
+        );
+    }
 }
 
 void QuickShellController::syncPreviewControlsSurfaceSize(int width, int height)
 {
-    if (backend_ == nullptr || backend_->quickShellPreviewControlsSurfaceWidget_ == nullptr) {
+    if (surfaceHost_ == nullptr) {
         return;
     }
-    const QSize nextSize(qMax(1, width), qMax(1, height));
-    if (backend_->quickShellPreviewControlsSurfaceWidget_->size() != nextSize) {
-        backend_->quickShellPreviewControlsSurfaceWidget_->resize(nextSize);
-    }
-    QLayout* layout = backend_->quickShellPreviewControlsSurfaceWidget_->layout();
-    if (layout != nullptr) {
-        layout->activate();
-    }
-    if (backend_->previewControlCard_ != nullptr) {
-        backend_->previewControlCard_->updateGeometry();
-        backend_->previewControlCard_->show();
-    }
-    if (backend_->previewStatsCard_ != nullptr) {
-        backend_->previewStatsCard_->updateGeometry();
-        backend_->previewStatsCard_->show();
-    }
-    if (layout != nullptr) {
-        layout->activate();
-    }
-    backend_->updatePreviewStatsLayoutMode(-1);
-    backend_->quickShellPreviewControlsSurfaceWidget_->updateGeometry();
-    backend_->quickShellPreviewControlsSurfaceWidget_->update();
-    backend_->quickShellPreviewControlsSurfaceWidget_->show();
-    appendQuickShellControllerLog(
-        QStringLiteral("sync_preview_controls"),
+    surfaceHost_->syncPreviewControlsSurfaceSize(width, height);
+    if (QWidget* surface = surfaceHost_->previewControlsSurfaceWidget(); surface != nullptr) {
+        appendQuickShellControllerLog(
+            QStringLiteral("sync_preview_controls"),
             QString("size=%1x%2 handle=0x%3")
-                .arg(nextSize.width())
-                .arg(nextSize.height())
-            .arg(static_cast<quintptr>(backend_->quickShellPreviewControlsSurfaceWidget_->winId()), 0, 16)
-    );
+                .arg(surface->width())
+                .arg(surface->height())
+                .arg(static_cast<quintptr>(surface->winId()), 0, 16)
+        );
+    }
 }
 
 void QuickShellController::syncStatusSurfaceSize(int width, int height)
 {
-    if (backend_ == nullptr || backend_->quickShellStatusSurfaceWidget_ == nullptr) {
+    if (surfaceHost_ == nullptr) {
         return;
     }
-    const QSize nextSize(qMax(1, width), qMax(1, height));
-    if (backend_->quickShellStatusSurfaceWidget_->size() != nextSize) {
-        backend_->quickShellStatusSurfaceWidget_->resize(nextSize);
+    surfaceHost_->syncStatusSurfaceSize(width, height);
+    if (QWidget* surface = surfaceHost_->statusSurfaceWidget(); surface != nullptr) {
+        appendQuickShellControllerLog(
+            QStringLiteral("sync_status"),
+            QString("size=%1x%2 handle=0x%3")
+                .arg(surface->width())
+                .arg(surface->height())
+                .arg(static_cast<quintptr>(surface->winId()), 0, 16)
+        );
     }
-    if (QLayout* layout = backend_->quickShellStatusSurfaceWidget_->layout(); layout != nullptr) {
-        layout->activate();
-    }
-    if (QStatusBar* bar = backend_->statusBar(); bar != nullptr) {
-        bar->updateGeometry();
-        bar->show();
-    }
-    backend_->quickShellStatusSurfaceWidget_->updateGeometry();
-    backend_->quickShellStatusSurfaceWidget_->update();
-    backend_->quickShellStatusSurfaceWidget_->show();
-    appendQuickShellControllerLog(
-        QStringLiteral("sync_status"),
-        QString("size=%1x%2 handle=0x%3")
-            .arg(nextSize.width())
-            .arg(nextSize.height())
-            .arg(static_cast<quintptr>(backend_->quickShellStatusSurfaceWidget_->winId()), 0, 16)
-    );
 }
 
 bool QuickShellController::hasShortcut(const QKeySequence& sequence) const
 {
-    if (backend_ == nullptr || sequence.isEmpty()) {
-        return false;
-    }
-    const QList<QAction*> actions{
-        backend_->newAction_,
-        backend_->openAction_,
-        backend_->saveAction_,
-        backend_->saveAsAction_,
-        backend_->findReplaceAction_,
-        backend_->validateAction_,
-        backend_->transformMirrorLeftRightAction_,
-        backend_->transformMirrorUpDownAction_,
-        backend_->transformRotate180Action_,
-        backend_->transformRotate45CounterClockwiseAction_,
-        backend_->transformRotate45ClockwiseAction_,
-        backend_->normalizeWholeChartAction_,
-        backend_->transformToggleBreakAction_,
-        backend_->transformToggleExAction_,
-        backend_->transformToggleFireworkAction_,
-        backend_->transformRandomRotateAction_,
-        backend_->stopPreviewAction_,
-        backend_->pausePreviewAction_,
-        backend_->previewSlowerAction_,
-        backend_->previewFasterAction_,
-        backend_->exportVideoAction_,
-        backend_->latencyDetectorAction_,
-        backend_->previewAudioSettingsAction_,
-        backend_->previewVideoSettingsAction_,
-        backend_->swapWorkspaceSidesAction_,
-        backend_->preferencesAction_,
-        backend_->aboutAction_,
-    };
-    for (QAction* action : actions) {
-        if (actionMatchesShortcut(action, sequence)) {
-            return true;
-        }
-    }
-    return false;
+    return commandSink_ != nullptr ? commandSink_->shellHasShortcut(sequence) : false;
 }
 
 bool QuickShellController::triggerShortcut(const QKeySequence& sequence)
 {
-    if (backend_ == nullptr || sequence.isEmpty()) {
+    if (commandSink_ == nullptr) {
         return false;
     }
-    const QList<QAction*> actions{
-        backend_->newAction_,
-        backend_->openAction_,
-        backend_->saveAction_,
-        backend_->saveAsAction_,
-        backend_->findReplaceAction_,
-        backend_->validateAction_,
-        backend_->transformMirrorLeftRightAction_,
-        backend_->transformMirrorUpDownAction_,
-        backend_->transformRotate180Action_,
-        backend_->transformRotate45CounterClockwiseAction_,
-        backend_->transformRotate45ClockwiseAction_,
-        backend_->normalizeWholeChartAction_,
-        backend_->transformToggleBreakAction_,
-        backend_->transformToggleExAction_,
-        backend_->transformToggleFireworkAction_,
-        backend_->transformRandomRotateAction_,
-        backend_->stopPreviewAction_,
-        backend_->pausePreviewAction_,
-        backend_->previewSlowerAction_,
-        backend_->previewFasterAction_,
-        backend_->exportVideoAction_,
-        backend_->latencyDetectorAction_,
-        backend_->previewAudioSettingsAction_,
-        backend_->previewVideoSettingsAction_,
-        backend_->swapWorkspaceSidesAction_,
-        backend_->preferencesAction_,
-        backend_->aboutAction_,
-    };
-    for (QAction* action : actions) {
-        if (!actionMatchesShortcut(action, sequence)) {
-            continue;
-        }
-        if (!action->isEnabled()) {
-            return true;
-        }
-        action->trigger();
-        refreshFromBackend();
-        return true;
+    const bool triggered = commandSink_->shellTriggerShortcut(sequence);
+    if (triggered) {
+        refreshFromStateSource();
     }
-    return false;
+    return triggered;
 }
 
-QWindow* QuickShellController::createForeignWindowForSurface(QWidget* surface) const
+void QuickShellController::refreshFromStateSource()
 {
-    if (surface == nullptr) {
-        return nullptr;
-    }
-    const WId wid = surface->winId();
-    if (wid == 0) {
-        return nullptr;
-    }
-    QWindow* window = QWindow::fromWinId(wid);
-    if (window != nullptr) {
-        window->QObject::setParent(const_cast<QuickShellController*>(this));
-    }
-    return window;
-}
-
-void QuickShellController::refreshFromBackend()
-{
-    if (backend_ == nullptr) {
+    if (stateSource_ == nullptr) {
         return;
     }
 
     bool stateChanged = false;
-    stateChanged |= assignIfChanged(windowTitle_, backend_->windowTitle());
-    stateChanged |= assignIfChanged(workspacePanelsSwapped_, backend_->workspacePanelsSwapped_);
-    stateChanged |= assignIfChanged(
-        previewSpeedLabel_,
-        backend_->previewSpeedButton_ != nullptr ? backend_->previewSpeedButton_->text() : QStringLiteral("1x")
-    );
-    stateChanged |= assignIfChanged(previewPlaying_, backend_->qtPreviewPlaying_);
-    stateChanged |= assignIfChanged(
-        previewPositionSeconds_,
-        backend_->previewSlider_ != nullptr
-            ? static_cast<double>(backend_->previewSlider_->value()) / 1000.0
-            : backend_->qtPreviewPauseSecond_
-    );
-    stateChanged |= assignIfChanged(previewDurationSeconds_, backend_->previewDurationSeconds());
-    stateChanged |= assignIfChanged(previewUsesSeparateSurface_, backend_->quickShellPreviewUsesSeparateSurface());
+    stateChanged |= assignIfChanged(windowTitle_, stateSource_->shellWindowTitle());
+    stateChanged |= assignIfChanged(workspacePanelsSwapped_, stateSource_->shellWorkspacePanelsSwapped());
+    stateChanged |= assignIfChanged(previewSpeedLabel_, stateSource_->shellPreviewSpeedLabel());
+    stateChanged |= assignIfChanged(previewPlaying_, stateSource_->shellPreviewPlaying());
+    stateChanged |= assignIfChanged(previewPositionSeconds_, stateSource_->shellPreviewPositionSeconds());
+    stateChanged |= assignIfChanged(previewDurationSeconds_, stateSource_->shellPreviewDurationSeconds());
+    stateChanged |= assignIfChanged(previewUsesSeparateSurface_, stateSource_->shellPreviewUsesSeparateSurface());
 
-    const bool nextPreviewFullscreen = backend_->previewFullscreenActive_;
+    const bool nextPreviewFullscreen = stateSource_->shellPreviewFullscreen();
     if (assignIfChanged(previewFullscreen_, nextPreviewFullscreen)) {
         stateChanged = true;
         emit previewFullscreenChanged();

@@ -501,9 +501,10 @@ void LatencyDetectorDialog::applyBpmEdit()
 
 void LatencyDetectorDialog::showBpmHelpDialog()
 {
-    QDialog dialog(this);
+    QDialog dialog(UiDialogs::effectiveParentWidget(this));
     dialog.setWindowTitle(localizedText("BPM检测说明", "BPM Detection Notes"));
     dialog.resize(460, 210);
+    UiDialogs::prepareDialogWindow(&dialog, this);
 
     auto* rootLayout = new QVBoxLayout(&dialog);
     rootLayout->setContentsMargins(10, 10, 10, 10);
