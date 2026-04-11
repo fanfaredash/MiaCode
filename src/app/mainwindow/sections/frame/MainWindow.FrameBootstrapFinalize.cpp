@@ -388,7 +388,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         logStartupStage("preview_sfx_set_playback_rate_done");
     }
     if (previewCanvas_ != nullptr) {
-        previewCanvas_->setOutlineVariant(previewOutlineVariant_);
+        applyEffectivePreviewOutlineVariantToCanvas();
         previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
         previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
         previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);

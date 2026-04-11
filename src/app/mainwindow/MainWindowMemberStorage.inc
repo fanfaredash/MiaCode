@@ -281,6 +281,7 @@
         PreviewCanvasFrameRateMode previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
         double previewCanvasAspectRatio_ = 1.0;
         bool previewAutoRestoreSquareAfterExport_ = false;
+        bool previewForceLabeledJudgeLineWhenPaused_ = true;
         bool previewShowDebugInfo_ = false;
         bool previewShowTimestamp_ = true;
         bool previewShowObjectStatsHud_ = false;
@@ -503,6 +504,7 @@
     PreviewCanvasFrameRateMode& previewCanvasFrameRateMode_ = state_.previewCanvasFrameRateMode_;
     double& previewCanvasAspectRatio_ = state_.previewCanvasAspectRatio_;
     bool& previewAutoRestoreSquareAfterExport_ = state_.previewAutoRestoreSquareAfterExport_;
+    bool& previewForceLabeledJudgeLineWhenPaused_ = state_.previewForceLabeledJudgeLineWhenPaused_;
     bool& previewShowDebugInfo_ = state_.previewShowDebugInfo_;
     bool& previewShowTimestamp_ = state_.previewShowTimestamp_;
     bool& previewShowObjectStatsHud_ = state_.previewShowObjectStatsHud_;

@@ -846,7 +846,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     previewCanvas_ = new PreviewRuntime(this);
     logStartupStage("preview_canvas_created");
-    previewCanvas_->setOutlineVariant(previewOutlineVariant_);
+    applyEffectivePreviewOutlineVariantToCanvas();
     previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
     updatePreviewStageMediaPresentationMode(false);
     if (previewUsesStageMediaHostRoute()) {

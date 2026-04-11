@@ -40,8 +40,17 @@ MainWindow::PreviewSection::PreviewSection(
 
 void MainWindow::PreviewSection::applyPreviewStageMediaRouteVisualSettings()
 {
+    const bool mediaVisible = !state_.previewForceLabeledJudgeLineWhenPaused_ || state_.qtPreviewPlaying_;
     if (state_.previewStageMediaHost_ != nullptr) {
         state_.previewStageMediaHost_->setBackgroundScaleMode(state_.previewBackgroundScaleMode_);
+        state_.previewStageMediaHost_->setMediaVisible(mediaVisible);
+    }
+    if (state_.previewCanvas_ != nullptr) {
+        const bool stageMediaVisible =
+            mediaVisible
+            && state_.previewStageMediaHost_ != nullptr
+            && state_.previewStageMediaHost_->hasResolvedMedia();
+        state_.previewCanvas_->setStageMediaAvailable(stageMediaVisible);
     }
 }
 
@@ -308,9 +317,7 @@ void MainWindow::PreviewSection::ensurePreviewStageMediaHostInitialized()
     state_.previewStageMediaHost_ = new PreviewStageMediaHost(&owner_);
     state_.previewStageMediaHost_->setBackgroundScaleMode(state_.previewBackgroundScaleMode_);
     connect(state_.previewStageMediaHost_, &PreviewStageMediaHost::mediaStateChanged, &owner_, [this]() {
-        if (state_.previewCanvas_ != nullptr) {
-            state_.previewCanvas_->setStageMediaAvailable(state_.previewStageMediaHost_->hasResolvedMedia());
-        }
+        applyPreviewStageMediaRouteVisualSettings();
         refreshQuickShellPreviewCompositeSurfaceState();
         refreshPreviewStageMediaRouteDebugState(false);
     });

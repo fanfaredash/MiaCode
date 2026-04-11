@@ -324,6 +324,8 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
     }
 
     state_.qtPreviewPlaying_ = true;
+    owner_.applyEffectivePreviewOutlineVariantToCanvas();
+    owner_.applyPreviewStageMediaRouteVisualSettings();
     state_.qtPreviewAwaitingFrameSwap_ = false;
     state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;
     resetQtPreviewFixedFramePacing();
@@ -395,6 +397,8 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
         state_.qtPreviewTimelineDirty_ = true;
     }
     state_.qtPreviewPlaying_ = false;
+    owner_.applyEffectivePreviewOutlineVariantToCanvas();
+    owner_.applyPreviewStageMediaRouteVisualSettings();
     state_.qtPreviewAwaitingFrameSwap_ = false;
     state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;
     state_.qtPreviewNextFixedTickDueNs_ = -1;
