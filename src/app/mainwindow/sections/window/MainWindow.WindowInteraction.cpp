@@ -111,6 +111,12 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
         || watched == previewFullscreenHost_
         || watched == previewFullscreenControlsWindow_
         || watched == previewFullscreenButton_;
+    const bool previewMouseFocusScope =
+        watched == previewCanvasContainer_
+        || watched == previewCanvasFrame_
+        || watched == previewPanel_
+        || watched == previewFullscreenWindow_
+        || watched == previewFullscreenHost_;
     const bool previewFullscreenOverlayScope =
         watched == previewFullscreenWindow_
         || watched == previewFullscreenHost_
@@ -124,6 +130,13 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
         || watched == pausePreviewButton_
         || watched == previewSpeedButton_
         || watched == previewFullscreenButton_;
+    if (previewMouseFocusScope
+        && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::Wheel)) {
+        if (QWidget* widget = qobject_cast<QWidget*>(watched);
+            widget != nullptr && widget->focusPolicy() != Qt::NoFocus) {
+            widget->setFocus(Qt::MouseFocusReason);
+        }
+    }
     if (previewFullscreenActive_ && previewFullscreenOverlayScope) {
         if (event->type() == QEvent::MouseMove
             || event->type() == QEvent::MouseButtonPress
