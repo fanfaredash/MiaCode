@@ -1,4 +1,93 @@
-﻿void MainWindow::setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* transformMenu, QMenu* previewMenu, QMenu* helpMenu)
+﻿#include "../../MainWindow.h"
+#include "../../MainWindowShared.h"
+#include "MainWindow.FrameSection.h"
+#include "../editor/MainWindow.EditorSection.h"
+#include "../document/MainWindow.DocumentSection.h"
+#include "../preferences/MainWindow.PreferencesSection.h"
+#include "../preview/MainWindow.PreviewSection.h"
+#include "../timeline/MainWindow.TimelineSection.h"
+#include "../validation/MainWindow.ValidationSection.h"
+
+#include "BracketScopeHighlighter.h"
+#include "DialogLocalization.h"
+#include "PlainCodeEditor.h"
+#include "QtPreviewSfxRuntime.h"
+#include "SimaiNativeParser.h"
+#include "TimelineView.h"
+#include "UiText.h"
+#include "UiTheme.h"
+#include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
+#include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
+#include "common/ChartAssetPaths.h"
+#include "common/DebugLog.h"
+#include "common/DebugOptions.h"
+#include "common/PreviewInteractionConfig.h"
+#include "preview/runtime/PreviewRuntime.h"
+#include "preview/runtime/PreviewStageMediaHost.h"
+#include "preview/scene/PreviewProgressStatsCache.h"
+#include "simai/transform/ChartBatchTransform.h"
+#include "simai/transform/ChartNormalization.h"
+#include "tools/muri/MuriAnalyzer.h"
+#include "tools/muri/MuriPanelEntries.h"
+#include "tools/muri/MuriStaticChecker.h"
+
+#include <QtCore>
+#include <QtGui>
+#include <QtWidgets>
+
+using namespace miacode::mainwindow::shared;
+
+MainWindow::FrameSection::FrameSection(
+    MainWindow& owner,
+    MainWindow::MainWindowUiRefs& ui,
+    MainWindow::MainWindowState& state)
+    : owner_(owner)
+    , ui_(ui)
+    , state_(state)
+{}
+
+#define newAction_ owner_.newAction_
+#define openAction_ owner_.openAction_
+#define saveAction_ owner_.saveAction_
+#define saveAsAction_ owner_.saveAsAction_
+#define preferencesAction_ owner_.preferencesAction_
+#define findReplaceAction_ owner_.findReplaceAction_
+#define editorWidget_ owner_.editorWidget_
+#define transformMirrorLeftRightAction_ owner_.transformMirrorLeftRightAction_
+#define transformMirrorUpDownAction_ owner_.transformMirrorUpDownAction_
+#define transformRotate180Action_ owner_.transformRotate180Action_
+#define transformRotate45CounterClockwiseAction_ owner_.transformRotate45CounterClockwiseAction_
+#define transformRotate45ClockwiseAction_ owner_.transformRotate45ClockwiseAction_
+#define normalizeWholeChartAction_ owner_.normalizeWholeChartAction_
+#define transformToggleBreakAction_ owner_.transformToggleBreakAction_
+#define transformToggleExAction_ owner_.transformToggleExAction_
+#define transformToggleFireworkAction_ owner_.transformToggleFireworkAction_
+#define transformRandomRotateAction_ owner_.transformRandomRotateAction_
+#define stopPreviewAction_ owner_.stopPreviewAction_
+#define pausePreviewAction_ owner_.pausePreviewAction_
+#define previewSlowerAction_ owner_.previewSlowerAction_
+#define previewFasterAction_ owner_.previewFasterAction_
+#define exportVideoAction_ owner_.exportVideoAction_
+#define latencyDetectorAction_ owner_.latencyDetectorAction_
+#define toggleJudgeMarkersAction_ owner_.toggleJudgeMarkersAction_
+#define toggleTouchTrailAction_ owner_.toggleTouchTrailAction_
+#define renderModeNativeAction_ owner_.renderModeNativeAction_
+#define renderModeMaimuriDxAction_ owner_.renderModeMaimuriDxAction_
+#define editStaticTapOnSlideThresholdAction_ owner_.editStaticTapOnSlideThresholdAction_
+#define previewAudioSettingsAction_ owner_.previewAudioSettingsAction_
+#define previewVideoSettingsAction_ owner_.previewVideoSettingsAction_
+#define swapWorkspaceSidesAction_ owner_.swapWorkspaceSidesAction_
+#define aboutAction_ owner_.aboutAction_
+#define workspacePanelsSwapped_ owner_.workspacePanelsSwapped_
+#define validateAction_ owner_.validateAction_
+#define previewPlaybackRate_ owner_.previewPlaybackRate_
+#define muriRenderOptions_ owner_.muriRenderOptions_
+#define undoDeletedDifficultyField() owner_.undoDeletedDifficultyField()
+#define applyPreviewPlaybackRate(...) owner_.applyPreviewPlaybackRate(__VA_ARGS__)
+#define setMuriRenderMode(...) owner_.setMuriRenderMode(__VA_ARGS__)
+#define setWorkspacePanelsSwapped(...) owner_.setWorkspacePanelsSwapped(__VA_ARGS__)
+
+void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* transformMenu, QMenu* previewMenu, QMenu* helpMenu)
 {
     if (fileMenu == nullptr || editMenu == nullptr || transformMenu == nullptr || previewMenu == nullptr || helpMenu == nullptr) {
         return;
@@ -8,45 +97,45 @@
         QDesktopServices::openUrl(QUrl(url));
     };
 
-    newAction_ = new QAction(uiText("action.new", "New"), this);
+    newAction_ = new QAction(uiText("action.new", "New"), &owner_);
     newAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+N")));
-    connect(newAction_, &QAction::triggered, this, &MainWindow::onNewFile);
+    connect(newAction_, &QAction::triggered, &owner_, &MainWindow::onNewFile);
     fileMenu->addAction(newAction_);
 
-    openAction_ = new QAction(uiText("action.open", "Open..."), this);
+    openAction_ = new QAction(uiText("action.open", "Open..."), &owner_);
     openAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+O")));
-    connect(openAction_, &QAction::triggered, this, &MainWindow::onOpenFile);
+    connect(openAction_, &QAction::triggered, &owner_, &MainWindow::onOpenFile);
     fileMenu->addAction(openAction_);
 
-    saveAction_ = new QAction(uiText("action.save", "Save"), this);
+    saveAction_ = new QAction(uiText("action.save", "Save"), &owner_);
     saveAction_->setShortcut(QKeySequence::Save);
-    connect(saveAction_, &QAction::triggered, this, &MainWindow::onSaveFile);
+    connect(saveAction_, &QAction::triggered, &owner_, &MainWindow::onSaveFile);
     fileMenu->addAction(saveAction_);
 
-    saveAsAction_ = new QAction(uiText("action.save_as", "Save As..."), this);
+    saveAsAction_ = new QAction(uiText("action.save_as", "Save As..."), &owner_);
     saveAsAction_->setShortcut(QKeySequence::SaveAs);
-    connect(saveAsAction_, &QAction::triggered, this, &MainWindow::onSaveFileAs);
+    connect(saveAsAction_, &QAction::triggered, &owner_, &MainWindow::onSaveFileAs);
     fileMenu->addAction(saveAsAction_);
 
     fileMenu->addSeparator();
 
-    preferencesAction_ = new QAction(uiText("action.preferences", "Preferences..."), this);
-    connect(preferencesAction_, &QAction::triggered, this, &MainWindow::onPreferences);
+    preferencesAction_ = new QAction(uiText("action.preferences", "Preferences..."), &owner_);
+    connect(preferencesAction_, &QAction::triggered, &owner_, &MainWindow::onPreferences);
     fileMenu->addAction(preferencesAction_);
 
     fileMenu->addSeparator();
 
-    auto* quitAction = new QAction("Quit", this);
+    auto* quitAction = new QAction("Quit", &owner_);
     quitAction->setShortcut(QKeySequence::Quit);
     connect(quitAction, &QAction::triggered, qApp, &QApplication::quit);
     fileMenu->addAction(quitAction);
 
     findReplaceAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("查找/替换") : QStringLiteral("Find/Replace"),
-        this
+        &owner_
     );
     findReplaceAction_->setShortcut(QKeySequence::Find);
-    connect(findReplaceAction_, &QAction::triggered, this, &MainWindow::onToggleFindReplace);
+    connect(findReplaceAction_, &QAction::triggered, &owner_, &MainWindow::onToggleFindReplace);
     editMenu->addAction(findReplaceAction_);
 
     editMenu->addSeparator();
@@ -67,9 +156,9 @@
         }
     };
 
-    auto* cutAction = new QAction(uiText("action.cut", "Cut"), this);
+    auto* cutAction = new QAction(uiText("action.cut", "Cut"), &owner_);
     cutAction->setShortcut(QKeySequence::Cut);
-    connect(cutAction, &QAction::triggered, this, [invokeOnFocusedTextWidget]() {
+    connect(cutAction, &QAction::triggered, &owner_, [invokeOnFocusedTextWidget]() {
         invokeOnFocusedTextWidget(
             [](QTextEdit* textEdit) { textEdit->cut(); },
             [](QLineEdit* lineEdit) { lineEdit->cut(); }
@@ -77,9 +166,9 @@
     });
     editMenu->addAction(cutAction);
 
-    auto* copyAction = new QAction(uiText("action.copy", "Copy"), this);
+    auto* copyAction = new QAction(uiText("action.copy", "Copy"), &owner_);
     copyAction->setShortcut(QKeySequence::Copy);
-    connect(copyAction, &QAction::triggered, this, [invokeOnFocusedTextWidget]() {
+    connect(copyAction, &QAction::triggered, &owner_, [invokeOnFocusedTextWidget]() {
         invokeOnFocusedTextWidget(
             [](QTextEdit* textEdit) { textEdit->copy(); },
             [](QLineEdit* lineEdit) { lineEdit->copy(); }
@@ -87,9 +176,9 @@
     });
     editMenu->addAction(copyAction);
 
-    auto* pasteAction = new QAction(uiText("action.paste", "Paste"), this);
+    auto* pasteAction = new QAction(uiText("action.paste", "Paste"), &owner_);
     pasteAction->setShortcut(QKeySequence::Paste);
-    connect(pasteAction, &QAction::triggered, this, [invokeOnFocusedTextWidget]() {
+    connect(pasteAction, &QAction::triggered, &owner_, [invokeOnFocusedTextWidget]() {
         invokeOnFocusedTextWidget(
             [](QTextEdit* textEdit) { textEdit->paste(); },
             [](QLineEdit* lineEdit) { lineEdit->paste(); }
@@ -99,9 +188,9 @@
 
     editMenu->addSeparator();
 
-    auto* undoAction = new QAction(uiText("action.undo", "Undo"), this);
+    auto* undoAction = new QAction(uiText("action.undo", "Undo"), &owner_);
     undoAction->setShortcut(QKeySequence::Undo);
-    connect(undoAction, &QAction::triggered, this, [this]() {
+    connect(undoAction, &QAction::triggered, &owner_, [this]() {
         bool handled = false;
         if (QWidget* focus = QApplication::focusWidget(); focus != nullptr) {
             if (auto* lineEdit = qobject_cast<QLineEdit*>(focus); lineEdit != nullptr) {
@@ -130,9 +219,9 @@
     });
     editMenu->addAction(undoAction);
 
-    auto* redoAction = new QAction(uiText("action.redo", "Redo"), this);
+    auto* redoAction = new QAction(uiText("action.redo", "Redo"), &owner_);
     redoAction->setShortcut(QKeySequence::Redo);
-    connect(redoAction, &QAction::triggered, this, [invokeOnFocusedTextWidget]() {
+    connect(redoAction, &QAction::triggered, &owner_, [invokeOnFocusedTextWidget]() {
         invokeOnFocusedTextWidget(
             [](QTextEdit* textEdit) { textEdit->redo(); },
             [](QLineEdit* lineEdit) { lineEdit->redo(); }
@@ -142,114 +231,114 @@
 
     editMenu->addSeparator();
 
-    latencyDetectorAction_ = new QAction(UiText::isChineseUi() ? QStringLiteral("BPM&&偏移检测") : QStringLiteral("BPM && Offset Detection..."), this);
-    connect(latencyDetectorAction_, &QAction::triggered, this, &MainWindow::onOpenLatencyDetector);
+    latencyDetectorAction_ = new QAction(UiText::isChineseUi() ? QStringLiteral("BPM&&偏移检测") : QStringLiteral("BPM && Offset Detection..."), &owner_);
+    connect(latencyDetectorAction_, &QAction::triggered, &owner_, &MainWindow::onOpenLatencyDetector);
     editMenu->addAction(latencyDetectorAction_);
     editMenu->addSeparator();
 
     validateAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("语法检查") : QStringLiteral("Syntax Check"),
-        this
+        &owner_
     );
     validateAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
-    connect(validateAction_, &QAction::triggered, this, &MainWindow::onValidateSimai);
+    connect(validateAction_, &QAction::triggered, &owner_, &MainWindow::onValidateSimai);
     editMenu->addAction(validateAction_);
 
     normalizeWholeChartAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("谱面整理") : QStringLiteral("Format Chart"),
-        this
+        &owner_
     );
-    connect(normalizeWholeChartAction_, &QAction::triggered, this, &MainWindow::onNormalizeWholeChart);
+    connect(normalizeWholeChartAction_, &QAction::triggered, &owner_, &MainWindow::onNormalizeWholeChart);
 
-    transformMirrorLeftRightAction_ = new QAction(uiText("action.transform.mirror_lr", "Mirror Left/Right"), this);
+    transformMirrorLeftRightAction_ = new QAction(uiText("action.transform.mirror_lr", "Mirror Left/Right"), &owner_);
     transformMirrorLeftRightAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_J));
-    connect(transformMirrorLeftRightAction_, &QAction::triggered, this, &MainWindow::onMirrorLeftRight);
+    connect(transformMirrorLeftRightAction_, &QAction::triggered, &owner_, &MainWindow::onMirrorLeftRight);
     transformMenu->addAction(transformMirrorLeftRightAction_);
 
-    transformMirrorUpDownAction_ = new QAction(uiText("action.transform.mirror_ud", "Mirror Up/Down"), this);
+    transformMirrorUpDownAction_ = new QAction(uiText("action.transform.mirror_ud", "Mirror Up/Down"), &owner_);
     transformMirrorUpDownAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
-    connect(transformMirrorUpDownAction_, &QAction::triggered, this, &MainWindow::onMirrorUpDown);
+    connect(transformMirrorUpDownAction_, &QAction::triggered, &owner_, &MainWindow::onMirrorUpDown);
     transformMenu->addAction(transformMirrorUpDownAction_);
 
-    transformRotate180Action_ = new QAction(uiText("action.transform.rotate_180", "Rotate 180"), this);
+    transformRotate180Action_ = new QAction(uiText("action.transform.rotate_180", "Rotate 180"), &owner_);
     transformRotate180Action_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
-    connect(transformRotate180Action_, &QAction::triggered, this, &MainWindow::onRotate180);
+    connect(transformRotate180Action_, &QAction::triggered, &owner_, &MainWindow::onRotate180);
     transformMenu->addAction(transformRotate180Action_);
 
-    transformRotate45CounterClockwiseAction_ = new QAction(uiText("action.transform.rotate_ccw_45", "Rotate -45"), this);
+    transformRotate45CounterClockwiseAction_ = new QAction(uiText("action.transform.rotate_ccw_45", "Rotate -45"), &owner_);
     transformRotate45CounterClockwiseAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Semicolon));
-    connect(transformRotate45CounterClockwiseAction_, &QAction::triggered, this, &MainWindow::onRotate45CounterClockwise);
+    connect(transformRotate45CounterClockwiseAction_, &QAction::triggered, &owner_, &MainWindow::onRotate45CounterClockwise);
     transformMenu->addAction(transformRotate45CounterClockwiseAction_);
 
-    transformRotate45ClockwiseAction_ = new QAction(uiText("action.transform.rotate_cw_45", "Rotate +45"), this);
+    transformRotate45ClockwiseAction_ = new QAction(uiText("action.transform.rotate_cw_45", "Rotate +45"), &owner_);
     transformRotate45ClockwiseAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Apostrophe));
-    connect(transformRotate45ClockwiseAction_, &QAction::triggered, this, &MainWindow::onRotate45Clockwise);
+    connect(transformRotate45ClockwiseAction_, &QAction::triggered, &owner_, &MainWindow::onRotate45Clockwise);
     transformMenu->addAction(transformRotate45ClockwiseAction_);
 
     auto* moreTransformMenu = transformMenu->addMenu(uiText("action.transform.more", "More..."));
-    transformToggleBreakAction_ = new QAction(uiText("action.transform.toggle_break", "Toggle Break"), this);
+    transformToggleBreakAction_ = new QAction(uiText("action.transform.toggle_break", "Toggle Break"), &owner_);
     transformToggleBreakAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_B));
-    connect(transformToggleBreakAction_, &QAction::triggered, this, &MainWindow::onToggleBreakSelection);
+    connect(transformToggleBreakAction_, &QAction::triggered, &owner_, &MainWindow::onToggleBreakSelection);
     moreTransformMenu->addAction(transformToggleBreakAction_);
 
-    transformToggleExAction_ = new QAction(uiText("action.transform.toggle_ex", "Toggle EX"), this);
+    transformToggleExAction_ = new QAction(uiText("action.transform.toggle_ex", "Toggle EX"), &owner_);
     transformToggleExAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_N));
-    connect(transformToggleExAction_, &QAction::triggered, this, &MainWindow::onToggleExSelection);
+    connect(transformToggleExAction_, &QAction::triggered, &owner_, &MainWindow::onToggleExSelection);
     moreTransformMenu->addAction(transformToggleExAction_);
 
-    transformToggleFireworkAction_ = new QAction(uiText("action.transform.toggle_firework", "Toggle Firework"), this);
+    transformToggleFireworkAction_ = new QAction(uiText("action.transform.toggle_firework", "Toggle Firework"), &owner_);
     transformToggleFireworkAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_M));
-    connect(transformToggleFireworkAction_, &QAction::triggered, this, &MainWindow::onToggleFireworkSelection);
+    connect(transformToggleFireworkAction_, &QAction::triggered, &owner_, &MainWindow::onToggleFireworkSelection);
     moreTransformMenu->addAction(transformToggleFireworkAction_);
 
-    transformRandomRotateAction_ = new QAction(uiText("action.transform.random_rotate", "Random Rotate"), this);
+    transformRandomRotateAction_ = new QAction(uiText("action.transform.random_rotate", "Random Rotate"), &owner_);
     transformRandomRotateAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma));
-    connect(transformRandomRotateAction_, &QAction::triggered, this, &MainWindow::onRandomRotateSelection);
+    connect(transformRandomRotateAction_, &QAction::triggered, &owner_, &MainWindow::onRandomRotateSelection);
     moreTransformMenu->addAction(transformRandomRotateAction_);
 
-    stopPreviewAction_ = new QAction(uiText("action.stop_preview", "Stop Preview"), this);
+    stopPreviewAction_ = new QAction(uiText("action.stop_preview", "Stop Preview"), &owner_);
     stopPreviewAction_->setIcon(makePreviewStopIcon(QColor("#2B3C4E")));
     stopPreviewAction_->setToolTip(QString());
-    connect(stopPreviewAction_, &QAction::triggered, this, &MainWindow::onStopPreview);
+    connect(stopPreviewAction_, &QAction::triggered, &owner_, &MainWindow::onStopPreview);
     previewMenu->addAction(stopPreviewAction_);
 
-    pausePreviewAction_ = new QAction(uiText("action.pause_preview", "Play/Pause Preview"), this);
+    pausePreviewAction_ = new QAction(uiText("action.pause_preview", "Play/Pause Preview"), &owner_);
     pausePreviewAction_->setShortcuts({
         QKeySequence(Qt::CTRL | Qt::Key_Return),
         QKeySequence(Qt::CTRL | Qt::Key_Enter),
     });
     pausePreviewAction_->setIcon(makePreviewPlayIcon(QColor("#2B3C4E")));
     pausePreviewAction_->setToolTip(QString());
-    connect(pausePreviewAction_, &QAction::triggered, this, &MainWindow::onTogglePreviewPause);
+    connect(pausePreviewAction_, &QAction::triggered, &owner_, &MainWindow::onTogglePreviewPause);
     previewMenu->addAction(pausePreviewAction_);
 
     auto* previewSlowerAction = new QAction(
         uiText("action.preview_speed_down", "Playback Speed -"),
-        this
+        &owner_
     );
     previewSlowerAction_ = previewSlowerAction;
     previewSlowerAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+O")));
-    connect(previewSlowerAction, &QAction::triggered, this, [this]() {
+    connect(previewSlowerAction, &QAction::triggered, &owner_, [this]() {
         applyPreviewPlaybackRate(steppedPreviewPlaybackRate(previewPlaybackRate_, -1));
     });
     previewMenu->addAction(previewSlowerAction);
 
     auto* previewFasterAction = new QAction(
         uiText("action.preview_speed_up", "Playback Speed +"),
-        this
+        &owner_
     );
     previewFasterAction_ = previewFasterAction;
     previewFasterAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+P")));
-    connect(previewFasterAction, &QAction::triggered, this, [this]() {
+    connect(previewFasterAction, &QAction::triggered, &owner_, [this]() {
         applyPreviewPlaybackRate(steppedPreviewPlaybackRate(previewPlaybackRate_, 1));
     });
     previewMenu->addAction(previewFasterAction);
 
     exportVideoAction_ = new QAction(
         uiText("action.export_chart", "Export Chart"),
-        this
+        &owner_
     );
-    connect(exportVideoAction_, &QAction::triggered, this, &MainWindow::onExportPreviewVideo);
+    connect(exportVideoAction_, &QAction::triggered, &owner_, &MainWindow::onExportPreviewVideo);
     previewMenu->addAction(exportVideoAction_);
 
     previewMenu->addSeparator();
@@ -261,14 +350,14 @@
 
     renderModeNativeAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("预览模式：谱面确认") : QStringLiteral("Preview Mode: Chart Review"),
-        this
+        &owner_
     );
     renderModeNativeAction_->setCheckable(true);
     renderModeNativeAction_->setChecked(muriRenderOptions_.renderMode == RenderMode::Native);
     renderModeNativeAction_->setIcon(
         renderModeNativeAction_->isChecked() ? selectedRenderModeIcon : unselectedRenderModeIcon
     );
-    connect(renderModeNativeAction_, &QAction::triggered, this, [this]() {
+    connect(renderModeNativeAction_, &QAction::triggered, &owner_, [this]() {
         setMuriRenderMode(RenderMode::Native);
     });
     renderModeGroup->addAction(renderModeNativeAction_);
@@ -276,14 +365,14 @@
 
     renderModeMaimuriDxAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("预览模式：无理检测") : QStringLiteral("Preview Mode: Muri Check"),
-        this
+        &owner_
     );
     renderModeMaimuriDxAction_->setCheckable(true);
     renderModeMaimuriDxAction_->setChecked(muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle);
     renderModeMaimuriDxAction_->setIcon(
         renderModeMaimuriDxAction_->isChecked() ? selectedRenderModeIcon : unselectedRenderModeIcon
     );
-    connect(renderModeMaimuriDxAction_, &QAction::triggered, this, [this]() {
+    connect(renderModeMaimuriDxAction_, &QAction::triggered, &owner_, [this]() {
         setMuriRenderMode(RenderMode::MaimuriDxStyle);
     });
     renderModeGroup->addAction(renderModeMaimuriDxAction_);
@@ -291,64 +380,110 @@
 
     editStaticTapOnSlideThresholdAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("撞尾阈值...") : QStringLiteral("Tap-On-Slide Threshold..."),
-        this
+        &owner_
     );
     connect(
         editStaticTapOnSlideThresholdAction_,
         &QAction::triggered,
-        this,
+        &owner_,
         &MainWindow::onEditStaticTapOnSlideThreshold);
     previewMenu->addAction(editStaticTapOnSlideThresholdAction_);
 
     previewMenu->addSeparator();
 
-    previewAudioSettingsAction_ = new QAction(uiText("action.audio_settings", "Audio Settings..."), this);
-    connect(previewAudioSettingsAction_, &QAction::triggered, this, &MainWindow::onPreviewAudioSettings);
+    previewAudioSettingsAction_ = new QAction(uiText("action.audio_settings", "Audio Settings..."), &owner_);
+    connect(previewAudioSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewAudioSettings);
     previewMenu->addAction(previewAudioSettingsAction_);
 
-    previewVideoSettingsAction_ = new QAction(uiText("action.video_settings", "Preview Settings..."), this);
-    connect(previewVideoSettingsAction_, &QAction::triggered, this, &MainWindow::onPreviewVideoSettings);
+    previewVideoSettingsAction_ = new QAction(uiText("action.video_settings", "Preview Settings..."), &owner_);
+    connect(previewVideoSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewVideoSettings);
     previewMenu->addAction(previewVideoSettingsAction_);
 
     swapWorkspaceSidesAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("左右面板互换") : QStringLiteral("Swap Side Panels"),
-        this
+        &owner_
     );
     swapWorkspaceSidesAction_->setCheckable(true);
     swapWorkspaceSidesAction_->setIcon(
         makeMenuSelectionCheckIcon(UiTheme::colors().accent, workspacePanelsSwapped_)
     );
-    connect(swapWorkspaceSidesAction_, &QAction::toggled, this, [this](bool checked) {
+    connect(swapWorkspaceSidesAction_, &QAction::toggled, &owner_, [this](bool checked) {
         setWorkspacePanelsSwapped(checked, true);
     });
     previewMenu->addAction(swapWorkspaceSidesAction_);
 
     auto* officialChartMirrorAction = new QAction(
         UiText::isChineseUi() ? QStringLiteral("官谱镜像站") : QStringLiteral("Official Chart Mirror"),
-        this
+        &owner_
     );
-    connect(officialChartMirrorAction, &QAction::triggered, this, [openExternalUrl]() {
+    connect(officialChartMirrorAction, &QAction::triggered, &owner_, [openExternalUrl]() {
         openExternalUrl(QStringLiteral("https://www.maiviewer.net/"));
     });
     helpMenu->addAction(officialChartMirrorAction);
 
     auto* simaiWikiAction = new QAction(
         UiText::isChineseUi() ? QStringLiteral("simaiwiki") : QStringLiteral("simaiwiki"),
-        this
+        &owner_
     );
-    connect(simaiWikiAction, &QAction::triggered, this, [openExternalUrl]() {
+    connect(simaiWikiAction, &QAction::triggered, &owner_, [openExternalUrl]() {
         openExternalUrl(QStringLiteral("https://w.atwiki.jp/simai/"));
     });
     helpMenu->addAction(simaiWikiAction);
     helpMenu->addSeparator();
 
-    aboutAction_ = new QAction(uiText("action.about", "About"), this);
-    connect(aboutAction_, &QAction::triggered, this, &MainWindow::onAbout);
+    aboutAction_ = new QAction(uiText("action.about", "About"), &owner_);
+    connect(aboutAction_, &QAction::triggered, &owner_, &MainWindow::onAbout);
     helpMenu->addAction(aboutAction_);
 }
-MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
+
+#undef newAction_
+#undef openAction_
+#undef saveAction_
+#undef saveAsAction_
+#undef preferencesAction_
+#undef findReplaceAction_
+#undef editorWidget_
+#undef transformMirrorLeftRightAction_
+#undef transformMirrorUpDownAction_
+#undef transformRotate180Action_
+#undef transformRotate45CounterClockwiseAction_
+#undef transformRotate45ClockwiseAction_
+#undef normalizeWholeChartAction_
+#undef transformToggleBreakAction_
+#undef transformToggleExAction_
+#undef transformToggleFireworkAction_
+#undef transformRandomRotateAction_
+#undef stopPreviewAction_
+#undef pausePreviewAction_
+#undef previewSlowerAction_
+#undef previewFasterAction_
+#undef exportVideoAction_
+#undef latencyDetectorAction_
+#undef toggleJudgeMarkersAction_
+#undef toggleTouchTrailAction_
+#undef renderModeNativeAction_
+#undef renderModeMaimuriDxAction_
+#undef editStaticTapOnSlideThresholdAction_
+#undef previewAudioSettingsAction_
+#undef previewVideoSettingsAction_
+#undef swapWorkspaceSidesAction_
+#undef aboutAction_
+#undef workspacePanelsSwapped_
+#undef validateAction_
+#undef previewPlaybackRate_
+#undef muriRenderOptions_
+#undef undoDeletedDifficultyField
+#undef applyPreviewPlaybackRate
+#undef setMuriRenderMode
+#undef setWorkspacePanelsSwapped
+
+void MainWindow::setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* transformMenu, QMenu* previewMenu, QMenu* helpMenu)
+{
+    frameSection_->setupMenusAndActions(fileMenu, editMenu, transformMenu, previewMenu, helpMenu);
+}
+
+MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
-    , frontendHostMode_(hostMode)
 {
     QElapsedTimer startupStageTimer;
     startupStageTimer.start();
@@ -362,11 +497,19 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
 
     configureRuntimeDebugOutput();
     logStartupStage("configure_runtime_debug_output");
-    if (isQuickShellBackendMode()) {
-        quickShellStartupStageMediaLoadDeferred_ = true;
-        setAttribute(Qt::WA_NativeWindow);
-        winId();
-    }
+    quickShellStartupStageMediaLoadDeferred_ = true;
+    setProperty("miacode.dialog_parentless", true);
+    setAttribute(Qt::WA_DontShowOnScreen);
+    setAttribute(Qt::WA_NativeWindow);
+    winId();
+
+    editorSection_ = std::make_unique<EditorSection>(*this, ui_, state_);
+    documentSection_ = std::make_unique<DocumentSection>(*this, ui_, state_);
+    preferencesSection_ = std::make_unique<PreferencesSection>(*this, ui_, state_);
+    previewSection_ = std::make_unique<PreviewSection>(*this, ui_, state_);
+    validationSection_ = std::make_unique<ValidationSection>(*this, ui_, state_);
+    frameSection_ = std::make_unique<FrameSection>(*this, ui_, state_);
+    timelineSection_ = std::make_unique<TimelineSection>(*this, ui_, state_);
 
     previewWarmupPool_ = new QThreadPool(this);
     previewWarmupPool_->setObjectName(QStringLiteral("PreviewWarmupPool"));
@@ -1140,7 +1283,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     previewPanel_->setMinimumWidth(kEmbeddedPreviewPanelMinWidth);
     previewPanel_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 
-    previewCanvas_ = new PreviewRuntime(!isQuickShellBackendMode(), this);
+    previewCanvas_ = new PreviewRuntime(this);
     logStartupStage("preview_canvas_created");
     previewCanvas_->setOutlineVariant(previewOutlineVariant_);
     previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
@@ -1153,11 +1296,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     previewCanvasFrame_->setObjectName("PreviewCanvasFrame");
     previewCanvasFrame_->setMinimumSize(QSize(1, 1));
     previewCanvasFrame_->setFocusPolicy(Qt::StrongFocus);
-    if (isQuickShellBackendMode()) {
-        previewCanvasContainer_ = new QWidget(previewCanvasFrame_);
-    } else {
-        previewCanvasContainer_ = QWidget::createWindowContainer(previewCanvas_->hostWindow(), previewCanvasFrame_);
-    }
+    previewCanvasContainer_ = new QWidget(previewCanvasFrame_);
     previewCanvasContainer_->setMinimumSize(QSize(1, 1));
     previewCanvasContainer_->setFocusPolicy(Qt::StrongFocus);
     previewPanel_->setFocusPolicy(Qt::StrongFocus);
@@ -1683,65 +1822,7 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     timelineAnalysisIdleTimer_ = new QTimer(this);
     timelineAnalysisIdleTimer_->setSingleShot(true);
     connect(timelineAnalysisIdleTimer_, &QTimer::timeout, this, &MainWindow::dispatchTimelineAnalysisRefresh);
-
-    embeddedPreviewRefreshTimer_ = new QTimer(this);
-    embeddedPreviewRefreshTimer_->setSingleShot(true);
-    connect(embeddedPreviewRefreshTimer_, &QTimer::timeout, this, [this]() {
-        const bool skip =
-            embeddedPreviewRefreshSuspended_ || !isVisible() || windowState().testFlag(Qt::WindowMinimized);
-        if (runtimeDebugOutputEnabled_) {
-            appendOutput(
-                "preview/embedded_refresh",
-                QString(
-                    "action=timer_fire delay_ms=%1 skip=%2 visible=%3 minimized=%4 resize_active=%5 pending=%6 "
-                    "suspended=%7"
-                )
-                    .arg(embeddedPreviewRefreshTimer_ != nullptr ? embeddedPreviewRefreshTimer_->interval() : 0)
-                    .arg(skip ? 1 : 0)
-                    .arg(isVisible() ? 1 : 0)
-                    .arg(windowState().testFlag(Qt::WindowMinimized) ? 1 : 0)
-                    .arg(embeddedPreviewResizeActive_ ? 1 : 0)
-                    .arg(embeddedPreviewRefreshPending_ ? 1 : 0)
-                    .arg(embeddedPreviewRefreshSuspended_ ? 1 : 0)
-            );
-        }
-        if (skip || !embeddedPreviewRefreshPending_) {
-            return;
-        }
-        refreshEmbeddedPreviewSurface();
-    });
-
-    embeddedPreviewResizeSettleTimer_ = new QTimer(this);
-    embeddedPreviewResizeSettleTimer_->setSingleShot(true);
-    embeddedPreviewResizeSettleTimer_->setInterval(kEmbeddedPreviewResizeSettleDelayMs);
-    connect(embeddedPreviewResizeSettleTimer_, &QTimer::timeout, this, [this]() {
-        if (embeddedPreviewRefreshSuspended_) {
-            embeddedPreviewResizeActive_ = false;
-            embeddedPreviewRefreshPending_ = true;
-            return;
-        }
-        const bool wasActive = embeddedPreviewResizeActive_;
-        embeddedPreviewResizeActive_ = false;
-        if (runtimeDebugOutputEnabled_ && wasActive) {
-            appendOutput(
-                "preview/embedded_refresh",
-                QString("action=resize_degrade_end pending=%1 visible=%2 minimized=%3")
-                    .arg(embeddedPreviewRefreshPending_ ? 1 : 0)
-                    .arg(isVisible() ? 1 : 0)
-                    .arg(windowState().testFlag(Qt::WindowMinimized) ? 1 : 0)
-            );
-        }
-        if (!embeddedPreviewRefreshPending_) {
-            return;
-        }
-        if (!isVisible() || windowState().testFlag(Qt::WindowMinimized)) {
-            return;
-        }
-        refreshEmbeddedPreviewSurface(true);
-    });
     logStartupStage("timers_ready");
-
-    initializeQuickShellNativeRegions();
 
     if (previewSlider_ != nullptr) {
         previewSlider_->setFocusPolicy(Qt::StrongFocus);
@@ -1819,9 +1900,6 @@ MainWindow::MainWindow(FrontendHostMode hostMode, QWidget* parent)
     if (previewCanvasContainer_ != nullptr) {
         previewCanvasContainer_->setMouseTracking(true);
         previewCanvasContainer_->installEventFilter(this);
-    }
-    if (previewCanvas_ != nullptr && previewCanvas_->hostWindow() != nullptr) {
-        previewCanvas_->hostWindow()->installEventFilter(this);
     }
     if (previewCanvasFrame_ != nullptr) {
         previewCanvasFrame_->setMouseTracking(true);

@@ -1,4 +1,12 @@
 #include "MainWindow.h"
+#include "MainWindowShared.h"
+#include "sections/editor/MainWindow.EditorSection.h"
+#include "sections/document/MainWindow.DocumentSection.h"
+#include "sections/frame/MainWindow.FrameSection.h"
+#include "sections/preferences/MainWindow.PreferencesSection.h"
+#include "sections/preview/MainWindow.PreviewSection.h"
+#include "sections/timeline/MainWindow.TimelineSection.h"
+#include "sections/validation/MainWindow.ValidationSection.h"
 #include "AppVersion.h"
 #include "BracketScopeHighlighter.h"
 #include "PlainCodeEditor.h"
@@ -6,7 +14,6 @@
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
-#include "PreviewMediaController.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "TimelineView.h"
@@ -126,7 +133,6 @@
 #include <QTextDocument>
 #include <QTextEdit>
 #include <QTextOption>
-#include <QThread>
 #include <QToolBar>
 #include <QThreadPool>
 #include <QWidgetAction>
@@ -151,34 +157,19 @@
 #include <windows.h>
 #endif
 
+using namespace miacode::mainwindow::shared;
+
 namespace {
-constexpr int kEmbeddedPreviewPanelMinWidth = miacode::window_parity::kEmbeddedPreviewPanelMinWidth;
 constexpr qreal kEmbeddedPreviewPanelWidthRatio = miacode::window_parity::kEmbeddedPreviewPanelWidthRatio;
 constexpr int kEmbeddedPreviewPanelWidthMax = miacode::window_parity::kEmbeddedPreviewPanelWidthMax;
-constexpr int kPreviewPanelMarginX = miacode::window_parity::kPreviewPanelMarginX;
 constexpr int kPreviewPanelMarginTop = miacode::window_parity::kPreviewPanelMarginTop;
 constexpr int kPreviewPanelMarginBottom = 12;
 constexpr int kPreviewCanvasControlGap = miacode::window_parity::kPreviewCanvasControlGap;
 constexpr int kPreviewStatsBottomGap = miacode::window_parity::kPreviewStatsBottomGap;
 constexpr int kPreviewControlStatsGap = miacode::window_parity::kPreviewControlStatsGap;
-constexpr int kPreviewControlStatsCardMinWidth = miacode::window_parity::kPreviewControlStatsCardMinWidth;
-constexpr int kPreviewFullscreenHintTopMargin = miacode::window_parity::kPreviewFullscreenHintTopMargin;
-constexpr int kPreviewFullscreenOverlaySideMargin = miacode::window_parity::kPreviewFullscreenOverlaySideMargin;
-constexpr int kPreviewFullscreenOverlayBottomMargin = miacode::window_parity::kPreviewFullscreenOverlayBottomMargin;
-constexpr int kPreviewFullscreenOverlayMaxWidth = miacode::window_parity::kPreviewFullscreenOverlayMaxWidth;
-constexpr int kPreviewFullscreenOverlayHideOffset = miacode::window_parity::kPreviewFullscreenOverlayHideOffset;
-constexpr int kPreviewFullscreenControlsRevealHotzoneHeight = miacode::window_parity::kPreviewFullscreenControlsRevealHotzoneHeight;
-constexpr int kPreviewFullscreenControlsAutoHideDelayMs = miacode::window_parity::kPreviewFullscreenControlsAutoHideDelayMs;
 constexpr int kPreviewFullscreenControlsAnimationDurationMs = 180;
 constexpr int kPreviewFullscreenControlsOpacityAnimationDurationMs = 180;
 constexpr int kEmbeddedPreviewResizeSettleDelayMs = 120;
-constexpr double kTimelineUiCadenceHz = 30.0;
-constexpr int kTimelineUiCadenceMs = static_cast<int>(1000.0 / kTimelineUiCadenceHz);
-constexpr double kTimelineUiCadenceSeconds = 1.0 / kTimelineUiCadenceHz;
-constexpr int kEditorTextFontSizeMin = 8;
-constexpr int kEditorTextFontSizeMax = 28;
-constexpr int kWaveformPeakCount = 1024;
-constexpr double kEditorLineSpacingFactorDefault = 1.5;
 constexpr int kEditorFindBarMinWidth = 300;
 constexpr int kEditorFindBarMaxWidth = 500;
 constexpr int kEditorFindBarHorizontalMargin = 14;
@@ -186,23 +177,10 @@ constexpr int kEditorFindBarTopMargin = 10;
 constexpr int kEditorFindBarOverlayGap = 8;
 constexpr int kPreviewScrubRenderIntervalMs = kTimelineUiCadenceMs;
 constexpr qint64 kInvalidStarPreviewAboutClickWindowMs = 900;
-constexpr int kAutosaveIntervalMs = 15 * 60 * 1000;
-constexpr int kAutosaveMaxVersions = 10;
-const QList<double> kEditorLineSpacingFactorOptions{
-    0.0, 1.0, 1.5, 2.0, 3.0, 5.0,
-};
-const QList<double> kPreviewPlaybackRateOptions{
-    0.25, 0.5, 0.75, 1.0, 1.25, 2.0,
-};
 
 QString pointerHex(const void* pointer)
 {
     return QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(pointer), 0, 16);
-}
-
-QByteArray autosaveContentSignature(const QString& text)
-{
-    return QCryptographicHash::hash(text.toUtf8(), QCryptographicHash::Sha256);
 }
 
 QString qEventTypeName(QEvent::Type type)
@@ -262,6 +240,23 @@ QString qEventTypeName(QEvent::Type type)
     return QStringLiteral("Type(%1)").arg(static_cast<int>(type));
 }
 
+bool actionMatchesShortcut(QAction* action, const QKeySequence& sequence)
+{
+    if (action == nullptr || sequence.isEmpty()) {
+        return false;
+    }
+    QList<QKeySequence> shortcuts = action->shortcuts();
+    if (shortcuts.isEmpty() && !action->shortcut().isEmpty()) {
+        shortcuts.append(action->shortcut());
+    }
+    for (const QKeySequence& shortcut : shortcuts) {
+        if (!shortcut.isEmpty() && shortcut == sequence) {
+            return true;
+        }
+    }
+    return false;
+}
+
 QString platformSurfaceEventTypeName(QPlatformSurfaceEvent::SurfaceEventType type)
 {
     switch (type) {
@@ -318,216 +313,6 @@ bool shouldTracePreviewHostWindowEvent(QEvent::Type type)
     default:
         return false;
     }
-}
-
-QString cssRgba(const QColor& color, int alpha)
-{
-    return QStringLiteral("rgba(%1, %2, %3, %4)")
-        .arg(color.red())
-        .arg(color.green())
-        .arg(color.blue())
-        .arg(qBound(0, alpha, 255));
-}
-
-QString cssRgb(const QColor& color)
-{
-    return color.name(QColor::HexRgb);
-}
-
-QColor previewFullscreenOverlayIconColor()
-{
-    return QColor(QStringLiteral("#F8FAFC"));
-}
-
-QString previewFullscreenControlCardStyleSheet()
-{
-    const QColor overlayText = previewFullscreenOverlayIconColor();
-    const QColor accent = UiTheme::colors().accent;
-    return QStringLiteral(
-        "QFrame#PreviewControlCard {"
-        " background: rgba(0, 0, 0, 188);"
-        " border: 1px solid rgba(255, 255, 255, 42);"
-        " border-radius: 18px;"
-        "}"
-        "QFrame#PreviewControls {"
-        " background: transparent;"
-        " border: none;"
-        "}"
-        "QToolButton#PreviewControlButton {"
-        " color: %1;"
-        " padding: 7px 10px;"
-        " min-height: 32px;"
-        " border: 1px solid rgba(255, 255, 255, 40);"
-        " border-radius: 9px;"
-        " background: rgba(255, 255, 255, 18);"
-        " font-weight: 600;"
-        "}"
-        "QToolButton#PreviewControlButton:hover {"
-        " background: rgba(255, 255, 255, 32);"
-        " border-color: rgba(255, 255, 255, 76);"
-        "}"
-        "QToolButton#PreviewControlButton:pressed {"
-        " background: rgba(255, 255, 255, 46);"
-        "}"
-        "QSlider::groove:horizontal {"
-        " height: 6px;"
-        " background: rgba(255, 255, 255, 42);"
-        " border-radius: 3px;"
-        "}"
-        "QSlider::sub-page:horizontal {"
-        " background: %2;"
-        " border-radius: 3px;"
-        "}"
-        "QSlider::add-page:horizontal {"
-        " background: rgba(255, 255, 255, 22);"
-        " border-radius: 3px;"
-        "}"
-        "QSlider::handle:horizontal {"
-        " width: 12px;"
-        " margin: -4px 0;"
-        " border-radius: 6px;"
-        " background: %1;"
-        " border: 1px solid rgba(15, 23, 42, 102);"
-        "}"
-    )
-        .arg(cssRgb(overlayText))
-        .arg(cssRgb(accent));
-}
-
-QString previewFullscreenHintStyleSheet()
-{
-    return QStringLiteral(
-        "QLabel {"
-        " background: rgba(0, 0, 0, 188);"
-        " color: #F8FAFC;"
-        " border: 1px solid rgba(255, 255, 255, 52);"
-        " border-radius: 16px;"
-        " padding: 10px 16px;"
-        " font-size: 14px;"
-        " font-weight: 600;"
-        "}"
-    );
-}
-
-QString outlineCollapseButtonStyleSheet()
-{
-    const UiTheme::Colors& c = UiTheme::colors();
-    return QStringLiteral(
-        "QToolButton {"
-        " color: %1;"
-        " background: %2;"
-        " border: none;"
-        " border-left: 1px solid %3;"
-        " border-right: 1px solid %3;"
-        " padding: 0px;"
-        " font-size: 12px;"
-        " font-weight: 700;"
-        "}"
-        "QToolButton:hover {"
-        " background: %4;"
-        "}"
-        "QToolButton:pressed {"
-        " background: %5;"
-        "}"
-    )
-        .arg(cssRgb(c.iconSecondary))
-        .arg(cssRgb(c.cardAltBg))
-        .arg(cssRgb(c.border))
-        .arg(cssRgb(c.menuHoverBg))
-        .arg(cssRgb(c.borderSoft));
-}
-
-QString previewFullscreenPauseButtonStyleSheet(bool active)
-{
-    const QColor overlayText = previewFullscreenOverlayIconColor();
-    const QColor accent = UiTheme::colors().accent;
-    if (active) {
-        return QStringLiteral(
-            "QToolButton {"
-            " color: %1;"
-            " padding: 7px 10px;"
-            " min-height: 32px;"
-            " border: 1px solid %2;"
-            " border-radius: 9px;"
-            " background: %3;"
-            " font-weight: 700;"
-            "}"
-            "QToolButton:hover { background: %4; }"
-        )
-            .arg(cssRgb(overlayText))
-            .arg(cssRgba(accent, 220))
-            .arg(cssRgba(accent, 208))
-            .arg(cssRgba(accent, 255));
-    }
-    return QStringLiteral(
-        "QToolButton {"
-        " color: %1;"
-        " padding: 7px 10px;"
-        " min-height: 32px;"
-        " border: 1px solid rgba(255, 255, 255, 40);"
-        " border-radius: 9px;"
-        " background: rgba(255, 255, 255, 18);"
-        " font-weight: 600;"
-        "}"
-        "QToolButton:hover {"
-        " background: rgba(255, 255, 255, 32);"
-        " border-color: rgba(255, 255, 255, 76);"
-        "}"
-    )
-        .arg(cssRgb(overlayText));
-}
-
-double normalizeEditorLineSpacingFactor(double factor)
-{
-    if (kEditorLineSpacingFactorOptions.isEmpty()) {
-        return kEditorLineSpacingFactorDefault;
-    }
-    double best = kEditorLineSpacingFactorOptions.first();
-    double bestDiff = qAbs(best - factor);
-    for (double candidate : kEditorLineSpacingFactorOptions) {
-        const double diff = qAbs(candidate - factor);
-        if (diff < bestDiff) {
-            best = candidate;
-            bestDiff = diff;
-        }
-    }
-    return best;
-}
-
-QString editorLineSpacingFactorLabel(double factor)
-{
-    if (qFuzzyCompare(factor + 1.0, 1.0)) {
-        return QStringLiteral("0x");
-    }
-    const QString text = QString::number(factor, 'f', qFuzzyCompare(factor, qRound(factor)) ? 0 : 1);
-    return text + QStringLiteral("x");
-}
-
-int nearestPreviewPlaybackRateIndex(double rate)
-{
-    if (kPreviewPlaybackRateOptions.isEmpty()) {
-        return -1;
-    }
-    int bestIndex = 0;
-    double bestDiff = qAbs(kPreviewPlaybackRateOptions.first() - rate);
-    for (int index = 1; index < kPreviewPlaybackRateOptions.size(); ++index) {
-        const double diff = qAbs(kPreviewPlaybackRateOptions[index] - rate);
-        if (diff < bestDiff) {
-            bestDiff = diff;
-            bestIndex = index;
-        }
-    }
-    return bestIndex;
-}
-
-double steppedPreviewPlaybackRate(double rate, int direction)
-{
-    const int currentIndex = nearestPreviewPlaybackRateIndex(rate);
-    if (currentIndex < 0) {
-        return qMax(0.25, rate);
-    }
-    const int targetIndex = qBound(0, currentIndex + direction, kPreviewPlaybackRateOptions.size() - 1);
-    return kPreviewPlaybackRateOptions[targetIndex];
 }
 
 QString sanitizeExportFileStem(QString text, const QString& fallback = QStringLiteral("out"))
@@ -774,143 +559,9 @@ QString resolveInvalidStarPreviewReverseSoundPath()
     return QString();
 }
 
-enum class EditorValidationSummaryIconKind {
-    Error,
-    Warning,
-    Muri,
-};
-
-QIcon makeMenuSelectionCheckIcon(const QColor& color, bool visible = true);
-
-QPixmap makeEditorValidationSummaryIcon(const QColor& color, EditorValidationSummaryIconKind kind)
-{
-    QPixmap pixmap(14, 14);
-    pixmap.fill(Qt::transparent);
-
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(color);
-
-    if (kind == EditorValidationSummaryIconKind::Warning) {
-        QPainterPath triangle;
-        triangle.moveTo(7.0, 1.2);
-        triangle.lineTo(12.8, 12.0);
-        triangle.lineTo(1.2, 12.0);
-        triangle.closeSubpath();
-        painter.drawPath(triangle);
-        painter.setBrush(Qt::white);
-        painter.drawRoundedRect(QRectF(6.2, 4.0, 1.6, 4.0), 0.8, 0.8);
-        painter.drawEllipse(QRectF(6.1, 9.2, 1.8, 1.8));
-    } else if (kind == EditorValidationSummaryIconKind::Muri) {
-        painter.drawEllipse(QRectF(1.2, 1.2, 11.6, 11.6));
-        painter.setPen(Qt::white);
-        QFont font = painter.font();
-        font.setBold(true);
-        font.setPixelSize(11);
-        painter.setFont(font);
-        painter.drawText(QRectF(0.2, 0.6, 13.6, 12.8), Qt::AlignCenter, QStringLiteral("?"));
-    } else {
-        painter.drawEllipse(QRectF(1.2, 1.2, 11.6, 11.6));
-        painter.setBrush(Qt::white);
-        painter.drawRoundedRect(QRectF(6.1, 3.4, 1.8, 5.0), 0.9, 0.9);
-        painter.drawEllipse(QRectF(6.0, 9.5, 2.0, 2.0));
-    }
-
-    return pixmap;
-}
-
-class OutlineItemDelegate : public QStyledItemDelegate {
-public:
-    explicit OutlineItemDelegate(QObject* parent = nullptr)
-        : QStyledItemDelegate(parent)
-    {}
-
-    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
-    {
-        QStyleOptionViewItem drawOption(option);
-        initStyleOption(&drawOption, index);
-        const UiTheme::Colors& c = UiTheme::colors();
-        const QColor selectedBorder = c.dark ? QColor("#6B8BB8") : QColor("#9EC2EF");
-        const QColor selectedFill = c.dark ? QColor("#314158") : QColor("#F1F6FF");
-        const QColor hoverFill = c.dark ? QColor("#2A3442") : QColor("#F3F7FD");
-
-        painter->save();
-        const QRect fillRect = option.rect.adjusted(1, 1, -1, -1);
-        if (option.state.testFlag(QStyle::State_Selected)) {
-            painter->setRenderHint(QPainter::Antialiasing, true);
-            painter->setPen(QPen(selectedBorder, 1.0));
-            painter->setBrush(selectedFill);
-            painter->drawRoundedRect(fillRect, 6.0, 6.0);
-        } else if (option.state.testFlag(QStyle::State_MouseOver)) {
-            painter->setRenderHint(QPainter::Antialiasing, true);
-            painter->setPen(Qt::NoPen);
-            painter->setBrush(hoverFill);
-            painter->drawRoundedRect(fillRect, 6.0, 6.0);
-        }
-        painter->restore();
-
-        const int listWidth = option.widget != nullptr ? option.widget->width() : option.rect.width();
-        constexpr int kIconOnlyThreshold = 120;
-        const bool iconOnly = listWidth > 0 && listWidth < kIconOnlyThreshold;
-        if (iconOnly) {
-            drawOption.text.clear();
-            drawOption.features &= ~QStyleOptionViewItem::HasDisplay;
-            drawOption.decorationAlignment = Qt::AlignLeft | Qt::AlignVCenter;
-        }
-
-        drawOption.state &= ~QStyle::State_Selected;
-        drawOption.state &= ~QStyle::State_MouseOver;
-        drawOption.backgroundBrush = Qt::NoBrush;
-        drawOption.palette.setColor(QPalette::HighlightedText, c.textPrimary);
-        QStyledItemDelegate::paint(painter, drawOption, index);
-    }
-};
-
-class LeftPlaceholderLineEdit : public QLineEdit {
-public:
-    explicit LeftPlaceholderLineEdit(QWidget* parent = nullptr)
-        : QLineEdit(parent)
-    {}
-
-    void setLeftPlaceholderText(const QString& text)
-    {
-        leftPlaceholderText_ = text;
-        QLineEdit::setPlaceholderText(QString());
-        update();
-    }
-
-protected:
-    void paintEvent(QPaintEvent* event) override
-    {
-        QLineEdit::paintEvent(event);
-        if (!text().isEmpty() || leftPlaceholderText_.isEmpty()) {
-            return;
-        }
-
-        QStyleOptionFrame option;
-        initStyleOption(&option);
-        const QRect contentsRect = style()->subElementRect(QStyle::SE_LineEditContents, &option, this);
-
-        QPainter painter(this);
-        painter.setPen(palette().color(QPalette::PlaceholderText));
-        painter.setFont(font());
-        painter.drawText(contentsRect.adjusted(0, 0, -2, 0), Qt::AlignLeft | Qt::AlignVCenter, leftPlaceholderText_);
-    }
-
-private:
-    QString leftPlaceholderText_;
-};
-
 QString timestampLine(const QString& title)
 {
     return miacode::debug_log::formatTitleLine(title);
-}
-
-QString uiText(const QString& key, const QString& fallback)
-{
-    const QString localized = UiText::text(key);
-    return localized.isEmpty() ? fallback : localized;
 }
 
 QString normalizeLanguageToken(QString token)
@@ -943,154 +594,6 @@ QString systemL10n(const QString& en, const QString& zh)
     return systemLanguagePrefersChinese() ? zh : en;
 }
 
-void centerDialogOnAnchor(QDialog* dialog, QWidget* parent)
-{
-    if (dialog == nullptr) {
-        return;
-    }
-    dialog->adjustSize();
-    const bool debugDialogAnchor = miacode::debug_options::runtimeDebugOutputEnabled();
-    const auto appendDialogAnchorLog = [debugDialogAnchor](const QString& text) {
-        if (!debugDialogAnchor) {
-            return;
-        }
-        miacode::debug_log::appendLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("dialog/anchor"),
-            text
-        );
-    };
-
-    QWidget* anchorWidget = parent != nullptr ? parent->window() : nullptr;
-    QRect anchorRect;
-    QScreen* targetScreen = nullptr;
-    QString anchorSource;
-    if (anchorWidget != nullptr) {
-        if (auto* mainWindow = qobject_cast<MainWindow*>(anchorWidget);
-            mainWindow != nullptr
-            && mainWindow->quickShellRootWindowFrameGeometryAvailable()) {
-            anchorRect = mainWindow->quickShellRootWindowFrameGeometry();
-            targetScreen = QGuiApplication::screenAt(anchorRect.center());
-            anchorSource = QStringLiteral("quick_shell_root_window");
-        }
-    }
-    if (anchorWidget != nullptr
-        && !anchorRect.isValid()
-        && anchorWidget->isVisible()
-        && !anchorWidget->windowState().testFlag(Qt::WindowMinimized)
-        && !anchorWidget->windowFlags().testFlag(Qt::Tool)) {
-        anchorRect = anchorWidget->frameGeometry();
-        if (anchorWidget->windowHandle() != nullptr) {
-            targetScreen = anchorWidget->windowHandle()->screen();
-        }
-        anchorSource = QStringLiteral("parent_window");
-    }
-
-    const auto tryFindTopLevelWindow = [dialog](bool requireActive, bool allowToolWindows) -> QWindow* {
-        const auto windows = QGuiApplication::topLevelWindows();
-        for (QWindow* window : windows) {
-            if (window == nullptr
-                || window == dialog->windowHandle()
-                || !window->isVisible()
-                || window->visibility() == QWindow::Hidden
-                || window->visibility() == QWindow::Minimized) {
-                continue;
-            }
-            const Qt::WindowFlags flags = window->flags();
-            if (!allowToolWindows && (flags.testFlag(Qt::Tool) || flags.testFlag(Qt::Popup))) {
-                continue;
-            }
-            if (requireActive && !window->isActive()) {
-                continue;
-            }
-            return window;
-        }
-        return nullptr;
-    };
-
-    if (!anchorRect.isValid()) {
-        if (QWindow* topLevelWindow = tryFindTopLevelWindow(true, false); topLevelWindow != nullptr) {
-            anchorRect = topLevelWindow->frameGeometry();
-            targetScreen = topLevelWindow->screen();
-            anchorSource = QStringLiteral("active_non_tool_qwindow");
-        }
-    }
-    if (!anchorRect.isValid()) {
-        if (QWindow* topLevelWindow = tryFindTopLevelWindow(false, false); topLevelWindow != nullptr) {
-            anchorRect = topLevelWindow->frameGeometry();
-            targetScreen = topLevelWindow->screen();
-            anchorSource = QStringLiteral("visible_non_tool_qwindow");
-        }
-    }
-    if (!anchorRect.isValid()) {
-        if (QWidget* activeWidget = QApplication::activeWindow();
-            activeWidget != nullptr
-            && activeWidget != dialog
-            && activeWidget->isVisible()
-            && !activeWidget->windowState().testFlag(Qt::WindowMinimized)
-            && !activeWidget->windowFlags().testFlag(Qt::Tool)) {
-            anchorRect = activeWidget->frameGeometry();
-            anchorWidget = activeWidget;
-            if (activeWidget->windowHandle() != nullptr) {
-                targetScreen = activeWidget->windowHandle()->screen();
-            }
-            anchorSource = QStringLiteral("active_qwidget");
-        }
-    }
-    if (!anchorRect.isValid()) {
-        if (QWindow* topLevelWindow = tryFindTopLevelWindow(false, true); topLevelWindow != nullptr) {
-            anchorRect = topLevelWindow->frameGeometry();
-            targetScreen = topLevelWindow->screen();
-            anchorSource = QStringLiteral("visible_tool_qwindow");
-        }
-    }
-    if (!anchorRect.isValid()) {
-        if (QScreen* screen = QGuiApplication::primaryScreen(); screen != nullptr) {
-            anchorRect = screen->availableGeometry();
-            targetScreen = screen;
-            anchorSource = QStringLiteral("primary_screen");
-        }
-    }
-    appendDialogAnchorLog(
-        QString("title=%1 source=%2 rect=[%3,%4 %5x%6] parent_vis=%7 parent_title=%8")
-            .arg(dialog->windowTitle())
-            .arg(anchorSource.isEmpty() ? QStringLiteral("none") : anchorSource)
-            .arg(anchorRect.x())
-            .arg(anchorRect.y())
-            .arg(anchorRect.width())
-            .arg(anchorRect.height())
-            .arg(parent != nullptr && parent->window() != nullptr && parent->window()->isVisible() ? 1 : 0)
-            .arg(parent != nullptr && parent->window() != nullptr ? parent->window()->windowTitle() : QStringLiteral("(null)"))
-    );
-    if (anchorRect.isValid()) {
-        QPoint targetTopLeft(
-            anchorRect.center().x() - dialog->width() / 2,
-            anchorRect.center().y() - dialog->height() / 2
-        );
-        if (targetScreen == nullptr) {
-            targetScreen = QGuiApplication::screenAt(anchorRect.center());
-        }
-        if (targetScreen == nullptr && anchorWidget != nullptr && anchorWidget->windowHandle() != nullptr) {
-            targetScreen = anchorWidget->windowHandle()->screen();
-        }
-        if (targetScreen != nullptr) {
-            const QRect avail = targetScreen->availableGeometry();
-            targetTopLeft.setX(qBound(avail.left(), targetTopLeft.x(), avail.right() - dialog->width() + 1));
-            targetTopLeft.setY(qBound(avail.top(), targetTopLeft.y(), avail.bottom() - dialog->height() + 1));
-        }
-        appendDialogAnchorLog(
-            QString("title=%1 target=[%2,%3 %4x%5] screen=%6")
-                .arg(dialog->windowTitle())
-                .arg(targetTopLeft.x())
-                .arg(targetTopLeft.y())
-                .arg(dialog->width())
-                .arg(dialog->height())
-                .arg(targetScreen != nullptr ? targetScreen->name() : QStringLiteral("(null)"))
-        );
-        dialog->move(targetTopLeft);
-    }
-}
-
 QMessageBox::StandardButton showCenteredLocalizedMessageBox(
     QMessageBox::Icon icon,
     QWidget* parent,
@@ -1100,12 +603,13 @@ QMessageBox::StandardButton showCenteredLocalizedMessageBox(
     QMessageBox::StandardButton defaultButton = QMessageBox::NoButton
 )
 {
-    QMessageBox dialog(icon, title, message, QMessageBox::NoButton, parent);
+    QMessageBox dialog(icon, title, message, QMessageBox::NoButton, UiDialogs::effectiveParentWidget(parent));
     dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     dialog.setStandardButtons(buttons);
     if (defaultButton != QMessageBox::NoButton) {
         dialog.setDefaultButton(defaultButton);
     }
+    UiDialogs::prepareDialogWindow(&dialog, parent);
     UiDialogs::localizeMessageBox(&dialog);
     centerDialogOnAnchor(&dialog, parent);
 
@@ -1314,178 +818,6 @@ QString buildExportProgressLabelTextForUiLanguage(
     return QStringLiteral("%1\n%2").arg(text, etaLine);
 }
 
-QFont editorFont(int pointSize = -1)
-{
-#ifdef Q_OS_MACOS
-    QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    if (!QFontInfo(font).fixedPitch()) {
-        for (const QString& family : QStringList{"SF Mono", "Menlo", "Monaco", "Noto Sans Mono", "JetBrains Mono"}) {
-            font.setFamily(family);
-            if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0 && QFontInfo(font).fixedPitch()) {
-                break;
-            }
-        }
-    }
-    font.setStyleHint(QFont::Monospace);
-    font.setFixedPitch(true);
-    font.setPointSize(pointSize > 0 ? pointSize : 13);
-    font.setStyleStrategy(QFont::PreferAntialias);
-    font.setHintingPreference(QFont::PreferNoHinting);
-    return font;
-#else
-    static const QString embeddedConsolasFamily = []() -> QString {
-        const int fontId = QFontDatabase::addApplicationFont(":/fonts/consola.ttf");
-        if (fontId < 0) {
-            return QString();
-        }
-        const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
-        if (families.isEmpty()) {
-            return QString();
-        }
-        return families.first();
-    }();
-
-    QFont font;
-    if (!embeddedConsolasFamily.isEmpty()) {
-        font.setFamily(embeddedConsolasFamily);
-    } else {
-        font.setFamily("Consolas");
-        if (!QFontInfo(font).exactMatch()) {
-            font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-        }
-    }
-    font.setStyleHint(QFont::Monospace);
-    font.setFixedPitch(true);
-    font.setPointSize(pointSize > 0 ? pointSize : 11);
-    return font;
-#endif
-}
-
-int blockSpacingPixelsForPointSize(int pointSize, double spacingFactor)
-{
-    const int baseSpacing = qBound(1, qRound(static_cast<double>(pointSize) * 0.18), 6);
-    return qMax(0, qRound(static_cast<double>(baseSpacing) * qMax(0.0, spacingFactor)));
-}
-
-void applyBlockSpacingToTextEdit(QTextEdit* editor, int blockSpacingPixels)
-{
-    if (editor == nullptr || editor->document() == nullptr) {
-        return;
-    }
-    QSignalBlocker blocker(editor);
-    QTextCursor cursor(editor->document());
-    cursor.beginEditBlock();
-    cursor.select(QTextCursor::Document);
-    QTextBlockFormat fmt;
-    fmt.setBottomMargin(static_cast<qreal>(qMax(0, blockSpacingPixels)));
-    cursor.mergeBlockFormat(fmt);
-    cursor.endEditBlock();
-}
-
-QFont uiOutputFont()
-{
-#ifdef Q_OS_MACOS
-    QFont font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
-    font.setPointSize(12);
-    font.setStyleStrategy(QFont::PreferAntialias);
-    font.setHintingPreference(QFont::PreferNoHinting);
-    return font;
-#else
-    QFont font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
-    if (UiText::isChineseUi()) {
-        for (const QString& family : QStringList{"Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC"}) {
-            font.setFamily(family);
-            if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0) {
-                break;
-            }
-        }
-    }
-    font.setStyleStrategy(QFont::PreferAntialias);
-    font.setHintingPreference(QFont::PreferNoHinting);
-    font.setPointSize(11);
-    return font;
-#endif
-}
-
-QFont uiAccentFont(int pointSize, QFont::Weight weight = QFont::Medium)
-{
-#ifdef Q_OS_MACOS
-    QFont font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
-    if (UiText::isChineseUi()) {
-        for (const QString& family : QStringList{"PingFang SC", "Hiragino Sans GB"}) {
-            font.setFamily(family);
-            if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0) {
-                break;
-            }
-        }
-    }
-    font.setPointSize(pointSize + ((pointSize <= 11) ? 1 : 0));
-    font.setWeight(weight);
-    font.setStyleStrategy(QFont::PreferAntialias);
-    font.setHintingPreference(QFont::PreferNoHinting);
-    return font;
-#else
-    QFont font;
-    QStringList familyCandidates;
-    if (UiText::isChineseUi()) {
-        familyCandidates << "Microsoft YaHei UI" << "Microsoft YaHei" << "PingFang SC" << "Noto Sans CJK SC";
-    }
-    familyCandidates << "Segoe UI Variable Text" << "Segoe UI";
-    for (const QString& family : familyCandidates) {
-        font.setFamily(family);
-        if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0) {
-            break;
-        }
-    }
-    if (font.family().isEmpty()) {
-        font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);
-    }
-    font.setPointSize(pointSize);
-    font.setWeight(weight);
-    font.setStyleStrategy(QFont::PreferAntialias);
-    font.setHintingPreference(QFont::PreferNoHinting);
-    return font;
-#endif
-}
-
-QFont uiMonoFont(int pointSize, QFont::Weight weight = QFont::Medium)
-{
-#ifdef Q_OS_MACOS
-    QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    if (!QFontInfo(font).fixedPitch()) {
-        for (const QString& family : QStringList{"SF Mono", "Menlo", "Monaco", "Noto Sans Mono", "JetBrains Mono"}) {
-            font.setFamily(family);
-            if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0 && QFontInfo(font).fixedPitch()) {
-                break;
-            }
-        }
-    }
-    font.setPointSize(pointSize + 1);
-    font.setWeight(weight);
-    font.setStyleHint(QFont::Monospace);
-    font.setFixedPitch(true);
-    font.setStyleStrategy(QFont::PreferAntialias);
-    font.setHintingPreference(QFont::PreferNoHinting);
-    return font;
-#else
-    QFont font;
-    for (const QString& family : QStringList{"Cascadia Mono", "JetBrains Mono", "Cascadia Code", "Consolas"}) {
-        font.setFamily(family);
-        if (QFontInfo(font).family().compare(family, Qt::CaseInsensitive) == 0) {
-            break;
-        }
-    }
-    if (font.family().isEmpty()) {
-        font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-    }
-    font.setPointSize(pointSize);
-    font.setWeight(weight);
-    font.setStyleHint(QFont::Monospace);
-    font.setFixedPitch(true);
-    return font;
-#endif
-}
-
 QByteArray noteMarkerSignature(const QVector<TimelineNoteMarker>& notes)
 {
     QByteArray signature;
@@ -1665,207 +997,6 @@ QString readTextFileWithFallbackEncoding(const QString& path, bool* usedSystemEn
     return systemDecoder.decode(bytes);
 }
 
-struct PreparedDocumentOpenPayload {
-    bool success = false;
-    bool usedSystemEncoding = false;
-    QString normalizedPath;
-    SimaiDocument document;
-    QString resolvedTrackPath;
-    double trackDurationSeconds = 0.0;
-    bool hasTrackDuration = false;
-    qint64 readElapsedMs = 0;
-    qint64 decodeElapsedMs = 0;
-    qint64 parseElapsedMs = 0;
-    qint64 trackProbeElapsedMs = 0;
-    qint64 totalElapsedMs = 0;
-};
-
-qint64 fileLastModifiedMs(const QFileInfo& fileInfo)
-{
-    return fileInfo.exists() ? fileInfo.lastModified().toMSecsSinceEpoch() : -1;
-}
-
-double probeAudioDurationSeconds(const QString& trackPath)
-{
-    if (trackPath.isEmpty() || !QFileInfo::exists(trackPath)) {
-        return 0.0;
-    }
-
-    const QByteArray pathBytes = QFile::encodeName(trackPath);
-    ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 1, 48000);
-    ma_decoder decoder;
-    if (ma_decoder_init_file(pathBytes.constData(), &config, &decoder) != MA_SUCCESS) {
-        return 0.0;
-    }
-
-    ma_uint64 totalFrames = 0;
-    const bool ok = ma_decoder_get_length_in_pcm_frames(&decoder, &totalFrames) == MA_SUCCESS
-        && totalFrames > 0;
-    ma_decoder_uninit(&decoder);
-    if (!ok) {
-        return 0.0;
-    }
-
-    return static_cast<double>(totalFrames) / 48000.0;
-}
-
-PreparedDocumentOpenPayload prepareDocumentOpenPayload(const QString& path, bool probeTrackDuration)
-{
-    PreparedDocumentOpenPayload payload;
-    payload.normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
-    if (payload.normalizedPath.isEmpty()) {
-        return payload;
-    }
-
-    QFile file(payload.normalizedPath);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        return payload;
-    }
-
-    QElapsedTimer totalTimer;
-    totalTimer.start();
-    QElapsedTimer phaseTimer;
-    phaseTimer.start();
-    const QByteArray bytes = file.readAll();
-    payload.readElapsedMs = phaseTimer.elapsed();
-
-    phaseTimer.restart();
-    QString text;
-    if (bytes.startsWith("\xEF\xBB\xBF")) {
-        text = QString::fromUtf8(bytes.mid(3));
-    } else {
-        QStringDecoder utf8Decoder(QStringConverter::Utf8);
-        text = utf8Decoder.decode(bytes);
-        if (utf8Decoder.hasError()) {
-            QStringDecoder systemDecoder(QStringConverter::System);
-            text = systemDecoder.decode(bytes);
-            payload.usedSystemEncoding = true;
-        }
-    }
-    payload.decodeElapsedMs = phaseTimer.elapsed();
-
-    phaseTimer.restart();
-    payload.document = SimaiDocument::fromText(text);
-    payload.parseElapsedMs = phaseTimer.elapsed();
-
-    if (probeTrackDuration) {
-        payload.resolvedTrackPath = miacode::chart_assets::resolveTrackPath(payload.normalizedPath);
-        phaseTimer.restart();
-        if (!payload.resolvedTrackPath.isEmpty()) {
-            payload.trackDurationSeconds = probeAudioDurationSeconds(payload.resolvedTrackPath);
-            payload.hasTrackDuration = payload.trackDurationSeconds > 0.0;
-        }
-        payload.trackProbeElapsedMs = phaseTimer.elapsed();
-    }
-
-    payload.totalElapsedMs = totalTimer.elapsed();
-    payload.success = true;
-    return payload;
-}
-
-QVector<float> buildWaveformPeaks(const QString& trackPath, double* durationSeconds, int peakCount = 1024)
-{
-    QVector<float> peaks;
-    if (durationSeconds != nullptr) {
-        *durationSeconds = 0.0;
-    }
-    if (trackPath.isEmpty() || !QFileInfo::exists(trackPath) || peakCount <= 0) {
-        return peaks;
-    }
-
-    const QByteArray pathBytes = QFile::encodeName(trackPath);
-    ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 1, 48000);
-    ma_decoder decoder;
-    if (ma_decoder_init_file(pathBytes.constData(), &config, &decoder) != MA_SUCCESS) {
-        return peaks;
-    }
-
-    ma_uint64 totalFrames = 0;
-    if (ma_decoder_get_length_in_pcm_frames(&decoder, &totalFrames) != MA_SUCCESS || totalFrames == 0) {
-        ma_decoder_uninit(&decoder);
-        return peaks;
-    }
-
-    const double sampleRate = 48000.0;
-    if (durationSeconds != nullptr) {
-        *durationSeconds = static_cast<double>(totalFrames) / sampleRate;
-    }
-    peaks.fill(0.0f, peakCount);
-    constexpr ma_uint64 kChunkFrames = 4096;
-    QVector<float> buffer(static_cast<int>(kChunkFrames), 0.0f);
-    ma_uint64 frameCursor = 0;
-
-    while (frameCursor < totalFrames) {
-        ma_uint64 framesRead = 0;
-        if (ma_decoder_read_pcm_frames(&decoder, buffer.data(), kChunkFrames, &framesRead) != MA_SUCCESS || framesRead == 0) {
-            break;
-        }
-        for (ma_uint64 i = 0; i < framesRead; ++i) {
-            const ma_uint64 absoluteFrame = frameCursor + i;
-            const int binIndex = qBound(
-                0,
-                static_cast<int>((absoluteFrame * peakCount) / qMax<ma_uint64>(1, totalFrames)),
-                peakCount - 1
-            );
-            peaks[binIndex] = qMax(peaks[binIndex], qAbs(buffer[static_cast<int>(i)]));
-        }
-        frameCursor += framesRead;
-    }
-
-    ma_decoder_uninit(&decoder);
-    return peaks;
-}
-
-QIcon makePreviewPlayIcon(const QColor& color)
-{
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(color);
-    painter.drawPolygon(QPolygonF{
-        QPointF(5.0, 3.0),
-        QPointF(15.5, 10.0),
-        QPointF(5.0, 17.0),
-    });
-    return QIcon(pixmap);
-}
-
-QIcon makePreviewStopIcon(const QColor& color)
-{
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(color);
-    painter.drawRoundedRect(QRectF(4.5, 4.5, 11.0, 11.0), 1.8, 1.8);
-    return QIcon(pixmap);
-}
-
-QColor difficultyColor(int difficultyId)
-{
-    switch (difficultyId) {
-    case 1:
-        return QColor("#69A6FF");
-    case 2:
-        return QColor("#78C85A");
-    case 3:
-        return QColor("#DCC548");
-    case 4:
-        return QColor("#E35C50");
-    case 5:
-        return QColor("#7A4FD1");
-    case 6:
-        return QColor("#D548B6");
-    case 7:
-        return QColor("#E29A46");
-    default:
-        return QColor("#8A8F98");
-    }
-}
-
 QIcon makeRecycleTrashIcon(const QColor& color)
 {
     QPixmap pixmap(20, 16);
@@ -1897,70 +1028,6 @@ QIcon makeRecycleTrashIcon(const QColor& color)
     return QIcon(pixmap);
 }
 
-QIcon makeOutlineCloseIcon(const QColor& color)
-{
-    QPixmap pixmap(12, 12);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    QPen pen(color, 1.6);
-    pen.setCapStyle(Qt::RoundCap);
-    painter.setPen(pen);
-    painter.drawLine(QPointF(3.0, 3.0), QPointF(9.0, 9.0));
-    painter.drawLine(QPointF(9.0, 3.0), QPointF(3.0, 9.0));
-    return QIcon(pixmap);
-}
-
-QIcon makeMenuSelectionCheckIcon(const QColor& color, bool visible)
-{
-    QPixmap pixmap(14, 14);
-    pixmap.fill(Qt::transparent);
-    if (visible) {
-        QPainter painter(&pixmap);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        QPen pen(color, 1.8);
-        pen.setCapStyle(Qt::RoundCap);
-        pen.setJoinStyle(Qt::RoundJoin);
-        painter.setPen(pen);
-        painter.drawLine(QPointF(5.0, 7.4), QPointF(7.7, 10.1));
-        painter.drawLine(QPointF(7.7, 10.1), QPointF(12.4, 4.4));
-    }
-    return QIcon(pixmap);
-}
-
-QPixmap makeDifficultyBadgePixmap(int difficultyId)
-{
-    const QColor fill = difficultyColor(difficultyId);
-    const qreal dpr = qApp != nullptr ? qApp->devicePixelRatio() : 1.0;
-    QImage image(static_cast<int>(14 * dpr), static_cast<int>(14 * dpr), QImage::Format_ARGB32_Premultiplied);
-    image.fill(Qt::transparent);
-    QPainter painter(&image);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(fill);
-    painter.setCompositionMode(QPainter::CompositionMode_Source);
-    painter.drawRoundedRect(QRectF(2.0 * dpr, 2.0 * dpr, 10.0 * dpr, 10.0 * dpr), 3.0 * dpr, 3.0 * dpr);
-    painter.end();
-    QPixmap pixmap = QPixmap::fromImage(image);
-    pixmap.setDevicePixelRatio(dpr);
-    return pixmap;
-}
-
-QIcon makeDifficultyBadgeIcon(int difficultyId)
-{
-    const QPixmap pixmap = makeDifficultyBadgePixmap(difficultyId);
-    QIcon icon;
-    icon.addPixmap(pixmap, QIcon::Normal, QIcon::Off);
-    icon.addPixmap(pixmap, QIcon::Normal, QIcon::On);
-    icon.addPixmap(pixmap, QIcon::Selected, QIcon::Off);
-    icon.addPixmap(pixmap, QIcon::Selected, QIcon::On);
-    icon.addPixmap(pixmap, QIcon::Active, QIcon::Off);
-    icon.addPixmap(pixmap, QIcon::Active, QIcon::On);
-    icon.addPixmap(pixmap, QIcon::Disabled, QIcon::Off);
-    icon.addPixmap(pixmap, QIcon::Disabled, QIcon::On);
-    return icon;
-}
-
 QIcon makePreviewCursorIcon(const QColor& color)
 {
     QPixmap pixmap(20, 20);
@@ -1985,293 +1052,6 @@ QIcon makePreviewCursorIcon(const QColor& color)
     });
     painter.end();
     return QIcon(pixmap);
-}
-
-QIcon makePreviewPauseIcon(const QColor& color)
-{
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(color);
-    painter.drawRoundedRect(QRectF(5.0, 3.0, 3.5, 14.0), 1.2, 1.2);
-    painter.drawRoundedRect(QRectF(11.5, 3.0, 3.5, 14.0), 1.2, 1.2);
-    return QIcon(pixmap);
-}
-
-QIcon makePreviewResumeIcon(const QColor& color)
-{
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(color);
-    painter.drawRoundedRect(QRectF(3.0, 4.0, 2.6, 12.0), 1.0, 1.0);
-    painter.drawPolygon(QPolygonF{
-        QPointF(7.5, 3.0),
-        QPointF(16.5, 10.0),
-        QPointF(7.5, 17.0),
-    });
-    return QIcon(pixmap);
-}
-
-QIcon makePreviewEnterFullscreenIcon(const QColor& color)
-{
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    QPen pen(color, 1.7);
-    pen.setCapStyle(Qt::RoundCap);
-    pen.setJoinStyle(Qt::RoundJoin);
-    painter.setPen(pen);
-    painter.setBrush(Qt::NoBrush);
-    painter.drawLine(QPointF(7.8, 4.8), QPointF(4.8, 4.8));
-    painter.drawLine(QPointF(4.8, 4.8), QPointF(4.8, 7.8));
-    painter.drawLine(QPointF(12.2, 4.8), QPointF(15.2, 4.8));
-    painter.drawLine(QPointF(15.2, 4.8), QPointF(15.2, 7.8));
-    painter.drawLine(QPointF(4.8, 12.2), QPointF(4.8, 15.2));
-    painter.drawLine(QPointF(4.8, 15.2), QPointF(7.8, 15.2));
-    painter.drawLine(QPointF(12.2, 15.2), QPointF(15.2, 15.2));
-    painter.drawLine(QPointF(15.2, 12.2), QPointF(15.2, 15.2));
-    return QIcon(pixmap);
-}
-
-QIcon makePreviewExitFullscreenIcon(const QColor& color)
-{
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    QPen pen(color, 1.7);
-    pen.setCapStyle(Qt::RoundCap);
-    pen.setJoinStyle(Qt::RoundJoin);
-    painter.setPen(pen);
-    painter.setBrush(Qt::NoBrush);
-    painter.drawLine(QPointF(8.2, 4.8), QPointF(8.2, 8.2));
-    painter.drawLine(QPointF(4.8, 8.2), QPointF(8.2, 8.2));
-    painter.drawLine(QPointF(11.8, 4.8), QPointF(11.8, 8.2));
-    painter.drawLine(QPointF(11.8, 8.2), QPointF(15.2, 8.2));
-    painter.drawLine(QPointF(4.8, 11.8), QPointF(8.2, 11.8));
-    painter.drawLine(QPointF(8.2, 11.8), QPointF(8.2, 15.2));
-    painter.drawLine(QPointF(11.8, 11.8), QPointF(15.2, 11.8));
-    painter.drawLine(QPointF(11.8, 11.8), QPointF(11.8, 15.2));
-    return QIcon(pixmap);
-}
-
-QIcon makeSettingsGearIcon(const QColor& color)
-{
-    QPixmap pixmap(18, 18);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    QPen pen(color, 1.5);
-    pen.setCapStyle(Qt::RoundCap);
-    painter.setPen(pen);
-    painter.setBrush(Qt::NoBrush);
-    painter.drawEllipse(QPointF(9.0, 9.0), 3.0, 3.0);
-    for (int i = 0; i < 8; ++i) {
-        const qreal angle = (i * 45.0) * 0.017453292519943295;
-        const QPointF outer(9.0 + qCos(angle) * 7.0, 9.0 + qSin(angle) * 7.0);
-        const QPointF inner(9.0 + qCos(angle) * 5.0, 9.0 + qSin(angle) * 5.0);
-        painter.drawLine(inner, outer);
-    }
-    painter.end();
-    return QIcon(pixmap);
-}
-
-QIcon makeToolboxAccessIcon(const QColor& toolboxColor, const QColor& gearColor)
-{
-    QPixmap pixmap(24, 24);
-    pixmap.fill(Qt::transparent);
-
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-
-    QPen toolboxPen(toolboxColor, 1.8);
-    toolboxPen.setCapStyle(Qt::RoundCap);
-    toolboxPen.setJoinStyle(Qt::RoundJoin);
-    painter.setPen(toolboxPen);
-    painter.setBrush(Qt::NoBrush);
-    painter.drawRoundedRect(QRectF(4.0, 9.0, 11.8, 7.8), 2.2, 2.2);
-    painter.drawRoundedRect(QRectF(6.6, 6.0, 6.4, 3.5), 1.3, 1.3);
-    painter.drawLine(QPointF(4.2, 10.9), QPointF(15.6, 10.9));
-
-    const QPointF gearCenter(17.0, 16.4);
-    QPen gearPen(gearColor, 1.35);
-    gearPen.setCapStyle(Qt::RoundCap);
-    gearPen.setJoinStyle(Qt::RoundJoin);
-    painter.setPen(gearPen);
-    painter.drawEllipse(gearCenter, 2.35, 2.35);
-    for (int i = 0; i < 8; ++i) {
-        const qreal angle = (i * 45.0) * 0.017453292519943295;
-        const QPointF inner(gearCenter.x() + qCos(angle) * 3.1, gearCenter.y() + qSin(angle) * 3.1);
-        const QPointF outer(gearCenter.x() + qCos(angle) * 4.25, gearCenter.y() + qSin(angle) * 4.25);
-        painter.drawLine(inner, outer);
-    }
-
-    painter.end();
-    return QIcon(pixmap);
-}
-
-QIcon makeTransformMirrorLeftRightIcon(const QColor& color)
-{
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter p(&pixmap);
-    p.setRenderHint(QPainter::Antialiasing, true);
-    QPen pen(color, 1.7);
-    pen.setCapStyle(Qt::RoundCap);
-    pen.setJoinStyle(Qt::RoundJoin);
-    p.setPen(pen);
-    p.drawLine(QPointF(4.2, 10.0), QPointF(15.8, 10.0));
-    p.drawLine(QPointF(5.9, 8.3), QPointF(4.2, 10.0));
-    p.drawLine(QPointF(5.9, 11.7), QPointF(4.2, 10.0));
-    p.drawLine(QPointF(14.1, 8.3), QPointF(15.8, 10.0));
-    p.drawLine(QPointF(14.1, 11.7), QPointF(15.8, 10.0));
-    p.end();
-    return QIcon(pixmap);
-}
-
-QIcon makeTransformMirrorUpDownIcon(const QColor& color)
-{
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter p(&pixmap);
-    p.setRenderHint(QPainter::Antialiasing, true);
-    QPen pen(color, 1.7);
-    pen.setCapStyle(Qt::RoundCap);
-    pen.setJoinStyle(Qt::RoundJoin);
-    p.setPen(pen);
-    p.drawLine(QPointF(10.0, 4.2), QPointF(10.0, 15.8));
-    p.drawLine(QPointF(8.3, 5.9), QPointF(10.0, 4.2));
-    p.drawLine(QPointF(11.7, 5.9), QPointF(10.0, 4.2));
-    p.drawLine(QPointF(8.3, 14.1), QPointF(10.0, 15.8));
-    p.drawLine(QPointF(11.7, 14.1), QPointF(10.0, 15.8));
-    p.end();
-    return QIcon(pixmap);
-}
-
-QIcon makeTransformRotate180Icon(const QColor& color)
-{
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter p(&pixmap);
-    p.setRenderHint(QPainter::Antialiasing, true);
-    QPen pen(color, 1.6);
-    pen.setCapStyle(Qt::RoundCap);
-    pen.setJoinStyle(Qt::RoundJoin);
-    p.setPen(pen);
-    p.drawArc(QRectF(3.6, 3.6, 12.8, 12.8), 35 * 16, 150 * 16);
-    p.drawArc(QRectF(3.6, 3.6, 12.8, 12.8), 215 * 16, 150 * 16);
-    p.setPen(Qt::NoPen);
-    p.setBrush(color);
-    p.drawPolygon(QPolygonF{
-        QPointF(15.9, 6.8),
-        QPointF(17.6, 4.9),
-        QPointF(14.9, 4.6),
-    });
-    p.drawPolygon(QPolygonF{
-        QPointF(4.1, 13.2),
-        QPointF(2.4, 15.1),
-        QPointF(5.1, 15.4),
-    });
-    p.end();
-    return QIcon(pixmap);
-}
-
-QPointF pointOnArcPrecise(const QRectF& rect, qreal deg)
-{
-    const qreal rad = qDegreesToRadians(deg);
-    const qreal cx = rect.center().x();
-    const qreal cy = rect.center().y();
-    const qreal rx = rect.width() * 0.5;
-    const qreal ry = rect.height() * 0.5;
-    return QPointF(
-        cx + rx * std::cos(rad),
-        cy - ry * std::sin(rad)
-    );
-}
-
-QPointF tangentOnArcPrecise(const QRectF& rect, qreal deg, qreal sweepDeg)
-{
-    const qreal rad = qDegreesToRadians(deg);
-    const qreal rx = rect.width() * 0.5;
-    const qreal ry = rect.height() * 0.5;
-    QPointF t(
-        -rx * std::sin(rad),
-        -ry * std::cos(rad)
-    );
-    if (sweepDeg < 0.0) {
-        t = -t;
-    }
-    const qreal len = std::hypot(t.x(), t.y());
-    if (len < 1e-6) {
-        return QPointF(1.0, 0.0);
-    }
-    return QPointF(t.x() / len, t.y() / len);
-}
-
-QPixmap makeTransformRotate45Pixmap(const QColor& color, bool clockwise)
-{
-    constexpr qreal logicalSize = 20.0;
-    constexpr qreal dpr = 2.0;
-    QPixmap pixmap(static_cast<int>(logicalSize * dpr), static_cast<int>(logicalSize * dpr));
-    pixmap.setDevicePixelRatio(dpr);
-    pixmap.fill(Qt::transparent);
-    QPainter p(&pixmap);
-    p.setRenderHint(QPainter::Antialiasing, true);
-    const QRectF arcRect(3.4, 3.4, 13.2, 13.2);
-    const qreal startDeg = clockwise ? 42.0 : 138.0;
-    const qreal fullSweepDeg = clockwise ? -250.0 : 250.0;
-    const qreal arcSweepDeg = clockwise ? -236.0 : 236.0;
-
-    QPen pen(color, 1.8, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-    pen.setCapStyle(Qt::RoundCap);
-    pen.setJoinStyle(Qt::RoundJoin);
-    p.setPen(pen);
-    p.setBrush(Qt::NoBrush);
-    p.drawArc(arcRect, qRound(startDeg * 16.0), qRound(arcSweepDeg * 16.0));
-
-    const qreal endDeg = startDeg + arcSweepDeg;
-    const QPointF tip = pointOnArcPrecise(arcRect, endDeg);
-    const QPointF dir = tangentOnArcPrecise(arcRect, endDeg, arcSweepDeg);
-    const QPointF normal(-dir.y(), dir.x());
-    constexpr qreal headLength = 5.2;
-    constexpr qreal headWidth = 4.2;
-    const QPointF baseCenter = tip;
-    const QPointF headTip = baseCenter + dir * headLength;
-    QPolygonF head;
-    head << headTip
-         << (baseCenter + normal * (headWidth * 0.5))
-         << (baseCenter - normal * (headWidth * 0.5));
-    p.setPen(Qt::NoPen);
-    p.setBrush(color);
-    p.drawPolygon(head);
-    p.end();
-    return pixmap;
-}
-
-QIcon makeTransformRotateCcw45Icon(const QColor& color)
-{
-    return QIcon(makeTransformRotate45Pixmap(color, false));
-}
-
-QIcon makeTransformRotateCw45Icon(const QColor& color)
-{
-    return QIcon(makeTransformRotate45Pixmap(color, true));
-}
-
-QString modernScrollBarStyle()
-{
-    return UiTheme::scrollBarStyleSheet();
-}
-
-void styleRoundedMenu(QMenu& menu)
-{
-    UiTheme::styleRoundedMenu(menu);
 }
 
 #ifdef Q_OS_WIN
@@ -2352,12 +1132,228 @@ void applySystemBackdropToWidget(QWidget* widget, bool enabled, bool darkTheme)
 
 bool MainWindow::quickShellRootWindowFrameGeometryAvailable() const
 {
-    return isQuickShellBackendMode() && quickShellRootWindowFrameGeometry_.isValid();
+    return quickShellRootWindowFrameGeometry_.isValid();
 }
 
 QRect MainWindow::quickShellRootWindowFrameGeometry() const
 {
     return quickShellRootWindowFrameGeometry_;
+}
+
+bool MainWindow::confirmShellClose()
+{
+    if (!maybeSaveBeforeContinue()) {
+        return false;
+    }
+    savePortableState();
+    clearVideoExportWorkerState();
+    return true;
+}
+
+void MainWindow::toggleShellPreviewPlayback()
+{
+    onTogglePreviewPause();
+}
+
+void MainWindow::stopShellPreview()
+{
+    onStopPreview();
+}
+
+void MainWindow::seekShellPreview(double second)
+{
+    seekPreviewToSecond(second, true);
+}
+
+void MainWindow::setShellPreviewRate(double rate)
+{
+    applyPreviewPlaybackRate(rate);
+}
+
+void MainWindow::setShellPreviewFullscreen(bool fullscreen)
+{
+    if (previewFullscreenActive_ == fullscreen) {
+        return;
+    }
+    if (fullscreen) {
+        enterPreviewFullscreen();
+    } else {
+        exitPreviewFullscreen();
+    }
+}
+
+bool MainWindow::shellHasShortcut(const QKeySequence& sequence) const
+{
+    if (sequence.isEmpty()) {
+        return false;
+    }
+    for (QAction* action : quickShellShortcutActions()) {
+        if (actionMatchesShortcut(action, sequence)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool MainWindow::shellTriggerShortcut(const QKeySequence& sequence)
+{
+    if (sequence.isEmpty()) {
+        return false;
+    }
+    for (QAction* action : quickShellShortcutActions()) {
+        if (!actionMatchesShortcut(action, sequence)) {
+            continue;
+        }
+        if (!action->isEnabled()) {
+            return true;
+        }
+        action->trigger();
+        return true;
+    }
+    return false;
+}
+
+QString MainWindow::shellWindowTitle() const
+{
+    return windowTitle();
+}
+
+bool MainWindow::shellWorkspacePanelsSwapped() const
+{
+    return workspacePanelsSwapped_;
+}
+
+QString MainWindow::shellPreviewSpeedLabel() const
+{
+    return previewSpeedButton_ != nullptr ? previewSpeedButton_->text() : QStringLiteral("1x");
+}
+
+bool MainWindow::shellPreviewPlaying() const
+{
+    return qtPreviewPlaying_;
+}
+
+double MainWindow::shellPreviewPositionSeconds() const
+{
+    return previewSlider_ != nullptr
+        ? static_cast<double>(previewSlider_->value()) / 1000.0
+        : qtPreviewPauseSecond_;
+}
+
+double MainWindow::shellPreviewDurationSeconds() const
+{
+    return previewDurationSeconds();
+}
+
+bool MainWindow::shellPreviewFullscreen() const
+{
+    return previewFullscreenActive_;
+}
+
+QObject* MainWindow::shellPreviewRuntimeObject() const
+{
+    return previewCanvas_;
+}
+
+QObject* MainWindow::shellPreviewStageMediaHostObject() const
+{
+    return previewStageMediaHost_;
+}
+
+bool MainWindow::shellPreviewUsesSeparateSurface() const
+{
+    return quickShellPreviewUsesSeparateSurface();
+}
+
+QWindow* MainWindow::shellPreviewCompositeWindow() const
+{
+    return quickShellPreviewCompositeWindow();
+}
+
+QWidget* MainWindow::shellWindowWidget() const
+{
+    return const_cast<MainWindow*>(this);
+}
+
+QDockWidget* MainWindow::shellOutlineDockWidget() const
+{
+    return outlineDock_;
+}
+
+bool MainWindow::shellOutlineDockCollapsed() const
+{
+    return outlineDockCollapsed_;
+}
+
+int MainWindow::shellOutlineDockExpandedWidth() const
+{
+    return outlineDockExpandedWidth_;
+}
+
+QWidget* MainWindow::shellWorkspaceWidget() const
+{
+    return previewLeftColumn_;
+}
+
+QWidget* MainWindow::shellPreviewPanelWidget() const
+{
+    return previewPanel_;
+}
+
+QString MainWindow::shellPreviewPanelStyleSheet() const
+{
+    return previewPanel_ != nullptr ? previewPanel_->styleSheet() : QString();
+}
+
+QWidget* MainWindow::shellPreviewControlCardWidget() const
+{
+    return previewControlCard_;
+}
+
+QWidget* MainWindow::shellPreviewStatsCardWidget() const
+{
+    return previewStatsCard_;
+}
+
+QLabel* MainWindow::shellPreviewTotalStatsLabel() const
+{
+    return previewTotalStatsLabel_;
+}
+
+QGridLayout* MainWindow::shellPreviewStatsGridLayout() const
+{
+    return previewStatsGridLayout_;
+}
+
+int MainWindow::shellPreviewStatsMinimumPanelHeight(int panelWidth) const
+{
+    return previewStatsMinimumHeightForPanelWidth(panelWidth);
+}
+
+int MainWindow::shellUpdatePreviewStatsLayout(int hostWidth)
+{
+    return updatePreviewStatsLayoutMode(hostWidth);
+}
+
+double MainWindow::shellNormalizedPreviewCanvasAspectRatio() const
+{
+    return normalizedPreviewCanvasAspectRatio(previewCanvasAspectRatio_);
+}
+
+void MainWindow::shellRefreshLayoutAfterResize()
+{
+    refreshLayoutAfterPageSwitch();
+}
+
+void MainWindow::shellSetRootWindowFrameGeometry(const QRect& geometry)
+{
+    quickShellRootWindowFrameGeometry_ = geometry;
+    setProperty("miacode.quick_root_window_frame_geometry", geometry);
+}
+
+void MainWindow::shellNoteQuickUiReady()
+{
+    noteQuickShellStartupUiReady();
 }
 
 void MainWindow::applyUiTheme()
@@ -2448,9 +1444,6 @@ void MainWindow::applyUiTheme()
     if (previewPanel_ != nullptr) {
         previewPanel_->setStyleSheet(previewPanelStyle);
     }
-    if (quickShellPreviewControlsSurfaceWidget_ != nullptr) {
-        quickShellPreviewControlsSurfaceWidget_->setStyleSheet(previewPanelStyle);
-    }
     const QList<QMenu*> menus = findChildren<QMenu*>();
     for (QMenu* menu : menus) {
         if (menu != nullptr) {
@@ -2540,13 +1533,8 @@ void MainWindow::setOutlineDockCollapsed(bool collapsed)
     }
 
     const int targetWidth = collapsed ? kCollapsedWidth : qMax(kExpandedMinWidth, outlineDockExpandedWidth_);
-    if (isQuickShellBackendMode()) {
-        outlineDock_->setMinimumWidth(targetWidth);
-        outlineDock_->setMaximumWidth(targetWidth);
-    } else {
-        outlineDock_->setMinimumWidth(collapsed ? kCollapsedWidth : kExpandedMinWidth);
-        outlineDock_->setMaximumWidth(collapsed ? kCollapsedWidth : QWIDGETSIZE_MAX);
-    }
+    outlineDock_->setMinimumWidth(targetWidth);
+    outlineDock_->setMaximumWidth(targetWidth);
     outlineDock_->resize(targetWidth, outlineDock_->height());
     if (QWidget* widget = outlineDock_->widget(); widget != nullptr) {
         widget->updateGeometry();
@@ -2685,11 +1673,6 @@ void warmupFileIntoOsCache(const QString& path, qint64 maxBytes = -1)
     }
 }
 
-void appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 deltaMs)
-{
-    miacode::debug_log::appendStartupTimingStage(stage, elapsedMs, deltaMs);
-}
-
 }  // namespace
 
 const MuriAnalysisReport& MainWindow::alignedMuriAnalysisReportForPreview() const
@@ -2715,192 +1698,11 @@ void MainWindow::applyAlignedMuriAnalysisReportToViews()
 MainWindow::~MainWindow()
 {
     shutdownPreviewStageMediaHost();
-    shutdownPreviewMediaController();
-    delete quickShellTopChromeSurfaceWidget_;
-    quickShellTopChromeSurfaceWidget_ = nullptr;
-    delete quickShellWorkspaceSurfaceWidget_;
-    quickShellWorkspaceSurfaceWidget_ = nullptr;
-    delete quickShellPreviewControlsSurfaceWidget_;
-    quickShellPreviewControlsSurfaceWidget_ = nullptr;
-    delete quickShellStatusSurfaceWidget_;
-    quickShellStatusSurfaceWidget_ = nullptr;
-    delete quickShellChartSurfaceWidget_;
-    quickShellChartSurfaceWidget_ = nullptr;
-    delete quickShellTimelineSurfaceWidget_;
-    quickShellTimelineSurfaceWidget_ = nullptr;
 }
 
 void MainWindow::configureRuntimeDebugOutput()
 {
     runtimeDebugOutputEnabled_ = miacode::debug_options::runtimeDebugOutputEnabled();
-}
-
-void MainWindow::dispatchPreviewMediaControllerCall(
-    std::function<void(PreviewMediaController*)> call,
-    Qt::ConnectionType connectionType) const
-{
-    if (previewMediaController_ == nullptr || !call) {
-        return;
-    }
-    PreviewMediaController* controller = previewMediaController_;
-    if (connectionType == Qt::BlockingQueuedConnection && controller->thread() == QThread::currentThread()) {
-        call(controller);
-        return;
-    }
-    QMetaObject::invokeMethod(
-        controller,
-        [controller, call = std::move(call)]() mutable {
-            call(controller);
-        },
-        connectionType
-    );
-}
-
-bool MainWindow::queryPreviewMediaControllerHasVideoMedia() const
-{
-    bool hasVideoMedia = false;
-    dispatchPreviewMediaControllerCall(
-        [&hasVideoMedia](PreviewMediaController* controller) {
-            hasVideoMedia = controller->hasVideoMedia();
-        },
-        Qt::BlockingQueuedConnection
-    );
-    return hasVideoMedia;
-}
-
-double MainWindow::queryPreviewMediaControllerCurrentPlaybackSecond() const
-{
-    double second = 0.0;
-    dispatchPreviewMediaControllerCall(
-        [&second](PreviewMediaController* controller) {
-            second = controller->currentPlaybackSecond();
-        },
-        Qt::BlockingQueuedConnection
-    );
-    return second;
-}
-
-void MainWindow::ensurePreviewMediaControllerInitialized()
-{
-    if (previewMediaController_ != nullptr) {
-        return;
-    }
-
-    if (previewMediaControllerThread_ == nullptr) {
-        previewMediaControllerThread_ = new QThread(this);
-        previewMediaControllerThread_->setObjectName(QStringLiteral("PreviewMediaControllerThread"));
-        previewMediaControllerThread_->start();
-    }
-
-#ifdef HAVE_QT_MULTIMEDIA
-    qRegisterMetaType<QVideoFrame>("QVideoFrame");
-#endif
-
-    previewMediaController_ = new PreviewMediaController();
-    previewMediaController_->moveToThread(previewMediaControllerThread_);
-
-    connect(previewMediaController_, &PreviewMediaController::mediaStateChanged, this, [this](bool hasResolvedMedia, bool) {
-        if (previewCanvas_ != nullptr) {
-            previewCanvas_->setStageMediaAvailable(hasResolvedMedia);
-        }
-    });
-    connect(previewMediaController_, &PreviewMediaController::frameChanged, this, [this](const QImage& frame) {
-        if (previewCanvas_ == nullptr) {
-            return;
-        }
-        previewCanvas_->setMediaFrame(frame);
-        previewCanvas_->update();
-    });
-#ifdef HAVE_QT_MULTIMEDIA
-    connect(
-        previewMediaController_,
-        &PreviewMediaController::resolvedStageVideoFrameChanged,
-        this,
-        [this](const QVideoFrame& frame, const QImage& resolvedImage, bool cacheable, quint64 serial, double toImageMs) {
-            if (previewCanvas_ == nullptr) {
-                return;
-            }
-            previewCanvas_->setResolvedStageVideoFrame(frame, resolvedImage, cacheable, serial, toImageMs);
-            if (!qtPreviewPlaying_) {
-                previewCanvas_->update();
-            }
-        }
-    );
-    connect(previewMediaController_, &PreviewMediaController::videoFallbackFrameChanged, this, [this](const QImage& frame) {
-        if (previewCanvas_ == nullptr) {
-            return;
-        }
-        previewCanvas_->setRetainedVideoFallbackFrame(frame);
-    });
-#endif
-    connect(
-        previewMediaController_,
-        &PreviewMediaController::backgroundBrightnessChanged,
-        previewCanvas_,
-        &PreviewRuntime::setBackgroundBrightnessOuter
-    );
-    connect(previewMediaController_, &PreviewMediaController::playbackPositionChanged, this, [this](double second) {
-        if (qtPreviewPlaying_) {
-            return;
-        }
-        if (pausedPreviewMediaSeekPending_) {
-            if (qAbs(second - pausedPreviewMediaSeekSecond_) > 0.05) {
-                return;
-            }
-            second = pausedPreviewMediaSeekSecond_;
-            pausedPreviewMediaSeekPending_ = false;
-        }
-        qtPreviewStartSecond_ = second;
-        qtPreviewElapsed_.restart();
-        applyQtPreviewPosition(second, true);
-    });
-    connect(previewMediaController_, &PreviewMediaController::playbackFinished, this, [this]() {
-        finishQtPreviewPlaybackAndReturnToEntry("Qt preview reached the end of current media.");
-    });
-
-    if (previewCanvas_ != nullptr) {
-        previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
-        previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
-        previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
-        previewCanvas_->setNoteFlowSpeed(previewNoteFlowSpeed_);
-    }
-
-    dispatchPreviewMediaControllerCall([this](PreviewMediaController* controller) {
-        controller->initializeBackendObjects();
-        controller->setWarmupResolvedMediaPath(previewMediaWarmupChartPath_, previewMediaWarmupResolvedPath_);
-        controller->setBackgroundTrackVolume(previewAudioSettings_.bgmVolume);
-        controller->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
-        controller->setBackgroundTrackPath(lastTrackPath_);
-        controller->setBackgroundBrightness(previewBackgroundBrightnessOuter_);
-        controller->setTimelineOffsetSeconds(0.0);
-        controller->setChartPath(currentFilePath_);
-        controller->setPlayheadSeconds(qtPreviewPauseSecond_);
-    });
-}
-
-void MainWindow::shutdownPreviewMediaController()
-{
-    if (previewMediaController_ != nullptr) {
-        PreviewMediaController* controller = previewMediaController_;
-        previewMediaController_ = nullptr;
-        if (previewMediaControllerThread_ != nullptr && previewMediaControllerThread_->isRunning()) {
-            QMetaObject::invokeMethod(
-                controller,
-                [controller]() {
-                    delete controller;
-                },
-                Qt::BlockingQueuedConnection
-            );
-        } else {
-            delete controller;
-        }
-    }
-    if (previewMediaControllerThread_ != nullptr) {
-        previewMediaControllerThread_->quit();
-        previewMediaControllerThread_->wait();
-        delete previewMediaControllerThread_;
-        previewMediaControllerThread_ = nullptr;
-    }
 }
 
 void MainWindow::ensurePreviewSfxRuntimePrepared()
@@ -3241,7 +2043,6 @@ void MainWindow::logTopLevelWindowSnapshot(const QString& tag)
     appendOutput("window/top_levels", lines.join('\n'));
 }
 
-#include "sections/frame/MainWindow.BootstrapAndMenus.cpp"
 void MainWindow::closeEvent(QCloseEvent* event)
 {
     logWindowGeometryDebug("close_event_enter");
@@ -3292,164 +2093,63 @@ bool MainWindow::preparePreviewStartState()
     return false;
 }
 
-bool MainWindow::isQuickShellBackendMode() const
+QList<QAction*> MainWindow::quickShellShortcutActions() const
 {
-    return frontendHostMode_ == FrontendHostMode::QuickShellBackend;
+    return {
+        newAction_,
+        openAction_,
+        saveAction_,
+        saveAsAction_,
+        findReplaceAction_,
+        validateAction_,
+        transformMirrorLeftRightAction_,
+        transformMirrorUpDownAction_,
+        transformRotate180Action_,
+        transformRotate45CounterClockwiseAction_,
+        transformRotate45ClockwiseAction_,
+        normalizeWholeChartAction_,
+        transformToggleBreakAction_,
+        transformToggleExAction_,
+        transformToggleFireworkAction_,
+        transformRandomRotateAction_,
+        stopPreviewAction_,
+        pausePreviewAction_,
+        previewSlowerAction_,
+        previewFasterAction_,
+        exportVideoAction_,
+        latencyDetectorAction_,
+        previewAudioSettingsAction_,
+        previewVideoSettingsAction_,
+        swapWorkspaceSidesAction_,
+        preferencesAction_,
+        aboutAction_,
+    };
 }
 
-void MainWindow::initializeQuickShellNativeRegions()
+void MainWindow::refreshQuickShellRehostedWidgetParent(QWidget* widget)
 {
-    if (!isQuickShellBackendMode()) {
+    if (widget == nullptr) {
         return;
     }
-
-    const auto ensureBridgeSurface = [this](QWidget*& bridgeRoot, const QString& objectName) {
-        if (bridgeRoot != nullptr) {
-            return;
-        }
-        bridgeRoot = new QWidget(nullptr, Qt::Tool | Qt::FramelessWindowHint);
-        bridgeRoot->setObjectName(objectName);
-        bridgeRoot->setAttribute(Qt::WA_NativeWindow);
-        bridgeRoot->setAttribute(Qt::WA_StyledBackground, true);
-        bridgeRoot->setContentsMargins(0, 0, 0, 0);
-        bridgeRoot->setMinimumSize(QSize(64, 64));
-        bridgeRoot->resize(960, 720);
-        bridgeRoot->installEventFilter(this);
-        bridgeRoot->winId();
-        bridgeRoot->hide();
-    };
-
-    ensureBridgeSurface(quickShellTopChromeSurfaceWidget_, QStringLiteral("QuickShellTopChromeSurface"));
-    ensureBridgeSurface(quickShellWorkspaceSurfaceWidget_, QStringLiteral("QuickShellWorkspaceSurface"));
-    ensureBridgeSurface(quickShellPreviewControlsSurfaceWidget_, QStringLiteral("QuickShellPreviewControlsSurface"));
-    ensureBridgeSurface(quickShellStatusSurfaceWidget_, QStringLiteral("QuickShellStatusSurface"));
-    if (previewPanel_ != nullptr) {
-        quickShellPreviewControlsSurfaceWidget_->setStyleSheet(previewPanel_->styleSheet());
-    }
-
-    if (quickShellTopChromeSurfaceWidget_->layout() == nullptr) {
-        auto* layout = new QVBoxLayout(quickShellTopChromeSurfaceWidget_);
-        layout->setContentsMargins(0, 0, 0, 0);
-        layout->setSpacing(0);
-    }
-    if (quickShellWorkspaceSurfaceWidget_->layout() == nullptr) {
-        auto* layout = new QHBoxLayout(quickShellWorkspaceSurfaceWidget_);
-        layout->setContentsMargins(0, 0, 0, 0);
-        layout->setSpacing(0);
-    }
-    if (quickShellPreviewControlsSurfaceWidget_->layout() == nullptr) {
-        auto* layout = new QVBoxLayout(quickShellPreviewControlsSurfaceWidget_);
-        layout->setContentsMargins(8, 12, 8, 12);
-        layout->setSpacing(10);
-    }
-    if (quickShellStatusSurfaceWidget_->layout() == nullptr) {
-        auto* layout = new QVBoxLayout(quickShellStatusSurfaceWidget_);
-        layout->setContentsMargins(0, 0, 0, 0);
-        layout->setSpacing(0);
-    }
-
-    auto* topChromeLayout = qobject_cast<QBoxLayout*>(quickShellTopChromeSurfaceWidget_->layout());
-    auto* workspaceLayout = qobject_cast<QBoxLayout*>(quickShellWorkspaceSurfaceWidget_->layout());
-    auto* previewControlsLayout = qobject_cast<QBoxLayout*>(quickShellPreviewControlsSurfaceWidget_->layout());
-    auto* statusLayout = qobject_cast<QBoxLayout*>(quickShellStatusSurfaceWidget_->layout());
-    if (topChromeLayout == nullptr || workspaceLayout == nullptr || previewControlsLayout == nullptr || statusLayout == nullptr) {
-        return;
-    }
-
-    if (QMenuBar* windowMenuBar = menuBar(); windowMenuBar != nullptr) {
-        windowMenuBar->setNativeMenuBar(false);
-        if (windowMenuBar->parentWidget() != quickShellTopChromeSurfaceWidget_) {
-            windowMenuBar->setParent(quickShellTopChromeSurfaceWidget_);
-        }
-        if (topChromeLayout->indexOf(windowMenuBar) < 0) {
-            topChromeLayout->addWidget(windowMenuBar);
-        }
-        windowMenuBar->show();
-    }
-
-    if (const QList<QToolBar*> toolBars = findChildren<QToolBar*>(); !toolBars.isEmpty()) {
-        if (QToolBar* toolBar = toolBars.constFirst(); toolBar != nullptr) {
-            removeToolBar(toolBar);
-            if (toolBar->parentWidget() != quickShellTopChromeSurfaceWidget_) {
-                toolBar->setParent(quickShellTopChromeSurfaceWidget_);
-            }
-            if (topChromeLayout->indexOf(toolBar) < 0) {
-                topChromeLayout->addWidget(toolBar);
-            }
-            toolBar->show();
+    if (auto* dock = qobject_cast<QDockWidget*>(widget); dock != nullptr) {
+        if (QWidget* dockWidget = dock->widget(); dockWidget != nullptr) {
+            dockWidget->updateGeometry();
         }
     }
-
-    if (QStatusBar* windowStatusBar = statusBar(); windowStatusBar != nullptr) {
-        if (windowStatusBar->parentWidget() != quickShellStatusSurfaceWidget_) {
-            windowStatusBar->setParent(quickShellStatusSurfaceWidget_);
-        }
-        if (statusLayout->indexOf(windowStatusBar) < 0) {
-            statusLayout->addWidget(windowStatusBar);
-        }
-        windowStatusBar->show();
+    if (QLayout* layout = widget->layout(); layout != nullptr) {
+        layout->activate();
     }
-
-    if (outlineDock_ != nullptr) {
-        removeDockWidget(outlineDock_);
-        if (outlineDock_->parentWidget() != quickShellWorkspaceSurfaceWidget_) {
-            outlineDock_->setParent(quickShellWorkspaceSurfaceWidget_);
+    widget->updateGeometry();
+    widget->update();
+    widget->show();
+    if (QWidget* parentWidget = widget->parentWidget(); parentWidget != nullptr) {
+        if (QLayout* parentLayout = parentWidget->layout(); parentLayout != nullptr) {
+            parentLayout->activate();
         }
-        if (workspaceLayout->indexOf(outlineDock_) < 0) {
-            workspaceLayout->addWidget(outlineDock_);
-        }
-        outlineDock_->show();
+        parentWidget->updateGeometry();
+        parentWidget->update();
+        parentWidget->show();
     }
-
-    if (previewLeftColumn_ != nullptr) {
-        if (previewLeftColumn_->parentWidget() != quickShellWorkspaceSurfaceWidget_) {
-            previewLeftColumn_->setParent(quickShellWorkspaceSurfaceWidget_);
-        }
-        if (workspaceLayout->indexOf(previewLeftColumn_) < 0) {
-            workspaceLayout->addWidget(previewLeftColumn_, 1);
-        }
-        previewLeftColumn_->show();
-    }
-
-    if (previewControlCard_ != nullptr) {
-        if (previewControlCard_->parentWidget() != quickShellPreviewControlsSurfaceWidget_) {
-            previewControlCard_->setParent(quickShellPreviewControlsSurfaceWidget_);
-        }
-        if (previewControlsLayout->indexOf(previewControlCard_) < 0) {
-            previewControlsLayout->addWidget(previewControlCard_);
-        }
-        previewControlCard_->show();
-    }
-
-    if (previewStatsCard_ != nullptr) {
-        if (previewStatsCard_->parentWidget() != quickShellPreviewControlsSurfaceWidget_) {
-            previewStatsCard_->setParent(quickShellPreviewControlsSurfaceWidget_);
-        }
-        if (previewControlsLayout->indexOf(previewStatsCard_) < 0) {
-            previewControlsLayout->addWidget(previewStatsCard_);
-        }
-        previewStatsCard_->show();
-    }
-
-    if (previewPanel_ != nullptr) {
-        previewPanel_->hide();
-    }
-    if (previewCanvasFrame_ != nullptr) {
-        previewCanvasFrame_->hide();
-    }
-    if (previewCanvasContainer_ != nullptr) {
-        previewCanvasContainer_->hide();
-    }
-
-    topChromeLayout->activate();
-    workspaceLayout->activate();
-    previewControlsLayout->activate();
-    statusLayout->activate();
-    setOutlineDockCollapsed(outlineDockCollapsed_);
-    quickShellTopChromeSurfaceWidget_->show();
-    quickShellWorkspaceSurfaceWidget_->show();
-    quickShellPreviewControlsSurfaceWidget_->show();
-    quickShellStatusSurfaceWidget_->show();
 }
 
 void MainWindow::setInvalidStarPreviewEasterEggEnabled(bool enabled)
@@ -3582,49 +2282,8 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             );
         }
     }
-    QObject* previewWindowObject = previewCanvas_ != nullptr ? previewCanvas_->hostWindow() : nullptr;
-    if (watched == previewWindowObject) {
-        if (runtimeDebugOutputEnabled_ && shouldTracePreviewHostWindowEvent(event->type())) {
-            auto* previewWindow = qobject_cast<QWindow*>(previewWindowObject);
-            const QString surfaceDetail = platformSurfaceDetail(event);
-            appendOutput(
-                "preview/host_window_event",
-                QString(
-                    "event=%1 watched=%2 spontaneous=%3 visible=%4 exposed=%5 active=%6 visibility=%7 "
-                    "pos=(%8,%9) size=%10x%11%12"
-                )
-                    .arg(qEventTypeName(event->type()))
-                    .arg(pointerHex(previewWindow))
-                    .arg(event->spontaneous() ? 1 : 0)
-                    .arg(previewWindow != nullptr && previewWindow->isVisible() ? 1 : 0)
-                    .arg(previewWindow != nullptr && previewWindow->isExposed() ? 1 : 0)
-                    .arg(previewWindow != nullptr && previewWindow->isActive() ? 1 : 0)
-                    .arg(previewWindow != nullptr ? windowVisibilityName(previewWindow->visibility()) : QStringLiteral("null"))
-                    .arg(previewWindow != nullptr ? previewWindow->x() : 0)
-                    .arg(previewWindow != nullptr ? previewWindow->y() : 0)
-                    .arg(previewWindow != nullptr ? previewWindow->width() : 0)
-                    .arg(previewWindow != nullptr ? previewWindow->height() : 0)
-                    .arg(surfaceDetail.isEmpty() ? QString() : QStringLiteral(" ") + surfaceDetail)
-            );
-        }
-        if (event->type() == QEvent::Resize) {
-            noteEmbeddedPreviewResizeActivity("preview_host_window");
-        }
-        if (event->type() == QEvent::Show
-            || event->type() == QEvent::Expose
-            || event->type() == QEvent::PlatformSurface) {
-            scheduleEmbeddedPreviewSurfaceRefresh();
-        }
-    }
-    if ((watched == previewCanvasContainer_
-            || watched == previewCanvasFrame_
-            || watched == previewPanel_)
-        && event->type() == QEvent::Resize) {
-        noteEmbeddedPreviewResizeActivity("embedded_preview_widget");
-    }
     const bool previewKeyScope =
         watched == previewSlider_
-        || watched == previewWindowObject
         || watched == previewCanvasContainer_
         || watched == previewCanvasFrame_
         || watched == previewPanel_
@@ -3637,7 +2296,6 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
         || watched == previewFullscreenHost_
         || watched == previewFullscreenControlsWindow_
         || watched == previewFullscreenHintWindow_
-        || watched == previewWindowObject
         || watched == previewCanvasContainer_
         || watched == previewCanvasFrame_
         || watched == previewControlCard_
@@ -4066,7 +2724,6 @@ void MainWindow::resizeEvent(QResizeEvent* event)
             .arg(event->size().width())
             .arg(event->size().height())
     );
-    noteEmbeddedPreviewResizeActivity("main_window");
 }
 
 void MainWindow::moveEvent(QMoveEvent* event)
@@ -4100,215 +2757,7 @@ void MainWindow::hideEvent(QHideEvent* event)
 
 bool MainWindow::event(QEvent* event)
 {
-    const QEvent::Type type = event != nullptr ? event->type() : QEvent::None;
-    const bool handled = QMainWindow::event(event);
-    if (type == QEvent::WindowBlocked) {
-        logWindowGeometryDebug(
-            "window_blocked",
-            QString("handled=%1 spontaneous=%2")
-                .arg(handled ? 1 : 0)
-                .arg(event != nullptr && event->spontaneous() ? 1 : 0)
-        );
-        scheduleEmbeddedPreviewSurfaceRefresh();
-    } else if (type == QEvent::WindowUnblocked) {
-        logWindowGeometryDebug(
-            "window_unblocked",
-            QString("handled=%1 spontaneous=%2")
-                .arg(handled ? 1 : 0)
-                .arg(event != nullptr && event->spontaneous() ? 1 : 0)
-        );
-        scheduleEmbeddedPreviewSurfaceRefresh();
-    }
-    return handled;
-}
-
-void MainWindow::refreshEmbeddedPreviewSurface(bool force)
-{
-    if (isQuickShellBackendMode()) {
-        Q_UNUSED(force);
-        return;
-    }
-    if (embeddedPreviewRefreshSuspended_) {
-        embeddedPreviewRefreshPending_ = true;
-        if (runtimeDebugOutputEnabled_) {
-            appendOutput(
-                "preview/embedded_refresh",
-                QString("action=refresh_skipped_suspended force=%1").arg(force ? 1 : 0)
-            );
-        }
-        return;
-    }
-    if (!force && embeddedPreviewResizeActive_) {
-        embeddedPreviewRefreshPending_ = true;
-        if (embeddedPreviewResizeSettleTimer_ != nullptr) {
-            embeddedPreviewResizeSettleTimer_->start(kEmbeddedPreviewResizeSettleDelayMs);
-        }
-        return;
-    }
-    embeddedPreviewRefreshPending_ = false;
-    if (runtimeDebugOutputEnabled_) {
-        QWindow* hostWindow = previewCanvas_ != nullptr ? previewCanvas_->hostWindow() : nullptr;
-        appendOutput(
-            "preview/embedded_refresh",
-            QString(
-                "action=refresh panel_visible=%1 frame_visible=%2 container_visible=%3 host=%4 host_visible=%5 "
-                "host_exposed=%6 host_active=%7 host_visibility=%8 container_size=%9x%10 host_size=%11x%12"
-            )
-                .arg(previewPanel_ != nullptr && previewPanel_->isVisible() ? 1 : 0)
-                .arg(previewCanvasFrame_ != nullptr && previewCanvasFrame_->isVisible() ? 1 : 0)
-                .arg(previewCanvasContainer_ != nullptr && previewCanvasContainer_->isVisible() ? 1 : 0)
-                .arg(pointerHex(hostWindow))
-                .arg(hostWindow != nullptr && hostWindow->isVisible() ? 1 : 0)
-                .arg(hostWindow != nullptr && hostWindow->isExposed() ? 1 : 0)
-                .arg(hostWindow != nullptr && hostWindow->isActive() ? 1 : 0)
-                .arg(hostWindow != nullptr ? windowVisibilityName(hostWindow->visibility()) : QStringLiteral("null"))
-                .arg(previewCanvasContainer_ != nullptr ? previewCanvasContainer_->width() : 0)
-                .arg(previewCanvasContainer_ != nullptr ? previewCanvasContainer_->height() : 0)
-                .arg(hostWindow != nullptr ? hostWindow->width() : 0)
-                .arg(hostWindow != nullptr ? hostWindow->height() : 0)
-        );
-    }
-    if (previewPanel_ != nullptr && previewPanel_->isVisible()) {
-        updatePreviewWorkspaceLayout();
-    }
-    if (previewCanvasFrame_ != nullptr) {
-        previewCanvasFrame_->update();
-    }
-    if (previewCanvasContainer_ != nullptr) {
-        previewCanvasContainer_->show();
-        previewCanvasContainer_->updateGeometry();
-        previewCanvasContainer_->update();
-    }
-    if (previewCanvas_ != nullptr) {
-        if (QWindow* hostWindow = previewCanvas_->hostWindow(); hostWindow != nullptr) {
-            hostWindow->requestUpdate();
-        }
-        previewCanvas_->update();
-    }
-}
-
-void MainWindow::suspendEmbeddedPreviewForNativeDialog(const char* source)
-{
-    if (isQuickShellBackendMode()) {
-        Q_UNUSED(source);
-        return;
-    }
-    if (embeddedPreviewRefreshSuspended_) {
-        return;
-    }
-
-    embeddedPreviewRefreshSuspended_ = true;
-    embeddedPreviewRefreshPending_ = false;
-    embeddedPreviewResizeActive_ = false;
-    if (embeddedPreviewRefreshTimer_ != nullptr && embeddedPreviewRefreshTimer_->isActive()) {
-        embeddedPreviewRefreshTimer_->stop();
-    }
-    if (embeddedPreviewResizeSettleTimer_ != nullptr && embeddedPreviewResizeSettleTimer_->isActive()) {
-        embeddedPreviewResizeSettleTimer_->stop();
-    }
-    if (runtimeDebugOutputEnabled_) {
-        appendOutput(
-            "preview/embedded_refresh",
-            QString("action=suspend_for_native_dialog source=%1 container_visible=%2 fullscreen=%3")
-                .arg(QString::fromLatin1(source != nullptr ? source : "unknown"))
-                .arg(previewCanvasContainer_ != nullptr && previewCanvasContainer_->isVisible() ? 1 : 0)
-                .arg(previewFullscreenActive_ ? 1 : 0)
-        );
-    }
-    if (previewCanvasContainer_ != nullptr) {
-        previewCanvasContainer_->hide();
-    }
-}
-
-void MainWindow::resumeEmbeddedPreviewForNativeDialog(const char* source)
-{
-    if (isQuickShellBackendMode()) {
-        Q_UNUSED(source);
-        return;
-    }
-    if (!embeddedPreviewRefreshSuspended_) {
-        return;
-    }
-
-    embeddedPreviewRefreshSuspended_ = false;
-    if (runtimeDebugOutputEnabled_) {
-        appendOutput(
-            "preview/embedded_refresh",
-            QString("action=resume_after_native_dialog source=%1 visible=%2 minimized=%3")
-                .arg(QString::fromLatin1(source != nullptr ? source : "unknown"))
-                .arg(isVisible() ? 1 : 0)
-                .arg(windowState().testFlag(Qt::WindowMinimized) ? 1 : 0)
-        );
-    }
-    if (!isVisible() || windowState().testFlag(Qt::WindowMinimized)) {
-        embeddedPreviewRefreshPending_ = true;
-        return;
-    }
-    refreshEmbeddedPreviewSurface(true);
-    scheduleEmbeddedPreviewSurfaceRefresh(120);
-}
-
-void MainWindow::scheduleEmbeddedPreviewSurfaceRefresh(int delayMs)
-{
-    if (isQuickShellBackendMode()) {
-        Q_UNUSED(delayMs);
-        return;
-    }
-    const int effectiveDelayMs = qMax(0, delayMs);
-    embeddedPreviewRefreshPending_ = true;
-    if (embeddedPreviewRefreshSuspended_) {
-        return;
-    }
-    if (embeddedPreviewResizeActive_) {
-        if (embeddedPreviewResizeSettleTimer_ != nullptr) {
-            embeddedPreviewResizeSettleTimer_->start(kEmbeddedPreviewResizeSettleDelayMs);
-        }
-        return;
-    }
-    if (embeddedPreviewRefreshTimer_ == nullptr) {
-        refreshEmbeddedPreviewSurface();
-        return;
-    }
-    const int remainingMs =
-        embeddedPreviewRefreshTimer_->isActive() ? embeddedPreviewRefreshTimer_->remainingTime() : -1;
-    if (remainingMs >= 0 && remainingMs <= effectiveDelayMs) {
-        return;
-    }
-    embeddedPreviewRefreshTimer_->start(effectiveDelayMs);
-}
-
-void MainWindow::noteEmbeddedPreviewResizeActivity(const char* source)
-{
-    if (isQuickShellBackendMode()) {
-        Q_UNUSED(source);
-        return;
-    }
-    if (previewCanvas_ == nullptr || !isVisible() || windowState().testFlag(Qt::WindowMinimized)) {
-        return;
-    }
-    if (embeddedPreviewRefreshSuspended_) {
-        embeddedPreviewRefreshPending_ = true;
-        return;
-    }
-
-    const bool wasActive = embeddedPreviewResizeActive_;
-    embeddedPreviewResizeActive_ = true;
-    embeddedPreviewRefreshPending_ = true;
-    if (embeddedPreviewRefreshTimer_ != nullptr && embeddedPreviewRefreshTimer_->isActive()) {
-        embeddedPreviewRefreshTimer_->stop();
-    }
-    if (embeddedPreviewResizeSettleTimer_ != nullptr) {
-        embeddedPreviewResizeSettleTimer_->start(kEmbeddedPreviewResizeSettleDelayMs);
-    }
-    if (!wasActive && runtimeDebugOutputEnabled_) {
-        appendOutput(
-            "preview/embedded_refresh",
-            QString("action=resize_degrade_begin source=%1 visible=%2 minimized=%3")
-                .arg(QString::fromLatin1(source != nullptr ? source : "unknown"))
-                .arg(isVisible() ? 1 : 0)
-                .arg(windowState().testFlag(Qt::WindowMinimized) ? 1 : 0)
-        );
-    }
+    return QMainWindow::event(event);
 }
 
 void MainWindow::changeEvent(QEvent* event)
@@ -4329,7 +2778,6 @@ void MainWindow::changeEvent(QEvent* event)
         if (!isNowMinimized && wasMinimized) {
             refreshPreviewFrameRateTimers();
             applySystemWindowBackdrop();
-            scheduleEmbeddedPreviewSurfaceRefresh();
         }
     } else if (type == QEvent::ScreenChangeInternal
         || type == QEvent::DevicePixelRatioChange
@@ -4350,18 +2798,11 @@ void MainWindow::changeEvent(QEvent* event)
                 .arg(active ? 1 : 0)
                 .arg(event != nullptr && event->spontaneous() ? 1 : 0)
         );
-        if (active) {
-            scheduleEmbeddedPreviewSurfaceRefresh();
-        }
     } else if (type == QEvent::ZOrderChange) {
         logWindowGeometryDebug("zorder_change");
     }
 }
 
-#include "sections/document/MainWindow.DocumentFlow.cpp"
-#include "sections/preview/MainWindow.PreviewStageMediaRoute.cpp"
-#include "sections/timeline/MainWindow.PreviewTimelineFlow.cpp"
-#include "sections/validation/MainWindow.ValidationFlow.cpp"
 QString MainWindow::resolveDefaultTrackPath() const
 {
     const QString envTrack = qEnvironmentVariable("MIACODE_TRACK_PATH", qEnvironmentVariable("MAIMURI_TRACK_PATH"));
@@ -4516,7 +2957,6 @@ QString MainWindow::resolveInitialOpenDirectory() const
     return QDir::currentPath();
 }
 
-#include "sections/editor/MainWindow.EditorDisplay.cpp"
 void MainWindow::loadProjectRenderState()
 {
     const double previousCanvasAspectRatio = previewCanvasAspectRatio_;
@@ -5024,12 +3464,13 @@ void MainWindow::onToggleTouchTrail(bool checked)
 
 void MainWindow::onEditStaticTapOnSlideThreshold()
 {
-    QDialog dialog(this);
+    QDialog dialog(UiDialogs::effectiveParentWidget(this));
     dialog.setWindowTitle(UiText::isChineseUi() ? QStringLiteral("撞尾阈值") : QStringLiteral("Tap-On-Slide Threshold"));
     dialog.setModal(true);
     dialog.setMinimumWidth(360);
     dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
     applySystemWindowBackdrop(&dialog);
+    UiDialogs::prepareDialogWindow(&dialog, this);
 
     auto* rootLayout = new QVBoxLayout(&dialog);
     rootLayout->setContentsMargins(16, 14, 16, 14);
@@ -5169,7 +3610,6 @@ void MainWindow::onPreviewVideoSettings()
     );
 }
 
-#include "sections/preferences/MainWindow.PreferencesDialog.cpp"
 void MainWindow::onAbout()
 {
     QString buildType = "Release";
@@ -5181,12 +3621,13 @@ void MainWindow::onAbout()
         .arg(QSysInfo::currentCpuArchitecture())
         .arg(QSysInfo::buildAbi());
 
-    QDialog dialog(this);
+    QDialog dialog(UiDialogs::effectiveParentWidget(this));
     dialog.setWindowTitle(uiText("action.about", "About"));
     dialog.setModal(true);
     dialog.setMinimumWidth(500);
     dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
     applySystemWindowBackdrop(&dialog);
+    UiDialogs::prepareDialogWindow(&dialog, this);
 
     auto* rootLayout = new QVBoxLayout(&dialog);
     rootLayout->setContentsMargins(14, 14, 14, 12);
@@ -5446,8 +3887,9 @@ void MainWindow::onExportPreviewVideo()
             saveProjectRenderState();
             savePortableState();
         },
-        this
+        UiDialogs::effectiveParentWidget(this)
     );
+    UiDialogs::prepareDialogWindow(&dialog, this);
 
     dialog.adjustSize();
     QRect anchorRect = geometry();
@@ -5494,7 +3936,6 @@ void MainWindow::onExportPreviewVideo()
     dialog.move(targetTopLeft);
     applySystemWindowBackdrop(&dialog);
     dialog.exec();
-    scheduleEmbeddedPreviewSurfaceRefresh();
     setPreviewCanvasAspectRatio(1.0, false);
     restoreSquareAfterVideoExport_ = false;
     if (dialog.exportRequested()) {
@@ -5572,10 +4013,11 @@ void MainWindow::onBatchExportPreviewVideo()
         [this](const VideoExportTask& sharedTask) {
             applySharedExportTaskSettings(sharedTask);
         },
-        this
+        UiDialogs::effectiveParentWidget(this)
     );
     dialog.adjustSize();
     applySystemWindowBackdrop(&dialog);
+    UiDialogs::prepareDialogWindow(&dialog, this);
     dialog.exec();
     if (!dialog.exportRequested()) {
         return;
@@ -6597,9 +5039,10 @@ void MainWindow::handleVideoExportWorkerProcessFinished(int exitCode, int exitSt
                 .arg(uiText("dialog.video_export.message.completed", "Export completed."))
                 .arg(resolvedOutputName),
             QMessageBox::NoButton,
-            this
+            UiDialogs::effectiveParentWidget(this)
         );
         dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+        UiDialogs::applyDetachedParentBehavior(&dialog, this);
         QPushButton* openButton = dialog.addButton(
             uiText("action.open", "Open"),
             QMessageBox::AcceptRole
@@ -6918,8 +5361,14 @@ void MainWindow::onOpenLatencyDetector()
         latencyDetectorDialog_.clear();
     }
 
-    latencyDetectorDialog_ = new LatencyDetectorDialog(trackPath, currentFilePath_, previewAudioSettings_, this);
+    latencyDetectorDialog_ = new LatencyDetectorDialog(
+        trackPath,
+        currentFilePath_,
+        previewAudioSettings_,
+        UiDialogs::effectiveParentWidget(this)
+    );
     applySystemWindowBackdrop(latencyDetectorDialog_);
+    UiDialogs::prepareDialogWindow(latencyDetectorDialog_, this);
     latencyDetectorDialog_->setOffsetSeconds(offsetSeconds);
     latencyDetectorDialog_->setBpm(wholeBpmOk ? wholeBpm : 0.0);
     latencyDetectorDialog_->setMeterId(meterId);
@@ -6944,12 +5393,13 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     }
     previewAudioSettings_.normalize();
 
-    QDialog dialog(this);
+    QDialog dialog(UiDialogs::effectiveParentWidget(this));
     dialog.setWindowTitle(title);
     dialog.setModal(true);
     dialog.setMinimumWidth(520);
     dialog.setStyleSheet(UiTheme::settingsDialogStyleSheet());
     applySystemWindowBackdrop(&dialog);
+    UiDialogs::prepareDialogWindow(&dialog, this);
 
     const auto createDialogMenuButton = [](QWidget* parent, const QString& text) {
         auto* button = new QToolButton(parent);
@@ -7705,5 +6155,4 @@ void MainWindow::openPreviewSettingsDialog(bool includeAudioSettings, bool inclu
     });
     dialog.adjustSize();
     dialog.exec();
-    scheduleEmbeddedPreviewSurfaceRefresh();
 }
