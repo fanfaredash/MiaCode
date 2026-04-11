@@ -21,6 +21,8 @@ public:
     bool isIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey) const;
     void setIssueTypeIgnoredInHeaderForCurrentFile(const QString& issueTypeKey, bool ignored);
     void refreshEditorExtraSelections();
+    const MuriAnalysisReport& alignedMuriAnalysisReportForPreview() const;
+    void applyAlignedMuriAnalysisReportToViews();
     void updateEditorValidationSummary();
     void setPreviewFollowDecoration(int line, int col);
     void clearPreviewFollowDecoration();
@@ -46,6 +48,11 @@ public:
     void applyDeferredAnalysisUiUpdates();
     void setValidationTabVisible(bool visible);
     void refreshValidationPanelForActiveField();
+    void applyMuriRenderOptions();
+    void setMuriRenderMode(RenderMode mode, bool persistState = true);
+    void onToggleJudgeMarkers(bool checked);
+    void onToggleTouchTrail(bool checked);
+    void onEditStaticTapOnSlideThreshold();
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
     bool runValidateSimai();
     void onValidateSimai();

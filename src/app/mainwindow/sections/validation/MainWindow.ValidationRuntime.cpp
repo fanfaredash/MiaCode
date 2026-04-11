@@ -29,15 +29,6 @@
 
 using namespace miacode::mainwindow::shared;
 
-MainWindow::ValidationSection::ValidationSection(
-    MainWindow& owner,
-    MainWindow::MainWindowUiRefs& ui,
-    MainWindow::MainWindowState& state)
-    : owner_(owner)
-    , ui_(ui)
-    , state_(state)
-{}
-
 namespace {
 
 using miacode::muri::MuriPanelEntry;
@@ -655,96 +646,76 @@ bool buildEditorSelectionCursor(PlainCodeEditor* editor, int line, int col, int 
 
 }  // namespace
 
-void MainWindow::ValidationSection::refreshEditorExtraSelections()
+void MainWindow::ValidationSection::showIssueListContextMenu(QListWidget* list, const QPoint& pos, bool muriList)
 {
-    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
-    if (editor == nullptr) {
+    if (list == nullptr) {
+        return;
+    }
+    QListWidgetItem* item = list->itemAt(pos);
+    if (item == nullptr) {
         return;
     }
 
-    QVector<QTextEdit::ExtraSelection> selections;
-    selections.reserve(state_.validationDecorations_.size() + (state_.previewFollowDecorationActive_ ? 1 : 0));
+    const QString issueTypeKey = item->data(kIssueTypeKeyRole).toString();
+    const QString issueTypeLabel = item->data(kIssueTypeLabelRole).toString();
+    const bool ignoredInHeader = item->data(kIssueIgnoredRole).toBool();
 
-    for (const ValidationDecoration& decoration : state_.validationDecorations_) {
-        QTextCursor cursor;
-        if (!buildEditorSelectionCursor(editor, decoration.line, decoration.col, decoration.endCol, &cursor)) {
-            continue;
+    QMenu menu(&owner_);
+    styleRoundedMenu(menu);
+
+    QAction* copyAction = menu.addAction(
+        UiText::isChineseUi() ? QStringLiteral("复制信息") : QStringLiteral("Copy Info")
+    );
+    connect(copyAction, &QAction::triggered, &owner_, [this, item]() {
+        const QString text = item->toolTip().trimmed();
+        QGuiApplication::clipboard()->setText(text);
+        if (owner_.statusBar() != nullptr) {
+            owner_.statusBar()->showMessage(
+                UiText::isChineseUi() ? QStringLiteral("已复制信息。") : QStringLiteral("Issue info copied.")
+            );
         }
+    });
 
-        QTextEdit::ExtraSelection sel;
-        sel.cursor = cursor;
-        sel.format.setUnderlineStyle(QTextCharFormat::WaveUnderline);
-        sel.format.setUnderlineColor(decoration.warning
-                                         ? severityColor(ValidationSeverityLevel::Warning)
-                                         : severityColor(ValidationSeverityLevel::Error));
-        sel.format.setToolTip(decoration.message);
-        selections.append(sel);
+    QAction* jumpAction = menu.addAction(
+        UiText::isChineseUi() ? QStringLiteral("跳转到源") : QStringLiteral("Jump to Source")
+    );
+    connect(jumpAction, &QAction::triggered, &owner_, [this, item, muriList]() {
+        if (muriList) {
+            onMuriItemActivated(item);
+        } else {
+            onErrorItemActivated(item);
+        }
+    });
+
+    if (!issueTypeKey.isEmpty()) {
+        QAction* ignoreAction = menu.addAction(
+            ignoredInHeader
+                ? (UiText::isChineseUi() ? QStringLiteral("取消忽视该类型提示")
+                                         : QStringLiteral("Stop Ignoring This Issue Type"))
+                : (UiText::isChineseUi() ? QStringLiteral("忽视该类型提示")
+                                         : QStringLiteral("Ignore This Issue Type"))
+        );
+        connect(ignoreAction, &QAction::triggered, &owner_, [this, issueTypeKey, ignoredInHeader]() {
+            const int currentTabIndex = ui_.bottomTabs_ != nullptr ? ui_.bottomTabs_->currentIndex() : -1;
+            setIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey, !ignoredInHeader);
+            refreshValidationPanelForActiveField();
+            refreshMuriDiagnosticsPanel();
+            if (ui_.bottomTabs_ != nullptr && currentTabIndex >= 0) {
+                ui_.bottomTabs_->setCurrentIndex(currentTabIndex);
+            }
+        });
     }
 
-    if (state_.previewFollowDecorationActive_) {
-        QTextCursor cursor;
-        if (buildEditorSelectionCursor(
-                editor,
-                state_.previewFollowDecorationLine_,
-                state_.previewFollowDecorationCol_,
-                state_.previewFollowDecorationCol_,
-                &cursor)) {
-            QTextEdit::ExtraSelection sel;
-            sel.cursor = cursor;
-            QColor highlight = UiTheme::colors().accent;
-            highlight.setAlpha(UiTheme::colors().dark ? 88 : 56);
-            sel.format.setBackground(highlight);
-            sel.format.setProperty(QTextFormat::FullWidthSelection, false);
-            selections.append(sel);
-        }
-    }
-
-    editor->setExtraSelections(selections);
+    menu.exec(list->viewport()->mapToGlobal(pos));
 }
 
-void MainWindow::ValidationSection::updateEditorValidationSummary()
+void MainWindow::ValidationSection::refreshMuriDiagnosticsPanel()
 {
-    if (ui_.editorValidationSummaryWidget_ == nullptr
-        || ui_.editorValidationErrorIconLabel_ == nullptr
-        || ui_.editorValidationErrorCountLabel_ == nullptr
-        || ui_.editorValidationWarningIconLabel_ == nullptr
-        || ui_.editorValidationWarningCountLabel_ == nullptr
-        || ui_.editorValidationMuriIconLabel_ == nullptr
-        || ui_.editorValidationMuriCountLabel_ == nullptr) {
+    if (ui_.muriList_ == nullptr) {
         return;
     }
 
-    if (!owner_.hasActiveDifficulty()) {
-        ui_.editorValidationSummaryWidget_->hide();
-        return;
-    }
-
-    int errorCount = 0;
-    int warningCount = 0;
-    int muriIssueCount = 0;
-    const QSet<QString> ignoredTypes = state_.ignoredHeaderIssueTypesByFile_.value(currentValidationIgnoreScopeKey());
-    const auto cacheIt = state_.validationCacheByDifficulty_.constFind(owner_.activeDifficultyId());
-    if (cacheIt != state_.validationCacheByDifficulty_.constEnd()) {
-        const ValidationCacheEntry& entry = cacheIt.value();
-        if (entry.chartText == owner_.activeChartText()
-            && entry.chineseUi == UiText::isChineseUi()
-            && entry.timingMetadata == owner_.currentTimingMetadata()) {
-            for (const ValidationCachedIssue& issue : entry.issues) {
-                const QString issueTypeKey = issue.issueTypeKey.isEmpty()
-                    ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)
-                    : issue.issueTypeKey;
-                if (ignoredTypes.contains(issueTypeKey)) {
-                    continue;
-                }
-                const ValidationMessageParts parts = parseValidationMessage(issue.displayMessage);
-                if (parts.severity == ValidationSeverityLevel::Warning) {
-                    ++warningCount;
-                } else {
-                    ++errorCount;
-                }
-            }
-        }
-    }
+    ui_.muriList_->clear();
     const MuriAnalysisReport& alignedMuriReport = alignedMuriAnalysisReportForUi(
         state_.latestTimelineNoteMarkerSignature_,
         state_.muriAnalysisReportNoteMarkerSignature_,
@@ -753,324 +724,461 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
         state_.latestTimelineNoteMarkerSignature_,
         state_.muriAnalysisReportNoteMarkerSignature_,
         state_.muriStaticReferences_);
-    const QVector<MuriPanelEntry> muriEntries =
-        miacode::muri::buildVisibleMuriPanelEntries(alignedMuriReport, alignedStaticReferences);
-    for (const MuriPanelEntry& entry : muriEntries) {
-        if (ignoredTypes.contains(muriIssueTypeKey(entry.kind))) {
-            continue;
-        }
-        ++muriIssueCount;
-    }
-
-    const bool showError = errorCount > 0;
-    const bool showWarning = warningCount > 0;
-    const bool showMuri = muriIssueCount > 0;
-
-    const QString summaryTooltip = showMuri
-        ? uiText(
-              "editor.validation_summary.tooltip_with_muri",
-              "%1 error(s), %2 warning(s), %3 muri issue(s)"
-          ).arg(errorCount).arg(warningCount).arg(muriIssueCount)
-        : uiText(
-              "editor.validation_summary.tooltip",
-              "%1 error(s), %2 warning(s)"
-          ).arg(errorCount).arg(warningCount);
-    const bool showSummary = state_.previewShowValidationSummary_ && (showError || showWarning || showMuri);
-    ui_.editorValidationSummaryWidget_->setProperty("hasContent", showSummary);
-    ui_.editorValidationSummaryWidget_->setToolTip(summaryTooltip);
-
-    struct SummaryEntry {
-        EditorValidationSummaryIconKind kind;
-        QColor color;
-        int count = 0;
-    };
-    QVector<SummaryEntry> visibleEntries;
-    if (showMuri) {
-        visibleEntries.append(SummaryEntry{
-            EditorValidationSummaryIconKind::Muri,
-            QColor(QStringLiteral("#A24AD9")),
-            muriIssueCount
-        });
-    }
-    if (showWarning) {
-        visibleEntries.append(SummaryEntry{
-            EditorValidationSummaryIconKind::Warning,
-            QColor(QStringLiteral("#D4A12A")),
-            warningCount
-        });
-    }
-    if (showError) {
-        visibleEntries.append(SummaryEntry{
-            EditorValidationSummaryIconKind::Error,
-            QColor(QStringLiteral("#D94A4A")),
-            errorCount
-        });
-    }
-
-    const auto applySlot = [showSummary, &summaryTooltip](QLabel* icon, QLabel* count, const SummaryEntry* entry) {
-        const bool occupied = showSummary && entry != nullptr && entry->count > 0;
-        if (icon != nullptr) {
-            if (occupied) {
-                icon->setPixmap(makeEditorValidationSummaryIcon(entry->color, entry->kind));
-            } else {
-                icon->clear();
-            }
-            icon->setProperty("hasContent", occupied);
-            icon->setVisible(occupied);
-            icon->setToolTip(summaryTooltip);
-        }
-        if (count != nullptr) {
-            if (occupied) {
-                count->setText(QString::number(entry->count));
-                count->setStyleSheet(QStringLiteral("color: %1;").arg(entry->color.name(QColor::HexRgb)));
-            } else {
-                count->clear();
-                count->setStyleSheet(QString());
-            }
-            count->setProperty("hasContent", occupied);
-            count->setVisible(occupied);
-            count->setToolTip(summaryTooltip);
-        }
-    };
-    const SummaryEntry* slot0 = visibleEntries.size() > 0 ? &visibleEntries[0] : nullptr;
-    const SummaryEntry* slot1 = visibleEntries.size() > 1 ? &visibleEntries[1] : nullptr;
-    const SummaryEntry* slot2 = visibleEntries.size() > 2 ? &visibleEntries[2] : nullptr;
-    applySlot(ui_.editorValidationMuriIconLabel_, ui_.editorValidationMuriCountLabel_, slot0);
-    applySlot(ui_.editorValidationWarningIconLabel_, ui_.editorValidationWarningCountLabel_, slot1);
-    applySlot(ui_.editorValidationErrorIconLabel_, ui_.editorValidationErrorCountLabel_, slot2);
-    ui_.editorValidationSummaryWidget_->setVisible(showSummary);
-    ui_.editorValidationSummaryWidget_->adjustSize();
-    owner_.updateEditorHeaderLayoutMode();
-}
-
-void MainWindow::ValidationSection::setPreviewFollowDecoration(int line, int col)
-{
-    state_.previewFollowDecorationActive_ = true;
-    state_.previewFollowDecorationLine_ = qMax(1, line);
-    state_.previewFollowDecorationCol_ = qMax(1, col);
-    refreshEditorExtraSelections();
-}
-
-void MainWindow::ValidationSection::clearPreviewFollowDecoration()
-{
-    if (!state_.previewFollowDecorationActive_) {
-        return;
-    }
-    state_.previewFollowDecorationActive_ = false;
-    refreshEditorExtraSelections();
-}
-
-void MainWindow::ValidationSection::clearValidationErrors()
-{
-    if (ui_.errorList_ == nullptr) {
-        return;
-    }
-    ui_.errorList_->clear();
-}
-
-void MainWindow::ValidationSection::clearMuriDiagnostics()
-{
-    if (ui_.muriList_ == nullptr) {
+    if (alignedMuriReport.diagnostics.isEmpty() && alignedStaticReferences.isEmpty()) {
+        auto* item = new QListWidgetItem(
+            UiText::isChineseUi()
+                ? QStringLiteral("未检测到无理。")
+                : QStringLiteral("No muri issues detected."),
+            ui_.muriList_
+        );
+        item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
         updateEditorValidationSummary();
         return;
     }
-    ui_.muriList_->clear();
-    updateEditorValidationSummary();
-}
 
-void MainWindow::ValidationSection::clearValidationDecorations()
-{
-    state_.validationDecorations_.clear();
-    refreshEditorExtraSelections();
-}
+    QVector<MuriPanelEntry> entries =
+        miacode::muri::buildVisibleMuriPanelEntries(alignedMuriReport, alignedStaticReferences);
+    std::sort(entries.begin(), entries.end(), [](const MuriPanelEntry& a, const MuriPanelEntry& b) {
+        if (!qFuzzyCompare(a.second + 1.0, b.second + 1.0)) {
+            return a.second < b.second;
+        }
+        if (a.line != b.line) {
+            return a.line < b.line;
+        }
+        if (a.col != b.col) {
+            return a.col < b.col;
+        }
+        return static_cast<int>(a.kind) < static_cast<int>(b.kind);
+    });
 
-void MainWindow::ValidationSection::addValidationError(
-    int line,
-    int col,
-    const QString& rawMessage,
-    const QString& displayMessage,
-    const QString& issueTypeKey,
-    const QString& issueTypeLabel,
-    bool ignoredInHeader)
-{
-    if (ui_.errorList_ == nullptr) {
-        return;
-    }
-
-    const ValidationMessageParts parts = parseValidationMessage(displayMessage);
-    const QString issueTitle = issueTypeLabel.isEmpty() ? issueTypeSegment(parts.body) : issueTypeLabel;
-    const QString detailTail = issueDetailTail(parts.body);
-    const QString detailText = detailTail.isEmpty() ? parts.body : detailTail;
-    const QString summaryFocusText = extractValidationSummaryFocusText(rawMessage, displayMessage, issueTitle);
-    const WrappedListEntryText text =
-        buildValidationPanelEntryText(parts, summaryFocusText, detailText, line, col, ignoredInHeader);
-    QListWidgetItem* item = addWrappedListEntry(ui_.errorList_, text.html, text.plainText, line, col, -1.0, true);
-    if (item != nullptr) {
-        item->setData(kIssueAuxRole, parts.severity == ValidationSeverityLevel::Warning ? 1 : 0);
-        item->setData(kIssueTypeKeyRole, issueTypeKey);
-        item->setData(kIssueTypeLabelRole, issueTypeLabel);
-        item->setData(kIssueIgnoredRole, ignoredInHeader);
-        if (ignoredInHeader) {
-            if (QWidget* rowWidget = ui_.errorList_->itemWidget(item)) {
-                auto* effect = new QGraphicsOpacityEffect(rowWidget);
-                effect->setOpacity(0.58);
-                rowWidget->setGraphicsEffect(effect);
+    for (const MuriPanelEntry& entry : entries) {
+        const QString issueTypeKey = muriIssueTypeKey(entry.kind);
+        const bool ignoredInHeader = isIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey);
+        const QString title = muriKindDisplayName(entry.kind, UiText::isChineseUi());
+        const WrappedListEntryText text = buildMuriPanelEntryText(entry, ignoredInHeader);
+        QListWidgetItem* item = addWrappedListEntry(
+            ui_.muriList_,
+            text.html,
+            text.plainText,
+            entry.line,
+            entry.col,
+            entry.second,
+            true
+        );
+        if (item != nullptr) {
+            item->setData(kIssueTypeKeyRole, issueTypeKey);
+            item->setData(kIssueTypeLabelRole, title);
+            item->setData(kIssueIgnoredRole, ignoredInHeader);
+            if (ignoredInHeader) {
+                if (QWidget* rowWidget = ui_.muriList_->itemWidget(item)) {
+                    auto* effect = new QGraphicsOpacityEffect(rowWidget);
+                    effect->setOpacity(0.58);
+                    rowWidget->setGraphicsEffect(effect);
+                }
             }
         }
     }
+    scheduleWrappedListRelayout(ui_.muriList_);
+    updateEditorValidationSummary();
 }
 
-void MainWindow::ValidationSection::addValidationDecoration(int line, int col, const QString& message, int endCol)
+void MainWindow::ValidationSection::clearValidationCache()
 {
-    if (line < 1) {
-        line = 1;
-    }
-    if (col < 1) {
-        col = 1;
-    }
-    if (endCol < col) {
-        endCol = col;
-    }
-
-    const ValidationMessageParts parts = parseValidationMessage(message);
-    ValidationDecoration decoration;
-    decoration.line = qMax(1, line);
-    decoration.col = qMax(1, col);
-    decoration.endCol = qMax(decoration.col, endCol);
-    decoration.message = message;
-    decoration.warning = (parts.severity == ValidationSeverityLevel::Warning);
-    state_.validationDecorations_.append(decoration);
+    state_.validationCacheByDifficulty_.clear();
+    updateEditorValidationSummary();
 }
 
-void MainWindow::ValidationSection::jumpToLocation(int line, int col)
+void MainWindow::ValidationSection::applyDeferredAnalysisUiUpdates()
 {
-    if (line < 1) {
-        line = 1;
-    }
-    if (col < 1) {
-        col = 1;
-    }
-
-    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
-    if (editor == nullptr || editor->document() == nullptr) {
+    if (state_.qtPreviewPlaying_) {
         return;
     }
 
-    QTextBlock block = editor->document()->findBlockByNumber(line - 1);
-    if (!block.isValid()) {
-        return;
+    if (state_.pendingDeferredMuriUiRefresh_) {
+        refreshMuriDiagnosticsPanel();
+        if (state_.previewCanvas_ != nullptr) {
+            state_.previewCanvas_->setMuriRenderOptions(state_.muriRenderOptions_);
+        }
+        owner_.applyAlignedMuriAnalysisReportToViews();
+        state_.pendingDeferredMuriUiRefresh_ = false;
     }
-    QTextCursor cursor(editor->document());
-    cursor.setPosition(block.position() + col - 1);
-    cursor.clearSelection();
-    editor->setTextCursor(cursor);
-    editor->ensureCursorVisible();
-    editor->setFocus();
-    clearPreviewFollowDecoration();
+
+    if (state_.pendingDeferredValidationUiRefresh_) {
+        refreshValidationPanelForActiveField();
+        state_.pendingDeferredValidationUiRefresh_ = false;
+    }
 }
 
-void MainWindow::ValidationSection::onErrorItemActivated(QListWidgetItem* item)
+void MainWindow::ValidationSection::setValidationTabVisible(bool visible)
 {
-    if (item == nullptr) {
+    if (ui_.bottomTabs_ == nullptr || ui_.errorList_ == nullptr) {
         return;
     }
-    const int line = item->data(kIssueLineRole).toInt();
-    const int col = item->data(kIssueColRole).toInt();
-    jumpToLocation(line, col);
+    const int errorTabIndex = ui_.bottomTabs_->indexOf(ui_.errorList_);
+    if (errorTabIndex < 0) {
+        return;
+    }
+    ui_.bottomTabs_->setTabVisible(errorTabIndex, visible);
 }
 
-void MainWindow::ValidationSection::onMuriItemActivated(QListWidgetItem* item)
+void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
 {
-    if (item == nullptr || !item->flags().testFlag(Qt::ItemIsEnabled)) {
-        return;
-    }
-    const int line = item->data(kIssueLineRole).toInt();
-    const int col = item->data(kIssueColRole).toInt();
-    const double second = item->data(kIssueAuxRole).toDouble();
-    const bool previousSuppressState = state_.suppressTimelineCursorSync_;
-    state_.suppressTimelineCursorSync_ = true;
-    jumpToLocation(line, col);
-    state_.suppressTimelineCursorSync_ = previousSuppressState;
-
-    if (second < 0.0 || ui_.timelineView_ == nullptr) {
+    if (!owner_.hasActiveDifficulty()) {
+        setValidationTabVisible(false);
+        clearValidationErrors();
+        clearValidationDecorations();
+        updateEditorValidationSummary();
         return;
     }
 
-    const double clampedSecond = qBound(0.0, second, owner_.previewDurationSeconds());
-    state_.previewPendingSeekSecond_ = clampedSecond;
-    state_.previewPendingSeekCenterView_ = true;
-    if (ui_.previewSeekDebounceTimer_ != nullptr) {
-        ui_.previewSeekDebounceTimer_->stop();
+    setValidationTabVisible(true);
+    const int difficultyId = owner_.activeDifficultyId();
+    const auto it = state_.validationCacheByDifficulty_.constFind(difficultyId);
+    if (it == state_.validationCacheByDifficulty_.constEnd()) {
+        clearValidationErrors();
+        clearValidationDecorations();
+        updateEditorValidationSummary();
+        return;
     }
-    owner_.seekPreviewToSecond(clampedSecond, true);
-    ui_.timelineView_->setCursorSeconds(clampedSecond, false);
-    ui_.timelineView_->focusPlayhead(true);
+
+    const QString chartText = owner_.activeChartText();
+    const bool chineseUi = UiText::isChineseUi();
+    const miacode::simai::SimaiTimingMetadata timingMetadata = owner_.currentTimingMetadata();
+    const ValidationCacheEntry& entry = it.value();
+    if (entry.chartText != chartText
+        || entry.chineseUi != chineseUi
+        || entry.timingMetadata != timingMetadata) {
+        clearValidationErrors();
+        clearValidationDecorations();
+        updateEditorValidationSummary();
+        return;
+    }
+
+    clearValidationErrors();
+    clearValidationDecorations();
+    for (const ValidationCachedIssue& issue : entry.issues) {
+        const QString issueTypeKey = issue.issueTypeKey.isEmpty()
+            ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)
+            : issue.issueTypeKey;
+        const QString issueTypeLabel = issue.issueTypeLabel.isEmpty()
+            ? validationIssueTypeLabelFromDisplayMessage(issue.displayMessage)
+            : issue.issueTypeLabel;
+        addValidationError(
+            issue.line,
+            issue.col,
+            issue.rawMessage,
+            issue.displayMessage,
+            issueTypeKey,
+            issueTypeLabel,
+            isIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey)
+        );
+        addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
+    }
+    refreshEditorExtraSelections();
+    scheduleWrappedListRelayout(ui_.errorList_);
+    updateEditorValidationSummary();
 }
 
-void MainWindow::refreshEditorExtraSelections()
+bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssue)
 {
-    validationSection_->refreshEditorExtraSelections();
+    if (!owner_.hasActiveDifficulty()) {
+        refreshValidationPanelForActiveField();
+        return false;
+    }
+
+    const int difficultyId = owner_.activeDifficultyId();
+    const QString chartText = owner_.activeChartText();
+    const bool chineseUi = UiText::isChineseUi();
+    const miacode::simai::SimaiTimingMetadata timingMetadata = owner_.currentTimingMetadata();
+    const SimaiNativeParseResult* cachedLenientResult =
+        (state_.lastTimelineParseDifficultyId_ == difficultyId
+            && state_.lastTimelineParseChartText_ == chartText
+            && state_.lastTimelineParseTimingMetadata_ == timingMetadata)
+        ? &state_.lastTimelineParseResult_
+        : nullptr;
+
+    ValidationCacheEntry entry;
+    const auto cacheIt = state_.validationCacheByDifficulty_.constFind(difficultyId);
+    if (cacheIt != state_.validationCacheByDifficulty_.constEnd()
+        && cacheIt->chartText == chartText
+        && cacheIt->chineseUi == chineseUi
+        && cacheIt->timingMetadata == timingMetadata) {
+        entry = cacheIt.value();
+    } else {
+        QElapsedTimer reportTimer;
+        reportTimer.start();
+        const SimaiNativeValidationLocale locale = chineseUi
+            ? SimaiNativeValidationLocale::Chinese
+            : SimaiNativeValidationLocale::English;
+        const SimaiNativeValidationReport report =
+            SimaiNativeParser::buildValidationReport(chartText, locale, cachedLenientResult, timingMetadata);
+        entry.chartText = chartText;
+        entry.chineseUi = chineseUi;
+        entry.timingMetadata = timingMetadata;
+        entry.ok = report.ok;
+        entry.errorCount = report.errorCount;
+        entry.warningCount = report.warningCount;
+        entry.lenientNoteCount = report.lenientNoteCount;
+        entry.lenientErrorCount = report.lenientErrorCount;
+        entry.strictNoteCount = report.strictNoteCount;
+        entry.strictErrorCount = report.strictErrorCount;
+        entry.issues.clear();
+        entry.issues.reserve(report.issues.size());
+        for (const SimaiNativeValidationIssue& issue : report.issues) {
+            ValidationCachedIssue cachedIssue;
+            cachedIssue.line = issue.line;
+            cachedIssue.col = issue.col;
+            cachedIssue.endCol = issue.endCol;
+            cachedIssue.rawMessage = issue.rawMessage;
+            cachedIssue.displayMessage = issue.displayMessage;
+            cachedIssue.issueTypeKey = validationIssueTypeKeyFromRawMessage(issue.rawMessage);
+            cachedIssue.issueTypeLabel = validationIssueTypeLabelFromDisplayMessage(issue.displayMessage);
+            entry.issues.append(cachedIssue);
+        }
+        state_.validationCacheByDifficulty_.insert(difficultyId, entry);
+        if (state_.runtimeDebugOutputEnabled_) {
+            owner_.appendOutput(
+                "edit/validation_perf",
+                QStringLiteral("build_report=%1ms issues=%2 cached_lenient=%3")
+                    .arg(reportTimer.elapsed())
+                    .arg(entry.issues.size())
+                    .arg(cachedLenientResult != nullptr ? QStringLiteral("1") : QStringLiteral("0"))
+            );
+        }
+    }
+
+    QElapsedTimer applyTimer;
+    applyTimer.start();
+    setValidationTabVisible(true);
+    clearValidationErrors();
+    clearValidationDecorations();
+    for (const ValidationCachedIssue& issue : entry.issues) {
+        const QString issueTypeKey = issue.issueTypeKey.isEmpty()
+            ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)
+            : issue.issueTypeKey;
+        const QString issueTypeLabel = issue.issueTypeLabel.isEmpty()
+            ? validationIssueTypeLabelFromDisplayMessage(issue.displayMessage)
+            : issue.issueTypeLabel;
+        addValidationError(
+            issue.line,
+            issue.col,
+            issue.rawMessage,
+            issue.displayMessage,
+            issueTypeKey,
+            issueTypeLabel,
+            isIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey)
+        );
+        addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
+    }
+    refreshEditorExtraSelections();
+    scheduleWrappedListRelayout(ui_.errorList_);
+    updateEditorValidationSummary();
+    if (focusFirstIssue && !entry.issues.isEmpty() && ui_.bottomTabs_ != nullptr && ui_.errorList_ != nullptr) {
+        const int errorTabIndex = ui_.bottomTabs_->indexOf(ui_.errorList_);
+        if (errorTabIndex >= 0) {
+            ui_.bottomTabs_->setCurrentIndex(errorTabIndex);
+        }
+        onErrorItemActivated(ui_.errorList_->item(0));
+    }
+    if (state_.runtimeDebugOutputEnabled_) {
+        owner_.appendOutput(
+            "edit/validation_apply_perf",
+            QStringLiteral("apply_ui=%1ms issues=%2")
+                .arg(applyTimer.elapsed())
+                .arg(entry.issues.size())
+        );
+    }
+    return entry.ok;
 }
 
-void MainWindow::updateEditorValidationSummary()
+bool MainWindow::ValidationSection::runValidateSimai()
 {
-    validationSection_->updateEditorValidationSummary();
+    if (!owner_.hasActiveDifficulty()) {
+        owner_.statusBar()->showMessage(
+            uiText("status.syntax.select_difficulty", "Select a difficulty field first.")
+        );
+        return false;
+    }
+
+    const int difficultyId = owner_.activeDifficultyId();
+    const QString chartText = owner_.activeChartText();
+    const bool chineseUi = UiText::isChineseUi();
+    const miacode::simai::SimaiTimingMetadata timingMetadata = owner_.currentTimingMetadata();
+    const SimaiNativeParseResult* cachedLenientResult =
+        (state_.lastTimelineParseDifficultyId_ == difficultyId
+            && state_.lastTimelineParseChartText_ == chartText
+            && state_.lastTimelineParseTimingMetadata_ == timingMetadata)
+        ? &state_.lastTimelineParseResult_
+        : nullptr;
+
+    ValidationCacheEntry entry;
+    const auto cacheIt = state_.validationCacheByDifficulty_.constFind(difficultyId);
+    if (cacheIt != state_.validationCacheByDifficulty_.constEnd()
+        && cacheIt->chartText == chartText
+        && cacheIt->chineseUi == chineseUi
+        && cacheIt->timingMetadata == timingMetadata) {
+        entry = cacheIt.value();
+    } else {
+        QElapsedTimer reportTimer;
+        reportTimer.start();
+        const SimaiNativeValidationLocale locale = chineseUi
+            ? SimaiNativeValidationLocale::Chinese
+            : SimaiNativeValidationLocale::English;
+        const SimaiNativeValidationReport report =
+            SimaiNativeParser::buildValidationReport(chartText, locale, cachedLenientResult, timingMetadata);
+        entry.chartText = chartText;
+        entry.chineseUi = chineseUi;
+        entry.timingMetadata = timingMetadata;
+        entry.ok = report.ok;
+        entry.errorCount = report.errorCount;
+        entry.warningCount = report.warningCount;
+        entry.lenientNoteCount = report.lenientNoteCount;
+        entry.lenientErrorCount = report.lenientErrorCount;
+        entry.strictNoteCount = report.strictNoteCount;
+        entry.strictErrorCount = report.strictErrorCount;
+        entry.issues.clear();
+        entry.issues.reserve(report.issues.size());
+        for (const SimaiNativeValidationIssue& issue : report.issues) {
+            ValidationCachedIssue cachedIssue;
+            cachedIssue.line = issue.line;
+            cachedIssue.col = issue.col;
+            cachedIssue.endCol = issue.endCol;
+            cachedIssue.rawMessage = issue.rawMessage;
+            cachedIssue.displayMessage = issue.displayMessage;
+            cachedIssue.issueTypeKey = validationIssueTypeKeyFromRawMessage(issue.rawMessage);
+            cachedIssue.issueTypeLabel = validationIssueTypeLabelFromDisplayMessage(issue.displayMessage);
+            entry.issues.append(cachedIssue);
+        }
+        state_.validationCacheByDifficulty_.insert(difficultyId, entry);
+        if (state_.runtimeDebugOutputEnabled_) {
+            owner_.appendOutput(
+                "edit/validation_perf",
+                QStringLiteral("build_report=%1ms issues=%2 cached_lenient=%3")
+                    .arg(reportTimer.elapsed())
+                    .arg(entry.issues.size())
+                    .arg(cachedLenientResult != nullptr ? QStringLiteral("1") : QStringLiteral("0"))
+            );
+        }
+    }
+
+    const QString payload = QStringLiteral(
+        "lenient_note_count=%1\n"
+        "lenient_error_count=%2\n"
+        "strict_note_count=%3\n"
+        "strict_error_count=%4"
+    )
+        .arg(entry.lenientNoteCount)
+        .arg(entry.lenientErrorCount)
+        .arg(entry.strictNoteCount)
+        .arg(entry.strictErrorCount);
+    owner_.appendOutput("validate", payload);
+
+    clearValidationErrors();
+    clearValidationDecorations();
+    for (const ValidationCachedIssue& issue : entry.issues) {
+        const QString issueTypeKey = issue.issueTypeKey.isEmpty()
+            ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)
+            : issue.issueTypeKey;
+        const QString issueTypeLabel = issue.issueTypeLabel.isEmpty()
+            ? validationIssueTypeLabelFromDisplayMessage(issue.displayMessage)
+            : issue.issueTypeLabel;
+        addValidationError(
+            issue.line,
+            issue.col,
+            issue.rawMessage,
+            issue.displayMessage,
+            issueTypeKey,
+            issueTypeLabel,
+            isIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey)
+        );
+        addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
+    }
+    refreshEditorExtraSelections();
+    scheduleWrappedListRelayout(ui_.errorList_);
+    updateEditorValidationSummary();
+    if (!entry.issues.isEmpty() && ui_.bottomTabs_ != nullptr && ui_.errorList_ != nullptr) {
+        const int errorTabIndex = ui_.bottomTabs_->indexOf(ui_.errorList_);
+        if (errorTabIndex >= 0) {
+            ui_.bottomTabs_->setCurrentIndex(errorTabIndex);
+        }
+        onErrorItemActivated(ui_.errorList_->item(0));
+    }
+
+    if (entry.ok) {
+        owner_.statusBar()->showMessage(uiText("status.syntax.passed", "Syntax check passed."));
+        QMessageBox okDialog(UiDialogs::effectiveParentWidget(&owner_));
+        okDialog.setIcon(QMessageBox::Information);
+        okDialog.setWindowTitle(ui_.validateAction_ != nullptr ? ui_.validateAction_->text() : QStringLiteral("Syntax Check"));
+        okDialog.setWindowIcon(owner_.windowIcon());
+        okDialog.setText(uiText("dialog.syntax_ok.message", "No syntax errors or warnings found."));
+        okDialog.setStandardButtons(QMessageBox::Ok);
+        okDialog.setDefaultButton(QMessageBox::Ok);
+        UiDialogs::prepareDialogWindow(&okDialog, &owner_);
+        UiDialogs::localizeMessageBox(&okDialog);
+        auto* closeOnSpace = new QShortcut(QKeySequence(Qt::Key_Space), &okDialog);
+        connect(closeOnSpace, &QShortcut::activated, &okDialog, &QDialog::accept);
+        auto* closeOnReturn = new QShortcut(QKeySequence(Qt::Key_Return), &okDialog);
+        connect(closeOnReturn, &QShortcut::activated, &okDialog, &QDialog::accept);
+        auto* closeOnEnter = new QShortcut(QKeySequence(Qt::Key_Enter), &okDialog);
+        connect(closeOnEnter, &QShortcut::activated, &okDialog, &QDialog::accept);
+        okDialog.exec();
+        return true;
+    }
+
+    owner_.statusBar()->showMessage(
+        uiText("status.syntax.failed_counts", "Syntax check failed: %1 error(s), %2 warning(s).")
+            .arg(entry.errorCount)
+            .arg(entry.warningCount)
+    );
+    return false;
 }
 
-void MainWindow::setPreviewFollowDecoration(int line, int col)
+void MainWindow::ValidationSection::onValidateSimai()
 {
-    validationSection_->setPreviewFollowDecoration(line, col);
+    (void)runValidateSimai();
 }
 
-void MainWindow::clearPreviewFollowDecoration()
+void MainWindow::showIssueListContextMenu(QListWidget* list, const QPoint& pos, bool muriList)
 {
-    validationSection_->clearPreviewFollowDecoration();
+    validationSection_->showIssueListContextMenu(list, pos, muriList);
 }
 
-void MainWindow::clearValidationErrors()
+void MainWindow::refreshMuriDiagnosticsPanel()
 {
-    validationSection_->clearValidationErrors();
+    validationSection_->refreshMuriDiagnosticsPanel();
 }
 
-void MainWindow::clearMuriDiagnostics()
+void MainWindow::clearValidationCache()
 {
-    validationSection_->clearMuriDiagnostics();
+    validationSection_->clearValidationCache();
 }
 
-void MainWindow::clearValidationDecorations()
+void MainWindow::applyDeferredAnalysisUiUpdates()
 {
-    validationSection_->clearValidationDecorations();
+    validationSection_->applyDeferredAnalysisUiUpdates();
 }
 
-void MainWindow::addValidationError(
-    int line,
-    int col,
-    const QString& rawMessage,
-    const QString& displayMessage,
-    const QString& issueTypeKey,
-    const QString& issueTypeLabel,
-    bool ignoredInHeader)
+void MainWindow::setValidationTabVisible(bool visible)
 {
-    validationSection_->addValidationError(line, col, rawMessage, displayMessage, issueTypeKey, issueTypeLabel, ignoredInHeader);
+    validationSection_->setValidationTabVisible(visible);
 }
 
-void MainWindow::addValidationDecoration(int line, int col, const QString& message, int endCol)
+void MainWindow::refreshValidationPanelForActiveField()
 {
-    validationSection_->addValidationDecoration(line, col, message, endCol);
+    validationSection_->refreshValidationPanelForActiveField();
 }
 
-void MainWindow::jumpToLocation(int line, int col)
+bool MainWindow::runValidateSimaiSilently(bool focusFirstIssue)
 {
-    validationSection_->jumpToLocation(line, col);
+    return validationSection_->runValidateSimaiSilently(focusFirstIssue);
 }
 
-void MainWindow::onErrorItemActivated(QListWidgetItem* item)
+bool MainWindow::runValidateSimai()
 {
-    validationSection_->onErrorItemActivated(item);
+    return validationSection_->runValidateSimai();
 }
 
-void MainWindow::onMuriItemActivated(QListWidgetItem* item)
+void MainWindow::onValidateSimai()
 {
-    validationSection_->onMuriItemActivated(item);
+    validationSection_->onValidateSimai();
 }
-

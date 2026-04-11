@@ -71,12 +71,35 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/MainWindowShared.h
     src/app/mainwindow/MainWindowShared.cpp
     src/app/mainwindow/sections/document/MainWindow.DocumentFlow.cpp
+    src/app/mainwindow/sections/document/MainWindow.DocumentEditorState.cpp
+    src/app/mainwindow/sections/document/MainWindow.DocumentTransforms.cpp
+    src/app/mainwindow/sections/document/MainWindow.DocumentUi.cpp
+    src/app/mainwindow/sections/dialogs/MainWindow.Dialogs.cpp
+    src/app/mainwindow/sections/dialogs/MainWindow.DialogsSection.cpp
     src/app/mainwindow/sections/editor/MainWindow.EditorDisplay.cpp
+    src/app/mainwindow/sections/editor/MainWindow.EditorState.cpp
+    src/app/mainwindow/sections/export/MainWindow.ExportFlow.cpp
+    src/app/mainwindow/sections/export/MainWindow.ExportSnapshot.cpp
+    src/app/mainwindow/sections/export/MainWindow.ExportSection.cpp
+    src/app/mainwindow/sections/export/MainWindow.ExportWorker.cpp
     src/app/mainwindow/sections/frame/MainWindow.BootstrapAndMenus.cpp
+    src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp
+    src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp
     src/app/mainwindow/sections/preferences/MainWindow.PreferencesDialog.cpp
     src/app/mainwindow/sections/preview/MainWindow.PreviewStageMediaRoute.cpp
+    src/app/mainwindow/sections/preview/MainWindow.PreviewWarmupAndSettings.cpp
     src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp
+    src/app/mainwindow/sections/timeline/MainWindow.TimelineLayout.cpp
+    src/app/mainwindow/sections/timeline/MainWindow.TimelinePlayback.cpp
+    src/app/mainwindow/sections/timeline/MainWindow.PreviewPlaybackGlue.cpp
     src/app/mainwindow/sections/validation/MainWindow.ValidationFlow.cpp
+    src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp
+    src/app/mainwindow/sections/validation/MainWindow.ValidationRender.cpp
+    src/app/mainwindow/sections/validation/MainWindow.ValidationRuntime.cpp
+    src/app/mainwindow/sections/window/MainWindow.WindowInteraction.cpp
+    src/app/mainwindow/sections/window/MainWindow.WindowRuntime.cpp
+    src/app/mainwindow/sections/window/MainWindow.WindowSection.cpp
+    src/app/mainwindow/sections/window/MainWindow.WindowShell.cpp
     src/app/ui/UiText.h
     src/app/ui/UiText.cpp
     src/app/ui/UiTheme.h

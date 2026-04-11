@@ -38,34 +38,10 @@ MainWindow::PreviewSection::PreviewSection(
     , state_(state)
 {}
 
-#define previewStageMediaHost_ state_.previewStageMediaHost_
-#define previewCanvas_ state_.previewCanvas_
-#define quickShellPreviewCompositeSurface_ state_.quickShellPreviewCompositeSurface_
-#define quickShellStartupStageMediaLoadDeferred_ state_.quickShellStartupStageMediaLoadDeferred_
-#define quickShellStartupUiReady_ state_.quickShellStartupUiReady_
-#define startupRestorePending_ state_.startupRestorePending_
-#define deferredQuickShellStartupStageMediaFlushScheduled_ state_.deferredQuickShellStartupStageMediaFlushScheduled_
-#define deferredQuickShellStartupStageMediaPending_ state_.deferredQuickShellStartupStageMediaPending_
-#define deferredQuickShellStartupStageMediaChartPath_ state_.deferredQuickShellStartupStageMediaChartPath_
-#define deferredQuickShellStartupStageMediaPausedSecond_ state_.deferredQuickShellStartupStageMediaPausedSecond_
-#define previewBackgroundScaleMode_ state_.previewBackgroundScaleMode_
-#define previewPlaybackRate_ state_.previewPlaybackRate_
-#define pausedPreviewMediaSeekPending_ state_.pausedPreviewMediaSeekPending_
-#define pausedPreviewMediaSeekSecond_ state_.pausedPreviewMediaSeekSecond_
-#define currentFilePath_ state_.currentFilePath_
-#define qtPreviewPauseSecond_ state_.qtPreviewPauseSecond_
-#define previewMediaWarmupChartPath_ state_.previewMediaWarmupChartPath_
-#define previewMediaWarmupResolvedPath_ state_.previewMediaWarmupResolvedPath_
-#define qtPreviewPlaying_ state_.qtPreviewPlaying_
-#define qtPreviewStartSecond_ state_.qtPreviewStartSecond_
-#define qtPreviewElapsed_ state_.qtPreviewElapsed_
-#define quickShellPreviewCompositeSurfaceActive_ state_.quickShellPreviewCompositeSurfaceActive_
-#define runtimeDebugOutputEnabled_ state_.runtimeDebugOutputEnabled_
-
 void MainWindow::PreviewSection::applyPreviewStageMediaRouteVisualSettings()
 {
-    if (previewStageMediaHost_ != nullptr) {
-        previewStageMediaHost_->setBackgroundScaleMode(previewBackgroundScaleMode_);
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->setBackgroundScaleMode(state_.previewBackgroundScaleMode_);
     }
 }
 
@@ -83,20 +59,20 @@ bool MainWindow::PreviewSection::quickShellPreviewUsesSeparateSurface() const
 {
     return miacode::quick_shell::shouldUseSeparatePreviewSurface(
         true,
-        previewStageMediaHost_ != nullptr && previewStageMediaHost_->hasVideoMedia()
+        state_.previewStageMediaHost_ != nullptr && state_.previewStageMediaHost_->hasVideoMedia()
     );
 }
 
 QWindow* MainWindow::PreviewSection::quickShellPreviewCompositeWindow() const
 {
-    return quickShellPreviewCompositeSurface_ != nullptr
-        ? quickShellPreviewCompositeSurface_->hostWindow()
+    return state_.quickShellPreviewCompositeSurface_ != nullptr
+        ? state_.quickShellPreviewCompositeSurface_->hostWindow()
         : nullptr;
 }
 
 bool MainWindow::PreviewSection::shouldDeferQuickShellStartupStageMediaLoad() const
 {
-    return previewUsesStageMediaHostRoute() && quickShellStartupStageMediaLoadDeferred_;
+    return previewUsesStageMediaHostRoute() && state_.quickShellStartupStageMediaLoadDeferred_;
 }
 
 void MainWindow::PreviewSection::noteQuickShellStartupUiReady()
@@ -104,46 +80,46 @@ void MainWindow::PreviewSection::noteQuickShellStartupUiReady()
     if (!previewUsesStageMediaHostRoute()) {
         return;
     }
-    quickShellStartupUiReady_ = true;
+    state_.quickShellStartupUiReady_ = true;
     scheduleDeferredQuickShellStartupStageMediaLoadIfReady();
 }
 
 void MainWindow::PreviewSection::scheduleDeferredQuickShellStartupStageMediaLoadIfReady()
 {
     if (!shouldDeferQuickShellStartupStageMediaLoad()
-        || !quickShellStartupUiReady_
-        || startupRestorePending_
-        || deferredQuickShellStartupStageMediaFlushScheduled_) {
+        || !state_.quickShellStartupUiReady_
+        || state_.startupRestorePending_
+        || state_.deferredQuickShellStartupStageMediaFlushScheduled_) {
         return;
     }
 
-    deferredQuickShellStartupStageMediaFlushScheduled_ = true;
+    state_.deferredQuickShellStartupStageMediaFlushScheduled_ = true;
     QTimer::singleShot(0, &owner_, [this]() {
-        deferredQuickShellStartupStageMediaFlushScheduled_ = false;
+        state_.deferredQuickShellStartupStageMediaFlushScheduled_ = false;
         if (!shouldDeferQuickShellStartupStageMediaLoad()
-            || !quickShellStartupUiReady_
-            || startupRestorePending_) {
+            || !state_.quickShellStartupUiReady_
+            || state_.startupRestorePending_) {
             return;
         }
 
-        quickShellStartupStageMediaLoadDeferred_ = false;
-        if (!deferredQuickShellStartupStageMediaPending_ || previewStageMediaHost_ == nullptr) {
+        state_.quickShellStartupStageMediaLoadDeferred_ = false;
+        if (!state_.deferredQuickShellStartupStageMediaPending_ || state_.previewStageMediaHost_ == nullptr) {
             return;
         }
 
-        deferredQuickShellStartupStageMediaPending_ = false;
-        previewStageMediaHost_->setChartPath(deferredQuickShellStartupStageMediaChartPath_);
-        previewStageMediaHost_->setPlayheadSeconds(deferredQuickShellStartupStageMediaPausedSecond_);
+        state_.deferredQuickShellStartupStageMediaPending_ = false;
+        state_.previewStageMediaHost_->setChartPath(state_.deferredQuickShellStartupStageMediaChartPath_);
+        state_.previewStageMediaHost_->setPlayheadSeconds(state_.deferredQuickShellStartupStageMediaPausedSecond_);
         refreshPreviewStageMediaRouteDebugState(false);
     });
 }
 
 void MainWindow::PreviewSection::updatePreviewStageMediaPresentationMode(bool requestUpdate)
 {
-    if (previewCanvas_ == nullptr) {
+    if (state_.previewCanvas_ == nullptr) {
         return;
     }
-    previewCanvas_->setStageMediaPresentationMode(
+    state_.previewCanvas_->setStageMediaPresentationMode(
         miacode::preview::scene::PreviewStageMediaPresentationMode::ExternalQuickMediaItem,
         requestUpdate
     );
@@ -163,26 +139,26 @@ void MainWindow::PreviewSection::syncPreviewStageMediaRouteChartPath(
     updatePreviewStageMediaPresentationMode(false);
 
     ensurePreviewStageMediaHostInitialized();
-    deferredQuickShellStartupStageMediaChartPath_ = chartPath;
-    deferredQuickShellStartupStageMediaPausedSecond_ = clampedPausedSecond;
-    deferredQuickShellStartupStageMediaPending_ = true;
+    state_.deferredQuickShellStartupStageMediaChartPath_ = chartPath;
+    state_.deferredQuickShellStartupStageMediaPausedSecond_ = clampedPausedSecond;
+    state_.deferredQuickShellStartupStageMediaPending_ = true;
     if (!shouldDeferQuickShellStartupStageMediaLoad()) {
-        deferredQuickShellStartupStageMediaPending_ = false;
-        previewStageMediaHost_->setChartPath(chartPath);
-        previewStageMediaHost_->setPlayheadSeconds(clampedPausedSecond);
+        state_.deferredQuickShellStartupStageMediaPending_ = false;
+        state_.previewStageMediaHost_->setChartPath(chartPath);
+        state_.previewStageMediaHost_->setPlayheadSeconds(clampedPausedSecond);
     }
 
-    applyPreviewStageMediaRoutePlaybackRate(previewPlaybackRate_);
+    applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
     refreshPreviewStageMediaRouteDebugState(false);
 }
 
 void MainWindow::PreviewSection::clearPreviewStageMediaRoute()
 {
-    deferredQuickShellStartupStageMediaPending_ = false;
-    deferredQuickShellStartupStageMediaChartPath_.clear();
-    deferredQuickShellStartupStageMediaPausedSecond_ = 0.0;
-    if (previewStageMediaHost_ != nullptr) {
-        previewStageMediaHost_->setChartPath(QString());
+    state_.deferredQuickShellStartupStageMediaPending_ = false;
+    state_.deferredQuickShellStartupStageMediaChartPath_.clear();
+    state_.deferredQuickShellStartupStageMediaPausedSecond_ = 0.0;
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->setChartPath(QString());
     }
 
     refreshPreviewStageMediaRouteDebugState(false);
@@ -194,40 +170,40 @@ void MainWindow::PreviewSection::applyPreviewMediaWarmupToStageMediaRoute(
     const QString& trackPath)
 {
     ensurePreviewStageMediaHostInitialized();
-    previewStageMediaHost_->setWarmupResolvedMediaPath(chartPath, resolvedMediaPath);
-    deferredQuickShellStartupStageMediaChartPath_ = chartPath;
-    deferredQuickShellStartupStageMediaPending_ = true;
+    state_.previewStageMediaHost_->setWarmupResolvedMediaPath(chartPath, resolvedMediaPath);
+    state_.deferredQuickShellStartupStageMediaChartPath_ = chartPath;
+    state_.deferredQuickShellStartupStageMediaPending_ = true;
     if (!shouldDeferQuickShellStartupStageMediaLoad()) {
-        deferredQuickShellStartupStageMediaPending_ = false;
-        previewStageMediaHost_->setChartPath(chartPath);
+        state_.deferredQuickShellStartupStageMediaPending_ = false;
+        state_.previewStageMediaHost_->setChartPath(chartPath);
     }
 
-    applyPreviewStageMediaRoutePlaybackRate(previewPlaybackRate_);
+    applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
     refreshPreviewStageMediaRouteDebugState(false);
 }
 
 void MainWindow::PreviewSection::resetPreviewStageMediaRouteTimelineOffset()
 {
-    if (previewStageMediaHost_ != nullptr) {
-        previewStageMediaHost_->setTimelineOffsetSeconds(0.0);
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->setTimelineOffsetSeconds(0.0);
     }
 }
 
 void MainWindow::PreviewSection::applyPreviewStageMediaRoutePlaybackRate(double rate)
 {
-    if (previewStageMediaHost_ != nullptr) {
-        previewStageMediaHost_->setPlaybackRate(rate);
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->setPlaybackRate(rate);
     }
 }
 
 bool MainWindow::PreviewSection::previewStageMediaRouteHasVideo() const
 {
-    return previewStageMediaHost_ != nullptr && previewStageMediaHost_->hasVideoMedia();
+    return state_.previewStageMediaHost_ != nullptr && state_.previewStageMediaHost_->hasVideoMedia();
 }
 
 double MainWindow::PreviewSection::previewStageMediaRouteCurrentPlaybackSecond() const
 {
-    return previewStageMediaHost_ != nullptr ? previewStageMediaHost_->currentPlaybackSecond() : 0.0;
+    return state_.previewStageMediaHost_ != nullptr ? state_.previewStageMediaHost_->currentPlaybackSecond() : 0.0;
 }
 
 void MainWindow::PreviewSection::startPreviewStageMediaRoutePlayback(double second)
@@ -236,8 +212,8 @@ void MainWindow::PreviewSection::startPreviewStageMediaRoutePlayback(double seco
         return;
     }
 
-    if (previewStageMediaHost_ != nullptr) {
-        previewStageMediaHost_->startPlayback(second);
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->startPlayback(second);
     }
 }
 
@@ -247,8 +223,8 @@ void MainWindow::PreviewSection::syncPreviewStageMediaRoutePlayback(double secon
         return;
     }
 
-    if (previewStageMediaHost_ != nullptr) {
-        previewStageMediaHost_->syncPlayback(second);
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->syncPlayback(second);
     }
 }
 
@@ -258,8 +234,8 @@ void MainWindow::PreviewSection::pausePreviewStageMediaRoutePlayback()
         return;
     }
 
-    if (previewStageMediaHost_ != nullptr) {
-        previewStageMediaHost_->pausePlayback();
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->pausePlayback();
     }
 }
 
@@ -267,52 +243,52 @@ void MainWindow::PreviewSection::seekPreviewStageMediaRouteWhilePaused(double se
 {
     const double clampedSecond = qBound(0.0, second, owner_.previewDurationSeconds());
     if (!previewStageMediaRouteHasVideo()) {
-        pausedPreviewMediaSeekPending_ = false;
+        state_.pausedPreviewMediaSeekPending_ = false;
         return;
     }
 
-    pausedPreviewMediaSeekPending_ = true;
-    pausedPreviewMediaSeekSecond_ = clampedSecond;
-    if (previewStageMediaHost_ != nullptr) {
-        previewStageMediaHost_->setPlayheadSeconds(clampedSecond);
+    state_.pausedPreviewMediaSeekPending_ = true;
+    state_.pausedPreviewMediaSeekSecond_ = clampedSecond;
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->setPlayheadSeconds(clampedSecond);
     }
 }
 
 void MainWindow::PreviewSection::setPreviewStageMediaRouteObservedPlayheadSecond(double second)
 {
-    if (!previewUsesStageMediaHostRoute() || previewStageMediaHost_ == nullptr) {
+    if (!previewUsesStageMediaHostRoute() || state_.previewStageMediaHost_ == nullptr) {
         return;
     }
-    previewStageMediaHost_->setObservedPlayheadSecond(second);
+    state_.previewStageMediaHost_->setObservedPlayheadSecond(second);
 }
 
 void MainWindow::PreviewSection::ensureQuickShellPreviewCompositeSurfaceInitialized()
 {
-    if (quickShellPreviewCompositeSurface_ == nullptr) {
-        quickShellPreviewCompositeSurface_ = new QuickShellPreviewCompositeSurface(&owner_);
+    if (state_.quickShellPreviewCompositeSurface_ == nullptr) {
+        state_.quickShellPreviewCompositeSurface_ = new QuickShellPreviewCompositeSurface(&owner_);
     }
-    quickShellPreviewCompositeSurface_->setRuntime(previewCanvas_);
-    quickShellPreviewCompositeSurface_->setMediaHost(previewStageMediaHost_);
+    state_.quickShellPreviewCompositeSurface_->setRuntime(state_.previewCanvas_);
+    state_.quickShellPreviewCompositeSurface_->setMediaHost(state_.previewStageMediaHost_);
 }
 
 void MainWindow::PreviewSection::refreshQuickShellPreviewCompositeSurfaceState()
 {
     ensureQuickShellPreviewCompositeSurfaceInitialized();
-    if (quickShellPreviewCompositeSurface_ == nullptr) {
+    if (state_.quickShellPreviewCompositeSurface_ == nullptr) {
         return;
     }
 
     const bool nextActive = quickShellPreviewUsesSeparateSurface();
-    quickShellPreviewCompositeSurface_->setRuntime(previewCanvas_);
-    quickShellPreviewCompositeSurface_->setMediaHost(previewStageMediaHost_);
-    quickShellPreviewCompositeSurface_->setActive(nextActive);
+    state_.quickShellPreviewCompositeSurface_->setRuntime(state_.previewCanvas_);
+    state_.quickShellPreviewCompositeSurface_->setMediaHost(state_.previewStageMediaHost_);
+    state_.quickShellPreviewCompositeSurface_->setActive(nextActive);
 
-    if (quickShellPreviewCompositeSurfaceActive_ == nextActive) {
+    if (state_.quickShellPreviewCompositeSurfaceActive_ == nextActive) {
         return;
     }
 
-    quickShellPreviewCompositeSurfaceActive_ = nextActive;
-    if (runtimeDebugOutputEnabled_) {
+    state_.quickShellPreviewCompositeSurfaceActive_ = nextActive;
+    if (state_.runtimeDebugOutputEnabled_) {
         owner_.appendOutput(
             "preview/stage_media",
             QString("action=presentation_mode mode=%1")
@@ -323,52 +299,52 @@ void MainWindow::PreviewSection::refreshQuickShellPreviewCompositeSurfaceState()
 
 void MainWindow::PreviewSection::ensurePreviewStageMediaHostInitialized()
 {
-    if (previewStageMediaHost_ != nullptr) {
+    if (state_.previewStageMediaHost_ != nullptr) {
         ensureQuickShellPreviewCompositeSurfaceInitialized();
         refreshQuickShellPreviewCompositeSurfaceState();
         return;
     }
 
-    previewStageMediaHost_ = new PreviewStageMediaHost(&owner_);
-    previewStageMediaHost_->setBackgroundScaleMode(previewBackgroundScaleMode_);
-    connect(previewStageMediaHost_, &PreviewStageMediaHost::mediaStateChanged, &owner_, [this]() {
-        if (previewCanvas_ != nullptr) {
-            previewCanvas_->setStageMediaAvailable(previewStageMediaHost_->hasResolvedMedia());
+    state_.previewStageMediaHost_ = new PreviewStageMediaHost(&owner_);
+    state_.previewStageMediaHost_->setBackgroundScaleMode(state_.previewBackgroundScaleMode_);
+    connect(state_.previewStageMediaHost_, &PreviewStageMediaHost::mediaStateChanged, &owner_, [this]() {
+        if (state_.previewCanvas_ != nullptr) {
+            state_.previewCanvas_->setStageMediaAvailable(state_.previewStageMediaHost_->hasResolvedMedia());
         }
         refreshQuickShellPreviewCompositeSurfaceState();
         refreshPreviewStageMediaRouteDebugState(false);
     });
-    connect(previewStageMediaHost_, &PreviewStageMediaHost::playbackPositionChanged, &owner_, [this](double second) {
-        if (qtPreviewPlaying_) {
+    connect(state_.previewStageMediaHost_, &PreviewStageMediaHost::playbackPositionChanged, &owner_, [this](double second) {
+        if (state_.qtPreviewPlaying_) {
             return;
         }
-        if (pausedPreviewMediaSeekPending_) {
-            if (qAbs(second - pausedPreviewMediaSeekSecond_) > 0.05) {
+        if (state_.pausedPreviewMediaSeekPending_) {
+            if (qAbs(second - state_.pausedPreviewMediaSeekSecond_) > 0.05) {
                 return;
             }
-            second = pausedPreviewMediaSeekSecond_;
-            pausedPreviewMediaSeekPending_ = false;
+            second = state_.pausedPreviewMediaSeekSecond_;
+            state_.pausedPreviewMediaSeekPending_ = false;
         }
-        qtPreviewStartSecond_ = second;
-        qtPreviewElapsed_.restart();
+        state_.qtPreviewStartSecond_ = second;
+        state_.qtPreviewElapsed_.restart();
         owner_.applyQtPreviewPosition(second, true);
         refreshPreviewStageMediaRouteDebugState(false);
     });
-    connect(previewStageMediaHost_, &PreviewStageMediaHost::playbackFinished, &owner_, [this]() {
+    connect(state_.previewStageMediaHost_, &PreviewStageMediaHost::playbackFinished, &owner_, [this]() {
         owner_.finishQtPreviewPlaybackAndReturnToEntry("Qt preview reached the end of current media.");
     });
-    connect(previewStageMediaHost_, &PreviewStageMediaHost::diagnosticsChanged, &owner_, [this]() {
-        refreshPreviewStageMediaRouteDebugState(!qtPreviewPlaying_);
+    connect(state_.previewStageMediaHost_, &PreviewStageMediaHost::diagnosticsChanged, &owner_, [this]() {
+        refreshPreviewStageMediaRouteDebugState(!state_.qtPreviewPlaying_);
     });
     ensureQuickShellPreviewCompositeSurfaceInitialized();
-    previewStageMediaHost_->setWarmupResolvedMediaPath(previewMediaWarmupChartPath_, previewMediaWarmupResolvedPath_);
-    deferredQuickShellStartupStageMediaChartPath_ = currentFilePath_;
-    deferredQuickShellStartupStageMediaPausedSecond_ = qMax(0.0, qtPreviewPauseSecond_);
-    deferredQuickShellStartupStageMediaPending_ = !currentFilePath_.isEmpty();
+    state_.previewStageMediaHost_->setWarmupResolvedMediaPath(state_.previewMediaWarmupChartPath_, state_.previewMediaWarmupResolvedPath_);
+    state_.deferredQuickShellStartupStageMediaChartPath_ = state_.currentFilePath_;
+    state_.deferredQuickShellStartupStageMediaPausedSecond_ = qMax(0.0, state_.qtPreviewPauseSecond_);
+    state_.deferredQuickShellStartupStageMediaPending_ = !state_.currentFilePath_.isEmpty();
     if (!shouldDeferQuickShellStartupStageMediaLoad()) {
-        deferredQuickShellStartupStageMediaPending_ = false;
-        previewStageMediaHost_->setChartPath(currentFilePath_);
-        previewStageMediaHost_->setPlayheadSeconds(qtPreviewPauseSecond_);
+        state_.deferredQuickShellStartupStageMediaPending_ = false;
+        state_.previewStageMediaHost_->setChartPath(state_.currentFilePath_);
+        state_.previewStageMediaHost_->setPlayheadSeconds(state_.qtPreviewPauseSecond_);
     }
     refreshQuickShellPreviewCompositeSurfaceState();
     refreshPreviewStageMediaRouteDebugState(false);
@@ -376,21 +352,21 @@ void MainWindow::PreviewSection::ensurePreviewStageMediaHostInitialized()
 
 void MainWindow::PreviewSection::shutdownPreviewStageMediaHost()
 {
-    if (previewStageMediaHost_ == nullptr) {
+    if (state_.previewStageMediaHost_ == nullptr) {
         return;
     }
-    if (quickShellPreviewCompositeSurface_ != nullptr) {
-        quickShellPreviewCompositeSurface_->setMediaHost(nullptr);
-        quickShellPreviewCompositeSurface_->setActive(false);
+    if (state_.quickShellPreviewCompositeSurface_ != nullptr) {
+        state_.quickShellPreviewCompositeSurface_->setMediaHost(nullptr);
+        state_.quickShellPreviewCompositeSurface_->setActive(false);
     }
-    quickShellPreviewCompositeSurfaceActive_ = false;
-    delete previewStageMediaHost_;
-    previewStageMediaHost_ = nullptr;
+    state_.quickShellPreviewCompositeSurfaceActive_ = false;
+    delete state_.previewStageMediaHost_;
+    state_.previewStageMediaHost_ = nullptr;
 }
 
 void MainWindow::PreviewSection::refreshPreviewStageMediaRouteDebugState(bool requestUpdate)
 {
-    if (previewCanvas_ == nullptr) {
+    if (state_.previewCanvas_ == nullptr) {
         return;
     }
     miacode::preview::scene::PreviewExternalStageMediaType mediaType =
@@ -402,29 +378,29 @@ void MainWindow::PreviewSection::refreshPreviewStageMediaRouteDebugState(bool re
     bool hasResolvedMedia = false;
     bool hasVideoMedia = false;
     QString mediaTypeName = QStringLiteral("none");
-    if (previewUsesStageMediaHostRoute() && previewStageMediaHost_ != nullptr) {
-        hasResolvedMedia = previewStageMediaHost_->hasResolvedMedia();
-        hasVideoMedia = previewStageMediaHost_->hasVideoMedia();
-        if (previewStageMediaHost_->hasVideoMedia()) {
+    if (previewUsesStageMediaHostRoute() && state_.previewStageMediaHost_ != nullptr) {
+        hasResolvedMedia = state_.previewStageMediaHost_->hasResolvedMedia();
+        hasVideoMedia = state_.previewStageMediaHost_->hasVideoMedia();
+        if (state_.previewStageMediaHost_->hasVideoMedia()) {
             mediaType = miacode::preview::scene::PreviewExternalStageMediaType::Video;
             mediaTypeName = QStringLiteral("video");
-        } else if (previewStageMediaHost_->hasResolvedMedia()) {
+        } else if (state_.previewStageMediaHost_->hasResolvedMedia()) {
             mediaType = miacode::preview::scene::PreviewExternalStageMediaType::Image;
             mediaTypeName = QStringLiteral("image");
         }
-        videoPlaybackActive = previewStageMediaHost_->videoPlaybackActive();
-        playbackSecond = previewStageMediaHost_->currentPlaybackSecond();
-        clockDeltaSeconds = previewStageMediaHost_->clockDeltaSeconds();
-        videoFrameAgeMs = previewStageMediaHost_->videoFrameAgeMs();
+        videoPlaybackActive = state_.previewStageMediaHost_->videoPlaybackActive();
+        playbackSecond = state_.previewStageMediaHost_->currentPlaybackSecond();
+        clockDeltaSeconds = state_.previewStageMediaHost_->clockDeltaSeconds();
+        videoFrameAgeMs = state_.previewStageMediaHost_->videoFrameAgeMs();
     }
-    previewCanvas_->setExternalStageMediaProfileSummary(
+    state_.previewCanvas_->setExternalStageMediaProfileSummary(
         quickShellPreviewUsesSeparateSurface(),
         hasResolvedMedia,
         hasVideoMedia,
         mediaTypeName,
-        previewStageMediaHost_ != nullptr ? previewStageMediaHost_->videoFrameCountTotal() : 0
+        state_.previewStageMediaHost_ != nullptr ? state_.previewStageMediaHost_->videoFrameCountTotal() : 0
     );
-    previewCanvas_->setExternalStageMediaDebugState(
+    state_.previewCanvas_->setExternalStageMediaDebugState(
         mediaType,
         videoPlaybackActive,
         playbackSecond,
@@ -433,30 +409,6 @@ void MainWindow::PreviewSection::refreshPreviewStageMediaRouteDebugState(bool re
         requestUpdate
     );
 }
-
-#undef previewStageMediaHost_
-#undef previewCanvas_
-#undef quickShellPreviewCompositeSurface_
-#undef quickShellStartupStageMediaLoadDeferred_
-#undef quickShellStartupUiReady_
-#undef startupRestorePending_
-#undef deferredQuickShellStartupStageMediaFlushScheduled_
-#undef deferredQuickShellStartupStageMediaPending_
-#undef deferredQuickShellStartupStageMediaChartPath_
-#undef deferredQuickShellStartupStageMediaPausedSecond_
-#undef previewBackgroundScaleMode_
-#undef previewPlaybackRate_
-#undef pausedPreviewMediaSeekPending_
-#undef pausedPreviewMediaSeekSecond_
-#undef currentFilePath_
-#undef qtPreviewPauseSecond_
-#undef previewMediaWarmupChartPath_
-#undef previewMediaWarmupResolvedPath_
-#undef qtPreviewPlaying_
-#undef qtPreviewStartSecond_
-#undef qtPreviewElapsed_
-#undef quickShellPreviewCompositeSurfaceActive_
-#undef runtimeDebugOutputEnabled_
 
 void MainWindow::applyPreviewStageMediaRouteVisualSettings()
 {

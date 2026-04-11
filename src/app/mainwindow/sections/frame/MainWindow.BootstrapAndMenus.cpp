@@ -2,11 +2,14 @@
 #include "../../MainWindowShared.h"
 #include "MainWindow.FrameSection.h"
 #include "../editor/MainWindow.EditorSection.h"
+#include "../dialogs/MainWindow.DialogsSection.h"
 #include "../document/MainWindow.DocumentSection.h"
+#include "../export/MainWindow.ExportSection.h"
 #include "../preferences/MainWindow.PreferencesSection.h"
 #include "../preview/MainWindow.PreviewSection.h"
 #include "../timeline/MainWindow.TimelineSection.h"
 #include "../validation/MainWindow.ValidationSection.h"
+#include "../window/MainWindow.WindowSection.h"
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
@@ -46,47 +49,6 @@ MainWindow::FrameSection::FrameSection(
     , state_(state)
 {}
 
-#define newAction_ owner_.newAction_
-#define openAction_ owner_.openAction_
-#define saveAction_ owner_.saveAction_
-#define saveAsAction_ owner_.saveAsAction_
-#define preferencesAction_ owner_.preferencesAction_
-#define findReplaceAction_ owner_.findReplaceAction_
-#define editorWidget_ owner_.editorWidget_
-#define transformMirrorLeftRightAction_ owner_.transformMirrorLeftRightAction_
-#define transformMirrorUpDownAction_ owner_.transformMirrorUpDownAction_
-#define transformRotate180Action_ owner_.transformRotate180Action_
-#define transformRotate45CounterClockwiseAction_ owner_.transformRotate45CounterClockwiseAction_
-#define transformRotate45ClockwiseAction_ owner_.transformRotate45ClockwiseAction_
-#define normalizeWholeChartAction_ owner_.normalizeWholeChartAction_
-#define transformToggleBreakAction_ owner_.transformToggleBreakAction_
-#define transformToggleExAction_ owner_.transformToggleExAction_
-#define transformToggleFireworkAction_ owner_.transformToggleFireworkAction_
-#define transformRandomRotateAction_ owner_.transformRandomRotateAction_
-#define stopPreviewAction_ owner_.stopPreviewAction_
-#define pausePreviewAction_ owner_.pausePreviewAction_
-#define previewSlowerAction_ owner_.previewSlowerAction_
-#define previewFasterAction_ owner_.previewFasterAction_
-#define exportVideoAction_ owner_.exportVideoAction_
-#define latencyDetectorAction_ owner_.latencyDetectorAction_
-#define toggleJudgeMarkersAction_ owner_.toggleJudgeMarkersAction_
-#define toggleTouchTrailAction_ owner_.toggleTouchTrailAction_
-#define renderModeNativeAction_ owner_.renderModeNativeAction_
-#define renderModeMaimuriDxAction_ owner_.renderModeMaimuriDxAction_
-#define editStaticTapOnSlideThresholdAction_ owner_.editStaticTapOnSlideThresholdAction_
-#define previewAudioSettingsAction_ owner_.previewAudioSettingsAction_
-#define previewVideoSettingsAction_ owner_.previewVideoSettingsAction_
-#define swapWorkspaceSidesAction_ owner_.swapWorkspaceSidesAction_
-#define aboutAction_ owner_.aboutAction_
-#define workspacePanelsSwapped_ owner_.workspacePanelsSwapped_
-#define validateAction_ owner_.validateAction_
-#define previewPlaybackRate_ owner_.previewPlaybackRate_
-#define muriRenderOptions_ owner_.muriRenderOptions_
-#define undoDeletedDifficultyField() owner_.undoDeletedDifficultyField()
-#define applyPreviewPlaybackRate(...) owner_.applyPreviewPlaybackRate(__VA_ARGS__)
-#define setMuriRenderMode(...) owner_.setMuriRenderMode(__VA_ARGS__)
-#define setWorkspacePanelsSwapped(...) owner_.setWorkspacePanelsSwapped(__VA_ARGS__)
-
 void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* transformMenu, QMenu* previewMenu, QMenu* helpMenu)
 {
     if (fileMenu == nullptr || editMenu == nullptr || transformMenu == nullptr || previewMenu == nullptr || helpMenu == nullptr) {
@@ -97,31 +59,31 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         QDesktopServices::openUrl(QUrl(url));
     };
 
-    newAction_ = new QAction(uiText("action.new", "New"), &owner_);
-    newAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+N")));
-    connect(newAction_, &QAction::triggered, &owner_, &MainWindow::onNewFile);
-    fileMenu->addAction(newAction_);
+    owner_.newAction_ = new QAction(uiText("action.new", "New"), &owner_);
+    owner_.newAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+N")));
+    connect(owner_.newAction_, &QAction::triggered, &owner_, &MainWindow::onNewFile);
+    fileMenu->addAction(owner_.newAction_);
 
-    openAction_ = new QAction(uiText("action.open", "Open..."), &owner_);
-    openAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+O")));
-    connect(openAction_, &QAction::triggered, &owner_, &MainWindow::onOpenFile);
-    fileMenu->addAction(openAction_);
+    owner_.openAction_ = new QAction(uiText("action.open", "Open..."), &owner_);
+    owner_.openAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+O")));
+    connect(owner_.openAction_, &QAction::triggered, &owner_, &MainWindow::onOpenFile);
+    fileMenu->addAction(owner_.openAction_);
 
-    saveAction_ = new QAction(uiText("action.save", "Save"), &owner_);
-    saveAction_->setShortcut(QKeySequence::Save);
-    connect(saveAction_, &QAction::triggered, &owner_, &MainWindow::onSaveFile);
-    fileMenu->addAction(saveAction_);
+    owner_.saveAction_ = new QAction(uiText("action.save", "Save"), &owner_);
+    owner_.saveAction_->setShortcut(QKeySequence::Save);
+    connect(owner_.saveAction_, &QAction::triggered, &owner_, &MainWindow::onSaveFile);
+    fileMenu->addAction(owner_.saveAction_);
 
-    saveAsAction_ = new QAction(uiText("action.save_as", "Save As..."), &owner_);
-    saveAsAction_->setShortcut(QKeySequence::SaveAs);
-    connect(saveAsAction_, &QAction::triggered, &owner_, &MainWindow::onSaveFileAs);
-    fileMenu->addAction(saveAsAction_);
+    owner_.saveAsAction_ = new QAction(uiText("action.save_as", "Save As..."), &owner_);
+    owner_.saveAsAction_->setShortcut(QKeySequence::SaveAs);
+    connect(owner_.saveAsAction_, &QAction::triggered, &owner_, &MainWindow::onSaveFileAs);
+    fileMenu->addAction(owner_.saveAsAction_);
 
     fileMenu->addSeparator();
 
-    preferencesAction_ = new QAction(uiText("action.preferences", "Preferences..."), &owner_);
-    connect(preferencesAction_, &QAction::triggered, &owner_, &MainWindow::onPreferences);
-    fileMenu->addAction(preferencesAction_);
+    owner_.preferencesAction_ = new QAction(uiText("action.preferences", "Preferences..."), &owner_);
+    connect(owner_.preferencesAction_, &QAction::triggered, &owner_, &MainWindow::onPreferences);
+    fileMenu->addAction(owner_.preferencesAction_);
 
     fileMenu->addSeparator();
 
@@ -130,13 +92,13 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(quitAction, &QAction::triggered, qApp, &QApplication::quit);
     fileMenu->addAction(quitAction);
 
-    findReplaceAction_ = new QAction(
+    owner_.findReplaceAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("查找/替换") : QStringLiteral("Find/Replace"),
         &owner_
     );
-    findReplaceAction_->setShortcut(QKeySequence::Find);
-    connect(findReplaceAction_, &QAction::triggered, &owner_, &MainWindow::onToggleFindReplace);
-    editMenu->addAction(findReplaceAction_);
+    owner_.findReplaceAction_->setShortcut(QKeySequence::Find);
+    connect(owner_.findReplaceAction_, &QAction::triggered, &owner_, &MainWindow::onToggleFindReplace);
+    editMenu->addAction(owner_.findReplaceAction_);
 
     editMenu->addSeparator();
 
@@ -151,7 +113,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
                 return;
             }
         }
-        if (auto* editor = qobject_cast<QTextEdit*>(editorWidget_); editor != nullptr) {
+        if (auto* editor = qobject_cast<QTextEdit*>(owner_.editorWidget_); editor != nullptr) {
             textEditHandler(editor);
         }
     };
@@ -206,7 +168,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
             }
         }
         if (!handled) {
-            if (auto* editor = qobject_cast<QTextEdit*>(editorWidget_); editor != nullptr
+            if (auto* editor = qobject_cast<QTextEdit*>(owner_.editorWidget_); editor != nullptr
                 && editor->document() != nullptr
                 && editor->document()->isUndoAvailable()) {
                 editor->undo();
@@ -214,7 +176,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
             }
         }
         if (!handled) {
-            (void)undoDeletedDifficultyField();
+            (void)owner_.undoDeletedDifficultyField();
         }
     });
     editMenu->addAction(undoAction);
@@ -231,95 +193,95 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
 
     editMenu->addSeparator();
 
-    latencyDetectorAction_ = new QAction(UiText::isChineseUi() ? QStringLiteral("BPM&&偏移检测") : QStringLiteral("BPM && Offset Detection..."), &owner_);
-    connect(latencyDetectorAction_, &QAction::triggered, &owner_, &MainWindow::onOpenLatencyDetector);
-    editMenu->addAction(latencyDetectorAction_);
+    owner_.latencyDetectorAction_ = new QAction(UiText::isChineseUi() ? QStringLiteral("BPM&&偏移检测") : QStringLiteral("BPM && Offset Detection..."), &owner_);
+    connect(owner_.latencyDetectorAction_, &QAction::triggered, &owner_, &MainWindow::onOpenLatencyDetector);
+    editMenu->addAction(owner_.latencyDetectorAction_);
     editMenu->addSeparator();
 
-    validateAction_ = new QAction(
+    owner_.validateAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("语法检查") : QStringLiteral("Syntax Check"),
         &owner_
     );
-    validateAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
-    connect(validateAction_, &QAction::triggered, &owner_, &MainWindow::onValidateSimai);
-    editMenu->addAction(validateAction_);
+    owner_.validateAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
+    connect(owner_.validateAction_, &QAction::triggered, &owner_, &MainWindow::onValidateSimai);
+    editMenu->addAction(owner_.validateAction_);
 
-    normalizeWholeChartAction_ = new QAction(
+    owner_.normalizeWholeChartAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("谱面整理") : QStringLiteral("Format Chart"),
         &owner_
     );
-    connect(normalizeWholeChartAction_, &QAction::triggered, &owner_, &MainWindow::onNormalizeWholeChart);
+    connect(owner_.normalizeWholeChartAction_, &QAction::triggered, &owner_, &MainWindow::onNormalizeWholeChart);
 
-    transformMirrorLeftRightAction_ = new QAction(uiText("action.transform.mirror_lr", "Mirror Left/Right"), &owner_);
-    transformMirrorLeftRightAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_J));
-    connect(transformMirrorLeftRightAction_, &QAction::triggered, &owner_, &MainWindow::onMirrorLeftRight);
-    transformMenu->addAction(transformMirrorLeftRightAction_);
+    owner_.transformMirrorLeftRightAction_ = new QAction(uiText("action.transform.mirror_lr", "Mirror Left/Right"), &owner_);
+    owner_.transformMirrorLeftRightAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_J));
+    connect(owner_.transformMirrorLeftRightAction_, &QAction::triggered, &owner_, &MainWindow::onMirrorLeftRight);
+    transformMenu->addAction(owner_.transformMirrorLeftRightAction_);
 
-    transformMirrorUpDownAction_ = new QAction(uiText("action.transform.mirror_ud", "Mirror Up/Down"), &owner_);
-    transformMirrorUpDownAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
-    connect(transformMirrorUpDownAction_, &QAction::triggered, &owner_, &MainWindow::onMirrorUpDown);
-    transformMenu->addAction(transformMirrorUpDownAction_);
+    owner_.transformMirrorUpDownAction_ = new QAction(uiText("action.transform.mirror_ud", "Mirror Up/Down"), &owner_);
+    owner_.transformMirrorUpDownAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_K));
+    connect(owner_.transformMirrorUpDownAction_, &QAction::triggered, &owner_, &MainWindow::onMirrorUpDown);
+    transformMenu->addAction(owner_.transformMirrorUpDownAction_);
 
-    transformRotate180Action_ = new QAction(uiText("action.transform.rotate_180", "Rotate 180"), &owner_);
-    transformRotate180Action_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
-    connect(transformRotate180Action_, &QAction::triggered, &owner_, &MainWindow::onRotate180);
-    transformMenu->addAction(transformRotate180Action_);
+    owner_.transformRotate180Action_ = new QAction(uiText("action.transform.rotate_180", "Rotate 180"), &owner_);
+    owner_.transformRotate180Action_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
+    connect(owner_.transformRotate180Action_, &QAction::triggered, &owner_, &MainWindow::onRotate180);
+    transformMenu->addAction(owner_.transformRotate180Action_);
 
-    transformRotate45CounterClockwiseAction_ = new QAction(uiText("action.transform.rotate_ccw_45", "Rotate -45"), &owner_);
-    transformRotate45CounterClockwiseAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Semicolon));
-    connect(transformRotate45CounterClockwiseAction_, &QAction::triggered, &owner_, &MainWindow::onRotate45CounterClockwise);
-    transformMenu->addAction(transformRotate45CounterClockwiseAction_);
+    owner_.transformRotate45CounterClockwiseAction_ = new QAction(uiText("action.transform.rotate_ccw_45", "Rotate -45"), &owner_);
+    owner_.transformRotate45CounterClockwiseAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Semicolon));
+    connect(owner_.transformRotate45CounterClockwiseAction_, &QAction::triggered, &owner_, &MainWindow::onRotate45CounterClockwise);
+    transformMenu->addAction(owner_.transformRotate45CounterClockwiseAction_);
 
-    transformRotate45ClockwiseAction_ = new QAction(uiText("action.transform.rotate_cw_45", "Rotate +45"), &owner_);
-    transformRotate45ClockwiseAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Apostrophe));
-    connect(transformRotate45ClockwiseAction_, &QAction::triggered, &owner_, &MainWindow::onRotate45Clockwise);
-    transformMenu->addAction(transformRotate45ClockwiseAction_);
+    owner_.transformRotate45ClockwiseAction_ = new QAction(uiText("action.transform.rotate_cw_45", "Rotate +45"), &owner_);
+    owner_.transformRotate45ClockwiseAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Apostrophe));
+    connect(owner_.transformRotate45ClockwiseAction_, &QAction::triggered, &owner_, &MainWindow::onRotate45Clockwise);
+    transformMenu->addAction(owner_.transformRotate45ClockwiseAction_);
 
     auto* moreTransformMenu = transformMenu->addMenu(uiText("action.transform.more", "More..."));
-    transformToggleBreakAction_ = new QAction(uiText("action.transform.toggle_break", "Toggle Break"), &owner_);
-    transformToggleBreakAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_B));
-    connect(transformToggleBreakAction_, &QAction::triggered, &owner_, &MainWindow::onToggleBreakSelection);
-    moreTransformMenu->addAction(transformToggleBreakAction_);
+    owner_.transformToggleBreakAction_ = new QAction(uiText("action.transform.toggle_break", "Toggle Break"), &owner_);
+    owner_.transformToggleBreakAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_B));
+    connect(owner_.transformToggleBreakAction_, &QAction::triggered, &owner_, &MainWindow::onToggleBreakSelection);
+    moreTransformMenu->addAction(owner_.transformToggleBreakAction_);
 
-    transformToggleExAction_ = new QAction(uiText("action.transform.toggle_ex", "Toggle EX"), &owner_);
-    transformToggleExAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_N));
-    connect(transformToggleExAction_, &QAction::triggered, &owner_, &MainWindow::onToggleExSelection);
-    moreTransformMenu->addAction(transformToggleExAction_);
+    owner_.transformToggleExAction_ = new QAction(uiText("action.transform.toggle_ex", "Toggle EX"), &owner_);
+    owner_.transformToggleExAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_N));
+    connect(owner_.transformToggleExAction_, &QAction::triggered, &owner_, &MainWindow::onToggleExSelection);
+    moreTransformMenu->addAction(owner_.transformToggleExAction_);
 
-    transformToggleFireworkAction_ = new QAction(uiText("action.transform.toggle_firework", "Toggle Firework"), &owner_);
-    transformToggleFireworkAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_M));
-    connect(transformToggleFireworkAction_, &QAction::triggered, &owner_, &MainWindow::onToggleFireworkSelection);
-    moreTransformMenu->addAction(transformToggleFireworkAction_);
+    owner_.transformToggleFireworkAction_ = new QAction(uiText("action.transform.toggle_firework", "Toggle Firework"), &owner_);
+    owner_.transformToggleFireworkAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_M));
+    connect(owner_.transformToggleFireworkAction_, &QAction::triggered, &owner_, &MainWindow::onToggleFireworkSelection);
+    moreTransformMenu->addAction(owner_.transformToggleFireworkAction_);
 
-    transformRandomRotateAction_ = new QAction(uiText("action.transform.random_rotate", "Random Rotate"), &owner_);
-    transformRandomRotateAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma));
-    connect(transformRandomRotateAction_, &QAction::triggered, &owner_, &MainWindow::onRandomRotateSelection);
-    moreTransformMenu->addAction(transformRandomRotateAction_);
+    owner_.transformRandomRotateAction_ = new QAction(uiText("action.transform.random_rotate", "Random Rotate"), &owner_);
+    owner_.transformRandomRotateAction_->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Comma));
+    connect(owner_.transformRandomRotateAction_, &QAction::triggered, &owner_, &MainWindow::onRandomRotateSelection);
+    moreTransformMenu->addAction(owner_.transformRandomRotateAction_);
 
-    stopPreviewAction_ = new QAction(uiText("action.stop_preview", "Stop Preview"), &owner_);
-    stopPreviewAction_->setIcon(makePreviewStopIcon(QColor("#2B3C4E")));
-    stopPreviewAction_->setToolTip(QString());
-    connect(stopPreviewAction_, &QAction::triggered, &owner_, &MainWindow::onStopPreview);
-    previewMenu->addAction(stopPreviewAction_);
+    owner_.stopPreviewAction_ = new QAction(uiText("action.stop_preview", "Stop Preview"), &owner_);
+    owner_.stopPreviewAction_->setIcon(makePreviewStopIcon(QColor("#2B3C4E")));
+    owner_.stopPreviewAction_->setToolTip(QString());
+    connect(owner_.stopPreviewAction_, &QAction::triggered, &owner_, &MainWindow::onStopPreview);
+    previewMenu->addAction(owner_.stopPreviewAction_);
 
-    pausePreviewAction_ = new QAction(uiText("action.pause_preview", "Play/Pause Preview"), &owner_);
-    pausePreviewAction_->setShortcuts({
+    owner_.pausePreviewAction_ = new QAction(uiText("action.pause_preview", "Play/Pause Preview"), &owner_);
+    owner_.pausePreviewAction_->setShortcuts({
         QKeySequence(Qt::CTRL | Qt::Key_Return),
         QKeySequence(Qt::CTRL | Qt::Key_Enter),
     });
-    pausePreviewAction_->setIcon(makePreviewPlayIcon(QColor("#2B3C4E")));
-    pausePreviewAction_->setToolTip(QString());
-    connect(pausePreviewAction_, &QAction::triggered, &owner_, &MainWindow::onTogglePreviewPause);
-    previewMenu->addAction(pausePreviewAction_);
+    owner_.pausePreviewAction_->setIcon(makePreviewPlayIcon(QColor("#2B3C4E")));
+    owner_.pausePreviewAction_->setToolTip(QString());
+    connect(owner_.pausePreviewAction_, &QAction::triggered, &owner_, &MainWindow::onTogglePreviewPause);
+    previewMenu->addAction(owner_.pausePreviewAction_);
 
     auto* previewSlowerAction = new QAction(
         uiText("action.preview_speed_down", "Playback Speed -"),
         &owner_
     );
-    previewSlowerAction_ = previewSlowerAction;
+    owner_.previewSlowerAction_ = previewSlowerAction;
     previewSlowerAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+O")));
     connect(previewSlowerAction, &QAction::triggered, &owner_, [this]() {
-        applyPreviewPlaybackRate(steppedPreviewPlaybackRate(previewPlaybackRate_, -1));
+        owner_.applyPreviewPlaybackRate(steppedPreviewPlaybackRate(owner_.previewPlaybackRate_, -1));
     });
     previewMenu->addAction(previewSlowerAction);
 
@@ -327,19 +289,19 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
         uiText("action.preview_speed_up", "Playback Speed +"),
         &owner_
     );
-    previewFasterAction_ = previewFasterAction;
+    owner_.previewFasterAction_ = previewFasterAction;
     previewFasterAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+P")));
     connect(previewFasterAction, &QAction::triggered, &owner_, [this]() {
-        applyPreviewPlaybackRate(steppedPreviewPlaybackRate(previewPlaybackRate_, 1));
+        owner_.applyPreviewPlaybackRate(steppedPreviewPlaybackRate(owner_.previewPlaybackRate_, 1));
     });
     previewMenu->addAction(previewFasterAction);
 
-    exportVideoAction_ = new QAction(
+    owner_.exportVideoAction_ = new QAction(
         uiText("action.export_chart", "Export Chart"),
         &owner_
     );
-    connect(exportVideoAction_, &QAction::triggered, &owner_, &MainWindow::onExportPreviewVideo);
-    previewMenu->addAction(exportVideoAction_);
+    connect(owner_.exportVideoAction_, &QAction::triggered, &owner_, &MainWindow::onExportPreviewVideo);
+    previewMenu->addAction(owner_.exportVideoAction_);
 
     previewMenu->addSeparator();
 
@@ -348,69 +310,69 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     const QIcon selectedRenderModeIcon = makeMenuSelectionCheckIcon(UiTheme::colors().accent);
     const QIcon unselectedRenderModeIcon = makeMenuSelectionCheckIcon(UiTheme::colors().accent, false);
 
-    renderModeNativeAction_ = new QAction(
+    owner_.renderModeNativeAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("预览模式：谱面确认") : QStringLiteral("Preview Mode: Chart Review"),
         &owner_
     );
-    renderModeNativeAction_->setCheckable(true);
-    renderModeNativeAction_->setChecked(muriRenderOptions_.renderMode == RenderMode::Native);
-    renderModeNativeAction_->setIcon(
-        renderModeNativeAction_->isChecked() ? selectedRenderModeIcon : unselectedRenderModeIcon
+    owner_.renderModeNativeAction_->setCheckable(true);
+    owner_.renderModeNativeAction_->setChecked(owner_.muriRenderOptions_.renderMode == RenderMode::Native);
+    owner_.renderModeNativeAction_->setIcon(
+        owner_.renderModeNativeAction_->isChecked() ? selectedRenderModeIcon : unselectedRenderModeIcon
     );
-    connect(renderModeNativeAction_, &QAction::triggered, &owner_, [this]() {
-        setMuriRenderMode(RenderMode::Native);
+    connect(owner_.renderModeNativeAction_, &QAction::triggered, &owner_, [this]() {
+        owner_.setMuriRenderMode(RenderMode::Native);
     });
-    renderModeGroup->addAction(renderModeNativeAction_);
-    previewMenu->addAction(renderModeNativeAction_);
+    renderModeGroup->addAction(owner_.renderModeNativeAction_);
+    previewMenu->addAction(owner_.renderModeNativeAction_);
 
-    renderModeMaimuriDxAction_ = new QAction(
+    owner_.renderModeMaimuriDxAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("预览模式：无理检测") : QStringLiteral("Preview Mode: Muri Check"),
         &owner_
     );
-    renderModeMaimuriDxAction_->setCheckable(true);
-    renderModeMaimuriDxAction_->setChecked(muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle);
-    renderModeMaimuriDxAction_->setIcon(
-        renderModeMaimuriDxAction_->isChecked() ? selectedRenderModeIcon : unselectedRenderModeIcon
+    owner_.renderModeMaimuriDxAction_->setCheckable(true);
+    owner_.renderModeMaimuriDxAction_->setChecked(owner_.muriRenderOptions_.renderMode == RenderMode::MaimuriDxStyle);
+    owner_.renderModeMaimuriDxAction_->setIcon(
+        owner_.renderModeMaimuriDxAction_->isChecked() ? selectedRenderModeIcon : unselectedRenderModeIcon
     );
-    connect(renderModeMaimuriDxAction_, &QAction::triggered, &owner_, [this]() {
-        setMuriRenderMode(RenderMode::MaimuriDxStyle);
+    connect(owner_.renderModeMaimuriDxAction_, &QAction::triggered, &owner_, [this]() {
+        owner_.setMuriRenderMode(RenderMode::MaimuriDxStyle);
     });
-    renderModeGroup->addAction(renderModeMaimuriDxAction_);
-    previewMenu->addAction(renderModeMaimuriDxAction_);
+    renderModeGroup->addAction(owner_.renderModeMaimuriDxAction_);
+    previewMenu->addAction(owner_.renderModeMaimuriDxAction_);
 
-    editStaticTapOnSlideThresholdAction_ = new QAction(
+    owner_.editStaticTapOnSlideThresholdAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("撞尾阈值...") : QStringLiteral("Tap-On-Slide Threshold..."),
         &owner_
     );
     connect(
-        editStaticTapOnSlideThresholdAction_,
+        owner_.editStaticTapOnSlideThresholdAction_,
         &QAction::triggered,
         &owner_,
         &MainWindow::onEditStaticTapOnSlideThreshold);
-    previewMenu->addAction(editStaticTapOnSlideThresholdAction_);
+    previewMenu->addAction(owner_.editStaticTapOnSlideThresholdAction_);
 
     previewMenu->addSeparator();
 
-    previewAudioSettingsAction_ = new QAction(uiText("action.audio_settings", "Audio Settings..."), &owner_);
-    connect(previewAudioSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewAudioSettings);
-    previewMenu->addAction(previewAudioSettingsAction_);
+    owner_.previewAudioSettingsAction_ = new QAction(uiText("action.audio_settings", "Audio Settings..."), &owner_);
+    connect(owner_.previewAudioSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewAudioSettings);
+    previewMenu->addAction(owner_.previewAudioSettingsAction_);
 
-    previewVideoSettingsAction_ = new QAction(uiText("action.video_settings", "Preview Settings..."), &owner_);
-    connect(previewVideoSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewVideoSettings);
-    previewMenu->addAction(previewVideoSettingsAction_);
+    owner_.previewVideoSettingsAction_ = new QAction(uiText("action.video_settings", "Preview Settings..."), &owner_);
+    connect(owner_.previewVideoSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewVideoSettings);
+    previewMenu->addAction(owner_.previewVideoSettingsAction_);
 
-    swapWorkspaceSidesAction_ = new QAction(
+    owner_.swapWorkspaceSidesAction_ = new QAction(
         UiText::isChineseUi() ? QStringLiteral("左右面板互换") : QStringLiteral("Swap Side Panels"),
         &owner_
     );
-    swapWorkspaceSidesAction_->setCheckable(true);
-    swapWorkspaceSidesAction_->setIcon(
-        makeMenuSelectionCheckIcon(UiTheme::colors().accent, workspacePanelsSwapped_)
+    owner_.swapWorkspaceSidesAction_->setCheckable(true);
+    owner_.swapWorkspaceSidesAction_->setIcon(
+        makeMenuSelectionCheckIcon(UiTheme::colors().accent, owner_.workspacePanelsSwapped_)
     );
-    connect(swapWorkspaceSidesAction_, &QAction::toggled, &owner_, [this](bool checked) {
-        setWorkspacePanelsSwapped(checked, true);
+    connect(owner_.swapWorkspaceSidesAction_, &QAction::toggled, &owner_, [this](bool checked) {
+        owner_.setWorkspacePanelsSwapped(checked, true);
     });
-    previewMenu->addAction(swapWorkspaceSidesAction_);
+    previewMenu->addAction(owner_.swapWorkspaceSidesAction_);
 
     auto* officialChartMirrorAction = new QAction(
         UiText::isChineseUi() ? QStringLiteral("官谱镜像站") : QStringLiteral("Official Chart Mirror"),
@@ -431,1589 +393,13 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     helpMenu->addAction(simaiWikiAction);
     helpMenu->addSeparator();
 
-    aboutAction_ = new QAction(uiText("action.about", "About"), &owner_);
-    connect(aboutAction_, &QAction::triggered, &owner_, &MainWindow::onAbout);
-    helpMenu->addAction(aboutAction_);
+    owner_.aboutAction_ = new QAction(uiText("action.about", "About"), &owner_);
+    connect(owner_.aboutAction_, &QAction::triggered, &owner_, &MainWindow::onAbout);
+    helpMenu->addAction(owner_.aboutAction_);
 }
-
-#undef newAction_
-#undef openAction_
-#undef saveAction_
-#undef saveAsAction_
-#undef preferencesAction_
-#undef findReplaceAction_
-#undef editorWidget_
-#undef transformMirrorLeftRightAction_
-#undef transformMirrorUpDownAction_
-#undef transformRotate180Action_
-#undef transformRotate45CounterClockwiseAction_
-#undef transformRotate45ClockwiseAction_
-#undef normalizeWholeChartAction_
-#undef transformToggleBreakAction_
-#undef transformToggleExAction_
-#undef transformToggleFireworkAction_
-#undef transformRandomRotateAction_
-#undef stopPreviewAction_
-#undef pausePreviewAction_
-#undef previewSlowerAction_
-#undef previewFasterAction_
-#undef exportVideoAction_
-#undef latencyDetectorAction_
-#undef toggleJudgeMarkersAction_
-#undef toggleTouchTrailAction_
-#undef renderModeNativeAction_
-#undef renderModeMaimuriDxAction_
-#undef editStaticTapOnSlideThresholdAction_
-#undef previewAudioSettingsAction_
-#undef previewVideoSettingsAction_
-#undef swapWorkspaceSidesAction_
-#undef aboutAction_
-#undef workspacePanelsSwapped_
-#undef validateAction_
-#undef previewPlaybackRate_
-#undef muriRenderOptions_
-#undef undoDeletedDifficultyField
-#undef applyPreviewPlaybackRate
-#undef setMuriRenderMode
-#undef setWorkspacePanelsSwapped
 
 void MainWindow::setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* transformMenu, QMenu* previewMenu, QMenu* helpMenu)
 {
     frameSection_->setupMenusAndActions(fileMenu, editMenu, transformMenu, previewMenu, helpMenu);
-}
-
-MainWindow::MainWindow(QWidget* parent)
-    : QMainWindow(parent)
-{
-    QElapsedTimer startupStageTimer;
-    startupStageTimer.start();
-    qint64 startupLastMs = 0;
-    const auto logStartupStage = [&](const QString& stageName) {
-        const qint64 nowMs = startupStageTimer.elapsed();
-        const qint64 deltaMs = nowMs - startupLastMs;
-        startupLastMs = nowMs;
-        appendStartupTimingStage(QString("mainwindow/%1").arg(stageName), nowMs, deltaMs);
-    };
-
-    configureRuntimeDebugOutput();
-    logStartupStage("configure_runtime_debug_output");
-    quickShellStartupStageMediaLoadDeferred_ = true;
-    setProperty("miacode.dialog_parentless", true);
-    setAttribute(Qt::WA_DontShowOnScreen);
-    setAttribute(Qt::WA_NativeWindow);
-    winId();
-
-    editorSection_ = std::make_unique<EditorSection>(*this, ui_, state_);
-    documentSection_ = std::make_unique<DocumentSection>(*this, ui_, state_);
-    preferencesSection_ = std::make_unique<PreferencesSection>(*this, ui_, state_);
-    previewSection_ = std::make_unique<PreviewSection>(*this, ui_, state_);
-    validationSection_ = std::make_unique<ValidationSection>(*this, ui_, state_);
-    frameSection_ = std::make_unique<FrameSection>(*this, ui_, state_);
-    timelineSection_ = std::make_unique<TimelineSection>(*this, ui_, state_);
-
-    previewWarmupPool_ = new QThreadPool(this);
-    previewWarmupPool_->setObjectName(QStringLiteral("PreviewWarmupPool"));
-    previewWarmupPool_->setMaxThreadCount(2);
-    previewWarmupPool_->setExpiryTimeout(-1);
-    logStartupStage("preview_warmup_pool_ready");
-
-    timelineSlowRefreshPool_ = new QThreadPool(this);
-    timelineSlowRefreshPool_->setObjectName(QStringLiteral("TimelineSlowRefreshPool"));
-    timelineSlowRefreshPool_->setMaxThreadCount(1);
-    timelineSlowRefreshPool_->setExpiryTimeout(-1);
-
-    timelineAnalysisPool_ = new QThreadPool(this);
-    timelineAnalysisPool_->setObjectName(QStringLiteral("TimelineAnalysisPool"));
-    timelineAnalysisPool_->setMaxThreadCount(1);
-    timelineAnalysisPool_->setExpiryTimeout(-1);
-    logStartupStage("timeline_analysis_pools_ready");
-
-    setWindowModified(false);
-    updateWindowTitle();
-    setupInitialWindowGeometry();
-    if (QGuiApplication* guiApp = qobject_cast<QGuiApplication*>(QCoreApplication::instance()); guiApp != nullptr) {
-        if (QStyleHints* styleHints = guiApp->styleHints(); styleHints != nullptr) {
-            connect(styleHints, &QStyleHints::colorSchemeChanged, this, [this]() {
-                applyUiTheme();
-            });
-        }
-    }
-
-    auto* fileMenu = menuBar()->addMenu(uiText("menu.file", "&File"));
-    auto* editMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("编辑(&E)") : QStringLiteral("&Edit"));
-    auto* toolsMenu = menuBar()->addMenu(uiText("menu.tools", "&Tools"));
-    auto* transformMenu = menuBar()->addMenu(uiText("menu.transform", "变换(&T)"));
-    auto* previewMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("预览(&P)") : QStringLiteral("&Preview"));
-    auto* helpMenu = menuBar()->addMenu(uiText("menu.help", "&Help"));
-
-    auto* toolBar = addToolBar("Main");
-    toolBar->setMovable(false);
-    toolBar->setFloatable(false);
-    setupMenusAndActions(fileMenu, editMenu, transformMenu, previewMenu, helpMenu);
-    if (latencyDetectorAction_ != nullptr) {
-        editMenu->removeAction(latencyDetectorAction_);
-        toolsMenu->addAction(latencyDetectorAction_);
-    }
-    if (validateAction_ != nullptr) {
-        editMenu->removeAction(validateAction_);
-        toolsMenu->addSeparator();
-        toolsMenu->addAction(validateAction_);
-        if (normalizeWholeChartAction_ != nullptr) {
-            toolsMenu->addAction(normalizeWholeChartAction_);
-        }
-    }
-    if (exportVideoAction_ != nullptr) {
-        previewMenu->removeAction(exportVideoAction_);
-        toolsMenu->addSeparator();
-        toolsMenu->addAction(exportVideoAction_);
-        QAction* batchExportAction = toolsMenu->addAction(uiText("action.batch_export", "Batch Export"));
-        connect(batchExportAction, &QAction::triggered, this, &MainWindow::onBatchExportPreviewVideo);
-    }
-    const QList<QAction*> editActions = editMenu->actions();
-    if (!editActions.isEmpty() && editActions.constLast()->isSeparator()) {
-        editMenu->removeAction(editActions.constLast());
-    }
-    logStartupStage("menus_and_actions_ready");
-
-    auto* editor = new PlainCodeEditor(this);
-    const QFont codeFont = editorFont();
-    editorTextFontPointSize_ = qBound(kEditorTextFontSizeMin, codeFont.pointSize(), kEditorTextFontSizeMax);
-    editor->setFont(codeFont);
-    editor->setBlockSpacingPixels(blockSpacingPixelsForPointSize(editorTextFontPointSize_, editorLineSpacingFactor_));
-    editor->refreshLineNumberAreaLayout();
-    editor->setLineWrapMode(QTextEdit::WidgetWidth);
-    editor->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    editor->setPlainText(QString());
-    editor->setBatchTransformActions({
-        transformMirrorLeftRightAction_,
-        transformMirrorUpDownAction_,
-        transformRotate180Action_,
-        transformRotate45CounterClockwiseAction_,
-        transformRotate45ClockwiseAction_,
-    });
-    editor->setMoreBatchTransformActions({
-        transformToggleBreakAction_,
-        transformToggleExAction_,
-        transformToggleFireworkAction_,
-        transformRandomRotateAction_,
-    });
-    connect(editor, &PlainCodeEditor::previewPlayPauseRequested, this, &MainWindow::onTogglePreviewPause);
-    chartBracketHighlighter_ = new BracketScopeHighlighter(editor->document());
-    editorWidget_ = editor;
-    editorWidget_->setFont(codeFont);
-    editorWidget_->setStyleSheet(
-        "border: none;"
-        "background: #FFFFFF;"
-        "color: #1F1F1F;"
-        "selection-background-color: #B8CCE5;"
-        "selection-color: #1F1F1F;"
-    );
-    if (auto* scrollArea = qobject_cast<QAbstractScrollArea*>(editorWidget_)) {
-        if (QScrollBar* vbar = scrollArea->verticalScrollBar()) {
-            vbar->setStyleSheet(modernScrollBarStyle());
-        }
-        if (QScrollBar* hbar = scrollArea->horizontalScrollBar()) {
-            hbar->setStyleSheet(modernScrollBarStyle());
-        }
-    }
-    logStartupStage("editor_widget_ready");
-
-    auto* central = new QWidget(this);
-    central->setObjectName("EditorShell");
-    central->setAttribute(Qt::WA_StyledBackground, true);
-    central->setStyleSheet(UiTheme::editorShellStyleSheet());
-    auto* centralLayout = new QVBoxLayout(central);
-    centralLayout->setContentsMargins(0, 0, 0, 0);
-    centralLayout->setSpacing(0);
-
-    auto* editorHeader = new QFrame(central);
-    editorHeader->setObjectName("EditorHeader");
-    editorHeader->setAttribute(Qt::WA_StyledBackground, true);
-    editorHeaderWidget_ = editorHeader;
-    auto* editorHeaderLayout = new QHBoxLayout(editorHeader);
-    editorHeaderLayout->setContentsMargins(12, 8, 12, 8);
-    editorHeaderLayout->setSpacing(10);
-    editorContextLabel_ = new QLabel(uiText("editor.welcome", "Welcome to MiaCode!"), editorHeader);
-    editorContextLabel_->setObjectName("EditorContext");
-    editorContextLabel_->setFont(uiAccentFont(15, QFont::DemiBold));
-    editorContextLabel_->setMinimumWidth(0);
-    editorContextLabel_->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
-    editorHeaderLayout->addWidget(editorContextLabel_, 0);
-
-    editorBatchTransformControls_ = nullptr;
-    transformMirrorLeftRightButton_ = nullptr;
-    transformMirrorUpDownButton_ = nullptr;
-    transformRotate180Button_ = nullptr;
-    transformRotate45CounterClockwiseButton_ = nullptr;
-    transformRotate45ClockwiseButton_ = nullptr;
-
-    editorDifficultyControls_ = new QWidget(editorHeader);
-    editorDifficultyControls_->setObjectName("EditorDifficultyControls");
-    editorDifficultyControls_->setAttribute(Qt::WA_StyledBackground, true);
-    auto* editorDifficultyLayout = new QHBoxLayout(editorDifficultyControls_);
-    editorDifficultyLayout->setContentsMargins(0, 0, 0, 0);
-    editorDifficultyLayout->setSpacing(8);
-    auto* difficultyLevelLabel = new QLabel("Lv", editorDifficultyControls_);
-    difficultyLevelLabel_ = difficultyLevelLabel;
-    difficultyLevelLabel->setFont(uiAccentFont(10));
-    auto* difficultyLevelLineEdit = new LeftPlaceholderLineEdit(editorDifficultyControls_);
-    difficultyLevelLineEdit->setLeftPlaceholderText("&lv_n=");
-    difficultyLevelEdit_ = difficultyLevelLineEdit;
-    difficultyLevelEdit_->setFixedWidth(48);
-    difficultyLevelEdit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    difficultyLevelEdit_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    auto* difficultyDesignerLabel = new QLabel(uiText("editor.des", "Des"), editorDifficultyControls_);
-    difficultyDesignerLabel_ = difficultyDesignerLabel;
-    difficultyDesignerLabel->setFont(uiAccentFont(10));
-    auto* difficultyDesignerLineEdit = new LeftPlaceholderLineEdit(editorDifficultyControls_);
-    difficultyDesignerLineEdit->setLeftPlaceholderText("&des_n=");
-    difficultyDesignerEdit_ = difficultyDesignerLineEdit;
-    difficultyDesignerEdit_->setFixedWidth(96);
-    difficultyDesignerEdit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    difficultyDesignerEdit_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    editorDifficultyLayout->addWidget(difficultyLevelLabel);
-    editorDifficultyLayout->addWidget(difficultyLevelEdit_);
-    editorDifficultyLayout->addWidget(difficultyDesignerLabel);
-    editorDifficultyLayout->addWidget(difficultyDesignerEdit_);
-    editorDifficultyControls_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    editorDifficultyControls_->hide();
-    editorHeaderLayout->addWidget(editorDifficultyControls_, 0);
-
-    editorValidationSummaryWidget_ = new QWidget(editorHeader);
-    auto* editorValidationSummaryLayout = new QHBoxLayout(editorValidationSummaryWidget_);
-    editorValidationSummaryLayout->setContentsMargins(0, 0, 0, 0);
-    editorValidationSummaryLayout->setSpacing(8);
-    constexpr int kEditorValidationSummaryEdgeGap = 4;
-    auto* editorValidationSummaryLeadingGap = new QWidget(editorValidationSummaryWidget_);
-    editorValidationSummaryLeadingGap->setFixedWidth(kEditorValidationSummaryEdgeGap);
-    editorValidationSummaryLeadingGap->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    const int summaryCountReserveWidth =
-        QFontMetrics(uiMonoFont(10, QFont::DemiBold)).horizontalAdvance(QStringLiteral("999"));
-
-    auto* editorValidationErrorGroup = new QWidget(editorValidationSummaryWidget_);
-    auto* editorValidationErrorLayout = new QHBoxLayout(editorValidationErrorGroup);
-    editorValidationErrorLayout->setContentsMargins(0, 0, 0, 0);
-    editorValidationErrorLayout->setSpacing(6);
-    editorValidationErrorIconLabel_ = new QLabel(editorValidationErrorGroup);
-    editorValidationErrorIconLabel_->setFixedSize(14, 14);
-    editorValidationErrorCountLabel_ = new QLabel(QStringLiteral("0"), editorValidationErrorGroup);
-    editorValidationErrorCountLabel_->setFont(uiMonoFont(10, QFont::DemiBold));
-    editorValidationErrorCountLabel_->setFixedWidth(summaryCountReserveWidth);
-    editorValidationErrorCountLabel_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    editorValidationErrorLayout->addWidget(editorValidationErrorIconLabel_, 0, Qt::AlignVCenter);
-    editorValidationErrorLayout->addWidget(editorValidationErrorCountLabel_, 0, Qt::AlignVCenter);
-    editorValidationErrorGroup->setFixedWidth(14 + 6 + summaryCountReserveWidth);
-    editorValidationErrorGroup->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-
-    auto* editorValidationWarningGroup = new QWidget(editorValidationSummaryWidget_);
-    auto* editorValidationWarningLayout = new QHBoxLayout(editorValidationWarningGroup);
-    editorValidationWarningLayout->setContentsMargins(0, 0, 0, 0);
-    editorValidationWarningLayout->setSpacing(3);
-    editorValidationWarningIconLabel_ = new QLabel(editorValidationWarningGroup);
-    editorValidationWarningIconLabel_->setFixedSize(14, 14);
-    editorValidationWarningCountLabel_ = new QLabel(QStringLiteral("0"), editorValidationWarningGroup);
-    editorValidationWarningCountLabel_->setFont(uiMonoFont(10, QFont::DemiBold));
-    editorValidationWarningCountLabel_->setFixedWidth(summaryCountReserveWidth);
-    editorValidationWarningCountLabel_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    editorValidationWarningLayout->addWidget(editorValidationWarningIconLabel_, 0, Qt::AlignVCenter);
-    editorValidationWarningLayout->addWidget(editorValidationWarningCountLabel_, 0, Qt::AlignVCenter);
-    editorValidationWarningGroup->setFixedWidth(14 + 3 + summaryCountReserveWidth);
-    editorValidationWarningGroup->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-
-    auto* editorValidationMuriGroup = new QWidget(editorValidationSummaryWidget_);
-    auto* editorValidationMuriLayout = new QHBoxLayout(editorValidationMuriGroup);
-    editorValidationMuriLayout->setContentsMargins(0, 0, 0, 0);
-    editorValidationMuriLayout->setSpacing(4);
-    editorValidationMuriIconLabel_ = new QLabel(editorValidationMuriGroup);
-    editorValidationMuriIconLabel_->setFixedSize(14, 14);
-    editorValidationMuriCountLabel_ = new QLabel(QStringLiteral("0"), editorValidationMuriGroup);
-    editorValidationMuriCountLabel_->setFont(uiMonoFont(10, QFont::DemiBold));
-    editorValidationMuriCountLabel_->setFixedWidth(summaryCountReserveWidth);
-    editorValidationMuriCountLabel_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    editorValidationMuriLayout->addWidget(editorValidationMuriIconLabel_, 0, Qt::AlignVCenter);
-    editorValidationMuriLayout->addWidget(editorValidationMuriCountLabel_, 0, Qt::AlignVCenter);
-    editorValidationMuriGroup->setFixedWidth(14 + 4 + summaryCountReserveWidth);
-    editorValidationMuriGroup->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-
-    auto* editorValidationSummaryTrailingGap = new QWidget(editorValidationSummaryWidget_);
-    editorValidationSummaryTrailingGap->setFixedWidth(kEditorValidationSummaryEdgeGap);
-    editorValidationSummaryTrailingGap->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-
-    editorValidationSummaryLayout->addWidget(editorValidationSummaryLeadingGap, 0, Qt::AlignVCenter);
-    editorValidationSummaryLayout->addWidget(editorValidationMuriGroup, 0, Qt::AlignVCenter);
-    editorValidationSummaryLayout->addWidget(editorValidationWarningGroup, 0, Qt::AlignVCenter);
-    editorValidationSummaryLayout->addWidget(editorValidationErrorGroup, 0, Qt::AlignVCenter);
-    editorValidationSummaryLayout->addWidget(editorValidationSummaryTrailingGap, 0, Qt::AlignVCenter);
-    editorValidationSummaryWidget_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    editorValidationSummaryWidget_->hide();
-    editorHeaderLayout->addWidget(editorValidationSummaryWidget_, 0, Qt::AlignLeft);
-
-    editorHeaderLayout->addStretch(1);
-
-    auto* editorHeaderTrailingWidget = new QWidget(editorHeader);
-    auto* editorHeaderTrailingLayout = new QHBoxLayout(editorHeaderTrailingWidget);
-    editorHeaderTrailingLayout->setContentsMargins(0, 0, 0, 0);
-    editorHeaderTrailingLayout->setSpacing(16);
-
-    editorCursorLabel_ = new QLabel(
-        UiText::isChineseUi() ? QStringLiteral("1行 1列") : QStringLiteral("Ln 1, Col 1"),
-        editorHeaderTrailingWidget);
-    editorCursorLabel_->setObjectName("EditorMeta");
-    editorCursorLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    editorCursorLabel_->setFixedWidth(
-        QFontMetrics(uiMonoFont(10)).horizontalAdvance(
-            UiText::isChineseUi() ? QStringLiteral("9999行 9999列") : QStringLiteral("Ln 9999, Col 9999")) + 10);
-    editorCursorLabel_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    editorHeaderTrailingLayout->addWidget(editorCursorLabel_, 0, Qt::AlignRight);
-    editorHeaderLayout->addWidget(editorHeaderTrailingWidget, 0, Qt::AlignRight);
-    centralLayout->addWidget(editorHeader, 0);
-
-    editorStack_ = new QStackedWidget(central);
-    editorStack_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
-    editorStack_->setMinimumWidth(0);
-    editorFindGeometryHost_ = editorStack_;
-
-    auto* findBar = new QFrame(editorStack_);
-    findBar->setObjectName("EditorFindBar");
-    findBar->setStyleSheet(
-        "QFrame#EditorFindBar {"
-        " background: rgba(248, 250, 253, 248);"
-        " border: 1px solid #DEE4EC;"
-        " border-radius: 10px;"
-        "}"
-        "QFrame#EditorFindBar QLineEdit {"
-        " background: #FFFFFF;"
-        " border: 1px solid #CCD6E2;"
-        " border-radius: 6px;"
-        " min-height: 22px;"
-        " padding: 1px 6px;"
-        " selection-background-color: #B8CCE5;"
-        " selection-color: #1F1F1F;"
-        "}"
-        "QFrame#EditorFindBar QLineEdit:focus { border-color: #3B82F6; }"
-        "QFrame#EditorFindBar QToolButton, QFrame#EditorFindBar QPushButton {"
-        " color: #223042;"
-        " min-height: 22px;"
-        " padding: 0 6px;"
-        " border: 1px solid #D8E0EA;"
-        " border-radius: 6px;"
-        " background: #FFFFFF;"
-        " font-weight: 400;"
-        "}"
-        "QFrame#EditorFindBar QToolButton:hover, QFrame#EditorFindBar QPushButton:hover {"
-        " background: #F5F8FC;"
-        " border-color: #BCD0E5;"
-        "}"
-        "QFrame#EditorFindBar QToolButton:pressed, QFrame#EditorFindBar QPushButton:pressed {"
-        " background: #E8F1FB;"
-        "}"
-        "QFrame#EditorFindBar QToolButton#EditorFindPrevButton, QFrame#EditorFindBar QToolButton#EditorFindNextButton {"
-        " min-width: 24px;"
-        " padding: 0;"
-        " font-size: 12px;"
-        "}"
-        "QFrame#EditorFindBar QToolButton#EditorFindCloseButton {"
-        " min-width: 28px;"
-        " padding: 0;"
-        " font-size: 15px;"
-        " font-weight: 400;"
-        "}"
-    );
-    auto* findBarLayout = new QVBoxLayout(findBar);
-    findBarLayout->setContentsMargins(10, 6, 10, 6);
-    findBarLayout->setSpacing(4);
-
-    auto* findRow = new QHBoxLayout();
-    findRow->setContentsMargins(0, 0, 0, 0);
-    findRow->setSpacing(6);
-    editorFindEdit_ = new QLineEdit(findBar);
-    editorFindEdit_->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("查找") : QStringLiteral("Find"));
-    editorFindPrevButton_ = new QToolButton(findBar);
-    editorFindPrevButton_->setObjectName("EditorFindPrevButton");
-    editorFindPrevButton_->setText(QStringLiteral("↑"));
-    editorFindPrevButton_->setToolTip(UiText::isChineseUi() ? QStringLiteral("查找上一个") : QStringLiteral("Find Previous"));
-    editorFindPrevButton_->setFixedWidth(24);
-    editorFindNextButton_ = new QToolButton(findBar);
-    editorFindNextButton_->setObjectName("EditorFindNextButton");
-    editorFindNextButton_->setText(QStringLiteral("↓"));
-    editorFindNextButton_->setToolTip(UiText::isChineseUi() ? QStringLiteral("查找下一个") : QStringLiteral("Find Next"));
-    editorFindNextButton_->setFixedWidth(24);
-    editorFindCloseButton_ = new QToolButton(findBar);
-    editorFindCloseButton_->setObjectName("EditorFindCloseButton");
-    editorFindCloseButton_->setText(QStringLiteral("✕"));
-    editorFindCloseButton_->setToolTip(UiText::isChineseUi() ? QStringLiteral("关闭查找栏") : QStringLiteral("Close"));
-    editorFindCloseButton_->setFixedWidth(28);
-    findRow->addWidget(editorFindEdit_, 1);
-    findRow->addWidget(editorFindPrevButton_, 0);
-    findRow->addWidget(editorFindNextButton_, 0);
-    findRow->addWidget(editorFindCloseButton_, 0);
-    findBarLayout->addLayout(findRow);
-
-    auto* replaceRow = new QHBoxLayout();
-    replaceRow->setContentsMargins(0, 0, 0, 0);
-    replaceRow->setSpacing(4);
-    editorReplaceEdit_ = new QLineEdit(findBar);
-    editorReplaceEdit_->setPlaceholderText(UiText::isChineseUi() ? QStringLiteral("替换") : QStringLiteral("Replace"));
-    editorReplaceButton_ = new QPushButton(UiText::isChineseUi() ? QStringLiteral("替换") : QStringLiteral("Replace"), findBar);
-    editorReplaceAllButton_ = new QPushButton(UiText::isChineseUi() ? QStringLiteral("全部替换") : QStringLiteral("Replace All"), findBar);
-    replaceRow->addWidget(editorReplaceEdit_, 1);
-    replaceRow->addWidget(editorReplaceButton_, 0);
-    replaceRow->addWidget(editorReplaceAllButton_, 0);
-    findBarLayout->addLayout(replaceRow);
-
-    findBar->hide();
-    editorFindBar_ = findBar;
-
-    welcomePage_ = new QWidget(editorStack_);
-    welcomePage_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
-    welcomePage_->setStyleSheet(
-        "QWidget { background: #FFFFFF; color: #2A3440; }"
-    );
-    auto* welcomeLayout = new QVBoxLayout(welcomePage_);
-    welcomeLayout->setContentsMargins(12, 8, 12, 12);
-    welcomeLayout->setSpacing(8);
-    welcomeEmptyHintLabel_ = new QLabel(uiText("metadata.empty_hint", "← Click to add a chart difficulty"), welcomePage_);
-    welcomeEmptyHintLabel_->setFont(uiAccentFont(11));
-    welcomeEmptyHintLabel_->setStyleSheet("color: #6A7890; background: transparent; padding-left: 6px;");
-    welcomeLayout->addWidget(welcomeEmptyHintLabel_, 0, Qt::AlignLeft | Qt::AlignTop);
-    welcomeLayout->addStretch(1);
-
-    metadataPage_ = new QWidget(editorStack_);
-    metadataPage_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
-    metadataPage_->setStyleSheet(
-        "QWidget { background: #FFFFFF; color: #2A3440; }"
-        "QFrame#MetadataCard { background: #FFFFFF; border: 1px solid #DEE4EC; border-radius: 8px; }"
-        "QLabel#SectionTitle { color: #1F2D3D; font-weight: 700; padding-left: 4px; }"
-        "QLabel#MetadataFieldLabel { color: #2A3440; background: transparent; padding-left: 8px; }"
-        "QLineEdit, QTextEdit, QPlainTextEdit {"
-        " background: #FFFFFF;"
-        " color: #1F1F1F;"
-        " border: 1px solid #CCD6E2;"
-        " border-radius: 6px;"
-        " padding: 6px 8px;"
-        " selection-background-color: #B8CCE5;"
-        " selection-color: #1F1F1F;"
-        "}"
-        "QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus { border-color: #3B82F6; }"
-    );
-    auto* metadataLayout = new QVBoxLayout(metadataPage_);
-    metadataLayout->setContentsMargins(12, 8, 12, 12);
-    metadataLayout->setSpacing(8);
-
-    auto* metadataCard = new QFrame(metadataPage_);
-    metadataCard_ = metadataCard;
-    metadataCard->setObjectName("MetadataCard");
-    auto* metadataCardLayout = new QVBoxLayout(metadataCard);
-    metadataCardLayout->setContentsMargins(14, 12, 14, 14);
-    metadataCardLayout->setSpacing(12);
-
-    auto* infoTitle = new QLabel(uiText("metadata.information", "Information"), metadataPage_);
-    infoTitle->setObjectName("SectionTitle");
-    infoTitle->setFont(uiAccentFont(12));
-    metadataCardLayout->addWidget(infoTitle);
-
-    auto* metadataForm = new QFormLayout();
-    metadataForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
-    metadataForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    metadataForm->setHorizontalSpacing(8);
-    metadataForm->setVerticalSpacing(10);
-    titleEdit_ = new QLineEdit(metadataPage_);
-    artistEdit_ = new QLineEdit(metadataPage_);
-    firstEdit_ = new QLineEdit(metadataPage_);
-    auto* designerLineEdit = new LeftPlaceholderLineEdit(metadataPage_);
-    designerLineEdit->setLeftPlaceholderText("&des=");
-    designerEdit_ = designerLineEdit;
-    titleEdit_->setPlaceholderText("&title=");
-    artistEdit_->setPlaceholderText("&artist=");
-    firstEdit_->setPlaceholderText("&first=");
-    designerEdit_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    const auto makeMetadataFieldLabel = [this](const QString& text) {
-        auto* label = new QLabel(text, metadataPage_);
-        label->setObjectName("MetadataFieldLabel");
-        label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        label->setMinimumWidth(46);
-        return label;
-    };
-    firstEdit_->setFixedWidth(98);
-    auto* firstWrap = new QWidget(metadataPage_);
-    auto* firstWrapLayout = new QHBoxLayout(firstWrap);
-    firstWrapLayout->setContentsMargins(0, 0, 0, 0);
-    firstWrapLayout->setSpacing(6);
-    firstWrapLayout->addWidget(firstEdit_, 0, Qt::AlignLeft);
-    latencyDetectorButton_ = new QToolButton(metadataPage_);
-    latencyDetectorButton_->setText(UiText::isChineseUi() ? QStringLiteral("BPM&&偏移检测") : QStringLiteral("BPM && Offset Detection"));
-    connect(latencyDetectorButton_, &QToolButton::clicked, this, &MainWindow::onOpenLatencyDetector);
-    firstWrapLayout->addWidget(latencyDetectorButton_, 0, Qt::AlignLeft);
-    firstWrapLayout->addStretch(1);
-
-    metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.title", "title")), titleEdit_);
-    metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.artist", "artist")), artistEdit_);
-    metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.des", "des")), designerEdit_);
-    metadataForm->addRow(makeMetadataFieldLabel(uiText("metadata.field.first", "first")), firstWrap);
-    metadataCardLayout->addLayout(metadataForm);
-
-    auto* extraMetadataLabel = new QLabel(uiText("metadata.other_fields", "Other &xx Fields"), metadataPage_);
-    extraMetadataLabel->setObjectName("SectionTitle");
-    extraMetadataLabel->setFont(uiAccentFont(11));
-    metadataCardLayout->addWidget(extraMetadataLabel);
-    metadataExtraEdit_ = new QTextEdit(metadataPage_);
-    metadataExtraEdit_->setFont(editorFont(editorTextFontPointSize_));
-    metadataExtraEdit_->setLineWrapMode(QTextEdit::WidgetWidth);
-    metadataExtraEdit_->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    metadataExtraEdit_->setPlaceholderText("&dummy=...");
-    if (QScrollBar* vbar = metadataExtraEdit_->verticalScrollBar()) {
-        vbar->setStyleSheet(modernScrollBarStyle());
-    }
-    if (QScrollBar* hbar = metadataExtraEdit_->horizontalScrollBar()) {
-        hbar->setStyleSheet(modernScrollBarStyle());
-    }
-    metadataCardLayout->addWidget(metadataExtraEdit_, 1);
-    metadataBracketHighlighter_ = new BracketScopeHighlighter(metadataExtraEdit_->document());
-    applyEditorTextFontSize(editorTextFontPointSize_, false);
-    metadataEmptyHintLabel_ = new QLabel(uiText("metadata.empty_hint", "← Click to add a chart difficulty"), metadataPage_);
-    metadataEmptyHintLabel_->setFont(uiAccentFont(11));
-    metadataEmptyHintLabel_->setStyleSheet("color: #6A7890; background: transparent; padding-left: 6px;");
-    metadataEmptyHintLabel_->hide();
-    metadataLayout->addWidget(metadataEmptyHintLabel_, 0, Qt::AlignLeft | Qt::AlignTop);
-    metadataLayout->addWidget(metadataCard, 1);
-
-    chartPage_ = new QWidget(editorStack_);
-    chartPage_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
-    auto* chartLayout = new QVBoxLayout(chartPage_);
-    chartLayout->setContentsMargins(0, 0, 0, 0);
-    chartLayout->setSpacing(0);
-    chartLayout->addWidget(editorWidget_, 1);
-
-    editorStack_->addWidget(welcomePage_);
-    editorStack_->addWidget(metadataPage_);
-    editorStack_->addWidget(chartPage_);
-    centralLayout->addWidget(editorStack_, 1);
-    if (editorFindBar_ != nullptr) {
-        editorFindBar_->raise();
-    }
-    logStartupStage("editor_stack_ready");
-
-    auto* outlineDock = new QDockWidget("Fields", this);
-    outlineDock->setObjectName("OutlineDock");
-    outlineDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
-    outlineDock_ = outlineDock;
-    auto* outlineTitle = new QWidget(outlineDock);
-    outlineTitle->setFixedHeight(0);
-    outlineDock->setTitleBarWidget(outlineTitle);
-    outlineList_ = new QListWidget(outlineDock);
-    outlineList_->setUniformItemSizes(true);
-    outlineList_->setIconSize(QSize(14, 14));
-    outlineList_->setSpacing(2);
-    outlineList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    outlineList_->setTextElideMode(Qt::ElideRight);
-    outlineList_->setFont(uiAccentFont(11));
-    outlineList_->setItemDelegate(new OutlineItemDelegate(outlineList_));
-    outlineList_->setStyleSheet(
-        "QListWidget {"
-        " background: #FFFFFF;"
-        " color: #243447;"
-        " border: 1px solid #E1E7EF;"
-        " padding: 6px;"
-        " outline: none;"
-        "}"
-        "QListWidget::item {"
-        " min-height: 28px;"
-        " padding: 4px 12px;"
-        " border: 1px solid transparent;"
-        " border-radius: 6px;"
-        "}"
-        "QListWidget::item:selected { color: #243447; }"
-    );
-    auto* outlineDockShell = new QWidget(outlineDock);
-    auto* outlineDockShellLayout = new QHBoxLayout(outlineDockShell);
-    outlineDockShellLayout->setContentsMargins(0, 0, 0, 0);
-    outlineDockShellLayout->setSpacing(0);
-    outlineDockShellLayout->addWidget(outlineList_, 1);
-    outlineCollapseButton_ = new QToolButton(outlineDockShell);
-    outlineCollapseButton_->setFocusPolicy(Qt::NoFocus);
-    outlineCollapseButton_->setCursor(Qt::PointingHandCursor);
-    outlineCollapseButton_->setFixedWidth(20);
-    outlineCollapseButton_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
-    outlineCollapseButton_->setFont(uiAccentFont(10, QFont::Bold));
-    outlineCollapseButton_->setStyleSheet(outlineCollapseButtonStyleSheet());
-    outlineDockShellLayout->addWidget(outlineCollapseButton_, 0);
-    outlineDock->setWidget(outlineDockShell);
-    outlineList_->setMouseTracking(true);
-    outlineList_->viewport()->setMouseTracking(true);
-    outlineList_->viewport()->installEventFilter(this);
-    deleteDifficultyButton_ = new QToolButton(outlineList_->viewport());
-    deleteDifficultyButton_->setAutoRaise(true);
-    deleteDifficultyButton_->setIcon(makeOutlineCloseIcon(QColor("#5D6876")));
-    deleteDifficultyButton_->setIconSize(QSize(12, 12));
-    deleteDifficultyButton_->setToolTip("Delete the current difficulty");
-    deleteDifficultyButton_->setCursor(Qt::PointingHandCursor);
-    deleteDifficultyButton_->setFocusPolicy(Qt::NoFocus);
-    deleteDifficultyButton_->setFixedSize(18, 18);
-    deleteDifficultyButton_->setStyleSheet(
-        "QToolButton {"
-        " border: none;"
-        " border-radius: 5px;"
-        " background: transparent;"
-        "}"
-        "QToolButton:hover {"
-        " background: #E9EEF4;"
-        "}"
-    );
-    deleteDifficultyButton_->hide();
-    connect(deleteDifficultyButton_, &QToolButton::clicked, this, [this]() {
-        if (hasActiveDifficulty()) {
-            deleteDifficultyField(activeDifficultyId_);
-        }
-    });
-    connect(outlineCollapseButton_, &QToolButton::clicked, this, [this]() {
-        setOutlineDockCollapsed(!outlineDockCollapsed_);
-    });
-    connect(outlineList_, &QListWidget::itemClicked, this, [this](QListWidgetItem* current) {
-        updateDifficultyDeleteButton(false);
-        if (current == nullptr) {
-            return;
-        }
-        const QString kind = current->data(Qt::UserRole).toString();
-        const int difficultyId = current->data(Qt::UserRole + 1).toInt();
-        if (kind == "metadata") {
-            activeOutlineKey_ = "metadata";
-            if (switchToMetadataField() && titleEdit_ != nullptr) {
-                titleEdit_->setFocus();
-            }
-            return;
-        }
-        if (kind == "add") {
-            QMenu menu(this);
-            menu.setFont(uiAccentFont(10));
-            styleRoundedMenu(menu);
-            for (int id = 1; id <= 7; ++id) {
-                if (document_.difficulty(id) != nullptr) {
-                    continue;
-                }
-                auto* action = new QWidgetAction(&menu);
-                auto* button = new QToolButton(&menu);
-                button->setAutoRaise(true);
-                button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-                button->setIcon(makeDifficultyBadgeIcon(id));
-                button->setIconSize(QSize(14, 14));
-                button->setText(SimaiDocument::difficultyName(id));
-                button->setFont(uiAccentFont(10));
-                button->setCursor(Qt::PointingHandCursor);
-                const UiTheme::Colors& c = UiTheme::colors();
-                button->setStyleSheet(
-                    QStringLiteral(
-                        "QToolButton {"
-                        " color: %1;"
-                        " background: transparent;"
-                        " border: none;"
-                        " padding: 6px 20px 6px 12px;"
-                        " text-align: left;"
-                        "}"
-                        "QToolButton:hover {"
-                        " background: %2;"
-                        " border-radius: 6px;"
-                        "}"
-                    )
-                        .arg(c.textPrimary.name(QColor::HexRgb))
-                        .arg(c.menuHoverBg.name(QColor::HexRgb))
-                );
-                connect(button, &QToolButton::clicked, &menu, [action, &menu]() {
-                    action->trigger();
-                    menu.close();
-                });
-                action->setDefaultWidget(button);
-                menu.addAction(action);
-                connect(action, &QAction::triggered, this, [this, id]() {
-                    if (!maybeSaveCurrentFieldChanges()) {
-                        rebuildFieldSidebar();
-                        return;
-                    }
-                    document_.ensureDifficulty(id);
-                    documentDirty_ = true;
-                    activeOutlineKey_ = "chart";
-                    updateDirtyState();
-                    switchToDifficultyField(id);
-                });
-            }
-            if (!menu.isEmpty()) {
-                const QRect rowRect = outlineList_->visualItemRect(current);
-                menu.exec(outlineList_->viewport()->mapToGlobal(rowRect.bottomRight()));
-            }
-            rebuildFieldSidebar();
-            return;
-        }
-        if (kind == "toolbox") {
-            if (toolboxMenu_ != nullptr) {
-                const QRect rowRect = outlineList_->visualItemRect(current);
-                const QPoint popupPos = outlineList_->viewport()->mapToGlobal(
-                    QPoint(rowRect.right(), rowRect.top() + rowRect.height() / 2)
-                );
-                toolboxMenu_->exec(popupPos);
-            }
-            rebuildFieldSidebar();
-            return;
-        }
-        if (SimaiDocument::isDifficultyId(difficultyId)) {
-            activeOutlineKey_ = "chart";
-            if (switchToDifficultyField(difficultyId) && editorWidget_ != nullptr) {
-                editorWidget_->setFocus();
-            }
-        }
-    });
-    outlineList_->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(outlineList_, &QListWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
-        if (outlineList_ == nullptr) {
-            return;
-        }
-        QListWidgetItem* item = outlineList_->itemAt(pos);
-        if (item == nullptr) {
-            return;
-        }
-        const int difficultyId = item->data(Qt::UserRole + 1).toInt();
-        if (!SimaiDocument::isDifficultyId(difficultyId) || document_.difficulty(difficultyId) == nullptr) {
-            return;
-        }
-        QMenu menu(this);
-        menu.setFont(uiAccentFont(10));
-        styleRoundedMenu(menu);
-        QAction* deleteAction = menu.addAction(
-            makeOutlineCloseIcon(QColor("#5D6876")),
-            QString("Delete %1").arg(SimaiDocument::difficultyName(difficultyId))
-        );
-        connect(deleteAction, &QAction::triggered, this, [this, difficultyId]() {
-            deleteDifficultyField(difficultyId);
-        });
-        menu.exec(outlineList_->viewport()->mapToGlobal(pos));
-    });
-
-    toolboxMenu_ = new QMenu(outlineList_);
-    const auto openToolboxUrl = [](const QString& url) {
-        QDesktopServices::openUrl(QUrl(url));
-    };
-
-    if (latencyDetectorAction_ != nullptr) {
-        toolboxMenu_->addAction(latencyDetectorAction_);
-    }
-
-    if (normalizeWholeChartAction_ != nullptr) {
-        toolboxMenu_->addAction(normalizeWholeChartAction_);
-    }
-
-    toolboxMenu_->addSeparator();
-
-    QAction* toolboxOfficialChartMirrorAction = toolboxMenu_->addAction(
-        UiText::isChineseUi() ? QStringLiteral("官谱镜像站") : QStringLiteral("Official Chart Mirror")
-    );
-    connect(toolboxOfficialChartMirrorAction, &QAction::triggered, this, [openToolboxUrl]() {
-        openToolboxUrl(QStringLiteral("https://www.maiviewer.net/"));
-    });
-
-    addDockWidget(Qt::LeftDockWidgetArea, outlineDock);
-    setOutlineDockCollapsed(false);
-    logStartupStage("outline_ready");
-
-    previewPanel_ = new QWidget(this);
-    previewPanel_->setObjectName("PreviewPanel");
-    previewPanel_->setStyleSheet(
-        "QWidget#PreviewPanel {"
-        " background: #F5F7FA;"
-        " border-left: 1px solid #DEE4EC;"
-        "}"
-        "QFrame#PreviewCanvasFrame {"
-        " background: #000000;"
-        " border: 1px solid #D8E0EA;"
-        "}"
-        "QFrame#PreviewControlCard, QFrame#PreviewStatsCard {"
-        " background: #EDF2F8;"
-        " border: 1px solid #D5E0EC;"
-        " border-radius: 10px;"
-        "}"
-        "QFrame#PreviewControls {"
-        " background: transparent;"
-        " border: none;"
-        "}"
-        "QFrame#PreviewStats {"
-        " background: transparent;"
-        " border: none;"
-        "}"
-        "QLabel#PreviewStatChip {"
-        " color: #213246;"
-        " background: #F6F9FD;"
-        " border: 1px solid #D3DEEA;"
-        " border-radius: 9px;"
-        " padding: 2px 8px;"
-        " font-weight: 600;"
-        "}"
-        "QLabel#PreviewStatChipTotal {"
-        " color: #213246;"
-        " background: #F0F4FA;"
-        " border: 1px solid #CBD8E6;"
-        " border-radius: 9px;"
-        " padding: 2px 8px;"
-        " font-weight: 700;"
-        "}"
-        "QToolButton#PreviewControlButton {"
-        " color: #223042;"
-        " padding: 5px 8px;"
-        " min-height: 28px;"
-        " border: 1px solid #D8E0EA;"
-        " border-radius: 6px;"
-        " background: transparent;"
-        " font-weight: 600;"
-        "}"
-        "QToolButton#PreviewControlButton:hover { background: #F5F8FC; border-color: #BCD0E5; }"
-        "QToolButton#PreviewControlButton:pressed { background: #E8F1FB; }"
-        "QSlider::groove:horizontal {"
-        " height: 6px;"
-        " background: #D8E0EA;"
-        " border-radius: 3px;"
-        "}"
-        "QSlider::sub-page:horizontal {"
-        " background: #2E77D0;"
-        " border-radius: 3px;"
-        "}"
-        "QSlider::handle:horizontal {"
-        " width: 12px;"
-        " margin: -4px 0;"
-        " border-radius: 6px;"
-        " background: #FFFFFF;"
-        " border: 1px solid #AFC0D6;"
-        "}"
-    );
-    previewPanel_->setMinimumWidth(kEmbeddedPreviewPanelMinWidth);
-    previewPanel_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
-
-    previewCanvas_ = new PreviewRuntime(this);
-    logStartupStage("preview_canvas_created");
-    previewCanvas_->setOutlineVariant(previewOutlineVariant_);
-    previewCanvas_->setSkinDirectory(resolvePreviewSkinDir());
-    updatePreviewStageMediaPresentationMode(false);
-    if (previewUsesStageMediaHostRoute()) {
-        ensurePreviewStageMediaRouteInitialized();
-    }
-    logStartupStage("preview_skin_async_dispatched");
-    previewCanvasFrame_ = new QFrame(previewPanel_);
-    previewCanvasFrame_->setObjectName("PreviewCanvasFrame");
-    previewCanvasFrame_->setMinimumSize(QSize(1, 1));
-    previewCanvasFrame_->setFocusPolicy(Qt::StrongFocus);
-    previewCanvasContainer_ = new QWidget(previewCanvasFrame_);
-    previewCanvasContainer_->setMinimumSize(QSize(1, 1));
-    previewCanvasContainer_->setFocusPolicy(Qt::StrongFocus);
-    previewPanel_->setFocusPolicy(Qt::StrongFocus);
-    previewCanvasContainer_->hide();
-    logStartupStage("preview_canvas_container_ready");
-
-    previewControlCard_ = new QFrame(previewPanel_);
-    previewControlCard_->setObjectName("PreviewControlCard");
-    previewControlCard_->setMinimumWidth(kPreviewControlStatsCardMinWidth);
-    previewControlCard_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    previewControlCard_->setMouseTracking(true);
-    auto* previewControlCardLayout = new QVBoxLayout(previewControlCard_);
-    previewControlCardLayout->setContentsMargins(8, 8, 8, 8);
-    previewControlCardLayout->setSpacing(0);
-
-    auto* previewControls = new QFrame(previewControlCard_);
-    previewControls->setObjectName("PreviewControls");
-    auto* previewControlsLayout = new QHBoxLayout(previewControls);
-    previewControlsLayout_ = previewControlsLayout;
-    previewControlsLayout->setContentsMargins(0, 0, 0, 0);
-    previewControlsLayout->setSpacing(8);
-
-    stopPreviewButton_ = new QToolButton(previewControls);
-    stopPreviewButton_->setObjectName("PreviewControlButton");
-    stopPreviewButton_->setDefaultAction(stopPreviewAction_);
-    stopPreviewButton_->setIconSize(QSize(18, 18));
-    stopPreviewButton_->setAutoRaise(false);
-    stopPreviewButton_->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    stopPreviewButton_->setToolTip(QString());
-    stopPreviewButton_->setMouseTracking(true);
-    previewControlsLayout->addWidget(stopPreviewButton_, 0);
-
-    pausePreviewButton_ = new QToolButton(previewControls);
-    pausePreviewButton_->setObjectName("PreviewControlButton");
-    pausePreviewButton_->setDefaultAction(pausePreviewAction_);
-    pausePreviewButton_->setIconSize(QSize(18, 18));
-    pausePreviewButton_->setAutoRaise(false);
-    pausePreviewButton_->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    pausePreviewButton_->setToolTip(QString());
-    pausePreviewButton_->setMouseTracking(true);
-    previewControlsLayout->addWidget(pausePreviewButton_, 0);
-
-    previewSlider_ = new QSlider(Qt::Horizontal, previewControls);
-    previewSlider_->setRange(0, 1000);
-    previewSlider_->setSingleStep(25);
-    previewSlider_->setPageStep(250);
-    previewSlider_->setTracking(true);
-    previewSlider_->setMouseTracking(true);
-    previewControlsLayout->addWidget(previewSlider_, 1);
-
-    previewSpeedButton_ = new QToolButton(previewControls);
-    previewSpeedButton_->setObjectName("PreviewControlButton");
-    previewSpeedButton_->setPopupMode(QToolButton::InstantPopup);
-    previewSpeedButton_->setText("1x");
-    previewSpeedButton_->setFont(uiAccentFont(10));
-    previewSpeedButton_->setFixedWidth(72);
-    previewSpeedButton_->setMouseTracking(true);
-    auto* speedMenu = new QMenu(previewSpeedButton_);
-    speedMenu->setFont(uiAccentFont(10));
-    styleRoundedMenu(*speedMenu);
-    const QList<QPair<double, QString>> speedOptions{
-        {0.25, "0.25x"},
-        {0.5, "0.5x"},
-        {0.75, "0.75x"},
-        {1.0, "1x"},
-        {1.25, "1.25x"},
-        {2.0, "2x"},
-    };
-    for (const auto& speedOption : speedOptions) {
-        const double speed = speedOption.first;
-        QAction* speedAction = speedMenu->addAction(speedOption.second);
-        speedAction->setCheckable(true);
-        speedAction->setChecked(qFuzzyCompare(speed + 1.0, 2.0));
-        speedAction->setData(speed);
-        connect(speedAction, &QAction::triggered, this, [this, speed, speedMenu]() {
-            const QList<QAction*> actions = speedMenu->actions();
-            for (QAction* action : actions) {
-                action->setChecked(false);
-            }
-            QAction* action = qobject_cast<QAction*>(sender());
-            if (action != nullptr) {
-                action->setChecked(true);
-            }
-            applyPreviewPlaybackRate(speed);
-        });
-    }
-    previewSpeedButton_->setMenu(speedMenu);
-    previewControlsLayout->addWidget(previewSpeedButton_, 0);
-    previewFullscreenButton_ = new QToolButton(previewControls);
-    previewFullscreenButton_->setObjectName("PreviewControlButton");
-    previewFullscreenButton_->setCheckable(true);
-    previewFullscreenButton_->setAutoRaise(false);
-    previewFullscreenButton_->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    previewFullscreenButton_->setIconSize(QSize(20, 20));
-    previewFullscreenButton_->setMouseTracking(true);
-    connect(previewFullscreenButton_, &QToolButton::clicked, this, [this]() {
-        togglePreviewFullscreen();
-    });
-    updatePreviewFullscreenButtonAppearance();
-    previewControlsLayout->addWidget(previewFullscreenButton_, 0);
-    previewControlCardLayout->addWidget(previewControls, 0);
-
-    auto* previewStatsCard = new QFrame(previewPanel_);
-    previewStatsCard_ = previewStatsCard;
-    previewStatsCard->setObjectName("PreviewStatsCard");
-    previewStatsCard->setMinimumWidth(kPreviewControlStatsCardMinWidth);
-    previewStatsCard->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-    auto* previewStatsCardLayout = new QVBoxLayout(previewStatsCard);
-    previewStatsCardLayout->setContentsMargins(8, 8, 8, 8);
-    previewStatsCardLayout->setSpacing(0);
-
-    auto* previewStats = new QFrame(previewStatsCard);
-    previewStats->setObjectName("PreviewStats");
-    auto* previewStatsLayout = new QGridLayout(previewStats);
-    previewStatsGridLayout_ = previewStatsLayout;
-    previewStatsLayout->setContentsMargins(2, 2, 2, 2);
-    previewStatsLayout->setHorizontalSpacing(10);
-    previewStatsLayout->setVerticalSpacing(6);
-
-    const auto addStatsChip = [previewStats, previewStatsLayout](const QString& labelText) -> QLabel* {
-        auto* label = new QLabel(labelText, previewStats);
-        label->setObjectName("PreviewStatChip");
-        label->setFont(uiMonoFont(10, QFont::DemiBold));
-        label->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-        label->setFixedHeight(30);
-        label->setMinimumWidth(0);
-        label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-        previewStatsLayout->addWidget(label);
-        return label;
-    };
-
-    previewTapStatsLabel_ = addStatsChip("Tap    0/0");
-    previewHoldStatsLabel_ = addStatsChip("Hold   0/0");
-    previewSlideStatsLabel_ = addStatsChip("Slide  0/0");
-    previewTouchStatsLabel_ = addStatsChip("Touch  0/0");
-    previewBreakStatsLabel_ = addStatsChip("Break  0/0");
-    previewTotalStatsLabel_ = addStatsChip("Total  0/0");
-    previewTotalStatsLabel_->setObjectName("PreviewStatChipTotal");
-    previewStatsChips_.clear();
-    previewStatsChips_ << previewTapStatsLabel_
-                       << previewHoldStatsLabel_
-                       << previewSlideStatsLabel_
-                       << previewTouchStatsLabel_
-                       << previewBreakStatsLabel_
-                       << previewTotalStatsLabel_;
-    previewStatsCardLayout->addWidget(previewStats, 0);
-    previewStatsCardLayout->addStretch(1);
-    updatePreviewStatsLayoutMode();
-    logStartupStage("preview_controls_and_stats_ready");
-
-    previewSfxRuntime_ = new QtPreviewSfxRuntime(this);
-    logStartupStage("preview_sfx_runtime_created");
-    connect(previewCanvas_, &PreviewRuntime::framePresented, this, [this]() {
-        if (!qtPreviewPlaying_
-            || !previewCanvasUsesFrameSwappedPacing()
-            || !qtPreviewAwaitingFrameSwap_) {
-            return;
-        }
-        qtPreviewAwaitingFrameSwap_ = false;
-        qtPreviewAwaitingFrameSwapSinceMs_ = -1;
-    });
-    logStartupStage("preview_runtime_connections_ready");
-    logStartupStage("preview_runtime_ready");
-
-    bottomTabs_ = new QTabWidget(central);
-    if (QTabBar* bottomTabBar = bottomTabs_->tabBar(); bottomTabBar != nullptr) {
-        bottomTabBar->installEventFilter(this);
-    }
-    timelineView_ = new TimelineView(bottomTabs_);
-    QFont timelineHeaderLineNumberFont = codeFont;
-    timelineHeaderLineNumberFont.setPointSize(qMax(codeFont.pointSize() + 1, 12));
-    timelineView_->setHeaderLineNumberFont(timelineHeaderLineNumberFont);
-    timelineView_->setShowSlideTracks(true);
-    connect(timelineView_, &TimelineView::headerNavigateRequested, this, [this](double second) {
-        navigateTimelineToSecond(second, true);
-    });
-    connect(timelineView_, &TimelineView::previewPlayPauseRequested, this, &MainWindow::onTogglePreviewPause);
-    connect(timelineView_, &TimelineView::timelineUserInteractionStarted, this, [this]() {
-        if (qtPreviewPlaying_) {
-            stopQtPreviewPlayback(true);
-            updatePauseButtonAppearance();
-        }
-    });
-    connect(timelineView_, &TimelineView::centerNavigateRequested, this, [this](double second) {
-        const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
-        const bool shouldRenderNow = !previewScrubRenderElapsed_.isValid()
-            || previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs;
-        if (shouldRenderNow) {
-            if (previewSeekDebounceTimer_ != nullptr) {
-                previewSeekDebounceTimer_->stop();
-            }
-            seekPreviewToSecond(clampedSecond, false);
-            previewScrubRenderElapsed_.restart();
-        } else {
-            schedulePreviewSeek(clampedSecond, false);
-        }
-    });
-    connect(timelineView_, &TimelineView::followPreviewToggled, this, [this](bool enabled) {
-        if (!enabled) {
-            clearPreviewFollowDecoration();
-            return;
-        }
-        if (!qtPreviewPlaying_ || !hasActiveDifficulty()) {
-            return;
-        }
-        double second = qMax(0.0, qtPreviewPauseSecond_);
-        if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
-            second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-        } else if (previewStageMediaRouteHasVideo()) {
-            second = qMax(0.0, previewStageMediaRouteCurrentPlaybackSecond());
-        }
-        syncEditorCursorToPreviewSecond(second, false);
-    });
-    bottomTabs_->addTab(timelineView_, uiText("tab.timeline", "Timeline"));
-
-    if (auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_); editor != nullptr) {
-        connect(editor->document(), &QTextDocument::contentsChange, this, [this](int position, int charsRemoved, int charsAdded) {
-            if (suppressTextDirtyTracking_) {
-                return;
-            }
-            if (charsRemoved == 0 && charsAdded == 0) {
-                return;
-            }
-            markCurrentFieldDirty();
-            ++timelineRevision_;
-            applyTimelineQuickChange(position, charsRemoved, charsAdded);
-            requestTimelineSlowRefresh();
-            updateEditorEmptyState();
-            updateEditorStatus();
-            if (timelineView_ != nullptr && hasActiveDifficulty()) {
-                if (qtPreviewPlaying_ && timelineView_->followPreviewEnabled()) {
-                    double second = qMax(0.0, qtPreviewPauseSecond_);
-                    if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
-                        second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-                    } else if (previewStageMediaRouteHasVideo()) {
-                        second = qMax(0.0, previewStageMediaRouteCurrentPlaybackSecond());
-                    }
-                    syncEditorCursorToPreviewSecond(second, false);
-                } else {
-                    syncTimelineToEditorCursor(!qtPreviewPlaying_);
-                }
-            }
-        });
-    }
-    connect(qobject_cast<PlainCodeEditor*>(editorWidget_), &QTextEdit::cursorPositionChanged, this, [this]() {
-        updateEditorStatus();
-        syncTimelineToEditorCursor(!qtPreviewPlaying_);
-    });
-    connect(titleEdit_, &QLineEdit::textChanged, this, [this]() {
-        markCurrentFieldDirty();
-        updateWindowTitle();
-    });
-    connect(artistEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
-    connect(firstEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
-    connect(designerEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
-    if (metadataExtraEdit_ != nullptr) {
-        connect(metadataExtraEdit_->document(), &QTextDocument::contentsChange, this, [this](int, int charsRemoved, int charsAdded) {
-            if (suppressTextDirtyTracking_) {
-                return;
-            }
-            if (charsRemoved == 0 && charsAdded == 0) {
-                return;
-            }
-            markCurrentFieldDirty();
-        });
-    }
-    connect(difficultyLevelEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
-    connect(difficultyDesignerEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);
-
-    outputView_ = nullptr;
-
-    errorList_ = new QListWidget(bottomTabs_);
-    errorList_->setFont(uiOutputFont());
-    errorList_->setUniformItemSizes(false);
-    errorList_->setWordWrap(true);
-    errorList_->setTextElideMode(Qt::ElideNone);
-    errorList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    errorList_->setContextMenuPolicy(Qt::CustomContextMenu);
-    errorList_->viewport()->installEventFilter(this);
-    connect(errorList_, &QListWidget::itemActivated, this, &MainWindow::onErrorItemActivated);
-    connect(errorList_, &QListWidget::itemClicked, this, &MainWindow::onErrorItemActivated);
-    connect(errorList_, &QListWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
-        showIssueListContextMenu(errorList_, pos, false);
-    });
-    bottomTabs_->addTab(
-        errorList_,
-        UiText::isChineseUi() ? QStringLiteral("语法检查") : QStringLiteral("Syntax Check")
-    );
-
-    muriList_ = new QListWidget(bottomTabs_);
-    muriList_->setFont(uiOutputFont());
-    muriList_->setUniformItemSizes(false);
-    muriList_->setWordWrap(true);
-    muriList_->setTextElideMode(Qt::ElideNone);
-    muriList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    muriList_->setContextMenuPolicy(Qt::CustomContextMenu);
-    muriList_->viewport()->installEventFilter(this);
-    connect(muriList_, &QListWidget::itemActivated, this, &MainWindow::onMuriItemActivated);
-    connect(muriList_, &QListWidget::itemClicked, this, &MainWindow::onMuriItemActivated);
-    connect(muriList_, &QListWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
-        showIssueListContextMenu(muriList_, pos, true);
-    });
-    bottomTabs_->addTab(
-        muriList_,
-        UiText::isChineseUi() ? QStringLiteral("无理检查") : QStringLiteral("Muri Check")
-    );
-    connect(bottomTabs_, &QTabWidget::currentChanged, this, [this](int) {
-        scheduleWrappedListRelayout(errorList_);
-        scheduleWrappedListRelayout(muriList_);
-    });
-
-    updateBottomTabsDeviceHeight();
-    logStartupStage("timeline_and_tabs_ready");
-
-    previewLeftColumn_ = new QWidget(this);
-    previewLeftColumn_->setMinimumWidth(320);
-    previewLeftColumn_->setProperty("baseMinimumWidth", previewLeftColumn_->minimumWidth());
-    previewLeftColumn_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
-    auto* leftColumnLayout = new QVBoxLayout(previewLeftColumn_);
-    leftColumnLayout->setContentsMargins(0, 0, 0, 0);
-    leftColumnLayout->setSpacing(0);
-    leftColumnLayout->addWidget(central, 1);
-    leftColumnLayout->addWidget(bottomTabs_, 0);
-
-    workspaceSplitter_ = new QSplitter(Qt::Horizontal, this);
-    workspaceSplitter_->setChildrenCollapsible(false);
-    workspaceSplitter_->setHandleWidth(0);
-    workspaceSplitter_->addWidget(previewLeftColumn_);
-    workspaceSplitter_->addWidget(previewPanel_);
-    workspaceSplitter_->setStretchFactor(0, 1);
-    workspaceSplitter_->setStretchFactor(1, 0);
-    if (QSplitterHandle* handle = workspaceSplitter_->handle(1); handle != nullptr) {
-        handle->setEnabled(false);
-        handle->hide();
-    }
-    setCentralWidget(workspaceSplitter_);
-    syncEditorHeaderMinimumWidth();
-    applyWorkspacePanelArrangement();
-    updatePreviewWorkspaceLayout();
-    logStartupStage("workspace_and_central_widget_ready");
-
-    constexpr int kToolbarLeadingSpacerWidth = 6;
-    auto* toolbarLeadingSpacer = new QWidget(toolBar);
-    toolbarLeadingSpacer->setFixedWidth(kToolbarLeadingSpacerWidth);
-    toolBar->addWidget(toolbarLeadingSpacer);
-    toolBar->addAction(openAction_);
-    toolBar->addAction(saveAction_);
-    constexpr int kToolbarActionButtonWidth = 64;
-    constexpr int kToolbarActionButtonHorizontalPadding = 20;
-    const auto compactToolbarButtonWidth = [](const QFont& font, QAction* action) -> int {
-        if (action == nullptr) {
-            return kToolbarActionButtonWidth;
-        }
-        if (UiText::isChineseUi()) {
-            return kToolbarActionButtonWidth;
-        }
-        const QFontMetrics metrics(font);
-        return qMax(
-            kToolbarActionButtonWidth,
-            metrics.horizontalAdvance(action->text()) + kToolbarActionButtonHorizontalPadding
-        );
-    };
-    const auto makeCompactToolbarButton = [toolBar, compactToolbarButtonWidth](QAction* action) -> QToolButton* {
-        auto* button = new QToolButton(toolBar);
-        button->setDefaultAction(action);
-        button->setAutoRaise(true);
-        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-        const int buttonWidth = compactToolbarButtonWidth(button->font(), action);
-        button->setFixedWidth(buttonWidth);
-        button->setStyleSheet(UiTheme::compactToolbarButtonStyleSheet());
-        return button;
-    };
-
-    previewAudioSettingsButton_ = makeCompactToolbarButton(previewAudioSettingsAction_);
-    previewVideoSettingsButton_ = makeCompactToolbarButton(previewVideoSettingsAction_);
-    int settingsButtonWidth = kToolbarActionButtonWidth;
-    if (previewAudioSettingsButton_ != nullptr) {
-        settingsButtonWidth = qMax(settingsButtonWidth, previewAudioSettingsButton_->width());
-    }
-    if (previewVideoSettingsButton_ != nullptr) {
-        settingsButtonWidth = qMax(settingsButtonWidth, previewVideoSettingsButton_->width());
-    }
-    if (previewAudioSettingsButton_ != nullptr) {
-        previewAudioSettingsButton_->setFixedWidth(settingsButtonWidth);
-        toolBar->addWidget(previewAudioSettingsButton_);
-    }
-    if (previewVideoSettingsButton_ != nullptr) {
-        previewVideoSettingsButton_->setFixedWidth(settingsButtonWidth);
-        toolBar->addWidget(previewVideoSettingsButton_);
-    }
-    settingsPlaceholderAction_ = toolBar->addAction(
-        makeSettingsGearIcon(QColor("#5D6E83")),
-        uiText("action.preferences", "Preferences...")
-    );
-    settingsPlaceholderAction_->setToolTip(uiText("action.preferences", "Preferences..."));
-    connect(settingsPlaceholderAction_, &QAction::triggered, this, &MainWindow::onPreferences);
-    exportVideoButton_ = makeCompactToolbarButton(exportVideoAction_);
-    if (exportVideoButton_ != nullptr) {
-        const auto syncExportToolbarButton = [this]() {
-            if (exportVideoButton_ == nullptr) {
-                return;
-            }
-            exportVideoButton_->setText(uiText("toolbar.export", "Export"));
-            exportVideoButton_->setToolTip(exportVideoAction_ != nullptr ? exportVideoAction_->text() : QString());
-        };
-        syncExportToolbarButton();
-        int openButtonWidth = kToolbarActionButtonWidth;
-        if (QWidget* openWidget = toolBar->widgetForAction(openAction_); openWidget != nullptr) {
-            openButtonWidth = qMax(1, openWidget->sizeHint().width());
-        }
-        exportVideoButton_->setFixedWidth(openButtonWidth);
-        toolBar->insertWidget(settingsPlaceholderAction_, exportVideoButton_);
-        exportVideoMenu_ = new QMenu(exportVideoButton_);
-        if (exportVideoAction_ != nullptr) {
-            exportVideoMenu_->addAction(exportVideoAction_);
-        }
-        QAction* toolbarBatchExportAction = exportVideoMenu_->addAction(
-            uiText("action.batch_export", "Batch Export")
-        );
-        connect(toolbarBatchExportAction, &QAction::triggered, this, &MainWindow::onBatchExportPreviewVideo);
-        exportVideoButton_->installEventFilter(this);
-        exportVideoButton_->setMouseTracking(true);
-        if (exportVideoAction_ != nullptr) {
-            connect(exportVideoAction_, &QAction::changed, this, syncExportToolbarButton);
-        }
-    }
-
-    exportVideoHoverMenuTimer_ = new QTimer(this);
-    exportVideoHoverMenuTimer_->setSingleShot(true);
-    exportVideoHoverMenuTimer_->setInterval(250);
-    connect(exportVideoHoverMenuTimer_, &QTimer::timeout, this, &MainWindow::showExportToolbarMenu);
-    statusBar()->setSizeGripEnabled(false);
-    statusBar()->addPermanentWidget(new QLabel("Current File:", this));
-    currentFileLabel_ = new QLabel(this);
-    statusBar()->addPermanentWidget(currentFileLabel_, 1);
-    updateCurrentFileLabel();
-    updateLatencyDetectorAvailability();
-
-    autosaveTimer_ = new QTimer(this);
-    autosaveTimer_->setInterval(kAutosaveIntervalMs);
-    connect(autosaveTimer_, &QTimer::timeout, this, &MainWindow::runAutosaveCheck);
-    autosaveTimer_->start();
-
-    qtPreviewTimer_ = new QTimer(this);
-    qtPreviewTimer_->setInterval(16);
-    qtPreviewTimer_->setSingleShot(true);
-    qtPreviewTimer_->setTimerType(Qt::PreciseTimer);
-    connect(qtPreviewTimer_, &QTimer::timeout, this, [this]() {
-        if (!qtPreviewPlaying_) {
-            return;
-        }
-        const bool usingFrameSwapPacing =
-            previewCanvas_ != nullptr && previewCanvasUsesFrameSwappedPacing();
-        if (!usingFrameSwapPacing) {
-            onQtPreviewTick();
-            if (!qtPreviewPlaying_) {
-                return;
-            }
-            if (previewCanvas_ != nullptr && !previewCanvasUsesFrameSwappedPacing()) {
-                previewCanvas_->update();
-            }
-            if (!previewCanvasUsesFrameSwappedPacing()) {
-                const qint64 nowNs = qtPreviewWatchdogElapsed_.nsecsElapsed();
-                const qint64 frameIntervalNs = previewCanvasTargetFrameIntervalNs();
-                if (qtPreviewNextFixedTickDueNs_ < 0) {
-                    qtPreviewNextFixedTickDueNs_ = nowNs + frameIntervalNs;
-                } else {
-                    do {
-                        qtPreviewNextFixedTickDueNs_ += frameIntervalNs;
-                    } while (qtPreviewNextFixedTickDueNs_ <= nowNs);
-                }
-            }
-            scheduleNextQtPreviewTick();
-            return;
-        }
-        if (!qtPreviewAwaitingFrameSwap_) {
-            onQtPreviewTick();
-            return;
-        }
-        const qint64 nowMs = qtPreviewWatchdogElapsed_.elapsed();
-        const int stallTimeoutMs = qMax(
-            24,
-            qMax(1, qRound(static_cast<double>(previewCanvasTargetFrameIntervalNs()) / 1000000.0)) * 2
-        );
-        if (qtPreviewAwaitingFrameSwapSinceMs_ >= 0 && nowMs - qtPreviewAwaitingFrameSwapSinceMs_ >= stallTimeoutMs) {
-            qtPreviewAwaitingFrameSwap_ = false;
-            qtPreviewAwaitingFrameSwapSinceMs_ = -1;
-            onQtPreviewTick();
-            return;
-        }
-        scheduleNextQtPreviewTick();
-    });
-
-    qtPreviewTimelineTimer_ = new QTimer(this);
-    qtPreviewTimelineTimer_->setInterval(kTimelineUiCadenceMs);
-    qtPreviewTimelineTimer_->setTimerType(Qt::PreciseTimer);
-    connect(qtPreviewTimelineTimer_, &QTimer::timeout, this, &MainWindow::flushQtPreviewTimelinePosition);
-
-    previewStatsUiTimer_ = new QTimer(this);
-    previewStatsUiTimer_->setInterval(67);
-    previewStatsUiTimer_->setTimerType(Qt::PreciseTimer);
-    connect(previewStatsUiTimer_, &QTimer::timeout, this, [this]() {
-        if (!qtPreviewPlaying_) {
-            if (previewStatsUiTimer_ != nullptr) {
-                previewStatsUiTimer_->stop();
-            }
-            return;
-        }
-        updatePreviewObjectStats(qtPreviewPauseSecond_);
-    });
-
-    previewSeekDebounceTimer_ = new QTimer(this);
-    previewSeekDebounceTimer_->setSingleShot(true);
-    previewSeekDebounceTimer_->setInterval(120);
-    connect(previewSeekDebounceTimer_, &QTimer::timeout, this, [this]() {
-        seekPreviewToSecond(previewPendingSeekSecond_, previewPendingSeekCenterView_);
-    });
-    previewHeldSeekTimer_ = new QTimer(this);
-    previewHeldSeekTimer_->setTimerType(Qt::PreciseTimer);
-    previewHeldSeekTimer_->setInterval(miacode::preview_interaction::kSeekHoldTickIntervalMs);
-    connect(previewHeldSeekTimer_, &QTimer::timeout, this, &MainWindow::applyPreviewHeldSeekTick);
-
-    timelineAnalysisIdleTimer_ = new QTimer(this);
-    timelineAnalysisIdleTimer_->setSingleShot(true);
-    connect(timelineAnalysisIdleTimer_, &QTimer::timeout, this, &MainWindow::dispatchTimelineAnalysisRefresh);
-    logStartupStage("timers_ready");
-
-    if (previewSlider_ != nullptr) {
-        previewSlider_->setFocusPolicy(Qt::StrongFocus);
-        previewSlider_->installEventFilter(this);
-        connect(previewSlider_, &QSlider::sliderPressed, this, [this]() {
-            stopPreviewHeldSeek();
-            if (previewSlider_ != nullptr) {
-                previewSlider_->setFocus(Qt::MouseFocusReason);
-            }
-            if (previewFullscreenActive_) {
-                showPreviewFullscreenControls(false);
-            }
-            if (qtPreviewPlaying_) {
-                stopQtPreviewPlayback(true);
-            }
-            previewSliderDragging_ = true;
-            previewScrubRenderElapsed_.invalidate();
-            if (previewSlider_ != nullptr) {
-                showPreviewSliderTimeHint(previewSlider_->value());
-            }
-        });
-        connect(previewSlider_, &QSlider::sliderMoved, this, [this](int value) {
-            if (previewSlider_ == nullptr) {
-                return;
-            }
-            if (previewFullscreenActive_) {
-                showPreviewFullscreenControls(false);
-            }
-            showPreviewSliderTimeHint(value);
-            const double second = static_cast<double>(value) / 1000.0;
-            const bool shouldRenderNow = !previewScrubRenderElapsed_.isValid()
-                || previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs;
-            if (shouldRenderNow) {
-                if (previewSeekDebounceTimer_ != nullptr) {
-                    previewSeekDebounceTimer_->stop();
-                }
-                seekPreviewToSecond(second, true);
-                previewScrubRenderElapsed_.restart();
-            } else {
-                schedulePreviewSeek(second, true);
-            }
-        });
-        connect(previewSlider_, &QSlider::sliderReleased, this, [this]() {
-            stopPreviewHeldSeek();
-            previewSliderDragging_ = false;
-            previewScrubRenderElapsed_.invalidate();
-            if (previewSlider_ == nullptr) {
-                return;
-            }
-            if (previewFullscreenActive_) {
-                showPreviewFullscreenControls(false);
-            }
-            showPreviewSliderTimeHint(previewSlider_->value());
-            if (previewSeekDebounceTimer_ != nullptr) {
-                previewSeekDebounceTimer_->stop();
-            }
-            seekPreviewToSecond(static_cast<double>(previewSlider_->value()) / 1000.0, true);
-        });
-    }
-    if (previewControlCard_ != nullptr) {
-        previewControlCard_->installEventFilter(this);
-    }
-    if (stopPreviewButton_ != nullptr) {
-        stopPreviewButton_->installEventFilter(this);
-    }
-    if (pausePreviewButton_ != nullptr) {
-        pausePreviewButton_->installEventFilter(this);
-    }
-    if (previewSpeedButton_ != nullptr) {
-        previewSpeedButton_->installEventFilter(this);
-    }
-    if (previewFullscreenButton_ != nullptr) {
-        previewFullscreenButton_->installEventFilter(this);
-    }
-    if (previewCanvasContainer_ != nullptr) {
-        previewCanvasContainer_->setMouseTracking(true);
-        previewCanvasContainer_->installEventFilter(this);
-    }
-    if (previewCanvasFrame_ != nullptr) {
-        previewCanvasFrame_->setMouseTracking(true);
-        previewCanvasFrame_->installEventFilter(this);
-    }
-    if (previewPanel_ != nullptr) {
-        previewPanel_->setMouseTracking(true);
-        previewPanel_->installEventFilter(this);
-    }
-    editorViewport_ = qobject_cast<PlainCodeEditor*>(editorWidget_)->viewport();
-    if (editorViewport_ != nullptr) {
-        editorViewport_->installEventFilter(this);
-    }
-    if (editorFindEdit_ != nullptr) {
-        editorFindEdit_->installEventFilter(this);
-        connect(editorFindEdit_, &QLineEdit::returnPressed, this, &MainWindow::onFindNext);
-    }
-    if (editorReplaceEdit_ != nullptr) {
-        editorReplaceEdit_->installEventFilter(this);
-    }
-    if (editorFindPrevButton_ != nullptr) {
-        connect(editorFindPrevButton_, &QToolButton::clicked, this, &MainWindow::onFindPrevious);
-    }
-    if (editorFindNextButton_ != nullptr) {
-        connect(editorFindNextButton_, &QToolButton::clicked, this, &MainWindow::onFindNext);
-    }
-    if (editorFindCloseButton_ != nullptr) {
-        connect(editorFindCloseButton_, &QToolButton::clicked, this, &MainWindow::hideFindReplaceBar);
-    }
-    if (editorReplaceButton_ != nullptr) {
-        connect(editorReplaceButton_, &QPushButton::clicked, this, &MainWindow::onReplaceOne);
-    }
-    if (editorReplaceAllButton_ != nullptr) {
-        connect(editorReplaceAllButton_, &QPushButton::clicked, this, &MainWindow::onReplaceAll);
-    }
-    if (editorFindBar_ != nullptr) {
-        auto* toggleFindBarShortcut = new QShortcut(QKeySequence::Find, editorFindBar_);
-        toggleFindBarShortcut->setContext(Qt::WidgetWithChildrenShortcut);
-        connect(toggleFindBarShortcut, &QShortcut::activated, this, &MainWindow::onToggleFindReplace);
-        auto* closeFindBarShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), editorFindBar_);
-        closeFindBarShortcut->setContext(Qt::WidgetWithChildrenShortcut);
-        connect(closeFindBarShortcut, &QShortcut::activated, this, &MainWindow::hideFindReplaceBar);
-    }
-    updateEditorFindBarGeometry();
-    applyFindOverlayInset();
-    auto* fontDecreaseShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+-")), this);
-    fontDecreaseShortcut->setContext(Qt::WindowShortcut);
-    connect(fontDecreaseShortcut, &QShortcut::activated, this, [this]() {
-        applyEditorTextFontSize(editorTextFontPointSize_ - 1, true);
-        statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
-    });
-    auto* fontIncreaseShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+=")), this);
-    fontIncreaseShortcut->setContext(Qt::WindowShortcut);
-    connect(fontIncreaseShortcut, &QShortcut::activated, this, [this]() {
-        applyEditorTextFontSize(editorTextFontPointSize_ + 1, true);
-        statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
-    });
-    auto* fontIncreaseShiftShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl++")), this);
-    fontIncreaseShiftShortcut->setContext(Qt::WindowShortcut);
-    connect(fontIncreaseShiftShortcut, &QShortcut::activated, this, [this]() {
-        applyEditorTextFontSize(editorTextFontPointSize_ + 1, true);
-        statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
-    });
-
-    statusBar()->showMessage("PlainCodeEditor ready.");
-
-    loadPortableState();
-    applyWorkspacePanelArrangement();
-    logStartupStage("portable_state_loaded");
-    if (runtimeDebugOutputEnabled_) {
-        previewShowDebugInfo_ = true;
-    }
-    if (previewUsesStageMediaHostRoute()) {
-        ensurePreviewStageMediaRouteInitialized();
-    }
-    applyPreviewStageMediaRoutePlaybackRate(previewPlaybackRate_);
-    applyPreviewStageMediaRouteVisualSettings();
-    if (previewSfxRuntime_ != nullptr) {
-        previewSfxRuntime_->setChartPath(currentFilePath_);
-        logStartupStage("preview_sfx_set_chart_path_done");
-        previewSfxRuntime_->setBackgroundTrackPlaybackRate(previewPlaybackRate_);
-        logStartupStage("preview_sfx_set_playback_rate_done");
-    }
-    if (previewCanvas_ != nullptr) {
-        previewCanvas_->setOutlineVariant(previewOutlineVariant_);
-        previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
-        previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
-        previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
-        previewCanvas_->setSmoothBrightness(previewSmoothBrightness_);
-        previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
-        previewCanvas_->setNoteFlowSpeed(previewNoteFlowSpeed_);
-        previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
-        previewCanvas_->setShowTimestamp(previewShowTimestamp_);
-        previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
-    }
-    applyMuriRenderOptions();
-    applyUiTheme();
-    updatePauseButtonAppearance();
-    const bool restoredStartupDocument = restoreLastSessionFile();
-    if (!restoredStartupDocument) {
-        loadDocument(SimaiDocument::createEmpty());
-        logStartupStage("initial_empty_document_applied");
-    } else {
-        logStartupStage("initial_last_session_document_applied");
-    }
-    updatePreviewSliderRange();
-    updatePreviewSliderPosition(0.0);
-    logStartupStage("initial_document_loaded");
-    qtPreviewWatchdogElapsed_.start();
-    logStartupStage("preview_media_controller_lazy_init_deferred");
-    QTimer::singleShot(0, this, [this]() {
-        schedulePreviewSubsystemWarmup();
-    });
-    logStartupStage("preview_subsystem_warmup_scheduled");
-    logStartupStage("constructor_done");
 }
 
