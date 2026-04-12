@@ -161,6 +161,12 @@ struct PreviewMediaFrameState {
     double externalPlaybackSecond = 0.0;
     double externalClockDeltaSeconds = 0.0;
     qint64 externalVideoFrameAgeMs = -1;
+    qint64 externalVideoFrameCountTotal = 0;
+    double externalVideoFrameRate = 0.0;
+    double externalVideoFrameIntervalAvgMs = 0.0;
+    double externalVideoFrameIntervalMaxMs = 0.0;
+    qint64 externalVideoFrameStallCount = 0;
+    bool externalVideoFrameStalled = false;
 };
 
 struct PreviewAssetState {
@@ -194,6 +200,14 @@ struct PreviewFrameState {
     double playheadSeconds = 0.0;
     quint64 sceneContentRevision = 0;
     double fpsDisplay = 0.0;
+    double tickFpsDisplay = 0.0;
+    double updateRequestFpsDisplay = 0.0;
+    double framePacingTargetFps = 0.0;
+    double displayRefreshRate = 0.0;
+    qint64 tickCount = 0;
+    qint64 updateRequestCount = 0;
+    qint64 presentedFrameCount = 0;
+    bool framePacingUsesDisplayRefresh = false;
     int cpuFallbackCount = 0;
     bool usedGpuRendererThisFrame = false;
 };
