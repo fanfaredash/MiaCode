@@ -277,44 +277,12 @@ private:
     QString previewSkinVariantStorageValue() const;
     double currentPreviewCanvasRefreshRate() const;
     void refreshPreviewFrameRateTimers();
-    int computeBottomTabsDeviceHeight() const;
-    void updateBottomTabsDeviceHeight();
     double timelineSecondForCursor(int line, int col) const;
     void jumpToLocation(int line, int col);
     QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount = nullptr) const;
     QString editorText() const;
     QString resolveDefaultTrackPath() const;
     QString resolvePreviewSkinDir() const;
-    bool buildVideoExportSnapshot(
-        const VideoExportTask& requestedTask,
-        VideoExportSnapshot* snapshot,
-        QString* errorMessage
-    );
-    bool buildVideoExportSnapshotForChartDirectory(
-        const QString& chartDirectory,
-        int difficultyId,
-        const QString& difficultyToken,
-        const VideoExportTask& requestedTask,
-        const QString& outputDirectory,
-        VideoExportSnapshot* snapshot,
-        QString* errorMessage
-    );
-    bool startVideoExportWorkerProcess(QProcess* process, const VideoExportSnapshot& snapshot, QString* errorMessage);
-    bool runVideoExportWorkerSync(
-        const VideoExportSnapshot& snapshot,
-        QProgressDialog* progressDialog,
-        bool* canceledByUser,
-        QString* errorMessage,
-        const std::function<void(int percent, const QString& rawMessage)>& progressCallback = {}
-    );
-    bool launchVideoExportWorker(const VideoExportSnapshot& snapshot, QString* errorMessage);
-    void showExportToolbarMenu();
-    void handleVideoExportWorkerStdout();
-    void handleVideoExportWorkerStderr();
-    void handleVideoExportWorkerEvent(const QJsonObject& eventObject);
-    void handleVideoExportWorkerProcessFinished(int exitCode, int exitStatus);
-    void cancelVideoExportWorker();
-    void clearVideoExportWorkerState();
     QString resolveProjectRenderStateFilePath() const;
     QString resolveInitialOpenDirectory() const;
     void resetPortablePreviewSettingsToDefaults();
@@ -323,11 +291,6 @@ private:
     void savePortableState() const;
     void applyEditorTextFontSize(int pointSize, bool persistPreference);
     void applyEditorLineSpacingFactor(double factor, bool persistPreference);
-    void applyUiTheme();
-    void applySystemWindowBackdrop(QWidget* target = nullptr) const;
-    void setInvalidStarPreviewEasterEggEnabled(bool enabled);
-    void ensureInvalidStarPreviewEasterEggSounds();
-    void playInvalidStarPreviewEasterEggSound(bool enabled);
     void persistEditorTextFontPreference() const;
     void loadProjectRenderState();
     void saveProjectRenderState() const;
@@ -337,11 +300,6 @@ private:
     bool runValidateSimai();
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
     bool preparePreviewStartState();
-    QList<QAction*> quickShellShortcutActions() const;
-    void appendOutput(const QString& title, const QString& payload);
-    void logWindowGeometryDebug(const QString& tag, const QString& detail = QString());
-    QString formatWindowStateFlags(Qt::WindowStates states) const;
-    void logTopLevelWindowSnapshot(const QString& tag);
     void refreshEditorExtraSelections();
     void setPreviewFollowDecoration(int line, int col);
     void clearPreviewFollowDecoration();

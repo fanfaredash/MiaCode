@@ -1,5 +1,6 @@
 ﻿#include "MainWindow.ValidationSection.h"
 #include "../../MainWindowShared.h"
+#include "../window/MainWindow.WindowSection.h"
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
@@ -937,7 +938,7 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
         }
         state_.validationCacheByDifficulty_.insert(difficultyId, entry);
         if (state_.runtimeDebugOutputEnabled_) {
-            owner_.appendOutput(
+            owner_.windowSection_->appendOutput(
                 "edit/validation_perf",
                 QStringLiteral("build_report=%1ms issues=%2 cached_lenient=%3")
                     .arg(reportTimer.elapsed())
@@ -981,7 +982,7 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
         onErrorItemActivated(ui_.errorList_->item(0));
     }
     if (state_.runtimeDebugOutputEnabled_) {
-        owner_.appendOutput(
+        owner_.windowSection_->appendOutput(
             "edit/validation_apply_perf",
             QStringLiteral("apply_ui=%1ms issues=%2")
                 .arg(applyTimer.elapsed())
@@ -1051,7 +1052,7 @@ bool MainWindow::ValidationSection::runValidateSimai()
         }
         state_.validationCacheByDifficulty_.insert(difficultyId, entry);
         if (state_.runtimeDebugOutputEnabled_) {
-            owner_.appendOutput(
+            owner_.windowSection_->appendOutput(
                 "edit/validation_perf",
                 QStringLiteral("build_report=%1ms issues=%2 cached_lenient=%3")
                     .arg(reportTimer.elapsed())
@@ -1071,7 +1072,7 @@ bool MainWindow::ValidationSection::runValidateSimai()
         .arg(entry.lenientErrorCount)
         .arg(entry.strictNoteCount)
         .arg(entry.strictErrorCount);
-    owner_.appendOutput("validate", payload);
+    owner_.windowSection_->appendOutput("validate", payload);
 
     clearValidationErrors();
     clearValidationDecorations();

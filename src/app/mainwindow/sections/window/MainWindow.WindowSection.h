@@ -6,6 +6,8 @@ class MainWindow::WindowSection {
 public:
     WindowSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state);
 
+    bool quickShellRootWindowFrameGeometryAvailable() const;
+    QRect quickShellRootWindowFrameGeometry() const;
     bool confirmShellClose();
     void toggleShellPreviewPlayback();
     void stopShellPreview();
@@ -14,6 +16,9 @@ public:
     void updateShellPreviewScrub(double second, bool centerView);
     void endShellPreviewScrub(double second, bool centerView);
     void setShellPreviewRate(double rate);
+    bool stepShellPreviewBySeconds(double deltaSeconds, bool centerView);
+    void beginShellPreviewHeldSeek(int direction, int key);
+    void stopShellPreviewHeldSeek(int key = 0);
     void setShellPreviewFullscreen(bool fullscreen);
     bool shellHasShortcut(const QKeySequence& sequence) const;
     bool shellTriggerShortcut(const QKeySequence& sequence);
@@ -40,6 +45,8 @@ public:
     void shellSetRootWindowFrameGeometry(const QRect& geometry);
     void shellNoteQuickUiReady();
 
+    void configureRuntimeDebugOutput();
+    void setupInitialWindowGeometry();
     void applyUiTheme();
     void updateOutlineDockCollapseButton();
     void setOutlineDockCollapsed(bool collapsed);

@@ -1,5 +1,6 @@
 #include "MainWindow.TimelineSection.h"
 #include "../../MainWindowShared.h"
+#include "../window/MainWindow.WindowSection.h"
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
@@ -810,8 +811,8 @@ void MainWindow::TimelineSection::updatePreviewWorkspaceLayout()
     owner_.refreshQuickShellRehostedWidgetParent(ui_.previewLeftColumn_);
     owner_.refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
     owner_.refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
-    owner_.updateEditorFindBarGeometry();
-    owner_.applyFindOverlayInset();
+    owner_.windowSection_->updateEditorFindBarGeometry();
+    owner_.windowSection_->applyFindOverlayInset();
 }
 
 void MainWindow::TimelineSection::cacheWorkspaceLayoutSizes()

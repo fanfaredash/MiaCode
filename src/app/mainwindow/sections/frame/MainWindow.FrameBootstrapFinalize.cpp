@@ -131,7 +131,9 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     exportVideoHoverMenuTimer_ = new QTimer(this);
     exportVideoHoverMenuTimer_->setSingleShot(true);
     exportVideoHoverMenuTimer_->setInterval(250);
-    connect(exportVideoHoverMenuTimer_, &QTimer::timeout, this, &MainWindow::showExportToolbarMenu);
+    connect(exportVideoHoverMenuTimer_, &QTimer::timeout, this, [this]() {
+        exportSection_->showExportToolbarMenu();
+    });
     statusBar()->setSizeGripEnabled(false);
     statusBar()->addPermanentWidget(new QLabel("Current File:", this));
     currentFileLabel_ = new QLabel(this);
@@ -331,7 +333,9 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         connect(editorFindNextButton_, &QToolButton::clicked, this, &MainWindow::onFindNext);
     }
     if (editorFindCloseButton_ != nullptr) {
-        connect(editorFindCloseButton_, &QToolButton::clicked, this, &MainWindow::hideFindReplaceBar);
+        connect(editorFindCloseButton_, &QToolButton::clicked, this, [this]() {
+            windowSection_->hideFindReplaceBar();
+        });
     }
     if (editorReplaceButton_ != nullptr) {
         connect(editorReplaceButton_, &QPushButton::clicked, this, &MainWindow::onReplaceOne);
@@ -345,10 +349,12 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         connect(toggleFindBarShortcut, &QShortcut::activated, this, &MainWindow::onToggleFindReplace);
         auto* closeFindBarShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), editorFindBar_);
         closeFindBarShortcut->setContext(Qt::WidgetWithChildrenShortcut);
-        connect(closeFindBarShortcut, &QShortcut::activated, this, &MainWindow::hideFindReplaceBar);
+        connect(closeFindBarShortcut, &QShortcut::activated, this, [this]() {
+            windowSection_->hideFindReplaceBar();
+        });
     }
-    updateEditorFindBarGeometry();
-    applyFindOverlayInset();
+    windowSection_->updateEditorFindBarGeometry();
+    windowSection_->applyFindOverlayInset();
     auto* fontDecreaseShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+-")), this);
     fontDecreaseShortcut->setContext(Qt::WindowShortcut);
     connect(fontDecreaseShortcut, &QShortcut::activated, this, [this]() {
@@ -400,7 +406,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
     }
     applyMuriRenderOptions();
-    applyUiTheme();
+    windowSection_->applyUiTheme();
     updatePauseButtonAppearance();
     const bool restoredStartupDocument = restoreLastSessionFile();
     if (!restoredStartupDocument) {

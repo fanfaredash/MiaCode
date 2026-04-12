@@ -1,337 +1,308 @@
 #include "MainWindow.WindowSection.h"
 
+#include "common/DebugOptions.h"
+
 MainWindow::WindowSection::WindowSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state)
     : owner_(owner)
     , ui_(ui)
     , state_(state)
 {}
 
-bool MainWindow::WindowSection::confirmShellClose()
+bool MainWindow::quickShellRootWindowFrameGeometryAvailable() const
 {
-    return owner_.confirmShellClose();
+    return windowSection_->quickShellRootWindowFrameGeometryAvailable();
 }
 
-void MainWindow::WindowSection::toggleShellPreviewPlayback()
+QRect MainWindow::quickShellRootWindowFrameGeometry() const
 {
-    owner_.toggleShellPreviewPlayback();
+    return windowSection_->quickShellRootWindowFrameGeometry();
 }
 
-void MainWindow::WindowSection::stopShellPreview()
+bool MainWindow::confirmShellClose()
 {
-    owner_.stopShellPreview();
+    return windowSection_->confirmShellClose();
 }
 
-void MainWindow::WindowSection::seekShellPreview(double second)
+void MainWindow::toggleShellPreviewPlayback()
 {
-    owner_.seekShellPreview(second);
+    windowSection_->toggleShellPreviewPlayback();
 }
 
-void MainWindow::WindowSection::beginShellPreviewScrub()
+void MainWindow::stopShellPreview()
 {
-    owner_.beginShellPreviewScrub();
+    windowSection_->stopShellPreview();
 }
 
-void MainWindow::WindowSection::updateShellPreviewScrub(double second, bool centerView)
+void MainWindow::seekShellPreview(double second)
 {
-    owner_.updateShellPreviewScrub(second, centerView);
+    windowSection_->seekShellPreview(second);
 }
 
-void MainWindow::WindowSection::endShellPreviewScrub(double second, bool centerView)
+void MainWindow::beginShellPreviewScrub()
 {
-    owner_.endShellPreviewScrub(second, centerView);
+    windowSection_->beginShellPreviewScrub();
 }
 
-void MainWindow::WindowSection::setShellPreviewRate(double rate)
+void MainWindow::updateShellPreviewScrub(double second, bool centerView)
 {
-    owner_.setShellPreviewRate(rate);
+    windowSection_->updateShellPreviewScrub(second, centerView);
 }
 
-void MainWindow::WindowSection::setShellPreviewFullscreen(bool fullscreen)
+void MainWindow::endShellPreviewScrub(double second, bool centerView)
 {
-    owner_.setShellPreviewFullscreen(fullscreen);
+    windowSection_->endShellPreviewScrub(second, centerView);
 }
 
-bool MainWindow::WindowSection::shellHasShortcut(const QKeySequence& sequence) const
+void MainWindow::setShellPreviewRate(double rate)
 {
-    return owner_.shellHasShortcut(sequence);
+    windowSection_->setShellPreviewRate(rate);
 }
 
-bool MainWindow::WindowSection::shellTriggerShortcut(const QKeySequence& sequence)
+bool MainWindow::stepShellPreviewBySeconds(double deltaSeconds, bool centerView)
 {
-    return owner_.shellTriggerShortcut(sequence);
+    return windowSection_->stepShellPreviewBySeconds(deltaSeconds, centerView);
 }
 
-QString MainWindow::WindowSection::shellWindowTitle() const
+void MainWindow::beginShellPreviewHeldSeek(int direction, int key)
 {
-    return owner_.shellWindowTitle();
+    windowSection_->beginShellPreviewHeldSeek(direction, key);
 }
 
-bool MainWindow::WindowSection::shellWorkspacePanelsSwapped() const
+void MainWindow::stopShellPreviewHeldSeek(int key)
 {
-    return owner_.shellWorkspacePanelsSwapped();
+    windowSection_->stopShellPreviewHeldSeek(key);
 }
 
-QString MainWindow::WindowSection::shellPreviewSpeedLabel() const
+void MainWindow::setShellPreviewFullscreen(bool fullscreen)
 {
-    return owner_.shellPreviewSpeedLabel();
+    windowSection_->setShellPreviewFullscreen(fullscreen);
 }
 
-bool MainWindow::WindowSection::shellPreviewPlaying() const
+bool MainWindow::shellHasShortcut(const QKeySequence& sequence) const
 {
-    return owner_.shellPreviewPlaying();
+    return windowSection_->shellHasShortcut(sequence);
 }
 
-double MainWindow::WindowSection::shellPreviewPositionSeconds() const
+bool MainWindow::shellTriggerShortcut(const QKeySequence& sequence)
 {
-    return owner_.shellPreviewPositionSeconds();
+    return windowSection_->shellTriggerShortcut(sequence);
 }
 
-double MainWindow::WindowSection::shellPreviewDurationSeconds() const
+QString MainWindow::shellWindowTitle() const
 {
-    return owner_.shellPreviewDurationSeconds();
+    return windowSection_->shellWindowTitle();
 }
 
-QStringList MainWindow::WindowSection::shellPreviewStatsTexts() const
+bool MainWindow::shellWorkspacePanelsSwapped() const
 {
-    return owner_.shellPreviewStatsTexts();
+    return windowSection_->shellWorkspacePanelsSwapped();
 }
 
-bool MainWindow::WindowSection::shellPreviewFullscreen() const
+QString MainWindow::shellPreviewSpeedLabel() const
 {
-    return owner_.shellPreviewFullscreen();
+    return windowSection_->shellPreviewSpeedLabel();
 }
 
-QObject* MainWindow::WindowSection::shellPreviewRuntimeObject() const
+bool MainWindow::shellPreviewPlaying() const
 {
-    return owner_.shellPreviewRuntimeObject();
+    return windowSection_->shellPreviewPlaying();
 }
 
-QObject* MainWindow::WindowSection::shellPreviewStageMediaHostObject() const
+double MainWindow::shellPreviewPositionSeconds() const
 {
-    return owner_.shellPreviewStageMediaHostObject();
+    return windowSection_->shellPreviewPositionSeconds();
 }
 
-bool MainWindow::WindowSection::shellPreviewUsesSeparateSurface() const
+double MainWindow::shellPreviewDurationSeconds() const
 {
-    return owner_.shellPreviewUsesSeparateSurface();
+    return windowSection_->shellPreviewDurationSeconds();
 }
 
-QWindow* MainWindow::WindowSection::shellPreviewCompositeWindow() const
+QStringList MainWindow::shellPreviewStatsTexts() const
 {
-    return owner_.shellPreviewCompositeWindow();
+    return windowSection_->shellPreviewStatsTexts();
 }
 
-QWidget* MainWindow::WindowSection::shellWindowWidget() const
+bool MainWindow::shellPreviewFullscreen() const
 {
-    return owner_.shellWindowWidget();
+    return windowSection_->shellPreviewFullscreen();
 }
 
-QDockWidget* MainWindow::WindowSection::shellOutlineDockWidget() const
+QObject* MainWindow::shellPreviewRuntimeObject() const
 {
-    return owner_.shellOutlineDockWidget();
+    return windowSection_->shellPreviewRuntimeObject();
 }
 
-bool MainWindow::WindowSection::shellOutlineDockCollapsed() const
+QObject* MainWindow::shellPreviewStageMediaHostObject() const
 {
-    return owner_.shellOutlineDockCollapsed();
+    return windowSection_->shellPreviewStageMediaHostObject();
 }
 
-int MainWindow::WindowSection::shellOutlineDockExpandedWidth() const
+bool MainWindow::shellPreviewUsesSeparateSurface() const
 {
-    return owner_.shellOutlineDockExpandedWidth();
+    return windowSection_->shellPreviewUsesSeparateSurface();
 }
 
-QWidget* MainWindow::WindowSection::shellWorkspaceWidget() const
+QWindow* MainWindow::shellPreviewCompositeWindow() const
 {
-    return owner_.shellWorkspaceWidget();
+    return windowSection_->shellPreviewCompositeWindow();
 }
 
-QWidget* MainWindow::WindowSection::shellPreviewPanelWidget() const
+QWidget* MainWindow::shellWindowWidget() const
 {
-    return owner_.shellPreviewPanelWidget();
+    return windowSection_->shellWindowWidget();
 }
 
-double MainWindow::WindowSection::shellNormalizedPreviewCanvasAspectRatio() const
+QDockWidget* MainWindow::shellOutlineDockWidget() const
 {
-    return owner_.shellNormalizedPreviewCanvasAspectRatio();
+    return windowSection_->shellOutlineDockWidget();
 }
 
-void MainWindow::WindowSection::shellRefreshLayoutAfterResize()
+bool MainWindow::shellOutlineDockCollapsed() const
 {
-    owner_.shellRefreshLayoutAfterResize();
+    return windowSection_->shellOutlineDockCollapsed();
 }
 
-void MainWindow::WindowSection::shellSetRootWindowFrameGeometry(const QRect& geometry)
+int MainWindow::shellOutlineDockExpandedWidth() const
 {
-    owner_.shellSetRootWindowFrameGeometry(geometry);
+    return windowSection_->shellOutlineDockExpandedWidth();
 }
 
-void MainWindow::WindowSection::shellNoteQuickUiReady()
+QWidget* MainWindow::shellWorkspaceWidget() const
 {
-    owner_.shellNoteQuickUiReady();
+    return windowSection_->shellWorkspaceWidget();
 }
 
-void MainWindow::WindowSection::applyUiTheme()
+QWidget* MainWindow::shellPreviewPanelWidget() const
 {
-    owner_.applyUiTheme();
+    return windowSection_->shellPreviewPanelWidget();
 }
 
-void MainWindow::WindowSection::updateOutlineDockCollapseButton()
+double MainWindow::shellNormalizedPreviewCanvasAspectRatio() const
 {
-    owner_.updateOutlineDockCollapseButton();
+    return windowSection_->shellNormalizedPreviewCanvasAspectRatio();
 }
 
-void MainWindow::WindowSection::setOutlineDockCollapsed(bool collapsed)
+void MainWindow::shellRefreshLayoutAfterResize()
 {
-    owner_.setOutlineDockCollapsed(collapsed);
+    windowSection_->shellRefreshLayoutAfterResize();
 }
 
-void MainWindow::WindowSection::applySystemWindowBackdrop(QWidget* target) const
+void MainWindow::shellSetRootWindowFrameGeometry(const QRect& geometry)
 {
-    owner_.applySystemWindowBackdrop(target);
+    windowSection_->shellSetRootWindowFrameGeometry(geometry);
 }
 
-int MainWindow::WindowSection::computeBottomTabsDeviceHeight() const
+void MainWindow::shellNoteQuickUiReady()
 {
-    return owner_.computeBottomTabsDeviceHeight();
+    windowSection_->shellNoteQuickUiReady();
 }
 
-void MainWindow::WindowSection::updateBottomTabsDeviceHeight()
+void MainWindow::configureRuntimeDebugOutput()
 {
-    owner_.updateBottomTabsDeviceHeight();
+    if (windowSection_ == nullptr) {
+        runtimeDebugOutputEnabled_ = miacode::debug_options::runtimeDebugOutputEnabled();
+        return;
+    }
+    windowSection_->configureRuntimeDebugOutput();
 }
 
-QString MainWindow::WindowSection::formatWindowStateFlags(Qt::WindowStates states) const
+void MainWindow::closeEvent(QCloseEvent* event)
 {
-    return owner_.formatWindowStateFlags(states);
+    if (windowSection_ == nullptr) {
+        QMainWindow::closeEvent(event);
+        return;
+    }
+    windowSection_->closeEvent(event);
 }
 
-void MainWindow::WindowSection::logWindowGeometryDebug(const QString& tag, const QString& detail)
+void MainWindow::onToggleFindReplace()
 {
-    owner_.logWindowGeometryDebug(tag, detail);
+    windowSection_->onToggleFindReplace();
 }
 
-void MainWindow::WindowSection::logTopLevelWindowSnapshot(const QString& tag)
+void MainWindow::onFindNext()
 {
-    owner_.logTopLevelWindowSnapshot(tag);
+    windowSection_->onFindNext();
 }
 
-void MainWindow::WindowSection::closeEvent(QCloseEvent* event)
+void MainWindow::onFindPrevious()
 {
-    owner_.closeEvent(event);
+    windowSection_->onFindPrevious();
 }
 
-void MainWindow::WindowSection::appendOutput(const QString& title, const QString& payload)
+void MainWindow::onReplaceOne()
 {
-    owner_.appendOutput(title, payload);
+    windowSection_->onReplaceOne();
 }
 
-QTextEdit* MainWindow::WindowSection::activeFindTarget() const
+void MainWindow::onReplaceAll()
 {
-    return owner_.activeFindTarget();
+    windowSection_->onReplaceAll();
 }
 
-bool MainWindow::WindowSection::runFindInEditor(bool backward)
+void MainWindow::refreshQuickShellRehostedWidgetParent(QWidget* widget)
 {
-    return owner_.runFindInEditor(backward);
+    windowSection_->refreshQuickShellRehostedWidgetParent(widget);
 }
 
-void MainWindow::WindowSection::updateEditorFindBarGeometry()
+bool MainWindow::eventFilter(QObject* watched, QEvent* event)
 {
-    owner_.updateEditorFindBarGeometry();
+    if (windowSection_ == nullptr) {
+        return QMainWindow::eventFilter(watched, event);
+    }
+    return windowSection_->eventFilter(watched, event);
 }
 
-void MainWindow::WindowSection::applyFindOverlayInset()
+void MainWindow::resizeEvent(QResizeEvent* event)
 {
-    owner_.applyFindOverlayInset();
+    if (windowSection_ == nullptr) {
+        QMainWindow::resizeEvent(event);
+        return;
+    }
+    windowSection_->resizeEvent(event);
 }
 
-void MainWindow::WindowSection::hideFindReplaceBar()
+void MainWindow::moveEvent(QMoveEvent* event)
 {
-    owner_.hideFindReplaceBar();
+    if (windowSection_ == nullptr) {
+        QMainWindow::moveEvent(event);
+        return;
+    }
+    windowSection_->moveEvent(event);
 }
 
-void MainWindow::WindowSection::onToggleFindReplace()
+void MainWindow::showEvent(QShowEvent* event)
 {
-    owner_.onToggleFindReplace();
+    if (windowSection_ == nullptr) {
+        QMainWindow::showEvent(event);
+        return;
+    }
+    windowSection_->showEvent(event);
 }
 
-void MainWindow::WindowSection::onFindNext()
+void MainWindow::hideEvent(QHideEvent* event)
 {
-    owner_.onFindNext();
+    if (windowSection_ == nullptr) {
+        QMainWindow::hideEvent(event);
+        return;
+    }
+    windowSection_->hideEvent(event);
 }
 
-void MainWindow::WindowSection::onFindPrevious()
+bool MainWindow::event(QEvent* event)
 {
-    owner_.onFindPrevious();
+    if (windowSection_ == nullptr) {
+        return QMainWindow::event(event);
+    }
+    return windowSection_->event(event);
 }
 
-void MainWindow::WindowSection::onReplaceOne()
+void MainWindow::changeEvent(QEvent* event)
 {
-    owner_.onReplaceOne();
-}
-
-void MainWindow::WindowSection::onReplaceAll()
-{
-    owner_.onReplaceAll();
-}
-
-QList<QAction*> MainWindow::WindowSection::quickShellShortcutActions() const
-{
-    return owner_.quickShellShortcutActions();
-}
-
-void MainWindow::WindowSection::refreshQuickShellRehostedWidgetParent(QWidget* widget)
-{
-    owner_.refreshQuickShellRehostedWidgetParent(widget);
-}
-
-void MainWindow::WindowSection::setInvalidStarPreviewEasterEggEnabled(bool enabled)
-{
-    owner_.setInvalidStarPreviewEasterEggEnabled(enabled);
-}
-
-void MainWindow::WindowSection::ensureInvalidStarPreviewEasterEggSounds()
-{
-    owner_.ensureInvalidStarPreviewEasterEggSounds();
-}
-
-void MainWindow::WindowSection::playInvalidStarPreviewEasterEggSound(bool enabled)
-{
-    owner_.playInvalidStarPreviewEasterEggSound(enabled);
-}
-
-bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
-{
-    return owner_.eventFilter(watched, event);
-}
-
-void MainWindow::WindowSection::resizeEvent(QResizeEvent* event)
-{
-    owner_.resizeEvent(event);
-}
-
-void MainWindow::WindowSection::moveEvent(QMoveEvent* event)
-{
-    owner_.moveEvent(event);
-}
-
-void MainWindow::WindowSection::showEvent(QShowEvent* event)
-{
-    owner_.showEvent(event);
-}
-
-void MainWindow::WindowSection::hideEvent(QHideEvent* event)
-{
-    owner_.hideEvent(event);
-}
-
-bool MainWindow::WindowSection::event(QEvent* event)
-{
-    return owner_.event(event);
-}
-
-void MainWindow::WindowSection::changeEvent(QEvent* event)
-{
-    owner_.changeEvent(event);
+    if (windowSection_ == nullptr) {
+        QMainWindow::changeEvent(event);
+        return;
+    }
+    windowSection_->changeEvent(event);
 }

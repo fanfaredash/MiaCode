@@ -60,11 +60,8 @@
         const QString& sfxDir,
         qint64 workerElapsedMs
     );
-    void setupInitialWindowGeometry();
     void finishFrameBootstrap(QToolBar* toolBar, const std::function<void(const QString&)>& logStartupStage);
     void setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* transformMenu, QMenu* previewMenu, QMenu* helpMenu);
-    void setOutlineDockCollapsed(bool collapsed);
-    void updateOutlineDockCollapseButton();
     bool maybeSaveCurrentFieldChanges();
     bool applyCurrentFieldToDocument();
     bool saveToPath(const QString& path);
@@ -96,11 +93,6 @@
     void updateWindowTitle();
     void updateCurrentFileLabel();
     void updatePauseButtonAppearance();
-    QTextEdit* activeFindTarget() const;
-    bool runFindInEditor(bool backward);
-    void updateEditorFindBarGeometry();
-    void applyFindOverlayInset();
-    void hideFindReplaceBar();
     void updateDirtyState();
     bool currentFieldHasUndoChanges() const;
     void refreshCurrentFieldDirtyState();
@@ -219,4 +211,3 @@
     void restoreWorkspaceLayoutSizes();
     void refreshQuickShellRehostedWidgetParent(QWidget* widget);
     void refreshLayoutAfterPageSwitch();
-    void applySharedExportTaskSettings(const VideoExportTask& task);

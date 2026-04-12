@@ -1,5 +1,6 @@
 ﻿#include "MainWindow.EditorSection.h"
 #include "../../MainWindowShared.h"
+#include "../window/MainWindow.WindowSection.h"
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
@@ -334,7 +335,7 @@ void MainWindow::EditorSection::applyEditorTextFontSize(int pointSize, bool pers
         QFont timelineHeaderLineNumberFont = editorFont(normalized);
         timelineHeaderLineNumberFont.setPointSize(qMax(timelineHeaderLineNumberFont.pointSize() + 1, 12));
         ui_.timelineView_->setHeaderLineNumberFont(timelineHeaderLineNumberFont);
-        owner_.updateBottomTabsDeviceHeight();
+        owner_.windowSection_->updateBottomTabsDeviceHeight();
     }
     if (ui_.metadataExtraEdit_ != nullptr) {
         ui_.metadataExtraEdit_->setFont(editorFont(normalized));
