@@ -74,13 +74,22 @@ public:
         double playbackSecond,
         double clockDeltaSeconds,
         qint64 videoFrameAgeMs,
+        bool videoFrameStalled,
         bool requestUpdate = true);
     void setExternalStageMediaProfileSummary(
         bool separateSurfaceActive,
         bool hasResolvedMedia,
         bool hasVideoMedia,
         const QString& mediaTypeName,
-        qint64 videoFrameCountTotal);
+        qint64 videoFrameCountTotal,
+        double videoFrameRate,
+        double videoFrameIntervalAvgMs,
+        double videoFrameIntervalMaxMs,
+        qint64 videoFrameStallCount);
+    void setFramePacingDebugState(
+        bool usesDisplayRefreshPacing,
+        double targetFps,
+        double displayRefreshRate);
     void setPlayheadSeconds(double seconds, bool requestUpdate = true);
     void setMediaFrame(const QImage& frame);
     void setVideoFrame(const QVideoFrame& frame);
@@ -138,6 +147,25 @@ private:
     QVector<double> presentedFrameIntervalsMs_;
     int presentedFrameIntervalWriteIndex_ = 0;
     int presentedFrameIntervalCount_ = 0;
+    double presentedFrameIntervalSumMs_ = 0.0;
+    double presentedFrameIntervalMaxMs_ = 0.0;
+    qint64 presentedFrameIntervalSampleCount_ = 0;
+    QElapsedTimer tickTimer_;
+    qint64 lastTickNs_ = -1;
+    QVector<double> tickIntervalsMs_;
+    int tickIntervalWriteIndex_ = 0;
+    int tickIntervalCount_ = 0;
+    double tickIntervalSumMs_ = 0.0;
+    double tickIntervalMaxMs_ = 0.0;
+    qint64 tickIntervalSampleCount_ = 0;
+    QElapsedTimer updateRequestTimer_;
+    qint64 lastUpdateRequestNs_ = -1;
+    QVector<double> updateRequestIntervalsMs_;
+    int updateRequestIntervalWriteIndex_ = 0;
+    int updateRequestIntervalCount_ = 0;
+    double updateRequestIntervalSumMs_ = 0.0;
+    double updateRequestIntervalMaxMs_ = 0.0;
+    qint64 updateRequestIntervalSampleCount_ = 0;
     bool pendingPresentedStatsRefresh_ = true;
     bool profilingSummaryDirty_ = false;
     qint64 profiledTextureFrameCount_ = 0;
@@ -161,6 +189,7 @@ private:
     bool externalStageMediaHasResolvedMedia_ = false;
     bool externalStageMediaHasVideoMedia_ = false;
     QString externalStageMediaMediaTypeName_ = QStringLiteral("none");
-    qint64 externalStageMediaVideoFrameCountTotal_ = 0;
+    qint64 tickCountTotal_ = 0;
+    qint64 updateRequestCountTotal_ = 0;
     qint64 presentedFrameCountTotal_ = 0;
 };

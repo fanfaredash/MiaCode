@@ -432,10 +432,18 @@ void MainWindow::TimelineSection::requestNextDisplayRefreshPreviewFrame()
 
 void MainWindow::TimelineSection::refreshPreviewFrameRateTimers()
 {
-    const int intervalMs = qMax(1, qRound(static_cast<double>(previewCanvasTargetFrameIntervalNs()) / 1000000.0));
+    const qint64 targetIntervalNs = previewCanvasTargetFrameIntervalNs();
+    const int intervalMs = qMax(1, qRound(static_cast<double>(targetIntervalNs) / 1000000.0));
 
     if (ui_.qtPreviewTimer_ != nullptr) {
         ui_.qtPreviewTimer_->setInterval(intervalMs);
+    }
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->setFramePacingDebugState(
+            previewCanvasUsesFrameSwappedPacing(),
+            targetIntervalNs > 0 ? (1000000000.0 / static_cast<double>(targetIntervalNs)) : 0.0,
+            currentPreviewCanvasRefreshRate()
+        );
     }
 }
 

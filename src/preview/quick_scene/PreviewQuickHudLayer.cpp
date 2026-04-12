@@ -127,27 +127,46 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
         const QFontMetrics metrics(fpsFont);
         const qreal leftX = stageRect.left() + hudPadding;
         const qreal baseline0 = stageRect.top() + hudPadding + metrics.ascent();
-        drawHudText(
-            *painter,
-            QPointF(leftX, baseline0),
-            state->usedGpuRendererThisFrame ? QStringLiteral("Renderer: GPU") : QStringLiteral("Renderer: CPU")
-            ,
-            fpsFont,
-            qMax<qreal>(1.0, 2.0 * hudScale)
+        const qreal shadowOffset = qMax<qreal>(1.0, 2.0 * hudScale);
+        const auto formatMetric = [](double value) {
+            return value > 0.0 ? QString::number(value, 'f', 1) : QStringLiteral("na");
+        };
+        int lineIndex = 0;
+        const auto drawDebugLine = [&](const QString& text) {
+            drawHudText(
+                *painter,
+                QPointF(leftX, baseline0 + metrics.height() * lineIndex),
+                text,
+                fpsFont,
+                shadowOffset
+            );
+            ++lineIndex;
+        };
+
+        drawDebugLine(
+            QStringLiteral("Renderer: %1  Fallback: %2")
+                .arg(state->usedGpuRendererThisFrame ? QStringLiteral("GPU") : QStringLiteral("CPU"))
+                .arg(state->cpuFallbackCount)
         );
-        drawHudText(
-            *painter,
-            QPointF(leftX, baseline0 + metrics.height()),
-            QString::number(state->fpsDisplay, 'f', 1) + QStringLiteral(" FPS"),
-            fpsFont,
-            qMax<qreal>(1.0, 2.0 * hudScale)
+        drawDebugLine(
+            QStringLiteral("Present: %1 FPS").arg(QString::number(state->fpsDisplay, 'f', 1))
         );
-        drawHudText(
-            *painter,
-            QPointF(leftX, baseline0 + metrics.height() * 2),
-            QStringLiteral("Fallback: %1").arg(state->cpuFallbackCount),
-            fpsFont,
-            qMax<qreal>(1.0, 2.0 * hudScale)
+        drawDebugLine(
+            QStringLiteral("Tick: %1 FPS  Req: %2 FPS")
+                .arg(QString::number(state->tickFpsDisplay, 'f', 1))
+                .arg(QString::number(state->updateRequestFpsDisplay, 'f', 1))
+        );
+        drawDebugLine(
+            QStringLiteral("Count T/U/P: %1 / %2 / %3")
+                .arg(state->tickCount)
+                .arg(state->updateRequestCount)
+                .arg(state->presentedFrameCount)
+        );
+        drawDebugLine(
+            QStringLiteral("Pacing: %1 %2  Disp: %3")
+                .arg(state->framePacingUsesDisplayRefresh ? QStringLiteral("display") : QStringLiteral("fixed"))
+                .arg(formatMetric(state->framePacingTargetFps))
+                .arg(formatMetric(state->displayRefreshRate))
         );
         if (state->media.presentationMode == miacode::preview::scene::PreviewStageMediaPresentationMode::ExternalQuickMediaItem) {
             QString mediaType = QStringLiteral("none");
@@ -164,31 +183,46 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
             }
             drawHudText(
                 *painter,
-                QPointF(leftX, baseline0 + metrics.height() * 3),
+                QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
                 QStringLiteral("Media: external/%1").arg(mediaType),
                 fpsFont,
-                qMax<qreal>(1.0, 2.0 * hudScale)
+                shadowOffset
             );
             drawHudText(
                 *painter,
-                QPointF(leftX, baseline0 + metrics.height() * 4),
+                QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
                 QStringLiteral("Video: %1  Delta: %2 s")
-                    .arg(state->media.externalVideoPlaybackActive ? QStringLiteral("active") : QStringLiteral("idle"))
+                    .arg(
+                        QStringLiteral("%1 @ %2 FPS")
+                            .arg(state->media.externalVideoPlaybackActive ? QStringLiteral("active") : QStringLiteral("idle"))
+                            .arg(formatMetric(state->media.externalVideoFrameRate))
+                    )
                     .arg(QString::number(state->media.externalClockDeltaSeconds, 'f', 3)),
                 fpsFont,
-                qMax<qreal>(1.0, 2.0 * hudScale)
+                shadowOffset
             );
             const QString frameAgeText = state->media.externalVideoFrameAgeMs >= 0
                 ? QString::number(state->media.externalVideoFrameAgeMs)
                 : QStringLiteral("na");
             drawHudText(
                 *painter,
-                QPointF(leftX, baseline0 + metrics.height() * 5),
-                QStringLiteral("FrameAge: %1 ms  MediaT: %2 s")
+                QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
+                QStringLiteral("Age: %1 ms  AvgInt: %2  MaxInt: %3")
                     .arg(frameAgeText)
+                    .arg(formatMetric(state->media.externalVideoFrameIntervalAvgMs))
+                    .arg(formatMetric(state->media.externalVideoFrameIntervalMaxMs)),
+                fpsFont,
+                shadowOffset
+            );
+            drawHudText(
+                *painter,
+                QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
+                QStringLiteral("Stall: %1  Count: %2  MediaT: %3 s")
+                    .arg(state->media.externalVideoFrameStalled ? QStringLiteral("yes") : QStringLiteral("no"))
+                    .arg(state->media.externalVideoFrameStallCount)
                     .arg(QString::number(state->media.externalPlaybackSecond, 'f', 3)),
                 fpsFont,
-                qMax<qreal>(1.0, 2.0 * hudScale)
+                shadowOffset
             );
         }
     }

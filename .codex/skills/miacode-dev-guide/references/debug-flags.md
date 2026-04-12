@@ -55,8 +55,10 @@ Debug subcategories now default to on inside debug mode and are disabled with:
   - used for critical preview/export failures and worker failures
 - Preview profile summary:
   - default file: `miacode_preview_profile_summary.txt`
-  - current summary now includes `stage_bg.*` sub-metrics for stage-background media conversion, media texture work, dim-uniform updates, node-update time, and media/dim frame counters
-  - quickshell external-media sessions now also write `external_stage_media.*` summary rows for separate-surface state, media kind, and aggregate video-frame counts without emitting per-frame runtime logs
+  - `present_avg_ms` / `present_max_ms` are session-accumulated present intervals, while `present_window_*` keeps the last rolling present window used by the on-screen present FPS readout
+  - quickshell preview sessions now also write `tick_*`, `update_request_*`, `frame_pacing.*`, and `ratio.*` rows so logical tick cadence, update-request cadence, and actual present cadence can be compared directly
+  - quickshell external-media sessions now also write `external_stage_media.*` summary rows for separate-surface state, media kind, aggregate video-frame counts, estimated video FPS, video-frame intervals, and stall counts without emitting per-frame runtime logs
+  - current summary also includes `stage_bg.*` sub-metrics for stage-background media conversion, media texture work, dim-uniform updates, node-update time, and media/dim frame counters
   - layer summary rows now also include `candidate_count_*` and `active_count_*` so prepared-window efficiency can be compared against sprite/batch counts
 
 The Windows release package also ships:
@@ -123,7 +125,7 @@ Runtime black-screen / dialog tracing in the main app currently uses these tags:
 The `preview/quick_runtime` stream now also emits `action=frame_stall` when the embedded Quick window stays visible/exposed but stops presenting for an extended interval.
 The `preview/embedded_refresh` stream now also marks resize-throttling transitions with `action=resize_degrade_begin` / `action=resize_degrade_end`.
 The `startup/qt_config` runtime tag logs the active Qt graphics/render-loop experiment flags at process start, including whether the default native-sibling workaround was opted out.
-The `preview/stage_media` runtime tag is now switch-level only for quickshell media changes, presentation-mode flips, and `VideoOutput` binding transitions; the old per-frame quickshell video arrival line was retired.
+The `preview/stage_media` runtime tag is now switch-level only for quickshell media changes, presentation-mode flips, `VideoOutput` binding transitions, and low-noise external-video stall transitions (`action=video_frame_stall_begin` / `action=video_frame_stall_end`); the old per-frame quickshell video arrival line was retired.
 Normal document open/save now uses the direct native `QFileDialog::getOpenFileName` / `getSaveFileName` path. The old `window/dialog_event`, `window/native`, `window/native_hook`, and `window/native_related` probes were retired from the main app and should only return through a separate dev-only tool that is not packaged into release artifacts.
 
 Primary owners:
