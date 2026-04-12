@@ -10,6 +10,23 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Resolve-RepoPath {
+    param(
+        [string]$RepoRoot,
+        [string]$PathValue
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PathValue)) {
+        return $PathValue
+    }
+
+    if ([System.IO.Path]::IsPathRooted($PathValue)) {
+        return [System.IO.Path]::GetFullPath($PathValue)
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $PathValue))
+}
+
 function Read-VersionInfoFromCMake {
     param([string]$CMakeFilePath)
     if (!(Test-Path $CMakeFilePath)) {
@@ -234,10 +251,16 @@ function Assert-PackageEntries {
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$BuildDir = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $BuildDir
+if (![string]::IsNullOrWhiteSpace($QtRoot)) {
+    $QtRoot = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $QtRoot
+}
 $versionInfo = Read-VersionInfoFromCMake -CMakeFilePath (Join-Path $repoRoot "CMakeLists.txt")
 $version = $versionInfo.PackageVersion
 if ([string]::IsNullOrWhiteSpace($DistDir)) {
-    $DistDir = Join-Path "dist" "MiaCode-v$version-win64"
+    $DistDir = Join-Path $repoRoot "dist" "MiaCode-v$version-win64"
+} else {
+    $DistDir = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $DistDir
 }
 
 $exePath = Ensure-PackageBuildReady `

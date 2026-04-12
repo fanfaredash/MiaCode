@@ -112,8 +112,11 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 - Windows build/package:
   - `scripts/build-win.ps1`
   - `scripts/package-win.ps1`
+  - `scripts/build-local-dev2.ps1`
   - `scripts/package-win.ps1` defaults to `build/`, prechecks version freshness against `CMakeLists.txt` and `build/generated/AppVersion.h`, and auto-runs `cmake --build <BuildDir> --target MiaCode --config <Config> --parallel 8` when the packaged executable is stale or missing
+  - `scripts/build-win.ps1` and `scripts/package-win.ps1` resolve relative `BuildDir`, `DistDir`, `QtRoot`, and Qt output paths from the repo root instead of the caller's current working directory; this prevents `windeployqt` output from spilling into the desktop when launched from outside the repo
   - `scripts/build-win.ps1` now installs `qtmultimedia`, `qtdeclarative`, and `qtsvg` so the Qt Quick runtime can be reproduced from a clean machine
+  - `scripts/build-local-dev2.ps1` is the local one-click wrapper used by the desktop shortcut; it reuses repo-local `build/` and `.qt/`, then delegates packaging to `scripts/package-win.ps1`
   - both the CMake post-build deploy step and `scripts/package-win.ps1` now pass `--qmldir src/preview/runtime/qml` to `windeployqt` so the Qt Quick runtime imports are deployed
   - both the CMake post-build deploy step and `scripts/package-win.ps1` explicitly keep the Qt Quick runtime DLL set (`Qt6Quick`, `Qt6Qml`, `Qt6QmlMeta`, `Qt6QmlModels`, `Qt6QmlWorkerScript`) and remove stale `Qt6OpenGLWidgets.dll`
 - Windows release packages now also include:

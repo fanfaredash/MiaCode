@@ -11,6 +11,23 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Resolve-RepoPath {
+    param(
+        [string]$RepoRoot,
+        [string]$PathValue
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PathValue)) {
+        return $PathValue
+    }
+
+    if ([System.IO.Path]::IsPathRooted($PathValue)) {
+        return [System.IO.Path]::GetFullPath($PathValue)
+    }
+
+    return [System.IO.Path]::GetFullPath((Join-Path $RepoRoot $PathValue))
+}
+
 function Resolve-PythonExe {
     param([string]$Preferred)
 
@@ -51,7 +68,10 @@ function Invoke-Python {
 $repoRoot = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($QtOutputDir)) {
     $QtOutputDir = Join-Path $repoRoot ".qt"
+} else {
+    $QtOutputDir = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $QtOutputDir
 }
+$BuildDir = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $BuildDir
 
 & (Join-Path $repoRoot "scripts\ensure-windows-ffmpeg.ps1") -RepoRoot $repoRoot
 if ($LASTEXITCODE -ne 0) {
