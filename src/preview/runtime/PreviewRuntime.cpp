@@ -15,9 +15,74 @@
 
 namespace {
 
+constexpr int kPreviewIntervalWindowSize = 120;
+
 double averageOrZero(double total, qint64 count)
 {
     return count > 0 ? total / static_cast<double>(count) : 0.0;
+}
+
+double fpsFromAverageMs(double averageMs)
+{
+    return averageMs > 1e-6 ? 1000.0 / averageMs : 0.0;
+}
+
+double rollingAverageMs(const QVector<double>& samples, int count)
+{
+    if (count <= 0) {
+        return 0.0;
+    }
+    double sumMs = 0.0;
+    for (int index = 0; index < count; ++index) {
+        sumMs += samples.at(index);
+    }
+    return sumMs / static_cast<double>(count);
+}
+
+double rollingMaxMs(const QVector<double>& samples, int count)
+{
+    double maxMs = 0.0;
+    for (int index = 0; index < count; ++index) {
+        maxMs = qMax(maxMs, samples.at(index));
+    }
+    return maxMs;
+}
+
+void recordIntervalSample(
+    QElapsedTimer& timer,
+    qint64& lastSampleNs,
+    QVector<double>& samplesMs,
+    int& writeIndex,
+    int& sampleCount,
+    double& sessionSumMs,
+    double& sessionMaxMs,
+    qint64& sessionSampleCount,
+    double& fpsDisplay)
+{
+    if (!timer.isValid()) {
+        timer.start();
+        lastSampleNs = 0;
+        fpsDisplay = 0.0;
+        return;
+    }
+
+    const qint64 nowNs = timer.nsecsElapsed();
+    if (lastSampleNs >= 0) {
+        const qint64 intervalNs = nowNs - lastSampleNs;
+        if (intervalNs > 0) {
+            const double intervalMs = static_cast<double>(intervalNs) / 1000000.0;
+            if (!samplesMs.isEmpty()) {
+                samplesMs[writeIndex] = intervalMs;
+                writeIndex = (writeIndex + 1) % samplesMs.size();
+                sampleCount = qMin(sampleCount + 1, samplesMs.size());
+                fpsDisplay = fpsFromAverageMs(rollingAverageMs(samplesMs, sampleCount));
+            }
+            sessionSumMs += intervalMs;
+            sessionMaxMs = qMax(sessionMaxMs, intervalMs);
+            sessionSampleCount += 1;
+        }
+    }
+    lastSampleNs = nowNs;
 }
 
 }  // namespace
@@ -27,8 +92,12 @@ PreviewRuntime::PreviewRuntime(QObject* parent)
 {
     assets_ = new miacode::preview::runtime::PreviewSceneAssetRepository(this);
     refreshAssetStateFromRepository();
-    presentedFrameIntervalsMs_.resize(120);
+    presentedFrameIntervalsMs_.resize(kPreviewIntervalWindowSize);
     presentedFrameIntervalsMs_.fill(0.0);
+    tickIntervalsMs_.resize(kPreviewIntervalWindowSize);
+    tickIntervalsMs_.fill(0.0);
+    updateRequestIntervalsMs_.resize(kPreviewIntervalWindowSize);
+    updateRequestIntervalsMs_.fill(0.0);
     connect(assets_, &miacode::preview::runtime::PreviewSceneAssetRepository::assetsChanged, this, [this]() {
         refreshAssetStateFromRepository();
         update();
@@ -72,6 +141,19 @@ void PreviewRuntime::requestActivate()
 
 void PreviewRuntime::update()
 {
+    updateRequestCountTotal_ += 1;
+    frameState_.updateRequestCount = updateRequestCountTotal_;
+    recordIntervalSample(
+        updateRequestTimer_,
+        lastUpdateRequestNs_,
+        updateRequestIntervalsMs_,
+        updateRequestIntervalWriteIndex_,
+        updateRequestIntervalCount_,
+        updateRequestIntervalSumMs_,
+        updateRequestIntervalMaxMs_,
+        updateRequestIntervalSampleCount_,
+        frameState_.updateRequestFpsDisplay
+    );
     pendingPresentedStatsRefresh_ = true;
     emit frameStateChanged();
     if (visibleHostWindow_ != nullptr) {
@@ -107,6 +189,7 @@ void PreviewRuntime::setExternalStageMediaDebugState(
     double playbackSecond,
     double clockDeltaSeconds,
     qint64 videoFrameAgeMs,
+    bool videoFrameStalled,
     bool requestUpdate)
 {
     frameState_.media.externalMediaType = mediaType;
@@ -114,6 +197,7 @@ void PreviewRuntime::setExternalStageMediaDebugState(
     frameState_.media.externalPlaybackSecond = qMax(0.0, playbackSecond);
     frameState_.media.externalClockDeltaSeconds = clockDeltaSeconds;
     frameState_.media.externalVideoFrameAgeMs = videoFrameAgeMs;
+    frameState_.media.externalVideoFrameStalled = videoFrameStalled;
     if (requestUpdate) {
         update();
     }
@@ -124,7 +208,11 @@ void PreviewRuntime::setExternalStageMediaProfileSummary(
     bool hasResolvedMedia,
     bool hasVideoMedia,
     const QString& mediaTypeName,
-    qint64 videoFrameCountTotal)
+    qint64 videoFrameCountTotal,
+    double videoFrameRate,
+    double videoFrameIntervalAvgMs,
+    double videoFrameIntervalMaxMs,
+    qint64 videoFrameStallCount)
 {
     externalStageMediaSeparateSurfaceActive_ = separateSurfaceActive;
     externalStageMediaHasResolvedMedia_ = hasResolvedMedia;
@@ -132,7 +220,31 @@ void PreviewRuntime::setExternalStageMediaProfileSummary(
     externalStageMediaMediaTypeName_ = mediaTypeName.trimmed().isEmpty()
         ? QStringLiteral("none")
         : mediaTypeName.trimmed();
-    externalStageMediaVideoFrameCountTotal_ = qMax<qint64>(0, videoFrameCountTotal);
+    frameState_.media.externalVideoFrameCountTotal = qMax<qint64>(0, videoFrameCountTotal);
+    frameState_.media.externalVideoFrameRate = qMax(0.0, videoFrameRate);
+    frameState_.media.externalVideoFrameIntervalAvgMs = qMax(0.0, videoFrameIntervalAvgMs);
+    frameState_.media.externalVideoFrameIntervalMaxMs = qMax(0.0, videoFrameIntervalMaxMs);
+    frameState_.media.externalVideoFrameStallCount = qMax<qint64>(0, videoFrameStallCount);
+}
+
+void PreviewRuntime::setFramePacingDebugState(
+    bool usesDisplayRefreshPacing,
+    double targetFps,
+    double displayRefreshRate)
+{
+    const double normalizedTargetFps = qMax(0.0, targetFps);
+    const double normalizedDisplayRefreshRate = qMax(0.0, displayRefreshRate);
+    const bool changed =
+        frameState_.framePacingUsesDisplayRefresh != usesDisplayRefreshPacing
+        || qAbs(frameState_.framePacingTargetFps - normalizedTargetFps) > 0.01
+        || qAbs(frameState_.displayRefreshRate - normalizedDisplayRefreshRate) > 0.01;
+    if (!changed) {
+        return;
+    }
+    frameState_.framePacingUsesDisplayRefresh = usesDisplayRefreshPacing;
+    frameState_.framePacingTargetFps = normalizedTargetFps;
+    frameState_.displayRefreshRate = normalizedDisplayRefreshRate;
+    update();
 }
 
 void PreviewRuntime::setPlayheadSeconds(double seconds, bool requestUpdate)
@@ -322,6 +434,11 @@ void PreviewRuntime::reset()
     frameState_.media = miacode::preview::scene::PreviewMediaFrameState();
     frameState_.media.presentationMode = presentationMode;
     frameState_.fpsDisplay = 0.0;
+    frameState_.tickFpsDisplay = 0.0;
+    frameState_.updateRequestFpsDisplay = 0.0;
+    frameState_.tickCount = 0;
+    frameState_.updateRequestCount = 0;
+    frameState_.presentedFrameCount = 0;
     frameState_.cpuFallbackCount = 0;
     frameState_.usedGpuRendererThisFrame = false;
     if (assets_ != nullptr) {
@@ -335,6 +452,19 @@ void PreviewRuntime::reset()
 
 void PreviewRuntime::noteTickForProfiling()
 {
+    tickCountTotal_ += 1;
+    frameState_.tickCount = tickCountTotal_;
+    recordIntervalSample(
+        tickTimer_,
+        lastTickNs_,
+        tickIntervalsMs_,
+        tickIntervalWriteIndex_,
+        tickIntervalCount_,
+        tickIntervalSumMs_,
+        tickIntervalMaxMs_,
+        tickIntervalSampleCount_,
+        frameState_.tickFpsDisplay
+    );
 }
 
 void PreviewRuntime::resetProfilingSession()
@@ -344,7 +474,31 @@ void PreviewRuntime::resetProfilingSession()
     presentedFrameIntervalsMs_.fill(0.0);
     presentedFrameIntervalWriteIndex_ = 0;
     presentedFrameIntervalCount_ = 0;
+    presentedFrameIntervalSumMs_ = 0.0;
+    presentedFrameIntervalMaxMs_ = 0.0;
+    presentedFrameIntervalSampleCount_ = 0;
+    tickTimer_.invalidate();
+    lastTickNs_ = -1;
+    tickIntervalsMs_.fill(0.0);
+    tickIntervalWriteIndex_ = 0;
+    tickIntervalCount_ = 0;
+    tickIntervalSumMs_ = 0.0;
+    tickIntervalMaxMs_ = 0.0;
+    tickIntervalSampleCount_ = 0;
+    updateRequestTimer_.invalidate();
+    lastUpdateRequestNs_ = -1;
+    updateRequestIntervalsMs_.fill(0.0);
+    updateRequestIntervalWriteIndex_ = 0;
+    updateRequestIntervalCount_ = 0;
+    updateRequestIntervalSumMs_ = 0.0;
+    updateRequestIntervalMaxMs_ = 0.0;
+    updateRequestIntervalSampleCount_ = 0;
     frameState_.fpsDisplay = 0.0;
+    frameState_.tickFpsDisplay = 0.0;
+    frameState_.updateRequestFpsDisplay = 0.0;
+    frameState_.tickCount = 0;
+    frameState_.updateRequestCount = 0;
+    frameState_.presentedFrameCount = 0;
     profilingSummaryDirty_ = false;
     profiledTextureFrameCount_ = 0;
     profiledActiveSpriteFrameCount_ = 0;
@@ -363,14 +517,15 @@ void PreviewRuntime::resetProfilingSession()
     peakFrameLayerBuildMs_ = 0.0;
     layerProfileAggregates_.clear();
     stageBackgroundProfile_ = PreviewRuntimeStageBackgroundAggregate();
-    externalStageMediaVideoFrameCountTotal_ = 0;
+    tickCountTotal_ = 0;
+    updateRequestCountTotal_ = 0;
     presentedFrameCountTotal_ = 0;
 }
 
 QString PreviewRuntime::writeProfilingSummaryToFile()
 {
     if (!miacode::debug_options::previewProfileOutputEnabled()
-        || presentedFrameIntervalCount_ <= 0) {
+        || presentedFrameIntervalSampleCount_ <= 0) {
         return QString();
     }
 
@@ -390,22 +545,59 @@ QString PreviewRuntime::writeProfilingSummaryToFile()
         return QString();
     }
 
-    double sumMs = 0.0;
-    double maxMs = 0.0;
-    for (int index = 0; index < presentedFrameIntervalCount_; ++index) {
-        const double sample = presentedFrameIntervalsMs_[index];
-        sumMs += sample;
-        maxMs = qMax(maxMs, sample);
-    }
-    const double avgMs = sumMs / static_cast<double>(presentedFrameIntervalCount_);
+    const double presentWindowAvgMs = rollingAverageMs(presentedFrameIntervalsMs_, presentedFrameIntervalCount_);
+    const double presentWindowMaxMs = rollingMaxMs(presentedFrameIntervalsMs_, presentedFrameIntervalCount_);
+    const double presentSessionAvgMs =
+        averageOrZero(presentedFrameIntervalSumMs_, presentedFrameIntervalSampleCount_);
+    const double tickSessionAvgMs = averageOrZero(tickIntervalSumMs_, tickIntervalSampleCount_);
+    const double updateRequestSessionAvgMs =
+        averageOrZero(updateRequestIntervalSumMs_, updateRequestIntervalSampleCount_);
     QTextStream stream(&file);
     stream << "timestamp=" << QDateTime::currentDateTime().toString(Qt::ISODate) << '\n';
     stream << "profile_scope=session_accumulated" << '\n';
-    stream << "frame_samples=" << presentedFrameIntervalCount_ << '\n';
+    stream << "frame_samples=" << presentedFrameIntervalSampleCount_ << '\n';
+    stream << "present_window_samples=" << presentedFrameIntervalCount_ << '\n';
     stream << "presented_total=" << presentedFrameCountTotal_ << '\n';
-    stream << "present_avg_ms=" << QString::number(avgMs, 'f', 4) << '\n';
-    stream << "present_max_ms=" << QString::number(maxMs, 'f', 4) << '\n';
+    stream << "present_avg_ms=" << QString::number(presentSessionAvgMs, 'f', 4) << '\n';
+    stream << "present_max_ms=" << QString::number(presentedFrameIntervalMaxMs_, 'f', 4) << '\n';
+    stream << "present_window_avg_ms=" << QString::number(presentWindowAvgMs, 'f', 4) << '\n';
+    stream << "present_window_max_ms=" << QString::number(presentWindowMaxMs, 'f', 4) << '\n';
     stream << "fps=" << QString::number(frameState_.fpsDisplay, 'f', 4) << '\n';
+    stream << "present_session_fps=" << QString::number(fpsFromAverageMs(presentSessionAvgMs), 'f', 4) << '\n';
+    stream << "tick_total=" << tickCountTotal_ << '\n';
+    stream << "tick_avg_ms=" << QString::number(tickSessionAvgMs, 'f', 4) << '\n';
+    stream << "tick_max_ms=" << QString::number(tickIntervalMaxMs_, 'f', 4) << '\n';
+    stream << "tick_fps=" << QString::number(frameState_.tickFpsDisplay, 'f', 4) << '\n';
+    stream << "tick_session_fps=" << QString::number(fpsFromAverageMs(tickSessionAvgMs), 'f', 4) << '\n';
+    stream << "update_requests_total=" << updateRequestCountTotal_ << '\n';
+    stream << "update_request_avg_ms=" << QString::number(updateRequestSessionAvgMs, 'f', 4) << '\n';
+    stream << "update_request_max_ms=" << QString::number(updateRequestIntervalMaxMs_, 'f', 4) << '\n';
+    stream << "update_request_fps=" << QString::number(frameState_.updateRequestFpsDisplay, 'f', 4) << '\n';
+    stream << "update_request_session_fps="
+           << QString::number(fpsFromAverageMs(updateRequestSessionAvgMs), 'f', 4) << '\n';
+    stream << "frame_pacing.mode="
+           << (frameState_.framePacingUsesDisplayRefresh ? "display_refresh" : "fixed_interval") << '\n';
+    stream << "frame_pacing.target_fps=" << QString::number(frameState_.framePacingTargetFps, 'f', 4) << '\n';
+    stream << "frame_pacing.display_refresh_rate=" << QString::number(frameState_.displayRefreshRate, 'f', 4)
+           << '\n';
+    stream << "ratio.present_per_tick="
+           << QString::number(
+                  tickCountTotal_ > 0
+                      ? static_cast<double>(presentedFrameCountTotal_) / static_cast<double>(tickCountTotal_)
+                      : 0.0,
+                  'f',
+                  4
+              )
+           << '\n';
+    stream << "ratio.update_requests_per_tick="
+           << QString::number(
+                  tickCountTotal_ > 0
+                      ? static_cast<double>(updateRequestCountTotal_) / static_cast<double>(tickCountTotal_)
+                      : 0.0,
+                  'f',
+                  4
+              )
+           << '\n';
     stream << "external_stage_media.separate_surface_active="
            << (externalStageMediaSeparateSurfaceActive_ ? 1 : 0) << '\n';
     stream << "external_stage_media.has_resolved_media="
@@ -413,7 +605,25 @@ QString PreviewRuntime::writeProfilingSummaryToFile()
     stream << "external_stage_media.has_video_media="
            << (externalStageMediaHasVideoMedia_ ? 1 : 0) << '\n';
     stream << "external_stage_media.media_type=" << externalStageMediaMediaTypeName_ << '\n';
-    stream << "external_stage_media.video_frames_total=" << externalStageMediaVideoFrameCountTotal_ << '\n';
+    stream << "external_stage_media.video_frames_total=" << frameState_.media.externalVideoFrameCountTotal << '\n';
+    stream << "external_stage_media.video_frame_rate="
+           << QString::number(frameState_.media.externalVideoFrameRate, 'f', 4) << '\n';
+    stream << "external_stage_media.video_frame_interval_avg_ms="
+           << QString::number(frameState_.media.externalVideoFrameIntervalAvgMs, 'f', 4) << '\n';
+    stream << "external_stage_media.video_frame_interval_max_ms="
+           << QString::number(frameState_.media.externalVideoFrameIntervalMaxMs, 'f', 4) << '\n';
+    stream << "external_stage_media.video_frame_stalls_total="
+           << frameState_.media.externalVideoFrameStallCount << '\n';
+    stream << "ratio.present_per_video_frame="
+           << QString::number(
+                  frameState_.media.externalVideoFrameCountTotal > 0
+                      ? static_cast<double>(presentedFrameCountTotal_)
+                            / static_cast<double>(frameState_.media.externalVideoFrameCountTotal)
+                      : 0.0,
+                  'f',
+                  4
+              )
+           << '\n';
     stream << "texture_profiled_frames=" << profiledTextureFrameCount_ << '\n';
     stream << "texture_active_sprite_frames=" << profiledActiveSpriteFrameCount_ << '\n';
     stream << "texture_cached_hits_total=" << cachedTextureHitTotal_ << '\n';
@@ -516,6 +726,7 @@ void PreviewRuntime::setFrameSize(const QSize& size)
 void PreviewRuntime::handlePresentedFrame()
 {
     presentedFrameCountTotal_ += 1;
+    frameState_.presentedFrameCount = presentedFrameCountTotal_;
     updatePresentedFrameStats();
     pendingPresentedStatsRefresh_ = false;
     emit framePresented();
@@ -534,34 +745,17 @@ void PreviewRuntime::refreshAssetStateFromRepository()
 
 void PreviewRuntime::updatePresentedFrameStats()
 {
-    if (!presentTimer_.isValid()) {
-        presentTimer_.start();
-        lastPresentedNs_ = 0;
-        frameState_.fpsDisplay = 0.0;
-        frameState_.usedGpuRendererThisFrame = true;
-        frameState_.cpuFallbackCount = 0;
-        return;
-    }
-
-    const qint64 nowNs = presentTimer_.nsecsElapsed();
-    if (lastPresentedNs_ >= 0) {
-        const qint64 intervalNs = nowNs - lastPresentedNs_;
-        const double intervalMs = static_cast<double>(intervalNs) / 1000000.0;
-        if (!presentedFrameIntervalsMs_.isEmpty()) {
-            presentedFrameIntervalsMs_[presentedFrameIntervalWriteIndex_] = intervalMs;
-            presentedFrameIntervalWriteIndex_ =
-                (presentedFrameIntervalWriteIndex_ + 1) % presentedFrameIntervalsMs_.size();
-            presentedFrameIntervalCount_ = qMin(presentedFrameIntervalCount_ + 1, presentedFrameIntervalsMs_.size());
-            double sumMs = 0.0;
-            for (int index = 0; index < presentedFrameIntervalCount_; ++index) {
-                sumMs += presentedFrameIntervalsMs_[index];
-            }
-            frameState_.fpsDisplay = sumMs > 1e-6
-                ? 1000.0 / (sumMs / static_cast<double>(presentedFrameIntervalCount_))
-                : 0.0;
-        }
-    }
-    lastPresentedNs_ = nowNs;
+    recordIntervalSample(
+        presentTimer_,
+        lastPresentedNs_,
+        presentedFrameIntervalsMs_,
+        presentedFrameIntervalWriteIndex_,
+        presentedFrameIntervalCount_,
+        presentedFrameIntervalSumMs_,
+        presentedFrameIntervalMaxMs_,
+        presentedFrameIntervalSampleCount_,
+        frameState_.fpsDisplay
+    );
     frameState_.usedGpuRendererThisFrame = true;
     frameState_.cpuFallbackCount = 0;
 }

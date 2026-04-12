@@ -405,6 +405,12 @@ void MainWindow::PreviewSection::refreshPreviewStageMediaRouteDebugState(bool re
     double playbackSecond = 0.0;
     double clockDeltaSeconds = 0.0;
     qint64 videoFrameAgeMs = -1;
+    qint64 videoFrameCountTotal = 0;
+    double videoFrameRate = 0.0;
+    double videoFrameIntervalAvgMs = 0.0;
+    double videoFrameIntervalMaxMs = 0.0;
+    qint64 videoFrameStallCount = 0;
+    bool videoFrameStalled = false;
     bool hasResolvedMedia = false;
     bool hasVideoMedia = false;
     QString mediaTypeName = QStringLiteral("none");
@@ -422,13 +428,23 @@ void MainWindow::PreviewSection::refreshPreviewStageMediaRouteDebugState(bool re
         playbackSecond = state_.previewStageMediaHost_->currentPlaybackSecond();
         clockDeltaSeconds = state_.previewStageMediaHost_->clockDeltaSeconds();
         videoFrameAgeMs = state_.previewStageMediaHost_->videoFrameAgeMs();
+        videoFrameCountTotal = state_.previewStageMediaHost_->videoFrameCountTotal();
+        videoFrameRate = state_.previewStageMediaHost_->videoFrameRateEstimate();
+        videoFrameIntervalAvgMs = state_.previewStageMediaHost_->videoFrameIntervalAvgMs();
+        videoFrameIntervalMaxMs = state_.previewStageMediaHost_->videoFrameIntervalMaxMs();
+        videoFrameStallCount = state_.previewStageMediaHost_->videoFrameStallCount();
+        videoFrameStalled = state_.previewStageMediaHost_->videoFrameStalled();
     }
     state_.previewCanvas_->setExternalStageMediaProfileSummary(
         quickShellPreviewUsesSeparateSurface(),
         hasResolvedMedia,
         hasVideoMedia,
         mediaTypeName,
-        state_.previewStageMediaHost_ != nullptr ? state_.previewStageMediaHost_->videoFrameCountTotal() : 0
+        videoFrameCountTotal,
+        videoFrameRate,
+        videoFrameIntervalAvgMs,
+        videoFrameIntervalMaxMs,
+        videoFrameStallCount
     );
     state_.previewCanvas_->setExternalStageMediaDebugState(
         mediaType,
@@ -436,6 +452,7 @@ void MainWindow::PreviewSection::refreshPreviewStageMediaRouteDebugState(bool re
         playbackSecond,
         clockDeltaSeconds,
         videoFrameAgeMs,
+        videoFrameStalled,
         requestUpdate
     );
 }

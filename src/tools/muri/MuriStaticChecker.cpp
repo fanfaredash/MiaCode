@@ -101,6 +101,21 @@ QString headStarJudgeEmitKey(const TimelineNoteMarker& marker)
         .arg(marker.parseOrder);
 }
 
+QString slideHeadStarMarkerKey(const TimelineNoteMarker& marker)
+{
+    return QStringLiteral("slide_head_star|%1|%2|%3|%4|%5")
+        .arg(marker.second, 0, 'f', 6)
+        .arg(marker.lane)
+        .arg(marker.sourceLine)
+        .arg(marker.sourceCol)
+        .arg(marker.eachGroupId);
+}
+
+int slideHeadStarSourceCol(const TimelineNoteMarker& marker)
+{
+    return qMax(1, marker.sourceCol + 1);
+}
+
 bool shouldCreateHeadStarTarget(const TimelineNoteMarker& marker)
 {
     return isSlideLike(marker) && marker.hasHeadStar && marker.lane >= 1 && marker.lane <= 8;
@@ -240,8 +255,10 @@ MuriStaticReferenceNote staticReferenceNoteFromMarker(const TimelineNoteMarker& 
 MuriStaticReferenceNote staticReferenceNoteFromHeadStar(const TimelineNoteMarker& marker)
 {
     MuriStaticReferenceNote note = staticReferenceNoteFromMarker(marker);
+    note.markerKey = slideHeadStarMarkerKey(marker);
     note.markerType = QStringLiteral("tap");
     note.pad = lanePadToken(marker.lane);
+    note.col = slideHeadStarSourceCol(marker);
     note.endLane = marker.lane;
     note.endSecond = -1.0;
     note.slideTraceSecond = -1.0;
@@ -256,6 +273,13 @@ struct StaticHeadStarTarget {
     MuriStaticReferenceNote note;
     QString pad;
     double second = -1.0;
+};
+
+struct StaticOverlapCandidate {
+    MuriStaticReferenceNote note;
+    QString pad;
+    bool tapLike = false;
+    bool holdLike = false;
 };
 
 QVector<StaticHeadStarTarget> buildStaticHeadStarTargets(const QVector<TimelineNoteMarker>& noteMarkers)
@@ -633,46 +657,68 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
         }
     }
 
-    for (int i = 0; i < nonSlideIndices.size(); ++i) {
-        const int noteIndex = nonSlideIndices.at(i);
+    QVector<StaticOverlapCandidate> overlapCandidates;
+    overlapCandidates.reserve(nonSlideIndices.size() + headStarTargets.size());
+    for (int noteIndex : nonSlideIndices) {
         const TimelineNoteMarker& note = noteMarkers.at(noteIndex);
-        const QString notePad = markerPadToken(note);
-        if (notePad.isEmpty()) {
+        const QString pad = markerPadToken(note);
+        if (pad.isEmpty()) {
             continue;
         }
 
-        for (int j = 0; j < nonSlideIndices.size(); ++j) {
-            const int note2Index = nonSlideIndices.at(j);
-            if (noteIndex == note2Index) {
+        StaticOverlapCandidate candidate;
+        candidate.note = staticReferenceNoteFromMarker(note);
+        candidate.pad = pad;
+        candidate.tapLike = isTapLikeMarker(note);
+        candidate.holdLike = isHoldLikeMarker(note);
+        overlapCandidates.append(candidate);
+    }
+    for (const StaticHeadStarTarget& target : headStarTargets) {
+        if (target.pad.isEmpty()) {
+            continue;
+        }
+
+        StaticOverlapCandidate candidate;
+        candidate.note = target.note;
+        candidate.pad = target.pad;
+        candidate.tapLike = true;
+        overlapCandidates.append(candidate);
+    }
+
+    for (int i = 0; i < overlapCandidates.size(); ++i) {
+        const StaticOverlapCandidate& candidate = overlapCandidates.at(i);
+        for (int j = 0; j < overlapCandidates.size(); ++j) {
+            if (i == j) {
                 continue;
             }
-            const TimelineNoteMarker& note2 = noteMarkers.at(note2Index);
-            if (notePad != markerPadToken(note2)) {
+            const StaticOverlapCandidate& other = overlapCandidates.at(j);
+            if (candidate.pad != other.pad) {
                 continue;
             }
 
             bool overlap = false;
-            if (isTapLikeMarker(note)) {
-                if (isTapLikeMarker(note2)) {
+            if (candidate.tapLike) {
+                if (other.tapLike) {
                     overlap = (i < j)
-                        && qAbs(note.second - note2.second) <= kStaticOverlayThresholdSeconds + kStaticTimeEpsilonSeconds;
-                } else if (isHoldLikeMarker(note2) && note2.endSecond >= 0.0) {
+                        && qAbs(candidate.note.second - other.note.second)
+                            <= kStaticOverlayThresholdSeconds + kStaticTimeEpsilonSeconds;
+                } else if (other.holdLike && other.note.endSecond >= 0.0) {
                     overlap = markerMomentInRange(
-                        note.second,
-                        note2.second - kStaticOverlayThresholdSeconds,
-                        note2.endSecond + kStaticOverlayThresholdSeconds);
+                        candidate.note.second,
+                        other.note.second - kStaticOverlayThresholdSeconds,
+                        other.note.endSecond + kStaticOverlayThresholdSeconds);
                 }
-            } else if (isHoldLikeMarker(note) && note.endSecond >= 0.0) {
-                if (isHoldLikeMarker(note2) && note2.endSecond >= 0.0 && i < j) {
+            } else if (candidate.holdLike && candidate.note.endSecond >= 0.0) {
+                if (other.holdLike && other.note.endSecond >= 0.0 && i < j) {
                     overlap =
                         markerMomentInRange(
-                            note.second,
-                            note2.second - kStaticOverlayThresholdSeconds,
-                            note2.endSecond + kStaticOverlayThresholdSeconds)
+                            candidate.note.second,
+                            other.note.second - kStaticOverlayThresholdSeconds,
+                            other.note.endSecond + kStaticOverlayThresholdSeconds)
                         || markerMomentInRange(
-                            note2.second,
-                            note.second - kStaticOverlayThresholdSeconds,
-                            note.endSecond + kStaticOverlayThresholdSeconds);
+                            other.note.second,
+                            candidate.note.second - kStaticOverlayThresholdSeconds,
+                            candidate.note.endSecond + kStaticOverlayThresholdSeconds);
                 }
             }
 
@@ -682,8 +728,8 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
 
             MuriStaticReference record;
             record.kind = MuriKind::Overlap;
-            record.affected = staticReferenceNoteFromMarker(note);
-            record.cause = staticReferenceNoteFromMarker(note2);
+            record.affected = candidate.note;
+            record.cause = other.note;
             records.append(record);
         }
     }
