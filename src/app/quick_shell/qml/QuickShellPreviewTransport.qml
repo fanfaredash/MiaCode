@@ -45,6 +45,40 @@ Rectangle {
         preciseHintHideTimer.restart()
     }
 
+    function transportSurfaceColor() {
+        return fullscreenMode ? "#C8141B22" : tone("cardBg", "#ffffff")
+    }
+
+    function transportBorderColor() {
+        return fullscreenMode ? "#3AFFFFFF" : tone("border", "#d5e0ec")
+    }
+
+    function transportPrimaryTextColor() {
+        return fullscreenMode ? "#F2F7FF" : tone("textPrimary", "#203040")
+    }
+
+    function transportTrackColor() {
+        return fullscreenMode ? "#34404D" : tone("inputDisabledBg", "#e3e8ef")
+    }
+
+    function transportHandleFillColor() {
+        return fullscreenMode ? "#F7FBFF" : "white"
+    }
+
+    function transportHandleBorderColor() {
+        return fullscreenMode ? "#5D748E" : tone("borderSoft", "#ccd6e2")
+    }
+
+    function transportButtonFillColor(down) {
+        if (!fullscreenMode)
+            return down ? tone("menuHoverBg", "#eef5ff") : "transparent"
+        return down ? "#2A3542" : "#1A222B"
+    }
+
+    function transportButtonBorderColor() {
+        return fullscreenMode ? "#40FFFFFF" : tone("border", "#d5e0ec")
+    }
+
     function tooltipGlobalX() {
         if (!preciseHintWindow.visible)
             return 0
@@ -75,8 +109,8 @@ Rectangle {
 
     implicitHeight: transportLayout.implicitHeight + 16
     radius: metric("previewControlCardRadius", 10)
-    color: fullscreenMode ? tone("cardAltBg", "#edf2f8") : tone("cardBg", "#ffffff")
-    border.color: fullscreenMode ? "transparent" : tone("border", "#d5e0ec")
+    color: transportSurfaceColor()
+    border.color: transportBorderColor()
 
     Timer {
         id: preciseHintHideTimer
@@ -188,7 +222,7 @@ Rectangle {
                     Rectangle {
                         anchors.fill: parent
                         radius: height / 2
-                        color: tone("inputDisabledBg", "#e3e8ef")
+                        color: root.transportTrackColor()
                     }
 
                     Rectangle {
@@ -206,8 +240,8 @@ Rectangle {
                     width: 18
                     height: 18
                     radius: 9
-                    color: "white"
-                    border.color: root.tone("borderSoft", "#ccd6e2")
+                    color: root.transportHandleFillColor()
+                    border.color: root.transportHandleBorderColor()
                     border.width: 1
                 }
             }
@@ -261,8 +295,8 @@ Rectangle {
                             controller.stopPreview()
                     }
                     background: Rectangle {
-                        color: parent.down ? root.tone("menuHoverBg", "#eef5ff") : "transparent"
-                        border.color: root.tone("border", "#d5e0ec")
+                        color: root.transportButtonFillColor(parent.down)
+                        border.color: root.transportButtonBorderColor()
                         radius: 6
                     }
                     contentItem: Item {
@@ -273,7 +307,7 @@ Rectangle {
                             width: 10
                             height: 10
                             radius: 1
-                            color: root.tone("textPrimary", "#203040")
+                            color: root.transportPrimaryTextColor()
                             anchors.centerIn: parent
                         }
                     }
@@ -291,8 +325,8 @@ Rectangle {
                             controller.togglePreviewPlayback()
                     }
                     background: Rectangle {
-                        color: parent.down ? root.tone("menuHoverBg", "#eef5ff") : "transparent"
-                        border.color: root.tone("border", "#d5e0ec")
+                        color: root.transportButtonFillColor(parent.down)
+                        border.color: root.transportButtonBorderColor()
                         radius: 6
                     }
                     contentItem: Item {
@@ -307,7 +341,7 @@ Rectangle {
                             onPaint: {
                                 const ctx = getContext("2d")
                                 ctx.reset()
-                                ctx.fillStyle = root.tone("textPrimary", "#203040")
+                                ctx.fillStyle = root.transportPrimaryTextColor()
                                 ctx.beginPath()
                                 ctx.moveTo(width * 0.39, height * 0.28)
                                 ctx.lineTo(width * 0.39, height * 0.72)
@@ -334,14 +368,14 @@ Rectangle {
                                 width: 4
                                 height: 12
                                 radius: 1
-                                color: root.tone("textPrimary", "#203040")
+                                color: root.transportPrimaryTextColor()
                             }
 
                             Rectangle {
                                 width: 4
                                 height: 12
                                 radius: 1
-                                color: root.tone("textPrimary", "#203040")
+                                color: root.transportPrimaryTextColor()
                             }
                         }
                     }
@@ -349,7 +383,7 @@ Rectangle {
 
                 Label {
                     text: root.timeSummary
-                    color: root.tone("textPrimary", "#203040")
+                    color: root.transportPrimaryTextColor()
                     font.pixelSize: root.transportTextPixelSize
                     font.weight: root.transportTextWeight
                     verticalAlignment: Text.AlignVCenter
@@ -375,8 +409,8 @@ Rectangle {
                     onPressed: root.focusRequested()
                     onClicked: root.openSpeedMenu()
                     background: Rectangle {
-                        color: parent.down ? root.tone("menuHoverBg", "#eef5ff") : "transparent"
-                        border.color: root.tone("border", "#d5e0ec")
+                        color: root.transportButtonFillColor(parent.down)
+                        border.color: root.transportButtonBorderColor()
                         radius: 6
                     }
                     contentItem: Text {
@@ -384,7 +418,7 @@ Rectangle {
                         anchors.fill: parent
                         anchors.leftMargin: 9
                         anchors.rightMargin: 9
-                        color: root.tone("textPrimary", "#203040")
+                        color: root.transportPrimaryTextColor()
                         font.pixelSize: root.transportTextPixelSize
                         font.weight: root.transportTextWeight
                         horizontalAlignment: Text.AlignHCenter
@@ -405,13 +439,13 @@ Rectangle {
                             controller.previewFullscreen = !fullscreenMode
                     }
                     background: Rectangle {
-                        color: parent.down ? root.tone("menuHoverBg", "#eef5ff") : "transparent"
-                        border.color: root.tone("border", "#d5e0ec")
+                        color: root.transportButtonFillColor(parent.down)
+                        border.color: root.transportButtonBorderColor()
                         radius: 6
                     }
                     contentItem: Text {
                         text: "\u26f6"
-                        color: root.tone("textPrimary", "#203040")
+                        color: root.transportPrimaryTextColor()
                         font.pixelSize: 16
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
