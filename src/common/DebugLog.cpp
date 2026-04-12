@@ -28,6 +28,18 @@ QMutex& logMutex()
     return mutex;
 }
 
+QMutex& projectLogDirectoryMutex()
+{
+    static QMutex mutex;
+    return mutex;
+}
+
+QString& sessionProjectLogDirectoryStorage()
+{
+    static QString path;
+    return path;
+}
+
 bool channelEnabled(Channel channel)
 {
     switch (channel) {
@@ -195,6 +207,14 @@ QString logDirectory()
         return QDir::cleanPath(envDir);
     }
 
+    {
+        QMutexLocker locker(&projectLogDirectoryMutex());
+        const QString projectDir = sessionProjectLogDirectoryStorage().trimmed();
+        if (!projectDir.isEmpty()) {
+            return QDir::cleanPath(projectDir);
+        }
+    }
+
     if (miacode::debug_options::debugModeEnabled()) {
         const QString appDebugDir = defaultDebugLogDirectory();
         if (!appDebugDir.isEmpty()) {
@@ -203,6 +223,14 @@ QString logDirectory()
     }
 
     return QDir::tempPath();
+}
+
+void setSessionProjectLogDirectory(const QString& directoryPath)
+{
+    QMutexLocker locker(&projectLogDirectoryMutex());
+    sessionProjectLogDirectoryStorage() = directoryPath.trimmed().isEmpty()
+        ? QString()
+        : QDir::cleanPath(directoryPath);
 }
 
 QString logPath(Channel channel)

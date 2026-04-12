@@ -32,8 +32,15 @@ Current chart-directory conventions:
   - `bg.jpg`
   - `bg.png`
   - `bg.jpeg`
+- project metadata sidecar root:
+  - `.miacode/`
 - project render-state sidecar:
-  - `.miacode_render_settings.json`
+  - `.miacode/miacode_settings.json`
+- autosave container root:
+  - `.miacode/autosave/<chart file>/`
+  - contains `<chart file>.bak`, `history/*.bak`, and `autosave.json`
+  - current history filenames use `YYYY-MM-DD-HH-MM-SS.bak`
+  - if multiple history writes happen inside the same second, the later write replaces the earlier file of that same name
 
 If these conventions change, update both code and this file.
 
@@ -107,10 +114,10 @@ Do not rename sound files casually; both preview-time and export-time behavior d
   - `scripts/build-win.ps1` now installs `qtmultimedia`, `qtdeclarative`, and `qtsvg` so the Qt Quick runtime can be reproduced from a clean machine
   - both the CMake post-build deploy step and `scripts/package-win.ps1` now pass `--qmldir src/preview/runtime/qml` to `windeployqt` so the Qt Quick runtime imports are deployed
   - both the CMake post-build deploy step and `scripts/package-win.ps1` explicitly keep the Qt Quick runtime DLL set (`Qt6Quick`, `Qt6Qml`, `Qt6QmlMeta`, `Qt6QmlModels`, `Qt6QmlWorkerScript`) and remove stale `Qt6OpenGLWidgets.dll`
-  - Windows release packages now also include:
+- Windows release packages now also include:
     - root-level `Start_MiaCode_Debug.bat`
     - root-level `Start_MiaCode_Debug_CompareDump.bat`
-    - root-level `logs/`
+    - root-level `logs/` helper folder only for explicit debug-launch scripts; normal project-bound runtime logs default to `.miacode/logs/`
     - `docs/DEBUG_INDEX.md`
     - `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
 - macOS build/package:

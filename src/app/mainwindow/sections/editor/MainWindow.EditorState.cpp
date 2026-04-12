@@ -24,15 +24,25 @@ RenderMode renderModeFromToken(const QString& token)
         : RenderMode::Native;
 }
 
+QString legacyProjectRenderStateFilePath(const QString& currentFilePath)
+{
+    if (currentFilePath.isEmpty()) {
+        return QString();
+    }
+    const QDir projectDir(QFileInfo(currentFilePath).absolutePath());
+    return projectDir.filePath(QStringLiteral(".miacode_render_settings.json"));
+}
+
 }  // namespace
 
 QString MainWindow::EditorSection::resolveProjectRenderStateFilePath() const
 {
-    if (state_.currentFilePath_.isEmpty()) {
+    const QString projectDataDirectoryPath =
+        miacode::mainwindow::shared::resolveProjectDataDirectoryPath(state_.currentFilePath_);
+    if (projectDataDirectoryPath.isEmpty()) {
         return QString();
     }
-    const QDir projectDir(QFileInfo(state_.currentFilePath_).absolutePath());
-    return projectDir.filePath(".miacode_render_settings.json");
+    return QDir(projectDataDirectoryPath).filePath(QStringLiteral("miacode_settings.json"));
 }
 
 void MainWindow::EditorSection::loadProjectRenderState()
@@ -45,8 +55,10 @@ void MainWindow::EditorSection::loadProjectRenderState()
     state_.projectLastOpenedDifficultyId_ = 0;
 
     const QString path = resolveProjectRenderStateFilePath();
-    if (!path.isEmpty()) {
-        QFile file(path);
+    const QString legacyPath = legacyProjectRenderStateFilePath(state_.currentFilePath_);
+    const QString loadPath = QFileInfo::exists(path) ? path : legacyPath;
+    if (!loadPath.isEmpty()) {
+        QFile file(loadPath);
         if (file.exists() && file.open(QIODevice::ReadOnly | QIODevice::Text)) {
             QJsonParseError parseError;
             const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
@@ -210,6 +222,11 @@ void MainWindow::EditorSection::saveProjectRenderState() const
         return;
     }
 
+    const QFileInfo pathInfo(path);
+    if (!QDir().mkpath(pathInfo.absolutePath())) {
+        return;
+    }
+
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         return;
@@ -256,12 +273,19 @@ void MainWindow::EditorSection::saveProjectRenderState() const
     render.insert("auto_restore_square_after_export", false);
     root.insert("render", render);
     root.insert("last_opened_difficulty", state_.projectLastOpenedDifficultyId_);
-    root.insert("schema", "miacode_render_settings_v1");
+    root.insert("schema", "miacode_settings_v1");
     const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Indented);
     if (file.write(payload) != payload.size()) {
         return;
     }
-    file.commit();
+    if (!file.commit()) {
+        return;
+    }
+
+    const QString legacyPath = legacyProjectRenderStateFilePath(state_.currentFilePath_);
+    if (!legacyPath.isEmpty() && legacyPath != path) {
+        QFile::remove(legacyPath);
+    }
 }
 
 void MainWindow::EditorSection::removeProjectRenderState() const
@@ -271,6 +295,10 @@ void MainWindow::EditorSection::removeProjectRenderState() const
         return;
     }
     QFile::remove(path);
+    const QString legacyPath = legacyProjectRenderStateFilePath(state_.currentFilePath_);
+    if (!legacyPath.isEmpty() && legacyPath != path) {
+        QFile::remove(legacyPath);
+    }
 }
 
 QString MainWindow::resolveProjectRenderStateFilePath() const

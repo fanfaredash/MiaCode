@@ -20,10 +20,35 @@ constexpr int kEditorFindBarHorizontalMargin = 14;
 constexpr int kEditorFindBarTopMargin = 10;
 constexpr int kEditorFindBarOverlayGap = 8;
 
+bool widgetMatchesOrDescendsFrom(QWidget* widget, QWidget* root)
+{
+    return widget != nullptr && root != nullptr && (widget == root || root->isAncestorOf(widget));
+}
+
 }  // namespace
 
 bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
 {
+    if (event != nullptr && event->type() == QEvent::ToolTip) {
+        auto* widget = qobject_cast<QWidget*>(watched);
+        const bool allowPreviewTooltip =
+            widgetMatchesOrDescendsFrom(widget, owner_.previewPanel_)
+            || widgetMatchesOrDescendsFrom(widget, owner_.previewLeftColumn_)
+            || widgetMatchesOrDescendsFrom(widget, owner_.previewCanvasContainer_)
+            || widgetMatchesOrDescendsFrom(widget, owner_.previewCanvasFrame_)
+            || widgetMatchesOrDescendsFrom(widget, owner_.previewControlCard_)
+            || widgetMatchesOrDescendsFrom(widget, owner_.previewStatsCard_)
+            || widgetMatchesOrDescendsFrom(widget, owner_.previewFullscreenWindow_)
+            || widgetMatchesOrDescendsFrom(widget, owner_.previewFullscreenHost_)
+            || widgetMatchesOrDescendsFrom(widget, owner_.previewFullscreenControlsWindow_)
+            || widgetMatchesOrDescendsFrom(widget, owner_.previewFullscreenHintWindow_);
+        if (widget != nullptr && !allowPreviewTooltip) {
+            QToolTip::hideText();
+            event->ignore();
+            return true;
+        }
+    }
+
     if (owner_.editorFindGeometryHost_ != nullptr
         && watched == owner_.editorFindGeometryHost_
         && event != nullptr
@@ -631,6 +656,9 @@ void MainWindow::WindowSection::changeEvent(QEvent* event)
                 .arg(active ? 1 : 0)
                 .arg(event != nullptr && event->spontaneous() ? 1 : 0)
         );
+        if (!active) {
+            owner_.runAutosaveCheck(false);
+        }
     } else if (type == QEvent::ZOrderChange) {
         this->logWindowGeometryDebug("zorder_change");
     }

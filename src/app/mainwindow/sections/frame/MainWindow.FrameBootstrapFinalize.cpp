@@ -143,8 +143,11 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
 
     autosaveTimer_ = new QTimer(this);
     autosaveTimer_->setInterval(kAutosaveIntervalMs);
-    connect(autosaveTimer_, &QTimer::timeout, this, &MainWindow::runAutosaveCheck);
-    autosaveTimer_->start();
+    connect(autosaveTimer_, &QTimer::timeout, this, [this]() { runAutosaveCheck(true); });
+    autosaveIdleTimer_ = new QTimer(this);
+    autosaveIdleTimer_->setSingleShot(true);
+    autosaveIdleTimer_->setInterval(kAutosaveLatestIdleMs);
+    connect(autosaveIdleTimer_, &QTimer::timeout, this, [this]() { runAutosaveCheck(false); });
 
     qtPreviewTimer_ = new QTimer(this);
     qtPreviewTimer_->setInterval(16);
@@ -325,6 +328,9 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     }
     if (editorReplaceEdit_ != nullptr) {
         editorReplaceEdit_->installEventFilter(this);
+    }
+    if (QApplication::instance() != nullptr) {
+        QApplication::instance()->installEventFilter(this);
     }
     if (editorFindPrevButton_ != nullptr) {
         connect(editorFindPrevButton_, &QToolButton::clicked, this, &MainWindow::onFindPrevious);

@@ -18,8 +18,9 @@ Default directory order:
 
 1. channel-specific override path
 2. `MIACODE_LOG_DIR`
-3. app-local `logs/` next to `MiaCode.exe` while `--debug` is active
-4. system temp directory
+3. project-local `.miacode/logs/` once a chart file is bound
+4. app-local `logs/` next to `MiaCode.exe` while `--debug` is active
+5. system temp directory
 
 Default filenames:
 

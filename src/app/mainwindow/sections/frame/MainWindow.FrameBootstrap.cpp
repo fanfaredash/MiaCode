@@ -991,7 +991,11 @@ MainWindow::MainWindow(QWidget* parent)
             if (charsRemoved == 0 && charsAdded == 0) {
                 return;
             }
-            markCurrentFieldDirty();
+            QTimer::singleShot(0, this, [this]() {
+                if (!suppressTextDirtyTracking_) {
+                    markCurrentFieldDirty();
+                }
+            });
             ++timelineRevision_;
             applyTimelineQuickChange(position, charsRemoved, charsAdded);
             requestTimelineSlowRefresh();
@@ -1031,7 +1035,11 @@ MainWindow::MainWindow(QWidget* parent)
             if (charsRemoved == 0 && charsAdded == 0) {
                 return;
             }
-            markCurrentFieldDirty();
+            QTimer::singleShot(0, this, [this]() {
+                if (!suppressTextDirtyTracking_) {
+                    markCurrentFieldDirty();
+                }
+            });
         });
     }
     connect(difficultyLevelEdit_, &QLineEdit::textChanged, this, &MainWindow::markCurrentFieldDirty);

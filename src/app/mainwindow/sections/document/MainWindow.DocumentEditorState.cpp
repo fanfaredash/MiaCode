@@ -58,6 +58,7 @@ void MainWindow::DocumentSection::setMetadataExtraText(const QString& text)
     ui_.metadataExtraEdit_->setPlainText(text);
     ui_.metadataExtraEdit_->document()->clearUndoRedoStacks();
     ui_.metadataExtraEdit_->document()->setModified(false);
+    state_.metadataExtraUndoSaveAnchor_ = ui_.metadataExtraEdit_->document()->availableUndoSteps();
     applyBlockSpacingToTextEdit(ui_.metadataExtraEdit_, blockSpacingPixelsForPointSize(state_.editorTextFontPointSize_, state_.editorLineSpacingFactor_));
     state_.suppressTextDirtyTracking_ = previousSuppress;
 }
@@ -73,6 +74,7 @@ void MainWindow::DocumentSection::setEditorText(const QString& text)
     editor->setBlockSpacingPixels(blockSpacingPixels);
     editor->document()->clearUndoRedoStacks();
     editor->document()->setModified(false);
+    state_.editorUndoSaveAnchor_ = editor->document()->availableUndoSteps();
     // QSignalBlocker suppresses blockCountChanged, so force line-number gutter recompute.
     editor->refreshLineNumberAreaLayout();
     state_.suppressTextDirtyTracking_ = previousSuppress;
@@ -108,36 +110,94 @@ void MainWindow::DocumentSection::updatePauseButtonAppearance()
 
 void MainWindow::DocumentSection::updateDirtyState()
 {
-    owner_.setWindowModified(state_.documentDirty_ || state_.currentFieldDirty_);
+    const bool dirty = state_.documentDirty_ || state_.currentFieldDirty_;
+    const bool wasDirty = owner_.isWindowModified();
+    if (dirty) {
+        if (!wasDirty || state_.autosaveDirtySinceMs_ < 0) {
+            state_.autosaveDirtySinceMs_ = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+        }
+        if (ui_.autosaveTimer_ != nullptr && !ui_.autosaveTimer_->isActive()) {
+            ui_.autosaveTimer_->start();
+        }
+    } else {
+        state_.autosaveDirtySinceMs_ = -1;
+        if (ui_.autosaveTimer_ != nullptr) {
+            ui_.autosaveTimer_->stop();
+        }
+        if (ui_.autosaveIdleTimer_ != nullptr) {
+            ui_.autosaveIdleTimer_->stop();
+        }
+    }
+    owner_.setWindowModified(dirty);
     owner_.updateWindowTitle();
 }
 
 bool MainWindow::DocumentSection::currentFieldHasUndoChanges() const
 {
     if (owner_.hasActiveDifficulty()) {
-        const bool levelDirty = ui_.difficultyLevelEdit_ != nullptr && ui_.difficultyLevelEdit_->isUndoAvailable();
-        const bool designerDirty = ui_.difficultyDesignerEdit_ != nullptr && ui_.difficultyDesignerEdit_->isUndoAvailable();
+        const SimaiDifficultyData* difficultyData = state_.document_.difficulty(state_.activeDifficultyId_);
+        const QString savedLevel = difficultyData != nullptr ? difficultyData->level : QString();
+        const QString savedDesigner = difficultyData != nullptr ? difficultyData->designer : QString();
+        const bool levelDirty = ui_.difficultyLevelEdit_ != nullptr && ui_.difficultyLevelEdit_->text() != savedLevel;
+        const bool designerDirty = ui_.difficultyDesignerEdit_ != nullptr && ui_.difficultyDesignerEdit_->text() != savedDesigner;
         bool chartDirty = false;
         if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
             editor != nullptr && editor->document() != nullptr) {
-            chartDirty = editor->document()->isUndoAvailable();
+            chartDirty = editor->document()->availableUndoSteps() != state_.editorUndoSaveAnchor_;
         }
         return levelDirty || designerDirty || chartDirty;
     }
 
     if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
-        const bool titleDirty = ui_.titleEdit_ != nullptr && ui_.titleEdit_->isUndoAvailable();
-        const bool artistDirty = ui_.artistEdit_ != nullptr && ui_.artistEdit_->isUndoAvailable();
-        const bool firstDirty = ui_.firstEdit_ != nullptr && ui_.firstEdit_->isUndoAvailable();
-        const bool designerDirty = ui_.designerEdit_ != nullptr && ui_.designerEdit_->isUndoAvailable();
+        const bool titleDirty = ui_.titleEdit_ != nullptr && ui_.titleEdit_->text() != state_.document_.title;
+        const bool artistDirty = ui_.artistEdit_ != nullptr && ui_.artistEdit_->text() != state_.document_.artist;
+        const bool firstDirty = ui_.firstEdit_ != nullptr && ui_.firstEdit_->text() != state_.document_.first;
+        const bool designerDirty = ui_.designerEdit_ != nullptr && ui_.designerEdit_->text() != state_.document_.designer;
         bool extraDirty = false;
         if (ui_.metadataExtraEdit_ != nullptr && ui_.metadataExtraEdit_->document() != nullptr) {
-            extraDirty = ui_.metadataExtraEdit_->document()->isUndoAvailable();
+            extraDirty = ui_.metadataExtraEdit_->document()->availableUndoSteps() != state_.metadataExtraUndoSaveAnchor_;
         }
         return titleDirty || artistDirty || firstDirty || designerDirty || extraDirty;
     }
 
     return false;
+}
+
+void MainWindow::DocumentSection::anchorCurrentFieldCleanState()
+{
+    if (owner_.hasActiveDifficulty()) {
+        if (ui_.difficultyLevelEdit_ != nullptr) {
+            ui_.difficultyLevelEdit_->setModified(false);
+        }
+        if (ui_.difficultyDesignerEdit_ != nullptr) {
+            ui_.difficultyDesignerEdit_->setModified(false);
+        }
+        if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+            editor != nullptr && editor->document() != nullptr) {
+            editor->document()->setModified(false);
+            state_.editorUndoSaveAnchor_ = editor->document()->availableUndoSteps();
+        }
+        return;
+    }
+
+    if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
+        if (ui_.titleEdit_ != nullptr) {
+            ui_.titleEdit_->setModified(false);
+        }
+        if (ui_.artistEdit_ != nullptr) {
+            ui_.artistEdit_->setModified(false);
+        }
+        if (ui_.firstEdit_ != nullptr) {
+            ui_.firstEdit_->setModified(false);
+        }
+        if (ui_.designerEdit_ != nullptr) {
+            ui_.designerEdit_->setModified(false);
+        }
+        if (ui_.metadataExtraEdit_ != nullptr && ui_.metadataExtraEdit_->document() != nullptr) {
+            ui_.metadataExtraEdit_->document()->setModified(false);
+            state_.metadataExtraUndoSaveAnchor_ = ui_.metadataExtraEdit_->document()->availableUndoSteps();
+        }
+    }
 }
 
 void MainWindow::DocumentSection::refreshCurrentFieldDirtyState()
@@ -148,6 +208,9 @@ void MainWindow::DocumentSection::refreshCurrentFieldDirtyState()
 
 void MainWindow::DocumentSection::markCurrentFieldDirty()
 {
+    if (ui_.autosaveIdleTimer_ != nullptr) {
+        ui_.autosaveIdleTimer_->start();
+    }
     refreshCurrentFieldDirtyState();
 }
 

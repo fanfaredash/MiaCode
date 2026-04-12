@@ -421,6 +421,12 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
     }
     state_.currentFilePath_ = normalizedPath;
     state_.lastSessionFilePath_ = state_.currentFilePath_;
+    const QString projectDataDirectoryPath = resolveProjectDataDirectoryPath(state_.currentFilePath_);
+    miacode::debug_log::setSessionProjectLogDirectory(
+        projectDataDirectoryPath.isEmpty()
+            ? QString()
+            : QDir(projectDataDirectoryPath).filePath(QStringLiteral("logs"))
+    );
     if (!state_.currentFilePath_.isEmpty()) {
         owner_.setLastOpenDirectory(state_.currentFilePath_);
 
