@@ -21,6 +21,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package-win.ps1 -QtRoot <QtRo
 
 Notes:
 - `package-win.ps1` defaults to the `build/` directory.
+- Relative `BuildDir`, `DistDir`, `QtRoot`, and `QtOutputDir` values are resolved from the repository root, so launching the script from the desktop or another folder will still keep outputs inside the repo.
 - `build-win.ps1` now installs `qtmultimedia`, `qtdeclarative`, and `qtsvg` so the Qt Quick runtime and export session can be packaged from a clean machine.
 - Before packaging, it checks whether `build/generated/AppVersion.h` and `build/<Config>/MiaCode.exe` match the current `CMakeLists.txt`; if the executable is missing, version-stale, or older than the generated version header, it automatically runs `cmake --build build --target MiaCode --config <Config> --parallel 8`.
 - If `-QtRoot` is omitted, the script tries to find `windeployqt` from the current `PATH`.
