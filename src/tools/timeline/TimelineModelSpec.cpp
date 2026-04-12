@@ -1148,6 +1148,27 @@ int main(int argc, char** argv)
 
     {
         TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("1h,1h[8:0],\nE"), 0.0);
+        const TimelineRenderSnapshot snapshot = model.snapshot();
+        expect(!snapshot.lines.isEmpty(), QStringLiteral("quick model builds snapshot for zero-duration holds"));
+        if (!snapshot.lines.isEmpty()) {
+            const QVector<TimelineRenderNote>& notes = snapshot.lines.constFirst().notes;
+            expect(notes.size() == 2, QStringLiteral("quick model keeps both bare and bracketed zero-duration holds"));
+            if (notes.size() == 2) {
+                const TimelineRenderNote& bareHold = notes.at(0);
+                const TimelineRenderNote& bracketedHold = notes.at(1);
+                expect(bareHold.kind == TimelineRenderNoteKind::Hold
+                           && nearlyEqual(bareHold.endSecondOffset, bareHold.secondOffset),
+                       QStringLiteral("quick model treats bare h as a zero-duration hold"));
+                expect(bracketedHold.kind == TimelineRenderNoteKind::Hold
+                           && nearlyEqual(bracketedHold.endSecondOffset, bracketedHold.secondOffset),
+                       QStringLiteral("quick model keeps explicit [8:0] hold at zero duration"));
+            }
+        }
+    }
+
+    {
+        TimelineQuickModel model;
         model.rebuildFromText(QStringLiteral("1<5[4:1],8-3[8:1],\nE"), 0.0);
         const TimelineRenderSnapshot snapshot = model.snapshot();
         expect(!snapshot.lines.isEmpty(), QStringLiteral("quick model builds snapshot for bracketed slides"));
