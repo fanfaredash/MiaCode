@@ -339,29 +339,6 @@ int slideHeadStarSourceCol(const TimelineNoteMarker& marker)
     return qMax(1, marker.sourceCol + 1);
 }
 
-bool shouldEmitSyntheticSlideHeadStar(
-    const TimelineNoteMarker& marker,
-    const QVector<TimelineNoteMarker>& noteMarkers)
-{
-    if (!isSlideLike(marker) || !marker.hasHeadStar) {
-        return false;
-    }
-
-    for (const TimelineNoteMarker& other : noteMarkers) {
-        if (!isSlideLike(other) || other.slideTraceSecond < 0.0) {
-            continue;
-        }
-        if (other.lane != marker.lane) {
-            continue;
-        }
-        if (qAbs(other.slideTraceSecond - marker.second) < miacode::muri::kTapOnSlideThresholdSeconds) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 QString headStarJudgeEmitKey(const TimelineNoteMarker& marker)
 {
     if (marker.sameHeadSlide) {
@@ -706,9 +683,20 @@ QString simpleNoteTargetLabel(const JudgeableSimpleNote& note)
     return noteTypeDisplayLabel(note.type);
 }
 
+QString slideHeadConfigLabel(const TimelineNoteMarker& marker)
+{
+    const QString laneToken =
+        (marker.lane >= 1 && marker.lane <= 8) ? QString::number(marker.lane) : QString();
+    const QString token = simpleNoteLaneConfigToken(laneToken, marker.headEx, false);
+    const QString base = token.isEmpty() ? QStringLiteral("star") : QStringLiteral("star %1").arg(token);
+    return marker.headEx ? QStringLiteral("protected %1").arg(base) : base;
+}
+
 QString formatMarkerConfigLabel(const TimelineNoteMarker& marker, bool slideHead = false)
 {
-    Q_UNUSED(slideHead);
+    if (slideHead && isSlideLike(marker)) {
+        return slideHeadConfigLabel(marker);
+    }
     if (marker.type == QLatin1String("tap")) {
         return QStringLiteral("tap %1").arg(marker.lane);
     }
@@ -749,7 +737,7 @@ QHash<QString, QString> buildMarkerConfigLabels(const QVector<TimelineNoteMarker
 
     for (const TimelineNoteMarker& marker : noteMarkers) {
         labels.insert(makeMarkerAnalysisKey(marker), formatMarkerConfigLabel(marker));
-        if (!shouldEmitSyntheticSlideHeadStar(marker, noteMarkers)) {
+        if (!shouldCreateHeadStarJudgeNote(marker)) {
             continue;
         }
         labels.insert(slideHeadStarMarkerKey(marker), formatMarkerConfigLabel(marker, true));
@@ -780,9 +768,9 @@ QString slideStartLookupKey(int lane, double second)
 QHash<QString, QString> buildSyntheticSlideHeadOwnerKeys(const QVector<TimelineNoteMarker>& noteMarkers)
 {
     QHash<QString, QString> ownerKeys;
-    ownerKeys.reserve(noteMarkers.size());
+    ownerKeys.reserve(noteMarkers.size() * 2);
     for (const TimelineNoteMarker& marker : noteMarkers) {
-        if (!shouldEmitSyntheticSlideHeadStar(marker, noteMarkers)) {
+        if (!shouldCreateHeadStarJudgeNote(marker)) {
             continue;
         }
         ownerKeys.insert(slideHeadStarMarkerKey(marker), makeMarkerAnalysisKey(marker));
@@ -888,7 +876,10 @@ QString formatMultiTouchActionLabel(
     const auto it = markerLookup.constFind(effectiveKey);
     if (it != markerLookup.constEnd() && it.value() != nullptr) {
         const TimelineNoteMarker& marker = *it.value();
-        if (!ownerKey.isEmpty() || marker.type == QLatin1String("tap")) {
+        if (!ownerKey.isEmpty()) {
+            return formatMarkerConfigLabel(marker, true);
+        }
+        if (marker.type == QLatin1String("tap")) {
             return QStringLiteral("tap %1").arg(marker.lane);
         }
         return formatMarkerConfigLabel(marker);
@@ -1714,7 +1705,7 @@ bool appendSlideJudgeSpriteEvent(
 QHash<QString, MarkerSourceRef> buildMarkerSourceRefs(const QVector<TimelineNoteMarker>& noteMarkers)
 {
     QHash<QString, MarkerSourceRef> refs;
-    refs.reserve(noteMarkers.size());
+    refs.reserve(noteMarkers.size() * 2);
 
     for (int index = 0; index < noteMarkers.size(); ++index) {
         const TimelineNoteMarker& marker = noteMarkers.at(index);
@@ -1725,6 +1716,15 @@ QHash<QString, MarkerSourceRef> buildMarkerSourceRefs(const QVector<TimelineNote
         ref.col = marker.sourceCol;
         ref.type = marker.type;
         refs.insert(makeMarkerAnalysisKey(marker), ref);
+
+        if (!shouldCreateHeadStarJudgeNote(marker)) {
+            continue;
+        }
+
+        MarkerSourceRef headStarRef = ref;
+        headStarRef.col = slideHeadStarSourceCol(marker);
+        headStarRef.type = QStringLiteral("tap");
+        refs.insert(slideHeadStarMarkerKey(marker), headStarRef);
     }
 
     return refs;
@@ -1788,8 +1788,9 @@ QVector<JudgeableSimpleNote> buildJudgeableSimpleNotes(
         }
         emittedHeadStarKeys.insert(emitKey);
 
-        const QString markerKey = makeMarkerAnalysisKey(marker);
-        const MarkerSourceRef ref = markerRefs.value(markerKey);
+        const QString ownerMarkerKey = makeMarkerAnalysisKey(marker);
+        const MarkerSourceRef ref = markerRefs.value(ownerMarkerKey);
+        const QString markerKey = slideHeadStarMarkerKey(marker);
 
         JudgeableSimpleNote note;
         note.marker = &marker;
@@ -1800,7 +1801,7 @@ QVector<JudgeableSimpleNote> buildJudgeableSimpleNotes(
         note.parseOrder = marker.parseOrder;
         note.eachGroupId = marker.eachGroupId;
         note.line = marker.sourceLine;
-        note.col = marker.sourceCol;
+        note.col = slideHeadStarSourceCol(marker);
         note.momentSecond = marker.second;
         note.pressEndSecond = marker.second + miacode::muri::kReleaseDelaySeconds;
         note.criticalSeconds = miacode::muri::kTapCriticalSeconds;
@@ -2793,9 +2794,21 @@ struct RuntimeWifiNoteState {
     RuntimePadEvent judgeAction;
 };
 
-bool runtimePadEventIsForeignJudge(const RuntimePadEvent& event, const QString& ownerMarkerKey)
+bool runtimePadEventIsForeignJudge(
+    const RuntimePadEvent& event,
+    const QString& ownerMarkerKey,
+    const TimelineNoteMarker* ownerMarker = nullptr)
 {
-    return !event.sourceMarkerKey.isEmpty() && event.sourceMarkerKey != ownerMarkerKey;
+    if (event.sourceMarkerKey.isEmpty()) {
+        return false;
+    }
+    if (event.sourceMarkerKey == ownerMarkerKey) {
+        return false;
+    }
+    if (ownerMarker != nullptr && event.sourceMarkerKey == slideHeadStarMarkerKey(*ownerMarker)) {
+        return false;
+    }
+    return true;
 }
 
 bool slideFinalAreaWasJudgedByOther(const RuntimeSlideNoteState& note)
@@ -2804,12 +2817,12 @@ bool slideFinalAreaWasJudgedByOther(const RuntimeSlideNoteState& note)
         return false;
     }
     const RuntimeJudgeHit& finalHit = note.areaHits.constLast();
-    return finalHit.judged && runtimePadEventIsForeignJudge(finalHit.cause, note.markerKey);
+    return finalHit.judged && runtimePadEventIsForeignJudge(finalHit.cause, note.markerKey, note.marker);
 }
 
 bool wifiFinalJudgeWasByOther(const RuntimeWifiNoteState& note)
 {
-    return runtimePadEventIsForeignJudge(note.judgeAction, note.markerKey);
+    return runtimePadEventIsForeignJudge(note.judgeAction, note.markerKey, note.marker);
 }
 
 bool padStateForTick(
@@ -3919,9 +3932,6 @@ QSet<QString> buildSameMomentPadOverlapKeys(const QVector<JudgeableSimpleNote>& 
     markerKeysByMomentPad.reserve(notes.size());
 
     for (const JudgeableSimpleNote& note : notes) {
-        if (note.headStarTapLike) {
-            continue;
-        }
         const QString pad = normalizedPadToken(note.pad);
         if (pad.isEmpty()) {
             continue;
@@ -4038,7 +4048,7 @@ void collectSimpleNoteMultiTouchDiagnostics(
             touchGroups,
             touchGroupByChildNoteIndex,
             true,
-            false);
+            true);
     if (renderOptions.excludeTouchFromMultiTouch) {
         actions.erase(
             std::remove_if(actions.begin(), actions.end(), [](const RuntimeHandAction& action) {

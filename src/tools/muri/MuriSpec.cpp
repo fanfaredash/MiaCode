@@ -213,25 +213,31 @@ int main(int argc, char** argv)
         expect(analyzed.parsed.ok, QStringLiteral("synthetic head-star repro chart parses"));
         expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::SlideHeadTap) == 1,
             QStringLiteral("synthetic head-star repro keeps one runtime slide-head-tap diagnostic"));
-        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::MultiTouch) == 0,
-            QStringLiteral("synthetic head-star repro no longer reports multitouch"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::MultiTouch) == 1,
+            QStringLiteral("synthetic head-star repro now reports one multitouch"));
         expect(countStaticReferences(analyzed.staticReferences, MuriKind::SlideHeadTap) == 1,
             QStringLiteral("synthetic head-star repro keeps one static slide-head-tap reference"));
         expect(countStaticReferences(analyzed.staticReferences, MuriKind::TapOnSlide) == 1,
             QStringLiteral("synthetic head-star repro now also catches the earlier slide tail on the head star"));
         expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::SlideHeadTap) == 1,
             QStringLiteral("synthetic head-star repro keeps one visible slide-head-tap entry"));
-        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::MultiTouch) == 0,
-            QStringLiteral("synthetic head-star repro shows no visible multitouch entry"));
+        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::MultiTouch) == 1,
+            QStringLiteral("synthetic head-star repro keeps one visible multitouch entry"));
         expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::TapOnSlide) == 1,
             QStringLiteral("synthetic head-star repro keeps one visible tap-on-slide entry"));
-        expect(analyzed.visibleEntries.size() == 2,
-            QStringLiteral("synthetic head-star repro now shows both valid head-star issues"));
+        expect(analyzed.visibleEntries.size() == 3,
+            QStringLiteral("synthetic head-star repro now shows all three valid head-star issues"));
 
         if (const MuriDiagnostic* diagnostic =
                 firstDiagnostic(analyzed.report.diagnostics, MuriKind::SlideHeadTap)) {
             expect(diagnostic->detail.contains(QStringLiteral("star 1")),
                 QStringLiteral("synthetic head-star repro runtime detail names the affected star lane"));
+        }
+
+        if (const MuriDiagnostic* diagnostic =
+                firstDiagnostic(analyzed.report.diagnostics, MuriKind::MultiTouch)) {
+            expect(diagnostic->detail.contains(QStringLiteral("star 1")),
+                QStringLiteral("synthetic head-star repro multitouch detail distinguishes the head star from tap 1"));
         }
 
         if (const miacode::muri::MuriPanelEntry* entry =
@@ -292,8 +298,8 @@ int main(int argc, char** argv)
                 QStringLiteral("head-star tap-on-slide repro models the affected head star as tap"));
             expect(reference->affected.headStarTapLike,
                 QStringLiteral("head-star tap-on-slide repro flags the affected helper as star-like"));
-            expect(reference->affected.line == 2 && reference->affected.col == 6,
-                QStringLiteral("head-star tap-on-slide repro anchors the affected slide at its real token"));
+            expect(reference->affected.line == 2 && reference->affected.col == 7,
+                QStringLiteral("head-star tap-on-slide repro anchors the affected helper at the synthetic head column"));
             expect(reference->cause.line == 1 && reference->cause.col == 36,
                 QStringLiteral("head-star tap-on-slide repro keeps the prior slide tail as cause"));
         }
@@ -506,6 +512,26 @@ int main(int argc, char** argv)
             QStringLiteral("dense overlap repro keeps one visible overlap entry"));
         expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::MultiTouch) == 0,
             QStringLiteral("dense overlap repro does not add multitouch"));
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(240){16}\n1-5[4:1]/1,\nE\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("head-star overlap repro chart parses"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::Overlap) == 1,
+            QStringLiteral("head-star overlap repro emits one runtime overlap diagnostic"));
+        expect(countStaticReferences(analyzed.staticReferences, MuriKind::Overlap) == 1,
+            QStringLiteral("head-star overlap repro emits one static overlap reference"));
+        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::Overlap) == 1,
+            QStringLiteral("head-star overlap repro keeps one visible overlap entry"));
+
+        if (const MuriStaticReference* reference =
+                firstStaticReference(analyzed.staticReferences, MuriKind::Overlap)) {
+            expect(reference->cause.headStarTapLike,
+                QStringLiteral("head-star overlap repro static cause keeps the helper star identity"));
+            expect(reference->cause.col == 2,
+                QStringLiteral("head-star overlap repro anchors the helper star at the synthetic head column"));
+        }
     }
 
     {
