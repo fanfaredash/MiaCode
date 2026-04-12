@@ -16,6 +16,7 @@ enum class Channel {
 
 QString timestampString();
 QString logDirectory();
+void setSessionProjectLogDirectory(const QString& directoryPath);
 QString logPath(Channel channel);
 QString runtimeLogPath();
 QString audioLogPath();

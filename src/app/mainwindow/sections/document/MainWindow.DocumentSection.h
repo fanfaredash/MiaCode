@@ -27,7 +27,7 @@ public:
     QString resolveAutosaveDirectoryPath() const;
     QString currentDocumentTextForAutosave() const;
     void pruneAutosaveFiles(const QString& autosaveDirectoryPath) const;
-    void runAutosaveCheck();
+    void runAutosaveCheck(bool allowHistory = true);
     bool onSaveFile();
     bool onSaveFileAs();
     bool saveToPath(const QString& path);
@@ -41,6 +41,7 @@ public:
     void updatePauseButtonAppearance();
     void updateDirtyState();
     bool currentFieldHasUndoChanges() const;
+    void anchorCurrentFieldCleanState();
     void refreshCurrentFieldDirtyState();
     void markCurrentFieldDirty();
     void clearDeletedDifficultyUndoState();
@@ -76,6 +77,7 @@ public:
     void activateInitialField();
     void loadDocument(const SimaiDocument& document);
     void clearTimelineAndPreview();
+    void rebuildAutosaveMetadata(const QString& autosaveDirectoryPath) const;
 
 private:
     MainWindow& owner_;

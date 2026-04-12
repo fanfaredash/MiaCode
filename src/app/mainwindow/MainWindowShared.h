@@ -51,8 +51,9 @@ inline constexpr int kEditorTextFontSizeMin = 8;
 inline constexpr int kEditorTextFontSizeMax = 28;
 inline constexpr int kWaveformPeakCount = 1024;
 inline constexpr double kEditorLineSpacingFactorDefault = 1.5;
-inline constexpr int kAutosaveIntervalMs = 15 * 60 * 1000;
-inline constexpr int kAutosaveMaxVersions = 10;
+inline constexpr int kAutosaveIntervalMs = 2 * 60 * 1000;
+inline constexpr int kAutosaveHistoryMaxVersions = 30;
+inline constexpr int kAutosaveLatestIdleMs = 2 * 1000;
 // Cap interactive preview scrub updates at <= 15 FPS so timeline dragging and
 // preview-slider dragging do not spam seek work faster than the video path can settle.
 inline constexpr int kPreviewScrubRenderIntervalMs = 67;
@@ -66,6 +67,7 @@ double steppedPreviewPlaybackRate(double rate, int direction);
 QString uiText(const QString& key, const QString& fallback);
 void centerDialogOnAnchor(QDialog* dialog, QWidget* parent);
 QByteArray autosaveContentSignature(const QString& text);
+QString resolveProjectDataDirectoryPath(const QString& filePath);
 void appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 deltaMs);
 QFont editorFont(int pointSize = -1);
 int blockSpacingPixelsForPointSize(int pointSize, double spacingFactor);

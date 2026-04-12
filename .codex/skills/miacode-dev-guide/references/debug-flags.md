@@ -15,7 +15,7 @@ The user-facing canonical doc lives at `docs/DEBUG_INDEX.md`. This file stays sh
 - Shared log directory env:
   - `MIACODE_LOG_DIR`
 - Default debug-mode fallback:
-  - app-local `logs/` directory next to the running executable when `MIACODE_LOG_DIR` and per-channel overrides are unset
+  - project-local `.miacode/logs/` once a chart file is bound, otherwise app-local `logs/` next to the running executable when `MIACODE_LOG_DIR` and per-channel overrides are unset
 - Channel-specific path overrides:
   - `MIACODE_RUNTIME_LOG_PATH`
   - `MIACODE_AUDIO_LOG_PATH`

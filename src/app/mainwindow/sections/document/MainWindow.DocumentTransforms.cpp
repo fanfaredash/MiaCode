@@ -79,7 +79,11 @@ QString MainWindow::DocumentSection::transformChartText(const QString& input, Ch
 
 void MainWindow::DocumentSection::onMirrorLeftRight()
 {
-    if (!applyBatchTransform(uiText("action.transform.mirror_lr", "Mirror Left/Right"), [this](const QString& text, int* changedCount) {
+    if (!owner_.hasActiveDifficulty()) {
+        owner_.statusBar()->showMessage("Select a difficulty field first.");
+        return;
+    }
+    if (!applySelectionBatchTransform(uiText("action.transform.mirror_lr", "Mirror Left/Right"), [this](const QString& text, int* changedCount) {
         return transformChartText(text, ChartTransformOp::MirrorLeftRight, changedCount);
     })) {
         return;
@@ -89,7 +93,11 @@ void MainWindow::DocumentSection::onMirrorLeftRight()
 
 void MainWindow::DocumentSection::onMirrorUpDown()
 {
-    if (!applyBatchTransform(uiText("action.transform.mirror_ud", "Mirror Up/Down"), [this](const QString& text, int* changedCount) {
+    if (!owner_.hasActiveDifficulty()) {
+        owner_.statusBar()->showMessage("Select a difficulty field first.");
+        return;
+    }
+    if (!applySelectionBatchTransform(uiText("action.transform.mirror_ud", "Mirror Up/Down"), [this](const QString& text, int* changedCount) {
         return transformChartText(text, ChartTransformOp::MirrorUpDown, changedCount);
     })) {
         return;
@@ -99,7 +107,11 @@ void MainWindow::DocumentSection::onMirrorUpDown()
 
 void MainWindow::DocumentSection::onRotate180()
 {
-    if (!applyBatchTransform(uiText("action.transform.rotate_180", "Rotate 180"), [this](const QString& text, int* changedCount) {
+    if (!owner_.hasActiveDifficulty()) {
+        owner_.statusBar()->showMessage("Select a difficulty field first.");
+        return;
+    }
+    if (!applySelectionBatchTransform(uiText("action.transform.rotate_180", "Rotate 180"), [this](const QString& text, int* changedCount) {
         return transformChartText(text, ChartTransformOp::Rotate180, changedCount);
     })) {
         return;
@@ -109,7 +121,11 @@ void MainWindow::DocumentSection::onRotate180()
 
 void MainWindow::DocumentSection::onRotate45CounterClockwise()
 {
-    if (!applyBatchTransform(uiText("action.transform.rotate_ccw_45", "Rotate -45"), [this](const QString& text, int* changedCount) {
+    if (!owner_.hasActiveDifficulty()) {
+        owner_.statusBar()->showMessage("Select a difficulty field first.");
+        return;
+    }
+    if (!applySelectionBatchTransform(uiText("action.transform.rotate_ccw_45", "Rotate -45"), [this](const QString& text, int* changedCount) {
         return transformChartText(text, ChartTransformOp::Rotate45CounterClockwise, changedCount);
     })) {
         return;
@@ -119,7 +135,11 @@ void MainWindow::DocumentSection::onRotate45CounterClockwise()
 
 void MainWindow::DocumentSection::onRotate45Clockwise()
 {
-    if (!applyBatchTransform(uiText("action.transform.rotate_cw_45", "Rotate +45"), [this](const QString& text, int* changedCount) {
+    if (!owner_.hasActiveDifficulty()) {
+        owner_.statusBar()->showMessage("Select a difficulty field first.");
+        return;
+    }
+    if (!applySelectionBatchTransform(uiText("action.transform.rotate_cw_45", "Rotate +45"), [this](const QString& text, int* changedCount) {
         return transformChartText(text, ChartTransformOp::Rotate45Clockwise, changedCount);
     })) {
         return;

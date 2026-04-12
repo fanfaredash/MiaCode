@@ -9,6 +9,7 @@
 #include <QApplication>
 #include <QCryptographicHash>
 #include <QDialog>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QFontDatabase>
@@ -243,6 +244,21 @@ QString uiText(const QString& key, const QString& fallback)
 QByteArray autosaveContentSignature(const QString& text)
 {
     return QCryptographicHash::hash(text.toUtf8(), QCryptographicHash::Sha256);
+}
+
+QString resolveProjectDataDirectoryPath(const QString& filePath)
+{
+    const QString normalizedPath = filePath.isEmpty() ? QString() : QDir::cleanPath(filePath);
+    if (normalizedPath.isEmpty()) {
+        return QString();
+    }
+
+    const QFileInfo fileInfo(normalizedPath);
+    const QString projectDirectoryPath = fileInfo.absolutePath();
+    if (projectDirectoryPath.isEmpty()) {
+        return QString();
+    }
+    return QDir(projectDirectoryPath).filePath(QStringLiteral(".miacode"));
 }
 
 void appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 deltaMs)

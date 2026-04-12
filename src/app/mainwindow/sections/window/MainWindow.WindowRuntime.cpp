@@ -367,6 +367,7 @@ void MainWindow::WindowSection::closeEvent(QCloseEvent* event)
 {
     this->logWindowGeometryDebug("close_event_enter");
     if (owner_.maybeSaveBeforeContinue()) {
+        owner_.runAutosaveCheck(false);
         owner_.savePortableState();
         owner_.exportSection_->clearVideoExportWorkerState();
         event->accept();

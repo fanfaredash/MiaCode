@@ -39,6 +39,7 @@
         QAction* aboutAction_ = nullptr;
         QLabel* currentFileLabel_ = nullptr;
         QTimer* autosaveTimer_ = nullptr;
+        QTimer* autosaveIdleTimer_ = nullptr;
         QTimer* qtPreviewTimer_ = nullptr;
         QTimer* qtPreviewTimelineTimer_ = nullptr;
         QTimer* previewStatsUiTimer_ = nullptr;
@@ -163,7 +164,12 @@
         QString lastOpenDir_;
         QString lastTrackPath_;
         QByteArray autosaveReferenceContentSignature_;
-        QByteArray autosaveLastContentSignature_;
+        QByteArray autosaveLastLatestContentSignature_;
+        QByteArray autosaveLastHistoryContentSignature_;
+        qint64 autosaveLastHistorySnapshotMs_ = -1;
+        qint64 autosaveDirtySinceMs_ = -1;
+        int editorUndoSaveAnchor_ = 0;
+        int metadataExtraUndoSaveAnchor_ = 0;
         int lastTimelineParseDifficultyId_ = 0;
         QString lastTimelineParseChartText_;
         miacode::simai::SimaiTimingMetadata lastTimelineParseTimingMetadata_;
@@ -368,6 +374,7 @@
     QAction*& aboutAction_ = ui_.aboutAction_;
     QLabel*& currentFileLabel_ = ui_.currentFileLabel_;
     QTimer*& autosaveTimer_ = ui_.autosaveTimer_;
+    QTimer*& autosaveIdleTimer_ = ui_.autosaveIdleTimer_;
     QTimer*& qtPreviewTimer_ = ui_.qtPreviewTimer_;
     QTimer*& qtPreviewTimelineTimer_ = ui_.qtPreviewTimelineTimer_;
     QTimer*& previewStatsUiTimer_ = ui_.previewStatsUiTimer_;
@@ -392,7 +399,12 @@
     QString& lastOpenDir_ = state_.lastOpenDir_;
     QString& lastTrackPath_ = state_.lastTrackPath_;
     QByteArray& autosaveReferenceContentSignature_ = state_.autosaveReferenceContentSignature_;
-    QByteArray& autosaveLastContentSignature_ = state_.autosaveLastContentSignature_;
+    QByteArray& autosaveLastLatestContentSignature_ = state_.autosaveLastLatestContentSignature_;
+    QByteArray& autosaveLastHistoryContentSignature_ = state_.autosaveLastHistoryContentSignature_;
+    qint64& autosaveLastHistorySnapshotMs_ = state_.autosaveLastHistorySnapshotMs_;
+    qint64& autosaveDirtySinceMs_ = state_.autosaveDirtySinceMs_;
+    int& editorUndoSaveAnchor_ = state_.editorUndoSaveAnchor_;
+    int& metadataExtraUndoSaveAnchor_ = state_.metadataExtraUndoSaveAnchor_;
     int& lastTimelineParseDifficultyId_ = state_.lastTimelineParseDifficultyId_;
     QString& lastTimelineParseChartText_ = state_.lastTimelineParseChartText_;
     miacode::simai::SimaiTimingMetadata& lastTimelineParseTimingMetadata_ = state_.lastTimelineParseTimingMetadata_;

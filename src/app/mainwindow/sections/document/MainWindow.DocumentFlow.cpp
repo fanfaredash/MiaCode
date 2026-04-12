@@ -47,6 +47,9 @@ enum class UnsavedChangesChoice {
     Cancel,
 };
 
+constexpr qint64 kAutosaveUnsetTimestampMs = -1;
+constexpr char kAutosaveMetadataSchema[] = "miacode_autosave_v2";
+
 struct PreparedDocumentOpenPayload {
     bool success = false;
     bool usedSystemEncoding = false;
@@ -144,10 +147,64 @@ UnsavedChangesChoice showUnsavedChangesDialog(QWidget* parent, const QString& ti
     return UnsavedChangesChoice::Cancel;
 }
 
+QString autosaveEntryDirectoryPathForFile(const QString& filePath)
+{
+    const QString projectDataDirectoryPath = resolveProjectDataDirectoryPath(filePath);
+    if (projectDataDirectoryPath.isEmpty()) {
+        return QString();
+    }
+
+    QString fileContainerName = QFileInfo(filePath).fileName().trimmed();
+    if (fileContainerName.isEmpty()) {
+        fileContainerName = QStringLiteral("maidata.txt");
+    }
+    return QDir(projectDataDirectoryPath).filePath(QStringLiteral("autosave/%1").arg(fileContainerName));
+}
+
+QString autosaveLatestFilePath(const QString& autosaveDirectoryPath)
+{
+    QString baseName = QFileInfo(autosaveDirectoryPath).fileName().trimmed();
+    if (baseName.isEmpty()) {
+        baseName = QStringLiteral("latest");
+    }
+    return QDir(autosaveDirectoryPath).filePath(baseName + QStringLiteral(".bak"));
+}
+
+QString autosaveHistoryDirectoryPath(const QString& autosaveDirectoryPath)
+{
+    return QDir(autosaveDirectoryPath).filePath(QStringLiteral("history"));
+}
+
+QString autosaveMetadataFilePath(const QString& autosaveDirectoryPath)
+{
+    return QDir(autosaveDirectoryPath).filePath(QStringLiteral("autosave.json"));
+}
+
+QString autosaveTimestampStringUtc(qint64 msecsSinceEpoch)
+{
+    return QDateTime::fromMSecsSinceEpoch(msecsSinceEpoch, Qt::UTC)
+        .toString(QStringLiteral("yyyy-MM-dd-HH-mm-ss"));
+}
+
+QString autosaveTimestampStringUtcNow()
+{
+    return autosaveTimestampStringUtc(QDateTime::currentDateTimeUtc().toMSecsSinceEpoch());
+}
+
+bool ensureDirectoryExists(const QString& directoryPath)
+{
+    if (directoryPath.isEmpty()) {
+        return false;
+    }
+    QDir dir(directoryPath);
+    return dir.exists() || QDir().mkpath(directoryPath);
+}
+
 }  // namespace
 
 bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
 {
+    runAutosaveCheck(false);
     if (!maybeSaveCurrentFieldChanges()) {
         return false;
     }
@@ -230,6 +287,7 @@ bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
         }
     }
 
+    anchorCurrentFieldCleanState();
     state_.currentFieldDirty_ = false;
     if (changed) {
         state_.documentDirty_ = true;
@@ -498,22 +556,15 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
 void MainWindow::DocumentSection::resetAutosaveState(const QString& referenceText)
 {
     state_.autosaveReferenceContentSignature_ = autosaveContentSignature(referenceText);
-    state_.autosaveLastContentSignature_.clear();
+    state_.autosaveLastLatestContentSignature_.clear();
+    state_.autosaveLastHistoryContentSignature_.clear();
+    state_.autosaveLastHistorySnapshotMs_ = kAutosaveUnsetTimestampMs;
+    state_.autosaveDirtySinceMs_ = kAutosaveUnsetTimestampMs;
 }
 
 QString MainWindow::DocumentSection::resolveAutosaveDirectoryPath() const
 {
-    if (state_.currentFilePath_.isEmpty()) {
-        return QString();
-    }
-
-    const QFileInfo currentFileInfo(state_.currentFilePath_);
-    const QString projectDirectoryPath = currentFileInfo.absolutePath();
-    if (projectDirectoryPath.isEmpty()) {
-        return QString();
-    }
-
-    return QDir(projectDirectoryPath).filePath(QStringLiteral(".autosave"));
+    return autosaveEntryDirectoryPathForFile(state_.currentFilePath_);
 }
 
 QString MainWindow::DocumentSection::currentDocumentTextForAutosave() const
@@ -539,42 +590,88 @@ QString MainWindow::DocumentSection::currentDocumentTextForAutosave() const
 
 void MainWindow::DocumentSection::pruneAutosaveFiles(const QString& autosaveDirectoryPath) const
 {
-    QDir autosaveDir(autosaveDirectoryPath);
-    QFileInfoList autosaveFiles = autosaveDir.entryInfoList(
-        QStringList{QStringLiteral("autosave_*.txt")},
-        QDir::Files | QDir::NoDotAndDotDot
+    QDir historyDir(autosaveHistoryDirectoryPath(autosaveDirectoryPath));
+    QFileInfoList autosaveFiles = historyDir.entryInfoList(
+        QStringList{QStringLiteral("*.bak")},
+        QDir::Files | QDir::NoDotAndDotDot,
+        QDir::Name
     );
-    if (autosaveFiles.size() <= kAutosaveMaxVersions) {
+    if (autosaveFiles.size() <= kAutosaveHistoryMaxVersions) {
         return;
     }
 
-    std::sort(
-        autosaveFiles.begin(),
-        autosaveFiles.end(),
-        [](const QFileInfo& lhs, const QFileInfo& rhs) {
-            if (lhs.lastModified() == rhs.lastModified()) {
-                return lhs.fileName() < rhs.fileName();
-            }
-            return lhs.lastModified() < rhs.lastModified();
-        }
-    );
-
-    const int removeCount = autosaveFiles.size() - kAutosaveMaxVersions;
+    const int removeCount = autosaveFiles.size() - kAutosaveHistoryMaxVersions;
     for (int index = 0; index < removeCount; ++index) {
-        autosaveDir.remove(autosaveFiles.at(index).fileName());
+        historyDir.remove(autosaveFiles.at(index).fileName());
     }
 }
 
-void MainWindow::DocumentSection::runAutosaveCheck()
+void MainWindow::DocumentSection::rebuildAutosaveMetadata(const QString& autosaveDirectoryPath) const
 {
-    if (state_.currentFilePath_.isEmpty()) {
+    if (autosaveDirectoryPath.isEmpty() || state_.currentFilePath_.isEmpty() || !ensureDirectoryExists(autosaveDirectoryPath)) {
         return;
     }
 
-    const QString snapshotText = currentDocumentTextForAutosave();
-    const QByteArray snapshotSignature = autosaveContentSignature(snapshotText);
-    if (snapshotSignature == state_.autosaveReferenceContentSignature_
-        || snapshotSignature == state_.autosaveLastContentSignature_) {
+    QJsonObject root;
+    root.insert(QStringLiteral("schema"), QString::fromLatin1(kAutosaveMetadataSchema));
+    root.insert(QStringLiteral("source_path"), QDir::cleanPath(state_.currentFilePath_));
+    root.insert(
+        QStringLiteral("source_relative_path"),
+        QFileInfo(state_.currentFilePath_).fileName()
+    );
+    root.insert(QStringLiteral("latest_file"), QFileInfo(autosaveLatestFilePath(autosaveDirectoryPath)).fileName());
+    root.insert(QStringLiteral("history_dir"), QStringLiteral("history"));
+    root.insert(QStringLiteral("history_limit"), kAutosaveHistoryMaxVersions);
+    root.insert(QStringLiteral("history_interval_ms"), kAutosaveIntervalMs);
+    root.insert(
+        QStringLiteral("saved_reference_signature"),
+        QString::fromLatin1(state_.autosaveReferenceContentSignature_.toHex())
+    );
+
+    const QString latestFilePath = autosaveLatestFilePath(autosaveDirectoryPath);
+    const QFileInfo latestInfo(latestFilePath);
+    if (latestInfo.exists() && latestInfo.isFile()) {
+        QJsonObject latest;
+        latest.insert(QStringLiteral("file"), latestInfo.fileName());
+        latest.insert(QStringLiteral("size_bytes"), static_cast<qint64>(latestInfo.size()));
+        latest.insert(QStringLiteral("modified_at"), latestInfo.lastModified().toUTC().toString(Qt::ISODateWithMs));
+        root.insert(QStringLiteral("latest"), latest);
+    }
+
+    const QString historyDirectoryPath = autosaveHistoryDirectoryPath(autosaveDirectoryPath);
+    QDir historyDir(historyDirectoryPath);
+    QFileInfoList historyFiles = historyDir.entryInfoList(
+        QStringList{QStringLiteral("*.bak")},
+        QDir::Files | QDir::NoDotAndDotDot,
+        QDir::Name
+    );
+    QJsonArray historyArray;
+    for (const QFileInfo& historyInfo : historyFiles) {
+        QJsonObject entry;
+        entry.insert(QStringLiteral("file"), QStringLiteral("history/%1").arg(historyInfo.fileName()));
+        entry.insert(QStringLiteral("size_bytes"), static_cast<qint64>(historyInfo.size()));
+        entry.insert(QStringLiteral("modified_at"), historyInfo.lastModified().toUTC().toString(Qt::ISODateWithMs));
+        historyArray.append(entry);
+    }
+    root.insert(QStringLiteral("history"), historyArray);
+    root.insert(QStringLiteral("history_count"), historyArray.size());
+    root.insert(QStringLiteral("updated_at"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
+
+    QSaveFile metadataFile(autosaveMetadataFilePath(autosaveDirectoryPath));
+    if (!metadataFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        return;
+    }
+
+    const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Indented);
+    if (metadataFile.write(payload) != payload.size()) {
+        return;
+    }
+    metadataFile.commit();
+}
+
+void MainWindow::DocumentSection::runAutosaveCheck(bool allowHistory)
+{
+    if (state_.currentFilePath_.isEmpty()) {
         return;
     }
 
@@ -583,32 +680,69 @@ void MainWindow::DocumentSection::runAutosaveCheck()
         return;
     }
 
-    QDir autosaveDir(autosaveDirectoryPath);
-    if (!autosaveDir.exists() && !autosaveDir.mkpath(QStringLiteral("."))) {
+    const QFileInfo autosaveDirectoryInfo(autosaveDirectoryPath);
+    const QString metadataFilePath = autosaveMetadataFilePath(autosaveDirectoryPath);
+    if (!QFileInfo::exists(metadataFilePath) && autosaveDirectoryInfo.exists() && autosaveDirectoryInfo.isDir()) {
+        rebuildAutosaveMetadata(autosaveDirectoryPath);
+    }
+
+    const QString snapshotText = currentDocumentTextForAutosave();
+    const QByteArray snapshotSignature = autosaveContentSignature(snapshotText);
+    if (snapshotSignature == state_.autosaveReferenceContentSignature_) {
+        state_.autosaveDirtySinceMs_ = kAutosaveUnsetTimestampMs;
         return;
     }
 
-    QString autosaveBaseName = QFileInfo(state_.currentFilePath_).completeBaseName();
-    if (autosaveBaseName.trimmed().isEmpty()) {
-        autosaveBaseName = QStringLiteral("maidata");
-    }
-    const QString autosaveFileName = QStringLiteral("autosave_%1_%2.txt")
-        .arg(
-            autosaveBaseName,
-            QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss_zzz"))
-        );
-    QSaveFile autosaveFile(autosaveDir.filePath(autosaveFileName));
-    if (!autosaveFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    if (!ensureDirectoryExists(autosaveDirectoryPath)) {
         return;
     }
 
-    const QByteArray payload = snapshotText.toUtf8();
-    if (autosaveFile.write(payload) != payload.size() || !autosaveFile.commit()) {
-        return;
+    const qint64 nowMs = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+    if (state_.autosaveDirtySinceMs_ < 0) {
+        state_.autosaveDirtySinceMs_ = nowMs;
     }
 
-    state_.autosaveLastContentSignature_ = snapshotSignature;
-    pruneAutosaveFiles(autosaveDirectoryPath);
+    const QString latestFilePath = autosaveLatestFilePath(autosaveDirectoryPath);
+    const bool latestExists = QFileInfo::exists(latestFilePath);
+    if (!latestExists || snapshotSignature != state_.autosaveLastLatestContentSignature_) {
+        QSaveFile latestFile(latestFilePath);
+        if (!latestFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            return;
+        }
+
+        const QByteArray payload = snapshotText.toUtf8();
+        if (latestFile.write(payload) != payload.size() || !latestFile.commit()) {
+            return;
+        }
+        state_.autosaveLastLatestContentSignature_ = snapshotSignature;
+    }
+
+    const qint64 historyReferenceMs = state_.autosaveLastHistorySnapshotMs_ >= 0
+        ? state_.autosaveLastHistorySnapshotMs_
+        : state_.autosaveDirtySinceMs_;
+    const bool historyDue = historyReferenceMs >= 0 && nowMs - historyReferenceMs >= kAutosaveIntervalMs;
+    if (allowHistory && historyDue && snapshotSignature != state_.autosaveLastHistoryContentSignature_) {
+        const QString historyDirectoryPath = autosaveHistoryDirectoryPath(autosaveDirectoryPath);
+        if (!ensureDirectoryExists(historyDirectoryPath)) {
+            return;
+        }
+
+        const QString historyFileName = autosaveTimestampStringUtcNow() + QStringLiteral(".bak");
+        QSaveFile historyFile(QDir(historyDirectoryPath).filePath(historyFileName));
+        if (!historyFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            return;
+        }
+
+        const QByteArray payload = snapshotText.toUtf8();
+        if (historyFile.write(payload) != payload.size() || !historyFile.commit()) {
+            return;
+        }
+        state_.autosaveLastHistoryContentSignature_ = snapshotSignature;
+        state_.autosaveLastHistorySnapshotMs_ = nowMs;
+        pruneAutosaveFiles(autosaveDirectoryPath);
+    }
+
+    rebuildAutosaveMetadata(autosaveDirectoryPath);
 }
 
 bool MainWindow::DocumentSection::onSaveFile()
@@ -672,6 +806,10 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
         owner_.setCurrentFilePath(normalizedPath);
     }
     resetAutosaveState(serialized);
+    const QString autosaveDirectoryPath = resolveAutosaveDirectoryPath();
+    if (!autosaveDirectoryPath.isEmpty()) {
+        rebuildAutosaveMetadata(autosaveDirectoryPath);
+    }
     state_.documentDirty_ = false;
     state_.currentFieldDirty_ = false;
     updateDirtyState();
@@ -882,9 +1020,9 @@ void MainWindow::pruneAutosaveFiles(const QString& autosaveDirectoryPath) const
     documentSection_->pruneAutosaveFiles(autosaveDirectoryPath);
 }
 
-void MainWindow::runAutosaveCheck()
+void MainWindow::runAutosaveCheck(bool allowHistory)
 {
-    documentSection_->runAutosaveCheck();
+    documentSection_->runAutosaveCheck(allowHistory);
 }
 
 bool MainWindow::onSaveFile()

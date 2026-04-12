@@ -693,6 +693,10 @@ void MainWindow::DocumentSection::populateMetadataPage()
     ui_.artistEdit_->setText(state_.document_.artist);
     ui_.firstEdit_->setText(state_.document_.first);
     ui_.designerEdit_->setText(state_.document_.designer);
+    ui_.titleEdit_->setModified(false);
+    ui_.artistEdit_->setModified(false);
+    ui_.firstEdit_->setModified(false);
+    ui_.designerEdit_->setModified(false);
     setMetadataExtraText(SimaiDocument::serializeRawFields(state_.document_.extraFields));
     updateMetadataPageMode();
     updateEditorHeader();
@@ -710,6 +714,7 @@ void MainWindow::DocumentSection::populateDifficultyPage(int difficultyId)
             placeholderEdit->setLeftPlaceholderText(QString("&lv_%1=").arg(difficultyId));
         }
         ui_.difficultyLevelEdit_->setText(difficultyData->level);
+        ui_.difficultyLevelEdit_->setModified(false);
     }
     if (ui_.difficultyDesignerEdit_ != nullptr) {
         QSignalBlocker blocker(ui_.difficultyDesignerEdit_);
@@ -717,6 +722,7 @@ void MainWindow::DocumentSection::populateDifficultyPage(int difficultyId)
             placeholderEdit->setLeftPlaceholderText(QString("&des_%1=").arg(difficultyId));
         }
         ui_.difficultyDesignerEdit_->setText(difficultyData->designer);
+        ui_.difficultyDesignerEdit_->setModified(false);
     }
     setEditorText(difficultyData->chart);
     updateEditorHeader();

@@ -65,7 +65,7 @@
     bool maybeSaveCurrentFieldChanges();
     bool applyCurrentFieldToDocument();
     bool saveToPath(const QString& path);
-    void runAutosaveCheck();
+    void runAutosaveCheck(bool allowHistory = true);
     QString resolveAutosaveDirectoryPath() const;
     QString currentDocumentTextForAutosave() const;
     void pruneAutosaveFiles(const QString& autosaveDirectoryPath) const;
