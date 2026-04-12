@@ -146,7 +146,12 @@ QString sortedModifierText(QString modifiers)
     return modifiers;
 }
 
-QString normalizeFractionDurationSignature(QString signature, bool allowZeroDuration)
+struct DurationNormalizationOptions {
+    bool allowZeroDuration = false;
+    bool omitZeroDurationBracket = false;
+};
+
+QString normalizeFractionDurationSignature(QString signature, const DurationNormalizationOptions& options)
 {
     if (signature.contains(QLatin1Char('#'))) {
         return signature;
@@ -164,17 +169,27 @@ QString normalizeFractionDurationSignature(QString signature, bool allowZeroDura
     if (!beatsOk || !numeratorOk || beats <= 0 || numerator < 0) {
         return signature;
     }
-    if (!allowZeroDuration && numerator == 0) {
+    if (!options.allowZeroDuration && numerator == 0) {
         return signature;
     }
 
-    const qint64 scaledGridUnits = 384ll * static_cast<qint64>(numerator);
-    if ((scaledGridUnits % beats) != 0) {
-        return signature;
+    qint64 gridUnits = 0;
+    if (numerator > 0) {
+        const qint64 scaledGridUnits = 384ll * static_cast<qint64>(numerator);
+        gridUnits = (scaledGridUnits + (beats / 2)) / beats;
     }
 
-    const qint64 gridUnits = scaledGridUnits / beats;
-    const qint64 gcd = std::gcd<qint64>(384ll, gridUnits >= 0 ? gridUnits : -gridUnits);
+    if (gridUnits <= 0) {
+        if (!options.allowZeroDuration) {
+            gridUnits = 1;
+        } else if (options.omitZeroDurationBracket) {
+            return QString();
+        } else {
+            return QStringLiteral("1:0");
+        }
+    }
+
+    const qint64 gcd = std::gcd<qint64>(384ll, gridUnits);
     if (gcd <= 0) {
         return signature;
     }
@@ -182,7 +197,7 @@ QString normalizeFractionDurationSignature(QString signature, bool allowZeroDura
     return QStringLiteral("%1:%2").arg(384ll / gcd).arg(gridUnits / gcd);
 }
 
-QString normalizeBracketDurationSignatures(const QString& text, bool allowZeroDuration)
+QString normalizeBracketDurationSignatures(const QString& text, const DurationNormalizationOptions& options)
 {
     QString normalized;
     normalized.reserve(text.size());
@@ -202,11 +217,14 @@ QString normalizeBracketDurationSignatures(const QString& text, bool allowZeroDu
             break;
         }
 
-        normalized.append(QLatin1Char('['));
-        normalized.append(normalizeFractionDurationSignature(
+        const QString normalizedSignature = normalizeFractionDurationSignature(
             text.mid(openBracket + 1, closeBracket - openBracket - 1),
-            allowZeroDuration));
-        normalized.append(QLatin1Char(']'));
+            options);
+        if (!normalizedSignature.isEmpty()) {
+            normalized.append(QLatin1Char('['));
+            normalized.append(normalizedSignature);
+            normalized.append(QLatin1Char(']'));
+        }
         cursor = closeBracket + 1;
     }
 
@@ -381,7 +399,9 @@ QString buildTouchToken(const TouchTokenParts& parts)
     if (parts.hasFirework) {
         token.append(QLatin1Char('f'));
     }
-    token.append(normalizeBracketDurationSignatures(parts.bracketSuffix, true));
+    token.append(normalizeBracketDurationSignatures(
+        parts.bracketSuffix,
+        DurationNormalizationOptions{true, false}));
     return token;
 }
 
@@ -400,7 +420,9 @@ QString buildNoteToken(const NoteTokenParts& parts)
     if (parts.hasHold) {
         token.append(QLatin1Char('h'));
     }
-    token.append(normalizeBracketDurationSignatures(parts.bracketSuffix, true));
+    token.append(normalizeBracketDurationSignatures(
+        parts.bracketSuffix,
+        DurationNormalizationOptions{true, true}));
     return token;
 }
 
@@ -408,7 +430,7 @@ QString buildSlideToken(const SlideTokenParts& parts)
 {
     const QString normalizedCoreWithoutTrackBreak = normalizeBracketDurationSignatures(
         parts.coreWithoutTrackBreak,
-        false);
+        DurationNormalizationOptions{false, false});
     QString token;
     token.reserve(normalizedCoreWithoutTrackBreak.size() + parts.headExtraModifiers.size() + 3);
     token.append(normalizedCoreWithoutTrackBreak.at(0));

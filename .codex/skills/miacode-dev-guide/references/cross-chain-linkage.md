@@ -70,6 +70,7 @@ Current contract:
 - `MainWindow::currentTimingMetadata` reads live metadata text from the metadata editor when available, so unsaved `&whole_time_signature=` edits still affect validation and timeline refresh.
 - `parsedLatencyMeterId` now reads the effective chart default meter from timing metadata for latency-detector defaults; latency detection still writes `&first` and `&wholebpm`, but it no longer writes meter metadata back into the chart.
 - Any caller that uses `SimaiNativeParser::parseForTimeline` or `buildValidationReport` should pass timing metadata when document metadata is available, or fast/slow preview, export, and tooling timelines will drift.
+- Quick-timeline token parsing should stay aligned with parser note legality for timeline-visible syntax, including bare zero-duration `h` holds; if parser and quick-model note acceptance diverge, the editor timeline can silently drop notes that preview/export still keep.
 
 If you change timing-metadata semantics, review all of:
 

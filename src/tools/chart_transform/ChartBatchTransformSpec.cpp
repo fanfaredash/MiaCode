@@ -1025,8 +1025,35 @@ void runInlineSpecs(QTextStream& err, int* failed)
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart reduces hold and slide durations to the 384 grid"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("{16}A1xhf[4:1]/1h[1:0]/1-5[8:1]/1-5[120#24:3],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("{16}A1xhf[4:1]/1h/1-5[8:1]/1-5[120#24:3],,,, ,,,, ,,,, ,,,,\nE"),
             QStringLiteral("normalize whole chart reduces no-hash durations while preserving # timing syntax"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(
+                QStringLiteral("{16}2h[2000:1],7h[2000:1],3h[2000:1],6h[2000:1], 1h[2000:1],5h[2000:1],8h[2000:1],4h[2000:1], 7h[2000:1]/3h[2000:1],8h[2000:1]/4h[2000:1],5h[2000:1]/1h[2000:1],2h[2000:1]/6h[2000:1], 3h[2000:1]/7-3[1:3],8h[2000:1]/4h[2000:1],5h[2000:1]/1h[2000:1],6h[2000:1]/2h[2000:1],\nE"));
+        expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts the reported dense hold fragment"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16}2h,7h,3h,6h, 1h,5h,8h,4h, 7h/3h,8h/4h,5h/1h,2h/6h, 3h/7-3[1:3],8h/4h,5h/1h,6h/2h,\nE"),
+            QStringLiteral("normalize whole chart snaps irreducible hold durations onto the 384 grid and collapses zero-length holds"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(QStringLiteral("1h[500:1]/1-5[500:1]/1-5[2000:1],,,,\nE"));
+        expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts irreducible hold and slide durations"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16}1h[384:1]/1-5[384:1]/1-5[384:1],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize whole chart rounds irreducible durations to the nearest valid 384-grid form while keeping slide durations non-zero"),
             failed,
             err
         );

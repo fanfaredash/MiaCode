@@ -31,7 +31,7 @@ function Read-VersionInfoFromCMake {
     $displayVersion = $baseVersion
     $displayPrerelease = [regex]::Match($content, 'set\(MIACODE_DISPLAY_PRERELEASE\s+"([^"]*)"').Groups[1].Value
     if (![string]::IsNullOrWhiteSpace($displayPrerelease)) {
-        $displayVersion = "$displayVersion.$displayPrerelease"
+        $displayVersion = "$displayVersion-$displayPrerelease"
     }
 
     return [PSCustomObject]@{

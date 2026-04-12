@@ -1598,11 +1598,11 @@ bool TimelineQuickModel::parseNoteToken(
 
     if (hasHold) {
         note.kind = TimelineRenderNoteKind::Hold;
-        if (!hasBracket) {
-            return false;
+        double durationSecond = 0.0;
+        bool ok = true;
+        if (hasBracket) {
+            durationSecond = parseHoldDurationSignature(tokenInsideBrackets(token), state->bpm, &ok);
         }
-        bool ok = false;
-        const double durationSecond = parseHoldDurationSignature(tokenInsideBrackets(token), state->bpm, &ok);
         if (!ok) {
             return false;
         }
