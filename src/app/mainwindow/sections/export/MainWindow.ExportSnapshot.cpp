@@ -1,4 +1,4 @@
-#include "../../MainWindow.h"
+#include "MainWindow.ExportSection.h"
 #include "../../MainWindowShared.h"
 
 #include "DialogLocalization.h"
@@ -293,7 +293,7 @@ QString localizeExportWorkerMessageForUiLanguage(const QString& rawMessage)
 
 }  // namespace
 
-bool MainWindow::buildVideoExportSnapshot(
+bool MainWindow::ExportSection::buildVideoExportSnapshot(
     const VideoExportTask& requestedTask,
     VideoExportSnapshot* snapshot,
     QString* errorMessage
@@ -305,21 +305,21 @@ bool MainWindow::buildVideoExportSnapshot(
         }
         return false;
     }
-    if (!hasActiveDifficulty()) {
+    if (!owner_.hasActiveDifficulty()) {
         if (errorMessage != nullptr) {
             *errorMessage = uiText("dialog.video_export.error.no_difficulty", "No active difficulty is selected.");
         }
         return false;
     }
-    if (!applyCurrentFieldToDocument()) {
+    if (!owner_.applyCurrentFieldToDocument()) {
         if (errorMessage != nullptr) {
             *errorMessage = uiText("dialog.video_export.error.sync_failed", "Failed to sync current editor state.");
         }
         return false;
     }
 
-    refreshTimelineMetadata();
-    if (latestTimelineNoteMarkers_.isEmpty()) {
+    owner_.refreshTimelineMetadata();
+    if (owner_.latestTimelineNoteMarkers_.isEmpty()) {
         if (errorMessage != nullptr) {
             *errorMessage = uiText("dialog.video_export.error.no_markers", "No parsed note markers are available for export.");
         }
@@ -329,17 +329,17 @@ bool MainWindow::buildVideoExportSnapshot(
     VideoExportSnapshot built;
     built.jobId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     built.createdAtUtc = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
-    built.chartTextUtf8 = document_.toText();
-    built.difficultyId = activeDifficultyId_;
-    built.difficultyName = SimaiDocument::difficultyShortName(activeDifficultyId_);
-    built.originalChartPath = currentFilePath_;
-    built.projectDir = currentFilePath_.isEmpty()
+    built.chartTextUtf8 = owner_.document_.toText();
+    built.difficultyId = owner_.activeDifficultyId_;
+    built.difficultyName = SimaiDocument::difficultyShortName(owner_.activeDifficultyId_);
+    built.originalChartPath = owner_.currentFilePath_;
+    built.projectDir = owner_.currentFilePath_.isEmpty()
         ? QString()
-        : QFileInfo(currentFilePath_).absolutePath();
-    built.trackPath = resolveDefaultTrackPath();
-    built.backgroundMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(currentFilePath_);
-    built.skinDirectory = resolvePreviewSkinDir();
-    built.audioSettings = previewAudioSettings_;
+        : QFileInfo(owner_.currentFilePath_).absolutePath();
+    built.trackPath = owner_.resolveDefaultTrackPath();
+    built.backgroundMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(owner_.currentFilePath_);
+    built.skinDirectory = owner_.resolvePreviewSkinDir();
+    built.audioSettings = owner_.previewAudioSettings_;
     built.audioSettings.normalize();
     built.backgroundBrightnessOuter = requestedTask.backgroundBrightnessOuter;
     built.backgroundBrightnessInner = requestedTask.backgroundBrightnessInner;
@@ -357,8 +357,8 @@ bool MainWindow::buildVideoExportSnapshot(
     built.fps = requestedTask.fps;
     built.preset = requestedTask.preset;
     built.fullRangeExport = requestedTask.fullRangeExport;
-    const QString exportStem = sanitizeExportFileStem(document_.title, QStringLiteral("out"));
-    const QString difficultyName = SimaiDocument::difficultyShortName(activeDifficultyId_).replace(':', '_');
+    const QString exportStem = sanitizeExportFileStem(owner_.document_.title, QStringLiteral("out"));
+    const QString difficultyName = SimaiDocument::difficultyShortName(owner_.activeDifficultyId_).replace(':', '_');
     const QString defaultOutputName = QStringLiteral("%1_%2.mp4").arg(exportStem, difficultyName);
     built.outputPath = resolveVideoExportOutputPath(
         requestedTask.outputPath,
@@ -380,7 +380,7 @@ bool MainWindow::buildVideoExportSnapshot(
     return true;
 }
 
-bool MainWindow::buildVideoExportSnapshotForChartDirectory(
+bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
     const QString& chartDirectory,
     int difficultyId,
     const QString& difficultyToken,
@@ -533,7 +533,7 @@ bool MainWindow::buildVideoExportSnapshotForChartDirectory(
     built.projectDir = QFileInfo(chartPath).absolutePath();
     built.trackPath = trackPath;
     built.backgroundMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(chartPath);
-    built.skinDirectory = resolvePreviewSkinDir();
+    built.skinDirectory = owner_.resolvePreviewSkinDir();
     built.audioSettings = requestedTask.audioSettings;
     built.audioSettings.normalize();
     built.backgroundBrightnessOuter = requestedTask.backgroundBrightnessOuter;
@@ -576,7 +576,7 @@ bool MainWindow::buildVideoExportSnapshotForChartDirectory(
 }
 
 
-bool MainWindow::exportPreviewVideoFromCli(
+bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     const CliVideoExportRequest& request,
     QString* resolvedOutputPath,
     QString* errorMessage,
@@ -624,9 +624,9 @@ bool MainWindow::exportPreviewVideoFromCli(
         return fail(QStringLiteral("failed to read chart file"), chartPath);
     }
 
-    setCurrentFilePath(chartPath);
-    loadDocument(SimaiDocument::fromText(chartText));
-    refreshWaveformCache();
+    owner_.setCurrentFilePath(chartPath);
+    owner_.loadDocument(SimaiDocument::fromText(chartText));
+    owner_.refreshWaveformCache();
 
     const int difficultyId = difficultyIdFromCliToken(request.difficulty);
     if (!SimaiDocument::isDifficultyId(difficultyId)) {
@@ -636,9 +636,9 @@ bool MainWindow::exportPreviewVideoFromCli(
         );
     }
 
-    if (document_.difficulty(difficultyId) == nullptr) {
+    if (owner_.document_.difficulty(difficultyId) == nullptr) {
         QStringList available;
-        const QVector<int> ids = document_.difficultyIds();
+        const QVector<int> ids = owner_.document_.difficultyIds();
         available.reserve(ids.size());
         for (int id : ids) {
             available.append(SimaiDocument::difficultyShortName(id));
@@ -650,22 +650,22 @@ bool MainWindow::exportPreviewVideoFromCli(
                 .arg(available.join(','))
         );
     }
-    if (!switchToDifficultyField(difficultyId)) {
+    if (!owner_.switchToDifficultyField(difficultyId)) {
         return fail(QStringLiteral("failed to switch to requested difficulty"));
     }
 
-    refreshTimelineMetadata();
-    if (latestTimelineNoteMarkers_.isEmpty()) {
+    owner_.refreshTimelineMetadata();
+    if (owner_.latestTimelineNoteMarkers_.isEmpty()) {
         return fail(QStringLiteral("no parsed note markers for requested difficulty"));
     }
 
-    const QString previewSkinDir = resolvePreviewSkinDir();
+    const QString previewSkinDir = owner_.resolvePreviewSkinDir();
     if (previewSkinDir.trimmed().isEmpty()) {
         return fail(QStringLiteral("preview skin directory is empty"));
     }
 
-    const QFileInfo chartInfo(currentFilePath_);
-    const QString exportStem = sanitizeExportFileStem(document_.title, QStringLiteral("out"));
+    const QFileInfo chartInfo(owner_.currentFilePath_);
+    const QString exportStem = sanitizeExportFileStem(owner_.document_.title, QStringLiteral("out"));
     const QString difficultyName = SimaiDocument::difficultyShortName(difficultyId).replace(':', '_');
     const QString defaultOutputName = QString("%1_%2.mp4")
         .arg(exportStem)
@@ -696,12 +696,12 @@ bool MainWindow::exportPreviewVideoFromCli(
         return qMax(0.0, markerEnd);
     };
     double lastMarkerEndSecond = 0.0;
-    for (const TimelineNoteMarker& marker : latestTimelineNoteMarkers_) {
+    for (const TimelineNoteMarker& marker : owner_.latestTimelineNoteMarkers_) {
         lastMarkerEndSecond = qMax(lastMarkerEndSecond, previewMarkerEndSecond(marker));
     }
     const double cappedExportEndSecond = qMax(
         0.0,
-        qMin(previewDurationSeconds(), lastMarkerEndSecond + 3.0)
+        qMin(owner_.previewDurationSeconds(), lastMarkerEndSecond + 3.0)
     );
     const double maxDuration = qMax(0.0, cappedExportEndSecond - exportStartSeconds);
     const double contentDurationSeconds = request.contentDurationSeconds > 0.0
@@ -720,14 +720,14 @@ bool MainWindow::exportPreviewVideoFromCli(
     }
 
     VideoExportTask task;
-    task.chartPath = currentFilePath_;
-    task.trackPath = resolveDefaultTrackPath();
+    task.chartPath = owner_.currentFilePath_;
+    task.trackPath = owner_.resolveDefaultTrackPath();
     task.skinDirectory = previewSkinDir;
-    task.noteMarkers = latestTimelineNoteMarkers_;
-    task.muriAnalysisReport = muriAnalysisReport_;
-    task.muriRenderOptions = muriRenderOptions_;
-    task.staticTapOnSlideThresholdSeconds = static_cast<double>(staticTapOnSlideThresholdMs_) / 1000.0;
-    task.audioSettings = previewAudioSettings_;
+    task.noteMarkers = owner_.latestTimelineNoteMarkers_;
+    task.muriAnalysisReport = owner_.muriAnalysisReport_;
+    task.muriRenderOptions = owner_.muriRenderOptions_;
+    task.staticTapOnSlideThresholdSeconds = static_cast<double>(owner_.staticTapOnSlideThresholdMs_) / 1000.0;
+    task.audioSettings = owner_.previewAudioSettings_;
     task.backgroundBrightnessOuter = request.backgroundBrightnessOuter;
     task.backgroundBrightnessInner = request.backgroundBrightnessInner;
     task.layoutSquareScale = request.layoutSquareScale;
@@ -758,7 +758,7 @@ bool MainWindow::exportPreviewVideoFromCli(
         detailLines << QStringLiteral("chart=%1").arg(chartPath);
         detailLines << QStringLiteral("difficulty=%1").arg(SimaiDocument::difficultyShortName(difficultyId));
         detailLines << QStringLiteral("encoding=%1").arg(usedSystemEncoding ? QStringLiteral("system") : QStringLiteral("utf8"));
-        detailLines << QStringLiteral("noteCount=%1").arg(latestTimelineNoteMarkers_.size());
+        detailLines << QStringLiteral("noteCount=%1").arg(owner_.latestTimelineNoteMarkers_.size());
         detailLines << QStringLiteral("trackPath=%1").arg(task.trackPath.isEmpty() ? QStringLiteral("(none)") : task.trackPath);
         detailLines << QStringLiteral("skinLoaded=%1").arg(previewSkinDir.isEmpty() ? 0 : 1);
         *details = detailLines.join('\n');

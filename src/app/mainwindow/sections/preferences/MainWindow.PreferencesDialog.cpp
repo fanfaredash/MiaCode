@@ -1,5 +1,6 @@
 ﻿#include "MainWindow.PreferencesSection.h"
 #include "../../MainWindowShared.h"
+#include "../window/MainWindow.WindowSection.h"
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
@@ -45,7 +46,7 @@ void MainWindow::PreferencesSection::onPreferences()
     dialog.setModal(true);
     dialog.setMinimumWidth(400);
     dialog.setStyleSheet(UiTheme::preferencesDialogStyleSheet());
-    owner_.applySystemWindowBackdrop(&dialog);
+    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
     UiDialogs::prepareDialogWindow(&dialog, &owner_);
 
     auto* rootLayout = new QVBoxLayout(&dialog);
@@ -293,7 +294,7 @@ void MainWindow::PreferencesSection::onPreferences()
     }
     if (themeChanged) {
         UiText::setPreferredTheme(selectedThemePreference);
-        owner_.applyUiTheme();
+        owner_.windowSection_->applyUiTheme();
         owner_.statusBar()->showMessage(uiText("status.preferences_updated", "Preferences updated."));
     }
     if (languageChanged) {

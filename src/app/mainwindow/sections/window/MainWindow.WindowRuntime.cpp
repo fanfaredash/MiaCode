@@ -1,4 +1,4 @@
-#include "../../MainWindow.h"
+#include "MainWindow.WindowSection.h"
 #include "../../MainWindowShared.h"
 
 #include "../dialogs/MainWindow.DialogsSection.h"
@@ -10,7 +10,6 @@
 #include "../preview/MainWindow.PreviewSection.h"
 #include "../timeline/MainWindow.TimelineSection.h"
 #include "../validation/MainWindow.ValidationSection.h"
-#include "MainWindow.WindowSection.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "UiText.h"
@@ -199,12 +198,12 @@ MainWindow::~MainWindow()
     shutdownPreviewStageMediaHost();
 }
 
-void MainWindow::configureRuntimeDebugOutput()
+void MainWindow::WindowSection::configureRuntimeDebugOutput()
 {
-    runtimeDebugOutputEnabled_ = miacode::debug_options::runtimeDebugOutputEnabled();
+    owner_.runtimeDebugOutputEnabled_ = miacode::debug_options::runtimeDebugOutputEnabled();
 }
 
-void MainWindow::setupInitialWindowGeometry()
+void MainWindow::WindowSection::setupInitialWindowGeometry()
 {
     QSize initialSize(
         miacode::window_parity::kInitialWindowWidth,
@@ -220,14 +219,14 @@ void MainWindow::setupInitialWindowGeometry()
             initialSize.height(),
             qMax(miacode::window_parity::kInitialWindowFloorHeight, workArea.height() - 120)
         ));
-        resize(initialSize);
-        move(workArea.center() - QPoint(width() / 2, height() / 2));
+        owner_.resize(initialSize);
+        owner_.move(workArea.center() - QPoint(owner_.width() / 2, owner_.height() / 2));
         return;
     }
-    resize(initialSize);
+    owner_.resize(initialSize);
 }
 
-QString MainWindow::formatWindowStateFlags(Qt::WindowStates states) const
+QString MainWindow::WindowSection::formatWindowStateFlags(Qt::WindowStates states) const
 {
     QStringList flags;
     if (states.testFlag(Qt::WindowMinimized)) {
@@ -248,22 +247,22 @@ QString MainWindow::formatWindowStateFlags(Qt::WindowStates states) const
     return flags.join('|');
 }
 
-void MainWindow::logWindowGeometryDebug(const QString& tag, const QString& detail)
+void MainWindow::WindowSection::logWindowGeometryDebug(const QString& tag, const QString& detail)
 {
-    if (!runtimeDebugOutputEnabled_) {
+    if (!owner_.runtimeDebugOutputEnabled_) {
         return;
     }
 
-    const QRect clientRect = geometry();
-    const QRect frameRect = frameGeometry();
-    const Qt::WindowStates states = windowState();
+    const QRect clientRect = owner_.geometry();
+    const QRect frameRect = owner_.frameGeometry();
+    const Qt::WindowStates states = owner_.windowState();
 
     QString payload = QString(
         "seq=%1 tag=%2 geom=[%3,%4 %5x%6] frame=[%7,%8 %9x%10] state=%11 "
         "active=%12 visible=%13 minimized=%14 maximized=%15 fullscreen=%16 "
         "suspend_depth=%17 arrange_gen=%18 arrange_retry=%19"
     )
-        .arg(++windowEventDebugSequence_)
+        .arg(++owner_.windowEventDebugSequence_)
         .arg(tag)
         .arg(clientRect.left())
         .arg(clientRect.top())
@@ -273,12 +272,12 @@ void MainWindow::logWindowGeometryDebug(const QString& tag, const QString& detai
         .arg(frameRect.top())
         .arg(frameRect.width())
         .arg(frameRect.height())
-        .arg(formatWindowStateFlags(states))
-        .arg(isActiveWindow() ? 1 : 0)
-        .arg(isVisible() ? 1 : 0)
-        .arg(isMinimized() ? 1 : 0)
-        .arg(isMaximized() ? 1 : 0)
-        .arg(isFullScreen() ? 1 : 0)
+        .arg(this->formatWindowStateFlags(states))
+        .arg(owner_.isActiveWindow() ? 1 : 0)
+        .arg(owner_.isVisible() ? 1 : 0)
+        .arg(owner_.isMinimized() ? 1 : 0)
+        .arg(owner_.isMaximized() ? 1 : 0)
+        .arg(owner_.isFullScreen() ? 1 : 0)
         .arg(0)
         .arg(0)
         .arg(0);
@@ -288,7 +287,7 @@ void MainWindow::logWindowGeometryDebug(const QString& tag, const QString& detai
     }
 
 #ifdef Q_OS_WIN
-    const HWND selfHwnd = reinterpret_cast<HWND>(winId());
+    const HWND selfHwnd = reinterpret_cast<HWND>(owner_.winId());
     const HWND foregroundHwnd = GetForegroundWindow();
     const HWND foregroundOwner = foregroundHwnd != nullptr ? GetWindow(foregroundHwnd, GW_OWNER) : nullptr;
     const HWND foregroundRootOwner = foregroundHwnd != nullptr ? GetAncestor(foregroundHwnd, GA_ROOTOWNER) : nullptr;
@@ -313,12 +312,12 @@ void MainWindow::logWindowGeometryDebug(const QString& tag, const QString& detai
     }
 #endif
 
-    appendOutput("window/event", payload);
+    this->appendOutput("window/event", payload);
 }
 
-void MainWindow::logTopLevelWindowSnapshot(const QString& tag)
+void MainWindow::WindowSection::logTopLevelWindowSnapshot(const QString& tag)
 {
-    if (!runtimeDebugOutputEnabled_) {
+    if (!owner_.runtimeDebugOutputEnabled_) {
         return;
     }
 
@@ -353,7 +352,7 @@ void MainWindow::logTopLevelWindowSnapshot(const QString& tag)
                 .arg(window->isVisible() ? 1 : 0)
                 .arg(window->isActiveWindow() ? 1 : 0)
                 .arg(window->isModal() ? 1 : 0)
-                .arg(formatWindowStateFlags(window->windowState()))
+                .arg(this->formatWindowStateFlags(window->windowState()))
                 .arg(geom.left())
                 .arg(geom.top())
                 .arg(geom.width())
@@ -361,74 +360,74 @@ void MainWindow::logTopLevelWindowSnapshot(const QString& tag)
                 .arg(nativeDetail)
         );
     }
-    appendOutput("window/top_levels", lines.join('\n'));
+    this->appendOutput("window/top_levels", lines.join('\n'));
 }
 
-void MainWindow::closeEvent(QCloseEvent* event)
+void MainWindow::WindowSection::closeEvent(QCloseEvent* event)
 {
-    logWindowGeometryDebug("close_event_enter");
-    if (maybeSaveBeforeContinue()) {
-        savePortableState();
-        clearVideoExportWorkerState();
+    this->logWindowGeometryDebug("close_event_enter");
+    if (owner_.maybeSaveBeforeContinue()) {
+        owner_.savePortableState();
+        owner_.exportSection_->clearVideoExportWorkerState();
         event->accept();
-        logWindowGeometryDebug("close_event_accept");
+        this->logWindowGeometryDebug("close_event_accept");
     } else {
         event->ignore();
-        logWindowGeometryDebug("close_event_ignore");
+        this->logWindowGeometryDebug("close_event_ignore");
     }
 }
 
-void MainWindow::appendOutput(const QString& title, const QString& payload)
+void MainWindow::WindowSection::appendOutput(const QString& title, const QString& payload)
 {
-    if (!runtimeDebugOutputEnabled_) {
+    if (!owner_.runtimeDebugOutputEnabled_) {
         return;
     }
     miacode::debug_log::appendText(
         miacode::debug_log::Channel::Runtime,
         timestampLine(title) + QStringLiteral("\n") + payload + QStringLiteral("\n")
     );
-    if (outputView_ == nullptr) {
+    if (owner_.outputView_ == nullptr) {
         return;
     }
-    outputView_->appendPlainText(timestampLine(title));
-    outputView_->appendPlainText(payload);
-    outputView_->appendPlainText(QString());
+    owner_.outputView_->appendPlainText(timestampLine(title));
+    owner_.outputView_->appendPlainText(payload);
+    owner_.outputView_->appendPlainText(QString());
 }
 
-QList<QAction*> MainWindow::quickShellShortcutActions() const
+QList<QAction*> MainWindow::WindowSection::quickShellShortcutActions() const
 {
     return {
-        newAction_,
-        openAction_,
-        saveAction_,
-        saveAsAction_,
-        findReplaceAction_,
-        validateAction_,
-        transformMirrorLeftRightAction_,
-        transformMirrorUpDownAction_,
-        transformRotate180Action_,
-        transformRotate45CounterClockwiseAction_,
-        transformRotate45ClockwiseAction_,
-        normalizeWholeChartAction_,
-        transformToggleBreakAction_,
-        transformToggleExAction_,
-        transformToggleFireworkAction_,
-        transformRandomRotateAction_,
-        stopPreviewAction_,
-        pausePreviewAction_,
-        previewSlowerAction_,
-        previewFasterAction_,
-        exportVideoAction_,
-        latencyDetectorAction_,
-        previewAudioSettingsAction_,
-        previewVideoSettingsAction_,
-        swapWorkspaceSidesAction_,
-        preferencesAction_,
-        aboutAction_,
+        owner_.newAction_,
+        owner_.openAction_,
+        owner_.saveAction_,
+        owner_.saveAsAction_,
+        owner_.findReplaceAction_,
+        owner_.validateAction_,
+        owner_.transformMirrorLeftRightAction_,
+        owner_.transformMirrorUpDownAction_,
+        owner_.transformRotate180Action_,
+        owner_.transformRotate45CounterClockwiseAction_,
+        owner_.transformRotate45ClockwiseAction_,
+        owner_.normalizeWholeChartAction_,
+        owner_.transformToggleBreakAction_,
+        owner_.transformToggleExAction_,
+        owner_.transformToggleFireworkAction_,
+        owner_.transformRandomRotateAction_,
+        owner_.stopPreviewAction_,
+        owner_.pausePreviewAction_,
+        owner_.previewSlowerAction_,
+        owner_.previewFasterAction_,
+        owner_.exportVideoAction_,
+        owner_.latencyDetectorAction_,
+        owner_.previewAudioSettingsAction_,
+        owner_.previewVideoSettingsAction_,
+        owner_.swapWorkspaceSidesAction_,
+        owner_.preferencesAction_,
+        owner_.aboutAction_,
     };
 }
 
-void MainWindow::refreshQuickShellRehostedWidgetParent(QWidget* widget)
+void MainWindow::WindowSection::refreshQuickShellRehostedWidgetParent(QWidget* widget)
 {
     if (widget == nullptr) {
         return;
@@ -454,28 +453,28 @@ void MainWindow::refreshQuickShellRehostedWidgetParent(QWidget* widget)
     }
 }
 
-void MainWindow::setInvalidStarPreviewEasterEggEnabled(bool enabled)
+void MainWindow::WindowSection::setInvalidStarPreviewEasterEggEnabled(bool enabled)
 {
-    if (invalidStarPreviewEasterEggEnabled_ == enabled) {
+    if (owner_.invalidStarPreviewEasterEggEnabled_ == enabled) {
         return;
     }
-    invalidStarPreviewEasterEggEnabled_ = enabled;
+    owner_.invalidStarPreviewEasterEggEnabled_ = enabled;
     SimaiNativeParser::setInvalidStarPreviewEnabled(enabled);
-    refreshTimelineMetadata();
-    playInvalidStarPreviewEasterEggSound(enabled);
+    owner_.refreshTimelineMetadata();
+    this->playInvalidStarPreviewEasterEggSound(enabled);
 }
 
-void MainWindow::ensureInvalidStarPreviewEasterEggSounds()
+void MainWindow::WindowSection::ensureInvalidStarPreviewEasterEggSounds()
 {
-    if (invalidStarPreviewEnableSound_ == nullptr) {
-        invalidStarPreviewEnableSound_ = new QSoundEffect(this);
-        invalidStarPreviewEnableSound_->setLoopCount(1);
-        invalidStarPreviewEnableSound_->setVolume(0.45f);
+    if (owner_.invalidStarPreviewEnableSound_ == nullptr) {
+        owner_.invalidStarPreviewEnableSound_ = new QSoundEffect(&owner_);
+        owner_.invalidStarPreviewEnableSound_->setLoopCount(1);
+        owner_.invalidStarPreviewEnableSound_->setVolume(0.45f);
     }
-    if (invalidStarPreviewDisableSound_ == nullptr) {
-        invalidStarPreviewDisableSound_ = new QSoundEffect(this);
-        invalidStarPreviewDisableSound_->setLoopCount(1);
-        invalidStarPreviewDisableSound_->setVolume(0.45f);
+    if (owner_.invalidStarPreviewDisableSound_ == nullptr) {
+        owner_.invalidStarPreviewDisableSound_ = new QSoundEffect(&owner_);
+        owner_.invalidStarPreviewDisableSound_->setLoopCount(1);
+        owner_.invalidStarPreviewDisableSound_->setVolume(0.45f);
     }
 
     const QString sfxDir = miacode::preview_sfx::resolveSfxDirectory();
@@ -485,18 +484,18 @@ void MainWindow::ensureInvalidStarPreviewEasterEggSounds()
     const QUrl forwardUrl = QFileInfo::exists(forwardPath) ? QUrl::fromLocalFile(forwardPath) : QUrl();
     const QUrl reverseUrl = QFileInfo::exists(reversePath) ? QUrl::fromLocalFile(reversePath) : QUrl();
 
-    if (invalidStarPreviewDisableSound_->source() != forwardUrl) {
-        invalidStarPreviewDisableSound_->setSource(forwardUrl);
+    if (owner_.invalidStarPreviewDisableSound_->source() != forwardUrl) {
+        owner_.invalidStarPreviewDisableSound_->setSource(forwardUrl);
     }
-    if (invalidStarPreviewEnableSound_->source() != reverseUrl) {
-        invalidStarPreviewEnableSound_->setSource(reverseUrl);
+    if (owner_.invalidStarPreviewEnableSound_->source() != reverseUrl) {
+        owner_.invalidStarPreviewEnableSound_->setSource(reverseUrl);
     }
 }
 
-void MainWindow::playInvalidStarPreviewEasterEggSound(bool enabled)
+void MainWindow::WindowSection::playInvalidStarPreviewEasterEggSound(bool enabled)
 {
-    ensureInvalidStarPreviewEasterEggSounds();
-    QSoundEffect* effect = enabled ? invalidStarPreviewEnableSound_ : invalidStarPreviewDisableSound_;
+    this->ensureInvalidStarPreviewEasterEggSounds();
+    QSoundEffect* effect = enabled ? owner_.invalidStarPreviewEnableSound_ : owner_.invalidStarPreviewDisableSound_;
     if (effect == nullptr || effect->source().isEmpty()) {
         return;
     }

@@ -1,4 +1,4 @@
-#include "../../MainWindow.h"
+#include "MainWindow.WindowSection.h"
 #include "../../MainWindowShared.h"
 
 #include "PlainCodeEditor.h"
@@ -22,114 +22,114 @@ constexpr int kEditorFindBarOverlayGap = 8;
 
 }  // namespace
 
-bool MainWindow::eventFilter(QObject* watched, QEvent* event)
+bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
 {
-    if (editorFindGeometryHost_ != nullptr
-        && watched == editorFindGeometryHost_
+    if (owner_.editorFindGeometryHost_ != nullptr
+        && watched == owner_.editorFindGeometryHost_
         && event != nullptr
         && event->type() == QEvent::Resize) {
-        updateEditorFindBarGeometry();
-        applyFindOverlayInset();
+        this->updateEditorFindBarGeometry();
+        this->applyFindOverlayInset();
     }
-    if (bottomTabs_ != nullptr && watched == bottomTabs_->tabBar() && event->type() == QEvent::Wheel) {
+    if (owner_.bottomTabs_ != nullptr && watched == owner_.bottomTabs_->tabBar() && event->type() == QEvent::Wheel) {
         return true;
     }
-    if (exportVideoButton_ != nullptr && watched == exportVideoButton_) {
+    if (owner_.exportVideoButton_ != nullptr && watched == owner_.exportVideoButton_) {
         if (event->type() == QEvent::Enter || event->type() == QEvent::HoverEnter || event->type() == QEvent::MouseMove) {
-            if (exportVideoHoverMenuTimer_ != nullptr && !QApplication::mouseButtons().testAnyFlag(Qt::AllButtons)) {
-                exportVideoHoverMenuTimer_->start();
+            if (owner_.exportVideoHoverMenuTimer_ != nullptr && !QApplication::mouseButtons().testAnyFlag(Qt::AllButtons)) {
+                owner_.exportVideoHoverMenuTimer_->start();
             }
         } else if (event->type() == QEvent::Leave
                    || event->type() == QEvent::MouseButtonPress
                    || event->type() == QEvent::Hide) {
-            if (exportVideoHoverMenuTimer_ != nullptr) {
-                exportVideoHoverMenuTimer_->stop();
+            if (owner_.exportVideoHoverMenuTimer_ != nullptr) {
+                owner_.exportVideoHoverMenuTimer_->stop();
             }
         }
     }
-    if (aboutIconLabel_ != nullptr && watched == aboutIconLabel_) {
+    if (owner_.aboutIconLabel_ != nullptr && watched == owner_.aboutIconLabel_) {
         if (event->type() == QEvent::MouseButtonRelease) {
             auto* mouseEvent = static_cast<QMouseEvent*>(event);
             if (mouseEvent->button() == Qt::LeftButton) {
-                if (invalidStarPreviewEasterEggEnabled_) {
-                    invalidStarPreviewAboutClickCount_ = 0;
-                    invalidStarPreviewAboutClickElapsed_.invalidate();
-                    setInvalidStarPreviewEasterEggEnabled(false);
+                if (owner_.invalidStarPreviewEasterEggEnabled_) {
+                    owner_.invalidStarPreviewAboutClickCount_ = 0;
+                    owner_.invalidStarPreviewAboutClickElapsed_.invalidate();
+                    this->setInvalidStarPreviewEasterEggEnabled(false);
                 } else {
-                    if (!invalidStarPreviewAboutClickElapsed_.isValid()
-                        || invalidStarPreviewAboutClickElapsed_.elapsed() > kInvalidStarPreviewAboutClickWindowMs) {
-                        invalidStarPreviewAboutClickCount_ = 0;
+                    if (!owner_.invalidStarPreviewAboutClickElapsed_.isValid()
+                        || owner_.invalidStarPreviewAboutClickElapsed_.elapsed() > kInvalidStarPreviewAboutClickWindowMs) {
+                        owner_.invalidStarPreviewAboutClickCount_ = 0;
                     }
-                    ++invalidStarPreviewAboutClickCount_;
-                    if (invalidStarPreviewAboutClickElapsed_.isValid()) {
-                        invalidStarPreviewAboutClickElapsed_.restart();
+                    ++owner_.invalidStarPreviewAboutClickCount_;
+                    if (owner_.invalidStarPreviewAboutClickElapsed_.isValid()) {
+                        owner_.invalidStarPreviewAboutClickElapsed_.restart();
                     } else {
-                        invalidStarPreviewAboutClickElapsed_.start();
+                        owner_.invalidStarPreviewAboutClickElapsed_.start();
                     }
-                    if (invalidStarPreviewAboutClickCount_ >= 3) {
-                        invalidStarPreviewAboutClickCount_ = 0;
-                        invalidStarPreviewAboutClickElapsed_.invalidate();
-                        setInvalidStarPreviewEasterEggEnabled(true);
+                    if (owner_.invalidStarPreviewAboutClickCount_ >= 3) {
+                        owner_.invalidStarPreviewAboutClickCount_ = 0;
+                        owner_.invalidStarPreviewAboutClickElapsed_.invalidate();
+                        this->setInvalidStarPreviewEasterEggEnabled(true);
                     }
                 }
                 return true;
             }
         }
     }
-    if (outlineList_ != nullptr && watched == outlineList_->viewport()) {
+    if (owner_.outlineList_ != nullptr && watched == owner_.outlineList_->viewport()) {
         if (event->type() == QEvent::MouseMove) {
             auto* mouseEvent = static_cast<QMouseEvent*>(event);
-            QListWidgetItem* hoveredItem = outlineList_->itemAt(mouseEvent->pos());
+            QListWidgetItem* hoveredItem = owner_.outlineList_->itemAt(mouseEvent->pos());
             const bool showButton =
                 hoveredItem != nullptr
-                && hoveredItem == outlineList_->currentItem()
+                && hoveredItem == owner_.outlineList_->currentItem()
                 && SimaiDocument::isDifficultyId(hoveredItem->data(Qt::UserRole + 1).toInt());
-            updateDifficultyDeleteButton(showButton);
+            owner_.updateDifficultyDeleteButton(showButton);
         } else if (event->type() == QEvent::Leave || event->type() == QEvent::Wheel) {
-            updateDifficultyDeleteButton(false);
-        } else if (event->type() == QEvent::Resize && deleteDifficultyButton_ != nullptr && deleteDifficultyButton_->isVisible()) {
-            updateDifficultyDeleteButton(true);
+            owner_.updateDifficultyDeleteButton(false);
+        } else if (event->type() == QEvent::Resize && owner_.deleteDifficultyButton_ != nullptr && owner_.deleteDifficultyButton_->isVisible()) {
+            owner_.updateDifficultyDeleteButton(true);
         }
     }
-    if ((errorList_ != nullptr && watched == errorList_->viewport())
-        || (muriList_ != nullptr && watched == muriList_->viewport())) {
+    if ((owner_.errorList_ != nullptr && watched == owner_.errorList_->viewport())
+        || (owner_.muriList_ != nullptr && watched == owner_.muriList_->viewport())) {
         if (event->type() == QEvent::Resize
             || event->type() == QEvent::Show
             || event->type() == QEvent::LayoutRequest
             || event->type() == QEvent::PolishRequest) {
-            scheduleWrappedListRelayout(
-                watched == (errorList_ != nullptr ? errorList_->viewport() : nullptr) ? errorList_ : muriList_
+            owner_.scheduleWrappedListRelayout(
+                watched == (owner_.errorList_ != nullptr ? owner_.errorList_->viewport() : nullptr) ? owner_.errorList_ : owner_.muriList_
             );
         }
     }
     const bool previewKeyScope =
-        watched == previewSlider_
-        || watched == previewCanvasContainer_
-        || watched == previewCanvasFrame_
-        || watched == previewPanel_
-        || watched == previewFullscreenWindow_
-        || watched == previewFullscreenHost_
-        || watched == previewFullscreenControlsWindow_
-        || watched == previewFullscreenButton_;
+        watched == owner_.previewSlider_
+        || watched == owner_.previewCanvasContainer_
+        || watched == owner_.previewCanvasFrame_
+        || watched == owner_.previewPanel_
+        || watched == owner_.previewFullscreenWindow_
+        || watched == owner_.previewFullscreenHost_
+        || watched == owner_.previewFullscreenControlsWindow_
+        || watched == owner_.previewFullscreenButton_;
     const bool previewMouseFocusScope =
-        watched == previewCanvasContainer_
-        || watched == previewCanvasFrame_
-        || watched == previewPanel_
-        || watched == previewFullscreenWindow_
-        || watched == previewFullscreenHost_;
+        watched == owner_.previewCanvasContainer_
+        || watched == owner_.previewCanvasFrame_
+        || watched == owner_.previewPanel_
+        || watched == owner_.previewFullscreenWindow_
+        || watched == owner_.previewFullscreenHost_;
     const bool previewFullscreenOverlayScope =
-        watched == previewFullscreenWindow_
-        || watched == previewFullscreenHost_
-        || watched == previewFullscreenControlsWindow_
-        || watched == previewFullscreenHintWindow_
-        || watched == previewCanvasContainer_
-        || watched == previewCanvasFrame_
-        || watched == previewControlCard_
-        || watched == previewSlider_
-        || watched == stopPreviewButton_
-        || watched == pausePreviewButton_
-        || watched == previewSpeedButton_
-        || watched == previewFullscreenButton_;
+        watched == owner_.previewFullscreenWindow_
+        || watched == owner_.previewFullscreenHost_
+        || watched == owner_.previewFullscreenControlsWindow_
+        || watched == owner_.previewFullscreenHintWindow_
+        || watched == owner_.previewCanvasContainer_
+        || watched == owner_.previewCanvasFrame_
+        || watched == owner_.previewControlCard_
+        || watched == owner_.previewSlider_
+        || watched == owner_.stopPreviewButton_
+        || watched == owner_.pausePreviewButton_
+        || watched == owner_.previewSpeedButton_
+        || watched == owner_.previewFullscreenButton_;
     if (previewMouseFocusScope
         && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::Wheel)) {
         if (QWidget* widget = qobject_cast<QWidget*>(watched);
@@ -137,15 +137,15 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             widget->setFocus(Qt::MouseFocusReason);
         }
     }
-    if (previewFullscreenActive_ && previewFullscreenOverlayScope) {
+    if (owner_.previewFullscreenActive_ && previewFullscreenOverlayScope) {
         if (event->type() == QEvent::MouseMove
             || event->type() == QEvent::MouseButtonPress
             || event->type() == QEvent::Wheel) {
             const QPoint globalCursorPos = QCursor::pos();
-            if (shouldRevealPreviewFullscreenControls(globalCursorPos)) {
-                showPreviewFullscreenControls(event->type() != QEvent::MouseButtonPress);
-            } else if (previewFullscreenControlsVisible_) {
-                schedulePreviewFullscreenControlsAutoHide();
+            if (owner_.shouldRevealPreviewFullscreenControls(globalCursorPos)) {
+                owner_.showPreviewFullscreenControls(event->type() != QEvent::MouseButtonPress);
+            } else if (owner_.previewFullscreenControlsVisible_) {
+                owner_.schedulePreviewFullscreenControlsAutoHide();
             }
         }
         if (event->type() == QEvent::KeyPress) {
@@ -153,68 +153,68 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             if (!keyEvent->isAutoRepeat()
                 && keyEvent->modifiers() == Qt::NoModifier
                 && keyEvent->key() == Qt::Key_F11) {
-                togglePreviewFullscreen();
+                owner_.togglePreviewFullscreen();
                 return true;
             }
             if (!keyEvent->isAutoRepeat()
                 && keyEvent->modifiers() == Qt::NoModifier
                 && keyEvent->key() == Qt::Key_Escape) {
-                exitPreviewFullscreen();
+                owner_.exitPreviewFullscreen();
                 return true;
             }
         }
     }
-    if (previewFullscreenWindow_ != nullptr && watched == previewFullscreenWindow_) {
+    if (owner_.previewFullscreenWindow_ != nullptr && watched == owner_.previewFullscreenWindow_) {
         if (event->type() == QEvent::Close) {
-            exitPreviewFullscreen();
+            owner_.exitPreviewFullscreen();
             event->ignore();
             return true;
         }
-        if (previewFullscreenActive_
+        if (owner_.previewFullscreenActive_
             && (event->type() == QEvent::Move
                 || event->type() == QEvent::Resize
                 || event->type() == QEvent::Show
                 || event->type() == QEvent::WindowStateChange)) {
-            updatePreviewFullscreenOverlayGeometry();
+            owner_.updatePreviewFullscreenOverlayGeometry();
         }
     }
-    if (previewSlider_ != nullptr && watched == previewSlider_) {
+    if (owner_.previewSlider_ != nullptr && watched == owner_.previewSlider_) {
         if (event->type() == QEvent::Wheel) {
-            stopPreviewHeldSeek();
-            if (handlePreviewSeekWheel(static_cast<QWheelEvent*>(event))) {
+            owner_.stopPreviewHeldSeek();
+            if (owner_.handlePreviewSeekWheel(static_cast<QWheelEvent*>(event))) {
                 return true;
             }
         } else if (event->type() == QEvent::MouseButtonPress) {
-            stopPreviewHeldSeek();
+            owner_.stopPreviewHeldSeek();
             auto* mouseEvent = static_cast<QMouseEvent*>(event);
             if (mouseEvent->button() == Qt::LeftButton) {
                 QStyleOptionSlider option;
-                option.initFrom(previewSlider_);
+                option.initFrom(owner_.previewSlider_);
                 option.subControls = QStyle::SC_SliderHandle;
-                option.orientation = previewSlider_->orientation();
-                option.minimum = previewSlider_->minimum();
-                option.maximum = previewSlider_->maximum();
-                option.sliderPosition = previewSlider_->sliderPosition();
-                option.sliderValue = previewSlider_->value();
+                option.orientation = owner_.previewSlider_->orientation();
+                option.minimum = owner_.previewSlider_->minimum();
+                option.maximum = owner_.previewSlider_->maximum();
+                option.sliderPosition = owner_.previewSlider_->sliderPosition();
+                option.sliderValue = owner_.previewSlider_->value();
                 option.upsideDown = false;
-                const QRect handleRect = previewSlider_->style()->subControlRect(
+                const QRect handleRect = owner_.previewSlider_->style()->subControlRect(
                     QStyle::CC_Slider,
                     &option,
                     QStyle::SC_SliderHandle,
-                    previewSlider_
+                    owner_.previewSlider_
                 );
                 if (!handleRect.contains(mouseEvent->pos())) {
                     const int value = QStyle::sliderValueFromPosition(
-                        previewSlider_->minimum(),
-                        previewSlider_->maximum(),
+                        owner_.previewSlider_->minimum(),
+                        owner_.previewSlider_->maximum(),
                         mouseEvent->pos().x(),
-                        qMax(1, previewSlider_->width()),
+                        qMax(1, owner_.previewSlider_->width()),
                         false
                     );
-                    previewSlider_->setFocus(Qt::MouseFocusReason);
-                    previewSlider_->setValue(value);
-                    showPreviewSliderTimeHint(value);
-                    seekPreviewToSecond(static_cast<double>(value) / 1000.0, true);
+                    owner_.previewSlider_->setFocus(Qt::MouseFocusReason);
+                    owner_.previewSlider_->setValue(value);
+                    owner_.showPreviewSliderTimeHint(value);
+                    owner_.seekPreviewToSecond(static_cast<double>(value) / 1000.0, true);
                     return true;
                 }
             }
@@ -226,24 +226,24 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             if (!keyEvent->isAutoRepeat()
                 && keyEvent->modifiers() == Qt::NoModifier
                 && keyEvent->key() == Qt::Key_F11) {
-                togglePreviewFullscreen();
+                owner_.togglePreviewFullscreen();
                 return true;
             }
-            if (previewFullscreenActive_
+            if (owner_.previewFullscreenActive_
                 && !keyEvent->isAutoRepeat()
                 && keyEvent->modifiers() == Qt::NoModifier
                 && keyEvent->key() == Qt::Key_Escape) {
-                exitPreviewFullscreen();
+                owner_.exitPreviewFullscreen();
                 return true;
             }
             if (keyEvent->key() == Qt::Key_Space
                 && keyEvent->modifiers() == Qt::NoModifier
                 && !keyEvent->isAutoRepeat()) {
-                onTogglePreviewPause();
+                owner_.onTogglePreviewPause();
                 return true;
             }
-            if (previewSlider_ == nullptr) {
-                return QMainWindow::eventFilter(watched, event);
+            if (owner_.previewSlider_ == nullptr) {
+                return owner_.QMainWindow::eventFilter(watched, event);
             }
             int direction = 0;
             if (keyEvent->key() == Qt::Key_Left) {
@@ -253,13 +253,13 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             }
             if (direction != 0) {
                 if (keyEvent->modifiers() != Qt::NoModifier) {
-                    return QMainWindow::eventFilter(watched, event);
+                    return owner_.QMainWindow::eventFilter(watched, event);
                 }
                 if (keyEvent->isAutoRepeat()) {
                     return true;
                 }
-                beginPreviewHeldSeek(direction, keyEvent->key());
-                stepPreviewBySeconds(
+                owner_.beginPreviewHeldSeek(direction, keyEvent->key());
+                owner_.stepPreviewBySeconds(
                     static_cast<double>(direction) * miacode::preview_interaction::kSeekSingleStepSeconds,
                     true
                 );
@@ -270,121 +270,121 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
             if (keyEvent->key() == Qt::Key_Space && keyEvent->modifiers() == Qt::NoModifier) {
                 return true;
             }
-            if (previewSlider_ == nullptr) {
-                return QMainWindow::eventFilter(watched, event);
+            if (owner_.previewSlider_ == nullptr) {
+                return owner_.QMainWindow::eventFilter(watched, event);
             }
             if (!keyEvent->isAutoRepeat()
                 && (keyEvent->key() == Qt::Key_Left || keyEvent->key() == Qt::Key_Right)
-                && previewSeekHeldArrowKey_ == keyEvent->key()) {
-                stopPreviewHeldSeek(keyEvent->key());
+                && owner_.previewSeekHeldArrowKey_ == keyEvent->key()) {
+                owner_.stopPreviewHeldSeek(keyEvent->key());
                 return true;
             }
         }
     }
-    if (watched == editorFindEdit_ || watched == editorReplaceEdit_) {
+    if (watched == owner_.editorFindEdit_ || watched == owner_.editorReplaceEdit_) {
         if (event->type() == QEvent::KeyPress || event->type() == QEvent::ShortcutOverride) {
             auto* keyEvent = static_cast<QKeyEvent*>(event);
             const bool ctrlOnly = (keyEvent->modifiers() & Qt::ControlModifier)
                 && !(keyEvent->modifiers() & (Qt::AltModifier | Qt::MetaModifier));
             if ((keyEvent->matches(QKeySequence::Find))
                 || (ctrlOnly && keyEvent->key() == Qt::Key_F)) {
-                onToggleFindReplace();
+                this->onToggleFindReplace();
                 return true;
             }
         }
     }
-    if (watched == editorViewport_ && event->type() == QEvent::MouseButtonPress) {
+    if (watched == owner_.editorViewport_ && event->type() == QEvent::MouseButtonPress) {
         auto* mouseEvent = static_cast<QMouseEvent*>(event);
         const bool ctrlLeftClick = mouseEvent->button() == Qt::LeftButton
             && (mouseEvent->modifiers() & Qt::ControlModifier);
         if (ctrlLeftClick) {
-            editorCtrlLeftJumpPending_ = true;
-            editorCtrlLeftJumpDragged_ = false;
-            editorCtrlLeftJumpPressPos_ = mouseEvent->pos();
+            owner_.editorCtrlLeftJumpPending_ = true;
+            owner_.editorCtrlLeftJumpDragged_ = false;
+            owner_.editorCtrlLeftJumpPressPos_ = mouseEvent->pos();
         } else if (mouseEvent->button() == Qt::LeftButton) {
-            editorCtrlLeftJumpPending_ = false;
-            editorCtrlLeftJumpDragged_ = false;
+            owner_.editorCtrlLeftJumpPending_ = false;
+            owner_.editorCtrlLeftJumpDragged_ = false;
         }
-        if (mouseEvent->button() == Qt::LeftButton && !qtPreviewPlaying_ && !ctrlLeftClick) {
-            QTimer::singleShot(0, this, [this]() {
-                syncTimelineToEditorCursor(true);
+        if (mouseEvent->button() == Qt::LeftButton && !owner_.qtPreviewPlaying_ && !ctrlLeftClick) {
+            QTimer::singleShot(0, &owner_, [this]() {
+                owner_.syncTimelineToEditorCursor(true);
             });
         }
     }
-    if (watched == editorViewport_ && event->type() == QEvent::MouseMove && editorCtrlLeftJumpPending_) {
+    if (watched == owner_.editorViewport_ && event->type() == QEvent::MouseMove && owner_.editorCtrlLeftJumpPending_) {
         auto* mouseEvent = static_cast<QMouseEvent*>(event);
         if (mouseEvent->buttons().testFlag(Qt::LeftButton)
-            && (mouseEvent->pos() - editorCtrlLeftJumpPressPos_).manhattanLength() >= QApplication::startDragDistance()) {
-            editorCtrlLeftJumpDragged_ = true;
+            && (mouseEvent->pos() - owner_.editorCtrlLeftJumpPressPos_).manhattanLength() >= QApplication::startDragDistance()) {
+            owner_.editorCtrlLeftJumpDragged_ = true;
         }
     }
-    if (watched == editorViewport_ && event->type() == QEvent::MouseButtonRelease) {
+    if (watched == owner_.editorViewport_ && event->type() == QEvent::MouseButtonRelease) {
         auto* mouseEvent = static_cast<QMouseEvent*>(event);
-        if (mouseEvent->button() == Qt::LeftButton && editorCtrlLeftJumpPending_) {
-            const bool shouldJump = !editorCtrlLeftJumpDragged_
+        if (mouseEvent->button() == Qt::LeftButton && owner_.editorCtrlLeftJumpPending_) {
+            const bool shouldJump = !owner_.editorCtrlLeftJumpDragged_
                 && (mouseEvent->modifiers() & Qt::ControlModifier);
             const QPoint releasePos = mouseEvent->pos();
-            editorCtrlLeftJumpPending_ = false;
-            editorCtrlLeftJumpDragged_ = false;
+            owner_.editorCtrlLeftJumpPending_ = false;
+            owner_.editorCtrlLeftJumpDragged_ = false;
             if (shouldJump) {
-                QTimer::singleShot(0, this, [this, releasePos]() {
-                    auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_);
+                QTimer::singleShot(0, &owner_, [this, releasePos]() {
+                    auto* editor = qobject_cast<PlainCodeEditor*>(owner_.editorWidget_);
                     if (editor == nullptr) {
                         return;
                     }
                     const QTextCursor cursor = editor->cursorForPosition(releasePos);
                     const int line = cursor.blockNumber() + 1;
                     const int col = cursor.positionInBlock() + 1;
-                    const double second = timelineSecondForCursor(line, col);
-                    if (qtPreviewPlaying_) {
-                        stopQtPreviewPlayback(true);
+                    const double second = owner_.timelineSecondForCursor(line, col);
+                    if (owner_.qtPreviewPlaying_) {
+                        owner_.stopQtPreviewPlayback(true);
                     }
-                    seekPreviewToSecond(second, false);
-                    if (timelineView_ != nullptr) {
-                        timelineView_->setCursorSeconds(second, false);
-                        timelineView_->focusCursor(true);
+                    owner_.seekPreviewToSecond(second, false);
+                    if (owner_.timelineView_ != nullptr) {
+                        owner_.timelineView_->setCursorSeconds(second, false);
+                        owner_.timelineView_->focusCursor(true);
                     }
                 });
             }
         }
     }
-    if (watched == editorViewport_ && event->type() == QEvent::FocusIn && !qtPreviewPlaying_) {
-        QTimer::singleShot(0, this, [this]() {
-            syncTimelineToEditorCursor(true);
+    if (watched == owner_.editorViewport_ && event->type() == QEvent::FocusIn && !owner_.qtPreviewPlaying_) {
+        QTimer::singleShot(0, &owner_, [this]() {
+            owner_.syncTimelineToEditorCursor(true);
         });
     }
-    return QMainWindow::eventFilter(watched, event);
+    return owner_.QMainWindow::eventFilter(watched, event);
 }
 
-QTextEdit* MainWindow::activeFindTarget() const
+QTextEdit* MainWindow::WindowSection::activeFindTarget() const
 {
-    auto* chartEditor = qobject_cast<QTextEdit*>(editorWidget_);
+    auto* chartEditor = qobject_cast<QTextEdit*>(owner_.editorWidget_);
     QWidget* focus = QApplication::focusWidget();
     if (focus != nullptr) {
         if (chartEditor != nullptr && (focus == chartEditor || chartEditor->isAncestorOf(focus))) {
             return chartEditor;
         }
-        if (metadataExtraEdit_ != nullptr && (focus == metadataExtraEdit_ || metadataExtraEdit_->isAncestorOf(focus))) {
-            return metadataExtraEdit_;
+        if (owner_.metadataExtraEdit_ != nullptr && (focus == owner_.metadataExtraEdit_ || owner_.metadataExtraEdit_->isAncestorOf(focus))) {
+            return owner_.metadataExtraEdit_;
         }
     }
 
-    if (editorStack_ != nullptr && editorStack_->currentWidget() == chartPage_ && chartEditor != nullptr) {
+    if (owner_.editorStack_ != nullptr && owner_.editorStack_->currentWidget() == owner_.chartPage_ && chartEditor != nullptr) {
         return chartEditor;
     }
-    if (editorStack_ != nullptr && editorStack_->currentWidget() == metadataPage_ && metadataExtraEdit_ != nullptr) {
-        return metadataExtraEdit_;
+    if (owner_.editorStack_ != nullptr && owner_.editorStack_->currentWidget() == owner_.metadataPage_ && owner_.metadataExtraEdit_ != nullptr) {
+        return owner_.metadataExtraEdit_;
     }
-    return chartEditor != nullptr ? chartEditor : metadataExtraEdit_;
+    return chartEditor != nullptr ? chartEditor : owner_.metadataExtraEdit_;
 }
 
-bool MainWindow::runFindInEditor(bool backward)
+bool MainWindow::WindowSection::runFindInEditor(bool backward)
 {
-    QTextEdit* target = activeFindTarget();
-    if (target == nullptr || editorFindEdit_ == nullptr) {
+    QTextEdit* target = this->activeFindTarget();
+    if (target == nullptr || owner_.editorFindEdit_ == nullptr) {
         return false;
     }
-    const QString pattern = editorFindEdit_->text();
+    const QString pattern = owner_.editorFindEdit_->text();
     if (pattern.isEmpty()) {
         return false;
     }
@@ -403,10 +403,10 @@ bool MainWindow::runFindInEditor(bool backward)
     return target->find(pattern, flags);
 }
 
-void MainWindow::updateEditorFindBarGeometry()
+void MainWindow::WindowSection::updateEditorFindBarGeometry()
 {
-    QWidget* geometryHost = editorFindGeometryHost_ != nullptr ? editorFindGeometryHost_ : editorStack_;
-    if (editorFindBar_ == nullptr || geometryHost == nullptr) {
+    QWidget* geometryHost = owner_.editorFindGeometryHost_ != nullptr ? owner_.editorFindGeometryHost_ : owner_.editorStack_;
+    if (owner_.editorFindBar_ == nullptr || geometryHost == nullptr) {
         return;
     }
     const int availableWidth = qMax(0, geometryHost->width() - (kEditorFindBarHorizontalMargin * 2));
@@ -419,98 +419,98 @@ void MainWindow::updateEditorFindBarGeometry()
     }
     const int x = qMax(kEditorFindBarHorizontalMargin, geometryHost->width() - kEditorFindBarHorizontalMargin - width);
     const int y = kEditorFindBarTopMargin;
-    const int height = editorFindBar_->sizeHint().height();
-    editorFindBar_->setGeometry(x, y, width, height);
-    editorFindBar_->raise();
+    const int height = owner_.editorFindBar_->sizeHint().height();
+    owner_.editorFindBar_->setGeometry(x, y, width, height);
+    owner_.editorFindBar_->raise();
 }
 
-void MainWindow::applyFindOverlayInset()
+void MainWindow::WindowSection::applyFindOverlayInset()
 {
     const int topInset =
-        (editorFindBar_ != nullptr && editorFindBar_->isVisible())
-        ? editorFindBar_->height() + kEditorFindBarOverlayGap
+        (owner_.editorFindBar_ != nullptr && owner_.editorFindBar_->isVisible())
+        ? owner_.editorFindBar_->height() + kEditorFindBarOverlayGap
         : 0;
-    if (auto* plainEditor = qobject_cast<PlainCodeEditor*>(editorWidget_); plainEditor != nullptr) {
+    if (auto* plainEditor = qobject_cast<PlainCodeEditor*>(owner_.editorWidget_); plainEditor != nullptr) {
         plainEditor->setTopOverlayInsetPixels(topInset);
     }
 }
 
-void MainWindow::hideFindReplaceBar()
+void MainWindow::WindowSection::hideFindReplaceBar()
 {
-    if (editorFindBar_ == nullptr || !editorFindBar_->isVisible()) {
+    if (owner_.editorFindBar_ == nullptr || !owner_.editorFindBar_->isVisible()) {
         return;
     }
-    editorFindBar_->hide();
-    applyFindOverlayInset();
-    if (QTextEdit* target = activeFindTarget(); target != nullptr) {
+    owner_.editorFindBar_->hide();
+    this->applyFindOverlayInset();
+    if (QTextEdit* target = this->activeFindTarget(); target != nullptr) {
         target->setFocus();
     }
 }
 
-void MainWindow::onToggleFindReplace()
+void MainWindow::WindowSection::onToggleFindReplace()
 {
-    if (editorFindBar_ == nullptr) {
+    if (owner_.editorFindBar_ == nullptr) {
         return;
     }
-    if (editorFindBar_->isVisible()) {
-        hideFindReplaceBar();
+    if (owner_.editorFindBar_->isVisible()) {
+        this->hideFindReplaceBar();
         return;
     }
 
-    updateEditorFindBarGeometry();
-    editorFindBar_->show();
-    editorFindBar_->raise();
-    applyFindOverlayInset();
-    QTextEdit* target = activeFindTarget();
-    if (target != nullptr && editorFindEdit_ != nullptr && editorFindEdit_->text().isEmpty()) {
+    this->updateEditorFindBarGeometry();
+    owner_.editorFindBar_->show();
+    owner_.editorFindBar_->raise();
+    this->applyFindOverlayInset();
+    QTextEdit* target = this->activeFindTarget();
+    if (target != nullptr && owner_.editorFindEdit_ != nullptr && owner_.editorFindEdit_->text().isEmpty()) {
         const QTextCursor cursor = target->textCursor();
         const QString selected = cursor.selectedText();
         if (!selected.isEmpty() && !selected.contains(QChar::ParagraphSeparator)) {
-            editorFindEdit_->setText(selected);
+            owner_.editorFindEdit_->setText(selected);
         }
     }
-    if (editorFindEdit_ != nullptr) {
-        editorFindEdit_->setFocus();
-        editorFindEdit_->selectAll();
+    if (owner_.editorFindEdit_ != nullptr) {
+        owner_.editorFindEdit_->setFocus();
+        owner_.editorFindEdit_->selectAll();
     }
 }
 
-void MainWindow::onFindNext()
+void MainWindow::WindowSection::onFindNext()
 {
-    runFindInEditor(false);
+    this->runFindInEditor(false);
 }
 
-void MainWindow::onFindPrevious()
+void MainWindow::WindowSection::onFindPrevious()
 {
-    runFindInEditor(true);
+    this->runFindInEditor(true);
 }
 
-void MainWindow::onReplaceOne()
+void MainWindow::WindowSection::onReplaceOne()
 {
-    QTextEdit* target = activeFindTarget();
-    if (target == nullptr || editorFindEdit_ == nullptr || editorReplaceEdit_ == nullptr) {
+    QTextEdit* target = this->activeFindTarget();
+    if (target == nullptr || owner_.editorFindEdit_ == nullptr || owner_.editorReplaceEdit_ == nullptr) {
         return;
     }
-    const QString findText = editorFindEdit_->text();
+    const QString findText = owner_.editorFindEdit_->text();
     if (findText.isEmpty()) {
         return;
     }
 
     QTextCursor cursor = target->textCursor();
     if (cursor.hasSelection() && cursor.selectedText() == findText) {
-        cursor.insertText(editorReplaceEdit_->text());
+        cursor.insertText(owner_.editorReplaceEdit_->text());
         target->setTextCursor(cursor);
     }
-    runFindInEditor(false);
+    this->runFindInEditor(false);
 }
 
-void MainWindow::onReplaceAll()
+void MainWindow::WindowSection::onReplaceAll()
 {
-    QTextEdit* target = activeFindTarget();
-    if (target == nullptr || editorFindEdit_ == nullptr || editorReplaceEdit_ == nullptr) {
+    QTextEdit* target = this->activeFindTarget();
+    if (target == nullptr || owner_.editorFindEdit_ == nullptr || owner_.editorReplaceEdit_ == nullptr) {
         return;
     }
-    const QString findText = editorFindEdit_->text();
+    const QString findText = owner_.editorFindEdit_->text();
     if (findText.isEmpty()) {
         return;
     }
@@ -518,7 +518,7 @@ void MainWindow::onReplaceAll()
     QTextDocument* doc = target->document();
     QTextCursor editCursor(doc);
     editCursor.beginEditBlock();
-    const QString replaceText = editorReplaceEdit_->text();
+    const QString replaceText = owner_.editorReplaceEdit_->text();
     int replacedCount = 0;
     QTextCursor searchCursor = doc->find(findText, 0);
     while (true) {
@@ -530,26 +530,26 @@ void MainWindow::onReplaceAll()
         searchCursor = doc->find(findText, searchCursor);
     }
     editCursor.endEditBlock();
-    statusBar()->showMessage(
+    owner_.statusBar()->showMessage(
         UiText::isChineseUi()
             ? QStringLiteral("已替换 %1 处。").arg(replacedCount)
             : QStringLiteral("Replaced %1 occurrence(s).").arg(replacedCount)
     );
 }
 
-void MainWindow::resizeEvent(QResizeEvent* event)
+void MainWindow::WindowSection::resizeEvent(QResizeEvent* event)
 {
-    QMainWindow::resizeEvent(event);
-    if (!outlineDockCollapsed_ && outlineDock_ != nullptr) {
-        outlineDockExpandedWidth_ = qMax(120, outlineDock_->width());
+    owner_.QMainWindow::resizeEvent(event);
+    if (!owner_.outlineDockCollapsed_ && owner_.outlineDock_ != nullptr) {
+        owner_.outlineDockExpandedWidth_ = qMax(120, owner_.outlineDock_->width());
     }
-    updatePreviewWorkspaceLayout();
-    updateEditorHeaderLayoutMode();
-    updateEditorFindBarGeometry();
-    applyFindOverlayInset();
-    relayoutWrappedListRows(errorList_);
-    relayoutWrappedListRows(muriList_);
-    logWindowGeometryDebug(
+    owner_.updatePreviewWorkspaceLayout();
+    owner_.updateEditorHeaderLayoutMode();
+    this->updateEditorFindBarGeometry();
+    this->applyFindOverlayInset();
+    owner_.relayoutWrappedListRows(owner_.errorList_);
+    owner_.relayoutWrappedListRows(owner_.muriList_);
+    this->logWindowGeometryDebug(
         "resize_event",
         QString("old=%1x%2 new=%3x%4")
             .arg(event->oldSize().width())
@@ -559,11 +559,11 @@ void MainWindow::resizeEvent(QResizeEvent* event)
     );
 }
 
-void MainWindow::moveEvent(QMoveEvent* event)
+void MainWindow::WindowSection::moveEvent(QMoveEvent* event)
 {
-    QMainWindow::moveEvent(event);
-    refreshPreviewFrameRateTimers();
-    logWindowGeometryDebug(
+    owner_.QMainWindow::moveEvent(event);
+    owner_.refreshPreviewFrameRateTimers();
+    this->logWindowGeometryDebug(
         "move_event",
         QString("old=(%1,%2) new=(%3,%4)")
             .arg(event->oldPos().x())
@@ -573,44 +573,44 @@ void MainWindow::moveEvent(QMoveEvent* event)
     );
 }
 
-void MainWindow::showEvent(QShowEvent* event)
+void MainWindow::WindowSection::showEvent(QShowEvent* event)
 {
-    QMainWindow::showEvent(event);
-    updateBottomTabsDeviceHeight();
-    refreshPreviewFrameRateTimers();
-    applySystemWindowBackdrop();
-    logWindowGeometryDebug("show_event");
+    owner_.QMainWindow::showEvent(event);
+    this->updateBottomTabsDeviceHeight();
+    owner_.refreshPreviewFrameRateTimers();
+    this->applySystemWindowBackdrop();
+    this->logWindowGeometryDebug("show_event");
 }
 
-void MainWindow::hideEvent(QHideEvent* event)
+void MainWindow::WindowSection::hideEvent(QHideEvent* event)
 {
-    QMainWindow::hideEvent(event);
-    logWindowGeometryDebug("hide_event");
+    owner_.QMainWindow::hideEvent(event);
+    this->logWindowGeometryDebug("hide_event");
 }
 
-bool MainWindow::event(QEvent* event)
+bool MainWindow::WindowSection::event(QEvent* event)
 {
-    return QMainWindow::event(event);
+    return owner_.QMainWindow::event(event);
 }
 
-void MainWindow::changeEvent(QEvent* event)
+void MainWindow::WindowSection::changeEvent(QEvent* event)
 {
     const QEvent::Type type = event != nullptr ? event->type() : QEvent::None;
-    QMainWindow::changeEvent(event);
+    owner_.QMainWindow::changeEvent(event);
     if (type == QEvent::WindowStateChange) {
         auto* stateEvent = static_cast<QWindowStateChangeEvent*>(event);
-        logWindowGeometryDebug(
+        this->logWindowGeometryDebug(
             "window_state_change",
             QString("old_state=%1 new_state=%2")
-                .arg(formatWindowStateFlags(stateEvent != nullptr ? stateEvent->oldState() : Qt::WindowNoState))
-                .arg(formatWindowStateFlags(windowState()))
+                .arg(this->formatWindowStateFlags(stateEvent != nullptr ? stateEvent->oldState() : Qt::WindowNoState))
+                .arg(this->formatWindowStateFlags(owner_.windowState()))
         );
         const bool wasMinimized =
             stateEvent != nullptr && stateEvent->oldState().testFlag(Qt::WindowMinimized);
-        const bool isNowMinimized = windowState().testFlag(Qt::WindowMinimized);
+        const bool isNowMinimized = owner_.windowState().testFlag(Qt::WindowMinimized);
         if (!isNowMinimized && wasMinimized) {
-            refreshPreviewFrameRateTimers();
-            applySystemWindowBackdrop();
+            owner_.refreshPreviewFrameRateTimers();
+            this->applySystemWindowBackdrop();
         }
     } else if (type == QEvent::ScreenChangeInternal
         || type == QEvent::DevicePixelRatioChange
@@ -619,20 +619,20 @@ void MainWindow::changeEvent(QEvent* event)
         || type == QEvent::PaletteChange
         || type == QEvent::ThemeChange
         || type == QEvent::ApplicationPaletteChange) {
-        updateBottomTabsDeviceHeight();
-        refreshPreviewFrameRateTimers();
-        applySystemWindowBackdrop();
+        this->updateBottomTabsDeviceHeight();
+        owner_.refreshPreviewFrameRateTimers();
+        this->applySystemWindowBackdrop();
     } else if (type == QEvent::ActivationChange) {
-        applySystemWindowBackdrop();
-        const bool active = isActiveWindow();
-        logWindowGeometryDebug(
+        this->applySystemWindowBackdrop();
+        const bool active = owner_.isActiveWindow();
+        this->logWindowGeometryDebug(
             "activation_change",
             QString("is_active=%1 spontaneous=%2")
                 .arg(active ? 1 : 0)
                 .arg(event != nullptr && event->spontaneous() ? 1 : 0)
         );
     } else if (type == QEvent::ZOrderChange) {
-        logWindowGeometryDebug("zorder_change");
+        this->logWindowGeometryDebug("zorder_change");
     }
 }
 

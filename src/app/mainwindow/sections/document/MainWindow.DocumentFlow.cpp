@@ -1,5 +1,6 @@
 ﻿#include "MainWindow.DocumentSection.h"
 #include "../../MainWindowShared.h"
+#include "../window/MainWindow.WindowSection.h"
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
@@ -300,23 +301,23 @@ void MainWindow::DocumentSection::onNewFile()
 
 void MainWindow::DocumentSection::onOpenFile()
 {
-    owner_.logTopLevelWindowSnapshot("open_file_flow/begin");
+    owner_.windowSection_->logTopLevelWindowSnapshot("open_file_flow/begin");
     const bool canContinue = maybeSaveBeforeContinue();
     if (!canContinue) {
-        owner_.logTopLevelWindowSnapshot("open_file_flow/cancelled_before_dialog");
+        owner_.windowSection_->logTopLevelWindowSnapshot("open_file_flow/cancelled_before_dialog");
         return;
     }
 
-    owner_.logWindowGeometryDebug("open_file_before_dialog");
-    owner_.logTopLevelWindowSnapshot("open_file_before_dialog");
+    owner_.windowSection_->logWindowGeometryDebug("open_file_before_dialog");
+    owner_.windowSection_->logTopLevelWindowSnapshot("open_file_before_dialog");
     const QString path = QFileDialog::getOpenFileName(
         &owner_,
         QStringLiteral("Open simai file"),
         owner_.resolveInitialOpenDirectory(),
         QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)")
     );
-    owner_.logWindowGeometryDebug("open_file_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
-    owner_.logTopLevelWindowSnapshot("open_file_after_dialog");
+    owner_.windowSection_->logWindowGeometryDebug("open_file_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
+    owner_.windowSection_->logTopLevelWindowSnapshot("open_file_after_dialog");
     if (path.isEmpty()) {
         return;
     }
@@ -620,16 +621,16 @@ bool MainWindow::DocumentSection::onSaveFile()
 
 bool MainWindow::DocumentSection::onSaveFileAs()
 {
-    owner_.logTopLevelWindowSnapshot("save_file_as_dialog/begin");
-    owner_.logWindowGeometryDebug("save_file_as_before_dialog");
+    owner_.windowSection_->logTopLevelWindowSnapshot("save_file_as_dialog/begin");
+    owner_.windowSection_->logWindowGeometryDebug("save_file_as_before_dialog");
     const QString path = QFileDialog::getSaveFileName(
         &owner_,
         QStringLiteral("Save simai file"),
         state_.currentFilePath_.isEmpty() ? QStringLiteral("chart.txt") : state_.currentFilePath_,
         QStringLiteral("Simai (*.txt *.simai);;All Files (*.*)")
     );
-    owner_.logWindowGeometryDebug("save_file_as_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
-    owner_.logTopLevelWindowSnapshot("save_file_as_dialog/after_dialog");
+    owner_.windowSection_->logWindowGeometryDebug("save_file_as_after_dialog", QString("selected_empty=%1").arg(path.isEmpty() ? 1 : 0));
+    owner_.windowSection_->logTopLevelWindowSnapshot("save_file_as_dialog/after_dialog");
     if (path.isEmpty()) {
         return false;
     }

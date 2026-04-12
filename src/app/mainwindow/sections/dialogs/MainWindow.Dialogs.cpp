@@ -1,5 +1,6 @@
 #include "MainWindow.DialogsSection.h"
 #include "../../MainWindowShared.h"
+#include "../window/MainWindow.WindowSection.h"
 
 #include "AppVersion.h"
 #include "QtPreviewSfxRuntime.h"
@@ -78,7 +79,7 @@ void MainWindow::DialogsSection::onAbout()
     dialog.setModal(true);
     dialog.setMinimumWidth(500);
     dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
-    owner_.applySystemWindowBackdrop(&dialog);
+    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
     UiDialogs::prepareDialogWindow(&dialog, &owner_);
 
     auto* rootLayout = new QVBoxLayout(&dialog);
@@ -188,7 +189,7 @@ void MainWindow::DialogsSection::onOpenLatencyDetector()
         owner_.previewAudioSettings_,
         UiDialogs::effectiveParentWidget(&owner_)
     );
-    owner_.applySystemWindowBackdrop(owner_.latencyDetectorDialog_);
+    owner_.windowSection_->applySystemWindowBackdrop(owner_.latencyDetectorDialog_);
     UiDialogs::prepareDialogWindow(owner_.latencyDetectorDialog_, &owner_);
     owner_.latencyDetectorDialog_->setOffsetSeconds(offsetSeconds);
     owner_.latencyDetectorDialog_->setBpm(wholeBpmOk ? wholeBpm : 0.0);
@@ -219,7 +220,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     dialog.setModal(true);
     dialog.setMinimumWidth(520);
     dialog.setStyleSheet(UiTheme::settingsDialogStyleSheet());
-    owner_.applySystemWindowBackdrop(&dialog);
+    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
     UiDialogs::prepareDialogWindow(&dialog, &owner_);
 
     const auto createDialogMenuButton = [](QWidget* parent, const QString& text) {

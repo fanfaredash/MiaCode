@@ -1,5 +1,6 @@
 #include "MainWindow.ValidationSection.h"
 #include "../../MainWindowShared.h"
+#include "../window/MainWindow.WindowSection.h"
 
 #include "DialogLocalization.h"
 #include "TimelineView.h"
@@ -66,7 +67,7 @@ void MainWindow::ValidationSection::onEditStaticTapOnSlideThreshold()
     dialog.setModal(true);
     dialog.setMinimumWidth(360);
     dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
-    owner_.applySystemWindowBackdrop(&dialog);
+    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
     UiDialogs::prepareDialogWindow(&dialog, &owner_);
 
     auto* rootLayout = new QVBoxLayout(&dialog);

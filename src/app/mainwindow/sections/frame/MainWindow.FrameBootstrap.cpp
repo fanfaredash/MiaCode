@@ -57,9 +57,13 @@ MainWindow::MainWindow(QWidget* parent)
     logStartupStage("configure_runtime_debug_output");
     quickShellStartupStageMediaLoadDeferred_ = true;
     setProperty("miacode.dialog_parentless", true);
+    logStartupStage("dialog_parentless_property_ready");
     setAttribute(Qt::WA_DontShowOnScreen);
+    logStartupStage("dont_show_on_screen_ready");
     setAttribute(Qt::WA_NativeWindow);
+    logStartupStage("native_window_attribute_ready");
     winId();
+    logStartupStage("native_window_ready");
 
     editorSection_ = std::make_unique<EditorSection>(*this, ui_, state_);
     documentSection_ = std::make_unique<DocumentSection>(*this, ui_, state_);
@@ -71,6 +75,7 @@ MainWindow::MainWindow(QWidget* parent)
     windowSection_ = std::make_unique<WindowSection>(*this, ui_, state_);
     frameSection_ = std::make_unique<FrameSection>(*this, ui_, state_);
     timelineSection_ = std::make_unique<TimelineSection>(*this, ui_, state_);
+    logStartupStage("sections_ready");
 
     previewWarmupPool_ = new QThreadPool(this);
     previewWarmupPool_->setObjectName(QStringLiteral("PreviewWarmupPool"));
@@ -91,11 +96,11 @@ MainWindow::MainWindow(QWidget* parent)
 
     setWindowModified(false);
     updateWindowTitle();
-    setupInitialWindowGeometry();
+    windowSection_->setupInitialWindowGeometry();
     if (QGuiApplication* guiApp = qobject_cast<QGuiApplication*>(QCoreApplication::instance()); guiApp != nullptr) {
         if (QStyleHints* styleHints = guiApp->styleHints(); styleHints != nullptr) {
             connect(styleHints, &QStyleHints::colorSchemeChanged, this, [this]() {
-                applyUiTheme();
+                windowSection_->applyUiTheme();
             });
         }
     }
@@ -627,7 +632,7 @@ MainWindow::MainWindow(QWidget* parent)
         }
     });
     connect(outlineCollapseButton_, &QToolButton::clicked, this, [this]() {
-        setOutlineDockCollapsed(!outlineDockCollapsed_);
+        windowSection_->setOutlineDockCollapsed(!outlineDockCollapsed_);
     });
     connect(outlineList_, &QListWidget::itemClicked, this, [this](QListWidgetItem* current) {
         updateDifficultyDeleteButton(false);
@@ -770,7 +775,7 @@ MainWindow::MainWindow(QWidget* parent)
     });
 
     addDockWidget(Qt::LeftDockWidgetArea, outlineDock);
-    setOutlineDockCollapsed(false);
+    windowSection_->setOutlineDockCollapsed(false);
     logStartupStage("outline_ready");
 
     previewPanel_ = new QWidget(this);
@@ -1074,7 +1079,7 @@ MainWindow::MainWindow(QWidget* parent)
         scheduleWrappedListRelayout(muriList_);
     });
 
-    updateBottomTabsDeviceHeight();
+    windowSection_->updateBottomTabsDeviceHeight();
     logStartupStage("timeline_and_tabs_ready");
 
     previewLeftColumn_ = new QWidget(this);

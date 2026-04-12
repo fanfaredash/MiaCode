@@ -1,5 +1,6 @@
-#include "../../MainWindow.h"
+#include "MainWindow.ExportSection.h"
 #include "../../MainWindowShared.h"
+#include "../window/MainWindow.WindowSection.h"
 
 #include "DialogLocalization.h"
 #include "QtPreviewSfxRuntime.h"
@@ -293,49 +294,49 @@ QString localizeExportWorkerMessageForUiLanguage(const QString& rawMessage)
 
 }  // namespace
 
-void MainWindow::applySharedExportTaskSettings(const VideoExportTask& task)
+void MainWindow::ExportSection::applySharedExportTaskSettings(const VideoExportTask& task)
 {
-    previewShowTimestamp_ = task.showTimestamp;
-    previewShowObjectStatsHud_ = task.showObjectStatsHud;
-    exportShowObjectStatsHud_ = task.showObjectStatsHud;
-    previewBackgroundBrightnessOuter_ = qBound(0.0, task.backgroundBrightnessOuter, 1.0);
-    previewBackgroundBrightnessInner_ = qBound(0.0, task.backgroundBrightnessInner, 1.0);
-    previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(task.layoutSquareScale);
-    previewSmoothBrightness_ = task.smoothBrightness;
-    previewBackgroundScaleMode_ = task.backgroundScaleMode;
-    previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(task.noteFlowSpeed);
+    owner_.previewShowTimestamp_ = task.showTimestamp;
+    owner_.previewShowObjectStatsHud_ = task.showObjectStatsHud;
+    owner_.exportShowObjectStatsHud_ = task.showObjectStatsHud;
+    owner_.previewBackgroundBrightnessOuter_ = qBound(0.0, task.backgroundBrightnessOuter, 1.0);
+    owner_.previewBackgroundBrightnessInner_ = qBound(0.0, task.backgroundBrightnessInner, 1.0);
+    owner_.previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(task.layoutSquareScale);
+    owner_.previewSmoothBrightness_ = task.smoothBrightness;
+    owner_.previewBackgroundScaleMode_ = task.backgroundScaleMode;
+    owner_.previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(task.noteFlowSpeed);
 
-    applyPreviewStageMediaRouteVisualSettings();
-    if (previewCanvas_ != nullptr) {
-        previewCanvas_->setShowTimestamp(previewShowTimestamp_);
-        previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
-        previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
-        previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
-        previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
-        previewCanvas_->setSmoothBrightness(previewSmoothBrightness_);
-        previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
-        previewCanvas_->setNoteFlowSpeed(previewNoteFlowSpeed_);
+    owner_.applyPreviewStageMediaRouteVisualSettings();
+    if (owner_.previewCanvas_ != nullptr) {
+        owner_.previewCanvas_->setShowTimestamp(owner_.previewShowTimestamp_);
+        owner_.previewCanvas_->setShowObjectStatsHud(owner_.previewShowObjectStatsHud_);
+        owner_.previewCanvas_->setBackgroundBrightnessOuter(owner_.previewBackgroundBrightnessOuter_);
+        owner_.previewCanvas_->setBackgroundBrightnessInner(owner_.previewBackgroundBrightnessInner_);
+        owner_.previewCanvas_->setLayoutSquareScale(owner_.previewLayoutSquareScale_);
+        owner_.previewCanvas_->setSmoothBrightness(owner_.previewSmoothBrightness_);
+        owner_.previewCanvas_->setBackgroundScaleMode(owner_.previewBackgroundScaleMode_);
+        owner_.previewCanvas_->setNoteFlowSpeed(owner_.previewNoteFlowSpeed_);
     }
 
-    saveProjectRenderState();
-    savePortableState();
+    owner_.saveProjectRenderState();
+    owner_.savePortableState();
 }
 
-void MainWindow::onExportPreviewVideo()
+void MainWindow::ExportSection::onExportPreviewVideo()
 {
-    if (!hasActiveDifficulty()) {
-        statusBar()->showMessage(QStringLiteral("当前未选中难度，无法导出视频。"));
+    if (!owner_.hasActiveDifficulty()) {
+        owner_.statusBar()->showMessage(QStringLiteral("当前未选中难度，无法导出视频。"));
         return;
     }
-    if (previewCanvas_ == nullptr) {
-        statusBar()->showMessage(QStringLiteral("预览画布未初始化，无法导出视频。"));
+    if (owner_.previewCanvas_ == nullptr) {
+        owner_.statusBar()->showMessage(QStringLiteral("预览画布未初始化，无法导出视频。"));
         return;
     }
-    if (qtPreviewPlaying_) {
-        onTogglePreviewPause();
+    if (owner_.qtPreviewPlaying_) {
+        owner_.onTogglePreviewPause();
     }
 
-    refreshTimelineMetadata();
+    owner_.refreshTimelineMetadata();
 
     const auto previewMarkerEndSecond = [](const TimelineNoteMarker& marker) {
         double markerEnd = qMax(marker.second, marker.endSecond);
@@ -347,46 +348,46 @@ void MainWindow::onExportPreviewVideo()
         return qMax(0.0, markerEnd);
     };
     double lastMarkerEndSecond = 0.0;
-    for (const TimelineNoteMarker& marker : latestTimelineNoteMarkers_) {
+    for (const TimelineNoteMarker& marker : owner_.latestTimelineNoteMarkers_) {
         lastMarkerEndSecond = qMax(lastMarkerEndSecond, previewMarkerEndSecond(marker));
     }
     const double cappedExportEndSecond = qMax(
         0.0,
-        qMin(previewDurationSeconds(), lastMarkerEndSecond + 3.0)
+        qMin(owner_.previewDurationSeconds(), lastMarkerEndSecond + 3.0)
     );
 
     VideoExportTask task;
-    task.chartPath = currentFilePath_;
-    task.trackPath = resolveDefaultTrackPath();
-    task.noteMarkers = latestTimelineNoteMarkers_;
-    task.muriAnalysisReport = muriAnalysisReport_;
-    task.muriRenderOptions = muriRenderOptions_;
-    task.staticTapOnSlideThresholdSeconds = static_cast<double>(staticTapOnSlideThresholdMs_) / 1000.0;
-    task.audioSettings = previewAudioSettings_;
-    task.backgroundBrightnessOuter = previewBackgroundBrightnessOuter_;
-    task.backgroundBrightnessInner = previewBackgroundBrightnessInner_;
-    task.layoutSquareScale = previewLayoutSquareScale_;
-    task.smoothBrightness = previewSmoothBrightness_;
-    task.outlineVariant = previewOutlineVariant_;
-    task.backgroundScaleMode = previewBackgroundScaleMode_;
-    task.noteFlowSpeed = previewNoteFlowSpeed_;
+    task.chartPath = owner_.currentFilePath_;
+    task.trackPath = owner_.resolveDefaultTrackPath();
+    task.noteMarkers = owner_.latestTimelineNoteMarkers_;
+    task.muriAnalysisReport = owner_.muriAnalysisReport_;
+    task.muriRenderOptions = owner_.muriRenderOptions_;
+    task.staticTapOnSlideThresholdSeconds = static_cast<double>(owner_.staticTapOnSlideThresholdMs_) / 1000.0;
+    task.audioSettings = owner_.previewAudioSettings_;
+    task.backgroundBrightnessOuter = owner_.previewBackgroundBrightnessOuter_;
+    task.backgroundBrightnessInner = owner_.previewBackgroundBrightnessInner_;
+    task.layoutSquareScale = owner_.previewLayoutSquareScale_;
+    task.smoothBrightness = owner_.previewSmoothBrightness_;
+    task.outlineVariant = owner_.previewOutlineVariant_;
+    task.backgroundScaleMode = owner_.previewBackgroundScaleMode_;
+    task.noteFlowSpeed = owner_.previewNoteFlowSpeed_;
     task.exportStartSeconds = 0.0;
     task.contentDurationSeconds = cappedExportEndSecond;
     task.fullRangeExport = true;
     task.outputWidth = 1024;
     task.outputHeight = 1024;
     task.fps = 60;
-    task.showTimestamp = previewShowTimestamp_;
-    task.showObjectStatsHud = exportShowObjectStatsHud_;
+    task.showTimestamp = owner_.previewShowTimestamp_;
+    task.showObjectStatsHud = owner_.exportShowObjectStatsHud_;
 
-    const QFileInfo chartInfo(currentFilePath_);
-    QString chartTitle = document_.title;
-    if (editorStack_ != nullptr && editorStack_->currentWidget() == metadataPage_ && titleEdit_ != nullptr) {
-        chartTitle = titleEdit_->text();
+    const QFileInfo chartInfo(owner_.currentFilePath_);
+    QString chartTitle = owner_.document_.title;
+    if (owner_.editorStack_ != nullptr && owner_.editorStack_->currentWidget() == owner_.metadataPage_ && owner_.titleEdit_ != nullptr) {
+        chartTitle = owner_.titleEdit_->text();
     }
     const QString exportStem = sanitizeExportFileStem(chartTitle, QStringLiteral("out"));
-    const QString difficultyName = hasActiveDifficulty()
-        ? SimaiDocument::difficultyShortName(activeDifficultyId_).replace(':', '_')
+    const QString difficultyName = owner_.hasActiveDifficulty()
+        ? SimaiDocument::difficultyShortName(owner_.activeDifficultyId_).replace(':', '_')
         : QStringLiteral("chart");
     const QString outputName = QString("%1_%2.mp4")
         .arg(exportStem)
@@ -394,12 +395,12 @@ void MainWindow::onExportPreviewVideo()
     task.outputPath = outputName;
 
     const auto currentPreviewSecond = [this]() -> double {
-        double second = qMax(0.0, qtPreviewPauseSecond_);
-        if (qtPreviewPlaying_) {
-            if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
-                second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-            } else if (previewStageMediaRouteHasVideo()) {
-                second = qMax(0.0, previewStageMediaRouteCurrentPlaybackSecond());
+        double second = qMax(0.0, owner_.qtPreviewPauseSecond_);
+        if (owner_.qtPreviewPlaying_) {
+            if (owner_.previewSfxRuntime_ != nullptr && owner_.previewSfxRuntime_->hasBackgroundTrack()) {
+                second = qMax(0.0, owner_.previewSfxRuntime_->backgroundPlaybackSecond());
+            } else if (owner_.previewStageMediaRouteHasVideo()) {
+                second = qMax(0.0, owner_.previewStageMediaRouteCurrentPlaybackSecond());
             }
         }
         return second;
@@ -407,83 +408,83 @@ void MainWindow::onExportPreviewVideo()
     VideoExportDialog dialog(
         task,
         [this](double second) {
-            seekPreviewToSecond(second, false);
+            owner_.seekPreviewToSecond(second, false);
         },
         [this](double second) {
-            startQtPreviewPlayback(second, true);
-            updatePauseButtonAppearance();
+            owner_.startQtPreviewPlayback(second, true);
+            owner_.updatePauseButtonAppearance();
         },
         [this]() {
-            if (qtPreviewPlaying_) {
-                stopQtPreviewPlayback(true);
-                updatePauseButtonAppearance();
+            if (owner_.qtPreviewPlaying_) {
+                owner_.stopQtPreviewPlayback(true);
+                owner_.updatePauseButtonAppearance();
             }
         },
         [this]() -> bool {
-            return qtPreviewPlaying_;
+            return owner_.qtPreviewPlaying_;
         },
         currentPreviewSecond,
         [this](bool showTimestamp) {
-            previewShowTimestamp_ = showTimestamp;
-            if (previewCanvas_ != nullptr) {
-                previewCanvas_->setShowTimestamp(previewShowTimestamp_);
+            owner_.previewShowTimestamp_ = showTimestamp;
+            if (owner_.previewCanvas_ != nullptr) {
+                owner_.previewCanvas_->setShowTimestamp(owner_.previewShowTimestamp_);
             }
-            saveProjectRenderState();
-            savePortableState();
+            owner_.saveProjectRenderState();
+            owner_.savePortableState();
         },
         [this](double ratio) {
-            setPreviewCanvasAspectRatio(ratio, false);
+            owner_.setPreviewCanvasAspectRatio(ratio, false);
         },
         [this](double outer, double inner) {
-            previewBackgroundBrightnessOuter_ = qBound(0.0, outer, 1.0);
-            previewBackgroundBrightnessInner_ = qBound(0.0, inner, 1.0);
-            applyPreviewStageMediaRouteVisualSettings();
-            if (previewCanvas_ != nullptr) {
-                previewCanvas_->setBackgroundBrightnessOuter(previewBackgroundBrightnessOuter_);
-                previewCanvas_->setBackgroundBrightnessInner(previewBackgroundBrightnessInner_);
+            owner_.previewBackgroundBrightnessOuter_ = qBound(0.0, outer, 1.0);
+            owner_.previewBackgroundBrightnessInner_ = qBound(0.0, inner, 1.0);
+            owner_.applyPreviewStageMediaRouteVisualSettings();
+            if (owner_.previewCanvas_ != nullptr) {
+                owner_.previewCanvas_->setBackgroundBrightnessOuter(owner_.previewBackgroundBrightnessOuter_);
+                owner_.previewCanvas_->setBackgroundBrightnessInner(owner_.previewBackgroundBrightnessInner_);
             }
-            saveProjectRenderState();
-            savePortableState();
+            owner_.saveProjectRenderState();
+            owner_.savePortableState();
         },
         [this](double scale) {
-            previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(scale);
-            if (previewCanvas_ != nullptr) {
-                previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
+            owner_.previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(scale);
+            if (owner_.previewCanvas_ != nullptr) {
+                owner_.previewCanvas_->setLayoutSquareScale(owner_.previewLayoutSquareScale_);
             }
-            saveProjectRenderState();
-            savePortableState();
+            owner_.saveProjectRenderState();
+            owner_.savePortableState();
         },
         [this](bool smooth) {
-            previewSmoothBrightness_ = smooth;
-            if (previewCanvas_ != nullptr) {
-                previewCanvas_->setSmoothBrightness(previewSmoothBrightness_);
+            owner_.previewSmoothBrightness_ = smooth;
+            if (owner_.previewCanvas_ != nullptr) {
+                owner_.previewCanvas_->setSmoothBrightness(owner_.previewSmoothBrightness_);
             }
-            saveProjectRenderState();
-            savePortableState();
+            owner_.saveProjectRenderState();
+            owner_.savePortableState();
         },
         [this](PreviewBackgroundScaleMode mode) {
-            previewBackgroundScaleMode_ = mode;
-            applyPreviewStageMediaRouteVisualSettings();
-            if (previewCanvas_ != nullptr) {
-                previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
+            owner_.previewBackgroundScaleMode_ = mode;
+            owner_.applyPreviewStageMediaRouteVisualSettings();
+            if (owner_.previewCanvas_ != nullptr) {
+                owner_.previewCanvas_->setBackgroundScaleMode(owner_.previewBackgroundScaleMode_);
             }
-            saveProjectRenderState();
-            savePortableState();
+            owner_.saveProjectRenderState();
+            owner_.savePortableState();
         },
         [this](double flowSpeed) {
-            previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
-            if (previewCanvas_ != nullptr) {
-                previewCanvas_->setNoteFlowSpeed(previewNoteFlowSpeed_);
+            owner_.previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
+            if (owner_.previewCanvas_ != nullptr) {
+                owner_.previewCanvas_->setNoteFlowSpeed(owner_.previewNoteFlowSpeed_);
             }
-            saveProjectRenderState();
-            savePortableState();
+            owner_.saveProjectRenderState();
+            owner_.savePortableState();
         },
-        UiDialogs::effectiveParentWidget(this)
+        UiDialogs::effectiveParentWidget(&owner_)
     );
-    UiDialogs::prepareDialogWindow(&dialog, this);
+    UiDialogs::prepareDialogWindow(&dialog, &owner_);
 
     dialog.adjustSize();
-    QRect anchorRect = geometry();
+    QRect anchorRect = owner_.geometry();
     bool hasAnchor = false;
     auto mergeGlobalRect = [&anchorRect, &hasAnchor](const QWidget* widget) {
         if (widget == nullptr || !widget->isVisible()) {
@@ -498,14 +499,14 @@ void MainWindow::onExportPreviewVideo()
         }
         anchorRect = anchorRect.united(global);
     };
-    mergeGlobalRect(outlineList_);
-    mergeGlobalRect(previewLeftColumn_);
-    if (!hasAnchor && workspaceSplitter_ != nullptr && previewPanel_ != nullptr && previewPanel_->isVisible()) {
-        const QRect splitterRect = workspaceSplitter_->rect();
-        const QRect previewRect = previewPanel_->geometry();
+    mergeGlobalRect(owner_.outlineList_);
+    mergeGlobalRect(owner_.previewLeftColumn_);
+    if (!hasAnchor && owner_.workspaceSplitter_ != nullptr && owner_.previewPanel_ != nullptr && owner_.previewPanel_->isVisible()) {
+        const QRect splitterRect = owner_.workspaceSplitter_->rect();
+        const QRect previewRect = owner_.previewPanel_->geometry();
         const int leftWidth = qMax(1, previewRect.left());
         const QRect localLeftArea(0, 0, leftWidth, splitterRect.height());
-        anchorRect = QRect(workspaceSplitter_->mapToGlobal(localLeftArea.topLeft()), localLeftArea.size());
+        anchorRect = QRect(owner_.workspaceSplitter_->mapToGlobal(localLeftArea.topLeft()), localLeftArea.size());
     }
     if (hasAnchor) {
         const int preferredWidth = qRound(anchorRect.width() * 0.5);
@@ -516,8 +517,8 @@ void MainWindow::onExportPreviewVideo()
         anchorRect.center().y() - dialog.height() / 2
     );
     QScreen* targetScreen = QGuiApplication::screenAt(anchorRect.center());
-    if (targetScreen == nullptr && windowHandle() != nullptr) {
-        targetScreen = windowHandle()->screen();
+    if (targetScreen == nullptr && owner_.windowHandle() != nullptr) {
+        targetScreen = owner_.windowHandle()->screen();
     }
     if (targetScreen != nullptr) {
         const QRect avail = targetScreen->availableGeometry();
@@ -525,20 +526,20 @@ void MainWindow::onExportPreviewVideo()
         targetTopLeft.setY(qBound(avail.top(), targetTopLeft.y(), avail.bottom() - dialog.height() + 1));
     }
     dialog.move(targetTopLeft);
-    applySystemWindowBackdrop(&dialog);
+    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
     dialog.exec();
-    setPreviewCanvasAspectRatio(1.0, false);
-    restoreSquareAfterVideoExport_ = false;
+    owner_.setPreviewCanvasAspectRatio(1.0, false);
+    owner_.restoreSquareAfterVideoExport_ = false;
     if (dialog.exportRequested()) {
         const VideoExportTask requestedTask = dialog.requestedExportTask();
-        applySharedExportTaskSettings(requestedTask);
+        this->applySharedExportTaskSettings(requestedTask);
         VideoExportSnapshot snapshot;
         QString launchError;
-        if (!buildVideoExportSnapshot(requestedTask, &snapshot, &launchError)
-            || !launchVideoExportWorker(snapshot, &launchError)) {
+        if (!this->buildVideoExportSnapshot(requestedTask, &snapshot, &launchError)
+            || !this->launchVideoExportWorker(snapshot, &launchError)) {
             UiDialogs::showMessageBox(
                 QMessageBox::Critical,
-                this,
+                &owner_,
                 uiText("dialog.video_export.title", "Export Video"),
                 launchError.isEmpty()
                     ? uiText("dialog.video_export.error.launch_failed", "Failed to start background export.")
@@ -548,67 +549,67 @@ void MainWindow::onExportPreviewVideo()
     }
 }
 
-void MainWindow::onBatchExportPreviewVideo()
+void MainWindow::ExportSection::onBatchExportPreviewVideo()
 {
-    if (!hasActiveDifficulty()) {
-        statusBar()->showMessage(uiText("dialog.batch_export.error.no_difficulty", QStringLiteral("No active difficulty is selected.")));
+    if (!owner_.hasActiveDifficulty()) {
+        owner_.statusBar()->showMessage(uiText("dialog.batch_export.error.no_difficulty", QStringLiteral("No active difficulty is selected.")));
         return;
     }
-    if (previewCanvas_ == nullptr) {
-        statusBar()->showMessage(uiText("dialog.batch_export.error.no_preview", QStringLiteral("Preview canvas is not initialized.")));
+    if (owner_.previewCanvas_ == nullptr) {
+        owner_.statusBar()->showMessage(uiText("dialog.batch_export.error.no_preview", QStringLiteral("Preview canvas is not initialized.")));
         return;
     }
-    if (videoExportWorkerProcess_ != nullptr && videoExportWorkerProcess_->state() != QProcess::NotRunning) {
+    if (owner_.videoExportWorkerProcess_ != nullptr && owner_.videoExportWorkerProcess_->state() != QProcess::NotRunning) {
         UiDialogs::showMessageBox(
             QMessageBox::Warning,
-            this,
+            &owner_,
             uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
             uiText("dialog.video_export.error.worker_busy", QStringLiteral("Another export is already running."))
         );
         return;
     }
-    if (qtPreviewPlaying_) {
-        onTogglePreviewPause();
+    if (owner_.qtPreviewPlaying_) {
+        owner_.onTogglePreviewPause();
     }
 
-    refreshTimelineMetadata();
+    owner_.refreshTimelineMetadata();
 
     VideoExportTask task;
-    task.chartPath = currentFilePath_;
-    task.trackPath = resolveDefaultTrackPath();
-    task.noteMarkers = latestTimelineNoteMarkers_;
-    task.muriAnalysisReport = muriAnalysisReport_;
-    task.muriRenderOptions = muriRenderOptions_;
-    task.staticTapOnSlideThresholdSeconds = static_cast<double>(staticTapOnSlideThresholdMs_) / 1000.0;
-    task.audioSettings = previewAudioSettings_;
-    task.backgroundBrightnessOuter = previewBackgroundBrightnessOuter_;
-    task.backgroundBrightnessInner = previewBackgroundBrightnessInner_;
-    task.layoutSquareScale = previewLayoutSquareScale_;
-    task.smoothBrightness = previewSmoothBrightness_;
-    task.outlineVariant = previewOutlineVariant_;
-    task.backgroundScaleMode = previewBackgroundScaleMode_;
-    task.noteFlowSpeed = previewNoteFlowSpeed_;
+    task.chartPath = owner_.currentFilePath_;
+    task.trackPath = owner_.resolveDefaultTrackPath();
+    task.noteMarkers = owner_.latestTimelineNoteMarkers_;
+    task.muriAnalysisReport = owner_.muriAnalysisReport_;
+    task.muriRenderOptions = owner_.muriRenderOptions_;
+    task.staticTapOnSlideThresholdSeconds = static_cast<double>(owner_.staticTapOnSlideThresholdMs_) / 1000.0;
+    task.audioSettings = owner_.previewAudioSettings_;
+    task.backgroundBrightnessOuter = owner_.previewBackgroundBrightnessOuter_;
+    task.backgroundBrightnessInner = owner_.previewBackgroundBrightnessInner_;
+    task.layoutSquareScale = owner_.previewLayoutSquareScale_;
+    task.smoothBrightness = owner_.previewSmoothBrightness_;
+    task.outlineVariant = owner_.previewOutlineVariant_;
+    task.backgroundScaleMode = owner_.previewBackgroundScaleMode_;
+    task.noteFlowSpeed = owner_.previewNoteFlowSpeed_;
     task.exportStartSeconds = 0.0;
     task.contentDurationSeconds = 0.0;
     task.fullRangeExport = true;
     task.outputWidth = 1024;
     task.outputHeight = 1024;
     task.fps = 60;
-    task.showTimestamp = previewShowTimestamp_;
-    task.showObjectStatsHud = exportShowObjectStatsHud_;
+    task.showTimestamp = owner_.previewShowTimestamp_;
+    task.showObjectStatsHud = owner_.exportShowObjectStatsHud_;
 
-    const QString difficultyToken = SimaiDocument::difficultyShortName(activeDifficultyId_);
+    const QString difficultyToken = SimaiDocument::difficultyShortName(owner_.activeDifficultyId_);
     BatchVideoExportDialog dialog(
         task,
         difficultyToken,
         [this](const VideoExportTask& sharedTask) {
-            applySharedExportTaskSettings(sharedTask);
+            this->applySharedExportTaskSettings(sharedTask);
         },
-        UiDialogs::effectiveParentWidget(this)
+        UiDialogs::effectiveParentWidget(&owner_)
     );
     dialog.adjustSize();
-    applySystemWindowBackdrop(&dialog);
-    UiDialogs::prepareDialogWindow(&dialog, this);
+    owner_.windowSection_->applySystemWindowBackdrop(&dialog);
+    UiDialogs::prepareDialogWindow(&dialog, &owner_);
     dialog.exec();
     if (!dialog.exportRequested()) {
         return;
@@ -618,7 +619,7 @@ void MainWindow::onBatchExportPreviewVideo()
     const QList<int> selectedDifficultyIds = dialog.selectedDifficultyIds();
     const QString outputDirectory = dialog.outputDirectory();
     const VideoExportTask requestedTask = dialog.requestedTaskTemplate();
-    applySharedExportTaskSettings(requestedTask);
+    this->applySharedExportTaskSettings(requestedTask);
     if (chartDirectories.isEmpty()) {
         return;
     }
@@ -628,7 +629,7 @@ void MainWindow::onBatchExportPreviewVideo()
     if (outputDirectory.trimmed().isEmpty()) {
         UiDialogs::showMessageBox(
             QMessageBox::Warning,
-            this,
+            &owner_,
             uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
             uiText("dialog.batch_export.error.no_output_dir", QStringLiteral("Please choose an output folder."))
         );
@@ -637,7 +638,7 @@ void MainWindow::onBatchExportPreviewVideo()
     if (!QDir().mkpath(outputDirectory)) {
         UiDialogs::showMessageBox(
             QMessageBox::Critical,
-            this,
+            &owner_,
             uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
             uiText("dialog.batch_export.error.output_dir_create_failed", QStringLiteral("Failed to create output folder."))
                 + QStringLiteral("\n") + QDir::toNativeSeparators(outputDirectory)
@@ -727,7 +728,7 @@ void MainWindow::onBatchExportPreviewVideo()
         systemL10n(QStringLiteral("Cancel"), QStringLiteral("取消")),
         0,
         100,
-        this
+        &owner_
     );
     progress.setWindowTitle(uiText("dialog.batch_export.title", QStringLiteral("Batch Export")));
     progress.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
@@ -736,7 +737,7 @@ void MainWindow::onBatchExportPreviewVideo()
     progress.setAutoClose(false);
     progress.setAutoReset(false);
     progress.setValue(0);
-    applySystemWindowBackdrop(&progress);
+    owner_.windowSection_->applySystemWindowBackdrop(&progress);
     progress.show();
 
     QStringList exportedFiles;
@@ -760,7 +761,7 @@ void MainWindow::onBatchExportPreviewVideo()
 
         VideoExportSnapshot snapshot;
         QString validationFailure;
-        if (!buildVideoExportSnapshotForChartDirectory(
+        if (!this->buildVideoExportSnapshotForChartDirectory(
                 job.chartDirectory,
                 job.difficultyId,
                 job.difficultyToken,
@@ -785,7 +786,7 @@ void MainWindow::onBatchExportPreviewVideo()
                     .arg(localizeExportWorkerMessageForUiLanguage(rawMessage))
             );
         };
-        if (!runVideoExportWorkerSync(snapshot, &progress, &canceledThisItem, &failureText, updateBatchProgress)) {
+        if (!this->runVideoExportWorkerSync(snapshot, &progress, &canceledThisItem, &failureText, updateBatchProgress)) {
             if (canceledThisItem) {
                 canceled = true;
                 break;
@@ -804,7 +805,7 @@ void MainWindow::onBatchExportPreviewVideo()
     if (canceled) {
         UiDialogs::showMessageBox(
             QMessageBox::Information,
-            this,
+            &owner_,
             uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
             uiText("dialog.batch_export.message.canceled", QStringLiteral("Batch export canceled."))
         );
@@ -818,7 +819,7 @@ void MainWindow::onBatchExportPreviewVideo()
         }
         UiDialogs::showMessageBox(
             QMessageBox::Information,
-            this,
+            &owner_,
             uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
             uiText("dialog.batch_export.message.success", QStringLiteral("Batch export completed: %1 file(s)."))
                 .arg(successCount)
@@ -837,7 +838,7 @@ void MainWindow::onBatchExportPreviewVideo()
     }
     UiDialogs::showMessageBox(
         QMessageBox::Warning,
-        this,
+        &owner_,
         uiText("dialog.batch_export.title", QStringLiteral("Batch Export")),
         uiText("dialog.batch_export.message.partial_failed", QStringLiteral("Batch export finished with failures.\nSucceeded: %1\nFailed: %2"))
             .arg(successCount)
