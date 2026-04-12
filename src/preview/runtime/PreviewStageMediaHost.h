@@ -6,6 +6,7 @@
 #include <QMetaObject>
 #include <QObject>
 #include <QPointer>
+#include <QVector>
 #include <QUrl>
 #include <QString>
 
@@ -68,6 +69,11 @@ public:
     double clockDeltaSeconds() const;
     qint64 videoFrameAgeMs() const;
     qint64 videoFrameCountTotal() const;
+    double videoFrameRateEstimate() const;
+    double videoFrameIntervalAvgMs() const;
+    double videoFrameIntervalMaxMs() const;
+    qint64 videoFrameStallCount() const;
+    bool videoFrameStalled() const;
     void setObservedPlayheadSecond(double second);
     QString debugMediaTypeName() const;
 
@@ -89,6 +95,10 @@ private:
     void bindVideoOutput();
     void updateClockDelta();
     void noteVideoFrameArrived(const QVideoFrame& frame);
+    void resetVideoFrameDiagnostics();
+    void updateVideoFrameStallState(bool logTransition);
+    qint64 currentVideoFrameAgeForDiagnosticsMs() const;
+    qint64 videoFrameStallThresholdMs() const;
 
     MediaKind mediaKind_ = MediaKind::None;
     QString chartPath_;
@@ -116,5 +126,14 @@ private:
     double observedPlayheadSecond_ = 0.0;
     double clockDeltaSeconds_ = 0.0;
     QElapsedTimer videoFrameElapsed_;
+    QElapsedTimer videoPlaybackActiveElapsed_;
+    QVector<double> videoFrameIntervalsMs_;
+    int videoFrameIntervalWriteIndex_ = 0;
+    int videoFrameIntervalCount_ = 0;
+    double videoFrameIntervalSumMs_ = 0.0;
+    double videoFrameIntervalMaxMs_ = 0.0;
+    qint64 videoFrameIntervalSampleCount_ = 0;
     qint64 videoFrameCountTotal_ = 0;
+    qint64 videoFrameStallCount_ = 0;
+    bool videoFrameStalled_ = false;
 };

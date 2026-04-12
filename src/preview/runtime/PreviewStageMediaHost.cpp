@@ -18,6 +18,19 @@
 namespace {
 
 constexpr qint64 kPausedSeekAckToleranceMs = 80;
+constexpr int kVideoFrameIntervalWindowSize = 120;
+constexpr qint64 kVideoFrameStallMinMs = 120;
+constexpr double kVideoFrameStallMultiplier = 3.5;
+
+double averageOrZero(double total, qint64 count)
+{
+    return count > 0 ? total / static_cast<double>(count) : 0.0;
+}
+
+double fpsFromAverageMs(double averageMs)
+{
+    return averageMs > 1e-6 ? 1000.0 / averageMs : 0.0;
+}
 
 QString normalizedLocalPath(const QString& path)
 {
@@ -56,6 +69,8 @@ QMediaPlayer::PlaybackState playerPlaybackState(const QMediaPlayer* player)
 PreviewStageMediaHost::PreviewStageMediaHost(QObject* parent)
     : QObject(parent)
 {
+    videoFrameIntervalsMs_.resize(kVideoFrameIntervalWindowSize);
+    videoFrameIntervalsMs_.fill(0.0);
 }
 
 PreviewStageMediaHost::~PreviewStageMediaHost() = default;
@@ -105,7 +120,9 @@ void PreviewStageMediaHost::initializeBackendObjects()
         }
         videoPlaybackActive_ = false;
         videoPlaybackPendingStart_ = false;
+        videoPlaybackActiveElapsed_.invalidate();
         updateClockDelta();
+        updateVideoFrameStallState(true);
         emit diagnosticsChanged();
         emit playbackFinished();
     });
@@ -281,6 +298,8 @@ void PreviewStageMediaHost::startPlayback(double seconds)
     initializeBackendObjects();
     observedPlayheadSecond_ = qMax(0.0, seconds);
     if (mediaKind_ != MediaKind::Video || player_ == nullptr) {
+        videoPlaybackActiveElapsed_.invalidate();
+        updateVideoFrameStallState(true);
         updateClockDelta();
         emit diagnosticsChanged();
         return;
@@ -295,10 +314,12 @@ void PreviewStageMediaHost::startPlayback(double seconds)
         player_->pause();
         videoPlaybackPendingStart_ = true;
         videoPlaybackActive_ = false;
+        videoPlaybackActiveElapsed_.invalidate();
     } else {
         player_->play();
         videoPlaybackActive_ = true;
         videoPlaybackPendingStart_ = false;
+        videoPlaybackActiveElapsed_.restart();
         if (playerPlaybackState(player_) != QMediaPlayer::PlayingState) {
             QMetaObject::invokeMethod(player_, [this]() {
                 if (mediaKind_ == MediaKind::Video && videoPlaybackActive_) {
@@ -308,6 +329,7 @@ void PreviewStageMediaHost::startPlayback(double seconds)
         }
     }
     updateClockDelta();
+    updateVideoFrameStallState(true);
     emit diagnosticsChanged();
 #endif
 }
@@ -322,6 +344,8 @@ void PreviewStageMediaHost::submitPausedSeek(double seconds, quint64 generation)
     observedPlayheadSecond_ = clampedSecond;
     updateClockDelta();
     if (mediaKind_ != MediaKind::Video || player_ == nullptr) {
+        videoPlaybackActiveElapsed_.invalidate();
+        updateVideoFrameStallState(true);
         emit pausedSeekCompleted(clampedSecond, generation);
         emit diagnosticsChanged();
         return;
@@ -383,6 +407,8 @@ void PreviewStageMediaHost::syncPlayback(double seconds)
     initializeBackendObjects();
     observedPlayheadSecond_ = qMax(0.0, seconds);
     if (mediaKind_ != MediaKind::Video || player_ == nullptr) {
+        videoPlaybackActiveElapsed_.invalidate();
+        updateVideoFrameStallState(true);
         updateClockDelta();
         emit diagnosticsChanged();
         return;
@@ -394,12 +420,15 @@ void PreviewStageMediaHost::syncPlayback(double seconds)
             player_->play();
         }
         updateClockDelta();
+        updateVideoFrameStallState(true);
         emit diagnosticsChanged();
         return;
     }
 
     const double rawSecond = seconds + timelineOffsetSeconds_;
     if (rawSecond < 0.0) {
+        videoPlaybackActiveElapsed_.invalidate();
+        updateVideoFrameStallState(true);
         updateClockDelta();
         emit diagnosticsChanged();
         return;
@@ -411,7 +440,9 @@ void PreviewStageMediaHost::syncPlayback(double seconds)
     player_->play();
     videoPlaybackPendingStart_ = false;
     videoPlaybackActive_ = true;
+    videoPlaybackActiveElapsed_.restart();
     updateClockDelta();
+    updateVideoFrameStallState(true);
     emit diagnosticsChanged();
 #endif
 }
@@ -427,7 +458,9 @@ void PreviewStageMediaHost::pausePlayback()
     }
     videoPlaybackActive_ = false;
     videoPlaybackPendingStart_ = false;
+    videoPlaybackActiveElapsed_.invalidate();
     updateClockDelta();
+    updateVideoFrameStallState(true);
     emit diagnosticsChanged();
 #endif
 }
@@ -464,10 +497,10 @@ double PreviewStageMediaHost::clockDeltaSeconds() const
 
 qint64 PreviewStageMediaHost::videoFrameAgeMs() const
 {
-    if (!hasVideoMedia() || !videoFrameElapsed_.isValid()) {
+    if (!hasVideoMedia()) {
         return -1;
     }
-    return videoFrameElapsed_.elapsed();
+    return currentVideoFrameAgeForDiagnosticsMs();
 }
 
 qint64 PreviewStageMediaHost::videoFrameCountTotal() const
@@ -475,10 +508,36 @@ qint64 PreviewStageMediaHost::videoFrameCountTotal() const
     return videoFrameCountTotal_;
 }
 
+double PreviewStageMediaHost::videoFrameRateEstimate() const
+{
+    return fpsFromAverageMs(videoFrameIntervalAvgMs());
+}
+
+double PreviewStageMediaHost::videoFrameIntervalAvgMs() const
+{
+    return averageOrZero(videoFrameIntervalSumMs_, videoFrameIntervalSampleCount_);
+}
+
+double PreviewStageMediaHost::videoFrameIntervalMaxMs() const
+{
+    return videoFrameIntervalMaxMs_;
+}
+
+qint64 PreviewStageMediaHost::videoFrameStallCount() const
+{
+    return videoFrameStallCount_;
+}
+
+bool PreviewStageMediaHost::videoFrameStalled() const
+{
+    return videoFrameStalled_;
+}
+
 void PreviewStageMediaHost::setObservedPlayheadSecond(double second)
 {
     observedPlayheadSecond_ = qMax(0.0, second);
     updateClockDelta();
+    updateVideoFrameStallState(true);
     emit diagnosticsChanged();
 }
 
@@ -516,8 +575,7 @@ void PreviewStageMediaHost::clearMedia()
     videoPlaybackPendingStart_ = false;
     observedPlayheadSecond_ = 0.0;
     clockDeltaSeconds_ = 0.0;
-    videoFrameElapsed_.invalidate();
-    videoFrameCountTotal_ = 0;
+    resetVideoFrameDiagnostics();
     emit imageSourceChanged();
     emit mediaStateChanged();
     emit diagnosticsChanged();
@@ -544,8 +602,7 @@ void PreviewStageMediaHost::loadImageMedia(const QString& path)
     lastSeekMs_ = -1;
     videoPlaybackActive_ = false;
     videoPlaybackPendingStart_ = false;
-    videoFrameElapsed_.invalidate();
-    videoFrameCountTotal_ = 0;
+    resetVideoFrameDiagnostics();
     updateClockDelta();
     emit imageSourceChanged();
     emit mediaStateChanged();
@@ -572,7 +629,7 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     lastSeekMs_ = -1;
     videoPlaybackActive_ = false;
     videoPlaybackPendingStart_ = false;
-    videoFrameElapsed_.invalidate();
+    resetVideoFrameDiagnostics();
     player_->setSource(QUrl::fromLocalFile(path));
     player_->pause();
     player_->setPosition(0);
@@ -642,10 +699,22 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame)
     if (!frame.isValid()) {
         return;
     }
-    const bool firstFrame = !videoFrameElapsed_.isValid();
+    if (videoFrameElapsed_.isValid()) {
+        const double intervalMs = static_cast<double>(videoFrameElapsed_.nsecsElapsed()) / 1000000.0;
+        videoFrameIntervalSumMs_ += intervalMs;
+        videoFrameIntervalMaxMs_ = qMax(videoFrameIntervalMaxMs_, intervalMs);
+        videoFrameIntervalSampleCount_ += 1;
+        if (!videoFrameIntervalsMs_.isEmpty()) {
+            videoFrameIntervalsMs_[videoFrameIntervalWriteIndex_] = intervalMs;
+            videoFrameIntervalWriteIndex_ = (videoFrameIntervalWriteIndex_ + 1) % videoFrameIntervalsMs_.size();
+            videoFrameIntervalCount_ = qMin(videoFrameIntervalCount_ + 1, videoFrameIntervalsMs_.size());
+        }
+    }
     videoFrameElapsed_.restart();
-    Q_UNUSED(firstFrame);
     ++videoFrameCountTotal_;
+    if (videoPlaybackActive_ && !videoPlaybackActiveElapsed_.isValid()) {
+        videoPlaybackActiveElapsed_.restart();
+    }
     if (pausedSeekCompletionPending_ && pausedSeekTargetMs_ >= 0) {
         qint64 candidatePositionMs = -1;
         const qint64 frameStartUs = frame.startTime();
@@ -686,6 +755,75 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame)
             );
         }
     }
+    updateVideoFrameStallState(true);
     emit diagnosticsChanged();
 #endif
+}
+
+void PreviewStageMediaHost::resetVideoFrameDiagnostics()
+{
+    videoFrameElapsed_.invalidate();
+    videoPlaybackActiveElapsed_.invalidate();
+    videoFrameIntervalsMs_.fill(0.0);
+    videoFrameIntervalWriteIndex_ = 0;
+    videoFrameIntervalCount_ = 0;
+    videoFrameIntervalSumMs_ = 0.0;
+    videoFrameIntervalMaxMs_ = 0.0;
+    videoFrameIntervalSampleCount_ = 0;
+    videoFrameCountTotal_ = 0;
+    videoFrameStallCount_ = 0;
+    videoFrameStalled_ = false;
+}
+
+void PreviewStageMediaHost::updateVideoFrameStallState(bool logTransition)
+{
+    const qint64 ageMs = currentVideoFrameAgeForDiagnosticsMs();
+    const bool stalled =
+        hasVideoMedia()
+        && videoPlaybackActive_
+        && ageMs >= 0
+        && ageMs >= videoFrameStallThresholdMs();
+    if (videoFrameStalled_ == stalled) {
+        return;
+    }
+    videoFrameStalled_ = stalled;
+    if (videoFrameStalled_) {
+        videoFrameStallCount_ += 1;
+    }
+    if (!logTransition) {
+        return;
+    }
+    appendPreviewStageMediaLog(
+        videoFrameStalled_ ? QStringLiteral("video_frame_stall_begin") : QStringLiteral("video_frame_stall_end"),
+        QString("age_ms=%1 threshold_ms=%2 avg_interval_ms=%3 fps=%4 frame_count=%5 playback_second=%6 observed_second=%7 delta=%8")
+            .arg(ageMs)
+            .arg(videoFrameStallThresholdMs())
+            .arg(videoFrameIntervalAvgMs(), 0, 'f', 3)
+            .arg(videoFrameRateEstimate(), 0, 'f', 3)
+            .arg(videoFrameCountTotal_)
+            .arg(currentPlaybackSecond(), 0, 'f', 6)
+            .arg(observedPlayheadSecond_, 0, 'f', 6)
+            .arg(clockDeltaSeconds_, 0, 'f', 6)
+    );
+}
+
+qint64 PreviewStageMediaHost::currentVideoFrameAgeForDiagnosticsMs() const
+{
+    if (videoFrameElapsed_.isValid()) {
+        return videoFrameElapsed_.elapsed();
+    }
+    if (videoPlaybackActive_ && videoPlaybackActiveElapsed_.isValid()) {
+        return videoPlaybackActiveElapsed_.elapsed();
+    }
+    return -1;
+}
+
+qint64 PreviewStageMediaHost::videoFrameStallThresholdMs() const
+{
+    const double baseIntervalMs = qMax(0.0, videoFrameIntervalAvgMs());
+    const double scaledThresholdMs = qMax(
+        static_cast<double>(kVideoFrameStallMinMs),
+        qMax(33.0, baseIntervalMs) * kVideoFrameStallMultiplier
+    );
+    return qMax<qint64>(kVideoFrameStallMinMs, qRound64(scaledThresholdMs));
 }

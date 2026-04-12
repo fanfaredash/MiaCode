@@ -124,6 +124,21 @@ Retired with the old preview renderer and not recommended anymore:
 - `MIACODE_PREVIEW_DIAG_COMPARE_VIDEO_FALLBACK_EVERY`
 - `MIACODE_PREVIEW_DIAG_COMPARE_PRESENT_EVERY`
 
+Preview diagnostics now split these timing sources instead of reporting a single ambiguous FPS number:
+
+- preview HUD:
+  - `Present` is the rolling `frameSwapped` / presented-frame rate
+  - `Tick` is the logical preview-tick rate
+  - `Req` is the `requestUpdate()` cadence seen by the runtime
+  - `Pacing` shows whether the preview is using fixed 60/120 pacing or display-refresh pacing, plus the current screen refresh rate
+- preview profile summary:
+  - `present_avg_ms` / `present_max_ms` are now true session-accumulated present intervals
+  - `present_window_*` keeps the last rolling present window for comparison with the on-screen FPS readout
+  - `tick_*`, `update_request_*`, and `ratio.*` rows help distinguish logic pacing from actual present pacing
+  - `external_stage_media.video_frame_*` rows now include aggregate external-video frame rate, interval, and stall counts
+- runtime log:
+  - `preview/stage_media` now also emits low-noise `action=video_frame_stall_begin` / `action=video_frame_stall_end` transitions when external video stops delivering frames for longer than expected
+
 ## Useful Workflows
 
 Launch the default Quick Shell app in debug mode:
