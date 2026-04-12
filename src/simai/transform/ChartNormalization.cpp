@@ -1,6 +1,7 @@
 #include "ChartNormalization.h"
 
 #include <algorithm>
+#include <numeric>
 
 #include <QtGlobal>
 
@@ -143,6 +144,73 @@ QString sortedModifierText(QString modifiers)
         return left.unicode() < right.unicode();
     });
     return modifiers;
+}
+
+QString normalizeFractionDurationSignature(QString signature, bool allowZeroDuration)
+{
+    if (signature.contains(QLatin1Char('#'))) {
+        return signature;
+    }
+
+    const int colon = signature.indexOf(QLatin1Char(':'));
+    if (colon < 0 || signature.indexOf(QLatin1Char(':'), colon + 1) >= 0) {
+        return signature;
+    }
+
+    bool beatsOk = false;
+    bool numeratorOk = false;
+    const int beats = signature.left(colon).trimmed().toInt(&beatsOk);
+    const int numerator = signature.mid(colon + 1).trimmed().toInt(&numeratorOk);
+    if (!beatsOk || !numeratorOk || beats <= 0 || numerator < 0) {
+        return signature;
+    }
+    if (!allowZeroDuration && numerator == 0) {
+        return signature;
+    }
+
+    const qint64 scaledGridUnits = 384ll * static_cast<qint64>(numerator);
+    if ((scaledGridUnits % beats) != 0) {
+        return signature;
+    }
+
+    const qint64 gridUnits = scaledGridUnits / beats;
+    const qint64 gcd = std::gcd<qint64>(384ll, gridUnits >= 0 ? gridUnits : -gridUnits);
+    if (gcd <= 0) {
+        return signature;
+    }
+
+    return QStringLiteral("%1:%2").arg(384ll / gcd).arg(gridUnits / gcd);
+}
+
+QString normalizeBracketDurationSignatures(const QString& text, bool allowZeroDuration)
+{
+    QString normalized;
+    normalized.reserve(text.size());
+
+    int cursor = 0;
+    while (cursor < text.size()) {
+        const int openBracket = text.indexOf(QLatin1Char('['), cursor);
+        if (openBracket < 0) {
+            normalized.append(text.mid(cursor));
+            break;
+        }
+
+        normalized.append(text.mid(cursor, openBracket - cursor));
+        const int closeBracket = text.indexOf(QLatin1Char(']'), openBracket + 1);
+        if (closeBracket < 0) {
+            normalized.append(text.mid(openBracket));
+            break;
+        }
+
+        normalized.append(QLatin1Char('['));
+        normalized.append(normalizeFractionDurationSignature(
+            text.mid(openBracket + 1, closeBracket - openBracket - 1),
+            allowZeroDuration));
+        normalized.append(QLatin1Char(']'));
+        cursor = closeBracket + 1;
+    }
+
+    return normalized;
 }
 
 bool parseTouchTokenParts(const QString& token, TouchTokenParts* parts)
@@ -313,7 +381,7 @@ QString buildTouchToken(const TouchTokenParts& parts)
     if (parts.hasFirework) {
         token.append(QLatin1Char('f'));
     }
-    token.append(parts.bracketSuffix);
+    token.append(normalizeBracketDurationSignatures(parts.bracketSuffix, true));
     return token;
 }
 
@@ -332,15 +400,18 @@ QString buildNoteToken(const NoteTokenParts& parts)
     if (parts.hasHold) {
         token.append(QLatin1Char('h'));
     }
-    token.append(parts.bracketSuffix);
+    token.append(normalizeBracketDurationSignatures(parts.bracketSuffix, true));
     return token;
 }
 
 QString buildSlideToken(const SlideTokenParts& parts)
 {
+    const QString normalizedCoreWithoutTrackBreak = normalizeBracketDurationSignatures(
+        parts.coreWithoutTrackBreak,
+        false);
     QString token;
-    token.reserve(parts.coreWithoutTrackBreak.size() + parts.headExtraModifiers.size() + 3);
-    token.append(parts.coreWithoutTrackBreak.at(0));
+    token.reserve(normalizedCoreWithoutTrackBreak.size() + parts.headExtraModifiers.size() + 3);
+    token.append(normalizedCoreWithoutTrackBreak.at(0));
     token.append(sortedModifierText(parts.headExtraModifiers));
     if (parts.headBreak) {
         token.append(QLatin1Char('b'));
@@ -348,7 +419,7 @@ QString buildSlideToken(const SlideTokenParts& parts)
     if (parts.headEx) {
         token.append(QLatin1Char('x'));
     }
-    QString remainder = parts.coreWithoutTrackBreak.mid(1);
+    QString remainder = normalizedCoreWithoutTrackBreak.mid(1);
     if (parts.trackBreak) {
         const int firstBracket = remainder.indexOf(QLatin1Char('['));
         if (firstBracket >= 0) {
