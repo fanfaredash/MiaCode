@@ -600,6 +600,17 @@ bool parseSlideWaitAndDuration(const QString& signature, double bpm, double* wai
         *outSeconds = 240.0 * static_cast<double>(num) / (useBpm * static_cast<double>(beats));
         return true;
     };
+    const auto storePositiveDuration = [durationSecond](double seconds) -> bool {
+        if (durationSecond == nullptr || seconds <= 0.0) {
+            return false;
+        }
+        *durationSecond = seconds;
+        return true;
+    };
+    const auto parsePositiveFraction = [&parseFraction, &storePositiveDuration](const QString& text, double useBpm) -> bool {
+        double seconds = 0.0;
+        return parseFraction(text, useBpm, &seconds) && storePositiveDuration(seconds);
+    };
 
     if (signature.contains("###") || signature.count('#') > 3) {
         return false;
@@ -621,12 +632,12 @@ bool parseSlideWaitAndDuration(const QString& signature, double bpm, double* wai
             if (!tempBpmOk) {
                 return false;
             }
-            if (parseFraction(tail.mid(hashIndex + 1), tempBpm, durationSecond)) {
+            if (parsePositiveFraction(tail.mid(hashIndex + 1), tempBpm)) {
                 return true;
             }
             return false;
         }
-        if (parseFraction(tail, bpm, durationSecond)) {
+        if (parsePositiveFraction(tail, bpm)) {
             return true;
         }
         bool durationOk = false;
@@ -634,8 +645,7 @@ bool parseSlideWaitAndDuration(const QString& signature, double bpm, double* wai
         if (!durationOk) {
             return false;
         }
-        *durationSecond = qMax(0.0, seconds);
-        return true;
+        return storePositiveDuration(seconds);
     }
 
     const int hashIndex = signature.indexOf('#');
@@ -647,7 +657,7 @@ bool parseSlideWaitAndDuration(const QString& signature, double bpm, double* wai
         }
         *waitSecond = 60.0 / tempBpm;
         const QString tail = signature.mid(hashIndex + 1);
-        if (parseFraction(tail, tempBpm, durationSecond)) {
+        if (parsePositiveFraction(tail, tempBpm)) {
             return true;
         }
         bool durationOk = false;
@@ -655,12 +665,11 @@ bool parseSlideWaitAndDuration(const QString& signature, double bpm, double* wai
         if (!durationOk) {
             return false;
         }
-        *durationSecond = qMax(0.0, seconds);
-        return true;
+        return storePositiveDuration(seconds);
     }
 
     *waitSecond = 60.0 / qMax(1.0, bpm);
-    return parseFraction(signature, bpm, durationSecond);
+    return parsePositiveFraction(signature, bpm);
 }
 
 double slideAngleDegrees(const QPointF& start, const QPointF& end)

@@ -104,6 +104,29 @@ int main(int argc, char** argv)
     }
 
     {
+        const SimaiNativeParseResult zeroHold = SimaiNativeParser::parseForTimeline(QStringLiteral("1h[8:0]/A1h[8:0],\nE"));
+        expect(zeroHold.ok, QStringLiteral("hold and touch-hold accept zero duration"));
+        const TimelineNoteMarker* hold = firstMarkerOfType(zeroHold, QLatin1String("hold"));
+        const TimelineNoteMarker* touchHold = firstMarkerOfType(zeroHold, QLatin1String("touch_hold"));
+        expect(hold != nullptr && touchHold != nullptr, QStringLiteral("zero-duration hold repro emits both hold kinds"));
+        if (hold != nullptr) {
+            expect(nearlyEqual(hold->endSecond, hold->second), QStringLiteral("zero-duration hold keeps tail on the head timing"));
+        }
+        if (touchHold != nullptr) {
+            expect(
+                nearlyEqual(touchHold->endSecond, touchHold->second),
+                QStringLiteral("zero-duration touch-hold keeps tail on the head timing"));
+        }
+    }
+
+    {
+        const SimaiNativeParseResult zeroSlide = SimaiNativeParser::parseForTimeline(QStringLiteral("1-5[8:0],\nE"));
+        const SimaiNativeParseResult zeroHashedSlide = SimaiNativeParser::parseForTimeline(QStringLiteral("1-5[120#0],\nE"));
+        expect(!zeroSlide.ok, QStringLiteral("slide rejects zero fraction duration"));
+        expect(!zeroHashedSlide.ok, QStringLiteral("slide rejects zero # duration"));
+    }
+
+    {
         const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(QStringLiteral("C1bx,\nE"));
         expect(parsed.ok, QStringLiteral("lenient parse accepts C1 with b/x modifiers"));
         expect(!parsed.noteMarkers.isEmpty(), QStringLiteral("C1 lenient parse emits marker"));

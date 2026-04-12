@@ -1020,6 +1020,20 @@ void runInlineSpecs(QTextStream& err, int* failed)
 
     {
         const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(
+                QStringLiteral("A1fxh[24:6]/1h[8:0]/1-5[24:3]/1-5[120#24:3],,,,\nE"));
+        expectTrue(normalized.ok, QStringLiteral("normalize whole chart reduces hold and slide durations to the 384 grid"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16}A1xhf[4:1]/1h[1:0]/1-5[8:1]/1-5[120#24:3],,,, ,,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize whole chart reduces no-hash durations while preserving # timing syntax"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationResult normalized =
             miacode::chart_transform::normalizeChartText(QStringLiteral(",,(180)|| 3 / 4\n,,,\nE"));
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts BPM plus inline time-signature control syntax"), failed, err);
         expectEqual(
