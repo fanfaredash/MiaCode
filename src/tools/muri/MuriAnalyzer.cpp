@@ -2577,7 +2577,11 @@ QVector<PadWindowInterval> buildPadWindowIntervals(
         interval.startTick = judgeTickForPadActiveStart(window.startSecond);
         interval.endTick = judgeTickForPadActiveEnd(window.endSecond);
         if (interval.endTick < interval.startTick) {
-            continue;
+            // Keep zero-duration or sub-tick windows alive for one judge tick.
+            // Wifi resources can emit multiple pads at the exact same proportion
+            // (for example E5/B5/E6), and dropping those windows makes on-slide
+            // touches miss the matching pad-down entirely.
+            interval.endTick = interval.startTick;
         }
 
         interval.sourceMarkerKey = window.sourceMarkerKey;
