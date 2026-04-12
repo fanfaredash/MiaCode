@@ -121,7 +121,13 @@ public:
     void toggleShellPreviewPlayback() override;
     void stopShellPreview() override;
     void seekShellPreview(double second) override;
+    void beginShellPreviewScrub() override;
+    void updateShellPreviewScrub(double second, bool centerView) override;
+    void endShellPreviewScrub(double second, bool centerView) override;
     void setShellPreviewRate(double rate) override;
+    bool stepShellPreviewBySeconds(double deltaSeconds, bool centerView) override;
+    void beginShellPreviewHeldSeek(int direction, int key) override;
+    void stopShellPreviewHeldSeek(int key = 0) override;
     void setShellPreviewFullscreen(bool fullscreen) override;
     bool shellHasShortcut(const QKeySequence& sequence) const override;
     bool shellTriggerShortcut(const QKeySequence& sequence) override;
@@ -131,6 +137,7 @@ public:
     bool shellPreviewPlaying() const override;
     double shellPreviewPositionSeconds() const override;
     double shellPreviewDurationSeconds() const override;
+    QStringList shellPreviewStatsTexts() const override;
     bool shellPreviewFullscreen() const override;
     QObject* shellPreviewRuntimeObject() const override;
     QObject* shellPreviewStageMediaHostObject() const override;
@@ -142,13 +149,6 @@ public:
     int shellOutlineDockExpandedWidth() const override;
     QWidget* shellWorkspaceWidget() const override;
     QWidget* shellPreviewPanelWidget() const override;
-    QString shellPreviewPanelStyleSheet() const override;
-    QWidget* shellPreviewControlCardWidget() const override;
-    QWidget* shellPreviewStatsCardWidget() const override;
-    QLabel* shellPreviewTotalStatsLabel() const override;
-    QGridLayout* shellPreviewStatsGridLayout() const override;
-    int shellPreviewStatsMinimumPanelHeight(int panelWidth) const override;
-    int shellUpdatePreviewStatsLayout(int hostWidth = -1) override;
     double shellNormalizedPreviewCanvasAspectRatio() const override;
     void shellRefreshLayoutAfterResize() override;
     void shellSetRootWindowFrameGeometry(const QRect& geometry) override;

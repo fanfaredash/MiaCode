@@ -55,6 +55,7 @@ public:
     void syncPreviewStageMediaRoutePlayback(double second);
     void pausePreviewStageMediaRoutePlayback();
     void seekPreviewStageMediaRouteWhilePaused(double second);
+    void submitPreviewStageMediaRoutePausedSeek(double second, quint64 generation);
     void setPreviewStageMediaRouteObservedPlayheadSecond(double second);
     void ensureQuickShellPreviewCompositeSurfaceInitialized();
     void refreshQuickShellPreviewCompositeSurfaceState();

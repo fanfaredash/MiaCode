@@ -102,9 +102,14 @@ public:
     void updatePreviewObjectStats(double second);
     QString formatPreviewTimestamp(double second) const;
     void showPreviewSliderTimeHint(int sliderValue);
+    void requestPausedPreviewSeek(double second, bool centerView, bool submitMediaImmediately = true);
+    void applyPausedPreviewVisualSecond(double second, bool centerView);
+    void submitPausedMediaSeek(double second, quint64 generation);
+    void maybeSubmitLatestPausedMediaSeek();
+    void handlePausedPreviewMediaSeekCompleted(double second, quint64 generation);
     void schedulePreviewSeek(double second, bool centerView);
-    bool stepPreviewSliderBySeconds(double deltaSeconds, bool centerView);
-    bool handlePreviewSliderWheel(QWheelEvent* event);
+    bool stepPreviewBySeconds(double deltaSeconds, bool centerView);
+    bool handlePreviewSeekWheel(QWheelEvent* event);
     void beginPreviewHeldSeek(int direction, int key);
     void stopPreviewHeldSeek(int key = 0);
     void applyPreviewHeldSeekTick();

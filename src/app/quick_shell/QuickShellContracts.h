@@ -3,10 +3,9 @@
 #include <QKeySequence>
 #include <QRect>
 #include <QString>
+#include <QStringList>
 
 class QDockWidget;
-class QGridLayout;
-class QLabel;
 class QObject;
 class QWidget;
 class QWindow;
@@ -15,7 +14,6 @@ struct QuickShellNativeSurfaceBundle {
     QWindow* topChrome = nullptr;
     QWindow* sidebar = nullptr;
     QWindow* workspace = nullptr;
-    QWindow* previewControls = nullptr;
     QWindow* status = nullptr;
     QWindow* previewCompositeWindow = nullptr;
 };
@@ -29,7 +27,13 @@ public:
     virtual void toggleShellPreviewPlayback() = 0;
     virtual void stopShellPreview() = 0;
     virtual void seekShellPreview(double second) = 0;
+    virtual void beginShellPreviewScrub() = 0;
+    virtual void updateShellPreviewScrub(double second, bool centerView) = 0;
+    virtual void endShellPreviewScrub(double second, bool centerView) = 0;
     virtual void setShellPreviewRate(double rate) = 0;
+    virtual bool stepShellPreviewBySeconds(double deltaSeconds, bool centerView) = 0;
+    virtual void beginShellPreviewHeldSeek(int direction, int key) = 0;
+    virtual void stopShellPreviewHeldSeek(int key = 0) = 0;
     virtual void setShellPreviewFullscreen(bool fullscreen) = 0;
     virtual bool shellHasShortcut(const QKeySequence& sequence) const = 0;
     virtual bool shellTriggerShortcut(const QKeySequence& sequence) = 0;
@@ -46,6 +50,7 @@ public:
     virtual bool shellPreviewPlaying() const = 0;
     virtual double shellPreviewPositionSeconds() const = 0;
     virtual double shellPreviewDurationSeconds() const = 0;
+    virtual QStringList shellPreviewStatsTexts() const = 0;
     virtual bool shellPreviewFullscreen() const = 0;
     virtual QObject* shellPreviewRuntimeObject() const = 0;
     virtual QObject* shellPreviewStageMediaHostObject() const = 0;
@@ -64,13 +69,6 @@ public:
     virtual int shellOutlineDockExpandedWidth() const = 0;
     virtual QWidget* shellWorkspaceWidget() const = 0;
     virtual QWidget* shellPreviewPanelWidget() const = 0;
-    virtual QString shellPreviewPanelStyleSheet() const = 0;
-    virtual QWidget* shellPreviewControlCardWidget() const = 0;
-    virtual QWidget* shellPreviewStatsCardWidget() const = 0;
-    virtual QLabel* shellPreviewTotalStatsLabel() const = 0;
-    virtual QGridLayout* shellPreviewStatsGridLayout() const = 0;
-    virtual int shellPreviewStatsMinimumPanelHeight(int panelWidth) const = 0;
-    virtual int shellUpdatePreviewStatsLayout(int hostWidth = -1) = 0;
     virtual double shellNormalizedPreviewCanvasAspectRatio() const = 0;
     virtual void shellRefreshLayoutAfterResize() = 0;
     virtual void shellSetRootWindowFrameGeometry(const QRect& geometry) = 0;

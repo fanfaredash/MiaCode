@@ -258,6 +258,13 @@ void PreviewQuickSceneRoot::syncVisibleHostWindowBinding()
         windowVisibilityConnection_ = QMetaObject::Connection();
     }
     if (runtime_ != nullptr && boundWindow_ != nullptr) {
+        appendQuickSceneLog(
+            QStringLiteral("visible_host_clear"),
+            QString("window=%1 item_visible=%2 window_visible=%3")
+                .arg(pointerHex(boundWindow_))
+                .arg(isVisible() ? 1 : 0)
+                .arg(boundWindow_->isVisible() ? 1 : 0)
+        );
         runtime_->clearVisibleHostWindow(boundWindow_);
     }
 
@@ -272,6 +279,13 @@ void PreviewQuickSceneRoot::syncVisibleHostWindowBinding()
         return;
     }
 
+    appendQuickSceneLog(
+        QStringLiteral("visible_host_bind"),
+        QString("window=%1 item_visible=%2 window_visible=%3")
+            .arg(pointerHex(boundWindow_))
+            .arg(isVisible() ? 1 : 0)
+            .arg(boundWindow_->isVisible() ? 1 : 0)
+    );
     runtime_->setVisibleHostWindow(boundWindow_);
     windowVisibilityConnection_ = QObject::connect(boundWindow_, &QWindow::visibilityChanged, this, [this](QWindow::Visibility) {
         syncVisibleHostWindowBinding();

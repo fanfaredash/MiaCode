@@ -6,8 +6,10 @@
 #include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "common/DebugLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
+#include "preview/scene/PreviewProgressStatsCache.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -114,6 +116,25 @@ void applySystemBackdropToWidget(QWidget* widget, bool enabled, bool darkTheme)
 
 }  // namespace
 
+namespace {
+
+constexpr auto kQuickShellTransportSeekProperty = "miacode.quick_shell_transport_seek";
+
+void appendQuickShellBackendLog(const QString& action, const QString& payload = QString())
+{
+    QString text = QStringLiteral("action=%1").arg(action);
+    if (!payload.trimmed().isEmpty()) {
+        text += QStringLiteral(" ") + payload.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("quick_shell/backend"),
+        text
+    );
+}
+
+}  // namespace
+
 bool MainWindow::quickShellRootWindowFrameGeometryAvailable() const
 {
     return quickShellRootWindowFrameGeometry_.isValid();
@@ -149,9 +170,124 @@ void MainWindow::seekShellPreview(double second)
     seekPreviewToSecond(second, true);
 }
 
+void MainWindow::beginShellPreviewScrub()
+{
+    appendQuickShellBackendLog(QStringLiteral("preview_scrub_begin"));
+    QToolTip::hideText();
+    stopPreviewHeldSeek();
+    previewScrubDragging_ = true;
+    previewScrubRenderElapsed_.invalidate();
+    if (previewFullscreenActive_) {
+        showPreviewFullscreenControls(false);
+    }
+    if (qtPreviewPlaying_) {
+        stopQtPreviewPlayback(true);
+    }
+}
+
+void MainWindow::updateShellPreviewScrub(double second, bool centerView)
+{
+    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    QToolTip::hideText();
+    appendQuickShellBackendLog(
+        QStringLiteral("preview_scrub_update"),
+        QString("second=%1 center=%2")
+            .arg(clampedSecond, 0, 'f', 6)
+            .arg(centerView ? 1 : 0)
+    );
+    qtPreviewPauseSecond_ = clampedSecond;
+    if (previewFullscreenActive_) {
+        showPreviewFullscreenControls(false);
+    }
+    const bool shouldRenderNow =
+        !previewScrubRenderElapsed_.isValid()
+        || previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs;
+    if (shouldRenderNow) {
+        if (previewSeekDebounceTimer_ != nullptr) {
+            previewSeekDebounceTimer_->stop();
+        }
+        seekPreviewToSecond(clampedSecond, centerView);
+        previewScrubRenderElapsed_.restart();
+    } else {
+        schedulePreviewSeek(clampedSecond, centerView);
+    }
+}
+
+void MainWindow::endShellPreviewScrub(double second, bool centerView)
+{
+    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    QToolTip::hideText();
+    appendQuickShellBackendLog(
+        QStringLiteral("preview_scrub_end"),
+        QString("second=%1 center=%2")
+            .arg(clampedSecond, 0, 'f', 6)
+            .arg(centerView ? 1 : 0)
+    );
+    stopPreviewHeldSeek();
+    previewScrubDragging_ = false;
+    previewScrubRenderElapsed_.invalidate();
+    qtPreviewPauseSecond_ = clampedSecond;
+    if (previewSeekDebounceTimer_ != nullptr) {
+        previewSeekDebounceTimer_->stop();
+    }
+    seekPreviewToSecond(clampedSecond, centerView);
+}
+
 void MainWindow::setShellPreviewRate(double rate)
 {
     applyPreviewPlaybackRate(rate);
+}
+
+bool MainWindow::stepShellPreviewBySeconds(double deltaSeconds, bool centerView)
+{
+    appendQuickShellBackendLog(
+        QStringLiteral("preview_step_request"),
+        QString("delta=%1 center=%2")
+            .arg(deltaSeconds, 0, 'f', 6)
+            .arg(centerView ? 1 : 0)
+    );
+    if (!qIsFinite(deltaSeconds)) {
+        return false;
+    }
+    const double nextSecond = qBound(
+        0.0,
+        qtPreviewPauseSecond_ + deltaSeconds,
+        previewDurationSeconds()
+    );
+    const bool moved = qAbs(nextSecond - qtPreviewPauseSecond_) >= 1e-9;
+    QToolTip::hideText();
+    if (moved) {
+        seekPreviewToSecond(nextSecond, centerView);
+    }
+    appendQuickShellBackendLog(
+        QStringLiteral("preview_step_result"),
+        QString("delta=%1 center=%2 moved=%3 pos=%4")
+            .arg(deltaSeconds, 0, 'f', 6)
+            .arg(centerView ? 1 : 0)
+            .arg(moved ? 1 : 0)
+            .arg(shellPreviewPositionSeconds(), 0, 'f', 6)
+    );
+    return moved;
+}
+
+void MainWindow::beginShellPreviewHeldSeek(int direction, int key)
+{
+    appendQuickShellBackendLog(
+        QStringLiteral("preview_hold_begin"),
+        QString("direction=%1 key=%2").arg(direction).arg(key)
+    );
+    setProperty(kQuickShellTransportSeekProperty, true);
+    beginPreviewHeldSeek(direction, key);
+}
+
+void MainWindow::stopShellPreviewHeldSeek(int key)
+{
+    appendQuickShellBackendLog(
+        QStringLiteral("preview_hold_stop"),
+        QString("key=%1").arg(key)
+    );
+    stopPreviewHeldSeek(key);
+    setProperty(kQuickShellTransportSeekProperty, false);
 }
 
 void MainWindow::setShellPreviewFullscreen(bool fullscreen)
@@ -209,7 +345,14 @@ bool MainWindow::shellWorkspacePanelsSwapped() const
 
 QString MainWindow::shellPreviewSpeedLabel() const
 {
-    return previewSpeedButton_ != nullptr ? previewSpeedButton_->text() : QStringLiteral("1x");
+    QString rateText = QString::number(previewPlaybackRate_, 'f', 2);
+    while (rateText.endsWith('0')) {
+        rateText.chop(1);
+    }
+    if (rateText.endsWith('.')) {
+        rateText.chop(1);
+    }
+    return QStringLiteral("%1x").arg(rateText);
 }
 
 bool MainWindow::shellPreviewPlaying() const
@@ -219,14 +362,34 @@ bool MainWindow::shellPreviewPlaying() const
 
 double MainWindow::shellPreviewPositionSeconds() const
 {
-    return previewSlider_ != nullptr
-        ? static_cast<double>(previewSlider_->value()) / 1000.0
-        : qtPreviewPauseSecond_;
+    return qMax(0.0, qtPreviewPauseSecond_);
 }
 
 double MainWindow::shellPreviewDurationSeconds() const
 {
     return previewDurationSeconds();
+}
+
+QStringList MainWindow::shellPreviewStatsTexts() const
+{
+    const miacode::preview::scene::PreviewObjectStatsSnapshot stats =
+        previewProgressStatsCache_ != nullptr
+            ? previewProgressStatsCache_->snapshotAt(qMax(0.0, qtPreviewPauseSecond_))
+            : miacode::preview::scene::PreviewObjectStatsSnapshot();
+    const auto fmt = [](const QString& name, int played, int total) {
+        return QString("%1  %2/%3")
+            .arg(name.leftJustified(5, QChar(' '), true))
+            .arg(played)
+            .arg(total);
+    };
+    return QStringList{
+        fmt(QStringLiteral("Tap"), stats.tapPlayed, stats.tapTotal),
+        fmt(QStringLiteral("Hold"), stats.holdPlayed, stats.holdTotal),
+        fmt(QStringLiteral("Slide"), stats.slidePlayed, stats.slideTotal),
+        fmt(QStringLiteral("Touch"), stats.touchPlayed, stats.touchTotal),
+        fmt(QStringLiteral("Break"), stats.breakPlayed, stats.breakTotal),
+        fmt(QStringLiteral("Total"), stats.totalPlayed, stats.totalCount),
+    };
 }
 
 bool MainWindow::shellPreviewFullscreen() const
@@ -282,41 +445,6 @@ QWidget* MainWindow::shellWorkspaceWidget() const
 QWidget* MainWindow::shellPreviewPanelWidget() const
 {
     return previewPanel_;
-}
-
-QString MainWindow::shellPreviewPanelStyleSheet() const
-{
-    return previewPanel_ != nullptr ? previewPanel_->styleSheet() : QString();
-}
-
-QWidget* MainWindow::shellPreviewControlCardWidget() const
-{
-    return previewControlCard_;
-}
-
-QWidget* MainWindow::shellPreviewStatsCardWidget() const
-{
-    return previewStatsCard_;
-}
-
-QLabel* MainWindow::shellPreviewTotalStatsLabel() const
-{
-    return previewTotalStatsLabel_;
-}
-
-QGridLayout* MainWindow::shellPreviewStatsGridLayout() const
-{
-    return previewStatsGridLayout_;
-}
-
-int MainWindow::shellPreviewStatsMinimumPanelHeight(int panelWidth) const
-{
-    return previewStatsMinimumHeightForPanelWidth(panelWidth);
-}
-
-int MainWindow::shellUpdatePreviewStatsLayout(int hostWidth)
-{
-    return updatePreviewStatsLayoutMode(hostWidth);
 }
 
 double MainWindow::shellNormalizedPreviewCanvasAspectRatio() const

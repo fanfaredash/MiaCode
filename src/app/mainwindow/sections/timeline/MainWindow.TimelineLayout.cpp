@@ -128,7 +128,7 @@ void MainWindow::TimelineSection::updatePreviewSliderRange()
 
 void MainWindow::TimelineSection::updatePreviewSliderPosition(double second)
 {
-    if (ui_.previewSlider_ == nullptr || state_.previewSliderDragging_) {
+    if (ui_.previewSlider_ == nullptr || state_.previewScrubDragging_) {
         return;
     }
     const int value = qBound(0, qRound(second * 1000.0), ui_.previewSlider_->maximum());
@@ -500,6 +500,7 @@ void MainWindow::TimelineSection::enterPreviewFullscreen()
     state_.previewFullscreenActive_ = true;
     state_.previewFullscreenControlsVisible_ = false;
     state_.previewFullscreenCursorTrackingInitialized_ = false;
+    owner_.refreshQuickShellPreviewCompositeSurfaceState();
     owner_.updatePauseButtonAppearance();
     updatePreviewFullscreenButtonAppearance();
 }
@@ -512,6 +513,7 @@ void MainWindow::TimelineSection::exitPreviewFullscreen()
     state_.previewFullscreenActive_ = false;
     state_.previewFullscreenControlsVisible_ = false;
     state_.previewFullscreenCursorTrackingInitialized_ = false;
+    owner_.refreshQuickShellPreviewCompositeSurfaceState();
     owner_.updatePauseButtonAppearance();
     updatePreviewFullscreenButtonAppearance();
 }
@@ -673,7 +675,7 @@ void MainWindow::TimelineSection::hidePreviewFullscreenControls(bool animate)
         ui_.previewSpeedButton_ != nullptr
         && ui_.previewSpeedButton_->menu() != nullptr
         && ui_.previewSpeedButton_->menu()->isVisible();
-    if (state_.previewSliderDragging_ || pointerOverControls || speedMenuVisible) {
+    if (state_.previewScrubDragging_ || pointerOverControls || speedMenuVisible) {
         schedulePreviewFullscreenControlsAutoHide();
         return;
     }

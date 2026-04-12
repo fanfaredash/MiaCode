@@ -34,6 +34,20 @@ using namespace miacode::mainwindow::shared;
 namespace {
 
 constexpr double kTimelineZeroSecondTolerance = 1e-6;
+constexpr auto kQuickShellTransportSeekProperty = "miacode.quick_shell_transport_seek";
+
+void appendQuickShellBackendLog(const QString& action, const QString& payload = QString())
+{
+    QString text = QStringLiteral("action=%1").arg(action);
+    if (!payload.trimmed().isEmpty()) {
+        text += QStringLiteral(" ") + payload.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("quick_shell/backend"),
+        text
+    );
+}
 
 }  // namespace
 
@@ -74,44 +88,162 @@ QString MainWindow::parsedLatencyMeterId() const
 
 void MainWindow::TimelineSection::schedulePreviewSeek(double second, bool centerView)
 {
+    requestPausedPreviewSeek(second, centerView, false);
+}
+
+void MainWindow::TimelineSection::requestPausedPreviewSeek(
+    double second,
+    bool centerView,
+    bool submitMediaImmediately
+)
+{
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    const quint64 generation = ++state_.pausedSeekGeneration_;
+    state_.pausedSeekTargetSecond_ = clampedSecond;
     state_.previewPendingSeekSecond_ = clampedSecond;
     state_.previewPendingSeekCenterView_ = centerView;
-    updatePreviewSliderPosition(clampedSecond);
+    appendQuickShellBackendLog(
+        QStringLiteral("paused_seek_request"),
+        QString("generation=%1 second=%2 center=%3 submit_now=%4 media_pending=%5")
+            .arg(generation)
+            .arg(clampedSecond, 0, 'f', 6)
+            .arg(centerView ? 1 : 0)
+            .arg(submitMediaImmediately ? 1 : 0)
+            .arg(state_.pausedSeekMediaPending_ ? 1 : 0)
+    );
+    applyPausedPreviewVisualSecond(clampedSecond, centerView);
+    if (!owner_.previewStageMediaRouteHasVideo()) {
+        state_.pausedSeekMediaPending_ = false;
+        state_.pausedSeekMediaAckGeneration_ = generation;
+        if (ui_.previewSeekDebounceTimer_ != nullptr) {
+            ui_.previewSeekDebounceTimer_->stop();
+        }
+        return;
+    }
+    if (submitMediaImmediately && !state_.pausedSeekMediaPending_) {
+        submitPausedMediaSeek(clampedSecond, generation);
+        return;
+    }
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
         ui_.previewSeekDebounceTimer_->start();
     } else {
-        seekPreviewToSecond(clampedSecond, centerView);
+        maybeSubmitLatestPausedMediaSeek();
     }
 }
 
-bool MainWindow::TimelineSection::stepPreviewSliderBySeconds(double deltaSeconds, bool centerView)
+void MainWindow::TimelineSection::applyPausedPreviewVisualSecond(double second, bool centerView)
 {
-    if (ui_.previewSlider_ == nullptr || !qIsFinite(deltaSeconds)) {
-        return false;
+    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    state_.qtPreviewStartSecond_ = clampedSecond;
+    state_.qtPreviewPauseSecond_ = clampedSecond;
+    state_.qtPreviewTimelineStartSecond_ = clampedSecond;
+    state_.qtPreviewTimelineElapsed_.restart();
+    state_.qtPreviewPendingTimelineSecond_ = clampedSecond;
+    state_.qtPreviewPendingTimelineCenterView_ = centerView;
+    state_.qtPreviewTimelineDirty_ = true;
+    if (ui_.timelineView_ != nullptr) {
+        ui_.timelineView_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
     }
-    const int deltaMs = qRound(deltaSeconds * 1000.0);
-    if (deltaMs == 0) {
-        return false;
+    applyQtPreviewPosition(clampedSecond, centerView);
+    if (ui_.timelineView_ != nullptr) {
+        ui_.timelineView_->focusPlayhead(centerView);
     }
-    const int value = qBound(
-        ui_.previewSlider_->minimum(),
-        ui_.previewSlider_->value() + deltaMs,
-        ui_.previewSlider_->maximum()
+    state_.pausedSeekAppliedVisualSecond_ = clampedSecond;
+    appendQuickShellBackendLog(
+        QStringLiteral("paused_seek_visual_apply"),
+        QString("generation=%1 second=%2 center=%3")
+            .arg(state_.pausedSeekGeneration_)
+            .arg(clampedSecond, 0, 'f', 6)
+            .arg(centerView ? 1 : 0)
     );
-    if (value == ui_.previewSlider_->value()) {
-        showPreviewSliderTimeHint(value);
-        return true;
-    }
-    ui_.previewSlider_->setValue(value);
-    showPreviewSliderTimeHint(value);
-    seekPreviewToSecond(static_cast<double>(value) / 1000.0, centerView);
-    return true;
 }
 
-bool MainWindow::TimelineSection::handlePreviewSliderWheel(QWheelEvent* event)
+void MainWindow::TimelineSection::submitPausedMediaSeek(double second, quint64 generation)
 {
-    if (ui_.previewSlider_ == nullptr || event == nullptr) {
+    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    if (ui_.previewSeekDebounceTimer_ != nullptr) {
+        ui_.previewSeekDebounceTimer_->stop();
+    }
+    if (!owner_.previewStageMediaRouteHasVideo()) {
+        state_.pausedSeekMediaPending_ = false;
+        state_.pausedSeekMediaAckGeneration_ = generation;
+        return;
+    }
+    state_.pausedSeekMediaPending_ = true;
+    state_.pausedSeekMediaSubmittedGeneration_ = generation;
+    appendQuickShellBackendLog(
+        QStringLiteral("paused_seek_media_submit"),
+        QString("generation=%1 second=%2")
+            .arg(generation)
+            .arg(clampedSecond, 0, 'f', 6)
+    );
+    owner_.submitPreviewStageMediaRoutePausedSeek(clampedSecond, generation);
+}
+
+void MainWindow::TimelineSection::maybeSubmitLatestPausedMediaSeek()
+{
+    if (state_.qtPreviewPlaying_ || state_.pausedSeekMediaPending_ || !owner_.previewStageMediaRouteHasVideo()) {
+        return;
+    }
+    if (state_.pausedSeekMediaAckGeneration_ >= state_.pausedSeekGeneration_) {
+        return;
+    }
+    submitPausedMediaSeek(state_.pausedSeekTargetSecond_, state_.pausedSeekGeneration_);
+}
+
+void MainWindow::TimelineSection::handlePausedPreviewMediaSeekCompleted(double second, quint64 generation)
+{
+    const bool staleSubmitted = generation != state_.pausedSeekMediaSubmittedGeneration_;
+    appendQuickShellBackendLog(
+        QStringLiteral("paused_seek_media_ack"),
+        QString("generation=%1 submitted=%2 latest=%3 second=%4 stale_submitted=%5")
+            .arg(generation)
+            .arg(state_.pausedSeekMediaSubmittedGeneration_)
+            .arg(state_.pausedSeekGeneration_)
+            .arg(second, 0, 'f', 6)
+            .arg(staleSubmitted ? 1 : 0)
+    );
+    if (staleSubmitted) {
+        return;
+    }
+    state_.pausedSeekMediaPending_ = false;
+    state_.pausedPreviewMediaSeekPending_ = false;
+    state_.pausedSeekMediaAckGeneration_ = generation;
+    state_.qtPreviewStartSecond_ = second;
+    state_.qtPreviewElapsed_.restart();
+    owner_.refreshPreviewStageMediaRouteDebugState(false);
+    if (generation < state_.pausedSeekGeneration_) {
+        appendQuickShellBackendLog(
+            QStringLiteral("paused_seek_media_drop"),
+            QString("acked=%1 latest=%2").arg(generation).arg(state_.pausedSeekGeneration_)
+        );
+        maybeSubmitLatestPausedMediaSeek();
+    }
+}
+
+bool MainWindow::TimelineSection::stepPreviewBySeconds(double deltaSeconds, bool centerView)
+{
+    if (!qIsFinite(deltaSeconds)) {
+        return false;
+    }
+    if (qAbs(deltaSeconds) < 1e-9) {
+        return false;
+    }
+    const double nextSecond = qBound(
+        0.0,
+        state_.qtPreviewPauseSecond_ + deltaSeconds,
+        previewDurationSeconds()
+    );
+    const bool moved = qAbs(nextSecond - state_.qtPreviewPauseSecond_) >= 1e-9;
+    if (moved) {
+        seekPreviewToSecond(nextSecond, centerView);
+    }
+    return moved;
+}
+
+bool MainWindow::TimelineSection::handlePreviewSeekWheel(QWheelEvent* event)
+{
+    if (event == nullptr) {
         return false;
     }
     int delta = event->angleDelta().y();
@@ -129,8 +261,7 @@ bool MainWindow::TimelineSection::handlePreviewSliderWheel(QWheelEvent* event)
     }
     const int steps = delta > 0 ? qMax(1, qRound(static_cast<double>(delta) / 120.0))
                                 : qMin(-1, qRound(static_cast<double>(delta) / 120.0));
-    ui_.previewSlider_->setFocus(Qt::MouseFocusReason);
-    const bool handled = stepPreviewSliderBySeconds(
+    const bool handled = stepPreviewBySeconds(
         static_cast<double>(steps) * miacode::preview_interaction::kSeekSingleStepSeconds,
         true
     );
@@ -142,9 +273,15 @@ bool MainWindow::TimelineSection::handlePreviewSliderWheel(QWheelEvent* event)
 
 void MainWindow::TimelineSection::beginPreviewHeldSeek(int direction, int key)
 {
-    if (direction == 0 || ui_.previewSlider_ == nullptr) {
+    if (direction == 0) {
         return;
     }
+    appendQuickShellBackendLog(
+        QStringLiteral("native_hold_begin"),
+        QString("direction=%1 key=%2 has_focus=0")
+            .arg(direction > 0 ? 1 : -1)
+            .arg(key)
+    );
     state_.previewHeldSeekDirection_ = direction > 0 ? 1 : -1;
     state_.previewSeekHeldArrowKey_ = key;
     state_.previewSeekHeldArrowLastElapsedMs_ = 0;
@@ -159,10 +296,17 @@ void MainWindow::TimelineSection::stopPreviewHeldSeek(int key)
     if (key != 0 && state_.previewSeekHeldArrowKey_ != key) {
         return;
     }
+    appendQuickShellBackendLog(
+        QStringLiteral("native_hold_stop"),
+        QString("key=%1 active_key=%2 has_focus=0")
+            .arg(key)
+            .arg(state_.previewSeekHeldArrowKey_)
+    );
     state_.previewHeldSeekDirection_ = 0;
     state_.previewSeekHeldArrowKey_ = 0;
     state_.previewSeekHeldArrowLastElapsedMs_ = 0;
     state_.previewSeekHeldArrowElapsed_.invalidate();
+    owner_.setProperty(kQuickShellTransportSeekProperty, false);
     if (ui_.previewHeldSeekTimer_ != nullptr) {
         ui_.previewHeldSeekTimer_->stop();
     }
@@ -181,11 +325,28 @@ void MainWindow::TimelineSection::applyPreviewHeldSeekTick()
         : miacode::preview_interaction::kSeekHoldTickIntervalMs;
     state_.previewSeekHeldArrowLastElapsedMs_ = elapsedMs;
     const double heldSeconds = static_cast<double>(elapsedMs) / 1000.0;
-    stepPreviewSliderBySeconds(
+    const double deltaSeconds =
         static_cast<double>(state_.previewHeldSeekDirection_)
-            * miacode::preview_interaction::heldSeekStepSecondsForDeltaMs(deltaMs, heldSeconds),
-        true
+        * miacode::preview_interaction::heldSeekStepSecondsForDeltaMs(deltaMs, heldSeconds);
+    appendQuickShellBackendLog(
+        QStringLiteral("native_hold_tick"),
+        QString("direction=%1 key=%2 delta_ms=%3 held=%4 delta=%5 has_focus=0 pos=%6")
+            .arg(state_.previewHeldSeekDirection_)
+            .arg(state_.previewSeekHeldArrowKey_)
+            .arg(deltaMs)
+            .arg(heldSeconds, 0, 'f', 6)
+            .arg(deltaSeconds, 0, 'f', 6)
+            .arg(owner_.shellPreviewPositionSeconds(), 0, 'f', 6)
     );
+    QToolTip::hideText();
+    const double nextSecond = qBound(
+        0.0,
+        state_.qtPreviewPauseSecond_ + deltaSeconds,
+        previewDurationSeconds()
+    );
+    if (qAbs(nextSecond - state_.qtPreviewPauseSecond_) >= 1e-9) {
+        seekPreviewToSecond(nextSecond, true);
+    }
 }
 
 void MainWindow::TimelineSection::seekPreviewToSecond(double second, bool centerView)
@@ -196,25 +357,7 @@ void MainWindow::TimelineSection::seekPreviewToSecond(double second, bool center
     if (state_.qtPreviewPlaying_) {
         stopQtPreviewPlayback(true);
     }
-    state_.qtPreviewStartSecond_ = clampedSecond;
-    state_.qtPreviewPauseSecond_ = clampedSecond;
-    state_.qtPreviewTimelineStartSecond_ = clampedSecond;
-    state_.qtPreviewTimelineElapsed_.restart();
-    state_.qtPreviewPendingTimelineSecond_ = clampedSecond;
-    state_.qtPreviewPendingTimelineCenterView_ = centerView;
-    state_.qtPreviewTimelineDirty_ = true;
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
-    }
-    syncPausedPreviewMediaTimestamps(clampedSecond);
-    applyQtPreviewPosition(clampedSecond, centerView);
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->focusPlayhead(centerView);
-    }
-    if (state_.previewCanvas_ != nullptr) {
-        state_.previewCanvas_->update();
-    }
-    updatePreviewSliderPosition(clampedSecond);
+    requestPausedPreviewSeek(clampedSecond, centerView, true);
 }
 
 void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
@@ -546,14 +689,39 @@ void MainWindow::schedulePreviewSeek(double second, bool centerView)
     timelineSection_->schedulePreviewSeek(second, centerView);
 }
 
-bool MainWindow::stepPreviewSliderBySeconds(double deltaSeconds, bool centerView)
+void MainWindow::requestPausedPreviewSeek(double second, bool centerView, bool submitMediaImmediately)
 {
-    return timelineSection_->stepPreviewSliderBySeconds(deltaSeconds, centerView);
+    timelineSection_->requestPausedPreviewSeek(second, centerView, submitMediaImmediately);
 }
 
-bool MainWindow::handlePreviewSliderWheel(QWheelEvent* event)
+void MainWindow::applyPausedPreviewVisualSecond(double second, bool centerView)
 {
-    return timelineSection_->handlePreviewSliderWheel(event);
+    timelineSection_->applyPausedPreviewVisualSecond(second, centerView);
+}
+
+void MainWindow::submitPausedMediaSeek(double second, quint64 generation)
+{
+    timelineSection_->submitPausedMediaSeek(second, generation);
+}
+
+void MainWindow::maybeSubmitLatestPausedMediaSeek()
+{
+    timelineSection_->maybeSubmitLatestPausedMediaSeek();
+}
+
+void MainWindow::handlePausedPreviewMediaSeekCompleted(double second, quint64 generation)
+{
+    timelineSection_->handlePausedPreviewMediaSeekCompleted(second, generation);
+}
+
+bool MainWindow::stepPreviewBySeconds(double deltaSeconds, bool centerView)
+{
+    return timelineSection_->stepPreviewBySeconds(deltaSeconds, centerView);
+}
+
+bool MainWindow::handlePreviewSeekWheel(QWheelEvent* event)
+{
+    return timelineSection_->handlePreviewSeekWheel(event);
 }
 
 void MainWindow::beginPreviewHeldSeek(int direction, int key)

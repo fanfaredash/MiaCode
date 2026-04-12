@@ -4,8 +4,8 @@
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
-
 #include <QQuickView>
+#include <QSurfaceFormat>
 #include <QUrl>
 #include <QVariant>
 #include <QtQml/qqml.h>
@@ -31,7 +31,10 @@ QuickShellPreviewCompositeSurface::QuickShellPreviewCompositeSurface(QObject* pa
     ensureQuickShellPreviewTypesRegistered();
 
     view_ = new QQuickView();
-    view_->setColor(Qt::transparent);
+    QSurfaceFormat format = view_->format();
+    format.setAlphaBufferSize(0);
+    view_->setFormat(format);
+    view_->setColor(QColor(QStringLiteral("#000000")));
     view_->setResizeMode(QQuickView::SizeRootObjectToView);
     view_->setPersistentGraphics(true);
     view_->setPersistentSceneGraph(true);

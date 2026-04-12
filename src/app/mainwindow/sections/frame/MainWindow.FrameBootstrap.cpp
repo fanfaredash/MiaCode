@@ -784,14 +784,10 @@ MainWindow::MainWindow(QWidget* parent)
         " background: #000000;"
         " border: 1px solid #D8E0EA;"
         "}"
-        "QFrame#PreviewControlCard, QFrame#PreviewStatsCard {"
+        "QFrame#PreviewStatsCard {"
         " background: #EDF2F8;"
         " border: 1px solid #D5E0EC;"
         " border-radius: 10px;"
-        "}"
-        "QFrame#PreviewControls {"
-        " background: transparent;"
-        " border: none;"
         "}"
         "QFrame#PreviewStats {"
         " background: transparent;"
@@ -812,33 +808,6 @@ MainWindow::MainWindow(QWidget* parent)
         " border-radius: 9px;"
         " padding: 2px 8px;"
         " font-weight: 700;"
-        "}"
-        "QToolButton#PreviewControlButton {"
-        " color: #223042;"
-        " padding: 5px 8px;"
-        " min-height: 28px;"
-        " border: 1px solid #D8E0EA;"
-        " border-radius: 6px;"
-        " background: transparent;"
-        " font-weight: 600;"
-        "}"
-        "QToolButton#PreviewControlButton:hover { background: #F5F8FC; border-color: #BCD0E5; }"
-        "QToolButton#PreviewControlButton:pressed { background: #E8F1FB; }"
-        "QSlider::groove:horizontal {"
-        " height: 6px;"
-        " background: #D8E0EA;"
-        " border-radius: 3px;"
-        "}"
-        "QSlider::sub-page:horizontal {"
-        " background: #2E77D0;"
-        " border-radius: 3px;"
-        "}"
-        "QSlider::handle:horizontal {"
-        " width: 12px;"
-        " margin: -4px 0;"
-        " border-radius: 6px;"
-        " background: #FFFFFF;"
-        " border: 1px solid #AFC0D6;"
         "}"
     );
     previewPanel_->setMinimumWidth(kEmbeddedPreviewPanelMinWidth);
@@ -864,101 +833,13 @@ MainWindow::MainWindow(QWidget* parent)
     previewCanvasContainer_->hide();
     logStartupStage("preview_canvas_container_ready");
 
-    previewControlCard_ = new QFrame(previewPanel_);
-    previewControlCard_->setObjectName("PreviewControlCard");
-    previewControlCard_->setMinimumWidth(kPreviewControlStatsCardMinWidth);
-    previewControlCard_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    previewControlCard_->setMouseTracking(true);
-    auto* previewControlCardLayout = new QVBoxLayout(previewControlCard_);
-    previewControlCardLayout->setContentsMargins(8, 8, 8, 8);
-    previewControlCardLayout->setSpacing(0);
-
-    auto* previewControls = new QFrame(previewControlCard_);
-    previewControls->setObjectName("PreviewControls");
-    auto* previewControlsLayout = new QHBoxLayout(previewControls);
-    previewControlsLayout_ = previewControlsLayout;
-    previewControlsLayout->setContentsMargins(0, 0, 0, 0);
-    previewControlsLayout->setSpacing(8);
-
-    stopPreviewButton_ = new QToolButton(previewControls);
-    stopPreviewButton_->setObjectName("PreviewControlButton");
-    stopPreviewButton_->setDefaultAction(stopPreviewAction_);
-    stopPreviewButton_->setIconSize(QSize(18, 18));
-    stopPreviewButton_->setAutoRaise(false);
-    stopPreviewButton_->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    stopPreviewButton_->setToolTip(QString());
-    stopPreviewButton_->setMouseTracking(true);
-    previewControlsLayout->addWidget(stopPreviewButton_, 0);
-
-    pausePreviewButton_ = new QToolButton(previewControls);
-    pausePreviewButton_->setObjectName("PreviewControlButton");
-    pausePreviewButton_->setDefaultAction(pausePreviewAction_);
-    pausePreviewButton_->setIconSize(QSize(18, 18));
-    pausePreviewButton_->setAutoRaise(false);
-    pausePreviewButton_->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    pausePreviewButton_->setToolTip(QString());
-    pausePreviewButton_->setMouseTracking(true);
-    previewControlsLayout->addWidget(pausePreviewButton_, 0);
-
-    previewSlider_ = new QSlider(Qt::Horizontal, previewControls);
-    previewSlider_->setRange(0, 1000);
-    previewSlider_->setSingleStep(25);
-    previewSlider_->setPageStep(250);
-    previewSlider_->setTracking(true);
-    previewSlider_->setMouseTracking(true);
-    previewControlsLayout->addWidget(previewSlider_, 1);
-
-    previewSpeedButton_ = new QToolButton(previewControls);
-    previewSpeedButton_->setObjectName("PreviewControlButton");
-    previewSpeedButton_->setPopupMode(QToolButton::InstantPopup);
-    previewSpeedButton_->setText("1x");
-    previewSpeedButton_->setFont(uiAccentFont(10));
-    previewSpeedButton_->setFixedWidth(72);
-    previewSpeedButton_->setMouseTracking(true);
-    auto* speedMenu = new QMenu(previewSpeedButton_);
-    speedMenu->setFont(uiAccentFont(10));
-    styleRoundedMenu(*speedMenu);
-    const QList<QPair<double, QString>> speedOptions{
-        {0.25, "0.25x"},
-        {0.5, "0.5x"},
-        {0.75, "0.75x"},
-        {1.0, "1x"},
-        {1.25, "1.25x"},
-        {2.0, "2x"},
-    };
-    for (const auto& speedOption : speedOptions) {
-        const double speed = speedOption.first;
-        QAction* speedAction = speedMenu->addAction(speedOption.second);
-        speedAction->setCheckable(true);
-        speedAction->setChecked(qFuzzyCompare(speed + 1.0, 2.0));
-        speedAction->setData(speed);
-        connect(speedAction, &QAction::triggered, this, [this, speed, speedMenu]() {
-            const QList<QAction*> actions = speedMenu->actions();
-            for (QAction* action : actions) {
-                action->setChecked(false);
-            }
-            QAction* action = qobject_cast<QAction*>(sender());
-            if (action != nullptr) {
-                action->setChecked(true);
-            }
-            applyPreviewPlaybackRate(speed);
-        });
-    }
-    previewSpeedButton_->setMenu(speedMenu);
-    previewControlsLayout->addWidget(previewSpeedButton_, 0);
-    previewFullscreenButton_ = new QToolButton(previewControls);
-    previewFullscreenButton_->setObjectName("PreviewControlButton");
-    previewFullscreenButton_->setCheckable(true);
-    previewFullscreenButton_->setAutoRaise(false);
-    previewFullscreenButton_->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    previewFullscreenButton_->setIconSize(QSize(20, 20));
-    previewFullscreenButton_->setMouseTracking(true);
-    connect(previewFullscreenButton_, &QToolButton::clicked, this, [this]() {
-        togglePreviewFullscreen();
-    });
-    updatePreviewFullscreenButtonAppearance();
-    previewControlsLayout->addWidget(previewFullscreenButton_, 0);
-    previewControlCardLayout->addWidget(previewControls, 0);
+    previewControlCard_ = nullptr;
+    previewControlsLayout_ = nullptr;
+    stopPreviewButton_ = nullptr;
+    pausePreviewButton_ = nullptr;
+    previewSlider_ = nullptr;
+    previewSpeedButton_ = nullptr;
+    previewFullscreenButton_ = nullptr;
 
     auto* previewStatsCard = new QFrame(previewPanel_);
     previewStatsCard_ = previewStatsCard;
@@ -1041,6 +922,17 @@ MainWindow::MainWindow(QWidget* parent)
             updatePauseButtonAppearance();
         }
     });
+    connect(timelineView_, &TimelineView::timelineDragStarted, this, [this]() {
+        stopPreviewHeldSeek();
+        QToolTip::hideText();
+        previewScrubRenderElapsed_.invalidate();
+        if (previewFullscreenActive_) {
+            showPreviewFullscreenControls(false);
+        }
+        if (previewSeekDebounceTimer_ != nullptr) {
+            previewSeekDebounceTimer_->stop();
+        }
+    });
     connect(timelineView_, &TimelineView::centerNavigateRequested, this, [this](double second) {
         const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
         const bool shouldRenderNow = !previewScrubRenderElapsed_.isValid()
@@ -1054,6 +946,19 @@ MainWindow::MainWindow(QWidget* parent)
         } else {
             schedulePreviewSeek(clampedSecond, false);
         }
+    });
+    connect(timelineView_, &TimelineView::timelineDragFinished, this, [this](double second) {
+        stopPreviewHeldSeek();
+        QToolTip::hideText();
+        previewScrubRenderElapsed_.invalidate();
+        const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+        if (previewFullscreenActive_) {
+            showPreviewFullscreenControls(false);
+        }
+        if (previewSeekDebounceTimer_ != nullptr) {
+            previewSeekDebounceTimer_->stop();
+        }
+        seekPreviewToSecond(clampedSecond, false);
     });
     connect(timelineView_, &TimelineView::followPreviewToggled, this, [this](bool enabled) {
         if (!enabled) {

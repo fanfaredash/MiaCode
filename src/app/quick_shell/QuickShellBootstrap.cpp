@@ -266,14 +266,6 @@ bool QuickShellBootstrap::start()
                 const int workspaceWidth = qMax(1, window->width() - sidebarWidth - handleWidth - previewPaneWidth);
                 controller_->syncSidebarSurfaceSize(sidebarWidth, workspaceHeight);
                 controller_->syncWorkspaceSurfaceSize(workspaceWidth, workspaceHeight);
-
-                const int previewControlsWidth = qMax(1, previewPaneWidth - 16);
-                int previewControlsHeight = qMax(180, metrics.value(QStringLiteral("previewControlsHeight"), 180).toInt());
-                previewControlsHeight = surfaceHost_->recommendedPreviewControlsHeight(
-                    previewPaneWidth,
-                    previewControlsHeight
-                );
-                controller_->syncPreviewControlsSurfaceSize(previewControlsWidth, previewControlsHeight);
                 styleBridge_->refreshNow();
                 controller_->refresh();
             };
@@ -360,31 +352,69 @@ bool QuickShellBootstrap::start()
 
 bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
 {
-    Q_UNUSED(watched);
-
     if (controller_ == nullptr || event == nullptr) {
         return QObject::eventFilter(watched, event);
     }
 
-    if ((event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress)
-        && !controller_->previewFullscreen()) {
-        auto* keyEvent = static_cast<QKeyEvent*>(event);
-        if (keyEvent != nullptr && !keyEvent->isAutoRepeat()) {
-            const QKeySequence sequence(keyEvent->modifiers() | keyEvent->key());
-            if (controller_->hasShortcut(sequence)) {
+    if (!controller_->previewFullscreen() && event->type() == QEvent::MouseButtonPress) {
+        auto* mouseEvent = static_cast<QMouseEvent*>(event);
+        const QPoint globalPos = mouseEvent != nullptr ? mouseEvent->globalPosition().toPoint() : QPoint();
+        previewSeekArmed_ = previewSeekHotRectContainsGlobalPoint(globalPos);
+    }
+
+    if (!controller_->previewFullscreen()) {
+        if ((event->type() == QEvent::ShortcutOverride
+                || event->type() == QEvent::KeyPress
+                || event->type() == QEvent::KeyRelease)
+            && previewSeekArmed_) {
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            const bool isArrow =
+                keyEvent != nullptr
+                && keyEvent->modifiers() == Qt::NoModifier
+                && (keyEvent->key() == Qt::Key_Left || keyEvent->key() == Qt::Key_Right);
+            if (isArrow) {
                 if (event->type() == QEvent::ShortcutOverride) {
                     keyEvent->accept();
                     return true;
                 }
-                if (controller_->triggerShortcut(sequence)) {
+                const int direction = keyEvent->key() == Qt::Key_Left ? -1 : 1;
+                if (event->type() == QEvent::KeyPress) {
                     keyEvent->accept();
+                    if (keyEvent->isAutoRepeat()) {
+                        return true;
+                    }
+                    controller_->beginPreviewHeldSeek(direction, keyEvent->key());
+                    controller_->stepPreviewBySeconds(
+                        direction * controller_->previewSeekSingleStepSeconds(),
+                        true
+                    );
+                    return true;
+                }
+                if (event->type() == QEvent::KeyRelease) {
+                    keyEvent->accept();
+                    if (!keyEvent->isAutoRepeat()) {
+                        controller_->stopPreviewHeldSeek(keyEvent->key());
+                    }
                     return true;
                 }
             }
         }
-    }
-
-    if (!controller_->previewFullscreen()) {
+        if ((event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress)) {
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (keyEvent != nullptr && !keyEvent->isAutoRepeat()) {
+                const QKeySequence sequence(keyEvent->modifiers() | keyEvent->key());
+                if (controller_->hasShortcut(sequence)) {
+                    if (event->type() == QEvent::ShortcutOverride) {
+                        keyEvent->accept();
+                        return true;
+                    }
+                    if (controller_->triggerShortcut(sequence)) {
+                        keyEvent->accept();
+                        return true;
+                    }
+                }
+            }
+        }
         return QObject::eventFilter(watched, event);
     }
 
@@ -417,6 +447,27 @@ bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
     }
 
     return QObject::eventFilter(watched, event);
+}
+
+bool QuickShellBootstrap::previewSeekHotRectContainsGlobalPoint(const QPoint& globalPoint) const
+{
+    if (engine_ == nullptr || engine_->rootObjects().isEmpty()) {
+        return false;
+    }
+    auto* window = qobject_cast<QQuickWindow*>(engine_->rootObjects().constFirst());
+    if (window == nullptr || !window->isVisible()) {
+        return false;
+    }
+    const QVariant rectVariant = window->property("previewSeekHotRect");
+    if (!rectVariant.isValid()) {
+        return false;
+    }
+    const QRectF hotRect = rectVariant.toRectF();
+    if (!hotRect.isValid() || hotRect.isEmpty()) {
+        return false;
+    }
+    const QPoint localPos = window->mapFromGlobal(globalPoint);
+    return hotRect.contains(QPointF(localPos));
 }
 
 QuickShellController* QuickShellBootstrap::controller() const
