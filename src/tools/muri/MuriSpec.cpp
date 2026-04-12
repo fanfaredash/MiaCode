@@ -542,6 +542,16 @@ int main(int argc, char** argv)
         }
     }
 
+    {
+        const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(192)\n{8}2V46[4:1],1/8,,7h[4:1],,5w1b[8:1],2/8,{32}5bx,B5,Cf,B8/B1/B2,\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("wifi on-slide touch repro chart parses"));
+        expect(analyzed.report.diagnostics.isEmpty(),
+            QStringLiteral("wifi on-slide touch repro no longer misreports overlap"));
+        expect(analyzed.visibleEntries.isEmpty(),
+            QStringLiteral("wifi on-slide touch repro keeps the panel empty"));
+    }
+
     if (failed != 0) {
         err << "\nMuri spec failed: " << failed << " case(s)\n";
         return 1;
