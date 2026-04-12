@@ -3,6 +3,7 @@
 #include "QuickShellNativeSurfaceHost.h"
 #include "UiTheme.h"
 #include "ui/WindowParityMetrics.h"
+#include "preview/scene/PreviewHudState.h"
 
 #include <QApplication>
 #include <QDockWidget>
@@ -73,12 +74,6 @@ QuickShellStyleBridge::QuickShellStyleBridge(
         if (QWidget* workspace = contentProvider_->shellWorkspaceWidget(); workspace != nullptr) {
             workspace->installEventFilter(this);
         }
-        if (QWidget* controlCard = contentProvider_->shellPreviewControlCardWidget(); controlCard != nullptr) {
-            controlCard->installEventFilter(this);
-        }
-        if (QWidget* statsCard = contentProvider_->shellPreviewStatsCardWidget(); statsCard != nullptr) {
-            statsCard->installEventFilter(this);
-        }
     }
     if (surfaceHost_ != nullptr) {
         if (QWidget* sidebarSurface = surfaceHost_->sidebarSurfaceWidget(); sidebarSurface != nullptr) {
@@ -86,10 +81,6 @@ QuickShellStyleBridge::QuickShellStyleBridge(
         }
         if (QWidget* workspaceSurface = surfaceHost_->workspaceSurfaceWidget(); workspaceSurface != nullptr) {
             workspaceSurface->installEventFilter(this);
-        }
-        if (QWidget* previewControlsSurface = surfaceHost_->previewControlsSurfaceWidget();
-            previewControlsSurface != nullptr) {
-            previewControlsSurface->installEventFilter(this);
         }
     }
 
@@ -229,6 +220,18 @@ void QuickShellStyleBridge::refreshFromBackend()
         {QStringLiteral("previewControlsHeight"), 200},
         {QStringLiteral("previewSpeedButtonWidth"), miacode::window_parity::kPreviewSpeedButtonWidth},
         {QStringLiteral("previewControlButtonMinHeight"), miacode::window_parity::kPreviewControlButtonMinHeight},
+        {QStringLiteral("previewControlButtonPaddingX"), miacode::window_parity::kPreviewControlButtonPaddingX},
+        {QStringLiteral("previewControlButtonPaddingY"), miacode::window_parity::kPreviewControlButtonPaddingY},
+        {QStringLiteral("previewControlCardRadius"), miacode::window_parity::kPreviewControlCardRadius},
+        {QStringLiteral("previewStatsCardRadius"), miacode::window_parity::kPreviewStatsCardRadius},
+        {QStringLiteral("previewStatsChipRadius"), miacode::window_parity::kPreviewStatsChipRadius},
+        {QStringLiteral("previewStatsChipHeight"), miacode::window_parity::kPreviewStatsChipHeight},
+        {QStringLiteral("previewStatsHorizontalSpacing"), miacode::window_parity::kPreviewStatsHorizontalSpacing},
+        {QStringLiteral("previewStatsVerticalSpacing"), miacode::window_parity::kPreviewStatsVerticalSpacing},
+        {QStringLiteral("previewStatsWideLayoutCols"), miacode::window_parity::kPreviewStatsWideLayoutCols},
+        {QStringLiteral("previewStatsNarrowLayoutCols"), miacode::window_parity::kPreviewStatsNarrowLayoutCols},
+        {QStringLiteral("previewStatsWideLayoutMinChipWidth"), miacode::window_parity::kPreviewStatsWideLayoutMinChipWidth},
+        {QStringLiteral("previewControlStatsGap"), miacode::window_parity::kPreviewControlStatsGap},
         {QStringLiteral("fullscreenHintTopMargin"), miacode::window_parity::kPreviewFullscreenHintTopMargin},
         {QStringLiteral("fullscreenOverlaySideMargin"), miacode::window_parity::kPreviewFullscreenOverlaySideMargin},
         {QStringLiteral("fullscreenOverlayBottomMargin"), miacode::window_parity::kPreviewFullscreenOverlayBottomMargin},
@@ -274,39 +277,43 @@ void QuickShellStyleBridge::refreshFromBackend()
         }
     }
 
-    if (contentProvider_ != nullptr
-        && contentProvider_->shellPreviewControlCardWidget() != nullptr
-        && contentProvider_->shellPreviewStatsCardWidget() != nullptr) {
-        nextMetrics.insert(
-            QStringLiteral("previewControlsHeight"),
-            qMax(
-                180,
-                contentProvider_->shellPreviewControlCardWidget()->sizeHint().height()
-                    + contentProvider_->shellPreviewStatsCardWidget()->sizeHint().height()
-                    + 22
-            )
-        );
+    const QFont statsFont = miacode::preview::scene::previewHudMonoFont(10, QFont::DemiBold);
+    const QFontMetrics chipMetrics(statsFont);
+    const int templateChipWidth =
+        chipMetrics.horizontalAdvance(QStringLiteral("Total  xxxxx/xxxxx"))
+        + miacode::window_parity::kPreviewStatsChipPaddingX * 2
+        + 2;
+    const int statsHostWidthMin =
+        templateChipWidth * miacode::window_parity::kPreviewStatsNarrowLayoutCols
+        + miacode::window_parity::kPreviewStatsHorizontalSpacing
+            * qMax(0, miacode::window_parity::kPreviewStatsNarrowLayoutCols - 1)
+        + 4;
+    const int panelWidthMin =
+        statsHostWidthMin
+        + miacode::window_parity::kPreviewPanelMarginX * 2
+        + 16;
+    previewPanelMinWidth = qMax(previewPanelMinWidth, panelWidthMin);
+    nextMetrics.insert(QStringLiteral("previewPanelMinWidth"), previewPanelMinWidth);
 
-        if (contentProvider_->shellPreviewTotalStatsLabel() != nullptr
-            && contentProvider_->shellPreviewStatsGridLayout() != nullptr) {
-            const QFontMetrics chipMetrics(contentProvider_->shellPreviewTotalStatsLabel()->font());
-            const int templateChipWidth =
-                chipMetrics.horizontalAdvance(QStringLiteral("Total  xxxxx/xxxxx")) + 18;
-            const int horizontalSpacing = qMax(0, contentProvider_->shellPreviewStatsGridLayout()->horizontalSpacing());
-            const QMargins gridMargins = contentProvider_->shellPreviewStatsGridLayout()->contentsMargins();
-            const int statsHostWidthMin =
-                templateChipWidth * miacode::window_parity::kPreviewStatsNarrowLayoutCols
-                + horizontalSpacing * qMax(0, miacode::window_parity::kPreviewStatsNarrowLayoutCols - 1)
-                + gridMargins.left()
-                + gridMargins.right();
-            const int panelWidthMin =
-                statsHostWidthMin
-                + miacode::window_parity::kPreviewPanelMarginX * 2
-                + 16;
-            previewPanelMinWidth = qMax(previewPanelMinWidth, panelWidthMin);
-            nextMetrics.insert(QStringLiteral("previewPanelMinWidth"), previewPanelMinWidth);
-        }
-    }
+    const int transportCardHeight =
+        8
+        + qMax(18, miacode::window_parity::kPreviewControlButtonMinHeight - 10)
+        + 8
+        + miacode::window_parity::kPreviewControlButtonMinHeight
+        + 8;
+    const miacode::window_parity::PreviewStatsLayout statsLayout =
+        miacode::window_parity::computePreviewStatsLayout(
+            qMax(statsHostWidthMin, previewPanelMinWidth - miacode::window_parity::kPreviewPanelMarginX * 2 - 16)
+        );
+    nextMetrics.insert(
+        QStringLiteral("previewControlsHeight"),
+        qMax(
+            180,
+            transportCardHeight
+                + miacode::window_parity::kPreviewControlStatsGap
+                + statsLayout.minCardHeight
+        )
+    );
 
     nextMetrics.insert(
         QStringLiteral("minimumWindowWidth"),

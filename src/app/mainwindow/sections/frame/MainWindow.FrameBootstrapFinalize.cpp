@@ -214,9 +214,9 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
 
     previewSeekDebounceTimer_ = new QTimer(this);
     previewSeekDebounceTimer_->setSingleShot(true);
-    previewSeekDebounceTimer_->setInterval(120);
+    previewSeekDebounceTimer_->setInterval(33);
     connect(previewSeekDebounceTimer_, &QTimer::timeout, this, [this]() {
-        seekPreviewToSecond(previewPendingSeekSecond_, previewPendingSeekCenterView_);
+        maybeSubmitLatestPausedMediaSeek();
     });
     previewHeldSeekTimer_ = new QTimer(this);
     previewHeldSeekTimer_->setTimerType(Qt::PreciseTimer);
@@ -242,7 +242,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
             if (qtPreviewPlaying_) {
                 stopQtPreviewPlayback(true);
             }
-            previewSliderDragging_ = true;
+            previewScrubDragging_ = true;
             previewScrubRenderElapsed_.invalidate();
             if (previewSlider_ != nullptr) {
                 showPreviewSliderTimeHint(previewSlider_->value());
@@ -271,7 +271,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         });
         connect(previewSlider_, &QSlider::sliderReleased, this, [this]() {
             stopPreviewHeldSeek();
-            previewSliderDragging_ = false;
+            previewScrubDragging_ = false;
             previewScrubRenderElapsed_.invalidate();
             if (previewSlider_ == nullptr) {
                 return;

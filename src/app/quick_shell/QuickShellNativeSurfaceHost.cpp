@@ -48,13 +48,11 @@ QuickShellNativeSurfaceHost::QuickShellNativeSurfaceHost(
     , topChromeSurfaceWidget_(createBridgeSurface(QStringLiteral("QuickShellTopChromeSurface")))
     , sidebarSurfaceWidget_(createBridgeSurface(QStringLiteral("QuickShellSidebarSurface")))
     , workspaceSurfaceWidget_(createBridgeSurface(QStringLiteral("QuickShellWorkspaceSurface")))
-    , previewControlsSurfaceWidget_(createBridgeSurface(QStringLiteral("QuickShellPreviewControlsSurface")))
     , statusSurfaceWidget_(createBridgeSurface(QStringLiteral("QuickShellStatusSurface")))
 {
     surfaceBundle_.topChrome = createForeignWindowForSurface(topChromeSurfaceWidget_);
     surfaceBundle_.sidebar = createForeignWindowForSurface(sidebarSurfaceWidget_);
     surfaceBundle_.workspace = createForeignWindowForSurface(workspaceSurfaceWidget_);
-    surfaceBundle_.previewControls = createForeignWindowForSurface(previewControlsSurfaceWidget_);
     surfaceBundle_.status = createForeignWindowForSurface(statusSurfaceWidget_);
 
     ensureSurfaceLayouts();
@@ -70,8 +68,6 @@ QuickShellNativeSurfaceHost::~QuickShellNativeSurfaceHost()
     surfaceBundle_.sidebar = nullptr;
     delete surfaceBundle_.workspace;
     surfaceBundle_.workspace = nullptr;
-    delete surfaceBundle_.previewControls;
-    surfaceBundle_.previewControls = nullptr;
     delete surfaceBundle_.status;
     surfaceBundle_.status = nullptr;
     surfaceBundle_.previewCompositeWindow = nullptr;
@@ -81,8 +77,6 @@ QuickShellNativeSurfaceHost::~QuickShellNativeSurfaceHost()
     sidebarSurfaceWidget_ = nullptr;
     delete workspaceSurfaceWidget_;
     workspaceSurfaceWidget_ = nullptr;
-    delete previewControlsSurfaceWidget_;
-    previewControlsSurfaceWidget_ = nullptr;
     delete statusSurfaceWidget_;
     statusSurfaceWidget_ = nullptr;
 }
@@ -110,11 +104,6 @@ QWidget* QuickShellNativeSurfaceHost::workspaceSurfaceWidget() const
     return workspaceSurfaceWidget_;
 }
 
-QWidget* QuickShellNativeSurfaceHost::previewControlsSurfaceWidget() const
-{
-    return previewControlsSurfaceWidget_;
-}
-
 QWidget* QuickShellNativeSurfaceHost::statusSurfaceWidget() const
 {
     return statusSurfaceWidget_;
@@ -122,29 +111,7 @@ QWidget* QuickShellNativeSurfaceHost::statusSurfaceWidget() const
 
 void QuickShellNativeSurfaceHost::refreshSurfaceStyles()
 {
-    if (previewControlsSurfaceWidget_ == nullptr || contentProvider_ == nullptr) {
-        return;
-    }
-    previewControlsSurfaceWidget_->setStyleSheet(contentProvider_->shellPreviewPanelStyleSheet());
-}
-
-int QuickShellNativeSurfaceHost::recommendedPreviewControlsHeight(int previewPaneWidth, int fallbackHeight) const
-{
-    if (contentProvider_ == nullptr) {
-        return qMax(180, fallbackHeight);
-    }
-    int preferredHeight = qMax(180, fallbackHeight);
-    if (QWidget* controlCard = contentProvider_->shellPreviewControlCardWidget(); controlCard != nullptr) {
-        const int controlCardHeight = qMax(
-            controlCard->minimumSizeHint().height(),
-            controlCard->sizeHint().height()
-        );
-        preferredHeight = qMax(
-            preferredHeight,
-            controlCardHeight + contentProvider_->shellPreviewStatsMinimumPanelHeight(previewPaneWidth) + 34
-        );
-    }
-    return preferredHeight;
+    Q_UNUSED(contentProvider_);
 }
 
 void QuickShellNativeSurfaceHost::syncTopChromeSurfaceSize(int width, int height)
@@ -172,25 +139,6 @@ void QuickShellNativeSurfaceHost::syncWorkspaceSurfaceSize(int width, int height
         workspaceWidget != nullptr) {
         workspaceWidget->updateGeometry();
         workspaceWidget->show();
-    }
-}
-
-void QuickShellNativeSurfaceHost::syncPreviewControlsSurfaceSize(int width, int height)
-{
-    resizeSurface(previewControlsSurfaceWidget_, width, height);
-    if (QWidget* controlCard =
-            contentProvider_ != nullptr ? contentProvider_->shellPreviewControlCardWidget() : nullptr;
-        controlCard != nullptr) {
-        controlCard->updateGeometry();
-        controlCard->show();
-    }
-    if (QWidget* statsCard = contentProvider_ != nullptr ? contentProvider_->shellPreviewStatsCardWidget() : nullptr;
-        statsCard != nullptr) {
-        statsCard->updateGeometry();
-        statsCard->show();
-    }
-    if (contentProvider_ != nullptr) {
-        contentProvider_->shellUpdatePreviewStatsLayout();
     }
 }
 
@@ -227,6 +175,7 @@ QWidget* QuickShellNativeSurfaceHost::createBridgeSurface(const QString& objectN
     bridgeRoot->setObjectName(objectName);
     bridgeRoot->setAttribute(Qt::WA_NativeWindow);
     bridgeRoot->setAttribute(Qt::WA_StyledBackground, true);
+    bridgeRoot->setFocusPolicy(Qt::StrongFocus);
     bridgeRoot->setContentsMargins(0, 0, 0, 0);
     bridgeRoot->setMinimumSize(QSize(64, 64));
     bridgeRoot->resize(960, 720);
@@ -262,12 +211,10 @@ void QuickShellNativeSurfaceHost::attachNativeWidgets()
     auto* topChromeLayout = qobject_cast<QBoxLayout*>(topChromeSurfaceWidget_->layout());
     auto* sidebarLayout = qobject_cast<QBoxLayout*>(sidebarSurfaceWidget_->layout());
     auto* workspaceLayout = qobject_cast<QBoxLayout*>(workspaceSurfaceWidget_->layout());
-    auto* previewControlsLayout = qobject_cast<QBoxLayout*>(previewControlsSurfaceWidget_->layout());
     auto* statusLayout = qobject_cast<QBoxLayout*>(statusSurfaceWidget_->layout());
     if (topChromeLayout == nullptr
         || sidebarLayout == nullptr
         || workspaceLayout == nullptr
-        || previewControlsLayout == nullptr
         || statusLayout == nullptr) {
         return;
     }
@@ -331,26 +278,6 @@ void QuickShellNativeSurfaceHost::attachNativeWidgets()
         workspaceWidget->show();
     }
 
-    if (QWidget* controlCard = contentProvider_->shellPreviewControlCardWidget(); controlCard != nullptr) {
-        if (controlCard->parentWidget() != previewControlsSurfaceWidget_) {
-            controlCard->setParent(previewControlsSurfaceWidget_);
-        }
-        if (previewControlsLayout->indexOf(controlCard) < 0) {
-            previewControlsLayout->addWidget(controlCard);
-        }
-        controlCard->show();
-    }
-
-    if (QWidget* statsCard = contentProvider_->shellPreviewStatsCardWidget(); statsCard != nullptr) {
-        if (statsCard->parentWidget() != previewControlsSurfaceWidget_) {
-            statsCard->setParent(previewControlsSurfaceWidget_);
-        }
-        if (previewControlsLayout->indexOf(statsCard) < 0) {
-            previewControlsLayout->addWidget(statsCard);
-        }
-        statsCard->show();
-    }
-
     if (QWidget* previewPanel = contentProvider_->shellPreviewPanelWidget(); previewPanel != nullptr) {
         previewPanel->hide();
     }
@@ -358,7 +285,6 @@ void QuickShellNativeSurfaceHost::attachNativeWidgets()
     activateLayout(topChromeSurfaceWidget_);
     activateLayout(sidebarSurfaceWidget_);
     activateLayout(workspaceSurfaceWidget_);
-    activateLayout(previewControlsSurfaceWidget_);
     activateLayout(statusSurfaceWidget_);
 }
 
@@ -379,11 +305,6 @@ void QuickShellNativeSurfaceHost::ensureSurfaceLayouts()
         layout->setContentsMargins(0, 0, 0, 0);
         layout->setSpacing(0);
     }
-    if (previewControlsSurfaceWidget_->layout() == nullptr) {
-        auto* layout = new QVBoxLayout(previewControlsSurfaceWidget_);
-        layout->setContentsMargins(8, 12, 8, 12);
-        layout->setSpacing(10);
-    }
     if (statusSurfaceWidget_->layout() == nullptr) {
         auto* layout = new QVBoxLayout(statusSurfaceWidget_);
         layout->setContentsMargins(0, 0, 0, 0);
@@ -401,6 +322,5 @@ void QuickShellNativeSurfaceHost::showAllSurfaces()
     topChromeSurfaceWidget_->show();
     sidebarSurfaceWidget_->show();
     workspaceSurfaceWidget_->show();
-    previewControlsSurfaceWidget_->show();
     statusSurfaceWidget_->show();
 }

@@ -57,6 +57,7 @@ signals:
     void headerNavigateRequested(double second);
     void centerNavigateRequested(double second);
     void timelineDragStarted();
+    void timelineDragFinished(double second);
     void timelineUserInteractionStarted();
     void followPreviewToggled(bool enabled);
     void previewPlayPauseRequested();

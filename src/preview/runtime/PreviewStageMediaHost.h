@@ -7,6 +7,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QUrl>
+#include <QString>
 
 class QAudioOutput;
 class QMediaPlayer;
@@ -56,6 +57,7 @@ public:
     void setPlaybackRate(double rate);
     void setTimelineOffsetSeconds(double seconds);
     void setPlayheadSeconds(double seconds);
+    void submitPausedSeek(double seconds, quint64 generation);
     void startPlayback(double seconds);
     void syncPlayback(double seconds);
     void pausePlayback();
@@ -75,6 +77,7 @@ signals:
     void imageSourceChanged();
     void backgroundScaleModeChanged();
     void playbackPositionChanged(double seconds);
+    void pausedSeekCompleted(double seconds, quint64 generation);
     void playbackFinished();
     void diagnosticsChanged();
 
@@ -104,6 +107,10 @@ private:
     double playbackRate_ = 1.0;
     double lastTimelineSecond_ = 0.0;
     qint64 lastSeekMs_ = -1;
+    qint64 pausedSeekTargetMs_ = -1;
+    double pausedSeekTargetSecond_ = 0.0;
+    quint64 pausedSeekGeneration_ = 0;
+    bool pausedSeekCompletionPending_ = false;
     bool videoPlaybackActive_ = false;
     bool videoPlaybackPendingStart_ = false;
     double observedPlayheadSecond_ = 0.0;

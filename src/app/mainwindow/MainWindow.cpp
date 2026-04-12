@@ -178,7 +178,7 @@ constexpr int kEditorFindBarMaxWidth = 500;
 constexpr int kEditorFindBarHorizontalMargin = 14;
 constexpr int kEditorFindBarTopMargin = 10;
 constexpr int kEditorFindBarOverlayGap = 8;
-constexpr int kPreviewScrubRenderIntervalMs = kTimelineUiCadenceMs;
+constexpr int kPreviewScrubRenderIntervalMs = 67;
 constexpr qint64 kInvalidStarPreviewAboutClickWindowMs = 900;
 
 QString pointerHex(const void* pointer)

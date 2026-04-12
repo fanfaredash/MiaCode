@@ -4,8 +4,10 @@
 
 #include <QObject>
 #include <QIcon>
+#include <QElapsedTimer>
 
 class QQmlApplicationEngine;
+class QTimer;
 
 class MainWindow;
 class QuickShellController;
@@ -26,6 +28,7 @@ public:
 
 private:
     bool eventFilter(QObject* watched, QEvent* event) override;
+    bool previewSeekHotRectContainsGlobalPoint(const QPoint& globalPoint) const;
 
     QIcon appIcon_;
     std::unique_ptr<MainWindow> backend_;
@@ -33,4 +36,5 @@ private:
     std::unique_ptr<QuickShellController> controller_;
     std::unique_ptr<QuickShellStyleBridge> styleBridge_;
     std::unique_ptr<QQmlApplicationEngine> engine_;
+    bool previewSeekArmed_ = false;
 };

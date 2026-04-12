@@ -3,6 +3,7 @@
 #include "QuickShellNativeSurfaceHost.h"
 
 #include "common/DebugLog.h"
+#include "common/PreviewInteractionConfig.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 
 #include <QTimer>
@@ -56,7 +57,7 @@ QuickShellController::QuickShellController(
             });
         }
     }
-    refreshTimer_->setInterval(150);
+    refreshTimer_->setInterval(16);
     connect(refreshTimer_, &QTimer::timeout, this, &QuickShellController::refreshFromStateSource);
     refreshTimer_->start();
     refreshFromStateSource();
@@ -90,6 +91,16 @@ double QuickShellController::previewPositionSeconds() const
 double QuickShellController::previewDurationSeconds() const
 {
     return previewDurationSeconds_;
+}
+
+QStringList QuickShellController::previewStatsTexts() const
+{
+    return previewStatsTexts_;
+}
+
+double QuickShellController::previewSeekSingleStepSeconds() const
+{
+    return miacode::preview_interaction::kSeekSingleStepSeconds;
 }
 
 bool QuickShellController::previewFullscreen() const
@@ -130,11 +141,6 @@ QWindow* QuickShellController::sidebarWindow() const
 QWindow* QuickShellController::workspaceWindow() const
 {
     return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().workspace : nullptr;
-}
-
-QWindow* QuickShellController::previewControlsWindow() const
-{
-    return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().previewControls : nullptr;
 }
 
 QWindow* QuickShellController::statusWindow() const
@@ -191,6 +197,46 @@ void QuickShellController::seekPreview(double second)
     refreshFromStateSource();
 }
 
+void QuickShellController::beginPreviewScrub()
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    appendQuickShellControllerLog(QStringLiteral("preview_scrub_begin"));
+    commandSink_->beginShellPreviewScrub();
+    refreshFromStateSource();
+}
+
+void QuickShellController::updatePreviewScrub(double second, bool centerView)
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    appendQuickShellControllerLog(
+        QStringLiteral("preview_scrub_update"),
+        QString("second=%1 center=%2")
+            .arg(second, 0, 'f', 6)
+            .arg(centerView ? 1 : 0)
+    );
+    commandSink_->updateShellPreviewScrub(second, centerView);
+    refreshFromStateSource();
+}
+
+void QuickShellController::endPreviewScrub(double second, bool centerView)
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    appendQuickShellControllerLog(
+        QStringLiteral("preview_scrub_end"),
+        QString("second=%1 center=%2")
+            .arg(second, 0, 'f', 6)
+            .arg(centerView ? 1 : 0)
+    );
+    commandSink_->endShellPreviewScrub(second, centerView);
+    refreshFromStateSource();
+}
+
 void QuickShellController::setPreviewRate(double rate)
 {
     if (commandSink_ == nullptr) {
@@ -198,6 +244,89 @@ void QuickShellController::setPreviewRate(double rate)
     }
     commandSink_->setShellPreviewRate(rate);
     refreshFromStateSource();
+}
+
+bool QuickShellController::stepPreviewBySeconds(double deltaSeconds, bool centerView)
+{
+    if (commandSink_ == nullptr) {
+        appendQuickShellControllerLog(
+            QStringLiteral("preview_step_ignored"),
+            QString("reason=no_command_sink delta=%1 center=%2")
+                .arg(deltaSeconds, 0, 'f', 6)
+                .arg(centerView ? 1 : 0)
+        );
+        return false;
+    }
+    appendQuickShellControllerLog(
+        QStringLiteral("preview_step_request"),
+        QString("delta=%1 center=%2")
+            .arg(deltaSeconds, 0, 'f', 6)
+            .arg(centerView ? 1 : 0)
+    );
+    const bool moved = commandSink_->stepShellPreviewBySeconds(deltaSeconds, centerView);
+    appendQuickShellControllerLog(
+        QStringLiteral("preview_step_result"),
+        QString("delta=%1 center=%2 moved=%3 pos=%4 duration=%5")
+            .arg(deltaSeconds, 0, 'f', 6)
+            .arg(centerView ? 1 : 0)
+            .arg(moved ? 1 : 0)
+            .arg(previewPositionSeconds_, 0, 'f', 6)
+            .arg(previewDurationSeconds_, 0, 'f', 6)
+    );
+    if (moved) {
+        refreshFromStateSource();
+    }
+    return moved;
+}
+
+void QuickShellController::beginPreviewHeldSeek(int direction, int key)
+{
+    if (commandSink_ == nullptr) {
+        appendQuickShellControllerLog(
+            QStringLiteral("preview_hold_begin_ignored"),
+            QString("reason=no_command_sink direction=%1 key=%2").arg(direction).arg(key)
+        );
+        return;
+    }
+    appendQuickShellControllerLog(
+        QStringLiteral("preview_hold_begin"),
+        QString("direction=%1 key=%2").arg(direction).arg(key)
+    );
+    commandSink_->beginShellPreviewHeldSeek(direction, key);
+}
+
+void QuickShellController::stopPreviewHeldSeek(int key)
+{
+    if (commandSink_ == nullptr) {
+        appendQuickShellControllerLog(
+            QStringLiteral("preview_hold_stop_ignored"),
+            QString("reason=no_command_sink key=%1").arg(key)
+        );
+        return;
+    }
+    appendQuickShellControllerLog(
+        QStringLiteral("preview_hold_stop"),
+        QString("key=%1").arg(key)
+    );
+    commandSink_->stopShellPreviewHeldSeek(key);
+    refreshFromStateSource();
+}
+
+QString QuickShellController::formatPreviewTimestamp(double second) const
+{
+    const int totalCentiseconds = qMax(0, qRound(second * 100.0));
+    const int minutes = totalCentiseconds / 6000;
+    const int secondsPart = (totalCentiseconds / 100) % 60;
+    const int centiseconds = totalCentiseconds % 100;
+    return QString("%1:%2.%3")
+        .arg(minutes, 2, 10, QChar('0'))
+        .arg(secondsPart, 2, 10, QChar('0'))
+        .arg(centiseconds, 2, 10, QChar('0'));
+}
+
+void QuickShellController::logPreviewInteraction(const QString& action, const QString& payload)
+{
+    appendQuickShellControllerLog(action.trimmed().isEmpty() ? QStringLiteral("preview_interaction") : action, payload);
 }
 
 void QuickShellController::syncTopChromeSurfaceSize(int width, int height)
@@ -243,23 +372,6 @@ void QuickShellController::syncWorkspaceSurfaceSize(int width, int height)
     if (QWidget* surface = surfaceHost_->workspaceSurfaceWidget(); surface != nullptr) {
         appendQuickShellControllerLog(
             QStringLiteral("sync_workspace"),
-            QString("size=%1x%2 handle=0x%3")
-                .arg(surface->width())
-                .arg(surface->height())
-                .arg(static_cast<quintptr>(surface->winId()), 0, 16)
-        );
-    }
-}
-
-void QuickShellController::syncPreviewControlsSurfaceSize(int width, int height)
-{
-    if (surfaceHost_ == nullptr) {
-        return;
-    }
-    surfaceHost_->syncPreviewControlsSurfaceSize(width, height);
-    if (QWidget* surface = surfaceHost_->previewControlsSurfaceWidget(); surface != nullptr) {
-        appendQuickShellControllerLog(
-            QStringLiteral("sync_preview_controls"),
             QString("size=%1x%2 handle=0x%3")
                 .arg(surface->width())
                 .arg(surface->height())
@@ -315,6 +427,7 @@ void QuickShellController::refreshFromStateSource()
     stateChanged |= assignIfChanged(previewPlaying_, stateSource_->shellPreviewPlaying());
     stateChanged |= assignIfChanged(previewPositionSeconds_, stateSource_->shellPreviewPositionSeconds());
     stateChanged |= assignIfChanged(previewDurationSeconds_, stateSource_->shellPreviewDurationSeconds());
+    stateChanged |= assignIfChanged(previewStatsTexts_, stateSource_->shellPreviewStatsTexts());
     stateChanged |= assignIfChanged(previewUsesSeparateSurface_, stateSource_->shellPreviewUsesSeparateSurface());
 
     const bool nextPreviewFullscreen = stateSource_->shellPreviewFullscreen();

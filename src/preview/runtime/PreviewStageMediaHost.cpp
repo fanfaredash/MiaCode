@@ -17,6 +17,8 @@
 
 namespace {
 
+constexpr qint64 kPausedSeekAckToleranceMs = 80;
+
 QString normalizedLocalPath(const QString& path)
 {
     return path.isEmpty() ? QString() : QDir::cleanPath(path);
@@ -79,6 +81,21 @@ void PreviewStageMediaHost::initializeBackendObjects()
         }
         lastTimelineSecond_ = qMax(0.0, static_cast<double>(positionMs) / 1000.0 - timelineOffsetSeconds_);
         updateClockDelta();
+        if (pausedSeekCompletionPending_
+            && pausedSeekTargetMs_ >= 0
+            && videoSink_ == nullptr
+            && qAbs(positionMs - pausedSeekTargetMs_) <= kPausedSeekAckToleranceMs) {
+            appendPreviewStageMediaLog(
+                QStringLiteral("paused_seek_media_ack"),
+                QString("generation=%1 second=%2 position_ms=%3 target_ms=%4 source=position_fallback")
+                    .arg(pausedSeekGeneration_)
+                    .arg(pausedSeekTargetSecond_, 0, 'f', 6)
+                    .arg(positionMs)
+                    .arg(pausedSeekTargetMs_)
+            );
+            pausedSeekCompletionPending_ = false;
+            emit pausedSeekCompleted(pausedSeekTargetSecond_, pausedSeekGeneration_);
+        }
         emit playbackPositionChanged(lastTimelineSecond_);
         emit diagnosticsChanged();
     });
@@ -295,6 +312,69 @@ void PreviewStageMediaHost::startPlayback(double seconds)
 #endif
 }
 
+void PreviewStageMediaHost::submitPausedSeek(double seconds, quint64 generation)
+{
+#ifndef HAVE_QT_MULTIMEDIA
+    Q_UNUSED(seconds);
+    Q_UNUSED(generation);
+#else
+    const double clampedSecond = qMax(0.0, seconds);
+    observedPlayheadSecond_ = clampedSecond;
+    updateClockDelta();
+    if (mediaKind_ != MediaKind::Video || player_ == nullptr) {
+        emit pausedSeekCompleted(clampedSecond, generation);
+        emit diagnosticsChanged();
+        return;
+    }
+
+    lastTimelineSecond_ = clampedSecond;
+    const qint64 targetMs = qMax<qint64>(0, qRound64((clampedSecond + timelineOffsetSeconds_) * 1000.0));
+    pausedSeekGeneration_ = generation;
+    pausedSeekTargetMs_ = targetMs;
+    pausedSeekTargetSecond_ = clampedSecond;
+    pausedSeekCompletionPending_ = true;
+    appendPreviewStageMediaLog(
+        QStringLiteral("paused_seek_media_submit"),
+        QString("generation=%1 second=%2 target_ms=%3")
+            .arg(generation)
+            .arg(clampedSecond, 0, 'f', 6)
+            .arg(targetMs)
+    );
+    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < 40) {
+        QMetaObject::invokeMethod(
+            this,
+            [this, generation, clampedSecond]() {
+                if (!pausedSeekCompletionPending_ || pausedSeekGeneration_ != generation) {
+                    appendPreviewStageMediaLog(
+                        QStringLiteral("paused_seek_media_drop"),
+                        QString("generation=%1 current_generation=%2 reason=queued_ack_stale")
+                            .arg(generation)
+                            .arg(pausedSeekGeneration_)
+                    );
+                    return;
+                }
+                pausedSeekCompletionPending_ = false;
+                appendPreviewStageMediaLog(
+                    QStringLiteral("paused_seek_media_ack"),
+                    QString("generation=%1 second=%2 position_ms=%3 target_ms=%4 source=queued")
+                        .arg(generation)
+                        .arg(clampedSecond, 0, 'f', 6)
+                        .arg(lastSeekMs_)
+                        .arg(pausedSeekTargetMs_)
+                );
+                emit pausedSeekCompleted(clampedSecond, generation);
+            },
+            Qt::QueuedConnection
+        );
+        emit diagnosticsChanged();
+        return;
+    }
+    lastSeekMs_ = targetMs;
+    player_->setPosition(targetMs);
+    emit diagnosticsChanged();
+#endif
+}
+
 void PreviewStageMediaHost::syncPlayback(double seconds)
 {
 #ifndef HAVE_QT_MULTIMEDIA
@@ -424,6 +504,10 @@ void PreviewStageMediaHost::clearMedia()
     }
 #endif
     mediaKind_ = MediaKind::None;
+    pausedSeekCompletionPending_ = false;
+    pausedSeekTargetMs_ = -1;
+    pausedSeekTargetSecond_ = 0.0;
+    pausedSeekGeneration_ = 0;
     mediaPath_.clear();
     imageSource_ = QUrl();
     lastTimelineSecond_ = 0.0;
@@ -452,6 +536,10 @@ void PreviewStageMediaHost::loadImageMedia(const QString& path)
 {
     imageSource_ = QUrl::fromLocalFile(path);
     mediaKind_ = MediaKind::Image;
+    pausedSeekCompletionPending_ = false;
+    pausedSeekTargetMs_ = -1;
+    pausedSeekTargetSecond_ = 0.0;
+    pausedSeekGeneration_ = 0;
     lastTimelineSecond_ = 0.0;
     lastSeekMs_ = -1;
     videoPlaybackActive_ = false;
@@ -476,6 +564,10 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
 
     imageSource_ = QUrl();
     mediaKind_ = MediaKind::Video;
+    pausedSeekCompletionPending_ = false;
+    pausedSeekTargetMs_ = -1;
+    pausedSeekTargetSecond_ = 0.0;
+    pausedSeekGeneration_ = 0;
     lastTimelineSecond_ = 0.0;
     lastSeekMs_ = -1;
     videoPlaybackActive_ = false;
@@ -554,6 +646,46 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame)
     videoFrameElapsed_.restart();
     Q_UNUSED(firstFrame);
     ++videoFrameCountTotal_;
+    if (pausedSeekCompletionPending_ && pausedSeekTargetMs_ >= 0) {
+        qint64 candidatePositionMs = -1;
+        const qint64 frameStartUs = frame.startTime();
+        const qint64 frameEndUs = frame.endTime();
+        if (frameStartUs >= 0) {
+            candidatePositionMs = frameStartUs / 1000;
+        } else if (player_ != nullptr) {
+            candidatePositionMs = player_->position();
+        }
+        const bool frameCoversTarget =
+            frameStartUs >= 0
+            && frameEndUs >= 0
+            && (frameStartUs / 1000) <= pausedSeekTargetMs_
+            && pausedSeekTargetMs_ <= (frameEndUs / 1000);
+        const bool closeEnough =
+            candidatePositionMs >= 0
+            && qAbs(candidatePositionMs - pausedSeekTargetMs_) <= kPausedSeekAckToleranceMs;
+        if (frameCoversTarget || closeEnough) {
+            appendPreviewStageMediaLog(
+                QStringLiteral("paused_seek_media_ack"),
+                QString("generation=%1 second=%2 target_ms=%3 frame_ms=%4 frame_end_ms=%5 source=frame")
+                    .arg(pausedSeekGeneration_)
+                    .arg(pausedSeekTargetSecond_, 0, 'f', 6)
+                    .arg(pausedSeekTargetMs_)
+                    .arg(candidatePositionMs)
+                    .arg(frameEndUs >= 0 ? (frameEndUs / 1000) : -1)
+            );
+            pausedSeekCompletionPending_ = false;
+            emit pausedSeekCompleted(pausedSeekTargetSecond_, pausedSeekGeneration_);
+        } else {
+            appendPreviewStageMediaLog(
+                QStringLiteral("paused_seek_media_wait_frame"),
+                QString("generation=%1 target_ms=%2 frame_ms=%3 frame_end_ms=%4")
+                    .arg(pausedSeekGeneration_)
+                    .arg(pausedSeekTargetMs_)
+                    .arg(candidatePositionMs)
+                    .arg(frameEndUs >= 0 ? (frameEndUs / 1000) : -1)
+            );
+        }
+    }
     emit diagnosticsChanged();
 #endif
 }

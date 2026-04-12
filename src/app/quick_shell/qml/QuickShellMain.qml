@@ -7,8 +7,9 @@ import MiaCode.Preview
 ApplicationWindow {
     id: root
 
-    property var paletteMap: styleBridge.palette
-    property var metricsMap: styleBridge.metrics
+    property var paletteMap: ({})
+    property var metricsMap: ({})
+    property var shellController: controller
     property bool fullscreenControlsVisible: controller.previewFullscreen
     property bool fullscreenHintVisible: false
     property bool initialGeometryApplied: false
@@ -29,6 +30,15 @@ ApplicationWindow {
     property real pendingStartupLayoutHeight: 0
     property real startupMinimumWindowWidth: 960
     property real startupMinimumWindowHeight: 640
+    property bool embeddedSeparateSurfaceReady: true
+    property bool fullscreenHoveringRevealZone: false
+    property bool fullscreenHoveringControls: false
+    property rect previewSeekHotRect: {
+        if (!previewPaneFrame || !root.contentItem)
+            return Qt.rect(0, 0, 0, 0)
+        const topLeft = previewPaneFrame.mapToItem(root.contentItem, 0, 0)
+        return Qt.rect(topLeft.x, topLeft.y, previewPaneFrame.width, previewPaneFrame.height)
+    }
 
     function metric(key, fallback) {
         return metricsMap && metricsMap[key] !== undefined ? metricsMap[key] : fallback
@@ -38,10 +48,72 @@ ApplicationWindow {
         return paletteMap && paletteMap[key] !== undefined ? paletteMap[key] : fallback
     }
 
+    function syncStyleBridgeState() {
+        if (!styleBridge)
+            return
+        paletteMap = styleBridge.palette
+        metricsMap = styleBridge.metrics
+    }
+
+    function formatTransportTime(secondsValue) {
+        const safeSeconds = Math.max(0, Math.floor(secondsValue + 0.0001))
+        const minutes = Math.floor(safeSeconds / 60)
+        const seconds = safeSeconds % 60
+        return String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0")
+    }
+
+    function handlePreviewSeekPress(event) {
+        if (!event || event.modifiers !== Qt.NoModifier)
+            return
+        if (!event.isAutoRepeat && event.key === Qt.Key_F11) {
+            controller.previewFullscreen = !controller.previewFullscreen
+            event.accepted = true
+            return
+        }
+        if (!event.isAutoRepeat && event.key === Qt.Key_Space) {
+            controller.togglePreviewPlayback()
+            event.accepted = true
+            return
+        }
+        let direction = 0
+        if (event.key === Qt.Key_Left)
+            direction = -1
+        else if (event.key === Qt.Key_Right)
+            direction = 1
+        if (direction === 0)
+            return
+        if (!controller.previewFullscreen)
+            return
+        event.accepted = true
+        if (event.isAutoRepeat)
+            return
+        controller.beginPreviewHeldSeek(direction, event.key)
+        controller.stepPreviewBySeconds(direction * controller.previewSeekSingleStepSeconds, true)
+    }
+
+    function handlePreviewSeekRelease(event) {
+        if (!event || event.modifiers !== Qt.NoModifier)
+            return
+        if (event.key === Qt.Key_Space) {
+            event.accepted = true
+            return
+        }
+        if (!controller.previewFullscreen)
+            return
+        if (!event.isAutoRepeat && (event.key === Qt.Key_Left || event.key === Qt.Key_Right)) {
+            controller.stopPreviewHeldSeek(event.key)
+            event.accepted = true
+        }
+    }
+
     function showFullscreenControls() {
         if (!controller.previewFullscreen)
             return
         fullscreenControlsVisible = true
+        if (fullscreenHoveringRevealZone || fullscreenHoveringControls) {
+            fullscreenControlsHideTimer.stop()
+            return
+        }
         fullscreenControlsHideTimer.restart()
     }
 
@@ -208,8 +280,10 @@ ApplicationWindow {
     title: controller.windowTitle
     color: tone("windowBg", "#f8fafd")
     onMetricsMapChanged: {
-        applyWindowMinimumSize()
-        syncPreviewPaneWidth(workspaceRow.width, workspaceRow.height, true, !startupLayoutLocked)
+        Qt.callLater(function() {
+            applyWindowMinimumSize()
+            syncPreviewPaneWidth(workspaceRow.width, workspaceRow.height, true, !startupLayoutLocked)
+        })
     }
     onVisibleChanged: {
         if (visible)
@@ -233,6 +307,7 @@ ApplicationWindow {
     palette.highlightedText: tone("accentText", "#ffffff")
 
     Component.onCompleted: {
+        syncStyleBridgeState()
         if (!initialGeometryApplied) {
             width = metric("initialWindowWidth", 1280)
             height = metric("initialWindowHeight", 800)
@@ -256,6 +331,22 @@ ApplicationWindow {
     }
 
     Connections {
+        target: styleBridge
+
+        function onAppearanceChanged() {
+            root.paletteMap = styleBridge.palette
+            if (embeddedTransport)
+                embeddedTransport.paletteRefreshRequested()
+            if (fullscreenTransport)
+                fullscreenTransport.paletteRefreshRequested()
+        }
+
+        function onMetricsChanged() {
+            root.metricsMap = styleBridge.metrics
+        }
+    }
+
+    Connections {
         target: controller
 
         function onPreviewFullscreenChanged() {
@@ -264,8 +355,18 @@ ApplicationWindow {
                 fullscreenHintVisible = false
                 fullscreenControlsHideTimer.stop()
                 fullscreenHintHideTimer.stop()
+                fullscreenHoveringRevealZone = false
+                fullscreenHoveringControls = false
+                embeddedSeparateSurfaceReady = true
+                styleBridge.refreshNow()
+                controller.refresh()
+                root.requestActivate()
+                embeddedPreviewInteractionRoot.forceActiveFocus()
                 return
             }
+            embeddedSeparateSurfaceReady = false
+            fullscreenHoveringRevealZone = false
+            fullscreenHoveringControls = false
             fullscreenControlsVisible = true
             fullscreenHintVisible = true
             fullscreenControlsHideTimer.restart()
@@ -275,9 +376,15 @@ ApplicationWindow {
 
     Timer {
         id: fullscreenControlsHideTimer
-        interval: metric("fullscreenControlsAutoHideDelayMs", 1600)
+        interval: metric("fullscreenControlsAutoHideDelayMs", 1200)
         repeat: false
-        onTriggered: fullscreenControlsVisible = false
+        onTriggered: {
+            if (fullscreenHoveringRevealZone || fullscreenHoveringControls) {
+                restart()
+                return
+            }
+            fullscreenControlsVisible = false
+        }
     }
 
     Timer {
@@ -309,6 +416,13 @@ ApplicationWindow {
     Menu {
         id: previewSpeedMenu
         popupType: Popup.Window
+        padding: 4
+        leftPadding: 4
+        rightPadding: 4
+        topPadding: 4
+        bottomPadding: 4
+        implicitWidth: 78
+        width: implicitWidth
         palette.window: tone("menuBg", "#ffffff")
         palette.base: tone("menuBg", "#ffffff")
         palette.text: tone("textPrimary", "#203040")
@@ -322,12 +436,180 @@ ApplicationWindow {
             radius: 8
         }
 
-        MenuItem { text: "0.25x"; onTriggered: controller.setPreviewRate(0.25) }
-        MenuItem { text: "0.5x"; onTriggered: controller.setPreviewRate(0.5) }
-        MenuItem { text: "0.75x"; onTriggered: controller.setPreviewRate(0.75) }
-        MenuItem { text: "1x"; onTriggered: controller.setPreviewRate(1.0) }
-        MenuItem { text: "1.25x"; onTriggered: controller.setPreviewRate(1.25) }
-        MenuItem { text: "2x"; onTriggered: controller.setPreviewRate(2.0) }
+        MenuItem {
+            id: speed25Item
+            readonly property bool selectedRate: controller && controller.previewSpeedLabel === text
+            text: "0.25x"
+            leftPadding: 12
+            rightPadding: 12
+            topPadding: 0
+            bottomPadding: 0
+            implicitHeight: 32
+            implicitWidth: previewSpeedMenu.width - previewSpeedMenu.leftPadding - previewSpeedMenu.rightPadding
+            indicator: Item { implicitWidth: 0; implicitHeight: 0 }
+            onTriggered: controller.setPreviewRate(0.25)
+            background: Rectangle {
+                radius: 6
+                color: speed25Item.highlighted
+                    ? tone("accent", "#2e77d0")
+                    : (speed25Item.selectedRate ? tone("menuHoverBg", "#eef5ff") : "transparent")
+                border.color: speed25Item.highlighted
+                    ? tone("accent", "#2e77d0")
+                    : (speed25Item.selectedRate ? tone("border", "#d5e0ec") : "transparent")
+            }
+            contentItem: Text {
+                text: speed25Item.text
+                color: speed25Item.highlighted ? tone("accentText", "#ffffff") : tone("textPrimary", "#203040")
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+        MenuItem {
+            id: speed50Item
+            readonly property bool selectedRate: controller && controller.previewSpeedLabel === text
+            text: "0.5x"
+            leftPadding: 12
+            rightPadding: 12
+            topPadding: 0
+            bottomPadding: 0
+            implicitHeight: 32
+            implicitWidth: previewSpeedMenu.width - previewSpeedMenu.leftPadding - previewSpeedMenu.rightPadding
+            indicator: Item { implicitWidth: 0; implicitHeight: 0 }
+            onTriggered: controller.setPreviewRate(0.5)
+            background: Rectangle {
+                radius: 6
+                color: speed50Item.highlighted
+                    ? tone("accent", "#2e77d0")
+                    : (speed50Item.selectedRate ? tone("menuHoverBg", "#eef5ff") : "transparent")
+                border.color: speed50Item.highlighted
+                    ? tone("accent", "#2e77d0")
+                    : (speed50Item.selectedRate ? tone("border", "#d5e0ec") : "transparent")
+            }
+            contentItem: Text {
+                text: speed50Item.text
+                color: speed50Item.highlighted ? tone("accentText", "#ffffff") : tone("textPrimary", "#203040")
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+        MenuItem {
+            id: speed75Item
+            readonly property bool selectedRate: controller && controller.previewSpeedLabel === text
+            text: "0.75x"
+            leftPadding: 12
+            rightPadding: 12
+            topPadding: 0
+            bottomPadding: 0
+            implicitHeight: 32
+            implicitWidth: previewSpeedMenu.width - previewSpeedMenu.leftPadding - previewSpeedMenu.rightPadding
+            indicator: Item { implicitWidth: 0; implicitHeight: 0 }
+            onTriggered: controller.setPreviewRate(0.75)
+            background: Rectangle {
+                radius: 6
+                color: speed75Item.highlighted
+                    ? tone("accent", "#2e77d0")
+                    : (speed75Item.selectedRate ? tone("menuHoverBg", "#eef5ff") : "transparent")
+                border.color: speed75Item.highlighted
+                    ? tone("accent", "#2e77d0")
+                    : (speed75Item.selectedRate ? tone("border", "#d5e0ec") : "transparent")
+            }
+            contentItem: Text {
+                text: speed75Item.text
+                color: speed75Item.highlighted ? tone("accentText", "#ffffff") : tone("textPrimary", "#203040")
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+        MenuItem {
+            id: speed100Item
+            readonly property bool selectedRate: controller && controller.previewSpeedLabel === text
+            text: "1x"
+            leftPadding: 12
+            rightPadding: 12
+            topPadding: 0
+            bottomPadding: 0
+            implicitHeight: 32
+            implicitWidth: previewSpeedMenu.width - previewSpeedMenu.leftPadding - previewSpeedMenu.rightPadding
+            indicator: Item { implicitWidth: 0; implicitHeight: 0 }
+            onTriggered: controller.setPreviewRate(1.0)
+            background: Rectangle {
+                radius: 6
+                color: speed100Item.highlighted
+                    ? tone("accent", "#2e77d0")
+                    : (speed100Item.selectedRate ? tone("menuHoverBg", "#eef5ff") : "transparent")
+                border.color: speed100Item.highlighted
+                    ? tone("accent", "#2e77d0")
+                    : (speed100Item.selectedRate ? tone("border", "#d5e0ec") : "transparent")
+            }
+            contentItem: Text {
+                text: speed100Item.text
+                color: speed100Item.highlighted ? tone("accentText", "#ffffff") : tone("textPrimary", "#203040")
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+        MenuItem {
+            id: speed125Item
+            readonly property bool selectedRate: controller && controller.previewSpeedLabel === text
+            text: "1.25x"
+            leftPadding: 12
+            rightPadding: 12
+            topPadding: 0
+            bottomPadding: 0
+            implicitHeight: 32
+            implicitWidth: previewSpeedMenu.width - previewSpeedMenu.leftPadding - previewSpeedMenu.rightPadding
+            indicator: Item { implicitWidth: 0; implicitHeight: 0 }
+            onTriggered: controller.setPreviewRate(1.25)
+            background: Rectangle {
+                radius: 6
+                color: speed125Item.highlighted
+                    ? tone("accent", "#2e77d0")
+                    : (speed125Item.selectedRate ? tone("menuHoverBg", "#eef5ff") : "transparent")
+                border.color: speed125Item.highlighted
+                    ? tone("accent", "#2e77d0")
+                    : (speed125Item.selectedRate ? tone("border", "#d5e0ec") : "transparent")
+            }
+            contentItem: Text {
+                text: speed125Item.text
+                color: speed125Item.highlighted ? tone("accentText", "#ffffff") : tone("textPrimary", "#203040")
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+        MenuItem {
+            id: speed200Item
+            readonly property bool selectedRate: controller && controller.previewSpeedLabel === text
+            text: "2x"
+            leftPadding: 12
+            rightPadding: 12
+            topPadding: 0
+            bottomPadding: 0
+            implicitHeight: 32
+            implicitWidth: previewSpeedMenu.width - previewSpeedMenu.leftPadding - previewSpeedMenu.rightPadding
+            indicator: Item { implicitWidth: 0; implicitHeight: 0 }
+            onTriggered: controller.setPreviewRate(2.0)
+            background: Rectangle {
+                radius: 6
+                color: speed200Item.highlighted
+                    ? tone("accent", "#2e77d0")
+                    : (speed200Item.selectedRate ? tone("menuHoverBg", "#eef5ff") : "transparent")
+                border.color: speed200Item.highlighted
+                    ? tone("accent", "#2e77d0")
+                    : (speed200Item.selectedRate ? tone("border", "#d5e0ec") : "transparent")
+            }
+            contentItem: Text {
+                text: speed200Item.text
+                color: speed200Item.highlighted ? tone("accentText", "#ffffff") : tone("textPrimary", "#203040")
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
     }
 
     ColumnLayout {
@@ -441,6 +723,7 @@ ApplicationWindow {
                 }
 
                 Rectangle {
+                    id: previewPaneFrame
                     Layout.preferredWidth: previewPaneWidth
                     Layout.minimumWidth: previewPaneMinWidth()
                     Layout.maximumWidth: previewPaneMaxWidth(workspaceRow.width, workspaceRow.height)
@@ -448,66 +731,118 @@ ApplicationWindow {
                     color: tone("panelBg", "#f5f7fa")
                     border.color: tone("border", "#d5e0ec")
 
-                    ColumnLayout {
+                    FocusScope {
+                        id: embeddedPreviewInteractionRoot
+
                         anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-                        anchors.topMargin: 12
-                        anchors.bottomMargin: 12
-                        spacing: 10
 
-                        Item {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
+                        Keys.onPressed: root.handlePreviewSeekPress(event)
+                        Keys.onReleased: root.handlePreviewSeekRelease(event)
 
-                            Rectangle {
-                                id: embeddedPreviewFrame
+                        onActiveFocusChanged: controller.logPreviewInteraction(
+                            "qml_preview_focus_changed",
+                            "active=" + (activeFocus ? 1 : 0)
+                        )
 
-                                readonly property real canvasSide: Math.max(1, Math.min(parent.width, parent.height))
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            anchors.topMargin: 12
+                            anchors.bottomMargin: 12
+                            spacing: 10
 
-                                visible: !controller.previewFullscreen
-                                width: canvasSide
-                                height: canvasSide
-                                anchors.centerIn: parent
-                                color: tone("canvasBg", "#000000")
-                                border.color: tone("borderSoft", "#ccd6e2")
-                                clip: true
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
 
-                                Loader {
-                                    anchors.fill: parent
-                                    anchors.margins: 1
-                                    active: !controller.previewFullscreen && !controller.previewUsesSeparateSurface
+                                Rectangle {
+                                    id: embeddedPreviewFrame
 
-                                    sourceComponent: QuickShellPreviewSurface {
-                                        runtime: controller.previewRuntime
-                                        mediaHost: controller.previewStageMediaHost
+                                    readonly property real canvasSide: Math.max(1, Math.min(parent.width, parent.height))
+
+                                    visible: !controller.previewFullscreen
+                                    width: canvasSide
+                                    height: canvasSide
+                                    anchors.centerIn: parent
+                                    color: tone("canvasBg", "#000000")
+                                    border.color: tone("borderSoft", "#ccd6e2")
+                                    clip: true
+
+                                    Loader {
+                                        anchors.fill: parent
+                                        anchors.margins: 1
+                                        active: !controller.previewFullscreen
+                                            && (!controller.previewUsesSeparateSurface
+                                                || !embeddedSeparateSurfaceReady)
+
+                                        sourceComponent: QuickShellPreviewSurface {
+                                            runtime: controller.previewRuntime
+                                            mediaHost: controller.previewStageMediaHost
+                                        }
+                                    }
+
+                                    Loader {
+                                        anchors.fill: parent
+                                        anchors.margins: 1
+                                        active: !controller.previewFullscreen
+                                            && controller.previewUsesSeparateSurface
+                                            && embeddedSeparateSurfaceReady
+
+                                        sourceComponent: WindowContainer {
+                                            anchors.fill: parent
+                                            window: controller.previewCompositeWindow
+                                        }
                                     }
                                 }
 
-                                Loader {
-                                    anchors.fill: parent
-                                    anchors.margins: 1
-                                    active: !controller.previewFullscreen && controller.previewUsesSeparateSurface
-
-                                    sourceComponent: WindowContainer {
-                                        anchors.fill: parent
-                                        window: controller.previewCompositeWindow
+                                TapHandler {
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+                                    onTapped: {
+                                        controller.logPreviewInteraction(
+                                            "qml_preview_tapped",
+                                            "x=" + point.position.x + " y=" + point.position.y
+                                        )
+                                        embeddedPreviewInteractionRoot.forceActiveFocus()
                                     }
                                 }
                             }
-                        }
 
-                        Item {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: metric("previewControlsHeight", 220)
-                            Layout.minimumHeight: metric("previewControlsHeight", 220)
+                            Item {
+                                id: embeddedTransportStackHost
+                                Layout.fillWidth: true
+                                implicitHeight: embeddedTransportStack.implicitHeight
+                                Layout.preferredHeight: implicitHeight
+                                Layout.minimumHeight: implicitHeight
 
-                            WindowContainer {
-                                anchors.fill: parent
-                                window: controller.previewControlsWindow
-                                Component.onCompleted: controller.syncPreviewControlsSurfaceSize(width, height)
-                                onWidthChanged: controller.syncPreviewControlsSurfaceSize(width, height)
-                                onHeightChanged: controller.syncPreviewControlsSurfaceSize(width, height)
+                                ColumnLayout {
+                                    id: embeddedTransportStack
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.top: parent.top
+                                    spacing: metric("previewControlStatsGap", 10)
+
+                                    QuickShellPreviewTransport {
+                                        id: embeddedTransport
+                                        Layout.fillWidth: true
+                                        controller: root.shellController
+                                        paletteMap: root.paletteMap
+                                        metricsMap: root.metricsMap
+                                        speedMenu: previewSpeedMenu
+                                        fullscreenMode: false
+                                        onFocusRequested: embeddedPreviewInteractionRoot.forceActiveFocus()
+                                    }
+
+                                    QuickShellPreviewStatsPanel {
+                                        id: embeddedStatsPanel
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: implicitHeight
+                                        controller: root.shellController
+                                        paletteMap: root.paletteMap
+                                        metricsMap: root.metricsMap
+                                        onFocusRequested: embeddedPreviewInteractionRoot.forceActiveFocus()
+                                    }
+                                }
                             }
                         }
                     }
@@ -534,7 +869,6 @@ ApplicationWindow {
     Window {
         id: fullscreenPreviewWindow
 
-        visible: controller.previewFullscreen
         visibility: controller.previewFullscreen ? Window.FullScreen : Window.Hidden
         color: "black"
         title: root.title
@@ -574,41 +908,16 @@ ApplicationWindow {
         }
 
         onVisibleChanged: {
-            if (!visible)
+            if (!visible) {
+                root.requestActivate()
+                embeddedPreviewInteractionRoot.forceActiveFocus()
+                Qt.callLater(function() {
+                    styleBridge.refreshNow()
+                    controller.refresh()
+                })
                 return
+            }
             requestActivate()
-            fullscreenInteractionRoot.forceActiveFocus()
-            showFullscreenControls()
-        }
-
-        Item {
-            id: fullscreenInteractionRoot
-            anchors.fill: parent
-            focus: controller.previewFullscreen
-
-            Keys.onEscapePressed: function(event) {
-                event.accepted = true
-                controller.previewFullscreen = false
-            }
-
-            Keys.onSpacePressed: function(event) {
-                event.accepted = true
-                controller.togglePreviewPlayback()
-            }
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            onPressed: {
-                fullscreenPreviewWindow.requestActivate()
-                fullscreenInteractionRoot.forceActiveFocus()
-                showFullscreenControls()
-            }
-            onPositionChanged: {
-                if (mouseY >= height - metric("fullscreenControlsRevealHotzoneHeight", 120))
-                    showFullscreenControls()
-            }
         }
 
         Rectangle {
@@ -644,228 +953,123 @@ ApplicationWindow {
                 }
             }
         }
-    }
 
-    Window {
-        id: fullscreenControlsWindow
+        Item {
+            id: fullscreenInteractionRoot
+            anchors.fill: parent
+            focus: controller.previewFullscreen
 
-        transientParent: fullscreenPreviewWindow
-        flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint | Qt.WindowDoesNotAcceptFocus
-        color: "transparent"
-        width: Math.min(
-            metric("fullscreenOverlayMaxWidth", 10000),
-            Math.max(0, fullscreenPreviewWindow.width - metric("fullscreenOverlaySideMargin", 18) * 2)
-        )
-        height: Math.max(
-            metric("previewControlButtonMinHeight", 28) + 16,
-            fullscreenControlsCard.implicitHeight
-        )
-        x: fullscreenPreviewWindow.x + metric("fullscreenOverlaySideMargin", 18)
-        y: fullscreenPreviewWindow.y + fullscreenPreviewWindow.height - height
-            - metric("fullscreenOverlayBottomMargin", 24)
-            + (fullscreenControlsVisible ? 0 : metric("fullscreenOverlayHideOffset", 20))
-        opacity: fullscreenControlsVisible ? 1.0 : 0.0
-        visible: controller.previewFullscreen && (fullscreenControlsVisible || opacity > 0.0)
+            Keys.onPressed: function(event) {
+                if (!event.isAutoRepeat && event.modifiers === Qt.NoModifier && event.key === Qt.Key_Escape) {
+                    event.accepted = true
+                    controller.previewFullscreen = false
+                    return
+                }
+                root.handlePreviewSeekPress(event)
+            }
 
-        Shortcut {
-            sequence: "Esc"
-            enabled: controller.previewFullscreen
-            context: Qt.ApplicationShortcut
-            onActivated: controller.previewFullscreen = false
+            Keys.onReleased: root.handlePreviewSeekRelease(event)
         }
 
-        Shortcut {
-            sequence: "Space"
-            enabled: controller.previewFullscreen
-            context: Qt.ApplicationShortcut
-            onActivated: controller.togglePreviewPlayback()
-        }
-
-        onVisibleChanged: {
-            if (visible)
+        MouseArea {
+            id: fullscreenHoverArea
+            z: 10
+            anchors.fill: parent
+            hoverEnabled: true
+            onExited: {
+                fullscreenHoveringRevealZone = false
+                if (!fullscreenHoveringControls)
+                    fullscreenControlsHideTimer.restart()
+            }
+            onPressed: {
                 fullscreenPreviewWindow.requestActivate()
-        }
-
-        Behavior on y {
-            NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
-        }
-
-        Behavior on opacity {
-            NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                fullscreenInteractionRoot.forceActiveFocus()
+                showFullscreenControls()
+            }
+            onPositionChanged: {
+                fullscreenHoveringRevealZone =
+                    mouseY >= height - metric("fullscreenControlsRevealHotzoneHeight", 120)
+                if (fullscreenHoveringRevealZone)
+                    showFullscreenControls()
+                else if (!fullscreenHoveringControls)
+                    fullscreenControlsHideTimer.restart()
+            }
         }
 
         Rectangle {
-            id: fullscreenControlsCard
-            implicitHeight: fullscreenControlsRow.implicitHeight + 16
-            anchors.fill: parent
-            color: tone("cardAltBg", "#edf2f8")
-            border.color: tone("border", "#d5e0ec")
-            radius: 10
+            id: fullscreenControlsOverlay
 
-            RowLayout {
-                id: fullscreenControlsRow
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 8
+            z: 20
+            width: Math.min(
+                metric("fullscreenOverlayMaxWidth", 10000),
+                Math.max(0, fullscreenPreviewWindow.width - metric("fullscreenOverlaySideMargin", 18) * 2)
+            )
+            height: fullscreenTransport.implicitHeight
+            x: metric("fullscreenOverlaySideMargin", 18)
+            y: fullscreenPreviewWindow.height - height
+                - 6
+                + (fullscreenControlsVisible ? 0 : metric("fullscreenOverlayHideOffset", 20))
+            opacity: fullscreenControlsVisible ? 1.0 : 0.0
+            visible: controller.previewFullscreen && (fullscreenControlsVisible || opacity > 0.0)
+            color: "transparent"
 
-                ToolButton {
-                    Layout.preferredWidth: 30
-                    Layout.preferredHeight: metric("previewControlButtonMinHeight", 28)
-                    text: "\u25a0"
-                    onClicked: controller.stopPreview()
-                    padding: 0
-                    background: Rectangle {
-                        color: parent.down ? tone("menuHoverBg", "#eef5ff") : "transparent"
-                        border.color: tone("border", "#d5e0ec")
-                        radius: 6
-                    }
-                    contentItem: Item {
-                        implicitWidth: 18
-                        implicitHeight: 18
+            Behavior on y {
+                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+            }
 
-                        Rectangle {
-                            width: 10
-                            height: 10
-                            radius: 1
-                            color: tone("textPrimary", "#203040")
-                            anchors.centerIn: parent
-                        }
-                    }
-                }
+            Behavior on opacity {
+                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+            }
 
-                ToolButton {
-                    Layout.preferredWidth: 30
-                    Layout.preferredHeight: metric("previewControlButtonMinHeight", 28)
-                    text: controller.previewPlaying ? "\u23f8" : "\u25b6"
-                    onClicked: controller.togglePreviewPlayback()
-                    padding: 0
-                    background: Rectangle {
-                        color: parent.down ? tone("menuHoverBg", "#eef5ff") : "transparent"
-                        border.color: tone("border", "#d5e0ec")
-                        radius: 6
-                    }
-                    contentItem: Item {
-                        implicitWidth: 18
-                        implicitHeight: 18
-
-                        Canvas {
-                            anchors.fill: parent
-                            visible: !controller.previewPlaying
-                            onPaint: {
-                                const ctx = getContext("2d")
-                                ctx.reset()
-                                ctx.fillStyle = tone("textPrimary", "#203040")
-                                ctx.beginPath()
-                                ctx.moveTo(width * 0.34, height * 0.22)
-                                ctx.lineTo(width * 0.34, height * 0.78)
-                                ctx.lineTo(width * 0.76, height * 0.50)
-                                ctx.closePath()
-                                ctx.fill()
-                            }
-                        }
-
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 3
-                            visible: controller.previewPlaying
-
-                            Rectangle {
-                                width: 4
-                                height: 12
-                                radius: 1
-                                color: tone("textPrimary", "#203040")
-                            }
-
-                            Rectangle {
-                                width: 4
-                                height: 12
-                                radius: 1
-                                color: tone("textPrimary", "#203040")
-                            }
-                        }
-                    }
-                }
-
-                Slider {
-                    Layout.fillWidth: true
-                    from: 0
-                    to: Math.max(controller.previewDurationSeconds, 0.001)
-                    value: controller.previewPositionSeconds
-                    onMoved: controller.seekPreview(value)
-                }
-
-                Button {
-                    text: controller.previewSpeedLabel
-                    Layout.preferredWidth: metric("previewSpeedButtonWidth", 72)
-                    onClicked: previewSpeedMenu.popup()
-                    background: Rectangle {
-                        color: parent.down ? tone("menuHoverBg", "#eef5ff") : "transparent"
-                        border.color: tone("border", "#d5e0ec")
-                        radius: 6
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        color: tone("textPrimary", "#203040")
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
-                    }
-                }
-
-                ToolButton {
-                    Layout.preferredWidth: 30
-                    Layout.preferredHeight: metric("previewControlButtonMinHeight", 28)
-                    text: "\u26f6"
-                    onClicked: controller.previewFullscreen = false
-                    padding: 0
-                    background: Rectangle {
-                        color: parent.down ? tone("menuHoverBg", "#eef5ff") : "transparent"
-                        border.color: tone("border", "#d5e0ec")
-                        radius: 6
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        color: tone("textPrimary", "#203040")
-                        font.pixelSize: 16
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
+            HoverHandler {
+                id: fullscreenControlsHoverHandler
+                acceptedDevices: PointerDevice.Mouse
+                onHoveredChanged: {
+                    fullscreenHoveringControls = hovered
+                    if (hovered) {
+                        fullscreenControlsVisible = true
+                        fullscreenControlsHideTimer.stop()
+                    } else if (!fullscreenHoveringRevealZone) {
+                        fullscreenControlsHideTimer.restart()
                     }
                 }
             }
-        }
-    }
 
-    Window {
-        id: fullscreenHintWindow
-
-        transientParent: fullscreenPreviewWindow
-        flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.NoDropShadowWindowHint | Qt.WindowDoesNotAcceptFocus
-        color: "transparent"
-        width: fullscreenHintLabel.implicitWidth
-        height: fullscreenHintLabel.implicitHeight
-        x: fullscreenPreviewWindow.x + Math.round((fullscreenPreviewWindow.width - width) / 2)
-        y: fullscreenPreviewWindow.y + metric("fullscreenHintTopMargin", 28)
-        visible: controller.previewFullscreen && fullscreenHintVisible
-
-        Shortcut {
-            sequence: "Esc"
-            enabled: controller.previewFullscreen
-            context: Qt.ApplicationShortcut
-            onActivated: controller.previewFullscreen = false
-        }
-
-        Shortcut {
-            sequence: "Space"
-            enabled: controller.previewFullscreen
-            context: Qt.ApplicationShortcut
-            onActivated: controller.togglePreviewPlayback()
+            QuickShellPreviewTransport {
+                id: fullscreenTransport
+                anchors.fill: parent
+                controller: root.shellController
+                paletteMap: root.paletteMap
+                metricsMap: root.metricsMap
+                speedMenu: previewSpeedMenu
+                fullscreenMode: true
+                onFocusRequested: {
+                    fullscreenPreviewWindow.requestActivate()
+                    fullscreenInteractionRoot.forceActiveFocus()
+                    showFullscreenControls()
+                }
+                onScrubActivityChanged: function(active) {
+                    if (active) {
+                        fullscreenControlsVisible = true
+                        fullscreenControlsHideTimer.stop()
+                        return
+                    }
+                    showFullscreenControls()
+                }
+            }
         }
 
         Rectangle {
-            anchors.fill: parent
+            id: fullscreenHintOverlay
+
+            z: 21
+            anchors.top: parent.top
+            anchors.topMargin: metric("fullscreenHintTopMargin", 28)
+            anchors.horizontalCenter: parent.horizontalCenter
             radius: 12
             color: "#B0000000"
             border.color: "#40FFFFFF"
+            visible: controller.previewFullscreen && fullscreenHintVisible
 
             Label {
                 id: fullscreenHintLabel

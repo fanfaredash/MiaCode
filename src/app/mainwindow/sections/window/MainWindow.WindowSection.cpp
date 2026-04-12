@@ -26,6 +26,21 @@ void MainWindow::WindowSection::seekShellPreview(double second)
     owner_.seekShellPreview(second);
 }
 
+void MainWindow::WindowSection::beginShellPreviewScrub()
+{
+    owner_.beginShellPreviewScrub();
+}
+
+void MainWindow::WindowSection::updateShellPreviewScrub(double second, bool centerView)
+{
+    owner_.updateShellPreviewScrub(second, centerView);
+}
+
+void MainWindow::WindowSection::endShellPreviewScrub(double second, bool centerView)
+{
+    owner_.endShellPreviewScrub(second, centerView);
+}
+
 void MainWindow::WindowSection::setShellPreviewRate(double rate)
 {
     owner_.setShellPreviewRate(rate);
@@ -74,6 +89,11 @@ double MainWindow::WindowSection::shellPreviewPositionSeconds() const
 double MainWindow::WindowSection::shellPreviewDurationSeconds() const
 {
     return owner_.shellPreviewDurationSeconds();
+}
+
+QStringList MainWindow::WindowSection::shellPreviewStatsTexts() const
+{
+    return owner_.shellPreviewStatsTexts();
 }
 
 bool MainWindow::WindowSection::shellPreviewFullscreen() const
@@ -129,41 +149,6 @@ QWidget* MainWindow::WindowSection::shellWorkspaceWidget() const
 QWidget* MainWindow::WindowSection::shellPreviewPanelWidget() const
 {
     return owner_.shellPreviewPanelWidget();
-}
-
-QString MainWindow::WindowSection::shellPreviewPanelStyleSheet() const
-{
-    return owner_.shellPreviewPanelStyleSheet();
-}
-
-QWidget* MainWindow::WindowSection::shellPreviewControlCardWidget() const
-{
-    return owner_.shellPreviewControlCardWidget();
-}
-
-QWidget* MainWindow::WindowSection::shellPreviewStatsCardWidget() const
-{
-    return owner_.shellPreviewStatsCardWidget();
-}
-
-QLabel* MainWindow::WindowSection::shellPreviewTotalStatsLabel() const
-{
-    return owner_.shellPreviewTotalStatsLabel();
-}
-
-QGridLayout* MainWindow::WindowSection::shellPreviewStatsGridLayout() const
-{
-    return owner_.shellPreviewStatsGridLayout();
-}
-
-int MainWindow::WindowSection::shellPreviewStatsMinimumPanelHeight(int panelWidth) const
-{
-    return owner_.shellPreviewStatsMinimumPanelHeight(panelWidth);
-}
-
-int MainWindow::WindowSection::shellUpdatePreviewStatsLayout(int hostWidth)
-{
-    return owner_.shellUpdatePreviewStatsLayout(hostWidth);
 }
 
 double MainWindow::WindowSection::shellNormalizedPreviewCanvasAspectRatio() const

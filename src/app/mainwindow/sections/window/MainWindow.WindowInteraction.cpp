@@ -181,7 +181,7 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
     if (previewSlider_ != nullptr && watched == previewSlider_) {
         if (event->type() == QEvent::Wheel) {
             stopPreviewHeldSeek();
-            if (handlePreviewSliderWheel(static_cast<QWheelEvent*>(event))) {
+            if (handlePreviewSeekWheel(static_cast<QWheelEvent*>(event))) {
                 return true;
             }
         } else if (event->type() == QEvent::MouseButtonPress) {
@@ -259,7 +259,7 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event)
                     return true;
                 }
                 beginPreviewHeldSeek(direction, keyEvent->key());
-                stepPreviewSliderBySeconds(
+                stepPreviewBySeconds(
                     static_cast<double>(direction) * miacode::preview_interaction::kSeekSingleStepSeconds,
                     true
                 );

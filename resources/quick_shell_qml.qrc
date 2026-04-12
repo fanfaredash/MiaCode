@@ -1,6 +1,8 @@
 <RCC>
     <qresource prefix="/">
         <file alias="quick_shell/qml/QuickShellMain.qml">../src/app/quick_shell/qml/QuickShellMain.qml</file>
+        <file alias="quick_shell/qml/QuickShellPreviewTransport.qml">../src/app/quick_shell/qml/QuickShellPreviewTransport.qml</file>
+        <file alias="quick_shell/qml/QuickShellPreviewStatsPanel.qml">../src/app/quick_shell/qml/QuickShellPreviewStatsPanel.qml</file>
         <file alias="quick_shell/qml/QuickShellPreviewSurface.qml">../src/app/quick_shell/qml/QuickShellPreviewSurface.qml</file>
     </qresource>
 </RCC>

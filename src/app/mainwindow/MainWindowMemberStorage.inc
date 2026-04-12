@@ -223,7 +223,7 @@
         bool qtPreviewTimelineDirty_ = false;
         bool qtPreviewAwaitingFrameSwap_ = false;
         qint64 qtPreviewAwaitingFrameSwapSinceMs_ = -1;
-        bool previewSliderDragging_ = false;
+        bool previewScrubDragging_ = false;
         bool suppressTimelineCursorSync_ = false;
         bool suppressTextDirtyTracking_ = false;
         bool autoRestoreLastSessionFile_ = true;
@@ -255,6 +255,12 @@
         qint64 qtPreviewNextFixedTickDueNs_ = -1;
         double qtPreviewTimelineStartSecond_ = 0.0;
         QElapsedTimer qtPreviewTimelineElapsed_;
+        quint64 pausedSeekGeneration_ = 0;
+        double pausedSeekTargetSecond_ = 0.0;
+        double pausedSeekAppliedVisualSecond_ = 0.0;
+        quint64 pausedSeekMediaSubmittedGeneration_ = 0;
+        quint64 pausedSeekMediaAckGeneration_ = 0;
+        bool pausedSeekMediaPending_ = false;
         double previewPendingSeekSecond_ = 0.0;
         bool previewPendingSeekCenterView_ = true;
         bool pausedPreviewMediaSeekPending_ = false;
@@ -446,7 +452,7 @@
     bool& qtPreviewTimelineDirty_ = state_.qtPreviewTimelineDirty_;
     bool& qtPreviewAwaitingFrameSwap_ = state_.qtPreviewAwaitingFrameSwap_;
     qint64& qtPreviewAwaitingFrameSwapSinceMs_ = state_.qtPreviewAwaitingFrameSwapSinceMs_;
-    bool& previewSliderDragging_ = state_.previewSliderDragging_;
+    bool& previewScrubDragging_ = state_.previewScrubDragging_;
     bool& suppressTimelineCursorSync_ = state_.suppressTimelineCursorSync_;
     bool& suppressTextDirtyTracking_ = state_.suppressTextDirtyTracking_;
     bool& autoRestoreLastSessionFile_ = state_.autoRestoreLastSessionFile_;
@@ -478,6 +484,12 @@
     qint64& qtPreviewNextFixedTickDueNs_ = state_.qtPreviewNextFixedTickDueNs_;
     double& qtPreviewTimelineStartSecond_ = state_.qtPreviewTimelineStartSecond_;
     QElapsedTimer& qtPreviewTimelineElapsed_ = state_.qtPreviewTimelineElapsed_;
+    quint64& pausedSeekGeneration_ = state_.pausedSeekGeneration_;
+    double& pausedSeekTargetSecond_ = state_.pausedSeekTargetSecond_;
+    double& pausedSeekAppliedVisualSecond_ = state_.pausedSeekAppliedVisualSecond_;
+    quint64& pausedSeekMediaSubmittedGeneration_ = state_.pausedSeekMediaSubmittedGeneration_;
+    quint64& pausedSeekMediaAckGeneration_ = state_.pausedSeekMediaAckGeneration_;
+    bool& pausedSeekMediaPending_ = state_.pausedSeekMediaPending_;
     double& previewPendingSeekSecond_ = state_.previewPendingSeekSecond_;
     bool& previewPendingSeekCenterView_ = state_.previewPendingSeekCenterView_;
     bool& pausedPreviewMediaSeekPending_ = state_.pausedPreviewMediaSeekPending_;

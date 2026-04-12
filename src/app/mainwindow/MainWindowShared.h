@@ -53,7 +53,9 @@ inline constexpr int kWaveformPeakCount = 1024;
 inline constexpr double kEditorLineSpacingFactorDefault = 1.5;
 inline constexpr int kAutosaveIntervalMs = 15 * 60 * 1000;
 inline constexpr int kAutosaveMaxVersions = 10;
-inline constexpr int kPreviewScrubRenderIntervalMs = kTimelineUiCadenceMs;
+// Cap interactive preview scrub updates at <= 15 FPS so timeline dragging and
+// preview-slider dragging do not spam seek work faster than the video path can settle.
+inline constexpr int kPreviewScrubRenderIntervalMs = 67;
 
 extern const QList<double> kEditorLineSpacingFactorOptions;
 

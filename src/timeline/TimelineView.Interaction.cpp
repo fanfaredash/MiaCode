@@ -105,17 +105,17 @@ void TimelineView::mousePressEvent(QMouseEvent* event)
     setFocus(Qt::MouseFocusReason);
     emit timelineUserInteractionStarted();
     focusPlayhead(false);
-    if (!playheadNearViewportCenter()) {
-        const double centerSecond = viewportCenterSecond();
-        setPlayheadSeconds(centerSecond, false);
-        emit centerNavigateRequested(centerSecond);
-    }
     timelineDragActive_ = true;
     timelineDragStartX_ = qRound(event->position().x());
     timelineDragStartScrollValue_ = horizontalScrollBar()->value();
     viewport()->setCursor(Qt::ClosedHandCursor);
     suppressPlayheadIndicatorForInteraction();
     emit timelineDragStarted();
+    if (!playheadNearViewportCenter()) {
+        const double centerSecond = viewportCenterSecond();
+        setPlayheadSeconds(centerSecond, false);
+        emit centerNavigateRequested(centerSecond);
+    }
     event->accept();
 }
 
@@ -137,6 +137,7 @@ void TimelineView::mouseReleaseEvent(QMouseEvent* event)
         timelineDragActive_ = false;
         viewport()->unsetCursor();
         restorePlayheadIndicatorAfterInteraction(true);
+        emit timelineDragFinished(viewportCenterSecond());
         event->accept();
         return;
     }

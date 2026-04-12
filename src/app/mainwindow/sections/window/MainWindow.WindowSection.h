@@ -10,6 +10,9 @@ public:
     void toggleShellPreviewPlayback();
     void stopShellPreview();
     void seekShellPreview(double second);
+    void beginShellPreviewScrub();
+    void updateShellPreviewScrub(double second, bool centerView);
+    void endShellPreviewScrub(double second, bool centerView);
     void setShellPreviewRate(double rate);
     void setShellPreviewFullscreen(bool fullscreen);
     bool shellHasShortcut(const QKeySequence& sequence) const;
@@ -20,6 +23,7 @@ public:
     bool shellPreviewPlaying() const;
     double shellPreviewPositionSeconds() const;
     double shellPreviewDurationSeconds() const;
+    QStringList shellPreviewStatsTexts() const;
     bool shellPreviewFullscreen() const;
     QObject* shellPreviewRuntimeObject() const;
     QObject* shellPreviewStageMediaHostObject() const;
@@ -31,13 +35,6 @@ public:
     int shellOutlineDockExpandedWidth() const;
     QWidget* shellWorkspaceWidget() const;
     QWidget* shellPreviewPanelWidget() const;
-    QString shellPreviewPanelStyleSheet() const;
-    QWidget* shellPreviewControlCardWidget() const;
-    QWidget* shellPreviewStatsCardWidget() const;
-    QLabel* shellPreviewTotalStatsLabel() const;
-    QGridLayout* shellPreviewStatsGridLayout() const;
-    int shellPreviewStatsMinimumPanelHeight(int panelWidth) const;
-    int shellUpdatePreviewStatsLayout(int hostWidth = -1);
     double shellNormalizedPreviewCanvasAspectRatio() const;
     void shellRefreshLayoutAfterResize();
     void shellSetRootWindowFrameGeometry(const QRect& geometry);

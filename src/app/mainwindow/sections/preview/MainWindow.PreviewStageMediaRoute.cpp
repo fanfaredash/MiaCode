@@ -13,7 +13,6 @@
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
-#include "common/DebugOptions.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "preview/scene/PreviewProgressStatsCache.h"
@@ -66,10 +65,7 @@ bool MainWindow::PreviewSection::previewUsesStageMediaHostRoute() const
 
 bool MainWindow::PreviewSection::quickShellPreviewUsesSeparateSurface() const
 {
-    return miacode::quick_shell::shouldUseSeparatePreviewSurface(
-        true,
-        state_.previewStageMediaHost_ != nullptr && state_.previewStageMediaHost_->hasVideoMedia()
-    );
+    return false;
 }
 
 QWindow* MainWindow::PreviewSection::quickShellPreviewCompositeWindow() const
@@ -263,6 +259,21 @@ void MainWindow::PreviewSection::seekPreviewStageMediaRouteWhilePaused(double se
     }
 }
 
+void MainWindow::PreviewSection::submitPreviewStageMediaRoutePausedSeek(double second, quint64 generation)
+{
+    const double clampedSecond = qBound(0.0, second, owner_.previewDurationSeconds());
+    if (!previewStageMediaRouteHasVideo()) {
+        state_.pausedPreviewMediaSeekPending_ = false;
+        return;
+    }
+
+    state_.pausedPreviewMediaSeekPending_ = true;
+    state_.pausedPreviewMediaSeekSecond_ = clampedSecond;
+    if (state_.previewStageMediaHost_ != nullptr) {
+        state_.previewStageMediaHost_->submitPausedSeek(clampedSecond, generation);
+    }
+}
+
 void MainWindow::PreviewSection::setPreviewStageMediaRouteObservedPlayheadSecond(double second)
 {
     if (!previewUsesStageMediaHostRoute() || state_.previewStageMediaHost_ == nullptr) {
@@ -325,18 +336,29 @@ void MainWindow::PreviewSection::ensurePreviewStageMediaHostInitialized()
         if (state_.qtPreviewPlaying_) {
             return;
         }
-        if (state_.pausedPreviewMediaSeekPending_) {
-            if (qAbs(second - state_.pausedPreviewMediaSeekSecond_) > 0.05) {
-                return;
+        if (state_.pausedSeekMediaPending_) {
+            if (state_.runtimeDebugOutputEnabled_) {
+                owner_.appendOutput(
+                    "preview/stage_media",
+                    QString("action=paused_seek_media_drop second=%1 reason=pending_generation")
+                        .arg(second, 0, 'f', 6)
+                );
             }
-            second = state_.pausedPreviewMediaSeekSecond_;
-            state_.pausedPreviewMediaSeekPending_ = false;
+            refreshPreviewStageMediaRouteDebugState(false);
+            return;
         }
         state_.qtPreviewStartSecond_ = second;
         state_.qtPreviewElapsed_.restart();
-        owner_.applyQtPreviewPosition(second, true);
         refreshPreviewStageMediaRouteDebugState(false);
     });
+    connect(
+        state_.previewStageMediaHost_,
+        &PreviewStageMediaHost::pausedSeekCompleted,
+        &owner_,
+        [this](double second, quint64 generation) {
+            owner_.handlePausedPreviewMediaSeekCompleted(second, generation);
+        }
+    );
     connect(state_.previewStageMediaHost_, &PreviewStageMediaHost::playbackFinished, &owner_, [this]() {
         owner_.finishQtPreviewPlaybackAndReturnToEntry("Qt preview reached the end of current media.");
     });
@@ -523,6 +545,11 @@ void MainWindow::pausePreviewStageMediaRoutePlayback()
 void MainWindow::seekPreviewStageMediaRouteWhilePaused(double second)
 {
     previewSection_->seekPreviewStageMediaRouteWhilePaused(second);
+}
+
+void MainWindow::submitPreviewStageMediaRoutePausedSeek(double second, quint64 generation)
+{
+    previewSection_->submitPreviewStageMediaRoutePausedSeek(second, generation);
 }
 
 void MainWindow::setPreviewStageMediaRouteObservedPlayheadSecond(double second)
