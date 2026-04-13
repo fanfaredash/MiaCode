@@ -4,6 +4,7 @@
 #include <QPointer>
 #include <QQuickItem>
 #include <QSize>
+#include <QString>
 
 #include "preview/quick_scene/PreviewQuickBackdropLayer.h"
 #include "preview/quick_scene/PreviewQuickChartReviewLayer.h"
@@ -54,7 +55,8 @@ protected:
     void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
 
 private:
-    void syncVisibleHostWindowBinding();
+    QString instanceTag() const;
+    void syncVisibleHostWindowBinding(const char* reason = "unspecified");
 
     PreviewRuntime* runtime_ = nullptr;
     QMetaObject::Connection runtimeUpdateConnection_;
@@ -95,6 +97,7 @@ private:
     miacode::preview::scene::PreviewLayerWindowCursor maimuriDxJudgeCursor_;
     quint64 updatePaintNodeCount_ = 0;
     quint64 geometryChangeCount_ = 0;
+    quint64 instanceId_ = 0;
     bool lastLoggedHasWindow_ = false;
     bool lastLoggedHasState_ = false;
     QSize lastLoggedRenderSize_;

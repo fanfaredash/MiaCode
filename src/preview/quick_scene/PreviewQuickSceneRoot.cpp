@@ -6,12 +6,19 @@
 #include "preview/scene/PreviewPreparedSceneCache.h"
 
 #include <QElapsedTimer>
+#include <QAtomicInteger>
 #include <QQuickWindow>
 #include <QSGNode>
 
 namespace {
 
 constexpr int kPreviewQuickSceneLayerSlotCount = 15;
+
+quint64 nextPreviewQuickSceneRootInstanceId()
+{
+    static QAtomicInteger<quint64> nextId = 1;
+    return nextId.fetchAndAddRelaxed(1);
+}
 
 QString pointerHex(const void* pointer)
 {
@@ -128,23 +135,56 @@ void updateLayerSlotProfiled(
 
 PreviewQuickSceneRoot::PreviewQuickSceneRoot(QQuickItem* parent)
     : QQuickItem(parent)
+    , instanceId_(nextPreviewQuickSceneRootInstanceId())
 {
     setFlag(ItemHasContents, true);
+    appendQuickSceneLog(
+        QStringLiteral("scene_root_construct"),
+        QString("%1 item_visible=%2")
+            .arg(instanceTag())
+            .arg(isVisible() ? 1 : 0)
+    );
     connect(this, &QQuickItem::windowChanged, this, [this](QQuickWindow*) {
-        syncVisibleHostWindowBinding();
+        appendQuickSceneLog(
+            QStringLiteral("scene_root_window_changed"),
+            QString("%1 window=%2 item_visible=%3")
+                .arg(instanceTag())
+                .arg(pointerHex(window()))
+                .arg(isVisible() ? 1 : 0)
+        );
+        syncVisibleHostWindowBinding("window_changed");
         update();
     });
     connect(this, &QQuickItem::visibleChanged, this, [this]() {
-        syncVisibleHostWindowBinding();
+        appendQuickSceneLog(
+            QStringLiteral("scene_root_visible_changed"),
+            QString("%1 visible=%2 window=%3")
+                .arg(instanceTag())
+                .arg(isVisible() ? 1 : 0)
+                .arg(pointerHex(window()))
+        );
+        syncVisibleHostWindowBinding("visible_changed");
         update();
     });
 }
 
 PreviewQuickSceneRoot::~PreviewQuickSceneRoot()
 {
+    appendQuickSceneLog(
+        QStringLiteral("scene_root_destroy"),
+        QString("%1 runtime=%2 bound_window=%3")
+            .arg(instanceTag())
+            .arg(pointerHex(runtime_))
+            .arg(pointerHex(boundWindow_))
+    );
     if (runtime_ != nullptr && boundWindow_ != nullptr) {
         runtime_->clearVisibleHostWindow(boundWindow_);
     }
+}
+
+QString PreviewQuickSceneRoot::instanceTag() const
+{
+    return QStringLiteral("instance=%1").arg(instanceId_);
 }
 
 void PreviewQuickSceneRoot::setRuntime(PreviewRuntime* runtime)
@@ -166,10 +206,13 @@ void PreviewQuickSceneRoot::setRuntime(PreviewRuntime* runtime)
         });
         runtime_->setFrameSize(boundingRect().size().toSize());
     }
-    syncVisibleHostWindowBinding();
+    syncVisibleHostWindowBinding("set_runtime");
     appendQuickSceneLog(
         QStringLiteral("set_runtime"),
-        QString("runtime=%1 frame_state=%2").arg(pointerHex(runtime_)).arg(pointerHex(frameState_))
+        QString("%1 runtime=%2 frame_state=%3")
+            .arg(instanceTag())
+            .arg(pointerHex(runtime_))
+            .arg(pointerHex(frameState_))
     );
     emit runtimeChanged();
     update();
@@ -247,8 +290,9 @@ PreviewTextureStats PreviewQuickSceneRoot::textureStats() const
     return stats;
 }
 
-void PreviewQuickSceneRoot::syncVisibleHostWindowBinding()
+void PreviewQuickSceneRoot::syncVisibleHostWindowBinding(const char* reason)
 {
+    const QString reasonText = QString::fromLatin1(reason != nullptr ? reason : "unspecified");
     if (frameSwapConnection_) {
         QObject::disconnect(frameSwapConnection_);
         frameSwapConnection_ = QMetaObject::Connection();
@@ -260,19 +304,32 @@ void PreviewQuickSceneRoot::syncVisibleHostWindowBinding()
     if (runtime_ != nullptr && boundWindow_ != nullptr) {
         appendQuickSceneLog(
             QStringLiteral("visible_host_clear"),
-            QString("window=%1 item_visible=%2 window_visible=%3")
+            QString("%1 reason=%2 window=%3 item_visible=%4 window_visible=%5 runtime=%6")
+                .arg(instanceTag())
+                .arg(reasonText)
                 .arg(pointerHex(boundWindow_))
                 .arg(isVisible() ? 1 : 0)
                 .arg(boundWindow_->isVisible() ? 1 : 0)
+                .arg(pointerHex(runtime_))
         );
         runtime_->clearVisibleHostWindow(boundWindow_);
     }
 
     boundWindow_ = window();
     if (runtime_ == nullptr || boundWindow_ == nullptr || !isVisible() || !boundWindow_->isVisible()) {
+        appendQuickSceneLog(
+            QStringLiteral("visible_host_skip"),
+            QString("%1 reason=%2 runtime=%3 window=%4 item_visible=%5 window_visible=%6")
+                .arg(instanceTag())
+                .arg(reasonText)
+                .arg(pointerHex(runtime_))
+                .arg(pointerHex(boundWindow_))
+                .arg(isVisible() ? 1 : 0)
+                .arg(boundWindow_ != nullptr && boundWindow_->isVisible() ? 1 : 0)
+        );
         if (boundWindow_ != nullptr) {
             windowVisibilityConnection_ = QObject::connect(boundWindow_, &QWindow::visibilityChanged, this, [this](QWindow::Visibility) {
-                syncVisibleHostWindowBinding();
+                syncVisibleHostWindowBinding("window_visibility_changed");
                 update();
             });
         }
@@ -281,14 +338,17 @@ void PreviewQuickSceneRoot::syncVisibleHostWindowBinding()
 
     appendQuickSceneLog(
         QStringLiteral("visible_host_bind"),
-        QString("window=%1 item_visible=%2 window_visible=%3")
+        QString("%1 reason=%2 window=%3 item_visible=%4 window_visible=%5 runtime=%6")
+            .arg(instanceTag())
+            .arg(reasonText)
             .arg(pointerHex(boundWindow_))
             .arg(isVisible() ? 1 : 0)
             .arg(boundWindow_->isVisible() ? 1 : 0)
+            .arg(pointerHex(runtime_))
     );
     runtime_->setVisibleHostWindow(boundWindow_);
     windowVisibilityConnection_ = QObject::connect(boundWindow_, &QWindow::visibilityChanged, this, [this](QWindow::Visibility) {
-        syncVisibleHostWindowBinding();
+        syncVisibleHostWindowBinding("window_visibility_changed");
         update();
     });
     frameSwapConnection_ = QObject::connect(boundWindow_, &QQuickWindow::frameSwapped, this, [this]() {
