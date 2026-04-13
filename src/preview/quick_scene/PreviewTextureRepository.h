@@ -63,9 +63,14 @@ public:
     void clear();
 
 private:
+    void clearCachedTextures();
+
     QQuickWindow* window_ = nullptr;
     QHash<quint64, QSGTexture*> cachedTextures_;
+    QHash<quint64, qint64> cachedTextureBytesByKey_;
     QHash<quint64, QSGTexture*> transientTextures_;
     QHash<QString, PreviewRetainedTextureEntry> retainedTextures_;
     PreviewTextureStats stats_;
+    qint64 cachedTextureBytes_ = 0;
+    bool cachedTextureFlushPending_ = false;
 };

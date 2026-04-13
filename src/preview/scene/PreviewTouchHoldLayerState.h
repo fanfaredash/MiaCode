@@ -1,6 +1,7 @@
 #pragma once
 
 #include "preview/scene/PreviewArcDescriptor.h"
+#include "preview/scene/PreviewActiveMarkerView.h"
 #include "preview/scene/PreviewFrameState.h"
 #include "preview/scene/PreviewSpriteDescriptor.h"
 
@@ -16,6 +17,7 @@ struct PreviewTouchHoldLayerState {
 
 PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
     const PreviewFrameState& state,
+    const PreviewActiveMarkerView& markers,
     const QRectF& playfieldRect
 );
 

@@ -26,27 +26,26 @@ namespace miacode::preview::scene {
 
 PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
     const PreviewFrameState& state,
+    const PreviewActiveMarkerView& markers,
+    const QVector<MuriJudgeSpriteEvent>& activeEvents,
     const QRectF& playfieldRect
 )
 {
     PreviewSpriteDescriptors sprites;
     if (state.muriRenderOptions.renderMode != RenderMode::MaimuriDxStyle
-        || state.muriAnalysisReport.judgeSpriteEvents.isEmpty()
+        || activeEvents.isEmpty()
         || !hasAnyMaimuriDxJudgeAssets(state.judgeOverlay)) {
-        return sprites;
-    }
-    if (!state.muriAnalysisReport.sourceSignature.isEmpty()
-        && state.muriAnalysisReport.sourceSignature != buildJudgeOverlayMarkerSourceSignature(state.noteMarkers)) {
         return sprites;
     }
 
     QHash<QString, const TimelineNoteMarker*> markerByKey;
-    markerByKey.reserve(state.noteMarkers.size());
+    markerByKey.reserve(markers.size());
 
     QHash<QString, bool> simpleBreakByKey;
-    simpleBreakByKey.reserve(state.noteMarkers.size() * 2);
+    simpleBreakByKey.reserve(markers.size() * 2);
 
-    for (const TimelineNoteMarker& marker : state.noteMarkers) {
+    for (int markerIndex = 0; markerIndex < markers.size(); ++markerIndex) {
+        const TimelineNoteMarker& marker = markers.markerAt(markerIndex);
         const QString markerKey = makeMarkerAnalysisKey(marker);
         markerByKey.insert(markerKey, &marker);
         simpleBreakByKey.insert(markerKey, marker.isBreak);
@@ -55,8 +54,8 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
         }
     }
 
-    sprites.reserve(state.muriAnalysisReport.judgeSpriteEvents.size());
-    for (const MuriJudgeSpriteEvent& event : state.muriAnalysisReport.judgeSpriteEvents) {
+    sprites.reserve(activeEvents.size());
+    for (const MuriJudgeSpriteEvent& event : activeEvents) {
         if (state.playheadSeconds + 1e-6 < event.spawnSecond) {
             continue;
         }

@@ -12,6 +12,9 @@
 
 namespace {
 
+constexpr int kQuickShellActiveRefreshIntervalMs = 16;
+constexpr int kQuickShellIdleRefreshIntervalMs = 250;
+
 template <typename T>
 bool assignIfChanged(T& target, const T& value)
 {
@@ -57,7 +60,7 @@ QuickShellController::QuickShellController(
             });
         }
     }
-    refreshTimer_->setInterval(16);
+    refreshTimer_->setInterval(kQuickShellIdleRefreshIntervalMs);
     connect(refreshTimer_, &QTimer::timeout, this, &QuickShellController::refreshFromStateSource);
     refreshTimer_->start();
     refreshFromStateSource();
@@ -417,6 +420,7 @@ bool QuickShellController::triggerShortcut(const QKeySequence& sequence)
 void QuickShellController::refreshFromStateSource()
 {
     if (stateSource_ == nullptr) {
+        updateRefreshTimerInterval();
         return;
     }
 
@@ -438,5 +442,19 @@ void QuickShellController::refreshFromStateSource()
 
     if (stateChanged) {
         emit shellStateChanged();
+    }
+    updateRefreshTimerInterval();
+}
+
+void QuickShellController::updateRefreshTimerInterval()
+{
+    if (refreshTimer_ == nullptr) {
+        return;
+    }
+    const int nextIntervalMs = previewPlaying_
+        ? kQuickShellActiveRefreshIntervalMs
+        : kQuickShellIdleRefreshIntervalMs;
+    if (refreshTimer_->interval() != nextIntervalMs) {
+        refreshTimer_->setInterval(nextIntervalMs);
     }
 }

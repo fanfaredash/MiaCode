@@ -11,6 +11,7 @@ namespace miacode::preview::scene {
 
 PreviewTouchLayerState buildPreviewTouchLayerState(
     const PreviewFrameState& state,
+    const PreviewActiveMarkerView& markers,
     const QRectF& playfieldRect
 )
 {
@@ -18,7 +19,8 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
     QHash<quint64, int> overlapCounts;
     overlapCounts.reserve(16);
 
-    for (const TimelineNoteMarker& marker : state.noteMarkers) {
+    for (int markerIndex = 0; markerIndex < markers.size(); ++markerIndex) {
+        const TimelineNoteMarker& marker = markers.markerAt(markerIndex);
         if (marker.type != QLatin1String("touch")) {
             continue;
         }
@@ -55,7 +57,8 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
         layerState.sprites.append(sprite);
     };
 
-    for (const TimelineNoteMarker& marker : state.noteMarkers) {
+    for (int markerIndex = 0; markerIndex < markers.size(); ++markerIndex) {
+        const TimelineNoteMarker& marker = markers.markerAt(markerIndex);
         if (marker.type != QLatin1String("touch")) {
             continue;
         }

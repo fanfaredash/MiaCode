@@ -5,6 +5,9 @@
 
 namespace {
 
+constexpr qsizetype kPreviewCachedTextureEntryLimit = 96;
+constexpr qint64 kPreviewCachedTextureByteLimit = 96LL * 1024 * 1024;
+
 PreviewTextureLayerStats& ensureLayerStats(
     QVector<PreviewTextureLayerStats>* layerStats,
     const char* layerName
@@ -41,6 +44,11 @@ void PreviewTextureRepository::setWindow(QQuickWindow* window)
 
 void PreviewTextureRepository::beginFrame()
 {
+    if (cachedTextureFlushPending_
+        || cachedTextures_.size() > kPreviewCachedTextureEntryLimit
+        || cachedTextureBytes_ > kPreviewCachedTextureByteLimit) {
+        clearCachedTextures();
+    }
     qDeleteAll(transientTextures_);
     transientTextures_.clear();
     stats_ = PreviewTextureStats();
@@ -60,6 +68,13 @@ QSGTexture* PreviewTextureRepository::textureForImage(const QImage& image, bool 
         }
         QSGTexture* texture = window_->createTextureFromImage(image);
         cachedTextures_.insert(key, texture);
+        const qint64 imageBytes = qMax<qint64>(1, image.sizeInBytes());
+        cachedTextureBytesByKey_.insert(key, imageBytes);
+        cachedTextureBytes_ += imageBytes;
+        if (cachedTextures_.size() > kPreviewCachedTextureEntryLimit
+            || cachedTextureBytes_ > kPreviewCachedTextureByteLimit) {
+            cachedTextureFlushPending_ = true;
+        }
         stats_.cachedCreateCount += 1;
         return texture;
     }
@@ -140,10 +155,18 @@ PreviewTextureStats PreviewTextureRepository::stats() const
     return stats_;
 }
 
-void PreviewTextureRepository::clear()
+void PreviewTextureRepository::clearCachedTextures()
 {
     qDeleteAll(cachedTextures_);
     cachedTextures_.clear();
+    cachedTextureBytesByKey_.clear();
+    cachedTextureBytes_ = 0;
+    cachedTextureFlushPending_ = false;
+}
+
+void PreviewTextureRepository::clear()
+{
+    clearCachedTextures();
     qDeleteAll(transientTextures_);
     transientTextures_.clear();
     for (auto it = retainedTextures_.begin(); it != retainedTextures_.end(); ++it) {

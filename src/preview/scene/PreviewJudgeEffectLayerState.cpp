@@ -170,6 +170,8 @@ struct HoldSustainTrigger {
     qreal startSecond = 0.0;
 };
 
+QImage buildFallbackHoldRingImage();
+
 qreal approximateLaneJudgeAlpha(qreal normalizedTime)
 {
     constexpr qreal kDelayNorm = 0.56;
@@ -191,6 +193,12 @@ qreal approximateLaneJudgeAlpha(qreal normalizedTime)
 qreal judgeEffectClipTime(qreal elapsedSeconds)
 {
     return qBound<qreal>(0.0, elapsedSeconds, kJudgeEffectClipDurationSeconds);
+}
+
+const QImage& fallbackHoldRingImage()
+{
+    static const QImage image = buildFallbackHoldRingImage();
+    return image;
 }
 
 QPointF rotatePointDegrees(const QPointF& point, qreal angleDegrees)
@@ -330,6 +338,7 @@ namespace miacode::preview::scene {
 
 PreviewJudgeEffectLayerState buildPreviewJudgeEffectLayerState(
     const PreviewFrameState& state,
+    const PreviewActiveMarkerView& markers,
     const QRectF& playfieldRect
 )
 {
@@ -435,7 +444,8 @@ PreviewJudgeEffectLayerState buildPreviewJudgeEffectLayerState(
         holdSustainTriggers.insert(key, trigger);
     };
 
-    for (const TimelineNoteMarker& marker : state.noteMarkers) {
+    for (int markerIndex = 0; markerIndex < markers.size(); ++markerIndex) {
+        const TimelineNoteMarker& marker = markers.markerAt(markerIndex);
         if (marker.type == QLatin1String("tap")) {
             queueLaneTrigger(
                 marker.lane,
@@ -511,17 +521,8 @@ PreviewJudgeEffectLayerState buildPreviewJudgeEffectLayerState(
         + freeTriggers.size() * 10
         + holdSustainTriggers.size() * kJudgeEffectHoldSustainParticleCount * 2
     );
-
-    const auto appendOwnedImage = [&layerState](QImage image) -> const QImage* {
-        if (image.isNull()) {
-            return nullptr;
-        }
-        layerState.ownedImages.append(QSharedPointer<QImage>(new QImage(std::move(image))));
-        return layerState.ownedImages.last().data();
-    };
-
     const QImage* holdTexture = state.judgeEffect.holdSustainCircleImage.isNull()
-        ? appendOwnedImage(buildFallbackHoldRingImage())
+        ? &fallbackHoldRingImage()
         : &state.judgeEffect.holdSustainCircleImage;
 
     const auto appendSprite = [&](const QImage* image,

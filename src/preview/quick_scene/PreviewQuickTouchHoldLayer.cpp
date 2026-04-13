@@ -70,20 +70,14 @@ QSGNode* PreviewQuickTouchHoldLayer::updateNode(
     auto* root = ensureTouchHoldRoot(oldNode);
     const bool reusedRoot = root == oldNode;
 
-    miacode::preview::scene::PreviewFrameState filteredState = state;
-    QVector<TimelineNoteMarker> filteredMarkers;
-    if (preparedCache != nullptr && cursor != nullptr) {
-        preparedCache->collectMarkers(
-            state.noteMarkers,
-            preparedCache->touchHoldLayer(),
-            cursor->activePreparedIndices,
-            &filteredMarkers
-        );
-        filteredState.noteMarkers = filteredMarkers;
-    }
+    const miacode::preview::scene::PreviewActiveMarkerView activeMarkers =
+        preparedCache != nullptr && cursor != nullptr
+        ? miacode::preview::scene::PreviewActiveMarkerView(state.noteMarkers, preparedCache->touchHoldLayer(), *cursor)
+        : miacode::preview::scene::PreviewActiveMarkerView(state.noteMarkers);
     const miacode::preview::scene::PreviewTouchHoldLayerState layerState =
         miacode::preview::scene::buildPreviewTouchHoldLayerState(
-            filteredState,
+            state,
+            activeMarkers,
             miacode::preview::scene::playfieldRectForStage(
                 miacode::preview::scene::stageRectForSize(renderSize),
                 state.render.layoutSquareScale
@@ -101,7 +95,7 @@ QSGNode* PreviewQuickTouchHoldLayer::updateNode(
             layerState.sprites,
             window,
             textures,
-            filteredState.playheadSeconds,
+            state.playheadSeconds,
             "touch_hold"
         )
     );

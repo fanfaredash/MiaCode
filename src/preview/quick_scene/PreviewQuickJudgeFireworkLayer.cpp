@@ -613,21 +613,15 @@ QSGNode* PreviewQuickJudgeFireworkLayer::updateNode(
         return nullptr;
     }
 
-    miacode::preview::scene::PreviewFrameState filteredState = state;
-    QVector<TimelineNoteMarker> filteredMarkers;
-    if (preparedCache != nullptr && cursor != nullptr) {
-        preparedCache->collectMarkers(
-            state.noteMarkers,
-            preparedCache->judgeFireworkLayer(),
-            cursor->activePreparedIndices,
-            &filteredMarkers
-        );
-        filteredState.noteMarkers = filteredMarkers;
-    }
+    const miacode::preview::scene::PreviewActiveMarkerView activeMarkers =
+        preparedCache != nullptr && cursor != nullptr
+        ? miacode::preview::scene::PreviewActiveMarkerView(state.noteMarkers, preparedCache->judgeFireworkLayer(), *cursor)
+        : miacode::preview::scene::PreviewActiveMarkerView(state.noteMarkers);
 
     const miacode::preview::scene::PreviewJudgeFireworkLayerState layerState =
         miacode::preview::scene::buildPreviewJudgeFireworkLayerState(
-            filteredState,
+            state,
+            activeMarkers,
             miacode::preview::scene::playfieldRectForStage(
                 miacode::preview::scene::stageRectForSize(renderSize),
                 state.render.layoutSquareScale

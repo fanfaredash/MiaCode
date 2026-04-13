@@ -1,5 +1,6 @@
 #pragma once
 
+#include "preview/scene/PreviewActiveMarkerView.h"
 #include "preview/scene/PreviewFrameState.h"
 
 namespace miacode::preview::scene {
@@ -33,6 +34,7 @@ struct PreviewJudgeFireworkLayerState {
 
 PreviewJudgeFireworkLayerState buildPreviewJudgeFireworkLayerState(
     const PreviewFrameState& state,
+    const PreviewActiveMarkerView& markers,
     const QRectF& playfieldRect
 );
 

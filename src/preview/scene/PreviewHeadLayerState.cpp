@@ -28,6 +28,11 @@ constexpr qreal kHoldCapSliceRatioNumerator =
 constexpr qreal kHoldCapSliceRatioDenominator =
     static_cast<qreal>(miacode::preview_skin::kHoldCapSliceRatioDenominator);
 
+quint64 cacheKeyForImage(const QImage& image)
+{
+    return image.isNull() ? 0ULL : static_cast<quint64>(image.cacheKey());
+}
+
 qreal mirroredStarAngleDegrees(qreal angleDegrees)
 {
     return 360.0 - angleDegrees;
@@ -182,33 +187,94 @@ void appendSprite(
 
 namespace miacode::preview::scene {
 
+size_t qHash(const PreviewHeadRenderAssetCacheKey& key, size_t seed) noexcept
+{
+    seed = ::qHash(key.baseKey, seed);
+    seed = ::qHash(key.overlayKey, seed);
+    seed = ::qHash(key.tintRgba, seed);
+    return seed;
+}
+
+void PreviewHeadRenderAssetCache::synchronizeSkinAssets(const PreviewSkinAssets& skin)
+{
+    const QVector<quint64> nextSkinAssetKeys = {
+        cacheKeyForImage(skin.tapImage),
+        cacheKeyForImage(skin.tapEachImage),
+        cacheKeyForImage(skin.tapBreakImage),
+        cacheKeyForImage(skin.tapExImage),
+        cacheKeyForImage(skin.holdImage),
+        cacheKeyForImage(skin.holdOnImage),
+        cacheKeyForImage(skin.holdOffImage),
+        cacheKeyForImage(skin.holdEachImage),
+        cacheKeyForImage(skin.holdEachOnImage),
+        cacheKeyForImage(skin.holdBreakImage),
+        cacheKeyForImage(skin.holdBreakOnImage),
+        cacheKeyForImage(skin.holdExImage),
+        cacheKeyForImage(skin.starImage),
+        cacheKeyForImage(skin.starEachImage),
+        cacheKeyForImage(skin.starBreakImage),
+        cacheKeyForImage(skin.starDoubleImage),
+        cacheKeyForImage(skin.starEachDoubleImage),
+        cacheKeyForImage(skin.starBreakDoubleImage),
+        cacheKeyForImage(skin.starExImage),
+        cacheKeyForImage(skin.starExDoubleImage),
+    };
+    if (skinAssetKeys_ == nextSkinAssetKeys) {
+        return;
+    }
+
+    skinAssetKeys_ = nextSkinAssetKeys;
+    entries_.clear();
+}
+
+const QImage* PreviewHeadRenderAssetCache::composedImage(
+    const QImage& baseImage,
+    const QImage& overlayImage,
+    const QColor& tint,
+    qreal baseMix,
+    qreal overlayAlphaMix)
+{
+    if (baseImage.isNull()) {
+        return nullptr;
+    }
+    if (overlayImage.isNull()) {
+        return &baseImage;
+    }
+
+    const PreviewHeadRenderAssetCacheKey key{
+        cacheKeyForImage(baseImage),
+        cacheKeyForImage(overlayImage),
+        tint.rgba()
+    };
+    const auto it = entries_.constFind(key);
+    if (it != entries_.constEnd()) {
+        hitCount_ += 1;
+        return it.value().data();
+    }
+
+    missCount_ += 1;
+    QSharedPointer<QImage> composed(new QImage(composeOverlayImage(baseImage, overlayImage, baseMix, overlayAlphaMix, &tint)));
+    entries_.insert(key, composed);
+    return composed.data();
+}
+
+void PreviewHeadRenderAssetCache::clear()
+{
+    entries_.clear();
+    skinAssetKeys_.clear();
+    hitCount_ = 0;
+    missCount_ = 0;
+}
+
 PreviewHeadLayerState buildPreviewHeadLayerState(
     const PreviewFrameState& state,
-    const QRectF& playfieldRect
+    const PreviewActiveMarkerView& markers,
+    const QRectF& playfieldRect,
+    PreviewHeadRenderAssetCache* renderAssetCache
 )
 {
     PreviewHeadLayerState layerState;
-    layerState.ownedImages.reserve(state.noteMarkers.size() * 6);
-
-    QVector<qsizetype> layerOrder;
-    layerOrder.reserve(state.noteMarkers.size());
-    for (qsizetype markerIndex = 0; markerIndex < state.noteMarkers.size(); ++markerIndex) {
-        const TimelineNoteMarker& marker = state.noteMarkers[markerIndex];
-        if (marker.type == QLatin1String("hold")
-            || marker.type == QLatin1String("tap")
-            || marker.type == QLatin1String("slide")
-            || marker.type == QLatin1String("wifi")) {
-            layerOrder.append(markerIndex);
-        }
-    }
-    std::sort(layerOrder.begin(), layerOrder.end(), [&state](qsizetype a, qsizetype b) {
-        const TimelineNoteMarker& markerA = state.noteMarkers[a];
-        const TimelineNoteMarker& markerB = state.noteMarkers[b];
-        if (!qFuzzyCompare(1.0 + markerA.second, 1.0 + markerB.second)) {
-            return markerA.second > markerB.second;
-        }
-        return a > b;
-    });
+    layerState.ownedImages.reserve(markers.size() * 2);
 
     const PreviewTapTiming tapTiming = previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.noteFlowSpeed));
 
@@ -225,11 +291,56 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
     };
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-    const QHash<QString, SlideHeadRepresentative> slideHeadRepresentatives =
-        buildSlideHeadRepresentatives(state.noteMarkers);
+    const bool usesPreparedHeadOrder = markers.usesPreparedLayer() && !markers.preparedDrawOrder().isEmpty();
+    QVector<int> activePreparedDrawOrder;
+    QVector<int> fallbackLayerOrder;
+    QHash<QString, SlideHeadRepresentative> fallbackSlideHeadRepresentatives;
+    if (!usesPreparedHeadOrder) {
+        fallbackLayerOrder.reserve(markers.size());
+        for (int index = 0; index < markers.size(); ++index) {
+            const TimelineNoteMarker& marker = markers.markerAt(index);
+            if (marker.type == QLatin1String("hold")
+                || marker.type == QLatin1String("tap")
+                || marker.type == QLatin1String("slide")
+                || marker.type == QLatin1String("wifi")) {
+                fallbackLayerOrder.append(index);
+            }
+        }
+        std::sort(fallbackLayerOrder.begin(), fallbackLayerOrder.end(), [&markers](int a, int b) {
+            const TimelineNoteMarker& markerA = markers.markerAt(a);
+            const TimelineNoteMarker& markerB = markers.markerAt(b);
+            if (!qFuzzyCompare(1.0 + markerA.second, 1.0 + markerB.second)) {
+                return markerA.second > markerB.second;
+            }
+            return markers.sourceIndexAt(a) > markers.sourceIndexAt(b);
+        });
+        fallbackSlideHeadRepresentatives = buildSlideHeadRepresentatives(state.noteMarkers);
+    } else {
+        activePreparedDrawOrder = markers.activePreparedIndices();
+        std::stable_sort(activePreparedDrawOrder.begin(), activePreparedDrawOrder.end(), [&markers](int a, int b) {
+            return markers.preparedDrawRank(a) < markers.preparedDrawRank(b);
+        });
+    }
+    if (renderAssetCache != nullptr) {
+        renderAssetCache->synchronizeSkinAssets(state.skin);
+    }
 
-    for (qsizetype markerIndex : layerOrder) {
-        const TimelineNoteMarker& marker = state.noteMarkers[markerIndex];
+    const int orderCount = usesPreparedHeadOrder ? activePreparedDrawOrder.size() : fallbackLayerOrder.size();
+    for (int orderIndex = 0; orderIndex < orderCount; ++orderIndex) {
+        const int preparedIndex = usesPreparedHeadOrder ? activePreparedDrawOrder.at(orderIndex) : -1;
+        const PreviewPreparedMarkerEntry* preparedEntry =
+            usesPreparedHeadOrder ? markers.preparedEntry(preparedIndex) : nullptr;
+        if (usesPreparedHeadOrder && preparedEntry == nullptr) {
+            continue;
+        }
+
+        const int markerViewIndex = usesPreparedHeadOrder ? -1 : fallbackLayerOrder.at(orderIndex);
+        const int sourceMarkerIndex = usesPreparedHeadOrder
+            ? preparedEntry->markerIndex
+            : markers.sourceIndexAt(markerViewIndex);
+        const TimelineNoteMarker& marker = usesPreparedHeadOrder
+            ? markers.markerForPreparedIndex(preparedIndex)
+            : markers.markerAt(markerViewIndex);
         if (marker.type == QLatin1String("hold")) {
             const qreal deltaSeconds = static_cast<qreal>(state.playheadSeconds - marker.second);
             const qreal deltaEndSeconds = static_cast<qreal>(state.playheadSeconds - marker.endSecond);
@@ -259,18 +370,23 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
             const PreviewAnimatedSpriteEffect holdEffect = marker.isBreak
                 ? PreviewAnimatedSpriteEffect::BreakAnimate
                 : (holdActive ? PreviewAnimatedSpriteEffect::HoldShine : PreviewAnimatedSpriteEffect::None);
-            QImage holdCapImage = *holdImage;
-            bool ownsHoldImage = false;
-            if (marker.isEx && !state.skin.holdExImage.isNull()) {
-                const QColor tint = exTintColor(marker.isBreak, marker.isEach);
-                holdCapImage = composeOverlayImage(holdCapImage, state.skin.holdExImage, kHoldOverlayBaseMix, kHoldOverlayAlphaMix, &tint);
-                ownsHoldImage = true;
-            }
-
             const QImage* renderHoldImage = holdImage;
             bool renderHoldImageCacheable = true;
-            if (ownsHoldImage) {
-                renderHoldImage = appendOwnedImage(&layerState, std::move(holdCapImage));
+            if (marker.isEx && !state.skin.holdExImage.isNull()) {
+                const QColor tint = exTintColor(marker.isBreak, marker.isEach);
+                if (renderAssetCache != nullptr) {
+                    renderHoldImage = renderAssetCache->composedImage(
+                        *holdImage,
+                        state.skin.holdExImage,
+                        tint,
+                        kHoldOverlayBaseMix,
+                        kHoldOverlayAlphaMix);
+                } else {
+                    renderHoldImage = appendOwnedImage(
+                        &layerState,
+                        composeOverlayImage(*holdImage, state.skin.holdExImage, kHoldOverlayBaseMix, kHoldOverlayAlphaMix, &tint));
+                    renderHoldImageCacheable = false;
+                }
             }
             if (renderHoldImage == nullptr || renderHoldImage->isNull()) {
                 continue;
@@ -363,9 +479,16 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
             continue;
         }
         if (slideLike) {
-            const auto representativeIt = slideHeadRepresentatives.constFind(slideHeadEventKey(marker));
-            if (representativeIt != slideHeadRepresentatives.constEnd()
-                && representativeIt->markerIndex != markerIndex) {
+            int representativeMarkerIndex = sourceMarkerIndex;
+            if (preparedEntry != nullptr && preparedEntry->headRepresentativeMarkerIndex >= 0) {
+                representativeMarkerIndex = preparedEntry->headRepresentativeMarkerIndex;
+            } else {
+                const auto representativeIt = fallbackSlideHeadRepresentatives.constFind(slideHeadEventKey(marker));
+                if (representativeIt != fallbackSlideHeadRepresentatives.constEnd()) {
+                    representativeMarkerIndex = representativeIt->markerIndex;
+                }
+            }
+            if (representativeMarkerIndex != sourceMarkerIndex) {
                 continue;
             }
         }
@@ -394,29 +517,46 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
         if (baseImage == nullptr || baseImage->isNull()) {
             continue;
         }
-        QImage renderImage = *baseImage;
-        bool ownsHeadImage = false;
+        const QImage* headImage = baseImage;
+        bool headImageCacheable = true;
         if (starMaterialHead && headEx) {
             const QImage& overlay = (doubleStarHead && !state.skin.starExDoubleImage.isNull())
                 ? state.skin.starExDoubleImage
                 : state.skin.starExImage;
             if (!overlay.isNull()) {
                 const QColor tint = exStarTintColor(headBreak, headEach);
-                renderImage = composeOverlayImage(renderImage, overlay, kTapOverlayBaseMix, kTapOverlayAlphaMix, &tint);
-                ownsHeadImage = true;
+                if (renderAssetCache != nullptr) {
+                    headImage = renderAssetCache->composedImage(
+                        *baseImage,
+                        overlay,
+                        tint,
+                        kTapOverlayBaseMix,
+                        kTapOverlayAlphaMix);
+                } else {
+                    headImage = appendOwnedImage(
+                        &layerState,
+                        composeOverlayImage(*baseImage, overlay, kTapOverlayBaseMix, kTapOverlayAlphaMix, &tint));
+                    headImageCacheable = false;
+                }
             }
         } else if (!starMaterialHead && headEx && !state.skin.tapExImage.isNull()) {
             const QColor tint = exTintColor(headBreak, headEach);
-            renderImage = composeOverlayImage(renderImage, state.skin.tapExImage, kTapOverlayBaseMix, kTapOverlayAlphaMix, &tint);
-            ownsHeadImage = true;
+            if (renderAssetCache != nullptr) {
+                headImage = renderAssetCache->composedImage(
+                    *baseImage,
+                    state.skin.tapExImage,
+                    tint,
+                    kTapOverlayBaseMix,
+                    kTapOverlayAlphaMix);
+            } else {
+                headImage = appendOwnedImage(
+                    &layerState,
+                    composeOverlayImage(*baseImage, state.skin.tapExImage, kTapOverlayBaseMix, kTapOverlayAlphaMix, &tint));
+                headImageCacheable = false;
+            }
         }
         const PreviewAnimatedSpriteEffect headEffect =
             headBreak ? PreviewAnimatedSpriteEffect::BreakAnimate : PreviewAnimatedSpriteEffect::None;
-        const QImage* headImage = baseImage;
-        bool headImageCacheable = true;
-        if (ownsHeadImage) {
-            headImage = appendOwnedImage(&layerState, std::move(renderImage));
-        }
         if (headImage == nullptr || headImage->isNull()) {
             continue;
         }

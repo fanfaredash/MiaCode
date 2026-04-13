@@ -206,6 +206,7 @@ namespace miacode::preview::scene {
 
 PreviewTouchJudgeLayerState buildPreviewTouchJudgeLayerState(
     const PreviewFrameState& state,
+    const PreviewActiveMarkerView& markers,
     const QRectF& playfieldRect
 )
 {
@@ -218,7 +219,8 @@ PreviewTouchJudgeLayerState buildPreviewTouchJudgeLayerState(
 
     QHash<quint64, TouchJudgeTrigger> positionTriggers;
     positionTriggers.reserve(kPreviewSmallCollectionReserve);
-    for (const TimelineNoteMarker& marker : state.noteMarkers) {
+    for (int markerIndex = 0; markerIndex < markers.size(); ++markerIndex) {
+        const TimelineNoteMarker& marker = markers.markerAt(markerIndex);
         if (marker.type != QLatin1String("touch")) {
             continue;
         }

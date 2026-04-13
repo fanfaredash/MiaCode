@@ -482,6 +482,10 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/simai/document/SimaiTimingMetadata.h
         src/simai/document/SimaiTimingMetadata.cpp
         src/preview/scene/PreviewFrameState.h
+        src/preview/scene/PreviewPreparedSceneCache.h
+        src/preview/scene/PreviewPreparedSceneCache.cpp
+        src/preview/scene/PreviewChartReviewLayerState.h
+        src/preview/scene/PreviewChartReviewLayerState.cpp
         src/preview/scene/PreviewHeadLayerState.h
         src/preview/scene/PreviewHeadLayerState.cpp
         src/preview/scene/PreviewAnimatedSpriteHelpers.h
@@ -499,6 +503,36 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/common/MuriTypes.cpp
         src/timeline/TimelineData.h
         resources/fonts.qrc
+    )
+
+    add_executable(preview_realtime_object_hot_path_spec
+        src/tools/preview/PreviewRealtimeObjectHotPathSpec.cpp
+        src/preview/scene/PreviewActiveMarkerView.h
+        src/preview/scene/PreviewPreparedSceneCache.h
+        src/preview/scene/PreviewPreparedSceneCache.cpp
+        src/preview/scene/PreviewFrameState.h
+        src/preview/scene/PreviewChartReviewLayerState.h
+        src/preview/scene/PreviewChartReviewLayerState.cpp
+        src/preview/scene/PreviewTrackLayerState.h
+        src/preview/scene/PreviewTrackLayerState.cpp
+        src/preview/scene/PreviewTrackShared.h
+        src/preview/scene/PreviewTrackShared.cpp
+        src/preview/scene/PreviewMuriActionLayerState.h
+        src/preview/scene/PreviewMuriActionLayerState.cpp
+        src/preview/scene/PreviewAnimatedSpriteHelpers.h
+        src/preview/scene/PreviewAnimatedSpriteHelpers.cpp
+        src/preview/scene/PreviewJudgeOverlayShared.h
+        src/preview/scene/PreviewJudgeOverlayShared.cpp
+        src/preview/scene/PreviewOpacityCurves.h
+        src/preview/scene/PreviewOpacityCurves.cpp
+        src/preview/scene/PreviewSceneConstants.h
+        src/preview/scene/PreviewSceneMath.h
+        src/preview/scene/PreviewSceneMath.cpp
+        src/preview/scene/PreviewSkinSelectors.h
+        src/preview/scene/PreviewSkinSelectors.cpp
+        src/common/MuriTypes.h
+        src/common/MuriTypes.cpp
+        src/timeline/TimelineData.h
     )
 
     add_executable(preview_sfx_timeline_spec
@@ -655,6 +689,18 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/simai
         src/simai/document
         src/simai/parser
+        src/timeline
+    )
+
+    target_link_libraries(preview_realtime_object_hot_path_spec PRIVATE
+        Qt6::Core
+        Qt6::Gui
+    )
+    target_include_directories(preview_realtime_object_hot_path_spec PRIVATE
+        src
+        src/common
+        src/preview
+        src/preview/scene
         src/timeline
     )
 

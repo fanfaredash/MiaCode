@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QBitArray>
 #include <QVector>
 
 #include "common/MuriTypes.h"
@@ -33,6 +34,7 @@ struct PreviewPreparedMarkerEntry {
     int markerIndex = -1;
     double activeStart = 0.0;
     double activeEnd = 0.0;
+    int headRepresentativeMarkerIndex = -1;
 };
 
 struct PreviewPreparedChartReviewEntry {
@@ -53,12 +55,16 @@ struct PreviewPreparedLayerWindow {
     QVector<EntryT> entries;
     QVector<int> activationOrder;
     QVector<int> deactivationOrder;
+    QVector<int> drawOrder;
+    QVector<int> drawOrderRanks;
 
     void clear()
     {
         entries.clear();
         activationOrder.clear();
         deactivationOrder.clear();
+        drawOrder.clear();
+        drawOrderRanks.clear();
     }
 };
 
@@ -68,6 +74,7 @@ struct PreviewLayerWindowCursor {
     int nextActivationIndex = 0;
     int nextDeactivationIndex = 0;
     QVector<int> activePreparedIndices;
+    QBitArray activePreparedMembership;
 
     void reset()
     {
@@ -76,6 +83,7 @@ struct PreviewLayerWindowCursor {
         nextActivationIndex = 0;
         nextDeactivationIndex = 0;
         activePreparedIndices.clear();
+        activePreparedMembership.clear();
     }
 };
 
@@ -163,6 +171,9 @@ inline void syncPreviewLayerWindowCursor(
 
     const double kEpsilon = 1e-6;
     const auto addActive = [&cursor](int preparedIndex) {
+        if (preparedIndex >= 0 && preparedIndex < cursor->activePreparedMembership.size()) {
+            cursor->activePreparedMembership.setBit(preparedIndex, true);
+        }
         auto insertPos = std::lower_bound(
             cursor->activePreparedIndices.begin(),
             cursor->activePreparedIndices.end(),
@@ -172,6 +183,9 @@ inline void syncPreviewLayerWindowCursor(
         }
     };
     const auto removeActive = [&cursor](int preparedIndex) {
+        if (preparedIndex >= 0 && preparedIndex < cursor->activePreparedMembership.size()) {
+            cursor->activePreparedMembership.setBit(preparedIndex, false);
+        }
         auto it = std::lower_bound(
             cursor->activePreparedIndices.begin(),
             cursor->activePreparedIndices.end(),
@@ -182,6 +196,7 @@ inline void syncPreviewLayerWindowCursor(
     };
     const auto resetForTime = [&layer, &cursor, playheadSeconds]() {
         cursor->activePreparedIndices.clear();
+        cursor->activePreparedMembership.fill(false, layer.entries.size());
         const double activationTarget = playheadSeconds + 1e-6;
         const int startedCount = static_cast<int>(std::upper_bound(
             layer.activationOrder.begin(),
@@ -203,6 +218,7 @@ inline void syncPreviewLayerWindowCursor(
             const int preparedIndex = layer.activationOrder[i];
             if (layer.entries[preparedIndex].activeEnd + 1e-6 >= playheadSeconds) {
                 cursor->activePreparedIndices.append(preparedIndex);
+                cursor->activePreparedMembership.setBit(preparedIndex, true);
             }
         }
         std::sort(cursor->activePreparedIndices.begin(), cursor->activePreparedIndices.end());

@@ -3,8 +3,10 @@
 #include <QRectF>
 #include <QTextStream>
 
+#include "preview/scene/PreviewActiveMarkerView.h"
 #include "preview/scene/PreviewHeadLayerState.h"
 #include "preview/scene/PreviewOpacityCurves.h"
+#include "preview/scene/PreviewPreparedSceneCache.h"
 #include "preview/scene/PreviewSceneConstants.h"
 #include "preview/scene/PreviewSceneMath.h"
 #include "simai/parser/SimaiNativeParser.h"
@@ -86,6 +88,31 @@ qreal mirroredStarAngleDegrees(qreal angleDegrees)
     return 360.0 - angleDegrees;
 }
 
+PreviewHeadLayerState buildPreparedHeadLayerState(
+    const PreviewFrameState& state,
+    miacode::preview::scene::PreviewHeadRenderAssetCache* renderAssetCache = nullptr)
+{
+    miacode::preview::scene::PreviewPreparedSceneCache preparedCache;
+    preparedCache.sync(state);
+    miacode::preview::scene::PreviewLayerWindowCursor headCursor;
+    miacode::preview::scene::syncPreviewLayerWindowCursor(preparedCache.headLayer(), state.playheadSeconds, &headCursor);
+    const miacode::preview::scene::PreviewActiveMarkerView activeMarkers(
+        state.noteMarkers,
+        preparedCache.headLayer(),
+        headCursor
+    );
+    return miacode::preview::scene::buildPreviewHeadLayerState(
+        state,
+        activeMarkers,
+        QRectF(
+            0.0,
+            0.0,
+            miacode::preview::scene::kLogicalCanvasSize,
+            miacode::preview::scene::kLogicalCanvasSize),
+        renderAssetCache
+    );
+}
+
 bool verifySameHeadBranchesCollapseToFastestRotation(QTextStream& err)
 {
     const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
@@ -127,15 +154,7 @@ bool verifySameHeadBranchesCollapseToFastestRotation(QTextStream& err)
         miacode::preview::scene::previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.noteFlowSpeed));
     state.playheadSeconds = fastestMarker->second - tapTiming.flyDurationSeconds * 0.5;
 
-    const PreviewHeadLayerState layerState =
-        miacode::preview::scene::buildPreviewHeadLayerState(
-            state,
-            QRectF(
-                0.0,
-                0.0,
-                miacode::preview::scene::kLogicalCanvasSize,
-                miacode::preview::scene::kLogicalCanvasSize)
-        );
+    const PreviewHeadLayerState layerState = buildPreparedHeadLayerState(state);
 
     if (!require(layerState.sprites.size() == 1, QStringLiteral("same-head falling slide renders exactly one head sprite"), err)) {
         return false;
@@ -158,6 +177,172 @@ bool verifySameHeadBranchesCollapseToFastestRotation(QTextStream& err)
     return true;
 }
 
+bool verifyHeadRenderAssetCacheReuseAndInvalidation(QTextStream& err)
+{
+    PreviewFrameState state;
+    TimelineNoteMarker marker;
+    marker.type = QStringLiteral("tap");
+    marker.second = 1.0;
+    marker.lane = 1;
+    marker.isEx = true;
+    state.noteMarkers.append(marker);
+    state.playheadSeconds = 0.8;
+    state.skin.tapImage = solidImage(128, 128);
+    state.skin.tapExImage = solidImage(96, 96);
+
+    miacode::preview::scene::PreviewHeadRenderAssetCache renderAssetCache;
+    const PreviewHeadLayerState firstPass = buildPreparedHeadLayerState(state, &renderAssetCache);
+    if (!require(firstPass.sprites.size() == 1, QStringLiteral("first ex tap render produces one sprite"), err)) {
+        return false;
+    }
+    if (!require(renderAssetCache.missCount() == 1, QStringLiteral("first ex tap render records one cache miss"), err)) {
+        return false;
+    }
+    if (!require(renderAssetCache.hitCount() == 0, QStringLiteral("first ex tap render records zero cache hits"), err)) {
+        return false;
+    }
+    if (!require(renderAssetCache.entryCount() == 1, QStringLiteral("first ex tap render caches one composed image"), err)) {
+        return false;
+    }
+
+    const PreviewHeadLayerState secondPass = buildPreparedHeadLayerState(state, &renderAssetCache);
+    if (!require(secondPass.sprites.size() == 1, QStringLiteral("second ex tap render produces one sprite"), err)) {
+        return false;
+    }
+    if (!require(
+            secondPass.sprites.constFirst().image == firstPass.sprites.constFirst().image,
+            QStringLiteral("second ex tap render reuses the cached composed image pointer"),
+            err)) {
+        return false;
+    }
+    if (!require(renderAssetCache.missCount() == 1, QStringLiteral("second ex tap render does not add a cache miss"), err)) {
+        return false;
+    }
+    if (!require(renderAssetCache.hitCount() == 1, QStringLiteral("second ex tap render records one cache hit"), err)) {
+        return false;
+    }
+
+    state.skin.tapExImage = solidImage(64, 64);
+    const PreviewHeadLayerState thirdPass = buildPreparedHeadLayerState(state, &renderAssetCache);
+    if (!require(thirdPass.sprites.size() == 1, QStringLiteral("skin-invalidated ex tap render produces one sprite"), err)) {
+        return false;
+    }
+    if (!require(renderAssetCache.missCount() == 2, QStringLiteral("skin-invalidated render records a second cache miss"), err)) {
+        return false;
+    }
+    if (!require(renderAssetCache.entryCount() == 1, QStringLiteral("skin-invalidated render replaces the composed image cache entry"), err)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool verifyPreparedHeadOrderAndBaseImageSelection(QTextStream& err)
+{
+    PreviewFrameState state;
+    state.skin.tapImage = solidImage(96, 96);
+    state.skin.tapEachImage = solidImage(88, 88);
+    state.skin.starImage = solidImage(104, 104);
+    state.skin.starEachImage = solidImage(92, 92);
+
+    TimelineNoteMarker tapNormal;
+    tapNormal.type = QStringLiteral("tap");
+    tapNormal.second = 1.0;
+    tapNormal.lane = 1;
+
+    TimelineNoteMarker tapEach;
+    tapEach.type = QStringLiteral("tap");
+    tapEach.second = 1.0;
+    tapEach.lane = 2;
+    tapEach.isEach = true;
+
+    TimelineNoteMarker slideEach;
+    slideEach.type = QStringLiteral("slide");
+    slideEach.second = 1.05;
+    slideEach.slideTraceSecond = 1.35;
+    slideEach.endSecond = 1.8;
+    slideEach.lane = 3;
+    slideEach.endLane = 5;
+    slideEach.headEach = true;
+    slideEach.hasHeadStar = true;
+    slideEach.slideHeadUsesTapMaterial = false;
+
+    TimelineNoteMarker tapFarFuture;
+    tapFarFuture.type = QStringLiteral("tap");
+    tapFarFuture.second = 5.0;
+    tapFarFuture.lane = 4;
+
+    state.noteMarkers = {tapNormal, tapEach, slideEach, tapFarFuture};
+    state.playheadSeconds = 0.9;
+
+    const PreviewHeadLayerState layerState = buildPreparedHeadLayerState(state);
+    if (!require(layerState.sprites.size() == 3, QStringLiteral("prepared head state renders only visible head sprites"), err)) {
+        return false;
+    }
+    if (!require(
+            layerState.sprites.at(0).image == &state.skin.starEachImage,
+            QStringLiteral("highest-second slide head renders first with starEach image"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            layerState.sprites.at(1).image == &state.skin.tapEachImage,
+            QStringLiteral("same-second later tap renders second with tapEach image"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            layerState.sprites.at(2).image == &state.skin.tapImage,
+            QStringLiteral("same-second earlier tap renders last with tap image"),
+            err)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool verifyHoldExUsesHeadRenderAssetCache(QTextStream& err)
+{
+    PreviewFrameState state;
+    TimelineNoteMarker holdMarker;
+    holdMarker.type = QStringLiteral("hold");
+    holdMarker.second = 1.0;
+    holdMarker.endSecond = 1.4;
+    holdMarker.lane = 1;
+    holdMarker.isEx = true;
+    state.noteMarkers.append(holdMarker);
+    state.playheadSeconds = 0.9;
+    state.skin.holdImage = solidImage(64, 192);
+    state.skin.holdExImage = solidImage(32, 96);
+
+    miacode::preview::scene::PreviewHeadRenderAssetCache renderAssetCache;
+    const PreviewHeadLayerState firstPass = buildPreparedHeadLayerState(state, &renderAssetCache);
+    if (!require(!firstPass.sprites.isEmpty(), QStringLiteral("hold ex first render emits sprites"), err)) {
+        return false;
+    }
+    if (!require(renderAssetCache.missCount() == 1, QStringLiteral("hold ex first render records one cache miss"), err)) {
+        return false;
+    }
+
+    const PreviewHeadLayerState secondPass = buildPreparedHeadLayerState(state, &renderAssetCache);
+    if (!require(secondPass.sprites.size() == firstPass.sprites.size(), QStringLiteral("hold ex second render keeps sprite count"), err)) {
+        return false;
+    }
+    if (!require(renderAssetCache.hitCount() == 1, QStringLiteral("hold ex second render records one cache hit"), err)) {
+        return false;
+    }
+    for (int index = 0; index < secondPass.sprites.size(); ++index) {
+        if (!require(
+                secondPass.sprites.at(index).image == firstPass.sprites.at(index).image,
+                QStringLiteral("hold ex second render reuses cached composed image for sprite %1").arg(index),
+                err)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -167,6 +352,15 @@ int main(int argc, char* argv[])
     QTextStream out(stdout);
 
     if (!verifySameHeadBranchesCollapseToFastestRotation(err)) {
+        return 1;
+    }
+    if (!verifyHeadRenderAssetCacheReuseAndInvalidation(err)) {
+        return 1;
+    }
+    if (!verifyPreparedHeadOrderAndBaseImageSelection(err)) {
+        return 1;
+    }
+    if (!verifyHoldExUsesHeadRenderAssetCache(err)) {
         return 1;
     }
 

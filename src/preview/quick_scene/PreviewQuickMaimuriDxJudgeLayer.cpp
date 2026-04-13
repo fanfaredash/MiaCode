@@ -16,26 +16,18 @@ QSGNode* PreviewQuickMaimuriDxJudgeLayer::updateNode(
     PreviewTextureRepository* textures
 ) const
 {
-    miacode::preview::scene::PreviewFrameState filteredState = state;
-    QVector<MuriJudgeSpriteEvent> activeEvents;
-    QVector<int> markerIndices;
-    QVector<TimelineNoteMarker> filteredMarkers;
+    QVector<MuriJudgeSpriteEvent> activeEvents = state.muriAnalysisReport.judgeSpriteEvents;
     if (preparedCache != nullptr && cursor != nullptr) {
+        QVector<int> markerIndices;
         preparedCache->collectMaimuriDxJudgeData(cursor->activePreparedIndices, &activeEvents, &markerIndices);
-        filteredMarkers.reserve(markerIndices.size());
-        for (int markerIndex : markerIndices) {
-            if (markerIndex >= 0 && markerIndex < state.noteMarkers.size()) {
-                filteredMarkers.append(state.noteMarkers.at(markerIndex));
-            }
-        }
-        filteredState.noteMarkers = filteredMarkers;
-        filteredState.muriAnalysisReport.judgeSpriteEvents = activeEvents;
-        filteredState.muriAnalysisReport.sourceSignature.clear();
     }
+    const miacode::preview::scene::PreviewActiveMarkerView activeMarkers(state.noteMarkers);
     return buildPreviewSpriteNodeTree(
         oldNode,
         miacode::preview::scene::buildPreviewMaimuriDxJudgeLayerSprites(
-            filteredState,
+            state,
+            activeMarkers,
+            activeEvents,
             miacode::preview::scene::playfieldRectForStage(
                 miacode::preview::scene::stageRectForSize(renderSize),
                 state.render.layoutSquareScale

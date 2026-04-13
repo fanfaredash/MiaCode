@@ -3,6 +3,7 @@
 #include "common/MuriConfig.h"
 #include "preview/scene/PreviewSceneMath.h"
 
+#include <algorithm>
 #include <QtMath>
 
 namespace {
@@ -44,11 +45,20 @@ PreviewMuriActionLayerState buildPreviewMuriActionLayerState(
         constexpr qreal kPressEffectLifetimeSeconds = static_cast<qreal>(36.0 / miacode::muri::kJudgeTps);
         constexpr qreal kPressEffectTickSeconds = static_cast<qreal>(1.0 / miacode::muri::kJudgeTps);
         constexpr qreal kPressEffectSlideRadiusEndScale = 0.5;
+        constexpr qreal kMembershipEpsilon = 1e-6;
+
+        struct VisibleTrailEntry {
+            const MuriActionTrail* trail = nullptr;
+            int visibleIndex = -1;
+            int startTick = 0;
+            int endTick = -1;
+        };
 
         const qreal playheadSecond = static_cast<qreal>(state.playheadSeconds);
         const qreal sampleStartSecond = playheadSecond - kPressEffectLifetimeSeconds;
-        QVector<const MuriActionTrail*> visibleTrails;
+        QVector<VisibleTrailEntry> visibleTrails;
         visibleTrails.reserve(state.muriAnalysisReport.actionTrails.size());
+        int visibleIndex = 0;
         for (const MuriActionTrail& trail : state.muriAnalysisReport.actionTrails) {
             if (trail.endSecond + 1e-6 < sampleStartSecond || trail.startSecond > playheadSecond + 1e-6) {
                 continue;
@@ -56,7 +66,16 @@ PreviewMuriActionLayerState buildPreviewMuriActionLayerState(
             if (trail.points.isEmpty()) {
                 continue;
             }
-            visibleTrails.append(&trail);
+            const int trailStartTick = qMax(
+                0,
+                static_cast<int>(qCeil((trail.startSecond - kMembershipEpsilon) * miacode::muri::kJudgeTps))
+            );
+            const int trailEndTick = qMax(
+                trailStartTick,
+                static_cast<int>(qFloor((trail.endSecond + kMembershipEpsilon) * miacode::muri::kJudgeTps))
+            );
+            visibleTrails.append(VisibleTrailEntry{&trail, visibleIndex, trailStartTick, trailEndTick});
+            visibleIndex += 1;
         }
         if (visibleTrails.isEmpty()) {
             return layerState;
@@ -68,20 +87,61 @@ PreviewMuriActionLayerState buildPreviewMuriActionLayerState(
             static_cast<int>(qFloor(playheadSecond * miacode::muri::kJudgeTps + 1e-6))
         );
         layerState.circles.reserve((endTick - startTick + 1) * qMax(1, visibleTrails.size()));
+        QVector<int> activationOrder;
+        QVector<int> deactivationOrder;
+        activationOrder.reserve(visibleTrails.size());
+        deactivationOrder.reserve(visibleTrails.size());
+        for (int index = 0; index < visibleTrails.size(); ++index) {
+            activationOrder.append(index);
+            deactivationOrder.append(index);
+        }
+        std::stable_sort(activationOrder.begin(), activationOrder.end(), [&visibleTrails](int a, int b) {
+            const VisibleTrailEntry& left = visibleTrails.at(a);
+            const VisibleTrailEntry& right = visibleTrails.at(b);
+            if (left.startTick != right.startTick) {
+                return left.startTick < right.startTick;
+            }
+            return left.visibleIndex < right.visibleIndex;
+        });
+        std::stable_sort(deactivationOrder.begin(), deactivationOrder.end(), [&visibleTrails](int a, int b) {
+            const VisibleTrailEntry& left = visibleTrails.at(a);
+            const VisibleTrailEntry& right = visibleTrails.at(b);
+            if (left.endTick != right.endTick) {
+                return left.endTick < right.endTick;
+            }
+            return left.visibleIndex < right.visibleIndex;
+        });
+        QVector<int> activeVisibleIndices;
+        activeVisibleIndices.reserve(visibleTrails.size());
+        int activationCursor = 0;
+        int deactivationCursor = 0;
         for (int tick = startTick; tick <= endTick; ++tick) {
             const qreal sampleSecond = static_cast<qreal>(tick) * kPressEffectTickSeconds;
-            QVector<const MuriActionTrail*> activeTrails;
-            activeTrails.reserve(visibleTrails.size());
-            for (const MuriActionTrail* trail : visibleTrails) {
-                if (trail == nullptr) {
-                    continue;
+            while (deactivationCursor < deactivationOrder.size()
+                   && visibleTrails.at(deactivationOrder.at(deactivationCursor)).endTick < tick) {
+                const int expiredVisibleIndex = visibleTrails.at(deactivationOrder.at(deactivationCursor)).visibleIndex;
+                const auto activeIt = std::lower_bound(
+                    activeVisibleIndices.begin(),
+                    activeVisibleIndices.end(),
+                    expiredVisibleIndex);
+                if (activeIt != activeVisibleIndices.end() && *activeIt == expiredVisibleIndex) {
+                    activeVisibleIndices.erase(activeIt);
                 }
-                if (trail->startSecond <= sampleSecond + 1e-6
-                    && trail->endSecond + 1e-6 >= sampleSecond) {
-                    activeTrails.append(trail);
-                }
+                deactivationCursor += 1;
             }
-            if (activeTrails.isEmpty()) {
+            while (activationCursor < activationOrder.size()
+                   && visibleTrails.at(activationOrder.at(activationCursor)).startTick <= tick) {
+                const int nextVisibleIndex = visibleTrails.at(activationOrder.at(activationCursor)).visibleIndex;
+                const auto insertIt = std::lower_bound(
+                    activeVisibleIndices.begin(),
+                    activeVisibleIndices.end(),
+                    nextVisibleIndex);
+                if (insertIt == activeVisibleIndices.end() || *insertIt != nextVisibleIndex) {
+                    activeVisibleIndices.insert(insertIt, nextVisibleIndex);
+                }
+                activationCursor += 1;
+            }
+            if (activeVisibleIndices.isEmpty()) {
                 continue;
             }
 
@@ -91,11 +151,15 @@ PreviewMuriActionLayerState buildPreviewMuriActionLayerState(
             }
 
             const qreal t = qBound<qreal>(0.0, ageSeconds / kPressEffectLifetimeSeconds, 1.0);
-            QColor fillColor = activeTrails.size() > 2
+            QColor fillColor = activeVisibleIndices.size() > 2
                 ? QColor(224, 108, 117)
                 : QColor(255, 255, 255);
             fillColor.setAlpha(qBound(0, qRound((1.0 - t) * 255.0), 255));
-            for (const MuriActionTrail* trail : activeTrails) {
+            for (int activeVisibleIndex : activeVisibleIndices) {
+                const MuriActionTrail* trail = visibleTrails.at(activeVisibleIndex).trail;
+                if (trail == nullptr) {
+                    continue;
+                }
                 qreal proportion = 0.0;
                 if (trail->endSecond > trail->startSecond) {
                     proportion = qBound<qreal>(

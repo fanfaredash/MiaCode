@@ -89,6 +89,7 @@ namespace miacode::preview::scene {
 
 PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
     const PreviewFrameState& state,
+    const PreviewActiveMarkerView& markers,
     const QRectF& playfieldRect
 )
 {
@@ -97,7 +98,7 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
     };
 
     PreviewSpriteDescriptors sprites;
-    sprites.reserve(state.noteMarkers.size() * 2);
+    sprites.reserve(markers.size() * 2);
 
     QHash<int, QVector<ActiveEachCandidate>> eachGroupsById;
     QHash<qint64, QVector<ActiveEachCandidate>> fallbackEachGroupsBySecond;
@@ -124,7 +125,8 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
         );
     };
 
-    for (const TimelineNoteMarker& marker : state.noteMarkers) {
+    for (int markerIndex = 0; markerIndex < markers.size(); ++markerIndex) {
+        const TimelineNoteMarker& marker = markers.markerAt(markerIndex);
         if (marker.type == QLatin1String("tap") || marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi")) {
             const bool slideHeadStar = marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi");
             if (slideHeadStar && !marker.hasHeadStar) {

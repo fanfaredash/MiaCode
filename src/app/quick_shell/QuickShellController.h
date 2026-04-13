@@ -86,6 +86,7 @@ signals:
 
 private:
     void refreshFromStateSource();
+    void updateRefreshTimerInterval();
 
     QuickShellCommandSink* commandSink_ = nullptr;
     QuickShellStateSource* stateSource_ = nullptr;
