@@ -31,6 +31,8 @@ ApplicationWindow {
     property real startupMinimumWindowWidth: 960
     property real startupMinimumWindowHeight: 640
     property bool embeddedSeparateSurfaceReady: true
+    property bool embeddedInlineSurfaceActive: !controller.previewFullscreen
+    property bool fullscreenInlineSurfaceActive: false
     property bool fullscreenHoveringRevealZone: false
     property bool fullscreenHoveringControls: false
     property rect previewSeekHotRect: {
@@ -115,6 +117,58 @@ ApplicationWindow {
             return
         }
         fullscreenControlsHideTimer.restart()
+    }
+
+    function previewLoaderStatusName(status) {
+        if (status === Loader.Null)
+            return "null"
+        if (status === Loader.Ready)
+            return "ready"
+        if (status === Loader.Loading)
+            return "loading"
+        if (status === Loader.Error)
+            return "error"
+        return "unknown"
+    }
+
+    function logPreviewSurfaceTransition(action, extra) {
+        if (!controller)
+            return
+        let payload = "fullscreen=" + (controller.previewFullscreen ? 1 : 0)
+            + " fullscreen_window_visible=" + (fullscreenPreviewWindow.visible ? 1 : 0)
+            + " embedded_inline_active=" + (embeddedInlineSurfaceActive ? 1 : 0)
+            + " fullscreen_inline_active=" + (fullscreenInlineSurfaceActive ? 1 : 0)
+            + " separate_surface=" + (controller.previewUsesSeparateSurface ? 1 : 0)
+        if (extra && extra.length > 0)
+            payload += " " + extra
+        controller.logPreviewInteraction(action, payload)
+    }
+
+    function disableInlinePreviewSurfaces(reason) {
+        embeddedInlineSurfaceActivateTimer.stop()
+        fullscreenInlineSurfaceActivateTimer.stop()
+        const embeddedWasActive = embeddedInlineSurfaceActive
+        const fullscreenWasActive = fullscreenInlineSurfaceActive
+        embeddedInlineSurfaceActive = false
+        fullscreenInlineSurfaceActive = false
+        logPreviewSurfaceTransition(
+            "preview_surface_route_disable",
+            "reason=" + reason
+                + " embedded_was_active=" + (embeddedWasActive ? 1 : 0)
+                + " fullscreen_was_active=" + (fullscreenWasActive ? 1 : 0)
+        )
+    }
+
+    function armEmbeddedInlineSurface(reason) {
+        disableInlinePreviewSurfaces(reason)
+        logPreviewSurfaceTransition("preview_surface_route_arm", "target=embedded reason=" + reason)
+        embeddedInlineSurfaceActivateTimer.restart()
+    }
+
+    function armFullscreenInlineSurface(reason) {
+        disableInlinePreviewSurfaces(reason)
+        logPreviewSurfaceTransition("preview_surface_route_arm", "target=fullscreen reason=" + reason)
+        fullscreenInlineSurfaceActivateTimer.restart()
     }
 
     function previewPaneHandleWidth() {
@@ -350,7 +404,9 @@ ApplicationWindow {
         target: controller
 
         function onPreviewFullscreenChanged() {
+            logPreviewSurfaceTransition("preview_surface_fullscreen_changed")
             if (!controller.previewFullscreen) {
+                armEmbeddedInlineSurface("fullscreen_disabled")
                 fullscreenControlsVisible = false
                 fullscreenHintVisible = false
                 fullscreenControlsHideTimer.stop()
@@ -364,6 +420,7 @@ ApplicationWindow {
                 embeddedPreviewInteractionRoot.forceActiveFocus()
                 return
             }
+            armFullscreenInlineSurface("fullscreen_enabled")
             embeddedSeparateSurfaceReady = false
             fullscreenHoveringRevealZone = false
             fullscreenHoveringControls = false
@@ -392,6 +449,42 @@ ApplicationWindow {
         interval: metric("fullscreenHintAutoHideDelayMs", 2200)
         repeat: false
         onTriggered: fullscreenHintVisible = false
+    }
+
+    Timer {
+        id: embeddedInlineSurfaceActivateTimer
+        interval: 16
+        repeat: false
+        onTriggered: {
+            const canActivate = !controller.previewFullscreen && !fullscreenPreviewWindow.visible
+            logPreviewSurfaceTransition(
+                "preview_surface_route_timer",
+                "target=embedded can_activate=" + (canActivate ? 1 : 0)
+            )
+            if (!canActivate)
+                return
+            embeddedInlineSurfaceActive = true
+            logPreviewSurfaceTransition("preview_surface_route_commit", "target=embedded")
+        }
+    }
+
+    Timer {
+        id: fullscreenInlineSurfaceActivateTimer
+        interval: 16
+        repeat: false
+        onTriggered: {
+            const canActivate = controller.previewFullscreen && fullscreenPreviewWindow.visible
+            logPreviewSurfaceTransition(
+                "preview_surface_route_timer",
+                "target=fullscreen can_activate=" + (canActivate ? 1 : 0)
+            )
+            if (!canActivate)
+                return
+            fullscreenInlineSurfaceActive = true
+            fullscreenPreviewWindow.requestActivate()
+            fullscreenInteractionRoot.forceActiveFocus()
+            logPreviewSurfaceTransition("preview_surface_route_commit", "target=fullscreen")
+        }
     }
 
     Shortcut {
@@ -770,15 +863,24 @@ ApplicationWindow {
                                     clip: true
 
                                     Loader {
+                                        id: embeddedInlineSurfaceLoader
                                         anchors.fill: parent
                                         anchors.margins: 1
                                         active: !controller.previewFullscreen
+                                            && embeddedInlineSurfaceActive
                                             && (!controller.previewUsesSeparateSurface
                                                 || !embeddedSeparateSurfaceReady)
+                                        onStatusChanged: logPreviewSurfaceTransition(
+                                            "preview_surface_loader_status",
+                                            "loader=embedded_inline status=" + previewLoaderStatusName(status)
+                                                + " active=" + (active ? 1 : 0)
+                                        )
 
                                         sourceComponent: QuickShellPreviewSurface {
                                             runtime: controller.previewRuntime
                                             mediaHost: controller.previewStageMediaHost
+                                            logger: controller
+                                            surfaceRole: "embedded_inline"
                                         }
                                     }
 
@@ -908,7 +1010,10 @@ ApplicationWindow {
         }
 
         onVisibleChanged: {
+            logPreviewSurfaceTransition("preview_surface_fullscreen_window_visible")
             if (!visible) {
+                if (!controller.previewFullscreen)
+                    armEmbeddedInlineSurface("fullscreen_window_hidden")
                 root.requestActivate()
                 embeddedPreviewInteractionRoot.forceActiveFocus()
                 Qt.callLater(function() {
@@ -917,6 +1022,8 @@ ApplicationWindow {
                 })
                 return
             }
+            if (controller.previewFullscreen)
+                armFullscreenInlineSurface("fullscreen_window_visible")
             requestActivate()
         }
 
@@ -932,12 +1039,22 @@ ApplicationWindow {
                     anchors.fill: parent
 
                     Loader {
+                        id: fullscreenInlineSurfaceLoader
                         anchors.fill: parent
-                        active: controller.previewFullscreen && !controller.previewUsesSeparateSurface
+                        active: controller.previewFullscreen
+                            && fullscreenInlineSurfaceActive
+                            && !controller.previewUsesSeparateSurface
+                        onStatusChanged: logPreviewSurfaceTransition(
+                            "preview_surface_loader_status",
+                            "loader=fullscreen_inline status=" + previewLoaderStatusName(status)
+                                + " active=" + (active ? 1 : 0)
+                        )
 
                         sourceComponent: QuickShellPreviewSurface {
                             runtime: controller.previewRuntime
                             mediaHost: controller.previewStageMediaHost
+                            logger: controller
+                            surfaceRole: "fullscreen_inline"
                         }
                     }
 
