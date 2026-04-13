@@ -955,12 +955,44 @@ bool MainWindow::TimelineSection::moveEditorCursorToTimelineLocation(
         editor->setFocus();
         owner_.clearPreviewFollowDecoration();
     } else {
-        owner_.setPreviewFollowDecoration(line, col);
+        int startCol = col;
+        int endCol = col;
+        state_.timelineQuickModel_.resolvePreviewFollowSelectionRange(line, col, &startCol, &endCol);
+        owner_.setPreviewFollowDecoration(line, startCol, endCol);
     }
     return true;
 }
 
-void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(double second, bool centerView)
+void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLine(double second, bool ensureVisible)
+{
+    if (ui_.timelineView_ == nullptr || !hasActiveDifficulty() || !ui_.timelineView_->followPreviewEnabled()) {
+        owner_.clearPreviewFollowDecoration();
+        return;
+    }
+
+    int line = 1;
+    int startCol = 1;
+    int endCol = 1;
+    double cursorSecond = 0.0;
+    const bool resolved = state_.timelineQuickModel_.resolvePreviewFollowSelection(
+        qMax(0.0, second),
+        &line,
+        &startCol,
+        &endCol,
+        &cursorSecond
+    );
+    Q_UNUSED(cursorSecond);
+    if (!resolved) {
+        owner_.clearPreviewFollowDecoration();
+        return;
+    }
+    owner_.setPreviewFollowDecoration(line, startCol, endCol, ensureVisible);
+}
+
+void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
+    double second,
+    bool centerView,
+    bool ensureVisibleWhenPaused)
 {
     if (state_.suppressTimelineCursorSync_ || ui_.timelineView_ == nullptr || !hasActiveDifficulty()) {
         owner_.clearPreviewFollowDecoration();
@@ -971,6 +1003,7 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(double second,
         return;
     }
     if (!state_.qtPreviewPlaying_) {
+        updatePreviewFollowDecorationForTimelineBlueLine(second, ensureVisibleWhenPaused);
         return;
     }
 
@@ -983,7 +1016,10 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(double second,
 
     if (alreadyAtAnchor) {
         if (resolved) {
-            owner_.setPreviewFollowDecoration(line, col);
+            int startCol = col;
+            int endCol = col;
+            state_.timelineQuickModel_.resolvePreviewFollowSelectionRange(line, col, &startCol, &endCol);
+            owner_.setPreviewFollowDecoration(line, startCol, endCol);
         } else {
             owner_.clearPreviewFollowDecoration();
         }
@@ -1175,8 +1211,10 @@ bool MainWindow::moveEditorCursorToTimelineLocation(
     );
 }
 
-void MainWindow::syncEditorCursorToPreviewSecond(double second, bool centerView)
+void MainWindow::syncEditorCursorToPreviewSecond(
+    double second,
+    bool centerView,
+    bool ensureVisibleWhenPaused)
 {
-    timelineSection_->syncEditorCursorToPreviewSecond(second, centerView);
+    timelineSection_->syncEditorCursorToPreviewSecond(second, centerView, ensureVisibleWhenPaused);
 }
-

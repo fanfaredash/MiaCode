@@ -35,11 +35,18 @@ public:
     double timelineSecondForCursor(int lineNumber, int col) const;
     bool resolveTimelineNavigateCursor(double second, int* line, int* col, double* cursorSecond) const;
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
+    bool resolvePreviewFollowSelectionRange(int line, int anchorCol, int* startCol, int* endCol) const;
     bool resolvePreviewFollowCursor(
         double second,
         int* line,
         int* col,
         double* noteSecond) const;
+    bool resolvePreviewFollowSelection(
+        double second,
+        int* line,
+        int* startCol,
+        int* endCol,
+        double* anchorSecond) const;
 
 private:
     struct ParseState {

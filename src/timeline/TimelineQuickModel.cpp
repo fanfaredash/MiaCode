@@ -817,6 +817,59 @@ bool TimelineQuickModel::resolveNearestTimelineNote(double second, int lane, int
     return true;
 }
 
+bool TimelineQuickModel::resolvePreviewFollowSelectionRange(int line, int anchorCol, int* startCol, int* endCol) const
+{
+    if (startCol != nullptr) {
+        *startCol = qMax(1, anchorCol);
+    }
+    if (endCol != nullptr) {
+        *endCol = qMax(1, anchorCol);
+    }
+
+    if (line < 1 || line > lines_.size()) {
+        return false;
+    }
+
+    const QString& text = lines_.at(line - 1).text;
+    const int lineLength = text.size();
+    if (lineLength <= 0) {
+        return false;
+    }
+
+    const int normalizedAnchorCol = qBound(1, anchorCol, lineLength);
+    const int segmentEndExclusive = qBound(0, normalizedAnchorCol - 1, lineLength);
+    const int previousComma = segmentEndExclusive > 0
+        ? text.lastIndexOf(QLatin1Char(','), segmentEndExclusive - 1)
+        : -1;
+    int segmentStart = previousComma >= 0 ? previousComma + 1 : 0;
+    int segmentEnd = segmentEndExclusive;
+
+    while (segmentStart < segmentEnd && text.at(segmentStart).isSpace()) {
+        ++segmentStart;
+    }
+    while (segmentEnd > segmentStart && text.at(segmentEnd - 1).isSpace()) {
+        --segmentEnd;
+    }
+
+    if (segmentEnd > segmentStart) {
+        if (startCol != nullptr) {
+            *startCol = segmentStart + 1;
+        }
+        if (endCol != nullptr) {
+            *endCol = segmentEnd;
+        }
+        return true;
+    }
+
+    if (startCol != nullptr) {
+        *startCol = normalizedAnchorCol;
+    }
+    if (endCol != nullptr) {
+        *endCol = normalizedAnchorCol;
+    }
+    return true;
+}
+
 bool TimelineQuickModel::resolvePreviewFollowCursor(
     double second,
     int* line,
@@ -837,6 +890,43 @@ bool TimelineQuickModel::resolvePreviewFollowCursor(
         *noteSecond = 0.0;
     }
     return false;
+}
+
+bool TimelineQuickModel::resolvePreviewFollowSelection(
+    double second,
+    int* line,
+    int* startCol,
+    int* endCol,
+    double* anchorSecond) const
+{
+    int resolvedLine = 1;
+    int anchorCol = 1;
+    if (!resolvePreviewFollowCursor(second, &resolvedLine, &anchorCol, anchorSecond)) {
+        if (line != nullptr) {
+            *line = 1;
+        }
+        if (startCol != nullptr) {
+            *startCol = 1;
+        }
+        if (endCol != nullptr) {
+            *endCol = 1;
+        }
+        return false;
+    }
+
+    int resolvedStartCol = anchorCol;
+    int resolvedEndCol = anchorCol;
+    resolvePreviewFollowSelectionRange(resolvedLine, anchorCol, &resolvedStartCol, &resolvedEndCol);
+    if (line != nullptr) {
+        *line = resolvedLine;
+    }
+    if (startCol != nullptr) {
+        *startCol = resolvedStartCol;
+    }
+    if (endCol != nullptr) {
+        *endCol = resolvedEndCol;
+    }
+    return true;
 }
 
 bool TimelineQuickModel::rebuildFromLineTexts(

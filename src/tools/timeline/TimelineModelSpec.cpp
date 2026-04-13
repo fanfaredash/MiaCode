@@ -810,6 +810,45 @@ int main(int argc, char** argv)
     }
 
     {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("{1}1,1-4[8:1],\nE"), 0.0);
+        int line = 0;
+        int startCol = 0;
+        int endCol = 0;
+        double second = -1.0;
+        const bool resolved = model.resolvePreviewFollowSelection(0.75, &line, &startCol, &endCol, &second);
+        expect(resolved && line == 1 && startCol == 6 && endCol == 13 && nearlyEqual(second, 0.5),
+               QStringLiteral("follow selection keeps the full pre-comma segment including slide timing syntax"));
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("1/2,\n1,,\nE"), 0.0);
+        int startCol = 0;
+        int endCol = 0;
+        const bool groupedResolved = model.resolvePreviewFollowSelectionRange(1, 4, &startCol, &endCol);
+        expect(groupedResolved && startCol == 1 && endCol == 3,
+               QStringLiteral("follow selection keeps slash-joined syntax inside the same comma segment"));
+        const bool emptyResolved = model.resolvePreviewFollowSelectionRange(2, 3, &startCol, &endCol);
+        expect(emptyResolved && startCol == 3 && endCol == 3,
+               QStringLiteral("follow selection falls back to the comma column when the beat segment is empty"));
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("1,,\nE"), 0.0);
+        int line = 0;
+        int col = 0;
+        double second = -1.0;
+        const bool navigateResolved = model.resolveTimelineNavigateCursor(0.75, &line, &col, &second);
+        expect(navigateResolved && line == 1 && col == 2 && nearlyEqual(second, 0.0),
+               QStringLiteral("timeline navigate cursor stays on the first comma of the recent past line"));
+        const bool followResolved = model.resolvePreviewFollowCursor(0.75, &line, &col, &second);
+        expect(followResolved && line == 1 && col == 3 && nearlyEqual(second, 0.5),
+               QStringLiteral("follow cursor can advance within the same source line to the latest past comma"));
+    }
+
+    {
         const QString chartText = QStringLiteral("(150)\n\n|| 3 / 4\n1,\nE");
         TimelineQuickModel model;
         model.rebuildFromText(chartText, 0.0);

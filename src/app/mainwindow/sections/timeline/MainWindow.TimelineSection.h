@@ -61,7 +61,11 @@ public:
         bool centerView,
         bool suppressSignals
     );
-    void syncEditorCursorToPreviewSecond(double second, bool centerView = true);
+    void updatePreviewFollowDecorationForTimelineBlueLine(double second, bool ensureVisible = false);
+    void syncEditorCursorToPreviewSecond(
+        double second,
+        bool centerView = true,
+        bool ensureVisibleWhenPaused = false);
     double previewDurationSeconds() const;
     double previewPlaybackEndSeconds() const;
     void updatePreviewSliderRange();
