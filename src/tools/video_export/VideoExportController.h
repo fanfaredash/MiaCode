@@ -17,7 +17,6 @@ class QProgressDialog;
 enum class VideoExportPreset {
     Fast,
     HighQuality,
-    HighCompression,
 };
 
 struct VideoExportTask {
