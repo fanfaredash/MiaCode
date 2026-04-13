@@ -16,20 +16,14 @@ QSGNode* PreviewQuickTouchLayer::updateNode(
     PreviewTextureRepository* textures
 ) const
 {
-    miacode::preview::scene::PreviewFrameState filteredState = state;
-    QVector<TimelineNoteMarker> filteredMarkers;
-    if (preparedCache != nullptr && cursor != nullptr) {
-        preparedCache->collectMarkers(
-            state.noteMarkers,
-            preparedCache->touchLayer(),
-            cursor->activePreparedIndices,
-            &filteredMarkers
-        );
-        filteredState.noteMarkers = filteredMarkers;
-    }
+    const miacode::preview::scene::PreviewActiveMarkerView activeMarkers =
+        preparedCache != nullptr && cursor != nullptr
+        ? miacode::preview::scene::PreviewActiveMarkerView(state.noteMarkers, preparedCache->touchLayer(), *cursor)
+        : miacode::preview::scene::PreviewActiveMarkerView(state.noteMarkers);
     const miacode::preview::scene::PreviewTouchLayerState layerState =
         miacode::preview::scene::buildPreviewTouchLayerState(
-            filteredState,
+            state,
+            activeMarkers,
             miacode::preview::scene::playfieldRectForStage(
                 miacode::preview::scene::stageRectForSize(renderSize),
                 state.render.layoutSquareScale
@@ -40,7 +34,7 @@ QSGNode* PreviewQuickTouchLayer::updateNode(
         layerState.sprites,
         window,
         textures,
-        filteredState.playheadSeconds,
+        state.playheadSeconds,
         "touch"
     );
 }

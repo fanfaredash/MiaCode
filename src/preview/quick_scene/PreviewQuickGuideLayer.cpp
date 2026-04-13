@@ -16,21 +16,15 @@ QSGNode* PreviewQuickGuideLayer::updateNode(
     PreviewTextureRepository* textures
 ) const
 {
-    miacode::preview::scene::PreviewFrameState filteredState = state;
-    QVector<TimelineNoteMarker> filteredMarkers;
-    if (preparedCache != nullptr && cursor != nullptr) {
-        preparedCache->collectMarkers(
-            state.noteMarkers,
-            preparedCache->guideLayer(),
-            cursor->activePreparedIndices,
-            &filteredMarkers
-        );
-        filteredState.noteMarkers = filteredMarkers;
-    }
+    const miacode::preview::scene::PreviewActiveMarkerView activeMarkers =
+        preparedCache != nullptr && cursor != nullptr
+        ? miacode::preview::scene::PreviewActiveMarkerView(state.noteMarkers, preparedCache->guideLayer(), *cursor)
+        : miacode::preview::scene::PreviewActiveMarkerView(state.noteMarkers);
     return buildPreviewSpriteNodeTree(
         oldNode,
         miacode::preview::scene::buildPreviewGuideLayerSprites(
-            filteredState,
+            state,
+            activeMarkers,
             miacode::preview::scene::playfieldRectForStage(
                 miacode::preview::scene::stageRectForSize(renderSize),
                 state.render.layoutSquareScale

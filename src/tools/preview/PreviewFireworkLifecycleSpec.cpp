@@ -3,6 +3,7 @@
 #include <QRectF>
 #include <QTextStream>
 
+#include "preview/scene/PreviewActiveMarkerView.h"
 #include "preview/scene/PreviewFrameState.h"
 #include "preview/scene/PreviewJudgeFireworkLayerState.h"
 
@@ -77,7 +78,11 @@ bool verifyLegacyAlignedSample(
 {
     const PreviewFrameState state = buildStateAt(clipTimeSeconds);
     const PreviewJudgeFireworkLayerState layerState =
-        miacode::preview::scene::buildPreviewJudgeFireworkLayerState(state, QRectF(0.0, 0.0, 540.0, 540.0));
+        miacode::preview::scene::buildPreviewJudgeFireworkLayerState(
+            state,
+            miacode::preview::scene::PreviewActiveMarkerView(state.noteMarkers),
+            QRectF(0.0, 0.0, 540.0, 540.0)
+        );
 
     const QString prefix = QStringLiteral("t=%1").arg(clipTimeSeconds, 0, 'f', 3);
     if (!require(layerState.active == expectedActive, prefix + QStringLiteral(" active mismatch"), err)) {
@@ -157,9 +162,11 @@ bool verifyLegacyDev5Alignment(QTextStream& err)
 
 bool verifyClipCenterStaysOnPlayfield(QTextStream& err)
 {
+    const PreviewFrameState state = buildOffsetStateAt(0.2);
     const PreviewJudgeFireworkLayerState layerState =
         miacode::preview::scene::buildPreviewJudgeFireworkLayerState(
-            buildOffsetStateAt(0.2),
+            state,
+            miacode::preview::scene::PreviewActiveMarkerView(state.noteMarkers),
             QRectF(0.0, 0.0, 540.0, 540.0)
         );
     if (!requireNear(layerState.center.x(), 360.0, QStringLiteral("offset firework center x"), err)) {

@@ -135,6 +135,7 @@ namespace miacode::preview::scene {
 
 PreviewJudgeFireworkLayerState buildPreviewJudgeFireworkLayerState(
     const PreviewFrameState& state,
+    const PreviewActiveMarkerView& markers,
     const QRectF& playfieldRect
 )
 {
@@ -142,7 +143,8 @@ PreviewJudgeFireworkLayerState buildPreviewJudgeFireworkLayerState(
 
     const TimelineNoteMarker* latestTriggerMarker = nullptr;
     qreal latestTriggerSecond = -1.0;
-    for (const TimelineNoteMarker& marker : state.noteMarkers) {
+    for (int markerIndex = 0; markerIndex < markers.size(); ++markerIndex) {
+        const TimelineNoteMarker& marker = markers.markerAt(markerIndex);
         if (!marker.isFirework) {
             continue;
         }

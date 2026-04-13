@@ -16,24 +16,19 @@ QSGNode* PreviewQuickHeadLayer::updateNode(
     PreviewTextureRepository* textures
 ) const
 {
-    miacode::preview::scene::PreviewFrameState filteredState = state;
-    QVector<TimelineNoteMarker> filteredMarkers;
-    if (preparedCache != nullptr && cursor != nullptr) {
-        preparedCache->collectMarkers(
-            state.noteMarkers,
-            preparedCache->headLayer(),
-            cursor->activePreparedIndices,
-            &filteredMarkers
-        );
-        filteredState.noteMarkers = filteredMarkers;
-    }
+    const miacode::preview::scene::PreviewActiveMarkerView activeMarkers =
+        preparedCache != nullptr && cursor != nullptr
+        ? miacode::preview::scene::PreviewActiveMarkerView(state.noteMarkers, preparedCache->headLayer(), *cursor)
+        : miacode::preview::scene::PreviewActiveMarkerView(state.noteMarkers);
     const miacode::preview::scene::PreviewHeadLayerState layerState =
         miacode::preview::scene::buildPreviewHeadLayerState(
-            filteredState,
+            state,
+            activeMarkers,
             miacode::preview::scene::playfieldRectForStage(
                 miacode::preview::scene::stageRectForSize(renderSize),
                 state.render.layoutSquareScale
-            )
+            ),
+            &renderAssetCache_
         );
     return buildPreviewSpriteNodeTree(oldNode, layerState.sprites, window, textures, state.playheadSeconds, "head");
 }

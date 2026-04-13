@@ -12,6 +12,11 @@
 
 namespace {
 
+struct SlideHeadRepresentative {
+    int markerIndex = -1;
+    qreal rotateSpeedDegreesPerSecond = 0.0;
+};
+
 QString slideHeadEventKey(const TimelineNoteMarker& marker)
 {
     return QStringLiteral("slide_head_star|%1|%2|%3|%4|%5")
@@ -34,11 +39,67 @@ double markerLifecycleEndSecond(const TimelineNoteMarker& marker)
     return result;
 }
 
+qreal totalSlideTraceDurationSeconds(const TimelineNoteMarker& marker)
+{
+    qreal duration = 0.0;
+    for (double segmentDuration : marker.slideSegmentDurations) {
+        duration += static_cast<qreal>(qMax(0.0, segmentDuration));
+    }
+    if (duration > 0.0) {
+        return duration;
+    }
+    if (marker.endSecond > marker.slideTraceSecond) {
+        return static_cast<qreal>(marker.endSecond - marker.slideTraceSecond);
+    }
+    return 0.0;
+}
+
+qreal slideHeadRotateSpeedDegreesPerSecond(const TimelineNoteMarker& marker)
+{
+    if (marker.type != QLatin1String("slide") && marker.type != QLatin1String("wifi")) {
+        return 0.0;
+    }
+
+    const qreal totalLen = static_cast<qreal>(marker.slideNativeTrackLength);
+    const qreal totalDuration = totalSlideTraceDurationSeconds(marker);
+    if (totalLen <= 0.0 || totalDuration <= 0.0) {
+        return 0.0;
+    }
+    return qMax<qreal>(-4.500 * totalLen / totalDuration, -1080.0);
+}
+
+QHash<QString, SlideHeadRepresentative> buildSlideHeadRepresentatives(
+    const QVector<TimelineNoteMarker>& noteMarkers)
+{
+    QHash<QString, SlideHeadRepresentative> representatives;
+    representatives.reserve(noteMarkers.size());
+
+    for (int markerIndex = 0; markerIndex < noteMarkers.size(); ++markerIndex) {
+        const TimelineNoteMarker& marker = noteMarkers.at(markerIndex);
+        if ((marker.type != QLatin1String("slide") && marker.type != QLatin1String("wifi")) || !marker.hasHeadStar) {
+            continue;
+        }
+
+        const QString key = slideHeadEventKey(marker);
+        const qreal rotateSpeed = slideHeadRotateSpeedDegreesPerSecond(marker);
+        auto it = representatives.find(key);
+        if (it == representatives.end()
+            || rotateSpeed < it->rotateSpeedDegreesPerSecond
+            || (qFuzzyCompare(rotateSpeed + 1.0, it->rotateSpeedDegreesPerSecond + 1.0)
+                && markerIndex > it->markerIndex)) {
+            representatives.insert(key, SlideHeadRepresentative{markerIndex, rotateSpeed});
+        }
+    }
+
+    return representatives;
+}
+
 void appendPreparedMarkerEntry(
     miacode::preview::scene::PreviewPreparedLayerWindow<miacode::preview::scene::PreviewPreparedMarkerEntry>* layer,
     int markerIndex,
     double activeStart,
-    double activeEnd
+    double activeEnd,
+    int headRepresentativeMarkerIndex = -1
 )
 {
     if (layer == nullptr || markerIndex < 0 || activeEnd + 1e-6 < activeStart) {
@@ -47,7 +108,8 @@ void appendPreparedMarkerEntry(
     layer->entries.append(miacode::preview::scene::PreviewPreparedMarkerEntry{
         markerIndex,
         activeStart,
-        activeEnd
+        activeEnd,
+        headRepresentativeMarkerIndex
     });
 }
 
@@ -108,6 +170,8 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
         previewSlideTrackTimingForFlowSpeed(static_cast<qreal>(state.render.noteFlowSpeed));
     QHash<QString, int> markerIndexByKey;
     markerIndexByKey.reserve(state.noteMarkers.size() * 2);
+    const QHash<QString, SlideHeadRepresentative> slideHeadRepresentatives =
+        buildSlideHeadRepresentatives(state.noteMarkers);
 
     for (int markerIndex = 0; markerIndex < state.noteMarkers.size(); ++markerIndex) {
         const TimelineNoteMarker& marker = state.noteMarkers.at(markerIndex);
@@ -117,6 +181,13 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
         }
 
         const QString type = marker.type.toLower();
+        int headRepresentativeMarkerIndex = markerIndex;
+        if ((type == QLatin1String("slide") || type == QLatin1String("wifi")) && marker.hasHeadStar) {
+            const auto it = slideHeadRepresentatives.constFind(slideHeadEventKey(marker));
+            if (it != slideHeadRepresentatives.constEnd()) {
+                headRepresentativeMarkerIndex = it->markerIndex;
+            }
+        }
         if (type == QLatin1String("tap")) {
             appendPreparedMarkerEntry(
                 &guideLayer_,
@@ -128,7 +199,8 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
                 &headLayer_,
                 markerIndex,
                 marker.second - tapTiming.lifecycleDurationSeconds,
-                marker.second
+                marker.second,
+                headRepresentativeMarkerIndex
             );
             appendPreparedMarkerEntry(
                 &judgeEffectLayer_,
@@ -150,7 +222,8 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
                 &headLayer_,
                 markerIndex,
                 marker.second - tapTiming.lifecycleDurationSeconds,
-                qMax(marker.second, marker.endSecond)
+                qMax(marker.second, marker.endSecond),
+                headRepresentativeMarkerIndex
             );
             appendPreparedMarkerEntry(
                 &judgeEffectLayer_,
@@ -173,7 +246,8 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
                     &headLayer_,
                     markerIndex,
                     marker.second - tapTiming.lifecycleDurationSeconds,
-                    marker.second
+                    marker.second,
+                    headRepresentativeMarkerIndex
                 );
                 appendPreparedMarkerEntry(
                     &slideLikeLayer_,
@@ -281,6 +355,28 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
     finalizePreparedLayerWindow(&touchHoldLayer_);
     finalizePreparedLayerWindow(&chartReviewLayer_);
     finalizePreparedLayerWindow(&maimuriDxJudgeLayer_);
+
+    headLayer_.drawOrder.resize(headLayer_.entries.size());
+    for (int index = 0; index < headLayer_.entries.size(); ++index) {
+        headLayer_.drawOrder[index] = index;
+    }
+    std::stable_sort(headLayer_.drawOrder.begin(), headLayer_.drawOrder.end(), [&state, this](int a, int b) {
+        const int markerIndexA = headLayer_.entries.at(a).markerIndex;
+        const int markerIndexB = headLayer_.entries.at(b).markerIndex;
+        const TimelineNoteMarker& markerA = state.noteMarkers.at(markerIndexA);
+        const TimelineNoteMarker& markerB = state.noteMarkers.at(markerIndexB);
+        if (!qFuzzyCompare(1.0 + markerA.second, 1.0 + markerB.second)) {
+            return markerA.second > markerB.second;
+        }
+        return markerIndexA > markerIndexB;
+    });
+    headLayer_.drawOrderRanks.fill(-1, headLayer_.entries.size());
+    for (int rank = 0; rank < headLayer_.drawOrder.size(); ++rank) {
+        const int preparedIndex = headLayer_.drawOrder.at(rank);
+        if (preparedIndex >= 0 && preparedIndex < headLayer_.drawOrderRanks.size()) {
+            headLayer_.drawOrderRanks[preparedIndex] = rank;
+        }
+    }
 }
 
 void PreviewPreparedSceneCache::collectMarkers(

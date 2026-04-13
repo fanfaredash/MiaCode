@@ -9,12 +9,13 @@ namespace miacode::preview::scene {
 
 PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
     const PreviewFrameState& state,
+    const PreviewActiveMarkerView& markers,
     const QRectF& playfieldRect
 )
 {
     PreviewTouchHoldLayerState layerState;
-    layerState.sprites.reserve(state.noteMarkers.size() * 5);
-    layerState.arcs.reserve(state.noteMarkers.size());
+    layerState.sprites.reserve(markers.size() * 5);
+    layerState.arcs.reserve(markers.size());
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
     const auto appendSprite = [&layerState](
@@ -42,7 +43,8 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
         layerState.sprites.append(sprite);
     };
 
-    for (const TimelineNoteMarker& marker : state.noteMarkers) {
+    for (int markerIndex = 0; markerIndex < markers.size(); ++markerIndex) {
+        const TimelineNoteMarker& marker = markers.markerAt(markerIndex);
         if (marker.type != QLatin1String("touch_hold")) {
             continue;
         }

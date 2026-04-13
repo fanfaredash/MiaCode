@@ -1,6 +1,7 @@
 #pragma once
 
 #include "preview/scene/PreviewFrameState.h"
+#include "preview/scene/PreviewHeadLayerState.h"
 
 class QQuickWindow;
 class QSGNode;
@@ -22,4 +23,7 @@ public:
         QQuickWindow* window,
         PreviewTextureRepository* textures
     ) const;
+
+private:
+    mutable miacode::preview::scene::PreviewHeadRenderAssetCache renderAssetCache_;
 };

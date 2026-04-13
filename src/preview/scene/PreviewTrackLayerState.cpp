@@ -11,6 +11,8 @@
 
 namespace {
 
+using MarkerMuriStateLookup = QHash<QString, const MarkerMuriState*>;
+
 QString markerAnalysisBaseKey(const TimelineNoteMarker& marker)
 {
     return QStringLiteral("%1|%2|%3|%4|%5|%6|%7")
@@ -23,23 +25,36 @@ QString markerAnalysisBaseKey(const TimelineNoteMarker& marker)
         .arg(marker.slideTrackKey);
 }
 
+QString markerAnalysisBaseKeyFromStateKey(const QString& key)
+{
+    int separatorCount = 0;
+    for (int index = 0; index < key.size(); ++index) {
+        if (key.at(index) != QLatin1Char('|')) {
+            continue;
+        }
+        separatorCount += 1;
+        if (separatorCount == 7) {
+            return key.left(index);
+        }
+    }
+    return key;
+}
+
 const MarkerMuriState* findMarkerMuriState(
-    const MuriAnalysisReport& report,
+    const MarkerMuriStateLookup& exactStateByKey,
+    const MarkerMuriStateLookup& slideFallbackStateByBaseKey,
     const TimelineNoteMarker& marker
 )
 {
     const QString exactKey = makeMarkerAnalysisKey(marker);
-    if (const auto it = report.markerStates.constFind(exactKey); it != report.markerStates.constEnd()) {
-        return &it.value();
+    if (const auto it = exactStateByKey.constFind(exactKey); it != exactStateByKey.constEnd()) {
+        return it.value();
     }
 
     if (marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi")) {
         const QString baseKey = markerAnalysisBaseKey(marker);
-        const QString prefix = baseKey + QLatin1Char('|');
-        for (auto stateIt = report.markerStates.constBegin(); stateIt != report.markerStates.constEnd(); ++stateIt) {
-            if (stateIt.key() == baseKey || stateIt.key().startsWith(prefix)) {
-                return &stateIt.value();
-            }
+        if (const auto it = slideFallbackStateByBaseKey.constFind(baseKey); it != slideFallbackStateByBaseKey.constEnd()) {
+            return it.value();
         }
     }
     return nullptr;
@@ -51,14 +66,32 @@ namespace miacode::preview::scene {
 
 PreviewTrackLayerState buildPreviewTrackLayerState(
     const PreviewFrameState& state,
+    const PreviewActiveMarkerView& markers,
     const QRectF& playfieldRect
 )
 {
     PreviewTrackLayerState layerState;
-    layerState.sprites.reserve(state.noteMarkers.size() * 32);
+    layerState.sprites.reserve(markers.size() * 32);
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
     const PreviewSlideTrackTiming trackTiming = previewSlideTrackTimingForFlowSpeed(state.render.noteFlowSpeed);
+    MarkerMuriStateLookup exactStateByKey;
+    MarkerMuriStateLookup slideFallbackStateByBaseKey;
+    exactStateByKey.reserve(state.muriAnalysisReport.markerStates.size());
+    slideFallbackStateByBaseKey.reserve(state.muriAnalysisReport.markerStates.size());
+    for (auto stateIt = state.muriAnalysisReport.markerStates.constBegin();
+         stateIt != state.muriAnalysisReport.markerStates.constEnd();
+         ++stateIt) {
+        exactStateByKey.insert(stateIt.key(), &stateIt.value());
+        if (stateIt.value().markerType != QLatin1String("slide")
+            && stateIt.value().markerType != QLatin1String("wifi")) {
+            continue;
+        }
+        const QString baseKey = markerAnalysisBaseKeyFromStateKey(stateIt.key());
+        if (!slideFallbackStateByBaseKey.contains(baseKey)) {
+            slideFallbackStateByBaseKey.insert(baseKey, &stateIt.value());
+        }
+    }
 
     const auto appendSprite = [&layerState, &playfieldRect, canvasScale](
                                   const QImage* image,
@@ -155,7 +188,8 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
         }
     };
 
-    for (const TimelineNoteMarker& marker : state.noteMarkers) {
+    for (int markerIndex = 0; markerIndex < markers.size(); ++markerIndex) {
+        const TimelineNoteMarker& marker = markers.markerAt(markerIndex);
         if (marker.type == QLatin1String("slide")) {
             if (!state.muriRenderOptions.showSlideTracks) {
                 continue;
@@ -178,7 +212,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
             const bool cacheable = true;
 
             if (state.muriRenderOptions.renderMode == RenderMode::MaimuriDxStyle) {
-                const MarkerMuriState* muriState = findMarkerMuriState(state.muriAnalysisReport, marker);
+                const MarkerMuriState* muriState = findMarkerMuriState(exactStateByKey, slideFallbackStateByBaseKey, marker);
                 if (muriState != nullptr && !muriState->slideSegments.isEmpty()) {
                     qreal opacity = 1.0;
                     if (state.playheadSeconds < marker.slideTraceSecond) {
@@ -444,7 +478,11 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
         int startAreaIndex = 0;
         qreal startProportion = 0.0;
         int removedArrowCount = 0;
-        const MarkerMuriState* muriState = findMarkerMuriState(state.muriAnalysisReport, marker);
+                const MarkerMuriState* muriState = findMarkerMuriState(
+                    exactStateByKey,
+                    slideFallbackStateByBaseKey,
+                    marker
+                );
         if (state.playheadSeconds < marker.slideTraceSecond) {
             opacity = sampleSlideTrackPreTraceOpacity(
                 static_cast<qreal>(marker.second),

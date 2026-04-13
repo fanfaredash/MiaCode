@@ -3,6 +3,7 @@
 #include <QSharedPointer>
 #include <QVector>
 
+#include "preview/scene/PreviewActiveMarkerView.h"
 #include "preview/scene/PreviewFrameState.h"
 #include "preview/scene/PreviewSpriteDescriptor.h"
 
@@ -15,6 +16,7 @@ struct PreviewSlideMotionLayerState {
 
 PreviewSlideMotionLayerState buildPreviewSlideMotionLayerState(
     const PreviewFrameState& state,
+    const PreviewActiveMarkerView& markers,
     const QRectF& playfieldRect
 );
 

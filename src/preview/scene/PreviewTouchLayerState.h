@@ -2,6 +2,7 @@
 
 #include <QSharedPointer>
 
+#include "preview/scene/PreviewActiveMarkerView.h"
 #include "preview/scene/PreviewFrameState.h"
 #include "preview/scene/PreviewSpriteDescriptor.h"
 
@@ -14,6 +15,7 @@ struct PreviewTouchLayerState {
 
 PreviewTouchLayerState buildPreviewTouchLayerState(
     const PreviewFrameState& state,
+    const PreviewActiveMarkerView& markers,
     const QRectF& playfieldRect
 );
 
