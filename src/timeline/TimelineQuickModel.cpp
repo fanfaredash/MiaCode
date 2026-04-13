@@ -622,18 +622,21 @@ bool TimelineQuickModel::applyContentsChange(
         LineState& line = lines_[index];
         const ParseState oldStartState = line.startState;
         const ParseState oldEndState = line.endState;
+        const double secondShift = currentState.second - oldStartState.second;
+        const double measureShift =
+            currentState.currentMeasureStartSecond - oldStartState.currentMeasureStartSecond;
         const bool mustReparse = index <= guaranteedReparseEnd
             || qAbs(currentState.bpm - oldStartState.bpm) > kTimelineEpsilon
             || currentState.beats != oldStartState.beats
             || currentState.subdivisionIndex != oldStartState.subdivisionIndex
             || currentState.meterNumerator != oldStartState.meterNumerator
             || currentState.meterDenominator != oldStartState.meterDenominator
-            || qAbs(currentState.currentMeasureStartSecond - oldStartState.currentMeasureStartSecond) > kTimelineEpsilon;
+            || qAbs(secondShift - measureShift) > kTimelineEpsilon;
 
         if (mustReparse) {
             parseLine(&line, currentState);
         } else {
-            shiftLineTiming(&line, currentState.second - oldStartState.second);
+            shiftLineTiming(&line, secondShift);
             line.startState = currentState;
             line.endState.bpm = oldEndState.bpm;
             line.endState.beats = oldEndState.beats;

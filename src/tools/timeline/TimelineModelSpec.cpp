@@ -1104,6 +1104,21 @@ int main(int argc, char** argv)
     }
 
     {
+        const QString original = QStringLiteral(
+            "(193){1},\n"
+            "{1}1>8[4:7],\n"
+            "{1},\n"
+            "{1}1>8[4:7],\n"
+            "{1},\n"
+            "{1}1pp3pp5pp7pp1[4:13],\n"
+            "E");
+        const int position = QStringLiteral("(193)").size();
+        expect(
+            incrementalMatchesRebuild(original, position, 0, QStringLiteral("{8},"), 0.0),
+            QStringLiteral("incremental reparse keeps downstream measure lines aligned after inserting leading {8},"));
+    }
+
+    {
         TimelineQuickModel model;
         model.rebuildFromText(QStringLiteral("1$$bx/1@bx-4[0.5##8:1]/1!-4[0.5##8:1],\nE"), 0.0);
         const TimelineRenderSnapshot snapshot = model.snapshot();
