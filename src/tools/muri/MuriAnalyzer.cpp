@@ -4048,7 +4048,7 @@ void collectSimpleNoteMultiTouchDiagnostics(
             touchGroups,
             touchGroupByChildNoteIndex,
             true,
-            true);
+            false);
     if (renderOptions.excludeTouchFromMultiTouch) {
         actions.erase(
             std::remove_if(actions.begin(), actions.end(), [](const RuntimeHandAction& action) {
