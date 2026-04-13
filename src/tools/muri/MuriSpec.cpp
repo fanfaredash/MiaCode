@@ -213,20 +213,20 @@ int main(int argc, char** argv)
         expect(analyzed.parsed.ok, QStringLiteral("synthetic head-star repro chart parses"));
         expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::SlideHeadTap) == 1,
             QStringLiteral("synthetic head-star repro keeps one runtime slide-head-tap diagnostic"));
-        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::MultiTouch) == 1,
-            QStringLiteral("synthetic head-star repro now reports one multitouch"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::MultiTouch) == 0,
+            QStringLiteral("synthetic head-star repro no longer treats the helper star as a third hand"));
         expect(countStaticReferences(analyzed.staticReferences, MuriKind::SlideHeadTap) == 1,
             QStringLiteral("synthetic head-star repro keeps one static slide-head-tap reference"));
         expect(countStaticReferences(analyzed.staticReferences, MuriKind::TapOnSlide) == 1,
             QStringLiteral("synthetic head-star repro now also catches the earlier slide tail on the head star"));
         expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::SlideHeadTap) == 1,
             QStringLiteral("synthetic head-star repro keeps one visible slide-head-tap entry"));
-        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::MultiTouch) == 1,
-            QStringLiteral("synthetic head-star repro keeps one visible multitouch entry"));
+        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::MultiTouch) == 0,
+            QStringLiteral("synthetic head-star repro keeps multitouch hidden once the helper star aligns with tap behavior"));
         expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::TapOnSlide) == 1,
             QStringLiteral("synthetic head-star repro keeps one visible tap-on-slide entry"));
-        expect(analyzed.visibleEntries.size() == 3,
-            QStringLiteral("synthetic head-star repro now shows all three valid head-star issues"));
+        expect(analyzed.visibleEntries.size() == 2,
+            QStringLiteral("synthetic head-star repro now shows only the two real head-star issues"));
 
         if (const MuriDiagnostic* diagnostic =
                 firstDiagnostic(analyzed.report.diagnostics, MuriKind::SlideHeadTap)) {
@@ -234,17 +234,25 @@ int main(int argc, char** argv)
                 QStringLiteral("synthetic head-star repro runtime detail names the affected star lane"));
         }
 
-        if (const MuriDiagnostic* diagnostic =
-                firstDiagnostic(analyzed.report.diagnostics, MuriKind::MultiTouch)) {
-            expect(diagnostic->detail.contains(QStringLiteral("star 1")),
-                QStringLiteral("synthetic head-star repro multitouch detail distinguishes the head star from tap 1"));
-        }
-
         if (const miacode::muri::MuriPanelEntry* entry =
                 firstVisibleEntry(analyzed.visibleEntries, MuriKind::TapOnSlide)) {
             expect(entry->rawDetail.contains(QStringLiteral("star 1")),
                 QStringLiteral("synthetic head-star repro visible tap-on-slide detail names the star lane"));
         }
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(180){24}\n7/2-4[8:1],,,,,,1/2-6[8:1],\nE\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("user star-alignment repro chart parses"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::MultiTouch) == 0,
+            QStringLiteral("user star-alignment repro no longer reports multitouch"));
+        expect(analyzed.report.diagnostics.isEmpty(),
+            QStringLiteral("user star-alignment repro keeps runtime diagnostics empty"));
+        expect(analyzed.staticReferences.isEmpty(),
+            QStringLiteral("user star-alignment repro keeps static references empty"));
+        expect(analyzed.visibleEntries.isEmpty(),
+            QStringLiteral("user star-alignment repro keeps the Muri panel empty"));
     }
 
     {
