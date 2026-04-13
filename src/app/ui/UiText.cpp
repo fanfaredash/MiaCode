@@ -476,7 +476,6 @@ const QHash<QString, QString>& zhMap()
         {"dialog.video_export.preset", "导出设置"},
         {"dialog.video_export.preset.fast", "快速"},
         {"dialog.video_export.preset.high_quality", "高质量"},
-        {"dialog.video_export.preset.high_compression", "高压缩"},
         {"dialog.video_export.section.options", "选项"},
         {"dialog.video_export.section.range", "导出区间"},
         {"dialog.video_export.range.start", "开始"},

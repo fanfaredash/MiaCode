@@ -59,8 +59,6 @@ QString videoExportPresetToken(VideoExportPreset preset)
     switch (preset) {
     case VideoExportPreset::HighQuality:
         return QStringLiteral("high_quality");
-    case VideoExportPreset::HighCompression:
-        return QStringLiteral("high_compression");
     case VideoExportPreset::Fast:
     default:
         return QStringLiteral("fast");
@@ -73,7 +71,7 @@ VideoExportPreset videoExportPresetFromToken(const QString& token)
         return VideoExportPreset::HighQuality;
     }
     if (token.compare(QStringLiteral("high_compression"), Qt::CaseInsensitive) == 0) {
-        return VideoExportPreset::HighCompression;
+        return VideoExportPreset::HighQuality;
     }
     return VideoExportPreset::Fast;
 }

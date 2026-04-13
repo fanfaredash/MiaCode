@@ -492,8 +492,6 @@ QString videoExportPresetToken(VideoExportPreset preset)
     switch (preset) {
     case VideoExportPreset::HighQuality:
         return QStringLiteral("high_quality");
-    case VideoExportPreset::HighCompression:
-        return QStringLiteral("high_compression");
     case VideoExportPreset::Fast:
     default:
         return QStringLiteral("fast");
@@ -670,21 +668,21 @@ VideoBitratePlan chooseVideoBitratePlan(
     const int safeFps = qMax(1, fps);
 
     VideoBitratePlan plan;
-    if (preset == VideoExportPreset::HighCompression) {
+    if (preset == VideoExportPreset::HighQuality) {
         plan.bitrateKbps = qBound<qint64>(
-            1800LL,
-            qRound64(static_cast<double>(safeWidth) * safeHeight * safeFps * 0.060 / 1000.0),
-            7000LL
+            2600LL,
+            qRound64(static_cast<double>(safeWidth) * safeHeight * safeFps * 0.090 / 1000.0),
+            10500LL
         );
         plan.maxRateKbps = qBound<qint64>(
             plan.bitrateKbps,
-            qRound64(static_cast<double>(plan.bitrateKbps) * 1.30),
-            8500LL
+            qRound64(static_cast<double>(plan.bitrateKbps) * 1.35),
+            14000LL
         );
         plan.bufSizeKbps = qBound<qint64>(
             plan.maxRateKbps,
-            qRound64(static_cast<double>(plan.maxRateKbps) * 1.80),
-            12000LL
+            qRound64(static_cast<double>(plan.maxRateKbps) * 1.75),
+            20000LL
         );
         return plan;
     }
@@ -759,12 +757,8 @@ X264TuningPlan chooseX264TuningPlan(
     }
 
     if (preset == VideoExportPreset::HighQuality) {
-        plan.preset = slowerX264Preset(plan.preset);
-        plan.crf = qMax(16, plan.crf - 1);
-        plan.bframes = qMax(plan.bframes, 2);
-    } else if (preset == VideoExportPreset::HighCompression) {
-        plan.preset = slowerX264Preset(slowerX264Preset(plan.preset));
-        plan.bframes = qMax(plan.bframes, 2);
+        plan.crf = qMax(18, plan.crf - 1);
+        plan.bframes = 0;
     }
 
     if (!exportConfig.x264PresetOverride.isEmpty()) {
@@ -1812,9 +1806,7 @@ VideoEncoderConfig chooseVideoEncoder(
             QStringLiteral("-q:v"),
             preset == VideoExportPreset::HighQuality
                 ? QStringLiteral("3")
-                : (preset == VideoExportPreset::HighCompression
-                    ? QStringLiteral("5")
-                    : QStringLiteral("4"))
+                : QStringLiteral("4")
         };
         if (probeLog != nullptr) {
             *probeLog = QStringLiteral("encoder_probe_start_failed error=%1 fallback=%2")
@@ -1849,8 +1841,6 @@ VideoEncoderConfig chooseVideoEncoder(
         switch (preset) {
         case VideoExportPreset::HighQuality:
             return QStringList{QStringLiteral("-q:v"), QStringLiteral("3")};
-        case VideoExportPreset::HighCompression:
-            return QStringList{QStringLiteral("-q:v"), QStringLiteral("5")};
         case VideoExportPreset::Fast:
         default:
             return QStringList{QStringLiteral("-q:v"), QStringLiteral("4")};
@@ -1890,53 +1880,10 @@ VideoEncoderConfig chooseVideoEncoder(
             return item;
         }
 
-        if (codec == QLatin1String("h264_nvenc") || codec == QLatin1String("hevc_nvenc")) {
-            item.extraArgs = {
-                QStringLiteral("-preset"),
-                preset == VideoExportPreset::HighQuality ? QStringLiteral("p6") : QStringLiteral("p7"),
-                QStringLiteral("-tune"), QStringLiteral("hq"),
-                QStringLiteral("-rc"), QStringLiteral("vbr_hq"),
-                QStringLiteral("-spatial_aq"), QStringLiteral("1"),
-                QStringLiteral("-temporal_aq"), QStringLiteral("1"),
-                QStringLiteral("-aq-strength"),
-                preset == VideoExportPreset::HighQuality ? QStringLiteral("8") : QStringLiteral("10")
-            };
-            if (preset == VideoExportPreset::HighCompression) {
-                item.extraArgs << QStringLiteral("-rc-lookahead") << QStringLiteral("20");
-            }
-        } else if (codec == QLatin1String("h264_qsv") || codec == QLatin1String("hevc_qsv")) {
-            item.extraArgs = {
-                QStringLiteral("-preset"),
-                preset == VideoExportPreset::HighQuality ? QStringLiteral("slow") : QStringLiteral("slower"),
-                QStringLiteral("-extbrc"), QStringLiteral("1"),
-                QStringLiteral("-look_ahead_depth"),
-                preset == VideoExportPreset::HighQuality ? QStringLiteral("20") : QStringLiteral("30"),
-                QStringLiteral("-mbbrc"), QStringLiteral("1"),
-                QStringLiteral("-adaptive_i"), QStringLiteral("1"),
-                QStringLiteral("-adaptive_b"), QStringLiteral("1")
-            };
-        } else if (codec == QLatin1String("h264_amf") || codec == QLatin1String("hevc_amf")) {
-            item.extraArgs = {
-                QStringLiteral("-usage"), QStringLiteral("high_quality"),
-                QStringLiteral("-quality"), QStringLiteral("quality"),
-                QStringLiteral("-rc"), QStringLiteral("hqvbr"),
-                QStringLiteral("-qvbr_quality_level"),
-                preset == VideoExportPreset::HighQuality ? QStringLiteral("20") : QStringLiteral("22"),
-                QStringLiteral("-preanalysis"), QStringLiteral("1"),
-                QStringLiteral("-vbaq"), QStringLiteral("1")
-            };
-        } else if (codec == QLatin1String("h264_mf") || codec == QLatin1String("hevc_mf")) {
-            item.extraArgs = {
-                QStringLiteral("-scenario"), QStringLiteral("archive"),
-                QStringLiteral("-quality"),
-                preset == VideoExportPreset::HighQuality ? QStringLiteral("90") : QStringLiteral("84")
-            };
-        } else {
-            item.extraArgs = bitrateArgs;
-        }
-
-        item.extraArgs << bitrateArgs;
-        item.explicitBframes = isH264Codec ? 2 : -1;
+        // Keep the high-quality preset on the same conservative hardware path
+        // as fast mode, and raise quality through bitrate/CRF instead.
+        item.extraArgs = bitrateArgs;
+        item.explicitBframes = isH264Codec ? 0 : -1;
         return item;
     };
     const QString forcedEncoder = exportConfig.forcedEncoder;

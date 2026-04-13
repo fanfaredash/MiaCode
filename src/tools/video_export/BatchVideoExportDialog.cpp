@@ -106,8 +106,6 @@ QString videoExportPresetToken(VideoExportPreset preset)
     switch (preset) {
     case VideoExportPreset::HighQuality:
         return QStringLiteral("high_quality");
-    case VideoExportPreset::HighCompression:
-        return QStringLiteral("high_compression");
     case VideoExportPreset::Fast:
     default:
         return QStringLiteral("fast");
@@ -122,7 +120,7 @@ VideoExportPreset videoExportPresetFromStoredValue(const QJsonValue& value, Vide
             return VideoExportPreset::HighQuality;
         }
         if (token.compare(QStringLiteral("high_compression"), Qt::CaseInsensitive) == 0) {
-            return VideoExportPreset::HighCompression;
+            return VideoExportPreset::HighQuality;
         }
         if (token.compare(QStringLiteral("fast"), Qt::CaseInsensitive) == 0) {
             return VideoExportPreset::Fast;
@@ -136,8 +134,6 @@ QString exportDialogPresetLabel(VideoExportPreset preset)
     switch (preset) {
     case VideoExportPreset::HighQuality:
         return uiText("dialog.video_export.preset.high_quality", QStringLiteral("High Quality"));
-    case VideoExportPreset::HighCompression:
-        return uiText("dialog.video_export.preset.high_compression", QStringLiteral("High Compression"));
     case VideoExportPreset::Fast:
     default:
         return uiText("dialog.video_export.preset.fast", QStringLiteral("Fast"));
@@ -485,17 +481,6 @@ BatchVideoExportDialog::BatchVideoExportDialog(
         uiText("dialog.video_export.preset.high_quality", QStringLiteral("High Quality")),
         [this]() {
             selectedPreset_ = VideoExportPreset::HighQuality;
-            if (presetButton_ != nullptr) {
-                presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
-            }
-            persistExportOnlySettings();
-        }
-    );
-    addDialogMenuChoice(
-        presetMenu_,
-        uiText("dialog.video_export.preset.high_compression", QStringLiteral("High Compression")),
-        [this]() {
-            selectedPreset_ = VideoExportPreset::HighCompression;
             if (presetButton_ != nullptr) {
                 presetButton_->setText(exportDialogPresetLabel(selectedPreset_));
             }
