@@ -1,7 +1,9 @@
 #pragma once
 
 #include <QMetaObject>
+#include <QMutex>
 #include <QPointer>
+#include <QQueue>
 #include <QQuickItem>
 #include <QSize>
 #include <QString>
@@ -56,6 +58,9 @@ protected:
 
 private:
     QString instanceTag() const;
+    void clearPendingTextureStatsForPresentation();
+    void enqueueTextureStatsForPresentation(const PreviewTextureStats& stats);
+    PreviewTextureStats takePendingTextureStatsForPresentation() const;
     void syncVisibleHostWindowBinding(const char* reason = "unspecified");
 
     PreviewRuntime* runtime_ = nullptr;
@@ -98,6 +103,8 @@ private:
     quint64 updatePaintNodeCount_ = 0;
     quint64 geometryChangeCount_ = 0;
     quint64 instanceId_ = 0;
+    mutable QMutex latestTextureStatsMutex_;
+    mutable QQueue<PreviewTextureStats> pendingTextureStats_;
     bool lastLoggedHasWindow_ = false;
     bool lastLoggedHasState_ = false;
     QSize lastLoggedRenderSize_;

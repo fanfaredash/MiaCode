@@ -40,7 +40,7 @@
         QLabel* currentFileLabel_ = nullptr;
         QTimer* autosaveTimer_ = nullptr;
         QTimer* autosaveIdleTimer_ = nullptr;
-        QTimer* qtPreviewTimer_ = nullptr;
+        QChronoTimer* qtPreviewTimer_ = nullptr;
         QTimer* qtPreviewTimelineTimer_ = nullptr;
         QTimer* previewStatsUiTimer_ = nullptr;
         QTimer* previewSeekDebounceTimer_ = nullptr;
@@ -259,6 +259,7 @@
         QElapsedTimer qtPreviewElapsed_;
         QElapsedTimer qtPreviewWatchdogElapsed_;
         qint64 qtPreviewNextFixedTickDueNs_ = -1;
+        qint64 qtPreviewFixedTickOriginNs_ = -1;
         double qtPreviewTimelineStartSecond_ = 0.0;
         QElapsedTimer qtPreviewTimelineElapsed_;
         quint64 pausedSeekGeneration_ = 0;
@@ -375,7 +376,7 @@
     QLabel*& currentFileLabel_ = ui_.currentFileLabel_;
     QTimer*& autosaveTimer_ = ui_.autosaveTimer_;
     QTimer*& autosaveIdleTimer_ = ui_.autosaveIdleTimer_;
-    QTimer*& qtPreviewTimer_ = ui_.qtPreviewTimer_;
+    QChronoTimer*& qtPreviewTimer_ = ui_.qtPreviewTimer_;
     QTimer*& qtPreviewTimelineTimer_ = ui_.qtPreviewTimelineTimer_;
     QTimer*& previewStatsUiTimer_ = ui_.previewStatsUiTimer_;
     QTimer*& previewSeekDebounceTimer_ = ui_.previewSeekDebounceTimer_;
@@ -494,6 +495,7 @@
     QElapsedTimer& qtPreviewElapsed_ = state_.qtPreviewElapsed_;
     QElapsedTimer& qtPreviewWatchdogElapsed_ = state_.qtPreviewWatchdogElapsed_;
     qint64& qtPreviewNextFixedTickDueNs_ = state_.qtPreviewNextFixedTickDueNs_;
+    qint64& qtPreviewFixedTickOriginNs_ = state_.qtPreviewFixedTickOriginNs_;
     double& qtPreviewTimelineStartSecond_ = state_.qtPreviewTimelineStartSecond_;
     QElapsedTimer& qtPreviewTimelineElapsed_ = state_.qtPreviewTimelineElapsed_;
     quint64& pausedSeekGeneration_ = state_.pausedSeekGeneration_;

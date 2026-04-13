@@ -85,6 +85,22 @@ void recordIntervalSample(
     lastSampleNs = nowNs;
 }
 
+PreviewRuntimeLayerProfileAggregate& ensureLayerProfileAggregate(
+    QVector<PreviewRuntimeLayerProfileAggregate>* aggregates,
+    const QString& name)
+{
+    Q_ASSERT(aggregates != nullptr);
+
+    for (PreviewRuntimeLayerProfileAggregate& aggregate : *aggregates) {
+        if (aggregate.name == name) {
+            return aggregate;
+        }
+    }
+
+    aggregates->append(PreviewRuntimeLayerProfileAggregate{name});
+    return aggregates->last();
+}
+
 }  // namespace
 
 PreviewRuntime::PreviewRuntime(QObject* parent)
@@ -467,6 +483,109 @@ void PreviewRuntime::noteTickForProfiling()
     );
 }
 
+void PreviewRuntime::notePresentedTextureStats(const PreviewTextureStats& stats)
+{
+    if (!miacode::debug_options::previewProfileOutputEnabled()) {
+        return;
+    }
+    profilingSummaryDirty_ = true;
+    profiledTextureFrameCount_ += 1;
+    cachedTextureHitTotal_ += stats.cachedHitCount;
+    cachedTextureCreateTotal_ += stats.cachedCreateCount;
+    transientTextureHitTotal_ += stats.transientHitCount;
+    transientTextureCreateTotal_ += stats.transientCreateCount;
+    spriteCountTotal_ += stats.spriteCount;
+    spriteBatchCountTotal_ += stats.spriteBatchCount;
+    spriteCountMax_ = qMax(spriteCountMax_, stats.spriteCount);
+    spriteBatchCountMax_ = qMax(spriteBatchCountMax_, stats.spriteBatchCount);
+    if (stats.spriteCount > 0 || stats.spriteBatchCount > 0) {
+        profiledActiveSpriteFrameCount_ += 1;
+    }
+
+    double frameLayerBuildTotalMs = 0.0;
+    for (const PreviewTextureLayerStats& layerStat : stats.layerStats) {
+        PreviewRuntimeLayerProfileAggregate& aggregate =
+            ensureLayerProfileAggregate(&layerProfileAggregates_, layerStat.name);
+        aggregate.spriteCountSum += layerStat.spriteCount;
+        aggregate.spriteBatchCountSum += layerStat.spriteBatchCount;
+        aggregate.candidateCountSum += layerStat.candidateCount;
+        aggregate.activeCountSum += layerStat.activeCount;
+        aggregate.buildMsSum += layerStat.buildMs;
+        aggregate.spriteCountMax = qMax(aggregate.spriteCountMax, layerStat.spriteCount);
+        aggregate.spriteBatchCountMax = qMax(aggregate.spriteBatchCountMax, layerStat.spriteBatchCount);
+        aggregate.candidateCountMax = qMax(aggregate.candidateCountMax, layerStat.candidateCount);
+        aggregate.activeCountMax = qMax(aggregate.activeCountMax, layerStat.activeCount);
+        aggregate.buildMsMax = qMax(aggregate.buildMsMax, layerStat.buildMs);
+        if (layerStat.spriteCount > 0 || layerStat.spriteBatchCount > 0 || layerStat.activeCount > 0) {
+            aggregate.spriteActiveFrameCount += 1;
+        }
+        frameLayerBuildTotalMs += layerStat.buildMs;
+    }
+
+    layerBuildMsTotal_ += frameLayerBuildTotalMs;
+    layerBuildMsMax_ = qMax(layerBuildMsMax_, frameLayerBuildTotalMs);
+    if (frameLayerBuildTotalMs >= peakFrameLayerBuildMs_) {
+        peakFrameLayerBuildMs_ = frameLayerBuildTotalMs;
+        peakFrameSpriteCount_ = stats.spriteCount;
+        peakFrameSpriteBatchCount_ = stats.spriteBatchCount;
+    }
+
+    const PreviewStageBackgroundFrameProfile& stageBackground = stats.stageBackground;
+    stageBackgroundProfile_.mediaFrameCount += stageBackground.mediaFrameCount;
+    stageBackgroundProfile_.dimFrameCount += stageBackground.dimFrameCount;
+    stageBackgroundProfile_.videoFrameCount += stageBackground.videoFrameCount;
+    stageBackgroundProfile_.staticImageFrameCount += stageBackground.staticImageFrameCount;
+    stageBackgroundProfile_.dimUniformUpdateCount += stageBackground.dimUniformUpdateCount;
+
+    if (stageBackground.mediaToImageMs > 0.0 || stageBackground.videoFrameCount > 0) {
+        stageBackgroundProfile_.mediaToImageMsSum += stageBackground.mediaToImageMs;
+        stageBackgroundProfile_.mediaToImageMsMax =
+            qMax(stageBackgroundProfile_.mediaToImageMsMax, stageBackground.mediaToImageMs);
+        stageBackgroundProfile_.mediaToImageSampleCount += 1;
+    }
+    if (stageBackground.mediaTextureMs > 0.0 || stageBackground.mediaFrameCount > 0) {
+        stageBackgroundProfile_.mediaTextureMsSum += stageBackground.mediaTextureMs;
+        stageBackgroundProfile_.mediaTextureMsMax =
+            qMax(stageBackgroundProfile_.mediaTextureMsMax, stageBackground.mediaTextureMs);
+        stageBackgroundProfile_.mediaTextureSampleCount += 1;
+    }
+    if (stageBackground.dimUniformUpdateMs > 0.0 || stageBackground.dimUniformUpdateCount > 0) {
+        stageBackgroundProfile_.dimUniformUpdateMsSum += stageBackground.dimUniformUpdateMs;
+        stageBackgroundProfile_.dimUniformUpdateMsMax =
+            qMax(stageBackgroundProfile_.dimUniformUpdateMsMax, stageBackground.dimUniformUpdateMs);
+        stageBackgroundProfile_.dimUniformUpdateSampleCount += 1;
+    }
+    if (stageBackground.nodeUpdateMs > 0.0
+        || stageBackground.mediaFrameCount > 0
+        || stageBackground.dimFrameCount > 0) {
+        stageBackgroundProfile_.nodeUpdateMsSum += stageBackground.nodeUpdateMs;
+        stageBackgroundProfile_.nodeUpdateMsMax =
+            qMax(stageBackgroundProfile_.nodeUpdateMsMax, stageBackground.nodeUpdateMs);
+        stageBackgroundProfile_.nodeUpdateSampleCount += 1;
+    }
+}
+
+void PreviewRuntime::noteFixedTimerDeadlineMetrics(qint64 latenessNs, int catchupTicks, qint64 skippedIntervals)
+{
+    if (!miacode::debug_options::previewProfileOutputEnabled()) {
+        return;
+    }
+    profilingSummaryDirty_ = true;
+    if (latenessNs > 0) {
+        const double latenessMs = static_cast<double>(latenessNs) / 1000000.0;
+        fixedTimerLateWakeupCount_ += 1;
+        fixedTimerLatenessSumMs_ += latenessMs;
+        fixedTimerLatenessMaxMs_ = qMax(fixedTimerLatenessMaxMs_, latenessMs);
+        fixedTimerLatenessSampleCount_ += 1;
+    }
+    if (catchupTicks > 0) {
+        fixedTimerCatchupTickCount_ += catchupTicks;
+    }
+    if (skippedIntervals > 0) {
+        fixedTimerSkippedIntervalCount_ += skippedIntervals;
+    }
+}
+
 void PreviewRuntime::resetProfilingSession()
 {
     presentTimer_.invalidate();
@@ -520,6 +639,12 @@ void PreviewRuntime::resetProfilingSession()
     tickCountTotal_ = 0;
     updateRequestCountTotal_ = 0;
     presentedFrameCountTotal_ = 0;
+    fixedTimerLateWakeupCount_ = 0;
+    fixedTimerCatchupTickCount_ = 0;
+    fixedTimerSkippedIntervalCount_ = 0;
+    fixedTimerLatenessSumMs_ = 0.0;
+    fixedTimerLatenessMaxMs_ = 0.0;
+    fixedTimerLatenessSampleCount_ = 0;
 }
 
 QString PreviewRuntime::writeProfilingSummaryToFile()
@@ -575,6 +700,13 @@ QString PreviewRuntime::writeProfilingSummaryToFile()
     stream << "update_request_fps=" << QString::number(frameState_.updateRequestFpsDisplay, 'f', 4) << '\n';
     stream << "update_request_session_fps="
            << QString::number(fpsFromAverageMs(updateRequestSessionAvgMs), 'f', 4) << '\n';
+    stream << "fixed_timer.late_wakeups=" << fixedTimerLateWakeupCount_ << '\n';
+    stream << "fixed_timer.lateness_avg_ms="
+           << QString::number(averageOrZero(fixedTimerLatenessSumMs_, fixedTimerLatenessSampleCount_), 'f', 4)
+           << '\n';
+    stream << "fixed_timer.lateness_max_ms=" << QString::number(fixedTimerLatenessMaxMs_, 'f', 4) << '\n';
+    stream << "fixed_timer.catchup_ticks_total=" << fixedTimerCatchupTickCount_ << '\n';
+    stream << "fixed_timer.skipped_intervals_total=" << fixedTimerSkippedIntervalCount_ << '\n';
     stream << "frame_pacing.mode="
            << (frameState_.framePacingUsesDisplayRefresh ? "display_refresh" : "fixed_interval") << '\n';
     stream << "frame_pacing.target_fps=" << QString::number(frameState_.framePacingTargetFps, 'f', 4) << '\n';

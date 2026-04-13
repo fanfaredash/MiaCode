@@ -1,5 +1,6 @@
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
 
+#include "common/DebugOptions.h"
 #include "common/DebugLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/scene/PreviewFrameState.h"
@@ -7,6 +8,7 @@
 
 #include <QElapsedTimer>
 #include <QAtomicInteger>
+#include <QMutexLocker>
 #include <QQuickWindow>
 #include <QSGNode>
 
@@ -187,6 +189,12 @@ QString PreviewQuickSceneRoot::instanceTag() const
     return QStringLiteral("instance=%1").arg(instanceId_);
 }
 
+void PreviewQuickSceneRoot::clearPendingTextureStatsForPresentation()
+{
+    QMutexLocker locker(&latestTextureStatsMutex_);
+    pendingTextureStats_.clear();
+}
+
 void PreviewQuickSceneRoot::setRuntime(PreviewRuntime* runtime)
 {
     if (runtime_ == runtime) {
@@ -198,6 +206,7 @@ void PreviewQuickSceneRoot::setRuntime(PreviewRuntime* runtime)
     if (runtimeUpdateConnection_) {
         QObject::disconnect(runtimeUpdateConnection_);
     }
+    clearPendingTextureStatsForPresentation();
     runtime_ = runtime;
     if (runtime_ != nullptr) {
         frameState_ = nullptr;
@@ -241,6 +250,7 @@ void PreviewQuickSceneRoot::setFrameState(const miacode::preview::scene::Preview
         QObject::disconnect(frameSwapConnection_);
         frameSwapConnection_ = QMetaObject::Connection();
     }
+    clearPendingTextureStatsForPresentation();
     frameState_ = frameState;
     if (frameState_ != nullptr) {
         runtime_ = nullptr;
@@ -290,6 +300,24 @@ PreviewTextureStats PreviewQuickSceneRoot::textureStats() const
     return stats;
 }
 
+void PreviewQuickSceneRoot::enqueueTextureStatsForPresentation(const PreviewTextureStats& stats)
+{
+    QMutexLocker locker(&latestTextureStatsMutex_);
+    pendingTextureStats_.enqueue(stats);
+    while (pendingTextureStats_.size() > 8) {
+        pendingTextureStats_.dequeue();
+    }
+}
+
+PreviewTextureStats PreviewQuickSceneRoot::takePendingTextureStatsForPresentation() const
+{
+    QMutexLocker locker(&latestTextureStatsMutex_);
+    if (pendingTextureStats_.isEmpty()) {
+        return PreviewTextureStats();
+    }
+    return pendingTextureStats_.dequeue();
+}
+
 void PreviewQuickSceneRoot::syncVisibleHostWindowBinding(const char* reason)
 {
     const QString reasonText = QString::fromLatin1(reason != nullptr ? reason : "unspecified");
@@ -315,7 +343,11 @@ void PreviewQuickSceneRoot::syncVisibleHostWindowBinding(const char* reason)
         runtime_->clearVisibleHostWindow(boundWindow_);
     }
 
+    const QPointer<QQuickWindow> previousBoundWindow = boundWindow_;
     boundWindow_ = window();
+    if (previousBoundWindow != boundWindow_) {
+        clearPendingTextureStatsForPresentation();
+    }
     if (runtime_ == nullptr || boundWindow_ == nullptr || !isVisible() || !boundWindow_->isVisible()) {
         appendQuickSceneLog(
             QStringLiteral("visible_host_skip"),
@@ -354,6 +386,9 @@ void PreviewQuickSceneRoot::syncVisibleHostWindowBinding(const char* reason)
     frameSwapConnection_ = QObject::connect(boundWindow_, &QQuickWindow::frameSwapped, this, [this]() {
         if (runtime_ == nullptr || boundWindow_ == nullptr || window() != boundWindow_) {
             return;
+        }
+        if (miacode::debug_options::previewProfileOutputEnabled()) {
+            runtime_->notePresentedTextureStats(takePendingTextureStatsForPresentation());
         }
         runtime_->notifyVisibleFramePresented();
     });
@@ -404,6 +439,9 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
     ++updatePaintNodeCount_;
 
     if (!hasState || !hasWindow) {
+        if (miacode::debug_options::previewProfileOutputEnabled()) {
+            enqueueTextureStatsForPresentation(textureStats());
+        }
         return root;
     }
 
@@ -683,6 +721,9 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         preparedCache_.maimuriDxJudgeLayer().entries.size(),
         maimuriDxJudgeCursor_.activePreparedIndices.size()
     );
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        enqueueTextureStatsForPresentation(textureStats());
+    }
     return root;
 }
 
