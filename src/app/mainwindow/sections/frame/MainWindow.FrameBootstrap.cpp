@@ -970,16 +970,18 @@ MainWindow::MainWindow(QWidget* parent)
             clearPreviewFollowDecoration();
             return;
         }
-        if (!qtPreviewPlaying_ || !hasActiveDifficulty()) {
+        if (!hasActiveDifficulty()) {
             return;
         }
         double second = qMax(0.0, qtPreviewPauseSecond_);
-        if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
-            second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-        } else if (previewStageMediaRouteHasVideo()) {
-            second = qMax(0.0, previewStageMediaRouteCurrentPlaybackSecond());
+        if (qtPreviewPlaying_) {
+            if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
+                second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
+            } else if (previewStageMediaRouteHasVideo()) {
+                second = qMax(0.0, previewStageMediaRouteCurrentPlaybackSecond());
+            }
         }
-        syncEditorCursorToPreviewSecond(second, false);
+        syncEditorCursorToPreviewSecond(second, false, !qtPreviewPlaying_);
     });
     bottomTabs_->addTab(timelineView_, uiText("tab.timeline", "Timeline"));
 
@@ -1002,14 +1004,16 @@ MainWindow::MainWindow(QWidget* parent)
             updateEditorEmptyState();
             updateEditorStatus();
             if (timelineView_ != nullptr && hasActiveDifficulty()) {
-                if (qtPreviewPlaying_ && timelineView_->followPreviewEnabled()) {
+                if (timelineView_->followPreviewEnabled()) {
                     double second = qMax(0.0, qtPreviewPauseSecond_);
-                    if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
-                        second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-                    } else if (previewStageMediaRouteHasVideo()) {
-                        second = qMax(0.0, previewStageMediaRouteCurrentPlaybackSecond());
+                    if (qtPreviewPlaying_) {
+                        if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
+                            second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
+                        } else if (previewStageMediaRouteHasVideo()) {
+                            second = qMax(0.0, previewStageMediaRouteCurrentPlaybackSecond());
+                        }
                     }
-                    syncEditorCursorToPreviewSecond(second, false);
+                    syncEditorCursorToPreviewSecond(second, false, false);
                 } else {
                     syncTimelineToEditorCursor(!qtPreviewPlaying_);
                 }

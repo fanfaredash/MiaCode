@@ -168,7 +168,10 @@
         bool centerView,
         bool suppressSignals
     );
-    void syncEditorCursorToPreviewSecond(double second, bool centerView = true);
+    void syncEditorCursorToPreviewSecond(
+        double second,
+        bool centerView = true,
+        bool ensureVisibleWhenPaused = false);
     void jumpToNearestTimelineNote(double second, int lane);
     bool startQtPreviewPlayback(double second, bool resumeFromPause = false);
     void stopQtPreviewPlayback(bool keepPosition = true);

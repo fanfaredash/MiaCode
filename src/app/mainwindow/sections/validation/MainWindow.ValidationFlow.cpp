@@ -653,6 +653,49 @@ bool buildEditorSelectionCursor(PlainCodeEditor* editor, int line, int col, int 
     return true;
 }
 
+void ensureEditorSelectionVisible(PlainCodeEditor* editor, const QTextCursor& selectionCursor)
+{
+    if (editor == nullptr || editor->viewport() == nullptr) {
+        return;
+    }
+
+    QTextCursor startCursor = selectionCursor;
+    startCursor.setPosition(selectionCursor.selectionStart());
+    startCursor.clearSelection();
+    QTextCursor endCursor = selectionCursor;
+    const int endPosition = qMax(selectionCursor.selectionStart(), selectionCursor.selectionEnd() - 1);
+    endCursor.setPosition(endPosition);
+    endCursor.clearSelection();
+
+    const auto selectionRect = [editor, &startCursor, &endCursor]() {
+        return editor->cursorRect(startCursor).united(editor->cursorRect(endCursor));
+    };
+
+    const int verticalMargin = qMax(12, editor->fontMetrics().height());
+    if (QScrollBar* vbar = editor->verticalScrollBar()) {
+        QRect targetRect = selectionRect();
+        if (targetRect.top() < verticalMargin) {
+            const int nextValue = vbar->value() + targetRect.top() - verticalMargin;
+            vbar->setValue(qBound(vbar->minimum(), nextValue, vbar->maximum()));
+        } else if (targetRect.bottom() > editor->viewport()->height() - verticalMargin) {
+            const int nextValue = vbar->value() + targetRect.bottom() - editor->viewport()->height() + verticalMargin;
+            vbar->setValue(qBound(vbar->minimum(), nextValue, vbar->maximum()));
+        }
+    }
+
+    const int horizontalMargin = qMax(16, editor->fontMetrics().horizontalAdvance(QLatin1Char('M')));
+    if (QScrollBar* hbar = editor->horizontalScrollBar()) {
+        QRect targetRect = selectionRect();
+        if (targetRect.left() < horizontalMargin) {
+            const int nextValue = hbar->value() + targetRect.left() - horizontalMargin;
+            hbar->setValue(qBound(hbar->minimum(), nextValue, hbar->maximum()));
+        } else if (targetRect.right() > editor->viewport()->width() - horizontalMargin) {
+            const int nextValue = hbar->value() + targetRect.right() - editor->viewport()->width() + horizontalMargin;
+            hbar->setValue(qBound(hbar->minimum(), nextValue, hbar->maximum()));
+        }
+    }
+}
+
 }  // namespace
 
 void MainWindow::ValidationSection::refreshEditorExtraSelections()
@@ -687,7 +730,7 @@ void MainWindow::ValidationSection::refreshEditorExtraSelections()
                 editor,
                 state_.previewFollowDecorationLine_,
                 state_.previewFollowDecorationCol_,
-                state_.previewFollowDecorationCol_,
+                state_.previewFollowDecorationEndCol_,
                 &cursor)) {
             QTextEdit::ExtraSelection sel;
             sel.cursor = cursor;
@@ -843,12 +886,33 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
     owner_.updateEditorHeaderLayoutMode();
 }
 
-void MainWindow::ValidationSection::setPreviewFollowDecoration(int line, int col)
+void MainWindow::ValidationSection::setPreviewFollowDecoration(int line, int col, int endCol, bool ensureVisible)
 {
     state_.previewFollowDecorationActive_ = true;
     state_.previewFollowDecorationLine_ = qMax(1, line);
     state_.previewFollowDecorationCol_ = qMax(1, col);
+    state_.previewFollowDecorationEndCol_ = qMax(state_.previewFollowDecorationCol_, endCol >= 0 ? endCol : col);
     refreshEditorExtraSelections();
+
+    if (!ensureVisible) {
+        return;
+    }
+
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr) {
+        return;
+    }
+
+    QTextCursor cursor;
+    if (!buildEditorSelectionCursor(
+            editor,
+            state_.previewFollowDecorationLine_,
+            state_.previewFollowDecorationCol_,
+            state_.previewFollowDecorationEndCol_,
+            &cursor)) {
+        return;
+    }
+    ensureEditorSelectionVisible(editor, cursor);
 }
 
 void MainWindow::ValidationSection::clearPreviewFollowDecoration()
@@ -1017,9 +1081,9 @@ void MainWindow::updateEditorValidationSummary()
     validationSection_->updateEditorValidationSummary();
 }
 
-void MainWindow::setPreviewFollowDecoration(int line, int col)
+void MainWindow::setPreviewFollowDecoration(int line, int col, int endCol, bool ensureVisible)
 {
-    validationSection_->setPreviewFollowDecoration(line, col);
+    validationSection_->setPreviewFollowDecoration(line, col, endCol, ensureVisible);
 }
 
 void MainWindow::clearPreviewFollowDecoration()
@@ -1073,4 +1137,3 @@ void MainWindow::onMuriItemActivated(QListWidgetItem* item)
 {
     validationSection_->onMuriItemActivated(item);
 }
-

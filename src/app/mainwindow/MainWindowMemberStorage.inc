@@ -322,6 +322,7 @@
         bool previewFollowDecorationActive_ = false;
         int previewFollowDecorationLine_ = 1;
         int previewFollowDecorationCol_ = 1;
+        int previewFollowDecorationEndCol_ = 1;
         QString activeOutlineKey_ = "metadata";
         int activeDifficultyId_ = 0;
     };
@@ -648,5 +649,6 @@
     bool& previewFollowDecorationActive_ = state_.previewFollowDecorationActive_;
     int& previewFollowDecorationLine_ = state_.previewFollowDecorationLine_;
     int& previewFollowDecorationCol_ = state_.previewFollowDecorationCol_;
+    int& previewFollowDecorationEndCol_ = state_.previewFollowDecorationEndCol_;
     QString& activeOutlineKey_ = state_.activeOutlineKey_;
     int& activeDifficultyId_ = state_.activeDifficultyId_;

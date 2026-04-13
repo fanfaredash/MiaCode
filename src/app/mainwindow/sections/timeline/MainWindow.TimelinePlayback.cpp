@@ -588,7 +588,13 @@ void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool cen
     if (!state_.qtPreviewPlaying_) {
         updatePreviewObjectStats(second);
     }
-    if (state_.qtPreviewPlaying_) {
+    if (ui_.timelineView_ != nullptr && ui_.timelineView_->followPreviewEnabled()) {
+        if (state_.qtPreviewPlaying_) {
+            syncEditorCursorToPreviewSecond(second, centerView);
+        } else {
+            updatePreviewFollowDecorationForTimelineBlueLine(second, true);
+        }
+    } else if (state_.qtPreviewPlaying_) {
         syncEditorCursorToPreviewSecond(second, centerView);
     }
 }
