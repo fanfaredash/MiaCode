@@ -133,10 +133,11 @@ void QtPreviewSfxRuntime::initializeBackgroundTrack()
     backgroundTrackVoice_ = voice;
     backgroundTrackConfigured_ = true;
     resetBackgroundTrackSessionState(playbackSession_.backgroundTrackLastTimelineSecond);
-    ma_sound_set_volume(&backgroundTrackVoice_->sound, static_cast<float>(settings_.bgmVolume));
-    appendAudioDebugLog(QString("initializeBackgroundTrack ok path=%1 volume=%2")
+    ma_sound_set_volume(&backgroundTrackVoice_->sound, static_cast<float>(previewBgmVolume(settings_)));
+    appendAudioDebugLog(QString("initializeBackgroundTrack ok path=%1 volume=%2 effective=%3")
                             .arg(preparedAssets_.trackPath)
-                            .arg(settings_.bgmVolume, 0, 'f', 3));
+                            .arg(settings_.bgmVolume, 0, 'f', 3)
+                            .arg(previewBgmVolume(settings_), 0, 'f', 3));
 }
 
 void QtPreviewSfxRuntime::applyVolumes()
@@ -161,10 +162,10 @@ void QtPreviewSfxRuntime::applyVolumes()
     applyVolume(touchSfx_, previewSfxVolumeForKind(settings_, "touch"));
     applyVolume(fireworkSfx_, previewSfxVolumeForKind(settings_, "firework"));
     if (backgroundTrackVoice_ != nullptr && backgroundTrackVoice_->initialized) {
-        ma_sound_set_volume(&backgroundTrackVoice_->sound, static_cast<float>(settings_.bgmVolume));
+        ma_sound_set_volume(&backgroundTrackVoice_->sound, static_cast<float>(previewBgmVolume(settings_)));
     }
     if (stretchedBackgroundState_ != nullptr && stretchedBackgroundState_->soundInitialized) {
-        ma_sound_set_volume(&stretchedBackgroundState_->sound, static_cast<float>(settings_.bgmVolume));
+        ma_sound_set_volume(&stretchedBackgroundState_->sound, static_cast<float>(previewBgmVolume(settings_)));
     }
     for (TouchholdVoice& voice : touchholdVoices_) {
         if (voice.voice != nullptr && voice.voice->initialized) {
@@ -312,7 +313,7 @@ bool QtPreviewSfxRuntime::prepareStretchedBackgroundTrack(double timelineSecond)
         return false;
     }
     state->soundInitialized = true;
-    ma_sound_set_volume(&state->sound, static_cast<float>(settings_.bgmVolume));
+    ma_sound_set_volume(&state->sound, static_cast<float>(previewBgmVolume(settings_)));
     stretchedBackgroundState_ = state;
     appendAudioDebugLog(QString("prepareStretchedBackgroundTrack ready track=%1 rate=%2 channels=%3 sampleRate=%4")
                             .arg(state->trackPath)
