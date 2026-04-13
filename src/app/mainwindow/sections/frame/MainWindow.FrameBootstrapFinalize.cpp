@@ -149,34 +149,62 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     autosaveIdleTimer_->setInterval(kAutosaveLatestIdleMs);
     connect(autosaveIdleTimer_, &QTimer::timeout, this, [this]() { runAutosaveCheck(false); });
 
-    qtPreviewTimer_ = new QTimer(this);
-    qtPreviewTimer_->setInterval(16);
+    qtPreviewTimer_ = new QChronoTimer(this);
+    qtPreviewTimer_->setInterval(std::chrono::milliseconds(16));
     qtPreviewTimer_->setSingleShot(true);
     qtPreviewTimer_->setTimerType(Qt::PreciseTimer);
-    connect(qtPreviewTimer_, &QTimer::timeout, this, [this]() {
+    connect(qtPreviewTimer_, &QChronoTimer::timeout, this, [this]() {
         if (!qtPreviewPlaying_) {
             return;
         }
         const bool usingFrameSwapPacing =
             previewCanvas_ != nullptr && previewCanvasUsesFrameSwappedPacing();
         if (!usingFrameSwapPacing) {
-            onQtPreviewTick();
-            if (!qtPreviewPlaying_) {
-                return;
+            const qint64 frameIntervalNs = previewCanvasTargetFrameIntervalNs();
+            if (qtPreviewNextFixedTickDueNs_ < 0 || qtPreviewFixedTickOriginNs_ < 0) {
+                resetQtPreviewFixedFramePacing();
             }
-            if (previewCanvas_ != nullptr && !previewCanvasUsesFrameSwappedPacing()) {
-                previewCanvas_->update();
+            const qint64 nowNs = qtPreviewWatchdogElapsed_.nsecsElapsed();
+            const qint64 latenessNs = qMax<qint64>(0, nowNs - qtPreviewNextFixedTickDueNs_);
+            const bool canLogicalCatchup =
+                !(previewSfxRuntime_ != nullptr
+                    && previewSfxRuntime_->hasBackgroundTrack()
+                    && previewSfxRuntime_->isBackgroundTrackRunning());
+            int ticksToRun = 1;
+            if (canLogicalCatchup && frameIntervalNs > 0 && latenessNs >= frameIntervalNs) {
+                ticksToRun = qMin(2, 1 + static_cast<int>(latenessNs / frameIntervalNs));
             }
-            if (!previewCanvasUsesFrameSwappedPacing()) {
-                const qint64 nowNs = qtPreviewWatchdogElapsed_.nsecsElapsed();
-                const qint64 frameIntervalNs = previewCanvasTargetFrameIntervalNs();
-                if (qtPreviewNextFixedTickDueNs_ < 0) {
-                    qtPreviewNextFixedTickDueNs_ = nowNs + frameIntervalNs;
+            int executedTicks = 0;
+            for (; executedTicks < ticksToRun && qtPreviewPlaying_; ++executedTicks) {
+                const qint64 scheduledDueNs = qtPreviewNextFixedTickDueNs_;
+                if (canLogicalCatchup) {
+                    timelineSection_->onQtPreviewTickAtSecond(
+                        timelineSection_->fixedIntervalPreviewSecondForDeadlineNs(scheduledDueNs)
+                    );
                 } else {
-                    do {
-                        qtPreviewNextFixedTickDueNs_ += frameIntervalNs;
-                    } while (qtPreviewNextFixedTickDueNs_ <= nowNs);
+                    onQtPreviewTick();
                 }
+                if (!qtPreviewPlaying_) {
+                    return;
+                }
+                if (previewCanvas_ != nullptr && !previewCanvasUsesFrameSwappedPacing()) {
+                    previewCanvas_->update();
+                }
+                qtPreviewNextFixedTickDueNs_ += frameIntervalNs;
+            }
+            const qint64 postTickNowNs = qtPreviewWatchdogElapsed_.nsecsElapsed();
+            qint64 skippedIntervals = 0;
+            if (frameIntervalNs > 0 && qtPreviewNextFixedTickDueNs_ <= postTickNowNs) {
+                skippedIntervals =
+                    qMax<qint64>(1, ((postTickNowNs - qtPreviewNextFixedTickDueNs_) / frameIntervalNs) + 1);
+                qtPreviewNextFixedTickDueNs_ += skippedIntervals * frameIntervalNs;
+            }
+            if (previewCanvas_ != nullptr) {
+                previewCanvas_->noteFixedTimerDeadlineMetrics(
+                    latenessNs,
+                    qMax(0, executedTicks - 1),
+                    skippedIntervals
+                );
             }
             scheduleNextQtPreviewTick();
             return;

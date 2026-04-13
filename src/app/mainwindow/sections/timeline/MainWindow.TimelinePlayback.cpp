@@ -545,6 +545,7 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
     state_.qtPreviewAwaitingFrameSwap_ = false;
     state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;
     state_.qtPreviewNextFixedTickDueNs_ = -1;
+    state_.qtPreviewFixedTickOriginNs_ = -1;
     flushQtPreviewTimelinePosition();
     if (ui_.timelineView_ != nullptr) {
         ui_.timelineView_->focusPlayhead(false);
@@ -640,6 +641,14 @@ void MainWindow::TimelineSection::onQtPreviewTick()
         const double elapsedSeconds = static_cast<double>(state_.qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
         const double fallbackSecond = state_.qtPreviewStartSecond_ + (elapsedSeconds * state_.previewPlaybackRate_);
         second = state_.previewSfxRuntime_->syncPreviewPlaybackClockTransaction(fallbackSecond);
+    }
+    onQtPreviewTickAtSecond(second);
+}
+
+void MainWindow::TimelineSection::onQtPreviewTickAtSecond(double second)
+{
+    if (!state_.qtPreviewPlaying_) {
+        return;
     }
     owner_.syncPreviewStageMediaRoutePlayback(second);
     const double playbackEndSecond = previewPlaybackEndSeconds();

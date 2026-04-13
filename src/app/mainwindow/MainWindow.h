@@ -4,6 +4,7 @@
 #include <memory>
 #include <utility>
 
+#include <QChronoTimer>
 #include <QElapsedTimer>
 #include <QHash>
 #include <QMainWindow>
@@ -32,6 +33,7 @@
 class QAction;
 class QByteArray;
 class QCloseEvent;
+class QChronoTimer;
 class QDockWidget;
 class QEvent;
 class QFrame;

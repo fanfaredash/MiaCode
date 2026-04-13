@@ -392,10 +392,13 @@ qint64 MainWindow::TimelineSection::previewCanvasTargetFrameIntervalNs() const
 void MainWindow::TimelineSection::resetQtPreviewFixedFramePacing()
 {
     state_.qtPreviewNextFixedTickDueNs_ = -1;
+    state_.qtPreviewFixedTickOriginNs_ = -1;
     if (previewCanvasUsesFrameSwappedPacing()) {
         return;
     }
-    state_.qtPreviewNextFixedTickDueNs_ = state_.qtPreviewWatchdogElapsed_.nsecsElapsed() + previewCanvasTargetFrameIntervalNs();
+    state_.qtPreviewFixedTickOriginNs_ = state_.qtPreviewWatchdogElapsed_.nsecsElapsed();
+    state_.qtPreviewNextFixedTickDueNs_ =
+        state_.qtPreviewFixedTickOriginNs_ + previewCanvasTargetFrameIntervalNs();
 }
 
 void MainWindow::TimelineSection::scheduleNextQtPreviewTick()
@@ -404,16 +407,16 @@ void MainWindow::TimelineSection::scheduleNextQtPreviewTick()
         return;
     }
     if (previewCanvasUsesFrameSwappedPacing()) {
-        ui_.qtPreviewTimer_->start(qMax(1, ui_.qtPreviewTimer_->interval()));
+        ui_.qtPreviewTimer_->start();
         return;
     }
-    if (state_.qtPreviewNextFixedTickDueNs_ < 0) {
+    if (state_.qtPreviewNextFixedTickDueNs_ < 0 || state_.qtPreviewFixedTickOriginNs_ < 0) {
         resetQtPreviewFixedFramePacing();
     }
     const qint64 nowNs = state_.qtPreviewWatchdogElapsed_.nsecsElapsed();
     const qint64 delayNs = qMax<qint64>(0, state_.qtPreviewNextFixedTickDueNs_ - nowNs);
-    const int delayMs = delayNs <= 0 ? 0 : qMax(1, static_cast<int>((delayNs + 999999LL) / 1000000LL));
-    ui_.qtPreviewTimer_->start(delayMs);
+    ui_.qtPreviewTimer_->setInterval(std::chrono::nanoseconds(delayNs));
+    ui_.qtPreviewTimer_->start();
 }
 
 void MainWindow::TimelineSection::requestNextDisplayRefreshPreviewFrame()
@@ -433,10 +436,8 @@ void MainWindow::TimelineSection::requestNextDisplayRefreshPreviewFrame()
 void MainWindow::TimelineSection::refreshPreviewFrameRateTimers()
 {
     const qint64 targetIntervalNs = previewCanvasTargetFrameIntervalNs();
-    const int intervalMs = qMax(1, qRound(static_cast<double>(targetIntervalNs) / 1000000.0));
-
     if (ui_.qtPreviewTimer_ != nullptr) {
-        ui_.qtPreviewTimer_->setInterval(intervalMs);
+        ui_.qtPreviewTimer_->setInterval(std::chrono::nanoseconds(qMax<qint64>(1, targetIntervalNs)));
     }
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setFramePacingDebugState(
@@ -445,6 +446,19 @@ void MainWindow::TimelineSection::refreshPreviewFrameRateTimers()
             currentPreviewCanvasRefreshRate()
         );
     }
+}
+
+double MainWindow::TimelineSection::fixedIntervalPreviewSecondForDeadlineNs(qint64 deadlineNs) const
+{
+    if (state_.qtPreviewFixedTickOriginNs_ < 0) {
+        return qMax(0.0, state_.qtPreviewPauseSecond_);
+    }
+    const qint64 elapsedNs = qMax<qint64>(0, deadlineNs - state_.qtPreviewFixedTickOriginNs_);
+    return qMax(
+        0.0,
+        state_.qtPreviewStartSecond_
+            + (static_cast<double>(elapsedNs) / 1000000000.0) * state_.previewPlaybackRate_
+    );
 }
 
 void MainWindow::TimelineSection::setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)

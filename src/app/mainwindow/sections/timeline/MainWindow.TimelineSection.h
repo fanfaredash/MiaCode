@@ -75,6 +75,7 @@ public:
     double currentPreviewCanvasRefreshRate() const;
     bool previewCanvasUsesFrameSwappedPacing() const;
     qint64 previewCanvasTargetFrameIntervalNs() const;
+    double fixedIntervalPreviewSecondForDeadlineNs(qint64 deadlineNs) const;
     void resetQtPreviewFixedFramePacing();
     void scheduleNextQtPreviewTick();
     void requestNextDisplayRefreshPreviewFrame();
@@ -124,6 +125,7 @@ public:
     void applyQtPreviewPosition(double second, bool centerView);
     void syncPausedPreviewMediaTimestamps(double second);
     void flushQtPreviewTimelinePosition();
+    void onQtPreviewTickAtSecond(double second);
     void onQtPreviewTick();
     void jumpToNearestTimelineNote(double second, int lane);
 

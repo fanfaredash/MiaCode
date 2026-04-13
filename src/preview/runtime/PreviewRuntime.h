@@ -10,6 +10,7 @@
 
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
+#include "preview/quick_scene/PreviewTextureRepository.h"
 #include "preview/scene/PreviewFrameState.h"
 #include "preview/runtime/PreviewSceneAssetRepository.h"
 
@@ -122,6 +123,8 @@ public:
 
     void reset();
     void noteTickForProfiling();
+    void notePresentedTextureStats(const PreviewTextureStats& stats);
+    void noteFixedTimerDeadlineMetrics(qint64 latenessNs, int catchupTicks, qint64 skippedIntervals);
     void resetProfilingSession();
     QString writeProfilingSummaryToFile();
     bool hasCoreSkinAssetsLoadedForDebug() const;
@@ -192,4 +195,10 @@ private:
     qint64 tickCountTotal_ = 0;
     qint64 updateRequestCountTotal_ = 0;
     qint64 presentedFrameCountTotal_ = 0;
+    qint64 fixedTimerLateWakeupCount_ = 0;
+    qint64 fixedTimerCatchupTickCount_ = 0;
+    qint64 fixedTimerSkippedIntervalCount_ = 0;
+    double fixedTimerLatenessSumMs_ = 0.0;
+    double fixedTimerLatenessMaxMs_ = 0.0;
+    qint64 fixedTimerLatenessSampleCount_ = 0;
 };
