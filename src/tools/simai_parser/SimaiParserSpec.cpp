@@ -420,12 +420,30 @@ int main(int argc, char** argv)
         const SimaiNativeParseResult lenientInlineLowerTerminal = SimaiNativeParser::parseForTimeline(QStringLiteral("1,e"));
         const SimaiNativeParseResult strictInlineLowerTerminal = SimaiNativeParser::validateSyntax(QStringLiteral("1,e"));
         const SimaiNativeParseResult strictInlineUpperTerminal = SimaiNativeParser::validateSyntax(QStringLiteral("{1},E"));
+        const SimaiNativeParseResult strictInlineTerminalWithComment =
+            SimaiNativeParser::validateSyntax(QStringLiteral("{1},E || terminal comment"));
+        const SimaiNativeValidationReport terminalCommentReport = SimaiNativeParser::buildValidationReport(
+            QStringLiteral("E || terminal comment"),
+            SimaiNativeValidationLocale::English
+        );
+        const SimaiNativeValidationReport terminalCommentWithControlReport = SimaiNativeParser::buildValidationReport(
+            QStringLiteral("(120)E || terminal comment"),
+            SimaiNativeValidationLocale::English
+        );
         const SimaiNativeParseResult strictTerminalWithComma = SimaiNativeParser::validateSyntax(QStringLiteral("E,"));
+        const SimaiNativeParseResult strictTerminalWithTrailingText =
+            SimaiNativeParser::validateSyntax(QStringLiteral("{1},E trailing"));
 
         expect(lenientInlineLowerTerminal.ok, QStringLiteral("lenient parse accepts inline lowercase terminal marker"));
         expect(strictInlineLowerTerminal.ok, QStringLiteral("validate accepts inline lowercase terminal marker"));
         expect(strictInlineUpperTerminal.ok, QStringLiteral("validate accepts inline uppercase terminal marker"));
+        expect(strictInlineTerminalWithComment.ok, QStringLiteral("validate accepts inline terminal marker followed by comment"));
+        expect(terminalCommentReport.ok && terminalCommentReport.warningCount == 0,
+               QStringLiteral("validation report does not warn for terminal marker followed by comment"));
+        expect(terminalCommentWithControlReport.ok && terminalCommentWithControlReport.warningCount == 0,
+               QStringLiteral("validation report does not warn for control-prefixed terminal marker followed by comment"));
         expect(!strictTerminalWithComma.ok, QStringLiteral("validate rejects terminal marker followed by comma"));
+        expect(!strictTerminalWithTrailingText.ok, QStringLiteral("validate rejects non-comment trailing text after terminal marker"));
 
         const QString terminalPrefix = QStringLiteral("Invalid terminal marker placement: ");
         expect(lenientInlineLowerTerminal.errors.isEmpty(), QStringLiteral("inline lowercase terminal marker adds no lenient errors"));
@@ -434,6 +452,12 @@ int main(int argc, char** argv)
             expect(
                 strictTerminalWithComma.errors.constFirst().message.startsWith(terminalPrefix),
                 QStringLiteral("terminal marker followed by comma stays terminal marker error")
+            );
+        }
+        if (!strictTerminalWithTrailingText.errors.isEmpty()) {
+            expect(
+                strictTerminalWithTrailingText.errors.constFirst().message.startsWith(terminalPrefix),
+                QStringLiteral("terminal marker with trailing text stays terminal marker error")
             );
         }
     }

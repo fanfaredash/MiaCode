@@ -115,7 +115,8 @@ void runStrictFormatChecks(ParseState* state, const QStringList& lines)
         }
 
         const QString strippedLine = stripControlBlocks(line);
-        if (trimmed != QLatin1String("E")
+        const QString strippedTrimmed = strippedLine.trimmed();
+        if (strippedTrimmed.compare(QLatin1String("E"), Qt::CaseInsensitive) != 0
             && noteLikeLine(strippedLine)
             && !strippedLine.contains(',')) {
             appendTokenError(state, lineNumber, 1, "Missing beat separator ','");

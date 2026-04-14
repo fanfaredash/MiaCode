@@ -80,6 +80,25 @@ void appendDistinctSecond(QVector<double>* seconds, double second)
     seconds->append(second);
 }
 
+bool isTerminalMarkerText(QString text)
+{
+    text = text.trimmed();
+    return text.compare(QStringLiteral("E"), Qt::CaseInsensitive) == 0;
+}
+
+bool lineTailIsTerminalMarker(const QString& line, int startIndex)
+{
+    if (startIndex < 0 || startIndex >= line.size()) {
+        return false;
+    }
+    QString tail = line.mid(startIndex);
+    const int commentIndex = tail.indexOf(QStringLiteral("||"));
+    if (commentIndex >= 0) {
+        tail = tail.left(commentIndex);
+    }
+    return isTerminalMarkerText(tail);
+}
+
 enum class SlideHeadlessMode {
     None,
     Gradual,
@@ -530,8 +549,7 @@ void TimelineQuickModel::clear()
     snapshot_.durationSeconds = 0.0;
     snapshot_.minimumSecond = -0.5;
     snapshot_.maximumSecond = 1.0;
-    everyCommaAnchorsBySecond_.clear();
-    linesWithEveryComma_.clear();
+    cursorAnchorsBySecond_.clear();
     linesWithNotes_.clear();
 }
 
@@ -671,24 +689,6 @@ double TimelineQuickModel::timelineSecondForCursor(int lineNumber, int col) cons
 
 bool TimelineQuickModel::resolveTimelineNavigateCursor(double second, int* line, int* col, double* cursorSecond) const
 {
-    const int targetLineIndex = resolveRecentPastLineIndex(second);
-    if (targetLineIndex >= 0) {
-        const LineState& targetLine = lines_.at(targetLineIndex);
-        if (!targetLine.cursorCache.everyComma.isEmpty()) {
-            const TimelineCursorAnchor& anchor = targetLine.cursorCache.everyComma.constFirst();
-            if (line != nullptr) {
-                *line = targetLine.lineNumber;
-            }
-            if (col != nullptr) {
-                *col = anchor.sourceCol;
-            }
-            if (cursorSecond != nullptr) {
-                *cursorSecond = qMax(0.0, timelineRenderAbsoluteSecond(targetLine.render, anchor.secondOffset));
-            }
-            return true;
-        }
-    }
-
     if (resolvePreviousCursorAnchorForSecond(second, line, col, cursorSecond)) {
         return true;
     }
@@ -832,17 +832,12 @@ bool TimelineQuickModel::resolvePreviewFollowSelectionRange(int line, int anchor
 
     const QString& text = lines_.at(line - 1).text;
     const int lineLength = text.size();
-    if (lineLength <= 0) {
-        return false;
+    const int normalizedAnchorCol = qBound(1, anchorCol, lineLength + 1);
+    int segmentStart = qBound(0, normalizedAnchorCol - 1, lineLength);
+    int segmentEnd = text.indexOf(QLatin1Char(','), segmentStart);
+    if (segmentEnd < 0) {
+        segmentEnd = lineLength;
     }
-
-    const int normalizedAnchorCol = qBound(1, anchorCol, lineLength);
-    const int segmentEndExclusive = qBound(0, normalizedAnchorCol - 1, lineLength);
-    const int previousComma = segmentEndExclusive > 0
-        ? text.lastIndexOf(QLatin1Char(','), segmentEndExclusive - 1)
-        : -1;
-    int segmentStart = previousComma >= 0 ? previousComma + 1 : 0;
-    int segmentEnd = segmentEndExclusive;
 
     while (segmentStart < segmentEnd && text.at(segmentStart).isSpace()) {
         ++segmentStart;
@@ -1059,24 +1054,94 @@ void TimelineQuickModel::rebuildSnapshotDuration()
     double noteVisualEndPrefixWithSlideTracks = -std::numeric_limits<double>::infinity();
     double noteVisualEndPrefixWithoutSlideTracks = -std::numeric_limits<double>::infinity();
     bool hasData = false;
-    for (const LineState& lineState : lines_) {
-        snapshot_.lines.append(lineState.render);
-        for (double secondOffset : lineState.render.measureLineSecondOffsets) {
-            appendDistinctSecond(&snapshot_.measureLineSeconds, lineState.render.startSecond + secondOffset);
+
+    int terminalLineIndex = -1;
+    double terminalSecond = 0.0;
+    for (int index = 0; index < lines_.size(); ++index) {
+        if (!lines_.at(index).isTerminalE) {
+            continue;
         }
-        minSecond = hasData ? qMin(minSecond, lineState.render.startSecond) : lineState.render.startSecond;
-        maxSecond = hasData ? qMax(maxSecond, lineState.render.endSecond) : lineState.render.endSecond;
+        terminalLineIndex = index;
+        terminalSecond = lines_.at(index).terminalSecond >= 0.0
+            ? lines_.at(index).terminalSecond
+            : lines_.at(index).render.startSecond;
+        break;
+    }
+
+    const int anchorSearchEnd = terminalLineIndex >= 0 ? terminalLineIndex : lines_.size();
+    int trailingLineIndex = -1;
+    bool hasRealComma = false;
+    for (int index = 0; index < anchorSearchEnd; ++index) {
+        const LineState& lineState = lines_.at(index);
+        trailingLineIndex = index;
+        hasRealComma = hasRealComma || !lineState.render.beats.isEmpty();
+    }
+
+    for (int index = 0; index < lines_.size(); ++index) {
+        const LineState& lineState = lines_.at(index);
+        TimelineRenderLine renderLine = lineState.render;
+        if (index == trailingLineIndex && hasRealComma && terminalLineIndex < 0) {
+            TimelineRenderBeat trailingBeat;
+            trailingBeat.secondOffset = lineState.endState.second - renderLine.startSecond;
+            trailingBeat.sourceCol = qMax(1, lineState.text.size() + 1);
+            trailingBeat.subdivisionBeats = qMax(1, lineState.endState.beats);
+            trailingBeat.subdivisionIndex = qBound(
+                0,
+                trailingBeat.subdivisionBeats - 1,
+                lineState.endState.subdivisionIndex);
+            trailingBeat.major = false;
+            renderLine.beats.append(trailingBeat);
+        }
+
+        snapshot_.lines.append(renderLine);
+        for (double secondOffset : renderLine.measureLineSecondOffsets) {
+            const double absoluteSecond = renderLine.startSecond + secondOffset;
+            if (terminalLineIndex >= 0 && absoluteSecond > terminalSecond + kTimelineEpsilon) {
+                continue;
+            }
+            appendDistinctSecond(&snapshot_.measureLineSeconds, absoluteSecond);
+        }
+
+        minSecond = hasData ? qMin(minSecond, renderLine.startSecond) : renderLine.startSecond;
+        maxSecond = hasData ? qMax(maxSecond, renderLine.endSecond) : renderLine.endSecond;
         noteVisualEndPrefixWithSlideTracks = qMax(
             noteVisualEndPrefixWithSlideTracks,
-            timelineRenderLineVisualEndSecond(lineState.render, true)
+            timelineRenderLineVisualEndSecond(renderLine, true)
         );
         noteVisualEndPrefixWithoutSlideTracks = qMax(
             noteVisualEndPrefixWithoutSlideTracks,
-            timelineRenderLineVisualEndSecond(lineState.render, false)
+            timelineRenderLineVisualEndSecond(renderLine, false)
         );
         snapshot_.noteVisualEndPrefixMaxWithSlideTracks.append(noteVisualEndPrefixWithSlideTracks);
         snapshot_.noteVisualEndPrefixMaxWithoutSlideTracks.append(noteVisualEndPrefixWithoutSlideTracks);
         hasData = true;
+    }
+
+    if (trailingLineIndex >= 0) {
+        const LineState& trailingLine = lines_.at(trailingLineIndex);
+        const double measureDuration = measureDurationSeconds(
+            trailingLine.endState.bpm,
+            trailingLine.endState.meterNumerator,
+            trailingLine.endState.meterDenominator);
+        const double nextMeasureSecond = trailingLine.endState.currentMeasureStartSecond + measureDuration;
+        if (qIsFinite(nextMeasureSecond)
+            && nextMeasureSecond > trailingLine.endState.currentMeasureStartSecond + kTimelineEpsilon
+            && (terminalLineIndex < 0 || nextMeasureSecond <= terminalSecond + kTimelineEpsilon)) {
+            appendDistinctSecond(&snapshot_.measureLineSeconds, nextMeasureSecond);
+            if (hasData) {
+                maxSecond = qMax(maxSecond, nextMeasureSecond);
+                minSecond = qMin(minSecond, nextMeasureSecond);
+            } else {
+                minSecond = nextMeasureSecond;
+                maxSecond = nextMeasureSecond;
+                hasData = true;
+            }
+        }
+        if (hasRealComma && terminalLineIndex < 0) {
+            maxSecond = qMax(maxSecond, trailingLine.endState.second);
+            minSecond = hasData ? qMin(minSecond, trailingLine.endState.second) : trailingLine.endState.second;
+            hasData = true;
+        }
     }
 
     snapshot_.durationSeconds = hasData ? qMax(0.0, maxSecond) : 0.0;
@@ -1104,29 +1169,24 @@ void TimelineQuickModel::resequenceLineMetadata(int startIndex)
 
 void TimelineQuickModel::rebuildAnchorLineIndices()
 {
-    everyCommaAnchorsBySecond_.clear();
-    linesWithEveryComma_.clear();
+    cursorAnchorsBySecond_.clear();
     linesWithNotes_.clear();
-    linesWithEveryComma_.reserve(lines_.size());
     linesWithNotes_.reserve(lines_.size());
 
-    int totalEveryCommaCount = 0;
+    int totalAnchorCount = 0;
     for (const LineState& line : lines_) {
-        totalEveryCommaCount += line.cursorCache.everyComma.size();
+        totalAnchorCount += line.cursorCache.segmentStarts.size();
     }
-    everyCommaAnchorsBySecond_.reserve(totalEveryCommaCount);
+    cursorAnchorsBySecond_.reserve(totalAnchorCount);
 
     for (int index = 0; index < lines_.size(); ++index) {
         const LineState& line = lines_.at(index);
-        if (!line.cursorCache.everyComma.isEmpty()) {
-            linesWithEveryComma_.append(index);
-        }
-        for (const TimelineCursorAnchor& anchor : line.cursorCache.everyComma) {
+        for (const TimelineCursorAnchor& anchor : line.cursorCache.segmentStarts) {
             AbsoluteCursorAnchor absoluteAnchor;
             absoluteAnchor.lineNumber = line.lineNumber;
             absoluteAnchor.sourceCol = anchor.sourceCol;
             absoluteAnchor.second = qMax(0.0, timelineRenderAbsoluteSecond(line.render, anchor.secondOffset));
-            everyCommaAnchorsBySecond_.append(absoluteAnchor);
+            cursorAnchorsBySecond_.append(absoluteAnchor);
         }
         if (line.hasNotes) {
             linesWithNotes_.append(index);
@@ -1134,16 +1194,16 @@ void TimelineQuickModel::rebuildAnchorLineIndices()
     }
 
     std::sort(
-        everyCommaAnchorsBySecond_.begin(),
-        everyCommaAnchorsBySecond_.end(),
+        cursorAnchorsBySecond_.begin(),
+        cursorAnchorsBySecond_.end(),
         [](const AbsoluteCursorAnchor& left, const AbsoluteCursorAnchor& right) {
             if (qAbs(left.second - right.second) > kTimelineEpsilon) {
                 return left.second < right.second;
             }
             if (left.lineNumber != right.lineNumber) {
-                return left.lineNumber > right.lineNumber;
+                return left.lineNumber < right.lineNumber;
             }
-            return left.sourceCol > right.sourceCol;
+            return left.sourceCol < right.sourceCol;
         });
 }
 
@@ -1158,11 +1218,11 @@ bool TimelineQuickModel::resolvePreviousCursorAnchorForTextPosition(
         const int targetLineIndex = qBound(0, lineNumber - 1, lines_.size() - 1);
         for (int lineIndex = targetLineIndex; lineIndex >= 0; --lineIndex) {
             const LineState& lineState = lines_.at(lineIndex);
-            if (lineState.cursorCache.everyComma.isEmpty()) {
+            if (lineState.cursorCache.segmentStarts.isEmpty()) {
                 continue;
             }
 
-            const QVector<TimelineCursorAnchor>& anchors = lineState.cursorCache.everyComma;
+            const QVector<TimelineCursorAnchor>& anchors = lineState.cursorCache.segmentStarts;
             const TimelineCursorAnchor* resolvedAnchor = nullptr;
             if (lineIndex == targetLineIndex) {
                 const auto it = std::upper_bound(
@@ -1211,7 +1271,7 @@ bool TimelineQuickModel::resolvePreviousCursorAnchorForSecond(
     int* col,
     double* anchorSecond) const
 {
-    if (everyCommaAnchorsBySecond_.isEmpty()) {
+    if (cursorAnchorsBySecond_.isEmpty()) {
         if (line != nullptr) {
             *line = 1;
         }
@@ -1226,13 +1286,13 @@ bool TimelineQuickModel::resolvePreviousCursorAnchorForSecond(
 
     const double targetSecond = qMax(0.0, second);
     const auto endIt = std::upper_bound(
-        everyCommaAnchorsBySecond_.cbegin(),
-        everyCommaAnchorsBySecond_.cend(),
+        cursorAnchorsBySecond_.cbegin(),
+        cursorAnchorsBySecond_.cend(),
         targetSecond + kTimelineEpsilon,
         [](double target, const AbsoluteCursorAnchor& anchor) {
             return target < anchor.second;
         });
-    if (endIt == everyCommaAnchorsBySecond_.cbegin()) {
+    if (endIt == cursorAnchorsBySecond_.cbegin()) {
         if (line != nullptr) {
             *line = 1;
         }
@@ -1258,26 +1318,6 @@ bool TimelineQuickModel::resolvePreviousCursorAnchorForSecond(
     return true;
 }
 
-int TimelineQuickModel::resolveRecentPastLineIndex(double second) const
-{
-    if (lines_.isEmpty()) {
-        return -1;
-    }
-
-    const double targetSecond = qMax(0.0, second);
-    const auto it = std::upper_bound(
-        lines_.cbegin(),
-        lines_.cend(),
-        targetSecond + kTimelineEpsilon,
-        [](double target, const LineState& lineState) {
-            return target < qMax(0.0, lineState.render.startSecond);
-        });
-    if (it == lines_.cbegin()) {
-        return -1;
-    }
-    return static_cast<int>(std::distance(lines_.cbegin(), std::prev(it)));
-}
-
 bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& startState)
 {
     if (lineState == nullptr) {
@@ -1294,8 +1334,9 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
     lineState->render.measureLineSecondOffsets.clear();
     lineState->render.beats.clear();
     lineState->render.notes.clear();
-    lineState->cursorCache.everyComma.clear();
-    lineState->hasRawZeroAnchor = false;
+    lineState->cursorCache.segmentStarts.clear();
+    lineState->isTerminalE = false;
+    lineState->terminalSecond = -1.0;
     lineState->hasNotes = false;
     lineState->firstNoteSecond = 0.0;
     lineState->lastNoteSecond = 0.0;
@@ -1306,9 +1347,17 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
     int tokenColumn = 1;
     QVector<int> currentGroup;
 
-    if (lineState->text.trimmed().compare(QStringLiteral("E"), Qt::CaseInsensitive) == 0) {
+    if (lineTailIsTerminalMarker(lineState->text, 0)) {
+        lineState->isTerminalE = true;
+        lineState->terminalSecond = startState.second;
         return true;
     }
+
+    TimelineCursorAnchor lineStartAnchor;
+    lineStartAnchor.sourceCol = 1;
+    lineStartAnchor.lane = -1;
+    lineStartAnchor.secondOffset = 0.0;
+    lineState->cursorCache.segmentStarts.append(lineStartAnchor);
 
     const auto flushToken = [&]() {
         if (token.isEmpty()) {
@@ -1424,17 +1473,24 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
             beat.subdivisionIndex = qBound(0, beat.subdivisionBeats - 1, state.subdivisionIndex);
             beat.major = false;
             lineState->render.beats.append(beat);
-            lineState->hasRawZeroAnchor = lineState->hasRawZeroAnchor || qAbs(beat.secondOffset) <= kTimelineEpsilon;
             lineMaxSecond = qMax(lineMaxSecond, state.second);
             state.subdivisionIndex = (state.subdivisionIndex + 1) % qMax(1, state.beats);
             state.second += noteStepSeconds(state.bpm, state.beats);
             advanceMeasureLinesTo(state.second);
+
+            TimelineCursorAnchor anchor;
+            anchor.sourceCol = index + 2;
+            anchor.lane = -1;
+            anchor.secondOffset = state.second - lineState->render.startSecond;
+            lineState->cursorCache.segmentStarts.append(anchor);
             continue;
         }
         if (token.isEmpty()
             && (ch == QLatin1Char('E') || ch == QLatin1Char('e'))
-            && lineState->text.mid(index).trimmed().compare(QStringLiteral("E"), Qt::CaseInsensitive) == 0) {
+            && lineTailIsTerminalMarker(lineState->text, index)) {
             flushToken();
+            lineState->isTerminalE = true;
+            lineState->terminalSecond = state.second;
             break;
         }
         if (token.isEmpty()) {
@@ -1446,16 +1502,9 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
     flushToken();
     finalizeEachGroup(lineState, currentGroup);
 
-    for (const TimelineRenderBeat& beat : lineState->render.beats) {
-        TimelineCursorAnchor anchor;
-        anchor.sourceCol = beat.sourceCol;
-        anchor.lane = -1;
-        anchor.secondOffset = beat.secondOffset;
-        lineState->cursorCache.everyComma.append(anchor);
-    }
     std::sort(
-        lineState->cursorCache.everyComma.begin(),
-        lineState->cursorCache.everyComma.end(),
+        lineState->cursorCache.segmentStarts.begin(),
+        lineState->cursorCache.segmentStarts.end(),
         [](const TimelineCursorAnchor& left, const TimelineCursorAnchor& right) {
             if (left.sourceCol != right.sourceCol) {
                 return left.sourceCol < right.sourceCol;
@@ -1555,7 +1604,6 @@ bool TimelineQuickModel::parseNoteToken(
             note.endSecondOffset = note.secondOffset + qMax(0.0, durationSecond);
         }
         appendNote(note);
-        lineState->hasRawZeroAnchor = lineState->hasRawZeroAnchor || qAbs(note.secondOffset) <= kTimelineEpsilon;
         return true;
     }
 
@@ -1648,7 +1696,6 @@ bool TimelineQuickModel::parseNoteToken(
             note.flags |= TimelineRenderFlagTrackBreak | TimelineRenderFlagIsBreak;
         }
         appendNote(note);
-        lineState->hasRawZeroAnchor = lineState->hasRawZeroAnchor || qAbs(note.secondOffset) <= kTimelineEpsilon;
         return true;
     }
 
@@ -1703,7 +1750,6 @@ bool TimelineQuickModel::parseNoteToken(
     }
 
     appendNote(note);
-    lineState->hasRawZeroAnchor = lineState->hasRawZeroAnchor || qAbs(note.secondOffset) <= kTimelineEpsilon;
     return true;
 }
 
