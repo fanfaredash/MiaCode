@@ -9,6 +9,7 @@
 #include <QKeyEvent>
 #include <QMenu>
 #include <QMimeData>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QScrollBar>
 #include <QTextBlock>
@@ -67,6 +68,25 @@ bool isPreviewPlayPauseShortcut(const QKeyEvent* event)
         (event->modifiers() & Qt::ControlModifier)
         && !(event->modifiers() & (Qt::AltModifier | Qt::MetaModifier | Qt::ShiftModifier));
     return ctrlOnly && (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter);
+}
+
+QPointF adjustedTrailingBlankClickPosition(const PlainCodeEditor* editor, const QPointF& position)
+{
+    if (editor == nullptr || editor->document() == nullptr) {
+        return position;
+    }
+    const QTextBlock lastBlock = editor->document()->lastBlock();
+    if (!lastBlock.isValid()) {
+        return position;
+    }
+
+    QTextCursor lastBlockCursor(lastBlock);
+    const QRect lastBlockRect = editor->cursorRect(lastBlockCursor);
+    if (!lastBlockRect.isValid() || position.y() <= lastBlockRect.bottom()) {
+        return position;
+    }
+
+    return QPointF(position.x(), static_cast<qreal>(lastBlockRect.center().y()));
 }
 }  // namespace
 
@@ -450,6 +470,35 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
         event->count()
     );
     QTextEdit::keyPressEvent(&normalizedEvent);
+}
+
+void PlainCodeEditor::mousePressEvent(QMouseEvent* event)
+{
+    if (event == nullptr) {
+        QTextEdit::mousePressEvent(event);
+        return;
+    }
+
+    const QPointF adjustedPosition = adjustedTrailingBlankClickPosition(this, event->position());
+    if (adjustedPosition == event->position()) {
+        QTextEdit::mousePressEvent(event);
+        return;
+    }
+
+    const QPointF delta = adjustedPosition - event->position();
+    QMouseEvent adjustedEvent(
+        event->type(),
+        adjustedPosition,
+        event->scenePosition() + delta,
+        event->globalPosition() + delta,
+        event->button(),
+        event->buttons(),
+        event->modifiers(),
+        event->pointingDevice()
+    );
+    adjustedEvent.setAccepted(false);
+    QTextEdit::mousePressEvent(&adjustedEvent);
+    event->setAccepted(adjustedEvent.isAccepted());
 }
 
 void PlainCodeEditor::paintEvent(QPaintEvent* event)

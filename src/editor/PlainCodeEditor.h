@@ -8,6 +8,7 @@ class QAction;
 class QContextMenuEvent;
 class QInputMethodEvent;
 class QKeyEvent;
+class QMouseEvent;
 class QMimeData;
 
 class PlainCodeEditor : public QTextEdit
@@ -34,6 +35,7 @@ protected:
     void inputMethodEvent(QInputMethodEvent* event) override;
     void insertFromMimeData(const QMimeData* source) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
 
