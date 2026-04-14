@@ -43,7 +43,7 @@ NormalizeDialogResult showNormalizeSelectionDialog(
     QDialog dialog(UiDialogs::effectiveParentWidget(&owner));
     dialog.setWindowTitle(uiText("dialog.normalize.title", QStringLiteral("Format Chart")));
     dialog.setModal(true);
-    dialog.setMinimumWidth(360);
+    dialog.setMinimumWidth(300);
     dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
     UiDialogs::prepareDialogWindow(&dialog, &owner);
 
@@ -62,7 +62,7 @@ NormalizeDialogResult showNormalizeSelectionDialog(
     summaryLayout->addWidget(iconLabel, 0, Qt::AlignTop);
 
     auto* hintLabel = new QLabel(descriptionText, summaryRow);
-    hintLabel->setWordWrap(true);
+    hintLabel->setWordWrap(false);
     summaryLayout->addWidget(hintLabel, 1);
     rootLayout->addWidget(summaryRow);
 
@@ -285,22 +285,17 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
     QString dialogDescription;
     if (wholeTextSelected) {
         dialogDescription = UiText::isChineseUi()
-            ? QStringLiteral("整理谱面选中范围：全文。")
-            : QStringLiteral("Format Chart selection range: full chart.");
+            ? QStringLiteral("选中范围：全文")
+            : QStringLiteral("Selection: full chart");
     } else {
         const auto [startLine, startCol] = lineColForPosition(editor->document(), begin);
-        const auto [endLine, endCol] = lineColForPosition(editor->document(), finish);
         dialogDescription = UiText::isChineseUi()
-            ? QStringLiteral("整理谱面选中范围：%1行%2列 ~ %3行%4列。")
+            ? QStringLiteral("选中范围：%1行%2列")
                   .arg(startLine)
                   .arg(startCol)
-                  .arg(endLine)
-                  .arg(endCol)
-            : QStringLiteral("Format Chart selection range: L%1C%2~L%3C%4.")
+            : QStringLiteral("Selection: L%1C%2")
                   .arg(startLine)
-                  .arg(startCol)
-                  .arg(endLine)
-                  .arg(endCol);
+                  .arg(startCol);
     }
 
     miacode::chart_transform::ChartNormalizationOptions options;

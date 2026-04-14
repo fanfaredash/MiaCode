@@ -284,6 +284,15 @@ QVector<double> flattenParserMeasureLines(const SimaiNativeParseResult& parsed)
     return parsed.measureLineSeconds;
 }
 
+bool isSyntheticTrailingBeat(const ComparableBeat& beat, const QStringList& chartLines)
+{
+    const int lineIndex = beat.line - 1;
+    if (lineIndex < 0 || lineIndex >= chartLines.size()) {
+        return false;
+    }
+    return beat.col == chartLines.at(lineIndex).size() + 1;
+}
+
 bool lineStartsNondecreasing(const QVector<double>& starts)
 {
     for (int index = 1; index < starts.size(); ++index) {
@@ -449,6 +458,15 @@ bool snapshotMatchesParser(
     sortComparableBeats(&quickBeats);
     std::sort(parserMeasures.begin(), parserMeasures.end());
     std::sort(quickMeasures.begin(), quickMeasures.end());
+    const QStringList chartLines = chartText.split(QLatin1Char('\n'));
+    if (quickBeats.size() == parserBeats.size() + 1
+        && isSyntheticTrailingBeat(quickBeats.constLast(), chartLines)) {
+        quickBeats.removeLast();
+    }
+    if (quickMeasures.size() == parserMeasures.size() + 1
+        && (parserMeasures.isEmpty() || quickMeasures.constLast() > parserMeasures.constLast() + 1e-6)) {
+        quickMeasures.removeLast();
+    }
 
     if (parserNotes.size() != quickNotes.size()) {
         if (diff != nullptr) {
@@ -797,28 +815,41 @@ int main(int argc, char** argv)
 
     {
         TimelineQuickModel model;
-        model.rebuildFromText(QStringLiteral("1,\n2,\nE"), 0.0);
+        model.rebuildFromText(QStringLiteral("(120){4}1,12,\nE"), 0.0);
+        expect(nearlyEqual(model.timelineSecondForCursor(1, 1), 0.0),
+               QStringLiteral("line-start caret stays on the first segment start"));
+        expect(nearlyEqual(model.timelineSecondForCursor(1, 7), 0.0),
+               QStringLiteral("control-token interior caret stays on the current segment start"));
+        expect(nearlyEqual(model.timelineSecondForCursor(1, 10), 0.0),
+               QStringLiteral("caret before the first comma stays on the opening segment"));
+        expect(nearlyEqual(model.timelineSecondForCursor(1, 11), 0.5),
+               QStringLiteral("caret immediately after a comma advances to the next segment start"));
+        expect(nearlyEqual(model.timelineSecondForCursor(1, 12), 0.5),
+               QStringLiteral("multi-character note interior stays on the current segment start"));
+        expect(nearlyEqual(model.timelineSecondForCursor(1, 14), 1.0),
+               QStringLiteral("caret after the final comma advances even without another comma"));
+
         int line = 0;
         int col = 0;
         double second = -1.0;
         const bool firstResolved = model.resolvePreviewFollowCursor(0.1, &line, &col, &second);
-        expect(firstResolved && line == 1 && col == 2 && nearlyEqual(second, 0.0),
-               QStringLiteral("follow cursor binds to the latest comma at or before current preview second"));
+        expect(firstResolved && line == 1 && col == 1 && nearlyEqual(second, 0.0),
+               QStringLiteral("follow cursor binds to the latest segment-start anchor at or before preview second"));
         const bool secondResolved = model.resolvePreviewFollowCursor(0.6, &line, &col, &second);
-        expect(secondResolved && line == 2 && col == 2 && nearlyEqual(second, 0.5),
-               QStringLiteral("follow cursor advances to the next past comma while playback progresses"));
+        expect(secondResolved && line == 1 && col == 11 && nearlyEqual(second, 0.5),
+               QStringLiteral("follow cursor advances to the next segment-start anchor while playback progresses"));
     }
 
     {
         TimelineQuickModel model;
-        model.rebuildFromText(QStringLiteral("{1}1,1-4[8:1],\nE"), 0.0);
+        model.rebuildFromText(QStringLiteral("1,1-4[8:1],\nE"), 0.0);
         int line = 0;
         int startCol = 0;
         int endCol = 0;
         double second = -1.0;
         const bool resolved = model.resolvePreviewFollowSelection(0.75, &line, &startCol, &endCol, &second);
-        expect(resolved && line == 1 && startCol == 6 && endCol == 13 && nearlyEqual(second, 0.5),
-               QStringLiteral("follow selection keeps the full pre-comma segment including slide timing syntax"));
+        expect(resolved && line == 1 && startCol == 3 && endCol == 10 && nearlyEqual(second, 0.5),
+               QStringLiteral("follow selection keeps the full current segment including slide timing syntax"));
     }
 
     {
@@ -826,7 +857,7 @@ int main(int argc, char** argv)
         model.rebuildFromText(QStringLiteral("1/2,\n1,,\nE"), 0.0);
         int startCol = 0;
         int endCol = 0;
-        const bool groupedResolved = model.resolvePreviewFollowSelectionRange(1, 4, &startCol, &endCol);
+        const bool groupedResolved = model.resolvePreviewFollowSelectionRange(1, 1, &startCol, &endCol);
         expect(groupedResolved && startCol == 1 && endCol == 3,
                QStringLiteral("follow selection keeps slash-joined syntax inside the same comma segment"));
         const bool emptyResolved = model.resolvePreviewFollowSelectionRange(2, 3, &startCol, &endCol);
@@ -841,11 +872,42 @@ int main(int argc, char** argv)
         int col = 0;
         double second = -1.0;
         const bool navigateResolved = model.resolveTimelineNavigateCursor(0.75, &line, &col, &second);
-        expect(navigateResolved && line == 1 && col == 2 && nearlyEqual(second, 0.0),
-               QStringLiteral("timeline navigate cursor stays on the first comma of the recent past line"));
+        expect(navigateResolved && line == 1 && col == 3 && nearlyEqual(second, 0.5),
+               QStringLiteral("timeline navigate cursor uses the same segment-start anchor rule as preview follow"));
         const bool followResolved = model.resolvePreviewFollowCursor(0.75, &line, &col, &second);
         expect(followResolved && line == 1 && col == 3 && nearlyEqual(second, 0.5),
-               QStringLiteral("follow cursor can advance within the same source line to the latest past comma"));
+               QStringLiteral("follow cursor can advance within the same source line to the latest past segment start"));
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("(120){4}12\nE"), 0.0);
+        expect(nearlyEqual(model.timelineSecondForCursor(1, 11), 0.0),
+               QStringLiteral("line end does not extrapolate when the chart has no comma anchors"));
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("(120){4}1,12,"), 0.0);
+        QVector<ComparableBeat> quickBeats = flattenSnapshotBeats(model.snapshot());
+        sortComparableBeats(&quickBeats);
+        expect(quickBeats.size() == 3, QStringLiteral("charts without E append one trailing implicit beat line"));
+        if (quickBeats.size() == 3) {
+            expect(nearlyEqual(quickBeats.at(0).second, 0.0)
+                       && nearlyEqual(quickBeats.at(1).second, 0.5)
+                       && nearlyEqual(quickBeats.at(2).second, 1.0),
+                   QStringLiteral("the trailing implicit beat line lands on the next segment boundary"));
+        }
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("(120){4}1,12,E || terminal comment"), 0.0);
+        QVector<ComparableBeat> quickBeats = flattenSnapshotBeats(model.snapshot());
+        sortComparableBeats(&quickBeats);
+        expect(quickBeats.size() == 2, QStringLiteral("inline terminal marker suppresses the trailing implicit beat even with a comment"));
+        expect(nearlyEqual(model.timelineSecondForCursor(1, 14), 1.0),
+               QStringLiteral("inline terminal marker keeps caret timing at the segment boundary before E"));
     }
 
     {

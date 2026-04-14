@@ -66,7 +66,7 @@ private:
     };
 
     struct LineCursorCache {
-        QVector<TimelineCursorAnchor> everyComma;
+        QVector<TimelineCursorAnchor> segmentStarts;
     };
 
     struct LineState {
@@ -78,7 +78,8 @@ private:
         ParseState endState;
         TimelineRenderLine render;
         LineCursorCache cursorCache;
-        bool hasRawZeroAnchor = false;
+        bool isTerminalE = false;
+        double terminalSecond = -1.0;
         bool hasNotes = false;
         double firstNoteSecond = 0.0;
         double lastNoteSecond = 0.0;
@@ -114,7 +115,6 @@ private:
         int* line,
         int* col,
         double* anchorSecond) const;
-    int resolveRecentPastLineIndex(double second) const;
     bool parseNoteToken(
         LineState* lineState,
         ParseState* state,
@@ -130,7 +130,6 @@ private:
     int nextEachGroupId_ = 0;
     QVector<LineState> lines_;
     TimelineRenderSnapshot snapshot_;
-    QVector<AbsoluteCursorAnchor> everyCommaAnchorsBySecond_;
-    QVector<int> linesWithEveryComma_;
+    QVector<AbsoluteCursorAnchor> cursorAnchorsBySecond_;
     QVector<int> linesWithNotes_;
 };
