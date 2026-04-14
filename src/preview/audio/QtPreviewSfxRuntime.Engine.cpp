@@ -29,14 +29,12 @@ void QtPreviewSfxRuntime::initializeAssets()
         if (!QFileInfo::exists(path)) {
             return;
         }
-        const QByteArray pathBytes =
-            miacode::preview_sfx::encodedAssetFilePathForKind(preparedAssets_.sfxDir, kind);
         bank.voices.reserve(voiceCount);
         for (int i = 0; i < voiceCount; ++i) {
             Voice* voice = new Voice();
-            if (ma_sound_init_from_file(
+            if (miacode::audio_io::soundInitFromFile(
                     &engineState_->engine,
-                    pathBytes.constData(),
+                    path,
                     0,
                     nullptr,
                     nullptr,
@@ -66,15 +64,13 @@ void QtPreviewSfxRuntime::initializeAssets()
 
     const QString touchholdPath = miacode::preview_sfx::assetFilePathForKind(preparedAssets_.sfxDir, "touchhold");
     if (QFileInfo::exists(touchholdPath)) {
-        const QByteArray pathBytes =
-            miacode::preview_sfx::encodedAssetFilePathForKind(preparedAssets_.sfxDir, "touchhold");
         touchholdVoices_.reserve(8);
         for (int i = 0; i < 8; ++i) {
             TouchholdVoice touchholdVoice;
             touchholdVoice.voice = new Voice();
-            if (ma_sound_init_from_file(
+            if (miacode::audio_io::soundInitFromFile(
                     &engineState_->engine,
-                    pathBytes.constData(),
+                    touchholdPath,
                     0,
                     nullptr,
                     nullptr,
@@ -102,42 +98,54 @@ void QtPreviewSfxRuntime::initializeBackgroundTrack()
     }
 
     Voice* voice = new Voice();
-    ma_result initResult = MA_ERROR;
-#ifdef Q_OS_WIN
-    const QString nativeTrackPath = QDir::toNativeSeparators(preparedAssets_.trackPath);
-    initResult = ma_sound_init_from_file_w(
-        &engineState_->engine,
-        reinterpret_cast<const wchar_t*>(nativeTrackPath.utf16()),
-        0,
-        nullptr,
-        nullptr,
-        &voice->sound
+    ma_decoder_config decoderConfig = ma_decoder_config_init(
+        ma_format_f32,
+        2,
+        deviceSampleRate_);
+    const ma_result decoderInitResult = miacode::audio_io::decoderInitFile(
+        preparedAssets_.trackPath,
+        &decoderConfig,
+        &voice->decoder
     );
-#else
-    const QByteArray pathBytes = QFile::encodeName(preparedAssets_.trackPath);
-    initResult = ma_sound_init_from_file(
-        &engineState_->engine,
-        pathBytes.constData(),
-        0,
-        nullptr,
-        nullptr,
-        &voice->sound
-    );
-#endif
-    if (initResult != MA_SUCCESS) {
+    if (decoderInitResult != MA_SUCCESS) {
         delete voice;
-        appendAudioDebugLog(QString("initializeBackgroundTrack failed path=%1").arg(preparedAssets_.trackPath));
+        appendAudioDebugLog(
+            QString("initializeBackgroundTrack decoder init failed rc=%1 path=%2")
+                .arg(static_cast<int>(decoderInitResult))
+                .arg(preparedAssets_.trackPath));
+        return;
+    }
+    voice->decoderInitialized = true;
+    const ma_result initResult = ma_sound_init_from_data_source(
+        &engineState_->engine,
+        reinterpret_cast<ma_data_source*>(&voice->decoder),
+        0,
+        nullptr,
+        &voice->sound
+    );
+    if (initResult != MA_SUCCESS) {
+        ma_decoder_uninit(&voice->decoder);
+        voice->decoderInitialized = false;
+        delete voice;
+        appendAudioDebugLog(
+            QString("initializeBackgroundTrack sound init failed rc=%1 path=%2")
+                .arg(static_cast<int>(initResult))
+                .arg(preparedAssets_.trackPath));
         return;
     }
     voice->initialized = true;
+    voice->sampleRate = deviceSampleRate_;
+    ma_sound_get_length_in_pcm_frames(&voice->sound, &voice->frameCount);
     backgroundTrackVoice_ = voice;
     backgroundTrackConfigured_ = true;
     resetBackgroundTrackSessionState(playbackSession_.backgroundTrackLastTimelineSecond);
     ma_sound_set_volume(&backgroundTrackVoice_->sound, static_cast<float>(previewBgmVolume(settings_)));
-    appendAudioDebugLog(QString("initializeBackgroundTrack ok path=%1 volume=%2 effective=%3")
+    appendAudioDebugLog(QString("initializeBackgroundTrack ok path=%1 volume=%2 effective=%3 sampleRate=%4 frames=%5")
                             .arg(preparedAssets_.trackPath)
                             .arg(settings_.bgmVolume, 0, 'f', 3)
-                            .arg(previewBgmVolume(settings_), 0, 'f', 3));
+                            .arg(previewBgmVolume(settings_), 0, 'f', 3)
+                            .arg(backgroundTrackVoice_->sampleRate)
+                            .arg(backgroundTrackVoice_->frameCount));
 }
 
 void QtPreviewSfxRuntime::applyVolumes()
@@ -229,18 +237,8 @@ bool QtPreviewSfxRuntime::prepareStretchedBackgroundTrack(double timelineSecond)
     state->playbackRate = playbackSession_.backgroundTrackPlaybackRate;
 
     ma_decoder_config decoderConfig = ma_decoder_config_init(ma_format_f32, 0, 0);
-    ma_result decoderInitResult = MA_ERROR;
-#ifdef Q_OS_WIN
-    const QString nativeTrackPath = QDir::toNativeSeparators(preparedAssets_.trackPath);
-    decoderInitResult = ma_decoder_init_file_w(
-        reinterpret_cast<const wchar_t*>(nativeTrackPath.utf16()),
-        &decoderConfig,
-        &state->decoder
-    );
-#else
-    const QByteArray pathBytes = QFile::encodeName(preparedAssets_.trackPath);
-    decoderInitResult = ma_decoder_init_file(pathBytes.constData(), &decoderConfig, &state->decoder);
-#endif
+    const ma_result decoderInitResult =
+        miacode::audio_io::decoderInitFile(preparedAssets_.trackPath, &decoderConfig, &state->decoder);
     if (decoderInitResult != MA_SUCCESS) {
         appendAudioDebugLog(QString("prepareStretchedBackgroundTrack decoder_init_file failed rc=%1 track=%2")
                                 .arg(static_cast<int>(decoderInitResult))

@@ -32,8 +32,7 @@
 #include "QtPreviewSfxRuntime.h"
 #include "UiText.h"
 #include "UiTheme.h"
-
-#include "../../third_party/miniaudio/miniaudio.h"
+#include "common/MiniaudioFileAccess.h"
 
 namespace {
 
@@ -300,10 +299,9 @@ DecodedAudio decodeMonoTrack(const QString& trackPath, int sampleRate)
         return decoded;
     }
 
-    const QByteArray pathBytes = QFile::encodeName(trackPath);
     ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 1, static_cast<ma_uint32>(sampleRate));
     ma_decoder decoder;
-    if (ma_decoder_init_file(pathBytes.constData(), &config, &decoder) != MA_SUCCESS) {
+    if (miacode::audio_io::decoderInitFile(trackPath, &config, &decoder) != MA_SUCCESS) {
         return decoded;
     }
 

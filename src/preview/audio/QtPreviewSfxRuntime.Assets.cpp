@@ -21,6 +21,11 @@ void QtPreviewSfxRuntime::resetBackgroundTrack()
     if (backgroundTrackVoice_ != nullptr) {
         if (backgroundTrackVoice_->initialized) {
             ma_sound_uninit(&backgroundTrackVoice_->sound);
+            backgroundTrackVoice_->initialized = false;
+        }
+        if (backgroundTrackVoice_->decoderInitialized) {
+            ma_decoder_uninit(&backgroundTrackVoice_->decoder);
+            backgroundTrackVoice_->decoderInitialized = false;
         }
         delete backgroundTrackVoice_;
         backgroundTrackVoice_ = nullptr;
@@ -56,6 +61,11 @@ void QtPreviewSfxRuntime::resetBanks()
             }
             if (voice->initialized) {
                 ma_sound_uninit(&voice->sound);
+                voice->initialized = false;
+            }
+            if (voice->decoderInitialized) {
+                ma_decoder_uninit(&voice->decoder);
+                voice->decoderInitialized = false;
             }
             delete voice;
         }
@@ -80,6 +90,11 @@ void QtPreviewSfxRuntime::resetBanks()
         if (voice.voice != nullptr) {
             if (voice.voice->initialized) {
                 ma_sound_uninit(&voice.voice->sound);
+                voice.voice->initialized = false;
+            }
+            if (voice.voice->decoderInitialized) {
+                ma_decoder_uninit(&voice.voice->decoder);
+                voice.voice->decoderInitialized = false;
             }
             delete voice.voice;
             voice.voice = nullptr;
