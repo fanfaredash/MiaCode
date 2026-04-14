@@ -12,9 +12,24 @@ struct PreviewTextureLayerStats {
     QString name;
     qint64 spriteCount = 0;
     qint64 spriteBatchCount = 0;
+    qint64 spriteRunCount = 0;
+    qint64 spriteGeometryReallocCount = 0;
+    qint64 spriteVerticesRequired = 0;
+    qint64 spriteVerticesCapacity = 0;
+    qint64 spriteScratchReserveGrowCount = 0;
     qint64 candidateCount = 0;
     qint64 activeCount = 0;
     double buildMs = 0.0;
+};
+
+struct PreviewSpriteBatchFrameProfile {
+    qint64 spriteCount = 0;
+    qint64 batchCount = 0;
+    qint64 runCount = 0;
+    qint64 geometryReallocCount = 0;
+    qint64 verticesRequired = 0;
+    qint64 verticesCapacity = 0;
+    qint64 scratchReserveGrowCount = 0;
 };
 
 struct PreviewStageBackgroundFrameProfile {
@@ -57,7 +72,7 @@ public:
     QSGTexture* retainedTextureForImage(const QString& slotName, const QImage& image);
     void releaseRetainedTexture(const QString& slotName);
     QSGTexture* createOwnedTexture(const QImage& image) const;
-    void noteSpriteBatchStats(const char* layerName, qint64 spriteCount, qint64 batchCount);
+    void noteSpriteBatchStats(const char* layerName, const PreviewSpriteBatchFrameProfile& profile);
     void setStageBackgroundFrameProfile(const PreviewStageBackgroundFrameProfile& profile);
     PreviewTextureStats stats() const;
     void clear();

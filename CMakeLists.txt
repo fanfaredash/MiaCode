@@ -486,8 +486,6 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/preview/scene/PreviewPreparedSceneCache.cpp
         src/preview/scene/PreviewChartReviewLayerState.h
         src/preview/scene/PreviewChartReviewLayerState.cpp
-        src/preview/scene/PreviewSlideMotionLayerState.h
-        src/preview/scene/PreviewSlideMotionLayerState.cpp
         src/preview/scene/PreviewHeadLayerState.h
         src/preview/scene/PreviewHeadLayerState.cpp
         src/preview/scene/PreviewAnimatedSpriteHelpers.h
@@ -515,6 +513,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/preview/scene/PreviewFrameState.h
         src/preview/scene/PreviewChartReviewLayerState.h
         src/preview/scene/PreviewChartReviewLayerState.cpp
+        src/preview/scene/PreviewSlideMotionLayerState.h
+        src/preview/scene/PreviewSlideMotionLayerState.cpp
         src/preview/scene/PreviewTrackLayerState.h
         src/preview/scene/PreviewTrackLayerState.cpp
         src/preview/scene/PreviewTrackShared.h
@@ -535,6 +535,11 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/common/MuriTypes.h
         src/common/MuriTypes.cpp
         src/timeline/TimelineData.h
+    )
+
+    add_executable(preview_quick_sprite_batch_spec
+        src/tools/preview/PreviewQuickSpriteBatchSpec.cpp
+        src/preview/quick_scene/PreviewQuickSpriteBatchPolicy.h
     )
 
     add_executable(preview_sfx_timeline_spec
@@ -704,6 +709,16 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/preview
         src/preview/scene
         src/timeline
+    )
+
+    target_link_libraries(preview_quick_sprite_batch_spec PRIVATE
+        Qt6::Core
+    )
+    target_include_directories(preview_quick_sprite_batch_spec PRIVATE
+        src
+        src/common
+        src/preview
+        src/preview/quick_scene
     )
 
     target_link_libraries(preview_sfx_timeline_spec PRIVATE
