@@ -173,6 +173,36 @@ void TimelineView::paintEvent(QPaintEvent* event)
         painter.setPen(majorBeatPen);
         painter.drawLine(x, top, x, top + h);
     }
+    if (trailingMeasureLineStepSeconds_ > 1e-6) {
+        const double visibleLowerBound = visibleStartSecond - 1.0;
+        const double visibleUpperBound = visibleEndSecond + 1.0;
+        double extensionSecond = trailingMeasureLineStartSecond_;
+        if (!measureLineSeconds_.isEmpty()) {
+            const double lastMeasureSecond = measureLineSeconds_.constLast();
+            if (extensionSecond <= lastMeasureSecond + 1e-6) {
+                const double delta = lastMeasureSecond - extensionSecond;
+                const qint64 steps = qMax<qint64>(
+                    1,
+                    static_cast<qint64>(qFloor(delta / trailingMeasureLineStepSeconds_)) + 1);
+                extensionSecond += trailingMeasureLineStepSeconds_ * static_cast<double>(steps);
+            }
+        }
+        if (extensionSecond <= visibleLowerBound + 1e-6) {
+            const double delta = visibleLowerBound - extensionSecond;
+            const qint64 steps = qMax<qint64>(
+                1,
+                static_cast<qint64>(qFloor(delta / trailingMeasureLineStepSeconds_)) + 1);
+            extensionSecond += trailingMeasureLineStepSeconds_ * static_cast<double>(steps);
+        }
+        for (; extensionSecond <= visibleUpperBound + 1e-6; extensionSecond += trailingMeasureLineStepSeconds_) {
+            const int x = secondToX(extensionSecond) - xOffset;
+            if (x < left - 1 || x > viewport()->width()) {
+                continue;
+            }
+            painter.setPen(majorBeatPen);
+            painter.drawLine(x, top, x, top + h);
+        }
+    }
 
     if (!headerLabels.isEmpty()) {
         const QFontMetricsF baseHeaderMetrics(headerLineNumberFont_);

@@ -614,6 +614,8 @@ bool sameSnapshot(const TimelineRenderSnapshot& left, const TimelineRenderSnapsh
     if (!nearlyEqual(left.durationSeconds, right.durationSeconds)
         || !nearlyEqual(left.minimumSecond, right.minimumSecond)
         || !nearlyEqual(left.maximumSecond, right.maximumSecond)
+        || !nearlyEqual(left.trailingMeasureLineStartSecond, right.trailingMeasureLineStartSecond)
+        || !nearlyEqual(left.trailingMeasureLineStepSeconds, right.trailingMeasureLineStepSeconds)
         || left.lines.size() != right.lines.size()
         || !sameDoubleVector(left.measureLineSeconds, right.measureLineSeconds)
         || !sameDoubleVector(left.noteVisualEndPrefixMaxWithSlideTracks, right.noteVisualEndPrefixMaxWithSlideTracks)
@@ -1154,6 +1156,22 @@ int main(int argc, char** argv)
         QString diff;
         expect(snapshotMatchesParser(chartText, &diff),
                QStringLiteral("parser and quick model agree on BPM-reset measure-line semantics: %1").arg(diff));
+    }
+
+    {
+        const QString chartText = QStringLiteral(",\nE");
+        TimelineQuickModel model;
+        model.rebuildFromText(chartText, 0.0);
+        QVector<double> quickMeasures = flattenSnapshotMeasureLines(model.snapshot());
+        std::sort(quickMeasures.begin(), quickMeasures.end());
+        expect(quickMeasures.size() == 2, QStringLiteral("quick model keeps the next measure marker even when E appears early"));
+        if (quickMeasures.size() == 2) {
+            expect(nearlyEqual(quickMeasures.at(0), 0.0) && nearlyEqual(quickMeasures.at(1), 2.0),
+                   QStringLiteral("measure markers are no longer capped by terminal E or remaining text"));
+        }
+        expect(nearlyEqual(model.snapshot().trailingMeasureLineStartSecond, 0.0)
+                   && nearlyEqual(model.snapshot().trailingMeasureLineStepSeconds, 2.0),
+               QStringLiteral("snapshot exposes trailing measure cadence for view-side extension"));
     }
 
     {

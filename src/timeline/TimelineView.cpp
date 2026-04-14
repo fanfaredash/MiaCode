@@ -282,6 +282,8 @@ void TimelineView::setTimelineData(const TimelineRenderSnapshot& snapshot)
     measureLineSeconds_ = snapshot.measureLineSeconds;
     noteVisualEndPrefixMaxWithSlideTracks_ = snapshot.noteVisualEndPrefixMaxWithSlideTracks;
     noteVisualEndPrefixMaxWithoutSlideTracks_ = snapshot.noteVisualEndPrefixMaxWithoutSlideTracks;
+    trailingMeasureLineStartSecond_ = snapshot.trailingMeasureLineStartSecond;
+    trailingMeasureLineStepSeconds_ = snapshot.trailingMeasureLineStepSeconds;
     muriMarkerLocationIds_.clear();
     durationSeconds_ = qMax(0.0, snapshot.durationSeconds);
     minimumDataSecond_ = snapshot.minimumSecond;
@@ -307,6 +309,8 @@ void TimelineView::clear()
     measureLineSeconds_.clear();
     noteVisualEndPrefixMaxWithSlideTracks_.clear();
     noteVisualEndPrefixMaxWithoutSlideTracks_.clear();
+    trailingMeasureLineStartSecond_ = 0.0;
+    trailingMeasureLineStepSeconds_ = 0.0;
     muriMarkerLocationIds_.clear();
     durationSeconds_ = 0.0;
     playbackEntrySeconds_ = 0.0;

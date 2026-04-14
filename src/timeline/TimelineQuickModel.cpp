@@ -1045,6 +1045,8 @@ void TimelineQuickModel::rebuildSnapshotDuration()
     snapshot_.measureLineSeconds.clear();
     snapshot_.noteVisualEndPrefixMaxWithSlideTracks.clear();
     snapshot_.noteVisualEndPrefixMaxWithoutSlideTracks.clear();
+    snapshot_.trailingMeasureLineStartSecond = 0.0;
+    snapshot_.trailingMeasureLineStepSeconds = 0.0;
     snapshot_.lines.reserve(lines_.size());
     snapshot_.noteVisualEndPrefixMaxWithSlideTracks.reserve(lines_.size());
     snapshot_.noteVisualEndPrefixMaxWithoutSlideTracks.reserve(lines_.size());
@@ -1075,6 +1077,21 @@ void TimelineQuickModel::rebuildSnapshotDuration()
         const LineState& lineState = lines_.at(index);
         trailingLineIndex = index;
         hasRealComma = hasRealComma || !lineState.render.beats.isEmpty();
+    }
+    int trailingMeasureLineIndex = -1;
+    for (int index = lines_.size() - 1; index >= 0; --index) {
+        const LineState& lineState = lines_.at(index);
+        const bool pureTerminalOnly = lineState.isTerminalE
+            && lineState.render.beats.isEmpty()
+            && lineState.render.notes.isEmpty()
+            && lineState.render.measureLineSecondOffsets.isEmpty()
+            && qAbs(lineState.render.endSecond - lineState.render.startSecond) <= kTimelineEpsilon
+            && qAbs(lineState.terminalSecond - lineState.render.startSecond) <= kTimelineEpsilon;
+        if (pureTerminalOnly) {
+            continue;
+        }
+        trailingMeasureLineIndex = index;
+        break;
     }
 
     for (int index = 0; index < lines_.size(); ++index) {
@@ -1117,26 +1134,32 @@ void TimelineQuickModel::rebuildSnapshotDuration()
         hasData = true;
     }
 
-    if (trailingLineIndex >= 0) {
-        const LineState& trailingLine = lines_.at(trailingLineIndex);
+    if (trailingMeasureLineIndex >= 0) {
+        const LineState& trailingLine = lines_.at(trailingMeasureLineIndex);
         const double measureDuration = measureDurationSeconds(
             trailingLine.endState.bpm,
             trailingLine.endState.meterNumerator,
             trailingLine.endState.meterDenominator);
-        const double nextMeasureSecond = trailingLine.endState.currentMeasureStartSecond + measureDuration;
-        if (qIsFinite(nextMeasureSecond)
-            && nextMeasureSecond > trailingLine.endState.currentMeasureStartSecond + kTimelineEpsilon
-            && (terminalLineIndex < 0 || nextMeasureSecond <= terminalSecond + kTimelineEpsilon)) {
-            appendDistinctSecond(&snapshot_.measureLineSeconds, nextMeasureSecond);
-            if (hasData) {
-                maxSecond = qMax(maxSecond, nextMeasureSecond);
-                minSecond = qMin(minSecond, nextMeasureSecond);
-            } else {
-                minSecond = nextMeasureSecond;
-                maxSecond = nextMeasureSecond;
-                hasData = true;
+        if (qIsFinite(measureDuration) && measureDuration > kTimelineEpsilon) {
+            snapshot_.trailingMeasureLineStartSecond = trailingLine.endState.currentMeasureStartSecond;
+            snapshot_.trailingMeasureLineStepSeconds = measureDuration;
+            const double nextMeasureSecond = trailingLine.endState.currentMeasureStartSecond + measureDuration;
+            if (qIsFinite(nextMeasureSecond)
+                && nextMeasureSecond > trailingLine.endState.currentMeasureStartSecond + kTimelineEpsilon) {
+                appendDistinctSecond(&snapshot_.measureLineSeconds, nextMeasureSecond);
+                if (hasData) {
+                    maxSecond = qMax(maxSecond, nextMeasureSecond);
+                    minSecond = qMin(minSecond, nextMeasureSecond);
+                } else {
+                    minSecond = nextMeasureSecond;
+                    maxSecond = nextMeasureSecond;
+                    hasData = true;
+                }
             }
         }
+    }
+    if (trailingLineIndex >= 0) {
+        const LineState& trailingLine = lines_.at(trailingLineIndex);
         if (hasRealComma && terminalLineIndex < 0) {
             maxSecond = qMax(maxSecond, trailingLine.endState.second);
             minSecond = hasData ? qMin(minSecond, trailingLine.endState.second) : trailingLine.endState.second;
