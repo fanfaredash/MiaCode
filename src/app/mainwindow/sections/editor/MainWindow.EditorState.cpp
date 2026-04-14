@@ -197,6 +197,9 @@ void MainWindow::EditorSection::loadProjectRenderState()
         }
     }
     state_.previewAudioSettings_.normalize();
+    if (ui_.timelineView_ != nullptr) {
+        ui_.timelineView_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
+    }
     owner_.refreshPreviewFrameRateTimers();
     owner_.applyPreviewStageMediaRouteVisualSettings();
     if (state_.previewCanvas_ != nullptr) {

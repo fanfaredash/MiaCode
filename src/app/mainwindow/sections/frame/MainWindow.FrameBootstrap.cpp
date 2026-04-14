@@ -976,6 +976,8 @@ MainWindow::MainWindow(QWidget* parent)
         seekPreviewToSecond(clampedSecond, false);
     });
     connect(timelineView_, &TimelineView::followPreviewToggled, this, [this](bool enabled) {
+        state_.previewFollowEnabled_ = enabled;
+        savePortableState();
         if (!enabled) {
             clearPreviewFollowDecoration();
             return;

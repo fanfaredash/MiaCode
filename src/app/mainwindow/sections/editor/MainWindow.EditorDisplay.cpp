@@ -88,6 +88,9 @@ void MainWindow::EditorSection::loadPortableState()
         state_.lastTrackPath_ = QDir::cleanPath(trackPath);
     }
     applyPortablePreviewSettings(preview);
+    if (ui_.timelineView_ != nullptr) {
+        ui_.timelineView_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
+    }
     owner_.refreshPreviewFrameRateTimers();
 }
 
@@ -98,6 +101,7 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.showSlideTracks_ = true;
     state_.showJudgeMarkers_ = false;
     state_.showTouchTrail_ = false;
+    state_.previewFollowEnabled_ = false;
     state_.muriRenderOptions_ = MuriRenderOptions();
     state_.staticTapOnSlideThresholdMs_ = miacode::muri::kStaticTapOnSlideThresholdDefaultMs;
     state_.previewBackgroundBrightnessOuter_ = miacode::preview_video::kBackgroundBrightnessDefault;
@@ -229,6 +233,9 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     if (preview.value("show_validation_summary").isBool()) {
         state_.previewShowValidationSummary_ = preview.value("show_validation_summary").toBool(true);
     }
+    if (preview.value("follow_preview").isBool()) {
+        state_.previewFollowEnabled_ = preview.value("follow_preview").toBool(false);
+    }
     const miacode::chart_transform::ChartNormalizationOptions normalizationOptions =
         miacode::chart_transform::chartNormalizationOptionsFromPreferences(preview);
     state_.chartNormalizeStartAtNewMeasure_ = normalizationOptions.startAtNewMeasure;
@@ -304,6 +311,7 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("show_object_stats_preview", state_.previewShowObjectStatsHud_);
     preview.insert("show_object_stats_export", state_.exportShowObjectStatsHud_);
     preview.insert("show_validation_summary", state_.previewShowValidationSummary_);
+    preview.insert("follow_preview", state_.previewFollowEnabled_);
     miacode::chart_transform::saveChartNormalizationOptionsToPreferences(
         &preview,
         miacode::chart_transform::ChartNormalizationOptions{
