@@ -155,6 +155,8 @@ private:
     QVector<double> measureLineSeconds_;
     QVector<double> noteVisualEndPrefixMaxWithSlideTracks_;
     QVector<double> noteVisualEndPrefixMaxWithoutSlideTracks_;
+    double trailingMeasureLineStartSecond_ = 0.0;
+    double trailingMeasureLineStepSeconds_ = 0.0;
     double durationSeconds_ = 0.0;
     double playbackEntrySeconds_ = 0.0;
     double playheadSeconds_ = 0.0;

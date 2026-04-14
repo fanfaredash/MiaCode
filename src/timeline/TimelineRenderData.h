@@ -87,6 +87,8 @@ struct TimelineRenderSnapshot {
     QVector<double> measureLineSeconds;
     QVector<double> noteVisualEndPrefixMaxWithSlideTracks;
     QVector<double> noteVisualEndPrefixMaxWithoutSlideTracks;
+    double trailingMeasureLineStartSecond = 0.0;
+    double trailingMeasureLineStepSeconds = 0.0;
     double durationSeconds = 0.0;
     double minimumSecond = -0.5;
     double maximumSecond = 1.0;
