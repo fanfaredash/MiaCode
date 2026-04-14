@@ -490,7 +490,14 @@ $zipPath = "$DistDir.zip"
 if (Test-Path $zipPath) {
     Remove-Item -Force $zipPath
 }
-Compress-Archive -Path (Join-Path $DistDir "*") -DestinationPath $zipPath -CompressionLevel Optimal
+$zipParentDir = Split-Path -Parent $DistDir
+$zipFolderName = Split-Path -Leaf $DistDir
+Push-Location $zipParentDir
+try {
+    Compress-Archive -Path $zipFolderName -DestinationPath $zipPath -CompressionLevel Optimal
+} finally {
+    Pop-Location
+}
 
 Write-Host "Packaged to $DistDir"
 Write-Host "Zip created: $zipPath"
