@@ -541,6 +541,7 @@ void TimelineView::setFollowPreviewEnabled(bool enabled)
     if (followPreviewCheckBox_ == nullptr) {
         return;
     }
+    const QSignalBlocker blocker(followPreviewCheckBox_);
     followPreviewCheckBox_->setChecked(enabled);
 }
 
