@@ -7,6 +7,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/LayoutRingConfig.h"
+#include "common/MiniaudioFileAccess.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewSfxAssets.h"
 #include "common/PreviewSfxTimeline.h"
@@ -39,8 +40,6 @@
 #include <QThread>
 #include <QUuid>
 #include <QtMath>
-
-#include "../../../third_party/miniaudio/miniaudio.h"
 
 #include <algorithm>
 #include <cmath>
@@ -2147,8 +2146,7 @@ bool decodeAudioClip(const QString& path, DecodedClip* clip)
 
     ma_decoder decoder;
     ma_decoder_config config = ma_decoder_config_init(ma_format_f32, kMixChannels, kMixSampleRate);
-    const QByteArray encodedPath = QFile::encodeName(path);
-    if (ma_decoder_init_file(encodedPath.constData(), &config, &decoder) != MA_SUCCESS) {
+    if (miacode::audio_io::decoderInitFile(path, &config, &decoder) != MA_SUCCESS) {
         return false;
     }
 

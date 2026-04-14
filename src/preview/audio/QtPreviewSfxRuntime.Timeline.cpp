@@ -143,6 +143,11 @@ void QtPreviewSfxRuntime::setBackgroundTrackPlaybackRate(double rate)
         if (backgroundTrackVoice_ != nullptr) {
             if (backgroundTrackVoice_->initialized) {
                 ma_sound_uninit(&backgroundTrackVoice_->sound);
+                backgroundTrackVoice_->initialized = false;
+            }
+            if (backgroundTrackVoice_->decoderInitialized) {
+                ma_decoder_uninit(&backgroundTrackVoice_->decoder);
+                backgroundTrackVoice_->decoderInitialized = false;
             }
             delete backgroundTrackVoice_;
             backgroundTrackVoice_ = nullptr;

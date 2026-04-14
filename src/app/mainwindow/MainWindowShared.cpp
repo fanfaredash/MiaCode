@@ -5,6 +5,7 @@
 #include "UiTheme.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/MiniaudioFileAccess.h"
 
 #include <QApplication>
 #include <QCryptographicHash>
@@ -33,8 +34,6 @@
 #include <QtMath>
 
 #include <cmath>
-
-#include "../../../third_party/miniaudio/miniaudio.h"
 
 namespace miacode::mainwindow::shared {
 
@@ -1029,10 +1028,9 @@ double probeAudioDurationSeconds(const QString& trackPath)
         return 0.0;
     }
 
-    const QByteArray pathBytes = QFile::encodeName(trackPath);
     ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 1, 48000);
     ma_decoder decoder;
-    if (ma_decoder_init_file(pathBytes.constData(), &config, &decoder) != MA_SUCCESS) {
+    if (miacode::audio_io::decoderInitFile(trackPath, &config, &decoder) != MA_SUCCESS) {
         return 0.0;
     }
 
@@ -1057,10 +1055,9 @@ QVector<float> buildWaveformPeaks(const QString& trackPath, double* durationSeco
         return peaks;
     }
 
-    const QByteArray pathBytes = QFile::encodeName(trackPath);
     ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 1, 48000);
     ma_decoder decoder;
-    if (ma_decoder_init_file(pathBytes.constData(), &config, &decoder) != MA_SUCCESS) {
+    if (miacode::audio_io::decoderInitFile(trackPath, &config, &decoder) != MA_SUCCESS) {
         return peaks;
     }
 
