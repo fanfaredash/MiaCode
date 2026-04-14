@@ -486,6 +486,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/preview/scene/PreviewPreparedSceneCache.cpp
         src/preview/scene/PreviewChartReviewLayerState.h
         src/preview/scene/PreviewChartReviewLayerState.cpp
+        src/preview/scene/PreviewSlideMotionLayerState.h
+        src/preview/scene/PreviewSlideMotionLayerState.cpp
         src/preview/scene/PreviewHeadLayerState.h
         src/preview/scene/PreviewHeadLayerState.cpp
         src/preview/scene/PreviewAnimatedSpriteHelpers.h
