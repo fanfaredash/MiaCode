@@ -26,7 +26,7 @@ bool MainWindow::TimelineSection::preparePreviewStartState()
 void MainWindow::TimelineSection::onStopPreview()
 {
     const double returnSecond = qBound(0.0, state_.qtPreviewPlaybackReturnSecond_, previewDurationSeconds());
-    if (state_.qtPreviewPlaying_) {
+    if (state_.qtPreviewPlaying_ || state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
         stopQtPreviewPlayback(true);
     }
     state_.pendingPreviewPlaybackStart_ = false;
@@ -57,9 +57,15 @@ void MainWindow::TimelineSection::onTogglePreviewPause()
         return;
     }
     owner_.updatePauseButtonAppearance();
-    owner_.statusBar()->showMessage(
-        QString("Qt preview resumed at %1s.").arg(state_.qtPreviewPauseSecond_, 0, 'f', 2)
-    );
+    if (state_.previewStartupSyncPending_) {
+        owner_.statusBar()->showMessage(
+            QString("Qt preview starting at %1s.").arg(state_.qtPreviewPauseSecond_, 0, 'f', 2)
+        );
+    } else {
+        owner_.statusBar()->showMessage(
+            QString("Qt preview resumed at %1s.").arg(state_.qtPreviewPauseSecond_, 0, 'f', 2)
+        );
+    }
 }
 
 bool MainWindow::preparePreviewStartState()

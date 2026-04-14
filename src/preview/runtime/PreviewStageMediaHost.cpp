@@ -111,6 +111,22 @@ void PreviewStageMediaHost::initializeBackendObjects()
             pausedSeekCompletionPending_ = false;
             emit pausedSeekCompleted(pausedSeekTargetSecond_, pausedSeekGeneration_);
         }
+        if (preparedPlaybackPending_
+            && preparedPlaybackTargetMs_ >= 0
+            && videoSink_ == nullptr
+            && qAbs(positionMs - preparedPlaybackTargetMs_) <= kPausedSeekAckToleranceMs) {
+            appendPreviewStageMediaLog(
+                QStringLiteral("prepare_playback_ready"),
+                QString("txn=%1 second=%2 position_ms=%3 target_ms=%4 source=position_fallback")
+                    .arg(preparedPlaybackTransaction_)
+                    .arg(preparedPlaybackTargetSecond_, 0, 'f', 6)
+                    .arg(positionMs)
+                    .arg(preparedPlaybackTargetMs_)
+            );
+            preparedPlaybackPending_ = false;
+            preparedPlaybackReady_ = true;
+            emit playbackStartPrepared(preparedPlaybackTargetSecond_, preparedPlaybackTransaction_);
+        }
         emit playbackPositionChanged(lastTimelineSecond_);
         emit diagnosticsChanged();
     });
@@ -258,6 +274,182 @@ void PreviewStageMediaHost::setPlaybackRate(double rate)
 #endif
 }
 
+void PreviewStageMediaHost::setPlaybackTransactionId(quint64 transactionId)
+{
+    playbackTransactionId_ = transactionId;
+}
+
+void PreviewStageMediaHost::preparePlaybackStart(double seconds, quint64 transactionId)
+{
+#ifndef HAVE_QT_MULTIMEDIA
+    Q_UNUSED(seconds);
+    Q_UNUSED(transactionId);
+#else
+    initializeBackendObjects();
+    const double clampedSecond = qMax(0.0, seconds);
+    observedPlayheadSecond_ = clampedSecond;
+    updateClockDelta();
+    preparedPlaybackTransaction_ = transactionId;
+    preparedPlaybackTargetSecond_ = clampedSecond;
+    preparedPlaybackTargetMs_ = -1;
+    preparedPlaybackPending_ = false;
+    preparedPlaybackReady_ = false;
+    pausedSeekCompletionPending_ = false;
+    pausedSeekTargetMs_ = -1;
+    pausedSeekTargetSecond_ = 0.0;
+    pausedSeekGeneration_ = 0;
+    appendPreviewStageMediaLog(
+        QStringLiteral("prepare_playback_start"),
+        QString("txn=%1 second=%2 rate=%3 offset=%4 has_video=%5")
+            .arg(transactionId)
+            .arg(clampedSecond, 0, 'f', 6)
+            .arg(playbackRate_, 0, 'f', 3)
+            .arg(timelineOffsetSeconds_, 0, 'f', 6)
+            .arg(mediaKind_ == MediaKind::Video && player_ != nullptr ? 1 : 0));
+    if (mediaKind_ != MediaKind::Video || player_ == nullptr) {
+        emit playbackStartPrepared(clampedSecond, transactionId);
+        emit diagnosticsChanged();
+        return;
+    }
+
+    videoPlaybackActive_ = false;
+    videoPlaybackPendingStart_ = false;
+    videoPlaybackActiveElapsed_.invalidate();
+    lastTimelineSecond_ = clampedSecond;
+    const qint64 targetMs = qMax<qint64>(0, qRound64((clampedSecond + timelineOffsetSeconds_) * 1000.0));
+    preparedPlaybackTargetMs_ = targetMs;
+    preparedPlaybackPending_ = true;
+    player_->pause();
+    if (lastSeekMs_ >= 0 && qAbs(targetMs - lastSeekMs_) < 40) {
+        QMetaObject::invokeMethod(
+            this,
+            [this, transactionId, clampedSecond]() {
+                if (!preparedPlaybackPending_ || preparedPlaybackTransaction_ != transactionId) {
+                    appendPreviewStageMediaLog(
+                        QStringLiteral("prepare_playback_drop"),
+                        QString("txn=%1 current_txn=%2 reason=queued_ack_stale")
+                            .arg(transactionId)
+                            .arg(preparedPlaybackTransaction_)
+                    );
+                    return;
+                }
+                preparedPlaybackPending_ = false;
+                preparedPlaybackReady_ = true;
+                appendPreviewStageMediaLog(
+                    QStringLiteral("prepare_playback_ready"),
+                    QString("txn=%1 second=%2 position_ms=%3 target_ms=%4 source=queued")
+                        .arg(transactionId)
+                        .arg(clampedSecond, 0, 'f', 6)
+                        .arg(lastSeekMs_)
+                        .arg(preparedPlaybackTargetMs_)
+                );
+                emit playbackStartPrepared(clampedSecond, transactionId);
+            },
+            Qt::QueuedConnection
+        );
+        emit diagnosticsChanged();
+        return;
+    }
+    lastSeekMs_ = targetMs;
+    player_->setPosition(targetMs);
+    emit diagnosticsChanged();
+#endif
+}
+
+void PreviewStageMediaHost::commitPreparedPlaybackStart(double currentTimelineSecond)
+{
+#ifndef HAVE_QT_MULTIMEDIA
+    Q_UNUSED(currentTimelineSecond);
+#else
+    initializeBackendObjects();
+    if (mediaKind_ != MediaKind::Video || player_ == nullptr) {
+        return;
+    }
+
+    const double clampedSecond = qMax(0.0, currentTimelineSecond);
+    observedPlayheadSecond_ = clampedSecond;
+    lastTimelineSecond_ = clampedSecond;
+    const double rawSecond = clampedSecond + timelineOffsetSeconds_;
+    if (rawSecond < 0.0) {
+        player_->pause();
+        videoPlaybackPendingStart_ = true;
+        videoPlaybackActive_ = false;
+        videoPlaybackActiveElapsed_.invalidate();
+        appendPreviewStageMediaLog(
+            QStringLiteral("commit_prepared_playback_pending"),
+            QString("txn=%1 second=%2 raw_second=%3")
+                .arg(playbackTransactionId_)
+                .arg(clampedSecond, 0, 'f', 6)
+                .arg(rawSecond, 0, 'f', 6));
+        preparedPlaybackPending_ = false;
+        preparedPlaybackReady_ = false;
+        preparedPlaybackTargetMs_ = -1;
+        preparedPlaybackTargetSecond_ = 0.0;
+        preparedPlaybackTransaction_ = 0;
+        updateClockDelta();
+        emit diagnosticsChanged();
+        return;
+    }
+
+    const qint64 targetMs = qMax<qint64>(0, qRound64(rawSecond * 1000.0));
+    lastSeekMs_ = targetMs;
+    player_->setPosition(targetMs);
+    player_->play();
+    videoPlaybackPendingStart_ = false;
+    videoPlaybackActive_ = true;
+    videoPlaybackActiveElapsed_.restart();
+    if (playerPlaybackState(player_) != QMediaPlayer::PlayingState) {
+        QMetaObject::invokeMethod(player_, [this]() {
+            if (mediaKind_ == MediaKind::Video && videoPlaybackActive_) {
+                player_->play();
+            }
+        }, Qt::QueuedConnection);
+    }
+    appendPreviewStageMediaLog(
+        QStringLiteral("commit_prepared_playback"),
+        QString("txn=%1 second=%2 raw_second=%3 target_ms=%4 late=%5")
+            .arg(playbackTransactionId_)
+            .arg(clampedSecond, 0, 'f', 6)
+            .arg(rawSecond, 0, 'f', 6)
+            .arg(targetMs)
+            .arg(qAbs(clampedSecond - preparedPlaybackTargetSecond_) > 0.0005 ? 1 : 0));
+    preparedPlaybackPending_ = false;
+    preparedPlaybackReady_ = false;
+    preparedPlaybackTargetMs_ = -1;
+    preparedPlaybackTargetSecond_ = 0.0;
+    preparedPlaybackTransaction_ = 0;
+    updateClockDelta();
+    updateVideoFrameStallState(true);
+    emit diagnosticsChanged();
+#endif
+}
+
+void PreviewStageMediaHost::cancelPreparedPlaybackStart(quint64 transactionId)
+{
+    if (transactionId != 0 && preparedPlaybackTransaction_ != transactionId) {
+        return;
+    }
+    if (!preparedPlaybackPending_ && !preparedPlaybackReady_ && preparedPlaybackTransaction_ == 0) {
+        return;
+    }
+    appendPreviewStageMediaLog(
+        QStringLiteral("prepare_playback_cancel"),
+        QString("txn=%1 pending=%2 ready=%3")
+            .arg(preparedPlaybackTransaction_)
+            .arg(preparedPlaybackPending_ ? 1 : 0)
+            .arg(preparedPlaybackReady_ ? 1 : 0));
+    preparedPlaybackPending_ = false;
+    preparedPlaybackReady_ = false;
+    preparedPlaybackTargetMs_ = -1;
+    preparedPlaybackTargetSecond_ = 0.0;
+    preparedPlaybackTransaction_ = 0;
+}
+
+bool PreviewStageMediaHost::hasPreparedPlaybackStart(quint64 transactionId) const
+{
+    return preparedPlaybackReady_ && preparedPlaybackTransaction_ == transactionId;
+}
+
 void PreviewStageMediaHost::setTimelineOffsetSeconds(double seconds)
 {
     timelineOffsetSeconds_ = qIsFinite(seconds) ? seconds : 0.0;
@@ -297,6 +489,15 @@ void PreviewStageMediaHost::startPlayback(double seconds)
 #else
     initializeBackendObjects();
     observedPlayheadSecond_ = qMax(0.0, seconds);
+    appendPreviewStageMediaLog(
+        QStringLiteral("start_playback"),
+        QString("txn=%1 second=%2 raw_second=%3 rate=%4 offset=%5 has_video=%6")
+            .arg(playbackTransactionId_)
+            .arg(observedPlayheadSecond_, 0, 'f', 6)
+            .arg(observedPlayheadSecond_ + timelineOffsetSeconds_, 0, 'f', 6)
+            .arg(playbackRate_, 0, 'f', 3)
+            .arg(timelineOffsetSeconds_, 0, 'f', 6)
+            .arg(mediaKind_ == MediaKind::Video && player_ != nullptr ? 1 : 0));
     if (mediaKind_ != MediaKind::Video || player_ == nullptr) {
         videoPlaybackActiveElapsed_.invalidate();
         updateVideoFrameStallState(true);
@@ -315,6 +516,13 @@ void PreviewStageMediaHost::startPlayback(double seconds)
         videoPlaybackPendingStart_ = true;
         videoPlaybackActive_ = false;
         videoPlaybackActiveElapsed_.invalidate();
+        appendPreviewStageMediaLog(
+            QStringLiteral("start_playback_pending"),
+            QString("txn=%1 second=%2 raw_second=%3 target_ms=%4")
+                .arg(playbackTransactionId_)
+                .arg(seconds, 0, 'f', 6)
+                .arg(rawSecond, 0, 'f', 6)
+                .arg(targetMs));
     } else {
         player_->play();
         videoPlaybackActive_ = true;
@@ -327,6 +535,13 @@ void PreviewStageMediaHost::startPlayback(double seconds)
                 }
             }, Qt::QueuedConnection);
         }
+        appendPreviewStageMediaLog(
+            QStringLiteral("start_playback_started"),
+            QString("txn=%1 second=%2 raw_second=%3 target_ms=%4")
+                .arg(playbackTransactionId_)
+                .arg(seconds, 0, 'f', 6)
+                .arg(rawSecond, 0, 'f', 6)
+                .arg(targetMs));
     }
     updateClockDelta();
     updateVideoFrameStallState(true);
@@ -441,6 +656,13 @@ void PreviewStageMediaHost::syncPlayback(double seconds)
     videoPlaybackPendingStart_ = false;
     videoPlaybackActive_ = true;
     videoPlaybackActiveElapsed_.restart();
+    appendPreviewStageMediaLog(
+        QStringLiteral("sync_playback_started"),
+        QString("txn=%1 second=%2 raw_second=%3 target_ms=%4")
+            .arg(playbackTransactionId_)
+            .arg(seconds, 0, 'f', 6)
+            .arg(rawSecond, 0, 'f', 6)
+            .arg(targetMs));
     updateClockDelta();
     updateVideoFrameStallState(true);
     emit diagnosticsChanged();
@@ -456,9 +678,18 @@ void PreviewStageMediaHost::pausePlayback()
     if (mediaKind_ == MediaKind::Video && player_ != nullptr) {
         player_->pause();
     }
+    pausedSeekCompletionPending_ = false;
+    pausedSeekTargetMs_ = -1;
+    pausedSeekTargetSecond_ = 0.0;
+    pausedSeekGeneration_ = 0;
     videoPlaybackActive_ = false;
     videoPlaybackPendingStart_ = false;
     videoPlaybackActiveElapsed_.invalidate();
+    preparedPlaybackPending_ = false;
+    preparedPlaybackReady_ = false;
+    preparedPlaybackTargetMs_ = -1;
+    preparedPlaybackTargetSecond_ = 0.0;
+    preparedPlaybackTransaction_ = 0;
     updateClockDelta();
     updateVideoFrameStallState(true);
     emit diagnosticsChanged();
@@ -567,6 +798,11 @@ void PreviewStageMediaHost::clearMedia()
     pausedSeekTargetMs_ = -1;
     pausedSeekTargetSecond_ = 0.0;
     pausedSeekGeneration_ = 0;
+    preparedPlaybackPending_ = false;
+    preparedPlaybackReady_ = false;
+    preparedPlaybackTargetMs_ = -1;
+    preparedPlaybackTargetSecond_ = 0.0;
+    preparedPlaybackTransaction_ = 0;
     mediaPath_.clear();
     imageSource_ = QUrl();
     lastTimelineSecond_ = 0.0;
@@ -598,6 +834,11 @@ void PreviewStageMediaHost::loadImageMedia(const QString& path)
     pausedSeekTargetMs_ = -1;
     pausedSeekTargetSecond_ = 0.0;
     pausedSeekGeneration_ = 0;
+    preparedPlaybackPending_ = false;
+    preparedPlaybackReady_ = false;
+    preparedPlaybackTargetMs_ = -1;
+    preparedPlaybackTargetSecond_ = 0.0;
+    preparedPlaybackTransaction_ = 0;
     lastTimelineSecond_ = 0.0;
     lastSeekMs_ = -1;
     videoPlaybackActive_ = false;
@@ -625,6 +866,11 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     pausedSeekTargetMs_ = -1;
     pausedSeekTargetSecond_ = 0.0;
     pausedSeekGeneration_ = 0;
+    preparedPlaybackPending_ = false;
+    preparedPlaybackReady_ = false;
+    preparedPlaybackTargetMs_ = -1;
+    preparedPlaybackTargetSecond_ = 0.0;
+    preparedPlaybackTransaction_ = 0;
     lastTimelineSecond_ = 0.0;
     lastSeekMs_ = -1;
     videoPlaybackActive_ = false;
@@ -750,6 +996,47 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame)
                 QString("generation=%1 target_ms=%2 frame_ms=%3 frame_end_ms=%4")
                     .arg(pausedSeekGeneration_)
                     .arg(pausedSeekTargetMs_)
+                    .arg(candidatePositionMs)
+                    .arg(frameEndUs >= 0 ? (frameEndUs / 1000) : -1)
+            );
+        }
+    }
+    if (preparedPlaybackPending_ && preparedPlaybackTargetMs_ >= 0) {
+        qint64 candidatePositionMs = -1;
+        const qint64 frameStartUs = frame.startTime();
+        const qint64 frameEndUs = frame.endTime();
+        if (frameStartUs >= 0) {
+            candidatePositionMs = frameStartUs / 1000;
+        } else if (player_ != nullptr) {
+            candidatePositionMs = player_->position();
+        }
+        const bool frameCoversTarget =
+            frameStartUs >= 0
+            && frameEndUs >= 0
+            && (frameStartUs / 1000) <= preparedPlaybackTargetMs_
+            && preparedPlaybackTargetMs_ <= (frameEndUs / 1000);
+        const bool closeEnough =
+            candidatePositionMs >= 0
+            && qAbs(candidatePositionMs - preparedPlaybackTargetMs_) <= kPausedSeekAckToleranceMs;
+        if (frameCoversTarget || closeEnough) {
+            appendPreviewStageMediaLog(
+                QStringLiteral("prepare_playback_ready"),
+                QString("txn=%1 second=%2 target_ms=%3 frame_ms=%4 frame_end_ms=%5 source=frame")
+                    .arg(preparedPlaybackTransaction_)
+                    .arg(preparedPlaybackTargetSecond_, 0, 'f', 6)
+                    .arg(preparedPlaybackTargetMs_)
+                    .arg(candidatePositionMs)
+                    .arg(frameEndUs >= 0 ? (frameEndUs / 1000) : -1)
+            );
+            preparedPlaybackPending_ = false;
+            preparedPlaybackReady_ = true;
+            emit playbackStartPrepared(preparedPlaybackTargetSecond_, preparedPlaybackTransaction_);
+        } else {
+            appendPreviewStageMediaLog(
+                QStringLiteral("prepare_playback_wait_frame"),
+                QString("txn=%1 target_ms=%2 frame_ms=%3 frame_end_ms=%4")
+                    .arg(preparedPlaybackTransaction_)
+                    .arg(preparedPlaybackTargetMs_)
                     .arg(candidatePositionMs)
                     .arg(frameEndUs >= 0 ? (frameEndUs / 1000) : -1)
             );

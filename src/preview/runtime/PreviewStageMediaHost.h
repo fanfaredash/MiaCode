@@ -57,6 +57,11 @@ public:
     void setChartPath(const QString& chartPath);
     void setPlaybackRate(double rate);
     void setTimelineOffsetSeconds(double seconds);
+    void setPlaybackTransactionId(quint64 transactionId);
+    void preparePlaybackStart(double seconds, quint64 transactionId);
+    void commitPreparedPlaybackStart(double currentTimelineSecond);
+    void cancelPreparedPlaybackStart(quint64 transactionId = 0);
+    bool hasPreparedPlaybackStart(quint64 transactionId) const;
     void setPlayheadSeconds(double seconds);
     void submitPausedSeek(double seconds, quint64 generation);
     void startPlayback(double seconds);
@@ -83,6 +88,7 @@ signals:
     void imageSourceChanged();
     void backgroundScaleModeChanged();
     void playbackPositionChanged(double seconds);
+    void playbackStartPrepared(double seconds, quint64 transactionId);
     void pausedSeekCompleted(double seconds, quint64 generation);
     void playbackFinished();
     void diagnosticsChanged();
@@ -115,6 +121,12 @@ private:
     QMetaObject::Connection videoSinkFrameConnection_;
     double timelineOffsetSeconds_ = 0.0;
     double playbackRate_ = 1.0;
+    quint64 playbackTransactionId_ = 0;
+    qint64 preparedPlaybackTargetMs_ = -1;
+    double preparedPlaybackTargetSecond_ = 0.0;
+    quint64 preparedPlaybackTransaction_ = 0;
+    bool preparedPlaybackPending_ = false;
+    bool preparedPlaybackReady_ = false;
     double lastTimelineSecond_ = 0.0;
     qint64 lastSeekMs_ = -1;
     qint64 pausedSeekTargetMs_ = -1;
