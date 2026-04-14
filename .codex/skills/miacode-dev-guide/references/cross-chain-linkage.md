@@ -102,7 +102,7 @@ Shared concerns:
 - `trackBreak` vs `headBreak`
 - touchhold span semantics
 - firework timing offsets
-- partial export timing: when the export request is not marked as full-range, export now uses a 1.5-second preload, but the exported marker set is filtered up front by `marker.second` within `[L, R]`; preview/export rendering, Muri overlays, and export SFX all consume that same filtered marker set
+- partial export timing: when the export request is not marked as full-range, export now uses a 1.0-second preload (full-range still keeps its 3.0-second lead-in), and the exported marker set is filtered up front by `marker.second` within the simulated frame window `[timelineOriginSecond, R]`; preview/export rendering, Muri overlays, and export SFX all consume that same filtered marker set
 
 If one side changes, inspect the other side in the same patch.
 

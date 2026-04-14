@@ -301,6 +301,68 @@ bool verifyPreparedHeadOrderAndBaseImageSelection(QTextStream& err)
     return true;
 }
 
+bool verifyNegativePlayheadKeepsFallingTapVisible(QTextStream& err)
+{
+    PreviewFrameState state;
+    TimelineNoteMarker marker;
+    marker.type = QStringLiteral("tap");
+    marker.second = -0.1;
+    marker.lane = 1;
+    state.noteMarkers.append(marker);
+    state.skin.tapImage = solidImage(96, 96);
+
+    const PreviewTapTiming tapTiming =
+        miacode::preview::scene::previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.noteFlowSpeed));
+    state.playheadSeconds = marker.second - tapTiming.flyDurationSeconds * 0.5;
+
+    const PreviewHeadLayerState layerState = buildPreparedHeadLayerState(state);
+    if (!require(layerState.sprites.size() == 1, QStringLiteral("negative playhead tap render produces one sprite"), err)) {
+        return false;
+    }
+
+    const qreal deltaSeconds = static_cast<qreal>(state.playheadSeconds - marker.second);
+    const miacode::preview::scene::TapApproachSample approach = miacode::preview::scene::sampleTapApproach(
+        deltaSeconds,
+        tapTiming.lifecycleDurationSeconds,
+        tapTiming.spawnDurationSeconds,
+        tapTiming.flyDurationSeconds,
+        tapTiming.unitsPerSecond,
+        miacode::preview::scene::kLogicalDistanceTap,
+        miacode::preview::scene::kLogicalDistanceEdge);
+    if (!require(approach.scale > 0.0, QStringLiteral("negative playhead tap stays inside the visible approach window"), err)) {
+        return false;
+    }
+
+    const QPointF unit = miacode::preview::scene::laneUnitVector(marker.lane);
+    const QPointF expectedLogicalPoint(
+        miacode::preview::scene::kLogicalCanvasCenter + unit.x() * approach.distance,
+        miacode::preview::scene::kLogicalCanvasCenter + unit.y() * approach.distance
+    );
+    const QPointF expectedPoint = miacode::preview::scene::mapLogicalPointToRect(
+        expectedLogicalPoint,
+        QRectF(
+            0.0,
+            0.0,
+            miacode::preview::scene::kLogicalCanvasSize,
+            miacode::preview::scene::kLogicalCanvasSize));
+    if (!requireNear(
+            layerState.sprites.constFirst().center.x(),
+            expectedPoint.x(),
+            QStringLiteral("negative playhead tap center x"),
+            err)) {
+        return false;
+    }
+    if (!requireNear(
+            layerState.sprites.constFirst().center.y(),
+            expectedPoint.y(),
+            QStringLiteral("negative playhead tap center y"),
+            err)) {
+        return false;
+    }
+
+    return true;
+}
+
 bool verifyHoldExUsesHeadRenderAssetCache(QTextStream& err)
 {
     PreviewFrameState state;
@@ -358,6 +420,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyPreparedHeadOrderAndBaseImageSelection(err)) {
+        return 1;
+    }
+    if (!verifyNegativePlayheadKeepsFallingTapVisible(err)) {
         return 1;
     }
     if (!verifyHoldExUsesHeadRenderAssetCache(err)) {

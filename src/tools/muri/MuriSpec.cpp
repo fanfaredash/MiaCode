@@ -24,13 +24,45 @@ bool nearlyEqual(double a, double b, double epsilon = 1e-6)
     return qAbs(a - b) <= epsilon;
 }
 
-AnalyzedChart analyzeChart(const QString& chartText)
+double shiftedTimelineSecond(double second, double offsetSeconds)
+{
+    if (!qIsFinite(second) || !qIsFinite(offsetSeconds)) {
+        return second;
+    }
+    return second + offsetSeconds;
+}
+
+QVector<TimelineNoteMarker> shiftedNoteMarkers(
+    const QVector<TimelineNoteMarker>& noteMarkers,
+    double offsetSeconds)
+{
+    QVector<TimelineNoteMarker> shifted = noteMarkers;
+    for (TimelineNoteMarker& marker : shifted) {
+        marker.second = shiftedTimelineSecond(marker.second, offsetSeconds);
+        if (marker.endSecond >= 0.0) {
+            marker.endSecond = shiftedTimelineSecond(marker.endSecond, offsetSeconds);
+        }
+        if (marker.slideTraceSecond >= 0.0) {
+            marker.slideTraceSecond = shiftedTimelineSecond(marker.slideTraceSecond, offsetSeconds);
+        }
+        if (marker.availableSecond >= 0.0) {
+            marker.availableSecond = shiftedTimelineSecond(marker.availableSecond, offsetSeconds);
+        }
+        for (double& shootSecond : marker.slideSegmentShootSeconds) {
+            shootSecond = shiftedTimelineSecond(shootSecond, offsetSeconds);
+        }
+    }
+    return shifted;
+}
+
+AnalyzedChart analyzeChart(const QString& chartText, double firstSeconds = 0.0)
 {
     AnalyzedChart result;
     result.parsed = SimaiNativeParser::parseForTimeline(chartText);
-    result.report = MuriAnalyzer::analyze(result.parsed.noteMarkers);
+    const QVector<TimelineNoteMarker> shiftedMarkers = shiftedNoteMarkers(result.parsed.noteMarkers, firstSeconds);
+    result.report = MuriAnalyzer::analyze(shiftedMarkers);
     result.staticReferences = miacode::muri::buildStaticMuriReferences(
-        result.parsed.noteMarkers,
+        shiftedMarkers,
         static_cast<double>(miacode::muri::kStaticTapOnSlideThresholdDefaultMs) / 1000.0);
     result.visibleEntries = miacode::muri::buildVisibleMuriPanelEntries(result.report, result.staticReferences);
     return result;
@@ -204,6 +236,37 @@ int main(int argc, char** argv)
                 QStringLiteral("anchor repro visible entry points at the first involved object"));
             expect(!entry->isStatic,
                 QStringLiteral("anchor repro runtime entry suppresses the duplicate static entry"));
+        }
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(240){16}\n8>3[4:1],,,,,\n8,\nE\n"),
+            -0.125);
+        expect(analyzed.parsed.ok, QStringLiteral("negative-time slide-head repro chart parses"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::SlideHeadTap) == 1,
+            QStringLiteral("negative-time slide-head repro keeps one runtime slide-head-tap diagnostic"));
+        expect(countStaticReferences(analyzed.staticReferences, MuriKind::SlideHeadTap) == 1,
+            QStringLiteral("negative-time slide-head repro keeps one static slide-head-tap reference"));
+        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::SlideHeadTap) == 1,
+            QStringLiteral("negative-time slide-head repro keeps one visible slide-head-tap entry"));
+
+        if (const MuriDiagnostic* diagnostic =
+                firstDiagnostic(analyzed.report.diagnostics, MuriKind::SlideHeadTap)) {
+            expect(diagnostic->anchorSecond < -1e-6,
+                QStringLiteral("negative-time slide-head repro keeps a negative runtime anchor second"));
+        }
+
+        if (const MuriStaticReference* reference =
+                firstStaticReference(analyzed.staticReferences, MuriKind::SlideHeadTap)) {
+            expect(reference->cause.second < -1e-6,
+                QStringLiteral("negative-time slide-head repro keeps the static cause on the negative-time slide"));
+        }
+
+        if (const miacode::muri::MuriPanelEntry* entry =
+                firstVisibleEntry(analyzed.visibleEntries, MuriKind::SlideHeadTap)) {
+            expect(entry->second < -1e-6,
+                QStringLiteral("negative-time slide-head repro keeps the visible entry anchored before zero"));
         }
     }
 
@@ -520,6 +583,19 @@ int main(int argc, char** argv)
             QStringLiteral("dense overlap repro keeps one visible overlap entry"));
         expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::MultiTouch) == 0,
             QStringLiteral("dense overlap repro does not add multitouch"));
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(120){16}\n1,1,\nE\n"),
+            -0.125);
+        expect(analyzed.parsed.ok, QStringLiteral("negative-time adjacent tap repro chart parses"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::Overlap) == 0,
+            QStringLiteral("negative-time adjacent tap repro does not create runtime overlap"));
+        expect(countStaticReferences(analyzed.staticReferences, MuriKind::Overlap) == 0,
+            QStringLiteral("negative-time adjacent tap repro does not create static overlap"));
+        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::Overlap) == 0,
+            QStringLiteral("negative-time adjacent tap repro keeps overlap hidden in the panel"));
     }
 
     {

@@ -286,6 +286,13 @@ bool isSlideLike(const TimelineNoteMarker& marker)
     return marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi");
 }
 
+bool hasUsableSlideTraceTiming(const TimelineNoteMarker& marker)
+{
+    return isSlideLike(marker)
+        && marker.slideTraceSecond + kPadTimeEpsilon >= marker.second
+        && marker.endSecond + kPadTimeEpsilon >= marker.slideTraceSecond;
+}
+
 bool slideKeyUsesCcwJudgeSprite(const QString& key)
 {
     if (key.isEmpty()) {
@@ -541,7 +548,7 @@ DiagnosticAnchor diagnosticAnchorFromMarkerSourceRef(const MarkerSourceRef& ref)
 {
     DiagnosticAnchor anchor;
     anchor.valid = ref.order >= 0;
-    anchor.second = qMax(0.0, ref.second);
+    anchor.second = ref.second;
     anchor.order = ref.order >= 0 ? ref.order : std::numeric_limits<int>::max();
     anchor.line = ref.line;
     anchor.col = ref.col;
@@ -552,7 +559,7 @@ DiagnosticAnchor diagnosticAnchorFromMarker(const TimelineNoteMarker& marker)
 {
     DiagnosticAnchor anchor;
     anchor.valid = true;
-    anchor.second = qMax(0.0, marker.second);
+    anchor.second = marker.second;
     anchor.order = marker.parseOrder >= 0 ? marker.parseOrder : std::numeric_limits<int>::max();
     anchor.line = marker.sourceLine;
     anchor.col = marker.sourceCol;
@@ -563,7 +570,7 @@ DiagnosticAnchor diagnosticAnchorFromNote(const JudgeableSimpleNote& note)
 {
     DiagnosticAnchor anchor;
     anchor.valid = true;
-    anchor.second = qMax(0.0, note.momentSecond);
+    anchor.second = note.momentSecond;
     anchor.order = note.order >= 0 ? note.order : std::numeric_limits<int>::max();
     anchor.line = note.line;
     anchor.col = note.col;
@@ -574,7 +581,7 @@ DiagnosticAnchor diagnosticAnchorFromAction(const RuntimeHandAction& action)
 {
     DiagnosticAnchor anchor;
     anchor.valid = true;
-    anchor.second = qMax(0.0, action.startSecond);
+    anchor.second = action.startSecond;
     anchor.order = action.order >= 0 ? action.order : std::numeric_limits<int>::max();
     anchor.line = action.line;
     anchor.col = action.col;
@@ -784,7 +791,7 @@ QSet<QString> buildSlideKeysWithTapOnSlideHead(const QVector<TimelineNoteMarker>
     slideKeysByStart.reserve(noteMarkers.size());
 
     for (const TimelineNoteMarker& marker : noteMarkers) {
-        if (!isSlideLike(marker) || marker.slideTraceSecond < 0.0) {
+        if (!hasUsableSlideTraceTiming(marker)) {
             continue;
         }
         slideKeysByStart[slideStartLookupKey(marker.lane, marker.slideTraceSecond)].append(makeMarkerAnalysisKey(marker));
@@ -842,12 +849,8 @@ DiagnosticAnchor diagnosticAnchorForCause(
     if (anchor.valid) {
         return anchor;
     }
-    if (cause.second < 0.0) {
-        return DiagnosticAnchor();
-    }
-
     anchor.valid = true;
-    anchor.second = qMax(0.0, cause.second);
+    anchor.second = cause.second;
     anchor.order = cause.sourceOrder >= 0 ? cause.sourceOrder : std::numeric_limits<int>::max();
     anchor.line = cause.line;
     anchor.col = cause.col;
@@ -906,8 +909,7 @@ double slideStartSecondForSource(
     const auto it = markerLookup.constFind(ownerKey);
     if (it != markerLookup.constEnd()
         && it.value() != nullptr
-        && isSlideLike(*it.value())
-        && it.value()->slideTraceSecond >= 0.0) {
+        && hasUsableSlideTraceTiming(*it.value())) {
         return it.value()->slideTraceSecond;
     }
     return cause.second;
@@ -1122,8 +1124,8 @@ double firstAreaDurationSecond(const TimelineNoteMarker& marker)
 
 double extraPadDownSecond(const TimelineNoteMarker& marker)
 {
-    if (!isSlideLike(marker) || marker.afterSlide || marker.slideTraceSecond < 0.0) {
-        return -1.0;
+    if (!hasUsableSlideTraceTiming(marker) || marker.afterSlide) {
+        return std::numeric_limits<double>::quiet_NaN();
     }
 
     const double firstAreaSecond = firstAreaDurationSecond(marker);
@@ -1132,7 +1134,7 @@ double extraPadDownSecond(const TimelineNoteMarker& marker)
 
 int judgeTickForPadActiveStart(double second)
 {
-    return qMax(0, qCeil(second * miacode::muri::kJudgeTps - kPadTimeEpsilon));
+    return qCeil(second * miacode::muri::kJudgeTps - kPadTimeEpsilon);
 }
 
 int judgeTickForPadActiveEnd(double second)
@@ -1142,12 +1144,12 @@ int judgeTickForPadActiveEnd(double second)
 
 int judgeTickForExtraPadDown(double second)
 {
-    return qMax(0, qFloor(second * miacode::muri::kJudgeTps + kPadTimeEpsilon) + 1);
+    return qFloor(second * miacode::muri::kJudgeTps + kPadTimeEpsilon) + 1;
 }
 
 int judgeTickForNoteExpiry(double momentSecond, double availableSeconds)
 {
-    return qMax(0, qFloor((momentSecond + availableSeconds) * miacode::muri::kJudgeTps + kPadTimeEpsilon) + 1);
+    return qFloor((momentSecond + availableSeconds) * miacode::muri::kJudgeTps + kPadTimeEpsilon) + 1;
 }
 
 double tickToSecond(int tick)
@@ -1599,8 +1601,8 @@ void addDiagnostic(
     MuriDiagnostic diagnostic;
     diagnostic.kind = kind;
     diagnostic.alertLevel = alertLevel;
-    diagnostic.second = qMax(0.0, second);
-    diagnostic.anchorSecond = anchor.valid ? qMax(0.0, anchor.second) : diagnostic.second;
+    diagnostic.second = second;
+    diagnostic.anchorSecond = anchor.valid ? anchor.second : diagnostic.second;
     diagnostic.line = anchor.valid ? anchor.line : marker.sourceLine;
     diagnostic.col = anchor.valid ? anchor.col : marker.sourceCol;
     diagnostic.markerKey = markerKey;
@@ -1624,8 +1626,8 @@ void addSimpleNoteDiagnostic(
     MuriDiagnostic diagnostic;
     diagnostic.kind = kind;
     diagnostic.alertLevel = alertLevel;
-    diagnostic.second = qMax(0.0, second);
-    diagnostic.anchorSecond = anchor.valid ? qMax(0.0, anchor.second) : diagnostic.second;
+    diagnostic.second = second;
+    diagnostic.anchorSecond = anchor.valid ? anchor.second : diagnostic.second;
     diagnostic.line = anchor.valid ? anchor.line : note.line;
     diagnostic.col = anchor.valid ? anchor.col : note.col;
     diagnostic.markerKey = note.markerKey;
@@ -1646,7 +1648,7 @@ void addSimpleJudgeSpriteEvent(
     MuriJudgeSpriteEvent event;
     event.kind = MuriJudgeSpriteKind::Simple;
     event.simpleEffect = simpleEffect;
-    event.second = qMax(0.0, note.judgeSecond);
+    event.second = note.judgeSecond;
     event.spawnSecond = event.second;
     if (note.marker != nullptr
         && (note.type == QLatin1String("hold") || note.type == QLatin1String("touch_hold"))
@@ -1673,7 +1675,7 @@ bool appendSlideJudgeSpriteEvent(
     }
 
     MuriJudgeSpriteEvent event;
-    event.second = qMax(0.0, judgeSecond);
+    event.second = judgeSecond;
     event.spawnSecond = event.second;
     event.markerKey = makeMarkerAnalysisKey(marker);
     event.lane = lane;
@@ -2607,7 +2609,7 @@ QMap<int, QMap<QString, RuntimePadEvent>> buildRuntimePadEvents(
     for (const TimelineNoteMarker& marker : noteMarkers) {
         const QString pad = slideHeadPad(marker.lane);
         const double eventSecond = extraPadDownSecond(marker);
-        if (pad.isEmpty() || eventSecond < 0.0) {
+        if (pad.isEmpty() || !std::isfinite(eventSecond)) {
             continue;
         }
 
@@ -2627,7 +2629,7 @@ QMap<int, QMap<QString, RuntimePadEvent>> buildRuntimePadEvents(
     }
 
     for (const TimelineNoteMarker& marker : noteMarkers) {
-        if (!isSlideLike(marker) || marker.slideTraceSecond < 0.0) {
+        if (!hasUsableSlideTraceTiming(marker)) {
             continue;
         }
 
@@ -4169,8 +4171,8 @@ void collectSimpleNoteMultiTouchDiagnostics(
 
                 MuriDiagnostic diagnostic;
                 diagnostic.kind = MuriKind::MultiTouch;
-                diagnostic.second = qMax(0.0, nowSecond);
-                diagnostic.anchorSecond = anchorInfo.valid ? qMax(0.0, anchorInfo.second) : diagnostic.second;
+                diagnostic.second = nowSecond;
+                diagnostic.anchorSecond = anchorInfo.valid ? anchorInfo.second : diagnostic.second;
                 diagnostic.line = anchorInfo.valid ? anchorInfo.line : 1;
                 diagnostic.col = anchorInfo.valid ? anchorInfo.col : 1;
                 diagnostic.markerKey = actions.at(anchorActionIndex).markerKey;
