@@ -258,7 +258,7 @@ if (![string]::IsNullOrWhiteSpace($QtRoot)) {
 $versionInfo = Read-VersionInfoFromCMake -CMakeFilePath (Join-Path $repoRoot "CMakeLists.txt")
 $version = $versionInfo.PackageVersion
 if ([string]::IsNullOrWhiteSpace($DistDir)) {
-    $DistDir = Join-Path $repoRoot "dist" "MiaCode-v$version-win64"
+    $DistDir = Join-Path (Join-Path $repoRoot "dist") "MiaCode-v$version-win64"
 } else {
     $DistDir = Resolve-RepoPath -RepoRoot $repoRoot -PathValue $DistDir
 }
