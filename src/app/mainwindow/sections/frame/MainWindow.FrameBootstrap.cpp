@@ -104,6 +104,9 @@ MainWindow::MainWindow(QWidget* parent)
             });
         }
     }
+    if (QMenuBar* topMenuBar = menuBar(); topMenuBar != nullptr) {
+        topMenuBar->setNativeMenuBar(false);
+    }
 
     auto* fileMenu = menuBar()->addMenu(uiText("menu.file", "&File"));
     auto* editMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("编辑(&E)") : QStringLiteral("&Edit"));
@@ -111,6 +114,12 @@ MainWindow::MainWindow(QWidget* parent)
     auto* transformMenu = menuBar()->addMenu(uiText("menu.transform", "变换(&T)"));
     auto* previewMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("预览(&P)") : QStringLiteral("&Preview"));
     auto* helpMenu = menuBar()->addMenu(uiText("menu.help", "&Help"));
+    styleRoundedMenu(*fileMenu);
+    styleRoundedMenu(*editMenu);
+    styleRoundedMenu(*toolsMenu);
+    styleRoundedMenu(*transformMenu);
+    styleRoundedMenu(*previewMenu);
+    styleRoundedMenu(*helpMenu);
 
     auto* toolBar = addToolBar("Main");
     toolBar->setMovable(false);
@@ -753,6 +762,7 @@ MainWindow::MainWindow(QWidget* parent)
     });
 
     toolboxMenu_ = new QMenu(outlineList_);
+    styleRoundedMenu(*toolboxMenu_);
     const auto openToolboxUrl = [](const QString& url) {
         QDesktopServices::openUrl(QUrl(url));
     };

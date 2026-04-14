@@ -41,6 +41,56 @@ bool actionMatchesShortcut(QAction* action, const QKeySequence& sequence)
     return false;
 }
 
+void repolishWidget(QWidget* widget)
+{
+    if (widget == nullptr) {
+        return;
+    }
+    if (QStyle* style = widget->style(); style != nullptr) {
+        style->unpolish(widget);
+        style->polish(widget);
+    }
+    widget->update();
+}
+
+void refreshMenuThemeRecursive(QMenu* menu, QSet<QMenu*>* visited)
+{
+    if (menu == nullptr || visited == nullptr || visited->contains(menu)) {
+        return;
+    }
+    visited->insert(menu);
+    UiTheme::styleRoundedMenu(*menu);
+    repolishWidget(menu);
+    const QList<QAction*> actions = menu->actions();
+    for (QAction* action : actions) {
+        if (action == nullptr) {
+            continue;
+        }
+        if (QMenu* submenu = action->menu(); submenu != nullptr) {
+            refreshMenuThemeRecursive(submenu, visited);
+        }
+    }
+}
+
+void refreshMenuBarTheme(QMenuBar* menuBar, QSet<QMenu*>* visited)
+{
+    if (menuBar == nullptr) {
+        return;
+    }
+    menuBar->setNativeMenuBar(false);
+    menuBar->setPalette(UiTheme::applicationPalette());
+    repolishWidget(menuBar);
+    const QList<QAction*> actions = menuBar->actions();
+    for (QAction* action : actions) {
+        if (action == nullptr) {
+            continue;
+        }
+        if (QMenu* menu = action->menu(); menu != nullptr) {
+            refreshMenuThemeRecursive(menu, visited);
+        }
+    }
+}
+
 #ifdef Q_OS_WIN
 constexpr DWORD kDwmwaUseImmersiveDarkMode = 20;
 constexpr DWORD kDwmwaBorderColor = 34;
@@ -557,11 +607,13 @@ void MainWindow::WindowSection::applyUiTheme()
     if (owner_.previewPanel_ != nullptr) {
         owner_.previewPanel_->setStyleSheet(previewPanelStyle);
     }
+    QSet<QMenu*> refreshedMenus;
+    refreshMenuBarTheme(owner_.menuBar(), &refreshedMenus);
+    refreshMenuThemeRecursive(owner_.exportVideoMenu_, &refreshedMenus);
+    refreshMenuThemeRecursive(owner_.toolboxMenu_, &refreshedMenus);
     const QList<QMenu*> menus = owner_.findChildren<QMenu*>();
     for (QMenu* menu : menus) {
-        if (menu != nullptr) {
-            UiTheme::styleRoundedMenu(*menu);
-        }
+        refreshMenuThemeRecursive(menu, &refreshedMenus);
     }
 
     const QColor iconColor = UiTheme::colors().iconPrimary;

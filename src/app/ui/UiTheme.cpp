@@ -261,6 +261,7 @@ QString scrollBarStyleSheet()
 void styleRoundedMenu(QMenu& menu)
 {
     const Colors& c = colors();
+    menu.setPalette(applicationPalette());
     menu.setWindowFlag(Qt::FramelessWindowHint, true);
     menu.setWindowFlag(Qt::NoDropShadowWindowHint, true);
     menu.setAttribute(Qt::WA_TranslucentBackground, true);
@@ -299,14 +300,15 @@ QString timelineZoomButtonStyleSheet()
     return QStringLiteral(
         "QToolButton { color: %1; background: %2; border: 1px solid %3; border-radius: 6px; padding: 1px 8px; font-weight: 600; }"
         "QToolButton:hover { background: %4; border-color: %5; }"
-        "QToolButton:pressed { background: %6; }"
+        "QToolButton:pressed { background: %6; color: %7; }"
     )
         .arg(css(c.textPrimary))
         .arg(css(c.cardBg))
         .arg(css(c.borderStrong))
         .arg(css(c.menuHoverBg))
         .arg(css(c.accent))
-        .arg(css(c.accentPressed));
+        .arg(css(c.accentPressed))
+        .arg(css(c.accentText));
 }
 
 QString timelineCheckBoxStyleSheet()
@@ -365,7 +367,7 @@ QString editorFindBarStyleSheet()
         "QFrame#EditorFindBar QLineEdit:focus { border-color: %8; }"
         "QFrame#EditorFindBar QToolButton, QFrame#EditorFindBar QPushButton { color: %7; min-height: 22px; padding: 0 6px; border: 1px solid %2; border-radius: 6px; background: %3; font-weight: 400; }"
         "QFrame#EditorFindBar QToolButton:hover, QFrame#EditorFindBar QPushButton:hover { background: %9; border-color: %8; }"
-        "QFrame#EditorFindBar QToolButton:pressed, QFrame#EditorFindBar QPushButton:pressed { background: %10; }"
+        "QFrame#EditorFindBar QToolButton:pressed, QFrame#EditorFindBar QPushButton:pressed { background: %10; color: %11; }"
         "QFrame#EditorFindBar QToolButton#EditorFindPrevButton, QFrame#EditorFindBar QToolButton#EditorFindNextButton { min-width: 24px; padding: 0; font-size: 12px; }"
         "QFrame#EditorFindBar QToolButton#EditorFindCloseButton { min-width: 28px; padding: 0; font-size: 15px; font-weight: 400; }"
     )
@@ -378,7 +380,8 @@ QString editorFindBarStyleSheet()
         .arg(css(c.textPrimary))
         .arg(css(c.accent))
         .arg(css(c.menuHoverBg))
-        .arg(css(c.accentPressed));
+        .arg(css(c.accentPressed))
+        .arg(css(c.accentText));
 }
 
 QString metadataPageStyleSheet()
@@ -448,7 +451,7 @@ QString previewPanelStyleSheet()
         "QLabel#PreviewStatChipTotal { color: %6; background: %5; border: 1px solid %2; border-radius: 9px; padding: 2px 8px; font-weight: 700; }"
         "QToolButton#PreviewControlButton { color: %6; padding: 5px 8px; min-height: 28px; border: 1px solid %2; border-radius: 6px; background: transparent; font-weight: 600; }"
         "QToolButton#PreviewControlButton:hover { background: %9; border-color: %10; }"
-        "QToolButton#PreviewControlButton:pressed { background: %11; }"
+        "QToolButton#PreviewControlButton:pressed { background: %11; color: %12; }"
         "QSlider::groove:horizontal { height: 6px; background: %2; border-radius: 3px; }"
         "QSlider::sub-page:horizontal { background: %10; border-radius: 3px; }"
         "QSlider::handle:horizontal { width: 12px; margin: -4px 0; border-radius: 6px; background: %7; border: 1px solid %8; }"
@@ -463,7 +466,8 @@ QString previewPanelStyleSheet()
         .arg(css(c.borderSoft))
         .arg(css(c.menuHoverBg))
         .arg(css(c.accent))
-        .arg(css(c.accentPressed));
+        .arg(css(c.accentPressed))
+        .arg(css(c.accentText));
 }
 
 QString compactToolbarButtonStyleSheet()
@@ -581,7 +585,7 @@ QString dialogMenuButtonStyleSheet()
     return QStringLiteral(
         "QToolButton { min-height: 24px; padding: 2px 10px; border: 1px solid %1; border-radius: 8px; background: %2; color: %3; font-weight: 500; text-align: left; }"
         "QToolButton:hover { background: %4; border-color: %5; }"
-        "QToolButton:pressed { background: %6; border-color: %5; }"
+        "QToolButton:pressed, QToolButton:checked { background: %6; border-color: %5; color: %7; }"
         "QToolButton::menu-indicator { image: none; width: 0px; }"
     )
         .arg(css(c.border))
@@ -589,7 +593,8 @@ QString dialogMenuButtonStyleSheet()
         .arg(css(c.textPrimary))
         .arg(css(c.menuHoverBg))
         .arg(css(c.accent))
-        .arg(css(c.accentPressed));
+        .arg(css(c.accentPressed))
+        .arg(css(c.accentText));
 }
 
 QString dialogMenuLineEditStyleSheet()
@@ -609,19 +614,25 @@ QString dialogMenuLineEditStyleSheet()
 QString dialogPushButtonStyleSheet(bool emphasized)
 {
     const Colors& c = colors();
-    Q_UNUSED(emphasized);
+    const QColor baseBorder = emphasized ? c.accent : c.border;
+    const QColor baseBackground = emphasized ? c.accent : c.cardBg;
+    const QColor baseText = emphasized ? c.accentText : c.textPrimary;
+    const QColor hoverBackground = emphasized ? c.accentHover : c.menuHoverBg;
+    const QColor hoverText = emphasized ? c.accentText : c.textPrimary;
     return QStringLiteral(
         "QPushButton { min-width: 92px; min-height: 30px; padding: 0 12px; border: 1px solid %1; border-radius: 8px; background: %2; color: %3; font-weight: 500; }"
-        "QPushButton:hover { background: %4; border-color: %5; }"
-        "QPushButton:pressed { background: %6; border-color: %5; }"
-        "QPushButton:disabled { background: %7; border-color: %1; color: %8; }"
+        "QPushButton:hover { background: %4; border-color: %5; color: %6; }"
+        "QPushButton:pressed, QPushButton:checked { background: %7; border-color: %5; color: %8; }"
+        "QPushButton:disabled { background: %9; border-color: %1; color: %10; }"
     )
-        .arg(css(c.border))
-        .arg(css(c.cardBg))
-        .arg(css(c.textPrimary))
-        .arg(css(c.menuHoverBg))
+        .arg(css(baseBorder))
+        .arg(css(baseBackground))
+        .arg(css(baseText))
+        .arg(css(hoverBackground))
         .arg(css(c.accent))
+        .arg(css(hoverText))
         .arg(css(c.accentPressed))
+        .arg(css(c.accentText))
         .arg(css(c.inputDisabledBg))
         .arg(css(c.textMuted));
 }
@@ -666,10 +677,10 @@ QString preferencesDialogStyleSheet()
         "QLabel { color: %4; }"
         "QToolButton#PreferenceMenuButton { min-height: 30px; min-width: 180px; border: 1px solid %3; border-radius: 6px; padding: 4px 10px; background: %2; color: %4; font-weight: 600; text-align: left; }"
         "QToolButton#PreferenceMenuButton:hover { background: %5; border-color: %6; }"
-        "QToolButton#PreferenceMenuButton:pressed { background: %7; border-color: %6; }"
+        "QToolButton#PreferenceMenuButton:pressed, QToolButton#PreferenceMenuButton:checked { background: %7; border-color: %6; color: %8; }"
         "QPushButton { min-width: 92px; min-height: 30px; padding: 0 12px; border: 1px solid %3; border-radius: 8px; background: %2; color: %4; font-weight: 500; }"
         "QPushButton:hover { background: %5; border-color: %6; }"
-        "QPushButton:pressed { background: %7; border-color: %6; }"
+        "QPushButton:pressed, QPushButton:checked { background: %7; border-color: %6; color: %8; }"
     )
         .arg(css(c.windowBg))
         .arg(css(c.cardBg))
@@ -677,7 +688,8 @@ QString preferencesDialogStyleSheet()
         .arg(css(c.textPrimary))
         .arg(css(c.menuHoverBg))
         .arg(css(c.accent))
-        .arg(css(c.accentPressed));
+        .arg(css(c.accentPressed))
+        .arg(css(c.accentText));
 }
 
 QString settingsDialogStyleSheet()
@@ -711,6 +723,7 @@ QString aboutDialogStyleSheet()
         "QLabel#AboutValue { color: %5; font-weight: 600; }"
         "QPushButton { min-width: 92px; min-height: 30px; border: 1px solid %3; border-radius: 6px; background: %2; color: %5; }"
         "QPushButton:hover { background: %10; border-color: %6; }"
+        "QPushButton:pressed, QPushButton:checked { background: %11; border-color: %6; color: %12; }"
     )
         .arg(css(c.windowBg))
         .arg(css(c.cardBg))
@@ -721,7 +734,9 @@ QString aboutDialogStyleSheet()
         .arg(css(versionBg))
         .arg(css(versionBorder))
         .arg(css(c.textSecondary))
-        .arg(css(c.menuHoverBg));
+        .arg(css(c.menuHoverBg))
+        .arg(css(c.accentPressed))
+        .arg(css(c.accentText));
 }
 
 QString exportDialogStyleSheet()

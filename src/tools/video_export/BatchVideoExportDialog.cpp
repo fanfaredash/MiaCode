@@ -432,6 +432,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     resolutionLabel->setFixedWidth(kFormLabelWidth);
     resolutionButton_ = createDialogMenuButton(this, exportDialogResolutionLabel(selectedResolution_));
     resolutionMenu_ = new QMenu(resolutionButton_);
+    UiTheme::styleRoundedMenu(*resolutionMenu_);
     resolutionButton_->setMenu(resolutionMenu_);
     for (const ResolutionPreset& preset : kResolutionPresets) {
         addDialogMenuChoice(resolutionMenu_, QString::fromLatin1(preset.label), [this, preset]() {
@@ -450,6 +451,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     fpsLabel->setFixedWidth(kFormLabelWidth);
     fpsButton_ = createDialogMenuButton(this, QStringLiteral("%1 FPS").arg(selectedFps_));
     fpsMenu_ = new QMenu(fpsButton_);
+    UiTheme::styleRoundedMenu(*fpsMenu_);
     fpsButton_->setMenu(fpsMenu_);
     for (int fps : kFpsOptions) {
         addDialogMenuChoice(fpsMenu_, QStringLiteral("%1 FPS").arg(fps), [this, fps]() {
@@ -468,6 +470,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     presetLabel->setFixedWidth(kFormLabelWidth);
     presetButton_ = createDialogMenuButton(this, exportDialogPresetLabel(selectedPreset_));
     presetMenu_ = new QMenu(presetButton_);
+    UiTheme::styleRoundedMenu(*presetMenu_);
     presetButton_->setMenu(presetMenu_);
     addDialogMenuChoice(presetMenu_, uiText("dialog.video_export.preset.fast", QStringLiteral("Fast")), [this]() {
         selectedPreset_ = VideoExportPreset::Fast;
@@ -583,6 +586,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     auto* scaleModeLabel = new QLabel(uiText("dialog.video_export.option.scale_mode", QStringLiteral("Background / PV Scale")), optionsCard);
     backgroundScaleModeButton_ = createDialogMenuButton(optionsCard, exportDialogBackgroundScaleModeLabel(selectedBackgroundScaleMode_));
     backgroundScaleModeMenu_ = new QMenu(backgroundScaleModeButton_);
+    UiTheme::styleRoundedMenu(*backgroundScaleModeMenu_);
     backgroundScaleModeButton_->setMenu(backgroundScaleModeMenu_);
     addDialogMenuChoice(backgroundScaleModeMenu_, exportDialogBackgroundScaleModeLabel(PreviewBackgroundScaleMode::FillCrop), [this]() {
         selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;

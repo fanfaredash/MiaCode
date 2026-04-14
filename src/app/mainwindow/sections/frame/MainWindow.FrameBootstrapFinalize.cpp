@@ -114,6 +114,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         exportVideoButton_->setFixedWidth(openButtonWidth);
         toolBar->insertWidget(settingsPlaceholderAction_, exportVideoButton_);
         exportVideoMenu_ = new QMenu(exportVideoButton_);
+        styleRoundedMenu(*exportVideoMenu_);
         if (exportVideoAction_ != nullptr) {
             exportVideoMenu_->addAction(exportVideoAction_);
         }
