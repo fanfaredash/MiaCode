@@ -1,5 +1,6 @@
 ﻿#include "MainWindow.PreviewSection.h"
 #include "../../MainWindowShared.h"
+#include "../timeline/MainWindow.TimelineSection.h"
 #include "../window/MainWindow.WindowSection.h"
 
 #include "BracketScopeHighlighter.h"
@@ -352,6 +353,14 @@ void MainWindow::PreviewSection::ensurePreviewStageMediaHostInitialized()
         state_.qtPreviewElapsed_.restart();
         refreshPreviewStageMediaRouteDebugState(false);
     });
+    connect(
+        state_.previewStageMediaHost_,
+        &PreviewStageMediaHost::playbackStartPrepared,
+        &owner_,
+        [this](double second, quint64 transactionId) {
+            owner_.timelineSection_->handlePreviewStartupVideoPrepared(second, transactionId);
+        }
+    );
     connect(
         state_.previewStageMediaHost_,
         &PreviewStageMediaHost::pausedSeekCompleted,

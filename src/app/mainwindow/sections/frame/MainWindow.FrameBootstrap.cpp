@@ -907,6 +907,7 @@ MainWindow::MainWindow(QWidget* parent)
     previewSfxRuntime_ = new QtPreviewSfxRuntime(this);
     logStartupStage("preview_sfx_runtime_created");
     connect(previewCanvas_, &PreviewRuntime::framePresented, this, [this]() {
+        timelineSection_->handlePreviewStartupCanvasPresented();
         if (!qtPreviewPlaying_
             || !previewCanvasUsesFrameSwappedPacing()
             || !qtPreviewAwaitingFrameSwap_) {

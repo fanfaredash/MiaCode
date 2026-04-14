@@ -28,6 +28,11 @@ public:
     void applyLevels(const PreviewAudioSettings& settings);
     void configureTimeline(const QVector<TimelineNoteMarker>& noteMarkers);
     void clearTimeline();
+    void setPlaybackTransactionId(quint64 transactionId);
+    double preparePreviewPlaybackTransaction(double startSecond, bool resumeFromPause, double playbackRate);
+    void commitPreparedPreviewPlayback();
+    void cancelPreparedPreviewPlayback();
+    double preparedStartSecond() const;
     void applyPausedPreviewState(
         const QVector<TimelineNoteMarker>& noteMarkers,
         bool noteMarkersChanged,
@@ -94,6 +99,12 @@ private:
         double backgroundTrackLastTimelineSecond = 0.0;
     };
 
+    struct PreparedPlaybackState {
+        bool pending = false;
+        bool resumeFromPause = false;
+        double startSecond = 0.0;
+    };
+
     QString resolveTrackPath(const QString& chartPath) const;
     QString resolveSfxDir() const;
     void rebuildPreparedTimeline(const QVector<TimelineNoteMarker>& noteMarkers);
@@ -119,6 +130,8 @@ private:
     PreparedAssetState preparedAssets_;
     TimelineProgramState preparedTimeline_;
     PlaybackSessionState playbackSession_;
+    PreparedPlaybackState preparedPlayback_;
+    quint64 playbackTransactionId_ = 0;
     quint64 touchholdSoundLengthFrames_ = 0;
     quint32 deviceSampleRate_ = 48000;
     bool engineInitialized_ = false;

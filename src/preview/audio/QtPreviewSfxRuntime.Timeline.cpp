@@ -164,6 +164,94 @@ void QtPreviewSfxRuntime::applyLevels(const PreviewAudioSettings& settings)
     applyVolumes();
 }
 
+void QtPreviewSfxRuntime::setPlaybackTransactionId(quint64 transactionId)
+{
+    playbackTransactionId_ = transactionId;
+}
+
+double QtPreviewSfxRuntime::preparePreviewPlaybackTransaction(
+    double startSecond,
+    bool resumeFromPause,
+    double playbackRate)
+{
+    const double clampedStartSecond = qMax(0.0, startSecond);
+    appendAudioDebugLog(
+        QString("preview_prepare txn=%1 requested=%2 resume=%3 playback_rate=%4 has_track=%5 events=%6 touchhold_spans=%7")
+            .arg(playbackTransactionId_)
+            .arg(clampedStartSecond, 0, 'f', 6)
+            .arg(resumeFromPause ? 1 : 0)
+            .arg(playbackRate, 0, 'f', 3)
+            .arg(hasBackgroundTrack() ? 1 : 0)
+            .arg(preparedTimeline_.events.size())
+            .arg(preparedTimeline_.touchholdSpans.size()));
+    setBackgroundTrackPlaybackRate(playbackRate);
+    if (hasBackgroundTrack()) {
+        seekBackgroundTrack(clampedStartSecond);
+    }
+    resetCursor(clampedStartSecond, !resumeFromPause);
+    pauseTouchholdVoices();
+    preparedPlayback_.pending = true;
+    preparedPlayback_.resumeFromPause = resumeFromPause;
+    preparedPlayback_.startSecond = clampedStartSecond;
+
+    QString nextEventDescription = QStringLiteral("none");
+    if (playbackSession_.eventIndex >= 0 && playbackSession_.eventIndex < preparedTimeline_.events.size()) {
+        const auto& nextEvent = preparedTimeline_.events[playbackSession_.eventIndex];
+        nextEventDescription = QStringLiteral("%1@%2").arg(nextEvent.kind).arg(nextEvent.second, 0, 'f', 6);
+    }
+    appendAudioDebugLog(
+        QString("preview_prepare_ready txn=%1 effective=%2 event_index=%3 next_event=%4")
+            .arg(playbackTransactionId_)
+            .arg(preparedPlayback_.startSecond, 0, 'f', 6)
+            .arg(playbackSession_.eventIndex)
+            .arg(nextEventDescription));
+    return preparedPlayback_.startSecond;
+}
+
+void QtPreviewSfxRuntime::commitPreparedPreviewPlayback()
+{
+    if (!preparedPlayback_.pending) {
+        return;
+    }
+
+    const double startSecond = preparedPlayback_.startSecond;
+    const bool resumeFromPause = preparedPlayback_.resumeFromPause;
+    if (hasBackgroundTrack()) {
+        startBackgroundTrack(startSecond);
+    }
+    if (!resumeFromPause) {
+        drainEvents(startSecond);
+    }
+    restoreTouchholdVoices(startSecond);
+    appendAudioDebugLog(
+        QString("preview_commit txn=%1 effective=%2 resume=%3 background_running=%4 pending=%5")
+            .arg(playbackTransactionId_)
+            .arg(startSecond, 0, 'f', 6)
+            .arg(resumeFromPause ? 1 : 0)
+            .arg(playbackSession_.backgroundTrackRunning ? 1 : 0)
+            .arg(playbackSession_.backgroundTrackPendingStart ? 1 : 0));
+    preparedPlayback_ = PreparedPlaybackState();
+}
+
+void QtPreviewSfxRuntime::cancelPreparedPreviewPlayback()
+{
+    if (!preparedPlayback_.pending) {
+        return;
+    }
+    pauseTouchholdVoices();
+    pauseBackgroundTrack();
+    appendAudioDebugLog(
+        QString("preview_prepare_cancel txn=%1 effective=%2")
+            .arg(playbackTransactionId_)
+            .arg(preparedPlayback_.startSecond, 0, 'f', 6));
+    preparedPlayback_ = PreparedPlaybackState();
+}
+
+double QtPreviewSfxRuntime::preparedStartSecond() const
+{
+    return preparedPlayback_.pending ? preparedPlayback_.startSecond : qMax(0.0, playbackSession_.backgroundTrackLastTimelineSecond);
+}
+
 void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& noteMarkers)
 {
     rebuildPreparedTimeline(noteMarkers);
@@ -180,6 +268,7 @@ void QtPreviewSfxRuntime::applyPausedPreviewState(
     bool noteMarkersChanged,
     double pauseSecond)
 {
+    preparedPlayback_ = PreparedPlaybackState();
     if (noteMarkersChanged) {
         rebuildPreparedTimeline(noteMarkers);
     }
@@ -192,20 +281,8 @@ double QtPreviewSfxRuntime::startPreviewPlaybackTransaction(
     bool resumeFromPause,
     double playbackRate)
 {
-    const double clampedStartSecond = qMax(0.0, startSecond);
-    setBackgroundTrackPlaybackRate(playbackRate);
-    startBackgroundTrack(clampedStartSecond);
-
-    double effectiveStartSecond = clampedStartSecond;
-    if (hasBackgroundTrack() && isBackgroundTrackRunning()) {
-        effectiveStartSecond = qMax(0.0, backgroundPlaybackSecond());
-    }
-
-    resetCursor(effectiveStartSecond, !resumeFromPause);
-    if (!resumeFromPause) {
-        drainEvents(effectiveStartSecond);
-    }
-    restoreTouchholdVoices(effectiveStartSecond);
+    const double effectiveStartSecond = preparePreviewPlaybackTransaction(startSecond, resumeFromPause, playbackRate);
+    commitPreparedPreviewPlayback();
     return effectiveStartSecond;
 }
 
@@ -320,6 +397,7 @@ void QtPreviewSfxRuntime::clearPreparedTimeline()
     preparedTimeline_.events.clear();
     preparedTimeline_.touchholdSpans.clear();
     playbackSession_.eventIndex = 0;
+    preparedPlayback_ = PreparedPlaybackState();
 }
 
 void QtPreviewSfxRuntime::resetBackgroundTrackSessionState(double timelineSecond)

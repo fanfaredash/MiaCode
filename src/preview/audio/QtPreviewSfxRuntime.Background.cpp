@@ -108,7 +108,8 @@ void QtPreviewSfxRuntime::startBackgroundTrack(double second)
     const ma_result startResult = ma_sound_start(activeSound);
     if (startResult == MA_SUCCESS) {
         playbackSession_.backgroundTrackRunning = true;
-        appendAudioDebugLog(QString("startBackgroundTrack started second=%1 raw=%2 mapped=%3 rate=%4")
+        appendAudioDebugLog(QString("startBackgroundTrack started txn=%1 second=%2 raw=%3 mapped=%4 rate=%5")
+                                .arg(playbackTransactionId_)
                                 .arg(second, 0, 'f', 3)
                                 .arg(rawSecond, 0, 'f', 3)
                                 .arg(mappedSecond, 0, 'f', 3)
@@ -116,7 +117,8 @@ void QtPreviewSfxRuntime::startBackgroundTrack(double second)
     } else {
         playbackSession_.backgroundTrackRunning = false;
         playbackSession_.backgroundTrackPendingStart = true;
-        appendAudioDebugLog(QString("startBackgroundTrack start failed rc=%1 second=%2 mapped=%3 rate=%4")
+        appendAudioDebugLog(QString("startBackgroundTrack start failed txn=%1 rc=%2 second=%3 mapped=%4 rate=%5")
+                                .arg(playbackTransactionId_)
                                 .arg(static_cast<int>(startResult))
                                 .arg(second, 0, 'f', 3)
                                 .arg(mappedSecond, 0, 'f', 3)
@@ -308,7 +310,8 @@ void QtPreviewSfxRuntime::syncBackgroundTrack(double timelineSecond)
     if (startResult == MA_SUCCESS) {
         playbackSession_.backgroundTrackPendingStart = false;
         playbackSession_.backgroundTrackRunning = true;
-        appendAudioDebugLog(QString("syncBackgroundTrack started second=%1 raw=%2 mapped=%3 rate=%4")
+        appendAudioDebugLog(QString("syncBackgroundTrack started txn=%1 second=%2 raw=%3 mapped=%4 rate=%5")
+                                .arg(playbackTransactionId_)
                                 .arg(timelineSecond, 0, 'f', 3)
                                 .arg(rawSecond, 0, 'f', 3)
                                 .arg(mappedSecond, 0, 'f', 3)
@@ -316,7 +319,8 @@ void QtPreviewSfxRuntime::syncBackgroundTrack(double timelineSecond)
     } else {
         playbackSession_.backgroundTrackPendingStart = true;
         playbackSession_.backgroundTrackRunning = false;
-        appendAudioDebugLog(QString("syncBackgroundTrack start failed rc=%1 second=%2 mapped=%3 rate=%4")
+        appendAudioDebugLog(QString("syncBackgroundTrack start failed txn=%1 rc=%2 second=%3 mapped=%4 rate=%5")
+                                .arg(playbackTransactionId_)
                                 .arg(static_cast<int>(startResult))
                                 .arg(timelineSecond, 0, 'f', 3)
                                 .arg(mappedSecond, 0, 'f', 3)
@@ -368,6 +372,7 @@ void QtPreviewSfxRuntime::stopAll()
     }
     playbackSession_.backgroundTrackPendingStart = false;
     playbackSession_.backgroundTrackRunning = false;
+    preparedPlayback_ = PreparedPlaybackState();
     pauseTouchholdVoices();
 }
 

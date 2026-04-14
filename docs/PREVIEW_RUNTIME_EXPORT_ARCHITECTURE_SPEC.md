@@ -58,6 +58,7 @@ Important implication:
 - Rendering is now Qt Quick.
 - Media ownership and audio ownership are still intentionally separate from scene rendering.
 - The play-start snapshot freeze semantics are preserved at the `MainWindow` / `PreviewRuntime` level, not delegated to QML animation state.
+- Realtime preview startup is intentionally asymmetric: canvas + background track + SFX are committed as one strong-sync group, while background video is weak-sync and may visibly start later so long as it re-locks to the audio clock after launch.
 
 ## Realtime Layer Ownership
 

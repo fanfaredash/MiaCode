@@ -124,6 +124,8 @@ public:
     void onStopPreview();
     void onTogglePreviewPause();
     bool startQtPreviewPlayback(double second, bool resumeFromPause = false);
+    void handlePreviewStartupCanvasPresented();
+    void handlePreviewStartupVideoPrepared(double second, quint64 transactionId);
     void finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage);
     void stopQtPreviewPlayback(bool keepPosition = true);
     void applyQtPreviewPosition(double second, bool centerView);
@@ -134,6 +136,9 @@ public:
     void jumpToNearestTimelineNote(double second, int lane);
 
 private:
+    void cancelPreviewStartupSync();
+    void tryCommitPreviewStartupSync();
+    double currentPreviewPlaybackClockSecond() const;
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;
     MainWindow::MainWindowState& state_;
