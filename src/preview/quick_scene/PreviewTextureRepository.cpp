@@ -134,14 +134,22 @@ QSGTexture* PreviewTextureRepository::createOwnedTexture(const QImage& image) co
     return window_->createTextureFromImage(image);
 }
 
-void PreviewTextureRepository::noteSpriteBatchStats(const char* layerName, qint64 spriteCount, qint64 batchCount)
+void PreviewTextureRepository::noteSpriteBatchStats(
+    const char* layerName,
+    const PreviewSpriteBatchFrameProfile& profile
+)
 {
-    stats_.spriteCount += spriteCount;
-    stats_.spriteBatchCount += batchCount;
+    stats_.spriteCount += profile.spriteCount;
+    stats_.spriteBatchCount += profile.batchCount;
     if (layerName != nullptr && *layerName != '\0') {
         PreviewTextureLayerStats& layerStat = ensureLayerStats(&stats_.layerStats, layerName);
-        layerStat.spriteCount += spriteCount;
-        layerStat.spriteBatchCount += batchCount;
+        layerStat.spriteCount += profile.spriteCount;
+        layerStat.spriteBatchCount += profile.batchCount;
+        layerStat.spriteRunCount += profile.runCount;
+        layerStat.spriteGeometryReallocCount += profile.geometryReallocCount;
+        layerStat.spriteVerticesRequired += profile.verticesRequired;
+        layerStat.spriteVerticesCapacity += profile.verticesCapacity;
+        layerStat.spriteScratchReserveGrowCount += profile.scratchReserveGrowCount;
     }
 }
 

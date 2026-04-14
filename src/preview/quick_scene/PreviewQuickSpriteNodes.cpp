@@ -1,8 +1,10 @@
 #include "preview/quick_scene/PreviewQuickSpriteNodes.h"
 
+#include "preview/quick_scene/PreviewQuickSpriteBatchPolicy.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
 #include "preview/scene/PreviewAnimatedSpriteHelpers.h"
 
+#include <QHash>
 #include <QQuickWindow>
 #include <QSGGeometry>
 #include <QSGGeometryNode>
@@ -19,6 +21,7 @@ namespace {
 
 using miacode::preview::scene::PreviewAnimatedSpriteEffect;
 using miacode::preview::scene::PreviewSpriteDescriptor;
+using miacode::preview::quick_scene::SpriteFamilyKey;
 
 struct PreviewQuickSpriteVertex {
     float x = 0.0f;
@@ -29,17 +32,9 @@ struct PreviewQuickSpriteVertex {
     float effect = 0.0f;
 };
 
-struct PreviewQuickSpriteBatchKey {
+struct OrderedRunScratch {
+    SpriteFamilyKey familyKey = 0;
     QSGTexture* texture = nullptr;
-
-    bool operator==(const PreviewQuickSpriteBatchKey& other) const
-    {
-        return texture == other.texture;
-    }
-};
-
-struct PreviewQuickSpriteBatch {
-    PreviewQuickSpriteBatchKey key;
     QVector<PreviewQuickSpriteVertex> vertices;
     int spriteCount = 0;
 };
@@ -91,13 +86,14 @@ QPointF rotateLocalPoint(const QPointF& point, qreal degrees)
     );
 }
 
-void appendSpriteVertices(
-    QVector<PreviewQuickSpriteVertex>* vertices,
+void writeSpriteVertices(
+    PreviewQuickSpriteVertex* vertices,
+    int baseIndex,
     const PreviewSpriteDescriptor& sprite,
     const QRectF& uvRect
 )
 {
-    if (vertices == nullptr) {
+    if (vertices == nullptr || baseIndex < 0) {
         return;
     }
 
@@ -120,13 +116,36 @@ void appendSpriteVertices(
     const float opacity = static_cast<float>(sprite.opacity);
     const float effect = static_cast<float>(sprite.effect);
 
-    vertices->append({static_cast<float>(topLeft.x()), static_cast<float>(topLeft.y()), leftU, topV, opacity, effect});
-    vertices->append({static_cast<float>(topRight.x()), static_cast<float>(topRight.y()), rightU, topV, opacity, effect});
-    vertices->append({static_cast<float>(bottomLeft.x()), static_cast<float>(bottomLeft.y()), leftU, bottomV, opacity, effect});
-    vertices->append({static_cast<float>(topRight.x()), static_cast<float>(topRight.y()), rightU, topV, opacity, effect});
-    vertices->append({static_cast<float>(bottomRight.x()), static_cast<float>(bottomRight.y()), rightU, bottomV, opacity, effect});
-    vertices->append({static_cast<float>(bottomLeft.x()), static_cast<float>(bottomLeft.y()), leftU, bottomV, opacity, effect});
+    vertices[baseIndex + 0] = {static_cast<float>(topLeft.x()), static_cast<float>(topLeft.y()), leftU, topV, opacity, effect};
+    vertices[baseIndex + 1] = {static_cast<float>(topRight.x()), static_cast<float>(topRight.y()), rightU, topV, opacity, effect};
+    vertices[baseIndex + 2] = {static_cast<float>(bottomLeft.x()), static_cast<float>(bottomLeft.y()), leftU, bottomV, opacity, effect};
+    vertices[baseIndex + 3] = {static_cast<float>(topRight.x()), static_cast<float>(topRight.y()), rightU, topV, opacity, effect};
+    vertices[baseIndex + 4] = {static_cast<float>(bottomRight.x()), static_cast<float>(bottomRight.y()), rightU, bottomV, opacity, effect};
+    vertices[baseIndex + 5] = {static_cast<float>(bottomLeft.x()), static_cast<float>(bottomLeft.y()), leftU, bottomV, opacity, effect};
 }
+
+class PreviewQuickSpriteBatchRootNode final : public QSGNode
+{
+public:
+    QVector<OrderedRunScratch> runs;
+    QHash<SpriteFamilyKey, int> familyVertexReserveHint;
+    QVector<QSGNode*> scratchChildren;
+};
+
+PreviewQuickSpriteBatchRootNode* ensurePreviewQuickSpriteRoot(QSGNode* oldNode)
+{
+    if (auto* root = dynamic_cast<PreviewQuickSpriteBatchRootNode*>(oldNode)) {
+        return root;
+    }
+    delete oldNode;
+    return new PreviewQuickSpriteBatchRootNode();
+}
+
+struct PreviewQuickSpriteBatchNodeUpdateProfile {
+    int requiredVertexCount = 0;
+    int allocatedVertexCapacity = 0;
+    bool geometryReallocated = false;
+};
 
 class PreviewQuickSpriteMaterialShader final : public QSGMaterialShader
 {
@@ -271,25 +290,67 @@ public:
         setFlag(QSGNode::OwnsMaterial, true);
     }
 
-    void updateBatch(const PreviewQuickSpriteBatch& batch, qreal wave, qreal absWave)
+    PreviewQuickSpriteBatchNodeUpdateProfile updateBatch(const OrderedRunScratch& run, qreal wave, qreal absWave)
     {
-        geometry_->allocate(batch.vertices.size());
-        if (!batch.vertices.isEmpty()) {
+        PreviewQuickSpriteBatchNodeUpdateProfile profile;
+        profile.requiredVertexCount = run.vertices.size();
+
+        if (profile.requiredVertexCount > allocatedVertexCapacity_) {
+            allocatedVertexCapacity_ =
+                miacode::preview::quick_scene::previewQuickSpriteAlignedVertexCapacity(profile.requiredVertexCount);
+            geometry_->allocate(allocatedVertexCapacity_);
+            underuseFrameCount_ = 0;
+            profile.geometryReallocated = true;
+        } else {
+            underuseFrameCount_ = miacode::preview::quick_scene::previewQuickSpriteNextUnderuseFrameCount(
+                profile.requiredVertexCount,
+                allocatedVertexCapacity_,
+                underuseFrameCount_);
+            if (miacode::preview::quick_scene::previewQuickSpriteShouldShrink(
+                    profile.requiredVertexCount,
+                    allocatedVertexCapacity_,
+                    underuseFrameCount_)) {
+                allocatedVertexCapacity_ =
+                    miacode::preview::quick_scene::previewQuickSpriteAlignedVertexCapacity(profile.requiredVertexCount);
+                geometry_->allocate(allocatedVertexCapacity_);
+                underuseFrameCount_ = 0;
+                profile.geometryReallocated = true;
+            }
+        }
+
+        auto* geometryVertices = reinterpret_cast<PreviewQuickSpriteVertex*>(geometry_->vertexData());
+        if (profile.requiredVertexCount > 0) {
             std::memcpy(
-                geometry_->vertexData(),
-                batch.vertices.constData(),
-                static_cast<size_t>(batch.vertices.size()) * sizeof(PreviewQuickSpriteVertex)
+                geometryVertices,
+                run.vertices.constData(),
+                static_cast<size_t>(profile.requiredVertexCount) * sizeof(PreviewQuickSpriteVertex)
             );
+
+            if (profile.requiredVertexCount < allocatedVertexCapacity_) {
+                PreviewQuickSpriteVertex filler = run.vertices.constLast();
+                filler.opacity = 0.0f;
+                filler.effect = 0.0f;
+                miacode::preview::quick_scene::fillPreviewQuickDegenerateVertexTail(
+                    geometryVertices,
+                    profile.requiredVertexCount,
+                    allocatedVertexCapacity_,
+                    filler
+                );
+            }
         }
         geometry_->markVertexDataDirty();
 
-        material_->setBatchState(batch.key.texture, wave, absWave);
+        material_->setBatchState(run.texture, wave, absWave);
         markDirty(QSGNode::DirtyGeometry | QSGNode::DirtyMaterial);
+        profile.allocatedVertexCapacity = allocatedVertexCapacity_;
+        return profile;
     }
 
 private:
     QSGGeometry* geometry_ = nullptr;
     PreviewQuickSpriteMaterial* material_ = nullptr;
+    int allocatedVertexCapacity_ = 0;
+    int underuseFrameCount_ = 0;
 };
 
 }  // namespace
@@ -308,10 +369,12 @@ QSGNode* buildPreviewSpriteNodeTree(
         return nullptr;
     }
 
-    QVector<PreviewQuickSpriteBatch> batches;
-    batches.reserve(sprites.size());
+    auto* root = ensurePreviewQuickSpriteRoot(oldNode);
+    QVector<OrderedRunScratch>& runs = root->runs;
 
     int visibleSpriteCount = 0;
+    int runCount = 0;
+    qint64 scratchReserveGrowCount = 0;
     for (const PreviewSpriteDescriptor& sprite : sprites) {
         if (sprite.image == nullptr
             || sprite.image->isNull()
@@ -327,35 +390,71 @@ QSGNode* buildPreviewSpriteNodeTree(
         }
         texture->setFiltering(QSGTexture::Linear);
 
-        const PreviewQuickSpriteBatchKey key{texture};
-        if (batches.isEmpty() || !(batches.last().key == key)) {
-            batches.append(PreviewQuickSpriteBatch{key});
-            batches.last().vertices.reserve(6);
+        const SpriteFamilyKey familyKey = static_cast<SpriteFamilyKey>(sprite.image->cacheKey());
+        if (runCount == 0 || runs.at(runCount - 1).familyKey != familyKey) {
+            if (runCount >= runs.size()) {
+                runs.append(OrderedRunScratch());
+            }
+            OrderedRunScratch& run = runs[runCount];
+            run.familyKey = familyKey;
+            run.texture = texture;
+            run.vertices.clear();
+            run.spriteCount = 0;
+            const int initialReserveHint =
+                miacode::preview::quick_scene::previewQuickSpriteInitialReserveHint(
+                    root->familyVertexReserveHint,
+                    familyKey);
+            if (run.vertices.capacity() < initialReserveHint) {
+                run.vertices.reserve(initialReserveHint);
+                ++scratchReserveGrowCount;
+            }
+            ++runCount;
         }
 
-        PreviewQuickSpriteBatch& batch = batches.last();
-        appendSpriteVertices(&batch.vertices, sprite, normalizedSourceRect(texture, sprite));
-        batch.spriteCount += 1;
+        OrderedRunScratch& run = runs[runCount - 1];
+        const int baseVertexIndex = run.spriteCount * 6;
+        const int requiredVertexCount = baseVertexIndex + 6;
+        if (requiredVertexCount > run.vertices.capacity()) {
+            run.vertices.reserve(
+                miacode::preview::quick_scene::previewQuickSpriteAlignedVertexCapacity(requiredVertexCount));
+            ++scratchReserveGrowCount;
+        }
+        if (run.vertices.size() < requiredVertexCount) {
+            run.vertices.resize(requiredVertexCount);
+        }
+        writeSpriteVertices(
+            run.vertices.data(),
+            baseVertexIndex,
+            sprite,
+            normalizedSourceRect(texture, sprite));
+        run.spriteCount += 1;
         visibleSpriteCount += 1;
     }
 
-    textures->noteSpriteBatchStats(profileLayerName, visibleSpriteCount, batches.size());
-    if (batches.isEmpty()) {
-        delete oldNode;
+    PreviewSpriteBatchFrameProfile frameProfile;
+    frameProfile.spriteCount = visibleSpriteCount;
+    frameProfile.batchCount = runCount;
+    frameProfile.runCount = runCount;
+    frameProfile.verticesRequired = static_cast<qint64>(visibleSpriteCount) * 6;
+    frameProfile.scratchReserveGrowCount = scratchReserveGrowCount;
+    if (runCount == 0) {
+        textures->noteSpriteBatchStats(profileLayerName, frameProfile);
+        delete root;
         return nullptr;
     }
 
     const qreal wave = miacode::preview::scene::previewAnimatedSpriteWave(playheadSeconds);
     const qreal absWave = qAbs(wave);
 
-    auto* root = oldNode != nullptr ? oldNode : new QSGNode();
-    QVector<QSGNode*> existingChildren;
+    QVector<QSGNode*>& existingChildren = root->scratchChildren;
+    existingChildren.clear();
     for (QSGNode* child = root->firstChild(); child != nullptr; child = child->nextSibling()) {
         existingChildren.append(child);
     }
 
     int nodeIndex = 0;
-    for (const PreviewQuickSpriteBatch& batch : batches) {
+    for (int runIndex = 0; runIndex < runCount; ++runIndex) {
+        OrderedRunScratch& run = runs[runIndex];
         QSGNode* existing = nodeIndex < existingChildren.size() ? existingChildren.at(nodeIndex) : nullptr;
         auto* batchNode = dynamic_cast<PreviewQuickSpriteBatchNode*>(existing);
         if (batchNode == nullptr) {
@@ -372,9 +471,16 @@ QSGNode* buildPreviewSpriteNodeTree(
             batchNode = newNode;
         }
 
-        batchNode->updateBatch(batch, wave, absWave);
+        const PreviewQuickSpriteBatchNodeUpdateProfile batchProfile = batchNode->updateBatch(run, wave, absWave);
+        frameProfile.geometryReallocCount += batchProfile.geometryReallocated ? 1 : 0;
+        frameProfile.verticesCapacity += batchProfile.allocatedVertexCapacity;
+        const int previousHint = root->familyVertexReserveHint.value(run.familyKey, 0);
+        if (batchProfile.requiredVertexCount > previousHint) {
+            root->familyVertexReserveHint.insert(run.familyKey, batchProfile.requiredVertexCount);
+        }
         ++nodeIndex;
     }
+    textures->noteSpriteBatchStats(profileLayerName, frameProfile);
 
     for (int index = existingChildren.size() - 1; index >= nodeIndex; --index) {
         QSGNode* child = existingChildren.at(index);

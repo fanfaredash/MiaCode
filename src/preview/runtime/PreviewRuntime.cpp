@@ -508,11 +508,23 @@ void PreviewRuntime::notePresentedTextureStats(const PreviewTextureStats& stats)
             ensureLayerProfileAggregate(&layerProfileAggregates_, layerStat.name);
         aggregate.spriteCountSum += layerStat.spriteCount;
         aggregate.spriteBatchCountSum += layerStat.spriteBatchCount;
+        aggregate.spriteRunCountSum += layerStat.spriteRunCount;
+        aggregate.spriteGeometryReallocCountSum += layerStat.spriteGeometryReallocCount;
+        aggregate.spriteVerticesRequiredSum += layerStat.spriteVerticesRequired;
+        aggregate.spriteVerticesCapacitySum += layerStat.spriteVerticesCapacity;
+        aggregate.spriteScratchReserveGrowCountSum += layerStat.spriteScratchReserveGrowCount;
         aggregate.candidateCountSum += layerStat.candidateCount;
         aggregate.activeCountSum += layerStat.activeCount;
         aggregate.buildMsSum += layerStat.buildMs;
         aggregate.spriteCountMax = qMax(aggregate.spriteCountMax, layerStat.spriteCount);
         aggregate.spriteBatchCountMax = qMax(aggregate.spriteBatchCountMax, layerStat.spriteBatchCount);
+        aggregate.spriteRunCountMax = qMax(aggregate.spriteRunCountMax, layerStat.spriteRunCount);
+        aggregate.spriteGeometryReallocCountMax =
+            qMax(aggregate.spriteGeometryReallocCountMax, layerStat.spriteGeometryReallocCount);
+        aggregate.spriteVerticesRequiredMax = qMax(aggregate.spriteVerticesRequiredMax, layerStat.spriteVerticesRequired);
+        aggregate.spriteVerticesCapacityMax = qMax(aggregate.spriteVerticesCapacityMax, layerStat.spriteVerticesCapacity);
+        aggregate.spriteScratchReserveGrowCountMax =
+            qMax(aggregate.spriteScratchReserveGrowCountMax, layerStat.spriteScratchReserveGrowCount);
         aggregate.candidateCountMax = qMax(aggregate.candidateCountMax, layerStat.candidateCount);
         aggregate.activeCountMax = qMax(aggregate.activeCountMax, layerStat.activeCount);
         aggregate.buildMsMax = qMax(aggregate.buildMsMax, layerStat.buildMs);
@@ -822,6 +834,48 @@ QString PreviewRuntime::writeProfilingSummaryToFile()
         stream << "layer." << layerStat.name << ".sprite_batch_count_avg="
                << QString::number(averageOrZero(static_cast<double>(layerStat.spriteBatchCountSum), profiledTextureFrameCount_), 'f', 4) << '\n';
         stream << "layer." << layerStat.name << ".sprite_batch_count_max=" << layerStat.spriteBatchCountMax << '\n';
+        stream << "layer." << layerStat.name << ".sprite_run_count_avg="
+               << QString::number(averageOrZero(static_cast<double>(layerStat.spriteRunCountSum), profiledTextureFrameCount_), 'f', 4) << '\n';
+        stream << "layer." << layerStat.name << ".sprite_run_count_max=" << layerStat.spriteRunCountMax << '\n';
+        stream << "layer." << layerStat.name << ".sprite_geometry_realloc_count_avg="
+               << QString::number(
+                      averageOrZero(static_cast<double>(layerStat.spriteGeometryReallocCountSum), profiledTextureFrameCount_),
+                      'f',
+                      4
+                  )
+               << '\n';
+        stream << "layer." << layerStat.name << ".sprite_geometry_realloc_count_max="
+               << layerStat.spriteGeometryReallocCountMax << '\n';
+        stream << "layer." << layerStat.name << ".sprite_vertices_required_avg="
+               << QString::number(
+                      averageOrZero(static_cast<double>(layerStat.spriteVerticesRequiredSum), profiledTextureFrameCount_),
+                      'f',
+                      4
+                  )
+               << '\n';
+        stream << "layer." << layerStat.name << ".sprite_vertices_required_max="
+               << layerStat.spriteVerticesRequiredMax << '\n';
+        stream << "layer." << layerStat.name << ".sprite_vertices_capacity_avg="
+               << QString::number(
+                      averageOrZero(static_cast<double>(layerStat.spriteVerticesCapacitySum), profiledTextureFrameCount_),
+                      'f',
+                      4
+                  )
+               << '\n';
+        stream << "layer." << layerStat.name << ".sprite_vertices_capacity_max="
+               << layerStat.spriteVerticesCapacityMax << '\n';
+        stream << "layer." << layerStat.name << ".sprite_scratch_reserve_grow_count_avg="
+               << QString::number(
+                      averageOrZero(
+                          static_cast<double>(layerStat.spriteScratchReserveGrowCountSum),
+                          profiledTextureFrameCount_
+                      ),
+                      'f',
+                      4
+                  )
+               << '\n';
+        stream << "layer." << layerStat.name << ".sprite_scratch_reserve_grow_count_max="
+               << layerStat.spriteScratchReserveGrowCountMax << '\n';
         stream << "layer." << layerStat.name << ".candidate_count_avg="
                << QString::number(averageOrZero(static_cast<double>(layerStat.candidateCountSum), profiledTextureFrameCount_), 'f', 4) << '\n';
         stream << "layer." << layerStat.name << ".candidate_count_max=" << layerStat.candidateCountMax << '\n';
