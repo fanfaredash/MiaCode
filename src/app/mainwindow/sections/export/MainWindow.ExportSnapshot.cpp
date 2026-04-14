@@ -496,8 +496,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
     for (const TimelineNoteMarker& marker : parsedTimeline.noteMarkers) {
         lastMarkerEndSecond = qMax(lastMarkerEndSecond, markerEndSecond(marker));
     }
-    double trackDurationSeconds = 0.0;
-    buildWaveformPeaks(trackPath, &trackDurationSeconds, 1);
+    const double trackDurationSeconds = probeAudioDurationSeconds(trackPath);
     double contentDurationSeconds = qMax(0.0, lastMarkerEndSecond + 3.0);
     if (trackDurationSeconds > 0.0) {
         contentDurationSeconds = qMax(0.0, qMin(trackDurationSeconds, contentDurationSeconds));

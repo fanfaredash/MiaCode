@@ -19,8 +19,14 @@
 #include <QVector>
 #include <QEvent>
 
+#include <memory>
+
 #include "timeline/TimelineRenderData.h"
 #include "common/MuriTypes.h"
+
+namespace miacode::waveform {
+struct WaveformData;
+}
 
 class TimelineView : public QAbstractScrollArea
 {
@@ -32,7 +38,7 @@ public:
     QSize sizeHint() const override;
     void setHeaderLineNumberFont(const QFont& font);
     void setTimelineData(const TimelineRenderSnapshot& snapshot);
-    void setWaveformData(const QVector<float>& peaks, double startSecond = 0.0, double durationSeconds = 0.0);
+    void setWaveformData(const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData);
     void clear();
     void setPlaybackEntrySeconds(double second);
     double playbackEntrySeconds() const;
@@ -173,9 +179,7 @@ private:
     QHash<QString, int> noteIconBasePixelSizes_;
     mutable QHash<QString, QPixmap> transformedIconCache_;
     mutable QHash<QString, HoldPixmapParts> holdPixmapPartsCache_;
-    QVector<float> waveformPeaks_;
-    double waveformStartSeconds_ = 0.0;
-    double waveformDurationSeconds_ = 0.0;
+    std::shared_ptr<const miacode::waveform::WaveformData> waveformData_;
     QToolButton* zoomButton_ = nullptr;
     QCheckBox* followPreviewCheckBox_ = nullptr;
     QFont headerLineNumberFont_;

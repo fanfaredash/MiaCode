@@ -16,6 +16,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewInteractionConfig.h"
+#include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "preview/scene/PreviewProgressStatsCache.h"
@@ -165,11 +166,12 @@ void MainWindow::TimelineSection::resetPreviewTrackTimelineOffsets()
     owner_.resetPreviewStageMediaRouteTimelineOffset();
 }
 
-void MainWindow::TimelineSection::applyWaveformData(const QVector<float>& peaks, double durationSeconds)
+void MainWindow::TimelineSection::applyWaveformData(
+    const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData)
 {
-    state_.previewTrackDurationSeconds_ = qMax(0.0, durationSeconds);
+    state_.previewTrackDurationSeconds_ = waveformData ? qMax(0.0, waveformData->durationSeconds) : 0.0;
     if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->setWaveformData(peaks, 0.0, state_.previewTrackDurationSeconds_);
+        ui_.timelineView_->setWaveformData(waveformData);
     }
     updatePreviewSliderRange();
 }
@@ -190,101 +192,45 @@ void MainWindow::TimelineSection::refreshWaveformCache(double knownDurationSecon
     const quint64 generation = state_.waveformRefreshGeneration_;
     const QString trackPath = state_.lastTrackPath_;
     if (trackPath.isEmpty()) {
-        applyWaveformData(QVector<float>(), 0.0);
+        applyWaveformData(miacode::waveform::makeWaveformPlaceholder(0.0));
         return;
     }
 
     const QFileInfo trackInfo(trackPath);
     if (!trackInfo.exists() || !trackInfo.isFile()) {
-        applyWaveformData(QVector<float>(), 0.0);
-        return;
-    }
-
-    const qint64 fileSize = trackInfo.size();
-    const qint64 lastModifiedMs = fileLastModifiedMs(trackInfo);
-    const bool cacheMatches =
-        state_.waveformCacheEntry_.trackPath == trackPath
-        && state_.waveformCacheEntry_.fileSize == fileSize
-        && state_.waveformCacheEntry_.lastModifiedMs == lastModifiedMs;
-    const bool cacheHasPeaks = cacheMatches && !state_.waveformCacheEntry_.peaks.isEmpty();
-    if (cacheHasPeaks) {
-        applyWaveformData(
-            state_.waveformCacheEntry_.peaks,
-            knownDurationSeconds > 0.0 ? knownDurationSeconds : state_.waveformCacheEntry_.durationSeconds
-        );
+        applyWaveformData(miacode::waveform::makeWaveformPlaceholder(0.0));
         return;
     }
 
     if (knownDurationSeconds > 0.0) {
-        applyWaveformData(QVector<float>(), knownDurationSeconds);
-    } else if (cacheMatches && state_.waveformCacheEntry_.durationSeconds > 0.0) {
-        applyWaveformData(QVector<float>(), state_.waveformCacheEntry_.durationSeconds);
+        applyWaveformData(miacode::waveform::makeWaveformPlaceholder(knownDurationSeconds));
     } else {
-        applyWaveformData(QVector<float>(), 0.0);
+        applyWaveformData(miacode::waveform::makeWaveformPlaceholder(0.0));
     }
 
-    QPointer<MainWindow> guard(&owner_);
-    QThreadPool* const pool = state_.previewWarmupPool_ != nullptr
-        ? state_.previewWarmupPool_
-        : QThreadPool::globalInstance();
-    pool->start([guard, generation, trackPath, fileSize, lastModifiedMs]() {
-        double audioDurationSeconds = 0.0;
-        QElapsedTimer timer;
-        timer.start();
-        const QVector<float> peaks = buildWaveformPeaks(trackPath, &audioDurationSeconds, kWaveformPeakCount);
-        const qint64 buildElapsedMs = timer.elapsed();
-        if (guard.isNull()) {
-            return;
-        }
-        QMetaObject::invokeMethod(
-            guard.data(),
-            [guard, generation, trackPath, fileSize, lastModifiedMs, audioDurationSeconds, peaks, buildElapsedMs]() {
-                if (guard.isNull()) {
+    const QString cacheDirectoryPath = miacode::waveform::waveformCacheDirectoryPath(
+        miacode::waveform::projectDataDirectoryPathForFile(state_.currentFilePath_));
+    owner_.ensureWaveformCacheService()->requestWaveform(
+        trackPath,
+        cacheDirectoryPath,
+        [this, generation, trackPath](miacode::waveform::WaveformDataPtr waveformData) {
+            if (generation != state_.waveformRefreshGeneration_ || state_.lastTrackPath_ != trackPath) {
+                return;
+            }
+
+            const QFileInfo currentTrackInfo(trackPath);
+            if (!currentTrackInfo.exists() || !currentTrackInfo.isFile()) {
+                return;
+            }
+            if (waveformData && waveformData->fileSize >= 0) {
+                const qint64 currentLastModifiedMs = fileLastModifiedMs(currentTrackInfo);
+                if (currentTrackInfo.size() != waveformData->fileSize
+                    || currentLastModifiedMs != waveformData->lastModifiedMs) {
                     return;
                 }
-                guard->applyWaveformCacheEntry(
-                    generation,
-                    trackPath,
-                    fileSize,
-                    lastModifiedMs,
-                    audioDurationSeconds,
-                    peaks,
-                    buildElapsedMs
-                );
-            },
-            Qt::QueuedConnection
-        );
-    });
-}
-
-void MainWindow::TimelineSection::applyWaveformCacheEntry(
-    quint64 generation,
-    const QString& trackPath,
-    qint64 fileSize,
-    qint64 lastModifiedMs,
-    double durationSeconds,
-    const QVector<float>& peaks,
-    qint64 buildElapsedMs)
-{
-    Q_UNUSED(buildElapsedMs);
-
-    if (generation != state_.waveformRefreshGeneration_ || state_.lastTrackPath_ != trackPath) {
-        return;
-    }
-
-    const QFileInfo currentTrackInfo(trackPath);
-    if (!currentTrackInfo.exists()
-        || currentTrackInfo.size() != fileSize
-        || fileLastModifiedMs(currentTrackInfo) != lastModifiedMs) {
-        return;
-    }
-
-    state_.waveformCacheEntry_.trackPath = trackPath;
-    state_.waveformCacheEntry_.fileSize = fileSize;
-    state_.waveformCacheEntry_.lastModifiedMs = lastModifiedMs;
-    state_.waveformCacheEntry_.durationSeconds = qMax(0.0, durationSeconds);
-    state_.waveformCacheEntry_.peaks = peaks;
-    applyWaveformData(peaks, state_.waveformCacheEntry_.durationSeconds);
+            }
+            applyWaveformData(waveformData);
+        });
 }
 
 bool MainWindow::TimelineSection::hasActiveDifficulty() const
@@ -1040,9 +986,20 @@ void MainWindow::resetPreviewTrackTimelineOffsets()
     timelineSection_->resetPreviewTrackTimelineOffsets();
 }
 
-void MainWindow::applyWaveformData(const QVector<float>& peaks, double durationSeconds)
+miacode::waveform::WaveformCacheService* MainWindow::ensureWaveformCacheService()
 {
-    timelineSection_->applyWaveformData(peaks, durationSeconds);
+    if (state_.waveformCacheService_ == nullptr) {
+        state_.waveformCacheService_ = new miacode::waveform::WaveformCacheService(this);
+    }
+    state_.waveformCacheService_->setThreadPool(
+        state_.previewWarmupPool_ != nullptr ? state_.previewWarmupPool_ : QThreadPool::globalInstance());
+    return state_.waveformCacheService_;
+}
+
+void MainWindow::applyWaveformData(
+    const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData)
+{
+    timelineSection_->applyWaveformData(waveformData);
 }
 
 void MainWindow::refreshWaveformCache()
@@ -1053,26 +1010,6 @@ void MainWindow::refreshWaveformCache()
 void MainWindow::refreshWaveformCache(double knownDurationSeconds)
 {
     timelineSection_->refreshWaveformCache(knownDurationSeconds);
-}
-
-void MainWindow::applyWaveformCacheEntry(
-    quint64 generation,
-    const QString& trackPath,
-    qint64 fileSize,
-    qint64 lastModifiedMs,
-    double durationSeconds,
-    const QVector<float>& peaks,
-    qint64 buildElapsedMs)
-{
-    timelineSection_->applyWaveformCacheEntry(
-        generation,
-        trackPath,
-        fileSize,
-        lastModifiedMs,
-        durationSeconds,
-        peaks,
-        buildElapsedMs
-    );
 }
 
 void MainWindow::applyLatencyDetectorOffset(double seconds)

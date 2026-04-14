@@ -109,6 +109,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/DebugLog.cpp
     src/common/DebugImageCompare.h
     src/common/ChartAssetPaths.h
+    src/common/WaveformCache.h
+    src/common/WaveformCache.cpp
     src/common/PreviewSfxTimeline.h
     src/editor/PlainCodeEditor.h
     src/editor/PlainCodeEditor.cpp

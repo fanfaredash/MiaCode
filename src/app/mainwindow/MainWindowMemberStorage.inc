@@ -146,6 +146,7 @@
         PreviewStageMediaHost* previewStageMediaHost_ = nullptr;
         QuickShellPreviewCompositeSurface* quickShellPreviewCompositeSurface_ = nullptr;
         QtPreviewSfxRuntime* previewSfxRuntime_ = nullptr;
+        miacode::waveform::WaveformCacheService* waveformCacheService_ = nullptr;
         QThreadPool* previewWarmupPool_ = nullptr;
         QThreadPool* timelineSlowRefreshPool_ = nullptr;
         QThreadPool* timelineAnalysisPool_ = nullptr;
@@ -287,7 +288,6 @@
         double pausedPreviewMediaSeekSecond_ = 0.0;
         double previewPlaybackRate_ = 1.0;
         double previewTrackDurationSeconds_ = 0.0;
-        WaveformCacheEntry waveformCacheEntry_;
         bool showSlideTracks_ = true;
         bool showJudgeMarkers_ = false;
         bool showTouchTrail_ = false;
@@ -527,7 +527,6 @@
     double& pausedPreviewMediaSeekSecond_ = state_.pausedPreviewMediaSeekSecond_;
     double& previewPlaybackRate_ = state_.previewPlaybackRate_;
     double& previewTrackDurationSeconds_ = state_.previewTrackDurationSeconds_;
-    WaveformCacheEntry& waveformCacheEntry_ = state_.waveformCacheEntry_;
     bool& showSlideTracks_ = state_.showSlideTracks_;
     bool& showJudgeMarkers_ = state_.showJudgeMarkers_;
     bool& showTouchTrail_ = state_.showTouchTrail_;

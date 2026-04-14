@@ -1,6 +1,7 @@
 #include "TimelineView.h"
 #include "common/AssetPaths.h"
 #include "common/PreviewSkinConfig.h"
+#include "common/WaveformCache.h"
 #include "UiText.h"
 #include "UiTheme.h"
 
@@ -36,7 +37,6 @@ constexpr int kTimelineLeftMargin = 40;
 constexpr int kTimelineTopMargin = 6;
 constexpr int kTimelineRightPadding = 24;
 constexpr int kTimelineMaxRenderedSubdivisionBeats = 32;
-constexpr int kTimelineHeaderLineLabelWidth = 56;
 constexpr int kTimelineHeaderLineLabelMinSpacingPx = 22;
 constexpr int kTimelineHeaderMultiDigitLabelSideGapPx = 2;
 constexpr qreal kTimelineHeaderSingleDigitFontScale = 0.9;
@@ -158,6 +158,44 @@ QString holdPixmapCacheKey(const QString& type, qreal scale)
 {
     return QStringLiteral("%1|%2").arg(type).arg(transformedPixmapScalePermille(scale));
 }
+
+QFont scaledTimelineHeaderFont(const QFont& sourceFont, qreal scale)
+{
+    QFont scaledFont(sourceFont);
+    const qreal clampedScale = qMax(0.1, scale);
+    if (scaledFont.pointSizeF() > 0.0) {
+        scaledFont.setPointSizeF(qMax(1.0, scaledFont.pointSizeF() * clampedScale));
+    } else if (scaledFont.pointSize() > 0) {
+        scaledFont.setPointSizeF(qMax(1.0, static_cast<qreal>(scaledFont.pointSize()) * clampedScale));
+    } else if (scaledFont.pixelSize() > 0) {
+        scaledFont.setPixelSize(qMax(1, qRound(static_cast<qreal>(scaledFont.pixelSize()) * clampedScale)));
+    }
+    return scaledFont;
+}
+
+qreal timelineHeaderLabelScale(const QFont& baseFont, int digitCount)
+{
+    if (digitCount <= 1) {
+        return kTimelineHeaderSingleDigitFontScale;
+    }
+    const qreal multiDigitWidthBudget = qMax<qreal>(
+        8.0,
+        static_cast<qreal>(kTimelineHeaderLineLabelMinSpacingPx - kTimelineHeaderMultiDigitLabelSideGapPx)
+    );
+    const QString widthSample(qMax(1, digitCount), QLatin1Char('8'));
+    const qreal widthScale = multiDigitWidthBudget
+        / qMax<qreal>(1.0, static_cast<qreal>(QFontMetricsF(baseFont).horizontalAdvance(widthSample)));
+    return qMin(kTimelineHeaderMultiDigitBaseFontScale, widthScale);
+}
+
+int timelineHeaderLabelHalfWidthPx(const QFont& baseFont, const QString& labelText)
+{
+    if (labelText.isEmpty()) {
+        return 0;
+    }
+    const QFont labelFont = scaledTimelineHeaderFont(baseFont, timelineHeaderLabelScale(baseFont, labelText.size()));
+    return qCeil(QFontMetricsF(labelFont).horizontalAdvance(labelText) * 0.5) + 1;
+}
 }  // namespace
 
 TimelineView::TimelineView(QWidget* parent)
@@ -252,7 +290,13 @@ void TimelineView::refreshTheme()
         zoomButton_->setStyleSheet(UiTheme::timelineZoomButtonStyleSheet());
     }
     if (followPreviewCheckBox_ != nullptr) {
-        followPreviewCheckBox_->setStyleSheet(UiTheme::timelineCheckBoxStyleSheet());
+        followPreviewCheckBox_->setStyleSheet(
+            UiTheme::timelineCheckBoxStyleSheet()
+            + QStringLiteral(
+                "QCheckBox { spacing: 4px; }"
+                "QCheckBox::indicator { width: 14px; height: 14px; }"
+            )
+        );
     }
     refreshMinimumHeightForCurrentDevice();
     viewport()->update();
@@ -293,11 +337,9 @@ void TimelineView::setTimelineData(const TimelineRenderSnapshot& snapshot)
     viewport()->update();
 }
 
-void TimelineView::setWaveformData(const QVector<float>& peaks, double startSecond, double durationSeconds)
+void TimelineView::setWaveformData(const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData)
 {
-    waveformPeaks_ = peaks;
-    waveformStartSeconds_ = startSecond;
-    waveformDurationSeconds_ = qMax(0.0, durationSeconds);
+    waveformData_ = waveformData;
     updateDisplayBounds();
     updateHorizontalRange();
     viewport()->update();
@@ -322,9 +364,7 @@ void TimelineView::clear()
     maximumDataSecond_ = 0.0;
     displayStartSeconds_ = -kTimelineDisplayLeadInSeconds;
     displayEndSeconds_ = 1.0;
-    waveformPeaks_.clear();
-    waveformStartSeconds_ = 0.0;
-    waveformDurationSeconds_ = 0.0;
+    waveformData_.reset();
     updateHorizontalRange();
     viewport()->update();
 }
@@ -504,7 +544,7 @@ int TimelineView::minimumContentHeightForCurrentDevice() const
         controlBandHeight = qMax(controlBandHeight, QFontMetrics(headerLineNumberFont_).height());
     }
     const int headerHeight = qMax(baseHeaderHeight, controlBandHeight + 10);
-    return headerHeight + timelineHeight() + 10;
+    return headerHeight + timelineHeight();
 }
 
 void TimelineView::refreshMinimumHeightForCurrentDevice()
@@ -527,9 +567,8 @@ void TimelineView::updateDisplayBounds()
     if (playheadUpperLimitSeconds_ > 0.0) {
         maxSecond = qMax(maxSecond, playheadUpperLimitSeconds_);
     }
-    if (waveformDurationSeconds_ > 0.0) {
-        minSecond = qMin(minSecond, waveformStartSeconds_);
-        maxSecond = qMax(maxSecond, waveformStartSeconds_ + waveformDurationSeconds_);
+    if (waveformData_ && waveformData_->durationSeconds > 0.0) {
+        maxSecond = qMax(maxSecond, waveformData_->durationSeconds);
     }
     displayStartSeconds_ = qMin(-kTimelineDisplayLeadInSeconds, minSecond - kTimelineDisplayLeadInSeconds);
     displayEndSeconds_ = qMax(displayStartSeconds_ + 1.0, maxSecond + 1.0);

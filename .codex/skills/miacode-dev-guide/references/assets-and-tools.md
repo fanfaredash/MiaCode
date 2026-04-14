@@ -36,6 +36,10 @@ Current chart-directory conventions:
   - `.miacode/`
 - project render-state sidecar:
   - `.miacode/miacode_settings.json`
+- waveform cache container root:
+  - `.miacode/waveform/`
+  - stores hashed per-track waveform cache blobs reused by timeline and latency detection
+  - cache validity is tied to normalized track path plus file size and last-modified timestamp
 - autosave container root:
   - `.miacode/autosave/<chart file>/`
   - contains `<chart file>.bak`, `history/*.bak`, and `autosave.json`

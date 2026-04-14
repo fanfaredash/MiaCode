@@ -229,14 +229,14 @@ void LatencyDetectorDialog::buildUi()
         updateBeatOverlay();
     });
     connect(zoomOutButton_, &QToolButton::clicked, this, [this]() {
-        if (zoomLevel_ < 1) {
-            ++zoomLevel_;
+        if (zoomPresetIndex_ + 1 < waveformZoomFactors().size()) {
+            ++zoomPresetIndex_;
             applyZoomLevel(true);
         }
     });
     connect(zoomInButton_, &QToolButton::clicked, this, [this]() {
-        if (zoomLevel_ > -1) {
-            --zoomLevel_;
+        if (zoomPresetIndex_ > 0) {
+            --zoomPresetIndex_;
             applyZoomLevel(true);
         }
     });
@@ -263,14 +263,38 @@ void LatencyDetectorDialog::loadAudioAnalysis()
     const DecodedAudio decoded = decodeMonoTrack(trackPath_, kAnalysisSampleRate);
     decodedSamples_ = decoded.samples;
     trackDurationSeconds_ = decoded.durationSeconds;
-    waveformPeaks_ = buildWaveformPeaks(decodedSamples_, kWaveformPeakCount);
     onsetEnvelope_ = buildOnsetEnvelope(decodedSamples_, kAnalysisSampleRate, &onsetStepSeconds_);
     offsetEnvelope_ = buildTransientEnvelope(decodedSamples_, kAnalysisSampleRate, &offsetStepSeconds_);
-    static_cast<WaveformOverviewWidget*>(waveformView_)->setWaveformData(waveformPeaks_, trackDurationSeconds_);
+    static_cast<WaveformOverviewWidget*>(waveformView_)->setWaveformData(
+        miacode::waveform::makeWaveformPlaceholder(trackDurationSeconds_));
+    if (waveformCacheService_ != nullptr && !trackPath_.isEmpty()) {
+        const QString cacheDirectoryPath = miacode::waveform::waveformCacheDirectoryPath(
+            miacode::waveform::projectDataDirectoryPathForFile(chartPath_));
+        QPointer<LatencyDetectorDialog> guard(this);
+        waveformCacheService_->requestWaveform(
+            trackPath_,
+            cacheDirectoryPath,
+            [guard, trackPath = trackPath_](miacode::waveform::WaveformDataPtr waveformData) {
+                if (guard.isNull() || guard->waveformView_ == nullptr) {
+                    return;
+                }
+                const QFileInfo currentTrackInfo(trackPath);
+                if (!currentTrackInfo.exists() || !currentTrackInfo.isFile()) {
+                    return;
+                }
+                if (waveformData && waveformData->fileSize >= 0) {
+                    const qint64 lastModifiedMs = currentTrackInfo.lastModified().toMSecsSinceEpoch();
+                    if (currentTrackInfo.size() != waveformData->fileSize
+                        || lastModifiedMs != waveformData->lastModifiedMs) {
+                        return;
+                    }
+                }
+                static_cast<WaveformOverviewWidget*>(guard->waveformView_)->setWaveformData(waveformData);
+            });
+    }
     detectBpmButton_->setEnabled(!onsetEnvelope_.isEmpty());
-    visibleDurationSeconds_ = qMin(qMax(trackDurationSeconds_, kMinimumVisibleSeconds), 12.0);
-    baseVisibleDurationSeconds_ = visibleDurationSeconds_;
-    zoomLevel_ = 0;
+    zoomPresetIndex_ = defaultWaveformZoomPresetIndex();
+    applyZoomLevel(true);
 }
 
 void LatencyDetectorDialog::updatePlaybackUi()
@@ -294,8 +318,8 @@ void LatencyDetectorDialog::updatePlaybackUi()
     }
     playbackTimeLabel_->setText(QString("%1 / %2").arg(formatTimestamp(playheadSecond_), formatTimestamp(trackDurationSeconds_)));
     detectOffsetButton_->setEnabled(parsedBpm() > 0.0);
-    zoomOutButton_->setEnabled(zoomLevel_ < 1);
-    zoomInButton_->setEnabled(zoomLevel_ > -1);
+    zoomOutButton_->setEnabled(zoomPresetIndex_ + 1 < waveformZoomFactors().size());
+    zoomInButton_->setEnabled(zoomPresetIndex_ > 0);
 }
 
 void LatencyDetectorDialog::updateBeatOverlay()
@@ -362,42 +386,22 @@ void LatencyDetectorDialog::updateBeatOverlay()
 
 void LatencyDetectorDialog::smoothFollowPlayhead(bool forceCenter)
 {
+    Q_UNUSED(forceCenter);
     if (trackDurationSeconds_ <= 0.0) {
         visibleStartSecond_ = 0.0;
         return;
     }
     const double maxStart = qMax(0.0, trackDurationSeconds_ - visibleDurationSeconds_);
-    const double targetStart = qBound(0.0, playheadSecond_ - visibleDurationSeconds_ * 0.35, maxStart);
-    if (forceCenter) {
-        visibleStartSecond_ = targetStart;
-        return;
-    }
-
-    const double leftBoundary = visibleStartSecond_ + visibleDurationSeconds_ * 0.15;
-    const double rightBoundary = visibleStartSecond_ + visibleDurationSeconds_ * 0.85;
-    if (playheadSecond_ < leftBoundary || playheadSecond_ > rightBoundary) {
-        const double center = visibleStartSecond_ + visibleDurationSeconds_ * 0.5;
-        const double normalizedDistance = qBound(
-            0.0,
-            qAbs(playheadSecond_ - center) / qMax(0.001, visibleDurationSeconds_ * 0.5),
-            1.0
-        );
-        const double blend = 0.18 + 0.42 * normalizedDistance;
-        visibleStartSecond_ = visibleStartSecond_ + (targetStart - visibleStartSecond_) * blend;
-    }
-    visibleStartSecond_ = qBound(0.0, visibleStartSecond_, maxStart);
+    visibleStartSecond_ = qBound(0.0, playheadSecond_ - visibleDurationSeconds_ * 0.5, maxStart);
 }
 
 void LatencyDetectorDialog::applyZoomLevel(bool centerOnPlayhead)
 {
-    const double base = qMax(kMinimumVisibleSeconds, baseVisibleDurationSeconds_);
-    double factor = 1.0;
-    if (zoomLevel_ > 0) {
-        factor = 1.5;
-    } else if (zoomLevel_ < 0) {
-        factor = 1.0 / 1.5;
-    }
-    visibleDurationSeconds_ = base * factor;
+    const QVector<double>& factors = waveformZoomFactors();
+    const int boundedIndex = qBound(0, zoomPresetIndex_, factors.size() - 1);
+    zoomPresetIndex_ = boundedIndex;
+    const double factor = factors.at(boundedIndex);
+    visibleDurationSeconds_ = qMax(kMinimumVisibleSeconds, kWaveformZoomBaseVisibleSeconds * factor);
     updateVisibleRange(centerOnPlayhead);
 }
 
@@ -407,12 +411,10 @@ void LatencyDetectorDialog::updateVisibleRange(bool centerOnPlayhead)
         visibleStartSecond_ = 0.0;
         visibleDurationSeconds_ = kMinimumVisibleSeconds;
     } else {
-        visibleDurationSeconds_ = qBound(kMinimumVisibleSeconds, visibleDurationSeconds_, qMax(trackDurationSeconds_, kMinimumVisibleSeconds));
+        visibleDurationSeconds_ = qMax(kMinimumVisibleSeconds, visibleDurationSeconds_);
         if (centerOnPlayhead) {
-            visibleStartSecond_ = playheadSecond_ - visibleDurationSeconds_ * 0.35;
+            visibleStartSecond_ = playheadSecond_ - visibleDurationSeconds_ * 0.5;
         }
-        const double maxStart = qMax(0.0, trackDurationSeconds_ - visibleDurationSeconds_);
-        visibleStartSecond_ = qBound(0.0, visibleStartSecond_, maxStart);
     }
     static_cast<WaveformOverviewWidget*>(waveformView_)->setVisibleRange(visibleStartSecond_, visibleDurationSeconds_);
     static_cast<WaveformOverviewWidget*>(waveformView_)->setPlayheadSecond(playheadSecond_);

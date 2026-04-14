@@ -128,18 +128,10 @@
     void applyLatencyDetectorOffset(double seconds);
     void applyLatencyDetectorBpm(double bpm);
     void resetPreviewTrackTimelineOffsets();
-    void applyWaveformData(const QVector<float>& peaks, double durationSeconds);
+    miacode::waveform::WaveformCacheService* ensureWaveformCacheService();
+    void applyWaveformData(const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData);
     void refreshWaveformCache();
     void refreshWaveformCache(double knownDurationSeconds);
-    void applyWaveformCacheEntry(
-        quint64 generation,
-        const QString& trackPath,
-        qint64 fileSize,
-        qint64 lastModifiedMs,
-        double durationSeconds,
-        const QVector<float>& peaks,
-        qint64 buildElapsedMs
-    );
     void applyTimelineQuickChange(int position, int charsRemoved, int charsAdded);
     void refreshTimelineQuickModelFromCurrentText();
     void applyLatestTimelinePreviewStateToPausedPreview();

@@ -5,6 +5,8 @@
 #include <QString>
 #include <QVector>
 
+#include <memory>
+
 #include "PreviewAudioSettings.h"
 
 class QLabel;
@@ -17,6 +19,10 @@ class QToolButton;
 class QtPreviewSfxRuntime;
 class QWidget;
 
+namespace miacode::waveform {
+class WaveformCacheService;
+}
+
 class LatencyDetectorDialog : public QDialog
 {
     Q_OBJECT
@@ -25,6 +31,7 @@ public:
     explicit LatencyDetectorDialog(
         const QString& trackPath,
         const QString& chartPath,
+        miacode::waveform::WaveformCacheService* waveformCacheService,
         const PreviewAudioSettings& audioSettings,
         QWidget* parent = nullptr
     );
@@ -74,6 +81,7 @@ private:
     QString trackPath_;
     QString chartPath_;
     PreviewAudioSettings audioSettings_;
+    miacode::waveform::WaveformCacheService* waveformCacheService_ = nullptr;
     QWidget* waveformView_ = nullptr;
     QLineEdit* bpmEdit_ = nullptr;
     QPushButton* detectBpmButton_ = nullptr;
@@ -96,7 +104,6 @@ private:
     QTimer* playbackTimer_ = nullptr;
     QTimer* beatAuditionTimer_ = nullptr;
     QTimer* offsetReplayTimer_ = nullptr;
-    QVector<float> waveformPeaks_;
     QVector<float> onsetEnvelope_;
     QVector<float> offsetEnvelope_;
     QVector<float> decodedSamples_;
@@ -108,7 +115,7 @@ private:
     double visibleStartSecond_ = 0.0;
     double visibleDurationSeconds_ = 12.0;
     double baseVisibleDurationSeconds_ = 12.0;
-    int zoomLevel_ = 0;
+    int zoomPresetIndex_ = 2;
     double pendingBeatBpm_ = 0.0;
     double pendingBeatOffset_ = 0.0;
     int pendingBeatBarPulseCount_ = 4;

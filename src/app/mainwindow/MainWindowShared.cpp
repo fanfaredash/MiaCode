@@ -6,6 +6,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/MiniaudioFileAccess.h"
+#include "common/WaveformCache.h"
 
 #include <QApplication>
 #include <QCryptographicHash>
@@ -247,17 +248,7 @@ QByteArray autosaveContentSignature(const QString& text)
 
 QString resolveProjectDataDirectoryPath(const QString& filePath)
 {
-    const QString normalizedPath = filePath.isEmpty() ? QString() : QDir::cleanPath(filePath);
-    if (normalizedPath.isEmpty()) {
-        return QString();
-    }
-
-    const QFileInfo fileInfo(normalizedPath);
-    const QString projectDirectoryPath = fileInfo.absolutePath();
-    if (projectDirectoryPath.isEmpty()) {
-        return QString();
-    }
-    return QDir(projectDirectoryPath).filePath(QStringLiteral(".miacode"));
+    return miacode::waveform::projectDataDirectoryPathForFile(filePath);
 }
 
 void appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 deltaMs)
@@ -1043,58 +1034,6 @@ double probeAudioDurationSeconds(const QString& trackPath)
     }
 
     return static_cast<double>(totalFrames) / 48000.0;
-}
-
-QVector<float> buildWaveformPeaks(const QString& trackPath, double* durationSeconds, int peakCount)
-{
-    QVector<float> peaks;
-    if (durationSeconds != nullptr) {
-        *durationSeconds = 0.0;
-    }
-    if (trackPath.isEmpty() || !QFileInfo::exists(trackPath) || peakCount <= 0) {
-        return peaks;
-    }
-
-    ma_decoder_config config = ma_decoder_config_init(ma_format_f32, 1, 48000);
-    ma_decoder decoder;
-    if (miacode::audio_io::decoderInitFile(trackPath, &config, &decoder) != MA_SUCCESS) {
-        return peaks;
-    }
-
-    ma_uint64 totalFrames = 0;
-    if (ma_decoder_get_length_in_pcm_frames(&decoder, &totalFrames) != MA_SUCCESS || totalFrames == 0) {
-        ma_decoder_uninit(&decoder);
-        return peaks;
-    }
-
-    const double sampleRate = 48000.0;
-    if (durationSeconds != nullptr) {
-        *durationSeconds = static_cast<double>(totalFrames) / sampleRate;
-    }
-    peaks.fill(0.0f, peakCount);
-    constexpr ma_uint64 kChunkFrames = 4096;
-    QVector<float> buffer(static_cast<int>(kChunkFrames), 0.0f);
-    ma_uint64 frameCursor = 0;
-
-    while (frameCursor < totalFrames) {
-        ma_uint64 framesRead = 0;
-        if (ma_decoder_read_pcm_frames(&decoder, buffer.data(), kChunkFrames, &framesRead) != MA_SUCCESS || framesRead == 0) {
-            break;
-        }
-        for (ma_uint64 index = 0; index < framesRead; ++index) {
-            const ma_uint64 absoluteFrame = frameCursor + index;
-            const int binIndex = qBound(
-                0,
-                static_cast<int>((absoluteFrame * peakCount) / qMax<ma_uint64>(1, totalFrames)),
-                peakCount - 1
-            );
-            peaks[binIndex] = qMax(peaks[binIndex], qAbs(buffer[static_cast<int>(index)]));
-        }
-        frameCursor += framesRead;
-    }
-
-    ma_decoder_uninit(&decoder);
-    return peaks;
 }
 
 }  // namespace miacode::mainwindow::shared
