@@ -16,7 +16,6 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
-#include <QPainterPath>
 #include <QPushButton>
 #include <QDialogButtonBox>
 #include <QPlainTextEdit>
@@ -33,21 +32,33 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/MiniaudioFileAccess.h"
+#include "common/WaveformCache.h"
 
 namespace {
 
-constexpr int kWaveformPeakCount = 2048;
 constexpr int kAnalysisSampleRate = 24000;
 constexpr int kAnalysisWindowSize = 1024;
 constexpr int kAnalysisHopSize = 512;
 constexpr int kOffsetWindowSize = 512;
 constexpr int kOffsetHopSize = 128;
-constexpr double kMinimumVisibleSeconds = 4.0;
+constexpr double kMinimumVisibleSeconds = 0.001;
+constexpr double kWaveformZoomBaseVisibleSeconds = 4.0;
 constexpr double kOffsetReplayDelayMs = 120.0;
 constexpr double kMinDetectBpm = 50.0;
 constexpr double kMaxDetectBpm = 300.0;
 constexpr double kOffsetPhasePenalty = 0.06;
 constexpr double kOffsetSnapThreshold = 0.90;
+
+const QVector<double>& waveformZoomFactors()
+{
+    static const QVector<double> factors{0.5, 1.0, 2.0, 4.0, 8.0};
+    return factors;
+}
+
+int defaultWaveformZoomPresetIndex()
+{
+    return qMax(0, waveformZoomFactors().indexOf(2.0));
+}
 
 struct MeterPattern {
     const char* id = "";
@@ -105,10 +116,10 @@ public:
         setMouseTracking(true);
     }
 
-    void setWaveformData(const QVector<float>& peaks, double durationSeconds)
+    void setWaveformData(const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData)
     {
-        peaks_ = peaks;
-        durationSeconds_ = qMax(0.0, durationSeconds);
+        waveformData_ = waveformData;
+        durationSeconds_ = waveformData ? qMax(0.0, waveformData->durationSeconds) : 0.0;
         update();
     }
 
@@ -191,31 +202,44 @@ protected:
             }
         }
 
-        if (!peaks_.isEmpty()) {
-            QPainterPath upperPath;
-            QPainterPath lowerPath;
-            bool started = false;
-            for (int i = 0; i < peaks_.size(); ++i) {
-                const double second = durationSeconds_ * (static_cast<double>(i) / qMax(1, peaks_.size() - 1));
-                if (second < visibleStartSecond_ - 0.01 || second > visibleStartSecond_ + visibleDurationSeconds_ + 0.01) {
-                    continue;
+        if (waveformData_ && waveformData_->durationSeconds > 0.0) {
+            const miacode::waveform::WaveformLevel* waveformLevel =
+                miacode::waveform::selectWaveformLevelForVisibleRange(
+                    *waveformData_,
+                    visibleDurationSeconds_,
+                    qMax(1, qFloor(chartRect.width())));
+            if (waveformLevel != nullptr && !waveformLevel->columns.isEmpty()) {
+                const QPair<int, int> visibleColumns =
+                    miacode::waveform::visibleWaveformColumnRange(
+                        *waveformLevel,
+                        visibleStartSecond_,
+                        visibleStartSecond_ + visibleDurationSeconds_);
+                const QColor waveformColor = c.timelineWaveStroke;
+                const qreal centerY = chartRect.center().y();
+                const qreal maxAmplitude = chartRect.height() * 0.38;
+                painter.save();
+                painter.setClipRect(chartRect);
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(waveformColor);
+                for (int index = visibleColumns.first; index < visibleColumns.second; ++index) {
+                    const miacode::waveform::WaveformColumn& column = waveformLevel->columns.at(index);
+                    if (qAbs(column.max - column.min) <= 1e-5f) {
+                        continue;
+                    }
+                    const double columnStartSecond = waveformLevel->secondsPerColumn * static_cast<double>(index);
+                    const double columnEndSecond = columnStartSecond + waveformLevel->secondsPerColumn;
+                    const int x0 = qFloor(secondToX(columnStartSecond, chartRect));
+                    const int x1 = qMax(x0 + 1, qCeil(secondToX(columnEndSecond, chartRect)));
+                    const qreal topY = centerY - (qBound(-1.0f, column.max, 1.0f) * maxAmplitude);
+                    const qreal bottomY = centerY - (qBound(-1.0f, column.min, 1.0f) * maxAmplitude);
+                    const int barTop = qFloor(qMin(topY, bottomY));
+                    const int barBottom = qCeil(qMax(topY, bottomY));
+                    painter.fillRect(
+                        QRect(x0, barTop, qMax(1, x1 - x0), qMax(1, barBottom - barTop)),
+                        waveformColor);
                 }
-                const qreal x = secondToX(second, chartRect);
-                const qreal peak = qBound<qreal>(0.0, peaks_.at(i), 1.0);
-                const qreal upperY = chartRect.center().y() - peak * chartRect.height() * 0.38;
-                const qreal lowerY = chartRect.center().y() + peak * chartRect.height() * 0.38;
-                if (!started) {
-                    upperPath.moveTo(x, upperY);
-                    lowerPath.moveTo(x, lowerY);
-                    started = true;
-                } else {
-                    upperPath.lineTo(x, upperY);
-                    lowerPath.lineTo(x, lowerY);
-                }
+                painter.restore();
             }
-            painter.setPen(QPen(c.timelineWaveStroke, 1.15));
-            painter.drawPath(upperPath);
-            painter.drawPath(lowerPath);
         }
 
         painter.setPen(QPen(c.textPrimary, 1.0));
@@ -274,7 +298,7 @@ private:
         seekCallback_(xToSecond(position.x(), chartRect));
     }
 
-    QVector<float> peaks_;
+    std::shared_ptr<const miacode::waveform::WaveformData> waveformData_;
     std::function<void(double)> seekCallback_;
     double durationSeconds_ = 0.0;
     double visibleStartSecond_ = 0.0;
@@ -328,25 +352,6 @@ DecodedAudio decodeMonoTrack(const QString& trackPath, int sampleRate)
         decoded.durationSeconds = static_cast<double>(decoded.samples.size()) / static_cast<double>(sampleRate);
     }
     return decoded;
-}
-
-QVector<float> buildWaveformPeaks(const QVector<float>& samples, int peakCount)
-{
-    QVector<float> peaks;
-    if (samples.isEmpty() || peakCount <= 0) {
-        return peaks;
-    }
-
-    peaks.fill(0.0f, peakCount);
-    for (int i = 0; i < samples.size(); ++i) {
-        const int peakIndex = qBound(
-            0,
-            static_cast<int>((static_cast<qint64>(i) * peakCount) / qMax(1, samples.size())),
-            peakCount - 1
-        );
-        peaks[peakIndex] = qMax(peaks.at(peakIndex), qAbs(samples.at(i)));
-    }
-    return peaks;
 }
 
 QVector<float> buildOnsetEnvelope(const QVector<float>& samples, int sampleRate, double* stepSecondsOut)
@@ -557,6 +562,7 @@ TempoAlignmentResult bestTempoAlignmentNear(
 LatencyDetectorDialog::LatencyDetectorDialog(
     const QString& trackPath,
     const QString& chartPath,
+    miacode::waveform::WaveformCacheService* waveformCacheService,
     const PreviewAudioSettings& audioSettings,
     QWidget* parent
 )
@@ -564,6 +570,7 @@ LatencyDetectorDialog::LatencyDetectorDialog(
     , trackPath_(trackPath)
     , chartPath_(chartPath)
     , audioSettings_(audioSettings)
+    , waveformCacheService_(waveformCacheService)
 {
     setAttribute(Qt::WA_DeleteOnClose, true);
     setWindowTitle(localizedText("BPM&偏移检测", "BPM & Offset Detection"));

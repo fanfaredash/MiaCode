@@ -49,7 +49,6 @@ inline constexpr int kTimelineUiCadenceMs = static_cast<int>(1000.0 / kTimelineU
 inline constexpr double kTimelineUiCadenceSeconds = 1.0 / kTimelineUiCadenceHz;
 inline constexpr int kEditorTextFontSizeMin = 8;
 inline constexpr int kEditorTextFontSizeMax = 28;
-inline constexpr int kWaveformPeakCount = 1024;
 inline constexpr double kEditorLineSpacingFactorDefault = 1.5;
 inline constexpr int kAutosaveIntervalMs = 2 * 60 * 1000;
 inline constexpr int kAutosaveHistoryMaxVersions = 30;
@@ -100,11 +99,6 @@ QString modernScrollBarStyle();
 void styleRoundedMenu(QMenu& menu);
 qint64 fileLastModifiedMs(const QFileInfo& fileInfo);
 double probeAudioDurationSeconds(const QString& trackPath);
-QVector<float> buildWaveformPeaks(
-    const QString& trackPath,
-    double* durationSeconds,
-    int peakCount = kWaveformPeakCount
-);
 
 class OutlineItemDelegate : public QStyledItemDelegate {
 public:

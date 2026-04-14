@@ -73,8 +73,8 @@ double TimelineView::maxNavigableSecond() const
     if (playheadUpperLimitSeconds_ > 0.0) {
         maxSecond = qMax(maxSecond, playheadUpperLimitSeconds_);
     }
-    if (waveformDurationSeconds_ > 0.0) {
-        maxSecond = qMax(maxSecond, waveformStartSeconds_ + waveformDurationSeconds_);
+    if (waveformData_ && waveformData_->durationSeconds > 0.0) {
+        maxSecond = qMax(maxSecond, waveformData_->durationSeconds);
     }
     return maxSecond;
 }
@@ -264,7 +264,7 @@ void TimelineView::updateZoomButtonAppearance()
 void TimelineView::layoutHeaderButtons()
 {
     const int leftBaseX = 4;
-    const int rightMargin = 4;
+    const int rightMargin = 8;
     int x = leftBaseX;
     if (zoomButton_ != nullptr) {
         const int y = qMax(0, (timelineTop() - zoomButton_->height()) / 2);
@@ -276,6 +276,11 @@ void TimelineView::layoutHeaderButtons()
             followPreviewCheckBox_->minimumSizeHint().height(),
             followPreviewCheckBox_->sizeHint().height()
         );
+        const int checkBoxWidth = qMax(
+            followPreviewCheckBox_->minimumSizeHint().width(),
+            followPreviewCheckBox_->sizeHint().width()
+        );
+        followPreviewCheckBox_->setFixedWidth(checkBoxWidth);
         followPreviewCheckBox_->setFixedHeight(checkBoxHeight);
         const int y = qMax(0, (timelineTop() - followPreviewCheckBox_->height()) / 2);
         const int rightX = qMax(leftBaseX, viewport()->width() - followPreviewCheckBox_->width() - rightMargin);
@@ -343,8 +348,10 @@ QVector<TimelineView::HeaderLineLabel> TimelineView::visibleHeaderLineLabels(
 
     labels.reserve(collapsed.size());
     for (const HeaderLineLabel& label : collapsed) {
-        const int labelX = label.screenX - (kTimelineHeaderLineLabelWidth / 2);
-        if (labelX < headerLeftLimit || labelX + kTimelineHeaderLineLabelWidth > headerRightLimit) {
+        const QString labelText = QString::number(label.lineNumber);
+        const int labelHalfWidth = timelineHeaderLabelHalfWidthPx(headerLineNumberFont_, labelText);
+        if (label.screenX - labelHalfWidth < headerLeftLimit
+            || label.screenX + labelHalfWidth > headerRightLimit) {
             continue;
         }
         if (!labels.isEmpty()

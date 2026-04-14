@@ -15,6 +15,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "preview/scene/PreviewProgressStatsCache.h"
@@ -540,7 +541,9 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
     double knownTrackDurationSeconds)
 {
     state_.currentEncoding_ = encodingUsed;
-    owner_.applyWaveformData(QVector<float>(), knownTrackDurationSeconds > 0.0 ? knownTrackDurationSeconds : 0.0);
+    owner_.applyWaveformData(
+        miacode::waveform::makeWaveformPlaceholder(
+            knownTrackDurationSeconds > 0.0 ? knownTrackDurationSeconds : 0.0));
     owner_.setCurrentFilePath(normalizedPath, true);
     loadDocument(document);
     owner_.refreshWaveformCache(knownTrackDurationSeconds);

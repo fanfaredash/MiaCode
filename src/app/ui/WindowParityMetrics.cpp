@@ -203,11 +203,9 @@ PreviewPanelLayout computePreviewPanelLayout(
 
 int computeBottomTabsDeviceHeight(int timelineHeight, int tabBarHeight, int frameWidth)
 {
-    constexpr int kSafetyPadding = 4;
     return qMax(0, timelineHeight)
         + qMax(0, tabBarHeight)
-        + qMax(0, frameWidth) * 2
-        + kSafetyPadding;
+        + qMax(0, frameWidth) * 2;
 }
 
 }  // namespace miacode::window_parity

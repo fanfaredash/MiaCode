@@ -76,6 +76,11 @@ class QtPreviewSfxRuntime;
 class TimelineView;
 class QuickShellPreviewCompositeSurface;
 
+namespace miacode::waveform {
+class WaveformCacheService;
+struct WaveformData;
+}
+
 namespace miacode::preview::scene {
 class PreviewProgressStatsCache;
 }
@@ -240,13 +245,6 @@ private:
         qint64 parseElapsedMs = 0;
         qint64 trackProbeElapsedMs = 0;
         qint64 totalElapsedMs = 0;
-    };
-    struct WaveformCacheEntry {
-        QString trackPath;
-        qint64 fileSize = -1;
-        qint64 lastModifiedMs = -1;
-        double durationSeconds = 0.0;
-        QVector<float> peaks;
     };
 
     #include "MainWindowPrivateMethodsA.inc"

@@ -66,7 +66,6 @@ void TimelineView::paintEvent(QPaintEvent* event)
     laneDividerColor.setAlpha(qMin(laneDividerColor.alpha(), 96));
     const QPen laneDividerPen(laneDividerColor, 1.0);
     const QPen minorBeatPen(laneDividerColor, 1.0);
-    const QPen waveformPen(c.timelineWaveStroke, 1.0);
     painter.setPen(borderPen);
     painter.drawLine(0, top - 1, viewport()->width(), top - 1);
 
@@ -75,40 +74,50 @@ void TimelineView::paintEvent(QPaintEvent* event)
     laneLabelFont.setPointSize(10);
     laneLabelFont.setWeight(QFont::DemiBold);
 
-    if (!waveformPeaks_.isEmpty() && waveformDurationSeconds_ > 0.0) {
-        painter.save();
-        painter.setClipRect(QRect(left, top, viewport()->width() - left, h));
-        QPainterPath waveformPath;
-        const qreal centerY = top + h / 2.0;
-        const qreal maxAmplitude = qMax<qreal>(8.0, h / 2.0 - 8.0);
-        const int sampleCount = waveformPeaks_.size();
-        bool started = false;
-        for (int i = 0; i < sampleCount; ++i) {
-            const qreal peak = qBound<qreal>(0.0, waveformPeaks_.at(i), 1.0);
-            const double second = waveformStartSeconds_
-                + waveformDurationSeconds_ * (static_cast<double>(i) / qMax(1, sampleCount - 1));
-            const qreal x = secondToX(second) - xOffset;
-            const qreal y = centerY - peak * maxAmplitude;
-            if (!started) {
-                waveformPath.moveTo(x, y);
-                started = true;
-            } else {
-                waveformPath.lineTo(x, y);
+    if (waveformData_ && waveformData_->durationSeconds > 0.0) {
+        const miacode::waveform::WaveformLevel* waveformLevel =
+            miacode::waveform::selectWaveformLevelForVisibleRange(
+                *waveformData_,
+                qMax(0.001, visibleEndSecond - visibleStartSecond),
+                qMax(1, timelineRect.width()));
+        if (waveformLevel != nullptr && !waveformLevel->columns.isEmpty()) {
+            const QPair<int, int> visibleColumns =
+                miacode::waveform::visibleWaveformColumnRange(
+                    *waveformLevel,
+                    qMax(0.0, visibleStartSecond),
+                    qMax(0.0, visibleEndSecond));
+            const qreal centerY = top + h / 2.0;
+            const qreal maxAmplitude = (qMax<qreal>(8.0, h / 2.0 - 8.0) * 7.0) / 9.0;
+            const QColor waveformColor = c.timelineWaveStroke;
+            painter.save();
+            painter.setClipRect(QRect(left, top, viewport()->width() - left, h));
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(waveformColor);
+            for (int index = visibleColumns.first; index < visibleColumns.second; ++index) {
+                const miacode::waveform::WaveformColumn& column = waveformLevel->columns.at(index);
+                if (qAbs(column.max - column.min) <= 1e-5f) {
+                    continue;
+                }
+                const double columnStartSecond = waveformLevel->secondsPerColumn * static_cast<double>(index);
+                const double columnEndSecond = columnStartSecond + waveformLevel->secondsPerColumn;
+                int x0 = secondToX(columnStartSecond) - xOffset;
+                int x1 = secondToX(columnEndSecond) - xOffset;
+                if (x1 <= x0) {
+                    x1 = x0 + 1;
+                }
+                if (x1 < left || x0 > viewport()->width()) {
+                    continue;
+                }
+
+                const qreal topY = centerY - (qBound(-1.0f, column.max, 1.0f) * maxAmplitude);
+                const qreal bottomY = centerY - (qBound(-1.0f, column.min, 1.0f) * maxAmplitude);
+                const int barTop = qFloor(qMin(topY, bottomY));
+                const int barBottom = qCeil(qMax(topY, bottomY));
+                const QRect barRect(x0, barTop, qMax(1, x1 - x0), qMax(1, barBottom - barTop));
+                painter.fillRect(barRect, waveformColor);
             }
+            painter.restore();
         }
-        for (int i = sampleCount - 1; i >= 0; --i) {
-            const qreal peak = qBound<qreal>(0.0, waveformPeaks_.at(i), 1.0);
-            const double second = waveformStartSeconds_
-                + waveformDurationSeconds_ * (static_cast<double>(i) / qMax(1, sampleCount - 1));
-            const qreal x = secondToX(second) - xOffset;
-            const qreal y = centerY + peak * maxAmplitude;
-            waveformPath.lineTo(x, y);
-        }
-        waveformPath.closeSubpath();
-        painter.fillPath(waveformPath, c.timelineWaveFill);
-        painter.setPen(waveformPen);
-        painter.drawPath(waveformPath);
-        painter.restore();
     }
 
     painter.setFont(laneLabelFont);
@@ -127,11 +136,11 @@ void TimelineView::paintEvent(QPaintEvent* event)
 
     int headerLeftLimit = 0;
     if (zoomButton_ != nullptr) {
-        headerLeftLimit = qMax(headerLeftLimit, zoomButton_->x() + zoomButton_->width() + 8);
+        headerLeftLimit = qMax(headerLeftLimit, zoomButton_->x() + zoomButton_->width() + 1);
     }
     int headerRightLimit = viewport()->width() - 4;
     if (followPreviewCheckBox_ != nullptr) {
-        headerRightLimit = qMin(headerRightLimit, followPreviewCheckBox_->x() - 8);
+        headerRightLimit = qMin(headerRightLimit, followPreviewCheckBox_->x() - 1);
     }
     const QVector<HeaderLineLabel> headerLabels = visibleHeaderLineLabels(
         visibleStartSecond,

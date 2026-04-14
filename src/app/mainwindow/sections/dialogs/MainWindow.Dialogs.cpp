@@ -186,6 +186,7 @@ void MainWindow::DialogsSection::onOpenLatencyDetector()
     owner_.latencyDetectorDialog_ = new LatencyDetectorDialog(
         trackPath,
         owner_.currentFilePath_,
+        owner_.ensureWaveformCacheService(),
         owner_.previewAudioSettings_,
         UiDialogs::effectiveParentWidget(&owner_)
     );
