@@ -6,6 +6,8 @@
 #include "preview/scene/PreviewSceneMath.h"
 #include "preview/scene/PreviewSkinSelectors.h"
 
+#include <cmath>
+
 namespace {
 
 qreal mirroredStarAngleDegrees(qreal angleDegrees)
@@ -48,7 +50,10 @@ qreal interpolateAngle(const QVector<double>& angles, qreal proportion)
     const int startIndex = qFloor(scaledIndex);
     const int endIndex = qMin(angles.size() - 1, startIndex + 1);
     const qreal localT = scaledIndex - startIndex;
-    return angles[startIndex] * (1.0 - localT) + angles[endIndex] * localT;
+    const qreal startAngle = angles[startIndex];
+    const qreal endAngle = angles[endIndex];
+    const qreal delta = std::fmod(endAngle - startAngle + 540.0, 360.0) - 180.0;
+    return startAngle + delta * localT;
 }
 
 }  // namespace

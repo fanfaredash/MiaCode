@@ -8,6 +8,7 @@
 #include "preview/scene/PreviewPreparedSceneCache.h"
 #include "preview/scene/PreviewSceneConstants.h"
 #include "preview/scene/PreviewSceneMath.h"
+#include "preview/scene/PreviewSlideMotionLayerState.h"
 #include "preview/scene/PreviewTrackLayerState.h"
 
 namespace {
@@ -19,6 +20,7 @@ using miacode::preview::scene::PreviewMuriActionLayerState;
 using miacode::preview::scene::PreviewPreparedLayerWindow;
 using miacode::preview::scene::PreviewPreparedMarkerEntry;
 using miacode::preview::scene::PreviewPreparedSceneCache;
+using miacode::preview::scene::PreviewSlideMotionLayerState;
 using miacode::preview::scene::PreviewTrackLayerState;
 
 constexpr qreal kEpsilon = 1e-3;
@@ -347,6 +349,50 @@ bool verifyWifiTrackFallbackLookupUsesBaseKey(QTextStream& err)
     return true;
 }
 
+bool verifySlideMotionAngleInterpolationUsesShortestArc(QTextStream& err)
+{
+    const QRectF playfieldRect(
+        0.0,
+        0.0,
+        miacode::preview::scene::kLogicalCanvasSize,
+        miacode::preview::scene::kLogicalCanvasSize
+    );
+
+    PreviewFrameState state;
+    state.playheadSeconds = 0.6;
+    state.skin.starImage = solidImage(32, 32);
+
+    TimelineNoteMarker marker;
+    marker.type = QStringLiteral("slide");
+    marker.second = 0.0;
+    marker.slideTraceSecond = 0.1;
+    marker.endSecond = 1.1;
+    marker.lane = 4;
+    marker.endLane = 4;
+    marker.slideSegmentShootSeconds = {0.1};
+    marker.slideSegmentDurations = {1.0};
+    marker.slideSegmentPoints = {{QPointF(0.0, 0.0), QPointF(12.0, 0.0)}};
+    marker.slideSegmentAngles = {{449.57731827709983, 91.86485853382351}};
+    state.noteMarkers.append(marker);
+
+    const PreviewSlideMotionLayerState layerState =
+        miacode::preview::scene::buildPreviewSlideMotionLayerState(
+            state,
+            PreviewActiveMarkerView(state.noteMarkers),
+            playfieldRect
+        );
+    if (!require(layerState.sprites.size() == 1, QStringLiteral("slide motion shortest-arc interpolation emits one sprite"), err)) {
+        return false;
+    }
+
+    const qreal expectedRotation = -90.72108840546167;
+    if (!requireNear(layerState.sprites.constFirst().rotationDegrees, expectedRotation, QStringLiteral("slide motion shortest-arc rotation"), err)) {
+        return false;
+    }
+
+    return true;
+}
+
 PreviewMuriActionLayerState buildNaiveDxMuriActionLayerState(
     const PreviewFrameState& state,
     const QRectF& playfieldRect)
@@ -583,6 +629,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyWifiTrackFallbackLookupUsesBaseKey(err)) {
+        return 1;
+    }
+    if (!verifySlideMotionAngleInterpolationUsesShortestArc(err)) {
         return 1;
     }
     if (!verifyDxMuriActionSweepLineMatchesNaiveReference(err)) {
