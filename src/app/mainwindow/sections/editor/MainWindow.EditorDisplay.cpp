@@ -118,6 +118,8 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.previewShowObjectStatsHud_ = false;
     state_.exportShowObjectStatsHud_ = false;
     state_.previewShowValidationSummary_ = true;
+    state_.chartNormalizeStartAtNewMeasure_ = true;
+    state_.chartNormalizeReduceTo384Grid_ = true;
     state_.workspacePanelsSwapped_ = false;
 }
 
@@ -227,6 +229,10 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     if (preview.value("show_validation_summary").isBool()) {
         state_.previewShowValidationSummary_ = preview.value("show_validation_summary").toBool(true);
     }
+    const miacode::chart_transform::ChartNormalizationOptions normalizationOptions =
+        miacode::chart_transform::chartNormalizationOptionsFromPreferences(preview);
+    state_.chartNormalizeStartAtNewMeasure_ = normalizationOptions.startAtNewMeasure;
+    state_.chartNormalizeReduceTo384Grid_ = normalizationOptions.reduceTo384Grid;
     if (preview.value("swap_side_panels").isBool()) {
         state_.workspacePanelsSwapped_ = preview.value("swap_side_panels").toBool(false);
     }
@@ -298,6 +304,11 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("show_object_stats_preview", state_.previewShowObjectStatsHud_);
     preview.insert("show_object_stats_export", state_.exportShowObjectStatsHud_);
     preview.insert("show_validation_summary", state_.previewShowValidationSummary_);
+    miacode::chart_transform::saveChartNormalizationOptionsToPreferences(
+        &preview,
+        miacode::chart_transform::ChartNormalizationOptions{
+            state_.chartNormalizeStartAtNewMeasure_,
+            state_.chartNormalizeReduceTo384Grid_});
     preview.insert("swap_side_panels", state_.workspacePanelsSwapped_);
     preview.insert("canvas_aspect_ratio", 1.0);
     preview.insert("auto_restore_square_after_export", false);

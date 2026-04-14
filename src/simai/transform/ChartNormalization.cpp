@@ -1,6 +1,7 @@
 #include "ChartNormalization.h"
 
 #include <algorithm>
+#include <limits>
 #include <numeric>
 
 #include <QtGlobal>
@@ -11,6 +12,137 @@ namespace miacode::chart_transform {
 namespace {
 
 constexpr double kNormalizationEpsilon = 1e-6;
+constexpr double kSnapToleranceWhole = (1.0 / (2.0 * 384.0)) + 1e-9;
+
+struct Rational {
+    qint64 numerator = 0;
+    qint64 denominator = 1;
+
+    Rational() = default;
+    Rational(qint64 n, qint64 d)
+        : numerator(n)
+        , denominator(d)
+    {
+        normalize();
+    }
+
+    void normalize()
+    {
+        if (denominator == 0) {
+            numerator = 0;
+            denominator = 1;
+            return;
+        }
+        if (denominator < 0) {
+            numerator = -numerator;
+            denominator = -denominator;
+        }
+        if (numerator == 0) {
+            denominator = 1;
+            return;
+        }
+        const qint64 gcd = std::gcd(qAbs(numerator), denominator);
+        if (gcd > 1) {
+            numerator /= gcd;
+            denominator /= gcd;
+        }
+    }
+
+    bool isZero() const
+    {
+        return numerator == 0;
+    }
+};
+
+Rational operator+(const Rational& left, const Rational& right)
+{
+    return Rational(
+        left.numerator * right.denominator + right.numerator * left.denominator,
+        left.denominator * right.denominator);
+}
+
+Rational operator-(const Rational& left, const Rational& right)
+{
+    return Rational(
+        left.numerator * right.denominator - right.numerator * left.denominator,
+        left.denominator * right.denominator);
+}
+
+bool operator<(const Rational& left, const Rational& right)
+{
+    return left.numerator * right.denominator < right.numerator * left.denominator;
+}
+
+bool operator>(const Rational& left, const Rational& right)
+{
+    return right < left;
+}
+
+bool operator<=(const Rational& left, const Rational& right)
+{
+    return !(left > right);
+}
+
+bool operator>=(const Rational& left, const Rational& right)
+{
+    return !(left < right);
+}
+
+bool operator==(const Rational& left, const Rational& right)
+{
+    return left.numerator == right.numerator && left.denominator == right.denominator;
+}
+
+double toDouble(const Rational& value)
+{
+    return static_cast<double>(value.numerator) / static_cast<double>(value.denominator);
+}
+
+qint64 safeLcm(qint64 left, qint64 right)
+{
+    if (left <= 0) {
+        return qMax<qint64>(1, right);
+    }
+    if (right <= 0) {
+        return qMax<qint64>(1, left);
+    }
+    const qint64 gcd = std::gcd(left, right);
+    const qint64 scaled = left / gcd;
+    if (scaled > (std::numeric_limits<qint64>::max() / right)) {
+        return 0;
+    }
+    return scaled * right;
+}
+
+bool scaleRationalExact(const Rational& value, int scale, qint64* scaledValue = nullptr)
+{
+    if (scale <= 0) {
+        return false;
+    }
+    const qint64 scaledNumerator = value.numerator * static_cast<qint64>(scale);
+    if ((scaledNumerator % value.denominator) != 0) {
+        return false;
+    }
+    if (scaledValue != nullptr) {
+        *scaledValue = scaledNumerator / value.denominator;
+    }
+    return true;
+}
+
+qint64 scaleRationalRounded(const Rational& value, int scale)
+{
+    return qRound64(toDouble(value) * static_cast<double>(scale));
+}
+
+double scaledSnapError(const Rational& value, qint64 scaledValue, int scale)
+{
+    return qAbs(toDouble(value) - (static_cast<double>(scaledValue) / static_cast<double>(scale)));
+}
+
+QString normalizeTimeSignatureText(int numerator, int denominator)
+{
+    return QStringLiteral("%1/%2").arg(qMax(1, numerator)).arg(qMax(1, denominator));
+}
 
 enum class BoundaryItemKind {
     StandaloneText,
@@ -23,15 +155,17 @@ struct BoundaryItem {
     QString text;
 };
 
+using MomentGroups = QVector<QStringList>;
+
 struct MeasureMoment {
-    double positionWhole = 0.0;
-    QString text;
+    Rational positionWhole;
+    MomentGroups groups;
 };
 
 struct MeasureBuilder {
     int meterNumerator = miacode::simai::kDefaultWholeTimeSignatureNumerator;
     int meterDenominator = miacode::simai::kDefaultWholeTimeSignatureDenominator;
-    double startPhaseWhole = 0.0;
+    Rational startPhaseWhole;
     QVector<BoundaryItem> leadingItems;
     QVector<BoundaryItem> trailingItems;
     QVector<MeasureMoment> moments;
@@ -40,11 +174,19 @@ struct MeasureBuilder {
 struct RenderMeasure {
     int meterNumerator = miacode::simai::kDefaultWholeTimeSignatureNumerator;
     int meterDenominator = miacode::simai::kDefaultWholeTimeSignatureDenominator;
-    double startPhaseWhole = 0.0;
-    double lengthWhole = 0.0;
+    Rational startPhaseWhole;
+    Rational lengthWhole;
     QVector<BoundaryItem> leadingItems;
     QVector<BoundaryItem> trailingItems;
     QVector<MeasureMoment> moments;
+};
+
+struct NormalizationSeed {
+    int meterNumerator = miacode::simai::kDefaultWholeTimeSignatureNumerator;
+    int meterDenominator = miacode::simai::kDefaultWholeTimeSignatureDenominator;
+    Rational startPhaseWhole;
+    int currentBeats = 4;
+    double currentBpm = 120.0;
 };
 
 bool nearlyEqual(double a, double b, double epsilon = kNormalizationEpsilon)
@@ -138,6 +280,16 @@ struct SlideTokenParts {
     bool valid = false;
 };
 
+struct DurationNormalizationOptions {
+    bool allowZeroDuration = false;
+    bool omitZeroDurationBracket = false;
+};
+
+struct DurationConstraint {
+    Rational durationWhole;
+    bool allowZero = false;
+};
+
 QString sortedModifierText(QString modifiers)
 {
     std::sort(modifiers.begin(), modifiers.end(), [](QChar left, QChar right) {
@@ -146,89 +298,91 @@ QString sortedModifierText(QString modifiers)
     return modifiers;
 }
 
-struct DurationNormalizationOptions {
-    bool allowZeroDuration = false;
-    bool omitZeroDurationBracket = false;
-};
-
-QString normalizeFractionDurationSignature(QString signature, const DurationNormalizationOptions& options)
+bool parsePlainDurationSignature(const QString& signature, Rational* durationWhole)
 {
-    if (signature.contains(QLatin1Char('#'))) {
-        return signature;
+    if (durationWhole == nullptr || signature.contains(QLatin1Char('#'))) {
+        return false;
     }
-
     const int colon = signature.indexOf(QLatin1Char(':'));
     if (colon < 0 || signature.indexOf(QLatin1Char(':'), colon + 1) >= 0) {
-        return signature;
+        return false;
     }
-
     bool beatsOk = false;
     bool numeratorOk = false;
     const int beats = signature.left(colon).trimmed().toInt(&beatsOk);
     const int numerator = signature.mid(colon + 1).trimmed().toInt(&numeratorOk);
     if (!beatsOk || !numeratorOk || beats <= 0 || numerator < 0) {
-        return signature;
+        return false;
     }
-    if (!options.allowZeroDuration && numerator == 0) {
-        return signature;
-    }
-
-    qint64 gridUnits = 0;
-    if (numerator > 0) {
-        const qint64 scaledGridUnits = 384ll * static_cast<qint64>(numerator);
-        gridUnits = (scaledGridUnits + (beats / 2)) / beats;
-    }
-
-    if (gridUnits <= 0) {
-        if (!options.allowZeroDuration) {
-            gridUnits = 1;
-        } else if (options.omitZeroDurationBracket) {
-            return QString();
-        } else {
-            return QStringLiteral("1:0");
-        }
-    }
-
-    const qint64 gcd = std::gcd<qint64>(384ll, gridUnits);
-    if (gcd <= 0) {
-        return signature;
-    }
-
-    return QStringLiteral("%1:%2").arg(384ll / gcd).arg(gridUnits / gcd);
+    *durationWhole = Rational(numerator, beats);
+    return true;
 }
 
-QString normalizeBracketDurationSignatures(const QString& text, const DurationNormalizationOptions& options)
+QString normalizePlainDurationSignature(
+    const QString& signature,
+    int gridBeats,
+    bool reduceTo384Grid,
+    const DurationNormalizationOptions& options)
 {
-    QString normalized;
-    normalized.reserve(text.size());
-
-    int cursor = 0;
-    while (cursor < text.size()) {
-        const int openBracket = text.indexOf(QLatin1Char('['), cursor);
-        if (openBracket < 0) {
-            normalized.append(text.mid(cursor));
-            break;
-        }
-
-        normalized.append(text.mid(cursor, openBracket - cursor));
-        const int closeBracket = text.indexOf(QLatin1Char(']'), openBracket + 1);
-        if (closeBracket < 0) {
-            normalized.append(text.mid(openBracket));
-            break;
-        }
-
-        const QString normalizedSignature = normalizeFractionDurationSignature(
-            text.mid(openBracket + 1, closeBracket - openBracket - 1),
-            options);
-        if (!normalizedSignature.isEmpty()) {
-            normalized.append(QLatin1Char('['));
-            normalized.append(normalizedSignature);
-            normalized.append(QLatin1Char(']'));
-        }
-        cursor = closeBracket + 1;
+    Rational durationWhole;
+    if (!parsePlainDurationSignature(signature, &durationWhole)) {
+        return signature;
     }
 
-    return normalized;
+    if (!reduceTo384Grid) {
+        if (durationWhole.isZero()) {
+            if (!options.allowZeroDuration) {
+                return signature;
+            }
+            if (options.omitZeroDurationBracket) {
+                return QString();
+            }
+            return QStringLiteral("1:0");
+        }
+        return QStringLiteral("%1:%2")
+            .arg(durationWhole.denominator)
+            .arg(durationWhole.numerator);
+    }
+
+    qint64 units = scaleRationalRounded(durationWhole, gridBeats);
+    if (!options.allowZeroDuration && units <= 0) {
+        units = 1;
+    }
+    if (options.allowZeroDuration && units <= 0) {
+        if (options.omitZeroDurationBracket) {
+            return QString();
+        }
+        return QStringLiteral("1:0");
+    }
+    const qint64 gcd = std::gcd<qint64>(static_cast<qint64>(gridBeats), units);
+    return QStringLiteral("%1:%2")
+        .arg(static_cast<qint64>(gridBeats) / gcd)
+        .arg(units / gcd);
+}
+
+QString normalizeSingleBracketSuffix(
+    const QString& bracketSuffix,
+    int gridBeats,
+    bool reduceTo384Grid,
+    const DurationNormalizationOptions& options)
+{
+    if (bracketSuffix.isEmpty()) {
+        return QString();
+    }
+    const int openBracket = bracketSuffix.indexOf(QLatin1Char('['));
+    const int closeBracket = bracketSuffix.lastIndexOf(QLatin1Char(']'));
+    if (openBracket < 0 || closeBracket != bracketSuffix.size() - 1) {
+        return bracketSuffix;
+    }
+    const QString normalizedSignature = normalizePlainDurationSignature(
+        bracketSuffix.mid(openBracket + 1, closeBracket - openBracket - 1),
+        gridBeats,
+        reduceTo384Grid,
+        options);
+    if (normalizedSignature.isEmpty()) {
+        return QString();
+    }
+    return QStringLiteral("[%1]").arg(normalizedSignature);
 }
 
 bool parseTouchTokenParts(const QString& token, TouchTokenParts* parts)
@@ -307,8 +461,8 @@ bool parseNoteTokenParts(const QString& token, NoteTokenParts* parts)
 
     parts->lane = core.at(0);
     parts->bracketSuffix = openBracket >= 0 ? token.mid(openBracket) : QString();
-    for (int i = 1; i < core.size(); ++i) {
-        const QChar ch = core.at(i);
+    for (int index = 1; index < core.size(); ++index) {
+        const QChar ch = core.at(index);
         const QChar lower = ch.toLower();
         if (lower == QLatin1Char('b')) {
             parts->hasBreak = true;
@@ -374,11 +528,11 @@ bool parseSlideTokenParts(const QString& token, SlideTokenParts* parts)
     parts->trackBreak = core.mid(1).contains(QLatin1Char('b'), Qt::CaseInsensitive);
     parts->coreWithoutTrackBreak.reserve(core.size());
     parts->coreWithoutTrackBreak.append(core.at(0));
-    for (int i = 1; i < core.size(); ++i) {
-        if (core.at(i).toLower() == QLatin1Char('b')) {
+    for (int index = 1; index < core.size(); ++index) {
+        if (core.at(index).toLower() == QLatin1Char('b')) {
             continue;
         }
-        parts->coreWithoutTrackBreak.append(core.at(i));
+        parts->coreWithoutTrackBreak.append(core.at(index));
     }
     parts->valid = true;
     return true;
@@ -399,9 +553,7 @@ QString buildTouchToken(const TouchTokenParts& parts)
     if (parts.hasFirework) {
         token.append(QLatin1Char('f'));
     }
-    token.append(normalizeBracketDurationSignatures(
-        parts.bracketSuffix,
-        DurationNormalizationOptions{true, false}));
+    token.append(parts.bracketSuffix);
     return token;
 }
 
@@ -420,20 +572,15 @@ QString buildNoteToken(const NoteTokenParts& parts)
     if (parts.hasHold) {
         token.append(QLatin1Char('h'));
     }
-    token.append(normalizeBracketDurationSignatures(
-        parts.bracketSuffix,
-        DurationNormalizationOptions{true, true}));
+    token.append(parts.bracketSuffix);
     return token;
 }
 
 QString buildSlideToken(const SlideTokenParts& parts)
 {
-    const QString normalizedCoreWithoutTrackBreak = normalizeBracketDurationSignatures(
-        parts.coreWithoutTrackBreak,
-        DurationNormalizationOptions{false, false});
     QString token;
-    token.reserve(normalizedCoreWithoutTrackBreak.size() + parts.headExtraModifiers.size() + 3);
-    token.append(normalizedCoreWithoutTrackBreak.at(0));
+    token.reserve(parts.coreWithoutTrackBreak.size() + parts.headExtraModifiers.size() + 3);
+    token.append(parts.coreWithoutTrackBreak.at(0));
     token.append(sortedModifierText(parts.headExtraModifiers));
     if (parts.headBreak) {
         token.append(QLatin1Char('b'));
@@ -441,7 +588,7 @@ QString buildSlideToken(const SlideTokenParts& parts)
     if (parts.headEx) {
         token.append(QLatin1Char('x'));
     }
-    QString remainder = normalizedCoreWithoutTrackBreak.mid(1);
+    QString remainder = parts.coreWithoutTrackBreak.mid(1);
     if (parts.trackBreak) {
         const int firstBracket = remainder.indexOf(QLatin1Char('['));
         if (firstBracket >= 0) {
@@ -479,7 +626,131 @@ QString canonicalizeToken(const QString& token)
     return trimmed;
 }
 
-QString buildMomentText(const QVector<QStringList>& groups)
+QString renderTokenForGrid(const QString& token, int gridBeats, bool reduceTo384Grid)
+{
+    const QString trimmed = token.trimmed();
+    if (trimmed.isEmpty()) {
+        return QString();
+    }
+
+    TouchTokenParts touchParts;
+    if (parseTouchTokenParts(trimmed, &touchParts) && touchParts.valid) {
+        touchParts.bracketSuffix = normalizeSingleBracketSuffix(
+            touchParts.bracketSuffix,
+            gridBeats,
+            reduceTo384Grid,
+            DurationNormalizationOptions{true, false});
+        return buildTouchToken(touchParts);
+    }
+
+    NoteTokenParts noteParts;
+    if (parseNoteTokenParts(trimmed, &noteParts) && noteParts.valid) {
+        noteParts.bracketSuffix = normalizeSingleBracketSuffix(
+            noteParts.bracketSuffix,
+            gridBeats,
+            reduceTo384Grid,
+            DurationNormalizationOptions{true, true});
+        return buildNoteToken(noteParts);
+    }
+
+    SlideTokenParts slideParts;
+    if (parseSlideTokenParts(trimmed, &slideParts) && slideParts.valid) {
+        const int openBracket = slideParts.coreWithoutTrackBreak.indexOf(QLatin1Char('['));
+        if (openBracket >= 0) {
+            const QString normalizedBracket = normalizeSingleBracketSuffix(
+                slideParts.coreWithoutTrackBreak.mid(openBracket),
+                gridBeats,
+                reduceTo384Grid,
+                DurationNormalizationOptions{false, false});
+            slideParts.coreWithoutTrackBreak =
+                slideParts.coreWithoutTrackBreak.left(openBracket) + normalizedBracket;
+        }
+        return buildSlideToken(slideParts);
+    }
+
+    return trimmed;
+}
+
+bool collectTokenDurations(const QString& token, QVector<DurationConstraint>* durations)
+{
+    if (durations == nullptr) {
+        return false;
+    }
+
+    auto appendDuration = [durations](const QString& bracketSuffix, bool allowZero) {
+        if (bracketSuffix.isEmpty()) {
+            return;
+        }
+        const int openBracket = bracketSuffix.indexOf(QLatin1Char('['));
+        const int closeBracket = bracketSuffix.lastIndexOf(QLatin1Char(']'));
+        if (openBracket < 0 || closeBracket != bracketSuffix.size() - 1) {
+            return;
+        }
+        Rational durationWhole;
+        if (parsePlainDurationSignature(
+                bracketSuffix.mid(openBracket + 1, closeBracket - openBracket - 1),
+                &durationWhole)
+            && !durationWhole.isZero()) {
+            durations->append(DurationConstraint{durationWhole, allowZero});
+        }
+    };
+
+    TouchTokenParts touchParts;
+    if (parseTouchTokenParts(token, &touchParts) && touchParts.valid) {
+        appendDuration(touchParts.bracketSuffix, true);
+        return true;
+    }
+
+    NoteTokenParts noteParts;
+    if (parseNoteTokenParts(token, &noteParts) && noteParts.valid) {
+        appendDuration(noteParts.bracketSuffix, true);
+        return true;
+    }
+
+    SlideTokenParts slideParts;
+    if (parseSlideTokenParts(token, &slideParts) && slideParts.valid) {
+        const int openBracket = slideParts.coreWithoutTrackBreak.indexOf(QLatin1Char('['));
+        if (openBracket >= 0) {
+            appendDuration(slideParts.coreWithoutTrackBreak.mid(openBracket), false);
+        }
+        return true;
+    }
+
+    return false;
+}
+
+MomentGroups normalizedMomentGroups(const QVector<QStringList>& groups)
+{
+    MomentGroups normalized;
+    normalized.reserve(groups.size());
+    for (const QStringList& group : groups) {
+        QStringList renderedTokens;
+        renderedTokens.reserve(group.size());
+        for (const QString& token : group) {
+            if (!token.trimmed().isEmpty()) {
+                renderedTokens.append(token.trimmed());
+            }
+        }
+        if (!renderedTokens.isEmpty()) {
+            normalized.append(renderedTokens);
+        }
+    }
+    return normalized;
+}
+
+void appendMomentGroups(MomentGroups* target, const MomentGroups& extra)
+{
+    if (target == nullptr) {
+        return;
+    }
+    for (const QStringList& group : extra) {
+        if (!group.isEmpty()) {
+            target->append(group);
+        }
+    }
+}
+
+QString buildMomentText(const MomentGroups& groups, int gridBeats, bool reduceTo384Grid)
 {
     QStringList renderedGroups;
     renderedGroups.reserve(groups.size());
@@ -487,8 +758,9 @@ QString buildMomentText(const QVector<QStringList>& groups)
         QStringList renderedTokens;
         renderedTokens.reserve(group.size());
         for (const QString& token : group) {
-            if (!token.isEmpty()) {
-                renderedTokens.append(token);
+            const QString renderedToken = renderTokenForGrid(token, gridBeats, reduceTo384Grid);
+            if (!renderedToken.isEmpty()) {
+                renderedTokens.append(renderedToken);
             }
         }
         if (!renderedTokens.isEmpty()) {
@@ -497,7 +769,6 @@ QString buildMomentText(const QVector<QStringList>& groups)
     }
     return renderedGroups.join(QLatin1Char('`'));
 }
-
 bool isTerminalMarkerText(QString text)
 {
     text = text.trimmed();
@@ -517,21 +788,22 @@ bool lineTailIsTerminalMarker(const QString& line, int startIndex)
     return isTerminalMarkerText(tail);
 }
 
-double measureLengthWhole(int meterNumerator, int meterDenominator)
+Rational measureLengthWhole(int meterNumerator, int meterDenominator)
 {
-    return static_cast<double>(qMax(1, meterNumerator)) / static_cast<double>(qMax(1, meterDenominator));
+    return Rational(qMax(1, meterNumerator), qMax(1, meterDenominator));
 }
 
-double normalizeMeasurePhaseWhole(double phaseWhole, int meterNumerator, int meterDenominator)
+Rational normalizeMeasurePhaseWhole(const Rational& phaseWhole, int meterNumerator, int meterDenominator)
 {
-    const double measureLength = measureLengthWhole(meterNumerator, meterDenominator);
-    if (measureLength <= kNormalizationEpsilon) {
-        return 0.0;
+    const Rational measureLength = measureLengthWhole(meterNumerator, meterDenominator);
+    Rational normalized = phaseWhole;
+    while (normalized >= measureLength) {
+        normalized = normalized - measureLength;
     }
-    while (phaseWhole + kNormalizationEpsilon >= measureLength) {
-        phaseWhole -= measureLength;
+    while (normalized < Rational(0, 1)) {
+        normalized = normalized + measureLength;
     }
-    return nearlyEqual(phaseWhole, 0.0) ? 0.0 : qMax(0.0, phaseWhole);
+    return normalized;
 }
 
 void appendBoundaryItems(QStringList* lines, const QVector<BoundaryItem>& items)
@@ -577,7 +849,7 @@ void appendBoundaryItems(QStringList* lines, const QVector<BoundaryItem>& items)
     }
 }
 
-QVector<int> preferredSubdivisionBeats()
+QVector<int> preferredSnapSubdivisionBeats()
 {
     QVector<int> beatsValues;
     for (int beats = 16; beats <= 384; ++beats) {
@@ -588,41 +860,45 @@ QVector<int> preferredSubdivisionBeats()
     return beatsValues;
 }
 
-int chooseSubdivisionBeats(int measureGridLength, const QVector<int>& momentGrids)
+bool snapRangeFitsBeats(
+    const QVector<Rational>& momentPositions,
+    const QVector<DurationConstraint>& durations,
+    int beats)
 {
-    static const QVector<int> kPreferredBeats = preferredSubdivisionBeats();
-    for (int beats : kPreferredBeats) {
-        const int stepGrid = 384 / beats;
-        if (stepGrid <= 0 || (measureGridLength % stepGrid) != 0) {
-            continue;
-        }
-        bool fits = true;
-        for (int grid : momentGrids) {
-            if ((grid % stepGrid) != 0) {
-                fits = false;
-                break;
-            }
-        }
-        if (fits) {
-            return beats;
+    for (const Rational& position : momentPositions) {
+        const qint64 units = scaleRationalRounded(position, beats);
+        if (scaledSnapError(position, units, beats) > kSnapToleranceWhole) {
+            return false;
         }
     }
-    return 384;
+    for (const DurationConstraint& duration : durations) {
+        qint64 units = scaleRationalRounded(duration.durationWhole, beats);
+        if (!duration.allowZero && units <= 0) {
+            units = 1;
+        }
+        if (scaledSnapError(duration.durationWhole, units, beats) > kSnapToleranceWhole) {
+            return false;
+        }
+    }
+    return true;
 }
 
-QString renderMeasureLine(const RenderMeasure& measure)
+QString renderMeasureLineApproximate(const RenderMeasure& measure)
 {
-    const int measureGridLength = qMax(1, qRound(measure.lengthWhole * 384.0));
-    const int startPhaseGrid = qMax(0, qRound(measure.startPhaseWhole * 384.0));
+    static const QVector<int> kPreferredBeats = preferredSnapSubdivisionBeats();
+
+    const int measureGridLength = qMax(1, qRound(toDouble(measure.lengthWhole) * 384.0));
+    const int startPhaseGrid = qMax(0, qRound(toDouble(measure.startPhaseWhole) * 384.0));
     const int endPhaseGrid = startPhaseGrid + measureGridLength;
     const int beatGrid = measure.meterDenominator > 0
         ? qMax(1, qRound(384.0 / static_cast<double>(measure.meterDenominator)))
         : 0;
+
     QVector<int> momentAbsoluteGrids;
     momentAbsoluteGrids.reserve(measure.moments.size());
     for (const MeasureMoment& moment : measure.moments) {
-        const int relativeGrid = qBound(0, measureGridLength, qRound(moment.positionWhole * 384.0));
-        momentAbsoluteGrids.append(startPhaseGrid + relativeGrid);
+        momentAbsoluteGrids.append(
+            startPhaseGrid + qBound(0, measureGridLength, qRound(toDouble(moment.positionWhole) * 384.0)));
     }
 
     QString line;
@@ -636,41 +912,55 @@ QString renderMeasureLine(const RenderMeasure& measure)
         }
         const int segmentLengthGrid = qMax(1, segmentEndGrid - segmentStartGrid);
 
-        QVector<int> segmentMomentGrids;
+        QVector<Rational> segmentMomentPositions;
         QVector<int> segmentMomentIndices;
-        segmentMomentGrids.reserve(measure.moments.size());
+        segmentMomentPositions.reserve(measure.moments.size());
         segmentMomentIndices.reserve(measure.moments.size());
         for (int index = 0; index < momentAbsoluteGrids.size(); ++index) {
             const int absoluteGrid = momentAbsoluteGrids.at(index);
             if (absoluteGrid < segmentStartGrid || absoluteGrid >= segmentEndGrid) {
                 continue;
             }
-            segmentMomentGrids.append(absoluteGrid - segmentStartGrid);
+            segmentMomentPositions.append(Rational(absoluteGrid - segmentStartGrid, 384));
             segmentMomentIndices.append(index);
         }
 
-        const int beats = chooseSubdivisionBeats(segmentLengthGrid, segmentMomentGrids);
-        const int stepGrid = qMax(1, 384 / beats);
-        const int slotCount = qMax(1, segmentLengthGrid / stepGrid);
-        QVector<QString> slotTexts(slotCount);
-        for (int index = 0; index < segmentMomentIndices.size(); ++index) {
-            const int momentIndex = segmentMomentIndices.at(index);
-            const int grid = segmentMomentGrids.at(index);
-            const int slotIndex = qBound(0, slotCount - 1, grid / stepGrid);
-            if (slotTexts.at(slotIndex).isEmpty()) {
-                slotTexts[slotIndex] = measure.moments.at(momentIndex).text;
-            } else if (!measure.moments.at(momentIndex).text.isEmpty()) {
-                slotTexts[slotIndex].append(QLatin1Char('/'));
-                slotTexts[slotIndex].append(measure.moments.at(momentIndex).text);
+        QVector<DurationConstraint> segmentDurations;
+        for (int index : segmentMomentIndices) {
+            for (const QStringList& group : measure.moments.at(index).groups) {
+                for (const QString& token : group) {
+                    collectTokenDurations(token, &segmentDurations);
+                }
             }
+        }
+
+        int beats = 384;
+        for (int candidate : kPreferredBeats) {
+            const int stepGrid = 384 / candidate;
+            if (stepGrid <= 0 || (segmentLengthGrid % stepGrid) != 0) {
+                continue;
+            }
+            if (snapRangeFitsBeats(segmentMomentPositions, segmentDurations, candidate)) {
+                beats = candidate;
+                break;
+            }
+        }
+
+        const int slotCount = qMax(1, qRound(toDouble(Rational(segmentLengthGrid, 384)) * beats));
+        QVector<MomentGroups> slotGroups(slotCount);
+        for (int localIndex = 0; localIndex < segmentMomentIndices.size(); ++localIndex) {
+            const int momentIndex = segmentMomentIndices.at(localIndex);
+            const qint64 scaled = scaleRationalRounded(segmentMomentPositions.at(localIndex), beats);
+            const int slotIndex = qBound(0, slotCount - 1, static_cast<int>(scaled));
+            appendMomentGroups(&slotGroups[slotIndex], measure.moments.at(momentIndex).groups);
         }
 
         if (line.isEmpty() || beats != lastSegmentBeats) {
             line.append(QStringLiteral("{%1}").arg(beats));
             lastSegmentBeats = beats;
         }
-        for (const QString& slotText : slotTexts) {
-            line.append(slotText);
+        for (const MomentGroups& slotGroup : slotGroups) {
+            line.append(buildMomentText(slotGroup, beats, true));
             line.append(QLatin1Char(','));
         }
         if (segmentEndGrid < endPhaseGrid && beatGrid > 0 && (segmentEndGrid % beatGrid) == 0) {
@@ -678,7 +968,169 @@ QString renderMeasureLine(const RenderMeasure& measure)
         }
         segmentStartGrid = segmentEndGrid;
     }
+
     return line.trimmed();
+}
+
+QVector<Rational> beatBoundaryPositions(const RenderMeasure& measure)
+{
+    QVector<Rational> boundaries;
+    const Rational beatLength(1, qMax(1, measure.meterDenominator));
+    const Rational absoluteStart = measure.startPhaseWhole;
+    const Rational absoluteEnd = measure.startPhaseWhole + measure.lengthWhole;
+
+    qint64 beatIndex = (absoluteStart.numerator * beatLength.denominator)
+        / (absoluteStart.denominator * beatLength.numerator);
+    Rational candidate(static_cast<qint64>(beatIndex + 1) * beatLength.numerator, beatLength.denominator);
+    while (candidate < absoluteEnd) {
+        boundaries.append(candidate - absoluteStart);
+        candidate = candidate + beatLength;
+    }
+    return boundaries;
+}
+
+int chooseExactBeatsForRange(
+    const RenderMeasure& measure,
+    const Rational& start,
+    const Rational& end)
+{
+    qint64 beats = 1;
+    const Rational chunkLength = end - start;
+    beats = safeLcm(beats, chunkLength.denominator);
+    if (beats <= 0) {
+        return 0;
+    }
+
+    for (const MeasureMoment& moment : measure.moments) {
+        if (moment.positionWhole < start || moment.positionWhole >= end) {
+            continue;
+        }
+        const Rational relativePosition = moment.positionWhole - start;
+        beats = safeLcm(beats, relativePosition.denominator);
+        if (beats <= 0 || beats > std::numeric_limits<int>::max()) {
+            return 0;
+        }
+        for (const QStringList& group : moment.groups) {
+            for (const QString& token : group) {
+                QVector<DurationConstraint> durations;
+                collectTokenDurations(token, &durations);
+                for (const DurationConstraint& duration : durations) {
+                    beats = safeLcm(beats, duration.durationWhole.denominator);
+                    if (beats <= 0 || beats > std::numeric_limits<int>::max()) {
+                        return 0;
+                    }
+                }
+            }
+        }
+    }
+
+    return qMax<int>(1, static_cast<int>(beats));
+}
+
+QString renderExactChunk(
+    const RenderMeasure& measure,
+    const Rational& start,
+    const Rational& end,
+    int beats)
+{
+    qint64 slotCount64 = 0;
+    const Rational chunkLength = end - start;
+    if (!scaleRationalExact(chunkLength, beats, &slotCount64) || slotCount64 <= 0) {
+        return QString();
+    }
+
+    const int slotCount = static_cast<int>(qMin<qint64>(slotCount64, std::numeric_limits<int>::max()));
+    QVector<MomentGroups> slotGroups(slotCount);
+    for (const MeasureMoment& moment : measure.moments) {
+        if (moment.positionWhole < start || moment.positionWhole >= end) {
+            continue;
+        }
+        qint64 scaled = 0;
+        if (!scaleRationalExact(moment.positionWhole - start, beats, &scaled)) {
+            continue;
+        }
+        const int slotIndex = qBound(0, slotCount - 1, static_cast<int>(scaled));
+        appendMomentGroups(&slotGroups[slotIndex], moment.groups);
+    }
+
+    QString text = QStringLiteral("{%1}").arg(beats);
+    for (const MomentGroups& slotGroup : slotGroups) {
+        text.append(buildMomentText(slotGroup, beats, false));
+        text.append(QLatin1Char(','));
+    }
+    return text;
+}
+
+QString renderMeasureLineExact(const RenderMeasure& measure)
+{
+    QString line;
+    int lastBeats = 0;
+    Rational cursor(0, 1);
+    const QVector<Rational> boundaries = beatBoundaryPositions(measure);
+    int boundaryIndex = 0;
+
+    while (cursor < measure.lengthWhole) {
+        Rational chosenEnd = measure.lengthWhole;
+        bool chosenEndsAtBeatBoundary = false;
+        int chosenBeats = 0;
+
+        QVector<QPair<Rational, bool>> candidates;
+        candidates.reserve(boundaries.size() - boundaryIndex + 1);
+        for (int index = boundaryIndex; index < boundaries.size(); ++index) {
+            if (boundaries.at(index) <= cursor) {
+                continue;
+            }
+            candidates.append(qMakePair(boundaries.at(index), true));
+        }
+        candidates.append(qMakePair(measure.lengthWhole, false));
+
+        int minimalBeats = std::numeric_limits<int>::max();
+        for (const auto& candidate : candidates) {
+            const int candidateBeats = chooseExactBeatsForRange(measure, cursor, candidate.first);
+            if (candidateBeats <= 0) {
+                continue;
+            }
+            if (candidateBeats < minimalBeats) {
+                minimalBeats = candidateBeats;
+                chosenEnd = candidate.first;
+                chosenEndsAtBeatBoundary = candidate.second;
+                chosenBeats = candidateBeats;
+            }
+        }
+
+        if (chosenBeats <= 0) {
+            break;
+        }
+
+        const QString chunkText = renderExactChunk(measure, cursor, chosenEnd, chosenBeats);
+        if (chunkText.isEmpty()) {
+            break;
+        }
+        if (line.isEmpty() || chosenBeats != lastBeats) {
+            line.append(chunkText);
+        } else {
+            line.append(chunkText.mid(chunkText.indexOf(QLatin1Char('}')) + 1));
+        }
+        lastBeats = chosenBeats;
+
+        if (chosenEndsAtBeatBoundary && chosenEnd < measure.lengthWhole) {
+            line.append(QLatin1Char(' '));
+        }
+
+        cursor = chosenEnd;
+        while (boundaryIndex < boundaries.size() && boundaries.at(boundaryIndex) <= cursor) {
+            ++boundaryIndex;
+        }
+    }
+
+    return line.trimmed();
+}
+
+QString renderMeasureLine(const RenderMeasure& measure, const ChartNormalizationOptions& options)
+{
+    return options.reduceTo384Grid
+        ? renderMeasureLineApproximate(measure)
+        : renderMeasureLineExact(measure);
 }
 
 QString summarizeValidationError(const SimaiNativeValidationReport& report)
@@ -690,11 +1142,126 @@ QString summarizeValidationError(const SimaiNativeValidationReport& report)
     return QStringLiteral("Fix syntax errors before normalizing this chart.");
 }
 
+NormalizationSeed seedFromTimingMetadata(const miacode::simai::SimaiTimingMetadata& timingMetadata)
+{
+    NormalizationSeed seed;
+    seed.meterNumerator = timingMetadata.wholeTimeSignatureValid
+        ? timingMetadata.wholeTimeSignatureNumerator
+        : miacode::simai::kDefaultWholeTimeSignatureNumerator;
+    seed.meterDenominator = timingMetadata.wholeTimeSignatureValid
+        ? timingMetadata.wholeTimeSignatureDenominator
+        : miacode::simai::kDefaultWholeTimeSignatureDenominator;
+    return seed;
+}
+
+NormalizationSeed scanNormalizationSeed(
+    const QString& prefix,
+    const miacode::simai::SimaiTimingMetadata& timingMetadata)
+{
+    NormalizationSeed seed = seedFromTimingMetadata(timingMetadata);
+    Rational currentPhase;
+
+    const auto advanceByComma = [&]() {
+        currentPhase = currentPhase + Rational(1, qMax(1, seed.currentBeats));
+        const Rational measureLength = measureLengthWhole(seed.meterNumerator, seed.meterDenominator);
+        while (currentPhase >= measureLength) {
+            currentPhase = currentPhase - measureLength;
+        }
+    };
+
+    const QStringList lines = prefix.split(QLatin1Char('\n'), Qt::KeepEmptyParts);
+    for (QString line : lines) {
+        if (line.endsWith(QLatin1Char('\r'))) {
+            line.chop(1);
+        }
+        if (isTerminalMarkerText(line)) {
+            break;
+        }
+
+        for (int index = 0; index < line.size(); ++index) {
+            const QChar ch = line.at(index);
+            if (ch == QLatin1Char('|') && index + 1 < line.size() && line.at(index + 1) == QLatin1Char('|')) {
+                int numerator = 0;
+                int denominator = 0;
+                if (miacode::simai::parseInlineTimeSignatureComment(
+                        line,
+                        index,
+                        &numerator,
+                        &denominator,
+                        nullptr)) {
+                    seed.meterNumerator = qMax(1, numerator);
+                    seed.meterDenominator = qMax(1, denominator);
+                    currentPhase = Rational();
+                }
+                break;
+            }
+            if (ch.isSpace() || ch == QLatin1Char('/')) {
+                continue;
+            }
+            if (ch == QLatin1Char('(')) {
+                const int close = line.indexOf(QLatin1Char(')'), index + 1);
+                if (close < 0) {
+                    break;
+                }
+                bool bpmOk = false;
+                const double parsedBpm = line.mid(index + 1, close - index - 1).trimmed().toDouble(&bpmOk);
+                if (bpmOk) {
+                    seed.currentBpm = parsedBpm;
+                }
+                index = close;
+                continue;
+            }
+            if (ch == QLatin1Char('{')) {
+                const int close = line.indexOf(QLatin1Char('}'), index + 1);
+                if (close < 0) {
+                    break;
+                }
+                bool beatsOk = false;
+                const int parsedBeats = line.mid(index + 1, close - index - 1).trimmed().toInt(&beatsOk);
+                if (beatsOk && parsedBeats > 0) {
+                    seed.currentBeats = parsedBeats;
+                }
+                index = close;
+                continue;
+            }
+            if (ch == QLatin1Char('H') && line.mid(index, 3) == QStringLiteral("HS*")) {
+                const int close = line.indexOf(QLatin1Char('>'), index + 3);
+                if (close < 0) {
+                    break;
+                }
+                index = close;
+                continue;
+            }
+            if (ch == QLatin1Char('`')) {
+                continue;
+            }
+            if (ch == QLatin1Char(',')) {
+                advanceByComma();
+                continue;
+            }
+            if ((ch == QLatin1Char('E') || ch == QLatin1Char('e'))
+                && lineTailIsTerminalMarker(line, index)) {
+                break;
+            }
+        }
+    }
+
+    seed.startPhaseWhole = normalizeMeasurePhaseWhole(
+        currentPhase,
+        seed.meterNumerator,
+        seed.meterDenominator);
+    return seed;
+}
+
 }  // namespace
 
-ChartNormalizationResult normalizeChartText(
+ChartNormalizationResult normalizeChartFragment(
     const QString& input,
-    const miacode::simai::SimaiTimingMetadata& timingMetadata)
+    const miacode::simai::SimaiTimingMetadata& timingMetadata,
+    const NormalizationSeed& seed,
+    const ChartNormalizationOptions& options,
+    bool appendTerminalMarker,
+    bool injectLeadingTimeSignature)
 {
     ChartNormalizationResult result;
 
@@ -710,16 +1277,20 @@ ChartNormalizationResult normalizeChartText(
 
     QVector<RenderMeasure> renderedMeasures;
     MeasureBuilder currentMeasure;
-    currentMeasure.meterNumerator = timingMetadata.wholeTimeSignatureValid
-        ? timingMetadata.wholeTimeSignatureNumerator
-        : miacode::simai::kDefaultWholeTimeSignatureNumerator;
-    currentMeasure.meterDenominator = timingMetadata.wholeTimeSignatureValid
-        ? timingMetadata.wholeTimeSignatureDenominator
-        : miacode::simai::kDefaultWholeTimeSignatureDenominator;
+    currentMeasure.meterNumerator = seed.meterNumerator;
+    currentMeasure.meterDenominator = seed.meterDenominator;
+    currentMeasure.startPhaseWhole = options.startAtNewMeasure
+        ? Rational()
+        : seed.startPhaseWhole;
+    if (injectLeadingTimeSignature) {
+        currentMeasure.leadingItems.append(BoundaryItem{
+            BoundaryItemKind::TimeSignature,
+            QStringLiteral("|| %1").arg(normalizeTimeSignatureText(seed.meterNumerator, seed.meterDenominator))});
+    }
 
-    double currentPositionWhole = 0.0;
-    int currentBeats = 4;
-    double currentBpm = 120.0;
+    Rational currentPositionWhole;
+    int currentBeats = qMax(1, seed.currentBeats);
+    double currentBpm = seed.currentBpm;
     QString token;
     QStringList currentGroupTokens;
     QVector<QStringList> currentGroups;
@@ -743,17 +1314,17 @@ ChartNormalizationResult normalizeChartText(
     const auto flushMoment = [&]() {
         flushToken();
         finalizeGroup();
-        const QString momentText = buildMomentText(currentGroups);
-        if (!momentText.isEmpty()) {
+        const MomentGroups groups = normalizedMomentGroups(currentGroups);
+        if (!groups.isEmpty()) {
             MeasureMoment moment;
             moment.positionWhole = currentPositionWhole;
-            moment.text = momentText;
+            moment.groups = groups;
             currentMeasure.moments.append(moment);
         }
         currentGroups.clear();
     };
-    const auto appendRenderedMeasure = [&](double lengthWhole) {
-        if (lengthWhole <= kNormalizationEpsilon
+    const auto appendRenderedMeasure = [&](const Rational& lengthWhole) {
+        if (lengthWhole.isZero()
             && currentMeasure.leadingItems.isEmpty()
             && currentMeasure.trailingItems.isEmpty()
             && currentMeasure.moments.isEmpty()) {
@@ -763,13 +1334,13 @@ ChartNormalizationResult normalizeChartText(
         stored.meterNumerator = currentMeasure.meterNumerator;
         stored.meterDenominator = currentMeasure.meterDenominator;
         stored.startPhaseWhole = currentMeasure.startPhaseWhole;
-        stored.lengthWhole = qMax(0.0, lengthWhole);
+        stored.lengthWhole = lengthWhole;
         stored.leadingItems = currentMeasure.leadingItems;
         stored.trailingItems = currentMeasure.trailingItems;
         stored.moments = currentMeasure.moments;
         renderedMeasures.append(stored);
     };
-    const auto beginFreshMeasure = [&](int meterNumerator, int meterDenominator, double startPhaseWhole = 0.0) {
+    const auto beginFreshMeasure = [&](int meterNumerator, int meterDenominator, const Rational& startPhaseWhole = Rational()) {
         currentMeasure = MeasureBuilder();
         currentMeasure.meterNumerator = qMax(1, meterNumerator);
         currentMeasure.meterDenominator = qMax(1, meterDenominator);
@@ -777,22 +1348,15 @@ ChartNormalizationResult normalizeChartText(
             startPhaseWhole,
             currentMeasure.meterNumerator,
             currentMeasure.meterDenominator);
-        currentPositionWhole = 0.0;
+        currentPositionWhole = Rational();
     };
-    const auto currentMeasureLengthWhole = [&]() {
-        return measureLengthWhole(currentMeasure.meterNumerator, currentMeasure.meterDenominator);
-    };
-    const auto currentRemainingMeasureLengthWhole = [&]() {
-        return qMax(
-            0.0,
-            currentMeasureLengthWhole() - normalizeMeasurePhaseWhole(
-                currentMeasure.startPhaseWhole,
-                currentMeasure.meterNumerator,
-                currentMeasure.meterDenominator));
+    const auto currentRemainingMeasureLength = [&]() {
+        return measureLengthWhole(currentMeasure.meterNumerator, currentMeasure.meterDenominator)
+            - currentMeasure.startPhaseWhole;
     };
     const auto appendBoundaryItem = [&](const BoundaryItem& item) {
         flushMoment();
-        if (!currentMeasure.moments.isEmpty() || currentPositionWhole > kNormalizationEpsilon) {
+        if (!currentMeasure.moments.isEmpty() || !currentPositionWhole.isZero()) {
             currentMeasure.trailingItems.append(item);
             return;
         }
@@ -800,22 +1364,22 @@ ChartNormalizationResult normalizeChartText(
     };
     const auto restartMeasureAtCurrentPosition = [&](const BoundaryItem& item, int nextMeterNumerator, int nextMeterDenominator) {
         flushMoment();
-        if (!currentMeasure.moments.isEmpty() || currentPositionWhole > kNormalizationEpsilon) {
+        if (!currentMeasure.moments.isEmpty() || !currentPositionWhole.isZero()) {
             appendRenderedMeasure(currentPositionWhole);
             beginFreshMeasure(nextMeterNumerator, nextMeterDenominator);
         } else {
             currentMeasure.meterNumerator = qMax(1, nextMeterNumerator);
             currentMeasure.meterDenominator = qMax(1, nextMeterDenominator);
-            currentMeasure.startPhaseWhole = 0.0;
+            currentMeasure.startPhaseWhole = Rational();
         }
         currentMeasure.leadingItems.append(item);
     };
     const auto splitMeasureAtCurrentPosition = [&](const BoundaryItem& item) {
         flushMoment();
-        if (!currentMeasure.moments.isEmpty() || currentPositionWhole > kNormalizationEpsilon) {
+        if (!currentMeasure.moments.isEmpty() || !currentPositionWhole.isZero()) {
             const int carryMeterNumerator = currentMeasure.meterNumerator;
             const int carryMeterDenominator = currentMeasure.meterDenominator;
-            const double nextStartPhase = currentMeasure.startPhaseWhole + currentPositionWhole;
+            const Rational nextStartPhase = currentMeasure.startPhaseWhole + currentPositionWhole;
             appendRenderedMeasure(currentPositionWhole);
             beginFreshMeasure(carryMeterNumerator, carryMeterDenominator, nextStartPhase);
         }
@@ -823,20 +1387,19 @@ ChartNormalizationResult normalizeChartText(
     };
     const auto advanceByComma = [&]() {
         flushMoment();
-        const double stepWhole = currentBeats > 0 ? (1.0 / static_cast<double>(currentBeats)) : 0.0;
-        currentPositionWhole += stepWhole;
-        while (currentPositionWhole + kNormalizationEpsilon >= currentRemainingMeasureLengthWhole()) {
+        currentPositionWhole = currentPositionWhole + Rational(1, qMax(1, currentBeats));
+        while (currentPositionWhole >= currentRemainingMeasureLength()) {
             const int carryMeterNumerator = currentMeasure.meterNumerator;
             const int carryMeterDenominator = currentMeasure.meterDenominator;
-            const double completedLength = currentRemainingMeasureLengthWhole();
-            const double overflow = currentPositionWhole - completedLength;
+            const Rational completedLength = currentRemainingMeasureLength();
+            const Rational overflow = currentPositionWhole - completedLength;
             appendRenderedMeasure(completedLength);
             beginFreshMeasure(carryMeterNumerator, carryMeterDenominator);
-            currentPositionWhole = nearlyEqual(overflow, 0.0) ? 0.0 : qMax(0.0, overflow);
+            currentPositionWhole = overflow;
         }
     };
 
-    const QStringList lines = input.split(QLatin1Char('\n'));
+    const QStringList lines = input.split(QLatin1Char('\n'), Qt::KeepEmptyParts);
     for (QString line : lines) {
         if (line.endsWith(QLatin1Char('\r'))) {
             line.chop(1);
@@ -896,7 +1459,8 @@ ChartNormalizationResult normalizeChartText(
                             currentMeasure.meterNumerator,
                             currentMeasure.meterDenominator);
                     } else {
-                        appendBoundaryItem(BoundaryItem{BoundaryItemKind::StandaloneText, QStringLiteral("(%1)").arg(bpmText)});
+                        appendBoundaryItem(
+                            BoundaryItem{BoundaryItemKind::StandaloneText, QStringLiteral("(%1)").arg(bpmText)});
                     }
                     currentBpm = parsedBpm;
                 }
@@ -969,7 +1533,7 @@ ChartNormalizationResult normalizeChartText(
 
     flushMoment();
     if (!currentMeasure.moments.isEmpty()
-        || currentPositionWhole > kNormalizationEpsilon
+        || !currentPositionWhole.isZero()
         || !currentMeasure.leadingItems.isEmpty()
         || !currentMeasure.trailingItems.isEmpty()) {
         appendRenderedMeasure(currentPositionWhole);
@@ -979,8 +1543,8 @@ ChartNormalizationResult normalizeChartText(
     int emittedMeasureLines = 0;
     for (const RenderMeasure& measure : renderedMeasures) {
         appendBoundaryItems(&outputLines, measure.leadingItems);
-        if (measure.lengthWhole > kNormalizationEpsilon || !measure.moments.isEmpty()) {
-            outputLines.append(renderMeasureLine(measure));
+        if (!measure.lengthWhole.isZero() || !measure.moments.isEmpty()) {
+            outputLines.append(renderMeasureLine(measure, options));
             ++emittedMeasureLines;
         }
         appendBoundaryItems(&outputLines, measure.trailingItems);
@@ -991,13 +1555,85 @@ ChartNormalizationResult normalizeChartText(
     while (!outputLines.isEmpty() && outputLines.constLast().isEmpty()) {
         outputLines.removeLast();
     }
-    outputLines.append(QStringLiteral("E"));
+    if (appendTerminalMarker) {
+        outputLines.append(QStringLiteral("E"));
+    }
 
     result.ok = true;
     result.text = outputLines.join(QLatin1Char('\n'));
     result.measureLineCount = emittedMeasureLines;
     result.changedCount = result.text == input ? 0 : qMax(1, emittedMeasureLines);
     return result;
+}
+
+ChartNormalizationOptions chartNormalizationOptionsFromPreferences(
+    const QJsonObject& preview,
+    const ChartNormalizationOptions& defaults)
+{
+    ChartNormalizationOptions options = defaults;
+    if (preview.value(kChartNormalizeStartAtNewMeasurePreferenceKey).isBool()) {
+        options.startAtNewMeasure =
+            preview.value(kChartNormalizeStartAtNewMeasurePreferenceKey).toBool(options.startAtNewMeasure);
+    }
+    if (preview.value(kChartNormalizeReduceTo384GridPreferenceKey).isBool()) {
+        options.reduceTo384Grid =
+            preview.value(kChartNormalizeReduceTo384GridPreferenceKey).toBool(options.reduceTo384Grid);
+    }
+    return options;
+}
+
+void saveChartNormalizationOptionsToPreferences(
+    QJsonObject* preview,
+    const ChartNormalizationOptions& options)
+{
+    if (preview == nullptr) {
+        return;
+    }
+    preview->insert(kChartNormalizeStartAtNewMeasurePreferenceKey, options.startAtNewMeasure);
+    preview->insert(kChartNormalizeReduceTo384GridPreferenceKey, options.reduceTo384Grid);
+}
+
+ChartNormalizationResult normalizeChartText(
+    const QString& input,
+    const miacode::simai::SimaiTimingMetadata& timingMetadata,
+    const ChartNormalizationOptions& options)
+{
+    return normalizeChartFragment(
+        input,
+        timingMetadata,
+        seedFromTimingMetadata(timingMetadata),
+        options,
+        true,
+        false);
+}
+
+ChartNormalizationResult normalizeChartSelectionText(
+    const QString& fullText,
+    int selectionStart,
+    int selectionEnd,
+    const miacode::simai::SimaiTimingMetadata& timingMetadata,
+    const ChartNormalizationOptions& options)
+{
+    if (selectionStart < 0 || selectionEnd < selectionStart || selectionEnd > fullText.size()) {
+        ChartNormalizationResult result;
+        result.errorMessage = QStringLiteral("Invalid selection range.");
+        return result;
+    }
+
+    NormalizationSeed seed = scanNormalizationSeed(fullText.left(selectionStart), timingMetadata);
+    const bool shouldInjectLeadingTimeSignature =
+        options.startAtNewMeasure && !seed.startPhaseWhole.isZero();
+    if (options.startAtNewMeasure) {
+        seed.startPhaseWhole = Rational();
+    }
+
+    return normalizeChartFragment(
+        fullText.mid(selectionStart, selectionEnd - selectionStart),
+        timingMetadata,
+        seed,
+        options,
+        false,
+        shouldInjectLeadingTimeSignature);
 }
 
 }  // namespace miacode::chart_transform

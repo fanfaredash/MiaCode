@@ -1052,8 +1052,8 @@ void runInlineSpecs(QTextStream& err, int* failed)
         expectTrue(normalized.ok, QStringLiteral("normalize whole chart accepts irreducible hold and slide durations"), failed, err);
         expectEqual(
             normalized.text,
-            QStringLiteral("{16}1h[384:1]/1-5[384:1]/1-5[384:1],,,, ,,,, ,,,, ,,,,\nE"),
-            QStringLiteral("normalize whole chart rounds irreducible durations to the nearest valid 384-grid form while keeping slide durations non-zero"),
+            QStringLiteral("{384}1h[384:1]/1-5[384:1]/1-5[384:1],,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,, {16},,,, ,,,, ,,,,\nE"),
+            QStringLiteral("normalize whole chart lets duration snapping raise the local subdivision grid when needed"),
             failed,
             err
         );
@@ -1114,6 +1114,73 @@ void runInlineSpecs(QTextStream& err, int* failed)
             normalized.text,
             QStringLiteral("{16},,,, ,,,, ,,,,\n{16},,,, ,,,, ,,,,\nE"),
             QStringLiteral("normalize whole chart uses metadata-driven 3/4 measure boundaries"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const miacode::chart_transform::ChartNormalizationOptions defaults;
+        const miacode::chart_transform::ChartNormalizationOptions loaded =
+            miacode::chart_transform::chartNormalizationOptionsFromPreferences(QJsonObject(), defaults);
+        expectTrue(
+            loaded.startAtNewMeasure && loaded.reduceTo384Grid,
+            QStringLiteral("chart normalization preferences default both options to enabled"),
+            failed,
+            err
+        );
+
+        QJsonObject preview;
+        miacode::chart_transform::saveChartNormalizationOptionsToPreferences(
+            &preview,
+            miacode::chart_transform::ChartNormalizationOptions{false, false});
+        const miacode::chart_transform::ChartNormalizationOptions restored =
+            miacode::chart_transform::chartNormalizationOptionsFromPreferences(preview, defaults);
+        expectTrue(
+            !restored.startAtNewMeasure && !restored.reduceTo384Grid,
+            QStringLiteral("chart normalization preferences round-trip through preview json"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const QString fullText = QStringLiteral("1,2,3,4,\nE");
+        const int selectionStart = fullText.indexOf(QStringLiteral("2,3,"));
+        const int selectionEnd = selectionStart + QStringLiteral("2,3,").size();
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartSelectionText(
+                fullText,
+                selectionStart,
+                selectionEnd,
+                miacode::simai::SimaiTimingMetadata(),
+                miacode::chart_transform::ChartNormalizationOptions{true, true});
+        expectTrue(normalized.ok, QStringLiteral("selection normalize accepts a mid-measure selection"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("|| 4/4\n{16}2,,,, 3,,,,"),
+            QStringLiteral("selection normalize injects a restart time signature when starting a new measure mid-line"),
+            failed,
+            err
+        );
+    }
+
+    {
+        const QString fullText = QStringLiteral("{9}1,1,,,,,,,,\nE");
+        const int selectionStart = fullText.indexOf(QLatin1Char('1'));
+        const int selectionEnd = fullText.indexOf(QLatin1Char('\n'));
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartSelectionText(
+                fullText,
+                selectionStart,
+                selectionEnd,
+                miacode::simai::SimaiTimingMetadata(),
+                miacode::chart_transform::ChartNormalizationOptions{false, false});
+        expectTrue(normalized.ok, QStringLiteral("selection normalize accepts an exact non-384 subdivision selection"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{9}1,1,,,,,,,,"),
+            QStringLiteral("selection normalize carries the active subdivision from the selection prefix"),
             failed,
             err
         );
