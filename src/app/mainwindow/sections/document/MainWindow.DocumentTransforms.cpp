@@ -2,7 +2,9 @@
 #include "../../MainWindowShared.h"
 
 #include "DialogLocalization.h"
+#include "PlainCodeEditor.h"
 #include "UiText.h"
+#include "UiTheme.h"
 #include "simai/transform/ChartBatchTransform.h"
 #include "simai/transform/ChartNormalization.h"
 
@@ -11,6 +13,120 @@
 #include <QtWidgets>
 
 using namespace miacode::mainwindow::shared;
+
+namespace {
+
+struct NormalizeDialogResult {
+    bool accepted = false;
+    miacode::chart_transform::ChartNormalizationOptions options;
+};
+
+std::pair<int, int> lineColForPosition(const QTextDocument* document, int position)
+{
+    if (document == nullptr) {
+        return {1, 1};
+    }
+    QTextCursor cursor(const_cast<QTextDocument*>(document));
+    const int maxPosition = qMax(0, document->characterCount() - 1);
+    cursor.setPosition(qBound(0, position, maxPosition));
+    return {cursor.blockNumber() + 1, cursor.positionInBlock() + 1};
+}
+
+NormalizeDialogResult showNormalizeSelectionDialog(
+    MainWindow& owner,
+    const QString& descriptionText,
+    const miacode::chart_transform::ChartNormalizationOptions& initialOptions)
+{
+    NormalizeDialogResult result;
+    result.options = initialOptions;
+
+    QDialog dialog(UiDialogs::effectiveParentWidget(&owner));
+    dialog.setWindowTitle(uiText("dialog.normalize.title", QStringLiteral("Format Chart")));
+    dialog.setModal(true);
+    dialog.setMinimumWidth(360);
+    dialog.setStyleSheet(UiTheme::aboutDialogStyleSheet());
+    UiDialogs::prepareDialogWindow(&dialog, &owner);
+
+    auto* rootLayout = new QVBoxLayout(&dialog);
+    rootLayout->setContentsMargins(16, 14, 16, 14);
+    rootLayout->setSpacing(10);
+
+    auto* summaryRow = new QWidget(&dialog);
+    auto* summaryLayout = new QHBoxLayout(summaryRow);
+    summaryLayout->setContentsMargins(0, 0, 0, 0);
+    summaryLayout->setSpacing(10);
+
+    auto* iconLabel = new QLabel(summaryRow);
+    iconLabel->setPixmap(dialog.style()->standardIcon(QStyle::SP_MessageBoxInformation).pixmap(28, 28));
+    iconLabel->setAlignment(Qt::AlignTop | Qt::AlignHCenter);
+    summaryLayout->addWidget(iconLabel, 0, Qt::AlignTop);
+
+    auto* hintLabel = new QLabel(descriptionText, summaryRow);
+    hintLabel->setWordWrap(true);
+    summaryLayout->addWidget(hintLabel, 1);
+    rootLayout->addWidget(summaryRow);
+
+    auto* startAtNewMeasureCheck = new QCheckBox(
+        UiText::isChineseUi()
+            ? QStringLiteral("选区起点视作小节线开始")
+            : QStringLiteral("Treat selection start as measure boundary"),
+        &dialog);
+    startAtNewMeasureCheck->setChecked(initialOptions.startAtNewMeasure);
+    rootLayout->addWidget(startAtNewMeasureCheck);
+
+    auto* reduceTo384Check = new QCheckBox(
+        UiText::isChineseUi()
+            ? QStringLiteral("统一近似至384分音")
+            : QStringLiteral("Snap approximately to 384 grid"),
+        &dialog);
+    reduceTo384Check->setChecked(initialOptions.reduceTo384Grid);
+    rootLayout->addWidget(reduceTo384Check);
+
+    auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    UiDialogs::localizeButtonBox(buttonBox);
+    QObject::connect(buttonBox, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    QObject::connect(buttonBox, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    rootLayout->addWidget(buttonBox);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return result;
+    }
+
+    result.accepted = true;
+    result.options.startAtNewMeasure = startAtNewMeasureCheck->isChecked();
+    result.options.reduceTo384Grid = reduceTo384Check->isChecked();
+    return result;
+}
+
+bool selectionStartsAtLineStart(const QString& text, int selectionStart)
+{
+    return selectionStart <= 0 || text.at(selectionStart - 1) == QLatin1Char('\n');
+}
+
+bool selectionEndsAtLineBoundary(const QString& text, int selectionEnd)
+{
+    return selectionEnd >= text.size()
+        || (selectionEnd < text.size() && text.at(selectionEnd) == QLatin1Char('\n'))
+        || (selectionEnd > 0 && text.at(selectionEnd - 1) == QLatin1Char('\n'));
+}
+
+QString composeNormalizedSelectionReplacement(
+    const QString& original,
+    int selectionStart,
+    int selectionEnd,
+    const QString& normalizedText)
+{
+    QString replacement = normalizedText;
+    if (!selectionStartsAtLineStart(original, selectionStart)) {
+        replacement.prepend(QStringLiteral("\n\n"));
+    }
+    if (!selectionEndsAtLineBoundary(original, selectionEnd)) {
+        replacement.append(QLatin1Char('\n'));
+    }
+    return replacement;
+}
+
+}  // namespace
 
 QString MainWindow::DocumentSection::resolveInitialOpenDirectory() const
 {
@@ -154,9 +270,62 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
         return;
     }
 
-    const auto normalized = miacode::chart_transform::normalizeChartText(
-        owner_.activeChartText(),
-        owner_.currentTimingMetadata()
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    const QTextCursor oldCursor = editor->textCursor();
+    const int oldVScroll = editor->verticalScrollBar() != nullptr ? editor->verticalScrollBar()->value() : 0;
+    const int oldHScroll = editor->horizontalScrollBar() != nullptr ? editor->horizontalScrollBar()->value() : 0;
+    const bool hadSelection = oldCursor.hasSelection();
+    const QString original = owner_.editorText();
+    const int startPos = hadSelection ? oldCursor.selectionStart() : 0;
+    const int endPos = hadSelection ? oldCursor.selectionEnd() : original.size();
+    const int begin = qMin(startPos, endPos);
+    const int finish = qMax(startPos, endPos);
+    const bool wholeTextSelected = begin == 0 && finish == original.size();
+
+    QString dialogDescription;
+    if (wholeTextSelected) {
+        dialogDescription = UiText::isChineseUi()
+            ? QStringLiteral("整理谱面选中范围：全文。")
+            : QStringLiteral("Format Chart selection range: full chart.");
+    } else {
+        const auto [startLine, startCol] = lineColForPosition(editor->document(), begin);
+        const auto [endLine, endCol] = lineColForPosition(editor->document(), finish);
+        dialogDescription = UiText::isChineseUi()
+            ? QStringLiteral("整理谱面选中范围：%1行%2列 ~ %3行%4列。")
+                  .arg(startLine)
+                  .arg(startCol)
+                  .arg(endLine)
+                  .arg(endCol)
+            : QStringLiteral("Format Chart selection range: L%1C%2~L%3C%4.")
+                  .arg(startLine)
+                  .arg(startCol)
+                  .arg(endLine)
+                  .arg(endCol);
+    }
+
+    miacode::chart_transform::ChartNormalizationOptions options;
+    options.startAtNewMeasure = state_.chartNormalizeStartAtNewMeasure_;
+    options.reduceTo384Grid = state_.chartNormalizeReduceTo384Grid_;
+    const NormalizeDialogResult dialogResult = showNormalizeSelectionDialog(owner_, dialogDescription, options);
+    if (!dialogResult.accepted) {
+        return;
+    }
+
+    state_.chartNormalizeStartAtNewMeasure_ = dialogResult.options.startAtNewMeasure;
+    state_.chartNormalizeReduceTo384Grid_ = dialogResult.options.reduceTo384Grid;
+    owner_.savePortableState();
+
+    if (begin < 0 || finish < begin || finish > original.size()) {
+        owner_.statusBar()->showMessage(QStringLiteral("Format Chart: invalid selection range."));
+        return;
+    }
+
+    const auto normalized = miacode::chart_transform::normalizeChartSelectionText(
+        original,
+        begin,
+        finish,
+        owner_.currentTimingMetadata(),
+        dialogResult.options
     );
     if (!normalized.ok) {
         UiDialogs::showMessageBox(
@@ -172,7 +341,8 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
         return;
     }
 
-    if (normalized.text == owner_.activeChartText()) {
+    const QString replacement = composeNormalizedSelectionReplacement(original, begin, finish, normalized.text);
+    if (replacement == original.mid(begin, finish - begin)) {
         owner_.statusBar()->showMessage(
             uiText(
                 "status.normalize.already_normalized",
@@ -181,16 +351,44 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
         return;
     }
 
-    if (!applyBatchTransform(
-            uiText("action.normalize_chart", QStringLiteral("Format Chart")),
-            [normalized](const QString&, int* changedCount) {
-                if (changedCount != nullptr) {
-                    *changedCount = normalized.changedCount;
-                }
-                return normalized.text;
-            })) {
-        return;
+    QTextCursor editCursor = oldCursor;
+    editCursor.beginEditBlock();
+    editCursor.setPosition(begin);
+    editCursor.setPosition(finish, QTextCursor::KeepAnchor);
+    editCursor.insertText(replacement);
+    editCursor.endEditBlock();
+
+    QTextCursor restoredCursor(editor->document());
+    const int maxPos = editor->document()->characterCount() - 1;
+    if (!hadSelection) {
+        restoredCursor.setPosition(qBound(0, oldCursor.position(), maxPos));
+    } else {
+        const int transformedEnd = begin + replacement.size();
+        const bool forwardSelection = oldCursor.position() >= oldCursor.anchor();
+        const int restoredAnchor = qBound(0, forwardSelection ? begin : transformedEnd, maxPos);
+        const int restoredPosition = qBound(0, forwardSelection ? transformedEnd : begin, maxPos);
+        restoredCursor.setPosition(restoredAnchor);
+        restoredCursor.setPosition(restoredPosition, QTextCursor::KeepAnchor);
     }
+    editor->setTextCursor(restoredCursor);
+    if (editor->verticalScrollBar() != nullptr) {
+        editor->verticalScrollBar()->setValue(qBound(
+            editor->verticalScrollBar()->minimum(),
+            oldVScroll,
+            editor->verticalScrollBar()->maximum()
+        ));
+    }
+    if (editor->horizontalScrollBar() != nullptr) {
+        editor->horizontalScrollBar()->setValue(qBound(
+            editor->horizontalScrollBar()->minimum(),
+            oldHScroll,
+            editor->horizontalScrollBar()->maximum()
+        ));
+    }
+
+    markCurrentFieldDirty();
+    state_.lastPreviewNoteMarkerSignature_.clear();
+    owner_.refreshTimelineMetadata();
 
     owner_.statusBar()->showMessage(
         uiText(

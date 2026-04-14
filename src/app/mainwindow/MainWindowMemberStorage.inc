@@ -300,6 +300,8 @@
         bool previewShowObjectStatsHud_ = false;
         bool exportShowObjectStatsHud_ = false;
         bool previewShowValidationSummary_ = true;
+        bool chartNormalizeStartAtNewMeasure_ = true;
+        bool chartNormalizeReduceTo384Grid_ = true;
         bool workspacePanelsSwapped_ = false;
         PreviewAudioSettings softwarePreviewAudioSettings_;
         PreviewAudioSettings previewAudioSettings_;
@@ -537,6 +539,8 @@
     bool& previewShowObjectStatsHud_ = state_.previewShowObjectStatsHud_;
     bool& exportShowObjectStatsHud_ = state_.exportShowObjectStatsHud_;
     bool& previewShowValidationSummary_ = state_.previewShowValidationSummary_;
+    bool& chartNormalizeStartAtNewMeasure_ = state_.chartNormalizeStartAtNewMeasure_;
+    bool& chartNormalizeReduceTo384Grid_ = state_.chartNormalizeReduceTo384Grid_;
     bool& workspacePanelsSwapped_ = state_.workspacePanelsSwapped_;
     PreviewAudioSettings& softwarePreviewAudioSettings_ = state_.softwarePreviewAudioSettings_;
     PreviewAudioSettings& previewAudioSettings_ = state_.previewAudioSettings_;
