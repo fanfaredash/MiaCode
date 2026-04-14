@@ -3329,7 +3329,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
         : normalizePath(task.trackPath);
     const bool hasTrack = !trackPath.isEmpty();
     const QVector<TimelineNoteMarker> exportMarkers =
-        filteredMarkersForRange(task.noteMarkers, segmentStartSecond, segmentEndSecond);
+        filteredMarkersForRange(task.noteMarkers, timelineOriginSecond, segmentEndSecond);
     const MuriAnalysisReport exportMuriAnalysisReport = exportMarkers.isEmpty()
         ? MuriAnalysisReport{}
         : MuriAnalyzer::analyze(
@@ -3338,7 +3338,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
               task.staticTapOnSlideThresholdSeconds);
     appendVideoExportLog(
         QStringLiteral("input_probe"),
-        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 leadIn=%8 timelineOrigin=%9 fullRange=%10 markerFilter=marker.second frameWindow=%11..%12 totalSeconds=%13 alignedSeconds=%14 frameCount=%15 size=%16x%17")
+        QStringLiteral("media=%1 hasMedia=%2 mediaIsImage=%3 track=%4 hasTrack=%5 segmentStart=%6 segmentEnd=%7 leadIn=%8 timelineOrigin=%9 fullRange=%10 markerFilter=marker.second within simulatedWindow frameWindow=%11..%12 totalSeconds=%13 alignedSeconds=%14 frameCount=%15 size=%16x%17")
             .arg(mediaPath)
             .arg(hasMedia ? 1 : 0)
             .arg(mediaIsImage ? 1 : 0)
@@ -3349,7 +3349,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(leadInSeconds, 0, 'f', 6)
             .arg(timelineOriginSecond, 0, 'f', 6)
             .arg(task.fullRangeExport ? 1 : 0)
-            .arg(segmentStartSecond, 0, 'f', 6)
+            .arg(timelineOriginSecond, 0, 'f', 6)
             .arg(segmentEndSecond, 0, 'f', 6)
             .arg(totalSeconds, 0, 'f', 6)
             .arg(alignedTotalSeconds, 0, 'f', 6)

@@ -46,6 +46,13 @@ bool isSlideLike(const TimelineNoteMarker& marker)
     return marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi");
 }
 
+bool hasUsableSlideTraceTiming(const TimelineNoteMarker& marker)
+{
+    return isSlideLike(marker)
+        && marker.slideTraceSecond + kStaticTimeEpsilonSeconds >= marker.second
+        && marker.endSecond + kStaticTimeEpsilonSeconds >= marker.slideTraceSecond;
+}
+
 bool isTapMarker(const TimelineNoteMarker& marker)
 {
     return marker.type == QLatin1String("tap");
@@ -157,7 +164,7 @@ QSet<QString> buildSlideKeysWithTapOnSlideHead(const QVector<TimelineNoteMarker>
     slideKeysByStart.reserve(noteMarkers.size());
 
     for (const TimelineNoteMarker& marker : noteMarkers) {
-        if (!isSlideLike(marker) || marker.slideTraceSecond < 0.0) {
+        if (!hasUsableSlideTraceTiming(marker)) {
             continue;
         }
         slideKeysByStart[slideStartLookupKey(marker.lane, marker.slideTraceSecond)].append(
@@ -225,8 +232,7 @@ double slideCriticalSecondForMarker(const TimelineNoteMarker& marker)
         }
     }
     if (marker.type == QLatin1String("wifi")
-        && marker.slideTraceSecond >= 0.0
-        && marker.endSecond >= marker.slideTraceSecond) {
+        && hasUsableSlideTraceTiming(marker)) {
         return marker.slideTraceSecond
             + (marker.endSecond - marker.slideTraceSecond) * marker.wifiCriticalProportion;
     }
@@ -361,7 +367,7 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
     for (int slideIndex : slideIndices) {
         const TimelineNoteMarker& slide = noteMarkers.at(slideIndex);
         const double criticalSecond = slideCriticalSecondForMarker(slide);
-        if (slide.slideTraceSecond < 0.0 || slide.endSecond < slide.slideTraceSecond || criticalSecond < 0.0) {
+        if (!hasUsableSlideTraceTiming(slide) || !qIsFinite(criticalSecond)) {
             continue;
         }
 
@@ -450,7 +456,7 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
 
             if (!endPad.isEmpty()
                 && notePad == endPad
-                && criticalSecond >= 0.0
+                && qIsFinite(criticalSecond)
                 && note.second > criticalSecond + normalizedCollideThresholdSeconds + kStaticTimeEpsilonSeconds
                 && note.second <= slide.endSecond + collideExtraDeltaSeconds + kStaticTimeEpsilonSeconds) {
                 MuriStaticReference record;
@@ -524,7 +530,7 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
 
             if (!endPad.isEmpty()
                 && target.pad == endPad
-                && criticalSecond >= 0.0
+                && qIsFinite(criticalSecond)
                 && target.second > criticalSecond + normalizedCollideThresholdSeconds + kStaticTimeEpsilonSeconds
                 && target.second <= slide.endSecond + collideExtraDeltaSeconds + kStaticTimeEpsilonSeconds) {
                 MuriStaticReference record;
@@ -547,7 +553,7 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
     for (int wifiIndex : wifiIndices) {
         const TimelineNoteMarker& wifi = noteMarkers.at(wifiIndex);
         const double criticalSecond = slideCriticalSecondForMarker(wifi);
-        if (wifi.slideTraceSecond < 0.0 || wifi.endSecond < wifi.slideTraceSecond || criticalSecond < 0.0) {
+        if (!hasUsableSlideTraceTiming(wifi) || !qIsFinite(criticalSecond)) {
             continue;
         }
 

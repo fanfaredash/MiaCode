@@ -282,7 +282,7 @@ void VideoExportQuickRenderBackend::updateFrameStateForRender(
     bool showTimestamp,
     bool showObjectStatsHud)
 {
-    frameState_.playheadSeconds = qMax(0.0, playheadSeconds);
+    frameState_.playheadSeconds = playheadSeconds;
     frameState_.render.showTimestamp = showTimestamp;
     frameState_.render.showObjectStatsHud = showObjectStatsHud;
     frameState_.usedGpuRendererThisFrame = true;

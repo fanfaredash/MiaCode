@@ -19,7 +19,7 @@ bool keepDenseOverlapPanelIssue(MuriKind kind, double second, QHash<qint64, int>
         return true;
     }
 
-    const qint64 secondKey = qRound64(qMax(0.0, second) * 1000000.0);
+    const qint64 secondKey = qRound64(second * 1000000.0);
     const int keptCount = keptOverlapCountBySecond->value(secondKey, 0);
     if (keptCount >= 1) {
         return false;
@@ -64,7 +64,7 @@ MuriPanelAnchor muriPanelAnchorFromReferenceNote(const MuriStaticReferenceNote& 
 {
     MuriPanelAnchor anchor;
     anchor.valid = true;
-    anchor.second = qMax(0.0, note.second);
+    anchor.second = note.second;
     anchor.line = note.line;
     anchor.col = note.col;
     return anchor;
@@ -180,7 +180,7 @@ MuriPanelEntry makeMuriPanelEntry(const MuriDiagnostic& diagnostic)
     MuriPanelEntry entry;
     entry.kind = diagnostic.kind;
     entry.alertLevel = diagnostic.alertLevel;
-    entry.second = diagnostic.anchorSecond >= 0.0 ? diagnostic.anchorSecond : diagnostic.second;
+    entry.second = diagnostic.anchorSecond;
     entry.occurrenceSecond = diagnostic.second;
     entry.line = diagnostic.line;
     entry.col = diagnostic.col;
@@ -197,8 +197,8 @@ MuriPanelEntry makeMuriPanelEntry(const MuriStaticReference& reference)
     const MuriPanelAnchor anchor = earlierMuriPanelAnchor(
         muriPanelAnchorFromReferenceNote(reference.affected),
         muriPanelAnchorFromReferenceNote(reference.cause));
-    entry.second = anchor.valid ? anchor.second : qMax(0.0, reference.affected.second);
-    entry.occurrenceSecond = qMax(0.0, reference.affected.second);
+    entry.second = anchor.valid ? anchor.second : reference.affected.second;
+    entry.occurrenceSecond = reference.affected.second;
     entry.line = anchor.valid ? anchor.line : reference.affected.line;
     entry.col = anchor.valid ? anchor.col : reference.affected.col;
     entry.rawDetail = buildMuriStaticReferenceDetail(reference);
