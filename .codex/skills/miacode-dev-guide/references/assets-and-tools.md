@@ -108,7 +108,9 @@ Do not rename sound files casually; both preview-time and export-time behavior d
 ## 5. Build And Packaging Scripts
 
 - Default local build expectation:
-  - prefer `--Release` / `--config Release` for normal builds unless the task explicitly needs debug-only behavior; do not assume `--Debug` by default
+  - run routine compile, test, and verification work in `--Release` / `--config Release`
+  - do not create or maintain a separate `Debug` build just for ordinary compile/test runs
+  - use debug-only launch paths or diagnostics only when the task explicitly requires debug-specific investigation
 - Windows build/package:
   - `scripts/build-win.ps1`
   - `scripts/package-win.ps1`

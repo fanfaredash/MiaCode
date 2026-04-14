@@ -22,6 +22,7 @@ Use this skill as the repo memory layer for MiaCode. Start from the user-facing 
 2. Follow downstream consumers before editing. In MiaCode, many behaviors are mirrored across runtime and export paths.
 3. If a behavior exists in both preview-time and export-time code, treat it as a sync pair unless the references explicitly say otherwise.
 4. Prefer code over docs when they disagree. If code disproves a reference, update the reference in the same change.
+5. For routine compile, test, and verification work, use the `Release` configuration only; do not spin a separate `Debug` build unless the task explicitly targets debug-only diagnostics.
 
 ## Core Anchors
 
