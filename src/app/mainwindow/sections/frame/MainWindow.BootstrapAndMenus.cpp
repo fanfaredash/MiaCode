@@ -153,6 +153,46 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     owner_.undoAction_ = new QAction(uiText("action.undo", "Undo"), &owner_);
     owner_.undoAction_->setShortcuts(QKeySequence::keyBindings(QKeySequence::Undo));
     connect(owner_.undoAction_, &QAction::triggered, &owner_, [this]() {
+        const auto focusSummary = []() {
+            if (QWidget* focus = QApplication::focusWidget(); focus != nullptr) {
+                return QStringLiteral("%1(name=%2 ptr=0x%3)")
+                    .arg(focus->metaObject() != nullptr ? focus->metaObject()->className() : QStringLiteral("unknown"))
+                    .arg(focus->objectName().isEmpty() ? QStringLiteral("(none)") : focus->objectName())
+                    .arg(reinterpret_cast<quintptr>(focus), 0, 16);
+            }
+            return QStringLiteral("null");
+        };
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("selection_restore/undo_action"),
+            QStringLiteral("triggered focus=%1").arg(focusSummary()),
+            true
+        );
+        const auto undoChartEditor = [this]() {
+            if (owner_.documentSection_ != nullptr) {
+                const bool handled = owner_.documentSection_->undoChartEditorWithSelectionRestore();
+                miacode::debug_log::appendLine(
+                    miacode::debug_log::Channel::Runtime,
+                    QStringLiteral("selection_restore/undo_action"),
+                    QStringLiteral("chart_editor_path handled=%1").arg(handled ? 1 : 0),
+                    true
+                );
+                return handled;
+            }
+            if (auto* editor = qobject_cast<QTextEdit*>(owner_.editorWidget_); editor != nullptr
+                && editor->document() != nullptr
+                && editor->document()->isUndoAvailable()) {
+                editor->undo();
+                miacode::debug_log::appendLine(
+                    miacode::debug_log::Channel::Runtime,
+                    QStringLiteral("selection_restore/undo_action"),
+                    QStringLiteral("chart_editor_fallback handled=1"),
+                    true
+                );
+                return true;
+            }
+            return false;
+        };
         bool handled = false;
         if (QWidget* focus = QApplication::focusWidget(); focus != nullptr) {
             if (auto* lineEdit = qobject_cast<QLineEdit*>(focus); lineEdit != nullptr) {
@@ -161,19 +201,16 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
                     handled = true;
                 }
             } else if (auto* textEdit = qobject_cast<QTextEdit*>(focus); textEdit != nullptr) {
-                if (textEdit->document() != nullptr && textEdit->document()->isUndoAvailable()) {
+                if (textEdit == owner_.editorWidget_) {
+                    handled = undoChartEditor();
+                } else if (textEdit->document() != nullptr && textEdit->document()->isUndoAvailable()) {
                     textEdit->undo();
                     handled = true;
                 }
             }
         }
         if (!handled) {
-            if (auto* editor = qobject_cast<QTextEdit*>(owner_.editorWidget_); editor != nullptr
-                && editor->document() != nullptr
-                && editor->document()->isUndoAvailable()) {
-                editor->undo();
-                handled = true;
-            }
+            handled = undoChartEditor();
         }
         if (!handled) {
             (void)owner_.undoDeletedDifficultyField();
@@ -183,11 +220,66 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
 
     owner_.redoAction_ = new QAction(uiText("action.redo", "Redo"), &owner_);
     owner_.redoAction_->setShortcuts(QKeySequence::keyBindings(QKeySequence::Redo));
-    connect(owner_.redoAction_, &QAction::triggered, &owner_, [invokeOnFocusedTextWidget]() {
-        invokeOnFocusedTextWidget(
-            [](QTextEdit* textEdit) { textEdit->redo(); },
-            [](QLineEdit* lineEdit) { lineEdit->redo(); }
+    connect(owner_.redoAction_, &QAction::triggered, &owner_, [this]() {
+        const auto focusSummary = []() {
+            if (QWidget* focus = QApplication::focusWidget(); focus != nullptr) {
+                return QStringLiteral("%1(name=%2 ptr=0x%3)")
+                    .arg(focus->metaObject() != nullptr ? focus->metaObject()->className() : QStringLiteral("unknown"))
+                    .arg(focus->objectName().isEmpty() ? QStringLiteral("(none)") : focus->objectName())
+                    .arg(reinterpret_cast<quintptr>(focus), 0, 16);
+            }
+            return QStringLiteral("null");
+        };
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("selection_restore/redo_action"),
+            QStringLiteral("triggered focus=%1").arg(focusSummary()),
+            true
         );
+        const auto redoChartEditor = [this]() {
+            if (owner_.documentSection_ != nullptr) {
+                const bool handled = owner_.documentSection_->redoChartEditorWithSelectionRestore();
+                miacode::debug_log::appendLine(
+                    miacode::debug_log::Channel::Runtime,
+                    QStringLiteral("selection_restore/redo_action"),
+                    QStringLiteral("chart_editor_path handled=%1").arg(handled ? 1 : 0),
+                    true
+                );
+                return handled;
+            }
+            if (auto* editor = qobject_cast<QTextEdit*>(owner_.editorWidget_); editor != nullptr
+                && editor->document() != nullptr
+                && editor->document()->isRedoAvailable()) {
+                editor->redo();
+                miacode::debug_log::appendLine(
+                    miacode::debug_log::Channel::Runtime,
+                    QStringLiteral("selection_restore/redo_action"),
+                    QStringLiteral("chart_editor_fallback handled=1"),
+                    true
+                );
+                return true;
+            }
+            return false;
+        };
+        bool handled = false;
+        if (QWidget* focus = QApplication::focusWidget(); focus != nullptr) {
+            if (auto* lineEdit = qobject_cast<QLineEdit*>(focus); lineEdit != nullptr) {
+                if (lineEdit->isRedoAvailable()) {
+                    lineEdit->redo();
+                    handled = true;
+                }
+            } else if (auto* textEdit = qobject_cast<QTextEdit*>(focus); textEdit != nullptr) {
+                if (textEdit == owner_.editorWidget_) {
+                    handled = redoChartEditor();
+                } else if (textEdit->document() != nullptr && textEdit->document()->isRedoAvailable()) {
+                    textEdit->redo();
+                    handled = true;
+                }
+            }
+        }
+        if (!handled) {
+            handled = redoChartEditor();
+        }
     });
     editMenu->addAction(owner_.redoAction_);
 

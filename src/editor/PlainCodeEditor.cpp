@@ -1,4 +1,5 @@
 #include "PlainCodeEditor.h"
+#include "common/DebugLog.h"
 #include "UiText.h"
 #include "UiTheme.h"
 
@@ -57,6 +58,16 @@ QString normalizedHalfWidthText(QString text)
         text[i] = normalizedHalfWidthChar(text.at(i));
     }
     return text;
+}
+
+void logSelectionRestoreEditorShortcut(const QString& scope, const QString& payload)
+{
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("selection_restore/%1").arg(scope),
+        payload,
+        true
+    );
 }
 
 struct BlockVisualSpan
@@ -226,6 +237,27 @@ void PlainCodeEditor::setBatchTransformActions(const QList<QAction*>& actions)
 void PlainCodeEditor::setMoreBatchTransformActions(const QList<QAction*>& actions)
 {
     moreBatchTransformActions_ = actions;
+}
+
+bool PlainCodeEditor::event(QEvent* event)
+{
+    if (event != nullptr && event->type() == QEvent::ShortcutOverride) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (keyEvent != nullptr
+            && (keyEvent->matches(QKeySequence::Undo) || keyEvent->matches(QKeySequence::Redo))) {
+            logSelectionRestoreEditorShortcut(
+                QStringLiteral("editor_shortcut_override"),
+                QStringLiteral("match=%1 key=%2 modifiers=%3 focus=%4")
+                    .arg(keyEvent->matches(QKeySequence::Undo) ? QStringLiteral("undo") : QStringLiteral("redo"))
+                    .arg(keyEvent->key())
+                    .arg(static_cast<int>(keyEvent->modifiers()))
+                    .arg(hasFocus() ? 1 : 0)
+            );
+            event->accept();
+            return true;
+        }
+    }
+    return QTextEdit::event(event);
 }
 
 int PlainCodeEditor::lineNumberAreaWidth() const
@@ -423,6 +455,27 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
     if (event == nullptr) {
         QTextEdit::keyPressEvent(event);
         return;
+    }
+
+    if (!event->isAutoRepeat()) {
+        if (event->matches(QKeySequence::Undo)) {
+            logSelectionRestoreEditorShortcut(
+                QStringLiteral("editor_shortcut_press"),
+                QStringLiteral("match=undo key=%1 modifiers=%2").arg(event->key()).arg(static_cast<int>(event->modifiers()))
+            );
+            emit undoShortcutRequested();
+            event->accept();
+            return;
+        }
+        if (event->matches(QKeySequence::Redo)) {
+            logSelectionRestoreEditorShortcut(
+                QStringLiteral("editor_shortcut_press"),
+                QStringLiteral("match=redo key=%1 modifiers=%2").arg(event->key()).arg(static_cast<int>(event->modifiers()))
+            );
+            emit redoShortcutRequested();
+            event->accept();
+            return;
+        }
     }
 
     const bool plainEnterKey =

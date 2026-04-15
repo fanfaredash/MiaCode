@@ -899,6 +899,12 @@ bool MainWindow::DocumentSection::applySelectionBatchTransform(const QString& op
         return false;
     }
 
+    const bool forwardSelection = oldCursor.hasSelection()
+        ? (oldCursor.position() >= oldCursor.anchor())
+        : true;
+    const int originalAnchor = forwardSelection ? begin : finish;
+    const int originalPosition = forwardSelection ? finish : begin;
+
     QTextCursor editCursor = oldCursor;
     editCursor.beginEditBlock();
     editCursor.setPosition(begin);
@@ -909,12 +915,12 @@ bool MainWindow::DocumentSection::applySelectionBatchTransform(const QString& op
     QTextCursor restoredCursor(editor->document());
     const int maxPos = editor->document()->characterCount() - 1;
     const int transformedEnd = begin + transformed.size();
-    const bool forwardSelection = oldCursor.position() >= oldCursor.anchor();
     const int restoredAnchor = qBound(0, forwardSelection ? begin : transformedEnd, maxPos);
     const int restoredPosition = qBound(0, forwardSelection ? transformedEnd : begin, maxPos);
     restoredCursor.setPosition(restoredAnchor);
     restoredCursor.setPosition(restoredPosition, QTextCursor::KeepAnchor);
     editor->setTextCursor(restoredCursor);
+    recordChartSelectionTransformUndoEntry(originalAnchor, originalPosition, restoredCursor);
     if (editor->verticalScrollBar() != nullptr) {
         editor->verticalScrollBar()->setValue(qBound(
             editor->verticalScrollBar()->minimum(),

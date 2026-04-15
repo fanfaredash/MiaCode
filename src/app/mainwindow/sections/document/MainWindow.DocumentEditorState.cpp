@@ -5,6 +5,7 @@
 #include "PlainCodeEditor.h"
 #include "TimelineView.h"
 #include "UiText.h"
+#include "common/DebugLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 
 #include <QtCore>
@@ -13,11 +14,321 @@
 
 using namespace miacode::mainwindow::shared;
 
+namespace {
+
+QString cursorSummary(const QTextCursor& cursor)
+{
+    return QStringLiteral(
+        "anchor=%1 pos=%2 has_selection=%3 sel_start=%4 sel_end=%5 sel_len=%6")
+        .arg(cursor.anchor())
+        .arg(cursor.position())
+        .arg(cursor.hasSelection() ? 1 : 0)
+        .arg(cursor.selectionStart())
+        .arg(cursor.selectionEnd())
+        .arg(qAbs(cursor.position() - cursor.anchor()));
+}
+
+QString widgetSummary(QWidget* widget)
+{
+    if (widget == nullptr) {
+        return QStringLiteral("null");
+    }
+    return QStringLiteral("%1(name=%2 ptr=0x%3)")
+        .arg(widget->metaObject() != nullptr ? widget->metaObject()->className() : QStringLiteral("unknown"))
+        .arg(widget->objectName().isEmpty() ? QStringLiteral("(none)") : widget->objectName())
+        .arg(reinterpret_cast<quintptr>(widget), 0, 16);
+}
+
+void logSelectionRestore(const QString& scope, const QString& payload)
+{
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("selection_restore/%1").arg(scope),
+        payload,
+        true
+    );
+}
+
+}  // namespace
+
 std::pair<int, int> MainWindow::DocumentSection::currentCursorLineCol() const
 {
     auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
     const QTextCursor cursor = editor->textCursor();
     return {cursor.blockNumber() + 1, cursor.positionInBlock() + 1};
+}
+
+void MainWindow::DocumentSection::pruneChartSelectionTransformUndoEntriesFromStep(int undoStepThreshold)
+{
+    const qsizetype beforeSize = state_.chartSelectionTransformUndoEntries_.size();
+    for (qsizetype index = state_.chartSelectionTransformUndoEntries_.size() - 1; index >= 0; --index) {
+        if (state_.chartSelectionTransformUndoEntries_.at(index).undoStepAfterApply >= undoStepThreshold) {
+            state_.chartSelectionTransformUndoEntries_.removeAt(index);
+        }
+    }
+    const qsizetype removedCount = beforeSize - state_.chartSelectionTransformUndoEntries_.size();
+    if (removedCount > 0) {
+        logSelectionRestore(
+            QStringLiteral("prune"),
+            QStringLiteral("threshold=%1 removed=%2 remaining=%3")
+                .arg(undoStepThreshold)
+                .arg(removedCount)
+                .arg(state_.chartSelectionTransformUndoEntries_.size())
+        );
+    }
+}
+
+void MainWindow::DocumentSection::updateLastObservedChartEditorUndoRedoSteps()
+{
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr || editor->document() == nullptr) {
+        state_.lastObservedEditorUndoSteps_ = 0;
+        state_.lastObservedEditorRedoSteps_ = 0;
+        return;
+    }
+    state_.lastObservedEditorUndoSteps_ = editor->document()->availableUndoSteps();
+    state_.lastObservedEditorRedoSteps_ = editor->document()->availableRedoSteps();
+}
+
+void MainWindow::DocumentSection::clearChartSelectionTransformUndoEntries()
+{
+    state_.chartSelectionTransformUndoEntries_.clear();
+    updateLastObservedChartEditorUndoRedoSteps();
+}
+
+void MainWindow::DocumentSection::syncChartSelectionTransformUndoState()
+{
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr || editor->document() == nullptr) {
+        state_.chartSelectionTransformUndoEntries_.clear();
+        state_.lastObservedEditorUndoSteps_ = 0;
+        state_.lastObservedEditorRedoSteps_ = 0;
+        return;
+    }
+
+    const int currentUndoSteps = editor->document()->availableUndoSteps();
+    const int currentRedoSteps = editor->document()->availableRedoSteps();
+    if (state_.editorSelectionUndoRedoRestoreInProgress_) {
+        state_.lastObservedEditorUndoSteps_ = currentUndoSteps;
+        state_.lastObservedEditorRedoSteps_ = currentRedoSteps;
+        return;
+    }
+    if (state_.lastObservedEditorRedoSteps_ > 0 && currentRedoSteps == 0) {
+        pruneChartSelectionTransformUndoEntriesFromStep(currentUndoSteps);
+        logSelectionRestore(
+            QStringLiteral("sync_steps"),
+            QStringLiteral("redo_branch_cleared current_undo=%1 current_redo=%2")
+                .arg(currentUndoSteps)
+                .arg(currentRedoSteps)
+        );
+    }
+    state_.lastObservedEditorUndoSteps_ = currentUndoSteps;
+    state_.lastObservedEditorRedoSteps_ = currentRedoSteps;
+}
+
+void MainWindow::DocumentSection::recordChartSelectionTransformUndoEntry(
+    int originalAnchor,
+    int originalPosition,
+    const QTextCursor& transformedCursor)
+{
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr || editor->document() == nullptr) {
+        return;
+    }
+
+    const int undoStepAfterApply = editor->document()->availableUndoSteps();
+    if (undoStepAfterApply <= 0) {
+        return;
+    }
+
+    pruneChartSelectionTransformUndoEntriesFromStep(undoStepAfterApply);
+    SelectionTransformUndoEntry entry;
+    entry.undoStepAfterApply = undoStepAfterApply;
+    entry.originalAnchor = originalAnchor;
+    entry.originalPosition = originalPosition;
+    entry.transformedAnchor = transformedCursor.anchor();
+    entry.transformedPosition = transformedCursor.position();
+    state_.chartSelectionTransformUndoEntries_.append(entry);
+    logSelectionRestore(
+        QStringLiteral("record"),
+        QStringLiteral("undo_step=%1 original={%2} transformed={%3} entries=%4")
+            .arg(undoStepAfterApply)
+            .arg(QStringLiteral(
+                     "anchor=%1 pos=%2 has_selection=%3 sel_start=%4 sel_end=%5 sel_len=%6")
+                     .arg(originalAnchor)
+                     .arg(originalPosition)
+                     .arg(originalAnchor != originalPosition ? 1 : 0)
+                     .arg(qMin(originalAnchor, originalPosition))
+                     .arg(qMax(originalAnchor, originalPosition))
+                     .arg(qAbs(originalPosition - originalAnchor)))
+            .arg(cursorSummary(transformedCursor))
+            .arg(state_.chartSelectionTransformUndoEntries_.size())
+    );
+    updateLastObservedChartEditorUndoRedoSteps();
+}
+
+const MainWindow::SelectionTransformUndoEntry* MainWindow::DocumentSection::findChartSelectionTransformUndoEntry(
+    int undoStepAfterApply) const
+{
+    for (const SelectionTransformUndoEntry& entry : state_.chartSelectionTransformUndoEntries_) {
+        if (entry.undoStepAfterApply == undoStepAfterApply) {
+            return &entry;
+        }
+    }
+    return nullptr;
+}
+
+bool MainWindow::DocumentSection::restoreChartSelectionTransformCursor(
+    const SelectionTransformUndoEntry& entry,
+    bool transformedSelection)
+{
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr || editor->document() == nullptr) {
+        return false;
+    }
+
+    QTextDocument* document = editor->document();
+    const int maxPosition = qMax(0, document->characterCount() - 1);
+    const int anchor = transformedSelection ? entry.transformedAnchor : entry.originalAnchor;
+    const int position = transformedSelection ? entry.transformedPosition : entry.originalPosition;
+    if (anchor < 0 || position < 0) {
+        return false;
+    }
+
+    const int boundedAnchor = qBound(0, anchor, maxPosition);
+    const int boundedPosition = qBound(0, position, maxPosition);
+    const auto applySelection = [boundedAnchor, boundedPosition](PlainCodeEditor* target) {
+        if (target == nullptr || target->document() == nullptr) {
+            return;
+        }
+        QTextDocument* targetDocument = target->document();
+        const int targetMaxPosition = qMax(0, targetDocument->characterCount() - 1);
+        QTextCursor cursor(targetDocument);
+        cursor.setPosition(qBound(0, boundedAnchor, targetMaxPosition));
+        cursor.setPosition(qBound(0, boundedPosition, targetMaxPosition), QTextCursor::KeepAnchor);
+        target->setTextCursor(cursor);
+    };
+
+    logSelectionRestore(
+        QStringLiteral("restore_begin"),
+        QStringLiteral("mode=%1 focus_before=%2 target=%3 requested_anchor=%4 requested_pos=%5 current={%6}")
+            .arg(transformedSelection ? QStringLiteral("redo") : QStringLiteral("undo"))
+            .arg(widgetSummary(QApplication::focusWidget()))
+            .arg(widgetSummary(editor))
+            .arg(anchor)
+            .arg(position)
+            .arg(cursorSummary(editor->textCursor()))
+    );
+    editor->setFocus(Qt::ShortcutFocusReason);
+    applySelection(editor);
+    logSelectionRestore(
+        QStringLiteral("restore_immediate"),
+        QStringLiteral("mode=%1 focus_after=%2 current={%3}")
+            .arg(transformedSelection ? QStringLiteral("redo") : QStringLiteral("undo"))
+            .arg(widgetSummary(QApplication::focusWidget()))
+            .arg(cursorSummary(editor->textCursor()))
+    );
+    const QPointer<PlainCodeEditor> guard(editor);
+    QTimer::singleShot(0, editor, [guard, applySelection, transformedSelection]() {
+        if (guard.isNull()) {
+            return;
+        }
+        guard->setFocus(Qt::ShortcutFocusReason);
+        applySelection(guard.data());
+        logSelectionRestore(
+            QStringLiteral("restore_deferred"),
+            QStringLiteral("mode=%1 focus_after=%2 current={%3}")
+                .arg(transformedSelection ? QStringLiteral("redo") : QStringLiteral("undo"))
+                .arg(widgetSummary(QApplication::focusWidget()))
+                .arg(cursorSummary(guard->textCursor()))
+        );
+    });
+    return true;
+}
+
+bool MainWindow::DocumentSection::undoChartEditorWithSelectionRestore()
+{
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr || editor->document() == nullptr || !editor->document()->isUndoAvailable()) {
+        return false;
+    }
+
+    const int undoStepBefore = editor->document()->availableUndoSteps();
+    logSelectionRestore(
+        QStringLiteral("undo_begin"),
+        QStringLiteral("undo_step_before=%1 focus=%2 current={%3}")
+            .arg(undoStepBefore)
+            .arg(widgetSummary(QApplication::focusWidget()))
+            .arg(cursorSummary(editor->textCursor()))
+    );
+    state_.editorSelectionUndoRedoRestoreInProgress_ = true;
+    editor->undo();
+    if (const SelectionTransformUndoEntry* entry = findChartSelectionTransformUndoEntry(undoStepBefore); entry != nullptr) {
+        logSelectionRestore(
+            QStringLiteral("undo_match"),
+            QStringLiteral("undo_step=%1 matched=1 original_anchor=%2 original_pos=%3 transformed_anchor=%4 transformed_pos=%5")
+                .arg(undoStepBefore)
+                .arg(entry->originalAnchor)
+                .arg(entry->originalPosition)
+                .arg(entry->transformedAnchor)
+                .arg(entry->transformedPosition)
+        );
+        (void)restoreChartSelectionTransformCursor(*entry, false);
+    } else {
+        logSelectionRestore(
+            QStringLiteral("undo_match"),
+            QStringLiteral("undo_step=%1 matched=0 post_undo_step=%2 current={%3}")
+                .arg(undoStepBefore)
+                .arg(editor->document()->availableUndoSteps())
+                .arg(cursorSummary(editor->textCursor()))
+        );
+    }
+    state_.editorSelectionUndoRedoRestoreInProgress_ = false;
+    updateLastObservedChartEditorUndoRedoSteps();
+    return true;
+}
+
+bool MainWindow::DocumentSection::redoChartEditorWithSelectionRestore()
+{
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr || editor->document() == nullptr || !editor->document()->isRedoAvailable()) {
+        return false;
+    }
+
+    logSelectionRestore(
+        QStringLiteral("redo_begin"),
+        QStringLiteral("undo_step_before=%1 redo_step_before=%2 focus=%3 current={%4}")
+            .arg(editor->document()->availableUndoSteps())
+            .arg(editor->document()->availableRedoSteps())
+            .arg(widgetSummary(QApplication::focusWidget()))
+            .arg(cursorSummary(editor->textCursor()))
+    );
+    state_.editorSelectionUndoRedoRestoreInProgress_ = true;
+    editor->redo();
+    const int undoStepAfterRedo = editor->document()->availableUndoSteps();
+    if (const SelectionTransformUndoEntry* entry = findChartSelectionTransformUndoEntry(undoStepAfterRedo); entry != nullptr) {
+        logSelectionRestore(
+            QStringLiteral("redo_match"),
+            QStringLiteral("undo_step_after=%1 matched=1 original_anchor=%2 original_pos=%3 transformed_anchor=%4 transformed_pos=%5")
+                .arg(undoStepAfterRedo)
+                .arg(entry->originalAnchor)
+                .arg(entry->originalPosition)
+                .arg(entry->transformedAnchor)
+                .arg(entry->transformedPosition)
+        );
+        (void)restoreChartSelectionTransformCursor(*entry, true);
+    } else {
+        logSelectionRestore(
+            QStringLiteral("redo_match"),
+            QStringLiteral("undo_step_after=%1 matched=0 redo_step_after=%2 current={%3}")
+                .arg(undoStepAfterRedo)
+                .arg(editor->document()->availableRedoSteps())
+                .arg(cursorSummary(editor->textCursor()))
+        );
+    }
+    state_.editorSelectionUndoRedoRestoreInProgress_ = false;
+    updateLastObservedChartEditorUndoRedoSteps();
+    return true;
 }
 
 bool MainWindow::DocumentSection::currentSelectionRange(int* startPos, int* endPos) const
@@ -75,6 +386,7 @@ void MainWindow::DocumentSection::setEditorText(const QString& text)
     editor->document()->clearUndoRedoStacks();
     editor->document()->setModified(false);
     state_.editorUndoSaveAnchor_ = editor->document()->availableUndoSteps();
+    clearChartSelectionTransformUndoEntries();
     // QSignalBlocker suppresses blockCountChanged, so force line-number gutter recompute.
     editor->refreshLineNumberAreaLayout();
     state_.suppressTextDirtyTracking_ = previousSuppress;

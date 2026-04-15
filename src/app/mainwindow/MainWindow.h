@@ -378,6 +378,14 @@ private:
         SimaiDifficultyData difficultyData;
     };
 
+    struct SelectionTransformUndoEntry {
+        int undoStepAfterApply = 0;
+        int originalAnchor = -1;
+        int originalPosition = -1;
+        int transformedAnchor = -1;
+        int transformedPosition = -1;
+    };
+
     class EditorSection;
     class PreferencesSection;
     class PreviewSection;
