@@ -29,6 +29,10 @@ public:
 private:
     bool eventFilter(QObject* watched, QEvent* event) override;
     bool previewSeekHotRectContainsGlobalPoint(const QPoint& globalPoint) const;
+    bool shouldTraceFocusObject(QObject* watched) const;
+    QString describeFocusObject(QObject* object) const;
+    QString focusReasonName(Qt::FocusReason reason) const;
+    void logFocusEvent(const QString& action, QObject* watched = nullptr, QEvent* event = nullptr, const QString& detail = QString()) const;
 
     QIcon appIcon_;
     std::unique_ptr<MainWindow> backend_;

@@ -27,8 +27,273 @@ bool widgetMatchesOrDescendsFrom(QWidget* widget, QWidget* root)
 
 }  // namespace
 
+QTextEdit* MainWindow::WindowSection::resolveRestorableTextEdit(QWidget* widget) const
+{
+    if (owner_.editorWidget_ != nullptr && widgetMatchesOrDescendsFrom(widget, owner_.editorWidget_)) {
+        return qobject_cast<QTextEdit*>(owner_.editorWidget_);
+    }
+    if (owner_.metadataExtraEdit_ != nullptr && widgetMatchesOrDescendsFrom(widget, owner_.metadataExtraEdit_)) {
+        return owner_.metadataExtraEdit_;
+    }
+    return nullptr;
+}
+
+bool MainWindow::WindowSection::shouldRespectFocusedWidgetOnRestore(QWidget* widget, QTextEdit* target) const
+{
+    if (widget == nullptr || target == nullptr) {
+        return false;
+    }
+    if (widget == target || target->isAncestorOf(widget)) {
+        return false;
+    }
+    if (widget == &owner_ || widget == owner_.centralWidget()) {
+        return false;
+    }
+
+    return qobject_cast<QLineEdit*>(widget) != nullptr
+        || qobject_cast<QTextEdit*>(widget) != nullptr
+        || qobject_cast<QAbstractButton*>(widget) != nullptr
+        || qobject_cast<QAbstractSlider*>(widget) != nullptr
+        || qobject_cast<QAbstractItemView*>(widget) != nullptr
+        || qobject_cast<QComboBox*>(widget) != nullptr
+        || qobject_cast<QSpinBox*>(widget) != nullptr
+        || qobject_cast<QDateTimeEdit*>(widget) != nullptr
+        || qobject_cast<QTabBar*>(widget) != nullptr;
+}
+
+void MainWindow::WindowSection::handleApplicationFocusChanged(QWidget* old, QWidget* now)
+{
+    this->logFocusDebug(QStringLiteral("app_focus_changed"), old, now);
+    QTextEdit* newTextEdit = this->resolveRestorableTextEdit(now);
+    if (newTextEdit != nullptr) {
+        this->logFocusDebug(
+            QStringLiteral("app_focus_changed_clear_for_new_text"),
+            old,
+            now,
+            QStringLiteral("new_restorable=%1").arg(this->describeFocusWidget(newTextEdit))
+        );
+        this->clearFocusedTextEditState();
+        return;
+    }
+
+    if (now != nullptr && (now == &owner_ || owner_.isAncestorOf(now))) {
+        this->logFocusDebug(QStringLiteral("app_focus_changed_clear_for_owner_child"), old, now);
+        this->clearFocusedTextEditState();
+        return;
+    }
+
+    if (QTextEdit* oldTextEdit = this->resolveRestorableTextEdit(old); oldTextEdit != nullptr) {
+        this->logFocusDebug(
+            QStringLiteral("app_focus_changed_remember_old_text"),
+            old,
+            now,
+            QStringLiteral("old_restorable=%1").arg(this->describeFocusWidget(oldTextEdit))
+        );
+        this->rememberFocusedTextEditState(oldTextEdit);
+    }
+}
+
+void MainWindow::WindowSection::handleApplicationStateChanged(Qt::ApplicationState state)
+{
+    this->logFocusDebug(
+        QStringLiteral("application_state_changed"),
+        QApplication::focusWidget(),
+        owner_.focusWidget(),
+        QStringLiteral("state=%1").arg(static_cast<int>(state))
+    );
+    if (state == Qt::ApplicationActive) {
+        this->restoreFocusedTextEditState();
+        return;
+    }
+    if (state == Qt::ApplicationInactive || state == Qt::ApplicationHidden) {
+        this->rememberFocusedTextEditState();
+    }
+}
+
+void MainWindow::WindowSection::rememberFocusedTextEditState(QTextEdit* textEdit)
+{
+    pendingTextFocusWidget_ = textEdit;
+    pendingTextCursorAnchor_ = -1;
+    pendingTextCursorPosition_ = -1;
+    if (pendingTextFocusWidget_.isNull()) {
+        return;
+    }
+
+    const QTextCursor cursor = pendingTextFocusWidget_->textCursor();
+    pendingTextCursorAnchor_ = cursor.anchor();
+    pendingTextCursorPosition_ = cursor.position();
+    this->logFocusDebug(
+        QStringLiteral("remember_text_focus_state"),
+        textEdit,
+        QApplication::focusWidget(),
+        QStringLiteral("saved_anchor=%1 saved_pos=%2")
+            .arg(pendingTextCursorAnchor_)
+            .arg(pendingTextCursorPosition_)
+    );
+}
+
+void MainWindow::WindowSection::rememberFocusedTextEditState()
+{
+    this->rememberFocusedTextEditState(this->resolveRestorableTextEdit(QApplication::focusWidget()));
+}
+
+void MainWindow::WindowSection::clearFocusedTextEditState()
+{
+    if (!pendingTextFocusWidget_.isNull()) {
+        this->logFocusDebug(QStringLiteral("clear_text_focus_state"), pendingTextFocusWidget_.data(), QApplication::focusWidget());
+    }
+    pendingTextFocusWidget_.clear();
+    pendingTextCursorAnchor_ = -1;
+    pendingTextCursorPosition_ = -1;
+}
+
+void MainWindow::WindowSection::restoreFocusedTextEditState()
+{
+    if (pendingTextFocusWidget_.isNull()) {
+        this->logFocusDebug(QStringLiteral("restore_text_focus_state_skip_no_pending"), nullptr, QApplication::focusWidget());
+        return;
+    }
+
+    QPointer<QTextEdit> target = pendingTextFocusWidget_;
+    const int savedAnchor = pendingTextCursorAnchor_;
+    const int savedPosition = pendingTextCursorPosition_;
+    this->logFocusDebug(
+        QStringLiteral("restore_text_focus_state_schedule"),
+        target.data(),
+        QApplication::focusWidget(),
+        QStringLiteral("saved_anchor=%1 saved_pos=%2").arg(savedAnchor).arg(savedPosition)
+    );
+    pendingTextFocusWidget_.clear();
+    pendingTextCursorAnchor_ = -1;
+    pendingTextCursorPosition_ = -1;
+    QTimer::singleShot(0, &owner_, [this, target, savedAnchor, savedPosition]() {
+        this->restoreFocusedTextEditStateAttempt(target, savedAnchor, savedPosition, 0);
+    });
+}
+
+void MainWindow::WindowSection::restoreFocusedTextEditStateAttempt(
+    QPointer<QTextEdit> target,
+    int savedAnchor,
+    int savedPosition,
+    int attempt)
+{
+    constexpr int kMaxRestoreAttempts = 6;
+    constexpr int kRestoreRetryDelayMs = 30;
+
+    const Qt::ApplicationState appState =
+        qobject_cast<QGuiApplication*>(QCoreApplication::instance()) != nullptr
+            ? qobject_cast<QGuiApplication*>(QCoreApplication::instance())->applicationState()
+            : Qt::ApplicationInactive;
+    QWidget* topLevel = !target.isNull() ? target->window() : nullptr;
+    const bool topLevelVisible = topLevel != nullptr && topLevel->isVisible();
+    const bool topLevelActive = topLevel != nullptr && topLevel->isActiveWindow();
+
+    if (target.isNull() || !target->isVisible() || appState != Qt::ApplicationActive) {
+        this->logFocusDebug(
+            QStringLiteral("restore_text_focus_state_abort_target_invalid"),
+            target.data(),
+            QApplication::focusWidget(),
+            QStringLiteral("attempt=%1 target_null=%2 app_state=%3 target_visible=%4 top_level_visible=%5 top_level_active=%6")
+                .arg(attempt)
+                .arg(target.isNull() ? 1 : 0)
+                .arg(static_cast<int>(appState))
+                .arg((!target.isNull() && target->isVisible()) ? 1 : 0)
+                .arg(topLevelVisible ? 1 : 0)
+                .arg(topLevelActive ? 1 : 0)
+        );
+        return;
+    }
+
+    if ((!topLevelVisible || !topLevelActive) && attempt < kMaxRestoreAttempts) {
+        this->logFocusDebug(
+            QStringLiteral("restore_text_focus_state_retry_wait_top_level"),
+            target.data(),
+            QApplication::focusWidget(),
+            QStringLiteral("attempt=%1 top_level_visible=%2 top_level_active=%3")
+                .arg(attempt)
+                .arg(topLevelVisible ? 1 : 0)
+                .arg(topLevelActive ? 1 : 0)
+        );
+        QTimer::singleShot(kRestoreRetryDelayMs, &owner_, [this, target, savedAnchor, savedPosition, attempt]() {
+            this->restoreFocusedTextEditStateAttempt(target, savedAnchor, savedPosition, attempt + 1);
+        });
+        return;
+    }
+
+    QWidget* focus = QApplication::focusWidget();
+    if (this->shouldRespectFocusedWidgetOnRestore(focus, target.data())) {
+        this->logFocusDebug(
+            QStringLiteral("restore_text_focus_state_abort_respect_current_focus"),
+            target.data(),
+            focus,
+            QStringLiteral("attempt=%1 current_focus=%2").arg(attempt).arg(this->describeFocusWidget(focus))
+        );
+        return;
+    }
+
+    target->setFocus(Qt::ActiveWindowFocusReason);
+    if (QTextDocument* document = target->document();
+        document != nullptr && savedAnchor >= 0 && savedPosition >= 0) {
+        const int maxPosition = qMax(0, document->characterCount() - 1);
+        QTextCursor cursor(document);
+        cursor.setPosition(qBound(0, savedAnchor, maxPosition));
+        cursor.setPosition(qBound(0, savedPosition, maxPosition), QTextCursor::KeepAnchor);
+        target->setTextCursor(cursor);
+    }
+
+    QWidget* appliedFocus = QApplication::focusWidget();
+    const bool focusLanded = appliedFocus == target.data() || (appliedFocus != nullptr && target->isAncestorOf(appliedFocus));
+    if (!focusLanded && attempt < kMaxRestoreAttempts) {
+        this->logFocusDebug(
+            QStringLiteral("restore_text_focus_state_retry_focus_not_landed"),
+            target.data(),
+            appliedFocus,
+            QStringLiteral("attempt=%1 applied_focus=%2").arg(attempt).arg(this->describeFocusWidget(appliedFocus))
+        );
+        QTimer::singleShot(kRestoreRetryDelayMs, &owner_, [this, target, savedAnchor, savedPosition, attempt]() {
+            this->restoreFocusedTextEditStateAttempt(target, savedAnchor, savedPosition, attempt + 1);
+        });
+        return;
+    }
+
+    this->logFocusDebug(
+        QStringLiteral("restore_text_focus_state_applied"),
+        target.data(),
+        appliedFocus,
+        QStringLiteral("attempt=%1 saved_anchor=%2 saved_pos=%3")
+            .arg(attempt)
+            .arg(savedAnchor)
+            .arg(savedPosition)
+    );
+}
+
 bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
 {
+    if (owner_.runtimeDebugOutputEnabled_
+        && event != nullptr
+        && (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut)
+        && (watched == owner_.editorWidget_
+            || watched == owner_.editorViewport_
+            || watched == owner_.metadataExtraEdit_
+            || watched == owner_.editorFindEdit_
+            || watched == owner_.editorReplaceEdit_
+            || watched == owner_.previewPanel_
+            || watched == owner_.previewCanvasContainer_
+            || watched == owner_.previewCanvasFrame_
+            || watched == owner_.previewSlider_)) {
+        auto* widget = qobject_cast<QWidget*>(watched);
+        auto* focusEvent = static_cast<QFocusEvent*>(event);
+        this->logFocusDebug(
+            event->type() == QEvent::FocusIn ? QStringLiteral("watched_focus_in") : QStringLiteral("watched_focus_out"),
+            widget,
+            QApplication::focusWidget(),
+            QStringLiteral("watched=%1 reason=%2 spontaneous=%3")
+                .arg(this->describeFocusWidget(widget))
+                .arg(this->formatFocusReason(focusEvent != nullptr ? focusEvent->reason() : Qt::NoFocusReason))
+                .arg(event->spontaneous() ? 1 : 0)
+        );
+    }
+
     if (event != nullptr && event->type() == QEvent::ToolTip) {
         auto* widget = qobject_cast<QWidget*>(watched);
         const bool allowPreviewTooltip =
@@ -650,6 +915,12 @@ void MainWindow::WindowSection::changeEvent(QEvent* event)
     } else if (type == QEvent::ActivationChange) {
         this->applySystemWindowBackdrop();
         const bool active = owner_.isActiveWindow();
+        this->logFocusDebug(
+            active ? QStringLiteral("activation_change_active") : QStringLiteral("activation_change_inactive"),
+            QApplication::focusWidget(),
+            owner_.focusWidget(),
+            QStringLiteral("spontaneous=%1").arg(event != nullptr && event->spontaneous() ? 1 : 0)
+        );
         this->logWindowGeometryDebug(
             "activation_change",
             QString("is_active=%1 spontaneous=%2")
@@ -657,6 +928,7 @@ void MainWindow::WindowSection::changeEvent(QEvent* event)
                 .arg(event != nullptr && event->spontaneous() ? 1 : 0)
         );
         if (!active) {
+            this->rememberFocusedTextEditState();
             owner_.runAutosaveCheck(false);
         }
     } else if (type == QEvent::ZOrderChange) {
