@@ -2,11 +2,22 @@
 
 #include "common/DebugOptions.h"
 
+#include <QApplication>
+
 MainWindow::WindowSection::WindowSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state)
     : owner_(owner)
     , ui_(ui)
     , state_(state)
-{}
+{
+    if (QApplication* app = qobject_cast<QApplication*>(QCoreApplication::instance()); app != nullptr) {
+        QObject::connect(app, &QApplication::focusChanged, &owner_, [this](QWidget* old, QWidget* now) {
+            this->handleApplicationFocusChanged(old, now);
+        });
+        QObject::connect(app, &QGuiApplication::applicationStateChanged, &owner_, [this](Qt::ApplicationState state) {
+            this->handleApplicationStateChanged(state);
+        });
+    }
+}
 
 bool MainWindow::quickShellRootWindowFrameGeometryAvailable() const
 {

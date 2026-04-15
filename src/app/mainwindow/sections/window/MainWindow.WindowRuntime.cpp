@@ -123,6 +123,23 @@ QString windowVisibilityName(QWindow::Visibility visibility)
     return QStringLiteral("Unknown(%1)").arg(static_cast<int>(visibility));
 }
 
+QString focusPolicyName(Qt::FocusPolicy policy)
+{
+    switch (policy) {
+    case Qt::NoFocus:
+        return QStringLiteral("NoFocus");
+    case Qt::TabFocus:
+        return QStringLiteral("TabFocus");
+    case Qt::ClickFocus:
+        return QStringLiteral("ClickFocus");
+    case Qt::StrongFocus:
+        return QStringLiteral("StrongFocus");
+    case Qt::WheelFocus:
+        return QStringLiteral("WheelFocus");
+    }
+    return QStringLiteral("FocusPolicy(%1)").arg(static_cast<int>(policy));
+}
+
 QString platformSurfaceDetail(const QEvent* event)
 {
     const auto* surfaceEvent = dynamic_cast<const QPlatformSurfaceEvent*>(event);
@@ -393,6 +410,111 @@ void MainWindow::WindowSection::appendOutput(const QString& title, const QString
     owner_.outputView_->appendPlainText(timestampLine(title));
     owner_.outputView_->appendPlainText(payload);
     owner_.outputView_->appendPlainText(QString());
+}
+
+QString MainWindow::WindowSection::describeFocusWidget(QWidget* widget) const
+{
+    if (widget == nullptr) {
+        return QStringLiteral("null");
+    }
+
+    const auto matchesOrDescendsFrom = [](QWidget* candidate, QWidget* root) {
+        return candidate != nullptr && root != nullptr && (candidate == root || root->isAncestorOf(candidate));
+    };
+
+    QStringList parts;
+    parts.append(QStringLiteral("class=%1").arg(widget->metaObject() != nullptr ? widget->metaObject()->className() : "unknown"));
+    parts.append(QStringLiteral("ptr=%1").arg(pointerHex(widget)));
+    if (!widget->objectName().isEmpty()) {
+        parts.append(QStringLiteral("name=%1").arg(widget->objectName()));
+    }
+    parts.append(QStringLiteral("vis=%1").arg(widget->isVisible() ? 1 : 0));
+    parts.append(QStringLiteral("enabled=%1").arg(widget->isEnabled() ? 1 : 0));
+    parts.append(QStringLiteral("focus=%1").arg(widget->hasFocus() ? 1 : 0));
+    parts.append(QStringLiteral("policy=%1").arg(focusPolicyName(widget->focusPolicy())));
+    parts.append(QStringLiteral("in_owner=%1").arg(owner_.isAncestorOf(widget) || widget == &owner_ ? 1 : 0));
+    parts.append(QStringLiteral("in_editor=%1").arg(matchesOrDescendsFrom(widget, owner_.editorWidget_) ? 1 : 0));
+    parts.append(QStringLiteral("viewport=%1").arg(widget == owner_.editorViewport_ ? 1 : 0));
+    parts.append(QStringLiteral("in_metadata=%1").arg(matchesOrDescendsFrom(widget, owner_.metadataExtraEdit_) ? 1 : 0));
+    parts.append(QStringLiteral("in_preview=%1").arg(matchesOrDescendsFrom(widget, owner_.previewPanel_) ? 1 : 0));
+
+    if (QWidget* focusProxy = widget->focusProxy(); focusProxy != nullptr) {
+        parts.append(QStringLiteral("focus_proxy=%1").arg(pointerHex(focusProxy)));
+    }
+
+    QTextEdit* restorableTextEdit = this->resolveRestorableTextEdit(widget);
+    if (restorableTextEdit != nullptr) {
+        const bool chartEditor = restorableTextEdit == owner_.editorWidget_;
+        const QTextCursor cursor = restorableTextEdit->textCursor();
+        const int selectionLength = qAbs(cursor.position() - cursor.anchor());
+        parts.append(QStringLiteral("restorable=1"));
+        parts.append(QStringLiteral("restorable_id=%1").arg(chartEditor ? "chart_editor" : "metadata_extra"));
+        parts.append(QStringLiteral("cursor_anchor=%1").arg(cursor.anchor()));
+        parts.append(QStringLiteral("cursor_pos=%1").arg(cursor.position()));
+        parts.append(QStringLiteral("selection_len=%1").arg(selectionLength));
+        if (QTextDocument* document = restorableTextEdit->document(); document != nullptr) {
+            parts.append(QStringLiteral("doc_chars=%1").arg(qMax(0, document->characterCount() - 1)));
+        }
+    }
+
+    if (auto* lineEdit = qobject_cast<QLineEdit*>(widget); lineEdit != nullptr) {
+        parts.append(QStringLiteral("line_text_len=%1").arg(lineEdit->text().size()));
+    }
+
+    return parts.join(' ');
+}
+
+QString MainWindow::WindowSection::formatFocusReason(Qt::FocusReason reason) const
+{
+    switch (reason) {
+    case Qt::MouseFocusReason:
+        return QStringLiteral("MouseFocusReason");
+    case Qt::TabFocusReason:
+        return QStringLiteral("TabFocusReason");
+    case Qt::BacktabFocusReason:
+        return QStringLiteral("BacktabFocusReason");
+    case Qt::ActiveWindowFocusReason:
+        return QStringLiteral("ActiveWindowFocusReason");
+    case Qt::PopupFocusReason:
+        return QStringLiteral("PopupFocusReason");
+    case Qt::ShortcutFocusReason:
+        return QStringLiteral("ShortcutFocusReason");
+    case Qt::MenuBarFocusReason:
+        return QStringLiteral("MenuBarFocusReason");
+    case Qt::OtherFocusReason:
+        return QStringLiteral("OtherFocusReason");
+    case Qt::NoFocusReason:
+        return QStringLiteral("NoFocusReason");
+    }
+    return QStringLiteral("FocusReason(%1)").arg(static_cast<int>(reason));
+}
+
+void MainWindow::WindowSection::logFocusDebug(const QString& reason, QWidget* oldWidget, QWidget* nowWidget, const QString& detail)
+{
+    if (!owner_.runtimeDebugOutputEnabled_) {
+        return;
+    }
+
+    QString payload = QStringLiteral("seq=%1 reason=%2 active=%3")
+        .arg(++owner_.windowEventDebugSequence_)
+        .arg(reason)
+        .arg(owner_.isActiveWindow() ? 1 : 0);
+    payload += QStringLiteral(" old={%1}").arg(this->describeFocusWidget(oldWidget));
+    payload += QStringLiteral(" now={%1}").arg(this->describeFocusWidget(nowWidget));
+    payload += QStringLiteral(" app_focus={%1}").arg(this->describeFocusWidget(QApplication::focusWidget()));
+    payload += QStringLiteral(" owner_focus={%1}").arg(this->describeFocusWidget(owner_.focusWidget()));
+    if (!pendingTextFocusWidget_.isNull()) {
+        payload += QStringLiteral(" pending={%1 saved_anchor=%2 saved_pos=%3}")
+            .arg(this->describeFocusWidget(pendingTextFocusWidget_.data()))
+            .arg(pendingTextCursorAnchor_)
+            .arg(pendingTextCursorPosition_);
+    } else {
+        payload += QStringLiteral(" pending={null}");
+    }
+    if (!detail.isEmpty()) {
+        payload += QStringLiteral(" detail=%1").arg(detail);
+    }
+    this->appendOutput(QStringLiteral("window/focus"), payload);
 }
 
 QList<QAction*> MainWindow::WindowSection::quickShellShortcutActions() const

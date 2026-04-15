@@ -58,6 +58,9 @@ public:
     void logTopLevelWindowSnapshot(const QString& tag);
     void closeEvent(QCloseEvent* event);
     void appendOutput(const QString& title, const QString& payload);
+    QString describeFocusWidget(QWidget* widget) const;
+    QString formatFocusReason(Qt::FocusReason reason) const;
+    void logFocusDebug(const QString& reason, QWidget* oldWidget = nullptr, QWidget* nowWidget = nullptr, const QString& detail = QString());
     QTextEdit* activeFindTarget() const;
     bool runFindInEditor(bool backward);
     void updateEditorFindBarGeometry();
@@ -82,7 +85,20 @@ public:
     void changeEvent(QEvent* event);
 
 private:
+    QTextEdit* resolveRestorableTextEdit(QWidget* widget) const;
+    bool shouldRespectFocusedWidgetOnRestore(QWidget* widget, QTextEdit* target) const;
+    void handleApplicationFocusChanged(QWidget* old, QWidget* now);
+    void handleApplicationStateChanged(Qt::ApplicationState state);
+    void rememberFocusedTextEditState(QTextEdit* textEdit);
+    void rememberFocusedTextEditState();
+    void restoreFocusedTextEditState();
+    void restoreFocusedTextEditStateAttempt(QPointer<QTextEdit> target, int savedAnchor, int savedPosition, int attempt);
+    void clearFocusedTextEditState();
+
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;
     MainWindow::MainWindowState& state_;
+    QPointer<QTextEdit> pendingTextFocusWidget_;
+    int pendingTextCursorAnchor_ = -1;
+    int pendingTextCursorPosition_ = -1;
 };

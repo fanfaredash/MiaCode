@@ -5,22 +5,27 @@
 #include "QuickShellStyleBridge.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "common/DebugOptions.h"
 #include "common/DebugLog.h"
 #include "mainwindow/MainWindow.h"
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
 
+#include <QApplication>
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QKeyEvent>
+#include <QLineEdit>
 #include <QQmlError>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
+#include <QTextEdit>
 #include <QTextStream>
 #include <QTimer>
 #include <QEventLoop>
+#include <QWidget>
 #include <QtQml>
 
 #ifdef Q_OS_WIN
@@ -28,6 +33,11 @@
 #endif
 
 namespace {
+
+QString pointerHex(const void* pointer)
+{
+    return QStringLiteral("0x%1").arg(reinterpret_cast<quintptr>(pointer), 0, 16);
+}
 
 void appendQuickShellRuntimeLog(const QString& action, const QString& payload = QString())
 {
@@ -40,6 +50,51 @@ void appendQuickShellRuntimeLog(const QString& action, const QString& payload = 
         QStringLiteral("quick_shell"),
         text
     );
+}
+
+void appendQuickShellFocusLog(const QString& action, const QString& payload = QString())
+{
+    QString text = QStringLiteral("action=%1").arg(action);
+    if (!payload.trimmed().isEmpty()) {
+        text += QStringLiteral(" ") + payload.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("quick_shell/focus"),
+        text
+    );
+}
+
+QString focusPolicyName(Qt::FocusPolicy policy)
+{
+    switch (policy) {
+    case Qt::NoFocus:
+        return QStringLiteral("NoFocus");
+    case Qt::TabFocus:
+        return QStringLiteral("TabFocus");
+    case Qt::ClickFocus:
+        return QStringLiteral("ClickFocus");
+    case Qt::StrongFocus:
+        return QStringLiteral("StrongFocus");
+    case Qt::WheelFocus:
+        return QStringLiteral("WheelFocus");
+    }
+    return QStringLiteral("FocusPolicy(%1)").arg(static_cast<int>(policy));
+}
+
+QString applicationStateName(Qt::ApplicationState state)
+{
+    switch (state) {
+    case Qt::ApplicationSuspended:
+        return QStringLiteral("ApplicationSuspended");
+    case Qt::ApplicationHidden:
+        return QStringLiteral("ApplicationHidden");
+    case Qt::ApplicationInactive:
+        return QStringLiteral("ApplicationInactive");
+    case Qt::ApplicationActive:
+        return QStringLiteral("ApplicationActive");
+    }
+    return QStringLiteral("ApplicationState(%1)").arg(static_cast<int>(state));
 }
 
 #ifdef Q_OS_WIN
@@ -162,6 +217,29 @@ bool QuickShellBootstrap::start()
     if (qApp != nullptr) {
         qApp->installEventFilter(this);
     }
+    if (QApplication* app = qobject_cast<QApplication*>(qApp); app != nullptr) {
+        QObject::connect(app, &QApplication::focusChanged, this, [this](QWidget* old, QWidget* now) {
+            if (!shouldTraceFocusObject(old) && !shouldTraceFocusObject(now)) {
+                return;
+            }
+            logFocusEvent(
+                QStringLiteral("focus_changed_signal"),
+                now,
+                nullptr,
+                QStringLiteral("old={%1} now={%2}")
+                    .arg(describeFocusObject(old))
+                    .arg(describeFocusObject(now))
+            );
+        });
+    }
+    QObject::connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
+        logFocusEvent(
+            QStringLiteral("application_state_changed"),
+            qApp != nullptr ? qApp->focusWindow() : nullptr,
+            nullptr,
+            QStringLiteral("state=%1").arg(applicationStateName(state))
+        );
+    });
     engine_->addImportPath(QCoreApplication::applicationDirPath() + QStringLiteral("/qml"));
     ensurePreviewQuickTypesRegisteredForQuickShell();
 
@@ -295,6 +373,14 @@ bool QuickShellBootstrap::start()
             QObject::connect(window, &QQuickWindow::activeChanged, this, [window]() {
                 applySystemBackdropToQuickWindow(window);
             });
+            QObject::connect(window, &QQuickWindow::activeChanged, this, [this, window]() {
+                logFocusEvent(
+                    QStringLiteral("root_window_active_changed"),
+                    window,
+                    nullptr,
+                    QStringLiteral("active=%1").arg(window->isActive() ? 1 : 0)
+                );
+            });
             if (styleBridge_ != nullptr) {
                 QObject::connect(styleBridge_.get(), &QuickShellStyleBridge::appearanceChanged, this, [window]() {
                     applySystemBackdropToQuickWindow(window);
@@ -354,6 +440,20 @@ bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
 {
     if (controller_ == nullptr || event == nullptr) {
         return QObject::eventFilter(watched, event);
+    }
+
+    if (shouldTraceFocusObject(watched)) {
+        switch (event->type()) {
+        case QEvent::FocusIn:
+        case QEvent::FocusOut:
+        case QEvent::WindowActivate:
+        case QEvent::WindowDeactivate:
+        case QEvent::ActivationChange:
+            logFocusEvent(QStringLiteral("event_filter"), watched, event);
+            break;
+        default:
+            break;
+        }
     }
 
     if (!controller_->previewFullscreen() && event->type() == QEvent::MouseButtonPress) {
@@ -478,4 +578,138 @@ QuickShellController* QuickShellBootstrap::controller() const
 QuickShellStyleBridge* QuickShellBootstrap::styleBridge() const
 {
     return styleBridge_.get();
+}
+
+bool QuickShellBootstrap::shouldTraceFocusObject(QObject* watched) const
+{
+    if (watched == nullptr) {
+        return false;
+    }
+
+    if (auto* widget = qobject_cast<QWidget*>(watched); widget != nullptr) {
+        const auto matchesOrDescends = [widget](QWidget* root) {
+            return root != nullptr && (widget == root || root->isAncestorOf(widget));
+        };
+        if (surfaceHost_ != nullptr
+            && (matchesOrDescends(surfaceHost_->topChromeSurfaceWidget())
+                || matchesOrDescends(surfaceHost_->sidebarSurfaceWidget())
+                || matchesOrDescends(surfaceHost_->workspaceSurfaceWidget())
+                || matchesOrDescends(surfaceHost_->statusSurfaceWidget()))) {
+            return true;
+        }
+        return qobject_cast<QTextEdit*>(widget) != nullptr
+            || qobject_cast<QLineEdit*>(widget) != nullptr;
+    }
+
+    if (auto* window = qobject_cast<QWindow*>(watched); window != nullptr) {
+        if (engine_ != nullptr && !engine_->rootObjects().isEmpty() && engine_->rootObjects().constFirst() == window) {
+            return true;
+        }
+        if (qApp != nullptr && qApp->focusWindow() == window) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+QString QuickShellBootstrap::describeFocusObject(QObject* object) const
+{
+    if (object == nullptr) {
+        return QStringLiteral("null");
+    }
+
+    QStringList parts;
+    parts.append(QStringLiteral("class=%1").arg(object->metaObject() != nullptr ? object->metaObject()->className() : "unknown"));
+    parts.append(QStringLiteral("ptr=%1").arg(pointerHex(object)));
+    if (!object->objectName().isEmpty()) {
+        parts.append(QStringLiteral("name=%1").arg(object->objectName()));
+    }
+
+    if (auto* widget = qobject_cast<QWidget*>(object); widget != nullptr) {
+        parts.append(QStringLiteral("widget=1"));
+        parts.append(QStringLiteral("visible=%1").arg(widget->isVisible() ? 1 : 0));
+        parts.append(QStringLiteral("enabled=%1").arg(widget->isEnabled() ? 1 : 0));
+        parts.append(QStringLiteral("focus=%1").arg(widget->hasFocus() ? 1 : 0));
+        parts.append(QStringLiteral("active_win=%1").arg(widget->isActiveWindow() ? 1 : 0));
+        parts.append(QStringLiteral("policy=%1").arg(focusPolicyName(widget->focusPolicy())));
+        if (QWidget* parent = widget->parentWidget(); parent != nullptr) {
+            parts.append(QStringLiteral("parent=%1").arg(pointerHex(parent)));
+        }
+        if (surfaceHost_ != nullptr) {
+            const auto matchesOrDescends = [widget](QWidget* root) {
+                return root != nullptr && (widget == root || root->isAncestorOf(widget));
+            };
+            parts.append(QStringLiteral("in_top=%1").arg(matchesOrDescends(surfaceHost_->topChromeSurfaceWidget()) ? 1 : 0));
+            parts.append(QStringLiteral("in_sidebar=%1").arg(matchesOrDescends(surfaceHost_->sidebarSurfaceWidget()) ? 1 : 0));
+            parts.append(QStringLiteral("in_workspace=%1").arg(matchesOrDescends(surfaceHost_->workspaceSurfaceWidget()) ? 1 : 0));
+            parts.append(QStringLiteral("in_status=%1").arg(matchesOrDescends(surfaceHost_->statusSurfaceWidget()) ? 1 : 0));
+        }
+        if (auto* textEdit = qobject_cast<QTextEdit*>(widget); textEdit != nullptr) {
+            const QTextCursor cursor = textEdit->textCursor();
+            parts.append(QStringLiteral("cursor_anchor=%1").arg(cursor.anchor()));
+            parts.append(QStringLiteral("cursor_pos=%1").arg(cursor.position()));
+        }
+        if (auto* lineEdit = qobject_cast<QLineEdit*>(widget); lineEdit != nullptr) {
+            parts.append(QStringLiteral("text_len=%1").arg(lineEdit->text().size()));
+        }
+    }
+
+    if (auto* window = qobject_cast<QWindow*>(object); window != nullptr) {
+        parts.append(QStringLiteral("window=1"));
+        parts.append(QStringLiteral("visible=%1").arg(window->isVisible() ? 1 : 0));
+        parts.append(QStringLiteral("active=%1").arg(window->isActive() ? 1 : 0));
+        parts.append(QStringLiteral("focus_obj=%1").arg(pointerHex(window->focusObject())));
+    }
+
+    return parts.join(' ');
+}
+
+QString QuickShellBootstrap::focusReasonName(Qt::FocusReason reason) const
+{
+    switch (reason) {
+    case Qt::MouseFocusReason:
+        return QStringLiteral("MouseFocusReason");
+    case Qt::TabFocusReason:
+        return QStringLiteral("TabFocusReason");
+    case Qt::BacktabFocusReason:
+        return QStringLiteral("BacktabFocusReason");
+    case Qt::ActiveWindowFocusReason:
+        return QStringLiteral("ActiveWindowFocusReason");
+    case Qt::PopupFocusReason:
+        return QStringLiteral("PopupFocusReason");
+    case Qt::ShortcutFocusReason:
+        return QStringLiteral("ShortcutFocusReason");
+    case Qt::MenuBarFocusReason:
+        return QStringLiteral("MenuBarFocusReason");
+    case Qt::OtherFocusReason:
+        return QStringLiteral("OtherFocusReason");
+    case Qt::NoFocusReason:
+        return QStringLiteral("NoFocusReason");
+    }
+    return QStringLiteral("FocusReason(%1)").arg(static_cast<int>(reason));
+}
+
+void QuickShellBootstrap::logFocusEvent(const QString& action, QObject* watched, QEvent* event, const QString& detail) const
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+
+    QString payload;
+    if (event != nullptr) {
+        payload += QStringLiteral("event_type=%1").arg(static_cast<int>(event->type()));
+        if (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut) {
+            auto* focusEvent = static_cast<QFocusEvent*>(event);
+            payload += QStringLiteral(" focus_reason=%1").arg(focusReasonName(focusEvent != nullptr ? focusEvent->reason() : Qt::NoFocusReason));
+        }
+        payload += QStringLiteral(" spontaneous=%1").arg(event->spontaneous() ? 1 : 0);
+    }
+    payload += QStringLiteral(" watched={%1}").arg(describeFocusObject(watched));
+    payload += QStringLiteral(" app_focus_widget={%1}").arg(describeFocusObject(qobject_cast<QObject*>(QApplication::focusWidget())));
+    payload += QStringLiteral(" app_focus_window={%1}").arg(describeFocusObject(qobject_cast<QObject*>(qApp != nullptr ? qApp->focusWindow() : nullptr)));
+    if (!detail.trimmed().isEmpty()) {
+        payload += QStringLiteral(" detail=%1").arg(detail.trimmed());
+    }
+    appendQuickShellFocusLog(action, payload);
 }
