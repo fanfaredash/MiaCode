@@ -119,7 +119,7 @@ Do not rename sound files casually; both preview-time and export-time behavior d
   - `scripts/build-win.ps1`
   - `scripts/package-win.ps1`
   - `scripts/build-local-dev2.ps1`
-  - `scripts/package-win.ps1` defaults to `build/`, prechecks version freshness against `CMakeLists.txt` and `build/generated/AppVersion.h`, and auto-runs `cmake --build <BuildDir> --target MiaCode --config <Config> --parallel 8` when the packaged executable is stale or missing
+  - `scripts/package-win.ps1` defaults to `build/`, prechecks version freshness against `CMakeLists.txt` and `build/generated/AppVersion.h`, treats version/header drift as a normal refresh instead of a warning, and auto-runs `cmake --build <BuildDir> --target MiaCode --config <Config> --parallel 8` when the packaged executable or generated version metadata needs refreshing
   - `scripts/build-win.ps1` and `scripts/package-win.ps1` resolve relative `BuildDir`, `DistDir`, `QtRoot`, and Qt output paths from the repo root instead of the caller's current working directory; this prevents `windeployqt` output from spilling into the desktop when launched from outside the repo
   - `scripts/build-win.ps1` now installs `qtmultimedia`, `qtdeclarative`, and `qtsvg` so the Qt Quick runtime can be reproduced from a clean machine
   - `scripts/build-local-dev2.ps1` is the local one-click wrapper used by the desktop shortcut; it reuses repo-local `build/` and `.qt/`, then delegates packaging to `scripts/package-win.ps1`

@@ -127,6 +127,7 @@ function Ensure-PackageBuildReady {
     }
 
     $needsBuildReasons = New-Object System.Collections.Generic.List[string]
+    $versionMetadataChanged = $false
     if (!(Test-Path $exePath)) {
         $needsBuildReasons.Add("MiaCode executable is missing")
     }
@@ -136,14 +137,10 @@ function Ensure-PackageBuildReady {
         $needsBuildReasons.Add("generated AppVersion.h is missing or unreadable")
     } else {
         if ($generatedVersionInfo.PackageVersion -ne $ExpectedVersionInfo.PackageVersion) {
-            $needsBuildReasons.Add(
-                "generated package version '$($generatedVersionInfo.PackageVersion)' != expected '$($ExpectedVersionInfo.PackageVersion)'"
-            )
+            $versionMetadataChanged = $true
         }
         if ($generatedVersionInfo.DisplayVersion -ne $ExpectedVersionInfo.DisplayVersion) {
-            $needsBuildReasons.Add(
-                "generated display version '$($generatedVersionInfo.DisplayVersion)' != expected '$($ExpectedVersionInfo.DisplayVersion)'"
-            )
+            $versionMetadataChanged = $true
         }
     }
 
@@ -157,8 +154,8 @@ function Ensure-PackageBuildReady {
         }
     }
 
-    if ($needsBuildReasons.Count -gt 0) {
-        Write-Host "Precheck: package build is stale."
+    if ($versionMetadataChanged -or $needsBuildReasons.Count -gt 0) {
+        Write-Host "Precheck: refreshing package build."
         foreach ($reason in $needsBuildReasons) {
             Write-Host "  - $reason"
         }
