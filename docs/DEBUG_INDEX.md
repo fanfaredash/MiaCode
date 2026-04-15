@@ -138,6 +138,7 @@ Preview diagnostics now split these timing sources instead of reporting a single
   - `external_stage_media.video_frame_*` rows now include aggregate external-video frame rate, interval, and stall counts
 - runtime log:
   - `preview/stage_media` now also emits low-noise `action=video_frame_stall_begin` / `action=video_frame_stall_end` transitions when external video stops delivering frames for longer than expected
+  - `window/focus` records app-level focus transitions, activation edges, watched editor focus events, and text-focus restore attempts for focus-regression diagnosis
 
 ## Useful Workflows
 

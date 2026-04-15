@@ -12,7 +12,9 @@ namespace miacode::chart_transform {
 namespace {
 
 constexpr double kNormalizationEpsilon = 1e-6;
-constexpr double kSnapToleranceWhole = (1.0 / (2.0 * 384.0)) + 1e-9;
+constexpr int kMinimumSnapSubdivisionBeats = 16;
+constexpr int kMaximumSnapSubdivisionBeats = 384;
+constexpr double kSnapToleranceWhole = (1.0 / (2.0 * static_cast<double>(kMaximumSnapSubdivisionBeats))) + 1e-9;
 
 struct Rational {
     qint64 numerator = 0;
@@ -142,6 +144,17 @@ double scaledSnapError(const Rational& value, qint64 scaledValue, int scale)
 QString normalizeTimeSignatureText(int numerator, int denominator)
 {
     return QStringLiteral("%1/%2").arg(qMax(1, numerator)).arg(qMax(1, denominator));
+}
+
+QVector<int> preferredSnapSubdivisionBeats()
+{
+    QVector<int> beatsValues;
+    for (int beats = kMinimumSnapSubdivisionBeats; beats <= kMaximumSnapSubdivisionBeats; ++beats) {
+        if ((kMaximumSnapSubdivisionBeats % beats) == 0) {
+            beatsValues.append(beats);
+        }
+    }
+    return beatsValues;
 }
 
 enum class BoundaryItemKind {
@@ -285,11 +298,6 @@ struct DurationNormalizationOptions {
     bool omitZeroDurationBracket = false;
 };
 
-struct DurationConstraint {
-    Rational durationWhole;
-    bool allowZero = false;
-};
-
 QString sortedModifierText(QString modifiers)
 {
     std::sort(modifiers.begin(), modifiers.end(), [](QChar left, QChar right) {
@@ -344,7 +352,7 @@ QString normalizePlainDurationSignature(
             .arg(durationWhole.numerator);
     }
 
-    qint64 units = scaleRationalRounded(durationWhole, gridBeats);
+    qint64 units = scaleRationalRounded(durationWhole, kMaximumSnapSubdivisionBeats);
     if (!options.allowZeroDuration && units <= 0) {
         units = 1;
     }
@@ -354,10 +362,18 @@ QString normalizePlainDurationSignature(
         }
         return QStringLiteral("1:0");
     }
-    const qint64 gcd = std::gcd<qint64>(static_cast<qint64>(gridBeats), units);
-    return QStringLiteral("%1:%2")
-        .arg(static_cast<qint64>(gridBeats) / gcd)
-        .arg(units / gcd);
+    static const QVector<int> kPreferredDurationBeats = preferredSnapSubdivisionBeats();
+    int renderedBeats = kMaximumSnapSubdivisionBeats;
+    for (int candidate : kPreferredDurationBeats) {
+        const qint64 scaledUnits = units * static_cast<qint64>(candidate);
+        if ((scaledUnits % kMaximumSnapSubdivisionBeats) == 0) {
+            renderedBeats = candidate;
+            break;
+        }
+    }
+    const qint64 renderedUnits =
+        (units * static_cast<qint64>(renderedBeats)) / static_cast<qint64>(kMaximumSnapSubdivisionBeats);
+    return QStringLiteral("%1:%2").arg(renderedBeats).arg(renderedUnits);
 }
 
 QString normalizeSingleBracketSuffix(
@@ -671,54 +687,6 @@ QString renderTokenForGrid(const QString& token, int gridBeats, bool reduceTo384
     return trimmed;
 }
 
-bool collectTokenDurations(const QString& token, QVector<DurationConstraint>* durations)
-{
-    if (durations == nullptr) {
-        return false;
-    }
-
-    auto appendDuration = [durations](const QString& bracketSuffix, bool allowZero) {
-        if (bracketSuffix.isEmpty()) {
-            return;
-        }
-        const int openBracket = bracketSuffix.indexOf(QLatin1Char('['));
-        const int closeBracket = bracketSuffix.lastIndexOf(QLatin1Char(']'));
-        if (openBracket < 0 || closeBracket != bracketSuffix.size() - 1) {
-            return;
-        }
-        Rational durationWhole;
-        if (parsePlainDurationSignature(
-                bracketSuffix.mid(openBracket + 1, closeBracket - openBracket - 1),
-                &durationWhole)
-            && !durationWhole.isZero()) {
-            durations->append(DurationConstraint{durationWhole, allowZero});
-        }
-    };
-
-    TouchTokenParts touchParts;
-    if (parseTouchTokenParts(token, &touchParts) && touchParts.valid) {
-        appendDuration(touchParts.bracketSuffix, true);
-        return true;
-    }
-
-    NoteTokenParts noteParts;
-    if (parseNoteTokenParts(token, &noteParts) && noteParts.valid) {
-        appendDuration(noteParts.bracketSuffix, true);
-        return true;
-    }
-
-    SlideTokenParts slideParts;
-    if (parseSlideTokenParts(token, &slideParts) && slideParts.valid) {
-        const int openBracket = slideParts.coreWithoutTrackBreak.indexOf(QLatin1Char('['));
-        if (openBracket >= 0) {
-            appendDuration(slideParts.coreWithoutTrackBreak.mid(openBracket), false);
-        }
-        return true;
-    }
-
-    return false;
-}
-
 MomentGroups normalizedMomentGroups(const QVector<QStringList>& groups)
 {
     MomentGroups normalized;
@@ -849,34 +817,11 @@ void appendBoundaryItems(QStringList* lines, const QVector<BoundaryItem>& items)
     }
 }
 
-QVector<int> preferredSnapSubdivisionBeats()
-{
-    QVector<int> beatsValues;
-    for (int beats = 16; beats <= 384; ++beats) {
-        if ((384 % beats) == 0) {
-            beatsValues.append(beats);
-        }
-    }
-    return beatsValues;
-}
-
-bool snapRangeFitsBeats(
-    const QVector<Rational>& momentPositions,
-    const QVector<DurationConstraint>& durations,
-    int beats)
+bool snapRangeFitsBeats(const QVector<Rational>& momentPositions, int beats)
 {
     for (const Rational& position : momentPositions) {
         const qint64 units = scaleRationalRounded(position, beats);
         if (scaledSnapError(position, units, beats) > kSnapToleranceWhole) {
-            return false;
-        }
-    }
-    for (const DurationConstraint& duration : durations) {
-        qint64 units = scaleRationalRounded(duration.durationWhole, beats);
-        if (!duration.allowZero && units <= 0) {
-            units = 1;
-        }
-        if (scaledSnapError(duration.durationWhole, units, beats) > kSnapToleranceWhole) {
             return false;
         }
     }
@@ -925,22 +870,13 @@ QString renderMeasureLineApproximate(const RenderMeasure& measure)
             segmentMomentIndices.append(index);
         }
 
-        QVector<DurationConstraint> segmentDurations;
-        for (int index : segmentMomentIndices) {
-            for (const QStringList& group : measure.moments.at(index).groups) {
-                for (const QString& token : group) {
-                    collectTokenDurations(token, &segmentDurations);
-                }
-            }
-        }
-
         int beats = 384;
         for (int candidate : kPreferredBeats) {
             const int stepGrid = 384 / candidate;
             if (stepGrid <= 0 || (segmentLengthGrid % stepGrid) != 0) {
                 continue;
             }
-            if (snapRangeFitsBeats(segmentMomentPositions, segmentDurations, candidate)) {
+            if (snapRangeFitsBeats(segmentMomentPositions, candidate)) {
                 beats = candidate;
                 break;
             }
@@ -1009,18 +945,6 @@ int chooseExactBeatsForRange(
         beats = safeLcm(beats, relativePosition.denominator);
         if (beats <= 0 || beats > std::numeric_limits<int>::max()) {
             return 0;
-        }
-        for (const QStringList& group : moment.groups) {
-            for (const QString& token : group) {
-                QVector<DurationConstraint> durations;
-                collectTokenDurations(token, &durations);
-                for (const DurationConstraint& duration : durations) {
-                    beats = safeLcm(beats, duration.durationWhole.denominator);
-                    if (beats <= 0 || beats > std::numeric_limits<int>::max()) {
-                        return 0;
-                    }
-                }
-            }
         }
     }
 

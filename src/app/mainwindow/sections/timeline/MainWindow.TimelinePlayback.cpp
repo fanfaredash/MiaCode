@@ -14,9 +14,11 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/PreviewGameplayConfig.h"
 #include "common/PreviewInteractionConfig.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
+#include "preview/scene/PreviewOpacityCurves.h"
 #include "preview/scene/PreviewProgressStatsCache.h"
 #include "simai/transform/ChartBatchTransform.h"
 #include "simai/transform/ChartNormalization.h"
@@ -60,6 +62,61 @@ void appendPreviewPlaybackLog(const QString& action, const QString& payload = QS
         QStringLiteral("preview/playback"),
         text
     );
+}
+
+double previewVisualLeadInStartSecond(
+    const QVector<TimelineNoteMarker>& noteMarkers,
+    double requestedSecond,
+    double noteFlowSpeed)
+{
+    if (requestedSecond > kTimelineZeroSecondTolerance || noteMarkers.isEmpty()) {
+        return requestedSecond;
+    }
+
+    const auto tapTiming = miacode::preview::scene::previewTapTimingForFlowSpeed(static_cast<qreal>(noteFlowSpeed));
+    const auto slideTrackTiming =
+        miacode::preview::scene::previewSlideTrackTimingForFlowSpeed(static_cast<qreal>(noteFlowSpeed));
+
+    double earliestSecond = requestedSecond;
+    for (const TimelineNoteMarker& marker : noteMarkers) {
+        const QString type = marker.type.toLower();
+        if (type == QLatin1String("tap")) {
+            if (marker.second + kTimelineZeroSecondTolerance >= requestedSecond) {
+                earliestSecond = qMin(earliestSecond, marker.second - tapTiming.lifecycleDurationSeconds);
+            }
+            continue;
+        }
+        if (type == QLatin1String("hold")) {
+            if (qMax(marker.second, marker.endSecond) + kTimelineZeroSecondTolerance >= requestedSecond) {
+                earliestSecond = qMin(earliestSecond, marker.second - tapTiming.lifecycleDurationSeconds);
+            }
+            continue;
+        }
+        if (type == QLatin1String("slide") || type == QLatin1String("wifi")) {
+            if (marker.second + kTimelineZeroSecondTolerance >= requestedSecond) {
+                earliestSecond = qMin(earliestSecond, marker.second - tapTiming.lifecycleDurationSeconds);
+            }
+            if (qMax(marker.second, qMax(marker.endSecond, marker.slideTraceSecond)) + kTimelineZeroSecondTolerance
+                >= requestedSecond) {
+                earliestSecond = qMin(earliestSecond, marker.second - slideTrackTiming.appearLeadInSeconds);
+            }
+            continue;
+        }
+        if (type == QLatin1String("touch")) {
+            if (marker.second + kTimelineZeroSecondTolerance >= requestedSecond) {
+                earliestSecond = qMin(earliestSecond, marker.second - miacode::preview_gameplay::kTouchDurationSeconds);
+            }
+            continue;
+        }
+        if (type == QLatin1String("touch_hold")) {
+            if (qMax(marker.second, marker.endSecond) + kTimelineZeroSecondTolerance >= requestedSecond) {
+                earliestSecond = qMin(earliestSecond, marker.second - miacode::preview_gameplay::kTouchDurationSeconds);
+            }
+            continue;
+        }
+    }
+
+    return earliestSecond;
 }
 
 }  // namespace
@@ -424,12 +481,12 @@ double MainWindow::TimelineSection::currentPreviewPlaybackClockSecond() const
     }
     if (state_.qtPreviewPlaying_) {
         const double elapsedSeconds = static_cast<double>(state_.qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
-        return qMax(0.0, state_.qtPreviewStartSecond_ + (elapsedSeconds * state_.previewPlaybackRate_));
+        return state_.qtPreviewStartSecond_ + (elapsedSeconds * state_.previewPlaybackRate_);
     }
     if (state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
-        return qMax(0.0, state_.previewStartupPreparedSecond_);
+        return state_.previewStartupPreparedSecond_;
     }
-    return qMax(0.0, state_.qtPreviewPauseSecond_);
+    return state_.qtPreviewPauseSecond_;
 }
 
 void MainWindow::TimelineSection::cancelPreviewStartupSync()
@@ -539,7 +596,7 @@ void MainWindow::TimelineSection::tryCommitPreviewStartupSync()
 
     state_.previewStartupStrongGroupCommitted_ = true;
     state_.previewStartupSyncPending_ = false;
-    const double effectiveStartSecond = qMax(0.0, state_.previewStartupPreparedSecond_);
+    const double effectiveStartSecond = state_.previewStartupPreparedSecond_;
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->commitPreparedPreviewPlayback();
     }
@@ -609,7 +666,10 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
     owner_.ensurePreviewSfxRuntimePrepared();
     cancelPreviewStartupSync();
     applyLatestTimelinePreviewStateToPausedPreview();
-    const double startSecond = qBound(0.0, second, previewDurationSeconds());
+    const double requestedSecond = qBound(0.0, second, previewDurationSeconds());
+    const double startSecond = (!resumeFromPause && requestedSecond <= kTimelineZeroSecondTolerance)
+        ? previewVisualLeadInStartSecond(state_.latestTimelineNoteMarkers_, requestedSecond, state_.previewNoteFlowSpeed_)
+        : requestedSecond;
     const bool hasVideoMedia = owner_.previewStageMediaRouteHasVideo();
     const quint64 playbackTxn = ++state_.previewPlaybackTransactionCounter_;
     state_.activePreviewPlaybackTransactionId_ = playbackTxn;
@@ -623,7 +683,7 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
         state_.qtPreviewTimelineStartSecond_ = initialSecond;
     };
 
-    state_.qtPreviewPlaybackReturnSecond_ = startSecond;
+    state_.qtPreviewPlaybackReturnSecond_ = requestedSecond;
     state_.qtPreviewPlaybackEndSecond_ = qMax(0.0, previewPlaybackEndSeconds());
     owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
     state_.pausedSeekMediaPending_ = false;
@@ -638,7 +698,7 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
     state_.previewStartupVideoPrepareStarted_ = hasVideoMedia;
     state_.previewStartupVideoPrepared_ = false;
     state_.previewStartupVideoStarted_ = false;
-    state_.previewStartupRequestedSecond_ = startSecond;
+    state_.previewStartupRequestedSecond_ = requestedSecond;
     appendPreviewPlaybackLog(
         QStringLiteral("start_request"),
         QString("txn=%1 requested=%2 resume=%3 rate=%4 has_video=%5 duration=%6")
@@ -721,7 +781,7 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
         }
     }
     if (hadStartupSync && !wasPlaying) {
-        state_.qtPreviewPauseSecond_ = qMax(0.0, state_.previewStartupPreparedSecond_);
+        state_.qtPreviewPauseSecond_ = state_.previewStartupPreparedSecond_;
         pauseSecondCaptured = true;
     }
     if (!pauseSecondCaptured) {

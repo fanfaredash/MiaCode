@@ -324,15 +324,15 @@ bool QtPreviewSfxRuntime::prepareStretchedBackgroundTrack(double timelineSecond)
 double QtPreviewSfxRuntime::stretchedBackgroundPlaybackSecond() const
 {
     if (stretchedBackgroundState_ == nullptr || !stretchedBackgroundState_->soundInitialized) {
-        return qMax(0.0, playbackSession_.backgroundTrackLastTimelineSecond);
+        return playbackSession_.backgroundTrackLastTimelineSecond;
     }
     if (!playbackSession_.backgroundTrackRunning) {
-        return qMax(0.0, playbackSession_.backgroundTrackLastTimelineSecond);
+        return playbackSession_.backgroundTrackLastTimelineSecond;
     }
 
     float cursorSeconds = 0.0f;
     if (ma_sound_get_cursor_in_seconds(&stretchedBackgroundState_->sound, &cursorSeconds) != MA_SUCCESS) {
-        return qMax(0.0, playbackSession_.backgroundTrackLastTimelineSecond);
+        return playbackSession_.backgroundTrackLastTimelineSecond;
     }
 
     const double timelineSecond =

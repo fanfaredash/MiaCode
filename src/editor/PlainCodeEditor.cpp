@@ -70,6 +70,55 @@ bool isPreviewPlayPauseShortcut(const QKeyEvent* event)
     return ctrlOnly && (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter);
 }
 
+struct BlockVisualSpan
+{
+    QRect firstRowRect;
+    QRect lastRowRect;
+
+    bool isValid() const
+    {
+        return firstRowRect.isValid() && lastRowRect.isValid();
+    }
+
+    int top() const
+    {
+        return qMin(firstRowRect.top(), lastRowRect.top());
+    }
+
+    int bottom() const
+    {
+        return qMax(firstRowRect.bottom(), lastRowRect.bottom());
+    }
+
+    int height() const
+    {
+        return qMax(1, bottom() - top() + 1);
+    }
+};
+
+BlockVisualSpan visibleBlockSpan(const PlainCodeEditor* editor, const QTextBlock& block)
+{
+    BlockVisualSpan span;
+    if (editor == nullptr || !block.isValid()) {
+        return span;
+    }
+
+    QTextCursor blockStartCursor(block);
+    span.firstRowRect = editor->cursorRect(blockStartCursor);
+    if (!span.firstRowRect.isValid()) {
+        return span;
+    }
+
+    // The end-of-block caret sits on the last soft-wrapped visual row.
+    QTextCursor blockEndCursor(block);
+    blockEndCursor.movePosition(QTextCursor::EndOfBlock);
+    span.lastRowRect = editor->cursorRect(blockEndCursor);
+    if (!span.lastRowRect.isValid()) {
+        span.lastRowRect = span.firstRowRect;
+    }
+    return span;
+}
+
 QPointF adjustedTrailingBlankClickPosition(const PlainCodeEditor* editor, const QPointF& position)
 {
     if (editor == nullptr || editor->document() == nullptr) {
@@ -80,13 +129,12 @@ QPointF adjustedTrailingBlankClickPosition(const PlainCodeEditor* editor, const 
         return position;
     }
 
-    QTextCursor lastBlockCursor(lastBlock);
-    const QRect lastBlockRect = editor->cursorRect(lastBlockCursor);
-    if (!lastBlockRect.isValid() || position.y() <= lastBlockRect.bottom()) {
+    const BlockVisualSpan lastBlockSpan = visibleBlockSpan(editor, lastBlock);
+    if (!lastBlockSpan.isValid() || position.y() <= lastBlockSpan.bottom()) {
         return position;
     }
 
-    return QPointF(position.x(), static_cast<qreal>(lastBlockRect.center().y()));
+    return QPointF(position.x(), static_cast<qreal>(lastBlockSpan.lastRowRect.center().y()));
 }
 }  // namespace
 
@@ -511,11 +559,14 @@ void PlainCodeEditor::paintEvent(QPaintEvent* event)
         return;
     }
 
-    QTextCursor blockStartCursor(block);
-    const QRect blockRect = cursorRect(blockStartCursor);
-    const int blockTop = blockRect.top();
-    // Keep current-line highlight tied to glyph line height, not paragraph bottom margin.
-    const int blockHeight = qMax(1, blockRect.height());
+    const BlockVisualSpan blockSpan = visibleBlockSpan(this, block);
+    if (!blockSpan.isValid()) {
+        return;
+    }
+
+    const int blockTop = blockSpan.top();
+    // Keep current-line highlight tied to wrapped glyph rows, not paragraph bottom margin.
+    const int blockHeight = blockSpan.height();
 
     const int verticalExpand = qMax(0, qRound(static_cast<qreal>(blockSpacingPixels_) / 8.0));
     QRect highlightRect(

@@ -265,7 +265,7 @@ void PreviewRuntime::setFramePacingDebugState(
 
 void PreviewRuntime::setPlayheadSeconds(double seconds, bool requestUpdate)
 {
-    frameState_.playheadSeconds = qMax(0.0, seconds);
+    frameState_.playheadSeconds = seconds;
     if (requestUpdate) {
         update();
     }
