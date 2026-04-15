@@ -802,6 +802,7 @@ bool MainWindow::DocumentSection::switchToWelcomePage()
     state_.currentFieldDirty_ = false;
     updateDirtyState();
     rebuildFieldSidebar();
+    updateEditorHeader();
     owner_.updateWindowTitle();
     updateEditorEmptyState();
     updateEditorStatus();
