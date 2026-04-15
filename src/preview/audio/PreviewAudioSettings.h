@@ -7,26 +7,26 @@
 struct PreviewAudioSettings {
     double masterVolume = 1.0;
     double masterRestoreVolume = 1.0;
-    double bgmVolume = 0.25;
-    double bgmRestoreVolume = 0.25;
-    double answerVolume = 0.35;
-    double answerRestoreVolume = 0.35;
-    double judgeVolume = 0.15;
-    double judgeRestoreVolume = 0.15;
-    double slideVolume = 0.15;
-    double slideRestoreVolume = 0.15;
-    double breakVolume = 0.15;
-    double breakRestoreVolume = 0.15;
-    double breakSlideVolume = 0.15;
-    double breakSlideRestoreVolume = 0.15;
-    double exVolume = 0.15;
-    double exRestoreVolume = 0.15;
-    double touchVolume = 0.15;
-    double touchRestoreVolume = 0.15;
-    double touchholdVolume = 0.15;
-    double touchholdRestoreVolume = 0.15;
-    double fireworkVolume = 0.15;
-    double fireworkRestoreVolume = 0.15;
+    double bgmVolume = 0.40;
+    double bgmRestoreVolume = 0.40;
+    double answerVolume = 0.20;
+    double answerRestoreVolume = 0.20;
+    double judgeVolume = 0.10;
+    double judgeRestoreVolume = 0.10;
+    double slideVolume = 0.05;
+    double slideRestoreVolume = 0.05;
+    double breakVolume = 0.20;
+    double breakRestoreVolume = 0.20;
+    double breakSlideVolume = 0.05;
+    double breakSlideRestoreVolume = 0.05;
+    double exVolume = 0.10;
+    double exRestoreVolume = 0.10;
+    double touchVolume = 0.10;
+    double touchRestoreVolume = 0.10;
+    double touchholdVolume = 0.10;
+    double touchholdRestoreVolume = 0.10;
+    double fireworkVolume = 0.20;
+    double fireworkRestoreVolume = 0.20;
 
     static double clamp(double value);
     static double clampMaster(double value);
@@ -166,16 +166,16 @@ inline double previewSfxVolumeForKind(const PreviewAudioSettings& settings, cons
         return settings.answerVolume * masterVolume;
     }
     if (lowered == "judge") {
-        return settings.judgeVolume * 0.25 * masterVolume;
+        return settings.judgeVolume * 0.5 * masterVolume;
     }
     if (lowered == "judge_break" || lowered == "break_touch") {
-        return settings.breakVolume * 0.5 * masterVolume;
+        return settings.judgeVolume * 0.5 * masterVolume;
     }
     if (lowered == "slide") {
-        return settings.slideVolume * 0.25 * masterVolume;
+        return settings.slideVolume * 0.5 * masterVolume;
     }
     if (lowered == "break") {
-        return settings.breakVolume * 0.5 * masterVolume;
+        return settings.breakVolume * 1.5 * masterVolume;
     }
     if (lowered == "break_slide"
         || lowered == "break_slide_start"
@@ -184,16 +184,16 @@ inline double previewSfxVolumeForKind(const PreviewAudioSettings& settings, cons
         return settings.breakSlideVolume * 0.5 * masterVolume;
     }
     if (lowered == "ex") {
-        return settings.exVolume * 0.25 * masterVolume;
+        return settings.exVolume * 0.5 * masterVolume;
     }
     if (lowered == "touch") {
-        return settings.touchVolume * 0.25 * masterVolume;
+        return settings.touchVolume * 0.5 * masterVolume;
     }
     if (lowered == "touchhold") {
-        return settings.touchholdVolume * 0.25 * masterVolume;
+        return settings.touchholdVolume * 0.5 * masterVolume;
     }
     if (lowered == "firework") {
-        return settings.fireworkVolume * 0.5 * masterVolume;
+        return settings.fireworkVolume * masterVolume;
     }
     return 0.0;
 }

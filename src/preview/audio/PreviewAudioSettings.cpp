@@ -4,17 +4,17 @@
 
 namespace {
 
-constexpr double kDefaultBgmVolume = 0.25;
+constexpr double kDefaultBgmVolume = 0.40;
 constexpr double kDefaultMasterVolume = 1.0;
 constexpr double kMaxMasterVolume = 2.0;
-constexpr double kDefaultAnswerVolume = 0.35;
-constexpr double kDefaultJudgeVolume = 0.15;
-constexpr double kDefaultSlideVolume = 0.15;
-constexpr double kDefaultBreakVolume = 0.15;
-constexpr double kDefaultBreakSlideVolume = 0.15;
-constexpr double kDefaultExVolume = 0.15;
-constexpr double kDefaultTouchVolume = 0.15;
-constexpr double kDefaultFireworkVolume = 0.15;
+constexpr double kDefaultAnswerVolume = 0.20;
+constexpr double kDefaultJudgeVolume = 0.10;
+constexpr double kDefaultSlideVolume = 0.05;
+constexpr double kDefaultBreakVolume = 0.20;
+constexpr double kDefaultBreakSlideVolume = 0.05;
+constexpr double kDefaultExVolume = 0.10;
+constexpr double kDefaultTouchVolume = 0.10;
+constexpr double kDefaultFireworkVolume = 0.20;
 constexpr double kMuteThreshold = 0.0001;
 
 bool isMutedVolume(double value)
