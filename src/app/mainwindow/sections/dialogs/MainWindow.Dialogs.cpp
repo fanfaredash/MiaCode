@@ -340,7 +340,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     audioSeparator->setFrameShape(QFrame::HLine);
     audioSeparator->setFrameShadow(QFrame::Plain);
     audioSeparator->setLineWidth(1);
-    audioSeparator->setStyleSheet(QStringLiteral("color: %1; background: %1;").arg(UiTheme::colors().border.name(QColor::HexRgb)));
+    audioSeparator->setStyleSheet(
+        QStringLiteral("color: %1; background: %1;")
+            .arg(UiTheme::colors().textInverse.name(QColor::HexRgb)));
     audioFormLayout->addRow(QString(), audioSeparator);
 
     const QString bgmAudioLabelText = uiText("dialog.render_settings.audio.bgm", "BGM Volume");
