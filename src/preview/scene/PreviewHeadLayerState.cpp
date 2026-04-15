@@ -2,6 +2,7 @@
 
 #include "preview/scene/PreviewAnimatedSpriteHelpers.h"
 #include "preview/scene/PreviewJudgeOverlayShared.h"
+#include "preview/scene/PreviewMarkerDrawOrder.h"
 #include "preview/scene/PreviewOpacityCurves.h"
 #include "preview/scene/PreviewSceneConstants.h"
 #include "preview/scene/PreviewSceneMath.h"
@@ -306,14 +307,11 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
                 fallbackLayerOrder.append(index);
             }
         }
-        std::sort(fallbackLayerOrder.begin(), fallbackLayerOrder.end(), [&markers](int a, int b) {
-            const TimelineNoteMarker& markerA = markers.markerAt(a);
-            const TimelineNoteMarker& markerB = markers.markerAt(b);
-            if (!qFuzzyCompare(1.0 + markerA.second, 1.0 + markerB.second)) {
-                return markerA.second > markerB.second;
-            }
-            return markers.sourceIndexAt(a) > markers.sourceIndexAt(b);
-        });
+        sortPreviewMarkerViewIndicesForDraw(
+            markers,
+            &fallbackLayerOrder,
+            state.render.slideEarlierSecondAndTextOnTop
+        );
         fallbackSlideHeadRepresentatives = buildSlideHeadRepresentatives(state.noteMarkers);
     } else {
         activePreparedDrawOrder = markers.activePreparedIndices();

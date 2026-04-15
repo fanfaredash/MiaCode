@@ -38,6 +38,7 @@ struct VideoExportTask {
     PreviewOutlineVariant outlineVariant = PreviewOutlineVariant::Line;
     PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
     double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    bool slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
     double exportStartSeconds = 0.0;
     double contentDurationSeconds = 0.0;
     int outputWidth = 1024;

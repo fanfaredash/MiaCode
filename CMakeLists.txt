@@ -161,6 +161,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/scene/PreviewSceneMath.cpp
     src/preview/scene/PreviewSceneGeometry.h
     src/preview/scene/PreviewSceneGeometry.cpp
+    src/preview/scene/PreviewMarkerDrawOrder.h
+    src/preview/scene/PreviewMarkerDrawOrder.cpp
     src/preview/scene/PreviewSkinSelectors.h
     src/preview/scene/PreviewSkinSelectors.cpp
     src/preview/scene/PreviewSpriteDescriptor.h
@@ -490,6 +492,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/preview/scene/PreviewChartReviewLayerState.cpp
         src/preview/scene/PreviewHeadLayerState.h
         src/preview/scene/PreviewHeadLayerState.cpp
+        src/preview/scene/PreviewMarkerDrawOrder.h
+        src/preview/scene/PreviewMarkerDrawOrder.cpp
         src/preview/scene/PreviewAnimatedSpriteHelpers.h
         src/preview/scene/PreviewAnimatedSpriteHelpers.cpp
         src/preview/scene/PreviewJudgeOverlayShared.h
@@ -515,6 +519,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/preview/scene/PreviewFrameState.h
         src/preview/scene/PreviewChartReviewLayerState.h
         src/preview/scene/PreviewChartReviewLayerState.cpp
+        src/preview/scene/PreviewMarkerDrawOrder.h
+        src/preview/scene/PreviewMarkerDrawOrder.cpp
         src/preview/scene/PreviewSlideMotionLayerState.h
         src/preview/scene/PreviewSlideMotionLayerState.cpp
         src/preview/scene/PreviewTrackLayerState.h

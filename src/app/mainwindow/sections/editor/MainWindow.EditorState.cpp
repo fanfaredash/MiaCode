@@ -110,6 +110,11 @@ void MainWindow::EditorSection::loadProjectRenderState()
                             render.value("note_flow_speed").toDouble(state_.previewNoteFlowSpeed_)
                         );
                     }
+                    if (render.value("slide_earlier_second_and_text_on_top").isBool()) {
+                        state_.previewSlideEarlierSecondAndTextOnTop_ =
+                            render.value("slide_earlier_second_and_text_on_top")
+                                .toBool(state_.previewSlideEarlierSecondAndTextOnTop_);
+                    }
                     if (render.value("skin_variant").isString()) {
                         state_.previewSkinVariant_ = owner_.previewSkinVariantFromStorageValue(
                             render.value("skin_variant").toString()
@@ -211,6 +216,7 @@ void MainWindow::EditorSection::loadProjectRenderState()
         state_.previewCanvas_->setSmoothBrightness(state_.previewSmoothBrightness_);
         state_.previewCanvas_->setBackgroundScaleMode(state_.previewBackgroundScaleMode_);
         state_.previewCanvas_->setNoteFlowSpeed(state_.previewNoteFlowSpeed_);
+        state_.previewCanvas_->setSlideEarlierSecondAndTextOnTop(state_.previewSlideEarlierSecondAndTextOnTop_);
         state_.previewCanvas_->setShowDebugInfo(state_.previewShowDebugInfo_);
         state_.previewCanvas_->setShowTimestamp(state_.previewShowTimestamp_);
         state_.previewCanvas_->setShowObjectStatsHud(state_.previewShowObjectStatsHud_);
@@ -252,6 +258,7 @@ void MainWindow::EditorSection::saveProjectRenderState() const
             : QStringLiteral("fill")
     );
     render.insert("note_flow_speed", state_.previewNoteFlowSpeed_);
+    render.insert("slide_earlier_second_and_text_on_top", state_.previewSlideEarlierSecondAndTextOnTop_);
     render.insert("skin_variant", owner_.previewSkinVariantStorageValue());
     if (state_.previewOutlineVariantUsesAutoSelection_) {
         render.remove("outline_variant");

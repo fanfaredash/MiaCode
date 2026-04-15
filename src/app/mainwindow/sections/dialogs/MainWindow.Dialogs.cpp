@@ -580,6 +580,17 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     const QString scaleFitLabel = uiText("dialog.render_settings.video.scale.fit", "Fit (keep full image, may letterbox)");
     const QString standardSkinLabel = uiText("dialog.render_settings.video.skin.standard", "Standard");
     const QString dxSkinLabel = uiText("dialog.render_settings.video.skin.dx", "DX");
+    const QString slideStackOrderDxLabel = uiText(
+        "dialog.render_settings.gameplay.slide_stack_order.dx_style",
+        "DX Style"
+    );
+    const QString slideStackOrderFinaleLabel = uiText(
+        "dialog.render_settings.gameplay.slide_stack_order.finale_style",
+        "FiNALE Style"
+    );
+    const auto slideStackOrderLabelForValue = [slideStackOrderDxLabel, slideStackOrderFinaleLabel](bool earlierOnTop) {
+        return earlierOnTop ? slideStackOrderDxLabel : slideStackOrderFinaleLabel;
+    };
     auto* skinButton = createDialogMenuButton(
         gameplayGroup,
         owner_.previewSkinVariant_ == PreviewSkinVariant::Dx ? dxSkinLabel : standardSkinLabel
@@ -687,9 +698,40 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             "dialog.render_settings.gameplay.force_labeled_judge_line_when_paused",
             "Hide PV / BG while preview is paused"
         ),
-        gameplayGroup
+        videoGroup
     );
     forceLabeledJudgeLineWhenPausedCheck->setChecked(owner_.previewForceLabeledJudgeLineWhenPaused_);
+    auto* slideStackOrderButton = createDialogMenuButton(
+        gameplayGroup,
+        slideStackOrderLabelForValue(owner_.previewSlideEarlierSecondAndTextOnTop_)
+    );
+    slideStackOrderButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto* slideStackOrderMenu = new QMenu(slideStackOrderButton);
+    styleRoundedMenu(*slideStackOrderMenu);
+    const auto setSlideStackOrder = [
+        this,
+        slideStackOrderButton,
+        slideStackOrderLabelForValue
+    ](bool earlierOnTop) {
+        if (owner_.previewSlideEarlierSecondAndTextOnTop_ == earlierOnTop) {
+            slideStackOrderButton->setText(slideStackOrderLabelForValue(earlierOnTop));
+            return;
+        }
+        owner_.previewSlideEarlierSecondAndTextOnTop_ = earlierOnTop;
+        slideStackOrderButton->setText(slideStackOrderLabelForValue(earlierOnTop));
+        if (owner_.previewCanvas_ != nullptr) {
+            owner_.previewCanvas_->setSlideEarlierSecondAndTextOnTop(earlierOnTop);
+        }
+        owner_.saveProjectRenderState();
+        owner_.savePortableState();
+    };
+    addDialogMenuChoice(slideStackOrderMenu, slideStackOrderDxLabel, [setSlideStackOrder]() {
+        setSlideStackOrder(true);
+    });
+    addDialogMenuChoice(slideStackOrderMenu, slideStackOrderFinaleLabel, [setSlideStackOrder]() {
+        setSlideStackOrder(false);
+    });
+    slideStackOrderButton->setMenu(slideStackOrderMenu);
     PreviewBackgroundScaleMode selectedScaleMode = owner_.previewBackgroundScaleMode_;
     auto* scaleModeButton = createDialogMenuButton(
         videoGroup,
@@ -731,14 +773,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         videoGroup
     );
     timestampCheck->setChecked(owner_.previewShowTimestamp_);
-    const bool unifiedObjectStatsChecked = owner_.previewShowObjectStatsHud_ || owner_.exportShowObjectStatsHud_;
-    owner_.previewShowObjectStatsHud_ = unifiedObjectStatsChecked;
-    owner_.exportShowObjectStatsHud_ = unifiedObjectStatsChecked;
-    auto* objectStatsCheck = new QCheckBox(
-        uiText("dialog.render_settings.preview.show_object_stats", "Show object stats in preview/export"),
-        videoGroup
-    );
-    objectStatsCheck->setChecked(unifiedObjectStatsChecked);
     auto* debugCheck = new QCheckBox(
         uiText("dialog.render_settings.preview.debug", "Show preview debug info"),
         videoGroup
@@ -762,7 +796,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     videoCheckLayout->addWidget(smoothBrightnessCheck, 0, 0, Qt::AlignLeft);
     videoCheckLayout->addWidget(timestampCheck, 0, 1, Qt::AlignLeft);
     videoCheckLayout->addWidget(debugCheck, 1, 0, Qt::AlignLeft);
-    videoCheckLayout->addWidget(objectStatsCheck, 1, 1, Qt::AlignLeft);
+    videoCheckLayout->addWidget(forceLabeledJudgeLineWhenPausedCheck, 1, 1, Qt::AlignLeft);
     videoFormLayout->addRow(QString(), videoCheckRow);
 
     const auto addGameplayField = [gameplayGroup, gameplayLayout](int row, int column, const QString& labelText, QWidget* control) {
@@ -789,7 +823,12 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         uiText("dialog.render_settings.gameplay.judge_line", "Judge Line"),
         judgeLineButton
     );
-    gameplayLayout->addWidget(forceLabeledJudgeLineWhenPausedCheck, 2, 0, 1, 2, Qt::AlignLeft);
+    addGameplayField(
+        2,
+        0,
+        uiText("dialog.render_settings.gameplay.slide_stack_order", "Slide Stack Order"),
+        slideStackOrderButton
+    );
     audioGroup->setVisible(includeAudioSettings);
     videoGroup->setVisible(includeVideoSettings);
     gameplayGroup->setVisible(includeVideoSettings);
@@ -1261,20 +1300,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         }
         owner_.saveProjectRenderState();
         owner_.savePortableState();
-    });
-    const auto setObjectStatsHudEnabled = [this, objectStatsCheck](bool checked) {
-        owner_.previewShowObjectStatsHud_ = checked;
-        owner_.exportShowObjectStatsHud_ = checked;
-        if (owner_.previewCanvas_ != nullptr) {
-            owner_.previewCanvas_->setShowObjectStatsHud(owner_.previewShowObjectStatsHud_);
-        }
-        const QSignalBlocker objectStatsBlocker(objectStatsCheck);
-        objectStatsCheck->setChecked(checked);
-        owner_.saveProjectRenderState();
-        owner_.savePortableState();
-    };
-    connect(objectStatsCheck, &QCheckBox::toggled, &dialog, [setObjectStatsHudEnabled](bool checked) {
-        setObjectStatsHudEnabled(checked);
     });
     dialog.adjustSize();
     dialog.exec();

@@ -59,6 +59,7 @@ bool VideoExportQuickRenderBackend::bootstrap(
     frameState_.render.smoothBrightness = task.smoothBrightness;
     frameState_.render.backgroundScaleMode = task.backgroundScaleMode;
     frameState_.render.noteFlowSpeed = normalizedFlowSpeed(task.noteFlowSpeed);
+    frameState_.render.slideEarlierSecondAndTextOnTop = task.slideEarlierSecondAndTextOnTop;
     frameState_.render.showDebugInfo = false;
     frameState_.render.showTimestamp = task.showTimestamp;
     frameState_.render.showObjectStatsHud = task.showObjectStatsHud;

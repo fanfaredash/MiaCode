@@ -463,6 +463,9 @@ const QHash<QString, QString>& zhMap()
             "dialog.render_settings.gameplay.force_labeled_judge_line_when_paused",
             "暂停时不显示PV/BG"
         },
+        {"dialog.render_settings.gameplay.slide_stack_order", "slide层叠顺序"},
+        {"dialog.render_settings.gameplay.slide_stack_order.dx_style", "DX风格"},
+        {"dialog.render_settings.gameplay.slide_stack_order.finale_style", "FiNALE风格"},
         {"dialog.render_settings.preview.debug", "显示预览调试信息"},
         {"dialog.render_settings.preview.canvas_frame_rate", "预览刷新率"},
         {"dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS"},

@@ -1,6 +1,7 @@
 #include "preview/scene/PreviewTrackLayerState.h"
 
 #include "preview/scene/PreviewAnimatedSpriteHelpers.h"
+#include "preview/scene/PreviewMarkerDrawOrder.h"
 #include "preview/scene/PreviewOpacityCurves.h"
 #include "preview/scene/PreviewSceneConstants.h"
 #include "preview/scene/PreviewSceneMath.h"
@@ -8,6 +9,8 @@
 #include "preview/scene/PreviewTrackShared.h"
 
 #include <QHash>
+
+#include <algorithm>
 
 namespace {
 
@@ -72,6 +75,29 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
 {
     PreviewTrackLayerState layerState;
     layerState.sprites.reserve(markers.size() * 32);
+
+    const bool usesPreparedDrawOrder = markers.usesPreparedLayer() && !markers.preparedDrawOrder().isEmpty();
+    QVector<int> orderedPreparedIndices;
+    QVector<int> orderedMarkerViewIndices;
+    if (usesPreparedDrawOrder) {
+        orderedPreparedIndices = markers.activePreparedIndices();
+        std::stable_sort(orderedPreparedIndices.begin(), orderedPreparedIndices.end(), [&markers](int a, int b) {
+            return markers.preparedDrawRank(a) < markers.preparedDrawRank(b);
+        });
+    } else {
+        orderedMarkerViewIndices.reserve(markers.size());
+        for (int markerViewIndex = 0; markerViewIndex < markers.size(); ++markerViewIndex) {
+            const TimelineNoteMarker& marker = markers.markerAt(markerViewIndex);
+            if (marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi")) {
+                orderedMarkerViewIndices.append(markerViewIndex);
+            }
+        }
+        sortPreviewMarkerViewIndicesForDraw(
+            markers,
+            &orderedMarkerViewIndices,
+            state.render.slideEarlierSecondAndTextOnTop
+        );
+    }
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
     const PreviewSlideTrackTiming trackTiming = previewSlideTrackTimingForFlowSpeed(state.render.noteFlowSpeed);
@@ -188,8 +214,13 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
         }
     };
 
-    for (int markerIndex = 0; markerIndex < markers.size(); ++markerIndex) {
-        const TimelineNoteMarker& marker = markers.markerAt(markerIndex);
+    const int orderedCount = usesPreparedDrawOrder ? orderedPreparedIndices.size() : orderedMarkerViewIndices.size();
+    for (int orderIndex = 0; orderIndex < orderedCount; ++orderIndex) {
+        const int preparedIndex = usesPreparedDrawOrder ? orderedPreparedIndices.at(orderIndex) : -1;
+        const int markerViewIndex = usesPreparedDrawOrder ? -1 : orderedMarkerViewIndices.at(orderIndex);
+        const TimelineNoteMarker& marker = usesPreparedDrawOrder
+            ? markers.markerForPreparedIndex(preparedIndex)
+            : markers.markerAt(markerViewIndex);
         if (marker.type == QLatin1String("slide")) {
             if (!state.muriRenderOptions.showSlideTracks) {
                 continue;

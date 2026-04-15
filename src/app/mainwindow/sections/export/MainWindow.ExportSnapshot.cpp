@@ -348,6 +348,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     built.outlineVariant = requestedTask.outlineVariant;
     built.backgroundScaleMode = requestedTask.backgroundScaleMode;
     built.noteFlowSpeed = requestedTask.noteFlowSpeed;
+    built.slideEarlierSecondAndTextOnTop = requestedTask.slideEarlierSecondAndTextOnTop;
     built.muriRenderOptions = requestedTask.muriRenderOptions;
     built.staticTapOnSlideThresholdSeconds = requestedTask.staticTapOnSlideThresholdSeconds;
     built.exportStartSeconds = requestedTask.exportStartSeconds;
@@ -542,6 +543,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
     built.outlineVariant = requestedTask.outlineVariant;
     built.backgroundScaleMode = requestedTask.backgroundScaleMode;
     built.noteFlowSpeed = requestedTask.noteFlowSpeed;
+    built.slideEarlierSecondAndTextOnTop = requestedTask.slideEarlierSecondAndTextOnTop;
     built.muriRenderOptions = requestedTask.muriRenderOptions;
     built.staticTapOnSlideThresholdSeconds = requestedTask.staticTapOnSlideThresholdSeconds;
     built.exportStartSeconds = 0.0;
@@ -734,6 +736,7 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     task.outlineVariant = request.outlineVariant;
     task.backgroundScaleMode = request.backgroundScaleMode;
     task.noteFlowSpeed = request.noteFlowSpeed;
+    task.slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
     task.exportStartSeconds = exportStartSeconds;
     task.contentDurationSeconds = contentDurationSeconds;
     task.fullRangeExport = fullRangeExport;

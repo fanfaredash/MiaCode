@@ -305,6 +305,7 @@ void MainWindow::ExportSection::applySharedExportTaskSettings(const VideoExportT
     owner_.previewSmoothBrightness_ = task.smoothBrightness;
     owner_.previewBackgroundScaleMode_ = task.backgroundScaleMode;
     owner_.previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(task.noteFlowSpeed);
+    owner_.previewSlideEarlierSecondAndTextOnTop_ = task.slideEarlierSecondAndTextOnTop;
 
     owner_.applyPreviewStageMediaRouteVisualSettings();
     if (owner_.previewCanvas_ != nullptr) {
@@ -316,6 +317,7 @@ void MainWindow::ExportSection::applySharedExportTaskSettings(const VideoExportT
         owner_.previewCanvas_->setSmoothBrightness(owner_.previewSmoothBrightness_);
         owner_.previewCanvas_->setBackgroundScaleMode(owner_.previewBackgroundScaleMode_);
         owner_.previewCanvas_->setNoteFlowSpeed(owner_.previewNoteFlowSpeed_);
+        owner_.previewCanvas_->setSlideEarlierSecondAndTextOnTop(owner_.previewSlideEarlierSecondAndTextOnTop_);
     }
 
     owner_.saveProjectRenderState();
@@ -371,6 +373,7 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     task.outlineVariant = owner_.previewOutlineVariant_;
     task.backgroundScaleMode = owner_.previewBackgroundScaleMode_;
     task.noteFlowSpeed = owner_.previewNoteFlowSpeed_;
+    task.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
     task.exportStartSeconds = 0.0;
     task.contentDurationSeconds = cappedExportEndSecond;
     task.fullRangeExport = true;
@@ -589,6 +592,7 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo()
     task.outlineVariant = owner_.previewOutlineVariant_;
     task.backgroundScaleMode = owner_.previewBackgroundScaleMode_;
     task.noteFlowSpeed = owner_.previewNoteFlowSpeed_;
+    task.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
     task.exportStartSeconds = 0.0;
     task.contentDurationSeconds = 0.0;
     task.fullRangeExport = true;

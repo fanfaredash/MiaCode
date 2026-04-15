@@ -4,6 +4,7 @@
 #include <QTextStream>
 
 #include "preview/scene/PreviewActiveMarkerView.h"
+#include "preview/scene/PreviewMarkerDrawOrder.h"
 #include "preview/scene/PreviewMuriActionLayerState.h"
 #include "preview/scene/PreviewPreparedSceneCache.h"
 #include "preview/scene/PreviewSceneConstants.h"
@@ -17,10 +18,12 @@ using miacode::preview::scene::PreviewActiveMarkerView;
 using miacode::preview::scene::PreviewCircleDescriptor;
 using miacode::preview::scene::PreviewFrameState;
 using miacode::preview::scene::PreviewMuriActionLayerState;
+using miacode::preview::scene::PreviewLayerWindowCursor;
 using miacode::preview::scene::PreviewPreparedLayerWindow;
 using miacode::preview::scene::PreviewPreparedMarkerEntry;
 using miacode::preview::scene::PreviewPreparedSceneCache;
 using miacode::preview::scene::PreviewSlideMotionLayerState;
+using miacode::preview::scene::PreviewSpriteDescriptor;
 using miacode::preview::scene::PreviewTrackLayerState;
 
 constexpr qreal kEpsilon = 1e-3;
@@ -259,6 +262,145 @@ PreviewFrameState buildDxWifiTrackState(bool withFallbackMarkerState)
     return state;
 }
 
+PreviewFrameState buildSameSecondSlideOrderState()
+{
+    PreviewFrameState state;
+    state.playheadSeconds = 1.05;
+    state.muriRenderOptions.showSlideTracks = true;
+    state.skin.slideTrackImage = solidImage(48, 16);
+    state.skin.starImage = solidImage(32, 32);
+
+    TimelineNoteMarker earlierTextSlide;
+    earlierTextSlide.type = QStringLiteral("slide");
+    earlierTextSlide.second = 1.0;
+    earlierTextSlide.slideTraceSecond = 1.3;
+    earlierTextSlide.endSecond = 2.0;
+    earlierTextSlide.availableSecond = 0.0;
+    earlierTextSlide.lane = 1;
+    earlierTextSlide.endLane = 3;
+    earlierTextSlide.sourceLine = 8;
+    earlierTextSlide.sourceCol = 2;
+    earlierTextSlide.parseOrder = 0;
+    earlierTextSlide.slideTrackKey = QStringLiteral("1-3");
+    earlierTextSlide.slideTrackAreaPoints = {{{QPointF(-40.0, 0.0)}}};
+    earlierTextSlide.slideTrackAreaRotations = {{{0.0}}};
+    earlierTextSlide.slideSegmentShootSeconds = {1.3};
+    earlierTextSlide.slideSegmentDurations = {0.7};
+    earlierTextSlide.slideSegmentPoints = {{QPointF(-30.0, 0.0)}};
+    earlierTextSlide.slideSegmentAngles = {{0.0}};
+
+    TimelineNoteMarker laterTextSlide = earlierTextSlide;
+    laterTextSlide.sourceCol = 6;
+    laterTextSlide.parseOrder = 1;
+    laterTextSlide.slideTrackKey = QStringLiteral("1-5");
+    laterTextSlide.slideTrackAreaPoints = {{{QPointF(40.0, 0.0)}}};
+    laterTextSlide.slideSegmentPoints = {{QPointF(30.0, 0.0)}};
+
+    state.noteMarkers = {earlierTextSlide, laterTextSlide};
+    return state;
+}
+
+QPointF expectedMappedSpriteCenter(const QPointF& logicalPoint, const QRectF& playfieldRect)
+{
+    return miacode::preview::scene::mapLogicalPointToRect(
+        QPointF(
+            miacode::preview::scene::kLogicalCanvasCenter + logicalPoint.x(),
+            miacode::preview::scene::kLogicalCanvasCenter + logicalPoint.y()
+        ),
+        playfieldRect
+    );
+}
+
+bool verifyPreviewMarkerDrawOrderHelper(QTextStream& err)
+{
+    TimelineNoteMarker earlierSecond = makeMarker(1.0, QStringLiteral("slide"));
+    earlierSecond.sourceLine = 3;
+    earlierSecond.sourceCol = 2;
+    earlierSecond.parseOrder = 0;
+
+    TimelineNoteMarker laterSecond = earlierSecond;
+    laterSecond.second = 2.0;
+    laterSecond.parseOrder = 1;
+
+    TimelineNoteMarker laterTextSameSecond = earlierSecond;
+    laterTextSameSecond.sourceCol = 8;
+    laterTextSameSecond.parseOrder = 2;
+
+    TimelineNoteMarker laterParseOrderSameText = earlierSecond;
+    laterParseOrderSameText.parseOrder = 4;
+
+    if (!require(
+            miacode::preview::scene::comparePreviewMarkerTopPriority(earlierSecond, laterSecond, true) < 0,
+            QStringLiteral("earlier-second marker is on top when earlierOnTop is enabled"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            miacode::preview::scene::comparePreviewMarkerTopPriority(earlierSecond, laterSecond, false) > 0,
+            QStringLiteral("later-second marker is on top when earlierOnTop is disabled"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            miacode::preview::scene::comparePreviewMarkerTopPriority(earlierSecond, laterTextSameSecond, true) < 0,
+            QStringLiteral("earlier-text marker is on top when earlierOnTop is enabled"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            miacode::preview::scene::comparePreviewMarkerTopPriority(earlierSecond, laterTextSameSecond, false) > 0,
+            QStringLiteral("later-text marker is on top when earlierOnTop is disabled"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            miacode::preview::scene::comparePreviewMarkerTopPriority(earlierSecond, laterParseOrderSameText, true) < 0,
+            QStringLiteral("parseOrder breaks same-text ties when earlierOnTop is enabled"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            miacode::preview::scene::comparePreviewMarkerTopPriority(earlierSecond, laterParseOrderSameText, false) > 0,
+            QStringLiteral("parseOrder reverses with earlierOnTop disabled"),
+            err)) {
+        return false;
+    }
+
+    QVector<TimelineNoteMarker> markers{earlierSecond, laterTextSameSecond};
+    QVector<int> sourceOrder{0, 1};
+    miacode::preview::scene::sortPreviewMarkerViewIndicesForDraw(
+        PreviewActiveMarkerView(markers),
+        &sourceOrder,
+        true
+    );
+    if (!require(
+            sourceOrder == QVector<int>({1, 0}),
+            QStringLiteral("fallback helper sorts same-second markers to draw later-text first"),
+            err)) {
+        return false;
+    }
+
+    PreviewPreparedLayerWindow<PreviewPreparedMarkerEntry> layer;
+    layer.entries.append(PreviewPreparedMarkerEntry{0, 0.0, 2.0, -1});
+    layer.entries.append(PreviewPreparedMarkerEntry{1, 0.0, 2.0, -1});
+    miacode::preview::scene::rebuildPreviewPreparedMarkerDrawOrder(markers, &layer, true);
+    if (!require(
+            layer.drawOrder == QVector<int>({1, 0}),
+            QStringLiteral("prepared helper sorts same-second markers to draw later-text first"),
+            err)) {
+        return false;
+    }
+    miacode::preview::scene::rebuildPreviewPreparedMarkerDrawOrder(markers, &layer, false);
+    if (!require(
+            layer.drawOrder == QVector<int>({0, 1}),
+            QStringLiteral("prepared helper reverses same-second text order when earlierOnTop is disabled"),
+            err)) {
+        return false;
+    }
+
+    return true;
+}
+
 bool verifyTrackFallbackLookupAvoidsLinearScanRegression(QTextStream& err)
 {
     const QRectF playfieldRect(
@@ -387,6 +529,115 @@ bool verifySlideMotionAngleInterpolationUsesShortestArc(QTextStream& err)
 
     const qreal expectedRotation = -90.72108840546167;
     if (!requireNear(layerState.sprites.constFirst().rotationDegrees, expectedRotation, QStringLiteral("slide motion shortest-arc rotation"), err)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool verifyTrackAndSlideMotionUseTextOrderForSameSecondSlides(QTextStream& err)
+{
+    const QRectF playfieldRect(
+        0.0,
+        0.0,
+        miacode::preview::scene::kLogicalCanvasSize,
+        miacode::preview::scene::kLogicalCanvasSize
+    );
+    const PreviewFrameState state = buildSameSecondSlideOrderState();
+    const QPointF expectedEarlierTrackCenter = expectedMappedSpriteCenter(QPointF(-40.0, 0.0), playfieldRect);
+    const QPointF expectedLaterTrackCenter = expectedMappedSpriteCenter(QPointF(40.0, 0.0), playfieldRect);
+    const QPointF expectedEarlierMotionCenter = expectedMappedSpriteCenter(QPointF(-30.0, 0.0), playfieldRect);
+    const QPointF expectedLaterMotionCenter = expectedMappedSpriteCenter(QPointF(30.0, 0.0), playfieldRect);
+
+    const PreviewTrackLayerState fallbackTrackLayerState =
+        miacode::preview::scene::buildPreviewTrackLayerState(
+            state,
+            PreviewActiveMarkerView(state.noteMarkers),
+            playfieldRect
+        );
+    const PreviewSlideMotionLayerState fallbackSlideMotionLayerState =
+        miacode::preview::scene::buildPreviewSlideMotionLayerState(
+            state,
+            PreviewActiveMarkerView(state.noteMarkers),
+            playfieldRect
+        );
+    if (!require(fallbackTrackLayerState.sprites.size() == 2, QStringLiteral("fallback track state keeps both same-second slide sprites"), err)) {
+        return false;
+    }
+    if (!require(fallbackSlideMotionLayerState.sprites.size() == 2, QStringLiteral("fallback slide motion keeps both same-second slide sprites"), err)) {
+        return false;
+    }
+
+    PreviewPreparedSceneCache preparedCache;
+    preparedCache.sync(state);
+    PreviewLayerWindowCursor slideLikeCursor;
+    miacode::preview::scene::syncPreviewLayerWindowCursor(preparedCache.slideLikeLayer(), state.playheadSeconds, &slideLikeCursor);
+    const PreviewActiveMarkerView preparedView(state.noteMarkers, preparedCache.slideLikeLayer(), slideLikeCursor);
+    if (!require(
+            preparedView.preparedDrawOrder() == QVector<int>({1, 0}),
+            QStringLiteral("prepared slide-like layer stores later-text-first draw order for same-second slides"),
+            err)) {
+        return false;
+    }
+
+    const PreviewTrackLayerState preparedTrackLayerState =
+        miacode::preview::scene::buildPreviewTrackLayerState(
+            state,
+            preparedView,
+            playfieldRect
+        );
+    const PreviewSlideMotionLayerState preparedSlideMotionLayerState =
+        miacode::preview::scene::buildPreviewSlideMotionLayerState(
+            state,
+            preparedView,
+            playfieldRect
+        );
+    if (!require(preparedTrackLayerState.sprites.size() == 2, QStringLiteral("prepared track state keeps both same-second slide sprites"), err)) {
+        return false;
+    }
+    if (!require(preparedSlideMotionLayerState.sprites.size() == 2, QStringLiteral("prepared slide motion keeps both same-second slide sprites"), err)) {
+        return false;
+    }
+
+    const auto requireCenterOrder = [&err](const PreviewSpriteDescriptor& first,
+                                           const PreviewSpriteDescriptor& second,
+                                           const QPointF& expectedFirst,
+                                           const QPointF& expectedSecond,
+                                           const QString& label) {
+        return requireNear(first.center.x(), expectedFirst.x(), label + QStringLiteral(" first center x"), err)
+            && requireNear(second.center.x(), expectedSecond.x(), label + QStringLiteral(" second center x"), err);
+    };
+
+    if (!requireCenterOrder(
+            fallbackTrackLayerState.sprites.at(0),
+            fallbackTrackLayerState.sprites.at(1),
+            expectedLaterTrackCenter,
+            expectedEarlierTrackCenter,
+            QStringLiteral("fallback track same-second text order"))) {
+        return false;
+    }
+    if (!requireCenterOrder(
+            preparedTrackLayerState.sprites.at(0),
+            preparedTrackLayerState.sprites.at(1),
+            expectedLaterTrackCenter,
+            expectedEarlierTrackCenter,
+            QStringLiteral("prepared track same-second text order"))) {
+        return false;
+    }
+    if (!requireCenterOrder(
+            fallbackSlideMotionLayerState.sprites.at(0),
+            fallbackSlideMotionLayerState.sprites.at(1),
+            expectedLaterMotionCenter,
+            expectedEarlierMotionCenter,
+            QStringLiteral("fallback slide motion same-second text order"))) {
+        return false;
+    }
+    if (!requireCenterOrder(
+            preparedSlideMotionLayerState.sprites.at(0),
+            preparedSlideMotionLayerState.sprites.at(1),
+            expectedLaterMotionCenter,
+            expectedEarlierMotionCenter,
+            QStringLiteral("prepared slide motion same-second text order"))) {
         return false;
     }
 
@@ -622,6 +873,9 @@ int main(int argc, char* argv[])
     if (!verifyActiveMarkerViewMatchesCollectMarkers(err)) {
         return 1;
     }
+    if (!verifyPreviewMarkerDrawOrderHelper(err)) {
+        return 1;
+    }
     if (!verifyTrackFallbackLookupAvoidsLinearScanRegression(err)) {
         return 1;
     }
@@ -632,6 +886,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifySlideMotionAngleInterpolationUsesShortestArc(err)) {
+        return 1;
+    }
+    if (!verifyTrackAndSlideMotionUseTextOrderForSameSecondSlides(err)) {
         return 1;
     }
     if (!verifyDxMuriActionSweepLineMatchesNaiveReference(err)) {

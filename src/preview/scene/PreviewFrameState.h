@@ -181,6 +181,7 @@ struct PreviewRenderState {
     bool smoothBrightness = false;
     PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
     double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    bool slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
     bool showDebugInfo = false;
     bool showTimestamp = true;
     bool showObjectStatsHud = false;

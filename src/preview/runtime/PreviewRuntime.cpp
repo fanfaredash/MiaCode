@@ -411,6 +411,12 @@ void PreviewRuntime::setNoteFlowSpeed(double flowSpeed)
     update();
 }
 
+void PreviewRuntime::setSlideEarlierSecondAndTextOnTop(bool enabled)
+{
+    frameState_.render.slideEarlierSecondAndTextOnTop = enabled;
+    update();
+}
+
 void PreviewRuntime::setShowDebugInfo(bool show)
 {
     frameState_.render.showDebugInfo = show;

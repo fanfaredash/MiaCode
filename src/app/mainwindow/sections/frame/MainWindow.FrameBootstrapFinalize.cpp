@@ -443,6 +443,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         previewCanvas_->setSmoothBrightness(previewSmoothBrightness_);
         previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
         previewCanvas_->setNoteFlowSpeed(previewNoteFlowSpeed_);
+        previewCanvas_->setSlideEarlierSecondAndTextOnTop(previewSlideEarlierSecondAndTextOnTop_);
         previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
         previewCanvas_->setShowTimestamp(previewShowTimestamp_);
         previewCanvas_->setShowObjectStatsHud(previewShowObjectStatsHud_);
