@@ -1,5 +1,7 @@
 #include "TimelineView.h"
 #include "common/AssetPaths.h"
+#include "common/DebugLog.h"
+#include "common/DebugOptions.h"
 #include "common/PreviewSkinConfig.h"
 #include "common/WaveformCache.h"
 #include "UiText.h"
@@ -195,6 +197,19 @@ int timelineHeaderLabelHalfWidthPx(const QFont& baseFont, const QString& labelTe
     }
     const QFont labelFont = scaledTimelineHeaderFont(baseFont, timelineHeaderLabelScale(baseFont, labelText.size()));
     return qCeil(QFontMetricsF(labelFont).horizontalAdvance(labelText) * 0.5) + 1;
+}
+
+void appendTimelineUiPerfLog(const QString& payload)
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("timeline/ui_perf"),
+        payload,
+        true
+    );
 }
 }  // namespace
 
@@ -464,10 +479,13 @@ void TimelineView::focusPlayhead(bool centerView)
     if (!centerView) {
         return;
     }
+    const int previousValue = horizontalScrollBar()->value();
     const int playheadX = secondToX(playheadSeconds_);
     const int targetX = playheadX - (viewport()->width() / 2);
     horizontalScrollBar()->setValue(qBound(horizontalScrollBar()->minimum(), targetX, horizontalScrollBar()->maximum()));
-    viewport()->update();
+    if (horizontalScrollBar()->value() != previousValue) {
+        viewport()->update();
+    }
 }
 
 void TimelineView::focusCursor(bool centerView)
@@ -476,10 +494,13 @@ void TimelineView::focusCursor(bool centerView)
     if (!centerView) {
         return;
     }
+    const int previousValue = horizontalScrollBar()->value();
     const int cursorX = secondToX(cursorSeconds_);
     const int targetX = cursorX - (viewport()->width() / 2);
     horizontalScrollBar()->setValue(qBound(horizontalScrollBar()->minimum(), targetX, horizontalScrollBar()->maximum()));
-    viewport()->update();
+    if (horizontalScrollBar()->value() != previousValue) {
+        viewport()->update();
+    }
 }
 
 double TimelineView::playheadSeconds() const

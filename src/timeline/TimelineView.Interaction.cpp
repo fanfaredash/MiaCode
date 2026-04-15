@@ -179,6 +179,18 @@ void TimelineView::scrollContentsBy(int dx, int dy)
     Q_UNUSED(dy);
     // This view has fixed (non-scrolling) painted regions on the left/header.
     // Force full repaint to avoid stale artifacts from scroll blit optimization.
+    if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+        ++debugScrollEventCount_;
+        if ((debugScrollEventCount_ % 20) == 0) {
+            appendTimelineUiPerfLog(
+                QStringLiteral("kind=scroll count=%1 dx=%2 dy=%3 hbar=%4")
+                    .arg(debugScrollEventCount_)
+                    .arg(dx)
+                    .arg(dy)
+                    .arg(horizontalScrollBar() != nullptr ? horizontalScrollBar()->value() : 0)
+            );
+        }
+    }
     viewport()->update();
 }
 

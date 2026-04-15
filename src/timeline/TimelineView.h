@@ -195,6 +195,10 @@ private:
     int heldHorizontalKeyScrollLastElapsedMs_ = 0;
     double heldHorizontalKeyScrollRemainderPixels_ = 0.0;
     bool playheadIndicatorSuppressed_ = false;
+    quint64 debugPaintSampleCount_ = 0;
+    qint64 debugPaintTotalElapsedNs_ = 0;
+    qint64 debugPaintMaxElapsedNs_ = 0;
+    quint64 debugScrollEventCount_ = 0;
     QElapsedTimer heldHorizontalKeyScrollElapsed_;
     QTimer* playheadIndicatorRestoreTimer_ = nullptr;
     QTimer* heldHorizontalKeyScrollTimer_ = nullptr;

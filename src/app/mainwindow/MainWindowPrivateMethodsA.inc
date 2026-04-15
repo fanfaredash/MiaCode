@@ -151,6 +151,16 @@
     void seekTimelineToCursor(int line, int col);
     void syncTimelineToEditorCursor(bool centerView = true);
     void navigateTimelineToSecond(double second, bool focusEditor = true);
+    void scheduleDeferredEditorUiUpdate(
+        bool updateStatus = false,
+        bool updateEmptyState = false,
+        bool syncTimelineCursor = false,
+        bool centerView = false,
+        bool syncPreviewFollow = false,
+        double previewFollowSecond = 0.0,
+        bool ensurePreviewFollowVisible = false);
+    void flushDeferredEditorUiUpdate();
+    void queueQtPreviewFollowUiUpdate(double second, bool centerView = false);
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
     bool moveEditorCursorToTimelineLocation(
         int line,

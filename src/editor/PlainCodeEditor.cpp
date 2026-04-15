@@ -136,6 +136,46 @@ QPointF adjustedTrailingBlankClickPosition(const PlainCodeEditor* editor, const 
 
     return QPointF(position.x(), static_cast<qreal>(lastBlockSpan.lastRowRect.center().y()));
 }
+
+QRect currentLineHighlightRectForCursor(
+    const PlainCodeEditor* editor,
+    const QTextCursor& cursor,
+    int blockSpacingPixels)
+{
+    if (editor == nullptr || editor->viewport() == nullptr) {
+        return QRect();
+    }
+
+    const QTextBlock block = cursor.block();
+    if (!block.isValid()) {
+        return QRect();
+    }
+
+    const BlockVisualSpan blockSpan = visibleBlockSpan(editor, block);
+    int blockTop = 0;
+    int blockHeight = 0;
+    if (blockSpan.isValid()) {
+        blockTop = blockSpan.top();
+        blockHeight = blockSpan.height();
+    } else {
+        const QRect caretRect = editor->cursorRect(cursor);
+        if (!caretRect.isValid()) {
+            return QRect();
+        }
+        blockTop = caretRect.top();
+        blockHeight = qMax(1, caretRect.height());
+    }
+    const int verticalExpand = qMax(0, qRound(static_cast<qreal>(blockSpacingPixels) / 8.0));
+    QRect highlightRect(
+        kCurrentLineHighlightLeftInset,
+        blockTop - verticalExpand,
+        editor->viewport()->width() - kCurrentLineHighlightLeftInset - kCurrentLineHighlightRightInset,
+        blockHeight + (verticalExpand * 2)
+    );
+    highlightRect = highlightRect.intersected(editor->viewport()->rect());
+    highlightRect.adjust(0, 0, -1, -1);
+    return highlightRect.isValid() ? highlightRect : QRect();
+}
 }  // namespace
 
 class LineNumberArea : public QWidget
@@ -166,7 +206,9 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
 {
     const auto applyCursorVisibility = [this]() {
         const QTextCursor cursor = textCursor();
-        const bool hideAtLineStart = !cursor.hasSelection() && cursor.positionInBlock() == 0;
+        const bool hideAtLineStart = !cursor.hasSelection()
+            && cursor.positionInBlock() == 0
+            && !cursor.block().text().isEmpty();
         setCursorWidth(hideAtLineStart ? kEditorCursorHiddenWidth : kEditorCursorVisibleWidth);
     };
 
@@ -181,8 +223,11 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
         updateLineNumberArea();
     });
     connect(this, &QTextEdit::cursorPositionChanged, this, [this, applyCursorVisibility]() {
+        const QRect previousHighlightRect = lastCurrentLineHighlightRect_;
         applyCursorVisibility();
-        viewport()->update();
+        const QRect currentHighlightRect = currentLineHighlightRect();
+        lastCurrentLineHighlightRect_ = currentHighlightRect;
+        updateCurrentLineHighlightRegion(previousHighlightRect, currentHighlightRect);
     });
     updateLineNumberAreaWidth(0);
     setLineWrapMode(QTextEdit::NoWrap);
@@ -194,6 +239,7 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
     }
     setCursorWidth(kEditorCursorVisibleWidth);
     applyCursorVisibility();
+    lastCurrentLineHighlightRect_ = currentLineHighlightRect();
 }
 
 void PlainCodeEditor::setBlockSpacingPixels(int px)
@@ -227,6 +273,32 @@ void PlainCodeEditor::refreshLineNumberAreaLayout()
     lineNumberArea_->setGeometry(QRect(cr.left(), cr.top(), lineNumberAreaWidth(), cr.height()));
     lineNumberArea_->update();
     viewport()->update();
+}
+
+QRect PlainCodeEditor::currentLineHighlightRect() const
+{
+    return currentLineHighlightRectForCursor(this, textCursor(), blockSpacingPixels_);
+}
+
+void PlainCodeEditor::updateCurrentLineHighlightRegion(const QRect& previousRect, const QRect& currentRect)
+{
+    if (viewport() == nullptr) {
+        return;
+    }
+
+    QRect dirtyRect;
+    if (previousRect.isValid()) {
+        dirtyRect = previousRect;
+    }
+    if (currentRect.isValid()) {
+        dirtyRect = dirtyRect.isNull() ? currentRect : dirtyRect.united(currentRect);
+    }
+
+    if (!dirtyRect.isValid()) {
+        viewport()->update();
+        return;
+    }
+    viewport()->update(dirtyRect.intersected(viewport()->rect()));
 }
 
 void PlainCodeEditor::setBatchTransformActions(const QList<QAction*>& actions)
@@ -551,31 +623,8 @@ void PlainCodeEditor::mousePressEvent(QMouseEvent* event)
 void PlainCodeEditor::paintEvent(QPaintEvent* event)
 {
     QTextEdit::paintEvent(event);
-
-    QTextCursor cursor = textCursor();
-    const QTextBlock block = cursor.block();
-    if (!block.isValid()) {
-        return;
-    }
-
-    const BlockVisualSpan blockSpan = visibleBlockSpan(this, block);
-    if (!blockSpan.isValid()) {
-        return;
-    }
-
-    const int blockTop = blockSpan.top();
-    // Keep current-line highlight tied to wrapped glyph rows, not paragraph bottom margin.
-    const int blockHeight = blockSpan.height();
-
-    const int verticalExpand = qMax(0, qRound(static_cast<qreal>(blockSpacingPixels_) / 8.0));
-    QRect highlightRect(
-        kCurrentLineHighlightLeftInset,
-        blockTop - verticalExpand,
-        viewport()->width() - kCurrentLineHighlightLeftInset - kCurrentLineHighlightRightInset,
-        blockHeight + (verticalExpand * 2)
-    );
-    highlightRect = highlightRect.intersected(viewport()->rect());
-    highlightRect.adjust(0, 0, -1, -1);
+    const QRect highlightRect = currentLineHighlightRect();
+    lastCurrentLineHighlightRect_ = highlightRect;
     if (!highlightRect.isValid()) {
         return;
     }
