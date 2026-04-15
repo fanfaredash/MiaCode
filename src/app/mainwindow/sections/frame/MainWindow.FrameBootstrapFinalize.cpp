@@ -390,23 +390,30 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     }
     windowSection_->updateEditorFindBarGeometry();
     windowSection_->applyFindOverlayInset();
-    auto* fontDecreaseShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+-")), this);
-    fontDecreaseShortcut->setContext(Qt::WindowShortcut);
-    connect(fontDecreaseShortcut, &QShortcut::activated, this, [this]() {
-        applyEditorTextFontSize(editorTextFontPointSize_ - 1, true);
+    const auto applyEditorFontDelta = [this](int delta) {
+        applyEditorTextFontSize(editorTextFontPointSize_ + delta, true);
         statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+    };
+    fontDecreaseAction_ = new QAction(QStringLiteral("Decrease Editor Font"), this);
+    fontDecreaseAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+-")));
+    fontDecreaseAction_->setShortcutContext(Qt::WindowShortcut);
+    addAction(fontDecreaseAction_);
+    connect(fontDecreaseAction_, &QAction::triggered, this, [applyEditorFontDelta]() {
+        applyEditorFontDelta(-1);
     });
-    auto* fontIncreaseShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl+=")), this);
-    fontIncreaseShortcut->setContext(Qt::WindowShortcut);
-    connect(fontIncreaseShortcut, &QShortcut::activated, this, [this]() {
-        applyEditorTextFontSize(editorTextFontPointSize_ + 1, true);
-        statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+    fontIncreaseAction_ = new QAction(QStringLiteral("Increase Editor Font"), this);
+    fontIncreaseAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+=")));
+    fontIncreaseAction_->setShortcutContext(Qt::WindowShortcut);
+    addAction(fontIncreaseAction_);
+    connect(fontIncreaseAction_, &QAction::triggered, this, [applyEditorFontDelta]() {
+        applyEditorFontDelta(1);
     });
-    auto* fontIncreaseShiftShortcut = new QShortcut(QKeySequence(QStringLiteral("Ctrl++")), this);
-    fontIncreaseShiftShortcut->setContext(Qt::WindowShortcut);
-    connect(fontIncreaseShiftShortcut, &QShortcut::activated, this, [this]() {
-        applyEditorTextFontSize(editorTextFontPointSize_ + 1, true);
-        statusBar()->showMessage(uiText("status.editor_text_display_updated", "Editor text display updated."));
+    fontIncreaseShiftAction_ = new QAction(QStringLiteral("Increase Editor Font Shift"), this);
+    fontIncreaseShiftAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl++")));
+    fontIncreaseShiftAction_->setShortcutContext(Qt::WindowShortcut);
+    addAction(fontIncreaseShiftAction_);
+    connect(fontIncreaseShiftAction_, &QAction::triggered, this, [applyEditorFontDelta]() {
+        applyEditorFontDelta(1);
     });
 
     statusBar()->showMessage("PlainCodeEditor ready.");
