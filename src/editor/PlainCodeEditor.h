@@ -25,7 +25,12 @@ public:
     void setBatchTransformActions(const QList<QAction*>& actions);
     void setMoreBatchTransformActions(const QList<QAction*>& actions);
 
+signals:
+    void undoShortcutRequested();
+    void redoShortcutRequested();
+
 protected:
+    bool event(QEvent* event) override;
     void changeEvent(QEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
     void inputMethodEvent(QInputMethodEvent* event) override;

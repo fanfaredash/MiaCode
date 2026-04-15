@@ -2,6 +2,8 @@
 
 #include "../../MainWindow.h"
 
+class QTextCursor;
+
 class MainWindow::DocumentSection {
 public:
     DocumentSection(MainWindow& owner, MainWindow::MainWindowUiRefs& ui, MainWindow::MainWindowState& state);
@@ -46,6 +48,10 @@ public:
     void markCurrentFieldDirty();
     void clearDeletedDifficultyUndoState();
     bool undoDeletedDifficultyField();
+    void clearChartSelectionTransformUndoEntries();
+    void syncChartSelectionTransformUndoState();
+    bool undoChartEditorWithSelectionRestore();
+    bool redoChartEditorWithSelectionRestore();
     QString resolveInitialOpenDirectory() const;
     void setLastOpenDirectory(const QString& pathOrDir);
     QString transformChartText(const QString& input, ChartTransformOp op, int* changedCount = nullptr) const;
@@ -80,6 +86,12 @@ public:
     void rebuildAutosaveMetadata(const QString& autosaveDirectoryPath) const;
 
 private:
+    void pruneChartSelectionTransformUndoEntriesFromStep(int undoStepThreshold);
+    void updateLastObservedChartEditorUndoRedoSteps();
+    void recordChartSelectionTransformUndoEntry(int originalAnchor, int originalPosition, const QTextCursor& transformedCursor);
+    const SelectionTransformUndoEntry* findChartSelectionTransformUndoEntry(int undoStepAfterApply) const;
+    bool restoreChartSelectionTransformCursor(const SelectionTransformUndoEntry& entry, bool transformedSelection);
+
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;
     MainWindow::MainWindowState& state_;

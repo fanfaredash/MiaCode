@@ -172,6 +172,28 @@ MainWindow::MainWindow(QWidget* parent)
         transformToggleFireworkAction_,
         transformRandomRotateAction_,
     });
+    connect(editor, &PlainCodeEditor::undoShortcutRequested, this, [this]() {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("selection_restore/editor_shortcut_forward"),
+            QStringLiteral("action=undo has_action=%1").arg(undoAction_ != nullptr ? 1 : 0),
+            true
+        );
+        if (undoAction_ != nullptr) {
+            undoAction_->trigger();
+        }
+    });
+    connect(editor, &PlainCodeEditor::redoShortcutRequested, this, [this]() {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("selection_restore/editor_shortcut_forward"),
+            QStringLiteral("action=redo has_action=%1").arg(redoAction_ != nullptr ? 1 : 0),
+            true
+        );
+        if (redoAction_ != nullptr) {
+            redoAction_->trigger();
+        }
+    });
     chartBracketHighlighter_ = new BracketScopeHighlighter(editor->document());
     editorWidget_ = editor;
     editorWidget_->setFont(codeFont);
@@ -1002,6 +1024,9 @@ MainWindow::MainWindow(QWidget* parent)
             }
             if (charsRemoved == 0 && charsAdded == 0) {
                 return;
+            }
+            if (documentSection_ != nullptr) {
+                documentSection_->syncChartSelectionTransformUndoState();
             }
             QTimer::singleShot(0, this, [this]() {
                 if (!suppressTextDirtyTracking_) {

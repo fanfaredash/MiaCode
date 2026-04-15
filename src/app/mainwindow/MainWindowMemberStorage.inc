@@ -176,6 +176,10 @@
         qint64 autosaveDirtySinceMs_ = -1;
         int editorUndoSaveAnchor_ = 0;
         int metadataExtraUndoSaveAnchor_ = 0;
+        QVector<SelectionTransformUndoEntry> chartSelectionTransformUndoEntries_;
+        int lastObservedEditorUndoSteps_ = 0;
+        int lastObservedEditorRedoSteps_ = 0;
+        bool editorSelectionUndoRedoRestoreInProgress_ = false;
         int lastTimelineParseDifficultyId_ = 0;
         QString lastTimelineParseChartText_;
         miacode::simai::SimaiTimingMetadata lastTimelineParseTimingMetadata_;
@@ -434,6 +438,10 @@
     qint64& autosaveDirtySinceMs_ = state_.autosaveDirtySinceMs_;
     int& editorUndoSaveAnchor_ = state_.editorUndoSaveAnchor_;
     int& metadataExtraUndoSaveAnchor_ = state_.metadataExtraUndoSaveAnchor_;
+    QVector<SelectionTransformUndoEntry>& chartSelectionTransformUndoEntries_ = state_.chartSelectionTransformUndoEntries_;
+    int& lastObservedEditorUndoSteps_ = state_.lastObservedEditorUndoSteps_;
+    int& lastObservedEditorRedoSteps_ = state_.lastObservedEditorRedoSteps_;
+    bool& editorSelectionUndoRedoRestoreInProgress_ = state_.editorSelectionUndoRedoRestoreInProgress_;
     int& lastTimelineParseDifficultyId_ = state_.lastTimelineParseDifficultyId_;
     QString& lastTimelineParseChartText_ = state_.lastTimelineParseChartText_;
     miacode::simai::SimaiTimingMetadata& lastTimelineParseTimingMetadata_ = state_.lastTimelineParseTimingMetadata_;
