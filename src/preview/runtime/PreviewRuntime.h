@@ -72,6 +72,7 @@ public:
     void setVisibleHostWindow(QQuickWindow* window);
     void clearVisibleHostWindow(QQuickWindow* window);
     void notifyVisibleFramePresented();
+    QQuickWindow* visibleHostWindow() const;
     void requestActivate();
     void update();
 

@@ -25,11 +25,7 @@ public:
     void setBatchTransformActions(const QList<QAction*>& actions);
     void setMoreBatchTransformActions(const QList<QAction*>& actions);
 
-signals:
-    void previewPlayPauseRequested();
-
 protected:
-    bool eventFilter(QObject* watched, QEvent* event) override;
     void changeEvent(QEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
     void inputMethodEvent(QInputMethodEvent* event) override;
@@ -44,7 +40,6 @@ private slots:
     void updateLineNumberArea();
 
 private:
-    bool previewShortcutPending_ = false;
     int blockSpacingPixels_ = 0;
     int topOverlayInsetPixels_ = 0;
     bool halfWidthInputEnabled_ = true;

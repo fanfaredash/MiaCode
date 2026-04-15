@@ -4,7 +4,9 @@
 #include "PlainCodeEditor.h"
 #include "UiText.h"
 #include "common/PreviewInteractionConfig.h"
+#include "preview/runtime/PreviewRuntime.h"
 
+#include <QQuickWindow>
 #include <QtCore>
 #include <QtGui>
 #include <QtWidgets>
@@ -59,6 +61,36 @@ bool MainWindow::WindowSection::shouldRespectFocusedWidgetOnRestore(QWidget* wid
         || qobject_cast<QSpinBox*>(widget) != nullptr
         || qobject_cast<QDateTimeEdit*>(widget) != nullptr
         || qobject_cast<QTabBar*>(widget) != nullptr;
+}
+
+QWindow* MainWindow::WindowSection::previewVisibleHostWindow() const
+{
+    return owner_.previewCanvas_ != nullptr ? owner_.previewCanvas_->visibleHostWindow() : nullptr;
+}
+
+void MainWindow::WindowSection::focusPreviewInteractionTarget(QObject* watched, Qt::FocusReason reason)
+{
+    QWidget* widget = qobject_cast<QWidget*>(watched);
+    if (widget == nullptr || widget->focusPolicy() == Qt::NoFocus) {
+        if (owner_.previewFullscreenActive_ && owner_.previewFullscreenHost_ != nullptr
+            && owner_.previewFullscreenHost_->focusPolicy() != Qt::NoFocus) {
+            widget = owner_.previewFullscreenHost_;
+        } else if (owner_.previewFullscreenWindow_ != nullptr && owner_.previewFullscreenWindow_->focusPolicy() != Qt::NoFocus) {
+            widget = owner_.previewFullscreenWindow_;
+        } else if (owner_.previewCanvasContainer_ != nullptr && owner_.previewCanvasContainer_->focusPolicy() != Qt::NoFocus) {
+            widget = owner_.previewCanvasContainer_;
+        } else if (owner_.previewCanvasFrame_ != nullptr && owner_.previewCanvasFrame_->focusPolicy() != Qt::NoFocus) {
+            widget = owner_.previewCanvasFrame_;
+        } else if (owner_.previewPanel_ != nullptr && owner_.previewPanel_->focusPolicy() != Qt::NoFocus) {
+            widget = owner_.previewPanel_;
+        }
+    }
+    if (widget != nullptr) {
+        widget->setFocus(reason);
+    }
+    if (owner_.previewCanvas_ != nullptr) {
+        owner_.previewCanvas_->requestActivate();
+    }
 }
 
 void MainWindow::WindowSection::handleApplicationFocusChanged(QWidget* old, QWidget* now)
@@ -392,6 +424,7 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
             );
         }
     }
+    const QWindow* previewVisibleWindow = this->previewVisibleHostWindow();
     const bool previewKeyScope =
         watched == owner_.previewSlider_
         || watched == owner_.previewCanvasContainer_
@@ -400,13 +433,15 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         || watched == owner_.previewFullscreenWindow_
         || watched == owner_.previewFullscreenHost_
         || watched == owner_.previewFullscreenControlsWindow_
-        || watched == owner_.previewFullscreenButton_;
+        || watched == owner_.previewFullscreenButton_
+        || watched == previewVisibleWindow;
     const bool previewMouseFocusScope =
         watched == owner_.previewCanvasContainer_
         || watched == owner_.previewCanvasFrame_
         || watched == owner_.previewPanel_
         || watched == owner_.previewFullscreenWindow_
-        || watched == owner_.previewFullscreenHost_;
+        || watched == owner_.previewFullscreenHost_
+        || watched == previewVisibleWindow;
     const bool previewFullscreenOverlayScope =
         watched == owner_.previewFullscreenWindow_
         || watched == owner_.previewFullscreenHost_
@@ -419,13 +454,11 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         || watched == owner_.stopPreviewButton_
         || watched == owner_.pausePreviewButton_
         || watched == owner_.previewSpeedButton_
-        || watched == owner_.previewFullscreenButton_;
+        || watched == owner_.previewFullscreenButton_
+        || watched == previewVisibleWindow;
     if (previewMouseFocusScope
         && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::Wheel)) {
-        if (QWidget* widget = qobject_cast<QWidget*>(watched);
-            widget != nullptr && widget->focusPolicy() != Qt::NoFocus) {
-            widget->setFocus(Qt::MouseFocusReason);
-        }
+        this->focusPreviewInteractionTarget(watched, Qt::MouseFocusReason);
     }
     if (owner_.previewFullscreenActive_ && previewFullscreenOverlayScope) {
         if (event->type() == QEvent::MouseMove

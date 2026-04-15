@@ -87,6 +87,8 @@ public:
 private:
     QTextEdit* resolveRestorableTextEdit(QWidget* widget) const;
     bool shouldRespectFocusedWidgetOnRestore(QWidget* widget, QTextEdit* target) const;
+    QWindow* previewVisibleHostWindow() const;
+    void focusPreviewInteractionTarget(QObject* watched, Qt::FocusReason reason);
     void handleApplicationFocusChanged(QWidget* old, QWidget* now);
     void handleApplicationStateChanged(Qt::ApplicationState state);
     void rememberFocusedTextEditState(QTextEdit* textEdit);
