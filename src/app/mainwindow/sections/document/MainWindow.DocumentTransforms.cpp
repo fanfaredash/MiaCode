@@ -289,13 +289,18 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
             : QStringLiteral("Selection: full chart");
     } else {
         const auto [startLine, startCol] = lineColForPosition(editor->document(), begin);
+        const auto [endLine, endCol] = lineColForPosition(editor->document(), qMax(begin, finish - 1));
         dialogDescription = UiText::isChineseUi()
-            ? QStringLiteral("选中范围：%1行%2列")
+            ? QStringLiteral("选中范围：%1行%2列 ~ %3行%4列")
                   .arg(startLine)
                   .arg(startCol)
-            : QStringLiteral("Selection: L%1C%2")
+                  .arg(endLine)
+                  .arg(endCol)
+            : QStringLiteral("Selection: L%1C%2 ~ L%3C%4")
                   .arg(startLine)
-                  .arg(startCol);
+                  .arg(startCol)
+                  .arg(endLine)
+                  .arg(endCol);
     }
 
     miacode::chart_transform::ChartNormalizationOptions options;

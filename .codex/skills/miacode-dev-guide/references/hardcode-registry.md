@@ -54,6 +54,10 @@ Use this file to track where important constants live, what they mean, and wheth
 - `src/tools/latency/LatencyDetectorDialog.cpp`
   - Owns: detection windows, hop sizes, BPM scan range, offset penalties, snap thresholds
   - Rule: keep local when the values are intrinsic to the latency tool, but document any user-visible range changes
+- `src/simai/transform/ChartNormalization.cpp`
+  - Owns: whole-chart formatting snap constants for note-grid minimization and duration-signature rewriting
+  - Current tuning note: `384`-snap formatting keeps rendered `{beats}` selection independent from hold/slide duration syntax, still rewrites no-`#` duration signatures against a fixed `384` grid, and keeps rendered duration denominators at or above a `16th-note` floor
+  - Rule: keep local while only the chart formatter consumes these thresholds, but document any user-visible formatting changes immediately
 - `src/simai/parser/SimaiNativeParser.cpp`
   - Owns: parser-default geometry and timing assumptions used to derive marker behavior
   - Rule: parser-level constants can have repo-wide consequences; treat changes as cross-chain changes
