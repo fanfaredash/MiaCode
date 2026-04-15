@@ -173,6 +173,19 @@ QColor severityColor(ValidationSeverityLevel severity)
         : QColor(QStringLiteral("#C62828"));
 }
 
+void appendValidationPerfLog(const QString& tag, const QString& payload)
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        tag,
+        payload,
+        true
+    );
+}
+
 QString validationIssueTypeKeyFromRawMessage(const QString& rawMessage)
 {
     return QStringLiteral("validation:%1").arg(issueTypeSegment(rawMessage));
@@ -705,6 +718,39 @@ void MainWindow::ValidationSection::refreshEditorExtraSelections()
         return;
     }
 
+    QElapsedTimer timer;
+    timer.start();
+    const auto buildSignature = [this]() {
+        QByteArray signature;
+        QDataStream stream(&signature, QIODevice::WriteOnly);
+        stream << static_cast<quint32>(state_.validationDecorations_.size());
+        for (const ValidationDecoration& decoration : state_.validationDecorations_) {
+            stream << decoration.line;
+            stream << decoration.col;
+            stream << decoration.endCol;
+            stream << decoration.warning;
+            stream << decoration.message;
+        }
+        stream << state_.previewFollowDecorationActive_;
+        if (state_.previewFollowDecorationActive_) {
+            stream << state_.previewFollowDecorationLine_;
+            stream << state_.previewFollowDecorationCol_;
+            stream << state_.previewFollowDecorationEndCol_;
+        }
+        return signature;
+    };
+    const QByteArray signature = buildSignature();
+    if (signature == state_.lastEditorExtraSelectionsSignature_) {
+        appendValidationPerfLog(
+            QStringLiteral("edit/extra_selections_perf"),
+            QStringLiteral("skipped=1 decorations=%1 preview_follow=%2 elapsed_ms=%3")
+                .arg(state_.validationDecorations_.size())
+                .arg(state_.previewFollowDecorationActive_ ? 1 : 0)
+                .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
+        );
+        return;
+    }
+
     QVector<QTextEdit::ExtraSelection> selections;
     selections.reserve(state_.validationDecorations_.size() + (state_.previewFollowDecorationActive_ ? 1 : 0));
 
@@ -743,6 +789,15 @@ void MainWindow::ValidationSection::refreshEditorExtraSelections()
     }
 
     editor->setExtraSelections(selections);
+    state_.lastEditorExtraSelectionsSignature_ = signature;
+    appendValidationPerfLog(
+        QStringLiteral("edit/extra_selections_perf"),
+        QStringLiteral("skipped=0 decorations=%1 preview_follow=%2 selections=%3 elapsed_ms=%4")
+            .arg(state_.validationDecorations_.size())
+            .arg(state_.previewFollowDecorationActive_ ? 1 : 0)
+            .arg(selections.size())
+            .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
+    );
 }
 
 void MainWindow::ValidationSection::updateEditorValidationSummary()
@@ -888,10 +943,20 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
 
 void MainWindow::ValidationSection::setPreviewFollowDecoration(int line, int col, int endCol, bool ensureVisible)
 {
+    const int normalizedLine = qMax(1, line);
+    const int normalizedCol = qMax(1, col);
+    const int normalizedEndCol = qMax(normalizedCol, endCol >= 0 ? endCol : col);
+    if (state_.previewFollowDecorationActive_
+        && state_.previewFollowDecorationLine_ == normalizedLine
+        && state_.previewFollowDecorationCol_ == normalizedCol
+        && state_.previewFollowDecorationEndCol_ == normalizedEndCol) {
+        return;
+    }
+
     state_.previewFollowDecorationActive_ = true;
-    state_.previewFollowDecorationLine_ = qMax(1, line);
-    state_.previewFollowDecorationCol_ = qMax(1, col);
-    state_.previewFollowDecorationEndCol_ = qMax(state_.previewFollowDecorationCol_, endCol >= 0 ? endCol : col);
+    state_.previewFollowDecorationLine_ = normalizedLine;
+    state_.previewFollowDecorationCol_ = normalizedCol;
+    state_.previewFollowDecorationEndCol_ = normalizedEndCol;
     refreshEditorExtraSelections();
 
     if (!ensureVisible) {

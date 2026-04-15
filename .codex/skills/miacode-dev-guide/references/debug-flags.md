@@ -144,9 +144,13 @@ Primary owners:
   - runtime log
 - Stable tags:
   - `edit/metadata_perf`
+  - `edit/quick_timeline_perf`
+  - `edit/follow_sync_perf`
+  - `edit/extra_selections_perf`
   - `edit/muri_perf`
   - `edit/validation_perf`
   - `edit/validation_apply_perf`
+  - `timeline/ui_perf`
 - Main owners:
   - `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
   - `src/app/mainwindow/sections/validation/MainWindow.ValidationFlow.cpp`

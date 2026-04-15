@@ -1036,28 +1036,40 @@ MainWindow::MainWindow(QWidget* parent)
             ++timelineRevision_;
             applyTimelineQuickChange(position, charsRemoved, charsAdded);
             requestTimelineSlowRefresh();
-            updateEditorEmptyState();
-            updateEditorStatus();
-            if (timelineView_ != nullptr && hasActiveDifficulty()) {
-                if (timelineView_->followPreviewEnabled()) {
-                    double second = qMax(0.0, qtPreviewPauseSecond_);
-                    if (qtPreviewPlaying_) {
-                        if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
-                            second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-                        } else if (previewStageMediaRouteHasVideo()) {
-                            second = qMax(0.0, previewStageMediaRouteCurrentPlaybackSecond());
-                        }
+            bool syncPreviewFollow = false;
+            double previewFollowSecond = 0.0;
+            if (timelineView_ != nullptr && hasActiveDifficulty() && timelineView_->followPreviewEnabled()) {
+                syncPreviewFollow = true;
+                previewFollowSecond = qMax(0.0, qtPreviewPauseSecond_);
+                if (qtPreviewPlaying_) {
+                    if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
+                        previewFollowSecond = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
+                    } else if (previewStageMediaRouteHasVideo()) {
+                        previewFollowSecond = qMax(0.0, previewStageMediaRouteCurrentPlaybackSecond());
                     }
-                    syncEditorCursorToPreviewSecond(second, false, false);
-                } else {
-                    syncTimelineToEditorCursor(!qtPreviewPlaying_);
                 }
             }
+            scheduleDeferredEditorUiUpdate(
+                true,
+                true,
+                !syncPreviewFollow,
+                !qtPreviewPlaying_ && !syncPreviewFollow,
+                syncPreviewFollow,
+                previewFollowSecond,
+                false
+            );
         });
     }
     connect(qobject_cast<PlainCodeEditor*>(editorWidget_), &QTextEdit::cursorPositionChanged, this, [this]() {
-        updateEditorStatus();
-        syncTimelineToEditorCursor(!qtPreviewPlaying_);
+        scheduleDeferredEditorUiUpdate(
+            true,
+            false,
+            true,
+            !qtPreviewPlaying_,
+            false,
+            0.0,
+            false
+        );
     });
     connect(titleEdit_, &QLineEdit::textChanged, this, [this]() {
         markCurrentFieldDirty();

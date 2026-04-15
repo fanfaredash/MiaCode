@@ -1,5 +1,10 @@
 void TimelineView::paintEvent(QPaintEvent* event)
 {
+    QElapsedTimer paintTimer;
+    const bool logPerf = miacode::debug_options::runtimeDebugOutputEnabled();
+    if (logPerf) {
+        paintTimer.start();
+    }
     const UiTheme::Colors& c = UiTheme::colors();
     const QRect dirtyRect = event != nullptr ? event->rect() : viewport()->rect();
 
@@ -746,4 +751,31 @@ void TimelineView::paintEvent(QPaintEvent* event)
     painter.drawLine(left, top - 1, left, top + h);
     painter.setPen(c.timelineBorder);
     painter.drawRect(QRect(0, 0, viewport()->width() - 1, top + h));
+
+    if (logPerf) {
+        const qint64 elapsedNs = paintTimer.nsecsElapsed();
+        ++debugPaintSampleCount_;
+        debugPaintTotalElapsedNs_ += elapsedNs;
+        debugPaintMaxElapsedNs_ = qMax(debugPaintMaxElapsedNs_, elapsedNs);
+        if (elapsedNs >= 8000000 || (debugPaintSampleCount_ % 30) == 0) {
+            appendTimelineUiPerfLog(
+                QStringLiteral("kind=paint count=%1 elapsed_ms=%2 avg_ms=%3 max_ms=%4 dirty=%5x%6 visible_notes=%7 hbar=%8")
+                    .arg(debugPaintSampleCount_)
+                    .arg(elapsedNs / 1000000.0, 0, 'f', 3)
+                    .arg(
+                        debugPaintSampleCount_ > 0
+                            ? (static_cast<double>(debugPaintTotalElapsedNs_) / static_cast<double>(debugPaintSampleCount_ * 1000000.0))
+                            : 0.0,
+                        0,
+                        'f',
+                        3
+                    )
+                    .arg(debugPaintMaxElapsedNs_ / 1000000.0, 0, 'f', 3)
+                    .arg(dirtyRect.width())
+                    .arg(dirtyRect.height())
+                    .arg(visibleNoteRefs.size())
+                    .arg(horizontalScrollBar() != nullptr ? horizontalScrollBar()->value() : 0)
+            );
+        }
+    }
 }

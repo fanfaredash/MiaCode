@@ -819,6 +819,8 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
         state_.qtPreviewTimelineDirty_ = true;
     }
     state_.qtPreviewPlaying_ = false;
+    state_.qtPreviewFollowDirty_ = false;
+    state_.qtPreviewPendingFollowCenterView_ = false;
     state_.activePreviewPlaybackTransactionId_ = 0;
     owner_.applyEffectivePreviewOutlineVariantToCanvas();
     owner_.applyPreviewStageMediaRouteVisualSettings();
@@ -870,12 +872,10 @@ void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool cen
     }
     if (ui_.timelineView_ != nullptr && ui_.timelineView_->followPreviewEnabled()) {
         if (state_.qtPreviewPlaying_) {
-            syncEditorCursorToPreviewSecond(second, centerView);
+            owner_.queueQtPreviewFollowUiUpdate(second, centerView);
         } else {
             updatePreviewFollowDecorationForTimelineBlueLine(second, true);
         }
-    } else if (state_.qtPreviewPlaying_) {
-        syncEditorCursorToPreviewSecond(second, centerView);
     }
 }
 
@@ -902,6 +902,18 @@ void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()
         ui_.timelineView_->setPlayheadSeconds(second, true);
         ui_.timelineView_->focusPlayhead(false);
         state_.qtPreviewLastTimelineSecond_ = second;
+        if (state_.qtPreviewFollowDirty_) {
+            if (ui_.timelineView_->followPreviewEnabled()) {
+                const double followSecond = state_.qtPreviewPendingFollowSecond_;
+                const bool followCenterView = state_.qtPreviewPendingFollowCenterView_;
+                state_.qtPreviewFollowDirty_ = false;
+                state_.qtPreviewPendingFollowCenterView_ = false;
+                syncEditorCursorToPreviewSecond(followSecond, followCenterView, false);
+            } else {
+                state_.qtPreviewFollowDirty_ = false;
+                state_.qtPreviewPendingFollowCenterView_ = false;
+            }
+        }
         return;
     }
     if (!state_.qtPreviewTimelineDirty_) {

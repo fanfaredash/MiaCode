@@ -45,10 +45,14 @@ private slots:
     void updateLineNumberArea();
 
 private:
+    QRect currentLineHighlightRect() const;
+    void updateCurrentLineHighlightRegion(const QRect& previousRect, const QRect& currentRect);
+
     int blockSpacingPixels_ = 0;
     int topOverlayInsetPixels_ = 0;
     bool halfWidthInputEnabled_ = true;
     QList<QAction*> batchTransformActions_;
     QList<QAction*> moreBatchTransformActions_;
+    QRect lastCurrentLineHighlightRect_;
     LineNumberArea* lineNumberArea_;
 };

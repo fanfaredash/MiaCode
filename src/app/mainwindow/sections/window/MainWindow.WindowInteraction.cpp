@@ -630,7 +630,7 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         }
         if (mouseEvent->button() == Qt::LeftButton && !owner_.qtPreviewPlaying_ && !ctrlLeftClick) {
             QTimer::singleShot(0, &owner_, [this]() {
-                owner_.syncTimelineToEditorCursor(true);
+                owner_.scheduleDeferredEditorUiUpdate(false, false, true, true, false, 0.0, false);
             });
         }
     }
@@ -664,8 +664,8 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
                     }
                     owner_.seekPreviewToSecond(second, false);
                     if (owner_.timelineView_ != nullptr) {
-                        owner_.timelineView_->setCursorSeconds(second, false);
-                        owner_.timelineView_->focusCursor(true);
+                        owner_.timelineView_->setCursorSeconds(second, true);
+                        owner_.timelineView_->focusCursor(false);
                     }
                 });
             }
@@ -673,7 +673,7 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
     }
     if (watched == owner_.editorViewport_ && event->type() == QEvent::FocusIn && !owner_.qtPreviewPlaying_) {
         QTimer::singleShot(0, &owner_, [this]() {
-            owner_.syncTimelineToEditorCursor(true);
+            owner_.scheduleDeferredEditorUiUpdate(false, false, true, true, false, 0.0, false);
         });
     }
     return owner_.QMainWindow::eventFilter(watched, event);
