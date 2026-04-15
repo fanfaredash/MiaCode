@@ -150,9 +150,9 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
 
     editMenu->addSeparator();
 
-    auto* undoAction = new QAction(uiText("action.undo", "Undo"), &owner_);
-    undoAction->setShortcut(QKeySequence::Undo);
-    connect(undoAction, &QAction::triggered, &owner_, [this]() {
+    owner_.undoAction_ = new QAction(uiText("action.undo", "Undo"), &owner_);
+    owner_.undoAction_->setShortcuts(QKeySequence::keyBindings(QKeySequence::Undo));
+    connect(owner_.undoAction_, &QAction::triggered, &owner_, [this]() {
         bool handled = false;
         if (QWidget* focus = QApplication::focusWidget(); focus != nullptr) {
             if (auto* lineEdit = qobject_cast<QLineEdit*>(focus); lineEdit != nullptr) {
@@ -179,17 +179,17 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
             (void)owner_.undoDeletedDifficultyField();
         }
     });
-    editMenu->addAction(undoAction);
+    editMenu->addAction(owner_.undoAction_);
 
-    auto* redoAction = new QAction(uiText("action.redo", "Redo"), &owner_);
-    redoAction->setShortcut(QKeySequence::Redo);
-    connect(redoAction, &QAction::triggered, &owner_, [invokeOnFocusedTextWidget]() {
+    owner_.redoAction_ = new QAction(uiText("action.redo", "Redo"), &owner_);
+    owner_.redoAction_->setShortcuts(QKeySequence::keyBindings(QKeySequence::Redo));
+    connect(owner_.redoAction_, &QAction::triggered, &owner_, [invokeOnFocusedTextWidget]() {
         invokeOnFocusedTextWidget(
             [](QTextEdit* textEdit) { textEdit->redo(); },
             [](QLineEdit* lineEdit) { lineEdit->redo(); }
         );
     });
-    editMenu->addAction(redoAction);
+    editMenu->addAction(owner_.redoAction_);
 
     editMenu->addSeparator();
 

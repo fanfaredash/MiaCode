@@ -525,6 +525,8 @@ QList<QAction*> MainWindow::WindowSection::quickShellShortcutActions() const
         owner_.saveAction_,
         owner_.saveAsAction_,
         owner_.findReplaceAction_,
+        owner_.undoAction_,
+        owner_.redoAction_,
         owner_.validateAction_,
         owner_.transformMirrorLeftRightAction_,
         owner_.transformMirrorUpDownAction_,
@@ -547,6 +549,9 @@ QList<QAction*> MainWindow::WindowSection::quickShellShortcutActions() const
         owner_.swapWorkspaceSidesAction_,
         owner_.preferencesAction_,
         owner_.aboutAction_,
+        owner_.fontDecreaseAction_,
+        owner_.fontIncreaseAction_,
+        owner_.fontIncreaseShiftAction_,
     };
 }
 

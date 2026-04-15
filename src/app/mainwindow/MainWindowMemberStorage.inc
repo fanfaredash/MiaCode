@@ -22,6 +22,8 @@
         QAction* transformToggleFireworkAction_ = nullptr;
         QAction* transformRandomRotateAction_ = nullptr;
         QAction* findReplaceAction_ = nullptr;
+        QAction* undoAction_ = nullptr;
+        QAction* redoAction_ = nullptr;
         QAction* stopPreviewAction_ = nullptr;
         QAction* pausePreviewAction_ = nullptr;
         QAction* previewSlowerAction_ = nullptr;
@@ -37,6 +39,9 @@
         QAction* previewVideoSettingsAction_ = nullptr;
         QAction* swapWorkspaceSidesAction_ = nullptr;
         QAction* aboutAction_ = nullptr;
+        QAction* fontDecreaseAction_ = nullptr;
+        QAction* fontIncreaseAction_ = nullptr;
+        QAction* fontIncreaseShiftAction_ = nullptr;
         QLabel* currentFileLabel_ = nullptr;
         QTimer* autosaveTimer_ = nullptr;
         QTimer* autosaveIdleTimer_ = nullptr;
@@ -375,6 +380,8 @@
     QAction*& transformToggleFireworkAction_ = ui_.transformToggleFireworkAction_;
     QAction*& transformRandomRotateAction_ = ui_.transformRandomRotateAction_;
     QAction*& findReplaceAction_ = ui_.findReplaceAction_;
+    QAction*& undoAction_ = ui_.undoAction_;
+    QAction*& redoAction_ = ui_.redoAction_;
     QAction*& stopPreviewAction_ = ui_.stopPreviewAction_;
     QAction*& pausePreviewAction_ = ui_.pausePreviewAction_;
     QAction*& previewSlowerAction_ = ui_.previewSlowerAction_;
@@ -390,6 +397,9 @@
     QAction*& previewVideoSettingsAction_ = ui_.previewVideoSettingsAction_;
     QAction*& swapWorkspaceSidesAction_ = ui_.swapWorkspaceSidesAction_;
     QAction*& aboutAction_ = ui_.aboutAction_;
+    QAction*& fontDecreaseAction_ = ui_.fontDecreaseAction_;
+    QAction*& fontIncreaseAction_ = ui_.fontIncreaseAction_;
+    QAction*& fontIncreaseShiftAction_ = ui_.fontIncreaseShiftAction_;
     QLabel*& currentFileLabel_ = ui_.currentFileLabel_;
     QTimer*& autosaveTimer_ = ui_.autosaveTimer_;
     QTimer*& autosaveIdleTimer_ = ui_.autosaveIdleTimer_;
