@@ -148,6 +148,11 @@ void PreviewRuntime::notifyVisibleFramePresented()
     handlePresentedFrame();
 }
 
+QQuickWindow* PreviewRuntime::visibleHostWindow() const
+{
+    return visibleHostWindow_.data();
+}
+
 void PreviewRuntime::requestActivate()
 {
     if (visibleHostWindow_ != nullptr) {

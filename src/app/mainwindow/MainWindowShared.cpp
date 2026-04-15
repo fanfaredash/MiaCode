@@ -456,6 +456,12 @@ QFont editorFont(int pointSize)
 #endif
 }
 
+QFont timelineHeaderLineNumberFont(int pointSize)
+{
+    Q_UNUSED(pointSize);
+    return editorFont(11);
+}
+
 int blockSpacingPixelsForPointSize(int pointSize, double spacingFactor)
 {
     const int baseSpacing = qBound(1, qRound(static_cast<double>(pointSize) * 0.18), 6);

@@ -265,10 +265,6 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     previewMenu->addAction(owner_.stopPreviewAction_);
 
     owner_.pausePreviewAction_ = new QAction(uiText("action.pause_preview", "Play/Pause Preview"), &owner_);
-    owner_.pausePreviewAction_->setShortcuts({
-        QKeySequence(Qt::CTRL | Qt::Key_Return),
-        QKeySequence(Qt::CTRL | Qt::Key_Enter),
-    });
     owner_.pausePreviewAction_->setIcon(makePreviewPlayIcon(QColor("#2B3C4E")));
     owner_.pausePreviewAction_->setToolTip(QString());
     connect(owner_.pausePreviewAction_, &QAction::triggered, &owner_, &MainWindow::onTogglePreviewPause);

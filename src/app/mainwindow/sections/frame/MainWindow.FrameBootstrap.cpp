@@ -172,7 +172,6 @@ MainWindow::MainWindow(QWidget* parent)
         transformToggleFireworkAction_,
         transformRandomRotateAction_,
     });
-    connect(editor, &PlainCodeEditor::previewPlayPauseRequested, this, &MainWindow::onTogglePreviewPause);
     chartBracketHighlighter_ = new BracketScopeHighlighter(editor->document());
     editorWidget_ = editor;
     editorWidget_->setFont(codeFont);
@@ -924,9 +923,7 @@ MainWindow::MainWindow(QWidget* parent)
         bottomTabBar->installEventFilter(this);
     }
     timelineView_ = new TimelineView(bottomTabs_);
-    QFont timelineHeaderLineNumberFont = codeFont;
-    timelineHeaderLineNumberFont.setPointSize(qMax(codeFont.pointSize() + 1, 12));
-    timelineView_->setHeaderLineNumberFont(timelineHeaderLineNumberFont);
+    timelineView_->setHeaderLineNumberFont(timelineHeaderLineNumberFont());
     timelineView_->setShowSlideTracks(true);
     connect(timelineView_, &TimelineView::headerNavigateRequested, this, [this](double second) {
         navigateTimelineToSecond(second, true);

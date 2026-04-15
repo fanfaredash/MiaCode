@@ -358,9 +358,6 @@ void MainWindow::EditorSection::applyEditorTextFontSize(int pointSize, bool pers
         editor->refreshLineNumberAreaLayout();
     }
     if (ui_.timelineView_ != nullptr) {
-        QFont timelineHeaderLineNumberFont = editorFont(normalized);
-        timelineHeaderLineNumberFont.setPointSize(qMax(timelineHeaderLineNumberFont.pointSize() + 1, 12));
-        ui_.timelineView_->setHeaderLineNumberFont(timelineHeaderLineNumberFont);
         owner_.windowSection_->updateBottomTabsDeviceHeight();
     }
     if (ui_.metadataExtraEdit_ != nullptr) {
