@@ -401,7 +401,7 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
     }
     owner_.syncPreviewStageMediaRouteChartPath(state_.currentFilePath_, state_.lastTrackPath_, state_.qtPreviewPauseSecond_);
     if (state_.previewCanvas_ != nullptr) {
-        state_.previewCanvas_->setPlayheadSeconds(qMax(0.0, state_.qtPreviewPauseSecond_), false);
+        state_.previewCanvas_->setPlayheadSeconds(state_.qtPreviewPauseSecond_, false);
     }
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->setChartPath(state_.currentFilePath_);

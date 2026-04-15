@@ -174,11 +174,10 @@ double QtPreviewSfxRuntime::preparePreviewPlaybackTransaction(
     bool resumeFromPause,
     double playbackRate)
 {
-    const double clampedStartSecond = qMax(0.0, startSecond);
     appendAudioDebugLog(
         QString("preview_prepare txn=%1 requested=%2 resume=%3 playback_rate=%4 has_track=%5 events=%6 touchhold_spans=%7")
             .arg(playbackTransactionId_)
-            .arg(clampedStartSecond, 0, 'f', 6)
+            .arg(startSecond, 0, 'f', 6)
             .arg(resumeFromPause ? 1 : 0)
             .arg(playbackRate, 0, 'f', 3)
             .arg(hasBackgroundTrack() ? 1 : 0)
@@ -186,13 +185,13 @@ double QtPreviewSfxRuntime::preparePreviewPlaybackTransaction(
             .arg(preparedTimeline_.touchholdSpans.size()));
     setBackgroundTrackPlaybackRate(playbackRate);
     if (hasBackgroundTrack()) {
-        seekBackgroundTrack(clampedStartSecond);
+        seekBackgroundTrack(startSecond);
     }
-    resetCursor(clampedStartSecond, !resumeFromPause);
+    resetCursor(startSecond, !resumeFromPause);
     pauseTouchholdVoices();
     preparedPlayback_.pending = true;
     preparedPlayback_.resumeFromPause = resumeFromPause;
-    preparedPlayback_.startSecond = clampedStartSecond;
+    preparedPlayback_.startSecond = startSecond;
 
     QString nextEventDescription = QStringLiteral("none");
     if (playbackSession_.eventIndex >= 0 && playbackSession_.eventIndex < preparedTimeline_.events.size()) {
@@ -249,7 +248,7 @@ void QtPreviewSfxRuntime::cancelPreparedPreviewPlayback()
 
 double QtPreviewSfxRuntime::preparedStartSecond() const
 {
-    return preparedPlayback_.pending ? preparedPlayback_.startSecond : qMax(0.0, playbackSession_.backgroundTrackLastTimelineSecond);
+    return preparedPlayback_.pending ? preparedPlayback_.startSecond : playbackSession_.backgroundTrackLastTimelineSecond;
 }
 
 void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& noteMarkers)
@@ -272,7 +271,7 @@ void QtPreviewSfxRuntime::applyPausedPreviewState(
     if (noteMarkersChanged) {
         rebuildPreparedTimeline(noteMarkers);
     }
-    resetCursor(qMax(0.0, pauseSecond), false);
+    resetCursor(pauseSecond, false);
     pauseTouchholdVoices();
 }
 
@@ -404,5 +403,5 @@ void QtPreviewSfxRuntime::resetBackgroundTrackSessionState(double timelineSecond
 {
     playbackSession_.backgroundTrackPendingStart = false;
     playbackSession_.backgroundTrackRunning = false;
-    playbackSession_.backgroundTrackLastTimelineSecond = qMax(0.0, timelineSecond);
+    playbackSession_.backgroundTrackLastTimelineSecond = timelineSecond;
 }
