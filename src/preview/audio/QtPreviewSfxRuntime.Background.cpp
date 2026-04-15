@@ -50,7 +50,7 @@ void QtPreviewSfxRuntime::startBackgroundTrack(double second)
     }
     const bool useStretched = !qFuzzyCompare(playbackSession_.backgroundTrackPlaybackRate + 1.0, 2.0);
     if (useStretched && !prepareStretchedBackgroundTrack(second)) {
-        playbackSession_.backgroundTrackLastTimelineSecond = qMax(0.0, second);
+        playbackSession_.backgroundTrackLastTimelineSecond = second;
         playbackSession_.backgroundTrackPendingStart = true;
         playbackSession_.backgroundTrackRunning = false;
         appendAudioDebugLog(QString("startBackgroundTrack deferred second=%1 rate=%2")
@@ -74,7 +74,7 @@ void QtPreviewSfxRuntime::startBackgroundTrack(double second)
         activeSound = &backgroundTrackVoice_->sound;
     }
 
-    playbackSession_.backgroundTrackLastTimelineSecond = qMax(0.0, second);
+    playbackSession_.backgroundTrackLastTimelineSecond = second;
     playbackSession_.backgroundTrackPendingStart = false;
     playbackSession_.backgroundTrackRunning = false;
     ma_sound_stop(activeSound);
@@ -134,7 +134,7 @@ void QtPreviewSfxRuntime::seekBackgroundTrack(double second)
 
     const bool useStretched = !qFuzzyCompare(playbackSession_.backgroundTrackPlaybackRate + 1.0, 2.0);
     if (useStretched && !prepareStretchedBackgroundTrack(second)) {
-        playbackSession_.backgroundTrackLastTimelineSecond = qMax(0.0, second);
+        playbackSession_.backgroundTrackLastTimelineSecond = second;
         playbackSession_.backgroundTrackPendingStart = false;
         playbackSession_.backgroundTrackRunning = false;
         appendAudioDebugLog(QString("seekBackgroundTrack deferred second=%1 rate=%2")
@@ -158,7 +158,7 @@ void QtPreviewSfxRuntime::seekBackgroundTrack(double second)
         activeSound = &backgroundTrackVoice_->sound;
     }
 
-    playbackSession_.backgroundTrackLastTimelineSecond = qMax(0.0, second);
+    playbackSession_.backgroundTrackLastTimelineSecond = second;
     playbackSession_.backgroundTrackPendingStart = false;
     playbackSession_.backgroundTrackRunning = false;
     ma_sound_stop(activeSound);
@@ -236,11 +236,11 @@ double QtPreviewSfxRuntime::backgroundPlaybackSecond() const
         return stretchedBackgroundPlaybackSecond();
     }
     if (!playbackSession_.backgroundTrackRunning) {
-        return qMax(0.0, playbackSession_.backgroundTrackLastTimelineSecond);
+        return playbackSession_.backgroundTrackLastTimelineSecond;
     }
     float cursorSeconds = 0.0f;
     if (ma_sound_get_cursor_in_seconds(&backgroundTrackVoice_->sound, &cursorSeconds) != MA_SUCCESS) {
-        return qMax(0.0, playbackSession_.backgroundTrackLastTimelineSecond);
+        return playbackSession_.backgroundTrackLastTimelineSecond;
     }
     return qMax(0.0, static_cast<double>(cursorSeconds) - playbackSession_.backgroundTrackOffsetSeconds);
 }
@@ -252,7 +252,7 @@ void QtPreviewSfxRuntime::syncBackgroundTrack(double timelineSecond)
     }
     const bool useStretched = !qFuzzyCompare(playbackSession_.backgroundTrackPlaybackRate + 1.0, 2.0);
     if (useStretched && !prepareStretchedBackgroundTrack(timelineSecond)) {
-        playbackSession_.backgroundTrackLastTimelineSecond = qMax(0.0, timelineSecond);
+        playbackSession_.backgroundTrackLastTimelineSecond = timelineSecond;
         playbackSession_.backgroundTrackPendingStart = true;
         playbackSession_.backgroundTrackRunning = false;
         appendAudioDebugLog(QString("syncBackgroundTrack deferred second=%1 rate=%2")
@@ -276,7 +276,7 @@ void QtPreviewSfxRuntime::syncBackgroundTrack(double timelineSecond)
         activeSound = &backgroundTrackVoice_->sound;
     }
 
-    playbackSession_.backgroundTrackLastTimelineSecond = qMax(0.0, timelineSecond);
+    playbackSession_.backgroundTrackLastTimelineSecond = timelineSecond;
     if (!playbackSession_.backgroundTrackPendingStart) {
         return;
     }
@@ -330,9 +330,9 @@ void QtPreviewSfxRuntime::syncBackgroundTrack(double timelineSecond)
 
 double QtPreviewSfxRuntime::syncPreviewPlaybackClockTransaction(double fallbackSecond)
 {
-    double second = qMax(0.0, fallbackSecond);
+    double second = fallbackSecond;
     if (hasBackgroundTrack() && isBackgroundTrackRunning()) {
-        second = qMax(0.0, backgroundPlaybackSecond());
+        second = backgroundPlaybackSecond();
     }
     syncBackgroundTrack(second);
     return second;
