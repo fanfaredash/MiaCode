@@ -9,7 +9,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Scope: shared resource lookup
   - Promote new shared path rules here before duplicating them elsewhere
 - `src/common/PreviewGameplayConfig.h`
-  - Owns: logical canvas size, lane-distance geometry, preview flow-speed normalization, tap lifecycle timing, slide pretrace timing, judge-effect durations
+  - Owns: logical canvas size, lane-distance geometry, preview flow-speed normalization, tap lifecycle timing, slide pretrace timing, judge-effect durations, and the default value for the shared preview/export slide stacking toggle (`kPreviewSlideEarlierSecondAndTextOnTop`)
   - Scope: preview and export timing assumptions
 - `src/common/PreviewSkinConfig.h`
   - Owns: shared tap-head scale plus hold-width, hold-cap-slice, and slide-track sizing ratios used to keep preview and timeline skin geometry aligned

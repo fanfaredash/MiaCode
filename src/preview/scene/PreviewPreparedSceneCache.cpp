@@ -2,6 +2,7 @@
 
 #include "common/PreviewGameplayConfig.h"
 #include "preview/scene/PreviewJudgeOverlayShared.h"
+#include "preview/scene/PreviewMarkerDrawOrder.h"
 #include "preview/scene/PreviewMaimuriDxJudgeLayerState.h"
 #include "preview/scene/PreviewOpacityCurves.h"
 
@@ -124,6 +125,7 @@ bool PreviewPreparedSceneCache::sync(const PreviewFrameState& state)
     nextKey.noteFlowSpeed = state.render.noteFlowSpeed;
     nextKey.renderMode = state.muriRenderOptions.renderMode;
     nextKey.showSlideTracks = state.muriRenderOptions.showSlideTracks;
+    nextKey.slideEarlierSecondAndTextOnTop = state.render.slideEarlierSecondAndTextOnTop;
     nextKey.showChartReviewSlideJudgeOverlay = state.muriRenderOptions.showChartReviewSlideJudgeOverlay;
     nextKey.showChartReviewSimpleJudgeOverlay = state.muriRenderOptions.showChartReviewSimpleJudgeOverlay;
 
@@ -355,28 +357,16 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
     finalizePreparedLayerWindow(&touchHoldLayer_);
     finalizePreparedLayerWindow(&chartReviewLayer_);
     finalizePreparedLayerWindow(&maimuriDxJudgeLayer_);
-
-    headLayer_.drawOrder.resize(headLayer_.entries.size());
-    for (int index = 0; index < headLayer_.entries.size(); ++index) {
-        headLayer_.drawOrder[index] = index;
-    }
-    std::stable_sort(headLayer_.drawOrder.begin(), headLayer_.drawOrder.end(), [&state, this](int a, int b) {
-        const int markerIndexA = headLayer_.entries.at(a).markerIndex;
-        const int markerIndexB = headLayer_.entries.at(b).markerIndex;
-        const TimelineNoteMarker& markerA = state.noteMarkers.at(markerIndexA);
-        const TimelineNoteMarker& markerB = state.noteMarkers.at(markerIndexB);
-        if (!qFuzzyCompare(1.0 + markerA.second, 1.0 + markerB.second)) {
-            return markerA.second > markerB.second;
-        }
-        return markerIndexA > markerIndexB;
-    });
-    headLayer_.drawOrderRanks.fill(-1, headLayer_.entries.size());
-    for (int rank = 0; rank < headLayer_.drawOrder.size(); ++rank) {
-        const int preparedIndex = headLayer_.drawOrder.at(rank);
-        if (preparedIndex >= 0 && preparedIndex < headLayer_.drawOrderRanks.size()) {
-            headLayer_.drawOrderRanks[preparedIndex] = rank;
-        }
-    }
+    rebuildPreviewPreparedMarkerDrawOrder(
+        state.noteMarkers,
+        &headLayer_,
+        state.render.slideEarlierSecondAndTextOnTop
+    );
+    rebuildPreviewPreparedMarkerDrawOrder(
+        state.noteMarkers,
+        &slideLikeLayer_,
+        state.render.slideEarlierSecondAndTextOnTop
+    );
 }
 
 void PreviewPreparedSceneCache::collectMarkers(

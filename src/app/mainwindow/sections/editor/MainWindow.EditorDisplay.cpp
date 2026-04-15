@@ -112,6 +112,7 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.previewOutlineVariantUsesAutoSelection_ = true;
     state_.previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     state_.previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    state_.previewSlideEarlierSecondAndTextOnTop_ = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
     state_.previewSkinVariant_ = PreviewSkinVariant::Standard;
     state_.previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
     state_.previewCanvasAspectRatio_ = 1.0;
@@ -198,6 +199,11 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
         state_.previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(
             preview.value("note_flow_speed").toDouble(state_.previewNoteFlowSpeed_)
         );
+    }
+    if (preview.value("slide_earlier_second_and_text_on_top").isBool()) {
+        state_.previewSlideEarlierSecondAndTextOnTop_ =
+            preview.value("slide_earlier_second_and_text_on_top")
+                .toBool(state_.previewSlideEarlierSecondAndTextOnTop_);
     }
     if (preview.value("skin_variant").isString()) {
         state_.previewSkinVariant_ = owner_.previewSkinVariantFromStorageValue(preview.value("skin_variant").toString());
@@ -300,6 +306,7 @@ void MainWindow::EditorSection::savePortableState() const
             : QStringLiteral("fill")
     );
     preview.insert("note_flow_speed", state_.previewNoteFlowSpeed_);
+    preview.insert("slide_earlier_second_and_text_on_top", state_.previewSlideEarlierSecondAndTextOnTop_);
     preview.insert("skin_variant", owner_.previewSkinVariantStorageValue());
     preview.insert("canvas_frame_rate_mode", owner_.previewCanvasFrameRateModeStorageValue());
     preview.insert(

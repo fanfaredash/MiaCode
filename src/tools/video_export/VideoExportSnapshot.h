@@ -27,6 +27,7 @@ struct VideoExportSnapshot {
     PreviewOutlineVariant outlineVariant = PreviewOutlineVariant::Line;
     PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
     double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    bool slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
     MuriRenderOptions muriRenderOptions;
     double staticTapOnSlideThresholdSeconds =
         static_cast<double>(miacode::muri::kStaticTapOnSlideThresholdDefaultMs) / 1000.0;

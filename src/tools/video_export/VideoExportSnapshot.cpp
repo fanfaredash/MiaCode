@@ -173,6 +173,7 @@ QJsonObject VideoExportSnapshot::toJson() const
     render.insert(QStringLiteral("outline_variant"), outlineVariantToken(outlineVariant));
     render.insert(QStringLiteral("background_scale_mode"), backgroundScaleModeToken(backgroundScaleMode));
     render.insert(QStringLiteral("note_flow_speed"), noteFlowSpeed);
+    render.insert(QStringLiteral("slide_earlier_second_and_text_on_top"), slideEarlierSecondAndTextOnTop);
     render.insert(QStringLiteral("render_mode"), renderModeToken(muriRenderOptions.renderMode));
     render.insert(QStringLiteral("show_slide_tracks"), muriRenderOptions.showSlideTracks);
     render.insert(QStringLiteral("show_judge_markers"), muriRenderOptions.showJudgeMarkers);
@@ -259,6 +260,9 @@ bool VideoExportSnapshot::fromJson(
         backgroundScaleModeFromToken(render.value(QStringLiteral("background_scale_mode")).toString());
     parsed.noteFlowSpeed =
         render.value(QStringLiteral("note_flow_speed")).toDouble(parsed.noteFlowSpeed);
+    parsed.slideEarlierSecondAndTextOnTop =
+        render.value(QStringLiteral("slide_earlier_second_and_text_on_top"))
+            .toBool(parsed.slideEarlierSecondAndTextOnTop);
     parsed.muriRenderOptions.renderMode =
         renderModeFromToken(render.value(QStringLiteral("render_mode")).toString());
     parsed.muriRenderOptions.showSlideTracks =
@@ -369,6 +373,7 @@ bool buildVideoExportTaskFromSnapshot(
     built.outlineVariant = snapshot.outlineVariant;
     built.backgroundScaleMode = snapshot.backgroundScaleMode;
     built.noteFlowSpeed = snapshot.noteFlowSpeed;
+    built.slideEarlierSecondAndTextOnTop = snapshot.slideEarlierSecondAndTextOnTop;
     built.muriRenderOptions = snapshot.muriRenderOptions;
     built.staticTapOnSlideThresholdSeconds = snapshot.staticTapOnSlideThresholdSeconds;
     built.exportStartSeconds = qMax(0.0, snapshot.exportStartSeconds);

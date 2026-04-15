@@ -125,6 +125,7 @@ public:
     void setSmoothBrightness(bool smooth);
     void setBackgroundScaleMode(PreviewBackgroundScaleMode mode);
     void setNoteFlowSpeed(double flowSpeed);
+    void setSlideEarlierSecondAndTextOnTop(bool enabled);
     void setShowDebugInfo(bool show);
     void setShowTimestamp(bool show);
     void setShowObjectStatsHud(bool show);

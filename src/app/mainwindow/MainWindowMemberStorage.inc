@@ -309,6 +309,7 @@
         bool previewOutlineVariantUsesAutoSelection_ = true;
         PreviewBackgroundScaleMode previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
         double previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+        bool previewSlideEarlierSecondAndTextOnTop_ = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
         PreviewSkinVariant previewSkinVariant_ = PreviewSkinVariant::Standard;
         PreviewCanvasFrameRateMode previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
         double previewCanvasAspectRatio_ = 1.0;
@@ -553,6 +554,7 @@
     bool& previewOutlineVariantUsesAutoSelection_ = state_.previewOutlineVariantUsesAutoSelection_;
     PreviewBackgroundScaleMode& previewBackgroundScaleMode_ = state_.previewBackgroundScaleMode_;
     double& previewNoteFlowSpeed_ = state_.previewNoteFlowSpeed_;
+    bool& previewSlideEarlierSecondAndTextOnTop_ = state_.previewSlideEarlierSecondAndTextOnTop_;
     PreviewSkinVariant& previewSkinVariant_ = state_.previewSkinVariant_;
     PreviewCanvasFrameRateMode& previewCanvasFrameRateMode_ = state_.previewCanvasFrameRateMode_;
     double& previewCanvasAspectRatio_ = state_.previewCanvasAspectRatio_;

@@ -113,6 +113,50 @@ PreviewHeadLayerState buildPreparedHeadLayerState(
     );
 }
 
+PreviewHeadLayerState buildFallbackHeadLayerState(
+    const PreviewFrameState& state,
+    miacode::preview::scene::PreviewHeadRenderAssetCache* renderAssetCache = nullptr)
+{
+    return miacode::preview::scene::buildPreviewHeadLayerState(
+        state,
+        miacode::preview::scene::PreviewActiveMarkerView(state.noteMarkers),
+        QRectF(
+            0.0,
+            0.0,
+            miacode::preview::scene::kLogicalCanvasSize,
+            miacode::preview::scene::kLogicalCanvasSize),
+        renderAssetCache
+    );
+}
+
+QPointF expectedHeadCenterForLane(
+    int lane,
+    qreal second,
+    qreal playheadSeconds,
+    const PreviewTapTiming& tapTiming)
+{
+    const miacode::preview::scene::TapApproachSample approach = miacode::preview::scene::sampleTapApproach(
+        playheadSeconds - second,
+        tapTiming.lifecycleDurationSeconds,
+        tapTiming.spawnDurationSeconds,
+        tapTiming.flyDurationSeconds,
+        tapTiming.unitsPerSecond,
+        miacode::preview::scene::kLogicalDistanceTap,
+        miacode::preview::scene::kLogicalDistanceEdge);
+    const QPointF unit = miacode::preview::scene::laneUnitVector(lane);
+    const QPointF logicalPoint(
+        miacode::preview::scene::kLogicalCanvasCenter + unit.x() * approach.distance,
+        miacode::preview::scene::kLogicalCanvasCenter + unit.y() * approach.distance
+    );
+    return miacode::preview::scene::mapLogicalPointToRect(
+        logicalPoint,
+        QRectF(
+            0.0,
+            0.0,
+            miacode::preview::scene::kLogicalCanvasSize,
+            miacode::preview::scene::kLogicalCanvasSize));
+}
+
 bool verifySameHeadBranchesCollapseToFastestRotation(QTextStream& err)
 {
     const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
@@ -249,12 +293,18 @@ bool verifyPreparedHeadOrderAndBaseImageSelection(QTextStream& err)
     tapNormal.type = QStringLiteral("tap");
     tapNormal.second = 1.0;
     tapNormal.lane = 1;
+    tapNormal.sourceLine = 1;
+    tapNormal.sourceCol = 1;
+    tapNormal.parseOrder = 0;
 
     TimelineNoteMarker tapEach;
     tapEach.type = QStringLiteral("tap");
     tapEach.second = 1.0;
     tapEach.lane = 2;
     tapEach.isEach = true;
+    tapEach.sourceLine = 1;
+    tapEach.sourceCol = 2;
+    tapEach.parseOrder = 1;
 
     TimelineNoteMarker slideEach;
     slideEach.type = QStringLiteral("slide");
@@ -266,11 +316,17 @@ bool verifyPreparedHeadOrderAndBaseImageSelection(QTextStream& err)
     slideEach.headEach = true;
     slideEach.hasHeadStar = true;
     slideEach.slideHeadUsesTapMaterial = false;
+    slideEach.sourceLine = 1;
+    slideEach.sourceCol = 3;
+    slideEach.parseOrder = 2;
 
     TimelineNoteMarker tapFarFuture;
     tapFarFuture.type = QStringLiteral("tap");
     tapFarFuture.second = 5.0;
     tapFarFuture.lane = 4;
+    tapFarFuture.sourceLine = 1;
+    tapFarFuture.sourceCol = 4;
+    tapFarFuture.parseOrder = 3;
 
     state.noteMarkers = {tapNormal, tapEach, slideEach, tapFarFuture};
     state.playheadSeconds = 0.9;
@@ -296,6 +352,89 @@ bool verifyPreparedHeadOrderAndBaseImageSelection(QTextStream& err)
             QStringLiteral("same-second earlier tap renders last with tap image"),
             err)) {
         return false;
+    }
+
+    return true;
+}
+
+bool verifySameSecondSlideTextOrderMatchesBetweenPreparedAndFallback(QTextStream& err)
+{
+    PreviewFrameState state;
+    state.skin.starImage = solidImage(104, 104);
+
+    TimelineNoteMarker earlierTextSlide;
+    earlierTextSlide.type = QStringLiteral("slide");
+    earlierTextSlide.second = 1.0;
+    earlierTextSlide.slideTraceSecond = 1.3;
+    earlierTextSlide.endSecond = 1.8;
+    earlierTextSlide.lane = 1;
+    earlierTextSlide.endLane = 3;
+    earlierTextSlide.hasHeadStar = true;
+    earlierTextSlide.sourceLine = 4;
+    earlierTextSlide.sourceCol = 2;
+    earlierTextSlide.parseOrder = 0;
+
+    TimelineNoteMarker laterTextSlide = earlierTextSlide;
+    laterTextSlide.lane = 5;
+    laterTextSlide.endLane = 7;
+    laterTextSlide.sourceCol = 6;
+    laterTextSlide.parseOrder = 1;
+
+    state.noteMarkers = {earlierTextSlide, laterTextSlide};
+    const PreviewTapTiming tapTiming =
+        miacode::preview::scene::previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.noteFlowSpeed));
+    state.playheadSeconds = earlierTextSlide.second - tapTiming.flyDurationSeconds * 0.5;
+
+    const PreviewHeadLayerState preparedLayerState = buildPreparedHeadLayerState(state);
+    const PreviewHeadLayerState fallbackLayerState = buildFallbackHeadLayerState(state);
+    if (!require(preparedLayerState.sprites.size() == 2, QStringLiteral("prepared same-second slides render two head sprites"), err)) {
+        return false;
+    }
+    if (!require(fallbackLayerState.sprites.size() == 2, QStringLiteral("fallback same-second slides render two head sprites"), err)) {
+        return false;
+    }
+
+    const QPointF expectedEarlierCenter = expectedHeadCenterForLane(
+        earlierTextSlide.lane,
+        static_cast<qreal>(earlierTextSlide.second),
+        static_cast<qreal>(state.playheadSeconds),
+        tapTiming
+    );
+    const QPointF expectedLaterCenter = expectedHeadCenterForLane(
+        laterTextSlide.lane,
+        static_cast<qreal>(laterTextSlide.second),
+        static_cast<qreal>(state.playheadSeconds),
+        tapTiming
+    );
+    if (!requireNear(
+            preparedLayerState.sprites.at(0).center.x(),
+            expectedLaterCenter.x(),
+            QStringLiteral("prepared same-second later-text slide renders first center x"),
+            err)) {
+        return false;
+    }
+    if (!requireNear(
+            preparedLayerState.sprites.at(1).center.x(),
+            expectedEarlierCenter.x(),
+            QStringLiteral("prepared same-second earlier-text slide renders last center x"),
+            err)) {
+        return false;
+    }
+    for (int index = 0; index < preparedLayerState.sprites.size(); ++index) {
+        if (!requireNear(
+                fallbackLayerState.sprites.at(index).center.x(),
+                preparedLayerState.sprites.at(index).center.x(),
+                QStringLiteral("fallback same-second slide order matches prepared center x %1").arg(index),
+                err)) {
+            return false;
+        }
+        if (!requireNear(
+                fallbackLayerState.sprites.at(index).center.y(),
+                preparedLayerState.sprites.at(index).center.y(),
+                QStringLiteral("fallback same-second slide order matches prepared center y %1").arg(index),
+                err)) {
+            return false;
+        }
     }
 
     return true;
@@ -420,6 +559,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyPreparedHeadOrderAndBaseImageSelection(err)) {
+        return 1;
+    }
+    if (!verifySameSecondSlideTextOrderMatchesBetweenPreparedAndFallback(err)) {
         return 1;
     }
     if (!verifyNegativePlayheadKeepsFallingTapVisible(err)) {

@@ -16,6 +16,7 @@ struct PreviewPreparedSceneCacheKey {
     double noteFlowSpeed = 0.0;
     RenderMode renderMode = RenderMode::Native;
     bool showSlideTracks = true;
+    bool slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
     bool showChartReviewSlideJudgeOverlay = false;
     bool showChartReviewSimpleJudgeOverlay = false;
 
@@ -25,6 +26,7 @@ struct PreviewPreparedSceneCacheKey {
             && qFuzzyCompare(noteFlowSpeed + 1.0, other.noteFlowSpeed + 1.0)
             && renderMode == other.renderMode
             && showSlideTracks == other.showSlideTracks
+            && slideEarlierSecondAndTextOnTop == other.slideEarlierSecondAndTextOnTop
             && showChartReviewSlideJudgeOverlay == other.showChartReviewSlideJudgeOverlay
             && showChartReviewSimpleJudgeOverlay == other.showChartReviewSimpleJudgeOverlay;
     }
