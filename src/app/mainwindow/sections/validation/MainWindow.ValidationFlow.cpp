@@ -709,9 +709,133 @@ void ensureEditorSelectionVisible(PlainCodeEditor* editor, const QTextCursor& se
     }
 }
 
+QByteArray buildEditorExtraSelectionsSignature(
+    const QByteArray& validationSignature,
+    bool previewFollowActive,
+    int previewFollowLine,
+    int previewFollowCol,
+    int previewFollowEndCol)
+{
+    QByteArray signature;
+    QDataStream stream(&signature, QIODevice::WriteOnly);
+    stream << validationSignature;
+    stream << previewFollowActive;
+    if (previewFollowActive) {
+        stream << previewFollowLine;
+        stream << previewFollowCol;
+        stream << previewFollowEndCol;
+    }
+    return signature;
+}
+
+bool buildPreviewFollowExtraSelection(
+    PlainCodeEditor* editor,
+    bool previewFollowActive,
+    int previewFollowLine,
+    int previewFollowCol,
+    int previewFollowEndCol,
+    QTextEdit::ExtraSelection* selectionOut)
+{
+    if (editor == nullptr || selectionOut == nullptr || !previewFollowActive) {
+        return false;
+    }
+
+    QTextCursor cursor;
+    if (!buildEditorSelectionCursor(
+            editor,
+            previewFollowLine,
+            previewFollowCol,
+            previewFollowEndCol,
+            &cursor)) {
+        return false;
+    }
+
+    QTextEdit::ExtraSelection selection;
+    selection.cursor = cursor;
+    QColor highlight = UiTheme::colors().accent;
+    highlight.setAlpha(UiTheme::colors().dark ? 88 : 56);
+    selection.format.setBackground(highlight);
+    selection.format.setProperty(QTextFormat::FullWidthSelection, false);
+    *selectionOut = selection;
+    return true;
+}
+
 }  // namespace
 
-void MainWindow::ValidationSection::refreshEditorExtraSelections()
+QByteArray MainWindow::ValidationSection::buildValidationExtraSelectionsSignature() const
+{
+    QByteArray signature;
+    QDataStream stream(&signature, QIODevice::WriteOnly);
+    stream << static_cast<quint32>(state_.validationDecorations_.size());
+    for (const ValidationDecoration& decoration : state_.validationDecorations_) {
+        stream << decoration.line;
+        stream << decoration.col;
+        stream << decoration.endCol;
+        stream << decoration.warning;
+        stream << decoration.message;
+    }
+    return signature;
+}
+
+void MainWindow::ValidationSection::rebuildValidationExtraSelectionsCache(const QString& reason)
+{
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    if (editor == nullptr) {
+        state_.cachedValidationExtraSelections_.clear();
+        state_.currentEditorExtraSelections_.clear();
+        state_.validationExtraSelectionsSignature_.clear();
+        state_.lastEditorExtraSelectionsSignature_.clear();
+        return;
+    }
+
+    QElapsedTimer timer;
+    timer.start();
+    const QByteArray signature = buildValidationExtraSelectionsSignature();
+    if (signature == state_.validationExtraSelectionsSignature_) {
+        appendValidationPerfLog(
+            QStringLiteral("edit/extra_selections_validation_perf"),
+            QStringLiteral("reason=%1 skipped=1 decorations=%2 selections=%3 elapsed_ms=%4")
+                .arg(reason)
+                .arg(state_.validationDecorations_.size())
+                .arg(state_.cachedValidationExtraSelections_.size())
+                .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
+        );
+        return;
+    }
+
+    QVector<QTextEdit::ExtraSelection> selections;
+    selections.reserve(state_.validationDecorations_.size());
+    for (const ValidationDecoration& decoration : state_.validationDecorations_) {
+        QTextCursor cursor;
+        if (!buildEditorSelectionCursor(editor, decoration.line, decoration.col, decoration.endCol, &cursor)) {
+            continue;
+        }
+
+        QTextEdit::ExtraSelection selection;
+        selection.cursor = cursor;
+        selection.format.setUnderlineStyle(QTextCharFormat::WaveUnderline);
+        selection.format.setUnderlineColor(decoration.warning
+                                               ? severityColor(ValidationSeverityLevel::Warning)
+                                               : severityColor(ValidationSeverityLevel::Error));
+        selection.format.setToolTip(decoration.message);
+        selections.append(selection);
+    }
+
+    state_.cachedValidationExtraSelections_ = selections;
+    state_.currentEditorExtraSelections_.clear();
+    state_.validationExtraSelectionsSignature_ = signature;
+    state_.lastEditorExtraSelectionsSignature_.clear();
+    appendValidationPerfLog(
+        QStringLiteral("edit/extra_selections_validation_perf"),
+        QStringLiteral("reason=%1 skipped=0 decorations=%2 selections=%3 elapsed_ms=%4")
+            .arg(reason)
+            .arg(state_.validationDecorations_.size())
+            .arg(state_.cachedValidationExtraSelections_.size())
+            .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
+    );
+}
+
+void MainWindow::ValidationSection::applyEditorExtraSelectionsForReason(const QString& reason)
 {
     auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
     if (editor == nullptr) {
@@ -720,84 +844,79 @@ void MainWindow::ValidationSection::refreshEditorExtraSelections()
 
     QElapsedTimer timer;
     timer.start();
-    const auto buildSignature = [this]() {
-        QByteArray signature;
-        QDataStream stream(&signature, QIODevice::WriteOnly);
-        stream << static_cast<quint32>(state_.validationDecorations_.size());
-        for (const ValidationDecoration& decoration : state_.validationDecorations_) {
-            stream << decoration.line;
-            stream << decoration.col;
-            stream << decoration.endCol;
-            stream << decoration.warning;
-            stream << decoration.message;
-        }
-        stream << state_.previewFollowDecorationActive_;
-        if (state_.previewFollowDecorationActive_) {
-            stream << state_.previewFollowDecorationLine_;
-            stream << state_.previewFollowDecorationCol_;
-            stream << state_.previewFollowDecorationEndCol_;
-        }
-        return signature;
-    };
-    const QByteArray signature = buildSignature();
+
+    QTextEdit::ExtraSelection followSelection;
+    const bool followActive = buildPreviewFollowExtraSelection(
+        editor,
+        state_.previewFollowDecorationActive_,
+        state_.previewFollowDecorationLine_,
+        state_.previewFollowDecorationCol_,
+        state_.previewFollowDecorationEndCol_,
+        &followSelection);
+    const QByteArray signature = buildEditorExtraSelectionsSignature(
+        state_.validationExtraSelectionsSignature_,
+        followActive,
+        state_.previewFollowDecorationLine_,
+        state_.previewFollowDecorationCol_,
+        state_.previewFollowDecorationEndCol_);
+    const int totalSelections = state_.cachedValidationExtraSelections_.size() + (followActive ? 1 : 0);
     if (signature == state_.lastEditorExtraSelectionsSignature_) {
         appendValidationPerfLog(
             QStringLiteral("edit/extra_selections_perf"),
             QStringLiteral("skipped=1 decorations=%1 preview_follow=%2 elapsed_ms=%3")
                 .arg(state_.validationDecorations_.size())
-                .arg(state_.previewFollowDecorationActive_ ? 1 : 0)
+                .arg(followActive ? 1 : 0)
+                .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
+        );
+        appendValidationPerfLog(
+            QStringLiteral("edit/extra_selections_apply_perf"),
+            QStringLiteral(
+                "reason=%1 validation_selections=%2 follow_active=%3 total_selections=%4 elapsed_ms=%5")
+                .arg(reason)
+                .arg(state_.cachedValidationExtraSelections_.size())
+                .arg(followActive ? 1 : 0)
+                .arg(totalSelections)
                 .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
         );
         return;
     }
 
-    QVector<QTextEdit::ExtraSelection> selections;
-    selections.reserve(state_.validationDecorations_.size() + (state_.previewFollowDecorationActive_ ? 1 : 0));
-
-    for (const ValidationDecoration& decoration : state_.validationDecorations_) {
-        QTextCursor cursor;
-        if (!buildEditorSelectionCursor(editor, decoration.line, decoration.col, decoration.endCol, &cursor)) {
-            continue;
-        }
-
-        QTextEdit::ExtraSelection sel;
-        sel.cursor = cursor;
-        sel.format.setUnderlineStyle(QTextCharFormat::WaveUnderline);
-        sel.format.setUnderlineColor(decoration.warning
-                                         ? severityColor(ValidationSeverityLevel::Warning)
-                                         : severityColor(ValidationSeverityLevel::Error));
-        sel.format.setToolTip(decoration.message);
-        selections.append(sel);
+    state_.currentEditorExtraSelections_ = state_.cachedValidationExtraSelections_;
+    if (followActive) {
+        state_.currentEditorExtraSelections_.append(followSelection);
     }
 
-    if (state_.previewFollowDecorationActive_) {
-        QTextCursor cursor;
-        if (buildEditorSelectionCursor(
-                editor,
-                state_.previewFollowDecorationLine_,
-                state_.previewFollowDecorationCol_,
-                state_.previewFollowDecorationEndCol_,
-                &cursor)) {
-            QTextEdit::ExtraSelection sel;
-            sel.cursor = cursor;
-            QColor highlight = UiTheme::colors().accent;
-            highlight.setAlpha(UiTheme::colors().dark ? 88 : 56);
-            sel.format.setBackground(highlight);
-            sel.format.setProperty(QTextFormat::FullWidthSelection, false);
-            selections.append(sel);
-        }
-    }
-
-    editor->setExtraSelections(selections);
+    editor->setExtraSelections(state_.currentEditorExtraSelections_);
     state_.lastEditorExtraSelectionsSignature_ = signature;
     appendValidationPerfLog(
         QStringLiteral("edit/extra_selections_perf"),
         QStringLiteral("skipped=0 decorations=%1 preview_follow=%2 selections=%3 elapsed_ms=%4")
             .arg(state_.validationDecorations_.size())
-            .arg(state_.previewFollowDecorationActive_ ? 1 : 0)
-            .arg(selections.size())
+            .arg(followActive ? 1 : 0)
+            .arg(totalSelections)
             .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
     );
+    appendValidationPerfLog(
+        QStringLiteral("edit/extra_selections_apply_perf"),
+        QStringLiteral(
+            "reason=%1 validation_selections=%2 follow_active=%3 total_selections=%4 elapsed_ms=%5")
+            .arg(reason)
+            .arg(state_.cachedValidationExtraSelections_.size())
+            .arg(followActive ? 1 : 0)
+            .arg(totalSelections)
+            .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
+    );
+}
+
+void MainWindow::ValidationSection::refreshEditorExtraSelectionsForReason(const QString& reason)
+{
+    rebuildValidationExtraSelectionsCache(reason);
+    applyEditorExtraSelectionsForReason(reason);
+}
+
+void MainWindow::ValidationSection::refreshEditorExtraSelections()
+{
+    refreshEditorExtraSelectionsForReason(QStringLiteral("validation_refresh"));
 }
 
 void MainWindow::ValidationSection::updateEditorValidationSummary()
@@ -957,7 +1076,7 @@ void MainWindow::ValidationSection::setPreviewFollowDecoration(int line, int col
     state_.previewFollowDecorationLine_ = normalizedLine;
     state_.previewFollowDecorationCol_ = normalizedCol;
     state_.previewFollowDecorationEndCol_ = normalizedEndCol;
-    refreshEditorExtraSelections();
+    applyEditorExtraSelectionsForReason(QStringLiteral("follow_only"));
 
     if (!ensureVisible) {
         return;
@@ -986,7 +1105,7 @@ void MainWindow::ValidationSection::clearPreviewFollowDecoration()
         return;
     }
     state_.previewFollowDecorationActive_ = false;
-    refreshEditorExtraSelections();
+    applyEditorExtraSelectionsForReason(QStringLiteral("follow_clear"));
 }
 
 void MainWindow::ValidationSection::clearValidationErrors()
@@ -1010,7 +1129,7 @@ void MainWindow::ValidationSection::clearMuriDiagnostics()
 void MainWindow::ValidationSection::clearValidationDecorations()
 {
     state_.validationDecorations_.clear();
-    refreshEditorExtraSelections();
+    refreshEditorExtraSelectionsForReason(QStringLiteral("validation_clear"));
 }
 
 void MainWindow::ValidationSection::addValidationError(

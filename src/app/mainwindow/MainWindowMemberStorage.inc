@@ -360,7 +360,10 @@
         int previewFollowDecorationLine_ = 1;
         int previewFollowDecorationCol_ = 1;
         int previewFollowDecorationEndCol_ = 1;
+        QByteArray validationExtraSelectionsSignature_;
         QByteArray lastEditorExtraSelectionsSignature_;
+        QVector<QTextEdit::ExtraSelection> cachedValidationExtraSelections_;
+        QVector<QTextEdit::ExtraSelection> currentEditorExtraSelections_;
         QString activeOutlineKey_ = "metadata";
         int activeDifficultyId_ = 0;
     };
@@ -711,6 +714,9 @@
     int& previewFollowDecorationLine_ = state_.previewFollowDecorationLine_;
     int& previewFollowDecorationCol_ = state_.previewFollowDecorationCol_;
     int& previewFollowDecorationEndCol_ = state_.previewFollowDecorationEndCol_;
+    QByteArray& validationExtraSelectionsSignature_ = state_.validationExtraSelectionsSignature_;
     QByteArray& lastEditorExtraSelectionsSignature_ = state_.lastEditorExtraSelectionsSignature_;
+    QVector<QTextEdit::ExtraSelection>& cachedValidationExtraSelections_ = state_.cachedValidationExtraSelections_;
+    QVector<QTextEdit::ExtraSelection>& currentEditorExtraSelections_ = state_.currentEditorExtraSelections_;
     QString& activeOutlineKey_ = state_.activeOutlineKey_;
     int& activeDifficultyId_ = state_.activeDifficultyId_;

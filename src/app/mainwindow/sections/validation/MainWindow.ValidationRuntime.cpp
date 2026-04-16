@@ -856,7 +856,7 @@ void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
     }
 
     clearValidationErrors();
-    clearValidationDecorations();
+    state_.validationDecorations_.clear();
     for (const ValidationCachedIssue& issue : entry.issues) {
         const QString issueTypeKey = issue.issueTypeKey.isEmpty()
             ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)
@@ -875,7 +875,7 @@ void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
         );
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
-    refreshEditorExtraSelections();
+    refreshEditorExtraSelectionsForReason(QStringLiteral("validation_refresh"));
     scheduleWrappedListRelayout(ui_.errorList_);
     updateEditorValidationSummary();
 }
@@ -952,7 +952,7 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
     applyTimer.start();
     setValidationTabVisible(true);
     clearValidationErrors();
-    clearValidationDecorations();
+    state_.validationDecorations_.clear();
     for (const ValidationCachedIssue& issue : entry.issues) {
         const QString issueTypeKey = issue.issueTypeKey.isEmpty()
             ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)
@@ -971,7 +971,7 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
         );
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
-    refreshEditorExtraSelections();
+    refreshEditorExtraSelectionsForReason(QStringLiteral("explicit_validate"));
     scheduleWrappedListRelayout(ui_.errorList_);
     updateEditorValidationSummary();
     if (focusFirstIssue && !entry.issues.isEmpty() && ui_.bottomTabs_ != nullptr && ui_.errorList_ != nullptr) {
@@ -1075,7 +1075,7 @@ bool MainWindow::ValidationSection::runValidateSimai()
     owner_.windowSection_->appendOutput("validate", payload);
 
     clearValidationErrors();
-    clearValidationDecorations();
+    state_.validationDecorations_.clear();
     for (const ValidationCachedIssue& issue : entry.issues) {
         const QString issueTypeKey = issue.issueTypeKey.isEmpty()
             ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)
@@ -1094,7 +1094,7 @@ bool MainWindow::ValidationSection::runValidateSimai()
         );
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
-    refreshEditorExtraSelections();
+    refreshEditorExtraSelectionsForReason(QStringLiteral("explicit_validate"));
     scheduleWrappedListRelayout(ui_.errorList_);
     updateEditorValidationSummary();
     if (!entry.issues.isEmpty() && ui_.bottomTabs_ != nullptr && ui_.errorList_ != nullptr) {

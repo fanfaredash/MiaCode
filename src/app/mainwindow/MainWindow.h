@@ -12,6 +12,7 @@
 #include <QPoint>
 #include <QRect>
 #include <QSet>
+#include <QTextEdit>
 #include <QVector>
 
 #include "app/quick_shell/QuickShellContracts.h"

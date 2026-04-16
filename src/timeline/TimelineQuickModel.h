@@ -66,7 +66,14 @@ private:
     };
 
     struct LineCursorCache {
+        struct FollowSelectionRange {
+            int anchorCol = 1;
+            int startCol = 1;
+            int endCol = 1;
+        };
+
         QVector<TimelineCursorAnchor> segmentStarts;
+        QVector<FollowSelectionRange> followSelectionRanges;
     };
 
     struct LineState {
@@ -104,6 +111,7 @@ private:
     void rebuildSnapshotDuration();
     void resequenceLineMetadata(int startIndex);
     void rebuildAnchorLineIndices();
+    void rebuildFollowSelectionRanges(LineState* lineState) const;
     bool resolvePreviousCursorAnchorForTextPosition(
         int lineNumber,
         int sourceCol,

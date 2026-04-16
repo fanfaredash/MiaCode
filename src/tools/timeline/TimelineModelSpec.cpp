@@ -868,6 +868,46 @@ int main(int argc, char** argv)
     }
 
     {
+        TimelineQuickModel incremental;
+        TimelineQuickModel rebuilt;
+        const QString original = QStringLiteral("1/2,\n1,,\nE");
+        QTextDocument document(original);
+        incremental.rebuildFromText(original, 0.0);
+
+        const int position = original.indexOf(QStringLiteral("1/2"));
+        QTextCursor cursor(&document);
+        cursor.setPosition(position);
+        cursor.setPosition(position + QStringLiteral("1/2").size(), QTextCursor::KeepAnchor);
+        cursor.insertText(QStringLiteral("1-4[8:1]"));
+
+        const QString updated = document.toPlainText();
+        const bool incrementalApplied = incremental.applyContentsChange(
+            &document,
+            position,
+            QStringLiteral("1/2").size(),
+            QStringLiteral("1-4[8:1]").size(),
+            0.0);
+        rebuilt.rebuildFromText(updated, 0.0);
+
+        int incrementalStartCol = 0;
+        int incrementalEndCol = 0;
+        int rebuiltStartCol = 0;
+        int rebuiltEndCol = 0;
+        const bool incrementalResolved = incremental.resolvePreviewFollowSelectionRange(
+            1,
+            1,
+            &incrementalStartCol,
+            &incrementalEndCol);
+        const bool rebuiltResolved = rebuilt.resolvePreviewFollowSelectionRange(1, 1, &rebuiltStartCol, &rebuiltEndCol);
+        expect(incrementalApplied && incrementalResolved && rebuiltResolved
+                   && incrementalStartCol == rebuiltStartCol
+                   && incrementalEndCol == rebuiltEndCol
+                   && incrementalStartCol == 1
+                   && incrementalEndCol == 8,
+               QStringLiteral("incremental edits rebuild cached follow-selection ranges the same way as full rebuild"));
+    }
+
+    {
         TimelineQuickModel model;
         model.rebuildFromText(QStringLiteral("1,,\nE"), 0.0);
         int line = 0;

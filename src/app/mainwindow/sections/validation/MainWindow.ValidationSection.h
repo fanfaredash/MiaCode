@@ -58,6 +58,11 @@ public:
     void onValidateSimai();
 
 private:
+    void refreshEditorExtraSelectionsForReason(const QString& reason);
+    void rebuildValidationExtraSelectionsCache(const QString& reason);
+    void applyEditorExtraSelectionsForReason(const QString& reason);
+    QByteArray buildValidationExtraSelectionsSignature() const;
+
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;
     MainWindow::MainWindowState& state_;
