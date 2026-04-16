@@ -24,7 +24,14 @@ public:
     const MuriAnalysisReport& alignedMuriAnalysisReportForPreview() const;
     void applyAlignedMuriAnalysisReportToViews();
     void updateEditorValidationSummary();
-    void setPreviewFollowDecoration(int line, int col, int endCol = -1, bool ensureVisible = false);
+    void setPreviewFollowDecoration(
+        int startLine,
+        int startCol,
+        int endLine = -1,
+        int endCol = -1,
+        int cursorLine = -1,
+        int cursorCol = -1,
+        bool ensureVisible = false);
     void clearPreviewFollowDecoration();
     void clearValidationErrors();
     void clearMuriDiagnostics();

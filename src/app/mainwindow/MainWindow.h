@@ -302,7 +302,14 @@ private:
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
     bool preparePreviewStartState();
     void refreshEditorExtraSelections();
-    void setPreviewFollowDecoration(int line, int col, int endCol = -1, bool ensureVisible = false);
+    void setPreviewFollowDecoration(
+        int startLine,
+        int startCol,
+        int endLine = -1,
+        int endCol = -1,
+        int cursorLine = -1,
+        int cursorCol = -1,
+        bool ensureVisible = false);
     void clearPreviewFollowDecoration();
     void clearValidationErrors();
     void clearValidationDecorations();

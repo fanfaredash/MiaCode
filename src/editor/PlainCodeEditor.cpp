@@ -6,6 +6,7 @@
 #include <QAction>
 #include <QContextMenuEvent>
 #include <QEvent>
+#include <QFocusEvent>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QMenu>
@@ -26,6 +27,7 @@ constexpr int kLineNumberMinWidth = 40;
 constexpr qreal kEditorDocumentLeftInset = 14.0;
 constexpr int kCurrentLineHighlightLeftInset = 3;
 constexpr int kCurrentLineHighlightRightInset = 0;
+constexpr int kCurrentLineHighlightDirtyMargin = 2;
 constexpr int kEditorCursorVisibleWidth = 1;
 constexpr int kEditorCursorHiddenWidth = 0;
 
@@ -204,14 +206,6 @@ private:
 PlainCodeEditor::PlainCodeEditor(QWidget* parent)
     : QTextEdit(parent), lineNumberArea_(new LineNumberArea(this))
 {
-    const auto applyCursorVisibility = [this]() {
-        const QTextCursor cursor = textCursor();
-        const bool hideAtLineStart = !cursor.hasSelection()
-            && cursor.positionInBlock() == 0
-            && !cursor.block().text().isEmpty();
-        setCursorWidth(hideAtLineStart ? kEditorCursorHiddenWidth : kEditorCursorVisibleWidth);
-    };
-
     lineNumberArea_->setFont(font());
     connect(document(), &QTextDocument::blockCountChanged, this, &PlainCodeEditor::updateLineNumberAreaWidth);
     connect(this, &QTextEdit::textChanged, this, [this]() {
@@ -222,13 +216,7 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
         Q_UNUSED(value);
         updateLineNumberArea();
     });
-    connect(this, &QTextEdit::cursorPositionChanged, this, [this, applyCursorVisibility]() {
-        const QRect previousHighlightRect = lastCurrentLineHighlightRect_;
-        applyCursorVisibility();
-        const QRect currentHighlightRect = currentLineHighlightRect();
-        lastCurrentLineHighlightRect_ = currentHighlightRect;
-        updateCurrentLineHighlightRegion(previousHighlightRect, currentHighlightRect);
-    });
+    connect(this, &QTextEdit::cursorPositionChanged, this, [this]() { syncCursorVisualState(); });
     updateLineNumberAreaWidth(0);
     setLineWrapMode(QTextEdit::NoWrap);
     setAcceptRichText(false);
@@ -238,7 +226,7 @@ PlainCodeEditor::PlainCodeEditor(QWidget* parent)
         frame->setFrameFormat(format);
     }
     setCursorWidth(kEditorCursorVisibleWidth);
-    applyCursorVisibility();
+    updateCursorVisibility();
     lastCurrentLineHighlightRect_ = currentLineHighlightRect();
 }
 
@@ -280,10 +268,64 @@ QRect PlainCodeEditor::currentLineHighlightRect() const
     return currentLineHighlightRectForCursor(this, textCursor(), blockSpacingPixels_);
 }
 
+QRect PlainCodeEditor::previewFollowVisualCaretRect() const
+{
+    if (!previewFollowVisualCaretActive_ || document() == nullptr || viewport() == nullptr) {
+        return QRect();
+    }
+
+    const int normalizedLine = qMax(1, previewFollowVisualCaretLine_);
+    QTextBlock block = document()->findBlockByNumber(normalizedLine - 1);
+    if (!block.isValid()) {
+        return QRect();
+    }
+
+    QTextCursor cursor(document());
+    cursor.setPosition(block.position() + qBound(0, previewFollowVisualCaretCol_ - 1, block.text().size()));
+    QRect caretRect = cursorRect(cursor);
+    if (!caretRect.isValid()) {
+        return QRect();
+    }
+    caretRect = caretRect.intersected(viewport()->rect());
+    return caretRect.isValid() ? caretRect : QRect();
+}
+
+void PlainCodeEditor::updateCursorVisibility()
+{
+    const QTextCursor cursor = textCursor();
+    const bool hideAtLineStart = !cursor.hasSelection()
+        && cursor.positionInBlock() == 0
+        && !cursor.block().text().isEmpty();
+    setCursorWidth(hideAtLineStart ? kEditorCursorHiddenWidth : kEditorCursorVisibleWidth);
+}
+
+void PlainCodeEditor::syncCursorVisualState()
+{
+    const QRect previousHighlightRect = lastCurrentLineHighlightRect_;
+    updateCursorVisibility();
+    const QRect currentHighlightRect = currentLineHighlightRect();
+    lastCurrentLineHighlightRect_ = currentHighlightRect;
+    updateCurrentLineHighlightRegion(previousHighlightRect, currentHighlightRect);
+}
+
 void PlainCodeEditor::updateCurrentLineHighlightRegion(const QRect& previousRect, const QRect& currentRect)
 {
     if (viewport() == nullptr) {
         return;
+    }
+
+    const QRect viewportRect = viewport()->rect();
+    if (previousRect.isValid() && previousRect != currentRect) {
+        const QRect expandedPreviousRect =
+            previousRect.adjusted(
+                -kCurrentLineHighlightDirtyMargin,
+                -kCurrentLineHighlightDirtyMargin,
+                kCurrentLineHighlightDirtyMargin,
+                kCurrentLineHighlightDirtyMargin)
+                .intersected(viewportRect);
+        if (expandedPreviousRect.isValid()) {
+            viewport()->update(expandedPreviousRect);
+        }
     }
 
     QRect dirtyRect;
@@ -298,7 +340,63 @@ void PlainCodeEditor::updateCurrentLineHighlightRegion(const QRect& previousRect
         viewport()->update();
         return;
     }
-    viewport()->update(dirtyRect.intersected(viewport()->rect()));
+    const QRect expandedDirtyRect =
+        dirtyRect.adjusted(
+            -kCurrentLineHighlightDirtyMargin,
+            -kCurrentLineHighlightDirtyMargin,
+            kCurrentLineHighlightDirtyMargin,
+            kCurrentLineHighlightDirtyMargin)
+            .intersected(viewportRect);
+    viewport()->update(expandedDirtyRect);
+}
+
+void PlainCodeEditor::setPreviewFollowVisualCaret(bool active, int line, int col)
+{
+    const QRect previousRect = previewFollowVisualCaretRect();
+    previewFollowVisualCaretActive_ = active;
+    previewFollowVisualCaretLine_ = qMax(1, line);
+    previewFollowVisualCaretCol_ = qMax(1, col);
+    const QRect currentRect = previewFollowVisualCaretRect();
+
+    if (viewport() == nullptr) {
+        return;
+    }
+    QRect dirtyRect;
+    if (previousRect.isValid()) {
+        dirtyRect = previousRect;
+    }
+    if (currentRect.isValid()) {
+        dirtyRect = dirtyRect.isNull() ? currentRect : dirtyRect.united(currentRect);
+    }
+    if (!dirtyRect.isValid()) {
+        return;
+    }
+    viewport()->update(dirtyRect.adjusted(-1, -1, 1, 1).intersected(viewport()->rect()));
+}
+
+bool PlainCodeEditor::applyPreviewFollowCursor(const QTextCursor& cursor, bool centerView, bool suppressSignals)
+{
+    if (document() == nullptr) {
+        return false;
+    }
+
+    if (suppressSignals) {
+        QSignalBlocker blocker(this);
+        setTextCursor(cursor);
+    } else {
+        setTextCursor(cursor);
+    }
+
+    syncCursorVisualState();
+
+    if (centerView) {
+        if (QScrollBar* vbar = verticalScrollBar()) {
+            const QRect caretRect = cursorRect();
+            const int centeredValue = vbar->value() + caretRect.center().y() - (viewport()->height() / 2);
+            vbar->setValue(qBound(vbar->minimum(), centeredValue, vbar->maximum()));
+        }
+    }
+    return true;
 }
 
 void PlainCodeEditor::setBatchTransformActions(const QList<QAction*>& actions)
@@ -370,6 +468,35 @@ void PlainCodeEditor::changeEvent(QEvent* event)
     QTextEdit::changeEvent(event);
     if (event != nullptr && event->type() == QEvent::FontChange) {
         refreshLineNumberAreaLayout();
+    }
+}
+
+void PlainCodeEditor::focusInEvent(QFocusEvent* event)
+{
+    const QRect previousRect = previewFollowVisualCaretRect();
+    QTextEdit::focusInEvent(event);
+    if (viewport() != nullptr && previousRect.isValid()) {
+        viewport()->update(previousRect.adjusted(-1, -1, 1, 1).intersected(viewport()->rect()));
+    }
+}
+
+void PlainCodeEditor::focusOutEvent(QFocusEvent* event)
+{
+    const QRect previousRect = previewFollowVisualCaretRect();
+    QTextEdit::focusOutEvent(event);
+    const QRect currentRect = previewFollowVisualCaretRect();
+    if (viewport() == nullptr) {
+        return;
+    }
+    QRect dirtyRect;
+    if (previousRect.isValid()) {
+        dirtyRect = previousRect;
+    }
+    if (currentRect.isValid()) {
+        dirtyRect = dirtyRect.isNull() ? currentRect : dirtyRect.united(currentRect);
+    }
+    if (dirtyRect.isValid()) {
+        viewport()->update(dirtyRect.adjusted(-1, -1, 1, 1).intersected(viewport()->rect()));
     }
 }
 
@@ -623,19 +750,27 @@ void PlainCodeEditor::mousePressEvent(QMouseEvent* event)
 void PlainCodeEditor::paintEvent(QPaintEvent* event)
 {
     QTextEdit::paintEvent(event);
+    QPainter painter(viewport());
     const QRect highlightRect = currentLineHighlightRect();
     lastCurrentLineHighlightRect_ = highlightRect;
-    if (!highlightRect.isValid()) {
-        return;
+    if (highlightRect.isValid()) {
+        const UiTheme::Colors& c = UiTheme::colors();
+        QColor currentLineFill = c.menuHoverBg;
+        currentLineFill.setAlpha(c.dark ? 60 : 36);
+        painter.setPen(QPen(c.borderSoft, 1));
+        painter.setBrush(currentLineFill);
+        painter.drawRoundedRect(highlightRect, 4.0, 4.0);
     }
 
-    QPainter painter(viewport());
-    const UiTheme::Colors& c = UiTheme::colors();
-    QColor currentLineFill = c.menuHoverBg;
-    currentLineFill.setAlpha(c.dark ? 60 : 36);
-    painter.setPen(QPen(c.borderSoft, 1));
-    painter.setBrush(currentLineFill);
-    painter.drawRoundedRect(highlightRect, 4.0, 4.0);
+    if (!hasFocus() && previewFollowVisualCaretActive_) {
+        const QRect caretRect = previewFollowVisualCaretRect();
+        if (caretRect.isValid()) {
+            const UiTheme::Colors& c = UiTheme::colors();
+            QColor caretColor = c.accent;
+            caretColor.setAlpha(c.dark ? 232 : 212);
+            painter.fillRect(QRect(caretRect.left(), caretRect.top(), qMax(1, kEditorCursorVisibleWidth), caretRect.height()), caretColor);
+        }
+    }
 }
 
 void PlainCodeEditor::lineNumberAreaPaintEvent(QPaintEvent* event)

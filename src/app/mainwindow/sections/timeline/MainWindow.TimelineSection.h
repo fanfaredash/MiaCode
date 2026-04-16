@@ -58,7 +58,8 @@ public:
         double second,
         bool ensureVisible = false,
         qint64* resolveElapsedNs = nullptr,
-        qint64* followOverlayElapsedNs = nullptr);
+        qint64* followOverlayElapsedNs = nullptr,
+        TimelineQuickModel::PreviewFollowSpan* spanOut = nullptr);
     void syncEditorCursorToPreviewSecond(
         double second,
         bool centerView = true,

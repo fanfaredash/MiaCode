@@ -856,6 +856,85 @@ int main(int argc, char** argv)
 
     {
         TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("{16} 8b (160){4},\n{16} (160),\nE"), 0.0);
+        int startCol = 0;
+        int endCol = 0;
+        const bool trimmedResolved = model.resolvePreviewFollowSelectionRange(1, 1, &startCol, &endCol);
+        expect(trimmedResolved && startCol == 6 && endCol == 7,
+               QStringLiteral("follow selection trims leading and trailing control tokens around the active note text"));
+        const bool controlOnlyResolved = model.resolvePreviewFollowSelectionRange(2, 1, &startCol, &endCol);
+        expect(controlOnlyResolved && startCol == 1 && endCol == 1,
+               QStringLiteral("follow selection falls back to the anchor when a segment only contains control tokens and spaces"));
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("1\n2,\nE"), 0.0);
+        TimelineQuickModel::PreviewFollowSpan span;
+        double second = -1.0;
+        const bool resolved = model.resolvePreviewFollowSpan(0.1, &span, &second);
+        expect(resolved
+                   && span.hasVisibleBody
+                   && span.startLine == 1
+                   && span.startCol == 1
+                   && span.endLine == 2
+                   && span.endCol == 1
+                   && span.cursorLine == 2
+                   && span.cursorCol == 2
+                   && nearlyEqual(second, 0.0),
+               QStringLiteral("follow span can continuously cross lines and moves the caret to the span end"));
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("{16} (160)\n8b,\nE"), 0.0);
+        TimelineQuickModel::PreviewFollowSpan span;
+        const bool resolved = model.resolvePreviewFollowSpan(0.01, &span);
+        expect(resolved
+                   && span.hasVisibleBody
+                   && span.startLine == 2
+                   && span.startCol == 1
+                   && span.endLine == 2
+                   && span.endCol == 2
+                   && span.cursorLine == 2
+                   && span.cursorCol == 3,
+               QStringLiteral("follow span can trim a control-only first line and advance to later visible content"));
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("1\n2 (160){4},\nE"), 0.0);
+        TimelineQuickModel::PreviewFollowSpan span;
+        const bool resolved = model.resolvePreviewFollowSpan(0.1, &span);
+        expect(resolved
+                   && span.hasVisibleBody
+                   && span.startLine == 1
+                   && span.startCol == 1
+                   && span.endLine == 2
+                   && span.endCol == 1
+                   && span.cursorLine == 2
+                   && span.cursorCol == 2,
+               QStringLiteral("follow span trims trailing control tokens on the final line and stops at the last logical character"));
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("{16} (160),\nE"), 0.0);
+        TimelineQuickModel::PreviewFollowSpan span;
+        const bool resolved = model.resolvePreviewFollowSpan(0.01, &span);
+        expect(resolved
+                   && !span.hasVisibleBody
+                   && span.startLine == 1
+                   && span.startCol == 1
+                   && span.endLine == 1
+                   && span.endCol == 1
+                   && span.cursorLine == 1
+                   && span.cursorCol == 2,
+               QStringLiteral("follow span reports empty-body fallback spans distinctly from visible-body selections"));
+    }
+
+    {
+        TimelineQuickModel model;
         model.rebuildFromText(QStringLiteral("1/2,\n1,,\nE"), 0.0);
         int startCol = 0;
         int endCol = 0;
@@ -905,6 +984,90 @@ int main(int argc, char** argv)
                    && incrementalStartCol == 1
                    && incrementalEndCol == 8,
                QStringLiteral("incremental edits rebuild cached follow-selection ranges the same way as full rebuild"));
+    }
+
+    {
+        TimelineQuickModel incremental;
+        TimelineQuickModel rebuilt;
+        const QString original = QStringLiteral("1,\nE");
+        QTextDocument document(original);
+        incremental.rebuildFromText(original, 0.0);
+
+        QTextCursor cursor(&document);
+        cursor.setPosition(0);
+        cursor.setPosition(1, QTextCursor::KeepAnchor);
+        cursor.insertText(QStringLiteral("{16} 1-4[8:1] (160)"));
+
+        const QString updated = document.toPlainText();
+        const bool incrementalApplied = incremental.applyContentsChange(
+            &document,
+            0,
+            1,
+            QStringLiteral("{16} 1-4[8:1] (160)").size(),
+            0.0);
+        rebuilt.rebuildFromText(updated, 0.0);
+
+        int incrementalStartCol = 0;
+        int incrementalEndCol = 0;
+        int rebuiltStartCol = 0;
+        int rebuiltEndCol = 0;
+        const bool incrementalResolved = incremental.resolvePreviewFollowSelectionRange(
+            1,
+            1,
+            &incrementalStartCol,
+            &incrementalEndCol);
+        const bool rebuiltResolved = rebuilt.resolvePreviewFollowSelectionRange(1, 1, &rebuiltStartCol, &rebuiltEndCol);
+        expect(incrementalApplied && incrementalResolved && rebuiltResolved
+                   && incrementalStartCol == rebuiltStartCol
+                   && incrementalEndCol == rebuiltEndCol
+                   && incrementalStartCol == 6
+                   && incrementalEndCol == 13,
+               QStringLiteral("incremental edits rebuild trimmed follow-selection ranges with boundary control tokens"));
+    }
+
+    {
+        TimelineQuickModel incremental;
+        TimelineQuickModel rebuilt;
+        const QString original = QStringLiteral("1,\nE");
+        QTextDocument document(original);
+        incremental.rebuildFromText(original, 0.0);
+
+        QTextCursor cursor(&document);
+        cursor.setPosition(0);
+        cursor.setPosition(1, QTextCursor::KeepAnchor);
+        cursor.insertText(QStringLiteral("{16} (160)\n8b"));
+
+        const QString updated = document.toPlainText();
+        const bool incrementalApplied = incremental.applyContentsChange(
+            &document,
+            0,
+            1,
+            QStringLiteral("{16} (160)\n8b").size(),
+            0.0);
+        rebuilt.rebuildFromText(updated, 0.0);
+
+        TimelineQuickModel::PreviewFollowSpan incrementalSpan;
+        TimelineQuickModel::PreviewFollowSpan rebuiltSpan;
+        const bool incrementalResolved = incremental.resolvePreviewFollowSpan(0.01, &incrementalSpan);
+        const bool rebuiltResolved = rebuilt.resolvePreviewFollowSpan(0.01, &rebuiltSpan);
+        expect(incrementalApplied
+                   && incrementalResolved
+                   && rebuiltResolved
+                   && incrementalSpan.hasVisibleBody == rebuiltSpan.hasVisibleBody
+                   && incrementalSpan.startLine == rebuiltSpan.startLine
+                   && incrementalSpan.startCol == rebuiltSpan.startCol
+                   && incrementalSpan.endLine == rebuiltSpan.endLine
+                   && incrementalSpan.endCol == rebuiltSpan.endCol
+                   && incrementalSpan.cursorLine == rebuiltSpan.cursorLine
+                   && incrementalSpan.cursorCol == rebuiltSpan.cursorCol
+                   && incrementalSpan.startLine == 2
+                   && incrementalSpan.startCol == 1
+                   && incrementalSpan.endLine == 2
+                   && incrementalSpan.endCol == 2
+                   && incrementalSpan.cursorLine == 2
+                   && incrementalSpan.cursorCol == 3
+                   && incrementalSpan.hasVisibleBody,
+               QStringLiteral("incremental edits rebuild cached follow spans the same way as full rebuild"));
     }
 
     {
