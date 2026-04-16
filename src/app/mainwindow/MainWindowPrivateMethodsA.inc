@@ -168,7 +168,9 @@
         bool selectToken,
         bool focusEditor,
         bool centerView,
-        bool suppressSignals
+        bool suppressSignals,
+        qint64* cursorMoveElapsedNs = nullptr,
+        qint64* followOverlayElapsedNs = nullptr
     );
     void syncEditorCursorToPreviewSecond(
         double second,

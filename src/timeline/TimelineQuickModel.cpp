@@ -830,7 +830,26 @@ bool TimelineQuickModel::resolvePreviewFollowSelectionRange(int line, int anchor
         return false;
     }
 
-    const QString& text = lines_.at(line - 1).text;
+    const LineState& lineState = lines_.at(line - 1);
+    const auto followRangeIt = std::lower_bound(
+        lineState.cursorCache.followSelectionRanges.cbegin(),
+        lineState.cursorCache.followSelectionRanges.cend(),
+        anchorCol,
+        [](const LineCursorCache::FollowSelectionRange& range, int value) {
+            return range.anchorCol < value;
+        });
+    if (followRangeIt != lineState.cursorCache.followSelectionRanges.cend()
+        && followRangeIt->anchorCol == anchorCol) {
+        if (startCol != nullptr) {
+            *startCol = followRangeIt->startCol;
+        }
+        if (endCol != nullptr) {
+            *endCol = followRangeIt->endCol;
+        }
+        return true;
+    }
+
+    const QString& text = lineState.text;
     const int lineLength = text.size();
     const int normalizedAnchorCol = qBound(1, anchorCol, lineLength + 1);
     int segmentStart = qBound(0, normalizedAnchorCol - 1, lineLength);
@@ -1341,6 +1360,48 @@ bool TimelineQuickModel::resolvePreviousCursorAnchorForSecond(
     return true;
 }
 
+void TimelineQuickModel::rebuildFollowSelectionRanges(LineState* lineState) const
+{
+    if (lineState == nullptr) {
+        return;
+    }
+
+    lineState->cursorCache.followSelectionRanges.clear();
+    lineState->cursorCache.followSelectionRanges.reserve(lineState->cursorCache.segmentStarts.size());
+
+    const QString& text = lineState->text;
+    const int lineLength = text.size();
+    for (const TimelineCursorAnchor& anchor : lineState->cursorCache.segmentStarts) {
+        LineCursorCache::FollowSelectionRange range;
+        range.anchorCol = qMax(1, anchor.sourceCol);
+        range.startCol = range.anchorCol;
+        range.endCol = range.anchorCol;
+
+        const int normalizedAnchorCol = qBound(1, range.anchorCol, lineLength + 1);
+        int segmentStart = qBound(0, normalizedAnchorCol - 1, lineLength);
+        int segmentEnd = text.indexOf(QLatin1Char(','), segmentStart);
+        if (segmentEnd < 0) {
+            segmentEnd = lineLength;
+        }
+
+        while (segmentStart < segmentEnd && text.at(segmentStart).isSpace()) {
+            ++segmentStart;
+        }
+        while (segmentEnd > segmentStart && text.at(segmentEnd - 1).isSpace()) {
+            --segmentEnd;
+        }
+
+        if (segmentEnd > segmentStart) {
+            range.startCol = segmentStart + 1;
+            range.endCol = segmentEnd;
+        } else {
+            range.startCol = normalizedAnchorCol;
+            range.endCol = normalizedAnchorCol;
+        }
+        lineState->cursorCache.followSelectionRanges.append(range);
+    }
+}
+
 bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& startState)
 {
     if (lineState == nullptr) {
@@ -1358,6 +1419,7 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
     lineState->render.beats.clear();
     lineState->render.notes.clear();
     lineState->cursorCache.segmentStarts.clear();
+    lineState->cursorCache.followSelectionRanges.clear();
     lineState->isTerminalE = false;
     lineState->terminalSecond = -1.0;
     lineState->hasNotes = false;
@@ -1534,6 +1596,7 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
             }
             return left.secondOffset < right.secondOffset;
         });
+    rebuildFollowSelectionRanges(lineState);
 
     lineState->endState = state;
     lineState->render.endSecond = qMax(lineMaxSecond, state.second);
