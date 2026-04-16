@@ -368,6 +368,12 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
 {
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
     const bool pathChanged = normalizedPath != state_.currentFilePath_;
+    const QString previousTrackPath = state_.lastTrackPath_;
+    QString nextTrackPath;
+    if (!normalizedPath.isEmpty()) {
+        nextTrackPath = miacode::chart_assets::resolveTrackPath(normalizedPath);
+    }
+    const bool trackPathChanged = previousTrackPath != nextTrackPath;
     if (pathChanged) {
         owner_.clearValidationCache();
         owner_.clearValidationErrors();
@@ -377,6 +383,9 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
             ui_.latencyDetectorDialog_->close();
             ui_.latencyDetectorDialog_.clear();
         }
+    }
+    if ((pathChanged || trackPathChanged) && state_.waveformCacheService_ != nullptr) {
+        state_.waveformCacheService_->clear();
     }
     state_.currentFilePath_ = normalizedPath;
     state_.lastSessionFilePath_ = state_.currentFilePath_;
@@ -389,10 +398,9 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
     if (!state_.currentFilePath_.isEmpty()) {
         owner_.setLastOpenDirectory(state_.currentFilePath_);
 
-        const QString siblingTrack = miacode::chart_assets::resolveTrackPath(state_.currentFilePath_);
-        if (!siblingTrack.isEmpty()) {
+        if (!nextTrackPath.isEmpty()) {
             // Keep preview audio in sync with the currently opened chart directory.
-            state_.lastTrackPath_ = siblingTrack;
+            state_.lastTrackPath_ = nextTrackPath;
         } else {
             state_.lastTrackPath_.clear();
         }
@@ -871,9 +879,18 @@ bool MainWindow::TimelineSection::moveEditorCursorToTimelineLocation(
     bool selectToken,
     bool focusEditor,
     bool centerView,
-    bool suppressSignals
+    bool suppressSignals,
+    qint64* cursorMoveElapsedNs,
+    qint64* followOverlayElapsedNs
 )
 {
+    if (cursorMoveElapsedNs != nullptr) {
+        *cursorMoveElapsedNs = 0;
+    }
+    if (followOverlayElapsedNs != nullptr) {
+        *followOverlayElapsedNs = 0;
+    }
+
     auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
     if (editor == nullptr || editor->document() == nullptr) {
         return false;
@@ -881,7 +898,12 @@ bool MainWindow::TimelineSection::moveEditorCursorToTimelineLocation(
 
     QTextBlock block = editor->document()->findBlockByNumber(line - 1);
     if (!block.isValid()) {
+        QElapsedTimer cursorTimer;
+        cursorTimer.start();
         owner_.jumpToLocation(line, col);
+        if (cursorMoveElapsedNs != nullptr) {
+            *cursorMoveElapsedNs = cursorTimer.nsecsElapsed();
+        }
         return true;
     }
 
@@ -919,6 +941,8 @@ bool MainWindow::TimelineSection::moveEditorCursorToTimelineLocation(
         cursor.setPosition(block.position() + localIndex);
     }
 
+    QElapsedTimer cursorTimer;
+    cursorTimer.start();
     if (suppressSignals) {
         QSignalBlocker blocker(editor);
         editor->setTextCursor(cursor);
@@ -933,6 +957,12 @@ bool MainWindow::TimelineSection::moveEditorCursorToTimelineLocation(
             vbar->setValue(qBound(vbar->minimum(), centeredValue, vbar->maximum()));
         }
     }
+    if (cursorMoveElapsedNs != nullptr) {
+        *cursorMoveElapsedNs = cursorTimer.nsecsElapsed();
+    }
+
+    QElapsedTimer followOverlayTimer;
+    followOverlayTimer.start();
     if (focusEditor) {
         editor->setFocus();
         owner_.clearPreviewFollowDecoration();
@@ -942,13 +972,32 @@ bool MainWindow::TimelineSection::moveEditorCursorToTimelineLocation(
         state_.timelineQuickModel_.resolvePreviewFollowSelectionRange(line, col, &startCol, &endCol);
         owner_.setPreviewFollowDecoration(line, startCol, endCol);
     }
+    if (followOverlayElapsedNs != nullptr) {
+        *followOverlayElapsedNs = followOverlayTimer.nsecsElapsed();
+    }
     return true;
 }
 
-void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLine(double second, bool ensureVisible)
+void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLine(
+    double second,
+    bool ensureVisible,
+    qint64* resolveElapsedNs,
+    qint64* followOverlayElapsedNs)
 {
+    if (resolveElapsedNs != nullptr) {
+        *resolveElapsedNs = 0;
+    }
+    if (followOverlayElapsedNs != nullptr) {
+        *followOverlayElapsedNs = 0;
+    }
+
     if (ui_.timelineView_ == nullptr || !hasActiveDifficulty() || !ui_.timelineView_->followPreviewEnabled()) {
+        QElapsedTimer overlayTimer;
+        overlayTimer.start();
         owner_.clearPreviewFollowDecoration();
+        if (followOverlayElapsedNs != nullptr) {
+            *followOverlayElapsedNs = overlayTimer.nsecsElapsed();
+        }
         return;
     }
 
@@ -956,6 +1005,8 @@ void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLi
     int startCol = 1;
     int endCol = 1;
     double cursorSecond = 0.0;
+    QElapsedTimer resolveTimer;
+    resolveTimer.start();
     const bool resolved = state_.timelineQuickModel_.resolvePreviewFollowSelection(
         qMax(0.0, second),
         &line,
@@ -963,12 +1014,25 @@ void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLi
         &endCol,
         &cursorSecond
     );
+    if (resolveElapsedNs != nullptr) {
+        *resolveElapsedNs = resolveTimer.nsecsElapsed();
+    }
     Q_UNUSED(cursorSecond);
     if (!resolved) {
+        QElapsedTimer overlayTimer;
+        overlayTimer.start();
         owner_.clearPreviewFollowDecoration();
+        if (followOverlayElapsedNs != nullptr) {
+            *followOverlayElapsedNs = overlayTimer.nsecsElapsed();
+        }
         return;
     }
+    QElapsedTimer overlayTimer;
+    overlayTimer.start();
     owner_.setPreviewFollowDecoration(line, startCol, endCol, ensureVisible);
+    if (followOverlayElapsedNs != nullptr) {
+        *followOverlayElapsedNs = overlayTimer.nsecsElapsed();
+    }
 }
 
 void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
@@ -978,10 +1042,21 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
 {
     QElapsedTimer timer;
     timer.start();
-    const auto logPerf = [&](const QString& action, bool resolved, bool moved, int line, int col, int endCol) {
+    const auto logPerf =
+        [&](const QString& action,
+            bool resolved,
+            bool moved,
+            int line,
+            int col,
+            int endCol,
+            qint64 resolveElapsedNs,
+            qint64 cursorMoveElapsedNs,
+            qint64 followOverlayElapsedNs,
+            qint64 timelineCursorElapsedNs) {
         if (!state_.runtimeDebugOutputEnabled_) {
             return;
         }
+        const double totalElapsedMs = timer.nsecsElapsed() / 1000000.0;
         appendTimelinePerfLog(
             QStringLiteral("edit/follow_sync_perf"),
             QStringLiteral(
@@ -997,23 +1072,58 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
                 .arg(centerView ? 1 : 0)
                 .arg(ensureVisibleWhenPaused ? 1 : 0)
                 .arg(state_.qtPreviewPlaying_ ? 1 : 0)
-                .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
+                .arg(totalElapsedMs, 0, 'f', 3)
+        );
+        appendTimelinePerfLog(
+            QStringLiteral("edit/follow_sync_breakdown"),
+            QStringLiteral(
+                "action=%1 resolved=%2 moved=%3 center=%4 playing=%5 resolve_ms=%6 cursor_move_ms=%7 follow_overlay_ms=%8 timeline_cursor_ms=%9 total_ms=%10"
+            )
+                .arg(action)
+                .arg(resolved ? 1 : 0)
+                .arg(moved ? 1 : 0)
+                .arg(centerView ? 1 : 0)
+                .arg(state_.qtPreviewPlaying_ ? 1 : 0)
+                .arg(resolveElapsedNs / 1000000.0, 0, 'f', 3)
+                .arg(cursorMoveElapsedNs / 1000000.0, 0, 'f', 3)
+                .arg(followOverlayElapsedNs / 1000000.0, 0, 'f', 3)
+                .arg(timelineCursorElapsedNs / 1000000.0, 0, 'f', 3)
+                .arg(totalElapsedMs, 0, 'f', 3)
         );
     };
 
+    qint64 resolveElapsedNs = 0;
+    qint64 cursorMoveElapsedNs = 0;
+    qint64 followOverlayElapsedNs = 0;
+    qint64 timelineCursorElapsedNs = 0;
+
     if (state_.suppressTimelineCursorSync_ || ui_.timelineView_ == nullptr || !hasActiveDifficulty()) {
         owner_.clearPreviewFollowDecoration();
-        logPerf(QStringLiteral("suppressed"), false, false, 1, 1, 1);
+        logPerf(QStringLiteral("suppressed"), false, false, 1, 1, 1, 0, 0, 0, 0);
         return;
     }
     if (!ui_.timelineView_->followPreviewEnabled()) {
         owner_.clearPreviewFollowDecoration();
-        logPerf(QStringLiteral("disabled"), false, false, 1, 1, 1);
+        logPerf(QStringLiteral("disabled"), false, false, 1, 1, 1, 0, 0, 0, 0);
         return;
     }
     if (!state_.qtPreviewPlaying_) {
-        updatePreviewFollowDecorationForTimelineBlueLine(second, ensureVisibleWhenPaused);
-        logPerf(QStringLiteral("paused_decoration"), true, false, 1, 1, 1);
+        updatePreviewFollowDecorationForTimelineBlueLine(
+            second,
+            ensureVisibleWhenPaused,
+            &resolveElapsedNs,
+            &followOverlayElapsedNs);
+        logPerf(
+            QStringLiteral("paused_decoration"),
+            state_.previewFollowDecorationActive_,
+            false,
+            1,
+            1,
+            1,
+            resolveElapsedNs,
+            0,
+            followOverlayElapsedNs,
+            0);
         return;
     }
 
@@ -1021,36 +1131,92 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
     int line = 1;
     int col = 1;
     double cursorSecond = 0.0;
+    QElapsedTimer resolveTimer;
+    resolveTimer.start();
     const bool resolved = state_.timelineQuickModel_.resolvePreviewFollowCursor(second, &line, &col, &cursorSecond);
+    resolveElapsedNs = resolveTimer.nsecsElapsed();
     const bool alreadyAtAnchor = (currentLine == line && currentCol == col);
 
     if (alreadyAtAnchor) {
         int startCol = col;
         int endCol = col;
         if (resolved) {
+            QElapsedTimer overlayTimer;
+            overlayTimer.start();
             state_.timelineQuickModel_.resolvePreviewFollowSelectionRange(line, col, &startCol, &endCol);
             owner_.setPreviewFollowDecoration(line, startCol, endCol);
+            followOverlayElapsedNs = overlayTimer.nsecsElapsed();
         } else {
+            QElapsedTimer overlayTimer;
+            overlayTimer.start();
             owner_.clearPreviewFollowDecoration();
+            followOverlayElapsedNs = overlayTimer.nsecsElapsed();
         }
+        QElapsedTimer timelineTimer;
+        timelineTimer.start();
         ui_.timelineView_->setCursorSeconds(cursorSecond, false);
-        logPerf(QStringLiteral("anchor_unchanged"), resolved, false, line, col, endCol);
+        timelineCursorElapsedNs = timelineTimer.nsecsElapsed();
+        logPerf(
+            QStringLiteral("anchor_unchanged"),
+            resolved,
+            false,
+            line,
+            col,
+            endCol,
+            resolveElapsedNs,
+            0,
+            followOverlayElapsedNs,
+            timelineCursorElapsedNs);
         return;
     }
 
     int endCol = col;
-    if (moveEditorCursorToTimelineLocation(line, col, false, false, centerView, true)) {
+    if (moveEditorCursorToTimelineLocation(
+            line,
+            col,
+            false,
+            false,
+            centerView,
+            true,
+            &cursorMoveElapsedNs,
+            &followOverlayElapsedNs)) {
         if (!resolved) {
+            QElapsedTimer overlayTimer;
+            overlayTimer.start();
             owner_.clearPreviewFollowDecoration();
+            followOverlayElapsedNs += overlayTimer.nsecsElapsed();
         } else {
             int startCol = col;
             state_.timelineQuickModel_.resolvePreviewFollowSelectionRange(line, col, &startCol, &endCol);
         }
+        QElapsedTimer timelineTimer;
+        timelineTimer.start();
         ui_.timelineView_->setCursorSeconds(cursorSecond, false);
-        logPerf(QStringLiteral("cursor_moved"), resolved, true, line, col, endCol);
+        timelineCursorElapsedNs = timelineTimer.nsecsElapsed();
+        logPerf(
+            QStringLiteral("cursor_moved"),
+            resolved,
+            true,
+            line,
+            col,
+            endCol,
+            resolveElapsedNs,
+            cursorMoveElapsedNs,
+            followOverlayElapsedNs,
+            timelineCursorElapsedNs);
         return;
     }
-    logPerf(QStringLiteral("cursor_move_failed"), resolved, false, line, col, endCol);
+    logPerf(
+        QStringLiteral("cursor_move_failed"),
+        resolved,
+        false,
+        line,
+        col,
+        endCol,
+        resolveElapsedNs,
+        cursorMoveElapsedNs,
+        followOverlayElapsedNs,
+        timelineCursorElapsedNs);
 }
 
 void MainWindow::scheduleDeferredEditorUiUpdate(
@@ -1288,7 +1454,9 @@ bool MainWindow::moveEditorCursorToTimelineLocation(
     bool selectToken,
     bool focusEditor,
     bool centerView,
-    bool suppressSignals)
+    bool suppressSignals,
+    qint64* cursorMoveElapsedNs,
+    qint64* followOverlayElapsedNs)
 {
     return timelineSection_->moveEditorCursorToTimelineLocation(
         line,
@@ -1296,7 +1464,9 @@ bool MainWindow::moveEditorCursorToTimelineLocation(
         selectToken,
         focusEditor,
         centerView,
-        suppressSignals
+        suppressSignals,
+        cursorMoveElapsedNs,
+        followOverlayElapsedNs
     );
 }
 
