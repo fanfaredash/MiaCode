@@ -610,41 +610,6 @@ int wrappedRichTextHeight(const QString& html, const QFont& font, int width)
     return qMax(1, qCeil(document.size().height()));
 }
 
-bool buildEditorSelectionCursor(PlainCodeEditor* editor, int line, int col, int endCol, QTextCursor* cursorOut)
-{
-    if (editor == nullptr || editor->document() == nullptr || cursorOut == nullptr) {
-        return false;
-    }
-
-    const int normalizedLine = qMax(1, line);
-    const int normalizedCol = qMax(1, col);
-    const int normalizedEndCol = qMax(normalizedCol, endCol);
-    QTextBlock block = editor->document()->findBlockByNumber(normalizedLine - 1);
-    if (!block.isValid()) {
-        return false;
-    }
-
-    const QString blockText = block.text();
-    const int lineLength = blockText.size();
-    const int localIndex = qBound(0, normalizedCol - 1, qMax(0, lineLength));
-    const int localEndIndex = qBound(localIndex, normalizedEndCol - 1, qMax(0, lineLength));
-
-    QTextCursor cursor(editor->document());
-    cursor.setPosition(block.position() + localIndex);
-    if (lineLength > 0) {
-        const int selectionLength = qMax(0, localEndIndex - localIndex + (localIndex < lineLength ? 1 : 0));
-        if (selectionLength > 0) {
-            cursor.setPosition(block.position() + localIndex + selectionLength, QTextCursor::KeepAnchor);
-        } else {
-            cursor.setPosition(block.position() + qMax(0, lineLength - 1));
-            cursor.setPosition(block.position() + lineLength, QTextCursor::KeepAnchor);
-        }
-    }
-
-    *cursorOut = cursor;
-    return true;
-}
-
 }  // namespace
 
 void MainWindow::ValidationSection::showIssueListContextMenu(QListWidget* list, const QPoint& pos, bool muriList)

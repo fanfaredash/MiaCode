@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <utility>
 
 namespace {
 
@@ -97,6 +98,168 @@ bool lineTailIsTerminalMarker(const QString& line, int startIndex)
         tail = tail.left(commentIndex);
     }
     return isTerminalMarkerText(tail);
+}
+
+bool tryConsumeLeadingFollowControlToken(const QString& text, int limit, int* cursor)
+{
+    if (cursor == nullptr || *cursor < 0 || *cursor >= limit || limit > text.size()) {
+        return false;
+    }
+
+    const int start = *cursor;
+    if (text.at(start) == QLatin1Char('(')) {
+        const int close = text.indexOf(QLatin1Char(')'), start + 1);
+        if (close > start && close < limit) {
+            bool bpmOk = false;
+            const double bpm = text.mid(start + 1, close - start - 1).trimmed().toDouble(&bpmOk);
+            if (bpmOk && bpm > 0.0) {
+                *cursor = close + 1;
+                return true;
+            }
+        }
+    }
+
+    if (text.at(start) == QLatin1Char('{')) {
+        const int close = text.indexOf(QLatin1Char('}'), start + 1);
+        if (close > start && close < limit) {
+            bool beatsOk = false;
+            const int beats = text.mid(start + 1, close - start - 1).trimmed().toInt(&beatsOk);
+            if (beatsOk && beats > 0) {
+                *cursor = close + 1;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool tryConsumeTrailingFollowControlToken(const QString& text, int start, int* endExclusive)
+{
+    if (endExclusive == nullptr || start < 0 || *endExclusive <= start || *endExclusive > text.size()) {
+        return false;
+    }
+
+    const int end = *endExclusive;
+    if (text.at(end - 1) == QLatin1Char(')')) {
+        const int open = text.lastIndexOf(QLatin1Char('('), end - 1);
+        if (open >= start) {
+            bool bpmOk = false;
+            const double bpm = text.mid(open + 1, end - open - 2).trimmed().toDouble(&bpmOk);
+            if (bpmOk && bpm > 0.0) {
+                *endExclusive = open;
+                return true;
+            }
+        }
+    }
+
+    if (text.at(end - 1) == QLatin1Char('}')) {
+        const int open = text.lastIndexOf(QLatin1Char('{'), end - 1);
+        if (open >= start) {
+            bool beatsOk = false;
+            const int beats = text.mid(open + 1, end - open - 2).trimmed().toInt(&beatsOk);
+            if (beatsOk && beats > 0) {
+                *endExclusive = open;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+int findTrailingInlineTimeSignatureCommentStart(const QString& text, int start, int endExclusive)
+{
+    if (start < 0 || endExclusive > text.size() || start >= endExclusive) {
+        return -1;
+    }
+
+    const int lineStart = qMax(start, text.lastIndexOf(QLatin1Char('\n'), endExclusive - 1) + 1);
+    const QString tailLine = text.mid(lineStart, endExclusive - lineStart);
+    for (int index = 0; index + 1 < tailLine.size(); ++index) {
+        if (tailLine.at(index) != QLatin1Char('|') || tailLine.at(index + 1) != QLatin1Char('|')) {
+            continue;
+        }
+        int numerator = 0;
+        int denominator = 0;
+        if (miacode::simai::parseInlineTimeSignatureComment(
+                tailLine,
+                index,
+                &numerator,
+                &denominator,
+                nullptr)) {
+            return lineStart + index;
+        }
+    }
+
+    return -1;
+}
+
+void trimFollowSelectionSegment(const QString& text, int anchorCol, int* startCol, int* endCol)
+{
+    const int lineLength = text.size();
+    const int normalizedAnchorCol = qBound(1, anchorCol, lineLength + 1);
+    int segmentStart = qBound(0, normalizedAnchorCol - 1, lineLength);
+    int segmentEnd = text.indexOf(QLatin1Char(','), segmentStart);
+    if (segmentEnd < 0) {
+        segmentEnd = lineLength;
+    }
+
+    bool trimmedLeading = true;
+    while (trimmedLeading) {
+        trimmedLeading = false;
+        while (segmentStart < segmentEnd && text.at(segmentStart).isSpace()) {
+            ++segmentStart;
+            trimmedLeading = true;
+        }
+        if (tryConsumeLeadingFollowControlToken(text, segmentEnd, &segmentStart)) {
+            trimmedLeading = true;
+        }
+    }
+
+    bool trimmedTrailing = true;
+    while (trimmedTrailing) {
+        trimmedTrailing = false;
+        while (segmentEnd > segmentStart && text.at(segmentEnd - 1).isSpace()) {
+            --segmentEnd;
+            trimmedTrailing = true;
+        }
+
+        const int commentStart = findTrailingInlineTimeSignatureCommentStart(text, segmentStart, segmentEnd);
+        if (commentStart >= 0) {
+            segmentEnd = commentStart;
+            trimmedTrailing = true;
+            continue;
+        }
+
+        if (tryConsumeTrailingFollowControlToken(text, segmentStart, &segmentEnd)) {
+            trimmedTrailing = true;
+        }
+    }
+
+    while (segmentStart < segmentEnd && text.at(segmentStart).isSpace()) {
+        ++segmentStart;
+    }
+    while (segmentEnd > segmentStart && text.at(segmentEnd - 1).isSpace()) {
+        --segmentEnd;
+    }
+
+    if (segmentEnd > segmentStart) {
+        if (startCol != nullptr) {
+            *startCol = segmentStart + 1;
+        }
+        if (endCol != nullptr) {
+            *endCol = segmentEnd;
+        }
+        return;
+    }
+
+    if (startCol != nullptr) {
+        *startCol = normalizedAnchorCol;
+    }
+    if (endCol != nullptr) {
+        *endCol = normalizedAnchorCol;
+    }
 }
 
 enum class SlideHeadlessMode {
@@ -671,6 +834,7 @@ bool TimelineQuickModel::applyContentsChange(
 
     rebuildSlideDerivedFlags();
     rebuildAnchorLineIndices();
+    rebuildFollowSelectionSpans();
     rebuildSnapshotDuration();
     return true;
 }
@@ -849,38 +1013,7 @@ bool TimelineQuickModel::resolvePreviewFollowSelectionRange(int line, int anchor
         return true;
     }
 
-    const QString& text = lineState.text;
-    const int lineLength = text.size();
-    const int normalizedAnchorCol = qBound(1, anchorCol, lineLength + 1);
-    int segmentStart = qBound(0, normalizedAnchorCol - 1, lineLength);
-    int segmentEnd = text.indexOf(QLatin1Char(','), segmentStart);
-    if (segmentEnd < 0) {
-        segmentEnd = lineLength;
-    }
-
-    while (segmentStart < segmentEnd && text.at(segmentStart).isSpace()) {
-        ++segmentStart;
-    }
-    while (segmentEnd > segmentStart && text.at(segmentEnd - 1).isSpace()) {
-        --segmentEnd;
-    }
-
-    if (segmentEnd > segmentStart) {
-        if (startCol != nullptr) {
-            *startCol = segmentStart + 1;
-        }
-        if (endCol != nullptr) {
-            *endCol = segmentEnd;
-        }
-        return true;
-    }
-
-    if (startCol != nullptr) {
-        *startCol = normalizedAnchorCol;
-    }
-    if (endCol != nullptr) {
-        *endCol = normalizedAnchorCol;
-    }
+    trimFollowSelectionSegment(lineState.text, anchorCol, startCol, endCol);
     return true;
 }
 
@@ -904,6 +1037,74 @@ bool TimelineQuickModel::resolvePreviewFollowCursor(
         *noteSecond = 0.0;
     }
     return false;
+}
+
+bool TimelineQuickModel::resolvePreviewFollowSpan(
+    double second,
+    PreviewFollowSpan* span,
+    double* anchorSecond) const
+{
+    if (span != nullptr) {
+        *span = PreviewFollowSpan();
+    }
+
+    int resolvedLine = 1;
+    int anchorCol = 1;
+    double resolvedSecond = 0.0;
+    if (!resolvePreviewFollowCursor(second, &resolvedLine, &anchorCol, &resolvedSecond)) {
+        if (anchorSecond != nullptr) {
+            *anchorSecond = 0.0;
+        }
+        return false;
+    }
+
+    if (anchorSecond != nullptr) {
+        *anchorSecond = resolvedSecond;
+    }
+    if (span == nullptr || resolvedLine < 1 || resolvedLine > lines_.size()) {
+        return true;
+    }
+
+    const LineState& lineState = lines_.at(resolvedLine - 1);
+    const auto followSpanIt = std::lower_bound(
+        lineState.cursorCache.followSelectionSpans.cbegin(),
+        lineState.cursorCache.followSelectionSpans.cend(),
+        anchorCol,
+        [](const LineCursorCache::FollowSelectionSpan& entry, int value) {
+            return entry.anchorCol < value;
+        });
+    if (followSpanIt != lineState.cursorCache.followSelectionSpans.cend()
+        && followSpanIt->anchorCol == anchorCol) {
+        *span = followSpanIt->span;
+        return true;
+    }
+
+    PreviewFollowSpan fallback;
+    fallback.startLine = resolvedLine;
+    fallback.startCol = anchorCol;
+    fallback.endLine = resolvedLine;
+    fallback.endCol = anchorCol;
+    fallback.hasVisibleBody = false;
+    const int lineLength = lineState.text.size();
+    const int startOffset = lineLength > 0
+        ? qBound(0, anchorCol - 1, lineLength - 1)
+        : 0;
+    int endOffsetExclusive = lineLength > 0
+        ? qBound(1, anchorCol, lineLength)
+        : 0;
+
+    fallback.startPosition = lineState.startPosition + startOffset;
+    fallback.endPositionExclusive = lineState.startPosition + endOffsetExclusive;
+    if (lineLength > 0 && fallback.endPositionExclusive <= fallback.startPosition) {
+        fallback.endPositionExclusive = qMin(
+            lineState.startPosition + lineLength,
+            fallback.startPosition + 1);
+    }
+    fallback.cursorPosition = fallback.endPositionExclusive;
+    fallback.cursorLine = resolvedLine;
+    fallback.cursorCol = qMax(1, fallback.cursorPosition - lineState.startPosition + 1);
+    *span = fallback;
+    return true;
 }
 
 bool TimelineQuickModel::resolvePreviewFollowSelection(
@@ -976,6 +1177,7 @@ bool TimelineQuickModel::rebuildFromLineTexts(
 
     rebuildSlideDerivedFlags();
     rebuildAnchorLineIndices();
+    rebuildFollowSelectionSpans();
     rebuildSnapshotDuration();
     return true;
 }
@@ -1370,35 +1572,247 @@ void TimelineQuickModel::rebuildFollowSelectionRanges(LineState* lineState) cons
     lineState->cursorCache.followSelectionRanges.reserve(lineState->cursorCache.segmentStarts.size());
 
     const QString& text = lineState->text;
-    const int lineLength = text.size();
     for (const TimelineCursorAnchor& anchor : lineState->cursorCache.segmentStarts) {
         LineCursorCache::FollowSelectionRange range;
         range.anchorCol = qMax(1, anchor.sourceCol);
         range.startCol = range.anchorCol;
         range.endCol = range.anchorCol;
-
-        const int normalizedAnchorCol = qBound(1, range.anchorCol, lineLength + 1);
-        int segmentStart = qBound(0, normalizedAnchorCol - 1, lineLength);
-        int segmentEnd = text.indexOf(QLatin1Char(','), segmentStart);
-        if (segmentEnd < 0) {
-            segmentEnd = lineLength;
-        }
-
-        while (segmentStart < segmentEnd && text.at(segmentStart).isSpace()) {
-            ++segmentStart;
-        }
-        while (segmentEnd > segmentStart && text.at(segmentEnd - 1).isSpace()) {
-            --segmentEnd;
-        }
-
-        if (segmentEnd > segmentStart) {
-            range.startCol = segmentStart + 1;
-            range.endCol = segmentEnd;
-        } else {
-            range.startCol = normalizedAnchorCol;
-            range.endCol = normalizedAnchorCol;
-        }
+        trimFollowSelectionSegment(text, range.anchorCol, &range.startCol, &range.endCol);
         lineState->cursorCache.followSelectionRanges.append(range);
+    }
+}
+
+void TimelineQuickModel::rebuildFollowSelectionSpans()
+{
+    for (LineState& lineState : lines_) {
+        lineState.cursorCache.followSelectionSpans.clear();
+        lineState.cursorCache.followSelectionSpans.reserve(lineState.cursorCache.segmentStarts.size());
+    }
+    if (lines_.isEmpty()) {
+        return;
+    }
+
+    struct DocumentAnchorEntry {
+        int lineIndex = 0;
+        int anchorCol = 1;
+        double second = 0.0;
+        int position = 0;
+    };
+
+    QVector<DocumentAnchorEntry> anchors;
+    int totalAnchorCount = 0;
+    for (const LineState& lineState : lines_) {
+        totalAnchorCount += lineState.cursorCache.segmentStarts.size();
+    }
+    anchors.reserve(totalAnchorCount);
+
+    for (int lineIndex = 0; lineIndex < lines_.size(); ++lineIndex) {
+        const LineState& lineState = lines_.at(lineIndex);
+        for (const TimelineCursorAnchor& anchor : lineState.cursorCache.segmentStarts) {
+            DocumentAnchorEntry entry;
+            entry.lineIndex = lineIndex;
+            entry.anchorCol = qMax(1, anchor.sourceCol);
+            entry.second = qMax(0.0, timelineRenderAbsoluteSecond(lineState.render, anchor.secondOffset));
+            entry.position = lineState.startPosition + qMax(0, entry.anchorCol - 1);
+            anchors.append(entry);
+        }
+    }
+    if (anchors.isEmpty()) {
+        return;
+    }
+
+    int documentTextEndExclusive = 0;
+    for (int lineIndex = lines_.size() - 1; lineIndex >= 0; --lineIndex) {
+        const LineState& lineState = lines_.at(lineIndex);
+        const bool pureTerminalOnly = lineState.isTerminalE
+            && lineState.render.beats.isEmpty()
+            && lineState.render.notes.isEmpty()
+            && lineState.render.measureLineSecondOffsets.isEmpty()
+            && qAbs(lineState.render.endSecond - lineState.render.startSecond) <= kTimelineEpsilon
+            && qAbs(lineState.terminalSecond - lineState.render.startSecond) <= kTimelineEpsilon;
+        if (pureTerminalOnly) {
+            continue;
+        }
+        documentTextEndExclusive = lineState.startPosition + lineState.text.size();
+        break;
+    }
+
+    const auto resolveVisibleCharLineCol = [this](int position) -> std::pair<int, int> {
+        if (lines_.isEmpty()) {
+            return {1, 1};
+        }
+        const int lineIndex = qBound(0, lineIndexForStoredPosition(position), lines_.size() - 1);
+        const LineState& lineState = lines_.at(lineIndex);
+        const int maxOffset = qMax(0, lineState.text.size() - 1);
+        const int localOffset = qBound(0, position - lineState.startPosition, maxOffset);
+        return {lineState.lineNumber, localOffset + 1};
+    };
+    const auto resolveCaretLineCol = [this](int position) -> std::pair<int, int> {
+        if (lines_.isEmpty()) {
+            return {1, 1};
+        }
+        const int lineIndex = qBound(0, lineIndexForStoredPosition(position), lines_.size() - 1);
+        const LineState& lineState = lines_.at(lineIndex);
+        const int localOffset = qMax(0, position - lineState.startPosition);
+        return {lineState.lineNumber, localOffset + 1};
+    };
+    const auto fallbackSpanForAnchor = [&](const DocumentAnchorEntry& anchor) {
+        const LineState& lineState = lines_.at(anchor.lineIndex);
+        PreviewFollowSpan span;
+        span.startLine = lineState.lineNumber;
+        span.startCol = anchor.anchorCol;
+        span.endLine = lineState.lineNumber;
+        span.endCol = anchor.anchorCol;
+        span.hasVisibleBody = false;
+
+        const int lineLength = lineState.text.size();
+        const int startOffset = lineLength > 0
+            ? qBound(0, anchor.anchorCol - 1, lineLength - 1)
+            : 0;
+        int endOffsetExclusive = lineLength > 0
+            ? qBound(1, anchor.anchorCol, lineLength)
+            : 0;
+
+        span.startPosition = lineState.startPosition + startOffset;
+        span.endPositionExclusive = lineState.startPosition + endOffsetExclusive;
+        if (lineLength > 0 && span.endPositionExclusive <= span.startPosition) {
+            span.endPositionExclusive = qMin(lineState.startPosition + lineLength, span.startPosition + 1);
+        }
+        span.cursorPosition = span.endPositionExclusive;
+        const auto [cursorLine, cursorCol] = resolveCaretLineCol(span.cursorPosition);
+        span.cursorLine = cursorLine;
+        span.cursorCol = cursorCol;
+        return span;
+    };
+
+    struct FlatFollowSpan {
+        QString text;
+        QVector<int> positions;
+    };
+
+    const auto buildFlatSpan = [this](int startPosition, int endPositionExclusive) {
+        FlatFollowSpan flatSpan;
+        if (endPositionExclusive <= startPosition || lines_.isEmpty()) {
+            flatSpan.positions.append(startPosition);
+            return flatSpan;
+        }
+
+        const int startLineIndex = qBound(0, lineIndexForStoredPosition(startPosition), lines_.size() - 1);
+        const int endLineIndex = qBound(
+            startLineIndex,
+            lineIndexForStoredPosition(qMax(startPosition, endPositionExclusive - 1)),
+            lines_.size() - 1);
+
+        for (int lineIndex = startLineIndex; lineIndex <= endLineIndex; ++lineIndex) {
+            const LineState& lineState = lines_.at(lineIndex);
+            const int fromOffset = (lineIndex == startLineIndex)
+                ? qBound(0, startPosition - lineState.startPosition, lineState.text.size())
+                : 0;
+            const int toOffset = (lineIndex == endLineIndex)
+                ? qBound(fromOffset, endPositionExclusive - lineState.startPosition, lineState.text.size())
+                : lineState.text.size();
+            for (int offset = fromOffset; offset < toOffset; ++offset) {
+                flatSpan.positions.append(lineState.startPosition + offset);
+                flatSpan.text.append(lineState.text.at(offset));
+            }
+
+            const bool includeNewline = lineIndex < endLineIndex
+                && endPositionExclusive > lineState.startPosition + lineState.text.size();
+            if (includeNewline) {
+                flatSpan.positions.append(lineState.startPosition + lineState.text.size());
+                flatSpan.text.append(QLatin1Char('\n'));
+            }
+        }
+
+        flatSpan.positions.append(endPositionExclusive);
+        return flatSpan;
+    };
+
+    for (int index = 0; index < anchors.size();) {
+        int runEnd = index + 1;
+        while (runEnd < anchors.size()
+               && qAbs(anchors.at(runEnd).second - anchors.at(index).second) <= kTimelineEpsilon) {
+            ++runEnd;
+        }
+
+        const int rawStartPosition = anchors.at(index).position;
+        const int rawEndExclusive = runEnd < anchors.size()
+            ? qMax(rawStartPosition, anchors.at(runEnd).position - 1)
+            : qMax(rawStartPosition, documentTextEndExclusive);
+        const FlatFollowSpan flatSpan = buildFlatSpan(rawStartPosition, rawEndExclusive);
+
+        int trimmedStartIndex = 0;
+        int trimmedEndIndex = flatSpan.text.size();
+        bool trimmedLeading = true;
+        while (trimmedLeading) {
+            trimmedLeading = false;
+            while (trimmedStartIndex < trimmedEndIndex && flatSpan.text.at(trimmedStartIndex).isSpace()) {
+                ++trimmedStartIndex;
+                trimmedLeading = true;
+            }
+            if (tryConsumeLeadingFollowControlToken(flatSpan.text, trimmedEndIndex, &trimmedStartIndex)) {
+                trimmedLeading = true;
+            }
+        }
+
+        bool trimmedTrailing = true;
+        while (trimmedTrailing) {
+            trimmedTrailing = false;
+            while (trimmedEndIndex > trimmedStartIndex && flatSpan.text.at(trimmedEndIndex - 1).isSpace()) {
+                --trimmedEndIndex;
+                trimmedTrailing = true;
+            }
+
+            const int commentStart = findTrailingInlineTimeSignatureCommentStart(
+                flatSpan.text,
+                trimmedStartIndex,
+                trimmedEndIndex);
+            if (commentStart >= 0) {
+                trimmedEndIndex = commentStart;
+                trimmedTrailing = true;
+                continue;
+            }
+
+            if (tryConsumeTrailingFollowControlToken(flatSpan.text, trimmedStartIndex, &trimmedEndIndex)) {
+                trimmedTrailing = true;
+            }
+        }
+
+        while (trimmedStartIndex < trimmedEndIndex && flatSpan.text.at(trimmedStartIndex).isSpace()) {
+            ++trimmedStartIndex;
+        }
+        while (trimmedEndIndex > trimmedStartIndex && flatSpan.text.at(trimmedEndIndex - 1).isSpace()) {
+            --trimmedEndIndex;
+        }
+
+        PreviewFollowSpan resolvedSpan;
+        const bool hasVisibleContent = trimmedStartIndex < trimmedEndIndex
+            && trimmedStartIndex < flatSpan.positions.size()
+            && trimmedEndIndex < flatSpan.positions.size();
+        if (hasVisibleContent) {
+            resolvedSpan.hasVisibleBody = true;
+            resolvedSpan.startPosition = flatSpan.positions.at(trimmedStartIndex);
+            resolvedSpan.endPositionExclusive = flatSpan.positions.at(trimmedEndIndex);
+            resolvedSpan.cursorPosition = resolvedSpan.endPositionExclusive;
+            const auto [startLine, startCol] = resolveVisibleCharLineCol(resolvedSpan.startPosition);
+            const auto [endLine, endCol] = resolveVisibleCharLineCol(resolvedSpan.endPositionExclusive - 1);
+            const auto [cursorLine, cursorCol] = resolveCaretLineCol(resolvedSpan.cursorPosition);
+            resolvedSpan.startLine = startLine;
+            resolvedSpan.startCol = startCol;
+            resolvedSpan.endLine = endLine;
+            resolvedSpan.endCol = endCol;
+            resolvedSpan.cursorLine = cursorLine;
+            resolvedSpan.cursorCol = cursorCol;
+        }
+
+        for (int runIndex = index; runIndex < runEnd; ++runIndex) {
+            LineCursorCache::FollowSelectionSpan cachedSpan;
+            cachedSpan.anchorCol = anchors.at(runIndex).anchorCol;
+            cachedSpan.span = hasVisibleContent ? resolvedSpan : fallbackSpanForAnchor(anchors.at(runIndex));
+            lines_[anchors.at(runIndex).lineIndex].cursorCache.followSelectionSpans.append(cachedSpan);
+        }
+
+        index = runEnd;
     }
 }
 
@@ -1420,6 +1834,7 @@ bool TimelineQuickModel::parseLine(LineState* lineState, const ParseState& start
     lineState->render.notes.clear();
     lineState->cursorCache.segmentStarts.clear();
     lineState->cursorCache.followSelectionRanges.clear();
+    lineState->cursorCache.followSelectionSpans.clear();
     lineState->isTerminalE = false;
     lineState->terminalSecond = -1.0;
     lineState->hasNotes = false;

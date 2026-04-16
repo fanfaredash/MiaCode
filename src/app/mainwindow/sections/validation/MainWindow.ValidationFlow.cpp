@@ -3,6 +3,7 @@
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
+#include "EditorSelectionUtils.h"
 #include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
@@ -631,41 +632,6 @@ int wrappedRichTextHeight(const QString& html, const QFont& font, int width)
     return qMax(1, qCeil(document.size().height()));
 }
 
-bool buildEditorSelectionCursor(PlainCodeEditor* editor, int line, int col, int endCol, QTextCursor* cursorOut)
-{
-    if (editor == nullptr || editor->document() == nullptr || cursorOut == nullptr) {
-        return false;
-    }
-
-    const int normalizedLine = qMax(1, line);
-    const int normalizedCol = qMax(1, col);
-    const int normalizedEndCol = qMax(normalizedCol, endCol);
-    QTextBlock block = editor->document()->findBlockByNumber(normalizedLine - 1);
-    if (!block.isValid()) {
-        return false;
-    }
-
-    const QString blockText = block.text();
-    const int lineLength = blockText.size();
-    const int localIndex = qBound(0, normalizedCol - 1, qMax(0, lineLength));
-    const int localEndIndex = qBound(localIndex, normalizedEndCol - 1, qMax(0, lineLength));
-
-    QTextCursor cursor(editor->document());
-    cursor.setPosition(block.position() + localIndex);
-    if (lineLength > 0) {
-        const int selectionLength = qMax(0, localEndIndex - localIndex + (localIndex < lineLength ? 1 : 0));
-        if (selectionLength > 0) {
-            cursor.setPosition(block.position() + localIndex + selectionLength, QTextCursor::KeepAnchor);
-        } else {
-            cursor.setPosition(block.position() + qMax(0, lineLength - 1));
-            cursor.setPosition(block.position() + lineLength, QTextCursor::KeepAnchor);
-        }
-    }
-
-    *cursorOut = cursor;
-    return true;
-}
-
 void ensureEditorSelectionVisible(PlainCodeEditor* editor, const QTextCursor& selectionCursor)
 {
     if (editor == nullptr || editor->viewport() == nullptr) {
@@ -709,55 +675,12 @@ void ensureEditorSelectionVisible(PlainCodeEditor* editor, const QTextCursor& se
     }
 }
 
-QByteArray buildEditorExtraSelectionsSignature(
-    const QByteArray& validationSignature,
-    bool previewFollowActive,
-    int previewFollowLine,
-    int previewFollowCol,
-    int previewFollowEndCol)
+QByteArray buildEditorExtraSelectionsSignature(const QByteArray& validationSignature)
 {
     QByteArray signature;
     QDataStream stream(&signature, QIODevice::WriteOnly);
     stream << validationSignature;
-    stream << previewFollowActive;
-    if (previewFollowActive) {
-        stream << previewFollowLine;
-        stream << previewFollowCol;
-        stream << previewFollowEndCol;
-    }
     return signature;
-}
-
-bool buildPreviewFollowExtraSelection(
-    PlainCodeEditor* editor,
-    bool previewFollowActive,
-    int previewFollowLine,
-    int previewFollowCol,
-    int previewFollowEndCol,
-    QTextEdit::ExtraSelection* selectionOut)
-{
-    if (editor == nullptr || selectionOut == nullptr || !previewFollowActive) {
-        return false;
-    }
-
-    QTextCursor cursor;
-    if (!buildEditorSelectionCursor(
-            editor,
-            previewFollowLine,
-            previewFollowCol,
-            previewFollowEndCol,
-            &cursor)) {
-        return false;
-    }
-
-    QTextEdit::ExtraSelection selection;
-    selection.cursor = cursor;
-    QColor highlight = UiTheme::colors().accent;
-    highlight.setAlpha(UiTheme::colors().dark ? 88 : 56);
-    selection.format.setBackground(highlight);
-    selection.format.setProperty(QTextFormat::FullWidthSelection, false);
-    *selectionOut = selection;
-    return true;
 }
 
 }  // namespace
@@ -807,7 +730,13 @@ void MainWindow::ValidationSection::rebuildValidationExtraSelectionsCache(const 
     selections.reserve(state_.validationDecorations_.size());
     for (const ValidationDecoration& decoration : state_.validationDecorations_) {
         QTextCursor cursor;
-        if (!buildEditorSelectionCursor(editor, decoration.line, decoration.col, decoration.endCol, &cursor)) {
+        if (!miacode::mainwindow::editor_selection::buildSelectionCursor(
+                editor,
+                decoration.line,
+                decoration.col,
+                decoration.line,
+                decoration.endCol,
+                &cursor)) {
             continue;
         }
 
@@ -845,27 +774,14 @@ void MainWindow::ValidationSection::applyEditorExtraSelectionsForReason(const QS
     QElapsedTimer timer;
     timer.start();
 
-    QTextEdit::ExtraSelection followSelection;
-    const bool followActive = buildPreviewFollowExtraSelection(
-        editor,
-        state_.previewFollowDecorationActive_,
-        state_.previewFollowDecorationLine_,
-        state_.previewFollowDecorationCol_,
-        state_.previewFollowDecorationEndCol_,
-        &followSelection);
-    const QByteArray signature = buildEditorExtraSelectionsSignature(
-        state_.validationExtraSelectionsSignature_,
-        followActive,
-        state_.previewFollowDecorationLine_,
-        state_.previewFollowDecorationCol_,
-        state_.previewFollowDecorationEndCol_);
-    const int totalSelections = state_.cachedValidationExtraSelections_.size() + (followActive ? 1 : 0);
+    const QByteArray signature = buildEditorExtraSelectionsSignature(state_.validationExtraSelectionsSignature_);
+    const int totalSelections = state_.cachedValidationExtraSelections_.size();
     if (signature == state_.lastEditorExtraSelectionsSignature_) {
         appendValidationPerfLog(
             QStringLiteral("edit/extra_selections_perf"),
             QStringLiteral("skipped=1 decorations=%1 preview_follow=%2 elapsed_ms=%3")
                 .arg(state_.validationDecorations_.size())
-                .arg(followActive ? 1 : 0)
+                .arg(0)
                 .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
         );
         appendValidationPerfLog(
@@ -874,7 +790,7 @@ void MainWindow::ValidationSection::applyEditorExtraSelectionsForReason(const QS
                 "reason=%1 validation_selections=%2 follow_active=%3 total_selections=%4 elapsed_ms=%5")
                 .arg(reason)
                 .arg(state_.cachedValidationExtraSelections_.size())
-                .arg(followActive ? 1 : 0)
+                .arg(0)
                 .arg(totalSelections)
                 .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
         );
@@ -882,17 +798,13 @@ void MainWindow::ValidationSection::applyEditorExtraSelectionsForReason(const QS
     }
 
     state_.currentEditorExtraSelections_ = state_.cachedValidationExtraSelections_;
-    if (followActive) {
-        state_.currentEditorExtraSelections_.append(followSelection);
-    }
-
     editor->setExtraSelections(state_.currentEditorExtraSelections_);
     state_.lastEditorExtraSelectionsSignature_ = signature;
     appendValidationPerfLog(
         QStringLiteral("edit/extra_selections_perf"),
         QStringLiteral("skipped=0 decorations=%1 preview_follow=%2 selections=%3 elapsed_ms=%4")
             .arg(state_.validationDecorations_.size())
-            .arg(followActive ? 1 : 0)
+            .arg(0)
             .arg(totalSelections)
             .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
     );
@@ -902,7 +814,7 @@ void MainWindow::ValidationSection::applyEditorExtraSelectionsForReason(const QS
             "reason=%1 validation_selections=%2 follow_active=%3 total_selections=%4 elapsed_ms=%5")
             .arg(reason)
             .arg(state_.cachedValidationExtraSelections_.size())
-            .arg(followActive ? 1 : 0)
+            .arg(0)
             .arg(totalSelections)
             .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
     );
@@ -1060,23 +972,52 @@ void MainWindow::ValidationSection::updateEditorValidationSummary()
     owner_.updateEditorHeaderLayoutMode();
 }
 
-void MainWindow::ValidationSection::setPreviewFollowDecoration(int line, int col, int endCol, bool ensureVisible)
+void MainWindow::ValidationSection::setPreviewFollowDecoration(
+    int startLine,
+    int startCol,
+    int endLine,
+    int endCol,
+    int cursorLine,
+    int cursorCol,
+    bool ensureVisible)
 {
-    const int normalizedLine = qMax(1, line);
-    const int normalizedCol = qMax(1, col);
-    const int normalizedEndCol = qMax(normalizedCol, endCol >= 0 ? endCol : col);
-    if (state_.previewFollowDecorationActive_
-        && state_.previewFollowDecorationLine_ == normalizedLine
-        && state_.previewFollowDecorationCol_ == normalizedCol
-        && state_.previewFollowDecorationEndCol_ == normalizedEndCol) {
-        return;
+    const int normalizedStartLine = qMax(1, startLine);
+    const int normalizedStartCol = qMax(1, startCol);
+    int normalizedEndLine = qMax(1, endLine >= 0 ? endLine : startLine);
+    int normalizedEndCol = qMax(1, endCol >= 0 ? endCol : startCol);
+    if (normalizedEndLine < normalizedStartLine
+        || (normalizedEndLine == normalizedStartLine && normalizedEndCol < normalizedStartCol)) {
+        normalizedEndLine = normalizedStartLine;
+        normalizedEndCol = normalizedStartCol;
     }
+    const int normalizedCursorLine = qMax(1, cursorLine >= 0 ? cursorLine : normalizedEndLine);
+    const int normalizedCursorCol = qMax(1, cursorCol >= 0 ? cursorCol : normalizedEndCol);
 
-    state_.previewFollowDecorationActive_ = true;
-    state_.previewFollowDecorationLine_ = normalizedLine;
-    state_.previewFollowDecorationCol_ = normalizedCol;
-    state_.previewFollowDecorationEndCol_ = normalizedEndCol;
-    applyEditorExtraSelectionsForReason(QStringLiteral("follow_only"));
+    if (state_.previewFollowDecorationActive_
+        && state_.previewFollowDecorationStartLine_ == normalizedStartLine
+        && state_.previewFollowDecorationStartCol_ == normalizedStartCol
+        && state_.previewFollowDecorationEndLine_ == normalizedEndLine
+        && state_.previewFollowDecorationEndCol_ == normalizedEndCol
+        && state_.previewFollowDecorationCursorLine_ == normalizedCursorLine
+        && state_.previewFollowDecorationCursorCol_ == normalizedCursorCol) {
+        if (!ensureVisible) {
+            if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
+                editor->setPreviewFollowVisualCaret(true, normalizedCursorLine, normalizedCursorCol);
+            }
+            return;
+        }
+    } else {
+        state_.previewFollowDecorationActive_ = true;
+        state_.previewFollowDecorationStartLine_ = normalizedStartLine;
+        state_.previewFollowDecorationStartCol_ = normalizedStartCol;
+        state_.previewFollowDecorationEndLine_ = normalizedEndLine;
+        state_.previewFollowDecorationEndCol_ = normalizedEndCol;
+        state_.previewFollowDecorationCursorLine_ = normalizedCursorLine;
+        state_.previewFollowDecorationCursorCol_ = normalizedCursorCol;
+        if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
+            editor->setPreviewFollowVisualCaret(true, normalizedCursorLine, normalizedCursorCol);
+        }
+    }
 
     if (!ensureVisible) {
         return;
@@ -1088,10 +1029,11 @@ void MainWindow::ValidationSection::setPreviewFollowDecoration(int line, int col
     }
 
     QTextCursor cursor;
-    if (!buildEditorSelectionCursor(
+    if (!miacode::mainwindow::editor_selection::buildSelectionCursor(
             editor,
-            state_.previewFollowDecorationLine_,
-            state_.previewFollowDecorationCol_,
+            state_.previewFollowDecorationStartLine_,
+            state_.previewFollowDecorationStartCol_,
+            state_.previewFollowDecorationEndLine_,
             state_.previewFollowDecorationEndCol_,
             &cursor)) {
         return;
@@ -1105,7 +1047,9 @@ void MainWindow::ValidationSection::clearPreviewFollowDecoration()
         return;
     }
     state_.previewFollowDecorationActive_ = false;
-    applyEditorExtraSelectionsForReason(QStringLiteral("follow_clear"));
+    if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
+        editor->setPreviewFollowVisualCaret(false);
+    }
 }
 
 void MainWindow::ValidationSection::clearValidationErrors()
@@ -1204,12 +1148,10 @@ void MainWindow::ValidationSection::jumpToLocation(int line, int col)
         return;
     }
 
-    QTextBlock block = editor->document()->findBlockByNumber(line - 1);
-    if (!block.isValid()) {
+    QTextCursor cursor;
+    if (!miacode::mainwindow::editor_selection::buildCaretCursor(editor, line, col, &cursor)) {
         return;
     }
-    QTextCursor cursor(editor->document());
-    cursor.setPosition(block.position() + col - 1);
     cursor.clearSelection();
     editor->setTextCursor(cursor);
     editor->ensureCursorVisible();
@@ -1265,9 +1207,23 @@ void MainWindow::updateEditorValidationSummary()
     validationSection_->updateEditorValidationSummary();
 }
 
-void MainWindow::setPreviewFollowDecoration(int line, int col, int endCol, bool ensureVisible)
+void MainWindow::setPreviewFollowDecoration(
+    int startLine,
+    int startCol,
+    int endLine,
+    int endCol,
+    int cursorLine,
+    int cursorCol,
+    bool ensureVisible)
 {
-    validationSection_->setPreviewFollowDecoration(line, col, endCol, ensureVisible);
+    validationSection_->setPreviewFollowDecoration(
+        startLine,
+        startCol,
+        endLine,
+        endCol,
+        cursorLine,
+        cursorCol,
+        ensureVisible);
 }
 
 void MainWindow::clearPreviewFollowDecoration()

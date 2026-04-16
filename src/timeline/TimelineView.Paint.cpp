@@ -757,7 +757,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
         ++debugPaintSampleCount_;
         debugPaintTotalElapsedNs_ += elapsedNs;
         debugPaintMaxElapsedNs_ = qMax(debugPaintMaxElapsedNs_, elapsedNs);
-        if (elapsedNs >= 8000000 || (debugPaintSampleCount_ % 30) == 0) {
+        if (elapsedNs >= 16000000) {
             appendTimelineUiPerfLog(
                 QStringLiteral("kind=paint count=%1 elapsed_ms=%2 avg_ms=%3 max_ms=%4 dirty=%5x%6 visible_notes=%7 hbar=%8")
                     .arg(debugPaintSampleCount_)

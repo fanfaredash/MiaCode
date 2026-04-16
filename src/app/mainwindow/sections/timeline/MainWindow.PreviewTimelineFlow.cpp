@@ -4,6 +4,7 @@
 
 #include "BracketScopeHighlighter.h"
 #include "DialogLocalization.h"
+#include "../validation/EditorSelectionUtils.h"
 #include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
@@ -970,7 +971,7 @@ bool MainWindow::TimelineSection::moveEditorCursorToTimelineLocation(
         int startCol = col;
         int endCol = col;
         state_.timelineQuickModel_.resolvePreviewFollowSelectionRange(line, col, &startCol, &endCol);
-        owner_.setPreviewFollowDecoration(line, startCol, endCol);
+        owner_.setPreviewFollowDecoration(line, startCol, line, endCol);
     }
     if (followOverlayElapsedNs != nullptr) {
         *followOverlayElapsedNs = followOverlayTimer.nsecsElapsed();
@@ -982,13 +983,17 @@ void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLi
     double second,
     bool ensureVisible,
     qint64* resolveElapsedNs,
-    qint64* followOverlayElapsedNs)
+    qint64* followOverlayElapsedNs,
+    TimelineQuickModel::PreviewFollowSpan* spanOut)
 {
     if (resolveElapsedNs != nullptr) {
         *resolveElapsedNs = 0;
     }
     if (followOverlayElapsedNs != nullptr) {
         *followOverlayElapsedNs = 0;
+    }
+    if (spanOut != nullptr) {
+        *spanOut = TimelineQuickModel::PreviewFollowSpan();
     }
 
     if (ui_.timelineView_ == nullptr || !hasActiveDifficulty() || !ui_.timelineView_->followPreviewEnabled()) {
@@ -1001,23 +1006,19 @@ void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLi
         return;
     }
 
-    int line = 1;
-    int startCol = 1;
-    int endCol = 1;
-    double cursorSecond = 0.0;
+    TimelineQuickModel::PreviewFollowSpan span;
     QElapsedTimer resolveTimer;
     resolveTimer.start();
-    const bool resolved = state_.timelineQuickModel_.resolvePreviewFollowSelection(
+    const bool resolved = state_.timelineQuickModel_.resolvePreviewFollowSpan(
         qMax(0.0, second),
-        &line,
-        &startCol,
-        &endCol,
-        &cursorSecond
+        &span
     );
     if (resolveElapsedNs != nullptr) {
         *resolveElapsedNs = resolveTimer.nsecsElapsed();
     }
-    Q_UNUSED(cursorSecond);
+    if (spanOut != nullptr) {
+        *spanOut = span;
+    }
     if (!resolved) {
         QElapsedTimer overlayTimer;
         overlayTimer.start();
@@ -1029,7 +1030,14 @@ void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLi
     }
     QElapsedTimer overlayTimer;
     overlayTimer.start();
-    owner_.setPreviewFollowDecoration(line, startCol, endCol, ensureVisible);
+    owner_.setPreviewFollowDecoration(
+        span.startLine,
+        span.startCol,
+        span.endLine,
+        span.endCol,
+        span.cursorLine,
+        span.cursorCol,
+        ensureVisible);
     if (followOverlayElapsedNs != nullptr) {
         *followOverlayElapsedNs = overlayTimer.nsecsElapsed();
     }
@@ -1046,9 +1054,7 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
         [&](const QString& action,
             bool resolved,
             bool moved,
-            int line,
-            int col,
-            int endCol,
+            const TimelineQuickModel::PreviewFollowSpan* span,
             qint64 resolveElapsedNs,
             qint64 cursorMoveElapsedNs,
             qint64 followOverlayElapsedNs,
@@ -1056,11 +1062,31 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
         if (!state_.runtimeDebugOutputEnabled_) {
             return;
         }
-        const double totalElapsedMs = timer.nsecsElapsed() / 1000000.0;
+        const qint64 totalElapsedNs = timer.nsecsElapsed();
+        const bool hotAction = action == QStringLiteral("selection_end_unchanged")
+            || action == QStringLiteral("anchor_unchanged")
+            || action == QStringLiteral("cursor_moved")
+            || action == QStringLiteral("paused_decoration");
+        constexpr qint64 kFollowPerfLogThresholdNs = 4 * 1000 * 1000;
+        if (hotAction
+            && totalElapsedNs < kFollowPerfLogThresholdNs
+            && resolveElapsedNs < kFollowPerfLogThresholdNs
+            && cursorMoveElapsedNs < kFollowPerfLogThresholdNs
+            && followOverlayElapsedNs < kFollowPerfLogThresholdNs
+            && timelineCursorElapsedNs < kFollowPerfLogThresholdNs) {
+            return;
+        }
+        const int line = (span != nullptr) ? span->cursorLine : 1;
+        const int col = (span != nullptr) ? span->cursorCol : 1;
+        const int endCol = (span != nullptr) ? span->endCol : 1;
+        const int startLine = (span != nullptr) ? span->startLine : 1;
+        const int startCol = (span != nullptr) ? span->startCol : 1;
+        const int endLine = (span != nullptr) ? span->endLine : 1;
+        const double totalElapsedMs = totalElapsedNs / 1000000.0;
         appendTimelinePerfLog(
             QStringLiteral("edit/follow_sync_perf"),
             QStringLiteral(
-                "action=%1 resolved=%2 moved=%3 second=%4 line=%5 col=%6 end_col=%7 center=%8 ensure_visible=%9 playing=%10 elapsed_ms=%11"
+                "action=%1 resolved=%2 moved=%3 second=%4 line=%5 col=%6 end_col=%7 start_line=%8 start_col=%9 end_line=%10 end_col=%11 center=%12 ensure_visible=%13 playing=%14 elapsed_ms=%15"
             )
                 .arg(action)
                 .arg(resolved ? 1 : 0)
@@ -1068,6 +1094,10 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
                 .arg(second, 0, 'f', 6)
                 .arg(line)
                 .arg(col)
+                .arg(endCol)
+                .arg(startLine)
+                .arg(startCol)
+                .arg(endLine)
                 .arg(endCol)
                 .arg(centerView ? 1 : 0)
                 .arg(ensureVisibleWhenPaused ? 1 : 0)
@@ -1096,15 +1126,16 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
     qint64 cursorMoveElapsedNs = 0;
     qint64 followOverlayElapsedNs = 0;
     qint64 timelineCursorElapsedNs = 0;
+    TimelineQuickModel::PreviewFollowSpan span;
 
     if (state_.suppressTimelineCursorSync_ || ui_.timelineView_ == nullptr || !hasActiveDifficulty()) {
         owner_.clearPreviewFollowDecoration();
-        logPerf(QStringLiteral("suppressed"), false, false, 1, 1, 1, 0, 0, 0, 0);
+        logPerf(QStringLiteral("suppressed"), false, false, nullptr, 0, 0, 0, 0);
         return;
     }
     if (!ui_.timelineView_->followPreviewEnabled()) {
         owner_.clearPreviewFollowDecoration();
-        logPerf(QStringLiteral("disabled"), false, false, 1, 1, 1, 0, 0, 0, 0);
+        logPerf(QStringLiteral("disabled"), false, false, nullptr, 0, 0, 0, 0);
         return;
     }
     if (!state_.qtPreviewPlaying_) {
@@ -1112,14 +1143,13 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
             second,
             ensureVisibleWhenPaused,
             &resolveElapsedNs,
-            &followOverlayElapsedNs);
+            &followOverlayElapsedNs,
+            &span);
         logPerf(
             QStringLiteral("paused_decoration"),
             state_.previewFollowDecorationActive_,
             false,
-            1,
-            1,
-            1,
+            state_.previewFollowDecorationActive_ ? &span : nullptr,
             resolveElapsedNs,
             0,
             followOverlayElapsedNs,
@@ -1127,42 +1157,61 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
         return;
     }
 
-    const auto [currentLine, currentCol] = owner_.currentCursorLineCol();
-    int line = 1;
-    int col = 1;
+    auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
+    const QTextCursor currentEditorCursor =
+        (editor != nullptr && editor->document() != nullptr) ? editor->textCursor() : QTextCursor();
     double cursorSecond = 0.0;
     QElapsedTimer resolveTimer;
     resolveTimer.start();
-    const bool resolved = state_.timelineQuickModel_.resolvePreviewFollowCursor(second, &line, &col, &cursorSecond);
+    const bool resolved = state_.timelineQuickModel_.resolvePreviewFollowSpan(second, &span, &cursorSecond);
     resolveElapsedNs = resolveTimer.nsecsElapsed();
-    const bool alreadyAtAnchor = (currentLine == line && currentCol == col);
-
-    if (alreadyAtAnchor) {
-        int startCol = col;
-        int endCol = col;
+    const int targetLine = resolved ? span.cursorLine : 1;
+    const int targetCol = resolved ? span.cursorCol : 1;
+    bool alreadyAtSelectionEnd = false;
+    if (editor != nullptr && editor->document() != nullptr) {
         if (resolved) {
-            QElapsedTimer overlayTimer;
-            overlayTimer.start();
-            state_.timelineQuickModel_.resolvePreviewFollowSelectionRange(line, col, &startCol, &endCol);
-            owner_.setPreviewFollowDecoration(line, startCol, endCol);
-            followOverlayElapsedNs = overlayTimer.nsecsElapsed();
+            if (span.hasVisibleBody) {
+                alreadyAtSelectionEnd = currentEditorCursor.hasSelection()
+                    && currentEditorCursor.position() == span.cursorPosition
+                    && currentEditorCursor.selectionStart() == span.startPosition
+                    && currentEditorCursor.selectionEnd() == span.endPositionExclusive;
+            } else {
+                alreadyAtSelectionEnd = !currentEditorCursor.hasSelection()
+                    && currentEditorCursor.position() == span.cursorPosition;
+            }
         } else {
-            QElapsedTimer overlayTimer;
-            overlayTimer.start();
-            owner_.clearPreviewFollowDecoration();
-            followOverlayElapsedNs = overlayTimer.nsecsElapsed();
+            alreadyAtSelectionEnd = !currentEditorCursor.hasSelection() && currentEditorCursor.position() == 0;
         }
+    }
+
+    const auto applyFollowOverlay = [&](bool followResolved) {
+        QElapsedTimer overlayTimer;
+        overlayTimer.start();
+        if (followResolved) {
+            owner_.setPreviewFollowDecoration(
+                span.startLine,
+                span.startCol,
+                span.endLine,
+                span.endCol,
+                span.cursorLine,
+                span.cursorCol);
+        } else {
+            owner_.clearPreviewFollowDecoration();
+        }
+        return overlayTimer.nsecsElapsed();
+    };
+
+    if (alreadyAtSelectionEnd) {
+        followOverlayElapsedNs = applyFollowOverlay(resolved);
         QElapsedTimer timelineTimer;
         timelineTimer.start();
         ui_.timelineView_->setCursorSeconds(cursorSecond, false);
         timelineCursorElapsedNs = timelineTimer.nsecsElapsed();
         logPerf(
-            QStringLiteral("anchor_unchanged"),
+            QStringLiteral("selection_end_unchanged"),
             resolved,
             false,
-            line,
-            col,
-            endCol,
+            resolved ? &span : nullptr,
             resolveElapsedNs,
             0,
             followOverlayElapsedNs,
@@ -1170,49 +1219,45 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
         return;
     }
 
-    int endCol = col;
-    if (moveEditorCursorToTimelineLocation(
-            line,
-            col,
-            false,
-            false,
-            centerView,
-            true,
-            &cursorMoveElapsedNs,
-            &followOverlayElapsedNs)) {
-        if (!resolved) {
-            QElapsedTimer overlayTimer;
-            overlayTimer.start();
-            owner_.clearPreviewFollowDecoration();
-            followOverlayElapsedNs += overlayTimer.nsecsElapsed();
-        } else {
-            int startCol = col;
-            state_.timelineQuickModel_.resolvePreviewFollowSelectionRange(line, col, &startCol, &endCol);
+    if (editor != nullptr && editor->document() != nullptr) {
+        QTextCursor cursor;
+        const bool builtCursor = resolved && span.hasVisibleBody
+            ? miacode::mainwindow::editor_selection::buildSelectionCursor(
+                  editor,
+                  span.startLine,
+                  span.startCol,
+                  span.endLine,
+                  span.endCol,
+                  &cursor)
+            : miacode::mainwindow::editor_selection::buildCaretCursor(editor, targetLine, targetCol, &cursor);
+        if (builtCursor) {
+            QElapsedTimer cursorTimer;
+            cursorTimer.start();
+            editor->applyPreviewFollowCursor(cursor, centerView, true);
+            cursorMoveElapsedNs = cursorTimer.nsecsElapsed();
+            followOverlayElapsedNs = applyFollowOverlay(resolved);
+
+            QElapsedTimer timelineTimer;
+            timelineTimer.start();
+            ui_.timelineView_->setCursorSeconds(cursorSecond, false);
+            timelineCursorElapsedNs = timelineTimer.nsecsElapsed();
+            logPerf(
+                QStringLiteral("cursor_moved"),
+                resolved,
+                true,
+                resolved ? &span : nullptr,
+                resolveElapsedNs,
+                cursorMoveElapsedNs,
+                followOverlayElapsedNs,
+                timelineCursorElapsedNs);
+            return;
         }
-        QElapsedTimer timelineTimer;
-        timelineTimer.start();
-        ui_.timelineView_->setCursorSeconds(cursorSecond, false);
-        timelineCursorElapsedNs = timelineTimer.nsecsElapsed();
-        logPerf(
-            QStringLiteral("cursor_moved"),
-            resolved,
-            true,
-            line,
-            col,
-            endCol,
-            resolveElapsedNs,
-            cursorMoveElapsedNs,
-            followOverlayElapsedNs,
-            timelineCursorElapsedNs);
-        return;
     }
     logPerf(
         QStringLiteral("cursor_move_failed"),
         resolved,
         false,
-        line,
-        col,
-        endCol,
+        resolved ? &span : nullptr,
         resolveElapsedNs,
         cursorMoveElapsedNs,
         followOverlayElapsedNs,
