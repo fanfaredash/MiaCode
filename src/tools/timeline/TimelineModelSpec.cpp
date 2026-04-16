@@ -1043,10 +1043,12 @@ int main(int argc, char** argv)
                        && !quickBeats.at(3).major && !quickBeats.at(4).major,
                    QStringLiteral("comma beat markers stay independent from measure-line styling"));
         }
-        expect(quickMeasures.size() == 2, QStringLiteral("quick model builds independent 4/4 measure lines across source lines"));
-        if (quickMeasures.size() == 2) {
-            expect(nearlyEqual(quickMeasures.at(0), 0.0) && nearlyEqual(quickMeasures.at(1), 2.0),
-                   QStringLiteral("measure lines continue by meter time instead of resetting per text line"));
+        expect(quickMeasures.size() == 3, QStringLiteral("quick model keeps the trailing virtual-comma measure line across source lines"));
+        if (quickMeasures.size() == 3) {
+            expect(nearlyEqual(quickMeasures.at(0), 0.0)
+                       && nearlyEqual(quickMeasures.at(1), 2.0)
+                       && nearlyEqual(quickMeasures.at(2), 4.0),
+                   QStringLiteral("measure lines continue by meter time and extend one future line for the implicit trailing comma"));
         }
 
         QString diff;
@@ -1072,10 +1074,12 @@ int main(int argc, char** argv)
                        && !quickBeats.at(6).major,
                    QStringLiteral("changing {beats} does not turn comma beat markers into measure lines"));
         }
-        expect(quickMeasures.size() == 2, QStringLiteral("quick model keeps meter-based measure lines across {beats} changes"));
-        if (quickMeasures.size() == 2) {
-            expect(nearlyEqual(quickMeasures.at(0), 0.0) && nearlyEqual(quickMeasures.at(1), 2.0),
-                   QStringLiteral("changing {beats} does not move independent 4/4 measure lines"));
+        expect(quickMeasures.size() == 3, QStringLiteral("quick model keeps meter-based measure lines and the trailing virtual-comma line across {beats} changes"));
+        if (quickMeasures.size() == 3) {
+            expect(nearlyEqual(quickMeasures.at(0), 0.0)
+                       && nearlyEqual(quickMeasures.at(1), 2.0)
+                       && nearlyEqual(quickMeasures.at(2), 4.0),
+                   QStringLiteral("changing {beats} does not move independent 4/4 measure lines or the trailing extension"));
         }
 
         QString diff;
@@ -1101,12 +1105,13 @@ int main(int argc, char** argv)
                        && !quickBeats.at(6).major,
                    QStringLiteral("3-beat comma markers remain separate from measure-line styling"));
         }
-        expect(quickMeasures.size() == 3, QStringLiteral("quick model keeps independent measure lines under {3}"));
-        if (quickMeasures.size() == 3) {
+        expect(quickMeasures.size() == 4, QStringLiteral("quick model keeps independent measure lines and the trailing virtual-comma line under {3}"));
+        if (quickMeasures.size() == 4) {
             expect(nearlyEqual(quickMeasures.at(0), 0.0)
                        && nearlyEqual(quickMeasures.at(1), 2.0)
-                       && nearlyEqual(quickMeasures.at(2), 4.0),
-                   QStringLiteral("independent 4/4 measure lines keep their own timing under {3}"));
+                       && nearlyEqual(quickMeasures.at(2), 4.0)
+                       && nearlyEqual(quickMeasures.at(3), 6.0),
+                   QStringLiteral("independent 4/4 measure lines keep their own timing under {3}, plus one trailing future line"));
         }
 
         QString diff;
@@ -1187,10 +1192,12 @@ int main(int argc, char** argv)
                        && !quickBeats.at(3).major,
                    QStringLiteral("BPM changes do not promote comma markers into measure lines"));
         }
-        expect(quickMeasures.size() == 2, QStringLiteral("quick model keeps independent measure markers across BPM changes"));
-        if (quickMeasures.size() == 2) {
-            expect(nearlyEqual(quickMeasures.at(0), 0.0) && nearlyEqual(quickMeasures.at(1), 1.0),
-                   QStringLiteral("a BPM change resets the independent measure-line timeline at the BPM position"));
+        expect(quickMeasures.size() == 3, QStringLiteral("quick model keeps independent measure markers and the trailing virtual-comma line across BPM changes"));
+        if (quickMeasures.size() == 3) {
+            expect(nearlyEqual(quickMeasures.at(0), 0.0)
+                       && nearlyEqual(quickMeasures.at(1), 1.0)
+                       && nearlyEqual(quickMeasures.at(2), 2.6),
+                   QStringLiteral("a BPM change resets the independent measure-line timeline at the BPM position and still extends one future line"));
         }
 
         QString diff;
@@ -1222,12 +1229,13 @@ int main(int argc, char** argv)
         model.rebuildFromText(chartText, 0.0, timingMetadata);
         QVector<double> quickMeasures = flattenSnapshotMeasureLines(model.snapshot());
         std::sort(quickMeasures.begin(), quickMeasures.end());
-        expect(quickMeasures.size() == 3, QStringLiteral("quick model keeps whole_time_signature-driven measure markers"));
-        if (quickMeasures.size() == 3) {
+        expect(quickMeasures.size() == 4, QStringLiteral("quick model keeps whole_time_signature-driven measure markers plus the trailing virtual-comma line"));
+        if (quickMeasures.size() == 4) {
             expect(nearlyEqual(quickMeasures.at(0), 0.0)
                        && nearlyEqual(quickMeasures.at(1), 1.5)
-                       && nearlyEqual(quickMeasures.at(2), 3.0),
-                   QStringLiteral("whole_time_signature metadata shifts quick-model measure timing to 3/4"));
+                       && nearlyEqual(quickMeasures.at(2), 3.0)
+                       && nearlyEqual(quickMeasures.at(3), 4.5),
+                   QStringLiteral("whole_time_signature metadata shifts quick-model measure timing to 3/4 and keeps one future line"));
         }
 
         QString diff;
@@ -1241,12 +1249,13 @@ int main(int argc, char** argv)
         model.rebuildFromText(chartText, 0.0);
         QVector<double> quickMeasures = flattenSnapshotMeasureLines(model.snapshot());
         std::sort(quickMeasures.begin(), quickMeasures.end());
-        expect(quickMeasures.size() == 3, QStringLiteral("quick model accepts inline time-signature comments"));
-        if (quickMeasures.size() == 3) {
+        expect(quickMeasures.size() == 4, QStringLiteral("quick model accepts inline time-signature comments and keeps the trailing virtual-comma line"));
+        if (quickMeasures.size() == 4) {
             expect(nearlyEqual(quickMeasures.at(0), 0.0)
                        && nearlyEqual(quickMeasures.at(1), 1.0)
-                       && nearlyEqual(quickMeasures.at(2), 2.5),
-                   QStringLiteral("inline time-signature comments truncate and restart quick-model measure timing"));
+                       && nearlyEqual(quickMeasures.at(2), 2.5)
+                       && nearlyEqual(quickMeasures.at(3), 4.0),
+                   QStringLiteral("inline time-signature comments truncate and restart quick-model measure timing, then extend one future line"));
         }
 
         QString diff;
