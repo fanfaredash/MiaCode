@@ -23,6 +23,9 @@
 using namespace miacode::mainwindow::shared;
 
 namespace {
+constexpr int kVideoExportWorkerDetailsMaxChars = 24000;
+constexpr int kVideoExportWorkerStderrBufferMaxBytes = 24 * 1024;
+
 QString videoExportBackgroundScaleModeToken(PreviewBackgroundScaleMode mode)
 {
     switch (mode) {
@@ -68,6 +71,77 @@ QString truncateProcessTextForUi(QString text, int maxChars = 2000)
         return text;
     }
     return text.left(maxChars) + QStringLiteral(" ...<truncated>");
+}
+
+QString truncatedProcessTailMarker()
+{
+    return QStringLiteral("...[truncated earlier output]...\n");
+}
+
+QByteArray truncatedProcessTailMarkerBytes()
+{
+    return QByteArrayLiteral("...[truncated earlier output]...\n");
+}
+
+void trimProcessTextTail(QString* text, int maxChars)
+{
+    if (text == nullptr || maxChars <= 0 || text->size() <= maxChars) {
+        return;
+    }
+
+    const QString marker = truncatedProcessTailMarker();
+    QString body = *text;
+    if (body.startsWith(marker)) {
+        body.remove(0, marker.size());
+    }
+    const int keepChars = qMax(0, maxChars - marker.size());
+    *text = marker + body.right(keepChars);
+}
+
+QString tailLimitedProcessText(QString text, int maxChars)
+{
+    trimProcessTextTail(&text, maxChars);
+    return text;
+}
+
+void appendProcessDetailLine(QString* text, QString line, int maxChars)
+{
+    if (text == nullptr) {
+        return;
+    }
+    line = line.trimmed();
+    if (line.isEmpty()) {
+        return;
+    }
+    if (!text->isEmpty()) {
+        text->append(QLatin1Char('\n'));
+    }
+    text->append(line);
+    trimProcessTextTail(text, maxChars);
+}
+
+void trimProcessOutputTail(QByteArray* buffer, int maxBytes)
+{
+    if (buffer == nullptr || maxBytes <= 0 || buffer->size() <= maxBytes) {
+        return;
+    }
+
+    const QByteArray marker = truncatedProcessTailMarkerBytes();
+    QByteArray body = *buffer;
+    if (body.startsWith(marker)) {
+        body.remove(0, marker.size());
+    }
+    const int keepBytes = qMax(0, maxBytes - marker.size());
+    *buffer = marker + body.right(keepBytes);
+}
+
+void appendProcessOutputTail(QByteArray* buffer, const QByteArray& chunk, int maxBytes)
+{
+    if (buffer == nullptr || chunk.isEmpty()) {
+        return;
+    }
+    buffer->append(chunk);
+    trimProcessOutputTail(buffer, maxBytes);
 }
 
 QString appendVideoExportDiagnostics(const QString& base, const QString& extra)
@@ -422,7 +496,7 @@ bool MainWindow::ExportSection::runVideoExportWorkerSync(
             QJsonParseError parseError;
             const QJsonDocument document = QJsonDocument::fromJson(rawLine, &parseError);
             if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-                resultDetails += (resultDetails.isEmpty() ? QString() : QStringLiteral("\n")) + QString::fromUtf8(rawLine);
+                appendProcessDetailLine(&resultDetails, QString::fromUtf8(rawLine), kVideoExportWorkerDetailsMaxChars);
                 continue;
             }
             const QJsonObject object = document.object();
@@ -448,7 +522,9 @@ bool MainWindow::ExportSection::runVideoExportWorkerSync(
                 finishedEventReceived = true;
                 success = object.value(QStringLiteral("success")).toBool(false);
                 resultMessage = object.value(QStringLiteral("message")).toString();
-                resultDetails = object.value(QStringLiteral("details")).toString();
+                resultDetails = tailLimitedProcessText(
+                    object.value(QStringLiteral("details")).toString(),
+                    kVideoExportWorkerDetailsMaxChars);
             }
         }
     };
@@ -456,7 +532,10 @@ bool MainWindow::ExportSection::runVideoExportWorkerSync(
     while (process.state() != QProcess::NotRunning) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
         stdoutBuffer.append(process.readAllStandardOutput());
-        stderrBuffer.append(process.readAllStandardError());
+        appendProcessOutputTail(
+            &stderrBuffer,
+            process.readAllStandardError(),
+            kVideoExportWorkerStderrBufferMaxBytes);
         parseStdoutLines();
         if (progressDialog != nullptr && progressDialog->wasCanceled()) {
             if (canceledByUser != nullptr) {
@@ -470,7 +549,10 @@ bool MainWindow::ExportSection::runVideoExportWorkerSync(
     }
 
     stdoutBuffer.append(process.readAllStandardOutput());
-    stderrBuffer.append(process.readAllStandardError());
+    appendProcessOutputTail(
+        &stderrBuffer,
+        process.readAllStandardError(),
+        kVideoExportWorkerStderrBufferMaxBytes);
     parseStdoutLines();
 
     const QString stderrText = QString::fromUtf8(stderrBuffer).trimmed();
@@ -624,10 +706,10 @@ void MainWindow::ExportSection::handleVideoExportWorkerStdout()
         QJsonParseError parseError;
         const QJsonDocument document = QJsonDocument::fromJson(rawLine, &parseError);
         if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-            if (!owner_.videoExportWorkerResultDetails_.isEmpty()) {
-                owner_.videoExportWorkerResultDetails_.append('\n');
-            }
-            owner_.videoExportWorkerResultDetails_.append(QString::fromUtf8(rawLine));
+            appendProcessDetailLine(
+                &owner_.videoExportWorkerResultDetails_,
+                QString::fromUtf8(rawLine),
+                kVideoExportWorkerDetailsMaxChars);
             continue;
         }
         this->handleVideoExportWorkerEvent(document.object());
@@ -639,7 +721,10 @@ void MainWindow::ExportSection::handleVideoExportWorkerStderr()
     if (owner_.videoExportWorkerProcess_ == nullptr) {
         return;
     }
-    owner_.videoExportWorkerStderrBuffer_.append(owner_.videoExportWorkerProcess_->readAllStandardError());
+    appendProcessOutputTail(
+        &owner_.videoExportWorkerStderrBuffer_,
+        owner_.videoExportWorkerProcess_->readAllStandardError(),
+        kVideoExportWorkerStderrBufferMaxBytes);
 }
 
 void MainWindow::ExportSection::handleVideoExportWorkerEvent(const QJsonObject& eventObject)
@@ -726,10 +811,10 @@ void MainWindow::ExportSection::handleVideoExportWorkerEvent(const QJsonObject& 
     if (eventType == QLatin1String("log")) {
         const QString message = eventObject.value(QStringLiteral("message")).toString().trimmed();
         if (!message.isEmpty()) {
-            if (!owner_.videoExportWorkerResultDetails_.isEmpty()) {
-                owner_.videoExportWorkerResultDetails_.append('\n');
-            }
-            owner_.videoExportWorkerResultDetails_.append(message);
+            appendProcessDetailLine(
+                &owner_.videoExportWorkerResultDetails_,
+                message,
+                kVideoExportWorkerDetailsMaxChars);
         }
         return;
     }
@@ -742,7 +827,8 @@ void MainWindow::ExportSection::handleVideoExportWorkerEvent(const QJsonObject& 
             : eventObject.value(QStringLiteral("error")).toString(uiText("dialog.video_export.error.failed", "Export failed."));
         const QString details = eventObject.value(QStringLiteral("details")).toString().trimmed();
         if (!details.isEmpty()) {
-            owner_.videoExportWorkerResultDetails_ = details;
+            owner_.videoExportWorkerResultDetails_ =
+                tailLimitedProcessText(details, kVideoExportWorkerDetailsMaxChars);
         }
         if (!suppressProgressUi && owner_.videoExportProgressDialog_ != nullptr) {
             if (owner_.videoExportProgressDialog_->minimum() == 0 && owner_.videoExportProgressDialog_->maximum() == 0) {
@@ -818,6 +904,7 @@ void MainWindow::ExportSection::handleVideoExportWorkerProcessFinished(int exitC
     } else if (!owner_.videoExportWorkerSuccess_) {
         owner_.videoExportWorkerResultDetails_ = appendVideoExportDiagnostics(owner_.videoExportWorkerResultDetails_, workerDiagnostics);
     }
+    trimProcessTextTail(&owner_.videoExportWorkerResultDetails_, kVideoExportWorkerDetailsMaxChars);
     if (!owner_.videoExportWorkerSuccess_) {
         miacode::debug_log::appendFatalMessage(
             QStringLiteral("export/worker"),
