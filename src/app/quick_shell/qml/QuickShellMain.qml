@@ -27,6 +27,10 @@ ApplicationWindow {
     property bool startupLayoutLocked: true
     property bool startupContentReady: false
     property real lastPreviewCanvasAspectRatio: 1.0
+    property real previewPaneWidthBeforeExport: 0
+    property bool previewPaneWidthBeforeExportUserResized: false
+    property bool previewPaneWidthRestorePending: false
+    property real lastPreviewPaneRestoreGeneration: 0
     property real pendingStartupLayoutWidth: 0
     property real pendingStartupLayoutHeight: 0
     property real startupMinimumWindowWidth: 960
@@ -526,10 +530,32 @@ ApplicationWindow {
         target: controller
 
         function onShellStateChanged() {
+            const nextRestoreGeneration = controller.previewPaneRestoreGeneration
+            if (nextRestoreGeneration !== root.lastPreviewPaneRestoreGeneration) {
+                root.lastPreviewPaneRestoreGeneration = nextRestoreGeneration
+                if (Math.abs(root.lastPreviewCanvasAspectRatio - 1.0) <= 0.0001 && previewPaneWidth > 0) {
+                    root.previewPaneWidthBeforeExport = previewPaneWidth
+                    root.previewPaneWidthBeforeExportUserResized = previewPaneUserResized
+                    root.previewPaneWidthRestorePending = true
+                }
+            }
             const nextAspectRatio = previewCanvasAspectRatio()
-            if (Math.abs(nextAspectRatio - root.lastPreviewCanvasAspectRatio) <= 0.0001)
+            const previousAspectRatio = root.lastPreviewCanvasAspectRatio
+            if (Math.abs(nextAspectRatio - previousAspectRatio) <= 0.0001)
                 return
+            const restoringToSquare = Math.abs(nextAspectRatio - 1.0) <= 0.0001
+                && previousAspectRatio > 1.0001
             root.lastPreviewCanvasAspectRatio = nextAspectRatio
+            if (restoringToSquare && root.previewPaneWidthRestorePending && root.previewPaneWidthBeforeExport > 0) {
+                previewPaneWidth = clampPreviewPaneWidth(
+                    root.previewPaneWidthBeforeExport,
+                    workspaceRow.width,
+                    workspaceRow.height
+                )
+                previewPaneUserResized = root.previewPaneWidthBeforeExportUserResized
+                root.previewPaneWidthRestorePending = false
+                return
+            }
             previewPaneUserResized = false
             previewPaneWidth = clampPreviewPaneWidth(
                 previewPaneAdaptiveTargetWidth(workspaceRow.width, workspaceRow.height),

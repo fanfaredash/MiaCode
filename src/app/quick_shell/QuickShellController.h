@@ -21,6 +21,7 @@ class QuickShellController : public QObject
     Q_PROPERTY(double previewDurationSeconds READ previewDurationSeconds NOTIFY shellStateChanged)
     Q_PROPERTY(QStringList previewStatsTexts READ previewStatsTexts NOTIFY shellStateChanged)
     Q_PROPERTY(double previewCanvasAspectRatio READ previewCanvasAspectRatio NOTIFY shellStateChanged)
+    Q_PROPERTY(qulonglong previewPaneRestoreGeneration READ previewPaneRestoreGeneration NOTIFY shellStateChanged)
     Q_PROPERTY(double previewSeekSingleStepSeconds READ previewSeekSingleStepSeconds CONSTANT)
     Q_PROPERTY(bool previewFullscreen READ previewFullscreen WRITE setPreviewFullscreen NOTIFY previewFullscreenChanged)
     Q_PROPERTY(QObject* previewRuntime READ previewRuntime CONSTANT)
@@ -48,6 +49,7 @@ public:
     double previewDurationSeconds() const;
     QStringList previewStatsTexts() const;
     double previewCanvasAspectRatio() const;
+    qulonglong previewPaneRestoreGeneration() const;
     double previewSeekSingleStepSeconds() const;
     bool previewFullscreen() const;
     QObject* previewRuntime() const;
@@ -102,6 +104,7 @@ private:
     double previewDurationSeconds_ = 0.0;
     QStringList previewStatsTexts_;
     double previewCanvasAspectRatio_ = 1.0;
+    quint64 previewPaneRestoreGeneration_ = 0;
     bool previewFullscreen_ = false;
     bool previewUsesSeparateSurface_ = false;
 };

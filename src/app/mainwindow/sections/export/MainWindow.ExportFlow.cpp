@@ -539,6 +539,7 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     }
     dialog.move(targetTopLeft);
     owner_.windowSection_->applySystemWindowBackdrop(&dialog);
+    ++owner_.previewPaneRestoreGeneration_;
     dialog.exec();
     owner_.setPreviewCanvasAspectRatio(1.0, false);
     owner_.restoreSquareAfterVideoExport_ = false;

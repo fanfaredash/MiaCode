@@ -111,7 +111,7 @@ void MainWindow::PreviewSection::ensurePreviewSfxRuntimePrepared()
     state_.previewSfxRuntime_->reloadAssets(state_.previewAudioSettings_);
     state_.previewSfxRuntime_->setChartPath(state_.currentFilePath_);
     state_.previewSfxRuntime_->setBackgroundTrackPlaybackRate(state_.previewPlaybackRate_);
-    state_.previewSfxRuntimePrepared_ = true;
+    state_.previewSfxRuntimePrepared_ = state_.previewSfxRuntime_->audioEngineInitialized();
     const qint64 elapsedMs = initTimer.elapsed();
     appendStartupTimingStage("mainwindow/preview_sfx_runtime_prepare_on_demand", elapsedMs, elapsedMs);
 }

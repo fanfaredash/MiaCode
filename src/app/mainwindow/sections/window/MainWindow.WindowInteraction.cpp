@@ -2,6 +2,7 @@
 #include "../../MainWindowShared.h"
 
 #include "PlainCodeEditor.h"
+#include "QtPreviewSfxRuntime.h"
 #include "UiText.h"
 #include "common/PreviewInteractionConfig.h"
 #include "preview/runtime/PreviewRuntime.h"
@@ -125,6 +126,36 @@ void MainWindow::WindowSection::handleApplicationFocusChanged(QWidget* old, QWid
     }
 }
 
+void MainWindow::WindowSection::recoverPreviewBackendsAfterApplicationResume()
+{
+    if (!state_.previewBackendRecoveryPending_) {
+        return;
+    }
+    if (state_.qtPreviewPlaying_ || state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
+        return;
+    }
+
+    state_.previewBackendRecoveryPending_ = false;
+    state_.previewSfxRuntimePrepared_ = false;
+    if (state_.previewSfxRuntime_ != nullptr) {
+        state_.previewSfxRuntime_->stopAll();
+    }
+    owner_.ensurePreviewSfxRuntimePrepared();
+
+    owner_.shutdownPreviewStageMediaHost();
+    if (state_.currentFilePath_.isEmpty()) {
+        owner_.clearPreviewStageMediaRoute();
+    } else {
+        owner_.syncPreviewStageMediaRouteChartPath(
+            state_.currentFilePath_,
+            state_.lastTrackPath_,
+            qMax(0.0, state_.qtPreviewPauseSecond_)
+        );
+        owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
+    }
+    owner_.applyPreviewStageMediaRouteVisualSettings();
+}
+
 void MainWindow::WindowSection::handleApplicationStateChanged(Qt::ApplicationState state)
 {
     this->logFocusDebug(
@@ -135,9 +166,13 @@ void MainWindow::WindowSection::handleApplicationStateChanged(Qt::ApplicationSta
     );
     if (state == Qt::ApplicationActive) {
         this->restoreFocusedTextEditState();
+        this->recoverPreviewBackendsAfterApplicationResume();
         return;
     }
-    if (state == Qt::ApplicationInactive || state == Qt::ApplicationHidden) {
+    if (state == Qt::ApplicationSuspended || state == Qt::ApplicationHidden) {
+        state_.previewBackendRecoveryPending_ = true;
+    }
+    if (state == Qt::ApplicationInactive || state == Qt::ApplicationHidden || state == Qt::ApplicationSuspended) {
         this->rememberFocusedTextEditState();
     }
 }

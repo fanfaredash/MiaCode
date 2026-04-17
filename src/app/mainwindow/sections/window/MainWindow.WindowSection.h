@@ -30,6 +30,7 @@ public:
     double shellPreviewDurationSeconds() const;
     QStringList shellPreviewStatsTexts() const;
     double shellPreviewCanvasAspectRatio() const;
+    quint64 shellPreviewPaneRestoreGeneration() const;
     bool shellPreviewFullscreen() const;
     QObject* shellPreviewRuntimeObject() const;
     QObject* shellPreviewStageMediaHostObject() const;
@@ -92,6 +93,7 @@ private:
     void focusPreviewInteractionTarget(QObject* watched, Qt::FocusReason reason);
     void handleApplicationFocusChanged(QWidget* old, QWidget* now);
     void handleApplicationStateChanged(Qt::ApplicationState state);
+    void recoverPreviewBackendsAfterApplicationResume();
     void rememberFocusedTextEditState(QTextEdit* textEdit);
     void rememberFocusedTextEditState();
     void restoreFocusedTextEditState();

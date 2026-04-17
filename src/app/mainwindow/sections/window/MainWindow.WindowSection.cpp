@@ -139,6 +139,11 @@ double MainWindow::shellPreviewCanvasAspectRatio() const
     return windowSection_->shellPreviewCanvasAspectRatio();
 }
 
+quint64 MainWindow::shellPreviewPaneRestoreGeneration() const
+{
+    return windowSection_->shellPreviewPaneRestoreGeneration();
+}
+
 bool MainWindow::shellPreviewFullscreen() const
 {
     return windowSection_->shellPreviewFullscreen();
