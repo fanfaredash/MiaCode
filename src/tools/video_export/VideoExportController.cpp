@@ -27,8 +27,10 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QImage>
+#include <QImageReader>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QPainter>
 #include <QProcess>
 #include <QProgressDialog>
 #include <QRect>
@@ -1688,6 +1690,89 @@ QImage buildCircularDimMaskImage(
         }
     }
     return mask;
+}
+
+QRectF staticMediaTargetRect(
+    const QSize& mediaSize,
+    const QSize& outputSize,
+    PreviewBackgroundScaleMode scaleMode)
+{
+    if (mediaSize.isEmpty() || outputSize.isEmpty()) {
+        return QRectF();
+    }
+
+    QSize fittedSize = mediaSize;
+    fittedSize.scale(
+        outputSize,
+        scaleMode == PreviewBackgroundScaleMode::FitContain
+            ? Qt::KeepAspectRatio
+            : Qt::KeepAspectRatioByExpanding
+    );
+    if (fittedSize.isEmpty()) {
+        return QRectF();
+    }
+
+    return QRectF(
+        (outputSize.width() - fittedSize.width()) * 0.5,
+        (outputSize.height() - fittedSize.height()) * 0.5,
+        fittedSize.width(),
+        fittedSize.height()
+    );
+}
+
+bool stageStaticBackgroundImageForExport(
+    const QString& sourcePath,
+    const QSize& outputSize,
+    PreviewBackgroundScaleMode scaleMode,
+    const QString& stagedPath,
+    QString* detail)
+{
+    if (detail != nullptr) {
+        detail->clear();
+    }
+
+    if (sourcePath.isEmpty() || outputSize.isEmpty() || stagedPath.isEmpty()) {
+        if (detail != nullptr) {
+            *detail = QStringLiteral("invalid_input");
+        }
+        return false;
+    }
+
+    QImageReader reader(sourcePath);
+    reader.setAutoTransform(true);
+    const QImage sourceImage = reader.read();
+    if (sourceImage.isNull()) {
+        if (detail != nullptr) {
+            *detail = QStringLiteral("read_failed error=%1").arg(reader.errorString());
+        }
+        return false;
+    }
+
+    QImage stagedImage(outputSize, QImage::Format_RGBA8888);
+    stagedImage.fill(Qt::black);
+
+    QPainter painter(&stagedImage);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.drawImage(staticMediaTargetRect(sourceImage.size(), outputSize, scaleMode), sourceImage);
+    painter.end();
+
+    if (!stagedImage.save(stagedPath)) {
+        if (detail != nullptr) {
+            *detail = QStringLiteral("save_failed path=%1").arg(stagedPath);
+        }
+        return false;
+    }
+
+    if (detail != nullptr) {
+        *detail = QStringLiteral("source=%1x%2 staged=%3x%4 mode=%5 path=%6")
+            .arg(sourceImage.width())
+            .arg(sourceImage.height())
+            .arg(stagedImage.width())
+            .arg(stagedImage.height())
+            .arg(scaleMode == PreviewBackgroundScaleMode::FitContain ? QStringLiteral("fit") : QStringLiteral("fill"))
+            .arg(stagedPath);
+    }
+    return true;
 }
 
 bool probeEncoderRuntimeAvailability(
@@ -3403,6 +3488,30 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(encodedTempPath, remuxStagePath, task.outputPath)
     );
 
+    QString ffmpegMediaPath = mediaPath;
+    bool mediaUsesPreprocessedImage = false;
+    if (hasMedia && mediaIsImage) {
+        const QString stagedImagePath = QDir(tempDir.path()).filePath(QStringLiteral("background_media_staged.png"));
+        QString stagedImageDetail;
+        if (stageStaticBackgroundImageForExport(
+                mediaPath,
+                frameSize,
+                task.backgroundScaleMode,
+                stagedImagePath,
+                &stagedImageDetail)) {
+            ffmpegMediaPath = stagedImagePath;
+            mediaUsesPreprocessedImage = true;
+            appendVideoExportLog(QStringLiteral("stage_static_media"), stagedImageDetail);
+        } else {
+            appendVideoExportLog(
+                QStringLiteral("stage_static_media_fallback"),
+                QStringLiteral("source=%1 failure=%2")
+                    .arg(mediaPath)
+                    .arg(stagedImageDetail.isEmpty() ? QStringLiteral("unknown") : stagedImageDetail)
+            );
+        }
+    }
+
     const QString sfxWavPath = QDir(tempDir.path()).filePath(QStringLiteral("export_sfx.wav"));
     if (!mixSfxTrackToWav(
             sfxWavPath,
@@ -3488,7 +3597,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
                  << QStringLiteral("-framerate")
                  << QString::number(task.fps);
         }
-        args << QStringLiteral("-i") << mediaPath;
+        args << QStringLiteral("-i") << ffmpegMediaPath;
     }
     if (hasDimMask) {
         const QString dimMaskPath = QDir(tempDir.path()).filePath(QStringLiteral("dim_mask.png"));
@@ -3552,16 +3661,18 @@ VideoExportResult VideoExportController::exportPreparedTask(
                        .arg(totalSecondsText);
     if (hasMedia) {
         QString mediaChain = QStringLiteral("[%1:v]").arg(mediaInputIndex);
-        if (task.backgroundScaleMode == PreviewBackgroundScaleMode::FitContain) {
-            mediaChain += QStringLiteral(
-                "scale=%1:%2:force_original_aspect_ratio=decrease,pad=%1:%2:(ow-iw)/2:(oh-ih)/2:color=black")
-                .arg(frameWidth)
-                .arg(frameHeight);
-        } else {
-            mediaChain += QStringLiteral(
-                "scale=%1:%2:force_original_aspect_ratio=increase,crop=%1:%2")
-                .arg(frameWidth)
-                .arg(frameHeight);
+        if (!(mediaIsImage && mediaUsesPreprocessedImage)) {
+            if (task.backgroundScaleMode == PreviewBackgroundScaleMode::FitContain) {
+                mediaChain += QStringLiteral(
+                    "scale=%1:%2:force_original_aspect_ratio=decrease,pad=%1:%2:(ow-iw)/2:(oh-ih)/2:color=black")
+                    .arg(frameWidth)
+                    .arg(frameHeight);
+            } else {
+                mediaChain += QStringLiteral(
+                    "scale=%1:%2:force_original_aspect_ratio=increase,crop=%1:%2")
+                    .arg(frameWidth)
+                    .arg(frameHeight);
+            }
         }
         mediaChain += QStringLiteral(",setsar=1,fps=%1,format=rgba").arg(task.fps);
         if (!mediaIsImage) {
