@@ -67,7 +67,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Rule: export heuristics may stay local, but document behavior changes that affect output compatibility or packaging assumptions
 - `src/tools/video_export/RawVideoPipeTransport.cpp`
   - Owns: raw-video pipe queue depth, pipe buffer sizing, connect timeout, writer chunk size, and bounded producer blocking behavior
-  - Current tuning note: `RawVideoPipePlan::maxBufferedFrames` is derived from frame size using `32 * (1920*1080) / (width*height)` and then clamped to `8..128`; this keeps the app-side rawvideo backlog near the 1080p=32-frame baseline while remaining an export-performance tuning knob that can continue to move as hardware data and long-export logs accumulate
+  - Current tuning note: `RawVideoPipePlan::maxBufferedFrames` is derived from frame size using `32 * (1920*1080) / (width*height)`, clamped to `8..128`, and then scaled by `2` so the effective queued-frame budget is `16..256`; `RawVideoPipePlan::requestedBufferBytes` now targets `2 * max(frameBytes, 1 MiB)` so the OS-side raw pipe buffer is also doubled
   - Rule: keep transport-level tuning local while it only shapes export stability/performance at the ffmpeg rawvideo boundary
 - `src/tools/video_export/VideoExportDialog.cpp`
   - Owns: export-dialog UI sizing and preview control constants
@@ -93,6 +93,10 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: timeline zoom preset bounds, coarse button stops, and the initial `pixelsPerSecond_` scale derived from the default zoom
   - Current tuning note: the fixed zoom presets are now `25/50/75/100/150/200`; keyboard `Left` / `Right` keep viewport-scroll semantics and the existing single-step behavior, while held-scroll speed caps at `2 * zoomScale()` (for example `25% -> 0.5x`, `50% -> 1.0x`, `100% -> 2.0x`); Timeline header line numbers now anchor to per-line `startSecond` values and keep a local minimum spacing of `22 px`, with same-anchor collisions favoring the later source line; header labels size by digit count instead of visible-neighbor width, using a local `0.9x` scale for 1-digit labels, a `0.8x` base for 2+ digits, and additional per-digit-count width fitting against the same `22 px` spacing budget with a `2 px` side gap while keeping bottoms aligned; each displayed line-start anchor also draws a local inverted triangle marker whose tip offset and side angle reuse the playback-entry triangle, while the marker height keeps the earlier header-local `0.85 * digitWidth * 0.7` cap; Timeline minor beat lines currently use `1.4 px`; dense comma grids now render at most `32` subdivisions by collapsing to the largest divisor of the source `{beats}` value that does not exceed that cap
   - Rule: keep local while these values only shape timeline widget UX and do not need cross-subsystem parity
+- `src/tools/video_export/VideoExportRuntimePolicy.h`
+  - Owns: export PBO env precedence and worker crash-retry policy shared by the controller, main-window worker launcher, and runtime policy spec
+  - Current tuning note: offscreen PBO readback now defaults to on unless `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1` wins, and `kVideoExportWorkerMaxCrashRetries` is fixed at `1`
+  - Rule: keep shared here because export runtime config parsing, worker retry decisions, docs, and specs must stay aligned
 
 ## 3. Promotion Rules
 

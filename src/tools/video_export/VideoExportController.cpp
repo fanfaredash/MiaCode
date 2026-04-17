@@ -2,6 +2,7 @@
 
 #include "RawVideoPipeTransport.h"
 #include "VideoExportQuickRenderBackend.h"
+#include "VideoExportRuntimePolicy.h"
 #include "common/AssetPaths.h"
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
@@ -549,11 +550,8 @@ ExportRuntimeConfig loadExportRuntimeConfig()
         miacode::debug_options::envOptionalFlagValue("MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO");
     config.renderBackend.requestGpuRender =
         enablePboOverride.value_or(false) ? true : gpuRenderOverride.value_or(true);
-    if (disablePboOverride.value_or(false)) {
-        config.renderBackend.requestOffscreenPboReadback = false;
-    } else if (enablePboOverride.has_value()) {
-        config.renderBackend.requestOffscreenPboReadback = enablePboOverride.value();
-    }
+    config.renderBackend.requestOffscreenPboReadback =
+        miacode::video_export::shouldRequestOffscreenPboReadback(enablePboOverride, disablePboOverride);
 
     config.diag.repeatEnabled = miacode::debug_options::envFlagEnabled("MIACODE_EXPORT_DIAG_REPEAT");
     config.diag.cropBottom = qMax(0, miacode::debug_options::envIntValue("MIACODE_EXPORT_DIAG_CROP_BOTTOM", 0));
@@ -2709,7 +2707,13 @@ bool preparePackedRgbaFrame(
     const QImage* rgba = &frame;
     if (rgba->format() != QImage::Format_RGBA8888) {
         *convertedFrame = frame.convertToFormat(QImage::Format_RGBA8888);
+        if (!frame.isNull() && convertedFrame->isNull()) {
+            return false;
+        }
         rgba = convertedFrame;
+    }
+    if (!frame.isNull() && rgba->isNull()) {
+        return false;
     }
 
     const int width = rgba->width();
@@ -2721,12 +2725,19 @@ bool preparePackedRgbaFrame(
     const qint64 packedStride = static_cast<qint64>(width) * 4;
     const qint64 packedSize = packedStride * height;
     if (rgba->bytesPerLine() == packedStride) {
+        if (packedSize > 0 && rgba->constBits() == nullptr) {
+            return false;
+        }
         *data = reinterpret_cast<const char*>(rgba->constBits());
         *size = packedSize;
         return true;
     }
 
     packedScratch->resize(static_cast<qsizetype>(packedSize));
+    if (packedScratch->size() != packedSize || (packedSize > 0 && packedScratch->data() == nullptr)) {
+        packedScratch->clear();
+        return false;
+    }
     for (int y = 0; y < height; ++y) {
         std::memcpy(
             packedScratch->data() + y * packedStride,

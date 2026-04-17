@@ -6,6 +6,7 @@
 #include "UiTheme.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/WaveformCache.h"
 
 #include <QApplication>
 #include <QCommandLineOption>
@@ -30,6 +31,8 @@
 
 #include <cmath>
 #include <cstdio>
+#include <exception>
+#include <new>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -79,6 +82,38 @@ void addSharedCliDebugOption(QCommandLineParser& parser)
     ));
 }
 
+QString currentExceptionDetail()
+{
+    try {
+        throw;
+    } catch (const std::bad_alloc&) {
+        return QStringLiteral("std::bad_alloc");
+    } catch (const std::exception& ex) {
+        const QString what = QString::fromUtf8(ex.what()).trimmed();
+        return what.isEmpty() ? QStringLiteral("std::exception") : what;
+    } catch (...) {
+        return QStringLiteral("unknown non-std exception");
+    }
+}
+
+QString videoExportWorkerProjectLogDirectory(const VideoExportSnapshot& snapshot)
+{
+    const QString chartPath = snapshot.originalChartPath.trimmed();
+    if (!chartPath.isEmpty()) {
+        const QString projectDataDirectoryPath = miacode::waveform::projectDataDirectoryPathForFile(chartPath);
+        if (!projectDataDirectoryPath.isEmpty()) {
+            return QDir(projectDataDirectoryPath).filePath(QStringLiteral("logs"));
+        }
+    }
+
+    const QString projectDir = snapshot.projectDir.trimmed();
+    if (!projectDir.isEmpty()) {
+        return QDir(QDir::cleanPath(projectDir)).filePath(QStringLiteral(".miacode/logs"));
+    }
+
+    return QString();
+}
+
 void writeWorkerJsonLine(const QJsonObject& object)
 {
     QTextStream out(stdout);
@@ -125,6 +160,7 @@ bool parseCliResolutionToken(const QString& token, int* outputWidth, int* output
 
 int runCliVideoExport(QApplication& app, QString* errorMessage)
 {
+    try {
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("MiaCode CLI video export"));
     parser.addHelpOption();
@@ -377,10 +413,21 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
         QTextStream(stdout) << exportDetails << "\n";
     }
     return 0;
+    } catch (...) {
+        const QString detail = currentExceptionDetail();
+        const QString message = QStringLiteral("Unhandled CLI export exception: %1").arg(detail);
+        miacode::debug_log::appendFatalMessage(QStringLiteral("export/cli_exception"), message);
+        if (errorMessage != nullptr) {
+            *errorMessage = message;
+        }
+        return 1;
+    }
 }
 
 int runCliVideoExportWorker(QApplication& app, QString* errorMessage)
 {
+    QString workerJobId;
+    try {
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("MiaCode export worker"));
     parser.addHelpOption();
@@ -457,6 +504,8 @@ int runCliVideoExportWorker(QApplication& app, QString* errorMessage)
         }
         return 1;
     }
+    workerJobId = snapshot.jobId;
+    miacode::debug_log::setSessionProjectLogDirectory(videoExportWorkerProjectLogDirectory(snapshot));
 
     writeWorkerJsonLine(QJsonObject{
         {QStringLiteral("event"), QStringLiteral("accepted")},
@@ -506,6 +555,25 @@ int runCliVideoExportWorker(QApplication& app, QString* errorMessage)
     }
     writeWorkerJsonLine(finishedObject);
     return result.success ? 0 : 1;
+    } catch (...) {
+        const QString detail = currentExceptionDetail();
+        const QString error = QStringLiteral("Unhandled export worker exception.");
+        miacode::debug_log::appendFatalMessage(
+            QStringLiteral("export/worker_exception"),
+            QStringLiteral("%1 details=%2").arg(error, detail)
+        );
+        writeWorkerJsonLine(QJsonObject{
+            {QStringLiteral("event"), QStringLiteral("finished")},
+            {QStringLiteral("job_id"), workerJobId},
+            {QStringLiteral("success"), false},
+            {QStringLiteral("error"), error},
+            {QStringLiteral("details"), detail},
+        });
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("%1 %2").arg(error, detail);
+        }
+        return 1;
+    }
 }
 
 }  // namespace

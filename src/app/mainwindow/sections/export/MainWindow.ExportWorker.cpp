@@ -11,20 +11,26 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/video_export/BatchVideoExportDialog.h"
 #include "tools/video_export/VideoExportController.h"
+#include "tools/video_export/VideoExportRuntimePolicy.h"
 #include "tools/video_export/VideoExportDialog.h"
 
 #include <QtCore>
 #include <QtGui>
 #include <QtWidgets>
 
+#include <optional>
+
 using namespace miacode::mainwindow::shared;
 
 namespace {
 constexpr int kVideoExportWorkerDetailsMaxChars = 24000;
 constexpr int kVideoExportWorkerStderrBufferMaxBytes = 24 * 1024;
+
+QString appendVideoExportDiagnostics(const QString& base, const QString& extra);
 
 QString videoExportBackgroundScaleModeToken(PreviewBackgroundScaleMode mode)
 {
@@ -48,9 +54,132 @@ QByteArray buildVideoExportWorkerStartPayload(const VideoExportSnapshot& snapsho
     return payload;
 }
 
-QString videoExportWorkerLogPathForUi()
+bool shouldCurrentExportWorkerAttemptRequestPbo(bool forceDisableOffscreenPbo)
 {
-    return miacode::debug_log::exportLogPath();
+    if (forceDisableOffscreenPbo) {
+        return false;
+    }
+    const std::optional<bool> enablePboOverride =
+        miacode::debug_options::envOptionalFlagValue("MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO");
+    const std::optional<bool> disablePboOverride =
+        miacode::debug_options::envOptionalFlagValue("MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO");
+    return miacode::video_export::shouldRequestOffscreenPboReadback(enablePboOverride, disablePboOverride);
+}
+
+QString combineWorkerAttemptDiagnostics(const QString& attemptDetails, const QString& workerDiagnostics)
+{
+    const QString trimmedAttemptDetails = attemptDetails.trimmed();
+    const QString trimmedWorkerDiagnostics = workerDiagnostics.trimmed();
+    if (trimmedAttemptDetails.isEmpty()) {
+        return trimmedWorkerDiagnostics;
+    }
+    if (trimmedWorkerDiagnostics.isEmpty() || trimmedAttemptDetails == trimmedWorkerDiagnostics) {
+        return trimmedAttemptDetails;
+    }
+    return appendVideoExportDiagnostics(trimmedAttemptDetails, trimmedWorkerDiagnostics);
+}
+
+QString buildWorkerRetryFailureDetails(
+    const QString& retryNote,
+    const QString& firstAttemptTitle,
+    const QString& firstCrashDiagnostics,
+    const QString& finalAttemptTitle,
+    const QString& finalAttemptDiagnostics
+)
+{
+    QStringList sections;
+    if (!retryNote.trimmed().isEmpty()) {
+        sections.append(retryNote.trimmed());
+    }
+    if (!firstCrashDiagnostics.trimmed().isEmpty()) {
+        sections.append(QStringLiteral("%1:\n%2").arg(firstAttemptTitle.trimmed(), firstCrashDiagnostics.trimmed()));
+    }
+    if (!finalAttemptDiagnostics.trimmed().isEmpty()) {
+        sections.append(QStringLiteral("%1:\n%2").arg(finalAttemptTitle.trimmed(), finalAttemptDiagnostics.trimmed()));
+    }
+    return sections.join(QStringLiteral("\n\n"));
+}
+
+QString resolvedLogPathOverrideForUi(const QString& overridePath, const QString& defaultFileName)
+{
+    const QString trimmed = overridePath.trimmed();
+    if (trimmed.isEmpty()) {
+        return QString();
+    }
+
+    const bool looksLikeDirectory = trimmed.endsWith(QLatin1Char('/')) || trimmed.endsWith(QLatin1Char('\\'));
+    const QString cleanPath = QDir::cleanPath(trimmed);
+    const QFileInfo info(cleanPath);
+    const bool looksLikeDirectoryName = !info.exists()
+        && info.suffix().isEmpty()
+        && !info.fileName().contains(QLatin1Char('.'));
+    if (looksLikeDirectory || (info.exists() && info.isDir()) || looksLikeDirectoryName) {
+        return QDir(cleanPath).filePath(defaultFileName);
+    }
+    return cleanPath;
+}
+
+QString projectLogDirectoryForSnapshot(const VideoExportSnapshot& snapshot)
+{
+    const QString chartPath = snapshot.originalChartPath.trimmed();
+    if (!chartPath.isEmpty()) {
+        const QString projectDataDirectoryPath = miacode::waveform::projectDataDirectoryPathForFile(chartPath);
+        if (!projectDataDirectoryPath.isEmpty()) {
+            return QDir(projectDataDirectoryPath).filePath(QStringLiteral("logs"));
+        }
+    }
+
+    const QString projectDir = snapshot.projectDir.trimmed();
+    if (!projectDir.isEmpty()) {
+        return QDir(QDir::cleanPath(projectDir)).filePath(QStringLiteral(".miacode/logs"));
+    }
+
+    return QString();
+}
+
+QString workerChannelLogPathForUi(
+    const VideoExportSnapshot& snapshot,
+    const QString& channelOverridePath,
+    const QString& defaultFileName,
+    const QString& fallbackPath
+)
+{
+    const QString overridePath = resolvedLogPathOverrideForUi(channelOverridePath, defaultFileName);
+    if (!overridePath.isEmpty()) {
+        return overridePath;
+    }
+
+    const QString sharedLogDirectory = qEnvironmentVariable("MIACODE_LOG_DIR").trimmed();
+    if (!sharedLogDirectory.isEmpty()) {
+        return QDir(QDir::cleanPath(sharedLogDirectory)).filePath(defaultFileName);
+    }
+
+    const QString projectLogDirectory = projectLogDirectoryForSnapshot(snapshot);
+    if (!projectLogDirectory.isEmpty()) {
+        return QDir(projectLogDirectory).filePath(defaultFileName);
+    }
+
+    return fallbackPath;
+}
+
+QString videoExportWorkerLogPathForUi(const VideoExportSnapshot& snapshot)
+{
+    return workerChannelLogPathForUi(
+        snapshot,
+        qEnvironmentVariable("MIACODE_EXPORT_LOG_PATH").trimmed(),
+        QStringLiteral("miacode_video_export.log"),
+        miacode::debug_log::exportLogPath()
+    );
+}
+
+QString videoExportWorkerFatalLogPathForUi(const VideoExportSnapshot& snapshot)
+{
+    return workerChannelLogPathForUi(
+        snapshot,
+        qEnvironmentVariable("MIACODE_FATAL_LOG_PATH").trimmed(),
+        QStringLiteral("miacode_fatal.log"),
+        miacode::debug_log::fatalLogPath()
+    );
 }
 
 QString qProcessExitStatusForUi(QProcess::ExitStatus status)
@@ -162,7 +291,9 @@ QString buildWorkerProcessDiagnostics(
     QProcess::ExitStatus exitStatus,
     const QString& processError,
     const QString& stderrText,
-    const QString& stdoutTailText
+    const QString& stdoutTailText,
+    const QString& exportLogPath,
+    const QString& fatalLogPath
 )
 {
     QStringList lines;
@@ -180,10 +311,12 @@ QString buildWorkerProcessDiagnostics(
     if (!stdoutTailText.trimmed().isEmpty()) {
         lines.append(QStringLiteral("stdout_tail: %1").arg(truncateProcessTextForUi(stdoutTailText, 1000)));
     }
-    if (miacode::debug_options::exportDebugOutputEnabled()) {
-        lines.append(QStringLiteral("Debug log: %1").arg(videoExportWorkerLogPathForUi()));
+    if (miacode::debug_options::exportDebugOutputEnabled() && !exportLogPath.trimmed().isEmpty()) {
+        lines.append(QStringLiteral("Debug log: %1").arg(exportLogPath));
     }
-    lines.append(QStringLiteral("Error log: %1").arg(miacode::debug_log::fatalLogPath()));
+    if (!fatalLogPath.trimmed().isEmpty()) {
+        lines.append(QStringLiteral("Error log: %1").arg(fatalLogPath));
+    }
     return lines.join(QStringLiteral("\n"));
 }
 
@@ -405,7 +538,12 @@ QString buildExportProgressLabelTextForUiLanguage(
 
 }  // namespace
 
-bool MainWindow::ExportSection::startVideoExportWorkerProcess(QProcess* process, const VideoExportSnapshot& snapshot, QString* errorMessage)
+bool MainWindow::ExportSection::startVideoExportWorkerProcess(
+    QProcess* process,
+    const VideoExportSnapshot& snapshot,
+    QString* errorMessage,
+    bool forceDisableOffscreenPbo
+)
 {
     if (process == nullptr) {
         if (errorMessage != nullptr) {
@@ -423,6 +561,17 @@ bool MainWindow::ExportSection::startVideoExportWorkerProcess(QProcess* process,
     }
 
     process->setProcessChannelMode(QProcess::SeparateChannels);
+    QProcessEnvironment workerEnvironment = QProcessEnvironment::systemEnvironment();
+    if (!workerEnvironment.contains(QStringLiteral("MIACODE_LOG_DIR"))) {
+        const QString projectLogDirectory = projectLogDirectoryForSnapshot(snapshot);
+        if (!projectLogDirectory.isEmpty()) {
+            workerEnvironment.insert(QStringLiteral("MIACODE_LOG_DIR"), projectLogDirectory);
+        }
+    }
+    if (forceDisableOffscreenPbo) {
+        workerEnvironment.insert(QStringLiteral("MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO"), QStringLiteral("1"));
+    }
+    process->setProcessEnvironment(workerEnvironment);
     QStringList workerArgs;
     if (miacode::debug_options::debugModeEnabled()) {
         workerArgs.append(QStringLiteral("--debug"));
@@ -467,132 +616,194 @@ bool MainWindow::ExportSection::runVideoExportWorkerSync(
         *canceledByUser = false;
     }
 
-    QProcess process;
-    if (!this->startVideoExportWorkerProcess(&process, snapshot, errorMessage)) {
-        return false;
-    }
-
-    QByteArray stdoutBuffer;
-    QByteArray stderrBuffer;
-    bool finishedEventReceived = false;
-    bool success = false;
-    QString resultMessage;
-    QString resultDetails;
-    QElapsedTimer itemElapsed;
-    qint64 smoothedEtaSeconds = -1;
-    itemElapsed.start();
-
-    const auto parseStdoutLines = [&]() {
-        while (true) {
-            const int newlineIndex = stdoutBuffer.indexOf('\n');
-            if (newlineIndex < 0) {
-                break;
+    QString firstCrashDiagnostics;
+    bool forceDisableOffscreenPbo = false;
+    for (int attempt = 1;; ++attempt) {
+        QProcess process;
+        if (!this->startVideoExportWorkerProcess(&process, snapshot, errorMessage, forceDisableOffscreenPbo)) {
+            if (errorMessage != nullptr && !firstCrashDiagnostics.trimmed().isEmpty()) {
+                *errorMessage = buildWorkerRetryFailureDetails(
+                    uiText(
+                        "dialog.video_export.error.worker_retry_note",
+                        "The export worker crashed once and was retried automatically with PBO disabled."
+                    ),
+                    uiText("dialog.video_export.error.worker_retry_first_attempt", "First attempt diagnostics"),
+                    firstCrashDiagnostics,
+                    uiText("dialog.video_export.error.worker_retry_final_attempt", "Safe-mode retry diagnostics"),
+                    *errorMessage
+                );
             }
-            const QByteArray rawLine = stdoutBuffer.left(newlineIndex).trimmed();
-            stdoutBuffer.remove(0, newlineIndex + 1);
-            if (rawLine.isEmpty()) {
-                continue;
-            }
-            QJsonParseError parseError;
-            const QJsonDocument document = QJsonDocument::fromJson(rawLine, &parseError);
-            if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-                appendProcessDetailLine(&resultDetails, QString::fromUtf8(rawLine), kVideoExportWorkerDetailsMaxChars);
-                continue;
-            }
-            const QJsonObject object = document.object();
-            const QString eventType = object.value(QStringLiteral("event")).toString();
-            if (eventType == QLatin1String("progress")) {
-                const int percent = object.value(QStringLiteral("percent")).toInt(-1);
-                const QString message = object.value(QStringLiteral("message")).toString();
-                if (progressCallback) {
-                    progressCallback(percent, message);
-                } else if (progressDialog != nullptr && !message.trimmed().isEmpty()) {
-                    progressDialog->setLabelText(
-                        buildExportProgressLabelTextForUiLanguage(
-                            message,
-                            qBound(0, percent, 100),
-                            itemElapsed,
-                            &smoothedEtaSeconds
-                        )
-                    );
-                }
-                continue;
-            }
-            if (eventType == QLatin1String("finished")) {
-                finishedEventReceived = true;
-                success = object.value(QStringLiteral("success")).toBool(false);
-                resultMessage = object.value(QStringLiteral("message")).toString();
-                resultDetails = tailLimitedProcessText(
-                    object.value(QStringLiteral("details")).toString(),
-                    kVideoExportWorkerDetailsMaxChars);
-            }
+            return false;
         }
-    };
 
-    while (process.state() != QProcess::NotRunning) {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        QByteArray stdoutBuffer;
+        QByteArray stderrBuffer;
+        bool finishedEventReceived = false;
+        bool success = false;
+        QString resultMessage;
+        QString resultDetails;
+        QElapsedTimer itemElapsed;
+        qint64 smoothedEtaSeconds = -1;
+        itemElapsed.start();
+
+        const auto parseStdoutLines = [&]() {
+            while (true) {
+                const int newlineIndex = stdoutBuffer.indexOf('\n');
+                if (newlineIndex < 0) {
+                    break;
+                }
+                const QByteArray rawLine = stdoutBuffer.left(newlineIndex).trimmed();
+                stdoutBuffer.remove(0, newlineIndex + 1);
+                if (rawLine.isEmpty()) {
+                    continue;
+                }
+                QJsonParseError parseError;
+                const QJsonDocument document = QJsonDocument::fromJson(rawLine, &parseError);
+                if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+                    appendProcessDetailLine(&resultDetails, QString::fromUtf8(rawLine), kVideoExportWorkerDetailsMaxChars);
+                    continue;
+                }
+                const QJsonObject object = document.object();
+                const QString eventType = object.value(QStringLiteral("event")).toString();
+                if (eventType == QLatin1String("progress")) {
+                    const int percent = object.value(QStringLiteral("percent")).toInt(-1);
+                    const QString message = object.value(QStringLiteral("message")).toString();
+                    if (progressCallback) {
+                        progressCallback(percent, message);
+                    } else if (progressDialog != nullptr && !message.trimmed().isEmpty()) {
+                        progressDialog->setLabelText(
+                            buildExportProgressLabelTextForUiLanguage(
+                                message,
+                                qBound(0, percent, 100),
+                                itemElapsed,
+                                &smoothedEtaSeconds
+                            )
+                        );
+                    }
+                    continue;
+                }
+                if (eventType == QLatin1String("finished")) {
+                    finishedEventReceived = true;
+                    success = object.value(QStringLiteral("success")).toBool(false);
+                    resultMessage = object.value(QStringLiteral("message")).toString();
+                    resultDetails = tailLimitedProcessText(
+                        object.value(QStringLiteral("details")).toString(),
+                        kVideoExportWorkerDetailsMaxChars);
+                }
+            }
+        };
+
+        while (process.state() != QProcess::NotRunning) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+            stdoutBuffer.append(process.readAllStandardOutput());
+            appendProcessOutputTail(
+                &stderrBuffer,
+                process.readAllStandardError(),
+                kVideoExportWorkerStderrBufferMaxBytes);
+            parseStdoutLines();
+            if (progressDialog != nullptr && progressDialog->wasCanceled()) {
+                if (canceledByUser != nullptr) {
+                    *canceledByUser = true;
+                }
+                process.kill();
+                process.waitForFinished(2000);
+                return false;
+            }
+            process.waitForFinished(50);
+        }
+
         stdoutBuffer.append(process.readAllStandardOutput());
         appendProcessOutputTail(
             &stderrBuffer,
             process.readAllStandardError(),
             kVideoExportWorkerStderrBufferMaxBytes);
         parseStdoutLines();
-        if (progressDialog != nullptr && progressDialog->wasCanceled()) {
-            if (canceledByUser != nullptr) {
-                *canceledByUser = true;
+
+        const QString stderrText = QString::fromUtf8(stderrBuffer).trimmed();
+        const QString stdoutTailText = QString::fromUtf8(stdoutBuffer).trimmed();
+        const QString processErrorText = process.errorString().trimmed();
+        const QString workerExportLogPath = videoExportWorkerLogPathForUi(snapshot);
+        const QString workerFatalLogPath = videoExportWorkerFatalLogPathForUi(snapshot);
+        const QString workerDiagnostics = buildWorkerProcessDiagnostics(
+            process.exitCode(),
+            process.exitStatus(),
+            processErrorText,
+            stderrText,
+            stdoutTailText,
+            workerExportLogPath,
+            workerFatalLogPath
+        );
+        const QString attemptDiagnostics = combineWorkerAttemptDiagnostics(resultDetails, workerDiagnostics);
+        const bool shouldRetry = miacode::video_export::shouldRetryVideoExportWorkerAfterCrash(
+            process.exitStatus() == QProcess::CrashExit,
+            shouldCurrentExportWorkerAttemptRequestPbo(forceDisableOffscreenPbo),
+            canceledByUser != nullptr && *canceledByUser,
+            attempt
+        );
+        if (shouldRetry) {
+            firstCrashDiagnostics = attemptDiagnostics;
+            forceDisableOffscreenPbo = true;
+            if (progressDialog != nullptr) {
+                progressDialog->setRange(0, 100);
+                progressDialog->setValue(0);
+                progressDialog->setLabelText(
+                    uiText(
+                        "dialog.video_export.progress.retrying_safe_mode",
+                        "Export worker crashed. Retrying in safe mode..."
+                    )
+                );
             }
-            process.kill();
-            process.waitForFinished(2000);
+            continue;
+        }
+
+        const QString combinedRetryDiagnostics = firstCrashDiagnostics.trimmed().isEmpty()
+            ? QString()
+            : buildWorkerRetryFailureDetails(
+                  uiText(
+                      "dialog.video_export.error.worker_retry_note",
+                      "The export worker crashed once and was retried automatically with PBO disabled."
+                  ),
+                  uiText("dialog.video_export.error.worker_retry_first_attempt", "First attempt diagnostics"),
+                  firstCrashDiagnostics,
+                  uiText("dialog.video_export.error.worker_retry_final_attempt", "Safe-mode retry diagnostics"),
+                  attemptDiagnostics
+              );
+        if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
+            if (errorMessage != nullptr) {
+                const QString summary = !resultMessage.trimmed().isEmpty()
+                    ? resultMessage
+                    : (!stderrText.isEmpty()
+                        ? stderrText.split('\n').constFirst().trimmed()
+                        : uiText("dialog.batch_export.error.export_failed", QStringLiteral("Export failed.")));
+                const QString exitSummary = compactWorkerExitSummary(process.exitCode(), process.exitStatus(), summary);
+                *errorMessage = combinedRetryDiagnostics.isEmpty()
+                    ? exitSummary
+                    : appendVideoExportDiagnostics(exitSummary, combinedRetryDiagnostics);
+            }
             return false;
         }
-        process.waitForFinished(50);
-    }
 
-    stdoutBuffer.append(process.readAllStandardOutput());
-    appendProcessOutputTail(
-        &stderrBuffer,
-        process.readAllStandardError(),
-        kVideoExportWorkerStderrBufferMaxBytes);
-    parseStdoutLines();
-
-    const QString stderrText = QString::fromUtf8(stderrBuffer).trimmed();
-    const QString stdoutTailText = QString::fromUtf8(stdoutBuffer).trimmed();
-    const QString processErrorText = process.errorString().trimmed();
-    const QString workerDiagnostics = buildWorkerProcessDiagnostics(
-        process.exitCode(),
-        process.exitStatus(),
-        processErrorText,
-        stderrText,
-        stdoutTailText
-    );
-    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
-        if (errorMessage != nullptr) {
-            const QString summary = !resultMessage.trimmed().isEmpty()
-                ? resultMessage
-                : (!stderrText.isEmpty()
-                    ? stderrText.split('\n').constFirst().trimmed()
-                    : uiText("dialog.batch_export.error.export_failed", QStringLiteral("Export failed.")));
-            *errorMessage = compactWorkerExitSummary(process.exitCode(), process.exitStatus(), summary);
+        if (!finishedEventReceived || !success) {
+            if (errorMessage != nullptr) {
+                const QString summary = !resultMessage.trimmed().isEmpty()
+                    ? resultMessage
+                    : (!stderrText.isEmpty()
+                        ? stderrText.split('\n').constFirst().trimmed()
+                        : uiText("dialog.batch_export.error.export_failed", QStringLiteral("Export failed.")));
+                const bool genericFailure = resultMessage.trimmed().isEmpty() && stderrText.trimmed().isEmpty();
+                if (!combinedRetryDiagnostics.isEmpty()) {
+                    *errorMessage = appendVideoExportDiagnostics(summary, combinedRetryDiagnostics);
+                } else {
+                    *errorMessage = genericFailure
+                        ? appendVideoExportDiagnostics(summary, workerDiagnostics)
+                        : summary;
+                }
+            }
+            return false;
         }
-        return false;
-    }
 
-    if (!finishedEventReceived || !success) {
-        if (errorMessage != nullptr) {
-            const QString summary = !resultMessage.trimmed().isEmpty()
-                ? resultMessage
-                : (!stderrText.isEmpty()
-                    ? stderrText.split('\n').constFirst().trimmed()
-                    : uiText("dialog.batch_export.error.export_failed", QStringLiteral("Export failed.")));
-            const bool genericFailure = resultMessage.trimmed().isEmpty() && stderrText.trimmed().isEmpty();
-            *errorMessage = genericFailure
-                ? appendVideoExportDiagnostics(summary, workerDiagnostics)
-                : summary;
-        }
-        return false;
+        return true;
     }
-
-    return true;
 }
 
 void MainWindow::ExportSection::showExportToolbarMenu()
@@ -629,12 +840,13 @@ bool MainWindow::ExportSection::launchVideoExportWorker(const VideoExportSnapsho
         systemL10n(QStringLiteral("Cancel"), QStringLiteral("取消")),
         0,
         100,
-        &owner_
+        UiDialogs::effectiveParentWidget(&owner_)
     );
     progress->setWindowTitle(systemL10n(QStringLiteral("Export Video"), QStringLiteral("导出视频")));
     progress->setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     progress->setWindowFlag(Qt::WindowMinimizeButtonHint, true);
     progress->setWindowModality(Qt::NonModal);
+    progress->setAttribute(Qt::WA_ShowWithoutActivating, true);
     progress->setLabelText(uiText("dialog.video_export.progress.preparing", "Preparing export..."));
     progress->setCancelButtonText(uiText("dialog.video_export.button.cancel", "Cancel"));
     progress->setWindowTitle(uiText("dialog.video_export.title", "Export Video"));
@@ -648,16 +860,40 @@ bool MainWindow::ExportSection::launchVideoExportWorker(const VideoExportSnapsho
     if (QLabel* label = progress->findChild<QLabel*>(); label != nullptr) {
         label->setWordWrap(true);
     }
+    UiDialogs::centerDialogOnAnchor(progress, &owner_);
     progress->show();
+    QTimer::singleShot(0, progress, [this, progress]() {
+        if (progress == nullptr) {
+            return;
+        }
+        progress->adjustSize();
+        UiDialogs::centerDialogOnAnchor(progress, &owner_);
+    });
+    QTimer::singleShot(0, &owner_, [this]() {
+        if (!owner_.isVisible() || owner_.windowState().testFlag(Qt::WindowMinimized)) {
+            return;
+        }
+        owner_.raise();
+        owner_.activateWindow();
+        if (QWidget* focusWidget = owner_.focusWidget(); focusWidget != nullptr) {
+            focusWidget->setFocus(Qt::ActiveWindowFocusReason);
+        } else {
+            owner_.setFocus(Qt::ActiveWindowFocusReason);
+        }
+    });
     owner_.videoExportProgressDialog_ = progress;
 
     auto* process = new QProcess(&owner_);
     process->setProcessChannelMode(QProcess::SeparateChannels);
     owner_.videoExportWorkerProcess_ = process;
+    owner_.videoExportWorkerSnapshot_ = snapshot;
     owner_.videoExportWorkerJobId_ = snapshot.jobId;
     owner_.videoExportWorkerOutputPath_ = snapshot.outputPath;
+    owner_.videoExportWorkerExportLogPath_ = videoExportWorkerLogPathForUi(snapshot);
+    owner_.videoExportWorkerFatalLogPath_ = videoExportWorkerFatalLogPathForUi(snapshot);
     owner_.videoExportWorkerResultMessage_.clear();
     owner_.videoExportWorkerResultDetails_.clear();
+    owner_.videoExportWorkerFirstCrashDiagnostics_.clear();
     owner_.videoExportWorkerStdoutBuffer_.clear();
     owner_.videoExportWorkerStderrBuffer_.clear();
     owner_.videoExportWorkerSuccess_ = false;
@@ -665,6 +901,8 @@ bool MainWindow::ExportSection::launchVideoExportWorker(const VideoExportSnapsho
     owner_.videoExportWorkerCancelRequested_ = false;
     owner_.videoExportWorkerLastProgressPercent_ = 0;
     owner_.videoExportWorkerLastEtaSeconds_ = -1;
+    owner_.videoExportWorkerAttempt_ = 1;
+    owner_.videoExportWorkerForceDisablePbo_ = false;
     owner_.videoExportWorkerElapsed_.start();
 
     connect(progress, &QProgressDialog::canceled, &owner_, [this]() {
@@ -680,7 +918,11 @@ bool MainWindow::ExportSection::launchVideoExportWorker(const VideoExportSnapsho
         this->handleVideoExportWorkerProcessFinished(exitCode, static_cast<int>(exitStatus));
     });
 
-    if (!this->startVideoExportWorkerProcess(process, snapshot, errorMessage)) {
+    if (!this->startVideoExportWorkerProcess(
+            process,
+            snapshot,
+            errorMessage,
+            owner_.videoExportWorkerForceDisablePbo_)) {
         this->clearVideoExportWorkerState();
         return false;
     }
@@ -862,10 +1104,18 @@ void MainWindow::ExportSection::handleVideoExportWorkerProcessFinished(int exitC
         owner_.setPreviewCanvasAspectRatio(1.0, false);
     };
 
-    if (owner_.videoExportProgressDialog_ != nullptr) {
-        owner_.videoExportProgressDialog_->hide();
-    }
-
+    const QString retryNote = uiText(
+        "dialog.video_export.error.worker_retry_note",
+        "The export worker crashed once and was retried automatically with PBO disabled."
+    );
+    const QString firstAttemptTitle = uiText(
+        "dialog.video_export.error.worker_retry_first_attempt",
+        "First attempt diagnostics"
+    );
+    const QString finalAttemptTitle = uiText(
+        "dialog.video_export.error.worker_retry_final_attempt",
+        "Safe-mode retry diagnostics"
+    );
     const QString stderrText = QString::fromUtf8(owner_.videoExportWorkerStderrBuffer_).trimmed();
     const QString stdoutTailText = QString::fromUtf8(owner_.videoExportWorkerStdoutBuffer_).trimmed();
     const QString processErrorText = owner_.videoExportWorkerProcess_ != nullptr
@@ -876,12 +1126,19 @@ void MainWindow::ExportSection::handleVideoExportWorkerProcessFinished(int exitC
         static_cast<QProcess::ExitStatus>(exitStatus),
         processErrorText,
         stderrText,
-        stdoutTailText
+        stdoutTailText,
+        owner_.videoExportWorkerExportLogPath_,
+        owner_.videoExportWorkerFatalLogPath_
     );
+    const QString attemptDiagnostics =
+        combineWorkerAttemptDiagnostics(owner_.videoExportWorkerResultDetails_, workerDiagnostics);
     const bool canceledOutcome =
         owner_.videoExportWorkerCancelRequested_
         && (!owner_.videoExportWorkerCompletionReceived_ || !owner_.videoExportWorkerSuccess_);
     if (canceledOutcome) {
+        if (owner_.videoExportProgressDialog_ != nullptr) {
+            owner_.videoExportProgressDialog_->hide();
+        }
         restorePreviewAspectIfNeeded();
         showCenteredLocalizedMessageBox(
             QMessageBox::Information,
@@ -893,16 +1150,84 @@ void MainWindow::ExportSection::handleVideoExportWorkerProcessFinished(int exitC
         return;
     }
 
-    if (!owner_.videoExportWorkerCompletionReceived_) {
+    bool retryRestartFailed = false;
+    QString retryRestartError;
+    const bool shouldRetry = miacode::video_export::shouldRetryVideoExportWorkerAfterCrash(
+        exitStatus == static_cast<int>(QProcess::CrashExit),
+        shouldCurrentExportWorkerAttemptRequestPbo(owner_.videoExportWorkerForceDisablePbo_),
+        owner_.videoExportWorkerCancelRequested_,
+        owner_.videoExportWorkerAttempt_
+    );
+    if (shouldRetry) {
+        owner_.videoExportWorkerFirstCrashDiagnostics_ = attemptDiagnostics;
+        owner_.videoExportWorkerAttempt_ += 1;
+        owner_.videoExportWorkerForceDisablePbo_ = true;
+        owner_.videoExportWorkerCompletionReceived_ = false;
+        owner_.videoExportWorkerSuccess_ = false;
+        owner_.videoExportWorkerResultMessage_.clear();
+        owner_.videoExportWorkerResultDetails_.clear();
+        owner_.videoExportWorkerStdoutBuffer_.clear();
+        owner_.videoExportWorkerStderrBuffer_.clear();
+        owner_.videoExportWorkerLastProgressPercent_ = 0;
+        owner_.videoExportWorkerLastEtaSeconds_ = -1;
+        owner_.videoExportWorkerElapsed_.start();
+        if (owner_.videoExportProgressDialog_ != nullptr) {
+            owner_.videoExportProgressDialog_->setRange(0, 100);
+            owner_.videoExportProgressDialog_->setValue(0);
+            owner_.videoExportProgressDialog_->setLabelText(
+                uiText(
+                    "dialog.video_export.progress.retrying_safe_mode",
+                    "Export worker crashed. Retrying in safe mode..."
+                )
+            );
+            owner_.videoExportProgressDialog_->show();
+        }
+
+        QString restartError;
+        if (owner_.videoExportWorkerProcess_ != nullptr
+            && this->startVideoExportWorkerProcess(
+                owner_.videoExportWorkerProcess_,
+                owner_.videoExportWorkerSnapshot_,
+                &restartError,
+                true)) {
+            return;
+        }
+
+        retryRestartFailed = true;
+        retryRestartError = restartError.trimmed();
+    }
+
+    if (owner_.videoExportProgressDialog_ != nullptr) {
+        owner_.videoExportProgressDialog_->hide();
+    }
+
+    QString finalAttemptDiagnostics;
+    if (retryRestartFailed) {
+        owner_.videoExportWorkerSuccess_ = false;
+        owner_.videoExportWorkerCompletionReceived_ = false;
+        owner_.videoExportWorkerResultMessage_ =
+            uiText("dialog.video_export.error.failed", "Export failed.");
+        finalAttemptDiagnostics = retryRestartError;
+        owner_.videoExportWorkerResultDetails_ = retryRestartError;
+    } else if (!owner_.videoExportWorkerCompletionReceived_) {
         owner_.videoExportWorkerSuccess_ = false;
         owner_.videoExportWorkerResultMessage_ = exitStatus == static_cast<int>(QProcess::CrashExit)
             ? uiText("dialog.video_export.error.worker_crash", "Export worker crashed.")
             : uiText("dialog.video_export.error.worker_exit", "Export worker exited unexpectedly.");
-        owner_.videoExportWorkerResultDetails_ = workerDiagnostics;
-    } else if (!stderrText.isEmpty() && !owner_.videoExportWorkerSuccess_) {
-        owner_.videoExportWorkerResultDetails_ = appendVideoExportDiagnostics(owner_.videoExportWorkerResultDetails_, workerDiagnostics);
+        finalAttemptDiagnostics = workerDiagnostics;
+        owner_.videoExportWorkerResultDetails_ = finalAttemptDiagnostics;
     } else if (!owner_.videoExportWorkerSuccess_) {
-        owner_.videoExportWorkerResultDetails_ = appendVideoExportDiagnostics(owner_.videoExportWorkerResultDetails_, workerDiagnostics);
+        finalAttemptDiagnostics = attemptDiagnostics;
+        owner_.videoExportWorkerResultDetails_ = attemptDiagnostics;
+    }
+    if (!owner_.videoExportWorkerSuccess_ && !owner_.videoExportWorkerFirstCrashDiagnostics_.trimmed().isEmpty()) {
+        owner_.videoExportWorkerResultDetails_ = buildWorkerRetryFailureDetails(
+            retryNote,
+            firstAttemptTitle,
+            owner_.videoExportWorkerFirstCrashDiagnostics_,
+            finalAttemptTitle,
+            finalAttemptDiagnostics
+        );
     }
     trimProcessTextTail(&owner_.videoExportWorkerResultDetails_, kVideoExportWorkerDetailsMaxChars);
     if (!owner_.videoExportWorkerSuccess_) {
@@ -1016,10 +1341,14 @@ void MainWindow::ExportSection::clearVideoExportWorkerState()
     }
     owner_.videoExportWorkerStdoutBuffer_.clear();
     owner_.videoExportWorkerStderrBuffer_.clear();
+    owner_.videoExportWorkerSnapshot_ = VideoExportSnapshot();
     owner_.videoExportWorkerJobId_.clear();
     owner_.videoExportWorkerOutputPath_.clear();
+    owner_.videoExportWorkerExportLogPath_.clear();
+    owner_.videoExportWorkerFatalLogPath_.clear();
     owner_.videoExportWorkerResultMessage_.clear();
     owner_.videoExportWorkerResultDetails_.clear();
+    owner_.videoExportWorkerFirstCrashDiagnostics_.clear();
     owner_.videoExportWorkerElapsed_.invalidate();
     owner_.videoExportWorkerSuccess_ = false;
     owner_.videoExportWorkerCompletionReceived_ = false;
@@ -1027,5 +1356,7 @@ void MainWindow::ExportSection::clearVideoExportWorkerState()
     owner_.restoreSquareAfterVideoExport_ = false;
     owner_.videoExportWorkerLastProgressPercent_ = 0;
     owner_.videoExportWorkerLastEtaSeconds_ = -1;
+    owner_.videoExportWorkerAttempt_ = 0;
+    owner_.videoExportWorkerForceDisablePbo_ = false;
 }
 

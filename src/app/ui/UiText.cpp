@@ -553,6 +553,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.video_export.progress.remaining", "预计剩余 %1"},
         {"dialog.video_export.progress.generic", "正在导出..."},
         {"dialog.video_export.progress.canceling", "正在取消导出..."},
+        {"dialog.video_export.progress.retrying_safe_mode", "导出子进程崩溃，正在以安全模式重试..."},
         {"dialog.video_export.progress.done", "导出完成。"},
         {"dialog.video_export.status.canceled", "导出已取消。"},
         {"dialog.video_export.status.completed", "导出完成。"},
@@ -561,6 +562,9 @@ const QHash<QString, QString>& zhMap()
         {"dialog.video_export.error.failed", "导出失败。"},
         {"dialog.video_export.error.worker_crash", "导出子进程已崩溃。"},
         {"dialog.video_export.error.worker_exit", "导出子进程异常退出。"},
+        {"dialog.video_export.error.worker_retry_note", "导出子进程曾崩溃一次，系统已自动关闭 PBO 并重试。"},
+        {"dialog.video_export.error.worker_retry_first_attempt", "第一次尝试诊断"},
+        {"dialog.video_export.error.worker_retry_final_attempt", "安全模式重试诊断"},
         {"dialog.video_export.error.failed_title", "导出失败"},
 
         {"status.audio_restored_default", "已恢复默认音量设置"},
