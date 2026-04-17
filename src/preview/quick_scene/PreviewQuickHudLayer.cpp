@@ -12,6 +12,11 @@
 
 namespace {
 
+bool aspectRatioNear(qreal actual, qreal expected)
+{
+    return qAbs(actual - expected) < 0.02;
+}
+
 void drawHudText(QPainter& painter, const QPointF& baseline, const QString& text, const QFont& font, qreal shadowOffset)
 {
     painter.save();
@@ -230,11 +235,26 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
         }
     }
 
+    const qreal stageAspectRatio = stageRect.height() > 0.0 ? (stageRect.width() / stageRect.height()) : 1.0;
+
     if (state->render.showTimestamp) {
+        const QString timeLabel = miacode::preview::scene::formatPreviewHudTimeLabel(state->playheadSeconds);
+        const QFontMetrics timeMetrics(timeFont);
+        const bool insetTimestampForAspect =
+            aspectRatioNear(stageAspectRatio, 16.0 / 9.0) || aspectRatioNear(stageAspectRatio, 4.0 / 3.0);
+        const qreal positiveTimeExtraInset =
+            timeLabel.startsWith(QLatin1Char('-')) || !insetTimestampForAspect
+                ? 0.0
+                : static_cast<qreal>(timeMetrics.horizontalAdvance(QStringLiteral(" ")));
+        const qreal timestampBottomExtraInset =
+            insetTimestampForAspect ? (static_cast<qreal>(timeMetrics.lineSpacing()) * 0.5) : 0.0;
         drawHudText(
             *painter,
-            QPointF(stageRect.left() + hudPadding, stageRect.bottom() - hudPadding),
-            miacode::preview::scene::formatPreviewHudTimeLabel(state->playheadSeconds),
+            QPointF(
+                stageRect.left() + hudPadding + positiveTimeExtraInset,
+                stageRect.bottom() - hudPadding - timestampBottomExtraInset
+            ),
+            timeLabel,
             timeFont,
             qMax<qreal>(1.0, 2.0 * hudScale)
         );
@@ -244,8 +264,7 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
         return;
     }
 
-    const qreal stageAspectRatio = stageRect.height() > 0.0 ? (stageRect.width() / stageRect.height()) : 1.0;
-    if (qAbs(stageAspectRatio - 1.0) < 0.02) {
+    if (aspectRatioNear(stageAspectRatio, 1.0) || aspectRatioNear(stageAspectRatio, 4.0 / 3.0)) {
         return;
     }
 
@@ -334,8 +353,13 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
         return;
     }
 
-    const qreal blockLeft = statsRightLimit - blockWidth;
-    const qreal blockTop = stageRect.bottom() - hudPadding - blockHeight;
+    const bool isSixteenByNine = aspectRatioNear(stageAspectRatio, 16.0 / 9.0);
+    const qreal extraRightInset =
+        isSixteenByNine ? static_cast<qreal>(statMetrics.horizontalAdvance(QStringLiteral("   "))) : 0.0;
+    const qreal extraBottomInset =
+        isSixteenByNine ? static_cast<qreal>(statMetrics.lineSpacing()) : 0.0;
+    const qreal blockLeft = statsRightLimit - extraRightInset - blockWidth;
+    const qreal blockTop = stageRect.bottom() - hudPadding - extraBottomInset - blockHeight;
     if (blockTop < stageRect.top() + hudPadding) {
         return;
     }
