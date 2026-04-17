@@ -3661,32 +3661,38 @@ VideoExportResult VideoExportController::exportPreparedTask(
                        .arg(totalSecondsText);
     if (hasMedia) {
         QString mediaChain = QStringLiteral("[%1:v]").arg(mediaInputIndex);
+        QStringList mediaFilters;
         if (!(mediaIsImage && mediaUsesPreprocessedImage)) {
             if (task.backgroundScaleMode == PreviewBackgroundScaleMode::FitContain) {
-                mediaChain += QStringLiteral(
+                mediaFilters << QStringLiteral(
                     "scale=%1:%2:force_original_aspect_ratio=decrease,pad=%1:%2:(ow-iw)/2:(oh-ih)/2:color=black")
-                    .arg(frameWidth)
-                    .arg(frameHeight);
+                                    .arg(frameWidth)
+                                    .arg(frameHeight);
             } else {
-                mediaChain += QStringLiteral(
+                mediaFilters << QStringLiteral(
                     "scale=%1:%2:force_original_aspect_ratio=increase,crop=%1:%2")
-                    .arg(frameWidth)
-                    .arg(frameHeight);
+                                    .arg(frameWidth)
+                                    .arg(frameHeight);
             }
         }
-        mediaChain += QStringLiteral(",setsar=1,fps=%1,format=rgba").arg(task.fps);
+        mediaFilters << QStringLiteral("setsar=1")
+                     << QStringLiteral("fps=%1").arg(task.fps)
+                     << QStringLiteral("format=rgba");
         if (!mediaIsImage) {
             if (timelineOriginSecond > kTimelineEpsilonSeconds) {
-                mediaChain += QStringLiteral(",trim=start=%1:end=%2,setpts=PTS-STARTPTS")
-                    .arg(timelineOriginText)
-                    .arg(QString::number(timelineOriginSecond + alignedTotalSeconds, 'f', 6));
+                mediaFilters << QStringLiteral("trim=start=%1:end=%2")
+                                    .arg(timelineOriginText)
+                                    .arg(QString::number(timelineOriginSecond + alignedTotalSeconds, 'f', 6))
+                             << QStringLiteral("setpts=PTS-STARTPTS");
             } else if (timelineOriginSecond < -kTimelineEpsilonSeconds) {
-                mediaChain += QStringLiteral(",trim=start=0:end=%1,setpts=PTS-STARTPTS+%2/TB")
-                    .arg(QString::number(alignedTotalSeconds + timelineOriginSecond, 'f', 6))
-                    .arg(QString::number(-timelineOriginSecond, 'f', 6));
+                mediaFilters << QStringLiteral("trim=start=0:end=%1")
+                                    .arg(QString::number(alignedTotalSeconds + timelineOriginSecond, 'f', 6))
+                             << QStringLiteral("setpts=PTS-STARTPTS+%1/TB")
+                                    .arg(QString::number(-timelineOriginSecond, 'f', 6));
             }
-            mediaChain += QStringLiteral(",tpad=stop_mode=clone:stop_duration=%1").arg(totalSecondsText);
+            mediaFilters << QStringLiteral("tpad=stop_mode=clone:stop_duration=%1").arg(totalSecondsText);
         }
+        mediaChain += mediaFilters.join(QLatin1Char(','));
         mediaChain += QStringLiteral("[media_src]");
         filterParts << mediaChain;
         filterParts << QStringLiteral("[base_fill][media_src]overlay=0:0:format=rgb:alpha=straight[base_media]");
