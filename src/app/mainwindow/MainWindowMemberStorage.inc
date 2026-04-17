@@ -347,7 +347,7 @@
         bool previewShowValidationSummary_ = true;
         bool chartNormalizeStartAtNewMeasure_ = true;
         bool chartNormalizeReduceTo384Grid_ = true;
-        bool workspacePanelsSwapped_ = true;
+        bool workspacePanelsSwapped_ = false;
         PreviewAudioSettings softwarePreviewAudioSettings_;
         PreviewAudioSettings previewAudioSettings_;
         int editorTextFontPointSize_ = 0;

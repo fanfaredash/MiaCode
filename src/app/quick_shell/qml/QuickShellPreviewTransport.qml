@@ -276,17 +276,15 @@ Rectangle {
         }
 
         Item {
+            id: controlStripHost
             Layout.fillWidth: true
-            implicitHeight: Math.max(
-                root.controlButtonHeight,
-                Math.max(leftControlRow.implicitHeight, Math.max(timeSummaryLabel.implicitHeight, rightControlRow.implicitHeight))
-            )
+            implicitHeight: root.controlButtonHeight
 
-            Row {
-                id: leftControlRow
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 8
+            property var defaultControlOrder: ["stop", "play", "time", "speed", "fullscreen"]
+            property var swappedControlOrder: ["fullscreen", "speed", "time", "stop", "play"]
+
+            Component {
+                id: fullscreenButtonComponent
 
                 ToolButton {
                     width: 30
@@ -312,6 +310,10 @@ Rectangle {
                         verticalAlignment: Text.AlignVCenter
                     }
                 }
+            }
+
+            Component {
+                id: speedButtonComponent
 
                 Button {
                     text: controller ? controller.previewSpeedLabel : "1x"
@@ -341,21 +343,20 @@ Rectangle {
                 }
             }
 
-            Label {
-                id: timeSummaryLabel
-                anchors.centerIn: parent
-                text: root.timeSummary
-                color: root.transportPrimaryTextColor()
-                font.pixelSize: root.transportTextPixelSize
-                font.weight: root.transportTextWeight
-                verticalAlignment: Text.AlignVCenter
+            Component {
+                id: timeSummaryComponent
+
+                Label {
+                    text: root.timeSummary
+                    color: root.transportPrimaryTextColor()
+                    font.pixelSize: root.transportTextPixelSize
+                    font.weight: root.transportTextWeight
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
 
-            Row {
-                id: rightControlRow
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 8
+            Component {
+                id: stopButtonComponent
 
                 ToolButton {
                     width: 30
@@ -386,6 +387,10 @@ Rectangle {
                         }
                     }
                 }
+            }
+
+            Component {
+                id: playButtonComponent
 
                 ToolButton {
                     width: 30
@@ -451,6 +456,31 @@ Rectangle {
                                 radius: 1
                                 color: root.transportPrimaryTextColor()
                             }
+                        }
+                    }
+                }
+            }
+
+            Row {
+                anchors.centerIn: parent
+                spacing: 8
+
+                Repeater {
+                    model: controller && controller.workspacePanelsSwapped
+                        ? controlStripHost.swappedControlOrder
+                        : controlStripHost.defaultControlOrder
+
+                    Loader {
+                        sourceComponent: {
+                            if (modelData === "fullscreen")
+                                return fullscreenButtonComponent
+                            if (modelData === "speed")
+                                return speedButtonComponent
+                            if (modelData === "time")
+                                return timeSummaryComponent
+                            if (modelData === "stop")
+                                return stopButtonComponent
+                            return playButtonComponent
                         }
                     }
                 }
