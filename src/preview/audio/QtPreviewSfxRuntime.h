@@ -22,6 +22,7 @@ public:
 
     void setWarmupResolvedPaths(const QString& chartPath, const QString& trackPath, const QString& sfxDir);
     void reloadAssets(const PreviewAudioSettings& settings);
+    bool audioEngineInitialized() const;
     void setChartPath(const QString& chartPath);
     void setBackgroundTrackOffsetSeconds(double seconds);
     void setBackgroundTrackPlaybackRate(double rate);
@@ -66,11 +67,6 @@ private:
         QVector<Voice*> voices;
         int nextVoice = 0;
         bool configured = false;
-    };
-
-    struct TouchholdVoice {
-        struct Voice* voice = nullptr;
-        int activeSpanIndex = -1;
     };
 
     struct WarmupPathState {
@@ -120,7 +116,6 @@ private:
     double stretchedBackgroundPlaybackSecond() const;
     void applyVolumes();
     bool playKindInternal(const QString& kind, double gain = 1.0);
-    void updateTouchholdVoiceVolumes();
     void startTouchholdSpan(int spanIndex, double offsetSeconds);
     void stopTouchholdSpan(int spanIndex);
     bool playTouchholdAudition();
@@ -135,6 +130,8 @@ private:
     quint64 touchholdSoundLengthFrames_ = 0;
     quint32 deviceSampleRate_ = 48000;
     bool engineInitialized_ = false;
+    Voice* touchholdVoice_ = nullptr;
+    QVector<int> activeTouchholdSpanIndices_;
     Voice* backgroundTrackVoice_ = nullptr;
     bool backgroundTrackConfigured_ = false;
     StretchedBackgroundState* stretchedBackgroundState_ = nullptr;
@@ -149,6 +146,5 @@ private:
     SfxBank exSfx_;
     SfxBank touchSfx_;
     SfxBank fireworkSfx_;
-    QVector<TouchholdVoice> touchholdVoices_;
     EngineState* engineState_ = nullptr;
 };

@@ -361,6 +361,22 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     owner_.pausePreviewAction_->setToolTip(QString());
     connect(owner_.pausePreviewAction_, &QAction::triggered, &owner_, &MainWindow::onTogglePreviewPause);
     previewMenu->addAction(owner_.pausePreviewAction_);
+    owner_.stopOrPlayPreviewShortcutAction_ = new QAction(&owner_);
+    owner_.stopOrPlayPreviewShortcutAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+C")));
+    owner_.stopOrPlayPreviewShortcutAction_->setShortcutContext(Qt::ApplicationShortcut);
+    owner_.addAction(owner_.stopOrPlayPreviewShortcutAction_);
+    connect(owner_.stopOrPlayPreviewShortcutAction_, &QAction::triggered, &owner_, [this]() {
+        if (state_.qtPreviewPlaying_ || state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
+            owner_.onStopPreview();
+            return;
+        }
+        owner_.onTogglePreviewPause();
+    });
+    owner_.playPausePreviewShortcutAction_ = new QAction(&owner_);
+    owner_.playPausePreviewShortcutAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+X")));
+    owner_.playPausePreviewShortcutAction_->setShortcutContext(Qt::ApplicationShortcut);
+    owner_.addAction(owner_.playPausePreviewShortcutAction_);
+    connect(owner_.playPausePreviewShortcutAction_, &QAction::triggered, &owner_, &MainWindow::onTogglePreviewPause);
 
     auto* previewSlowerAction = new QAction(
         uiText("action.preview_speed_down", "Playback Speed -"),

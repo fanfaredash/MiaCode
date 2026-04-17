@@ -451,7 +451,7 @@ QFont editorFont(int pointSize)
     }
     font.setStyleHint(QFont::Monospace);
     font.setFixedPitch(true);
-    font.setPointSize(pointSize > 0 ? pointSize : 11);
+    font.setPointSize(pointSize > 0 ? pointSize : 10);
     return font;
 #endif
 }

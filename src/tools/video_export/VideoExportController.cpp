@@ -2,6 +2,7 @@
 
 #include "RawVideoPipeTransport.h"
 #include "VideoExportQuickRenderBackend.h"
+#include "VideoExportRuntimePolicy.h"
 #include "common/AssetPaths.h"
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
@@ -26,8 +27,10 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QImage>
+#include <QImageReader>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QPainter>
 #include <QProcess>
 #include <QProgressDialog>
 #include <QRect>
@@ -549,11 +552,8 @@ ExportRuntimeConfig loadExportRuntimeConfig()
         miacode::debug_options::envOptionalFlagValue("MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO");
     config.renderBackend.requestGpuRender =
         enablePboOverride.value_or(false) ? true : gpuRenderOverride.value_or(true);
-    if (disablePboOverride.value_or(false)) {
-        config.renderBackend.requestOffscreenPboReadback = false;
-    } else if (enablePboOverride.has_value()) {
-        config.renderBackend.requestOffscreenPboReadback = enablePboOverride.value();
-    }
+    config.renderBackend.requestOffscreenPboReadback =
+        miacode::video_export::shouldRequestOffscreenPboReadback(enablePboOverride, disablePboOverride);
 
     config.diag.repeatEnabled = miacode::debug_options::envFlagEnabled("MIACODE_EXPORT_DIAG_REPEAT");
     config.diag.cropBottom = qMax(0, miacode::debug_options::envIntValue("MIACODE_EXPORT_DIAG_CROP_BOTTOM", 0));
@@ -1692,6 +1692,89 @@ QImage buildCircularDimMaskImage(
     return mask;
 }
 
+QRectF staticMediaTargetRect(
+    const QSize& mediaSize,
+    const QSize& outputSize,
+    PreviewBackgroundScaleMode scaleMode)
+{
+    if (mediaSize.isEmpty() || outputSize.isEmpty()) {
+        return QRectF();
+    }
+
+    QSize fittedSize = mediaSize;
+    fittedSize.scale(
+        outputSize,
+        scaleMode == PreviewBackgroundScaleMode::FitContain
+            ? Qt::KeepAspectRatio
+            : Qt::KeepAspectRatioByExpanding
+    );
+    if (fittedSize.isEmpty()) {
+        return QRectF();
+    }
+
+    return QRectF(
+        (outputSize.width() - fittedSize.width()) * 0.5,
+        (outputSize.height() - fittedSize.height()) * 0.5,
+        fittedSize.width(),
+        fittedSize.height()
+    );
+}
+
+bool stageStaticBackgroundImageForExport(
+    const QString& sourcePath,
+    const QSize& outputSize,
+    PreviewBackgroundScaleMode scaleMode,
+    const QString& stagedPath,
+    QString* detail)
+{
+    if (detail != nullptr) {
+        detail->clear();
+    }
+
+    if (sourcePath.isEmpty() || outputSize.isEmpty() || stagedPath.isEmpty()) {
+        if (detail != nullptr) {
+            *detail = QStringLiteral("invalid_input");
+        }
+        return false;
+    }
+
+    QImageReader reader(sourcePath);
+    reader.setAutoTransform(true);
+    const QImage sourceImage = reader.read();
+    if (sourceImage.isNull()) {
+        if (detail != nullptr) {
+            *detail = QStringLiteral("read_failed error=%1").arg(reader.errorString());
+        }
+        return false;
+    }
+
+    QImage stagedImage(outputSize, QImage::Format_RGBA8888);
+    stagedImage.fill(Qt::black);
+
+    QPainter painter(&stagedImage);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.drawImage(staticMediaTargetRect(sourceImage.size(), outputSize, scaleMode), sourceImage);
+    painter.end();
+
+    if (!stagedImage.save(stagedPath)) {
+        if (detail != nullptr) {
+            *detail = QStringLiteral("save_failed path=%1").arg(stagedPath);
+        }
+        return false;
+    }
+
+    if (detail != nullptr) {
+        *detail = QStringLiteral("source=%1x%2 staged=%3x%4 mode=%5 path=%6")
+            .arg(sourceImage.width())
+            .arg(sourceImage.height())
+            .arg(stagedImage.width())
+            .arg(stagedImage.height())
+            .arg(scaleMode == PreviewBackgroundScaleMode::FitContain ? QStringLiteral("fit") : QStringLiteral("fill"))
+            .arg(stagedPath);
+    }
+    return true;
+}
+
 bool probeEncoderRuntimeAvailability(
     const QString& ffmpegPath,
     const VideoEncoderConfig& candidate,
@@ -2398,14 +2481,21 @@ bool mixSfxTrackToWav(
             continue;
         }
         if (playback.second + kTimelineEpsilonSeconds < timelineOriginSecond) {
-            continue;
+            if (previewSfxNormalizedKind(playback.kind) == QLatin1String("answer")
+                && playback.second + miacode::preview_sfx_timeline::kAnswerTriggerCompensationSeconds
+                    + kTimelineEpsilonSeconds
+                    >= timelineOriginSecond) {
+                // Keep compensated answer hits audible at the exact partial-export boundary.
+            } else {
+                continue;
+            }
         }
         const double volume = kindVolume(playback.kind);
         const double mixedGain = qMax(0.0, playback.gain) * qMax(0.0, volume);
         if (mixedGain <= 0.0) {
             continue;
         }
-        const double shiftedSecond = playback.second - timelineOriginSecond;
+        const double shiftedSecond = qMax(0.0, playback.second - timelineOriginSecond);
         if (shiftedSecond < 0.0) {
             continue;
         }
@@ -2414,7 +2504,8 @@ bool mixSfxTrackToWav(
     }
 
     const auto touchholdIt = clips.constFind(QStringLiteral("touchhold"));
-    if (touchholdIt != clips.constEnd() && settings.touchVolume > 0.0) {
+    const double touchholdGain = kindVolume(QStringLiteral("touchhold"));
+    if (touchholdIt != clips.constEnd() && touchholdGain > 0.0) {
         const DecodedClip& touchholdClip = touchholdIt.value();
         struct MixTouchholdSpan {
             qint64 startFrame = 0;
@@ -2422,8 +2513,6 @@ bool mixSfxTrackToWav(
         };
         QVector<MixTouchholdSpan> activeSpans;
         activeSpans.reserve(spans.size());
-        QVector<qint64> boundaries;
-        boundaries.reserve(spans.size() * 2);
         const qint64 totalMixFrames = mix.size() / kMixChannels;
         for (const ExportTouchholdSpan& span : spans) {
             if (span.endSecond <= span.startSecond) {
@@ -2446,45 +2535,42 @@ bool mixSfxTrackToWav(
             mixSpan.startFrame = startFrame;
             mixSpan.endFrame = qMin(audibleEndFrame, totalMixFrames);
             activeSpans.append(mixSpan);
-            boundaries.append(mixSpan.startFrame);
-            boundaries.append(mixSpan.endFrame);
         }
         if (!activeSpans.isEmpty()) {
-            std::sort(boundaries.begin(), boundaries.end());
-            boundaries.erase(std::unique(boundaries.begin(), boundaries.end()), boundaries.end());
-            for (int boundaryIndex = 0; boundaryIndex + 1 < boundaries.size(); ++boundaryIndex) {
-                const qint64 intervalStart = boundaries.at(boundaryIndex);
-                const qint64 intervalEnd = boundaries.at(boundaryIndex + 1);
-                if (intervalEnd <= intervalStart) {
+            std::sort(activeSpans.begin(), activeSpans.end(), [](const MixTouchholdSpan& a, const MixTouchholdSpan& b) {
+                if (a.startFrame != b.startFrame) {
+                    return a.startFrame < b.startFrame;
+                }
+                return a.endFrame < b.endFrame;
+            });
+
+            qint64 mergedStart = activeSpans.first().startFrame;
+            qint64 mergedEnd = activeSpans.first().endFrame;
+            for (int i = 1; i < activeSpans.size(); ++i) {
+                const MixTouchholdSpan& span = activeSpans.at(i);
+                if (span.startFrame <= mergedEnd) {
+                    mergedEnd = qMax(mergedEnd, span.endFrame);
                     continue;
                 }
-
-                QVector<const MixTouchholdSpan*> overlappingSpans;
-                overlappingSpans.reserve(activeSpans.size());
-                for (const MixTouchholdSpan& span : activeSpans) {
-                    if (span.startFrame < intervalEnd && span.endFrame > intervalStart) {
-                        overlappingSpans.append(&span);
-                    }
-                }
-                if (overlappingSpans.isEmpty()) {
-                    continue;
-                }
-
-                const double totalCopies = previewTouchholdAggregatePlaybackCopies(overlappingSpans.size());
-                const double perSpanGain =
-                    qBound(0.0, settings.touchVolume * (totalCopies / static_cast<double>(overlappingSpans.size())), 1.5);
-                for (const MixTouchholdSpan* span : overlappingSpans) {
-                    const qint64 clipStartFrame = intervalStart - span->startFrame;
-                    addClipToMix(
-                        touchholdClip,
-                        perSpanGain,
-                        intervalStart,
-                        intervalEnd - intervalStart,
-                        clipStartFrame,
-                        &mix
-                    );
-                }
+                addClipToMix(
+                    touchholdClip,
+                    touchholdGain,
+                    mergedStart,
+                    mergedEnd - mergedStart,
+                    0,
+                    &mix
+                );
+                mergedStart = span.startFrame;
+                mergedEnd = span.endFrame;
             }
+            addClipToMix(
+                touchholdClip,
+                touchholdGain,
+                mergedStart,
+                mergedEnd - mergedStart,
+                0,
+                &mix
+            );
         }
     }
 
@@ -2709,7 +2795,13 @@ bool preparePackedRgbaFrame(
     const QImage* rgba = &frame;
     if (rgba->format() != QImage::Format_RGBA8888) {
         *convertedFrame = frame.convertToFormat(QImage::Format_RGBA8888);
+        if (!frame.isNull() && convertedFrame->isNull()) {
+            return false;
+        }
         rgba = convertedFrame;
+    }
+    if (!frame.isNull() && rgba->isNull()) {
+        return false;
     }
 
     const int width = rgba->width();
@@ -2721,12 +2813,19 @@ bool preparePackedRgbaFrame(
     const qint64 packedStride = static_cast<qint64>(width) * 4;
     const qint64 packedSize = packedStride * height;
     if (rgba->bytesPerLine() == packedStride) {
+        if (packedSize > 0 && rgba->constBits() == nullptr) {
+            return false;
+        }
         *data = reinterpret_cast<const char*>(rgba->constBits());
         *size = packedSize;
         return true;
     }
 
     packedScratch->resize(static_cast<qsizetype>(packedSize));
+    if (packedScratch->size() != packedSize || (packedSize > 0 && packedScratch->data() == nullptr)) {
+        packedScratch->clear();
+        return false;
+    }
     for (int y = 0; y < height; ++y) {
         std::memcpy(
             packedScratch->data() + y * packedStride,
@@ -3389,6 +3488,30 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(encodedTempPath, remuxStagePath, task.outputPath)
     );
 
+    QString ffmpegMediaPath = mediaPath;
+    bool mediaUsesPreprocessedImage = false;
+    if (hasMedia && mediaIsImage) {
+        const QString stagedImagePath = QDir(tempDir.path()).filePath(QStringLiteral("background_media_staged.png"));
+        QString stagedImageDetail;
+        if (stageStaticBackgroundImageForExport(
+                mediaPath,
+                frameSize,
+                task.backgroundScaleMode,
+                stagedImagePath,
+                &stagedImageDetail)) {
+            ffmpegMediaPath = stagedImagePath;
+            mediaUsesPreprocessedImage = true;
+            appendVideoExportLog(QStringLiteral("stage_static_media"), stagedImageDetail);
+        } else {
+            appendVideoExportLog(
+                QStringLiteral("stage_static_media_fallback"),
+                QStringLiteral("source=%1 failure=%2")
+                    .arg(mediaPath)
+                    .arg(stagedImageDetail.isEmpty() ? QStringLiteral("unknown") : stagedImageDetail)
+            );
+        }
+    }
+
     const QString sfxWavPath = QDir(tempDir.path()).filePath(QStringLiteral("export_sfx.wav"));
     if (!mixSfxTrackToWav(
             sfxWavPath,
@@ -3474,7 +3597,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
                  << QStringLiteral("-framerate")
                  << QString::number(task.fps);
         }
-        args << QStringLiteral("-i") << mediaPath;
+        args << QStringLiteral("-i") << ffmpegMediaPath;
     }
     if (hasDimMask) {
         const QString dimMaskPath = QDir(tempDir.path()).filePath(QStringLiteral("dim_mask.png"));
@@ -3538,30 +3661,38 @@ VideoExportResult VideoExportController::exportPreparedTask(
                        .arg(totalSecondsText);
     if (hasMedia) {
         QString mediaChain = QStringLiteral("[%1:v]").arg(mediaInputIndex);
-        if (task.backgroundScaleMode == PreviewBackgroundScaleMode::FitContain) {
-            mediaChain += QStringLiteral(
-                "scale=%1:%2:force_original_aspect_ratio=decrease,pad=%1:%2:(ow-iw)/2:(oh-ih)/2:color=black")
-                .arg(frameWidth)
-                .arg(frameHeight);
-        } else {
-            mediaChain += QStringLiteral(
-                "scale=%1:%2:force_original_aspect_ratio=increase,crop=%1:%2")
-                .arg(frameWidth)
-                .arg(frameHeight);
+        QStringList mediaFilters;
+        if (!(mediaIsImage && mediaUsesPreprocessedImage)) {
+            if (task.backgroundScaleMode == PreviewBackgroundScaleMode::FitContain) {
+                mediaFilters << QStringLiteral(
+                    "scale=%1:%2:force_original_aspect_ratio=decrease,pad=%1:%2:(ow-iw)/2:(oh-ih)/2:color=black")
+                                    .arg(frameWidth)
+                                    .arg(frameHeight);
+            } else {
+                mediaFilters << QStringLiteral(
+                    "scale=%1:%2:force_original_aspect_ratio=increase,crop=%1:%2")
+                                    .arg(frameWidth)
+                                    .arg(frameHeight);
+            }
         }
-        mediaChain += QStringLiteral(",setsar=1,fps=%1,format=rgba").arg(task.fps);
+        mediaFilters << QStringLiteral("setsar=1")
+                     << QStringLiteral("fps=%1").arg(task.fps)
+                     << QStringLiteral("format=rgba");
         if (!mediaIsImage) {
             if (timelineOriginSecond > kTimelineEpsilonSeconds) {
-                mediaChain += QStringLiteral(",trim=start=%1:end=%2,setpts=PTS-STARTPTS")
-                    .arg(timelineOriginText)
-                    .arg(QString::number(timelineOriginSecond + alignedTotalSeconds, 'f', 6));
+                mediaFilters << QStringLiteral("trim=start=%1:end=%2")
+                                    .arg(timelineOriginText)
+                                    .arg(QString::number(timelineOriginSecond + alignedTotalSeconds, 'f', 6))
+                             << QStringLiteral("setpts=PTS-STARTPTS");
             } else if (timelineOriginSecond < -kTimelineEpsilonSeconds) {
-                mediaChain += QStringLiteral(",trim=start=0:end=%1,setpts=PTS-STARTPTS+%2/TB")
-                    .arg(QString::number(alignedTotalSeconds + timelineOriginSecond, 'f', 6))
-                    .arg(QString::number(-timelineOriginSecond, 'f', 6));
+                mediaFilters << QStringLiteral("trim=start=0:end=%1")
+                                    .arg(QString::number(alignedTotalSeconds + timelineOriginSecond, 'f', 6))
+                             << QStringLiteral("setpts=PTS-STARTPTS+%1/TB")
+                                    .arg(QString::number(-timelineOriginSecond, 'f', 6));
             }
-            mediaChain += QStringLiteral(",tpad=stop_mode=clone:stop_duration=%1").arg(totalSecondsText);
+            mediaFilters << QStringLiteral("tpad=stop_mode=clone:stop_duration=%1").arg(totalSecondsText);
         }
+        mediaChain += mediaFilters.join(QLatin1Char(','));
         mediaChain += QStringLiteral("[media_src]");
         filterParts << mediaChain;
         filterParts << QStringLiteral("[base_fill][media_src]overlay=0:0:format=rgb:alpha=straight[base_media]");
@@ -3580,13 +3711,13 @@ VideoExportResult VideoExportController::exportPreparedTask(
 
     // Quick export frames are already read back in top-left raster order.
     filterParts << QStringLiteral("[0:v]format=rgba[overlay_src]");
-    filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3[sfx]")
+    filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3,aformat=channel_layouts=stereo[sfx]")
                        .arg(sfxInputIndex)
                        .arg(totalSecondsText)
                        .arg(kMixSampleRate);
     if (hasTrack) {
         if (timelineOriginSecond > kTimelineEpsilonSeconds) {
-            filterParts << QStringLiteral("[%1:a]atrim=start=%2:end=%3,asetpts=PTS-STARTPTS,aresample=%4,volume=%5[bgm]")
+            filterParts << QStringLiteral("[%1:a]atrim=start=%2:end=%3,asetpts=PTS-STARTPTS,aresample=%4,aformat=channel_layouts=stereo,volume=%5[bgm]")
                                .arg(bgmInputIndex)
                                .arg(timelineOriginText)
                                .arg(QString::number(timelineOriginSecond + alignedTotalSeconds, 'f', 6))
@@ -3594,14 +3725,14 @@ VideoExportResult VideoExportController::exportPreparedTask(
                                .arg(QString::number(task.audioSettings.bgmVolume, 'f', 6));
         } else if (timelineOriginSecond < -kTimelineEpsilonSeconds) {
             const int delayMs = qMax(0, qRound(-timelineOriginSecond * 1000.0));
-            filterParts << QStringLiteral("[%1:a]atrim=start=0:end=%2,asetpts=PTS-STARTPTS,adelay=%3|%3,aresample=%4,volume=%5[bgm]")
+            filterParts << QStringLiteral("[%1:a]atrim=start=0:end=%2,asetpts=PTS-STARTPTS,adelay=%3|%3,aresample=%4,aformat=channel_layouts=stereo,volume=%5[bgm]")
                                .arg(bgmInputIndex)
                                .arg(QString::number(alignedTotalSeconds + timelineOriginSecond, 'f', 6))
                                .arg(delayMs)
                                .arg(kMixSampleRate)
                                .arg(QString::number(task.audioSettings.bgmVolume, 'f', 6));
         } else {
-            filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3,volume=%4[bgm]")
+            filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3,aformat=channel_layouts=stereo,volume=%4[bgm]")
                                .arg(bgmInputIndex)
                                .arg(totalSecondsText)
                                .arg(kMixSampleRate)

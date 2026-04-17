@@ -215,8 +215,14 @@ void QuickShellStyleBridge::refreshFromBackend()
         {QStringLiteral("statusHeight"), 28},
         {QStringLiteral("previewPanelMinWidth"), previewPanelMinWidth},
         {QStringLiteral("previewPanelMaxWidth"), miacode::window_parity::kEmbeddedPreviewPanelWidthMax},
+        {QStringLiteral("previewControlStatsCardMinWidth"), miacode::window_parity::kPreviewControlStatsCardMinWidth},
         {QStringLiteral("previewSplitterHandleWidth"), 6},
         {QStringLiteral("previewShellWidth"), 360},
+        {QStringLiteral("previewCanvasAspectRatio"), 1.0},
+        {QStringLiteral("previewPanelMarginX"), miacode::window_parity::kPreviewPanelMarginX},
+        {QStringLiteral("previewPanelMarginTop"), miacode::window_parity::kPreviewPanelMarginTop},
+        {QStringLiteral("previewCanvasControlGap"), miacode::window_parity::kPreviewCanvasControlGap},
+        {QStringLiteral("previewStatsBottomGap"), miacode::window_parity::kPreviewStatsBottomGap},
         {QStringLiteral("previewControlsHeight"), 200},
         {QStringLiteral("previewSpeedButtonWidth"), miacode::window_parity::kPreviewSpeedButtonWidth},
         {QStringLiteral("previewControlButtonMinHeight"), miacode::window_parity::kPreviewControlButtonMinHeight},
@@ -243,6 +249,10 @@ void QuickShellStyleBridge::refreshFromBackend()
     };
 
     if (contentProvider_ != nullptr) {
+        nextMetrics.insert(
+            QStringLiteral("previewCanvasAspectRatio"),
+            contentProvider_->shellNormalizedPreviewCanvasAspectRatio()
+        );
         const int outlineWidth =
             contentProvider_->shellOutlineDockWidget() != nullptr
                 ? contentProvider_->shellOutlineDockWidget()->width()

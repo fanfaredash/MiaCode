@@ -51,6 +51,8 @@ public:
     virtual double shellPreviewPositionSeconds() const = 0;
     virtual double shellPreviewDurationSeconds() const = 0;
     virtual QStringList shellPreviewStatsTexts() const = 0;
+    virtual double shellPreviewCanvasAspectRatio() const = 0;
+    virtual quint64 shellPreviewPaneRestoreGeneration() const = 0;
     virtual bool shellPreviewFullscreen() const = 0;
     virtual QObject* shellPreviewRuntimeObject() const = 0;
     virtual QObject* shellPreviewStageMediaHostObject() const = 0;

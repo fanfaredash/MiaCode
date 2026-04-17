@@ -193,6 +193,34 @@ QString formatPreviewHudTimeLabel(double seconds)
         .arg(ms, 3, 10, QChar('0'));
 }
 
+QFont previewHudTimestampFont(int pointSize, QFont::Weight weight)
+{
+    static const QString embeddedJetBrainsMonoFamily = []() -> QString {
+        const int fontId = QFontDatabase::addApplicationFont(QStringLiteral(":/fonts/jetbrains_mono.ttf"));
+        if (fontId < 0) {
+            return QString();
+        }
+        const QStringList families = QFontDatabase::applicationFontFamilies(fontId);
+        return families.isEmpty() ? QString() : families.first();
+    }();
+
+    QFont font;
+    if (!embeddedJetBrainsMonoFamily.isEmpty()) {
+        font.setFamily(embeddedJetBrainsMonoFamily);
+    } else {
+        font.setFamily(QStringLiteral("JetBrains Mono"));
+    }
+    if (font.family().isEmpty() || QFontInfo(font).family().compare(font.family(), Qt::CaseInsensitive) != 0) {
+        font = previewHudMonoFont(pointSize, weight);
+    } else {
+        font.setPointSize(pointSize);
+        font.setWeight(weight);
+    }
+    font.setStyleHint(QFont::Monospace);
+    font.setFixedPitch(true);
+    return font;
+}
+
 QFont previewHudMonoFont(int pointSize, QFont::Weight weight)
 {
     QFont font;

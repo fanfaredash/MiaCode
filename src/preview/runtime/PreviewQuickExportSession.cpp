@@ -1,5 +1,6 @@
 #include "preview/runtime/PreviewQuickExportSession.h"
 
+#include "common/DebugLog.h"
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
 
@@ -30,33 +31,27 @@ inline uchar unpremultiplyChannel(uchar channel, uchar alpha)
     return static_cast<uchar>(qBound(0, (static_cast<int>(channel) * 255 + alpha / 2) / alpha, 255));
 }
 
-void unpremultiplyRgba8888InPlace(QImage* image)
+qsizetype readbackByteCount(const QSize& imageSize)
 {
-    if (image == nullptr || image->isNull()) {
-        return;
-    }
-    if (image->format() != QImage::Format_RGBA8888) {
-        *image = image->convertToFormat(QImage::Format_RGBA8888);
-    }
-    for (int y = 0; y < image->height(); ++y) {
-        uchar* row = image->scanLine(y);
-        for (int x = 0; x < image->width(); ++x) {
-            uchar* px = row + x * 4;
-            const uchar alpha = px[3];
-            if (alpha == 0) {
-                px[0] = 0;
-                px[1] = 0;
-                px[2] = 0;
-                continue;
-            }
-            if (alpha == 255) {
-                continue;
-            }
-            px[0] = unpremultiplyChannel(px[0], alpha);
-            px[1] = unpremultiplyChannel(px[1], alpha);
-            px[2] = unpremultiplyChannel(px[2], alpha);
-        }
-    }
+    return static_cast<qsizetype>(qMax(1, imageSize.width()))
+        * static_cast<qsizetype>(qMax(1, imageSize.height()))
+        * 4;
+}
+
+void appendExportSessionLog(const QString& scope, const QString& detail = QString())
+{
+    miacode::debug_log::appendLine(miacode::debug_log::Channel::Export, scope, detail);
+}
+
+QString glEnumHex(GLenum value)
+{
+    return QStringLiteral("0x%1").arg(static_cast<qulonglong>(value), 0, 16);
+}
+
+bool isOpenGlAtLeast(const QSurfaceFormat& format, int major, int minor)
+{
+    return format.majorVersion() > major
+        || (format.majorVersion() == major && format.minorVersion() >= minor);
 }
 
 }  // namespace
@@ -95,6 +90,8 @@ void PreviewQuickExportSession::setFrameSize(const QSize& size)
     frameSize_ = safeSize;
     applyFrameSize();
     destroyFramebuffer();
+    directReadbackBuffer_.clear();
+    reusableReadbackFrame_ = QImage();
 }
 
 bool PreviewQuickExportSession::initialize(
@@ -109,6 +106,11 @@ bool PreviewQuickExportSession::initialize(
 
     requestedFormat_ = requestedFormat;
     shareContext_ = shareContext;
+    clearOffscreenReadbackPboState();
+    clearOffscreenPboCapabilityCache();
+    directReadbackBuffer_.clear();
+    reusableReadbackFrame_ = QImage();
+    lastRenderStats_ = PreviewQuickExportRenderStats();
 
     QSurfaceFormat surfaceFormat = requestedFormat_;
     if (shareContext_ != nullptr && shareContext_->isValid()) {
@@ -189,20 +191,59 @@ bool PreviewQuickExportSession::initialize(
 
 void PreviewQuickExportSession::invalidate()
 {
-    if (context_ != nullptr && offscreenSurface_ != nullptr && quickWindow_ != nullptr && renderControl_ != nullptr) {
-        if (context_->makeCurrent(offscreenSurface_)) {
-            destroyOffscreenReadbackPbos();
-            destroyFramebuffer();
-            quickWindow_->releaseResources();
-            renderControl_->invalidate();
-            context_->doneCurrent();
-        } else {
-            destroyOffscreenReadbackPbos();
-            destroyFramebuffer();
-        }
-    } else {
+    const bool needMakeCurrent =
+        context_ != nullptr
+        && offscreenSurface_ != nullptr
+        && QOpenGLContext::currentContext() != context_;
+    const bool teardownContextCurrent =
+        context_ != nullptr
+        && offscreenSurface_ != nullptr
+        && (!needMakeCurrent || context_->makeCurrent(offscreenSurface_));
+    if (teardownContextCurrent) {
         destroyOffscreenReadbackPbos();
         destroyFramebuffer();
+        if (quickWindow_ != nullptr) {
+            quickWindow_->releaseResources();
+        }
+        if (renderControl_ != nullptr) {
+            renderControl_->invalidate();
+        }
+        if (context_ != nullptr) {
+            context_->doneCurrent();
+        }
+    } else {
+        if (framebuffer_ != nullptr
+            || quickWindow_ != nullptr
+            || renderControl_ != nullptr
+            || offscreenReadbackPbos_[0] != 0
+            || offscreenReadbackPbos_[1] != 0) {
+            appendExportSessionLog(
+                QStringLiteral("export_context_not_current_on_teardown"),
+                QStringLiteral(
+                    "trigger=invalidate makeCurrent=%1 hasContext=%2 hasSurface=%3 hasFramebuffer=%4 hasQuickWindow=%5 hasRenderControl=%6 skipExplicitGlCleanup=1"
+                )
+                    .arg(needMakeCurrent ? 0 : (context_ != nullptr && offscreenSurface_ != nullptr ? 1 : 0))
+                    .arg(context_ != nullptr ? 1 : 0)
+                    .arg(offscreenSurface_ != nullptr ? 1 : 0)
+                    .arg(framebuffer_ != nullptr ? 1 : 0)
+                    .arg(quickWindow_ != nullptr ? 1 : 0)
+                    .arg(renderControl_ != nullptr ? 1 : 0)
+            );
+        }
+        clearOffscreenReadbackPboState();
+        framebuffer_ = nullptr;
+        quickWindow_ = nullptr;
+        rootItem_ = nullptr;
+        sceneRoot_ = nullptr;
+        hudLayer_ = nullptr;
+        renderControl_ = nullptr;
+        context_ = nullptr;
+        offscreenSurface_ = nullptr;
+        directReadbackBuffer_.clear();
+        reusableReadbackFrame_ = QImage();
+        clearOffscreenPboCapabilityCache();
+        lastRenderStats_ = PreviewQuickExportRenderStats();
+        return;
     }
 
     delete quickWindow_;
@@ -220,6 +261,10 @@ void PreviewQuickExportSession::invalidate()
     delete offscreenSurface_;
     offscreenSurface_ = nullptr;
 
+    clearOffscreenReadbackPboState();
+    clearOffscreenPboCapabilityCache();
+    directReadbackBuffer_.clear();
+    reusableReadbackFrame_ = QImage();
     lastRenderStats_ = PreviewQuickExportRenderStats();
 }
 
@@ -245,64 +290,208 @@ QImage PreviewQuickExportSession::renderFrame(QString* errorMessage)
         return QImage();
     }
 
+    const QSize pixelSize = framebufferPixelSize();
+    if (!ensureDirectReadbackBuffer(pixelSize, errorMessage)) {
+        context_->doneCurrent();
+        return QImage();
+    }
+
+    QOpenGLFunctions* gl = context_ != nullptr ? context_->functions() : nullptr;
+    if (gl == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("Quick export OpenGL functions are unavailable for direct readback");
+        }
+        context_->doneCurrent();
+        return QImage();
+    }
+
     QElapsedTimer readbackTimer;
     readbackTimer.start();
-    const QImage frame = framebuffer_->toImage(true);
+    GLint previousPackAlignment = 4;
+    gl->glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
+    gl->glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    gl->glReadPixels(
+        0,
+        0,
+        pixelSize.width(),
+        pixelSize.height(),
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        directReadbackBuffer_.data()
+    );
+    gl->glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
+    if (!convertBottomUpPremultipliedReadbackToStraightRgba(
+            reinterpret_cast<const uchar*>(directReadbackBuffer_.constData()),
+            static_cast<qsizetype>(pixelSize.width()) * 4,
+            pixelSize,
+            &reusableReadbackFrame_,
+            errorMessage)) {
+        context_->doneCurrent();
+        return QImage();
+    }
     lastRenderStats_.readbackNs = readbackTimer.nsecsElapsed();
     context_->doneCurrent();
-    return frame;
+    return reusableReadbackFrame_;
 }
 
 bool PreviewQuickExportSession::supportsOffscreenPboReadback(QString* errorMessage) const
+{
+    if (offscreenPboCapabilityProbed_) {
+        if (errorMessage != nullptr && !offscreenPboCapabilitySupported_) {
+            *errorMessage = offscreenPboCapabilityError_;
+        }
+        return offscreenPboCapabilitySupported_;
+    }
+
+    if (errorMessage != nullptr) {
+        errorMessage->clear();
+    }
+
+    const auto finishProbe = [&](bool supported, const QString& reason, const QString& detail) {
+        offscreenPboCapabilityProbed_ = true;
+        offscreenPboCapabilitySupported_ = supported;
+        offscreenPboCapabilityError_ = supported ? QString() : reason;
+        appendExportSessionLog(QStringLiteral("pbo_capability_probe"), detail);
+        if (!supported && errorMessage != nullptr) {
+            *errorMessage = reason;
+        }
+        return supported;
+    };
+
+    if (context_ == nullptr || offscreenSurface_ == nullptr) {
+        return finishProbe(
+            false,
+            QStringLiteral("Quick export OpenGL context is unavailable"),
+            QStringLiteral(
+                "version=unknown extra=0 pixelPack=0 mapRange=0 mapProc=0 extPbo=0 extMapRange=0 smoke=skipped result=disable reason=context_unavailable"
+            )
+        );
+    }
+
+    const bool needMakeCurrent =
+        QOpenGLContext::currentContext() != context_;
+    if (needMakeCurrent && !context_->makeCurrent(offscreenSurface_)) {
+        return finishProbe(
+            false,
+            QStringLiteral("failed to make Quick export context current for PBO detection"),
+            QStringLiteral(
+                "version=unknown extra=0 pixelPack=0 mapRange=0 mapProc=0 extPbo=0 extMapRange=0 smoke=skipped result=disable reason=makeCurrent_failed"
+            )
+        );
+    }
+
+    QOpenGLFunctions* gl = context_->functions();
+    QOpenGLExtraFunctions* extra = context_->extraFunctions();
+    const QSurfaceFormat format = context_->format();
+    const bool versionAtLeast30 = isOpenGlAtLeast(format, 3, 0);
+    const bool hasPboExtension = context_->hasExtension(QByteArrayLiteral("GL_ARB_pixel_buffer_object"));
+    const bool hasMapRangeExtension = context_->hasExtension(QByteArrayLiteral("GL_ARB_map_buffer_range"));
+    const bool pixelPackBufferSupported = versionAtLeast30 || hasPboExtension;
+    const bool mapBufferRangeSupported = versionAtLeast30 || hasMapRangeExtension;
+    const bool mapBufferRangeProcAvailable =
+        context_->getProcAddress("glMapBufferRange") != nullptr
+        || context_->getProcAddress("glMapBufferRangeARB") != nullptr;
+
+    QString reason;
+    QString smokeProbeStatus = QStringLiteral("skipped");
+    if (gl == nullptr) {
+        reason = QStringLiteral("Quick export OpenGL functions are unavailable for PBO detection");
+    } else if (extra == nullptr) {
+        reason = QStringLiteral("OpenGL extra functions are unavailable for PBO readback");
+    } else if (!pixelPackBufferSupported) {
+        reason = QStringLiteral("OpenGL context does not expose pixel pack buffer support");
+    } else if (!mapBufferRangeSupported) {
+        reason = QStringLiteral("OpenGL context does not expose map buffer range support required for PBO readback");
+    } else if (!mapBufferRangeProcAvailable) {
+        reason = QStringLiteral("OpenGL context does not expose a glMapBufferRange entry point for PBO readback");
+    } else {
+        while (gl->glGetError() != GL_NO_ERROR) {
+        }
+        GLint previousPackBufferBinding = 0;
+        gl->glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &previousPackBufferBinding);
+
+        GLuint probeBuffer = 0;
+        extra->glGenBuffers(1, &probeBuffer);
+        if (probeBuffer == 0) {
+            reason = QStringLiteral("failed to allocate smoke probe pixel pack buffer");
+            smokeProbeStatus = QStringLiteral("glGenBuffers=0");
+        } else {
+            extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, probeBuffer);
+            extra->glBufferData(GL_PIXEL_PACK_BUFFER, 16, nullptr, GL_STREAM_READ);
+            const GLenum allocError = gl->glGetError();
+            if (allocError != GL_NO_ERROR) {
+                reason = QStringLiteral("failed to allocate smoke probe pixel pack buffer storage");
+                smokeProbeStatus = QStringLiteral("glBufferData_error=%1").arg(glEnumHex(allocError));
+            } else {
+                void* mapped = extra->glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, 16, GL_MAP_READ_BIT);
+                const GLenum mapError = gl->glGetError();
+                if (mapped == nullptr || mapError != GL_NO_ERROR) {
+                    reason = QStringLiteral("failed to map smoke probe pixel pack buffer");
+                    smokeProbeStatus = QStringLiteral("glMapBufferRange_error=%1 mapped=%2")
+                                           .arg(glEnumHex(mapError))
+                                           .arg(mapped != nullptr ? 1 : 0);
+                } else {
+                    const bool unmapOk = extra->glUnmapBuffer(GL_PIXEL_PACK_BUFFER) == GL_TRUE;
+                    const GLenum unmapError = gl->glGetError();
+                    if (!unmapOk || unmapError != GL_NO_ERROR) {
+                        reason = QStringLiteral("failed to unmap smoke probe pixel pack buffer");
+                        smokeProbeStatus = QStringLiteral("glUnmapBuffer_error=%1 ok=%2")
+                                               .arg(glEnumHex(unmapError))
+                                               .arg(unmapOk ? 1 : 0);
+                    } else {
+                        smokeProbeStatus = QStringLiteral("pass");
+                    }
+                }
+            }
+            extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, static_cast<GLuint>(qMax(0, previousPackBufferBinding)));
+            extra->glDeleteBuffers(1, &probeBuffer);
+        }
+    }
+
+    const bool supported = reason.isEmpty();
+    const QString detail = QStringLiteral(
+        "version=%1.%2 extra=%3 pixelPack=%4 mapRange=%5 mapProc=%6 extPbo=%7 extMapRange=%8 smoke=%9 result=%10 reason=%11"
+    )
+                               .arg(format.majorVersion())
+                               .arg(format.minorVersion())
+                               .arg(extra != nullptr ? 1 : 0)
+                               .arg(pixelPackBufferSupported ? 1 : 0)
+                               .arg(mapBufferRangeSupported ? 1 : 0)
+                               .arg(mapBufferRangeProcAvailable ? 1 : 0)
+                               .arg(hasPboExtension ? 1 : 0)
+                               .arg(hasMapRangeExtension ? 1 : 0)
+                               .arg(smokeProbeStatus)
+                               .arg(supported ? QStringLiteral("enable") : QStringLiteral("disable"))
+                               .arg(supported ? QStringLiteral("ok") : reason);
+    if (needMakeCurrent) {
+        context_->doneCurrent();
+    }
+    return finishProbe(supported, reason, detail);
+}
+
+void PreviewQuickExportSession::resetOffscreenPboReadback()
 {
     const bool needMakeCurrent =
         context_ != nullptr
         && offscreenSurface_ != nullptr
         && QOpenGLContext::currentContext() != context_;
-    if (needMakeCurrent && !context_->makeCurrent(offscreenSurface_)) {
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("failed to make Quick export context current for PBO detection");
-        }
-        return false;
-    }
-
-    QOpenGLContext* activeContext = context_ != nullptr ? context_ : QOpenGLContext::currentContext();
-    if (activeContext == nullptr) {
-        if (needMakeCurrent) {
-            context_->doneCurrent();
-        }
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("Quick export OpenGL context is unavailable");
-        }
-        return false;
-    }
-
-    const QSurfaceFormat format = activeContext->format();
-    const bool versionSupported =
-        format.majorVersion() > 2 || (format.majorVersion() == 2 && format.minorVersion() >= 1);
-    if (versionSupported || activeContext->hasExtension(QByteArrayLiteral("GL_ARB_pixel_buffer_object"))) {
-        if (needMakeCurrent) {
-            context_->doneCurrent();
-        }
-        return true;
-    }
-    if (needMakeCurrent) {
-        context_->doneCurrent();
-    }
-    if (errorMessage != nullptr) {
-        *errorMessage = QStringLiteral("OpenGL context does not expose pixel pack buffer support");
-    }
-    return false;
-}
-
-void PreviewQuickExportSession::resetOffscreenPboReadback()
-{
-    if (context_ != nullptr && offscreenSurface_ != nullptr && context_->makeCurrent(offscreenSurface_)) {
+    if (context_ != nullptr
+        && offscreenSurface_ != nullptr
+        && (!needMakeCurrent || context_->makeCurrent(offscreenSurface_))) {
         destroyOffscreenReadbackPbos();
-        context_->doneCurrent();
+        if (needMakeCurrent) {
+            context_->doneCurrent();
+        }
         return;
     }
-    destroyOffscreenReadbackPbos();
+    if (offscreenReadbackPbos_[0] != 0 || offscreenReadbackPbos_[1] != 0) {
+        appendExportSessionLog(
+            QStringLiteral("pbo_cleanup_deferred"),
+            QStringLiteral("trigger=reset makeCurrent=%1 skipExplicitDelete=1")
+                .arg(needMakeCurrent ? 0 : (context_ != nullptr && offscreenSurface_ != nullptr ? 1 : 0))
+        );
+    }
+    clearOffscreenReadbackPboState();
 }
 
 bool PreviewQuickExportSession::renderFramePboStep(
@@ -355,19 +544,24 @@ bool PreviewQuickExportSession::renderFramePboStep(
         return false;
     }
 
+    QOpenGLFunctions* gl = context_ != nullptr ? context_->functions() : nullptr;
     QOpenGLExtraFunctions* extra = context_ != nullptr ? context_->extraFunctions() : nullptr;
-    if (extra == nullptr) {
+    if (gl == nullptr || extra == nullptr) {
         if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("OpenGL extra functions are unavailable for PBO readback");
+            *errorMessage = QStringLiteral("OpenGL functions are unavailable for PBO readback");
         }
         context_->doneCurrent();
         return false;
     }
 
+    GLint previousPackAlignment = 4;
+    gl->glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
+    gl->glPixelStorei(GL_PACK_ALIGNMENT, 1);
     const int writeIndex = offscreenReadbackPboWriteIndex_;
     extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, offscreenReadbackPbos_[writeIndex]);
     extra->glReadPixels(0, 0, pixelSize.width(), pixelSize.height(), GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
     extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    gl->glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
 
     if (offscreenReadbackPendingIndex_ >= 0) {
         QElapsedTimer readbackTimer;
@@ -432,10 +626,97 @@ bool PreviewQuickExportSession::ensureFramebuffer(QString* errorMessage)
     return true;
 }
 
+bool PreviewQuickExportSession::ensureDirectReadbackBuffer(const QSize& imageSize, QString* errorMessage)
+{
+    const QSize safeSize(qMax(1, imageSize.width()), qMax(1, imageSize.height()));
+    const qsizetype byteCount = readbackByteCount(safeSize);
+    if (directReadbackBuffer_.size() != byteCount) {
+        directReadbackBuffer_.resize(byteCount);
+    }
+    if (directReadbackBuffer_.size() != byteCount) {
+        directReadbackBuffer_.clear();
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to allocate Quick export direct readback buffer");
+        }
+        return false;
+    }
+    return true;
+}
+
+bool PreviewQuickExportSession::convertBottomUpPremultipliedReadbackToStraightRgba(
+    const uchar* sourceBytes,
+    qsizetype sourceBytesPerRow,
+    const QSize& imageSize,
+    QImage* frame,
+    QString* errorMessage)
+{
+    if (frame == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("invalid Quick export readback output image");
+        }
+        return false;
+    }
+    if (sourceBytes == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("Quick export readback source bytes are null");
+        }
+        return false;
+    }
+
+    const QSize safeSize(qMax(1, imageSize.width()), qMax(1, imageSize.height()));
+    const qsizetype expectedBytesPerRow = static_cast<qsizetype>(safeSize.width()) * 4;
+    if (sourceBytesPerRow < expectedBytesPerRow) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("Quick export readback row stride is smaller than RGBA output width");
+        }
+        return false;
+    }
+    if (frame->isNull()
+        || frame->size() != safeSize
+        || frame->format() != QImage::Format_RGBA8888) {
+        *frame = QImage(safeSize, QImage::Format_RGBA8888);
+    }
+    if (frame->isNull()) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to allocate Quick export straight RGBA frame buffer");
+        }
+        return false;
+    }
+
+    for (int row = 0; row < safeSize.height(); ++row) {
+        const int sourceRow = safeSize.height() - 1 - row;
+        const uchar* sourceRowBytes =
+            sourceBytes + static_cast<qsizetype>(sourceRow) * sourceBytesPerRow;
+        uchar* outputRow = frame->scanLine(row);
+        for (int x = 0; x < safeSize.width(); ++x) {
+            const uchar* src = sourceRowBytes + x * 4;
+            uchar* dst = outputRow + x * 4;
+            const uchar alpha = src[3];
+            dst[3] = alpha;
+            if (alpha == 0) {
+                dst[0] = 0;
+                dst[1] = 0;
+                dst[2] = 0;
+                continue;
+            }
+            if (alpha == 255) {
+                dst[0] = src[0];
+                dst[1] = src[1];
+                dst[2] = src[2];
+                continue;
+            }
+            dst[0] = unpremultiplyChannel(src[0], alpha);
+            dst[1] = unpremultiplyChannel(src[1], alpha);
+            dst[2] = unpremultiplyChannel(src[2], alpha);
+        }
+    }
+    return true;
+}
+
 bool PreviewQuickExportSession::ensureOffscreenReadbackPbos(const QSize& imageSize, QString* errorMessage)
 {
     const QSize safeSize(qMax(1, imageSize.width()), qMax(1, imageSize.height()));
-    const qsizetype byteCount = static_cast<qsizetype>(safeSize.width()) * safeSize.height() * 4;
+    const qsizetype byteCount = readbackByteCount(safeSize);
     if (offscreenReadbackPbos_[0] != 0
         && offscreenReadbackPbos_[1] != 0
         && offscreenReadbackPboSize_ == safeSize
@@ -512,22 +793,26 @@ bool PreviewQuickExportSession::mapOffscreenReadbackPbo(
         return false;
     }
 
-    QImage output(safeSize, QImage::Format_RGBA8888);
     const uchar* sourceBytes = static_cast<const uchar*>(mapped);
-    for (int row = 0; row < safeSize.height(); ++row) {
-        const int sourceRow = safeSize.height() - 1 - row;
-        std::memcpy(
-            output.scanLine(row),
-            sourceBytes + (static_cast<qsizetype>(sourceRow) * bytesPerRow),
-            bytesPerRow
-        );
-    }
-    extra->glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+    const bool normalized = convertBottomUpPremultipliedReadbackToStraightRgba(
+        sourceBytes,
+        bytesPerRow,
+        safeSize,
+        &reusableReadbackFrame_,
+        errorMessage
+    );
+    const bool unmapOk = extra->glUnmapBuffer(GL_PIXEL_PACK_BUFFER) == GL_TRUE;
     extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-    // Qt Quick renders into a premultiplied-alpha target. Export frames are
-    // packed downstream as straight RGBA for ffmpeg overlay compositing.
-    unpremultiplyRgba8888InPlace(&output);
-    *frame = std::move(output);
+    if (!normalized) {
+        return false;
+    }
+    if (!unmapOk) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to unmap Quick export readback PBO");
+        }
+        return false;
+    }
+    *frame = reusableReadbackFrame_;
     return true;
 }
 
@@ -598,15 +883,29 @@ void PreviewQuickExportSession::destroyFramebuffer()
 void PreviewQuickExportSession::destroyOffscreenReadbackPbos()
 {
     QOpenGLExtraFunctions* extra = context_ != nullptr ? context_->extraFunctions() : nullptr;
-    if (extra != nullptr && (offscreenReadbackPbos_[0] != 0 || offscreenReadbackPbos_[1] != 0)) {
+    if (extra != nullptr
+        && QOpenGLContext::currentContext() == context_
+        && (offscreenReadbackPbos_[0] != 0 || offscreenReadbackPbos_[1] != 0)) {
         extra->glDeleteBuffers(2, offscreenReadbackPbos_);
     }
+    clearOffscreenReadbackPboState();
+}
+
+void PreviewQuickExportSession::clearOffscreenReadbackPboState()
+{
     offscreenReadbackPbos_[0] = 0;
     offscreenReadbackPbos_[1] = 0;
     offscreenReadbackPboSize_ = QSize();
     offscreenReadbackPboBytes_ = 0;
     offscreenReadbackPboWriteIndex_ = 0;
     offscreenReadbackPendingIndex_ = -1;
+}
+
+void PreviewQuickExportSession::clearOffscreenPboCapabilityCache()
+{
+    offscreenPboCapabilityProbed_ = false;
+    offscreenPboCapabilitySupported_ = false;
+    offscreenPboCapabilityError_.clear();
 }
 
 void PreviewQuickExportSession::applyFrameSize()

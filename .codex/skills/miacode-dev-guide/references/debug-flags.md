@@ -16,6 +16,7 @@ The user-facing canonical doc lives at `docs/DEBUG_INDEX.md`. This file stays sh
   - `MIACODE_LOG_DIR`
 - Default debug-mode fallback:
   - project-local `.miacode/logs/` once a chart file is bound, otherwise app-local `logs/` next to the running executable when `MIACODE_LOG_DIR` and per-channel overrides are unset
+  - export worker launches now pre-bind `MIACODE_LOG_DIR` to the snapshot chart's `.miacode/logs/` directory when no explicit shared log-dir override is present, and the worker also restores the same path after snapshot parse for direct CLI-worker runs
 - Channel-specific path overrides:
   - `MIACODE_RUNTIME_LOG_PATH`
   - `MIACODE_AUDIO_LOG_PATH`
@@ -146,7 +147,10 @@ Primary owners:
   - `edit/metadata_perf`
   - `edit/quick_timeline_perf`
   - `edit/follow_sync_perf`
+  - `edit/follow_sync_breakdown`
   - `edit/extra_selections_perf`
+  - `edit/extra_selections_validation_perf`
+  - `edit/extra_selections_apply_perf`
   - `edit/muri_perf`
   - `edit/validation_perf`
   - `edit/validation_apply_perf`
@@ -186,6 +190,9 @@ Owner: `src/tools/video_export/VideoExportController.cpp`
   - `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO`
   - `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO`
   - these now drive `VideoExportQuickRenderBackend` plus `PreviewQuickExportSession`, not the removed legacy offscreen renderer
+  - default export path keeps GPU offscreen render enabled and requests PBO readback unless `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1`
+  - `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1` is the standard safety override and the forced env used by worker crash retry
+  - `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO=1` now only makes the default explicit
 - Encoder selection and tuning:
   - `MIACODE_EXPORT_SKIP_ENCODER_RUNTIME_PROBE`
   - `MIACODE_EXPORT_FORCE_ENCODER`
@@ -202,6 +209,9 @@ Current normalization rules:
 - object-trace max-lines defaults to `max(diag_max_lines, 5000)` unless explicitly overridden.
 - `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO` wins over `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO`.
 - `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO` implies GPU render should be requested.
+- offscreen PBO readback defaults to enabled unless explicitly disabled.
+- export log tags `pbo_capability_probe`, `pbo_cleanup_deferred`, and `export_context_not_current_on_teardown` are the primary probe / teardown breadcrumbs for PBO stability issues.
+- export worker `CrashExit` retries exactly once, only when the crashing attempt still requested PBO, and the retry injects `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1`.
 - encoder auto mode defaults to `balanced`.
 
 ## 6. Helper Binaries And Scripts For Debug Work
