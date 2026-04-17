@@ -21,6 +21,7 @@ struct PreviewHudStats {
 
 PreviewHudStats computePreviewHudStats(const QVector<TimelineNoteMarker>& noteMarkers, double second);
 QString formatPreviewHudTimeLabel(double seconds);
+QFont previewHudTimestampFont(int pointSize, QFont::Weight weight = QFont::Medium);
 QFont previewHudMonoFont(int pointSize, QFont::Weight weight = QFont::Medium);
 
 }  // namespace miacode::preview::scene

@@ -111,16 +111,19 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
     const QRectF stageRect = miacode::preview::scene::stageRectForSize(boundingRect().size().toSize());
     constexpr qreal kHudReferenceShortSide = 1024.0;
     constexpr qreal kHudReferencePadding = 18.0;
-    constexpr int kHudReferenceTimeFontPointSize = 23;
     constexpr int kHudReferenceDebugFontPointSize = 13;
     constexpr int kHudReferenceStatsFontPointSize = 22;
+    constexpr qreal kHudTimestampToStatsFontScale = 1.2;
 
     const qreal shortSide = qMin(stageRect.width(), stageRect.height());
-    const qreal hudScale = qMax<qreal>(0.5, shortSide / kHudReferenceShortSide);
-    const qreal hudPadding = kHudReferencePadding * hudScale;
-    const int timeFontPointSize = qMax(11, qRound(static_cast<qreal>(kHudReferenceTimeFontPointSize) * hudScale));
-    const int debugFontPointSize = qMax(8, qRound(static_cast<qreal>(kHudReferenceDebugFontPointSize) * hudScale));
-    QFont timeFont = miacode::preview::scene::previewHudMonoFont(timeFontPointSize, QFont::DemiBold);
+    const qreal hudScale = qMax<qreal>(0.1, shortSide / kHudReferenceShortSide);
+    const qreal hudPadding = qMax<qreal>(2.0, kHudReferencePadding * hudScale);
+    const int timeFontPointSize = qMax(
+        1,
+        qRound(static_cast<qreal>(kHudReferenceStatsFontPointSize) * kHudTimestampToStatsFontScale * hudScale)
+    );
+    const int debugFontPointSize = qMax(1, qRound(static_cast<qreal>(kHudReferenceDebugFontPointSize) * hudScale));
+    QFont timeFont = miacode::preview::scene::previewHudTimestampFont(timeFontPointSize, QFont::DemiBold);
 
     if (state->render.showDebugInfo) {
         QFont fpsFont = miacode::preview::scene::previewHudMonoFont(debugFontPointSize, QFont::Medium);
@@ -259,7 +262,7 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
         ? state->progressStatsCache->hudStatsAt(state->playheadSeconds)
         : miacode::preview::scene::PreviewHudStats();
 
-    int baseFontPointSize = qMax(10, qRound(static_cast<qreal>(kHudReferenceStatsFontPointSize) * hudScale));
+    int baseFontPointSize = qMax(1, qRound(static_cast<qreal>(kHudReferenceStatsFontPointSize) * hudScale));
     QFont titleFont;
     QFont rateFont;
     QFont statFont;
@@ -274,10 +277,10 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
     QString rateLine;
     QStringList statLines;
 
-    while (baseFontPointSize >= 8) {
-        titleFont = miacode::preview::scene::previewHudMonoFont(baseFontPointSize, QFont::Black);
-        rateFont = miacode::preview::scene::previewHudMonoFont(baseFontPointSize + 1, QFont::Black);
-        statFont = miacode::preview::scene::previewHudMonoFont(baseFontPointSize, QFont::Black);
+    while (baseFontPointSize >= 5) {
+        titleFont = miacode::preview::scene::previewHudTimestampFont(baseFontPointSize, QFont::DemiBold);
+        rateFont = miacode::preview::scene::previewHudTimestampFont(baseFontPointSize + 1, QFont::DemiBold);
+        statFont = miacode::preview::scene::previewHudTimestampFont(baseFontPointSize, QFont::DemiBold);
         titleMetrics = QFontMetrics(titleFont);
         rateMetrics = QFontMetrics(rateFont);
         statMetrics = QFontMetrics(statFont);

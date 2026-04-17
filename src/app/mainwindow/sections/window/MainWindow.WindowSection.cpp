@@ -134,6 +134,11 @@ QStringList MainWindow::shellPreviewStatsTexts() const
     return windowSection_->shellPreviewStatsTexts();
 }
 
+double MainWindow::shellPreviewCanvasAspectRatio() const
+{
+    return windowSection_->shellPreviewCanvasAspectRatio();
+}
+
 bool MainWindow::shellPreviewFullscreen() const
 {
     return windowSection_->shellPreviewFullscreen();

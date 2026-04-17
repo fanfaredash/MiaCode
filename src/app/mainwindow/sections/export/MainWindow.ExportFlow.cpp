@@ -435,6 +435,15 @@ void MainWindow::ExportSection::onExportPreviewVideo()
             owner_.saveProjectRenderState();
             owner_.savePortableState();
         },
+        [this](bool showObjectStatsHud) {
+            owner_.previewShowObjectStatsHud_ = showObjectStatsHud;
+            owner_.exportShowObjectStatsHud_ = showObjectStatsHud;
+            if (owner_.previewCanvas_ != nullptr) {
+                owner_.previewCanvas_->setShowObjectStatsHud(owner_.previewShowObjectStatsHud_);
+            }
+            owner_.saveProjectRenderState();
+            owner_.savePortableState();
+        },
         [this](double ratio) {
             owner_.setPreviewCanvasAspectRatio(ratio, false);
         },

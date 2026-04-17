@@ -146,6 +146,7 @@ public:
     double shellPreviewPositionSeconds() const override;
     double shellPreviewDurationSeconds() const override;
     QStringList shellPreviewStatsTexts() const override;
+    double shellPreviewCanvasAspectRatio() const override;
     bool shellPreviewFullscreen() const override;
     QObject* shellPreviewRuntimeObject() const override;
     QObject* shellPreviewStageMediaHostObject() const override;

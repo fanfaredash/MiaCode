@@ -81,6 +81,12 @@ void MainWindow::DocumentSection::updateDifficultyScopedActionStates()
     if (ui_.pausePreviewAction_ != nullptr) {
         ui_.pausePreviewAction_->setEnabled(enabled);
     }
+    if (ui_.stopOrPlayPreviewShortcutAction_ != nullptr) {
+        ui_.stopOrPlayPreviewShortcutAction_->setEnabled(enabled);
+    }
+    if (ui_.playPausePreviewShortcutAction_ != nullptr) {
+        ui_.playPausePreviewShortcutAction_->setEnabled(enabled);
+    }
     if (ui_.exportVideoAction_ != nullptr) {
         ui_.exportVideoAction_->setEnabled(enabled);
     }
