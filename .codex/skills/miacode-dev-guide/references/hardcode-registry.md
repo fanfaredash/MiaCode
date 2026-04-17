@@ -25,7 +25,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Scope: sound asset conventions
 - `src/preview/audio/PreviewAudioSettings.h`
   - Owns: shared preview/export SFX aggregation policy plus per-kind gain multipliers applied on top of user-set rows
-  - Current defaults: BGM `0.40`, Answer `0.30`, Slide `0.10`, Break Slide `0.10`, Break/Judge/EX/Touch/Touch-Hold/Firework `0.20`, Master `1.0`
+  - Current defaults: BGM `0.40`, Answer `0.30`, Break `0.10`, Slide `0.10`, Break Slide `0.10`, Judge/EX/Touch/Touch-Hold/Firework `0.20`, Master `1.0`
   - Scope: realtime preview and export audio balance
 - `src/common/VideoExportConfig.h`
   - Owns: export lead-in constants for zero-start exports and non-zero partial-export preload

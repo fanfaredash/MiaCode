@@ -15,8 +15,8 @@ struct PreviewAudioSettings {
     double judgeRestoreVolume = 0.20;
     double slideVolume = 0.10;
     double slideRestoreVolume = 0.10;
-    double breakVolume = 0.20;
-    double breakRestoreVolume = 0.20;
+    double breakVolume = 0.10;
+    double breakRestoreVolume = 0.10;
     double breakSlideVolume = 0.10;
     double breakSlideRestoreVolume = 0.10;
     double exVolume = 0.20;
