@@ -95,6 +95,7 @@ Canonical sync pair:
 Shared concerns:
 
 - which note kinds emit `answer`, `judge`, `break`, `ex`, `touch`, `touchhold`, `firework`
+- `answer` hit-confirm timing is intentionally pre-triggered by `1/60 s` in the shared timeline builder; keep runtime preview and export aligned, and clamp partial-export boundary answers to frame 0 instead of dropping them
 - touch and touch-hold still emit `answer` when `isFirework` is set; firework is additive rather than replacing the hit-confirm sound
 - touch-hold tail timing must mirror hold tail timing for `answer`: when `endSecond > second`, both note kinds emit a second `answer` at the tail while touch-hold still keeps its sustain start/stop span events
 - head-star behavior for slide and wifi
@@ -103,6 +104,9 @@ Shared concerns:
 - `headEach` vs `slideEach`: `headEach` comes from synchronous note-head grouping, while `slideEach` must stay aligned between `SimaiNativeParser` and `TimelineQuickModel` by grouping only slide/wifi notes that share both the same each-group and the same `slideTraceSecond`
 - `trackBreak` vs `headBreak`
 - touchhold span semantics
+- same-second same-kind runtime/export SFX collapse to one playback using the strongest event gain, and every note-SFX kind is now latest-wins across time on both runtime preview and export; do not reintroduce per-kind overlap on only one side
+- touchhold sustain is intentionally shared and non-stacking across overlapping spans in both runtime preview and export mixing
+- break-slide tails now emit `break + judge_break_slide`; do not restore the legacy `break_slide_finish` event on only one side
 - firework timing offsets
 - partial export timing: when the export request is not marked as full-range, export now uses a 1.0-second preload (full-range still keeps its 3.0-second lead-in), and the exported marker set is filtered up front by `marker.second` within the simulated frame window `[timelineOriginSecond, R]`; preview/export rendering, Muri overlays, and export SFX all consume that same filtered marker set
 
