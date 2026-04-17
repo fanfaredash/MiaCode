@@ -214,6 +214,7 @@
         bool runtimeDebugOutputEnabled_ = false;
         quint64 windowEventDebugSequence_ = 0;
         bool previewSfxRuntimePrepared_ = false;
+        bool previewBackendRecoveryPending_ = false;
         quint64 previewWarmupGeneration_ = 0;
         quint64 previewMediaWarmupAppliedGeneration_ = 0;
         quint64 previewSfxWarmupAppliedGeneration_ = 0;
@@ -238,6 +239,7 @@
         bool videoExportWorkerCompletionReceived_ = false;
         bool videoExportWorkerCancelRequested_ = false;
         bool restoreSquareAfterVideoExport_ = false;
+        quint64 previewPaneRestoreGeneration_ = 0;
         int videoExportWorkerLastProgressPercent_ = 0;
         qint64 videoExportWorkerLastEtaSeconds_ = -1;
         int projectLastOpenedDifficultyId_ = 0;
@@ -502,6 +504,7 @@
     bool& runtimeDebugOutputEnabled_ = state_.runtimeDebugOutputEnabled_;
     quint64& windowEventDebugSequence_ = state_.windowEventDebugSequence_;
     bool& previewSfxRuntimePrepared_ = state_.previewSfxRuntimePrepared_;
+    bool& previewBackendRecoveryPending_ = state_.previewBackendRecoveryPending_;
     quint64& previewWarmupGeneration_ = state_.previewWarmupGeneration_;
     quint64& previewMediaWarmupAppliedGeneration_ = state_.previewMediaWarmupAppliedGeneration_;
     quint64& previewSfxWarmupAppliedGeneration_ = state_.previewSfxWarmupAppliedGeneration_;
@@ -526,6 +529,7 @@
     bool& videoExportWorkerCompletionReceived_ = state_.videoExportWorkerCompletionReceived_;
     bool& videoExportWorkerCancelRequested_ = state_.videoExportWorkerCancelRequested_;
     bool& restoreSquareAfterVideoExport_ = state_.restoreSquareAfterVideoExport_;
+    quint64& previewPaneRestoreGeneration_ = state_.previewPaneRestoreGeneration_;
     int& videoExportWorkerLastProgressPercent_ = state_.videoExportWorkerLastProgressPercent_;
     qint64& videoExportWorkerLastEtaSeconds_ = state_.videoExportWorkerLastEtaSeconds_;
     int& projectLastOpenedDifficultyId_ = state_.projectLastOpenedDifficultyId_;

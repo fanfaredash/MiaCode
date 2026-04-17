@@ -106,6 +106,11 @@ double QuickShellController::previewCanvasAspectRatio() const
     return previewCanvasAspectRatio_;
 }
 
+qulonglong QuickShellController::previewPaneRestoreGeneration() const
+{
+    return previewPaneRestoreGeneration_;
+}
+
 double QuickShellController::previewSeekSingleStepSeconds() const
 {
     return miacode::preview_interaction::kSeekSingleStepSeconds;
@@ -438,6 +443,7 @@ void QuickShellController::refreshFromStateSource()
     stateChanged |= assignIfChanged(previewDurationSeconds_, stateSource_->shellPreviewDurationSeconds());
     stateChanged |= assignIfChanged(previewStatsTexts_, stateSource_->shellPreviewStatsTexts());
     stateChanged |= assignIfChanged(previewCanvasAspectRatio_, stateSource_->shellPreviewCanvasAspectRatio());
+    stateChanged |= assignIfChanged(previewPaneRestoreGeneration_, stateSource_->shellPreviewPaneRestoreGeneration());
     stateChanged |= assignIfChanged(previewUsesSeparateSurface_, stateSource_->shellPreviewUsesSeparateSurface());
 
     const bool nextPreviewFullscreen = stateSource_->shellPreviewFullscreen();
