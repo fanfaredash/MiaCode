@@ -7,6 +7,7 @@ namespace {
 
 using miacode::preview_sfx_timeline::Event;
 using miacode::preview_sfx_timeline::TouchholdSpan;
+using miacode::preview_sfx_timeline::adjustedAnswerSecond;
 
 bool require(bool condition, const QString& message, QTextStream& err)
 {
@@ -51,13 +52,13 @@ bool verifyHoldAndTouchHoldTailAnswer(QTextStream& err)
             continue;
         }
 
-        if (event.kind == QLatin1String("answer") && qAbs(event.second - 1.0) <= 1e-6) {
+        if (event.kind == QLatin1String("answer") && qAbs(event.second - adjustedAnswerSecond(1.0)) <= 1e-6) {
             ++holdStartAnswerCount;
-        } else if (event.kind == QLatin1String("answer") && qAbs(event.second - 2.0) <= 1e-6) {
+        } else if (event.kind == QLatin1String("answer") && qAbs(event.second - adjustedAnswerSecond(2.0)) <= 1e-6) {
             ++holdEndAnswerCount;
-        } else if (event.kind == QLatin1String("answer") && qAbs(event.second - 3.0) <= 1e-6) {
+        } else if (event.kind == QLatin1String("answer") && qAbs(event.second - adjustedAnswerSecond(3.0)) <= 1e-6) {
             ++touchHoldStartAnswerCount;
-        } else if (event.kind == QLatin1String("answer") && qAbs(event.second - 4.5) <= 1e-6) {
+        } else if (event.kind == QLatin1String("answer") && qAbs(event.second - adjustedAnswerSecond(4.5)) <= 1e-6) {
             ++touchHoldEndAnswerCount;
         } else if (event.kind == QLatin1String("touchhold_start") && qAbs(event.second - 3.0) <= 1e-6) {
             ++touchHoldStartSpanCount;
@@ -91,6 +92,104 @@ bool verifyHoldAndTouchHoldTailAnswer(QTextStream& err)
     return true;
 }
 
+bool verifyAnswerTimingCompensation(QTextStream& err)
+{
+    QVector<TimelineNoteMarker> markers;
+
+    TimelineNoteMarker tap;
+    tap.type = QStringLiteral("tap");
+    tap.second = 1.0;
+    markers.append(tap);
+
+    QVector<Event> events;
+    QVector<TouchholdSpan> spans;
+    miacode::preview_sfx_timeline::buildTimeline(markers, &events, &spans);
+
+    int compensatedAnswerCount = 0;
+    int uncompensatedAnswerCount = 0;
+    for (const Event& event : events) {
+        if (event.kind != QLatin1String("answer")) {
+            continue;
+        }
+        if (qAbs(event.second - adjustedAnswerSecond(1.0)) <= 1e-6) {
+            ++compensatedAnswerCount;
+        }
+        if (qAbs(event.second - 1.0) <= 1e-6) {
+            ++uncompensatedAnswerCount;
+        }
+    }
+
+    if (!require(compensatedAnswerCount == 1, QStringLiteral("answer should emit one compensated event"), err)) {
+        return false;
+    }
+    if (!require(uncompensatedAnswerCount == 0, QStringLiteral("answer should not emit an uncompensated event"), err)) {
+        return false;
+    }
+    if (!require(spans.isEmpty(), QStringLiteral("tap should not create touchhold spans"), err)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool verifyBreakSlideTailSfx(QTextStream& err)
+{
+    QVector<TimelineNoteMarker> markers;
+
+    TimelineNoteMarker slide;
+    slide.type = QStringLiteral("slide");
+    slide.second = 1.0;
+    slide.slideTraceSecond = 1.5;
+    slide.endSecond = 3.0;
+    slide.trackBreak = true;
+    markers.append(slide);
+
+    QVector<Event> events;
+    QVector<TouchholdSpan> spans;
+    miacode::preview_sfx_timeline::buildTimeline(markers, &events, &spans);
+
+    int breakSlideStartCount = 0;
+    int breakTailCount = 0;
+    int judgeBreakSlideTailCount = 0;
+    int legacyBreakSlideFinishCount = 0;
+
+    for (const Event& event : events) {
+        if (event.kind == QLatin1String("break_slide_start") && qAbs(event.second - 1.5) <= 1e-6) {
+            ++breakSlideStartCount;
+        } else if (event.kind == QLatin1String("break") && qAbs(event.second - 3.0) <= 1e-6) {
+            ++breakTailCount;
+        } else if (event.kind == QLatin1String("judge_break_slide") && qAbs(event.second - 3.0) <= 1e-6) {
+            ++judgeBreakSlideTailCount;
+        } else if (event.kind == QLatin1String("break_slide_finish") && qAbs(event.second - 3.0) <= 1e-6) {
+            ++legacyBreakSlideFinishCount;
+        }
+    }
+
+    if (!require(breakSlideStartCount == 1, QStringLiteral("break slide should emit one start SFX"), err)) {
+        return false;
+    }
+    if (!require(breakTailCount == 1, QStringLiteral("break slide tail should emit one break SFX"), err)) {
+        return false;
+    }
+    if (!require(
+            judgeBreakSlideTailCount == 1,
+            QStringLiteral("break slide tail should emit one judge_break_slide SFX"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            legacyBreakSlideFinishCount == 0,
+            QStringLiteral("break slide tail should not emit legacy break_slide_finish"),
+            err)) {
+        return false;
+    }
+    if (!require(spans.isEmpty(), QStringLiteral("break slide should not create touchhold spans"), err)) {
+        return false;
+    }
+
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -100,6 +199,12 @@ int main(int argc, char* argv[])
     QTextStream out(stdout);
 
     if (!verifyHoldAndTouchHoldTailAnswer(err)) {
+        return 1;
+    }
+    if (!verifyAnswerTimingCompensation(err)) {
+        return 1;
+    }
+    if (!verifyBreakSlideTailSfx(err)) {
         return 1;
     }
 

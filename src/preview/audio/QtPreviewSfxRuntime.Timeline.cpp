@@ -74,6 +74,11 @@ void QtPreviewSfxRuntime::reloadAssets(const PreviewAudioSettings& settings)
     }
 }
 
+bool QtPreviewSfxRuntime::audioEngineInitialized() const
+{
+    return engineInitialized_ && engineState_ != nullptr;
+}
+
 void QtPreviewSfxRuntime::setChartPath(const QString& chartPath)
 {
     const QString normalizedChartPath = chartPath.isEmpty() ? QString() : QDir::cleanPath(chartPath);
@@ -342,17 +347,21 @@ void QtPreviewSfxRuntime::drainEvents(double second)
 
 void QtPreviewSfxRuntime::pauseTouchholdVoices()
 {
-    for (TouchholdVoice& voice : touchholdVoices_) {
-        if (voice.voice != nullptr && voice.voice->initialized) {
-            ma_sound_stop(&voice.voice->sound);
-        }
-        voice.activeSpanIndex = -1;
+    if (touchholdVoice_ != nullptr && touchholdVoice_->initialized) {
+        ma_sound_stop(&touchholdVoice_->sound);
     }
+    activeTouchholdSpanIndices_.clear();
 }
 
 void QtPreviewSfxRuntime::restoreTouchholdVoices(double second)
 {
     pauseTouchholdVoices();
+    if (touchholdVoice_ == nullptr || !touchholdVoice_->initialized) {
+        return;
+    }
+
+    int startSpanIndex = -1;
+    double startOffsetSeconds = 0.0;
     for (int spanIndex = 0; spanIndex < preparedTimeline_.touchholdSpans.size(); ++spanIndex) {
         const TouchholdSpan& span = preparedTimeline_.touchholdSpans[spanIndex];
         if (second + kQtPreviewSfxEpsilonSeconds < span.startSecond) {
@@ -361,9 +370,26 @@ void QtPreviewSfxRuntime::restoreTouchholdVoices(double second)
         if (second >= span.endSecond - kQtPreviewSfxEpsilonSeconds) {
             continue;
         }
-        startTouchholdSpan(spanIndex, second - span.startSecond);
+        activeTouchholdSpanIndices_.append(spanIndex);
+        if (startSpanIndex < 0 || span.startSecond < preparedTimeline_.touchholdSpans[startSpanIndex].startSecond) {
+            startSpanIndex = spanIndex;
+            startOffsetSeconds = second - span.startSecond;
+        }
     }
-    updateTouchholdVoiceVolumes();
+
+    if (startSpanIndex < 0) {
+        activeTouchholdSpanIndices_.clear();
+        return;
+    }
+
+    const ma_uint64 offsetFrames = static_cast<ma_uint64>(qMax(0.0, startOffsetSeconds) * deviceSampleRate_);
+    if (touchholdSoundLengthFrames_ > 0 && offsetFrames >= touchholdSoundLengthFrames_) {
+        return;
+    }
+
+    ma_sound_stop(&touchholdVoice_->sound);
+    ma_sound_seek_to_pcm_frame(&touchholdVoice_->sound, offsetFrames);
+    ma_sound_start(&touchholdVoice_->sound);
 }
 
 bool QtPreviewSfxRuntime::hasBackgroundTrack() const

@@ -2396,14 +2396,21 @@ bool mixSfxTrackToWav(
             continue;
         }
         if (playback.second + kTimelineEpsilonSeconds < timelineOriginSecond) {
-            continue;
+            if (previewSfxNormalizedKind(playback.kind) == QLatin1String("answer")
+                && playback.second + miacode::preview_sfx_timeline::kAnswerTriggerCompensationSeconds
+                    + kTimelineEpsilonSeconds
+                    >= timelineOriginSecond) {
+                // Keep compensated answer hits audible at the exact partial-export boundary.
+            } else {
+                continue;
+            }
         }
         const double volume = kindVolume(playback.kind);
         const double mixedGain = qMax(0.0, playback.gain) * qMax(0.0, volume);
         if (mixedGain <= 0.0) {
             continue;
         }
-        const double shiftedSecond = playback.second - timelineOriginSecond;
+        const double shiftedSecond = qMax(0.0, playback.second - timelineOriginSecond);
         if (shiftedSecond < 0.0) {
             continue;
         }
@@ -2412,7 +2419,8 @@ bool mixSfxTrackToWav(
     }
 
     const auto touchholdIt = clips.constFind(QStringLiteral("touchhold"));
-    if (touchholdIt != clips.constEnd() && settings.touchVolume > 0.0) {
+    const double touchholdGain = kindVolume(QStringLiteral("touchhold"));
+    if (touchholdIt != clips.constEnd() && touchholdGain > 0.0) {
         const DecodedClip& touchholdClip = touchholdIt.value();
         struct MixTouchholdSpan {
             qint64 startFrame = 0;
@@ -2420,8 +2428,6 @@ bool mixSfxTrackToWav(
         };
         QVector<MixTouchholdSpan> activeSpans;
         activeSpans.reserve(spans.size());
-        QVector<qint64> boundaries;
-        boundaries.reserve(spans.size() * 2);
         const qint64 totalMixFrames = mix.size() / kMixChannels;
         for (const ExportTouchholdSpan& span : spans) {
             if (span.endSecond <= span.startSecond) {
@@ -2444,45 +2450,42 @@ bool mixSfxTrackToWav(
             mixSpan.startFrame = startFrame;
             mixSpan.endFrame = qMin(audibleEndFrame, totalMixFrames);
             activeSpans.append(mixSpan);
-            boundaries.append(mixSpan.startFrame);
-            boundaries.append(mixSpan.endFrame);
         }
         if (!activeSpans.isEmpty()) {
-            std::sort(boundaries.begin(), boundaries.end());
-            boundaries.erase(std::unique(boundaries.begin(), boundaries.end()), boundaries.end());
-            for (int boundaryIndex = 0; boundaryIndex + 1 < boundaries.size(); ++boundaryIndex) {
-                const qint64 intervalStart = boundaries.at(boundaryIndex);
-                const qint64 intervalEnd = boundaries.at(boundaryIndex + 1);
-                if (intervalEnd <= intervalStart) {
+            std::sort(activeSpans.begin(), activeSpans.end(), [](const MixTouchholdSpan& a, const MixTouchholdSpan& b) {
+                if (a.startFrame != b.startFrame) {
+                    return a.startFrame < b.startFrame;
+                }
+                return a.endFrame < b.endFrame;
+            });
+
+            qint64 mergedStart = activeSpans.first().startFrame;
+            qint64 mergedEnd = activeSpans.first().endFrame;
+            for (int i = 1; i < activeSpans.size(); ++i) {
+                const MixTouchholdSpan& span = activeSpans.at(i);
+                if (span.startFrame <= mergedEnd) {
+                    mergedEnd = qMax(mergedEnd, span.endFrame);
                     continue;
                 }
-
-                QVector<const MixTouchholdSpan*> overlappingSpans;
-                overlappingSpans.reserve(activeSpans.size());
-                for (const MixTouchholdSpan& span : activeSpans) {
-                    if (span.startFrame < intervalEnd && span.endFrame > intervalStart) {
-                        overlappingSpans.append(&span);
-                    }
-                }
-                if (overlappingSpans.isEmpty()) {
-                    continue;
-                }
-
-                const double totalCopies = previewTouchholdAggregatePlaybackCopies(overlappingSpans.size());
-                const double perSpanGain =
-                    qBound(0.0, settings.touchVolume * (totalCopies / static_cast<double>(overlappingSpans.size())), 1.5);
-                for (const MixTouchholdSpan* span : overlappingSpans) {
-                    const qint64 clipStartFrame = intervalStart - span->startFrame;
-                    addClipToMix(
-                        touchholdClip,
-                        perSpanGain,
-                        intervalStart,
-                        intervalEnd - intervalStart,
-                        clipStartFrame,
-                        &mix
-                    );
-                }
+                addClipToMix(
+                    touchholdClip,
+                    touchholdGain,
+                    mergedStart,
+                    mergedEnd - mergedStart,
+                    0,
+                    &mix
+                );
+                mergedStart = span.startFrame;
+                mergedEnd = span.endFrame;
             }
+            addClipToMix(
+                touchholdClip,
+                touchholdGain,
+                mergedStart,
+                mergedEnd - mergedStart,
+                0,
+                &mix
+            );
         }
     }
 
@@ -3591,13 +3594,13 @@ VideoExportResult VideoExportController::exportPreparedTask(
 
     // Quick export frames are already read back in top-left raster order.
     filterParts << QStringLiteral("[0:v]format=rgba[overlay_src]");
-    filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3[sfx]")
+    filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3,aformat=channel_layouts=stereo[sfx]")
                        .arg(sfxInputIndex)
                        .arg(totalSecondsText)
                        .arg(kMixSampleRate);
     if (hasTrack) {
         if (timelineOriginSecond > kTimelineEpsilonSeconds) {
-            filterParts << QStringLiteral("[%1:a]atrim=start=%2:end=%3,asetpts=PTS-STARTPTS,aresample=%4,volume=%5[bgm]")
+            filterParts << QStringLiteral("[%1:a]atrim=start=%2:end=%3,asetpts=PTS-STARTPTS,aresample=%4,aformat=channel_layouts=stereo,volume=%5[bgm]")
                                .arg(bgmInputIndex)
                                .arg(timelineOriginText)
                                .arg(QString::number(timelineOriginSecond + alignedTotalSeconds, 'f', 6))
@@ -3605,14 +3608,14 @@ VideoExportResult VideoExportController::exportPreparedTask(
                                .arg(QString::number(task.audioSettings.bgmVolume, 'f', 6));
         } else if (timelineOriginSecond < -kTimelineEpsilonSeconds) {
             const int delayMs = qMax(0, qRound(-timelineOriginSecond * 1000.0));
-            filterParts << QStringLiteral("[%1:a]atrim=start=0:end=%2,asetpts=PTS-STARTPTS,adelay=%3|%3,aresample=%4,volume=%5[bgm]")
+            filterParts << QStringLiteral("[%1:a]atrim=start=0:end=%2,asetpts=PTS-STARTPTS,adelay=%3|%3,aresample=%4,aformat=channel_layouts=stereo,volume=%5[bgm]")
                                .arg(bgmInputIndex)
                                .arg(QString::number(alignedTotalSeconds + timelineOriginSecond, 'f', 6))
                                .arg(delayMs)
                                .arg(kMixSampleRate)
                                .arg(QString::number(task.audioSettings.bgmVolume, 'f', 6));
         } else {
-            filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3,volume=%4[bgm]")
+            filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3,aformat=channel_layouts=stereo,volume=%4[bgm]")
                                .arg(bgmInputIndex)
                                .arg(totalSecondsText)
                                .arg(kMixSampleRate)
