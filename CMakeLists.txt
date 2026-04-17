@@ -3,13 +3,13 @@ cmake_minimum_required(VERSION 3.21)
 set(MIACODE_VERSION_MAJOR "0")
 set(MIACODE_VERSION_MINOR "4")
 set(MIACODE_VERSION_PATCH "0")
-set(MIACODE_VERSION_PRERELEASE "beta7")
+set(MIACODE_VERSION_PRERELEASE "beta8")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
     set(MIACODE_VERSION_STRING "${MIACODE_VERSION}-${MIACODE_VERSION_PRERELEASE}")
 endif()
-set(MIACODE_DISPLAY_PRERELEASE "beta7")
+set(MIACODE_DISPLAY_PRERELEASE "beta8")
 set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_DISPLAY_PRERELEASE}" STREQUAL "")
     set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_DISPLAY_VERSION_STRING}-${MIACODE_DISPLAY_PRERELEASE}")
@@ -130,6 +130,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/BatchVideoExportDialog.cpp
     src/tools/video_export/VideoExportController.h
     src/tools/video_export/VideoExportController.cpp
+    src/tools/video_export/VideoExportRuntimePolicy.h
+    src/tools/video_export/VideoExportRuntimePolicy.cpp
     src/tools/video_export/VideoExportQuickRenderBackend.h
     src/tools/video_export/VideoExportQuickRenderBackend.cpp
     src/tools/video_export/RawVideoPipeTransport.h
@@ -562,6 +564,12 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/app/quick_shell/QuickShellPreviewSurfacePolicy.h
     )
 
+    add_executable(video_export_runtime_policy_spec
+        src/tools/video_export/VideoExportRuntimePolicySpec.cpp
+        src/tools/video_export/VideoExportRuntimePolicy.h
+        src/tools/video_export/VideoExportRuntimePolicy.cpp
+    )
+
     target_link_libraries(miacode_muri_dump PRIVATE
         Qt6::Core
         Qt6::Gui
@@ -744,6 +752,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_include_directories(quickshell_preview_surface_policy_spec PRIVATE
         src
         src/app/quick_shell
+    )
+
+    target_link_libraries(video_export_runtime_policy_spec PRIVATE
+        Qt6::Core
+    )
+    target_include_directories(video_export_runtime_policy_spec PRIVATE
+        src
+        src/tools
     )
 endif()
 

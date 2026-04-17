@@ -26,6 +26,9 @@ constexpr qint64 kRawPipeBaselineHeight = 1080;
 constexpr int kRawPipeBaselineBufferedFrames = 32;
 constexpr int kRawPipeMinBufferedFrames = 8;
 constexpr int kRawPipeMaxBufferedFrames = 128;
+constexpr int kRawPipeBufferedFramesScale = 2;
+constexpr qint64 kRawPipeMinBufferBytes = 1LL * 1024LL * 1024LL;
+constexpr qint64 kRawPipeRequestedBufferScale = 2;
 
 #ifdef Q_OS_WIN
 HANDLE rawVideoPipeHandle(const RawVideoPipe& pipe)
@@ -316,14 +319,16 @@ RawVideoPipePlan chooseRawVideoPipePlan(const QSize& frameSize)
     const qint64 pixelCount = width * height;
     const qint64 baselinePixelCount = kRawPipeBaselineWidth * kRawPipeBaselineHeight;
     plan.frameBytes = width * height * 4LL;
-    plan.requestedBufferBytes = qMax(plan.frameBytes, 1LL * 1024LL * 1024LL);
+    plan.requestedBufferBytes =
+        qMax(plan.frameBytes, kRawPipeMinBufferBytes) * kRawPipeRequestedBufferScale;
     const double scaledBufferedFrames =
         static_cast<double>(kRawPipeBaselineBufferedFrames) * static_cast<double>(baselinePixelCount)
         / static_cast<double>(qMax<qint64>(1, pixelCount));
-    plan.maxBufferedFrames = qBound(
+    const int bufferedFrames = qBound(
         kRawPipeMinBufferedFrames,
         qRound(scaledBufferedFrames),
         kRawPipeMaxBufferedFrames);
+    plan.maxBufferedFrames = bufferedFrames * kRawPipeBufferedFramesScale;
     return plan;
 }
 

@@ -1,8 +1,10 @@
 #pragma once
 
+#include <QByteArray>
 #include <QObject>
 #include <QImage>
 #include <QSize>
+#include <QString>
 #include <QSurfaceFormat>
 #include <QtGui/qopengl.h>
 
@@ -61,12 +63,22 @@ public:
 
 private:
     bool ensureFramebuffer(QString* errorMessage);
+    bool ensureDirectReadbackBuffer(const QSize& imageSize, QString* errorMessage);
+    bool convertBottomUpPremultipliedReadbackToStraightRgba(
+        const uchar* sourceBytes,
+        qsizetype sourceBytesPerRow,
+        const QSize& imageSize,
+        QImage* frame,
+        QString* errorMessage
+    );
     bool ensureOffscreenReadbackPbos(const QSize& imageSize, QString* errorMessage);
     bool mapOffscreenReadbackPbo(int pboIndex, const QSize& imageSize, QImage* frame, QString* errorMessage);
     bool renderSceneIntoFramebuffer(QString* errorMessage);
     bool ensureContextCurrent(QString* errorMessage);
     void destroyFramebuffer();
     void destroyOffscreenReadbackPbos();
+    void clearOffscreenReadbackPboState();
+    void clearOffscreenPboCapabilityCache();
     void applyFrameSize();
     void applyFrameState();
     QSize framebufferPixelSize() const;
@@ -85,10 +97,15 @@ private:
     QOffscreenSurface* offscreenSurface_ = nullptr;
     QOpenGLContext* context_ = nullptr;
     QOpenGLFramebufferObject* framebuffer_ = nullptr;
+    QByteArray directReadbackBuffer_;
+    QImage reusableReadbackFrame_;
     GLuint offscreenReadbackPbos_[2] = {0, 0};
     QSize offscreenReadbackPboSize_;
     qsizetype offscreenReadbackPboBytes_ = 0;
     int offscreenReadbackPboWriteIndex_ = 0;
     int offscreenReadbackPendingIndex_ = -1;
+    mutable bool offscreenPboCapabilityProbed_ = false;
+    mutable bool offscreenPboCapabilitySupported_ = false;
+    mutable QString offscreenPboCapabilityError_;
     PreviewQuickExportRenderStats lastRenderStats_;
 };

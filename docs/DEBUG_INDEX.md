@@ -22,6 +22,12 @@ Default directory order:
 4. app-local `logs/` next to `MiaCode.exe` while `--debug` is active
 5. system temp directory
 
+Export worker note:
+
+- Background export workers now inherit the snapshot chart's project-local `.miacode/logs/` directory by default.
+- This keeps worker-side export and fatal logs aligned with the chart being exported, including batch-export items, unless `MIACODE_LOG_DIR` or a per-channel path override is set.
+- If a worker exits with `CrashExit` while the current attempt still requested offscreen PBO readback, the UI retries that export once with `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1` and keeps the first-crash diagnostics for the final error report.
+
 Default filenames:
 
 - runtime: `miacode_runtime_debug.log`
@@ -64,6 +70,9 @@ Relevant export backend toggles:
 - `MIACODE_EXPORT_ENABLE_GPU_RENDER`
 - `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO`
 - `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO`
+- Default export path keeps GPU offscreen render enabled and requests PBO readback unless `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1`.
+- `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1` is the primary stability fallback switch.
+- `MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO=1` now only makes the default explicit and remains useful for cleaning inherited `ENABLE=0` env state.
 
 Relevant export diagnostics:
 
@@ -74,6 +83,9 @@ Relevant export diagnostics:
 - `MIACODE_EXPORT_DIAG_OBJECT_HASH`
 - `MIACODE_EXPORT_DIAG_OBJECT_TRACE`
 - `MIACODE_EXPORT_DIAG_OBJECT_TRACE_MAX_LINES`
+- `pbo_capability_probe` export-log entries record version / extension checks, smoke-probe result, and the final enable/disable reason.
+- `pbo_cleanup_deferred` and `export_context_not_current_on_teardown` mark teardown paths that skipped explicit GL cleanup because the export context was not current.
+- `render_backend` export-log entries now report `pboRequested=1` by default and only leave `pboEnabled=0` when capability probing or runtime fallback disables it.
 - `MIACODE_EXPORT_DIAG_OBJECT_DIFF_THRESHOLD`
 - `MIACODE_EXPORT_DIAG_COMPARE_RENDER_PATHS`
 - `MIACODE_EXPORT_DIAG_COMPARE_RADIUS`
@@ -166,10 +178,12 @@ Force export GPU render off:
 Force export PBO off:
 
 - `set MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1`
+- This is the standard stability fallback switch and the same override used by the automatic worker crash retry path.
 
 Force export PBO on:
 
 - `set MIACODE_EXPORT_ENABLE_OFFSCREEN_PBO=1`
+- PBO readback is already on by default; this only forces the default back on after inherited env cleanup or an explicit `ENABLE=0`.
 
 Opt out of the default embedded-preview native-sibling workaround for regression A/B:
 
