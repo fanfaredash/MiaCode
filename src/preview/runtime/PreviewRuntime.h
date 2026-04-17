@@ -130,6 +130,7 @@ public:
     void setShowDebugInfo(bool show);
     void setShowTimestamp(bool show);
     void setShowObjectStatsHud(bool show);
+    void setSuppressObjectStatsHud(bool suppress);
     bool showTimestamp() const;
     bool showObjectStatsHud() const;
 
@@ -157,6 +158,8 @@ private:
     QPointer<QQuickWindow> visibleHostWindow_;
     QSize frameSize_;
     miacode::preview::scene::PreviewFrameState frameState_;
+    bool requestedShowObjectStatsHud_ = false;
+    bool suppressObjectStatsHud_ = false;
     QElapsedTimer presentTimer_;
     qint64 lastPresentedNs_ = -1;
     QVector<double> presentedFrameIntervalsMs_;

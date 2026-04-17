@@ -9,22 +9,22 @@ struct PreviewAudioSettings {
     double masterRestoreVolume = 1.0;
     double bgmVolume = 0.40;
     double bgmRestoreVolume = 0.40;
-    double answerVolume = 0.20;
-    double answerRestoreVolume = 0.20;
-    double judgeVolume = 0.10;
-    double judgeRestoreVolume = 0.10;
-    double slideVolume = 0.05;
-    double slideRestoreVolume = 0.05;
-    double breakVolume = 0.20;
-    double breakRestoreVolume = 0.20;
-    double breakSlideVolume = 0.05;
-    double breakSlideRestoreVolume = 0.05;
-    double exVolume = 0.10;
-    double exRestoreVolume = 0.10;
-    double touchVolume = 0.10;
-    double touchRestoreVolume = 0.10;
-    double touchholdVolume = 0.10;
-    double touchholdRestoreVolume = 0.10;
+    double answerVolume = 0.30;
+    double answerRestoreVolume = 0.30;
+    double judgeVolume = 0.20;
+    double judgeRestoreVolume = 0.20;
+    double slideVolume = 0.10;
+    double slideRestoreVolume = 0.10;
+    double breakVolume = 0.10;
+    double breakRestoreVolume = 0.10;
+    double breakSlideVolume = 0.10;
+    double breakSlideRestoreVolume = 0.10;
+    double exVolume = 0.20;
+    double exRestoreVolume = 0.20;
+    double touchVolume = 0.20;
+    double touchRestoreVolume = 0.20;
+    double touchholdVolume = 0.20;
+    double touchholdRestoreVolume = 0.20;
     double fireworkVolume = 0.20;
     double fireworkRestoreVolume = 0.20;
 
@@ -85,9 +85,6 @@ struct PreviewAudioSettings {
     static PreviewAudioSettings fromJson(const QJsonObject& object);
 };
 
-constexpr double kPreviewSfxSameKindBoostGain = 1.5;
-constexpr double kPreviewTouchholdMaxPlaybackCopies = 1.5;
-
 inline QString previewSfxNormalizedKind(const QString& kind)
 {
     return kind.trimmed().toLower();
@@ -109,53 +106,19 @@ inline bool previewSfxShouldAggregateKind(const QString& kind)
         || lowered == "firework";
 }
 
-inline bool previewSfxShouldBoostAggregatedKind(const QString& kind)
-{
-    const QString lowered = previewSfxNormalizedKind(kind);
-    return lowered == "judge"
-        || lowered == "slide"
-        || lowered == "ex";
-}
-
 inline bool previewSfxShouldInterruptPreviousKind(const QString& kind)
 {
     const QString lowered = previewSfxNormalizedKind(kind);
-    return lowered == "judge_break"
-        || lowered == "break"
-        || lowered == "break_slide_start"
-        || lowered == "break_slide_finish"
-        || lowered == "judge_break_slide"
-        || lowered == "firework";
-}
-
-inline int previewSfxAggregatePlaybackCopies(const QString& kind, int count)
-{
-    const QString lowered = previewSfxNormalizedKind(kind);
-    if (lowered == "touch") {
-        // Touch clusters are capped so dense chords do not keep scaling indefinitely.
-        return qBound(1, count, 2);
-    }
-    return 1;
-}
-
-inline double previewTouchholdAggregatePlaybackCopies(int count)
-{
-    return qBound(0.0, qMin(kPreviewTouchholdMaxPlaybackCopies, static_cast<double>(count)), kPreviewTouchholdMaxPlaybackCopies);
+    return previewSfxShouldAggregateKind(lowered)
+        || lowered == "break_touch"
+        || lowered == "break_slide";
 }
 
 inline double previewSfxPlaybackGainForAggregate(const QString& kind, int count, double maxGain)
 {
-    double gain = qMax(0.0, maxGain);
-    if (gain <= 0.0) {
-        return 0.0;
-    }
-
-    const QString lowered = previewSfxNormalizedKind(kind);
-    gain *= static_cast<double>(previewSfxAggregatePlaybackCopies(lowered, count));
-    if (count >= 2 && previewSfxShouldBoostAggregatedKind(lowered)) {
-        gain = qMin(kPreviewSfxSameKindBoostGain, gain * kPreviewSfxSameKindBoostGain);
-    }
-    return gain;
+    Q_UNUSED(kind);
+    Q_UNUSED(count);
+    return qMax(0.0, maxGain);
 }
 
 inline double previewSfxVolumeForKind(const PreviewAudioSettings& settings, const QString& kind)
@@ -169,7 +132,7 @@ inline double previewSfxVolumeForKind(const PreviewAudioSettings& settings, cons
         return settings.judgeVolume * 0.5 * masterVolume;
     }
     if (lowered == "judge_break" || lowered == "break_touch") {
-        return settings.judgeVolume * 0.5 * masterVolume;
+        return settings.breakVolume * 1.5 * masterVolume;
     }
     if (lowered == "slide") {
         return settings.slideVolume * 0.5 * masterVolume;

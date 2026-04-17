@@ -86,22 +86,19 @@ void QtPreviewSfxRuntime::resetBanks()
     resetBank(touchSfx_);
     resetBank(fireworkSfx_);
     resetBackgroundTrack();
-    for (TouchholdVoice& voice : touchholdVoices_) {
-        if (voice.voice != nullptr) {
-            if (voice.voice->initialized) {
-                ma_sound_uninit(&voice.voice->sound);
-                voice.voice->initialized = false;
-            }
-            if (voice.voice->decoderInitialized) {
-                ma_decoder_uninit(&voice.voice->decoder);
-                voice.voice->decoderInitialized = false;
-            }
-            delete voice.voice;
-            voice.voice = nullptr;
+    if (touchholdVoice_ != nullptr) {
+        if (touchholdVoice_->initialized) {
+            ma_sound_uninit(&touchholdVoice_->sound);
+            touchholdVoice_->initialized = false;
         }
-        voice.activeSpanIndex = -1;
+        if (touchholdVoice_->decoderInitialized) {
+            ma_decoder_uninit(&touchholdVoice_->decoder);
+            touchholdVoice_->decoderInitialized = false;
+        }
+        delete touchholdVoice_;
+        touchholdVoice_ = nullptr;
     }
-    touchholdVoices_.clear();
+    activeTouchholdSpanIndices_.clear();
     touchholdSoundLengthFrames_ = 0;
 
     if (engineState_ != nullptr) {

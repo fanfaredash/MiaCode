@@ -4,8 +4,12 @@ bool QtPreviewSfxRuntime::initializeAudioEngine()
         return true;
     }
 
+    ma_engine_config engineConfig = ma_engine_config_init();
+    engineConfig.channels = 2;
+    engineConfig.sampleRate = 48000;
+
     engineState_ = new EngineState();
-    if (ma_engine_init(nullptr, &engineState_->engine) != MA_SUCCESS) {
+    if (ma_engine_init(&engineConfig, &engineState_->engine) != MA_SUCCESS) {
         delete engineState_;
         engineState_ = nullptr;
         engineInitialized_ = false;
@@ -14,7 +18,10 @@ bool QtPreviewSfxRuntime::initializeAudioEngine()
     }
     deviceSampleRate_ = ma_engine_get_sample_rate(&engineState_->engine);
     engineInitialized_ = true;
-    appendAudioDebugLog(QString("initializeAudioEngine ok sampleRate=%1").arg(deviceSampleRate_));
+    appendAudioDebugLog(
+        QString("initializeAudioEngine ok sampleRate=%1 channels=%2")
+            .arg(deviceSampleRate_)
+            .arg(ma_engine_get_channels(&engineState_->engine)));
     return true;
 }
 
@@ -49,42 +56,38 @@ void QtPreviewSfxRuntime::initializeAssets()
         bank.configured = !bank.voices.isEmpty();
     };
 
-    configureBank(answerSfx_, "answer", 12);
-    configureBank(judgeSfx_, "judge", 12);
+    configureBank(answerSfx_, "answer", 1);
+    configureBank(judgeSfx_, "judge", 1);
     configureBank(judgeBreakSfx_, "judge_break", 1);
-    configureBank(slideSfx_, "slide", 8);
+    configureBank(slideSfx_, "slide", 1);
     configureBank(breakSfx_, "break", 1);
     configureBank(breakSlideStartSfx_, "break_slide_start", 1);
     configureBank(breakSlideSfx_, "break_slide", 1);
     configureBank(judgeBreakSlideSfx_, "judge_break_slide", 1);
-    configureBank(exSfx_, "ex", 8);
-    configureBank(touchSfx_, "touch", 12);
-    // Firework cheers should also be latest-wins, matching break cheer behavior.
+    configureBank(exSfx_, "ex", 1);
+    configureBank(touchSfx_, "touch", 1);
+    // All note SFX kinds are now latest-wins to mirror MajdataPlay's runtime behavior.
     configureBank(fireworkSfx_, "firework", 1);
 
     const QString touchholdPath = miacode::preview_sfx::assetFilePathForKind(preparedAssets_.sfxDir, "touchhold");
     if (QFileInfo::exists(touchholdPath)) {
-        touchholdVoices_.reserve(8);
-        for (int i = 0; i < 8; ++i) {
-            TouchholdVoice touchholdVoice;
-            touchholdVoice.voice = new Voice();
-            if (miacode::audio_io::soundInitFromFile(
-                    &engineState_->engine,
-                    touchholdPath,
-                    0,
-                    nullptr,
-                    nullptr,
-                    &touchholdVoice.voice->sound
-                ) == MA_SUCCESS) {
-                touchholdVoice.voice->initialized = true;
-                ma_uint64 lengthFrames = 0;
-                if (ma_sound_get_length_in_pcm_frames(&touchholdVoice.voice->sound, &lengthFrames) == MA_SUCCESS) {
-                    touchholdSoundLengthFrames_ = qMax<quint64>(touchholdSoundLengthFrames_, lengthFrames);
-                }
-                touchholdVoices_.append(touchholdVoice);
-            } else {
-                delete touchholdVoice.voice;
+        Voice* voice = new Voice();
+        if (miacode::audio_io::soundInitFromFile(
+                &engineState_->engine,
+                touchholdPath,
+                0,
+                nullptr,
+                nullptr,
+                &voice->sound
+            ) == MA_SUCCESS) {
+            voice->initialized = true;
+            ma_uint64 lengthFrames = 0;
+            if (ma_sound_get_length_in_pcm_frames(&voice->sound, &lengthFrames) == MA_SUCCESS) {
+                touchholdSoundLengthFrames_ = lengthFrames;
             }
+            touchholdVoice_ = voice;
+        } else {
+            delete voice;
         }
     }
 
@@ -175,43 +178,8 @@ void QtPreviewSfxRuntime::applyVolumes()
     if (stretchedBackgroundState_ != nullptr && stretchedBackgroundState_->soundInitialized) {
         ma_sound_set_volume(&stretchedBackgroundState_->sound, static_cast<float>(previewBgmVolume(settings_)));
     }
-    for (TouchholdVoice& voice : touchholdVoices_) {
-        if (voice.voice != nullptr && voice.voice->initialized) {
-            ma_sound_set_volume(&voice.voice->sound, static_cast<float>(previewSfxVolumeForKind(settings_, "touchhold")));
-        }
-    }
-    updateTouchholdVoiceVolumes();
-}
-
-void QtPreviewSfxRuntime::updateTouchholdVoiceVolumes()
-{
-    const double baseVolume = previewSfxVolumeForKind(settings_, "touchhold");
-    if (touchholdVoices_.isEmpty()) {
-        return;
-    }
-
-    int activeCount = 0;
-    for (const TouchholdVoice& voice : touchholdVoices_) {
-        if (voice.activeSpanIndex >= 0 && voice.voice != nullptr && voice.voice->initialized) {
-            ++activeCount;
-        }
-    }
-
-    const double activeCopies = previewTouchholdAggregatePlaybackCopies(activeCount);
-    const double activeVoiceVolume = (activeCount > 0)
-        ? qBound(0.0, baseVolume * (activeCopies / static_cast<double>(activeCount)), 1.5)
-        : qBound(0.0, baseVolume, 1.5);
-    const float inactiveVoiceVolume = static_cast<float>(qBound(0.0, baseVolume, 1.5));
-    const float activeVoiceVolumeF = static_cast<float>(activeVoiceVolume);
-
-    for (TouchholdVoice& voice : touchholdVoices_) {
-        if (voice.voice == nullptr || !voice.voice->initialized) {
-            continue;
-        }
-        ma_sound_set_volume(
-            &voice.voice->sound,
-            voice.activeSpanIndex >= 0 ? activeVoiceVolumeF : inactiveVoiceVolume
-        );
+    if (touchholdVoice_ != nullptr && touchholdVoice_->initialized) {
+        ma_sound_set_volume(&touchholdVoice_->sound, static_cast<float>(previewSfxVolumeForKind(settings_, "touchhold")));
     }
 }
 
@@ -236,7 +204,7 @@ bool QtPreviewSfxRuntime::prepareStretchedBackgroundTrack(double timelineSecond)
     state->trackPath = preparedAssets_.trackPath;
     state->playbackRate = playbackSession_.backgroundTrackPlaybackRate;
 
-    ma_decoder_config decoderConfig = ma_decoder_config_init(ma_format_f32, 0, 0);
+    ma_decoder_config decoderConfig = ma_decoder_config_init(ma_format_f32, 2, deviceSampleRate_);
     const ma_result decoderInitResult =
         miacode::audio_io::decoderInitFile(preparedAssets_.trackPath, &decoderConfig, &state->decoder);
     if (decoderInitResult != MA_SUCCESS) {

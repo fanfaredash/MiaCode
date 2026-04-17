@@ -856,6 +856,85 @@ int main(int argc, char** argv)
 
     {
         TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("{16} 8b (160){4},\n{16} (160),\nE"), 0.0);
+        int startCol = 0;
+        int endCol = 0;
+        const bool trimmedResolved = model.resolvePreviewFollowSelectionRange(1, 1, &startCol, &endCol);
+        expect(trimmedResolved && startCol == 6 && endCol == 7,
+               QStringLiteral("follow selection trims leading and trailing control tokens around the active note text"));
+        const bool controlOnlyResolved = model.resolvePreviewFollowSelectionRange(2, 1, &startCol, &endCol);
+        expect(controlOnlyResolved && startCol == 1 && endCol == 1,
+               QStringLiteral("follow selection falls back to the anchor when a segment only contains control tokens and spaces"));
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("1\n2,\nE"), 0.0);
+        TimelineQuickModel::PreviewFollowSpan span;
+        double second = -1.0;
+        const bool resolved = model.resolvePreviewFollowSpan(0.1, &span, &second);
+        expect(resolved
+                   && span.hasVisibleBody
+                   && span.startLine == 1
+                   && span.startCol == 1
+                   && span.endLine == 2
+                   && span.endCol == 1
+                   && span.cursorLine == 2
+                   && span.cursorCol == 2
+                   && nearlyEqual(second, 0.0),
+               QStringLiteral("follow span can continuously cross lines and moves the caret to the span end"));
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("{16} (160)\n8b,\nE"), 0.0);
+        TimelineQuickModel::PreviewFollowSpan span;
+        const bool resolved = model.resolvePreviewFollowSpan(0.01, &span);
+        expect(resolved
+                   && span.hasVisibleBody
+                   && span.startLine == 2
+                   && span.startCol == 1
+                   && span.endLine == 2
+                   && span.endCol == 2
+                   && span.cursorLine == 2
+                   && span.cursorCol == 3,
+               QStringLiteral("follow span can trim a control-only first line and advance to later visible content"));
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("1\n2 (160){4},\nE"), 0.0);
+        TimelineQuickModel::PreviewFollowSpan span;
+        const bool resolved = model.resolvePreviewFollowSpan(0.1, &span);
+        expect(resolved
+                   && span.hasVisibleBody
+                   && span.startLine == 1
+                   && span.startCol == 1
+                   && span.endLine == 2
+                   && span.endCol == 1
+                   && span.cursorLine == 2
+                   && span.cursorCol == 2,
+               QStringLiteral("follow span trims trailing control tokens on the final line and stops at the last logical character"));
+    }
+
+    {
+        TimelineQuickModel model;
+        model.rebuildFromText(QStringLiteral("{16} (160),\nE"), 0.0);
+        TimelineQuickModel::PreviewFollowSpan span;
+        const bool resolved = model.resolvePreviewFollowSpan(0.01, &span);
+        expect(resolved
+                   && !span.hasVisibleBody
+                   && span.startLine == 1
+                   && span.startCol == 1
+                   && span.endLine == 1
+                   && span.endCol == 1
+                   && span.cursorLine == 1
+                   && span.cursorCol == 2,
+               QStringLiteral("follow span reports empty-body fallback spans distinctly from visible-body selections"));
+    }
+
+    {
+        TimelineQuickModel model;
         model.rebuildFromText(QStringLiteral("1/2,\n1,,\nE"), 0.0);
         int startCol = 0;
         int endCol = 0;
@@ -865,6 +944,130 @@ int main(int argc, char** argv)
         const bool emptyResolved = model.resolvePreviewFollowSelectionRange(2, 3, &startCol, &endCol);
         expect(emptyResolved && startCol == 3 && endCol == 3,
                QStringLiteral("follow selection falls back to the comma column when the beat segment is empty"));
+    }
+
+    {
+        TimelineQuickModel incremental;
+        TimelineQuickModel rebuilt;
+        const QString original = QStringLiteral("1/2,\n1,,\nE");
+        QTextDocument document(original);
+        incremental.rebuildFromText(original, 0.0);
+
+        const int position = original.indexOf(QStringLiteral("1/2"));
+        QTextCursor cursor(&document);
+        cursor.setPosition(position);
+        cursor.setPosition(position + QStringLiteral("1/2").size(), QTextCursor::KeepAnchor);
+        cursor.insertText(QStringLiteral("1-4[8:1]"));
+
+        const QString updated = document.toPlainText();
+        const bool incrementalApplied = incremental.applyContentsChange(
+            &document,
+            position,
+            QStringLiteral("1/2").size(),
+            QStringLiteral("1-4[8:1]").size(),
+            0.0);
+        rebuilt.rebuildFromText(updated, 0.0);
+
+        int incrementalStartCol = 0;
+        int incrementalEndCol = 0;
+        int rebuiltStartCol = 0;
+        int rebuiltEndCol = 0;
+        const bool incrementalResolved = incremental.resolvePreviewFollowSelectionRange(
+            1,
+            1,
+            &incrementalStartCol,
+            &incrementalEndCol);
+        const bool rebuiltResolved = rebuilt.resolvePreviewFollowSelectionRange(1, 1, &rebuiltStartCol, &rebuiltEndCol);
+        expect(incrementalApplied && incrementalResolved && rebuiltResolved
+                   && incrementalStartCol == rebuiltStartCol
+                   && incrementalEndCol == rebuiltEndCol
+                   && incrementalStartCol == 1
+                   && incrementalEndCol == 8,
+               QStringLiteral("incremental edits rebuild cached follow-selection ranges the same way as full rebuild"));
+    }
+
+    {
+        TimelineQuickModel incremental;
+        TimelineQuickModel rebuilt;
+        const QString original = QStringLiteral("1,\nE");
+        QTextDocument document(original);
+        incremental.rebuildFromText(original, 0.0);
+
+        QTextCursor cursor(&document);
+        cursor.setPosition(0);
+        cursor.setPosition(1, QTextCursor::KeepAnchor);
+        cursor.insertText(QStringLiteral("{16} 1-4[8:1] (160)"));
+
+        const QString updated = document.toPlainText();
+        const bool incrementalApplied = incremental.applyContentsChange(
+            &document,
+            0,
+            1,
+            QStringLiteral("{16} 1-4[8:1] (160)").size(),
+            0.0);
+        rebuilt.rebuildFromText(updated, 0.0);
+
+        int incrementalStartCol = 0;
+        int incrementalEndCol = 0;
+        int rebuiltStartCol = 0;
+        int rebuiltEndCol = 0;
+        const bool incrementalResolved = incremental.resolvePreviewFollowSelectionRange(
+            1,
+            1,
+            &incrementalStartCol,
+            &incrementalEndCol);
+        const bool rebuiltResolved = rebuilt.resolvePreviewFollowSelectionRange(1, 1, &rebuiltStartCol, &rebuiltEndCol);
+        expect(incrementalApplied && incrementalResolved && rebuiltResolved
+                   && incrementalStartCol == rebuiltStartCol
+                   && incrementalEndCol == rebuiltEndCol
+                   && incrementalStartCol == 6
+                   && incrementalEndCol == 13,
+               QStringLiteral("incremental edits rebuild trimmed follow-selection ranges with boundary control tokens"));
+    }
+
+    {
+        TimelineQuickModel incremental;
+        TimelineQuickModel rebuilt;
+        const QString original = QStringLiteral("1,\nE");
+        QTextDocument document(original);
+        incremental.rebuildFromText(original, 0.0);
+
+        QTextCursor cursor(&document);
+        cursor.setPosition(0);
+        cursor.setPosition(1, QTextCursor::KeepAnchor);
+        cursor.insertText(QStringLiteral("{16} (160)\n8b"));
+
+        const QString updated = document.toPlainText();
+        const bool incrementalApplied = incremental.applyContentsChange(
+            &document,
+            0,
+            1,
+            QStringLiteral("{16} (160)\n8b").size(),
+            0.0);
+        rebuilt.rebuildFromText(updated, 0.0);
+
+        TimelineQuickModel::PreviewFollowSpan incrementalSpan;
+        TimelineQuickModel::PreviewFollowSpan rebuiltSpan;
+        const bool incrementalResolved = incremental.resolvePreviewFollowSpan(0.01, &incrementalSpan);
+        const bool rebuiltResolved = rebuilt.resolvePreviewFollowSpan(0.01, &rebuiltSpan);
+        expect(incrementalApplied
+                   && incrementalResolved
+                   && rebuiltResolved
+                   && incrementalSpan.hasVisibleBody == rebuiltSpan.hasVisibleBody
+                   && incrementalSpan.startLine == rebuiltSpan.startLine
+                   && incrementalSpan.startCol == rebuiltSpan.startCol
+                   && incrementalSpan.endLine == rebuiltSpan.endLine
+                   && incrementalSpan.endCol == rebuiltSpan.endCol
+                   && incrementalSpan.cursorLine == rebuiltSpan.cursorLine
+                   && incrementalSpan.cursorCol == rebuiltSpan.cursorCol
+                   && incrementalSpan.startLine == 2
+                   && incrementalSpan.startCol == 1
+                   && incrementalSpan.endLine == 2
+                   && incrementalSpan.endCol == 2
+                   && incrementalSpan.cursorLine == 2
+                   && incrementalSpan.cursorCol == 3
+                   && incrementalSpan.hasVisibleBody,
+               QStringLiteral("incremental edits rebuild cached follow spans the same way as full rebuild"));
     }
 
     {
@@ -1003,10 +1206,12 @@ int main(int argc, char** argv)
                        && !quickBeats.at(3).major && !quickBeats.at(4).major,
                    QStringLiteral("comma beat markers stay independent from measure-line styling"));
         }
-        expect(quickMeasures.size() == 2, QStringLiteral("quick model builds independent 4/4 measure lines across source lines"));
-        if (quickMeasures.size() == 2) {
-            expect(nearlyEqual(quickMeasures.at(0), 0.0) && nearlyEqual(quickMeasures.at(1), 2.0),
-                   QStringLiteral("measure lines continue by meter time instead of resetting per text line"));
+        expect(quickMeasures.size() == 3, QStringLiteral("quick model keeps the trailing virtual-comma measure line across source lines"));
+        if (quickMeasures.size() == 3) {
+            expect(nearlyEqual(quickMeasures.at(0), 0.0)
+                       && nearlyEqual(quickMeasures.at(1), 2.0)
+                       && nearlyEqual(quickMeasures.at(2), 4.0),
+                   QStringLiteral("measure lines continue by meter time and extend one future line for the implicit trailing comma"));
         }
 
         QString diff;
@@ -1032,10 +1237,12 @@ int main(int argc, char** argv)
                        && !quickBeats.at(6).major,
                    QStringLiteral("changing {beats} does not turn comma beat markers into measure lines"));
         }
-        expect(quickMeasures.size() == 2, QStringLiteral("quick model keeps meter-based measure lines across {beats} changes"));
-        if (quickMeasures.size() == 2) {
-            expect(nearlyEqual(quickMeasures.at(0), 0.0) && nearlyEqual(quickMeasures.at(1), 2.0),
-                   QStringLiteral("changing {beats} does not move independent 4/4 measure lines"));
+        expect(quickMeasures.size() == 3, QStringLiteral("quick model keeps meter-based measure lines and the trailing virtual-comma line across {beats} changes"));
+        if (quickMeasures.size() == 3) {
+            expect(nearlyEqual(quickMeasures.at(0), 0.0)
+                       && nearlyEqual(quickMeasures.at(1), 2.0)
+                       && nearlyEqual(quickMeasures.at(2), 4.0),
+                   QStringLiteral("changing {beats} does not move independent 4/4 measure lines or the trailing extension"));
         }
 
         QString diff;
@@ -1061,12 +1268,13 @@ int main(int argc, char** argv)
                        && !quickBeats.at(6).major,
                    QStringLiteral("3-beat comma markers remain separate from measure-line styling"));
         }
-        expect(quickMeasures.size() == 3, QStringLiteral("quick model keeps independent measure lines under {3}"));
-        if (quickMeasures.size() == 3) {
+        expect(quickMeasures.size() == 4, QStringLiteral("quick model keeps independent measure lines and the trailing virtual-comma line under {3}"));
+        if (quickMeasures.size() == 4) {
             expect(nearlyEqual(quickMeasures.at(0), 0.0)
                        && nearlyEqual(quickMeasures.at(1), 2.0)
-                       && nearlyEqual(quickMeasures.at(2), 4.0),
-                   QStringLiteral("independent 4/4 measure lines keep their own timing under {3}"));
+                       && nearlyEqual(quickMeasures.at(2), 4.0)
+                       && nearlyEqual(quickMeasures.at(3), 6.0),
+                   QStringLiteral("independent 4/4 measure lines keep their own timing under {3}, plus one trailing future line"));
         }
 
         QString diff;
@@ -1147,10 +1355,12 @@ int main(int argc, char** argv)
                        && !quickBeats.at(3).major,
                    QStringLiteral("BPM changes do not promote comma markers into measure lines"));
         }
-        expect(quickMeasures.size() == 2, QStringLiteral("quick model keeps independent measure markers across BPM changes"));
-        if (quickMeasures.size() == 2) {
-            expect(nearlyEqual(quickMeasures.at(0), 0.0) && nearlyEqual(quickMeasures.at(1), 1.0),
-                   QStringLiteral("a BPM change resets the independent measure-line timeline at the BPM position"));
+        expect(quickMeasures.size() == 3, QStringLiteral("quick model keeps independent measure markers and the trailing virtual-comma line across BPM changes"));
+        if (quickMeasures.size() == 3) {
+            expect(nearlyEqual(quickMeasures.at(0), 0.0)
+                       && nearlyEqual(quickMeasures.at(1), 1.0)
+                       && nearlyEqual(quickMeasures.at(2), 2.6),
+                   QStringLiteral("a BPM change resets the independent measure-line timeline at the BPM position and still extends one future line"));
         }
 
         QString diff;
@@ -1182,12 +1392,13 @@ int main(int argc, char** argv)
         model.rebuildFromText(chartText, 0.0, timingMetadata);
         QVector<double> quickMeasures = flattenSnapshotMeasureLines(model.snapshot());
         std::sort(quickMeasures.begin(), quickMeasures.end());
-        expect(quickMeasures.size() == 3, QStringLiteral("quick model keeps whole_time_signature-driven measure markers"));
-        if (quickMeasures.size() == 3) {
+        expect(quickMeasures.size() == 4, QStringLiteral("quick model keeps whole_time_signature-driven measure markers plus the trailing virtual-comma line"));
+        if (quickMeasures.size() == 4) {
             expect(nearlyEqual(quickMeasures.at(0), 0.0)
                        && nearlyEqual(quickMeasures.at(1), 1.5)
-                       && nearlyEqual(quickMeasures.at(2), 3.0),
-                   QStringLiteral("whole_time_signature metadata shifts quick-model measure timing to 3/4"));
+                       && nearlyEqual(quickMeasures.at(2), 3.0)
+                       && nearlyEqual(quickMeasures.at(3), 4.5),
+                   QStringLiteral("whole_time_signature metadata shifts quick-model measure timing to 3/4 and keeps one future line"));
         }
 
         QString diff;
@@ -1201,12 +1412,13 @@ int main(int argc, char** argv)
         model.rebuildFromText(chartText, 0.0);
         QVector<double> quickMeasures = flattenSnapshotMeasureLines(model.snapshot());
         std::sort(quickMeasures.begin(), quickMeasures.end());
-        expect(quickMeasures.size() == 3, QStringLiteral("quick model accepts inline time-signature comments"));
-        if (quickMeasures.size() == 3) {
+        expect(quickMeasures.size() == 4, QStringLiteral("quick model accepts inline time-signature comments and keeps the trailing virtual-comma line"));
+        if (quickMeasures.size() == 4) {
             expect(nearlyEqual(quickMeasures.at(0), 0.0)
                        && nearlyEqual(quickMeasures.at(1), 1.0)
-                       && nearlyEqual(quickMeasures.at(2), 2.5),
-                   QStringLiteral("inline time-signature comments truncate and restart quick-model measure timing"));
+                       && nearlyEqual(quickMeasures.at(2), 2.5)
+                       && nearlyEqual(quickMeasures.at(3), 4.0),
+                   QStringLiteral("inline time-signature comments truncate and restart quick-model measure timing, then extend one future line"));
         }
 
         QString diff;

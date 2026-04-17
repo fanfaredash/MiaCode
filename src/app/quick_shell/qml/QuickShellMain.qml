@@ -26,6 +26,11 @@ ApplicationWindow {
     property bool previewPaneStartupBalancePending: true
     property bool startupLayoutLocked: true
     property bool startupContentReady: false
+    property real lastPreviewCanvasAspectRatio: 1.0
+    property real previewPaneWidthBeforeExport: 0
+    property bool previewPaneWidthBeforeExportUserResized: false
+    property bool previewPaneWidthRestorePending: false
+    property real lastPreviewPaneRestoreGeneration: 0
     property real pendingStartupLayoutWidth: 0
     property real pendingStartupLayoutHeight: 0
     property real startupMinimumWindowWidth: 960
@@ -198,18 +203,127 @@ ApplicationWindow {
         return Math.max(0, totalWidth - sidebarPaneWidth() - previewPaneHandleWidth())
     }
 
+    function previewCanvasAspectRatio() {
+        if (!controller || controller.previewCanvasAspectRatio === undefined)
+            return metric("previewCanvasAspectRatio", 1.0)
+        return Math.max(1.0, controller.previewCanvasAspectRatio)
+    }
+
+    function previewStatsMinimumHeightForRightWidth(rightWidth) {
+        const statsHostWidth = Math.max(
+            0,
+            rightWidth - metric("previewPanelMarginX", 8) * 2 - 16
+        )
+        const itemCount = 6
+        const wideCols = metric("previewStatsWideLayoutCols", 3)
+        const narrowCols = metric("previewStatsNarrowLayoutCols", 2)
+        const horizontalSpacing = metric("previewStatsHorizontalSpacing", 10)
+        const verticalSpacing = metric("previewStatsVerticalSpacing", 6)
+        const chipHeight = metric("previewStatsChipHeight", 30)
+        const wideLayoutThreshold = wideCols * metric("previewStatsWideLayoutMinChipWidth", 118)
+            + Math.max(0, wideCols - 1) * horizontalSpacing
+        const useWideLayout = statsHostWidth >= wideLayoutThreshold
+        const columns = Math.max(1, Math.min(itemCount, useWideLayout ? wideCols : narrowCols))
+        const rows = Math.max(1, Math.ceil(itemCount / columns))
+        return 16 + 2 + 2 + rows * chipHeight + Math.max(0, rows - 1) * verticalSpacing
+    }
+
+    function previewPaneMinimumRightWidth(totalWidth) {
+        const availableWidth = Math.max(0, totalWidth - previewPaneHandleWidth())
+        const leftMinWidth = workspacePaneMinWidth()
+        const minimumCandidate = metric("previewControlStatsCardMinWidth", 280)
+            + metric("previewPanelMarginX", 8) * 2
+        return availableWidth >= leftMinWidth + minimumCandidate
+            ? minimumCandidate
+            : Math.min(availableWidth, minimumCandidate)
+    }
+
+    function previewPaneRightMaxWidth(totalWidth) {
+        const availableWidth = Math.max(0, totalWidth - previewPaneHandleWidth())
+        const leftMinWidth = workspacePaneMinWidth()
+        const minimumRightWidth = previewPaneMinimumRightWidth(totalWidth)
+        return availableWidth >= leftMinWidth + minimumRightWidth
+            ? Math.min(metric("previewPanelMaxWidth", 900), availableWidth - leftMinWidth)
+            : availableWidth
+    }
+
+    function previewPaneTargetWidth(totalWidth, totalHeight, minimumStatsHeight) {
+        const availableWidth = Math.max(0, totalWidth - previewPaneHandleWidth())
+        const minimumRightWidth = previewPaneMinimumRightWidth(totalWidth)
+        const rightMaxWidth = previewPaneRightMaxWidth(totalWidth)
+        const aspectRatio = previewCanvasAspectRatio()
+        let targetRightWidth = Math.round(availableWidth * 0.5)
+        targetRightWidth = Math.min(targetRightWidth, rightMaxWidth)
+        targetRightWidth = Math.max(
+            targetRightWidth,
+            Math.min(metric("previewPanelMinWidth", 320), rightMaxWidth)
+        )
+        for (let iteration = 0; iteration < 3; ++iteration) {
+            const availablePreviewHeight = Math.max(
+                0,
+                totalHeight
+                    - metric("previewPanelMarginTop", 12)
+                    - metric("previewCanvasControlGap", 10)
+                    - Math.max(0, metric("previewControlsHeight", 200))
+                    - metric("previewControlStatsGap", 10)
+                    - Math.max(0, minimumStatsHeight)
+                    - metric("previewStatsBottomGap", 12)
+            )
+            const heightLimitedWidth = Math.max(
+                0,
+                Math.round(availablePreviewHeight * aspectRatio)
+                    + metric("previewPanelMarginX", 8) * 2
+            )
+            const nextRightWidth = Math.min(
+                targetRightWidth,
+                Math.max(minimumRightWidth, heightLimitedWidth)
+            )
+            if (nextRightWidth === targetRightWidth)
+                break
+            targetRightWidth = nextRightWidth
+        }
+        return Math.max(minimumRightWidth, Math.min(targetRightWidth, rightMaxWidth))
+    }
+
+    function previewPaneAdaptiveTargetWidth(totalWidth, totalHeight) {
+        const minimumRightWidth = previewPaneMinimumRightWidth(totalWidth)
+        const rightMaxWidth = previewPaneRightMaxWidth(totalWidth)
+        if (rightMaxWidth <= 0)
+            return 0
+        let targetRightWidth = Math.max(
+            minimumRightWidth,
+            Math.min(
+                previewPaneTargetWidth(
+                    totalWidth,
+                    totalHeight,
+                    previewStatsMinimumHeightForRightWidth(rightMaxWidth)
+                ),
+                rightMaxWidth
+            )
+        )
+        for (let iteration = 0; iteration < 4; ++iteration) {
+            const nextRightWidth = Math.max(
+                minimumRightWidth,
+                Math.min(
+                    previewPaneTargetWidth(
+                        totalWidth,
+                        totalHeight,
+                        previewStatsMinimumHeightForRightWidth(targetRightWidth)
+                    ),
+                    rightMaxWidth
+                )
+            )
+            if (nextRightWidth === targetRightWidth)
+                break
+            targetRightWidth = nextRightWidth
+        }
+        return targetRightWidth
+    }
+
     function previewPaneMaxWidth(totalWidth, totalHeight) {
         const minWidth = previewPaneMinWidth()
-        const textMinWidth = contentPaneMinWidth()
-        const maxByWindow = Math.max(
-            minWidth,
-            Math.floor(totalWidth - sidebarPaneWidth() - textMinWidth - previewPaneHandleWidth())
-        )
-        const maxBySquare = Math.max(minWidth, Math.floor(totalHeight))
-        return Math.max(
-            minWidth,
-            Math.min(metric("previewPanelMaxWidth", 900), maxByWindow, maxBySquare)
-        )
+        const maxByWindow = previewPaneRightMaxWidth(totalWidth)
+        return Math.max(minWidth, Math.min(metric("previewPanelMaxWidth", 900), maxByWindow))
     }
 
     function clampPreviewPaneWidth(candidate, totalWidth, totalHeight) {
@@ -221,7 +335,7 @@ ApplicationWindow {
     }
 
     function previewPaneDefaultWidth(totalWidth, totalHeight) {
-        return Math.max(0, previewPaneAvailableWidth(totalWidth) - contentPaneMinWidth())
+        return previewPaneAdaptiveTargetWidth(totalWidth, totalHeight)
     }
 
     function previewPaneInitialWidth(totalWidth, totalHeight) {
@@ -232,6 +346,17 @@ ApplicationWindow {
             Math.max(workspaceMinWidth, Math.floor(availableWidth / 2))
         )
         return Math.max(0, availableWidth - initialWorkspaceWidth)
+    }
+
+    function fittedPreviewFrameWidth(hostWidth, hostHeight) {
+        const safeWidth = Math.max(1, hostWidth)
+        const safeHeight = Math.max(1, hostHeight)
+        return Math.max(1, Math.min(safeWidth, safeHeight * previewCanvasAspectRatio()))
+    }
+
+    function fittedPreviewFrameHeight(hostWidth, hostHeight) {
+        const frameWidth = fittedPreviewFrameWidth(hostWidth, hostHeight)
+        return Math.max(1, Math.min(hostHeight, frameWidth / previewCanvasAspectRatio()))
     }
 
     function noteStartupLayoutActivity(totalWidth, totalHeight) {
@@ -362,6 +487,7 @@ ApplicationWindow {
 
     Component.onCompleted: {
         syncStyleBridgeState()
+        lastPreviewCanvasAspectRatio = previewCanvasAspectRatio()
         if (!initialGeometryApplied) {
             width = metric("initialWindowWidth", 1280)
             height = metric("initialWindowHeight", 800)
@@ -402,6 +528,41 @@ ApplicationWindow {
 
     Connections {
         target: controller
+
+        function onShellStateChanged() {
+            const nextRestoreGeneration = controller.previewPaneRestoreGeneration
+            if (nextRestoreGeneration !== root.lastPreviewPaneRestoreGeneration) {
+                root.lastPreviewPaneRestoreGeneration = nextRestoreGeneration
+                if (Math.abs(root.lastPreviewCanvasAspectRatio - 1.0) <= 0.0001 && previewPaneWidth > 0) {
+                    root.previewPaneWidthBeforeExport = previewPaneWidth
+                    root.previewPaneWidthBeforeExportUserResized = previewPaneUserResized
+                    root.previewPaneWidthRestorePending = true
+                }
+            }
+            const nextAspectRatio = previewCanvasAspectRatio()
+            const previousAspectRatio = root.lastPreviewCanvasAspectRatio
+            if (Math.abs(nextAspectRatio - previousAspectRatio) <= 0.0001)
+                return
+            const restoringToSquare = Math.abs(nextAspectRatio - 1.0) <= 0.0001
+                && previousAspectRatio > 1.0001
+            root.lastPreviewCanvasAspectRatio = nextAspectRatio
+            if (restoringToSquare && root.previewPaneWidthRestorePending && root.previewPaneWidthBeforeExport > 0) {
+                previewPaneWidth = clampPreviewPaneWidth(
+                    root.previewPaneWidthBeforeExport,
+                    workspaceRow.width,
+                    workspaceRow.height
+                )
+                previewPaneUserResized = root.previewPaneWidthBeforeExportUserResized
+                root.previewPaneWidthRestorePending = false
+                return
+            }
+            previewPaneUserResized = false
+            previewPaneWidth = clampPreviewPaneWidth(
+                previewPaneAdaptiveTargetWidth(workspaceRow.width, workspaceRow.height),
+                workspaceRow.width,
+                workspaceRow.height
+            )
+        }
 
         function onPreviewFullscreenChanged() {
             logPreviewSurfaceTransition("preview_surface_fullscreen_changed")
@@ -852,11 +1013,9 @@ ApplicationWindow {
                                 Rectangle {
                                     id: embeddedPreviewFrame
 
-                                    readonly property real canvasSide: Math.max(1, Math.min(parent.width, parent.height))
-
                                     visible: !controller.previewFullscreen
-                                    width: canvasSide
-                                    height: canvasSide
+                                    width: fittedPreviewFrameWidth(parent.width, parent.height)
+                                    height: fittedPreviewFrameHeight(parent.width, parent.height)
                                     anchors.centerIn: parent
                                     color: tone("canvasBg", "#000000")
                                     border.color: tone("borderSoft", "#ccd6e2")

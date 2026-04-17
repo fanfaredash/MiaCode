@@ -11,6 +11,19 @@ class QTextDocument;
 class TimelineQuickModel
 {
 public:
+    struct PreviewFollowSpan {
+        int startLine = 1;
+        int startCol = 1;
+        int endLine = 1;
+        int endCol = 1;
+        int cursorLine = 1;
+        int cursorCol = 1;
+        int startPosition = 0;
+        int endPositionExclusive = 0;
+        int cursorPosition = 0;
+        bool hasVisibleBody = false;
+    };
+
     TimelineQuickModel() = default;
 
     void clear();
@@ -36,6 +49,7 @@ public:
     bool resolveTimelineNavigateCursor(double second, int* line, int* col, double* cursorSecond) const;
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
     bool resolvePreviewFollowSelectionRange(int line, int anchorCol, int* startCol, int* endCol) const;
+    bool resolvePreviewFollowSpan(double second, PreviewFollowSpan* span, double* anchorSecond = nullptr) const;
     bool resolvePreviewFollowCursor(
         double second,
         int* line,
@@ -66,7 +80,20 @@ private:
     };
 
     struct LineCursorCache {
+        struct FollowSelectionRange {
+            int anchorCol = 1;
+            int startCol = 1;
+            int endCol = 1;
+        };
+
+        struct FollowSelectionSpan {
+            int anchorCol = 1;
+            PreviewFollowSpan span;
+        };
+
         QVector<TimelineCursorAnchor> segmentStarts;
+        QVector<FollowSelectionRange> followSelectionRanges;
+        QVector<FollowSelectionSpan> followSelectionSpans;
     };
 
     struct LineState {
@@ -104,6 +131,8 @@ private:
     void rebuildSnapshotDuration();
     void resequenceLineMetadata(int startIndex);
     void rebuildAnchorLineIndices();
+    void rebuildFollowSelectionRanges(LineState* lineState) const;
+    void rebuildFollowSelectionSpans();
     bool resolvePreviousCursorAnchorForTextPosition(
         int lineNumber,
         int sourceCol,

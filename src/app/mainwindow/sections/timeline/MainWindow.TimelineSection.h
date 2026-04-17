@@ -50,9 +50,16 @@ public:
         bool selectToken,
         bool focusEditor,
         bool centerView,
-        bool suppressSignals
+        bool suppressSignals,
+        qint64* cursorMoveElapsedNs = nullptr,
+        qint64* followOverlayElapsedNs = nullptr
     );
-    void updatePreviewFollowDecorationForTimelineBlueLine(double second, bool ensureVisible = false);
+    void updatePreviewFollowDecorationForTimelineBlueLine(
+        double second,
+        bool ensureVisible = false,
+        qint64* resolveElapsedNs = nullptr,
+        qint64* followOverlayElapsedNs = nullptr,
+        TimelineQuickModel::PreviewFollowSpan* spanOut = nullptr);
     void syncEditorCursorToPreviewSecond(
         double second,
         bool centerView = true,

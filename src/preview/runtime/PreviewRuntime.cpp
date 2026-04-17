@@ -436,7 +436,18 @@ void PreviewRuntime::setShowTimestamp(bool show)
 
 void PreviewRuntime::setShowObjectStatsHud(bool show)
 {
-    frameState_.render.showObjectStatsHud = show;
+    requestedShowObjectStatsHud_ = show;
+    frameState_.render.showObjectStatsHud = requestedShowObjectStatsHud_ && !suppressObjectStatsHud_;
+    update();
+}
+
+void PreviewRuntime::setSuppressObjectStatsHud(bool suppress)
+{
+    if (suppressObjectStatsHud_ == suppress) {
+        return;
+    }
+    suppressObjectStatsHud_ = suppress;
+    frameState_.render.showObjectStatsHud = requestedShowObjectStatsHud_ && !suppressObjectStatsHud_;
     update();
 }
 

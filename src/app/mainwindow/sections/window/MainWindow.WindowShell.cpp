@@ -443,6 +443,16 @@ QStringList MainWindow::WindowSection::shellPreviewStatsTexts() const
     };
 }
 
+double MainWindow::WindowSection::shellPreviewCanvasAspectRatio() const
+{
+    return owner_.normalizedPreviewCanvasAspectRatio(owner_.previewCanvasAspectRatio_);
+}
+
+quint64 MainWindow::WindowSection::shellPreviewPaneRestoreGeneration() const
+{
+    return owner_.previewPaneRestoreGeneration_;
+}
+
 bool MainWindow::WindowSection::shellPreviewFullscreen() const
 {
     return owner_.previewFullscreenActive_;

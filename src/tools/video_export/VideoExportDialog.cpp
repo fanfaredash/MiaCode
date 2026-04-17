@@ -413,6 +413,7 @@ VideoExportDialog::VideoExportDialog(
     IsPreviewPlayingCallback isPreviewPlayingCallback,
     CurrentPreviewSecondCallback currentPreviewSecondCallback,
     PreviewTimestampCallback previewTimestampCallback,
+    PreviewObjectStatsCallback previewObjectStatsCallback,
     PreviewAspectRatioCallback previewAspectRatioCallback,
     PreviewBrightnessCallback previewBrightnessCallback,
     PreviewLayoutScaleCallback previewLayoutScaleCallback,
@@ -429,6 +430,7 @@ VideoExportDialog::VideoExportDialog(
     , isPreviewPlayingCallback_(std::move(isPreviewPlayingCallback))
     , currentPreviewSecondCallback_(std::move(currentPreviewSecondCallback))
     , previewTimestampCallback_(std::move(previewTimestampCallback))
+    , previewObjectStatsCallback_(std::move(previewObjectStatsCallback))
     , previewAspectRatioCallback_(std::move(previewAspectRatioCallback))
     , previewBrightnessCallback_(std::move(previewBrightnessCallback))
     , previewLayoutScaleCallback_(std::move(previewLayoutScaleCallback))
@@ -443,6 +445,7 @@ VideoExportDialog::VideoExportDialog(
     resize(680, 360);
     setStyleSheet(UiTheme::exportDialogStyleSheet());
     initialShowTimestamp_ = baseTask_.showTimestamp;
+    initialShowObjectStats_ = baseTask_.showObjectStatsHud;
 
     auto* rootLayout = new QVBoxLayout(this);
     rootLayout->setContentsMargins(12, 10, 12, 10);
@@ -739,6 +742,11 @@ VideoExportDialog::VideoExportDialog(
     );
     showTimestampCheck_->setChecked(baseTask_.showTimestamp);
     showTimestampCheck_->setText(uiText("dialog.video_export.option.show_timestamp", QStringLiteral("Show bottom-left timestamp")));
+    showObjectStatsCheck_ = new QCheckBox(
+        uiText("dialog.video_export.option.show_object_stats", QStringLiteral("Show object stats")),
+        optionsContent_
+    );
+    showObjectStatsCheck_->setChecked(baseTask_.showObjectStatsHud);
     smoothBrightnessCheck_ = new QCheckBox(
         l10n(QStringLiteral("Smooth brightness"), QStringLiteral("骞虫粦浜害")),
         optionsContent_
@@ -927,6 +935,7 @@ VideoExportDialog::VideoExportDialog(
     optionsLayout->addWidget(backgroundScaleModeRow, 4, 0, 1, 2);
     optionsLayout->addWidget(smoothBrightnessCheck_, 5, 0, 1, 1, Qt::AlignLeft | Qt::AlignTop);
     optionsLayout->addWidget(showTimestampCheck_, 5, 1, 1, 1, Qt::AlignLeft | Qt::AlignTop);
+    optionsLayout->addWidget(showObjectStatsCheck_, 6, 0, 1, 2, Qt::AlignLeft | Qt::AlignTop);
     rootLayout->addWidget(
         buildCollapsibleSection(
             l10n(QStringLiteral("Options"), QStringLiteral("閫夐」")),
@@ -992,6 +1001,10 @@ VideoExportDialog::VideoExportDialog(
     connect(showTimestampCheck_, &QCheckBox::toggled, this, [this](bool checked) {
         syncLivePreviewTimestampVisibility();
         initialShowTimestamp_ = checked;
+    });
+    connect(showObjectStatsCheck_, &QCheckBox::toggled, this, [this](bool checked) {
+        syncLivePreviewObjectStatsVisibility();
+        initialShowObjectStats_ = checked;
     });
     connect(smoothBrightnessCheck_, &QCheckBox::toggled, this, [this](bool checked) {
         if (previewSmoothBrightnessCallback_) {
@@ -1137,6 +1150,14 @@ void VideoExportDialog::syncLivePreviewTimestampVisibility()
     previewTimestampCallback_(showTimestampCheck_->isChecked());
 }
 
+void VideoExportDialog::syncLivePreviewObjectStatsVisibility()
+{
+    if (showObjectStatsCheck_ == nullptr || !previewObjectStatsCallback_) {
+        return;
+    }
+    previewObjectStatsCallback_(showObjectStatsCheck_->isChecked());
+}
+
 void VideoExportDialog::restoreLivePreviewState()
 {
     if (previewStateRestored_) {
@@ -1145,6 +1166,12 @@ void VideoExportDialog::restoreLivePreviewState()
     previewStateRestored_ = true;
     if (previewTimestampCallback_) {
         previewTimestampCallback_(initialShowTimestamp_);
+    }
+    if (previewObjectStatsCallback_) {
+        previewObjectStatsCallback_(initialShowObjectStats_);
+    }
+    if (previewAspectRatioCallback_) {
+        previewAspectRatioCallback_(1.0);
     }
 }
 
@@ -1345,6 +1372,7 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
     updated.fps = qMax(1, selectedFps_);
     updated.preset = selectedPreset_;
     updated.showTimestamp = showTimestampCheck_ != nullptr ? showTimestampCheck_->isChecked() : true;
+    updated.showObjectStatsHud = showObjectStatsCheck_ != nullptr ? showObjectStatsCheck_->isChecked() : false;
     updated.backgroundBrightnessOuter = brightnessOuterSlider_ != nullptr
         ? qBound(0.0, static_cast<double>(brightnessOuterSlider_->value()) / 100.0, 1.0)
         : updated.backgroundBrightnessOuter;

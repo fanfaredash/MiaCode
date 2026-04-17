@@ -162,6 +162,13 @@ Rectangle {
         font.weight: root.transportTextWeight
     }
 
+    TextMetrics {
+        id: timeSummaryTextMetrics
+        text: root.timeSummary
+        font.pixelSize: root.transportTextPixelSize
+        font.weight: root.transportTextWeight
+    }
+
     Binding {
         target: transportSlider
         property: "value"
@@ -275,180 +282,375 @@ Rectangle {
             }
         }
 
-        RowLayout {
+        Item {
             Layout.fillWidth: true
-            spacing: 8
+            implicitHeight: Math.max(
+                root.controlButtonHeight,
+                Math.max(defaultLeftRow.implicitHeight, Math.max(defaultRightRow.implicitHeight, Math.max(swappedLeftRow.implicitHeight, swappedRightRow.implicitHeight)))
+            )
 
             RowLayout {
-                Layout.alignment: Qt.AlignLeft
+                anchors.fill: parent
                 spacing: 8
 
-                ToolButton {
-                    Layout.preferredWidth: 30
-                    Layout.preferredHeight: root.controlButtonHeight
-                    focusPolicy: Qt.NoFocus
-                    padding: 0
-                    onPressed: root.focusRequested()
-                    onClicked: {
-                        root.focusRequested()
-                        if (controller)
-                            controller.stopPreview()
-                    }
-                    background: Rectangle {
-                        color: root.transportButtonFillColor(parent.down)
-                        border.color: root.transportButtonBorderColor()
-                        radius: 6
-                    }
-                    contentItem: Item {
-                        implicitWidth: 18
-                        implicitHeight: 18
+                RowLayout {
+                    id: defaultLeftRow
+                    visible: !(controller && controller.workspacePanelsSwapped)
+                    Layout.alignment: Qt.AlignLeft
+                    spacing: 8
 
-                        Rectangle {
-                            width: 10
-                            height: 10
-                            radius: 1
-                            color: root.transportPrimaryTextColor()
-                            anchors.centerIn: parent
+                    ToolButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: root.controlButtonHeight
+                        focusPolicy: Qt.NoFocus
+                        padding: 0
+                        onPressed: root.focusRequested()
+                        onClicked: {
+                            root.focusRequested()
+                            if (controller)
+                                controller.stopPreview()
+                        }
+                        background: Rectangle {
+                            color: root.transportButtonFillColor(parent.down)
+                            border.color: root.transportButtonBorderColor()
+                            radius: 6
+                        }
+                        contentItem: Item {
+                            implicitWidth: 18
+                            implicitHeight: 18
+
+                            Rectangle {
+                                width: 10
+                                height: 10
+                                radius: 1
+                                color: root.transportPrimaryTextColor()
+                                anchors.centerIn: parent
+                            }
                         }
                     }
-                }
 
-                ToolButton {
-                    Layout.preferredWidth: 30
-                    Layout.preferredHeight: root.controlButtonHeight
-                    focusPolicy: Qt.NoFocus
-                    padding: 0
-                    onPressed: root.focusRequested()
-                    onClicked: {
-                        root.focusRequested()
-                        if (controller)
-                            controller.togglePreviewPlayback()
-                    }
-                    background: Rectangle {
-                        color: root.transportButtonFillColor(parent.down)
-                        border.color: root.transportButtonBorderColor()
-                        radius: 6
-                    }
-                    contentItem: Item {
-                        implicitWidth: 18
-                        implicitHeight: 18
+                    ToolButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: root.controlButtonHeight
+                        focusPolicy: Qt.NoFocus
+                        padding: 0
+                        onPressed: root.focusRequested()
+                        onClicked: {
+                            root.focusRequested()
+                            if (controller)
+                                controller.togglePreviewPlayback()
+                        }
+                        background: Rectangle {
+                            color: root.transportButtonFillColor(parent.down)
+                            border.color: root.transportButtonBorderColor()
+                            radius: 6
+                        }
+                        contentItem: Item {
+                            implicitWidth: 18
+                            implicitHeight: 18
 
-                        Canvas {
-                            id: playIconCanvas
-                            anchors.fill: parent
-                            visible: !(controller && controller.previewPlaying)
-                            onVisibleChanged: requestPaint()
-                            onPaint: {
-                                const ctx = getContext("2d")
-                                ctx.reset()
-                                ctx.fillStyle = root.transportPrimaryTextColor()
-                                ctx.beginPath()
-                                ctx.moveTo(width * 0.39, height * 0.28)
-                                ctx.lineTo(width * 0.39, height * 0.72)
-                                ctx.lineTo(width * 0.71, height * 0.50)
-                                ctx.closePath()
-                                ctx.fill()
+                            Canvas {
+                                id: defaultPlayIconCanvas
+                                anchors.fill: parent
+                                visible: !(controller && controller.previewPlaying)
+                                onVisibleChanged: requestPaint()
+                                onPaint: {
+                                    const ctx = getContext("2d")
+                                    ctx.reset()
+                                    ctx.fillStyle = root.transportPrimaryTextColor()
+                                    ctx.beginPath()
+                                    ctx.moveTo(width * 0.39, height * 0.28)
+                                    ctx.lineTo(width * 0.39, height * 0.72)
+                                    ctx.lineTo(width * 0.71, height * 0.50)
+                                    ctx.closePath()
+                                    ctx.fill()
+                                }
+
+                                Connections {
+                                    target: root
+
+                                    function onPaletteRefreshRequested() {
+                                        defaultPlayIconCanvas.requestPaint()
+                                    }
+                                }
                             }
 
-                            Connections {
-                                target: root
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 3
+                                visible: !!(controller && controller.previewPlaying)
 
-                                function onPaletteRefreshRequested() {
-                                    playIconCanvas.requestPaint()
+                                Rectangle {
+                                    width: 4
+                                    height: 12
+                                    radius: 1
+                                    color: root.transportPrimaryTextColor()
+                                }
+
+                                Rectangle {
+                                    width: 4
+                                    height: 12
+                                    radius: 1
+                                    color: root.transportPrimaryTextColor()
                                 }
                             }
                         }
+                    }
 
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 3
-                            visible: !!(controller && controller.previewPlaying)
+                    Label {
+                        text: root.timeSummary
+                        color: root.transportPrimaryTextColor()
+                        font.pixelSize: root.transportTextPixelSize
+                        font.weight: root.transportTextWeight
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
 
-                            Rectangle {
-                                width: 4
-                                height: 12
-                                radius: 1
-                                color: root.transportPrimaryTextColor()
-                            }
+                RowLayout {
+                    id: swappedLeftRow
+                    visible: controller && controller.workspacePanelsSwapped
+                    Layout.alignment: Qt.AlignLeft
+                    spacing: 8
 
-                            Rectangle {
-                                width: 4
-                                height: 12
-                                radius: 1
-                                color: root.transportPrimaryTextColor()
-                            }
+                    ToolButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: root.controlButtonHeight
+                        focusPolicy: Qt.NoFocus
+                        padding: 0
+                        onPressed: root.focusRequested()
+                        onClicked: {
+                            root.focusRequested()
+                            if (controller)
+                                controller.previewFullscreen = !fullscreenMode
+                        }
+                        background: Rectangle {
+                            color: root.transportButtonFillColor(parent.down)
+                            border.color: root.transportButtonBorderColor()
+                            radius: 6
+                        }
+                        contentItem: Text {
+                            text: "\u26f6"
+                            color: root.transportPrimaryTextColor()
+                            font.pixelSize: 16
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Button {
+                        text: controller ? controller.previewSpeedLabel : "1x"
+                        Layout.preferredWidth: root.metric("previewSpeedButtonWidth", 72)
+                        Layout.minimumWidth: root.metric("previewSpeedButtonWidth", 72)
+                        Layout.maximumWidth: root.metric("previewSpeedButtonWidth", 72)
+                        Layout.preferredHeight: root.controlButtonHeight
+                        Layout.minimumHeight: root.controlButtonHeight
+                        Layout.maximumHeight: root.controlButtonHeight
+                        focusPolicy: Qt.NoFocus
+                        padding: 0
+                        onPressed: root.focusRequested()
+                        onClicked: root.openSpeedMenu()
+                        background: Rectangle {
+                            color: root.transportButtonFillColor(parent.down)
+                            border.color: root.transportButtonBorderColor()
+                            radius: 6
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            anchors.fill: parent
+                            anchors.leftMargin: 9
+                            anchors.rightMargin: 9
+                            color: root.transportPrimaryTextColor()
+                            font.pixelSize: root.transportTextPixelSize
+                            font.weight: root.transportTextWeight
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    Label {
+                        Layout.preferredWidth: Math.max(
+                            timeSummaryTextMetrics.advanceWidth + 2,
+                            root.metric("previewTimeSummaryMinWidth", 108)
+                        )
+                        Layout.minimumWidth: Layout.preferredWidth
+                        text: root.timeSummary
+                        color: root.transportPrimaryTextColor()
+                        font.pixelSize: root.transportTextPixelSize
+                        font.weight: root.transportTextWeight
+                        horizontalAlignment: Text.AlignLeft
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                }
+
+                Item { Layout.fillWidth: true }
+
+                RowLayout {
+                    id: defaultRightRow
+                    visible: !(controller && controller.workspacePanelsSwapped)
+                    Layout.alignment: Qt.AlignRight
+                    spacing: 8
+
+                    Button {
+                        text: controller ? controller.previewSpeedLabel : "1x"
+                        Layout.preferredWidth: root.metric("previewSpeedButtonWidth", 72)
+                        Layout.minimumWidth: root.metric("previewSpeedButtonWidth", 72)
+                        Layout.maximumWidth: root.metric("previewSpeedButtonWidth", 72)
+                        Layout.preferredHeight: root.controlButtonHeight
+                        Layout.minimumHeight: root.controlButtonHeight
+                        Layout.maximumHeight: root.controlButtonHeight
+                        focusPolicy: Qt.NoFocus
+                        padding: 0
+                        onPressed: root.focusRequested()
+                        onClicked: root.openSpeedMenu()
+                        background: Rectangle {
+                            color: root.transportButtonFillColor(parent.down)
+                            border.color: root.transportButtonBorderColor()
+                            radius: 6
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            anchors.fill: parent
+                            anchors.leftMargin: 9
+                            anchors.rightMargin: 9
+                            color: root.transportPrimaryTextColor()
+                            font.pixelSize: root.transportTextPixelSize
+                            font.weight: root.transportTextWeight
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    ToolButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: root.controlButtonHeight
+                        focusPolicy: Qt.NoFocus
+                        padding: 0
+                        onPressed: root.focusRequested()
+                        onClicked: {
+                            root.focusRequested()
+                            if (controller)
+                                controller.previewFullscreen = !fullscreenMode
+                        }
+                        background: Rectangle {
+                            color: root.transportButtonFillColor(parent.down)
+                            border.color: root.transportButtonBorderColor()
+                            radius: 6
+                        }
+                        contentItem: Text {
+                            text: "\u26f6"
+                            color: root.transportPrimaryTextColor()
+                            font.pixelSize: 16
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
                         }
                     }
                 }
 
-                Label {
-                    text: root.timeSummary
-                    color: root.transportPrimaryTextColor()
-                    font.pixelSize: root.transportTextPixelSize
-                    font.weight: root.transportTextWeight
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
+                RowLayout {
+                    id: swappedRightRow
+                    visible: controller && controller.workspacePanelsSwapped
+                    Layout.alignment: Qt.AlignRight
+                    spacing: 8
 
-            Item { Layout.fillWidth: true }
+                    ToolButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: root.controlButtonHeight
+                        focusPolicy: Qt.NoFocus
+                        padding: 0
+                        onPressed: root.focusRequested()
+                        onClicked: {
+                            root.focusRequested()
+                            if (controller)
+                                controller.stopPreview()
+                        }
+                        background: Rectangle {
+                            color: root.transportButtonFillColor(parent.down)
+                            border.color: root.transportButtonBorderColor()
+                            radius: 6
+                        }
+                        contentItem: Item {
+                            implicitWidth: 18
+                            implicitHeight: 18
 
-            RowLayout {
-                Layout.alignment: Qt.AlignRight
-                spacing: 8
+                            Rectangle {
+                                width: 10
+                                height: 10
+                                radius: 1
+                                color: root.transportPrimaryTextColor()
+                                anchors.centerIn: parent
+                            }
+                        }
+                    }
 
-                Button {
-                    text: controller ? controller.previewSpeedLabel : "1x"
-                    Layout.preferredWidth: root.metric("previewSpeedButtonWidth", 72)
-                    Layout.minimumWidth: root.metric("previewSpeedButtonWidth", 72)
-                    Layout.maximumWidth: root.metric("previewSpeedButtonWidth", 72)
-                    Layout.preferredHeight: root.controlButtonHeight
-                    Layout.minimumHeight: root.controlButtonHeight
-                    Layout.maximumHeight: root.controlButtonHeight
-                    focusPolicy: Qt.NoFocus
-                    padding: 0
-                    onPressed: root.focusRequested()
-                    onClicked: root.openSpeedMenu()
-                    background: Rectangle {
-                        color: root.transportButtonFillColor(parent.down)
-                        border.color: root.transportButtonBorderColor()
-                        radius: 6
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        anchors.fill: parent
-                        anchors.leftMargin: 9
-                        anchors.rightMargin: 9
-                        color: root.transportPrimaryTextColor()
-                        font.pixelSize: root.transportTextPixelSize
-                        font.weight: root.transportTextWeight
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
-                    }
-                }
+                    ToolButton {
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: root.controlButtonHeight
+                        focusPolicy: Qt.NoFocus
+                        padding: 0
+                        onPressed: root.focusRequested()
+                        onClicked: {
+                            root.focusRequested()
+                            if (controller)
+                                controller.togglePreviewPlayback()
+                        }
+                        background: Rectangle {
+                            color: root.transportButtonFillColor(parent.down)
+                            border.color: root.transportButtonBorderColor()
+                            radius: 6
+                        }
+                        contentItem: Item {
+                            implicitWidth: 18
+                            implicitHeight: 18
 
-                ToolButton {
-                    Layout.preferredWidth: 30
-                    Layout.preferredHeight: root.controlButtonHeight
-                    focusPolicy: Qt.NoFocus
-                    padding: 0
-                    onPressed: root.focusRequested()
-                    onClicked: {
-                        root.focusRequested()
-                        if (controller)
-                            controller.previewFullscreen = !fullscreenMode
-                    }
-                    background: Rectangle {
-                        color: root.transportButtonFillColor(parent.down)
-                        border.color: root.transportButtonBorderColor()
-                        radius: 6
-                    }
-                    contentItem: Text {
-                        text: "\u26f6"
-                        color: root.transportPrimaryTextColor()
-                        font.pixelSize: 16
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
+                            Canvas {
+                                id: swappedPlayIconCanvas
+                                anchors.fill: parent
+                                visible: !(controller && controller.previewPlaying)
+                                onVisibleChanged: requestPaint()
+                                onPaint: {
+                                    const ctx = getContext("2d")
+                                    ctx.reset()
+                                    ctx.fillStyle = root.transportPrimaryTextColor()
+                                    ctx.beginPath()
+                                    ctx.moveTo(width * 0.39, height * 0.28)
+                                    ctx.lineTo(width * 0.39, height * 0.72)
+                                    ctx.lineTo(width * 0.71, height * 0.50)
+                                    ctx.closePath()
+                                    ctx.fill()
+                                }
+
+                                Connections {
+                                    target: root
+
+                                    function onPaletteRefreshRequested() {
+                                        swappedPlayIconCanvas.requestPaint()
+                                    }
+                                }
+                            }
+
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 3
+                                visible: !!(controller && controller.previewPlaying)
+
+                                Rectangle {
+                                    width: 4
+                                    height: 12
+                                    radius: 1
+                                    color: root.transportPrimaryTextColor()
+                                }
+
+                                Rectangle {
+                                    width: 4
+                                    height: 12
+                                    radius: 1
+                                    color: root.transportPrimaryTextColor()
+                                }
+                            }
+                        }
                     }
                 }
             }

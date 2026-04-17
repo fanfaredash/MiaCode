@@ -6,6 +6,7 @@
 class LineNumberArea;
 class QAction;
 class QContextMenuEvent;
+class QFocusEvent;
 class QInputMethodEvent;
 class QKeyEvent;
 class QMouseEvent;
@@ -24,6 +25,8 @@ public:
     void refreshLineNumberAreaLayout();
     void setBatchTransformActions(const QList<QAction*>& actions);
     void setMoreBatchTransformActions(const QList<QAction*>& actions);
+    void setPreviewFollowVisualCaret(bool active, int line = 1, int col = 1);
+    bool applyPreviewFollowCursor(const QTextCursor& cursor, bool centerView, bool suppressSignals = true);
 
 signals:
     void undoShortcutRequested();
@@ -33,6 +36,8 @@ protected:
     bool event(QEvent* event) override;
     void changeEvent(QEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
+    void focusInEvent(QFocusEvent* event) override;
+    void focusOutEvent(QFocusEvent* event) override;
     void inputMethodEvent(QInputMethodEvent* event) override;
     void insertFromMimeData(const QMimeData* source) override;
     void keyPressEvent(QKeyEvent* event) override;
@@ -46,6 +51,9 @@ private slots:
 
 private:
     QRect currentLineHighlightRect() const;
+    QRect previewFollowVisualCaretRect() const;
+    void syncCursorVisualState();
+    void updateCursorVisibility();
     void updateCurrentLineHighlightRegion(const QRect& previousRect, const QRect& currentRect);
 
     int blockSpacingPixels_ = 0;
@@ -54,5 +62,8 @@ private:
     QList<QAction*> batchTransformActions_;
     QList<QAction*> moreBatchTransformActions_;
     QRect lastCurrentLineHighlightRect_;
+    bool previewFollowVisualCaretActive_ = false;
+    int previewFollowVisualCaretLine_ = 1;
+    int previewFollowVisualCaretCol_ = 1;
     LineNumberArea* lineNumberArea_;
 };

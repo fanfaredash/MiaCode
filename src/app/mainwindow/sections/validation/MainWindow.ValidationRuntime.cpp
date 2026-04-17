@@ -610,41 +610,6 @@ int wrappedRichTextHeight(const QString& html, const QFont& font, int width)
     return qMax(1, qCeil(document.size().height()));
 }
 
-bool buildEditorSelectionCursor(PlainCodeEditor* editor, int line, int col, int endCol, QTextCursor* cursorOut)
-{
-    if (editor == nullptr || editor->document() == nullptr || cursorOut == nullptr) {
-        return false;
-    }
-
-    const int normalizedLine = qMax(1, line);
-    const int normalizedCol = qMax(1, col);
-    const int normalizedEndCol = qMax(normalizedCol, endCol);
-    QTextBlock block = editor->document()->findBlockByNumber(normalizedLine - 1);
-    if (!block.isValid()) {
-        return false;
-    }
-
-    const QString blockText = block.text();
-    const int lineLength = blockText.size();
-    const int localIndex = qBound(0, normalizedCol - 1, qMax(0, lineLength));
-    const int localEndIndex = qBound(localIndex, normalizedEndCol - 1, qMax(0, lineLength));
-
-    QTextCursor cursor(editor->document());
-    cursor.setPosition(block.position() + localIndex);
-    if (lineLength > 0) {
-        const int selectionLength = qMax(0, localEndIndex - localIndex + (localIndex < lineLength ? 1 : 0));
-        if (selectionLength > 0) {
-            cursor.setPosition(block.position() + localIndex + selectionLength, QTextCursor::KeepAnchor);
-        } else {
-            cursor.setPosition(block.position() + qMax(0, lineLength - 1));
-            cursor.setPosition(block.position() + lineLength, QTextCursor::KeepAnchor);
-        }
-    }
-
-    *cursorOut = cursor;
-    return true;
-}
-
 }  // namespace
 
 void MainWindow::ValidationSection::showIssueListContextMenu(QListWidget* list, const QPoint& pos, bool muriList)
@@ -856,7 +821,7 @@ void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
     }
 
     clearValidationErrors();
-    clearValidationDecorations();
+    state_.validationDecorations_.clear();
     for (const ValidationCachedIssue& issue : entry.issues) {
         const QString issueTypeKey = issue.issueTypeKey.isEmpty()
             ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)
@@ -875,7 +840,7 @@ void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
         );
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
-    refreshEditorExtraSelections();
+    refreshEditorExtraSelectionsForReason(QStringLiteral("validation_refresh"));
     scheduleWrappedListRelayout(ui_.errorList_);
     updateEditorValidationSummary();
 }
@@ -952,7 +917,7 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
     applyTimer.start();
     setValidationTabVisible(true);
     clearValidationErrors();
-    clearValidationDecorations();
+    state_.validationDecorations_.clear();
     for (const ValidationCachedIssue& issue : entry.issues) {
         const QString issueTypeKey = issue.issueTypeKey.isEmpty()
             ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)
@@ -971,7 +936,7 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
         );
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
-    refreshEditorExtraSelections();
+    refreshEditorExtraSelectionsForReason(QStringLiteral("explicit_validate"));
     scheduleWrappedListRelayout(ui_.errorList_);
     updateEditorValidationSummary();
     if (focusFirstIssue && !entry.issues.isEmpty() && ui_.bottomTabs_ != nullptr && ui_.errorList_ != nullptr) {
@@ -1075,7 +1040,7 @@ bool MainWindow::ValidationSection::runValidateSimai()
     owner_.windowSection_->appendOutput("validate", payload);
 
     clearValidationErrors();
-    clearValidationDecorations();
+    state_.validationDecorations_.clear();
     for (const ValidationCachedIssue& issue : entry.issues) {
         const QString issueTypeKey = issue.issueTypeKey.isEmpty()
             ? validationIssueTypeKeyFromRawMessage(issue.rawMessage.isEmpty() ? issue.displayMessage : issue.rawMessage)
@@ -1094,7 +1059,7 @@ bool MainWindow::ValidationSection::runValidateSimai()
         );
         addValidationDecoration(issue.line, issue.col, issue.displayMessage, issue.endCol);
     }
-    refreshEditorExtraSelections();
+    refreshEditorExtraSelectionsForReason(QStringLiteral("explicit_validate"));
     scheduleWrappedListRelayout(ui_.errorList_);
     updateEditorValidationSummary();
     if (!entry.issues.isEmpty() && ui_.bottomTabs_ != nullptr && ui_.errorList_ != nullptr) {

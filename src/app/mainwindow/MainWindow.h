@@ -12,6 +12,7 @@
 #include <QPoint>
 #include <QRect>
 #include <QSet>
+#include <QTextEdit>
 #include <QVector>
 
 #include "app/quick_shell/QuickShellContracts.h"
@@ -145,6 +146,8 @@ public:
     double shellPreviewPositionSeconds() const override;
     double shellPreviewDurationSeconds() const override;
     QStringList shellPreviewStatsTexts() const override;
+    double shellPreviewCanvasAspectRatio() const override;
+    quint64 shellPreviewPaneRestoreGeneration() const override;
     bool shellPreviewFullscreen() const override;
     QObject* shellPreviewRuntimeObject() const override;
     QObject* shellPreviewStageMediaHostObject() const override;
@@ -301,7 +304,14 @@ private:
     bool runValidateSimaiSilently(bool focusFirstIssue = false);
     bool preparePreviewStartState();
     void refreshEditorExtraSelections();
-    void setPreviewFollowDecoration(int line, int col, int endCol = -1, bool ensureVisible = false);
+    void setPreviewFollowDecoration(
+        int startLine,
+        int startCol,
+        int endLine = -1,
+        int endCol = -1,
+        int cursorLine = -1,
+        int cursorCol = -1,
+        bool ensureVisible = false);
     void clearPreviewFollowDecoration();
     void clearValidationErrors();
     void clearValidationDecorations();

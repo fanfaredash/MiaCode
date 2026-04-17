@@ -23,7 +23,12 @@ public:
         VideoExportSnapshot* snapshot,
         QString* errorMessage
     );
-    bool startVideoExportWorkerProcess(QProcess* process, const VideoExportSnapshot& snapshot, QString* errorMessage);
+    bool startVideoExportWorkerProcess(
+        QProcess* process,
+        const VideoExportSnapshot& snapshot,
+        QString* errorMessage,
+        bool forceDisableOffscreenPbo = false
+    );
     bool runVideoExportWorkerSync(
         const VideoExportSnapshot& snapshot,
         QProgressDialog* progressDialog,

@@ -12,6 +12,7 @@
 namespace miacode::preview_sfx_timeline {
 
 constexpr double kTimelineEpsilonSeconds = 1e-6;
+constexpr double kAnswerTriggerCompensationSeconds = 1.0 / 60.0;
 constexpr double kFireworkTouchTriggerDelaySeconds =
     miacode::preview_gameplay::kJudgeEffectFireworkTouchTriggerDelaySeconds;
 
@@ -27,6 +28,11 @@ struct TouchholdSpan {
     double startSecond = 0.0;
     double endSecond = 0.0;
 };
+
+inline double adjustedAnswerSecond(double second)
+{
+    return qMax(0.0, second - kAnswerTriggerCompensationSeconds);
+}
 
 inline void buildTimeline(
     const QVector<TimelineNoteMarker>& noteMarkers,
@@ -59,7 +65,7 @@ inline void buildTimeline(
     for (const TimelineNoteMarker& marker : noteMarkers) {
         const QString type = marker.type.toLower();
         if (type == QLatin1String("tap")) {
-            addEvent(marker.second, QStringLiteral("answer"));
+            addEvent(adjustedAnswerSecond(marker.second), QStringLiteral("answer"));
             addEvent(marker.second, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("judge"));
             if (marker.isBreak) {
                 addEvent(marker.second, QStringLiteral("break"));
@@ -70,13 +76,13 @@ inline void buildTimeline(
             continue;
         }
         if (type == QLatin1String("hold")) {
-            addEvent(marker.second, QStringLiteral("answer"));
+            addEvent(adjustedAnswerSecond(marker.second), QStringLiteral("answer"));
             addEvent(marker.second, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("judge"));
             if (marker.isBreak) {
                 addEvent(marker.second, QStringLiteral("break"));
             }
             if (marker.endSecond > marker.second) {
-                addEvent(marker.endSecond, QStringLiteral("answer"));
+                addEvent(adjustedAnswerSecond(marker.endSecond), QStringLiteral("answer"));
             }
             if (marker.isEx) {
                 addEvent(marker.second, QStringLiteral("ex"));
@@ -84,7 +90,7 @@ inline void buildTimeline(
             continue;
         }
         if (type == QLatin1String("touch")) {
-            addEvent(marker.second, QStringLiteral("answer"));
+            addEvent(adjustedAnswerSecond(marker.second), QStringLiteral("answer"));
             addEvent(marker.second, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("touch"));
             if (marker.isFirework) {
                 addEvent(marker.second + kFireworkTouchTriggerDelaySeconds, QStringLiteral("firework"));
@@ -92,13 +98,13 @@ inline void buildTimeline(
             continue;
         }
         if (type == QLatin1String("touch_hold")) {
-            addEvent(marker.second, QStringLiteral("answer"));
+            addEvent(adjustedAnswerSecond(marker.second), QStringLiteral("answer"));
             addEvent(marker.second, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("touch"));
             if (marker.isFirework && marker.endSecond >= 0.0) {
                 addEvent(marker.endSecond, QStringLiteral("firework"));
             }
             if (marker.endSecond > marker.second) {
-                addEvent(marker.endSecond, QStringLiteral("answer"));
+                addEvent(adjustedAnswerSecond(marker.endSecond), QStringLiteral("answer"));
             }
             if (marker.endSecond > marker.second) {
                 TouchholdSpan span;
@@ -113,7 +119,7 @@ inline void buildTimeline(
         }
         if (type == QLatin1String("slide") || type == QLatin1String("wifi")) {
             if (marker.hasHeadStar) {
-                addEvent(marker.second, QStringLiteral("answer"));
+                addEvent(adjustedAnswerSecond(marker.second), QStringLiteral("answer"));
                 addEvent(marker.second, marker.headBreak ? QStringLiteral("judge_break") : QStringLiteral("judge"));
                 if (marker.headBreak && !marker.trackBreak) {
                     addEvent(marker.second, QStringLiteral("break"));
@@ -125,8 +131,8 @@ inline void buildTimeline(
             const double traceSecond = marker.slideTraceSecond >= 0.0 ? marker.slideTraceSecond : marker.second;
             addEvent(traceSecond, marker.trackBreak ? QStringLiteral("break_slide_start") : QStringLiteral("slide"));
             if (marker.trackBreak && marker.endSecond > traceSecond) {
-                addEvent(marker.endSecond, QStringLiteral("break_slide_finish"), 1, -1, 0.5);
-                addEvent(marker.endSecond, QStringLiteral("judge_break_slide"), 1, -1, 0.5);
+                addEvent(marker.endSecond, QStringLiteral("break"));
+                addEvent(marker.endSecond, QStringLiteral("judge_break_slide"));
             }
         }
     }

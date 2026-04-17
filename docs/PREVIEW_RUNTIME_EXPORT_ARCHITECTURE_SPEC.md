@@ -115,6 +115,11 @@ Headless export path:
 5. `PreviewQuickExportSession` creates a headless `QQuickRenderControl` scene and renders `PreviewQuickSceneRoot` into an offscreen framebuffer.
 6. The resulting RGBA frame is packed and streamed to ffmpeg through the raw video pipe.
 
+Worker logging note:
+
+- Export workers now bind their shared log directory to the snapshot chart's project-local `.miacode/logs/` directory when no explicit log-dir override is set.
+- This keeps worker-side export and fatal logs aligned with the chart being exported instead of falling back to executable-local debug logs.
+
 Important export-side constraints:
 
 - Export uses the same Quick scene and layer-state builders as realtime preview.
@@ -146,7 +151,12 @@ Relevant switches:
 Current intent:
 
 - Keep the ffmpeg raw-pipe pipeline and backpressure instrumentation.
-- Keep PBO readback as an optimization within the Quick export session.
+- Keep direct framebuffer readback as the semantic fallback path.
+- Keep PBO readback as the default export path when the Quick export session proves it is safe to enable.
+- Require capability probing before entering the PBO path: current export context, `extraFunctions()`, pixel-pack-buffer support, `glMapBufferRange` support, and a small map/unmap smoke probe.
+- On `renderFramePboStep()` soft failure, reset the session PBO state and continue the same export through direct readback.
+- On worker `CrashExit`, retry the same snapshot once with `MIACODE_EXPORT_DISABLE_OFFSCREEN_PBO=1`; do not retry normal business failures or user cancellation.
+- On teardown when `makeCurrent()` fails, skip explicit PBO/FBO/Quick GL cleanup and let worker-process exit reclaim those resources.
 - Do not reintroduce the removed legacy renderer just to recover export performance.
 
 ## Removed Legacy Path
