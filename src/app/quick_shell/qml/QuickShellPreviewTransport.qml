@@ -468,6 +468,20 @@ Rectangle {
                         }
                     }
 
+                    Label {
+                        Layout.preferredWidth: Math.max(
+                            timeSummaryTextMetrics.advanceWidth + 2,
+                            root.metric("previewTimeSummaryMinWidth", 108)
+                        )
+                        Layout.minimumWidth: Layout.preferredWidth
+                        text: root.timeSummary
+                        color: root.transportPrimaryTextColor()
+                        font.pixelSize: root.transportTextPixelSize
+                        font.weight: root.transportTextWeight
+                        horizontalAlignment: Text.AlignLeft
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
                 }
 
                 Item { Layout.fillWidth: true }
@@ -540,20 +554,6 @@ Rectangle {
                     visible: controller && controller.workspacePanelsSwapped
                     Layout.alignment: Qt.AlignRight
                     spacing: 8
-
-                    Label {
-                        Layout.preferredWidth: Math.max(
-                            timeSummaryTextMetrics.advanceWidth + 2,
-                            root.metric("previewTimeSummaryMinWidth", 108)
-                        )
-                        Layout.minimumWidth: Layout.preferredWidth
-                        text: root.timeSummary
-                        color: root.transportPrimaryTextColor()
-                        font.pixelSize: root.transportTextPixelSize
-                        font.weight: root.transportTextWeight
-                        horizontalAlignment: Text.AlignRight
-                        verticalAlignment: Text.AlignVCenter
-                    }
 
                     ToolButton {
                         Layout.preferredWidth: 30
