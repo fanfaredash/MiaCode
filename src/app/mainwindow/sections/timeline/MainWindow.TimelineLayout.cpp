@@ -503,6 +503,7 @@ void MainWindow::TimelineSection::setPreviewCanvasAspectRatio(double ratio, bool
     }
     owner_.refreshQuickShellPreviewCompositeSurfaceState();
     if (ui_.workspaceSplitter_ != nullptr && ui_.previewPanel_ != nullptr && ui_.previewLeftColumn_ != nullptr) {
+        const bool restoringToSquare = qAbs(normalized - 1.0) <= 1e-6 && previousRatio > 1.0 + 1e-6;
         const int availableWidth = qMax(0, ui_.workspaceSplitter_->contentsRect().width());
         const int availableHeight = qMax(0, ui_.workspaceSplitter_->contentsRect().height());
         const int leftMinWidth = qMax(320, ui_.previewLeftColumn_->minimumWidth());
@@ -510,13 +511,16 @@ void MainWindow::TimelineSection::setPreviewCanvasAspectRatio(double ratio, bool
             ui_.previewControlCard_ != nullptr
                 ? qMax(ui_.previewControlCard_->minimumSizeHint().height(), ui_.previewControlCard_->sizeHint().height())
                 : 0;
-        const int targetRightWidth = miacode::window_parity::computePreviewPanelTargetWidthForAdaptiveStats(
-            availableWidth,
-            availableHeight,
-            leftMinWidth,
-            controlHeight,
-            normalized
-        );
+        const int targetRightWidth =
+            restoringToSquare
+                ? qMax(kEmbeddedPreviewPanelMinWidth, ui_.previewPanel_->width())
+                : miacode::window_parity::computePreviewPanelTargetWidthForAdaptiveStats(
+                    availableWidth,
+                    availableHeight,
+                    leftMinWidth,
+                    controlHeight,
+                    normalized
+                );
         const int clampedRightWidth = qBound(
             kEmbeddedPreviewPanelMinWidth,
             targetRightWidth,
@@ -551,6 +555,9 @@ void MainWindow::TimelineSection::enterPreviewFullscreen()
     state_.previewFullscreenActive_ = true;
     state_.previewFullscreenControlsVisible_ = false;
     state_.previewFullscreenCursorTrackingInitialized_ = false;
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->setSuppressObjectStatsHud(true);
+    }
     owner_.refreshQuickShellPreviewCompositeSurfaceState();
     owner_.updatePauseButtonAppearance();
     updatePreviewFullscreenButtonAppearance();
@@ -564,6 +571,9 @@ void MainWindow::TimelineSection::exitPreviewFullscreen()
     state_.previewFullscreenActive_ = false;
     state_.previewFullscreenControlsVisible_ = false;
     state_.previewFullscreenCursorTrackingInitialized_ = false;
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->setSuppressObjectStatsHud(false);
+    }
     owner_.refreshQuickShellPreviewCompositeSurfaceState();
     owner_.updatePauseButtonAppearance();
     updatePreviewFullscreenButtonAppearance();

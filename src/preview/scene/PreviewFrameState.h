@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "common/PreviewGameplayConfig.h"
+#include "common/PreviewVideoGeometryConfig.h"
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
 #include "preview/video/PreviewRenderSettings.h"
@@ -175,10 +176,10 @@ struct PreviewAssetState {
 };
 
 struct PreviewRenderState {
-    double backgroundBrightnessOuter = 0.30;
-    double backgroundBrightnessInner = 0.20;
-    double layoutSquareScale = 0.95;
-    bool smoothBrightness = false;
+    double backgroundBrightnessOuter = miacode::preview_video::kBackgroundBrightnessDefault;
+    double backgroundBrightnessInner = miacode::preview_video::kBackgroundBrightnessInnerDefault;
+    double layoutSquareScale = miacode::preview_video::kLayoutSquareScaleDefault;
+    bool smoothBrightness = miacode::preview_video::kSmoothBrightnessDefault;
     PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
     double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     bool slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
