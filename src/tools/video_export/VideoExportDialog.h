@@ -32,6 +32,7 @@ public:
     using IsPreviewPlayingCallback = std::function<bool()>;
     using CurrentPreviewSecondCallback = std::function<double()>;
     using PreviewTimestampCallback = std::function<void(bool showTimestamp)>;
+    using PreviewObjectStatsCallback = std::function<void(bool showObjectStatsHud)>;
     using PreviewAspectRatioCallback = std::function<void(double ratio)>;
     using PreviewBrightnessCallback = std::function<void(double outer, double inner)>;
     using PreviewLayoutScaleCallback = std::function<void(double scale)>;
@@ -47,6 +48,7 @@ public:
         IsPreviewPlayingCallback isPreviewPlayingCallback = {},
         CurrentPreviewSecondCallback currentPreviewSecondCallback = {},
         PreviewTimestampCallback previewTimestampCallback = {},
+        PreviewObjectStatsCallback previewObjectStatsCallback = {},
         PreviewAspectRatioCallback previewAspectRatioCallback = {},
         PreviewBrightnessCallback previewBrightnessCallback = {},
         PreviewLayoutScaleCallback previewLayoutScaleCallback = {},
@@ -66,6 +68,7 @@ private:
     bool applyUiToTask(VideoExportTask* task, QString* errorMessage) const;
     void refreshDialogGeometry();
     void syncLivePreviewTimestampVisibility();
+    void syncLivePreviewObjectStatsVisibility();
     void restoreLivePreviewState();
     void loadPersistedSettings();
     void savePersistedSettings(const VideoExportTask& task) const;
@@ -111,6 +114,7 @@ private:
     IsPreviewPlayingCallback isPreviewPlayingCallback_;
     CurrentPreviewSecondCallback currentPreviewSecondCallback_;
     PreviewTimestampCallback previewTimestampCallback_;
+    PreviewObjectStatsCallback previewObjectStatsCallback_;
     PreviewAspectRatioCallback previewAspectRatioCallback_;
     PreviewBrightnessCallback previewBrightnessCallback_;
     PreviewLayoutScaleCallback previewLayoutScaleCallback_;
@@ -128,6 +132,7 @@ private:
     bool previewAspectChangedByDialog_ = false;
     bool previewStateRestored_ = false;
     bool initialShowTimestamp_ = true;
+    bool initialShowObjectStats_ = false;
     int previewHeldSeekDirection_ = 0;
     int previewSeekHeldArrowKey_ = 0;
     int previewSeekHeldArrowLastElapsedMs_ = 0;
@@ -146,6 +151,7 @@ private:
     QMenu* presetMenu_ = nullptr;
     VideoExportPreset selectedPreset_ = VideoExportPreset::Fast;
     QCheckBox* showTimestampCheck_ = nullptr;
+    QCheckBox* showObjectStatsCheck_ = nullptr;
     QCheckBox* smoothBrightnessCheck_ = nullptr;
     QToolButton* backgroundScaleModeButton_ = nullptr;
     QMenu* backgroundScaleModeMenu_ = nullptr;

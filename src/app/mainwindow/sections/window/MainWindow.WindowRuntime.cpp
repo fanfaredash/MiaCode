@@ -540,6 +540,8 @@ QList<QAction*> MainWindow::WindowSection::quickShellShortcutActions() const
         owner_.transformRandomRotateAction_,
         owner_.stopPreviewAction_,
         owner_.pausePreviewAction_,
+        owner_.stopOrPlayPreviewShortcutAction_,
+        owner_.playPausePreviewShortcutAction_,
         owner_.previewSlowerAction_,
         owner_.previewFasterAction_,
         owner_.exportVideoAction_,

@@ -29,6 +29,7 @@ public:
     double shellPreviewPositionSeconds() const;
     double shellPreviewDurationSeconds() const;
     QStringList shellPreviewStatsTexts() const;
+    double shellPreviewCanvasAspectRatio() const;
     bool shellPreviewFullscreen() const;
     QObject* shellPreviewRuntimeObject() const;
     QObject* shellPreviewStageMediaHostObject() const;

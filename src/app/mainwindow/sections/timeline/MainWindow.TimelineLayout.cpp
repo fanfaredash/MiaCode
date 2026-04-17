@@ -501,6 +501,34 @@ void MainWindow::TimelineSection::setPreviewCanvasAspectRatio(double ratio, bool
     } else {
         updatePreviewPanelLayout();
     }
+    owner_.refreshQuickShellPreviewCompositeSurfaceState();
+    if (ui_.workspaceSplitter_ != nullptr && ui_.previewPanel_ != nullptr && ui_.previewLeftColumn_ != nullptr) {
+        const int availableWidth = qMax(0, ui_.workspaceSplitter_->contentsRect().width());
+        const int availableHeight = qMax(0, ui_.workspaceSplitter_->contentsRect().height());
+        const int leftMinWidth = qMax(320, ui_.previewLeftColumn_->minimumWidth());
+        const int controlHeight =
+            ui_.previewControlCard_ != nullptr
+                ? qMax(ui_.previewControlCard_->minimumSizeHint().height(), ui_.previewControlCard_->sizeHint().height())
+                : 0;
+        const int targetRightWidth = miacode::window_parity::computePreviewPanelTargetWidthForAdaptiveStats(
+            availableWidth,
+            availableHeight,
+            leftMinWidth,
+            controlHeight,
+            normalized
+        );
+        const int clampedRightWidth = qBound(
+            kEmbeddedPreviewPanelMinWidth,
+            targetRightWidth,
+            qMax(kEmbeddedPreviewPanelMinWidth, availableWidth)
+        );
+        ui_.previewPanel_->setMinimumWidth(clampedRightWidth);
+        if (availableWidth > 0) {
+            const int leftWidth = qMax(leftMinWidth, availableWidth - clampedRightWidth);
+            ui_.workspaceSplitter_->setSizes({leftWidth, clampedRightWidth});
+        }
+    }
+    refreshLayoutAfterPageSwitch();
     if (persistState) {
         owner_.saveProjectRenderState();
         owner_.savePortableState();
@@ -829,6 +857,7 @@ void MainWindow::TimelineSection::updatePreviewFullscreenOverlayGeometry()
 
 void MainWindow::TimelineSection::updatePreviewWorkspaceLayout()
 {
+    updatePreviewPanelLayout();
     owner_.refreshQuickShellRehostedWidgetParent(ui_.outlineDock_);
     owner_.refreshQuickShellRehostedWidgetParent(ui_.previewLeftColumn_);
     owner_.refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
@@ -910,8 +939,56 @@ void MainWindow::TimelineSection::refreshLayoutAfterPageSwitch()
 
 void MainWindow::TimelineSection::updatePreviewPanelLayout(int panelWidthOverride, int panelHeightOverride)
 {
-    Q_UNUSED(panelWidthOverride);
-    Q_UNUSED(panelHeightOverride);
+    if (ui_.previewPanel_ != nullptr) {
+        const QRect panelRect = ui_.previewPanel_->contentsRect();
+        const int resolvedWidth = panelWidthOverride >= 0 ? panelWidthOverride : panelRect.width();
+        const int resolvedHeight = panelHeightOverride >= 0 ? panelHeightOverride : panelRect.height();
+        const int controlHeight =
+            ui_.previewControlCard_ != nullptr
+                ? qMax(ui_.previewControlCard_->minimumSizeHint().height(), ui_.previewControlCard_->sizeHint().height())
+                : 0;
+        const miacode::window_parity::PreviewPanelLayout layout =
+            miacode::window_parity::computePreviewPanelLayout(
+                resolvedWidth,
+                resolvedHeight,
+                controlHeight,
+                state_.previewCanvasAspectRatio_
+            );
+
+        if (ui_.previewCanvasFrame_ != nullptr) {
+            ui_.previewCanvasFrame_->setGeometry(
+                panelRect.x() + layout.previewX,
+                panelRect.y() + layout.previewY,
+                layout.previewWidth,
+                layout.previewHeight
+            );
+            ui_.previewCanvasFrame_->show();
+        }
+        if (ui_.previewCanvasContainer_ != nullptr && ui_.previewCanvasFrame_ != nullptr) {
+            ui_.previewCanvasContainer_->setGeometry(ui_.previewCanvasFrame_->contentsRect());
+            ui_.previewCanvasContainer_->show();
+        }
+        if (ui_.previewControlCard_ != nullptr) {
+            ui_.previewControlCard_->setGeometry(
+                panelRect.x() + layout.controlX,
+                panelRect.y() + layout.controlY,
+                layout.controlWidth,
+                controlHeight
+            );
+            ui_.previewControlCard_->show();
+        }
+        if (ui_.previewStatsCard_ != nullptr) {
+            const int statsHeight = qMax(layout.statsHeight, previewStatsMinimumHeightForPanelWidth(layout.statsWidth));
+            ui_.previewStatsCard_->setGeometry(
+                panelRect.x() + layout.statsX,
+                panelRect.y() + layout.statsY,
+                layout.statsWidth,
+                statsHeight
+            );
+            updatePreviewStatsLayoutMode(layout.statsHostWidth);
+            ui_.previewStatsCard_->show();
+        }
+    }
     owner_.refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
     owner_.refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
 }

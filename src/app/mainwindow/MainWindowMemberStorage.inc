@@ -26,6 +26,8 @@
         QAction* redoAction_ = nullptr;
         QAction* stopPreviewAction_ = nullptr;
         QAction* pausePreviewAction_ = nullptr;
+        QAction* stopOrPlayPreviewShortcutAction_ = nullptr;
+        QAction* playPausePreviewShortcutAction_ = nullptr;
         QAction* previewSlowerAction_ = nullptr;
         QAction* previewFasterAction_ = nullptr;
         QAction* exportVideoAction_ = nullptr;
@@ -413,6 +415,8 @@
     QAction*& redoAction_ = ui_.redoAction_;
     QAction*& stopPreviewAction_ = ui_.stopPreviewAction_;
     QAction*& pausePreviewAction_ = ui_.pausePreviewAction_;
+    QAction*& stopOrPlayPreviewShortcutAction_ = ui_.stopOrPlayPreviewShortcutAction_;
+    QAction*& playPausePreviewShortcutAction_ = ui_.playPausePreviewShortcutAction_;
     QAction*& previewSlowerAction_ = ui_.previewSlowerAction_;
     QAction*& previewFasterAction_ = ui_.previewFasterAction_;
     QAction*& exportVideoAction_ = ui_.exportVideoAction_;
