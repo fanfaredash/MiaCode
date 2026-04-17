@@ -125,7 +125,7 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.previewShowValidationSummary_ = true;
     state_.chartNormalizeStartAtNewMeasure_ = true;
     state_.chartNormalizeReduceTo384Grid_ = true;
-    state_.workspacePanelsSwapped_ = false;
+    state_.workspacePanelsSwapped_ = true;
 }
 
 void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& preview)

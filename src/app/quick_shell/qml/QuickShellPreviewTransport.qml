@@ -275,17 +275,91 @@ Rectangle {
             }
         }
 
-        RowLayout {
+        Item {
             Layout.fillWidth: true
-            spacing: 8
+            implicitHeight: Math.max(
+                root.controlButtonHeight,
+                Math.max(leftControlRow.implicitHeight, Math.max(timeSummaryLabel.implicitHeight, rightControlRow.implicitHeight))
+            )
 
-            RowLayout {
-                Layout.alignment: Qt.AlignLeft
+            Row {
+                id: leftControlRow
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
                 spacing: 8
 
                 ToolButton {
-                    Layout.preferredWidth: 30
-                    Layout.preferredHeight: root.controlButtonHeight
+                    width: 30
+                    height: root.controlButtonHeight
+                    focusPolicy: Qt.NoFocus
+                    padding: 0
+                    onPressed: root.focusRequested()
+                    onClicked: {
+                        root.focusRequested()
+                        if (controller)
+                            controller.previewFullscreen = !fullscreenMode
+                    }
+                    background: Rectangle {
+                        color: root.transportButtonFillColor(parent.down)
+                        border.color: root.transportButtonBorderColor()
+                        radius: 6
+                    }
+                    contentItem: Text {
+                        text: "\u26f6"
+                        color: root.transportPrimaryTextColor()
+                        font.pixelSize: 16
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+
+                Button {
+                    text: controller ? controller.previewSpeedLabel : "1x"
+                    width: root.metric("previewSpeedButtonWidth", 72)
+                    height: root.controlButtonHeight
+                    focusPolicy: Qt.NoFocus
+                    padding: 0
+                    onPressed: root.focusRequested()
+                    onClicked: root.openSpeedMenu()
+                    background: Rectangle {
+                        color: root.transportButtonFillColor(parent.down)
+                        border.color: root.transportButtonBorderColor()
+                        radius: 6
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        anchors.fill: parent
+                        anchors.leftMargin: 9
+                        anchors.rightMargin: 9
+                        color: root.transportPrimaryTextColor()
+                        font.pixelSize: root.transportTextPixelSize
+                        font.weight: root.transportTextWeight
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                    }
+                }
+            }
+
+            Label {
+                id: timeSummaryLabel
+                anchors.centerIn: parent
+                text: root.timeSummary
+                color: root.transportPrimaryTextColor()
+                font.pixelSize: root.transportTextPixelSize
+                font.weight: root.transportTextWeight
+                verticalAlignment: Text.AlignVCenter
+            }
+
+            Row {
+                id: rightControlRow
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 8
+
+                ToolButton {
+                    width: 30
+                    height: root.controlButtonHeight
                     focusPolicy: Qt.NoFocus
                     padding: 0
                     onPressed: root.focusRequested()
@@ -314,8 +388,8 @@ Rectangle {
                 }
 
                 ToolButton {
-                    Layout.preferredWidth: 30
-                    Layout.preferredHeight: root.controlButtonHeight
+                    width: 30
+                    height: root.controlButtonHeight
                     focusPolicy: Qt.NoFocus
                     padding: 0
                     onPressed: root.focusRequested()
@@ -378,77 +452,6 @@ Rectangle {
                                 color: root.transportPrimaryTextColor()
                             }
                         }
-                    }
-                }
-
-                Label {
-                    text: root.timeSummary
-                    color: root.transportPrimaryTextColor()
-                    font.pixelSize: root.transportTextPixelSize
-                    font.weight: root.transportTextWeight
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-
-            Item { Layout.fillWidth: true }
-
-            RowLayout {
-                Layout.alignment: Qt.AlignRight
-                spacing: 8
-
-                Button {
-                    text: controller ? controller.previewSpeedLabel : "1x"
-                    Layout.preferredWidth: root.metric("previewSpeedButtonWidth", 72)
-                    Layout.minimumWidth: root.metric("previewSpeedButtonWidth", 72)
-                    Layout.maximumWidth: root.metric("previewSpeedButtonWidth", 72)
-                    Layout.preferredHeight: root.controlButtonHeight
-                    Layout.minimumHeight: root.controlButtonHeight
-                    Layout.maximumHeight: root.controlButtonHeight
-                    focusPolicy: Qt.NoFocus
-                    padding: 0
-                    onPressed: root.focusRequested()
-                    onClicked: root.openSpeedMenu()
-                    background: Rectangle {
-                        color: root.transportButtonFillColor(parent.down)
-                        border.color: root.transportButtonBorderColor()
-                        radius: 6
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        anchors.fill: parent
-                        anchors.leftMargin: 9
-                        anchors.rightMargin: 9
-                        color: root.transportPrimaryTextColor()
-                        font.pixelSize: root.transportTextPixelSize
-                        font.weight: root.transportTextWeight
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
-                    }
-                }
-
-                ToolButton {
-                    Layout.preferredWidth: 30
-                    Layout.preferredHeight: root.controlButtonHeight
-                    focusPolicy: Qt.NoFocus
-                    padding: 0
-                    onPressed: root.focusRequested()
-                    onClicked: {
-                        root.focusRequested()
-                        if (controller)
-                            controller.previewFullscreen = !fullscreenMode
-                    }
-                    background: Rectangle {
-                        color: root.transportButtonFillColor(parent.down)
-                        border.color: root.transportButtonBorderColor()
-                        radius: 6
-                    }
-                    contentItem: Text {
-                        text: "\u26f6"
-                        color: root.transportPrimaryTextColor()
-                        font.pixelSize: 16
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
                     }
                 }
             }
