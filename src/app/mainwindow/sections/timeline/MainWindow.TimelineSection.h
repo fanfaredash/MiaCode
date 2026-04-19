@@ -27,6 +27,12 @@ public:
     void refreshTimelineMetadata();
     void applyTimelineQuickChange(int position, int charsRemoved, int charsAdded);
     void refreshTimelineQuickModelFromCurrentText();
+    void onTimelineHeaderNavigateRequested(double second);
+    void onTimelineUserInteractionStarted();
+    void onTimelineDragStarted();
+    void onTimelineCenterNavigateRequested(double second);
+    void onTimelineDragFinished(double second);
+    void onTimelineFollowPreviewToggled(bool enabled);
     void applyLatestTimelinePreviewStateToPausedPreview();
     void requestTimelineSlowRefresh();
     void dispatchTimelineSlowRefresh();
@@ -77,6 +83,7 @@ public:
     double currentPreviewCanvasRefreshRate() const;
     bool previewCanvasUsesFrameSwappedPacing() const;
     qint64 previewCanvasTargetFrameIntervalNs() const;
+    qint64 timelineTargetFrameIntervalNs() const;
     double fixedIntervalPreviewSecondForDeadlineNs(qint64 deadlineNs) const;
     void resetQtPreviewFixedFramePacing();
     void scheduleNextQtPreviewTick();

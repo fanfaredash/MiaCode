@@ -4,6 +4,8 @@
 #include "common/DebugOptions.h"
 #include "common/PreviewSkinConfig.h"
 #include "common/WaveformCache.h"
+#include "timeline/TimelineNoteAssets.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 #include "UiText.h"
 #include "UiTheme.h"
 
@@ -128,39 +130,6 @@ bool shouldPaintTimelineBeatMarker(const TimelineRenderBeat& beat)
     return (beat.subdivisionIndex % stride) == 0;
 }
 
-int transformedPixmapScalePermille(qreal scale)
-{
-    return qMax(1, qRound(scale * 1000.0));
-}
-
-int transformedPixmapRotationTenths(qreal rotationDegrees)
-{
-    int tenths = qRound(rotationDegrees * 10.0);
-    tenths %= 3600;
-    if (tenths < 0) {
-        tenths += 3600;
-    }
-    return tenths;
-}
-
-QString transformedPixmapCacheKey(
-    const QString& type,
-    qreal scale,
-    qreal rotationDegrees,
-    bool mirrorX)
-{
-    return QStringLiteral("%1|%2|%3|%4")
-        .arg(type)
-        .arg(transformedPixmapScalePermille(scale))
-        .arg(transformedPixmapRotationTenths(rotationDegrees))
-        .arg(mirrorX ? 1 : 0);
-}
-
-QString holdPixmapCacheKey(const QString& type, qreal scale)
-{
-    return QStringLiteral("%1|%2").arg(type).arg(transformedPixmapScalePermille(scale));
-}
-
 QFont scaledTimelineHeaderFont(const QFont& sourceFont, qreal scale)
 {
     QFont scaledFont(sourceFont);
@@ -245,6 +214,9 @@ TimelineView::TimelineView(QWidget* parent)
             : QStringLiteral("During playback, bind the editor cursor to the latest comma at or before preview time")
     );
     connect(followPreviewCheckBox_, &QCheckBox::toggled, this, [this](bool enabled) {
+        if (stateBridge_ != nullptr && !applyingBridgeState_) {
+            stateBridge_->setFollowPreviewEnabled(enabled);
+        }
         emit followPreviewToggled(enabled);
     });
 
@@ -278,6 +250,75 @@ TimelineView::TimelineView(QWidget* parent)
     updateHorizontalRange();
 }
 
+void TimelineView::setStateBridge(TimelineQuickStateBridge* stateBridge)
+{
+    if (stateBridge_ == stateBridge) {
+        return;
+    }
+    if (stateBridgeRenderStateConnection_) {
+        QObject::disconnect(stateBridgeRenderStateConnection_);
+        stateBridgeRenderStateConnection_ = {};
+    }
+    stateBridge_ = stateBridge;
+    if (stateBridge_ != nullptr) {
+        stateBridgeRenderStateConnection_ =
+            connect(stateBridge_, &TimelineQuickStateBridge::renderStateChanged, this, &TimelineView::applyStateFromBridge);
+        applyStateFromBridge();
+    }
+}
+
+TimelineQuickStateBridge* TimelineView::stateBridge() const
+{
+    return stateBridge_;
+}
+
+void TimelineView::applyStateFromBridge()
+{
+    if (stateBridge_ == nullptr) {
+        return;
+    }
+
+    applyingBridgeState_ = true;
+    headerLineNumberFont_ = stateBridge_->headerLineNumberFont();
+    snapshotCache_ = stateBridge_->renderSnapshot();
+    lines_ = snapshotCache_.lines;
+    measureLineSeconds_ = snapshotCache_.measureLineSeconds;
+    noteVisualEndPrefixMaxWithSlideTracks_ = snapshotCache_.noteVisualEndPrefixMaxWithSlideTracks;
+    noteVisualEndPrefixMaxWithoutSlideTracks_ = snapshotCache_.noteVisualEndPrefixMaxWithoutSlideTracks;
+    trailingMeasureLineStartSecond_ = snapshotCache_.trailingMeasureLineStartSecond;
+    trailingMeasureLineStepSeconds_ = snapshotCache_.trailingMeasureLineStepSeconds;
+    durationSeconds_ = qMax(0.0, snapshotCache_.durationSeconds);
+    minimumDataSecond_ = snapshotCache_.minimumSecond;
+    maximumDataSecond_ = snapshotCache_.maximumSecond;
+    waveformData_ = stateBridge_->waveformData();
+    muriMarkerLocationIds_ = stateBridge_->muriMarkerLocationIds();
+    playbackEntrySeconds_ = stateBridge_->playbackEntrySeconds();
+    playheadUpperLimitSeconds_ = stateBridge_->playheadUpperLimitSeconds();
+    playheadSeconds_ = stateBridge_->playheadSeconds();
+    cursorSeconds_ = stateBridge_->cursorSeconds();
+    showSlideTracks_ = stateBridge_->showSlideTracks();
+    playheadIndicatorSuppressed_ = stateBridge_->playheadIndicatorSuppressed();
+    pixelsPerSecond_ = 120.0 * stateBridge_->zoomScale();
+    const int nextZoomIndex = qMax(0, zoomPresets_.indexOf(stateBridge_->zoomScale()));
+    if (nextZoomIndex >= 0) {
+        zoomPresetIndex_ = nextZoomIndex;
+    }
+    if (followPreviewCheckBox_ != nullptr) {
+        const QSignalBlocker blocker(followPreviewCheckBox_);
+        followPreviewCheckBox_->setChecked(stateBridge_->followPreviewEnabled());
+    }
+    updateDisplayBounds();
+    updateHorizontalRange();
+    if (horizontalScrollBar() != nullptr) {
+        horizontalScrollBar()->setValue(
+            qBound(horizontalScrollBar()->minimum(), stateBridge_->horizontalScrollValue(), horizontalScrollBar()->maximum()));
+    }
+    layoutHeaderButtons();
+    refreshMinimumHeightForCurrentDevice();
+    viewport()->update();
+    applyingBridgeState_ = false;
+}
+
 QSize TimelineView::minimumSizeHint() const
 {
     return QSize(kTimelineLeftMargin + 240, minimumContentHeightForCurrentDevice());
@@ -288,14 +329,24 @@ QSize TimelineView::sizeHint() const
     return minimumSizeHint();
 }
 
+const QFont& TimelineView::headerLineNumberFont() const
+{
+    return headerLineNumberFont_;
+}
+
 void TimelineView::setHeaderLineNumberFont(const QFont& font)
 {
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setHeaderLineNumberFont(font);
+        return;
+    }
     if (headerLineNumberFont_ == font) {
         return;
     }
     headerLineNumberFont_ = font;
     refreshMinimumHeightForCurrentDevice();
     viewport()->update();
+    emit renderStateChanged();
 }
 
 void TimelineView::refreshTheme()
@@ -315,6 +366,7 @@ void TimelineView::refreshTheme()
     }
     refreshMinimumHeightForCurrentDevice();
     viewport()->update();
+    emit renderStateChanged();
 }
 
 bool TimelineView::viewportEvent(QEvent* event)
@@ -337,6 +389,11 @@ bool TimelineView::viewportEvent(QEvent* event)
 
 void TimelineView::setTimelineData(const TimelineRenderSnapshot& snapshot)
 {
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setTimelineData(snapshot);
+        return;
+    }
+    snapshotCache_ = snapshot;
     lines_ = snapshot.lines;
     measureLineSeconds_ = snapshot.measureLineSeconds;
     noteVisualEndPrefixMaxWithSlideTracks_ = snapshot.noteVisualEndPrefixMaxWithSlideTracks;
@@ -350,18 +407,39 @@ void TimelineView::setTimelineData(const TimelineRenderSnapshot& snapshot)
     updateDisplayBounds();
     updateHorizontalRange();
     viewport()->update();
+    emit renderStateChanged();
+}
+
+const TimelineRenderSnapshot& TimelineView::renderSnapshot() const
+{
+    return snapshotCache_;
 }
 
 void TimelineView::setWaveformData(const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData)
 {
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setWaveformData(waveformData);
+        return;
+    }
     waveformData_ = waveformData;
     updateDisplayBounds();
     updateHorizontalRange();
     viewport()->update();
+    emit renderStateChanged();
+}
+
+std::shared_ptr<const miacode::waveform::WaveformData> TimelineView::waveformData() const
+{
+    return waveformData_;
 }
 
 void TimelineView::clear()
 {
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->clear();
+        return;
+    }
+    snapshotCache_ = TimelineRenderSnapshot();
     lines_.clear();
     measureLineSeconds_.clear();
     noteVisualEndPrefixMaxWithSlideTracks_.clear();
@@ -382,10 +460,15 @@ void TimelineView::clear()
     waveformData_.reset();
     updateHorizontalRange();
     viewport()->update();
+    emit renderStateChanged();
 }
 
 void TimelineView::setPlaybackEntrySeconds(double second)
 {
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setPlaybackEntrySeconds(second);
+        return;
+    }
     const double clamped = qMax(0.0, second);
     if (qFuzzyCompare(playbackEntrySeconds_ + 1.0, clamped + 1.0)) {
         return;
@@ -394,6 +477,7 @@ void TimelineView::setPlaybackEntrySeconds(double second)
     updateDisplayBounds();
     updateHorizontalRange();
     viewport()->update();
+    emit renderStateChanged();
 }
 
 double TimelineView::playbackEntrySeconds() const
@@ -403,6 +487,10 @@ double TimelineView::playbackEntrySeconds() const
 
 void TimelineView::setPlayheadUpperLimitSeconds(double second)
 {
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setPlayheadUpperLimitSeconds(second);
+        return;
+    }
     if (second > 0.0) {
         playheadUpperLimitSeconds_ = second;
     } else {
@@ -414,10 +502,20 @@ void TimelineView::setPlayheadUpperLimitSeconds(double second)
     updateDisplayBounds();
     updateHorizontalRange();
     viewport()->update();
+    emit renderStateChanged();
+}
+
+double TimelineView::playheadUpperLimitSeconds() const
+{
+    return playheadUpperLimitSeconds_;
 }
 
 void TimelineView::setPlayheadSeconds(double second, bool centerView)
 {
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setPlayheadSeconds(second, centerView);
+        return;
+    }
     double clamped = qMax(0.0, second);
     if (playheadUpperLimitSeconds_ > 0.0) {
         clamped = qMin(clamped, playheadUpperLimitSeconds_);
@@ -448,10 +546,15 @@ void TimelineView::setPlayheadSeconds(double second, bool centerView)
         viewport()->update();
     }
     emit playheadChanged(playheadSeconds_);
+    emit renderStateChanged();
 }
 
 void TimelineView::setCursorSeconds(double second, bool centerView)
 {
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setCursorSeconds(second, centerView);
+        return;
+    }
     const double clamped = qIsFinite(second) ? second : 0.0;
     const bool changed = !qFuzzyCompare(cursorSeconds_ + 1.0, clamped + 1.0);
     const double previousSecond = cursorSeconds_;
@@ -470,11 +573,16 @@ void TimelineView::setCursorSeconds(double second, bool centerView)
         } else {
             viewport()->update();
         }
+        emit renderStateChanged();
     }
 }
 
 void TimelineView::focusPlayhead(bool centerView)
 {
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->focusPlayhead(centerView);
+        return;
+    }
     focusTarget_ = FocusTarget::Playhead;
     if (!centerView) {
         return;
@@ -485,11 +593,16 @@ void TimelineView::focusPlayhead(bool centerView)
     horizontalScrollBar()->setValue(qBound(horizontalScrollBar()->minimum(), targetX, horizontalScrollBar()->maximum()));
     if (horizontalScrollBar()->value() != previousValue) {
         viewport()->update();
+        emit renderStateChanged();
     }
 }
 
 void TimelineView::focusCursor(bool centerView)
 {
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->focusCursor(centerView);
+        return;
+    }
     focusTarget_ = FocusTarget::Cursor;
     if (!centerView) {
         return;
@@ -500,6 +613,7 @@ void TimelineView::focusCursor(bool centerView)
     horizontalScrollBar()->setValue(qBound(horizontalScrollBar()->minimum(), targetX, horizontalScrollBar()->maximum()));
     if (horizontalScrollBar()->value() != previousValue) {
         viewport()->update();
+        emit renderStateChanged();
     }
 }
 
@@ -520,11 +634,16 @@ double TimelineView::durationSeconds() const
 
 void TimelineView::setShowSlideTracks(bool show)
 {
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setShowSlideTracks(show);
+        return;
+    }
     if (showSlideTracks_ == show) {
         return;
     }
     showSlideTracks_ = show;
     viewport()->update();
+    emit renderStateChanged();
 }
 
 bool TimelineView::showSlideTracks() const
@@ -534,6 +653,10 @@ bool TimelineView::showSlideTracks() const
 
 void TimelineView::setMuriAnalysisReport(const MuriAnalysisReport& report)
 {
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setMuriAnalysisReport(report);
+        return;
+    }
     QSet<quint64> nextLocationIds;
     for (const MuriDiagnostic& diagnostic : report.diagnostics) {
         nextLocationIds.insert(timelineRenderLocationId(diagnostic.line, diagnostic.col));
@@ -543,6 +666,12 @@ void TimelineView::setMuriAnalysisReport(const MuriAnalysisReport& report)
     }
     muriMarkerLocationIds_ = nextLocationIds;
     viewport()->update();
+    emit renderStateChanged();
+}
+
+const QSet<quint64>& TimelineView::muriMarkerLocationIds() const
+{
+    return muriMarkerLocationIds_;
 }
 
 int TimelineView::minimumContentHeightForCurrentDevice() const
@@ -600,13 +729,80 @@ double TimelineView::zoomScale() const
     return zoomPresets_.value(zoomPresetIndex_, 0.5);
 }
 
+int TimelineView::horizontalScrollValue() const
+{
+    return horizontalScrollBar() != nullptr ? horizontalScrollBar()->value() : 0;
+}
+
+void TimelineView::setHorizontalScrollValue(int value)
+{
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setHorizontalScrollValue(value);
+        return;
+    }
+    QScrollBar* hbar = horizontalScrollBar();
+    if (hbar == nullptr) {
+        return;
+    }
+    const int clamped = qBound(hbar->minimum(), value, hbar->maximum());
+    if (hbar->value() == clamped) {
+        return;
+    }
+    hbar->setValue(clamped);
+    viewport()->update();
+    emit renderStateChanged();
+}
+
+void TimelineView::stepZoomPresetForQuickSurface(int deltaSteps, double anchorSecond)
+{
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->stepZoomPreset(deltaSteps, anchorSecond);
+        return;
+    }
+    const int previousIndex = zoomPresetIndex_;
+    stepZoomPreset(deltaSteps, anchorSecond);
+    if (zoomPresetIndex_ != previousIndex) {
+        emit renderStateChanged();
+    }
+}
+
+bool TimelineView::playheadIndicatorSuppressed() const
+{
+    return playheadIndicatorSuppressed_;
+}
+
+void TimelineView::suppressPlayheadIndicatorForQuickSurface()
+{
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->suppressPlayheadIndicator();
+        return;
+    }
+    suppressPlayheadIndicatorForInteraction();
+    emit renderStateChanged();
+}
+
+void TimelineView::restorePlayheadIndicatorForQuickSurface(bool immediate)
+{
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->restorePlayheadIndicator(immediate);
+        return;
+    }
+    restorePlayheadIndicatorAfterInteraction(immediate);
+    emit renderStateChanged();
+}
+
 void TimelineView::setFollowPreviewEnabled(bool enabled)
 {
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setFollowPreviewEnabled(enabled);
+        return;
+    }
     if (followPreviewCheckBox_ == nullptr) {
         return;
     }
     const QSignalBlocker blocker(followPreviewCheckBox_);
     followPreviewCheckBox_->setChecked(enabled);
+    emit renderStateChanged();
 }
 
 bool TimelineView::followPreviewEnabled() const

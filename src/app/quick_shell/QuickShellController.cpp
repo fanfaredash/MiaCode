@@ -141,6 +141,41 @@ bool QuickShellController::previewUsesSeparateSurface() const
     return previewUsesSeparateSurface_;
 }
 
+QObject* QuickShellController::timelineStateBridge() const
+{
+    return stateSource_ != nullptr ? stateSource_->shellTimelineStateBridgeObject() : nullptr;
+}
+
+bool QuickShellController::timelineSurfaceReady() const
+{
+    return timelineSurfaceReady_;
+}
+
+QString QuickShellController::bottomTabsCurrentTabId() const
+{
+    return bottomTabsCurrentTabId_;
+}
+
+bool QuickShellController::bottomTabsVisible() const
+{
+    return bottomTabsVisible_;
+}
+
+bool QuickShellController::timelineTabVisible() const
+{
+    return timelineTabVisible_;
+}
+
+bool QuickShellController::validationTabVisible() const
+{
+    return validationTabVisible_;
+}
+
+bool QuickShellController::muriTabVisible() const
+{
+    return muriTabVisible_;
+}
+
 QWindow* QuickShellController::topChromeWindow() const
 {
     return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().topChrome : nullptr;
@@ -154,6 +189,11 @@ QWindow* QuickShellController::sidebarWindow() const
 QWindow* QuickShellController::workspaceWindow() const
 {
     return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().workspace : nullptr;
+}
+
+QWindow* QuickShellController::bottomTabsWindow() const
+{
+    return surfaceHost_ != nullptr ? surfaceHost_->surfaceBundle().bottomTabs : nullptr;
 }
 
 QWindow* QuickShellController::statusWindow() const
@@ -256,6 +296,81 @@ void QuickShellController::setPreviewRate(double rate)
         return;
     }
     commandSink_->setShellPreviewRate(rate);
+    refreshFromStateSource();
+}
+
+void QuickShellController::setBottomTabsCurrentTabId(const QString& tabId)
+{
+    if (commandSink_ == nullptr || stateSource_ == nullptr) {
+        return;
+    }
+    if (tabId.trimmed().isEmpty() || stateSource_->shellBottomTabsCurrentTabId() == tabId) {
+        return;
+    }
+    commandSink_->setShellBottomTabsCurrentTab(tabId);
+    refreshFromStateSource();
+}
+
+void QuickShellController::timelineHeaderNavigate(double second)
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    commandSink_->navigateShellTimelineToSecond(second);
+    refreshFromStateSource();
+}
+
+void QuickShellController::timelineCenterNavigate(double second)
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    commandSink_->centerShellTimelineNavigate(second);
+    refreshFromStateSource();
+}
+
+void QuickShellController::timelineDragStarted()
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    commandSink_->shellTimelineDragStarted();
+    refreshFromStateSource();
+}
+
+void QuickShellController::timelineDragFinished(double second)
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    commandSink_->shellTimelineDragFinished(second);
+    refreshFromStateSource();
+}
+
+void QuickShellController::timelineUserInteractionStarted()
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    commandSink_->shellTimelineUserInteractionStarted();
+    refreshFromStateSource();
+}
+
+void QuickShellController::noteTimelineSurfaceReady()
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    commandSink_->shellTimelineSurfaceReady();
+    refreshFromStateSource();
+}
+
+void QuickShellController::timelineFollowPreviewToggled(bool enabled)
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    commandSink_->shellTimelineFollowPreviewToggled(enabled);
     refreshFromStateSource();
 }
 
@@ -393,6 +508,23 @@ void QuickShellController::syncWorkspaceSurfaceSize(int width, int height)
     }
 }
 
+void QuickShellController::syncBottomTabsSurfaceSize(int width, int height)
+{
+    if (surfaceHost_ == nullptr) {
+        return;
+    }
+    surfaceHost_->syncBottomTabsSurfaceSize(width, height);
+    if (QWidget* surface = surfaceHost_->bottomTabsSurfaceWidget(); surface != nullptr) {
+        appendQuickShellControllerLog(
+            QStringLiteral("sync_bottom_tabs"),
+            QString("size=%1x%2 handle=0x%3")
+                .arg(surface->width())
+                .arg(surface->height())
+                .arg(static_cast<quintptr>(surface->winId()), 0, 16)
+        );
+    }
+}
+
 void QuickShellController::syncStatusSurfaceSize(int width, int height)
 {
     if (surfaceHost_ == nullptr) {
@@ -434,6 +566,7 @@ void QuickShellController::refreshFromStateSource()
         return;
     }
 
+    const QString previousBottomTabsCurrentTabId = bottomTabsCurrentTabId_;
     bool stateChanged = false;
     stateChanged |= assignIfChanged(windowTitle_, stateSource_->shellWindowTitle());
     stateChanged |= assignIfChanged(workspacePanelsSwapped_, stateSource_->shellWorkspacePanelsSwapped());
@@ -445,11 +578,21 @@ void QuickShellController::refreshFromStateSource()
     stateChanged |= assignIfChanged(previewCanvasAspectRatio_, stateSource_->shellPreviewCanvasAspectRatio());
     stateChanged |= assignIfChanged(previewPaneRestoreGeneration_, stateSource_->shellPreviewPaneRestoreGeneration());
     stateChanged |= assignIfChanged(previewUsesSeparateSurface_, stateSource_->shellPreviewUsesSeparateSurface());
+    stateChanged |= assignIfChanged(timelineSurfaceReady_, stateSource_->shellTimelineSurfaceReady());
+    stateChanged |= assignIfChanged(bottomTabsCurrentTabId_, stateSource_->shellBottomTabsCurrentTabId());
+    stateChanged |= assignIfChanged(bottomTabsVisible_, stateSource_->shellBottomTabsVisible());
+    stateChanged |= assignIfChanged(timelineTabVisible_, stateSource_->shellTimelineTabVisible());
+    stateChanged |= assignIfChanged(validationTabVisible_, stateSource_->shellValidationTabVisible());
+    stateChanged |= assignIfChanged(muriTabVisible_, stateSource_->shellMuriTabVisible());
 
     const bool nextPreviewFullscreen = stateSource_->shellPreviewFullscreen();
     if (assignIfChanged(previewFullscreen_, nextPreviewFullscreen)) {
         stateChanged = true;
         emit previewFullscreenChanged();
+    }
+
+    if (surfaceHost_ != nullptr && previousBottomTabsCurrentTabId != bottomTabsCurrentTabId_) {
+        surfaceHost_->refreshBottomTabsSurfaceVisibility();
     }
 
     if (stateChanged) {

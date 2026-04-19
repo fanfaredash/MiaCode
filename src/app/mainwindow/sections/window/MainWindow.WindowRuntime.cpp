@@ -572,14 +572,12 @@ void MainWindow::WindowSection::refreshQuickShellRehostedWidgetParent(QWidget* w
     }
     widget->updateGeometry();
     widget->update();
-    widget->show();
     if (QWidget* parentWidget = widget->parentWidget(); parentWidget != nullptr) {
         if (QLayout* parentLayout = parentWidget->layout(); parentLayout != nullptr) {
             parentLayout->activate();
         }
         parentWidget->updateGeometry();
         parentWidget->update();
-        parentWidget->show();
     }
 }
 

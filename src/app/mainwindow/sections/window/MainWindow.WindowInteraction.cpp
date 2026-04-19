@@ -6,6 +6,7 @@
 #include "UiText.h"
 #include "common/PreviewInteractionConfig.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 
 #include <QQuickWindow>
 #include <QtCore>
@@ -29,6 +30,11 @@ bool widgetMatchesOrDescendsFrom(QWidget* widget, QWidget* root)
 }
 
 }  // namespace
+
+bool MainWindow::WindowSection::quickShellFocusBridgeActive() const
+{
+    return state_.quickShellUiFocusBridgeMode_;
+}
 
 QTextEdit* MainWindow::WindowSection::resolveRestorableTextEdit(QWidget* widget) const
 {
@@ -96,7 +102,12 @@ void MainWindow::WindowSection::focusPreviewInteractionTarget(QObject* watched, 
 
 void MainWindow::WindowSection::handleApplicationFocusChanged(QWidget* old, QWidget* now)
 {
-    this->logFocusDebug(QStringLiteral("app_focus_changed"), old, now);
+    this->logFocusDebug(
+        quickShellFocusBridgeActive()
+            ? QStringLiteral("app_focus_changed_quick_shell")
+            : QStringLiteral("app_focus_changed"),
+        old,
+        now);
     QTextEdit* newTextEdit = this->resolveRestorableTextEdit(now);
     if (newTextEdit != nullptr) {
         this->logFocusDebug(
@@ -109,7 +120,7 @@ void MainWindow::WindowSection::handleApplicationFocusChanged(QWidget* old, QWid
         return;
     }
 
-    if (now != nullptr && (now == &owner_ || owner_.isAncestorOf(now))) {
+    if (!quickShellFocusBridgeActive() && now != nullptr && (now == &owner_ || owner_.isAncestorOf(now))) {
         this->logFocusDebug(QStringLiteral("app_focus_changed_clear_for_owner_child"), old, now);
         this->clearFocusedTextEditState();
         return;
@@ -665,7 +676,16 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         }
         if (mouseEvent->button() == Qt::LeftButton && !owner_.qtPreviewPlaying_ && !ctrlLeftClick) {
             QTimer::singleShot(0, &owner_, [this]() {
-                owner_.scheduleDeferredEditorUiUpdate(false, false, true, true, false, 0.0, false);
+                const bool syncTimelineCursor =
+                    !owner_.quickShellUiFocusBridgeMode_ || owner_.quickTimelineSurfaceReady_;
+                owner_.scheduleDeferredEditorUiUpdate(
+                    false,
+                    false,
+                    syncTimelineCursor,
+                    true,
+                    false,
+                    0.0,
+                    false);
             });
         }
     }
@@ -698,9 +718,17 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
                         owner_.stopQtPreviewPlayback(true);
                     }
                     owner_.seekPreviewToSecond(second, false);
-                    if (owner_.timelineView_ != nullptr) {
-                        owner_.timelineView_->setCursorSeconds(second, true);
-                        owner_.timelineView_->focusCursor(false);
+                    if (owner_.timelineQuickStateBridge_ != nullptr) {
+                        const bool quickTimelineBridgeReady =
+                            !owner_.quickShellUiFocusBridgeMode_ || owner_.quickTimelineSurfaceReady_;
+                        if (quickTimelineBridgeReady) {
+                            owner_.timelineQuickStateBridge_->setCursorSeconds(second, true);
+                            owner_.timelineQuickStateBridge_->focusCursor(false);
+                        } else {
+                            owner_.pendingQuickTimelineCursorSync_ = true;
+                            owner_.pendingQuickTimelineCursorSecond_ = second;
+                            owner_.pendingQuickTimelineCursorCenterView_ = true;
+                        }
                     }
                 });
             }
@@ -708,7 +736,16 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
     }
     if (watched == owner_.editorViewport_ && event->type() == QEvent::FocusIn && !owner_.qtPreviewPlaying_) {
         QTimer::singleShot(0, &owner_, [this]() {
-            owner_.scheduleDeferredEditorUiUpdate(false, false, true, true, false, 0.0, false);
+            const bool syncTimelineCursor =
+                !owner_.quickShellUiFocusBridgeMode_ || owner_.quickTimelineSurfaceReady_;
+            owner_.scheduleDeferredEditorUiUpdate(
+                false,
+                false,
+                syncTimelineCursor,
+                true,
+                false,
+                0.0,
+                false);
         });
     }
     return owner_.QMainWindow::eventFilter(watched, event);

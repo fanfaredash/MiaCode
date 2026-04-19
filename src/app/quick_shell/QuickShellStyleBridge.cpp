@@ -16,6 +16,8 @@
 #include <QMetaObject>
 #include <QScreen>
 #include <QStatusBar>
+#include <QTabBar>
+#include <QTabWidget>
 #include <QTimer>
 #include <QToolBar>
 #include <QWidget>
@@ -27,6 +29,7 @@ QVariantMap buildPaletteMap()
     const UiTheme::Colors& c = UiTheme::colors();
     return QVariantMap{
         {QStringLiteral("dark"), c.dark},
+        {QStringLiteral("isChineseUi"), UiText::isChineseUi()},
         {QStringLiteral("windowBg"), c.windowBg},
         {QStringLiteral("windowAltBg"), c.windowAltBg},
         {QStringLiteral("toolbarBg"), c.toolbarBg},
@@ -50,6 +53,11 @@ QVariantMap buildPaletteMap()
         {QStringLiteral("menuBorder"), c.menuBorder},
         {QStringLiteral("menuHoverBg"), c.menuHoverBg},
         {QStringLiteral("iconPrimary"), c.iconPrimary},
+        {QStringLiteral("timelineHeader"), c.timelineHeader},
+        {QStringLiteral("timelineSidebar"), c.timelineSidebar},
+        {QStringLiteral("timelineBorder"), c.timelineBorder},
+        {QStringLiteral("timelineLabel"), c.timelineLabel},
+        {QStringLiteral("timelineAxis"), c.timelineAxis},
     };
 }
 
@@ -74,6 +82,9 @@ QuickShellStyleBridge::QuickShellStyleBridge(
         if (QWidget* workspace = contentProvider_->shellWorkspaceWidget(); workspace != nullptr) {
             workspace->installEventFilter(this);
         }
+        if (QWidget* bottomTabs = contentProvider_->shellBottomTabsWidget(); bottomTabs != nullptr) {
+            bottomTabs->installEventFilter(this);
+        }
     }
     if (surfaceHost_ != nullptr) {
         if (QWidget* sidebarSurface = surfaceHost_->sidebarSurfaceWidget(); sidebarSurface != nullptr) {
@@ -82,6 +93,12 @@ QuickShellStyleBridge::QuickShellStyleBridge(
         if (QWidget* workspaceSurface = surfaceHost_->workspaceSurfaceWidget(); workspaceSurface != nullptr) {
             workspaceSurface->installEventFilter(this);
         }
+        if (QWidget* bottomTabsSurface = surfaceHost_->bottomTabsSurfaceWidget(); bottomTabsSurface != nullptr) {
+            bottomTabsSurface->installEventFilter(this);
+        }
+    }
+    if (qApp != nullptr) {
+        qApp->installEventFilter(this);
     }
 
     refreshTimer_->setInterval(1000);
@@ -238,6 +255,8 @@ void QuickShellStyleBridge::refreshFromBackend()
         {QStringLiteral("previewStatsNarrowLayoutCols"), miacode::window_parity::kPreviewStatsNarrowLayoutCols},
         {QStringLiteral("previewStatsWideLayoutMinChipWidth"), miacode::window_parity::kPreviewStatsWideLayoutMinChipWidth},
         {QStringLiteral("previewControlStatsGap"), miacode::window_parity::kPreviewControlStatsGap},
+        {QStringLiteral("bottomTabsHostHeight"), 260},
+        {QStringLiteral("bottomTabsTabBarHeight"), 40},
         {QStringLiteral("fullscreenHintTopMargin"), miacode::window_parity::kPreviewFullscreenHintTopMargin},
         {QStringLiteral("fullscreenOverlaySideMargin"), miacode::window_parity::kPreviewFullscreenOverlaySideMargin},
         {QStringLiteral("fullscreenOverlayBottomMargin"), miacode::window_parity::kPreviewFullscreenOverlayBottomMargin},
@@ -272,6 +291,21 @@ void QuickShellStyleBridge::refreshFromBackend()
         nextMetrics.insert(QStringLiteral("workspaceContentMinWidth"), workspaceContentMinWidth);
         nextMetrics.insert(QStringLiteral("workspaceCompositeMinWidth"), workspaceCompositeMinWidth);
         nextMetrics.insert(QStringLiteral("leftColumnMinWidth"), workspaceCompositeMinWidth);
+        nextMetrics.insert(
+            QStringLiteral("bottomTabsHostHeight"),
+            qMax(0, contentProvider_->shellBottomTabsHeight())
+        );
+        if (QWidget* bottomTabsWidget = contentProvider_->shellBottomTabsWidget(); bottomTabsWidget != nullptr) {
+            if (auto* tabWidget = qobject_cast<QTabWidget*>(bottomTabsWidget); tabWidget != nullptr) {
+                if (QTabBar* tabBar = tabWidget->tabBar(); tabBar != nullptr) {
+                    tabBar->ensurePolished();
+                    nextMetrics.insert(
+                        QStringLiteral("bottomTabsTabBarHeight"),
+                        qMax(tabBar->minimumSizeHint().height(), tabBar->sizeHint().height())
+                    );
+                }
+            }
+        }
 
         if (QMainWindow* mainWindow = qobject_cast<QMainWindow*>(contentProvider_->shellWindowWidget());
             mainWindow != nullptr) {

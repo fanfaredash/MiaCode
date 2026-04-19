@@ -3,6 +3,7 @@
 
 #include "UiText.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -202,8 +203,8 @@ void MainWindow::EditorSection::loadProjectRenderState()
         }
     }
     state_.previewAudioSettings_.normalize();
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
     }
     owner_.refreshPreviewFrameRateTimers();
     owner_.applyPreviewStageMediaRouteVisualSettings();

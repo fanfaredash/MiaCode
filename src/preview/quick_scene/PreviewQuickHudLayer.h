@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QMetaObject>
+#include <QPointer>
 #include <QQuickPaintedItem>
 
 #include "preview/scene/PreviewLayerOrder.h"
@@ -29,7 +30,7 @@ signals:
     void runtimeChanged();
 
 private:
-    PreviewRuntime* runtime_ = nullptr;
+    QPointer<PreviewRuntime> runtime_;
     QMetaObject::Connection runtimeUpdateConnection_;
     const miacode::preview::scene::PreviewFrameState* frameState_ = nullptr;
     miacode::preview::scene::PreviewRenderLayerFlags layerFlags_ =

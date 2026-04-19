@@ -22,6 +22,7 @@
 #include "preview/scene/PreviewProgressStatsCache.h"
 #include "simai/transform/ChartBatchTransform.h"
 #include "simai/transform/ChartNormalization.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -203,6 +204,8 @@ void MainWindow::TimelineSection::requestPausedPreviewSeek(
 
 void MainWindow::TimelineSection::applyPausedPreviewVisualSecond(double second, bool centerView)
 {
+    const bool quickTimelineBridgeReady =
+        !state_.quickShellUiFocusBridgeMode_ || state_.quickTimelineSurfaceReady_;
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     state_.qtPreviewStartSecond_ = clampedSecond;
     state_.qtPreviewPauseSecond_ = clampedSecond;
@@ -211,12 +214,12 @@ void MainWindow::TimelineSection::applyPausedPreviewVisualSecond(double second, 
     state_.qtPreviewPendingTimelineSecond_ = clampedSecond;
     state_.qtPreviewPendingTimelineCenterView_ = centerView;
     state_.qtPreviewTimelineDirty_ = true;
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
     }
     applyQtPreviewPosition(clampedSecond, centerView);
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->focusPlayhead(centerView);
+    if (state_.timelineQuickStateBridge_ != nullptr && quickTimelineBridgeReady) {
+        state_.timelineQuickStateBridge_->focusPlayhead(centerView);
     }
     state_.pausedSeekAppliedVisualSecond_ = clampedSecond;
     appendQuickShellBackendLog(
@@ -727,14 +730,14 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
 
     applyPlaybackClockState(effectiveStartSecond);
     state_.pausedPreviewMediaSeekPending_ = false;
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->setPlaybackEntrySeconds(state_.qtPreviewPlaybackReturnSecond_);
-        ui_.timelineView_->setPlayheadUpperLimitSeconds(state_.qtPreviewPlaybackEndSecond_);
-        if (qFuzzyCompare(ui_.timelineView_->playheadSeconds() + 1.0, effectiveStartSecond + 1.0)) {
-            ui_.timelineView_->focusPlayhead(true);
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setPlaybackEntrySeconds(state_.qtPreviewPlaybackReturnSecond_);
+        state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(state_.qtPreviewPlaybackEndSecond_);
+        if (qFuzzyCompare(state_.timelineQuickStateBridge_->playheadSeconds() + 1.0, effectiveStartSecond + 1.0)) {
+            state_.timelineQuickStateBridge_->focusPlayhead(true);
         } else {
-            ui_.timelineView_->setPlayheadSeconds(effectiveStartSecond, true);
-            ui_.timelineView_->focusPlayhead(false);
+            state_.timelineQuickStateBridge_->setPlayheadSeconds(effectiveStartSecond, true);
+            state_.timelineQuickStateBridge_->focusPlayhead(false);
         }
     }
     if (state_.previewCanvas_ != nullptr) {
@@ -829,9 +832,9 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
     state_.qtPreviewNextFixedTickDueNs_ = -1;
     state_.qtPreviewFixedTickOriginNs_ = -1;
     flushQtPreviewTimelinePosition();
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->focusPlayhead(false);
-        ui_.timelineView_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->focusPlayhead(false);
+        state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
     }
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->stopAll();
@@ -851,15 +854,21 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
 
 void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool centerView)
 {
+    const bool quickTimelineBridgeReady =
+        !state_.quickShellUiFocusBridgeMode_ || state_.quickTimelineSurfaceReady_;
+    const double timelineCadenceSeconds =
+        static_cast<double>(qMax<qint64>(1, timelineTargetFrameIntervalNs())) / 1000000000.0;
     state_.qtPreviewPauseSecond_ = second;
     if (!state_.qtPreviewPlaying_
-        && ui_.timelineView_ != nullptr
+        && state_.timelineQuickStateBridge_ != nullptr
         && (state_.qtPreviewLastTimelineSecond_ < 0.0
-            || qAbs(second - state_.qtPreviewLastTimelineSecond_) >= kTimelineUiCadenceSeconds)) {
+            || qAbs(second - state_.qtPreviewLastTimelineSecond_) >= timelineCadenceSeconds)) {
         state_.qtPreviewPendingTimelineSecond_ = second;
         state_.qtPreviewPendingTimelineCenterView_ = state_.qtPreviewPendingTimelineCenterView_ || centerView;
         state_.qtPreviewTimelineDirty_ = true;
-        flushQtPreviewTimelinePosition();
+        if (quickTimelineBridgeReady) {
+            flushQtPreviewTimelinePosition();
+        }
     }
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setPlayheadSeconds(second, !state_.qtPreviewPlaying_);
@@ -870,7 +879,7 @@ void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool cen
     if (!state_.qtPreviewPlaying_) {
         updatePreviewObjectStats(second);
     }
-    if (ui_.timelineView_ != nullptr && ui_.timelineView_->followPreviewEnabled()) {
+    if (state_.timelineQuickStateBridge_ != nullptr && state_.timelineQuickStateBridge_->followPreviewEnabled()) {
         if (state_.qtPreviewPlaying_) {
             owner_.queueQtPreviewFollowUiUpdate(second, centerView);
         } else {
@@ -886,7 +895,10 @@ void MainWindow::TimelineSection::syncPausedPreviewMediaTimestamps(double second
 
 void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()
 {
-    if (ui_.timelineView_ == nullptr) {
+    if (state_.timelineQuickStateBridge_ == nullptr) {
+        return;
+    }
+    if (state_.quickShellUiFocusBridgeMode_ && !state_.quickTimelineSurfaceReady_) {
         return;
     }
     if (state_.qtPreviewPlaying_) {
@@ -899,11 +911,11 @@ void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()
             && state_.previewSfxRuntime_->isBackgroundTrackRunning()) {
             second = qMax(0.0, state_.previewSfxRuntime_->backgroundPlaybackSecond());
         }
-        ui_.timelineView_->setPlayheadSeconds(second, true);
-        ui_.timelineView_->focusPlayhead(false);
+        state_.timelineQuickStateBridge_->setPlayheadSeconds(second, true);
+        state_.timelineQuickStateBridge_->focusPlayhead(false);
         state_.qtPreviewLastTimelineSecond_ = second;
         if (state_.qtPreviewFollowDirty_) {
-            if (ui_.timelineView_->followPreviewEnabled()) {
+            if (state_.timelineQuickStateBridge_->followPreviewEnabled()) {
                 const double followSecond = state_.qtPreviewPendingFollowSecond_;
                 const bool followCenterView = state_.qtPreviewPendingFollowCenterView_;
                 state_.qtPreviewFollowDirty_ = false;
@@ -919,8 +931,10 @@ void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()
     if (!state_.qtPreviewTimelineDirty_) {
         return;
     }
-    ui_.timelineView_->setPlayheadSeconds(state_.qtPreviewPendingTimelineSecond_, state_.qtPreviewPendingTimelineCenterView_);
-    ui_.timelineView_->focusPlayhead(state_.qtPreviewPendingTimelineCenterView_);
+    state_.timelineQuickStateBridge_->setPlayheadSeconds(
+        state_.qtPreviewPendingTimelineSecond_,
+        state_.qtPreviewPendingTimelineCenterView_);
+    state_.timelineQuickStateBridge_->focusPlayhead(state_.qtPreviewPendingTimelineCenterView_);
     state_.qtPreviewLastTimelineSecond_ = state_.qtPreviewPendingTimelineSecond_;
     state_.qtPreviewPendingTimelineCenterView_ = false;
     state_.qtPreviewTimelineDirty_ = false;

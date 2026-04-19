@@ -14,6 +14,7 @@ struct QuickShellNativeSurfaceBundle {
     QWindow* topChrome = nullptr;
     QWindow* sidebar = nullptr;
     QWindow* workspace = nullptr;
+    QWindow* bottomTabs = nullptr;
     QWindow* status = nullptr;
     QWindow* previewCompositeWindow = nullptr;
 };
@@ -35,6 +36,14 @@ public:
     virtual void beginShellPreviewHeldSeek(int direction, int key) = 0;
     virtual void stopShellPreviewHeldSeek(int key = 0) = 0;
     virtual void setShellPreviewFullscreen(bool fullscreen) = 0;
+    virtual void setShellBottomTabsCurrentTab(const QString& tabId) = 0;
+    virtual void navigateShellTimelineToSecond(double second) = 0;
+    virtual void centerShellTimelineNavigate(double second) = 0;
+    virtual void shellTimelineDragStarted() = 0;
+    virtual void shellTimelineDragFinished(double second) = 0;
+    virtual void shellTimelineUserInteractionStarted() = 0;
+    virtual void shellTimelineSurfaceReady() = 0;
+    virtual void shellTimelineFollowPreviewToggled(bool enabled) = 0;
     virtual bool shellHasShortcut(const QKeySequence& sequence) const = 0;
     virtual bool shellTriggerShortcut(const QKeySequence& sequence) = 0;
 };
@@ -58,6 +67,13 @@ public:
     virtual QObject* shellPreviewStageMediaHostObject() const = 0;
     virtual bool shellPreviewUsesSeparateSurface() const = 0;
     virtual QWindow* shellPreviewCompositeWindow() const = 0;
+    virtual QObject* shellTimelineStateBridgeObject() const = 0;
+    virtual bool shellTimelineSurfaceReady() const = 0;
+    virtual QString shellBottomTabsCurrentTabId() const = 0;
+    virtual bool shellBottomTabsVisible() const = 0;
+    virtual bool shellTimelineTabVisible() const = 0;
+    virtual bool shellValidationTabVisible() const = 0;
+    virtual bool shellMuriTabVisible() const = 0;
 };
 
 class QuickShellNativeContentProvider
@@ -70,6 +86,8 @@ public:
     virtual bool shellOutlineDockCollapsed() const = 0;
     virtual int shellOutlineDockExpandedWidth() const = 0;
     virtual QWidget* shellWorkspaceWidget() const = 0;
+    virtual QWidget* shellBottomTabsWidget() const = 0;
+    virtual int shellBottomTabsHeight() const = 0;
     virtual QWidget* shellPreviewPanelWidget() const = 0;
     virtual double shellNormalizedPreviewCanvasAspectRatio() const = 0;
     virtual void shellRefreshLayoutAfterResize() = 0;

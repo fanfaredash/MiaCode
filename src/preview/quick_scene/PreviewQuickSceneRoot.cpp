@@ -172,6 +172,15 @@ PreviewQuickSceneRoot::PreviewQuickSceneRoot(QQuickItem* parent)
 
 PreviewQuickSceneRoot::~PreviewQuickSceneRoot()
 {
+    if (frameSwapConnection_) {
+        QObject::disconnect(frameSwapConnection_);
+    }
+    if (windowVisibilityConnection_) {
+        QObject::disconnect(windowVisibilityConnection_);
+    }
+    if (runtimeUpdateConnection_) {
+        QObject::disconnect(runtimeUpdateConnection_);
+    }
     appendQuickSceneLog(
         QStringLiteral("scene_root_destroy"),
         QString("%1 runtime=%2 bound_window=%3")
@@ -253,7 +262,7 @@ void PreviewQuickSceneRoot::setFrameState(const miacode::preview::scene::Preview
     clearPendingTextureStatsForPresentation();
     frameState_ = frameState;
     if (frameState_ != nullptr) {
-        runtime_ = nullptr;
+        runtime_.clear();
         boundWindow_.clear();
     }
     appendQuickSceneLog(
