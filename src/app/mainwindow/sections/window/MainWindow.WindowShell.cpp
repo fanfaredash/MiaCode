@@ -532,9 +532,19 @@ QString MainWindow::WindowSection::shellBottomTabsCurrentTabId() const
 
 bool MainWindow::WindowSection::shellBottomTabsVisible() const
 {
-    return owner_.bottomTabsTabVisible(MainWindow::BottomTabsTabId::Timeline)
+    const bool anyTabVisible = owner_.bottomTabsTabVisible(MainWindow::BottomTabsTabId::Timeline)
         || owner_.bottomTabsTabVisible(MainWindow::BottomTabsTabId::Validation)
         || owner_.bottomTabsTabVisible(MainWindow::BottomTabsTabId::Muri);
+    if (!anyTabVisible) {
+        return false;
+    }
+
+    const QWidget* const shellBottomTabsWidget = this->shellBottomTabsWidget();
+    const bool shellBottomTabsWidgetVisible =
+        shellBottomTabsWidget != nullptr && shellBottomTabsWidget->isVisible();
+    const bool timelineTabsWidgetVisible =
+        owner_.bottomTabs_ != nullptr && owner_.bottomTabs_->isVisible();
+    return shellBottomTabsWidgetVisible || timelineTabsWidgetVisible;
 }
 
 bool MainWindow::WindowSection::shellTimelineTabVisible() const
