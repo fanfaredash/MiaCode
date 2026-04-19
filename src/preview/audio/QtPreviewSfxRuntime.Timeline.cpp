@@ -1,43 +1,3 @@
-namespace {
-
-struct AggregatedPlayback {
-    QString kind;
-    int count = 0;
-    double maxGain = 0.0;
-};
-
-bool shouldAggregatePlaybackKind(const QString& kind)
-{
-    return previewSfxShouldAggregateKind(kind);
-}
-
-void accumulatePlayback(QVector<AggregatedPlayback>* playbacks, const QString& kind, double gain)
-{
-    if (playbacks == nullptr || kind.isEmpty()) {
-        return;
-    }
-    for (AggregatedPlayback& playback : *playbacks) {
-        if (playback.kind != kind) {
-            continue;
-        }
-        ++playback.count;
-        playback.maxGain = qMax(playback.maxGain, qMax(0.0, gain));
-        return;
-    }
-    AggregatedPlayback playback;
-    playback.kind = kind;
-    playback.count = 1;
-    playback.maxGain = qMax(0.0, gain);
-    playbacks->append(playback);
-}
-
-double playbackGain(const AggregatedPlayback& playback)
-{
-    return previewSfxPlaybackGainForAggregate(playback.kind, playback.count, playback.maxGain);
-}
-
-}
-
 QtPreviewSfxRuntime::QtPreviewSfxRuntime(QObject* parent)
     : QObject(parent)
 {
@@ -314,15 +274,12 @@ void QtPreviewSfxRuntime::drainEvents(double second)
             break;
         }
 
-        int groupEnd = groupStart + 1;
-        while (groupEnd < preparedTimeline_.events.size()
-               && qAbs(preparedTimeline_.events[groupEnd].second - groupSecond) <= kQtPreviewSfxEpsilonSeconds) {
-            ++groupEnd;
-        }
+        const int groupEnd =
+            miacode::preview_sfx_timeline::eventGroupEndIndex(preparedTimeline_.events, groupStart);
+        const miacode::preview_sfx_timeline::CollapsedEventGroup group =
+            miacode::preview_sfx_timeline::collapseEventGroup(preparedTimeline_.events, groupStart, groupEnd);
 
-        QVector<AggregatedPlayback> playbacks;
-        for (int i = groupStart; i < groupEnd; ++i) {
-            const Event& event = preparedTimeline_.events[i];
+        for (const Event& event : group.orderedEvents) {
             if (event.kind == "touchhold_start") {
                 startTouchholdSpan(event.spanIndex, 0.0);
                 continue;
@@ -331,14 +288,10 @@ void QtPreviewSfxRuntime::drainEvents(double second)
                 stopTouchholdSpan(event.spanIndex);
                 continue;
             }
-            if (shouldAggregatePlaybackKind(event.kind)) {
-                accumulatePlayback(&playbacks, event.kind, event.gain);
-                continue;
-            }
             playKindInternal(event.kind, event.gain);
         }
-        for (const AggregatedPlayback& playback : playbacks) {
-            playKindInternal(playback.kind, playbackGain(playback));
+        for (const miacode::preview_sfx_timeline::AggregatedPlayback& playback : group.aggregatedPlaybacks) {
+            playKindInternal(playback.kind, miacode::preview_sfx_timeline::aggregatedPlaybackGain(playback));
         }
 
         playbackSession_.eventIndex = groupEnd;

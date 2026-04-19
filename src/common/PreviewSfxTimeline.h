@@ -1,12 +1,14 @@
 #pragma once
 
 #include <QVector>
+#include <QHash>
 #include <QString>
 #include <QtMath>
 
 #include <algorithm>
 
 #include "PreviewGameplayConfig.h"
+#include "PreviewSfxSemantics.h"
 #include "timeline/TimelineData.h"
 
 namespace miacode::preview_sfx_timeline {
@@ -29,9 +31,159 @@ struct TouchholdSpan {
     double endSecond = 0.0;
 };
 
+struct AggregatedPlayback {
+    QString kind;
+    int count = 0;
+    double maxGain = 0.0;
+};
+
+struct CollapsedEventGroup {
+    double second = 0.0;
+    QVector<Event> orderedEvents;
+    QVector<AggregatedPlayback> aggregatedPlaybacks;
+};
+
+struct ScheduledPlayback {
+    double second = 0.0;
+    QString kind;
+    double gain = 1.0;
+    double nextSameKindSecond = -1.0;
+};
+
 inline double adjustedAnswerSecond(double second)
 {
     return qMax(0.0, second - kAnswerTriggerCompensationSeconds);
+}
+
+inline void accumulateAggregatedPlayback(QVector<AggregatedPlayback>* playbacks, const QString& kind, double gain)
+{
+    if (playbacks == nullptr || kind.isEmpty()) {
+        return;
+    }
+    for (AggregatedPlayback& playback : *playbacks) {
+        if (playback.kind != kind) {
+            continue;
+        }
+        ++playback.count;
+        playback.maxGain = qMax(playback.maxGain, qMax(0.0, gain));
+        return;
+    }
+
+    AggregatedPlayback playback;
+    playback.kind = kind;
+    playback.count = 1;
+    playback.maxGain = qMax(0.0, gain);
+    playbacks->append(playback);
+}
+
+inline double aggregatedPlaybackGain(const AggregatedPlayback& playback)
+{
+    return previewSfxPlaybackGainForAggregate(playback.kind, playback.count, playback.maxGain);
+}
+
+inline int eventGroupEndIndex(const QVector<Event>& events, int groupStart)
+{
+    if (groupStart < 0 || groupStart >= events.size()) {
+        return groupStart;
+    }
+    int groupEnd = groupStart + 1;
+    while (groupEnd < events.size()
+           && qAbs(events[groupEnd].second - events[groupStart].second) <= kTimelineEpsilonSeconds) {
+        ++groupEnd;
+    }
+    return groupEnd;
+}
+
+inline CollapsedEventGroup collapseEventGroup(
+    const QVector<Event>& events,
+    int groupStart,
+    int groupEnd
+)
+{
+    CollapsedEventGroup group;
+    if (groupStart < 0 || groupStart >= events.size() || groupEnd <= groupStart) {
+        return group;
+    }
+
+    group.second = events[groupStart].second;
+    group.orderedEvents.reserve(groupEnd - groupStart);
+    for (int i = groupStart; i < groupEnd; ++i) {
+        const Event& event = events[i];
+        if (previewSfxShouldAggregateKind(event.kind)) {
+            accumulateAggregatedPlayback(&group.aggregatedPlaybacks, event.kind, event.gain);
+            continue;
+        }
+        group.orderedEvents.append(event);
+    }
+    return group;
+}
+
+inline void annotateScheduledPlaybackLatestWins(QVector<ScheduledPlayback>* playbacks)
+{
+    if (playbacks == nullptr) {
+        return;
+    }
+
+    QHash<QString, double> nextPlaybackSecondByKind;
+    for (int i = playbacks->size() - 1; i >= 0; --i) {
+        ScheduledPlayback& playback = (*playbacks)[i];
+        const QString normalizedKind = previewSfxNormalizedKind(playback.kind);
+        if (previewSfxShouldInterruptPreviousKind(normalizedKind)
+            && nextPlaybackSecondByKind.contains(normalizedKind)) {
+            playback.nextSameKindSecond = nextPlaybackSecondByKind.value(normalizedKind);
+        }
+        nextPlaybackSecondByKind.insert(normalizedKind, playback.second);
+    }
+}
+
+inline QVector<ScheduledPlayback> buildScheduledPlaybacks(const QVector<Event>& events)
+{
+    QVector<ScheduledPlayback> playbacks;
+    int index = 0;
+    while (index < events.size()) {
+        const int groupEnd = eventGroupEndIndex(events, index);
+        const CollapsedEventGroup group = collapseEventGroup(events, index, groupEnd);
+
+        for (const Event& event : group.orderedEvents) {
+            if (event.kind == QLatin1String("touchhold_start")
+                || event.kind == QLatin1String("touchhold_stop")) {
+                continue;
+            }
+            ScheduledPlayback playback;
+            playback.second = event.second;
+            playback.kind = event.kind;
+            playback.gain = event.gain;
+            playbacks.append(playback);
+        }
+        for (const AggregatedPlayback& playback : group.aggregatedPlaybacks) {
+            ScheduledPlayback scheduled;
+            scheduled.second = group.second;
+            scheduled.kind = playback.kind;
+            scheduled.gain = aggregatedPlaybackGain(playback);
+            playbacks.append(scheduled);
+        }
+        index = groupEnd;
+    }
+
+    annotateScheduledPlaybackLatestWins(&playbacks);
+    return playbacks;
+}
+
+inline bool scheduledPlaybackSurvivesTimelineOriginClamp(
+    const ScheduledPlayback& playback,
+    double timelineOriginSecond
+)
+{
+    if (playback.second + kTimelineEpsilonSeconds >= timelineOriginSecond) {
+        return true;
+    }
+    return previewSfxNormalizedKind(playback.kind) == QLatin1String("answer")
+        && playback.second + kAnswerTriggerCompensationSeconds + kTimelineEpsilonSeconds >= timelineOriginSecond;
+}
+
+inline double scheduledPlaybackMixSecond(const ScheduledPlayback& playback, double timelineOriginSecond)
+{
+    return qMax(0.0, playback.second - timelineOriginSecond);
 }
 
 inline void buildTimeline(
