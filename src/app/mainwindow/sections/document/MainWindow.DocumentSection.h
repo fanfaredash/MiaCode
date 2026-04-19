@@ -86,6 +86,7 @@ public:
     void rebuildAutosaveMetadata(const QString& autosaveDirectoryPath) const;
 
 private:
+    void setChartBottomTabsMode(bool enabled);
     void pruneChartSelectionTransformUndoEntriesFromStep(int undoStepThreshold);
     void updateLastObservedChartEditorUndoRedoSteps();
     void recordChartSelectionTransformUndoEntry(int originalAnchor, int originalPosition, const QTextCursor& transformedCursor);

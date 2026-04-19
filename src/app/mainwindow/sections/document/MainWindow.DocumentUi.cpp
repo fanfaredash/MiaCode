@@ -541,10 +541,7 @@ bool MainWindow::DocumentSection::deleteDifficultyField(int difficultyId)
             if (ui_.editorStack_ != nullptr && ui_.welcomePage_ != nullptr) {
                 ui_.editorStack_->setCurrentWidget(ui_.welcomePage_);
             }
-            if (ui_.bottomTabs_ != nullptr) {
-                ui_.bottomTabs_->setVisible(false);
-            }
-            owner_.setValidationTabVisible(false);
+            setChartBottomTabsMode(false);
             clearTimelineAndPreview();
             if (ui_.outlineList_ != nullptr) {
                 ui_.outlineList_->setFocus();
@@ -743,6 +740,26 @@ void MainWindow::DocumentSection::populateDifficultyPage(int difficultyId)
     updateEditorStatus();
 }
 
+void MainWindow::DocumentSection::setChartBottomTabsMode(bool enabled)
+{
+    owner_.setBottomTabsTabVisible(MainWindow::BottomTabsTabId::Timeline, enabled);
+    owner_.setValidationTabVisible(enabled);
+    owner_.setBottomTabsTabVisible(MainWindow::BottomTabsTabId::Muri, enabled);
+
+    if (ui_.bottomTabs_ != nullptr) {
+        ui_.bottomTabs_->setVisible(enabled);
+        owner_.refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
+    }
+    if (owner_.quickShellBottomTabsProxy_ != nullptr) {
+        owner_.quickShellBottomTabsProxy_->setVisible(enabled);
+        owner_.refreshQuickShellRehostedWidgetParent(owner_.quickShellBottomTabsProxy_);
+    }
+
+    if (enabled) {
+        owner_.setCurrentBottomTabsTabId(MainWindow::BottomTabsTabId::Timeline);
+    }
+}
+
 bool MainWindow::DocumentSection::switchToMetadataField()
 {
     if (!maybeSaveCurrentFieldChanges()) {
@@ -761,11 +778,7 @@ bool MainWindow::DocumentSection::switchToMetadataField()
     if (ui_.editorStack_ != nullptr && ui_.metadataPage_ != nullptr) {
         ui_.editorStack_->setCurrentWidget(ui_.metadataPage_);
     }
-    owner_.setBottomTabsTabVisible(MainWindow::BottomTabsTabId::Timeline, false);
-    if (ui_.bottomTabs_ != nullptr) {
-        ui_.bottomTabs_->setVisible(false);
-    }
-    owner_.setValidationTabVisible(false);
+    setChartBottomTabsMode(false);
     owner_.clearValidationDecorations();
     updateMetadataPageMode();
     state_.currentFieldDirty_ = false;
@@ -796,11 +809,7 @@ bool MainWindow::DocumentSection::switchToWelcomePage()
     if (ui_.editorStack_ != nullptr && ui_.welcomePage_ != nullptr) {
         ui_.editorStack_->setCurrentWidget(ui_.welcomePage_);
     }
-    owner_.setBottomTabsTabVisible(MainWindow::BottomTabsTabId::Timeline, false);
-    if (ui_.bottomTabs_ != nullptr) {
-        ui_.bottomTabs_->setVisible(false);
-    }
-    owner_.setValidationTabVisible(false);
+    setChartBottomTabsMode(false);
     owner_.clearValidationDecorations();
     state_.currentFieldDirty_ = false;
     updateDirtyState();
@@ -838,12 +847,7 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     if (ui_.editorStack_ != nullptr && ui_.chartPage_ != nullptr) {
         ui_.editorStack_->setCurrentWidget(ui_.chartPage_);
     }
-    owner_.setBottomTabsTabVisible(MainWindow::BottomTabsTabId::Timeline, true);
-    owner_.setCurrentBottomTabsTabId(MainWindow::BottomTabsTabId::Timeline);
-    if (ui_.bottomTabs_ != nullptr) {
-        ui_.bottomTabs_->setVisible(true);
-    }
-    owner_.setValidationTabVisible(true);
+    setChartBottomTabsMode(true);
     state_.currentFieldDirty_ = false;
     updateDirtyState();
     rebuildFieldSidebar();
