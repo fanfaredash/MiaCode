@@ -475,21 +475,19 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
     }
 }
 
-double MainWindow::TimelineSection::currentPreviewPlaybackClockSecond() const
+double MainWindow::currentPreviewAuthoritativeAudioClockSecond() const
 {
-    if (state_.previewSfxRuntime_ != nullptr
-        && state_.previewSfxRuntime_->hasBackgroundTrack()
-        && state_.previewSfxRuntime_->isBackgroundTrackRunning()) {
-        return qMax(0.0, state_.previewSfxRuntime_->backgroundPlaybackSecond());
+    if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
+        return previewSfxRuntime_->backgroundPlaybackSecond();
     }
-    if (state_.qtPreviewPlaying_) {
-        const double elapsedSeconds = static_cast<double>(state_.qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
-        return state_.qtPreviewStartSecond_ + (elapsedSeconds * state_.previewPlaybackRate_);
+    if (qtPreviewPlaying_) {
+        const double elapsedSeconds = static_cast<double>(qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
+        return qtPreviewStartSecond_ + (elapsedSeconds * previewPlaybackRate_);
     }
-    if (state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
-        return state_.previewStartupPreparedSecond_;
+    if (previewStartupSyncPending_ || previewLateVideoStartPending_) {
+        return previewStartupPreparedSecond_;
     }
-    return state_.qtPreviewPauseSecond_;
+    return qtPreviewPauseSecond_;
 }
 
 void MainWindow::TimelineSection::cancelPreviewStartupSync()
@@ -573,7 +571,7 @@ void MainWindow::TimelineSection::handlePreviewStartupVideoPrepared(double secon
     if (state_.previewStartupStrongGroupCommitted_
         && state_.previewLateVideoStartPending_
         && state_.previewStageMediaHost_ != nullptr) {
-        const double currentSecond = currentPreviewPlaybackClockSecond();
+        const double currentSecond = owner_.currentPreviewAuthoritativeAudioClockSecond();
         state_.previewStageMediaHost_->commitPreparedPlaybackStart(currentSecond);
         state_.previewStartupVideoStarted_ = true;
         state_.previewLateVideoStartPending_ = false;
@@ -788,9 +786,8 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
         pauseSecondCaptured = true;
     }
     if (!pauseSecondCaptured) {
-        if (owner_.previewStageMediaRouteHasVideo()) {
-            state_.qtPreviewPauseSecond_ = owner_.previewStageMediaRouteCurrentPlaybackSecond();
-        }
+        state_.qtPreviewPauseSecond_ = owner_.currentPreviewAuthoritativeAudioClockSecond();
+        pauseSecondCaptured = true;
     }
     cancelPreviewStartupSync();
     owner_.pausePreviewStageMediaRoutePlayback();
@@ -902,15 +899,7 @@ void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()
         return;
     }
     if (state_.qtPreviewPlaying_) {
-        double second = qMax(
-            0.0,
-            state_.qtPreviewTimelineStartSecond_ + ((state_.qtPreviewTimelineElapsed_.elapsed() / 1000.0) * state_.previewPlaybackRate_)
-        );
-        if (state_.previewSfxRuntime_ != nullptr
-            && state_.previewSfxRuntime_->hasBackgroundTrack()
-            && state_.previewSfxRuntime_->isBackgroundTrackRunning()) {
-            second = qMax(0.0, state_.previewSfxRuntime_->backgroundPlaybackSecond());
-        }
+        const double second = qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond());
         state_.timelineQuickStateBridge_->setPlayheadSeconds(second, true);
         state_.timelineQuickStateBridge_->focusPlayhead(false);
         state_.qtPreviewLastTimelineSecond_ = second;

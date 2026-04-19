@@ -148,6 +148,7 @@
     void dispatchTimelineAnalysisRefresh();
     const MuriAnalysisReport& alignedMuriAnalysisReportForPreview() const;
     void applyAlignedMuriAnalysisReportToViews();
+    double currentPreviewAuthoritativeAudioClockSecond() const;
     void seekTimelineToCursor(int line, int col);
     void syncTimelineToEditorCursor(bool centerView = true);
     void navigateTimelineToSecond(double second, bool focusEditor = true);

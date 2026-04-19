@@ -590,6 +590,9 @@
     double& qtPreviewPendingFollowSecond_ = state_.qtPreviewPendingFollowSecond_;
     bool& qtPreviewPendingTimelineCenterView_ = state_.qtPreviewPendingTimelineCenterView_;
     bool& qtPreviewPendingFollowCenterView_ = state_.qtPreviewPendingFollowCenterView_;
+    bool& previewStartupSyncPending_ = state_.previewStartupSyncPending_;
+    bool& previewLateVideoStartPending_ = state_.previewLateVideoStartPending_;
+    double& previewStartupPreparedSecond_ = state_.previewStartupPreparedSecond_;
     double& deferredEditorUiPreviewFollowSecond_ = state_.deferredEditorUiPreviewFollowSecond_;
     bool& pendingPreviewPlaybackStart_ = state_.pendingPreviewPlaybackStart_;
     bool& pendingPreviewPlaybackResumeFromPause_ = state_.pendingPreviewPlaybackResumeFromPause_;
