@@ -1003,14 +1003,7 @@ MainWindow::MainWindow(QWidget* parent)
                 && hasActiveDifficulty()
                 && timelineQuickStateBridge_->followPreviewEnabled()) {
                 syncPreviewFollow = true;
-                previewFollowSecond = qMax(0.0, qtPreviewPauseSecond_);
-                if (qtPreviewPlaying_) {
-                    if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
-                        previewFollowSecond = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-                    } else if (previewStageMediaRouteHasVideo()) {
-                        previewFollowSecond = qMax(0.0, previewStageMediaRouteCurrentPlaybackSecond());
-                    }
-                }
+                previewFollowSecond = qMax(0.0, currentPreviewAuthoritativeAudioClockSecond());
             }
             const bool syncTimelineCursor =
                 !syncPreviewFollow

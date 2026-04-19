@@ -620,14 +620,7 @@ void MainWindow::TimelineSection::onTimelineFollowPreviewToggled(bool enabled)
     if (!hasActiveDifficulty()) {
         return;
     }
-    double second = qMax(0.0, state_.qtPreviewPauseSecond_);
-    if (state_.qtPreviewPlaying_) {
-        if (state_.previewSfxRuntime_ != nullptr && state_.previewSfxRuntime_->hasBackgroundTrack()) {
-            second = qMax(0.0, state_.previewSfxRuntime_->backgroundPlaybackSecond());
-        } else if (owner_.previewStageMediaRouteHasVideo()) {
-            second = qMax(0.0, owner_.previewStageMediaRouteCurrentPlaybackSecond());
-        }
-    }
+    const double second = qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond());
     syncEditorCursorToPreviewSecond(second, false, !state_.qtPreviewPlaying_);
 }
 

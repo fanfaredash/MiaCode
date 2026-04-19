@@ -125,9 +125,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 ## 7. Preview Audio And SFX Scheduling
 
 - Preview SFX runtime:
-  - Files: `src/preview/audio/QtPreviewSfxRuntime.h`, `src/preview/audio/QtPreviewSfxRuntime.cpp`
+  - Files: `src/common/PreviewSfxSemantics.h`, `src/common/PreviewSfxTimeline.h`, `src/preview/audio/QtPreviewSfxRuntime.h`, `src/preview/audio/QtPreviewSfxRuntime.cpp`
   - Class: `QtPreviewSfxRuntime`
-  - Owns: miniaudio engine state, prepared asset paths, prepared timeline program, playback session state, clip banks, shared touchhold sustain control, background track playback
+  - Owns: shared SFX kind semantics plus runtime/export playback collapsing rules, miniaudio engine state, prepared asset paths, prepared timeline program, playback session state, clip banks, shared touchhold sustain control, background track playback
 - Split responsibilities:
   - `QtPreviewSfxRuntime.Assets.cpp`: chart track resolution, SFX dir resolution, bank resets
   - `QtPreviewSfxRuntime.Timeline.cpp`: event generation from `TimelineNoteMarker`
@@ -136,6 +136,10 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Main window hooks:
   - File: `src/app/mainwindow/MainWindow.cpp`
   - Key functions: `ensurePreviewSfxRuntimePrepared`, `applyPreviewAudioSettingsToRuntime`, `schedulePreviewSubsystemWarmup`
+- Main window playback-second authority:
+  - File: `src/app/mainwindow/sections/timeline/MainWindow.TimelinePlayback.cpp`
+  - Key function: `MainWindow::currentPreviewAuthoritativeAudioClockSecond`
+  - Owns: the single preview-time audio clock getter for UI follow, export-dialog default position, and weak video late-start alignment
 
 ## 8. Video Export UI, Snapshot Boundary, And Encoder Pipeline
 

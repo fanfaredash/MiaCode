@@ -398,15 +398,7 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     task.outputPath = outputName;
 
     const auto currentPreviewSecond = [this]() -> double {
-        double second = qMax(0.0, owner_.qtPreviewPauseSecond_);
-        if (owner_.qtPreviewPlaying_) {
-            if (owner_.previewSfxRuntime_ != nullptr && owner_.previewSfxRuntime_->hasBackgroundTrack()) {
-                second = qMax(0.0, owner_.previewSfxRuntime_->backgroundPlaybackSecond());
-            } else if (owner_.previewStageMediaRouteHasVideo()) {
-                second = qMax(0.0, owner_.previewStageMediaRouteCurrentPlaybackSecond());
-            }
-        }
-        return second;
+        return qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond());
     };
     VideoExportDialog dialog(
         task,

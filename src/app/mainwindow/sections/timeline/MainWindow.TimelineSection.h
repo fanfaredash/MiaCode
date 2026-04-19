@@ -143,7 +143,6 @@ public:
 private:
     void cancelPreviewStartupSync();
     void tryCommitPreviewStartupSync();
-    double currentPreviewPlaybackClockSecond() const;
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;
     MainWindow::MainWindowState& state_;
