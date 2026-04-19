@@ -6,6 +6,7 @@
 namespace {
 
 using miacode::preview_sfx_timeline::Event;
+using miacode::preview_sfx_timeline::ScheduledPlayback;
 using miacode::preview_sfx_timeline::TouchholdSpan;
 using miacode::preview_sfx_timeline::adjustedAnswerSecond;
 
@@ -190,6 +191,95 @@ bool verifyBreakSlideTailSfx(QTextStream& err)
     return true;
 }
 
+bool verifySharedPlaybackScheduling(QTextStream& err)
+{
+    QVector<Event> events;
+
+    Event answerA;
+    answerA.second = 1.0;
+    answerA.kind = QStringLiteral("answer");
+    answerA.gain = 0.25;
+    events.append(answerA);
+
+    Event answerB = answerA;
+    answerB.gain = 0.75;
+    events.append(answerB);
+
+    Event judge;
+    judge.second = 1.0;
+    judge.kind = QStringLiteral("judge");
+    judge.gain = 0.50;
+    events.append(judge);
+
+    Event laterAnswer = answerA;
+    laterAnswer.second = 1.5;
+    laterAnswer.gain = 1.0;
+    events.append(laterAnswer);
+
+    const QVector<ScheduledPlayback> playbacks = miacode::preview_sfx_timeline::buildScheduledPlaybacks(events);
+    if (!require(playbacks.size() == 3, QStringLiteral("scheduled playback should collapse same-second same-kind hits"), err)) {
+        return false;
+    }
+    if (!require(
+            playbacks.at(0).kind == QLatin1String("answer")
+                && qAbs(playbacks.at(0).gain - 0.75) <= 1e-6
+                && qAbs(playbacks.at(0).nextSameKindSecond - 1.5) <= 1e-6,
+            QStringLiteral("scheduled playback should keep strongest same-second answer and annotate latest-wins"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            playbacks.at(1).kind == QLatin1String("judge")
+                && qAbs(playbacks.at(1).gain - 0.50) <= 1e-6
+                && playbacks.at(1).nextSameKindSecond < 0.0,
+            QStringLiteral("scheduled playback should preserve non-conflicting kinds"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            playbacks.at(2).kind == QLatin1String("answer")
+                && qAbs(playbacks.at(2).gain - 1.0) <= 1e-6
+                && playbacks.at(2).nextSameKindSecond < 0.0,
+            QStringLiteral("latest scheduled answer should not point to a later same-kind hit"),
+            err)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool verifyPartialExportAnswerClamp(QTextStream& err)
+{
+    ScheduledPlayback answer;
+    answer.second = adjustedAnswerSecond(1.0);
+    answer.kind = QStringLiteral("answer");
+
+    ScheduledPlayback judge;
+    judge.second = adjustedAnswerSecond(1.0);
+    judge.kind = QStringLiteral("judge");
+
+    if (!require(
+            miacode::preview_sfx_timeline::scheduledPlaybackSurvivesTimelineOriginClamp(answer, 1.0),
+            QStringLiteral("compensated answer should survive exact partial-export origin"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            !miacode::preview_sfx_timeline::scheduledPlaybackSurvivesTimelineOriginClamp(judge, 1.0),
+            QStringLiteral("non-answer playback should not survive partial-export origin clamp"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            qAbs(miacode::preview_sfx_timeline::scheduledPlaybackMixSecond(answer, 1.0)) <= 1e-6,
+            QStringLiteral("surviving compensated answer should clamp to frame zero"),
+            err)) {
+        return false;
+    }
+
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[])
@@ -205,6 +295,12 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyBreakSlideTailSfx(err)) {
+        return 1;
+    }
+    if (!verifySharedPlaybackScheduling(err)) {
+        return 1;
+    }
+    if (!verifyPartialExportAnswerClamp(err)) {
         return 1;
     }
 

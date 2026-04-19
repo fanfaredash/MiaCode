@@ -60,6 +60,7 @@ constexpr int kMixChannels = 2;
 constexpr double kTimelineEpsilonSeconds = miacode::preview_sfx_timeline::kTimelineEpsilonSeconds;
 
 using ExportEvent = miacode::preview_sfx_timeline::Event;
+using ScheduledExportPlayback = miacode::preview_sfx_timeline::ScheduledPlayback;
 using ExportTouchholdSpan = miacode::preview_sfx_timeline::TouchholdSpan;
 using miacode::video_export::raw_pipe::enqueueRawVideoFrame;
 using miacode::video_export::raw_pipe::finishRawVideoPipePump;
@@ -70,19 +71,6 @@ using miacode::video_export::raw_pipe::shutdownRawVideoPipePump;
 using miacode::video_export::raw_pipe::startRawVideoPipe;
 using miacode::video_export::raw_pipe::startRawVideoPipePumpThread;
 using miacode::video_export::raw_pipe::chooseRawVideoPipePlan;
-
-struct AggregatedExportPlayback {
-    QString kind;
-    int count = 0;
-    double maxGain = 0.0;
-};
-
-struct ScheduledExportPlayback {
-    double second = 0.0;
-    QString kind;
-    double gain = 1.0;
-    double nextSameKindSecond = -1.0;
-};
 
 struct DecodedClip {
     QVector<float> samples;
@@ -286,36 +274,6 @@ bool waitForProcessBackpressureDrain(
     qint64* peakQueuedBytes = nullptr,
     QString* failureDetail = nullptr
 );
-
-bool shouldAggregateExportPlaybackKind(const QString& kind)
-{
-    return previewSfxShouldAggregateKind(kind);
-}
-
-void accumulateExportPlayback(QVector<AggregatedExportPlayback>* playbacks, const QString& kind, double gain)
-{
-    if (playbacks == nullptr || kind.isEmpty()) {
-        return;
-    }
-    for (AggregatedExportPlayback& playback : *playbacks) {
-        if (playback.kind != kind) {
-            continue;
-        }
-        ++playback.count;
-        playback.maxGain = qMax(playback.maxGain, qMax(0.0, gain));
-        return;
-    }
-    AggregatedExportPlayback playback;
-    playback.kind = kind;
-    playback.count = 1;
-    playback.maxGain = qMax(0.0, gain);
-    playbacks->append(playback);
-}
-
-double exportPlaybackGain(const AggregatedExportPlayback& playback)
-{
-    return previewSfxPlaybackGainForAggregate(playback.kind, playback.count, playback.maxGain);
-}
 
 QString exportTempDirTemplate()
 {
@@ -2418,54 +2376,8 @@ bool mixSfxTrackToWav(
         return previewSfxVolumeForKind(settings, kind);
     };
 
-    QVector<ScheduledExportPlayback> scheduledPlaybacks;
-    int index = 0;
-    while (index < events.size()) {
-        const int groupStart = index;
-        const double groupSecond = events[groupStart].second;
-        int groupEnd = groupStart + 1;
-        while (groupEnd < events.size()
-               && qAbs(events[groupEnd].second - groupSecond) <= kTimelineEpsilonSeconds) {
-            ++groupEnd;
-        }
-
-        QVector<AggregatedExportPlayback> playbacks;
-        for (int i = groupStart; i < groupEnd; ++i) {
-            const ExportEvent& event = events.at(i);
-            if (event.kind == QLatin1String("touchhold_start")
-                || event.kind == QLatin1String("touchhold_stop")) {
-                continue;
-            }
-            if (shouldAggregateExportPlaybackKind(event.kind)) {
-                accumulateExportPlayback(&playbacks, event.kind, event.gain);
-                continue;
-            }
-            ScheduledExportPlayback playback;
-            playback.second = event.second;
-            playback.kind = event.kind;
-            playback.gain = event.gain;
-            scheduledPlaybacks.append(playback);
-        }
-        for (const AggregatedExportPlayback& playback : playbacks) {
-            ScheduledExportPlayback scheduled;
-            scheduled.second = groupSecond;
-            scheduled.kind = playback.kind;
-            scheduled.gain = exportPlaybackGain(playback);
-            scheduledPlaybacks.append(scheduled);
-        }
-        index = groupEnd;
-    }
-
-    QHash<QString, double> nextPlaybackSecondByKind;
-    for (int i = scheduledPlaybacks.size() - 1; i >= 0; --i) {
-        ScheduledExportPlayback& playback = scheduledPlaybacks[i];
-        const QString normalizedKind = previewSfxNormalizedKind(playback.kind);
-        if (previewSfxShouldInterruptPreviousKind(normalizedKind)
-            && nextPlaybackSecondByKind.contains(normalizedKind)) {
-            playback.nextSameKindSecond = nextPlaybackSecondByKind.value(normalizedKind);
-        }
-        nextPlaybackSecondByKind.insert(normalizedKind, playback.second);
-    }
+    const QVector<ScheduledExportPlayback> scheduledPlaybacks =
+        miacode::preview_sfx_timeline::buildScheduledPlaybacks(events);
 
     for (const ScheduledExportPlayback& playback : std::as_const(scheduledPlaybacks)) {
         qint64 maxFrames = -1;
@@ -2480,22 +2392,18 @@ bool mixSfxTrackToWav(
         if (it == clips.constEnd()) {
             continue;
         }
-        if (playback.second + kTimelineEpsilonSeconds < timelineOriginSecond) {
-            if (previewSfxNormalizedKind(playback.kind) == QLatin1String("answer")
-                && playback.second + miacode::preview_sfx_timeline::kAnswerTriggerCompensationSeconds
-                    + kTimelineEpsilonSeconds
-                    >= timelineOriginSecond) {
-                // Keep compensated answer hits audible at the exact partial-export boundary.
-            } else {
-                continue;
-            }
+        if (!miacode::preview_sfx_timeline::scheduledPlaybackSurvivesTimelineOriginClamp(
+                playback,
+                timelineOriginSecond)) {
+            continue;
         }
         const double volume = kindVolume(playback.kind);
         const double mixedGain = qMax(0.0, playback.gain) * qMax(0.0, volume);
         if (mixedGain <= 0.0) {
             continue;
         }
-        const double shiftedSecond = qMax(0.0, playback.second - timelineOriginSecond);
+        const double shiftedSecond =
+            miacode::preview_sfx_timeline::scheduledPlaybackMixSecond(playback, timelineOriginSecond);
         if (shiftedSecond < 0.0) {
             continue;
         }
