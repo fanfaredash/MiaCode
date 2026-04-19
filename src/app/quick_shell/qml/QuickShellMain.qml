@@ -915,13 +915,36 @@ ApplicationWindow {
                 spacing: 0
                 layoutDirection: controller.workspacePanelsSwapped ? Qt.RightToLeft : Qt.LeftToRight
 
-                WindowContainer {
+                ColumnLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    window: controller.workspaceWindow
-                    Component.onCompleted: controller.syncWorkspaceSurfaceSize(width, height)
-                    onWidthChanged: controller.syncWorkspaceSurfaceSize(width, height)
-                    onHeightChanged: controller.syncWorkspaceSurfaceSize(width, height)
+                    spacing: 0
+
+                    WindowContainer {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        window: controller.workspaceWindow
+                        Component.onCompleted: controller.syncWorkspaceSurfaceSize(width, height)
+                        onWidthChanged: controller.syncWorkspaceSurfaceSize(width, height)
+                        onHeightChanged: controller.syncWorkspaceSurfaceSize(width, height)
+                    }
+
+                    BottomTabsQuickHost {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: controller.bottomTabsVisible
+                            ? metric("bottomTabsHostHeight", 260)
+                            : 0
+                        Layout.minimumHeight: controller.bottomTabsVisible
+                            ? metric("bottomTabsHostHeight", 260)
+                            : 0
+                        Layout.maximumHeight: controller.bottomTabsVisible
+                            ? metric("bottomTabsHostHeight", 260)
+                            : 0
+                        visible: controller.bottomTabsVisible
+                        controller: root.shellController
+                        paletteMap: root.paletteMap
+                        metricsMap: root.metricsMap
+                    }
                 }
 
                 Rectangle {

@@ -23,13 +23,16 @@ public:
     QWidget* topChromeSurfaceWidget() const;
     QWidget* sidebarSurfaceWidget() const;
     QWidget* workspaceSurfaceWidget() const;
+    QWidget* bottomTabsSurfaceWidget() const;
     QWidget* statusSurfaceWidget() const;
 
     void refreshSurfaceStyles();
     void syncTopChromeSurfaceSize(int width, int height);
     void syncSidebarSurfaceSize(int width, int height);
     void syncWorkspaceSurfaceSize(int width, int height);
+    void syncBottomTabsSurfaceSize(int width, int height);
     void syncStatusSurfaceSize(int width, int height);
+    void refreshBottomTabsSurfaceVisibility();
     void updateRootWindowFrameGeometry(const QRect& geometry);
     void noteQuickShellUiReady();
 
@@ -45,6 +48,7 @@ private:
     QWidget* topChromeSurfaceWidget_ = nullptr;
     QWidget* sidebarSurfaceWidget_ = nullptr;
     QWidget* workspaceSurfaceWidget_ = nullptr;
+    QWidget* bottomTabsSurfaceWidget_ = nullptr;
     QWidget* statusSurfaceWidget_ = nullptr;
     QuickShellNativeSurfaceBundle surfaceBundle_;
 };

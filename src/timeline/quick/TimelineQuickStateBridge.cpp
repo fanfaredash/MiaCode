@@ -1,0 +1,686 @@
+#include "timeline/quick/TimelineQuickStateBridge.h"
+
+#include <algorithm>
+
+#include <QFontDatabase>
+
+#include "common/DebugLog.h"
+#include "common/DebugOptions.h"
+#include "UiText.h"
+#include "timeline/TimelineSceneStateBuilder.h"
+#include "timeline/TimelineView.h"
+
+namespace {
+
+QVector<double> makeTimelineZoomPresets()
+{
+    return {0.25, 0.5, 0.75, 1.0, 1.5, 2.0};
+}
+
+QSet<quint64> muriMarkerLocationIdsForReport(const MuriAnalysisReport& report)
+{
+    QSet<quint64> locationIds;
+    for (const MuriDiagnostic& diagnostic : report.diagnostics) {
+        locationIds.insert(timelineRenderLocationId(diagnostic.line, diagnostic.col));
+    }
+    return locationIds;
+}
+
+QString localizeMuriEntityText(QString text, bool chineseUi)
+{
+    text = text.trimmed();
+    if (!chineseUi || text.isEmpty()) {
+        return text;
+    }
+    static const QString kProtectedPrefix = QStringLiteral("protected ");
+    if (text.startsWith(kProtectedPrefix, Qt::CaseInsensitive)) {
+        text = QStringLiteral("保护 %1").arg(text.mid(kProtectedPrefix.size()).trimmed());
+    }
+    return text;
+}
+
+QString localizeMuriDetail(QString rawDetail, bool chineseUi)
+{
+    rawDetail = rawDetail.trimmed();
+    if (!chineseUi || rawDetail.isEmpty()) {
+        return rawDetail;
+    }
+
+    const auto unwrap = [](const QString& text, const QString& prefix, const QString& suffix, QString* middle) {
+        if (middle == nullptr || !text.startsWith(prefix) || !text.endsWith(suffix)) {
+            return false;
+        }
+        *middle = text.mid(prefix.size(), text.size() - prefix.size() - suffix.size()).trimmed();
+        return true;
+    };
+    const auto trimTrailingPeriod = [](QString text) {
+        text = text.trimmed();
+        if (text.endsWith(QLatin1Char('.'))) {
+            text.chop(1);
+        }
+        return text.trimmed();
+    };
+    const auto splitText = [](const QString& text, const QString& separator, QString* left, QString* right) {
+        if (left == nullptr || right == nullptr) {
+            return false;
+        }
+        const int splitIndex = text.indexOf(separator);
+        if (splitIndex < 0) {
+            return false;
+        }
+        *left = text.left(splitIndex).trimmed();
+        *right = text.mid(splitIndex + separator.size()).trimmed();
+        return !left->isEmpty() && !right->isEmpty();
+    };
+    const auto splitGapText =
+        [&trimTrailingPeriod](const QString& text,
+                              const QString& separator,
+                              QString* left,
+                              QString* right,
+                              QString* gapText) {
+            if (left == nullptr || right == nullptr || gapText == nullptr) {
+                return false;
+            }
+            const int splitIndex = text.indexOf(separator);
+            const int gapIndex = text.lastIndexOf(QStringLiteral(", gap "));
+            if (splitIndex < 0 || gapIndex < 0 || gapIndex <= splitIndex) {
+                return false;
+            }
+            *left = text.left(splitIndex).trimmed();
+            *right = text.mid(splitIndex + separator.size(), gapIndex - splitIndex - separator.size()).trimmed();
+            *gapText = trimTrailingPeriod(text.mid(gapIndex + QStringLiteral(", gap ").size()));
+            return !left->isEmpty() && !right->isEmpty() && gapText->endsWith(QStringLiteral(" ms"));
+        };
+    const auto splitSingleGapText =
+        [&trimTrailingPeriod](const QString& text, const QString& separator, QString* left, QString* gapText) {
+            if (left == nullptr || gapText == nullptr) {
+                return false;
+            }
+            const int splitIndex = text.indexOf(separator);
+            if (splitIndex < 0) {
+                return false;
+            }
+            *left = text.left(splitIndex).trimmed();
+            *gapText = trimTrailingPeriod(text.mid(splitIndex + separator.size()));
+            return !left->isEmpty() && gapText->endsWith(QStringLiteral(" ms"));
+        };
+
+    QString middle;
+    QString left;
+    QString right;
+    QString gapText;
+    if (splitSingleGapText(rawDetail, QStringLiteral(" start will early-judge a following tap, gap "), &left, &gapText)) {
+        return QStringLiteral("%1 启动，会提前判定后续 tap，间隔 %2。").arg(left, gapText);
+    }
+    if (splitSingleGapText(rawDetail, QStringLiteral(" jump-start will early-judge a following tap, gap "), &left, &gapText)) {
+        return QStringLiteral("%1 偷跑，会提前判定后续 tap，间隔 %2。").arg(left, gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" start will early-judge "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 启动，会提前判定 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" start may early-judge "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 启动，可能会提前判定 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" start early-judges "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 启动，会提前判定 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" jump-start will early-judge "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 偷跑，会提前判定 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" jump-start may early-judge "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 偷跑，可能会提前判定 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" jump-start early-judges "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 偷跑，会提前判定 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" trajectory may collide with "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 运行轨迹可能会撞到 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" trajectory will collide with "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 运行轨迹会撞到 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" trajectory collides with "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 运行轨迹会撞到 %2，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
+    }
+    if (splitGapText(rawDetail, QStringLiteral(" was early-judged by "), &left, &right, &gapText)) {
+        return QStringLiteral("%1 被 %2 提前判定，间隔 %3。")
+            .arg(localizeMuriEntityText(left, chineseUi), localizeMuriEntityText(right, chineseUi), gapText);
+    }
+    if (rawDetail.endsWith(QStringLiteral(" resolved outside its critical window."))
+        || rawDetail.contains(QStringLiteral(" resolved outside its critical window, gap "))) {
+        const int splitIndex = rawDetail.indexOf(QStringLiteral(" resolved outside its critical window"));
+        if (splitIndex > 0) {
+            const QString target = rawDetail.left(splitIndex).trimmed();
+            const int gapIndex = rawDetail.lastIndexOf(QStringLiteral(", gap "));
+            if (gapIndex > splitIndex) {
+                gapText = trimTrailingPeriod(rawDetail.mid(gapIndex + QStringLiteral(", gap ").size()));
+                return QStringLiteral("%1 提前完成，间隔 %2。").arg(target, gapText);
+            }
+            return QStringLiteral("%1 的判定落在临界窗之外。").arg(target);
+        }
+    }
+    if (unwrap(rawDetail, QStringLiteral("Multi-touch formed by "), QStringLiteral("."), &middle)) {
+        return QStringLiteral("%1 构成多押。").arg(middle);
+    }
+    if (rawDetail.endsWith(QStringLiteral(" formed overlap."))
+        && splitText(
+            trimTrailingPeriod(rawDetail.left(rawDetail.size() - QStringLiteral(" formed overlap.").size())),
+            QStringLiteral(" and same-position "),
+            &left,
+            &right)) {
+        return QStringLiteral("%1 与相同位置的 %2 构成叠键。").arg(left, right);
+    }
+    if (rawDetail.endsWith(QStringLiteral(" formed overlap at the same position."))) {
+        const QString target = rawDetail.left(
+            rawDetail.size() - QStringLiteral(" formed overlap at the same position.").size()).trimmed();
+        if (!target.isEmpty()) {
+            return QStringLiteral("%1 在相同位置构成叠键。").arg(target);
+        }
+    }
+    if (unwrap(rawDetail, QStringLiteral("Slide-head trigger from "), QStringLiteral(" early-judged this note."), &middle)) {
+        return QStringLiteral("来自 %1 的滑键头触发提前判定了此物件。").arg(middle);
+    }
+    if (unwrap(rawDetail, QStringLiteral("Pad trigger from "), QStringLiteral(" early-judged this note."), &middle)) {
+        return QStringLiteral("来自 %1 的按下触发提前判定了此物件。").arg(middle);
+    }
+    if (unwrap(
+            rawDetail,
+            QStringLiteral("Runtime simple-note judge for "),
+            QStringLiteral(" missed the critical window and resolved as overlap."),
+            &middle)) {
+        return QStringLiteral("运行时普通物件判定 %1 错过了判定临界窗，并最终判为叠键。").arg(middle);
+    }
+    if (unwrap(rawDetail, QStringLiteral("Slide runtime judge for "), QStringLiteral(" resolved outside its critical window."), &middle)) {
+        return QStringLiteral("Slide 运行时判定 %1 落在判定临界窗之外。").arg(middle);
+    }
+    if (unwrap(rawDetail, QStringLiteral("Slide "), QStringLiteral(" was cleared earlier than its normal judge timing."), &middle)) {
+        return QStringLiteral("Slide %1 的完成时间早于正常判定时机。").arg(middle);
+    }
+    if (unwrap(rawDetail, QStringLiteral("Wifi runtime judge for "), QStringLiteral(" resolved outside its critical window."), &middle)) {
+        return QStringLiteral("Wifi 运行时判定 %1 落在判定临界窗之外。").arg(middle);
+    }
+    if (unwrap(rawDetail, QStringLiteral("Wifi "), QStringLiteral(" was cleared earlier than its normal judge timing."), &middle)) {
+        return QStringLiteral("Wifi %1 的完成时间早于正常判定时机。").arg(middle);
+    }
+    if (rawDetail.startsWith(QStringLiteral("Static reference from "))) {
+        const QString tail = rawDetail.mid(QStringLiteral("Static reference from ").size()).trimmed();
+        const int deltaIndex = tail.lastIndexOf(QStringLiteral(", Δ "));
+        if (deltaIndex >= 0 && tail.endsWith(QStringLiteral(" ms"))) {
+            const QString source = tail.left(deltaIndex).trimmed();
+            const QString deltaText = tail.mid(deltaIndex + QStringLiteral(", Δ ").size());
+            return QStringLiteral("静态参考：%1，Δ %2").arg(source, deltaText);
+        }
+        return QStringLiteral("静态参考：%1").arg(tail);
+    }
+    if (rawDetail.startsWith(QStringLiteral("Runtime hand actions formed "))) {
+        const QString tail = rawDetail.mid(QStringLiteral("Runtime hand actions formed ").size()).trimmed();
+        const QString marker = QStringLiteral("-hand multi-touch: ");
+        const int split = tail.indexOf(marker);
+        if (split > 0) {
+            const QString handCount = tail.left(split).trimmed();
+            const QString actions = tail.mid(split + marker.size()).trimmed();
+            return QStringLiteral("运行时手部动作形成了 %1 手多押：%2").arg(handCount, actions);
+        }
+    }
+    return rawDetail;
+}
+
+QHash<quint64, QString> muriMarkerTooltipsForReport(const MuriAnalysisReport& report)
+{
+    QHash<quint64, QStringList> linesByLocation;
+    const bool chineseUi = UiText::isChineseUi();
+    for (const MuriDiagnostic& diagnostic : report.diagnostics) {
+        const quint64 locationId = timelineRenderLocationId(diagnostic.line, diagnostic.col);
+        QString text = QStringLiteral("%1 · %2")
+                           .arg(muriAlertLevelDisplayName(diagnostic.alertLevel, chineseUi))
+                           .arg(muriKindDisplayName(diagnostic.kind, chineseUi));
+        const QString detail = localizeMuriDetail(diagnostic.detail, chineseUi).trimmed();
+        if (!detail.isEmpty()) {
+            text += QStringLiteral("\n") + detail;
+        }
+        if (!text.isEmpty()) {
+            linesByLocation[locationId].append(text);
+        }
+    }
+    QHash<quint64, QString> tooltips;
+    for (auto it = linesByLocation.cbegin(); it != linesByLocation.cend(); ++it) {
+        tooltips.insert(it.key(), it.value().join(QStringLiteral("\n\n")));
+    }
+    return tooltips;
+}
+
+}  // namespace
+
+TimelineQuickStateBridge::TimelineQuickStateBridge(QObject* parent)
+    : QObject(parent)
+    , zoomPresets_(makeTimelineZoomPresets())
+{
+    headerLineNumberFont_ = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    headerLineNumberFont_.setStyleHint(QFont::Monospace);
+    headerLineNumberFont_.setFixedPitch(true);
+}
+
+void TimelineQuickStateBridge::bumpAllRevisions()
+{
+    ++gridRevision_;
+    ++waveformRevision_;
+    ++headerRevision_;
+    ++notesRevision_;
+    ++overlayRevision_;
+}
+
+void TimelineQuickStateBridge::bumpHeaderRevision()
+{
+    ++headerRevision_;
+}
+
+void TimelineQuickStateBridge::bumpNotesRevision()
+{
+    ++notesRevision_;
+}
+
+void TimelineQuickStateBridge::bumpOverlayRevision()
+{
+    ++overlayRevision_;
+}
+
+void TimelineQuickStateBridge::attachReferenceView(TimelineView* referenceView)
+{
+    if (referenceView_ == referenceView) {
+        return;
+    }
+    if (referenceView_ != nullptr && referenceView_->stateBridge() == this) {
+        referenceView_->setStateBridge(nullptr);
+    }
+    referenceView_ = referenceView;
+    if (referenceView_ != nullptr) {
+        referenceView_->setStateBridge(this);
+    }
+    emit renderStateChanged();
+}
+
+void TimelineQuickStateBridge::clear()
+{
+    snapshot_ = TimelineRenderSnapshot();
+    waveformData_.reset();
+    muriMarkerLocationIds_.clear();
+    muriMarkerTooltips_.clear();
+    horizontalScrollValue_ = 0;
+    playbackEntrySeconds_ = 0.0;
+    playheadUpperLimitSeconds_ = -1.0;
+    playheadSeconds_ = 0.0;
+    cursorSeconds_ = 0.0;
+    playheadIndicatorSuppressed_ = false;
+    bumpAllRevisions();
+    emit renderStateChanged();
+}
+
+void TimelineQuickStateBridge::setTimelineData(const TimelineRenderSnapshot& snapshot)
+{
+    snapshot_ = snapshot;
+    bumpAllRevisions();
+    emit renderStateChanged();
+}
+
+const TimelineRenderSnapshot& TimelineQuickStateBridge::renderSnapshot() const
+{
+    return snapshot_;
+}
+
+void TimelineQuickStateBridge::setWaveformData(
+    const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData)
+{
+    waveformData_ = waveformData;
+    bumpAllRevisions();
+    emit renderStateChanged();
+}
+
+std::shared_ptr<const miacode::waveform::WaveformData> TimelineQuickStateBridge::waveformData() const
+{
+    return waveformData_;
+}
+
+void TimelineQuickStateBridge::setMuriAnalysisReport(const MuriAnalysisReport& report)
+{
+    muriMarkerLocationIds_ = muriMarkerLocationIdsForReport(report);
+    muriMarkerTooltips_ = muriMarkerTooltipsForReport(report);
+    bumpOverlayRevision();
+    emit renderStateChanged();
+}
+
+QSet<quint64> TimelineQuickStateBridge::muriMarkerLocationIds() const
+{
+    return muriMarkerLocationIds_;
+}
+
+QHash<quint64, QString> TimelineQuickStateBridge::muriMarkerTooltips() const
+{
+    return muriMarkerTooltips_;
+}
+
+void TimelineQuickStateBridge::setHeaderLineNumberFont(const QFont& font)
+{
+    headerLineNumberFont_ = font;
+    ++gridRevision_;
+    bumpHeaderRevision();
+    emit renderStateChanged();
+}
+
+QFont TimelineQuickStateBridge::headerLineNumberFont() const
+{
+    return headerLineNumberFont_;
+}
+
+void TimelineQuickStateBridge::setQuickViewportSize(const QSize& viewportSize)
+{
+    if (!viewportSize.isValid()) {
+        return;
+    }
+    const QSize normalized(qMax(1, viewportSize.width()), qMax(1, viewportSize.height()));
+    if (quickViewportSize_ == normalized) {
+        return;
+    }
+    quickViewportSize_ = normalized;
+    bumpAllRevisions();
+    emit renderStateChanged();
+}
+
+QSize TimelineQuickStateBridge::effectiveViewportSize() const
+{
+    if (quickViewportSize_.isValid()) {
+        return quickViewportSize_;
+    }
+    return QSize(1, 1);
+}
+
+int TimelineQuickStateBridge::horizontalScrollValue() const
+{
+    return horizontalScrollValue_;
+}
+
+void TimelineQuickStateBridge::setHorizontalScrollValue(int value)
+{
+    const miacode::timeline::TimelineSceneBuildRequest request{
+        snapshot_,
+        waveformData_,
+        muriMarkerLocationIds_,
+        muriMarkerTooltips_,
+        effectiveViewportSize(),
+        headerLineNumberFont_,
+        0,
+        0,
+        effectiveViewportSize().width(),
+        zoomScale(),
+        playbackEntrySeconds_,
+        playheadSeconds_,
+        cursorSeconds_,
+        playheadUpperLimitSeconds_,
+        showSlideTracks_,
+        playheadIndicatorSuppressed_,
+        false,
+        gridRevision_,
+        waveformRevision_,
+        headerRevision_,
+        notesRevision_,
+        overlayRevision_};
+    const miacode::timeline::TimelineSceneState state = miacode::timeline::TimelineSceneStateBuilder::build(request);
+    const int clamped = qBound(0, value, qMax(0, state.contentWidth - state.viewportSize.width()));
+    if (horizontalScrollValue_ == clamped) {
+        return;
+    }
+    horizontalScrollValue_ = clamped;
+    bumpAllRevisions();
+    emit renderStateChanged();
+}
+
+double TimelineQuickStateBridge::zoomScale() const
+{
+    return zoomPresets_.value(zoomPresetIndex_, 0.5);
+}
+
+void TimelineQuickStateBridge::cycleZoomPreset(double anchorSecond)
+{
+    if (zoomPresets_.isEmpty()) {
+        return;
+    }
+    const double currentScale = zoomScale();
+    int nextIndex = 0;
+    bool foundHigherPreset = false;
+    for (int index = 0; index < zoomPresets_.size(); ++index) {
+        if (zoomPresets_.at(index) > currentScale + 1e-6) {
+            nextIndex = index;
+            foundHigherPreset = true;
+            break;
+        }
+    }
+    if (!foundHigherPreset) {
+        nextIndex = 0;
+    }
+    if (nextIndex == zoomPresetIndex_) {
+        return;
+    }
+    zoomPresetIndex_ = nextIndex;
+    centerOnSecond(anchorSecond);
+    bumpAllRevisions();
+    emit renderStateChanged();
+}
+
+void TimelineQuickStateBridge::centerOnSecond(double second)
+{
+    miacode::timeline::TimelineSceneBuildRequest request;
+    request.snapshot = snapshot_;
+    request.waveformData = waveformData_;
+    request.muriMarkerLocationIds = muriMarkerLocationIds_;
+    request.viewportSize = effectiveViewportSize();
+    request.headerLineNumberFont = headerLineNumberFont_;
+    request.horizontalScrollValue = horizontalScrollValue_;
+    request.headerLeftLimit = 0;
+    request.headerRightLimit = request.viewportSize.width();
+    request.zoomScale = zoomScale();
+    request.playbackEntrySeconds = playbackEntrySeconds_;
+    request.playheadSeconds = playheadSeconds_;
+    request.cursorSeconds = cursorSeconds_;
+    request.playheadUpperLimitSeconds = playheadUpperLimitSeconds_;
+    request.showSlideTracks = showSlideTracks_;
+    request.playheadIndicatorSuppressed = playheadIndicatorSuppressed_;
+    request.gridRevision = gridRevision_;
+    request.waveformRevision = waveformRevision_;
+    request.headerRevision = headerRevision_;
+    request.notesRevision = notesRevision_;
+    request.overlayRevision = overlayRevision_;
+    const miacode::timeline::TimelineSceneState state = miacode::timeline::TimelineSceneStateBuilder::build(request);
+    const int targetX =
+        miacode::timeline::TimelineSceneStateBuilder::secondToSceneX(state, second) - (state.viewportSize.width() / 2);
+    horizontalScrollValue_ = qBound(0, targetX, qMax(0, state.contentWidth - state.viewportSize.width()));
+}
+
+void TimelineQuickStateBridge::stepZoomPreset(int deltaSteps, double anchorSecond)
+{
+    if (zoomPresets_.isEmpty() || deltaSteps == 0) {
+        return;
+    }
+    const int nextIndex = qBound(0, zoomPresetIndex_ + deltaSteps, zoomPresets_.size() - 1);
+    if (nextIndex == zoomPresetIndex_) {
+        return;
+    }
+    zoomPresetIndex_ = nextIndex;
+    centerOnSecond(anchorSecond);
+    bumpAllRevisions();
+    emit renderStateChanged();
+}
+
+void TimelineQuickStateBridge::setPlaybackEntrySeconds(double second)
+{
+    const double clamped = qMax(0.0, second);
+    if (qFuzzyCompare(playbackEntrySeconds_ + 1.0, clamped + 1.0)) {
+        return;
+    }
+    playbackEntrySeconds_ = clamped;
+    bumpAllRevisions();
+    emit renderStateChanged();
+}
+
+double TimelineQuickStateBridge::playbackEntrySeconds() const
+{
+    return playbackEntrySeconds_;
+}
+
+void TimelineQuickStateBridge::setPlayheadUpperLimitSeconds(double second)
+{
+    playheadUpperLimitSeconds_ = second > 0.0 ? second : -1.0;
+    if (playheadUpperLimitSeconds_ > 0.0 && playheadSeconds_ > playheadUpperLimitSeconds_) {
+        playheadSeconds_ = playheadUpperLimitSeconds_;
+    }
+    bumpAllRevisions();
+    emit renderStateChanged();
+}
+
+double TimelineQuickStateBridge::playheadUpperLimitSeconds() const
+{
+    return playheadUpperLimitSeconds_;
+}
+
+double TimelineQuickStateBridge::durationSeconds() const
+{
+    return qMax(0.0, snapshot_.durationSeconds);
+}
+
+double TimelineQuickStateBridge::playheadSeconds() const
+{
+    return playheadSeconds_;
+}
+
+void TimelineQuickStateBridge::setPlayheadSeconds(double second, bool centerView)
+{
+    double clamped = qMax(0.0, second);
+    if (playheadUpperLimitSeconds_ > 0.0) {
+        clamped = qMin(clamped, playheadUpperLimitSeconds_);
+    }
+    const bool changed = !qFuzzyCompare(playheadSeconds_ + 1.0, clamped + 1.0);
+    playheadSeconds_ = clamped;
+    if (centerView) {
+        centerOnSecond(playheadSeconds_);
+        bumpAllRevisions();
+    } else {
+        bumpOverlayRevision();
+    }
+    if (changed) {
+        emit playheadChanged(playheadSeconds_);
+    }
+    emit renderStateChanged();
+}
+
+double TimelineQuickStateBridge::cursorSeconds() const
+{
+    return cursorSeconds_;
+}
+
+void TimelineQuickStateBridge::setCursorSeconds(double second, bool centerView)
+{
+    const double clamped = qIsFinite(second) ? second : 0.0;
+    if (qFuzzyCompare(cursorSeconds_ + 1.0, clamped + 1.0) && !centerView) {
+        return;
+    }
+    cursorSeconds_ = clamped;
+    if (centerView) {
+        centerOnSecond(cursorSeconds_);
+        bumpAllRevisions();
+    } else {
+        bumpOverlayRevision();
+    }
+    if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("timeline/bridge"),
+            QStringLiteral("action=set_cursor_seconds second=%1 center=%2 quick_viewport=%3x%4")
+                .arg(cursorSeconds_, 0, 'f', 6)
+                .arg(centerView ? 1 : 0)
+                .arg(quickViewportSize_.width())
+                .arg(quickViewportSize_.height())
+        );
+    }
+    emit renderStateChanged();
+}
+
+void TimelineQuickStateBridge::focusPlayhead(bool centerView)
+{
+    if (!centerView) {
+        return;
+    }
+    centerOnSecond(playheadSeconds_);
+    bumpAllRevisions();
+    emit renderStateChanged();
+}
+
+void TimelineQuickStateBridge::focusCursor(bool centerView)
+{
+    if (!centerView) {
+        return;
+    }
+    centerOnSecond(cursorSeconds_);
+    bumpAllRevisions();
+    emit renderStateChanged();
+}
+
+bool TimelineQuickStateBridge::showSlideTracks() const
+{
+    return showSlideTracks_;
+}
+
+void TimelineQuickStateBridge::setShowSlideTracks(bool show)
+{
+    if (showSlideTracks_ == show) {
+        return;
+    }
+    showSlideTracks_ = show;
+    bumpNotesRevision();
+    emit renderStateChanged();
+}
+
+bool TimelineQuickStateBridge::followPreviewEnabled() const
+{
+    return followPreviewEnabled_;
+}
+
+void TimelineQuickStateBridge::setFollowPreviewEnabled(bool enabled)
+{
+    if (followPreviewEnabled_ == enabled) {
+        return;
+    }
+    followPreviewEnabled_ = enabled;
+    emit renderStateChanged();
+}
+
+bool TimelineQuickStateBridge::playheadIndicatorSuppressed() const
+{
+    return playheadIndicatorSuppressed_;
+}
+
+void TimelineQuickStateBridge::suppressPlayheadIndicator()
+{
+    if (playheadIndicatorSuppressed_) {
+        return;
+    }
+    playheadIndicatorSuppressed_ = true;
+    bumpOverlayRevision();
+    emit renderStateChanged();
+}
+
+void TimelineQuickStateBridge::restorePlayheadIndicator(bool immediate)
+{
+    if (!playheadIndicatorSuppressed_ && !immediate) {
+        return;
+    }
+    playheadIndicatorSuppressed_ = false;
+    bumpOverlayRevision();
+    emit renderStateChanged();
+}

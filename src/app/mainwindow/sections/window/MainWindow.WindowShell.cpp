@@ -3,9 +3,11 @@
 
 #include "AppVersion.h"
 #include "BracketScopeHighlighter.h"
+#include "../timeline/MainWindow.TimelineSection.h"
 #include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 #include "../export/MainWindow.ExportSection.h"
 #include "common/DebugLog.h"
 #include "preview/runtime/PreviewRuntime.h"
@@ -353,6 +355,46 @@ void MainWindow::WindowSection::setShellPreviewFullscreen(bool fullscreen)
     }
 }
 
+void MainWindow::WindowSection::setShellBottomTabsCurrentTab(const QString& tabId)
+{
+    owner_.setCurrentBottomTabsTabId(tabId);
+}
+
+void MainWindow::WindowSection::navigateShellTimelineToSecond(double second)
+{
+    owner_.timelineSection_->onTimelineHeaderNavigateRequested(second);
+}
+
+void MainWindow::WindowSection::centerShellTimelineNavigate(double second)
+{
+    owner_.timelineSection_->onTimelineCenterNavigateRequested(second);
+}
+
+void MainWindow::WindowSection::shellTimelineDragStarted()
+{
+    owner_.timelineSection_->onTimelineDragStarted();
+}
+
+void MainWindow::WindowSection::shellTimelineDragFinished(double second)
+{
+    owner_.timelineSection_->onTimelineDragFinished(second);
+}
+
+void MainWindow::WindowSection::shellTimelineUserInteractionStarted()
+{
+    owner_.timelineSection_->onTimelineUserInteractionStarted();
+}
+
+void MainWindow::WindowSection::shellTimelineSurfaceReady()
+{
+    owner_.noteQuickTimelineSurfaceReady();
+}
+
+void MainWindow::WindowSection::shellTimelineFollowPreviewToggled(bool enabled)
+{
+    owner_.timelineSection_->onTimelineFollowPreviewToggled(enabled);
+}
+
 bool MainWindow::WindowSection::shellHasShortcut(const QKeySequence& sequence) const
 {
     if (sequence.isEmpty()) {
@@ -478,6 +520,38 @@ QWindow* MainWindow::WindowSection::shellPreviewCompositeWindow() const
     return owner_.quickShellPreviewCompositeWindow();
 }
 
+QObject* MainWindow::WindowSection::shellTimelineStateBridgeObject() const
+{
+    return static_cast<QObject*>(owner_.timelineQuickStateBridge_);
+}
+
+QString MainWindow::WindowSection::shellBottomTabsCurrentTabId() const
+{
+    return owner_.currentBottomTabsTabIdString();
+}
+
+bool MainWindow::WindowSection::shellBottomTabsVisible() const
+{
+    return owner_.bottomTabsTabVisible(MainWindow::BottomTabsTabId::Timeline)
+        || owner_.bottomTabsTabVisible(MainWindow::BottomTabsTabId::Validation)
+        || owner_.bottomTabsTabVisible(MainWindow::BottomTabsTabId::Muri);
+}
+
+bool MainWindow::WindowSection::shellTimelineTabVisible() const
+{
+    return owner_.bottomTabsTabVisible(MainWindow::BottomTabsTabId::Timeline);
+}
+
+bool MainWindow::WindowSection::shellValidationTabVisible() const
+{
+    return owner_.bottomTabsTabVisible(MainWindow::BottomTabsTabId::Validation);
+}
+
+bool MainWindow::WindowSection::shellMuriTabVisible() const
+{
+    return owner_.bottomTabsTabVisible(MainWindow::BottomTabsTabId::Muri);
+}
+
 QWidget* MainWindow::WindowSection::shellWindowWidget() const
 {
     return const_cast<MainWindow*>(&owner_);
@@ -500,7 +574,20 @@ int MainWindow::WindowSection::shellOutlineDockExpandedWidth() const
 
 QWidget* MainWindow::WindowSection::shellWorkspaceWidget() const
 {
-    return owner_.previewLeftColumn_;
+    return owner_.workspaceContentWidget_ != nullptr ? owner_.workspaceContentWidget_ : owner_.previewLeftColumn_;
+}
+
+QWidget* MainWindow::WindowSection::shellBottomTabsWidget() const
+{
+    if (owner_.quickShellBottomTabsProxyActive()) {
+        return owner_.quickShellBottomTabsProxy_;
+    }
+    return owner_.bottomTabs_;
+}
+
+int MainWindow::WindowSection::shellBottomTabsHeight() const
+{
+    return this->computeBottomTabsDeviceHeight();
 }
 
 QWidget* MainWindow::WindowSection::shellPreviewPanelWidget() const

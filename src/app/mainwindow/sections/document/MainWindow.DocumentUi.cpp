@@ -19,6 +19,7 @@
 #include "preview/scene/PreviewProgressStatsCache.h"
 #include "simai/transform/ChartBatchTransform.h"
 #include "simai/transform/ChartNormalization.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -439,9 +440,15 @@ void MainWindow::DocumentSection::syncEditorHeaderMinimumWidth()
             owner_.updatePreviewWorkspaceLayout();
         }
     }
+    if (ui_.workspaceContentWidget_ != nullptr) {
+        const int baseMinimumWidth = qMax(0, ui_.workspaceContentWidget_->property("baseMinimumWidth").toInt());
+        ui_.workspaceContentWidget_->setMinimumWidth(qMax(baseMinimumWidth, headerMinimumWidth));
+        ui_.workspaceContentWidget_->updateGeometry();
+    }
 
     owner_.refreshQuickShellRehostedWidgetParent(ui_.outlineDock_);
-    owner_.refreshQuickShellRehostedWidgetParent(ui_.previewLeftColumn_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.workspaceContentWidget_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
 
     if (ui_.workspaceSplitter_ != nullptr) {
         ui_.workspaceSplitter_->updateGeometry();
@@ -754,12 +761,7 @@ bool MainWindow::DocumentSection::switchToMetadataField()
     if (ui_.editorStack_ != nullptr && ui_.metadataPage_ != nullptr) {
         ui_.editorStack_->setCurrentWidget(ui_.metadataPage_);
     }
-    if (ui_.bottomTabs_ != nullptr && ui_.timelineView_ != nullptr) {
-        const int timelineTabIndex = ui_.bottomTabs_->indexOf(ui_.timelineView_);
-        if (timelineTabIndex >= 0) {
-            ui_.bottomTabs_->setTabVisible(timelineTabIndex, false);
-        }
-    }
+    owner_.setBottomTabsTabVisible(MainWindow::BottomTabsTabId::Timeline, false);
     if (ui_.bottomTabs_ != nullptr) {
         ui_.bottomTabs_->setVisible(false);
     }
@@ -794,12 +796,7 @@ bool MainWindow::DocumentSection::switchToWelcomePage()
     if (ui_.editorStack_ != nullptr && ui_.welcomePage_ != nullptr) {
         ui_.editorStack_->setCurrentWidget(ui_.welcomePage_);
     }
-    if (ui_.bottomTabs_ != nullptr && ui_.timelineView_ != nullptr) {
-        const int timelineTabIndex = ui_.bottomTabs_->indexOf(ui_.timelineView_);
-        if (timelineTabIndex >= 0) {
-            ui_.bottomTabs_->setTabVisible(timelineTabIndex, false);
-        }
-    }
+    owner_.setBottomTabsTabVisible(MainWindow::BottomTabsTabId::Timeline, false);
     if (ui_.bottomTabs_ != nullptr) {
         ui_.bottomTabs_->setVisible(false);
     }
@@ -841,14 +838,9 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     if (ui_.editorStack_ != nullptr && ui_.chartPage_ != nullptr) {
         ui_.editorStack_->setCurrentWidget(ui_.chartPage_);
     }
-    if (ui_.bottomTabs_ != nullptr && ui_.timelineView_ != nullptr) {
-        const int timelineTabIndex = ui_.bottomTabs_->indexOf(ui_.timelineView_);
-        if (timelineTabIndex >= 0) {
-            ui_.bottomTabs_->setTabVisible(timelineTabIndex, true);
-            ui_.bottomTabs_->setCurrentIndex(timelineTabIndex);
-        }
-        ui_.bottomTabs_->setVisible(true);
-    } else if (ui_.bottomTabs_ != nullptr) {
+    owner_.setBottomTabsTabVisible(MainWindow::BottomTabsTabId::Timeline, true);
+    owner_.setCurrentBottomTabsTabId(MainWindow::BottomTabsTabId::Timeline);
+    if (ui_.bottomTabs_ != nullptr) {
         ui_.bottomTabs_->setVisible(true);
     }
     owner_.setValidationTabVisible(true);
@@ -950,9 +942,9 @@ void MainWindow::DocumentSection::clearTimelineAndPreview()
         state_.previewSfxRuntime_->clearTimeline();
     }
     owner_.stopQtPreviewPlayback(false);
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->clear();
-        ui_.timelineView_->setMuriAnalysisReport(state_.muriAnalysisReport_);
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->clear();
+        state_.timelineQuickStateBridge_->setMuriAnalysisReport(state_.muriAnalysisReport_);
     }
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->reset();

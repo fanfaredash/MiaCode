@@ -21,6 +21,7 @@
 #include "preview/scene/PreviewProgressStatsCache.h"
 #include "simai/transform/ChartBatchTransform.h"
 #include "simai/transform/ChartNormalization.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -90,10 +91,10 @@ double MainWindow::TimelineSection::previewDurationSeconds() const
     if (state_.qtPreviewPlaying_ && state_.qtPreviewPlaybackEndSecond_ > 0.0) {
         duration = qMax(duration, state_.qtPreviewPlaybackEndSecond_);
     }
-    if (ui_.timelineView_ != nullptr) {
-        duration = qMax(duration, ui_.timelineView_->durationSeconds());
-        duration = qMax(duration, ui_.timelineView_->playheadSeconds());
-        duration = qMax(duration, ui_.timelineView_->playbackEntrySeconds());
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        duration = qMax(duration, state_.timelineQuickStateBridge_->durationSeconds());
+        duration = qMax(duration, state_.timelineQuickStateBridge_->playheadSeconds());
+        duration = qMax(duration, state_.timelineQuickStateBridge_->playbackEntrySeconds());
     }
     duration = qMax(duration, qMax(0.0, state_.qtPreviewPauseSecond_));
     if (state_.previewTrackDurationSeconds_ > 0.0) {
@@ -108,8 +109,8 @@ double MainWindow::TimelineSection::previewPlaybackEndSeconds() const
         return qMax(0.0, state_.qtPreviewPlaybackEndSecond_);
     }
     double duration = 0.0;
-    if (ui_.timelineView_ != nullptr) {
-        duration = qMax(duration, ui_.timelineView_->durationSeconds());
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        duration = qMax(duration, state_.timelineQuickStateBridge_->durationSeconds());
     }
     if (state_.previewTrackDurationSeconds_ > 0.0) {
         duration = qMax(duration, state_.previewTrackDurationSeconds_);
@@ -389,6 +390,14 @@ qint64 MainWindow::TimelineSection::previewCanvasTargetFrameIntervalNs() const
     }
 }
 
+qint64 MainWindow::TimelineSection::timelineTargetFrameIntervalNs() const
+{
+    const qint64 previewIntervalNs = qMax<qint64>(1LL, previewCanvasTargetFrameIntervalNs());
+    const qint64 timelineCapIntervalNs =
+        qMax<qint64>(1LL, qRound64(1000000000.0 / miacode::mainwindow::shared::kTimelineMaxUiUpdateFps));
+    return qMax(previewIntervalNs, timelineCapIntervalNs);
+}
+
 void MainWindow::TimelineSection::resetQtPreviewFixedFramePacing()
 {
     state_.qtPreviewNextFixedTickDueNs_ = -1;
@@ -436,8 +445,12 @@ void MainWindow::TimelineSection::requestNextDisplayRefreshPreviewFrame()
 void MainWindow::TimelineSection::refreshPreviewFrameRateTimers()
 {
     const qint64 targetIntervalNs = previewCanvasTargetFrameIntervalNs();
+    const qint64 timelineIntervalNs = timelineTargetFrameIntervalNs();
     if (ui_.qtPreviewTimer_ != nullptr) {
         ui_.qtPreviewTimer_->setInterval(std::chrono::nanoseconds(qMax<qint64>(1, targetIntervalNs)));
+    }
+    if (ui_.qtPreviewTimelineTimer_ != nullptr) {
+        ui_.qtPreviewTimelineTimer_->setInterval(std::chrono::nanoseconds(qMax<qint64>(1, timelineIntervalNs)));
     }
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setFramePacingDebugState(
@@ -869,7 +882,8 @@ void MainWindow::TimelineSection::updatePreviewWorkspaceLayout()
 {
     updatePreviewPanelLayout();
     owner_.refreshQuickShellRehostedWidgetParent(ui_.outlineDock_);
-    owner_.refreshQuickShellRehostedWidgetParent(ui_.previewLeftColumn_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.workspaceContentWidget_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
     owner_.refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
     owner_.refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
     owner_.windowSection_->updateEditorFindBarGeometry();
@@ -937,7 +951,8 @@ void MainWindow::TimelineSection::refreshLayoutAfterPageSwitch()
         }
     }
     owner_.refreshQuickShellRehostedWidgetParent(ui_.outlineDock_);
-    owner_.refreshQuickShellRehostedWidgetParent(ui_.previewLeftColumn_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.workspaceContentWidget_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
     owner_.refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
     owner_.refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
     owner_.updateEditorHeaderLayoutMode();

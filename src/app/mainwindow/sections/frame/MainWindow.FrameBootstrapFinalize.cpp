@@ -228,10 +228,15 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         scheduleNextQtPreviewTick();
     });
 
-    qtPreviewTimelineTimer_ = new QTimer(this);
-    qtPreviewTimelineTimer_->setInterval(kTimelineUiCadenceMs);
+    qtPreviewTimelineTimer_ = new QChronoTimer(this);
+    qtPreviewTimelineTimer_->setInterval(std::chrono::nanoseconds(
+        qMax<qint64>(
+            1,
+            timelineSection_ != nullptr
+                ? timelineSection_->timelineTargetFrameIntervalNs()
+                : previewCanvasTargetFrameIntervalNs())));
     qtPreviewTimelineTimer_->setTimerType(Qt::PreciseTimer);
-    connect(qtPreviewTimelineTimer_, &QTimer::timeout, this, &MainWindow::flushQtPreviewTimelinePosition);
+    connect(qtPreviewTimelineTimer_, &QChronoTimer::timeout, this, &MainWindow::flushQtPreviewTimelinePosition);
 
     previewStatsUiTimer_ = new QTimer(this);
     previewStatsUiTimer_->setInterval(67);

@@ -91,6 +91,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp
     src/app/mainwindow/sections/validation/MainWindow.ValidationRender.cpp
     src/app/mainwindow/sections/validation/MainWindow.ValidationRuntime.cpp
+    src/app/mainwindow/sections/window/MainWindow.BottomTabsHost.cpp
     src/app/mainwindow/sections/window/MainWindow.WindowInteraction.cpp
     src/app/mainwindow/sections/window/MainWindow.WindowRuntime.cpp
     src/app/mainwindow/sections/window/MainWindow.WindowSection.cpp
@@ -109,6 +110,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/DebugLog.cpp
     src/common/DebugImageCompare.h
     src/common/ChartAssetPaths.h
+    src/common/TimelineThemeConfig.h
     src/common/WaveformCache.h
     src/common/WaveformCache.cpp
     src/common/PreviewSfxTimeline.h
@@ -266,10 +268,34 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/TimelineRenderData.h
     src/timeline/TimelineQuickModel.h
     src/timeline/TimelineQuickModel.cpp
+    src/timeline/TimelineSceneState.h
+    src/timeline/TimelineSceneState.cpp
+    src/timeline/TimelineSceneStateBuilder.h
+    src/timeline/TimelineSceneStateBuilder.cpp
+    src/timeline/TimelineNoteAssets.h
+    src/timeline/TimelineNoteAssets.cpp
     src/timeline/TimelineSlowRefresh.h
     src/timeline/TimelineSlowRefresh.cpp
     src/timeline/TimelineView.h
     src/timeline/TimelineView.cpp
+    src/timeline/quick/TimelineQuickItem.h
+    src/timeline/quick/TimelineQuickItem.cpp
+    src/timeline/quick/TimelineQuickStateBridge.h
+    src/timeline/quick/TimelineQuickStateBridge.cpp
+    src/timeline/quick/TimelineQuickTextureCache.h
+    src/timeline/quick/TimelineQuickTextureCache.cpp
+    src/timeline/quick/TimelineQuickLayerUtils.h
+    src/timeline/quick/TimelineQuickLayerUtils.cpp
+    src/timeline/quick/TimelineQuickGridLayer.h
+    src/timeline/quick/TimelineQuickGridLayer.cpp
+    src/timeline/quick/TimelineQuickWaveformLayer.h
+    src/timeline/quick/TimelineQuickWaveformLayer.cpp
+    src/timeline/quick/TimelineQuickHeaderLayer.h
+    src/timeline/quick/TimelineQuickHeaderLayer.cpp
+    src/timeline/quick/TimelineQuickNotesLayer.h
+    src/timeline/quick/TimelineQuickNotesLayer.cpp
+    src/timeline/quick/TimelineQuickOverlayLayer.h
+    src/timeline/quick/TimelineQuickOverlayLayer.cpp
     resources/app_icons.qrc
     resources/fonts.qrc
     resources/preview_runtime_qml.qrc

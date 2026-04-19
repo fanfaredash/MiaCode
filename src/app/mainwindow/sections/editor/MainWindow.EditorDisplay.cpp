@@ -20,6 +20,7 @@
 #include "preview/scene/PreviewProgressStatsCache.h"
 #include "simai/transform/ChartBatchTransform.h"
 #include "simai/transform/ChartNormalization.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -88,8 +89,8 @@ void MainWindow::EditorSection::loadPortableState()
         state_.lastTrackPath_ = QDir::cleanPath(trackPath);
     }
     applyPortablePreviewSettings(preview);
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
     }
     owner_.refreshPreviewFrameRateTimers();
 }

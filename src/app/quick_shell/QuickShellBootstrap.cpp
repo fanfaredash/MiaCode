@@ -10,6 +10,7 @@
 #include "mainwindow/MainWindow.h"
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
+#include "timeline/quick/TimelineQuickItem.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -176,6 +177,7 @@ void ensurePreviewQuickTypesRegisteredForQuickShell()
     }
     qmlRegisterType<PreviewQuickSceneRoot>("MiaCode.Preview", 1, 0, "PreviewQuickSceneRoot");
     qmlRegisterType<PreviewQuickHudLayer>("MiaCode.Preview", 1, 0, "PreviewQuickHudLayer");
+    qmlRegisterType<TimelineQuickItem>("MiaCode.Timeline", 1, 0, "TimelineQuickItem");
     registered = true;
 }
 
@@ -193,6 +195,7 @@ bool QuickShellBootstrap::start()
 {
     appendQuickShellRuntimeLog(QStringLiteral("start_enter"));
     backend_ = std::make_unique<MainWindow>();
+    backend_->setQuickShellBackendActive(true);
     backend_->hide();
     backend_->setVisible(false);
     appendQuickShellRuntimeLog(QStringLiteral("backend_ready"));

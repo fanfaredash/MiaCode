@@ -89,6 +89,46 @@ void MainWindow::setShellPreviewFullscreen(bool fullscreen)
     windowSection_->setShellPreviewFullscreen(fullscreen);
 }
 
+void MainWindow::setShellBottomTabsCurrentTab(const QString& tabId)
+{
+    windowSection_->setShellBottomTabsCurrentTab(tabId);
+}
+
+void MainWindow::navigateShellTimelineToSecond(double second)
+{
+    windowSection_->navigateShellTimelineToSecond(second);
+}
+
+void MainWindow::centerShellTimelineNavigate(double second)
+{
+    windowSection_->centerShellTimelineNavigate(second);
+}
+
+void MainWindow::shellTimelineDragStarted()
+{
+    windowSection_->shellTimelineDragStarted();
+}
+
+void MainWindow::shellTimelineDragFinished(double second)
+{
+    windowSection_->shellTimelineDragFinished(second);
+}
+
+void MainWindow::shellTimelineUserInteractionStarted()
+{
+    windowSection_->shellTimelineUserInteractionStarted();
+}
+
+void MainWindow::shellTimelineSurfaceReady()
+{
+    windowSection_->shellTimelineSurfaceReady();
+}
+
+void MainWindow::shellTimelineFollowPreviewToggled(bool enabled)
+{
+    windowSection_->shellTimelineFollowPreviewToggled(enabled);
+}
+
 bool MainWindow::shellHasShortcut(const QKeySequence& sequence) const
 {
     return windowSection_->shellHasShortcut(sequence);
@@ -169,6 +209,36 @@ QWindow* MainWindow::shellPreviewCompositeWindow() const
     return windowSection_->shellPreviewCompositeWindow();
 }
 
+QObject* MainWindow::shellTimelineStateBridgeObject() const
+{
+    return windowSection_->shellTimelineStateBridgeObject();
+}
+
+QString MainWindow::shellBottomTabsCurrentTabId() const
+{
+    return windowSection_->shellBottomTabsCurrentTabId();
+}
+
+bool MainWindow::shellBottomTabsVisible() const
+{
+    return windowSection_->shellBottomTabsVisible();
+}
+
+bool MainWindow::shellTimelineTabVisible() const
+{
+    return windowSection_->shellTimelineTabVisible();
+}
+
+bool MainWindow::shellValidationTabVisible() const
+{
+    return windowSection_->shellValidationTabVisible();
+}
+
+bool MainWindow::shellMuriTabVisible() const
+{
+    return windowSection_->shellMuriTabVisible();
+}
+
 QWidget* MainWindow::shellWindowWidget() const
 {
     return windowSection_->shellWindowWidget();
@@ -192,6 +262,16 @@ int MainWindow::shellOutlineDockExpandedWidth() const
 QWidget* MainWindow::shellWorkspaceWidget() const
 {
     return windowSection_->shellWorkspaceWidget();
+}
+
+QWidget* MainWindow::shellBottomTabsWidget() const
+{
+    return windowSection_->shellBottomTabsWidget();
+}
+
+int MainWindow::shellBottomTabsHeight() const
+{
+    return windowSection_->shellBottomTabsHeight();
 }
 
 QWidget* MainWindow::shellPreviewPanelWidget() const
