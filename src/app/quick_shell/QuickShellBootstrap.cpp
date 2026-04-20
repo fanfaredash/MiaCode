@@ -3,6 +3,7 @@
 #include "QuickShellNativeSurfaceHost.h"
 #include "QuickShellController.h"
 #include "QuickShellStyleBridge.h"
+#include "DialogLocalization.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/DebugOptions.h"
@@ -456,6 +457,16 @@ bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
             break;
         default:
             break;
+        }
+    }
+
+    if (UiDialogs::hasVisibleProtectedPreviewDialog()
+        && (event->type() == QEvent::ShortcutOverride
+            || event->type() == QEvent::KeyPress
+            || event->type() == QEvent::KeyRelease)) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (UiDialogs::isPreviewShortcutEvent(keyEvent)) {
+            return QObject::eventFilter(watched, event);
         }
     }
 

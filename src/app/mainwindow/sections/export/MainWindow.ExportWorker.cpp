@@ -856,6 +856,7 @@ bool MainWindow::ExportSection::launchVideoExportWorker(const VideoExportSnapsho
     progress->setMinimumWidth(320);
     progress->setMaximumWidth(360);
     progress->setValue(0);
+    UiDialogs::configureDialogPreviewShortcuts(progress);
     owner_.windowSection_->applySystemWindowBackdrop(progress);
     if (QLabel* label = progress->findChild<QLabel*>(); label != nullptr) {
         label->setWordWrap(true);
@@ -1253,6 +1254,7 @@ void MainWindow::ExportSection::handleVideoExportWorkerProcessFinished(int exitC
             UiDialogs::effectiveParentWidget(&owner_)
         );
         dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+        UiDialogs::configureDialogPreviewShortcuts(&dialog);
         UiDialogs::applyDetachedParentBehavior(&dialog, &owner_);
         QPushButton* openButton = dialog.addButton(
             uiText("action.open", "Open"),

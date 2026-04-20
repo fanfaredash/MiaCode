@@ -130,6 +130,7 @@ UnsavedChangesChoice showUnsavedChangesDialog(QWidget* parent, const QString& ti
         UiDialogs::effectiveParentWidget(parent)
     );
     dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+    UiDialogs::configureDialogPreviewShortcuts(&dialog);
     UiDialogs::applyDetachedParentBehavior(&dialog, parent);
     QPushButton* saveButton = dialog.addButton(uiText("action.save", "Save"), QMessageBox::AcceptRole);
     QPushButton* discardButton = dialog.addButton(uiText("action.discard", "Discard"), QMessageBox::DestructiveRole);
