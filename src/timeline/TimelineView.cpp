@@ -321,7 +321,7 @@ void TimelineView::applyStateFromBridge()
 
 QSize TimelineView::minimumSizeHint() const
 {
-    return QSize(kTimelineLeftMargin + 240, minimumContentHeightForCurrentDevice());
+    return QSize(timelineLeft() + 240, minimumContentHeightForCurrentDevice());
 }
 
 QSize TimelineView::sizeHint() const
@@ -365,6 +365,7 @@ void TimelineView::refreshTheme()
         );
     }
     refreshMinimumHeightForCurrentDevice();
+    layoutHeaderButtons();
     viewport()->update();
     emit renderStateChanged();
 }
@@ -676,6 +677,10 @@ const QSet<quint64>& TimelineView::muriMarkerLocationIds() const
 
 int TimelineView::minimumContentHeightForCurrentDevice() const
 {
+    if (waveformOnlyPresentation()) {
+        return timelineTop() + timelineHeight() + 8;
+    }
+
     const int baseHeaderHeight = kHeaderHeight + kTimelineTopMargin;
     int controlBandHeight = 0;
     if (zoomButton_ != nullptr) {
@@ -808,6 +813,35 @@ void TimelineView::setFollowPreviewEnabled(bool enabled)
 bool TimelineView::followPreviewEnabled() const
 {
     return followPreviewCheckBox_ != nullptr && followPreviewCheckBox_->isChecked();
+}
+
+void TimelineView::setPresentationMode(PresentationMode mode)
+{
+    if (presentationMode_ == mode) {
+        return;
+    }
+    presentationMode_ = mode;
+    refreshMinimumHeightForCurrentDevice();
+    layoutHeaderButtons();
+    updateDisplayBounds();
+    updateHorizontalRange();
+    viewport()->update();
+    emit renderStateChanged();
+}
+
+TimelineView::PresentationMode TimelineView::presentationMode() const
+{
+    return presentationMode_;
+}
+
+int TimelineView::zoomPresetIndex() const
+{
+    return zoomPresetIndex_;
+}
+
+int TimelineView::zoomPresetCount() const
+{
+    return zoomPresets_.size();
 }
 
 

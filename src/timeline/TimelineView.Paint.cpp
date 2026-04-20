@@ -12,6 +12,10 @@ void TimelineView::paintEvent(QPaintEvent* event)
     if (!painter.isActive()) {
         return;
     }
+    if (waveformOnlyPresentation()) {
+        paintWaveformOnly(painter, dirtyRect);
+        return;
+    }
     painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
     painter.setClipRect(dirtyRect);
     painter.fillRect(dirtyRect, c.timelineWindow);
@@ -778,4 +782,123 @@ void TimelineView::paintEvent(QPaintEvent* event)
             );
         }
     }
+}
+
+void TimelineView::paintWaveformOnly(QPainter& painter, const QRect& dirtyRect)
+{
+    const UiTheme::Colors& c = UiTheme::colors();
+    const int left = timelineLeft();
+    const int top = timelineTop();
+    const int h = timelineHeight();
+    const int xOffset = horizontalScrollBar()->value();
+    const QRectF cardRect(
+        static_cast<qreal>(left),
+        static_cast<qreal>(top),
+        qMax(1.0, static_cast<qreal>(viewport()->width() - left - 8)),
+        static_cast<qreal>(h));
+
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.setClipRect(dirtyRect);
+    painter.fillRect(dirtyRect, c.windowAltBg);
+    painter.setPen(QPen(c.border, 1.0));
+    painter.setBrush(c.cardBg);
+    painter.drawRoundedRect(cardRect, 8.0, 8.0);
+
+    if (cardRect.width() <= 2.0 || cardRect.height() <= 2.0) {
+        return;
+    }
+
+    const double visibleStartSecond = xToSecond(left);
+    const double visibleEndSecond = xToSecond(viewport()->width() - 8);
+    const QPen minorBeatPen(c.timelineGridMinor, 1.0);
+    const QPen majorBeatPen(c.timelineLimit, 1.5);
+
+    painter.save();
+    painter.setClipRect(cardRect.adjusted(1.0, 1.0, -1.0, -1.0));
+
+    for (const TimelineRenderLine& line : lines_) {
+        for (const TimelineRenderBeat& marker : line.beats) {
+            if (!shouldPaintTimelineBeatMarker(marker)) {
+                continue;
+            }
+            const double absoluteSecond = timelineRenderAbsoluteSecond(line, marker.secondOffset);
+            if (absoluteSecond < visibleStartSecond - 1e-6 || absoluteSecond > visibleEndSecond + 1e-6) {
+                continue;
+            }
+            const int x = secondToX(absoluteSecond) - xOffset;
+            painter.setPen(minorBeatPen);
+            painter.drawLine(x, top + 2, x, top + h - 2);
+        }
+    }
+
+    const auto measureBeginIt = std::lower_bound(
+        measureLineSeconds_.cbegin(),
+        measureLineSeconds_.cend(),
+        visibleStartSecond - 1.0);
+    const auto measureEndIt = std::upper_bound(
+        measureLineSeconds_.cbegin(),
+        measureLineSeconds_.cend(),
+        visibleEndSecond + 1.0);
+    for (auto it = measureBeginIt; it != measureEndIt; ++it) {
+        const int x = secondToX(*it) - xOffset;
+        painter.setPen(majorBeatPen);
+        painter.drawLine(x, top + 2, x, top + h - 2);
+    }
+
+    if (waveformData_ && waveformData_->durationSeconds > 0.0) {
+        const miacode::waveform::WaveformLevel* waveformLevel =
+            miacode::waveform::selectWaveformLevelForVisibleRange(
+                *waveformData_,
+                qMax(0.001, visibleEndSecond - visibleStartSecond),
+                qMax(1, static_cast<int>(cardRect.width())));
+        if (waveformLevel != nullptr && !waveformLevel->columns.isEmpty()) {
+            const QPair<int, int> visibleColumns =
+                miacode::waveform::visibleWaveformColumnRange(
+                    *waveformLevel,
+                    qMax(0.0, visibleStartSecond),
+                    qMax(0.0, visibleEndSecond));
+            const qreal centerY = cardRect.center().y();
+            const qreal maxAmplitude = cardRect.height() * 0.38;
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(c.timelineWaveStroke);
+            for (int index = visibleColumns.first; index < visibleColumns.second; ++index) {
+                const miacode::waveform::WaveformColumn& column = waveformLevel->columns.at(index);
+                if (qAbs(column.max - column.min) <= 1e-5f) {
+                    continue;
+                }
+                const double columnStartSecond = waveformLevel->secondsPerColumn * static_cast<double>(index);
+                const double columnEndSecond = columnStartSecond + waveformLevel->secondsPerColumn;
+                int x0 = secondToX(columnStartSecond) - xOffset;
+                int x1 = secondToX(columnEndSecond) - xOffset;
+                if (x1 <= x0) {
+                    x1 = x0 + 1;
+                }
+                const qreal topY = centerY - (qBound(-1.0f, column.max, 1.0f) * maxAmplitude);
+                const qreal bottomY = centerY - (qBound(-1.0f, column.min, 1.0f) * maxAmplitude);
+                const int barTop = qFloor(qMin(topY, bottomY));
+                const int barBottom = qCeil(qMax(topY, bottomY));
+                painter.fillRect(
+                    QRect(x0, barTop, qMax(1, x1 - x0), qMax(1, barBottom - barTop)),
+                    c.timelineWaveStroke);
+            }
+        }
+    }
+
+    painter.setPen(QPen(c.textPrimary, 1.0));
+    painter.drawLine(
+        QPointF(cardRect.left(), cardRect.center().y()),
+        QPointF(cardRect.right(), cardRect.center().y()));
+
+    if (!playheadIndicatorSuppressed_) {
+        const int playheadX = secondToX(playheadSeconds_) - xOffset;
+        painter.setPen(QPen(c.timelinePlayhead, 2.0));
+        painter.drawLine(playheadX, top, playheadX, top + h);
+    }
+    if (timelineDragActive_) {
+        const int dragCenterX = viewport()->width() / 2;
+        painter.setPen(QPen(c.timelinePlayhead, 2.0));
+        painter.drawLine(dragCenterX, top, dragCenterX, top + h);
+    }
+
+    painter.restore();
 }

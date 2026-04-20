@@ -11,6 +11,7 @@
 #include <QPixmap>
 #include <QPointF>
 #include <QPointer>
+#include <QRect>
 #include <QSet>
 #include <QSize>
 #include <QString>
@@ -32,11 +33,18 @@ namespace miacode::waveform {
 struct WaveformData;
 }
 
+class QPainter;
+
 class TimelineView : public QAbstractScrollArea
 {
     Q_OBJECT
 
 public:
+    enum class PresentationMode {
+        Full,
+        WaveformOnly,
+    };
+
     explicit TimelineView(QWidget* parent = nullptr);
     void setStateBridge(class TimelineQuickStateBridge* stateBridge);
     class TimelineQuickStateBridge* stateBridge() const;
@@ -73,6 +81,10 @@ public:
     void restorePlayheadIndicatorForQuickSurface(bool immediate = false);
     void setFollowPreviewEnabled(bool enabled);
     bool followPreviewEnabled() const;
+    void setPresentationMode(PresentationMode mode);
+    PresentationMode presentationMode() const;
+    int zoomPresetIndex() const;
+    int zoomPresetCount() const;
     void refreshTheme();
 
 signals:
@@ -119,6 +131,7 @@ private:
 
     void updateDisplayBounds();
     void updateHorizontalRange();
+    int headerHeight() const;
     int contentWidth() const;
     int rawContentWidth() const;
     int timelineLeft() const;
@@ -170,6 +183,8 @@ private:
     void beginHeldHorizontalKeyScroll(int direction, int key);
     void stopHeldHorizontalKeyScroll(int key = 0);
     void applyHeldHorizontalKeyScrollTick();
+    bool waveformOnlyPresentation() const;
+    void paintWaveformOnly(QPainter& painter, const QRect& dirtyRect);
 
     QVector<TimelineRenderLine> lines_;
     TimelineRenderSnapshot snapshotCache_;
@@ -201,6 +216,7 @@ private:
     QVector<double> zoomPresets_;
     QVector<double> buttonZoomPresets_;
     int zoomPresetIndex_ = 0;
+    PresentationMode presentationMode_ = PresentationMode::Full;
     FocusTarget focusTarget_ = FocusTarget::Playhead;
     bool timelineDragActive_ = false;
     int timelineDragStartX_ = 0;

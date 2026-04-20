@@ -4,6 +4,9 @@
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QMenu>
+#include <QPainter>
+#include <QPixmap>
+#include <QPolygonF>
 #include <QStyleHints>
 
 namespace {
@@ -309,6 +312,29 @@ QString timelineZoomButtonStyleSheet()
         .arg(css(c.accent))
         .arg(css(c.accentPressed))
         .arg(css(c.accentText));
+}
+
+QIcon timelineZoomButtonIcon(const QColor& strokeColor, const QString& sign)
+{
+    QPixmap iconPixmap(18, 18);
+    iconPixmap.fill(Qt::transparent);
+    QPainter painter(&iconPixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(QPen(strokeColor, 1.8));
+    painter.drawEllipse(QRectF(2.5, 2.5, 9.0, 9.0));
+    painter.drawLine(QPointF(10.5, 10.5), QPointF(15.2, 15.2));
+    QFont font = painter.font();
+    font.setBold(true);
+    font.setPointSize(7);
+    painter.setFont(font);
+    painter.drawText(QRectF(11.5, 0.0, 6.5, 9.0), Qt::AlignCenter, sign);
+    painter.end();
+    return QIcon(iconPixmap);
+}
+
+QString timelineZoomButtonText(double scale)
+{
+    return QStringLiteral("%1%").arg(qRound(scale * 100.0));
 }
 
 QString timelineCheckBoxStyleSheet()
@@ -665,6 +691,47 @@ QString dialogIconToolButtonStyleSheet(bool active)
         .arg(css(c.accent))
         .arg(css(c.accentPressed))
         .arg(css(c.inputDisabledBg));
+}
+
+QIcon dialogTransportPlayIcon(const QColor& color)
+{
+    QPixmap pixmap(20, 20);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+    painter.drawPolygon(QPolygonF{
+        QPointF(5.0, 3.0),
+        QPointF(15.5, 10.0),
+        QPointF(5.0, 17.0),
+    });
+    return QIcon(pixmap);
+}
+
+QIcon dialogTransportPauseIcon(const QColor& color)
+{
+    QPixmap pixmap(20, 20);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+    painter.drawRoundedRect(QRectF(5.0, 3.0, 3.5, 14.0), 1.2, 1.2);
+    painter.drawRoundedRect(QRectF(11.5, 3.0, 3.5, 14.0), 1.2, 1.2);
+    return QIcon(pixmap);
+}
+
+QIcon dialogTransportStopIcon(const QColor& color)
+{
+    QPixmap pixmap(20, 20);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+    painter.drawRoundedRect(QRectF(4.5, 4.5, 11.0, 11.0), 1.8, 1.8);
+    return QIcon(pixmap);
 }
 
 QString preferencesDialogStyleSheet()

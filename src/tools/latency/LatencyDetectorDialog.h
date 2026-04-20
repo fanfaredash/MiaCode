@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDialog>
+#include <QElapsedTimer>
 #include <QPair>
 #include <QString>
 #include <QVector>
@@ -13,11 +14,12 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QComboBox;
+class QEvent;
 class QSlider;
 class QTimer;
 class QToolButton;
 class QtPreviewSfxRuntime;
-class QWidget;
+class TimelineView;
 
 namespace miacode::waveform {
 class WaveformCacheService;
@@ -47,10 +49,14 @@ signals:
     void meterIdChanged(const QString& meterId);
     void offsetChanged(double offsetSeconds);
 
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
 private:
     void buildUi();
     void loadAudioAnalysis();
     void updatePlaybackUi();
+    void updateZoomButtonUi();
     void updateBeatOverlay();
     void smoothFollowPlayhead(bool forceCenter);
     void applyZoomLevel(bool centerOnPlayhead);
@@ -63,6 +69,14 @@ private:
     void applyBpmEdit();
     void restoreDetectedOffset();
     void showBpmHelpDialog();
+    void rebuildTimelineSnapshot();
+    void beginManualSeekInteraction();
+    void applyPlaybackRate(double rate);
+    void stepPlaybackRate(int deltaSteps);
+    void handleStopOrPlayShortcut();
+    void schedulePausedSeek(double second, bool centerView, bool immediate);
+    void commitPendingPausedSeek();
+    double currentTransportSecond() const;
     void seekToSecond(double second, bool centerView);
     void togglePlayback();
     void startPlayback();
@@ -82,21 +96,20 @@ private:
     QString chartPath_;
     PreviewAudioSettings audioSettings_;
     miacode::waveform::WaveformCacheService* waveformCacheService_ = nullptr;
-    QWidget* waveformView_ = nullptr;
+    TimelineView* waveformView_ = nullptr;
     QLineEdit* bpmEdit_ = nullptr;
     QPushButton* detectBpmButton_ = nullptr;
     QPushButton* bpmHelpButton_ = nullptr;
     QLineEdit* offsetEdit_ = nullptr;
     QPushButton* detectOffsetButton_ = nullptr;
     QPushButton* restoreDetectedOffsetButton_ = nullptr;
-    QPushButton* playPauseButton_ = nullptr;
-    QPushButton* stopButton_ = nullptr;
+    QToolButton* playPauseButton_ = nullptr;
+    QToolButton* stopButton_ = nullptr;
     QSlider* playbackSlider_ = nullptr;
     QSlider* sfxVolumeSlider_ = nullptr;
     QLabel* sfxVolumeValueLabel_ = nullptr;
     QToolButton* speedButton_ = nullptr;
-    QToolButton* zoomOutButton_ = nullptr;
-    QToolButton* zoomInButton_ = nullptr;
+    QToolButton* zoomButton_ = nullptr;
     QLabel* playbackTimeLabel_ = nullptr;
     QComboBox* meterCombo_ = nullptr;
     QComboBox* offsetSnapCombo_ = nullptr;
@@ -104,6 +117,7 @@ private:
     QTimer* playbackTimer_ = nullptr;
     QTimer* beatAuditionTimer_ = nullptr;
     QTimer* offsetReplayTimer_ = nullptr;
+    QTimer* pausedSeekTimer_ = nullptr;
     QVector<float> onsetEnvelope_;
     QVector<float> offsetEnvelope_;
     QVector<float> decodedSamples_;
@@ -112,10 +126,7 @@ private:
     double offsetStepSeconds_ = 0.0;
     double playheadSecond_ = 0.0;
     double playbackRate_ = 1.0;
-    double visibleStartSecond_ = 0.0;
-    double visibleDurationSeconds_ = 12.0;
-    double baseVisibleDurationSeconds_ = 12.0;
-    int zoomPresetIndex_ = 2;
+    int zoomPresetIndex_ = 3;
     double pendingBeatBpm_ = 0.0;
     double pendingBeatOffset_ = 0.0;
     int pendingBeatBarPulseCount_ = 4;
@@ -137,4 +148,9 @@ private:
     double lastAppliedOffsetSeconds_ = 0.0;
     bool hasLastAppliedOffset_ = false;
     bool playing_ = false;
+    double transportAnchorSecond_ = 0.0;
+    QElapsedTimer transportElapsed_;
+    double pendingPausedSeekSecond_ = 0.0;
+    bool pendingPausedSeekCenterView_ = false;
+    bool pendingPausedSeekActive_ = false;
 };

@@ -1,20 +1,36 @@
 void LatencyDetectorDialog::seekToSecond(double second, bool centerView)
 {
+    pendingPausedSeekActive_ = false;
+    if (pausedSeekTimer_ != nullptr) {
+        pausedSeekTimer_->stop();
+    }
     playheadSecond_ = qBound(0.0, second, trackDurationSeconds_);
+    transportAnchorSecond_ = playheadSecond_;
+    if (playing_) {
+        transportElapsed_.restart();
+    } else {
+        transportElapsed_.invalidate();
+    }
     if (sfxRuntime_ != nullptr) {
         if (playing_) {
             sfxRuntime_->startBackgroundTrack(playheadSecond_);
-            playheadSecond_ = qBound(0.0, sfxRuntime_->backgroundPlaybackSecond(), trackDurationSeconds_);
         } else {
             sfxRuntime_->pauseBackgroundTrack();
-            sfxRuntime_->startBackgroundTrack(playheadSecond_);
+            sfxRuntime_->seekBackgroundTrack(playheadSecond_);
             sfxRuntime_->pauseBackgroundTrack();
-            playheadSecond_ = qBound(0.0, sfxRuntime_->backgroundPlaybackSecond(), trackDurationSeconds_);
         }
     }
-    smoothFollowPlayhead(centerView);
     lastBeatAuditionSecond_ = playheadSecond_;
-    updateVisibleRange(false);
+    updateVisibleRange(centerView);
+}
+
+double LatencyDetectorDialog::currentTransportSecond() const
+{
+    if (!transportElapsed_.isValid()) {
+        return qBound(0.0, transportAnchorSecond_, trackDurationSeconds_);
+    }
+    const double elapsedSeconds = static_cast<double>(transportElapsed_.elapsed()) / 1000.0;
+    return qBound(0.0, transportAnchorSecond_ + (elapsedSeconds * playbackRate_), trackDurationSeconds_);
 }
 
 void LatencyDetectorDialog::togglePlayback()
@@ -31,18 +47,34 @@ void LatencyDetectorDialog::startPlayback()
     if (sfxRuntime_ == nullptr) {
         return;
     }
+    pendingPausedSeekActive_ = false;
+    if (pausedSeekTimer_ != nullptr) {
+        pausedSeekTimer_->stop();
+    }
+    if (offsetReplayTimer_ != nullptr) {
+        offsetReplayTimer_->stop();
+    }
+    if (trackDurationSeconds_ > 0.0 && playheadSecond_ >= trackDurationSeconds_ - 0.02) {
+        playheadSecond_ = 0.0;
+    }
+    transportAnchorSecond_ = playheadSecond_;
+    transportElapsed_.restart();
     sfxRuntime_->setBackgroundTrackPlaybackRate(playbackRate_);
     sfxRuntime_->startBackgroundTrack(playheadSecond_);
     playing_ = true;
-    playheadSecond_ = qBound(0.0, sfxRuntime_->backgroundPlaybackSecond(), trackDurationSeconds_);
     lastBeatAuditionSecond_ = playheadSecond_;
     playbackTimer_->start();
-    updatePlaybackUi();
+    updateVisibleRange(true);
 }
 
 void LatencyDetectorDialog::pausePlayback()
 {
+    if (playing_) {
+        playheadSecond_ = currentTransportSecond();
+    }
     playing_ = false;
+    transportAnchorSecond_ = playheadSecond_;
+    transportElapsed_.invalidate();
     if (sfxRuntime_ != nullptr) {
         sfxRuntime_->pauseBackgroundTrack();
     }
@@ -54,7 +86,6 @@ void LatencyDetectorDialog::pausePlayback()
 
 void LatencyDetectorDialog::restartPlaybackAfterOffsetChange()
 {
-    updateBeatOverlay();
     if (!playing_) {
         return;
     }
@@ -68,16 +99,18 @@ void LatencyDetectorDialog::onPlaybackTick()
         return;
     }
     const double previousSecond = playheadSecond_;
-    playheadSecond_ = qBound(0.0, sfxRuntime_->backgroundPlaybackSecond(), trackDurationSeconds_);
+    playheadSecond_ = currentTransportSecond();
+    sfxRuntime_->syncBackgroundTrack(playheadSecond_);
     if (pendingBeatBpm_ > 0.0) {
         triggerBeatAudition(previousSecond, playheadSecond_);
     }
     if (playheadSecond_ >= trackDurationSeconds_ - 0.02) {
         pausePlayback();
         playheadSecond_ = trackDurationSeconds_;
+        updateVisibleRange(true);
+        return;
     }
-    smoothFollowPlayhead(false);
-    updateVisibleRange(false);
+    updateVisibleRange(true);
 }
 
 void LatencyDetectorDialog::triggerBeatAudition(double fromSecond, double toSecond)
