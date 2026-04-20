@@ -27,10 +27,7 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
-#include <QPainter>
-#include <QPolygonF>
 #include <QPushButton>
-#include <QPixmap>
 #include <QRegularExpression>
 #include <QSignalBlocker>
 #include <QSlider>
@@ -302,43 +299,17 @@ double sliderValueToSecond(int sliderValue)
 
 QIcon makePreviewPlayIcon(const QColor& color)
 {
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(color);
-    painter.drawPolygon(QPolygonF{
-        QPointF(5.0, 3.0),
-        QPointF(15.5, 10.0),
-        QPointF(5.0, 17.0),
-    });
-    return QIcon(pixmap);
+    return UiTheme::dialogTransportPlayIcon(color);
 }
 
 QIcon makePreviewStopIcon(const QColor& color)
 {
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(color);
-    painter.drawRoundedRect(QRectF(4.5, 4.5, 11.0, 11.0), 1.8, 1.8);
-    return QIcon(pixmap);
+    return UiTheme::dialogTransportStopIcon(color);
 }
 
 QIcon makePreviewPauseIcon(const QColor& color)
 {
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(color);
-    painter.drawRoundedRect(QRectF(5.0, 3.0, 3.5, 14.0), 1.2, 1.2);
-    painter.drawRoundedRect(QRectF(11.5, 3.0, 3.5, 14.0), 1.2, 1.2);
-    return QIcon(pixmap);
+    return UiTheme::dialogTransportPauseIcon(color);
 }
 
 class TimestampSpinBox : public QDoubleSpinBox

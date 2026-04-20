@@ -77,18 +77,36 @@ void LatencyDetectorDialog::buildUi()
     offsetSnapCombo_->addItem(localizedText(QStringLiteral("4\u5206\u97F3\u7B26"), "Quarter"), QStringLiteral("quarter"));
     offsetSnapCombo_->addItem(localizedText(QStringLiteral("8\u5206\u97F3\u7B26"), "Eighth"), QStringLiteral("eighth"));
     offsetSnapCombo_->setCurrentIndex(1);
+    zoomButton_ = new QToolButton(this);
+    zoomButton_->setAutoRaise(false);
+    zoomButton_->setCursor(Qt::PointingHandCursor);
+    zoomButton_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    zoomButton_->setStyleSheet(UiTheme::timelineZoomButtonStyleSheet());
+    zoomButton_->setFixedHeight(24);
+    const int zoomButtonWidth = qMax(
+        88,
+        QFontMetrics(zoomButton_->font()).horizontalAdvance(UiTheme::timelineZoomButtonText(2.0)) + 32);
+    zoomButton_->setFixedWidth(zoomButtonWidth);
     timingRow->addWidget(meterLabel);
     timingRow->addWidget(meterCombo_);
     timingRow->addSpacing(10);
     timingRow->addWidget(snapLabel);
     timingRow->addWidget(offsetSnapCombo_);
     timingRow->addStretch(1);
+    timingRow->addWidget(zoomButton_, 0, Qt::AlignRight | Qt::AlignVCenter);
     rootLayout->addLayout(timingRow);
 
-    waveformView_ = new WaveformOverviewWidget(this);
-    static_cast<WaveformOverviewWidget*>(waveformView_)->setSeekCallback([this](double second) {
-        seekToSecond(second, true);
+    waveformView_ = new TimelineView(this);
+    waveformView_->setPresentationMode(TimelineView::PresentationMode::WaveformOnly);
+    waveformView_->setFollowPreviewEnabled(false);
+    connect(waveformView_, &TimelineView::previewPlayPauseRequested, this, &LatencyDetectorDialog::togglePlayback);
+    connect(waveformView_, &TimelineView::centerNavigateRequested, this, [this](double second) {
+        schedulePausedSeek(second, false, false);
     });
+    connect(waveformView_, &TimelineView::timelineDragFinished, this, [this](double second) {
+        schedulePausedSeek(second, false, true);
+    });
+    connect(waveformView_, &TimelineView::renderStateChanged, this, &LatencyDetectorDialog::updateZoomButtonUi);
     rootLayout->addWidget(waveformView_, 1);
     playbackSlider_ = new QSlider(Qt::Horizontal, this);
     playbackSlider_->setRange(0, 0);
@@ -98,71 +116,63 @@ void LatencyDetectorDialog::buildUi()
 
     auto* controlsRow = new QHBoxLayout();
     controlsRow->setSpacing(8);
-    playPauseButton_ = new QPushButton(this);
-    stopButton_ = new QPushButton(localizedText("停止", "Stop"), this);
+    playPauseButton_ = new QToolButton(this);
+    playPauseButton_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    playPauseButton_->setIconSize(QSize(16, 16));
+    playPauseButton_->setFixedSize(QSize(32, 26));
+    playPauseButton_->setAutoRaise(false);
+    playPauseButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet());
+    stopButton_ = new QToolButton(this);
+    stopButton_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    stopButton_->setIconSize(QSize(16, 16));
+    stopButton_->setFixedSize(QSize(32, 26));
+    stopButton_->setAutoRaise(false);
+    stopButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet());
+    playbackTimeLabel_ = new QLabel(this);
+    playbackTimeLabel_->setMinimumWidth(70);
+    playbackTimeLabel_->setFixedHeight(26);
+    playbackTimeLabel_->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     speedButton_ = new QToolButton(this);
     speedButton_->setPopupMode(QToolButton::InstantPopup);
+    speedButton_->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    speedButton_->setStyleSheet(UiTheme::dialogMenuButtonStyleSheet());
+    speedButton_->setFixedSize(QSize(64, 26));
     speedButton_->setText("1x");
     auto* speedMenu = new QMenu(speedButton_);
-    const QList<QPair<double, QString>> speedOptions{
-        {0.25, "0.25x"},
-        {0.50, "0.5x"},
-        {0.75, "0.75x"},
-        {1.00, "1x"},
-        {1.25, "1.25x"},
-        {1.50, "1.5x"},
-        {2.00, "2x"},
-    };
+    const QList<QPair<double, QString>>& speedOptions = latencyPlaybackSpeedOptions();
     for (const auto& speedOption : speedOptions) {
         QAction* action = speedMenu->addAction(speedOption.second);
         action->setCheckable(true);
         action->setChecked(qFuzzyCompare(speedOption.first, 1.0));
-        connect(action, &QAction::triggered, this, [this, speedMenu, speed = speedOption.first, label = speedOption.second]() {
+        connect(action, &QAction::triggered, this, [this, speedMenu, speed = speedOption.first]() {
             for (QAction* entry : speedMenu->actions()) {
                 entry->setChecked(false);
             }
             if (QAction* action = qobject_cast<QAction*>(sender()); action != nullptr) {
                 action->setChecked(true);
             }
-            playbackRate_ = speed;
-            speedButton_->setText(label);
-            if (sfxRuntime_ != nullptr) {
-                sfxRuntime_->setBackgroundTrackPlaybackRate(playbackRate_);
-            }
-            if (playing_) {
-                startPlayback();
-            }
+            applyPlaybackRate(speed);
         });
     }
     speedButton_->setMenu(speedMenu);
-
-    zoomOutButton_ = new QToolButton(this);
-    zoomOutButton_->setText("-");
-    zoomInButton_ = new QToolButton(this);
-    zoomInButton_->setText("+");
     sfxVolumeSlider_ = new QSlider(Qt::Horizontal, this);
     sfxVolumeSlider_->setRange(0, 100);
     sfxVolumeSlider_->setValue(25);
     sfxVolumeSlider_->setFixedWidth(110);
     sfxVolumeValueLabel_ = new QLabel("25%", this);
     sfxVolumeValueLabel_->setMinimumWidth(42);
-    playbackTimeLabel_ = new QLabel(this);
-    playbackTimeLabel_->setMinimumWidth(170);
-    playbackTimeLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    auto* sfxLabel = new QLabel(localizedText("效果音", "SFX"), this);
 
-    controlsRow->addWidget(playPauseButton_);
-    controlsRow->addWidget(stopButton_);
-    controlsRow->addWidget(speedButton_);
-    controlsRow->addSpacing(10);
-    controlsRow->addWidget(new QLabel(localizedText("缩放", "Zoom"), this));
-    controlsRow->addWidget(zoomOutButton_);
-    controlsRow->addWidget(zoomInButton_);
-    controlsRow->addSpacing(10);
-    controlsRow->addWidget(new QLabel(localizedText("效果音", "SFX"), this));
-    controlsRow->addWidget(sfxVolumeSlider_);
-    controlsRow->addWidget(sfxVolumeValueLabel_);
+    controlsRow->addWidget(playPauseButton_, 0, Qt::AlignVCenter);
+    controlsRow->addWidget(stopButton_, 0, Qt::AlignVCenter);
+    controlsRow->addWidget(playbackTimeLabel_, 0, Qt::AlignVCenter);
+    controlsRow->addSpacing(4);
+    controlsRow->addWidget(speedButton_, 0, Qt::AlignVCenter);
+    controlsRow->addSpacing(48);
     controlsRow->addStretch(1);
-    controlsRow->addWidget(playbackTimeLabel_);
+    controlsRow->addWidget(sfxLabel, 0, Qt::AlignVCenter);
+    controlsRow->addWidget(sfxVolumeSlider_, 0, Qt::AlignVCenter);
+    controlsRow->addWidget(sfxVolumeValueLabel_, 0, Qt::AlignVCenter);
     rootLayout->addLayout(controlsRow);
 
     sfxRuntime_ = new QtPreviewSfxRuntime(this);
@@ -176,15 +186,21 @@ void LatencyDetectorDialog::buildUi()
     playbackTimer_->setInterval(8);
     connect(playbackTimer_, &QTimer::timeout, this, &LatencyDetectorDialog::onPlaybackTick);
 
+    pausedSeekTimer_ = new QTimer(this);
+    pausedSeekTimer_->setSingleShot(true);
+    pausedSeekTimer_->setTimerType(Qt::PreciseTimer);
+    pausedSeekTimer_->setInterval(33);
+    connect(pausedSeekTimer_, &QTimer::timeout, this, &LatencyDetectorDialog::commitPendingPausedSeek);
+
     offsetReplayTimer_ = new QTimer(this);
     offsetReplayTimer_->setSingleShot(true);
     connect(offsetReplayTimer_, &QTimer::timeout, this, [this]() {
         startPlayback();
     });
 
-    connect(playPauseButton_, &QPushButton::clicked, this, &LatencyDetectorDialog::togglePlayback);
-    connect(stopButton_, &QPushButton::clicked, this, [this]() {
-        pausePlayback();
+    connect(playPauseButton_, &QToolButton::clicked, this, &LatencyDetectorDialog::togglePlayback);
+    connect(stopButton_, &QToolButton::clicked, this, [this]() {
+        beginManualSeekInteraction();
         seekToSecond(0.0, true);
     });
     connect(detectBpmButton_, &QPushButton::clicked, this, [this]() {
@@ -228,33 +244,37 @@ void LatencyDetectorDialog::buildUi()
     connect(offsetSnapCombo_, &QComboBox::currentIndexChanged, this, [this](int) {
         updateBeatOverlay();
     });
-    connect(zoomOutButton_, &QToolButton::clicked, this, [this]() {
-        if (zoomPresetIndex_ + 1 < waveformZoomFactors().size()) {
+    connect(waveformView_, &TimelineView::timelineUserInteractionStarted, this, &LatencyDetectorDialog::beginManualSeekInteraction);
+    connect(waveformView_, &TimelineView::timelineDragStarted, this, &LatencyDetectorDialog::beginManualSeekInteraction);
+    connect(zoomButton_, &QToolButton::clicked, this, [this]() {
+        if (waveformView_ != nullptr && zoomPresetIndex_ + 1 < waveformView_->zoomPresetCount()) {
             ++zoomPresetIndex_;
             applyZoomLevel(true);
+            return;
         }
-    });
-    connect(zoomInButton_, &QToolButton::clicked, this, [this]() {
-        if (zoomPresetIndex_ > 0) {
-            --zoomPresetIndex_;
-            applyZoomLevel(true);
-        }
+        zoomPresetIndex_ = 0;
+        applyZoomLevel(true);
     });
     connect(playbackSlider_, &QSlider::sliderPressed, this, [this]() {
         playbackSliderDragging_ = true;
+        beginManualSeekInteraction();
     });
     connect(playbackSlider_, &QSlider::sliderReleased, this, [this]() {
         playbackSliderDragging_ = false;
-        seekToSecond(static_cast<double>(playbackSlider_->value()) / 1000.0, false);
+        seekToSecond(static_cast<double>(playbackSlider_->value()) / 1000.0, true);
     });
     connect(playbackSlider_, &QSlider::sliderMoved, this, [this](int value) {
-        seekToSecond(static_cast<double>(value) / 1000.0, false);
+        seekToSecond(static_cast<double>(value) / 1000.0, true);
     });
     connect(sfxVolumeSlider_, &QSlider::valueChanged, this, [this](int value) {
         beatSfxVolume_ = qBound(0.0, static_cast<double>(value) * 0.04, 4.0);
         sfxVolumeValueLabel_->setText(QString("%1%").arg(value));
     });
 
+    if (waveformView_ != nullptr) {
+        zoomPresetIndex_ = qMin(zoomPresetIndex_, waveformView_->zoomPresetCount() - 1);
+    }
+    updateZoomButtonUi();
     updateOffsetEdit(0.0, false);
 }
 
@@ -265,8 +285,10 @@ void LatencyDetectorDialog::loadAudioAnalysis()
     trackDurationSeconds_ = decoded.durationSeconds;
     onsetEnvelope_ = buildOnsetEnvelope(decodedSamples_, kAnalysisSampleRate, &onsetStepSeconds_);
     offsetEnvelope_ = buildTransientEnvelope(decodedSamples_, kAnalysisSampleRate, &offsetStepSeconds_);
-    static_cast<WaveformOverviewWidget*>(waveformView_)->setWaveformData(
-        miacode::waveform::makeWaveformPlaceholder(trackDurationSeconds_));
+    if (waveformView_ != nullptr) {
+        waveformView_->setWaveformData(miacode::waveform::makeWaveformPlaceholder(trackDurationSeconds_));
+        waveformView_->setPlayheadUpperLimitSeconds(trackDurationSeconds_);
+    }
     if (waveformCacheService_ != nullptr && !trackPath_.isEmpty()) {
         const QString cacheDirectoryPath = miacode::waveform::waveformCacheDirectoryPath(
             miacode::waveform::projectDataDirectoryPathForFile(chartPath_));
@@ -289,19 +311,26 @@ void LatencyDetectorDialog::loadAudioAnalysis()
                         return;
                     }
                 }
-                static_cast<WaveformOverviewWidget*>(guard->waveformView_)->setWaveformData(waveformData);
+                guard->waveformView_->setWaveformData(waveformData);
             });
     }
     detectBpmButton_->setEnabled(!onsetEnvelope_.isEmpty());
-    zoomPresetIndex_ = defaultWaveformZoomPresetIndex();
     applyZoomLevel(true);
 }
 
 void LatencyDetectorDialog::updatePlaybackUi()
 {
-    playPauseButton_->setText(playing_
+    const QColor iconColor = UiTheme::colors().iconPrimary;
+    playPauseButton_->setIcon(
+        playing_
+            ? UiTheme::dialogTransportPauseIcon(iconColor)
+            : UiTheme::dialogTransportPlayIcon(iconColor));
+    playPauseButton_->setToolTip(playing_
         ? localizedText("暂停", "Pause")
         : localizedText("播放", "Play"));
+    playPauseButton_->setStyleSheet(UiTheme::dialogIconToolButtonStyleSheet(playing_));
+    stopButton_->setIcon(UiTheme::dialogTransportStopIcon(iconColor));
+    stopButton_->setToolTip(localizedText("停止", "Stop"));
     if (stopButton_ != nullptr) {
         stopButton_->setEnabled(playing_ || playheadSecond_ > 0.001);
     }
@@ -318,8 +347,147 @@ void LatencyDetectorDialog::updatePlaybackUi()
     }
     playbackTimeLabel_->setText(QString("%1 / %2").arg(formatTimestamp(playheadSecond_), formatTimestamp(trackDurationSeconds_)));
     detectOffsetButton_->setEnabled(parsedBpm() > 0.0);
-    zoomOutButton_->setEnabled(zoomPresetIndex_ + 1 < waveformZoomFactors().size());
-    zoomInButton_->setEnabled(zoomPresetIndex_ > 0);
+    updateZoomButtonUi();
+}
+
+void LatencyDetectorDialog::updateZoomButtonUi()
+{
+    if (zoomButton_ == nullptr || waveformView_ == nullptr) {
+        return;
+    }
+
+    const int waveformZoomIndex = waveformView_->zoomPresetIndex();
+    const double currentScale = waveformView_->zoomScale();
+    const QVector<double>& zoomPresets = latencyTimelineZoomPresets();
+    const int nextIndex = (waveformZoomIndex + 1 < waveformView_->zoomPresetCount()) ? (waveformZoomIndex + 1) : 0;
+    const double nextScale = zoomPresets.value(nextIndex, currentScale);
+    const QString sign = nextScale < currentScale ? QStringLiteral("-") : QStringLiteral("+");
+    const QString zoomText = UiTheme::timelineZoomButtonText(currentScale);
+    if (zoomPresetIndex_ == waveformZoomIndex
+        && zoomButton_->text() == zoomText
+        && zoomButton_->isEnabled() == (waveformView_->zoomPresetCount() > 0)) {
+        return;
+    }
+
+    zoomPresetIndex_ = waveformZoomIndex;
+    zoomButton_->setIcon(UiTheme::timelineZoomButtonIcon(UiTheme::colors().timelineLabel, sign));
+    zoomButton_->setIconSize(QSize(18, 18));
+    zoomButton_->setText(zoomText);
+    zoomButton_->setToolTip(QStringLiteral("Timeline zoom: %1").arg(zoomText));
+    zoomButton_->setEnabled(waveformView_->zoomPresetCount() > 0);
+}
+
+void LatencyDetectorDialog::beginManualSeekInteraction()
+{
+    if (offsetReplayTimer_ != nullptr) {
+        offsetReplayTimer_->stop();
+    }
+    if (pausedSeekTimer_ != nullptr) {
+        pausedSeekTimer_->stop();
+    }
+    if (!playing_) {
+        return;
+    }
+    if (sfxRuntime_ != nullptr) {
+        if (sfxRuntime_->isBackgroundTrackRunning()) {
+            playheadSecond_ = qBound(0.0, sfxRuntime_->backgroundPlaybackSecond(), trackDurationSeconds_);
+        } else {
+            playheadSecond_ = currentTransportSecond();
+        }
+    }
+    pausePlayback();
+}
+
+void LatencyDetectorDialog::applyPlaybackRate(double rate)
+{
+    const QList<QPair<double, QString>>& speedOptions = latencyPlaybackSpeedOptions();
+    if (speedOptions.isEmpty()) {
+        return;
+    }
+    const int optionIndex = closestLatencyPlaybackSpeedIndex(rate);
+    playbackRate_ = speedOptions.at(optionIndex).first;
+    if (speedButton_ != nullptr) {
+        speedButton_->setText(speedOptions.at(optionIndex).second);
+        if (QMenu* speedMenu = speedButton_->menu(); speedMenu != nullptr) {
+            const QList<QAction*> actions = speedMenu->actions();
+            for (int index = 0; index < actions.size(); ++index) {
+                actions.at(index)->setChecked(index == optionIndex);
+            }
+        }
+    }
+    if (sfxRuntime_ != nullptr) {
+        sfxRuntime_->setBackgroundTrackPlaybackRate(playbackRate_);
+    }
+    if (playing_) {
+        if (sfxRuntime_ != nullptr) {
+            if (sfxRuntime_->isBackgroundTrackRunning()) {
+                playheadSecond_ = qBound(0.0, sfxRuntime_->backgroundPlaybackSecond(), trackDurationSeconds_);
+            } else {
+                playheadSecond_ = currentTransportSecond();
+            }
+        }
+        startPlayback();
+    }
+}
+
+void LatencyDetectorDialog::stepPlaybackRate(int deltaSteps)
+{
+    const QList<QPair<double, QString>>& speedOptions = latencyPlaybackSpeedOptions();
+    if (speedOptions.isEmpty() || deltaSteps == 0) {
+        return;
+    }
+    const int currentIndex = closestLatencyPlaybackSpeedIndex(playbackRate_);
+    const int nextIndex = qBound(0, currentIndex + deltaSteps, speedOptions.size() - 1);
+    applyPlaybackRate(speedOptions.at(nextIndex).first);
+}
+
+void LatencyDetectorDialog::handleStopOrPlayShortcut()
+{
+    if (playing_) {
+        beginManualSeekInteraction();
+        seekToSecond(0.0, true);
+        return;
+    }
+    togglePlayback();
+}
+
+void LatencyDetectorDialog::schedulePausedSeek(double second, bool centerView, bool immediate)
+{
+    beginManualSeekInteraction();
+    playheadSecond_ = qBound(0.0, second, trackDurationSeconds_);
+    transportAnchorSecond_ = playheadSecond_;
+    transportElapsed_.invalidate();
+    lastBeatAuditionSecond_ = playheadSecond_;
+    updateVisibleRange(centerView);
+
+    pendingPausedSeekSecond_ = playheadSecond_;
+    pendingPausedSeekCenterView_ = centerView;
+    pendingPausedSeekActive_ = true;
+    if (pausedSeekTimer_ != nullptr) {
+        if (immediate) {
+            pausedSeekTimer_->stop();
+            commitPendingPausedSeek();
+        } else {
+            pausedSeekTimer_->start();
+        }
+    } else if (immediate) {
+        commitPendingPausedSeek();
+    }
+}
+
+void LatencyDetectorDialog::commitPendingPausedSeek()
+{
+    if (!pendingPausedSeekActive_ || playing_) {
+        return;
+    }
+    pendingPausedSeekActive_ = false;
+    transportAnchorSecond_ = pendingPausedSeekSecond_;
+    transportElapsed_.invalidate();
+    if (sfxRuntime_ != nullptr) {
+        sfxRuntime_->pauseBackgroundTrack();
+        sfxRuntime_->seekBackgroundTrack(pendingPausedSeekSecond_);
+        sfxRuntime_->pauseBackgroundTrack();
+    }
 }
 
 void LatencyDetectorDialog::updateBeatOverlay()
@@ -372,53 +540,51 @@ void LatencyDetectorDialog::updateBeatOverlay()
             pendingBeatAccentAnchorIndex_ = qRound(anchorBeats);
         }
     }
-    if (pendingBeatBpm_ > 0.0) {
-        static_cast<WaveformOverviewWidget*>(waveformView_)->setBeatGrid(
-            pendingBeatBpm_,
-            pendingBeatOffset_,
-            pendingBeatBarPulseCount_
-        );
-    } else {
-        static_cast<WaveformOverviewWidget*>(waveformView_)->clearBeatGrid();
-    }
+    rebuildTimelineSnapshot();
     updatePlaybackUi();
 }
 
 void LatencyDetectorDialog::smoothFollowPlayhead(bool forceCenter)
 {
-    Q_UNUSED(forceCenter);
-    if (trackDurationSeconds_ <= 0.0) {
-        visibleStartSecond_ = 0.0;
-        return;
+    if (waveformView_ != nullptr) {
+        waveformView_->setPlayheadSeconds(playheadSecond_, forceCenter);
     }
-    const double maxStart = qMax(0.0, trackDurationSeconds_ - visibleDurationSeconds_);
-    visibleStartSecond_ = qBound(0.0, playheadSecond_ - visibleDurationSeconds_ * 0.5, maxStart);
 }
 
 void LatencyDetectorDialog::applyZoomLevel(bool centerOnPlayhead)
 {
-    const QVector<double>& factors = waveformZoomFactors();
-    const int boundedIndex = qBound(0, zoomPresetIndex_, factors.size() - 1);
+    if (waveformView_ == nullptr) {
+        return;
+    }
+    const int boundedIndex = qBound(0, zoomPresetIndex_, waveformView_->zoomPresetCount() - 1);
+    const int deltaSteps = boundedIndex - waveformView_->zoomPresetIndex();
     zoomPresetIndex_ = boundedIndex;
-    const double factor = factors.at(boundedIndex);
-    visibleDurationSeconds_ = qMax(kMinimumVisibleSeconds, kWaveformZoomBaseVisibleSeconds * factor);
+    if (deltaSteps != 0) {
+        waveformView_->stepZoomPresetForQuickSurface(deltaSteps, playheadSecond_);
+    }
     updateVisibleRange(centerOnPlayhead);
 }
 
 void LatencyDetectorDialog::updateVisibleRange(bool centerOnPlayhead)
 {
-    if (trackDurationSeconds_ <= 0.0) {
-        visibleStartSecond_ = 0.0;
-        visibleDurationSeconds_ = kMinimumVisibleSeconds;
-    } else {
-        visibleDurationSeconds_ = qMax(kMinimumVisibleSeconds, visibleDurationSeconds_);
-        if (centerOnPlayhead) {
-            visibleStartSecond_ = playheadSecond_ - visibleDurationSeconds_ * 0.5;
-        }
+    if (waveformView_ != nullptr) {
+        waveformView_->setPlayheadSeconds(playheadSecond_, centerOnPlayhead);
     }
-    static_cast<WaveformOverviewWidget*>(waveformView_)->setVisibleRange(visibleStartSecond_, visibleDurationSeconds_);
-    static_cast<WaveformOverviewWidget*>(waveformView_)->setPlayheadSecond(playheadSecond_);
     updatePlaybackUi();
+}
+
+void LatencyDetectorDialog::rebuildTimelineSnapshot()
+{
+    if (waveformView_ == nullptr) {
+        return;
+    }
+    waveformView_->setTimelineData(buildLatencyTimelineSnapshot(
+        trackDurationSeconds_,
+        pendingBeatBpm_,
+        pendingBeatOffset_,
+        pendingBeatBarPulseCount_));
+    waveformView_->setPlayheadUpperLimitSeconds(trackDurationSeconds_);
+    waveformView_->setPlayheadSeconds(playheadSecond_, false);
 }
 
 void LatencyDetectorDialog::updateBpmEdit(double bpm, bool notify)

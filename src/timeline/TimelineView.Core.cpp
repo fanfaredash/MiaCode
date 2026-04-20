@@ -1,3 +1,18 @@
+namespace {
+constexpr int kWaveformOnlyTimelineHeight = 132;
+constexpr int kWaveformOnlyMargin = 8;
+}
+
+bool TimelineView::waveformOnlyPresentation() const
+{
+    return presentationMode_ == PresentationMode::WaveformOnly;
+}
+
+int TimelineView::headerHeight() const
+{
+    return waveformOnlyPresentation() ? 0 : kHeaderHeight;
+}
+
 void TimelineView::updateHorizontalRange()
 {
     const int fullWidth = contentWidth();
@@ -14,17 +29,18 @@ int TimelineView::contentWidth() const
 int TimelineView::rawContentWidth() const
 {
     const double timelineSeconds = qMax(0.0, displayEndSeconds_ - displayStartSeconds_);
-    return timelineLeft() + static_cast<int>(timelineSeconds * pixelsPerSecond_) + kTimelineRightPadding;
+    const int rightPadding = waveformOnlyPresentation() ? 0 : kTimelineRightPadding;
+    return timelineLeft() + static_cast<int>(timelineSeconds * pixelsPerSecond_) + rightPadding;
 }
 
 int TimelineView::timelineLeft() const
 {
-    return kTimelineLeftMargin;
+    return waveformOnlyPresentation() ? kWaveformOnlyMargin : kTimelineLeftMargin;
 }
 
 int TimelineView::timelineTop() const
 {
-    return kHeaderHeight + kTimelineTopMargin;
+    return headerHeight() + (waveformOnlyPresentation() ? kWaveformOnlyMargin : kTimelineTopMargin);
 }
 
 int TimelineView::laneHeight() const
@@ -34,7 +50,7 @@ int TimelineView::laneHeight() const
 
 int TimelineView::timelineHeight() const
 {
-    return kLaneCount * laneHeight();
+    return waveformOnlyPresentation() ? kWaveformOnlyTimelineHeight : (kLaneCount * laneHeight());
 }
 
 int TimelineView::notePixelSize() const
@@ -243,27 +259,14 @@ void TimelineView::updateZoomButtonAppearance()
             break;
         }
     }
-    const QString sign = nextScale < currentScale ? "-" : "+";
+    const QString sign = nextScale < currentScale ? QStringLiteral("-") : QStringLiteral("+");
 
-    QPixmap iconPixmap(18, 18);
-    iconPixmap.fill(Qt::transparent);
-    QPainter p(&iconPixmap);
-    p.setRenderHint(QPainter::Antialiasing, true);
-    p.setPen(QPen(c.timelineLabel, 1.8));
-    p.drawEllipse(QRectF(2.5, 2.5, 9.0, 9.0));
-    p.drawLine(QPointF(10.5, 10.5), QPointF(15.2, 15.2));
-    QFont font = p.font();
-    font.setBold(true);
-    font.setPointSize(7);
-    p.setFont(font);
-    p.drawText(QRectF(11.5, 0.0, 6.5, 9.0), Qt::AlignCenter, sign);
-    p.end();
-
-    zoomButton_->setIcon(QIcon(iconPixmap));
-    zoomButton_->setIconSize(iconPixmap.size());
+    const QIcon zoomIcon = UiTheme::timelineZoomButtonIcon(c.timelineLabel, sign);
+    zoomButton_->setIcon(zoomIcon);
+    zoomButton_->setIconSize(QSize(18, 18));
     zoomButton_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    zoomButton_->setText(UiTheme::timelineZoomButtonText(currentScale));
     const int currentPercent = qRound(currentScale * 100.0);
-    zoomButton_->setText(QString("%1%").arg(currentPercent));
     zoomButton_->setToolTip(QString("Timeline zoom: %1%").arg(currentPercent));
     zoomButton_->adjustSize();
     zoomButton_->setFixedHeight(22);
@@ -275,14 +278,26 @@ void TimelineView::updateZoomButtonAppearance()
 
 void TimelineView::layoutHeaderButtons()
 {
+    if (waveformOnlyPresentation()) {
+        if (zoomButton_ != nullptr) {
+            zoomButton_->hide();
+        }
+        if (followPreviewCheckBox_ != nullptr) {
+            followPreviewCheckBox_->hide();
+        }
+        return;
+    }
+
     const int leftBaseX = 4;
     const int rightMargin = 8;
     int x = leftBaseX;
     if (zoomButton_ != nullptr) {
+        zoomButton_->show();
         const int y = qMax(0, (timelineTop() - zoomButton_->height()) / 2);
         zoomButton_->move(x, y);
     }
     if (followPreviewCheckBox_ != nullptr) {
+        followPreviewCheckBox_->show();
         followPreviewCheckBox_->adjustSize();
         const int checkBoxHeight = qMax(
             followPreviewCheckBox_->minimumSizeHint().height(),

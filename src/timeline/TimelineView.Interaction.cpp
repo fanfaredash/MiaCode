@@ -80,7 +80,7 @@ void TimelineView::mousePressEvent(QMouseEvent* event)
         return second;
     };
 
-    const QRect headerRect(timelineLeft(), 0, viewport()->width() - timelineLeft(), kHeaderHeight);
+    const QRect headerRect(timelineLeft(), 0, viewport()->width() - timelineLeft(), headerHeight());
     if (headerRect.contains(event->position().toPoint())) {
         setFocus(Qt::MouseFocusReason);
         emit timelineUserInteractionStarted();
