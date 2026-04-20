@@ -138,6 +138,11 @@
         QWidget* previewFullscreenWindow_ = nullptr;
         QWidget* previewFullscreenHost_ = nullptr;
         QWidget* previewFullscreenControlsWindow_ = nullptr;
+        QWidget* previewPlaybackRateToast_ = nullptr;
+        QLabel* previewPlaybackRateToastLabel_ = nullptr;
+        QTimer* previewPlaybackRateToastTimer_ = nullptr;
+        QGraphicsOpacityEffect* previewPlaybackRateToastOpacityEffect_ = nullptr;
+        QPropertyAnimation* previewPlaybackRateToastOpacityAnimation_ = nullptr;
         QWidget* previewFullscreenHintWindow_ = nullptr;
         QLabel* previewFullscreenHintLabel_ = nullptr;
         QTimer* previewFullscreenHintTimer_ = nullptr;
@@ -743,6 +748,11 @@
     QWidget*& previewFullscreenWindow_ = ui_.previewFullscreenWindow_;
     QWidget*& previewFullscreenHost_ = ui_.previewFullscreenHost_;
     QWidget*& previewFullscreenControlsWindow_ = ui_.previewFullscreenControlsWindow_;
+    QWidget*& previewPlaybackRateToast_ = ui_.previewPlaybackRateToast_;
+    QLabel*& previewPlaybackRateToastLabel_ = ui_.previewPlaybackRateToastLabel_;
+    QTimer*& previewPlaybackRateToastTimer_ = ui_.previewPlaybackRateToastTimer_;
+    QGraphicsOpacityEffect*& previewPlaybackRateToastOpacityEffect_ = ui_.previewPlaybackRateToastOpacityEffect_;
+    QPropertyAnimation*& previewPlaybackRateToastOpacityAnimation_ = ui_.previewPlaybackRateToastOpacityAnimation_;
     QWidget*& previewFullscreenHintWindow_ = ui_.previewFullscreenHintWindow_;
     QLabel*& previewFullscreenHintLabel_ = ui_.previewFullscreenHintLabel_;
     QTimer*& previewFullscreenHintTimer_ = ui_.previewFullscreenHintTimer_;

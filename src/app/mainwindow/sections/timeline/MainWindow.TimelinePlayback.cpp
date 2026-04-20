@@ -38,6 +38,9 @@ namespace {
 
 constexpr double kTimelineZeroSecondTolerance = 1e-6;
 constexpr auto kQuickShellTransportSeekProperty = "miacode.quick_shell_transport_seek";
+constexpr int kPreviewPlaybackRateToastMinWidth = 196;
+constexpr int kPreviewPlaybackRateToastMinHeight = 96;
+constexpr int kPreviewPlaybackRateToastHorizontalMargin = 20;
 
 void appendQuickShellBackendLog(const QString& action, const QString& payload = QString())
 {
@@ -473,6 +476,7 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
             }
         }
     }
+    owner_.showPreviewPlaybackRateToast(state_.previewPlaybackRate_);
     owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->setBackgroundTrackPlaybackRate(state_.previewPlaybackRate_);
@@ -1079,6 +1083,81 @@ void MainWindow::seekPreviewToSecond(double second, bool centerView)
 void MainWindow::applyPreviewPlaybackRate(double rate)
 {
     timelineSection_->applyPreviewPlaybackRate(rate);
+}
+
+QString MainWindow::formatPreviewPlaybackRateToastText(double rate) const
+{
+    const int percent = qRound(rate * 100.0);
+    const QString title = UiText::isChineseUi()
+        ? QStringLiteral("当前倍速")
+        : QStringLiteral("Playback Speed");
+    return QStringLiteral(
+               "<div style='text-align:center;'>"
+               "<div style='font-size:14px;font-weight:600;line-height:1.2;'>%1</div>"
+               "<div style='margin-top:6px;font-size:28px;font-weight:700;line-height:1.1;'>%2%%</div>"
+               "</div>"
+           )
+        .arg(title.toHtmlEscaped())
+        .arg(percent);
+}
+
+void MainWindow::showPreviewPlaybackRateToast(double rate)
+{
+    if (previewPlaybackRateToast_ == nullptr || previewPlaybackRateToastLabel_ == nullptr) {
+        return;
+    }
+    if (previewPlaybackRateToastTimer_ != nullptr) {
+        previewPlaybackRateToastTimer_->stop();
+    }
+    if (previewPlaybackRateToastOpacityAnimation_ != nullptr) {
+        previewPlaybackRateToastOpacityAnimation_->stop();
+    }
+    previewPlaybackRateToastLabel_->setText(formatPreviewPlaybackRateToastText(rate));
+    updatePreviewPlaybackRateToastGeometry();
+    if (previewPlaybackRateToastOpacityEffect_ != nullptr) {
+        previewPlaybackRateToastOpacityEffect_->setOpacity(1.0);
+    }
+    previewPlaybackRateToast_->show();
+    previewPlaybackRateToast_->raise();
+    if (previewPlaybackRateToastTimer_ != nullptr) {
+        previewPlaybackRateToastTimer_->start();
+    }
+}
+
+void MainWindow::updatePreviewPlaybackRateToastGeometry()
+{
+    if (previewPlaybackRateToast_ == nullptr || previewPlaybackRateToastLabel_ == nullptr) {
+        return;
+    }
+    const QRect hostRect = contentsRect();
+    if (!hostRect.isValid()) {
+        return;
+    }
+
+    const QSize preferredSize = previewPlaybackRateToast_->sizeHint();
+    const int availableWidth = qMax(1, hostRect.width() - kPreviewPlaybackRateToastHorizontalMargin * 2);
+    int toastWidth = qMax(kPreviewPlaybackRateToastMinWidth, preferredSize.width());
+    toastWidth = qMin(toastWidth, availableWidth);
+    const int toastHeight = qMax(kPreviewPlaybackRateToastMinHeight, preferredSize.height());
+    const int toastX = hostRect.x() + qMax(0, (hostRect.width() - toastWidth) / 2);
+    const int toastY = hostRect.y() + qMax(0, (hostRect.height() - toastHeight) / 2);
+    previewPlaybackRateToast_->setGeometry(toastX, toastY, toastWidth, toastHeight);
+}
+
+void MainWindow::hidePreviewPlaybackRateToast()
+{
+    if (previewPlaybackRateToastTimer_ != nullptr) {
+        previewPlaybackRateToastTimer_->stop();
+    }
+    if (previewPlaybackRateToastOpacityAnimation_ != nullptr) {
+        previewPlaybackRateToastOpacityAnimation_->stop();
+    }
+    if (previewPlaybackRateToastOpacityEffect_ != nullptr) {
+        previewPlaybackRateToastOpacityEffect_->setOpacity(1.0);
+    }
+    if (previewPlaybackRateToast_ != nullptr) {
+        previewPlaybackRateToast_->hide();
+    }
 }
 
 bool MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)

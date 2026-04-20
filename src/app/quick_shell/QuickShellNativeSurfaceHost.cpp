@@ -2,8 +2,13 @@
 
 #include <QBoxLayout>
 #include <QDockWidget>
+#include <QEasingCurve>
+#include <QLabel>
 #include <QMainWindow>
 #include <QMenuBar>
+#include <QPropertyAnimation>
+#include <QTimer>
+#include <QVBoxLayout>
 #include <QStatusBar>
 #include <QTabBar>
 #include <QTabWidget>
@@ -48,6 +53,10 @@ bool shouldUseBottomTabsNativeSurface(QuickShellStateSource* stateSource)
     return stateSource->shellBottomTabsCurrentTabId().trimmed().compare(QStringLiteral("timeline"), Qt::CaseInsensitive) != 0;
 }
 
+constexpr int kBottomTabsSpeedToastMinWidth = 180;
+constexpr int kBottomTabsSpeedToastMinHeight = 96;
+constexpr int kBottomTabsSpeedToastHorizontalMargin = 20;
+
 void setSurfaceVisible(QWidget* surface, bool visible)
 {
     if (surface == nullptr) {
@@ -78,6 +87,15 @@ QuickShellNativeSurfaceHost::QuickShellNativeSurfaceHost(
     , workspaceSurfaceWidget_(createBridgeSurface(QStringLiteral("QuickShellWorkspaceSurface")))
     , bottomTabsSurfaceWidget_(createBridgeSurface(QStringLiteral("QuickShellBottomTabsSurface")))
     , statusSurfaceWidget_(createBridgeSurface(QStringLiteral("QuickShellStatusSurface")))
+    , bottomTabsSpeedToastWindow_(new QWidget(
+          nullptr,
+          Qt::ToolTip | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint | Qt::WindowStaysOnTopHint
+              | Qt::WindowDoesNotAcceptFocus
+      ))
+    , bottomTabsSpeedToastPanel_(new QWidget(bottomTabsSpeedToastWindow_))
+    , bottomTabsSpeedToastLabel_(new QLabel(bottomTabsSpeedToastPanel_))
+    , bottomTabsSpeedToastTimer_(new QTimer(this))
+    , bottomTabsSpeedToastOpacityAnimation_(new QPropertyAnimation(bottomTabsSpeedToastWindow_, "windowOpacity", this))
 {
     surfaceBundle_.topChrome = createForeignWindowForSurface(topChromeSurfaceWidget_);
     surfaceBundle_.sidebar = createForeignWindowForSurface(sidebarSurfaceWidget_);
@@ -89,6 +107,68 @@ QuickShellNativeSurfaceHost::QuickShellNativeSurfaceHost(
     attachNativeWidgets();
     showAllSurfaces();
     refreshBottomTabsSurfaceVisibility();
+
+    bottomTabsSpeedToastWindow_->setObjectName(QStringLiteral("QuickShellBottomTabsSpeedToast"));
+    bottomTabsSpeedToastWindow_->setAttribute(Qt::WA_TranslucentBackground, true);
+    bottomTabsSpeedToastWindow_->setAttribute(Qt::WA_ShowWithoutActivating, true);
+    bottomTabsSpeedToastWindow_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    bottomTabsSpeedToastWindow_->setWindowFlag(Qt::WindowTransparentForInput, true);
+    bottomTabsSpeedToastWindow_->setFocusPolicy(Qt::NoFocus);
+    bottomTabsSpeedToastPanel_->setObjectName(QStringLiteral("QuickShellBottomTabsSpeedToastPanel"));
+    bottomTabsSpeedToastPanel_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    bottomTabsSpeedToastPanel_->setFocusPolicy(Qt::NoFocus);
+    bottomTabsSpeedToastWindow_->setStyleSheet(
+        QStringLiteral(
+            "QWidget#QuickShellBottomTabsSpeedToast {"
+            " background: transparent;"
+            " border: none;"
+            "}"
+            "QWidget#QuickShellBottomTabsSpeedToastPanel {"
+            " background: rgba(0, 0, 0, 204);"
+            " border: none;"
+            " border-radius: 18px;"
+            "}"
+            "QLabel {"
+            " background: transparent;"
+            " color: #F8FAFC;"
+            " border: none;"
+            "}"
+        )
+    );
+    auto* windowLayout = new QVBoxLayout(bottomTabsSpeedToastWindow_);
+    windowLayout->setContentsMargins(0, 0, 0, 0);
+    windowLayout->setSpacing(0);
+    windowLayout->addWidget(bottomTabsSpeedToastPanel_);
+    auto* toastLayout = new QVBoxLayout(bottomTabsSpeedToastPanel_);
+    toastLayout->setContentsMargins(24, 18, 24, 18);
+    toastLayout->setSpacing(0);
+    bottomTabsSpeedToastLabel_->setAlignment(Qt::AlignCenter);
+    bottomTabsSpeedToastLabel_->setFocusPolicy(Qt::NoFocus);
+    bottomTabsSpeedToastLabel_->setTextFormat(Qt::RichText);
+    bottomTabsSpeedToastLabel_->setTextInteractionFlags(Qt::NoTextInteraction);
+    bottomTabsSpeedToastLabel_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    toastLayout->addWidget(bottomTabsSpeedToastLabel_);
+    bottomTabsSpeedToastWindow_->setWindowOpacity(1.0);
+    bottomTabsSpeedToastOpacityAnimation_->setDuration(240);
+    bottomTabsSpeedToastOpacityAnimation_->setEasingCurve(QEasingCurve::OutCubic);
+    connect(bottomTabsSpeedToastOpacityAnimation_, &QPropertyAnimation::finished, this, [this]() {
+        if (bottomTabsSpeedToastWindow_ != nullptr && bottomTabsSpeedToastWindow_->windowOpacity() <= 0.0) {
+            hideBottomTabsSpeedToast();
+        }
+    });
+    bottomTabsSpeedToastTimer_->setSingleShot(true);
+    bottomTabsSpeedToastTimer_->setInterval(900);
+    connect(bottomTabsSpeedToastTimer_, &QTimer::timeout, this, [this]() {
+        if (bottomTabsSpeedToastOpacityAnimation_ == nullptr || bottomTabsSpeedToastWindow_ == nullptr) {
+            return;
+        }
+        bottomTabsSpeedToastOpacityAnimation_->stop();
+        bottomTabsSpeedToastWindow_->setWindowOpacity(1.0);
+        bottomTabsSpeedToastOpacityAnimation_->setStartValue(1.0);
+        bottomTabsSpeedToastOpacityAnimation_->setEndValue(0.0);
+        bottomTabsSpeedToastOpacityAnimation_->start();
+    });
+    bottomTabsSpeedToastWindow_->hide();
 }
 
 QuickShellNativeSurfaceHost::~QuickShellNativeSurfaceHost()
@@ -114,6 +194,12 @@ QuickShellNativeSurfaceHost::~QuickShellNativeSurfaceHost()
     bottomTabsSurfaceWidget_ = nullptr;
     delete statusSurfaceWidget_;
     statusSurfaceWidget_ = nullptr;
+    delete bottomTabsSpeedToastWindow_;
+    bottomTabsSpeedToastWindow_ = nullptr;
+    bottomTabsSpeedToastPanel_ = nullptr;
+    bottomTabsSpeedToastLabel_ = nullptr;
+    bottomTabsSpeedToastTimer_ = nullptr;
+    bottomTabsSpeedToastOpacityAnimation_ = nullptr;
 }
 
 QuickShellNativeSurfaceBundle QuickShellNativeSurfaceHost::surfaceBundle() const
@@ -206,6 +292,17 @@ void QuickShellNativeSurfaceHost::syncBottomTabsSurfaceSize(int width, int heigh
     }
 }
 
+void QuickShellNativeSurfaceHost::syncBottomTabsToastAnchor(int x, int y, int width, int height, bool visible)
+{
+    bottomTabsToastAnchorRect_ = QRect(x, y, qMax(1, width), qMax(1, height));
+    bottomTabsToastAnchorVisible_ = visible && width > 0 && height > 0;
+    if (!bottomTabsToastAnchorVisible_) {
+        hideBottomTabsSpeedToast();
+        return;
+    }
+    updateBottomTabsSpeedToastGeometry();
+}
+
 void QuickShellNativeSurfaceHost::syncStatusSurfaceSize(int width, int height)
 {
     resizeSurface(statusSurfaceWidget_, width, height);
@@ -225,6 +322,9 @@ void QuickShellNativeSurfaceHost::syncStatusSurfaceSize(int width, int height)
 void QuickShellNativeSurfaceHost::refreshBottomTabsSurfaceVisibility()
 {
     setSurfaceVisible(bottomTabsSurfaceWidget_, shouldUseBottomTabsNativeSurface(stateSource_));
+    if (stateSource_ != nullptr && !stateSource_->shellBottomTabsVisible()) {
+        hideBottomTabsSpeedToast();
+    }
 }
 
 void QuickShellNativeSurfaceHost::updateRootWindowFrameGeometry(const QRect& geometry)
@@ -254,6 +354,22 @@ QWidget* QuickShellNativeSurfaceHost::createBridgeSurface(const QString& objectN
     bridgeRoot->winId();
     bridgeRoot->hide();
     return bridgeRoot;
+}
+
+QString QuickShellNativeSurfaceHost::formatBottomTabsSpeedToastText(const QString& speedLabel)
+{
+    QString numericText = speedLabel;
+    numericText.remove(QLatin1Char('x'), Qt::CaseInsensitive);
+    bool ok = false;
+    const double numericRate = numericText.trimmed().toDouble(&ok);
+    const int percent = ok ? qRound(numericRate * 100.0) : 100;
+    return QStringLiteral(
+               "<div style='text-align:center;'>"
+               "<div style='font-size:14px;font-weight:600;line-height:1.2;'>当前倍速</div>"
+               "<div style='margin-top:6px;font-size:28px;font-weight:700;line-height:1.1;'>%1%</div>"
+               "</div>"
+           )
+        .arg(percent);
 }
 
 QWindow* QuickShellNativeSurfaceHost::createForeignWindowForSurface(QWidget* surface) const
@@ -421,4 +537,62 @@ void QuickShellNativeSurfaceHost::showAllSurfaces()
     setSurfaceVisible(workspaceSurfaceWidget_, true);
     setSurfaceVisible(bottomTabsSurfaceWidget_, shouldUseBottomTabsNativeSurface(stateSource_));
     setSurfaceVisible(statusSurfaceWidget_, true);
+}
+
+void QuickShellNativeSurfaceHost::updateBottomTabsSpeedToastGeometry()
+{
+    if (bottomTabsSpeedToastWindow_ == nullptr
+        || !bottomTabsToastAnchorVisible_
+        || !bottomTabsToastAnchorRect_.isValid()) {
+        return;
+    }
+    const QSize preferredSize = bottomTabsSpeedToastWindow_->sizeHint();
+    const int availableWidth = qMax(1, bottomTabsToastAnchorRect_.width() - kBottomTabsSpeedToastHorizontalMargin * 2);
+    int toastWidth = qMax(kBottomTabsSpeedToastMinWidth, preferredSize.width());
+    toastWidth = qMin(toastWidth, availableWidth);
+    const int toastHeight = qMax(kBottomTabsSpeedToastMinHeight, preferredSize.height());
+    const int toastX = bottomTabsToastAnchorRect_.x()
+        + qMax(0, (bottomTabsToastAnchorRect_.width() - toastWidth) / 2);
+    const int toastY = bottomTabsToastAnchorRect_.y()
+        + qMax(0, (bottomTabsToastAnchorRect_.height() - toastHeight) / 2);
+    bottomTabsSpeedToastWindow_->setGeometry(toastX, toastY, toastWidth, toastHeight);
+}
+
+void QuickShellNativeSurfaceHost::showBottomTabsSpeedToast(const QString& speedLabel)
+{
+    if (bottomTabsSpeedToastWindow_ == nullptr
+        || bottomTabsSpeedToastLabel_ == nullptr
+        || stateSource_ == nullptr
+        || !stateSource_->shellBottomTabsVisible()
+        || !bottomTabsToastAnchorVisible_) {
+        return;
+    }
+    if (bottomTabsSpeedToastTimer_ != nullptr) {
+        bottomTabsSpeedToastTimer_->stop();
+    }
+    if (bottomTabsSpeedToastOpacityAnimation_ != nullptr) {
+        bottomTabsSpeedToastOpacityAnimation_->stop();
+    }
+    bottomTabsSpeedToastLabel_->setText(formatBottomTabsSpeedToastText(speedLabel));
+    updateBottomTabsSpeedToastGeometry();
+    bottomTabsSpeedToastWindow_->setWindowOpacity(1.0);
+    bottomTabsSpeedToastWindow_->show();
+    bottomTabsSpeedToastWindow_->raise();
+    if (bottomTabsSpeedToastTimer_ != nullptr) {
+        bottomTabsSpeedToastTimer_->start();
+    }
+}
+
+void QuickShellNativeSurfaceHost::hideBottomTabsSpeedToast()
+{
+    if (bottomTabsSpeedToastTimer_ != nullptr) {
+        bottomTabsSpeedToastTimer_->stop();
+    }
+    if (bottomTabsSpeedToastOpacityAnimation_ != nullptr) {
+        bottomTabsSpeedToastOpacityAnimation_->stop();
+    }
+    if (bottomTabsSpeedToastWindow_ != nullptr) {
+        bottomTabsSpeedToastWindow_->setWindowOpacity(1.0);
+        bottomTabsSpeedToastWindow_->hide();
+    }
 }

@@ -1016,6 +1016,7 @@ void MainWindow::TimelineSection::updatePreviewPanelLayout(int panelWidthOverrid
     }
     owner_.refreshQuickShellRehostedWidgetParent(ui_.previewControlCard_);
     owner_.refreshQuickShellRehostedWidgetParent(ui_.previewStatsCard_);
+    owner_.updatePreviewPlaybackRateToastGeometry();
 }
 
 void MainWindow::TimelineSection::updatePreviewObjectStats(double second)

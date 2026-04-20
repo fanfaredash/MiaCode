@@ -105,6 +105,7 @@ public:
     Q_INVOKABLE void syncSidebarSurfaceSize(int width, int height);
     Q_INVOKABLE void syncWorkspaceSurfaceSize(int width, int height);
     Q_INVOKABLE void syncBottomTabsSurfaceSize(int width, int height);
+    Q_INVOKABLE void syncBottomTabsToastAnchor(int x, int y, int width, int height, bool visible);
     Q_INVOKABLE void syncStatusSurfaceSize(int width, int height);
     bool hasShortcut(const QKeySequence& sequence) const;
     bool triggerShortcut(const QKeySequence& sequence);
@@ -138,4 +139,5 @@ private:
     bool timelineTabVisible_ = false;
     bool validationTabVisible_ = false;
     bool muriTabVisible_ = false;
+    bool previewSpeedToastInitialized_ = false;
 };

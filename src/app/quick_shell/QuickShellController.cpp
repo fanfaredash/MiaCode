@@ -525,6 +525,14 @@ void QuickShellController::syncBottomTabsSurfaceSize(int width, int height)
     }
 }
 
+void QuickShellController::syncBottomTabsToastAnchor(int x, int y, int width, int height, bool visible)
+{
+    if (surfaceHost_ == nullptr) {
+        return;
+    }
+    surfaceHost_->syncBottomTabsToastAnchor(x, y, width, height, visible);
+}
+
 void QuickShellController::syncStatusSurfaceSize(int width, int height)
 {
     if (surfaceHost_ == nullptr) {
@@ -567,6 +575,7 @@ void QuickShellController::refreshFromStateSource()
     }
 
     const QString previousBottomTabsCurrentTabId = bottomTabsCurrentTabId_;
+    const QString previousPreviewSpeedLabel = previewSpeedLabel_;
     bool stateChanged = false;
     stateChanged |= assignIfChanged(windowTitle_, stateSource_->shellWindowTitle());
     stateChanged |= assignIfChanged(workspacePanelsSwapped_, stateSource_->shellWorkspacePanelsSwapped());
@@ -593,6 +602,16 @@ void QuickShellController::refreshFromStateSource()
 
     if (surfaceHost_ != nullptr && previousBottomTabsCurrentTabId != bottomTabsCurrentTabId_) {
         surfaceHost_->refreshBottomTabsSurfaceVisibility();
+    }
+    if (surfaceHost_ != nullptr) {
+        if (!previewSpeedToastInitialized_) {
+            previewSpeedToastInitialized_ = true;
+        } else if (previousPreviewSpeedLabel != previewSpeedLabel_) {
+            surfaceHost_->showBottomTabsSpeedToast(previewSpeedLabel_);
+        }
+        if (!bottomTabsVisible_) {
+            surfaceHost_->hideBottomTabsSpeedToast();
+        }
     }
 
     if (stateChanged) {

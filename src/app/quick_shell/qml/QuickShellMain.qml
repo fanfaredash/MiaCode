@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
@@ -12,6 +12,10 @@ ApplicationWindow {
     property var shellController: controller
     property bool fullscreenControlsVisible: controller.previewFullscreen
     property bool fullscreenHintVisible: false
+    property bool previewSpeedToastInitialized: false
+    property string previewSpeedToastLastLabel: ""
+    property bool previewSpeedToastVisible: false
+    property string previewSpeedToastPercentText: "100%"
     property bool initialGeometryApplied: false
     property real previewPaneWidth: previewPaneInitialWidth(
         metric("initialWindowWidth", 1280),
@@ -67,6 +71,20 @@ ApplicationWindow {
         const minutes = Math.floor(safeSeconds / 60)
         const seconds = safeSeconds % 60
         return String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0")
+    }
+
+    function formatPreviewSpeedPercent(speedLabel) {
+        const normalized = (speedLabel || "").replace("x", "").trim()
+        const numericValue = Number(normalized)
+        if (!isFinite(numericValue) || numericValue <= 0)
+            return "100%"
+        return Math.round(numericValue * 100) + "%"
+    }
+
+    function showPreviewSpeedToast(speedLabel) {
+        previewSpeedToastPercentText = formatPreviewSpeedPercent(speedLabel)
+        previewSpeedToastVisible = true
+        previewSpeedToastHideTimer.restart()
     }
 
     function handlePreviewSeekPress(event) {
@@ -530,6 +548,15 @@ ApplicationWindow {
         target: controller
 
         function onShellStateChanged() {
+            const nextSpeedLabel = controller ? controller.previewSpeedLabel : ""
+            if (!root.previewSpeedToastInitialized) {
+                root.previewSpeedToastInitialized = true
+                root.previewSpeedToastLastLabel = nextSpeedLabel
+            } else if (nextSpeedLabel !== root.previewSpeedToastLastLabel) {
+                root.previewSpeedToastLastLabel = nextSpeedLabel
+                root.showPreviewSpeedToast(nextSpeedLabel)
+            }
+
             const nextRestoreGeneration = controller.previewPaneRestoreGeneration
             if (nextRestoreGeneration !== root.lastPreviewPaneRestoreGeneration) {
                 root.lastPreviewPaneRestoreGeneration = nextRestoreGeneration
@@ -610,6 +637,13 @@ ApplicationWindow {
         interval: metric("fullscreenHintAutoHideDelayMs", 2200)
         repeat: false
         onTriggered: fullscreenHintVisible = false
+    }
+
+    Timer {
+        id: previewSpeedToastHideTimer
+        interval: 900
+        repeat: false
+        onTriggered: root.previewSpeedToastVisible = false
     }
 
     Timer {
@@ -1381,6 +1415,49 @@ ApplicationWindow {
                 color: "white"
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
+            }
+        }
+
+        Rectangle {
+            id: fullscreenPreviewSpeedToast
+
+            z: 22
+            anchors.centerIn: parent
+            width: Math.min(220, Math.max(180, fullscreenPreviewSpeedToastColumn.implicitWidth + 48))
+            height: Math.max(96, fullscreenPreviewSpeedToastColumn.implicitHeight + 36)
+            radius: 18
+            color: "#CC000000"
+            border.width: 0
+            opacity: controller.previewFullscreen && root.previewSpeedToastVisible ? 1.0 : 0.0
+            visible: controller.previewFullscreen && (root.previewSpeedToastVisible || opacity > 0.0)
+            enabled: false
+
+            Behavior on opacity {
+                NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+            }
+
+            Column {
+                id: fullscreenPreviewSpeedToastColumn
+                anchors.centerIn: parent
+                spacing: 6
+
+                Label {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "\u5f53\u524d\u500d\u901f"
+                    color: "#F8FAFC"
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                Label {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: root.previewSpeedToastPercentText
+                    color: "#F8FAFC"
+                    font.pixelSize: 28
+                    font.weight: Font.Bold
+                    horizontalAlignment: Text.AlignHCenter
+                }
             }
         }
     }
