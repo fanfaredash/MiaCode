@@ -16,7 +16,6 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
-#include "common/PreviewGlobalFirstOffset.h"
 #include "common/PreviewInteractionConfig.h"
 #include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
@@ -296,12 +295,7 @@ double MainWindow::TimelineSection::parsedRawFirstSeconds(bool* ok) const
 
 double MainWindow::TimelineSection::parsedFirstSeconds(bool* ok) const
 {
-    bool localOk = false;
-    const double rawFirstSeconds = parsedRawFirstSeconds(&localOk);
-    if (ok != nullptr) {
-        *ok = localOk;
-    }
-    return miacode::preview_global_timing::effectiveFirstSeconds(rawFirstSeconds);
+    return parsedRawFirstSeconds(ok);
 }
 
 double MainWindow::TimelineSection::parsedWholeBpm(bool* ok) const

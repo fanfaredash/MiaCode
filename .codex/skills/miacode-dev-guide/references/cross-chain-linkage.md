@@ -53,7 +53,7 @@ Current contract:
 
 - `SimaiDocument` stores raw `first`.
 - `MainWindow::parsedFirstSeconds` is the main getter.
-- the effective preview/export `first` now uses the finite normalized negative of raw `&first` from `src/common/PreviewGlobalFirstOffset.h`
+- preview/export `first` now uses the finite parsed raw `&first` value directly; do not maintain a second inverted "effectiveFirst" concept
 - `TimelineQuickModel` receives `first` on every fast-path rebuild or incremental edit apply.
 - `buildTimelineSlowRefreshResult` shifts parser-produced beat/note markers by `first`.
 - `MainWindow::applyLatencyDetectorOffset` writes raw `first` back into the document.
@@ -103,8 +103,8 @@ Current runtime ownership note:
 Shared concerns:
 
 - which note kinds emit `answer`, `judge`, `break`, `ex`, `touch`, `touchhold`, `firework`
-- shared timing semantics now live in `src/common/PreviewTimingSettings.h` plus `src/common/PreviewSfxTiming.h`; `&first` currently uses the finite normalized negative of the raw document value, `audioOffset` is the whole-SFX chart-domain shift, `displayOffset` advances the `answer` / `judge` families, `answerOffset` stays answer-only, and `judgeOffset` stays judge-only
-- `PreviewGlobalFirstOffset.h` no longer adds a repo-wide fixed lead-in on top of raw `&first`; `PreviewSfxTiming.h` still keeps a fixed real-time `1/60 s` pre-trigger for `answer` plus tap/hold/touch-family `judge` SFX only, while slide / break-slide / firework / touchhold sustain timing should still be compared against the chart-domain shift without inheriting that extra note-category pre-trigger
+- shared timing semantics now live in `src/common/PreviewTimingSettings.h` plus `src/common/PreviewSfxTiming.h`; `&first` currently uses the finite parsed raw document value directly, `audioOffset` is the whole-SFX chart-domain shift, `displayOffset` advances the `answer` / `judge` families, `answerOffset` stays answer-only, and `judgeOffset` stays judge-only
+- `&first` no longer flows through a separate preview-global helper or repo-wide fixed lead-in layer; `PreviewSfxTiming.h` still keeps a fixed real-time `1/60 s` pre-trigger for `answer` plus tap/hold/touch-family `judge` SFX only, while slide / break-slide / firework / touchhold sustain timing should still be compared against the chart-domain shift without inheriting that extra note-category pre-trigger
 - touch and touch-hold still emit `answer` when `isFirework` is set; firework is additive rather than replacing the hit-confirm sound
 - touch-hold tail timing must mirror hold tail timing for `answer`: when `endSecond > second`, both note kinds emit a second `answer` at the tail while touch-hold still keeps its sustain start/stop span events
 - head-star behavior for slide and wifi
