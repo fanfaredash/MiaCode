@@ -1103,10 +1103,21 @@ MainWindow::MainWindow(QWidget* parent)
                 currentBottomTabsTabId_ = BottomTabsTabId::Muri;
             }
         }
+        if (validationSection_ != nullptr && bottomTabs_->currentWidget() == muriList_) {
+            validationSection_->flushPendingMuriDiagnosticsPanelRefresh();
+        }
         scheduleWrappedListRelayout(errorList_);
         scheduleWrappedListRelayout(muriList_);
     });
     connect(quickShellBottomTabsProxy_, &QTabWidget::currentChanged, this, [this](int) {
+        if (quickShellBottomTabsProxy_->currentWidget() == errorList_) {
+            currentBottomTabsTabId_ = BottomTabsTabId::Validation;
+        } else if (quickShellBottomTabsProxy_->currentWidget() == muriList_) {
+            currentBottomTabsTabId_ = BottomTabsTabId::Muri;
+        }
+        if (validationSection_ != nullptr && quickShellBottomTabsProxy_->currentWidget() == muriList_) {
+            validationSection_->flushPendingMuriDiagnosticsPanelRefresh();
+        }
         scheduleWrappedListRelayout(errorList_);
         scheduleWrappedListRelayout(muriList_);
     });

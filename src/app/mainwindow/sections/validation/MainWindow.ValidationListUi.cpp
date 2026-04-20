@@ -14,6 +14,13 @@ namespace {
 constexpr int kIssueLineRole = Qt::UserRole;
 constexpr int kIssueColRole = Qt::UserRole + 1;
 constexpr int kIssueAuxRole = Qt::UserRole + 2;
+constexpr int kIssueIgnoredRole = Qt::UserRole + 5;
+constexpr int kIssueHtmlRole = Qt::UserRole + 6;
+constexpr qreal kIgnoredIssueOpacity = 0.58;
+constexpr int kWrappedIssueHorizontalPadding = 4;
+constexpr int kWrappedIssueTopPadding = 3;
+constexpr int kWrappedIssueBottomPadding = 4;
+constexpr int kWrappedIssueMinimumHeight = 40;
 
 int wrappedRichTextHeight(const QString& html, const QFont& font, int width)
 {
@@ -23,6 +30,111 @@ int wrappedRichTextHeight(const QString& html, const QFont& font, int width)
     document.setHtml(html);
     document.setTextWidth(qMax(1, width));
     return qMax(1, qCeil(document.size().height()));
+}
+
+int wrappedListRowWidth(const QListWidget* list)
+{
+    if (list == nullptr || list->viewport() == nullptr) {
+        return 220;
+    }
+    return qMax(220, list->viewport()->width());
+}
+
+QRect wrappedIssueTextRect(const QRect& rowRect)
+{
+    return rowRect.adjusted(
+        kWrappedIssueHorizontalPadding,
+        kWrappedIssueTopPadding,
+        -kWrappedIssueHorizontalPadding,
+        -kWrappedIssueBottomPadding);
+}
+
+int wrappedIssueRowHeight(const QString& html, const QFont& font, int rowWidth)
+{
+    const QRect textRect = wrappedIssueTextRect(QRect(0, 0, rowWidth, 0));
+    const int textHeight = wrappedRichTextHeight(html, font, qMax(1, textRect.width()));
+    return qMax(kWrappedIssueMinimumHeight, textHeight + kWrappedIssueTopPadding + kWrappedIssueBottomPadding);
+}
+
+class WrappedRichTextItemDelegate final : public QStyledItemDelegate {
+public:
+    explicit WrappedRichTextItemDelegate(QObject* parent = nullptr)
+        : QStyledItemDelegate(parent)
+    {}
+
+    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override
+    {
+        const QString html = index.data(kIssueHtmlRole).toString();
+        if (html.isEmpty()) {
+            return QStyledItemDelegate::sizeHint(option, index);
+        }
+
+        const auto* list = qobject_cast<const QListWidget*>(option.widget);
+        const int rowWidth = wrappedListRowWidth(list);
+        return QSize(rowWidth, wrappedIssueRowHeight(html, option.font, rowWidth));
+    }
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override
+    {
+        const QString html = index.data(kIssueHtmlRole).toString();
+        if (html.isEmpty()) {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+
+        QStyleOptionViewItem drawOption(option);
+        initStyleOption(&drawOption, index);
+
+        const UiTheme::Colors& colors = UiTheme::colors();
+        const QColor selectedBorder = colors.dark ? QColor("#6B8BB8") : QColor("#9EC2EF");
+        const QColor selectedFill = colors.dark ? QColor("#314158") : QColor("#F1F6FF");
+        const QColor hoverFill = colors.dark ? QColor("#2A3442") : QColor("#F3F7FD");
+
+        painter->save();
+        const QRect fillRect = drawOption.rect.adjusted(1, 1, -1, -1);
+        if (drawOption.state.testFlag(QStyle::State_Selected)) {
+            painter->setRenderHint(QPainter::Antialiasing, true);
+            painter->setPen(QPen(selectedBorder, 1.0));
+            painter->setBrush(selectedFill);
+            painter->drawRoundedRect(fillRect, 6.0, 6.0);
+        } else if (drawOption.state.testFlag(QStyle::State_MouseOver)) {
+            painter->setRenderHint(QPainter::Antialiasing, true);
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(hoverFill);
+            painter->drawRoundedRect(fillRect, 6.0, 6.0);
+        }
+
+        const QRect textRect = wrappedIssueTextRect(drawOption.rect);
+        QTextDocument document;
+        document.setDocumentMargin(0.0);
+        document.setDefaultFont(drawOption.font);
+        document.setHtml(html);
+        document.setTextWidth(qMax(1, textRect.width()));
+
+        QAbstractTextDocumentLayout::PaintContext paintContext;
+        paintContext.palette.setColor(QPalette::Text, colors.textPrimary);
+        qreal contentOpacity = 1.0;
+        if (index.data(kIssueIgnoredRole).toBool()) {
+            contentOpacity *= kIgnoredIssueOpacity;
+        }
+        if (!(index.flags() & Qt::ItemIsEnabled)) {
+            contentOpacity *= 0.75;
+        }
+        painter->setOpacity(contentOpacity);
+        painter->translate(textRect.topLeft());
+        painter->setClipRect(QRect(QPoint(0, 0), textRect.size()));
+        document.documentLayout()->draw(painter, paintContext);
+        painter->restore();
+    }
+};
+
+void ensureWrappedIssueDelegate(QListWidget* list)
+{
+    if (list == nullptr || list->property("wrappedIssueDelegateInstalled").toBool()) {
+        return;
+    }
+    list->setItemDelegate(new WrappedRichTextItemDelegate(list));
+    list->setProperty("wrappedIssueDelegateInstalled", true);
 }
 
 }  // namespace
@@ -40,33 +152,18 @@ QListWidgetItem* MainWindow::ValidationSection::addWrappedListEntry(
         return nullptr;
     }
 
+    ensureWrappedIssueDelegate(list);
+
     auto* item = new QListWidgetItem(list);
     item->setToolTip(plainText);
     item->setData(kIssueLineRole, line);
     item->setData(kIssueColRole, col);
     item->setData(kIssueAuxRole, second);
+    item->setData(kIssueHtmlRole, html);
+    item->setText(plainText);
     if (!enabled) {
         item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
     }
-    item->setText(QString());
-
-    auto* label = new QLabel(list);
-    label->setObjectName(QStringLiteral("WrappedListEntryLabel"));
-    label->setTextFormat(Qt::RichText);
-    label->setWordWrap(true);
-    label->setTextInteractionFlags(Qt::NoTextInteraction);
-    label->setStyleSheet(UiTheme::validationMessageLabelStyleSheet());
-    label->setText(html);
-
-    auto* rowWidget = new QWidget(list);
-    auto* rowLayout = new QVBoxLayout(rowWidget);
-    const bool roomyLayout = (list == ui_.muriList_ || list == ui_.errorList_);
-    rowLayout->setContentsMargins(roomyLayout ? 4 : 0, roomyLayout ? 3 : 0, roomyLayout ? 4 : 0, roomyLayout ? 4 : 0);
-    rowLayout->setSpacing(0);
-    rowLayout->addWidget(label);
-
-    list->setItemWidget(item, rowWidget);
-    relayoutWrappedListRows(list);
     scheduleWrappedListRelayout(list);
     return item;
 }
@@ -77,32 +174,19 @@ void MainWindow::ValidationSection::relayoutWrappedListRows(QListWidget* list)
         return;
     }
 
-    const int rowWidth = qMax(220, list->viewport()->width());
-    const bool roomyLayout = (list == ui_.muriList_ || list == ui_.errorList_);
-    const int horizontalMargin = roomyLayout ? 8 : 0;
-    const int verticalMargin = roomyLayout ? 7 : 2;
-    const int labelWidth = qMax(1, rowWidth - horizontalMargin);
+    const int rowWidth = wrappedListRowWidth(list);
     for (int index = 0; index < list->count(); ++index) {
         QListWidgetItem* item = list->item(index);
         if (item == nullptr) {
             continue;
         }
-        QWidget* rowWidget = list->itemWidget(item);
-        if (rowWidget == nullptr) {
+        const QString html = item->data(kIssueHtmlRole).toString();
+        if (html.isEmpty()) {
             continue;
         }
-        QLabel* label = rowWidget->findChild<QLabel*>(QStringLiteral("WrappedListEntryLabel"));
-        if (label == nullptr) {
-            continue;
-        }
-        label->setFixedWidth(labelWidth);
-        const int labelHeight = wrappedRichTextHeight(label->text(), label->font(), labelWidth);
-        label->setFixedHeight(labelHeight);
-        const int rowHeight = qMax(roomyLayout ? 40 : 28, labelHeight + verticalMargin);
-        rowWidget->setMinimumHeight(rowHeight);
-        rowWidget->setMaximumHeight(rowHeight);
-        item->setSizeHint(QSize(rowWidth, rowHeight));
+        item->setSizeHint(QSize(rowWidth, wrappedIssueRowHeight(html, list->font(), rowWidth)));
     }
+    list->viewport()->update();
 }
 
 void MainWindow::ValidationSection::scheduleWrappedListRelayout(QListWidget* list)
