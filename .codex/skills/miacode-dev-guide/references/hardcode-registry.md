@@ -23,6 +23,12 @@ Use this file to track where important constants live, what they mean, and wheth
 - `src/common/PreviewSfxAssets.h`
   - Owns: SFX kind-to-filename mapping and SFX directory resolution
   - Scope: sound asset conventions
+- `src/common/PreviewTimingSettings.h`
+  - Owns: persisted preview timing offset layers (`audioOffset`, `displayOffset`, `judgeOffset`, `answerOffset`) plus the internal frame-vs-second conversion helper for future callers
+  - Scope: realtime preview, persistence, and export snapshot/task timing parity
+- `src/common/PreviewSfxTiming.h`
+  - Owns: shared runtime/export SFX timing formulas, including fixed-real-time `1/60 s` pre-trigger conversion and the chart-domain vs fixed-real-time offset split
+  - Scope: realtime preview and export SFX timing parity
 - `src/preview/audio/PreviewAudioSettings.h`
   - Owns: shared preview/export SFX aggregation policy plus per-kind gain multipliers applied on top of user-set rows
   - Current defaults: BGM `0.40`, Answer `0.30`, Break `0.10`, Slide `0.10`, Break Slide `0.10`, Judge/EX/Touch/Touch-Hold/Firework `0.20`, Master `1.0`
