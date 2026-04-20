@@ -657,6 +657,22 @@ QString previewFullscreenHintStyleSheet()
     );
 }
 
+QString previewPlaybackRateToastStyleSheet()
+{
+    return QStringLiteral(
+        "QWidget {"
+        " background: rgba(0, 0, 0, 204);"
+        " border: 1px solid rgba(255, 255, 255, 56);"
+        " border-radius: 18px;"
+        "}"
+        "QLabel {"
+        " background: transparent;"
+        " color: #F8FAFC;"
+        " border: none;"
+        "}"
+    );
+}
+
 QString outlineCollapseButtonStyleSheet()
 {
     const UiTheme::Colors& colors = UiTheme::colors();

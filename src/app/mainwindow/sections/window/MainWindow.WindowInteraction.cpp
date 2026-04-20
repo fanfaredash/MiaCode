@@ -956,6 +956,7 @@ void MainWindow::WindowSection::resizeEvent(QResizeEvent* event)
         owner_.outlineDockExpandedWidth_ = qMax(120, owner_.outlineDock_->width());
     }
     owner_.updatePreviewWorkspaceLayout();
+    owner_.updatePreviewPlaybackRateToastGeometry();
     owner_.updateEditorHeaderLayoutMode();
     this->updateEditorFindBarGeometry();
     this->applyFindOverlayInset();
@@ -990,6 +991,7 @@ void MainWindow::WindowSection::showEvent(QShowEvent* event)
     owner_.QMainWindow::showEvent(event);
     this->updateBottomTabsDeviceHeight();
     owner_.refreshPreviewFrameRateTimers();
+    owner_.updatePreviewPlaybackRateToastGeometry();
     this->applySystemWindowBackdrop();
     this->logWindowGeometryDebug("show_event");
 }

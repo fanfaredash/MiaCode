@@ -29,6 +29,19 @@ Rectangle {
         controller.syncBottomTabsSurfaceSize(contentHost.width, contentHost.height)
     }
 
+    function syncNativeToastAnchor() {
+        if (!controller)
+            return
+        const topLeft = root.mapToGlobal(0, 0)
+        controller.syncBottomTabsToastAnchor(
+            Math.round(topLeft.x),
+            Math.round(topLeft.y),
+            Math.round(root.width),
+            Math.round(root.height),
+            root.visible && root.width > 0 && root.height > 0 && controller.bottomTabsVisible
+        )
+    }
+
     readonly property int tabBarHeight: metric("bottomTabsTabBarHeight", 40)
     readonly property var visibleTabs: {
         const tabs = []
@@ -43,6 +56,12 @@ Rectangle {
 
     color: tone("cardBg", "#ffffff")
     border.color: tone("border", "#d5e0ec")
+    Component.onCompleted: syncNativeToastAnchor()
+    onVisibleChanged: syncNativeToastAnchor()
+    onXChanged: syncNativeToastAnchor()
+    onYChanged: syncNativeToastAnchor()
+    onWidthChanged: syncNativeToastAnchor()
+    onHeightChanged: syncNativeToastAnchor()
 
     ColumnLayout {
         anchors.fill: parent
@@ -120,12 +139,15 @@ Rectangle {
             Layout.fillHeight: true
             Component.onCompleted: {
                 root.syncNativeBottomTabsSurface()
+                root.syncNativeToastAnchor()
             }
             onWidthChanged: {
                 root.syncNativeBottomTabsSurface()
+                root.syncNativeToastAnchor()
             }
             onHeightChanged: {
                 root.syncNativeBottomTabsSurface()
+                root.syncNativeToastAnchor()
             }
 
             TimelineTabSurface {

@@ -39,6 +39,7 @@ class QChronoTimer;
 class QDockWidget;
 class QEvent;
 class QFrame;
+class QGraphicsOpacityEffect;
 class QGridLayout;
 class QHBoxLayout;
 class QHideEvent;
@@ -287,6 +288,9 @@ private:
     void exitPreviewFullscreen();
     void updatePreviewFullscreenButtonAppearance();
     void updatePreviewFullscreenOverlayGeometry();
+    QString formatPreviewPlaybackRateToastText(double rate) const;
+    void showPreviewPlaybackRateToast(double rate);
+    void updatePreviewPlaybackRateToastGeometry();
     void showPreviewFullscreenControls(bool animate = true);
     void hidePreviewFullscreenControls(bool animate = true);
     void schedulePreviewFullscreenControlsAutoHide();

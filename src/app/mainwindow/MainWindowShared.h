@@ -75,6 +75,7 @@ QFont uiAccentFont(int pointSize, QFont::Weight weight = QFont::Medium);
 QFont uiMonoFont(int pointSize, QFont::Weight weight = QFont::Medium);
 QString previewFullscreenControlCardStyleSheet();
 QString previewFullscreenHintStyleSheet();
+QString previewPlaybackRateToastStyleSheet();
 QString outlineCollapseButtonStyleSheet();
 QColor previewFullscreenOverlayIconColor();
 QString previewFullscreenPauseButtonStyleSheet(bool active);

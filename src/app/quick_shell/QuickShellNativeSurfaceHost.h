@@ -4,6 +4,9 @@
 
 #include <QObject>
 
+class QLabel;
+class QPropertyAnimation;
+class QTimer;
 class QWidget;
 
 class QuickShellNativeSurfaceHost : public QObject
@@ -31,17 +34,22 @@ public:
     void syncSidebarSurfaceSize(int width, int height);
     void syncWorkspaceSurfaceSize(int width, int height);
     void syncBottomTabsSurfaceSize(int width, int height);
+    void syncBottomTabsToastAnchor(int x, int y, int width, int height, bool visible);
     void syncStatusSurfaceSize(int width, int height);
     void refreshBottomTabsSurfaceVisibility();
     void updateRootWindowFrameGeometry(const QRect& geometry);
     void noteQuickShellUiReady();
+    void showBottomTabsSpeedToast(const QString& speedLabel);
+    void hideBottomTabsSpeedToast();
 
 private:
     static QWidget* createBridgeSurface(const QString& objectName);
+    static QString formatBottomTabsSpeedToastText(const QString& speedLabel);
     QWindow* createForeignWindowForSurface(QWidget* surface) const;
     void attachNativeWidgets();
     void ensureSurfaceLayouts();
     void showAllSurfaces();
+    void updateBottomTabsSpeedToastGeometry();
 
     QuickShellNativeContentProvider* contentProvider_ = nullptr;
     QuickShellStateSource* stateSource_ = nullptr;
@@ -50,5 +58,12 @@ private:
     QWidget* workspaceSurfaceWidget_ = nullptr;
     QWidget* bottomTabsSurfaceWidget_ = nullptr;
     QWidget* statusSurfaceWidget_ = nullptr;
+    QWidget* bottomTabsSpeedToastWindow_ = nullptr;
+    QWidget* bottomTabsSpeedToastPanel_ = nullptr;
+    QLabel* bottomTabsSpeedToastLabel_ = nullptr;
+    QTimer* bottomTabsSpeedToastTimer_ = nullptr;
+    QPropertyAnimation* bottomTabsSpeedToastOpacityAnimation_ = nullptr;
+    QRect bottomTabsToastAnchorRect_;
+    bool bottomTabsToastAnchorVisible_ = false;
     QuickShellNativeSurfaceBundle surfaceBundle_;
 };
