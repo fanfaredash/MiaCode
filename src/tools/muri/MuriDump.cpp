@@ -19,6 +19,7 @@
 #include "timeline/TimelineData.h"
 #include "common/MuriConfig.h"
 #include "common/MuriTypes.h"
+#include "common/PreviewGlobalFirstOffset.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriStaticChecker.h"
 
@@ -982,7 +983,8 @@ bool loadChartFromArgs(
         }
 
         *outChartText = difficulty->chart;
-        *outFirstSeconds = firstOverrideSet ? firstOverride : parsedFirst;
+        *outFirstSeconds = miacode::preview_global_timing::effectiveFirstSeconds(
+            firstOverrideSet ? firstOverride : parsedFirst);
         *outTimingMetadata = miacode::simai::buildTimingMetadata(document);
         *outDifficultyName = SimaiDocument::difficultyShortName(difficultyId);
         *outSourceDescription = QStringLiteral("maidata=%1 difficulty=%2")
@@ -997,7 +999,8 @@ bool loadChartFromArgs(
             return false;
         }
         *outChartText = QString::fromUtf8(file.readAll());
-        *outFirstSeconds = firstOverrideSet ? firstOverride : 0.0;
+        *outFirstSeconds = miacode::preview_global_timing::effectiveFirstSeconds(
+            firstOverrideSet ? firstOverride : 0.0);
         *outTimingMetadata = miacode::simai::SimaiTimingMetadata();
         *outDifficultyName = QStringLiteral("N/A");
         *outSourceDescription = QStringLiteral("file=%1").arg(filePath);

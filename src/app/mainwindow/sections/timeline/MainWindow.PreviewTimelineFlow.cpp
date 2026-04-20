@@ -16,6 +16,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/PreviewGlobalFirstOffset.h"
 #include "common/PreviewInteractionConfig.h"
 #include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
@@ -290,9 +291,9 @@ double MainWindow::TimelineSection::parsedFirstSeconds(bool* ok) const
         *ok = rawValue.trimmed().isEmpty() ? true : localOk;
     }
     if (rawValue.trimmed().isEmpty()) {
-        return 0.0;
+        return miacode::preview_global_timing::effectiveFirstSeconds(0.0);
     }
-    return localOk ? value : 0.0;
+    return miacode::preview_global_timing::effectiveFirstSeconds(localOk ? value : 0.0);
 }
 
 double MainWindow::TimelineSection::parsedWholeBpm(bool* ok) const
@@ -635,7 +636,9 @@ void MainWindow::TimelineSection::applyLatestTimelinePreviewStateToPausedPreview
         state_.previewSfxRuntime_->applyPausedPreviewState(
             state_.latestTimelineNoteMarkers_,
             noteMarkersChanged,
-            state_.qtPreviewPauseSecond_);
+            state_.qtPreviewPauseSecond_,
+            state_.previewPlaybackRate_,
+            state_.previewTimingSettings_);
     }
 
     refreshPreviewObjectStatsTotals(state_.latestTimelineNoteMarkers_);

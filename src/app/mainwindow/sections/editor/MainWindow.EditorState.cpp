@@ -70,6 +70,11 @@ void MainWindow::EditorSection::loadProjectRenderState()
                 } else if (root.value("preview_audio").isObject()) {
                     state_.previewAudioSettings_ = PreviewAudioSettings::fromJson(root.value("preview_audio").toObject());
                 }
+                if (root.value("timing").isObject()) {
+                    state_.previewTimingSettings_ = PreviewTimingSettings::fromJson(root.value("timing").toObject());
+                } else if (root.value("preview_timing").isObject()) {
+                    state_.previewTimingSettings_ = PreviewTimingSettings::fromJson(root.value("preview_timing").toObject());
+                }
                 const QJsonObject render = root.value("render").toObject();
                 if (!render.isEmpty()) {
                     const double legacyBrightness = qBound(
@@ -203,6 +208,7 @@ void MainWindow::EditorSection::loadProjectRenderState()
         }
     }
     state_.previewAudioSettings_.normalize();
+    state_.previewTimingSettings_.normalize();
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
     }
@@ -244,6 +250,7 @@ void MainWindow::EditorSection::saveProjectRenderState() const
 
     QJsonObject root;
     root.insert("audio", state_.previewAudioSettings_.toJson());
+    root.insert("timing", state_.previewTimingSettings_.toJson());
     QJsonObject render;
     render.remove("show_judge_markers");
     render.remove("show_touch_trail");

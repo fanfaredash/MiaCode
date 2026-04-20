@@ -341,6 +341,8 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     built.skinDirectory = owner_.resolvePreviewSkinDir();
     built.audioSettings = owner_.previewAudioSettings_;
     built.audioSettings.normalize();
+    built.timingSettings = owner_.previewTimingSettings_;
+    built.timingSettings.normalize();
     built.backgroundBrightnessOuter = requestedTask.backgroundBrightnessOuter;
     built.backgroundBrightnessInner = requestedTask.backgroundBrightnessInner;
     built.layoutSquareScale = requestedTask.layoutSquareScale;
@@ -536,6 +538,8 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
     built.skinDirectory = owner_.resolvePreviewSkinDir();
     built.audioSettings = requestedTask.audioSettings;
     built.audioSettings.normalize();
+    built.timingSettings = requestedTask.timingSettings;
+    built.timingSettings.normalize();
     built.backgroundBrightnessOuter = requestedTask.backgroundBrightnessOuter;
     built.backgroundBrightnessInner = requestedTask.backgroundBrightnessInner;
     built.layoutSquareScale = requestedTask.layoutSquareScale;
@@ -729,6 +733,7 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     task.muriRenderOptions = owner_.muriRenderOptions_;
     task.staticTapOnSlideThresholdSeconds = static_cast<double>(owner_.staticTapOnSlideThresholdMs_) / 1000.0;
     task.audioSettings = owner_.previewAudioSettings_;
+    task.timingSettings = owner_.previewTimingSettings_;
     task.backgroundBrightnessOuter = request.backgroundBrightnessOuter;
     task.backgroundBrightnessInner = request.backgroundBrightnessInner;
     task.layoutSquareScale = request.layoutSquareScale;

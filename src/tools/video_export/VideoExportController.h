@@ -6,6 +6,7 @@
 
 #include "PreviewRenderSettings.h"
 #include "PreviewAudioSettings.h"
+#include "common/PreviewTimingSettings.h"
 #include "timeline/TimelineData.h"
 #include "common/MuriConfig.h"
 #include "common/MuriRenderOptions.h"
@@ -31,6 +32,7 @@ struct VideoExportTask {
     double staticTapOnSlideThresholdSeconds =
         static_cast<double>(miacode::muri::kStaticTapOnSlideThresholdDefaultMs) / 1000.0;
     PreviewAudioSettings audioSettings;
+    PreviewTimingSettings timingSettings;
     double backgroundBrightnessOuter = miacode::preview_video::kBackgroundBrightnessDefault;
     double backgroundBrightnessInner = miacode::preview_video::kBackgroundBrightnessInnerDefault;
     double layoutSquareScale = miacode::preview_video::kLayoutSquareScaleDefault;

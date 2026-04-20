@@ -59,7 +59,7 @@ void appendPreviewPlaybackLog(const QString& action, const QString& payload = QS
         text += QStringLiteral(" ") + payload.trimmed();
     }
     miacode::debug_log::appendLine(
-        miacode::debug_log::Channel::Runtime,
+        miacode::debug_log::Channel::Audio,
         QStringLiteral("preview/playback"),
         text
     );
@@ -468,6 +468,17 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
     owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->setBackgroundTrackPlaybackRate(state_.previewPlaybackRate_);
+        if (!state_.qtPreviewPlaying_
+            && !state_.previewStartupSyncPending_
+            && !state_.previewLateVideoStartPending_
+            && !state_.latestTimelineNoteMarkers_.isEmpty()) {
+            state_.previewSfxRuntime_->applyPausedPreviewState(
+                state_.latestTimelineNoteMarkers_,
+                false,
+                state_.qtPreviewPauseSecond_,
+                state_.previewPlaybackRate_,
+                state_.previewTimingSettings_);
+        }
     }
     if (state_.qtPreviewPlaying_ || state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
         stopQtPreviewPlayback(true);
@@ -728,15 +739,14 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
 
     applyPlaybackClockState(effectiveStartSecond);
     state_.pausedPreviewMediaSeekPending_ = false;
+    state_.qtPreviewPendingTimelineSecond_ = effectiveStartSecond;
+    state_.qtPreviewPendingTimelineCenterView_ = true;
+    state_.qtPreviewTimelineDirty_ = true;
+    state_.qtPreviewLastTimelineSecond_ = -1.0;
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setPlaybackEntrySeconds(state_.qtPreviewPlaybackReturnSecond_);
         state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(state_.qtPreviewPlaybackEndSecond_);
-        if (qFuzzyCompare(state_.timelineQuickStateBridge_->playheadSeconds() + 1.0, effectiveStartSecond + 1.0)) {
-            state_.timelineQuickStateBridge_->focusPlayhead(true);
-        } else {
-            state_.timelineQuickStateBridge_->setPlayheadSeconds(effectiveStartSecond, true);
-            state_.timelineQuickStateBridge_->focusPlayhead(false);
-        }
+        state_.timelineQuickStateBridge_->setPlayheadSeconds(effectiveStartSecond, false);
     }
     if (state_.previewCanvas_ != nullptr) {
         if (!resumeFromPause) {

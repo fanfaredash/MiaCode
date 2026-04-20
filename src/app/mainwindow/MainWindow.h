@@ -17,6 +17,7 @@
 
 #include "app/quick_shell/QuickShellContracts.h"
 #include "PreviewAudioSettings.h"
+#include "common/PreviewTimingSettings.h"
 #include "PreviewRenderSettings.h"
 #include "SimaiDocument.h"
 #include "SimaiTimingMetadata.h"

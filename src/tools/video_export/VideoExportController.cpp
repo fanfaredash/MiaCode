@@ -2334,6 +2334,7 @@ bool mixSfxTrackToWav(
     const QString& outputPath,
     const QVector<TimelineNoteMarker>& noteMarkers,
     const PreviewAudioSettings& settings,
+    const PreviewTimingSettings& timingSettings,
     double totalSeconds,
     double timelineOriginSecond
 )
@@ -2370,7 +2371,7 @@ bool mixSfxTrackToWav(
 
     QVector<ExportEvent> events;
     QVector<ExportTouchholdSpan> spans;
-    miacode::preview_sfx_timeline::buildTimeline(noteMarkers, &events, &spans);
+    miacode::preview_sfx_timeline::buildTimeline(noteMarkers, 1.0, timingSettings, &events, &spans);
 
     const auto kindVolume = [&settings](const QString& kind) -> double {
         return previewSfxVolumeForKind(settings, kind);
@@ -3425,6 +3426,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
             sfxWavPath,
             exportMarkers,
             task.audioSettings,
+            task.timingSettings,
             alignedTotalSeconds,
             timelineOriginSecond)) {
         result.message = QStringLiteral("Unable to generate SFX mix track.");

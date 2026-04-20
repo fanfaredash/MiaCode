@@ -20,6 +20,7 @@ struct VideoExportSnapshot {
     QString backgroundMediaPath;
     QString skinDirectory;
     PreviewAudioSettings audioSettings;
+    PreviewTimingSettings timingSettings;
     double backgroundBrightnessOuter = miacode::preview_video::kBackgroundBrightnessDefault;
     double backgroundBrightnessInner = miacode::preview_video::kBackgroundBrightnessInnerDefault;
     double layoutSquareScale = miacode::preview_video::kLayoutSquareScaleDefault;
