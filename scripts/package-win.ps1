@@ -343,6 +343,22 @@ foreach ($runtimeDll in @("dxcompiler.dll", "dxil.dll")) {
     }
 }
 
+$bassRuntimeDir = Join-Path $repoRoot "third_party\\bass\\bin\\win64"
+$requiredBassRuntimeDlls = @(
+    "bass.dll",
+    "bassmix.dll",
+    "bass_fx.dll",
+    "bass_aac.dll",
+    "bassopus.dll"
+)
+foreach ($runtimeDll in $requiredBassRuntimeDlls) {
+    $srcDll = Join-Path $bassRuntimeDir $runtimeDll
+    if (!(Test-Path $srcDll)) {
+        throw "Missing required BASS runtime DLL: $srcDll"
+    }
+    Copy-Item $srcDll (Join-Path $DistDir $runtimeDll) -Force
+}
+
 if ($IncludeDevTools) {
     foreach ($toolName in @("simai_native_dump.exe", "soundtouch_probe.exe")) {
         $toolPath = Join-Path $buildOutputDir $toolName
@@ -426,6 +442,7 @@ $releaseLines = @(
     "  - Start_MiaCode_Debug.bat"
     "  - Start_MiaCode_QuickShell_Debug.bat"
     "  - Qt runtime DLLs, plugin folders, and QML modules"
+    "  - BASS runtime DLLs (bass, bassmix, bass_fx, bass_aac, bassopus)"
     "  - ffmpeg/ffmpeg.exe"
     "  - assets/"
     "  - docs/"
@@ -467,6 +484,11 @@ $requiredPackagePaths = @(
     "D3Dcompiler_47.dll",
     "dxcompiler.dll",
     "dxil.dll",
+    "bass.dll",
+    "bassmix.dll",
+    "bass_fx.dll",
+    "bass_aac.dll",
+    "bassopus.dll",
     "platforms\\qwindows.dll",
     "qml\\QtQuick\\qtquick2plugin.dll",
     "qml\\QtQml\\Models\\modelsplugin.dll",
