@@ -301,9 +301,9 @@ bool verifyRateAwareAnswerAndJudgeTiming(QTextStream& err)
         double rate;
         double expectedRealMs;
     } cases[] = {
-        {0.5, 16.6666667},
+        {0.5, 33.3333334},
         {1.0, 16.6666667},
-        {2.0, 16.6666667},
+        {2.0, 8.33333335},
     };
 
     for (const auto& testCase : cases) {
@@ -331,12 +331,12 @@ bool verifyRateAwareAnswerAndJudgeTiming(QTextStream& err)
         const double answerEarlyMs = realDeltaMs(tap.second - answerSecond, testCase.rate);
         const double judgeEarlyMs = realDeltaMs(tap.second - judgeSecond, testCase.rate);
         if (!require(qAbs(answerEarlyMs - testCase.expectedRealMs) <= 0.01,
-                     QStringLiteral("answer real-time compensation should stay fixed across playback rates"),
+                     QStringLiteral("answer chart-domain pre-trigger should scale in real time with playback rate like Majdata View"),
                      err)) {
             return false;
         }
         if (!require(qAbs(judgeEarlyMs - testCase.expectedRealMs) <= 0.01,
-                     QStringLiteral("judge real-time compensation should stay fixed across playback rates"),
+                     QStringLiteral("judge chart-domain pre-trigger should scale in real time with playback rate like Majdata View"),
                      err)) {
             return false;
         }
@@ -405,14 +405,57 @@ bool verifyOffsetLayerSemantics(QTextStream& err)
 
     const double answerRealOffsetMs = realDeltaMs(answerSecond - tap.second, 0.5);
     const double judgeRealOffsetMs = realDeltaMs(judgeSecond - tap.second, 0.5);
-    if (!require(qAbs(answerRealOffsetMs - 283.3333333) <= 0.02,
-                 QStringLiteral("answer should apply chart/audio offset plus fixed-real answer offset"),
+    if (!require(qAbs(answerRealOffsetMs - 166.6666667) <= 0.02,
+                 QStringLiteral("answer should apply audio and answer offsets while positive display offset advances the answer family"),
                  err)) {
         return false;
     }
-    if (!require(qAbs(judgeRealOffsetMs - 283.3333333) <= 0.02,
-                 QStringLiteral("judge should apply chart/audio offset plus fixed-real judge offset without display offset drift"),
+    if (!require(qAbs(judgeRealOffsetMs - 166.6666667) <= 0.02,
+                 QStringLiteral("judge should apply audio and judge offsets while positive display offset advances the judge family"),
                  err)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool verifyDisplayOffsetDoesNotRetargetSlideFamily(QTextStream& err)
+{
+    TimelineNoteMarker slide;
+    slide.type = QStringLiteral("slide");
+    slide.second = 1.0;
+    slide.slideTraceSecond = 1.5;
+    slide.endSecond = 2.0;
+
+    PreviewTimingSettings settings;
+    settings.audioOffsetSeconds = 0.1;
+    settings.displayOffsetSeconds = 0.1;
+
+    QVector<Event> events;
+    QVector<TouchholdSpan> spans;
+    miacode::preview_sfx_timeline::buildTimeline({slide}, 1.0, settings, &events, &spans);
+
+    int shiftedTrackCount = 0;
+    int displayShiftedTrackCount = 0;
+    for (const Event& event : events) {
+        if (event.kind == QLatin1String("slide") && qAbs(event.second - 1.6) <= 1e-6) {
+            ++shiftedTrackCount;
+        }
+        if (event.kind == QLatin1String("slide") && qAbs(event.second - 1.5) <= 1e-6) {
+            ++displayShiftedTrackCount;
+        }
+    }
+
+    if (!require(
+            shiftedTrackCount == 1,
+            QStringLiteral("slide-family timing should keep only the global chart-domain shift and ignore display offset"),
+            err)) {
+        return false;
+    }
+    if (!require(
+            displayShiftedTrackCount == 0,
+            QStringLiteral("slide-family timing should not inherit Majdata View display/judge layering"),
+            err)) {
         return false;
     }
 
@@ -449,6 +492,9 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyOffsetLayerSemantics(err)) {
+        return 1;
+    }
+    if (!verifyDisplayOffsetDoesNotRetargetSlideFamily(err)) {
         return 1;
     }
 

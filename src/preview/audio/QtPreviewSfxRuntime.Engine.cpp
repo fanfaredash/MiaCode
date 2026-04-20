@@ -144,10 +144,10 @@ void QtPreviewSfxRuntime::applyVolumes()
     applyVolume(touchSfx_, previewSfxVolumeForKind(settings_, "touch"));
     applyVolume(fireworkSfx_, previewSfxVolumeForKind(settings_, "firework"));
     if (backgroundTrackVoice_ != nullptr && backgroundTrackVoice_->initialized) {
-        ma_sound_set_volume(&backgroundTrackVoice_->sound, static_cast<float>(previewBgmVolume(settings_)));
+        ma_sound_set_volume(&backgroundTrackVoice_->sound, static_cast<float>(previewTrackVolume(settings_)));
     }
     if (stretchedBackgroundState_ != nullptr && stretchedBackgroundState_->soundInitialized) {
-        ma_sound_set_volume(&stretchedBackgroundState_->sound, static_cast<float>(previewBgmVolume(settings_)));
+        ma_sound_set_volume(&stretchedBackgroundState_->sound, static_cast<float>(previewTrackVolume(settings_)));
     }
     if (touchholdVoice_ != nullptr && touchholdVoice_->initialized) {
         ma_sound_set_volume(&touchholdVoice_->sound, static_cast<float>(previewSfxVolumeForKind(settings_, "touchhold")));
@@ -247,7 +247,7 @@ bool QtPreviewSfxRuntime::prepareStretchedBackgroundTrack(double timelineSecond)
         return false;
     }
     state->soundInitialized = true;
-    ma_sound_set_volume(&state->sound, static_cast<float>(previewBgmVolume(settings_)));
+            ma_sound_set_volume(&state->sound, static_cast<float>(previewTrackVolume(settings_)));
     stretchedBackgroundState_ = state;
     appendAudioDebugLog(QString("prepareStretchedBackgroundTrack ready track=%1 rate=%2 channels=%3 sampleRate=%4")
                             .arg(state->trackPath)

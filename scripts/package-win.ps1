@@ -373,12 +373,17 @@ if (Test-Path $assetsSrc) {
     $requiredSfxDir = Join-Path $assetsSrc "SFX"
     $requiredSfxFiles = @(
         "answer.wav",
+        "break_tap.wav",
         "slide.wav",
         "break.wav",
-        "firework.wav",
-        "judge_ex.wav",
+        "break_slide.wav",
+        "slide_break_start.wav",
+        "slide_break_slide.wav",
+        "tap_ex.wav",
+        "tap_perfect.wav",
+        "touch_hanabi.wav",
         "touch.wav",
-        "touchHold_riser.wav"
+        "touch_Hold_riser.wav"
     )
     foreach ($sfxFile in $requiredSfxFiles) {
         $sfxPath = Join-Path $requiredSfxDir $sfxFile

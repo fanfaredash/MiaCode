@@ -142,6 +142,11 @@ miacode::simai::SimaiTimingMetadata MainWindow::currentTimingMetadata() const
     return timelineSection_->currentTimingMetadata();
 }
 
+double MainWindow::parsedRawFirstSeconds(bool* ok) const
+{
+    return timelineSection_->parsedRawFirstSeconds(ok);
+}
+
 double MainWindow::parsedFirstSeconds(bool* ok) const
 {
     return timelineSection_->parsedFirstSeconds(ok);

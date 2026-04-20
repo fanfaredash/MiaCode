@@ -160,15 +160,20 @@ fi
 
 if [[ -d "$ROOT_DIR/assets" ]]; then
   required_sfx_dir="$ROOT_DIR/assets/SFX"
-  required_sfx_files=(
-    "answer.wav"
-    "slide.wav"
-    "break.wav"
-    "firework.wav"
-    "judge_ex.wav"
-    "touch.wav"
-    "touchHold_riser.wav"
-  )
+required_sfx_files=(
+  "answer.wav"
+  "break_tap.wav"
+  "slide.wav"
+  "break.wav"
+  "break_slide.wav"
+  "slide_break_start.wav"
+  "slide_break_slide.wav"
+  "tap_ex.wav"
+  "tap_perfect.wav"
+  "touch_hanabi.wav"
+  "touch.wav"
+  "touch_Hold_riser.wav"
+)
   for sfx_file in "${required_sfx_files[@]}"; do
     if [[ ! -f "$required_sfx_dir/$sfx_file" ]]; then
       echo "Missing required SFX asset: $required_sfx_dir/$sfx_file" >&2

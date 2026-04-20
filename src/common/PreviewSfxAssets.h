@@ -19,10 +19,10 @@ inline QStringList assetFileNamesForKind(const QString& kind)
         return {QStringLiteral("answer.wav")};
     }
     if (lowered == QStringLiteral("judge")) {
-        return {QStringLiteral("judge.wav")};
+        return {QStringLiteral("tap_perfect.wav"), QStringLiteral("judge.wav")};
     }
     if (lowered == QStringLiteral("judge_break") || lowered == QStringLiteral("break_touch")) {
-        return {QStringLiteral("judge_break.wav")};
+        return {QStringLiteral("break_tap.wav"), QStringLiteral("judge_break.wav")};
     }
     if (lowered == QStringLiteral("slide")) {
         return {QStringLiteral("slide.wav")};
@@ -31,26 +31,25 @@ inline QStringList assetFileNamesForKind(const QString& kind)
         return {QStringLiteral("break.wav")};
     }
     if (lowered == QStringLiteral("break_slide_start")) {
-        return {QStringLiteral("break_slide_start.wav")};
+        return {QStringLiteral("slide_break_start.wav"), QStringLiteral("break_slide_start.wav")};
     }
     if (lowered == QStringLiteral("break_slide")) {
-        return {QStringLiteral("break_slide.wav")};
+        return {QStringLiteral("slide_break_slide.wav"), QStringLiteral("break_slide.wav")};
     }
     if (lowered == QStringLiteral("judge_break_slide")) {
-        return {QStringLiteral("judge_break_slide.wav")};
+        return {QStringLiteral("slide_break_slide.wav"), QStringLiteral("judge_break_slide.wav")};
     }
     if (lowered == QStringLiteral("ex")) {
-        return {QStringLiteral("judge_ex.wav")};
+        return {QStringLiteral("tap_ex.wav"), QStringLiteral("judge_ex.wav")};
     }
     if (lowered == QStringLiteral("touch")) {
         return {QStringLiteral("touch.wav")};
     }
     if (lowered == QStringLiteral("touchhold")) {
-        return {QStringLiteral("touchHold_riser.wav")};
+        return {QStringLiteral("touch_Hold_riser.wav"), QStringLiteral("touchHold_riser.wav")};
     }
     if (lowered == QStringLiteral("firework")) {
-        // Keep the legacy Hanabi filename only as an on-disk compatibility alias.
-        return {QStringLiteral("firework.wav"), QStringLiteral("hanabi.wav")};
+        return {QStringLiteral("touch_hanabi.wav"), QStringLiteral("firework.wav"), QStringLiteral("hanabi.wav")};
     }
     return {};
 }

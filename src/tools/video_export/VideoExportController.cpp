@@ -3632,7 +3632,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
                                .arg(timelineOriginText)
                                .arg(QString::number(timelineOriginSecond + alignedTotalSeconds, 'f', 6))
                                .arg(kMixSampleRate)
-                               .arg(QString::number(task.audioSettings.bgmVolume, 'f', 6));
+                               .arg(QString::number(task.audioSettings.trackVolume, 'f', 6));
         } else if (timelineOriginSecond < -kTimelineEpsilonSeconds) {
             const int delayMs = qMax(0, qRound(-timelineOriginSecond * 1000.0));
             filterParts << QStringLiteral("[%1:a]atrim=start=0:end=%2,asetpts=PTS-STARTPTS,adelay=%3|%3,aresample=%4,aformat=channel_layouts=stereo,volume=%5[bgm]")
@@ -3640,13 +3640,13 @@ VideoExportResult VideoExportController::exportPreparedTask(
                                .arg(QString::number(alignedTotalSeconds + timelineOriginSecond, 'f', 6))
                                .arg(delayMs)
                                .arg(kMixSampleRate)
-                               .arg(QString::number(task.audioSettings.bgmVolume, 'f', 6));
+                               .arg(QString::number(task.audioSettings.trackVolume, 'f', 6));
         } else {
             filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3,aformat=channel_layouts=stereo,volume=%4[bgm]")
                                .arg(bgmInputIndex)
                                .arg(totalSecondsText)
                                .arg(kMixSampleRate)
-                               .arg(QString::number(task.audioSettings.bgmVolume, 'f', 6));
+                               .arg(QString::number(task.audioSettings.trackVolume, 'f', 6));
         }
         filterParts << QStringLiteral("[bgm][sfx]amix=inputs=2:normalize=0[aout]");
     } else {
