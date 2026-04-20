@@ -39,11 +39,12 @@ std::unique_ptr<miacode::preview_audio::PreviewAudioBackend> QtPreviewSfxRuntime
 #ifdef Q_OS_WIN
     auto bassBackend = std::make_unique<BassPreviewAudioBackend>();
     QString bassReason;
-    if (bassBackend->canBePrimary(&bassReason)) {
-        appendAudioDebugLog(QString("preview_audio_backend selected=bass"));
-        return bassBackend;
-    }
-    appendAudioDebugLog(QString("preview_audio_backend fallback=miniaudio skipped=bass reason=%1").arg(bassReason));
+    const bool bassReady = bassBackend->canBePrimary(&bassReason);
+    appendAudioDebugLog(
+        QString("preview_audio_backend selected=bass ready=%1 reason=%2")
+            .arg(bassReady ? 1 : 0)
+            .arg(bassReason));
+    return bassBackend;
 #endif
     return std::make_unique<MiniaudioPreviewAudioBackend>();
 }
@@ -139,6 +140,46 @@ double QtPreviewSfxRuntime::startPreviewPlaybackTransaction(double startSecond, 
 QtPreviewSfxRuntime::PausePreviewResult QtPreviewSfxRuntime::capturePausedPreviewTransaction()
 {
     return backend_->capturePausedPreviewTransaction();
+}
+
+QtPreviewSfxRuntime::PausePreviewResult QtPreviewSfxRuntime::pausePreviewPlaybackTransaction()
+{
+    return backend_->pausePreviewPlaybackTransaction();
+}
+
+double QtPreviewSfxRuntime::resumeRetainedPreviewPlaybackTransaction()
+{
+    return backend_->resumeRetainedPreviewPlaybackTransaction();
+}
+
+double QtPreviewSfxRuntime::seekRetainedPreviewPlaybackTransaction(double targetSecond, bool continuePlaying)
+{
+    return backend_->seekRetainedPreviewPlaybackTransaction(targetSecond, continuePlaying);
+}
+
+void QtPreviewSfxRuntime::resetRetainedPreviewPlaybackTransaction(double targetSecond)
+{
+    backend_->resetRetainedPreviewPlaybackTransaction(targetSecond);
+}
+
+void QtPreviewSfxRuntime::clearRetainedPreviewPlaybackTransaction()
+{
+    backend_->clearRetainedPreviewPlaybackTransaction();
+}
+
+QtPreviewSfxRuntime::RetainedPlaybackMode QtPreviewSfxRuntime::retainedPlaybackMode() const
+{
+    return backend_->retainedPlaybackMode();
+}
+
+QtPreviewSfxRuntime::RetainedBgmState QtPreviewSfxRuntime::retainedBgmState() const
+{
+    return backend_->retainedBgmState();
+}
+
+double QtPreviewSfxRuntime::authoritativePlaybackSecond() const
+{
+    return backend_->authoritativePlaybackSecond();
 }
 
 double QtPreviewSfxRuntime::syncPreviewPlaybackClockTransaction(double fallbackSecond)

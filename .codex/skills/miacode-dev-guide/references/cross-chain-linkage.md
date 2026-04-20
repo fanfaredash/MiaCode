@@ -98,8 +98,8 @@ Canonical sync pair:
 Current runtime ownership note:
 
 - `QtPreviewSfxRuntime` is now the stable facade owned by `MainWindow`, while concrete runtime behavior lives behind `src/preview/audio/PreviewAudioBackend.h`.
-- `MiniaudioPreviewAudioBackend` currently remains the active compatibility implementation and still owns the existing `QtPreviewSfxRuntime.*.cpp` split internals.
-- `BassPreviewAudioBackend` now owns the Windows preview-time BASS transport path: repo-local runtime DLL loading, the master mixer authority clock, preloaded note-SFX channels, and backend-side event draining. It also keeps a lightweight rolling scheduler by arming only the next mixer sync position at a time instead of relying on UI tick direct one-shots.
+- `MiniaudioPreviewAudioBackend` now remains the non-Windows compatibility implementation and still owns the existing `QtPreviewSfxRuntime.*.cpp` split internals.
+- `BassPreviewAudioBackend` now owns the Windows preview-time BASS transport path with no Windows-side miniaudio fallback: repo-local runtime DLL loading, the master mixer authority clock, preloaded note-SFX channels, background-track tempo control through `bass_fx`, and backend-side event draining. It also keeps a lightweight rolling scheduler by arming only the next mixer sync position at a time instead of relying on UI tick direct one-shots.
 
 Shared concerns:
 
@@ -139,9 +139,9 @@ Timing contract:
 
 - Preview UI follow, export-dialog current second, and weak video late-start alignment must read `MainWindow::currentPreviewAuthoritativeAudioClockSecond` instead of branching between audio and `PreviewStageMediaHost::currentPlaybackSecond()`
 - `PreviewStageMediaHost::currentPlaybackSecond()` and `clockDeltaSeconds()` remain video-local observability only; they are not shared SFX/BGM/UI authority clocks
-- Realtime preview BGM now uses the stretched `SoundTouch` data-source path for every playback rate, including `1.0x`; do not reintroduce a separate normal-decoder runtime BGM path without reviewing preview clock ownership.
-- The stretched runtime clock is not the data-source cursor. Runtime authoritative preview audio time now anchors to `ma_engine_get_time_in_pcm_frames()` plus the chart-second start point recorded when background playback starts; `getCursorCallback()` may still expose a raw delivery cursor for diagnostics, but it is not the authority clock.
-- Before the stretched source has emitted its first output frames after seek/start, realtime preview should keep using the fallback elapsed clock so SFX do not lock to a pre-output stretched cursor.
+- Realtime preview BGM rate control is backend-owned: Windows uses the BASS/BASS_FX tempo path for every playback rate, while the non-Windows compatibility backend still uses the stretched `SoundTouch` data-source path for every playback rate, including `1.0x`; do not reintroduce a separate normal-decoder runtime BGM path without reviewing preview clock ownership.
+- The non-Windows stretched runtime clock is not the data-source cursor. Runtime authoritative preview audio time there now anchors to `ma_engine_get_time_in_pcm_frames()` plus the chart-second start point recorded when background playback starts; `getCursorCallback()` may still expose a raw delivery cursor for diagnostics, but it is not the authority clock.
+- Before the non-Windows stretched source has emitted its first output frames after seek/start, realtime preview should keep using the fallback elapsed clock so SFX do not lock to a pre-output stretched cursor.
 
 Current filename convention:
 

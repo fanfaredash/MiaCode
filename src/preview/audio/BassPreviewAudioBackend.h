@@ -13,6 +13,8 @@ class BassPreviewAudioBackend final : public QObject, public miacode::preview_au
 {
 public:
     using PausePreviewResult = miacode::preview_audio::PausePreviewResult;
+    using RetainedPlaybackMode = miacode::preview_audio::RetainedPlaybackMode;
+    using RetainedBgmState = miacode::preview_audio::RetainedBgmState;
     using Event = miacode::preview_sfx_timeline::Event;
     using TouchholdSpan = miacode::preview_sfx_timeline::TouchholdSpan;
     using CollapsedEventGroup = miacode::preview_sfx_timeline::CollapsedEventGroup;
@@ -48,6 +50,14 @@ public:
         const PreviewTimingSettings& timingSettings) override;
     double startPreviewPlaybackTransaction(double startSecond, bool resumeFromPause, double playbackRate) override;
     PausePreviewResult capturePausedPreviewTransaction() override;
+    PausePreviewResult pausePreviewPlaybackTransaction() override;
+    double resumeRetainedPreviewPlaybackTransaction() override;
+    double seekRetainedPreviewPlaybackTransaction(double targetSecond, bool continuePlaying) override;
+    void resetRetainedPreviewPlaybackTransaction(double targetSecond) override;
+    void clearRetainedPreviewPlaybackTransaction() override;
+    RetainedPlaybackMode retainedPlaybackMode() const override;
+    RetainedBgmState retainedBgmState() const override;
+    double authoritativePlaybackSecond() const override;
     double syncPreviewPlaybackClockTransaction(double fallbackSecond) override;
     void resetCursor(double second, bool includeCurrentSecond) override;
     void drainEvents(double second) override;
@@ -107,6 +117,38 @@ private:
         int triggeredGroupCount = 0;
     };
 
+    struct ActiveSampleSnapshot {
+        bool active = false;
+        double second = 0.0;
+    };
+
+    struct ExactPauseSnapshot {
+        double authoritySecondAtPause = 0.0;
+        double sessionStartSecond = 0.0;
+        double sessionPlaybackRate = 1.0;
+        quint64 masterMixerBytePosition = 0;
+        int eventGroupIndex = 0;
+        int lastTriggeredGroupIndex = -1;
+        int scheduledGroupIndex = -1;
+        double bgmChartSecond = 0.0;
+        double bgmRawSecond = 0.0;
+        bool touchholdActive = false;
+        double touchholdCurrentOffsetSecond = 0.0;
+        ActiveSampleSnapshot answer;
+        ActiveSampleSnapshot judge;
+        ActiveSampleSnapshot judgeBreak;
+        ActiveSampleSnapshot slide;
+        ActiveSampleSnapshot breakSample;
+        ActiveSampleSnapshot breakSlideStart;
+        ActiveSampleSnapshot breakSlideFinish;
+        ActiveSampleSnapshot judgeBreakSlide;
+        ActiveSampleSnapshot ex;
+        ActiveSampleSnapshot touch;
+        ActiveSampleSnapshot firework;
+        ActiveSampleSnapshot touchhold;
+        ActiveSampleSnapshot backgroundTrack;
+    };
+
     QString resolveTrackPath(const QString& chartPath) const;
     QString resolveSfxDir() const;
     bool runtimeLibrariesPresent() const;
@@ -127,6 +169,14 @@ private:
     void applySampleLevels();
     Sample* sampleForKind(const QString& kind) const;
     void setBackgroundTrackSampleSpeed(double rate);
+    void invalidateRetainedPlaybackState();
+    void updateRetainedBgmState();
+    void logTrackFileMissingAfterLoadIfNeeded();
+    void captureExactPauseSnapshot();
+    void clearExactPauseSnapshot();
+    void suspendPlaybackTransport();
+    void anchorTransportToSecond(double targetSecond);
+    void startTransportFromCurrentAnchor(bool resumeFromPause);
     void resetMasterMixerClock(double startSecond);
     void stopAllSamples();
     void stopPlaybackSession();
@@ -163,6 +213,11 @@ private:
     bool registeredBassDeviceRef_ = false;
     void* bassFxModule_ = nullptr;
     void* bassFxTempoCreate_ = nullptr;
+    RetainedPlaybackMode retainedPlaybackMode_ = RetainedPlaybackMode::None;
+    RetainedBgmState retainedBgmState_ = RetainedBgmState::NoneLoaded;
+    ExactPauseSnapshot exactPauseSnapshot_;
+    bool exactPauseSnapshotValid_ = false;
+    bool trackMissingAfterLoadLogged_ = false;
     QMutex schedulerMutex_;
     quint32 scheduledGroupSync_ = 0;
     int scheduledGroupIndex_ = -1;

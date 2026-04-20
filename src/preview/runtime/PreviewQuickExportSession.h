@@ -34,6 +34,14 @@ public:
     ~PreviewQuickExportSession() override;
 
     void setFrameState(const miacode::preview::scene::PreviewFrameState& state);
+    void applyExportFrameTick(
+        double playheadSeconds,
+        bool showTimestamp,
+        bool showObjectStatsHud,
+        bool usedGpuRendererThisFrame,
+        int cpuFallbackCount,
+        double fpsDisplay
+    );
     const miacode::preview::scene::PreviewFrameState& frameState() const { return frameState_; }
     void setLayerFlags(miacode::preview::scene::PreviewRenderLayerFlags layerFlags);
     miacode::preview::scene::PreviewRenderLayerFlags layerFlags() const { return layerFlags_; }
@@ -81,6 +89,9 @@ private:
     void clearOffscreenPboCapabilityCache();
     void applyFrameSize();
     void applyFrameState();
+    void bindFrameStateIfNeeded();
+    void applyLayerFlagsIfNeeded();
+    void requestFrameRefresh();
     QSize framebufferPixelSize() const;
 
     miacode::preview::scene::PreviewFrameState frameState_;
@@ -107,5 +118,9 @@ private:
     mutable bool offscreenPboCapabilityProbed_ = false;
     mutable bool offscreenPboCapabilitySupported_ = false;
     mutable QString offscreenPboCapabilityError_;
+    bool frameStateBound_ = false;
+    bool layerFlagsApplied_ = false;
+    miacode::preview::scene::PreviewRenderLayerFlags appliedLayerFlags_ =
+        miacode::preview::scene::kPreviewAllRenderLayers;
     PreviewQuickExportRenderStats lastRenderStats_;
 };

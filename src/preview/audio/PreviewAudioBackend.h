@@ -9,9 +9,24 @@
 
 namespace miacode::preview_audio {
 
+enum class RetainedPlaybackMode {
+    None,
+    PausedExact,
+    PausedAnchored,
+    Invalidated,
+};
+
+enum class RetainedBgmState {
+    NoneLoaded,
+    LoadedUsable,
+    MissingOnDiskIgnored,
+};
+
 struct PausePreviewResult {
     bool usedBackgroundTrack = false;
     double pauseSecond = 0.0;
+    RetainedPlaybackMode retainedMode = RetainedPlaybackMode::None;
+    RetainedBgmState retainedBgmState = RetainedBgmState::NoneLoaded;
 };
 
 class PreviewAudioBackend
@@ -47,6 +62,14 @@ public:
         const PreviewTimingSettings& timingSettings) = 0;
     virtual double startPreviewPlaybackTransaction(double startSecond, bool resumeFromPause, double playbackRate) = 0;
     virtual PausePreviewResult capturePausedPreviewTransaction() = 0;
+    virtual PausePreviewResult pausePreviewPlaybackTransaction() = 0;
+    virtual double resumeRetainedPreviewPlaybackTransaction() = 0;
+    virtual double seekRetainedPreviewPlaybackTransaction(double targetSecond, bool continuePlaying) = 0;
+    virtual void resetRetainedPreviewPlaybackTransaction(double targetSecond) = 0;
+    virtual void clearRetainedPreviewPlaybackTransaction() = 0;
+    virtual RetainedPlaybackMode retainedPlaybackMode() const = 0;
+    virtual RetainedBgmState retainedBgmState() const = 0;
+    virtual double authoritativePlaybackSecond() const = 0;
     virtual double syncPreviewPlaybackClockTransaction(double fallbackSecond) = 0;
     virtual void resetCursor(double second, bool includeCurrentSecond) = 0;
     virtual void drainEvents(double second) = 0;

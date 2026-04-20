@@ -21,6 +21,9 @@ void QtPreviewSfxRuntime::reloadAssets(const PreviewAudioSettings& settings)
 {
     settings_ = settings;
     settings_.normalize();
+    retainedPlayback_.mode = RetainedPlaybackMode::None;
+    retainedPlayback_.bgmState = RetainedBgmState::NoneLoaded;
+    retainedPlayback_.second = 0.0;
     resetBanks();
     preparedAssets_.sfxDir = resolveSfxDir();
     if (!initializeAudioEngine()) {
@@ -28,6 +31,7 @@ void QtPreviewSfxRuntime::reloadAssets(const PreviewAudioSettings& settings)
     }
     initializeAssets();
     prepareStretchedBackgroundTrack(playbackSession_.backgroundTrackLastTimelineSecond);
+    retainedPlayback_.bgmState = hasBackgroundTrack() ? RetainedBgmState::LoadedUsable : RetainedBgmState::NoneLoaded;
 }
 
 bool QtPreviewSfxRuntime::audioEngineInitialized() const
@@ -55,6 +59,8 @@ void QtPreviewSfxRuntime::setChartPath(const QString& chartPath)
                             .arg(preparedAssets_.chartPath, preparedAssets_.trackPath));
     resetBackgroundTrack();
     prepareStretchedBackgroundTrack(playbackSession_.backgroundTrackLastTimelineSecond);
+    retainedPlayback_.mode = RetainedPlaybackMode::Invalidated;
+    retainedPlayback_.bgmState = hasBackgroundTrack() ? RetainedBgmState::LoadedUsable : RetainedBgmState::NoneLoaded;
 }
 
 void QtPreviewSfxRuntime::setBackgroundTrackOffsetSeconds(double seconds)
