@@ -125,14 +125,14 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 ## 7. Preview Audio And SFX Scheduling
 
 - Preview SFX runtime:
-  - Files: `src/common/PreviewSfxSemantics.h`, `src/common/PreviewSfxTimeline.h`, `src/preview/audio/QtPreviewSfxRuntime.h`, `src/preview/audio/QtPreviewSfxRuntime.cpp`
+  - Files: `src/common/PreviewSfxSemantics.h`, `src/common/PreviewSfxTimeline.h`, `src/preview/audio/PreviewAudioBackend.h`, `src/preview/audio/QtPreviewSfxRuntime.h`, `src/preview/audio/QtPreviewSfxRuntime.cpp`, `src/preview/audio/MiniaudioPreviewAudioBackend.h`, `src/preview/audio/MiniaudioPreviewAudioBackend.cpp`, `src/preview/audio/BassPreviewAudioBackend.h`, `src/preview/audio/BassPreviewAudioBackend.cpp`
   - Class: `QtPreviewSfxRuntime`
-  - Owns: shared SFX kind semantics plus runtime/export playback collapsing rules, miniaudio engine state, prepared asset paths, prepared timeline program, playback session state, clip banks, shared touchhold sustain control, background track playback
+  - Owns: the preview-audio facade seen by `MainWindow`, backend selection, and the stable prepare / commit / pause / resume / seek surface; `MiniaudioPreviewAudioBackend` remains the compatibility path, while `BassPreviewAudioBackend` now owns the Windows-first real BASS runtime path with repo-local `bass*.dll`, master mixer clock authority, preloaded sample channels inspired by MajdataPlay's `BassAudioSample`, and backend-side note-SFX draining
 - Split responsibilities:
-  - `QtPreviewSfxRuntime.Assets.cpp`: chart track resolution, SFX dir resolution, bank resets
-  - `QtPreviewSfxRuntime.Timeline.cpp`: event generation from `TimelineNoteMarker`
-  - `QtPreviewSfxRuntime.Background.cpp`: BGM start/seek/sync/audition
-  - `QtPreviewSfxRuntime.Engine.cpp`, `QtPreviewSfxRuntime.Voices.cpp`: engine and voice internals
+  - `QtPreviewSfxRuntime.Assets.cpp`: miniaudio backend chart track resolution, SFX dir resolution, bank resets
+  - `QtPreviewSfxRuntime.Timeline.cpp`: miniaudio backend event generation from `TimelineNoteMarker`
+  - `QtPreviewSfxRuntime.Background.cpp`: miniaudio backend BGM start/seek/sync/audition
+  - `QtPreviewSfxRuntime.Engine.cpp`, `QtPreviewSfxRuntime.Voices.cpp`: miniaudio backend engine and voice internals
 - Main window hooks:
   - File: `src/app/mainwindow/MainWindow.cpp`
   - Key functions: `ensurePreviewSfxRuntimePrepared`, `applyPreviewAudioSettingsToRuntime`, `schedulePreviewSubsystemWarmup`

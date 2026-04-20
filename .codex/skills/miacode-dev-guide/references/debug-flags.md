@@ -17,6 +17,7 @@ The user-facing canonical doc lives at `docs/DEBUG_INDEX.md`. This file stays sh
 - Default debug-mode fallback:
   - project-local `.miacode/logs/` once a chart file is bound, otherwise app-local `logs/` next to the running executable when `MIACODE_LOG_DIR` and per-channel overrides are unset
   - export worker launches now pre-bind `MIACODE_LOG_DIR` to the snapshot chart's `.miacode/logs/` directory when no explicit shared log-dir override is present, and the worker also restores the same path after snapshot parse for direct CLI-worker runs
+  - in debug mode, startup now trims retained runtime/audio/export/startup/fatal logs down to at most `100 KB` each by dropping the oldest lines first
 - Channel-specific path overrides:
   - `MIACODE_RUNTIME_LOG_PATH`
   - `MIACODE_AUDIO_LOG_PATH`
@@ -43,7 +44,7 @@ Debug subcategories now default to on inside debug mode and are disabled with:
   - main producer: `MainWindow::appendOutput`
 - Audio log:
   - default file: `miacode_audio_debug.log`
-  - producers: `QtPreviewSfxRuntime`, `soundtouch_probe`
+  - producers: `QtPreviewSfxRuntime`, `MiniaudioPreviewAudioBackend`, `BassPreviewAudioBackend`, `PreviewStageMediaHost`, preview startup/playback transaction logs, `soundtouch_probe`
 - Export log:
   - default file: `miacode_video_export.log`
   - producer: `VideoExportController`
@@ -123,14 +124,16 @@ Runtime black-screen / dialog tracing in the main app currently uses these tags:
 - `preview/embedded_refresh`
 - `preview/quick_runtime`
 - `preview/quick_scene`
-- `preview/playback`
 
 The `preview/quick_runtime` stream now also emits `action=frame_stall` when the embedded Quick window stays visible/exposed but stops presenting for an extended interval.
 The `preview/embedded_refresh` stream now also marks resize-throttling transitions with `action=resize_degrade_begin` / `action=resize_degrade_end`.
 The `startup/qt_config` runtime tag logs the active Qt graphics/render-loop experiment flags at process start, including whether the default native-sibling workaround was opted out.
-The `preview/playback` runtime tag now traces realtime preview start transactions. Strong-sync startup should log `action=start_request`, `action=audio_prepared`, `action=canvas_presented`, and `action=commit` under one `txn`, while weak-video startup adds `action=weak_video_prepare_started`, `action=weak_video_ready_before_commit`, or `action=late_video_start_after_commit`.
 The `window/focus` runtime tag now traces app-level `focusChanged`, activation edges, watched editor/preview `FocusIn`/`FocusOut` events, pending text-focus snapshots, and restore attempts for Alt-Tab regression debugging.
-The `preview/stage_media` runtime tag is now switch-level only for quickshell media changes, presentation-mode flips, `VideoOutput` binding transitions, weak-sync video prepare / commit transitions (`action=prepare_playback_*`, `action=commit_prepared_playback*`), and low-noise external-video stall transitions (`action=video_frame_stall_begin` / `action=video_frame_stall_end`); the old per-frame quickshell video arrival line was retired.
+The `preview/playback` audio tag now traces realtime preview start transactions. Strong-sync startup should log `action=start_request`, `action=audio_prepared`, `action=canvas_presented`, and `action=commit` under one `txn`, while weak-video startup adds `action=weak_video_prepare_started`, `action=weak_video_ready_before_commit`, or `action=late_video_start_after_commit`.
+The `preview/stage_media` audio tag is now switch-level only for quickshell media changes, presentation-mode flips, `VideoOutput` binding transitions, weak-sync video prepare / commit transitions (`action=prepare_playback_*`, `action=commit_prepared_playback*`), and low-noise external-video stall transitions (`action=video_frame_stall_begin` / `action=video_frame_stall_end`); the old per-frame quickshell video arrival line was retired.
+The audio log emits `stretched_clock_drift` for low-noise stretched-BGM drift sampling; current fields are `fallback`, `bg`, `delta_ms`, `rate`, `engine_now_frame`, `start_engine_frame`, and `tick_bg_gap_ms` (`fallback - backgroundTrackLastTimelineSecond`) so engine-time anchor drift can be separated from tick-to-tick catch-up.
+The preview audio facade now also emits `preview_audio_backend` selection lines so backend routing and BASS fallback decisions are visible in the audio log.
+The BASS preview backend now also emits low-noise `bass_schedule_arm` and `bass_status` lines. `bass_schedule_arm` shows which collapsed SFX group has been armed as the next mixer sync, while `bass_status` samples the current authoritative audio second, mixer-relative second, BGM transport second, fallback drift in milliseconds, the next armed SFX group, and the last triggered SFX group.
 Normal document open/save now uses the direct native `QFileDialog::getOpenFileName` / `getSaveFileName` path. The old `window/dialog_event`, `window/native`, `window/native_hook`, and `window/native_related` probes were retired from the main app and should only return through a separate dev-only tool that is not packaged into release artifacts.
 
 Primary owners:
