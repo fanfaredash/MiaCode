@@ -66,6 +66,7 @@ float clampSampleVolume(double value)
 
 #ifdef Q_OS_WIN
 typedef DWORD (WINAPI* BassFxTempoCreateProc)(DWORD handle, DWORD flags);
+int gBassDeviceRefCount = 0;
 #endif
 
 }  // namespace
@@ -316,9 +317,15 @@ BassPreviewAudioBackend::~BassPreviewAudioBackend()
         masterMixer_ = 0;
     }
     unloadBassFx();
-    if (engineInitialized_) {
+    if (registeredBassDeviceRef_ && gBassDeviceRefCount > 0) {
+        --gBassDeviceRefCount;
+        registeredBassDeviceRef_ = false;
+    }
+    if (engineInitialized_ && gBassDeviceRefCount == 0) {
         BASS_Stop();
         BASS_Free();
+        engineInitialized_ = false;
+    } else if (engineInitialized_) {
         engineInitialized_ = false;
     }
 #endif
@@ -465,15 +472,27 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
     if (!ensureBassFxLoaded()) {
         return false;
     }
-    if (!BASS_Init(-1, static_cast<int>(deviceSampleRate_), 0, nullptr, nullptr)) {
-        appendAudioDebugLog(QString("bass_init_failed err=%1").arg(static_cast<int>(BASS_ErrorGetCode())));
-        return false;
+    if (!registeredBassDeviceRef_) {
+        if (gBassDeviceRefCount == 0) {
+            if (!BASS_Init(-1, static_cast<int>(deviceSampleRate_), 0, nullptr, nullptr)) {
+                appendAudioDebugLog(QString("bass_init_failed err=%1").arg(static_cast<int>(BASS_ErrorGetCode())));
+                return false;
+            }
+        }
+        ++gBassDeviceRefCount;
+        registeredBassDeviceRef_ = true;
     }
     loadOptionalPlugins();
     masterMixer_ = BASS_Mixer_StreamCreate(deviceSampleRate_, 2, BASS_SAMPLE_FLOAT | BASS_MIXER_NONSTOP | BASS_MIXER_POSEX);
     if (masterMixer_ == 0) {
         appendAudioDebugLog(QString("bass_master_mixer_failed err=%1").arg(static_cast<int>(BASS_ErrorGetCode())));
-        BASS_Free();
+        if (registeredBassDeviceRef_ && gBassDeviceRefCount > 0) {
+            --gBassDeviceRefCount;
+            registeredBassDeviceRef_ = false;
+        }
+        if (gBassDeviceRefCount == 0) {
+            BASS_Free();
+        }
         return false;
     }
     BASS_ChannelSetAttribute(masterMixer_, BASS_ATTRIB_BUFFER, 0.0f);
