@@ -10,6 +10,14 @@ using miacode::preview_sfx_timeline::ScheduledPlayback;
 using miacode::preview_sfx_timeline::TouchholdSpan;
 using miacode::preview_sfx_timeline::adjustedAnswerSecond;
 
+double realDeltaMs(double chartDeltaSeconds, double playbackRate)
+{
+    if (!qIsFinite(playbackRate) || qAbs(playbackRate) <= 1e-9) {
+        return 0.0;
+    }
+    return (chartDeltaSeconds / playbackRate) * 1000.0;
+}
+
 bool require(bool condition, const QString& message, QTextStream& err)
 {
     if (!condition) {
@@ -37,7 +45,7 @@ bool verifyHoldAndTouchHoldTailAnswer(QTextStream& err)
 
     QVector<Event> events;
     QVector<TouchholdSpan> spans;
-    miacode::preview_sfx_timeline::buildTimeline(markers, &events, &spans);
+    miacode::preview_sfx_timeline::buildTimeline(markers, 1.0, PreviewTimingSettings(), &events, &spans);
 
     int holdStartAnswerCount = 0;
     int holdEndAnswerCount = 0;
@@ -104,7 +112,7 @@ bool verifyAnswerTimingCompensation(QTextStream& err)
 
     QVector<Event> events;
     QVector<TouchholdSpan> spans;
-    miacode::preview_sfx_timeline::buildTimeline(markers, &events, &spans);
+    miacode::preview_sfx_timeline::buildTimeline(markers, 1.0, PreviewTimingSettings(), &events, &spans);
 
     int compensatedAnswerCount = 0;
     int uncompensatedAnswerCount = 0;
@@ -147,7 +155,7 @@ bool verifyBreakSlideTailSfx(QTextStream& err)
 
     QVector<Event> events;
     QVector<TouchholdSpan> spans;
-    miacode::preview_sfx_timeline::buildTimeline(markers, &events, &spans);
+    miacode::preview_sfx_timeline::buildTimeline(markers, 1.0, PreviewTimingSettings(), &events, &spans);
 
     int breakSlideStartCount = 0;
     int breakTailCount = 0;
@@ -251,11 +259,13 @@ bool verifySharedPlaybackScheduling(QTextStream& err)
 bool verifyPartialExportAnswerClamp(QTextStream& err)
 {
     ScheduledPlayback answer;
-    answer.second = adjustedAnswerSecond(1.0);
+    answer.second = adjustedAnswerSecond(1.0, 1.0, PreviewTimingSettings());
     answer.kind = QStringLiteral("answer");
+    answer.originClampAllowanceSeconds =
+        miacode::preview_sfx_timing::answerPreTriggerChartSeconds(1.0);
 
     ScheduledPlayback judge;
-    judge.second = adjustedAnswerSecond(1.0);
+    judge.second = adjustedAnswerSecond(1.0, 1.0, PreviewTimingSettings());
     judge.kind = QStringLiteral("judge");
 
     if (!require(
@@ -274,6 +284,135 @@ bool verifyPartialExportAnswerClamp(QTextStream& err)
             qAbs(miacode::preview_sfx_timeline::scheduledPlaybackMixSecond(answer, 1.0)) <= 1e-6,
             QStringLiteral("surviving compensated answer should clamp to frame zero"),
             err)) {
+        return false;
+    }
+
+    return true;
+}
+
+bool verifyRateAwareAnswerAndJudgeTiming(QTextStream& err)
+{
+    TimelineNoteMarker tap;
+    tap.type = QStringLiteral("tap");
+    tap.second = 1.0;
+    QVector<TimelineNoteMarker> markers{tap};
+
+    const struct {
+        double rate;
+        double expectedRealMs;
+    } cases[] = {
+        {0.5, 16.6666667},
+        {1.0, 16.6666667},
+        {2.0, 16.6666667},
+    };
+
+    for (const auto& testCase : cases) {
+        QVector<Event> events;
+        QVector<TouchholdSpan> spans;
+        miacode::preview_sfx_timeline::buildTimeline(markers, testCase.rate, PreviewTimingSettings(), &events, &spans);
+
+        double answerSecond = -1.0;
+        double judgeSecond = -1.0;
+        for (const Event& event : events) {
+            if (event.kind == QLatin1String("answer")) {
+                answerSecond = event.second;
+            } else if (event.kind == QLatin1String("judge")) {
+                judgeSecond = event.second;
+            }
+        }
+
+        if (!require(answerSecond >= 0.0, QStringLiteral("answer timing should exist"), err)) {
+            return false;
+        }
+        if (!require(judgeSecond >= 0.0, QStringLiteral("judge timing should exist"), err)) {
+            return false;
+        }
+
+        const double answerEarlyMs = realDeltaMs(tap.second - answerSecond, testCase.rate);
+        const double judgeEarlyMs = realDeltaMs(tap.second - judgeSecond, testCase.rate);
+        if (!require(qAbs(answerEarlyMs - testCase.expectedRealMs) <= 0.01,
+                     QStringLiteral("answer real-time compensation should stay fixed across playback rates"),
+                     err)) {
+            return false;
+        }
+        if (!require(qAbs(judgeEarlyMs - testCase.expectedRealMs) <= 0.01,
+                     QStringLiteral("judge real-time compensation should stay fixed across playback rates"),
+                     err)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool verifySlideTrackTimingAvoidsFixedJudgeCompensation(QTextStream& err)
+{
+    TimelineNoteMarker slide;
+    slide.type = QStringLiteral("slide");
+    slide.second = 1.0;
+    slide.slideTraceSecond = 1.5;
+    slide.endSecond = 2.5;
+
+    QVector<Event> events;
+    QVector<TouchholdSpan> spans;
+    miacode::preview_sfx_timeline::buildTimeline({slide}, 0.5, PreviewTimingSettings(), &events, &spans);
+
+    int exactTraceCount = 0;
+    for (const Event& event : events) {
+        if (event.kind == QLatin1String("slide") && qAbs(event.second - 1.5) <= 1e-6) {
+            ++exactTraceCount;
+        }
+    }
+
+    return require(
+        exactTraceCount == 1,
+        QStringLiteral("slide track timing should stay on trace second instead of taking fixed judge compensation"),
+        err);
+}
+
+bool verifyOffsetLayerSemantics(QTextStream& err)
+{
+    TimelineNoteMarker tap;
+    tap.type = QStringLiteral("tap");
+    tap.second = 1.0;
+    QVector<TimelineNoteMarker> markers{tap};
+
+    PreviewTimingSettings settings;
+    settings.audioOffsetSeconds = 0.1;
+    settings.displayOffsetSeconds = 0.1;
+    settings.judgeOffsetSeconds = 0.1;
+    settings.answerOffsetSeconds = 0.1;
+
+    QVector<Event> events;
+    QVector<TouchholdSpan> spans;
+    miacode::preview_sfx_timeline::buildTimeline(markers, 0.5, settings, &events, &spans);
+
+    double answerSecond = -1.0;
+    double judgeSecond = -1.0;
+    for (const Event& event : events) {
+        if (event.kind == QLatin1String("answer")) {
+            answerSecond = event.second;
+        } else if (event.kind == QLatin1String("judge")) {
+            judgeSecond = event.second;
+        }
+    }
+
+    if (!require(answerSecond >= 0.0 && judgeSecond >= 0.0,
+                 QStringLiteral("offset-layer timing should emit both answer and judge events"),
+                 err)) {
+        return false;
+    }
+
+    const double answerRealOffsetMs = realDeltaMs(answerSecond - tap.second, 0.5);
+    const double judgeRealOffsetMs = realDeltaMs(judgeSecond - tap.second, 0.5);
+    if (!require(qAbs(answerRealOffsetMs - 283.3333333) <= 0.02,
+                 QStringLiteral("answer should apply chart/audio offset plus fixed-real answer offset"),
+                 err)) {
+        return false;
+    }
+    if (!require(qAbs(judgeRealOffsetMs - 283.3333333) <= 0.02,
+                 QStringLiteral("judge should apply chart/audio offset plus fixed-real judge offset without display offset drift"),
+                 err)) {
         return false;
     }
 
@@ -301,6 +440,15 @@ int main(int argc, char* argv[])
         return 1;
     }
     if (!verifyPartialExportAnswerClamp(err)) {
+        return 1;
+    }
+    if (!verifyRateAwareAnswerAndJudgeTiming(err)) {
+        return 1;
+    }
+    if (!verifySlideTrackTimingAvoidsFixedJudgeCompensation(err)) {
+        return 1;
+    }
+    if (!verifyOffsetLayerSemantics(err)) {
         return 1;
     }
 

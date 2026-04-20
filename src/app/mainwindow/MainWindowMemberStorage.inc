@@ -360,6 +360,8 @@
         bool workspacePanelsSwapped_ = false;
         PreviewAudioSettings softwarePreviewAudioSettings_;
         PreviewAudioSettings previewAudioSettings_;
+        PreviewTimingSettings softwarePreviewTimingSettings_;
+        PreviewTimingSettings previewTimingSettings_;
         int editorTextFontPointSize_ = 0;
         double editorLineSpacingFactor_ = 1.5;
         SimaiDocument document_;
@@ -649,6 +651,8 @@
     bool& workspacePanelsSwapped_ = state_.workspacePanelsSwapped_;
     PreviewAudioSettings& softwarePreviewAudioSettings_ = state_.softwarePreviewAudioSettings_;
     PreviewAudioSettings& previewAudioSettings_ = state_.previewAudioSettings_;
+    PreviewTimingSettings& softwarePreviewTimingSettings_ = state_.softwarePreviewTimingSettings_;
+    PreviewTimingSettings& previewTimingSettings_ = state_.previewTimingSettings_;
     int& editorTextFontPointSize_ = state_.editorTextFontPointSize_;
     double& editorLineSpacingFactor_ = state_.editorLineSpacingFactor_;
     SimaiDocument& document_ = state_.document_;

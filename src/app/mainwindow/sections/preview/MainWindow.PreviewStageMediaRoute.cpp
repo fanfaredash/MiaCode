@@ -311,11 +311,11 @@ void MainWindow::PreviewSection::refreshQuickShellPreviewCompositeSurfaceState()
 
     state_.quickShellPreviewCompositeSurfaceActive_ = nextActive;
     if (state_.runtimeDebugOutputEnabled_) {
-        owner_.windowSection_->appendOutput(
-            "preview/stage_media",
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Audio,
+            QStringLiteral("preview/stage_media"),
             QString("action=presentation_mode mode=%1")
-                .arg(nextActive ? QStringLiteral("separate_surface") : QStringLiteral("inline"))
-        );
+                .arg(nextActive ? QStringLiteral("separate_surface") : QStringLiteral("inline")));
     }
 }
 
@@ -340,11 +340,11 @@ void MainWindow::PreviewSection::ensurePreviewStageMediaHostInitialized()
         }
         if (state_.pausedSeekMediaPending_) {
             if (state_.runtimeDebugOutputEnabled_) {
-                owner_.windowSection_->appendOutput(
-                    "preview/stage_media",
+                miacode::debug_log::appendLine(
+                    miacode::debug_log::Channel::Audio,
+                    QStringLiteral("preview/stage_media"),
                     QString("action=paused_seek_media_drop second=%1 reason=pending_generation")
-                        .arg(second, 0, 'f', 6)
-                );
+                        .arg(second, 0, 'f', 6));
             }
             refreshPreviewStageMediaRouteDebugState(false);
             return;

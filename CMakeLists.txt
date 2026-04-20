@@ -113,6 +113,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/TimelineThemeConfig.h
     src/common/WaveformCache.h
     src/common/WaveformCache.cpp
+    src/common/PreviewTimingSettings.h
+    src/common/PreviewSfxTiming.h
     src/common/PreviewSfxTimeline.h
     src/editor/PlainCodeEditor.h
     src/editor/PlainCodeEditor.cpp
@@ -250,8 +252,13 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/quick_scene/PreviewQuickSceneRoot.h
     src/preview/quick_scene/PreviewQuickSceneRoot.cpp
     src/preview/quick_scene/PreviewQuickSceneInvalidationPolicy.h
+    src/preview/audio/PreviewAudioBackend.h
     src/preview/audio/PreviewAudioSettings.h
     src/preview/audio/PreviewAudioSettings.cpp
+    src/preview/audio/BassPreviewAudioBackend.h
+    src/preview/audio/BassPreviewAudioBackend.cpp
+    src/preview/audio/MiniaudioPreviewAudioBackend.h
+    src/preview/audio/MiniaudioPreviewAudioBackend.cpp
     src/preview/audio/QtPreviewSfxRuntime.h
     src/preview/audio/QtPreviewSfxRuntime.cpp
     src/simai/transform/ChartBatchTransform.h
@@ -366,6 +373,7 @@ target_link_libraries(MiaCode PRIVATE
 )
 target_include_directories(MiaCode PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/generated
+    third_party/bass/include
     src
     src/app
     src/app/quick_shell
@@ -384,6 +392,22 @@ target_include_directories(MiaCode PRIVATE
     src/tools/latency
     src/tools/video_export
 )
+
+if (WIN32)
+    target_link_libraries(MiaCode PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
+    )
+    add_custom_command(TARGET MiaCode POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass.dll"
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassmix.dll"
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_fx.dll"
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_aac.dll"
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassopus.dll"
+            $<TARGET_FILE_DIR:MiaCode>
+    )
+endif()
 
 target_link_libraries(MiaCode PRIVATE Qt6::Multimedia)
 target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
@@ -422,9 +446,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
     )
 
     add_executable(soundtouch_probe
+        src/preview/audio/PreviewAudioBackend.h
         src/tools/probe/SoundtouchProbe.cpp
         src/preview/audio/PreviewAudioSettings.h
         src/preview/audio/PreviewAudioSettings.cpp
+        src/preview/audio/BassPreviewAudioBackend.h
+        src/preview/audio/BassPreviewAudioBackend.cpp
+        src/preview/audio/MiniaudioPreviewAudioBackend.h
+        src/preview/audio/MiniaudioPreviewAudioBackend.cpp
         src/preview/audio/QtPreviewSfxRuntime.h
         src/preview/audio/QtPreviewSfxRuntime.cpp
         src/common/DebugLog.h
@@ -580,6 +609,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
 
     add_executable(preview_sfx_timeline_spec
         src/tools/preview/PreviewSfxTimelineSpec.cpp
+        src/common/PreviewTimingSettings.h
+        src/common/PreviewSfxTiming.h
         src/common/PreviewSfxTimeline.h
         src/common/PreviewGameplayConfig.h
         src/timeline/TimelineData.h
@@ -645,6 +676,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
         soundtouch
     )
     target_include_directories(soundtouch_probe PRIVATE
+        third_party/bass/include
         src
         src/preview
         src/preview/audio
@@ -652,6 +684,22 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/timeline
         src/tools
     )
+
+    if (WIN32)
+        target_link_libraries(soundtouch_probe PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
+        )
+        add_custom_command(TARGET soundtouch_probe POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass.dll"
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassmix.dll"
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_fx.dll"
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_aac.dll"
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassopus.dll"
+                $<TARGET_FILE_DIR:soundtouch_probe>
+        )
+    endif()
 
     target_link_libraries(chart_batch_transform_spec PRIVATE
         Qt6::Core

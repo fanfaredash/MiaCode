@@ -3,6 +3,7 @@
 #include "SimaiDocument.h"
 #include "SimaiNativeParser.h"
 #include "common/ChartAssetPaths.h"
+#include "common/PreviewGlobalFirstOffset.h"
 #include "tools/muri/MuriAnalyzer.h"
 
 #include <QDir>
@@ -102,10 +103,10 @@ double parsedFirstSeconds(const QString& rawValue)
     bool ok = false;
     const QString trimmed = rawValue.trimmed();
     if (trimmed.isEmpty()) {
-        return 0.0;
+        return miacode::preview_global_timing::effectiveFirstSeconds(0.0);
     }
     const double value = trimmed.toDouble(&ok);
-    return ok ? value : 0.0;
+    return miacode::preview_global_timing::effectiveFirstSeconds(ok ? value : 0.0);
 }
 
 double shiftedTimelineSecond(double second, double offsetSeconds)
@@ -194,6 +195,7 @@ QJsonObject VideoExportSnapshot::toJson() const
     root.insert(QStringLiteral("render"), render);
 
     root.insert(QStringLiteral("audio"), audioSettings.toJson());
+    root.insert(QStringLiteral("timing"), timingSettings.toJson());
 
     QJsonObject exportObject;
     exportObject.insert(QStringLiteral("start_seconds"), exportStartSeconds);
@@ -292,6 +294,8 @@ bool VideoExportSnapshot::fromJson(
 
     parsed.audioSettings = PreviewAudioSettings::fromJson(object.value(QStringLiteral("audio")).toObject());
     parsed.audioSettings.normalize();
+    parsed.timingSettings = PreviewTimingSettings::fromJson(object.value(QStringLiteral("timing")).toObject());
+    parsed.timingSettings.normalize();
 
     const QJsonObject exportObject = object.value(QStringLiteral("export")).toObject();
     parsed.exportStartSeconds = exportObject.value(QStringLiteral("start_seconds")).toDouble(parsed.exportStartSeconds);
@@ -366,6 +370,8 @@ bool buildVideoExportTaskFromSnapshot(
     built.noteMarkers = shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds);
     built.audioSettings = snapshot.audioSettings;
     built.audioSettings.normalize();
+    built.timingSettings = snapshot.timingSettings;
+    built.timingSettings.normalize();
     built.backgroundBrightnessOuter = snapshot.backgroundBrightnessOuter;
     built.backgroundBrightnessInner = snapshot.backgroundBrightnessInner;
     built.layoutSquareScale = snapshot.layoutSquareScale;

@@ -44,7 +44,7 @@ void appendPreviewStageMediaLog(const QString& action, const QString& payload = 
         text += QStringLiteral(" ") + payload.trimmed();
     }
     miacode::debug_log::appendLine(
-        miacode::debug_log::Channel::Runtime,
+        miacode::debug_log::Channel::Audio,
         QStringLiteral("preview/stage_media"),
         text
     );

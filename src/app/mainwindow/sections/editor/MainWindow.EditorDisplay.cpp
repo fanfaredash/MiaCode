@@ -99,6 +99,8 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
 {
     state_.softwarePreviewAudioSettings_ = PreviewAudioSettings();
     state_.previewAudioSettings_ = state_.softwarePreviewAudioSettings_;
+    state_.softwarePreviewTimingSettings_ = PreviewTimingSettings();
+    state_.previewTimingSettings_ = state_.softwarePreviewTimingSettings_;
     state_.showSlideTracks_ = true;
     state_.showJudgeMarkers_ = false;
     state_.showTouchTrail_ = false;
@@ -259,6 +261,9 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     }
     state_.softwarePreviewAudioSettings_.normalize();
     state_.previewAudioSettings_ = state_.softwarePreviewAudioSettings_;
+    state_.softwarePreviewTimingSettings_ = PreviewTimingSettings::fromJson(preview.value("timing").toObject());
+    state_.softwarePreviewTimingSettings_.normalize();
+    state_.previewTimingSettings_ = state_.softwarePreviewTimingSettings_;
 }
 
 void MainWindow::EditorSection::savePortableState() const
@@ -329,6 +334,7 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("canvas_aspect_ratio", 1.0);
     preview.insert("auto_restore_square_after_export", false);
     preview.insert("audio", state_.softwarePreviewAudioSettings_.toJson());
+    preview.insert("timing", state_.softwarePreviewTimingSettings_.toJson());
 
     app.insert("preview", preview);
     root.insert("app", app);

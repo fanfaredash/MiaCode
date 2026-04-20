@@ -366,6 +366,7 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     task.muriRenderOptions = owner_.muriRenderOptions_;
     task.staticTapOnSlideThresholdSeconds = static_cast<double>(owner_.staticTapOnSlideThresholdMs_) / 1000.0;
     task.audioSettings = owner_.previewAudioSettings_;
+    task.timingSettings = owner_.previewTimingSettings_;
     task.backgroundBrightnessOuter = owner_.previewBackgroundBrightnessOuter_;
     task.backgroundBrightnessInner = owner_.previewBackgroundBrightnessInner_;
     task.layoutSquareScale = owner_.previewLayoutSquareScale_;
@@ -587,6 +588,7 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo()
     task.muriRenderOptions = owner_.muriRenderOptions_;
     task.staticTapOnSlideThresholdSeconds = static_cast<double>(owner_.staticTapOnSlideThresholdMs_) / 1000.0;
     task.audioSettings = owner_.previewAudioSettings_;
+    task.timingSettings = owner_.previewTimingSettings_;
     task.backgroundBrightnessOuter = owner_.previewBackgroundBrightnessOuter_;
     task.backgroundBrightnessInner = owner_.previewBackgroundBrightnessInner_;
     task.layoutSquareScale = owner_.previewLayoutSquareScale_;
