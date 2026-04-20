@@ -535,7 +535,6 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
         }
         return qMax(0.0, value);
     };
-    double lastMarkerEndSecond = 0.0;
     bool firstOk = false;
     const double firstSeconds = parsedDocumentFirstSeconds(document.first, &firstOk);
     if (!firstOk) {
@@ -548,6 +547,7 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
         return false;
     }
     const QVector<TimelineNoteMarker> shiftedMarkers = shiftedNoteMarkers(parsedTimeline.noteMarkers, firstSeconds);
+    double lastMarkerEndSecond = 0.0;
     for (const TimelineNoteMarker& marker : shiftedMarkers) {
         lastMarkerEndSecond = qMax(lastMarkerEndSecond, markerEndSecond(marker));
     }
@@ -794,7 +794,7 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     task.outlineVariant = request.outlineVariant;
     task.backgroundScaleMode = request.backgroundScaleMode;
     task.tapFlowSpeed = request.noteFlowSpeed;
-    task.touchFlowSpeed = request.noteFlowSpeed;
+    task.touchFlowSpeed = request.touchFlowSpeed;
     task.slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
     task.exportStartSeconds = exportStartSeconds;
     task.contentDurationSeconds = contentDurationSeconds;

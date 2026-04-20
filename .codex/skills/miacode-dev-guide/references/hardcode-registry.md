@@ -91,6 +91,9 @@ Use this file to track where important constants live, what they mean, and wheth
     - fullscreen control-bar auto-hide delay
     - fixed `30 Hz` Timeline UI cadence (`33 ms` timer interval / `1/30 s` seek-throttle threshold)
   - Rule: keep local while they only shape the main-window preview UX and do not need preview/export parity
+- `src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp`
+  - Owns: wrapped Validation/Muri issue-row padding, minimum row height, and ignored-row opacity used by the shared rich-text list delegate
+  - Rule: keep local while these values only shape diagnostics-list rendering in the main window and are not reused by other widgets or the Quick frontend
 - `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
   - Owns: analysis idle scheduling debounce for low-priority validation/Muri work
   - Current tuning note: `kTimelineAnalysisIdleDelayMs` is `180 ms`, used to coalesce rapid edits before dispatching the combined validation+Muri analysis worker once preview snapshot publication has already completed
