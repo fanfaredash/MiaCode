@@ -538,6 +538,9 @@ bool MainWindow::WindowSection::shellBottomTabsVisible() const
     if (!anyTabVisible) {
         return false;
     }
+    if (owner_.quickShellBackendActive_) {
+        return true;
+    }
 
     const QWidget* const shellBottomTabsWidget = this->shellBottomTabsWidget();
     const bool shellBottomTabsWidgetVisible =
