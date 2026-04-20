@@ -388,13 +388,7 @@ void LatencyDetectorDialog::beginManualSeekInteraction()
     if (!playing_) {
         return;
     }
-    if (sfxRuntime_ != nullptr) {
-        if (sfxRuntime_->isBackgroundTrackRunning()) {
-            playheadSecond_ = qBound(0.0, sfxRuntime_->backgroundPlaybackSecond(), trackDurationSeconds_);
-        } else {
-            playheadSecond_ = currentTransportSecond();
-        }
-    }
+    playheadSecond_ = currentTransportSecond();
     pausePlayback();
 }
 
@@ -419,13 +413,7 @@ void LatencyDetectorDialog::applyPlaybackRate(double rate)
         sfxRuntime_->setBackgroundTrackPlaybackRate(playbackRate_);
     }
     if (playing_) {
-        if (sfxRuntime_ != nullptr) {
-            if (sfxRuntime_->isBackgroundTrackRunning()) {
-                playheadSecond_ = qBound(0.0, sfxRuntime_->backgroundPlaybackSecond(), trackDurationSeconds_);
-            } else {
-                playheadSecond_ = currentTransportSecond();
-            }
-        }
+        playheadSecond_ = currentTransportSecond();
         startPlayback();
     }
 }
