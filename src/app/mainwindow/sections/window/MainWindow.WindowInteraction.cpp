@@ -3,6 +3,7 @@
 
 #include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
+#include "DialogLocalization.h"
 #include "UiText.h"
 #include "common/PreviewInteractionConfig.h"
 #include "preview/runtime/PreviewRuntime.h"
@@ -468,6 +469,22 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
             owner_.scheduleWrappedListRelayout(
                 watched == (owner_.errorList_ != nullptr ? owner_.errorList_->viewport() : nullptr) ? owner_.errorList_ : owner_.muriList_
             );
+        }
+    }
+    if (event != nullptr
+        && UiDialogs::hasVisibleProtectedPreviewDialog()
+        && (event->type() == QEvent::ShortcutOverride
+            || event->type() == QEvent::KeyPress
+            || event->type() == QEvent::KeyRelease)) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (UiDialogs::isPreviewShortcutEvent(keyEvent)) {
+            if (event->type() == QEvent::KeyRelease
+                && owner_.previewSeekHeldArrowKey_ != 0
+                && (keyEvent->key() == Qt::Key_Left || keyEvent->key() == Qt::Key_Right)
+                && owner_.previewSeekHeldArrowKey_ == keyEvent->key()) {
+                owner_.stopPreviewHeldSeek(keyEvent->key());
+            }
+            return owner_.QMainWindow::eventFilter(watched, event);
         }
     }
     const QWindow* previewVisibleWindow = this->previewVisibleHostWindow();

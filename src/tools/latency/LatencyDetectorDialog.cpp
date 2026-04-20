@@ -503,6 +503,7 @@ LatencyDetectorDialog::LatencyDetectorDialog(
     , waveformCacheService_(waveformCacheService)
 {
     setAttribute(Qt::WA_DeleteOnClose, true);
+    UiDialogs::configureDialogPreviewShortcuts(this, UiDialogs::PreviewShortcutPolicy::LocalPlaybackControls);
     setWindowTitle(localizedText("BPM&偏移检测", "BPM & Offset Detection"));
 
     buildUi();
@@ -566,12 +567,7 @@ void LatencyDetectorDialog::setOffsetSeconds(double seconds)
 bool LatencyDetectorDialog::eventFilter(QObject* watched, QEvent* event)
 {
     Q_UNUSED(watched);
-    if (!isVisible()) {
-        return QDialog::eventFilter(watched, event);
-    }
-    QWidget* focusWidget = QApplication::focusWidget();
-    const bool dialogShortcutScope = isActiveWindow() || (focusWidget != nullptr && isAncestorOf(focusWidget));
-    if (!dialogShortcutScope || event == nullptr) {
+    if (event == nullptr || !UiDialogs::dialogOwnsPreviewShortcutScope(this)) {
         return QDialog::eventFilter(watched, event);
     }
 
