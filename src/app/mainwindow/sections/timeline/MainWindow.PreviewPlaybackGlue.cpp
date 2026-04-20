@@ -27,21 +27,23 @@ void MainWindow::TimelineSection::onStopPreview()
 {
     const double returnSecond = qBound(0.0, state_.qtPreviewPlaybackReturnSecond_, previewDurationSeconds());
     if (state_.qtPreviewPlaying_ || state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
-        stopQtPreviewPlayback(true);
+        anchorQtPreviewPlaybackToSecond(returnSecond, true);
     }
     state_.pendingPreviewPlaybackStart_ = false;
     state_.pendingPreviewPlaybackResumeFromPause_ = false;
     state_.pendingPreviewPlaybackRevision_ = 0;
     state_.pendingPreviewPlaybackDifficultyId_ = 0;
     state_.pendingPreviewPlaybackSecond_ = 0.0;
-    seekPreviewToSecond(returnSecond, true);
+    if (!state_.qtPreviewPlaying_) {
+        anchorQtPreviewPlaybackToSecond(returnSecond, true);
+    }
     owner_.statusBar()->showMessage("Qt preview stopped.");
 }
 
 void MainWindow::TimelineSection::onTogglePreviewPause()
 {
     if (state_.qtPreviewPlaying_) {
-        stopQtPreviewPlayback(true);
+        pauseQtPreviewPlaybackExact();
         owner_.updatePauseButtonAppearance();
         owner_.statusBar()->showMessage(
             QString("Qt preview paused at %1s.").arg(state_.qtPreviewPauseSecond_, 0, 'f', 2)
