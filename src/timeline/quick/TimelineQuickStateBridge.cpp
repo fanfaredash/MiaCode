@@ -351,8 +351,13 @@ std::shared_ptr<const miacode::waveform::WaveformData> TimelineQuickStateBridge:
 
 void TimelineQuickStateBridge::setMuriAnalysisReport(const MuriAnalysisReport& report)
 {
-    muriMarkerLocationIds_ = muriMarkerLocationIdsForReport(report);
-    muriMarkerTooltips_ = muriMarkerTooltipsForReport(report);
+    const QSet<quint64> nextLocationIds = muriMarkerLocationIdsForReport(report);
+    const QHash<quint64, QString> nextTooltips = muriMarkerTooltipsForReport(report);
+    if (muriMarkerLocationIds_ == nextLocationIds && muriMarkerTooltips_ == nextTooltips) {
+        return;
+    }
+    muriMarkerLocationIds_ = nextLocationIds;
+    muriMarkerTooltips_ = nextTooltips;
     bumpOverlayRevision();
     emit renderStateChanged();
 }

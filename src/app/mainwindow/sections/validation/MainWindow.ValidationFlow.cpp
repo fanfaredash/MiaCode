@@ -1064,10 +1064,12 @@ void MainWindow::ValidationSection::clearValidationErrors()
 void MainWindow::ValidationSection::clearMuriDiagnostics()
 {
     if (ui_.muriList_ == nullptr) {
+        state_.pendingMuriPanelRefresh_ = false;
         updateEditorValidationSummary();
         return;
     }
     ui_.muriList_->clear();
+    state_.pendingMuriPanelRefresh_ = false;
     updateEditorValidationSummary();
 }
 
@@ -1103,13 +1105,6 @@ void MainWindow::ValidationSection::addValidationError(
         item->setData(kIssueTypeKeyRole, issueTypeKey);
         item->setData(kIssueTypeLabelRole, issueTypeLabel);
         item->setData(kIssueIgnoredRole, ignoredInHeader);
-        if (ignoredInHeader) {
-            if (QWidget* rowWidget = ui_.errorList_->itemWidget(item)) {
-                auto* effect = new QGraphicsOpacityEffect(rowWidget);
-                effect->setOpacity(0.58);
-                rowWidget->setGraphicsEffect(effect);
-            }
-        }
     }
 }
 

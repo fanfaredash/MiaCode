@@ -836,6 +836,9 @@ void MainWindow::TimelineSection::dispatchTimelineAnalysisRefresh()
                     return;
                 }
 
+                QElapsedTimer applyTimer;
+                applyTimer.start();
+
                 guard->state_.timelineAnalysisWorkerRunning_ = false;
                 if (result.revision != guard->state_.timelineAnalysisRequestedRevision_
                     || !guard->hasActiveDifficulty()
@@ -867,14 +870,27 @@ void MainWindow::TimelineSection::dispatchTimelineAnalysisRefresh()
                     cachedIssue.displayMessage = issue.displayMessage;
                     entry.issues.append(cachedIssue);
                 }
-                guard->state_.validationCacheByDifficulty_.insert(result.difficultyId, entry);
+                const int validationIssueCount = entry.issues.size();
+                const int muriDiagnosticCount = result.analysisReport.diagnostics.size();
+                const int muriStaticReferenceCount = result.staticReferences.size();
+                guard->state_.validationCacheByDifficulty_[result.difficultyId] = std::move(entry);
                 guard->state_.pendingDeferredValidationUiRefresh_ = true;
-                guard->state_.muriAnalysisReport_ = result.analysisReport;
+                guard->state_.muriAnalysisReport_ = std::move(result.analysisReport);
                 guard->state_.muriAnalysisReportNoteMarkerSignature_ = result.noteMarkerSignature;
-                guard->state_.muriStaticReferences_ = result.staticReferences;
+                guard->state_.muriStaticReferences_ = std::move(result.staticReferences);
                 guard->state_.pendingDeferredMuriUiRefresh_ = true;
                 if (!guard->state_.qtPreviewPlaying_) {
                     guard->applyDeferredAnalysisUiUpdates();
+                }
+                if (guard->state_.runtimeDebugOutputEnabled_) {
+                    appendTimelinePerfLog(
+                        QStringLiteral("edit/muri_perf"),
+                        QStringLiteral("phase=analysis_apply validation_issues=%1 diagnostics=%2 static_refs=%3 elapsed_ms=%4")
+                            .arg(validationIssueCount)
+                            .arg(muriDiagnosticCount)
+                            .arg(muriStaticReferenceCount)
+                            .arg(applyTimer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
+                    );
                 }
                 guard->requestTimelineAnalysisDispatch();
             },

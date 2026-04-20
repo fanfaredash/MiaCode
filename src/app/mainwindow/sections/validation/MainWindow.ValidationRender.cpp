@@ -15,6 +15,17 @@
 
 using namespace miacode::mainwindow::shared;
 
+namespace {
+
+bool previewConsumesMuriAnalysisReport(const MuriRenderOptions& options)
+{
+    return options.renderMode == RenderMode::MaimuriDxStyle
+        || options.showJudgeMarkers
+        || options.showTouchTrail;
+}
+
+}  // namespace
+
 const MuriAnalysisReport& MainWindow::ValidationSection::alignedMuriAnalysisReportForPreview() const
 {
     static const MuriAnalysisReport kEmptyReport;
@@ -26,12 +37,15 @@ const MuriAnalysisReport& MainWindow::ValidationSection::alignedMuriAnalysisRepo
 
 void MainWindow::ValidationSection::applyAlignedMuriAnalysisReportToViews()
 {
+    static const MuriAnalysisReport kEmptyReport;
     const MuriAnalysisReport& alignedReport = alignedMuriAnalysisReportForPreview();
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setMuriAnalysisReport(alignedReport);
     }
     if (state_.previewCanvas_ != nullptr) {
-        state_.previewCanvas_->setMuriAnalysisReport(alignedReport);
+        state_.previewCanvas_->setMuriAnalysisReport(
+            previewConsumesMuriAnalysisReport(state_.muriRenderOptions_) ? alignedReport : kEmptyReport
+        );
     }
 }
 
