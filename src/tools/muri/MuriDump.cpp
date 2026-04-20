@@ -19,7 +19,6 @@
 #include "timeline/TimelineData.h"
 #include "common/MuriConfig.h"
 #include "common/MuriTypes.h"
-#include "common/PreviewGlobalFirstOffset.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriStaticChecker.h"
 
@@ -50,6 +49,17 @@ constexpr double kStaticCollideThresholdSeconds = 36.0 / miacode::muri::kJudgeTp
 constexpr double kStaticCollideExtraDeltaSeconds =
     kStaticCollideThresholdSeconds - miacode::muri::kTapAvailableSeconds;
 constexpr double kStaticTimeEpsilonSeconds = 1e-9;
+
+double parsedFirstSeconds(const QString& rawValue, bool* ok = nullptr)
+{
+    const QString trimmed = rawValue.trimmed();
+    bool localOk = false;
+    const double value = trimmed.isEmpty() ? 0.0 : trimmed.toDouble(&localOk);
+    if (ok != nullptr) {
+        *ok = trimmed.isEmpty() ? true : localOk;
+    }
+    return (trimmed.isEmpty() || localOk) ? value : 0.0;
+}
 
 bool isSlideLike(const TimelineNoteMarker& marker)
 {
@@ -972,19 +982,14 @@ bool loadChartFromArgs(
         }
 
         bool parsedFirstOk = true;
-        double parsedFirst = 0.0;
-        const QString firstText = document.first.trimmed();
-        if (!firstText.isEmpty()) {
-            parsedFirst = firstText.toDouble(&parsedFirstOk);
-        }
+        const double parsedFirst = parsedFirstSeconds(document.first, &parsedFirstOk);
         if (!parsedFirstOk) {
             *outErrorMessage = QStringLiteral("Invalid &first value in maidata: %1").arg(document.first);
             return false;
         }
 
         *outChartText = difficulty->chart;
-        *outFirstSeconds = miacode::preview_global_timing::effectiveFirstSeconds(
-            firstOverrideSet ? firstOverride : parsedFirst);
+        *outFirstSeconds = firstOverrideSet ? firstOverride : parsedFirst;
         *outTimingMetadata = miacode::simai::buildTimingMetadata(document);
         *outDifficultyName = SimaiDocument::difficultyShortName(difficultyId);
         *outSourceDescription = QStringLiteral("maidata=%1 difficulty=%2")
@@ -999,8 +1004,7 @@ bool loadChartFromArgs(
             return false;
         }
         *outChartText = QString::fromUtf8(file.readAll());
-        *outFirstSeconds = miacode::preview_global_timing::effectiveFirstSeconds(
-            firstOverrideSet ? firstOverride : 0.0);
+        *outFirstSeconds = firstOverrideSet ? firstOverride : 0.0;
         *outTimingMetadata = miacode::simai::SimaiTimingMetadata();
         *outDifficultyName = QStringLiteral("N/A");
         *outSourceDescription = QStringLiteral("file=%1").arg(filePath);

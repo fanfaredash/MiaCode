@@ -3,7 +3,6 @@
 #include "SimaiDocument.h"
 #include "SimaiNativeParser.h"
 #include "common/ChartAssetPaths.h"
-#include "common/PreviewGlobalFirstOffset.h"
 #include "tools/muri/MuriAnalyzer.h"
 
 #include <QDir>
@@ -102,11 +101,8 @@ double parsedFirstSeconds(const QString& rawValue)
 {
     bool ok = false;
     const QString trimmed = rawValue.trimmed();
-    if (trimmed.isEmpty()) {
-        return miacode::preview_global_timing::effectiveFirstSeconds(0.0);
-    }
-    const double value = trimmed.toDouble(&ok);
-    return miacode::preview_global_timing::effectiveFirstSeconds(ok ? value : 0.0);
+    const double value = trimmed.isEmpty() ? 0.0 : trimmed.toDouble(&ok);
+    return (trimmed.isEmpty() || ok) ? value : 0.0;
 }
 
 double shiftedTimelineSecond(double second, double offsetSeconds)

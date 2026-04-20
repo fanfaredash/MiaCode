@@ -22,6 +22,45 @@
 using namespace miacode::mainwindow::shared;
 
 namespace {
+double parsedDocumentFirstSeconds(const QString& rawValue, bool* ok = nullptr)
+{
+    const QString trimmed = rawValue.trimmed();
+    bool localOk = false;
+    const double value = trimmed.isEmpty() ? 0.0 : trimmed.toDouble(&localOk);
+    if (ok != nullptr) {
+        *ok = trimmed.isEmpty() ? true : localOk;
+    }
+    return (trimmed.isEmpty() || localOk) ? value : 0.0;
+}
+
+double shiftedTimelineSecond(double second, double offsetSeconds)
+{
+    return second + offsetSeconds;
+}
+
+QVector<TimelineNoteMarker> shiftedNoteMarkers(
+    const QVector<TimelineNoteMarker>& noteMarkers,
+    double offsetSeconds)
+{
+    QVector<TimelineNoteMarker> shifted = noteMarkers;
+    for (TimelineNoteMarker& marker : shifted) {
+        marker.second = shiftedTimelineSecond(marker.second, offsetSeconds);
+        if (marker.endSecond >= 0.0) {
+            marker.endSecond = shiftedTimelineSecond(marker.endSecond, offsetSeconds);
+        }
+        if (marker.slideTraceSecond >= 0.0) {
+            marker.slideTraceSecond = shiftedTimelineSecond(marker.slideTraceSecond, offsetSeconds);
+        }
+        if (marker.availableSecond >= 0.0) {
+            marker.availableSecond = shiftedTimelineSecond(marker.availableSecond, offsetSeconds);
+        }
+        for (double& shootSecond : marker.slideSegmentShootSeconds) {
+            shootSecond = shiftedTimelineSecond(shootSecond, offsetSeconds);
+        }
+    }
+    return shifted;
+}
+
 QString sanitizeExportFileStem(QString text, const QString& fallback = QStringLiteral("out"))
 {
     text = text.trimmed();
@@ -496,7 +535,19 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
         return qMax(0.0, value);
     };
     double lastMarkerEndSecond = 0.0;
-    for (const TimelineNoteMarker& marker : parsedTimeline.noteMarkers) {
+    bool firstOk = false;
+    const double firstSeconds = parsedDocumentFirstSeconds(document.first, &firstOk);
+    if (!firstOk) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText(
+                "dialog.batch_export.error.invalid_first",
+                "Invalid &first value in chart metadata."
+            );
+        }
+        return false;
+    }
+    const QVector<TimelineNoteMarker> shiftedMarkers = shiftedNoteMarkers(parsedTimeline.noteMarkers, firstSeconds);
+    for (const TimelineNoteMarker& marker : shiftedMarkers) {
         lastMarkerEndSecond = qMax(lastMarkerEndSecond, markerEndSecond(marker));
     }
     const double trackDurationSeconds = probeAudioDurationSeconds(trackPath);
