@@ -3,6 +3,7 @@
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/PreviewAudioMixConfig.h"
 #include "common/PreviewSfxAssets.h"
 #include "common/PreviewSfxTimeline.h"
 
@@ -185,7 +186,10 @@ struct BassPreviewAudioBackend::Sample {
         BASS_ChannelGetAttribute(stream, BASS_ATTRIB_FREQ, &channelFrequency);
         const DWORD resamplerFlags = BASS_STREAM_DECODE | BASS_SAMPLE_FLOAT | BASS_MIXER_NONSTOP;
         const DWORD resamplerStream =
-            BASS_Mixer_StreamCreate(static_cast<DWORD>(qMax(1.0f, channelFrequency)), 2, resamplerFlags);
+            BASS_Mixer_StreamCreate(
+                static_cast<DWORD>(qMax(1.0f, channelFrequency)),
+                miacode::preview_audio::kMixChannels,
+                resamplerFlags);
         if (resamplerStream == 0) {
             const int errorCode = static_cast<int>(BASS_ErrorGetCode());
             BASS_StreamFree(stream);
@@ -483,7 +487,10 @@ bool BassPreviewAudioBackend::initializeAudioEngine()
         registeredBassDeviceRef_ = true;
     }
     loadOptionalPlugins();
-    masterMixer_ = BASS_Mixer_StreamCreate(deviceSampleRate_, 2, BASS_SAMPLE_FLOAT | BASS_MIXER_NONSTOP | BASS_MIXER_POSEX);
+    masterMixer_ = BASS_Mixer_StreamCreate(
+        deviceSampleRate_,
+        miacode::preview_audio::kMixChannels,
+        BASS_SAMPLE_FLOAT | BASS_MIXER_NONSTOP | BASS_MIXER_POSEX);
     if (masterMixer_ == 0) {
         appendAudioDebugLog(QString("bass_master_mixer_failed err=%1").arg(static_cast<int>(BASS_ErrorGetCode())));
         if (registeredBassDeviceRef_ && gBassDeviceRefCount > 0) {

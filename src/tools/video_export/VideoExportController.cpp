@@ -1,6 +1,9 @@
 #include "VideoExportController.h"
 
+#include "BassExportAudioBackend.h"
+#include "LegacyExportAudioBackend.h"
 #include "RawVideoPipeTransport.h"
+#include "VideoExportAudioRenderPlan.h"
 #include "VideoExportQuickRenderBackend.h"
 #include "VideoExportRuntimePolicy.h"
 #include "common/AssetPaths.h"
@@ -8,11 +11,9 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/LayoutRingConfig.h"
-#include "common/MiniaudioFileAccess.h"
+#include "common/PreviewAudioMixConfig.h"
 #include "common/PreviewGameplayConfig.h"
-#include "common/PreviewSfxAssets.h"
 #include "common/PreviewSfxTimeline.h"
-#include "common/VideoExportConfig.h"
 #include "preview/runtime/PreviewSceneAssetLoader.h"
 #include "tools/muri/MuriAnalyzer.h"
 
@@ -55,13 +56,10 @@
 #endif
 
 namespace {
-constexpr int kMixSampleRate = 48000;
-constexpr int kMixChannels = 2;
 constexpr double kTimelineEpsilonSeconds = miacode::preview_sfx_timeline::kTimelineEpsilonSeconds;
 
-using ExportEvent = miacode::preview_sfx_timeline::Event;
-using ScheduledExportPlayback = miacode::preview_sfx_timeline::ScheduledPlayback;
-using ExportTouchholdSpan = miacode::preview_sfx_timeline::TouchholdSpan;
+using miacode::preview_audio::kMixChannels;
+using miacode::preview_audio::kMixSampleRate;
 using miacode::video_export::raw_pipe::enqueueRawVideoFrame;
 using miacode::video_export::raw_pipe::finishRawVideoPipePump;
 using miacode::video_export::raw_pipe::RawVideoPipePlan;
@@ -71,25 +69,6 @@ using miacode::video_export::raw_pipe::shutdownRawVideoPipePump;
 using miacode::video_export::raw_pipe::startRawVideoPipe;
 using miacode::video_export::raw_pipe::startRawVideoPipePumpThread;
 using miacode::video_export::raw_pipe::chooseRawVideoPipePlan;
-
-struct DecodedClip {
-    QVector<float> samples;
-    int sampleRate = kMixSampleRate;
-    int channels = kMixChannels;
-
-    qint64 frameCount() const
-    {
-        if (channels <= 0) {
-            return 0;
-        }
-        return samples.size() / channels;
-    }
-
-    bool isValid() const
-    {
-        return !samples.isEmpty() && channels > 0;
-    }
-};
 
 struct VideoEncoderConfig {
     QString codec;
@@ -2170,320 +2149,25 @@ bool isImageMediaPath(const QString& path)
         || suffix == QLatin1String("webp");
 }
 
-QString resolveSfxDirectory()
+std::unique_ptr<miacode::video_export::VideoExportAudioBackend> createExportAudioBackend(QString* errorMessage)
 {
-    return normalizePath(miacode::preview_sfx::resolveSfxDirectory());
-}
-
-bool decodeAudioClip(const QString& path, DecodedClip* clip)
-{
-    if (clip == nullptr) {
-        return false;
-    }
-    clip->samples.clear();
-    if (path.isEmpty() || !QFileInfo::exists(path)) {
-        return false;
-    }
-
-    ma_decoder decoder;
-    ma_decoder_config config = ma_decoder_config_init(ma_format_f32, kMixChannels, kMixSampleRate);
-    if (miacode::audio_io::decoderInitFile(path, &config, &decoder) != MA_SUCCESS) {
-        return false;
-    }
-
-    constexpr ma_uint64 kChunkFrames = 4096;
-    QVector<float> chunk;
-    chunk.resize(static_cast<int>(kChunkFrames * kMixChannels));
-    for (;;) {
-        ma_uint64 framesRead = 0;
-        const ma_result rc = ma_decoder_read_pcm_frames(&decoder, chunk.data(), kChunkFrames, &framesRead);
-        if (framesRead > 0) {
-            const int sampleCount = static_cast<int>(framesRead * kMixChannels);
-            const int previousSize = clip->samples.size();
-            clip->samples.resize(previousSize + sampleCount);
-            std::copy_n(chunk.constData(), sampleCount, clip->samples.begin() + previousSize);
+#ifdef Q_OS_WIN
+    auto backend = std::make_unique<miacode::video_export::BassExportAudioBackend>();
+    QString reason;
+    if (!backend->isSupported(&reason)) {
+        if (errorMessage != nullptr) {
+            *errorMessage = reason;
         }
-        if (rc != MA_SUCCESS || framesRead == 0) {
-            break;
-        }
+        return {};
     }
-
-    ma_decoder_uninit(&decoder);
-    clip->sampleRate = kMixSampleRate;
-    clip->channels = kMixChannels;
-    return !clip->samples.isEmpty();
-}
-
-void addClipToMix(
-    const DecodedClip& clip,
-    double gain,
-    qint64 startFrame,
-    qint64 maxFrames,
-    qint64 clipStartFrame,
-    QVector<float>* mix
-)
-{
-    if (mix == nullptr || !clip.isValid() || gain <= 0.0 || startFrame < 0 || clipStartFrame < 0) {
-        return;
-    }
-    const qint64 totalMixFrames = mix->size() / kMixChannels;
-    if (startFrame >= totalMixFrames) {
-        return;
-    }
-    if (clipStartFrame >= clip.frameCount()) {
-        return;
-    }
-    qint64 framesToMix = qMin(clip.frameCount() - clipStartFrame, totalMixFrames - startFrame);
-    if (maxFrames >= 0) {
-        framesToMix = qMin(framesToMix, maxFrames);
-    }
-    if (framesToMix <= 0) {
-        return;
-    }
-
-    const float gainF = static_cast<float>(gain);
-    for (qint64 frame = 0; frame < framesToMix; ++frame) {
-        const qint64 mixIndex = (startFrame + frame) * kMixChannels;
-        const qint64 clipIndex = (clipStartFrame + frame) * clip.channels;
-        float left = clip.samples[clipIndex];
-        float right = clip.channels >= 2 ? clip.samples[clipIndex + 1] : left;
-        (*mix)[mixIndex] += left * gainF;
-        (*mix)[mixIndex + 1] += right * gainF;
-    }
-}
-
-bool writeWav16(const QString& path, const QVector<float>& samples, int sampleRate, int channels)
-{
-    if (path.isEmpty() || sampleRate <= 0 || channels <= 0) {
-        return false;
-    }
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        return false;
-    }
-
-    QDataStream stream(&file);
-    stream.setByteOrder(QDataStream::LittleEndian);
-    const quint32 dataBytes =
-        static_cast<quint32>(samples.size() * static_cast<int>(sizeof(qint16)));
-    const quint32 riffChunkSize = 36u + dataBytes;
-    const quint16 bitsPerSample = 16;
-    const quint16 blockAlign = static_cast<quint16>(channels * (bitsPerSample / 8));
-    const quint32 byteRate = static_cast<quint32>(sampleRate * blockAlign);
-
-    stream.writeRawData("RIFF", 4);
-    stream << riffChunkSize;
-    stream.writeRawData("WAVE", 4);
-    stream.writeRawData("fmt ", 4);
-    stream << quint32(16);        // PCM fmt chunk size
-    stream << quint16(1);         // Audio format PCM
-    stream << quint16(channels);
-    stream << quint32(sampleRate);
-    stream << byteRate;
-    stream << blockAlign;
-    stream << bitsPerSample;
-    stream.writeRawData("data", 4);
-    stream << dataBytes;
-
-    constexpr int kPcmChunkSamples = 16384;
-    QByteArray pcmBytes;
-    pcmBytes.resize(kPcmChunkSamples * static_cast<int>(sizeof(qint16)));
-    int sampleIndex = 0;
-    while (sampleIndex < samples.size()) {
-        const int chunkSamples = qMin(kPcmChunkSamples, samples.size() - sampleIndex);
-        const int chunkBytes = chunkSamples * static_cast<int>(sizeof(qint16));
-        qint16* out = reinterpret_cast<qint16*>(pcmBytes.data());
-        for (int i = 0; i < chunkSamples; ++i) {
-            const float clamped = qBound(-1.0f, samples.at(sampleIndex + i), 1.0f);
-            out[i] = static_cast<qint16>(qRound(clamped * 32767.0f));
-        }
-        if (file.write(pcmBytes.constData(), chunkBytes) != chunkBytes) {
-            return false;
-        }
-        sampleIndex += chunkSamples;
-    }
-    return true;
-}
-
-bool noteMarkerTimestampInRange(const TimelineNoteMarker& marker, double startSecond, double endSecond)
-{
-    if (endSecond <= startSecond) {
-        return true;
-    }
-    return marker.second + kTimelineEpsilonSeconds >= startSecond
-        && marker.second <= endSecond + kTimelineEpsilonSeconds;
-}
-
-QVector<TimelineNoteMarker> filteredMarkersForRange(
-    const QVector<TimelineNoteMarker>& markers,
-    double startSecond,
-    double endSecond
-)
-{
-    QVector<TimelineNoteMarker> filtered;
-    filtered.reserve(markers.size());
-    for (const TimelineNoteMarker& marker : markers) {
-        if (noteMarkerTimestampInRange(marker, startSecond, endSecond)) {
-            filtered.append(marker);
-        }
-    }
-    return filtered;
-}
-
-bool mixSfxTrackToWav(
-    const QString& outputPath,
-    const QVector<TimelineNoteMarker>& noteMarkers,
-    const PreviewAudioSettings& settings,
-    const PreviewTimingSettings& timingSettings,
-    double totalSeconds,
-    double timelineOriginSecond
-)
-{
-    const qint64 totalFrames = qMax<qint64>(1, qCeil(totalSeconds * kMixSampleRate));
-    QVector<float> mix;
-    mix.fill(0.0f, static_cast<int>(totalFrames * kMixChannels));
-
-    const QString sfxDir = resolveSfxDirectory();
-    if (sfxDir.isEmpty()) {
-        return false;
-    }
-
-    QHash<QString, DecodedClip> clips;
-    const auto loadClip = [&sfxDir, &clips](const QString& key) {
-        DecodedClip clip;
-        const QString path = miacode::preview_sfx::assetFilePathForKind(sfxDir, key);
-        if (decodeAudioClip(path, &clip)) {
-            clips.insert(key, clip);
-        }
-    };
-    loadClip(QStringLiteral("answer"));
-    loadClip(QStringLiteral("judge"));
-    loadClip(QStringLiteral("judge_break"));
-    loadClip(QStringLiteral("slide"));
-    loadClip(QStringLiteral("break"));
-    loadClip(QStringLiteral("break_slide_start"));
-    loadClip(QStringLiteral("break_slide"));
-    loadClip(QStringLiteral("judge_break_slide"));
-    loadClip(QStringLiteral("ex"));
-    loadClip(QStringLiteral("touch"));
-    loadClip(QStringLiteral("touchhold"));
-    loadClip(QStringLiteral("firework"));
-
-    QVector<ExportEvent> events;
-    QVector<ExportTouchholdSpan> spans;
-    miacode::preview_sfx_timeline::buildTimeline(noteMarkers, 1.0, timingSettings, &events, &spans);
-
-    const auto kindVolume = [&settings](const QString& kind) -> double {
-        return previewSfxVolumeForKind(settings, kind);
-    };
-
-    const QVector<ScheduledExportPlayback> scheduledPlaybacks =
-        miacode::preview_sfx_timeline::buildScheduledPlaybacks(events);
-
-    for (const ScheduledExportPlayback& playback : std::as_const(scheduledPlaybacks)) {
-        qint64 maxFrames = -1;
-        if (playback.nextSameKindSecond >= 0.0) {
-            const double availableSeconds = playback.nextSameKindSecond - playback.second;
-            maxFrames = qMax<qint64>(0, qRound64(availableSeconds * kMixSampleRate));
-        }
-        const QString clipKind = playback.kind == QLatin1String("break_slide_finish")
-            ? QStringLiteral("break_slide")
-            : playback.kind;
-        const auto it = clips.constFind(clipKind);
-        if (it == clips.constEnd()) {
-            continue;
-        }
-        if (!miacode::preview_sfx_timeline::scheduledPlaybackSurvivesTimelineOriginClamp(
-                playback,
-                timelineOriginSecond)) {
-            continue;
-        }
-        const double volume = kindVolume(playback.kind);
-        const double mixedGain = qMax(0.0, playback.gain) * qMax(0.0, volume);
-        if (mixedGain <= 0.0) {
-            continue;
-        }
-        const double shiftedSecond =
-            miacode::preview_sfx_timeline::scheduledPlaybackMixSecond(playback, timelineOriginSecond);
-        if (shiftedSecond < 0.0) {
-            continue;
-        }
-        const qint64 startFrame = qRound64(shiftedSecond * kMixSampleRate);
-        addClipToMix(it.value(), mixedGain, startFrame, maxFrames, 0, &mix);
-    }
-
-    const auto touchholdIt = clips.constFind(QStringLiteral("touchhold"));
-    const double touchholdGain = kindVolume(QStringLiteral("touchhold"));
-    if (touchholdIt != clips.constEnd() && touchholdGain > 0.0) {
-        const DecodedClip& touchholdClip = touchholdIt.value();
-        struct MixTouchholdSpan {
-            qint64 startFrame = 0;
-            qint64 endFrame = 0;
-        };
-        QVector<MixTouchholdSpan> activeSpans;
-        activeSpans.reserve(spans.size());
-        const qint64 totalMixFrames = mix.size() / kMixChannels;
-        for (const ExportTouchholdSpan& span : spans) {
-            if (span.endSecond <= span.startSecond) {
-                continue;
-            }
-            if (span.startSecond + kTimelineEpsilonSeconds < timelineOriginSecond) {
-                continue;
-            }
-            const double shiftedSecond = span.startSecond - timelineOriginSecond;
-            if (shiftedSecond < 0.0) {
-                continue;
-            }
-            const qint64 startFrame = qRound64(shiftedSecond * kMixSampleRate);
-            const qint64 spanFrames = qRound64((span.endSecond - span.startSecond) * kMixSampleRate);
-            const qint64 audibleEndFrame = qMin(startFrame + spanFrames, startFrame + touchholdClip.frameCount());
-            if (startFrame >= totalMixFrames || audibleEndFrame <= startFrame) {
-                continue;
-            }
-            MixTouchholdSpan mixSpan;
-            mixSpan.startFrame = startFrame;
-            mixSpan.endFrame = qMin(audibleEndFrame, totalMixFrames);
-            activeSpans.append(mixSpan);
-        }
-        if (!activeSpans.isEmpty()) {
-            std::sort(activeSpans.begin(), activeSpans.end(), [](const MixTouchholdSpan& a, const MixTouchholdSpan& b) {
-                if (a.startFrame != b.startFrame) {
-                    return a.startFrame < b.startFrame;
-                }
-                return a.endFrame < b.endFrame;
-            });
-
-            qint64 mergedStart = activeSpans.first().startFrame;
-            qint64 mergedEnd = activeSpans.first().endFrame;
-            for (int i = 1; i < activeSpans.size(); ++i) {
-                const MixTouchholdSpan& span = activeSpans.at(i);
-                if (span.startFrame <= mergedEnd) {
-                    mergedEnd = qMax(mergedEnd, span.endFrame);
-                    continue;
-                }
-                addClipToMix(
-                    touchholdClip,
-                    touchholdGain,
-                    mergedStart,
-                    mergedEnd - mergedStart,
-                    0,
-                    &mix
-                );
-                mergedStart = span.startFrame;
-                mergedEnd = span.endFrame;
-            }
-            addClipToMix(
-                touchholdClip,
-                touchholdGain,
-                mergedStart,
-                mergedEnd - mergedStart,
-                0,
-                &mix
-            );
-        }
-    }
-
-    return writeWav16(outputPath, mix, kMixSampleRate, kMixChannels);
+    return backend;
+#else
+    auto backend = std::make_unique<miacode::video_export::LegacyExportAudioBackend>();
+    QString reason;
+    backend->isSupported(&reason);
+    Q_UNUSED(reason);
+    return backend;
+#endif
 }
 
 quint64 fnv1a64Bytes(const char* data, qint64 size)
@@ -3311,17 +2995,18 @@ VideoExportResult VideoExportController::exportPreparedTask(
         return progressCallback(percent, text);
     };
 
-    const double segmentStartSecond = qMax(0.0, task.exportStartSeconds);
-    const double segmentDurationSeconds = task.contentDurationSeconds;
-    const double segmentEndSecond = segmentStartSecond + segmentDurationSeconds;
-    const bool keepFullExportBehavior = task.fullRangeExport;
-    const double leadInSeconds = keepFullExportBehavior
-        ? miacode::video_export::kLeadInSeconds
-        : miacode::video_export::kPartialRangePreloadSeconds;
-    const double timelineOriginSecond = segmentStartSecond - leadInSeconds;
-    const double totalSeconds = leadInSeconds + segmentDurationSeconds;
-    const int frameCount = qMax(1, qRound(totalSeconds * task.fps));
-    const double alignedTotalSeconds = static_cast<double>(frameCount) / qMax(1, task.fps);
+    miacode::video_export::VideoExportAudioRenderPlan audioRenderPlan;
+    QString audioPlanError;
+    if (!miacode::video_export::buildVideoExportAudioRenderPlan(task, &audioRenderPlan, &audioPlanError)) {
+        result.message = QStringLiteral("Unable to build export audio render plan.");
+        result.details = withExportLogPath(audioPlanError);
+        appendVideoExportLog(QStringLiteral("fail_audio_plan"), audioPlanError);
+        return result;
+    }
+
+    const int frameCount = audioRenderPlan.frameCount;
+    const double alignedTotalSeconds = audioRenderPlan.alignedTotalSeconds;
+    const double timelineOriginSecond = audioRenderPlan.timelineOriginSecond;
     const int frameWidth = qMax(1, task.outputWidth);
     const int frameHeight = qMax(1, task.outputHeight);
     const QSize frameSize(frameWidth, frameHeight);
@@ -3332,12 +3017,11 @@ VideoExportResult VideoExportController::exportPreparedTask(
     );
     const bool hasMedia = !mediaPath.isEmpty();
     const bool mediaIsImage = hasMedia && isImageMediaPath(mediaPath);
-    const QString trackPath = (task.trackPath.isEmpty() || !QFileInfo::exists(task.trackPath))
-        ? QString()
-        : normalizePath(task.trackPath);
+    const QString trackPath = audioRenderPlan.backgroundTrack.enabled
+        ? audioRenderPlan.backgroundTrack.path
+        : QString();
     const bool hasTrack = !trackPath.isEmpty();
-    const QVector<TimelineNoteMarker> exportMarkers =
-        filteredMarkersForRange(task.noteMarkers, timelineOriginSecond, segmentEndSecond);
+    const QVector<TimelineNoteMarker>& exportMarkers = audioRenderPlan.exportMarkers;
     const MuriAnalysisReport exportMuriAnalysisReport = exportMarkers.isEmpty()
         ? MuriAnalysisReport{}
         : MuriAnalyzer::analyze(
@@ -3352,14 +3036,14 @@ VideoExportResult VideoExportController::exportPreparedTask(
             .arg(mediaIsImage ? 1 : 0)
             .arg(trackPath)
             .arg(hasTrack ? 1 : 0)
-            .arg(segmentStartSecond, 0, 'f', 6)
-            .arg(segmentEndSecond, 0, 'f', 6)
-            .arg(leadInSeconds, 0, 'f', 6)
+            .arg(audioRenderPlan.segmentStartSecond, 0, 'f', 6)
+            .arg(audioRenderPlan.segmentEndSecond, 0, 'f', 6)
+            .arg(audioRenderPlan.leadInSeconds, 0, 'f', 6)
             .arg(timelineOriginSecond, 0, 'f', 6)
             .arg(task.fullRangeExport ? 1 : 0)
             .arg(timelineOriginSecond, 0, 'f', 6)
-            .arg(segmentEndSecond, 0, 'f', 6)
-            .arg(totalSeconds, 0, 'f', 6)
+            .arg(audioRenderPlan.segmentEndSecond, 0, 'f', 6)
+            .arg(audioRenderPlan.totalSeconds, 0, 'f', 6)
             .arg(alignedTotalSeconds, 0, 'f', 6)
             .arg(frameCount)
             .arg(frameWidth)
@@ -3367,10 +3051,13 @@ VideoExportResult VideoExportController::exportPreparedTask(
     );
     appendVideoExportLog(
         QStringLiteral("render_plan"),
-        QStringLiteral("fps=%1 frameBudgetMs=%2 frameCount=%3")
+        QStringLiteral("fps=%1 frameBudgetMs=%2 frameCount=%3 bgm=%4 sfx=%5 touchhold=%6")
             .arg(task.fps)
             .arg(1000.0 / static_cast<double>(qMax(1, task.fps)), 0, 'f', 4)
             .arg(frameCount)
+            .arg(audioRenderPlan.backgroundTrack.enabled ? 1 : 0)
+            .arg(audioRenderPlan.scheduledSfxPlaybacks.size())
+            .arg(audioRenderPlan.mergedTouchholdSpans.size())
     );
 
     if (setProgressPercent(0, QStringLiteral("Preparing SFX track..."))) {
@@ -3421,21 +3108,31 @@ VideoExportResult VideoExportController::exportPreparedTask(
         }
     }
 
-    const QString sfxWavPath = QDir(tempDir.path()).filePath(QStringLiteral("export_sfx.wav"));
-    if (!mixSfxTrackToWav(
-            sfxWavPath,
-            exportMarkers,
-            task.audioSettings,
-            task.timingSettings,
-            alignedTotalSeconds,
-            timelineOriginSecond)) {
-        result.message = QStringLiteral("Unable to generate SFX mix track.");
-        result.details = QStringLiteral("Check whether assets/SFX files are complete.");
-        result.details = withExportLogPath(result.details);
-        appendVideoExportLog(QStringLiteral("fail_mix_sfx"), QStringLiteral("sfxWavPath=%1").arg(sfxWavPath));
+    const QString mixedAudioWavPath = QDir(tempDir.path()).filePath(QStringLiteral("export_audio.wav"));
+    QString audioBackendError;
+    std::unique_ptr<miacode::video_export::VideoExportAudioBackend> audioBackend =
+        createExportAudioBackend(&audioBackendError);
+    if (!audioBackend) {
+        result.message = QStringLiteral("Unable to select export audio backend.");
+        result.details = withExportLogPath(audioBackendError);
+        appendVideoExportLog(QStringLiteral("fail_audio_backend_select"), audioBackendError);
         return result;
     }
-    appendVideoExportLog(QStringLiteral("mix_sfx_ok"), QStringLiteral("sfxWavPath=%1").arg(sfxWavPath));
+    appendVideoExportLog(
+        QStringLiteral("audio_backend_select"),
+        QStringLiteral("backend=%1 path=%2").arg(audioBackend->backendId(), mixedAudioWavPath));
+    if (!audioBackend->renderMixedTrackToWav(audioRenderPlan, mixedAudioWavPath, &audioBackendError)) {
+        result.message = QStringLiteral("Unable to generate mixed export audio track.");
+        result.details = withExportLogPath(audioBackendError);
+        appendVideoExportLog(
+            QStringLiteral("fail_audio_mix"),
+            QStringLiteral("backend=%1 output=%2 error=%3")
+                .arg(audioBackend->backendId(), mixedAudioWavPath, audioBackendError));
+        return result;
+    }
+    appendVideoExportLog(
+        QStringLiteral("audio_mix_ok"),
+        QStringLiteral("backend=%1 output=%2").arg(audioBackend->backendId(), mixedAudioWavPath));
 
     if (setProgressPercent(5, QStringLiteral("Starting ffmpeg..."))) {
         result.message = QStringLiteral("canceled");
@@ -3496,8 +3193,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
 
     int mediaInputIndex = -1;
     int dimMaskInputIndex = -1;
-    int bgmInputIndex = -1;
-    int sfxInputIndex = -1;
+    int audioInputIndex = -1;
     int currentInputIndex = 1;
     if (hasMedia) {
         mediaInputIndex = currentInputIndex++;
@@ -3552,12 +3248,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
                 .arg(ringRatio, 0, 'f', 6)
         );
     }
-    if (hasTrack) {
-        bgmInputIndex = currentInputIndex++;
-        args << QStringLiteral("-i") << trackPath;
-    }
-    sfxInputIndex = currentInputIndex++;
-    args << QStringLiteral("-i") << sfxWavPath;
+    audioInputIndex = currentInputIndex++;
+    args << QStringLiteral("-i") << mixedAudioWavPath;
 
     const QString totalSecondsText = QString::number(alignedTotalSeconds, 'f', 6);
     const QString timelineOriginText = QString::number(timelineOriginSecond, 'f', 6);
@@ -3621,37 +3313,10 @@ VideoExportResult VideoExportController::exportPreparedTask(
 
     // Quick export frames are already read back in top-left raster order.
     filterParts << QStringLiteral("[0:v]format=rgba[overlay_src]");
-    filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3,aformat=channel_layouts=stereo[sfx]")
-                       .arg(sfxInputIndex)
+    filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3,aformat=channel_layouts=stereo[aout]")
+                       .arg(audioInputIndex)
                        .arg(totalSecondsText)
                        .arg(kMixSampleRate);
-    if (hasTrack) {
-        if (timelineOriginSecond > kTimelineEpsilonSeconds) {
-            filterParts << QStringLiteral("[%1:a]atrim=start=%2:end=%3,asetpts=PTS-STARTPTS,aresample=%4,aformat=channel_layouts=stereo,volume=%5[bgm]")
-                               .arg(bgmInputIndex)
-                               .arg(timelineOriginText)
-                               .arg(QString::number(timelineOriginSecond + alignedTotalSeconds, 'f', 6))
-                               .arg(kMixSampleRate)
-                               .arg(QString::number(task.audioSettings.trackVolume, 'f', 6));
-        } else if (timelineOriginSecond < -kTimelineEpsilonSeconds) {
-            const int delayMs = qMax(0, qRound(-timelineOriginSecond * 1000.0));
-            filterParts << QStringLiteral("[%1:a]atrim=start=0:end=%2,asetpts=PTS-STARTPTS,adelay=%3|%3,aresample=%4,aformat=channel_layouts=stereo,volume=%5[bgm]")
-                               .arg(bgmInputIndex)
-                               .arg(QString::number(alignedTotalSeconds + timelineOriginSecond, 'f', 6))
-                               .arg(delayMs)
-                               .arg(kMixSampleRate)
-                               .arg(QString::number(task.audioSettings.trackVolume, 'f', 6));
-        } else {
-            filterParts << QStringLiteral("[%1:a]atrim=0:%2,asetpts=PTS-STARTPTS,aresample=%3,aformat=channel_layouts=stereo,volume=%4[bgm]")
-                               .arg(bgmInputIndex)
-                               .arg(totalSecondsText)
-                               .arg(kMixSampleRate)
-                               .arg(QString::number(task.audioSettings.trackVolume, 'f', 6));
-        }
-        filterParts << QStringLiteral("[bgm][sfx]amix=inputs=2:normalize=0[aout]");
-    } else {
-        filterParts << QStringLiteral("[sfx]anull[aout]");
-    }
 
     const SystemMemoryInfo memoryInfo = querySystemMemoryInfo();
     appendVideoExportLog(QStringLiteral("memory_snapshot"), memoryInfoToLog(memoryInfo));

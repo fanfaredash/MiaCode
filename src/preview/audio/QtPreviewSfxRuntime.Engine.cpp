@@ -5,8 +5,8 @@ bool QtPreviewSfxRuntime::initializeAudioEngine()
     }
 
     ma_engine_config engineConfig = ma_engine_config_init();
-    engineConfig.channels = 2;
-    engineConfig.sampleRate = 48000;
+    engineConfig.channels = miacode::preview_audio::kMixChannels;
+    engineConfig.sampleRate = miacode::preview_audio::kMixSampleRate;
 
     engineState_ = new EngineState();
     if (ma_engine_init(&engineConfig, &engineState_->engine) != MA_SUCCESS) {
@@ -172,7 +172,10 @@ bool QtPreviewSfxRuntime::prepareStretchedBackgroundTrack(double timelineSecond)
     state->trackPath = preparedAssets_.trackPath;
     state->playbackRate = playbackSession_.backgroundTrackPlaybackRate;
 
-    ma_decoder_config decoderConfig = ma_decoder_config_init(ma_format_f32, 2, deviceSampleRate_);
+    ma_decoder_config decoderConfig = ma_decoder_config_init(
+        ma_format_f32,
+        miacode::preview_audio::kMixChannels,
+        deviceSampleRate_);
     const ma_result decoderInitResult =
         miacode::audio_io::decoderInitFile(preparedAssets_.trackPath, &decoderConfig, &state->decoder);
     if (decoderInitResult != MA_SUCCESS) {

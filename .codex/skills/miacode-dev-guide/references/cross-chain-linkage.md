@@ -93,7 +93,7 @@ If you change timing-metadata semantics, review all of:
 Canonical sync pair:
 
 - Runtime: `src/preview/audio/QtPreviewSfxRuntime.Timeline.cpp`, `QtPreviewSfxRuntime::configureTimeline`
-- Export: `src/tools/video_export/VideoExportController.cpp`, `buildSfxTimeline`
+- Export: `src/tools/video_export/VideoExportAudioRenderPlan.cpp`, `buildVideoExportAudioRenderPlan`; `src/tools/video_export/VideoExportAudioBackend.h`, `VideoExportAudioBackend::renderMixedTrackToWav`
 
 Current runtime ownership note:
 
@@ -119,7 +119,7 @@ Shared concerns:
 - break-slide tails now emit `break + judge_break_slide`; do not restore the legacy `break_slide_finish` event on only one side
 - firework timing offsets
 - partial export timing: when the export request is not marked as full-range, export now uses a 1.0-second preload (full-range still keeps its 3.0-second lead-in), and the exported marker set is filtered up front by `marker.second` within the simulated frame window `[timelineOriginSecond, R]`; preview/export rendering, Muri overlays, and export SFX all consume that same filtered marker set
-- same-second collapse, latest-wins scheduling, and partial-export answer clamping are shared in `src/common/PreviewSfxTimeline.h`; keep runtime `drainEvents(...)` and export `mixSfxTrackToWav(...)` on that common path, and pass the same playback-rate / timing-settings inputs into both sides
+- same-second collapse, latest-wins scheduling, and partial-export answer clamping are shared in `src/common/PreviewSfxTimeline.h`; keep runtime `drainEvents(...)`, export render-plan building, and export backend rendering on that common path, and pass the same playback-rate / timing-settings inputs into both sides
 
 If one side changes, inspect the other side in the same patch.
 
@@ -133,7 +133,7 @@ Current contract:
 - Widget-shell preview route: `MainWindow::previewStageMediaRoute` selects `PreviewMediaController`, and `PreviewRuntime` keeps background media on the internal stage layer for both `bg.png` and `bg.mp4` / `pv.mp4`
 - Quickshell-beta preview host route: `MainWindow::previewStageMediaRoute` selects `PreviewStageMediaHost` for both background images and videos
 - Quickshell-beta presentation split: `QuickShellPreviewSurface.qml` keeps inline presentation for images and no-media states, while `QuickShellPreviewCompositeSurface` hosts `QuickShellPreviewSurface.qml` inside a dedicated `QQuickView` whenever the active quickshell media is video
-- Export route: export stays separate from the preview host split and still consumes the shared resolver through `VideoExportController`
+- Export route: export stays separate from the preview host split and still consumes the shared resolver through `VideoExportController`; Windows export audio now renders a single mixed WAV through `BassExportAudioBackend`, while non-Windows keeps `LegacyExportAudioBackend` as a non-parity fallback
 
 Timing contract:
 
@@ -271,7 +271,8 @@ Implication:
   - Check `VideoExportSnapshot.cpp`
   - Check `MuriAnalyzer.cpp`
 - Change preview SFX mapping:
-  - Check `VideoExportController.cpp::buildSfxTimeline`
+  - Check `VideoExportAudioRenderPlan.cpp`
+  - Check `VideoExportAudioBackend` implementations
   - Check `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
 - Change export media rules:
   - Check `PreviewMediaController.cpp`

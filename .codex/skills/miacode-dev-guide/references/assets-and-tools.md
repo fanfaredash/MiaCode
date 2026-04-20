@@ -75,7 +75,7 @@ If these conventions change, update both code and this file.
     - `just_wifi_d_fast_gd.png`
   - Do not add fallback from these overlays to root-level `assets/skin/just_*.png` or any `perfect`-style judge assets
 - SFX clips:
-  - Consumer: `QtPreviewSfxRuntime`, export SFX mixing
+  - Consumer: `QtPreviewSfxRuntime`, `VideoExportAudioRenderPlan`, export audio backends
   - Entry: `miacode::preview_sfx::resolveSfxDirectory`
 - Windows BASS runtime assets:
   - Repo-local files:
@@ -90,7 +90,7 @@ If these conventions change, update both code and this file.
     - `third_party/bass/bin/win64/bassopus.dll`
   - Current build contract:
     - `CMakeLists.txt` links `bass.lib` and `bassmix.lib` on Windows for `MiaCode` and `soundtouch_probe`
-    - post-build copy now deploys the repo-local `bass*.dll` files into the executable directory so preview audio never depends on MajdataPlay's install path or any external machine-global location
+    - post-build copy now deploys the repo-local `bass*.dll` files into the executable directory so both preview audio and Windows export audio never depend on MajdataPlay's install path or any external machine-global location
 - Background outlines and auxiliary background art:
   - Consumers: preview and export overlay composition
   - Current active variant files:

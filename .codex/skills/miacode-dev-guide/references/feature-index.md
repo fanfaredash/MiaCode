@@ -152,9 +152,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Class: `BatchVideoExportDialog`
   - Owns: chart-folder batch export setup, shared export settings UI, and application-scoped export preset / resolution / FPS persistence for batch runs
 - Export task and controller:
-  - Files: `src/tools/video_export/VideoExportController.h`, `src/tools/video_export/VideoExportController.cpp`, `src/tools/video_export/VideoExportQuickRenderBackend.h`, `src/tools/video_export/VideoExportQuickRenderBackend.cpp`, `src/tools/video_export/RawVideoPipeTransport.h`, `src/tools/video_export/RawVideoPipeTransport.cpp`
-  - Classes: `VideoExportController`, `VideoExportQuickRenderBackend`
-  - Key functions: `exportFullPreview`, `exportPreparedTask`, `chooseVideoEncoder`, `VideoExportQuickRenderBackend::bootstrap`, `miacode::video_export::raw_pipe::enqueueRawVideoFrame`
+  - Files: `src/tools/video_export/VideoExportController.h`, `src/tools/video_export/VideoExportController.cpp`, `src/tools/video_export/VideoExportAudioRenderPlan.h`, `src/tools/video_export/VideoExportAudioRenderPlan.cpp`, `src/tools/video_export/VideoExportAudioBackend.h`, `src/tools/video_export/LegacyExportAudioBackend.h`, `src/tools/video_export/LegacyExportAudioBackend.cpp`, `src/tools/video_export/BassExportAudioBackend.h`, `src/tools/video_export/BassExportAudioBackend.cpp`, `src/tools/video_export/VideoExportQuickRenderBackend.h`, `src/tools/video_export/VideoExportQuickRenderBackend.cpp`, `src/tools/video_export/RawVideoPipeTransport.h`, `src/tools/video_export/RawVideoPipeTransport.cpp`
+  - Classes: `VideoExportController`, `VideoExportQuickRenderBackend`, `LegacyExportAudioBackend`, `BassExportAudioBackend`
+  - Key functions: `exportFullPreview`, `exportPreparedTask`, `buildVideoExportAudioRenderPlan`, `VideoExportAudioBackend::renderMixedTrackToWav`, `chooseVideoEncoder`, `VideoExportQuickRenderBackend::bootstrap`, `miacode::video_export::raw_pipe::enqueueRawVideoFrame`
 - Export snapshot boundary:
   - Files: `src/tools/video_export/VideoExportSnapshot.h`, `src/tools/video_export/VideoExportSnapshot.cpp`
   - Struct: `VideoExportSnapshot`

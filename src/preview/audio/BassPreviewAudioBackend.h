@@ -6,6 +6,7 @@
 #include <QHash>
 #include <QMutex>
 
+#include "common/PreviewAudioMixConfig.h"
 #include "PreviewAudioBackend.h"
 
 class BassPreviewAudioBackend final : public QObject, public miacode::preview_audio::PreviewAudioBackend
@@ -153,7 +154,7 @@ private:
     PreparedPlaybackState preparedPlayback_;
     PlaybackSessionState playbackSession_;
     quint64 playbackTransactionId_ = 0;
-    quint32 deviceSampleRate_ = 48000;
+    quint32 deviceSampleRate_ = static_cast<quint32>(miacode::preview_audio::kMixSampleRate);
     double preparedTimelinePlaybackRate_ = 1.0;
     bool engineInitialized_ = false;
     quint32 masterMixer_ = 0;

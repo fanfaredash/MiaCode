@@ -132,10 +132,12 @@ Headless export path:
 
 1. `MainWindow` builds a `VideoExportSnapshot`.
 2. The export worker reconstructs a `VideoExportTask`.
-3. `VideoExportController` owns the ffmpeg process, raw-frame pipe, timing diagnostics, and export loop.
-4. `VideoExportQuickRenderBackend` owns a `PreviewSceneAssetRepository`, a `PreviewFrameState`, and a `PreviewQuickExportSession`.
-5. `PreviewQuickExportSession` creates a headless `QQuickRenderControl` scene and renders `PreviewQuickSceneRoot` into an offscreen framebuffer.
-6. The resulting RGBA frame is packed and streamed to ffmpeg through the raw video pipe.
+3. `buildVideoExportAudioRenderPlan(...)` collapses export-time BGM placement, scheduled SFX playbacks, and merged touchhold spans into one offline audio plan.
+4. `VideoExportAudioBackend::renderMixedTrackToWav(...)` renders a single `export_audio.wav`; Windows uses `BassExportAudioBackend`, while non-Windows keeps `LegacyExportAudioBackend` as a non-parity fallback.
+5. `VideoExportController` owns the ffmpeg process, raw-frame pipe, timing diagnostics, and export loop.
+6. `VideoExportQuickRenderBackend` owns a `PreviewSceneAssetRepository`, a `PreviewFrameState`, and a `PreviewQuickExportSession`.
+7. `PreviewQuickExportSession` creates a headless `QQuickRenderControl` scene and renders `PreviewQuickSceneRoot` into an offscreen framebuffer.
+8. The resulting RGBA frame is packed and streamed to ffmpeg through the raw video pipe, while the pre-mixed `export_audio.wav` is muxed directly without an extra BGM/SFX `amix` stage.
 
 Worker logging note:
 
@@ -145,12 +147,16 @@ Worker logging note:
 Important export-side constraints:
 
 - Export uses the same Quick scene and layer-state builders as realtime preview.
+- Export uses the same `PreviewSfxTimeline` scheduling semantics as realtime preview, but its mixed-audio render now happens behind `VideoExportAudioRenderPlan` plus `VideoExportAudioBackend` instead of hand-built controller-local mixing.
 - Export does not reuse a live preview window or share a legacy renderer.
 - Export overlay rendering is selected by `kPreviewExportOverlayRenderLayers`; it is not a second hand-maintained draw list.
 
 Primary owner files:
 
 - `src/tools/video_export/VideoExportController.cpp`
+- `src/tools/video_export/VideoExportAudioRenderPlan.cpp`
+- `src/tools/video_export/BassExportAudioBackend.cpp`
+- `src/tools/video_export/LegacyExportAudioBackend.cpp`
 - `src/tools/video_export/VideoExportQuickRenderBackend.cpp`
 - `src/tools/video_export/RawVideoPipeTransport.cpp`
 - `src/preview/runtime/PreviewQuickExportSession.cpp`
