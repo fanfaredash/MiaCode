@@ -142,10 +142,11 @@ Do not rename sound files casually; both preview-time and export-time behavior d
   - the CMake post-build deploy step now also copies the repo-local BASS runtime DLL set (`bass`, `bassmix`, `bass_fx`, `bass_aac`, `bassopus`) into the executable directory
 - Windows release packages now also include:
     - root-level `Start_MiaCode_Debug.bat`
-    - root-level `Start_MiaCode_Debug_CompareDump.bat`
+    - root-level `Start_MiaCode_QuickShell_Debug.bat`
     - root-level `logs/` helper folder only for explicit debug-launch scripts; normal project-bound runtime logs default to `.miacode/logs/`
     - `docs/DEBUG_INDEX.md`
     - `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
+  - optional Windows dev-tool packaging currently includes only `simai_native_dump.exe`; `soundtouch_probe.exe` is no longer copied by `scripts/package-win.ps1`
 - macOS build/package:
   - `scripts/build-macos.sh`
   - `scripts/package-mac.sh`

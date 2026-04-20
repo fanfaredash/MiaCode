@@ -360,7 +360,7 @@ foreach ($runtimeDll in $requiredBassRuntimeDlls) {
 }
 
 if ($IncludeDevTools) {
-    foreach ($toolName in @("simai_native_dump.exe", "soundtouch_probe.exe")) {
+    foreach ($toolName in @("simai_native_dump.exe")) {
         $toolPath = Join-Path $buildOutputDir $toolName
         if (Test-Path $toolPath) {
             Copy-Item $toolPath (Join-Path $DistDir $toolName) -Force
@@ -456,14 +456,16 @@ $releaseLines = @(
 if ($IncludeDevTools) {
     $releaseLines += @(
         "  - simai_native_dump.exe"
-        "  - soundtouch_probe.exe"
     )
-} else {
+}
+$releaseLines += @(
+    ""
+    "Not included on purpose:"
+    "  - soundtouch_probe.exe"
+)
+if (!$IncludeDevTools) {
     $releaseLines += @(
-        ""
-        "Not included on purpose:"
         "  - simai_native_dump.exe"
-        "  - soundtouch_probe.exe"
     )
 }
 $releaseLines | Set-Content -Path $releaseReadme -Encoding UTF8
@@ -504,6 +506,7 @@ $unexpectedPackagePaths = @(
     "Start_MiaCode_Debug_CompareDump.bat",
     "Start_MiaCode_Debug_View.bat",
     "Start_MiaCode_Debug_Widget.bat",
+    "soundtouch_probe.exe",
     (Get-QtRuntimeDllName -BaseName "Qt6OpenGLWidgets" -Config $Config),
     (Get-QtRuntimeDllName -BaseName "Qt6Concurrent" -Config $Config),
     "opengl32sw.dll"

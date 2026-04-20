@@ -78,6 +78,7 @@ public:
 
 private:
     void refreshAssetState();
+    void syncSessionStateIfInitialized();
     void updateFrameStateForRender(double playheadSeconds, bool showTimestamp, bool showObjectStatsHud);
 
     miacode::preview::runtime::PreviewSceneAssetRepository assets_;

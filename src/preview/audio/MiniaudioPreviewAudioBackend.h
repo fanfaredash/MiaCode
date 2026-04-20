@@ -11,6 +11,8 @@ class MiniaudioPreviewAudioBackend final : public QObject, public miacode::previ
 {
 public:
     using PausePreviewResult = miacode::preview_audio::PausePreviewResult;
+    using RetainedPlaybackMode = miacode::preview_audio::RetainedPlaybackMode;
+    using RetainedBgmState = miacode::preview_audio::RetainedBgmState;
 
     explicit MiniaudioPreviewAudioBackend(QObject* parent = nullptr);
     ~MiniaudioPreviewAudioBackend() override;
@@ -43,6 +45,14 @@ public:
         const PreviewTimingSettings& timingSettings) override;
     double startPreviewPlaybackTransaction(double startSecond, bool resumeFromPause, double playbackRate) override;
     PausePreviewResult capturePausedPreviewTransaction() override;
+    PausePreviewResult pausePreviewPlaybackTransaction() override;
+    double resumeRetainedPreviewPlaybackTransaction() override;
+    double seekRetainedPreviewPlaybackTransaction(double targetSecond, bool continuePlaying) override;
+    void resetRetainedPreviewPlaybackTransaction(double targetSecond) override;
+    void clearRetainedPreviewPlaybackTransaction() override;
+    RetainedPlaybackMode retainedPlaybackMode() const override;
+    RetainedBgmState retainedBgmState() const override;
+    double authoritativePlaybackSecond() const override;
     double syncPreviewPlaybackClockTransaction(double fallbackSecond) override;
     void resetCursor(double second, bool includeCurrentSecond) override;
     void drainEvents(double second) override;
@@ -109,6 +119,12 @@ private:
         double startSecond = 0.0;
     };
 
+    struct RetainedPlaybackState {
+        RetainedPlaybackMode mode = RetainedPlaybackMode::None;
+        RetainedBgmState bgmState = RetainedBgmState::NoneLoaded;
+        double second = 0.0;
+    };
+
     QString resolveTrackPath(const QString& chartPath) const;
     QString resolveSfxDir() const;
     void rebuildPreparedTimeline(
@@ -141,6 +157,7 @@ private:
     TimelineProgramState preparedTimeline_;
     PlaybackSessionState playbackSession_;
     PreparedPlaybackState preparedPlayback_;
+    RetainedPlaybackState retainedPlayback_;
     quint64 playbackTransactionId_ = 0;
     quint64 touchholdSoundLengthFrames_ = 0;
     quint32 deviceSampleRate_ = static_cast<quint32>(miacode::preview_audio::kMixSampleRate);

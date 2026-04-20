@@ -12,6 +12,8 @@ class QtPreviewSfxRuntime : public QObject
 
 public:
     using PausePreviewResult = miacode::preview_audio::PausePreviewResult;
+    using RetainedPlaybackMode = miacode::preview_audio::RetainedPlaybackMode;
+    using RetainedBgmState = miacode::preview_audio::RetainedBgmState;
 
     explicit QtPreviewSfxRuntime(QObject* parent = nullptr);
     ~QtPreviewSfxRuntime() override;
@@ -41,6 +43,14 @@ public:
         const PreviewTimingSettings& timingSettings);
     double startPreviewPlaybackTransaction(double startSecond, bool resumeFromPause, double playbackRate);
     PausePreviewResult capturePausedPreviewTransaction();
+    PausePreviewResult pausePreviewPlaybackTransaction();
+    double resumeRetainedPreviewPlaybackTransaction();
+    double seekRetainedPreviewPlaybackTransaction(double targetSecond, bool continuePlaying);
+    void resetRetainedPreviewPlaybackTransaction(double targetSecond);
+    void clearRetainedPreviewPlaybackTransaction();
+    RetainedPlaybackMode retainedPlaybackMode() const;
+    RetainedBgmState retainedBgmState() const;
+    double authoritativePlaybackSecond() const;
     double syncPreviewPlaybackClockTransaction(double fallbackSecond);
     void resetCursor(double second, bool includeCurrentSecond);
     void drainEvents(double second);

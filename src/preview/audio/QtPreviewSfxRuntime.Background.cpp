@@ -127,10 +127,20 @@ void QtPreviewSfxRuntime::pauseBackgroundTrack()
 
 QtPreviewSfxRuntime::PausePreviewResult QtPreviewSfxRuntime::capturePausedPreviewTransaction()
 {
+    return pausePreviewPlaybackTransaction();
+}
+
+QtPreviewSfxRuntime::PausePreviewResult QtPreviewSfxRuntime::pausePreviewPlaybackTransaction()
+{
     PausePreviewResult result;
+    result.usedBackgroundTrack = hasBackgroundTrack();
+    result.pauseSecond = authoritativePlaybackSecond();
+    result.retainedMode = RetainedPlaybackMode::PausedExact;
+    result.retainedBgmState = hasBackgroundTrack() ? RetainedBgmState::LoadedUsable : RetainedBgmState::NoneLoaded;
+    retainedPlayback_.mode = result.retainedMode;
+    retainedPlayback_.bgmState = result.retainedBgmState;
+    retainedPlayback_.second = result.pauseSecond;
     if (hasBackgroundTrack()) {
-        result.usedBackgroundTrack = true;
-        result.pauseSecond = backgroundPlaybackSecond();
         pauseBackgroundTrack();
     }
     return result;
@@ -233,6 +243,71 @@ double QtPreviewSfxRuntime::syncPreviewPlaybackClockTransaction(double fallbackS
     }
     syncBackgroundTrack(second);
     return second;
+}
+
+double QtPreviewSfxRuntime::resumeRetainedPreviewPlaybackTransaction()
+{
+    const double second = retainedPlayback_.second;
+    if (hasBackgroundTrack()) {
+        startBackgroundTrack(second);
+    }
+    restoreTouchholdVoices(second);
+    retainedPlayback_.mode = RetainedPlaybackMode::None;
+    return second;
+}
+
+double QtPreviewSfxRuntime::seekRetainedPreviewPlaybackTransaction(double targetSecond, bool continuePlaying)
+{
+    const double second = qMax(0.0, targetSecond);
+    resetCursor(second, false);
+    pauseTouchholdVoices();
+    retainedPlayback_.second = second;
+    retainedPlayback_.bgmState = hasBackgroundTrack() ? RetainedBgmState::LoadedUsable : RetainedBgmState::NoneLoaded;
+    if (hasBackgroundTrack()) {
+        if (continuePlaying) {
+            startBackgroundTrack(second);
+        } else {
+            seekBackgroundTrack(second);
+        }
+    }
+    if (continuePlaying) {
+        restoreTouchholdVoices(second);
+        retainedPlayback_.mode = RetainedPlaybackMode::None;
+    } else {
+        retainedPlayback_.mode = RetainedPlaybackMode::PausedAnchored;
+    }
+    return second;
+}
+
+void QtPreviewSfxRuntime::resetRetainedPreviewPlaybackTransaction(double targetSecond)
+{
+    retainedPlayback_.second = seekRetainedPreviewPlaybackTransaction(targetSecond, false);
+}
+
+void QtPreviewSfxRuntime::clearRetainedPreviewPlaybackTransaction()
+{
+    retainedPlayback_.mode = RetainedPlaybackMode::None;
+}
+
+QtPreviewSfxRuntime::RetainedPlaybackMode QtPreviewSfxRuntime::retainedPlaybackMode() const
+{
+    return retainedPlayback_.mode;
+}
+
+QtPreviewSfxRuntime::RetainedBgmState QtPreviewSfxRuntime::retainedBgmState() const
+{
+    return retainedPlayback_.bgmState;
+}
+
+double QtPreviewSfxRuntime::authoritativePlaybackSecond() const
+{
+    if (hasBackgroundTrack()) {
+        return backgroundPlaybackSecond();
+    }
+    if (retainedPlayback_.mode != RetainedPlaybackMode::None) {
+        return retainedPlayback_.second;
+    }
+    return playbackSession_.backgroundTrackLastTimelineSecond;
 }
 
 bool QtPreviewSfxRuntime::audition(const QString& kind, double gain)

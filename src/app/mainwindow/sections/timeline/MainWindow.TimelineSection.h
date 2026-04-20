@@ -144,6 +144,10 @@ public:
 private:
     void cancelPreviewStartupSync();
     void tryCommitPreviewStartupSync();
+    void stopQtPreviewTimers();
+    void finalizeQtPreviewPlaybackStart(double effectiveStartSecond);
+    void pauseQtPreviewPlaybackExact();
+    void anchorQtPreviewPlaybackToSecond(double second, bool centerView);
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;
     MainWindow::MainWindowState& state_;

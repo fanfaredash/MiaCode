@@ -522,6 +522,8 @@ void BassPreviewAudioBackend::resetAssets()
     samplesByKind_.clear();
     backgroundTrackSample_ = nullptr;
     touchholdSample_ = nullptr;
+    retainedBgmState_ = RetainedBgmState::NoneLoaded;
+    trackMissingAfterLoadLogged_ = false;
 
     auto resetSample = [](std::unique_ptr<Sample>& sample) {
         if (sample) {
@@ -605,6 +607,7 @@ void BassPreviewAudioBackend::initializeAssets()
 
     touchholdSample_ = touchholdSampleOwner_.get();
     applySampleLevels();
+    updateRetainedBgmState();
 #endif
 }
 
@@ -650,15 +653,169 @@ void BassPreviewAudioBackend::setBackgroundTrackSampleSpeed(double rate)
 #endif
 }
 
+void BassPreviewAudioBackend::clearExactPauseSnapshot()
+{
+    exactPauseSnapshot_ = ExactPauseSnapshot();
+    exactPauseSnapshotValid_ = false;
+}
+
+void BassPreviewAudioBackend::invalidateRetainedPlaybackState()
+{
+    retainedPlaybackMode_ = RetainedPlaybackMode::Invalidated;
+    clearExactPauseSnapshot();
+}
+
+void BassPreviewAudioBackend::updateRetainedBgmState()
+{
+    if (backgroundTrackSample_ != nullptr) {
+        if (retainedBgmState_ != RetainedBgmState::MissingOnDiskIgnored) {
+            retainedBgmState_ = RetainedBgmState::LoadedUsable;
+        }
+        return;
+    }
+    retainedBgmState_ = RetainedBgmState::NoneLoaded;
+}
+
+void BassPreviewAudioBackend::logTrackFileMissingAfterLoadIfNeeded()
+{
+    if (backgroundTrackSample_ == nullptr
+        || preparedAssets_.trackPath.isEmpty()
+        || trackMissingAfterLoadLogged_
+        || QFileInfo::exists(preparedAssets_.trackPath)) {
+        return;
+    }
+    trackMissingAfterLoadLogged_ = true;
+    retainedBgmState_ = RetainedBgmState::MissingOnDiskIgnored;
+    appendAudioDebugLog(
+        QString("bgm_disk_missing_after_load path=%1 txn=%2")
+            .arg(preparedAssets_.trackPath)
+            .arg(playbackTransactionId_));
+}
+
+void BassPreviewAudioBackend::captureExactPauseSnapshot()
+{
+#ifdef Q_OS_WIN
+    const auto captureSample = [](Sample* sample) -> ExactPauseSnapshot::ActiveSampleSnapshot {
+        ExactPauseSnapshot::ActiveSampleSnapshot snapshot;
+        if (sample == nullptr) {
+            return snapshot;
+        }
+        snapshot.active = sample->isPlaying();
+        snapshot.second = snapshot.active ? sample->currentSec() : 0.0;
+        return snapshot;
+    };
+
+    exactPauseSnapshot_.authoritySecondAtPause = authoritativeSecond();
+    exactPauseSnapshot_.sessionStartSecond = playbackSession_.sessionStartSecond;
+    exactPauseSnapshot_.sessionPlaybackRate = playbackSession_.sessionPlaybackRate;
+    if (masterMixer_ != 0) {
+        const QWORD mixerPosition = BASS_ChannelGetPosition(masterMixer_, BASS_POS_BYTE);
+        exactPauseSnapshot_.masterMixerBytePosition =
+            mixerPosition == static_cast<QWORD>(-1) ? 0 : static_cast<quint64>(mixerPosition);
+    } else {
+        exactPauseSnapshot_.masterMixerBytePosition = 0;
+    }
+    exactPauseSnapshot_.eventGroupIndex = playbackSession_.eventGroupIndex;
+    exactPauseSnapshot_.lastTriggeredGroupIndex = playbackSession_.lastTriggeredGroupIndex;
+    exactPauseSnapshot_.scheduledGroupIndex =
+        scheduledGroupIndex_ >= 0 ? scheduledGroupIndex_ : playbackSession_.eventGroupIndex;
+    exactPauseSnapshot_.bgmRawSecond = backgroundTrackSample_ != nullptr ? backgroundTrackSample_->currentSec() : 0.0;
+    exactPauseSnapshot_.bgmChartSecond =
+        backgroundTrackSample_ != nullptr
+            ? qMax(0.0, exactPauseSnapshot_.bgmRawSecond - playbackSession_.backgroundTrackOffsetSeconds)
+            : 0.0;
+    exactPauseSnapshot_.touchhold = captureSample(touchholdSample_);
+    exactPauseSnapshot_.touchholdActive = exactPauseSnapshot_.touchhold.active;
+    exactPauseSnapshot_.touchholdCurrentOffsetSecond = exactPauseSnapshot_.touchhold.second;
+    exactPauseSnapshot_.answer = captureSample(answerSample_.get());
+    exactPauseSnapshot_.judge = captureSample(judgeSample_.get());
+    exactPauseSnapshot_.judgeBreak = captureSample(judgeBreakSample_.get());
+    exactPauseSnapshot_.slide = captureSample(slideSample_.get());
+    exactPauseSnapshot_.breakSample = captureSample(breakSample_.get());
+    exactPauseSnapshot_.breakSlideStart = captureSample(breakSlideStartSample_.get());
+    exactPauseSnapshot_.breakSlideFinish = captureSample(breakSlideFinishSample_.get());
+    exactPauseSnapshot_.judgeBreakSlide = captureSample(judgeBreakSlideSample_.get());
+    exactPauseSnapshot_.ex = captureSample(exSample_.get());
+    exactPauseSnapshot_.touch = captureSample(touchSample_.get());
+    exactPauseSnapshot_.firework = captureSample(fireworkSample_.get());
+    exactPauseSnapshot_.backgroundTrack = captureSample(backgroundTrackSample_);
+    exactPauseSnapshotValid_ = true;
+#endif
+}
+
+void BassPreviewAudioBackend::suspendPlaybackTransport()
+{
+#ifdef Q_OS_WIN
+    if (masterMixer_ == 0) {
+        return;
+    }
+    logTrackFileMissingAfterLoadIfNeeded();
+    const double pauseSecond = authoritativeSecond();
+    playbackSession_.lastAuthoritativeSecond = pauseSecond;
+    captureExactPauseSnapshot();
+    clearScheduledGroupSync();
+    BASS_ChannelPause(masterMixer_);
+    playbackSession_.masterRunning = false;
+    playbackSession_.backgroundTrackRunning = false;
+    retainedPlaybackMode_ = RetainedPlaybackMode::PausedExact;
+#endif
+}
+
+void BassPreviewAudioBackend::anchorTransportToSecond(double targetSecond)
+{
+    const double anchoredSecond = clampTimelineSecond(targetSecond);
+    clearScheduledGroupSync();
+    stopAllSamples();
+    resetMasterMixerClock(anchoredSecond);
+    configureBackgroundTrackForSecond(anchoredSecond);
+    playbackSession_.lastAuthoritativeSecond = anchoredSecond;
+    resetCursor(anchoredSecond, false);
+    pauseTouchholdVoices();
+    retainedPlaybackMode_ = RetainedPlaybackMode::PausedAnchored;
+    clearExactPauseSnapshot();
+    logTrackFileMissingAfterLoadIfNeeded();
+}
+
+void BassPreviewAudioBackend::startTransportFromCurrentAnchor(bool resumeFromPause)
+{
+#ifdef Q_OS_WIN
+    if (masterMixer_ == 0) {
+        return;
+    }
+    logTrackFileMissingAfterLoadIfNeeded();
+    BASS_ChannelPlay(masterMixer_, FALSE);
+    playbackSession_.masterRunning = true;
+    playbackSession_.lastAuthoritativeSecond = authoritativeSecond();
+    if (backgroundTrackSample_ != nullptr) {
+        playbackSession_.backgroundTrackRunning = !playbackSession_.backgroundTrackPendingStart;
+    } else {
+        playbackSession_.backgroundTrackRunning = false;
+    }
+    if (!resumeFromPause) {
+        drainEvents(playbackSession_.lastAuthoritativeSecond);
+        restoreTouchholdVoices(playbackSession_.lastAuthoritativeSecond);
+    }
+    armNextGroupSync(playbackSession_.lastAuthoritativeSecond);
+#else
+    Q_UNUSED(resumeFromPause);
+#endif
+    retainedPlaybackMode_ = RetainedPlaybackMode::None;
+    clearExactPauseSnapshot();
+}
+
 void BassPreviewAudioBackend::reloadAssets(const PreviewAudioSettings& settings)
 {
     settings_ = settings;
     settings_.normalize();
+    invalidateRetainedPlaybackState();
+    trackMissingAfterLoadLogged_ = false;
     refreshPreparedAssets();
     if (!initializeAudioEngine()) {
+        updateRetainedBgmState();
         return;
     }
     initializeAssets();
+    updateRetainedBgmState();
 }
 
 bool BassPreviewAudioBackend::audioEngineInitialized() const
@@ -672,11 +829,14 @@ void BassPreviewAudioBackend::setChartPath(const QString& chartPath)
     if (preparedAssets_.chartPath == normalized) {
         return;
     }
+    invalidateRetainedPlaybackState();
+    trackMissingAfterLoadLogged_ = false;
     preparedAssets_.chartPath = normalized;
     refreshPreparedAssets();
     if (engineInitialized_) {
         initializeAssets();
     }
+    updateRetainedBgmState();
 }
 
 void BassPreviewAudioBackend::setBackgroundTrackOffsetSeconds(double seconds)
@@ -686,8 +846,11 @@ void BassPreviewAudioBackend::setBackgroundTrackOffsetSeconds(double seconds)
 
 void BassPreviewAudioBackend::setBackgroundTrackPlaybackRate(double rate)
 {
-    playbackSession_.backgroundTrackPlaybackRate =
-        qBound(kBassPreviewMinRate, qIsFinite(rate) ? rate : 1.0, kBassPreviewMaxRate);
+    const double normalizedRate = qBound(kBassPreviewMinRate, qIsFinite(rate) ? rate : 1.0, kBassPreviewMaxRate);
+    if (qAbs(playbackSession_.backgroundTrackPlaybackRate - normalizedRate) > kBassPreviewEpsilonSeconds) {
+        invalidateRetainedPlaybackState();
+    }
+    playbackSession_.backgroundTrackPlaybackRate = normalizedRate;
     setBackgroundTrackSampleSpeed(playbackSession_.backgroundTrackPlaybackRate);
 }
 
@@ -813,6 +976,8 @@ void BassPreviewAudioBackend::stopPlaybackSession()
     playbackSession_.backgroundTrackRunning = false;
     playbackSession_.backgroundTrackPendingStart = false;
     playbackSession_.backgroundTrackPendingStartSecond = playbackSession_.lastAuthoritativeSecond;
+    retainedPlaybackMode_ = RetainedPlaybackMode::None;
+    clearExactPauseSnapshot();
 }
 
 void BassPreviewAudioBackend::clearScheduledGroupSync()
@@ -1062,10 +1227,11 @@ double BassPreviewAudioBackend::preparePreviewPlaybackTransaction(
     bool resumeFromPause,
     double playbackRate)
 {
-    Q_UNUSED(resumeFromPause);
     if (!initializeAudioEngine()) {
         return startSecond;
     }
+    clearExactPauseSnapshot();
+    retainedPlaybackMode_ = RetainedPlaybackMode::None;
     setBackgroundTrackPlaybackRate(playbackRate);
     stopPlaybackSession();
     resetMasterMixerClock(startSecond);
@@ -1104,6 +1270,7 @@ void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
     }
     restoreTouchholdVoices(preparedPlayback_.startSecond);
     armNextGroupSync(preparedPlayback_.startSecond);
+    logTrackFileMissingAfterLoadIfNeeded();
     appendAudioDebugLog(
         QString("bass_commit txn=%1 start=%2 resume=%3 bg_pending=%4")
             .arg(playbackTransactionId_)
@@ -1136,16 +1303,22 @@ void BassPreviewAudioBackend::applyPausedPreviewState(
     const PreviewTimingSettings& timingSettings)
 {
     preparedPlayback_ = PreparedPlaybackState();
-    if (noteMarkersChanged
+    const bool transportInvalidated =
+        noteMarkersChanged
         || preparedTimeline_.sourceNoteMarkers.size() != noteMarkers.size()
         || qAbs(preparedTimelinePlaybackRate_ - playbackRate) > kBassPreviewEpsilonSeconds
-        || !previewTimingSettingsEqual(timingSettings_, timingSettings)) {
+        || !previewTimingSettingsEqual(timingSettings_, timingSettings);
+    if (transportInvalidated) {
         rebuildPreparedTimeline(noteMarkers, playbackRate, timingSettings);
     }
-    stopPlaybackSession();
-    playbackSession_.lastAuthoritativeSecond = clampTimelineSecond(pauseSecond);
-    resetCursor(pauseSecond, false);
-    pauseTouchholdVoices();
+    const double clampedPauseSecond = clampTimelineSecond(pauseSecond);
+    if (!transportInvalidated
+        && retainedPlaybackMode_ == RetainedPlaybackMode::PausedExact
+        && qAbs(authoritativeSecond() - clampedPauseSecond) <= kBassPreviewEpsilonSeconds) {
+        playbackSession_.lastAuthoritativeSecond = clampedPauseSecond;
+        return;
+    }
+    anchorTransportToSecond(clampedPauseSecond);
 }
 
 double BassPreviewAudioBackend::startPreviewPlaybackTransaction(double startSecond, bool resumeFromPause, double playbackRate)
@@ -1157,17 +1330,71 @@ double BassPreviewAudioBackend::startPreviewPlaybackTransaction(double startSeco
 
 miacode::preview_audio::PausePreviewResult BassPreviewAudioBackend::capturePausedPreviewTransaction()
 {
+    return pausePreviewPlaybackTransaction();
+}
+
+miacode::preview_audio::PausePreviewResult BassPreviewAudioBackend::pausePreviewPlaybackTransaction()
+{
     PausePreviewResult result;
     result.usedBackgroundTrack = hasBackgroundTrack();
     result.pauseSecond = authoritativeSecond();
-    stopPlaybackSession();
-    preparedPlayback_ = PreparedPlaybackState();
     playbackSession_.lastAuthoritativeSecond = result.pauseSecond;
+    if (playbackSession_.masterRunning) {
+        suspendPlaybackTransport();
+    }
+    result.retainedMode = retainedPlaybackMode_;
+    result.retainedBgmState = retainedBgmState_;
     return result;
+}
+
+double BassPreviewAudioBackend::resumeRetainedPreviewPlaybackTransaction()
+{
+    if (retainedPlaybackMode_ != RetainedPlaybackMode::PausedExact
+        && retainedPlaybackMode_ != RetainedPlaybackMode::PausedAnchored) {
+        return authoritativeSecond();
+    }
+    startTransportFromCurrentAnchor(true);
+    return authoritativeSecond();
+}
+
+double BassPreviewAudioBackend::seekRetainedPreviewPlaybackTransaction(double targetSecond, bool continuePlaying)
+{
+    anchorTransportToSecond(targetSecond);
+    if (continuePlaying) {
+        startTransportFromCurrentAnchor(true);
+    }
+    return authoritativeSecond();
+}
+
+void BassPreviewAudioBackend::resetRetainedPreviewPlaybackTransaction(double targetSecond)
+{
+    anchorTransportToSecond(targetSecond);
+}
+
+void BassPreviewAudioBackend::clearRetainedPreviewPlaybackTransaction()
+{
+    retainedPlaybackMode_ = RetainedPlaybackMode::None;
+    clearExactPauseSnapshot();
+}
+
+BassPreviewAudioBackend::RetainedPlaybackMode BassPreviewAudioBackend::retainedPlaybackMode() const
+{
+    return retainedPlaybackMode_;
+}
+
+BassPreviewAudioBackend::RetainedBgmState BassPreviewAudioBackend::retainedBgmState() const
+{
+    return retainedBgmState_;
+}
+
+double BassPreviewAudioBackend::authoritativePlaybackSecond() const
+{
+    return authoritativeSecond();
 }
 
 double BassPreviewAudioBackend::syncPreviewPlaybackClockTransaction(double fallbackSecond)
 {
+    logTrackFileMissingAfterLoadIfNeeded();
     const double second = authoritativeSecond();
     playbackSession_.lastAuthoritativeSecond = second;
     maybeStartPendingBackgroundTrack(second);
@@ -1366,4 +1593,6 @@ void BassPreviewAudioBackend::stopAll()
 {
     stopPlaybackSession();
     preparedPlayback_ = PreparedPlaybackState();
+    retainedPlaybackMode_ = RetainedPlaybackMode::None;
+    clearExactPauseSnapshot();
 }
