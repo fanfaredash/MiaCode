@@ -590,7 +590,7 @@ int main(int argc, char* argv[])
     const bool forceOpenGlGraphicsApi = cliVideoExportRequested || cliVideoExportWorkerRequested;
     miacode::debug_options::setDebugModeEnabled(miacode::debug_options::hasDebugArg(rawArgs));
     if (miacode::debug_options::debugModeEnabled()) {
-        miacode::debug_log::clearDebugSessionLogs();
+        miacode::debug_log::trimDebugSessionLogsForStartup();
     }
     if (miacode::debug_options::startupTimingEnabled()) {
         miacode::debug_log::initializeStartupTimingLogSession();
