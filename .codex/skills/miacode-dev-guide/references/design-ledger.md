@@ -28,7 +28,7 @@ Use this file to separate hard contracts from adjustable implementation choices.
 ## 3. Current Defaults That Are Adjustable
 
 - Preview canvas default aspect ratio is square unless temporarily changed by export UI.
-- Preview note flow speed defaults to the value in `PreviewGameplayConfig.h`.
+- Preview Tap/Touch flow speeds both default to the shared value in `PreviewGameplayConfig.h`; persisted settings now store them separately, while older single-speed settings still fan out to both on load.
 - Native chart-review preview currently stacks an extra maimuri-style judge overlay above the legacy hex judge effects. `MuriRenderOptions::showChartReviewSlideJudgeOverlay` controls slide/wifi-family overlays and defaults to enabled; `MuriRenderOptions::showChartReviewSimpleJudgeOverlay` controls tap/hold/break text overlays plus slide-head text and defaults to disabled until UI toggles are added.
 - In `RenderMode::MaimuriDxStyle`, wifi track erasure currently follows runtime lane progress rather than static area checkpoints: the shared track trims by the slowest of the three lanes, falls back to judged lane areas if the progress array is unavailable, and stays erased after runtime completion instead of replaying a full-track flash. When `MuriRenderOptions::wifiNeedC` is enabled, the last area stays visible until `C` is actually released.
 - Export auto-encoder selection currently favors conservative H.264-oriented paths in automatic mode before falling back.

@@ -111,10 +111,24 @@ void MainWindow::EditorSection::loadProjectRenderState()
                     } else if (!scaleMode.isEmpty()) {
                         state_.previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
                     }
-                    if (render.value("note_flow_speed").isDouble()) {
-                        state_.previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(
-                            render.value("note_flow_speed").toDouble(state_.previewNoteFlowSpeed_)
+                    const double legacyFlowSpeed = render.value("note_flow_speed").toDouble(
+                        miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed
+                    );
+                    if (render.value("tap_flow_speed").isDouble()) {
+                        state_.previewTapFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(
+                            render.value("tap_flow_speed").toDouble(state_.previewTapFlowSpeed_)
                         );
+                    } else if (render.value("note_flow_speed").isDouble()) {
+                        state_.previewTapFlowSpeed_ =
+                            miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(legacyFlowSpeed);
+                    }
+                    if (render.value("touch_flow_speed").isDouble()) {
+                        state_.previewTouchFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(
+                            render.value("touch_flow_speed").toDouble(state_.previewTouchFlowSpeed_)
+                        );
+                    } else if (render.value("note_flow_speed").isDouble()) {
+                        state_.previewTouchFlowSpeed_ =
+                            miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(legacyFlowSpeed);
                     }
                     if (render.value("slide_earlier_second_and_text_on_top").isBool()) {
                         state_.previewSlideEarlierSecondAndTextOnTop_ =
@@ -222,7 +236,8 @@ void MainWindow::EditorSection::loadProjectRenderState()
         state_.previewCanvas_->setLayoutSquareScale(state_.previewLayoutSquareScale_);
         state_.previewCanvas_->setSmoothBrightness(state_.previewSmoothBrightness_);
         state_.previewCanvas_->setBackgroundScaleMode(state_.previewBackgroundScaleMode_);
-        state_.previewCanvas_->setNoteFlowSpeed(state_.previewNoteFlowSpeed_);
+        state_.previewCanvas_->setTapFlowSpeed(state_.previewTapFlowSpeed_);
+        state_.previewCanvas_->setTouchFlowSpeed(state_.previewTouchFlowSpeed_);
         state_.previewCanvas_->setSlideEarlierSecondAndTextOnTop(state_.previewSlideEarlierSecondAndTextOnTop_);
         state_.previewCanvas_->setShowDebugInfo(state_.previewShowDebugInfo_);
         state_.previewCanvas_->setShowTimestamp(state_.previewShowTimestamp_);
@@ -265,7 +280,8 @@ void MainWindow::EditorSection::saveProjectRenderState() const
             ? QStringLiteral("fit")
             : QStringLiteral("fill")
     );
-    render.insert("note_flow_speed", state_.previewNoteFlowSpeed_);
+    render.insert("tap_flow_speed", state_.previewTapFlowSpeed_);
+    render.insert("touch_flow_speed", state_.previewTouchFlowSpeed_);
     render.insert("slide_earlier_second_and_text_on_top", state_.previewSlideEarlierSecondAndTextOnTop_);
     render.insert("skin_variant", owner_.previewSkinVariantStorageValue());
     if (state_.previewOutlineVariantUsesAutoSelection_) {

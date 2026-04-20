@@ -13,7 +13,8 @@ namespace miacode::preview::scene {
 
 struct PreviewPreparedSceneCacheKey {
     quint64 sceneContentRevision = 0;
-    double noteFlowSpeed = 0.0;
+    double tapFlowSpeed = 0.0;
+    double touchFlowSpeed = 0.0;
     RenderMode renderMode = RenderMode::Native;
     bool showSlideTracks = true;
     bool slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
@@ -23,7 +24,8 @@ struct PreviewPreparedSceneCacheKey {
     bool operator==(const PreviewPreparedSceneCacheKey& other) const
     {
         return sceneContentRevision == other.sceneContentRevision
-            && qFuzzyCompare(noteFlowSpeed + 1.0, other.noteFlowSpeed + 1.0)
+            && qFuzzyCompare(tapFlowSpeed + 1.0, other.tapFlowSpeed + 1.0)
+            && qFuzzyCompare(touchFlowSpeed + 1.0, other.touchFlowSpeed + 1.0)
             && renderMode == other.renderMode
             && showSlideTracks == other.showSlideTracks
             && slideEarlierSecondAndTextOnTop == other.slideEarlierSecondAndTextOnTop

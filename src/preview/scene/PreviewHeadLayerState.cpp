@@ -277,7 +277,7 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
     PreviewHeadLayerState layerState;
     layerState.ownedImages.reserve(markers.size() * 2);
 
-    const PreviewTapTiming tapTiming = previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.noteFlowSpeed));
+    const PreviewTapTiming tapTiming = previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.tapFlowSpeed));
 
     const auto tapApproachFor = [tapTiming](qreal deltaSeconds) {
         return sampleTapApproach(

@@ -122,7 +122,8 @@ bool PreviewPreparedSceneCache::sync(const PreviewFrameState& state)
 {
     PreviewPreparedSceneCacheKey nextKey;
     nextKey.sceneContentRevision = state.sceneContentRevision;
-    nextKey.noteFlowSpeed = state.render.noteFlowSpeed;
+    nextKey.tapFlowSpeed = state.render.tapFlowSpeed;
+    nextKey.touchFlowSpeed = state.render.touchFlowSpeed;
     nextKey.renderMode = state.muriRenderOptions.renderMode;
     nextKey.showSlideTracks = state.muriRenderOptions.showSlideTracks;
     nextKey.slideEarlierSecondAndTextOnTop = state.render.slideEarlierSecondAndTextOnTop;
@@ -167,9 +168,11 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
     maimuriDxJudgeLayer_.clear();
 
     const PreviewTapTiming tapTiming =
-        previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.noteFlowSpeed));
+        previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.tapFlowSpeed));
     const PreviewSlideTrackTiming trackTiming =
-        previewSlideTrackTimingForFlowSpeed(static_cast<qreal>(state.render.noteFlowSpeed));
+        previewSlideTrackTimingForFlowSpeed(static_cast<qreal>(state.render.tapFlowSpeed));
+    const PreviewTouchTiming touchTiming =
+        previewTouchTimingForFlowSpeed(static_cast<qreal>(state.render.touchFlowSpeed));
     QHash<QString, int> markerIndexByKey;
     markerIndexByKey.reserve(state.noteMarkers.size() * 2);
     const QHash<QString, SlideHeadRepresentative> slideHeadRepresentatives =
@@ -271,7 +274,7 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
             appendPreparedMarkerEntry(
                 &touchLayer_,
                 markerIndex,
-                marker.second - miacode::preview_gameplay::kTouchDurationSeconds,
+                marker.second - touchTiming.durationSeconds,
                 marker.second
             );
             appendPreparedMarkerEntry(
@@ -297,7 +300,7 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
             appendPreparedMarkerEntry(
                 &touchHoldLayer_,
                 markerIndex,
-                marker.second - miacode::preview_gameplay::kTouchDurationSeconds,
+                marker.second - touchTiming.durationSeconds,
                 qMax(marker.second, marker.endSecond)
             );
             appendPreparedMarkerEntry(

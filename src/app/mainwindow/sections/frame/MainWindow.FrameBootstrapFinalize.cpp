@@ -447,7 +447,8 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
         previewCanvas_->setSmoothBrightness(previewSmoothBrightness_);
         previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
-        previewCanvas_->setNoteFlowSpeed(previewNoteFlowSpeed_);
+    previewCanvas_->setTapFlowSpeed(previewTapFlowSpeed_);
+    previewCanvas_->setTouchFlowSpeed(previewTouchFlowSpeed_);
         previewCanvas_->setSlideEarlierSecondAndTextOnTop(previewSlideEarlierSecondAndTextOnTop_);
         previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
         previewCanvas_->setShowTimestamp(previewShowTimestamp_);

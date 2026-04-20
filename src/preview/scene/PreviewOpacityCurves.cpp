@@ -55,6 +55,17 @@ PreviewSlideTrackTiming previewSlideTrackTimingForFlowSpeed(qreal flowSpeed)
     return timing;
 }
 
+PreviewTouchTiming previewTouchTimingForFlowSpeed(qreal flowSpeed)
+{
+    const PreviewTapTiming tapTiming = previewTapTimingForFlowSpeed(flowSpeed);
+
+    PreviewTouchTiming timing;
+    timing.durationSeconds = tapTiming.lifecycleDurationSeconds;
+    timing.showDurationSeconds = timing.durationSeconds / 5.0;
+    timing.closeDurationSeconds = timing.durationSeconds - timing.showDurationSeconds;
+    return timing;
+}
+
 qreal touchPreHitAlpha(qreal deltaSeconds, qreal touchDurationSeconds, qreal touchShowDurationSeconds)
 {
     if (deltaSeconds >= 0.0) {

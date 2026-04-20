@@ -31,6 +31,8 @@ public:
     void setSmoothBrightness(bool smooth);
     void setOutlineVariant(PreviewOutlineVariant variant);
     void setBackgroundScaleMode(PreviewBackgroundScaleMode mode);
+    void setTapFlowSpeed(double flowSpeed);
+    void setTouchFlowSpeed(double flowSpeed);
     void setNoteFlowSpeed(double flowSpeed);
     void setShowDebugInfo(bool show);
     void setShowTimestamp(bool show);

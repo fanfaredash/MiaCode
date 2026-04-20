@@ -38,7 +38,8 @@ public:
     using PreviewLayoutScaleCallback = std::function<void(double scale)>;
     using PreviewSmoothBrightnessCallback = std::function<void(bool smooth)>;
     using PreviewScaleModeCallback = std::function<void(PreviewBackgroundScaleMode mode)>;
-    using PreviewFlowSpeedCallback = std::function<void(double flowSpeed)>;
+    using PreviewTapFlowSpeedCallback = std::function<void(double flowSpeed)>;
+    using PreviewTouchFlowSpeedCallback = std::function<void(double flowSpeed)>;
 
     VideoExportDialog(
         const VideoExportTask& baseTask,
@@ -54,7 +55,8 @@ public:
         PreviewLayoutScaleCallback previewLayoutScaleCallback = {},
         PreviewSmoothBrightnessCallback previewSmoothBrightnessCallback = {},
         PreviewScaleModeCallback previewScaleModeCallback = {},
-        PreviewFlowSpeedCallback previewFlowSpeedCallback = {},
+        PreviewTapFlowSpeedCallback previewTapFlowSpeedCallback = {},
+        PreviewTouchFlowSpeedCallback previewTouchFlowSpeedCallback = {},
         QWidget* parent = nullptr
     );
     bool exportSucceeded() const { return exportSucceeded_; }
@@ -88,6 +90,8 @@ private:
     void stopRangePreview(bool seekToCurrent);
     void stopRangePreviewToStart();
     void updatePreviewPlayPauseUi();
+    void handlePreviewPlayPauseShortcut();
+    void handlePreviewStopOrPlayShortcut();
     void onRangePreviewTick();
     void syncRangeUi();
     void seekPreview(double second);
@@ -120,7 +124,8 @@ private:
     PreviewLayoutScaleCallback previewLayoutScaleCallback_;
     PreviewSmoothBrightnessCallback previewSmoothBrightnessCallback_;
     PreviewScaleModeCallback previewScaleModeCallback_;
-    PreviewFlowSpeedCallback previewFlowSpeedCallback_;
+    PreviewTapFlowSpeedCallback previewTapFlowSpeedCallback_;
+    PreviewTouchFlowSpeedCallback previewTouchFlowSpeedCallback_;
 
     double totalDurationSeconds_ = 0.0;
     double previewCursorSecond_ = 0.0;
@@ -156,8 +161,10 @@ private:
     QToolButton* backgroundScaleModeButton_ = nullptr;
     QMenu* backgroundScaleModeMenu_ = nullptr;
     PreviewBackgroundScaleMode selectedBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
-    QLineEdit* flowSpeedEdit_ = nullptr;
-    double selectedFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    QLineEdit* tapFlowSpeedEdit_ = nullptr;
+    QLineEdit* touchFlowSpeedEdit_ = nullptr;
+    double selectedTapFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    double selectedTouchFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     QSlider* brightnessOuterSlider_ = nullptr;
     QSlider* brightnessInnerSlider_ = nullptr;
     QSlider* layoutSquareScaleSlider_ = nullptr;

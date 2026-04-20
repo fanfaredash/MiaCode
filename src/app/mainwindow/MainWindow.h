@@ -114,6 +114,7 @@ public:
         PreviewOutlineVariant outlineVariant = PreviewOutlineVariant::Line;
         PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
         double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+        double touchFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
         int skinLoadWaitMs = 2000;
     };
 

@@ -111,7 +111,7 @@ PreviewSpriteDescriptors buildPreviewGuideLayerSprites(
         fallbackEachGroupsBySecond[secondKey].append(ActiveEachCandidate{&marker});
     };
 
-    const PreviewTapTiming tapTiming = previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.noteFlowSpeed));
+    const PreviewTapTiming tapTiming = previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.tapFlowSpeed));
 
     const auto tapApproachFor = [tapTiming](qreal deltaSeconds) {
         return sampleTapApproach(

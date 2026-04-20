@@ -304,7 +304,8 @@ void MainWindow::ExportSection::applySharedExportTaskSettings(const VideoExportT
     owner_.previewLayoutSquareScale_ = miacode::preview_video::normalizedLayoutSquareScale(task.layoutSquareScale);
     owner_.previewSmoothBrightness_ = task.smoothBrightness;
     owner_.previewBackgroundScaleMode_ = task.backgroundScaleMode;
-    owner_.previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(task.noteFlowSpeed);
+    owner_.previewTapFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(task.tapFlowSpeed);
+    owner_.previewTouchFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(task.touchFlowSpeed);
     owner_.previewSlideEarlierSecondAndTextOnTop_ = task.slideEarlierSecondAndTextOnTop;
 
     owner_.applyPreviewStageMediaRouteVisualSettings();
@@ -316,7 +317,8 @@ void MainWindow::ExportSection::applySharedExportTaskSettings(const VideoExportT
         owner_.previewCanvas_->setLayoutSquareScale(owner_.previewLayoutSquareScale_);
         owner_.previewCanvas_->setSmoothBrightness(owner_.previewSmoothBrightness_);
         owner_.previewCanvas_->setBackgroundScaleMode(owner_.previewBackgroundScaleMode_);
-        owner_.previewCanvas_->setNoteFlowSpeed(owner_.previewNoteFlowSpeed_);
+        owner_.previewCanvas_->setTapFlowSpeed(owner_.previewTapFlowSpeed_);
+        owner_.previewCanvas_->setTouchFlowSpeed(owner_.previewTouchFlowSpeed_);
         owner_.previewCanvas_->setSlideEarlierSecondAndTextOnTop(owner_.previewSlideEarlierSecondAndTextOnTop_);
     }
 
@@ -373,7 +375,8 @@ void MainWindow::ExportSection::onExportPreviewVideo()
     task.smoothBrightness = owner_.previewSmoothBrightness_;
     task.outlineVariant = owner_.previewOutlineVariant_;
     task.backgroundScaleMode = owner_.previewBackgroundScaleMode_;
-    task.noteFlowSpeed = owner_.previewNoteFlowSpeed_;
+    task.tapFlowSpeed = owner_.previewTapFlowSpeed_;
+    task.touchFlowSpeed = owner_.previewTouchFlowSpeed_;
     task.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
     task.exportStartSeconds = 0.0;
     task.contentDurationSeconds = cappedExportEndSecond;
@@ -477,16 +480,29 @@ void MainWindow::ExportSection::onExportPreviewVideo()
             owner_.savePortableState();
         },
         [this](double flowSpeed) {
-            owner_.previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
+            owner_.previewTapFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
             if (owner_.previewCanvas_ != nullptr) {
-                owner_.previewCanvas_->setNoteFlowSpeed(owner_.previewNoteFlowSpeed_);
+                owner_.previewCanvas_->setTapFlowSpeed(owner_.previewTapFlowSpeed_);
+            }
+            owner_.saveProjectRenderState();
+            owner_.savePortableState();
+        },
+        [this](double flowSpeed) {
+            owner_.previewTouchFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
+            if (owner_.previewCanvas_ != nullptr) {
+                owner_.previewCanvas_->setTouchFlowSpeed(owner_.previewTouchFlowSpeed_);
             }
             owner_.saveProjectRenderState();
             owner_.savePortableState();
         },
         UiDialogs::effectiveParentWidget(&owner_)
     );
-    UiDialogs::prepareDialogWindow(&dialog, &owner_);
+    UiDialogs::prepareDialogWindow(
+        &dialog,
+        &owner_,
+        true,
+        UiDialogs::PreviewShortcutPolicy::LocalPlaybackControls
+    );
 
     dialog.adjustSize();
     QRect anchorRect = owner_.geometry();
@@ -595,7 +611,8 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo()
     task.smoothBrightness = owner_.previewSmoothBrightness_;
     task.outlineVariant = owner_.previewOutlineVariant_;
     task.backgroundScaleMode = owner_.previewBackgroundScaleMode_;
-    task.noteFlowSpeed = owner_.previewNoteFlowSpeed_;
+    task.tapFlowSpeed = owner_.previewTapFlowSpeed_;
+    task.touchFlowSpeed = owner_.previewTouchFlowSpeed_;
     task.slideEarlierSecondAndTextOnTop = owner_.previewSlideEarlierSecondAndTextOnTop_;
     task.exportStartSeconds = 0.0;
     task.contentDurationSeconds = 0.0;
@@ -745,6 +762,7 @@ void MainWindow::ExportSection::onBatchExportPreviewVideo()
     progress.setAutoClose(false);
     progress.setAutoReset(false);
     progress.setValue(0);
+    UiDialogs::configureDialogPreviewShortcuts(&progress);
     owner_.windowSection_->applySystemWindowBackdrop(&progress);
     progress.show();
 
