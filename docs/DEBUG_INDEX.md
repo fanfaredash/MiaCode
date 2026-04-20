@@ -86,6 +86,8 @@ Relevant export diagnostics:
 - `pbo_capability_probe` export-log entries record version / extension checks, smoke-probe result, and the final enable/disable reason.
 - `pbo_cleanup_deferred` and `export_context_not_current_on_teardown` mark teardown paths that skipped explicit GL cleanup because the export context was not current.
 - `render_backend` export-log entries now report `pboRequested=1` by default and only leave `pboEnabled=0` when capability probing or runtime fallback disables it.
+- `audio_backend_select`, `audio_mix_ok`, and `audio_backend_render_complete` export-log entries describe StageB mixed-audio backend routing and offline WAV generation.
+- `fail_audio_plan`, `fail_audio_backend_select`, and `fail_audio_mix` are the primary StageB breadcrumbs when export audio generation fails before ffmpeg starts.
 - `MIACODE_EXPORT_DIAG_OBJECT_DIFF_THRESHOLD`
 - `MIACODE_EXPORT_DIAG_COMPARE_RENDER_PATHS`
 - `MIACODE_EXPORT_DIAG_COMPARE_RADIUS`

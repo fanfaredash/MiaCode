@@ -4,6 +4,7 @@
 #include <QString>
 #include <QVector>
 
+#include "common/PreviewAudioMixConfig.h"
 #include "PreviewAudioBackend.h"
 
 class MiniaudioPreviewAudioBackend final : public QObject, public miacode::preview_audio::PreviewAudioBackend
@@ -142,7 +143,7 @@ private:
     PreparedPlaybackState preparedPlayback_;
     quint64 playbackTransactionId_ = 0;
     quint64 touchholdSoundLengthFrames_ = 0;
-    quint32 deviceSampleRate_ = 48000;
+    quint32 deviceSampleRate_ = static_cast<quint32>(miacode::preview_audio::kMixSampleRate);
     double preparedTimelinePlaybackRate_ = 1.0;
     double lastStretchedClockDriftLogSecond_ = -1.0;
     double lastStretchedClockDriftDeltaMs_ = 0.0;

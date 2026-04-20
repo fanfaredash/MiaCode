@@ -394,6 +394,17 @@ target_include_directories(MiaCode PRIVATE
     src/tools/video_export
 )
 
+target_sources(MiaCode PRIVATE
+    src/common/PreviewAudioMixConfig.h
+    src/tools/video_export/VideoExportAudioRenderPlan.h
+    src/tools/video_export/VideoExportAudioRenderPlan.cpp
+    src/tools/video_export/VideoExportAudioBackend.h
+    src/tools/video_export/LegacyExportAudioBackend.h
+    src/tools/video_export/LegacyExportAudioBackend.cpp
+    src/tools/video_export/BassExportAudioBackend.h
+    src/tools/video_export/BassExportAudioBackend.cpp
+)
+
 if (WIN32)
     target_link_libraries(MiaCode PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
@@ -636,6 +647,23 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/tools/video_export/VideoExportRuntimePolicy.cpp
     )
 
+    add_executable(video_export_audio_render_plan_spec
+        src/tools/video_export/VideoExportAudioRenderPlanSpec.cpp
+        src/tools/video_export/VideoExportAudioRenderPlan.h
+        src/tools/video_export/VideoExportAudioRenderPlan.cpp
+        src/tools/video_export/VideoExportController.h
+        src/common/PreviewAudioMixConfig.h
+        src/common/PreviewTimingSettings.h
+        src/common/PreviewSfxTiming.h
+        src/common/PreviewSfxTimeline.h
+        src/common/PreviewSfxAssets.h
+        src/common/PreviewSfxSemantics.h
+        src/common/VideoExportConfig.h
+        src/preview/audio/PreviewAudioSettings.h
+        src/preview/audio/PreviewAudioSettings.cpp
+        src/timeline/TimelineData.h
+    )
+
     target_link_libraries(miacode_muri_dump PRIVATE
         Qt6::Core
         Qt6::Gui
@@ -853,6 +881,20 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_include_directories(video_export_runtime_policy_spec PRIVATE
         src
         src/tools
+    )
+
+    target_link_libraries(video_export_audio_render_plan_spec PRIVATE
+        Qt6::Core
+        Qt6::Gui
+    )
+    target_include_directories(video_export_audio_render_plan_spec PRIVATE
+        src
+        src/common
+        src/preview/audio
+        src/preview/video
+        src/timeline
+        src/tools
+        src/tools/video_export
     )
 endif()
 

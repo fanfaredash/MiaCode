@@ -26,6 +26,9 @@ Use this file to track where important constants live, what they mean, and wheth
 - `src/common/PreviewTimingSettings.h`
   - Owns: persisted preview timing offset layers (`audioOffset`, `displayOffset`, `judgeOffset`, `answerOffset`) plus the internal frame-vs-second conversion helper for future callers
   - Scope: realtime preview, persistence, and export snapshot/task timing parity
+- `src/common/PreviewAudioMixConfig.h`
+  - Owns: shared preview/export offline mix format constants (`48 kHz`, stereo)
+  - Scope: preview BASS runtime, export audio render-plan consumers, and Windows BASS offline mixing
 - `src/common/PreviewSfxTiming.h`
   - Owns: shared runtime/export SFX timing formulas, including the current offset layering (`audioOffset` as whole-SFX chart shift, positive `displayOffset` advancing only answer/judge families, family-specific `judge` / `answer` offsets) plus the chart-domain `1/60 s` pre-trigger shared by answer and judge-family SFX
   - Scope: realtime preview and export SFX timing parity
@@ -72,7 +75,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: parser-default geometry and timing assumptions used to derive marker behavior
   - Rule: parser-level constants can have repo-wide consequences; treat changes as cross-chain changes
 - `src/tools/video_export/VideoExportController.cpp`
-  - Owns: mix sample rate, encoder probe timeouts, bitrate heuristics, frame diagnostics thresholds, ffmpeg fallback behavior
+  - Owns: encoder probe timeouts, bitrate heuristics, frame diagnostics thresholds, ffmpeg fallback behavior
   - Current tuning note: export preset mapping stays local here. `Fast` keeps the historical baseline, while `High Quality` and `High Compression` retune x264 CRF/preset/B-frames plus per-encoder bitrate or quality flags for NVENC/QSV/AMF/MF/libopenh264/mpeg4 without changing the codec-facing UI surface.
   - Rule: export heuristics may stay local, but document behavior changes that affect output compatibility or packaging assumptions
 - `src/tools/video_export/RawVideoPipeTransport.cpp`

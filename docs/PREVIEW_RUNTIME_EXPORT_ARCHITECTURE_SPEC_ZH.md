@@ -130,10 +130,12 @@ Preview 现在已经具备了应用级与模块级 Quick 策略拆分的雏形�
 
 1. `MainWindow` 构建 `VideoExportSnapshot`
 2. 导出 worker 重建 `VideoExportTask`
-3. `VideoExportController` 拥有 ffmpeg 进程、raw-frame pipe、时序诊断与导出循环
-4. `VideoExportQuickRenderBackend` 拥有 `PreviewSceneAssetRepository`、`PreviewFrameState` 和 `PreviewQuickExportSession`
-5. `PreviewQuickExportSession` 创建无头 `QQuickRenderControl` 场景，并将 `PreviewQuickSceneRoot` 渲染到离屏 framebuffer
-6. 最终 RGBA frame 被打包并通过 raw video pipe 流入 ffmpeg
+3. `buildVideoExportAudioRenderPlan(...)` 把导出期的 BGM 放置、scheduled SFX playback 与合并后的 touchhold sustain 收敛成一份离线音频计划
+4. `VideoExportAudioBackend::renderMixedTrackToWav(...)` 渲染单条 `export_audio.wav`；Windows 走 `BassExportAudioBackend`，非 Windows 保留 `LegacyExportAudioBackend` 作为 non-parity fallback
+5. `VideoExportController` 拥有 ffmpeg 进程、raw-frame pipe、时序诊断与导出循环
+6. `VideoExportQuickRenderBackend` 拥有 `PreviewSceneAssetRepository`、`PreviewFrameState` 和 `PreviewQuickExportSession`
+7. `PreviewQuickExportSession` 创建无头 `QQuickRenderControl` 场景，并将 `PreviewQuickSceneRoot` 渲染到离屏 framebuffer
+8. 最终 RGBA frame 被打包并通过 raw video pipe 流入 ffmpeg，而预混好的 `export_audio.wav` 直接参与 mux，不再追加 BGM/SFX `amix` 阶段
 
 worker 日志说明：
 
@@ -143,12 +145,16 @@ worker 日志说明：
 重要约束：
 
 - 导出复用与实时预览相同的 Quick scene 和 layer-state builders
+- 导出复用与实时预览相同的 `PreviewSfxTimeline` 调度语义，但混音执行层现在通过 `VideoExportAudioRenderPlan` 与 `VideoExportAudioBackend` 收口，不再在 controller 里手写一条 BGM/SFX 混音链
 - 导出不会复用 live preview window，也不会共享 legacy renderer
 - 导出 overlay 渲染由 `kPreviewExportOverlayRenderLayers` 选择，不存在第二套手工维护的 draw list
 
 主要 owner 文件：
 
 - `src/tools/video_export/VideoExportController.cpp`
+- `src/tools/video_export/VideoExportAudioRenderPlan.cpp`
+- `src/tools/video_export/BassExportAudioBackend.cpp`
+- `src/tools/video_export/LegacyExportAudioBackend.cpp`
 - `src/tools/video_export/VideoExportQuickRenderBackend.cpp`
 - `src/tools/video_export/RawVideoPipeTransport.cpp`
 - `src/preview/runtime/PreviewQuickExportSession.cpp`
