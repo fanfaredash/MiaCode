@@ -14,6 +14,7 @@ public:
     int activeDifficultyId() const;
     QString activeChartText() const;
     miacode::simai::SimaiTimingMetadata currentTimingMetadata() const;
+    double parsedRawFirstSeconds(bool* ok = nullptr) const;
     double parsedFirstSeconds(bool* ok = nullptr) const;
     double parsedWholeBpm(bool* ok = nullptr) const;
     QString parsedLatencyMeterId() const;

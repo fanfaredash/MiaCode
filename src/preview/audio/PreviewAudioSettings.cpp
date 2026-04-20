@@ -4,17 +4,16 @@
 
 namespace {
 
-constexpr double kDefaultBgmVolume = 0.40;
-constexpr double kDefaultMasterVolume = 1.0;
-constexpr double kMaxMasterVolume = 2.0;
-constexpr double kDefaultAnswerVolume = 0.30;
-constexpr double kDefaultJudgeVolume = 0.20;
-constexpr double kDefaultSlideVolume = 0.10;
-constexpr double kDefaultBreakVolume = 0.10;
-constexpr double kDefaultBreakSlideVolume = 0.10;
-constexpr double kDefaultExVolume = 0.20;
-constexpr double kDefaultTouchVolume = 0.20;
-constexpr double kDefaultFireworkVolume = 0.20;
+constexpr double kDefaultGlobalVolume = 0.30;
+constexpr double kDefaultTrackVolume = 1.0;
+constexpr double kDefaultAnswerVolume = 0.80;
+constexpr double kDefaultTapVolume = 0.30;
+constexpr double kDefaultExVolume = 0.30;
+constexpr double kDefaultBreakVolume = 0.30;
+constexpr double kDefaultSlideVolume = 0.30;
+constexpr double kDefaultTouchVolume = 0.30;
+constexpr double kDefaultFireworkVolume = 0.30;
+constexpr double kMaxGlobalVolume = 1.0;
 constexpr double kMuteThreshold = 0.0001;
 
 bool isMutedVolume(double value)
@@ -43,10 +42,10 @@ void setVolumePercent(double& currentVolume, double& restoreVolume, int value, d
     }
 }
 
-void restoreMasterIfMuted(PreviewAudioSettings& settings)
+void restoreGlobalIfMuted(PreviewAudioSettings& settings)
 {
-    if (settings.masterMuted()) {
-        settings.toggleMasterMuted();
+    if (settings.globalMuted()) {
+        settings.toggleGlobalMuted();
     }
 }
 
@@ -66,6 +65,16 @@ void toggleMuted(double& currentVolume, double& restoreVolume, double fallbackVo
     currentVolume = restoreVolume;
 }
 
+double valueOrDefault(const QJsonObject& object, const char* key, double fallback)
+{
+    return object.value(QLatin1String(key)).toDouble(fallback);
+}
+
+double maxLegacyValue(double a, double b)
+{
+    return qMax(a, b);
+}
+
 }  // namespace
 
 double PreviewAudioSettings::clamp(double value)
@@ -79,46 +88,45 @@ double PreviewAudioSettings::clamp(double value)
     return value;
 }
 
-double PreviewAudioSettings::clampMaster(double value)
+double PreviewAudioSettings::clampGlobal(double value)
 {
     if (value < 0.0) {
         return 0.0;
     }
-    if (value > kMaxMasterVolume) {
-        return kMaxMasterVolume;
+    if (value > kMaxGlobalVolume) {
+        return kMaxGlobalVolume;
     }
     return value;
 }
 
 void PreviewAudioSettings::normalize()
 {
-    masterVolume = clampMaster(masterVolume);
-    masterRestoreVolume = clampMaster(masterRestoreVolume);
-    if (masterVolume > kMuteThreshold) {
-        masterRestoreVolume = masterVolume;
-    } else if (masterRestoreVolume <= kMuteThreshold) {
-        masterRestoreVolume = kDefaultMasterVolume;
+    globalVolume = clampGlobal(globalVolume);
+    globalRestoreVolume = clampGlobal(globalRestoreVolume);
+    if (globalVolume > kMuteThreshold) {
+        globalRestoreVolume = globalVolume;
+    } else if (globalRestoreVolume <= kMuteThreshold) {
+        globalRestoreVolume = kDefaultGlobalVolume;
     }
-    normalizeVolumePair(bgmVolume, bgmRestoreVolume, kDefaultBgmVolume);
+
+    normalizeVolumePair(trackVolume, trackRestoreVolume, kDefaultTrackVolume);
     normalizeVolumePair(answerVolume, answerRestoreVolume, kDefaultAnswerVolume);
-    normalizeVolumePair(judgeVolume, judgeRestoreVolume, kDefaultJudgeVolume);
-    normalizeVolumePair(slideVolume, slideRestoreVolume, kDefaultSlideVolume);
-    normalizeVolumePair(breakVolume, breakRestoreVolume, kDefaultBreakVolume);
-    normalizeVolumePair(breakSlideVolume, breakSlideRestoreVolume, kDefaultBreakSlideVolume);
+    normalizeVolumePair(tapVolume, tapRestoreVolume, kDefaultTapVolume);
     normalizeVolumePair(exVolume, exRestoreVolume, kDefaultExVolume);
+    normalizeVolumePair(breakVolume, breakRestoreVolume, kDefaultBreakVolume);
+    normalizeVolumePair(slideVolume, slideRestoreVolume, kDefaultSlideVolume);
     normalizeVolumePair(touchVolume, touchRestoreVolume, kDefaultTouchVolume);
-    normalizeVolumePair(touchholdVolume, touchholdRestoreVolume, kDefaultTouchVolume);
     normalizeVolumePair(fireworkVolume, fireworkRestoreVolume, kDefaultFireworkVolume);
 }
 
-int PreviewAudioSettings::bgmPercent() const
+int PreviewAudioSettings::globalPercent() const
 {
-    return qRound(clamp(bgmVolume) * 100.0);
+    return qRound(clampGlobal(globalVolume) * 100.0);
 }
 
-int PreviewAudioSettings::masterPercent() const
+int PreviewAudioSettings::trackPercent() const
 {
-    return qRound(clampMaster(masterVolume) * 100.0);
+    return qRound(clamp(trackVolume) * 100.0);
 }
 
 int PreviewAudioSettings::answerPercent() const
@@ -126,24 +134,9 @@ int PreviewAudioSettings::answerPercent() const
     return qRound(clamp(answerVolume) * 100.0);
 }
 
-int PreviewAudioSettings::judgePercent() const
+int PreviewAudioSettings::tapPercent() const
 {
-    return qRound(clamp(judgeVolume) * 100.0);
-}
-
-int PreviewAudioSettings::slidePercent() const
-{
-    return qRound(clamp(slideVolume) * 100.0);
-}
-
-int PreviewAudioSettings::breakPercent() const
-{
-    return qRound(clamp(breakVolume) * 100.0);
-}
-
-int PreviewAudioSettings::breakSlidePercent() const
-{
-    return qRound(clamp(breakSlideVolume) * 100.0);
+    return qRound(clamp(tapVolume) * 100.0);
 }
 
 int PreviewAudioSettings::exPercent() const
@@ -151,14 +144,19 @@ int PreviewAudioSettings::exPercent() const
     return qRound(clamp(exVolume) * 100.0);
 }
 
+int PreviewAudioSettings::breakPercent() const
+{
+    return qRound(clamp(breakVolume) * 100.0);
+}
+
+int PreviewAudioSettings::slidePercent() const
+{
+    return qRound(clamp(slideVolume) * 100.0);
+}
+
 int PreviewAudioSettings::touchPercent() const
 {
     return qRound(clamp(touchVolume) * 100.0);
-}
-
-int PreviewAudioSettings::touchholdPercent() const
-{
-    return qRound(clamp(touchholdVolume) * 100.0);
 }
 
 int PreviewAudioSettings::fireworkPercent() const
@@ -166,21 +164,21 @@ int PreviewAudioSettings::fireworkPercent() const
     return qRound(clamp(fireworkVolume) * 100.0);
 }
 
-void PreviewAudioSettings::setBgmPercent(int value)
+void PreviewAudioSettings::setGlobalPercent(int value)
 {
-    setVolumePercent(bgmVolume, bgmRestoreVolume, value, kDefaultBgmVolume);
-    if (bgmVolume > kMuteThreshold) {
-        restoreMasterIfMuted(*this);
+    globalVolume = clampGlobal(static_cast<double>(qBound(0, value, 100)) / 100.0);
+    if (globalVolume > kMuteThreshold) {
+        globalRestoreVolume = globalVolume;
+    } else if (clampGlobal(globalRestoreVolume) <= kMuteThreshold) {
+        globalRestoreVolume = kDefaultGlobalVolume;
     }
 }
 
-void PreviewAudioSettings::setMasterPercent(int value)
+void PreviewAudioSettings::setTrackPercent(int value)
 {
-    masterVolume = clampMaster(static_cast<double>(qBound(0, value, 200)) / 100.0);
-    if (masterVolume > kMuteThreshold) {
-        masterRestoreVolume = masterVolume;
-    } else if (clampMaster(masterRestoreVolume) <= kMuteThreshold) {
-        masterRestoreVolume = kDefaultMasterVolume;
+    setVolumePercent(trackVolume, trackRestoreVolume, value, kDefaultTrackVolume);
+    if (trackVolume > kMuteThreshold) {
+        restoreGlobalIfMuted(*this);
     }
 }
 
@@ -188,39 +186,15 @@ void PreviewAudioSettings::setAnswerPercent(int value)
 {
     setVolumePercent(answerVolume, answerRestoreVolume, value, kDefaultAnswerVolume);
     if (answerVolume > kMuteThreshold) {
-        restoreMasterIfMuted(*this);
+        restoreGlobalIfMuted(*this);
     }
 }
 
-void PreviewAudioSettings::setJudgePercent(int value)
+void PreviewAudioSettings::setTapPercent(int value)
 {
-    setVolumePercent(judgeVolume, judgeRestoreVolume, value, kDefaultJudgeVolume);
-    if (judgeVolume > kMuteThreshold) {
-        restoreMasterIfMuted(*this);
-    }
-}
-
-void PreviewAudioSettings::setSlidePercent(int value)
-{
-    setVolumePercent(slideVolume, slideRestoreVolume, value, kDefaultSlideVolume);
-    if (slideVolume > kMuteThreshold) {
-        restoreMasterIfMuted(*this);
-    }
-}
-
-void PreviewAudioSettings::setBreakPercent(int value)
-{
-    setVolumePercent(breakVolume, breakRestoreVolume, value, kDefaultBreakVolume);
-    if (breakVolume > kMuteThreshold) {
-        restoreMasterIfMuted(*this);
-    }
-}
-
-void PreviewAudioSettings::setBreakSlidePercent(int value)
-{
-    setVolumePercent(breakSlideVolume, breakSlideRestoreVolume, value, kDefaultBreakSlideVolume);
-    if (breakSlideVolume > kMuteThreshold) {
-        restoreMasterIfMuted(*this);
+    setVolumePercent(tapVolume, tapRestoreVolume, value, kDefaultTapVolume);
+    if (tapVolume > kMuteThreshold) {
+        restoreGlobalIfMuted(*this);
     }
 }
 
@@ -228,7 +202,23 @@ void PreviewAudioSettings::setExPercent(int value)
 {
     setVolumePercent(exVolume, exRestoreVolume, value, kDefaultExVolume);
     if (exVolume > kMuteThreshold) {
-        restoreMasterIfMuted(*this);
+        restoreGlobalIfMuted(*this);
+    }
+}
+
+void PreviewAudioSettings::setBreakPercent(int value)
+{
+    setVolumePercent(breakVolume, breakRestoreVolume, value, kDefaultBreakVolume);
+    if (breakVolume > kMuteThreshold) {
+        restoreGlobalIfMuted(*this);
+    }
+}
+
+void PreviewAudioSettings::setSlidePercent(int value)
+{
+    setVolumePercent(slideVolume, slideRestoreVolume, value, kDefaultSlideVolume);
+    if (slideVolume > kMuteThreshold) {
+        restoreGlobalIfMuted(*this);
     }
 }
 
@@ -236,15 +226,7 @@ void PreviewAudioSettings::setTouchPercent(int value)
 {
     setVolumePercent(touchVolume, touchRestoreVolume, value, kDefaultTouchVolume);
     if (touchVolume > kMuteThreshold) {
-        restoreMasterIfMuted(*this);
-    }
-}
-
-void PreviewAudioSettings::setTouchholdPercent(int value)
-{
-    setVolumePercent(touchholdVolume, touchholdRestoreVolume, value, kDefaultTouchVolume);
-    if (touchholdVolume > kMuteThreshold) {
-        restoreMasterIfMuted(*this);
+        restoreGlobalIfMuted(*this);
     }
 }
 
@@ -252,18 +234,18 @@ void PreviewAudioSettings::setFireworkPercent(int value)
 {
     setVolumePercent(fireworkVolume, fireworkRestoreVolume, value, kDefaultFireworkVolume);
     if (fireworkVolume > kMuteThreshold) {
-        restoreMasterIfMuted(*this);
+        restoreGlobalIfMuted(*this);
     }
 }
 
-bool PreviewAudioSettings::masterMuted() const
+bool PreviewAudioSettings::globalMuted() const
 {
-    return isMutedVolume(masterVolume);
+    return isMutedVolume(globalVolume);
 }
 
-bool PreviewAudioSettings::bgmMuted() const
+bool PreviewAudioSettings::trackMuted() const
 {
-    return isMutedVolume(bgmVolume);
+    return isMutedVolume(trackVolume);
 }
 
 bool PreviewAudioSettings::answerMuted() const
@@ -271,24 +253,9 @@ bool PreviewAudioSettings::answerMuted() const
     return isMutedVolume(answerVolume);
 }
 
-bool PreviewAudioSettings::judgeMuted() const
+bool PreviewAudioSettings::tapMuted() const
 {
-    return isMutedVolume(judgeVolume);
-}
-
-bool PreviewAudioSettings::slideMuted() const
-{
-    return isMutedVolume(slideVolume);
-}
-
-bool PreviewAudioSettings::breakMuted() const
-{
-    return isMutedVolume(breakVolume);
-}
-
-bool PreviewAudioSettings::breakSlideMuted() const
-{
-    return isMutedVolume(breakSlideVolume);
+    return isMutedVolume(tapVolume);
 }
 
 bool PreviewAudioSettings::exMuted() const
@@ -296,14 +263,19 @@ bool PreviewAudioSettings::exMuted() const
     return isMutedVolume(exVolume);
 }
 
+bool PreviewAudioSettings::breakMuted() const
+{
+    return isMutedVolume(breakVolume);
+}
+
+bool PreviewAudioSettings::slideMuted() const
+{
+    return isMutedVolume(slideVolume);
+}
+
 bool PreviewAudioSettings::touchMuted() const
 {
     return isMutedVolume(touchVolume);
-}
-
-bool PreviewAudioSettings::touchholdMuted() const
-{
-    return isMutedVolume(touchholdVolume);
 }
 
 bool PreviewAudioSettings::fireworkMuted() const
@@ -311,140 +283,116 @@ bool PreviewAudioSettings::fireworkMuted() const
     return isMutedVolume(fireworkVolume);
 }
 
-bool PreviewAudioSettings::allNonBgmMuted() const
+bool PreviewAudioSettings::allNonTrackMuted() const
 {
     return answerMuted()
-        && judgeMuted()
-        && slideMuted()
-        && breakMuted()
-        && breakSlideMuted()
+        && tapMuted()
         && exMuted()
+        && breakMuted()
+        && slideMuted()
         && touchMuted()
-        && touchholdMuted()
         && fireworkMuted();
 }
 
-void PreviewAudioSettings::toggleMasterMuted()
+void PreviewAudioSettings::toggleGlobalMuted()
 {
-    masterVolume = clampMaster(masterVolume);
-    masterRestoreVolume = clampMaster(masterRestoreVolume);
-    if (masterVolume > kMuteThreshold) {
-        masterRestoreVolume = masterVolume;
-        masterVolume = 0.0;
+    globalVolume = clampGlobal(globalVolume);
+    globalRestoreVolume = clampGlobal(globalRestoreVolume);
+    if (globalVolume > kMuteThreshold) {
+        globalRestoreVolume = globalVolume;
+        globalVolume = 0.0;
         return;
     }
-    if (masterRestoreVolume <= kMuteThreshold) {
-        masterRestoreVolume = kDefaultMasterVolume;
+    if (globalRestoreVolume <= kMuteThreshold) {
+        globalRestoreVolume = kDefaultGlobalVolume;
     }
-    masterVolume = masterRestoreVolume;
+    globalVolume = globalRestoreVolume;
 }
 
-void PreviewAudioSettings::toggleBgmMuted()
+void PreviewAudioSettings::toggleTrackMuted()
 {
-    if (bgmMuted()) {
-        restoreMasterIfMuted(*this);
+    if (trackMuted()) {
+        restoreGlobalIfMuted(*this);
     }
-    toggleMuted(bgmVolume, bgmRestoreVolume, kDefaultBgmVolume);
+    toggleMuted(trackVolume, trackRestoreVolume, kDefaultTrackVolume);
 }
 
 void PreviewAudioSettings::toggleAnswerMuted()
 {
     if (answerMuted()) {
-        restoreMasterIfMuted(*this);
+        restoreGlobalIfMuted(*this);
     }
     toggleMuted(answerVolume, answerRestoreVolume, kDefaultAnswerVolume);
 }
 
-void PreviewAudioSettings::toggleJudgeMuted()
+void PreviewAudioSettings::toggleTapMuted()
 {
-    if (judgeMuted()) {
-        restoreMasterIfMuted(*this);
+    if (tapMuted()) {
+        restoreGlobalIfMuted(*this);
     }
-    toggleMuted(judgeVolume, judgeRestoreVolume, kDefaultJudgeVolume);
-}
-
-void PreviewAudioSettings::toggleSlideMuted()
-{
-    if (slideMuted()) {
-        restoreMasterIfMuted(*this);
-    }
-    toggleMuted(slideVolume, slideRestoreVolume, kDefaultSlideVolume);
-}
-
-void PreviewAudioSettings::toggleBreakMuted()
-{
-    if (breakMuted()) {
-        restoreMasterIfMuted(*this);
-    }
-    toggleMuted(breakVolume, breakRestoreVolume, kDefaultBreakVolume);
-}
-
-void PreviewAudioSettings::toggleBreakSlideMuted()
-{
-    if (breakSlideMuted()) {
-        restoreMasterIfMuted(*this);
-    }
-    toggleMuted(breakSlideVolume, breakSlideRestoreVolume, kDefaultBreakSlideVolume);
+    toggleMuted(tapVolume, tapRestoreVolume, kDefaultTapVolume);
 }
 
 void PreviewAudioSettings::toggleExMuted()
 {
     if (exMuted()) {
-        restoreMasterIfMuted(*this);
+        restoreGlobalIfMuted(*this);
     }
     toggleMuted(exVolume, exRestoreVolume, kDefaultExVolume);
+}
+
+void PreviewAudioSettings::toggleBreakMuted()
+{
+    if (breakMuted()) {
+        restoreGlobalIfMuted(*this);
+    }
+    toggleMuted(breakVolume, breakRestoreVolume, kDefaultBreakVolume);
+}
+
+void PreviewAudioSettings::toggleSlideMuted()
+{
+    if (slideMuted()) {
+        restoreGlobalIfMuted(*this);
+    }
+    toggleMuted(slideVolume, slideRestoreVolume, kDefaultSlideVolume);
 }
 
 void PreviewAudioSettings::toggleTouchMuted()
 {
     if (touchMuted()) {
-        restoreMasterIfMuted(*this);
+        restoreGlobalIfMuted(*this);
     }
     toggleMuted(touchVolume, touchRestoreVolume, kDefaultTouchVolume);
-}
-
-void PreviewAudioSettings::toggleTouchholdMuted()
-{
-    if (touchholdMuted()) {
-        restoreMasterIfMuted(*this);
-    }
-    toggleMuted(touchholdVolume, touchholdRestoreVolume, kDefaultTouchVolume);
 }
 
 void PreviewAudioSettings::toggleFireworkMuted()
 {
     if (fireworkMuted()) {
-        restoreMasterIfMuted(*this);
+        restoreGlobalIfMuted(*this);
     }
     toggleMuted(fireworkVolume, fireworkRestoreVolume, kDefaultFireworkVolume);
 }
 
-void PreviewAudioSettings::toggleAllNonBgmMuted()
+void PreviewAudioSettings::toggleAllNonTrackMuted()
 {
-    if (!allNonBgmMuted()) {
+    if (!allNonTrackMuted()) {
         if (!answerMuted()) {
             toggleAnswerMuted();
         }
-        if (!judgeMuted()) {
-            toggleJudgeMuted();
-        }
-        if (!slideMuted()) {
-            toggleSlideMuted();
-        }
-        if (!breakMuted()) {
-            toggleBreakMuted();
-        }
-        if (!breakSlideMuted()) {
-            toggleBreakSlideMuted();
+        if (!tapMuted()) {
+            toggleTapMuted();
         }
         if (!exMuted()) {
             toggleExMuted();
         }
+        if (!breakMuted()) {
+            toggleBreakMuted();
+        }
+        if (!slideMuted()) {
+            toggleSlideMuted();
+        }
         if (!touchMuted()) {
             toggleTouchMuted();
-        }
-        if (!touchholdMuted()) {
-            toggleTouchholdMuted();
         }
         if (!fireworkMuted()) {
             toggleFireworkMuted();
@@ -453,13 +401,11 @@ void PreviewAudioSettings::toggleAllNonBgmMuted()
     }
 
     toggleAnswerMuted();
-    toggleJudgeMuted();
-    toggleSlideMuted();
-    toggleBreakMuted();
-    toggleBreakSlideMuted();
+    toggleTapMuted();
     toggleExMuted();
+    toggleBreakMuted();
+    toggleSlideMuted();
     toggleTouchMuted();
-    toggleTouchholdMuted();
     toggleFireworkMuted();
 }
 
@@ -468,26 +414,22 @@ QJsonObject PreviewAudioSettings::toJson() const
     PreviewAudioSettings normalized = *this;
     normalized.normalize();
     QJsonObject object;
-    object.insert("master_volume", normalized.masterVolume);
-    object.insert("master_restore_volume", normalized.masterRestoreVolume);
-    object.insert("bgm_volume", normalized.bgmVolume);
-    object.insert("bgm_restore_volume", normalized.bgmRestoreVolume);
+    object.insert("global_volume", normalized.globalVolume);
+    object.insert("global_restore_volume", normalized.globalRestoreVolume);
+    object.insert("track_volume", normalized.trackVolume);
+    object.insert("track_restore_volume", normalized.trackRestoreVolume);
     object.insert("answer_volume", normalized.answerVolume);
     object.insert("answer_restore_volume", normalized.answerRestoreVolume);
-    object.insert("judge_volume", normalized.judgeVolume);
-    object.insert("judge_restore_volume", normalized.judgeRestoreVolume);
-    object.insert("slide_volume", normalized.slideVolume);
-    object.insert("slide_restore_volume", normalized.slideRestoreVolume);
-    object.insert("break_volume", normalized.breakVolume);
-    object.insert("break_restore_volume", normalized.breakRestoreVolume);
-    object.insert("break_slide_volume", normalized.breakSlideVolume);
-    object.insert("break_slide_restore_volume", normalized.breakSlideRestoreVolume);
+    object.insert("tap_volume", normalized.tapVolume);
+    object.insert("tap_restore_volume", normalized.tapRestoreVolume);
     object.insert("ex_volume", normalized.exVolume);
     object.insert("ex_restore_volume", normalized.exRestoreVolume);
+    object.insert("break_volume", normalized.breakVolume);
+    object.insert("break_restore_volume", normalized.breakRestoreVolume);
+    object.insert("slide_volume", normalized.slideVolume);
+    object.insert("slide_restore_volume", normalized.slideRestoreVolume);
     object.insert("touch_volume", normalized.touchVolume);
     object.insert("touch_restore_volume", normalized.touchRestoreVolume);
-    object.insert("touchhold_volume", normalized.touchholdVolume);
-    object.insert("touchhold_restore_volume", normalized.touchholdRestoreVolume);
     object.insert("firework_volume", normalized.fireworkVolume);
     object.insert("firework_restore_volume", normalized.fireworkRestoreVolume);
     return object;
@@ -496,60 +438,111 @@ QJsonObject PreviewAudioSettings::toJson() const
 PreviewAudioSettings PreviewAudioSettings::fromJson(const QJsonObject& object)
 {
     PreviewAudioSettings settings;
-    settings.masterVolume = object.value("master_volume").toDouble(settings.masterVolume);
-    settings.masterRestoreVolume = object.value("master_restore_volume").toDouble(
-        settings.masterVolume > kMuteThreshold ? settings.masterVolume : kDefaultMasterVolume
-    );
-    settings.bgmVolume = object.value("bgm_volume").toDouble(settings.bgmVolume);
-    settings.bgmRestoreVolume = object.value("bgm_restore_volume").toDouble(
-        settings.bgmVolume > kMuteThreshold ? settings.bgmVolume : kDefaultBgmVolume
-    );
-    const double answerLegacySfx = object.value("sfx_volume").toDouble(settings.answerVolume);
-    const double judgeLegacySfx = object.value("sfx_volume").toDouble(settings.judgeVolume);
-    const double slideLegacySfx = object.value("sfx_volume").toDouble(settings.slideVolume);
-    const double breakLegacySfx = object.value("sfx_volume").toDouble(settings.breakVolume);
-    const double breakSlideLegacyVolume = object.value("slide_volume").toDouble(slideLegacySfx);
-    const double exLegacySfx = object.value("sfx_volume").toDouble(settings.exVolume);
-    const double touchLegacySfx = object.contains("touch_volume")
-        ? object.value("touch_volume").toDouble(object.value("sfx_volume").toDouble(settings.touchVolume))
-        : object.value("touchhold_volume").toDouble(object.value("sfx_volume").toDouble(settings.touchVolume));
-    const double fireworkLegacySfx = object.value("sfx_volume").toDouble(settings.fireworkVolume);
-    settings.answerVolume = object.value("answer_volume").toDouble(answerLegacySfx);
-    settings.answerRestoreVolume = object.value("answer_restore_volume").toDouble(
-        settings.answerVolume > kMuteThreshold ? settings.answerVolume : kDefaultAnswerVolume
-    );
-    settings.judgeVolume = object.value("judge_volume").toDouble(judgeLegacySfx);
-    settings.judgeRestoreVolume = object.value("judge_restore_volume").toDouble(
-        settings.judgeVolume > kMuteThreshold ? settings.judgeVolume : kDefaultJudgeVolume
-    );
-    settings.slideVolume = object.value("slide_volume").toDouble(slideLegacySfx);
-    settings.slideRestoreVolume = object.value("slide_restore_volume").toDouble(
-        settings.slideVolume > kMuteThreshold ? settings.slideVolume : kDefaultSlideVolume
-    );
-    settings.breakVolume = object.value("break_volume").toDouble(breakLegacySfx);
-    settings.breakRestoreVolume = object.value("break_restore_volume").toDouble(
-        settings.breakVolume > kMuteThreshold ? settings.breakVolume : kDefaultBreakVolume
-    );
-    settings.breakSlideVolume = object.value("break_slide_volume").toDouble(breakSlideLegacyVolume);
-    settings.breakSlideRestoreVolume = object.value("break_slide_restore_volume").toDouble(
-        settings.breakSlideVolume > kMuteThreshold ? settings.breakSlideVolume : kDefaultBreakSlideVolume
-    );
-    settings.exVolume = object.value("ex_volume").toDouble(exLegacySfx);
-    settings.exRestoreVolume = object.value("ex_restore_volume").toDouble(
-        settings.exVolume > kMuteThreshold ? settings.exVolume : kDefaultExVolume
-    );
-    settings.touchVolume = object.value("touch_volume").toDouble(touchLegacySfx);
-    settings.touchRestoreVolume = object.value("touch_restore_volume").toDouble(
-        settings.touchVolume > kMuteThreshold ? settings.touchVolume : kDefaultTouchVolume
-    );
-    settings.touchholdVolume = object.value("touchhold_volume").toDouble(settings.touchVolume);
-    settings.touchholdRestoreVolume = object.value("touchhold_restore_volume").toDouble(
-        settings.touchholdVolume > kMuteThreshold ? settings.touchholdVolume : settings.touchRestoreVolume
-    );
-    settings.fireworkVolume = object.value("firework_volume").toDouble(fireworkLegacySfx);
-    settings.fireworkRestoreVolume = object.value("firework_restore_volume").toDouble(
-        settings.fireworkVolume > kMuteThreshold ? settings.fireworkVolume : kDefaultFireworkVolume
-    );
+    const bool hasNewBucketSchema = object.contains("global_volume")
+        || object.contains("track_volume")
+        || object.contains("tap_volume");
+
+    settings.globalVolume = valueOrDefault(
+        object,
+        "global_volume",
+        valueOrDefault(object, "master_volume", settings.globalVolume));
+    settings.globalRestoreVolume = valueOrDefault(
+        object,
+        "global_restore_volume",
+        valueOrDefault(
+            object,
+            "master_restore_volume",
+            settings.globalVolume > kMuteThreshold ? settings.globalVolume : kDefaultGlobalVolume));
+
+    settings.trackVolume = valueOrDefault(
+        object,
+        "track_volume",
+        valueOrDefault(object, "bgm_volume", settings.trackVolume));
+    settings.trackRestoreVolume = valueOrDefault(
+        object,
+        "track_restore_volume",
+        valueOrDefault(
+            object,
+            "bgm_restore_volume",
+            settings.trackVolume > kMuteThreshold ? settings.trackVolume : kDefaultTrackVolume));
+
+    const double legacySfx = valueOrDefault(object, "sfx_volume", kDefaultTapVolume);
+
+    settings.answerVolume = valueOrDefault(object, "answer_volume", legacySfx);
+    settings.answerRestoreVolume = valueOrDefault(
+        object,
+        "answer_restore_volume",
+        settings.answerVolume > kMuteThreshold ? settings.answerVolume : kDefaultAnswerVolume);
+
+    settings.tapVolume = valueOrDefault(
+        object,
+        "tap_volume",
+        valueOrDefault(object, "judge_volume", legacySfx));
+    settings.tapRestoreVolume = valueOrDefault(
+        object,
+        "tap_restore_volume",
+        valueOrDefault(
+            object,
+            "judge_restore_volume",
+            settings.tapVolume > kMuteThreshold ? settings.tapVolume : kDefaultTapVolume));
+
+    settings.exVolume = valueOrDefault(object, "ex_volume", legacySfx);
+    settings.exRestoreVolume = valueOrDefault(
+        object,
+        "ex_restore_volume",
+        settings.exVolume > kMuteThreshold ? settings.exVolume : kDefaultExVolume);
+
+    settings.breakVolume = valueOrDefault(object, "break_volume", legacySfx);
+    settings.breakRestoreVolume = valueOrDefault(
+        object,
+        "break_restore_volume",
+        settings.breakVolume > kMuteThreshold ? settings.breakVolume : kDefaultBreakVolume);
+
+    const double legacySlide = maxLegacyValue(
+        valueOrDefault(object, "slide_volume", legacySfx),
+        valueOrDefault(object, "break_slide_volume", legacySfx));
+    settings.slideVolume = hasNewBucketSchema
+        ? valueOrDefault(object, "slide_volume", legacySlide)
+        : legacySlide;
+    settings.slideRestoreVolume = valueOrDefault(
+        object,
+        "slide_restore_volume",
+        hasNewBucketSchema
+            ? (settings.slideVolume > kMuteThreshold ? settings.slideVolume : kDefaultSlideVolume)
+            : valueOrDefault(
+                object,
+                "break_slide_restore_volume",
+                settings.slideVolume > kMuteThreshold ? settings.slideVolume : kDefaultSlideVolume));
+
+    const double legacyTouch = maxLegacyValue(
+        valueOrDefault(object, "touch_volume", legacySfx),
+        valueOrDefault(object, "touchhold_volume", legacySfx));
+    settings.touchVolume = hasNewBucketSchema
+        ? valueOrDefault(object, "touch_volume", legacyTouch)
+        : legacyTouch;
+    settings.touchRestoreVolume = valueOrDefault(
+        object,
+        "touch_restore_volume",
+        hasNewBucketSchema
+            ? (settings.touchVolume > kMuteThreshold ? settings.touchVolume : kDefaultTouchVolume)
+            : valueOrDefault(
+                object,
+                "touchhold_restore_volume",
+                settings.touchVolume > kMuteThreshold ? settings.touchVolume : kDefaultTouchVolume));
+
+    const double legacyFirework = valueOrDefault(
+        object,
+        "firework_volume",
+        valueOrDefault(object, "hanabi_volume", legacySfx));
+    settings.fireworkVolume = valueOrDefault(object, "firework_volume", legacyFirework);
+    settings.fireworkRestoreVolume = valueOrDefault(
+        object,
+        "firework_restore_volume",
+        valueOrDefault(
+            object,
+            "hanabi_restore_volume",
+            settings.fireworkVolume > kMuteThreshold ? settings.fireworkVolume : kDefaultFireworkVolume));
+
     settings.normalize();
     return settings;
 }

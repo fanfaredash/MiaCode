@@ -27,11 +27,11 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: persisted preview timing offset layers (`audioOffset`, `displayOffset`, `judgeOffset`, `answerOffset`) plus the internal frame-vs-second conversion helper for future callers
   - Scope: realtime preview, persistence, and export snapshot/task timing parity
 - `src/common/PreviewSfxTiming.h`
-  - Owns: shared runtime/export SFX timing formulas, including fixed-real-time `1/60 s` pre-trigger conversion and the chart-domain vs fixed-real-time offset split
+  - Owns: shared runtime/export SFX timing formulas, including the current offset layering (`audioOffset` as whole-SFX chart shift, positive `displayOffset` advancing only answer/judge families, family-specific `judge` / `answer` offsets) plus the chart-domain `1/60 s` pre-trigger shared by answer and judge-family SFX
   - Scope: realtime preview and export SFX timing parity
 - `src/preview/audio/PreviewAudioSettings.h`
-  - Owns: shared preview/export SFX aggregation policy plus per-kind gain multipliers applied on top of user-set rows
-  - Current defaults: BGM `0.40`, Answer `0.30`, Break `0.10`, Slide `0.10`, Break Slide `0.10`, Judge/EX/Touch/Touch-Hold/Firework `0.20`, Master `1.0`
+  - Owns: shared preview/export SFX aggregation policy plus the Majdata-View-style bucket-to-kind gain mapping
+  - Current defaults: Global `0.30`, Track `1.0`, Answer `0.80`, Tap `0.30`, EX `0.30`, Break `0.30`, Slide `0.30`, Touch `0.30`, Firework `0.30`
   - Scope: realtime preview and export audio balance
 - `src/common/VideoExportConfig.h`
   - Owns: export lead-in constants for zero-start exports and non-zero partial-export preload

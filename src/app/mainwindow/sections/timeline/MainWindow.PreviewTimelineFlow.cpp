@@ -279,21 +279,29 @@ miacode::simai::SimaiTimingMetadata MainWindow::TimelineSection::currentTimingMe
     return miacode::simai::buildTimingMetadata(state_.document_);
 }
 
-double MainWindow::TimelineSection::parsedFirstSeconds(bool* ok) const
+double MainWindow::TimelineSection::parsedRawFirstSeconds(bool* ok) const
 {
     QString rawValue = state_.document_.first;
     if (ui_.editorStack_ != nullptr && ui_.editorStack_->currentWidget() == ui_.metadataPage_ && ui_.firstEdit_ != nullptr) {
         rawValue = ui_.firstEdit_->text();
     }
+    const QString trimmedRawValue = rawValue.trimmed();
     bool localOk = false;
-    const double value = rawValue.trimmed().isEmpty() ? 0.0 : rawValue.trimmed().toDouble(&localOk);
+    const double value = trimmedRawValue.isEmpty() ? 0.0 : trimmedRawValue.toDouble(&localOk);
     if (ok != nullptr) {
-        *ok = rawValue.trimmed().isEmpty() ? true : localOk;
+        *ok = trimmedRawValue.isEmpty() ? true : localOk;
     }
-    if (rawValue.trimmed().isEmpty()) {
-        return miacode::preview_global_timing::effectiveFirstSeconds(0.0);
+    return (trimmedRawValue.isEmpty() || localOk) ? value : 0.0;
+}
+
+double MainWindow::TimelineSection::parsedFirstSeconds(bool* ok) const
+{
+    bool localOk = false;
+    const double rawFirstSeconds = parsedRawFirstSeconds(&localOk);
+    if (ok != nullptr) {
+        *ok = localOk;
     }
-    return miacode::preview_global_timing::effectiveFirstSeconds(localOk ? value : 0.0);
+    return miacode::preview_global_timing::effectiveFirstSeconds(rawFirstSeconds);
 }
 
 double MainWindow::TimelineSection::parsedWholeBpm(bool* ok) const

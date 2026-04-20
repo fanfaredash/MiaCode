@@ -39,13 +39,13 @@ int main(int argc, char* argv[])
     }
 
     PreviewAudioSettings settings;
-    settings.bgmVolume = 1.0;
+    settings.trackVolume = 1.0;
     settings.answerVolume = 0.0;
     settings.slideVolume = 0.0;
     settings.breakVolume = 0.0;
     settings.exVolume = 0.0;
     settings.touchVolume = 0.0;
-    settings.touchholdVolume = 0.0;
+    settings.touchVolume = 0.0;
     settings.normalize();
 
     QtPreviewSfxRuntime runtime;

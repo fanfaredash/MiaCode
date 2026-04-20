@@ -3,13 +3,13 @@ cmake_minimum_required(VERSION 3.21)
 set(MIACODE_VERSION_MAJOR "0")
 set(MIACODE_VERSION_MINOR "4")
 set(MIACODE_VERSION_PATCH "0")
-set(MIACODE_VERSION_PRERELEASE "beta12")
+set(MIACODE_VERSION_PRERELEASE "beta13")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
     set(MIACODE_VERSION_STRING "${MIACODE_VERSION}-${MIACODE_VERSION_PRERELEASE}")
 endif()
-set(MIACODE_DISPLAY_PRERELEASE "beta12")
+set(MIACODE_DISPLAY_PRERELEASE "beta13")
 set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_DISPLAY_PRERELEASE}" STREQUAL "")
     set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_DISPLAY_VERSION_STRING}-${MIACODE_DISPLAY_PRERELEASE}")
@@ -616,6 +616,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/timeline/TimelineData.h
     )
 
+    add_executable(preview_audio_settings_spec
+        src/tools/preview/PreviewAudioSettingsSpec.cpp
+        src/preview/audio/PreviewAudioSettings.h
+        src/preview/audio/PreviewAudioSettings.cpp
+        src/common/PreviewSfxAssets.h
+        src/common/PreviewSfxSemantics.h
+    )
+
     add_executable(quickshell_preview_surface_policy_spec
         src/tools/preview/QuickShellPreviewSurfacePolicySpec.cpp
         src/app/quick_shell/QuickShellPreviewSurfacePolicy.h
@@ -818,6 +826,16 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src
         src/common
         src/timeline
+    )
+
+    target_link_libraries(preview_audio_settings_spec PRIVATE
+        Qt6::Core
+    )
+    target_include_directories(preview_audio_settings_spec PRIVATE
+        src
+        src/common
+        src/preview
+        src/preview/audio
     )
 
     target_link_libraries(quickshell_preview_surface_policy_spec PRIVATE

@@ -29,13 +29,26 @@ inline double chartDomainSecond(
     return rawSecond + settings.audioOffsetSeconds;
 }
 
-inline double displayShiftedSecond(
+inline double majdataViewAnswerBaseSecond(
     double rawSecond,
     const PreviewTimingSettings& settings,
     double playbackRate)
 {
+    Q_UNUSED(playbackRate);
     return chartDomainSecond(rawSecond, settings)
-        - chartDeltaForFixedRealSeconds(settings.displayOffsetSeconds, playbackRate);
+        - settings.displayOffsetSeconds
+        + settings.answerOffsetSeconds;
+}
+
+inline double majdataViewJudgeBaseSecond(
+    double rawSecond,
+    const PreviewTimingSettings& settings,
+    double playbackRate)
+{
+    Q_UNUSED(playbackRate);
+    return chartDomainSecond(rawSecond, settings)
+        - settings.displayOffsetSeconds
+        + settings.judgeOffsetSeconds;
 }
 
 inline double answerPreTriggerChartSeconds(double playbackRate)
@@ -48,8 +61,7 @@ inline double answerTriggerSecond(
     const PreviewTimingSettings& settings,
     double playbackRate)
 {
-    return chartDomainSecond(rawSecond, settings)
-        + chartDeltaForFixedRealSeconds(settings.answerOffsetSeconds, playbackRate)
+    return majdataViewAnswerBaseSecond(rawSecond, settings, playbackRate)
         - answerPreTriggerChartSeconds(playbackRate);
 }
 
@@ -58,8 +70,7 @@ inline double judgeTriggerSecond(
     const PreviewTimingSettings& settings,
     double playbackRate)
 {
-    return chartDomainSecond(rawSecond, settings)
-        + chartDeltaForFixedRealSeconds(settings.judgeOffsetSeconds, playbackRate)
+    return majdataViewJudgeBaseSecond(rawSecond, settings, playbackRate)
         - answerPreTriggerChartSeconds(playbackRate);
 }
 
@@ -68,7 +79,8 @@ inline double slideTriggerSecond(
     const PreviewTimingSettings& settings,
     double playbackRate)
 {
-    return displayShiftedSecond(rawSecond, settings, playbackRate);
+    Q_UNUSED(playbackRate);
+    return chartDomainSecond(rawSecond, settings);
 }
 
 }  // namespace miacode::preview_sfx_timing

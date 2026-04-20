@@ -604,7 +604,7 @@ void BassPreviewAudioBackend::applySampleLevels()
     apply(touchSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("touch")));
     apply(touchholdSample_, previewSfxVolumeForKind(settings_, QStringLiteral("touchhold")));
     apply(fireworkSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("firework")));
-    apply(backgroundTrackSample_, previewBgmVolume(settings_));
+    apply(backgroundTrackSample_, previewTrackVolume(settings_));
 #endif
 }
 
