@@ -394,6 +394,7 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
         ? PreviewBackgroundScaleMode::FitContain
         : PreviewBackgroundScaleMode::FillCrop;
     request.noteFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
+    request.touchFlowSpeed = request.noteFlowSpeed;
     request.skinLoadWaitMs = skinWaitMs;
 
     MainWindow window;

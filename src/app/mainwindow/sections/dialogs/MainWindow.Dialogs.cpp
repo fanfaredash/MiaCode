@@ -191,7 +191,12 @@ void MainWindow::DialogsSection::onOpenLatencyDetector()
         UiDialogs::effectiveParentWidget(&owner_)
     );
     owner_.windowSection_->applySystemWindowBackdrop(owner_.latencyDetectorDialog_);
-    UiDialogs::prepareDialogWindow(owner_.latencyDetectorDialog_, &owner_);
+    UiDialogs::prepareDialogWindow(
+        owner_.latencyDetectorDialog_,
+        &owner_,
+        true,
+        UiDialogs::PreviewShortcutPolicy::LocalPlaybackControls
+    );
     owner_.latencyDetectorDialog_->setOffsetSeconds(offsetSeconds);
     owner_.latencyDetectorDialog_->setBpm(wholeBpmOk ? wholeBpm : 0.0);
     owner_.latencyDetectorDialog_->setMeterId(meterId);
@@ -477,42 +482,53 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         &layoutSquareScaleSlider,
         &layoutSquareScaleLabel
     );
-    double selectedFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(owner_.previewNoteFlowSpeed_);
     const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
     const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
     const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
-    selectedFlowSpeed = qBound(
-        flowSpeedMin,
-        flowSpeedMin + qRound((selectedFlowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
-        flowSpeedMax
-    );
-    auto* flowSpeedEdit = new QLineEdit(gameplayGroup);
-    flowSpeedEdit->setAlignment(Qt::AlignCenter);
-    flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed));
-    flowSpeedEdit->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet());
-    flowSpeedEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* flowSpeedValidator = new QDoubleValidator(flowSpeedMin, flowSpeedMax, 2, flowSpeedEdit);
-    flowSpeedValidator->setNotation(QDoubleValidator::StandardNotation);
-    flowSpeedEdit->setValidator(flowSpeedValidator);
-    QObject::connect(flowSpeedEdit, &QLineEdit::editingFinished, &dialog, [&, flowSpeedEdit]() {
-        bool ok = false;
-        const double typedSpeed = flowSpeedEdit->text().trimmed().toDouble(&ok);
-        if (!ok) {
-            flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed));
-            return;
-        }
-        selectedFlowSpeed = qBound(
+    const auto snapFlowSpeed = [flowSpeedMin, flowSpeedMax, flowSpeedStep](double flowSpeed) {
+        return qBound(
             flowSpeedMin,
-            flowSpeedMin + qRound((typedSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
+            flowSpeedMin + qRound((flowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
             flowSpeedMax
         );
+    };
+    double selectedTapFlowSpeed = snapFlowSpeed(owner_.previewTapFlowSpeed_);
+    double selectedTouchFlowSpeed = snapFlowSpeed(owner_.previewTouchFlowSpeed_);
+    const auto createFlowSpeedEdit = [&](double& selectedFlowSpeed, const std::function<void(double)>& applyFlowSpeed) {
+        auto* flowSpeedEdit = new QLineEdit(gameplayGroup);
+        flowSpeedEdit->setAlignment(Qt::AlignCenter);
         flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed));
-        owner_.previewNoteFlowSpeed_ = selectedFlowSpeed;
+        flowSpeedEdit->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet());
+        flowSpeedEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        auto* flowSpeedValidator = new QDoubleValidator(flowSpeedMin, flowSpeedMax, 2, flowSpeedEdit);
+        flowSpeedValidator->setNotation(QDoubleValidator::StandardNotation);
+        flowSpeedEdit->setValidator(flowSpeedValidator);
+        QObject::connect(flowSpeedEdit, &QLineEdit::editingFinished, &dialog, [&, flowSpeedEdit, applyFlowSpeed]() {
+            bool ok = false;
+            const double typedSpeed = flowSpeedEdit->text().trimmed().toDouble(&ok);
+            if (!ok) {
+                flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed));
+                return;
+            }
+            selectedFlowSpeed = snapFlowSpeed(typedSpeed);
+            flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed));
+            applyFlowSpeed(selectedFlowSpeed);
+            owner_.saveProjectRenderState();
+            owner_.savePortableState();
+        });
+        return flowSpeedEdit;
+    };
+    auto* tapFlowSpeedEdit = createFlowSpeedEdit(selectedTapFlowSpeed, [this](double flowSpeed) {
+        owner_.previewTapFlowSpeed_ = flowSpeed;
         if (owner_.previewCanvas_ != nullptr) {
-            owner_.previewCanvas_->setNoteFlowSpeed(selectedFlowSpeed);
+            owner_.previewCanvas_->setTapFlowSpeed(flowSpeed);
         }
-        owner_.saveProjectRenderState();
-        owner_.savePortableState();
+    });
+    auto* touchFlowSpeedEdit = createFlowSpeedEdit(selectedTouchFlowSpeed, [this](double flowSpeed) {
+        owner_.previewTouchFlowSpeed_ = flowSpeed;
+        if (owner_.previewCanvas_ != nullptr) {
+            owner_.previewCanvas_->setTouchFlowSpeed(flowSpeed);
+        }
     });
 
     struct CanvasFrameRateOption {
@@ -539,7 +555,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         }
     }
     auto* canvasFrameRateButton = createDialogMenuButton(videoGroup, selectedCanvasFrameRateLabel);
-    canvasFrameRateButton->setFixedHeight(flowSpeedEdit->sizeHint().height());
+    canvasFrameRateButton->setFixedHeight(tapFlowSpeedEdit->sizeHint().height());
     canvasFrameRateButton->setStyleSheet(
         UiTheme::dialogMenuButtonStyleSheet()
         + QStringLiteral("QToolButton { text-align: center; padding: 2px 22px 2px 10px; }")
@@ -789,23 +805,39 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         fieldLayout->addWidget(control, 0);
         gameplayLayout->addWidget(field, row, column);
     };
-    addGameplayField(0, 0, uiText("dialog.render_settings.video.flow_speed", "Flow Speed"), flowSpeedEdit);
-    addGameplayField(0, 1, uiText("dialog.render_settings.video.skin", "Skin"), skinButton);
+    addGameplayField(
+        0,
+        0,
+        uiText("dialog.render_settings.video.tap_flow_speed", "Tap Flow Speed"),
+        tapFlowSpeedEdit
+    );
+    addGameplayField(
+        0,
+        1,
+        uiText("dialog.render_settings.video.touch_flow_speed", "Touch Flow Speed"),
+        touchFlowSpeedEdit
+    );
     addGameplayField(
         1,
         0,
-        uiText("dialog.render_settings.gameplay.slide_judge_effect", "Slide Judge Effect"),
-        slideJudgeEffectButton
+        uiText("dialog.render_settings.video.skin", "Skin"),
+        skinButton
     );
     addGameplayField(
         1,
         1,
+        uiText("dialog.render_settings.gameplay.slide_judge_effect", "Slide Judge Effect"),
+        slideJudgeEffectButton
+    );
+    addGameplayField(
+        2,
+        0,
         uiText("dialog.render_settings.gameplay.judge_line", "Judge Line"),
         judgeLineButton
     );
     addGameplayField(
         2,
-        0,
+        1,
         uiText("dialog.render_settings.gameplay.slide_stack_order", "Slide Stack Order"),
         slideStackOrderButton
     );

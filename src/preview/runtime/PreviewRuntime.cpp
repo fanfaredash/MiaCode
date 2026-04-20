@@ -410,9 +410,23 @@ void PreviewRuntime::setBackgroundScaleMode(PreviewBackgroundScaleMode mode)
     update();
 }
 
+void PreviewRuntime::setTapFlowSpeed(double flowSpeed)
+{
+    frameState_.render.tapFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
+    update();
+}
+
+void PreviewRuntime::setTouchFlowSpeed(double flowSpeed)
+{
+    frameState_.render.touchFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
+    update();
+}
+
 void PreviewRuntime::setNoteFlowSpeed(double flowSpeed)
 {
-    frameState_.render.noteFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
+    const double normalizedFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
+    frameState_.render.tapFlowSpeed = normalizedFlowSpeed;
+    frameState_.render.touchFlowSpeed = normalizedFlowSpeed;
     update();
 }
 

@@ -225,7 +225,7 @@ Shared render settings include:
 - outline variant / judge-line background overlay selection
 - smooth brightness
 - background scale mode
-- note flow speed
+- tap/touch flow speed (persisted as separate values with legacy single-speed fallback)
 - chart-review judge overlay toggles for slide/wifi-family and tap/hold-family effects
 - timestamp/object-stats HUD flags
 - Muri render options

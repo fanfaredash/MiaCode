@@ -68,15 +68,18 @@ void appendPreviewPlaybackLog(const QString& action, const QString& payload = QS
 double previewVisualLeadInStartSecond(
     const QVector<TimelineNoteMarker>& noteMarkers,
     double requestedSecond,
-    double noteFlowSpeed)
+    double tapFlowSpeed,
+    double touchFlowSpeed)
 {
     if (requestedSecond > kTimelineZeroSecondTolerance || noteMarkers.isEmpty()) {
         return requestedSecond;
     }
 
-    const auto tapTiming = miacode::preview::scene::previewTapTimingForFlowSpeed(static_cast<qreal>(noteFlowSpeed));
+    const auto tapTiming = miacode::preview::scene::previewTapTimingForFlowSpeed(static_cast<qreal>(tapFlowSpeed));
     const auto slideTrackTiming =
-        miacode::preview::scene::previewSlideTrackTimingForFlowSpeed(static_cast<qreal>(noteFlowSpeed));
+        miacode::preview::scene::previewSlideTrackTimingForFlowSpeed(static_cast<qreal>(tapFlowSpeed));
+    const auto touchTiming =
+        miacode::preview::scene::previewTouchTimingForFlowSpeed(static_cast<qreal>(touchFlowSpeed));
 
     double earliestSecond = requestedSecond;
     for (const TimelineNoteMarker& marker : noteMarkers) {
@@ -105,13 +108,13 @@ double previewVisualLeadInStartSecond(
         }
         if (type == QLatin1String("touch")) {
             if (marker.second + kTimelineZeroSecondTolerance >= requestedSecond) {
-                earliestSecond = qMin(earliestSecond, marker.second - miacode::preview_gameplay::kTouchDurationSeconds);
+                earliestSecond = qMin(earliestSecond, marker.second - touchTiming.durationSeconds);
             }
             continue;
         }
         if (type == QLatin1String("touch_hold")) {
             if (qMax(marker.second, marker.endSecond) + kTimelineZeroSecondTolerance >= requestedSecond) {
-                earliestSecond = qMin(earliestSecond, marker.second - miacode::preview_gameplay::kTouchDurationSeconds);
+                earliestSecond = qMin(earliestSecond, marker.second - touchTiming.durationSeconds);
             }
             continue;
         }
@@ -685,7 +688,11 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
     applyLatestTimelinePreviewStateToPausedPreview();
     const double requestedSecond = qBound(0.0, second, previewDurationSeconds());
     const double startSecond = (!resumeFromPause && requestedSecond <= kTimelineZeroSecondTolerance)
-        ? previewVisualLeadInStartSecond(state_.latestTimelineNoteMarkers_, requestedSecond, state_.previewNoteFlowSpeed_)
+        ? previewVisualLeadInStartSecond(
+              state_.latestTimelineNoteMarkers_,
+              requestedSecond,
+              state_.previewTapFlowSpeed_,
+              state_.previewTouchFlowSpeed_)
         : requestedSecond;
     const bool hasVideoMedia = owner_.previewStageMediaRouteHasVideo();
     const quint64 playbackTxn = ++state_.previewPlaybackTransactionCounter_;

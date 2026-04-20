@@ -377,7 +377,8 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     , selectedFps_(baseTask.fps >= 90 ? 120 : 60)
     , selectedPreset_(baseTask.preset)
     , selectedBackgroundScaleMode_(baseTask.backgroundScaleMode)
-    , selectedFlowSpeed_(baseTask.noteFlowSpeed)
+    , selectedTapFlowSpeed_(baseTask.tapFlowSpeed)
+    , selectedTouchFlowSpeed_(baseTask.touchFlowSpeed)
 {
     setWindowTitle(uiText("dialog.batch_export.title", QStringLiteral("Batch Export")));
     setModal(true);
@@ -531,6 +532,8 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     optionsLayout->setContentsMargins(12, 12, 12, 12);
     optionsLayout->setHorizontalSpacing(10);
     optionsLayout->setVerticalSpacing(8);
+    optionsLayout->setColumnStretch(1, 1);
+    optionsLayout->setColumnStretch(3, 1);
     int optionRow = 0;
 
     auto* checkboxRow = new QWidget(optionsCard);
@@ -547,7 +550,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     checkboxLayout->addWidget(showObjectStatsCheck_, 0);
     checkboxLayout->addWidget(smoothBrightnessCheck_, 0);
     checkboxLayout->addStretch(1);
-    optionsLayout->addWidget(checkboxRow, optionRow, 0, 1, 2);
+    optionsLayout->addWidget(checkboxRow, optionRow, 0, 1, 4);
     ++optionRow;
 
     QWidget* outerBrightnessOption = createSliderOption(
@@ -557,7 +560,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
         &brightnessOuterSlider_,
         &brightnessOuterValueLabel_
     );
-    optionsLayout->addWidget(outerBrightnessOption, optionRow, 0, 1, 2);
+    optionsLayout->addWidget(outerBrightnessOption, optionRow, 0, 1, 4);
     ++optionRow;
 
     QWidget* innerBrightnessOption = createSliderOption(
@@ -567,7 +570,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
         &brightnessInnerSlider_,
         &brightnessInnerValueLabel_
     );
-    optionsLayout->addWidget(innerBrightnessOption, optionRow, 0, 1, 2);
+    optionsLayout->addWidget(innerBrightnessOption, optionRow, 0, 1, 4);
     ++optionRow;
 
     QWidget* judgeLineOption = createSliderOption(
@@ -580,7 +583,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     layoutSquareScaleSlider_->setRange(50, 150);
     layoutSquareScaleSlider_->setSingleStep(1);
     layoutSquareScaleSlider_->setPageStep(1);
-    optionsLayout->addWidget(judgeLineOption, optionRow, 0, 1, 2);
+    optionsLayout->addWidget(judgeLineOption, optionRow, 0, 1, 4);
     ++optionRow;
 
     auto* scaleModeLabel = new QLabel(uiText("dialog.video_export.option.scale_mode", QStringLiteral("Background / PV Scale")), optionsCard);
@@ -603,38 +606,55 @@ BatchVideoExportDialog::BatchVideoExportDialog(
         notifySharedSettingsChanged();
     });
     optionsLayout->addWidget(scaleModeLabel, optionRow, 0);
-    optionsLayout->addWidget(backgroundScaleModeButton_, optionRow, 1);
+    optionsLayout->addWidget(backgroundScaleModeButton_, optionRow, 1, 1, 3);
     ++optionRow;
 
-    auto* flowSpeedLabel = new QLabel(uiText("dialog.video_export.option.flow_speed", QStringLiteral("Flow Speed")), optionsCard);
-    flowSpeedEdit_ = new QLineEdit(optionsCard);
-    flowSpeedEdit_->setAlignment(Qt::AlignCenter);
-    flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
-    flowSpeedEdit_->setStyleSheet(batchExportLineEditStyleSheet());
-    auto* flowValidator = new QDoubleValidator(
-        miacode::preview_gameplay::kPreviewTimingFlowSpeedMin,
-        miacode::preview_gameplay::kPreviewTimingFlowSpeedMax,
-        2,
-        flowSpeedEdit_
+    const auto createFlowSpeedEdit = [this, optionsCard](QLineEdit** editOut, double* selectedFlowSpeed) {
+        auto* flowSpeedEdit = new QLineEdit(optionsCard);
+        flowSpeedEdit->setAlignment(Qt::AlignCenter);
+        flowSpeedEdit->setText(flowSpeedValueLabel(*selectedFlowSpeed));
+        flowSpeedEdit->setStyleSheet(batchExportLineEditStyleSheet());
+        auto* flowValidator = new QDoubleValidator(
+            miacode::preview_gameplay::kPreviewTimingFlowSpeedMin,
+            miacode::preview_gameplay::kPreviewTimingFlowSpeedMax,
+            2,
+            flowSpeedEdit
+        );
+        flowValidator->setNotation(QDoubleValidator::StandardNotation);
+        flowSpeedEdit->setValidator(flowValidator);
+        QObject::connect(flowSpeedEdit, &QLineEdit::editingFinished, this, [this, flowSpeedEdit, selectedFlowSpeed]() {
+            if (flowSpeedEdit == nullptr || selectedFlowSpeed == nullptr) {
+                return;
+            }
+            bool ok = false;
+            const double typedSpeed = flowSpeedEdit->text().trimmed().toDouble(&ok);
+            if (!ok) {
+                flowSpeedEdit->setText(flowSpeedValueLabel(*selectedFlowSpeed));
+                return;
+            }
+            *selectedFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(typedSpeed);
+            flowSpeedEdit->setText(flowSpeedValueLabel(*selectedFlowSpeed));
+            notifySharedSettingsChanged();
+        });
+        if (editOut != nullptr) {
+            *editOut = flowSpeedEdit;
+        }
+        return flowSpeedEdit;
+    };
+    auto* tapFlowSpeedLabel = new QLabel(
+        uiText("dialog.video_export.option.tap_flow_speed", QStringLiteral("Tap Flow Speed")),
+        optionsCard
     );
-    flowValidator->setNotation(QDoubleValidator::StandardNotation);
-    flowSpeedEdit_->setValidator(flowValidator);
-    optionsLayout->addWidget(flowSpeedLabel, optionRow, 0);
-    optionsLayout->addWidget(flowSpeedEdit_, optionRow, 1);
-    connect(flowSpeedEdit_, &QLineEdit::editingFinished, this, [this]() {
-        if (flowSpeedEdit_ == nullptr) {
-            return;
-        }
-        bool ok = false;
-        const double typedSpeed = flowSpeedEdit_->text().trimmed().toDouble(&ok);
-        if (!ok) {
-            flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
-            return;
-        }
-        selectedFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(typedSpeed);
-        flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
-        notifySharedSettingsChanged();
-    });
+    tapFlowSpeedEdit_ = createFlowSpeedEdit(&tapFlowSpeedEdit_, &selectedTapFlowSpeed_);
+    auto* touchFlowSpeedLabel = new QLabel(
+        uiText("dialog.video_export.option.touch_flow_speed", QStringLiteral("Touch Flow Speed")),
+        optionsCard
+    );
+    touchFlowSpeedEdit_ = createFlowSpeedEdit(&touchFlowSpeedEdit_, &selectedTouchFlowSpeed_);
+    optionsLayout->addWidget(tapFlowSpeedLabel, optionRow, 0);
+    optionsLayout->addWidget(tapFlowSpeedEdit_, optionRow, 1);
+    optionsLayout->addWidget(touchFlowSpeedLabel, optionRow, 2);
+    optionsLayout->addWidget(touchFlowSpeedEdit_, optionRow, 3);
 
     connect(brightnessOuterSlider_, &QSlider::valueChanged, this, [this](int value) {
         if (brightnessOuterValueLabel_ != nullptr) {
@@ -815,9 +835,11 @@ bool BatchVideoExportDialog::applyUiToTask(VideoExportTask* task, QString* error
         return false;
     }
 
-    bool flowSpeedOk = false;
-    const double flowSpeed = flowSpeedEdit_->text().trimmed().toDouble(&flowSpeedOk);
-    if (!flowSpeedOk) {
+    bool tapFlowSpeedOk = false;
+    const double tapFlowSpeed = tapFlowSpeedEdit_->text().trimmed().toDouble(&tapFlowSpeedOk);
+    bool touchFlowSpeedOk = false;
+    const double touchFlowSpeed = touchFlowSpeedEdit_->text().trimmed().toDouble(&touchFlowSpeedOk);
+    if (!tapFlowSpeedOk || !touchFlowSpeedOk) {
         if (errorMessage != nullptr) {
             *errorMessage = uiText("dialog.video_export.error.invalid_flow_speed", QStringLiteral("Flow speed is invalid."));
         }
@@ -835,7 +857,8 @@ bool BatchVideoExportDialog::applyUiToTask(VideoExportTask* task, QString* error
     task->backgroundBrightnessInner = qBound(0.0, brightnessInnerSlider_->value() / 100.0, 1.0);
     task->layoutSquareScale = miacode::preview_video::normalizedLayoutSquareScale(layoutSquareScaleSlider_->value() / 100.0);
     task->backgroundScaleMode = selectedBackgroundScaleMode_;
-    task->noteFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(flowSpeed);
+    task->tapFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(tapFlowSpeed);
+    task->touchFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(touchFlowSpeed);
     return true;
 }
 
@@ -1005,6 +1028,7 @@ VideoExportTask BatchVideoExportDialog::currentSharedSettingsTask() const
         ? miacode::preview_video::normalizedLayoutSquareScale(layoutSquareScaleSlider_->value() / 100.0)
         : task.layoutSquareScale;
     task.backgroundScaleMode = selectedBackgroundScaleMode_;
-    task.noteFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(selectedFlowSpeed_);
+    task.tapFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(selectedTapFlowSpeed_);
+    task.touchFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(selectedTouchFlowSpeed_);
     return task;
 }

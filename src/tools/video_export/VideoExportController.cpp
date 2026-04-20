@@ -3948,7 +3948,8 @@ VideoExportResult VideoExportController::exportPreparedTask(
         diagReferenceCanvas.setLayoutSquareScale(task.layoutSquareScale);
         diagReferenceCanvas.setSmoothBrightness(task.smoothBrightness);
         diagReferenceCanvas.setBackgroundScaleMode(task.backgroundScaleMode);
-        diagReferenceCanvas.setNoteFlowSpeed(task.noteFlowSpeed);
+        diagReferenceCanvas.setTapFlowSpeed(task.tapFlowSpeed);
+        diagReferenceCanvas.setTouchFlowSpeed(task.touchFlowSpeed);
         diagReferenceCanvas.setShowDebugInfo(false);
         diagReferenceCanvas.setNoteMarkers({});
         QString diagInitError;

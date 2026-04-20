@@ -169,7 +169,8 @@ QJsonObject VideoExportSnapshot::toJson() const
     render.insert(QStringLiteral("smooth_brightness"), smoothBrightness);
     render.insert(QStringLiteral("outline_variant"), outlineVariantToken(outlineVariant));
     render.insert(QStringLiteral("background_scale_mode"), backgroundScaleModeToken(backgroundScaleMode));
-    render.insert(QStringLiteral("note_flow_speed"), noteFlowSpeed);
+    render.insert(QStringLiteral("tap_flow_speed"), tapFlowSpeed);
+    render.insert(QStringLiteral("touch_flow_speed"), touchFlowSpeed);
     render.insert(QStringLiteral("slide_earlier_second_and_text_on_top"), slideEarlierSecondAndTextOnTop);
     render.insert(QStringLiteral("render_mode"), renderModeToken(muriRenderOptions.renderMode));
     render.insert(QStringLiteral("show_slide_tracks"), muriRenderOptions.showSlideTracks);
@@ -256,8 +257,15 @@ bool VideoExportSnapshot::fromJson(
         outlineVariantFromToken(render.value(QStringLiteral("outline_variant")).toString());
     parsed.backgroundScaleMode =
         backgroundScaleModeFromToken(render.value(QStringLiteral("background_scale_mode")).toString());
-    parsed.noteFlowSpeed =
-        render.value(QStringLiteral("note_flow_speed")).toDouble(parsed.noteFlowSpeed);
+    const double legacyFlowSpeed = render.value(QStringLiteral("note_flow_speed")).toDouble(
+        miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed
+    );
+    parsed.tapFlowSpeed = render.value(QStringLiteral("tap_flow_speed")).toDouble(
+        render.contains(QStringLiteral("note_flow_speed")) ? legacyFlowSpeed : parsed.tapFlowSpeed
+    );
+    parsed.touchFlowSpeed = render.value(QStringLiteral("touch_flow_speed")).toDouble(
+        render.contains(QStringLiteral("note_flow_speed")) ? legacyFlowSpeed : parsed.touchFlowSpeed
+    );
     parsed.slideEarlierSecondAndTextOnTop =
         render.value(QStringLiteral("slide_earlier_second_and_text_on_top"))
             .toBool(parsed.slideEarlierSecondAndTextOnTop);
@@ -374,7 +382,8 @@ bool buildVideoExportTaskFromSnapshot(
     built.smoothBrightness = snapshot.smoothBrightness;
     built.outlineVariant = snapshot.outlineVariant;
     built.backgroundScaleMode = snapshot.backgroundScaleMode;
-    built.noteFlowSpeed = snapshot.noteFlowSpeed;
+    built.tapFlowSpeed = snapshot.tapFlowSpeed;
+    built.touchFlowSpeed = snapshot.touchFlowSpeed;
     built.slideEarlierSecondAndTextOnTop = snapshot.slideEarlierSecondAndTextOnTop;
     built.muriRenderOptions = snapshot.muriRenderOptions;
     built.staticTapOnSlideThresholdSeconds = snapshot.staticTapOnSlideThresholdSeconds;

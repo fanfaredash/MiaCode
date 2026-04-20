@@ -27,7 +27,8 @@ struct VideoExportSnapshot {
     bool smoothBrightness = miacode::preview_video::kSmoothBrightnessDefault;
     PreviewOutlineVariant outlineVariant = PreviewOutlineVariant::Line;
     PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
-    double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    double tapFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    double touchFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     bool slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
     MuriRenderOptions muriRenderOptions;
     double staticTapOnSlideThresholdSeconds =

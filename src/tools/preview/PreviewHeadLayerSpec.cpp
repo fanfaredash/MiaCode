@@ -195,7 +195,7 @@ bool verifySameHeadBranchesCollapseToFastestRotation(QTextStream& err)
     state.skin.starImage = solidImage(126, 126);
 
     const PreviewTapTiming tapTiming =
-        miacode::preview::scene::previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.noteFlowSpeed));
+        miacode::preview::scene::previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.tapFlowSpeed));
     state.playheadSeconds = fastestMarker->second - tapTiming.flyDurationSeconds * 0.5;
 
     const PreviewHeadLayerState layerState = buildPreparedHeadLayerState(state);
@@ -382,7 +382,7 @@ bool verifySameSecondSlideTextOrderMatchesBetweenPreparedAndFallback(QTextStream
 
     state.noteMarkers = {earlierTextSlide, laterTextSlide};
     const PreviewTapTiming tapTiming =
-        miacode::preview::scene::previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.noteFlowSpeed));
+        miacode::preview::scene::previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.tapFlowSpeed));
     state.playheadSeconds = earlierTextSlide.second - tapTiming.flyDurationSeconds * 0.5;
 
     const PreviewHeadLayerState preparedLayerState = buildPreparedHeadLayerState(state);
@@ -451,7 +451,7 @@ bool verifyNegativePlayheadKeepsFallingTapVisible(QTextStream& err)
     state.skin.tapImage = solidImage(96, 96);
 
     const PreviewTapTiming tapTiming =
-        miacode::preview::scene::previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.noteFlowSpeed));
+        miacode::preview::scene::previewTapTimingForFlowSpeed(static_cast<qreal>(state.render.tapFlowSpeed));
     state.playheadSeconds = marker.second - tapTiming.flyDurationSeconds * 0.5;
 
     const PreviewHeadLayerState layerState = buildPreparedHeadLayerState(state);

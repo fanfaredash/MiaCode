@@ -239,6 +239,7 @@
         quint64 waveformRefreshGeneration_ = 0;
         bool pendingDeferredValidationUiRefresh_ = false;
         bool pendingDeferredMuriUiRefresh_ = false;
+        bool pendingMuriPanelRefresh_ = false;
         QString previewMediaWarmupChartPath_;
         QString previewMediaWarmupResolvedPath_;
         QString previewMediaWarmupTrackPath_;
@@ -343,7 +344,8 @@
         PreviewOutlineVariant previewOutlineVariant_ = PreviewOutlineVariant::Line;
         bool previewOutlineVariantUsesAutoSelection_ = true;
         PreviewBackgroundScaleMode previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
-        double previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+        double previewTapFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+        double previewTouchFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
         bool previewSlideEarlierSecondAndTextOnTop_ = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
         PreviewSkinVariant previewSkinVariant_ = PreviewSkinVariant::Standard;
         PreviewCanvasFrameRateMode previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
@@ -540,6 +542,7 @@
     quint64& waveformRefreshGeneration_ = state_.waveformRefreshGeneration_;
     bool& pendingDeferredValidationUiRefresh_ = state_.pendingDeferredValidationUiRefresh_;
     bool& pendingDeferredMuriUiRefresh_ = state_.pendingDeferredMuriUiRefresh_;
+    bool& pendingMuriPanelRefresh_ = state_.pendingMuriPanelRefresh_;
     QString& previewMediaWarmupChartPath_ = state_.previewMediaWarmupChartPath_;
     QString& previewMediaWarmupResolvedPath_ = state_.previewMediaWarmupResolvedPath_;
     QString& previewMediaWarmupTrackPath_ = state_.previewMediaWarmupTrackPath_;
@@ -634,7 +637,8 @@
     PreviewOutlineVariant& previewOutlineVariant_ = state_.previewOutlineVariant_;
     bool& previewOutlineVariantUsesAutoSelection_ = state_.previewOutlineVariantUsesAutoSelection_;
     PreviewBackgroundScaleMode& previewBackgroundScaleMode_ = state_.previewBackgroundScaleMode_;
-    double& previewNoteFlowSpeed_ = state_.previewNoteFlowSpeed_;
+    double& previewTapFlowSpeed_ = state_.previewTapFlowSpeed_;
+    double& previewTouchFlowSpeed_ = state_.previewTouchFlowSpeed_;
     bool& previewSlideEarlierSecondAndTextOnTop_ = state_.previewSlideEarlierSecondAndTextOnTop_;
     PreviewSkinVariant& previewSkinVariant_ = state_.previewSkinVariant_;
     PreviewCanvasFrameRateMode& previewCanvasFrameRateMode_ = state_.previewCanvasFrameRateMode_;

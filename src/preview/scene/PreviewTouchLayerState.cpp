@@ -18,6 +18,8 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
     PreviewTouchLayerState layerState;
     QHash<quint64, int> overlapCounts;
     overlapCounts.reserve(16);
+    const PreviewTouchTiming touchTiming =
+        previewTouchTimingForFlowSpeed(static_cast<qreal>(state.render.touchFlowSpeed));
 
     for (int markerIndex = 0; markerIndex < markers.size(); ++markerIndex) {
         const TimelineNoteMarker& marker = markers.markerAt(markerIndex);
@@ -25,7 +27,7 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
             continue;
         }
         const qreal deltaSeconds = static_cast<qreal>(state.playheadSeconds - marker.second);
-        if (deltaSeconds <= -kTouchDurationSeconds || deltaSeconds >= 0.0) {
+        if (deltaSeconds <= -touchTiming.durationSeconds || deltaSeconds >= 0.0) {
             continue;
         }
         overlapCounts[touchRegionKey(marker)] += 1;
@@ -66,7 +68,7 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
             continue;
         }
         const qreal deltaSeconds = static_cast<qreal>(state.playheadSeconds - marker.second);
-        if (deltaSeconds <= -kTouchDurationSeconds || deltaSeconds >= 0.0) {
+        if (deltaSeconds <= -touchTiming.durationSeconds || deltaSeconds >= 0.0) {
             continue;
         }
 
@@ -92,14 +94,15 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
         const bool cornerImageCacheable = true;
 
         const QPointF point = mapLogicalPointToRect(marker.touchPoint, playfieldRect);
-        const qreal alpha = touchPreHitAlpha(deltaSeconds, kTouchDurationSeconds, kTouchShowDurationSeconds);
+        const qreal alpha =
+            touchPreHitAlpha(deltaSeconds, touchTiming.durationSeconds, touchTiming.showDurationSeconds);
         const qreal logicalOffset = touchLogicalOffsetForDelta(
             deltaSeconds,
             kTouchStartOffset,
             kTouchClosedOffset,
-            kTouchDurationSeconds,
-            kTouchShowDurationSeconds,
-            kTouchCloseDurationSeconds
+            touchTiming.durationSeconds,
+            touchTiming.showDurationSeconds,
+            touchTiming.closeDurationSeconds
         );
         const qreal offset = mapLogicalLengthToRect(logicalOffset, playfieldRect);
         const int overlapCount = overlapCounts.value(touchRegionKey(marker), 0);

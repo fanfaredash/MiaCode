@@ -58,7 +58,8 @@ bool VideoExportQuickRenderBackend::bootstrap(
     frameState_.render.layoutSquareScale = normalizedLayoutScale(task.layoutSquareScale);
     frameState_.render.smoothBrightness = task.smoothBrightness;
     frameState_.render.backgroundScaleMode = task.backgroundScaleMode;
-    frameState_.render.noteFlowSpeed = normalizedFlowSpeed(task.noteFlowSpeed);
+    frameState_.render.tapFlowSpeed = normalizedFlowSpeed(task.tapFlowSpeed);
+    frameState_.render.touchFlowSpeed = normalizedFlowSpeed(task.touchFlowSpeed);
     frameState_.render.slideEarlierSecondAndTextOnTop = task.slideEarlierSecondAndTextOnTop;
     frameState_.render.showDebugInfo = false;
     frameState_.render.showTimestamp = task.showTimestamp;
@@ -124,9 +125,21 @@ void VideoExportQuickRenderBackend::setBackgroundScaleMode(PreviewBackgroundScal
     frameState_.render.backgroundScaleMode = mode;
 }
 
+void VideoExportQuickRenderBackend::setTapFlowSpeed(double flowSpeed)
+{
+    frameState_.render.tapFlowSpeed = normalizedFlowSpeed(flowSpeed);
+}
+
+void VideoExportQuickRenderBackend::setTouchFlowSpeed(double flowSpeed)
+{
+    frameState_.render.touchFlowSpeed = normalizedFlowSpeed(flowSpeed);
+}
+
 void VideoExportQuickRenderBackend::setNoteFlowSpeed(double flowSpeed)
 {
-    frameState_.render.noteFlowSpeed = normalizedFlowSpeed(flowSpeed);
+    const double normalizedSpeed = normalizedFlowSpeed(flowSpeed);
+    frameState_.render.tapFlowSpeed = normalizedSpeed;
+    frameState_.render.touchFlowSpeed = normalizedSpeed;
 }
 
 void VideoExportQuickRenderBackend::setShowDebugInfo(bool show)
