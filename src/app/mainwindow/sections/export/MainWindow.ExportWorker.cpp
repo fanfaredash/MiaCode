@@ -311,8 +311,8 @@ QString buildWorkerProcessDiagnostics(
     if (!stdoutTailText.trimmed().isEmpty()) {
         lines.append(QStringLiteral("stdout_tail: %1").arg(truncateProcessTextForUi(stdoutTailText, 1000)));
     }
-    if (miacode::debug_options::exportDebugOutputEnabled() && !exportLogPath.trimmed().isEmpty()) {
-        lines.append(QStringLiteral("Debug log: %1").arg(exportLogPath));
+    if (!exportLogPath.trimmed().isEmpty()) {
+        lines.append(QStringLiteral("Export log: %1").arg(exportLogPath));
     }
     if (!fatalLogPath.trimmed().isEmpty()) {
         lines.append(QStringLiteral("Error log: %1").arg(fatalLogPath));

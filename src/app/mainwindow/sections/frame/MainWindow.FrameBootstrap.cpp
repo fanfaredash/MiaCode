@@ -556,11 +556,35 @@ MainWindow::MainWindow(QWidget* parent)
     extraMetadataLabel->setObjectName("SectionTitle");
     extraMetadataLabel->setFont(uiAccentFont(11));
     metadataCardLayout->addWidget(extraMetadataLabel);
+    const auto installCtrlEnterLineBreakShortcut = [](QTextEdit* textEdit) {
+        if (textEdit == nullptr) {
+            return;
+        }
+        const auto insertLineBreak = [textEdit]() {
+            if (textEdit->isReadOnly()) {
+                return;
+            }
+            QTextCursor cursor = textEdit->textCursor();
+            cursor.beginEditBlock();
+            cursor.insertBlock(cursor.blockFormat(), cursor.charFormat());
+            cursor.endEditBlock();
+            textEdit->setTextCursor(cursor);
+        };
+        for (const QKeySequence& shortcutKey : {
+                 QKeySequence(Qt::CTRL | Qt::Key_Return),
+                 QKeySequence(Qt::CTRL | Qt::Key_Enter)}) {
+            auto* shortcut = new QShortcut(shortcutKey, textEdit);
+            shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+            QObject::connect(shortcut, &QShortcut::activated, textEdit, insertLineBreak);
+        }
+    };
     metadataExtraEdit_ = new QTextEdit(metadataPage_);
+    metadataExtraEdit_->setAcceptRichText(false);
     metadataExtraEdit_->setFont(editorFont(editorTextFontPointSize_));
     metadataExtraEdit_->setLineWrapMode(QTextEdit::WidgetWidth);
     metadataExtraEdit_->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     metadataExtraEdit_->setPlaceholderText("&dummy=...");
+    installCtrlEnterLineBreakShortcut(metadataExtraEdit_);
     if (QScrollBar* vbar = metadataExtraEdit_->verticalScrollBar()) {
         vbar->setStyleSheet(modernScrollBarStyle());
     }

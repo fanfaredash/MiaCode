@@ -25,7 +25,7 @@ namespace {
 constexpr double kBassPreviewEpsilonSeconds = miacode::preview_sfx_timeline::kTimelineEpsilonSeconds;
 constexpr double kBassPreviewMinRate = 0.25;
 constexpr double kBassPreviewMaxRate = 2.0;
-constexpr double kBassPreviewStatusLogIntervalSeconds = 0.5;
+constexpr double kBassPreviewStatusLogIntervalSeconds = 1.0;
 constexpr DWORD kBassPreviewTempoFlags = 0x10000 | BASS_STREAM_DECODE; // BASS_FX_FREESOURCE | BASS_STREAM_DECODE
 constexpr DWORD kBassPreviewTempoAttribute = 0x10000; // BASS_ATTRIB_TEMPO
 

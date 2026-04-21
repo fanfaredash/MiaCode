@@ -1475,28 +1475,85 @@ QString normalizePath(const QString& path)
     return path.isEmpty() ? QString() : QDir::cleanPath(path);
 }
 
-QString videoExportDebugLogPath()
-{
-    return miacode::debug_log::exportLogPath();
-}
-
-void appendVideoExportLog(const QString& stage, const QString& detail = QString())
-{
-    miacode::debug_log::appendLine(miacode::debug_log::Channel::Export, stage, detail);
-    if (stage.startsWith(QStringLiteral("fail_"))) {
-        miacode::debug_log::appendFatalMessage(
-            QStringLiteral("export/%1").arg(stage),
-            detail.isEmpty() ? QStringLiteral("See export debug log for details.") : detail
-        );
-    }
-}
-
 QString truncateForLog(const QString& text, int maxChars = 4000)
 {
     if (text.size() <= maxChars) {
         return text;
     }
     return text.left(maxChars) + QStringLiteral(" ...<truncated>");
+}
+
+QString videoExportLogPath()
+{
+    return miacode::debug_log::exportLogPath();
+}
+
+bool exportDetailedLoggingEnabled()
+{
+    return miacode::debug_options::exportDebugOutputEnabled();
+}
+
+bool shouldWriteSummaryExportStage(const QString& stage)
+{
+    if (stage.startsWith(QStringLiteral("fail_")) || stage == QStringLiteral("canceled")) {
+        return true;
+    }
+
+    static const QStringList kSummaryStages{
+        QStringLiteral("export_begin"),
+        QStringLiteral("resolve_ffmpeg"),
+        QStringLiteral("resolve_ffprobe"),
+        QStringLiteral("output_staging"),
+        QStringLiteral("stage_static_media"),
+        QStringLiteral("stage_static_media_fallback"),
+        QStringLiteral("audio_backend_select"),
+        QStringLiteral("audio_mix_ok"),
+        QStringLiteral("encoder_select"),
+        QStringLiteral("skin_bootstrap"),
+        QStringLiteral("render_backend"),
+        QStringLiteral("offscreen_warmup"),
+        QStringLiteral("render_backend_fallback"),
+        QStringLiteral("frame_timing_summary"),
+        QStringLiteral("raw_pipe_summary"),
+        QStringLiteral("encode_output_file"),
+        QStringLiteral("ffmpeg_encode_started"),
+        QStringLiteral("ffmpeg_remux_started"),
+        QStringLiteral("export_file"),
+        QStringLiteral("ffprobe_summary"),
+        QStringLiteral("export_success"),
+    };
+    return kSummaryStages.contains(stage);
+}
+
+QString summarizedExportLogDetail(const QString& detail)
+{
+    QString normalized = detail.trimmed();
+    if (normalized.isEmpty()) {
+        return normalized;
+    }
+    normalized.replace(QLatin1Char('\n'), QLatin1Char(' '));
+    normalized = normalized.simplified();
+    return truncateForLog(normalized, 1200);
+}
+
+void appendVideoExportLog(const QString& stage, const QString& detail = QString())
+{
+    if (exportDetailedLoggingEnabled()) {
+        miacode::debug_log::appendLine(miacode::debug_log::Channel::Export, stage, detail);
+    } else if (shouldWriteSummaryExportStage(stage)) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Export,
+            stage,
+            summarizedExportLogDetail(detail),
+            true
+        );
+    }
+    if (stage.startsWith(QStringLiteral("fail_"))) {
+        miacode::debug_log::appendFatalMessage(
+            QStringLiteral("export/%1").arg(stage),
+            detail.isEmpty() ? QStringLiteral("See export log for details.") : detail
+        );
+    }
 }
 
 bool fileIsExecutable(const QString& path)
@@ -2893,9 +2950,7 @@ QString withExportLogPath(const QString& details)
     if (!details.trimmed().isEmpty()) {
         lines.append(details);
     }
-    if (miacode::debug_options::exportDebugOutputEnabled()) {
-        lines.append(QStringLiteral("Debug log: %1").arg(videoExportDebugLogPath()));
-    }
+    lines.append(QStringLiteral("Export log: %1").arg(videoExportLogPath()));
     lines.append(QStringLiteral("Error log: %1").arg(miacode::debug_log::fatalLogPath()));
     return lines.join(QStringLiteral("\n"));
 }
@@ -3508,7 +3563,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
 
     const qint64 frameBudgetNs = static_cast<qint64>(1000000000.0 / qMax(1, task.fps));
     static constexpr qint64 kFrameStallLogNs = 80000000;  // 80ms
-    static constexpr int kFrameProgressStride = 120;
+    static constexpr int kFrameProgressStride = 300;
     FrameTimingStats frameStats;
 
     const bool diagRepeatEnabled = exportConfig.diag.repeatEnabled;

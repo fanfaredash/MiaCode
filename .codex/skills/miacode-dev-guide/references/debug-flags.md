@@ -26,7 +26,7 @@ The user-facing canonical doc lives at `docs/DEBUG_INDEX.md`. This file stays sh
   - `MIACODE_FATAL_LOG_PATH`
   - `MIACODE_PREVIEW_PROFILE_PATH`
 
-Debug-only outputs are gated by the process debug mode entered through `--debug`. Fatal logs are intentionally not gated.
+Runtime/audio/startup/profile detailed outputs are gated by the process debug mode entered through `--debug`. Fatal logs are intentionally not gated. The export log now keeps a concise stage/failure summary even without `--debug`, while detailed export diagnostics still require debug mode.
 
 Debug subcategories now default to on inside debug mode and are disabled with:
 
@@ -48,6 +48,8 @@ Debug subcategories now default to on inside debug mode and are disabled with:
 - Export log:
   - default file: `miacode_video_export.log`
   - producers: `VideoExportController`, export audio backends
+  - normal mode writes concise major-stage/failure/result lines so user bug reports still have a shareable export log
+  - debug mode adds the existing detailed ffmpeg/render/backend diagnostics on top of that same file
 - Startup timing:
   - default file: `miacode_startup_timing.log`
   - extra disable gate: `MIACODE_DISABLE_STARTUP_TIMING`
@@ -133,8 +135,9 @@ The `preview/playback` audio tag now traces realtime preview start transactions.
 The `preview/stage_media` audio tag is now switch-level only for quickshell media changes, presentation-mode flips, `VideoOutput` binding transitions, weak-sync video prepare / commit transitions (`action=prepare_playback_*`, `action=commit_prepared_playback*`), and low-noise external-video stall transitions (`action=video_frame_stall_begin` / `action=video_frame_stall_end`); the old per-frame quickshell video arrival line was retired.
 The audio log emits `stretched_clock_drift` for low-noise stretched-BGM drift sampling; current fields are `fallback`, `bg`, `delta_ms`, `rate`, `engine_now_frame`, `start_engine_frame`, and `tick_bg_gap_ms` (`fallback - backgroundTrackLastTimelineSecond`) so engine-time anchor drift can be separated from tick-to-tick catch-up.
 The preview audio facade now also emits `preview_audio_backend` selection lines so backend routing and BASS fallback decisions are visible in the audio log.
-The BASS preview backend now also emits low-noise `bass_schedule_arm` and `bass_status` lines. `bass_schedule_arm` shows which collapsed SFX group has been armed as the next mixer sync, while `bass_status` samples the current authoritative audio second, mixer-relative second, BGM transport second, fallback drift in milliseconds, the next armed SFX group, and the last triggered SFX group.
+The BASS preview backend now also emits low-noise `bass_schedule_arm` and `bass_status` lines. `bass_schedule_arm` shows which collapsed SFX group has been armed as the next mixer sync, while `bass_status` samples the current authoritative audio second, mixer-relative second, BGM transport second, fallback drift in milliseconds, the next armed SFX group, and the last triggered SFX group at roughly a `1s` interval.
 The export log now also emits `audio_backend_select`, `audio_mix_ok`, `audio_backend_render_complete`, and `fail_audio_*` lines so StageB backend routing and mixed-audio generation failures are visible without parsing ffmpeg arguments.
+Detailed export `frame_timing` sampling now defaults to every `300` frames unless a frame/render/write stall forces an earlier line.
 Normal document open/save now uses the direct native `QFileDialog::getOpenFileName` / `getSaveFileName` path. The old `window/dialog_event`, `window/native`, `window/native_hook`, and `window/native_related` probes were retired from the main app and should only return through a separate dev-only tool that is not packaged into release artifacts.
 
 Primary owners:

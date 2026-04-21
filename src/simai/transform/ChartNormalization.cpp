@@ -347,6 +347,13 @@ QString normalizePlainDurationSignature(
             }
             return QStringLiteral("1:0");
         }
+        // Exact-mode formatting keeps the active rendered grid when it can
+        // represent the duration exactly, so users do not see a 16-grid line
+        // collapse its token text back to a shorter unrelated denominator.
+        qint64 renderedUnits = 0;
+        if (gridBeats > 0 && scaleRationalExact(durationWhole, gridBeats, &renderedUnits)) {
+            return QStringLiteral("%1:%2").arg(gridBeats).arg(renderedUnits);
+        }
         return QStringLiteral("%1:%2")
             .arg(durationWhole.denominator)
             .arg(durationWhole.numerator);
