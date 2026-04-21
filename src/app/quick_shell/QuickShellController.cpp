@@ -218,8 +218,23 @@ void QuickShellController::refresh()
     refreshFromStateSource();
 }
 
+void QuickShellController::markNextCloseConfirmedExternally()
+{
+    closeConfirmedExternally_ = true;
+}
+
+void QuickShellController::clearPendingExternalCloseConfirmation()
+{
+    closeConfirmedExternally_ = false;
+}
+
 bool QuickShellController::confirmClose()
 {
+    if (closeConfirmedExternally_) {
+        appendQuickShellControllerLog(QStringLiteral("confirm_close_bypass"));
+        closeConfirmedExternally_ = false;
+        return true;
+    }
     return commandSink_ != nullptr ? commandSink_->confirmShellClose() : true;
 }
 
