@@ -870,6 +870,35 @@ ApplicationWindow {
             }
         }
         MenuItem {
+            id: speed150Item
+            readonly property bool selectedRate: controller && controller.previewSpeedLabel === text
+            text: "1.5x"
+            leftPadding: 12
+            rightPadding: 12
+            topPadding: 0
+            bottomPadding: 0
+            implicitHeight: 32
+            implicitWidth: previewSpeedMenu.width - previewSpeedMenu.leftPadding - previewSpeedMenu.rightPadding
+            indicator: Item { implicitWidth: 0; implicitHeight: 0 }
+            onTriggered: controller.setPreviewRate(1.5)
+            background: Rectangle {
+                radius: 6
+                color: speed150Item.highlighted
+                    ? tone("accent", "#2e77d0")
+                    : (speed150Item.selectedRate ? tone("menuHoverBg", "#eef5ff") : "transparent")
+                border.color: speed150Item.highlighted
+                    ? tone("accent", "#2e77d0")
+                    : (speed150Item.selectedRate ? tone("border", "#d5e0ec") : "transparent")
+            }
+            contentItem: Text {
+                text: speed150Item.text
+                color: speed150Item.highlighted ? tone("accentText", "#ffffff") : tone("textPrimary", "#203040")
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+        MenuItem {
             id: speed200Item
             readonly property bool selectedRate: controller && controller.previewSpeedLabel === text
             text: "2x"
