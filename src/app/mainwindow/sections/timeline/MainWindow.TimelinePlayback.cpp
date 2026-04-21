@@ -710,6 +710,7 @@ void MainWindow::TimelineSection::finalizeQtPreviewPlaybackStart(double effectiv
     if (ui_.previewStatsUiTimer_ != nullptr && !ui_.previewStatsUiTimer_->isActive()) {
         ui_.previewStatsUiTimer_->start();
     }
+    invalidatePreviewFollowBindingCache();
     syncEditorCursorToPreviewSecond(effectiveStartSecond, false);
     updatePreviewSliderPosition(effectiveStartSecond);
     owner_.updatePauseButtonAppearance();
@@ -741,8 +742,7 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
     state_.qtPreviewPendingTimelineCenterView_ = false;
     state_.qtPreviewTimelineDirty_ = true;
     state_.qtPreviewPlaying_ = false;
-    state_.qtPreviewFollowDirty_ = false;
-    state_.qtPreviewPendingFollowCenterView_ = false;
+    invalidatePreviewFollowBindingCache();
     state_.activePreviewPlaybackTransactionId_ = 0;
     owner_.applyEffectivePreviewOutlineVariantToCanvas();
     owner_.applyPreviewStageMediaRouteVisualSettings();
@@ -780,8 +780,7 @@ void MainWindow::TimelineSection::anchorQtPreviewPlaybackToSecond(double second,
     state_.qtPreviewPendingTimelineCenterView_ = centerView;
     state_.qtPreviewTimelineDirty_ = true;
     state_.qtPreviewPlaying_ = false;
-    state_.qtPreviewFollowDirty_ = false;
-    state_.qtPreviewPendingFollowCenterView_ = false;
+    invalidatePreviewFollowBindingCache();
     state_.activePreviewPlaybackTransactionId_ = 0;
     owner_.applyEffectivePreviewOutlineVariantToCanvas();
     owner_.applyPreviewStageMediaRouteVisualSettings();
@@ -990,8 +989,7 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
         state_.qtPreviewTimelineDirty_ = true;
     }
     state_.qtPreviewPlaying_ = false;
-    state_.qtPreviewFollowDirty_ = false;
-    state_.qtPreviewPendingFollowCenterView_ = false;
+    invalidatePreviewFollowBindingCache();
     state_.activePreviewPlaybackTransactionId_ = 0;
     owner_.applyEffectivePreviewOutlineVariantToCanvas();
     owner_.applyPreviewStageMediaRouteVisualSettings();
@@ -1044,9 +1042,9 @@ void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool cen
     if (!state_.qtPreviewPlaying_) {
         updatePreviewObjectStats(second);
     }
-    if (state_.timelineQuickStateBridge_ != nullptr && state_.timelineQuickStateBridge_->followPreviewEnabled()) {
+    if (state_.previewFollowEnabled_) {
         if (state_.qtPreviewPlaying_) {
-            owner_.queueQtPreviewFollowUiUpdate(second, centerView);
+            syncEditorCursorToPreviewSecond(second, centerView, false);
         } else {
             updatePreviewFollowDecorationForTimelineBlueLine(second, true);
         }
@@ -1060,29 +1058,19 @@ void MainWindow::TimelineSection::syncPausedPreviewMediaTimestamps(double second
 
 void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()
 {
-    if (state_.timelineQuickStateBridge_ == nullptr) {
-        return;
-    }
-    if (state_.quickShellUiFocusBridgeMode_ && !state_.quickTimelineSurfaceReady_) {
-        return;
-    }
     if (state_.qtPreviewPlaying_) {
+        if (state_.timelineQuickStateBridge_ == nullptr
+            || !quickTimelineBridgeReady()
+            || !timelineTabIsForeground()) {
+            return;
+        }
         const double second = qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond());
         state_.timelineQuickStateBridge_->setPlayheadSeconds(second, true);
         state_.timelineQuickStateBridge_->focusPlayhead(false);
         state_.qtPreviewLastTimelineSecond_ = second;
-        if (state_.qtPreviewFollowDirty_) {
-            if (state_.timelineQuickStateBridge_->followPreviewEnabled()) {
-                const double followSecond = state_.qtPreviewPendingFollowSecond_;
-                const bool followCenterView = state_.qtPreviewPendingFollowCenterView_;
-                state_.qtPreviewFollowDirty_ = false;
-                state_.qtPreviewPendingFollowCenterView_ = false;
-                syncEditorCursorToPreviewSecond(followSecond, followCenterView, false);
-            } else {
-                state_.qtPreviewFollowDirty_ = false;
-                state_.qtPreviewPendingFollowCenterView_ = false;
-            }
-        }
+        return;
+    }
+    if (state_.timelineQuickStateBridge_ == nullptr || !quickTimelineBridgeReady()) {
         return;
     }
     if (!state_.qtPreviewTimelineDirty_) {

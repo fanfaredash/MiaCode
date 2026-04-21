@@ -713,6 +713,7 @@ void TimelineQuickModel::clear()
     snapshot_.minimumSecond = -0.5;
     snapshot_.maximumSecond = 1.0;
     cursorAnchorsBySecond_.clear();
+    previewFollowBindings_.clear();
     linesWithNotes_.clear();
 }
 
@@ -1023,7 +1024,17 @@ bool TimelineQuickModel::resolvePreviewFollowCursor(
     int* col,
     double* noteSecond) const
 {
-    if (resolvePreviousCursorAnchorForSecond(second, line, col, noteSecond)) {
+    PreviewFollowBinding binding;
+    if (resolvePreviewFollowBinding(second, &binding)) {
+        if (line != nullptr) {
+            *line = binding.anchorLine;
+        }
+        if (col != nullptr) {
+            *col = binding.anchorCol;
+        }
+        if (noteSecond != nullptr) {
+            *noteSecond = binding.anchorSecond;
+        }
         return true;
     }
 
@@ -1048,10 +1059,8 @@ bool TimelineQuickModel::resolvePreviewFollowSpan(
         *span = PreviewFollowSpan();
     }
 
-    int resolvedLine = 1;
-    int anchorCol = 1;
-    double resolvedSecond = 0.0;
-    if (!resolvePreviewFollowCursor(second, &resolvedLine, &anchorCol, &resolvedSecond)) {
+    PreviewFollowBinding binding;
+    if (!resolvePreviewFollowBinding(second, &binding)) {
         if (anchorSecond != nullptr) {
             *anchorSecond = 0.0;
         }
@@ -1059,52 +1068,44 @@ bool TimelineQuickModel::resolvePreviewFollowSpan(
     }
 
     if (anchorSecond != nullptr) {
-        *anchorSecond = resolvedSecond;
+        *anchorSecond = binding.anchorSecond;
     }
-    if (span == nullptr || resolvedLine < 1 || resolvedLine > lines_.size()) {
-        return true;
+    if (span != nullptr) {
+        *span = binding.span;
+    }
+    return binding.resolved;
+}
+
+bool TimelineQuickModel::resolvePreviewFollowBinding(double second, PreviewFollowBinding* binding) const
+{
+    if (binding != nullptr) {
+        *binding = PreviewFollowBinding();
+    }
+    if (previewFollowBindings_.isEmpty()) {
+        return false;
     }
 
-    const LineState& lineState = lines_.at(resolvedLine - 1);
-    const auto followSpanIt = std::lower_bound(
-        lineState.cursorCache.followSelectionSpans.cbegin(),
-        lineState.cursorCache.followSelectionSpans.cend(),
-        anchorCol,
-        [](const LineCursorCache::FollowSelectionSpan& entry, int value) {
-            return entry.anchorCol < value;
+    const double targetSecond = qMax(0.0, second);
+    const auto endIt = std::upper_bound(
+        previewFollowBindings_.cbegin(),
+        previewFollowBindings_.cend(),
+        targetSecond + kTimelineEpsilon,
+        [](double target, const PreviewFollowBinding& entry) {
+            return target < entry.startSecond;
         });
-    if (followSpanIt != lineState.cursorCache.followSelectionSpans.cend()
-        && followSpanIt->anchorCol == anchorCol) {
-        *span = followSpanIt->span;
-        return true;
+    if (endIt == previewFollowBindings_.cbegin()) {
+        return false;
     }
 
-    PreviewFollowSpan fallback;
-    fallback.startLine = resolvedLine;
-    fallback.startCol = anchorCol;
-    fallback.endLine = resolvedLine;
-    fallback.endCol = anchorCol;
-    fallback.hasVisibleBody = false;
-    const int lineLength = lineState.text.size();
-    const int startOffset = lineLength > 0
-        ? qBound(0, anchorCol - 1, lineLength - 1)
-        : 0;
-    int endOffsetExclusive = lineLength > 0
-        ? qBound(1, anchorCol, lineLength)
-        : 0;
-
-    fallback.startPosition = lineState.startPosition + startOffset;
-    fallback.endPositionExclusive = lineState.startPosition + endOffsetExclusive;
-    if (lineLength > 0 && fallback.endPositionExclusive <= fallback.startPosition) {
-        fallback.endPositionExclusive = qMin(
-            lineState.startPosition + lineLength,
-            fallback.startPosition + 1);
+    const PreviewFollowBinding& candidate = *std::prev(endIt);
+    if (qIsFinite(candidate.endSecondExclusive)
+        && targetSecond + kTimelineEpsilon >= candidate.endSecondExclusive) {
+        return false;
     }
-    fallback.cursorPosition = fallback.endPositionExclusive;
-    fallback.cursorLine = resolvedLine;
-    fallback.cursorCol = qMax(1, fallback.cursorPosition - lineState.startPosition + 1);
-    *span = fallback;
-    return true;
+    if (binding != nullptr) {
+        *binding = candidate;
+    }
+    return candidate.resolved;
 }
 
 bool TimelineQuickModel::resolvePreviewFollowSelection(
@@ -1584,6 +1585,7 @@ void TimelineQuickModel::rebuildFollowSelectionRanges(LineState* lineState) cons
 
 void TimelineQuickModel::rebuildFollowSelectionSpans()
 {
+    previewFollowBindings_.clear();
     for (LineState& lineState : lines_) {
         lineState.cursorCache.followSelectionSpans.clear();
         lineState.cursorCache.followSelectionSpans.reserve(lineState.cursorCache.segmentStarts.size());
@@ -1620,6 +1622,7 @@ void TimelineQuickModel::rebuildFollowSelectionSpans()
     if (anchors.isEmpty()) {
         return;
     }
+    previewFollowBindings_.reserve(anchors.size());
 
     int documentTextEndExclusive = 0;
     for (int lineIndex = lines_.size() - 1; lineIndex >= 0; --lineIndex) {
@@ -1811,6 +1814,19 @@ void TimelineQuickModel::rebuildFollowSelectionSpans()
             cachedSpan.span = hasVisibleContent ? resolvedSpan : fallbackSpanForAnchor(anchors.at(runIndex));
             lines_[anchors.at(runIndex).lineIndex].cursorCache.followSelectionSpans.append(cachedSpan);
         }
+
+        const DocumentAnchorEntry& effectiveAnchor = anchors.at(runEnd - 1);
+        PreviewFollowBinding binding;
+        binding.startSecond = anchors.at(index).second;
+        binding.endSecondExclusive = runEnd < anchors.size()
+            ? anchors.at(runEnd).second
+            : std::numeric_limits<double>::infinity();
+        binding.anchorSecond = effectiveAnchor.second;
+        binding.anchorLine = lines_.at(effectiveAnchor.lineIndex).lineNumber;
+        binding.anchorCol = effectiveAnchor.anchorCol;
+        binding.span = hasVisibleContent ? resolvedSpan : fallbackSpanForAnchor(effectiveAnchor);
+        binding.resolved = true;
+        previewFollowBindings_.append(binding);
 
         index = runEnd;
     }

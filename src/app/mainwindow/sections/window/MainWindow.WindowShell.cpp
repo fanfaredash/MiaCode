@@ -844,18 +844,22 @@ void MainWindow::WindowSection::applySystemWindowBackdrop(QWidget* target) const
 
 int MainWindow::WindowSection::computeBottomTabsDeviceHeight() const
 {
-    if (owner_.bottomTabs_ == nullptr || owner_.timelineView_ == nullptr) {
+    if (owner_.bottomTabs_ == nullptr) {
         return 0;
     }
 
     owner_.bottomTabs_->ensurePolished();
-    owner_.timelineView_->ensurePolished();
     QTabBar* tabBar = owner_.bottomTabs_->tabBar();
     if (tabBar != nullptr) {
         tabBar->ensurePolished();
     }
 
-    const int timelineHeight = qMax(owner_.timelineView_->minimumHeight(), owner_.timelineView_->minimumSizeHint().height());
+    int timelineHeight = miacode::window_parity::computeTimelineMinimumContentHeight();
+    if (owner_.timelineView_ != nullptr) {
+        owner_.timelineView_->ensurePolished();
+        timelineHeight =
+            qMax(owner_.timelineView_->minimumHeight(), owner_.timelineView_->minimumSizeHint().height());
+    }
     const int tabBarHeight = tabBar != nullptr
         ? qMax(tabBar->minimumSizeHint().height(), tabBar->sizeHint().height())
         : 0;

@@ -147,11 +147,11 @@ QSGNode* TimelineQuickOverlayLayer::updateNode(
                 }
             }
         }
-        if (state.hasCursorLine) {
-            dynamicRoot->appendChildNode(buildTimelineLineNode(state.cursorLine));
-        }
         if (state.hasPlayheadLine) {
             dynamicRoot->appendChildNode(buildTimelineLineNode(state.playheadLine));
+        }
+        if (state.hasCursorLine) {
+            dynamicRoot->appendChildNode(buildTimelineLineNode(state.cursorLine));
         }
         if (state.hasDragCenterLine) {
             dynamicRoot->appendChildNode(buildTimelineLineNode(state.dragCenterLine));

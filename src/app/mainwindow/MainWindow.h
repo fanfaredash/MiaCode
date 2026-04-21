@@ -119,7 +119,7 @@ public:
         int skinLoadWaitMs = 2000;
     };
 
-    explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(bool quickShellBootstrapMode = false, QWidget* parent = nullptr);
     ~MainWindow() override;
     bool exportPreviewVideoFromCli(
         const CliVideoExportRequest& request,

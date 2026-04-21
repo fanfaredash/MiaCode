@@ -160,6 +160,8 @@
         PreviewStageMediaHost* previewStageMediaHost_ = nullptr;
         QuickShellPreviewCompositeSurface* quickShellPreviewCompositeSurface_ = nullptr;
         TimelineQuickStateBridge* timelineQuickStateBridge_ = nullptr;
+        bool quickShellBootstrapMode_ = false;
+        bool timelineWidgetlessQuickRoute_ = false;
         bool quickShellBackendActive_ = false;
         bool quickShellUiFocusBridgeMode_ = false;
         bool quickTimelineSurfaceReady_ = false;
@@ -167,6 +169,7 @@
         double pendingQuickTimelineCursorSecond_ = 0.0;
         bool pendingQuickTimelineCursorCenterView_ = false;
         BottomTabsTabId currentBottomTabsTabId_ = BottomTabsTabId::Timeline;
+        bool timelineTabVisible_ = true;
         QtPreviewSfxRuntime* previewSfxRuntime_ = nullptr;
         miacode::waveform::WaveformCacheService* waveformCacheService_ = nullptr;
         QThreadPool* previewWarmupPool_ = nullptr;
@@ -263,7 +266,6 @@
         bool currentFieldDirty_ = false;
         bool qtPreviewPlaying_ = false;
         bool qtPreviewTimelineDirty_ = false;
-        bool qtPreviewFollowDirty_ = false;
         bool qtPreviewAwaitingFrameSwap_ = false;
         qint64 qtPreviewAwaitingFrameSwapSinceMs_ = -1;
         bool previewScrubDragging_ = false;
@@ -294,9 +296,9 @@
         double qtPreviewPlaybackEndSecond_ = 0.0;
         double qtPreviewLastTimelineSecond_ = -1.0;
         double qtPreviewPendingTimelineSecond_ = 0.0;
-        double qtPreviewPendingFollowSecond_ = 0.0;
         bool qtPreviewPendingTimelineCenterView_ = true;
-        bool qtPreviewPendingFollowCenterView_ = false;
+        bool previewFollowBindingCacheValid_ = false;
+        TimelineQuickModel::PreviewFollowBinding previewFollowBindingCache_;
         double deferredEditorUiPreviewFollowSecond_ = 0.0;
         bool pendingPreviewPlaybackStart_ = false;
         bool pendingPreviewPlaybackResumeFromPause_ = false;
@@ -407,6 +409,8 @@
     PreviewStageMediaHost*& previewStageMediaHost_ = state_.previewStageMediaHost_;
     QuickShellPreviewCompositeSurface*& quickShellPreviewCompositeSurface_ = state_.quickShellPreviewCompositeSurface_;
     TimelineQuickStateBridge*& timelineQuickStateBridge_ = state_.timelineQuickStateBridge_;
+    bool& quickShellBootstrapMode_ = state_.quickShellBootstrapMode_;
+    bool& timelineWidgetlessQuickRoute_ = state_.timelineWidgetlessQuickRoute_;
     bool& quickShellBackendActive_ = state_.quickShellBackendActive_;
     bool& quickShellUiFocusBridgeMode_ = state_.quickShellUiFocusBridgeMode_;
     bool& quickTimelineSurfaceReady_ = state_.quickTimelineSurfaceReady_;
@@ -414,6 +418,7 @@
     double& pendingQuickTimelineCursorSecond_ = state_.pendingQuickTimelineCursorSecond_;
     bool& pendingQuickTimelineCursorCenterView_ = state_.pendingQuickTimelineCursorCenterView_;
     BottomTabsTabId& currentBottomTabsTabId_ = state_.currentBottomTabsTabId_;
+    bool& timelineTabVisible_ = state_.timelineTabVisible_;
     QtPreviewSfxRuntime*& previewSfxRuntime_ = state_.previewSfxRuntime_;
     QThreadPool*& previewWarmupPool_ = state_.previewWarmupPool_;
     QThreadPool*& timelineSlowRefreshPool_ = state_.timelineSlowRefreshPool_;
@@ -566,7 +571,6 @@
     bool& currentFieldDirty_ = state_.currentFieldDirty_;
     bool& qtPreviewPlaying_ = state_.qtPreviewPlaying_;
     bool& qtPreviewTimelineDirty_ = state_.qtPreviewTimelineDirty_;
-    bool& qtPreviewFollowDirty_ = state_.qtPreviewFollowDirty_;
     bool& qtPreviewAwaitingFrameSwap_ = state_.qtPreviewAwaitingFrameSwap_;
     qint64& qtPreviewAwaitingFrameSwapSinceMs_ = state_.qtPreviewAwaitingFrameSwapSinceMs_;
     bool& previewScrubDragging_ = state_.previewScrubDragging_;
@@ -597,9 +601,9 @@
     double& qtPreviewPlaybackEndSecond_ = state_.qtPreviewPlaybackEndSecond_;
     double& qtPreviewLastTimelineSecond_ = state_.qtPreviewLastTimelineSecond_;
     double& qtPreviewPendingTimelineSecond_ = state_.qtPreviewPendingTimelineSecond_;
-    double& qtPreviewPendingFollowSecond_ = state_.qtPreviewPendingFollowSecond_;
     bool& qtPreviewPendingTimelineCenterView_ = state_.qtPreviewPendingTimelineCenterView_;
-    bool& qtPreviewPendingFollowCenterView_ = state_.qtPreviewPendingFollowCenterView_;
+    bool& previewFollowBindingCacheValid_ = state_.previewFollowBindingCacheValid_;
+    TimelineQuickModel::PreviewFollowBinding& previewFollowBindingCache_ = state_.previewFollowBindingCache_;
     bool& previewStartupSyncPending_ = state_.previewStartupSyncPending_;
     bool& previewLateVideoStartPending_ = state_.previewLateVideoStartPending_;
     double& previewStartupPreparedSecond_ = state_.previewStartupPreparedSecond_;

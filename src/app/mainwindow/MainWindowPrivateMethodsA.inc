@@ -163,7 +163,6 @@
         double previewFollowSecond = 0.0,
         bool ensurePreviewFollowVisible = false);
     void flushDeferredEditorUiUpdate();
-    void queueQtPreviewFollowUiUpdate(double second, bool centerView = false);
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
     bool moveEditorCursorToTimelineLocation(
         int line,

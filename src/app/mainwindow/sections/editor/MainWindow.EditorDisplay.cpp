@@ -378,7 +378,7 @@ void MainWindow::EditorSection::applyEditorTextFontSize(int pointSize, bool pers
         editor->setBlockSpacingPixels(blockSpacingPixels);
         editor->refreshLineNumberAreaLayout();
     }
-    if (ui_.timelineView_ != nullptr) {
+    if (state_.timelineQuickStateBridge_ != nullptr) {
         owner_.windowSection_->updateBottomTabsDeviceHeight();
     }
     if (ui_.metadataExtraEdit_ != nullptr) {

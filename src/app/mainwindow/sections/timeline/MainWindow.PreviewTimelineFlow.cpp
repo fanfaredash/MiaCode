@@ -44,6 +44,50 @@ MainWindow::TimelineSection::TimelineSection(
     , state_(state)
 {}
 
+bool MainWindow::TimelineSection::timelineTabIsForeground() const
+{
+    return owner_.bottomTabsTabVisible(MainWindow::BottomTabsTabId::Timeline)
+        && owner_.currentBottomTabsTabId() == MainWindow::BottomTabsTabId::Timeline;
+}
+
+bool MainWindow::TimelineSection::quickTimelineBridgeReady() const
+{
+    return !state_.quickShellUiFocusBridgeMode_ || state_.quickTimelineSurfaceReady_;
+}
+
+void MainWindow::TimelineSection::queueTimelineCursorBridgeUpdate(double second, bool centerView)
+{
+    if (state_.timelineQuickStateBridge_ == nullptr) {
+        return;
+    }
+    state_.pendingQuickTimelineCursorSync_ = true;
+    state_.pendingQuickTimelineCursorSecond_ = second;
+    state_.pendingQuickTimelineCursorCenterView_ =
+        state_.pendingQuickTimelineCursorCenterView_ || centerView;
+}
+
+void MainWindow::TimelineSection::flushDeferredTimelineBridgeState()
+{
+    if (state_.timelineQuickStateBridge_ == nullptr
+        || !quickTimelineBridgeReady()
+        || !timelineTabIsForeground()) {
+        return;
+    }
+
+    flushQtPreviewTimelinePosition();
+    if (!state_.pendingQuickTimelineCursorSync_) {
+        return;
+    }
+
+    state_.timelineQuickStateBridge_->setCursorSeconds(
+        state_.pendingQuickTimelineCursorSecond_,
+        state_.pendingQuickTimelineCursorCenterView_);
+    state_.timelineQuickStateBridge_->focusCursor(state_.pendingQuickTimelineCursorCenterView_);
+    state_.pendingQuickTimelineCursorSync_ = false;
+    state_.pendingQuickTimelineCursorSecond_ = 0.0;
+    state_.pendingQuickTimelineCursorCenterView_ = false;
+}
+
 namespace {
 
 constexpr double kTimelineZeroSecondTolerance = 1e-6;
@@ -173,6 +217,41 @@ void appendTimelinePerfLog(const QString& tag, const QString& payload)
 
 }  // namespace
 
+void MainWindow::TimelineSection::invalidatePreviewFollowBindingCache()
+{
+    state_.previewFollowBindingCacheValid_ = false;
+    state_.previewFollowBindingCache_ = TimelineQuickModel::PreviewFollowBinding();
+}
+
+bool MainWindow::TimelineSection::cachedPreviewFollowBindingContainsSecond(double second) const
+{
+    if (!state_.previewFollowBindingCacheValid_ || !state_.previewFollowBindingCache_.resolved) {
+        return false;
+    }
+
+    const double targetSecond = qMax(0.0, second);
+    const TimelineQuickModel::PreviewFollowBinding& binding = state_.previewFollowBindingCache_;
+    if (targetSecond + kTimelineZeroSecondTolerance < binding.startSecond) {
+        return false;
+    }
+    if (qIsFinite(binding.endSecondExclusive)
+        && targetSecond + kTimelineZeroSecondTolerance >= binding.endSecondExclusive) {
+        return false;
+    }
+    return true;
+}
+
+void MainWindow::TimelineSection::cachePreviewFollowBinding(
+    const TimelineQuickModel::PreviewFollowBinding& binding)
+{
+    if (!binding.resolved) {
+        invalidatePreviewFollowBindingCache();
+        return;
+    }
+    state_.previewFollowBindingCacheValid_ = true;
+    state_.previewFollowBindingCache_ = binding;
+}
+
 void MainWindow::TimelineSection::resetPreviewTrackTimelineOffsets()
 {
     if (state_.previewSfxRuntime_ != nullptr) {
@@ -199,7 +278,7 @@ void MainWindow::TimelineSection::refreshWaveformCache()
 void MainWindow::TimelineSection::refreshWaveformCache(double knownDurationSeconds)
 {
     resetPreviewTrackTimelineOffsets();
-    if (ui_.timelineView_ == nullptr) {
+    if (state_.timelineQuickStateBridge_ == nullptr) {
         return;
     }
 
@@ -380,6 +459,7 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
     }
     const bool trackPathChanged = previousTrackPath != nextTrackPath;
     if (pathChanged) {
+        invalidatePreviewFollowBindingCache();
         owner_.clearValidationCache();
         owner_.clearValidationErrors();
         owner_.clearValidationDecorations();
@@ -478,7 +558,7 @@ QString MainWindow::TimelineSection::editorText() const
 
 void MainWindow::TimelineSection::scheduleTimelineRefresh()
 {
-    if (!hasActiveDifficulty() || ui_.timelineView_ == nullptr) {
+    if (!hasActiveDifficulty() || state_.timelineQuickStateBridge_ == nullptr) {
         return;
     }
     ++state_.timelineRevision_;
@@ -493,7 +573,7 @@ void MainWindow::TimelineSection::refreshTimelineMetadata()
 
 void MainWindow::TimelineSection::applyTimelineQuickChange(int position, int charsRemoved, int charsAdded)
 {
-    if (ui_.timelineView_ == nullptr || !hasActiveDifficulty()) {
+    if (state_.timelineQuickStateBridge_ == nullptr || !hasActiveDifficulty()) {
         return;
     }
 
@@ -515,6 +595,7 @@ void MainWindow::TimelineSection::applyTimelineQuickChange(int position, int cha
     } else {
         state_.timelineQuickModel_.rebuildFromText(activeChartText(), firstSeconds, timingMetadata);
     }
+    invalidatePreviewFollowBindingCache();
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setTimelineData(state_.timelineQuickModel_.snapshot());
     }
@@ -534,12 +615,13 @@ void MainWindow::TimelineSection::applyTimelineQuickChange(int position, int cha
 
 void MainWindow::TimelineSection::refreshTimelineQuickModelFromCurrentText()
 {
-    if (ui_.timelineView_ == nullptr || !hasActiveDifficulty()) {
+    if (state_.timelineQuickStateBridge_ == nullptr || !hasActiveDifficulty()) {
         return;
     }
     QElapsedTimer timer;
     timer.start();
     state_.timelineQuickModel_.rebuildFromText(activeChartText(), parsedFirstSeconds(), currentTimingMetadata());
+    invalidatePreviewFollowBindingCache();
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->setTimelineData(state_.timelineQuickModel_.snapshot());
     }
@@ -615,6 +697,7 @@ void MainWindow::TimelineSection::onTimelineDragFinished(double second)
 void MainWindow::TimelineSection::onTimelineFollowPreviewToggled(bool enabled)
 {
     state_.previewFollowEnabled_ = enabled;
+    invalidatePreviewFollowBindingCache();
     owner_.savePortableState();
     if (!enabled) {
         owner_.clearPreviewFollowDecoration();
@@ -913,25 +996,28 @@ double MainWindow::TimelineSection::timelineSecondForCursor(int line, int col) c
 
 void MainWindow::TimelineSection::seekTimelineToCursor(int line, int col)
 {
-    if (ui_.timelineView_ == nullptr) {
+    if (state_.timelineQuickStateBridge_ == nullptr) {
         return;
     }
     const double second = timelineSecondForCursor(line, col);
     if (state_.timelineQuickStateBridge_ != nullptr) {
-        if (state_.quickTimelineSurfaceReady_) {
+        if (quickTimelineBridgeReady() && timelineTabIsForeground()) {
+            state_.pendingQuickTimelineCursorSync_ = false;
+            state_.pendingQuickTimelineCursorSecond_ = 0.0;
+            state_.pendingQuickTimelineCursorCenterView_ = false;
             state_.timelineQuickStateBridge_->setCursorSeconds(second, true);
             state_.timelineQuickStateBridge_->focusCursor(false);
-        } else if (state_.quickShellUiFocusBridgeMode_) {
-            state_.pendingQuickTimelineCursorSync_ = true;
-            state_.pendingQuickTimelineCursorSecond_ = second;
-            state_.pendingQuickTimelineCursorCenterView_ = true;
+        } else {
+            queueTimelineCursorBridgeUpdate(second, true);
         }
     }
 }
 
 void MainWindow::TimelineSection::syncTimelineToEditorCursor(bool centerView)
 {
-    if (state_.suppressTimelineCursorSync_ || !hasActiveDifficulty() || ui_.timelineView_ == nullptr) {
+    if (state_.suppressTimelineCursorSync_
+        || !hasActiveDifficulty()
+        || state_.timelineQuickStateBridge_ == nullptr) {
         return;
     }
     const auto [line, col] = owner_.currentCursorLineCol();
@@ -943,25 +1029,26 @@ void MainWindow::TimelineSection::syncTimelineToEditorCursor(bool centerView)
             QStringLiteral("action=sync_timeline_to_editor_cursor second=%1 center=%2 quick_ready=%3")
                 .arg(second, 0, 'f', 6)
                 .arg((!state_.qtPreviewPlaying_ && centerView) ? 1 : 0)
-                .arg(state_.quickTimelineSurfaceReady_ ? 1 : 0)
+                .arg(quickTimelineBridgeReady() ? 1 : 0)
         );
     }
     if (state_.timelineQuickStateBridge_ != nullptr) {
         const bool bridgeCenterView = !state_.qtPreviewPlaying_ && centerView;
-        if (state_.quickTimelineSurfaceReady_) {
+        if (quickTimelineBridgeReady() && timelineTabIsForeground()) {
+            state_.pendingQuickTimelineCursorSync_ = false;
+            state_.pendingQuickTimelineCursorSecond_ = 0.0;
+            state_.pendingQuickTimelineCursorCenterView_ = false;
             state_.timelineQuickStateBridge_->setCursorSeconds(second, bridgeCenterView);
             state_.timelineQuickStateBridge_->focusCursor(false);
-        } else if (state_.quickShellUiFocusBridgeMode_) {
-            state_.pendingQuickTimelineCursorSync_ = true;
-            state_.pendingQuickTimelineCursorSecond_ = second;
-            state_.pendingQuickTimelineCursorCenterView_ = bridgeCenterView;
+        } else {
+            queueTimelineCursorBridgeUpdate(second, bridgeCenterView);
         }
     }
 }
 
 void MainWindow::TimelineSection::navigateTimelineToSecond(double second, bool focusEditor)
 {
-    if (ui_.timelineView_ == nullptr) {
+    if (state_.timelineQuickStateBridge_ == nullptr) {
         return;
     }
 
@@ -980,13 +1067,14 @@ void MainWindow::TimelineSection::navigateTimelineToSecond(double second, bool f
     }
     seekPreviewToSecond(clampedSecond, true);
     if (state_.timelineQuickStateBridge_ != nullptr) {
-        if (state_.quickTimelineSurfaceReady_) {
+        if (quickTimelineBridgeReady() && timelineTabIsForeground()) {
+            state_.pendingQuickTimelineCursorSync_ = false;
+            state_.pendingQuickTimelineCursorSecond_ = 0.0;
+            state_.pendingQuickTimelineCursorCenterView_ = false;
             state_.timelineQuickStateBridge_->setCursorSeconds(cursorSecond, false);
             state_.timelineQuickStateBridge_->focusPlayhead(true);
-        } else if (state_.quickShellUiFocusBridgeMode_) {
-            state_.pendingQuickTimelineCursorSync_ = true;
-            state_.pendingQuickTimelineCursorSecond_ = cursorSecond;
-            state_.pendingQuickTimelineCursorCenterView_ = false;
+        } else {
+            queueTimelineCursorBridgeUpdate(cursorSecond, false);
         }
     }
 
@@ -1129,30 +1217,36 @@ void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLi
         *spanOut = TimelineQuickModel::PreviewFollowSpan();
     }
 
-    if (state_.timelineQuickStateBridge_ == nullptr
-        || !hasActiveDifficulty()
-        || !state_.timelineQuickStateBridge_->followPreviewEnabled()) {
+    if (!hasActiveDifficulty() || !state_.previewFollowEnabled_) {
         QElapsedTimer overlayTimer;
         overlayTimer.start();
         owner_.clearPreviewFollowDecoration();
+        invalidatePreviewFollowBindingCache();
         if (followOverlayElapsedNs != nullptr) {
             *followOverlayElapsedNs = overlayTimer.nsecsElapsed();
         }
         return;
     }
 
-    TimelineQuickModel::PreviewFollowSpan span;
-    QElapsedTimer resolveTimer;
-    resolveTimer.start();
-    const bool resolved = state_.timelineQuickModel_.resolvePreviewFollowSpan(
-        qMax(0.0, second),
-        &span
-    );
-    if (resolveElapsedNs != nullptr) {
-        *resolveElapsedNs = resolveTimer.nsecsElapsed();
+    TimelineQuickModel::PreviewFollowBinding binding;
+    bool resolved = false;
+    if (cachedPreviewFollowBindingContainsSecond(second)) {
+        binding = state_.previewFollowBindingCache_;
+    } else {
+        QElapsedTimer resolveTimer;
+        resolveTimer.start();
+        resolved = state_.timelineQuickModel_.resolvePreviewFollowBinding(qMax(0.0, second), &binding);
+        if (resolveElapsedNs != nullptr) {
+            *resolveElapsedNs = resolveTimer.nsecsElapsed();
+        }
+        if (resolved) {
+            cachePreviewFollowBinding(binding);
+        } else {
+            invalidatePreviewFollowBindingCache();
+        }
     }
-    if (spanOut != nullptr) {
-        *spanOut = span;
+    if (!resolved) {
+        resolved = binding.resolved;
     }
     if (!resolved) {
         QElapsedTimer overlayTimer;
@@ -1163,15 +1257,18 @@ void MainWindow::TimelineSection::updatePreviewFollowDecorationForTimelineBlueLi
         }
         return;
     }
+    if (spanOut != nullptr) {
+        *spanOut = binding.span;
+    }
     QElapsedTimer overlayTimer;
     overlayTimer.start();
     owner_.setPreviewFollowDecoration(
-        span.startLine,
-        span.startCol,
-        span.endLine,
-        span.endCol,
-        span.cursorLine,
-        span.cursorCol,
+        binding.span.startLine,
+        binding.span.startCol,
+        binding.span.endLine,
+        binding.span.endCol,
+        binding.span.cursorLine,
+        binding.span.cursorCol,
         ensureVisible);
     if (followOverlayElapsedNs != nullptr) {
         *followOverlayElapsedNs = overlayTimer.nsecsElapsed();
@@ -1200,6 +1297,7 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
         const qint64 totalElapsedNs = timer.nsecsElapsed();
         const bool hotAction = action == QStringLiteral("selection_end_unchanged")
             || action == QStringLiteral("anchor_unchanged")
+            || action == QStringLiteral("binding_unchanged")
             || action == QStringLiteral("cursor_moved")
             || action == QStringLiteral("paused_decoration");
         constexpr qint64 kFollowPerfLogThresholdNs = 4 * 1000 * 1000;
@@ -1260,32 +1358,19 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
     qint64 resolveElapsedNs = 0;
     qint64 cursorMoveElapsedNs = 0;
     qint64 followOverlayElapsedNs = 0;
-    qint64 timelineCursorElapsedNs = 0;
     TimelineQuickModel::PreviewFollowSpan span;
-    const bool quickTimelineBridgeReady =
-        !state_.quickShellUiFocusBridgeMode_ || state_.quickTimelineSurfaceReady_;
-    const auto syncTimelineCursorSecond = [&](double cursorSecond) {
-        if (state_.timelineQuickStateBridge_ == nullptr) {
-            return;
-        }
-        if (quickTimelineBridgeReady) {
-            state_.timelineQuickStateBridge_->setCursorSeconds(cursorSecond, false);
-            return;
-        }
-        if (state_.quickShellUiFocusBridgeMode_) {
-            state_.pendingQuickTimelineCursorSync_ = true;
-            state_.pendingQuickTimelineCursorSecond_ = cursorSecond;
-            state_.pendingQuickTimelineCursorCenterView_ = false;
-        }
-    };
 
-    if (state_.suppressTimelineCursorSync_ || state_.timelineQuickStateBridge_ == nullptr || !hasActiveDifficulty()) {
+    if (state_.suppressTimelineCursorSync_ || !hasActiveDifficulty()) {
         owner_.clearPreviewFollowDecoration();
+        if (!hasActiveDifficulty()) {
+            invalidatePreviewFollowBindingCache();
+        }
         logPerf(QStringLiteral("suppressed"), false, false, nullptr, 0, 0, 0, 0);
         return;
     }
-    if (!state_.timelineQuickStateBridge_->followPreviewEnabled()) {
+    if (!state_.previewFollowEnabled_) {
         owner_.clearPreviewFollowDecoration();
+        invalidatePreviewFollowBindingCache();
         logPerf(QStringLiteral("disabled"), false, false, nullptr, 0, 0, 0, 0);
         return;
     }
@@ -1308,27 +1393,47 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
         return;
     }
 
+    if (cachedPreviewFollowBindingContainsSecond(second)) {
+        span = state_.previewFollowBindingCache_.span;
+        logPerf(
+            QStringLiteral("binding_unchanged"),
+            true,
+            false,
+            &span,
+            0,
+            0,
+            0,
+            0);
+        return;
+    }
+
     auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
     const QTextCursor currentEditorCursor =
         (editor != nullptr && editor->document() != nullptr) ? editor->textCursor() : QTextCursor();
-    double cursorSecond = 0.0;
+    TimelineQuickModel::PreviewFollowBinding binding;
     QElapsedTimer resolveTimer;
     resolveTimer.start();
-    const bool resolved = state_.timelineQuickModel_.resolvePreviewFollowSpan(second, &span, &cursorSecond);
+    const bool resolved = state_.timelineQuickModel_.resolvePreviewFollowBinding(second, &binding);
     resolveElapsedNs = resolveTimer.nsecsElapsed();
-    const int targetLine = resolved ? span.cursorLine : 1;
-    const int targetCol = resolved ? span.cursorCol : 1;
+    if (resolved) {
+        cachePreviewFollowBinding(binding);
+        span = binding.span;
+    } else {
+        invalidatePreviewFollowBindingCache();
+    }
+    const int targetLine = resolved ? binding.span.cursorLine : 1;
+    const int targetCol = resolved ? binding.span.cursorCol : 1;
     bool alreadyAtSelectionEnd = false;
     if (editor != nullptr && editor->document() != nullptr) {
         if (resolved) {
-            if (span.hasVisibleBody) {
+            if (binding.span.hasVisibleBody) {
                 alreadyAtSelectionEnd = currentEditorCursor.hasSelection()
-                    && currentEditorCursor.position() == span.cursorPosition
-                    && currentEditorCursor.selectionStart() == span.startPosition
-                    && currentEditorCursor.selectionEnd() == span.endPositionExclusive;
+                    && currentEditorCursor.position() == binding.span.cursorPosition
+                    && currentEditorCursor.selectionStart() == binding.span.startPosition
+                    && currentEditorCursor.selectionEnd() == binding.span.endPositionExclusive;
             } else {
                 alreadyAtSelectionEnd = !currentEditorCursor.hasSelection()
-                    && currentEditorCursor.position() == span.cursorPosition;
+                    && currentEditorCursor.position() == binding.span.cursorPosition;
             }
         } else {
             alreadyAtSelectionEnd = !currentEditorCursor.hasSelection() && currentEditorCursor.position() == 0;
@@ -1340,12 +1445,12 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
         overlayTimer.start();
         if (followResolved) {
             owner_.setPreviewFollowDecoration(
-                span.startLine,
-                span.startCol,
-                span.endLine,
-                span.endCol,
-                span.cursorLine,
-                span.cursorCol);
+                binding.span.startLine,
+                binding.span.startCol,
+                binding.span.endLine,
+                binding.span.endCol,
+                binding.span.cursorLine,
+                binding.span.cursorCol);
         } else {
             owner_.clearPreviewFollowDecoration();
         }
@@ -1354,10 +1459,6 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
 
     if (alreadyAtSelectionEnd) {
         followOverlayElapsedNs = applyFollowOverlay(resolved);
-        QElapsedTimer timelineTimer;
-        timelineTimer.start();
-        syncTimelineCursorSecond(cursorSecond);
-        timelineCursorElapsedNs = timelineTimer.nsecsElapsed();
         logPerf(
             QStringLiteral("selection_end_unchanged"),
             resolved,
@@ -1366,19 +1467,19 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
             resolveElapsedNs,
             0,
             followOverlayElapsedNs,
-            timelineCursorElapsedNs);
+            0);
         return;
     }
 
     if (editor != nullptr && editor->document() != nullptr) {
         QTextCursor cursor;
-        const bool builtCursor = resolved && span.hasVisibleBody
+        const bool builtCursor = resolved && binding.span.hasVisibleBody
             ? miacode::mainwindow::editor_selection::buildSelectionCursor(
                   editor,
-                  span.startLine,
-                  span.startCol,
-                  span.endLine,
-                  span.endCol,
+                  binding.span.startLine,
+                  binding.span.startCol,
+                  binding.span.endLine,
+                  binding.span.endCol,
                   &cursor)
             : miacode::mainwindow::editor_selection::buildCaretCursor(editor, targetLine, targetCol, &cursor);
         if (builtCursor) {
@@ -1387,11 +1488,6 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
             editor->applyPreviewFollowCursor(cursor, centerView, true);
             cursorMoveElapsedNs = cursorTimer.nsecsElapsed();
             followOverlayElapsedNs = applyFollowOverlay(resolved);
-
-            QElapsedTimer timelineTimer;
-            timelineTimer.start();
-            syncTimelineCursorSecond(cursorSecond);
-            timelineCursorElapsedNs = timelineTimer.nsecsElapsed();
             logPerf(
                 QStringLiteral("cursor_moved"),
                 resolved,
@@ -1400,7 +1496,7 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
                 resolveElapsedNs,
                 cursorMoveElapsedNs,
                 followOverlayElapsedNs,
-                timelineCursorElapsedNs);
+                0);
             return;
         }
     }
@@ -1412,7 +1508,7 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
         resolveElapsedNs,
         cursorMoveElapsedNs,
         followOverlayElapsedNs,
-        timelineCursorElapsedNs);
+        0);
 }
 
 void MainWindow::scheduleDeferredEditorUiUpdate(
@@ -1506,30 +1602,18 @@ void MainWindow::flushDeferredEditorUiUpdate()
 
     bool previewFollowHandled = false;
     if (syncPreviewFollow
-        && state_.timelineQuickStateBridge_ != nullptr
         && hasActiveDifficulty()
-        && state_.timelineQuickStateBridge_->followPreviewEnabled()) {
+        && state_.previewFollowEnabled_) {
         previewFollowHandled = true;
-        if (qtPreviewPlaying_) {
-            queueQtPreviewFollowUiUpdate(previewFollowSecond, centerView);
-        } else {
-            syncEditorCursorToPreviewSecond(
-                previewFollowSecond,
-                centerView,
-                ensurePreviewFollowVisible);
-        }
+        syncEditorCursorToPreviewSecond(
+            previewFollowSecond,
+            centerView,
+            ensurePreviewFollowVisible);
     }
 
     if (syncTimelineCursor && !previewFollowHandled) {
         syncTimelineToEditorCursor(centerView);
     }
-}
-
-void MainWindow::queueQtPreviewFollowUiUpdate(double second, bool centerView)
-{
-    qtPreviewFollowDirty_ = true;
-    qtPreviewPendingFollowSecond_ = second;
-    qtPreviewPendingFollowCenterView_ = qtPreviewPendingFollowCenterView_ || centerView;
 }
 
 void MainWindow::resetPreviewTrackTimelineOffsets()
