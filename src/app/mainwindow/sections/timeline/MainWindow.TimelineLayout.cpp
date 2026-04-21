@@ -393,9 +393,10 @@ qint64 MainWindow::TimelineSection::previewCanvasTargetFrameIntervalNs() const
 qint64 MainWindow::TimelineSection::timelineTargetFrameIntervalNs() const
 {
     const qint64 previewIntervalNs = qMax<qint64>(1LL, previewCanvasTargetFrameIntervalNs());
-    const qint64 timelineCapIntervalNs =
-        qMax<qint64>(1LL, qRound64(1000000000.0 / miacode::mainwindow::shared::kTimelineMaxUiUpdateFps));
-    return qMax(previewIntervalNs, timelineCapIntervalNs);
+    const double previewTargetFps = 1000000000.0 / static_cast<double>(previewIntervalNs);
+    const double timelineTargetFps =
+        qMin(previewTargetFps, miacode::mainwindow::shared::kTimelineMaxUiUpdateFps);
+    return qMax<qint64>(1LL, qRound64(1000000000.0 / timelineTargetFps));
 }
 
 void MainWindow::TimelineSection::resetQtPreviewFixedFramePacing()
