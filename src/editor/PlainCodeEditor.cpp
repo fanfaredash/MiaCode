@@ -767,10 +767,8 @@ void PlainCodeEditor::paintEvent(QPaintEvent* event)
     lastCurrentLineHighlightRect_ = highlightRect;
     if (highlightRect.isValid()) {
         const UiTheme::Colors& c = UiTheme::colors();
-        QColor currentLineFill = c.menuHoverBg;
-        currentLineFill.setAlpha(c.dark ? 60 : 36);
         painter.setPen(QPen(c.borderSoft, 1));
-        painter.setBrush(textCursor().hasSelection() ? Qt::NoBrush : QBrush(currentLineFill));
+        painter.setBrush(Qt::NoBrush);
         painter.drawRoundedRect(highlightRect, 4.0, 4.0);
     }
 
