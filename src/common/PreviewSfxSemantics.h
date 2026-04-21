@@ -15,6 +15,7 @@ inline bool previewSfxShouldAggregateKind(const QString& kind)
         || lowered == "judge"
         || lowered == "judge_break"
         || lowered == "break"
+        || lowered == "break_slide_break"
         || lowered == "slide"
         || lowered == "break_slide_start"
         || lowered == "break_slide_finish"

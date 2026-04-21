@@ -120,7 +120,7 @@ Shared concerns:
 - touchhold span semantics
 - same-second same-kind runtime/export SFX collapse to one playback using the strongest event gain, and every note-SFX kind is now latest-wins across time on both runtime preview and export; do not reintroduce per-kind overlap on only one side
 - touchhold sustain is intentionally shared and non-stacking across overlapping spans in both runtime preview and export mixing
-- break-slide tails now emit `break + judge_break_slide`; do not restore the legacy `break_slide_finish` event on only one side
+- break-slide tails now emit the dedicated `break_slide_break` bucket plus `judge_break_slide`; `break_slide_break` reuses `break.wav` but must stay on the Break Slide volume bucket, and you must not restore the legacy `break_slide_finish` event on only one side
 - firework timing offsets
 - partial export timing: when the export request is not marked as full-range, export now uses a 1.0-second preload (full-range still keeps its 3.0-second lead-in), and the exported marker set is filtered up front by `marker.second` within the simulated frame window `[timelineOriginSecond, R]`; preview/export rendering, Muri overlays, and export SFX all consume that same filtered marker set
 - same-second collapse, latest-wins scheduling, and partial-export answer clamping are shared in `src/common/PreviewSfxTimeline.h`; keep runtime `drainEvents(...)`, export render-plan building, and export backend rendering on that common path, and pass the same playback-rate / timing-settings inputs into both sides

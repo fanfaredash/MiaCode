@@ -8,6 +8,7 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/ChartAssetPaths.h"
+#include "common/PreviewSfxAssets.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "tools/latency/LatencyDetectorDialog.h"
 
@@ -386,6 +387,17 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     QLabel* slideLabel = nullptr;
     QToolButton* slideMuteButton = nullptr;
     addAudioRow(slideAudioLabelText, owner_.previewAudioSettings_.slidePercent(), &slideSlider, &slideLabel, &slideMuteButton);
+    const QString breakSlideAudioLabelText =
+        uiText("dialog.render_settings.audio.break_slide", "Break Slide Volume");
+    QSlider* breakSlideSlider = nullptr;
+    QLabel* breakSlideLabel = nullptr;
+    QToolButton* breakSlideMuteButton = nullptr;
+    addAudioRow(
+        breakSlideAudioLabelText,
+        owner_.previewAudioSettings_.breakSlidePercent(),
+        &breakSlideSlider,
+        &breakSlideLabel,
+        &breakSlideMuteButton);
     const QString touchAudioLabelText = uiText("dialog.render_settings.audio.touch", "Touch Volume");
     QSlider* touchSlider = nullptr;
     QLabel* touchLabel = nullptr;
@@ -881,10 +893,43 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     audioApplyTimer->setSingleShot(true);
     audioApplyTimer->setInterval(220);
     QString pendingAudition;
+    auto* dialogAuditionRuntime = new QtPreviewSfxRuntime(&dialog);
+    QString dialogAuditionSfxDir;
 
     auto queueAudioApply = [audioApplyTimer, &pendingAudition](const QString& audition) {
         pendingAudition = audition;
         audioApplyTimer->start();
+    };
+
+    const auto playDialogLocalSfxAudition = [
+        this,
+        dialogAuditionRuntime,
+        &dialogAuditionSfxDir
+    ](const QString& audition) {
+        if (audition.isEmpty()) {
+            return false;
+        }
+        QString resolvedKind = previewSfxNormalizedKind(audition);
+        if (resolvedKind == QStringLiteral("break_slide")) {
+            resolvedKind = QStringLiteral("break_slide_start");
+        }
+        const QString sfxDir = miacode::preview_sfx::resolveSfxDirectory();
+        if (sfxDir.isEmpty()) {
+            return false;
+        }
+        const QString resolvedSfxDir = QDir::cleanPath(sfxDir);
+        if (dialogAuditionSfxDir != resolvedSfxDir || !dialogAuditionRuntime->audioEngineInitialized()) {
+            dialogAuditionRuntime->setWarmupResolvedPaths(QString(), QString(), resolvedSfxDir);
+            dialogAuditionRuntime->reloadAssets(owner_.previewAudioSettings_);
+            dialogAuditionSfxDir = resolvedSfxDir;
+        } else {
+            dialogAuditionRuntime->applyLevels(owner_.previewAudioSettings_);
+        }
+        if (!dialogAuditionRuntime->audioEngineInitialized()) {
+            return false;
+        }
+        dialogAuditionRuntime->stopAll();
+        return dialogAuditionRuntime->audition(resolvedKind);
     };
 
     const QString muteAudioButtonTooltip = uiText("dialog.render_settings.audio.button.mute", "Mute %1");
@@ -964,6 +1009,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         slideSlider,
         slideLabel,
         slideMuteButton,
+        breakSlideSlider,
+        breakSlideLabel,
+        breakSlideMuteButton,
         exSlider,
         exLabel,
         exMuteButton,
@@ -979,6 +1027,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         exAudioLabelText,
         breakAudioLabelText,
         slideAudioLabelText,
+        breakSlideAudioLabelText,
         touchAudioLabelText,
         fireworkAudioLabelText
     ]() {
@@ -1019,6 +1068,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         syncAudioRow(exSlider, exLabel, owner_.previewAudioSettings_.exPercent());
         syncAudioRow(breakSlider, breakLabel, owner_.previewAudioSettings_.breakPercent());
         syncAudioRow(slideSlider, slideLabel, owner_.previewAudioSettings_.slidePercent());
+        syncAudioRow(breakSlideSlider, breakSlideLabel, owner_.previewAudioSettings_.breakSlidePercent());
         syncAudioRow(touchSlider, touchLabel, owner_.previewAudioSettings_.touchPercent());
         syncAudioRow(fireworkSlider, fireworkLabel, owner_.previewAudioSettings_.fireworkPercent());
         syncPerChannelMuteButton(bgmMuteButton, owner_.previewAudioSettings_.trackMuted(), bgmAudioLabelText);
@@ -1027,6 +1077,10 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         syncPerChannelMuteButton(exMuteButton, owner_.previewAudioSettings_.exMuted(), exAudioLabelText);
         syncPerChannelMuteButton(breakMuteButton, owner_.previewAudioSettings_.breakMuted(), breakAudioLabelText);
         syncPerChannelMuteButton(slideMuteButton, owner_.previewAudioSettings_.slideMuted(), slideAudioLabelText);
+        syncPerChannelMuteButton(
+            breakSlideMuteButton,
+            owner_.previewAudioSettings_.breakSlideMuted(),
+            breakSlideAudioLabelText);
         syncPerChannelMuteButton(touchMuteButton, owner_.previewAudioSettings_.touchMuted(), touchAudioLabelText);
         syncPerChannelMuteButton(fireworkMuteButton, owner_.previewAudioSettings_.fireworkMuted(), fireworkAudioLabelText);
     };
@@ -1079,6 +1133,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             if (!owner_.previewAudioSettings_.slideMuted()) {
                 owner_.previewAudioSettings_.toggleSlideMuted();
             }
+            if (!owner_.previewAudioSettings_.breakSlideMuted()) {
+                owner_.previewAudioSettings_.toggleBreakSlideMuted();
+            }
             if (!owner_.previewAudioSettings_.touchMuted()) {
                 owner_.previewAudioSettings_.toggleTouchMuted();
             }
@@ -1105,6 +1162,9 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             if (owner_.previewAudioSettings_.slideMuted()) {
                 owner_.previewAudioSettings_.toggleSlideMuted();
             }
+            if (owner_.previewAudioSettings_.breakSlideMuted()) {
+                owner_.previewAudioSettings_.toggleBreakSlideMuted();
+            }
             if (owner_.previewAudioSettings_.touchMuted()) {
                 owner_.previewAudioSettings_.toggleTouchMuted();
             }
@@ -1120,6 +1180,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     connectAudioSlider(exSlider, &PreviewAudioSettings::setExPercent, "ex");
     connectAudioSlider(breakSlider, &PreviewAudioSettings::setBreakPercent, "break");
     connectAudioSlider(slideSlider, &PreviewAudioSettings::setSlidePercent, "slide");
+    connectAudioSlider(breakSlideSlider, &PreviewAudioSettings::setBreakSlidePercent, "break_slide");
     connectAudioSlider(touchSlider, &PreviewAudioSettings::setTouchPercent, "touch");
     connectAudioSlider(fireworkSlider, &PreviewAudioSettings::setFireworkPercent, "firework");
     const auto connectPerChannelMute = [
@@ -1139,6 +1200,11 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     connectPerChannelMute(exMuteButton, &PreviewAudioSettings::toggleExMuted, &PreviewAudioSettings::exMuted, "ex");
     connectPerChannelMute(breakMuteButton, &PreviewAudioSettings::toggleBreakMuted, &PreviewAudioSettings::breakMuted, "break");
     connectPerChannelMute(slideMuteButton, &PreviewAudioSettings::toggleSlideMuted, &PreviewAudioSettings::slideMuted, "slide");
+    connectPerChannelMute(
+        breakSlideMuteButton,
+        &PreviewAudioSettings::toggleBreakSlideMuted,
+        &PreviewAudioSettings::breakSlideMuted,
+        "break_slide");
     connectPerChannelMute(touchMuteButton, &PreviewAudioSettings::toggleTouchMuted, &PreviewAudioSettings::touchMuted, "touch");
     connectPerChannelMute(fireworkMuteButton, &PreviewAudioSettings::toggleFireworkMuted, &PreviewAudioSettings::fireworkMuted, "firework");
     if (saveLocalAudioPresetButton != nullptr) {
@@ -1168,39 +1234,32 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         );
     }
 
-    connect(audioApplyTimer, &QTimer::timeout, &dialog, [this, audioApplyTimer, masterSlider, bgmSlider, answerSlider, judgeSlider, breakSlider, slideSlider, exSlider, touchSlider, fireworkSlider, &pendingAudition]() {
+    connect(audioApplyTimer, &QTimer::timeout, &dialog, [this, audioApplyTimer, masterSlider, bgmSlider, answerSlider, judgeSlider, breakSlider, slideSlider, breakSlideSlider, exSlider, touchSlider, fireworkSlider, &pendingAudition, playDialogLocalSfxAudition]() {
         if (masterSlider->isSliderDown()
             || bgmSlider->isSliderDown()
             || answerSlider->isSliderDown()
             || judgeSlider->isSliderDown()
             || breakSlider->isSliderDown()
             || slideSlider->isSliderDown()
+            || breakSlideSlider->isSliderDown()
             || exSlider->isSliderDown()
             || touchSlider->isSliderDown()
             || fireworkSlider->isSliderDown()) {
             audioApplyTimer->start();
             return;
         }
-        if (!pendingAudition.isEmpty()) {
-            owner_.ensurePreviewSfxRuntimePrepared();
-        }
         const bool handledLocally = !pendingAudition.isEmpty()
-            && owner_.previewSfxRuntime_ != nullptr
-            && owner_.previewSfxRuntime_->audition(pendingAudition);
+            && playDialogLocalSfxAudition(pendingAudition);
         Q_UNUSED(handledLocally);
         pendingAudition.clear();
     });
-    connect(&dialog, &QDialog::finished, &dialog, [this, audioApplyTimer, &pendingAudition]() {
+    connect(&dialog, &QDialog::finished, &dialog, [this, audioApplyTimer, &pendingAudition, playDialogLocalSfxAudition]() {
         if (!audioApplyTimer->isActive()) {
             return;
         }
         audioApplyTimer->stop();
-        if (!pendingAudition.isEmpty()) {
-            owner_.ensurePreviewSfxRuntimePrepared();
-        }
         const bool handledLocally = !pendingAudition.isEmpty()
-            && owner_.previewSfxRuntime_ != nullptr
-            && owner_.previewSfxRuntime_->audition(pendingAudition);
+            && playDialogLocalSfxAudition(pendingAudition);
         Q_UNUSED(handledLocally);
         pendingAudition.clear();
     });

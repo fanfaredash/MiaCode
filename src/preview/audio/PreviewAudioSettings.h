@@ -21,6 +21,8 @@ struct PreviewAudioSettings {
     double breakRestoreVolume = 0.30;
     double slideVolume = 0.30;
     double slideRestoreVolume = 0.30;
+    double breakSlideVolume = 0.30;
+    double breakSlideRestoreVolume = 0.30;
     double touchVolume = 0.30;
     double touchRestoreVolume = 0.30;
     double fireworkVolume = 0.30;
@@ -37,6 +39,7 @@ struct PreviewAudioSettings {
     int exPercent() const;
     int breakPercent() const;
     int slidePercent() const;
+    int breakSlidePercent() const;
     int touchPercent() const;
     int fireworkPercent() const;
     void setGlobalPercent(int value);
@@ -46,6 +49,7 @@ struct PreviewAudioSettings {
     void setExPercent(int value);
     void setBreakPercent(int value);
     void setSlidePercent(int value);
+    void setBreakSlidePercent(int value);
     void setTouchPercent(int value);
     void setFireworkPercent(int value);
 
@@ -56,6 +60,7 @@ struct PreviewAudioSettings {
     bool exMuted() const;
     bool breakMuted() const;
     bool slideMuted() const;
+    bool breakSlideMuted() const;
     bool touchMuted() const;
     bool fireworkMuted() const;
     bool allNonTrackMuted() const;
@@ -67,6 +72,7 @@ struct PreviewAudioSettings {
     void toggleExMuted();
     void toggleBreakMuted();
     void toggleSlideMuted();
+    void toggleBreakSlideMuted();
     void toggleTouchMuted();
     void toggleFireworkMuted();
     void toggleAllNonTrackMuted();
@@ -89,11 +95,15 @@ inline double previewSfxVolumeForKind(const PreviewAudioSettings& settings, cons
         return settings.breakVolume * globalVolume;
     }
     if (lowered == "slide"
-        || lowered == "break_slide"
+        ) {
+        return settings.slideVolume * globalVolume;
+    }
+    if (lowered == "break_slide"
+        || lowered == "break_slide_break"
         || lowered == "break_slide_start"
         || lowered == "break_slide_finish"
         || lowered == "judge_break_slide") {
-        return settings.slideVolume * globalVolume;
+        return settings.breakSlideVolume * globalVolume;
     }
     if (lowered == "ex") {
         return settings.exVolume * globalVolume;

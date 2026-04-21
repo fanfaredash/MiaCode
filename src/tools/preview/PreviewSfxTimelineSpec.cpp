@@ -158,15 +158,18 @@ bool verifyBreakSlideTailSfx(QTextStream& err)
     miacode::preview_sfx_timeline::buildTimeline(markers, 1.0, PreviewTimingSettings(), &events, &spans);
 
     int breakSlideStartCount = 0;
-    int breakTailCount = 0;
+    int breakSlideBreakTailCount = 0;
+    int plainBreakTailCount = 0;
     int judgeBreakSlideTailCount = 0;
     int legacyBreakSlideFinishCount = 0;
 
     for (const Event& event : events) {
         if (event.kind == QLatin1String("break_slide_start") && qAbs(event.second - 1.5) <= 1e-6) {
             ++breakSlideStartCount;
+        } else if (event.kind == QLatin1String("break_slide_break") && qAbs(event.second - 3.0) <= 1e-6) {
+            ++breakSlideBreakTailCount;
         } else if (event.kind == QLatin1String("break") && qAbs(event.second - 3.0) <= 1e-6) {
-            ++breakTailCount;
+            ++plainBreakTailCount;
         } else if (event.kind == QLatin1String("judge_break_slide") && qAbs(event.second - 3.0) <= 1e-6) {
             ++judgeBreakSlideTailCount;
         } else if (event.kind == QLatin1String("break_slide_finish") && qAbs(event.second - 3.0) <= 1e-6) {
@@ -177,7 +180,10 @@ bool verifyBreakSlideTailSfx(QTextStream& err)
     if (!require(breakSlideStartCount == 1, QStringLiteral("break slide should emit one start SFX"), err)) {
         return false;
     }
-    if (!require(breakTailCount == 1, QStringLiteral("break slide tail should emit one break SFX"), err)) {
+    if (!require(breakSlideBreakTailCount == 1, QStringLiteral("break slide tail should emit one break_slide_break SFX"), err)) {
+        return false;
+    }
+    if (!require(plainBreakTailCount == 0, QStringLiteral("break slide tail should not emit the plain break bucket event"), err)) {
         return false;
     }
     if (!require(

@@ -330,6 +330,7 @@ void QtPreviewSfxRuntime::stopAll()
     stopBank(judgeBreakSfx_);
     stopBank(slideSfx_);
     stopBank(breakSfx_);
+    stopBank(breakSlideBreakSfx_);
     stopBank(breakSlideStartSfx_);
     stopBank(breakSlideSfx_);
     stopBank(judgeBreakSlideSfx_);

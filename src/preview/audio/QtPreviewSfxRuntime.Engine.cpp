@@ -61,6 +61,7 @@ void QtPreviewSfxRuntime::initializeAssets()
     configureBank(judgeBreakSfx_, "judge_break", 1);
     configureBank(slideSfx_, "slide", 1);
     configureBank(breakSfx_, "break", 1);
+    configureBank(breakSlideBreakSfx_, "break_slide_break", 1);
     configureBank(breakSlideStartSfx_, "break_slide_start", 1);
     configureBank(breakSlideSfx_, "break_slide", 1);
     configureBank(judgeBreakSlideSfx_, "judge_break_slide", 1);
@@ -137,6 +138,7 @@ void QtPreviewSfxRuntime::applyVolumes()
     applyVolume(judgeBreakSfx_, previewSfxVolumeForKind(settings_, "judge_break"));
     applyVolume(slideSfx_, previewSfxVolumeForKind(settings_, "slide"));
     applyVolume(breakSfx_, previewSfxVolumeForKind(settings_, "break"));
+    applyVolume(breakSlideBreakSfx_, previewSfxVolumeForKind(settings_, "break_slide_break"));
     applyVolume(breakSlideStartSfx_, previewSfxVolumeForKind(settings_, "break_slide_start"));
     applyVolume(breakSlideSfx_, previewSfxVolumeForKind(settings_, "break_slide_finish"));
     applyVolume(judgeBreakSlideSfx_, previewSfxVolumeForKind(settings_, "judge_break_slide"));

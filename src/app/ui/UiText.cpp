@@ -135,6 +135,7 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
         || raw.contains("touch_volume")
         || raw.contains("touchhold_volume")
         || raw.contains("break_slide_volume")
+        || raw.contains("break_slide_restore_volume")
         || raw.contains("firework_volume")
         || raw.contains("hanabi_volume")) {
         QJsonObject audio = preview.value("audio").toObject();
@@ -162,7 +163,17 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
             audio.insert("break_volume", raw.value("break_volume").toDouble(raw.value("sfx_volume").toDouble()));
         }
         if (raw.contains("break_slide_volume")) {
-            audio.insert("break_slide_volume", raw.value("break_slide_volume").toDouble(raw.value("slide_volume").toDouble(raw.value("sfx_volume").toDouble())));
+            audio.insert(
+                "break_slide_volume",
+                raw.value("break_slide_volume").toDouble(
+                    raw.value("slide_volume").toDouble(raw.value("sfx_volume").toDouble())));
+        }
+        if (raw.contains("break_slide_restore_volume")) {
+            audio.insert(
+                "break_slide_restore_volume",
+                raw.value("break_slide_restore_volume").toDouble(
+                    raw.value("break_slide_volume").toDouble(
+                        raw.value("slide_volume").toDouble(raw.value("sfx_volume").toDouble()))));
         }
         if (raw.contains("ex_volume")) {
             audio.insert("ex_volume", raw.value("ex_volume").toDouble(raw.value("sfx_volume").toDouble()));
@@ -454,6 +465,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.audio.tap", "Tap 音量"},
         {"dialog.render_settings.audio.break", "Break 音量"},
         {"dialog.render_settings.audio.slide", "Slide 音量"},
+        {"dialog.render_settings.audio.break_slide", "Break Slide 音量"},
         {"dialog.render_settings.audio.ex", "EX 音量"},
         {"dialog.render_settings.audio.touch", "Touch 音量"},
         {"dialog.render_settings.audio.track", "Track 音量"},

@@ -30,6 +30,9 @@ inline QStringList assetFileNamesForKind(const QString& kind)
     if (lowered == QStringLiteral("break")) {
         return {QStringLiteral("break.wav")};
     }
+    if (lowered == QStringLiteral("break_slide_break")) {
+        return {QStringLiteral("break.wav")};
+    }
     if (lowered == QStringLiteral("break_slide_start")) {
         return {QStringLiteral("slide_break_start.wav"), QStringLiteral("break_slide_start.wav")};
     }

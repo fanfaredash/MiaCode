@@ -376,7 +376,7 @@ inline void buildTimeline(
                     1.0,
                     answerCompensationSeconds);
                 addEvent(judgeSecond, marker.headBreak ? QStringLiteral("judge_break") : QStringLiteral("judge"));
-                if (marker.headBreak && !marker.trackBreak) {
+                if (marker.headBreak) {
                     addEvent(judgeSecond, QStringLiteral("break"));
                 }
                 if (marker.headEx) {
@@ -390,7 +390,7 @@ inline void buildTimeline(
             if (marker.trackBreak && marker.endSecond > traceSecond) {
                 const double tailSecond =
                     qMax(0.0, miacode::preview_sfx_timing::slideTriggerSecond(marker.endSecond, normalizedTimingSettings, playbackRate));
-                addEvent(tailSecond, QStringLiteral("break"));
+                addEvent(tailSecond, QStringLiteral("break_slide_break"));
                 addEvent(tailSecond, QStringLiteral("judge_break_slide"));
             }
         }
