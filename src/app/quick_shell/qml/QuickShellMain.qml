@@ -473,7 +473,7 @@ ApplicationWindow {
         previewPaneStartupBalancePending = false
     }
 
-    visible: false
+    visible: true
     title: controller.windowTitle
     color: tone("windowBg", "#f8fafd")
     onMetricsMapChanged: {

@@ -78,6 +78,8 @@ public:
     QWindow* statusWindow() const;
 
     void setPreviewFullscreen(bool fullscreen);
+    void markNextCloseConfirmedExternally();
+    void clearPendingExternalCloseConfirmation();
 
     Q_INVOKABLE void refresh();
     Q_INVOKABLE bool confirmClose();
@@ -140,4 +142,5 @@ private:
     bool validationTabVisible_ = false;
     bool muriTabVisible_ = false;
     bool previewSpeedToastInitialized_ = false;
+    bool closeConfirmedExternally_ = false;
 };

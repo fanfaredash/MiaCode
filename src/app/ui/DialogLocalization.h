@@ -8,8 +8,10 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QEvent>
+#include <QEventLoop>
 #include <QGuiApplication>
 #include <QKeyEvent>
+#include <QList>
 #include <QMessageBox>
 #include <QObject>
 #include <QPointer>
@@ -92,6 +94,66 @@ inline bool hasVisibleProtectedPreviewDialog()
         }
     }
     return false;
+}
+
+inline bool isVisibleBlockingModalDialog(const QWidget* widget)
+{
+    const auto* dialog = qobject_cast<const QDialog*>(widget);
+    return dialog != nullptr
+        && dialog->isModal()
+        && dialog->isVisible()
+        && !dialog->windowState().testFlag(Qt::WindowMinimized);
+}
+
+inline QList<QPointer<QDialog>> visibleBlockingModalDialogs()
+{
+    QList<QPointer<QDialog>> dialogs;
+    const auto appendDialog = [&dialogs](QDialog* dialog) {
+        if (dialog == nullptr || !isVisibleBlockingModalDialog(dialog) || dialogs.contains(dialog)) {
+            return;
+        }
+        dialogs.append(dialog);
+    };
+
+    appendDialog(qobject_cast<QDialog*>(QApplication::activeModalWidget()));
+    const auto topLevelWidgets = QApplication::topLevelWidgets();
+    for (auto it = topLevelWidgets.crbegin(); it != topLevelWidgets.crend(); ++it) {
+        appendDialog(qobject_cast<QDialog*>(*it));
+    }
+    return dialogs;
+}
+
+inline bool hasVisibleBlockingModalDialog()
+{
+    return !visibleBlockingModalDialogs().isEmpty();
+}
+
+inline int closeVisibleBlockingModalDialogs()
+{
+    int closedCount = 0;
+    constexpr int kMaxClosePasses = 8;
+    for (int pass = 0; pass < kMaxClosePasses; ++pass) {
+        const QList<QPointer<QDialog>> dialogs = visibleBlockingModalDialogs();
+        if (dialogs.isEmpty()) {
+            break;
+        }
+
+        bool closedAnyThisPass = false;
+        for (const QPointer<QDialog>& dialog : dialogs) {
+            if (dialog.isNull() || !isVisibleBlockingModalDialog(dialog)) {
+                continue;
+            }
+            dialog->close();
+            ++closedCount;
+            closedAnyThisPass = true;
+        }
+
+        if (!closedAnyThisPass) {
+            break;
+        }
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    }
+    return closedCount;
 }
 
 inline bool dialogOwnsPreviewShortcutScope(const QDialog* dialog)
