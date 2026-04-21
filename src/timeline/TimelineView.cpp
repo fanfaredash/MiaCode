@@ -8,6 +8,7 @@
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "WindowParityMetrics.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -699,7 +700,7 @@ int TimelineView::minimumContentHeightForCurrentDevice() const
         controlBandHeight = qMax(controlBandHeight, QFontMetrics(headerLineNumberFont_).height());
     }
     const int headerHeight = qMax(baseHeaderHeight, controlBandHeight + 10);
-    return headerHeight + timelineHeight();
+    return headerHeight + timelineHeight() + miacode::window_parity::kTimelineBottomPadding;
 }
 
 void TimelineView::refreshMinimumHeightForCurrentDevice()

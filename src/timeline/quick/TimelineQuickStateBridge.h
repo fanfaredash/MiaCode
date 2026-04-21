@@ -24,7 +24,7 @@ class TimelineQuickStateBridge : public QObject
 public:
     explicit TimelineQuickStateBridge(QObject* parent = nullptr);
 
-    // Reference-only mirror attach for the QWidget timeline path.
+    // Reference-only mirror attach for the classic QWidget timeline path.
     void attachReferenceView(TimelineView* referenceView);
     void setQuickViewportSize(const QSize& viewportSize);
 

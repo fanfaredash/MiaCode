@@ -1,5 +1,6 @@
 #include "../../MainWindow.h"
 #include "MainWindow.WindowSection.h"
+#include "../timeline/MainWindow.TimelineSection.h"
 
 #include "common/DebugLog.h"
 #include "TimelineView.h"
@@ -46,18 +47,9 @@ void MainWindow::noteQuickTimelineSurfaceReady()
                 .arg(pendingQuickTimelineCursorCenterView_ ? 1 : 0)
         );
     }
-    if (qtPreviewTimelineDirty_) {
-        flushQtPreviewTimelinePosition();
+    if (timelineSection_ != nullptr) {
+        timelineSection_->flushDeferredTimelineBridgeState();
     }
-    if (pendingQuickTimelineCursorSync_ && timelineQuickStateBridge_ != nullptr) {
-        timelineQuickStateBridge_->setCursorSeconds(
-            pendingQuickTimelineCursorSecond_,
-            pendingQuickTimelineCursorCenterView_);
-        timelineQuickStateBridge_->focusCursor(false);
-    }
-    pendingQuickTimelineCursorSync_ = false;
-    pendingQuickTimelineCursorSecond_ = 0.0;
-    pendingQuickTimelineCursorCenterView_ = false;
 }
 
 bool MainWindow::quickShellBottomTabsProxyActive() const
@@ -84,6 +76,9 @@ QWidget* MainWindow::bottomTabsPageForTab(BottomTabsTabId tabId) const
 {
     switch (tabId) {
     case BottomTabsTabId::Timeline:
+        if (timelineWidgetlessQuickRoute_) {
+            return nullptr;
+        }
         return timelineView_;
     case BottomTabsTabId::Validation:
         return errorList_;
@@ -98,6 +93,9 @@ QWidget* MainWindow::bottomTabsPageForTab(BottomTabsTabId tabId) const
 QTabWidget* MainWindow::bottomTabsContainerForTab(BottomTabsTabId tabId) const
 {
     if (tabId == BottomTabsTabId::Unknown) {
+        return nullptr;
+    }
+    if (tabId == BottomTabsTabId::Timeline && timelineWidgetlessQuickRoute_) {
         return nullptr;
     }
     if (quickShellBottomTabsProxyActive() && tabId != BottomTabsTabId::Timeline) {
@@ -158,6 +156,9 @@ QString MainWindow::currentBottomTabsTabIdString() const
 
 bool MainWindow::bottomTabsTabVisible(BottomTabsTabId tabId) const
 {
+    if (tabId == BottomTabsTabId::Timeline && timelineWidgetlessQuickRoute_) {
+        return timelineTabVisible_;
+    }
     const QTabWidget* container = bottomTabsContainerForTab(tabId);
     if (container == nullptr) {
         return false;
@@ -173,7 +174,8 @@ void MainWindow::syncBottomTabsCurrentTabToContainers()
     }
 
     if (!quickShellBottomTabsProxyActive()) {
-        const int index = bottomTabs_->indexOf(bottomTabsPageForTab(currentBottomTabsTabId_));
+        const QWidget* targetPage = bottomTabsPageForTab(currentBottomTabsTabId_);
+        const int index = targetPage != nullptr ? bottomTabs_->indexOf(const_cast<QWidget*>(targetPage)) : -1;
         if (index >= 0 && bottomTabs_->isTabVisible(index) && bottomTabs_->currentIndex() != index) {
             bottomTabs_->setCurrentIndex(index);
         }
@@ -181,7 +183,10 @@ void MainWindow::syncBottomTabsCurrentTabToContainers()
     }
 
     if (quickShellBottomTabsProxy_ != nullptr) {
-        const int proxyIndex = quickShellBottomTabsProxy_->indexOf(bottomTabsPageForTab(currentBottomTabsTabId_));
+        const QWidget* targetPage = bottomTabsPageForTab(currentBottomTabsTabId_);
+        const int proxyIndex = targetPage != nullptr
+            ? quickShellBottomTabsProxy_->indexOf(const_cast<QWidget*>(targetPage))
+            : -1;
         if (proxyIndex >= 0
             && quickShellBottomTabsProxy_->isTabVisible(proxyIndex)
             && quickShellBottomTabsProxy_->currentIndex() != proxyIndex) {
@@ -194,7 +199,6 @@ void MainWindow::syncQuickShellBottomTabsProxyRoute()
 {
     if (bottomTabs_ == nullptr
         || quickShellBottomTabsProxy_ == nullptr
-        || timelineView_ == nullptr
         || errorList_ == nullptr
         || muriList_ == nullptr) {
         return;
@@ -279,6 +283,9 @@ void MainWindow::setCurrentBottomTabsTabId(BottomTabsTabId tabId)
     }
     currentBottomTabsTabId_ = tabId;
     syncBottomTabsCurrentTabToContainers();
+    if (tabId == BottomTabsTabId::Timeline && timelineSection_ != nullptr) {
+        timelineSection_->flushDeferredTimelineBridgeState();
+    }
     if (tabId != BottomTabsTabId::Timeline) {
         scheduleWrappedListRelayout(errorList_);
         scheduleWrappedListRelayout(muriList_);
@@ -292,6 +299,16 @@ void MainWindow::setCurrentBottomTabsTabId(const QString& tabId)
 
 void MainWindow::setBottomTabsTabVisible(BottomTabsTabId tabId, bool visible)
 {
+    if (tabId == BottomTabsTabId::Timeline && timelineWidgetlessQuickRoute_) {
+        if (timelineTabVisible_ == visible) {
+            return;
+        }
+        timelineTabVisible_ = visible;
+        if (!visible && currentBottomTabsTabId() == tabId) {
+            restoreBottomTabsCurrentTabAfterRefresh(BottomTabsTabId::Validation);
+        }
+        return;
+    }
     QTabWidget* container = bottomTabsContainerForTab(tabId);
     if (container == nullptr) {
         return;

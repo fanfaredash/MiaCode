@@ -364,10 +364,19 @@ void PlainCodeEditor::updateCurrentLineHighlightRegion(const QRect& previousRect
 
 void PlainCodeEditor::setPreviewFollowVisualCaret(bool active, int line, int col)
 {
+    const bool normalizedActive = active;
+    const int normalizedLine = qMax(1, line);
+    const int normalizedCol = qMax(1, col);
+    if (previewFollowVisualCaretActive_ == normalizedActive
+        && previewFollowVisualCaretLine_ == normalizedLine
+        && previewFollowVisualCaretCol_ == normalizedCol) {
+        return;
+    }
+
     const QRect previousRect = previewFollowVisualCaretRect();
-    previewFollowVisualCaretActive_ = active;
-    previewFollowVisualCaretLine_ = qMax(1, line);
-    previewFollowVisualCaretCol_ = qMax(1, col);
+    previewFollowVisualCaretActive_ = normalizedActive;
+    previewFollowVisualCaretLine_ = normalizedLine;
+    previewFollowVisualCaretCol_ = normalizedCol;
     const QRect currentRect = previewFollowVisualCaretRect();
 
     if (viewport() == nullptr) {

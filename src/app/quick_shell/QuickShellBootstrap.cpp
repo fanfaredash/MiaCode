@@ -223,7 +223,7 @@ QuickShellBootstrap::~QuickShellBootstrap()
 bool QuickShellBootstrap::start()
 {
     appendQuickShellRuntimeLog(QStringLiteral("start_enter"));
-    backend_ = std::make_unique<MainWindow>();
+    backend_ = std::make_unique<MainWindow>(true);
     backend_->setQuickShellBackendActive(true);
     backend_->hide();
     backend_->setVisible(false);

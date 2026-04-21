@@ -40,6 +40,51 @@ QString describeSecond(double second)
     return QStringLiteral("second=%1").arg(second, 0, 'f', 6);
 }
 
+QString describeFollowBinding(const TimelineQuickModel::PreviewFollowBinding& binding)
+{
+    return QStringLiteral(
+               "resolved=%1 start=%2 end=%3 anchor=%4 L%5C%6 span=[%7:%8-%9:%10] cursor=%11:%12 body=%13")
+        .arg(binding.resolved ? 1 : 0)
+        .arg(binding.startSecond, 0, 'f', 6)
+        .arg(qIsInf(binding.endSecondExclusive)
+                 ? QStringLiteral("inf")
+                 : QString::number(binding.endSecondExclusive, 'f', 6))
+        .arg(binding.anchorSecond, 0, 'f', 6)
+        .arg(binding.anchorLine)
+        .arg(binding.anchorCol)
+        .arg(binding.span.startLine)
+        .arg(binding.span.startCol)
+        .arg(binding.span.endLine)
+        .arg(binding.span.endCol)
+        .arg(binding.span.cursorLine)
+        .arg(binding.span.cursorCol)
+        .arg(binding.span.hasVisibleBody ? 1 : 0);
+}
+
+bool bindingsEquivalent(
+    const TimelineQuickModel::PreviewFollowBinding& left,
+    const TimelineQuickModel::PreviewFollowBinding& right)
+{
+    const bool endEquivalent = (qIsInf(left.endSecondExclusive) && qIsInf(right.endSecondExclusive))
+        || nearlyEqual(left.endSecondExclusive, right.endSecondExclusive);
+    return left.resolved == right.resolved
+        && nearlyEqual(left.startSecond, right.startSecond)
+        && endEquivalent
+        && nearlyEqual(left.anchorSecond, right.anchorSecond)
+        && left.anchorLine == right.anchorLine
+        && left.anchorCol == right.anchorCol
+        && left.span.startLine == right.span.startLine
+        && left.span.startCol == right.span.startCol
+        && left.span.endLine == right.span.endLine
+        && left.span.endCol == right.span.endCol
+        && left.span.cursorLine == right.span.cursorLine
+        && left.span.cursorCol == right.span.cursorCol
+        && left.span.startPosition == right.span.startPosition
+        && left.span.endPositionExclusive == right.span.endPositionExclusive
+        && left.span.cursorPosition == right.span.cursorPosition
+        && left.span.hasVisibleBody == right.span.hasVisibleBody;
+}
+
 QString kindLabel(TimelineRenderNoteKind kind)
 {
     switch (kind) {
@@ -840,6 +885,28 @@ int main(int argc, char** argv)
         const bool secondResolved = model.resolvePreviewFollowCursor(0.6, &line, &col, &second);
         expect(secondResolved && line == 1 && col == 11 && nearlyEqual(second, 0.5),
                QStringLiteral("follow cursor advances to the next segment-start anchor while playback progresses"));
+
+        TimelineQuickModel::PreviewFollowBinding firstBinding;
+        TimelineQuickModel::PreviewFollowBinding secondBinding;
+        TimelineQuickModel::PreviewFollowBinding thirdBinding;
+        const bool firstBindingResolved = model.resolvePreviewFollowBinding(0.1, &firstBinding);
+        const bool secondBindingResolved = model.resolvePreviewFollowBinding(0.4, &secondBinding);
+        const bool thirdBindingResolved = model.resolvePreviewFollowBinding(0.6, &thirdBinding);
+        expect(firstBindingResolved
+                   && secondBindingResolved
+                   && bindingsEquivalent(firstBinding, secondBinding)
+                   && nearlyEqual(firstBinding.startSecond, 0.0)
+                   && nearlyEqual(firstBinding.endSecondExclusive, 0.5),
+               QStringLiteral("follow binding stays stable for every second inside the same anchor bucket: %1 vs %2")
+                   .arg(describeFollowBinding(firstBinding), describeFollowBinding(secondBinding)));
+        expect(thirdBindingResolved
+                   && !bindingsEquivalent(firstBinding, thirdBinding)
+                   && nearlyEqual(thirdBinding.startSecond, 0.5)
+                   && nearlyEqual(thirdBinding.anchorSecond, 0.5)
+                   && thirdBinding.anchorLine == 1
+                   && thirdBinding.anchorCol == 11,
+               QStringLiteral("follow binding only changes after crossing the next anchor second: %1")
+                   .arg(describeFollowBinding(thirdBinding)));
     }
 
     {
@@ -883,6 +950,22 @@ int main(int argc, char** argv)
                    && span.cursorCol == 2
                    && nearlyEqual(second, 0.0),
                QStringLiteral("follow span can continuously cross lines and moves the caret to the span end"));
+
+        TimelineQuickModel::PreviewFollowBinding binding;
+        const bool bindingResolved = model.resolvePreviewFollowBinding(0.1, &binding);
+        expect(bindingResolved
+                   && binding.anchorLine == 2
+                   && binding.anchorCol == 1
+                   && nearlyEqual(binding.startSecond, 0.0)
+                   && nearlyEqual(binding.endSecondExclusive, 0.5)
+                   && binding.span.startLine == 1
+                   && binding.span.startCol == 1
+                   && binding.span.endLine == 2
+                   && binding.span.endCol == 1
+                   && binding.span.cursorLine == 2
+                   && binding.span.cursorCol == 2,
+               QStringLiteral("same-second anchors collapse into one follow binding that uses the final anchor but shared span: %1")
+                   .arg(describeFollowBinding(binding)));
     }
 
     {
@@ -1068,6 +1151,16 @@ int main(int argc, char** argv)
                    && incrementalSpan.cursorCol == 3
                    && incrementalSpan.hasVisibleBody,
                QStringLiteral("incremental edits rebuild cached follow spans the same way as full rebuild"));
+
+        TimelineQuickModel::PreviewFollowBinding incrementalBinding;
+        TimelineQuickModel::PreviewFollowBinding rebuiltBinding;
+        const bool incrementalBindingResolved = incremental.resolvePreviewFollowBinding(0.01, &incrementalBinding);
+        const bool rebuiltBindingResolved = rebuilt.resolvePreviewFollowBinding(0.01, &rebuiltBinding);
+        expect(incrementalBindingResolved
+                   && rebuiltBindingResolved
+                   && bindingsEquivalent(incrementalBinding, rebuiltBinding),
+               QStringLiteral("incremental edits rebuild follow bindings the same way as full rebuild: %1 vs %2")
+                   .arg(describeFollowBinding(incrementalBinding), describeFollowBinding(rebuiltBinding)));
     }
 
     {

@@ -28,6 +28,9 @@ public:
     void refreshTimelineMetadata();
     void applyTimelineQuickChange(int position, int charsRemoved, int charsAdded);
     void refreshTimelineQuickModelFromCurrentText();
+    bool timelineTabIsForeground() const;
+    bool quickTimelineBridgeReady() const;
+    void flushDeferredTimelineBridgeState();
     void onTimelineHeaderNavigateRequested(double second);
     void onTimelineUserInteractionStarted();
     void onTimelineDragStarted();
@@ -142,6 +145,10 @@ public:
     void jumpToNearestTimelineNote(double second, int lane);
 
 private:
+    void queueTimelineCursorBridgeUpdate(double second, bool centerView);
+    void invalidatePreviewFollowBindingCache();
+    bool cachedPreviewFollowBindingContainsSecond(double second) const;
+    void cachePreviewFollowBinding(const TimelineQuickModel::PreviewFollowBinding& binding);
     void cancelPreviewStartupSync();
     void tryCommitPreviewStartupSync();
     void stopQtPreviewTimers();

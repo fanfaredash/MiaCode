@@ -1002,9 +1002,6 @@ void MainWindow::ValidationSection::setPreviewFollowDecoration(
         && state_.previewFollowDecorationCursorLine_ == normalizedCursorLine
         && state_.previewFollowDecorationCursorCol_ == normalizedCursorCol) {
         if (!ensureVisible) {
-            if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
-                editor->setPreviewFollowVisualCaret(true, normalizedCursorLine, normalizedCursorCol);
-            }
             return;
         }
     } else {

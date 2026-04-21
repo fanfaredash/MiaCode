@@ -844,6 +844,7 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
         state_.activeOutlineKey_ = "chart";
     }
     populateDifficultyPage(difficultyId);
+    clearTimelineAndPreview();
     if (ui_.editorStack_ != nullptr && ui_.chartPage_ != nullptr) {
         ui_.editorStack_->setCurrentWidget(ui_.chartPage_);
     }
@@ -851,7 +852,13 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
     state_.currentFieldDirty_ = false;
     updateDirtyState();
     rebuildFieldSidebar();
-    owner_.scheduleTimelineRefresh();
+    QTimer::singleShot(0, &owner_, [this, difficultyId]() {
+        if (state_.activeDifficultyId_ != difficultyId || !owner_.hasActiveDifficulty()) {
+            return;
+        }
+        owner_.restoreBottomTabsCurrentTabAfterRefresh(MainWindow::BottomTabsTabId::Timeline);
+        owner_.scheduleTimelineRefresh();
+    });
     owner_.saveProjectRenderState();
     owner_.refreshLayoutAfterPageSwitch();
         QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
@@ -933,6 +940,11 @@ void MainWindow::DocumentSection::clearTimelineAndPreview()
     state_.qtPreviewTimelineDirty_ = false;
     state_.qtPreviewPendingTimelineSecond_ = 0.0;
     state_.qtPreviewPendingTimelineCenterView_ = true;
+    state_.previewFollowBindingCacheValid_ = false;
+    state_.previewFollowBindingCache_ = TimelineQuickModel::PreviewFollowBinding();
+    state_.pendingQuickTimelineCursorSync_ = false;
+    state_.pendingQuickTimelineCursorSecond_ = 0.0;
+    state_.pendingQuickTimelineCursorCenterView_ = false;
     state_.pendingPreviewPlaybackStart_ = false;
     state_.pendingPreviewPlaybackResumeFromPause_ = false;
     state_.pendingPreviewPlaybackRevision_ = 0;

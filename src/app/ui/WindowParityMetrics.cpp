@@ -201,6 +201,13 @@ PreviewPanelLayout computePreviewPanelLayout(
     return layout;
 }
 
+int computeTimelineMinimumContentHeight()
+{
+    return (kTimelineHeaderHeight + kTimelineTopMargin)
+        + (kTimelineLaneHeight * kTimelineLaneCount)
+        + kTimelineBottomPadding;
+}
+
 int computeBottomTabsDeviceHeight(int timelineHeight, int tabBarHeight, int frameWidth)
 {
     return qMax(0, timelineHeight)
