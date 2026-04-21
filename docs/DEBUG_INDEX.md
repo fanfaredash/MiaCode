@@ -11,6 +11,7 @@ This document is the current user-facing index for MiaCode debug mode, log files
   - `Start_MiaCode_QuickShell_Debug.bat`
 
 Inside debug mode, runtime, audio, export, startup-timing, and preview-profile outputs are enabled unless they are individually disabled.
+Outside debug mode, the export log still keeps a concise stage/failure summary so users can report export issues without reproducing under `--debug`.
 
 ## Default Log Files
 
@@ -48,7 +49,7 @@ Path overrides:
 
 ## Category Gates
 
-These only matter while debug mode is active:
+These only matter while debug mode is active for the detailed channels. The always-on concise export summary remains available without `--debug`.
 
 - `MIACODE_DISABLE_RUNTIME_DEBUG_OUTPUT`
 - `MIACODE_DISABLE_AUDIO_DEBUG_OUTPUT`
@@ -88,6 +89,8 @@ Relevant export diagnostics:
 - `render_backend` export-log entries now report `pboRequested=1` by default and only leave `pboEnabled=0` when capability probing or runtime fallback disables it.
 - `audio_backend_select`, `audio_mix_ok`, and `audio_backend_render_complete` export-log entries describe StageB mixed-audio backend routing and offline WAV generation.
 - `fail_audio_plan`, `fail_audio_backend_select`, and `fail_audio_mix` are the primary StageB breadcrumbs when export audio generation fails before ffmpeg starts.
+- `miacode_video_export.log` now uses two tiers: concise major-stage/failure summaries always, detailed ffmpeg/render diagnostics only under `--debug`.
+- detailed `frame_timing` sampling is now sparser and only records every `300` frames unless a frame stalls.
 - `MIACODE_EXPORT_DIAG_OBJECT_DIFF_THRESHOLD`
 - `MIACODE_EXPORT_DIAG_COMPARE_RENDER_PATHS`
 - `MIACODE_EXPORT_DIAG_COMPARE_RADIUS`
@@ -153,6 +156,7 @@ Preview diagnostics now split these timing sources instead of reporting a single
 - runtime log:
   - `preview/stage_media` now also emits low-noise `action=video_frame_stall_begin` / `action=video_frame_stall_end` transitions when external video stops delivering frames for longer than expected
   - `window/focus` records app-level focus transitions, activation edges, watched editor focus events, and text-focus restore attempts for focus-regression diagnosis
+  - BASS `bass_status` sampling is now reduced to about once per second in debug mode
 
 ## Useful Workflows
 
@@ -171,7 +175,8 @@ Launch the Qt Quick hybrid host explicitly in debug mode:
 Force export logging into a local directory:
 
 - `set MIACODE_LOG_DIR=<folder>`
-- `MiaCode.exe --debug`
+- `MiaCode.exe`
+- add `--debug` when you also need the detailed per-stage diagnostics
 
 Force export GPU render off:
 
