@@ -1,36 +1,15 @@
 #include "QtPreviewSfxRuntime.h"
 
-#include "common/ChartAssetPaths.h"
+#include "BassPreviewAudioBackend.h"
+#include "MiniaudioPreviewAudioBackend.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
-#include "common/MiniaudioFileAccess.h"
-#include "common/PreviewGameplayConfig.h"
-#include "common/PreviewSfxAssets.h"
-#include "common/PreviewSfxTimeline.h"
-
-#include <algorithm>
-#include <cstring>
-#include <QFileInfo>
-#include <QMutex>
-#include <QMutexLocker>
-#include <QtMath>
-
-#include <SoundTouch.h>
-
-#define MINIAUDIO_IMPLEMENTATION
-#include "../third_party/miniaudio/miniaudio.h"
 
 namespace {
-constexpr double kQtPreviewSfxEpsilonSeconds = miacode::preview_sfx_timeline::kTimelineEpsilonSeconds;
 
 bool runtimeAudioDebugEnabled()
 {
     return miacode::debug_options::audioDebugOutputEnabled();
-}
-
-QString audioDebugLogPath()
-{
-    return miacode::debug_log::audioLogPath();
 }
 
 void appendAudioDebugLog(const QString& message)
@@ -40,260 +19,235 @@ void appendAudioDebugLog(const QString& message)
     }
     miacode::debug_log::appendLine(miacode::debug_log::Channel::Audio, QString(), message);
 }
+
+}  // namespace
+
+QtPreviewSfxRuntime::QtPreviewSfxRuntime(QObject* parent)
+    : QObject(parent)
+    , backend_(createBackend())
+{
+    appendAudioDebugLog(QString("QtPreviewSfxRuntime created backend=%1").arg(backend_->backendId()));
 }
 
-struct QtPreviewSfxRuntime::EngineState {
-    ma_engine engine{};
-};
+QtPreviewSfxRuntime::~QtPreviewSfxRuntime()
+{
+    appendAudioDebugLog(QString("QtPreviewSfxRuntime destroying backend=%1").arg(backend_->backendId()));
+}
 
-struct QtPreviewSfxRuntime::Voice {
-    ma_decoder decoder{};
-    bool decoderInitialized = false;
-    ma_sound sound{};
-    bool initialized = false;
-    ma_uint32 sampleRate = 0;
-    ma_uint64 frameCount = 0;
-};
+std::unique_ptr<miacode::preview_audio::PreviewAudioBackend> QtPreviewSfxRuntime::createBackend() const
+{
+#ifdef Q_OS_WIN
+    auto bassBackend = std::make_unique<BassPreviewAudioBackend>();
+    QString bassReason;
+    const bool bassReady = bassBackend->canBePrimary(&bassReason);
+    appendAudioDebugLog(
+        QString("preview_audio_backend selected=bass ready=%1 reason=%2")
+            .arg(bassReady ? 1 : 0)
+            .arg(bassReason));
+    return bassBackend;
+#endif
+    return std::make_unique<MiniaudioPreviewAudioBackend>();
+}
 
-struct QtPreviewSfxRuntime::StretchedBackgroundState {
-    ma_data_source_base dataSource{};
-    QString trackPath;
-    double playbackRate = 1.0;
-    ma_decoder decoder{};
-    bool decoderInitialized = false;
-    soundtouch::SoundTouch stretcher;
-    ma_sound sound{};
-    bool soundInitialized = false;
-    QMutex mutex;
-    QVector<float> decodeChunk;
-    QVector<float> stretchChunk;
-    ma_uint32 channels = 0;
-    ma_uint32 sampleRate = 0;
-    ma_uint64 sourceFrameCount = 0;
-    ma_uint64 stretchedFrameCount = 0;
-    ma_uint64 outputCursorFrame = 0;
-    bool decoderAtEnd = false;
-    bool stretcherFlushed = false;
+void QtPreviewSfxRuntime::setWarmupResolvedPaths(const QString& chartPath, const QString& trackPath, const QString& sfxDir)
+{
+    backend_->setWarmupResolvedPaths(chartPath, trackPath, sfxDir);
+}
 
-    static StretchedBackgroundState* from(ma_data_source* dataSourcePtr)
-    {
-        return reinterpret_cast<StretchedBackgroundState*>(dataSourcePtr);
-    }
+void QtPreviewSfxRuntime::reloadAssets(const PreviewAudioSettings& settings)
+{
+    backend_->reloadAssets(settings);
+}
 
-    static const ma_data_source_vtable* dataSourceVTable()
-    {
-        static const ma_data_source_vtable sVTable{
-            &StretchedBackgroundState::readCallback,
-            &StretchedBackgroundState::seekCallback,
-            &StretchedBackgroundState::getDataFormatCallback,
-            &StretchedBackgroundState::getCursorCallback,
-            &StretchedBackgroundState::getLengthCallback,
-            &StretchedBackgroundState::setLoopingCallback,
-            0,
-        };
-        return &sVTable;
-    }
+bool QtPreviewSfxRuntime::audioEngineInitialized() const
+{
+    return backend_->audioEngineInitialized();
+}
 
-    static ma_result readCallback(
-        ma_data_source* dataSourcePtr,
-        void* framesOut,
-        ma_uint64 frameCount,
-        ma_uint64* framesRead
-    )
-    {
-        StretchedBackgroundState* state = from(dataSourcePtr);
-        if (state == nullptr || !state->decoderInitialized || state->channels == 0) {
-            if (framesRead != nullptr) {
-                *framesRead = 0;
-            }
-            return MA_INVALID_OPERATION;
-        }
-        if (framesRead != nullptr) {
-            *framesRead = 0;
-        }
-        if (frameCount == 0) {
-            return MA_SUCCESS;
-        }
+void QtPreviewSfxRuntime::setChartPath(const QString& chartPath)
+{
+    backend_->setChartPath(chartPath);
+}
 
-        QMutexLocker locker(&state->mutex);
-        const ma_uint32 channels = state->channels;
-        const ma_uint64 requestedFrames = frameCount;
-        ma_uint64 producedFrames = 0;
-        float* output = static_cast<float*>(framesOut);
-        if (state->stretchChunk.isEmpty()) {
-            state->stretchChunk.resize(static_cast<int>(4096 * channels));
-        }
-        if (state->decodeChunk.isEmpty()) {
-            state->decodeChunk.resize(static_cast<int>(4096 * channels));
-        }
+void QtPreviewSfxRuntime::setBackgroundTrackOffsetSeconds(double seconds)
+{
+    backend_->setBackgroundTrackOffsetSeconds(seconds);
+}
 
-        while (producedFrames < requestedFrames) {
-            const ma_uint64 remainingFrames = requestedFrames - producedFrames;
-            const unsigned int availableFrames = state->stretcher.numSamples();
-            if (availableFrames > 0) {
-                const unsigned int receiveFrames =
-                    static_cast<unsigned int>(qMin<ma_uint64>(remainingFrames, availableFrames));
-                const qsizetype receiveSamples =
-                    static_cast<qsizetype>(receiveFrames * static_cast<ma_uint64>(channels));
-                if (state->stretchChunk.size() < receiveSamples) {
-                    state->stretchChunk.resize(static_cast<int>(receiveSamples));
-                }
-                const unsigned int framesOutNow = state->stretcher.receiveSamples(
-                    state->stretchChunk.data(),
-                    receiveFrames
-                );
-                if (framesOutNow > 0) {
-                    const ma_uint64 framesToCopy = static_cast<ma_uint64>(framesOutNow);
-                    const qsizetype sampleCount =
-                        static_cast<qsizetype>(framesToCopy * static_cast<ma_uint64>(channels));
-                    if (output != nullptr) {
-                        std::memcpy(
-                            output + (producedFrames * channels),
-                            state->stretchChunk.constData(),
-                            static_cast<size_t>(sampleCount) * sizeof(float)
-                        );
-                    }
-                    producedFrames += framesToCopy;
-                    state->outputCursorFrame += framesToCopy;
-                    continue;
-                }
-            }
+void QtPreviewSfxRuntime::setBackgroundTrackPlaybackRate(double rate)
+{
+    backend_->setBackgroundTrackPlaybackRate(rate);
+}
 
-            if (state->decoderAtEnd) {
-                if (!state->stretcherFlushed) {
-                    state->stretcher.flush();
-                    state->stretcherFlushed = true;
-                    continue;
-                }
-                break;
-            }
+void QtPreviewSfxRuntime::applyLevels(const PreviewAudioSettings& settings)
+{
+    backend_->applyLevels(settings);
+}
 
-            constexpr ma_uint64 kDecodeFrames = 4096;
-            ma_uint64 decodedFrames = 0;
-            const ma_result decodeResult = ma_decoder_read_pcm_frames(
-                &state->decoder,
-                state->decodeChunk.data(),
-                kDecodeFrames,
-                &decodedFrames
-            );
-            if (decodedFrames > 0) {
-                state->stretcher.putSamples(
-                    state->decodeChunk.constData(),
-                    static_cast<unsigned int>(decodedFrames)
-                );
-            }
-            if (decodeResult != MA_SUCCESS || decodedFrames == 0) {
-                state->decoderAtEnd = true;
-            }
-        }
+void QtPreviewSfxRuntime::configureTimeline(
+    const QVector<TimelineNoteMarker>& noteMarkers,
+    double playbackRate,
+    const PreviewTimingSettings& timingSettings)
+{
+    backend_->configureTimeline(noteMarkers, playbackRate, timingSettings);
+}
 
-        if (framesRead != nullptr) {
-            *framesRead = producedFrames;
-        }
-        return producedFrames == requestedFrames ? MA_SUCCESS : MA_AT_END;
-    }
+void QtPreviewSfxRuntime::clearTimeline()
+{
+    backend_->clearTimeline();
+}
 
-    static ma_result seekCallback(ma_data_source* dataSourcePtr, ma_uint64 frameIndex)
-    {
-        StretchedBackgroundState* state = from(dataSourcePtr);
-        if (state == nullptr || !state->decoderInitialized) {
-            return MA_INVALID_OPERATION;
-        }
+void QtPreviewSfxRuntime::setPlaybackTransactionId(quint64 transactionId)
+{
+    backend_->setPlaybackTransactionId(transactionId);
+}
 
-        QMutexLocker locker(&state->mutex);
-        const double sourceFrameAsDouble = static_cast<double>(frameIndex) * state->playbackRate;
-        ma_uint64 sourceFrameIndex = sourceFrameAsDouble <= 0.0
-            ? 0
-            : static_cast<ma_uint64>(sourceFrameAsDouble);
-        if (state->sourceFrameCount > 0) {
-            sourceFrameIndex = qMin(sourceFrameIndex, state->sourceFrameCount - 1);
-        }
-        const ma_result seekResult = ma_data_source_seek_to_pcm_frame(
-            reinterpret_cast<ma_data_source*>(&state->decoder),
-            sourceFrameIndex
-        );
-        if (seekResult != MA_SUCCESS) {
-            return seekResult;
-        }
-        state->stretcher.clear();
-        state->stretcher.setTempo(static_cast<float>(state->playbackRate));
-        state->decoderAtEnd = false;
-        state->stretcherFlushed = false;
-        state->outputCursorFrame = frameIndex;
-        return MA_SUCCESS;
-    }
+double QtPreviewSfxRuntime::preparePreviewPlaybackTransaction(double startSecond, bool resumeFromPause, double playbackRate)
+{
+    return backend_->preparePreviewPlaybackTransaction(startSecond, resumeFromPause, playbackRate);
+}
 
-    static ma_result getDataFormatCallback(
-        ma_data_source* dataSourcePtr,
-        ma_format* format,
-        ma_uint32* channels,
-        ma_uint32* sampleRate,
-        ma_channel* channelMap,
-        size_t channelMapCap
-    )
-    {
-        Q_UNUSED(channelMap);
-        Q_UNUSED(channelMapCap);
-        StretchedBackgroundState* state = from(dataSourcePtr);
-        if (state == nullptr || !state->decoderInitialized) {
-            return MA_INVALID_OPERATION;
-        }
-        if (format != nullptr) {
-            *format = ma_format_f32;
-        }
-        if (channels != nullptr) {
-            *channels = state->channels;
-        }
-        if (sampleRate != nullptr) {
-            *sampleRate = state->sampleRate;
-        }
-        return MA_SUCCESS;
-    }
+void QtPreviewSfxRuntime::commitPreparedPreviewPlayback()
+{
+    backend_->commitPreparedPreviewPlayback();
+}
 
-    static ma_result getCursorCallback(ma_data_source* dataSourcePtr, ma_uint64* cursor)
-    {
-        if (cursor == nullptr) {
-            return MA_INVALID_ARGS;
-        }
-        StretchedBackgroundState* state = from(dataSourcePtr);
-        if (state == nullptr || !state->decoderInitialized) {
-            *cursor = 0;
-            return MA_INVALID_OPERATION;
-        }
-        QMutexLocker locker(&state->mutex);
-        *cursor = state->outputCursorFrame;
-        return MA_SUCCESS;
-    }
+void QtPreviewSfxRuntime::cancelPreparedPreviewPlayback()
+{
+    backend_->cancelPreparedPreviewPlayback();
+}
 
-    static ma_result getLengthCallback(ma_data_source* dataSourcePtr, ma_uint64* length)
-    {
-        if (length == nullptr) {
-            return MA_INVALID_ARGS;
-        }
-        StretchedBackgroundState* state = from(dataSourcePtr);
-        if (state == nullptr || !state->decoderInitialized) {
-            *length = 0;
-            return MA_INVALID_OPERATION;
-        }
-        if (state->stretchedFrameCount == 0) {
-            *length = 0;
-            return MA_NOT_IMPLEMENTED;
-        }
-        *length = state->stretchedFrameCount;
-        return MA_SUCCESS;
-    }
+double QtPreviewSfxRuntime::preparedStartSecond() const
+{
+    return backend_->preparedStartSecond();
+}
 
-    static ma_result setLoopingCallback(ma_data_source* dataSourcePtr, ma_bool32 isLooping)
-    {
-        Q_UNUSED(dataSourcePtr);
-        Q_UNUSED(isLooping);
-        return MA_NOT_IMPLEMENTED;
-    }
-};
+void QtPreviewSfxRuntime::applyPausedPreviewState(
+    const QVector<TimelineNoteMarker>& noteMarkers,
+    bool noteMarkersChanged,
+    double pauseSecond,
+    double playbackRate,
+    const PreviewTimingSettings& timingSettings)
+{
+    backend_->applyPausedPreviewState(noteMarkers, noteMarkersChanged, pauseSecond, playbackRate, timingSettings);
+}
 
+double QtPreviewSfxRuntime::startPreviewPlaybackTransaction(double startSecond, bool resumeFromPause, double playbackRate)
+{
+    return backend_->startPreviewPlaybackTransaction(startSecond, resumeFromPause, playbackRate);
+}
 
-#include "QtPreviewSfxRuntime.Timeline.cpp"
-#include "QtPreviewSfxRuntime.Background.cpp"
-#include "QtPreviewSfxRuntime.Assets.cpp"
-#include "QtPreviewSfxRuntime.Engine.cpp"
-#include "QtPreviewSfxRuntime.Voices.cpp"
+QtPreviewSfxRuntime::PausePreviewResult QtPreviewSfxRuntime::capturePausedPreviewTransaction()
+{
+    return backend_->capturePausedPreviewTransaction();
+}
+
+QtPreviewSfxRuntime::PausePreviewResult QtPreviewSfxRuntime::pausePreviewPlaybackTransaction()
+{
+    return backend_->pausePreviewPlaybackTransaction();
+}
+
+double QtPreviewSfxRuntime::resumeRetainedPreviewPlaybackTransaction()
+{
+    return backend_->resumeRetainedPreviewPlaybackTransaction();
+}
+
+double QtPreviewSfxRuntime::seekRetainedPreviewPlaybackTransaction(double targetSecond, bool continuePlaying)
+{
+    return backend_->seekRetainedPreviewPlaybackTransaction(targetSecond, continuePlaying);
+}
+
+void QtPreviewSfxRuntime::resetRetainedPreviewPlaybackTransaction(double targetSecond)
+{
+    backend_->resetRetainedPreviewPlaybackTransaction(targetSecond);
+}
+
+void QtPreviewSfxRuntime::clearRetainedPreviewPlaybackTransaction()
+{
+    backend_->clearRetainedPreviewPlaybackTransaction();
+}
+
+QtPreviewSfxRuntime::RetainedPlaybackMode QtPreviewSfxRuntime::retainedPlaybackMode() const
+{
+    return backend_->retainedPlaybackMode();
+}
+
+QtPreviewSfxRuntime::RetainedBgmState QtPreviewSfxRuntime::retainedBgmState() const
+{
+    return backend_->retainedBgmState();
+}
+
+double QtPreviewSfxRuntime::authoritativePlaybackSecond() const
+{
+    return backend_->authoritativePlaybackSecond();
+}
+
+double QtPreviewSfxRuntime::syncPreviewPlaybackClockTransaction(double fallbackSecond)
+{
+    return backend_->syncPreviewPlaybackClockTransaction(fallbackSecond);
+}
+
+void QtPreviewSfxRuntime::resetCursor(double second, bool includeCurrentSecond)
+{
+    backend_->resetCursor(second, includeCurrentSecond);
+}
+
+void QtPreviewSfxRuntime::drainEvents(double second)
+{
+    backend_->drainEvents(second);
+}
+
+void QtPreviewSfxRuntime::pauseTouchholdVoices()
+{
+    backend_->pauseTouchholdVoices();
+}
+
+void QtPreviewSfxRuntime::restoreTouchholdVoices(double second)
+{
+    backend_->restoreTouchholdVoices(second);
+}
+
+void QtPreviewSfxRuntime::syncBackgroundTrack(double timelineSecond)
+{
+    backend_->syncBackgroundTrack(timelineSecond);
+}
+
+bool QtPreviewSfxRuntime::hasBackgroundTrack() const
+{
+    return backend_->hasBackgroundTrack();
+}
+
+bool QtPreviewSfxRuntime::isBackgroundTrackRunning() const
+{
+    return backend_->isBackgroundTrackRunning();
+}
+
+void QtPreviewSfxRuntime::startBackgroundTrack(double second)
+{
+    backend_->startBackgroundTrack(second);
+}
+
+void QtPreviewSfxRuntime::seekBackgroundTrack(double second)
+{
+    backend_->seekBackgroundTrack(second);
+}
+
+void QtPreviewSfxRuntime::pauseBackgroundTrack()
+{
+    backend_->pauseBackgroundTrack();
+}
+
+double QtPreviewSfxRuntime::backgroundPlaybackSecond() const
+{
+    return backend_->backgroundPlaybackSecond();
+}
+
+bool QtPreviewSfxRuntime::audition(const QString& kind, double gain)
+{
+    return backend_->audition(kind, gain);
+}
+
+void QtPreviewSfxRuntime::stopAll()
+{
+    backend_->stopAll();
+}

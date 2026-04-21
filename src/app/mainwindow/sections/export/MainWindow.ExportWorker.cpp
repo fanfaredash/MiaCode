@@ -311,8 +311,8 @@ QString buildWorkerProcessDiagnostics(
     if (!stdoutTailText.trimmed().isEmpty()) {
         lines.append(QStringLiteral("stdout_tail: %1").arg(truncateProcessTextForUi(stdoutTailText, 1000)));
     }
-    if (miacode::debug_options::exportDebugOutputEnabled() && !exportLogPath.trimmed().isEmpty()) {
-        lines.append(QStringLiteral("Debug log: %1").arg(exportLogPath));
+    if (!exportLogPath.trimmed().isEmpty()) {
+        lines.append(QStringLiteral("Export log: %1").arg(exportLogPath));
     }
     if (!fatalLogPath.trimmed().isEmpty()) {
         lines.append(QStringLiteral("Error log: %1").arg(fatalLogPath));
@@ -856,6 +856,7 @@ bool MainWindow::ExportSection::launchVideoExportWorker(const VideoExportSnapsho
     progress->setMinimumWidth(320);
     progress->setMaximumWidth(360);
     progress->setValue(0);
+    UiDialogs::configureDialogPreviewShortcuts(progress);
     owner_.windowSection_->applySystemWindowBackdrop(progress);
     if (QLabel* label = progress->findChild<QLabel*>(); label != nullptr) {
         label->setWordWrap(true);
@@ -1253,6 +1254,7 @@ void MainWindow::ExportSection::handleVideoExportWorkerProcessFinished(int exitC
             UiDialogs::effectiveParentWidget(&owner_)
         );
         dialog.setWindowFlag(Qt::WindowContextHelpButtonHint, false);
+        UiDialogs::configureDialogPreviewShortcuts(&dialog);
         UiDialogs::applyDetachedParentBehavior(&dialog, &owner_);
         QPushButton* openButton = dialog.addButton(
             uiText("action.open", "Open"),

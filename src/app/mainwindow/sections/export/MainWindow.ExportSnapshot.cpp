@@ -22,6 +22,45 @@
 using namespace miacode::mainwindow::shared;
 
 namespace {
+double parsedDocumentFirstSeconds(const QString& rawValue, bool* ok = nullptr)
+{
+    const QString trimmed = rawValue.trimmed();
+    bool localOk = false;
+    const double value = trimmed.isEmpty() ? 0.0 : trimmed.toDouble(&localOk);
+    if (ok != nullptr) {
+        *ok = trimmed.isEmpty() ? true : localOk;
+    }
+    return (trimmed.isEmpty() || localOk) ? value : 0.0;
+}
+
+double shiftedTimelineSecond(double second, double offsetSeconds)
+{
+    return second + offsetSeconds;
+}
+
+QVector<TimelineNoteMarker> shiftedNoteMarkers(
+    const QVector<TimelineNoteMarker>& noteMarkers,
+    double offsetSeconds)
+{
+    QVector<TimelineNoteMarker> shifted = noteMarkers;
+    for (TimelineNoteMarker& marker : shifted) {
+        marker.second = shiftedTimelineSecond(marker.second, offsetSeconds);
+        if (marker.endSecond >= 0.0) {
+            marker.endSecond = shiftedTimelineSecond(marker.endSecond, offsetSeconds);
+        }
+        if (marker.slideTraceSecond >= 0.0) {
+            marker.slideTraceSecond = shiftedTimelineSecond(marker.slideTraceSecond, offsetSeconds);
+        }
+        if (marker.availableSecond >= 0.0) {
+            marker.availableSecond = shiftedTimelineSecond(marker.availableSecond, offsetSeconds);
+        }
+        for (double& shootSecond : marker.slideSegmentShootSeconds) {
+            shootSecond = shiftedTimelineSecond(shootSecond, offsetSeconds);
+        }
+    }
+    return shifted;
+}
+
 QString sanitizeExportFileStem(QString text, const QString& fallback = QStringLiteral("out"))
 {
     text = text.trimmed();
@@ -341,13 +380,16 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     built.skinDirectory = owner_.resolvePreviewSkinDir();
     built.audioSettings = owner_.previewAudioSettings_;
     built.audioSettings.normalize();
+    built.timingSettings = owner_.previewTimingSettings_;
+    built.timingSettings.normalize();
     built.backgroundBrightnessOuter = requestedTask.backgroundBrightnessOuter;
     built.backgroundBrightnessInner = requestedTask.backgroundBrightnessInner;
     built.layoutSquareScale = requestedTask.layoutSquareScale;
     built.smoothBrightness = requestedTask.smoothBrightness;
     built.outlineVariant = requestedTask.outlineVariant;
     built.backgroundScaleMode = requestedTask.backgroundScaleMode;
-    built.noteFlowSpeed = requestedTask.noteFlowSpeed;
+    built.tapFlowSpeed = requestedTask.tapFlowSpeed;
+    built.touchFlowSpeed = requestedTask.touchFlowSpeed;
     built.slideEarlierSecondAndTextOnTop = requestedTask.slideEarlierSecondAndTextOnTop;
     built.muriRenderOptions = requestedTask.muriRenderOptions;
     built.staticTapOnSlideThresholdSeconds = requestedTask.staticTapOnSlideThresholdSeconds;
@@ -493,8 +535,20 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
         }
         return qMax(0.0, value);
     };
+    bool firstOk = false;
+    const double firstSeconds = parsedDocumentFirstSeconds(document.first, &firstOk);
+    if (!firstOk) {
+        if (errorMessage != nullptr) {
+            *errorMessage = uiText(
+                "dialog.batch_export.error.invalid_first",
+                "Invalid &first value in chart metadata."
+            );
+        }
+        return false;
+    }
+    const QVector<TimelineNoteMarker> shiftedMarkers = shiftedNoteMarkers(parsedTimeline.noteMarkers, firstSeconds);
     double lastMarkerEndSecond = 0.0;
-    for (const TimelineNoteMarker& marker : parsedTimeline.noteMarkers) {
+    for (const TimelineNoteMarker& marker : shiftedMarkers) {
         lastMarkerEndSecond = qMax(lastMarkerEndSecond, markerEndSecond(marker));
     }
     const double trackDurationSeconds = probeAudioDurationSeconds(trackPath);
@@ -536,13 +590,16 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
     built.skinDirectory = owner_.resolvePreviewSkinDir();
     built.audioSettings = requestedTask.audioSettings;
     built.audioSettings.normalize();
+    built.timingSettings = requestedTask.timingSettings;
+    built.timingSettings.normalize();
     built.backgroundBrightnessOuter = requestedTask.backgroundBrightnessOuter;
     built.backgroundBrightnessInner = requestedTask.backgroundBrightnessInner;
     built.layoutSquareScale = requestedTask.layoutSquareScale;
     built.smoothBrightness = requestedTask.smoothBrightness;
     built.outlineVariant = requestedTask.outlineVariant;
     built.backgroundScaleMode = requestedTask.backgroundScaleMode;
-    built.noteFlowSpeed = requestedTask.noteFlowSpeed;
+    built.tapFlowSpeed = requestedTask.tapFlowSpeed;
+    built.touchFlowSpeed = requestedTask.touchFlowSpeed;
     built.slideEarlierSecondAndTextOnTop = requestedTask.slideEarlierSecondAndTextOnTop;
     built.muriRenderOptions = requestedTask.muriRenderOptions;
     built.staticTapOnSlideThresholdSeconds = requestedTask.staticTapOnSlideThresholdSeconds;
@@ -729,13 +786,15 @@ bool MainWindow::ExportSection::exportPreviewVideoFromCli(
     task.muriRenderOptions = owner_.muriRenderOptions_;
     task.staticTapOnSlideThresholdSeconds = static_cast<double>(owner_.staticTapOnSlideThresholdMs_) / 1000.0;
     task.audioSettings = owner_.previewAudioSettings_;
+    task.timingSettings = owner_.previewTimingSettings_;
     task.backgroundBrightnessOuter = request.backgroundBrightnessOuter;
     task.backgroundBrightnessInner = request.backgroundBrightnessInner;
     task.layoutSquareScale = request.layoutSquareScale;
     task.smoothBrightness = request.smoothBrightness;
     task.outlineVariant = request.outlineVariant;
     task.backgroundScaleMode = request.backgroundScaleMode;
-    task.noteFlowSpeed = request.noteFlowSpeed;
+    task.tapFlowSpeed = request.noteFlowSpeed;
+    task.touchFlowSpeed = request.touchFlowSpeed;
     task.slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
     task.exportStartSeconds = exportStartSeconds;
     task.contentDurationSeconds = contentDurationSeconds;

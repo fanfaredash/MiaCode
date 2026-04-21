@@ -14,6 +14,7 @@ public:
     int activeDifficultyId() const;
     QString activeChartText() const;
     miacode::simai::SimaiTimingMetadata currentTimingMetadata() const;
+    double parsedRawFirstSeconds(bool* ok = nullptr) const;
     double parsedFirstSeconds(bool* ok = nullptr) const;
     double parsedWholeBpm(bool* ok = nullptr) const;
     QString parsedLatencyMeterId() const;
@@ -27,6 +28,15 @@ public:
     void refreshTimelineMetadata();
     void applyTimelineQuickChange(int position, int charsRemoved, int charsAdded);
     void refreshTimelineQuickModelFromCurrentText();
+    bool timelineTabIsForeground() const;
+    bool quickTimelineBridgeReady() const;
+    void flushDeferredTimelineBridgeState();
+    void onTimelineHeaderNavigateRequested(double second);
+    void onTimelineUserInteractionStarted();
+    void onTimelineDragStarted();
+    void onTimelineCenterNavigateRequested(double second);
+    void onTimelineDragFinished(double second);
+    void onTimelineFollowPreviewToggled(bool enabled);
     void applyLatestTimelinePreviewStateToPausedPreview();
     void requestTimelineSlowRefresh();
     void dispatchTimelineSlowRefresh();
@@ -77,6 +87,7 @@ public:
     double currentPreviewCanvasRefreshRate() const;
     bool previewCanvasUsesFrameSwappedPacing() const;
     qint64 previewCanvasTargetFrameIntervalNs() const;
+    qint64 timelineTargetFrameIntervalNs() const;
     double fixedIntervalPreviewSecondForDeadlineNs(qint64 deadlineNs) const;
     void resetQtPreviewFixedFramePacing();
     void scheduleNextQtPreviewTick();
@@ -134,9 +145,16 @@ public:
     void jumpToNearestTimelineNote(double second, int lane);
 
 private:
+    void queueTimelineCursorBridgeUpdate(double second, bool centerView);
+    void invalidatePreviewFollowBindingCache();
+    bool cachedPreviewFollowBindingContainsSecond(double second) const;
+    void cachePreviewFollowBinding(const TimelineQuickModel::PreviewFollowBinding& binding);
     void cancelPreviewStartupSync();
     void tryCommitPreviewStartupSync();
-    double currentPreviewPlaybackClockSecond() const;
+    void stopQtPreviewTimers();
+    void finalizeQtPreviewPlaybackStart(double effectiveStartSecond);
+    void pauseQtPreviewPlaybackExact();
+    void anchorQtPreviewPlaybackToSecond(double second, bool centerView);
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;
     MainWindow::MainWindowState& state_;

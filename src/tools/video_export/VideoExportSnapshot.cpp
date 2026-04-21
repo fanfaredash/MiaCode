@@ -101,11 +101,8 @@ double parsedFirstSeconds(const QString& rawValue)
 {
     bool ok = false;
     const QString trimmed = rawValue.trimmed();
-    if (trimmed.isEmpty()) {
-        return 0.0;
-    }
-    const double value = trimmed.toDouble(&ok);
-    return ok ? value : 0.0;
+    const double value = trimmed.isEmpty() ? 0.0 : trimmed.toDouble(&ok);
+    return (trimmed.isEmpty() || ok) ? value : 0.0;
 }
 
 double shiftedTimelineSecond(double second, double offsetSeconds)
@@ -172,7 +169,8 @@ QJsonObject VideoExportSnapshot::toJson() const
     render.insert(QStringLiteral("smooth_brightness"), smoothBrightness);
     render.insert(QStringLiteral("outline_variant"), outlineVariantToken(outlineVariant));
     render.insert(QStringLiteral("background_scale_mode"), backgroundScaleModeToken(backgroundScaleMode));
-    render.insert(QStringLiteral("note_flow_speed"), noteFlowSpeed);
+    render.insert(QStringLiteral("tap_flow_speed"), tapFlowSpeed);
+    render.insert(QStringLiteral("touch_flow_speed"), touchFlowSpeed);
     render.insert(QStringLiteral("slide_earlier_second_and_text_on_top"), slideEarlierSecondAndTextOnTop);
     render.insert(QStringLiteral("render_mode"), renderModeToken(muriRenderOptions.renderMode));
     render.insert(QStringLiteral("show_slide_tracks"), muriRenderOptions.showSlideTracks);
@@ -194,6 +192,7 @@ QJsonObject VideoExportSnapshot::toJson() const
     root.insert(QStringLiteral("render"), render);
 
     root.insert(QStringLiteral("audio"), audioSettings.toJson());
+    root.insert(QStringLiteral("timing"), timingSettings.toJson());
 
     QJsonObject exportObject;
     exportObject.insert(QStringLiteral("start_seconds"), exportStartSeconds);
@@ -258,8 +257,15 @@ bool VideoExportSnapshot::fromJson(
         outlineVariantFromToken(render.value(QStringLiteral("outline_variant")).toString());
     parsed.backgroundScaleMode =
         backgroundScaleModeFromToken(render.value(QStringLiteral("background_scale_mode")).toString());
-    parsed.noteFlowSpeed =
-        render.value(QStringLiteral("note_flow_speed")).toDouble(parsed.noteFlowSpeed);
+    const double legacyFlowSpeed = render.value(QStringLiteral("note_flow_speed")).toDouble(
+        miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed
+    );
+    parsed.tapFlowSpeed = render.value(QStringLiteral("tap_flow_speed")).toDouble(
+        render.contains(QStringLiteral("note_flow_speed")) ? legacyFlowSpeed : parsed.tapFlowSpeed
+    );
+    parsed.touchFlowSpeed = render.value(QStringLiteral("touch_flow_speed")).toDouble(
+        render.contains(QStringLiteral("note_flow_speed")) ? legacyFlowSpeed : parsed.touchFlowSpeed
+    );
     parsed.slideEarlierSecondAndTextOnTop =
         render.value(QStringLiteral("slide_earlier_second_and_text_on_top"))
             .toBool(parsed.slideEarlierSecondAndTextOnTop);
@@ -292,6 +298,8 @@ bool VideoExportSnapshot::fromJson(
 
     parsed.audioSettings = PreviewAudioSettings::fromJson(object.value(QStringLiteral("audio")).toObject());
     parsed.audioSettings.normalize();
+    parsed.timingSettings = PreviewTimingSettings::fromJson(object.value(QStringLiteral("timing")).toObject());
+    parsed.timingSettings.normalize();
 
     const QJsonObject exportObject = object.value(QStringLiteral("export")).toObject();
     parsed.exportStartSeconds = exportObject.value(QStringLiteral("start_seconds")).toDouble(parsed.exportStartSeconds);
@@ -366,13 +374,16 @@ bool buildVideoExportTaskFromSnapshot(
     built.noteMarkers = shiftedNoteMarkers(nativeResult.noteMarkers, firstSeconds);
     built.audioSettings = snapshot.audioSettings;
     built.audioSettings.normalize();
+    built.timingSettings = snapshot.timingSettings;
+    built.timingSettings.normalize();
     built.backgroundBrightnessOuter = snapshot.backgroundBrightnessOuter;
     built.backgroundBrightnessInner = snapshot.backgroundBrightnessInner;
     built.layoutSquareScale = snapshot.layoutSquareScale;
     built.smoothBrightness = snapshot.smoothBrightness;
     built.outlineVariant = snapshot.outlineVariant;
     built.backgroundScaleMode = snapshot.backgroundScaleMode;
-    built.noteFlowSpeed = snapshot.noteFlowSpeed;
+    built.tapFlowSpeed = snapshot.tapFlowSpeed;
+    built.touchFlowSpeed = snapshot.touchFlowSpeed;
     built.slideEarlierSecondAndTextOnTop = snapshot.slideEarlierSecondAndTextOnTop;
     built.muriRenderOptions = snapshot.muriRenderOptions;
     built.staticTapOnSlideThresholdSeconds = snapshot.staticTapOnSlideThresholdSeconds;

@@ -3,13 +3,14 @@ cmake_minimum_required(VERSION 3.21)
 set(MIACODE_VERSION_MAJOR "0")
 set(MIACODE_VERSION_MINOR "4")
 set(MIACODE_VERSION_PATCH "0")
-set(MIACODE_VERSION_PRERELEASE "beta10")
+set(MIACODE_VERSION_PRERELEASE "beta16")
+set(MIACODE_BUILD_LAYOUT_REVISION "2026-04-21-first-unification")
 set(MIACODE_VERSION "${MIACODE_VERSION_MAJOR}.${MIACODE_VERSION_MINOR}.${MIACODE_VERSION_PATCH}")
 set(MIACODE_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_VERSION_PRERELEASE}" STREQUAL "")
     set(MIACODE_VERSION_STRING "${MIACODE_VERSION}-${MIACODE_VERSION_PRERELEASE}")
 endif()
-set(MIACODE_DISPLAY_PRERELEASE "beta10")
+set(MIACODE_DISPLAY_PRERELEASE "beta16")
 set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_VERSION}")
 if (NOT "${MIACODE_DISPLAY_PRERELEASE}" STREQUAL "")
     set(MIACODE_DISPLAY_VERSION_STRING "${MIACODE_DISPLAY_VERSION_STRING}-${MIACODE_DISPLAY_PRERELEASE}")
@@ -91,6 +92,7 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp
     src/app/mainwindow/sections/validation/MainWindow.ValidationRender.cpp
     src/app/mainwindow/sections/validation/MainWindow.ValidationRuntime.cpp
+    src/app/mainwindow/sections/window/MainWindow.BottomTabsHost.cpp
     src/app/mainwindow/sections/window/MainWindow.WindowInteraction.cpp
     src/app/mainwindow/sections/window/MainWindow.WindowRuntime.cpp
     src/app/mainwindow/sections/window/MainWindow.WindowSection.cpp
@@ -109,8 +111,11 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/DebugLog.cpp
     src/common/DebugImageCompare.h
     src/common/ChartAssetPaths.h
+    src/common/TimelineThemeConfig.h
     src/common/WaveformCache.h
     src/common/WaveformCache.cpp
+    src/common/PreviewTimingSettings.h
+    src/common/PreviewSfxTiming.h
     src/common/PreviewSfxTimeline.h
     src/editor/PlainCodeEditor.h
     src/editor/PlainCodeEditor.cpp
@@ -248,8 +253,13 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/quick_scene/PreviewQuickSceneRoot.h
     src/preview/quick_scene/PreviewQuickSceneRoot.cpp
     src/preview/quick_scene/PreviewQuickSceneInvalidationPolicy.h
+    src/preview/audio/PreviewAudioBackend.h
     src/preview/audio/PreviewAudioSettings.h
     src/preview/audio/PreviewAudioSettings.cpp
+    src/preview/audio/BassPreviewAudioBackend.h
+    src/preview/audio/BassPreviewAudioBackend.cpp
+    src/preview/audio/MiniaudioPreviewAudioBackend.h
+    src/preview/audio/MiniaudioPreviewAudioBackend.cpp
     src/preview/audio/QtPreviewSfxRuntime.h
     src/preview/audio/QtPreviewSfxRuntime.cpp
     src/simai/transform/ChartBatchTransform.h
@@ -266,10 +276,34 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/TimelineRenderData.h
     src/timeline/TimelineQuickModel.h
     src/timeline/TimelineQuickModel.cpp
+    src/timeline/TimelineSceneState.h
+    src/timeline/TimelineSceneState.cpp
+    src/timeline/TimelineSceneStateBuilder.h
+    src/timeline/TimelineSceneStateBuilder.cpp
+    src/timeline/TimelineNoteAssets.h
+    src/timeline/TimelineNoteAssets.cpp
     src/timeline/TimelineSlowRefresh.h
     src/timeline/TimelineSlowRefresh.cpp
     src/timeline/TimelineView.h
     src/timeline/TimelineView.cpp
+    src/timeline/quick/TimelineQuickItem.h
+    src/timeline/quick/TimelineQuickItem.cpp
+    src/timeline/quick/TimelineQuickStateBridge.h
+    src/timeline/quick/TimelineQuickStateBridge.cpp
+    src/timeline/quick/TimelineQuickTextureCache.h
+    src/timeline/quick/TimelineQuickTextureCache.cpp
+    src/timeline/quick/TimelineQuickLayerUtils.h
+    src/timeline/quick/TimelineQuickLayerUtils.cpp
+    src/timeline/quick/TimelineQuickGridLayer.h
+    src/timeline/quick/TimelineQuickGridLayer.cpp
+    src/timeline/quick/TimelineQuickWaveformLayer.h
+    src/timeline/quick/TimelineQuickWaveformLayer.cpp
+    src/timeline/quick/TimelineQuickHeaderLayer.h
+    src/timeline/quick/TimelineQuickHeaderLayer.cpp
+    src/timeline/quick/TimelineQuickNotesLayer.h
+    src/timeline/quick/TimelineQuickNotesLayer.cpp
+    src/timeline/quick/TimelineQuickOverlayLayer.h
+    src/timeline/quick/TimelineQuickOverlayLayer.cpp
     resources/app_icons.qrc
     resources/fonts.qrc
     resources/preview_runtime_qml.qrc
@@ -340,6 +374,7 @@ target_link_libraries(MiaCode PRIVATE
 )
 target_include_directories(MiaCode PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/generated
+    third_party/bass/include
     src
     src/app
     src/app/quick_shell
@@ -358,6 +393,33 @@ target_include_directories(MiaCode PRIVATE
     src/tools/latency
     src/tools/video_export
 )
+
+target_sources(MiaCode PRIVATE
+    src/common/PreviewAudioMixConfig.h
+    src/tools/video_export/VideoExportAudioRenderPlan.h
+    src/tools/video_export/VideoExportAudioRenderPlan.cpp
+    src/tools/video_export/VideoExportAudioBackend.h
+    src/tools/video_export/LegacyExportAudioBackend.h
+    src/tools/video_export/LegacyExportAudioBackend.cpp
+    src/tools/video_export/BassExportAudioBackend.h
+    src/tools/video_export/BassExportAudioBackend.cpp
+)
+
+if (WIN32)
+    target_link_libraries(MiaCode PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
+    )
+    add_custom_command(TARGET MiaCode POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass.dll"
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassmix.dll"
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_fx.dll"
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_aac.dll"
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassopus.dll"
+            $<TARGET_FILE_DIR:MiaCode>
+    )
+endif()
 
 target_link_libraries(MiaCode PRIVATE Qt6::Multimedia)
 target_compile_definitions(MiaCode PRIVATE HAVE_QT_MULTIMEDIA=1)
@@ -396,9 +458,14 @@ if (MIACODE_BUILD_DEV_TOOLS)
     )
 
     add_executable(soundtouch_probe
+        src/preview/audio/PreviewAudioBackend.h
         src/tools/probe/SoundtouchProbe.cpp
         src/preview/audio/PreviewAudioSettings.h
         src/preview/audio/PreviewAudioSettings.cpp
+        src/preview/audio/BassPreviewAudioBackend.h
+        src/preview/audio/BassPreviewAudioBackend.cpp
+        src/preview/audio/MiniaudioPreviewAudioBackend.h
+        src/preview/audio/MiniaudioPreviewAudioBackend.cpp
         src/preview/audio/QtPreviewSfxRuntime.h
         src/preview/audio/QtPreviewSfxRuntime.cpp
         src/common/DebugLog.h
@@ -554,9 +621,19 @@ if (MIACODE_BUILD_DEV_TOOLS)
 
     add_executable(preview_sfx_timeline_spec
         src/tools/preview/PreviewSfxTimelineSpec.cpp
+        src/common/PreviewTimingSettings.h
+        src/common/PreviewSfxTiming.h
         src/common/PreviewSfxTimeline.h
         src/common/PreviewGameplayConfig.h
         src/timeline/TimelineData.h
+    )
+
+    add_executable(preview_audio_settings_spec
+        src/tools/preview/PreviewAudioSettingsSpec.cpp
+        src/preview/audio/PreviewAudioSettings.h
+        src/preview/audio/PreviewAudioSettings.cpp
+        src/common/PreviewSfxAssets.h
+        src/common/PreviewSfxSemantics.h
     )
 
     add_executable(quickshell_preview_surface_policy_spec
@@ -568,6 +645,23 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/tools/video_export/VideoExportRuntimePolicySpec.cpp
         src/tools/video_export/VideoExportRuntimePolicy.h
         src/tools/video_export/VideoExportRuntimePolicy.cpp
+    )
+
+    add_executable(video_export_audio_render_plan_spec
+        src/tools/video_export/VideoExportAudioRenderPlanSpec.cpp
+        src/tools/video_export/VideoExportAudioRenderPlan.h
+        src/tools/video_export/VideoExportAudioRenderPlan.cpp
+        src/tools/video_export/VideoExportController.h
+        src/common/PreviewAudioMixConfig.h
+        src/common/PreviewTimingSettings.h
+        src/common/PreviewSfxTiming.h
+        src/common/PreviewSfxTimeline.h
+        src/common/PreviewSfxAssets.h
+        src/common/PreviewSfxSemantics.h
+        src/common/VideoExportConfig.h
+        src/preview/audio/PreviewAudioSettings.h
+        src/preview/audio/PreviewAudioSettings.cpp
+        src/timeline/TimelineData.h
     )
 
     target_link_libraries(miacode_muri_dump PRIVATE
@@ -619,6 +713,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
         soundtouch
     )
     target_include_directories(soundtouch_probe PRIVATE
+        third_party/bass/include
         src
         src/preview
         src/preview/audio
@@ -626,6 +721,22 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/timeline
         src/tools
     )
+
+    if (WIN32)
+        target_link_libraries(soundtouch_probe PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
+        )
+        add_custom_command(TARGET soundtouch_probe POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass.dll"
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassmix.dll"
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_fx.dll"
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_aac.dll"
+                "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassopus.dll"
+                $<TARGET_FILE_DIR:soundtouch_probe>
+        )
+    endif()
 
     target_link_libraries(chart_batch_transform_spec PRIVATE
         Qt6::Core
@@ -746,6 +857,16 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/timeline
     )
 
+    target_link_libraries(preview_audio_settings_spec PRIVATE
+        Qt6::Core
+    )
+    target_include_directories(preview_audio_settings_spec PRIVATE
+        src
+        src/common
+        src/preview
+        src/preview/audio
+    )
+
     target_link_libraries(quickshell_preview_surface_policy_spec PRIVATE
         Qt6::Core
     )
@@ -760,6 +881,20 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_include_directories(video_export_runtime_policy_spec PRIVATE
         src
         src/tools
+    )
+
+    target_link_libraries(video_export_audio_render_plan_spec PRIVATE
+        Qt6::Core
+        Qt6::Gui
+    )
+    target_include_directories(video_export_audio_render_plan_spec PRIVATE
+        src
+        src/common
+        src/preview/audio
+        src/preview/video
+        src/timeline
+        src/tools
+        src/tools/video_export
     )
 endif()
 

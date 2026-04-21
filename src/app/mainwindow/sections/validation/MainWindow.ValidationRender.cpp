@@ -7,12 +7,24 @@
 #include "UiText.h"
 #include "UiTheme.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 
 #include <QtCore>
 #include <QtGui>
 #include <QtWidgets>
 
 using namespace miacode::mainwindow::shared;
+
+namespace {
+
+bool previewConsumesMuriAnalysisReport(const MuriRenderOptions& options)
+{
+    return options.renderMode == RenderMode::MaimuriDxStyle
+        || options.showJudgeMarkers
+        || options.showTouchTrail;
+}
+
+}  // namespace
 
 const MuriAnalysisReport& MainWindow::ValidationSection::alignedMuriAnalysisReportForPreview() const
 {
@@ -25,12 +37,15 @@ const MuriAnalysisReport& MainWindow::ValidationSection::alignedMuriAnalysisRepo
 
 void MainWindow::ValidationSection::applyAlignedMuriAnalysisReportToViews()
 {
+    static const MuriAnalysisReport kEmptyReport;
     const MuriAnalysisReport& alignedReport = alignedMuriAnalysisReportForPreview();
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->setMuriAnalysisReport(alignedReport);
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setMuriAnalysisReport(alignedReport);
     }
     if (state_.previewCanvas_ != nullptr) {
-        state_.previewCanvas_->setMuriAnalysisReport(alignedReport);
+        state_.previewCanvas_->setMuriAnalysisReport(
+            previewConsumesMuriAnalysisReport(state_.muriRenderOptions_) ? alignedReport : kEmptyReport
+        );
     }
 }
 
@@ -159,8 +174,8 @@ void MainWindow::ValidationSection::applyMuriRenderOptions()
             makeMenuSelectionCheckIcon(UiTheme::colors().accent, ui_.renderModeMaimuriDxAction_->isChecked())
         );
     }
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->setShowSlideTracks(state_.muriRenderOptions_.showSlideTracks);
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setShowSlideTracks(state_.muriRenderOptions_.showSlideTracks);
     }
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setMuriRenderOptions(state_.muriRenderOptions_);

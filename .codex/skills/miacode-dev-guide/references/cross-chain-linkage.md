@@ -37,12 +37,18 @@ Implication:
 - Runtime and export layer order are both owned by `PreviewQuickSceneRoot` plus `PreviewLayerOrder.h`. If you change layer ordering or add a new visible layer, review `src/preview/scene/PreviewLayerOrder.h`, `src/preview/quick_scene/*`, and `src/tools/video_export/VideoExportQuickRenderBackend.*` together.
 - Firework overlay visuals now depend on the custom `PreviewQuickJudgeFireworkLayer` material path rather than pie-sector geometry plus sprite overlays. If you change firework timing curves, additive blending, source texture use, hole-mask math, or stage clipping, review `src/preview/scene/PreviewJudgeFireworkLayerState.*`, `src/preview/quick_scene/PreviewQuickJudgeFireworkLayer.*`, `src/preview/quick_scene/shaders/PreviewFireworkMaterial.*`, and the historical `PreviewCanvas` reference behavior together. The legacy contract is a playfield-centered judgment-ring clip, not a second local clip around the trigger point.
 - While preview playback is running, slow-refresh note-marker updates still feed the latest validation and Muri worker inputs, but preview audio/canvas/object stats stay on the frozen play-start snapshot until playback stops; validation and Muri panel/decorations may defer their visible UI apply until playback returns to a paused state.
+- When preview is paused or idle, Muri analysis should still publish fresh overlay state into preview/timeline as soon as the aligned report lands, but the full bottom-tab Muri list may stay lazily materialized until the `Muri` tab is actually visible. Keep summary chips and overlay alignment up to date even when the hidden tab content is stale on purpose.
 - Preview object stats now share one `PreviewProgressStatsCache` across realtime HUD, the main-window side stats card, and export HUD rendering. Hold-family played counts and score-style progress must use judge/end timing in every consumer; if you touch the cache, keep that timing aligned with the HUD's finale/deluxe progression.
 - Analysis-only setting changes such as Muri render mode, the static tap-on-slide threshold, or touch-exclusion rules for multi-touch should prefer reusing the latest preview snapshot and cached parse result instead of forcing another full slow refresh.
 - Preview play/resume must use the latest in-memory field state, not a forced disk save. If slow refresh is still behind `timelineRevision_`, playback start may synchronously rebuild a preview-only note-marker snapshot once before audio/video start so the next resume does not wait for validation or Muri workers.
 - Realtime preview startup is now split: chart canvas, background track, and SFX form the strong-sync group, while background video is weak-sync only. Playback must wait for the target canvas frame plus prepared audio/SFX state before commit, but stage media prepare / late-start must never block that commit.
+- Preview startup should not force a synchronous quick-timeline `centerOnSecond(...)` pass before the strong-sync group commits. Seed the pending timeline second / playback-entry state and let the normal post-commit playback/timeline timers drive the first centered bridge update; otherwise the startup path can re-enter timeline scene building while audio/video startup state is still mid-transaction.
 - Slow refresh may publish the preview-only note-marker snapshot before validation finishes. Resume-time preview freshness should not wait for the strict validation half of slow refresh.
 - If preview play/resume is requested before the current revision's preview snapshot is ready, the request should wait in memory and auto-start once the preview snapshot for that same revision and difficulty lands. Validation completion must not gate that auto-start.
+- Difficulty switching now intentionally clears the quick-timeline snapshot, preview note-marker snapshot, follow decorations, and pending bridge cursor/playhead state before the replacement refresh is queued on the next event-loop turn. Do not restore synchronous "switch field and rebuild everything in the same stack" behavior unless you re-check the stale-location risk across editor follow, preview startup, and Muri alignment.
+- Preview follow is now editor-first and quick-model-driven: `TimelineQuickModel` precomputes stable follow buckets from parsed anchor timing plus shared follow spans, playback-time editor follow only consumes the current authoritative preview second against those buckets, and the timeline bridge remains a passive cursor/playhead mirror. While the Timeline tab is hidden, keep editor follow working from the quick model and cache bridge cursor/playhead updates until the Timeline tab is foreground again instead of reintroducing offscreen `centerOnSecond(...)` work.
+- While preview follow is enabled during playback, do not keep pushing Timeline `C` from follow bindings. Let Timeline `R` stay the only high-cadence playback indicator, render `R` below `C`, and leave `C` at its last manual/editor-driven position until the user moves the cursor again after playback stops.
+- In `quickshell-beta`, do not construct or attach the legacy `TimelineView` just to host Timeline state. `TimelineQuickStateBridge` must be able to run without a QWidget reference view there, and bottom-tabs Timeline routing/visibility must remain valid even when the Timeline tab is a pure quickshell logical page.
 - Paused preview is intentionally silent for touch-hold sustain audio: `MainWindow::applyLatestTimelinePreviewStateToPausedPreview` must keep touch-hold voices paused, and only playback-start/resume paths should call `QtPreviewSfxRuntime::restoreTouchholdVoices`.
 - Paused preview and timeline overlays must only apply a `MuriAnalysisReport` whose `noteMarkerSignature` matches the currently published preview snapshot. If slow refresh publishes new note markers before analysis finishes, clear/rehold the review overlay instead of mixing a stale report with fresh markers.
 
@@ -52,6 +58,7 @@ Current contract:
 
 - `SimaiDocument` stores raw `first`.
 - `MainWindow::parsedFirstSeconds` is the main getter.
+- preview/export `first` now uses the finite parsed raw `&first` value directly; do not maintain a second inverted "effectiveFirst" concept
 - `TimelineQuickModel` receives `first` on every fast-path rebuild or incremental edit apply.
 - `buildTimelineSlowRefreshResult` shifts parser-produced beat/note markers by `first`.
 - `MainWindow::applyLatencyDetectorOffset` writes raw `first` back into the document.
@@ -90,12 +97,19 @@ If you change timing-metadata semantics, review all of:
 Canonical sync pair:
 
 - Runtime: `src/preview/audio/QtPreviewSfxRuntime.Timeline.cpp`, `QtPreviewSfxRuntime::configureTimeline`
-- Export: `src/tools/video_export/VideoExportController.cpp`, `buildSfxTimeline`
+- Export: `src/tools/video_export/VideoExportAudioRenderPlan.cpp`, `buildVideoExportAudioRenderPlan`; `src/tools/video_export/VideoExportAudioBackend.h`, `VideoExportAudioBackend::renderMixedTrackToWav`
+
+Current runtime ownership note:
+
+- `QtPreviewSfxRuntime` is now the stable facade owned by `MainWindow`, while concrete runtime behavior lives behind `src/preview/audio/PreviewAudioBackend.h`.
+- `MiniaudioPreviewAudioBackend` now remains the non-Windows compatibility implementation and still owns the existing `QtPreviewSfxRuntime.*.cpp` split internals.
+- `BassPreviewAudioBackend` now owns the Windows preview-time BASS transport path with no Windows-side miniaudio fallback: repo-local runtime DLL loading, the master mixer authority clock, preloaded note-SFX channels, background-track tempo control through `bass_fx`, and backend-side event draining. It also keeps a lightweight rolling scheduler by arming only the next mixer sync position at a time instead of relying on UI tick direct one-shots.
 
 Shared concerns:
 
 - which note kinds emit `answer`, `judge`, `break`, `ex`, `touch`, `touchhold`, `firework`
-- `answer` hit-confirm timing is intentionally pre-triggered by `1/60 s` in the shared timeline builder; keep runtime preview and export aligned, and clamp partial-export boundary answers to frame 0 instead of dropping them
+- shared timing semantics now live in `src/common/PreviewTimingSettings.h` plus `src/common/PreviewSfxTiming.h`; `&first` currently uses the finite parsed raw document value directly, `audioOffset` is the whole-SFX chart-domain shift, `displayOffset` advances the `answer` / `judge` families, `answerOffset` stays answer-only, and `judgeOffset` stays judge-only
+- `&first` no longer flows through a separate preview-global helper or repo-wide fixed lead-in layer; `PreviewSfxTiming.h` still keeps a fixed real-time `1/60 s` pre-trigger for `answer` plus tap/hold/touch-family `judge` SFX only, while slide / break-slide / firework / touchhold sustain timing should still be compared against the chart-domain shift without inheriting that extra note-category pre-trigger
 - touch and touch-hold still emit `answer` when `isFirework` is set; firework is additive rather than replacing the hit-confirm sound
 - touch-hold tail timing must mirror hold tail timing for `answer`: when `endSecond > second`, both note kinds emit a second `answer` at the tail while touch-hold still keeps its sustain start/stop span events
 - head-star behavior for slide and wifi
@@ -109,6 +123,7 @@ Shared concerns:
 - break-slide tails now emit `break + judge_break_slide`; do not restore the legacy `break_slide_finish` event on only one side
 - firework timing offsets
 - partial export timing: when the export request is not marked as full-range, export now uses a 1.0-second preload (full-range still keeps its 3.0-second lead-in), and the exported marker set is filtered up front by `marker.second` within the simulated frame window `[timelineOriginSecond, R]`; preview/export rendering, Muri overlays, and export SFX all consume that same filtered marker set
+- same-second collapse, latest-wins scheduling, and partial-export answer clamping are shared in `src/common/PreviewSfxTimeline.h`; keep runtime `drainEvents(...)`, export render-plan building, and export backend rendering on that common path, and pass the same playback-rate / timing-settings inputs into both sides
 
 If one side changes, inspect the other side in the same patch.
 
@@ -118,10 +133,19 @@ Current contract:
 
 - Shared resolver: `miacode::chart_assets::resolveBackgroundMediaPath`
 - Route coordinator: `src/app/mainwindow/sections/preview/MainWindow.PreviewStageMediaRoute.cpp`
+- Shared preview-time audio clock getter: `MainWindow::currentPreviewAuthoritativeAudioClockSecond`
 - Widget-shell preview route: `MainWindow::previewStageMediaRoute` selects `PreviewMediaController`, and `PreviewRuntime` keeps background media on the internal stage layer for both `bg.png` and `bg.mp4` / `pv.mp4`
 - Quickshell-beta preview host route: `MainWindow::previewStageMediaRoute` selects `PreviewStageMediaHost` for both background images and videos
 - Quickshell-beta presentation split: `QuickShellPreviewSurface.qml` keeps inline presentation for images and no-media states, while `QuickShellPreviewCompositeSurface` hosts `QuickShellPreviewSurface.qml` inside a dedicated `QQuickView` whenever the active quickshell media is video
-- Export route: export stays separate from the preview host split and still consumes the shared resolver through `VideoExportController`
+- Export route: export stays separate from the preview host split and still consumes the shared resolver through `VideoExportController`; Windows export audio now renders a single mixed WAV through `BassExportAudioBackend`, while non-Windows keeps `LegacyExportAudioBackend` as a non-parity fallback
+
+Timing contract:
+
+- Preview UI follow, export-dialog current second, and weak video late-start alignment must read `MainWindow::currentPreviewAuthoritativeAudioClockSecond` instead of branching between audio and `PreviewStageMediaHost::currentPlaybackSecond()`
+- `PreviewStageMediaHost::currentPlaybackSecond()` and `clockDeltaSeconds()` remain video-local observability only; they are not shared SFX/BGM/UI authority clocks
+- Realtime preview BGM rate control is backend-owned: Windows uses the BASS/BASS_FX tempo path for every playback rate, while the non-Windows compatibility backend still uses the stretched `SoundTouch` data-source path for every playback rate, including `1.0x`; do not reintroduce a separate normal-decoder runtime BGM path without reviewing preview clock ownership.
+- The non-Windows stretched runtime clock is not the data-source cursor. Runtime authoritative preview audio time there now anchors to `ma_engine_get_time_in_pcm_frames()` plus the chart-second start point recorded when background playback starts; `getCursorCallback()` may still expose a raw delivery cursor for diagnostics, but it is not the authority clock.
+- Before the non-Windows stretched source has emitted its first output frames after seek/start, realtime preview should keep using the fallback elapsed clock so SFX do not lock to a pre-output stretched cursor.
 
 Current filename convention:
 
@@ -184,6 +208,7 @@ Export worker boundary:
 Implication:
 
 - New export settings must be added on both serialization and deserialization sides.
+- Shared preview/export timing settings now also cross this boundary through `VideoExportSnapshot::toJson/fromJson` and `buildVideoExportTaskFromSnapshot`; if you add or reinterpret timing offsets, update preview state persistence and export snapshot/task reconstruction together.
 - Worker protocol changes must be reflected in both `main.cpp` and MainWindow worker-event handling.
 - `snapshot.outputPath` should already be the final `.mp4` path by the time the worker starts; `MainWindow` resolves missing suffixes and duplicate-name fallbacks before launching the worker so completion UI and worker results can treat it as authoritative.
 - Static Muri thresholds that affect analyzer timing, such as the tap-on-slide threshold, must also cross this boundary; otherwise preview-time diagnostics and export-time overlays will drift.
@@ -205,7 +230,7 @@ Shared render settings include:
 - outline variant / judge-line background overlay selection
 - smooth brightness
 - background scale mode
-- note flow speed
+- tap/touch flow speed (persisted as separate values with legacy single-speed fallback)
 - chart-review judge overlay toggles for slide/wifi-family and tap/hold-family effects
 - timestamp/object-stats HUD flags
 - Muri render options
@@ -250,7 +275,8 @@ Implication:
   - Check `VideoExportSnapshot.cpp`
   - Check `MuriAnalyzer.cpp`
 - Change preview SFX mapping:
-  - Check `VideoExportController.cpp::buildSfxTimeline`
+  - Check `VideoExportAudioRenderPlan.cpp`
+  - Check `VideoExportAudioBackend` implementations
   - Check `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
 - Change export media rules:
   - Check `PreviewMediaController.cpp`

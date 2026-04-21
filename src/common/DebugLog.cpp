@@ -193,6 +193,64 @@ QString defaultDebugLogDirectory()
     return QDir(executableDir).filePath(QStringLiteral("logs"));
 }
 
+qint64 startupTrimMaxBytes()
+{
+    return 100 * 1024;
+}
+
+bool trimFileToMaxBytesLocked(const QString& path, qint64 maxBytes)
+{
+    if (maxBytes <= 0) {
+        return true;
+    }
+
+    QFile file(path);
+    if (!file.exists()) {
+        return true;
+    }
+    if (!file.open(QIODevice::ReadOnly)) {
+        return false;
+    }
+    const QByteArray data = file.readAll();
+    file.close();
+    if (data.size() <= maxBytes) {
+        return true;
+    }
+
+    int start = qMax(0, data.size() - static_cast<int>(maxBytes));
+    while (start < data.size() && start > 0 && data.at(start - 1) != '\n') {
+        ++start;
+    }
+    if (start >= data.size()) {
+        start = qMax(0, data.size() - static_cast<int>(maxBytes));
+    }
+    QByteArray trimmed = data.mid(start);
+    if (trimmed.size() > maxBytes) {
+        trimmed = trimmed.right(static_cast<int>(maxBytes));
+    }
+
+    ensureParentDirectory(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        return false;
+    }
+    const qint64 written = file.write(trimmed);
+    file.close();
+    return written == trimmed.size();
+}
+
+void trimDebugLogsInCurrentDirectoryLocked()
+{
+    const qint64 maxBytes = startupTrimMaxBytes();
+    for (const Channel channel : {
+             Channel::Runtime,
+             Channel::Audio,
+             Channel::Export,
+             Channel::StartupTiming,
+             Channel::Fatal}) {
+        (void)trimFileToMaxBytesLocked(logPath(channel), maxBytes);
+    }
+}
+
 }  // namespace
 
 QString timestampString()
@@ -227,10 +285,15 @@ QString logDirectory()
 
 void setSessionProjectLogDirectory(const QString& directoryPath)
 {
-    QMutexLocker locker(&projectLogDirectoryMutex());
-    sessionProjectLogDirectoryStorage() = directoryPath.trimmed().isEmpty()
-        ? QString()
-        : QDir::cleanPath(directoryPath);
+    {
+        QMutexLocker locker(&projectLogDirectoryMutex());
+        sessionProjectLogDirectoryStorage() = directoryPath.trimmed().isEmpty()
+            ? QString()
+            : QDir::cleanPath(directoryPath);
+    }
+    if (miacode::debug_options::debugModeEnabled()) {
+        trimDebugLogsInCurrentDirectoryLocked();
+    }
 }
 
 QString logPath(Channel channel)
@@ -292,6 +355,15 @@ void clearDebugSessionLogs()
     clearChannel(Channel::PreviewProfile);
 }
 
+void trimDebugSessionLogsForStartup()
+{
+    if (!miacode::debug_options::debugModeEnabled()) {
+        return;
+    }
+    QMutexLocker locker(&logMutex());
+    trimDebugLogsInCurrentDirectoryLocked();
+}
+
 bool resetChannel(Channel channel, const QStringList& initialLines, bool force)
 {
     if (!shouldWrite(channel, force)) {
@@ -330,6 +402,11 @@ bool appendText(Channel channel, const QString& text, bool force)
     stream << text;
     if (!text.endsWith(QLatin1Char('\n'))) {
         stream << '\n';
+    }
+    stream.flush();
+    file.close();
+    if (miacode::debug_options::debugModeEnabled()) {
+        trimFileToMaxBytesLocked(path, startupTrimMaxBytes());
     }
     return true;
 }

@@ -30,6 +30,7 @@
 #include "preview/scene/PreviewProgressStatsCache.h"
 #include "simai/transform/ChartBatchTransform.h"
 #include "simai/transform/ChartNormalization.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -40,7 +41,7 @@
 
 using namespace miacode::mainwindow::shared;
 
-MainWindow::MainWindow(QWidget* parent)
+MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     : QMainWindow(parent)
 {
     QElapsedTimer startupStageTimer;
@@ -52,6 +53,9 @@ MainWindow::MainWindow(QWidget* parent)
         startupLastMs = nowMs;
         appendStartupTimingStage(QString("mainwindow/%1").arg(stageName), nowMs, deltaMs);
     };
+
+    quickShellBootstrapMode_ = quickShellBootstrapMode;
+    timelineWidgetlessQuickRoute_ = quickShellBootstrapMode_;
 
     configureRuntimeDebugOutput();
     logStartupStage("configure_runtime_debug_output");
@@ -218,6 +222,9 @@ MainWindow::MainWindow(QWidget* parent)
     central->setObjectName("EditorShell");
     central->setAttribute(Qt::WA_StyledBackground, true);
     central->setStyleSheet(UiTheme::editorShellStyleSheet());
+    central->setMinimumWidth(320);
+    central->setProperty("baseMinimumWidth", central->minimumWidth());
+    workspaceContentWidget_ = central;
     auto* centralLayout = new QVBoxLayout(central);
     centralLayout->setContentsMargins(0, 0, 0, 0);
     centralLayout->setSpacing(0);
@@ -552,11 +559,35 @@ MainWindow::MainWindow(QWidget* parent)
     extraMetadataLabel->setObjectName("SectionTitle");
     extraMetadataLabel->setFont(uiAccentFont(11));
     metadataCardLayout->addWidget(extraMetadataLabel);
+    const auto installCtrlEnterLineBreakShortcut = [](QTextEdit* textEdit) {
+        if (textEdit == nullptr) {
+            return;
+        }
+        const auto insertLineBreak = [textEdit]() {
+            if (textEdit->isReadOnly()) {
+                return;
+            }
+            QTextCursor cursor = textEdit->textCursor();
+            cursor.beginEditBlock();
+            cursor.insertBlock(cursor.blockFormat(), cursor.charFormat());
+            cursor.endEditBlock();
+            textEdit->setTextCursor(cursor);
+        };
+        for (const QKeySequence& shortcutKey : {
+                 QKeySequence(Qt::CTRL | Qt::Key_Return),
+                 QKeySequence(Qt::CTRL | Qt::Key_Enter)}) {
+            auto* shortcut = new QShortcut(shortcutKey, textEdit);
+            shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+            QObject::connect(shortcut, &QShortcut::activated, textEdit, insertLineBreak);
+        }
+    };
     metadataExtraEdit_ = new QTextEdit(metadataPage_);
+    metadataExtraEdit_->setAcceptRichText(false);
     metadataExtraEdit_->setFont(editorFont(editorTextFontPointSize_));
     metadataExtraEdit_->setLineWrapMode(QTextEdit::WidgetWidth);
     metadataExtraEdit_->setWordWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     metadataExtraEdit_->setPlaceholderText("&dummy=...");
+    installCtrlEnterLineBreakShortcut(metadataExtraEdit_);
     if (QScrollBar* vbar = metadataExtraEdit_->verticalScrollBar()) {
         vbar->setStyleSheet(modernScrollBarStyle());
     }
@@ -944,78 +975,37 @@ MainWindow::MainWindow(QWidget* parent)
     if (QTabBar* bottomTabBar = bottomTabs_->tabBar(); bottomTabBar != nullptr) {
         bottomTabBar->installEventFilter(this);
     }
-    timelineView_ = new TimelineView(bottomTabs_);
-    timelineView_->setHeaderLineNumberFont(timelineHeaderLineNumberFont());
-    timelineView_->setShowSlideTracks(true);
-    connect(timelineView_, &TimelineView::headerNavigateRequested, this, [this](double second) {
-        navigateTimelineToSecond(second, true);
-    });
-    connect(timelineView_, &TimelineView::previewPlayPauseRequested, this, &MainWindow::onTogglePreviewPause);
-    connect(timelineView_, &TimelineView::timelineUserInteractionStarted, this, [this]() {
-        if (qtPreviewPlaying_) {
-            stopQtPreviewPlayback(true);
-            updatePauseButtonAppearance();
-        }
-    });
-    connect(timelineView_, &TimelineView::timelineDragStarted, this, [this]() {
-        stopPreviewHeldSeek();
-        QToolTip::hideText();
-        previewScrubRenderElapsed_.invalidate();
-        if (previewFullscreenActive_) {
-            showPreviewFullscreenControls(false);
-        }
-        if (previewSeekDebounceTimer_ != nullptr) {
-            previewSeekDebounceTimer_->stop();
-        }
-    });
-    connect(timelineView_, &TimelineView::centerNavigateRequested, this, [this](double second) {
-        const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
-        const bool shouldRenderNow = !previewScrubRenderElapsed_.isValid()
-            || previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs;
-        if (shouldRenderNow) {
-            if (previewSeekDebounceTimer_ != nullptr) {
-                previewSeekDebounceTimer_->stop();
-            }
-            seekPreviewToSecond(clampedSecond, false);
-            previewScrubRenderElapsed_.restart();
-        } else {
-            schedulePreviewSeek(clampedSecond, false);
-        }
-    });
-    connect(timelineView_, &TimelineView::timelineDragFinished, this, [this](double second) {
-        stopPreviewHeldSeek();
-        QToolTip::hideText();
-        previewScrubRenderElapsed_.invalidate();
-        const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
-        if (previewFullscreenActive_) {
-            showPreviewFullscreenControls(false);
-        }
-        if (previewSeekDebounceTimer_ != nullptr) {
-            previewSeekDebounceTimer_->stop();
-        }
-        seekPreviewToSecond(clampedSecond, false);
-    });
-    connect(timelineView_, &TimelineView::followPreviewToggled, this, [this](bool enabled) {
-        state_.previewFollowEnabled_ = enabled;
-        savePortableState();
-        if (!enabled) {
-            clearPreviewFollowDecoration();
-            return;
-        }
-        if (!hasActiveDifficulty()) {
-            return;
-        }
-        double second = qMax(0.0, qtPreviewPauseSecond_);
-        if (qtPreviewPlaying_) {
-            if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
-                second = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-            } else if (previewStageMediaRouteHasVideo()) {
-                second = qMax(0.0, previewStageMediaRouteCurrentPlaybackSecond());
-            }
-        }
-        syncEditorCursorToPreviewSecond(second, false, !qtPreviewPlaying_);
-    });
-    bottomTabs_->addTab(timelineView_, uiText("tab.timeline", "Timeline"));
+    quickShellBottomTabsProxy_ = new QTabWidget(this);
+    if (QTabBar* proxyTabBar = quickShellBottomTabsProxy_->tabBar(); proxyTabBar != nullptr) {
+        proxyTabBar->installEventFilter(this);
+    }
+    timelineQuickStateBridge_ = new TimelineQuickStateBridge(this);
+    timelineQuickStateBridge_->setHeaderLineNumberFont(timelineHeaderLineNumberFont());
+    timelineQuickStateBridge_->setShowSlideTracks(true);
+    if (!timelineWidgetlessQuickRoute_) {
+        timelineView_ = new TimelineView(bottomTabs_);
+        timelineQuickStateBridge_->attachReferenceView(timelineView_);
+        connect(timelineView_, &TimelineView::headerNavigateRequested, this, [this](double second) {
+            timelineSection_->onTimelineHeaderNavigateRequested(second);
+        });
+        connect(timelineView_, &TimelineView::previewPlayPauseRequested, this, &MainWindow::onTogglePreviewPause);
+        connect(timelineView_, &TimelineView::timelineUserInteractionStarted, this, [this]() {
+            timelineSection_->onTimelineUserInteractionStarted();
+        });
+        connect(timelineView_, &TimelineView::timelineDragStarted, this, [this]() {
+            timelineSection_->onTimelineDragStarted();
+        });
+        connect(timelineView_, &TimelineView::centerNavigateRequested, this, [this](double second) {
+            timelineSection_->onTimelineCenterNavigateRequested(second);
+        });
+        connect(timelineView_, &TimelineView::timelineDragFinished, this, [this](double second) {
+            timelineSection_->onTimelineDragFinished(second);
+        });
+        connect(timelineView_, &TimelineView::followPreviewToggled, this, [this](bool enabled) {
+            timelineSection_->onTimelineFollowPreviewToggled(enabled);
+        });
+        bottomTabs_->addTab(timelineView_, uiText("tab.timeline", "Timeline"));
+    }
 
     if (auto* editor = qobject_cast<PlainCodeEditor*>(editorWidget_); editor != nullptr) {
         connect(editor->document(), &QTextDocument::contentsChange, this, [this](int position, int charsRemoved, int charsAdded) {
@@ -1038,21 +1028,17 @@ MainWindow::MainWindow(QWidget* parent)
             requestTimelineSlowRefresh();
             bool syncPreviewFollow = false;
             double previewFollowSecond = 0.0;
-            if (timelineView_ != nullptr && hasActiveDifficulty() && timelineView_->followPreviewEnabled()) {
+            if (hasActiveDifficulty() && previewFollowEnabled_) {
                 syncPreviewFollow = true;
-                previewFollowSecond = qMax(0.0, qtPreviewPauseSecond_);
-                if (qtPreviewPlaying_) {
-                    if (previewSfxRuntime_ != nullptr && previewSfxRuntime_->hasBackgroundTrack()) {
-                        previewFollowSecond = qMax(0.0, previewSfxRuntime_->backgroundPlaybackSecond());
-                    } else if (previewStageMediaRouteHasVideo()) {
-                        previewFollowSecond = qMax(0.0, previewStageMediaRouteCurrentPlaybackSecond());
-                    }
-                }
+                previewFollowSecond = qMax(0.0, currentPreviewAuthoritativeAudioClockSecond());
             }
+            const bool syncTimelineCursor =
+                !syncPreviewFollow
+                && (!quickShellUiFocusBridgeMode_ || quickTimelineSurfaceReady_);
             scheduleDeferredEditorUiUpdate(
                 true,
                 true,
-                !syncPreviewFollow,
+                syncTimelineCursor,
                 !qtPreviewPlaying_ && !syncPreviewFollow,
                 syncPreviewFollow,
                 previewFollowSecond,
@@ -1061,10 +1047,11 @@ MainWindow::MainWindow(QWidget* parent)
         });
     }
     connect(qobject_cast<PlainCodeEditor*>(editorWidget_), &QTextEdit::cursorPositionChanged, this, [this]() {
+        const bool syncTimelineCursor = !quickShellUiFocusBridgeMode_ || quickTimelineSurfaceReady_;
         scheduleDeferredEditorUiUpdate(
             true,
             false,
-            true,
+            syncTimelineCursor,
             !qtPreviewPlaying_,
             false,
             0.0,
@@ -1134,6 +1121,33 @@ MainWindow::MainWindow(QWidget* parent)
         UiText::isChineseUi() ? QStringLiteral("无理检查") : QStringLiteral("Muri Check")
     );
     connect(bottomTabs_, &QTabWidget::currentChanged, this, [this](int) {
+        if (!quickShellBottomTabsProxyActive() && !timelineWidgetlessQuickRoute_) {
+            if (bottomTabs_->currentWidget() == timelineView_) {
+                currentBottomTabsTabId_ = BottomTabsTabId::Timeline;
+                if (timelineSection_ != nullptr) {
+                    timelineSection_->flushDeferredTimelineBridgeState();
+                }
+            } else if (bottomTabs_->currentWidget() == errorList_) {
+                currentBottomTabsTabId_ = BottomTabsTabId::Validation;
+            } else if (bottomTabs_->currentWidget() == muriList_) {
+                currentBottomTabsTabId_ = BottomTabsTabId::Muri;
+            }
+        }
+        if (validationSection_ != nullptr && bottomTabs_->currentWidget() == muriList_) {
+            validationSection_->flushPendingMuriDiagnosticsPanelRefresh();
+        }
+        scheduleWrappedListRelayout(errorList_);
+        scheduleWrappedListRelayout(muriList_);
+    });
+    connect(quickShellBottomTabsProxy_, &QTabWidget::currentChanged, this, [this](int) {
+        if (quickShellBottomTabsProxy_->currentWidget() == errorList_) {
+            currentBottomTabsTabId_ = BottomTabsTabId::Validation;
+        } else if (quickShellBottomTabsProxy_->currentWidget() == muriList_) {
+            currentBottomTabsTabId_ = BottomTabsTabId::Muri;
+        }
+        if (validationSection_ != nullptr && quickShellBottomTabsProxy_->currentWidget() == muriList_) {
+            validationSection_->flushPendingMuriDiagnosticsPanelRefresh();
+        }
         scheduleWrappedListRelayout(errorList_);
         scheduleWrappedListRelayout(muriList_);
     });

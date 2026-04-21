@@ -22,6 +22,7 @@
 #include "preview/scene/PreviewProgressStatsCache.h"
 #include "simai/transform/ChartBatchTransform.h"
 #include "simai/transform/ChartNormalization.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -37,6 +38,9 @@ namespace {
 
 constexpr double kTimelineZeroSecondTolerance = 1e-6;
 constexpr auto kQuickShellTransportSeekProperty = "miacode.quick_shell_transport_seek";
+constexpr int kPreviewPlaybackRateToastMinWidth = 196;
+constexpr int kPreviewPlaybackRateToastMinHeight = 96;
+constexpr int kPreviewPlaybackRateToastHorizontalMargin = 20;
 
 void appendQuickShellBackendLog(const QString& action, const QString& payload = QString())
 {
@@ -58,7 +62,7 @@ void appendPreviewPlaybackLog(const QString& action, const QString& payload = QS
         text += QStringLiteral(" ") + payload.trimmed();
     }
     miacode::debug_log::appendLine(
-        miacode::debug_log::Channel::Runtime,
+        miacode::debug_log::Channel::Audio,
         QStringLiteral("preview/playback"),
         text
     );
@@ -67,15 +71,18 @@ void appendPreviewPlaybackLog(const QString& action, const QString& payload = QS
 double previewVisualLeadInStartSecond(
     const QVector<TimelineNoteMarker>& noteMarkers,
     double requestedSecond,
-    double noteFlowSpeed)
+    double tapFlowSpeed,
+    double touchFlowSpeed)
 {
     if (requestedSecond > kTimelineZeroSecondTolerance || noteMarkers.isEmpty()) {
         return requestedSecond;
     }
 
-    const auto tapTiming = miacode::preview::scene::previewTapTimingForFlowSpeed(static_cast<qreal>(noteFlowSpeed));
+    const auto tapTiming = miacode::preview::scene::previewTapTimingForFlowSpeed(static_cast<qreal>(tapFlowSpeed));
     const auto slideTrackTiming =
-        miacode::preview::scene::previewSlideTrackTimingForFlowSpeed(static_cast<qreal>(noteFlowSpeed));
+        miacode::preview::scene::previewSlideTrackTimingForFlowSpeed(static_cast<qreal>(tapFlowSpeed));
+    const auto touchTiming =
+        miacode::preview::scene::previewTouchTimingForFlowSpeed(static_cast<qreal>(touchFlowSpeed));
 
     double earliestSecond = requestedSecond;
     for (const TimelineNoteMarker& marker : noteMarkers) {
@@ -104,13 +111,13 @@ double previewVisualLeadInStartSecond(
         }
         if (type == QLatin1String("touch")) {
             if (marker.second + kTimelineZeroSecondTolerance >= requestedSecond) {
-                earliestSecond = qMin(earliestSecond, marker.second - miacode::preview_gameplay::kTouchDurationSeconds);
+                earliestSecond = qMin(earliestSecond, marker.second - touchTiming.durationSeconds);
             }
             continue;
         }
         if (type == QLatin1String("touch_hold")) {
             if (qMax(marker.second, marker.endSecond) + kTimelineZeroSecondTolerance >= requestedSecond) {
-                earliestSecond = qMin(earliestSecond, marker.second - miacode::preview_gameplay::kTouchDurationSeconds);
+                earliestSecond = qMin(earliestSecond, marker.second - touchTiming.durationSeconds);
             }
             continue;
         }
@@ -139,6 +146,11 @@ QString MainWindow::activeChartText() const
 miacode::simai::SimaiTimingMetadata MainWindow::currentTimingMetadata() const
 {
     return timelineSection_->currentTimingMetadata();
+}
+
+double MainWindow::parsedRawFirstSeconds(bool* ok) const
+{
+    return timelineSection_->parsedRawFirstSeconds(ok);
 }
 
 double MainWindow::parsedFirstSeconds(bool* ok) const
@@ -203,6 +215,8 @@ void MainWindow::TimelineSection::requestPausedPreviewSeek(
 
 void MainWindow::TimelineSection::applyPausedPreviewVisualSecond(double second, bool centerView)
 {
+    const bool quickTimelineBridgeReady =
+        !state_.quickShellUiFocusBridgeMode_ || state_.quickTimelineSurfaceReady_;
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
     state_.qtPreviewStartSecond_ = clampedSecond;
     state_.qtPreviewPauseSecond_ = clampedSecond;
@@ -211,12 +225,12 @@ void MainWindow::TimelineSection::applyPausedPreviewVisualSecond(double second, 
     state_.qtPreviewPendingTimelineSecond_ = clampedSecond;
     state_.qtPreviewPendingTimelineCenterView_ = centerView;
     state_.qtPreviewTimelineDirty_ = true;
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
     }
     applyQtPreviewPosition(clampedSecond, centerView);
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->focusPlayhead(centerView);
+    if (state_.timelineQuickStateBridge_ != nullptr && quickTimelineBridgeReady) {
+        state_.timelineQuickStateBridge_->focusPlayhead(centerView);
     }
     state_.pausedSeekAppliedVisualSecond_ = clampedSecond;
     appendQuickShellBackendLog(
@@ -424,10 +438,30 @@ void MainWindow::TimelineSection::seekPreviewToSecond(double second, bool center
     owner_.ensurePreviewStageMediaRouteInitialized();
     owner_.ensurePreviewSfxRuntimePrepared();
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
-    if (state_.qtPreviewPlaying_ || state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
-        stopQtPreviewPlayback(true);
+    if (state_.qtPreviewPlaying_ && state_.previewSfxRuntime_ != nullptr) {
+        const double effectiveSecond =
+            state_.previewSfxRuntime_->seekRetainedPreviewPlaybackTransaction(clampedSecond, true);
+        state_.qtPreviewStartSecond_ = effectiveSecond;
+        state_.qtPreviewPauseSecond_ = effectiveSecond;
+        state_.qtPreviewElapsed_.restart();
+        state_.qtPreviewTimelineElapsed_.restart();
+        state_.qtPreviewPendingTimelineSecond_ = effectiveSecond;
+        state_.qtPreviewPendingTimelineCenterView_ = centerView;
+        state_.qtPreviewTimelineDirty_ = true;
+        state_.qtPreviewLastTimelineSecond_ = -1.0;
+        if (state_.previewCanvas_ != nullptr) {
+            state_.previewCanvas_->setPlayheadSeconds(effectiveSecond, true);
+        }
+        owner_.syncPreviewStageMediaRoutePlayback(effectiveSecond);
+        applyQtPreviewPosition(effectiveSecond, centerView);
+        updatePreviewSliderPosition(effectiveSecond);
+        updatePreviewObjectStats(effectiveSecond);
+        return;
     }
-    requestPausedPreviewSeek(clampedSecond, centerView, true);
+    if (state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
+        cancelPreviewStartupSync();
+    }
+    anchorQtPreviewPlaybackToSecond(clampedSecond, centerView);
 }
 
 void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
@@ -462,9 +496,21 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
             }
         }
     }
+    owner_.showPreviewPlaybackRateToast(state_.previewPlaybackRate_);
     owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->setBackgroundTrackPlaybackRate(state_.previewPlaybackRate_);
+        if (!state_.qtPreviewPlaying_
+            && !state_.previewStartupSyncPending_
+            && !state_.previewLateVideoStartPending_
+            && !state_.latestTimelineNoteMarkers_.isEmpty()) {
+            state_.previewSfxRuntime_->applyPausedPreviewState(
+                state_.latestTimelineNoteMarkers_,
+                false,
+                state_.qtPreviewPauseSecond_,
+                state_.previewPlaybackRate_,
+                state_.previewTimingSettings_);
+        }
     }
     if (state_.qtPreviewPlaying_ || state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
         stopQtPreviewPlayback(true);
@@ -472,21 +518,19 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
     }
 }
 
-double MainWindow::TimelineSection::currentPreviewPlaybackClockSecond() const
+double MainWindow::currentPreviewAuthoritativeAudioClockSecond() const
 {
-    if (state_.previewSfxRuntime_ != nullptr
-        && state_.previewSfxRuntime_->hasBackgroundTrack()
-        && state_.previewSfxRuntime_->isBackgroundTrackRunning()) {
-        return qMax(0.0, state_.previewSfxRuntime_->backgroundPlaybackSecond());
+    if (previewStartupSyncPending_ || previewLateVideoStartPending_) {
+        return previewStartupPreparedSecond_;
     }
-    if (state_.qtPreviewPlaying_) {
-        const double elapsedSeconds = static_cast<double>(state_.qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
-        return state_.qtPreviewStartSecond_ + (elapsedSeconds * state_.previewPlaybackRate_);
+    if (previewSfxRuntime_ != nullptr) {
+        return previewSfxRuntime_->authoritativePlaybackSecond();
     }
-    if (state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
-        return state_.previewStartupPreparedSecond_;
+    if (qtPreviewPlaying_) {
+        const double elapsedSeconds = static_cast<double>(qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
+        return qtPreviewStartSecond_ + (elapsedSeconds * previewPlaybackRate_);
     }
-    return state_.qtPreviewPauseSecond_;
+    return qtPreviewPauseSecond_;
 }
 
 void MainWindow::TimelineSection::cancelPreviewStartupSync()
@@ -570,7 +614,7 @@ void MainWindow::TimelineSection::handlePreviewStartupVideoPrepared(double secon
     if (state_.previewStartupStrongGroupCommitted_
         && state_.previewLateVideoStartPending_
         && state_.previewStageMediaHost_ != nullptr) {
-        const double currentSecond = currentPreviewPlaybackClockSecond();
+        const double currentSecond = owner_.currentPreviewAuthoritativeAudioClockSecond();
         state_.previewStageMediaHost_->commitPreparedPlaybackStart(currentSecond);
         state_.previewStartupVideoStarted_ = true;
         state_.previewLateVideoStartPending_ = false;
@@ -614,8 +658,36 @@ void MainWindow::TimelineSection::tryCommitPreviewStartupSync()
     } else {
         state_.previewLateVideoStartPending_ = state_.previewStartupVideoPrepareStarted_;
     }
+    finalizeQtPreviewPlaybackStart(effectiveStartSecond);
+    appendPreviewPlaybackLog(
+        QStringLiteral("commit"),
+        QString("txn=%1 effective=%2 late_video_pending=%3")
+            .arg(state_.activePreviewPlaybackTransactionId_)
+            .arg(effectiveStartSecond, 0, 'f', 6)
+            .arg(state_.previewLateVideoStartPending_ ? 1 : 0));
+}
 
+void MainWindow::TimelineSection::stopQtPreviewTimers()
+{
+    if (ui_.previewSeekDebounceTimer_ != nullptr) {
+        ui_.previewSeekDebounceTimer_->stop();
+    }
+    if (ui_.qtPreviewTimer_ != nullptr) {
+        ui_.qtPreviewTimer_->stop();
+    }
+    if (ui_.qtPreviewTimelineTimer_ != nullptr) {
+        ui_.qtPreviewTimelineTimer_->stop();
+    }
+    if (ui_.previewStatsUiTimer_ != nullptr) {
+        ui_.previewStatsUiTimer_->stop();
+    }
+}
+
+void MainWindow::TimelineSection::finalizeQtPreviewPlaybackStart(double effectiveStartSecond)
+{
     state_.pausedPreviewMediaSeekPending_ = false;
+    state_.qtPreviewStartSecond_ = effectiveStartSecond;
+    state_.qtPreviewPauseSecond_ = effectiveStartSecond;
     state_.qtPreviewElapsed_.restart();
     state_.qtPreviewTimelineElapsed_.restart();
     state_.qtPreviewPlaying_ = true;
@@ -638,15 +710,87 @@ void MainWindow::TimelineSection::tryCommitPreviewStartupSync()
     if (ui_.previewStatsUiTimer_ != nullptr && !ui_.previewStatsUiTimer_->isActive()) {
         ui_.previewStatsUiTimer_->start();
     }
+    invalidatePreviewFollowBindingCache();
     syncEditorCursorToPreviewSecond(effectiveStartSecond, false);
     updatePreviewSliderPosition(effectiveStartSecond);
     owner_.updatePauseButtonAppearance();
+}
+
+void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
+{
+    const bool wasPlaying = state_.qtPreviewPlaying_;
+    const quint64 playbackTxn = state_.activePreviewPlaybackTransactionId_;
+    if (!wasPlaying || state_.previewSfxRuntime_ == nullptr) {
+        stopQtPreviewPlayback(true);
+        return;
+    }
+
+    const QtPreviewSfxRuntime::PausePreviewResult pauseResult =
+        state_.previewSfxRuntime_->pausePreviewPlaybackTransaction();
+    state_.qtPreviewPauseSecond_ = pauseResult.pauseSecond;
+    cancelPreviewStartupSync();
+    owner_.pausePreviewStageMediaRoutePlayback();
+    stopQtPreviewTimers();
+    state_.pausedPreviewMediaSeekPending_ = false;
     appendPreviewPlaybackLog(
-        QStringLiteral("commit"),
-        QString("txn=%1 effective=%2 late_video_pending=%3")
-            .arg(state_.activePreviewPlaybackTransactionId_)
-            .arg(effectiveStartSecond, 0, 'f', 6)
-            .arg(state_.previewLateVideoStartPending_ ? 1 : 0));
+        QStringLiteral("pause_exact"),
+        QString("txn=%1 pause_second=%2 retained_mode=%3")
+            .arg(playbackTxn)
+            .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6)
+            .arg(static_cast<int>(pauseResult.retainedMode)));
+    state_.qtPreviewPendingTimelineSecond_ = state_.qtPreviewPauseSecond_;
+    state_.qtPreviewPendingTimelineCenterView_ = false;
+    state_.qtPreviewTimelineDirty_ = true;
+    state_.qtPreviewPlaying_ = false;
+    invalidatePreviewFollowBindingCache();
+    state_.activePreviewPlaybackTransactionId_ = 0;
+    owner_.applyEffectivePreviewOutlineVariantToCanvas();
+    owner_.applyPreviewStageMediaRouteVisualSettings();
+    state_.qtPreviewAwaitingFrameSwap_ = false;
+    state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+    state_.qtPreviewNextFixedTickDueNs_ = -1;
+    state_.qtPreviewFixedTickOriginNs_ = -1;
+    flushQtPreviewTimelinePosition();
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->focusPlayhead(false);
+        state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
+    }
+    owner_.applyDeferredAnalysisUiUpdates();
+    if (state_.pendingTimelineAnalysisRefresh_.revision != 0) {
+        requestTimelineAnalysisDispatch(0);
+    }
+    updatePreviewSliderPosition(state_.qtPreviewPauseSecond_);
+    updatePreviewObjectStats(state_.qtPreviewPauseSecond_);
+    owner_.updatePauseButtonAppearance();
+}
+
+void MainWindow::TimelineSection::anchorQtPreviewPlaybackToSecond(double second, bool centerView)
+{
+    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    owner_.ensurePreviewStageMediaRouteInitialized();
+    cancelPreviewStartupSync();
+    if (state_.previewSfxRuntime_ != nullptr) {
+        state_.previewSfxRuntime_->resetRetainedPreviewPlaybackTransaction(clampedSecond);
+    }
+    owner_.pausePreviewStageMediaRoutePlayback();
+    stopQtPreviewTimers();
+    state_.qtPreviewPauseSecond_ = clampedSecond;
+    state_.pausedPreviewMediaSeekPending_ = false;
+    state_.qtPreviewPendingTimelineSecond_ = clampedSecond;
+    state_.qtPreviewPendingTimelineCenterView_ = centerView;
+    state_.qtPreviewTimelineDirty_ = true;
+    state_.qtPreviewPlaying_ = false;
+    invalidatePreviewFollowBindingCache();
+    state_.activePreviewPlaybackTransactionId_ = 0;
+    owner_.applyEffectivePreviewOutlineVariantToCanvas();
+    owner_.applyPreviewStageMediaRouteVisualSettings();
+    state_.qtPreviewAwaitingFrameSwap_ = false;
+    state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+    state_.qtPreviewNextFixedTickDueNs_ = -1;
+    state_.qtPreviewFixedTickOriginNs_ = -1;
+    requestPausedPreviewSeek(clampedSecond, centerView, true);
+    updatePreviewObjectStats(clampedSecond);
+    owner_.updatePauseButtonAppearance();
 }
 
 bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool resumeFromPause)
@@ -668,7 +812,11 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
     applyLatestTimelinePreviewStateToPausedPreview();
     const double requestedSecond = qBound(0.0, second, previewDurationSeconds());
     const double startSecond = (!resumeFromPause && requestedSecond <= kTimelineZeroSecondTolerance)
-        ? previewVisualLeadInStartSecond(state_.latestTimelineNoteMarkers_, requestedSecond, state_.previewNoteFlowSpeed_)
+        ? previewVisualLeadInStartSecond(
+              state_.latestTimelineNoteMarkers_,
+              requestedSecond,
+              state_.previewTapFlowSpeed_,
+              state_.previewTouchFlowSpeed_)
         : requestedSecond;
     const bool hasVideoMedia = owner_.previewStageMediaRouteHasVideo();
     const quint64 playbackTxn = ++state_.previewPlaybackTransactionCounter_;
@@ -689,6 +837,46 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
     state_.pausedSeekMediaPending_ = false;
     state_.pausedSeekMediaSubmittedGeneration_ = 0;
     state_.pausedSeekMediaAckGeneration_ = 0;
+    if (resumeFromPause && state_.previewSfxRuntime_ != nullptr) {
+        const QtPreviewSfxRuntime::RetainedPlaybackMode retainedMode =
+            state_.previewSfxRuntime_->retainedPlaybackMode();
+        if (retainedMode == QtPreviewSfxRuntime::RetainedPlaybackMode::PausedExact
+            || retainedMode == QtPreviewSfxRuntime::RetainedPlaybackMode::PausedAnchored) {
+            double effectiveStartSecond = 0.0;
+            if (retainedMode == QtPreviewSfxRuntime::RetainedPlaybackMode::PausedExact
+                && qAbs(state_.previewSfxRuntime_->authoritativePlaybackSecond() - requestedSecond)
+                    <= kTimelineZeroSecondTolerance) {
+                effectiveStartSecond = state_.previewSfxRuntime_->resumeRetainedPreviewPlaybackTransaction();
+            } else {
+                effectiveStartSecond =
+                    state_.previewSfxRuntime_->seekRetainedPreviewPlaybackTransaction(requestedSecond, true);
+            }
+            applyPlaybackClockState(effectiveStartSecond);
+            state_.qtPreviewPendingTimelineSecond_ = effectiveStartSecond;
+            state_.qtPreviewPendingTimelineCenterView_ = true;
+            state_.qtPreviewTimelineDirty_ = true;
+            state_.qtPreviewLastTimelineSecond_ = -1.0;
+            if (state_.timelineQuickStateBridge_ != nullptr) {
+                state_.timelineQuickStateBridge_->setPlaybackEntrySeconds(state_.qtPreviewPlaybackReturnSecond_);
+                state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(state_.qtPreviewPlaybackEndSecond_);
+                state_.timelineQuickStateBridge_->setPlayheadSeconds(effectiveStartSecond, false);
+            }
+            if (state_.previewCanvas_ != nullptr) {
+                state_.previewCanvas_->setPlayheadSeconds(effectiveStartSecond, true);
+            }
+            if (hasVideoMedia) {
+                owner_.startPreviewStageMediaRoutePlayback(effectiveStartSecond);
+            }
+            appendPreviewPlaybackLog(
+                QStringLiteral("retained_start"),
+                QString("txn=%1 effective=%2 retained_mode=%3")
+                    .arg(playbackTxn)
+                    .arg(effectiveStartSecond, 0, 'f', 6)
+                    .arg(static_cast<int>(retainedMode)));
+            finalizeQtPreviewPlaybackStart(effectiveStartSecond);
+            return true;
+        }
+    }
     state_.previewStartupSyncPending_ = true;
     state_.previewLateVideoStartPending_ = false;
     state_.previewStartupAudioPrepared_ = false;
@@ -727,15 +915,14 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
 
     applyPlaybackClockState(effectiveStartSecond);
     state_.pausedPreviewMediaSeekPending_ = false;
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->setPlaybackEntrySeconds(state_.qtPreviewPlaybackReturnSecond_);
-        ui_.timelineView_->setPlayheadUpperLimitSeconds(state_.qtPreviewPlaybackEndSecond_);
-        if (qFuzzyCompare(ui_.timelineView_->playheadSeconds() + 1.0, effectiveStartSecond + 1.0)) {
-            ui_.timelineView_->focusPlayhead(true);
-        } else {
-            ui_.timelineView_->setPlayheadSeconds(effectiveStartSecond, true);
-            ui_.timelineView_->focusPlayhead(false);
-        }
+    state_.qtPreviewPendingTimelineSecond_ = effectiveStartSecond;
+    state_.qtPreviewPendingTimelineCenterView_ = true;
+    state_.qtPreviewTimelineDirty_ = true;
+    state_.qtPreviewLastTimelineSecond_ = -1.0;
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setPlaybackEntrySeconds(state_.qtPreviewPlaybackReturnSecond_);
+        state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(state_.qtPreviewPlaybackEndSecond_);
+        state_.timelineQuickStateBridge_->setPlayheadSeconds(effectiveStartSecond, false);
     }
     if (state_.previewCanvas_ != nullptr) {
         if (!resumeFromPause) {
@@ -772,39 +959,22 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
     const bool hadStartupSync = state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_;
     const quint64 playbackTxn = state_.activePreviewPlaybackTransactionId_;
     bool pauseSecondCaptured = false;
-    if (wasPlaying && state_.previewSfxRuntime_ != nullptr) {
-        const QtPreviewSfxRuntime::PausePreviewResult pauseResult =
-            state_.previewSfxRuntime_->capturePausedPreviewTransaction();
-        if (pauseResult.usedBackgroundTrack) {
-            state_.qtPreviewPauseSecond_ = pauseResult.pauseSecond;
-            pauseSecondCaptured = true;
-        }
-    }
     if (hadStartupSync && !wasPlaying) {
         state_.qtPreviewPauseSecond_ = state_.previewStartupPreparedSecond_;
         pauseSecondCaptured = true;
     }
     if (!pauseSecondCaptured) {
-        if (owner_.previewStageMediaRouteHasVideo()) {
-            state_.qtPreviewPauseSecond_ = owner_.previewStageMediaRouteCurrentPlaybackSecond();
-        }
+        state_.qtPreviewPauseSecond_ = owner_.currentPreviewAuthoritativeAudioClockSecond();
+        pauseSecondCaptured = true;
     }
     cancelPreviewStartupSync();
     owner_.pausePreviewStageMediaRoutePlayback();
-    if (ui_.previewSeekDebounceTimer_ != nullptr) {
-        ui_.previewSeekDebounceTimer_->stop();
-    }
-    if (ui_.qtPreviewTimer_ != nullptr) {
-        ui_.qtPreviewTimer_->stop();
-    }
-    if (ui_.qtPreviewTimelineTimer_ != nullptr) {
-        ui_.qtPreviewTimelineTimer_->stop();
-    }
-    if (ui_.previewStatsUiTimer_ != nullptr) {
-        ui_.previewStatsUiTimer_->stop();
-    }
+    stopQtPreviewTimers();
     if (!keepPosition) {
         state_.qtPreviewPauseSecond_ = 0.0;
+    }
+    if (state_.previewSfxRuntime_ != nullptr) {
+        state_.previewSfxRuntime_->resetRetainedPreviewPlaybackTransaction(state_.qtPreviewPauseSecond_);
     }
     state_.pausedPreviewMediaSeekPending_ = false;
     if (wasPlaying || hadStartupSync) {
@@ -819,8 +989,7 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
         state_.qtPreviewTimelineDirty_ = true;
     }
     state_.qtPreviewPlaying_ = false;
-    state_.qtPreviewFollowDirty_ = false;
-    state_.qtPreviewPendingFollowCenterView_ = false;
+    invalidatePreviewFollowBindingCache();
     state_.activePreviewPlaybackTransactionId_ = 0;
     owner_.applyEffectivePreviewOutlineVariantToCanvas();
     owner_.applyPreviewStageMediaRouteVisualSettings();
@@ -829,14 +998,11 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
     state_.qtPreviewNextFixedTickDueNs_ = -1;
     state_.qtPreviewFixedTickOriginNs_ = -1;
     flushQtPreviewTimelinePosition();
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->focusPlayhead(false);
-        ui_.timelineView_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->focusPlayhead(false);
+        state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
     }
-    if (state_.previewSfxRuntime_ != nullptr) {
-        state_.previewSfxRuntime_->stopAll();
-    }
-    applyLatestTimelinePreviewStateToPausedPreview();
+    requestPausedPreviewSeek(state_.qtPreviewPauseSecond_, false, true);
     owner_.applyDeferredAnalysisUiUpdates();
     if (state_.pendingTimelineAnalysisRefresh_.revision != 0) {
         requestTimelineAnalysisDispatch(0);
@@ -851,15 +1017,21 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
 
 void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool centerView)
 {
+    const bool quickTimelineBridgeReady =
+        !state_.quickShellUiFocusBridgeMode_ || state_.quickTimelineSurfaceReady_;
+    const double timelineCadenceSeconds =
+        static_cast<double>(qMax<qint64>(1, timelineTargetFrameIntervalNs())) / 1000000000.0;
     state_.qtPreviewPauseSecond_ = second;
     if (!state_.qtPreviewPlaying_
-        && ui_.timelineView_ != nullptr
+        && state_.timelineQuickStateBridge_ != nullptr
         && (state_.qtPreviewLastTimelineSecond_ < 0.0
-            || qAbs(second - state_.qtPreviewLastTimelineSecond_) >= kTimelineUiCadenceSeconds)) {
+            || qAbs(second - state_.qtPreviewLastTimelineSecond_) >= timelineCadenceSeconds)) {
         state_.qtPreviewPendingTimelineSecond_ = second;
         state_.qtPreviewPendingTimelineCenterView_ = state_.qtPreviewPendingTimelineCenterView_ || centerView;
         state_.qtPreviewTimelineDirty_ = true;
-        flushQtPreviewTimelinePosition();
+        if (quickTimelineBridgeReady) {
+            flushQtPreviewTimelinePosition();
+        }
     }
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setPlayheadSeconds(second, !state_.qtPreviewPlaying_);
@@ -870,9 +1042,9 @@ void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool cen
     if (!state_.qtPreviewPlaying_) {
         updatePreviewObjectStats(second);
     }
-    if (ui_.timelineView_ != nullptr && ui_.timelineView_->followPreviewEnabled()) {
+    if (state_.previewFollowEnabled_) {
         if (state_.qtPreviewPlaying_) {
-            owner_.queueQtPreviewFollowUiUpdate(second, centerView);
+            syncEditorCursorToPreviewSecond(second, centerView, false);
         } else {
             updatePreviewFollowDecorationForTimelineBlueLine(second, true);
         }
@@ -886,41 +1058,28 @@ void MainWindow::TimelineSection::syncPausedPreviewMediaTimestamps(double second
 
 void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()
 {
-    if (ui_.timelineView_ == nullptr) {
+    if (state_.qtPreviewPlaying_) {
+        if (state_.timelineQuickStateBridge_ == nullptr
+            || !quickTimelineBridgeReady()
+            || !timelineTabIsForeground()) {
+            return;
+        }
+        const double second = qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond());
+        state_.timelineQuickStateBridge_->setPlayheadSeconds(second, true);
+        state_.timelineQuickStateBridge_->focusPlayhead(false);
+        state_.qtPreviewLastTimelineSecond_ = second;
         return;
     }
-    if (state_.qtPreviewPlaying_) {
-        double second = qMax(
-            0.0,
-            state_.qtPreviewTimelineStartSecond_ + ((state_.qtPreviewTimelineElapsed_.elapsed() / 1000.0) * state_.previewPlaybackRate_)
-        );
-        if (state_.previewSfxRuntime_ != nullptr
-            && state_.previewSfxRuntime_->hasBackgroundTrack()
-            && state_.previewSfxRuntime_->isBackgroundTrackRunning()) {
-            second = qMax(0.0, state_.previewSfxRuntime_->backgroundPlaybackSecond());
-        }
-        ui_.timelineView_->setPlayheadSeconds(second, true);
-        ui_.timelineView_->focusPlayhead(false);
-        state_.qtPreviewLastTimelineSecond_ = second;
-        if (state_.qtPreviewFollowDirty_) {
-            if (ui_.timelineView_->followPreviewEnabled()) {
-                const double followSecond = state_.qtPreviewPendingFollowSecond_;
-                const bool followCenterView = state_.qtPreviewPendingFollowCenterView_;
-                state_.qtPreviewFollowDirty_ = false;
-                state_.qtPreviewPendingFollowCenterView_ = false;
-                syncEditorCursorToPreviewSecond(followSecond, followCenterView, false);
-            } else {
-                state_.qtPreviewFollowDirty_ = false;
-                state_.qtPreviewPendingFollowCenterView_ = false;
-            }
-        }
+    if (state_.timelineQuickStateBridge_ == nullptr || !quickTimelineBridgeReady()) {
         return;
     }
     if (!state_.qtPreviewTimelineDirty_) {
         return;
     }
-    ui_.timelineView_->setPlayheadSeconds(state_.qtPreviewPendingTimelineSecond_, state_.qtPreviewPendingTimelineCenterView_);
-    ui_.timelineView_->focusPlayhead(state_.qtPreviewPendingTimelineCenterView_);
+    state_.timelineQuickStateBridge_->setPlayheadSeconds(
+        state_.qtPreviewPendingTimelineSecond_,
+        state_.qtPreviewPendingTimelineCenterView_);
+    state_.timelineQuickStateBridge_->focusPlayhead(state_.qtPreviewPendingTimelineCenterView_);
     state_.qtPreviewLastTimelineSecond_ = state_.qtPreviewPendingTimelineSecond_;
     state_.qtPreviewPendingTimelineCenterView_ = false;
     state_.qtPreviewTimelineDirty_ = false;
@@ -1054,6 +1213,81 @@ void MainWindow::seekPreviewToSecond(double second, bool centerView)
 void MainWindow::applyPreviewPlaybackRate(double rate)
 {
     timelineSection_->applyPreviewPlaybackRate(rate);
+}
+
+QString MainWindow::formatPreviewPlaybackRateToastText(double rate) const
+{
+    const int percent = qRound(rate * 100.0);
+    const QString title = UiText::isChineseUi()
+        ? QStringLiteral("当前倍速")
+        : QStringLiteral("Playback Speed");
+    return QStringLiteral(
+               "<div style='text-align:center;'>"
+               "<div style='font-size:14px;font-weight:600;line-height:1.2;'>%1</div>"
+               "<div style='margin-top:6px;font-size:28px;font-weight:700;line-height:1.1;'>%2%%</div>"
+               "</div>"
+           )
+        .arg(title.toHtmlEscaped())
+        .arg(percent);
+}
+
+void MainWindow::showPreviewPlaybackRateToast(double rate)
+{
+    if (previewPlaybackRateToast_ == nullptr || previewPlaybackRateToastLabel_ == nullptr) {
+        return;
+    }
+    if (previewPlaybackRateToastTimer_ != nullptr) {
+        previewPlaybackRateToastTimer_->stop();
+    }
+    if (previewPlaybackRateToastOpacityAnimation_ != nullptr) {
+        previewPlaybackRateToastOpacityAnimation_->stop();
+    }
+    previewPlaybackRateToastLabel_->setText(formatPreviewPlaybackRateToastText(rate));
+    updatePreviewPlaybackRateToastGeometry();
+    if (previewPlaybackRateToastOpacityEffect_ != nullptr) {
+        previewPlaybackRateToastOpacityEffect_->setOpacity(1.0);
+    }
+    previewPlaybackRateToast_->show();
+    previewPlaybackRateToast_->raise();
+    if (previewPlaybackRateToastTimer_ != nullptr) {
+        previewPlaybackRateToastTimer_->start();
+    }
+}
+
+void MainWindow::updatePreviewPlaybackRateToastGeometry()
+{
+    if (previewPlaybackRateToast_ == nullptr || previewPlaybackRateToastLabel_ == nullptr) {
+        return;
+    }
+    const QRect hostRect = contentsRect();
+    if (!hostRect.isValid()) {
+        return;
+    }
+
+    const QSize preferredSize = previewPlaybackRateToast_->sizeHint();
+    const int availableWidth = qMax(1, hostRect.width() - kPreviewPlaybackRateToastHorizontalMargin * 2);
+    int toastWidth = qMax(kPreviewPlaybackRateToastMinWidth, preferredSize.width());
+    toastWidth = qMin(toastWidth, availableWidth);
+    const int toastHeight = qMax(kPreviewPlaybackRateToastMinHeight, preferredSize.height());
+    const int toastX = hostRect.x() + qMax(0, (hostRect.width() - toastWidth) / 2);
+    const int toastY = hostRect.y() + qMax(0, (hostRect.height() - toastHeight) / 2);
+    previewPlaybackRateToast_->setGeometry(toastX, toastY, toastWidth, toastHeight);
+}
+
+void MainWindow::hidePreviewPlaybackRateToast()
+{
+    if (previewPlaybackRateToastTimer_ != nullptr) {
+        previewPlaybackRateToastTimer_->stop();
+    }
+    if (previewPlaybackRateToastOpacityAnimation_ != nullptr) {
+        previewPlaybackRateToastOpacityAnimation_->stop();
+    }
+    if (previewPlaybackRateToastOpacityEffect_ != nullptr) {
+        previewPlaybackRateToastOpacityEffect_->setOpacity(1.0);
+    }
+    if (previewPlaybackRateToast_ != nullptr) {
+        previewPlaybackRateToast_->hide();
+    }
 }
 
 bool MainWindow::startQtPreviewPlayback(double second, bool resumeFromPause)

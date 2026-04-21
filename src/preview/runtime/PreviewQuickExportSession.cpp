@@ -72,6 +72,23 @@ void PreviewQuickExportSession::setFrameState(const miacode::preview::scene::Pre
     applyFrameState();
 }
 
+void PreviewQuickExportSession::applyExportFrameTick(
+    double playheadSeconds,
+    bool showTimestamp,
+    bool showObjectStatsHud,
+    bool usedGpuRendererThisFrame,
+    int cpuFallbackCount,
+    double fpsDisplay)
+{
+    frameState_.playheadSeconds = playheadSeconds;
+    frameState_.render.showTimestamp = showTimestamp;
+    frameState_.render.showObjectStatsHud = showObjectStatsHud;
+    frameState_.usedGpuRendererThisFrame = usedGpuRendererThisFrame;
+    frameState_.cpuFallbackCount = cpuFallbackCount;
+    frameState_.fpsDisplay = fpsDisplay;
+    requestFrameRefresh();
+}
+
 void PreviewQuickExportSession::setLayerFlags(miacode::preview::scene::PreviewRenderLayerFlags layerFlags)
 {
     if (layerFlags_ == layerFlags) {
@@ -110,6 +127,9 @@ bool PreviewQuickExportSession::initialize(
     clearOffscreenPboCapabilityCache();
     directReadbackBuffer_.clear();
     reusableReadbackFrame_ = QImage();
+    frameStateBound_ = false;
+    layerFlagsApplied_ = false;
+    appliedLayerFlags_ = miacode::preview::scene::kPreviewAllRenderLayers;
     lastRenderStats_ = PreviewQuickExportRenderStats();
 
     QSurfaceFormat surfaceFormat = requestedFormat_;
@@ -171,11 +191,9 @@ bool PreviewQuickExportSession::initialize(
 
     sceneRoot_ = new PreviewQuickSceneRoot(rootItem_);
     sceneRoot_->setZ(0.0);
-    sceneRoot_->setFrameState(&frameState_);
 
     hudLayer_ = new PreviewQuickHudLayer(rootItem_);
     hudLayer_->setZ(1.0);
-    hudLayer_->setFrameState(&frameState_);
 
     applyFrameSize();
     applyFrameState();
@@ -242,6 +260,9 @@ void PreviewQuickExportSession::invalidate()
         directReadbackBuffer_.clear();
         reusableReadbackFrame_ = QImage();
         clearOffscreenPboCapabilityCache();
+        frameStateBound_ = false;
+        layerFlagsApplied_ = false;
+        appliedLayerFlags_ = miacode::preview::scene::kPreviewAllRenderLayers;
         lastRenderStats_ = PreviewQuickExportRenderStats();
         return;
     }
@@ -265,6 +286,9 @@ void PreviewQuickExportSession::invalidate()
     clearOffscreenPboCapabilityCache();
     directReadbackBuffer_.clear();
     reusableReadbackFrame_ = QImage();
+    frameStateBound_ = false;
+    layerFlagsApplied_ = false;
+    appliedLayerFlags_ = miacode::preview::scene::kPreviewAllRenderLayers;
     lastRenderStats_ = PreviewQuickExportRenderStats();
 }
 
@@ -931,13 +955,44 @@ void PreviewQuickExportSession::applyFrameSize()
 
 void PreviewQuickExportSession::applyFrameState()
 {
+    bindFrameStateIfNeeded();
+    applyLayerFlagsIfNeeded();
+    requestFrameRefresh();
+}
+
+void PreviewQuickExportSession::bindFrameStateIfNeeded()
+{
+    if (frameStateBound_ || sceneRoot_ == nullptr || hudLayer_ == nullptr) {
+        return;
+    }
+
+    sceneRoot_->setFrameState(&frameState_);
+    hudLayer_->setFrameState(&frameState_);
+    frameStateBound_ = true;
+}
+
+void PreviewQuickExportSession::applyLayerFlagsIfNeeded()
+{
+    if (sceneRoot_ == nullptr || hudLayer_ == nullptr) {
+        return;
+    }
+    if (layerFlagsApplied_ && appliedLayerFlags_ == layerFlags_) {
+        return;
+    }
+
+    sceneRoot_->setLayerFlags(layerFlags_);
+    hudLayer_->setLayerFlags(layerFlags_);
+    appliedLayerFlags_ = layerFlags_;
+    layerFlagsApplied_ = true;
+}
+
+void PreviewQuickExportSession::requestFrameRefresh()
+{
     if (sceneRoot_ != nullptr) {
-        sceneRoot_->setFrameState(&frameState_);
-        sceneRoot_->setLayerFlags(layerFlags_);
+        sceneRoot_->update();
     }
     if (hudLayer_ != nullptr) {
-        hudLayer_->setFrameState(&frameState_);
-        hudLayer_->setLayerFlags(layerFlags_);
+        hudLayer_->update();
     }
 }
 

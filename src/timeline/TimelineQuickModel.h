@@ -1,5 +1,7 @@
 #pragma once
 
+#include <limits>
+
 #include <QString>
 #include <QVector>
 
@@ -22,6 +24,16 @@ public:
         int endPositionExclusive = 0;
         int cursorPosition = 0;
         bool hasVisibleBody = false;
+    };
+
+    struct PreviewFollowBinding {
+        double startSecond = 0.0;
+        double endSecondExclusive = std::numeric_limits<double>::infinity();
+        double anchorSecond = 0.0;
+        int anchorLine = 1;
+        int anchorCol = 1;
+        PreviewFollowSpan span;
+        bool resolved = false;
     };
 
     TimelineQuickModel() = default;
@@ -49,6 +61,7 @@ public:
     bool resolveTimelineNavigateCursor(double second, int* line, int* col, double* cursorSecond) const;
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
     bool resolvePreviewFollowSelectionRange(int line, int anchorCol, int* startCol, int* endCol) const;
+    bool resolvePreviewFollowBinding(double second, PreviewFollowBinding* binding) const;
     bool resolvePreviewFollowSpan(double second, PreviewFollowSpan* span, double* anchorSecond = nullptr) const;
     bool resolvePreviewFollowCursor(
         double second,
@@ -160,5 +173,6 @@ private:
     QVector<LineState> lines_;
     TimelineRenderSnapshot snapshot_;
     QVector<AbsoluteCursorAnchor> cursorAnchorsBySecond_;
+    QVector<PreviewFollowBinding> previewFollowBindings_;
     QVector<int> linesWithNotes_;
 };

@@ -1,0 +1,58 @@
+#pragma once
+
+#include <QString>
+#include <QVector>
+
+#include "timeline/TimelineData.h"
+
+struct VideoExportTask;
+
+namespace miacode::video_export {
+
+struct BackgroundTrackRenderPlan {
+    bool enabled = false;
+    QString path;
+    double mixStartSecond = 0.0;
+    double sourceStartSecond = 0.0;
+    double durationSeconds = 0.0;
+    double gain = 1.0;
+};
+
+struct ScheduledSfxPlaybackRenderPlan {
+    QString kind;
+    QString assetKind;
+    double mixSecond = 0.0;
+    double gain = 0.0;
+    double maxDurationSeconds = -1.0;
+};
+
+struct TouchholdSpanRenderPlan {
+    QString kind;
+    QString assetKind;
+    double mixSecond = 0.0;
+    double gain = 0.0;
+    double durationSeconds = 0.0;
+};
+
+struct VideoExportAudioRenderPlan {
+    double segmentStartSecond = 0.0;
+    double segmentEndSecond = 0.0;
+    double leadInSeconds = 0.0;
+    double timelineOriginSecond = 0.0;
+    double totalSeconds = 0.0;
+    double alignedTotalSeconds = 0.0;
+    int frameCount = 0;
+    QString sfxDirectory;
+    QVector<TimelineNoteMarker> exportMarkers;
+    BackgroundTrackRenderPlan backgroundTrack;
+    QVector<ScheduledSfxPlaybackRenderPlan> scheduledSfxPlaybacks;
+    QVector<TouchholdSpanRenderPlan> mergedTouchholdSpans;
+};
+
+bool buildVideoExportAudioRenderPlan(
+    const VideoExportTask& task,
+    VideoExportAudioRenderPlan* plan,
+    QString* errorMessage = nullptr
+);
+
+}  // namespace miacode::video_export

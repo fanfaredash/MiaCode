@@ -20,6 +20,7 @@
 #include "preview/scene/PreviewProgressStatsCache.h"
 #include "simai/transform/ChartBatchTransform.h"
 #include "simai/transform/ChartNormalization.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -88,8 +89,8 @@ void MainWindow::EditorSection::loadPortableState()
         state_.lastTrackPath_ = QDir::cleanPath(trackPath);
     }
     applyPortablePreviewSettings(preview);
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
     }
     owner_.refreshPreviewFrameRateTimers();
 }
@@ -98,6 +99,8 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
 {
     state_.softwarePreviewAudioSettings_ = PreviewAudioSettings();
     state_.previewAudioSettings_ = state_.softwarePreviewAudioSettings_;
+    state_.softwarePreviewTimingSettings_ = PreviewTimingSettings();
+    state_.previewTimingSettings_ = state_.softwarePreviewTimingSettings_;
     state_.showSlideTracks_ = true;
     state_.showJudgeMarkers_ = false;
     state_.showTouchTrail_ = false;
@@ -111,7 +114,8 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.previewOutlineVariant_ = PreviewOutlineVariant::Line;
     state_.previewOutlineVariantUsesAutoSelection_ = true;
     state_.previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
-    state_.previewNoteFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    state_.previewTapFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    state_.previewTouchFlowSpeed_ = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     state_.previewSlideEarlierSecondAndTextOnTop_ = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
     state_.previewSkinVariant_ = PreviewSkinVariant::Standard;
     state_.previewCanvasFrameRateMode_ = PreviewCanvasFrameRateMode::DisplayRefresh;
@@ -195,10 +199,22 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     } else if (!scaleMode.isEmpty()) {
         state_.previewBackgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     }
-    if (preview.value("note_flow_speed").isDouble()) {
-        state_.previewNoteFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(
-            preview.value("note_flow_speed").toDouble(state_.previewNoteFlowSpeed_)
+    const double legacyFlowSpeed = preview.value("note_flow_speed").toDouble(
+        miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed
+    );
+    if (preview.value("tap_flow_speed").isDouble()) {
+        state_.previewTapFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(
+            preview.value("tap_flow_speed").toDouble(state_.previewTapFlowSpeed_)
         );
+    } else if (preview.value("note_flow_speed").isDouble()) {
+        state_.previewTapFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(legacyFlowSpeed);
+    }
+    if (preview.value("touch_flow_speed").isDouble()) {
+        state_.previewTouchFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(
+            preview.value("touch_flow_speed").toDouble(state_.previewTouchFlowSpeed_)
+        );
+    } else if (preview.value("note_flow_speed").isDouble()) {
+        state_.previewTouchFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(legacyFlowSpeed);
     }
     if (preview.value("slide_earlier_second_and_text_on_top").isBool()) {
         state_.previewSlideEarlierSecondAndTextOnTop_ =
@@ -258,6 +274,9 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     }
     state_.softwarePreviewAudioSettings_.normalize();
     state_.previewAudioSettings_ = state_.softwarePreviewAudioSettings_;
+    state_.softwarePreviewTimingSettings_ = PreviewTimingSettings::fromJson(preview.value("timing").toObject());
+    state_.softwarePreviewTimingSettings_.normalize();
+    state_.previewTimingSettings_ = state_.softwarePreviewTimingSettings_;
 }
 
 void MainWindow::EditorSection::savePortableState() const
@@ -305,7 +324,8 @@ void MainWindow::EditorSection::savePortableState() const
             ? QStringLiteral("fit")
             : QStringLiteral("fill")
     );
-    preview.insert("note_flow_speed", state_.previewNoteFlowSpeed_);
+    preview.insert("tap_flow_speed", state_.previewTapFlowSpeed_);
+    preview.insert("touch_flow_speed", state_.previewTouchFlowSpeed_);
     preview.insert("slide_earlier_second_and_text_on_top", state_.previewSlideEarlierSecondAndTextOnTop_);
     preview.insert("skin_variant", owner_.previewSkinVariantStorageValue());
     preview.insert("canvas_frame_rate_mode", owner_.previewCanvasFrameRateModeStorageValue());
@@ -328,6 +348,7 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("canvas_aspect_ratio", 1.0);
     preview.insert("auto_restore_square_after_export", false);
     preview.insert("audio", state_.softwarePreviewAudioSettings_.toJson());
+    preview.insert("timing", state_.softwarePreviewTimingSettings_.toJson());
 
     app.insert("preview", preview);
     root.insert("app", app);
@@ -357,7 +378,7 @@ void MainWindow::EditorSection::applyEditorTextFontSize(int pointSize, bool pers
         editor->setBlockSpacingPixels(blockSpacingPixels);
         editor->refreshLineNumberAreaLayout();
     }
-    if (ui_.timelineView_ != nullptr) {
+    if (state_.timelineQuickStateBridge_ != nullptr) {
         owner_.windowSection_->updateBottomTabsDeviceHeight();
     }
     if (ui_.metadataExtraEdit_ != nullptr) {

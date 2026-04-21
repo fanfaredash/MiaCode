@@ -13,6 +13,7 @@ Item {
     property var attachedMediaHost: null
     property var attachedVideoOutputObject: null
     readonly property string instanceTag: surfaceRole + ":" + Math.round(Math.random() * 1000000000)
+    readonly property var hostWindow: root.Window.window ? root.Window.window : null
 
     function logSurface(action, extra) {
         if (!logger)
@@ -22,10 +23,10 @@ Item {
             + " visible=" + (visible ? 1 : 0)
             + " has_runtime=" + (runtime ? 1 : 0)
             + " has_media=" + (mediaHost ? 1 : 0)
-        if (window) {
-            payload += " window_visible=" + (window.visible ? 1 : 0)
-            payload += " window_width=" + window.width
-            payload += " window_height=" + window.height
+        if (hostWindow) {
+            payload += " window_visible=" + (hostWindow.visible ? 1 : 0)
+            payload += " window_width=" + hostWindow.width
+            payload += " window_height=" + hostWindow.height
         }
         if (extra && extra.length > 0)
             payload += " " + extra
@@ -35,7 +36,7 @@ Item {
     function syncVideoOutputBinding() {
         const videoOutput = previewStageMedia.videoOutputObject
         const nextHost = mediaHost
-        const shouldAttach = visible && nextHost && videoOutput
+        const shouldAttach = visible && nextHost && videoOutput && hostWindow && hostWindow.visible
 
         if (attachedMediaHost && (!shouldAttach || attachedMediaHost !== nextHost)) {
             attachedMediaHost.detachVideoOutputObject(attachedVideoOutputObject)
@@ -60,6 +61,10 @@ Item {
         syncVideoOutputBinding()
         logSurface("preview_surface_media_host_changed")
     }
+    onHostWindowChanged: {
+        syncVideoOutputBinding()
+        logSurface("preview_surface_host_window_changed")
+    }
     onRuntimeChanged: logSurface("preview_surface_runtime_changed")
     Component.onCompleted: {
         syncVideoOutputBinding()
@@ -69,6 +74,17 @@ Item {
         logSurface("preview_surface_destroyed")
         if (attachedMediaHost && attachedVideoOutputObject) {
             attachedMediaHost.detachVideoOutputObject(attachedVideoOutputObject)
+            attachedMediaHost = null
+            attachedVideoOutputObject = null
+        }
+    }
+
+    Connections {
+        target: root.hostWindow
+
+        function onVisibleChanged() {
+            root.syncVideoOutputBinding()
+            root.logSurface("preview_surface_window_visible_changed")
         }
     }
 

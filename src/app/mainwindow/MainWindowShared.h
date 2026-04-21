@@ -44,16 +44,14 @@ inline constexpr int kPreviewFullscreenControlsRevealHotzoneHeight =
     miacode::window_parity::kPreviewFullscreenControlsRevealHotzoneHeight;
 inline constexpr int kPreviewFullscreenControlsAutoHideDelayMs =
     miacode::window_parity::kPreviewFullscreenControlsAutoHideDelayMs;
-inline constexpr double kTimelineUiCadenceHz = 30.0;
-inline constexpr int kTimelineUiCadenceMs = static_cast<int>(1000.0 / kTimelineUiCadenceHz);
-inline constexpr double kTimelineUiCadenceSeconds = 1.0 / kTimelineUiCadenceHz;
 inline constexpr int kEditorTextFontSizeMin = 8;
 inline constexpr int kEditorTextFontSizeMax = 28;
 inline constexpr double kEditorLineSpacingFactorDefault = 3.0;
 inline constexpr int kAutosaveIntervalMs = 2 * 60 * 1000;
 inline constexpr int kAutosaveHistoryMaxVersions = 30;
 inline constexpr int kAutosaveLatestIdleMs = 2 * 1000;
-// Cap interactive preview scrub updates at <= 15 FPS so timeline dragging and
+inline constexpr double kTimelineMaxUiUpdateFps = 3600.0;
+// Cap interactive preview scrub updates at <= ? FPS so timeline dragging and
 // preview-slider dragging do not spam seek work faster than the video path can settle.
 inline constexpr int kPreviewScrubRenderIntervalMs = 67;
 
@@ -77,6 +75,7 @@ QFont uiAccentFont(int pointSize, QFont::Weight weight = QFont::Medium);
 QFont uiMonoFont(int pointSize, QFont::Weight weight = QFont::Medium);
 QString previewFullscreenControlCardStyleSheet();
 QString previewFullscreenHintStyleSheet();
+QString previewPlaybackRateToastStyleSheet();
 QString outlineCollapseButtonStyleSheet();
 QColor previewFullscreenOverlayIconColor();
 QString previewFullscreenPauseButtonStyleSheet(bool active);

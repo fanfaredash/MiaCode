@@ -45,7 +45,7 @@ const QList<double> kEditorLineSpacingFactorOptions{
 namespace {
 
 const QList<double> kPreviewPlaybackRateOptions{
-    0.25, 0.5, 0.75, 1.0, 1.25, 2.0,
+    0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0,
 };
 
 QString normalizeLanguageToken(QString token)
@@ -653,6 +653,22 @@ QString previewFullscreenHintStyleSheet()
         " padding: 10px 16px;"
         " font-size: 14px;"
         " font-weight: 600;"
+        "}"
+    );
+}
+
+QString previewPlaybackRateToastStyleSheet()
+{
+    return QStringLiteral(
+        "QWidget {"
+        " background: rgba(0, 0, 0, 204);"
+        " border: 1px solid rgba(255, 255, 255, 56);"
+        " border-radius: 18px;"
+        "}"
+        "QLabel {"
+        " background: transparent;"
+        " color: #F8FAFC;"
+        " border: none;"
         "}"
     );
 }

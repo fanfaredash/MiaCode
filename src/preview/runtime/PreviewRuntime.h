@@ -125,6 +125,8 @@ public:
     void setLayoutSquareScale(double scale);
     void setSmoothBrightness(bool smooth);
     void setBackgroundScaleMode(PreviewBackgroundScaleMode mode);
+    void setTapFlowSpeed(double flowSpeed);
+    void setTouchFlowSpeed(double flowSpeed);
     void setNoteFlowSpeed(double flowSpeed);
     void setSlideEarlierSecondAndTextOnTop(bool enabled);
     void setShowDebugInfo(bool show);

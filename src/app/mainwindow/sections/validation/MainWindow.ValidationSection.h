@@ -51,6 +51,7 @@ public:
     void onMuriItemActivated(QListWidgetItem* item);
     void showIssueListContextMenu(QListWidget* list, const QPoint& pos, bool muriList);
     void refreshMuriDiagnosticsPanel();
+    void flushPendingMuriDiagnosticsPanelRefresh();
     void clearValidationCache();
     void applyDeferredAnalysisUiUpdates();
     void setValidationTabVisible(bool visible);
@@ -65,6 +66,8 @@ public:
     void onValidateSimai();
 
 private:
+    bool isMuriDiagnosticsTabActive() const;
+    void rebuildMuriDiagnosticsPanel();
     void refreshEditorExtraSelectionsForReason(const QString& reason);
     void rebuildValidationExtraSelectionsCache(const QString& reason);
     void applyEditorExtraSelectionsForReason(const QString& reason);

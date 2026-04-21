@@ -63,7 +63,7 @@ private:
     PreviewTextureStats takePendingTextureStatsForPresentation() const;
     void syncVisibleHostWindowBinding(const char* reason = "unspecified");
 
-    PreviewRuntime* runtime_ = nullptr;
+    QPointer<PreviewRuntime> runtime_;
     QMetaObject::Connection runtimeUpdateConnection_;
     QMetaObject::Connection frameSwapConnection_;
     QMetaObject::Connection windowVisibilityConnection_;

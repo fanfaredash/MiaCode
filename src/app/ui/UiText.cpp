@@ -123,20 +123,36 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
     if (raw.contains("preview_audio") && raw.value("preview_audio").isObject()) {
         preview.insert("audio", raw.value("preview_audio").toObject());
     }
-    if (raw.contains("bgm_volume")
+    if (raw.contains("master_volume")
+        || raw.contains("master_restore_volume")
+        || raw.contains("bgm_volume")
         || raw.contains("sfx_volume")
         || raw.contains("answer_volume")
         || raw.contains("judge_volume")
+        || raw.contains("ex_volume")
+        || raw.contains("break_volume")
+        || raw.contains("slide_volume")
+        || raw.contains("touch_volume")
+        || raw.contains("touchhold_volume")
         || raw.contains("break_slide_volume")
-        || raw.contains("firework_volume")) {
+        || raw.contains("firework_volume")
+        || raw.contains("hanabi_volume")) {
         QJsonObject audio = preview.value("audio").toObject();
+        if (raw.contains("master_volume")) {
+            audio.insert("global_volume", raw.value("master_volume").toDouble());
+        }
+        if (raw.contains("master_restore_volume")) {
+            audio.insert("global_restore_volume", raw.value("master_restore_volume").toDouble());
+        }
         if (raw.contains("bgm_volume")) {
+            audio.insert("track_volume", raw.value("bgm_volume").toDouble());
             audio.insert("bgm_volume", raw.value("bgm_volume").toDouble());
         }
         if (raw.contains("answer_volume")) {
             audio.insert("answer_volume", raw.value("answer_volume").toDouble(raw.value("sfx_volume").toDouble()));
         }
         if (raw.contains("judge_volume")) {
+            audio.insert("tap_volume", raw.value("judge_volume").toDouble(raw.value("sfx_volume").toDouble()));
             audio.insert("judge_volume", raw.value("judge_volume").toDouble(raw.value("sfx_volume").toDouble()));
         }
         if (raw.contains("slide_volume")) {
@@ -155,13 +171,22 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
             audio.insert("touch_volume", raw.value("touch_volume").toDouble(raw.value("sfx_volume").toDouble()));
         }
         if (raw.contains("touchhold_volume")) {
-            audio.insert("touchhold_volume", raw.value("touchhold_volume").toDouble(raw.value("sfx_volume").toDouble()));
+            const double touchHoldVolume = raw.value("touchhold_volume").toDouble(raw.value("sfx_volume").toDouble());
+            audio.insert("touchhold_volume", touchHoldVolume);
             if (!raw.contains("touch_volume")) {
-                audio.insert("touch_volume", raw.value("touchhold_volume").toDouble(raw.value("sfx_volume").toDouble()));
+                audio.insert("touch_volume", touchHoldVolume);
+            } else {
+                audio.insert(
+                    "touch_volume",
+                    qMax(audio.value("touch_volume").toDouble(), touchHoldVolume)
+                );
             }
         }
         if (raw.contains("firework_volume")) {
             audio.insert("firework_volume", raw.value("firework_volume").toDouble(raw.value("sfx_volume").toDouble()));
+        }
+        if (raw.contains("hanabi_volume")) {
+            audio.insert("firework_volume", raw.value("hanabi_volume").toDouble(raw.value("sfx_volume").toDouble()));
         }
         preview.insert("audio", audio);
     }
@@ -426,14 +451,14 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.audio.master", "全局音量"},
         {"dialog.render_settings.audio.bgm", "BGM 音量"},
         {"dialog.render_settings.audio.answer", "Answer 音量"},
-        {"dialog.render_settings.audio.judge", "Judge 音量"},
+        {"dialog.render_settings.audio.tap", "Tap 音量"},
         {"dialog.render_settings.audio.break", "Break 音量"},
         {"dialog.render_settings.audio.slide", "Slide 音量"},
         {"dialog.render_settings.audio.ex", "EX 音量"},
         {"dialog.render_settings.audio.touch", "Touch 音量"},
-        {"dialog.render_settings.audio.touchhold", "Touch-Hold 音量"},
+        {"dialog.render_settings.audio.track", "Track 音量"},
+        {"dialog.render_settings.audio.global", "Global 音量"},
         {"dialog.render_settings.audio.firework", "Firework 音量"},
-        {"dialog.render_settings.audio.break_slide", "Break Slide 音量"},
         {"dialog.render_settings.audio.button.mute", "静音 %1"},
         {"dialog.render_settings.audio.button.unmute", "恢复 %1"},
         {"dialog.render_settings.video.brightness", "背景/PV 亮度"},
@@ -448,6 +473,8 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.video.brightness_inner", "亮度（内侧）"},
         {"dialog.render_settings.video.layout_square_scale", "判定线大小"},
         {"dialog.render_settings.video.flow_speed", "流速"},
+        {"dialog.render_settings.video.tap_flow_speed", "Tap流速"},
+        {"dialog.render_settings.video.touch_flow_speed", "Touch流速"},
         {"dialog.render_settings.video.skin", "皮肤"},
         {"dialog.render_settings.video.skin.standard", "标准"},
         {"dialog.render_settings.video.skin.dx", "DX"},
@@ -503,6 +530,8 @@ const QHash<QString, QString>& zhMap()
         {"dialog.video_export.option.brightness_inner", "亮度（内侧）"},
         {"dialog.video_export.option.layout_size", "判定线大小"},
         {"dialog.video_export.option.flow_speed", "流速"},
+        {"dialog.video_export.option.tap_flow_speed", "Tap流速"},
+        {"dialog.video_export.option.touch_flow_speed", "Touch流速"},
         {"dialog.video_export.option.scale_mode", "背景 / PV 缩放模式"},
         {"dialog.video_export.option.scale.fill", "填充（必要时裁切）"},
         {"dialog.video_export.option.scale.fit", "适应（完整显示）"},

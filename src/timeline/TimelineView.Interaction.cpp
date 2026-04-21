@@ -3,6 +3,7 @@ void TimelineView::resizeEvent(QResizeEvent* event)
     QAbstractScrollArea::resizeEvent(event);
     layoutHeaderButtons();
     updateHorizontalRange();
+    emit renderStateChanged();
 }
 
 void TimelineView::keyPressEvent(QKeyEvent* event)
@@ -79,7 +80,7 @@ void TimelineView::mousePressEvent(QMouseEvent* event)
         return second;
     };
 
-    const QRect headerRect(timelineLeft(), 0, viewport()->width() - timelineLeft(), kHeaderHeight);
+    const QRect headerRect(timelineLeft(), 0, viewport()->width() - timelineLeft(), headerHeight());
     if (headerRect.contains(event->position().toPoint())) {
         setFocus(Qt::MouseFocusReason);
         emit timelineUserInteractionStarted();
@@ -123,7 +124,7 @@ void TimelineView::mouseMoveEvent(QMouseEvent* event)
 {
     if (event != nullptr && timelineDragActive_) {
         const int deltaX = qRound(event->position().x()) - timelineDragStartX_;
-        horizontalScrollBar()->setValue(timelineDragStartScrollValue_ - deltaX);
+        setHorizontalScrollValue(timelineDragStartScrollValue_ - deltaX);
         updatePlayheadToViewportCenter();
         event->accept();
         return;
@@ -164,7 +165,7 @@ void TimelineView::wheelEvent(QWheelEvent* event)
             emit centerNavigateRequested(centerSecond);
         }
         suppressPlayheadIndicatorForInteraction();
-        horizontalScrollBar()->setValue(horizontalScrollBar()->value() - (delta / 2));
+        setHorizontalScrollValue(horizontalScrollBar()->value() - (delta / 2));
         updatePlayheadToViewportCenter();
         restorePlayheadIndicatorAfterInteraction();
         event->accept();
@@ -192,6 +193,7 @@ void TimelineView::scrollContentsBy(int dx, int dy)
         }
     }
     viewport()->update();
+    emit renderStateChanged();
 }
 
 bool TimelineView::stepViewportBySeconds(double deltaSeconds)
@@ -211,7 +213,7 @@ bool TimelineView::stepViewportBySeconds(double deltaSeconds)
         return true;
     }
 
-    hbar->setValue(qBound(hbar->minimum(), hbar->value() + pixelDelta, hbar->maximum()));
+    setHorizontalScrollValue(qBound(hbar->minimum(), hbar->value() + pixelDelta, hbar->maximum()));
     return true;
 }
 

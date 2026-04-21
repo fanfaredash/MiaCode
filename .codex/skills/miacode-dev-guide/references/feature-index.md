@@ -24,12 +24,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Class: `MainWindow`
   - Owns: top-level state, shared widgets, preview runtime instances, export worker process, portable/project settings, the route-specific preview stage-media coordinator, and the hidden Quick-shell backend mode that rehosts legacy editor/timeline surfaces for QML
 - Quick shell beta bootstrap and controller bridge:
-  - Files: `src/app/quick_shell/QuickShellBootstrap.h`, `src/app/quick_shell/QuickShellBootstrap.cpp`, `src/app/quick_shell/QuickShellController.h`, `src/app/quick_shell/QuickShellController.cpp`, `src/app/quick_shell/QuickShellPreviewCompositeSurface.h`, `src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp`, `src/app/quick_shell/QuickShellStyleBridge.h`, `src/app/quick_shell/QuickShellStyleBridge.cpp`, `src/app/quick_shell/qml/QuickShellPreviewSurface.qml`, `src/app/quick_shell/qml/QuickShellPreviewTransport.qml`, `src/app/quick_shell/qml/QuickShellPreviewStatsPanel.qml`, `src/app/ui/WindowParityMetrics.h`, `src/app/ui/WindowParityMetrics.cpp`
-  - Classes: `QuickShellBootstrap`, `QuickShellController`, `QuickShellPreviewCompositeSurface`, `QuickShellStyleBridge`
-  - Owns: `QQmlApplicationEngine` startup, hybrid-host beta window lifetime, coarse-grained native-region window exposure for top chrome/sidebar/workspace/status, preview transport/fullscreen bridge state, the pure-QML embedded/fullscreen preview transport and embedded stats panel, the quickshell-only inline preview surface that stacks background media plus scene plus HUD, the dedicated quickshell composite preview window used for video media, and host sizing/theme tokens shared with the `MainWindow` backend
-- Quick shell legacy bridge leftovers:
-  - Files: `src/app/quick_shell/OutlineListModel.h`, `src/app/quick_shell/OutlineListModel.cpp`, `src/app/quick_shell/IssueListModel.h`, `src/app/quick_shell/IssueListModel.cpp`, `src/app/quick_shell/LegacyChartEditorSurface.h`, `src/app/quick_shell/LegacyChartEditorSurface.cpp`, `src/app/quick_shell/LegacyTimelineSurface.h`, `src/app/quick_shell/LegacyTimelineSurface.cpp`, `src/app/quick_shell/qml/QuickShellMain.qml`
-  - Owns: the retained legacy quick-shell bridge helpers that are no longer on the active hybrid-host path; `QuickShellMain.qml` is now the coarse-grained host that embeds native top chrome/workspace/status regions, drives the pure-QML preview transport/stats layout, and hosts the same-window Quick preview
+  - Files: `src/app/quick_shell/QuickShellBootstrap.h`, `src/app/quick_shell/QuickShellBootstrap.cpp`, `src/app/quick_shell/QuickShellContracts.h`, `src/app/quick_shell/QuickShellController.h`, `src/app/quick_shell/QuickShellController.cpp`, `src/app/quick_shell/QuickShellNativeSurfaceHost.h`, `src/app/quick_shell/QuickShellNativeSurfaceHost.cpp`, `src/app/quick_shell/QuickShellPreviewCompositeSurface.h`, `src/app/quick_shell/QuickShellPreviewCompositeSurface.cpp`, `src/app/quick_shell/QuickShellStyleBridge.h`, `src/app/quick_shell/QuickShellStyleBridge.cpp`, `src/app/quick_shell/qml/QuickShellMain.qml`, `src/app/quick_shell/qml/BottomTabsQuickHost.qml`, `src/app/quick_shell/qml/QuickShellPreviewSurface.qml`, `src/app/quick_shell/qml/QuickShellPreviewTransport.qml`, `src/app/quick_shell/qml/QuickShellPreviewStatsPanel.qml`, `src/app/ui/WindowParityMetrics.h`, `src/app/ui/WindowParityMetrics.cpp`
+  - Classes: `QuickShellBootstrap`, `QuickShellController`, `QuickShellNativeSurfaceHost`, `QuickShellPreviewCompositeSurface`, `QuickShellStyleBridge`
+  - Owns: `QQmlApplicationEngine` startup, hybrid-host beta window lifetime, coarse-grained native-region window exposure for top chrome/sidebar/workspace/bottom-tabs/status, preview transport/fullscreen bridge state, bottom-tabs current-tab plus tab-visibility bridge state, the pure-QML embedded/fullscreen preview transport and embedded stats panel, the phase-1 Quick bottom-tabs shell that drives the retained-native tab content surface, the quickshell-only inline preview surface that stacks background media plus scene plus HUD, the dedicated quickshell composite preview window used for video media, and host sizing/theme tokens shared with the `MainWindow` backend
 - Section map:
   - File: `src/app/mainwindow/sections/README.md`
   - Owns: where each MainWindow feature slice lives
@@ -83,7 +80,11 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Timeline data model and widget:
   - Files: `src/timeline/TimelineView.h`, `src/timeline/TimelineView.cpp`, `src/timeline/TimelineView.Core.cpp`, `src/timeline/TimelineView.Interaction.cpp`, `src/timeline/TimelineView.Paint.cpp`
   - Class: `TimelineView`
-  - Owns: lightweight timeline rendering, visible-range painting, playhead/cursor movement, waveform strip, follow-preview behavior
+  - Owns: the widget reference implementation for lightweight timeline rendering, visible-range painting, playhead/cursor movement, waveform strip, follow-preview behavior, and the shared state surface currently mirrored by the Quick timeline route
+- Timeline scene-state and Quick surface:
+  - Files: `src/common/TimelineThemeConfig.h`, `src/timeline/TimelineNoteAssets.h`, `src/timeline/TimelineNoteAssets.cpp`, `src/timeline/TimelineSceneState.h`, `src/timeline/TimelineSceneState.cpp`, `src/timeline/TimelineSceneStateBuilder.h`, `src/timeline/TimelineSceneStateBuilder.cpp`, `src/timeline/quick/TimelineQuickStateBridge.h`, `src/timeline/quick/TimelineQuickStateBridge.cpp`, `src/timeline/quick/TimelineQuickTextureCache.h`, `src/timeline/quick/TimelineQuickTextureCache.cpp`, `src/timeline/quick/TimelineQuickLayerUtils.h`, `src/timeline/quick/TimelineQuickLayerUtils.cpp`, `src/timeline/quick/TimelineQuickGridLayer.*`, `src/timeline/quick/TimelineQuickWaveformLayer.*`, `src/timeline/quick/TimelineQuickHeaderLayer.*`, `src/timeline/quick/TimelineQuickNotesLayer.*`, `src/timeline/quick/TimelineQuickOverlayLayer.*`, `src/timeline/quick/TimelineQuickItem.h`, `src/timeline/quick/TimelineQuickItem.cpp`, `src/app/quick_shell/qml/TimelineTabSurface.qml`
+  - Classes: `TimelineQuickStateBridge`, `TimelineQuickTextureCache`, `TimelineQuickGridLayer`, `TimelineQuickWaveformLayer`, `TimelineQuickHeaderLayer`, `TimelineQuickNotesLayer`, `TimelineQuickOverlayLayer`, `TimelineQuickItem`
+  - Owns: the single source of truth for Quick/widget timeline state during Phase2, shared note asset loading for widget plus Quick routes, renderer-facing scene-state extraction from snapshot/view state, layered QSG rendering for grid/waveform/header/notes/overlay, the experimental Quick timeline path under quick-shell, and the Quick-side interaction surface that forwards semantic signals back into `MainWindow`
 - Timeline fast/slow refresh orchestration:
   - File: `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
   - Key functions: `applyTimelineQuickChange`, `refreshTimelineQuickModelFromCurrentText`, `scheduleTimelineRefresh`, `requestTimelineSlowRefresh`, `dispatchTimelineSlowRefresh`, `scheduleTimelineAnalysisRefresh`, `scheduleTimelineAnalysisRefreshFromLatestPreviewState`, `dispatchTimelineAnalysisRefresh`, `seekTimelineToCursor`, `syncTimelineToEditorCursor`, `navigateTimelineToSecond`, `updatePreviewSliderRange`, `updatePreviewObjectStats`, `updatePreviewWorkspaceLayout`, `updatePreviewPanelLayout`
@@ -124,17 +125,21 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 ## 7. Preview Audio And SFX Scheduling
 
 - Preview SFX runtime:
-  - Files: `src/preview/audio/QtPreviewSfxRuntime.h`, `src/preview/audio/QtPreviewSfxRuntime.cpp`
+  - Files: `src/common/PreviewSfxSemantics.h`, `src/common/PreviewSfxTimeline.h`, `src/preview/audio/PreviewAudioBackend.h`, `src/preview/audio/QtPreviewSfxRuntime.h`, `src/preview/audio/QtPreviewSfxRuntime.cpp`, `src/preview/audio/MiniaudioPreviewAudioBackend.h`, `src/preview/audio/MiniaudioPreviewAudioBackend.cpp`, `src/preview/audio/BassPreviewAudioBackend.h`, `src/preview/audio/BassPreviewAudioBackend.cpp`
   - Class: `QtPreviewSfxRuntime`
-  - Owns: miniaudio engine state, prepared asset paths, prepared timeline program, playback session state, clip banks, shared touchhold sustain control, background track playback
+  - Owns: the preview-audio facade seen by `MainWindow`, backend selection, and the stable prepare / commit / pause / resume / seek surface; `MiniaudioPreviewAudioBackend` remains the non-Windows compatibility path, while `BassPreviewAudioBackend` now owns the Windows real BASS runtime path with repo-local `bass*.dll`, no Windows-side miniaudio fallback, master mixer clock authority, preloaded sample channels inspired by MajdataPlay's `BassAudioSample`, and backend-side note-SFX draining
 - Split responsibilities:
-  - `QtPreviewSfxRuntime.Assets.cpp`: chart track resolution, SFX dir resolution, bank resets
-  - `QtPreviewSfxRuntime.Timeline.cpp`: event generation from `TimelineNoteMarker`
-  - `QtPreviewSfxRuntime.Background.cpp`: BGM start/seek/sync/audition
-  - `QtPreviewSfxRuntime.Engine.cpp`, `QtPreviewSfxRuntime.Voices.cpp`: engine and voice internals
+  - `QtPreviewSfxRuntime.Assets.cpp`: miniaudio backend chart track resolution, SFX dir resolution, bank resets
+  - `QtPreviewSfxRuntime.Timeline.cpp`: miniaudio backend event generation from `TimelineNoteMarker`
+  - `QtPreviewSfxRuntime.Background.cpp`: miniaudio backend BGM start/seek/sync/audition
+  - `QtPreviewSfxRuntime.Engine.cpp`, `QtPreviewSfxRuntime.Voices.cpp`: miniaudio backend engine and voice internals
 - Main window hooks:
   - File: `src/app/mainwindow/MainWindow.cpp`
   - Key functions: `ensurePreviewSfxRuntimePrepared`, `applyPreviewAudioSettingsToRuntime`, `schedulePreviewSubsystemWarmup`
+- Main window playback-second authority:
+  - File: `src/app/mainwindow/sections/timeline/MainWindow.TimelinePlayback.cpp`
+  - Key function: `MainWindow::currentPreviewAuthoritativeAudioClockSecond`
+  - Owns: the single preview-time audio clock getter for UI follow, export-dialog default position, and weak video late-start alignment
 
 ## 8. Video Export UI, Snapshot Boundary, And Encoder Pipeline
 
@@ -147,9 +152,9 @@ Use this file to map a user-facing feature to the concrete file, class, and func
   - Class: `BatchVideoExportDialog`
   - Owns: chart-folder batch export setup, shared export settings UI, and application-scoped export preset / resolution / FPS persistence for batch runs
 - Export task and controller:
-  - Files: `src/tools/video_export/VideoExportController.h`, `src/tools/video_export/VideoExportController.cpp`, `src/tools/video_export/VideoExportQuickRenderBackend.h`, `src/tools/video_export/VideoExportQuickRenderBackend.cpp`, `src/tools/video_export/RawVideoPipeTransport.h`, `src/tools/video_export/RawVideoPipeTransport.cpp`
-  - Classes: `VideoExportController`, `VideoExportQuickRenderBackend`
-  - Key functions: `exportFullPreview`, `exportPreparedTask`, `chooseVideoEncoder`, `VideoExportQuickRenderBackend::bootstrap`, `miacode::video_export::raw_pipe::enqueueRawVideoFrame`
+  - Files: `src/tools/video_export/VideoExportController.h`, `src/tools/video_export/VideoExportController.cpp`, `src/tools/video_export/VideoExportAudioRenderPlan.h`, `src/tools/video_export/VideoExportAudioRenderPlan.cpp`, `src/tools/video_export/VideoExportAudioBackend.h`, `src/tools/video_export/LegacyExportAudioBackend.h`, `src/tools/video_export/LegacyExportAudioBackend.cpp`, `src/tools/video_export/BassExportAudioBackend.h`, `src/tools/video_export/BassExportAudioBackend.cpp`, `src/tools/video_export/VideoExportQuickRenderBackend.h`, `src/tools/video_export/VideoExportQuickRenderBackend.cpp`, `src/tools/video_export/RawVideoPipeTransport.h`, `src/tools/video_export/RawVideoPipeTransport.cpp`
+  - Classes: `VideoExportController`, `VideoExportQuickRenderBackend`, `LegacyExportAudioBackend`, `BassExportAudioBackend`
+  - Key functions: `exportFullPreview`, `exportPreparedTask`, `buildVideoExportAudioRenderPlan`, `VideoExportAudioBackend::renderMixedTrackToWav`, `chooseVideoEncoder`, `VideoExportQuickRenderBackend::bootstrap`, `miacode::video_export::raw_pipe::enqueueRawVideoFrame`
 - Export snapshot boundary:
   - Files: `src/tools/video_export/VideoExportSnapshot.h`, `src/tools/video_export/VideoExportSnapshot.cpp`
   - Struct: `VideoExportSnapshot`

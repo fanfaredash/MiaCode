@@ -58,7 +58,8 @@ bool VideoExportQuickRenderBackend::bootstrap(
     frameState_.render.layoutSquareScale = normalizedLayoutScale(task.layoutSquareScale);
     frameState_.render.smoothBrightness = task.smoothBrightness;
     frameState_.render.backgroundScaleMode = task.backgroundScaleMode;
-    frameState_.render.noteFlowSpeed = normalizedFlowSpeed(task.noteFlowSpeed);
+    frameState_.render.tapFlowSpeed = normalizedFlowSpeed(task.tapFlowSpeed);
+    frameState_.render.touchFlowSpeed = normalizedFlowSpeed(task.touchFlowSpeed);
     frameState_.render.slideEarlierSecondAndTextOnTop = task.slideEarlierSecondAndTextOnTop;
     frameState_.render.showDebugInfo = false;
     frameState_.render.showTimestamp = task.showTimestamp;
@@ -84,6 +85,7 @@ void VideoExportQuickRenderBackend::copyRenderStateFrom(const VideoExportQuickRe
     shareContext_ = source.shareContext_;
     session_.setLayerFlags(source.session_.layerFlags());
     refreshAssetState();
+    syncSessionStateIfInitialized();
 }
 
 void VideoExportQuickRenderBackend::setStageMediaAvailable(bool hasMedia)
@@ -91,57 +93,82 @@ void VideoExportQuickRenderBackend::setStageMediaAvailable(bool hasMedia)
     assets_.setStageMediaAvailable(hasMedia);
     frameState_.media.stageMediaAvailable = hasMedia;
     refreshAssetState();
+    syncSessionStateIfInitialized();
 }
 
 void VideoExportQuickRenderBackend::setBackgroundBrightnessOuter(double brightness)
 {
     frameState_.render.backgroundBrightnessOuter = qBound(0.0, brightness, 1.0);
+    syncSessionStateIfInitialized();
 }
 
 void VideoExportQuickRenderBackend::setBackgroundBrightnessInner(double brightness)
 {
     frameState_.render.backgroundBrightnessInner = qBound(0.0, brightness, 1.0);
+    syncSessionStateIfInitialized();
 }
 
 void VideoExportQuickRenderBackend::setLayoutSquareScale(double scale)
 {
     frameState_.render.layoutSquareScale = normalizedLayoutScale(scale);
+    syncSessionStateIfInitialized();
 }
 
 void VideoExportQuickRenderBackend::setSmoothBrightness(bool smooth)
 {
     frameState_.render.smoothBrightness = smooth;
+    syncSessionStateIfInitialized();
 }
 
 void VideoExportQuickRenderBackend::setOutlineVariant(PreviewOutlineVariant variant)
 {
     assets_.setOutlineVariant(variant);
     refreshAssetState();
+    syncSessionStateIfInitialized();
 }
 
 void VideoExportQuickRenderBackend::setBackgroundScaleMode(PreviewBackgroundScaleMode mode)
 {
     frameState_.render.backgroundScaleMode = mode;
+    syncSessionStateIfInitialized();
+}
+
+void VideoExportQuickRenderBackend::setTapFlowSpeed(double flowSpeed)
+{
+    frameState_.render.tapFlowSpeed = normalizedFlowSpeed(flowSpeed);
+    syncSessionStateIfInitialized();
+}
+
+void VideoExportQuickRenderBackend::setTouchFlowSpeed(double flowSpeed)
+{
+    frameState_.render.touchFlowSpeed = normalizedFlowSpeed(flowSpeed);
+    syncSessionStateIfInitialized();
 }
 
 void VideoExportQuickRenderBackend::setNoteFlowSpeed(double flowSpeed)
 {
-    frameState_.render.noteFlowSpeed = normalizedFlowSpeed(flowSpeed);
+    const double normalizedSpeed = normalizedFlowSpeed(flowSpeed);
+    frameState_.render.tapFlowSpeed = normalizedSpeed;
+    frameState_.render.touchFlowSpeed = normalizedSpeed;
+    syncSessionStateIfInitialized();
 }
 
 void VideoExportQuickRenderBackend::setShowDebugInfo(bool show)
 {
     frameState_.render.showDebugInfo = show;
+    syncSessionStateIfInitialized();
 }
 
 void VideoExportQuickRenderBackend::setShowTimestamp(bool show)
 {
     frameState_.render.showTimestamp = show;
+    syncSessionStateIfInitialized();
 }
 
 void VideoExportQuickRenderBackend::setShowObjectStatsHud(bool show)
 {
     frameState_.render.showObjectStatsHud = show;
+    syncSessionStateIfInitialized();
 }
 
 void VideoExportQuickRenderBackend::setNoteMarkers(const QVector<TimelineNoteMarker>& notes)
@@ -149,18 +176,21 @@ void VideoExportQuickRenderBackend::setNoteMarkers(const QVector<TimelineNoteMar
     frameState_.noteMarkers = notes;
     frameState_.progressStatsCache = buildProgressStatsCache(notes);
     frameState_.sceneContentRevision += 1;
+    syncSessionStateIfInitialized();
 }
 
 void VideoExportQuickRenderBackend::setMuriAnalysisReport(const MuriAnalysisReport& report)
 {
     frameState_.muriAnalysisReport = report;
     frameState_.sceneContentRevision += 1;
+    syncSessionStateIfInitialized();
 }
 
 void VideoExportQuickRenderBackend::setMuriRenderOptions(const MuriRenderOptions& options)
 {
     frameState_.muriRenderOptions = options;
     frameState_.sceneContentRevision += 1;
+    syncSessionStateIfInitialized();
 }
 
 bool VideoExportQuickRenderBackend::hasCoreSkinAssetsLoadedForDebug() const
@@ -176,7 +206,11 @@ bool VideoExportQuickRenderBackend::initializeOffscreenRenderer(
     requestedFormat_ = requestedFormat;
     shareContext_ = shareContext;
     session_.setFrameState(frameState_);
-    return session_.initialize(requestedFormat_, shareContext_, errorMessage);
+    if (!session_.initialize(requestedFormat_, shareContext_, errorMessage)) {
+        return false;
+    }
+    session_.setFrameState(frameState_);
+    return true;
 }
 
 void VideoExportQuickRenderBackend::shutdownOffscreenRenderer()
@@ -206,7 +240,6 @@ bool VideoExportQuickRenderBackend::renderOverlayFrameOffscreenPboStep(
 {
     session_.setFrameSize(outputSize);
     updateFrameStateForRender(playheadSeconds, showTimestamp, showObjectStatsHud);
-    session_.setFrameState(frameState_);
     const bool ok = session_.renderFramePboStep(
         completedFrame,
         completedFrameReady,
@@ -234,7 +267,6 @@ QImage VideoExportQuickRenderBackend::renderOverlayFrameOffscreen(
 {
     session_.setFrameSize(outputSize);
     updateFrameStateForRender(playheadSeconds, showTimestamp, showObjectStatsHud);
-    session_.setFrameState(frameState_);
     const QImage frame = session_.renderFrame();
     lastRenderStats_ = session_.lastRenderStats();
     return frame;
@@ -278,15 +310,25 @@ void VideoExportQuickRenderBackend::refreshAssetState()
     frameState_.judgeEffect = assets_.judgeEffectAssets();
 }
 
+void VideoExportQuickRenderBackend::syncSessionStateIfInitialized()
+{
+    if (!session_.isInitialized()) {
+        return;
+    }
+    session_.setFrameState(frameState_);
+}
+
 void VideoExportQuickRenderBackend::updateFrameStateForRender(
     double playheadSeconds,
     bool showTimestamp,
     bool showObjectStatsHud)
 {
-    frameState_.playheadSeconds = playheadSeconds;
-    frameState_.render.showTimestamp = showTimestamp;
-    frameState_.render.showObjectStatsHud = showObjectStatsHud;
-    frameState_.usedGpuRendererThisFrame = true;
-    frameState_.cpuFallbackCount = 0;
-    frameState_.fpsDisplay = 0.0;
+    session_.applyExportFrameTick(
+        playheadSeconds,
+        showTimestamp,
+        showObjectStatsHud,
+        true,
+        0,
+        0.0
+    );
 }

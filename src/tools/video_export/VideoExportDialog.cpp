@@ -8,8 +8,10 @@
 
 #include <QAbstractItemView>
 #include <QAbstractSpinBox>
+#include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
+#include <QCoreApplication>
 #include <QDialogButtonBox>
 #include <QDockWidget>
 #include <QDoubleValidator>
@@ -27,10 +29,7 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
-#include <QPainter>
-#include <QPolygonF>
 #include <QPushButton>
-#include <QPixmap>
 #include <QRegularExpression>
 #include <QSignalBlocker>
 #include <QSlider>
@@ -84,6 +83,30 @@ constexpr ResolutionPreset kResolutionPresets[] = {
 };
 
 constexpr int kFpsOptions[] = {60, 120};
+
+enum class VideoExportShortcutAction {
+    None,
+    TogglePlayPause,
+    StopOrPlay,
+};
+
+VideoExportShortcutAction matchVideoExportShortcut(const QKeyEvent* event)
+{
+    if (event == nullptr) {
+        return VideoExportShortcutAction::None;
+    }
+    const Qt::KeyboardModifiers modifiers = event->modifiers();
+    if (modifiers == Qt::NoModifier && event->key() == Qt::Key_Space) {
+        return VideoExportShortcutAction::TogglePlayPause;
+    }
+    if (modifiers == (Qt::ControlModifier | Qt::ShiftModifier) && event->key() == Qt::Key_C) {
+        return VideoExportShortcutAction::StopOrPlay;
+    }
+    if (modifiers == (Qt::ControlModifier | Qt::ShiftModifier) && event->key() == Qt::Key_X) {
+        return VideoExportShortcutAction::TogglePlayPause;
+    }
+    return VideoExportShortcutAction::None;
+}
 
 QString uiText(const char* key, const QString& fallback)
 {
@@ -302,43 +325,17 @@ double sliderValueToSecond(int sliderValue)
 
 QIcon makePreviewPlayIcon(const QColor& color)
 {
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(color);
-    painter.drawPolygon(QPolygonF{
-        QPointF(5.0, 3.0),
-        QPointF(15.5, 10.0),
-        QPointF(5.0, 17.0),
-    });
-    return QIcon(pixmap);
+    return UiTheme::dialogTransportPlayIcon(color);
 }
 
 QIcon makePreviewStopIcon(const QColor& color)
 {
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(color);
-    painter.drawRoundedRect(QRectF(4.5, 4.5, 11.0, 11.0), 1.8, 1.8);
-    return QIcon(pixmap);
+    return UiTheme::dialogTransportStopIcon(color);
 }
 
 QIcon makePreviewPauseIcon(const QColor& color)
 {
-    QPixmap pixmap(20, 20);
-    pixmap.fill(Qt::transparent);
-    QPainter painter(&pixmap);
-    painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(color);
-    painter.drawRoundedRect(QRectF(5.0, 3.0, 3.5, 14.0), 1.2, 1.2);
-    painter.drawRoundedRect(QRectF(11.5, 3.0, 3.5, 14.0), 1.2, 1.2);
-    return QIcon(pixmap);
+    return UiTheme::dialogTransportPauseIcon(color);
 }
 
 class TimestampSpinBox : public QDoubleSpinBox
@@ -419,7 +416,8 @@ VideoExportDialog::VideoExportDialog(
     PreviewLayoutScaleCallback previewLayoutScaleCallback,
     PreviewSmoothBrightnessCallback previewSmoothBrightnessCallback,
     PreviewScaleModeCallback previewScaleModeCallback,
-    PreviewFlowSpeedCallback previewFlowSpeedCallback,
+    PreviewTapFlowSpeedCallback previewTapFlowSpeedCallback,
+    PreviewTouchFlowSpeedCallback previewTouchFlowSpeedCallback,
     QWidget* parent
 )
     : QDialog(parent)
@@ -436,7 +434,8 @@ VideoExportDialog::VideoExportDialog(
     , previewLayoutScaleCallback_(std::move(previewLayoutScaleCallback))
     , previewSmoothBrightnessCallback_(std::move(previewSmoothBrightnessCallback))
     , previewScaleModeCallback_(std::move(previewScaleModeCallback))
-    , previewFlowSpeedCallback_(std::move(previewFlowSpeedCallback))
+    , previewTapFlowSpeedCallback_(std::move(previewTapFlowSpeedCallback))
+    , previewTouchFlowSpeedCallback_(std::move(previewTouchFlowSpeedCallback))
     , totalDurationSeconds_(qMax(0.0, baseTask.contentDurationSeconds))
 {
     setWindowTitle(uiText("dialog.video_export.title", QStringLiteral("Export Video")));
@@ -444,6 +443,10 @@ VideoExportDialog::VideoExportDialog(
     setMinimumWidth(kDialogMinWidth);
     resize(680, 360);
     setStyleSheet(UiTheme::exportDialogStyleSheet());
+    UiDialogs::configureDialogPreviewShortcuts(this, UiDialogs::PreviewShortcutPolicy::LocalPlaybackControls);
+    if (QApplication* app = qobject_cast<QApplication*>(QCoreApplication::instance()); app != nullptr) {
+        app->installEventFilter(this);
+    }
     initialShowTimestamp_ = baseTask_.showTimestamp;
     initialShowObjectStats_ = baseTask_.showObjectStatsHud;
 
@@ -847,53 +850,88 @@ VideoExportDialog::VideoExportDialog(
     );
     setSliderOptionTitle(layoutSquareScaleOption, uiText("dialog.video_export.option.layout_size", QStringLiteral("Layout Size")));
     optionsLayout->addWidget(layoutSquareScaleOption, 2, 0, 1, 2);
-    selectedFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(baseTask_.noteFlowSpeed);
     const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
     const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
     const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
-    selectedFlowSpeed_ = qBound(
-        flowSpeedMin,
-        flowSpeedMin + qRound((selectedFlowSpeed_ - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
-        flowSpeedMax
-    );
-    flowSpeedEdit_ = new QLineEdit(optionsContent_);
-    flowSpeedEdit_->setAlignment(Qt::AlignCenter);
-    flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
-    flowSpeedEdit_->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet());
-    auto* flowSpeedValidator = new QDoubleValidator(flowSpeedMin, flowSpeedMax, 2, flowSpeedEdit_);
-    flowSpeedValidator->setNotation(QDoubleValidator::StandardNotation);
-    flowSpeedEdit_->setValidator(flowSpeedValidator);
-    QObject::connect(flowSpeedEdit_, &QLineEdit::editingFinished, this, [this, flowSpeedMin, flowSpeedMax, flowSpeedStep]() {
-        if (flowSpeedEdit_ == nullptr) {
-            return;
-        }
-        bool ok = false;
-        const double typedSpeed = flowSpeedEdit_->text().trimmed().toDouble(&ok);
-        if (!ok) {
-            flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
-            return;
-        }
-        selectedFlowSpeed_ = qBound(
+    const auto snapFlowSpeed = [flowSpeedMin, flowSpeedMax, flowSpeedStep](double flowSpeed) {
+        return qBound(
             flowSpeedMin,
-            flowSpeedMin + qRound((typedSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
+            flowSpeedMin + qRound((flowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
             flowSpeedMax
         );
-        flowSpeedEdit_->setText(flowSpeedValueLabel(selectedFlowSpeed_));
-        if (previewFlowSpeedCallback_) {
-            previewFlowSpeedCallback_(selectedFlowSpeed_);
+    };
+    selectedTapFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(baseTask_.tapFlowSpeed);
+    selectedTouchFlowSpeed_ = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(baseTask_.touchFlowSpeed);
+    selectedTapFlowSpeed_ = snapFlowSpeed(selectedTapFlowSpeed_);
+    selectedTouchFlowSpeed_ = snapFlowSpeed(selectedTouchFlowSpeed_);
+    const auto createFlowSpeedRow = [
+        this,
+        flowSpeedMin,
+        flowSpeedMax,
+        snapFlowSpeed
+    ](
+        const QString& labelText,
+        QLineEdit** editOut,
+        double* selectedFlowSpeed,
+        const std::function<void(double)>& callback
+    ) {
+        auto* flowSpeedEdit = new QLineEdit(this->optionsContent_);
+        flowSpeedEdit->setAlignment(Qt::AlignCenter);
+        flowSpeedEdit->setText(flowSpeedValueLabel(*selectedFlowSpeed));
+        flowSpeedEdit->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet());
+        auto* flowSpeedValidator = new QDoubleValidator(flowSpeedMin, flowSpeedMax, 2, flowSpeedEdit);
+        flowSpeedValidator->setNotation(QDoubleValidator::StandardNotation);
+        flowSpeedEdit->setValidator(flowSpeedValidator);
+        QObject::connect(flowSpeedEdit, &QLineEdit::editingFinished, this, [flowSpeedEdit, selectedFlowSpeed, callback, snapFlowSpeed]() {
+            if (flowSpeedEdit == nullptr || selectedFlowSpeed == nullptr) {
+                return;
+            }
+            bool ok = false;
+            const double typedSpeed = flowSpeedEdit->text().trimmed().toDouble(&ok);
+            if (!ok) {
+                flowSpeedEdit->setText(flowSpeedValueLabel(*selectedFlowSpeed));
+                return;
+            }
+            *selectedFlowSpeed = snapFlowSpeed(typedSpeed);
+            flowSpeedEdit->setText(flowSpeedValueLabel(*selectedFlowSpeed));
+            if (callback) {
+                callback(*selectedFlowSpeed);
+            }
+        });
+        if (editOut != nullptr) {
+            *editOut = flowSpeedEdit;
         }
-    });
-    auto* flowSpeedRow = new QWidget(optionsContent_);
-    auto* flowSpeedLayout = new QHBoxLayout(flowSpeedRow);
-    flowSpeedLayout->setContentsMargins(0, 0, 0, 0);
-    flowSpeedLayout->setSpacing(6);
-    auto* flowSpeedLabel = new QLabel(
-        uiText("dialog.video_export.option.flow_speed", QStringLiteral("Flow Speed")),
-        flowSpeedRow
+        auto* flowSpeedRow = new QWidget(this->optionsContent_);
+        auto* flowSpeedLayout = new QHBoxLayout(flowSpeedRow);
+        flowSpeedLayout->setContentsMargins(0, 0, 0, 0);
+        flowSpeedLayout->setSpacing(6);
+        auto* flowSpeedLabel = new QLabel(labelText, flowSpeedRow);
+        flowSpeedLayout->addWidget(flowSpeedLabel, 0);
+        flowSpeedLayout->addWidget(flowSpeedEdit, 1);
+        return flowSpeedRow;
+    };
+    QWidget* tapFlowSpeedRow = createFlowSpeedRow(
+        uiText("dialog.video_export.option.tap_flow_speed", QStringLiteral("Tap Flow Speed")),
+        &tapFlowSpeedEdit_,
+        &selectedTapFlowSpeed_,
+        [this](double flowSpeed) {
+            if (previewTapFlowSpeedCallback_) {
+                previewTapFlowSpeedCallback_(flowSpeed);
+            }
+        }
     );
-    flowSpeedLayout->addWidget(flowSpeedLabel, 0);
-    flowSpeedLayout->addWidget(flowSpeedEdit_, 1);
-    optionsLayout->addWidget(flowSpeedRow, 3, 0, 1, 2);
+    QWidget* touchFlowSpeedRow = createFlowSpeedRow(
+        uiText("dialog.video_export.option.touch_flow_speed", QStringLiteral("Touch Flow Speed")),
+        &touchFlowSpeedEdit_,
+        &selectedTouchFlowSpeed_,
+        [this](double flowSpeed) {
+            if (previewTouchFlowSpeedCallback_) {
+                previewTouchFlowSpeedCallback_(flowSpeed);
+            }
+        }
+    );
+    optionsLayout->addWidget(tapFlowSpeedRow, 3, 0, 1, 1);
+    optionsLayout->addWidget(touchFlowSpeedRow, 3, 1, 1, 1);
     const QString scaleFillLabel = uiText("dialog.video_export.option.scale.fill", QStringLiteral("Fill (crop if needed)"));
     const QString scaleFitLabel = uiText("dialog.video_export.option.scale.fit", QStringLiteral("Fit (keep full image, may letterbox)"));
     selectedBackgroundScaleMode_ = baseTask_.backgroundScaleMode;
@@ -1386,20 +1424,33 @@ bool VideoExportDialog::applyUiToTask(VideoExportTask* task, QString* errorMessa
         ? smoothBrightnessCheck_->isChecked()
         : updated.smoothBrightness;
     updated.backgroundScaleMode = selectedBackgroundScaleMode_;
-    double exportFlowSpeed = selectedFlowSpeed_;
-    if (flowSpeedEdit_ != nullptr) {
+    double exportTapFlowSpeed = selectedTapFlowSpeed_;
+    if (tapFlowSpeedEdit_ != nullptr) {
         bool ok = false;
-        const double typedSpeed = flowSpeedEdit_->text().trimmed().toDouble(&ok);
+        const double typedSpeed = tapFlowSpeedEdit_->text().trimmed().toDouble(&ok);
         if (ok) {
-            exportFlowSpeed = typedSpeed;
+            exportTapFlowSpeed = typedSpeed;
+        }
+    }
+    double exportTouchFlowSpeed = selectedTouchFlowSpeed_;
+    if (touchFlowSpeedEdit_ != nullptr) {
+        bool ok = false;
+        const double typedSpeed = touchFlowSpeedEdit_->text().trimmed().toDouble(&ok);
+        if (ok) {
+            exportTouchFlowSpeed = typedSpeed;
         }
     }
     const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
     const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
     const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
-    updated.noteFlowSpeed = qBound(
+    updated.tapFlowSpeed = qBound(
         flowSpeedMin,
-        flowSpeedMin + qRound((exportFlowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
+        flowSpeedMin + qRound((exportTapFlowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
+        flowSpeedMax
+    );
+    updated.touchFlowSpeed = qBound(
+        flowSpeedMin,
+        flowSpeedMin + qRound((exportTouchFlowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
         flowSpeedMax
     );
     const double selectedRangeStart = rangeStartSeconds();
@@ -1544,6 +1595,24 @@ void VideoExportDialog::stopRangePreview(bool seekToCurrent)
     if (seekToCurrent) {
         seekPreview(previewCursorSecond_);
     }
+}
+
+void VideoExportDialog::handlePreviewPlayPauseShortcut()
+{
+    if (rangePreviewPlaying_ || isPreviewPlaying()) {
+        stopRangePreview(false);
+        return;
+    }
+    toggleRangePreview();
+}
+
+void VideoExportDialog::handlePreviewStopOrPlayShortcut()
+{
+    if (rangePreviewPlaying_ || isPreviewPlaying()) {
+        stopRangePreviewToStart();
+        return;
+    }
+    toggleRangePreview();
 }
 
 void VideoExportDialog::stopRangePreviewToStart()
@@ -1733,6 +1802,44 @@ void VideoExportDialog::done(int result)
 
 bool VideoExportDialog::eventFilter(QObject* watched, QEvent* event)
 {
+    if (event != nullptr && UiDialogs::dialogOwnsPreviewShortcutScope(this)) {
+        if (event->type() == QEvent::ShortcutOverride) {
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (matchVideoExportShortcut(keyEvent) != VideoExportShortcutAction::None) {
+                event->accept();
+                return true;
+            }
+        }
+        if (event->type() == QEvent::KeyPress) {
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            const VideoExportShortcutAction action = matchVideoExportShortcut(keyEvent);
+            if (action != VideoExportShortcutAction::None) {
+                if (keyEvent->isAutoRepeat()) {
+                    event->accept();
+                    return true;
+                }
+                switch (action) {
+                case VideoExportShortcutAction::TogglePlayPause:
+                    handlePreviewPlayPauseShortcut();
+                    break;
+                case VideoExportShortcutAction::StopOrPlay:
+                    handlePreviewStopOrPlayShortcut();
+                    break;
+                case VideoExportShortcutAction::None:
+                    break;
+                }
+                event->accept();
+                return true;
+            }
+        }
+        if (event->type() == QEvent::KeyRelease) {
+            auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (matchVideoExportShortcut(keyEvent) != VideoExportShortcutAction::None) {
+                event->accept();
+                return true;
+            }
+        }
+    }
     if (previewSlider_ != nullptr && watched == previewSlider_) {
         if (event->type() == QEvent::Wheel) {
             stopPreviewHeldSeek();

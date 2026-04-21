@@ -6,6 +6,7 @@
 
 #include "PreviewRenderSettings.h"
 #include "PreviewAudioSettings.h"
+#include "common/PreviewTimingSettings.h"
 #include "timeline/TimelineData.h"
 #include "common/MuriConfig.h"
 #include "common/MuriRenderOptions.h"
@@ -31,13 +32,15 @@ struct VideoExportTask {
     double staticTapOnSlideThresholdSeconds =
         static_cast<double>(miacode::muri::kStaticTapOnSlideThresholdDefaultMs) / 1000.0;
     PreviewAudioSettings audioSettings;
+    PreviewTimingSettings timingSettings;
     double backgroundBrightnessOuter = miacode::preview_video::kBackgroundBrightnessDefault;
     double backgroundBrightnessInner = miacode::preview_video::kBackgroundBrightnessInnerDefault;
     double layoutSquareScale = miacode::preview_video::kLayoutSquareScaleDefault;
     bool smoothBrightness = miacode::preview_video::kSmoothBrightnessDefault;
     PreviewOutlineVariant outlineVariant = PreviewOutlineVariant::Line;
     PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
-    double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    double tapFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+    double touchFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
     bool slideEarlierSecondAndTextOnTop = miacode::preview_gameplay::kPreviewSlideEarlierSecondAndTextOnTop;
     double exportStartSeconds = 0.0;
     double contentDurationSeconds = 0.0;

@@ -16,6 +16,8 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
     PreviewTouchHoldLayerState layerState;
     layerState.sprites.reserve(markers.size() * 5);
     layerState.arcs.reserve(markers.size());
+    const PreviewTouchTiming touchTiming =
+        previewTouchTimingForFlowSpeed(static_cast<qreal>(state.render.touchFlowSpeed));
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
     const auto appendSprite = [&layerState](
@@ -57,7 +59,7 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
 
         const qreal deltaSeconds = static_cast<qreal>(state.playheadSeconds - marker.second);
         const qreal holdDuration = qMax<qreal>(0.001, static_cast<qreal>(marker.endSecond - marker.second));
-        if (deltaSeconds <= -kTouchDurationSeconds || deltaSeconds >= holdDuration) {
+        if (deltaSeconds <= -touchTiming.durationSeconds || deltaSeconds >= holdDuration) {
             continue;
         }
 
@@ -97,14 +99,14 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
         qreal alpha = 1.0;
         qreal logicalOffset = kTouchHoldClosedOffset;
         if (deltaSeconds < 0.0) {
-            alpha = touchPreHitAlpha(deltaSeconds, kTouchDurationSeconds, kTouchShowDurationSeconds);
+            alpha = touchPreHitAlpha(deltaSeconds, touchTiming.durationSeconds, touchTiming.showDurationSeconds);
             logicalOffset = touchLogicalOffsetForDelta(
                 deltaSeconds,
                 kTouchHoldStartOffset,
                 kTouchHoldClosedOffset,
-                kTouchDurationSeconds,
-                kTouchShowDurationSeconds,
-                kTouchCloseDurationSeconds
+                touchTiming.durationSeconds,
+                touchTiming.showDurationSeconds,
+                touchTiming.closeDurationSeconds
             );
         }
         const qreal offset = mapLogicalLengthToRect(logicalOffset, playfieldRect);

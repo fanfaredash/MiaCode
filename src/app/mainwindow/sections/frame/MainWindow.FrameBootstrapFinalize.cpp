@@ -228,10 +228,15 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         scheduleNextQtPreviewTick();
     });
 
-    qtPreviewTimelineTimer_ = new QTimer(this);
-    qtPreviewTimelineTimer_->setInterval(kTimelineUiCadenceMs);
+    qtPreviewTimelineTimer_ = new QChronoTimer(this);
+    qtPreviewTimelineTimer_->setInterval(std::chrono::nanoseconds(
+        qMax<qint64>(
+            1,
+            timelineSection_ != nullptr
+                ? timelineSection_->timelineTargetFrameIntervalNs()
+                : previewCanvasTargetFrameIntervalNs())));
     qtPreviewTimelineTimer_->setTimerType(Qt::PreciseTimer);
-    connect(qtPreviewTimelineTimer_, &QTimer::timeout, this, &MainWindow::flushQtPreviewTimelinePosition);
+    connect(qtPreviewTimelineTimer_, &QChronoTimer::timeout, this, &MainWindow::flushQtPreviewTimelinePosition);
 
     previewStatsUiTimer_ = new QTimer(this);
     previewStatsUiTimer_->setInterval(67);
@@ -256,6 +261,57 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     previewHeldSeekTimer_->setTimerType(Qt::PreciseTimer);
     previewHeldSeekTimer_->setInterval(miacode::preview_interaction::kSeekHoldTickIntervalMs);
     connect(previewHeldSeekTimer_, &QTimer::timeout, this, &MainWindow::applyPreviewHeldSeekTick);
+
+    previewPlaybackRateToast_ = new QWidget(this);
+    previewPlaybackRateToast_->setObjectName(QStringLiteral("previewPlaybackRateToast"));
+    previewPlaybackRateToast_->setFocusPolicy(Qt::NoFocus);
+    previewPlaybackRateToast_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    previewPlaybackRateToast_->setAttribute(Qt::WA_ShowWithoutActivating, true);
+    previewPlaybackRateToast_->setStyleSheet(previewPlaybackRateToastStyleSheet());
+    auto* previewPlaybackRateToastLayout = new QVBoxLayout(previewPlaybackRateToast_);
+    previewPlaybackRateToastLayout->setContentsMargins(24, 18, 24, 18);
+    previewPlaybackRateToastLayout->setSpacing(0);
+    previewPlaybackRateToastLabel_ = new QLabel(previewPlaybackRateToast_);
+    previewPlaybackRateToastLabel_->setAlignment(Qt::AlignCenter);
+    previewPlaybackRateToastLabel_->setFocusPolicy(Qt::NoFocus);
+    previewPlaybackRateToastLabel_->setTextFormat(Qt::RichText);
+    previewPlaybackRateToastLabel_->setTextInteractionFlags(Qt::NoTextInteraction);
+    previewPlaybackRateToastLabel_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    previewPlaybackRateToastLayout->addWidget(previewPlaybackRateToastLabel_);
+    previewPlaybackRateToastOpacityEffect_ = new QGraphicsOpacityEffect(previewPlaybackRateToast_);
+    previewPlaybackRateToastOpacityEffect_->setOpacity(1.0);
+    previewPlaybackRateToast_->setGraphicsEffect(previewPlaybackRateToastOpacityEffect_);
+    previewPlaybackRateToastOpacityAnimation_ =
+        new QPropertyAnimation(previewPlaybackRateToastOpacityEffect_, "opacity", previewPlaybackRateToast_);
+    previewPlaybackRateToastOpacityAnimation_->setDuration(240);
+    previewPlaybackRateToastOpacityAnimation_->setEasingCurve(QEasingCurve::OutCubic);
+    connect(
+        previewPlaybackRateToastOpacityAnimation_,
+        &QPropertyAnimation::finished,
+        this,
+        [this]() {
+            if (previewPlaybackRateToastOpacityEffect_ != nullptr
+                && previewPlaybackRateToastOpacityEffect_->opacity() <= 0.0) {
+                hidePreviewPlaybackRateToast();
+            }
+        }
+    );
+    previewPlaybackRateToastTimer_ = new QTimer(this);
+    previewPlaybackRateToastTimer_->setSingleShot(true);
+    previewPlaybackRateToastTimer_->setInterval(900);
+    connect(previewPlaybackRateToastTimer_, &QTimer::timeout, this, [this]() {
+        if (previewPlaybackRateToast_ == nullptr || previewPlaybackRateToastOpacityAnimation_ == nullptr) {
+            return;
+        }
+        if (previewPlaybackRateToastOpacityEffect_ != nullptr) {
+            previewPlaybackRateToastOpacityEffect_->setOpacity(1.0);
+        }
+        previewPlaybackRateToastOpacityAnimation_->stop();
+        previewPlaybackRateToastOpacityAnimation_->setStartValue(1.0);
+        previewPlaybackRateToastOpacityAnimation_->setEndValue(0.0);
+        previewPlaybackRateToastOpacityAnimation_->start();
+    });
+    previewPlaybackRateToast_->hide();
 
     timelineAnalysisIdleTimer_ = new QTimer(this);
     timelineAnalysisIdleTimer_->setSingleShot(true);
@@ -442,7 +498,8 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
         previewCanvas_->setLayoutSquareScale(previewLayoutSquareScale_);
         previewCanvas_->setSmoothBrightness(previewSmoothBrightness_);
         previewCanvas_->setBackgroundScaleMode(previewBackgroundScaleMode_);
-        previewCanvas_->setNoteFlowSpeed(previewNoteFlowSpeed_);
+    previewCanvas_->setTapFlowSpeed(previewTapFlowSpeed_);
+    previewCanvas_->setTouchFlowSpeed(previewTouchFlowSpeed_);
         previewCanvas_->setSlideEarlierSecondAndTextOnTop(previewSlideEarlierSecondAndTextOnTop_);
         previewCanvas_->setShowDebugInfo(previewShowDebugInfo_);
         previewCanvas_->setShowTimestamp(previewShowTimestamp_);

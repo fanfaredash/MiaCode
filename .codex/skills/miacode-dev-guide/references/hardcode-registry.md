@@ -9,7 +9,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Scope: shared resource lookup
   - Promote new shared path rules here before duplicating them elsewhere
 - `src/common/PreviewGameplayConfig.h`
-  - Owns: logical canvas size, lane-distance geometry, preview flow-speed normalization, tap lifecycle timing, slide pretrace timing, judge-effect durations, and the default value for the shared preview/export slide stacking toggle (`kPreviewSlideEarlierSecondAndTextOnTop`)
+  - Owns: logical canvas size, lane-distance geometry, preview flow-speed normalization shared by Tap/Touch settings, tap lifecycle timing, slide pretrace timing, judge-effect durations, and the default value for the shared preview/export slide stacking toggle (`kPreviewSlideEarlierSecondAndTextOnTop`)
   - Scope: preview and export timing assumptions
 - `src/common/PreviewSkinConfig.h`
   - Owns: shared tap-head scale plus hold-width, hold-cap-slice, and slide-track sizing ratios used to keep preview and timeline skin geometry aligned
@@ -23,9 +23,18 @@ Use this file to track where important constants live, what they mean, and wheth
 - `src/common/PreviewSfxAssets.h`
   - Owns: SFX kind-to-filename mapping and SFX directory resolution
   - Scope: sound asset conventions
+- `src/common/PreviewTimingSettings.h`
+  - Owns: persisted preview timing offset layers (`audioOffset`, `displayOffset`, `judgeOffset`, `answerOffset`) plus the internal frame-vs-second conversion helper for future callers
+  - Scope: realtime preview, persistence, and export snapshot/task timing parity
+- `src/common/PreviewAudioMixConfig.h`
+  - Owns: shared preview/export offline mix format constants (`48 kHz`, stereo)
+  - Scope: preview BASS runtime, export audio render-plan consumers, and Windows BASS offline mixing
+- `src/common/PreviewSfxTiming.h`
+  - Owns: shared runtime/export SFX timing formulas, including the current offset layering (`audioOffset` as whole-SFX chart shift, positive `displayOffset` advancing only answer/judge families, family-specific `judge` / `answer` offsets) plus the chart-domain `1/60 s` pre-trigger shared by answer and judge-family SFX
+  - Scope: realtime preview and export SFX timing parity
 - `src/preview/audio/PreviewAudioSettings.h`
-  - Owns: shared preview/export SFX aggregation policy plus per-kind gain multipliers applied on top of user-set rows
-  - Current defaults: BGM `0.40`, Answer `0.30`, Break `0.10`, Slide `0.10`, Break Slide `0.10`, Judge/EX/Touch/Touch-Hold/Firework `0.20`, Master `1.0`
+  - Owns: shared preview/export SFX aggregation policy plus the Majdata-View-style bucket-to-kind gain mapping
+  - Current defaults: Global `0.30`, Track `1.0`, Answer `0.80`, Tap `0.30`, EX `0.30`, Break `0.30`, Slide `0.30`, Touch `0.30`, Firework `0.30`
   - Scope: realtime preview and export audio balance
 - `src/common/VideoExportConfig.h`
   - Owns: export lead-in constants for zero-start exports and non-zero partial-export preload
@@ -66,7 +75,7 @@ Use this file to track where important constants live, what they mean, and wheth
   - Owns: parser-default geometry and timing assumptions used to derive marker behavior
   - Rule: parser-level constants can have repo-wide consequences; treat changes as cross-chain changes
 - `src/tools/video_export/VideoExportController.cpp`
-  - Owns: mix sample rate, encoder probe timeouts, bitrate heuristics, frame diagnostics thresholds, ffmpeg fallback behavior
+  - Owns: encoder probe timeouts, bitrate heuristics, frame diagnostics thresholds, ffmpeg fallback behavior
   - Current tuning note: export preset mapping stays local here. `Fast` keeps the historical baseline, while `High Quality` and `High Compression` retune x264 CRF/preset/B-frames plus per-encoder bitrate or quality flags for NVENC/QSV/AMF/MF/libopenh264/mpeg4 without changing the codec-facing UI surface.
   - Rule: export heuristics may stay local, but document behavior changes that affect output compatibility or packaging assumptions
 - `src/tools/video_export/RawVideoPipeTransport.cpp`
@@ -85,6 +94,9 @@ Use this file to track where important constants live, what they mean, and wheth
     - fullscreen control-bar auto-hide delay
     - fixed `30 Hz` Timeline UI cadence (`33 ms` timer interval / `1/30 s` seek-throttle threshold)
   - Rule: keep local while they only shape the main-window preview UX and do not need preview/export parity
+- `src/app/mainwindow/sections/validation/MainWindow.ValidationListUi.cpp`
+  - Owns: wrapped Validation/Muri issue-row padding, minimum row height, and ignored-row opacity used by the shared rich-text list delegate
+  - Rule: keep local while these values only shape diagnostics-list rendering in the main window and are not reused by other widgets or the Quick frontend
 - `src/app/mainwindow/sections/timeline/MainWindow.PreviewTimelineFlow.cpp`
   - Owns: analysis idle scheduling debounce for low-priority validation/Muri work
   - Current tuning note: `kTimelineAnalysisIdleDelayMs` is `180 ms`, used to coalesce rapid edits before dispatching the combined validation+Muri analysis worker once preview snapshot publication has already completed

@@ -75,8 +75,22 @@ If these conventions change, update both code and this file.
     - `just_wifi_d_fast_gd.png`
   - Do not add fallback from these overlays to root-level `assets/skin/just_*.png` or any `perfect`-style judge assets
 - SFX clips:
-  - Consumer: `QtPreviewSfxRuntime`, export SFX mixing
+  - Consumer: `QtPreviewSfxRuntime`, `VideoExportAudioRenderPlan`, export audio backends
   - Entry: `miacode::preview_sfx::resolveSfxDirectory`
+- Windows BASS runtime assets:
+  - Repo-local files:
+    - `third_party/bass/include/bass.h`
+    - `third_party/bass/include/bassmix.h`
+    - `third_party/bass/lib/win64/bass.lib`
+    - `third_party/bass/lib/win64/bassmix.lib`
+    - `third_party/bass/bin/win64/bass.dll`
+    - `third_party/bass/bin/win64/bassmix.dll`
+    - `third_party/bass/bin/win64/bass_fx.dll`
+    - `third_party/bass/bin/win64/bass_aac.dll`
+    - `third_party/bass/bin/win64/bassopus.dll`
+  - Current build contract:
+    - `CMakeLists.txt` links `bass.lib` and `bassmix.lib` on Windows for `MiaCode` and `soundtouch_probe`
+    - post-build copy now deploys the repo-local `bass*.dll` files into the executable directory so both preview audio and Windows export audio never depend on MajdataPlay's install path or any external machine-global location
 - Background outlines and auxiliary background art:
   - Consumers: preview and export overlay composition
   - Current active variant files:
@@ -125,12 +139,14 @@ Do not rename sound files casually; both preview-time and export-time behavior d
   - `scripts/build-local-dev2.ps1` is the local one-click wrapper used by the desktop shortcut; it reuses repo-local `build/` and `.qt/`, then delegates packaging to `scripts/package-win.ps1`
   - both the CMake post-build deploy step and `scripts/package-win.ps1` now pass `--qmldir src/preview/runtime/qml` to `windeployqt` so the Qt Quick runtime imports are deployed
   - both the CMake post-build deploy step and `scripts/package-win.ps1` explicitly keep the Qt Quick runtime DLL set (`Qt6Quick`, `Qt6Qml`, `Qt6QmlMeta`, `Qt6QmlModels`, `Qt6QmlWorkerScript`) and remove stale `Qt6OpenGLWidgets.dll`
+  - the CMake post-build deploy step now also copies the repo-local BASS runtime DLL set (`bass`, `bassmix`, `bass_fx`, `bass_aac`, `bassopus`) into the executable directory
 - Windows release packages now also include:
     - root-level `Start_MiaCode_Debug.bat`
-    - root-level `Start_MiaCode_Debug_CompareDump.bat`
+    - root-level `Start_MiaCode_QuickShell_Debug.bat`
     - root-level `logs/` helper folder only for explicit debug-launch scripts; normal project-bound runtime logs default to `.miacode/logs/`
     - `docs/DEBUG_INDEX.md`
     - `docs/PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md`
+  - optional Windows dev-tool packaging currently includes only `simai_native_dump.exe`; `soundtouch_probe.exe` is no longer copied by `scripts/package-win.ps1`
 - macOS build/package:
   - `scripts/build-macos.sh`
   - `scripts/package-mac.sh`

@@ -161,7 +161,7 @@ void MainWindow::DialogsSection::onOpenLatencyDetector()
     bool wholeBpmOk = false;
     const double wholeBpm = owner_.parsedWholeBpm(&wholeBpmOk);
     const QString meterId = owner_.parsedLatencyMeterId();
-    const double offsetSeconds = owner_.parsedFirstSeconds();
+    const double offsetSeconds = owner_.parsedRawFirstSeconds();
     if (trackPath.isEmpty()) {
         owner_.statusBar()->showMessage(UiText::isChineseUi()
             ? QStringLiteral("当前谱面目录缺少 track.mp3，无法打开BPM&偏移检测。")
@@ -191,7 +191,12 @@ void MainWindow::DialogsSection::onOpenLatencyDetector()
         UiDialogs::effectiveParentWidget(&owner_)
     );
     owner_.windowSection_->applySystemWindowBackdrop(owner_.latencyDetectorDialog_);
-    UiDialogs::prepareDialogWindow(owner_.latencyDetectorDialog_, &owner_);
+    UiDialogs::prepareDialogWindow(
+        owner_.latencyDetectorDialog_,
+        &owner_,
+        true,
+        UiDialogs::PreviewShortcutPolicy::LocalPlaybackControls
+    );
     owner_.latencyDetectorDialog_->setOffsetSeconds(offsetSeconds);
     owner_.latencyDetectorDialog_->setBpm(wholeBpmOk ? wholeBpm : 0.0);
     owner_.latencyDetectorDialog_->setMeterId(meterId);
@@ -324,17 +329,17 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         }
     };
 
-    const QString masterAudioLabelText = uiText("dialog.render_settings.audio.master", "Global Volume");
+    const QString masterAudioLabelText = uiText("dialog.render_settings.audio.global", "Global Volume");
     QSlider* masterSlider = nullptr;
     QLabel* masterLabel = nullptr;
     QToolButton* masterMuteButton = nullptr;
     addAudioRow(
         masterAudioLabelText,
-        owner_.previewAudioSettings_.masterPercent(),
+        owner_.previewAudioSettings_.globalPercent(),
         &masterSlider,
         &masterLabel,
         &masterMuteButton,
-        200
+        100
     );
     auto* audioSeparator = new QFrame(audioGroup);
     audioSeparator->setFrameShape(QFrame::HLine);
@@ -345,11 +350,11 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             .arg(UiTheme::colors().textInverse.name(QColor::HexRgb)));
     audioFormLayout->addRow(QString(), audioSeparator);
 
-    const QString bgmAudioLabelText = uiText("dialog.render_settings.audio.bgm", "BGM Volume");
+    const QString bgmAudioLabelText = uiText("dialog.render_settings.audio.track", "Track Volume");
     QSlider* bgmSlider = nullptr;
     QLabel* bgmLabel = nullptr;
     QToolButton* bgmMuteButton = nullptr;
-    addAudioRow(bgmAudioLabelText, owner_.previewAudioSettings_.bgmPercent(), &bgmSlider, &bgmLabel, &bgmMuteButton);
+    addAudioRow(bgmAudioLabelText, owner_.previewAudioSettings_.trackPercent(), &bgmSlider, &bgmLabel, &bgmMuteButton);
     const QString answerAudioLabelText = uiText("dialog.render_settings.audio.answer", "Answer Volume");
     QSlider* answerSlider = nullptr;
     QLabel* answerLabel = nullptr;
@@ -361,11 +366,16 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         &answerLabel,
         &answerMuteButton
     );
-    const QString judgeAudioLabelText = uiText("dialog.render_settings.audio.judge", "Judge Volume");
+    const QString judgeAudioLabelText = uiText("dialog.render_settings.audio.tap", "Tap Volume");
     QSlider* judgeSlider = nullptr;
     QLabel* judgeLabel = nullptr;
     QToolButton* judgeMuteButton = nullptr;
-    addAudioRow(judgeAudioLabelText, owner_.previewAudioSettings_.judgePercent(), &judgeSlider, &judgeLabel, &judgeMuteButton);
+    addAudioRow(judgeAudioLabelText, owner_.previewAudioSettings_.tapPercent(), &judgeSlider, &judgeLabel, &judgeMuteButton);
+    const QString exAudioLabelText = uiText("dialog.render_settings.audio.ex", "EX Volume");
+    QSlider* exSlider = nullptr;
+    QLabel* exLabel = nullptr;
+    QToolButton* exMuteButton = nullptr;
+    addAudioRow(exAudioLabelText, owner_.previewAudioSettings_.exPercent(), &exSlider, &exLabel, &exMuteButton);
     const QString breakAudioLabelText = uiText("dialog.render_settings.audio.break", "Break Volume");
     QSlider* breakSlider = nullptr;
     QLabel* breakLabel = nullptr;
@@ -376,27 +386,11 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     QLabel* slideLabel = nullptr;
     QToolButton* slideMuteButton = nullptr;
     addAudioRow(slideAudioLabelText, owner_.previewAudioSettings_.slidePercent(), &slideSlider, &slideLabel, &slideMuteButton);
-    const QString exAudioLabelText = uiText("dialog.render_settings.audio.ex", "EX Volume");
-    QSlider* exSlider = nullptr;
-    QLabel* exLabel = nullptr;
-    QToolButton* exMuteButton = nullptr;
-    addAudioRow(exAudioLabelText, owner_.previewAudioSettings_.exPercent(), &exSlider, &exLabel, &exMuteButton);
     const QString touchAudioLabelText = uiText("dialog.render_settings.audio.touch", "Touch Volume");
     QSlider* touchSlider = nullptr;
     QLabel* touchLabel = nullptr;
     QToolButton* touchMuteButton = nullptr;
     addAudioRow(touchAudioLabelText, owner_.previewAudioSettings_.touchPercent(), &touchSlider, &touchLabel, &touchMuteButton);
-    const QString touchholdAudioLabelText = uiText("dialog.render_settings.audio.touchhold", "Touch-Hold Volume");
-    QSlider* touchholdSlider = nullptr;
-    QLabel* touchholdLabel = nullptr;
-    QToolButton* touchholdMuteButton = nullptr;
-    addAudioRow(
-        touchholdAudioLabelText,
-        owner_.previewAudioSettings_.touchholdPercent(),
-        &touchholdSlider,
-        &touchholdLabel,
-        &touchholdMuteButton
-    );
     const QString fireworkAudioLabelText = uiText("dialog.render_settings.audio.firework", "Firework Volume");
     QSlider* fireworkSlider = nullptr;
     QLabel* fireworkLabel = nullptr;
@@ -407,17 +401,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         &fireworkSlider,
         &fireworkLabel,
         &fireworkMuteButton
-    );
-    const QString breakSlideAudioLabelText = uiText("dialog.render_settings.audio.break_slide", "Break Slide Volume");
-    QSlider* breakSlideSlider = nullptr;
-    QLabel* breakSlideLabel = nullptr;
-    QToolButton* breakSlideMuteButton = nullptr;
-    addAudioRow(
-        breakSlideAudioLabelText,
-        owner_.previewAudioSettings_.breakSlidePercent(),
-        &breakSlideSlider,
-        &breakSlideLabel,
-        &breakSlideMuteButton
     );
 
     const auto addVideoSliderRow = [](
@@ -499,42 +482,53 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         &layoutSquareScaleSlider,
         &layoutSquareScaleLabel
     );
-    double selectedFlowSpeed = miacode::preview_gameplay::normalizePreviewTimingFlowSpeed(owner_.previewNoteFlowSpeed_);
     const double flowSpeedMin = miacode::preview_gameplay::kPreviewTimingFlowSpeedMin;
     const double flowSpeedMax = miacode::preview_gameplay::kPreviewTimingFlowSpeedMax;
     const double flowSpeedStep = miacode::preview_gameplay::kPreviewTimingFlowSpeedStep;
-    selectedFlowSpeed = qBound(
-        flowSpeedMin,
-        flowSpeedMin + qRound((selectedFlowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
-        flowSpeedMax
-    );
-    auto* flowSpeedEdit = new QLineEdit(gameplayGroup);
-    flowSpeedEdit->setAlignment(Qt::AlignCenter);
-    flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed));
-    flowSpeedEdit->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet());
-    flowSpeedEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* flowSpeedValidator = new QDoubleValidator(flowSpeedMin, flowSpeedMax, 2, flowSpeedEdit);
-    flowSpeedValidator->setNotation(QDoubleValidator::StandardNotation);
-    flowSpeedEdit->setValidator(flowSpeedValidator);
-    QObject::connect(flowSpeedEdit, &QLineEdit::editingFinished, &dialog, [&, flowSpeedEdit]() {
-        bool ok = false;
-        const double typedSpeed = flowSpeedEdit->text().trimmed().toDouble(&ok);
-        if (!ok) {
-            flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed));
-            return;
-        }
-        selectedFlowSpeed = qBound(
+    const auto snapFlowSpeed = [flowSpeedMin, flowSpeedMax, flowSpeedStep](double flowSpeed) {
+        return qBound(
             flowSpeedMin,
-            flowSpeedMin + qRound((typedSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
+            flowSpeedMin + qRound((flowSpeed - flowSpeedMin) / flowSpeedStep) * flowSpeedStep,
             flowSpeedMax
         );
+    };
+    double selectedTapFlowSpeed = snapFlowSpeed(owner_.previewTapFlowSpeed_);
+    double selectedTouchFlowSpeed = snapFlowSpeed(owner_.previewTouchFlowSpeed_);
+    const auto createFlowSpeedEdit = [&](double& selectedFlowSpeed, const std::function<void(double)>& applyFlowSpeed) {
+        auto* flowSpeedEdit = new QLineEdit(gameplayGroup);
+        flowSpeedEdit->setAlignment(Qt::AlignCenter);
         flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed));
-        owner_.previewNoteFlowSpeed_ = selectedFlowSpeed;
+        flowSpeedEdit->setStyleSheet(UiTheme::dialogMenuLineEditStyleSheet());
+        flowSpeedEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        auto* flowSpeedValidator = new QDoubleValidator(flowSpeedMin, flowSpeedMax, 2, flowSpeedEdit);
+        flowSpeedValidator->setNotation(QDoubleValidator::StandardNotation);
+        flowSpeedEdit->setValidator(flowSpeedValidator);
+        QObject::connect(flowSpeedEdit, &QLineEdit::editingFinished, &dialog, [&, flowSpeedEdit, applyFlowSpeed]() {
+            bool ok = false;
+            const double typedSpeed = flowSpeedEdit->text().trimmed().toDouble(&ok);
+            if (!ok) {
+                flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed));
+                return;
+            }
+            selectedFlowSpeed = snapFlowSpeed(typedSpeed);
+            flowSpeedEdit->setText(flowSpeedValueLabel(selectedFlowSpeed));
+            applyFlowSpeed(selectedFlowSpeed);
+            owner_.saveProjectRenderState();
+            owner_.savePortableState();
+        });
+        return flowSpeedEdit;
+    };
+    auto* tapFlowSpeedEdit = createFlowSpeedEdit(selectedTapFlowSpeed, [this](double flowSpeed) {
+        owner_.previewTapFlowSpeed_ = flowSpeed;
         if (owner_.previewCanvas_ != nullptr) {
-            owner_.previewCanvas_->setNoteFlowSpeed(selectedFlowSpeed);
+            owner_.previewCanvas_->setTapFlowSpeed(flowSpeed);
         }
-        owner_.saveProjectRenderState();
-        owner_.savePortableState();
+    });
+    auto* touchFlowSpeedEdit = createFlowSpeedEdit(selectedTouchFlowSpeed, [this](double flowSpeed) {
+        owner_.previewTouchFlowSpeed_ = flowSpeed;
+        if (owner_.previewCanvas_ != nullptr) {
+            owner_.previewCanvas_->setTouchFlowSpeed(flowSpeed);
+        }
     });
 
     struct CanvasFrameRateOption {
@@ -561,7 +555,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         }
     }
     auto* canvasFrameRateButton = createDialogMenuButton(videoGroup, selectedCanvasFrameRateLabel);
-    canvasFrameRateButton->setFixedHeight(flowSpeedEdit->sizeHint().height());
+    canvasFrameRateButton->setFixedHeight(tapFlowSpeedEdit->sizeHint().height());
     canvasFrameRateButton->setStyleSheet(
         UiTheme::dialogMenuButtonStyleSheet()
         + QStringLiteral("QToolButton { text-align: center; padding: 2px 22px 2px 10px; }")
@@ -811,23 +805,39 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         fieldLayout->addWidget(control, 0);
         gameplayLayout->addWidget(field, row, column);
     };
-    addGameplayField(0, 0, uiText("dialog.render_settings.video.flow_speed", "Flow Speed"), flowSpeedEdit);
-    addGameplayField(0, 1, uiText("dialog.render_settings.video.skin", "Skin"), skinButton);
+    addGameplayField(
+        0,
+        0,
+        uiText("dialog.render_settings.video.tap_flow_speed", "Tap Flow Speed"),
+        tapFlowSpeedEdit
+    );
+    addGameplayField(
+        0,
+        1,
+        uiText("dialog.render_settings.video.touch_flow_speed", "Touch Flow Speed"),
+        touchFlowSpeedEdit
+    );
     addGameplayField(
         1,
         0,
-        uiText("dialog.render_settings.gameplay.slide_judge_effect", "Slide Judge Effect"),
-        slideJudgeEffectButton
+        uiText("dialog.render_settings.video.skin", "Skin"),
+        skinButton
     );
     addGameplayField(
         1,
         1,
+        uiText("dialog.render_settings.gameplay.slide_judge_effect", "Slide Judge Effect"),
+        slideJudgeEffectButton
+    );
+    addGameplayField(
+        2,
+        0,
         uiText("dialog.render_settings.gameplay.judge_line", "Judge Line"),
         judgeLineButton
     );
     addGameplayField(
         2,
-        0,
+        1,
         uiText("dialog.render_settings.gameplay.slide_stack_order", "Slide Stack Order"),
         slideStackOrderButton
     );
@@ -960,25 +970,17 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         touchSlider,
         touchLabel,
         touchMuteButton,
-        touchholdSlider,
-        touchholdLabel,
-        touchholdMuteButton,
         fireworkSlider,
         fireworkLabel,
         fireworkMuteButton,
-        breakSlideSlider,
-        breakSlideLabel,
-        breakSlideMuteButton,
         bgmAudioLabelText,
         answerAudioLabelText,
         judgeAudioLabelText,
+        exAudioLabelText,
         breakAudioLabelText,
         slideAudioLabelText,
-        exAudioLabelText,
         touchAudioLabelText,
-        touchholdAudioLabelText,
-        fireworkAudioLabelText,
-        breakSlideAudioLabelText
+        fireworkAudioLabelText
     ]() {
         owner_.previewAudioSettings_.normalize();
         const auto syncAudioRow = [](QSlider* slider, QLabel* label, int valuePercent) {
@@ -989,12 +991,12 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             slider->setValue(valuePercent);
             label->setText(QString::number(valuePercent) + "%");
         };
-        syncAudioRow(masterSlider, masterLabel, owner_.previewAudioSettings_.masterPercent());
+        syncAudioRow(masterSlider, masterLabel, owner_.previewAudioSettings_.globalPercent());
         if (masterMuteButton != nullptr) {
             masterMuteButton->setStyleSheet(muteButtonStyleSheet);
-            masterMuteButton->setIcon(makeAudioMuteIcon(owner_.previewAudioSettings_.masterMuted()));
+            masterMuteButton->setIcon(makeAudioMuteIcon(owner_.previewAudioSettings_.globalMuted()));
             masterMuteButton->setToolTip(
-                (owner_.previewAudioSettings_.masterMuted() ? unmuteAudioButtonTooltip : muteAudioButtonTooltip)
+                (owner_.previewAudioSettings_.globalMuted() ? unmuteAudioButtonTooltip : muteAudioButtonTooltip)
                     .arg(masterAudioLabelText)
             );
         }
@@ -1011,34 +1013,22 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             button->setIcon(makeAudioMuteIcon(muted));
             button->setToolTip((muted ? unmuteAudioButtonTooltip : muteAudioButtonTooltip).arg(labelText));
         };
-        syncAudioRow(bgmSlider, bgmLabel, owner_.previewAudioSettings_.bgmPercent());
+        syncAudioRow(bgmSlider, bgmLabel, owner_.previewAudioSettings_.trackPercent());
         syncAudioRow(answerSlider, answerLabel, owner_.previewAudioSettings_.answerPercent());
-        syncAudioRow(judgeSlider, judgeLabel, owner_.previewAudioSettings_.judgePercent());
+        syncAudioRow(judgeSlider, judgeLabel, owner_.previewAudioSettings_.tapPercent());
+        syncAudioRow(exSlider, exLabel, owner_.previewAudioSettings_.exPercent());
         syncAudioRow(breakSlider, breakLabel, owner_.previewAudioSettings_.breakPercent());
         syncAudioRow(slideSlider, slideLabel, owner_.previewAudioSettings_.slidePercent());
-        syncAudioRow(exSlider, exLabel, owner_.previewAudioSettings_.exPercent());
         syncAudioRow(touchSlider, touchLabel, owner_.previewAudioSettings_.touchPercent());
-        syncAudioRow(touchholdSlider, touchholdLabel, owner_.previewAudioSettings_.touchholdPercent());
         syncAudioRow(fireworkSlider, fireworkLabel, owner_.previewAudioSettings_.fireworkPercent());
-        syncAudioRow(breakSlideSlider, breakSlideLabel, owner_.previewAudioSettings_.breakSlidePercent());
-        syncPerChannelMuteButton(bgmMuteButton, owner_.previewAudioSettings_.bgmMuted(), bgmAudioLabelText);
+        syncPerChannelMuteButton(bgmMuteButton, owner_.previewAudioSettings_.trackMuted(), bgmAudioLabelText);
         syncPerChannelMuteButton(answerMuteButton, owner_.previewAudioSettings_.answerMuted(), answerAudioLabelText);
-        syncPerChannelMuteButton(judgeMuteButton, owner_.previewAudioSettings_.judgeMuted(), judgeAudioLabelText);
+        syncPerChannelMuteButton(judgeMuteButton, owner_.previewAudioSettings_.tapMuted(), judgeAudioLabelText);
+        syncPerChannelMuteButton(exMuteButton, owner_.previewAudioSettings_.exMuted(), exAudioLabelText);
         syncPerChannelMuteButton(breakMuteButton, owner_.previewAudioSettings_.breakMuted(), breakAudioLabelText);
         syncPerChannelMuteButton(slideMuteButton, owner_.previewAudioSettings_.slideMuted(), slideAudioLabelText);
-        syncPerChannelMuteButton(exMuteButton, owner_.previewAudioSettings_.exMuted(), exAudioLabelText);
         syncPerChannelMuteButton(touchMuteButton, owner_.previewAudioSettings_.touchMuted(), touchAudioLabelText);
-        syncPerChannelMuteButton(
-            touchholdMuteButton,
-            owner_.previewAudioSettings_.touchholdMuted(),
-            touchholdAudioLabelText
-        );
         syncPerChannelMuteButton(fireworkMuteButton, owner_.previewAudioSettings_.fireworkMuted(), fireworkAudioLabelText);
-        syncPerChannelMuteButton(
-            breakSlideMuteButton,
-            owner_.previewAudioSettings_.breakSlideMuted(),
-            breakSlideAudioLabelText
-        );
     };
 
     const auto commitAudioSettingsChange = [
@@ -1066,19 +1056,22 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
 
     syncAudioControlsFromCurrentSettings();
 
-    connectAudioSlider(masterSlider, &PreviewAudioSettings::setMasterPercent, "answer");
+    connectAudioSlider(masterSlider, &PreviewAudioSettings::setGlobalPercent, "answer");
     connect(masterMuteButton, &QToolButton::clicked, &dialog, [this, commitAudioSettingsChange]() {
-        const bool muteAll = !owner_.previewAudioSettings_.masterMuted();
+        const bool muteAll = !owner_.previewAudioSettings_.globalMuted();
         if (muteAll) {
-            owner_.previewAudioSettings_.toggleMasterMuted();
-            if (!owner_.previewAudioSettings_.bgmMuted()) {
-                owner_.previewAudioSettings_.toggleBgmMuted();
+            owner_.previewAudioSettings_.toggleGlobalMuted();
+            if (!owner_.previewAudioSettings_.trackMuted()) {
+                owner_.previewAudioSettings_.toggleTrackMuted();
             }
             if (!owner_.previewAudioSettings_.answerMuted()) {
                 owner_.previewAudioSettings_.toggleAnswerMuted();
             }
-            if (!owner_.previewAudioSettings_.judgeMuted()) {
-                owner_.previewAudioSettings_.toggleJudgeMuted();
+            if (!owner_.previewAudioSettings_.tapMuted()) {
+                owner_.previewAudioSettings_.toggleTapMuted();
+            }
+            if (!owner_.previewAudioSettings_.exMuted()) {
+                owner_.previewAudioSettings_.toggleExMuted();
             }
             if (!owner_.previewAudioSettings_.breakMuted()) {
                 owner_.previewAudioSettings_.toggleBreakMuted();
@@ -1086,31 +1079,25 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             if (!owner_.previewAudioSettings_.slideMuted()) {
                 owner_.previewAudioSettings_.toggleSlideMuted();
             }
-            if (!owner_.previewAudioSettings_.exMuted()) {
-                owner_.previewAudioSettings_.toggleExMuted();
-            }
             if (!owner_.previewAudioSettings_.touchMuted()) {
                 owner_.previewAudioSettings_.toggleTouchMuted();
-            }
-            if (!owner_.previewAudioSettings_.touchholdMuted()) {
-                owner_.previewAudioSettings_.toggleTouchholdMuted();
             }
             if (!owner_.previewAudioSettings_.fireworkMuted()) {
                 owner_.previewAudioSettings_.toggleFireworkMuted();
             }
-            if (!owner_.previewAudioSettings_.breakSlideMuted()) {
-                owner_.previewAudioSettings_.toggleBreakSlideMuted();
-            }
         } else {
-            owner_.previewAudioSettings_.toggleMasterMuted();
-            if (owner_.previewAudioSettings_.bgmMuted()) {
-                owner_.previewAudioSettings_.toggleBgmMuted();
+            owner_.previewAudioSettings_.toggleGlobalMuted();
+            if (owner_.previewAudioSettings_.trackMuted()) {
+                owner_.previewAudioSettings_.toggleTrackMuted();
             }
             if (owner_.previewAudioSettings_.answerMuted()) {
                 owner_.previewAudioSettings_.toggleAnswerMuted();
             }
-            if (owner_.previewAudioSettings_.judgeMuted()) {
-                owner_.previewAudioSettings_.toggleJudgeMuted();
+            if (owner_.previewAudioSettings_.tapMuted()) {
+                owner_.previewAudioSettings_.toggleTapMuted();
+            }
+            if (owner_.previewAudioSettings_.exMuted()) {
+                owner_.previewAudioSettings_.toggleExMuted();
             }
             if (owner_.previewAudioSettings_.breakMuted()) {
                 owner_.previewAudioSettings_.toggleBreakMuted();
@@ -1118,34 +1105,23 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             if (owner_.previewAudioSettings_.slideMuted()) {
                 owner_.previewAudioSettings_.toggleSlideMuted();
             }
-            if (owner_.previewAudioSettings_.exMuted()) {
-                owner_.previewAudioSettings_.toggleExMuted();
-            }
             if (owner_.previewAudioSettings_.touchMuted()) {
                 owner_.previewAudioSettings_.toggleTouchMuted();
-            }
-            if (owner_.previewAudioSettings_.touchholdMuted()) {
-                owner_.previewAudioSettings_.toggleTouchholdMuted();
             }
             if (owner_.previewAudioSettings_.fireworkMuted()) {
                 owner_.previewAudioSettings_.toggleFireworkMuted();
             }
-            if (owner_.previewAudioSettings_.breakSlideMuted()) {
-                owner_.previewAudioSettings_.toggleBreakSlideMuted();
-            }
         }
-        commitAudioSettingsChange(owner_.previewAudioSettings_.masterMuted() ? QString() : QStringLiteral("answer"));
+        commitAudioSettingsChange(owner_.previewAudioSettings_.globalMuted() ? QString() : QStringLiteral("answer"));
     });
-    connectAudioSlider(bgmSlider, &PreviewAudioSettings::setBgmPercent, QString());
+    connectAudioSlider(bgmSlider, &PreviewAudioSettings::setTrackPercent, QString());
     connectAudioSlider(answerSlider, &PreviewAudioSettings::setAnswerPercent, "answer");
-    connectAudioSlider(judgeSlider, &PreviewAudioSettings::setJudgePercent, "judge");
+    connectAudioSlider(judgeSlider, &PreviewAudioSettings::setTapPercent, "judge");
+    connectAudioSlider(exSlider, &PreviewAudioSettings::setExPercent, "ex");
     connectAudioSlider(breakSlider, &PreviewAudioSettings::setBreakPercent, "break");
     connectAudioSlider(slideSlider, &PreviewAudioSettings::setSlidePercent, "slide");
-    connectAudioSlider(exSlider, &PreviewAudioSettings::setExPercent, "ex");
     connectAudioSlider(touchSlider, &PreviewAudioSettings::setTouchPercent, "touch");
-    connectAudioSlider(touchholdSlider, &PreviewAudioSettings::setTouchholdPercent, "touchhold");
     connectAudioSlider(fireworkSlider, &PreviewAudioSettings::setFireworkPercent, "firework");
-    connectAudioSlider(breakSlideSlider, &PreviewAudioSettings::setBreakSlidePercent, "break_slide");
     const auto connectPerChannelMute = [
         this,
         &dialog,
@@ -1157,26 +1133,14 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             commitAudioSettingsChange(mutedNow ? QString() : audition);
         });
     };
-    connectPerChannelMute(bgmMuteButton, &PreviewAudioSettings::toggleBgmMuted, &PreviewAudioSettings::bgmMuted, QString());
+    connectPerChannelMute(bgmMuteButton, &PreviewAudioSettings::toggleTrackMuted, &PreviewAudioSettings::trackMuted, QString());
     connectPerChannelMute(answerMuteButton, &PreviewAudioSettings::toggleAnswerMuted, &PreviewAudioSettings::answerMuted, "answer");
-    connectPerChannelMute(judgeMuteButton, &PreviewAudioSettings::toggleJudgeMuted, &PreviewAudioSettings::judgeMuted, "judge");
+    connectPerChannelMute(judgeMuteButton, &PreviewAudioSettings::toggleTapMuted, &PreviewAudioSettings::tapMuted, "judge");
+    connectPerChannelMute(exMuteButton, &PreviewAudioSettings::toggleExMuted, &PreviewAudioSettings::exMuted, "ex");
     connectPerChannelMute(breakMuteButton, &PreviewAudioSettings::toggleBreakMuted, &PreviewAudioSettings::breakMuted, "break");
     connectPerChannelMute(slideMuteButton, &PreviewAudioSettings::toggleSlideMuted, &PreviewAudioSettings::slideMuted, "slide");
-    connectPerChannelMute(exMuteButton, &PreviewAudioSettings::toggleExMuted, &PreviewAudioSettings::exMuted, "ex");
     connectPerChannelMute(touchMuteButton, &PreviewAudioSettings::toggleTouchMuted, &PreviewAudioSettings::touchMuted, "touch");
-    connectPerChannelMute(
-        touchholdMuteButton,
-        &PreviewAudioSettings::toggleTouchholdMuted,
-        &PreviewAudioSettings::touchholdMuted,
-        "touchhold"
-    );
     connectPerChannelMute(fireworkMuteButton, &PreviewAudioSettings::toggleFireworkMuted, &PreviewAudioSettings::fireworkMuted, "firework");
-    connectPerChannelMute(
-        breakSlideMuteButton,
-        &PreviewAudioSettings::toggleBreakSlideMuted,
-        &PreviewAudioSettings::breakSlideMuted,
-        "break_slide"
-    );
     if (saveLocalAudioPresetButton != nullptr) {
         connect(saveLocalAudioPresetButton, &QPushButton::clicked, &dialog, [this]() {
             owner_.previewAudioSettings_.normalize();
@@ -1204,7 +1168,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         );
     }
 
-    connect(audioApplyTimer, &QTimer::timeout, &dialog, [this, audioApplyTimer, masterSlider, bgmSlider, answerSlider, judgeSlider, breakSlider, slideSlider, exSlider, touchSlider, touchholdSlider, fireworkSlider, breakSlideSlider, &pendingAudition]() {
+    connect(audioApplyTimer, &QTimer::timeout, &dialog, [this, audioApplyTimer, masterSlider, bgmSlider, answerSlider, judgeSlider, breakSlider, slideSlider, exSlider, touchSlider, fireworkSlider, &pendingAudition]() {
         if (masterSlider->isSliderDown()
             || bgmSlider->isSliderDown()
             || answerSlider->isSliderDown()
@@ -1213,9 +1177,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             || slideSlider->isSliderDown()
             || exSlider->isSliderDown()
             || touchSlider->isSliderDown()
-            || touchholdSlider->isSliderDown()
-            || fireworkSlider->isSliderDown()
-            || breakSlideSlider->isSliderDown()) {
+            || fireworkSlider->isSliderDown()) {
             audioApplyTimer->start();
             return;
         }

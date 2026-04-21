@@ -10,6 +10,8 @@
 #include <QMouseEvent>
 #include <QPixmap>
 #include <QPointF>
+#include <QPointer>
+#include <QRect>
 #include <QSet>
 #include <QSize>
 #include <QString>
@@ -21,6 +23,9 @@
 
 #include <memory>
 
+#include <QMetaObject>
+
+#include "timeline/TimelineNoteAssets.h"
 #include "timeline/TimelineRenderData.h"
 #include "common/MuriTypes.h"
 
@@ -28,21 +33,34 @@ namespace miacode::waveform {
 struct WaveformData;
 }
 
+class QPainter;
+
 class TimelineView : public QAbstractScrollArea
 {
     Q_OBJECT
 
 public:
+    enum class PresentationMode {
+        Full,
+        WaveformOnly,
+    };
+
     explicit TimelineView(QWidget* parent = nullptr);
+    void setStateBridge(class TimelineQuickStateBridge* stateBridge);
+    class TimelineQuickStateBridge* stateBridge() const;
     QSize minimumSizeHint() const override;
     QSize sizeHint() const override;
     void setHeaderLineNumberFont(const QFont& font);
+    const QFont& headerLineNumberFont() const;
     void setTimelineData(const TimelineRenderSnapshot& snapshot);
+    const TimelineRenderSnapshot& renderSnapshot() const;
     void setWaveformData(const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData);
+    std::shared_ptr<const miacode::waveform::WaveformData> waveformData() const;
     void clear();
     void setPlaybackEntrySeconds(double second);
     double playbackEntrySeconds() const;
     void setPlayheadUpperLimitSeconds(double second);
+    double playheadUpperLimitSeconds() const;
     void setPlayheadSeconds(double second, bool centerView);
     void setCursorSeconds(double second, bool centerView = false);
     void focusPlayhead(bool centerView = false);
@@ -53,9 +71,20 @@ public:
     void setShowSlideTracks(bool show);
     bool showSlideTracks() const;
     void setMuriAnalysisReport(const MuriAnalysisReport& report);
+    const QSet<quint64>& muriMarkerLocationIds() const;
     double zoomScale() const;
+    int horizontalScrollValue() const;
+    void setHorizontalScrollValue(int value);
+    void stepZoomPresetForQuickSurface(int deltaSteps, double anchorSecond);
+    bool playheadIndicatorSuppressed() const;
+    void suppressPlayheadIndicatorForQuickSurface();
+    void restorePlayheadIndicatorForQuickSurface(bool immediate = false);
     void setFollowPreviewEnabled(bool enabled);
     bool followPreviewEnabled() const;
+    void setPresentationMode(PresentationMode mode);
+    PresentationMode presentationMode() const;
+    int zoomPresetIndex() const;
+    int zoomPresetCount() const;
     void refreshTheme();
 
 signals:
@@ -67,6 +96,7 @@ signals:
     void timelineUserInteractionStarted();
     void followPreviewToggled(bool enabled);
     void previewPlayPauseRequested();
+    void renderStateChanged();
 
 protected:
     bool viewportEvent(QEvent* event) override;
@@ -92,11 +122,7 @@ private:
         int screenX = 0;
     };
 
-    struct HoldPixmapParts {
-        QPixmap leftCap;
-        QPixmap rightCap;
-        QImage bodySlice;
-    };
+    using HoldPixmapParts = miacode::timeline::TimelineHoldPixmapParts;
 
     enum class FocusTarget {
         Playhead,
@@ -105,6 +131,7 @@ private:
 
     void updateDisplayBounds();
     void updateHorizontalRange();
+    int headerHeight() const;
     int contentWidth() const;
     int rawContentWidth() const;
     int timelineLeft() const;
@@ -156,8 +183,11 @@ private:
     void beginHeldHorizontalKeyScroll(int direction, int key);
     void stopHeldHorizontalKeyScroll(int key = 0);
     void applyHeldHorizontalKeyScrollTick();
+    bool waveformOnlyPresentation() const;
+    void paintWaveformOnly(QPainter& painter, const QRect& dirtyRect);
 
     QVector<TimelineRenderLine> lines_;
+    TimelineRenderSnapshot snapshotCache_;
     QVector<double> measureLineSeconds_;
     QVector<double> noteVisualEndPrefixMaxWithSlideTracks_;
     QVector<double> noteVisualEndPrefixMaxWithoutSlideTracks_;
@@ -186,6 +216,7 @@ private:
     QVector<double> zoomPresets_;
     QVector<double> buttonZoomPresets_;
     int zoomPresetIndex_ = 0;
+    PresentationMode presentationMode_ = PresentationMode::Full;
     FocusTarget focusTarget_ = FocusTarget::Playhead;
     bool timelineDragActive_ = false;
     int timelineDragStartX_ = 0;
@@ -202,4 +233,9 @@ private:
     QElapsedTimer heldHorizontalKeyScrollElapsed_;
     QTimer* playheadIndicatorRestoreTimer_ = nullptr;
     QTimer* heldHorizontalKeyScrollTimer_ = nullptr;
+    QPointer<class TimelineQuickStateBridge> stateBridge_;
+    QMetaObject::Connection stateBridgeRenderStateConnection_;
+    bool applyingBridgeState_ = false;
+
+    void applyStateFromBridge();
 };

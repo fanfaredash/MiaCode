@@ -5,17 +5,20 @@
 #include <algorithm>
 #include <climits>
 #include <functional>
+#include <limits>
 
 #include <QAction>
+#include <QApplication>
 #include <QComboBox>
 #include <QFile>
 #include <QDoubleValidator>
+#include <QEvent>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QFontMetrics>
 #include <QMenu>
-#include <QMouseEvent>
-#include <QPainter>
 #include <QPushButton>
 #include <QDialogButtonBox>
 #include <QPlainTextEdit>
@@ -29,6 +32,7 @@
 #include <QtMath>
 
 #include "QtPreviewSfxRuntime.h"
+#include "TimelineView.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/MiniaudioFileAccess.h"
@@ -41,24 +45,11 @@ constexpr int kAnalysisWindowSize = 1024;
 constexpr int kAnalysisHopSize = 512;
 constexpr int kOffsetWindowSize = 512;
 constexpr int kOffsetHopSize = 128;
-constexpr double kMinimumVisibleSeconds = 0.001;
-constexpr double kWaveformZoomBaseVisibleSeconds = 4.0;
 constexpr double kOffsetReplayDelayMs = 120.0;
 constexpr double kMinDetectBpm = 50.0;
 constexpr double kMaxDetectBpm = 300.0;
 constexpr double kOffsetPhasePenalty = 0.06;
 constexpr double kOffsetSnapThreshold = 0.90;
-
-const QVector<double>& waveformZoomFactors()
-{
-    static const QVector<double> factors{0.5, 1.0, 2.0, 4.0, 8.0};
-    return factors;
-}
-
-int defaultWaveformZoomPresetIndex()
-{
-    return qMax(0, waveformZoomFactors().indexOf(2.0));
-}
 
 struct MeterPattern {
     const char* id = "";
@@ -107,208 +98,147 @@ QVector<const MeterPattern*> candidatePatternsForId(const QString& id)
     return result;
 }
 
-class WaveformOverviewWidget : public QWidget {
-public:
-    explicit WaveformOverviewWidget(QWidget* parent = nullptr)
-        : QWidget(parent)
-    {
-        setMinimumHeight(132);
-        setMouseTracking(true);
+bool appendDistinctSecond(QVector<double>* seconds, double second)
+{
+    if (seconds == nullptr) {
+        return false;
     }
-
-    void setWaveformData(const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData)
-    {
-        waveformData_ = waveformData;
-        durationSeconds_ = waveformData ? qMax(0.0, waveformData->durationSeconds) : 0.0;
-        update();
+    if (!seconds->isEmpty() && qAbs(seconds->constLast() - second) <= 1e-6) {
+        return false;
     }
+    seconds->append(second);
+    return true;
+}
 
-    void setVisibleRange(double startSecond, double durationSeconds)
-    {
-        visibleStartSecond_ = qMax(0.0, startSecond);
-        visibleDurationSeconds_ = qMax(0.001, durationSeconds);
-        update();
-    }
+TimelineRenderSnapshot buildLatencyTimelineSnapshot(
+    double durationSeconds,
+    double bpm,
+    double offsetSecond,
+    int barPulseCount)
+{
+    TimelineRenderSnapshot snapshot;
+    snapshot.durationSeconds = qMax(0.0, durationSeconds);
+    snapshot.minimumSecond = 0.0;
+    snapshot.maximumSecond = snapshot.durationSeconds;
 
-    void setPlayheadSecond(double second)
-    {
-        playheadSecond_ = qBound(0.0, second, durationSeconds_);
-        update();
-    }
+    TimelineRenderLine line;
+    line.lineId = 1;
+    line.lineNumber = 1;
+    line.startPosition = 0;
+    line.startSecond = 0.0;
+    line.endSecond = snapshot.durationSeconds;
 
-    void setBeatGrid(double bpm, double offsetSecond, int barPulseCount)
-    {
-        bpm_ = bpm;
-        offsetSecond_ = offsetSecond;
-        barPulseCount_ = qMax(1, barPulseCount);
-        update();
-    }
-
-    void clearBeatGrid()
-    {
-        bpm_ = 0.0;
-        offsetSecond_ = 0.0;
-        update();
-    }
-
-    void setSeekCallback(std::function<void(double)> callback)
-    {
-        seekCallback_ = std::move(callback);
-    }
-
-protected:
-    void paintEvent(QPaintEvent* event) override
-    {
-        Q_UNUSED(event);
-        const UiTheme::Colors& c = UiTheme::colors();
-
-        QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        painter.fillRect(rect(), c.windowAltBg);
-
-        const QRectF chartRect = rect().adjusted(8.0, 12.0, -8.0, -18.0);
-        painter.setPen(QPen(c.border, 1.0));
-        painter.setBrush(c.cardBg);
-        painter.drawRoundedRect(chartRect, 8.0, 8.0);
-
-        if (chartRect.width() <= 2.0 || chartRect.height() <= 2.0 || durationSeconds_ <= 0.0) {
-            return;
-        }
-
-        if (bpm_ > 0.0) {
-            const double beatPeriod = 60.0 / bpm_;
-            const double firstBeat = offsetSecond_;
-            const double rangeEnd = visibleStartSecond_ + visibleDurationSeconds_;
-            if (beatPeriod > 0.0) {
-                int beatIndex = static_cast<int>(qFloor((visibleStartSecond_ - firstBeat) / beatPeriod));
-                if (firstBeat + beatIndex * beatPeriod < visibleStartSecond_) {
-                    ++beatIndex;
+    if (bpm > 0.0) {
+        const double beatPeriod = 60.0 / bpm;
+        const int safeBarPulseCount = qMax(1, barPulseCount);
+        if (beatPeriod > 0.0) {
+            const double renderMinSecond = -0.5;
+            qint64 beatIndex = static_cast<qint64>(qFloor((renderMinSecond - offsetSecond) / beatPeriod));
+            while (offsetSecond + static_cast<double>(beatIndex) * beatPeriod < renderMinSecond - 1e-6) {
+                ++beatIndex;
+            }
+            int sourceCol = 1;
+            for (;; ++beatIndex) {
+                const double beatSecond = offsetSecond + static_cast<double>(beatIndex) * beatPeriod;
+                if (beatSecond > snapshot.durationSeconds + 1e-6) {
+                    break;
                 }
-                for (; ; ++beatIndex) {
-                    const double beatSecond = firstBeat + beatIndex * beatPeriod;
-                    if (beatSecond > rangeEnd + 1e-6) {
-                        break;
-                    }
-                    if (beatSecond < visibleStartSecond_ - 1e-6) {
-                        continue;
-                    }
-                    const qreal x = secondToX(beatSecond, chartRect);
-                    const bool isBarLine = beatIndex >= 0
-                        ? (beatIndex % qMax(1, barPulseCount_)) == 0
-                        : ((-beatIndex) % qMax(1, barPulseCount_)) == 0;
-                    painter.setPen(QPen(isBarLine ? c.timelineCursor : c.timelineGridMinor, isBarLine ? 1.5 : 1.0));
-                    painter.drawLine(QPointF(x, chartRect.top() + 2.0), QPointF(x, chartRect.bottom() - 2.0));
+
+                const bool isBarLine = beatIndex >= 0
+                    ? ((beatIndex % safeBarPulseCount) == 0)
+                    : (((-beatIndex) % safeBarPulseCount) == 0);
+                if (isBarLine) {
+                    appendDistinctSecond(&snapshot.measureLineSeconds, beatSecond);
+                } else {
+                    TimelineRenderBeat beat;
+                    beat.secondOffset = beatSecond;
+                    beat.sourceCol = sourceCol;
+                    beat.subdivisionBeats = safeBarPulseCount;
+                    beat.subdivisionIndex = safeBarPulseCount > 0
+                        ? static_cast<int>((beatIndex % safeBarPulseCount + safeBarPulseCount) % safeBarPulseCount)
+                        : 0;
+                    line.beats.append(beat);
                 }
+                ++sourceCol;
             }
         }
-
-        if (waveformData_ && waveformData_->durationSeconds > 0.0) {
-            const miacode::waveform::WaveformLevel* waveformLevel =
-                miacode::waveform::selectWaveformLevelForVisibleRange(
-                    *waveformData_,
-                    visibleDurationSeconds_,
-                    qMax(1, qFloor(chartRect.width())));
-            if (waveformLevel != nullptr && !waveformLevel->columns.isEmpty()) {
-                const QPair<int, int> visibleColumns =
-                    miacode::waveform::visibleWaveformColumnRange(
-                        *waveformLevel,
-                        visibleStartSecond_,
-                        visibleStartSecond_ + visibleDurationSeconds_);
-                const QColor waveformColor = c.timelineWaveStroke;
-                const qreal centerY = chartRect.center().y();
-                const qreal maxAmplitude = chartRect.height() * 0.38;
-                painter.save();
-                painter.setClipRect(chartRect);
-                painter.setPen(Qt::NoPen);
-                painter.setBrush(waveformColor);
-                for (int index = visibleColumns.first; index < visibleColumns.second; ++index) {
-                    const miacode::waveform::WaveformColumn& column = waveformLevel->columns.at(index);
-                    if (qAbs(column.max - column.min) <= 1e-5f) {
-                        continue;
-                    }
-                    const double columnStartSecond = waveformLevel->secondsPerColumn * static_cast<double>(index);
-                    const double columnEndSecond = columnStartSecond + waveformLevel->secondsPerColumn;
-                    const int x0 = qFloor(secondToX(columnStartSecond, chartRect));
-                    const int x1 = qMax(x0 + 1, qCeil(secondToX(columnEndSecond, chartRect)));
-                    const qreal topY = centerY - (qBound(-1.0f, column.max, 1.0f) * maxAmplitude);
-                    const qreal bottomY = centerY - (qBound(-1.0f, column.min, 1.0f) * maxAmplitude);
-                    const int barTop = qFloor(qMin(topY, bottomY));
-                    const int barBottom = qCeil(qMax(topY, bottomY));
-                    painter.fillRect(
-                        QRect(x0, barTop, qMax(1, x1 - x0), qMax(1, barBottom - barTop)),
-                        waveformColor);
-                }
-                painter.restore();
-            }
-        }
-
-        painter.setPen(QPen(c.textPrimary, 1.0));
-        painter.drawLine(
-            QPointF(chartRect.left(), chartRect.center().y()),
-            QPointF(chartRect.right(), chartRect.center().y())
-        );
-
-        const qreal playheadX = secondToX(playheadSecond_, chartRect);
-        painter.setPen(QPen(c.timelinePlayhead, 2.0));
-        painter.drawLine(QPointF(playheadX, chartRect.top()), QPointF(playheadX, chartRect.bottom()));
     }
 
-    void mousePressEvent(QMouseEvent* event) override
-    {
-        dragging_ = event->button() == Qt::LeftButton;
-        if (dragging_) {
-            seekTo(event->position());
-        }
-    }
+    snapshot.lines.append(line);
+    snapshot.noteVisualEndPrefixMaxWithSlideTracks.append(-std::numeric_limits<double>::infinity());
+    snapshot.noteVisualEndPrefixMaxWithoutSlideTracks.append(-std::numeric_limits<double>::infinity());
+    return snapshot;
+}
 
-    void mouseMoveEvent(QMouseEvent* event) override
-    {
-        if (dragging_) {
-            seekTo(event->position());
-        }
-    }
-
-    void mouseReleaseEvent(QMouseEvent* event) override
-    {
-        Q_UNUSED(event);
-        dragging_ = false;
-    }
-
-private:
-    qreal secondToX(double second, const QRectF& chartRect) const
-    {
-        const double range = qMax(0.001, visibleDurationSeconds_);
-        const double relative = (second - visibleStartSecond_) / range;
-        return chartRect.left() + qBound(0.0, relative, 1.0) * chartRect.width();
-    }
-
-    double xToSecond(qreal x, const QRectF& chartRect) const
-    {
-        const qreal width = qMax<qreal>(1.0, chartRect.width());
-        const qreal relative = qBound<qreal>(0.0, (x - chartRect.left()) / width, 1.0);
-        return qBound(0.0, visibleStartSecond_ + visibleDurationSeconds_ * relative, durationSeconds_);
-    }
-
-    void seekTo(const QPointF& position)
-    {
-        if (!seekCallback_) {
-            return;
-        }
-        const QRectF chartRect = rect().adjusted(8.0, 12.0, -8.0, -18.0);
-        seekCallback_(xToSecond(position.x(), chartRect));
-    }
-
-    std::shared_ptr<const miacode::waveform::WaveformData> waveformData_;
-    std::function<void(double)> seekCallback_;
-    double durationSeconds_ = 0.0;
-    double visibleStartSecond_ = 0.0;
-    double visibleDurationSeconds_ = 12.0;
-    double playheadSecond_ = 0.0;
-    double bpm_ = 0.0;
-    double offsetSecond_ = 0.0;
-    int barPulseCount_ = 4;
-    bool dragging_ = false;
+enum class LatencyShortcutAction {
+    None,
+    TogglePlayPause,
+    StopOrPlay,
+    Slower,
+    Faster,
 };
+
+LatencyShortcutAction matchLatencyShortcut(const QKeyEvent* event)
+{
+    if (event == nullptr) {
+        return LatencyShortcutAction::None;
+    }
+    const Qt::KeyboardModifiers modifiers = event->modifiers();
+    if (modifiers == Qt::NoModifier && event->key() == Qt::Key_Space) {
+        return LatencyShortcutAction::TogglePlayPause;
+    }
+    if (modifiers == (Qt::ControlModifier | Qt::ShiftModifier) && event->key() == Qt::Key_C) {
+        return LatencyShortcutAction::StopOrPlay;
+    }
+    if (modifiers == (Qt::ControlModifier | Qt::ShiftModifier) && event->key() == Qt::Key_X) {
+        return LatencyShortcutAction::TogglePlayPause;
+    }
+    if (modifiers == Qt::ControlModifier && event->key() == Qt::Key_O) {
+        return LatencyShortcutAction::Slower;
+    }
+    if (modifiers == Qt::ControlModifier && event->key() == Qt::Key_P) {
+        return LatencyShortcutAction::Faster;
+    }
+    return LatencyShortcutAction::None;
+}
+
+const QList<QPair<double, QString>>& latencyPlaybackSpeedOptions()
+{
+    static const QList<QPair<double, QString>> kOptions{
+        {0.25, QStringLiteral("0.25x")},
+        {0.50, QStringLiteral("0.5x")},
+        {0.75, QStringLiteral("0.75x")},
+        {1.00, QStringLiteral("1x")},
+        {1.25, QStringLiteral("1.25x")},
+        {1.50, QStringLiteral("1.5x")},
+        {2.00, QStringLiteral("2x")},
+    };
+    return kOptions;
+}
+
+const QVector<double>& latencyTimelineZoomPresets()
+{
+    static const QVector<double> kZoomPresets{0.25, 0.5, 0.75, 1.0, 1.5, 2.0};
+    return kZoomPresets;
+}
+
+int closestLatencyPlaybackSpeedIndex(double rate)
+{
+    const auto& options = latencyPlaybackSpeedOptions();
+    if (options.isEmpty()) {
+        return 0;
+    }
+    int bestIndex = 0;
+    double bestDistance = std::numeric_limits<double>::infinity();
+    for (int index = 0; index < options.size(); ++index) {
+        const double distance = qAbs(options.at(index).first - rate);
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = index;
+        }
+    }
+    return bestIndex;
+}
 
 struct DecodedAudio {
     QVector<float> samples;
@@ -573,9 +503,13 @@ LatencyDetectorDialog::LatencyDetectorDialog(
     , waveformCacheService_(waveformCacheService)
 {
     setAttribute(Qt::WA_DeleteOnClose, true);
+    UiDialogs::configureDialogPreviewShortcuts(this, UiDialogs::PreviewShortcutPolicy::LocalPlaybackControls);
     setWindowTitle(localizedText("BPM&偏移检测", "BPM & Offset Detection"));
 
     buildUi();
+    if (QApplication* app = qobject_cast<QApplication*>(QCoreApplication::instance()); app != nullptr) {
+        app->installEventFilter(this);
+    }
     loadAudioAnalysis();
     updateBeatOverlay();
     updateVisibleRange(true);
@@ -628,6 +562,62 @@ void LatencyDetectorDialog::setMeterId(const QString& meterId)
 void LatencyDetectorDialog::setOffsetSeconds(double seconds)
 {
     updateOffsetEdit(seconds, false);
+}
+
+bool LatencyDetectorDialog::eventFilter(QObject* watched, QEvent* event)
+{
+    Q_UNUSED(watched);
+    if (event == nullptr || !UiDialogs::dialogOwnsPreviewShortcutScope(this)) {
+        return QDialog::eventFilter(watched, event);
+    }
+
+    if (event->type() == QEvent::ShortcutOverride) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (matchLatencyShortcut(keyEvent) != LatencyShortcutAction::None) {
+            event->accept();
+            return true;
+        }
+    }
+
+    if (event->type() == QEvent::KeyPress) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        const LatencyShortcutAction action = matchLatencyShortcut(keyEvent);
+        if (action == LatencyShortcutAction::None) {
+            return QDialog::eventFilter(watched, event);
+        }
+        if (keyEvent->isAutoRepeat()) {
+            event->accept();
+            return true;
+        }
+        switch (action) {
+        case LatencyShortcutAction::TogglePlayPause:
+            togglePlayback();
+            break;
+        case LatencyShortcutAction::StopOrPlay:
+            handleStopOrPlayShortcut();
+            break;
+        case LatencyShortcutAction::Slower:
+            stepPlaybackRate(-1);
+            break;
+        case LatencyShortcutAction::Faster:
+            stepPlaybackRate(1);
+            break;
+        case LatencyShortcutAction::None:
+            break;
+        }
+        event->accept();
+        return true;
+    }
+
+    if (event->type() == QEvent::KeyRelease) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (matchLatencyShortcut(keyEvent) != LatencyShortcutAction::None) {
+            event->accept();
+            return true;
+        }
+    }
+
+    return QDialog::eventFilter(watched, event);
 }
 
 

@@ -20,6 +20,14 @@ public:
     void beginShellPreviewHeldSeek(int direction, int key);
     void stopShellPreviewHeldSeek(int key = 0);
     void setShellPreviewFullscreen(bool fullscreen);
+    void setShellBottomTabsCurrentTab(const QString& tabId);
+    void navigateShellTimelineToSecond(double second);
+    void centerShellTimelineNavigate(double second);
+    void shellTimelineDragStarted();
+    void shellTimelineDragFinished(double second);
+    void shellTimelineUserInteractionStarted();
+    void shellTimelineSurfaceReady();
+    void shellTimelineFollowPreviewToggled(bool enabled);
     bool shellHasShortcut(const QKeySequence& sequence) const;
     bool shellTriggerShortcut(const QKeySequence& sequence);
     QString shellWindowTitle() const;
@@ -36,11 +44,19 @@ public:
     QObject* shellPreviewStageMediaHostObject() const;
     bool shellPreviewUsesSeparateSurface() const;
     QWindow* shellPreviewCompositeWindow() const;
+    QObject* shellTimelineStateBridgeObject() const;
+    QString shellBottomTabsCurrentTabId() const;
+    bool shellBottomTabsVisible() const;
+    bool shellTimelineTabVisible() const;
+    bool shellValidationTabVisible() const;
+    bool shellMuriTabVisible() const;
     QWidget* shellWindowWidget() const;
     QDockWidget* shellOutlineDockWidget() const;
     bool shellOutlineDockCollapsed() const;
     int shellOutlineDockExpandedWidth() const;
     QWidget* shellWorkspaceWidget() const;
+    QWidget* shellBottomTabsWidget() const;
+    int shellBottomTabsHeight() const;
     QWidget* shellPreviewPanelWidget() const;
     double shellNormalizedPreviewCanvasAspectRatio() const;
     void shellRefreshLayoutAfterResize();
@@ -89,6 +105,7 @@ public:
 private:
     QTextEdit* resolveRestorableTextEdit(QWidget* widget) const;
     bool shouldRespectFocusedWidgetOnRestore(QWidget* widget, QTextEdit* target) const;
+    bool quickShellFocusBridgeActive() const;
     QWindow* previewVisibleHostWindow() const;
     void focusPreviewInteractionTarget(QObject* watched, Qt::FocusReason reason);
     void handleApplicationFocusChanged(QWidget* old, QWidget* now);

@@ -19,6 +19,7 @@
 #include "preview/scene/PreviewProgressStatsCache.h"
 #include "simai/transform/ChartBatchTransform.h"
 #include "simai/transform/ChartNormalization.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -439,9 +440,15 @@ void MainWindow::DocumentSection::syncEditorHeaderMinimumWidth()
             owner_.updatePreviewWorkspaceLayout();
         }
     }
+    if (ui_.workspaceContentWidget_ != nullptr) {
+        const int baseMinimumWidth = qMax(0, ui_.workspaceContentWidget_->property("baseMinimumWidth").toInt());
+        ui_.workspaceContentWidget_->setMinimumWidth(qMax(baseMinimumWidth, headerMinimumWidth));
+        ui_.workspaceContentWidget_->updateGeometry();
+    }
 
     owner_.refreshQuickShellRehostedWidgetParent(ui_.outlineDock_);
-    owner_.refreshQuickShellRehostedWidgetParent(ui_.previewLeftColumn_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.workspaceContentWidget_);
+    owner_.refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
 
     if (ui_.workspaceSplitter_ != nullptr) {
         ui_.workspaceSplitter_->updateGeometry();
@@ -534,10 +541,7 @@ bool MainWindow::DocumentSection::deleteDifficultyField(int difficultyId)
             if (ui_.editorStack_ != nullptr && ui_.welcomePage_ != nullptr) {
                 ui_.editorStack_->setCurrentWidget(ui_.welcomePage_);
             }
-            if (ui_.bottomTabs_ != nullptr) {
-                ui_.bottomTabs_->setVisible(false);
-            }
-            owner_.setValidationTabVisible(false);
+            setChartBottomTabsMode(false);
             clearTimelineAndPreview();
             if (ui_.outlineList_ != nullptr) {
                 ui_.outlineList_->setFocus();
@@ -736,6 +740,26 @@ void MainWindow::DocumentSection::populateDifficultyPage(int difficultyId)
     updateEditorStatus();
 }
 
+void MainWindow::DocumentSection::setChartBottomTabsMode(bool enabled)
+{
+    owner_.setBottomTabsTabVisible(MainWindow::BottomTabsTabId::Timeline, enabled);
+    owner_.setValidationTabVisible(enabled);
+    owner_.setBottomTabsTabVisible(MainWindow::BottomTabsTabId::Muri, enabled);
+
+    if (ui_.bottomTabs_ != nullptr) {
+        ui_.bottomTabs_->setVisible(enabled);
+        owner_.refreshQuickShellRehostedWidgetParent(ui_.bottomTabs_);
+    }
+    if (owner_.quickShellBottomTabsProxy_ != nullptr) {
+        owner_.quickShellBottomTabsProxy_->setVisible(enabled);
+        owner_.refreshQuickShellRehostedWidgetParent(owner_.quickShellBottomTabsProxy_);
+    }
+
+    if (enabled) {
+        owner_.setCurrentBottomTabsTabId(MainWindow::BottomTabsTabId::Timeline);
+    }
+}
+
 bool MainWindow::DocumentSection::switchToMetadataField()
 {
     if (!maybeSaveCurrentFieldChanges()) {
@@ -754,16 +778,7 @@ bool MainWindow::DocumentSection::switchToMetadataField()
     if (ui_.editorStack_ != nullptr && ui_.metadataPage_ != nullptr) {
         ui_.editorStack_->setCurrentWidget(ui_.metadataPage_);
     }
-    if (ui_.bottomTabs_ != nullptr && ui_.timelineView_ != nullptr) {
-        const int timelineTabIndex = ui_.bottomTabs_->indexOf(ui_.timelineView_);
-        if (timelineTabIndex >= 0) {
-            ui_.bottomTabs_->setTabVisible(timelineTabIndex, false);
-        }
-    }
-    if (ui_.bottomTabs_ != nullptr) {
-        ui_.bottomTabs_->setVisible(false);
-    }
-    owner_.setValidationTabVisible(false);
+    setChartBottomTabsMode(false);
     owner_.clearValidationDecorations();
     updateMetadataPageMode();
     state_.currentFieldDirty_ = false;
@@ -794,16 +809,7 @@ bool MainWindow::DocumentSection::switchToWelcomePage()
     if (ui_.editorStack_ != nullptr && ui_.welcomePage_ != nullptr) {
         ui_.editorStack_->setCurrentWidget(ui_.welcomePage_);
     }
-    if (ui_.bottomTabs_ != nullptr && ui_.timelineView_ != nullptr) {
-        const int timelineTabIndex = ui_.bottomTabs_->indexOf(ui_.timelineView_);
-        if (timelineTabIndex >= 0) {
-            ui_.bottomTabs_->setTabVisible(timelineTabIndex, false);
-        }
-    }
-    if (ui_.bottomTabs_ != nullptr) {
-        ui_.bottomTabs_->setVisible(false);
-    }
-    owner_.setValidationTabVisible(false);
+    setChartBottomTabsMode(false);
     owner_.clearValidationDecorations();
     state_.currentFieldDirty_ = false;
     updateDirtyState();
@@ -838,24 +844,21 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
         state_.activeOutlineKey_ = "chart";
     }
     populateDifficultyPage(difficultyId);
+    clearTimelineAndPreview();
     if (ui_.editorStack_ != nullptr && ui_.chartPage_ != nullptr) {
         ui_.editorStack_->setCurrentWidget(ui_.chartPage_);
     }
-    if (ui_.bottomTabs_ != nullptr && ui_.timelineView_ != nullptr) {
-        const int timelineTabIndex = ui_.bottomTabs_->indexOf(ui_.timelineView_);
-        if (timelineTabIndex >= 0) {
-            ui_.bottomTabs_->setTabVisible(timelineTabIndex, true);
-            ui_.bottomTabs_->setCurrentIndex(timelineTabIndex);
-        }
-        ui_.bottomTabs_->setVisible(true);
-    } else if (ui_.bottomTabs_ != nullptr) {
-        ui_.bottomTabs_->setVisible(true);
-    }
-    owner_.setValidationTabVisible(true);
+    setChartBottomTabsMode(true);
     state_.currentFieldDirty_ = false;
     updateDirtyState();
     rebuildFieldSidebar();
-    owner_.scheduleTimelineRefresh();
+    QTimer::singleShot(0, &owner_, [this, difficultyId]() {
+        if (state_.activeDifficultyId_ != difficultyId || !owner_.hasActiveDifficulty()) {
+            return;
+        }
+        owner_.restoreBottomTabsCurrentTabAfterRefresh(MainWindow::BottomTabsTabId::Timeline);
+        owner_.scheduleTimelineRefresh();
+    });
     owner_.saveProjectRenderState();
     owner_.refreshLayoutAfterPageSwitch();
         QTimer::singleShot(0, &owner_, [this]() { owner_.refreshLayoutAfterPageSwitch(); });
@@ -937,6 +940,11 @@ void MainWindow::DocumentSection::clearTimelineAndPreview()
     state_.qtPreviewTimelineDirty_ = false;
     state_.qtPreviewPendingTimelineSecond_ = 0.0;
     state_.qtPreviewPendingTimelineCenterView_ = true;
+    state_.previewFollowBindingCacheValid_ = false;
+    state_.previewFollowBindingCache_ = TimelineQuickModel::PreviewFollowBinding();
+    state_.pendingQuickTimelineCursorSync_ = false;
+    state_.pendingQuickTimelineCursorSecond_ = 0.0;
+    state_.pendingQuickTimelineCursorCenterView_ = false;
     state_.pendingPreviewPlaybackStart_ = false;
     state_.pendingPreviewPlaybackResumeFromPause_ = false;
     state_.pendingPreviewPlaybackRevision_ = 0;
@@ -950,9 +958,9 @@ void MainWindow::DocumentSection::clearTimelineAndPreview()
         state_.previewSfxRuntime_->clearTimeline();
     }
     owner_.stopQtPreviewPlayback(false);
-    if (ui_.timelineView_ != nullptr) {
-        ui_.timelineView_->clear();
-        ui_.timelineView_->setMuriAnalysisReport(state_.muriAnalysisReport_);
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->clear();
+        state_.timelineQuickStateBridge_->setMuriAnalysisReport(state_.muriAnalysisReport_);
     }
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->reset();

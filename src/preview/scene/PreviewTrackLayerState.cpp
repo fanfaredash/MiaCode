@@ -100,7 +100,7 @@ PreviewTrackLayerState buildPreviewTrackLayerState(
     }
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-    const PreviewSlideTrackTiming trackTiming = previewSlideTrackTimingForFlowSpeed(state.render.noteFlowSpeed);
+    const PreviewSlideTrackTiming trackTiming = previewSlideTrackTimingForFlowSpeed(state.render.tapFlowSpeed);
     MarkerMuriStateLookup exactStateByKey;
     MarkerMuriStateLookup slideFallbackStateByBaseKey;
     exactStateByKey.reserve(state.muriAnalysisReport.markerStates.size());

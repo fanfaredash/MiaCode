@@ -1199,6 +1199,24 @@ void runInlineSpecs(QTextStream& err, int* failed)
             err
         );
     }
+
+    {
+        const QString input =
+            QStringLiteral("{16}1-5[8:1],1%1\nE").arg(QString(15, QLatin1Char(',')));
+        const miacode::chart_transform::ChartNormalizationResult normalized =
+            miacode::chart_transform::normalizeChartText(
+                input,
+                miacode::simai::SimaiTimingMetadata(),
+                miacode::chart_transform::ChartNormalizationOptions{true, false});
+        expectTrue(normalized.ok, QStringLiteral("exact normalize accepts duration text on a carried 16-grid line"), failed, err);
+        expectEqual(
+            normalized.text,
+            QStringLiteral("{16}1-5[16:2],1,,, {2}, {4},\nE"),
+            QStringLiteral("exact normalize keeps no-hash duration text aligned with the rendered local grid before later empty chunks are minimized"),
+            failed,
+            err
+        );
+    }
 }
 
 }  // namespace

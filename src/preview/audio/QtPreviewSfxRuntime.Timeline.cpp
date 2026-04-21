@@ -1,43 +1,3 @@
-namespace {
-
-struct AggregatedPlayback {
-    QString kind;
-    int count = 0;
-    double maxGain = 0.0;
-};
-
-bool shouldAggregatePlaybackKind(const QString& kind)
-{
-    return previewSfxShouldAggregateKind(kind);
-}
-
-void accumulatePlayback(QVector<AggregatedPlayback>* playbacks, const QString& kind, double gain)
-{
-    if (playbacks == nullptr || kind.isEmpty()) {
-        return;
-    }
-    for (AggregatedPlayback& playback : *playbacks) {
-        if (playback.kind != kind) {
-            continue;
-        }
-        ++playback.count;
-        playback.maxGain = qMax(playback.maxGain, qMax(0.0, gain));
-        return;
-    }
-    AggregatedPlayback playback;
-    playback.kind = kind;
-    playback.count = 1;
-    playback.maxGain = qMax(0.0, gain);
-    playbacks->append(playback);
-}
-
-double playbackGain(const AggregatedPlayback& playback)
-{
-    return previewSfxPlaybackGainForAggregate(playback.kind, playback.count, playback.maxGain);
-}
-
-}
-
 QtPreviewSfxRuntime::QtPreviewSfxRuntime(QObject* parent)
     : QObject(parent)
 {
@@ -61,17 +21,17 @@ void QtPreviewSfxRuntime::reloadAssets(const PreviewAudioSettings& settings)
 {
     settings_ = settings;
     settings_.normalize();
+    retainedPlayback_.mode = RetainedPlaybackMode::None;
+    retainedPlayback_.bgmState = RetainedBgmState::NoneLoaded;
+    retainedPlayback_.second = 0.0;
     resetBanks();
     preparedAssets_.sfxDir = resolveSfxDir();
     if (!initializeAudioEngine()) {
         return;
     }
     initializeAssets();
-    if (qFuzzyCompare(playbackSession_.backgroundTrackPlaybackRate + 1.0, 2.0)) {
-        initializeBackgroundTrack();
-    } else {
-        prepareStretchedBackgroundTrack(playbackSession_.backgroundTrackLastTimelineSecond);
-    }
+    prepareStretchedBackgroundTrack(playbackSession_.backgroundTrackLastTimelineSecond);
+    retainedPlayback_.bgmState = hasBackgroundTrack() ? RetainedBgmState::LoadedUsable : RetainedBgmState::NoneLoaded;
 }
 
 bool QtPreviewSfxRuntime::audioEngineInitialized() const
@@ -98,11 +58,9 @@ void QtPreviewSfxRuntime::setChartPath(const QString& chartPath)
     appendAudioDebugLog(QString("setChartPath chart=%1 track=%2")
                             .arg(preparedAssets_.chartPath, preparedAssets_.trackPath));
     resetBackgroundTrack();
-    if (qFuzzyCompare(playbackSession_.backgroundTrackPlaybackRate + 1.0, 2.0)) {
-        initializeBackgroundTrack();
-    } else {
-        prepareStretchedBackgroundTrack(playbackSession_.backgroundTrackLastTimelineSecond);
-    }
+    prepareStretchedBackgroundTrack(playbackSession_.backgroundTrackLastTimelineSecond);
+    retainedPlayback_.mode = RetainedPlaybackMode::Invalidated;
+    retainedPlayback_.bgmState = hasBackgroundTrack() ? RetainedBgmState::LoadedUsable : RetainedBgmState::NoneLoaded;
 }
 
 void QtPreviewSfxRuntime::setBackgroundTrackOffsetSeconds(double seconds)
@@ -139,12 +97,7 @@ void QtPreviewSfxRuntime::setBackgroundTrackPlaybackRate(double rate)
     if (stretchedBackgroundState_ != nullptr && stretchedBackgroundState_->soundInitialized) {
         ma_sound_stop(&stretchedBackgroundState_->sound);
     }
-    if (qFuzzyCompare(playbackSession_.backgroundTrackPlaybackRate + 1.0, 2.0)) {
-        resetStretchedBackgroundTrack();
-        if (backgroundTrackVoice_ == nullptr && !preparedAssets_.trackPath.isEmpty()) {
-            initializeBackgroundTrack();
-        }
-    } else if (!preparedAssets_.trackPath.isEmpty() && engineInitialized_ && engineState_ != nullptr) {
+    if (!preparedAssets_.trackPath.isEmpty() && engineInitialized_ && engineState_ != nullptr) {
         if (backgroundTrackVoice_ != nullptr) {
             if (backgroundTrackVoice_->initialized) {
                 ma_sound_uninit(&backgroundTrackVoice_->sound);
@@ -256,9 +209,12 @@ double QtPreviewSfxRuntime::preparedStartSecond() const
     return preparedPlayback_.pending ? preparedPlayback_.startSecond : playbackSession_.backgroundTrackLastTimelineSecond;
 }
 
-void QtPreviewSfxRuntime::configureTimeline(const QVector<TimelineNoteMarker>& noteMarkers)
+void QtPreviewSfxRuntime::configureTimeline(
+    const QVector<TimelineNoteMarker>& noteMarkers,
+    double playbackRate,
+    const PreviewTimingSettings& timingSettings)
 {
-    rebuildPreparedTimeline(noteMarkers);
+    rebuildPreparedTimeline(noteMarkers, playbackRate, timingSettings);
 }
 
 void QtPreviewSfxRuntime::clearTimeline()
@@ -270,11 +226,16 @@ void QtPreviewSfxRuntime::clearTimeline()
 void QtPreviewSfxRuntime::applyPausedPreviewState(
     const QVector<TimelineNoteMarker>& noteMarkers,
     bool noteMarkersChanged,
-    double pauseSecond)
+    double pauseSecond,
+    double playbackRate,
+    const PreviewTimingSettings& timingSettings)
 {
     preparedPlayback_ = PreparedPlaybackState();
-    if (noteMarkersChanged) {
-        rebuildPreparedTimeline(noteMarkers);
+    if (noteMarkersChanged
+        || (preparedTimeline_.sourceNoteMarkers.isEmpty() && !noteMarkers.isEmpty())
+        || qAbs(preparedTimelinePlaybackRate_ - playbackRate) > kQtPreviewSfxEpsilonSeconds
+        || !previewTimingSettingsEqual(timingSettings_, timingSettings)) {
+        rebuildPreparedTimeline(noteMarkers, playbackRate, timingSettings);
     }
     resetCursor(pauseSecond, false);
     pauseTouchholdVoices();
@@ -314,15 +275,12 @@ void QtPreviewSfxRuntime::drainEvents(double second)
             break;
         }
 
-        int groupEnd = groupStart + 1;
-        while (groupEnd < preparedTimeline_.events.size()
-               && qAbs(preparedTimeline_.events[groupEnd].second - groupSecond) <= kQtPreviewSfxEpsilonSeconds) {
-            ++groupEnd;
-        }
+        const int groupEnd =
+            miacode::preview_sfx_timeline::eventGroupEndIndex(preparedTimeline_.events, groupStart);
+        const miacode::preview_sfx_timeline::CollapsedEventGroup group =
+            miacode::preview_sfx_timeline::collapseEventGroup(preparedTimeline_.events, groupStart, groupEnd);
 
-        QVector<AggregatedPlayback> playbacks;
-        for (int i = groupStart; i < groupEnd; ++i) {
-            const Event& event = preparedTimeline_.events[i];
+        for (const Event& event : group.orderedEvents) {
             if (event.kind == "touchhold_start") {
                 startTouchholdSpan(event.spanIndex, 0.0);
                 continue;
@@ -331,14 +289,10 @@ void QtPreviewSfxRuntime::drainEvents(double second)
                 stopTouchholdSpan(event.spanIndex);
                 continue;
             }
-            if (shouldAggregatePlaybackKind(event.kind)) {
-                accumulatePlayback(&playbacks, event.kind, event.gain);
-                continue;
-            }
             playKindInternal(event.kind, event.gain);
         }
-        for (const AggregatedPlayback& playback : playbacks) {
-            playKindInternal(playback.kind, playbackGain(playback));
+        for (const miacode::preview_sfx_timeline::AggregatedPlayback& playback : group.aggregatedPlaybacks) {
+            playKindInternal(playback.kind, miacode::preview_sfx_timeline::aggregatedPlaybackGain(playback));
         }
 
         playbackSession_.eventIndex = groupEnd;
@@ -394,9 +348,6 @@ void QtPreviewSfxRuntime::restoreTouchholdVoices(double second)
 
 bool QtPreviewSfxRuntime::hasBackgroundTrack() const
 {
-    if (qFuzzyCompare(playbackSession_.backgroundTrackPlaybackRate + 1.0, 2.0)) {
-        return backgroundTrackConfigured_ && backgroundTrackVoice_ != nullptr && backgroundTrackVoice_->initialized;
-    }
     if (!preparedAssets_.trackPath.isEmpty() && engineInitialized_ && engineState_ != nullptr) {
         return true;
     }
@@ -408,10 +359,19 @@ bool QtPreviewSfxRuntime::isBackgroundTrackRunning() const
     return playbackSession_.backgroundTrackRunning;
 }
 
-void QtPreviewSfxRuntime::rebuildPreparedTimeline(const QVector<TimelineNoteMarker>& noteMarkers)
+void QtPreviewSfxRuntime::rebuildPreparedTimeline(
+    const QVector<TimelineNoteMarker>& noteMarkers,
+    double playbackRate,
+    const PreviewTimingSettings& timingSettings)
 {
+    timingSettings_ = timingSettings;
+    timingSettings_.normalize();
+    preparedTimelinePlaybackRate_ = qIsFinite(playbackRate) && playbackRate > 0.0 ? playbackRate : 1.0;
+    preparedTimeline_.sourceNoteMarkers = noteMarkers;
     miacode::preview_sfx_timeline::buildTimeline(
         noteMarkers,
+        preparedTimelinePlaybackRate_,
+        timingSettings_,
         &preparedTimeline_.events,
         &preparedTimeline_.touchholdSpans);
     playbackSession_.eventIndex = 0;
@@ -421,6 +381,7 @@ void QtPreviewSfxRuntime::clearPreparedTimeline()
 {
     preparedTimeline_.events.clear();
     preparedTimeline_.touchholdSpans.clear();
+    preparedTimeline_.sourceNoteMarkers.clear();
     playbackSession_.eventIndex = 0;
     preparedPlayback_ = PreparedPlaybackState();
 }
@@ -430,4 +391,5 @@ void QtPreviewSfxRuntime::resetBackgroundTrackSessionState(double timelineSecond
     playbackSession_.backgroundTrackPendingStart = false;
     playbackSession_.backgroundTrackRunning = false;
     playbackSession_.backgroundTrackLastTimelineSecond = timelineSecond;
+    clearBackgroundTrackClockAnchor();
 }

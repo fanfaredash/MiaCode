@@ -165,6 +165,19 @@ QColor severityColor(ValidationSeverityLevel severity)
         : QColor(QStringLiteral("#C62828"));
 }
 
+void appendMuriPerfLog(const QString& payload)
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("edit/muri_perf"),
+        payload,
+        true
+    );
+}
+
 QString validationIssueTypeKeyFromRawMessage(const QString& rawMessage)
 {
     return QStringLiteral("validation:%1").arg(issueTypeSegment(rawMessage));
@@ -662,13 +675,11 @@ void MainWindow::ValidationSection::showIssueListContextMenu(QListWidget* list, 
                                          : QStringLiteral("Ignore This Issue Type"))
         );
         connect(ignoreAction, &QAction::triggered, &owner_, [this, issueTypeKey, ignoredInHeader]() {
-            const int currentTabIndex = ui_.bottomTabs_ != nullptr ? ui_.bottomTabs_->currentIndex() : -1;
+            const MainWindow::BottomTabsTabId previousTabId = owner_.currentBottomTabsTabId();
             setIssueTypeIgnoredInHeaderForCurrentFile(issueTypeKey, !ignoredInHeader);
             refreshValidationPanelForActiveField();
             refreshMuriDiagnosticsPanel();
-            if (ui_.bottomTabs_ != nullptr && currentTabIndex >= 0) {
-                ui_.bottomTabs_->setCurrentIndex(currentTabIndex);
-            }
+            owner_.restoreBottomTabsCurrentTabAfterRefresh(previousTabId);
         });
     }
 
@@ -678,8 +689,50 @@ void MainWindow::ValidationSection::showIssueListContextMenu(QListWidget* list, 
 void MainWindow::ValidationSection::refreshMuriDiagnosticsPanel()
 {
     if (ui_.muriList_ == nullptr) {
+        state_.pendingMuriPanelRefresh_ = false;
+        updateEditorValidationSummary();
         return;
     }
+
+    if (!isMuriDiagnosticsTabActive()) {
+        state_.pendingMuriPanelRefresh_ = true;
+        updateEditorValidationSummary();
+        appendMuriPerfLog(QStringLiteral("phase=panel_deferred active=0"));
+        return;
+    }
+
+    rebuildMuriDiagnosticsPanel();
+}
+
+void MainWindow::ValidationSection::flushPendingMuriDiagnosticsPanelRefresh()
+{
+    if (!state_.pendingMuriPanelRefresh_ || !isMuriDiagnosticsTabActive()) {
+        return;
+    }
+    rebuildMuriDiagnosticsPanel();
+}
+
+bool MainWindow::ValidationSection::isMuriDiagnosticsTabActive() const
+{
+    if (ui_.muriList_ == nullptr) {
+        return false;
+    }
+    if (owner_.quickShellBottomTabsProxyActive() && ui_.quickShellBottomTabsProxy_ != nullptr) {
+        return ui_.quickShellBottomTabsProxy_->currentWidget() == ui_.muriList_;
+    }
+    return ui_.bottomTabs_ != nullptr && ui_.bottomTabs_->currentWidget() == ui_.muriList_;
+}
+
+void MainWindow::ValidationSection::rebuildMuriDiagnosticsPanel()
+{
+    if (ui_.muriList_ == nullptr) {
+        state_.pendingMuriPanelRefresh_ = false;
+        updateEditorValidationSummary();
+        return;
+    }
+
+    QElapsedTimer timer;
+    timer.start();
 
     ui_.muriList_->clear();
     const MuriAnalysisReport& alignedMuriReport = alignedMuriAnalysisReportForUi(
@@ -698,7 +751,12 @@ void MainWindow::ValidationSection::refreshMuriDiagnosticsPanel()
             ui_.muriList_
         );
         item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+        state_.pendingMuriPanelRefresh_ = false;
         updateEditorValidationSummary();
+        appendMuriPerfLog(
+            QStringLiteral("phase=panel_rebuild entries=0 diagnostics=0 static_refs=0 elapsed_ms=%1")
+                .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
+        );
         return;
     }
 
@@ -735,17 +793,18 @@ void MainWindow::ValidationSection::refreshMuriDiagnosticsPanel()
             item->setData(kIssueTypeKeyRole, issueTypeKey);
             item->setData(kIssueTypeLabelRole, title);
             item->setData(kIssueIgnoredRole, ignoredInHeader);
-            if (ignoredInHeader) {
-                if (QWidget* rowWidget = ui_.muriList_->itemWidget(item)) {
-                    auto* effect = new QGraphicsOpacityEffect(rowWidget);
-                    effect->setOpacity(0.58);
-                    rowWidget->setGraphicsEffect(effect);
-                }
-            }
         }
     }
+    state_.pendingMuriPanelRefresh_ = false;
     scheduleWrappedListRelayout(ui_.muriList_);
     updateEditorValidationSummary();
+    appendMuriPerfLog(
+        QStringLiteral("phase=panel_rebuild entries=%1 diagnostics=%2 static_refs=%3 elapsed_ms=%4")
+            .arg(entries.size())
+            .arg(alignedMuriReport.diagnostics.size())
+            .arg(alignedStaticReferences.size())
+            .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
+    );
 }
 
 void MainWindow::ValidationSection::clearValidationCache()
@@ -761,11 +820,11 @@ void MainWindow::ValidationSection::applyDeferredAnalysisUiUpdates()
     }
 
     if (state_.pendingDeferredMuriUiRefresh_) {
-        refreshMuriDiagnosticsPanel();
         if (state_.previewCanvas_ != nullptr) {
             state_.previewCanvas_->setMuriRenderOptions(state_.muriRenderOptions_);
         }
         owner_.applyAlignedMuriAnalysisReportToViews();
+        refreshMuriDiagnosticsPanel();
         state_.pendingDeferredMuriUiRefresh_ = false;
     }
 
@@ -777,14 +836,7 @@ void MainWindow::ValidationSection::applyDeferredAnalysisUiUpdates()
 
 void MainWindow::ValidationSection::setValidationTabVisible(bool visible)
 {
-    if (ui_.bottomTabs_ == nullptr || ui_.errorList_ == nullptr) {
-        return;
-    }
-    const int errorTabIndex = ui_.bottomTabs_->indexOf(ui_.errorList_);
-    if (errorTabIndex < 0) {
-        return;
-    }
-    ui_.bottomTabs_->setTabVisible(errorTabIndex, visible);
+    owner_.setBottomTabsTabVisible(MainWindow::BottomTabsTabId::Validation, visible);
 }
 
 void MainWindow::ValidationSection::refreshValidationPanelForActiveField()
@@ -940,10 +992,7 @@ bool MainWindow::ValidationSection::runValidateSimaiSilently(bool focusFirstIssu
     scheduleWrappedListRelayout(ui_.errorList_);
     updateEditorValidationSummary();
     if (focusFirstIssue && !entry.issues.isEmpty() && ui_.bottomTabs_ != nullptr && ui_.errorList_ != nullptr) {
-        const int errorTabIndex = ui_.bottomTabs_->indexOf(ui_.errorList_);
-        if (errorTabIndex >= 0) {
-            ui_.bottomTabs_->setCurrentIndex(errorTabIndex);
-        }
+        owner_.setCurrentBottomTabsTabId(MainWindow::BottomTabsTabId::Validation);
         onErrorItemActivated(ui_.errorList_->item(0));
     }
     if (state_.runtimeDebugOutputEnabled_) {
@@ -1063,10 +1112,7 @@ bool MainWindow::ValidationSection::runValidateSimai()
     scheduleWrappedListRelayout(ui_.errorList_);
     updateEditorValidationSummary();
     if (!entry.issues.isEmpty() && ui_.bottomTabs_ != nullptr && ui_.errorList_ != nullptr) {
-        const int errorTabIndex = ui_.bottomTabs_->indexOf(ui_.errorList_);
-        if (errorTabIndex >= 0) {
-            ui_.bottomTabs_->setCurrentIndex(errorTabIndex);
-        }
+        owner_.setCurrentBottomTabsTabId(MainWindow::BottomTabsTabId::Validation);
         onErrorItemActivated(ui_.errorList_->item(0));
     }
 

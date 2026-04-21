@@ -31,6 +31,8 @@ public:
     void setSmoothBrightness(bool smooth);
     void setOutlineVariant(PreviewOutlineVariant variant);
     void setBackgroundScaleMode(PreviewBackgroundScaleMode mode);
+    void setTapFlowSpeed(double flowSpeed);
+    void setTouchFlowSpeed(double flowSpeed);
     void setNoteFlowSpeed(double flowSpeed);
     void setShowDebugInfo(bool show);
     void setShowTimestamp(bool show);
@@ -76,6 +78,7 @@ public:
 
 private:
     void refreshAssetState();
+    void syncSessionStateIfInitialized();
     void updateFrameStateForRender(double playheadSeconds, bool showTimestamp, bool showObjectStatsHud);
 
     miacode::preview::runtime::PreviewSceneAssetRepository assets_;

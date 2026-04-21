@@ -5,8 +5,12 @@
 #include <QObject>
 #include <QIcon>
 #include <QElapsedTimer>
+#include <QPointer>
 
+class QByteArray;
 class QQmlApplicationEngine;
+class QQuickWindow;
+class QAbstractNativeEventFilter;
 class QTimer;
 
 class MainWindow;
@@ -25,6 +29,9 @@ public:
     bool start();
     QuickShellController* controller() const;
     QuickShellStyleBridge* styleBridge() const;
+#ifdef Q_OS_WIN
+    bool handleNativeCloseEvent(const QByteArray& eventType, void* message, qintptr* result);
+#endif
 
 private:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -32,6 +39,8 @@ private:
     bool shouldTraceFocusObject(QObject* watched) const;
     QString describeFocusObject(QObject* object) const;
     QString focusReasonName(Qt::FocusReason reason) const;
+    void scheduleRootWindowCloseRelay(const QString& source);
+    void processRootWindowCloseRelay();
     void logFocusEvent(const QString& action, QObject* watched = nullptr, QEvent* event = nullptr, const QString& detail = QString()) const;
 
     QIcon appIcon_;
@@ -40,5 +49,11 @@ private:
     std::unique_ptr<QuickShellController> controller_;
     std::unique_ptr<QuickShellStyleBridge> styleBridge_;
     std::unique_ptr<QQmlApplicationEngine> engine_;
+#ifdef Q_OS_WIN
+    std::unique_ptr<QAbstractNativeEventFilter> nativeCloseEventFilter_;
+#endif
+    QPointer<QQuickWindow> rootWindow_;
     bool previewSeekArmed_ = false;
+    bool rootWindowCloseRelayScheduled_ = false;
+    bool rootWindowCloseRelayActive_ = false;
 };

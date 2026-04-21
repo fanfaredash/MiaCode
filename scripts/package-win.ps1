@@ -343,8 +343,24 @@ foreach ($runtimeDll in @("dxcompiler.dll", "dxil.dll")) {
     }
 }
 
+$bassRuntimeDir = Join-Path $repoRoot "third_party\\bass\\bin\\win64"
+$requiredBassRuntimeDlls = @(
+    "bass.dll",
+    "bassmix.dll",
+    "bass_fx.dll",
+    "bass_aac.dll",
+    "bassopus.dll"
+)
+foreach ($runtimeDll in $requiredBassRuntimeDlls) {
+    $srcDll = Join-Path $bassRuntimeDir $runtimeDll
+    if (!(Test-Path $srcDll)) {
+        throw "Missing required BASS runtime DLL: $srcDll"
+    }
+    Copy-Item $srcDll (Join-Path $DistDir $runtimeDll) -Force
+}
+
 if ($IncludeDevTools) {
-    foreach ($toolName in @("simai_native_dump.exe", "soundtouch_probe.exe")) {
+    foreach ($toolName in @("simai_native_dump.exe")) {
         $toolPath = Join-Path $buildOutputDir $toolName
         if (Test-Path $toolPath) {
             Copy-Item $toolPath (Join-Path $DistDir $toolName) -Force
@@ -357,12 +373,17 @@ if (Test-Path $assetsSrc) {
     $requiredSfxDir = Join-Path $assetsSrc "SFX"
     $requiredSfxFiles = @(
         "answer.wav",
+        "break_tap.wav",
         "slide.wav",
         "break.wav",
-        "firework.wav",
-        "judge_ex.wav",
+        "break_slide.wav",
+        "slide_break_start.wav",
+        "slide_break_slide.wav",
+        "tap_ex.wav",
+        "tap_perfect.wav",
+        "touch_hanabi.wav",
         "touch.wav",
-        "touchHold_riser.wav"
+        "touch_Hold_riser.wav"
     )
     foreach ($sfxFile in $requiredSfxFiles) {
         $sfxPath = Join-Path $requiredSfxDir $sfxFile
@@ -426,6 +447,7 @@ $releaseLines = @(
     "  - Start_MiaCode_Debug.bat"
     "  - Start_MiaCode_QuickShell_Debug.bat"
     "  - Qt runtime DLLs, plugin folders, and QML modules"
+    "  - BASS runtime DLLs (bass, bassmix, bass_fx, bass_aac, bassopus)"
     "  - ffmpeg/ffmpeg.exe"
     "  - assets/"
     "  - docs/"
@@ -434,14 +456,16 @@ $releaseLines = @(
 if ($IncludeDevTools) {
     $releaseLines += @(
         "  - simai_native_dump.exe"
-        "  - soundtouch_probe.exe"
     )
-} else {
+}
+$releaseLines += @(
+    ""
+    "Not included on purpose:"
+    "  - soundtouch_probe.exe"
+)
+if (!$IncludeDevTools) {
     $releaseLines += @(
-        ""
-        "Not included on purpose:"
         "  - simai_native_dump.exe"
-        "  - soundtouch_probe.exe"
     )
 }
 $releaseLines | Set-Content -Path $releaseReadme -Encoding UTF8
@@ -467,6 +491,11 @@ $requiredPackagePaths = @(
     "D3Dcompiler_47.dll",
     "dxcompiler.dll",
     "dxil.dll",
+    "bass.dll",
+    "bassmix.dll",
+    "bass_fx.dll",
+    "bass_aac.dll",
+    "bassopus.dll",
     "platforms\\qwindows.dll",
     "qml\\QtQuick\\qtquick2plugin.dll",
     "qml\\QtQml\\Models\\modelsplugin.dll",
@@ -477,6 +506,7 @@ $unexpectedPackagePaths = @(
     "Start_MiaCode_Debug_CompareDump.bat",
     "Start_MiaCode_Debug_View.bat",
     "Start_MiaCode_Debug_Widget.bat",
+    "soundtouch_probe.exe",
     (Get-QtRuntimeDllName -BaseName "Qt6OpenGLWidgets" -Config $Config),
     (Get-QtRuntimeDllName -BaseName "Qt6Concurrent" -Config $Config),
     "opengl32sw.dll"

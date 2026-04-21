@@ -20,6 +20,7 @@
 #include "preview/scene/PreviewProgressStatsCache.h"
 #include "simai/transform/ChartBatchTransform.h"
 #include "simai/transform/ChartNormalization.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -1001,9 +1002,6 @@ void MainWindow::ValidationSection::setPreviewFollowDecoration(
         && state_.previewFollowDecorationCursorLine_ == normalizedCursorLine
         && state_.previewFollowDecorationCursorCol_ == normalizedCursorCol) {
         if (!ensureVisible) {
-            if (auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_); editor != nullptr) {
-                editor->setPreviewFollowVisualCaret(true, normalizedCursorLine, normalizedCursorCol);
-            }
             return;
         }
     } else {
@@ -1063,10 +1061,12 @@ void MainWindow::ValidationSection::clearValidationErrors()
 void MainWindow::ValidationSection::clearMuriDiagnostics()
 {
     if (ui_.muriList_ == nullptr) {
+        state_.pendingMuriPanelRefresh_ = false;
         updateEditorValidationSummary();
         return;
     }
     ui_.muriList_->clear();
+    state_.pendingMuriPanelRefresh_ = false;
     updateEditorValidationSummary();
 }
 
@@ -1102,13 +1102,6 @@ void MainWindow::ValidationSection::addValidationError(
         item->setData(kIssueTypeKeyRole, issueTypeKey);
         item->setData(kIssueTypeLabelRole, issueTypeLabel);
         item->setData(kIssueIgnoredRole, ignoredInHeader);
-        if (ignoredInHeader) {
-            if (QWidget* rowWidget = ui_.errorList_->itemWidget(item)) {
-                auto* effect = new QGraphicsOpacityEffect(rowWidget);
-                effect->setOpacity(0.58);
-                rowWidget->setGraphicsEffect(effect);
-            }
-        }
     }
 }
 
@@ -1182,7 +1175,7 @@ void MainWindow::ValidationSection::onMuriItemActivated(QListWidgetItem* item)
     jumpToLocation(line, col);
     state_.suppressTimelineCursorSync_ = previousSuppressState;
 
-    if (second < 0.0 || ui_.timelineView_ == nullptr) {
+    if (second < 0.0 || state_.timelineQuickStateBridge_ == nullptr) {
         return;
     }
 
@@ -1193,8 +1186,8 @@ void MainWindow::ValidationSection::onMuriItemActivated(QListWidgetItem* item)
         ui_.previewSeekDebounceTimer_->stop();
     }
     owner_.seekPreviewToSecond(clampedSecond, true);
-    ui_.timelineView_->setCursorSeconds(clampedSecond, false);
-    ui_.timelineView_->focusPlayhead(true);
+    state_.timelineQuickStateBridge_->setCursorSeconds(clampedSecond, false);
+    state_.timelineQuickStateBridge_->focusPlayhead(true);
 }
 
 void MainWindow::refreshEditorExtraSelections()

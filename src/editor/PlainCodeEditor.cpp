@@ -72,6 +72,18 @@ void logSelectionRestoreEditorShortcut(const QString& scope, const QString& payl
     );
 }
 
+void insertLineBreakAtCursor(QTextEdit* editor)
+{
+    if (editor == nullptr || editor->isReadOnly()) {
+        return;
+    }
+    QTextCursor cursor = editor->textCursor();
+    cursor.beginEditBlock();
+    cursor.insertBlock(cursor.blockFormat(), cursor.charFormat());
+    cursor.endEditBlock();
+    editor->setTextCursor(cursor);
+}
+
 struct BlockVisualSpan
 {
     QRect firstRowRect;
@@ -352,10 +364,19 @@ void PlainCodeEditor::updateCurrentLineHighlightRegion(const QRect& previousRect
 
 void PlainCodeEditor::setPreviewFollowVisualCaret(bool active, int line, int col)
 {
+    const bool normalizedActive = active;
+    const int normalizedLine = qMax(1, line);
+    const int normalizedCol = qMax(1, col);
+    if (previewFollowVisualCaretActive_ == normalizedActive
+        && previewFollowVisualCaretLine_ == normalizedLine
+        && previewFollowVisualCaretCol_ == normalizedCol) {
+        return;
+    }
+
     const QRect previousRect = previewFollowVisualCaretRect();
-    previewFollowVisualCaretActive_ = active;
-    previewFollowVisualCaretLine_ = qMax(1, line);
-    previewFollowVisualCaretCol_ = qMax(1, col);
+    previewFollowVisualCaretActive_ = normalizedActive;
+    previewFollowVisualCaretLine_ = normalizedLine;
+    previewFollowVisualCaretCol_ = normalizedCol;
     const QRect currentRect = previewFollowVisualCaretRect();
 
     if (viewport() == nullptr) {
@@ -680,12 +701,12 @@ void PlainCodeEditor::keyPressEvent(QKeyEvent* event)
     const bool plainEnterKey =
         (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
         && !(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier));
-    if (plainEnterKey) {
-        QTextCursor cursor = textCursor();
-        cursor.beginEditBlock();
-        cursor.insertBlock(cursor.blockFormat(), cursor.charFormat());
-        cursor.endEditBlock();
-        setTextCursor(cursor);
+    const bool ctrlEnterKey =
+        (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter)
+        && (event->modifiers() & Qt::ControlModifier)
+        && !(event->modifiers() & (Qt::AltModifier | Qt::MetaModifier));
+    if (plainEnterKey || ctrlEnterKey) {
+        insertLineBreakAtCursor(this);
         return;
     }
 
@@ -755,10 +776,8 @@ void PlainCodeEditor::paintEvent(QPaintEvent* event)
     lastCurrentLineHighlightRect_ = highlightRect;
     if (highlightRect.isValid()) {
         const UiTheme::Colors& c = UiTheme::colors();
-        QColor currentLineFill = c.menuHoverBg;
-        currentLineFill.setAlpha(c.dark ? 60 : 36);
         painter.setPen(QPen(c.borderSoft, 1));
-        painter.setBrush(currentLineFill);
+        painter.setBrush(Qt::NoBrush);
         painter.drawRoundedRect(highlightRect, 4.0, 4.0);
     }
 

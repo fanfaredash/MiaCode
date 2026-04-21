@@ -50,6 +50,17 @@ constexpr double kStaticCollideExtraDeltaSeconds =
     kStaticCollideThresholdSeconds - miacode::muri::kTapAvailableSeconds;
 constexpr double kStaticTimeEpsilonSeconds = 1e-9;
 
+double parsedFirstSeconds(const QString& rawValue, bool* ok = nullptr)
+{
+    const QString trimmed = rawValue.trimmed();
+    bool localOk = false;
+    const double value = trimmed.isEmpty() ? 0.0 : trimmed.toDouble(&localOk);
+    if (ok != nullptr) {
+        *ok = trimmed.isEmpty() ? true : localOk;
+    }
+    return (trimmed.isEmpty() || localOk) ? value : 0.0;
+}
+
 bool isSlideLike(const TimelineNoteMarker& marker)
 {
     return marker.type == QLatin1String("slide") || marker.type == QLatin1String("wifi");
@@ -971,11 +982,7 @@ bool loadChartFromArgs(
         }
 
         bool parsedFirstOk = true;
-        double parsedFirst = 0.0;
-        const QString firstText = document.first.trimmed();
-        if (!firstText.isEmpty()) {
-            parsedFirst = firstText.toDouble(&parsedFirstOk);
-        }
+        const double parsedFirst = parsedFirstSeconds(document.first, &parsedFirstOk);
         if (!parsedFirstOk) {
             *outErrorMessage = QStringLiteral("Invalid &first value in maidata: %1").arg(document.first);
             return false;

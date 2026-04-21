@@ -9,9 +9,10 @@ It replaces the old `PreviewCanvas` / `PreviewGLRenderer` / `PreviewQuickItem` s
 ## Current Backend Stance
 
 - Realtime preview and headless export both render through Qt Quick scene graph layers.
-- The project currently forces Qt Quick to the OpenGL graphics API on desktop startup.
-- The export session is intentionally OpenGL-specific today because it relies on `QQuickRenderControl` plus an OpenGL offscreen context and optional PBO readback.
-- This means the architecture is no longer tied to the removed legacy renderer, but it is still intentionally tied to an OpenGL-backed Qt Quick runtime.
+- The GUI runtime and the export worker do not currently have identical backend rules.
+- The headless export path is intentionally OpenGL-specific today because it relies on `QQuickRenderControl` plus an OpenGL offscreen context and optional PBO readback.
+- The GUI path should therefore be described in terms of its actual startup/runtime policy rather than by copying the export-worker constraint.
+- This means the architecture is no longer tied to the removed legacy renderer, but the export path is still intentionally tied to an OpenGL-backed Qt Quick runtime.
 
 Primary owner files:
 
@@ -20,6 +21,27 @@ Primary owner files:
 - `src/preview/runtime/PreviewRuntime.cpp`
 - `src/preview/runtime/PreviewQuickExportSession.h`
 - `src/preview/runtime/PreviewQuickExportSession.cpp`
+
+## Shared Runtime Policy Direction
+
+Preview already has the beginnings of an application-level versus module-level Quick policy split:
+
+- application startup and Qt-wide behavior live in `src/app/main.cpp`
+- module-level preview surface routing lives in `src/app/quick_shell/QuickShellPreviewSurfacePolicy.h`
+- Quick-side palette/metrics bridging lives in `src/app/quick_shell/QuickShellStyleBridge.*`
+
+If the project introduces a shared `QuickRenderPolicyConfig` plus per-module `QuickModuleRenderPolicy`, Preview and Timeline should read from that same configuration instead of each inventing its own backend, surface-mode, and fallback-selection rules.
+
+Current preview-specific reference point:
+
+- quick-shell preview currently chooses a separate surface only when the frontend is Quick shell and the stage media is video
+- otherwise preview stays on the inline path
+
+That current preview choice is a useful reference model for Timeline policy design because it distinguishes:
+
+- application-level startup/backend rules
+- module-level inline vs separate-surface decisions
+- runtime diagnostics that should be shared across Quick modules
 
 ## Shared Runtime Model
 
@@ -110,10 +132,12 @@ Headless export path:
 
 1. `MainWindow` builds a `VideoExportSnapshot`.
 2. The export worker reconstructs a `VideoExportTask`.
-3. `VideoExportController` owns the ffmpeg process, raw-frame pipe, timing diagnostics, and export loop.
-4. `VideoExportQuickRenderBackend` owns a `PreviewSceneAssetRepository`, a `PreviewFrameState`, and a `PreviewQuickExportSession`.
-5. `PreviewQuickExportSession` creates a headless `QQuickRenderControl` scene and renders `PreviewQuickSceneRoot` into an offscreen framebuffer.
-6. The resulting RGBA frame is packed and streamed to ffmpeg through the raw video pipe.
+3. `buildVideoExportAudioRenderPlan(...)` collapses export-time BGM placement, scheduled SFX playbacks, and merged touchhold spans into one offline audio plan.
+4. `VideoExportAudioBackend::renderMixedTrackToWav(...)` renders a single `export_audio.wav`; Windows uses `BassExportAudioBackend`, while non-Windows keeps `LegacyExportAudioBackend` as a non-parity fallback.
+5. `VideoExportController` owns the ffmpeg process, raw-frame pipe, timing diagnostics, and export loop.
+6. `VideoExportQuickRenderBackend` owns a `PreviewSceneAssetRepository`, a `PreviewFrameState`, and a `PreviewQuickExportSession`.
+7. `PreviewQuickExportSession` creates a headless `QQuickRenderControl` scene and renders `PreviewQuickSceneRoot` into an offscreen framebuffer.
+8. The resulting RGBA frame is packed and streamed to ffmpeg through the raw video pipe, while the pre-mixed `export_audio.wav` is muxed directly without an extra BGM/SFX `amix` stage.
 
 Worker logging note:
 
@@ -123,12 +147,16 @@ Worker logging note:
 Important export-side constraints:
 
 - Export uses the same Quick scene and layer-state builders as realtime preview.
+- Export uses the same `PreviewSfxTimeline` scheduling semantics as realtime preview, but its mixed-audio render now happens behind `VideoExportAudioRenderPlan` plus `VideoExportAudioBackend` instead of hand-built controller-local mixing.
 - Export does not reuse a live preview window or share a legacy renderer.
 - Export overlay rendering is selected by `kPreviewExportOverlayRenderLayers`; it is not a second hand-maintained draw list.
 
 Primary owner files:
 
 - `src/tools/video_export/VideoExportController.cpp`
+- `src/tools/video_export/VideoExportAudioRenderPlan.cpp`
+- `src/tools/video_export/BassExportAudioBackend.cpp`
+- `src/tools/video_export/LegacyExportAudioBackend.cpp`
 - `src/tools/video_export/VideoExportQuickRenderBackend.cpp`
 - `src/tools/video_export/RawVideoPipeTransport.cpp`
 - `src/preview/runtime/PreviewQuickExportSession.cpp`

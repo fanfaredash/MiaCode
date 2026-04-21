@@ -3,9 +3,11 @@
 
 #include "PlainCodeEditor.h"
 #include "QtPreviewSfxRuntime.h"
+#include "DialogLocalization.h"
 #include "UiText.h"
 #include "common/PreviewInteractionConfig.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "timeline/quick/TimelineQuickStateBridge.h"
 
 #include <QQuickWindow>
 #include <QtCore>
@@ -29,6 +31,11 @@ bool widgetMatchesOrDescendsFrom(QWidget* widget, QWidget* root)
 }
 
 }  // namespace
+
+bool MainWindow::WindowSection::quickShellFocusBridgeActive() const
+{
+    return state_.quickShellUiFocusBridgeMode_;
+}
 
 QTextEdit* MainWindow::WindowSection::resolveRestorableTextEdit(QWidget* widget) const
 {
@@ -96,7 +103,12 @@ void MainWindow::WindowSection::focusPreviewInteractionTarget(QObject* watched, 
 
 void MainWindow::WindowSection::handleApplicationFocusChanged(QWidget* old, QWidget* now)
 {
-    this->logFocusDebug(QStringLiteral("app_focus_changed"), old, now);
+    this->logFocusDebug(
+        quickShellFocusBridgeActive()
+            ? QStringLiteral("app_focus_changed_quick_shell")
+            : QStringLiteral("app_focus_changed"),
+        old,
+        now);
     QTextEdit* newTextEdit = this->resolveRestorableTextEdit(now);
     if (newTextEdit != nullptr) {
         this->logFocusDebug(
@@ -109,7 +121,7 @@ void MainWindow::WindowSection::handleApplicationFocusChanged(QWidget* old, QWid
         return;
     }
 
-    if (now != nullptr && (now == &owner_ || owner_.isAncestorOf(now))) {
+    if (!quickShellFocusBridgeActive() && now != nullptr && (now == &owner_ || owner_.isAncestorOf(now))) {
         this->logFocusDebug(QStringLiteral("app_focus_changed_clear_for_owner_child"), old, now);
         this->clearFocusedTextEditState();
         return;
@@ -459,6 +471,22 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
             );
         }
     }
+    if (event != nullptr
+        && UiDialogs::hasVisibleProtectedPreviewDialog()
+        && (event->type() == QEvent::ShortcutOverride
+            || event->type() == QEvent::KeyPress
+            || event->type() == QEvent::KeyRelease)) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (UiDialogs::isPreviewShortcutEvent(keyEvent)) {
+            if (event->type() == QEvent::KeyRelease
+                && owner_.previewSeekHeldArrowKey_ != 0
+                && (keyEvent->key() == Qt::Key_Left || keyEvent->key() == Qt::Key_Right)
+                && owner_.previewSeekHeldArrowKey_ == keyEvent->key()) {
+                owner_.stopPreviewHeldSeek(keyEvent->key());
+            }
+            return owner_.QMainWindow::eventFilter(watched, event);
+        }
+    }
     const QWindow* previewVisibleWindow = this->previewVisibleHostWindow();
     const bool previewKeyScope =
         watched == owner_.previewSlider_
@@ -665,7 +693,16 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         }
         if (mouseEvent->button() == Qt::LeftButton && !owner_.qtPreviewPlaying_ && !ctrlLeftClick) {
             QTimer::singleShot(0, &owner_, [this]() {
-                owner_.scheduleDeferredEditorUiUpdate(false, false, true, true, false, 0.0, false);
+                const bool syncTimelineCursor =
+                    !owner_.quickShellUiFocusBridgeMode_ || owner_.quickTimelineSurfaceReady_;
+                owner_.scheduleDeferredEditorUiUpdate(
+                    false,
+                    false,
+                    syncTimelineCursor,
+                    true,
+                    false,
+                    0.0,
+                    false);
             });
         }
     }
@@ -698,9 +735,17 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
                         owner_.stopQtPreviewPlayback(true);
                     }
                     owner_.seekPreviewToSecond(second, false);
-                    if (owner_.timelineView_ != nullptr) {
-                        owner_.timelineView_->setCursorSeconds(second, true);
-                        owner_.timelineView_->focusCursor(false);
+                    if (owner_.timelineQuickStateBridge_ != nullptr) {
+                        const bool quickTimelineBridgeReady =
+                            !owner_.quickShellUiFocusBridgeMode_ || owner_.quickTimelineSurfaceReady_;
+                        if (quickTimelineBridgeReady) {
+                            owner_.timelineQuickStateBridge_->setCursorSeconds(second, true);
+                            owner_.timelineQuickStateBridge_->focusCursor(false);
+                        } else {
+                            owner_.pendingQuickTimelineCursorSync_ = true;
+                            owner_.pendingQuickTimelineCursorSecond_ = second;
+                            owner_.pendingQuickTimelineCursorCenterView_ = true;
+                        }
                     }
                 });
             }
@@ -708,7 +753,16 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
     }
     if (watched == owner_.editorViewport_ && event->type() == QEvent::FocusIn && !owner_.qtPreviewPlaying_) {
         QTimer::singleShot(0, &owner_, [this]() {
-            owner_.scheduleDeferredEditorUiUpdate(false, false, true, true, false, 0.0, false);
+            const bool syncTimelineCursor =
+                !owner_.quickShellUiFocusBridgeMode_ || owner_.quickTimelineSurfaceReady_;
+            owner_.scheduleDeferredEditorUiUpdate(
+                false,
+                false,
+                syncTimelineCursor,
+                true,
+                false,
+                0.0,
+                false);
         });
     }
     return owner_.QMainWindow::eventFilter(watched, event);
@@ -902,6 +956,7 @@ void MainWindow::WindowSection::resizeEvent(QResizeEvent* event)
         owner_.outlineDockExpandedWidth_ = qMax(120, owner_.outlineDock_->width());
     }
     owner_.updatePreviewWorkspaceLayout();
+    owner_.updatePreviewPlaybackRateToastGeometry();
     owner_.updateEditorHeaderLayoutMode();
     this->updateEditorFindBarGeometry();
     this->applyFindOverlayInset();
@@ -936,6 +991,7 @@ void MainWindow::WindowSection::showEvent(QShowEvent* event)
     owner_.QMainWindow::showEvent(event);
     this->updateBottomTabsDeviceHeight();
     owner_.refreshPreviewFrameRateTimers();
+    owner_.updatePreviewPlaybackRateToastGeometry();
     this->applySystemWindowBackdrop();
     this->logWindowGeometryDebug("show_event");
 }

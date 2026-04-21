@@ -3,6 +3,7 @@
 #include "UiText.h"
 
 #include <QColor>
+#include <QIcon>
 #include <QPalette>
 #include <QString>
 
@@ -79,6 +80,8 @@ QString scrollBarStyleSheet();
 void styleRoundedMenu(QMenu& menu);
 QPalette timelineViewportPalette();
 QString timelineZoomButtonStyleSheet();
+QIcon timelineZoomButtonIcon(const QColor& strokeColor, const QString& sign);
+QString timelineZoomButtonText(double scale);
 QString timelineCheckBoxStyleSheet();
 QString editorTextEditStyleSheet();
 QString editorShellStyleSheet();
@@ -97,6 +100,9 @@ QString dialogMenuButtonStyleSheet();
 QString dialogMenuLineEditStyleSheet();
 QString dialogPushButtonStyleSheet(bool emphasized = false);
 QString dialogIconToolButtonStyleSheet(bool active = false);
+QIcon dialogTransportPlayIcon(const QColor& color);
+QIcon dialogTransportPauseIcon(const QColor& color);
+QIcon dialogTransportStopIcon(const QColor& color);
 QString preferencesDialogStyleSheet();
 QString settingsDialogStyleSheet();
 QString aboutDialogStyleSheet();

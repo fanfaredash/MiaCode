@@ -17,6 +17,7 @@
 
 #include "app/quick_shell/QuickShellContracts.h"
 #include "PreviewAudioSettings.h"
+#include "common/PreviewTimingSettings.h"
 #include "PreviewRenderSettings.h"
 #include "SimaiDocument.h"
 #include "SimaiTimingMetadata.h"
@@ -38,6 +39,7 @@ class QChronoTimer;
 class QDockWidget;
 class QEvent;
 class QFrame;
+class QGraphicsOpacityEffect;
 class QGridLayout;
 class QHBoxLayout;
 class QHideEvent;
@@ -75,6 +77,7 @@ class QWheelEvent;
 class QWindow;
 class QtPreviewSfxRuntime;
 class TimelineView;
+class TimelineQuickStateBridge;
 class QuickShellPreviewCompositeSurface;
 
 namespace miacode::waveform {
@@ -112,10 +115,11 @@ public:
         PreviewOutlineVariant outlineVariant = PreviewOutlineVariant::Line;
         PreviewBackgroundScaleMode backgroundScaleMode = PreviewBackgroundScaleMode::FillCrop;
         double noteFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
+        double touchFlowSpeed = miacode::preview_gameplay::kPreviewTimingDefaultFlowSpeed;
         int skinLoadWaitMs = 2000;
     };
 
-    explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(bool quickShellBootstrapMode = false, QWidget* parent = nullptr);
     ~MainWindow() override;
     bool exportPreviewVideoFromCli(
         const CliVideoExportRequest& request,
@@ -125,6 +129,9 @@ public:
     );
     bool quickShellRootWindowFrameGeometryAvailable() const;
     QRect quickShellRootWindowFrameGeometry() const;
+    void setQuickShellBackendActive(bool active);
+    bool shellTimelineSurfaceReady() const override;
+    void noteQuickTimelineSurfaceReady();
     bool confirmShellClose() override;
     void toggleShellPreviewPlayback() override;
     void stopShellPreview() override;
@@ -137,6 +144,14 @@ public:
     void beginShellPreviewHeldSeek(int direction, int key) override;
     void stopShellPreviewHeldSeek(int key = 0) override;
     void setShellPreviewFullscreen(bool fullscreen) override;
+    void setShellBottomTabsCurrentTab(const QString& tabId) override;
+    void navigateShellTimelineToSecond(double second) override;
+    void centerShellTimelineNavigate(double second) override;
+    void shellTimelineDragStarted() override;
+    void shellTimelineDragFinished(double second) override;
+    void shellTimelineUserInteractionStarted() override;
+    void shellTimelineSurfaceReady() override;
+    void shellTimelineFollowPreviewToggled(bool enabled) override;
     bool shellHasShortcut(const QKeySequence& sequence) const override;
     bool shellTriggerShortcut(const QKeySequence& sequence) override;
     QString shellWindowTitle() const override;
@@ -153,11 +168,19 @@ public:
     QObject* shellPreviewStageMediaHostObject() const override;
     bool shellPreviewUsesSeparateSurface() const override;
     QWindow* shellPreviewCompositeWindow() const override;
+    QObject* shellTimelineStateBridgeObject() const override;
+    QString shellBottomTabsCurrentTabId() const override;
+    bool shellBottomTabsVisible() const override;
+    bool shellTimelineTabVisible() const override;
+    bool shellValidationTabVisible() const override;
+    bool shellMuriTabVisible() const override;
     QWidget* shellWindowWidget() const override;
     QDockWidget* shellOutlineDockWidget() const override;
     bool shellOutlineDockCollapsed() const override;
     int shellOutlineDockExpandedWidth() const override;
     QWidget* shellWorkspaceWidget() const override;
+    QWidget* shellBottomTabsWidget() const override;
+    int shellBottomTabsHeight() const override;
     QWidget* shellPreviewPanelWidget() const override;
     double shellNormalizedPreviewCanvasAspectRatio() const override;
     void shellRefreshLayoutAfterResize() override;
@@ -234,6 +257,12 @@ private:
         Utf8,
         System,
     };
+    enum class BottomTabsTabId {
+        Timeline,
+        Validation,
+        Muri,
+        Unknown,
+    };
     struct TimelineCursorNote;
     struct PreparedStartupRestoreDocument {
         quint64 generation = 0;
@@ -259,6 +288,9 @@ private:
     void exitPreviewFullscreen();
     void updatePreviewFullscreenButtonAppearance();
     void updatePreviewFullscreenOverlayGeometry();
+    QString formatPreviewPlaybackRateToastText(double rate) const;
+    void showPreviewPlaybackRateToast(double rate);
+    void updatePreviewPlaybackRateToastGeometry();
     void showPreviewFullscreenControls(bool animate = true);
     void hidePreviewFullscreenControls(bool animate = true);
     void schedulePreviewFullscreenControlsAutoHide();
@@ -347,6 +379,13 @@ private:
     void refreshValidationPanelForActiveField();
     void applyDeferredAnalysisUiUpdates();
     void setValidationTabVisible(bool visible);
+    BottomTabsTabId currentBottomTabsTabId() const;
+    QString currentBottomTabsTabIdString() const;
+    void setCurrentBottomTabsTabId(BottomTabsTabId tabId);
+    void setCurrentBottomTabsTabId(const QString& tabId);
+    void setBottomTabsTabVisible(BottomTabsTabId tabId, bool visible);
+    bool bottomTabsTabVisible(BottomTabsTabId tabId) const;
+    void restoreBottomTabsCurrentTabAfterRefresh(BottomTabsTabId preferredTabId);
     void applyMuriRenderOptions();
     void setMuriRenderMode(RenderMode mode, bool persistState = true);
     struct ValidationCachedIssue {
@@ -416,6 +455,13 @@ private:
     std::unique_ptr<DocumentSection> documentSection_;
     std::unique_ptr<FrameSection> frameSection_;
     std::unique_ptr<TimelineSection> timelineSection_;
+
+    bool quickShellBottomTabsProxyActive() const;
+    QString bottomTabsFallbackLabel(BottomTabsTabId tabId) const;
+    QWidget* bottomTabsPageForTab(BottomTabsTabId tabId) const;
+    QTabWidget* bottomTabsContainerForTab(BottomTabsTabId tabId) const;
+    void syncBottomTabsCurrentTabToContainers();
+    void syncQuickShellBottomTabsProxyRoute();
 
     #include "MainWindowMemberStorage.inc"
 };

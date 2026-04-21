@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
@@ -12,6 +12,10 @@ ApplicationWindow {
     property var shellController: controller
     property bool fullscreenControlsVisible: controller.previewFullscreen
     property bool fullscreenHintVisible: false
+    property bool previewSpeedToastInitialized: false
+    property string previewSpeedToastLastLabel: ""
+    property bool previewSpeedToastVisible: false
+    property string previewSpeedToastPercentText: "100%"
     property bool initialGeometryApplied: false
     property real previewPaneWidth: previewPaneInitialWidth(
         metric("initialWindowWidth", 1280),
@@ -67,6 +71,20 @@ ApplicationWindow {
         const minutes = Math.floor(safeSeconds / 60)
         const seconds = safeSeconds % 60
         return String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0")
+    }
+
+    function formatPreviewSpeedPercent(speedLabel) {
+        const normalized = (speedLabel || "").replace("x", "").trim()
+        const numericValue = Number(normalized)
+        if (!isFinite(numericValue) || numericValue <= 0)
+            return "100%"
+        return Math.round(numericValue * 100) + "%"
+    }
+
+    function showPreviewSpeedToast(speedLabel) {
+        previewSpeedToastPercentText = formatPreviewSpeedPercent(speedLabel)
+        previewSpeedToastVisible = true
+        previewSpeedToastHideTimer.restart()
     }
 
     function handlePreviewSeekPress(event) {
@@ -455,7 +473,7 @@ ApplicationWindow {
         previewPaneStartupBalancePending = false
     }
 
-    visible: false
+    visible: true
     title: controller.windowTitle
     color: tone("windowBg", "#f8fafd")
     onMetricsMapChanged: {
@@ -530,6 +548,15 @@ ApplicationWindow {
         target: controller
 
         function onShellStateChanged() {
+            const nextSpeedLabel = controller ? controller.previewSpeedLabel : ""
+            if (!root.previewSpeedToastInitialized) {
+                root.previewSpeedToastInitialized = true
+                root.previewSpeedToastLastLabel = nextSpeedLabel
+            } else if (nextSpeedLabel !== root.previewSpeedToastLastLabel) {
+                root.previewSpeedToastLastLabel = nextSpeedLabel
+                root.showPreviewSpeedToast(nextSpeedLabel)
+            }
+
             const nextRestoreGeneration = controller.previewPaneRestoreGeneration
             if (nextRestoreGeneration !== root.lastPreviewPaneRestoreGeneration) {
                 root.lastPreviewPaneRestoreGeneration = nextRestoreGeneration
@@ -610,6 +637,13 @@ ApplicationWindow {
         interval: metric("fullscreenHintAutoHideDelayMs", 2200)
         repeat: false
         onTriggered: fullscreenHintVisible = false
+    }
+
+    Timer {
+        id: previewSpeedToastHideTimer
+        interval: 900
+        repeat: false
+        onTriggered: root.previewSpeedToastVisible = false
     }
 
     Timer {
@@ -836,6 +870,35 @@ ApplicationWindow {
             }
         }
         MenuItem {
+            id: speed150Item
+            readonly property bool selectedRate: controller && controller.previewSpeedLabel === text
+            text: "1.5x"
+            leftPadding: 12
+            rightPadding: 12
+            topPadding: 0
+            bottomPadding: 0
+            implicitHeight: 32
+            implicitWidth: previewSpeedMenu.width - previewSpeedMenu.leftPadding - previewSpeedMenu.rightPadding
+            indicator: Item { implicitWidth: 0; implicitHeight: 0 }
+            onTriggered: controller.setPreviewRate(1.5)
+            background: Rectangle {
+                radius: 6
+                color: speed150Item.highlighted
+                    ? tone("accent", "#2e77d0")
+                    : (speed150Item.selectedRate ? tone("menuHoverBg", "#eef5ff") : "transparent")
+                border.color: speed150Item.highlighted
+                    ? tone("accent", "#2e77d0")
+                    : (speed150Item.selectedRate ? tone("border", "#d5e0ec") : "transparent")
+            }
+            contentItem: Text {
+                text: speed150Item.text
+                color: speed150Item.highlighted ? tone("accentText", "#ffffff") : tone("textPrimary", "#203040")
+                font.pixelSize: 13
+                font.weight: Font.Medium
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+        MenuItem {
             id: speed200Item
             readonly property bool selectedRate: controller && controller.previewSpeedLabel === text
             text: "2x"
@@ -915,13 +978,36 @@ ApplicationWindow {
                 spacing: 0
                 layoutDirection: controller.workspacePanelsSwapped ? Qt.RightToLeft : Qt.LeftToRight
 
-                WindowContainer {
+                ColumnLayout {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    window: controller.workspaceWindow
-                    Component.onCompleted: controller.syncWorkspaceSurfaceSize(width, height)
-                    onWidthChanged: controller.syncWorkspaceSurfaceSize(width, height)
-                    onHeightChanged: controller.syncWorkspaceSurfaceSize(width, height)
+                    spacing: 0
+
+                    WindowContainer {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        window: controller.workspaceWindow
+                        Component.onCompleted: controller.syncWorkspaceSurfaceSize(width, height)
+                        onWidthChanged: controller.syncWorkspaceSurfaceSize(width, height)
+                        onHeightChanged: controller.syncWorkspaceSurfaceSize(width, height)
+                    }
+
+                    BottomTabsQuickHost {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: controller.bottomTabsVisible
+                            ? metric("bottomTabsHostHeight", 260)
+                            : 0
+                        Layout.minimumHeight: controller.bottomTabsVisible
+                            ? metric("bottomTabsHostHeight", 260)
+                            : 0
+                        Layout.maximumHeight: controller.bottomTabsVisible
+                            ? metric("bottomTabsHostHeight", 260)
+                            : 0
+                        visible: controller.bottomTabsVisible
+                        controller: root.shellController
+                        paletteMap: root.paletteMap
+                        metricsMap: root.metricsMap
+                    }
                 }
 
                 Rectangle {
@@ -1358,6 +1444,49 @@ ApplicationWindow {
                 color: "white"
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
+            }
+        }
+
+        Rectangle {
+            id: fullscreenPreviewSpeedToast
+
+            z: 22
+            anchors.centerIn: parent
+            width: Math.min(220, Math.max(180, fullscreenPreviewSpeedToastColumn.implicitWidth + 48))
+            height: Math.max(96, fullscreenPreviewSpeedToastColumn.implicitHeight + 36)
+            radius: 18
+            color: "#CC000000"
+            border.width: 0
+            opacity: controller.previewFullscreen && root.previewSpeedToastVisible ? 1.0 : 0.0
+            visible: controller.previewFullscreen && (root.previewSpeedToastVisible || opacity > 0.0)
+            enabled: false
+
+            Behavior on opacity {
+                NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+            }
+
+            Column {
+                id: fullscreenPreviewSpeedToastColumn
+                anchors.centerIn: parent
+                spacing: 6
+
+                Label {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "\u5f53\u524d\u500d\u901f"
+                    color: "#F8FAFC"
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                Label {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: root.previewSpeedToastPercentText
+                    color: "#F8FAFC"
+                    font.pixelSize: 28
+                    font.weight: Font.Bold
+                    horizontalAlignment: Text.AlignHCenter
+                }
             }
         }
     }

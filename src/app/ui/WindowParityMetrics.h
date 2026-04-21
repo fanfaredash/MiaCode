@@ -68,6 +68,11 @@ constexpr int kPreviewStatsNarrowLayoutCols = 2;
 constexpr int kPreviewStatsWideLayoutMinChipWidth = 118;
 constexpr int kPreviewStatsGridMarginTop = 2;
 constexpr int kPreviewStatsGridMarginBottom = 2;
+constexpr int kTimelineHeaderHeight = 28;
+constexpr int kTimelineTopMargin = 6;
+constexpr int kTimelineLaneHeight = 20;
+constexpr int kTimelineLaneCount = 9;
+constexpr int kTimelineBottomPadding = 20;
 
 constexpr int kPreviewFullscreenHintTopMargin = 28;
 constexpr int kPreviewFullscreenOverlaySideMargin = 18;
@@ -135,6 +140,7 @@ PreviewPanelLayout computePreviewPanelLayout(
     double aspectRatio
 );
 
+int computeTimelineMinimumContentHeight();
 int computeBottomTabsDeviceHeight(int timelineHeight, int tabBarHeight, int frameWidth);
 
 }  // namespace miacode::window_parity

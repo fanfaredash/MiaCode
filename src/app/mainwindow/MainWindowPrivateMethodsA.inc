@@ -62,6 +62,7 @@
     );
     void finishFrameBootstrap(QToolBar* toolBar, const std::function<void(const QString&)>& logStartupStage);
     void setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* transformMenu, QMenu* previewMenu, QMenu* helpMenu);
+    void hidePreviewPlaybackRateToast();
     bool maybeSaveCurrentFieldChanges();
     bool applyCurrentFieldToDocument();
     bool saveToPath(const QString& path);
@@ -122,6 +123,7 @@
     int activeDifficultyId() const;
     QString activeChartText() const;
     miacode::simai::SimaiTimingMetadata currentTimingMetadata() const;
+    double parsedRawFirstSeconds(bool* ok = nullptr) const;
     double parsedFirstSeconds(bool* ok = nullptr) const;
     double parsedWholeBpm(bool* ok = nullptr) const;
     QString parsedLatencyMeterId() const;
@@ -148,6 +150,7 @@
     void dispatchTimelineAnalysisRefresh();
     const MuriAnalysisReport& alignedMuriAnalysisReportForPreview() const;
     void applyAlignedMuriAnalysisReportToViews();
+    double currentPreviewAuthoritativeAudioClockSecond() const;
     void seekTimelineToCursor(int line, int col);
     void syncTimelineToEditorCursor(bool centerView = true);
     void navigateTimelineToSecond(double second, bool focusEditor = true);
@@ -160,7 +163,6 @@
         double previewFollowSecond = 0.0,
         bool ensurePreviewFollowVisible = false);
     void flushDeferredEditorUiUpdate();
-    void queueQtPreviewFollowUiUpdate(double second, bool centerView = false);
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
     bool moveEditorCursorToTimelineLocation(
         int line,
@@ -218,3 +220,6 @@
     void restoreWorkspaceLayoutSizes();
     void refreshQuickShellRehostedWidgetParent(QWidget* widget);
     void refreshLayoutAfterPageSwitch();
+    int bottomTabsTabIndex(BottomTabsTabId tabId) const;
+    BottomTabsTabId bottomTabsTabIdFromString(const QString& tabId) const;
+    QString bottomTabsTabIdString(BottomTabsTabId tabId) const;

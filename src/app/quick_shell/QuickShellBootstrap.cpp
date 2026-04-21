@@ -3,6 +3,7 @@
 #include "QuickShellNativeSurfaceHost.h"
 #include "QuickShellController.h"
 #include "QuickShellStyleBridge.h"
+#include "DialogLocalization.h"
 #include "UiText.h"
 #include "UiTheme.h"
 #include "common/DebugOptions.h"
@@ -10,6 +11,7 @@
 #include "mainwindow/MainWindow.h"
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
+#include "timeline/quick/TimelineQuickItem.h"
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -24,11 +26,11 @@
 #include <QTextEdit>
 #include <QTextStream>
 #include <QTimer>
-#include <QEventLoop>
 #include <QWidget>
 #include <QtQml>
 
 #ifdef Q_OS_WIN
+#include <QtCore/qabstractnativeeventfilter.h>
 #include <windows.h>
 #endif
 
@@ -98,6 +100,19 @@ QString applicationStateName(Qt::ApplicationState state)
 }
 
 #ifdef Q_OS_WIN
+class QuickShellNativeCloseEventFilter final : public QAbstractNativeEventFilter
+{
+public:
+    explicit QuickShellNativeCloseEventFilter(QuickShellBootstrap* bootstrap)
+        : bootstrap_(bootstrap)
+    {}
+
+    bool nativeEventFilter(const QByteArray& eventType, void* message, qintptr* result) override;
+
+private:
+    QuickShellBootstrap* bootstrap_ = nullptr;
+};
+
 constexpr DWORD kDwmwaUseImmersiveDarkMode = 20;
 constexpr DWORD kDwmwaBorderColor = 34;
 constexpr DWORD kDwmwaCaptionColor = 35;
@@ -176,6 +191,7 @@ void ensurePreviewQuickTypesRegisteredForQuickShell()
     }
     qmlRegisterType<PreviewQuickSceneRoot>("MiaCode.Preview", 1, 0, "PreviewQuickSceneRoot");
     qmlRegisterType<PreviewQuickHudLayer>("MiaCode.Preview", 1, 0, "PreviewQuickHudLayer");
+    qmlRegisterType<TimelineQuickItem>("MiaCode.Timeline", 1, 0, "TimelineQuickItem");
     registered = true;
 }
 
@@ -187,12 +203,28 @@ QuickShellBootstrap::QuickShellBootstrap(const QIcon& appIcon, QObject* parent)
 {
 }
 
-QuickShellBootstrap::~QuickShellBootstrap() = default;
+QuickShellBootstrap::~QuickShellBootstrap()
+{
+    if (!rootWindow_.isNull()) {
+        rootWindow_->removeEventFilter(this);
+    }
+    if (qApp != nullptr) {
+        qApp->removeEventFilter(this);
+    }
+#ifdef Q_OS_WIN
+    if (QCoreApplication* app = QCoreApplication::instance(); app != nullptr) {
+        if (nativeCloseEventFilter_ != nullptr) {
+            app->removeNativeEventFilter(nativeCloseEventFilter_.get());
+        }
+    }
+#endif
+}
 
 bool QuickShellBootstrap::start()
 {
     appendQuickShellRuntimeLog(QStringLiteral("start_enter"));
-    backend_ = std::make_unique<MainWindow>();
+    backend_ = std::make_unique<MainWindow>(true);
+    backend_->setQuickShellBackendActive(true);
     backend_->hide();
     backend_->setVisible(false);
     appendQuickShellRuntimeLog(QStringLiteral("backend_ready"));
@@ -217,6 +249,12 @@ bool QuickShellBootstrap::start()
     if (qApp != nullptr) {
         qApp->installEventFilter(this);
     }
+#ifdef Q_OS_WIN
+    if (QCoreApplication* app = QCoreApplication::instance(); app != nullptr) {
+        nativeCloseEventFilter_ = std::make_unique<QuickShellNativeCloseEventFilter>(this);
+        app->installNativeEventFilter(nativeCloseEventFilter_.get());
+    }
+#endif
     if (QApplication* app = qobject_cast<QApplication*>(qApp); app != nullptr) {
         QObject::connect(app, &QApplication::focusChanged, this, [this](QWidget* old, QWidget* now) {
             if (!shouldTraceFocusObject(old) && !shouldTraceFocusObject(now)) {
@@ -302,136 +340,100 @@ bool QuickShellBootstrap::start()
         return false;
     }
 
-    if (!appIcon_.isNull()) {
-        if (QQuickWindow* window = qobject_cast<QQuickWindow*>(engine_->rootObjects().constFirst()); window != nullptr) {
+    if (QQuickWindow* window = qobject_cast<QQuickWindow*>(engine_->rootObjects().constFirst()); window != nullptr) {
+        rootWindow_ = window;
+        window->installEventFilter(this);
+        if (surfaceHost_ != nullptr) {
+            surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
+        }
+        appendQuickShellRuntimeLog(
+            QStringLiteral("root_window_ready"),
+            QString("visible=%1 width=%2 height=%3 title=%4 icon_null=%5")
+                .arg(window->isVisible() ? 1 : 0)
+                .arg(window->width())
+                .arg(window->height())
+                .arg(window->title())
+                .arg(appIcon_.isNull() ? 1 : 0)
+        );
+        if (window->minimumWidth() > 0 && window->width() < window->minimumWidth()) {
+            const int deltaWidth = window->minimumWidth() - window->width();
+            window->setX(window->x() - deltaWidth / 2);
+            window->setWidth(window->minimumWidth());
+        }
+        if (window->minimumHeight() > 0 && window->height() < window->minimumHeight()) {
+            const int deltaHeight = window->minimumHeight() - window->height();
+            window->setY(window->y() - deltaHeight / 2);
+            window->setHeight(window->minimumHeight());
+        }
+        if (!appIcon_.isNull()) {
+            window->setIcon(appIcon_);
+        }
+#ifdef Q_OS_WIN
+        QObject::connect(window, &QQuickWindow::activeChanged, this, [this, window]() {
+            logFocusEvent(
+                QStringLiteral("root_window_active_changed"),
+                window,
+                nullptr,
+                QStringLiteral("active=%1").arg(window->isActive() ? 1 : 0)
+            );
+        });
+        QObject::connect(window, &QQuickWindow::xChanged, this, [this, window]() {
             if (surfaceHost_ != nullptr) {
                 surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
             }
-            appendQuickShellRuntimeLog(
-                QStringLiteral("root_window_ready"),
-                QString("visible=%1 width=%2 height=%3 title=%4")
-                    .arg(window->isVisible() ? 1 : 0)
-                    .arg(window->width())
-                    .arg(window->height())
-                    .arg(window->title())
-            );
-            if (styleBridge_ != nullptr && window->width() > 0 && window->height() > 0) {
-                styleBridge_->syncWindowSize(window->width(), window->height());
-                styleBridge_->refreshNow();
-            } else if (styleBridge_ != nullptr) {
-                styleBridge_->refreshNow();
+        });
+        QObject::connect(window, &QQuickWindow::yChanged, this, [this, window]() {
+            if (surfaceHost_ != nullptr) {
+                surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
             }
-            if (controller_ != nullptr) {
-                controller_->refresh();
+        });
+        QObject::connect(window, &QQuickWindow::widthChanged, this, [this, window]() {
+            if (surfaceHost_ != nullptr) {
+                surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
             }
-            const auto warmupStartupSurfaceLayout = [this, window]() {
-                if (surfaceHost_ == nullptr || controller_ == nullptr || styleBridge_ == nullptr || window == nullptr) {
-                    return;
-                }
-                const QVariantMap metrics = styleBridge_->metrics();
-                const int topChromeHeight = qMax(0, metrics.value(QStringLiteral("topChromeHeight")).toInt());
-                const int statusHeight = qMax(0, metrics.value(QStringLiteral("statusHeight")).toInt());
-                const int sidebarWidth = qMax(
-                    1,
-                    metrics.value(
-                        QStringLiteral("workspaceSidebarWidth"),
-                        metrics.value(QStringLiteral("outlineDockWidth"), 190)
-                    ).toInt()
-                );
-                const int handleWidth = qMax(0, metrics.value(QStringLiteral("previewSplitterHandleWidth")).toInt());
-                const int previewPaneWidth = qMax(0, qRound(window->property("previewPaneWidth").toReal()));
-                const int workspaceHeight = qMax(1, window->height() - topChromeHeight - statusHeight);
-                const int workspaceWidth = qMax(1, window->width() - sidebarWidth - handleWidth - previewPaneWidth);
-                controller_->syncSidebarSurfaceSize(sidebarWidth, workspaceHeight);
-                controller_->syncWorkspaceSurfaceSize(workspaceWidth, workspaceHeight);
-                styleBridge_->refreshNow();
-                controller_->refresh();
-            };
-            for (int iteration = 0; iteration < 3; ++iteration) {
-                warmupStartupSurfaceLayout();
-                QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-                if (styleBridge_ != nullptr) {
-                    styleBridge_->refreshNow();
-                }
-                if (controller_ != nullptr) {
-                    controller_->refresh();
-                }
+        });
+        QObject::connect(window, &QQuickWindow::heightChanged, this, [this, window]() {
+            if (surfaceHost_ != nullptr) {
+                surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
             }
-            if (window->minimumWidth() > 0 && window->width() < window->minimumWidth()) {
-                const int deltaWidth = window->minimumWidth() - window->width();
-                window->setX(window->x() - deltaWidth / 2);
-                window->setWidth(window->minimumWidth());
+        });
+#endif
+        QPointer<QQuickWindow> windowGuard(window);
+        QTimer::singleShot(0, this, [this, windowGuard]() {
+            if (windowGuard.isNull()) {
+                return;
             }
-            if (window->minimumHeight() > 0 && window->height() < window->minimumHeight()) {
-                const int deltaHeight = window->minimumHeight() - window->height();
-                window->setY(window->y() - deltaHeight / 2);
-                window->setHeight(window->minimumHeight());
+            auto* window = windowGuard.data();
+            if (surfaceHost_ != nullptr) {
+                surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
             }
-            window->setIcon(appIcon_);
 #ifdef Q_OS_WIN
             applySystemBackdropToQuickWindow(window);
             QObject::connect(window, &QQuickWindow::activeChanged, this, [window]() {
                 applySystemBackdropToQuickWindow(window);
-            });
-            QObject::connect(window, &QQuickWindow::activeChanged, this, [this, window]() {
-                logFocusEvent(
-                    QStringLiteral("root_window_active_changed"),
-                    window,
-                    nullptr,
-                    QStringLiteral("active=%1").arg(window->isActive() ? 1 : 0)
-                );
             });
             if (styleBridge_ != nullptr) {
                 QObject::connect(styleBridge_.get(), &QuickShellStyleBridge::appearanceChanged, this, [window]() {
                     applySystemBackdropToQuickWindow(window);
                 });
             }
-            QObject::connect(window, &QQuickWindow::xChanged, this, [this, window]() {
-                if (surfaceHost_ != nullptr) {
-                    surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
-                }
-            });
-            QObject::connect(window, &QQuickWindow::yChanged, this, [this, window]() {
-                if (surfaceHost_ != nullptr) {
-                    surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
-                }
-            });
-            QObject::connect(window, &QQuickWindow::widthChanged, this, [this, window]() {
-                if (surfaceHost_ != nullptr) {
-                    surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
-                }
-            });
-            QObject::connect(window, &QQuickWindow::heightChanged, this, [this, window]() {
-                if (surfaceHost_ != nullptr) {
-                    surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
-                }
-            });
             QObject::connect(qApp, &QGuiApplication::applicationStateChanged, this, [window](Qt::ApplicationState) {
                 applySystemBackdropToQuickWindow(window);
             });
 #endif
-            window->setVisible(true);
-            window->show();
-            window->raise();
-            window->requestActivate();
-            QTimer::singleShot(0, this, [this, window]() {
-                if (surfaceHost_ != nullptr) {
-                    surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
-                }
-                appendQuickShellRuntimeLog(
-                    QStringLiteral("root_window_post_show"),
-                    QString("visible=%1 exposed=%2 active=%3 width=%4 height=%5")
-                        .arg(window->isVisible() ? 1 : 0)
-                        .arg(window->isExposed() ? 1 : 0)
-                        .arg(window->isActive() ? 1 : 0)
-                        .arg(window->width())
-                        .arg(window->height())
-                );
-                if (surfaceHost_ != nullptr) {
-                    surfaceHost_->noteQuickShellUiReady();
-                }
-            });
-        }
+            appendQuickShellRuntimeLog(
+                QStringLiteral("root_window_post_show"),
+                QString("visible=%1 exposed=%2 active=%3 width=%4 height=%5")
+                    .arg(window->isVisible() ? 1 : 0)
+                    .arg(window->isExposed() ? 1 : 0)
+                    .arg(window->isActive() ? 1 : 0)
+                    .arg(window->width())
+                    .arg(window->height())
+            );
+            if (surfaceHost_ != nullptr) {
+                surfaceHost_->noteQuickShellUiReady();
+            }
+        });
     }
     return true;
 }
@@ -440,6 +442,20 @@ bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
 {
     if (controller_ == nullptr || event == nullptr) {
         return QObject::eventFilter(watched, event);
+    }
+
+    if (watched == rootWindow_ && event->type() == QEvent::Close) {
+        if (rootWindowCloseRelayScheduled_
+            || rootWindowCloseRelayActive_
+            || UiDialogs::hasVisibleBlockingModalDialog()) {
+            if (!rootWindowCloseRelayScheduled_
+                && !rootWindowCloseRelayActive_
+                && UiDialogs::hasVisibleBlockingModalDialog()) {
+                scheduleRootWindowCloseRelay(QStringLiteral("qevent_close"));
+            }
+            event->ignore();
+            return true;
+        }
     }
 
     if (shouldTraceFocusObject(watched)) {
@@ -453,6 +469,16 @@ bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
             break;
         default:
             break;
+        }
+    }
+
+    if (UiDialogs::hasVisibleProtectedPreviewDialog()
+        && (event->type() == QEvent::ShortcutOverride
+            || event->type() == QEvent::KeyPress
+            || event->type() == QEvent::KeyRelease)) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (UiDialogs::isPreviewShortcutEvent(keyEvent)) {
+            return QObject::eventFilter(watched, event);
         }
     }
 
@@ -547,6 +573,99 @@ bool QuickShellBootstrap::eventFilter(QObject* watched, QEvent* event)
     }
 
     return QObject::eventFilter(watched, event);
+}
+
+#ifdef Q_OS_WIN
+bool QuickShellNativeCloseEventFilter::nativeEventFilter(const QByteArray& eventType, void* message, qintptr* result)
+{
+    return bootstrap_ != nullptr ? bootstrap_->handleNativeCloseEvent(eventType, message, result) : false;
+}
+
+bool QuickShellBootstrap::handleNativeCloseEvent(const QByteArray& eventType, void* message, qintptr* result)
+{
+    if (rootWindow_.isNull()
+        || message == nullptr
+        || (eventType != "windows_generic_MSG" && eventType != "windows_dispatcher_MSG")) {
+        return false;
+    }
+
+    auto* msg = static_cast<MSG*>(message);
+    if (msg == nullptr || msg->hwnd == nullptr) {
+        return false;
+    }
+
+    const HWND rootHwnd = reinterpret_cast<HWND>(rootWindow_->winId());
+    if (msg->hwnd != rootHwnd) {
+        return false;
+    }
+
+    const bool isCloseMessage = msg->message == WM_CLOSE;
+    const bool isCloseSysCommand = msg->message == WM_SYSCOMMAND && ((msg->wParam & 0xFFF0) == SC_CLOSE);
+    if (!isCloseMessage && !isCloseSysCommand) {
+        return false;
+    }
+
+    if (!rootWindowCloseRelayScheduled_
+        && !rootWindowCloseRelayActive_
+        && !UiDialogs::hasVisibleBlockingModalDialog()) {
+        return false;
+    }
+
+    if (!rootWindowCloseRelayScheduled_
+        && !rootWindowCloseRelayActive_
+        && UiDialogs::hasVisibleBlockingModalDialog()) {
+        scheduleRootWindowCloseRelay(
+            isCloseSysCommand ? QStringLiteral("native_syscommand_close") : QStringLiteral("native_wm_close")
+        );
+    }
+    if (result != nullptr) {
+        *result = 0;
+    }
+    return true;
+}
+#endif
+
+void QuickShellBootstrap::scheduleRootWindowCloseRelay(const QString& source)
+{
+    if (controller_ == nullptr || rootWindow_.isNull() || rootWindowCloseRelayScheduled_ || rootWindowCloseRelayActive_) {
+        return;
+    }
+    rootWindowCloseRelayScheduled_ = true;
+    appendQuickShellRuntimeLog(QStringLiteral("root_close_relay_schedule"), QStringLiteral("source=%1").arg(source));
+    QTimer::singleShot(0, this, [this]() {
+        processRootWindowCloseRelay();
+    });
+}
+
+void QuickShellBootstrap::processRootWindowCloseRelay()
+{
+    rootWindowCloseRelayScheduled_ = false;
+    if (controller_ == nullptr || rootWindow_.isNull() || rootWindowCloseRelayActive_) {
+        return;
+    }
+
+    rootWindowCloseRelayActive_ = true;
+    appendQuickShellRuntimeLog(QStringLiteral("root_close_relay_begin"));
+    UiDialogs::closeVisibleBlockingModalDialogs();
+    if (UiDialogs::hasVisibleBlockingModalDialog()) {
+        appendQuickShellRuntimeLog(QStringLiteral("root_close_relay_retry"));
+        rootWindowCloseRelayActive_ = false;
+        scheduleRootWindowCloseRelay(QStringLiteral("dialogs_still_visible"));
+        return;
+    }
+
+    const bool confirmed = controller_->confirmClose();
+    if (!confirmed) {
+        appendQuickShellRuntimeLog(QStringLiteral("root_close_relay_cancelled"));
+        rootWindowCloseRelayActive_ = false;
+        return;
+    }
+
+    rootWindowCloseRelayActive_ = false;
+    controller_->markNextCloseConfirmedExternally();
+    if (!rootWindow_->close()) {
+        controller_->clearPendingExternalCloseConfirmation();
+    }
 }
 
 bool QuickShellBootstrap::previewSeekHotRectContainsGlobalPoint(const QPoint& globalPoint) const
