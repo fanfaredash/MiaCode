@@ -438,10 +438,30 @@ void MainWindow::TimelineSection::seekPreviewToSecond(double second, bool center
     owner_.ensurePreviewStageMediaRouteInitialized();
     owner_.ensurePreviewSfxRuntimePrepared();
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
-    if (state_.qtPreviewPlaying_ || state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
-        stopQtPreviewPlayback(true);
+    if (state_.qtPreviewPlaying_ && state_.previewSfxRuntime_ != nullptr) {
+        const double effectiveSecond =
+            state_.previewSfxRuntime_->seekRetainedPreviewPlaybackTransaction(clampedSecond, true);
+        state_.qtPreviewStartSecond_ = effectiveSecond;
+        state_.qtPreviewPauseSecond_ = effectiveSecond;
+        state_.qtPreviewElapsed_.restart();
+        state_.qtPreviewTimelineElapsed_.restart();
+        state_.qtPreviewPendingTimelineSecond_ = effectiveSecond;
+        state_.qtPreviewPendingTimelineCenterView_ = centerView;
+        state_.qtPreviewTimelineDirty_ = true;
+        state_.qtPreviewLastTimelineSecond_ = -1.0;
+        if (state_.previewCanvas_ != nullptr) {
+            state_.previewCanvas_->setPlayheadSeconds(effectiveSecond, true);
+        }
+        owner_.syncPreviewStageMediaRoutePlayback(effectiveSecond);
+        applyQtPreviewPosition(effectiveSecond, centerView);
+        updatePreviewSliderPosition(effectiveSecond);
+        updatePreviewObjectStats(effectiveSecond);
+        return;
     }
-    requestPausedPreviewSeek(clampedSecond, centerView, true);
+    if (state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
+        cancelPreviewStartupSync();
+    }
+    anchorQtPreviewPlaybackToSecond(clampedSecond, centerView);
 }
 
 void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
@@ -747,6 +767,7 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
 void MainWindow::TimelineSection::anchorQtPreviewPlaybackToSecond(double second, bool centerView)
 {
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    owner_.ensurePreviewStageMediaRouteInitialized();
     cancelPreviewStartupSync();
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->resetRetainedPreviewPlaybackTransaction(clampedSecond);
@@ -817,6 +838,46 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
     state_.pausedSeekMediaPending_ = false;
     state_.pausedSeekMediaSubmittedGeneration_ = 0;
     state_.pausedSeekMediaAckGeneration_ = 0;
+    if (resumeFromPause && state_.previewSfxRuntime_ != nullptr) {
+        const QtPreviewSfxRuntime::RetainedPlaybackMode retainedMode =
+            state_.previewSfxRuntime_->retainedPlaybackMode();
+        if (retainedMode == QtPreviewSfxRuntime::RetainedPlaybackMode::PausedExact
+            || retainedMode == QtPreviewSfxRuntime::RetainedPlaybackMode::PausedAnchored) {
+            double effectiveStartSecond = 0.0;
+            if (retainedMode == QtPreviewSfxRuntime::RetainedPlaybackMode::PausedExact
+                && qAbs(state_.previewSfxRuntime_->authoritativePlaybackSecond() - requestedSecond)
+                    <= kTimelineZeroSecondTolerance) {
+                effectiveStartSecond = state_.previewSfxRuntime_->resumeRetainedPreviewPlaybackTransaction();
+            } else {
+                effectiveStartSecond =
+                    state_.previewSfxRuntime_->seekRetainedPreviewPlaybackTransaction(requestedSecond, true);
+            }
+            applyPlaybackClockState(effectiveStartSecond);
+            state_.qtPreviewPendingTimelineSecond_ = effectiveStartSecond;
+            state_.qtPreviewPendingTimelineCenterView_ = true;
+            state_.qtPreviewTimelineDirty_ = true;
+            state_.qtPreviewLastTimelineSecond_ = -1.0;
+            if (state_.timelineQuickStateBridge_ != nullptr) {
+                state_.timelineQuickStateBridge_->setPlaybackEntrySeconds(state_.qtPreviewPlaybackReturnSecond_);
+                state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(state_.qtPreviewPlaybackEndSecond_);
+                state_.timelineQuickStateBridge_->setPlayheadSeconds(effectiveStartSecond, false);
+            }
+            if (state_.previewCanvas_ != nullptr) {
+                state_.previewCanvas_->setPlayheadSeconds(effectiveStartSecond, true);
+            }
+            if (hasVideoMedia) {
+                owner_.startPreviewStageMediaRoutePlayback(effectiveStartSecond);
+            }
+            appendPreviewPlaybackLog(
+                QStringLiteral("retained_start"),
+                QString("txn=%1 effective=%2 retained_mode=%3")
+                    .arg(playbackTxn)
+                    .arg(effectiveStartSecond, 0, 'f', 6)
+                    .arg(static_cast<int>(retainedMode)));
+            finalizeQtPreviewPlaybackStart(effectiveStartSecond);
+            return true;
+        }
+    }
     state_.previewStartupSyncPending_ = true;
     state_.previewLateVideoStartPending_ = false;
     state_.previewStartupAudioPrepared_ = false;
@@ -899,14 +960,6 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
     const bool hadStartupSync = state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_;
     const quint64 playbackTxn = state_.activePreviewPlaybackTransactionId_;
     bool pauseSecondCaptured = false;
-    if (wasPlaying && state_.previewSfxRuntime_ != nullptr) {
-        const QtPreviewSfxRuntime::PausePreviewResult pauseResult =
-            state_.previewSfxRuntime_->capturePausedPreviewTransaction();
-        if (pauseResult.usedBackgroundTrack) {
-            state_.qtPreviewPauseSecond_ = pauseResult.pauseSecond;
-            pauseSecondCaptured = true;
-        }
-    }
     if (hadStartupSync && !wasPlaying) {
         state_.qtPreviewPauseSecond_ = state_.previewStartupPreparedSecond_;
         pauseSecondCaptured = true;
@@ -917,20 +970,12 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
     }
     cancelPreviewStartupSync();
     owner_.pausePreviewStageMediaRoutePlayback();
-    if (ui_.previewSeekDebounceTimer_ != nullptr) {
-        ui_.previewSeekDebounceTimer_->stop();
-    }
-    if (ui_.qtPreviewTimer_ != nullptr) {
-        ui_.qtPreviewTimer_->stop();
-    }
-    if (ui_.qtPreviewTimelineTimer_ != nullptr) {
-        ui_.qtPreviewTimelineTimer_->stop();
-    }
-    if (ui_.previewStatsUiTimer_ != nullptr) {
-        ui_.previewStatsUiTimer_->stop();
-    }
+    stopQtPreviewTimers();
     if (!keepPosition) {
         state_.qtPreviewPauseSecond_ = 0.0;
+    }
+    if (state_.previewSfxRuntime_ != nullptr) {
+        state_.previewSfxRuntime_->resetRetainedPreviewPlaybackTransaction(state_.qtPreviewPauseSecond_);
     }
     state_.pausedPreviewMediaSeekPending_ = false;
     if (wasPlaying || hadStartupSync) {
@@ -959,10 +1004,7 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
         state_.timelineQuickStateBridge_->focusPlayhead(false);
         state_.timelineQuickStateBridge_->setPlayheadUpperLimitSeconds(previewDurationSeconds());
     }
-    if (state_.previewSfxRuntime_ != nullptr) {
-        state_.previewSfxRuntime_->stopAll();
-    }
-    applyLatestTimelinePreviewStateToPausedPreview();
+    requestPausedPreviewSeek(state_.qtPreviewPauseSecond_, false, true);
     owner_.applyDeferredAnalysisUiUpdates();
     if (state_.pendingTimelineAnalysisRefresh_.revision != 0) {
         requestTimelineAnalysisDispatch(0);
