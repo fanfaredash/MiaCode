@@ -415,7 +415,7 @@ void MainWindow::ExportSection::onExportPreviewVideo()
         },
         [this]() {
             if (owner_.qtPreviewPlaying_) {
-                owner_.stopQtPreviewPlayback(true);
+                owner_.pauseQtPreviewPlaybackExact();
                 owner_.updatePauseButtonAppearance();
             }
         },
