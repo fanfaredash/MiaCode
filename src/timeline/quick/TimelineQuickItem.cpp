@@ -11,6 +11,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/PreviewInteractionConfig.h"
+#include "common/TimelineThemeConfig.h"
 #include "timeline/TimelineSceneStateBuilder.h"
 #include "timeline/quick/TimelineQuickGridLayer.h"
 #include "timeline/quick/TimelineQuickHeaderLayer.h"
@@ -109,6 +110,87 @@ QString timelineThemeSignature(const miacode::timeline::TimelineSceneState& stat
     return themeSignature;
 }
 
+void appendTimelineQuickInteractionLog(const QString& action, const QString& payload = QString())
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    QString text = QStringLiteral("action=%1").arg(action);
+    if (!payload.trimmed().isEmpty()) {
+        text += QStringLiteral(" ") + payload.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("timeline/interaction"),
+        text
+    );
+}
+
+quint64 overlayDynamicRevisionForState(const TimelineQuickStateBridge* stateBridge, bool dragActive)
+{
+    const quint64 bridgeRevision = stateBridge != nullptr ? stateBridge->overlayDynamicRevision() : 0;
+    return (bridgeRevision << 1U) | (dragActive ? 1ULL : 0ULL);
+}
+
+void applyDynamicSceneState(
+    miacode::timeline::TimelineSceneState* state,
+    const TimelineQuickStateBridge* stateBridge,
+    bool dragActive)
+{
+    if (state == nullptr || stateBridge == nullptr) {
+        return;
+    }
+
+    state->horizontalScrollValue = stateBridge->horizontalScrollValue();
+    state->overlayDynamicRevision = overlayDynamicRevisionForState(stateBridge, dragActive);
+    state->visibleStartSecond =
+        miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(*state, state->timelineLeft);
+    state->visibleEndSecond =
+        miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(*state, state->viewportSize.width());
+
+    state->hasCursorLine = false;
+    state->hasPlayheadLine = false;
+    state->hasDragCenterLine = false;
+
+    const miacode::timeline::TimelineThemeColors theme = miacode::timeline::timelineThemeColors();
+    const int cursorX =
+        miacode::timeline::TimelineSceneStateBuilder::secondToSceneX(*state, stateBridge->cursorSeconds());
+    if (cursorX > state->timelineLeft) {
+        state->hasCursorLine = true;
+        state->cursorLine = miacode::timeline::TimelineSceneLine{
+            QPointF(cursorX, state->timelineTop),
+            QPointF(cursorX, state->timelineTop + state->timelineHeight),
+            theme.cursor,
+            2.0,
+        };
+    }
+
+    const int playheadX =
+        miacode::timeline::TimelineSceneStateBuilder::secondToSceneX(*state, stateBridge->playheadSeconds());
+    if (!stateBridge->playheadIndicatorSuppressed() && playheadX > state->timelineLeft) {
+        state->hasPlayheadLine = true;
+        state->playheadLine = miacode::timeline::TimelineSceneLine{
+            QPointF(playheadX, state->timelineTop),
+            QPointF(playheadX, state->timelineTop + state->timelineHeight),
+            theme.playhead,
+            2.0,
+        };
+    }
+
+    if (dragActive) {
+        const int dragCenterX = state->viewportSize.width() / 2;
+        if (dragCenterX > state->timelineLeft) {
+            state->hasDragCenterLine = true;
+            state->dragCenterLine = miacode::timeline::TimelineSceneLine{
+                QPointF(dragCenterX, state->timelineTop),
+                QPointF(dragCenterX, state->timelineTop + state->timelineHeight),
+                theme.playhead,
+                2.0,
+            };
+        }
+    }
+}
+
 }  // namespace
 
 TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
@@ -154,6 +236,8 @@ void TimelineQuickItem::setStateBridge(TimelineQuickStateBridge* stateBridge)
         QObject::disconnect(bridgePlayheadConnection_);
     }
     stateBridge_ = stateBridge;
+    cachedSceneStateValid_ = false;
+    lastPaintedHorizontalScrollValue_ = -1;
     if (stateBridge_ != nullptr) {
         bridgeRenderStateConnection_ =
             connect(stateBridge_, &TimelineQuickStateBridge::renderStateChanged, this, &TimelineQuickItem::syncSourceState);
@@ -252,6 +336,7 @@ void TimelineQuickItem::cycleZoomPreset()
 void TimelineQuickItem::refreshTheme()
 {
     cachedThemeSignature_.clear();
+    cachedSceneStateValid_ = false;
     ++appearanceRevision_;
     pendingThemeInvalidation_ = true;
     update();
@@ -312,12 +397,35 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     if (stateBridge_ == nullptr) {
         return miacode::timeline::TimelineSceneState();
     }
+    const QSize viewportSize(qMax(1, qRound(width())), qMax(1, qRound(height())));
+    const bool rebuildNeeded =
+        !cachedSceneStateValid_
+        || cachedSceneBuildViewportSize_ != viewportSize
+        || cachedSceneBuildHeaderLeftLimit_ != headerLeftLimit_
+        || cachedSceneBuildHeaderRightLimit_ != headerRightLimit_
+        || cachedSceneBuildAppearanceRevision_ != appearanceRevision_
+        || cachedSceneBuildGridRevision_ != stateBridge_->gridRevision()
+        || cachedSceneBuildWaveformRevision_ != stateBridge_->waveformRevision()
+        || cachedSceneBuildHeaderRevision_ != stateBridge_->headerRevision()
+        || cachedSceneBuildNotesRevision_ != stateBridge_->notesRevision()
+        || cachedSceneBuildOverlayRevision_ != stateBridge_->overlayRevision();
+    if (rebuildNeeded && miacode::debug_options::runtimeDebugOutputEnabled()) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("timeline/quick_scene"),
+            QStringLiteral("action=scene_state_rebuild_begin reason=current_scene_state count=%1")
+                .arg(sceneStateRebuildCount_ + 1));
+    }
+    QElapsedTimer timer;
+    if (rebuildNeeded) {
+        timer.start();
+    }
     miacode::timeline::TimelineSceneBuildRequest request;
     request.snapshot = stateBridge_->renderSnapshot();
     request.waveformData = stateBridge_->waveformData();
     request.muriMarkerLocationIds = stateBridge_->muriMarkerLocationIds();
     request.muriMarkerTooltips = stateBridge_->muriMarkerTooltips();
-    request.viewportSize = QSize(qMax(1, qRound(width())), qMax(1, qRound(height())));
+    request.viewportSize = viewportSize;
     request.headerLineNumberFont = stateBridge_->headerLineNumberFont();
     request.horizontalScrollValue = stateBridge_->horizontalScrollValue();
     request.headerLeftLimit = headerLeftLimit_;
@@ -336,12 +444,40 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.headerRevision = stateBridge_->headerRevision();
     request.notesRevision = stateBridge_->notesRevision();
     request.overlayRevision = stateBridge_->overlayRevision();
-    return miacode::timeline::TimelineSceneStateBuilder::build(request);
+    request.overlayDynamicRevision = overlayDynamicRevisionForState(stateBridge_, dragActive_);
+    if (rebuildNeeded) {
+        cachedSceneState_ = miacode::timeline::TimelineSceneStateBuilder::build(request);
+        cachedSceneStateValid_ = true;
+        cachedSceneBuildViewportSize_ = viewportSize;
+        cachedSceneBuildHeaderLeftLimit_ = headerLeftLimit_;
+        cachedSceneBuildHeaderRightLimit_ = headerRightLimit_;
+        cachedSceneBuildAppearanceRevision_ = appearanceRevision_;
+        cachedSceneBuildGridRevision_ = stateBridge_->gridRevision();
+        cachedSceneBuildWaveformRevision_ = stateBridge_->waveformRevision();
+        cachedSceneBuildHeaderRevision_ = stateBridge_->headerRevision();
+        cachedSceneBuildNotesRevision_ = stateBridge_->notesRevision();
+        cachedSceneBuildOverlayRevision_ = stateBridge_->overlayRevision();
+    }
+    if (rebuildNeeded && miacode::debug_options::runtimeDebugOutputEnabled()) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("timeline/quick_scene"),
+            QStringLiteral("action=scene_state_rebuild_end reason=current_scene_state count=%1 elapsed_ms=%2 lines=%3")
+                .arg(sceneStateRebuildCount_ + 1)
+                .arg(timer.elapsed())
+                .arg(stateBridge_->renderSnapshot().lines.size()));
+    }
+    if (rebuildNeeded) {
+        ++sceneStateRebuildCount_;
+    }
+    miacode::timeline::TimelineSceneState state = cachedSceneState_;
+    applyDynamicSceneState(&state, stateBridge_, dragActive_);
+    return state;
 }
 
 double TimelineQuickItem::clampSceneSecond(double second) const
 {
-    const miacode::timeline::TimelineSceneState state = currentSceneState();
+    const miacode::timeline::TimelineSceneState& state = currentSceneState();
     return qBound(0.0, second, state.maxNavigableSecond);
 }
 
@@ -416,12 +552,20 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     const QString themeSignature = timelineThemeSignature(state);
     if (!cachedThemeSignature_.isEmpty() && cachedThemeSignature_ != themeSignature) {
         ++appearanceRevision_;
-        pendingThemeInvalidation_ = true;
         textures_->invalidateThemeDependent();
-        pendingThemeInvalidation_ = false;
         state = currentSceneState();
     }
     cachedThemeSignature_ = timelineThemeSignature(state);
+    if (state.horizontalScrollValue != lastPaintedHorizontalScrollValue_
+        && miacode::debug_options::runtimeDebugOutputEnabled()) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("timeline/quick_scene"),
+            QStringLiteral("action=content_transform_update scroll=%1 max_scroll=%2")
+                .arg(state.horizontalScrollValue)
+                .arg(qMax(0, state.contentWidth - state.viewportSize.width())));
+    }
+    lastPaintedHorizontalScrollValue_ = state.horizontalScrollValue;
     int slotIndex = 0;
     updateLayerSlot(layerSlotAt(root, slotIndex++), [&](QSGNode* oldChild) {
         return gridLayer_->updateNode(oldChild, state, window(), textures_.get());
@@ -485,14 +629,16 @@ void TimelineQuickItem::mousePressEvent(QMouseEvent* event)
     emit timelineUserInteractionStarted();
     if (!playheadNearViewportCenter()) {
         const double centerSecond = viewportCenterSecondForScroll(stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0);
-        if (stateBridge_ != nullptr) {
-            stateBridge_->setPlayheadSeconds(centerSecond, false);
-        }
         emit centerNavigateRequested(centerSecond);
     }
     dragActive_ = true;
     dragStartX_ = qRound(event->position().x());
     dragStartScrollValue_ = stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0;
+    appendTimelineQuickInteractionLog(
+        QStringLiteral("drag_begin"),
+        QString("x=%1 scroll_start=%2")
+            .arg(dragStartX_)
+            .arg(dragStartScrollValue_));
     if (stateBridge_ != nullptr) {
         stateBridge_->focusPlayhead(false);
         stateBridge_->suppressPlayheadIndicator();
@@ -511,7 +657,6 @@ void TimelineQuickItem::mouseMoveEvent(QMouseEvent* event)
     const int newScroll = dragStartScrollValue_ - (qRound(event->position().x()) - dragStartX_);
     stateBridge_->setHorizontalScrollValue(newScroll);
     const double centerSecond = viewportCenterSecondForScroll(stateBridge_->horizontalScrollValue());
-    stateBridge_->setPlayheadSeconds(centerSecond, false);
     emit centerNavigateRequested(centerSecond);
     event->accept();
 }
@@ -552,6 +697,11 @@ void TimelineQuickItem::mouseReleaseEvent(QMouseEvent* event)
             stateBridge_->restorePlayheadIndicator(true);
         }
         const double centerSecond = viewportCenterSecondForScroll(stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0);
+        appendTimelineQuickInteractionLog(
+            QStringLiteral("drag_end"),
+            QString("scroll=%1 center_second=%2")
+                .arg(stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0)
+                .arg(centerSecond, 0, 'f', 6));
         emit timelineDragFinished(centerSecond);
         update();
         event->accept();
@@ -584,6 +734,12 @@ void TimelineQuickItem::wheelEvent(QWheelEvent* event)
 
     forceActiveFocus(Qt::MouseFocusReason);
     const miacode::timeline::TimelineSceneState state = currentSceneState();
+    appendTimelineQuickInteractionLog(
+        QStringLiteral("wheel_scroll"),
+        QString("delta=%1 modifiers=%2 scroll_before=%3")
+            .arg(delta)
+            .arg(static_cast<int>(event->modifiers()))
+            .arg(stateBridge_->horizontalScrollValue()));
     if (event->modifiers().testFlag(Qt::AltModifier)) {
         const int steps = delta > 0 ? qMax(1, qRound(static_cast<double>(delta) / 120.0))
                                     : qMin(-1, qRound(static_cast<double>(delta) / 120.0));
@@ -596,16 +752,15 @@ void TimelineQuickItem::wheelEvent(QWheelEvent* event)
 
     emit timelineUserInteractionStarted();
     stateBridge_->focusPlayhead(false);
-    if (!playheadNearViewportCenter()) {
-        const double centerSecond = viewportCenterSecondForScroll(stateBridge_->horizontalScrollValue());
-        stateBridge_->setPlayheadSeconds(centerSecond, false);
-        emit centerNavigateRequested(centerSecond);
-    }
     stateBridge_->suppressPlayheadIndicator();
     stateBridge_->setHorizontalScrollValue(stateBridge_->horizontalScrollValue() - (delta / 2));
     const double centerSecond = viewportCenterSecondForScroll(stateBridge_->horizontalScrollValue());
-    stateBridge_->setPlayheadSeconds(centerSecond, false);
-    emit centerNavigateRequested(centerSecond);
+    appendTimelineQuickInteractionLog(
+        QStringLiteral("wheel_scroll_applied"),
+        QString("scroll_after=%1 center_second=%2")
+            .arg(stateBridge_->horizontalScrollValue())
+            .arg(centerSecond, 0, 'f', 6));
+    emit timelineWheelNavigateRequested(centerSecond);
     stateBridge_->restorePlayheadIndicator(false);
     event->accept();
 }
@@ -681,5 +836,11 @@ void TimelineQuickItem::applyHeldHorizontalKeyScrollTick()
     heldHorizontalKeyScrollRemainderPixels_ = totalPixelDelta - static_cast<double>(pixelDelta);
     if (pixelDelta != 0) {
         stateBridge_->setHorizontalScrollValue(stateBridge_->horizontalScrollValue() + pixelDelta);
+        appendTimelineQuickInteractionLog(
+            QStringLiteral("held_key_scroll"),
+            QString("direction=%1 pixel_delta=%2 scroll=%3")
+                .arg(heldHorizontalKeyScrollDirection_)
+                .arg(pixelDelta)
+                .arg(stateBridge_->horizontalScrollValue()));
     }
 }

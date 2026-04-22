@@ -1,10 +1,12 @@
 #include "timeline/quick/TimelineQuickNotesLayer.h"
 
+#include <QMatrix4x4>
 #include <QQuickWindow>
 #include <QSGClipNode>
 #include <QSGNode>
 #include <QSGOpacityNode>
 #include <QSGSimpleTextureNode>
+#include <QSGTransformNode>
 #include <QTransform>
 
 #include "timeline/quick/TimelineQuickLayerUtils.h"
@@ -26,6 +28,35 @@ void clearChildren(QSGNode* node)
         node->removeChildNode(child);
         delete child;
     }
+}
+
+void rebuildNoteSlots(TimelineQuickNotesRootNode* root)
+{
+    if (root == nullptr) {
+        return;
+    }
+    clearChildren(root);
+    auto* clipRoot = new QSGClipNode();
+    clipRoot->setIsRectangular(true);
+    auto* transformRoot = new QSGTransformNode();
+    transformRoot->appendChildNode(new QSGNode());
+    clipRoot->appendChildNode(transformRoot);
+    root->appendChildNode(clipRoot);
+}
+
+QSGClipNode* clipRootFor(TimelineQuickNotesRootNode* root)
+{
+    return root != nullptr ? dynamic_cast<QSGClipNode*>(root->firstChild()) : nullptr;
+}
+
+QSGTransformNode* transformRootFor(QSGClipNode* clipRoot)
+{
+    return clipRoot != nullptr ? dynamic_cast<QSGTransformNode*>(clipRoot->firstChild()) : nullptr;
+}
+
+QSGNode* contentRootFor(QSGTransformNode* transformRoot)
+{
+    return transformRoot != nullptr ? transformRoot->firstChild() : nullptr;
 }
 
 void appendTextureNode(QSGNode* parent, QSGTexture* texture, const QRectF& rect)
@@ -142,20 +173,29 @@ QSGNode* TimelineQuickNotesLayer::updateNode(
         delete oldNode;
         root = new TimelineQuickNotesRootNode();
     }
+    if (clipRootFor(root) == nullptr || transformRootFor(clipRootFor(root)) == nullptr
+        || contentRootFor(transformRootFor(clipRootFor(root))) == nullptr) {
+        rebuildNoteSlots(root);
+    }
+    QSGClipNode* clipRoot = clipRootFor(root);
+    QSGTransformNode* transformRoot = transformRootFor(clipRoot);
+    QSGNode* bodyRoot = contentRootFor(transformRoot);
+    if (clipRoot != nullptr) {
+        clipRoot->setClipRect(QRectF(
+            state.timelineLeft,
+            state.timelineTop,
+            qMax(0, state.viewportSize.width() - state.timelineLeft),
+            state.timelineHeight));
+    }
+    if (transformRoot != nullptr) {
+        QMatrix4x4 matrix;
+        matrix.translate(-static_cast<float>(state.horizontalScrollValue), 0.0f);
+        transformRoot->setMatrix(matrix);
+    }
     if (root->revision == state.notesRevision && root->appearanceRevision == state.appearanceRevision) {
         return root;
     }
-    clearChildren(root);
-    auto* clipRoot = new QSGClipNode();
-    clipRoot->setIsRectangular(true);
-    clipRoot->setClipRect(QRectF(
-        state.timelineLeft,
-        state.timelineTop,
-        qMax(0, state.viewportSize.width() - state.timelineLeft),
-        state.timelineHeight));
-    auto* bodyRoot = new QSGNode();
-    clipRoot->appendChildNode(bodyRoot);
-    root->appendChildNode(clipRoot);
+    clearChildren(bodyRoot);
     for (const auto& rect : state.fireworkBands) {
         auto* opacity = new QSGOpacityNode();
         opacity->setOpacity(0.55f);

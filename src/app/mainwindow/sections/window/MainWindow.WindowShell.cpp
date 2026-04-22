@@ -234,7 +234,7 @@ void MainWindow::WindowSection::beginShellPreviewScrub()
         owner_.showPreviewFullscreenControls(false);
     }
     if (owner_.qtPreviewPlaying_) {
-        owner_.stopQtPreviewPlayback(true);
+        owner_.pauseQtPreviewPlaybackExact();
     }
 }
 
@@ -256,10 +256,7 @@ void MainWindow::WindowSection::updateShellPreviewScrub(double second, bool cent
         !owner_.previewScrubRenderElapsed_.isValid()
         || owner_.previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs;
     if (shouldRenderNow) {
-        if (owner_.previewSeekDebounceTimer_ != nullptr) {
-            owner_.previewSeekDebounceTimer_->stop();
-        }
-        owner_.seekPreviewToSecond(clampedSecond, centerView);
+        owner_.requestPausedPreviewSeek(clampedSecond, centerView, false, false);
         owner_.previewScrubRenderElapsed_.restart();
     } else {
         owner_.schedulePreviewSeek(clampedSecond, centerView);
@@ -368,6 +365,11 @@ void MainWindow::WindowSection::navigateShellTimelineToSecond(double second)
 void MainWindow::WindowSection::centerShellTimelineNavigate(double second)
 {
     owner_.timelineSection_->onTimelineCenterNavigateRequested(second);
+}
+
+void MainWindow::WindowSection::wheelShellTimelineNavigate(double second)
+{
+    owner_.timelineSection_->onTimelineWheelNavigateRequested(second);
 }
 
 void MainWindow::WindowSection::shellTimelineDragStarted()

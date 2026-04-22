@@ -995,6 +995,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         connect(timelineView_, &TimelineView::timelineDragStarted, this, [this]() {
             timelineSection_->onTimelineDragStarted();
         });
+        connect(timelineView_, &TimelineView::timelineWheelNavigateRequested, this, [this](double second) {
+            timelineSection_->onTimelineWheelNavigateRequested(second);
+        });
         connect(timelineView_, &TimelineView::centerNavigateRequested, this, [this](double second) {
             timelineSection_->onTimelineCenterNavigateRequested(second);
         });

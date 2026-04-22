@@ -90,6 +90,7 @@ public:
 signals:
     void playheadChanged(double second);
     void headerNavigateRequested(double second);
+    void timelineWheelNavigateRequested(double second);
     void centerNavigateRequested(double second);
     void timelineDragStarted();
     void timelineDragFinished(double second);

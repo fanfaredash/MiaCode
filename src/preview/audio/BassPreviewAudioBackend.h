@@ -7,6 +7,7 @@
 #include <QMutex>
 
 #include "common/PreviewAudioMixConfig.h"
+#include "BassPreviewDebugLogRouting.h"
 #include "PreviewAudioBackend.h"
 
 class BassPreviewAudioBackend final : public QObject, public miacode::preview_audio::PreviewAudioBackend
@@ -117,39 +118,6 @@ private:
         int triggeredGroupCount = 0;
     };
 
-    struct ActiveSampleSnapshot {
-        bool active = false;
-        double second = 0.0;
-    };
-
-    struct ExactPauseSnapshot {
-        double authoritySecondAtPause = 0.0;
-        double sessionStartSecond = 0.0;
-        double sessionPlaybackRate = 1.0;
-        quint64 masterMixerBytePosition = 0;
-        int eventGroupIndex = 0;
-        int lastTriggeredGroupIndex = -1;
-        int scheduledGroupIndex = -1;
-        double bgmChartSecond = 0.0;
-        double bgmRawSecond = 0.0;
-        bool touchholdActive = false;
-        double touchholdCurrentOffsetSecond = 0.0;
-        ActiveSampleSnapshot answer;
-        ActiveSampleSnapshot judge;
-        ActiveSampleSnapshot judgeBreak;
-        ActiveSampleSnapshot slide;
-        ActiveSampleSnapshot breakSample;
-        ActiveSampleSnapshot breakSlideBreak;
-        ActiveSampleSnapshot breakSlideStart;
-        ActiveSampleSnapshot breakSlideFinish;
-        ActiveSampleSnapshot judgeBreakSlide;
-        ActiveSampleSnapshot ex;
-        ActiveSampleSnapshot touch;
-        ActiveSampleSnapshot firework;
-        ActiveSampleSnapshot touchhold;
-        ActiveSampleSnapshot backgroundTrack;
-    };
-
     QString resolveTrackPath(const QString& chartPath) const;
     QString resolveSfxDir() const;
     bool runtimeLibrariesPresent() const;
@@ -169,20 +137,32 @@ private:
     void refreshPreparedAssets();
     void applySampleLevels();
     Sample* sampleForKind(const QString& kind) const;
+    double retainedTransportSecond() const;
+    bool retainedSecondMatches(double targetSecond) const;
+    void noteInitWindowOpened(const QString& reason);
+    void noteTransportReady(const QString& reason);
+    void appendBassDebugLog(
+        miacode::preview_audio::bass::BassDebugOperation operation,
+        const QString& payload = QString(),
+        bool initWindowContext = false) const;
     void setBackgroundTrackSampleSpeed(double rate);
-    void invalidateRetainedPlaybackState();
+    void invalidateRetainedPlaybackState(const QString& reason);
     void updateRetainedBgmState();
     void logTrackFileMissingAfterLoadIfNeeded();
-    void captureExactPauseSnapshot();
-    void clearExactPauseSnapshot();
     void suspendPlaybackTransport();
-    void anchorTransportToSecond(double targetSecond);
-    void startTransportFromCurrentAnchor(bool resumeFromPause);
+    void anchorTransportToSecond(double targetSecond, const QString& reason);
+    void clearResidualVoicesForPausedReposition();
+    void repositionMasterTransportClock(double targetSecond);
+    void repositionPausedTransportToSecond(double targetSecond, const QString& reason);
+    void startTransportFromCurrentAnchor();
     void resetMasterMixerClock(double startSecond);
     void stopAllSamples();
     void stopPlaybackSession();
     double authoritativeSecond() const;
-    void configureBackgroundTrackForSecond(double second);
+    void configureBackgroundTrackForSecond(
+        double second,
+        const QString& reason,
+        miacode::preview_audio::bass::BassDebugRoute route);
     bool maybeStartPendingBackgroundTrack(double second);
     bool playKindInternal(const QString& kind, double gain = 1.0);
     void triggerGroup(const CollapsedEventGroup& group);
@@ -216,8 +196,8 @@ private:
     void* bassFxTempoCreate_ = nullptr;
     RetainedPlaybackMode retainedPlaybackMode_ = RetainedPlaybackMode::None;
     RetainedBgmState retainedBgmState_ = RetainedBgmState::NoneLoaded;
-    ExactPauseSnapshot exactPauseSnapshot_;
-    bool exactPauseSnapshotValid_ = false;
+    bool initWindowActive_ = true;
+    quint64 transportReadyGeneration_ = 0;
     bool trackMissingAfterLoadLogged_ = false;
     QMutex schedulerMutex_;
     quint32 scheduledGroupSync_ = 0;

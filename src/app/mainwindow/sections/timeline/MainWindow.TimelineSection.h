@@ -34,6 +34,7 @@ public:
     void onTimelineHeaderNavigateRequested(double second);
     void onTimelineUserInteractionStarted();
     void onTimelineDragStarted();
+    void onTimelineWheelNavigateRequested(double second);
     void onTimelineCenterNavigateRequested(double second);
     void onTimelineDragFinished(double second);
     void onTimelineFollowPreviewToggled(bool enabled);
@@ -53,6 +54,7 @@ public:
     void seekTimelineToCursor(int line, int col);
     void syncTimelineToEditorCursor(bool centerView = true);
     void navigateTimelineToSecond(double second, bool focusEditor = true);
+    void deferTimelineCursorBridgeUpdate(double second, bool centerView);
     bool resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const;
     bool moveEditorCursorToTimelineLocation(
         int line,
@@ -116,7 +118,11 @@ public:
     void updatePreviewObjectStats(double second);
     QString formatPreviewTimestamp(double second) const;
     void showPreviewSliderTimeHint(int sliderValue);
-    void requestPausedPreviewSeek(double second, bool centerView, bool submitMediaImmediately = true);
+    void requestPausedPreviewSeek(
+        double second,
+        bool centerView,
+        bool submitMediaImmediately = true,
+        bool logHotPath = true);
     void applyPausedPreviewVisualSecond(double second, bool centerView);
     void submitPausedMediaSeek(double second, quint64 generation);
     void maybeSubmitLatestPausedMediaSeek();
@@ -128,11 +134,13 @@ public:
     void stopPreviewHeldSeek(int key = 0);
     void applyPreviewHeldSeekTick();
     void seekPreviewToSecond(double second, bool centerView);
+    void seekPreviewDiscreteToSecond(double second, bool centerView);
     void applyPreviewPlaybackRate(double rate);
     bool preparePreviewStartState();
     void onStopPreview();
     void onTogglePreviewPause();
     bool startQtPreviewPlayback(double second, bool resumeFromPause = false);
+    void pauseQtPreviewPlaybackExact();
     void handlePreviewStartupCanvasPresented();
     void handlePreviewStartupVideoPrepared(double second, quint64 transactionId);
     void finishQtPreviewPlaybackAndReturnToEntry(const QString& statusMessage);
@@ -146,14 +154,31 @@ public:
 
 private:
     void queueTimelineCursorBridgeUpdate(double second, bool centerView);
+    void scheduleDeferredTimelineBridgeFlush();
     void invalidatePreviewFollowBindingCache();
     bool cachedPreviewFollowBindingContainsSecond(double second) const;
     void cachePreviewFollowBinding(const TimelineQuickModel::PreviewFollowBinding& binding);
     void cancelPreviewStartupSync();
     void tryCommitPreviewStartupSync();
+    void scheduleDeferredPreviewUiTail(
+        bool applyPreviewVisualSettings,
+        bool applyDeferredAnalysis,
+        bool dispatchTimelineAnalysis,
+        bool writeProfilingSummary,
+        bool updatePauseButton,
+        bool updateObjectStats,
+        double objectStatsSecond,
+        bool refreshStageMediaDebugState,
+        bool updatePausedPreviewFollowDecoration);
+    quint64 requestPausedPreviewVisualSeek(
+        double second,
+        bool centerView,
+        int submitNowLogValue,
+        bool logHotPath = true);
+    void pauseQtPreviewPlaybackForReanchor();
     void stopQtPreviewTimers();
     void finalizeQtPreviewPlaybackStart(double effectiveStartSecond);
-    void pauseQtPreviewPlaybackExact();
+    void softStopQtPreviewPlaybackToSecond(double second, bool centerView);
     void anchorQtPreviewPlaybackToSecond(double second, bool centerView);
     MainWindow& owner_;
     MainWindow::MainWindowUiRefs& ui_;

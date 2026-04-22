@@ -1,9 +1,11 @@
 #include "timeline/quick/TimelineQuickOverlayLayer.h"
 
+#include <QMatrix4x4>
 #include <QQuickWindow>
 #include <QSGClipNode>
 #include <QSGNode>
 #include <QSGSimpleTextureNode>
+#include <QSGTransformNode>
 
 #include "timeline/quick/TimelineQuickLayerUtils.h"
 #include "timeline/quick/TimelineQuickTextureCache.h"
@@ -12,6 +14,8 @@ namespace {
 
 struct TimelineQuickOverlayRootNode : public QSGNode {
     quint64 staticRevision = 0;
+    quint64 transformedStaticNotesRevision = 0;
+    quint64 transformedStaticRevision = 0;
     quint64 dynamicRevision = 0;
     quint64 appearanceRevision = 0;
 };
@@ -39,44 +43,45 @@ QSGNode* childAt(QSGNode* parent, int index)
     return child;
 }
 
-QSGNode* ensureStaticRoot(TimelineQuickOverlayRootNode* root)
+void rebuildOverlaySlots(TimelineQuickOverlayRootNode* root)
 {
     if (root == nullptr) {
-        return nullptr;
+        return;
     }
-    QSGNode* staticRoot = childAt(root, 0);
-    if (staticRoot == nullptr) {
-        staticRoot = new QSGNode();
-        root->appendChildNode(staticRoot);
-    }
-    return staticRoot;
+    clearChildren(root);
+
+    root->appendChildNode(new QSGNode());
+
+    auto* transformedClipRoot = new QSGClipNode();
+    transformedClipRoot->setIsRectangular(true);
+    auto* transformRoot = new QSGTransformNode();
+    transformRoot->appendChildNode(new QSGNode());
+    transformRoot->appendChildNode(new QSGNode());
+    transformedClipRoot->appendChildNode(transformRoot);
+    root->appendChildNode(transformedClipRoot);
+
+    auto* viewportClipRoot = new QSGClipNode();
+    viewportClipRoot->setIsRectangular(true);
+    viewportClipRoot->appendChildNode(new QSGNode());
+    root->appendChildNode(viewportClipRoot);
 }
 
-QSGClipNode* ensureDynamicClipRoot(TimelineQuickOverlayRootNode* root)
+bool overlaySlotsValid(TimelineQuickOverlayRootNode* root)
 {
     if (root == nullptr) {
-        return nullptr;
+        return false;
     }
-    QSGNode* staticRoot = ensureStaticRoot(root);
-    Q_UNUSED(staticRoot);
-    QSGNode* child = childAt(root, 1);
-    auto* clipRoot = dynamic_cast<QSGClipNode*>(child);
-    if (clipRoot != nullptr) {
-        if (clipRoot->firstChild() == nullptr) {
-            clipRoot->appendChildNode(new QSGNode());
-        }
-        return clipRoot;
+    QSGNode* staticRoot = childAt(root, 0);
+    auto* transformedClipRoot = dynamic_cast<QSGClipNode*>(childAt(root, 1));
+    auto* viewportClipRoot = dynamic_cast<QSGClipNode*>(childAt(root, 2));
+    if (staticRoot == nullptr || transformedClipRoot == nullptr || viewportClipRoot == nullptr) {
+        return false;
     }
-
-    if (child != nullptr) {
-        root->removeChildNode(child);
-        delete child;
-    }
-    clipRoot = new QSGClipNode();
-    clipRoot->setIsRectangular(true);
-    clipRoot->appendChildNode(new QSGNode());
-    root->appendChildNode(clipRoot);
-    return clipRoot;
+    auto* transformRoot = dynamic_cast<QSGTransformNode*>(transformedClipRoot->firstChild());
+    return transformRoot != nullptr
+        && transformRoot->firstChild() != nullptr
+        && transformRoot->firstChild()->nextSibling() != nullptr
+        && viewportClipRoot->firstChild() != nullptr;
 }
 
 }  // namespace
@@ -93,9 +98,36 @@ QSGNode* TimelineQuickOverlayLayer::updateNode(
         delete oldNode;
         root = new TimelineQuickOverlayRootNode();
     }
-    QSGNode* staticRoot = ensureStaticRoot(root);
-    QSGClipNode* dynamicClipRoot = ensureDynamicClipRoot(root);
-    QSGNode* dynamicRoot = dynamicClipRoot != nullptr ? dynamicClipRoot->firstChild() : nullptr;
+    if (!overlaySlotsValid(root)) {
+        rebuildOverlaySlots(root);
+    }
+
+    QSGNode* staticRoot = childAt(root, 0);
+    auto* transformedClipRoot = dynamic_cast<QSGClipNode*>(childAt(root, 1));
+    auto* transformRoot = transformedClipRoot != nullptr
+        ? dynamic_cast<QSGTransformNode*>(transformedClipRoot->firstChild())
+        : nullptr;
+    QSGNode* transformedStaticRoot = transformRoot != nullptr ? childAt(transformRoot, 0) : nullptr;
+    QSGNode* transformedDynamicRoot = transformRoot != nullptr ? childAt(transformRoot, 1) : nullptr;
+    auto* viewportClipRoot = dynamic_cast<QSGClipNode*>(childAt(root, 2));
+    QSGNode* viewportRoot = viewportClipRoot != nullptr ? viewportClipRoot->firstChild() : nullptr;
+
+    const QRectF timelineClipRect(
+        state.timelineLeft,
+        state.timelineTop,
+        qMax(0, state.viewportSize.width() - state.timelineLeft),
+        state.timelineHeight);
+    if (transformedClipRoot != nullptr) {
+        transformedClipRoot->setClipRect(timelineClipRect);
+    }
+    if (viewportClipRoot != nullptr) {
+        viewportClipRoot->setClipRect(timelineClipRect);
+    }
+    if (transformRoot != nullptr) {
+        QMatrix4x4 matrix;
+        matrix.translate(-static_cast<float>(state.horizontalScrollValue), 0.0f);
+        transformRoot->setMatrix(matrix);
+    }
 
     const bool appearanceChanged = root->appearanceRevision != state.appearanceRevision;
     if (appearanceChanged || root->staticRevision != state.gridRevision) {
@@ -124,15 +156,10 @@ QSGNode* TimelineQuickOverlayLayer::updateNode(
         root->staticRevision = state.gridRevision;
     }
 
-    if (appearanceChanged || root->dynamicRevision != state.overlayRevision) {
-        if (dynamicClipRoot != nullptr) {
-            dynamicClipRoot->setClipRect(QRectF(
-                state.timelineLeft,
-                state.timelineTop,
-                qMax(0, state.viewportSize.width() - state.timelineLeft),
-                state.timelineHeight));
-        }
-        clearChildren(dynamicRoot);
+    if (appearanceChanged
+        || root->transformedStaticNotesRevision != state.notesRevision
+        || root->transformedStaticRevision != state.overlayRevision) {
+        clearChildren(transformedStaticRoot);
         if (textures != nullptr) {
             for (const auto& glyph : state.muriDots) {
                 const QString key = QStringLiteral("muri_dot|%1|%2|%3")
@@ -143,20 +170,27 @@ QSGNode* TimelineQuickOverlayLayer::updateNode(
                     auto* node = new QSGSimpleTextureNode();
                     node->setTexture(texture);
                     node->setRect(glyph.rect);
-                    dynamicRoot->appendChildNode(node);
+                    transformedStaticRoot->appendChildNode(node);
                 }
             }
         }
+        root->transformedStaticNotesRevision = state.notesRevision;
+        root->transformedStaticRevision = state.overlayRevision;
+    }
+
+    if (appearanceChanged || root->dynamicRevision != state.overlayDynamicRevision) {
+        clearChildren(transformedDynamicRoot);
+        clearChildren(viewportRoot);
         if (state.hasPlayheadLine) {
-            dynamicRoot->appendChildNode(buildTimelineLineNode(state.playheadLine));
+            transformedDynamicRoot->appendChildNode(buildTimelineLineNode(state.playheadLine));
         }
         if (state.hasCursorLine) {
-            dynamicRoot->appendChildNode(buildTimelineLineNode(state.cursorLine));
+            transformedDynamicRoot->appendChildNode(buildTimelineLineNode(state.cursorLine));
         }
         if (state.hasDragCenterLine) {
-            dynamicRoot->appendChildNode(buildTimelineLineNode(state.dragCenterLine));
+            viewportRoot->appendChildNode(buildTimelineLineNode(state.dragCenterLine));
         }
-        root->dynamicRevision = state.overlayRevision;
+        root->dynamicRevision = state.overlayDynamicRevision;
     }
     root->appearanceRevision = state.appearanceRevision;
     return root;

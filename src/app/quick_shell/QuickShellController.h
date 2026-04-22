@@ -92,6 +92,7 @@ public:
     Q_INVOKABLE void setPreviewRate(double rate);
     Q_INVOKABLE void setBottomTabsCurrentTabId(const QString& tabId);
     Q_INVOKABLE void timelineHeaderNavigate(double second);
+    Q_INVOKABLE void timelineWheelNavigate(double second);
     Q_INVOKABLE void timelineCenterNavigate(double second);
     Q_INVOKABLE void timelineDragStarted();
     Q_INVOKABLE void timelineDragFinished(double second);

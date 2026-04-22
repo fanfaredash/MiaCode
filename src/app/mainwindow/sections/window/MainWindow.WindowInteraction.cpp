@@ -5,6 +5,7 @@
 #include "QtPreviewSfxRuntime.h"
 #include "DialogLocalization.h"
 #include "UiText.h"
+#include "common/DebugLog.h"
 #include "common/PreviewInteractionConfig.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
@@ -28,6 +29,19 @@ constexpr int kEditorFindBarOverlayGap = 8;
 bool widgetMatchesOrDescendsFrom(QWidget* widget, QWidget* root)
 {
     return widget != nullptr && root != nullptr && (widget == root || root->isAncestorOf(widget));
+}
+
+void appendPreviewInteractionLog(const QString& action, const QString& payload = QString())
+{
+    QString text = QStringLiteral("action=%1").arg(action);
+    if (!payload.trimmed().isEmpty()) {
+        text += QStringLiteral(" ") + payload.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview/interaction"),
+        text
+    );
 }
 
 }  // namespace
@@ -600,7 +614,7 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
                     owner_.previewSlider_->setFocus(Qt::MouseFocusReason);
                     owner_.previewSlider_->setValue(value);
                     owner_.showPreviewSliderTimeHint(value);
-                    owner_.seekPreviewToSecond(static_cast<double>(value) / 1000.0, true);
+                    owner_.seekPreviewDiscreteToSecond(static_cast<double>(value) / 1000.0, true);
                     return true;
                 }
             }
@@ -684,12 +698,25 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
         const bool ctrlLeftClick = mouseEvent->button() == Qt::LeftButton
             && (mouseEvent->modifiers() & Qt::ControlModifier);
         if (ctrlLeftClick) {
+            if (!owner_.editorCtrlLeftJumpPending_) {
+                owner_.editorCtrlLeftJumpInteractionOp_ = ++owner_.previewInteractionSequence_;
+                const quint64 opId = owner_.editorCtrlLeftJumpInteractionOp_;
+                appendPreviewInteractionLog(
+                    QStringLiteral("ctrl_click_press"),
+                    QString("op=%1 source=editor_ctrl_click x=%2 y=%3 modifiers=%4")
+                        .arg(opId)
+                        .arg(mouseEvent->pos().x())
+                        .arg(mouseEvent->pos().y())
+                        .arg(static_cast<int>(mouseEvent->modifiers())));
+            }
             owner_.editorCtrlLeftJumpPending_ = true;
             owner_.editorCtrlLeftJumpDragged_ = false;
             owner_.editorCtrlLeftJumpPressPos_ = mouseEvent->pos();
         } else if (mouseEvent->button() == Qt::LeftButton) {
             owner_.editorCtrlLeftJumpPending_ = false;
             owner_.editorCtrlLeftJumpDragged_ = false;
+            owner_.editorCtrlLeftJumpDispatchActive_ = false;
+            owner_.editorCtrlLeftJumpInteractionOp_ = 0;
         }
         if (mouseEvent->button() == Qt::LeftButton && !owner_.qtPreviewPlaying_ && !ctrlLeftClick) {
             QTimer::singleShot(0, &owner_, [this]() {
@@ -716,38 +743,93 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
     if (watched == owner_.editorViewport_ && event->type() == QEvent::MouseButtonRelease) {
         auto* mouseEvent = static_cast<QMouseEvent*>(event);
         if (mouseEvent->button() == Qt::LeftButton && owner_.editorCtrlLeftJumpPending_) {
-            const bool shouldJump = !owner_.editorCtrlLeftJumpDragged_
+            const bool wasDragged = owner_.editorCtrlLeftJumpDragged_;
+            const bool shouldJump = !wasDragged
                 && (mouseEvent->modifiers() & Qt::ControlModifier);
             const QPoint releasePos = mouseEvent->pos();
+            const quint64 opId = owner_.editorCtrlLeftJumpInteractionOp_ != 0
+                ? owner_.editorCtrlLeftJumpInteractionOp_
+                : ++owner_.previewInteractionSequence_;
             owner_.editorCtrlLeftJumpPending_ = false;
             owner_.editorCtrlLeftJumpDragged_ = false;
+            appendPreviewInteractionLog(
+                QStringLiteral("ctrl_click_release"),
+                QString("op=%1 source=editor_ctrl_click should_jump=%2 dragged=%3 x=%4 y=%5 modifiers=%6")
+                    .arg(opId)
+                    .arg(shouldJump ? 1 : 0)
+                    .arg(wasDragged ? 1 : 0)
+                    .arg(releasePos.x())
+                    .arg(releasePos.y())
+                    .arg(static_cast<int>(mouseEvent->modifiers())));
             if (shouldJump) {
-                QTimer::singleShot(0, &owner_, [this, releasePos]() {
-                    auto* editor = qobject_cast<PlainCodeEditor*>(owner_.editorWidget_);
-                    if (editor == nullptr) {
-                        return;
-                    }
-                    const QTextCursor cursor = editor->cursorForPosition(releasePos);
-                    const int line = cursor.blockNumber() + 1;
-                    const int col = cursor.positionInBlock() + 1;
-                    const double second = owner_.timelineSecondForCursor(line, col);
-                    if (owner_.qtPreviewPlaying_) {
-                        owner_.stopQtPreviewPlayback(true);
-                    }
-                    owner_.seekPreviewToSecond(second, false);
-                    if (owner_.timelineQuickStateBridge_ != nullptr) {
-                        const bool quickTimelineBridgeReady =
-                            !owner_.quickShellUiFocusBridgeMode_ || owner_.quickTimelineSurfaceReady_;
-                        if (quickTimelineBridgeReady) {
-                            owner_.timelineQuickStateBridge_->setCursorSeconds(second, true);
-                            owner_.timelineQuickStateBridge_->focusCursor(false);
-                        } else {
-                            owner_.pendingQuickTimelineCursorSync_ = true;
-                            owner_.pendingQuickTimelineCursorSecond_ = second;
-                            owner_.pendingQuickTimelineCursorCenterView_ = true;
-                        }
-                    }
-                });
+                owner_.editorCtrlLeftJumpDispatchActive_ = true;
+                owner_.deferredEditorUiTimelineCursorPending_ = false;
+                owner_.deferredEditorUiCenterView_ = false;
+                owner_.pendingQuickTimelineCursorSync_ = false;
+                owner_.pendingQuickTimelineCursorSecond_ = 0.0;
+                owner_.pendingQuickTimelineCursorCenterView_ = false;
+                appendPreviewInteractionLog(
+                    QStringLiteral("ctrl_click_dispatch"),
+                    QString("op=%1 source=editor_ctrl_click x=%2 y=%3")
+                        .arg(opId)
+                        .arg(releasePos.x())
+                        .arg(releasePos.y()));
+                auto* editor = qobject_cast<PlainCodeEditor*>(owner_.editorWidget_);
+                if (editor == nullptr) {
+                    appendPreviewInteractionLog(
+                        QStringLiteral("ctrl_click_abort"),
+                        QString("op=%1 source=editor_ctrl_click reason=no_editor").arg(opId));
+                    owner_.editorCtrlLeftJumpDispatchActive_ = false;
+                    owner_.editorCtrlLeftJumpInteractionOp_ = 0;
+                    return false;
+                }
+                const QTextCursor cursor = editor->cursorForPosition(releasePos);
+                const int line = cursor.blockNumber() + 1;
+                const int col = cursor.positionInBlock() + 1;
+                const double second = owner_.timelineSecondForCursor(line, col);
+                appendPreviewInteractionLog(
+                    QStringLiteral("ctrl_click_resolved"),
+                    QString("op=%1 source=editor_ctrl_click line=%2 col=%3 second=%4 playing=%5")
+                        .arg(opId)
+                        .arg(line)
+                        .arg(col)
+                        .arg(second, 0, 'f', 6)
+                        .arg(owner_.qtPreviewPlaying_ ? 1 : 0));
+                if (owner_.qtPreviewPlaying_) {
+                    appendPreviewInteractionLog(
+                        QStringLiteral("ctrl_click_pause_begin"),
+                        QString("op=%1 source=editor_ctrl_click current_second=%2")
+                            .arg(opId)
+                            .arg(owner_.currentPreviewAuthoritativeAudioClockSecond(), 0, 'f', 6));
+                    owner_.pauseQtPreviewPlaybackExact();
+                    appendPreviewInteractionLog(
+                        QStringLiteral("ctrl_click_pause_complete"),
+                        QString("op=%1 source=editor_ctrl_click paused_second=%2")
+                            .arg(opId)
+                            .arg(owner_.qtPreviewPauseSecond_, 0, 'f', 6));
+                }
+                const bool previousSuppressTimelineCursorSync = owner_.suppressTimelineCursorSync_;
+                owner_.suppressTimelineCursorSync_ = true;
+                appendPreviewInteractionLog(
+                    QStringLiteral("ctrl_click_seek_begin"),
+                    QString("op=%1 source=editor_ctrl_click target_second=%2")
+                        .arg(opId)
+                        .arg(second, 0, 'f', 6));
+                owner_.seekPreviewDiscreteToSecond(second, true);
+                if (owner_.timelineQuickStateBridge_ != nullptr) {
+                    owner_.deferTimelineCursorBridgeUpdate(second, false);
+                }
+                appendPreviewInteractionLog(
+                    QStringLiteral("ctrl_click_seek_complete"),
+                    QString("op=%1 source=editor_ctrl_click final_second=%2")
+                        .arg(opId)
+                        .arg(owner_.qtPreviewPauseSecond_, 0, 'f', 6));
+                owner_.suppressTimelineCursorSync_ = previousSuppressTimelineCursorSync;
+                owner_.editorCtrlLeftJumpDispatchActive_ = false;
+                owner_.editorCtrlLeftJumpInteractionOp_ = 0;
+            } else {
+                owner_.editorCtrlLeftJumpDispatchActive_ = false;
+                owner_.editorCtrlLeftJumpInteractionOp_ = 0;
             }
         }
     }

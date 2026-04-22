@@ -157,6 +157,11 @@ Preview diagnostics now split these timing sources instead of reporting a single
   - `preview/stage_media` now also emits low-noise `action=video_frame_stall_begin` / `action=video_frame_stall_end` transitions when external video stops delivering frames for longer than expected
   - `window/focus` records app-level focus transitions, activation edges, watched editor focus events, and text-focus restore attempts for focus-regression diagnosis
   - BASS `bass_status` sampling is now reduced to about once per second in debug mode
+  - `preview/interaction` correlates user-facing preview actions such as `play`, `pause`, `stop`, and `ctrl+click` seek
+  - `timeline/interaction` records quick timeline drag, wheel-scroll, and held-key horizontal scroll inputs
+  - `timeline/bridge` records quick timeline bridge state pushes such as `action=set_horizontal_scroll_value`
+  - `timeline/quick_scene` records both full `scene_state_rebuild_*` boundaries and scroll-only `action=content_transform_update` paints for the quick timeline
+  - `timeline/cursor_map` profiles `timelineSecondForCursor()` so editor cursor-to-second mapping can be separated from redraw cost
 
 ## Useful Workflows
 

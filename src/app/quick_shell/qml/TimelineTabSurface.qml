@@ -43,6 +43,10 @@ Item {
             if (controller)
                 controller.timelineHeaderNavigate(second)
         }
+        onTimelineWheelNavigateRequested: function(second) {
+            if (controller)
+                controller.timelineWheelNavigate(second)
+        }
         onCenterNavigateRequested: function(second) {
             if (controller)
                 controller.timelineCenterNavigate(second)

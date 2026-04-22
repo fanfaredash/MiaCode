@@ -114,9 +114,13 @@ void TimelineView::mousePressEvent(QMouseEvent* event)
     emit timelineDragStarted();
     if (!playheadNearViewportCenter()) {
         const double centerSecond = viewportCenterSecond();
-        setPlayheadSeconds(centerSecond, false);
         emit centerNavigateRequested(centerSecond);
     }
+    appendTimelineUiPerfLog(
+        QStringLiteral("kind=drag_begin scroll=%1 center_second=%2")
+            .arg(horizontalScrollBar() != nullptr ? horizontalScrollBar()->value() : 0)
+            .arg(viewportCenterSecond(), 0, 'f', 6)
+    );
     event->accept();
 }
 
@@ -125,7 +129,7 @@ void TimelineView::mouseMoveEvent(QMouseEvent* event)
     if (event != nullptr && timelineDragActive_) {
         const int deltaX = qRound(event->position().x()) - timelineDragStartX_;
         setHorizontalScrollValue(timelineDragStartScrollValue_ - deltaX);
-        updatePlayheadToViewportCenter();
+        emit centerNavigateRequested(viewportCenterSecond());
         event->accept();
         return;
     }
@@ -138,6 +142,11 @@ void TimelineView::mouseReleaseEvent(QMouseEvent* event)
         timelineDragActive_ = false;
         viewport()->unsetCursor();
         restorePlayheadIndicatorAfterInteraction(true);
+        appendTimelineUiPerfLog(
+            QStringLiteral("kind=drag_end scroll=%1 center_second=%2")
+                .arg(horizontalScrollBar() != nullptr ? horizontalScrollBar()->value() : 0)
+                .arg(viewportCenterSecond(), 0, 'f', 6)
+        );
         emit timelineDragFinished(viewportCenterSecond());
         event->accept();
         return;
@@ -159,14 +168,9 @@ void TimelineView::wheelEvent(QWheelEvent* event)
         setFocus(Qt::MouseFocusReason);
         emit timelineUserInteractionStarted();
         focusPlayhead(false);
-        if (!playheadNearViewportCenter()) {
-            const double centerSecond = viewportCenterSecond();
-            setPlayheadSeconds(centerSecond, false);
-            emit centerNavigateRequested(centerSecond);
-        }
         suppressPlayheadIndicatorForInteraction();
         setHorizontalScrollValue(horizontalScrollBar()->value() - (delta / 2));
-        updatePlayheadToViewportCenter();
+        emit timelineWheelNavigateRequested(viewportCenterSecond());
         restorePlayheadIndicatorAfterInteraction();
         event->accept();
         return;

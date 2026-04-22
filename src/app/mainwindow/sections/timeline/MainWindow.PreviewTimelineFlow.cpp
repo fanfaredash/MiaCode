@@ -66,6 +66,23 @@ void MainWindow::TimelineSection::queueTimelineCursorBridgeUpdate(double second,
         state_.pendingQuickTimelineCursorCenterView_ || centerView;
 }
 
+void MainWindow::TimelineSection::scheduleDeferredTimelineBridgeFlush()
+{
+    const quint64 generation = ++state_.deferredTimelineBridgeFlushGeneration_;
+    QTimer::singleShot(0, &owner_, [this, generation]() {
+        if (generation != state_.deferredTimelineBridgeFlushGeneration_) {
+            return;
+        }
+        flushDeferredTimelineBridgeState();
+    });
+}
+
+void MainWindow::TimelineSection::deferTimelineCursorBridgeUpdate(double second, bool centerView)
+{
+    queueTimelineCursorBridgeUpdate(second, centerView);
+    scheduleDeferredTimelineBridgeFlush();
+}
+
 void MainWindow::TimelineSection::flushDeferredTimelineBridgeState()
 {
     if (state_.timelineQuickStateBridge_ == nullptr
@@ -82,7 +99,6 @@ void MainWindow::TimelineSection::flushDeferredTimelineBridgeState()
     state_.timelineQuickStateBridge_->setCursorSeconds(
         state_.pendingQuickTimelineCursorSecond_,
         state_.pendingQuickTimelineCursorCenterView_);
-    state_.timelineQuickStateBridge_->focusCursor(state_.pendingQuickTimelineCursorCenterView_);
     state_.pendingQuickTimelineCursorSync_ = false;
     state_.pendingQuickTimelineCursorSecond_ = 0.0;
     state_.pendingQuickTimelineCursorCenterView_ = false;
@@ -92,6 +108,22 @@ namespace {
 
 constexpr double kTimelineZeroSecondTolerance = 1e-6;
 constexpr int kTimelineAnalysisIdleDelayMs = 180;
+
+void appendTimelineInteractionLog(const QString& action, const QString& payload = QString())
+{
+    if (!miacode::debug_options::runtimeDebugOutputEnabled()) {
+        return;
+    }
+    QString text = QStringLiteral("action=%1").arg(action);
+    if (!payload.trimmed().isEmpty()) {
+        text += QStringLiteral(" ") + payload.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("timeline/interaction"),
+        text
+    );
+}
 
 QString workspaceSwapPreviewPanelStyleSheet(bool swapped)
 {
@@ -645,13 +677,18 @@ void MainWindow::TimelineSection::onTimelineHeaderNavigateRequested(double secon
 void MainWindow::TimelineSection::onTimelineUserInteractionStarted()
 {
     if (state_.qtPreviewPlaying_) {
-        stopQtPreviewPlayback(true);
+        pauseQtPreviewPlaybackExact();
         owner_.updatePauseButtonAppearance();
     }
 }
 
 void MainWindow::TimelineSection::onTimelineDragStarted()
 {
+    appendTimelineInteractionLog(
+        QStringLiteral("drag_scrub_begin"),
+        QString("playing=%1 current_second=%2")
+            .arg(state_.qtPreviewPlaying_ ? 1 : 0)
+            .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6));
     stopPreviewHeldSeek();
     QToolTip::hideText();
     state_.previewScrubRenderElapsed_.invalidate();
@@ -666,21 +703,36 @@ void MainWindow::TimelineSection::onTimelineDragStarted()
 void MainWindow::TimelineSection::onTimelineCenterNavigateRequested(double second)
 {
     const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    const int elapsedMs = state_.previewScrubRenderElapsed_.isValid()
+        ? static_cast<int>(state_.previewScrubRenderElapsed_.elapsed())
+        : -1;
     const bool shouldRenderNow = !state_.previewScrubRenderElapsed_.isValid()
-        || state_.previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs;
+        || elapsedMs >= kPreviewScrubRenderIntervalMs;
     if (shouldRenderNow) {
-        if (ui_.previewSeekDebounceTimer_ != nullptr) {
-            ui_.previewSeekDebounceTimer_->stop();
-        }
-        seekPreviewToSecond(clampedSecond, false);
+        owner_.ensurePreviewStageMediaRouteInitialized();
+        owner_.ensurePreviewSfxRuntimePrepared();
+        requestPausedPreviewSeek(clampedSecond, false, false, false);
         state_.previewScrubRenderElapsed_.restart();
     } else {
         schedulePreviewSeek(clampedSecond, false);
     }
 }
 
+void MainWindow::TimelineSection::onTimelineWheelNavigateRequested(double second)
+{
+    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    if (ui_.previewSeekDebounceTimer_ != nullptr) {
+        ui_.previewSeekDebounceTimer_->stop();
+    }
+    seekPreviewToSecond(clampedSecond, false);
+}
+
 void MainWindow::TimelineSection::onTimelineDragFinished(double second)
 {
+    appendTimelineInteractionLog(
+        QStringLiteral("drag_scrub_end"),
+        QString("second=%1")
+            .arg(second, 0, 'f', 6));
     stopPreviewHeldSeek();
     QToolTip::hideText();
     state_.previewScrubRenderElapsed_.invalidate();
@@ -991,7 +1043,21 @@ void MainWindow::TimelineSection::rebuildStaticMuriReferences(const QVector<Time
 
 double MainWindow::TimelineSection::timelineSecondForCursor(int line, int col) const
 {
-    return state_.timelineQuickModel_.timelineSecondForCursor(line, col);
+    QElapsedTimer timer;
+    timer.start();
+    const double second = state_.timelineQuickModel_.timelineSecondForCursor(line, col);
+    if (state_.runtimeDebugOutputEnabled_) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("timeline/cursor_map"),
+            QStringLiteral("action=timeline_second_for_cursor line=%1 col=%2 second=%3 elapsed_ms=%4")
+                .arg(line)
+                .arg(col)
+                .arg(second, 0, 'f', 6)
+                .arg(timer.nsecsElapsed() / 1000000.0, 0, 'f', 3)
+        );
+    }
+    return second;
 }
 
 void MainWindow::TimelineSection::seekTimelineToCursor(int line, int col)
@@ -1006,7 +1072,6 @@ void MainWindow::TimelineSection::seekTimelineToCursor(int line, int col)
             state_.pendingQuickTimelineCursorSecond_ = 0.0;
             state_.pendingQuickTimelineCursorCenterView_ = false;
             state_.timelineQuickStateBridge_->setCursorSeconds(second, true);
-            state_.timelineQuickStateBridge_->focusCursor(false);
         } else {
             queueTimelineCursorBridgeUpdate(second, true);
         }
@@ -1016,6 +1081,8 @@ void MainWindow::TimelineSection::seekTimelineToCursor(int line, int col)
 void MainWindow::TimelineSection::syncTimelineToEditorCursor(bool centerView)
 {
     if (state_.suppressTimelineCursorSync_
+        || state_.editorCtrlLeftJumpPending_
+        || state_.editorCtrlLeftJumpDispatchActive_
         || !hasActiveDifficulty()
         || state_.timelineQuickStateBridge_ == nullptr) {
         return;
@@ -1039,7 +1106,6 @@ void MainWindow::TimelineSection::syncTimelineToEditorCursor(bool centerView)
             state_.pendingQuickTimelineCursorSecond_ = 0.0;
             state_.pendingQuickTimelineCursorCenterView_ = false;
             state_.timelineQuickStateBridge_->setCursorSeconds(second, bridgeCenterView);
-            state_.timelineQuickStateBridge_->focusCursor(false);
         } else {
             queueTimelineCursorBridgeUpdate(second, bridgeCenterView);
         }
@@ -1065,17 +1131,9 @@ void MainWindow::TimelineSection::navigateTimelineToSecond(double second, bool f
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
         ui_.previewSeekDebounceTimer_->stop();
     }
-    seekPreviewToSecond(clampedSecond, true);
+    seekPreviewDiscreteToSecond(clampedSecond, true);
     if (state_.timelineQuickStateBridge_ != nullptr) {
-        if (quickTimelineBridgeReady() && timelineTabIsForeground()) {
-            state_.pendingQuickTimelineCursorSync_ = false;
-            state_.pendingQuickTimelineCursorSecond_ = 0.0;
-            state_.pendingQuickTimelineCursorCenterView_ = false;
-            state_.timelineQuickStateBridge_->setCursorSeconds(cursorSecond, false);
-            state_.timelineQuickStateBridge_->focusPlayhead(true);
-        } else {
-            queueTimelineCursorBridgeUpdate(cursorSecond, false);
-        }
+        deferTimelineCursorBridgeUpdate(cursorSecond, false);
     }
 
     moveEditorCursorToTimelineLocation(line, col, false, focusEditor, true, true);
@@ -1520,6 +1578,10 @@ void MainWindow::scheduleDeferredEditorUiUpdate(
     double previewFollowSecond,
     bool ensurePreviewFollowVisible)
 {
+    const bool allowTimelineCursorSync =
+        !(state_.editorCtrlLeftJumpPending_ || state_.editorCtrlLeftJumpDispatchActive_);
+    const bool effectiveSyncTimelineCursor = syncTimelineCursor && allowTimelineCursorSync;
+    const bool effectiveCenterView = centerView && effectiveSyncTimelineCursor;
     if (state_.runtimeDebugOutputEnabled_) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
@@ -1529,8 +1591,8 @@ void MainWindow::scheduleDeferredEditorUiUpdate(
             )
                 .arg(updateStatus ? 1 : 0)
                 .arg(updateEmptyState ? 1 : 0)
-                .arg(syncTimelineCursor ? 1 : 0)
-                .arg(centerView ? 1 : 0)
+                .arg(effectiveSyncTimelineCursor ? 1 : 0)
+                .arg(effectiveCenterView ? 1 : 0)
                 .arg(syncPreviewFollow ? 1 : 0)
                 .arg(previewFollowSecond, 0, 'f', 6)
                 .arg(state_.quickTimelineSurfaceReady_ ? 1 : 0)
@@ -1538,8 +1600,9 @@ void MainWindow::scheduleDeferredEditorUiUpdate(
     }
     deferredEditorUiStatusPending_ = deferredEditorUiStatusPending_ || updateStatus;
     deferredEditorUiEmptyStatePending_ = deferredEditorUiEmptyStatePending_ || updateEmptyState;
-    deferredEditorUiTimelineCursorPending_ = deferredEditorUiTimelineCursorPending_ || syncTimelineCursor;
-    deferredEditorUiCenterView_ = deferredEditorUiCenterView_ || centerView;
+    deferredEditorUiTimelineCursorPending_ =
+        deferredEditorUiTimelineCursorPending_ || effectiveSyncTimelineCursor;
+    deferredEditorUiCenterView_ = deferredEditorUiCenterView_ || effectiveCenterView;
     if (syncPreviewFollow) {
         deferredEditorUiPreviewFollowPending_ = true;
         deferredEditorUiPreviewFollowSecond_ = previewFollowSecond;
@@ -1758,6 +1821,11 @@ void MainWindow::syncTimelineToEditorCursor(bool centerView)
 void MainWindow::navigateTimelineToSecond(double second, bool focusEditor)
 {
     timelineSection_->navigateTimelineToSecond(second, focusEditor);
+}
+
+void MainWindow::deferTimelineCursorBridgeUpdate(double second, bool centerView)
+{
+    timelineSection_->deferTimelineCursorBridgeUpdate(second, centerView);
 }
 
 bool MainWindow::resolveNearestTimelineNote(double second, int lane, int* line, int* col, double* noteSecond) const

@@ -146,6 +146,7 @@ public:
     void setShellPreviewFullscreen(bool fullscreen) override;
     void setShellBottomTabsCurrentTab(const QString& tabId) override;
     void navigateShellTimelineToSecond(double second) override;
+    void wheelShellTimelineNavigate(double second) override;
     void centerShellTimelineNavigate(double second) override;
     void shellTimelineDragStarted() override;
     void shellTimelineDragFinished(double second) override;

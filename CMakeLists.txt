@@ -636,6 +636,17 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/common/PreviewSfxSemantics.h
     )
 
+    add_executable(bass_preview_retained_state_spec
+        src/tools/preview/BassPreviewRetainedStateSpec.cpp
+        src/preview/audio/BassPreviewRetainedState.h
+        src/preview/audio/PreviewAudioBackend.h
+    )
+
+    add_executable(bass_preview_debug_log_routing_spec
+        src/tools/preview/BassPreviewDebugLogRoutingSpec.cpp
+        src/preview/audio/BassPreviewDebugLogRouting.h
+    )
+
     add_executable(quickshell_preview_surface_policy_spec
         src/tools/preview/QuickShellPreviewSurfacePolicySpec.cpp
         src/app/quick_shell/QuickShellPreviewSurfacePolicy.h
@@ -861,6 +872,26 @@ if (MIACODE_BUILD_DEV_TOOLS)
         Qt6::Core
     )
     target_include_directories(preview_audio_settings_spec PRIVATE
+        src
+        src/common
+        src/preview
+        src/preview/audio
+    )
+
+    target_link_libraries(bass_preview_retained_state_spec PRIVATE
+        Qt6::Core
+    )
+    target_include_directories(bass_preview_retained_state_spec PRIVATE
+        src
+        src/common
+        src/preview
+        src/preview/audio
+    )
+
+    target_link_libraries(bass_preview_debug_log_routing_spec PRIVATE
+        Qt6::Core
+    )
+    target_include_directories(bass_preview_debug_log_routing_spec PRIVATE
         src
         src/common
         src/preview

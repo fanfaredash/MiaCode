@@ -38,6 +38,7 @@ public:
     virtual void setShellPreviewFullscreen(bool fullscreen) = 0;
     virtual void setShellBottomTabsCurrentTab(const QString& tabId) = 0;
     virtual void navigateShellTimelineToSecond(double second) = 0;
+    virtual void wheelShellTimelineNavigate(double second) = 0;
     virtual void centerShellTimelineNavigate(double second) = 0;
     virtual void shellTimelineDragStarted() = 0;
     virtual void shellTimelineDragFinished(double second) = 0;

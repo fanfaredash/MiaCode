@@ -276,6 +276,7 @@ void TimelineQuickStateBridge::bumpAllRevisions()
     ++headerRevision_;
     ++notesRevision_;
     ++overlayRevision_;
+    ++overlayDynamicRevision_;
 }
 
 void TimelineQuickStateBridge::bumpHeaderRevision()
@@ -291,6 +292,11 @@ void TimelineQuickStateBridge::bumpNotesRevision()
 void TimelineQuickStateBridge::bumpOverlayRevision()
 {
     ++overlayRevision_;
+}
+
+void TimelineQuickStateBridge::bumpOverlayDynamicRevision()
+{
+    ++overlayDynamicRevision_;
 }
 
 void TimelineQuickStateBridge::attachReferenceView(TimelineView* referenceView)
@@ -320,6 +326,7 @@ void TimelineQuickStateBridge::clear()
     playheadSeconds_ = 0.0;
     cursorSeconds_ = 0.0;
     playheadIndicatorSuppressed_ = false;
+    refreshLayoutMetrics();
     bumpAllRevisions();
     emit renderStateChanged();
 }
@@ -327,6 +334,7 @@ void TimelineQuickStateBridge::clear()
 void TimelineQuickStateBridge::setTimelineData(const TimelineRenderSnapshot& snapshot)
 {
     snapshot_ = snapshot;
+    refreshLayoutMetrics();
     bumpAllRevisions();
     emit renderStateChanged();
 }
@@ -340,6 +348,7 @@ void TimelineQuickStateBridge::setWaveformData(
     const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData)
 {
     waveformData_ = waveformData;
+    refreshLayoutMetrics();
     bumpAllRevisions();
     emit renderStateChanged();
 }
@@ -395,6 +404,7 @@ void TimelineQuickStateBridge::setQuickViewportSize(const QSize& viewportSize)
         return;
     }
     quickViewportSize_ = normalized;
+    refreshLayoutMetrics();
     bumpAllRevisions();
     emit renderStateChanged();
 }
@@ -407,6 +417,30 @@ QSize TimelineQuickStateBridge::effectiveViewportSize() const
     return QSize(1, 1);
 }
 
+void TimelineQuickStateBridge::refreshLayoutMetrics()
+{
+    miacode::timeline::TimelineSceneBuildRequest request;
+    request.snapshot = snapshot_;
+    request.waveformData = waveformData_;
+    request.viewportSize = effectiveViewportSize();
+    request.zoomScale = zoomScale();
+    request.playbackEntrySeconds = playbackEntrySeconds_;
+    request.playheadSeconds = playheadSeconds_;
+    request.cursorSeconds = cursorSeconds_;
+    request.playheadUpperLimitSeconds = playheadUpperLimitSeconds_;
+    layoutMetrics_ = miacode::timeline::TimelineSceneStateBuilder::layoutMetrics(request);
+    layoutMetricsValid_ = true;
+    horizontalScrollValue_ = qBound(0, horizontalScrollValue_, maxHorizontalScrollValue());
+}
+
+int TimelineQuickStateBridge::maxHorizontalScrollValue() const
+{
+    if (!layoutMetricsValid_) {
+        return 0;
+    }
+    return miacode::timeline::TimelineSceneStateBuilder::maxHorizontalScrollValue(layoutMetrics_);
+}
+
 int TimelineQuickStateBridge::horizontalScrollValue() const
 {
     return horizontalScrollValue_;
@@ -414,36 +448,24 @@ int TimelineQuickStateBridge::horizontalScrollValue() const
 
 void TimelineQuickStateBridge::setHorizontalScrollValue(int value)
 {
-    const miacode::timeline::TimelineSceneBuildRequest request{
-        snapshot_,
-        waveformData_,
-        muriMarkerLocationIds_,
-        muriMarkerTooltips_,
-        effectiveViewportSize(),
-        headerLineNumberFont_,
-        0,
-        0,
-        effectiveViewportSize().width(),
-        zoomScale(),
-        playbackEntrySeconds_,
-        playheadSeconds_,
-        cursorSeconds_,
-        playheadUpperLimitSeconds_,
-        showSlideTracks_,
-        playheadIndicatorSuppressed_,
-        false,
-        gridRevision_,
-        waveformRevision_,
-        headerRevision_,
-        notesRevision_,
-        overlayRevision_};
-    const miacode::timeline::TimelineSceneState state = miacode::timeline::TimelineSceneStateBuilder::build(request);
-    const int clamped = qBound(0, value, qMax(0, state.contentWidth - state.viewportSize.width()));
+    if (!layoutMetricsValid_) {
+        refreshLayoutMetrics();
+    }
+    const int clamped = qBound(0, value, maxHorizontalScrollValue());
     if (horizontalScrollValue_ == clamped) {
         return;
     }
     horizontalScrollValue_ = clamped;
-    bumpAllRevisions();
+    if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("timeline/bridge"),
+            QStringLiteral("action=set_horizontal_scroll_value value=%1 max=%2 viewport_width=%3")
+                .arg(horizontalScrollValue_)
+                .arg(maxHorizontalScrollValue())
+                .arg(effectiveViewportSize().width())
+        );
+    }
     emit renderStateChanged();
 }
 
@@ -474,38 +496,26 @@ void TimelineQuickStateBridge::cycleZoomPreset(double anchorSecond)
         return;
     }
     zoomPresetIndex_ = nextIndex;
+    refreshLayoutMetrics();
     centerOnSecond(anchorSecond);
     bumpAllRevisions();
     emit renderStateChanged();
 }
 
-void TimelineQuickStateBridge::centerOnSecond(double second)
+bool TimelineQuickStateBridge::centerOnSecond(double second)
 {
-    miacode::timeline::TimelineSceneBuildRequest request;
-    request.snapshot = snapshot_;
-    request.waveformData = waveformData_;
-    request.muriMarkerLocationIds = muriMarkerLocationIds_;
-    request.viewportSize = effectiveViewportSize();
-    request.headerLineNumberFont = headerLineNumberFont_;
-    request.horizontalScrollValue = horizontalScrollValue_;
-    request.headerLeftLimit = 0;
-    request.headerRightLimit = request.viewportSize.width();
-    request.zoomScale = zoomScale();
-    request.playbackEntrySeconds = playbackEntrySeconds_;
-    request.playheadSeconds = playheadSeconds_;
-    request.cursorSeconds = cursorSeconds_;
-    request.playheadUpperLimitSeconds = playheadUpperLimitSeconds_;
-    request.showSlideTracks = showSlideTracks_;
-    request.playheadIndicatorSuppressed = playheadIndicatorSuppressed_;
-    request.gridRevision = gridRevision_;
-    request.waveformRevision = waveformRevision_;
-    request.headerRevision = headerRevision_;
-    request.notesRevision = notesRevision_;
-    request.overlayRevision = overlayRevision_;
-    const miacode::timeline::TimelineSceneState state = miacode::timeline::TimelineSceneStateBuilder::build(request);
+    if (!layoutMetricsValid_) {
+        refreshLayoutMetrics();
+    }
     const int targetX =
-        miacode::timeline::TimelineSceneStateBuilder::secondToSceneX(state, second) - (state.viewportSize.width() / 2);
-    horizontalScrollValue_ = qBound(0, targetX, qMax(0, state.contentWidth - state.viewportSize.width()));
+        miacode::timeline::TimelineSceneStateBuilder::secondToSceneX(layoutMetrics_, second)
+        - (layoutMetrics_.viewportSize.width() / 2);
+    const int clamped = qBound(0, targetX, maxHorizontalScrollValue());
+    if (horizontalScrollValue_ == clamped) {
+        return false;
+    }
+    horizontalScrollValue_ = clamped;
+    return true;
 }
 
 void TimelineQuickStateBridge::stepZoomPreset(int deltaSteps, double anchorSecond)
@@ -518,6 +528,7 @@ void TimelineQuickStateBridge::stepZoomPreset(int deltaSteps, double anchorSecon
         return;
     }
     zoomPresetIndex_ = nextIndex;
+    refreshLayoutMetrics();
     centerOnSecond(anchorSecond);
     bumpAllRevisions();
     emit renderStateChanged();
@@ -530,7 +541,7 @@ void TimelineQuickStateBridge::setPlaybackEntrySeconds(double second)
         return;
     }
     playbackEntrySeconds_ = clamped;
-    bumpAllRevisions();
+    bumpHeaderRevision();
     emit renderStateChanged();
 }
 
@@ -541,11 +552,21 @@ double TimelineQuickStateBridge::playbackEntrySeconds() const
 
 void TimelineQuickStateBridge::setPlayheadUpperLimitSeconds(double second)
 {
-    playheadUpperLimitSeconds_ = second > 0.0 ? second : -1.0;
+    const double clampedUpperLimit = second > 0.0 ? second : -1.0;
+    const bool limitChanged = !qFuzzyCompare(playheadUpperLimitSeconds_ + 2.0, clampedUpperLimit + 2.0);
+    playheadUpperLimitSeconds_ = clampedUpperLimit;
+    bool playheadValueChanged = false;
     if (playheadUpperLimitSeconds_ > 0.0 && playheadSeconds_ > playheadUpperLimitSeconds_) {
+        playheadValueChanged = !qFuzzyCompare(playheadSeconds_ + 1.0, playheadUpperLimitSeconds_ + 1.0);
         playheadSeconds_ = playheadUpperLimitSeconds_;
     }
-    bumpAllRevisions();
+    if (!limitChanged && !playheadValueChanged) {
+        return;
+    }
+    bumpOverlayDynamicRevision();
+    if (playheadValueChanged) {
+        emit playheadChanged(playheadSeconds_);
+    }
     emit renderStateChanged();
 }
 
@@ -572,12 +593,11 @@ void TimelineQuickStateBridge::setPlayheadSeconds(double second, bool centerView
     }
     const bool changed = !qFuzzyCompare(playheadSeconds_ + 1.0, clamped + 1.0);
     playheadSeconds_ = clamped;
-    if (centerView) {
-        centerOnSecond(playheadSeconds_);
-        bumpAllRevisions();
-    } else {
-        bumpOverlayRevision();
+    const bool scrollChanged = centerView ? centerOnSecond(playheadSeconds_) : false;
+    if (!changed && !scrollChanged) {
+        return;
     }
+    bumpOverlayDynamicRevision();
     if (changed) {
         emit playheadChanged(playheadSeconds_);
     }
@@ -592,16 +612,16 @@ double TimelineQuickStateBridge::cursorSeconds() const
 void TimelineQuickStateBridge::setCursorSeconds(double second, bool centerView)
 {
     const double clamped = qIsFinite(second) ? second : 0.0;
-    if (qFuzzyCompare(cursorSeconds_ + 1.0, clamped + 1.0) && !centerView) {
+    const bool changed = !qFuzzyCompare(cursorSeconds_ + 1.0, clamped + 1.0);
+    if (!changed && !centerView) {
         return;
     }
     cursorSeconds_ = clamped;
-    if (centerView) {
-        centerOnSecond(cursorSeconds_);
-        bumpAllRevisions();
-    } else {
-        bumpOverlayRevision();
+    const bool scrollChanged = centerView ? centerOnSecond(cursorSeconds_) : false;
+    if (!changed && !scrollChanged) {
+        return;
     }
+    bumpOverlayDynamicRevision();
     if (miacode::debug_options::runtimeDebugOutputEnabled()) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
@@ -621,8 +641,10 @@ void TimelineQuickStateBridge::focusPlayhead(bool centerView)
     if (!centerView) {
         return;
     }
-    centerOnSecond(playheadSeconds_);
-    bumpAllRevisions();
+    if (!centerOnSecond(playheadSeconds_)) {
+        return;
+    }
+    bumpOverlayDynamicRevision();
     emit renderStateChanged();
 }
 
@@ -631,8 +653,10 @@ void TimelineQuickStateBridge::focusCursor(bool centerView)
     if (!centerView) {
         return;
     }
-    centerOnSecond(cursorSeconds_);
-    bumpAllRevisions();
+    if (!centerOnSecond(cursorSeconds_)) {
+        return;
+    }
+    bumpOverlayDynamicRevision();
     emit renderStateChanged();
 }
 
@@ -676,7 +700,7 @@ void TimelineQuickStateBridge::suppressPlayheadIndicator()
         return;
     }
     playheadIndicatorSuppressed_ = true;
-    bumpOverlayRevision();
+    bumpOverlayDynamicRevision();
     emit renderStateChanged();
 }
 
@@ -686,6 +710,6 @@ void TimelineQuickStateBridge::restorePlayheadIndicator(bool immediate)
         return;
     }
     playheadIndicatorSuppressed_ = false;
-    bumpOverlayRevision();
+    bumpOverlayDynamicRevision();
     emit renderStateChanged();
 }

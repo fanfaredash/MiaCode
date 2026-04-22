@@ -146,7 +146,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - Export dialog:
   - Files: `src/tools/video_export/VideoExportDialog.h`, `src/tools/video_export/VideoExportDialog.cpp`, `src/tools/video_export/VideoExportPreferences.h`
   - Class: `VideoExportDialog`
-  - Owns: export parameters, export-only preference persistence, preview-in-dialog, range selection, live preview controls
+  - Owns: export parameters, export-only preference persistence, preview-in-dialog, range selection, and the export-dialog live preview controls that reuse `MainWindow` preview transport callbacks so pause/seek behavior stays aligned with the main preview route
 - Batch export dialog:
   - Files: `src/tools/video_export/BatchVideoExportDialog.h`, `src/tools/video_export/BatchVideoExportDialog.cpp`, `src/tools/video_export/VideoExportPreferences.h`
   - Class: `BatchVideoExportDialog`

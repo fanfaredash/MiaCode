@@ -335,6 +335,15 @@ void QuickShellController::timelineHeaderNavigate(double second)
     refreshFromStateSource();
 }
 
+void QuickShellController::timelineWheelNavigate(double second)
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    commandSink_->wheelShellTimelineNavigate(second);
+    refreshFromStateSource();
+}
+
 void QuickShellController::timelineCenterNavigate(double second)
 {
     if (commandSink_ == nullptr) {

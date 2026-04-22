@@ -165,6 +165,7 @@
         bool quickShellBackendActive_ = false;
         bool quickShellUiFocusBridgeMode_ = false;
         bool quickTimelineSurfaceReady_ = false;
+        quint64 deferredTimelineBridgeFlushGeneration_ = 0;
         bool pendingQuickTimelineCursorSync_ = false;
         double pendingQuickTimelineCursorSecond_ = 0.0;
         bool pendingQuickTimelineCursorCenterView_ = false;
@@ -281,10 +282,13 @@
         bool autoRestoreLastSessionFile_ = true;
         bool editorCtrlLeftJumpPending_ = false;
         bool editorCtrlLeftJumpDragged_ = false;
+        bool editorCtrlLeftJumpDispatchActive_ = false;
+        bool suppressPausedPreviewSecondaryUiUpdates_ = false;
         bool invalidStarPreviewEasterEggEnabled_ = false;
         int invalidStarPreviewAboutClickCount_ = 0;
         QElapsedTimer invalidStarPreviewAboutClickElapsed_;
         QPoint editorCtrlLeftJumpPressPos_;
+        quint64 editorCtrlLeftJumpInteractionOp_ = 0;
         int previewHeldSeekDirection_ = 0;
         int previewSeekHeldArrowKey_ = 0;
         int previewSeekHeldArrowLastElapsedMs_ = 0;
@@ -305,6 +309,10 @@
         quint64 pendingPreviewPlaybackRevision_ = 0;
         int pendingPreviewPlaybackDifficultyId_ = 0;
         double pendingPreviewPlaybackSecond_ = 0.0;
+        quint64 previewInteractionSequence_ = 0;
+        quint64 previewPendingPlayInteractionId_ = 0;
+        quint64 deferredPreviewUiTailGeneration_ = 0;
+        QString previewPendingPlayInteractionSource_;
         quint64 previewPlaybackTransactionCounter_ = 0;
         quint64 activePreviewPlaybackTransactionId_ = 0;
         bool previewStartupSyncPending_ = false;
@@ -414,6 +422,7 @@
     bool& quickShellBackendActive_ = state_.quickShellBackendActive_;
     bool& quickShellUiFocusBridgeMode_ = state_.quickShellUiFocusBridgeMode_;
     bool& quickTimelineSurfaceReady_ = state_.quickTimelineSurfaceReady_;
+    quint64& deferredTimelineBridgeFlushGeneration_ = state_.deferredTimelineBridgeFlushGeneration_;
     bool& pendingQuickTimelineCursorSync_ = state_.pendingQuickTimelineCursorSync_;
     double& pendingQuickTimelineCursorSecond_ = state_.pendingQuickTimelineCursorSecond_;
     bool& pendingQuickTimelineCursorCenterView_ = state_.pendingQuickTimelineCursorCenterView_;
@@ -586,10 +595,13 @@
     bool& autoRestoreLastSessionFile_ = state_.autoRestoreLastSessionFile_;
     bool& editorCtrlLeftJumpPending_ = state_.editorCtrlLeftJumpPending_;
     bool& editorCtrlLeftJumpDragged_ = state_.editorCtrlLeftJumpDragged_;
+    bool& editorCtrlLeftJumpDispatchActive_ = state_.editorCtrlLeftJumpDispatchActive_;
+    bool& suppressPausedPreviewSecondaryUiUpdates_ = state_.suppressPausedPreviewSecondaryUiUpdates_;
     bool& invalidStarPreviewEasterEggEnabled_ = state_.invalidStarPreviewEasterEggEnabled_;
     int& invalidStarPreviewAboutClickCount_ = state_.invalidStarPreviewAboutClickCount_;
     QElapsedTimer& invalidStarPreviewAboutClickElapsed_ = state_.invalidStarPreviewAboutClickElapsed_;
     QPoint& editorCtrlLeftJumpPressPos_ = state_.editorCtrlLeftJumpPressPos_;
+    quint64& editorCtrlLeftJumpInteractionOp_ = state_.editorCtrlLeftJumpInteractionOp_;
     int& previewHeldSeekDirection_ = state_.previewHeldSeekDirection_;
     int& previewSeekHeldArrowKey_ = state_.previewSeekHeldArrowKey_;
     int& previewSeekHeldArrowLastElapsedMs_ = state_.previewSeekHeldArrowLastElapsedMs_;
@@ -613,6 +625,10 @@
     quint64& pendingPreviewPlaybackRevision_ = state_.pendingPreviewPlaybackRevision_;
     int& pendingPreviewPlaybackDifficultyId_ = state_.pendingPreviewPlaybackDifficultyId_;
     double& pendingPreviewPlaybackSecond_ = state_.pendingPreviewPlaybackSecond_;
+    quint64& previewInteractionSequence_ = state_.previewInteractionSequence_;
+    quint64& previewPendingPlayInteractionId_ = state_.previewPendingPlayInteractionId_;
+    quint64& deferredPreviewUiTailGeneration_ = state_.deferredPreviewUiTailGeneration_;
+    QString& previewPendingPlayInteractionSource_ = state_.previewPendingPlayInteractionSource_;
     QElapsedTimer& qtPreviewElapsed_ = state_.qtPreviewElapsed_;
     QElapsedTimer& qtPreviewWatchdogElapsed_ = state_.qtPreviewWatchdogElapsed_;
     qint64& qtPreviewNextFixedTickDueNs_ = state_.qtPreviewNextFixedTickDueNs_;

@@ -11,6 +11,22 @@
 
 namespace miacode::timeline {
 
+struct TimelineSceneLayoutMetrics {
+    QSize viewportSize;
+    int timelineLeft = 0;
+    int timelineTop = 0;
+    int timelineHeight = 0;
+    int laneHeight = 0;
+    int laneCount = 0;
+    int leadingCenteringPadding = 0;
+    int trailingCenteringPadding = 0;
+    int contentWidth = 0;
+    double displayStartSeconds = 0.0;
+    double displayEndSeconds = 0.0;
+    double pixelsPerSecond = 0.0;
+    double maxNavigableSecond = 0.0;
+};
+
 enum class TimelineSceneGlyphShape {
     Circle,
     Diamond,
@@ -82,6 +98,8 @@ struct TimelineSceneState {
     int laneHeight = 0;
     int laneCount = 0;
     int horizontalScrollValue = 0;
+    int headerLeftLimit = 0;
+    int headerRightLimit = 0;
     int leadingCenteringPadding = 0;
     int trailingCenteringPadding = 0;
     int contentWidth = 0;
@@ -97,6 +115,7 @@ struct TimelineSceneState {
     quint64 headerRevision = 0;
     quint64 notesRevision = 0;
     quint64 overlayRevision = 0;
+    quint64 overlayDynamicRevision = 0;
     QVector<TimelineSceneRect> baseBackgroundRects;
     QVector<TimelineSceneRect> laneOverlayRects;
     QVector<TimelineSceneRect> waveformBars;

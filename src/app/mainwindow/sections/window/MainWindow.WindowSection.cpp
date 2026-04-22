@@ -99,6 +99,11 @@ void MainWindow::navigateShellTimelineToSecond(double second)
     windowSection_->navigateShellTimelineToSecond(second);
 }
 
+void MainWindow::wheelShellTimelineNavigate(double second)
+{
+    windowSection_->wheelShellTimelineNavigate(second);
+}
+
 void MainWindow::centerShellTimelineNavigate(double second)
 {
     windowSection_->centerShellTimelineNavigate(second);

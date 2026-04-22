@@ -14,6 +14,7 @@ namespace {
 using miacode::timeline::TimelineSceneBuildRequest;
 using miacode::timeline::TimelineSceneGlyph;
 using miacode::timeline::TimelineSceneGlyphShape;
+using miacode::timeline::TimelineSceneLayoutMetrics;
 using miacode::timeline::TimelineSceneLine;
 using miacode::timeline::TimelineSceneRect;
 using miacode::timeline::TimelineSceneState;
@@ -129,6 +130,18 @@ int rawContentWidth(double displayStartSeconds, double displayEndSeconds, double
     return kTimelineLeftMargin + static_cast<int>(timelineSeconds * pixelsPerSecond) + kTimelineRightPadding;
 }
 
+int secondToX(const TimelineSceneLayoutMetrics& metrics, double second)
+{
+    return rawSecondToX(second, metrics.displayStartSeconds, metrics.pixelsPerSecond)
+        + metrics.leadingCenteringPadding;
+}
+
+qreal secondToXExact(const TimelineSceneLayoutMetrics& metrics, double second)
+{
+    return rawSecondToXExact(second, metrics.displayStartSeconds, metrics.pixelsPerSecond)
+        + static_cast<qreal>(metrics.leadingCenteringPadding);
+}
+
 int secondToX(const TimelineSceneState& state, double second)
 {
     return rawSecondToX(second, state.displayStartSeconds, state.pixelsPerSecond) + state.leadingCenteringPadding;
@@ -138,6 +151,15 @@ qreal secondToXExact(const TimelineSceneState& state, double second)
 {
     return rawSecondToXExact(second, state.displayStartSeconds, state.pixelsPerSecond)
         + static_cast<qreal>(state.leadingCenteringPadding);
+}
+
+double xToSecond(const TimelineSceneLayoutMetrics& metrics, int horizontalScrollValue, qreal x)
+{
+    return qMax(
+        0.0,
+        metrics.displayStartSeconds
+            + ((x + horizontalScrollValue - metrics.leadingCenteringPadding - metrics.timelineLeft)
+               / metrics.pixelsPerSecond));
 }
 
 double xToSecond(const TimelineSceneState& state, qreal x)
@@ -266,36 +288,82 @@ void appendSprite(
     sprites->append(sprite);
 }
 
+TimelineSceneLayoutMetrics buildLayoutMetrics(const TimelineSceneBuildRequest& request)
+{
+    TimelineSceneLayoutMetrics metrics;
+    metrics.viewportSize = request.viewportSize;
+    metrics.timelineLeft = kTimelineLeftMargin;
+    metrics.timelineTop = kHeaderHeight + kTimelineTopMargin;
+    metrics.timelineHeight = kLaneCount * kLaneHeight;
+    metrics.laneHeight = kLaneHeight;
+    metrics.laneCount = kLaneCount;
+    metrics.pixelsPerSecond = pixelsPerSecondForZoom(request.zoomScale);
+    metrics.maxNavigableSecond = maxNavigableSecond(request);
+    metrics.displayStartSeconds =
+        qMin(-kTimelineDisplayLeadInSeconds, request.snapshot.minimumSecond - kTimelineDisplayLeadInSeconds);
+    metrics.displayEndSeconds = qMax(metrics.displayStartSeconds + 1.0, metrics.maxNavigableSecond + 1.0);
+    metrics.leadingCenteringPadding = qMax(
+        0,
+        (request.viewportSize.width() / 2)
+            - rawSecondToX(0.0, metrics.displayStartSeconds, metrics.pixelsPerSecond));
+    metrics.trailingCenteringPadding = qMax(
+        0,
+        rawSecondToX(metrics.maxNavigableSecond, metrics.displayStartSeconds, metrics.pixelsPerSecond)
+                + (request.viewportSize.width() / 2)
+            - rawContentWidth(metrics.displayStartSeconds, metrics.displayEndSeconds, metrics.pixelsPerSecond));
+    metrics.contentWidth =
+        rawContentWidth(metrics.displayStartSeconds, metrics.displayEndSeconds, metrics.pixelsPerSecond)
+        + metrics.leadingCenteringPadding + metrics.trailingCenteringPadding;
+    return metrics;
+}
+
+void applyLayoutMetrics(TimelineSceneState* state, const TimelineSceneLayoutMetrics& metrics)
+{
+    if (state == nullptr) {
+        return;
+    }
+    state->viewportSize = metrics.viewportSize;
+    state->timelineLeft = metrics.timelineLeft;
+    state->timelineTop = metrics.timelineTop;
+    state->timelineHeight = metrics.timelineHeight;
+    state->laneHeight = metrics.laneHeight;
+    state->laneCount = metrics.laneCount;
+    state->leadingCenteringPadding = metrics.leadingCenteringPadding;
+    state->trailingCenteringPadding = metrics.trailingCenteringPadding;
+    state->contentWidth = metrics.contentWidth;
+    state->displayStartSeconds = metrics.displayStartSeconds;
+    state->displayEndSeconds = metrics.displayEndSeconds;
+    state->pixelsPerSecond = metrics.pixelsPerSecond;
+    state->maxNavigableSecond = metrics.maxNavigableSecond;
+}
+
 }  // namespace
 
 namespace miacode::timeline {
 
+TimelineSceneLayoutMetrics TimelineSceneStateBuilder::layoutMetrics(const TimelineSceneBuildRequest& request)
+{
+    return buildLayoutMetrics(request);
+}
+
+int TimelineSceneStateBuilder::maxHorizontalScrollValue(const TimelineSceneLayoutMetrics& metrics)
+{
+    return qMax(0, metrics.contentWidth - metrics.viewportSize.width());
+}
+
+int TimelineSceneStateBuilder::secondToSceneX(const TimelineSceneLayoutMetrics& metrics, double second)
+{
+    return ::secondToX(metrics, second);
+}
+
 TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequest& request)
 {
     TimelineSceneState state;
-    state.viewportSize = request.viewportSize;
-    state.timelineLeft = kTimelineLeftMargin;
-    state.timelineTop = kHeaderHeight + kTimelineTopMargin;
-    state.timelineHeight = kLaneCount * kLaneHeight;
-    state.laneHeight = kLaneHeight;
-    state.laneCount = kLaneCount;
+    const TimelineSceneLayoutMetrics metrics = buildLayoutMetrics(request);
+    applyLayoutMetrics(&state, metrics);
     state.horizontalScrollValue = qMax(0, request.horizontalScrollValue);
-    state.pixelsPerSecond = pixelsPerSecondForZoom(request.zoomScale);
-    state.maxNavigableSecond = maxNavigableSecond(request);
-    state.displayStartSeconds =
-        qMin(-kTimelineDisplayLeadInSeconds, request.snapshot.minimumSecond - kTimelineDisplayLeadInSeconds);
-    state.displayEndSeconds = qMax(state.displayStartSeconds + 1.0, state.maxNavigableSecond + 1.0);
-    state.leadingCenteringPadding = qMax(
-        0,
-        (request.viewportSize.width() / 2) - rawSecondToX(0.0, state.displayStartSeconds, state.pixelsPerSecond));
-    state.trailingCenteringPadding = qMax(
-        0,
-        rawSecondToX(state.maxNavigableSecond, state.displayStartSeconds, state.pixelsPerSecond)
-                + (request.viewportSize.width() / 2)
-            - rawContentWidth(state.displayStartSeconds, state.displayEndSeconds, state.pixelsPerSecond));
-    state.contentWidth =
-        rawContentWidth(state.displayStartSeconds, state.displayEndSeconds, state.pixelsPerSecond)
-        + state.leadingCenteringPadding + state.trailingCenteringPadding;
+    state.headerLeftLimit = qMax(0, request.headerLeftLimit);
+    state.headerRightLimit = request.headerRightLimit > 0 ? request.headerRightLimit : request.viewportSize.width();
     state.visibleStartSecond = xToSecond(state, state.timelineLeft);
     state.visibleEndSecond = xToSecond(state, request.viewportSize.width());
     state.appearanceRevision = request.appearanceRevision;
@@ -304,6 +372,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     state.headerRevision = request.headerRevision;
     state.notesRevision = request.notesRevision;
     state.overlayRevision = request.overlayRevision;
+    state.overlayDynamicRevision = request.overlayDynamicRevision;
 
     const TimelineThemeColors theme = timelineThemeColors();
     const QFont laneLabelFont = timelineLaneLabelFont();
@@ -400,8 +469,8 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             const QPair<int, int> visibleColumns =
                 miacode::waveform::visibleWaveformColumnRange(
                     *waveformLevel,
-                    qMax(0.0, state.visibleStartSecond),
-                    qMax(0.0, state.visibleEndSecond));
+                    qMax(0.0, state.displayStartSeconds),
+                    qMax(0.0, state.displayEndSeconds));
             const qreal centerY = state.timelineTop + state.timelineHeight / 2.0;
             const qreal maxAmplitude = (qMax<qreal>(8.0, state.timelineHeight / 2.0 - 8.0) * 7.0) / 9.0;
             for (int index = visibleColumns.first; index < visibleColumns.second; ++index) {
@@ -411,13 +480,10 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 }
                 const double columnStartSecond = waveformLevel->secondsPerColumn * static_cast<double>(index);
                 const double columnEndSecond = columnStartSecond + waveformLevel->secondsPerColumn;
-                int x0 = secondToSceneX(state, columnStartSecond) - state.horizontalScrollValue;
-                int x1 = secondToSceneX(state, columnEndSecond) - state.horizontalScrollValue;
+                int x0 = secondToSceneX(state, columnStartSecond);
+                int x1 = secondToSceneX(state, columnEndSecond);
                 if (x1 <= x0) {
                     x1 = x0 + 1;
-                }
-                if (x1 < state.timelineLeft || x0 > request.viewportSize.width()) {
-                    continue;
                 }
                 const qreal topY = centerY - (qBound(-1.0f, column.max, 1.0f) * maxAmplitude);
                 const qreal bottomY = centerY - (qBound(-1.0f, column.min, 1.0f) * maxAmplitude);
@@ -431,11 +497,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
 
     const auto addGridLine = [&](double absoluteSecond, const QColor& color, qreal width, bool exactPosition) {
         const qreal x = (exactPosition ? secondToXExact(state, absoluteSecond)
-                                       : static_cast<qreal>(secondToSceneX(state, absoluteSecond)))
-            - static_cast<qreal>(state.horizontalScrollValue);
-        if (x < state.timelineLeft - 1 || x > request.viewportSize.width()) {
-            return;
-        }
+                                       : static_cast<qreal>(secondToSceneX(state, absoluteSecond)));
         state.gridLines.append(TimelineSceneLine{
             QPointF(x, state.timelineTop),
             QPointF(x, state.timelineTop + state.timelineHeight),
@@ -445,36 +507,8 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
     };
 
     TimelineVisibleLineRange beatRange;
-    TimelineVisibleLineRange noteRange;
-    if (!request.snapshot.lines.isEmpty()) {
-        const auto beginIt = std::lower_bound(
-            request.snapshot.lines.cbegin(),
-            request.snapshot.lines.cend(),
-            state.visibleStartSecond - 1.0,
-            [](const TimelineRenderLine& line, double targetSecond) {
-                return line.startSecond < targetSecond;
-            });
-        const auto endIt = std::upper_bound(
-            request.snapshot.lines.cbegin(),
-            request.snapshot.lines.cend(),
-            state.visibleEndSecond + 1.0,
-            [](double targetSecond, const TimelineRenderLine& line) {
-                return targetSecond < line.startSecond;
-            });
-        beatRange.begin = static_cast<int>(std::distance(request.snapshot.lines.cbegin(), beginIt));
-        beatRange.end = static_cast<int>(std::distance(request.snapshot.lines.cbegin(), endIt));
-
-        const QVector<double>& noteVisualPrefixMax = request.showSlideTracks
-            ? request.snapshot.noteVisualEndPrefixMaxWithSlideTracks
-            : request.snapshot.noteVisualEndPrefixMaxWithoutSlideTracks;
-        noteRange = noteVisualPrefixMax.size() == request.snapshot.lines.size()
-            ? timelineRenderVisibleNoteLineRange(
-                  request.snapshot.lines,
-                  noteVisualPrefixMax,
-                  state.visibleStartSecond - 2.0,
-                  state.visibleEndSecond + 2.0)
-            : beatRange;
-    }
+    beatRange.begin = 0;
+    beatRange.end = static_cast<int>(request.snapshot.lines.size());
 
     for (int lineIndex = beatRange.begin; lineIndex < beatRange.end; ++lineIndex) {
         const TimelineRenderLine& line = request.snapshot.lines.at(lineIndex);
@@ -485,9 +519,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         }
     }
     for (double measureSecond : request.snapshot.measureLineSeconds) {
-        if (measureSecond >= state.visibleStartSecond - 1.0 && measureSecond <= state.visibleEndSecond + 1.0) {
-            addGridLine(measureSecond, theme.gridMajor, kTimelineBeatLineWidth, false);
-        }
+        addGridLine(measureSecond, theme.gridMajor, kTimelineBeatLineWidth, false);
     }
 
     if (request.snapshot.trailingMeasureLineStepSeconds > 1e-6) {
@@ -498,12 +530,12 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             extensionSecond += request.snapshot.trailingMeasureLineStepSeconds
                 * static_cast<double>(qMax<qint64>(1, static_cast<qint64>(qFloor(delta / request.snapshot.trailingMeasureLineStepSeconds)) + 1));
         }
-        if (extensionSecond <= state.visibleStartSecond - 1.0 + 1e-6) {
-            const double delta = (state.visibleStartSecond - 1.0) - extensionSecond;
+        if (extensionSecond <= state.displayStartSeconds - 1.0 + 1e-6) {
+            const double delta = (state.displayStartSeconds - 1.0) - extensionSecond;
             extensionSecond += request.snapshot.trailingMeasureLineStepSeconds
                 * static_cast<double>(qMax<qint64>(1, static_cast<qint64>(qFloor(delta / request.snapshot.trailingMeasureLineStepSeconds)) + 1));
         }
-        for (; extensionSecond <= state.visibleEndSecond + 1.0 + 1e-6;
+        for (; extensionSecond <= state.displayEndSeconds + 1.0 + 1e-6;
              extensionSecond += request.snapshot.trailingMeasureLineStepSeconds) {
             addGridLine(extensionSecond, theme.gridMajor, kTimelineBeatLineWidth, false);
         }
@@ -511,28 +543,10 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
 
     QVector<HeaderLineLabel> headerLabels;
     if (!request.snapshot.lines.isEmpty()) {
-        const auto beginIt = std::lower_bound(
-            request.snapshot.lines.cbegin(),
-            request.snapshot.lines.cend(),
-            state.visibleStartSecond - kTimelineHeaderLineAnchorToleranceSeconds,
-            [](const TimelineRenderLine& line, double targetSecond) {
-                return line.startSecond < targetSecond;
-            });
-        const auto endIt = std::upper_bound(
-            request.snapshot.lines.cbegin(),
-            request.snapshot.lines.cend(),
-            state.visibleEndSecond + kTimelineHeaderLineAnchorToleranceSeconds,
-            [](double targetSecond, const TimelineRenderLine& line) {
-                return targetSecond < line.startSecond;
-            });
-
         QVector<HeaderLineLabel> collapsed;
-        for (auto it = beginIt; it != endIt; ++it) {
+        for (auto it = request.snapshot.lines.cbegin(); it != request.snapshot.lines.cend(); ++it) {
             const TimelineRenderLine& line = *it;
-            const int screenX = secondToSceneX(state, line.startSecond) - state.horizontalScrollValue;
-            if (screenX < state.timelineLeft - 1 || screenX > request.viewportSize.width()) {
-                continue;
-            }
+            const int screenX = secondToSceneX(state, line.startSecond);
             HeaderLineLabel label{qMax(1, line.lineNumber), line.startSecond, screenX};
             if (!collapsed.isEmpty()) {
                 HeaderLineLabel& previous = collapsed.last();
@@ -545,12 +559,6 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             collapsed.append(label);
         }
         for (const HeaderLineLabel& label : collapsed) {
-            const QString labelText = QString::number(label.lineNumber);
-            const int labelHalfWidth = timelineHeaderLabelHalfWidthPx(request.headerLineNumberFont, labelText);
-            if (label.screenX - labelHalfWidth < request.headerLeftLimit
-                || label.screenX + labelHalfWidth > request.headerRightLimit) {
-                continue;
-            }
             if (!headerLabels.isEmpty()
                 && label.screenX - headerLabels.constLast().screenX < kTimelineHeaderLineLabelMinSpacingPx) {
                 continue;
@@ -599,7 +607,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         }
     }
 
-    const TimelineVisibleLineRange visibleNoteRange{noteRange.begin, noteRange.end};
+    const TimelineVisibleLineRange visibleNoteRange{0, static_cast<int>(request.snapshot.lines.size())};
     const QVector<TimelineVisibleNoteRef> visibleNoteRefs =
         timelineRenderVisibleNotePaintOrder(request.snapshot.lines, visibleNoteRange);
 
@@ -691,14 +699,14 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         const bool isSlideLike = note.kind == TimelineRenderNoteKind::Slide || note.kind == TimelineRenderNoteKind::Wifi;
         const bool isSlideTrack = isSlideLike && traceSecond > startSecond && endSecond > traceSecond;
 
-        const int x = secondToSceneX(state, startSecond) - state.horizontalScrollValue;
-        const int holdEndX = isHold ? (secondToSceneX(state, endSecond) - state.horizontalScrollValue) : x;
-        const int slideStartX = isSlideTrack ? (secondToSceneX(state, traceSecond) - state.horizontalScrollValue) : x;
-        const int slideEndX = isSlideTrack ? (secondToSceneX(state, endSecond) - state.horizontalScrollValue) : x;
+        const int x = secondToSceneX(state, startSecond);
+        const int holdEndX = isHold ? secondToSceneX(state, endSecond) : x;
+        const int slideStartX = isSlideTrack ? secondToSceneX(state, traceSecond) : x;
+        const int slideEndX = isSlideTrack ? secondToSceneX(state, endSecond) : x;
         int extentLeft = x;
         int extentRight = x;
         if (isHold || isTouchHold) {
-            const int endX = secondToSceneX(state, endSecond) - state.horizontalScrollValue;
+            const int endX = secondToSceneX(state, endSecond);
             extentLeft = qMin(extentLeft, endX);
             extentRight = qMax(extentRight, endX);
         }
@@ -706,7 +714,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             extentLeft = qMin(extentLeft, qMin(slideStartX, slideEndX));
             extentRight = qMax(extentRight, qMax(slideStartX, slideEndX));
         }
-        if (extentRight < state.timelineLeft - kNoteSize || extentLeft > request.viewportSize.width() + kNoteSize) {
+        if (extentRight < state.timelineLeft - kNoteSize || extentLeft > state.contentWidth + kNoteSize) {
             return;
         }
 
@@ -833,7 +841,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             appendTrackLine(
                 &state.touchHoldLines,
                 QPointF(x, rowCenterY),
-                QPointF(secondToSceneX(state, endSecond) - state.horizontalScrollValue, rowCenterY),
+                QPointF(secondToSceneX(state, endSecond), rowCenterY),
                 touchHoldColor,
                 4.0);
         }
@@ -841,25 +849,22 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             && (note.kind == TimelineRenderNoteKind::Touch || note.kind == TimelineRenderNoteKind::TouchHold)) {
             const double triggerSecond =
                 (note.kind == TimelineRenderNoteKind::TouchHold && endSecond > startSecond) ? endSecond : startSecond;
-            const int fireLeft = secondToSceneX(state, triggerSecond) - state.horizontalScrollValue;
-            const int fireRight =
-                secondToSceneX(state, triggerSecond + kTimelineFireworkDurationSeconds) - state.horizontalScrollValue;
-            if (fireRight >= state.timelineLeft && fireLeft <= request.viewportSize.width()) {
-                const qreal rowHeight = qMax<qreal>(1.0, kLaneHeight - 4.0);
-                const qreal bandHeight = rowHeight / static_cast<qreal>(theme.fireworkBands.size());
-                for (int bandIndex = 0; bandIndex < static_cast<int>(theme.fireworkBands.size()); ++bandIndex) {
-                    const qreal bandTop = rowTop + 2.0 + bandHeight * static_cast<qreal>(bandIndex);
-                    state.fireworkBands.append(TimelineSceneRect{
-                        QRectF(
-                            fireLeft,
-                            bandTop,
-                            qMax(1, fireRight - fireLeft),
-                            bandIndex + 1 == static_cast<int>(theme.fireworkBands.size())
-                                ? ((rowTop + 2.0 + rowHeight) - bandTop)
-                                : bandHeight),
-                        theme.fireworkBands.at(bandIndex),
-                    });
-                }
+            const int fireLeft = secondToSceneX(state, triggerSecond);
+            const int fireRight = secondToSceneX(state, triggerSecond + kTimelineFireworkDurationSeconds);
+            const qreal rowHeight = qMax<qreal>(1.0, kLaneHeight - 4.0);
+            const qreal bandHeight = rowHeight / static_cast<qreal>(theme.fireworkBands.size());
+            for (int bandIndex = 0; bandIndex < static_cast<int>(theme.fireworkBands.size()); ++bandIndex) {
+                const qreal bandTop = rowTop + 2.0 + bandHeight * static_cast<qreal>(bandIndex);
+                state.fireworkBands.append(TimelineSceneRect{
+                    QRectF(
+                        fireLeft,
+                        bandTop,
+                        qMax(1, fireRight - fireLeft),
+                        bandIndex + 1 == static_cast<int>(theme.fireworkBands.size())
+                            ? ((rowTop + 2.0 + rowHeight) - bandTop)
+                            : bandHeight),
+                    theme.fireworkBands.at(bandIndex),
+                });
             }
         }
 
@@ -911,7 +916,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         }
     }
 
-    const int entryX = secondToSceneX(state, request.playbackEntrySeconds) - state.horizontalScrollValue;
+    const int entryX = secondToSceneX(state, request.playbackEntrySeconds);
     if (entryX > state.timelineLeft) {
         state.hasEntryMarker = true;
         const qreal tipY = static_cast<qreal>(state.timelineTop) - kTimelineTopMarkerTipOffsetPx;
@@ -924,7 +929,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         };
     }
 
-    const int cursorX = secondToSceneX(state, request.cursorSeconds) - state.horizontalScrollValue;
+    const int cursorX = secondToSceneX(state, request.cursorSeconds);
     if (cursorX > state.timelineLeft) {
         state.hasCursorLine = true;
         state.cursorLine = TimelineSceneLine{
@@ -934,7 +939,7 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             2.0,
         };
     }
-    const int playheadX = secondToSceneX(state, request.playheadSeconds) - state.horizontalScrollValue;
+    const int playheadX = secondToSceneX(state, request.playheadSeconds);
     if (!request.playheadIndicatorSuppressed && playheadX > state.timelineLeft) {
         state.hasPlayheadLine = true;
         state.playheadLine = TimelineSceneLine{

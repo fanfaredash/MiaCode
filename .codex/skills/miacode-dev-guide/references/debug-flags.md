@@ -126,11 +126,21 @@ Runtime black-screen / dialog tracing in the main app currently uses these tags:
 - `preview/embedded_refresh`
 - `preview/quick_runtime`
 - `preview/quick_scene`
+- `preview/interaction`
+- `timeline/interaction`
+- `timeline/bridge`
+- `timeline/quick_scene`
+- `timeline/cursor_map`
 
 The `preview/quick_runtime` stream now also emits `action=frame_stall` when the embedded Quick window stays visible/exposed but stops presenting for an extended interval.
 The `preview/embedded_refresh` stream now also marks resize-throttling transitions with `action=resize_degrade_begin` / `action=resize_degrade_end`.
 The `startup/qt_config` runtime tag logs the active Qt graphics/render-loop experiment flags at process start, including whether the default native-sibling workaround was opted out.
 The `window/focus` runtime tag now traces app-level `focusChanged`, activation edges, watched editor/preview `FocusIn`/`FocusOut` events, pending text-focus snapshots, and restore attempts for Alt-Tab regression debugging.
+The `preview/interaction` runtime tag now traces end-to-end preview action boundaries for `play`, `pause`, `stop`, and `ctrl+click` seek, keyed by one `op` id per interaction.
+The `timeline/interaction` runtime tag now traces quick timeline drag, wheel-scroll, and held-key horizontal scroll inputs so user input can be matched to quick-scene work.
+The `timeline/bridge` runtime tag now records quick timeline bridge pushes such as `action=set_horizontal_scroll_value`.
+The `timeline/quick_scene` runtime tag now distinguishes full `scene_state_rebuild_*` passes from `action=content_transform_update` scroll-only paints, so cached-scene transform behavior can be verified directly from logs.
+The `timeline/cursor_map` runtime tag now profiles cursor-to-second mapping in `timelineSecondForCursor()`.
 The `preview/playback` audio tag now traces realtime preview start transactions. Strong-sync startup should log `action=start_request`, `action=audio_prepared`, `action=canvas_presented`, and `action=commit` under one `txn`, while weak-video startup adds `action=weak_video_prepare_started`, `action=weak_video_ready_before_commit`, or `action=late_video_start_after_commit`.
 The `preview/stage_media` audio tag is now switch-level only for quickshell media changes, presentation-mode flips, `VideoOutput` binding transitions, weak-sync video prepare / commit transitions (`action=prepare_playback_*`, `action=commit_prepared_playback*`), and low-noise external-video stall transitions (`action=video_frame_stall_begin` / `action=video_frame_stall_end`); the old per-frame quickshell video arrival line was retired.
 The audio log emits `stretched_clock_drift` for low-noise stretched-BGM drift sampling; current fields are `fallback`, `bg`, `delta_ms`, `rate`, `engine_now_frame`, `start_engine_frame`, and `tick_bg_gap_ms` (`fallback - backgroundTrackLastTimelineSecond`) so engine-time anchor drift can be separated from tick-to-tick catch-up.

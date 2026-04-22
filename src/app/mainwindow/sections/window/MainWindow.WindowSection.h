@@ -22,6 +22,7 @@ public:
     void setShellPreviewFullscreen(bool fullscreen);
     void setShellBottomTabsCurrentTab(const QString& tabId);
     void navigateShellTimelineToSecond(double second);
+    void wheelShellTimelineNavigate(double second);
     void centerShellTimelineNavigate(double second);
     void shellTimelineDragStarted();
     void shellTimelineDragFinished(double second);

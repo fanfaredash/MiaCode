@@ -1,8 +1,27 @@
 #include "MainWindow.TimelineSection.h"
 
+#include "common/DebugLog.h"
+
 #include <QtCore>
 #include <QtGui>
 #include <QtWidgets>
+
+namespace {
+
+void appendPreviewInteractionLog(const QString& action, const QString& payload = QString())
+{
+    QString text = QStringLiteral("action=%1").arg(action);
+    if (!payload.trimmed().isEmpty()) {
+        text += QStringLiteral(" ") + payload.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview/interaction"),
+        text
+    );
+}
+
+}  // namespace
 
 bool MainWindow::TimelineSection::preparePreviewStartState()
 {
@@ -25,26 +44,47 @@ bool MainWindow::TimelineSection::preparePreviewStartState()
 
 void MainWindow::TimelineSection::onStopPreview()
 {
+    const quint64 opId = ++state_.previewInteractionSequence_;
     const double returnSecond = qBound(0.0, state_.qtPreviewPlaybackReturnSecond_, previewDurationSeconds());
     const bool wasActive = state_.qtPreviewPlaying_ || state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_;
-    if (state_.qtPreviewPlaying_ || state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
-        anchorQtPreviewPlaybackToSecond(returnSecond, true);
-    }
+    appendPreviewInteractionLog(
+        QStringLiteral("stop_request"),
+        QString("op=%1 source=stop_action was_active=%2 return_second=%3 current_second=%4")
+            .arg(opId)
+            .arg(wasActive ? 1 : 0)
+            .arg(returnSecond, 0, 'f', 6)
+            .arg(owner_.currentPreviewAuthoritativeAudioClockSecond(), 0, 'f', 6));
     state_.pendingPreviewPlaybackStart_ = false;
     state_.pendingPreviewPlaybackResumeFromPause_ = false;
     state_.pendingPreviewPlaybackRevision_ = 0;
     state_.pendingPreviewPlaybackDifficultyId_ = 0;
     state_.pendingPreviewPlaybackSecond_ = 0.0;
-    if (!wasActive) {
-        anchorQtPreviewPlaybackToSecond(returnSecond, true);
-    }
+    state_.previewPendingPlayInteractionId_ = 0;
+    state_.previewPendingPlayInteractionSource_.clear();
+    seekPreviewDiscreteToSecond(returnSecond, true);
+    appendPreviewInteractionLog(
+        QStringLiteral("stop_complete"),
+        QString("op=%1 source=stop_action final_second=%2")
+            .arg(opId)
+            .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6));
     owner_.statusBar()->showMessage("Qt preview stopped.");
 }
 
 void MainWindow::TimelineSection::onTogglePreviewPause()
 {
     if (state_.qtPreviewPlaying_) {
+        const quint64 opId = ++state_.previewInteractionSequence_;
+        appendPreviewInteractionLog(
+            QStringLiteral("pause_request"),
+            QString("op=%1 source=toggle_action current_second=%2")
+                .arg(opId)
+                .arg(owner_.currentPreviewAuthoritativeAudioClockSecond(), 0, 'f', 6));
         pauseQtPreviewPlaybackExact();
+        appendPreviewInteractionLog(
+            QStringLiteral("pause_complete"),
+            QString("op=%1 source=toggle_action paused_second=%2")
+                .arg(opId)
+                .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6));
         owner_.updatePauseButtonAppearance();
         owner_.statusBar()->showMessage(
             QString("Qt preview paused at %1s.").arg(state_.qtPreviewPauseSecond_, 0, 'f', 2)
@@ -56,7 +96,20 @@ void MainWindow::TimelineSection::onTogglePreviewPause()
         owner_.statusBar()->showMessage("Select a difficulty field first.");
         return;
     }
+    const quint64 opId = ++state_.previewInteractionSequence_;
+    state_.previewPendingPlayInteractionId_ = opId;
+    state_.previewPendingPlayInteractionSource_ = QStringLiteral("toggle_action");
+    appendPreviewInteractionLog(
+        QStringLiteral("play_request"),
+        QString("op=%1 source=toggle_action requested_second=%2")
+            .arg(opId)
+            .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6));
     if (!startQtPreviewPlayback(state_.qtPreviewPauseSecond_, true)) {
+        appendPreviewInteractionLog(
+            QStringLiteral("play_deferred"),
+            QString("op=%1 source=toggle_action requested_second=%2")
+                .arg(opId)
+                .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6));
         return;
     }
     owner_.updatePauseButtonAppearance();

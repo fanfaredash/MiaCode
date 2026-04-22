@@ -14,6 +14,7 @@
 #include "common/MuriTypes.h"
 #include "common/WaveformCache.h"
 #include "timeline/TimelineRenderData.h"
+#include "timeline/TimelineSceneState.h"
 
 class TimelineView;
 
@@ -67,6 +68,7 @@ public:
     quint64 headerRevision() const { return headerRevision_; }
     quint64 notesRevision() const { return notesRevision_; }
     quint64 overlayRevision() const { return overlayRevision_; }
+    quint64 overlayDynamicRevision() const { return overlayDynamicRevision_; }
 
 signals:
     void renderStateChanged();
@@ -74,11 +76,14 @@ signals:
 
 private:
     QSize effectiveViewportSize() const;
-    void centerOnSecond(double second);
+    void refreshLayoutMetrics();
+    int maxHorizontalScrollValue() const;
+    bool centerOnSecond(double second);
     void bumpAllRevisions();
     void bumpHeaderRevision();
     void bumpNotesRevision();
     void bumpOverlayRevision();
+    void bumpOverlayDynamicRevision();
 
     QPointer<TimelineView> referenceView_;
     TimelineRenderSnapshot snapshot_;
@@ -97,9 +102,12 @@ private:
     bool showSlideTracks_ = true;
     bool followPreviewEnabled_ = false;
     bool playheadIndicatorSuppressed_ = false;
+    miacode::timeline::TimelineSceneLayoutMetrics layoutMetrics_;
+    bool layoutMetricsValid_ = false;
     quint64 gridRevision_ = 1;
     quint64 waveformRevision_ = 1;
     quint64 headerRevision_ = 1;
     quint64 notesRevision_ = 1;
     quint64 overlayRevision_ = 1;
+    quint64 overlayDynamicRevision_ = 1;
 };

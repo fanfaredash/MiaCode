@@ -37,11 +37,15 @@ struct TimelineSceneBuildRequest {
     quint64 headerRevision = 0;
     quint64 notesRevision = 0;
     quint64 overlayRevision = 0;
+    quint64 overlayDynamicRevision = 0;
 };
 
 class TimelineSceneStateBuilder
 {
 public:
+    static TimelineSceneLayoutMetrics layoutMetrics(const TimelineSceneBuildRequest& request);
+    static int maxHorizontalScrollValue(const TimelineSceneLayoutMetrics& metrics);
+    static int secondToSceneX(const TimelineSceneLayoutMetrics& metrics, double second);
     static TimelineSceneState build(const TimelineSceneBuildRequest& request);
     static int secondToSceneX(const TimelineSceneState& state, double second);
     static double sceneXToSecond(const TimelineSceneState& state, qreal x);

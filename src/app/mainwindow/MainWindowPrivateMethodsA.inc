@@ -154,6 +154,7 @@
     void seekTimelineToCursor(int line, int col);
     void syncTimelineToEditorCursor(bool centerView = true);
     void navigateTimelineToSecond(double second, bool focusEditor = true);
+    void deferTimelineCursorBridgeUpdate(double second, bool centerView);
     void scheduleDeferredEditorUiUpdate(
         bool updateStatus = false,
         bool updateEmptyState = false,
@@ -180,6 +181,7 @@
         bool ensureVisibleWhenPaused = false);
     void jumpToNearestTimelineNote(double second, int lane);
     bool startQtPreviewPlayback(double second, bool resumeFromPause = false);
+    void pauseQtPreviewPlaybackExact();
     void stopQtPreviewPlayback(bool keepPosition = true);
     void applyQtPreviewPosition(double second, bool centerView);
     void syncPausedPreviewMediaTimestamps(double second);
@@ -192,7 +194,12 @@
     void scheduleNextQtPreviewTick();
     void requestNextDisplayRefreshPreviewFrame();
     void seekPreviewToSecond(double second, bool centerView);
-    void requestPausedPreviewSeek(double second, bool centerView, bool submitMediaImmediately = true);
+    void seekPreviewDiscreteToSecond(double second, bool centerView);
+    void requestPausedPreviewSeek(
+        double second,
+        bool centerView,
+        bool submitMediaImmediately = true,
+        bool logHotPath = true);
     void applyPausedPreviewVisualSecond(double second, bool centerView);
     void submitPausedMediaSeek(double second, quint64 generation);
     void maybeSubmitLatestPausedMediaSeek();

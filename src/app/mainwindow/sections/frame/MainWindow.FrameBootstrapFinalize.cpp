@@ -330,7 +330,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
                 showPreviewFullscreenControls(false);
             }
             if (qtPreviewPlaying_) {
-                stopQtPreviewPlayback(true);
+                pauseQtPreviewPlaybackExact();
             }
             previewScrubDragging_ = true;
             previewScrubRenderElapsed_.invalidate();
@@ -350,10 +350,7 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
             const bool shouldRenderNow = !previewScrubRenderElapsed_.isValid()
                 || previewScrubRenderElapsed_.elapsed() >= kPreviewScrubRenderIntervalMs;
             if (shouldRenderNow) {
-                if (previewSeekDebounceTimer_ != nullptr) {
-                    previewSeekDebounceTimer_->stop();
-                }
-                seekPreviewToSecond(second, true);
+                requestPausedPreviewSeek(second, true, false, false);
                 previewScrubRenderElapsed_.restart();
             } else {
                 schedulePreviewSeek(second, true);
