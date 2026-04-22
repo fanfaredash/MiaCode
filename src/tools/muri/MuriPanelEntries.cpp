@@ -194,9 +194,12 @@ MuriPanelEntry makeMuriPanelEntry(const MuriStaticReference& reference)
     entry.isStatic = true;
     entry.kind = reference.kind;
     entry.alertLevel = reference.alertLevel;
-    const MuriPanelAnchor anchor = earlierMuriPanelAnchor(
-        muriPanelAnchorFromReferenceNote(reference.affected),
-        muriPanelAnchorFromReferenceNote(reference.cause));
+    const MuriPanelAnchor affectedAnchor = muriPanelAnchorFromReferenceNote(reference.affected);
+    const MuriPanelAnchor causeAnchor = muriPanelAnchorFromReferenceNote(reference.cause);
+    const MuriPanelAnchor anchor =
+        (reference.kind == MuriKind::SlideHeadTap || reference.kind == MuriKind::TapOnSlide)
+        ? affectedAnchor
+        : earlierMuriPanelAnchor(affectedAnchor, causeAnchor);
     entry.second = anchor.valid ? anchor.second : reference.affected.second;
     entry.occurrenceSecond = reference.affected.second;
     entry.line = anchor.valid ? anchor.line : reference.affected.line;

@@ -3713,14 +3713,17 @@ DiagnosticAnchor diagnosticAnchorForSlideJudge(
     const QHash<QString, MarkerSourceRef>& markerRefs,
     const QHash<QString, QString>& syntheticSlideHeadOwnerKeys)
 {
-    DiagnosticAnchor anchor = diagnosticAnchorFromMarker(marker);
     const EarlyJudgeCauseInfo latestCause = latestEarlyJudgeCauseForState(state);
-    if (!latestCause.valid) {
-        return anchor;
+    if (latestCause.valid) {
+        const DiagnosticAnchor causeAnchor = diagnosticAnchorForMarkerKey(
+            latestCause.markerKey,
+            markerRefs,
+            syntheticSlideHeadOwnerKeys);
+        if (causeAnchor.valid) {
+            return causeAnchor;
+        }
     }
-    return earlierDiagnosticAnchor(
-        anchor,
-        diagnosticAnchorForMarkerKey(latestCause.markerKey, markerRefs, syntheticSlideHeadOwnerKeys));
+    return diagnosticAnchorFromMarker(marker);
 }
 
 QString formatSlideTooFastDetail(
@@ -4322,9 +4325,6 @@ void collectSimpleNoteRuntimeDiagnostics(
                 ? slideHeadTapDetailText(
                       hasTapOnSlideHead, alertLevel, causeConfig, affectedTarget, gapMs)
                 : tapOnSlideDetailText(alertLevel, causeConfig, affectedTarget, gapMs);
-            const DiagnosticAnchor anchor = earlierDiagnosticAnchor(
-                diagnosticAnchorFromNote(note),
-                diagnosticAnchorForCause(note.cause, markerRefs, syntheticSlideHeadOwnerKeys));
             addSimpleNoteDiagnostic(
                 diagnostics,
                 slideHeadTap ? MuriKind::SlideHeadTap : MuriKind::TapOnSlide,
@@ -4332,7 +4332,7 @@ void collectSimpleNoteRuntimeDiagnostics(
                 note.judgeSecond,
                 note,
                 detail,
-                anchor);
+                diagnosticAnchorFromNote(note));
             forceRenderJudgeSpriteKeys.insert(note.markerKey);
             if (alertLevel == MuriAlertLevel::Warning) {
                 simpleJudgeEffects.insert(note.markerKey, MuriSimpleJudgeEffect::Perfect);

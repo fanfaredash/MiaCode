@@ -208,12 +208,12 @@ int main(int argc, char** argv)
                 firstDiagnostic(analyzed.report.diagnostics, MuriKind::SlideHeadTap)) {
             expect(diagnostic->kind == MuriKind::SlideHeadTap,
                 QStringLiteral("runtime anchor repro diagnostic kind is slide-head-tap"));
-            expect(nearlyEqual(diagnostic->anchorSecond, 0.0),
-                QStringLiteral("runtime anchor repro uses slide start as anchor second"));
             expect(nearlyEqual(diagnostic->second, 0.25),
                 QStringLiteral("runtime anchor repro keeps the actual early-judge second"));
-            expect(diagnostic->line == 2 && diagnostic->col == 1,
-                QStringLiteral("runtime anchor repro points at the first involved object"));
+            expect(nearlyEqual(diagnostic->anchorSecond, 0.3125),
+                QStringLiteral("runtime anchor repro uses the affected tap as anchor second"));
+            expect(diagnostic->line == 3 && diagnostic->col == 1,
+                QStringLiteral("runtime anchor repro points at the affected tap"));
             expect(diagnostic->detail.contains(QStringLiteral("tap 8")),
                 QStringLiteral("runtime anchor repro detail names the affected tap lane"));
             expect(diagnostic->detail.contains(QStringLiteral("will early-judge")),
@@ -230,10 +230,10 @@ int main(int argc, char** argv)
 
         if (const miacode::muri::MuriPanelEntry* entry =
                 firstVisibleEntry(analyzed.visibleEntries, MuriKind::SlideHeadTap)) {
-            expect(nearlyEqual(entry->second, 0.0),
-                QStringLiteral("anchor repro visible entry sorts by the first involved object"));
-            expect(entry->line == 2 && entry->col == 1,
-                QStringLiteral("anchor repro visible entry points at the first involved object"));
+            expect(nearlyEqual(entry->second, 0.3125),
+                QStringLiteral("anchor repro visible entry sorts by the affected tap"));
+            expect(entry->line == 3 && entry->col == 1,
+                QStringLiteral("anchor repro visible entry points at the affected tap"));
             expect(!entry->isStatic,
                 QStringLiteral("anchor repro runtime entry suppresses the duplicate static entry"));
         }
@@ -253,8 +253,8 @@ int main(int argc, char** argv)
 
         if (const MuriDiagnostic* diagnostic =
                 firstDiagnostic(analyzed.report.diagnostics, MuriKind::SlideHeadTap)) {
-            expect(diagnostic->anchorSecond < -1e-6,
-                QStringLiteral("negative-time slide-head repro keeps a negative runtime anchor second"));
+            expect(nearlyEqual(diagnostic->anchorSecond, 0.1875),
+                QStringLiteral("negative-time slide-head repro reanchors to the affected tap"));
         }
 
         if (const MuriStaticReference* reference =
@@ -265,8 +265,8 @@ int main(int argc, char** argv)
 
         if (const miacode::muri::MuriPanelEntry* entry =
                 firstVisibleEntry(analyzed.visibleEntries, MuriKind::SlideHeadTap)) {
-            expect(entry->second < -1e-6,
-                QStringLiteral("negative-time slide-head repro keeps the visible entry anchored before zero"));
+            expect(nearlyEqual(entry->second, 0.1875),
+                QStringLiteral("negative-time slide-head repro keeps the visible entry on the affected tap"));
         }
     }
 
@@ -301,6 +301,8 @@ int main(int argc, char** argv)
                 firstVisibleEntry(analyzed.visibleEntries, MuriKind::TapOnSlide)) {
             expect(entry->rawDetail.contains(QStringLiteral("star 1")),
                 QStringLiteral("synthetic head-star repro visible tap-on-slide detail names the star lane"));
+            expect(entry->line == 3 && entry->col == 2,
+                QStringLiteral("synthetic head-star repro visible tap-on-slide anchors to the affected helper star"));
         }
     }
 
@@ -381,6 +383,8 @@ int main(int argc, char** argv)
                 QStringLiteral("head-star tap-on-slide repro visible detail names the affected star lane"));
             expect(entry->rawDetail.contains(QStringLiteral("trajectory may collide with")),
                 QStringLiteral("head-star tap-on-slide repro visible detail uses warning wording when severity is warning"));
+            expect(entry->line == 2 && entry->col == 7,
+                QStringLiteral("head-star tap-on-slide repro visible entry anchors to the affected helper star"));
         }
     }
 
@@ -457,12 +461,16 @@ int main(int argc, char** argv)
                 QStringLiteral("protected tap-on-slide repro runtime detail uses warning wording"));
             expect(diagnostic->detail.contains(QStringLiteral("protected tap 4x")),
                 QStringLiteral("protected tap-on-slide repro runtime detail names the protected tap target"));
+            expect(diagnostic->line == 3 && diagnostic->col == 1,
+                QStringLiteral("protected tap-on-slide repro runtime anchor follows the affected tap"));
         }
 
         if (const miacode::muri::MuriPanelEntry* entry =
                 firstVisibleEntry(analyzed.visibleEntries, MuriKind::TapOnSlide)) {
             expect(entry->rawDetail.contains(QStringLiteral("protected tap 4x")),
                 QStringLiteral("protected tap-on-slide repro visible detail names the protected tap target"));
+            expect(entry->line == 3 && entry->col == 1,
+                QStringLiteral("protected tap-on-slide repro visible entry anchors to the affected tap"));
         }
     }
 
@@ -501,6 +509,8 @@ int main(int argc, char** argv)
                 QStringLiteral("chain-slide label repro runtime detail keeps the full chained slide token"));
             expect(diagnostic->detail.contains(QStringLiteral("trajectory will collide with")),
                 QStringLiteral("chain-slide label repro runtime detail uses definite wording for muri"));
+            expect(diagnostic->line == 3 && diagnostic->col == 1,
+                QStringLiteral("chain-slide label repro runtime anchor follows the affected tap"));
         }
 
         if (const MuriStaticReference* reference =
@@ -515,6 +525,39 @@ int main(int argc, char** argv)
                 QStringLiteral("chain-slide label repro visible detail keeps the full chained slide token"));
             expect(entry->rawDetail.contains(QStringLiteral("trajectory will collide with")),
                 QStringLiteral("chain-slide label repro visible detail uses definite wording for muri"));
+            expect(entry->line == 3 && entry->col == 1,
+                QStringLiteral("chain-slide label repro visible entry anchors to the affected tap"));
+        }
+    }
+
+    {
+        MuriAnalysisReport report;
+        MuriDiagnostic diagnostic;
+        diagnostic.kind = MuriKind::SlideTooFast;
+        diagnostic.alertLevel = MuriAlertLevel::Muri;
+        diagnostic.second = 0.12777777777777777;
+        diagnostic.anchorSecond = 0.1875;
+        diagnostic.line = 3;
+        diagnostic.col = 1;
+        diagnostic.markerKey = QStringLiteral("tap|0.187500|8|8|3|1|");
+        diagnostic.detail = QStringLiteral("slide 8>3 was early-judged by tap 8, gap 62.5 ms.");
+        report.diagnostics.append(diagnostic);
+
+        const QVector<miacode::muri::MuriPanelEntry> entries =
+            miacode::muri::buildVisibleMuriPanelEntries(report, {});
+        expect(entries.size() == 1,
+            QStringLiteral("runtime slide-too-fast repro keeps one visible entry"));
+
+        if (!entries.isEmpty()) {
+            const miacode::muri::MuriPanelEntry& entry = entries.constFirst();
+            expect(nearlyEqual(entry.second, diagnostic.anchorSecond),
+                QStringLiteral("runtime slide-too-fast repro visible entry uses the shifted anchor second"));
+            expect(nearlyEqual(entry.occurrenceSecond, diagnostic.second),
+                QStringLiteral("runtime slide-too-fast repro visible entry preserves the occurrence second"));
+            expect(entry.line == diagnostic.line && entry.col == diagnostic.col,
+                QStringLiteral("runtime slide-too-fast repro visible entry keeps the shifted anchor location"));
+            expect(!entry.isStatic,
+                QStringLiteral("runtime slide-too-fast repro visible entry stays runtime-backed"));
         }
     }
 
