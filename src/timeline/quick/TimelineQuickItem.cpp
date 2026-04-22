@@ -668,9 +668,11 @@ void TimelineQuickItem::hoverMoveEvent(QHoverEvent* event)
         return;
     }
     const miacode::timeline::TimelineSceneState state = currentSceneState();
+    QPointF hitPosition = event->position();
+    hitPosition.rx() += state.horizontalScrollValue;
     QString tooltipText;
     for (const auto& glyph : state.muriDots) {
-        if (!glyph.tooltipText.isEmpty() && glyph.rect.contains(event->position())) {
+        if (!glyph.tooltipText.isEmpty() && glyph.rect.contains(hitPosition)) {
             tooltipText = glyph.tooltipText;
             break;
         }
