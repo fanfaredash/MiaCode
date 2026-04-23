@@ -844,7 +844,22 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
         state_.activeOutlineKey_ = "chart";
     }
     populateDifficultyPage(difficultyId);
+    const double previousPreviewTrackDurationSeconds = state_.previewTrackDurationSeconds_;
+    const std::shared_ptr<const miacode::waveform::WaveformData> previousWaveformData =
+        state_.timelineQuickStateBridge_ != nullptr ? state_.timelineQuickStateBridge_->waveformData() : nullptr;
     clearTimelineAndPreview();
+    if (previousWaveformData) {
+        owner_.applyWaveformData(previousWaveformData);
+    } else if (previousPreviewTrackDurationSeconds > 0.0) {
+        state_.previewTrackDurationSeconds_ = previousPreviewTrackDurationSeconds;
+        owner_.updatePreviewSliderRange();
+    }
+    if (!state_.currentFilePath_.isEmpty()) {
+        owner_.syncPreviewStageMediaRouteChartPath(
+            state_.currentFilePath_,
+            state_.lastTrackPath_,
+            state_.qtPreviewPauseSecond_);
+    }
     if (ui_.editorStack_ != nullptr && ui_.chartPage_ != nullptr) {
         ui_.editorStack_->setCurrentWidget(ui_.chartPage_);
     }

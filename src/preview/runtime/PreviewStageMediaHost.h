@@ -100,8 +100,12 @@ private:
     void loadImageMedia(const QString& path);
     void loadVideoMedia(const QString& path);
     void bindVideoOutput();
+    bool recoverVideoBackend(const QString& reason, double targetSecond, bool resumePlayback);
+    void schedulePreparedPlaybackTimeout(quint64 transactionId, qint64 targetMs);
+    void schedulePausedSeekTimeout(quint64 generation, qint64 targetMs);
+    void scheduleVideoPlaybackWatchdog(const QString& reason);
     void updateClockDelta();
-    void noteVideoFrameArrived(const QVideoFrame& frame);
+    void noteVideoFrameArrived(const QVideoFrame& frame, quint64 sourceGeneration);
     void resetVideoFrameDiagnostics();
     void updateVideoFrameStallState(bool logTransition);
     qint64 currentVideoFrameAgeForDiagnosticsMs() const;
@@ -120,6 +124,7 @@ private:
     QPointer<QObject> videoOutputObject_;
     QPointer<QVideoSink> videoSink_;
     QMetaObject::Connection videoSinkFrameConnection_;
+    quint64 videoSourceGeneration_ = 0;
     double timelineOffsetSeconds_ = 0.0;
     double playbackRate_ = 1.0;
     quint64 playbackTransactionId_ = 0;
@@ -134,6 +139,11 @@ private:
     double pausedSeekTargetSecond_ = 0.0;
     quint64 pausedSeekGeneration_ = 0;
     bool pausedSeekCompletionPending_ = false;
+    quint64 preparedPlaybackTimeoutSerial_ = 0;
+    quint64 pausedSeekTimeoutSerial_ = 0;
+    quint64 videoPlaybackWatchdogSerial_ = 0;
+    bool recoveringVideoBackend_ = false;
+    int consecutiveVideoBackendRecoveryCount_ = 0;
     bool videoPlaybackActive_ = false;
     bool videoPlaybackPendingStart_ = false;
     double observedPlayheadSecond_ = 0.0;
