@@ -8,6 +8,8 @@
 #include "simai/transform/ChartBatchTransform.h"
 #include "simai/transform/ChartNormalization.h"
 
+#include <functional>
+
 #include <QtCore>
 #include <QtGui>
 #include <QtWidgets>
@@ -35,7 +37,8 @@ std::pair<int, int> lineColForPosition(const QTextDocument* document, int positi
 NormalizeDialogResult showNormalizeSelectionDialog(
     MainWindow& owner,
     const QString& descriptionText,
-    const miacode::chart_transform::ChartNormalizationOptions& initialOptions)
+    const miacode::chart_transform::ChartNormalizationOptions& initialOptions,
+    const std::function<void(const miacode::chart_transform::ChartNormalizationOptions&)>& optionsChanged)
 {
     NormalizeDialogResult result;
     result.options = initialOptions;
@@ -81,6 +84,17 @@ NormalizeDialogResult showNormalizeSelectionDialog(
         &dialog);
     reduceTo384Check->setChecked(initialOptions.reduceTo384Grid);
     rootLayout->addWidget(reduceTo384Check);
+
+    const auto publishOptionsChanged = [startAtNewMeasureCheck, reduceTo384Check, optionsChanged]() {
+        if (!optionsChanged) {
+            return;
+        }
+        optionsChanged(miacode::chart_transform::ChartNormalizationOptions{
+            startAtNewMeasureCheck->isChecked(),
+            reduceTo384Check->isChecked()});
+    };
+    QObject::connect(startAtNewMeasureCheck, &QCheckBox::toggled, &dialog, publishOptionsChanged);
+    QObject::connect(reduceTo384Check, &QCheckBox::toggled, &dialog, publishOptionsChanged);
 
     auto* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     UiDialogs::localizeButtonBox(buttonBox);
@@ -306,14 +320,26 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
     miacode::chart_transform::ChartNormalizationOptions options;
     options.startAtNewMeasure = state_.chartNormalizeStartAtNewMeasure_;
     options.reduceTo384Grid = state_.chartNormalizeReduceTo384Grid_;
-    const NormalizeDialogResult dialogResult = showNormalizeSelectionDialog(owner_, dialogDescription, options);
+    const NormalizeDialogResult dialogResult =
+        showNormalizeSelectionDialog(
+            owner_,
+            dialogDescription,
+            options,
+            [this](const miacode::chart_transform::ChartNormalizationOptions& changedOptions) {
+                if (state_.chartNormalizeStartAtNewMeasure_ == changedOptions.startAtNewMeasure
+                    && state_.chartNormalizeReduceTo384Grid_ == changedOptions.reduceTo384Grid) {
+                    return;
+                }
+                state_.chartNormalizeStartAtNewMeasure_ = changedOptions.startAtNewMeasure;
+                state_.chartNormalizeReduceTo384Grid_ = changedOptions.reduceTo384Grid;
+                owner_.savePortableState();
+            });
     if (!dialogResult.accepted) {
         return;
     }
 
     state_.chartNormalizeStartAtNewMeasure_ = dialogResult.options.startAtNewMeasure;
     state_.chartNormalizeReduceTo384Grid_ = dialogResult.options.reduceTo384Grid;
-    owner_.savePortableState();
 
     if (begin < 0 || finish < begin || finish > original.size()) {
         owner_.statusBar()->showMessage(QStringLiteral("Format Chart: invalid selection range."));
