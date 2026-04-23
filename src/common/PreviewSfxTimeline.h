@@ -296,6 +296,9 @@ inline void buildTimeline(
                     -1,
                     1.0,
                     answerCompensationSeconds);
+                const double tailJudgeSecond =
+                    qMax(0.0, miacode::preview_sfx_timing::judgeTriggerSecond(marker.endSecond, normalizedTimingSettings, playbackRate));
+                addEvent(tailJudgeSecond, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("judge"));
             }
             if (marker.isEx) {
                 addEvent(judgeSecond, QStringLiteral("ex"));

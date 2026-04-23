@@ -113,7 +113,7 @@ Shared concerns:
 - shared timing semantics now live in `src/common/PreviewTimingSettings.h` plus `src/common/PreviewSfxTiming.h`; `&first` currently uses the finite parsed raw document value directly, `audioOffset` is the whole-SFX chart-domain shift, `displayOffset` advances the `answer` / `judge` families, `answerOffset` stays answer-only, and `judgeOffset` stays judge-only
 - `&first` no longer flows through a separate preview-global helper or repo-wide fixed lead-in layer; `PreviewSfxTiming.h` still keeps a fixed real-time `1/60 s` pre-trigger for `answer` plus tap/hold/touch-family `judge` SFX only, while slide / break-slide / firework / touchhold sustain timing should still be compared against the chart-domain shift without inheriting that extra note-category pre-trigger
 - touch and touch-hold still emit `answer` when `isFirework` is set; firework is additive rather than replacing the hit-confirm sound
-- touch-hold tail timing must mirror hold tail timing for `answer`: when `endSecond > second`, both note kinds emit a second `answer` at the tail while touch-hold still keeps its sustain start/stop span events
+- hold tails emit both tail `answer` and tail `judge` events when `endSecond > second`; touch-hold tails stay answer-only for hit-confirm audio, while still keeping sustain start/stop span events and the firework tail event when applicable.
 - head-star behavior for slide and wifi
 - `hasHeadStar` gates only the pre-head object / head SFX / head judge path; `headlessImmediate` only changes the waiting-star visual ramp
 - `sameHeadSlide` behavior

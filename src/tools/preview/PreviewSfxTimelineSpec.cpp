@@ -27,7 +27,7 @@ bool require(bool condition, const QString& message, QTextStream& err)
     return true;
 }
 
-bool verifyHoldAndTouchHoldTailAnswer(QTextStream& err)
+bool verifyHoldTailJudgeAndTouchHoldTailAnswer(QTextStream& err)
 {
     QVector<TimelineNoteMarker> markers;
 
@@ -49,13 +49,20 @@ bool verifyHoldAndTouchHoldTailAnswer(QTextStream& err)
 
     int holdStartAnswerCount = 0;
     int holdEndAnswerCount = 0;
+    int holdEndJudgeCount = 0;
     int touchHoldStartAnswerCount = 0;
     int touchHoldEndAnswerCount = 0;
+    int touchHoldEndJudgeCount = 0;
     int touchHoldStartSpanCount = 0;
     int touchHoldStopSpanCount = 0;
+    const double holdTailJudgeSecond =
+        miacode::preview_sfx_timing::judgeTriggerSecond(2.0, PreviewTimingSettings(), 1.0);
+    const double touchHoldTailJudgeSecond =
+        miacode::preview_sfx_timing::judgeTriggerSecond(4.5, PreviewTimingSettings(), 1.0);
 
     for (const Event& event : events) {
         if (event.kind != QLatin1String("answer")
+            && event.kind != QLatin1String("judge")
             && event.kind != QLatin1String("touchhold_start")
             && event.kind != QLatin1String("touchhold_stop")) {
             continue;
@@ -65,10 +72,14 @@ bool verifyHoldAndTouchHoldTailAnswer(QTextStream& err)
             ++holdStartAnswerCount;
         } else if (event.kind == QLatin1String("answer") && qAbs(event.second - adjustedAnswerSecond(2.0)) <= 1e-6) {
             ++holdEndAnswerCount;
+        } else if (event.kind == QLatin1String("judge") && qAbs(event.second - holdTailJudgeSecond) <= 1e-6) {
+            ++holdEndJudgeCount;
         } else if (event.kind == QLatin1String("answer") && qAbs(event.second - adjustedAnswerSecond(3.0)) <= 1e-6) {
             ++touchHoldStartAnswerCount;
         } else if (event.kind == QLatin1String("answer") && qAbs(event.second - adjustedAnswerSecond(4.5)) <= 1e-6) {
             ++touchHoldEndAnswerCount;
+        } else if (event.kind == QLatin1String("judge") && qAbs(event.second - touchHoldTailJudgeSecond) <= 1e-6) {
+            ++touchHoldEndJudgeCount;
         } else if (event.kind == QLatin1String("touchhold_start") && qAbs(event.second - 3.0) <= 1e-6) {
             ++touchHoldStartSpanCount;
         } else if (event.kind == QLatin1String("touchhold_stop") && qAbs(event.second - 4.5) <= 1e-6) {
@@ -82,10 +93,16 @@ bool verifyHoldAndTouchHoldTailAnswer(QTextStream& err)
     if (!require(holdEndAnswerCount == 1, QStringLiteral("hold should emit one tail answer"), err)) {
         return false;
     }
+    if (!require(holdEndJudgeCount == 1, QStringLiteral("hold should emit one tail judge"), err)) {
+        return false;
+    }
     if (!require(touchHoldStartAnswerCount == 1, QStringLiteral("touch_hold should emit one start answer"), err)) {
         return false;
     }
     if (!require(touchHoldEndAnswerCount == 1, QStringLiteral("touch_hold should emit one tail answer"), err)) {
+        return false;
+    }
+    if (!require(touchHoldEndJudgeCount == 0, QStringLiteral("touch_hold tail should not emit judge"), err)) {
         return false;
     }
     if (!require(touchHoldStartSpanCount == 1, QStringLiteral("touch_hold should emit one sustain start event"), err)) {
@@ -476,7 +493,7 @@ int main(int argc, char* argv[])
     QTextStream err(stderr);
     QTextStream out(stdout);
 
-    if (!verifyHoldAndTouchHoldTailAnswer(err)) {
+    if (!verifyHoldTailJudgeAndTouchHoldTailAnswer(err)) {
         return 1;
     }
     if (!verifyAnswerTimingCompensation(err)) {
