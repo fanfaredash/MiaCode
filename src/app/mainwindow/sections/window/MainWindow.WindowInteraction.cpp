@@ -31,6 +31,13 @@ bool widgetMatchesOrDescendsFrom(QWidget* widget, QWidget* root)
     return widget != nullptr && root != nullptr && (widget == root || root->isAncestorOf(widget));
 }
 
+bool isUnmodifiedHorizontalArrowKey(const QKeyEvent* event)
+{
+    return event != nullptr
+        && event->modifiers() == Qt::NoModifier
+        && (event->key() == Qt::Key_Left || event->key() == Qt::Key_Right);
+}
+
 void appendPreviewInteractionLog(const QString& action, const QString& payload = QString())
 {
     QString text = QStringLiteral("action=%1").arg(action);
@@ -60,6 +67,35 @@ QTextEdit* MainWindow::WindowSection::resolveRestorableTextEdit(QWidget* widget)
         return owner_.metadataExtraEdit_;
     }
     return nullptr;
+}
+
+bool MainWindow::WindowSection::isTextInputWidget(QWidget* widget) const
+{
+    if (widget == nullptr) {
+        return false;
+    }
+    if (this->resolveRestorableTextEdit(widget) != nullptr) {
+        return true;
+    }
+
+    for (QWidget* current = widget; current != nullptr; current = current->parentWidget()) {
+        if (qobject_cast<QLineEdit*>(current) != nullptr
+            || qobject_cast<QTextEdit*>(current) != nullptr
+            || qobject_cast<QPlainTextEdit*>(current) != nullptr
+            || qobject_cast<QAbstractSpinBox*>(current) != nullptr) {
+            return true;
+        }
+        if (auto* combo = qobject_cast<QComboBox*>(current);
+            combo != nullptr && combo->isEditable()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool MainWindow::WindowSection::hasActiveTextInputFocus() const
+{
+    return this->isTextInputWidget(QApplication::focusWidget());
 }
 
 bool MainWindow::WindowSection::shouldRespectFocusedWidgetOnRestore(QWidget* widget, QTextEdit* target) const
@@ -362,6 +398,7 @@ void MainWindow::WindowSection::restoreFocusedTextEditStateAttempt(
 
 bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
 {
+    auto* watchedWidget = qobject_cast<QWidget*>(watched);
     if (owner_.runtimeDebugOutputEnabled_
         && event != nullptr
         && (event->type() == QEvent::FocusIn || event->type() == QEvent::FocusOut)
@@ -374,33 +411,45 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
             || watched == owner_.previewCanvasContainer_
             || watched == owner_.previewCanvasFrame_
             || watched == owner_.previewSlider_)) {
-        auto* widget = qobject_cast<QWidget*>(watched);
         auto* focusEvent = static_cast<QFocusEvent*>(event);
         this->logFocusDebug(
             event->type() == QEvent::FocusIn ? QStringLiteral("watched_focus_in") : QStringLiteral("watched_focus_out"),
-            widget,
+            watchedWidget,
             QApplication::focusWidget(),
             QStringLiteral("watched=%1 reason=%2 spontaneous=%3")
-                .arg(this->describeFocusWidget(widget))
+                .arg(this->describeFocusWidget(watchedWidget))
                 .arg(this->formatFocusReason(focusEvent != nullptr ? focusEvent->reason() : Qt::NoFocusReason))
                 .arg(event->spontaneous() ? 1 : 0)
         );
     }
+    if (event != nullptr && event->type() == QEvent::FocusIn && this->isTextInputWidget(watchedWidget)) {
+        owner_.stopPreviewHeldSeek();
+    }
+    if (event != nullptr
+        && (event->type() == QEvent::ShortcutOverride
+            || event->type() == QEvent::KeyPress
+            || event->type() == QEvent::KeyRelease)) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (isUnmodifiedHorizontalArrowKey(keyEvent)
+            && (this->isTextInputWidget(watchedWidget) || this->hasActiveTextInputFocus())) {
+            owner_.stopPreviewHeldSeek();
+            return owner_.QMainWindow::eventFilter(watched, event);
+        }
+    }
 
     if (event != nullptr && event->type() == QEvent::ToolTip) {
-        auto* widget = qobject_cast<QWidget*>(watched);
         const bool allowPreviewTooltip =
-            widgetMatchesOrDescendsFrom(widget, owner_.previewPanel_)
-            || widgetMatchesOrDescendsFrom(widget, owner_.previewLeftColumn_)
-            || widgetMatchesOrDescendsFrom(widget, owner_.previewCanvasContainer_)
-            || widgetMatchesOrDescendsFrom(widget, owner_.previewCanvasFrame_)
-            || widgetMatchesOrDescendsFrom(widget, owner_.previewControlCard_)
-            || widgetMatchesOrDescendsFrom(widget, owner_.previewStatsCard_)
-            || widgetMatchesOrDescendsFrom(widget, owner_.previewFullscreenWindow_)
-            || widgetMatchesOrDescendsFrom(widget, owner_.previewFullscreenHost_)
-            || widgetMatchesOrDescendsFrom(widget, owner_.previewFullscreenControlsWindow_)
-            || widgetMatchesOrDescendsFrom(widget, owner_.previewFullscreenHintWindow_);
-        if (widget != nullptr && !allowPreviewTooltip) {
+            widgetMatchesOrDescendsFrom(watchedWidget, owner_.previewPanel_)
+            || widgetMatchesOrDescendsFrom(watchedWidget, owner_.previewLeftColumn_)
+            || widgetMatchesOrDescendsFrom(watchedWidget, owner_.previewCanvasContainer_)
+            || widgetMatchesOrDescendsFrom(watchedWidget, owner_.previewCanvasFrame_)
+            || widgetMatchesOrDescendsFrom(watchedWidget, owner_.previewControlCard_)
+            || widgetMatchesOrDescendsFrom(watchedWidget, owner_.previewStatsCard_)
+            || widgetMatchesOrDescendsFrom(watchedWidget, owner_.previewFullscreenWindow_)
+            || widgetMatchesOrDescendsFrom(watchedWidget, owner_.previewFullscreenHost_)
+            || widgetMatchesOrDescendsFrom(watchedWidget, owner_.previewFullscreenControlsWindow_)
+            || widgetMatchesOrDescendsFrom(watchedWidget, owner_.previewFullscreenHintWindow_);
+        if (watchedWidget != nullptr && !allowPreviewTooltip) {
             QToolTip::hideText();
             event->ignore();
             return true;
@@ -783,18 +832,22 @@ bool MainWindow::WindowSection::eventFilter(QObject* watched, QEvent* event)
                     owner_.editorCtrlLeftJumpInteractionOp_ = 0;
                     return false;
                 }
-                const QTextCursor cursor = editor->cursorForPosition(releasePos);
+                const QPoint normalizedReleasePos =
+                    editor->normalizedViewportHitPosition(QPointF(releasePos)).toPoint();
+                const QTextCursor cursor = editor->cursorForPosition(normalizedReleasePos);
                 const int line = cursor.blockNumber() + 1;
                 const int col = cursor.positionInBlock() + 1;
                 const double second = owner_.timelineSecondForCursor(line, col);
                 appendPreviewInteractionLog(
                     QStringLiteral("ctrl_click_resolved"),
-                    QString("op=%1 source=editor_ctrl_click line=%2 col=%3 second=%4 playing=%5")
+                    QString("op=%1 source=editor_ctrl_click line=%2 col=%3 second=%4 playing=%5 normalized_x=%6 normalized_y=%7")
                         .arg(opId)
                         .arg(line)
                         .arg(col)
                         .arg(second, 0, 'f', 6)
-                        .arg(owner_.qtPreviewPlaying_ ? 1 : 0));
+                        .arg(owner_.qtPreviewPlaying_ ? 1 : 0)
+                        .arg(normalizedReleasePos.x())
+                        .arg(normalizedReleasePos.y()));
                 if (owner_.qtPreviewPlaying_) {
                     appendPreviewInteractionLog(
                         QStringLiteral("ctrl_click_pause_begin"),

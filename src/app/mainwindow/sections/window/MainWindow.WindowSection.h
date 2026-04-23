@@ -105,6 +105,8 @@ public:
 
 private:
     QTextEdit* resolveRestorableTextEdit(QWidget* widget) const;
+    bool isTextInputWidget(QWidget* widget) const;
+    bool hasActiveTextInputFocus() const;
     bool shouldRespectFocusedWidgetOnRestore(QWidget* widget, QTextEdit* target) const;
     bool quickShellFocusBridgeActive() const;
     QWindow* previewVisibleHostWindow() const;

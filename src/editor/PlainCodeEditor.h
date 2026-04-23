@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QList>
+#include <QPointF>
 #include <QTextEdit>
 
 class LineNumberArea;
@@ -27,6 +28,7 @@ public:
     void setMoreBatchTransformActions(const QList<QAction*>& actions);
     void setPreviewFollowVisualCaret(bool active, int line = 1, int col = 1);
     bool applyPreviewFollowCursor(const QTextCursor& cursor, bool centerView, bool suppressSignals = true);
+    QPointF normalizedViewportHitPosition(const QPointF& position) const;
 
 signals:
     void undoShortcutRequested();

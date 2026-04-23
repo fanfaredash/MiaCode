@@ -29,7 +29,6 @@ constexpr int kCurrentLineHighlightLeftInset = 3;
 constexpr int kCurrentLineHighlightRightInset = 0;
 constexpr int kCurrentLineHighlightDirtyMargin = 2;
 constexpr int kEditorCursorVisibleWidth = 1;
-constexpr int kEditorCursorHiddenWidth = 0;
 
 QChar normalizedHalfWidthChar(QChar ch)
 {
@@ -133,22 +132,47 @@ BlockVisualSpan visibleBlockSpan(const PlainCodeEditor* editor, const QTextBlock
     return span;
 }
 
-QPointF adjustedTrailingBlankClickPosition(const PlainCodeEditor* editor, const QPointF& position)
+QPointF normalizedViewportHitPositionForBlockSpacing(const PlainCodeEditor* editor, const QPointF& position)
 {
-    if (editor == nullptr || editor->document() == nullptr) {
-        return position;
-    }
-    const QTextBlock lastBlock = editor->document()->lastBlock();
-    if (!lastBlock.isValid()) {
+    if (editor == nullptr || editor->document() == nullptr || editor->viewport() == nullptr) {
         return position;
     }
 
-    const BlockVisualSpan lastBlockSpan = visibleBlockSpan(editor, lastBlock);
-    if (!lastBlockSpan.isValid() || position.y() <= lastBlockSpan.bottom()) {
+    QTextCursor visibleStartCursor = editor->cursorForPosition(QPoint(0, 0));
+    QTextBlock block = visibleStartCursor.block();
+    if (!block.isValid()) {
+        block = editor->document()->firstBlock();
+    }
+    if (!block.isValid()) {
         return position;
     }
 
-    return QPointF(position.x(), static_cast<qreal>(lastBlockSpan.lastRowRect.center().y()));
+    BlockVisualSpan previousSpan;
+    while (block.isValid()) {
+        const BlockVisualSpan currentSpan = visibleBlockSpan(editor, block);
+        if (!currentSpan.isValid()) {
+            block = block.next();
+            continue;
+        }
+
+        if (position.y() < currentSpan.top()) {
+            if (previousSpan.isValid() && position.y() > previousSpan.bottom()) {
+                return QPointF(position.x(), static_cast<qreal>(previousSpan.lastRowRect.center().y()));
+            }
+            return position;
+        }
+        if (position.y() <= currentSpan.bottom()) {
+            return position;
+        }
+
+        previousSpan = currentSpan;
+        block = block.next();
+    }
+
+    if (!previousSpan.isValid() || position.y() <= previousSpan.bottom()) {
+        return position;
+    }
+    return QPointF(position.x(), static_cast<qreal>(previousSpan.lastRowRect.center().y()));
 }
 
 QRect currentLineHighlightRectForCursor(
@@ -302,13 +326,14 @@ QRect PlainCodeEditor::previewFollowVisualCaretRect() const
     return caretRect.isValid() ? caretRect : QRect();
 }
 
+QPointF PlainCodeEditor::normalizedViewportHitPosition(const QPointF& position) const
+{
+    return normalizedViewportHitPositionForBlockSpacing(this, position);
+}
+
 void PlainCodeEditor::updateCursorVisibility()
 {
-    const QTextCursor cursor = textCursor();
-    const bool hideAtLineStart = !cursor.hasSelection()
-        && cursor.positionInBlock() == 0
-        && !cursor.block().text().isEmpty();
-    setCursorWidth(hideAtLineStart ? kEditorCursorHiddenWidth : kEditorCursorVisibleWidth);
+    setCursorWidth(kEditorCursorVisibleWidth);
 }
 
 void PlainCodeEditor::syncCursorVisualState()
@@ -746,7 +771,7 @@ void PlainCodeEditor::mousePressEvent(QMouseEvent* event)
         return;
     }
 
-    const QPointF adjustedPosition = adjustedTrailingBlankClickPosition(this, event->position());
+    const QPointF adjustedPosition = normalizedViewportHitPosition(event->position());
     if (adjustedPosition == event->position()) {
         QTextEdit::mousePressEvent(event);
         return;
