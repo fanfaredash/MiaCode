@@ -1327,19 +1327,48 @@ void MainWindow::ExportSection::cancelVideoExportWorker()
 
 void MainWindow::ExportSection::clearVideoExportWorkerState()
 {
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    const bool hadProgressDialog = owner_.videoExportProgressDialog_ != nullptr;
+    const bool hadWorkerProcess = owner_.videoExportWorkerProcess_ != nullptr;
     if (owner_.videoExportProgressDialog_ != nullptr) {
+        QElapsedTimer progressDialogTimer;
+        progressDialogTimer.start();
         owner_.videoExportProgressDialog_->close();
         owner_.videoExportProgressDialog_->deleteLater();
         owner_.videoExportProgressDialog_ = nullptr;
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/export_worker"),
+            QStringLiteral("clear_progress_dialog"),
+            progressDialogTimer.elapsed()
+        );
     }
     if (owner_.videoExportWorkerProcess_ != nullptr) {
+        QElapsedTimer processTimer;
+        processTimer.start();
         owner_.videoExportWorkerProcess_->disconnect(&owner_);
+        qint64 waitElapsedMs = 0;
+        bool processWasRunning = false;
         if (owner_.videoExportWorkerProcess_->state() != QProcess::NotRunning) {
+            processWasRunning = true;
+            QElapsedTimer waitTimer;
+            waitTimer.start();
             owner_.videoExportWorkerProcess_->kill();
             owner_.videoExportWorkerProcess_->waitForFinished(2000);
+            waitElapsedMs = waitTimer.elapsed();
         }
         owner_.videoExportWorkerProcess_->deleteLater();
         owner_.videoExportWorkerProcess_ = nullptr;
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/export_worker"),
+            QStringLiteral("clear_worker_process"),
+            processTimer.elapsed(),
+            QStringLiteral("was_running=%1 wait_ms=%2")
+                .arg(processWasRunning ? 1 : 0)
+                .arg(waitElapsedMs)
+        );
     }
     owner_.videoExportWorkerStdoutBuffer_.clear();
     owner_.videoExportWorkerStderrBuffer_.clear();
@@ -1360,5 +1389,16 @@ void MainWindow::ExportSection::clearVideoExportWorkerState()
     owner_.videoExportWorkerLastEtaSeconds_ = -1;
     owner_.videoExportWorkerAttempt_ = 0;
     owner_.videoExportWorkerForceDisablePbo_ = false;
+    if (hadProgressDialog || hadWorkerProcess) {
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/export_worker"),
+            QStringLiteral("clear_video_export_worker_state"),
+            totalTimer.elapsed(),
+            QStringLiteral("had_progress_dialog=%1 had_process=%2")
+                .arg(hadProgressDialog ? 1 : 0)
+                .arg(hadWorkerProcess ? 1 : 0)
+        );
+    }
 }
 

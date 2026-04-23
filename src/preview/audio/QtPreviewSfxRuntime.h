@@ -65,6 +65,7 @@ public:
     double backgroundPlaybackSecond() const;
     bool audition(const QString& kind, double gain = 1.0);
     void stopAll();
+    void prepareForShutdown();
 
 private:
     std::unique_ptr<miacode::preview_audio::PreviewAudioBackend> createBackend() const;

@@ -5,6 +5,8 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 
+#include <QElapsedTimer>
+
 namespace {
 
 bool runtimeAudioDebugEnabled()
@@ -31,7 +33,18 @@ QtPreviewSfxRuntime::QtPreviewSfxRuntime(QObject* parent)
 
 QtPreviewSfxRuntime::~QtPreviewSfxRuntime()
 {
-    appendAudioDebugLog(QString("QtPreviewSfxRuntime destroying backend=%1").arg(backend_->backendId()));
+    const QString backendId = backend_ != nullptr ? backend_->backendId() : QStringLiteral("null");
+    appendAudioDebugLog(QString("QtPreviewSfxRuntime destroying backend=%1").arg(backendId));
+    QElapsedTimer timer;
+    timer.start();
+    backend_.reset();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("app_shutdown/preview_audio"),
+        QStringLiteral("destroy_backend"),
+        timer.elapsed(),
+        QStringLiteral("backend=%1").arg(backendId)
+    );
 }
 
 std::unique_ptr<miacode::preview_audio::PreviewAudioBackend> QtPreviewSfxRuntime::createBackend() const
@@ -250,4 +263,9 @@ bool QtPreviewSfxRuntime::audition(const QString& kind, double gain)
 void QtPreviewSfxRuntime::stopAll()
 {
     backend_->stopAll();
+}
+
+void QtPreviewSfxRuntime::prepareForShutdown()
+{
+    backend_->prepareForShutdown();
 }

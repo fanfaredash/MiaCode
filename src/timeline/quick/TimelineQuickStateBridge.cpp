@@ -17,6 +17,27 @@ QVector<double> makeTimelineZoomPresets()
     return {0.25, 0.5, 0.75, 1.0, 1.5, 2.0};
 }
 
+int zoomPresetIndexForScale(const QVector<double>& zoomPresets, double scale, int fallbackIndex = 1)
+{
+    if (zoomPresets.isEmpty()) {
+        return 0;
+    }
+    if (!qIsFinite(scale) || scale <= 0.0) {
+        return qBound(0, fallbackIndex, zoomPresets.size() - 1);
+    }
+
+    int closestIndex = qBound(0, fallbackIndex, zoomPresets.size() - 1);
+    double closestDistance = qAbs(zoomPresets.at(closestIndex) - scale);
+    for (int index = 0; index < zoomPresets.size(); ++index) {
+        const double distance = qAbs(zoomPresets.at(index) - scale);
+        if (distance + 1e-9 < closestDistance) {
+            closestDistance = distance;
+            closestIndex = index;
+        }
+    }
+    return closestIndex;
+}
+
 bool usesTriggerSecondPlacement(const MuriDiagnostic& diagnostic)
 {
     return diagnostic.kind == MuriKind::SlideTooFast
@@ -511,6 +532,22 @@ double TimelineQuickStateBridge::zoomScale() const
     return zoomPresets_.value(zoomPresetIndex_, 0.5);
 }
 
+void TimelineQuickStateBridge::setZoomScale(double scale)
+{
+    if (zoomPresets_.isEmpty()) {
+        return;
+    }
+    const int nextIndex = zoomPresetIndexForScale(zoomPresets_, scale, zoomPresetIndex_);
+    if (nextIndex == zoomPresetIndex_) {
+        return;
+    }
+    zoomPresetIndex_ = nextIndex;
+    refreshLayoutMetrics();
+    bumpAllRevisions();
+    emit zoomScaleChanged(zoomScale());
+    emit renderStateChanged();
+}
+
 void TimelineQuickStateBridge::cycleZoomPreset(double anchorSecond)
 {
     if (zoomPresets_.isEmpty()) {
@@ -536,6 +573,7 @@ void TimelineQuickStateBridge::cycleZoomPreset(double anchorSecond)
     refreshLayoutMetrics();
     centerOnSecond(anchorSecond);
     bumpAllRevisions();
+    emit zoomScaleChanged(zoomScale());
     emit renderStateChanged();
 }
 
@@ -568,6 +606,7 @@ void TimelineQuickStateBridge::stepZoomPreset(int deltaSteps, double anchorSecon
     refreshLayoutMetrics();
     centerOnSecond(anchorSecond);
     bumpAllRevisions();
+    emit zoomScaleChanged(zoomScale());
     emit renderStateChanged();
 }
 

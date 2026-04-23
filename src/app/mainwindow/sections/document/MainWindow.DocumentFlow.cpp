@@ -48,6 +48,19 @@ enum class UnsavedChangesChoice {
     Cancel,
 };
 
+QString unsavedChangesChoiceName(UnsavedChangesChoice choice)
+{
+    switch (choice) {
+    case UnsavedChangesChoice::Save:
+        return QStringLiteral("save");
+    case UnsavedChangesChoice::Discard:
+        return QStringLiteral("discard");
+    case UnsavedChangesChoice::Cancel:
+    default:
+        return QStringLiteral("cancel");
+    }
+}
+
 constexpr qint64 kAutosaveUnsetTimestampMs = -1;
 constexpr char kAutosaveMetadataSchema[] = "miacode_autosave_v2";
 
@@ -206,47 +219,171 @@ bool ensureDirectoryExists(const QString& directoryPath)
 
 bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
 {
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+
+    QElapsedTimer autosaveTimer;
+    autosaveTimer.start();
     runAutosaveCheck(false);
-    if (!maybeSaveCurrentFieldChanges()) {
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/document"),
+        QStringLiteral("autosave_check"),
+        autosaveTimer.elapsed(),
+        QStringLiteral("trigger=maybe_save_before_continue allow_history=0")
+    );
+
+    QElapsedTimer fieldChangesTimer;
+    fieldChangesTimer.start();
+    const bool fieldChangesSaved = maybeSaveCurrentFieldChanges();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/document"),
+        QStringLiteral("maybe_save_current_field_changes"),
+        fieldChangesTimer.elapsed(),
+        QStringLiteral("result=%1").arg(fieldChangesSaved ? QStringLiteral("continue") : QStringLiteral("cancel"))
+    );
+    if (!fieldChangesSaved) {
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/document"),
+            QStringLiteral("maybe_save_before_continue"),
+            totalTimer.elapsed(),
+            QStringLiteral("result=cancelled_by_field_changes")
+        );
         return false;
     }
     if (!state_.documentDirty_) {
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/document"),
+            QStringLiteral("maybe_save_before_continue"),
+            totalTimer.elapsed(),
+            QStringLiteral("result=clean_document")
+        );
         return true;
     }
 
+    QElapsedTimer dialogTimer;
+    dialogTimer.start();
     const UnsavedChangesChoice choice = showUnsavedChangesDialog(
         &owner_,
         uiText("dialog.unsaved_changes.title", "Unsaved Changes"),
         uiText("dialog.unsaved_changes.message", "Current document has unsaved changes. Save before continue?")
     );
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/document"),
+        QStringLiteral("unsaved_document_dialog"),
+        dialogTimer.elapsed(),
+        QStringLiteral("choice=%1").arg(unsavedChangesChoiceName(choice))
+    );
     if (choice == UnsavedChangesChoice::Save) {
-        return onSaveFile();
+        QElapsedTimer saveTimer;
+        saveTimer.start();
+        const bool saved = onSaveFile();
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/document"),
+            QStringLiteral("on_save_file"),
+            saveTimer.elapsed(),
+            QStringLiteral("trigger=maybe_save_before_continue result=%1")
+                .arg(saved ? QStringLiteral("saved") : QStringLiteral("failed"))
+        );
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/document"),
+            QStringLiteral("maybe_save_before_continue"),
+            totalTimer.elapsed(),
+            QStringLiteral("result=%1").arg(saved ? QStringLiteral("saved") : QStringLiteral("save_failed"))
+        );
+        return saved;
     }
-    return choice == UnsavedChangesChoice::Discard;
+    const bool shouldContinue = choice == UnsavedChangesChoice::Discard;
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/document"),
+        QStringLiteral("maybe_save_before_continue"),
+        totalTimer.elapsed(),
+        QStringLiteral("result=%1").arg(shouldContinue ? QStringLiteral("discard") : QStringLiteral("cancel"))
+    );
+    return shouldContinue;
 }
 
 bool MainWindow::DocumentSection::maybeSaveCurrentFieldChanges()
 {
+    QElapsedTimer totalTimer;
+    totalTimer.start();
     if (!state_.currentFieldDirty_) {
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/document"),
+            QStringLiteral("maybe_save_current_field_changes"),
+            totalTimer.elapsed(),
+            QStringLiteral("result=clean_field")
+        );
         return true;
     }
 
     const QString fieldName = owner_.hasActiveDifficulty()
         ? SimaiDocument::difficultyName(state_.activeDifficultyId_)
         : uiText("dialog.unsaved_field_changes.field.metadata", "Metadata");
+    QElapsedTimer dialogTimer;
+    dialogTimer.start();
     const UnsavedChangesChoice choice = showUnsavedChangesDialog(
         &owner_,
         uiText("dialog.unsaved_field_changes.title", "Unsaved Field Changes"),
         uiText("dialog.unsaved_field_changes.message", "%1 has unsaved changes. Save before switch?").arg(fieldName)
     );
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/document"),
+        QStringLiteral("unsaved_field_changes_dialog"),
+        dialogTimer.elapsed(),
+        QStringLiteral("choice=%1 field=%2")
+            .arg(unsavedChangesChoiceName(choice), fieldName)
+    );
     if (choice == UnsavedChangesChoice::Save) {
-        return applyCurrentFieldToDocument();
+        QElapsedTimer applyTimer;
+        applyTimer.start();
+        const bool applied = applyCurrentFieldToDocument();
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/document"),
+            QStringLiteral("apply_current_field_to_document"),
+            applyTimer.elapsed(),
+            QStringLiteral("trigger=unsaved_field_changes result=%1 field=%2")
+                .arg(applied ? QStringLiteral("applied") : QStringLiteral("failed"), fieldName)
+        );
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/document"),
+            QStringLiteral("maybe_save_current_field_changes"),
+            totalTimer.elapsed(),
+            QStringLiteral("result=%1 field=%2")
+                .arg(applied ? QStringLiteral("saved") : QStringLiteral("save_failed"), fieldName)
+        );
+        return applied;
     }
     if (choice == UnsavedChangesChoice::Discard) {
         state_.currentFieldDirty_ = false;
         updateDirtyState();
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/document"),
+            QStringLiteral("maybe_save_current_field_changes"),
+            totalTimer.elapsed(),
+            QStringLiteral("result=discard field=%1").arg(fieldName)
+        );
         return true;
     }
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/document"),
+        QStringLiteral("maybe_save_current_field_changes"),
+        totalTimer.elapsed(),
+        QStringLiteral("result=cancel field=%1").arg(fieldName)
+    );
     return false;
 }
 
@@ -778,19 +915,55 @@ bool MainWindow::DocumentSection::onSaveFileAs()
 
 bool MainWindow::DocumentSection::saveToPath(const QString& path)
 {
-    if (!applyCurrentFieldToDocument()) {
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
+    const QString targetName = QFileInfo(normalizedPath.isEmpty() ? path : normalizedPath).fileName();
+
+    QElapsedTimer applyTimer;
+    applyTimer.start();
+    const bool applied = applyCurrentFieldToDocument();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/document"),
+        QStringLiteral("apply_current_field_to_document"),
+        applyTimer.elapsed(),
+        QStringLiteral("trigger=save_to_path result=%1 target=%2")
+            .arg(applied ? QStringLiteral("applied") : QStringLiteral("failed"), targetName)
+    );
+    if (!applied) {
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/document"),
+            QStringLiteral("save_to_path"),
+            totalTimer.elapsed(),
+            QStringLiteral("result=apply_failed target=%1").arg(targetName)
+        );
         return false;
     }
-    const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
     bool firstOk = false;
     (void)owner_.parsedFirstSeconds(&firstOk);
     if (!firstOk) {
         UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Save Failed", "&first must be a valid number of seconds.");
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/document"),
+            QStringLiteral("save_to_path"),
+            totalTimer.elapsed(),
+            QStringLiteral("result=invalid_first target=%1").arg(targetName)
+        );
         return false;
     }
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Save Failed", "Cannot write file:\n" + path);
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/document"),
+            QStringLiteral("save_to_path"),
+            totalTimer.elapsed(),
+            QStringLiteral("result=open_failed target=%1").arg(targetName)
+        );
         return false;
     }
     QByteArray data;
@@ -804,6 +977,13 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
     }
     if (file.write(data) != data.size() || !file.commit()) {
         UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Save Failed", "Write failed:\n" + path);
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/document"),
+            QStringLiteral("save_to_path"),
+            totalTimer.elapsed(),
+            QStringLiteral("result=write_failed target=%1").arg(targetName)
+        );
         return false;
     }
     if (normalizedPath != state_.currentFilePath_) {
@@ -819,6 +999,13 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
     updateDirtyState();
     owner_.updateWindowTitle();
     owner_.statusBar()->showMessage("Saved: " + QFileInfo(path).fileName());
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/document"),
+        QStringLiteral("save_to_path"),
+        totalTimer.elapsed(),
+        QStringLiteral("result=saved target=%1").arg(targetName)
+    );
     return true;
 }
 

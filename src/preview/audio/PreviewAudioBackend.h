@@ -84,6 +84,10 @@ public:
     virtual double backgroundPlaybackSecond() const = 0;
     virtual bool audition(const QString& kind, double gain = 1.0) = 0;
     virtual void stopAll() = 0;
+    virtual void prepareForShutdown()
+    {
+        stopAll();
+    }
 };
 
 }  // namespace miacode::preview_audio

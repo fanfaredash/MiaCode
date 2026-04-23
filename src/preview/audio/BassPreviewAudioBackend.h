@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <memory>
 
 #include <QObject>
@@ -73,6 +74,7 @@ public:
     double backgroundPlaybackSecond() const override;
     bool audition(const QString& kind, double gain = 1.0) override;
     void stopAll() override;
+    void prepareForShutdown() override;
 
 private:
     struct Sample;
@@ -199,6 +201,7 @@ private:
     bool initWindowActive_ = true;
     quint64 transportReadyGeneration_ = 0;
     bool trackMissingAfterLoadLogged_ = false;
+    std::atomic_bool shuttingDown_ = false;
     QMutex schedulerMutex_;
     quint32 scheduledGroupSync_ = 0;
     int scheduledGroupIndex_ = -1;

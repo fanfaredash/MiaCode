@@ -41,6 +41,7 @@ public:
     int horizontalScrollValue() const;
     void setHorizontalScrollValue(int value);
     double zoomScale() const;
+    void setZoomScale(double scale);
     void cycleZoomPreset(double anchorSecond);
     void stepZoomPreset(int deltaSteps, double anchorSecond);
     void setPlaybackEntrySeconds(double second);
@@ -72,6 +73,7 @@ public:
 signals:
     void renderStateChanged();
     void playheadChanged(double second);
+    void zoomScaleChanged(double scale);
 
 private:
     QSize effectiveViewportSize() const;

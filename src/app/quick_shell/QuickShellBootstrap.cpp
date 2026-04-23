@@ -15,6 +15,7 @@
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QKeyEvent>
@@ -205,6 +206,8 @@ QuickShellBootstrap::QuickShellBootstrap(const QIcon& appIcon, QObject* parent)
 
 QuickShellBootstrap::~QuickShellBootstrap()
 {
+    QElapsedTimer totalTimer;
+    totalTimer.start();
     if (!rootWindow_.isNull()) {
         rootWindow_->removeEventFilter(this);
     }
@@ -218,6 +221,35 @@ QuickShellBootstrap::~QuickShellBootstrap()
         }
     }
 #endif
+    if (backend_ != nullptr) {
+        backend_->preparePreviewForShutdown();
+        backend_->close();
+    }
+    const auto logResetTiming = [](const QString& step, auto& pointer) {
+        if (!pointer) {
+            return;
+        }
+        QElapsedTimer timer;
+        timer.start();
+        pointer.reset();
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("app_shutdown/quick_shell_bootstrap"),
+            step,
+            timer.elapsed()
+        );
+    };
+    logResetTiming(QStringLiteral("destroy_engine"), engine_);
+    logResetTiming(QStringLiteral("destroy_style_bridge"), styleBridge_);
+    logResetTiming(QStringLiteral("destroy_controller"), controller_);
+    logResetTiming(QStringLiteral("destroy_surface_host"), surfaceHost_);
+    logResetTiming(QStringLiteral("destroy_backend"), backend_);
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("app_shutdown/quick_shell_bootstrap"),
+        QStringLiteral("destructor_total"),
+        totalTimer.elapsed()
+    );
 }
 
 bool QuickShellBootstrap::start()
@@ -234,6 +266,14 @@ bool QuickShellBootstrap::start()
     appendQuickShellRuntimeLog(QStringLiteral("surface_host_ready"));
     controller_ = std::make_unique<QuickShellController>(backend_.get(), backend_.get(), surfaceHost_.get(), this);
     appendQuickShellRuntimeLog(QStringLiteral("controller_ready"));
+    QObject::connect(
+        controller_.get(),
+        &QuickShellController::rootCloseAccepted,
+        this,
+        [this](const QString& source) {
+            beginAcceptedRootWindowShutdown(source);
+        }
+    );
     styleBridge_ = std::make_unique<QuickShellStyleBridge>(backend_.get(), surfaceHost_.get(), this);
     appendQuickShellRuntimeLog(QStringLiteral("style_bridge_ready"));
     if (surfaceHost_ != nullptr && styleBridge_ != nullptr) {
@@ -342,6 +382,9 @@ bool QuickShellBootstrap::start()
 
     if (QQuickWindow* window = qobject_cast<QQuickWindow*>(engine_->rootObjects().constFirst()); window != nullptr) {
         rootWindow_ = window;
+#ifdef Q_OS_WIN
+        rootWindowNativeHwnd_ = static_cast<quintptr>(window->winId());
+#endif
         window->installEventFilter(this);
         if (surfaceHost_ != nullptr) {
             surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
@@ -368,6 +411,17 @@ bool QuickShellBootstrap::start()
         if (!appIcon_.isNull()) {
             window->setIcon(appIcon_);
         }
+        QObject::connect(window, &QQuickWindow::visibleChanged, this, [this, window]() {
+            appendQuickShellRuntimeLog(
+                QStringLiteral("root_window_visible_changed"),
+                QStringLiteral("visible=%1 shutdown_started=%2")
+                    .arg(window->isVisible() ? 1 : 0)
+                    .arg(acceptedRootWindowShutdownStarted_ ? 1 : 0)
+            );
+            if (!window->isVisible()) {
+                beginAcceptedRootWindowShutdown(QStringLiteral("root_window_hidden"));
+            }
+        });
 #ifdef Q_OS_WIN
         QObject::connect(window, &QQuickWindow::activeChanged, this, [this, window]() {
             logFocusEvent(
@@ -583,8 +637,7 @@ bool QuickShellNativeCloseEventFilter::nativeEventFilter(const QByteArray& event
 
 bool QuickShellBootstrap::handleNativeCloseEvent(const QByteArray& eventType, void* message, qintptr* result)
 {
-    if (rootWindow_.isNull()
-        || message == nullptr
+    if (message == nullptr
         || (eventType != "windows_generic_MSG" && eventType != "windows_dispatcher_MSG")) {
         return false;
     }
@@ -594,14 +647,18 @@ bool QuickShellBootstrap::handleNativeCloseEvent(const QByteArray& eventType, vo
         return false;
     }
 
-    const HWND rootHwnd = reinterpret_cast<HWND>(rootWindow_->winId());
-    if (msg->hwnd != rootHwnd) {
-        return false;
-    }
-
     const bool isCloseMessage = msg->message == WM_CLOSE;
     const bool isCloseSysCommand = msg->message == WM_SYSCOMMAND && ((msg->wParam & 0xFFF0) == SC_CLOSE);
     if (!isCloseMessage && !isCloseSysCommand) {
+        return false;
+    }
+
+    if (rootWindow_.isNull() || rootWindowNativeHwnd_ == 0) {
+        return false;
+    }
+
+    const HWND rootHwnd = reinterpret_cast<HWND>(rootWindowNativeHwnd_);
+    if (msg->hwnd != rootHwnd) {
         return false;
     }
 
@@ -639,6 +696,8 @@ void QuickShellBootstrap::scheduleRootWindowCloseRelay(const QString& source)
 
 void QuickShellBootstrap::processRootWindowCloseRelay()
 {
+    QElapsedTimer relayTimer;
+    relayTimer.start();
     rootWindowCloseRelayScheduled_ = false;
     if (controller_ == nullptr || rootWindow_.isNull() || rootWindowCloseRelayActive_) {
         return;
@@ -646,26 +705,240 @@ void QuickShellBootstrap::processRootWindowCloseRelay()
 
     rootWindowCloseRelayActive_ = true;
     appendQuickShellRuntimeLog(QStringLiteral("root_close_relay_begin"));
-    UiDialogs::closeVisibleBlockingModalDialogs();
-    if (UiDialogs::hasVisibleBlockingModalDialog()) {
+    QElapsedTimer closeDialogsTimer;
+    closeDialogsTimer.start();
+    const int closedDialogCount = UiDialogs::closeVisibleBlockingModalDialogs();
+    const bool dialogsRemainVisible = UiDialogs::hasVisibleBlockingModalDialog();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/quick_shell"),
+        QStringLiteral("close_blocking_modal_dialogs"),
+        closeDialogsTimer.elapsed(),
+        QStringLiteral("closed_count=%1 dialogs_remaining=%2")
+            .arg(closedDialogCount)
+            .arg(dialogsRemainVisible ? 1 : 0)
+    );
+    if (dialogsRemainVisible) {
         appendQuickShellRuntimeLog(QStringLiteral("root_close_relay_retry"));
         rootWindowCloseRelayActive_ = false;
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/quick_shell"),
+            QStringLiteral("process_root_window_close_relay"),
+            relayTimer.elapsed(),
+            QStringLiteral("result=retry_dialogs_visible")
+        );
         scheduleRootWindowCloseRelay(QStringLiteral("dialogs_still_visible"));
         return;
     }
 
+    QElapsedTimer confirmCloseTimer;
+    confirmCloseTimer.start();
     const bool confirmed = controller_->confirmClose();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/quick_shell"),
+        QStringLiteral("confirm_close"),
+        confirmCloseTimer.elapsed(),
+        QStringLiteral("confirmed=%1").arg(confirmed ? 1 : 0)
+    );
     if (!confirmed) {
         appendQuickShellRuntimeLog(QStringLiteral("root_close_relay_cancelled"));
         rootWindowCloseRelayActive_ = false;
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/quick_shell"),
+            QStringLiteral("process_root_window_close_relay"),
+            relayTimer.elapsed(),
+            QStringLiteral("result=cancelled")
+        );
         return;
     }
 
     rootWindowCloseRelayActive_ = false;
     controller_->markNextCloseConfirmedExternally();
-    if (!rootWindow_->close()) {
+    QElapsedTimer rootCloseTimer;
+    rootCloseTimer.start();
+    const bool rootWindowClosed = rootWindow_->close();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/quick_shell"),
+        QStringLiteral("root_window_close"),
+        rootCloseTimer.elapsed(),
+        QStringLiteral("accepted=%1").arg(rootWindowClosed ? 1 : 0)
+    );
+    if (!rootWindowClosed) {
         controller_->clearPendingExternalCloseConfirmation();
+    } else if (backend_ != nullptr) {
+        QElapsedTimer previewShutdownTimer;
+        previewShutdownTimer.start();
+        backend_->preparePreviewForShutdown();
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/quick_shell"),
+            QStringLiteral("prepare_preview_for_shutdown"),
+            previewShutdownTimer.elapsed()
+        );
+        beginAcceptedRootWindowShutdown(QStringLiteral("root_close_relay"));
     }
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/quick_shell"),
+        QStringLiteral("process_root_window_close_relay"),
+        relayTimer.elapsed(),
+        QStringLiteral("result=%1").arg(rootWindowClosed ? QStringLiteral("forwarded") : QStringLiteral("close_rejected"))
+    );
+}
+
+void QuickShellBootstrap::beginAcceptedRootWindowShutdown(const QString& source)
+{
+    if (acceptedRootWindowShutdownStarted_) {
+        appendQuickShellRuntimeLog(
+            QStringLiteral("accepted_close_shutdown_skip"),
+            QStringLiteral("source=%1 started=1").arg(source)
+        );
+        return;
+    }
+    acceptedRootWindowShutdownStarted_ = true;
+
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    appendQuickShellRuntimeLog(QStringLiteral("accepted_close_shutdown_begin"), QStringLiteral("source=%1").arg(source));
+
+    if (qApp != nullptr) {
+        qApp->setQuitOnLastWindowClosed(false);
+    }
+
+#ifdef Q_OS_WIN
+    if (QCoreApplication* app = QCoreApplication::instance(); app != nullptr) {
+        if (nativeCloseEventFilter_ != nullptr) {
+            app->removeNativeEventFilter(nativeCloseEventFilter_.get());
+            nativeCloseEventFilter_.reset();
+        }
+    }
+    rootWindowNativeHwnd_ = 0;
+#endif
+
+    if (!rootWindow_.isNull()) {
+        rootWindow_->removeEventFilter(this);
+    }
+    if (qApp != nullptr) {
+        qApp->removeEventFilter(this);
+    }
+
+    if (backend_ != nullptr) {
+        QElapsedTimer previewShutdownTimer;
+        previewShutdownTimer.start();
+        backend_->preparePreviewForShutdown();
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/quick_shell"),
+            QStringLiteral("accepted_close_prepare_preview_for_shutdown"),
+            previewShutdownTimer.elapsed()
+        );
+    }
+    if (backend_ != nullptr) {
+        QElapsedTimer backendCloseTimer;
+        backendCloseTimer.start();
+        backend_->close();
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/quick_shell"),
+            QStringLiteral("accepted_close_backend_close"),
+            backendCloseTimer.elapsed()
+        );
+    }
+
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/quick_shell"),
+        QStringLiteral("accepted_close_shutdown_prepare_destroy"),
+        totalTimer.elapsed(),
+        QStringLiteral("source=%1").arg(source)
+    );
+    appendQuickShellRuntimeLog(
+        QStringLiteral("accepted_close_shutdown_prepare_destroy"),
+        QStringLiteral("source=%1 elapsed_ms=%2").arg(source).arg(totalTimer.elapsed())
+    );
+    scheduleAcceptedRootWindowDestroyAndQuit(source);
+}
+
+void QuickShellBootstrap::scheduleAcceptedRootWindowDestroyAndQuit(const QString& source)
+{
+    if (acceptedRootWindowDestroyScheduled_ || acceptedRootWindowDestroyStarted_) {
+        appendQuickShellRuntimeLog(
+            QStringLiteral("accepted_close_destroy_skip"),
+            QStringLiteral("source=%1 scheduled=%2 started=%3")
+                .arg(source)
+                .arg(acceptedRootWindowDestroyScheduled_ ? 1 : 0)
+                .arg(acceptedRootWindowDestroyStarted_ ? 1 : 0)
+        );
+        return;
+    }
+
+    acceptedRootWindowDestroyScheduled_ = true;
+    appendQuickShellRuntimeLog(QStringLiteral("accepted_close_destroy_schedule"), QStringLiteral("source=%1").arg(source));
+    QTimer::singleShot(0, this, [this, source]() {
+        destroyAcceptedRootWindowResourcesAndQuit(source);
+    });
+}
+
+void QuickShellBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QString& source)
+{
+    if (acceptedRootWindowDestroyStarted_) {
+        return;
+    }
+    acceptedRootWindowDestroyScheduled_ = false;
+    acceptedRootWindowDestroyStarted_ = true;
+
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    appendQuickShellRuntimeLog(QStringLiteral("accepted_close_destroy_begin"), QStringLiteral("source=%1").arg(source));
+
+    if (!rootWindow_.isNull()) {
+        rootWindow_->removeEventFilter(this);
+    }
+    if (qApp != nullptr) {
+        qApp->removeEventFilter(this);
+    }
+
+    const auto logResetTiming = [](const QString& step, auto& pointer) {
+        if (!pointer) {
+            return;
+        }
+        QElapsedTimer timer;
+        timer.start();
+        pointer.reset();
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/quick_shell"),
+            step,
+            timer.elapsed()
+        );
+    };
+
+    logResetTiming(QStringLiteral("accepted_close_destroy_engine"), engine_);
+    rootWindow_ = nullptr;
+#ifdef Q_OS_WIN
+    rootWindowNativeHwnd_ = 0;
+#endif
+    logResetTiming(QStringLiteral("accepted_close_destroy_style_bridge"), styleBridge_);
+    logResetTiming(QStringLiteral("accepted_close_destroy_controller"), controller_);
+    logResetTiming(QStringLiteral("accepted_close_destroy_surface_host"), surfaceHost_);
+    logResetTiming(QStringLiteral("accepted_close_destroy_backend"), backend_);
+
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/quick_shell"),
+        QStringLiteral("accepted_close_destroy_and_quit"),
+        totalTimer.elapsed(),
+        QStringLiteral("source=%1").arg(source)
+    );
+    appendQuickShellRuntimeLog(
+        QStringLiteral("accepted_close_destroy_quit_request"),
+        QStringLiteral("source=%1 elapsed_ms=%2").arg(source).arg(totalTimer.elapsed())
+    );
+    QCoreApplication::quit();
 }
 
 bool QuickShellBootstrap::previewSeekHotRectContainsGlobalPoint(const QPoint& globalPoint) const

@@ -13,6 +13,7 @@
 #include "QtPreviewSfxRuntime.h"
 #include "SimaiNativeParser.h"
 #include "UiText.h"
+#include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "common/AssetPaths.h"
 #include "common/PreviewSfxAssets.h"
 #include "common/DebugOptions.h"
@@ -212,7 +213,107 @@ QString timestampLine(const QString& title)
 
 MainWindow::~MainWindow()
 {
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("app_shutdown/mainwindow"),
+        QStringLiteral("destructor_enter"),
+        0,
+        QStringLiteral(
+            "visible=%1 top_level_widgets=%2 current_file=%3 preview_canvas=%4 preview_sfx=%5 waveform_cache=%6 "
+            "warmup_active=%7 slow_refresh_active=%8 analysis_active=%9 export_worker_state=%10")
+            .arg(isVisible() ? 1 : 0)
+            .arg(QApplication::topLevelWidgets().size())
+            .arg(currentFilePath_.trimmed().isEmpty() ? QStringLiteral("(empty)") : currentFilePath_)
+            .arg(previewCanvas_ != nullptr ? 1 : 0)
+            .arg(previewSfxRuntime_ != nullptr ? 1 : 0)
+            .arg(state_.waveformCacheService_ != nullptr ? 1 : 0)
+            .arg(previewWarmupPool_ != nullptr ? previewWarmupPool_->activeThreadCount() : -1)
+            .arg(timelineSlowRefreshPool_ != nullptr ? timelineSlowRefreshPool_->activeThreadCount() : -1)
+            .arg(timelineAnalysisPool_ != nullptr ? timelineAnalysisPool_->activeThreadCount() : -1)
+            .arg(videoExportWorkerProcess_ != nullptr ? static_cast<int>(videoExportWorkerProcess_->state()) : -1)
+    );
+    QElapsedTimer stageMediaTimer;
+    stageMediaTimer.start();
     shutdownPreviewStageMediaHost();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("app_shutdown/mainwindow"),
+        QStringLiteral("shutdown_preview_stage_media_host"),
+        stageMediaTimer.elapsed()
+    );
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("app_shutdown/mainwindow"),
+        QStringLiteral("destructor_body"),
+        totalTimer.elapsed(),
+        QStringLiteral("top_level_widgets=%1").arg(QApplication::topLevelWidgets().size())
+    );
+}
+
+void MainWindow::preparePreviewForShutdown()
+{
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+
+    if (quickShellPreviewCompositeSurface_ != nullptr) {
+        quickShellPreviewCompositeSurface_->setMediaHost(nullptr);
+        quickShellPreviewCompositeSurface_->setActive(false);
+    }
+
+    if (previewSeekDebounceTimer_ != nullptr) {
+        previewSeekDebounceTimer_->stop();
+    }
+    if (qtPreviewTimer_ != nullptr) {
+        qtPreviewTimer_->stop();
+    }
+    if (qtPreviewTimelineTimer_ != nullptr) {
+        qtPreviewTimelineTimer_->stop();
+    }
+    if (previewStatsUiTimer_ != nullptr) {
+        previewStatsUiTimer_->stop();
+    }
+    if (previewHeldSeekTimer_ != nullptr) {
+        previewHeldSeekTimer_->stop();
+    }
+    qtPreviewPlaying_ = false;
+    previewStartupSyncPending_ = false;
+    previewLateVideoStartPending_ = false;
+    state_.previewStartupVideoPrepareStarted_ = false;
+    pausedPreviewMediaSeekPending_ = false;
+    pendingPreviewPlaybackStart_ = false;
+    state_.activePreviewPlaybackTransactionId_ = 0;
+
+    QElapsedTimer audioTimer;
+    audioTimer.start();
+    if (previewSfxRuntime_ != nullptr) {
+        previewSfxRuntime_->prepareForShutdown();
+    }
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("app_shutdown/mainwindow"),
+        QStringLiteral("prepare_preview_audio"),
+        audioTimer.elapsed(),
+        QStringLiteral("preview_sfx=%1").arg(previewSfxRuntime_ != nullptr ? 1 : 0)
+    );
+
+    QElapsedTimer stageMediaTimer;
+    stageMediaTimer.start();
+    shutdownPreviewStageMediaHost();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("app_shutdown/mainwindow"),
+        QStringLiteral("prepare_preview_stage_media_host"),
+        stageMediaTimer.elapsed()
+    );
+
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("app_shutdown/mainwindow"),
+        QStringLiteral("prepare_preview_for_shutdown"),
+        totalTimer.elapsed()
+    );
 }
 
 void MainWindow::WindowSection::configureRuntimeDebugOutput()
@@ -382,16 +483,79 @@ void MainWindow::WindowSection::logTopLevelWindowSnapshot(const QString& tag)
 
 void MainWindow::WindowSection::closeEvent(QCloseEvent* event)
 {
+    QElapsedTimer totalTimer;
+    totalTimer.start();
     this->logWindowGeometryDebug("close_event_enter");
-    if (owner_.maybeSaveBeforeContinue()) {
+    QElapsedTimer maybeSaveTimer;
+    maybeSaveTimer.start();
+    const bool canClose = owner_.maybeSaveBeforeContinue();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/window"),
+        QStringLiteral("legacy_close_event_maybe_save_before_continue"),
+        maybeSaveTimer.elapsed(),
+        QStringLiteral("result=%1").arg(canClose ? QStringLiteral("continue") : QStringLiteral("cancel"))
+    );
+    if (canClose) {
+        QElapsedTimer autosaveTimer;
+        autosaveTimer.start();
         owner_.runAutosaveCheck(false);
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/window"),
+            QStringLiteral("legacy_close_event_autosave_check"),
+            autosaveTimer.elapsed(),
+            QStringLiteral("allow_history=0")
+        );
+
+        QElapsedTimer savePortableTimer;
+        savePortableTimer.start();
         owner_.savePortableState();
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/window"),
+            QStringLiteral("legacy_close_event_save_portable_state"),
+            savePortableTimer.elapsed()
+        );
+
+        QElapsedTimer exportCleanupTimer;
+        exportCleanupTimer.start();
         owner_.exportSection_->clearVideoExportWorkerState();
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/window"),
+            QStringLiteral("legacy_close_event_clear_video_export_worker_state"),
+            exportCleanupTimer.elapsed()
+        );
+
+        QElapsedTimer previewShutdownTimer;
+        previewShutdownTimer.start();
+        owner_.preparePreviewForShutdown();
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/window"),
+            QStringLiteral("legacy_close_event_prepare_preview_for_shutdown"),
+            previewShutdownTimer.elapsed()
+        );
         event->accept();
         this->logWindowGeometryDebug("close_event_accept");
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/window"),
+            QStringLiteral("legacy_close_event_total"),
+            totalTimer.elapsed(),
+            QStringLiteral("result=accepted")
+        );
     } else {
         event->ignore();
         this->logWindowGeometryDebug("close_event_ignore");
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/window"),
+            QStringLiteral("legacy_close_event_total"),
+            totalTimer.elapsed(),
+            QStringLiteral("result=ignored")
+        );
     }
 }
 

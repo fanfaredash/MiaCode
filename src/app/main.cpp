@@ -158,6 +158,59 @@ bool parseCliResolutionToken(const QString& token, int* outputWidth, int* output
     return true;
 }
 
+void appendAppShutdownRuntimeLog(const QString& action, const QString& payload = QString())
+{
+    QString text = QStringLiteral("action=%1").arg(action);
+    if (!payload.trimmed().isEmpty()) {
+        text += QStringLiteral(" ") + payload.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("app_shutdown"),
+        text
+    );
+}
+
+QString summarizeTopLevelWidgets()
+{
+    const auto widgets = QApplication::topLevelWidgets();
+    QStringList items;
+    items.reserve(widgets.size());
+    for (QWidget* widget : widgets) {
+        if (widget == nullptr) {
+            continue;
+        }
+        items.append(
+            QStringLiteral("%1(vis=%2 hidden=%3 active=%4 title=%5)")
+                .arg(widget->metaObject() != nullptr ? widget->metaObject()->className() : QStringLiteral("unknown"))
+                .arg(widget->isVisible() ? 1 : 0)
+                .arg(widget->isHidden() ? 1 : 0)
+                .arg(widget->isActiveWindow() ? 1 : 0)
+                .arg(widget->windowTitle().trimmed().isEmpty() ? QStringLiteral("(empty)") : widget->windowTitle().trimmed())
+        );
+    }
+    return items.join(QStringLiteral("; "));
+}
+
+QString summarizeTopLevelWindows()
+{
+    const auto windows = QGuiApplication::topLevelWindows();
+    QStringList items;
+    items.reserve(windows.size());
+    for (QWindow* window : windows) {
+        if (window == nullptr) {
+            continue;
+        }
+        items.append(
+            QStringLiteral("%1(vis=%2 title=%3)")
+                .arg(window->metaObject() != nullptr ? window->metaObject()->className() : QStringLiteral("unknown"))
+                .arg(window->isVisible() ? 1 : 0)
+                .arg(window->title().trimmed().isEmpty() ? QStringLiteral("(empty)") : window->title().trimmed())
+        );
+    }
+    return items.join(QStringLiteral("; "));
+}
+
 int runCliVideoExport(QApplication& app, QString* errorMessage)
 {
     try {
@@ -710,14 +763,94 @@ int main(int argc, char* argv[])
     const bool quickShellBetaRequested = wantsQuickShellBeta(app.arguments());
     Q_UNUSED(quickShellBetaRequested);
     QQuickStyle::setStyle(QStringLiteral("Basic"));
-    QuickShellBootstrap quickShellBootstrap(appIcon);
-    if (!quickShellBootstrap.start()) {
-        QTextStream(stderr) << "Failed to start Quick Shell Beta.\n";
-        return 1;
-    }
-    logStartupStage("quick_shell_bootstrap_started");
-    QTimer::singleShot(0, &app, [&logStartupStage]() {
-        logStartupStage("event_loop_first_tick");
+
+    QElapsedTimer appExecElapsed;
+    QElapsedTimer postLastWindowClosedElapsed;
+    bool lastWindowClosedSeen = false;
+    int shutdownHeartbeatCount = 0;
+    QTimer shutdownHeartbeatTimer;
+    shutdownHeartbeatTimer.setInterval(250);
+    shutdownHeartbeatTimer.setSingleShot(false);
+
+    QObject::connect(&app, &QGuiApplication::lastWindowClosed, &app, [&]() {
+        lastWindowClosedSeen = true;
+        shutdownHeartbeatCount = 0;
+        postLastWindowClosedElapsed.restart();
+        appendAppShutdownRuntimeLog(
+            QStringLiteral("last_window_closed"),
+            QStringLiteral("quit_on_last_window_closed=%1 top_level_widgets=%2 widgets={%3} top_level_windows=%4 windows={%5}")
+                .arg(app.quitOnLastWindowClosed() ? 1 : 0)
+                .arg(QApplication::topLevelWidgets().size())
+                .arg(summarizeTopLevelWidgets())
+                .arg(QGuiApplication::topLevelWindows().size())
+                .arg(summarizeTopLevelWindows())
+        );
+        shutdownHeartbeatTimer.start();
     });
-    return app.exec();
+    QObject::connect(&shutdownHeartbeatTimer, &QTimer::timeout, &app, [&]() {
+        if (!lastWindowClosedSeen) {
+            return;
+        }
+        ++shutdownHeartbeatCount;
+        const qint64 elapsedMs = postLastWindowClosedElapsed.isValid() ? postLastWindowClosedElapsed.elapsed() : -1;
+        appendAppShutdownRuntimeLog(
+            QStringLiteral("last_window_closed_heartbeat"),
+            QStringLiteral("count=%1 elapsed_ms=%2 closing_down=%3 top_level_widgets=%4 widgets={%5} top_level_windows=%6 windows={%7}")
+                .arg(shutdownHeartbeatCount)
+                .arg(elapsedMs)
+                .arg(QCoreApplication::closingDown() ? 1 : 0)
+                .arg(QApplication::topLevelWidgets().size())
+                .arg(summarizeTopLevelWidgets())
+                .arg(QGuiApplication::topLevelWindows().size())
+                .arg(summarizeTopLevelWindows())
+        );
+    });
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, [&]() {
+        shutdownHeartbeatTimer.stop();
+        appendAppShutdownRuntimeLog(
+            QStringLiteral("about_to_quit"),
+            QStringLiteral("after_last_window_closed_ms=%1 top_level_widgets=%2 widgets={%3} top_level_windows=%4 windows={%5}")
+                .arg(postLastWindowClosedElapsed.isValid() ? postLastWindowClosedElapsed.elapsed() : -1)
+                .arg(QApplication::topLevelWidgets().size())
+                .arg(summarizeTopLevelWidgets())
+                .arg(QGuiApplication::topLevelWindows().size())
+                .arg(summarizeTopLevelWindows())
+        );
+    });
+
+    int exitCode = 1;
+    QElapsedTimer postExecObjectTeardownElapsed;
+    {
+        QuickShellBootstrap quickShellBootstrap(appIcon);
+        if (!quickShellBootstrap.start()) {
+            QTextStream(stderr) << "Failed to start Quick Shell Beta.\n";
+            return 1;
+        }
+        logStartupStage("quick_shell_bootstrap_started");
+        QTimer::singleShot(0, &app, [&logStartupStage]() {
+            logStartupStage("event_loop_first_tick");
+        });
+        appExecElapsed.start();
+        exitCode = app.exec();
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("app_shutdown"),
+            QStringLiteral("event_loop_exit"),
+            appExecElapsed.elapsed(),
+            QStringLiteral("exit_code=%1 after_last_window_closed_ms=%2")
+                .arg(exitCode)
+                .arg(postLastWindowClosedElapsed.isValid() ? postLastWindowClosedElapsed.elapsed() : -1)
+        );
+        postExecObjectTeardownElapsed.start();
+    }
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("app_shutdown"),
+        QStringLiteral("post_exec_object_teardown"),
+        postExecObjectTeardownElapsed.isValid() ? postExecObjectTeardownElapsed.elapsed() : -1,
+        QStringLiteral("top_level_widgets=%1 top_level_windows=%2")
+            .arg(QApplication::topLevelWidgets().size())
+            .arg(QGuiApplication::topLevelWindows().size())
+    );
+    return exitCode;
 }

@@ -41,6 +41,9 @@ private:
     QString focusReasonName(Qt::FocusReason reason) const;
     void scheduleRootWindowCloseRelay(const QString& source);
     void processRootWindowCloseRelay();
+    void beginAcceptedRootWindowShutdown(const QString& source);
+    void scheduleAcceptedRootWindowDestroyAndQuit(const QString& source);
+    void destroyAcceptedRootWindowResourcesAndQuit(const QString& source);
     void logFocusEvent(const QString& action, QObject* watched = nullptr, QEvent* event = nullptr, const QString& detail = QString()) const;
 
     QIcon appIcon_;
@@ -51,9 +54,13 @@ private:
     std::unique_ptr<QQmlApplicationEngine> engine_;
 #ifdef Q_OS_WIN
     std::unique_ptr<QAbstractNativeEventFilter> nativeCloseEventFilter_;
+    quintptr rootWindowNativeHwnd_ = 0;
 #endif
     QPointer<QQuickWindow> rootWindow_;
     bool previewSeekArmed_ = false;
     bool rootWindowCloseRelayScheduled_ = false;
     bool rootWindowCloseRelayActive_ = false;
+    bool acceptedRootWindowShutdownStarted_ = false;
+    bool acceptedRootWindowDestroyScheduled_ = false;
+    bool acceptedRootWindowDestroyStarted_ = false;
 };

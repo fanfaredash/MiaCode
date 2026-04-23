@@ -303,6 +303,8 @@ public:
 
     void cleanupActiveDirs()
     {
+        QElapsedTimer timer;
+        timer.start();
         QStringList paths;
         {
             QMutexLocker locker(&mutex_);
@@ -312,6 +314,13 @@ public:
         for (const QString& path : paths) {
             QDir(path).removeRecursively();
         }
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/export_temp_dirs"),
+            QStringLiteral("cleanup_active_dirs"),
+            timer.elapsed(),
+            QStringLiteral("path_count=%1").arg(paths.size())
+        );
     }
 
 private:

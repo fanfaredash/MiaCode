@@ -483,6 +483,16 @@ ApplicationWindow {
         })
     }
     onVisibleChanged: {
+        controller.logShellLifecycle(
+            "root_visible_changed",
+            "visible=" + (visible ? 1 : 0)
+                + " active=" + (active ? 1 : 0)
+                + " visibility=" + visibility
+                + " width=" + width
+                + " height=" + height
+                + " preview_fullscreen=" + (controller.previewFullscreen ? 1 : 0)
+                + " preview_playing=" + (controller.previewPlaying ? 1 : 0)
+        )
         if (visible)
             noteStartupLayoutActivity(width, Math.max(1, height - metric("topChromeHeight", 106) - metric("statusHeight", 28)))
     }
@@ -524,8 +534,34 @@ ApplicationWindow {
     onHeightChanged: styleBridge.syncWindowSize(width, height)
 
     onClosing: function(close) {
-        if (!controller.confirmClose())
+        controller.logShellLifecycle(
+            "root_closing_enter",
+            "accepted=" + (close.accepted ? 1 : 0)
+                + " visible=" + (visible ? 1 : 0)
+                + " active=" + (active ? 1 : 0)
+                + " visibility=" + visibility
+                + " width=" + width
+                + " height=" + height
+                + " preview_fullscreen=" + (controller.previewFullscreen ? 1 : 0)
+                + " preview_playing=" + (controller.previewPlaying ? 1 : 0)
+        )
+        var confirmed = controller.confirmClose()
+        controller.logShellLifecycle(
+            "root_closing_confirmed",
+            "confirmed=" + (confirmed ? 1 : 0)
+                + " accepted_before=" + (close.accepted ? 1 : 0)
+        )
+        if (!confirmed)
             close.accepted = false
+        controller.logShellLifecycle(
+            "root_closing_exit",
+            "accepted=" + (close.accepted ? 1 : 0)
+                + " visible=" + (visible ? 1 : 0)
+                + " active=" + (active ? 1 : 0)
+                + " visibility=" + visibility
+        )
+        if (close.accepted)
+            controller.notifyRootCloseAccepted("qml_root_closing_exit")
     }
 
     Connections {
@@ -1250,11 +1286,29 @@ ApplicationWindow {
         }
 
         onClosing: function(close) {
+            controller.logShellLifecycle(
+                "fullscreen_closing",
+                "accepted_before=" + (close.accepted ? 1 : 0)
+                    + " visible=" + (visible ? 1 : 0)
+                    + " active=" + (active ? 1 : 0)
+                    + " preview_fullscreen=" + (controller.previewFullscreen ? 1 : 0)
+            )
             close.accepted = false
             controller.previewFullscreen = false
+            controller.logShellLifecycle(
+                "fullscreen_closing_exit",
+                "accepted=" + (close.accepted ? 1 : 0)
+                    + " preview_fullscreen=" + (controller.previewFullscreen ? 1 : 0)
+            )
         }
 
         onVisibleChanged: {
+            controller.logShellLifecycle(
+                "fullscreen_visible_changed",
+                "visible=" + (visible ? 1 : 0)
+                    + " active=" + (active ? 1 : 0)
+                    + " preview_fullscreen=" + (controller.previewFullscreen ? 1 : 0)
+            )
             logPreviewSurfaceTransition("preview_surface_fullscreen_window_visible")
             if (!visible) {
                 if (!controller.previewFullscreen)

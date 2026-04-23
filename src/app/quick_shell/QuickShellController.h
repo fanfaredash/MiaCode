@@ -104,6 +104,8 @@ public:
     Q_INVOKABLE void stopPreviewHeldSeek(int key = 0);
     Q_INVOKABLE QString formatPreviewTimestamp(double second) const;
     Q_INVOKABLE void logPreviewInteraction(const QString& action, const QString& payload = QString());
+    Q_INVOKABLE void logShellLifecycle(const QString& action, const QString& payload = QString());
+    Q_INVOKABLE void notifyRootCloseAccepted(const QString& source);
     Q_INVOKABLE void syncTopChromeSurfaceSize(int width, int height);
     Q_INVOKABLE void syncSidebarSurfaceSize(int width, int height);
     Q_INVOKABLE void syncWorkspaceSurfaceSize(int width, int height);
@@ -116,6 +118,7 @@ public:
 signals:
     void shellStateChanged();
     void previewFullscreenChanged();
+    void rootCloseAccepted(const QString& source);
 
 private:
     void refreshFromStateSource();

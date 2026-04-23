@@ -342,6 +342,7 @@ void TimelineView::applyStateFromBridge()
     if (nextZoomIndex >= 0) {
         zoomPresetIndex_ = nextZoomIndex;
     }
+    updateZoomButtonAppearance();
     if (followPreviewCheckBox_ != nullptr) {
         const QSignalBlocker blocker(followPreviewCheckBox_);
         followPreviewCheckBox_->setChecked(stateBridge_->followPreviewEnabled());

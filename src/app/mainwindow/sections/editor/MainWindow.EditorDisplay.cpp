@@ -90,6 +90,11 @@ void MainWindow::EditorSection::loadPortableState()
     }
     applyPortablePreviewSettings(preview);
     if (state_.timelineQuickStateBridge_ != nullptr) {
+        if (preview.value("timeline_zoom_scale").isDouble()) {
+            state_.timelineQuickStateBridge_->setZoomScale(
+                preview.value("timeline_zoom_scale").toDouble(state_.timelineQuickStateBridge_->zoomScale())
+            );
+        }
         state_.timelineQuickStateBridge_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
     }
     owner_.refreshPreviewFrameRateTimers();
@@ -339,6 +344,10 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("show_object_stats_export", state_.exportShowObjectStatsHud_);
     preview.insert("show_validation_summary", state_.previewShowValidationSummary_);
     preview.insert("follow_preview", state_.previewFollowEnabled_);
+    preview.insert(
+        "timeline_zoom_scale",
+        state_.timelineQuickStateBridge_ != nullptr ? state_.timelineQuickStateBridge_->zoomScale() : 0.5
+    );
     miacode::chart_transform::saveChartNormalizationOptionsToPreferences(
         &preview,
         miacode::chart_transform::ChartNormalizationOptions{

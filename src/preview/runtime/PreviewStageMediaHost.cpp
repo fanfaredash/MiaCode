@@ -11,6 +11,7 @@
 #endif
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QVariant>
 #include <QtMath>
@@ -73,7 +74,29 @@ PreviewStageMediaHost::PreviewStageMediaHost(QObject* parent)
     videoFrameIntervalsMs_.fill(0.0);
 }
 
-PreviewStageMediaHost::~PreviewStageMediaHost() = default;
+PreviewStageMediaHost::~PreviewStageMediaHost()
+{
+    QElapsedTimer timer;
+    timer.start();
+    const QString mediaType = debugMediaTypeName();
+    const bool hadPlayer = player_ != nullptr;
+    shutdownForAppExit();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("app_shutdown/stage_media_host"),
+        QStringLiteral("destructor"),
+        timer.elapsed(),
+        QStringLiteral("had_player=%1 media_kind=%2")
+            .arg(hadPlayer ? 1 : 0)
+            .arg(mediaType)
+    );
+}
+
+void PreviewStageMediaHost::shutdownForAppExit()
+{
+    shuttingDown_ = true;
+    clearMedia();
+}
 
 void PreviewStageMediaHost::initializeBackendObjects()
 {
@@ -788,7 +811,13 @@ QString PreviewStageMediaHost::debugMediaTypeName() const
 void PreviewStageMediaHost::clearMedia()
 {
 #ifdef HAVE_QT_MULTIMEDIA
+    if (videoSinkFrameConnection_) {
+        QObject::disconnect(videoSinkFrameConnection_);
+        videoSinkFrameConnection_ = QMetaObject::Connection();
+    }
+    videoSink_.clear();
     if (player_ != nullptr) {
+        player_->setVideoOutput(static_cast<QObject*>(nullptr));
         player_->stop();
         player_->setSource(QUrl());
     }
@@ -812,6 +841,9 @@ void PreviewStageMediaHost::clearMedia()
     observedPlayheadSecond_ = 0.0;
     clockDeltaSeconds_ = 0.0;
     resetVideoFrameDiagnostics();
+    if (shuttingDown_) {
+        return;
+    }
     emit imageSourceChanged();
     emit mediaStateChanged();
     emit diagnosticsChanged();

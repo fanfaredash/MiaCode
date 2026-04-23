@@ -6,6 +6,7 @@
 #include "common/PreviewInteractionConfig.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 
+#include <QElapsedTimer>
 #include <QTimer>
 #include <QWidget>
 #include <QWindow>
@@ -34,6 +35,19 @@ void appendQuickShellControllerLog(const QString& action, const QString& payload
     miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("quick_shell/controller"),
+        text
+    );
+}
+
+void appendQuickShellLifecycleLog(const QString& action, const QString& payload = QString())
+{
+    QString text = QStringLiteral("action=%1").arg(action);
+    if (!payload.trimmed().isEmpty()) {
+        text += QStringLiteral(" ") + payload.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("quick_shell/lifecycle"),
         text
     );
 }
@@ -230,12 +244,67 @@ void QuickShellController::clearPendingExternalCloseConfirmation()
 
 bool QuickShellController::confirmClose()
 {
+    QElapsedTimer timer;
+    timer.start();
+    appendQuickShellLifecycleLog(
+        QStringLiteral("controller_confirm_close_enter"),
+        QStringLiteral("bypass_pending=%1 has_command_sink=%2 preview_playing=%3 preview_fullscreen=%4")
+            .arg(closeConfirmedExternally_ ? 1 : 0)
+            .arg(commandSink_ != nullptr ? 1 : 0)
+            .arg(previewPlaying_ ? 1 : 0)
+            .arg(previewFullscreen_ ? 1 : 0)
+    );
     if (closeConfirmedExternally_) {
         appendQuickShellControllerLog(QStringLiteral("confirm_close_bypass"));
         closeConfirmedExternally_ = false;
+        appendQuickShellLifecycleLog(
+            QStringLiteral("controller_confirm_close_exit"),
+            QStringLiteral("result=bypass elapsed_ms=%1").arg(timer.elapsed())
+        );
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/quick_shell"),
+            QStringLiteral("controller_confirm_close"),
+            timer.elapsed(),
+            QStringLiteral("result=bypass has_command_sink=%1").arg(commandSink_ != nullptr ? 1 : 0)
+        );
         return true;
     }
-    return commandSink_ != nullptr ? commandSink_->confirmShellClose() : true;
+    const bool confirmed = commandSink_ != nullptr ? commandSink_->confirmShellClose() : true;
+    appendQuickShellLifecycleLog(
+        QStringLiteral("controller_confirm_close_exit"),
+        QStringLiteral("result=%1 elapsed_ms=%2 has_command_sink=%3 preview_playing=%4 preview_fullscreen=%5")
+            .arg(confirmed ? QStringLiteral("confirmed") : QStringLiteral("rejected"))
+            .arg(timer.elapsed())
+            .arg(commandSink_ != nullptr ? 1 : 0)
+            .arg(previewPlaying_ ? 1 : 0)
+            .arg(previewFullscreen_ ? 1 : 0)
+    );
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/quick_shell"),
+        QStringLiteral("controller_confirm_close"),
+        timer.elapsed(),
+        QStringLiteral("result=%1 has_command_sink=%2")
+            .arg(confirmed ? QStringLiteral("confirmed") : QStringLiteral("rejected"))
+            .arg(commandSink_ != nullptr ? 1 : 0)
+    );
+    return confirmed;
+}
+
+void QuickShellController::logShellLifecycle(const QString& action, const QString& payload)
+{
+    appendQuickShellLifecycleLog(action.trimmed().isEmpty() ? QStringLiteral("qml_lifecycle") : action, payload);
+}
+
+void QuickShellController::notifyRootCloseAccepted(const QString& source)
+{
+    const QString normalizedSource = source.trimmed().isEmpty() ? QStringLiteral("qml_root_close") : source.trimmed();
+    appendQuickShellLifecycleLog(
+        QStringLiteral("root_close_accepted_notify"),
+        QStringLiteral("source=%1").arg(normalizedSource)
+    );
+    emit rootCloseAccepted(normalizedSource);
 }
 
 void QuickShellController::togglePreviewPlayback()

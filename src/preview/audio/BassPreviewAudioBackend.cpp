@@ -391,6 +391,7 @@ BassPreviewAudioBackend::BassPreviewAudioBackend(QObject* parent)
 BassPreviewAudioBackend::~BassPreviewAudioBackend()
 {
     appendAudioDebugLog("BassPreviewAudioBackend destroying");
+    shuttingDown_.store(true, std::memory_order_release);
 #ifdef Q_OS_WIN
     stopPlaybackSession();
     resetAssets();
@@ -1256,11 +1257,17 @@ void BassPreviewAudioBackend::clearScheduledGroupSync()
 void BassPreviewAudioBackend::armNextGroupSync(double currentSecond)
 {
 #ifdef Q_OS_WIN
+    if (shuttingDown_.load(std::memory_order_acquire)) {
+        return;
+    }
     if (masterMixer_ == 0 || !playbackSession_.masterRunning) {
         return;
     }
 
     QMutexLocker locker(&schedulerMutex_);
+    if (shuttingDown_.load(std::memory_order_acquire)) {
+        return;
+    }
     if (scheduledGroupSync_ != 0) {
         return;
     }
@@ -1384,11 +1391,17 @@ void BassPreviewAudioBackend::onMixerGroupSync(quint32 handle, quint32 channel, 
 
 void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
 {
+    if (shuttingDown_.load(std::memory_order_acquire)) {
+        return;
+    }
     CollapsedEventGroup group;
     int groupIndex = -1;
     bool shouldTrigger = false;
     {
         QMutexLocker locker(&schedulerMutex_);
+        if (shuttingDown_.load(std::memory_order_acquire)) {
+            return;
+        }
         if (handle == 0 || handle != scheduledGroupSync_) {
             return;
         }
@@ -1407,6 +1420,9 @@ void BassPreviewAudioBackend::handleMixerGroupSync(quint32 handle)
         }
     }
     if (!shouldTrigger) {
+        return;
+    }
+    if (shuttingDown_.load(std::memory_order_acquire)) {
         return;
     }
     triggerGroup(group);
@@ -1776,6 +1792,9 @@ double BassPreviewAudioBackend::authoritativePlaybackSecond() const
 
 double BassPreviewAudioBackend::syncPreviewPlaybackClockTransaction(double fallbackSecond)
 {
+    if (shuttingDown_.load(std::memory_order_acquire)) {
+        return playbackSession_.lastAuthoritativeSecond;
+    }
     logTrackFileMissingAfterLoadIfNeeded();
     const double second = authoritativeSecond();
     playbackSession_.lastAuthoritativeSecond = second;
@@ -1990,4 +2009,10 @@ void BassPreviewAudioBackend::stopAll()
     stopPlaybackSession();
     preparedPlayback_ = PreparedPlaybackState();
     retainedPlaybackMode_ = RetainedPlaybackMode::None;
+}
+
+void BassPreviewAudioBackend::prepareForShutdown()
+{
+    shuttingDown_.store(true, std::memory_order_release);
+    stopAll();
 }

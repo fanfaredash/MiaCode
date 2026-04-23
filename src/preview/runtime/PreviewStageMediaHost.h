@@ -67,6 +67,7 @@ public:
     void startPlayback(double seconds);
     void syncPlayback(double seconds);
     void pausePlayback();
+    void shutdownForAppExit();
 
     double currentPlaybackSecond() const;
     bool videoPlaybackActive() const;
@@ -148,4 +149,5 @@ private:
     qint64 videoFrameCountTotal_ = 0;
     qint64 videoFrameStallCount_ = 0;
     bool videoFrameStalled_ = false;
+    bool shuttingDown_ = false;
 };

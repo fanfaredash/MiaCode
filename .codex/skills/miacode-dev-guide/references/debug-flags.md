@@ -122,6 +122,12 @@ The Windows release package also ships:
 Runtime black-screen / dialog tracing in the main app currently uses these tags:
 
 - `window/focus`
+- `app_shutdown`
+- `close_timing/document`
+- `close_timing/window`
+- `close_timing/quick_shell`
+- `close_timing/export_worker`
+- `close_timing/export_temp_dirs`
 - `preview/host_window_event`
 - `preview/embedded_refresh`
 - `preview/quick_runtime`
@@ -141,6 +147,9 @@ The `timeline/interaction` runtime tag now traces quick timeline drag, wheel-scr
 The `timeline/bridge` runtime tag now records quick timeline bridge pushes such as `action=set_horizontal_scroll_value`.
 The `timeline/quick_scene` runtime tag now distinguishes full `scene_state_rebuild_*` passes from `action=content_transform_update` scroll-only paints, so cached-scene transform behavior can be verified directly from logs.
 The `timeline/cursor_map` runtime tag now profiles cursor-to-second mapping in `timelineSecondForCursor()`.
+The `app_shutdown` runtime tag now traces `lastWindowClosed`, periodic post-close heartbeats, `aboutToQuit`, `app.exec()` exit, and post-event-loop object teardown so "window disappeared but process still lives" tails can be separated from close-event time.
+QuickShell accepted root-window closes now notify C++ from QML before the window hide tail, logging `root_close_accepted_notify` and `accepted_close_shutdown_*`; the immediate pass shuts down preview and closes the hidden backend `MainWindow`, then a queued pre-quit pass logs `accepted_close_destroy_*` while destroying the QML engine, native surfaces, controller, style bridge, and backend before explicitly requesting `quit()`.
+The `close_timing/*` runtime tags now record close-path duration totals in milliseconds for document save-confirm work, QuickShell relay work, legacy window close hooks, export-worker teardown, and `aboutToQuit` export temp-dir cleanup so exit long tails can be triaged from one debug session.
 The `preview/playback` audio tag now traces realtime preview start transactions. Strong-sync startup should log `action=start_request`, `action=audio_prepared`, `action=canvas_presented`, and `action=commit` under one `txn`, while weak-video startup adds `action=weak_video_prepare_started`, `action=weak_video_ready_before_commit`, or `action=late_video_start_after_commit`.
 The `preview/stage_media` audio tag is now switch-level only for quickshell media changes, presentation-mode flips, `VideoOutput` binding transitions, weak-sync video prepare / commit transitions (`action=prepare_playback_*`, `action=commit_prepared_playback*`), and low-noise external-video stall transitions (`action=video_frame_stall_begin` / `action=video_frame_stall_end`); the old per-frame quickshell video arrival line was retired.
 The audio log emits `stretched_clock_drift` for low-noise stretched-BGM drift sampling; current fields are `fallback`, `bg`, `delta_ms`, `rate`, `engine_now_frame`, `start_engine_frame`, and `tick_bg_gap_ms` (`fallback - backgroundTrackLastTimelineSecond`) so engine-time anchor drift can be separated from tick-to-tick catch-up.

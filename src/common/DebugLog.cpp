@@ -424,6 +424,23 @@ bool appendLine(Channel channel, const QString& scope, const QString& payload, b
     return appendText(channel, text, force);
 }
 
+bool appendTimingLine(
+    Channel channel,
+    const QString& scope,
+    const QString& step,
+    qint64 elapsedMs,
+    const QString& detail,
+    bool force)
+{
+    QString payload = QStringLiteral("step=%1 elapsed_ms=%2")
+                          .arg(step.trimmed().isEmpty() ? QStringLiteral("unknown") : step.trimmed())
+                          .arg(elapsedMs);
+    if (!detail.trimmed().isEmpty()) {
+        payload += QStringLiteral(" ") + detail.trimmed();
+    }
+    return appendLine(channel, scope, payload, force);
+}
+
 bool initializeStartupTimingLogSession()
 {
     if (!miacode::debug_options::startupTimingEnabled()) {

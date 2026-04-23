@@ -130,6 +130,7 @@ public:
     bool quickShellRootWindowFrameGeometryAvailable() const;
     QRect quickShellRootWindowFrameGeometry() const;
     void setQuickShellBackendActive(bool active);
+    void preparePreviewForShutdown();
     bool shellTimelineSurfaceReady() const override;
     void noteQuickTimelineSurfaceReady();
     bool confirmShellClose() override;

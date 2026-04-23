@@ -122,9 +122,25 @@ PreviewRuntime::PreviewRuntime(QObject* parent)
 
 PreviewRuntime::~PreviewRuntime()
 {
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    qint64 profilingWriteElapsedMs = 0;
+    const bool profilingWasDirty = profilingSummaryDirty_;
     if (profilingSummaryDirty_) {
+        QElapsedTimer profilingWriteTimer;
+        profilingWriteTimer.start();
         writeProfilingSummaryToFile();
+        profilingWriteElapsedMs = profilingWriteTimer.elapsed();
     }
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("app_shutdown/preview_runtime"),
+        QStringLiteral("destructor"),
+        totalTimer.elapsed(),
+        QStringLiteral("profiling_summary_dirty=%1 profiling_write_ms=%2")
+            .arg(profilingWasDirty ? 1 : 0)
+            .arg(profilingWriteElapsedMs)
+    );
 }
 
 void PreviewRuntime::setVisibleHostWindow(QQuickWindow* window)

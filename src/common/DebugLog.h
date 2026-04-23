@@ -33,6 +33,13 @@ void trimDebugSessionLogsForStartup();
 bool resetChannel(Channel channel, const QStringList& initialLines = {}, bool force = false);
 bool appendText(Channel channel, const QString& text, bool force = false);
 bool appendLine(Channel channel, const QString& scope, const QString& payload, bool force = false);
+bool appendTimingLine(
+    Channel channel,
+    const QString& scope,
+    const QString& step,
+    qint64 elapsedMs,
+    const QString& detail = QString(),
+    bool force = false);
 bool initializeStartupTimingLogSession();
 bool appendStartupTimingStage(const QString& stage, qint64 elapsedMs, qint64 deltaMs);
 bool appendFatalMessage(const QString& scope, const QString& payload);

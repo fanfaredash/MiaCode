@@ -982,6 +982,9 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     timelineQuickStateBridge_ = new TimelineQuickStateBridge(this);
     timelineQuickStateBridge_->setHeaderLineNumberFont(timelineHeaderLineNumberFont());
     timelineQuickStateBridge_->setShowSlideTracks(true);
+    connect(timelineQuickStateBridge_, &TimelineQuickStateBridge::zoomScaleChanged, this, [this](double) {
+        savePortableState();
+    });
     if (!timelineWidgetlessQuickRoute_) {
         timelineView_ = new TimelineView(bottomTabs_);
         timelineQuickStateBridge_->attachReferenceView(timelineView_);

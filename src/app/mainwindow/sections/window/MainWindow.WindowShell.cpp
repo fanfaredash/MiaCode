@@ -200,11 +200,57 @@ QRect MainWindow::WindowSection::quickShellRootWindowFrameGeometry() const
 
 bool MainWindow::WindowSection::confirmShellClose()
 {
-    if (!owner_.maybeSaveBeforeContinue()) {
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+
+    QElapsedTimer maybeSaveTimer;
+    maybeSaveTimer.start();
+    const bool canClose = owner_.maybeSaveBeforeContinue();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/window"),
+        QStringLiteral("maybe_save_before_continue"),
+        maybeSaveTimer.elapsed(),
+        QStringLiteral("result=%1").arg(canClose ? QStringLiteral("continue") : QStringLiteral("cancel"))
+    );
+    if (!canClose) {
+        miacode::debug_log::appendTimingLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/window"),
+            QStringLiteral("confirm_shell_close"),
+            totalTimer.elapsed(),
+            QStringLiteral("result=cancelled_before_close")
+        );
         return false;
     }
+
+    QElapsedTimer savePortableTimer;
+    savePortableTimer.start();
     owner_.savePortableState();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/window"),
+        QStringLiteral("save_portable_state"),
+        savePortableTimer.elapsed()
+    );
+
+    QElapsedTimer exportCleanupTimer;
+    exportCleanupTimer.start();
     owner_.exportSection_->clearVideoExportWorkerState();
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/window"),
+        QStringLiteral("clear_video_export_worker_state"),
+        exportCleanupTimer.elapsed()
+    );
+
+    miacode::debug_log::appendTimingLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("close_timing/window"),
+        QStringLiteral("confirm_shell_close"),
+        totalTimer.elapsed(),
+        QStringLiteral("result=confirmed")
+    );
     return true;
 }
 
