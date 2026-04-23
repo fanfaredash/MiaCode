@@ -677,6 +677,26 @@ int main(int argc, char** argv)
 
     {
         const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(180){16}\n,,8>3[16:3],,2>5[16:3],,4h[8:1],,\nE\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("release-tail near-miss repro chart parses"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::MultiTouch) == 0,
+            QStringLiteral("release-tail near-miss repro does not create multitouch"));
+        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::MultiTouch) == 0,
+            QStringLiteral("release-tail near-miss repro keeps multitouch hidden"));
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(180){16}\n,,8>3[16:3],,2>5[16:3],,4h[8:2],,\nE\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("release-tail continuation repro chart parses"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::MultiTouch) == 0,
+            QStringLiteral("release-tail continuation repro suppresses temporary multitouch"));
+        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::MultiTouch) == 0,
+            QStringLiteral("release-tail continuation repro keeps multitouch hidden"));
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
             QStringLiteral("(240){16}\n123,\nE\n"));
         expect(analyzed.parsed.ok, QStringLiteral("plain multitouch repro chart parses"));
         expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::Overlap) == 0,

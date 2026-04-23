@@ -2514,7 +2514,9 @@ bool sampleRuntimeHandAction(
 QVector<RuntimeTouchPoint> buildRuntimeTouchPoints(
     const QVector<RuntimeHandAction>& actions,
     const QVector<int>& activeActionIndices,
-    double nowSecond)
+    double nowSecond,
+    const QSet<quint64>* previousMergedSlidePairs = nullptr,
+    QSet<quint64>* currentMergedSlidePairs = nullptr)
 {
     using namespace miacode::muri;
 
@@ -2535,6 +2537,20 @@ QVector<RuntimeTouchPoint> buildRuntimeTouchPoints(
         const RuntimeHandAction& action = actions.at(actionIndex);
         if (!action.mergeKey.isEmpty()) {
             bool merged = false;
+            const auto orderedActionPairKey = [](int left, int right) {
+                const quint32 first = static_cast<quint32>(qMin(left, right));
+                const quint32 second = static_cast<quint32>(qMax(left, right));
+                return (static_cast<quint64>(first) << 32) | static_cast<quint64>(second);
+            };
+            const auto inReleaseTail = [nowSecond](const RuntimeHandAction& candidateAction) {
+                if (candidateAction.kind != RuntimeHandActionKind::Slide) {
+                    return false;
+                }
+                const double motionEndSecond =
+                    candidateAction.startSecond + candidateAction.motionDurationSecond;
+                return nowSecond + kPadTimeEpsilon >= motionEndSecond
+                    && nowSecond < candidateAction.endSecond - kPadTimeEpsilon;
+            };
             for (const RuntimeTouchPoint& existing : touchPoints) {
                 if (existing.actionIndex < 0 || existing.actionIndex >= actions.size()) {
                     continue;
@@ -2543,11 +2559,23 @@ QVector<RuntimeTouchPoint> buildRuntimeTouchPoints(
                 if (existingAction.mergeKey.isEmpty() || existingAction.mergeKey != action.mergeKey) {
                     continue;
                 }
-                if (!existing.hasTangent || !touchPoint.hasTangent) {
-                    continue;
-                }
-                if (pointDistance(existing.center, touchPoint.center) < kSlideMergeDistance
-                    && tangentDelta(existing.tangent, touchPoint.tangent) < kSlideMergeTangentDelta) {
+                const quint64 pairKey = orderedActionPairKey(existing.actionIndex, actionIndex);
+                const bool regularMerge =
+                    existing.hasTangent
+                    && touchPoint.hasTangent
+                    && pointDistance(existing.center, touchPoint.center) < kSlideMergeDistance
+                    && tangentDelta(existing.tangent, touchPoint.tangent) < kSlideMergeTangentDelta;
+                const bool tailContinuationMerge =
+                    !regularMerge
+                    && previousMergedSlidePairs != nullptr
+                    && previousMergedSlidePairs->contains(pairKey)
+                    && existingAction.kind == RuntimeHandActionKind::Slide
+                    && action.kind == RuntimeHandActionKind::Slide
+                    && (inReleaseTail(existingAction) || inReleaseTail(action));
+                if (regularMerge || tailContinuationMerge) {
+                    if (currentMergedSlidePairs != nullptr) {
+                        currentMergedSlidePairs->insert(pairKey);
+                    }
                     merged = true;
                     break;
                 }
@@ -4071,6 +4099,7 @@ void collectSimpleNoteMultiTouchDiagnostics(
     }
     QVector<int> activeActionIndices;
     QSet<QString> seenSignatures;
+    QSet<quint64> previousMergedSlidePairs;
     int actionPointer = 0;
     for (int tick = 0; tick <= maxTick; ++tick) {
         const double nowSecond = tickToSecond(tick);
@@ -4083,8 +4112,14 @@ void collectSimpleNoteMultiTouchDiagnostics(
             ++actionPointer;
         }
 
+        QSet<quint64> currentMergedSlidePairs;
         const QVector<RuntimeTouchPoint> touchPoints =
-            buildRuntimeTouchPoints(actions, activeActionIndices, nowSecond);
+            buildRuntimeTouchPoints(
+                actions,
+                activeActionIndices,
+                nowSecond,
+                &previousMergedSlidePairs,
+                &currentMergedSlidePairs);
         const QVector<MultiTouchActionCluster> touchClusters =
             buildMultiTouchActionClusters(touchPoints, actions);
         int handCount = 0;
@@ -4202,6 +4237,7 @@ void collectSimpleNoteMultiTouchDiagnostics(
         for (int actionIndex : finishedActionIndices) {
             activeActionIndices.removeAll(actionIndex);
         }
+        previousMergedSlidePairs.swap(currentMergedSlidePairs);
     }
 }
 
