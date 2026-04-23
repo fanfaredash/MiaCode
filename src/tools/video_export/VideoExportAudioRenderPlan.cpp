@@ -221,7 +221,9 @@ bool buildVideoExportAudioRenderPlan(
         &touchholdSpans);
 
     const QVector<miacode::preview_sfx_timeline::ScheduledPlayback> scheduledPlaybacks =
-        miacode::preview_sfx_timeline::buildScheduledPlaybacks(events);
+        miacode::preview_sfx_timeline::buildScheduledPlaybacks(
+            events,
+            normalizedAudioSettings.breakSlideTailCheerMuted);
     built.scheduledSfxPlaybacks.reserve(scheduledPlaybacks.size());
     for (const auto& playback : scheduledPlaybacks) {
         if (!miacode::preview_sfx_timeline::scheduledPlaybackSurvivesTimelineOriginClamp(

@@ -25,6 +25,7 @@ struct Event {
     int spanIndex = -1;
     double gain = 1.0;
     double originClampAllowanceSeconds = 0.0;
+    bool breakSlideTailBreak = false;
 };
 
 struct TouchholdSpan {
@@ -116,7 +117,8 @@ inline int eventGroupEndIndex(const QVector<Event>& events, int groupStart)
 inline CollapsedEventGroup collapseEventGroup(
     const QVector<Event>& events,
     int groupStart,
-    int groupEnd
+    int groupEnd,
+    bool muteBreakSlideTailBreak = false
 )
 {
     CollapsedEventGroup group;
@@ -128,6 +130,9 @@ inline CollapsedEventGroup collapseEventGroup(
     group.orderedEvents.reserve(groupEnd - groupStart);
     for (int i = groupStart; i < groupEnd; ++i) {
         const Event& event = events[i];
+        if (muteBreakSlideTailBreak && event.breakSlideTailBreak) {
+            continue;
+        }
         if (previewSfxShouldAggregateKind(event.kind)) {
             accumulateAggregatedPlayback(
                 &group.aggregatedPlaybacks,
@@ -159,13 +164,15 @@ inline void annotateScheduledPlaybackLatestWins(QVector<ScheduledPlayback>* play
     }
 }
 
-inline QVector<ScheduledPlayback> buildScheduledPlaybacks(const QVector<Event>& events)
+inline QVector<ScheduledPlayback> buildScheduledPlaybacks(
+    const QVector<Event>& events,
+    bool muteBreakSlideTailBreak = false)
 {
     QVector<ScheduledPlayback> playbacks;
     int index = 0;
     while (index < events.size()) {
         const int groupEnd = eventGroupEndIndex(events, index);
-        const CollapsedEventGroup group = collapseEventGroup(events, index, groupEnd);
+        const CollapsedEventGroup group = collapseEventGroup(events, index, groupEnd, muteBreakSlideTailBreak);
 
         for (const Event& event : group.orderedEvents) {
             if (event.kind == QLatin1String("touchhold_start")
@@ -237,7 +244,8 @@ inline void buildTimeline(
                               int priority = 1,
                               int spanIndex = -1,
                               double gain = 1.0,
-                              double originClampAllowanceSeconds = 0.0) {
+                              double originClampAllowanceSeconds = 0.0,
+                              bool breakSlideTailBreak = false) {
         if (second < 0.0 || kind.isEmpty()) {
             return;
         }
@@ -248,6 +256,7 @@ inline void buildTimeline(
         event.spanIndex = spanIndex;
         event.gain = qMax(0.0, gain);
         event.originClampAllowanceSeconds = qMax(0.0, originClampAllowanceSeconds);
+        event.breakSlideTailBreak = breakSlideTailBreak;
         events->append(event);
     };
 
@@ -393,7 +402,7 @@ inline void buildTimeline(
             if (marker.trackBreak && marker.endSecond > traceSecond) {
                 const double tailSecond =
                     qMax(0.0, miacode::preview_sfx_timing::slideTriggerSecond(marker.endSecond, normalizedTimingSettings, playbackRate));
-                addEvent(tailSecond, QStringLiteral("break"));
+                addEvent(tailSecond, QStringLiteral("break"), 1, -1, 1.0, 0.0, true);
                 addEvent(tailSecond, QStringLiteral("judge_break_slide"));
             }
         }

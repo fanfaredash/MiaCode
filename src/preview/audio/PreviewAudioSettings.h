@@ -93,9 +93,6 @@ inline double previewSfxVolumeForKind(const PreviewAudioSettings& settings, cons
         || lowered == "break_slide_start"
         || lowered == "break_slide_finish"
         || lowered == "judge_break_slide") {
-        if (lowered == "judge_break_slide" && settings.breakSlideTailCheerMuted) {
-            return 0.0;
-        }
         return settings.breakVolume * globalVolume;
     }
     if (lowered == "slide") {

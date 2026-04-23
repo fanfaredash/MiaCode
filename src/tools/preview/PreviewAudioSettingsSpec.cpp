@@ -112,7 +112,10 @@ bool verifyDirectBucketGain(QTextStream& err)
         return false;
     }
     settings.breakSlideTailCheerMuted = true;
-    if (!requireNear(previewSfxVolumeForKind(settings, QStringLiteral("judge_break_slide")), 0.0, 1e-9, QStringLiteral("muted break-slide tail cheer should be silent"), err)) {
+    if (!requireNear(previewSfxVolumeForKind(settings, QStringLiteral("break")), 0.15, 1e-9, QStringLiteral("break bucket gain should stay unchanged when break-slide tail break is muted"), err)) {
+        return false;
+    }
+    if (!requireNear(previewSfxVolumeForKind(settings, QStringLiteral("judge_break_slide")), 0.15, 1e-9, QStringLiteral("muted break-slide tail cheer should keep judge_break_slide audible"), err)) {
         return false;
     }
     settings.breakSlideTailCheerMuted = false;
@@ -224,7 +227,7 @@ bool verifyJsonShape(QTextStream& err)
     if (!require(object.contains(QStringLiteral("tap_volume")), QStringLiteral("new schema should write tap_volume"), err)) {
         return false;
     }
-    if (!require(object.contains(QStringLiteral("break_slide_tail_cheer_muted")), QStringLiteral("new schema should write break-slide cheer mute option"), err)) {
+    if (!require(object.contains(QStringLiteral("break_slide_tail_cheer_muted")), QStringLiteral("new schema should write break-slide tail break filter option"), err)) {
         return false;
     }
     if (!require(!object.contains(QStringLiteral("break_slide_volume")), QStringLiteral("new schema should stop writing break_slide_volume"), err)) {

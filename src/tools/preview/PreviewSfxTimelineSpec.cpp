@@ -177,6 +177,7 @@ bool verifyBreakSlideTailSfx(QTextStream& err)
     int breakSlideStartCount = 0;
     int breakSlideBreakTailCount = 0;
     int plainBreakTailCount = 0;
+    int flaggedBreakTailCount = 0;
     int judgeBreakSlideTailCount = 0;
     int legacyBreakSlideFinishCount = 0;
 
@@ -187,6 +188,9 @@ bool verifyBreakSlideTailSfx(QTextStream& err)
             ++breakSlideBreakTailCount;
         } else if (event.kind == QLatin1String("break") && qAbs(event.second - 3.0) <= 1e-6) {
             ++plainBreakTailCount;
+            if (event.breakSlideTailBreak) {
+                ++flaggedBreakTailCount;
+            }
         } else if (event.kind == QLatin1String("judge_break_slide") && qAbs(event.second - 3.0) <= 1e-6) {
             ++judgeBreakSlideTailCount;
         } else if (event.kind == QLatin1String("break_slide_finish") && qAbs(event.second - 3.0) <= 1e-6) {
@@ -197,7 +201,10 @@ bool verifyBreakSlideTailSfx(QTextStream& err)
     if (!require(breakSlideStartCount == 1, QStringLiteral("break slide should emit one start SFX"), err)) {
         return false;
     }
-    if (!require(plainBreakTailCount == 1, QStringLiteral("break slide tail should emit one plain break bucket event"), err)) {
+    if (!require(plainBreakTailCount == 1, QStringLiteral("break slide tail should emit one ordinary break bucket event"), err)) {
+        return false;
+    }
+    if (!require(flaggedBreakTailCount == 1, QStringLiteral("break slide tail break should be flagged for optional filtering"), err)) {
         return false;
     }
     if (!require(breakSlideBreakTailCount == 0, QStringLiteral("break slide tail should not emit a separate break_slide_break event"), err)) {

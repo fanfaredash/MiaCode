@@ -278,7 +278,11 @@ void QtPreviewSfxRuntime::drainEvents(double second)
         const int groupEnd =
             miacode::preview_sfx_timeline::eventGroupEndIndex(preparedTimeline_.events, groupStart);
         const miacode::preview_sfx_timeline::CollapsedEventGroup group =
-            miacode::preview_sfx_timeline::collapseEventGroup(preparedTimeline_.events, groupStart, groupEnd);
+            miacode::preview_sfx_timeline::collapseEventGroup(
+                preparedTimeline_.events,
+                groupStart,
+                groupEnd,
+                settings_.breakSlideTailCheerMuted);
 
         for (const Event& event : group.orderedEvents) {
             if (event.kind == "touchhold_start") {

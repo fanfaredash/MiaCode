@@ -1103,6 +1103,9 @@ void BassPreviewAudioBackend::applyLevels(const PreviewAudioSettings& settings)
     settings_ = settings;
     settings_.normalize();
     applySampleLevels();
+    const double currentSecond = authoritativeSecond();
+    rebuildPreparedGroups();
+    resetCursor(currentSecond, false);
 }
 
 void BassPreviewAudioBackend::clearPreparedTimeline()
@@ -1118,7 +1121,11 @@ void BassPreviewAudioBackend::rebuildPreparedGroups()
     while (index < preparedTimeline_.events.size()) {
         const int groupEnd = miacode::preview_sfx_timeline::eventGroupEndIndex(preparedTimeline_.events, index);
         preparedGroups_.append(
-            miacode::preview_sfx_timeline::collapseEventGroup(preparedTimeline_.events, index, groupEnd));
+            miacode::preview_sfx_timeline::collapseEventGroup(
+                preparedTimeline_.events,
+                index,
+                groupEnd,
+                settings_.breakSlideTailCheerMuted));
         index = groupEnd;
     }
 }
