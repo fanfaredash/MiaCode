@@ -1809,6 +1809,7 @@ QVector<JudgeableSimpleNote> buildJudgeableSimpleNotes(
         note.criticalSeconds = miacode::muri::kTapCriticalSeconds;
         note.availableSeconds = miacode::muri::kTapAvailableSeconds;
         note.expiryTick = judgeTickForNoteExpiry(marker.second, note.availableSeconds);
+        // Keep the star identity for labeling and source attribution only.
         note.headStarTapLike = true;
         note.hasProtection = marker.headEx;
         const int noteIndex = notes.size();
@@ -2244,8 +2245,7 @@ QVector<RuntimeHandAction> buildRuntimeHandActions(
     const QVector<JudgeableSimpleNote>& notes,
     const QVector<RuntimeTouchGroup>& touchGroups,
     const QHash<int, int>& touchGroupByChildNoteIndex,
-    bool includeSlideLike = false,
-    bool includeHeadStarTapLikeNotes = true)
+    bool includeSlideLike = false)
 {
     using namespace miacode::muri;
 
@@ -2254,26 +2254,9 @@ QVector<RuntimeHandAction> buildRuntimeHandActions(
 
     for (int noteIndex = 0; noteIndex < notes.size(); ++noteIndex) {
         const JudgeableSimpleNote& note = notes.at(noteIndex);
-        if (note.headStarTapLike) {
-            if (!includeHeadStarTapLikeNotes) {
-                continue;
-            }
-            appendPressHandAction(
-                &actions,
-                note.markerKey,
-                note.type,
-                note.parseOrder >= 0 ? note.parseOrder : note.order,
-                note.line,
-                note.col,
-                note.momentSecond,
-                note.pressEndSecond,
-                simpleNoteActionCenter(note),
-                kHandRadiusNormal,
-                false);
-            continue;
-        }
-
         if (note.type == QLatin1String("tap")) {
+            // Synthetic head-stars keep their own labels, but use the same tap
+            // action path as ordinary taps after they are modeled.
             if (note.slideHead) {
                 continue;
             }
@@ -4080,8 +4063,7 @@ void collectSimpleNoteMultiTouchDiagnostics(
             notes,
             touchGroups,
             touchGroupByChildNoteIndex,
-            true,
-            false);
+            true);
     if (renderOptions.excludeTouchFromMultiTouch) {
         actions.erase(
             std::remove_if(actions.begin(), actions.end(), [](const RuntimeHandAction& action) {

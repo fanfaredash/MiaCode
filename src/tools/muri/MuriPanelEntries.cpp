@@ -91,6 +91,8 @@ QString simpleNoteConfigToken(int lane, bool hasProtection, bool isHold)
 QString muriStaticReferenceConfigText(const MuriStaticReferenceNote& note)
 {
     if (note.headStarTapLike) {
+        // Preserve the star-facing label even when the helper now behaves like
+        // an ordinary tap during Muri analysis.
         const QString token = simpleNoteConfigToken(note.lane, note.hasProtection, false);
         const QString base = token.isEmpty()
             ? QStringLiteral("star")
@@ -195,11 +197,7 @@ MuriPanelEntry makeMuriPanelEntry(const MuriStaticReference& reference)
     entry.kind = reference.kind;
     entry.alertLevel = reference.alertLevel;
     const MuriPanelAnchor affectedAnchor = muriPanelAnchorFromReferenceNote(reference.affected);
-    const MuriPanelAnchor causeAnchor = muriPanelAnchorFromReferenceNote(reference.cause);
-    const MuriPanelAnchor anchor =
-        (reference.kind == MuriKind::SlideHeadTap || reference.kind == MuriKind::TapOnSlide)
-        ? affectedAnchor
-        : earlierMuriPanelAnchor(affectedAnchor, causeAnchor);
+    const MuriPanelAnchor anchor = affectedAnchor;
     entry.second = anchor.valid ? anchor.second : reference.affected.second;
     entry.occurrenceSecond = reference.affected.second;
     entry.line = anchor.valid ? anchor.line : reference.affected.line;
@@ -220,26 +218,32 @@ QVector<MuriPanelEntry> buildVisibleMuriPanelEntries(
     entries.reserve(analysisReport.diagnostics.size() + staticReferences.size());
 
     QHash<qint64, int> keptOverlapCountBySecond;
-    QSet<QString> runtimeIssueKeys;
-    runtimeIssueKeys.reserve(analysisReport.diagnostics.size());
-
-    for (const MuriDiagnostic& diagnostic : analysisReport.diagnostics) {
-        const MuriPanelEntry entry = makeMuriPanelEntry(diagnostic);
-        if (!keepDenseOverlapPanelIssue(entry.kind, entry.second, &keptOverlapCountBySecond)) {
-            continue;
-        }
-        runtimeIssueKeys.insert(muriPanelEntryDedupeKey(entry.kind, entry.line, entry.col));
-        entries.append(entry);
-    }
+    QSet<QString> keptIssueKeys;
+    keptIssueKeys.reserve(analysisReport.diagnostics.size() + staticReferences.size());
 
     for (const MuriStaticReference& reference : staticReferences) {
         const MuriPanelEntry entry = makeMuriPanelEntry(reference);
         if (!keepDenseOverlapPanelIssue(entry.kind, entry.second, &keptOverlapCountBySecond)) {
             continue;
         }
-        if (runtimeIssueKeys.contains(muriPanelEntryDedupeKey(entry.kind, entry.line, entry.col))) {
+        const QString dedupeKey = muriPanelEntryDedupeKey(entry.kind, entry.line, entry.col);
+        if (keptIssueKeys.contains(dedupeKey)) {
             continue;
         }
+        keptIssueKeys.insert(dedupeKey);
+        entries.append(entry);
+    }
+
+    for (const MuriDiagnostic& diagnostic : analysisReport.diagnostics) {
+        const MuriPanelEntry entry = makeMuriPanelEntry(diagnostic);
+        if (!keepDenseOverlapPanelIssue(entry.kind, entry.second, &keptOverlapCountBySecond)) {
+            continue;
+        }
+        const QString dedupeKey = muriPanelEntryDedupeKey(entry.kind, entry.line, entry.col);
+        if (keptIssueKeys.contains(dedupeKey)) {
+            continue;
+        }
+        keptIssueKeys.insert(dedupeKey);
         entries.append(entry);
     }
 
