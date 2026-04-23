@@ -639,7 +639,6 @@ void BassPreviewAudioBackend::resetAssets()
     resetSample(judgeBreakSample_);
     resetSample(slideSample_);
     resetSample(breakSample_);
-    resetSample(breakSlideBreakSample_);
     resetSample(breakSlideStartSample_);
     resetSample(breakSlideFinishSample_);
     resetSample(judgeBreakSlideSample_);
@@ -690,7 +689,6 @@ void BassPreviewAudioBackend::initializeAssets()
     loadSample(judgeBreakSample_, QStringLiteral("judge_break"), false, true);
     loadSample(slideSample_, QStringLiteral("slide"), false, true);
     loadSample(breakSample_, QStringLiteral("break"), false, true);
-    loadSample(breakSlideBreakSample_, QStringLiteral("break_slide_break"), false, true);
     loadSample(breakSlideStartSample_, QStringLiteral("break_slide_start"), false, true);
     loadSample(breakSlideFinishSample_, QStringLiteral("break_slide_finish"), false, true);
     loadSample(judgeBreakSlideSample_, QStringLiteral("judge_break_slide"), false, true);
@@ -728,7 +726,6 @@ void BassPreviewAudioBackend::initializeAssets()
         judgeBreakSample_.get(),
         slideSample_.get(),
         breakSample_.get(),
-        breakSlideBreakSample_.get(),
         breakSlideStartSample_.get(),
         breakSlideFinishSample_.get(),
         judgeBreakSlideSample_.get(),
@@ -769,7 +766,6 @@ void BassPreviewAudioBackend::applySampleLevels()
     apply(judgeBreakSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("judge_break")));
     apply(slideSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("slide")));
     apply(breakSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("break")));
-    apply(breakSlideBreakSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("break_slide_break")));
     apply(breakSlideStartSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("break_slide_start")));
     apply(breakSlideFinishSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("break_slide_finish")));
     apply(judgeBreakSlideSample_.get(), previewSfxVolumeForKind(settings_, QStringLiteral("judge_break_slide")));
@@ -943,7 +939,6 @@ void BassPreviewAudioBackend::clearResidualVoicesForPausedReposition()
         judgeBreakSample_.get(),
         slideSample_.get(),
         breakSample_.get(),
-        breakSlideBreakSample_.get(),
         breakSlideStartSample_.get(),
         breakSlideFinishSample_.get(),
         judgeBreakSlideSample_.get(),
@@ -1212,7 +1207,6 @@ void BassPreviewAudioBackend::stopAllSamples()
         judgeBreakSample_.get(),
         slideSample_.get(),
         breakSample_.get(),
-        breakSlideBreakSample_.get(),
         breakSlideStartSample_.get(),
         breakSlideFinishSample_.get(),
         judgeBreakSlideSample_.get(),

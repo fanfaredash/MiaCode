@@ -180,10 +180,10 @@ bool verifyBreakSlideTailSfx(QTextStream& err)
     if (!require(breakSlideStartCount == 1, QStringLiteral("break slide should emit one start SFX"), err)) {
         return false;
     }
-    if (!require(breakSlideBreakTailCount == 1, QStringLiteral("break slide tail should emit one break_slide_break SFX"), err)) {
+    if (!require(plainBreakTailCount == 1, QStringLiteral("break slide tail should emit one plain break bucket event"), err)) {
         return false;
     }
-    if (!require(plainBreakTailCount == 0, QStringLiteral("break slide tail should not emit the plain break bucket event"), err)) {
+    if (!require(breakSlideBreakTailCount == 0, QStringLiteral("break slide tail should not emit a separate break_slide_break event"), err)) {
         return false;
     }
     if (!require(

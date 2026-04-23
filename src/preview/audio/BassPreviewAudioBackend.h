@@ -213,7 +213,6 @@ private:
     std::unique_ptr<Sample> judgeBreakSample_;
     std::unique_ptr<Sample> slideSample_;
     std::unique_ptr<Sample> breakSample_;
-    std::unique_ptr<Sample> breakSlideBreakSample_;
     std::unique_ptr<Sample> breakSlideStartSample_;
     std::unique_ptr<Sample> breakSlideFinishSample_;
     std::unique_ptr<Sample> judgeBreakSlideSample_;

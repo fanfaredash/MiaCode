@@ -175,7 +175,6 @@ private:
     SfxBank judgeBreakSfx_;
     SfxBank slideSfx_;
     SfxBank breakSfx_;
-    SfxBank breakSlideBreakSfx_;
     SfxBank breakSlideStartSfx_;
     SfxBank breakSlideSfx_;
     SfxBank judgeBreakSlideSfx_;

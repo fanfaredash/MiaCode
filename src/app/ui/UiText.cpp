@@ -136,6 +136,7 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
         || raw.contains("touchhold_volume")
         || raw.contains("break_slide_volume")
         || raw.contains("break_slide_restore_volume")
+        || raw.contains("break_slide_tail_cheer_muted")
         || raw.contains("firework_volume")
         || raw.contains("hanabi_volume")) {
         QJsonObject audio = preview.value("audio").toObject();
@@ -174,6 +175,9 @@ QJsonObject normalizedPreferencesRoot(const QJsonObject& raw)
                 raw.value("break_slide_restore_volume").toDouble(
                     raw.value("break_slide_volume").toDouble(
                         raw.value("slide_volume").toDouble(raw.value("sfx_volume").toDouble()))));
+        }
+        if (raw.contains("break_slide_tail_cheer_muted")) {
+            audio.insert("break_slide_tail_cheer_muted", raw.value("break_slide_tail_cheer_muted").toBool(false));
         }
         if (raw.contains("ex_volume")) {
             audio.insert("ex_volume", raw.value("ex_volume").toDouble(raw.value("sfx_volume").toDouble()));
@@ -465,7 +469,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.render_settings.audio.tap", "Tap 音量"},
         {"dialog.render_settings.audio.break", "Break 音量"},
         {"dialog.render_settings.audio.slide", "Slide 音量"},
-        {"dialog.render_settings.audio.break_slide", "Break Slide 音量"},
+        {"dialog.render_settings.audio.break_slide_tail_cheer_mute", "关闭breakslide结尾“欢呼”声"},
         {"dialog.render_settings.audio.ex", "EX 音量"},
         {"dialog.render_settings.audio.touch", "Touch 音量"},
         {"dialog.render_settings.audio.track", "Track 音量"},

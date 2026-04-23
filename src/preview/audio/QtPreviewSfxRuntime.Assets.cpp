@@ -79,7 +79,6 @@ void QtPreviewSfxRuntime::resetBanks()
     resetBank(judgeBreakSfx_);
     resetBank(slideSfx_);
     resetBank(breakSfx_);
-    resetBank(breakSlideBreakSfx_);
     resetBank(breakSlideStartSfx_);
     resetBank(breakSlideSfx_);
     resetBank(judgeBreakSlideSfx_);
