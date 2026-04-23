@@ -373,7 +373,7 @@
         bool exportShowObjectStatsHud_ = false;
         bool previewShowValidationSummary_ = true;
         bool chartNormalizeStartAtNewMeasure_ = true;
-        bool chartNormalizeReduceTo384Grid_ = true;
+        bool chartNormalizeReduceTo384Grid_ = false;
         bool workspacePanelsSwapped_ = false;
         PreviewAudioSettings softwarePreviewAudioSettings_;
         PreviewAudioSettings previewAudioSettings_;

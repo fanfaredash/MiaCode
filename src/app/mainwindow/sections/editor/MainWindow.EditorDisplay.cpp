@@ -133,7 +133,7 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.exportShowObjectStatsHud_ = false;
     state_.previewShowValidationSummary_ = true;
     state_.chartNormalizeStartAtNewMeasure_ = true;
-    state_.chartNormalizeReduceTo384Grid_ = true;
+    state_.chartNormalizeReduceTo384Grid_ = false;
     state_.workspacePanelsSwapped_ = false;
 }
 
@@ -264,7 +264,9 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
         state_.previewFollowEnabled_ = preview.value("follow_preview").toBool(false);
     }
     const miacode::chart_transform::ChartNormalizationOptions normalizationOptions =
-        miacode::chart_transform::chartNormalizationOptionsFromPreferences(preview);
+        miacode::chart_transform::chartNormalizationOptionsFromPreferences(
+            preview,
+            miacode::chart_transform::ChartNormalizationOptions{true, false});
     state_.chartNormalizeStartAtNewMeasure_ = normalizationOptions.startAtNewMeasure;
     state_.chartNormalizeReduceTo384Grid_ = normalizationOptions.reduceTo384Grid;
     if (preview.value("swap_side_panels").isBool()) {
