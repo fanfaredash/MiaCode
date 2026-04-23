@@ -37,7 +37,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
         visibleEndSecond = xToSecond(qMax(left, dirtyRight));
         beatRange = visibleLineRange(visibleStartSecond - 1.0, visibleEndSecond + 1.0);
         if (dirtyRect.bottom() >= top && dirtyRect.top() <= top + h) {
-            const QVector<double>& noteVisualPrefixMax = drawSlideTracks
+            const QVector<double>& noteVisualPrefixMax = (drawSlideTracks || !muriMarkerPlacementsByLocation_.isEmpty())
                 ? noteVisualEndPrefixMaxWithSlideTracks_
                 : noteVisualEndPrefixMaxWithoutSlideTracks_;
             if (noteVisualPrefixMax.size() == lines_.size()) {
@@ -63,6 +63,39 @@ void TimelineView::paintEvent(QPaintEvent* event)
     };
     const auto noteTraceSecond = [](const TimelineRenderLine& line, const TimelineRenderNote& note) {
         return note.slideTraceSecondOffset >= 0.0 ? timelineRenderAbsoluteSecond(line, note.slideTraceSecondOffset) : -1.0;
+    };
+    const auto muriMarkerAnchorY = [top, laneH, &noteSecond, &noteTraceSecond, &noteEndSecond](
+                                       const TimelineRenderLine& line,
+                                       const TimelineRenderNote& note,
+                                       double triggerSecond) {
+        const int startLane = qBound(1, note.lane, kPlayableLaneCount);
+        const qreal startY = static_cast<qreal>(top + (startLane - 1) * laneH + laneH / 2);
+        if (note.kind != TimelineRenderNoteKind::Slide && note.kind != TimelineRenderNoteKind::Wifi) {
+            return startY;
+        }
+
+        const double startSecond = noteSecond(line, note);
+        const double traceSecond = noteTraceSecond(line, note) >= 0.0 ? noteTraceSecond(line, note) : startSecond;
+        const double endSecond = noteEndSecond(line, note) >= 0.0 ? noteEndSecond(line, note) : traceSecond;
+        if (!(traceSecond > startSecond && endSecond > traceSecond)) {
+            return startY;
+        }
+
+        const int endLane = qBound(1, note.endLane, kPlayableLaneCount);
+        const qreal endY = static_cast<qreal>(top + (endLane - 1) * laneH + laneH / 2);
+        if (triggerSecond <= traceSecond) {
+            return startY;
+        }
+        if (triggerSecond >= endSecond) {
+            return endY;
+        }
+
+        const qreal proportion = qBound<qreal>(
+            0.0,
+            static_cast<qreal>((triggerSecond - traceSecond) / (endSecond - traceSecond)),
+            1.0
+        );
+        return startY + (endY - startY) * proportion;
     };
 
     painter.fillRect(QRect(0, 0, viewport()->width(), top), c.timelineHeader);
@@ -471,6 +504,12 @@ void TimelineView::paintEvent(QPaintEvent* event)
         const double startSecond = noteSecond(line, note);
         const double endSecond = noteEndSecond(line, note);
         const double traceSecond = noteTraceSecond(line, note);
+        const quint64 locationId = timelineRenderLocationId(line, note);
+        const QVector<miacode::timeline::TimelineMuriMarkerPlacement>* noteMuriMarkers = nullptr;
+        if (const auto markersIt = muriMarkerPlacementsByLocation_.constFind(locationId);
+            markersIt != muriMarkerPlacementsByLocation_.constEnd()) {
+            noteMuriMarkers = &markersIt.value();
+        }
         const bool isHold = note.kind == TimelineRenderNoteKind::Hold && endSecond >= startSecond;
         const bool isTouchHold = note.kind == TimelineRenderNoteKind::TouchHold && endSecond > startSecond;
         const bool isSlideLike = note.kind == TimelineRenderNoteKind::Slide || note.kind == TimelineRenderNoteKind::Wifi;
@@ -490,6 +529,16 @@ void TimelineView::paintEvent(QPaintEvent* event)
         if (drawSlideTracks && isSlideTrack) {
             extentLeft = qMin(extentLeft, qMin(slideStartX, slideEndX));
             extentRight = qMax(extentRight, qMax(slideStartX, slideEndX));
+        }
+        if (noteMuriMarkers != nullptr) {
+            for (const miacode::timeline::TimelineMuriMarkerPlacement& markerPlacement : *noteMuriMarkers) {
+                if (!markerPlacement.useTriggerSecond) {
+                    continue;
+                }
+                const int markerX = secondToX(markerPlacement.second) - xOffset;
+                extentLeft = qMin(extentLeft, markerX);
+                extentRight = qMax(extentRight, markerX);
+            }
         }
         if (extentRight < left - kNoteSize || extentLeft > viewport()->width() + kNoteSize) {
             return;
@@ -664,11 +713,19 @@ void TimelineView::paintEvent(QPaintEvent* event)
             }
         }
 
-        if (muriMarkerLocationIds_.contains(timelineRenderLocationId(line, note))) {
+        if (noteMuriMarkers != nullptr) {
             painter.save();
             painter.setPen(Qt::NoPen);
             painter.setBrush(QColor(255, 146, 43, 230));
-            painter.drawEllipse(QRectF(x + 4, rowCenterY - 8, 7, 7));
+            for (const miacode::timeline::TimelineMuriMarkerPlacement& markerPlacement : *noteMuriMarkers) {
+                const qreal markerX = markerPlacement.useTriggerSecond
+                    ? static_cast<qreal>(secondToX(markerPlacement.second) - xOffset)
+                    : static_cast<qreal>(x);
+                const qreal markerY = markerPlacement.useTriggerSecond
+                    ? muriMarkerAnchorY(line, note, markerPlacement.second)
+                    : static_cast<qreal>(rowCenterY);
+                painter.drawEllipse(QRectF(markerX + 4.0, markerY - 8.0, 7.0, 7.0));
+            }
             painter.restore();
         }
     };

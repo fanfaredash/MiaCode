@@ -12,7 +12,6 @@
 #include <QPointF>
 #include <QPointer>
 #include <QRect>
-#include <QSet>
 #include <QSize>
 #include <QString>
 #include <QStringList>
@@ -27,6 +26,7 @@
 
 #include "timeline/TimelineNoteAssets.h"
 #include "timeline/TimelineRenderData.h"
+#include "timeline/TimelineSceneState.h"
 #include "common/MuriTypes.h"
 
 namespace miacode::waveform {
@@ -71,7 +71,7 @@ public:
     void setShowSlideTracks(bool show);
     bool showSlideTracks() const;
     void setMuriAnalysisReport(const MuriAnalysisReport& report);
-    const QSet<quint64>& muriMarkerLocationIds() const;
+    const QHash<quint64, QVector<miacode::timeline::TimelineMuriMarkerPlacement>>& muriMarkerPlacementsByLocation() const;
     double zoomScale() const;
     int horizontalScrollValue() const;
     void setHorizontalScrollValue(int value);
@@ -205,7 +205,7 @@ private:
     double displayEndSeconds_ = 1.0;
     double pixelsPerSecond_ = 120.0;
     bool showSlideTracks_ = true;
-    QSet<quint64> muriMarkerLocationIds_;
+    QHash<quint64, QVector<miacode::timeline::TimelineMuriMarkerPlacement>> muriMarkerPlacementsByLocation_;
     QHash<QString, QPixmap> noteIcons_;
     QHash<QString, int> noteIconBasePixelSizes_;
     mutable QHash<QString, QPixmap> transformedIconCache_;

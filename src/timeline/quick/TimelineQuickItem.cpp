@@ -423,7 +423,7 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     miacode::timeline::TimelineSceneBuildRequest request;
     request.snapshot = stateBridge_->renderSnapshot();
     request.waveformData = stateBridge_->waveformData();
-    request.muriMarkerLocationIds = stateBridge_->muriMarkerLocationIds();
+    request.muriMarkersByLocation = stateBridge_->muriMarkersByLocation();
     request.muriMarkerTooltips = stateBridge_->muriMarkerTooltips();
     request.viewportSize = viewportSize;
     request.headerLineNumberFont = stateBridge_->headerLineNumberFont();

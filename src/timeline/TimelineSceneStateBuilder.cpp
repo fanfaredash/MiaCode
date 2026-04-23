@@ -153,6 +153,48 @@ qreal secondToXExact(const TimelineSceneState& state, double second)
         + static_cast<qreal>(state.leadingCenteringPadding);
 }
 
+qreal muriMarkerAnchorY(
+    const TimelineSceneState& state,
+    const TimelineRenderLine& line,
+    const TimelineRenderNote& note,
+    double triggerSecond)
+{
+    const int startLane = qBound(1, note.lane, kPlayableLaneCount);
+    const qreal startY = static_cast<qreal>(
+        state.timelineTop + (startLane - 1) * kLaneHeight + kLaneHeight / 2);
+    if (note.kind != TimelineRenderNoteKind::Slide && note.kind != TimelineRenderNoteKind::Wifi) {
+        return startY;
+    }
+
+    const double startSecond = timelineRenderAbsoluteSecond(line, note.secondOffset);
+    const double traceSecond = note.slideTraceSecondOffset >= 0.0
+        ? timelineRenderAbsoluteSecond(line, note.slideTraceSecondOffset)
+        : startSecond;
+    const double endSecond = note.endSecondOffset >= 0.0
+        ? timelineRenderAbsoluteSecond(line, note.endSecondOffset)
+        : traceSecond;
+    if (!(traceSecond > startSecond && endSecond > traceSecond)) {
+        return startY;
+    }
+
+    const int endLane = qBound(1, note.endLane, kPlayableLaneCount);
+    const qreal endY = static_cast<qreal>(
+        state.timelineTop + (endLane - 1) * kLaneHeight + kLaneHeight / 2);
+    if (triggerSecond <= traceSecond) {
+        return startY;
+    }
+    if (triggerSecond >= endSecond) {
+        return endY;
+    }
+
+    const qreal proportion = qBound<qreal>(
+        0.0,
+        static_cast<qreal>((triggerSecond - traceSecond) / (endSecond - traceSecond)),
+        1.0
+    );
+    return startY + (endY - startY) * proportion;
+}
+
 double xToSecond(const TimelineSceneLayoutMetrics& metrics, int horizontalScrollValue, qreal x)
 {
     return qMax(
@@ -694,6 +736,12 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         const double startSecond = noteSecond(line, note);
         const double endSecond = noteEndSecond(line, note);
         const double traceSecond = noteTraceSecond(line, note);
+        const quint64 locationId = timelineRenderLocationId(line, note);
+        const QVector<TimelineMuriMarkerPlacement>* noteMuriMarkers = nullptr;
+        if (const auto markersIt = request.muriMarkersByLocation.constFind(locationId);
+            markersIt != request.muriMarkersByLocation.constEnd()) {
+            noteMuriMarkers = &markersIt.value();
+        }
         const bool isHold = note.kind == TimelineRenderNoteKind::Hold && endSecond >= startSecond;
         const bool isTouchHold = note.kind == TimelineRenderNoteKind::TouchHold && endSecond > startSecond;
         const bool isSlideLike = note.kind == TimelineRenderNoteKind::Slide || note.kind == TimelineRenderNoteKind::Wifi;
@@ -713,6 +761,16 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         if (request.showSlideTracks && isSlideTrack) {
             extentLeft = qMin(extentLeft, qMin(slideStartX, slideEndX));
             extentRight = qMax(extentRight, qMax(slideStartX, slideEndX));
+        }
+        if (noteMuriMarkers != nullptr) {
+            for (const TimelineMuriMarkerPlacement& markerPlacement : *noteMuriMarkers) {
+                if (!markerPlacement.useTriggerSecond) {
+                    continue;
+                }
+                const int markerX = secondToSceneX(state, markerPlacement.second);
+                extentLeft = qMin(extentLeft, markerX);
+                extentRight = qMax(extentRight, markerX);
+            }
         }
         if (extentRight < state.timelineLeft - kNoteSize || extentLeft > state.contentWidth + kNoteSize) {
             return;
@@ -882,17 +940,26 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 baseIconScale);
         }
 
-        if (request.muriMarkerLocationIds.contains(timelineRenderLocationId(line, note))) {
-            const quint64 locationId = timelineRenderLocationId(line, note);
-            appendGlyph(
-                &state.muriDots,
-                QRectF(x + 4.0, rowCenterY - 8.0, 7.0, 7.0),
-                TimelineSceneGlyphShape::Circle,
-                theme.muriMarker);
-            if (!state.muriDots.isEmpty()) {
-                TimelineSceneGlyph& glyph = state.muriDots.last();
-                glyph.locationId = locationId;
-                glyph.tooltipText = request.muriMarkerTooltips.value(locationId);
+        if (noteMuriMarkers != nullptr) {
+            for (const TimelineMuriMarkerPlacement& markerPlacement : *noteMuriMarkers) {
+                const qreal markerX = markerPlacement.useTriggerSecond
+                    ? secondToXExact(state, markerPlacement.second)
+                    : static_cast<qreal>(x);
+                const qreal markerY = markerPlacement.useTriggerSecond
+                    ? muriMarkerAnchorY(state, line, note, markerPlacement.second)
+                    : static_cast<qreal>(rowCenterY);
+                appendGlyph(
+                    &state.muriDots,
+                    QRectF(markerX + 4.0, markerY - 8.0, 7.0, 7.0),
+                    TimelineSceneGlyphShape::Circle,
+                    theme.muriMarker);
+                if (!state.muriDots.isEmpty()) {
+                    TimelineSceneGlyph& glyph = state.muriDots.last();
+                    glyph.locationId = locationId;
+                    glyph.tooltipText = !markerPlacement.tooltipText.isEmpty()
+                        ? markerPlacement.tooltipText
+                        : request.muriMarkerTooltips.value(locationId);
+                }
             }
         }
     };

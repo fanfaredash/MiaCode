@@ -717,6 +717,18 @@ int main(int argc, char** argv)
 
     {
         const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(180){16}\n,,3-7[16:6],3h[16:3],2h[16:6],,,,,,,,,,,,\nE\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("staggered slide-hold non-issue repro chart parses"));
+        expect(analyzed.report.diagnostics.isEmpty(),
+            QStringLiteral("staggered slide-hold non-issue repro keeps runtime diagnostics empty"));
+        expect(analyzed.staticReferences.isEmpty(),
+            QStringLiteral("staggered slide-hold non-issue repro keeps static references empty"));
+        expect(analyzed.visibleEntries.isEmpty(),
+            QStringLiteral("staggered slide-hold non-issue repro keeps the Muri panel empty"));
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
             QStringLiteral("(192)\n{8}2V46[4:1],1/8,,7h[4:1],,5w1b[8:1],2/8,{32}5bx,B5,Cf,B8/B1/B2,\n"));
         expect(analyzed.parsed.ok, QStringLiteral("wifi on-slide touch repro chart parses"));
         expect(analyzed.report.diagnostics.isEmpty(),

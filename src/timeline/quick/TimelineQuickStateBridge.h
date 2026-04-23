@@ -6,7 +6,6 @@
 #include <QPointer>
 #include <QFont>
 #include <QSize>
-#include <QSet>
 #include <QVector>
 
 #include <memory>
@@ -35,7 +34,7 @@ public:
     void setWaveformData(const std::shared_ptr<const miacode::waveform::WaveformData>& waveformData);
     std::shared_ptr<const miacode::waveform::WaveformData> waveformData() const;
     void setMuriAnalysisReport(const MuriAnalysisReport& report);
-    QSet<quint64> muriMarkerLocationIds() const;
+    QHash<quint64, QVector<miacode::timeline::TimelineMuriMarkerPlacement>> muriMarkersByLocation() const;
     QHash<quint64, QString> muriMarkerTooltips() const;
     void setHeaderLineNumberFont(const QFont& font);
     QFont headerLineNumberFont() const;
@@ -88,7 +87,7 @@ private:
     QPointer<TimelineView> referenceView_;
     TimelineRenderSnapshot snapshot_;
     std::shared_ptr<const miacode::waveform::WaveformData> waveformData_;
-    QSet<quint64> muriMarkerLocationIds_;
+    QHash<quint64, QVector<miacode::timeline::TimelineMuriMarkerPlacement>> muriMarkersByLocation_;
     QHash<quint64, QString> muriMarkerTooltips_;
     QFont headerLineNumberFont_;
     QSize quickViewportSize_;

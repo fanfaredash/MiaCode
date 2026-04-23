@@ -17,13 +17,42 @@ QVector<double> makeTimelineZoomPresets()
     return {0.25, 0.5, 0.75, 1.0, 1.5, 2.0};
 }
 
-QSet<quint64> muriMarkerLocationIdsForReport(const MuriAnalysisReport& report)
+bool usesTriggerSecondPlacement(const MuriDiagnostic& diagnostic)
 {
-    QSet<quint64> locationIds;
+    return diagnostic.kind == MuriKind::SlideTooFast
+        || diagnostic.kind == MuriKind::MultiTouch;
+}
+
+QHash<quint64, QVector<miacode::timeline::TimelineMuriMarkerPlacement>> muriMarkersByLocationForReport(
+    const MuriAnalysisReport& report)
+{
+    QHash<quint64, QVector<miacode::timeline::TimelineMuriMarkerPlacement>> markersByLocation;
     for (const MuriDiagnostic& diagnostic : report.diagnostics) {
-        locationIds.insert(timelineRenderLocationId(diagnostic.line, diagnostic.col));
+        const quint64 locationId = timelineRenderLocationId(diagnostic.line, diagnostic.col);
+        QVector<miacode::timeline::TimelineMuriMarkerPlacement>& placements = markersByLocation[locationId];
+        const bool useTriggerSecond = usesTriggerSecondPlacement(diagnostic);
+        const bool duplicate = std::any_of(
+            placements.cbegin(),
+            placements.cend(),
+            [useTriggerSecond, &diagnostic](const miacode::timeline::TimelineMuriMarkerPlacement& placement) {
+                if (placement.useTriggerSecond != useTriggerSecond) {
+                    return false;
+                }
+                if (!useTriggerSecond) {
+                    return true;
+                }
+                return qAbs(placement.second - diagnostic.second) <= 1e-6;
+            });
+        if (duplicate) {
+            continue;
+        }
+
+        miacode::timeline::TimelineMuriMarkerPlacement placement;
+        placement.second = diagnostic.second;
+        placement.useTriggerSecond = useTriggerSecond;
+        placements.append(placement);
     }
-    return locationIds;
+    return markersByLocation;
 }
 
 QString localizeMuriEntityText(QString text, bool chineseUi)
@@ -318,7 +347,7 @@ void TimelineQuickStateBridge::clear()
 {
     snapshot_ = TimelineRenderSnapshot();
     waveformData_.reset();
-    muriMarkerLocationIds_.clear();
+    muriMarkersByLocation_.clear();
     muriMarkerTooltips_.clear();
     horizontalScrollValue_ = 0;
     playbackEntrySeconds_ = 0.0;
@@ -360,20 +389,28 @@ std::shared_ptr<const miacode::waveform::WaveformData> TimelineQuickStateBridge:
 
 void TimelineQuickStateBridge::setMuriAnalysisReport(const MuriAnalysisReport& report)
 {
-    const QSet<quint64> nextLocationIds = muriMarkerLocationIdsForReport(report);
+    QHash<quint64, QVector<miacode::timeline::TimelineMuriMarkerPlacement>> nextMarkersByLocation =
+        muriMarkersByLocationForReport(report);
     const QHash<quint64, QString> nextTooltips = muriMarkerTooltipsForReport(report);
-    if (muriMarkerLocationIds_ == nextLocationIds && muriMarkerTooltips_ == nextTooltips) {
+    for (auto it = nextMarkersByLocation.begin(); it != nextMarkersByLocation.end(); ++it) {
+        const QString tooltipText = nextTooltips.value(it.key());
+        for (miacode::timeline::TimelineMuriMarkerPlacement& placement : it.value()) {
+            placement.tooltipText = tooltipText;
+        }
+    }
+    if (muriMarkersByLocation_ == nextMarkersByLocation && muriMarkerTooltips_ == nextTooltips) {
         return;
     }
-    muriMarkerLocationIds_ = nextLocationIds;
+    muriMarkersByLocation_ = nextMarkersByLocation;
     muriMarkerTooltips_ = nextTooltips;
     bumpOverlayRevision();
     emit renderStateChanged();
 }
 
-QSet<quint64> TimelineQuickStateBridge::muriMarkerLocationIds() const
+QHash<quint64, QVector<miacode::timeline::TimelineMuriMarkerPlacement>>
+TimelineQuickStateBridge::muriMarkersByLocation() const
 {
-    return muriMarkerLocationIds_;
+    return muriMarkersByLocation_;
 }
 
 QHash<quint64, QString> TimelineQuickStateBridge::muriMarkerTooltips() const

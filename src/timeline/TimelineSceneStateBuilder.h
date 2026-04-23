@@ -2,7 +2,6 @@
 
 #include <QFont>
 #include <QHash>
-#include <QSet>
 #include <QSize>
 
 #include <memory>
@@ -16,7 +15,7 @@ namespace miacode::timeline {
 struct TimelineSceneBuildRequest {
     TimelineRenderSnapshot snapshot;
     std::shared_ptr<const miacode::waveform::WaveformData> waveformData;
-    QSet<quint64> muriMarkerLocationIds;
+    QHash<quint64, QVector<TimelineMuriMarkerPlacement>> muriMarkersByLocation;
     QHash<quint64, QString> muriMarkerTooltips;
     QSize viewportSize;
     QFont headerLineNumberFont;

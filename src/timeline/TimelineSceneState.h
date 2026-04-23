@@ -71,6 +71,21 @@ struct TimelineSceneGlyph {
     QString tooltipText;
 };
 
+struct TimelineMuriMarkerPlacement {
+    double second = 0.0;
+    bool useTriggerSecond = false;
+    QString tooltipText;
+};
+
+inline bool operator==(
+    const TimelineMuriMarkerPlacement& left,
+    const TimelineMuriMarkerPlacement& right)
+{
+    return qFuzzyCompare(left.second + 1.0, right.second + 1.0)
+        && left.useTriggerSecond == right.useTriggerSecond
+        && left.tooltipText == right.tooltipText;
+}
+
 struct TimelineSceneSprite {
     QPointF center;
     QString spriteType;
