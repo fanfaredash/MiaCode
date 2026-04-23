@@ -391,7 +391,6 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         uiText("dialog.render_settings.audio.break_slide_tail_cheer_mute", "Disable breakslide tail cheer"),
         audioGroup);
     breakSlideTailCheerCheck->setChecked(owner_.previewAudioSettings_.breakSlideTailCheerMuted);
-    audioFormLayout->addRow(QString(), breakSlideTailCheerCheck);
     const QString touchAudioLabelText = uiText("dialog.render_settings.audio.touch", "Touch Volume");
     QSlider* touchSlider = nullptr;
     QLabel* touchLabel = nullptr;
@@ -408,6 +407,7 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         &fireworkLabel,
         &fireworkMuteButton
     );
+    audioFormLayout->addRow(QString(), breakSlideTailCheerCheck);
 
     const auto addVideoSliderRow = [](
         QWidget* parent,
