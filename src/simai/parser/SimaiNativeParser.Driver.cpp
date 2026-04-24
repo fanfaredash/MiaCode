@@ -723,6 +723,9 @@ SimaiNativeParseResult parseInternal(
         if (marker.slideTraceSecond >= 0.0) {
             traceByLane[marker.lane].append(TimedMarkerRef{i, marker.slideTraceSecond});
             traceQueriesByLane[marker.lane].append(TimedMarkerRef{i, marker.slideTraceSecond});
+            if (marker.hasHeadStar) {
+                tapsByLane[marker.lane].append(TimedMarkerRef{i, marker.second});
+            }
 
             const QString headPad = slideHeadPad(marker.lane);
             if (!headPad.isEmpty()) {

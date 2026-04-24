@@ -800,10 +800,14 @@ QSet<QString> buildSlideKeysWithTapOnSlideHead(const QVector<TimelineNoteMarker>
     QSet<QString> slideKeys;
     slideKeys.reserve(noteMarkers.size());
     for (const TimelineNoteMarker& marker : noteMarkers) {
-        if (marker.type != QLatin1String("tap") || !marker.slideHead) {
+        const bool tapOnSlideHead = marker.type == QLatin1String("tap") && marker.slideHead;
+        const bool syntheticHeadOnSlideHead =
+            isSlideLike(marker) && marker.hasHeadStar && marker.slideHead;
+        if (!tapOnSlideHead && !syntheticHeadOnSlideHead) {
             continue;
         }
-        const QVector<QString> matchingSlideKeys = slideKeysByStart.value(slideStartLookupKey(marker.lane, marker.second));
+        const QVector<QString> matchingSlideKeys =
+            slideKeysByStart.value(slideStartLookupKey(marker.lane, marker.second));
         for (const QString& slideKey : matchingSlideKeys) {
             slideKeys.insert(slideKey);
         }
@@ -1809,6 +1813,7 @@ QVector<JudgeableSimpleNote> buildJudgeableSimpleNotes(
         note.criticalSeconds = miacode::muri::kTapCriticalSeconds;
         note.availableSeconds = miacode::muri::kTapAvailableSeconds;
         note.expiryTick = judgeTickForNoteExpiry(marker.second, note.availableSeconds);
+        note.slideHead = marker.slideHead;
         // Keep the star identity for labeling and source attribution only.
         note.headStarTapLike = true;
         note.hasProtection = marker.headEx;

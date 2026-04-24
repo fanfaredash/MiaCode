@@ -292,6 +292,24 @@ int main(int argc, char** argv)
 
     {
         const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
+            QStringLiteral("{16}1-5[8:1],,,,1-4[8:1],\nE")
+        );
+        expect(parsed.ok, QStringLiteral("synthetic-head-on-slide-head repro parses"));
+        const TimelineNoteMarker* laterSlide = nullptr;
+        for (const TimelineNoteMarker& marker : parsed.noteMarkers) {
+            if (marker.type == QLatin1String("slide") && nearlyEqual(marker.second, 0.5)) {
+                laterSlide = &marker;
+                break;
+            }
+        }
+        expect(laterSlide != nullptr, QStringLiteral("synthetic-head-on-slide-head repro emits later slide"));
+        if (laterSlide != nullptr) {
+            expect(laterSlide->slideHead, QStringLiteral("synthetic slide head on slide shoot moment sets slideHead"));
+        }
+    }
+
+    {
+        const SimaiNativeParseResult parsed = SimaiNativeParser::parseForTimeline(
             QStringLiteral("1h[4:1]/1-5[8:1],\nE")
         );
         expect(parsed.ok, QStringLiteral("hold-tail-on-slide-head repro parses"));

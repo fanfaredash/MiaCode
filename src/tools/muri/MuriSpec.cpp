@@ -310,16 +310,16 @@ int main(int argc, char** argv)
         const AnalyzedChart analyzed = analyzeChart(
             QStringLiteral("(180){24}\n7/2-4[8:1],,,,,,1/2-6[8:1],\nE\n"));
         expect(analyzed.parsed.ok, QStringLiteral("user star-alignment repro chart parses"));
-        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::MultiTouch) == 1,
-            QStringLiteral("user star-alignment repro now reports multitouch"));
-        expect(analyzed.report.diagnostics.size() == 1,
-            QStringLiteral("user star-alignment repro keeps one runtime diagnostic"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::MultiTouch) == 0,
+            QStringLiteral("user star-alignment repro merges synthetic head-star with slide head"));
+        expect(analyzed.report.diagnostics.isEmpty(),
+            QStringLiteral("user star-alignment repro keeps runtime diagnostics empty"));
         expect(analyzed.staticReferences.isEmpty(),
             QStringLiteral("user star-alignment repro keeps static references empty"));
-        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::MultiTouch) == 1,
-            QStringLiteral("user star-alignment repro keeps one visible multitouch entry"));
-        expect(analyzed.visibleEntries.size() == 1,
-            QStringLiteral("user star-alignment repro keeps only the multitouch issue visible"));
+        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::MultiTouch) == 0,
+            QStringLiteral("user star-alignment repro keeps multitouch hidden"));
+        expect(analyzed.visibleEntries.isEmpty(),
+            QStringLiteral("user star-alignment repro keeps the panel empty"));
     }
 
     {
@@ -805,6 +805,16 @@ int main(int argc, char** argv)
             QStringLiteral("release-tail continuation repro suppresses temporary multitouch"));
         expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::MultiTouch) == 0,
             QStringLiteral("release-tail continuation repro keeps multitouch hidden"));
+    }
+
+    {
+        const AnalyzedChart analyzed = analyzeChart(
+            QStringLiteral("(120){16}\n1-6[8:1]/5-2[8:1],,,,1/5-1[8:1],,,,\nE\n"));
+        expect(analyzed.parsed.ok, QStringLiteral("synthetic slide-head merge repro chart parses"));
+        expect(countDiagnostics(analyzed.report.diagnostics, MuriKind::MultiTouch) == 0,
+            QStringLiteral("synthetic slide-head merge repro suppresses multitouch"));
+        expect(countVisibleEntries(analyzed.visibleEntries, MuriKind::MultiTouch) == 0,
+            QStringLiteral("synthetic slide-head merge repro keeps multitouch hidden"));
     }
 
     {

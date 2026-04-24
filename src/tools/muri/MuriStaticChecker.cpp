@@ -174,7 +174,10 @@ QSet<QString> buildSlideKeysWithTapOnSlideHead(const QVector<TimelineNoteMarker>
     QSet<QString> slideKeys;
     slideKeys.reserve(noteMarkers.size());
     for (const TimelineNoteMarker& marker : noteMarkers) {
-        if (marker.type != QLatin1String("tap") || !marker.slideHead) {
+        const bool tapOnSlideHead = marker.type == QLatin1String("tap") && marker.slideHead;
+        const bool syntheticHeadOnSlideHead =
+            isSlideLike(marker) && marker.hasHeadStar && marker.slideHead;
+        if (!tapOnSlideHead && !syntheticHeadOnSlideHead) {
             continue;
         }
         const QVector<QString> matchingSlideKeys = slideKeysByStart.value(
