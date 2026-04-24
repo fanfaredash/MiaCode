@@ -794,7 +794,7 @@ bool MainWindow::DocumentSection::switchToMetadataField()
 
 bool MainWindow::DocumentSection::switchToWelcomePage()
 {
-    if (!maybeSaveCurrentFieldChanges()) {
+    if (!maybeSaveBeforeContinue()) {
         return false;
     }
     owner_.cacheWorkspaceLayoutSizes();

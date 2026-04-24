@@ -233,27 +233,7 @@ bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
         QStringLiteral("trigger=maybe_save_before_continue allow_history=0")
     );
 
-    QElapsedTimer fieldChangesTimer;
-    fieldChangesTimer.start();
-    const bool fieldChangesSaved = maybeSaveCurrentFieldChanges();
-    miacode::debug_log::appendTimingLine(
-        miacode::debug_log::Channel::Runtime,
-        QStringLiteral("close_timing/document"),
-        QStringLiteral("maybe_save_current_field_changes"),
-        fieldChangesTimer.elapsed(),
-        QStringLiteral("result=%1").arg(fieldChangesSaved ? QStringLiteral("continue") : QStringLiteral("cancel"))
-    );
-    if (!fieldChangesSaved) {
-        miacode::debug_log::appendTimingLine(
-            miacode::debug_log::Channel::Runtime,
-            QStringLiteral("close_timing/document"),
-            QStringLiteral("maybe_save_before_continue"),
-            totalTimer.elapsed(),
-            QStringLiteral("result=cancelled_by_field_changes")
-        );
-        return false;
-    }
-    if (!state_.documentDirty_) {
+    if (!state_.documentDirty_ && !state_.currentFieldDirty_) {
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("close_timing/document"),
@@ -300,6 +280,13 @@ bool MainWindow::DocumentSection::maybeSaveBeforeContinue()
         return saved;
     }
     const bool shouldContinue = choice == UnsavedChangesChoice::Discard;
+    if (shouldContinue) {
+        anchorCurrentFieldCleanState();
+        state_.documentDirty_ = false;
+        state_.currentFieldDirty_ = false;
+        updateDirtyState();
+        owner_.updateWindowTitle();
+    }
     miacode::debug_log::appendTimingLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("close_timing/document"),
@@ -346,7 +333,13 @@ bool MainWindow::DocumentSection::maybeSaveCurrentFieldChanges()
     if (choice == UnsavedChangesChoice::Save) {
         QElapsedTimer applyTimer;
         applyTimer.start();
+        const bool wasDocumentDirty = state_.documentDirty_;
         const bool applied = applyCurrentFieldToDocument();
+        if (applied) {
+            state_.documentDirty_ = wasDocumentDirty;
+            updateDirtyState();
+            owner_.updateWindowTitle();
+        }
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("close_timing/document"),
@@ -366,6 +359,11 @@ bool MainWindow::DocumentSection::maybeSaveCurrentFieldChanges()
         return applied;
     }
     if (choice == UnsavedChangesChoice::Discard) {
+        if (owner_.hasActiveDifficulty()) {
+            populateDifficultyPage(state_.activeDifficultyId_);
+        } else if (state_.activeOutlineKey_ == QLatin1String("metadata")) {
+            populateMetadataPage();
+        }
         state_.currentFieldDirty_ = false;
         updateDirtyState();
         miacode::debug_log::appendTimingLine(
