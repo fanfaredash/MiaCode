@@ -293,9 +293,15 @@ inline void buildTimeline(
                 answerCompensationSeconds);
             const double judgeSecond =
                 qMax(0.0, miacode::preview_sfx_timing::judgeTriggerSecond(marker.second, normalizedTimingSettings, playbackRate));
-            addEvent(judgeSecond, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("judge"));
             if (marker.isBreak) {
+                addEvent(judgeSecond, QStringLiteral("judge_break"));
                 addEvent(judgeSecond, QStringLiteral("break"));
+            }
+            if (marker.isEx) {
+                addEvent(judgeSecond, QStringLiteral("ex"));
+            }
+            if (!marker.isBreak && !marker.isEx) {
+                addEvent(judgeSecond, QStringLiteral("judge"));
             }
             if (marker.endSecond > marker.second) {
                 addEvent(
@@ -305,12 +311,11 @@ inline void buildTimeline(
                     -1,
                     1.0,
                     answerCompensationSeconds);
-                const double tailJudgeSecond =
-                    qMax(0.0, miacode::preview_sfx_timing::judgeTriggerSecond(marker.endSecond, normalizedTimingSettings, playbackRate));
-                addEvent(tailJudgeSecond, marker.isBreak ? QStringLiteral("judge_break") : QStringLiteral("judge"));
-            }
-            if (marker.isEx) {
-                addEvent(judgeSecond, QStringLiteral("ex"));
+                if (!marker.isBreak && !marker.isEx) {
+                    const double tailJudgeSecond =
+                        qMax(0.0, miacode::preview_sfx_timing::judgeTriggerSecond(marker.endSecond, normalizedTimingSettings, playbackRate));
+                    addEvent(tailJudgeSecond, QStringLiteral("judge"));
+                }
             }
             continue;
         }

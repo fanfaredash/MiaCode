@@ -118,6 +118,104 @@ bool verifyHoldTailJudgeAndTouchHoldTailAnswer(QTextStream& err)
     return true;
 }
 
+bool verifyMajdataHoldVariantSfx(QTextStream& err)
+{
+    QVector<TimelineNoteMarker> markers;
+
+    TimelineNoteMarker exHold;
+    exHold.type = QStringLiteral("hold");
+    exHold.second = 1.0;
+    exHold.endSecond = 2.0;
+    exHold.isEx = true;
+    markers.append(exHold);
+
+    TimelineNoteMarker breakHold;
+    breakHold.type = QStringLiteral("hold");
+    breakHold.second = 3.0;
+    breakHold.endSecond = 4.0;
+    breakHold.isBreak = true;
+    markers.append(breakHold);
+
+    TimelineNoteMarker breakExHold;
+    breakExHold.type = QStringLiteral("hold");
+    breakExHold.second = 5.0;
+    breakExHold.endSecond = 6.0;
+    breakExHold.isBreak = true;
+    breakExHold.isEx = true;
+    markers.append(breakExHold);
+
+    QVector<Event> events;
+    QVector<TouchholdSpan> spans;
+    miacode::preview_sfx_timeline::buildTimeline(markers, 1.0, PreviewTimingSettings(), &events, &spans);
+
+    const auto countKindAt = [&events](const QString& kind, double second) {
+        int count = 0;
+        for (const Event& event : events) {
+            if (event.kind == kind && qAbs(event.second - second) <= 1e-6) {
+                ++count;
+            }
+        }
+        return count;
+    };
+
+    const double exHeadJudgeSecond =
+        miacode::preview_sfx_timing::judgeTriggerSecond(1.0, PreviewTimingSettings(), 1.0);
+    const double exTailJudgeSecond =
+        miacode::preview_sfx_timing::judgeTriggerSecond(2.0, PreviewTimingSettings(), 1.0);
+    const double breakHeadJudgeSecond =
+        miacode::preview_sfx_timing::judgeTriggerSecond(3.0, PreviewTimingSettings(), 1.0);
+    const double breakTailJudgeSecond =
+        miacode::preview_sfx_timing::judgeTriggerSecond(4.0, PreviewTimingSettings(), 1.0);
+    const double breakExHeadJudgeSecond =
+        miacode::preview_sfx_timing::judgeTriggerSecond(5.0, PreviewTimingSettings(), 1.0);
+    const double breakExTailJudgeSecond =
+        miacode::preview_sfx_timing::judgeTriggerSecond(6.0, PreviewTimingSettings(), 1.0);
+
+    if (!require(countKindAt(QStringLiteral("ex"), exHeadJudgeSecond) == 1, QStringLiteral("ex hold head should emit ex judge"), err)) {
+        return false;
+    }
+    if (!require(countKindAt(QStringLiteral("judge"), exHeadJudgeSecond) == 0, QStringLiteral("ex hold head should not emit normal judge"), err)) {
+        return false;
+    }
+    if (!require(countKindAt(QStringLiteral("judge"), exTailJudgeSecond) == 0, QStringLiteral("ex hold tail should not emit normal judge"), err)) {
+        return false;
+    }
+    if (!require(countKindAt(QStringLiteral("ex"), exTailJudgeSecond) == 0, QStringLiteral("ex hold tail should not emit ex judge"), err)) {
+        return false;
+    }
+
+    if (!require(countKindAt(QStringLiteral("judge_break"), breakHeadJudgeSecond) == 1, QStringLiteral("break hold head should emit break judge"), err)) {
+        return false;
+    }
+    if (!require(countKindAt(QStringLiteral("break"), breakHeadJudgeSecond) == 1, QStringLiteral("break hold head should emit break cheer"), err)) {
+        return false;
+    }
+    if (!require(countKindAt(QStringLiteral("judge_break"), breakTailJudgeSecond) == 0, QStringLiteral("break hold tail should not emit break judge"), err)) {
+        return false;
+    }
+
+    if (!require(countKindAt(QStringLiteral("judge_break"), breakExHeadJudgeSecond) == 1, QStringLiteral("break ex hold head should emit break judge"), err)) {
+        return false;
+    }
+    if (!require(countKindAt(QStringLiteral("break"), breakExHeadJudgeSecond) == 1, QStringLiteral("break ex hold head should emit break cheer"), err)) {
+        return false;
+    }
+    if (!require(countKindAt(QStringLiteral("ex"), breakExHeadJudgeSecond) == 1, QStringLiteral("break ex hold head should emit ex judge"), err)) {
+        return false;
+    }
+    if (!require(countKindAt(QStringLiteral("judge_break"), breakExTailJudgeSecond) == 0, QStringLiteral("break ex hold tail should not emit break judge"), err)) {
+        return false;
+    }
+    if (!require(countKindAt(QStringLiteral("ex"), breakExTailJudgeSecond) == 0, QStringLiteral("break ex hold tail should not emit ex judge"), err)) {
+        return false;
+    }
+    if (!require(spans.isEmpty(), QStringLiteral("hold variants should not create touchhold spans"), err)) {
+        return false;
+    }
+
+    return true;
+}
+
 bool verifyAnswerTimingCompensation(QTextStream& err)
 {
     QVector<TimelineNoteMarker> markers;
@@ -501,6 +599,9 @@ int main(int argc, char* argv[])
     QTextStream out(stdout);
 
     if (!verifyHoldTailJudgeAndTouchHoldTailAnswer(err)) {
+        return 1;
+    }
+    if (!verifyMajdataHoldVariantSfx(err)) {
         return 1;
     }
     if (!verifyAnswerTimingCompensation(err)) {
