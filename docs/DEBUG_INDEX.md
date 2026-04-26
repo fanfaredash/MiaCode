@@ -121,6 +121,9 @@ Still active:
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG`
 - `MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS`
 - `MIACODE_PREVIEW_FIXED_TIMER_HIGH_RES`
+- `MIACODE_PREVIEW_VISUAL_SMOOTHING` (default on; `0` to disable scene-playhead smoothing)
+- `MIACODE_PREVIEW_VISUAL_LOOKAHEAD_VSYNCS` (default `1.0`; biases visual playhead forward by N display intervals to compensate for render→present pipeline latency, `0` disables, range `[0, 4]`)
+- `MIACODE_PREVIEW_QSG_RENDER_TIMING` (`1` to capture Qt scene-graph timings into the runtime log under `preview/qsg_timing` — diagnoses stutter that lives outside the offscreen renderer)
 - `MIACODE_TIMELINE_HOTPATH_DIAG`
 - `MIACODE_PREVIEW_DISABLE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS`
 - `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_FRAMES`

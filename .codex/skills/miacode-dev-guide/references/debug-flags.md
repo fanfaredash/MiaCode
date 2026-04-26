@@ -97,6 +97,21 @@ The Windows release package also ships:
   - Windows-only A/B switch for fixed 60/120 preview pacing; while fixed-FPS realtime preview is playing it requests `timeBeginPeriod(1)` and releases it on stop, mode switch, or shutdown
   - default is off; DisplayRefresh pacing does not use it
   - owners: `src/common/DebugOptions.h`, `src/app/mainwindow/sections/timeline/MainWindow.TimelineLayout.cpp`
+- `MIACODE_PREVIEW_VISUAL_SMOOTHING`
+  - bounds the per-frame visual playhead delta so render-time variance doesn't propagate audio-time jumps straight into the rendered scene; large drift > 50ms triggers a snap (treated as seek)
+  - default is on; set to `0` to pass audio time through unchanged
+  - owners: `src/common/DebugOptions.h`, `src/app/mainwindow/sections/timeline/MainWindow.TimelinePlayback.cpp` (`applyVisualClockSmoothing`)
+- `MIACODE_PREVIEW_QSG_RENDER_TIMING`
+  - sets `QSG_RENDER_TIMING=1` and `QT_LOGGING_RULES+=qt.scenegraph.time.*=true` before `QApplication` construction, then installs a `QtMessageHandler` that routes those messages to the runtime log under `runtime/preview/qsg_timing`
+  - use to diagnose stutter that the offscreen-renderer perf instrumentation can't see — i.e. when `renderer_perf max_frame_total_ms` is well under the vsync budget but `fixed_gate_present wait_ms` and `fixed_gate_tick gate_wait_ms` still spike
+  - default off; flag is read once at startup so it must be in the environment before the exe launches
+  - owners: `src/common/DebugOptions.h`, `src/app/main.cpp`
+- `MIACODE_PREVIEW_VISUAL_LOOKAHEAD_VSYNCS`
+  - Tier 2A predictive playhead. Biases the rendered visual time forward by N display intervals (scaled by current playback rate) so the frame represents audio time at the moment it's actually visible — eliminates the perceived "audio leads video by one frame" lag from the GUI→render→composite→present pipeline
+  - default `1.0` (≈16.7ms at 60Hz); set to `0` to disable, allowed range `[0, 4]`
+  - applies to all return paths of `applyVisualClockSmoothing` (smoothed, snap, reverse-motion, disabled, not-initialized) so motion stays continuous across snap boundaries
+  - the stored visual-clock state tracks un-biased smoothed audio time; lookahead is applied only to the per-frame return value, so smoothing math (drift, catchup, snap) stays coherent
+  - owners: `src/common/DebugOptions.h`, `src/app/mainwindow/sections/timeline/MainWindow.TimelinePlayback.cpp` (`applyVisualClockSmoothing`)
 - `MIACODE_TIMELINE_HOTPATH_DIAG`
   - re-enables high-frequency quick timeline hot-path logs such as `timeline/bridge action=set_horizontal_scroll_value` and `timeline/quick_scene action=content_transform_update` inside runtime debug mode
   - owners: `src/timeline/quick/TimelineQuickStateBridge.cpp`, `src/timeline/quick/TimelineQuickItem.cpp`

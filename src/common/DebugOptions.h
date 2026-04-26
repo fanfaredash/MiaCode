@@ -139,6 +139,40 @@ inline bool previewVisualSmoothingEnabled()
     return envOptionalFlagValue("MIACODE_PREVIEW_VISUAL_SMOOTHING").value_or(true);
 }
 
+inline bool previewQsgRenderTimingEnabled()
+{
+    // Captures Qt's built-in scene-graph timing (`qt.scenegraph.time.*` log
+    // category) into our runtime log via a QtMessageHandler. Qt only emits
+    // these when QSG_RENDER_TIMING=1 is set in the environment BEFORE
+    // QApplication is constructed, so the flag is read at the very top of
+    // main() and propagated as needed. Use this when the offscreen renderer
+    // looks healthy but the present-driven gate still misses vsyncs — the
+    // scene-graph timings tell you whether the main QSG render pass (which
+    // also includes our offscreen output as a sub-texture) is over budget.
+    return envFlagEnabled("MIACODE_PREVIEW_QSG_RENDER_TIMING");
+}
+
+inline double previewVisualLookaheadVsyncs()
+{
+    // Tier 2A predictive playhead. The audio-time sample we receive corresponds to "where audio
+    // was when sampled"; the frame we render off it won't be visible until the next vsync swap
+    // (~16.7ms at 60Hz, on top of the GUI→render→composite→present pipeline). Biasing the
+    // visual playhead forward by ~1 vsync makes the rendered scene line up with the audio
+    // moment when it's actually visible on screen, eliminating the perceived "audio leads
+    // video by one frame" lag. Default 1.0 vsync ≈ one display interval; set to 0 to disable
+    // (passes audio-time through unchanged) or to e.g. 1.5 / 2.0 to over/under-bias.
+    const QString raw = envValue("MIACODE_PREVIEW_VISUAL_LOOKAHEAD_VSYNCS");
+    if (raw.isEmpty()) {
+        return 1.0;
+    }
+    bool ok = false;
+    const double parsed = raw.toDouble(&ok);
+    if (!ok || parsed < 0.0 || parsed > 4.0) {
+        return 1.0;
+    }
+    return parsed;
+}
+
 inline bool timelineHotpathDiagnosticsEnabled()
 {
     return runtimeDebugOutputEnabled() && envFlagEnabled("MIACODE_TIMELINE_HOTPATH_DIAG");
