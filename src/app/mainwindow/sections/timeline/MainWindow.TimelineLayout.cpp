@@ -482,7 +482,17 @@ double MainWindow::TimelineSection::currentPreviewCanvasRefreshRate() const
 
 bool MainWindow::TimelineSection::previewCanvasUsesFrameSwappedPacing() const
 {
-    return state_.previewCanvasFrameRateMode_ == PreviewCanvasFrameRateMode::DisplayRefresh;
+    // Disabled (2026-04-27): the present-driven gate from 927322b was reverted
+    // because coupling the playback tick to frameSwapped meant any render
+    // hiccup directly stalled the playback clock — visible as choppiness on
+    // hardware that can't sustain 60fps. Reverting to the beta19 timer-driven
+    // path (qtPreviewTimer_ firing on a fixed interval regardless of render
+    // throughput) preserves audio-video sync at the cost of being able to
+    // over-tick under heavy load. The rest of 927322b — TripleBuffer, async
+    // log writer, MMCSS, sprite batching, visual-clock smoothing — is kept;
+    // only the gate is dropped. The gate code paths are left in place but
+    // unreachable so the surgery is one line.
+    return false;
 }
 
 qint64 MainWindow::TimelineSection::previewCanvasTargetFrameIntervalNs() const
