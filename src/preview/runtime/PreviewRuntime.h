@@ -139,7 +139,32 @@ public:
     void reset();
     void noteTickForProfiling();
     void notePresentedTextureStats(const PreviewTextureStats& stats);
-    void noteFixedTimerDeadlineMetrics(qint64 latenessNs, int catchupTicks, qint64 skippedIntervals);
+    void noteFixedTimerPacingMetrics(
+        qint64 latenessNs,
+        bool softLate,
+        bool hardResync,
+        qint64 presentMissedSlots);
+    void notePreviewPacingTick(qint64 wallDeltaNs, double playheadDeltaSeconds, double speedRatio);
+    void noteDisplayRefreshFrameRequest();
+    void noteDisplayRefreshFramePresentation(qint64 waitNs, bool matchedRequest);
+    void noteDisplayRefreshWatchdogTimeout();
+    void noteDisplayRefreshQueuedTick();
+    void noteDisplayRefreshTimerFallbackTick();
+    void noteFixedGateVisualTick(qint64 gateWaitNs);
+    void noteFixedGatePresentWithoutTick(qint64 gateWaitNs);
+    void noteFixedGateWatchdogKick();
+    void noteFixedGateMissedTargetSlots(qint64 count);
+    void setActivePlaybackProfilingEnabled(bool enabled);
+    void notePreviewClockMetrics(
+        double audioDeltaSeconds,
+        double visualDeltaSeconds,
+        double audioMinusFallbackSeconds,
+        bool hasAudioClock,
+        bool audioLargeStep,
+        bool visualLargeStep);
+    void noteFixedTimerHighResolutionRequest(bool requested);
+    void noteFixedTimerHighResolutionBeginResult(bool ok);
+    void noteFixedTimerHighResolutionStopState(bool activeAtStop);
     void resetProfilingSession();
     QString writeProfilingSummaryToFile();
     bool hasCoreSkinAssetsLoadedForDebug() const;
@@ -215,7 +240,49 @@ private:
     qint64 fixedTimerLateWakeupCount_ = 0;
     qint64 fixedTimerCatchupTickCount_ = 0;
     qint64 fixedTimerSkippedIntervalCount_ = 0;
+    qint64 fixedTimerSoftLateCount_ = 0;
+    qint64 fixedTimerHardResyncCount_ = 0;
+    qint64 fixedTimerPresentMissedSlotCount_ = 0;
+    bool fixedTimerHighResRequested_ = false;
+    bool fixedTimerHighResBeginOk_ = false;
+    bool fixedTimerHighResActiveAtStop_ = false;
     double fixedTimerLatenessSumMs_ = 0.0;
     double fixedTimerLatenessMaxMs_ = 0.0;
     qint64 fixedTimerLatenessSampleCount_ = 0;
+    qint64 displayRefreshRequestCount_ = 0;
+    qint64 displayRefreshPresentedAfterRequestCount_ = 0;
+    qint64 displayRefreshWatchdogTimeoutCount_ = 0;
+    qint64 displayRefreshQueuedTickCount_ = 0;
+    qint64 displayRefreshTimerFallbackTickCount_ = 0;
+    double displayRefreshPresentWaitSumMs_ = 0.0;
+    double displayRefreshPresentWaitMaxMs_ = 0.0;
+    qint64 displayRefreshPresentWaitSampleCount_ = 0;
+    double tickSpeedRatioMax_ = 0.0;
+    qint64 tickLargeStepCount_ = 0;
+    double audioClockDeltaMaxMs_ = 0.0;
+    qint64 audioClockLargeStepCount_ = 0;
+    double audioVsFallbackSumMs_ = 0.0;
+    double audioVsFallbackMaxAbsMs_ = 0.0;
+    qint64 audioVsFallbackSampleCount_ = 0;
+    qint64 visualTimeLargeStepCount_ = 0;
+    // Active-playback profile (doc section 2.5/4.4): subset of intervals recorded only while
+    // preview playback is actively running, so pause/seek/shutdown gaps don't pollute realtime FPS.
+    bool activePlaybackProfiling_ = false;
+    double playbackPresentedFrameIntervalSumMs_ = 0.0;
+    double playbackPresentedFrameIntervalMaxMs_ = 0.0;
+    qint64 playbackPresentedFrameIntervalSampleCount_ = 0;
+    double playbackUpdateRequestIntervalSumMs_ = 0.0;
+    double playbackUpdateRequestIntervalMaxMs_ = 0.0;
+    qint64 playbackUpdateRequestIntervalSampleCount_ = 0;
+    double playbackTickIntervalSumMs_ = 0.0;
+    double playbackTickIntervalMaxMs_ = 0.0;
+    qint64 playbackTickIntervalSampleCount_ = 0;
+    // Fixed-gate metrics (doc section 5.1): emitted by the present-driven fixed FPS gate path.
+    qint64 fixedGateVisualTickCount_ = 0;
+    qint64 fixedGatePresentWithoutTickCount_ = 0;
+    double fixedGatePresentGateWaitSumMs_ = 0.0;
+    double fixedGatePresentGateWaitMaxMs_ = 0.0;
+    qint64 fixedGatePresentGateWaitSampleCount_ = 0;
+    qint64 fixedGateMissedTargetSlotsCount_ = 0;
+    qint64 fixedGateWatchdogKickCount_ = 0;
 };

@@ -90,10 +90,12 @@ public:
     bool previewCanvasUsesFrameSwappedPacing() const;
     qint64 previewCanvasTargetFrameIntervalNs() const;
     qint64 timelineTargetFrameIntervalNs() const;
-    double fixedIntervalPreviewSecondForDeadlineNs(qint64 deadlineNs) const;
     void resetQtPreviewFixedFramePacing();
     void scheduleNextQtPreviewTick();
     void requestNextDisplayRefreshPreviewFrame();
+    void requestNextFixedIntervalPreviewFrame();
+    void advanceFixedIntervalGateAfterPresent();
+    void requestNextPreviewCanvasFrame();
     void refreshPreviewFrameRateTimers();
     void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     void setPreviewCanvasAspectRatio(double ratio, bool persistState);
@@ -148,8 +150,10 @@ public:
     void applyQtPreviewPosition(double second, bool centerView);
     void syncPausedPreviewMediaTimestamps(double second);
     void flushQtPreviewTimelinePosition();
-    void onQtPreviewTickAtSecond(double second);
+    void onQtPreviewTickAtSecond(double second, double fallbackSecond, bool hasAudioClock);
     void onQtPreviewTick();
+    double applyVisualClockSmoothing(double audioSecond, double fallbackSecond, bool hasAudioClock);
+    void resetVisualClockSmoothing();
     void jumpToNearestTimelineNote(double second, int lane);
 
 private:

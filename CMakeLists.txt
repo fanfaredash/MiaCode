@@ -109,6 +109,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/MuriConfig.h
     src/common/DebugLog.h
     src/common/DebugLog.cpp
+    src/common/Mmcss.h
+    src/common/Mmcss.cpp
     src/common/DebugImageCompare.h
     src/common/ChartAssetPaths.h
     src/common/TimelineThemeConfig.h
@@ -409,6 +411,8 @@ if (WIN32)
     target_link_libraries(MiaCode PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
+        winmm
+        avrt  # Multimedia Class Scheduler Service (AvSetMmThreadCharacteristicsW)
     )
     add_custom_command(TARGET MiaCode POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different

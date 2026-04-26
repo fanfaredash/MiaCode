@@ -1,8 +1,6 @@
 @echo off
 setlocal
 
-set MIACODE_PREVIEW_DIAG_COMPARE_VIDEO_FALLBACK_EVERY=120
-
 set "APP_DIR=%~dp0"
 if "%APP_DIR:~-1%"=="\" set "APP_DIR=%APP_DIR:~0,-1%"
 

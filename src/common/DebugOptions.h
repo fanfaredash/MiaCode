@@ -114,6 +114,36 @@ inline bool previewProfileOutputEnabled()
     return debugCategoryEnabled("MIACODE_DISABLE_PREVIEW_PROFILE_OUTPUT");
 }
 
+inline bool previewFramePacingDiagnosticsEnabled()
+{
+    return envFlagEnabled("MIACODE_PREVIEW_FRAME_PACING_DIAG");
+}
+
+inline int previewFramePacingDiagnosticSampleMs()
+{
+    const int value = envIntValue("MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS", 1000);
+    return value > 0 ? value : 1000;
+}
+
+inline bool previewFixedTimerHighResolutionEnabled()
+{
+    return envFlagEnabled("MIACODE_PREVIEW_FIXED_TIMER_HIGH_RES");
+}
+
+inline bool previewVisualSmoothingEnabled()
+{
+    // Visual-time smoothing (doc section 6.3): bound per-frame visual delta so render-time
+    // variance doesn't feed audio-time jumps straight into the rendered playhead. Default ON
+    // because the choppy motion from audio-authority + render-variance interaction is the most
+    // visible artefact during playback. Set MIACODE_PREVIEW_VISUAL_SMOOTHING=0 to disable.
+    return envOptionalFlagValue("MIACODE_PREVIEW_VISUAL_SMOOTHING").value_or(true);
+}
+
+inline bool timelineHotpathDiagnosticsEnabled()
+{
+    return runtimeDebugOutputEnabled() && envFlagEnabled("MIACODE_TIMELINE_HOTPATH_DIAG");
+}
+
 inline bool glDebugMessagesEnabled()
 {
     return debugCategoryEnabled("MIACODE_DISABLE_GL_DEBUG_MESSAGES");

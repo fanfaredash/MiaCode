@@ -906,6 +906,14 @@ void QuickShellBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QStrin
         if (!pointer) {
             return;
         }
+        // Bracket-log around the destructor so that if .reset() crashes, we can tell which
+        // pointer was being torn down from the last logged "enter" line.
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/quick_shell"),
+            QStringLiteral("action=%1_enter").arg(step),
+            true
+        );
         QElapsedTimer timer;
         timer.start();
         pointer.reset();

@@ -118,6 +118,10 @@ Still active:
 - `MIACODE_PREVIEW_SESSION_SCRIPT`
 - `MIACODE_PREVIEW_SFX_DIR`
 - `MIACODE_TRACK_PATH`
+- `MIACODE_PREVIEW_FRAME_PACING_DIAG`
+- `MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS`
+- `MIACODE_PREVIEW_FIXED_TIMER_HIGH_RES`
+- `MIACODE_TIMELINE_HOTPATH_DIAG`
 - `MIACODE_PREVIEW_DISABLE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS`
 - `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_FRAMES`
 - `MIACODE_PREVIEW_DIAG_COMPARE_DUMP_MAX_SAMPLES`
@@ -152,15 +156,25 @@ Preview diagnostics now split these timing sources instead of reporting a single
   - `present_avg_ms` / `present_max_ms` are now true session-accumulated present intervals
   - `present_window_*` keeps the last rolling present window for comparison with the on-screen FPS readout
   - `tick_*`, `update_request_*`, and `ratio.*` rows help distinguish logic pacing from actual present pacing
+  - `fixed_timer.soft_late_total`, `fixed_timer.hard_resync_total`, and `fixed_timer.present_missed_slots_total` describe fixed-FPS presentation scheduler drift without implying skipped note logic
+  - `fixed_timer.skipped_intervals_total` is retained as a retired compatibility row and should remain `0`; use `fixed_timer.present_missed_slots_total` for display-slot misses and `logic.skipped_ticks_total` for logic skips
+  - `fixed_timer.high_res_resolution_enabled`, `fixed_timer.high_res_requested`, `fixed_timer.high_res_begin_ok`, and `fixed_timer.high_res_active_at_stop` show whether the Windows timer-resolution A/B path was requested, successfully entered, and later released
+  - `display_refresh.*` rows show display-refresh frame requests, matched presents, watchdog fallback ticks, and present wait time
+  - `tick.speed_ratio_max` and `tick.large_step_count` flag logical playhead jumps that would look like catch-up acceleration
+  - `audio_clock.delta_max_ms`, `audio_clock.large_step_total`, `audio_clock.audio_vs_fallback_avg_ms`, and `audio_clock.audio_vs_fallback_max_abs_ms` compare the authoritative audio clock against the elapsed fallback clock
+  - `visual_time.large_step_total` counts visual playhead jumps after the selected time authority has been applied
   - `external_stage_media.video_frame_*` rows now include aggregate external-video frame rate, interval, and stall counts
 - runtime log:
+  - `preview/frame_pacing` is off by default and turns on with `MIACODE_PREVIEW_FRAME_PACING_DIAG=1`; normal request/tick/present samples are capped by `MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS` while watchdog, fixed timer present-miss/hard-resync, and large-step events log immediately
+  - fixed timer high-resolution status events `fixed_timer_high_res_requested`, `fixed_timer_high_res_enabled`, `fixed_timer_high_res_failed`, and `fixed_timer_high_res_disabled` are written as sparse status lines so env propagation can be verified even when per-frame pacing diagnostics are off
+  - `tick_sample` / `tick_large_step` include `fallback_second`, `audio_second`, `fallback_delta_ms`, `audio_delta_ms`, `visual_delta_ms`, `audio_minus_fallback_ms`, and `time_authority`
   - `preview/stage_media` now also emits low-noise `action=video_frame_stall_begin` / `action=video_frame_stall_end` transitions when external video stops delivering frames for longer than expected
   - `window/focus` records app-level focus transitions, activation edges, watched editor focus events, and text-focus restore attempts for focus-regression diagnosis
   - BASS `bass_status` sampling is now reduced to about once per second in debug mode
   - `preview/interaction` correlates user-facing preview actions such as `play`, `pause`, `stop`, and `ctrl+click` seek
   - `timeline/interaction` records quick timeline drag, wheel-scroll, and held-key horizontal scroll inputs
-  - `timeline/bridge` records quick timeline bridge state pushes such as `action=set_horizontal_scroll_value`
-  - `timeline/quick_scene` records both full `scene_state_rebuild_*` boundaries and scroll-only `action=content_transform_update` paints for the quick timeline
+  - `timeline/bridge` records quick timeline hot-path state pushes such as `action=set_horizontal_scroll_value` only when `MIACODE_TIMELINE_HOTPATH_DIAG=1`
+  - `timeline/quick_scene` records full `scene_state_rebuild_*` boundaries in debug mode; scroll-only `action=content_transform_update` paints require `MIACODE_TIMELINE_HOTPATH_DIAG=1`
   - `timeline/cursor_map` profiles `timelineSecondForCursor()` so editor cursor-to-second mapping can be separated from redraw cost
 
 ## Useful Workflows
@@ -200,6 +214,12 @@ Force export PBO on:
 Opt out of the default embedded-preview native-sibling workaround for regression A/B:
 
 - `set MIACODE_PREVIEW_DISABLE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS=1`
+- `MiaCode.exe --debug`
+
+Enable the Windows fixed-FPS timer-resolution A/B path:
+
+- `set MIACODE_PREVIEW_FIXED_TIMER_HIGH_RES=1`
+- `set MIACODE_PREVIEW_FRAME_PACING_DIAG=1`
 - `MiaCode.exe --debug`
 
 ## Code Anchors

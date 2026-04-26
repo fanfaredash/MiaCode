@@ -18,6 +18,7 @@
 #include "common/PreviewSfxAssets.h"
 #include "common/DebugOptions.h"
 #include "common/DebugLog.h"
+#include "preview/runtime/PreviewRuntime.h"
 
 #include <QtCore>
 #include <QtGui>
@@ -234,6 +235,7 @@ MainWindow::~MainWindow()
             .arg(timelineAnalysisPool_ != nullptr ? timelineAnalysisPool_->activeThreadCount() : -1)
             .arg(videoExportWorkerProcess_ != nullptr ? static_cast<int>(videoExportWorkerProcess_->state()) : -1)
     );
+    setPreviewFixedTimerHighResolutionActive(false);
     QElapsedTimer stageMediaTimer;
     stageMediaTimer.start();
     shutdownPreviewStageMediaHost();
@@ -277,7 +279,22 @@ void MainWindow::preparePreviewForShutdown()
     if (previewHeldSeekTimer_ != nullptr) {
         previewHeldSeekTimer_->stop();
     }
+    setPreviewFixedTimerHighResolutionActive(false);
     qtPreviewPlaying_ = false;
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->setActivePlaybackProfilingEnabled(false);
+    }
+    // Doc 4.1: clear fixed-gate awaiting/queued state so lingering singleShot tick callbacks
+    // cannot re-enter the request path during shutdown teardown.
+    qtPreviewAwaitingFrameSwap_ = false;
+    qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+    qtPreviewAwaitingFrameSwapSinceNs_ = -1;
+    qtPreviewDisplayRefreshTickQueued_ = false;
+    qtPreviewFixedAwaitingFrame_ = false;
+    qtPreviewFixedAwaitingFrameSinceMs_ = -1;
+    qtPreviewFixedAwaitingFrameSinceNs_ = -1;
+    qtPreviewFixedFrameTickQueued_ = false;
+    qtPreviewLastVisualTickNs_ = -1;
     previewStartupSyncPending_ = false;
     previewLateVideoStartPending_ = false;
     state_.previewStartupVideoPrepareStarted_ = false;

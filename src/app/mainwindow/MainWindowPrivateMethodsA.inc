@@ -62,6 +62,7 @@
     );
     void finishFrameBootstrap(QToolBar* toolBar, const std::function<void(const QString&)>& logStartupStage);
     void setupMenusAndActions(QMenu* fileMenu, QMenu* editMenu, QMenu* transformMenu, QMenu* previewMenu, QMenu* helpMenu);
+    void setPreviewFixedTimerHighResolutionActive(bool active);
     void hidePreviewPlaybackRateToast();
     bool maybeSaveCurrentFieldChanges();
     bool applyCurrentFieldToDocument();
@@ -193,6 +194,9 @@
     void resetQtPreviewFixedFramePacing();
     void scheduleNextQtPreviewTick();
     void requestNextDisplayRefreshPreviewFrame();
+    void requestNextFixedIntervalPreviewFrame();
+    void advanceFixedIntervalGateAfterPresent();
+    void requestNextPreviewCanvasFrame();
     void seekPreviewToSecond(double second, bool centerView);
     void seekPreviewDiscreteToSecond(double second, bool centerView);
     void requestPausedPreviewSeek(

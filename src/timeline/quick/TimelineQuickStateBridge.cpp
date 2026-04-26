@@ -514,7 +514,7 @@ void TimelineQuickStateBridge::setHorizontalScrollValue(int value)
         return;
     }
     horizontalScrollValue_ = clamped;
-    if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+    if (miacode::debug_options::timelineHotpathDiagnosticsEnabled()) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("timeline/bridge"),

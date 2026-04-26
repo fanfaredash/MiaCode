@@ -81,6 +81,23 @@ void appendPreviewInteractionLog(const QString& action, const QString& payload =
     );
 }
 
+void appendPreviewFramePacingDiagLog(const QString& action, const QString& payload = QString())
+{
+    if (!miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
+        return;
+    }
+    QString text = QStringLiteral("action=%1").arg(action);
+    if (!payload.trimmed().isEmpty()) {
+        text += QStringLiteral(" ") + payload.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview/frame_pacing"),
+        text,
+        true
+    );
+}
+
 double previewVisualLeadInStartSecond(
     const QVector<TimelineNoteMarker>& noteMarkers,
     double requestedSecond,
@@ -583,10 +600,21 @@ void MainWindow::TimelineSection::seekPreviewDiscreteToSecond(double second, boo
     state_.qtPreviewPendingTimelineCenterView_ = centerView;
     state_.qtPreviewTimelineDirty_ = true;
     state_.qtPreviewPlaying_ = false;
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->setActivePlaybackProfilingEnabled(false);
+    }
     invalidatePreviewFollowBindingCache();
     state_.activePreviewPlaybackTransactionId_ = 0;
     state_.qtPreviewAwaitingFrameSwap_ = false;
     state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+    state_.qtPreviewAwaitingFrameSwapSinceNs_ = -1;
+    state_.qtPreviewDisplayRefreshTickQueued_ = false;
+    state_.qtPreviewDisplayRefreshConsecutiveWatchdogs_ = 0;
+    state_.qtPreviewFixedAwaitingFrame_ = false;
+    state_.qtPreviewFixedAwaitingFrameSinceMs_ = -1;
+    state_.qtPreviewFixedAwaitingFrameSinceNs_ = -1;
+    state_.qtPreviewFixedFrameTickQueued_ = false;
+    state_.qtPreviewLastVisualTickNs_ = -1;
     state_.qtPreviewNextFixedTickDueNs_ = -1;
     state_.qtPreviewFixedTickOriginNs_ = -1;
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
@@ -864,6 +892,7 @@ void MainWindow::TimelineSection::stopQtPreviewTimers()
     if (ui_.previewStatsUiTimer_ != nullptr) {
         ui_.previewStatsUiTimer_->stop();
     }
+    owner_.setPreviewFixedTimerHighResolutionActive(false);
 }
 
 void MainWindow::TimelineSection::finalizeQtPreviewPlaybackStart(double effectiveStartSecond)
@@ -876,14 +905,27 @@ void MainWindow::TimelineSection::finalizeQtPreviewPlaybackStart(double effectiv
     state_.qtPreviewPlaying_ = true;
     state_.qtPreviewAwaitingFrameSwap_ = false;
     state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+    state_.qtPreviewAwaitingFrameSwapSinceNs_ = -1;
+    state_.qtPreviewDisplayRefreshTickQueued_ = false;
+    state_.qtPreviewDisplayRefreshConsecutiveWatchdogs_ = 0;
+    state_.qtPreviewFixedAwaitingFrame_ = false;
+    state_.qtPreviewFixedAwaitingFrameSinceMs_ = -1;
+    state_.qtPreviewFixedAwaitingFrameSinceNs_ = -1;
+    state_.qtPreviewFixedFrameTickQueued_ = false;
+    state_.qtPreviewLastVisualTickNs_ = -1;
+    state_.qtPreviewFramePacingDiagLastFixedGateLogMs_ = -1;
+    resetVisualClockSmoothing();
     resetQtPreviewFixedFramePacing();
-    if (state_.previewCanvas_ != nullptr && !previewCanvasUsesFrameSwappedPacing()) {
-        state_.previewCanvas_->update();
+    // Doc 4.4: activate active-playback profiling so realtime FPS stats aren't polluted by
+    // paused/closed-window intervals.
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->setActivePlaybackProfilingEnabled(true);
     }
+    owner_.setPreviewFixedTimerHighResolutionActive(!previewCanvasUsesFrameSwappedPacing());
     if (state_.previewCanvas_ != nullptr && previewCanvasUsesFrameSwappedPacing()) {
         requestNextDisplayRefreshPreviewFrame();
     } else {
-        scheduleNextQtPreviewTick();
+        requestNextFixedIntervalPreviewFrame();
     }
     if (ui_.qtPreviewTimelineTimer_ != nullptr && !ui_.qtPreviewTimelineTimer_->isActive()) {
         ui_.qtPreviewTimelineTimer_->start();
@@ -943,12 +985,24 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
     state_.qtPreviewPendingTimelineCenterView_ = false;
     state_.qtPreviewTimelineDirty_ = true;
     state_.qtPreviewPlaying_ = false;
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->setActivePlaybackProfilingEnabled(false);
+    }
     invalidatePreviewFollowBindingCache();
     state_.activePreviewPlaybackTransactionId_ = 0;
     state_.qtPreviewAwaitingFrameSwap_ = false;
     state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+    state_.qtPreviewAwaitingFrameSwapSinceNs_ = -1;
+    state_.qtPreviewDisplayRefreshTickQueued_ = false;
+    state_.qtPreviewDisplayRefreshConsecutiveWatchdogs_ = 0;
+    state_.qtPreviewFixedAwaitingFrame_ = false;
+    state_.qtPreviewFixedAwaitingFrameSinceMs_ = -1;
+    state_.qtPreviewFixedAwaitingFrameSinceNs_ = -1;
+    state_.qtPreviewFixedFrameTickQueued_ = false;
+    state_.qtPreviewLastVisualTickNs_ = -1;
     state_.qtPreviewNextFixedTickDueNs_ = -1;
     state_.qtPreviewFixedTickOriginNs_ = -1;
+    resetVisualClockSmoothing();
     flushQtPreviewTimelinePosition();
     if (state_.timelineQuickStateBridge_ != nullptr) {
         state_.timelineQuickStateBridge_->focusPlayhead(false);
@@ -989,10 +1043,21 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackForReanchor()
     state_.qtPreviewPendingTimelineCenterView_ = false;
     state_.qtPreviewTimelineDirty_ = true;
     state_.qtPreviewPlaying_ = false;
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->setActivePlaybackProfilingEnabled(false);
+    }
     invalidatePreviewFollowBindingCache();
     state_.activePreviewPlaybackTransactionId_ = 0;
     state_.qtPreviewAwaitingFrameSwap_ = false;
     state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+    state_.qtPreviewAwaitingFrameSwapSinceNs_ = -1;
+    state_.qtPreviewDisplayRefreshTickQueued_ = false;
+    state_.qtPreviewDisplayRefreshConsecutiveWatchdogs_ = 0;
+    state_.qtPreviewFixedAwaitingFrame_ = false;
+    state_.qtPreviewFixedAwaitingFrameSinceMs_ = -1;
+    state_.qtPreviewFixedAwaitingFrameSinceNs_ = -1;
+    state_.qtPreviewFixedFrameTickQueued_ = false;
+    state_.qtPreviewLastVisualTickNs_ = -1;
     state_.qtPreviewNextFixedTickDueNs_ = -1;
     state_.qtPreviewFixedTickOriginNs_ = -1;
     if (state_.timelineQuickStateBridge_ != nullptr) {
@@ -1031,10 +1096,21 @@ void MainWindow::TimelineSection::anchorQtPreviewPlaybackToSecond(double second,
     state_.qtPreviewPendingTimelineCenterView_ = centerView;
     state_.qtPreviewTimelineDirty_ = true;
     state_.qtPreviewPlaying_ = false;
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->setActivePlaybackProfilingEnabled(false);
+    }
     invalidatePreviewFollowBindingCache();
     state_.activePreviewPlaybackTransactionId_ = 0;
     state_.qtPreviewAwaitingFrameSwap_ = false;
     state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+    state_.qtPreviewAwaitingFrameSwapSinceNs_ = -1;
+    state_.qtPreviewDisplayRefreshTickQueued_ = false;
+    state_.qtPreviewDisplayRefreshConsecutiveWatchdogs_ = 0;
+    state_.qtPreviewFixedAwaitingFrame_ = false;
+    state_.qtPreviewFixedAwaitingFrameSinceMs_ = -1;
+    state_.qtPreviewFixedAwaitingFrameSinceNs_ = -1;
+    state_.qtPreviewFixedFrameTickQueued_ = false;
+    state_.qtPreviewLastVisualTickNs_ = -1;
     state_.qtPreviewNextFixedTickDueNs_ = -1;
     state_.qtPreviewFixedTickOriginNs_ = -1;
     requestPausedPreviewSeek(clampedSecond, centerView, true);
@@ -1098,6 +1174,16 @@ bool MainWindow::TimelineSection::startQtPreviewPlayback(double second, bool res
         state_.qtPreviewPendingTimelineCenterView_ = true;
         state_.qtPreviewTimelineDirty_ = false;
         state_.qtPreviewTimelineStartSecond_ = initialSecond;
+        state_.qtPreviewFramePacingDiagLastTickNs_ = -1;
+        state_.qtPreviewFramePacingDiagLastTickLogMs_ = -1;
+        state_.qtPreviewFramePacingDiagLastRequestLogMs_ = -1;
+        state_.qtPreviewFramePacingDiagLastPresentLogMs_ = -1;
+        state_.qtPreviewFramePacingDiagLastTickSecond_ = -1.0;
+        state_.qtPreviewFramePacingDiagLastTickFallbackSecond_ = -1.0;
+        state_.qtPreviewFramePacingDiagLastTickAudioSecond_ = -1.0;
+        state_.qtPreviewDisplayRefreshFrameRequestSeq_ = 0;
+        state_.qtPreviewDisplayRefreshFramePresentSeq_ = 0;
+        state_.qtPreviewDisplayRefreshConsecutiveWatchdogs_ = 0;
     };
 
     state_.qtPreviewPlaybackReturnSecond_ = requestedSecond;
@@ -1255,12 +1341,24 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
         state_.qtPreviewTimelineDirty_ = true;
     }
     state_.qtPreviewPlaying_ = false;
+    if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->setActivePlaybackProfilingEnabled(false);
+    }
     invalidatePreviewFollowBindingCache();
     state_.activePreviewPlaybackTransactionId_ = 0;
     state_.qtPreviewAwaitingFrameSwap_ = false;
     state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+    state_.qtPreviewAwaitingFrameSwapSinceNs_ = -1;
+    state_.qtPreviewDisplayRefreshTickQueued_ = false;
+    state_.qtPreviewDisplayRefreshConsecutiveWatchdogs_ = 0;
+    state_.qtPreviewFixedAwaitingFrame_ = false;
+    state_.qtPreviewFixedAwaitingFrameSinceMs_ = -1;
+    state_.qtPreviewFixedAwaitingFrameSinceNs_ = -1;
+    state_.qtPreviewFixedFrameTickQueued_ = false;
+    state_.qtPreviewLastVisualTickNs_ = -1;
     state_.qtPreviewNextFixedTickDueNs_ = -1;
     state_.qtPreviewFixedTickOriginNs_ = -1;
+    resetVisualClockSmoothing();
     requestPausedPreviewSeek(state_.qtPreviewPauseSecond_, false, true);
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->resetRetainedPreviewPlaybackTransaction(state_.qtPreviewPauseSecond_);
@@ -1302,8 +1400,12 @@ void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool cen
     owner_.setPreviewStageMediaRouteObservedPlayheadSecond(second);
     const bool suppressPausedSecondaryUi =
         !state_.qtPreviewPlaying_ && state_.suppressPausedPreviewSecondaryUiUpdates_;
-    if (!suppressPausedSecondaryUi) {
-        owner_.refreshPreviewStageMediaRouteDebugState(!state_.qtPreviewPlaying_);
+    // During playback the media-host's syncPlayback already emits diagnosticsChanged on actual
+    // state transitions, which runs refreshPreviewStageMediaRouteDebugState via its connected
+    // lambda. Calling the refresh again here would duplicate the work on every tick.
+    // For paused state, keep calling it so UI reflects changes while the user seeks.
+    if (!suppressPausedSecondaryUi && !state_.qtPreviewPlaying_) {
+        owner_.refreshPreviewStageMediaRouteDebugState(true);
     }
     updatePreviewSliderPosition(second);
     if (!state_.qtPreviewPlaying_ && !suppressPausedSecondaryUi) {
@@ -1311,7 +1413,10 @@ void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool cen
     }
     if (state_.previewFollowEnabled_) {
         if (state_.qtPreviewPlaying_) {
-            syncEditorCursorToPreviewSecond(second, centerView, false);
+            // Editor cursor now self-updates from the playback clock during playback, so
+            // syncing it here every tick would be redundant ~0.5-2ms of per-frame work that
+            // directly eats into the 16.67ms vsync budget. The paused branch below is kept
+            // because the editor only has a clock to sample from during active playback.
         } else if (!suppressPausedSecondaryUi) {
             updatePreviewFollowDecorationForTimelineBlueLine(second, true);
         }
@@ -1335,6 +1440,12 @@ void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()
         state_.timelineQuickStateBridge_->setPlayheadSeconds(second, true);
         state_.timelineQuickStateBridge_->focusPlayhead(false);
         state_.qtPreviewLastTimelineSecond_ = second;
+        // Follow-preview cursor sync runs on the timeline tick (throttled to timeline target
+        // FPS, typically 30-60Hz) rather than on the per-frame preview tick. This keeps the
+        // editor cursor tracking the playhead without eating into the preview render budget.
+        if (state_.previewFollowEnabled_) {
+            syncEditorCursorToPreviewSecond(second, true, false);
+        }
         return;
     }
     if (state_.timelineQuickStateBridge_ == nullptr || !quickTimelineBridgeReady()) {
@@ -1357,24 +1468,161 @@ void MainWindow::TimelineSection::onQtPreviewTick()
     if (!state_.qtPreviewPlaying_) {
         return;
     }
-    double second = 0.0;
+    const double elapsedSeconds = static_cast<double>(state_.qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
+    const double fallbackSecond = state_.qtPreviewStartSecond_ + (elapsedSeconds * state_.previewPlaybackRate_);
+    double second = fallbackSecond;
+    bool hasAudioClock = false;
     if (state_.previewSfxRuntime_ == nullptr) {
-        const double elapsedSeconds = static_cast<double>(state_.qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
-        second = state_.qtPreviewStartSecond_ + (elapsedSeconds * state_.previewPlaybackRate_);
+        second = fallbackSecond;
     } else {
-        const double elapsedSeconds = static_cast<double>(state_.qtPreviewElapsed_.nsecsElapsed()) / 1000000000.0;
-        const double fallbackSecond = state_.qtPreviewStartSecond_ + (elapsedSeconds * state_.previewPlaybackRate_);
         second = state_.previewSfxRuntime_->syncPreviewPlaybackClockTransaction(fallbackSecond);
+        hasAudioClock = true;
     }
-    onQtPreviewTickAtSecond(second);
+    // Pass AUDIO time to onQtPreviewTickAtSecond. Smoothing happens inside, applied only to the
+    // scene playhead (for smooth visible motion) — SFX drain and video stage sync must stay on
+    // audio time so that audio/video/SFX remain aligned with BGM.
+    onQtPreviewTickAtSecond(second, fallbackSecond, hasAudioClock);
 }
 
-void MainWindow::TimelineSection::onQtPreviewTickAtSecond(double second)
+double MainWindow::TimelineSection::applyVisualClockSmoothing(
+    double audioSecond, double fallbackSecond, bool hasAudioClock)
+{
+    Q_UNUSED(fallbackSecond);
+    // Tunables — kept local to avoid leaking into public headers. Chosen for a 60fps / 16.67ms
+    // target. Logs from the previous run showed audio_minus_fallback offsets of ~163ms (audio
+    // running 163ms behind elapsed time) plus per-tick jitter of 50-200ms when wall_ms balloons
+    // during slow render frames. With the older 150ms snap threshold the smoother snapped 29
+    // times per minute, and each snap log was a GUI-thread file I/O stall of 20-60ms. Raised
+    // the snap threshold to 350ms (only true seeks/glitches, not normal jitter), and raised
+    // max step to 1.5x so drift is absorbed in fewer frames.
+    constexpr double kVisualClockMaxStepScale = 1.50;
+    constexpr double kVisualClockMinStepScale = 0.0;  // never retreat visually
+    constexpr double kVisualClockCatchupRate = 0.30;  // close ~30% of drift per tick
+    constexpr double kVisualClockSnapSeconds = 0.350;  // drift > 350ms → snap, treat as seek
+
+    if (!miacode::debug_options::previewVisualSmoothingEnabled()) {
+        // Feature disabled: pass audio time through unchanged but keep state coherent so that
+        // re-enabling mid-playback doesn't see stale baselines.
+        state_.qtPreviewVisualClockSecond_ = audioSecond;
+        state_.qtPreviewVisualClockLastAudioSecond_ = audioSecond;
+        state_.qtPreviewVisualClockInitialized_ = true;
+        return audioSecond;
+    }
+
+    // Not initialized (first tick of the session or just after a seek / resume): sync hard.
+    if (!state_.qtPreviewVisualClockInitialized_) {
+        state_.qtPreviewVisualClockSecond_ = audioSecond;
+        state_.qtPreviewVisualClockLastAudioSecond_ = audioSecond;
+        state_.qtPreviewVisualClockInitialized_ = true;
+        return audioSecond;
+    }
+
+    const double audioDelta = audioSecond - state_.qtPreviewVisualClockLastAudioSecond_;
+    state_.qtPreviewVisualClockLastAudioSecond_ = audioSecond;
+
+    // Big drift (seek, pause/resume gap, audio backend glitch): snap to audio. Smoothing cannot
+    // help across discontinuities — better to take the one-frame jump than stay 300ms behind for
+    // the next dozen frames.
+    const double driftBeforeSeconds = audioSecond - state_.qtPreviewVisualClockSecond_;
+    if (qAbs(driftBeforeSeconds) > kVisualClockSnapSeconds) {
+        state_.qtPreviewVisualClockSecond_ = audioSecond;
+        // Rate-limit the snap log so a flurry of audio-clock jumps (which can happen on slow
+        // render cycles when wall_ms balloons to 80+ms) doesn't fill the GUI hot path with
+        // file-I/O-blocking writes — each appendLine call costs 0-50ms depending on disk state.
+        if (miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
+            const qint64 nowMs = state_.qtPreviewWatchdogElapsed_.elapsed();
+            const qint64 sampleMs = miacode::debug_options::previewFramePacingDiagnosticSampleMs();
+            if (state_.qtPreviewVisualClockDiagLastLogMs_ < 0
+                || nowMs - state_.qtPreviewVisualClockDiagLastLogMs_ >= sampleMs) {
+                state_.qtPreviewVisualClockDiagLastLogMs_ = nowMs;
+                appendPreviewFramePacingDiagLog(
+                    QStringLiteral("visual_clock_snap"),
+                    QStringLiteral("drift_ms=%1 audio_second=%2 audio_delta_ms=%3")
+                        .arg(driftBeforeSeconds * 1000.0, 0, 'f', 3)
+                        .arg(audioSecond, 0, 'f', 6)
+                        .arg(audioDelta * 1000.0, 0, 'f', 3)
+                );
+            }
+        }
+        return state_.qtPreviewVisualClockSecond_;
+    }
+
+    // Reverse motion (audio went backwards): rate change dips or timing-authority swap can
+    // occasionally produce a tiny negative delta. Pass it through rather than fighting it.
+    if (audioDelta < 0.0) {
+        state_.qtPreviewVisualClockSecond_ = audioSecond;
+        return state_.qtPreviewVisualClockSecond_;
+    }
+
+    const qint64 targetIntervalNs = qMax<qint64>(1, previewCanvasTargetFrameIntervalNs());
+    const double playbackRate = qMax(0.0, state_.previewPlaybackRate_);
+    const double targetStepSeconds =
+        (static_cast<double>(targetIntervalNs) / 1000000000.0) * playbackRate;
+
+    // Advance toward audio at `audioDelta + catchup * driftBeforeSeconds`, capped at max step.
+    // - When render is steady at 60fps, audioDelta ~= target, catchup ~= 0, visual tracks audio.
+    // - When a slow render cycle makes audioDelta ~= 2*target, cap kicks in at 1.25*target; the
+    //   remaining 0.75*target of drift is absorbed over the next 3-4 frames by catchup.
+    const double rawStep = audioDelta + driftBeforeSeconds * kVisualClockCatchupRate;
+    const double maxStep = targetStepSeconds * kVisualClockMaxStepScale;
+    const double minStep = targetStepSeconds * kVisualClockMinStepScale;
+    const double cappedStep = qBound(minStep, rawStep, maxStep);
+    state_.qtPreviewVisualClockSecond_ += cappedStep;
+
+    // Diagnostic log (rate-limited to sampleMs only, no per-frame "big correction" trigger — that
+    // was cascading into a noise loop where every tick logged, the logging contributed to per-tick
+    // cost, and the cost made every frame look like a "big correction" vs target step).
+    if (miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
+        const qint64 nowMs = state_.qtPreviewWatchdogElapsed_.elapsed();
+        const qint64 sampleMs = miacode::debug_options::previewFramePacingDiagnosticSampleMs();
+        if (state_.qtPreviewVisualClockDiagLastLogMs_ < 0
+            || nowMs - state_.qtPreviewVisualClockDiagLastLogMs_ >= sampleMs) {
+            state_.qtPreviewVisualClockDiagLastLogMs_ = nowMs;
+            const double driftAfterSeconds = audioSecond - state_.qtPreviewVisualClockSecond_;
+            appendPreviewFramePacingDiagLog(
+                QStringLiteral("visual_clock_smoothing"),
+                QStringLiteral(
+                    "audio_delta_ms=%1 step_ms=%2 target_step_ms=%3 drift_before_ms=%4 drift_after_ms=%5"
+                )
+                    .arg(audioDelta * 1000.0, 0, 'f', 3)
+                    .arg(cappedStep * 1000.0, 0, 'f', 3)
+                    .arg(targetStepSeconds * 1000.0, 0, 'f', 3)
+                    .arg(driftBeforeSeconds * 1000.0, 0, 'f', 3)
+                    .arg(driftAfterSeconds * 1000.0, 0, 'f', 3)
+            );
+        }
+    }
+
+    Q_UNUSED(hasAudioClock);
+    return state_.qtPreviewVisualClockSecond_;
+}
+
+void MainWindow::TimelineSection::resetVisualClockSmoothing()
+{
+    // Called on playback start, resume, and seek so the next tick hard-syncs visual to audio.
+    state_.qtPreviewVisualClockSecond_ = -1.0;
+    state_.qtPreviewVisualClockLastAudioSecond_ = -1.0;
+    state_.qtPreviewVisualClockInitialized_ = false;
+    state_.qtPreviewVisualClockDiagLastLogMs_ = -1;
+}
+
+void MainWindow::TimelineSection::onQtPreviewTickAtSecond(double second, double fallbackSecond, bool hasAudioClock)
 {
     if (!state_.qtPreviewPlaying_) {
         return;
     }
+    const bool diagEnabled = miacode::debug_options::previewFramePacingDiagnosticsEnabled();
+    QElapsedTimer tickProfileTimer;
+    qint64 syncMediaElapsedNs = 0;
+    qint64 applyPositionElapsedNs = 0;
+    qint64 drainEventsElapsedNs = 0;
+    if (diagEnabled) {
+        tickProfileTimer.start();
+    }
     owner_.syncPreviewStageMediaRoutePlayback(second);
+    if (diagEnabled) {
+        syncMediaElapsedNs = tickProfileTimer.nsecsElapsed();
+    }
     const double playbackEndSecond = previewPlaybackEndSeconds();
     if (playbackEndSecond > 0.0
         && second + kTimelineZeroSecondTolerance >= playbackEndSecond) {
@@ -1387,14 +1635,144 @@ void MainWindow::TimelineSection::onQtPreviewTickAtSecond(double second)
         return;
     }
 
+    const qint64 tickNowNs = state_.qtPreviewWatchdogElapsed_.nsecsElapsed();
+    qint64 wallDeltaNs = 0;
+    double playheadDeltaSeconds = 0.0;
+    double fallbackDeltaSeconds = 0.0;
+    double audioDeltaSeconds = 0.0;
+    double expectedDeltaSeconds = 0.0;
+    double speedRatio = 0.0;
+    if (state_.qtPreviewFramePacingDiagLastTickNs_ >= 0
+        && state_.qtPreviewFramePacingDiagLastTickSecond_ >= 0.0) {
+        wallDeltaNs = qMax<qint64>(0, tickNowNs - state_.qtPreviewFramePacingDiagLastTickNs_);
+        playheadDeltaSeconds = qMax(0.0, second - state_.qtPreviewFramePacingDiagLastTickSecond_);
+        expectedDeltaSeconds =
+            (static_cast<double>(wallDeltaNs) / 1000000000.0) * qMax(0.0, state_.previewPlaybackRate_);
+        if (expectedDeltaSeconds > 1e-6) {
+            speedRatio = playheadDeltaSeconds / expectedDeltaSeconds;
+        }
+        if (state_.qtPreviewFramePacingDiagLastTickFallbackSecond_ >= 0.0) {
+            fallbackDeltaSeconds =
+                qMax(0.0, fallbackSecond - state_.qtPreviewFramePacingDiagLastTickFallbackSecond_);
+        }
+        if (hasAudioClock && state_.qtPreviewFramePacingDiagLastTickAudioSecond_ >= 0.0) {
+            audioDeltaSeconds =
+                qMax(0.0, second - state_.qtPreviewFramePacingDiagLastTickAudioSecond_);
+        }
+    }
+    state_.qtPreviewFramePacingDiagLastTickNs_ = tickNowNs;
+    state_.qtPreviewFramePacingDiagLastTickSecond_ = second;
+    state_.qtPreviewFramePacingDiagLastTickFallbackSecond_ = fallbackSecond;
+    if (hasAudioClock) {
+        state_.qtPreviewFramePacingDiagLastTickAudioSecond_ = second;
+    } else {
+        state_.qtPreviewFramePacingDiagLastTickAudioSecond_ = -1.0;
+    }
+    const double audioMinusFallbackSeconds = hasAudioClock ? (second - fallbackSecond) : 0.0;
+    const bool largeStep = speedRatio > 1.5 && playheadDeltaSeconds > 0.0;
+    const bool audioLargeStep =
+        hasAudioClock
+        && audioDeltaSeconds > 0.0
+        && ((expectedDeltaSeconds > 1e-6 && audioDeltaSeconds > expectedDeltaSeconds * 1.5)
+            || audioDeltaSeconds > 0.050);
+    const qint64 beforeNotesNs = diagEnabled ? tickProfileTimer.nsecsElapsed() : 0;
+    qint64 notesElapsedNs = 0;
     if (state_.previewCanvas_ != nullptr) {
+        state_.previewCanvas_->notePreviewPacingTick(wallDeltaNs, playheadDeltaSeconds, speedRatio);
+        state_.previewCanvas_->notePreviewClockMetrics(
+            audioDeltaSeconds,
+            playheadDeltaSeconds,
+            audioMinusFallbackSeconds,
+            hasAudioClock,
+            audioLargeStep,
+            largeStep
+        );
         state_.previewCanvas_->noteTickForProfiling();
     }
+    if (diagEnabled) {
+        notesElapsedNs = tickProfileTimer.nsecsElapsed() - beforeNotesNs;
+    }
+    const qint64 beforeApplyNs = diagEnabled ? tickProfileTimer.nsecsElapsed() : 0;
     applyQtPreviewPosition(second, true);
+    if (diagEnabled) {
+        applyPositionElapsedNs = tickProfileTimer.nsecsElapsed() - beforeApplyNs;
+    }
+    const qint64 beforeSmoothingNs = diagEnabled ? tickProfileTimer.nsecsElapsed() : 0;
+    qint64 smoothingElapsedNs = 0;
+    // Visual-time smoothing: override ONLY the canvas scene playhead with a bounded visual time.
+    // applyQtPreviewPosition already wrote `second` (audio time) to setPlayheadSeconds; we
+    // overwrite it with the smoothed value so that object motion looks steady frame-to-frame
+    // even when render-variance makes audio-delta jump between ticks. Everything else (slider,
+    // media-host observed time, SFX drain, timeline follow) keeps using audio time so that
+    // audio/video/SFX remain tightly aligned with BGM.
+    if (state_.previewCanvas_ != nullptr && state_.qtPreviewPlaying_) {
+        const double visualSecond = applyVisualClockSmoothing(second, fallbackSecond, hasAudioClock);
+        if (qAbs(visualSecond - second) > 1e-9) {
+            state_.previewCanvas_->setPlayheadSeconds(visualSecond, false);
+        }
+    }
+    if (diagEnabled) {
+        smoothingElapsedNs = tickProfileTimer.nsecsElapsed() - beforeSmoothingNs;
+    }
+    const qint64 beforeDrainNs = diagEnabled ? tickProfileTimer.nsecsElapsed() : 0;
     if (state_.previewSfxRuntime_ != nullptr) {
         state_.previewSfxRuntime_->drainEvents(second);
     }
-    requestNextDisplayRefreshPreviewFrame();
+    if (diagEnabled) {
+        drainEventsElapsedNs = tickProfileTimer.nsecsElapsed() - beforeDrainNs;
+    }
+    if (diagEnabled && wallDeltaNs > 0) {
+        const qint64 totalTickElapsedNs = tickProfileTimer.nsecsElapsed();
+        const qint64 nowMs = state_.qtPreviewWatchdogElapsed_.elapsed();
+        const qint64 sampleMs = miacode::debug_options::previewFramePacingDiagnosticSampleMs();
+        // Rate-limit ALL tick log writes to sampleMs cadence (default 1s). Even "anomaly" log
+        // events — largeStep / audioLargeStep — used to fire per-tick when audio jitters, and
+        // each appendLine call is a GUI-thread mutex+file-write that can stall 0-50ms on slow
+        // disk I/O. The classification is kept (still labeled tick_large_step vs tick_sample)
+        // so we can see how often anomalies happen, but we only emit one log per sampleMs.
+        const bool isAnomaly = largeStep || audioLargeStep;
+        if (state_.qtPreviewFramePacingDiagLastTickLogMs_ < 0
+            || nowMs - state_.qtPreviewFramePacingDiagLastTickLogMs_ >= sampleMs) {
+            state_.qtPreviewFramePacingDiagLastTickLogMs_ = nowMs;
+            appendPreviewFramePacingDiagLog(
+                isAnomaly ? QStringLiteral("tick_large_step") : QStringLiteral("tick_sample"),
+                QStringLiteral(
+                    "tick=%1 wall_ms=%2 playhead_delta_ms=%3 speed_ratio=%4 second=%5 mode=%6 "
+                    "fallback_delta_ms=%7 audio_delta_ms=%8 audio_minus_fallback_ms=%9 time_authority=%10 "
+                    "tick_exec_ms=%11 sync_media_ms=%12 notes_ms=%13 apply_position_ms=%14 smoothing_ms=%15 drain_events_ms=%16"
+                )
+                    .arg(state_.previewCanvas_ != nullptr ? state_.previewCanvas_->frameState().tickCount : 0)
+                    .arg(static_cast<double>(wallDeltaNs) / 1000000.0, 0, 'f', 3)
+                    .arg(playheadDeltaSeconds * 1000.0, 0, 'f', 3)
+                    .arg(speedRatio, 0, 'f', 4)
+                    .arg(second, 0, 'f', 6)
+                    .arg(previewCanvasUsesFrameSwappedPacing()
+                        ? QStringLiteral("display_refresh")
+                        : QStringLiteral("fixed_interval"))
+                    .arg(fallbackDeltaSeconds * 1000.0, 0, 'f', 3)
+                    .arg(hasAudioClock ? QString::number(audioDeltaSeconds * 1000.0, 'f', 3) : QStringLiteral("na"))
+                    .arg(hasAudioClock
+                        ? QString::number(audioMinusFallbackSeconds * 1000.0, 'f', 3)
+                        : QStringLiteral("na"))
+                    .arg(hasAudioClock ? QStringLiteral("audio") : QStringLiteral("elapsed_fallback"))
+                    .arg(static_cast<double>(totalTickElapsedNs) / 1000000.0, 0, 'f', 3)
+                    .arg(static_cast<double>(syncMediaElapsedNs) / 1000000.0, 0, 'f', 3)
+                    .arg(static_cast<double>(notesElapsedNs) / 1000000.0, 0, 'f', 3)
+                    .arg(static_cast<double>(applyPositionElapsedNs) / 1000000.0, 0, 'f', 3)
+                    .arg(static_cast<double>(smoothingElapsedNs) / 1000000.0, 0, 'f', 3)
+                    .arg(static_cast<double>(drainEventsElapsedNs) / 1000000.0, 0, 'f', 3)
+            );
+        }
+    }
+    // NOTE: qtPreviewLastVisualTickNs_ is managed by advanceFixedIntervalGateAfterPresent BEFORE
+    // the tick runs, using phase-locked advancement (prev + targetInterval). Assigning nowNs
+    // here would push the baseline forward by the tick's work latency (2-5ms), causing every
+    // other present at 60Hz to miss the gate and halving effective tick rate.
+    if (previewCanvasUsesFrameSwappedPacing()) {
+        requestNextDisplayRefreshPreviewFrame();
+    } else {
+        requestNextFixedIntervalPreviewFrame();
+    }
 }
 
 void MainWindow::TimelineSection::jumpToNearestTimelineNote(double second, int lane)

@@ -269,6 +269,34 @@
         bool qtPreviewTimelineDirty_ = false;
         bool qtPreviewAwaitingFrameSwap_ = false;
         qint64 qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+        qint64 qtPreviewAwaitingFrameSwapSinceNs_ = -1;
+        bool qtPreviewDisplayRefreshTickQueued_ = false;
+        quint64 qtPreviewDisplayRefreshFrameRequestSeq_ = 0;
+        quint64 qtPreviewDisplayRefreshFramePresentSeq_ = 0;
+        qint64 qtPreviewFramePacingDiagLastTickNs_ = -1;
+        qint64 qtPreviewFramePacingDiagLastTickLogMs_ = -1;
+        qint64 qtPreviewFramePacingDiagLastRequestLogMs_ = -1;
+        qint64 qtPreviewFramePacingDiagLastPresentLogMs_ = -1;
+        double qtPreviewFramePacingDiagLastTickSecond_ = -1.0;
+        double qtPreviewFramePacingDiagLastTickFallbackSecond_ = -1.0;
+        double qtPreviewFramePacingDiagLastTickAudioSecond_ = -1.0;
+        int qtPreviewDisplayRefreshConsecutiveWatchdogs_ = 0;
+        qint64 qtPreviewLastVisualTickNs_ = -1;
+        bool qtPreviewFixedAwaitingFrame_ = false;
+        qint64 qtPreviewFixedAwaitingFrameSinceMs_ = -1;
+        qint64 qtPreviewFixedAwaitingFrameSinceNs_ = -1;
+        bool qtPreviewFixedFrameTickQueued_ = false;
+        quint64 qtPreviewFixedGateFrameRequestSeq_ = 0;
+        quint64 qtPreviewFixedGateFramePresentSeq_ = 0;
+        qint64 qtPreviewFramePacingDiagLastFixedGateLogMs_ = -1;
+        // Visual-clock smoothing (doc 6.3): a bounded surrogate for the audio clock used for
+        // scene rendering. Each tick advances qtPreviewVisualClockSecond_ toward the audio
+        // second, capped to ~1.25x target interval per frame so a single slow render cycle
+        // doesn't manifest as a visible "double jump" in note motion. Reset on seek/play-start.
+        double qtPreviewVisualClockSecond_ = -1.0;
+        double qtPreviewVisualClockLastAudioSecond_ = -1.0;
+        bool qtPreviewVisualClockInitialized_ = false;
+        qint64 qtPreviewVisualClockDiagLastLogMs_ = -1;
         bool previewScrubDragging_ = false;
         bool suppressTimelineCursorSync_ = false;
         bool suppressTextDirtyTracking_ = false;
@@ -330,6 +358,7 @@
         QElapsedTimer qtPreviewWatchdogElapsed_;
         qint64 qtPreviewNextFixedTickDueNs_ = -1;
         qint64 qtPreviewFixedTickOriginNs_ = -1;
+        bool qtPreviewFixedTimerHighResResolutionActive_ = false;
         double qtPreviewTimelineStartSecond_ = 0.0;
         QElapsedTimer qtPreviewTimelineElapsed_;
         quint64 pausedSeekGeneration_ = 0;
@@ -582,6 +611,24 @@
     bool& qtPreviewTimelineDirty_ = state_.qtPreviewTimelineDirty_;
     bool& qtPreviewAwaitingFrameSwap_ = state_.qtPreviewAwaitingFrameSwap_;
     qint64& qtPreviewAwaitingFrameSwapSinceMs_ = state_.qtPreviewAwaitingFrameSwapSinceMs_;
+    qint64& qtPreviewAwaitingFrameSwapSinceNs_ = state_.qtPreviewAwaitingFrameSwapSinceNs_;
+    bool& qtPreviewDisplayRefreshTickQueued_ = state_.qtPreviewDisplayRefreshTickQueued_;
+    quint64& qtPreviewDisplayRefreshFrameRequestSeq_ = state_.qtPreviewDisplayRefreshFrameRequestSeq_;
+    quint64& qtPreviewDisplayRefreshFramePresentSeq_ = state_.qtPreviewDisplayRefreshFramePresentSeq_;
+    qint64& qtPreviewFramePacingDiagLastPresentLogMs_ = state_.qtPreviewFramePacingDiagLastPresentLogMs_;
+    int& qtPreviewDisplayRefreshConsecutiveWatchdogs_ = state_.qtPreviewDisplayRefreshConsecutiveWatchdogs_;
+    qint64& qtPreviewLastVisualTickNs_ = state_.qtPreviewLastVisualTickNs_;
+    bool& qtPreviewFixedAwaitingFrame_ = state_.qtPreviewFixedAwaitingFrame_;
+    qint64& qtPreviewFixedAwaitingFrameSinceMs_ = state_.qtPreviewFixedAwaitingFrameSinceMs_;
+    qint64& qtPreviewFixedAwaitingFrameSinceNs_ = state_.qtPreviewFixedAwaitingFrameSinceNs_;
+    bool& qtPreviewFixedFrameTickQueued_ = state_.qtPreviewFixedFrameTickQueued_;
+    quint64& qtPreviewFixedGateFrameRequestSeq_ = state_.qtPreviewFixedGateFrameRequestSeq_;
+    quint64& qtPreviewFixedGateFramePresentSeq_ = state_.qtPreviewFixedGateFramePresentSeq_;
+    qint64& qtPreviewFramePacingDiagLastFixedGateLogMs_ = state_.qtPreviewFramePacingDiagLastFixedGateLogMs_;
+    double& qtPreviewVisualClockSecond_ = state_.qtPreviewVisualClockSecond_;
+    double& qtPreviewVisualClockLastAudioSecond_ = state_.qtPreviewVisualClockLastAudioSecond_;
+    bool& qtPreviewVisualClockInitialized_ = state_.qtPreviewVisualClockInitialized_;
+    qint64& qtPreviewVisualClockDiagLastLogMs_ = state_.qtPreviewVisualClockDiagLastLogMs_;
     bool& previewScrubDragging_ = state_.previewScrubDragging_;
     bool& suppressTimelineCursorSync_ = state_.suppressTimelineCursorSync_;
     bool& suppressTextDirtyTracking_ = state_.suppressTextDirtyTracking_;
@@ -633,6 +680,7 @@
     QElapsedTimer& qtPreviewWatchdogElapsed_ = state_.qtPreviewWatchdogElapsed_;
     qint64& qtPreviewNextFixedTickDueNs_ = state_.qtPreviewNextFixedTickDueNs_;
     qint64& qtPreviewFixedTickOriginNs_ = state_.qtPreviewFixedTickOriginNs_;
+    bool& qtPreviewFixedTimerHighResResolutionActive_ = state_.qtPreviewFixedTimerHighResResolutionActive_;
     double& qtPreviewTimelineStartSecond_ = state_.qtPreviewTimelineStartSecond_;
     QElapsedTimer& qtPreviewTimelineElapsed_ = state_.qtPreviewTimelineElapsed_;
     quint64& pausedSeekGeneration_ = state_.pausedSeekGeneration_;

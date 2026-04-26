@@ -557,7 +557,7 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     }
     cachedThemeSignature_ = timelineThemeSignature(state);
     if (state.horizontalScrollValue != lastPaintedHorizontalScrollValue_
-        && miacode::debug_options::runtimeDebugOutputEnabled()) {
+        && miacode::debug_options::timelineHotpathDiagnosticsEnabled()) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("timeline/quick_scene"),
