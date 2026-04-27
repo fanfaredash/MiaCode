@@ -9,6 +9,7 @@
 #include "common/DebugOptions.h"
 #include "common/DebugLog.h"
 #include "mainwindow/MainWindow.h"
+#include "preview/dcomp/PreviewDCompSurface.h"
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
 #include "timeline/quick/TimelineQuickItem.h"
@@ -386,6 +387,21 @@ bool QuickShellBootstrap::start()
         rootWindowNativeHwnd_ = static_cast<quintptr>(window->winId());
 #endif
         window->installEventFilter(this);
+
+        // Phase 1 of the DComp preview path. Opt-in via
+        // MIACODE_PREVIEW_USE_DCOMP=1. Renders a red test rectangle in the
+        // top-left of the window to verify the DComp visual tree attaches
+        // and resizes correctly. Attached lazily on first sceneGraphInitialized
+        // (handled inside attachToWindow). Phase 4+ replaces the fixed
+        // top-left placement with placeholder-driven geometry.
+        if (miacode::debug_options::previewUseDCompEnabled()) {
+            previewDCompSurface_ =
+                std::make_unique<miacode::preview::dcomp::PreviewDCompSurface>(this);
+            previewDCompSurface_->attachToWindow(window);
+            appendQuickShellRuntimeLog(
+                QStringLiteral("dcomp_surface_attached"),
+                QStringLiteral("phase=1 reason=env_flag"));
+        }
         if (surfaceHost_ != nullptr) {
             surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
         }

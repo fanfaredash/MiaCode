@@ -139,6 +139,19 @@ inline bool previewVisualSmoothingEnabled()
     return envOptionalFlagValue("MIACODE_PREVIEW_VISUAL_SMOOTHING").value_or(true);
 }
 
+inline bool previewUseDCompEnabled()
+{
+    // Phase 1 of the DirectComposition preview path (see local plan doc
+    // docs/PREVIEW_FRAME_PACING_FEASIBILITY_AND_IMPLEMENTATION_PLAN_ZH.md).
+    // When set, QuickShellBootstrap creates a PreviewDCompSurface attached
+    // to the main QQuickWindow on first show. Phase 1 deliverable is just a
+    // red test rectangle in the top-left of the window — Phase 4 wires it
+    // to the actual preview slot via a QML placeholder. Default off so
+    // every release build behaves exactly like the legacy path until each
+    // phase is fully validated.
+    return envFlagEnabled("MIACODE_PREVIEW_USE_DCOMP");
+}
+
 inline bool previewQsgRenderTimingEnabled()
 {
     // Captures Qt's built-in scene-graph timing (`qt.scenegraph.time.*` log
