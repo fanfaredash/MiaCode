@@ -109,6 +109,21 @@ void PreviewDCompSurface::attachToWindow(QQuickWindow* window)
             &PreviewDCompSurface::onWindowGeometryChanged);
     connect(window_, &QQuickWindow::visibilityChanged, this,
             &PreviewDCompSurface::onWindowVisibilityChanged);
+    // Phase 4e — DPI / multi-monitor handling. screenChanged fires
+    // when the user drags the window between monitors with different
+    // DPI scaling. effectiveDevicePixelRatio updates on the new
+    // screen, so we need to re-derive the swap chain pixel size and
+    // visual transform from the tracked item's logical bounds × new
+    // DPR. screenChanged on QQuickWindow fires on the GUI thread.
+    connect(window_, &QQuickWindow::screenChanged, this,
+            [this](QScreen*) {
+                logSurface("screen_changed",
+                           QStringLiteral("dpr=%1")
+                               .arg(window_ != nullptr
+                                    ? window_->effectiveDevicePixelRatio()
+                                    : 0.0));
+                applyTrackedItemGeometry();
+            });
     connect(window_, &QObject::destroyed, this, &PreviewDCompSurface::detach);
 
     // If the window is already initialised + visible, init right away.
