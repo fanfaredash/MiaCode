@@ -262,6 +262,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/dcomp/PreviewDCompRenderer.cpp
     src/preview/dcomp/PreviewDCompSpritePipeline.h
     src/preview/dcomp/PreviewDCompSpritePipeline.cpp
+    src/preview/dcomp/PreviewDCompTextureCache.h
+    src/preview/dcomp/PreviewDCompTextureCache.cpp
     src/preview/dcomp/PreviewDCompSurface.h
     src/preview/dcomp/PreviewDCompSurface.cpp
     src/preview/audio/PreviewAudioBackend.h

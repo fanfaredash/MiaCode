@@ -16,6 +16,7 @@
 #include "preview/dcomp/PreviewDCompCore.h"
 #include "preview/dcomp/PreviewDCompFrameStateSnapshot.h"
 #include "preview/dcomp/PreviewDCompSpritePipeline.h"
+#include "preview/dcomp/PreviewDCompTextureCache.h"
 
 #include <QObject>
 #include <QSize>
@@ -72,6 +73,10 @@ private:
 
     PreviewDCompCore* core_ = nullptr;
     PreviewDCompSpritePipeline pipeline_;
+    // Phase 3.3b: QImage* → ID3D11ShaderResourceView cache. Render-thread
+    // owned; populated lazily as snapshot descriptors arrive. Cleared on
+    // stop() before Core's D3D11 device is released.
+    PreviewDCompTextureCache textureCache_;
     std::thread thread_;
     std::atomic<bool> running_{ false };
     std::atomic<bool> stopRequested_{ false };

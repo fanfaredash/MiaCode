@@ -125,6 +125,9 @@ void PreviewDCompRenderer::stop()
         thread_.join();
     }
     running_.store(false, std::memory_order_release);
+    // Drop cached SRVs before Core releases the D3D11 device — every cached
+    // ComPtr holds a ref on a device-owned resource.
+    textureCache_.clear();
     pipeline_.shutdown();
     core_ = nullptr;
     logRenderer("stopped",
@@ -250,17 +253,18 @@ void PreviewDCompRenderer::renderAnimatedFrame()
                         .arg(snapshot.playheadSeconds, 0, 'f', 3));
     }
 
-    // Phase 3.1+3.2: render a textured quad through the full sprite
-    // pipeline. The quad's horizontal position is now driven by the
-    // playhead from the snapshot — visual proof that GUI-thread state
-    // is reaching the render thread. If the pipeline failed to
-    // initialise we fall back to a colour-cycle clear so the failure
-    // mode is visible.
+    // Phase 3.3b/c: render the snapshot's sprite descriptors through the
+    // full sprite pipeline. Texture cache resolves QImage → SRV; pipeline
+    // groups by SRV and issues one Draw per texture run. If the pipeline
+    // failed to initialise we fall back to a colour-cycle clear so the
+    // failure mode is visible.
     if (pipeline_.isReady()) {
-        pipeline_.renderTestQuad(core_->context(),
+        pipeline_.renderSnapshot(core_->context(),
+                                  core_->device(),
                                   core_->backBufferRtv(),
                                   core_->swapChainPixelSize(),
-                                  snapshot);
+                                  snapshot,
+                                  textureCache_);
         core_->present();
     } else {
         // Fallback: colour-cycle clear so we still have something on

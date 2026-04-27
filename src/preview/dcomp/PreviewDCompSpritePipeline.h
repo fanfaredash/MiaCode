@@ -28,6 +28,7 @@
 
 #include "preview/dcomp/PreviewDCompCore.h"
 #include "preview/dcomp/PreviewDCompFrameStateSnapshot.h"
+#include "preview/dcomp/PreviewDCompTextureCache.h"
 
 #include <QSize>
 
@@ -103,12 +104,28 @@ public:
                         ID3D11RenderTargetView* rtv,
                         QSize rtvLogicalSize,
                         const PreviewDCompFrameStateSnapshot& snapshot);
+
+    // Phase 3.3c — render sprites from the snapshot descriptor list.
+    // Each descriptor's QImage* is resolved to an ID3D11ShaderResourceView
+    // through `textureCache`. Sprites grouped by SRV produce one draw
+    // call per group. The RTV is cleared to opaque black before drawing
+    // so the previous frame's content is gone and DComp blending starts
+    // from a clean slate. Returns false if not ready / null inputs.
+    bool renderSnapshot(ID3D11DeviceContext* context,
+                        ID3D11Device* device,
+                        ID3D11RenderTargetView* rtv,
+                        QSize rtvLogicalSize,
+                        const PreviewDCompFrameStateSnapshot& snapshot,
+                        PreviewDCompTextureCache& textureCache);
 #else
     bool initialise(void*) { return false; }
     void shutdown() {}
     bool isReady() const { return false; }
     bool renderTestQuad(void*, void*, QSize,
                          const PreviewDCompFrameStateSnapshot&) { return false; }
+    bool renderSnapshot(void*, void*, void*, QSize,
+                         const PreviewDCompFrameStateSnapshot&,
+                         PreviewDCompTextureCache&) { return false; }
 #endif
 
 private:

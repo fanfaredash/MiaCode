@@ -542,6 +542,209 @@ bool PreviewDCompSpritePipeline::renderTestQuad(ID3D11DeviceContext* context,
     return true;
 }
 
+namespace {
+
+// Convert one PreviewSpriteDescriptor to 6 vertices forming two triangles
+// (a triangle list, not strip — we need to merge sprite quads into a
+// single batched draw, and a triangle list lets multiple quads share
+// one Draw call without degenerate connectors). UVs derived from the
+// sprite's sourceRect, position derived from center+width+height with
+// rotation around the centre.
+void emitSpriteVertices(const miacode::preview::scene::PreviewSpriteDescriptor& sprite,
+                         std::vector<PreviewDCompSpriteVertex>& out)
+{
+    if (sprite.image == nullptr || sprite.image->isNull()) {
+        return;
+    }
+    if (sprite.width <= 0.0 || sprite.height <= 0.0) {
+        return;
+    }
+    if (sprite.opacity <= 0.0) {
+        return;
+    }
+
+    const float cx = static_cast<float>(sprite.center.x());
+    const float cy = static_cast<float>(sprite.center.y());
+    const float halfW = static_cast<float>(sprite.width) * 0.5f;
+    const float halfH = static_cast<float>(sprite.height) * 0.5f;
+    const float opacity = static_cast<float>(qBound(0.0, sprite.opacity, 1.0));
+    const float effect = static_cast<float>(static_cast<int>(sprite.effect));
+
+    // UV from sourceRect. Empty source rect → use full image (0..1).
+    const QImage* img = sprite.image;
+    QRectF source = sprite.sourceRect;
+    if (source.isEmpty()) {
+        source = QRectF(0, 0, img->width(), img->height());
+    }
+    const float invW = img->width() > 0 ? 1.0f / static_cast<float>(img->width()) : 1.0f;
+    const float invH = img->height() > 0 ? 1.0f / static_cast<float>(img->height()) : 1.0f;
+    const float u0 = static_cast<float>(source.left()) * invW;
+    const float v0 = static_cast<float>(source.top()) * invH;
+    const float u1 = static_cast<float>(source.right()) * invW;
+    const float v1 = static_cast<float>(source.bottom()) * invH;
+
+    // Compute the four corners in world (pixel) space, applying rotation
+    // around the sprite centre. Rotation degrees: positive = clockwise
+    // in screen-space (Y-down convention from the QImage / QRectF world).
+    const double rad = sprite.rotationDegrees * (M_PI / 180.0);
+    const float cosR = static_cast<float>(std::cos(rad));
+    const float sinR = static_cast<float>(std::sin(rad));
+    auto rotate = [&](float lx, float ly, float& outX, float& outY) {
+        outX = cx + lx * cosR - ly * sinR;
+        outY = cy + lx * sinR + ly * cosR;
+    };
+
+    float tlx, tly, trx, try_, blx, bly, brx, bry;
+    rotate(-halfW, -halfH, tlx, tly);
+    rotate( halfW, -halfH, trx, try_);
+    rotate(-halfW,  halfH, blx, bly);
+    rotate( halfW,  halfH, brx, bry);
+
+    // Two triangles: TL-TR-BL, TR-BR-BL.
+    out.push_back({ tlx, tly, u0, v0, opacity, effect });
+    out.push_back({ trx, try_, u1, v0, opacity, effect });
+    out.push_back({ blx, bly, u0, v1, opacity, effect });
+    out.push_back({ trx, try_, u1, v0, opacity, effect });
+    out.push_back({ brx, bry, u1, v1, opacity, effect });
+    out.push_back({ blx, bly, u0, v1, opacity, effect });
+}
+
+}  // namespace
+
+bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
+                                                ID3D11Device* device,
+                                                ID3D11RenderTargetView* rtv,
+                                                QSize rtvLogicalSize,
+                                                const PreviewDCompFrameStateSnapshot& snapshot,
+                                                PreviewDCompTextureCache& textureCache)
+{
+    if (!ready_ || context == nullptr || device == nullptr || rtv == nullptr) {
+        return false;
+    }
+    const int width = rtvLogicalSize.width() > 0 ? rtvLogicalSize.width() : 1;
+    const int height = rtvLogicalSize.height() > 0 ? rtvLogicalSize.height() : 1;
+
+    // Project from logical pixel coordinates into NDC. The descriptor
+    // positions Surface produced are in QQuickWindow logical-pixel
+    // coordinates (matching the QML scene's layout), which is what we
+    // want — every sprite's center/width/height is in those units.
+    PreviewDCompSpriteUniformBlock uniforms{};
+    writeOrthoTopLeftPixelMatrix(uniforms.matrix, width, height);
+    uniforms.opacity = 1.0f;
+    uniforms.wave = 0.0f;
+    uniforms.absWave = 0.0f;
+    uniforms.effect = 0.0f;
+    context->UpdateSubresource(uniformBuffer_.Get(), 0, nullptr, &uniforms, 0, 0);
+
+    // Walk descriptors, group adjacent same-texture sprites into a single
+    // batched draw. The legacy QSG path uses the same pattern. Within a
+    // batch we accumulate vertices in `staging`, then upload + Draw +
+    // reset for the next batch.
+    std::vector<PreviewDCompSpriteVertex> staging;
+    staging.reserve(snapshot.sprites.size() * 6);
+
+    struct DrawRun {
+        ID3D11ShaderResourceView* srv = nullptr;
+        int firstVertex = 0;
+        int vertexCount = 0;
+    };
+    std::vector<DrawRun> runs;
+    runs.reserve(16);
+
+    for (const auto& sprite : snapshot.sprites) {
+        if (sprite.image == nullptr || sprite.image->isNull()) {
+            continue;
+        }
+        ID3D11ShaderResourceView* srv =
+            textureCache.lookupOrCreate(sprite.image, device);
+        if (srv == nullptr) {
+            continue;
+        }
+        if (runs.empty() || runs.back().srv != srv) {
+            DrawRun newRun;
+            newRun.srv = srv;
+            newRun.firstVertex = static_cast<int>(staging.size());
+            newRun.vertexCount = 0;
+            runs.push_back(newRun);
+        }
+        const int before = static_cast<int>(staging.size());
+        emitSpriteVertices(sprite, staging);
+        runs.back().vertexCount += static_cast<int>(staging.size()) - before;
+    }
+
+    // Upload vertices. Skip the draw if no sprites contributed any
+    // vertices (can happen with all-degenerate descriptors); fall back
+    // to clearing the RTV to black so the previous frame doesn't ghost.
+    if (staging.empty()) {
+        const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        ID3D11RenderTargetView* rtvs[1] = { rtv };
+        context->OMSetRenderTargets(1, rtvs, nullptr);
+        context->ClearRenderTargetView(rtv, clearColor);
+        return true;
+    }
+    if (static_cast<int>(staging.size()) > kMaxVertices) {
+        // Buffer overflow guard. Phase 3.4+ will grow the buffer
+        // dynamically once we know the steady-state vertex count.
+        staging.resize(kMaxVertices);
+    }
+
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    HRESULT hr = context->Map(vertexBuffer_.Get(), 0,
+                               D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    if (FAILED(hr)) {
+        logHr("renderSnapshot_map_vb", hr);
+        return false;
+    }
+    std::memcpy(mapped.pData, staging.data(),
+                staging.size() * sizeof(PreviewDCompSpriteVertex));
+    context->Unmap(vertexBuffer_.Get(), 0);
+
+    // Bind RTV, clear to fully-transparent black so the surrounding
+    // pixels DComp composites over the QML scene aren't tinted.
+    const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    ID3D11RenderTargetView* rtvs[1] = { rtv };
+    context->OMSetRenderTargets(1, rtvs, nullptr);
+    context->ClearRenderTargetView(rtv, clearColor);
+
+    D3D11_VIEWPORT vp{};
+    vp.TopLeftX = 0.0f;
+    vp.TopLeftY = 0.0f;
+    vp.Width = static_cast<float>(width);
+    vp.Height = static_cast<float>(height);
+    vp.MinDepth = 0.0f;
+    vp.MaxDepth = 1.0f;
+    context->RSSetViewports(1, &vp);
+    context->RSSetState(rasterizerState_.Get());
+
+    const float blendFactor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    context->OMSetBlendState(blendState_.Get(), blendFactor, 0xffffffff);
+
+    context->IASetInputLayout(inputLayout_.Get());
+    context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    UINT stride = sizeof(PreviewDCompSpriteVertex);
+    UINT offset = 0;
+    ID3D11Buffer* vbs[1] = { vertexBuffer_.Get() };
+    context->IASetVertexBuffers(0, 1, vbs, &stride, &offset);
+
+    context->VSSetShader(vs_.Get(), nullptr, 0);
+    ID3D11Buffer* cbs[1] = { uniformBuffer_.Get() };
+    context->VSSetConstantBuffers(0, 1, cbs);
+
+    context->PSSetShader(ps_.Get(), nullptr, 0);
+    ID3D11SamplerState* samplers[1] = { sampler_.Get() };
+    context->PSSetSamplers(0, 1, samplers);
+
+    for (const auto& run : runs) {
+        if (run.vertexCount <= 0) {
+            continue;
+        }
+        ID3D11ShaderResourceView* srvs[1] = { run.srv };
+        context->PSSetShaderResources(0, 1, srvs);
+        context->Draw(run.vertexCount, run.firstVertex);
+    }
+    return true;
+}
+
 #endif  // Q_OS_WIN
 
 }  // namespace miacode::preview::dcomp
