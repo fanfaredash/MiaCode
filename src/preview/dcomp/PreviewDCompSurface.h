@@ -10,6 +10,7 @@
 #include <QPointer>
 #include <QSize>
 
+class QQuickItem;
 class QQuickWindow;
 class PreviewRuntime;
 
@@ -70,6 +71,7 @@ private slots:
     void onWindowGeometryChanged();
     void onWindowVisibilityChanged();
     void onRuntimeFrameStateChanged();
+    void onTrackedItemGeometryChanged();
 
 private:
     bool initialiseIfReady();
@@ -77,9 +79,20 @@ private:
     QSize currentClientPixelSize() const;
     void* currentParentHwnd() const;
 
+    // Phase 4a — try to find the QQuickItem the DComp surface should
+    // shadow on screen. Looks up by objectName so the surface stays
+    // decoupled from PreviewQuickSceneRoot's type. Called whenever a
+    // window-level lifecycle signal fires; once an item is tracked
+    // these calls are short-circuit.
+    void tryDiscoverTrackedItem();
+    void setTrackedItem(QQuickItem* item);
+    void applyTrackedItemGeometry();
+
     QPointer<QQuickWindow> window_;
+    QPointer<QQuickItem> trackedItem_;
     QPointer<PreviewRuntime> runtime_;
     QMetaObject::Connection runtimeFrameStateConnection_;
+    QVector<QMetaObject::Connection> trackedItemConnections_;
     PreviewDCompCore core_;
     PreviewDCompRenderer renderer_;
     qint64 snapshotRevision_ = 0;

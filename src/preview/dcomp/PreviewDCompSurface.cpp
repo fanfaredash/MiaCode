@@ -19,6 +19,7 @@
 #include "preview/scene/PreviewTouchLayerState.h"
 #include "preview/scene/PreviewTrackLayerState.h"
 
+#include <QQuickItem>
 #include <QQuickWindow>
 
 #ifdef Q_OS_WIN
@@ -160,6 +161,7 @@ void PreviewDCompSurface::detach()
         QObject::disconnect(runtimeFrameStateConnection_);
         runtimeFrameStateConnection_ = QMetaObject::Connection();
     }
+    setTrackedItem(nullptr);
     runtime_ = nullptr;
     teardownCore();
     window_ = nullptr;
@@ -175,20 +177,29 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     PreviewDCompFrameStateSnapshot snapshot;
     snapshot.revision = ++snapshotRevision_;
     snapshot.playheadSeconds = state.playheadSeconds;
-    snapshot.sceneLogicalSize = currentClientPixelSize();
     snapshot.playing = false;
 
-    // Phase 3.3a: build the backdrop + track layer descriptors on the
-    // GUI thread and stash them in the snapshot. The render thread
-    // walks them after publish. We use the QQuickWindow's logical size
-    // for the playfield rect rather than a placeholder geometry — Phase
-    // 4 replaces this with a per-placeholder rect, but for the Phase 1
-    // top-left demo region the swap chain itself drives the projection,
-    // and we just need *some* representative rect to feed the layer
-    // builders.
-    const QSize logicalSize = window_ != nullptr
-        ? QSize(window_->width(), window_->height())
-        : QSize(800, 800);
+    // Phase 4a: when a QML target item is tracked, the scene's logical
+    // size is the item's bounding rect (matches the legacy QSG path —
+    // PreviewQuickSceneRoot passes boundingRect().size() to all layer
+    // builders as renderSize). Without a tracked item we fall back to
+    // the QQuickWindow's logical size; that's the Phase-3 demo path
+    // where the whole window scene squeezes into the 200x200 swap
+    // chain, used for visual sanity checks before Phase 4 wired up
+    // the placeholder geometry.
+    QSize logicalSize;
+    if (trackedItem_ != nullptr
+        && trackedItem_->width() > 0.0
+        && trackedItem_->height() > 0.0) {
+        logicalSize = QSize(qRound(trackedItem_->width()),
+                             qRound(trackedItem_->height()));
+    }
+    if (logicalSize.width() <= 0 || logicalSize.height() <= 0) {
+        logicalSize = window_ != nullptr
+            ? QSize(window_->width(), window_->height())
+            : QSize(800, 800);
+    }
+    snapshot.sceneLogicalSize = logicalSize;
     const double layoutSquareScale = state.render.layoutSquareScale > 0.0
         ? state.render.layoutSquareScale
         : 1.0;
@@ -451,6 +462,7 @@ bool PreviewDCompSurface::isActive() const
 void PreviewDCompSurface::onWindowSceneGraphInitialized()
 {
     initialiseIfReady();
+    tryDiscoverTrackedItem();
 }
 
 void PreviewDCompSurface::onWindowGeometryChanged()
@@ -460,10 +472,18 @@ void PreviewDCompSurface::onWindowGeometryChanged()
         // initialised. Try to bring up the surface if we now have a real
         // size + HWND.
         initialiseIfReady();
+        tryDiscoverTrackedItem();
         return;
     }
     const QSize clientPx = currentClientPixelSize();
     if (clientPx.width() <= 0 || clientPx.height() <= 0) {
+        return;
+    }
+    tryDiscoverTrackedItem();
+    // Phase 4a: when a QML target item is tracked the visual follows
+    // the item; otherwise we fall back to the Phase-1 demo region.
+    if (trackedItem_ != nullptr) {
+        applyTrackedItemGeometry();
         return;
     }
     // From Phase 2: route resize through the renderer so the swap chain
@@ -486,6 +506,90 @@ void PreviewDCompSurface::onWindowVisibilityChanged()
     if (window_->isVisible() && !initialised_) {
         initialiseIfReady();
     }
+    tryDiscoverTrackedItem();
+}
+
+void PreviewDCompSurface::onTrackedItemGeometryChanged()
+{
+    applyTrackedItemGeometry();
+}
+
+void PreviewDCompSurface::tryDiscoverTrackedItem()
+{
+    if (trackedItem_ != nullptr) return;
+    if (window_ == nullptr) return;
+    QQuickItem* found = window_->findChild<QQuickItem*>(
+        QStringLiteral("preview_dcomp_track_target"));
+    if (found != nullptr) {
+        setTrackedItem(found);
+    }
+}
+
+void PreviewDCompSurface::setTrackedItem(QQuickItem* item)
+{
+    if (trackedItem_ == item) return;
+    for (auto& c : trackedItemConnections_) {
+        QObject::disconnect(c);
+    }
+    trackedItemConnections_.clear();
+    trackedItem_ = item;
+    if (trackedItem_ == nullptr) {
+        logSurface("track_target_cleared");
+        return;
+    }
+    // Position-, size-, and visibility-affecting signals on the item.
+    // The item's mapToScene depends on its parent chain too — ancestor
+    // moves can change the scene-space origin without firing on the
+    // tracked item. For simplicity we re-read on every published
+    // snapshot (renderer thread reads stable swap-chain state); GUI
+    // ancestor moves in a stable layout are rare.
+    auto track = [this](QMetaObject::Connection c) {
+        if (c) trackedItemConnections_.append(c);
+    };
+    track(QObject::connect(trackedItem_, &QQuickItem::xChanged,
+                            this, &PreviewDCompSurface::onTrackedItemGeometryChanged));
+    track(QObject::connect(trackedItem_, &QQuickItem::yChanged,
+                            this, &PreviewDCompSurface::onTrackedItemGeometryChanged));
+    track(QObject::connect(trackedItem_, &QQuickItem::widthChanged,
+                            this, &PreviewDCompSurface::onTrackedItemGeometryChanged));
+    track(QObject::connect(trackedItem_, &QQuickItem::heightChanged,
+                            this, &PreviewDCompSurface::onTrackedItemGeometryChanged));
+    track(QObject::connect(trackedItem_, &QQuickItem::visibleChanged,
+                            this, &PreviewDCompSurface::onTrackedItemGeometryChanged));
+    track(QObject::connect(trackedItem_, &QQuickItem::parentChanged,
+                            this, &PreviewDCompSurface::onTrackedItemGeometryChanged));
+    track(QObject::connect(trackedItem_, &QQuickItem::windowChanged,
+                            this, &PreviewDCompSurface::onTrackedItemGeometryChanged));
+    logSurface("track_target_attached",
+               QStringLiteral("item=0x%1 w=%2 h=%3")
+                   .arg(reinterpret_cast<quintptr>(trackedItem_.data()), 0, 16)
+                   .arg(trackedItem_->width())
+                   .arg(trackedItem_->height()));
+    applyTrackedItemGeometry();
+}
+
+void PreviewDCompSurface::applyTrackedItemGeometry()
+{
+    if (!initialised_) return;
+    if (trackedItem_ == nullptr || window_ == nullptr) return;
+    if (trackedItem_->window() != window_.data()) return;
+    if (!trackedItem_->isVisible()) return;
+    const qreal itemW = trackedItem_->width();
+    const qreal itemH = trackedItem_->height();
+    if (itemW <= 0.0 || itemH <= 0.0) return;
+
+    const QPointF topLeftScene = trackedItem_->mapToScene(QPointF(0, 0));
+    const qreal dpr = window_->effectiveDevicePixelRatio() > 0.0
+        ? window_->effectiveDevicePixelRatio() : 1.0;
+    const int xPx = qRound(topLeftScene.x() * dpr);
+    const int yPx = qRound(topLeftScene.y() * dpr);
+    const QSize pixelSize(qRound(itemW * dpr), qRound(itemH * dpr));
+    if (pixelSize.width() <= 0 || pixelSize.height() <= 0) return;
+
+    if (pixelSize != core_.swapChainPixelSize()) {
+        renderer_.requestResize(pixelSize);
+    }
+    core_.setVisualTransform(xPx, yPx, pixelSize);
 }
 
 bool PreviewDCompSurface::initialiseIfReady()

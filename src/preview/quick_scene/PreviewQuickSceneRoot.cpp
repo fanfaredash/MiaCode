@@ -143,6 +143,11 @@ PreviewQuickSceneRoot::PreviewQuickSceneRoot(QQuickItem* parent)
     , instanceId_(nextPreviewQuickSceneRootInstanceId())
 {
     setFlag(ItemHasContents, true);
+    // Phase 4a — let PreviewDCompSurface auto-discover this item via
+    // QObject::findChild on the QQuickWindow. Decoupled from the
+    // dcomp/ side: surface looks up by objectName instead of taking a
+    // direct dependency on PreviewQuickSceneRoot's type.
+    setObjectName(QStringLiteral("preview_dcomp_track_target"));
     appendQuickSceneLog(
         QStringLiteral("scene_root_construct"),
         QString("%1 item_visible=%2")
