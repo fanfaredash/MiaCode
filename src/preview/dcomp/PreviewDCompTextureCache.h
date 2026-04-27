@@ -43,28 +43,56 @@ public:
     PreviewDCompTextureCache& operator=(const PreviewDCompTextureCache&) = delete;
 
 #ifdef Q_OS_WIN
-    // Look up or create the ID3D11ShaderResourceView for `image`.
+    // Look up or create the ID3D11ShaderResourceView for `image`. When
+    // `cacheable` is true the SRV is retained in the persistent cache
+    // keyed on QImage::cacheKey(); when false it is held only for the
+    // current frame and freed on the next endFrame() call. The legacy
+    // QSG path (PreviewTextureRepository) uses the same split because
+    // sprite layers re-decode QImages per frame for animated content,
+    // each producing a distinct cacheKey — without per-frame eviction
+    // the GPU runs out of memory in seconds and the driver removes the
+    // device (DXGI_ERROR_DEVICE_REMOVED).
+    //
     // Returns nullptr if image is null, the QImage has zero pixel size,
     // or D3D11 texture creation fails. Caller must use `device` only
     // from the render thread (D3D11Device::Create* are thread-safe but
-    // we rely on the cache map being single-threaded).
+    // the cache maps themselves are single-threaded).
     ID3D11ShaderResourceView* lookupOrCreate(const QImage* image,
-                                              ID3D11Device* device);
+                                              ID3D11Device* device,
+                                              bool cacheable);
 
-    // Drop all cached textures. Call from the render thread before the
-    // associated D3D11 device is released.
+    // Free the transient SRVs created with cacheable=false during the
+    // frame just rendered. Call from the render thread once per frame,
+    // after all draw calls referencing those SRVs have been issued.
+    void endFrame();
+
+    // Drop all cached textures (cacheable + transient). Call from the
+    // render thread before the associated D3D11 device is released.
     void clear();
 
-    int size() const { return cache_.size(); }
+    int cacheableSize() const { return cacheable_.size(); }
+    int transientSize() const { return transient_.size(); }
 #else
-    void* lookupOrCreate(const QImage*, void*) { return nullptr; }
+    void* lookupOrCreate(const QImage*, void*, bool) { return nullptr; }
+    void endFrame() {}
     void clear() {}
-    int size() const { return 0; }
+    int cacheableSize() const { return 0; }
+    int transientSize() const { return 0; }
 #endif
 
 private:
 #ifdef Q_OS_WIN
-    QHash<qint64, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView>> cache_;
+    // Storage holds raw SRV pointers with manual AddRef/Release. We
+    // *cannot* store Microsoft::WRL::ComPtr directly here: QHash's
+    // rehash on growth relocates entries, and the resulting move
+    // sequence interacts badly with ComPtr's move constructor — under
+    // observation, lookups after a rehash returned a hash entry whose
+    // ComPtr had ptr_==nullptr (logged as `hit_null_inner`). Manual
+    // AddRef in lookupOrCreate, Release in endFrame()/clear() avoids
+    // that whole class of issue: QHash only relocates pointer-sized
+    // PODs, which it handles correctly.
+    QHash<qint64, ID3D11ShaderResourceView*> cacheable_;
+    QHash<qint64, ID3D11ShaderResourceView*> transient_;
 #endif
 };
 

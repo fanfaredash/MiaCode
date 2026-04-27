@@ -35,18 +35,36 @@ PreviewDCompTextureCache::~PreviewDCompTextureCache()
 #ifdef Q_OS_WIN
 
 ID3D11ShaderResourceView* PreviewDCompTextureCache::lookupOrCreate(
-    const QImage* image, ID3D11Device* device)
+    const QImage* image, ID3D11Device* device, bool cacheable)
 {
     if (image == nullptr || image->isNull() || device == nullptr) {
+        logCache("reject_null",
+                 QStringLiteral("img_ptr=%1 isnull=%2 device_ptr=%3")
+                     .arg(reinterpret_cast<quintptr>(image), 0, 16)
+                     .arg(image && image->isNull() ? 1 : 0)
+                     .arg(reinterpret_cast<quintptr>(device), 0, 16));
         return nullptr;
     }
     if (image->width() <= 0 || image->height() <= 0) {
+        logCache("reject_size",
+                 QStringLiteral("w=%1 h=%2 cacheable=%3 format=%4 cache_key=0x%5")
+                     .arg(image->width())
+                     .arg(image->height())
+                     .arg(cacheable ? 1 : 0)
+                     .arg(static_cast<int>(image->format()))
+                     .arg(static_cast<quint64>(image->cacheKey()), 0, 16));
         return nullptr;
     }
 
     const qint64 key = image->cacheKey();
-    if (auto it = cache_.constFind(key); it != cache_.constEnd()) {
-        return it->Get();
+    if (cacheable) {
+        if (auto it = cacheable_.constFind(key); it != cacheable_.constEnd()) {
+            return *it;
+        }
+    } else {
+        if (auto it = transient_.constFind(key); it != transient_.constEnd()) {
+            return *it;
+        }
     }
 
     // Convert to a D3D11-friendly format. R8G8B8A8_UNORM with premultiplied
@@ -100,21 +118,56 @@ ID3D11ShaderResourceView* PreviewDCompTextureCache::lookupOrCreate(
         return nullptr;
     }
 
-    cache_.insert(key, srv);
-    if ((cache_.size() % 32) == 0) {
-        // Sparse log so we can see cache growth without flooding when
-        // chart sprites populate the cache for the first time.
-        logCache("growth", QStringLiteral("count=%1").arg(cache_.size()));
+    // Manual AddRef so the cache holds an owning ref to the SRV. Local
+    // ComPtr `srv` releases its ref when this function returns; the
+    // cache's stored raw pointer keeps the SRV alive via this AddRef.
+    ID3D11ShaderResourceView* raw = srv.Get();
+    raw->AddRef();
+    if (cacheable) {
+        cacheable_.insert(key, raw);
+        if ((cacheable_.size() % 32) == 0) {
+            logCache("cacheable_growth",
+                     QStringLiteral("count=%1").arg(cacheable_.size()));
+        }
+    } else {
+        transient_.insert(key, raw);
     }
-    return srv.Get();
+    return raw;
+}
+
+void PreviewDCompTextureCache::endFrame()
+{
+    // Wipe the per-frame transient compartment. Each Release pairs with
+    // the AddRef in lookupOrCreate; SRV + texture are freed once both
+    // the immediate context's binding refs and our manual ref drop.
+    for (auto it = transient_.cbegin(); it != transient_.cend(); ++it) {
+        if (*it != nullptr) {
+            (*it)->Release();
+        }
+    }
+    transient_.clear();
 }
 
 void PreviewDCompTextureCache::clear()
 {
-    if (!cache_.isEmpty()) {
-        logCache("clear", QStringLiteral("count=%1").arg(cache_.size()));
-        cache_.clear();
+    const int total = cacheable_.size() + transient_.size();
+    if (total > 0) {
+        logCache("clear",
+                 QStringLiteral("cacheable=%1 transient=%2")
+                     .arg(cacheable_.size()).arg(transient_.size()));
     }
+    for (auto it = cacheable_.cbegin(); it != cacheable_.cend(); ++it) {
+        if (*it != nullptr) {
+            (*it)->Release();
+        }
+    }
+    for (auto it = transient_.cbegin(); it != transient_.cend(); ++it) {
+        if (*it != nullptr) {
+            (*it)->Release();
+        }
+    }
+    cacheable_.clear();
+    transient_.clear();
 }
 
 #endif  // Q_OS_WIN

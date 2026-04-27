@@ -176,12 +176,24 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     const QRectF playfieldRect = miacode::preview::scene::playfieldRectForStage(
         stageRect, layoutSquareScale);
 
-    // Backdrop: synthesised single descriptor pointing at the runtime's
-    // outline asset. Lifetime is tied to PreviewRuntime so no
-    // retainedImages entry needed for this one.
+    // Backdrop: synthesised single descriptor backed by a snapshot-owned
+    // QImage copy so the render thread never reads runtime-owned QImage
+    // state. The QImage copy is implicit-shared (CoW) — same underlying
+    // pixel data as the runtime's outline asset, but the QImage object
+    // we hand to the render thread is private to this snapshot. If the
+    // runtime later reassigns state.assets.outlineImage (asset reload),
+    // its detach lands on a fresh d-pointer; ours stays bound to the
+    // original data via the QSharedPointer ref. Without this copy,
+    // sprite.image = &state.assets.outlineImage races with runtime
+    // mutations on the GUI thread and shows up on the render thread as
+    // intermittent isNull()=true → no backdrop drawn (the symptom we
+    // saw as `vertices=0 runs=0 cache_hit=2`).
     if (!state.assets.outlineImage.isNull()) {
+        auto backdropImage =
+            QSharedPointer<QImage>::create(state.assets.outlineImage);
+        snapshot.retainedImages.append(backdropImage);
         miacode::preview::scene::PreviewSpriteDescriptor backdrop;
-        backdrop.image = &state.assets.outlineImage;
+        backdrop.image = backdropImage.data();
         backdrop.center = playfieldRect.center();
         backdrop.width = playfieldRect.width();
         backdrop.height = playfieldRect.height();
@@ -204,6 +216,21 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     }
     for (auto& image : trackState.ownedImages) {
         snapshot.retainedImages.append(image);
+    }
+
+    // Phase 3.3b/c diagnostic: log every Nth publish so we can correlate
+    // GUI-thread snapshot building against render-thread consumption when
+    // chasing crashes. Sparse to keep the log readable; revision is a
+    // monotonic counter so any gap between consecutive lines tells us
+    // some snapshots were published but not logged here.
+    if ((snapshot.revision % 30) == 0 || snapshot.revision <= 5) {
+        logSurface("snapshot_published",
+                   QStringLiteral("revision=%1 sprites=%2 retained=%3 playhead=%4 logical=%5x%6")
+                       .arg(snapshot.revision)
+                       .arg(snapshot.sprites.size())
+                       .arg(snapshot.retainedImages.size())
+                       .arg(snapshot.playheadSeconds, 0, 'f', 3)
+                       .arg(logicalSize.width()).arg(logicalSize.height()));
     }
 
     renderer_.publishSnapshot(snapshot);

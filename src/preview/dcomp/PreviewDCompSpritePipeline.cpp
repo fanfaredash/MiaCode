@@ -621,15 +621,39 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
     if (!ready_ || context == nullptr || device == nullptr || rtv == nullptr) {
         return false;
     }
-    const int width = rtvLogicalSize.width() > 0 ? rtvLogicalSize.width() : 1;
-    const int height = rtvLogicalSize.height() > 0 ? rtvLogicalSize.height() : 1;
 
-    // Project from logical pixel coordinates into NDC. The descriptor
-    // positions Surface produced are in QQuickWindow logical-pixel
-    // coordinates (matching the QML scene's layout), which is what we
-    // want — every sprite's center/width/height is in those units.
+    // Phase 3.3 diagnostic: log first call so a silent crash on the very
+    // first frame is distinguishable from a crash later. Subsequent calls
+    // are silent — the renderer's `snapshot_sprite_count` log handles the
+    // ongoing case.
+    static thread_local bool s_loggedFirstCall = false;
+    if (!s_loggedFirstCall) {
+        s_loggedFirstCall = true;
+        logPipeline("renderSnapshot_first_call",
+                    QStringLiteral("revision=%1 sprites=%2 rtv_w=%3 rtv_h=%4")
+                        .arg(snapshot.revision)
+                        .arg(snapshot.sprites.size())
+                        .arg(rtvLogicalSize.width())
+                        .arg(rtvLogicalSize.height()));
+    }
+
+    const int rtvWidth = rtvLogicalSize.width() > 0 ? rtvLogicalSize.width() : 1;
+    const int rtvHeight = rtvLogicalSize.height() > 0 ? rtvLogicalSize.height() : 1;
+
+    // Project from the QQuickWindow logical-pixel coordinate space the
+    // descriptors were built in, NOT the swap-chain pixel size. The
+    // Phase-1 swap chain is fixed at 200×200 (the demo region), but the
+    // sprite descriptors come from the full 1280×800 layout. Mapping
+    // window-space to NDC and rasterising with a 200×200 viewport
+    // squeezes the whole scene into the demo rectangle — so something
+    // visible lands in the top-left, even though Phase 4 will replace
+    // this with placeholder-aligned coordinates.
+    const int sceneWidth = snapshot.sceneLogicalSize.width() > 0
+        ? snapshot.sceneLogicalSize.width() : rtvWidth;
+    const int sceneHeight = snapshot.sceneLogicalSize.height() > 0
+        ? snapshot.sceneLogicalSize.height() : rtvHeight;
     PreviewDCompSpriteUniformBlock uniforms{};
-    writeOrthoTopLeftPixelMatrix(uniforms.matrix, width, height);
+    writeOrthoTopLeftPixelMatrix(uniforms.matrix, sceneWidth, sceneHeight);
     uniforms.opacity = 1.0f;
     uniforms.wave = 0.0f;
     uniforms.absWave = 0.0f;
@@ -651,13 +675,23 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
     std::vector<DrawRun> runs;
     runs.reserve(16);
 
+    // Phase 3.3 diagnostic: track per-frame skip reasons so a loop that
+    // produces zero vertices is debuggable. Counts captured per-frame
+    // and emitted by the geometry log block below.
+    int skipNullImage = 0;
+    int skipNullSrv = 0;
+    int skipEmitFiltered = 0;
+    int processed = 0;
+
     for (const auto& sprite : snapshot.sprites) {
         if (sprite.image == nullptr || sprite.image->isNull()) {
+            ++skipNullImage;
             continue;
         }
         ID3D11ShaderResourceView* srv =
-            textureCache.lookupOrCreate(sprite.image, device);
+            textureCache.lookupOrCreate(sprite.image, device, sprite.cacheable);
         if (srv == nullptr) {
+            ++skipNullSrv;
             continue;
         }
         if (runs.empty() || runs.back().srv != srv) {
@@ -669,23 +703,65 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
         }
         const int before = static_cast<int>(staging.size());
         emitSpriteVertices(sprite, staging);
-        runs.back().vertexCount += static_cast<int>(staging.size()) - before;
+        const int added = static_cast<int>(staging.size()) - before;
+        runs.back().vertexCount += added;
+        if (added == 0) {
+            ++skipEmitFiltered;
+        }
+        ++processed;
+    }
+
+    // Phase 3.3 diagnostic: log vertex count every 60 frames so we can
+    // tell whether emitSpriteVertices is producing geometry — sprites=N
+    // in the snapshot doesn't guarantee N quads survive the
+    // width/height/opacity filter inside emitSpriteVertices.
+    static thread_local qint64 s_diagFrameCount = 0;
+    s_diagFrameCount += 1;
+    if ((s_diagFrameCount % 60) == 1) {
+        logPipeline("renderSnapshot_geom",
+                    QStringLiteral("sprites=%1 vertices=%2 runs=%3 cache_hit=%4 skip_null_img=%5 skip_null_srv=%6 skip_emit_filtered=%7 processed=%8")
+                        .arg(snapshot.sprites.size())
+                        .arg(static_cast<int>(staging.size()))
+                        .arg(static_cast<int>(runs.size()))
+                        .arg(textureCache.cacheableSize() + textureCache.transientSize())
+                        .arg(skipNullImage)
+                        .arg(skipNullSrv)
+                        .arg(skipEmitFiltered)
+                        .arg(processed));
     }
 
     // Upload vertices. Skip the draw if no sprites contributed any
-    // vertices (can happen with all-degenerate descriptors); fall back
-    // to clearing the RTV to black so the previous frame doesn't ghost.
+    // vertices (degenerate descriptors filtered by emitSpriteVertices,
+    // or empty snapshot.sprites). Empty path uses an opaque RED clear so
+    // that visually we can distinguish it from the non-empty path's GREY
+    // clear — different colour makes the active code path obvious in a
+    // single glance at the demo region.
     if (staging.empty()) {
-        const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        const float clearColor[4] = { 0.55f, 0.10f, 0.10f, 1.0f };
         ID3D11RenderTargetView* rtvs[1] = { rtv };
         context->OMSetRenderTargets(1, rtvs, nullptr);
         context->ClearRenderTargetView(rtv, clearColor);
         return true;
     }
     if (static_cast<int>(staging.size()) > kMaxVertices) {
-        // Buffer overflow guard. Phase 3.4+ will grow the buffer
-        // dynamically once we know the steady-state vertex count.
+        // Buffer overflow guard. Truncate `staging` AND any run whose
+        // [firstVertex, firstVertex+vertexCount) extends past kMaxVertices,
+        // so the per-batch Draw calls never reference uninitialised buffer
+        // contents — that's UB and on real drivers can trigger device
+        // removal. Phase 3.4+ will grow the buffer dynamically once we
+        // know the steady-state vertex count.
+        logPipeline("renderSnapshot_overflow",
+                    QStringLiteral("requested=%1 max=%2 truncated=1")
+                        .arg(static_cast<int>(staging.size()))
+                        .arg(kMaxVertices));
         staging.resize(kMaxVertices);
+        for (auto& run : runs) {
+            if (run.firstVertex >= kMaxVertices) {
+                run.vertexCount = 0;
+            } else if (run.firstVertex + run.vertexCount > kMaxVertices) {
+                run.vertexCount = kMaxVertices - run.firstVertex;
+            }
+        }
     }
 
     D3D11_MAPPED_SUBRESOURCE mapped{};
@@ -699,9 +775,14 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
                 staging.size() * sizeof(PreviewDCompSpriteVertex));
     context->Unmap(vertexBuffer_.Get(), 0);
 
-    // Bind RTV, clear to fully-transparent black so the surrounding
-    // pixels DComp composites over the QML scene aren't tinted.
-    const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    // Phase 3.3 diagnostic clear: opaque dark grey so the demo region is
+    // always visible, even if every sprite lands outside the viewport
+    // (the swap chain is still 200x200, but descriptors are in 1280x800
+    // logical space until Phase 4 aligns the placeholder rect). Without
+    // an opaque clear "DComp surface invisible because no sprites
+    // rendered" is indistinguishable from "DComp surface broken." Phase
+    // 4 switches this to fully-transparent so DComp can blend over QML.
+    const float clearColor[4] = { 0.15f, 0.15f, 0.18f, 1.0f };
     ID3D11RenderTargetView* rtvs[1] = { rtv };
     context->OMSetRenderTargets(1, rtvs, nullptr);
     context->ClearRenderTargetView(rtv, clearColor);
@@ -709,8 +790,8 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
     D3D11_VIEWPORT vp{};
     vp.TopLeftX = 0.0f;
     vp.TopLeftY = 0.0f;
-    vp.Width = static_cast<float>(width);
-    vp.Height = static_cast<float>(height);
+    vp.Width = static_cast<float>(rtvWidth);
+    vp.Height = static_cast<float>(rtvHeight);
     vp.MinDepth = 0.0f;
     vp.MaxDepth = 1.0f;
     context->RSSetViewports(1, &vp);
@@ -742,6 +823,13 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
         context->PSSetShaderResources(0, 1, srvs);
         context->Draw(run.vertexCount, run.firstVertex);
     }
+
+    // Release any transient SRVs that were created for non-cacheable
+    // sprites this frame. The runs[] vector still holds raw SRV pointers
+    // but those pointers won't be dereferenced again — D3D11 only needs
+    // them while the Draw command is in flight, and the command list is
+    // submitted to the GPU before this returns.
+    textureCache.endFrame();
     return true;
 }
 
