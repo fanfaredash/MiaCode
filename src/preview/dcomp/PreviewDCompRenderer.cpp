@@ -1,6 +1,7 @@
 #include "preview/dcomp/PreviewDCompRenderer.h"
 
 #include "common/DebugLog.h"
+#include "common/Mmcss.h"
 
 #include <QString>
 
@@ -178,6 +179,23 @@ void PreviewDCompRenderer::renderLoop()
     // against frame pacing data.
     ::SetThreadDescription(::GetCurrentThread(), L"MiaCodeDComp");
 
+    // Phase 4b-perf — register with MMCSS so the OS scheduler protects
+    // this thread from being preempted by background work (indexing,
+    // antivirus, normal-priority threads). Qt's QSG render thread does
+    // the same; without it our render thread takes occasional ~22 ms
+    // hits from being scheduled out for one quantum, which the user
+    // sees as the HUD's `stut` count >20.
+    const auto mmcssResult =
+        miacode::mmcss::registerCurrentThread(QStringLiteral("Games"));
+    logRenderer("mmcss_register",
+                QStringLiteral("registered=%1 task=%2 reason=%3 errno=%4")
+                    .arg(mmcssResult.registered ? 1 : 0)
+                    .arg(mmcssResult.taskClassUsed.isEmpty()
+                         ? QStringLiteral("(none)") : mmcssResult.taskClassUsed)
+                    .arg(mmcssResult.skipReason.isEmpty()
+                         ? QStringLiteral("(ok)") : mmcssResult.skipReason)
+                    .arg(mmcssResult.lastErrorCode));
+
     while (!stopRequested_.load(std::memory_order_acquire)) {
         // Plan §2: block on the GPU fence so we wake exactly once per
         // vsync slot when DXGI is ready to enqueue the next present.
@@ -218,6 +236,11 @@ void PreviewDCompRenderer::renderLoop()
         renderAnimatedFrame();
         framesRendered_.fetch_add(1, std::memory_order_release);
     }
+
+    // Pair with the MMCSS registration above. The handle is per-thread;
+    // unregister here so the OS reclaims the slot before this thread
+    // exits. Safe to call even if registration failed.
+    miacode::mmcss::unregisterCurrentThread();
 #endif
 }
 
