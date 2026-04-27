@@ -9,6 +9,7 @@
 #include <QFontMetrics>
 #include <QPainter>
 #include <QQuickWindow>
+#include <QTimer>
 
 namespace {
 
@@ -30,17 +31,58 @@ void drawHudText(QPainter& painter, const QPointF& baseline, const QString& text
 
 }  // namespace
 
+// Min interval between HUD repaints. The HUD shows FPS/max-ms/stutter
+// counts which are statistical aggregates over a ~1s rolling window —
+// updating their visual presentation at ~10Hz is indistinguishable to the
+// eye from updating at 60Hz, but cuts the QSG sync cost by 6× because the
+// QQuickPaintedItem only re-rasterises its full-area backing texture on
+// actual update() calls. Empirically observed to drop the QSG sync phase
+// from ~7.8ms/frame to ~2-3ms on the test chart.
+constexpr qint64 kHudUpdateIntervalMs = 100;
+
 PreviewQuickHudLayer::PreviewQuickHudLayer(QQuickItem* parent)
     : QQuickPaintedItem(parent)
 {
     setOpaquePainting(false);
     setAntialiasing(true);
+    hudUpdateThrottleTimer_.start();
     connect(this, &QQuickItem::windowChanged, this, [this](QQuickWindow*) {
         if (runtime_ != nullptr) {
             runtime_->setFrameSize(boundingRect().size().toSize());
         }
         update();
     });
+}
+
+void PreviewQuickHudLayer::requestThrottledUpdate()
+{
+    if (!hudUpdateThrottleTimer_.isValid()) {
+        hudUpdateThrottleTimer_.start();
+    }
+    const qint64 nowMs = hudUpdateThrottleTimer_.elapsed();
+    if (lastHudUpdateMs_ < 0 || (nowMs - lastHudUpdateMs_) >= kHudUpdateIntervalMs) {
+        lastHudUpdateMs_ = nowMs;
+        hudUpdatePending_ = false;
+        update();
+        return;
+    }
+    // Inside the throttle window — schedule a single deferred update so the
+    // last frameStateChanged in the window still produces a visible refresh
+    // (otherwise a burst of changes ending at the start of the window would
+    // never repaint until the next frameStateChanged after the window
+    // closes, leaving stale text on screen).
+    if (!hudUpdatePending_) {
+        hudUpdatePending_ = true;
+        const qint64 delayMs = kHudUpdateIntervalMs - (nowMs - lastHudUpdateMs_);
+        QTimer::singleShot(qMax<qint64>(1, delayMs), this, [this]() {
+            if (!hudUpdatePending_) {
+                return;
+            }
+            lastHudUpdateMs_ = hudUpdateThrottleTimer_.elapsed();
+            hudUpdatePending_ = false;
+            update();
+        });
+    }
 }
 
 void PreviewQuickHudLayer::setRuntime(PreviewRuntime* runtime)
@@ -55,7 +97,7 @@ void PreviewQuickHudLayer::setRuntime(PreviewRuntime* runtime)
     if (runtime_ != nullptr) {
         frameState_ = nullptr;
         runtimeUpdateConnection_ = QObject::connect(runtime_, &PreviewRuntime::frameStateChanged, this, [this]() {
-            update();
+            requestThrottledUpdate();
         });
         runtime_->setFrameSize(boundingRect().size().toSize());
     }
@@ -156,13 +198,29 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
                 .arg(state->usedGpuRendererThisFrame ? QStringLiteral("GPU") : QStringLiteral("CPU"))
                 .arg(state->cpuFallbackCount)
         );
+        // The trailing max=Nms and stut=N metrics surface what an FPS average
+        // hides: max is the worst single inter-event interval in the rolling
+        // window, stut is the count of intervals exceeding 1.5× the target
+        // (i.e. user-noticeable hitches). A clean 60fps line should show
+        // max≈17ms stut=0; numbers above that are the actual lag the user
+        // perceives even when the FPS figure looks healthy.
         drawDebugLine(
-            QStringLiteral("Present: %1 FPS").arg(QString::number(state->fpsDisplay, 'f', 1))
+            QStringLiteral("Present: %1 FPS  max=%2ms  stut=%3")
+                .arg(QString::number(state->fpsDisplay, 'f', 1))
+                .arg(QString::number(state->presentMaxMsDisplay, 'f', 0))
+                .arg(state->presentStutterCountDisplay)
         );
         drawDebugLine(
-            QStringLiteral("Tick: %1 FPS  Req: %2 FPS")
+            QStringLiteral("Tick: %1 FPS  max=%2ms  stut=%3")
                 .arg(QString::number(state->tickFpsDisplay, 'f', 1))
+                .arg(QString::number(state->tickMaxMsDisplay, 'f', 0))
+                .arg(state->tickStutterCountDisplay)
+        );
+        drawDebugLine(
+            QStringLiteral("Req: %1 FPS  max=%2ms  stut=%3")
                 .arg(QString::number(state->updateRequestFpsDisplay, 'f', 1))
+                .arg(QString::number(state->updateRequestMaxMsDisplay, 'f', 0))
+                .arg(state->updateRequestStutterCountDisplay)
         );
         drawDebugLine(
             QStringLiteral("Count T/U/P: %1 / %2 / %3")

@@ -49,6 +49,33 @@ double rollingMaxMs(const QVector<double>& samples, int count)
     return maxMs;
 }
 
+// Multiplier applied to the target frame interval to flag a "stutter".
+// 1.5× target (≈25ms at 60Hz) is the threshold beyond which an isolated
+// frame is reliably noticeable. Counted against the rolling sample window
+// so the HUD shows a per-second-scale figure.
+constexpr double kStutterMultiplier = 1.5;
+
+int rollingStutterCount(const QVector<double>& samples, int count, double thresholdMs)
+{
+    if (thresholdMs <= 0.0 || count <= 0) {
+        return 0;
+    }
+    int stutters = 0;
+    for (int index = 0; index < count; ++index) {
+        if (samples.at(index) > thresholdMs) {
+            ++stutters;
+        }
+    }
+    return stutters;
+}
+
+double targetIntervalMsForStutterDetection(double targetFps)
+{
+    // Fall back to 60fps if target hasn't been published yet (early frames).
+    const double effectiveTarget = targetFps > 1.0 ? targetFps : 60.0;
+    return 1000.0 / effectiveTarget;
+}
+
 struct PlaybackScopeAccumulator {
     bool active = false;
     double* sumMs = nullptr;
@@ -214,6 +241,14 @@ void PreviewRuntime::update()
         frameState_.updateRequestFpsDisplay,
         playbackScope
     );
+    {
+        const double thresholdMs = kStutterMultiplier
+            * targetIntervalMsForStutterDetection(frameState_.framePacingTargetFps);
+        frameState_.updateRequestMaxMsDisplay =
+            rollingMaxMs(updateRequestIntervalsMs_, updateRequestIntervalCount_);
+        frameState_.updateRequestStutterCountDisplay = rollingStutterCount(
+            updateRequestIntervalsMs_, updateRequestIntervalCount_, thresholdMs);
+    }
     pendingPresentedStatsRefresh_ = true;
     emit frameStateChanged();
     if (visibleHostWindow_ != nullptr) {
@@ -527,6 +562,12 @@ void PreviewRuntime::reset()
     frameState_.fpsDisplay = 0.0;
     frameState_.tickFpsDisplay = 0.0;
     frameState_.updateRequestFpsDisplay = 0.0;
+    frameState_.presentMaxMsDisplay = 0.0;
+    frameState_.tickMaxMsDisplay = 0.0;
+    frameState_.updateRequestMaxMsDisplay = 0.0;
+    frameState_.presentStutterCountDisplay = 0;
+    frameState_.tickStutterCountDisplay = 0;
+    frameState_.updateRequestStutterCountDisplay = 0;
     frameState_.tickCount = 0;
     frameState_.updateRequestCount = 0;
     frameState_.presentedFrameCount = 0;
@@ -562,6 +603,14 @@ void PreviewRuntime::noteTickForProfiling()
         frameState_.tickFpsDisplay,
         playbackScope
     );
+    {
+        const double thresholdMs = kStutterMultiplier
+            * targetIntervalMsForStutterDetection(frameState_.framePacingTargetFps);
+        frameState_.tickMaxMsDisplay =
+            rollingMaxMs(tickIntervalsMs_, tickIntervalCount_);
+        frameState_.tickStutterCountDisplay = rollingStutterCount(
+            tickIntervalsMs_, tickIntervalCount_, thresholdMs);
+    }
 }
 
 void PreviewRuntime::notePresentedTextureStats(const PreviewTextureStats& stats)
@@ -906,6 +955,12 @@ void PreviewRuntime::resetProfilingSession()
     frameState_.fpsDisplay = 0.0;
     frameState_.tickFpsDisplay = 0.0;
     frameState_.updateRequestFpsDisplay = 0.0;
+    frameState_.presentMaxMsDisplay = 0.0;
+    frameState_.tickMaxMsDisplay = 0.0;
+    frameState_.updateRequestMaxMsDisplay = 0.0;
+    frameState_.presentStutterCountDisplay = 0;
+    frameState_.tickStutterCountDisplay = 0;
+    frameState_.updateRequestStutterCountDisplay = 0;
     frameState_.tickCount = 0;
     frameState_.updateRequestCount = 0;
     frameState_.presentedFrameCount = 0;
@@ -1378,6 +1433,14 @@ void PreviewRuntime::updatePresentedFrameStats()
         frameState_.fpsDisplay,
         playbackScope
     );
+    {
+        const double thresholdMs = kStutterMultiplier
+            * targetIntervalMsForStutterDetection(frameState_.framePacingTargetFps);
+        frameState_.presentMaxMsDisplay =
+            rollingMaxMs(presentedFrameIntervalsMs_, presentedFrameIntervalCount_);
+        frameState_.presentStutterCountDisplay = rollingStutterCount(
+            presentedFrameIntervalsMs_, presentedFrameIntervalCount_, thresholdMs);
+    }
     frameState_.usedGpuRendererThisFrame = true;
     frameState_.cpuFallbackCount = 0;
 }
