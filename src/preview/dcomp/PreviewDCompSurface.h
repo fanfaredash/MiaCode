@@ -88,6 +88,7 @@ private:
     miacode::preview::scene::PreviewLayerWindowCursor trackCursor_;
     miacode::preview::scene::PreviewLayerWindowCursor slideMotionCursor_;
     miacode::preview::scene::PreviewLayerWindowCursor judgeEffectCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor judgeFireworkCursor_;
     miacode::preview::scene::PreviewLayerWindowCursor touchCursor_;
     miacode::preview::scene::PreviewLayerWindowCursor touchJudgeCursor_;
     miacode::preview::scene::PreviewLayerWindowCursor touchHoldCursor_;

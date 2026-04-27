@@ -75,6 +75,26 @@ struct PreviewDCompSpriteUniformBlock
 static_assert(sizeof(PreviewDCompSpriteUniformBlock) == 80,
               "PreviewDCompSpriteUniformBlock layout must match cbuffer");
 
+// Phase 3.5c — firework material constant buffer. Layout matches the
+// legacy GLSL fragment shader's std140 block in
+// src/preview/quick_scene/shaders/PreviewFireworkMaterial.frag (16-byte
+// alignment, vec4-grouped scalars). Updated once per firework draw —
+// typical chart has ≤1 active firework per frame.
+struct PreviewDCompFireworkUniformBlock
+{
+    float matrix[16];           // 64 bytes: projection (logical-pixel → NDC)
+    float opacity;              //  4
+    float quadRadius;           //  4
+    float clipRadius;           //  4 (unused on D3D11 — we don't use scissor; kept for layout parity)
+    float outerRadius;          //  4
+    float fireworkAndHole[4];   // 16: alpha, rotation°, holeRadius, holeMaskRadius
+    float colorBallSmall[4];    // 16: ballRadius, ballAlpha, sourceAspect, fallbackBallRadius
+    float colorBallBig[4];      // 16: bigBallRadius, bigBallAlpha, fallbackBallAlpha, renderFlags
+    float sourceRect[4];        // 16: texture sub-region (x, y, w, h) in [0,1]
+};
+static_assert(sizeof(PreviewDCompFireworkUniformBlock) == 144,
+              "PreviewDCompFireworkUniformBlock must match legacy std140 layout");
+
 class PreviewDCompSpritePipeline
 {
 public:
@@ -137,11 +157,18 @@ private:
 
     Microsoft::WRL::ComPtr<ID3D11VertexShader> vs_;
     Microsoft::WRL::ComPtr<ID3D11PixelShader> ps_;
-    // Phase 3.5a — second pixel shader for circle (and future arc/firework)
-    // batches. Same VS + same input layout; the PS reads the colour from
-    // the vertex's (uv.x, uv.y, opacity, effect) slots — repurposed as
-    // RGBA — and ignores the texture sampler entirely.
+    // Phase 3.5a — second pixel shader for circle batches. Same VS +
+    // same input layout; the PS reads the colour from the vertex's
+    // (uv.x, uv.y, opacity, effect) slots — repurposed as RGBA — and
+    // ignores the texture sampler entirely.
     Microsoft::WRL::ComPtr<ID3D11PixelShader> psSolid_;
+    // Phase 3.5c — firework PS. Same VS + same input layout; the PS
+    // ignores the per-vertex opacity/effect and pulls all rendering
+    // parameters from a dedicated constant buffer. Implements the
+    // procedural sector + color-ball logic ported from the legacy
+    // GLSL shader.
+    Microsoft::WRL::ComPtr<ID3D11PixelShader> psFirework_;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> fireworkUniformBuffer_;
     Microsoft::WRL::ComPtr<ID3D11InputLayout> inputLayout_;
     // Lifecycle-scoped: only held between compileShaders() and
     // createInputLayout() so the layout can be validated against the

@@ -8,6 +8,7 @@
 #include "preview/scene/PreviewGuideLayerState.h"
 #include "preview/scene/PreviewHeadLayerState.h"
 #include "preview/scene/PreviewJudgeEffectLayerState.h"
+#include "preview/scene/PreviewJudgeFireworkLayerState.h"
 #include "preview/scene/PreviewMaimuriDxJudgeLayerState.h"
 #include "preview/scene/PreviewMuriActionLayerState.h"
 #include "preview/scene/PreviewMuriPadLayerState.h"
@@ -202,6 +203,7 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
         trackCursor_.reset();
         slideMotionCursor_.reset();
         judgeEffectCursor_.reset();
+        judgeFireworkCursor_.reset();
         touchCursor_.reset();
         touchJudgeCursor_.reset();
         touchHoldCursor_.reset();
@@ -214,6 +216,7 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     scene::syncPreviewLayerWindowCursor(preparedCache_.slideLikeLayer(), playheadSeconds, &trackCursor_);
     scene::syncPreviewLayerWindowCursor(preparedCache_.slideLikeLayer(), playheadSeconds, &slideMotionCursor_);
     scene::syncPreviewLayerWindowCursor(preparedCache_.judgeEffectLayer(), playheadSeconds, &judgeEffectCursor_);
+    scene::syncPreviewLayerWindowCursor(preparedCache_.judgeFireworkLayer(), playheadSeconds, &judgeFireworkCursor_);
     scene::syncPreviewLayerWindowCursor(preparedCache_.touchLayer(), playheadSeconds, &touchCursor_);
     scene::syncPreviewLayerWindowCursor(preparedCache_.touchJudgeLayer(), playheadSeconds, &touchJudgeCursor_);
     scene::syncPreviewLayerWindowCursor(preparedCache_.touchHoldLayer(), playheadSeconds, &touchHoldCursor_);
@@ -261,6 +264,15 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
         snapshot.arcs.append(arcs);
         snapshot.batches.append(batch);
     };
+    const auto pushFireworkBatch = [&](const scene::PreviewJudgeFireworkLayerState& fw) {
+        if (!fw.active) return;
+        PreviewDCompFrameStateSnapshot::DrawBatch batch;
+        batch.type = BatchType::Fireworks;
+        batch.firstIndex = static_cast<qint32>(snapshot.fireworks.size());
+        batch.count = 1;
+        snapshot.fireworks.append(fw);
+        snapshot.batches.append(batch);
+    };
 
     // Backdrop (z=1 in the legacy stack). Snapshot owns its own QImage
     // copy so the render thread never reads runtime-mutated QImage state
@@ -296,7 +308,11 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     // Muri action (z=3) — solid-colour ellipses (Phase 3.5a).
     pushCircleBatch(scene::buildPreviewMuriActionLayerState(state, playfieldRect).circles);
 
-    // Phase 3.5c will insert judge_firework here at z=4.
+    // Judge firework (z=4) — Phase 3.5c. Uses the windowed firework
+    // layer cursor for activation timing.
+    pushFireworkBatch(scene::buildPreviewJudgeFireworkLayerState(
+        state, windowed(preparedCache_.judgeFireworkLayer(), judgeFireworkCursor_),
+        playfieldRect));
 
     // Guide (z=5)
     pushSpriteBatch(scene::buildPreviewGuideLayerSprites(
@@ -387,11 +403,12 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
 
     if ((snapshot.revision % 30) == 0 || snapshot.revision <= 5) {
         logSurface("snapshot_published",
-                   QStringLiteral("revision=%1 sprites=%2 circles=%3 arcs=%4 batches=%5 retained=%6 playhead=%7 logical=%8x%9 cache_rebuilt=%10")
+                   QStringLiteral("revision=%1 sprites=%2 circles=%3 arcs=%4 fireworks=%5 batches=%6 retained=%7 playhead=%8 logical=%9x%10 cache_rebuilt=%11")
                        .arg(snapshot.revision)
                        .arg(snapshot.sprites.size())
                        .arg(snapshot.circles.size())
                        .arg(snapshot.arcs.size())
+                       .arg(snapshot.fireworks.size())
                        .arg(snapshot.batches.size())
                        .arg(snapshot.retainedImages.size())
                        .arg(snapshot.playheadSeconds, 0, 'f', 3)

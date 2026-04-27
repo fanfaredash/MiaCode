@@ -22,6 +22,7 @@
 
 #include "preview/scene/PreviewArcDescriptor.h"
 #include "preview/scene/PreviewCircleDescriptor.h"
+#include "preview/scene/PreviewJudgeFireworkLayerState.h"
 #include "preview/scene/PreviewSpriteDescriptor.h"
 
 #include <QSharedPointer>
@@ -71,13 +72,16 @@ struct PreviewDCompFrameStateSnapshot
     // and are ordered via `batches` below.
     miacode::preview::scene::PreviewCircleDescriptors circles;
     miacode::preview::scene::PreviewArcDescriptors arcs;
+    // Phase 3.5c — judge firework state. Typically zero or one entry
+    // per frame (the chart's currently-firing judge effect, if any).
+    QVector<miacode::preview::scene::PreviewJudgeFireworkLayerState> fireworks;
 
     // Z-ordered draw command list. Each batch references a contiguous
-    // run inside one of the primitive vectors (sprites/circles/arcs).
-    // The pipeline iterates batches in order, switching shaders/state
-    // as needed. The legacy QSG path enforces z-order via its node
-    // tree; this is the equivalent.
-    enum class BatchType : qint8 { Sprites, Circles, Arcs };
+    // run inside one of the primitive vectors (sprites/circles/arcs/
+    // fireworks). The pipeline iterates batches in order, switching
+    // shaders/state as needed. The legacy QSG path enforces z-order
+    // via its node tree; this is the equivalent.
+    enum class BatchType : qint8 { Sprites, Circles, Arcs, Fireworks };
     struct DrawBatch {
         BatchType type = BatchType::Sprites;
         qint32 firstIndex = 0;

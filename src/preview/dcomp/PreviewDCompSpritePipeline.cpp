@@ -113,13 +113,13 @@ float4 main(PSInput input) : SV_TARGET
 }
 )HLSL";
 
-// Phase 3.5a — pixel shader for solid-colour primitives (circles in
-// 3.5a, arcs/fireworks in 3.5b/c). The vertex's (uv.x, uv.y, opacity,
-// effect) slots are repurposed as straight (R, G, B, A). Output is
-// premultiplied to match the swap chain's DXGI_ALPHA_MODE_PREMULTIPLIED
-// the same way the sprite path does (sprite path multiplies the sampled
-// premultiplied texture by opacity; we multiply RGB by A here so a pure
-// red half-transparent fill stores as `(0.5, 0, 0, 0.5)` in the RTV).
+// Phase 3.5a — pixel shader for solid-colour primitives (circles).
+// The vertex's (uv.x, uv.y, opacity, effect) slots are repurposed as
+// straight (R, G, B, A). Output is premultiplied to match the swap
+// chain's DXGI_ALPHA_MODE_PREMULTIPLIED the same way the sprite path
+// does (sprite path multiplies the sampled premultiplied texture by
+// opacity; we multiply RGB by A here so a pure red half-transparent
+// fill stores as `(0.5, 0, 0, 0.5)` in the RTV).
 constexpr const char* kSolidPS = R"HLSL(
 struct PSInput
 {
@@ -136,6 +136,196 @@ float4 main(PSInput input) : SV_TARGET
     float b = input.opacity;
     float a = input.effectIn;
     return float4(r * a, g * a, b * a, a);
+}
+)HLSL";
+
+// Phase 3.5c — firework material PS. Direct port of
+// src/preview/quick_scene/shaders/PreviewFireworkMaterial.frag with
+// minimal mechanical changes (mod→fmod, mix→lerp, vec4→float4,
+// texture()→Sample(), `degrees(x)` already an HLSL intrinsic). Reads
+// 144 bytes of state from a dedicated cbuffer; per-vertex `uv` is
+// the [0,1] mapping over the firework's bounding quad (positions in
+// world-space).
+constexpr const char* kFireworkPS = R"HLSL(
+cbuffer FireworkUniforms : register(b1)
+{
+    float4x4 projection;
+    float    globalOpacity;
+    float    quadRadius;
+    float    clipRadius;
+    float    outerRadius;
+    float4   fireworkAndHole;   // alpha, rotation°, holeR, holeMaskR
+    float4   colorBallSmall;    // smallR, smallA, sourceAspect, fallbackR
+    float4   colorBallBig;      // bigR, bigA, fallbackA, renderFlags
+    float4   sourceRect;        // texture sub-region (x,y,w,h)
+};
+
+Texture2D    fireworkTexture : register(t0);
+SamplerState fireworkSampler : register(s0);
+
+struct PSInput
+{
+    float4 pos      : SV_POSITION;
+    float2 uv       : TEXCOORD0;
+    float  opacity  : TEXCOORD1;
+    float  effectIn : TEXCOORD2;
+};
+
+static const float kSectorAlphaScale  = 0.88;
+static const float kSectorSpanDegrees = 12.0;
+static const float kSectorStepDegrees = 24.0;
+static const float kSectorPhaseDegrees = -102.0;
+static const int kRenderFlagDrawStripe       = 0x1;
+static const int kRenderFlagDrawBigBall      = 0x2;
+static const int kRenderFlagDrawSmallBall    = 0x4;
+static const int kRenderFlagUseTexture       = 0x8;
+static const int kRenderFlagDrawFallbackBall = 0x10;
+
+float3 sectorBaseColor(int idx)
+{
+    int m = idx % 5;
+    float3 c;
+    if (m == 0)      c = float3(214.0, 106.0, 59.0)  / 255.0;
+    else if (m == 1) c = float3(188.0, 86.0,  165.0) / 255.0;
+    else if (m == 2) c = float3(88.0,  157.0, 212.0) / 255.0;
+    else if (m == 3) c = float3(156.0, 186.0, 71.0)  / 255.0;
+    else             c = float3(202.0, 178.0, 70.0)  / 255.0;
+    return min(c * 1.2, float3(1.0, 1.0, 1.0));
+}
+
+float wrapAngleDegrees(float a)
+{
+    float w = fmod(a, 360.0);
+    if (w < 0.0) w += 360.0;
+    return w;
+}
+
+float shortestAngleDistanceDegrees(float a, float b)
+{
+    float d = wrapAngleDegrees(a - b);
+    if (d > 180.0) d = 360.0 - d;
+    return abs(d);
+}
+
+float fireworkSectorCoverage(float angle, float sectorStart, float r, float outerR)
+{
+    float halfSpan = kSectorSpanDegrees * 0.5;
+    float center = sectorStart + halfSpan;
+    float angDist = shortestAngleDistanceDegrees(angle, center);
+    float angFeather = clamp(max(fwidth(angle), 0.35), 0.35, halfSpan);
+    float radFeather = max(fwidth(r), 0.75);
+    float angCov = 1.0 - smoothstep(halfSpan - angFeather, halfSpan + angFeather, angDist);
+    float radCov = 1.0 - smoothstep(outerR - radFeather, outerR + radFeather, r);
+    return angCov * radCov;
+}
+
+float4 proceduralColorBall(float2 localRect)
+{
+    float radial = length((localRect - float2(0.5, 0.5)) * 2.0);
+    if (radial >= 1.0) return float4(0, 0, 0, 0);
+    float4 core  = float4(255, 245, 160, 235) / 255.0;
+    float4 mid   = float4(255, 110, 220, 166) / 255.0;
+    float4 outer = float4(110, 190, 255, 107) / 255.0;
+    float4 edge  = float4(255, 240, 120, 0)   / 255.0;
+    float4 c;
+    if (radial <= 0.3) {
+        c = lerp(core, mid, radial / 0.3);
+    } else if (radial <= 0.68) {
+        c = lerp(mid, outer, (radial - 0.3) / (0.68 - 0.3));
+    } else {
+        c = lerp(outer, edge, (radial - 0.68) / (1.0 - 0.68));
+    }
+    return float4(c.rgb * c.a, c.a);
+}
+
+float4 compositeSourceOver(float4 src, float4 dst)
+{
+    return src + dst * (1.0 - src.a);
+}
+
+float4 sampleColorBallLayer(float2 localPos, float radius, float alpha,
+                            float aspect, bool useTexture)
+{
+    if (radius <= 0.0 || alpha <= 0.0) return float4(0, 0, 0, 0);
+    float halfW = radius;
+    float halfH = max(0.01, radius * aspect);
+    float2 localRect = float2(localPos.x / (halfW * 2.0) + 0.5,
+                              localPos.y / (halfH * 2.0) + 0.5);
+    if (any(localRect < float2(0, 0)) || any(localRect > float2(1, 1))) {
+        return float4(0, 0, 0, 0);
+    }
+    float4 premul;
+    if (useTexture) {
+        float2 sampleUv = sourceRect.xy + localRect * sourceRect.zw;
+        premul = fireworkTexture.Sample(fireworkSampler, sampleUv);
+    } else {
+        premul = proceduralColorBall(localRect);
+    }
+    return premul * alpha;
+}
+
+float4 main(PSInput input) : SV_TARGET
+{
+    float2 localPos = (input.uv * 2.0 - 1.0) * quadRadius;
+    float r = length(localPos);
+
+    float fireworkAlpha = fireworkAndHole.x;
+    float fireworkRotation = fireworkAndHole.y;
+    float holeR = fireworkAndHole.z;
+    float holeMaskR = fireworkAndHole.w;
+    float ballR = colorBallSmall.x;
+    float ballA = colorBallSmall.y;
+    float sourceAspect = max(0.01, colorBallSmall.z);
+    float fallbackBallR = colorBallSmall.w;
+    float bigBallR = colorBallBig.x;
+    float bigBallA = colorBallBig.y;
+    float fallbackBallA = colorBallBig.z;
+    int flags = (int)floor(colorBallBig.w + 0.5);
+    bool drawFirework      = (flags & kRenderFlagDrawStripe)       != 0;
+    bool drawBigBall       = (flags & kRenderFlagDrawBigBall)      != 0;
+    bool drawSmallBall     = (flags & kRenderFlagDrawSmallBall)    != 0;
+    bool useTextureBall    = (flags & kRenderFlagUseTexture)       != 0;
+    bool drawFallbackBall  = (flags & kRenderFlagDrawFallbackBall) != 0;
+
+    float holeMask = 1.0;
+    if (r <= holeR) {
+        holeMask = 0.0;
+    } else if (r < holeMaskR) {
+        holeMask = clamp((r - holeR) / max(0.0001, holeMaskR - holeR), 0.0, 1.0);
+    }
+
+    float4 layer = float4(0, 0, 0, 0);
+    if (drawFirework && r <= outerRadius && fireworkAlpha > 0.0) {
+        float angleDeg = wrapAngleDegrees(degrees(atan2(-localPos.y, localPos.x)));
+        float contribAlpha = fireworkAlpha * kSectorAlphaScale;
+        for (int sectorIndex = 0; sectorIndex < 15; ++sectorIndex) {
+            float sectorStart = kSectorPhaseDegrees + fireworkRotation + (float)sectorIndex * kSectorStepDegrees;
+            float cov = fireworkSectorCoverage(angleDeg, sectorStart, r, outerRadius);
+            if (cov > 0.0) {
+                float a = contribAlpha * cov;
+                float4 fl = float4(sectorBaseColor(sectorIndex) * a, a);
+                layer = compositeSourceOver(fl, layer);
+                break;
+            }
+        }
+    }
+    if (drawBigBall) {
+        layer = compositeSourceOver(
+            sampleColorBallLayer(localPos, bigBallR, bigBallA, sourceAspect, useTextureBall),
+            layer);
+    }
+    if (drawSmallBall) {
+        layer = compositeSourceOver(
+            sampleColorBallLayer(localPos, ballR, ballA, sourceAspect, useTextureBall),
+            layer);
+    }
+    if (drawFallbackBall) {
+        layer = compositeSourceOver(
+            sampleColorBallLayer(localPos, fallbackBallR, fallbackBallA, 1.0, false),
+            layer);
+    }
+
+    return layer * (holeMask * globalOpacity);
 }
 )HLSL";
 
@@ -352,6 +542,28 @@ bool PreviewDCompSpritePipeline::compileShaders(ID3D11Device* device)
         return false;
     }
 
+    // Phase 3.5c — firework PS.
+    Microsoft::WRL::ComPtr<ID3DBlob> psFireworkBlob;
+    hr = D3DCompile(
+        kFireworkPS, std::strlen(kFireworkPS), "PreviewDCompFireworkPS",
+        nullptr, nullptr, "main", "ps_5_0",
+        compileFlags, 0, psFireworkBlob.GetAddressOf(), errorBlob.ReleaseAndGetAddressOf());
+    if (FAILED(hr)) {
+        const QString errStr = errorBlob
+            ? QString::fromUtf8(static_cast<const char*>(errorBlob->GetBufferPointer()),
+                                static_cast<int>(errorBlob->GetBufferSize()))
+            : QStringLiteral("(no error blob)");
+        logHr("compile_ps_firework", hr, QStringLiteral("err=%1").arg(errStr.left(400)));
+        return false;
+    }
+    hr = device->CreatePixelShader(
+        psFireworkBlob->GetBufferPointer(), psFireworkBlob->GetBufferSize(),
+        nullptr, psFirework_.GetAddressOf());
+    if (FAILED(hr)) {
+        logHr("create_ps_firework", hr);
+        return false;
+    }
+
     // Stash the VS blob on the pipeline so createInputLayout can validate
     // against the actual bytecode — CreateInputLayout requires the VS
     // bytecode to verify semantic bindings, and a fresh recompile would
@@ -415,6 +627,17 @@ bool PreviewDCompSpritePipeline::createBuffers(ID3D11Device* device)
         logHr("create_uniform_buffer", hr);
         return false;
     }
+
+    // Phase 3.5c — firework constant buffer (144 bytes, rounded up).
+    D3D11_BUFFER_DESC fwbd{};
+    fwbd.ByteWidth = sizeof(PreviewDCompFireworkUniformBlock);
+    fwbd.Usage = D3D11_USAGE_DEFAULT;
+    fwbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    hr = device->CreateBuffer(&fwbd, nullptr, fireworkUniformBuffer_.GetAddressOf());
+    if (FAILED(hr)) {
+        logHr("create_firework_uniform_buffer", hr);
+        return false;
+    }
     return true;
 }
 
@@ -474,10 +697,12 @@ void PreviewDCompSpritePipeline::shutdown()
     testTexture_.Reset();
     sampler_.Reset();
     uniformBuffer_.Reset();
+    fireworkUniformBuffer_.Reset();
     vertexBuffer_.Reset();
     inputLayout_.Reset();
     ps_.Reset();
     psSolid_.Reset();
+    psFirework_.Reset();
     vs_.Reset();
     ready_ = false;
 }
@@ -853,12 +1078,16 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
     std::vector<PreviewDCompSpriteVertex> staging;
     staging.reserve((snapshot.sprites.size() * 6) + (snapshot.circles.size() * 288));
 
-    enum class RunKind { Sprite, Solid };
+    enum class RunKind { Sprite, Solid, Firework };
     struct DrawRun {
         RunKind kind = RunKind::Sprite;
         ID3D11ShaderResourceView* srv = nullptr;
         int firstVertex = 0;
         int vertexCount = 0;
+        // Phase 3.5c — for Firework runs, the index into snapshot.fireworks
+        // whose state populates the firework cbuffer for this draw. One
+        // firework per run because the cbuffer is per-firework.
+        int fireworkIndex = -1;
     };
     std::vector<DrawRun> runs;
     runs.reserve(snapshot.batches.size());
@@ -923,6 +1152,50 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
                 runs.push_back(r);
             }
             processed += batch.count;
+            break;
+        }
+        case BatchType::Fireworks: {
+            // One firework descriptor → one quad → one Run. The cbuffer
+            // is populated at draw-time from the indexed firework
+            // descriptor. The quad is positioned at the firework's
+            // center extended by quadRadius (= outerRadius + a small
+            // margin from the layer-state builder). UV runs 0..1 over
+            // the full quad; the PS maps that to localPos.
+            const int end = batch.firstIndex + batch.count;
+            for (int i = batch.firstIndex; i < end && i < snapshot.fireworks.size(); ++i) {
+                const auto& fw = snapshot.fireworks.at(i);
+                if (!fw.active) continue;
+                const float cx = static_cast<float>(fw.center.x());
+                const float cy = static_cast<float>(fw.center.y());
+                // Quad half-extent; matches the legacy material's
+                // quadRadius which equals outerRadius (firework reach)
+                // plus the color-ball overshoot. The layer state builder
+                // already accounts for both; we use outerRadius here
+                // and the cbuffer's quadRadius covers exactly that.
+                const float quadHalf = static_cast<float>(
+                    std::max({fw.outerRadius, fw.colorBallBigRadius, fw.colorBallRadius,
+                              fw.fallbackColorBallRadius}));
+                if (quadHalf <= 0.0f) continue;
+                const float left = cx - quadHalf;
+                const float top = cy - quadHalf;
+                const float right = cx + quadHalf;
+                const float bottom = cy + quadHalf;
+                DrawRun r;
+                r.kind = RunKind::Firework;
+                r.srv = nullptr;
+                r.firstVertex = static_cast<int>(staging.size());
+                r.vertexCount = 6;
+                r.fireworkIndex = i;
+                // Two triangles, UV maps 0..1 across the quad.
+                staging.push_back({ left,  top,    0.0f, 0.0f, 1.0f, 0.0f });
+                staging.push_back({ right, top,    1.0f, 0.0f, 1.0f, 0.0f });
+                staging.push_back({ left,  bottom, 0.0f, 1.0f, 1.0f, 0.0f });
+                staging.push_back({ right, top,    1.0f, 0.0f, 1.0f, 0.0f });
+                staging.push_back({ right, bottom, 1.0f, 1.0f, 1.0f, 0.0f });
+                staging.push_back({ left,  bottom, 0.0f, 1.0f, 1.0f, 0.0f });
+                runs.push_back(r);
+                ++processed;
+            }
             break;
         }
         case BatchType::Arcs: {
@@ -1071,7 +1344,9 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
 
     // Per-run shader switch. Sprite runs bind ps_ + the run's SRV.
     // Solid runs bind psSolid_ and clear t0 — the sampler is still
-    // bound but the shader doesn't read it.
+    // bound but the shader doesn't read it. Firework runs bind
+    // psFirework_ + the firework cbuffer at slot b1, optionally with
+    // the colorBallImage at t0 if useTexture is set.
     RunKind currentKind = RunKind::Sprite;
     ID3D11ShaderResourceView* currentSrv = nullptr;
     bool stateInitialised = false;
@@ -1082,11 +1357,13 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
         if (!stateInitialised || run.kind != currentKind) {
             if (run.kind == RunKind::Sprite) {
                 context->PSSetShader(ps_.Get(), nullptr, 0);
-            } else {
+            } else if (run.kind == RunKind::Solid) {
                 context->PSSetShader(psSolid_.Get(), nullptr, 0);
                 ID3D11ShaderResourceView* nullSrv[1] = { nullptr };
                 context->PSSetShaderResources(0, 1, nullSrv);
                 currentSrv = nullptr;
+            } else /* Firework */ {
+                context->PSSetShader(psFirework_.Get(), nullptr, 0);
             }
             currentKind = run.kind;
             stateInitialised = true;
@@ -1095,6 +1372,80 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
             ID3D11ShaderResourceView* srvs[1] = { run.srv };
             context->PSSetShaderResources(0, 1, srvs);
             currentSrv = run.srv;
+        }
+        if (run.kind == RunKind::Firework) {
+            // Populate + bind the per-firework cbuffer at b1, plus the
+            // colorBallImage SRV at t0 when the descriptor flags
+            // request it. Without UseTexture set the PS draws the
+            // procedural color ball and the t0 sample (from whatever
+            // happens to be bound) is dead code.
+            const auto& fw = snapshot.fireworks.at(run.fireworkIndex);
+            PreviewDCompFireworkUniformBlock uf{};
+            writeOrthoTopLeftPixelMatrix(uf.matrix, sceneWidth, sceneHeight);
+            uf.opacity = 1.0f;
+            uf.quadRadius = static_cast<float>(
+                std::max({fw.outerRadius, fw.colorBallBigRadius, fw.colorBallRadius,
+                          fw.fallbackColorBallRadius}));
+            uf.clipRadius = static_cast<float>(fw.clipRadius);
+            uf.outerRadius = static_cast<float>(fw.outerRadius);
+            uf.fireworkAndHole[0] = static_cast<float>(fw.fireworkAlpha);
+            uf.fireworkAndHole[1] = static_cast<float>(fw.fireworkRotationDegrees);
+            uf.fireworkAndHole[2] = static_cast<float>(fw.holeRadius);
+            uf.fireworkAndHole[3] = static_cast<float>(fw.holeMaskRadius);
+            uf.colorBallSmall[0] = static_cast<float>(fw.colorBallRadius);
+            uf.colorBallSmall[1] = static_cast<float>(fw.colorBallAlpha);
+            // sourceAspect = source-rect height / width when the texture
+            // is sub-sampled; defaults to 1.0 when no texture.
+            const QRectF& rect = fw.colorBallSourceRect;
+            const float aspect = rect.width() > 0.0
+                ? static_cast<float>(rect.height() / rect.width())
+                : 1.0f;
+            uf.colorBallSmall[2] = aspect;
+            uf.colorBallSmall[3] = static_cast<float>(fw.fallbackColorBallRadius);
+            uf.colorBallBig[0] = static_cast<float>(fw.colorBallBigRadius);
+            uf.colorBallBig[1] = static_cast<float>(fw.colorBallBigAlpha);
+            uf.colorBallBig[2] = static_cast<float>(fw.fallbackColorBallAlpha);
+
+            int flags = 0;
+            if (fw.drawFirework)            flags |= 0x1;
+            if (fw.drawColorBallBig)        flags |= 0x2;
+            if (fw.drawColorBall)           flags |= 0x4;
+            const bool hasTextureBall = fw.colorBallImage != nullptr
+                && !fw.colorBallImage->isNull();
+            if (hasTextureBall)             flags |= 0x8;
+            if (fw.drawFallbackColorBall)   flags |= 0x10;
+            uf.colorBallBig[3] = static_cast<float>(flags);
+
+            // Source rect in texture UV. Layer-state builder gives it
+            // in texture-pixel space when a colorBallImage is supplied;
+            // we normalise to [0,1] here. When no texture is bound the
+            // shader doesn't read sourceRect.
+            if (hasTextureBall) {
+                const float texW = fw.colorBallImage->width() > 0
+                    ? static_cast<float>(fw.colorBallImage->width()) : 1.0f;
+                const float texH = fw.colorBallImage->height() > 0
+                    ? static_cast<float>(fw.colorBallImage->height()) : 1.0f;
+                uf.sourceRect[0] = static_cast<float>(rect.x()) / texW;
+                uf.sourceRect[1] = static_cast<float>(rect.y()) / texH;
+                uf.sourceRect[2] = static_cast<float>(rect.width()) / texW;
+                uf.sourceRect[3] = static_cast<float>(rect.height()) / texH;
+            } else {
+                uf.sourceRect[0] = 0.0f;
+                uf.sourceRect[1] = 0.0f;
+                uf.sourceRect[2] = 1.0f;
+                uf.sourceRect[3] = 1.0f;
+            }
+            context->UpdateSubresource(fireworkUniformBuffer_.Get(), 0, nullptr, &uf, 0, 0);
+            ID3D11Buffer* fwCbs[1] = { fireworkUniformBuffer_.Get() };
+            context->PSSetConstantBuffers(1, 1, fwCbs);
+
+            ID3D11ShaderResourceView* srv = nullptr;
+            if (hasTextureBall) {
+                srv = textureCache.lookupOrCreate(fw.colorBallImage, device, true);
+            }
+            ID3D11ShaderResourceView* srvs[1] = { srv };
+            context->PSSetShaderResources(0, 1, srvs);
+            currentSrv = srv;
         }
         context->Draw(run.vertexCount, run.firstVertex);
     }
