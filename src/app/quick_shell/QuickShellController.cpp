@@ -3,6 +3,7 @@
 #include "QuickShellNativeSurfaceHost.h"
 
 #include "common/DebugLog.h"
+#include "common/DebugOptions.h"
 #include "common/PreviewInteractionConfig.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
 
@@ -153,6 +154,11 @@ QWindow* QuickShellController::previewCompositeWindow() const
 bool QuickShellController::previewUsesSeparateSurface() const
 {
     return previewUsesSeparateSurface_;
+}
+
+bool QuickShellController::previewDCompExclusive() const
+{
+    return miacode::debug_options::previewDCompExclusiveEnabled();
 }
 
 QObject* QuickShellController::timelineStateBridge() const

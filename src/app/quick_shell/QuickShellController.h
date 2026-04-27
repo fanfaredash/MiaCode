@@ -28,6 +28,11 @@ class QuickShellController : public QObject
     Q_PROPERTY(QObject* previewStageMediaHost READ previewStageMediaHost CONSTANT)
     Q_PROPERTY(QWindow* previewCompositeWindow READ previewCompositeWindow CONSTANT)
     Q_PROPERTY(bool previewUsesSeparateSurface READ previewUsesSeparateSurface NOTIFY shellStateChanged)
+    // Phase 4c — env-driven flag, exposed read-only to QML so siblings of
+    // the DComp surface (PreviewStageMediaItem in particular) can hide
+    // themselves to avoid double-rendering when DComp is the
+    // authoritative chart renderer.
+    Q_PROPERTY(bool previewDCompExclusive READ previewDCompExclusive CONSTANT)
     Q_PROPERTY(QObject* timelineStateBridge READ timelineStateBridge CONSTANT)
     Q_PROPERTY(bool timelineSurfaceReady READ timelineSurfaceReady NOTIFY shellStateChanged)
     Q_PROPERTY(QString bottomTabsCurrentTabId READ bottomTabsCurrentTabId NOTIFY shellStateChanged)
@@ -64,6 +69,7 @@ public:
     QObject* previewStageMediaHost() const;
     QWindow* previewCompositeWindow() const;
     bool previewUsesSeparateSurface() const;
+    bool previewDCompExclusive() const;
     QObject* timelineStateBridge() const;
     bool timelineSurfaceReady() const;
     QString bottomTabsCurrentTabId() const;

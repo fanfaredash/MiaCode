@@ -93,6 +93,13 @@ Item {
         anchors.fill: parent
         z: 0
         mediaHost: root.mediaHost
+        // Phase 4c — hide when the DComp surface is the exclusive
+        // chart renderer; DComp now paints the stage background
+        // image itself, and an opaque-image QML rectangle here would
+        // double the GPU/CPU cost without changing what's visible.
+        // `logger` is the QuickShellController, exposes
+        // previewDCompExclusive (read-only env-driven flag).
+        visible: !(root.logger && root.logger.previewDCompExclusive)
     }
 
     PreviewQuickSceneRoot {

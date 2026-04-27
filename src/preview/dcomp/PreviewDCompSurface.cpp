@@ -315,6 +315,64 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
         return scene::previewRenderLayerEnabled(layerFlags_, layer);
     };
 
+    // Stage background (z=0) — Phase 4c. Picks the first non-null
+    // image from media.resolvedStageImage / mediaFrame /
+    // retainedVideoFallbackFrame, fits it into stageRect by either
+    // contain or cover (per state.render.backgroundScaleMode), and
+    // pushes it as a sprite. cacheable mirrors the legacy
+    // resolvedStageImageCacheable flag — true for static images that
+    // recur frame-to-frame, false for video/dynamic frames so they
+    // run through the per-frame transient compartment.
+    //
+    // Skipped when separate-surface external media is active (the
+    // legacy QSG path also short-circuits in that case — the media
+    // is rendered by an external HWND/QQuickWindow instead). Skipped
+    // when no media is available so the dark canvasBg from the
+    // embeddedPreviewFrame Rectangle shows through DComp's
+    // transparent clear.
+    if (enabled(scene::StageBackgroundLayer)) {
+        const auto& media = state.media;
+        const bool usesExternalMedia =
+            media.presentationMode
+                == scene::PreviewStageMediaPresentationMode::ExternalQuickMediaItem;
+        QImage bgImage;
+        bool bgCacheable = true;
+        if (!usesExternalMedia) {
+            if (!media.resolvedStageImage.isNull()) {
+                bgImage = media.resolvedStageImage;
+                bgCacheable = media.resolvedStageImageCacheable;
+            } else if (!media.mediaFrame.isNull()) {
+                bgImage = media.mediaFrame;
+                bgCacheable = true;
+            } else if (!media.retainedVideoFallbackFrame.isNull()) {
+                bgImage = media.retainedVideoFallbackFrame;
+                bgCacheable = false;  // last-known fallback, treat as transient
+            }
+        }
+        if (!bgImage.isNull() && bgImage.width() > 0 && bgImage.height() > 0) {
+            const bool fitContain =
+                state.render.backgroundScaleMode == PreviewBackgroundScaleMode::FitContain;
+            const QRectF targetRect = scene::mediaTargetRect(
+                bgImage.size(), stageRect, fitContain);
+            if (targetRect.width() > 0.0 && targetRect.height() > 0.0) {
+                auto bgPtr = QSharedPointer<QImage>::create(bgImage);
+                snapshot.retainedImages.append(bgPtr);
+                scene::PreviewSpriteDescriptor bg;
+                bg.image = bgPtr.data();
+                bg.center = targetRect.center();
+                bg.width = targetRect.width();
+                bg.height = targetRect.height();
+                bg.rotationDegrees = 0.0;
+                bg.opacity = 1.0;
+                bg.effect = scene::PreviewAnimatedSpriteEffect::None;
+                bg.cacheable = bgCacheable;
+                scene::PreviewSpriteDescriptors batch;
+                batch.append(bg);
+                pushSpriteBatch(batch);
+            }
+        }
+    }
+
     // Backdrop (z=1 in the legacy stack). Snapshot owns its own QImage
     // copy so the render thread never reads runtime-mutated QImage state
     // — see Phase 3.3c-fix commit notes for why this matters.
