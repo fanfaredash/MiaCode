@@ -137,6 +137,11 @@ private:
 
     Microsoft::WRL::ComPtr<ID3D11VertexShader> vs_;
     Microsoft::WRL::ComPtr<ID3D11PixelShader> ps_;
+    // Phase 3.5a — second pixel shader for circle (and future arc/firework)
+    // batches. Same VS + same input layout; the PS reads the colour from
+    // the vertex's (uv.x, uv.y, opacity, effect) slots — repurposed as
+    // RGBA — and ignores the texture sampler entirely.
+    Microsoft::WRL::ComPtr<ID3D11PixelShader> psSolid_;
     Microsoft::WRL::ComPtr<ID3D11InputLayout> inputLayout_;
     // Lifecycle-scoped: only held between compileShaders() and
     // createInputLayout() so the layout can be validated against the
@@ -150,7 +155,12 @@ private:
     Microsoft::WRL::ComPtr<ID3D11BlendState> blendState_;
     Microsoft::WRL::ComPtr<ID3D11RasterizerState> rasterizerState_;
 
-    static constexpr int kMaxVertices = 4096;
+    // Phase 3.5a expanded the budget to accommodate circle tessellation
+    // alongside sprite quads. A 32-segment filled circle is 96 vertices;
+    // a 32-segment stroke ring is 192 vertices (six per segment quad).
+    // Worst-case ~10 circles ≈ 2880 verts + ~100 sprite quads ≈ 600
+    // verts = ~3.5k, comfortably under 8192.
+    static constexpr int kMaxVertices = 8192;
     bool ready_ = false;
 #endif
 };

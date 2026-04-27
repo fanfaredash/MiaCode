@@ -9,6 +9,8 @@
 #include "preview/scene/PreviewHeadLayerState.h"
 #include "preview/scene/PreviewJudgeEffectLayerState.h"
 #include "preview/scene/PreviewMaimuriDxJudgeLayerState.h"
+#include "preview/scene/PreviewMuriActionLayerState.h"
+#include "preview/scene/PreviewMuriPadLayerState.h"
 #include "preview/scene/PreviewSceneGeometry.h"
 #include "preview/scene/PreviewSlideMotionLayerState.h"
 #include "preview/scene/PreviewTouchHoldLayerState.h"
@@ -221,17 +223,35 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     const auto windowed = [&](const auto& layer, const scene::PreviewLayerWindowCursor& cursor) {
         return scene::PreviewActiveMarkerView(state.noteMarkers, layer, cursor);
     };
-    const auto appendSprites = [&](const scene::PreviewSpriteDescriptors& sprites) {
-        for (const auto& sprite : sprites) {
-            snapshot.sprites.append(sprite);
-        }
-    };
     const auto appendOwnedImages =
         [&](const QVector<QSharedPointer<QImage>>& images) {
             for (const auto& image : images) {
                 snapshot.retainedImages.append(image);
             }
         };
+    // Phase 3.5a: tagged-batch pushers. Each layer pushes one or more
+    // batches recording its primitive type + range; the pipeline then
+    // walks `snapshot.batches` in order, switching shaders per type. An
+    // empty layer pushes nothing.
+    using BatchType = PreviewDCompFrameStateSnapshot::BatchType;
+    const auto pushSpriteBatch = [&](const scene::PreviewSpriteDescriptors& sprites) {
+        if (sprites.isEmpty()) return;
+        PreviewDCompFrameStateSnapshot::DrawBatch batch;
+        batch.type = BatchType::Sprites;
+        batch.firstIndex = static_cast<qint32>(snapshot.sprites.size());
+        batch.count = static_cast<qint32>(sprites.size());
+        snapshot.sprites.append(sprites);
+        snapshot.batches.append(batch);
+    };
+    const auto pushCircleBatch = [&](const scene::PreviewCircleDescriptors& circles) {
+        if (circles.isEmpty()) return;
+        PreviewDCompFrameStateSnapshot::DrawBatch batch;
+        batch.type = BatchType::Circles;
+        batch.firstIndex = static_cast<qint32>(snapshot.circles.size());
+        batch.count = static_cast<qint32>(circles.size());
+        snapshot.circles.append(circles);
+        snapshot.batches.append(batch);
+    };
 
     // Backdrop (z=1 in the legacy stack). Snapshot owns its own QImage
     // copy so the render thread never reads runtime-mutated QImage state
@@ -249,25 +269,35 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
         backdrop.opacity = 1.0;
         backdrop.effect = scene::PreviewAnimatedSpriteEffect::None;
         backdrop.cacheable = true;
-        snapshot.sprites.append(backdrop);
+        scene::PreviewSpriteDescriptors backdropBatch;
+        backdropBatch.append(backdrop);
+        pushSpriteBatch(backdropBatch);
     }
 
-    // The remaining layers append in the same back-to-front order as
-    // PreviewQuickSceneRoot::updatePaintNode — z-order matters because
-    // Phase 3.3 issues draws in vector order with premultiplied-alpha
-    // blending, so later sprites overwrite earlier ones. Layer flags
-    // (which the user can toggle) aren't honoured yet; Phase 3.6 wires
-    // them up alongside pixel-parity checks.
+    // The remaining layers push batches in the same back-to-front order
+    // as PreviewQuickSceneRoot::updatePaintNode — z-order matters
+    // because the pipeline issues draws in batch order with
+    // premultiplied-alpha blending, so later batches paint over earlier
+    // ones. Layer flags (which the user can toggle) aren't honoured
+    // yet; Phase 3.6 wires them up alongside pixel-parity checks.
+
+    // Muri pad (z=2) — solid-colour ellipses (Phase 3.5a).
+    pushCircleBatch(scene::buildPreviewMuriPadLayerState(state, playfieldRect).circles);
+
+    // Muri action (z=3) — solid-colour ellipses (Phase 3.5a).
+    pushCircleBatch(scene::buildPreviewMuriActionLayerState(state, playfieldRect).circles);
+
+    // Phase 3.5c will insert judge_firework here at z=4.
 
     // Guide (z=5)
-    appendSprites(scene::buildPreviewGuideLayerSprites(
+    pushSpriteBatch(scene::buildPreviewGuideLayerSprites(
         state, windowed(preparedCache_.guideLayer(), guideCursor_), playfieldRect));
 
-    // Track (z=6) — switched from full-marker (Phase 3.3a) to windowed view.
+    // Track (z=6)
     {
         auto layerState = scene::buildPreviewTrackLayerState(
             state, windowed(preparedCache_.slideLikeLayer(), trackCursor_), playfieldRect);
-        appendSprites(layerState.sprites);
+        pushSpriteBatch(layerState.sprites);
         appendOwnedImages(layerState.ownedImages);
     }
 
@@ -275,7 +305,7 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     {
         auto layerState = scene::buildPreviewSlideMotionLayerState(
             state, windowed(preparedCache_.slideLikeLayer(), slideMotionCursor_), playfieldRect);
-        appendSprites(layerState.sprites);
+        pushSpriteBatch(layerState.sprites);
         appendOwnedImages(layerState.ownedImages);
     }
 
@@ -283,16 +313,13 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     {
         auto layerState = scene::buildPreviewJudgeEffectLayerState(
             state, windowed(preparedCache_.judgeEffectLayer(), judgeEffectCursor_), playfieldRect);
-        appendSprites(layerState.sprites);
+        pushSpriteBatch(layerState.sprites);
         appendOwnedImages(layerState.ownedImages);
     }
 
     // Touch judge (z=9)
-    {
-        auto layerState = scene::buildPreviewTouchJudgeLayerState(
-            state, windowed(preparedCache_.touchJudgeLayer(), touchJudgeCursor_), playfieldRect);
-        appendSprites(layerState.sprites);
-    }
+    pushSpriteBatch(scene::buildPreviewTouchJudgeLayerState(
+        state, windowed(preparedCache_.touchJudgeLayer(), touchJudgeCursor_), playfieldRect).sprites);
 
     // Head (z=10) — passes the asset cache so tinted base+overlay
     // composites are deduped across frames.
@@ -300,7 +327,7 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
         auto layerState = scene::buildPreviewHeadLayerState(
             state, windowed(preparedCache_.headLayer(), headCursor_), playfieldRect,
             &headRenderAssetCache_);
-        appendSprites(layerState.sprites);
+        pushSpriteBatch(layerState.sprites);
         appendOwnedImages(layerState.ownedImages);
     }
 
@@ -308,15 +335,15 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     {
         auto layerState = scene::buildPreviewTouchLayerState(
             state, windowed(preparedCache_.touchLayer(), touchCursor_), playfieldRect);
-        appendSprites(layerState.sprites);
+        pushSpriteBatch(layerState.sprites);
         appendOwnedImages(layerState.ownedImages);
     }
 
-    // Touch hold (z=12) — sprites only; arc rendering is Phase 3.5.
+    // Touch hold (z=12) — sprites; arcs added in Phase 3.5b.
     {
         auto layerState = scene::buildPreviewTouchHoldLayerState(
             state, windowed(preparedCache_.touchHoldLayer(), touchHoldCursor_), playfieldRect);
-        appendSprites(layerState.sprites);
+        pushSpriteBatch(layerState.sprites);
         appendOwnedImages(layerState.ownedImages);
     }
 
@@ -326,7 +353,7 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
         scene::PreviewChartReviewPreparedEvents preparedEvents;
         preparedCache_.collectChartReviewEvents(
             chartReviewCursor_.activePreparedIndices, &preparedEvents);
-        appendSprites(scene::buildPreviewChartReviewLayerSprites(
+        pushSpriteBatch(scene::buildPreviewChartReviewLayerSprites(
             state, playfieldRect, &preparedEvents));
     }
 
@@ -342,15 +369,18 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
             maimuriDxJudgeCursor_.activePreparedIndices,
             &activeEvents, &activeMarkerIndices);
         scene::PreviewActiveMarkerView allMarkers(state.noteMarkers);
-        appendSprites(scene::buildPreviewMaimuriDxJudgeLayerSprites(
+        pushSpriteBatch(scene::buildPreviewMaimuriDxJudgeLayerSprites(
             state, allMarkers, activeEvents, playfieldRect));
     }
 
     if ((snapshot.revision % 30) == 0 || snapshot.revision <= 5) {
         logSurface("snapshot_published",
-                   QStringLiteral("revision=%1 sprites=%2 retained=%3 playhead=%4 logical=%5x%6 cache_rebuilt=%7")
+                   QStringLiteral("revision=%1 sprites=%2 circles=%3 arcs=%4 batches=%5 retained=%6 playhead=%7 logical=%8x%9 cache_rebuilt=%10")
                        .arg(snapshot.revision)
                        .arg(snapshot.sprites.size())
+                       .arg(snapshot.circles.size())
+                       .arg(snapshot.arcs.size())
+                       .arg(snapshot.batches.size())
                        .arg(snapshot.retainedImages.size())
                        .arg(snapshot.playheadSeconds, 0, 'f', 3)
                        .arg(logicalSize.width()).arg(logicalSize.height())

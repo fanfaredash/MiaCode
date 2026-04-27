@@ -20,6 +20,8 @@
 // here are deliberately small and trivially copyable so adding more
 // stays cheap.
 
+#include "preview/scene/PreviewArcDescriptor.h"
+#include "preview/scene/PreviewCircleDescriptor.h"
 #include "preview/scene/PreviewSpriteDescriptor.h"
 
 #include <QSharedPointer>
@@ -61,6 +63,27 @@ struct PreviewDCompFrameStateSnapshot
     // and copies them into ID3D11Texture2D backing through a content-
     // fingerprint cache (Phase 3.3b).
     miacode::preview::scene::PreviewSpriteDescriptors sprites;
+
+    // Phase 3.5 — non-sprite primitives. Circles (Phase 3.5a, used by
+    // muri_pad + muri_action) are solid-fill ellipses with optional
+    // stroke. Arcs (Phase 3.5b, used by touch_hold) are clipped textured
+    // quads. Both share the snapshot's flat-vector storage with sprites
+    // and are ordered via `batches` below.
+    miacode::preview::scene::PreviewCircleDescriptors circles;
+    miacode::preview::scene::PreviewArcDescriptors arcs;
+
+    // Z-ordered draw command list. Each batch references a contiguous
+    // run inside one of the primitive vectors (sprites/circles/arcs).
+    // The pipeline iterates batches in order, switching shaders/state
+    // as needed. The legacy QSG path enforces z-order via its node
+    // tree; this is the equivalent.
+    enum class BatchType : qint8 { Sprites, Circles, Arcs };
+    struct DrawBatch {
+        BatchType type = BatchType::Sprites;
+        qint32 firstIndex = 0;
+        qint32 count = 0;
+    };
+    QVector<DrawBatch> batches;
 
     // Per-frame composited QImages produced by some layer-state builders
     // (head, judge_effect, slide_motion, touch, touch_hold, track). The

@@ -113,6 +113,32 @@ float4 main(PSInput input) : SV_TARGET
 }
 )HLSL";
 
+// Phase 3.5a — pixel shader for solid-colour primitives (circles in
+// 3.5a, arcs/fireworks in 3.5b/c). The vertex's (uv.x, uv.y, opacity,
+// effect) slots are repurposed as straight (R, G, B, A). Output is
+// premultiplied to match the swap chain's DXGI_ALPHA_MODE_PREMULTIPLIED
+// the same way the sprite path does (sprite path multiplies the sampled
+// premultiplied texture by opacity; we multiply RGB by A here so a pure
+// red half-transparent fill stores as `(0.5, 0, 0, 0.5)` in the RTV).
+constexpr const char* kSolidPS = R"HLSL(
+struct PSInput
+{
+    float4 pos      : SV_POSITION;
+    float2 uv       : TEXCOORD0;
+    float  opacity  : TEXCOORD1;
+    float  effectIn : TEXCOORD2;
+};
+
+float4 main(PSInput input) : SV_TARGET
+{
+    float r = input.uv.x;
+    float g = input.uv.y;
+    float b = input.opacity;
+    float a = input.effectIn;
+    return float4(r * a, g * a, b * a, a);
+}
+)HLSL";
+
 // Build a 64x64 RGBA8 checkerboard pattern with two contrasting colours
 // + a magenta border so the test texture is unmistakable. Returned as
 // a row-major byte array suitable for ID3D11Device::CreateTexture2D
@@ -304,6 +330,28 @@ bool PreviewDCompSpritePipeline::compileShaders(ID3D11Device* device)
         return false;
     }
 
+    // Phase 3.5a — solid-colour PS for non-textured primitives.
+    Microsoft::WRL::ComPtr<ID3DBlob> psSolidBlob;
+    hr = D3DCompile(
+        kSolidPS, std::strlen(kSolidPS), "PreviewDCompSolidPS",
+        nullptr, nullptr, "main", "ps_5_0",
+        compileFlags, 0, psSolidBlob.GetAddressOf(), errorBlob.ReleaseAndGetAddressOf());
+    if (FAILED(hr)) {
+        const QString errStr = errorBlob
+            ? QString::fromUtf8(static_cast<const char*>(errorBlob->GetBufferPointer()),
+                                static_cast<int>(errorBlob->GetBufferSize()))
+            : QStringLiteral("(no error blob)");
+        logHr("compile_ps_solid", hr, QStringLiteral("err=%1").arg(errStr.left(400)));
+        return false;
+    }
+    hr = device->CreatePixelShader(
+        psSolidBlob->GetBufferPointer(), psSolidBlob->GetBufferSize(),
+        nullptr, psSolid_.GetAddressOf());
+    if (FAILED(hr)) {
+        logHr("create_ps_solid", hr);
+        return false;
+    }
+
     // Stash the VS blob on the pipeline so createInputLayout can validate
     // against the actual bytecode — CreateInputLayout requires the VS
     // bytecode to verify semantic bindings, and a fresh recompile would
@@ -429,6 +477,7 @@ void PreviewDCompSpritePipeline::shutdown()
     vertexBuffer_.Reset();
     inputLayout_.Reset();
     ps_.Reset();
+    psSolid_.Reset();
     vs_.Reset();
     ready_ = false;
 }
@@ -609,6 +658,87 @@ void emitSpriteVertices(const miacode::preview::scene::PreviewSpriteDescriptor& 
     out.push_back({ blx, bly, u0, v1, opacity, effect });
 }
 
+// Phase 3.5a — circle/ellipse tessellation for the solid-colour PS.
+//
+// Filled fan: 32 segments × 3 vertices/triangle = 96 verts.
+// Stroke ring: 32 segments × 6 vertices/quad      = 192 verts.
+// Per circle worst case: 288 verts. The vertex's (uv.x, uv.y, opacity,
+// effect) slots are repurposed as straight (R, G, B, A) — see kSolidPS.
+void emitCircleVertices(const miacode::preview::scene::PreviewCircleDescriptor& circle,
+                         std::vector<PreviewDCompSpriteVertex>& out)
+{
+    constexpr int kSegments = 32;
+    const float cx = static_cast<float>(circle.center.x());
+    const float cy = static_cast<float>(circle.center.y());
+    const float rx = static_cast<float>(circle.radiusX);
+    const float ry = static_cast<float>(circle.radiusY);
+    if (rx <= 0.0f || ry <= 0.0f) {
+        return;
+    }
+
+    auto packColor = [](const QColor& c) {
+        return std::array<float, 4>{
+            static_cast<float>(qBound(0.0, c.redF(), 1.0)),
+            static_cast<float>(qBound(0.0, c.greenF(), 1.0)),
+            static_cast<float>(qBound(0.0, c.blueF(), 1.0)),
+            static_cast<float>(qBound(0.0, c.alphaF(), 1.0)),
+        };
+    };
+    auto pushVertex = [&](float x, float y, const std::array<float, 4>& rgba) {
+        out.push_back({ x, y, rgba[0], rgba[1], rgba[2], rgba[3] });
+    };
+
+    // Fill — triangle fan emitted as triangle list (center + edge[i] + edge[i+1]).
+    if (circle.fillColor.alpha() > 0) {
+        const auto fill = packColor(circle.fillColor);
+        for (int i = 0; i < kSegments; ++i) {
+            const double a0 = (2.0 * M_PI) * static_cast<double>(i) / kSegments;
+            const double a1 = (2.0 * M_PI) * static_cast<double>(i + 1) / kSegments;
+            const float x0 = cx + rx * static_cast<float>(std::cos(a0));
+            const float y0 = cy + ry * static_cast<float>(std::sin(a0));
+            const float x1 = cx + rx * static_cast<float>(std::cos(a1));
+            const float y1 = cy + ry * static_cast<float>(std::sin(a1));
+            pushVertex(cx, cy, fill);
+            pushVertex(x0, y0, fill);
+            pushVertex(x1, y1, fill);
+        }
+    }
+
+    // Stroke — annulus between inner (r - w/2) and outer (r + w/2). Each
+    // segment is a quad split into two triangles.
+    if (circle.strokeColor.alpha() > 0 && circle.strokeWidth > 0.0) {
+        const auto stroke = packColor(circle.strokeColor);
+        const float halfWidth = static_cast<float>(circle.strokeWidth) * 0.5f;
+        const float outerRx = rx + halfWidth;
+        const float outerRy = ry + halfWidth;
+        const float innerRx = std::max(0.0f, rx - halfWidth);
+        const float innerRy = std::max(0.0f, ry - halfWidth);
+        for (int i = 0; i < kSegments; ++i) {
+            const double a0 = (2.0 * M_PI) * static_cast<double>(i) / kSegments;
+            const double a1 = (2.0 * M_PI) * static_cast<double>(i + 1) / kSegments;
+            const float c0 = static_cast<float>(std::cos(a0));
+            const float s0 = static_cast<float>(std::sin(a0));
+            const float c1 = static_cast<float>(std::cos(a1));
+            const float s1 = static_cast<float>(std::sin(a1));
+            const float ox0 = cx + outerRx * c0;
+            const float oy0 = cy + outerRy * s0;
+            const float ix0 = cx + innerRx * c0;
+            const float iy0 = cy + innerRy * s0;
+            const float ox1 = cx + outerRx * c1;
+            const float oy1 = cy + outerRy * s1;
+            const float ix1 = cx + innerRx * c1;
+            const float iy1 = cy + innerRy * s1;
+            // Quad: outer0 - outer1 - inner0  /  outer1 - inner1 - inner0
+            pushVertex(ox0, oy0, stroke);
+            pushVertex(ox1, oy1, stroke);
+            pushVertex(ix0, iy0, stroke);
+            pushVertex(ox1, oy1, stroke);
+            pushVertex(ix1, iy1, stroke);
+            pushVertex(ix0, iy0, stroke);
+        }
+    }
+}
+
 }  // namespace
 
 bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
@@ -660,55 +790,92 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
     uniforms.effect = 0.0f;
     context->UpdateSubresource(uniformBuffer_.Get(), 0, nullptr, &uniforms, 0, 0);
 
-    // Walk descriptors, group adjacent same-texture sprites into a single
-    // batched draw. The legacy QSG path uses the same pattern. Within a
-    // batch we accumulate vertices in `staging`, then upload + Draw +
-    // reset for the next batch.
+    // Walk the snapshot's tagged batch list in z-order, building a
+    // single vertex stream + a list of typed draw runs. Adjacent
+    // sprite descriptors that share an SRV merge into one run; circle
+    // descriptors merge into one run per circle batch. Runs of
+    // different types never merge — they need different shaders and,
+    // for sprites, an SRV bind. Phase 3.5b will add a third run kind
+    // for arcs (textured + clip uniforms).
     std::vector<PreviewDCompSpriteVertex> staging;
-    staging.reserve(snapshot.sprites.size() * 6);
+    staging.reserve((snapshot.sprites.size() * 6) + (snapshot.circles.size() * 288));
 
+    enum class RunKind { Sprite, Solid };
     struct DrawRun {
+        RunKind kind = RunKind::Sprite;
         ID3D11ShaderResourceView* srv = nullptr;
         int firstVertex = 0;
         int vertexCount = 0;
     };
     std::vector<DrawRun> runs;
-    runs.reserve(16);
+    runs.reserve(snapshot.batches.size());
 
-    // Phase 3.3 diagnostic: track per-frame skip reasons so a loop that
-    // produces zero vertices is debuggable. Counts captured per-frame
-    // and emitted by the geometry log block below.
     int skipNullImage = 0;
     int skipNullSrv = 0;
     int skipEmitFiltered = 0;
     int processed = 0;
 
-    for (const auto& sprite : snapshot.sprites) {
-        if (sprite.image == nullptr || sprite.image->isNull()) {
-            ++skipNullImage;
-            continue;
+    using BatchType = PreviewDCompFrameStateSnapshot::BatchType;
+    for (const auto& batch : snapshot.batches) {
+        if (batch.count <= 0) continue;
+        switch (batch.type) {
+        case BatchType::Sprites: {
+            const int end = batch.firstIndex + batch.count;
+            for (int i = batch.firstIndex; i < end && i < snapshot.sprites.size(); ++i) {
+                const auto& sprite = snapshot.sprites.at(i);
+                if (sprite.image == nullptr || sprite.image->isNull()) {
+                    ++skipNullImage;
+                    continue;
+                }
+                ID3D11ShaderResourceView* srv =
+                    textureCache.lookupOrCreate(sprite.image, device, sprite.cacheable);
+                if (srv == nullptr) {
+                    ++skipNullSrv;
+                    continue;
+                }
+                if (runs.empty()
+                    || runs.back().kind != RunKind::Sprite
+                    || runs.back().srv != srv) {
+                    DrawRun r;
+                    r.kind = RunKind::Sprite;
+                    r.srv = srv;
+                    r.firstVertex = static_cast<int>(staging.size());
+                    r.vertexCount = 0;
+                    runs.push_back(r);
+                }
+                const int before = static_cast<int>(staging.size());
+                emitSpriteVertices(sprite, staging);
+                const int added = static_cast<int>(staging.size()) - before;
+                runs.back().vertexCount += added;
+                if (added == 0) {
+                    ++skipEmitFiltered;
+                }
+                ++processed;
+            }
+            break;
         }
-        ID3D11ShaderResourceView* srv =
-            textureCache.lookupOrCreate(sprite.image, device, sprite.cacheable);
-        if (srv == nullptr) {
-            ++skipNullSrv;
-            continue;
+        case BatchType::Circles: {
+            const int end = batch.firstIndex + batch.count;
+            DrawRun r;
+            r.kind = RunKind::Solid;
+            r.srv = nullptr;
+            r.firstVertex = static_cast<int>(staging.size());
+            r.vertexCount = 0;
+            for (int i = batch.firstIndex; i < end && i < snapshot.circles.size(); ++i) {
+                const int before = static_cast<int>(staging.size());
+                emitCircleVertices(snapshot.circles.at(i), staging);
+                r.vertexCount += static_cast<int>(staging.size()) - before;
+            }
+            if (r.vertexCount > 0) {
+                runs.push_back(r);
+            }
+            processed += batch.count;
+            break;
         }
-        if (runs.empty() || runs.back().srv != srv) {
-            DrawRun newRun;
-            newRun.srv = srv;
-            newRun.firstVertex = static_cast<int>(staging.size());
-            newRun.vertexCount = 0;
-            runs.push_back(newRun);
+        case BatchType::Arcs:
+            // Phase 3.5b — implemented in a follow-up.
+            break;
         }
-        const int before = static_cast<int>(staging.size());
-        emitSpriteVertices(sprite, staging);
-        const int added = static_cast<int>(staging.size()) - before;
-        runs.back().vertexCount += added;
-        if (added == 0) {
-            ++skipEmitFiltered;
-        }
-        ++processed;
     }
 
     // Phase 3.3 diagnostic: log vertex count every 60 frames so we can
@@ -811,16 +978,36 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
     ID3D11Buffer* cbs[1] = { uniformBuffer_.Get() };
     context->VSSetConstantBuffers(0, 1, cbs);
 
-    context->PSSetShader(ps_.Get(), nullptr, 0);
     ID3D11SamplerState* samplers[1] = { sampler_.Get() };
     context->PSSetSamplers(0, 1, samplers);
 
+    // Per-run shader switch. Sprite runs bind ps_ + the run's SRV.
+    // Solid runs bind psSolid_ and clear t0 — the sampler is still
+    // bound but the shader doesn't read it.
+    RunKind currentKind = RunKind::Sprite;
+    ID3D11ShaderResourceView* currentSrv = nullptr;
+    bool stateInitialised = false;
     for (const auto& run : runs) {
         if (run.vertexCount <= 0) {
             continue;
         }
-        ID3D11ShaderResourceView* srvs[1] = { run.srv };
-        context->PSSetShaderResources(0, 1, srvs);
+        if (!stateInitialised || run.kind != currentKind) {
+            if (run.kind == RunKind::Sprite) {
+                context->PSSetShader(ps_.Get(), nullptr, 0);
+            } else {
+                context->PSSetShader(psSolid_.Get(), nullptr, 0);
+                ID3D11ShaderResourceView* nullSrv[1] = { nullptr };
+                context->PSSetShaderResources(0, 1, nullSrv);
+                currentSrv = nullptr;
+            }
+            currentKind = run.kind;
+            stateInitialised = true;
+        }
+        if (run.kind == RunKind::Sprite && run.srv != currentSrv) {
+            ID3D11ShaderResourceView* srvs[1] = { run.srv };
+            context->PSSetShaderResources(0, 1, srvs);
+            currentSrv = run.srv;
+        }
         context->Draw(run.vertexCount, run.firstVertex);
     }
 
