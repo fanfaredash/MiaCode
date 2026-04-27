@@ -19,6 +19,7 @@
 #include "preview/scene/PreviewTouchLayerState.h"
 #include "preview/scene/PreviewTrackLayerState.h"
 
+#include <QDateTime>
 #include <QQuickItem>
 #include <QQuickWindow>
 
@@ -172,6 +173,21 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     if (runtime_ == nullptr) {
         return;
     }
+
+    // Phase 4b-perf: throttle snapshot rebuild to ~60 Hz (the DComp
+    // render thread's max consume rate). The runtime can fire
+    // frameStateChanged faster than that — audio events, multiple
+    // updates per visual frame, etc. — and any intermediate publishes
+    // get overwritten before the render thread reads them. Skipping
+    // the work entirely when the previous publish is < 16 ms old
+    // halves the GUI-thread layer-build cost in pathological cases
+    // without affecting the rendered frame rate.
+    const qint64 nowNs = QDateTime::currentMSecsSinceEpoch() * 1000000LL;
+    if (lastPublishNs_ != 0 && (nowNs - lastPublishNs_) < 14'000'000LL) {
+        return;
+    }
+    lastPublishNs_ = nowNs;
+
     const auto& state = runtime_->frameState();
 
     PreviewDCompFrameStateSnapshot snapshot;

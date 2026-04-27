@@ -93,6 +93,10 @@ private:
     QPointer<PreviewRuntime> runtime_;
     QMetaObject::Connection runtimeFrameStateConnection_;
     QVector<QMetaObject::Connection> trackedItemConnections_;
+    // Phase 4b-perf: timestamp of the last snapshot publish, used to
+    // throttle rebuild work when the runtime emits frameStateChanged
+    // faster than the render thread can consume it.
+    qint64 lastPublishNs_ = 0;
     PreviewDCompCore core_;
     PreviewDCompRenderer renderer_;
     qint64 snapshotRevision_ = 0;
