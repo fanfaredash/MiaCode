@@ -158,6 +158,7 @@ cbuffer FireworkUniforms : register(b1)
     float4   colorBallSmall;    // smallR, smallA, sourceAspect, fallbackR
     float4   colorBallBig;      // bigR, bigA, fallbackA, renderFlags
     float4   sourceRect;        // texture sub-region (x,y,w,h)
+    float4   clipOffset;        // xy = clipCenter - fireworkCenter; zw unused
 };
 
 Texture2D    fireworkTexture : register(t0);
@@ -268,6 +269,19 @@ float4 main(PSInput input) : SV_TARGET
 {
     float2 localPos = (input.uv * 2.0 - 1.0) * quadRadius;
     float r = length(localPos);
+
+    // Phase 3.5c-fix: equivalent of the legacy QSGClipNode that bounds
+    // the firework to a circle around the playfield centre. clipOffset
+    // is (clipCenter - fireworkCenter) in scene pixels, so localPos -
+    // clipOffset.xy is the position relative to the clip centre.
+    if (clipRadius > 0.0)
+    {
+        float2 clipDelta = localPos - clipOffset.xy;
+        if (dot(clipDelta, clipDelta) > clipRadius * clipRadius)
+        {
+            discard;
+        }
+    }
 
     float fireworkAlpha = fireworkAndHole.x;
     float fireworkRotation = fireworkAndHole.y;
@@ -1435,6 +1449,13 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
                 uf.sourceRect[2] = 1.0f;
                 uf.sourceRect[3] = 1.0f;
             }
+            // Clip offset relative to firework center; the PS uses this
+            // to discard fragments outside the playfield ring (the
+            // legacy QSGClipNode equivalent).
+            uf.clipOffset[0] = static_cast<float>(fw.clipCenter.x() - fw.center.x());
+            uf.clipOffset[1] = static_cast<float>(fw.clipCenter.y() - fw.center.y());
+            uf.clipOffset[2] = 0.0f;
+            uf.clipOffset[3] = 0.0f;
             context->UpdateSubresource(fireworkUniformBuffer_.Get(), 0, nullptr, &uf, 0, 0);
             ID3D11Buffer* fwCbs[1] = { fireworkUniformBuffer_.Get() };
             context->PSSetConstantBuffers(1, 1, fwCbs);

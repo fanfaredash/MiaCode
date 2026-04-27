@@ -85,15 +85,22 @@ struct PreviewDCompFireworkUniformBlock
     float matrix[16];           // 64 bytes: projection (logical-pixel → NDC)
     float opacity;              //  4
     float quadRadius;           //  4
-    float clipRadius;           //  4 (unused on D3D11 — we don't use scissor; kept for layout parity)
+    float clipRadius;           //  4
     float outerRadius;          //  4
     float fireworkAndHole[4];   // 16: alpha, rotation°, holeRadius, holeMaskRadius
     float colorBallSmall[4];    // 16: ballRadius, ballAlpha, sourceAspect, fallbackBallRadius
     float colorBallBig[4];      // 16: bigBallRadius, bigBallAlpha, fallbackBallAlpha, renderFlags
     float sourceRect[4];        // 16: texture sub-region (x, y, w, h) in [0,1]
+    // Phase 3.5c-fix: clip-circle offset (clipCenter - fireworkCenter) in
+    // scene pixels. The legacy QSG path renders the firework inside a
+    // separate QSGClipNode; D3D11 has no direct equivalent for circular
+    // clips, so the PS computes distance from localPos to clipOffset.xy
+    // and discards fragments outside clipRadius. zw padding to keep the
+    // 16-byte alignment.
+    float clipOffset[4];        // 16: x, y, _pad, _pad
 };
-static_assert(sizeof(PreviewDCompFireworkUniformBlock) == 144,
-              "PreviewDCompFireworkUniformBlock must match legacy std140 layout");
+static_assert(sizeof(PreviewDCompFireworkUniformBlock) == 160,
+              "PreviewDCompFireworkUniformBlock must match cbuffer layout");
 
 class PreviewDCompSpritePipeline
 {
