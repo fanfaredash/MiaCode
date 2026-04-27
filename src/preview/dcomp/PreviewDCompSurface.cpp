@@ -112,6 +112,14 @@ void PreviewDCompSurface::attachToWindow(QQuickWindow* window)
     }
 }
 
+void PreviewDCompSurface::setLayerFlags(
+    miacode::preview::scene::PreviewRenderLayerFlags flags)
+{
+    if (layerFlags_ == flags) return;
+    layerFlags_ = flags;
+    onRuntimeFrameStateChanged();  // republish so the change shows immediately
+}
+
 void PreviewDCompSurface::setRuntime(PreviewRuntime* runtime)
 {
     if (runtime_ == runtime) {
@@ -274,10 +282,16 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
         snapshot.batches.append(batch);
     };
 
+    // Phase 3.6 — gate each layer on layerFlags_. Mirrors PreviewQuickSceneRoot's
+    // updateLayerSlotProfiled(... previewRenderLayerEnabled(...)) checks.
+    const auto enabled = [this](scene::PreviewRenderLayer layer) {
+        return scene::previewRenderLayerEnabled(layerFlags_, layer);
+    };
+
     // Backdrop (z=1 in the legacy stack). Snapshot owns its own QImage
     // copy so the render thread never reads runtime-mutated QImage state
     // — see Phase 3.3c-fix commit notes for why this matters.
-    if (!state.assets.outlineImage.isNull()) {
+    if (enabled(scene::BackdropLayer) && !state.assets.outlineImage.isNull()) {
         auto backdropImage =
             QSharedPointer<QImage>::create(state.assets.outlineImage);
         snapshot.retainedImages.append(backdropImage);
@@ -303,23 +317,31 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     // yet; Phase 3.6 wires them up alongside pixel-parity checks.
 
     // Muri pad (z=2) — solid-colour ellipses (Phase 3.5a).
-    pushCircleBatch(scene::buildPreviewMuriPadLayerState(state, playfieldRect).circles);
+    if (enabled(scene::MuriPadStateLayer)) {
+        pushCircleBatch(scene::buildPreviewMuriPadLayerState(state, playfieldRect).circles);
+    }
 
     // Muri action (z=3) — solid-colour ellipses (Phase 3.5a).
-    pushCircleBatch(scene::buildPreviewMuriActionLayerState(state, playfieldRect).circles);
+    if (enabled(scene::MuriActionLayer)) {
+        pushCircleBatch(scene::buildPreviewMuriActionLayerState(state, playfieldRect).circles);
+    }
 
     // Judge firework (z=4) — Phase 3.5c. Uses the windowed firework
     // layer cursor for activation timing.
-    pushFireworkBatch(scene::buildPreviewJudgeFireworkLayerState(
-        state, windowed(preparedCache_.judgeFireworkLayer(), judgeFireworkCursor_),
-        playfieldRect));
+    if (enabled(scene::JudgeFireworkLayer)) {
+        pushFireworkBatch(scene::buildPreviewJudgeFireworkLayerState(
+            state, windowed(preparedCache_.judgeFireworkLayer(), judgeFireworkCursor_),
+            playfieldRect));
+    }
 
     // Guide (z=5)
-    pushSpriteBatch(scene::buildPreviewGuideLayerSprites(
-        state, windowed(preparedCache_.guideLayer(), guideCursor_), playfieldRect));
+    if (enabled(scene::GuideLayer)) {
+        pushSpriteBatch(scene::buildPreviewGuideLayerSprites(
+            state, windowed(preparedCache_.guideLayer(), guideCursor_), playfieldRect));
+    }
 
     // Track (z=6)
-    {
+    if (enabled(scene::TrackLayer)) {
         auto layerState = scene::buildPreviewTrackLayerState(
             state, windowed(preparedCache_.slideLikeLayer(), trackCursor_), playfieldRect);
         pushSpriteBatch(layerState.sprites);
@@ -327,7 +349,7 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     }
 
     // Slide motion (z=7)
-    {
+    if (enabled(scene::SlideMotionLayer)) {
         auto layerState = scene::buildPreviewSlideMotionLayerState(
             state, windowed(preparedCache_.slideLikeLayer(), slideMotionCursor_), playfieldRect);
         pushSpriteBatch(layerState.sprites);
@@ -335,7 +357,7 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     }
 
     // Judge effect (z=8)
-    {
+    if (enabled(scene::JudgeLayer)) {
         auto layerState = scene::buildPreviewJudgeEffectLayerState(
             state, windowed(preparedCache_.judgeEffectLayer(), judgeEffectCursor_), playfieldRect);
         pushSpriteBatch(layerState.sprites);
@@ -343,12 +365,14 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     }
 
     // Touch judge (z=9)
-    pushSpriteBatch(scene::buildPreviewTouchJudgeLayerState(
-        state, windowed(preparedCache_.touchJudgeLayer(), touchJudgeCursor_), playfieldRect).sprites);
+    if (enabled(scene::JudgeTouchLayer)) {
+        pushSpriteBatch(scene::buildPreviewTouchJudgeLayerState(
+            state, windowed(preparedCache_.touchJudgeLayer(), touchJudgeCursor_), playfieldRect).sprites);
+    }
 
     // Head (z=10) — passes the asset cache so tinted base+overlay
     // composites are deduped across frames.
-    {
+    if (enabled(scene::HeadLayer)) {
         auto layerState = scene::buildPreviewHeadLayerState(
             state, windowed(preparedCache_.headLayer(), headCursor_), playfieldRect,
             &headRenderAssetCache_);
@@ -357,7 +381,7 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     }
 
     // Touch (z=11)
-    {
+    if (enabled(scene::TouchLayer)) {
         auto layerState = scene::buildPreviewTouchLayerState(
             state, windowed(preparedCache_.touchLayer(), touchCursor_), playfieldRect);
         pushSpriteBatch(layerState.sprites);
@@ -367,7 +391,7 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     // Touch hold (z=12) — sprites first, then arcs; legacy QSG renders
     // them as separate child nodes inside the same layer slot, with
     // arcs above sprites visually.
-    {
+    if (enabled(scene::TouchHoldLayer)) {
         auto layerState = scene::buildPreviewTouchHoldLayerState(
             state, windowed(preparedCache_.touchHoldLayer(), touchHoldCursor_), playfieldRect);
         pushSpriteBatch(layerState.sprites);
@@ -377,7 +401,7 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
 
     // Chart review (z=13) — special: not marker-windowed; uses
     // preparedEvents collected from the chart_review layer cursor.
-    {
+    if (enabled(scene::ChartReviewLayer)) {
         scene::PreviewChartReviewPreparedEvents preparedEvents;
         preparedCache_.collectChartReviewEvents(
             chartReviewCursor_.activePreparedIndices, &preparedEvents);
@@ -390,7 +414,7 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     // maimuriDxJudgeLayer cursor windows the *event* list, not markers.
     // The cursor still feeds collectMaimuriDxJudgeData for the events
     // themselves.
-    {
+    if (enabled(scene::MaimuriDxJudgeLayer)) {
         QVector<MuriJudgeSpriteEvent> activeEvents;
         QVector<int> activeMarkerIndices;
         preparedCache_.collectMaimuriDxJudgeData(

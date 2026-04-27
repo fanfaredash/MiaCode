@@ -129,6 +129,28 @@ ID3D11ShaderResourceView* PreviewDCompTextureCache::lookupOrCreate(
             logCache("cacheable_growth",
                      QStringLiteral("count=%1").arg(cacheable_.size()));
         }
+        // Phase 3.6 — cache cap mirroring PreviewTextureRepository's 96
+        // entry / 96MB triggers (PreviewTextureRepository.cpp:9-10).
+        // When the cap is exceeded we flush the entire cacheable cache
+        // and rebuild lazily on the next lookup. The current entry
+        // (`raw`) was just added and stays via the lookupOrCreate
+        // return; only the older entries are dropped. Without a cap a
+        // long edit session that loads many distinct sprite skins
+        // could grow unbounded.
+        if (cacheable_.size() > kCacheableEntryCap) {
+            // Save the entry we just inserted, drop everything else,
+            // then re-insert. That way the caller keeps a valid SRV.
+            cacheable_.remove(key);
+            for (auto it = cacheable_.cbegin(); it != cacheable_.cend(); ++it) {
+                if (*it != nullptr) (*it)->Release();
+            }
+            cacheable_.clear();
+            cacheable_.insert(key, raw);
+            logCache("cacheable_flush",
+                     QStringLiteral("reason=entry_cap cap=%1 retained_key=0x%2")
+                         .arg(kCacheableEntryCap)
+                         .arg(static_cast<quint64>(key), 0, 16));
+        }
     } else {
         transient_.insert(key, raw);
     }

@@ -82,6 +82,12 @@ public:
 
 private:
 #ifdef Q_OS_WIN
+    // Phase 3.6 — entry cap mirroring PreviewTextureRepository's 96
+    // limit. When exceeded, the cacheable compartment is fully
+    // flushed (the just-inserted entry survives so the current
+    // lookup stays valid).
+    static constexpr int kCacheableEntryCap = 96;
+
     // Storage holds raw SRV pointers with manual AddRef/Release. We
     // *cannot* store Microsoft::WRL::ComPtr directly here: QHash's
     // rehash on growth relocates entries, and the resulting move

@@ -3,6 +3,7 @@
 #include "preview/dcomp/PreviewDCompCore.h"
 #include "preview/dcomp/PreviewDCompRenderer.h"
 #include "preview/scene/PreviewHeadLayerState.h"
+#include "preview/scene/PreviewLayerOrder.h"
 #include "preview/scene/PreviewPreparedSceneCache.h"
 
 #include <QObject>
@@ -50,6 +51,14 @@ public:
     // snapshot, and publishes it to the renderer (which the render
     // thread reads at the top of each frame). Pass nullptr to detach.
     void setRuntime(PreviewRuntime* runtime);
+
+    // Phase 3.6: per-layer enable bitmap. Mirrors PreviewQuickSceneRoot's
+    // layerFlags_; defaults to kPreviewAllRenderLayers for live preview.
+    // Each onRuntimeFrameStateChanged() honours the current flags before
+    // pushing a batch, so a disabled layer skips both the build cost
+    // and the draw-list contribution. Used by the future export path
+    // when DComp replaces QSG there too.
+    void setLayerFlags(miacode::preview::scene::PreviewRenderLayerFlags flags);
 
     // Releases all resources and disconnects from the window. Idempotent.
     void detach();
@@ -100,6 +109,10 @@ private:
     // (base, overlay, tint) recurs across frames. Lives on the GUI
     // thread (built here, never touched by the render thread).
     miacode::preview::scene::PreviewHeadRenderAssetCache headRenderAssetCache_;
+
+    // Phase 3.6 — per-layer enable bitmap. All layers on by default.
+    miacode::preview::scene::PreviewRenderLayerFlags layerFlags_ =
+        miacode::preview::scene::kPreviewAllRenderLayers;
 };
 
 }  // namespace miacode::preview::dcomp
