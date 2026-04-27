@@ -1317,16 +1317,20 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
                 staging.size() * sizeof(PreviewDCompSpriteVertex));
     context->Unmap(vertexBuffer_.Get(), 0);
 
-    // Phase 4b — opaque clear matching the legacy stage_background's
-    // `canvasBg` colour `#1F2833` (no-media path) so the DComp output
-    // is a drop-in replacement once previewDCompExclusiveEnabled is
-    // on. Phase 4c will properly port stage_background (media frame
-    // composite + dim gradient) when those become Phase-4 priorities.
-    const float clearColor[4] = {
-        31.0f / 255.0f,
-        40.0f / 255.0f,
-        51.0f / 255.0f,
-        1.0f };
+    // Phase 4b-fix — transparent clear so the HUD overlay
+    // (PreviewQuickHudLayer) and any QML background (stage media,
+    // embeddedPreviewFrame's canvasBg) underneath the DComp visual
+    // remain visible. DComp composes ON TOP of the entire QSG swap
+    // chain, so an opaque clear hides those layers entirely; with a
+    // transparent clear, only chart-sprite pixels (premultiplied
+    // opaque) cover the QSG output, matching the legacy z-order
+    // where the HUD layer sits at z=2 above chart sprites at z=1.
+    //
+    // Phase 4c will port stage_background to D3D11 to recover the
+    // legacy `#1F2833` chart-area fill (and the brightness dim
+    // gradient). Until then the chart background is the QML
+    // canvasBg colour (#000000 by default in QuickShellMain.qml).
+    const float clearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
     ID3D11RenderTargetView* rtvs[1] = { rtv };
     context->OMSetRenderTargets(1, rtvs, nullptr);
     context->ClearRenderTargetView(rtv, clearColor);
