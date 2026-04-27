@@ -710,7 +710,12 @@ void PreviewDCompSurface::applyTrackedItemGeometry()
     if (!initialised_) return;
     if (trackedItem_ == nullptr || window_ == nullptr) return;
     if (trackedItem_->window() != window_.data()) return;
-    if (!trackedItem_->isVisible()) return;
+    // Don't gate on isVisible: in DComp-exclusive mode QML deliberately
+    // hides the tracked QQuickItem so the QSG sync phase skips it,
+    // but the bounding rect (anchors-driven, follows the parent
+    // chain) is still authoritative for where DComp must paint.
+    // Skipping geometry updates when invisible would leave the swap
+    // chain frozen at its last position even as the user resizes.
     const qreal itemW = trackedItem_->width();
     const qreal itemH = trackedItem_->height();
     if (itemW <= 0.0 || itemH <= 0.0) return;

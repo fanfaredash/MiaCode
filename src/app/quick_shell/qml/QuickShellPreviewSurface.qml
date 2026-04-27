@@ -106,11 +106,24 @@ Item {
         anchors.fill: parent
         z: 1
         runtime: root.runtime
+        // Phase 4f-perf — when DComp owns the chart, hide the entire
+        // QQuickItem so the QSG sync phase doesn't visit its
+        // bounding rect. updatePaintNode already short-circuits but
+        // QQuickItem with ItemHasContents still incurs a per-frame
+        // visit; visible:false removes it from the scene graph
+        // walk entirely. PreviewDCompSurface keeps tracking the
+        // item via findChild + windowChanged signals — those fire
+        // regardless of visibility.
+        visible: !(root.logger && root.logger.previewDCompExclusive)
     }
 
     PreviewQuickHudLayer {
         anchors.fill: parent
         z: 2
         runtime: root.runtime
+        // Phase 4f-perf — DComp now rasterises the HUD itself.
+        // QQuickPaintedItem's per-frame backing-texture upkeep is
+        // not free even when paint() short-circuits, so hide.
+        visible: !(root.logger && root.logger.previewDCompExclusive)
     }
 }
