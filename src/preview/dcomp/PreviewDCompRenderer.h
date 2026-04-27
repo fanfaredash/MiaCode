@@ -118,6 +118,21 @@ private:
     std::atomic<bool> paused_{ false };
     std::mutex pauseMutex_;
     std::condition_variable pauseCv_;
+
+    // Phase 4-perf-fix — visual motion smoothness tracking. The render
+    // thread compares each unique snapshot's playhead against the
+    // previous unique snapshot's playhead and accumulates the delta
+    // distribution. Periodic log entries record avg/max/stddev so
+    // subsequent builds can be checked for motion-smoothness
+    // regressions (the user-visible "clock instability" we just
+    // fixed). See logRenderer("playhead_delta_stats", ...).
+    qint64 lastSnapshotRevision_ = -1;
+    double lastPlayheadMs_ = -1.0;
+    double playheadDeltaSumMs_ = 0.0;
+    double playheadDeltaSqSumMs_ = 0.0;
+    double playheadDeltaMaxMs_ = 0.0;
+    double playheadDeltaMinMs_ = 1.0e9;
+    qint64 playheadDeltaSampleCount_ = 0;
 };
 
 }  // namespace miacode::preview::dcomp

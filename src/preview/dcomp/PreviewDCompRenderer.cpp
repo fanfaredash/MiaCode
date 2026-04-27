@@ -318,6 +318,57 @@ void PreviewDCompRenderer::renderAnimatedFrame()
                         .arg(snapshot.playheadSeconds, 0, 'f', 3));
     }
 
+    // Phase 4-perf-fix — visual motion smoothness tracking. Compare
+    // each unique snapshot's playhead against the previous unique
+    // snapshot's playhead; an even cadence (each delta close to 1
+    // frame at the target fps) means smooth motion, large
+    // deltas/stddev mean visible jitter. Stats accumulate over a
+    // rolling window and log periodically so subsequent code changes
+    // can be regression-checked against the recorded baseline.
+    if (snapshot.revision != lastSnapshotRevision_
+        && lastSnapshotRevision_ != -1) {
+        const double currentMs = snapshot.playheadSeconds * 1000.0;
+        if (lastPlayheadMs_ >= 0.0) {
+            const double delta = currentMs - lastPlayheadMs_;
+            // Exclude reverse seeks, pause→play resumes (large jumps),
+            // and the first-frame nonsense.
+            if (delta > 0.0 && delta < 100.0) {
+                playheadDeltaSumMs_ += delta;
+                playheadDeltaSqSumMs_ += delta * delta;
+                playheadDeltaMaxMs_ = std::max(playheadDeltaMaxMs_, delta);
+                playheadDeltaMinMs_ = std::min(playheadDeltaMinMs_, delta);
+                playheadDeltaSampleCount_ += 1;
+            }
+        }
+        lastPlayheadMs_ = currentMs;
+    }
+    lastSnapshotRevision_ = snapshot.revision;
+
+    // Log every ~600 unique snapshots (10 seconds at 60 Hz). Accumulate
+    // a fresh window after each log so the metric reflects recent
+    // behaviour rather than a session average that hides recent
+    // regressions.
+    if (playheadDeltaSampleCount_ >= 600) {
+        const double avg = playheadDeltaSumMs_
+            / static_cast<double>(playheadDeltaSampleCount_);
+        const double meanSq = playheadDeltaSqSumMs_
+            / static_cast<double>(playheadDeltaSampleCount_);
+        const double variance = std::max(0.0, meanSq - avg * avg);
+        const double stddev = std::sqrt(variance);
+        logRenderer("playhead_delta_stats",
+                    QStringLiteral("avg_ms=%1 min_ms=%2 max_ms=%3 stddev_ms=%4 samples=%5")
+                        .arg(avg, 0, 'f', 3)
+                        .arg(playheadDeltaMinMs_, 0, 'f', 3)
+                        .arg(playheadDeltaMaxMs_, 0, 'f', 3)
+                        .arg(stddev, 0, 'f', 3)
+                        .arg(playheadDeltaSampleCount_));
+        playheadDeltaSumMs_ = 0.0;
+        playheadDeltaSqSumMs_ = 0.0;
+        playheadDeltaMaxMs_ = 0.0;
+        playheadDeltaMinMs_ = 1.0e9;
+        playheadDeltaSampleCount_ = 0;
+    }
+
     // Phase 3.3b/c: render the snapshot's sprite descriptors through the
     // full sprite pipeline. Texture cache resolves QImage → SRV; pipeline
     // groups by SRV and issues one Draw per texture run. If the pipeline
