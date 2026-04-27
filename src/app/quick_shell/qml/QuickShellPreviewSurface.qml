@@ -93,37 +93,36 @@ Item {
         anchors.fill: parent
         z: 0
         mediaHost: root.mediaHost
-        // Phase 4c — hide when the DComp surface is the exclusive
-        // chart renderer; DComp now paints the stage background
-        // image itself, and an opaque-image QML rectangle here would
-        // double the GPU/CPU cost without changing what's visible.
-        // `logger` is the QuickShellController, exposes
-        // previewDCompExclusive (read-only env-driven flag).
-        visible: !(root.logger && root.logger.previewDCompExclusive)
+        // NOTE — keep visible:true even in DComp-exclusive mode. See
+        // the comment above PreviewQuickSceneRoot for why hiding QML
+        // items in this surface breaks Qt's lazy present cadence.
+        // The internal Image/VideoOutput children render against
+        // mediaHost.mediaVisible already; with DComp painting the
+        // bg image at z=0, the user sees both layers, but DComp
+        // composites on top so the visible result is DComp's.
     }
 
+    // NOTE — keep these QQuickItems visible:true even in DComp-
+    // exclusive mode. Hiding them sounds like a perf win (skip the
+    // QSG scene graph walk) but it broke Qt's lazy present cadence:
+    // with the canvas's three big visual items all invisible, the
+    // QSG had nothing dirty to push and frameSwapped fired at ~28 Hz
+    // instead of 60 Hz. The runtime's tick is gated by frameSwapped
+    // (present-driven pacing), so the playhead stalled and chart
+    // sprites stopped advancing — the symptom was a "frozen" preview
+    // even with DComp rendering correctly. updatePaintNode and
+    // paint() still short-circuit, so the items don't actually
+    // produce pixels; they just keep the scene graph "alive" enough
+    // for Qt to maintain its 60 Hz present cadence.
     PreviewQuickSceneRoot {
         anchors.fill: parent
         z: 1
         runtime: root.runtime
-        // Phase 4f-perf — when DComp owns the chart, hide the entire
-        // QQuickItem so the QSG sync phase doesn't visit its
-        // bounding rect. updatePaintNode already short-circuits but
-        // QQuickItem with ItemHasContents still incurs a per-frame
-        // visit; visible:false removes it from the scene graph
-        // walk entirely. PreviewDCompSurface keeps tracking the
-        // item via findChild + windowChanged signals — those fire
-        // regardless of visibility.
-        visible: !(root.logger && root.logger.previewDCompExclusive)
     }
 
     PreviewQuickHudLayer {
         anchors.fill: parent
         z: 2
         runtime: root.runtime
-        // Phase 4f-perf — DComp now rasterises the HUD itself.
-        // QQuickPaintedItem's per-frame backing-texture upkeep is
-        // not free even when paint() short-circuits, so hide.
-        visible: !(root.logger && root.logger.previewDCompExclusive)
     }
 }
