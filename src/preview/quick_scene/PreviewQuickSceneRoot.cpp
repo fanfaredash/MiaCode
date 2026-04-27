@@ -513,6 +513,21 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
 {
     Q_UNUSED(updatePaintNodeData);
 
+    // Phase 4b — when DComp-exclusive mode is on, the DComp surface is
+    // the authoritative chart renderer; this QSG path produces nothing.
+    // Discard any existing scene-graph subtree and return null so Qt
+    // skips this layer entirely. The QQuickItem itself stays visible
+    // (so the DComp surface's findChild + mapToScene tracking still
+    // works), but its bounding rect contributes no pixels to the QSG
+    // scene. PreviewQuickHudLayer + PreviewStageMediaItem are sibling
+    // items and continue to render normally.
+    if (miacode::debug_options::previewDCompExclusiveEnabled()) {
+        if (oldNode != nullptr) {
+            delete oldNode;
+        }
+        return nullptr;
+    }
+
     const bool renderDiagEnabled = miacode::debug_options::previewFramePacingDiagnosticsEnabled();
     if (renderDiagEnabled) {
         if (!renderPhaseTimer_.isValid()) {

@@ -1317,14 +1317,16 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
                 staging.size() * sizeof(PreviewDCompSpriteVertex));
     context->Unmap(vertexBuffer_.Get(), 0);
 
-    // Phase 3.3 diagnostic clear: opaque dark grey so the demo region is
-    // always visible, even if every sprite lands outside the viewport
-    // (the swap chain is still 200x200, but descriptors are in 1280x800
-    // logical space until Phase 4 aligns the placeholder rect). Without
-    // an opaque clear "DComp surface invisible because no sprites
-    // rendered" is indistinguishable from "DComp surface broken." Phase
-    // 4 switches this to fully-transparent so DComp can blend over QML.
-    const float clearColor[4] = { 0.15f, 0.15f, 0.18f, 1.0f };
+    // Phase 4b — opaque clear matching the legacy stage_background's
+    // `canvasBg` colour `#1F2833` (no-media path) so the DComp output
+    // is a drop-in replacement once previewDCompExclusiveEnabled is
+    // on. Phase 4c will properly port stage_background (media frame
+    // composite + dim gradient) when those become Phase-4 priorities.
+    const float clearColor[4] = {
+        31.0f / 255.0f,
+        40.0f / 255.0f,
+        51.0f / 255.0f,
+        1.0f };
     ID3D11RenderTargetView* rtvs[1] = { rtv };
     context->OMSetRenderTargets(1, rtvs, nullptr);
     context->ClearRenderTargetView(rtv, clearColor);

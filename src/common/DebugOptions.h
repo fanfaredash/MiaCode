@@ -152,6 +152,19 @@ inline bool previewUseDCompEnabled()
     return envFlagEnabled("MIACODE_PREVIEW_USE_DCOMP");
 }
 
+inline bool previewDCompExclusiveEnabled()
+{
+    // Phase 4b — when on, the legacy QSG chart-layer pipeline
+    // (PreviewQuickSceneRoot's updatePaintNode) is short-circuited so
+    // the DComp surface is the only thing rendering chart content.
+    // The other QSG items inside QuickShellPreviewSurface
+    // (PreviewStageMediaItem for video background, PreviewQuickHudLayer
+    // for the FPS overlay) keep running. Implies and requires
+    // previewUseDCompEnabled — otherwise nothing renders the chart.
+    return previewUseDCompEnabled()
+        && envFlagEnabled("MIACODE_PREVIEW_DCOMP_EXCLUSIVE");
+}
+
 inline bool previewQsgRenderTimingEnabled()
 {
     // Captures Qt's built-in scene-graph timing (`qt.scenegraph.time.*` log
