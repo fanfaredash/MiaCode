@@ -14,6 +14,7 @@
 // sprite pipeline.
 
 #include "preview/dcomp/PreviewDCompCore.h"
+#include "preview/dcomp/PreviewDCompSpritePipeline.h"
 
 #include <QObject>
 #include <QSize>
@@ -63,6 +64,7 @@ private:
     void renderAnimatedFrame();
 
     PreviewDCompCore* core_ = nullptr;
+    PreviewDCompSpritePipeline pipeline_;
     std::thread thread_;
     std::atomic<bool> running_{ false };
     std::atomic<bool> stopRequested_{ false };

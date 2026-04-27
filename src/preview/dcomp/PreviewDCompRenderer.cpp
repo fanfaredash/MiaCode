@@ -79,9 +79,24 @@ bool PreviewDCompRenderer::start(PreviewDCompCore* core)
     stopRequested_.store(false, std::memory_order_release);
     framesRendered_.store(0, std::memory_order_release);
     startTime_ = std::chrono::steady_clock::now();
+
+    // Phase 3.1: spin up the sprite pipeline using Core's D3D11 device.
+    // If pipeline init fails (shader compile error, etc.) we fall back
+    // to Core::renderClear so the render thread still produces frames —
+    // the user sees a magenta clear instead of the textured quad and
+    // pipeline-failed shows up in the log.
+    if (core_->device() != nullptr) {
+        if (!pipeline_.initialise(core_->device())) {
+            logRenderer("pipeline_init_failed",
+                        QStringLiteral("falling_back_to_clear=1"));
+        }
+    }
+
     running_.store(true, std::memory_order_release);
     thread_ = std::thread([this]() { renderLoop(); });
-    logRenderer("started");
+    logRenderer("started",
+                QStringLiteral("pipeline_ready=%1")
+                    .arg(pipeline_.isReady() ? 1 : 0));
     return true;
 }
 
@@ -110,6 +125,7 @@ void PreviewDCompRenderer::stop()
         thread_.join();
     }
     running_.store(false, std::memory_order_release);
+    pipeline_.shutdown();
     core_ = nullptr;
     logRenderer("stopped",
                 QStringLiteral("frames_total=%1").arg(framesRendered_.load()));
@@ -201,21 +217,32 @@ void PreviewDCompRenderer::renderAnimatedFrame()
     if (core_ == nullptr) {
         return;
     }
-    // 4-second hue cycle. Slow enough that successive frames are clearly
-    // related (so the eye reads it as a smooth gradient sweep rather than
-    // a rainbow flicker), fast enough that "is the renderer running?" is
-    // visually obvious within the first second of the app launch.
-    const auto now = std::chrono::steady_clock::now();
-    const double seconds =
-        std::chrono::duration<double>(now - startTime_).count();
-    constexpr double kCyclePeriodSeconds = 4.0;
-    const double hue = std::fmod(seconds / kCyclePeriodSeconds, 1.0);
 
-    float r = 0.0f;
-    float g = 0.0f;
-    float b = 0.0f;
-    hueToRgb(hue, r, g, b);
-    core_->renderClear(r, g, b, 1.0f);
+#ifdef Q_OS_WIN
+    // Phase 3.1: render a textured quad through the full sprite pipeline
+    // (HLSL VS+PS, vertex buffer, sampler, draw call). The pipeline does
+    // its own ClearRenderTargetView before the draw; we just present
+    // afterwards. If the pipeline failed to initialise (logged as
+    // pipeline_init_failed), we fall back to a colour-cycle clear so
+    // the user can still see the renderer is alive.
+    if (pipeline_.isReady()) {
+        pipeline_.renderTestQuad(core_->context(),
+                                  core_->backBufferRtv(),
+                                  core_->swapChainPixelSize());
+        core_->present();
+    } else {
+        // Fallback: colour-cycle clear so we still have something on
+        // screen for the user to see.
+        const auto now = std::chrono::steady_clock::now();
+        const double seconds =
+            std::chrono::duration<double>(now - startTime_).count();
+        constexpr double kCyclePeriodSeconds = 4.0;
+        const double hue = std::fmod(seconds / kCyclePeriodSeconds, 1.0);
+        float r = 0.0f, g = 0.0f, b = 0.0f;
+        hueToRgb(hue, r, g, b);
+        core_->renderClear(r, g, b, 1.0f);
+    }
+#endif
 }
 
 }  // namespace miacode::preview::dcomp

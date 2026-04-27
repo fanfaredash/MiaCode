@@ -77,11 +77,26 @@ public:
     // this. The immediate D3D11 context is not safe to share.
     bool renderClear(float r, float g, float b, float a);
 
+    // Phase 3: split present from the clear, so the sprite pipeline can
+    // do its own clear (or skip clearing entirely) and Core just flips
+    // the swap chain. Returns false if !ready_ or Present fails.
+    // Thread safety: render thread only, same as renderClear.
+    bool present();
+
     // Returns the FRAME_LATENCY_WAITABLE_OBJECT handle the render thread
     // blocks on (WaitForSingleObject). Lifetime is tied to this Core —
     // caller must not CloseHandle it. Returns nullptr if the swap chain
     // hasn't been created yet (i.e. before initialise() succeeds).
     HANDLE frameLatencyWaitable() const;
+
+    // Phase 3 accessors — borrowed by PreviewDCompSpritePipeline so it
+    // can build buffers, compile shaders, and issue draw calls without
+    // owning the device. Caller must use these only from the render
+    // thread (single-thread rule for the immediate D3D11 context).
+    // Lifetime tied to this Core.
+    ID3D11Device* device() const;
+    ID3D11DeviceContext* context() const;
+    ID3D11RenderTargetView* backBufferRtv() const;
 
     // True iff initialise() has succeeded and shutdown() has not been
     // called.
@@ -96,7 +111,11 @@ public:
     bool setVisualTransform(int, int, QSize) { return false; }
     bool renderTestFrame() { return false; }
     bool renderClear(float, float, float, float) { return false; }
+    bool present() { return false; }
     void* frameLatencyWaitable() const { return nullptr; }
+    void* device() const { return nullptr; }
+    void* context() const { return nullptr; }
+    void* backBufferRtv() const { return nullptr; }
     bool isReady() const { return false; }
     QSize swapChainPixelSize() const { return {}; }
 #endif

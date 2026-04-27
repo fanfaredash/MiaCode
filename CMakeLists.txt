@@ -259,6 +259,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/dcomp/PreviewDCompCore.cpp
     src/preview/dcomp/PreviewDCompRenderer.h
     src/preview/dcomp/PreviewDCompRenderer.cpp
+    src/preview/dcomp/PreviewDCompSpritePipeline.h
+    src/preview/dcomp/PreviewDCompSpritePipeline.cpp
     src/preview/dcomp/PreviewDCompSurface.h
     src/preview/dcomp/PreviewDCompSurface.cpp
     src/preview/audio/PreviewAudioBackend.h
@@ -419,9 +421,10 @@ if (WIN32)
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
         winmm
         avrt  # Multimedia Class Scheduler Service (AvSetMmThreadCharacteristicsW)
-        d3d11 # DComp preview path (src/preview/dcomp) — see docs plan §3 Phase 1
-        dxgi  # IDXGIFactory2::CreateSwapChainForComposition + frame latency waitable
-        dcomp # DCompositionCreateDevice + visual tree
+        d3d11        # DComp preview path (src/preview/dcomp) — see docs plan §3 Phase 1
+        dxgi         # IDXGIFactory2::CreateSwapChainForComposition + frame latency waitable
+        dcomp        # DCompositionCreateDevice + visual tree
+        d3dcompiler  # Phase 3 sprite pipeline runtime HLSL compile (D3DCompile)
     )
     add_custom_command(TARGET MiaCode POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different

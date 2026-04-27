@@ -425,9 +425,16 @@ bool PreviewDCompCore::renderClear(float r, float g, float b, float a)
     }
     const float clearColor[4] = { r, g, b, a };
     d3dContext_->ClearRenderTargetView(backBufferRtv_.Get(), clearColor);
+    return present();
+}
 
-    // Present(1, 0) = sync to vsync, no flags. The render thread blocking
-    // on the swap chain's frame-latency waitable means this Present
+bool PreviewDCompCore::present()
+{
+    if (!ready_) {
+        return false;
+    }
+    // Present(1, 0) = sync to vsync, no flags. The render thread blocks
+    // on the swap chain's frame-latency waitable elsewhere, so this
     // returns quickly — the wait already happened up the stack.
     HRESULT hr = swapChain_->Present(1, 0);
     if (FAILED(hr)) {
@@ -440,6 +447,21 @@ bool PreviewDCompCore::renderClear(float r, float g, float b, float a)
 HANDLE PreviewDCompCore::frameLatencyWaitable() const
 {
     return frameLatencyWaitable_;
+}
+
+ID3D11Device* PreviewDCompCore::device() const
+{
+    return d3dDevice_.Get();
+}
+
+ID3D11DeviceContext* PreviewDCompCore::context() const
+{
+    return d3dContext_.Get();
+}
+
+ID3D11RenderTargetView* PreviewDCompCore::backBufferRtv() const
+{
+    return backBufferRtv_.Get();
 }
 
 void PreviewDCompCore::shutdown()
