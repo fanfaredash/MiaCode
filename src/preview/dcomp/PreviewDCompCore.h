@@ -137,6 +137,20 @@ private:
     Microsoft::WRL::ComPtr<IDCompositionDevice> compDevice_;
     Microsoft::WRL::ComPtr<IDCompositionTarget> compTarget_;
     Microsoft::WRL::ComPtr<IDCompositionVisual> compVisual_;
+
+    // Phase 4a — remembered visual transform args. setVisualTransform
+    // computes the visual's scale as displaySize / swapChainSize_; when
+    // a resize is requested from the GUI thread immediately followed by
+    // setVisualTransform, the swap chain hasn't yet been resized (the
+    // render thread does that between presents), so the scale is wrong
+    // and *stays wrong* until the GUI thread happens to call
+    // setVisualTransform again. Storing the requested displaySize lets
+    // resize() re-apply the transform once the swap chain catches up,
+    // collapsing the scale back to 1.0.
+    bool lastVisualTransformValid_ = false;
+    int lastVisualTransformX_ = 0;
+    int lastVisualTransformY_ = 0;
+    QSize lastVisualTransformDisplaySize_;
     HANDLE frameLatencyWaitable_ = nullptr;
     HWND parentHwnd_ = nullptr;
     QSize swapChainSize_;

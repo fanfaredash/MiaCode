@@ -590,6 +590,29 @@ void PreviewDCompSurface::applyTrackedItemGeometry()
         renderer_.requestResize(pixelSize);
     }
     core_.setVisualTransform(xPx, yPx, pixelSize);
+
+    // Phase 4a diagnostic: log the geometry decision sparingly so we
+    // can confirm the tracked item's reported bounds match the visible
+    // legacy preview frame. Only log when the values change to avoid
+    // flooding on layout settle.
+    static thread_local int s_lastX = INT_MIN;
+    static thread_local int s_lastY = INT_MIN;
+    static thread_local QSize s_lastSize;
+    if (s_lastX != xPx || s_lastY != yPx || s_lastSize != pixelSize) {
+        s_lastX = xPx;
+        s_lastY = yPx;
+        s_lastSize = pixelSize;
+        logSurface("track_target_geometry",
+                   QStringLiteral("scene_x=%1 scene_y=%2 item_w=%3 item_h=%4 dpr=%5 px_x=%6 px_y=%7 px_w=%8 px_h=%9 obj=%10")
+                       .arg(topLeftScene.x(), 0, 'f', 2)
+                       .arg(topLeftScene.y(), 0, 'f', 2)
+                       .arg(itemW, 0, 'f', 2)
+                       .arg(itemH, 0, 'f', 2)
+                       .arg(dpr, 0, 'f', 2)
+                       .arg(xPx).arg(yPx)
+                       .arg(pixelSize.width()).arg(pixelSize.height())
+                       .arg(trackedItem_->objectName()));
+    }
 }
 
 bool PreviewDCompSurface::initialiseIfReady()

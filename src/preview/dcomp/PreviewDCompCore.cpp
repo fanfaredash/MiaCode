@@ -363,6 +363,18 @@ bool PreviewDCompCore::resize(QSize newPixelSize)
     logDComp("resized",
              QStringLiteral("width=%1 height=%2")
                  .arg(newPixelSize.width()).arg(newPixelSize.height()));
+
+    // Phase 4a — re-apply the last visual transform now that the swap
+    // chain matches it. setVisualTransform's scale = displaySize /
+    // swapChainSize_; if the GUI thread set the transform with the
+    // *requested* size before the render thread resized the swap chain
+    // here, the visual is currently scaled (oldDisplay/oldSwap) which
+    // is wrong now. Re-applying with the same displaySize against the
+    // new swap chain size gives the correct 1:1 scale.
+    if (lastVisualTransformValid_) {
+        setVisualTransform(lastVisualTransformX_, lastVisualTransformY_,
+                            lastVisualTransformDisplaySize_);
+    }
     return true;
 }
 
@@ -407,6 +419,13 @@ bool PreviewDCompCore::setVisualTransform(int xPx, int yPx, QSize displaySize)
         logDCompError("commit_after_transform", hr);
         return false;
     }
+    // Remember the requested transform so resize() can re-apply once
+    // the swap chain catches up — see the explanation on
+    // lastVisualTransformValid_ in the header.
+    lastVisualTransformValid_ = true;
+    lastVisualTransformX_ = xPx;
+    lastVisualTransformY_ = yPx;
+    lastVisualTransformDisplaySize_ = displaySize;
     return true;
 }
 
