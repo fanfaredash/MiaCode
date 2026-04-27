@@ -8,6 +8,7 @@
 #include <QSize>
 
 class QQuickWindow;
+class PreviewRuntime;
 
 namespace miacode::preview::dcomp {
 
@@ -42,6 +43,12 @@ public:
     // initialisation is deferred until the first sceneGraphInitialized.
     void attachToWindow(QQuickWindow* window);
 
+    // Phase 3.2: hand the surface a PreviewRuntime. The surface listens
+    // to frameStateChanged on the GUI thread, builds a thread-safe
+    // snapshot, and publishes it to the renderer (which the render
+    // thread reads at the top of each frame). Pass nullptr to detach.
+    void setRuntime(PreviewRuntime* runtime);
+
     // Releases all resources and disconnects from the window. Idempotent.
     void detach();
 
@@ -51,6 +58,7 @@ private slots:
     void onWindowSceneGraphInitialized();
     void onWindowGeometryChanged();
     void onWindowVisibilityChanged();
+    void onRuntimeFrameStateChanged();
 
 private:
     bool initialiseIfReady();
@@ -59,8 +67,11 @@ private:
     void* currentParentHwnd() const;
 
     QPointer<QQuickWindow> window_;
+    QPointer<PreviewRuntime> runtime_;
+    QMetaObject::Connection runtimeFrameStateConnection_;
     PreviewDCompCore core_;
     PreviewDCompRenderer renderer_;
+    qint64 snapshotRevision_ = 0;
     bool initialised_ = false;
 };
 

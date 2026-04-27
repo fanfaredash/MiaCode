@@ -151,6 +151,12 @@ qint64 PreviewDCompRenderer::framesRendered() const
     return framesRendered_.load(std::memory_order_acquire);
 }
 
+void PreviewDCompRenderer::publishSnapshot(const PreviewDCompFrameStateSnapshot& snapshot)
+{
+    std::lock_guard<std::mutex> lock(snapshotMutex_);
+    snapshot_ = snapshot;
+}
+
 void PreviewDCompRenderer::renderLoop()
 {
 #ifdef Q_OS_WIN
@@ -219,16 +225,26 @@ void PreviewDCompRenderer::renderAnimatedFrame()
     }
 
 #ifdef Q_OS_WIN
-    // Phase 3.1: render a textured quad through the full sprite pipeline
-    // (HLSL VS+PS, vertex buffer, sampler, draw call). The pipeline does
-    // its own ClearRenderTargetView before the draw; we just present
-    // afterwards. If the pipeline failed to initialise (logged as
-    // pipeline_init_failed), we fall back to a colour-cycle clear so
-    // the user can still see the renderer is alive.
+    // Phase 3.2: copy the latest published snapshot under the lock.
+    // The lock is held for one struct copy (< 100 ns) — render path
+    // contention is not a concern at this scale.
+    PreviewDCompFrameStateSnapshot snapshot;
+    {
+        std::lock_guard<std::mutex> lock(snapshotMutex_);
+        snapshot = snapshot_;
+    }
+
+    // Phase 3.1+3.2: render a textured quad through the full sprite
+    // pipeline. The quad's horizontal position is now driven by the
+    // playhead from the snapshot — visual proof that GUI-thread state
+    // is reaching the render thread. If the pipeline failed to
+    // initialise we fall back to a colour-cycle clear so the failure
+    // mode is visible.
     if (pipeline_.isReady()) {
         pipeline_.renderTestQuad(core_->context(),
                                   core_->backBufferRtv(),
-                                  core_->swapChainPixelSize());
+                                  core_->swapChainPixelSize(),
+                                  snapshot);
         core_->present();
     } else {
         // Fallback: colour-cycle clear so we still have something on

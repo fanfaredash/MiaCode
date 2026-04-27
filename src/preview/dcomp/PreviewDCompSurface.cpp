@@ -1,6 +1,8 @@
 #include "preview/dcomp/PreviewDCompSurface.h"
 
 #include "common/DebugLog.h"
+#include "preview/runtime/PreviewRuntime.h"
+#include "preview/scene/PreviewFrameState.h"
 
 #include <QQuickWindow>
 
@@ -95,13 +97,65 @@ void PreviewDCompSurface::attachToWindow(QQuickWindow* window)
     }
 }
 
+void PreviewDCompSurface::setRuntime(PreviewRuntime* runtime)
+{
+    if (runtime_ == runtime) {
+        return;
+    }
+    if (runtimeFrameStateConnection_) {
+        QObject::disconnect(runtimeFrameStateConnection_);
+        runtimeFrameStateConnection_ = QMetaObject::Connection();
+    }
+    runtime_ = runtime;
+    if (runtime_ != nullptr) {
+        // DirectConnection so the GUI thread builds the snapshot and
+        // publishes it inline with the signal — no event-loop hop. Both
+        // slot and signal live on the GUI thread, so DirectConnection
+        // is safe.
+        runtimeFrameStateConnection_ = QObject::connect(
+            runtime_, &PreviewRuntime::frameStateChanged, this,
+            &PreviewDCompSurface::onRuntimeFrameStateChanged,
+            Qt::DirectConnection);
+        // Publish an initial snapshot so the renderer has valid data
+        // before the first frameStateChanged fires (e.g. during the
+        // window's pre-playback idle phase).
+        onRuntimeFrameStateChanged();
+        logSurface("runtime_attached",
+                   QStringLiteral("runtime=0x%1")
+                       .arg(reinterpret_cast<quintptr>(runtime), 0, 16));
+    } else {
+        logSurface("runtime_detached");
+    }
+}
+
 void PreviewDCompSurface::detach()
 {
     if (window_) {
         disconnect(window_, nullptr, this, nullptr);
     }
+    if (runtimeFrameStateConnection_) {
+        QObject::disconnect(runtimeFrameStateConnection_);
+        runtimeFrameStateConnection_ = QMetaObject::Connection();
+    }
+    runtime_ = nullptr;
     teardownCore();
     window_ = nullptr;
+}
+
+void PreviewDCompSurface::onRuntimeFrameStateChanged()
+{
+    if (runtime_ == nullptr) {
+        return;
+    }
+    PreviewDCompFrameStateSnapshot snapshot;
+    snapshot.revision = ++snapshotRevision_;
+    snapshot.playheadSeconds = runtime_->frameState().playheadSeconds;
+    snapshot.sceneLogicalSize = currentClientPixelSize();
+    // playing flag: the runtime doesn't expose this directly here, so
+    // for Phase 3.2 we leave it false; Phase 3.3+ can wire it from
+    // PreviewSection state if needed.
+    snapshot.playing = false;
+    renderer_.publishSnapshot(snapshot);
 }
 
 bool PreviewDCompSurface::isActive() const

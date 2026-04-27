@@ -12,6 +12,7 @@
 #include "preview/dcomp/PreviewDCompSurface.h"
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
+#include "preview/runtime/PreviewRuntime.h"
 #include "timeline/quick/TimelineQuickItem.h"
 
 #include <QApplication>
@@ -398,9 +399,19 @@ bool QuickShellBootstrap::start()
             previewDCompSurface_ =
                 std::make_unique<miacode::preview::dcomp::PreviewDCompSurface>(this);
             previewDCompSurface_->attachToWindow(window);
+            // Phase 3.2: connect the surface to the PreviewRuntime so the
+            // render thread can read playhead state. controller_ exposes
+            // it as a generic QObject* (the QML-property accessor); cast
+            // back to PreviewRuntime for the typed setRuntime call.
+            if (controller_ != nullptr) {
+                if (auto* runtime = qobject_cast<PreviewRuntime*>(
+                        controller_->previewRuntime()); runtime != nullptr) {
+                    previewDCompSurface_->setRuntime(runtime);
+                }
+            }
             appendQuickShellRuntimeLog(
                 QStringLiteral("dcomp_surface_attached"),
-                QStringLiteral("phase=1 reason=env_flag"));
+                QStringLiteral("phase=3.2 reason=env_flag"));
         }
         if (surfaceHost_ != nullptr) {
             surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());

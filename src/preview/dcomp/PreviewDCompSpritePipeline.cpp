@@ -435,7 +435,8 @@ void PreviewDCompSpritePipeline::shutdown()
 
 bool PreviewDCompSpritePipeline::renderTestQuad(ID3D11DeviceContext* context,
                                                 ID3D11RenderTargetView* rtv,
-                                                QSize rtvLogicalSize)
+                                                QSize rtvLogicalSize,
+                                                const PreviewDCompFrameStateSnapshot& snapshot)
 {
     if (!ready_ || context == nullptr || rtv == nullptr) {
         return false;
@@ -443,15 +444,34 @@ bool PreviewDCompSpritePipeline::renderTestQuad(ID3D11DeviceContext* context,
     const int width = rtvLogicalSize.width() > 0 ? rtvLogicalSize.width() : 1;
     const int height = rtvLogicalSize.height() > 0 ? rtvLogicalSize.height() : 1;
 
-    // Phase 3.1: centre a 200×200 logical-pixel quad in the RTV. UV maps
-    // 0..1 across the test texture.
-    constexpr float kQuadSidePx = 200.0f;
+    // Phase 3.2: centre a smaller-than-RTV quad in the swap chain so
+    // there's actual room for it to slide. The Phase-1 swap chain is
+    // sized to the placeholder rect (200×200 for the top-left demo);
+    // making the quad a fraction of that gives us a visible bounce
+    // range. Horizontal position is offset by the snapshot revision —
+    // any frameStateChanged advances it by 0.5 px, so 60 snapshots/sec
+    // ≈ 30 px/sec, slow enough to be readable. Triangle-wave bounces
+    // off both edges, so motion is sustained indefinitely.
+    constexpr float kQuadFraction = 0.4f;  // quad side = 40% of RTV side
+    constexpr float kPxPerRevision = 0.5f;
+    const float quadSide = static_cast<float>(std::min(width, height)) * kQuadFraction;
     const float cx = static_cast<float>(width) * 0.5f;
     const float cy = static_cast<float>(height) * 0.5f;
-    const float halfSide = kQuadSidePx * 0.5f;
-    const float left = cx - halfSide;
+    const float halfSide = quadSide * 0.5f;
+    const float maxOffset = (cx - halfSide) > 0.0f ? (cx - halfSide) : 0.0f;
+    float rawOffset = static_cast<float>(snapshot.revision) * kPxPerRevision;
+    if (maxOffset > 0.0f) {
+        const float period = maxOffset * 2.0f;
+        float wrapped = std::fmod(rawOffset, period);
+        if (wrapped < 0.0f) wrapped += period;
+        rawOffset = wrapped > maxOffset ? (period - wrapped) : wrapped;
+    } else {
+        rawOffset = 0.0f;
+    }
+    const float originX = cx + rawOffset - halfSide;
+    const float left = originX;
     const float top = cy - halfSide;
-    const float right = cx + halfSide;
+    const float right = originX + quadSide;
     const float bottom = cy + halfSide;
 
     // Triangle strip: TL, TR, BL, BR

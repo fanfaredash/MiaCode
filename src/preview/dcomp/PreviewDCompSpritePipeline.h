@@ -27,6 +27,7 @@
 //    descriptors with no adapter layer.
 
 #include "preview/dcomp/PreviewDCompCore.h"
+#include "preview/dcomp/PreviewDCompFrameStateSnapshot.h"
 
 #include <QSize>
 
@@ -94,17 +95,20 @@ public:
     bool isReady() const { return ready_; }
 
     // Phase 3.1 — render one centred textured quad to the supplied RTV.
-    // The quad shows the test checkerboard at 256x256 logical pixels
-    // centred in `rtvLogicalSize`. Phase 3.3+ replaces this with a
-    // descriptor-list-driven draw.
+    // Phase 3.2 — quad horizontal position is offset by the snapshot's
+    // playheadSeconds so playback motion is visually verifiable. The
+    // quad shows the test checkerboard at 200x200 logical pixels.
+    // Phase 3.3+ replaces this with a descriptor-list-driven draw.
     bool renderTestQuad(ID3D11DeviceContext* context,
                         ID3D11RenderTargetView* rtv,
-                        QSize rtvLogicalSize);
+                        QSize rtvLogicalSize,
+                        const PreviewDCompFrameStateSnapshot& snapshot);
 #else
     bool initialise(void*) { return false; }
     void shutdown() {}
     bool isReady() const { return false; }
-    bool renderTestQuad(void*, void*, QSize) { return false; }
+    bool renderTestQuad(void*, void*, QSize,
+                         const PreviewDCompFrameStateSnapshot&) { return false; }
 #endif
 
 private:

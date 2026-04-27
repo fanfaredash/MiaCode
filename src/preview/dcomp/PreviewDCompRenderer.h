@@ -14,6 +14,7 @@
 // sprite pipeline.
 
 #include "preview/dcomp/PreviewDCompCore.h"
+#include "preview/dcomp/PreviewDCompFrameStateSnapshot.h"
 #include "preview/dcomp/PreviewDCompSpritePipeline.h"
 
 #include <QObject>
@@ -58,6 +59,12 @@ public:
     // thread.
     qint64 framesRendered() const;
 
+    // Phase 3.2: GUI thread calls this whenever a new snapshot is
+    // available (typically from PreviewRuntime::frameStateChanged).
+    // Cheap — copies ~80 bytes under a brief mutex. The render thread
+    // pulls the latest snapshot at the top of each frame.
+    void publishSnapshot(const PreviewDCompFrameStateSnapshot& snapshot);
+
 private:
     void renderLoop();
     void processPendingResizeLocked();
@@ -69,6 +76,13 @@ private:
     std::atomic<bool> running_{ false };
     std::atomic<bool> stopRequested_{ false };
     std::atomic<qint64> framesRendered_{ 0 };
+
+    // Latest published frame state. The GUI thread writes via
+    // publishSnapshot under snapshotMutex_; the render thread copies it
+    // out at the top of each frame. POD by value, ~80 bytes — the lock
+    // is held for tens of nanoseconds (one struct copy).
+    mutable std::mutex snapshotMutex_;
+    PreviewDCompFrameStateSnapshot snapshot_;
 
     // Pending-resize queue. The mutex is held only while reading or writing
     // `pendingResizeSize_` and `pendingResizeRequested_`; the renderer
