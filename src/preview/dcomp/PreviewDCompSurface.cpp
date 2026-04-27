@@ -519,20 +519,38 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     // and the texture cache hits on the unchanged QImage cacheKey.
     // Pushed last so it draws on top of everything (mirrors the
     // legacy z=2 placement of PreviewQuickHudLayer above the chart).
+    //
+    // Rasterise at PHYSICAL pixel size (logical × DPR), not logical:
+    // DComp's viewport is physical pixels, so a logical-size texture
+    // gets upscaled by DPR through bilinear filtering and the text
+    // looks blurry. Sprite still covers the canvas at logical bounds;
+    // the bigger texture maps 1:1 to physical viewport pixels =
+    // crisp text. paintPreviewHudOverlay's font scaling already
+    // hinges on shortSide / kHudReferenceShortSide (1024), so feeding
+    // it the larger size auto-scales fonts to the right pixel size.
     if (enabled(scene::HudLayer)) {
+        const qreal hudDpr = window_ != nullptr
+            && window_->effectiveDevicePixelRatio() > 0.0
+                ? window_->effectiveDevicePixelRatio() : 1.0;
+        const QSize hudPixelSize(
+            qMax(1, qRound(logicalSize.width() * hudDpr)),
+            qMax(1, qRound(logicalSize.height() * hudDpr)));
         constexpr qint64 kHudRebuildIntervalNs = 200LL * 1000LL * 1000LL;
         const bool needsRebuild =
             !hudImage_
-            || hudImage_->size() != logicalSize
+            || hudImage_->size() != hudPixelSize
             || lastHudRebuildNs_ == 0
             || (nowNs - lastHudRebuildNs_) >= kHudRebuildIntervalNs;
         if (needsRebuild) {
             auto fresh = QSharedPointer<QImage>::create(
-                logicalSize, QImage::Format_RGBA8888_Premultiplied);
+                hudPixelSize, QImage::Format_RGBA8888_Premultiplied);
             fresh->fill(Qt::transparent);
             QPainter p(fresh.data());
+            // Pass the same physical size so paintPreviewHudOverlay's
+            // shortSide / kHudReferenceShortSide ratio scales fonts
+            // for the high-res target.
             miacode::preview::hud::paintPreviewHudOverlay(
-                p, state, logicalSize, layerFlags_);
+                p, state, hudPixelSize, layerFlags_);
             p.end();
             hudImage_ = fresh;
             lastHudRebuildNs_ = nowNs;
