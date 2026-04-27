@@ -3,8 +3,17 @@
 #include "common/DebugLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/scene/PreviewActiveMarkerView.h"
+#include "preview/scene/PreviewChartReviewLayerState.h"
 #include "preview/scene/PreviewFrameState.h"
+#include "preview/scene/PreviewGuideLayerState.h"
+#include "preview/scene/PreviewHeadLayerState.h"
+#include "preview/scene/PreviewJudgeEffectLayerState.h"
+#include "preview/scene/PreviewMaimuriDxJudgeLayerState.h"
 #include "preview/scene/PreviewSceneGeometry.h"
+#include "preview/scene/PreviewSlideMotionLayerState.h"
+#include "preview/scene/PreviewTouchHoldLayerState.h"
+#include "preview/scene/PreviewTouchJudgeLayerState.h"
+#include "preview/scene/PreviewTouchLayerState.h"
 #include "preview/scene/PreviewTrackLayerState.h"
 
 #include <QQuickWindow>
@@ -176,61 +185,176 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     const QRectF playfieldRect = miacode::preview::scene::playfieldRectForStage(
         stageRect, layoutSquareScale);
 
-    // Backdrop: synthesised single descriptor backed by a snapshot-owned
-    // QImage copy so the render thread never reads runtime-owned QImage
-    // state. The QImage copy is implicit-shared (CoW) — same underlying
-    // pixel data as the runtime's outline asset, but the QImage object
-    // we hand to the render thread is private to this snapshot. If the
-    // runtime later reassigns state.assets.outlineImage (asset reload),
-    // its detach lands on a fresh d-pointer; ours stays bound to the
-    // original data via the QSharedPointer ref. Without this copy,
-    // sprite.image = &state.assets.outlineImage races with runtime
-    // mutations on the GUI thread and shows up on the render thread as
-    // intermittent isNull()=true → no backdrop drawn (the symptom we
-    // saw as `vertices=0 runs=0 cache_hit=2`).
+    // Phase 3.4: prepared-scene cache + per-layer cursor windowing.
+    // Mirrors PreviewQuickSceneRoot::updatePaintNode lines 566-592 — sync
+    // the cache (rebuild when chart content changes), reset every cursor
+    // on rebuild, then incrementally advance each cursor to the current
+    // playhead. This is what makes per-frame layer assembly cheap; the
+    // simpler full-marker view used in Phase 3.3a walks every marker on
+    // every frame, which scales badly for long charts.
+    namespace scene = miacode::preview::scene;
+    const bool cacheRebuilt = preparedCache_.sync(state);
+    if (cacheRebuilt) {
+        guideCursor_.reset();
+        headCursor_.reset();
+        trackCursor_.reset();
+        slideMotionCursor_.reset();
+        judgeEffectCursor_.reset();
+        touchCursor_.reset();
+        touchJudgeCursor_.reset();
+        touchHoldCursor_.reset();
+        chartReviewCursor_.reset();
+        maimuriDxJudgeCursor_.reset();
+    }
+    const double playheadSeconds = state.playheadSeconds;
+    scene::syncPreviewLayerWindowCursor(preparedCache_.guideLayer(), playheadSeconds, &guideCursor_);
+    scene::syncPreviewLayerWindowCursor(preparedCache_.headLayer(), playheadSeconds, &headCursor_);
+    scene::syncPreviewLayerWindowCursor(preparedCache_.slideLikeLayer(), playheadSeconds, &trackCursor_);
+    scene::syncPreviewLayerWindowCursor(preparedCache_.slideLikeLayer(), playheadSeconds, &slideMotionCursor_);
+    scene::syncPreviewLayerWindowCursor(preparedCache_.judgeEffectLayer(), playheadSeconds, &judgeEffectCursor_);
+    scene::syncPreviewLayerWindowCursor(preparedCache_.touchLayer(), playheadSeconds, &touchCursor_);
+    scene::syncPreviewLayerWindowCursor(preparedCache_.touchJudgeLayer(), playheadSeconds, &touchJudgeCursor_);
+    scene::syncPreviewLayerWindowCursor(preparedCache_.touchHoldLayer(), playheadSeconds, &touchHoldCursor_);
+    scene::syncPreviewLayerWindowCursor(preparedCache_.chartReviewLayer(), playheadSeconds, &chartReviewCursor_);
+    scene::syncPreviewLayerWindowCursor(preparedCache_.maimuriDxJudgeLayer(), playheadSeconds, &maimuriDxJudgeCursor_);
+
+    const auto windowed = [&](const auto& layer, const scene::PreviewLayerWindowCursor& cursor) {
+        return scene::PreviewActiveMarkerView(state.noteMarkers, layer, cursor);
+    };
+    const auto appendSprites = [&](const scene::PreviewSpriteDescriptors& sprites) {
+        for (const auto& sprite : sprites) {
+            snapshot.sprites.append(sprite);
+        }
+    };
+    const auto appendOwnedImages =
+        [&](const QVector<QSharedPointer<QImage>>& images) {
+            for (const auto& image : images) {
+                snapshot.retainedImages.append(image);
+            }
+        };
+
+    // Backdrop (z=1 in the legacy stack). Snapshot owns its own QImage
+    // copy so the render thread never reads runtime-mutated QImage state
+    // — see Phase 3.3c-fix commit notes for why this matters.
     if (!state.assets.outlineImage.isNull()) {
         auto backdropImage =
             QSharedPointer<QImage>::create(state.assets.outlineImage);
         snapshot.retainedImages.append(backdropImage);
-        miacode::preview::scene::PreviewSpriteDescriptor backdrop;
+        scene::PreviewSpriteDescriptor backdrop;
         backdrop.image = backdropImage.data();
         backdrop.center = playfieldRect.center();
         backdrop.width = playfieldRect.width();
         backdrop.height = playfieldRect.height();
         backdrop.rotationDegrees = 0.0;
         backdrop.opacity = 1.0;
-        backdrop.effect = miacode::preview::scene::PreviewAnimatedSpriteEffect::None;
+        backdrop.effect = scene::PreviewAnimatedSpriteEffect::None;
         backdrop.cacheable = true;
         snapshot.sprites.append(backdrop);
     }
 
-    // Track layer: produces per-marker note sprites. The legacy code
-    // uses a windowed PreviewActiveMarkerView via PreparedSceneCache,
-    // but for Phase 3.3a we use the simpler full-marker constructor —
-    // the perf optimisation can come back in Phase 3.4+ if needed.
-    miacode::preview::scene::PreviewActiveMarkerView trackMarkers(state.noteMarkers);
-    auto trackState = miacode::preview::scene::buildPreviewTrackLayerState(
-        state, trackMarkers, playfieldRect);
-    for (auto& sprite : trackState.sprites) {
-        snapshot.sprites.append(sprite);
-    }
-    for (auto& image : trackState.ownedImages) {
-        snapshot.retainedImages.append(image);
+    // The remaining layers append in the same back-to-front order as
+    // PreviewQuickSceneRoot::updatePaintNode — z-order matters because
+    // Phase 3.3 issues draws in vector order with premultiplied-alpha
+    // blending, so later sprites overwrite earlier ones. Layer flags
+    // (which the user can toggle) aren't honoured yet; Phase 3.6 wires
+    // them up alongside pixel-parity checks.
+
+    // Guide (z=5)
+    appendSprites(scene::buildPreviewGuideLayerSprites(
+        state, windowed(preparedCache_.guideLayer(), guideCursor_), playfieldRect));
+
+    // Track (z=6) — switched from full-marker (Phase 3.3a) to windowed view.
+    {
+        auto layerState = scene::buildPreviewTrackLayerState(
+            state, windowed(preparedCache_.slideLikeLayer(), trackCursor_), playfieldRect);
+        appendSprites(layerState.sprites);
+        appendOwnedImages(layerState.ownedImages);
     }
 
-    // Phase 3.3b/c diagnostic: log every Nth publish so we can correlate
-    // GUI-thread snapshot building against render-thread consumption when
-    // chasing crashes. Sparse to keep the log readable; revision is a
-    // monotonic counter so any gap between consecutive lines tells us
-    // some snapshots were published but not logged here.
+    // Slide motion (z=7)
+    {
+        auto layerState = scene::buildPreviewSlideMotionLayerState(
+            state, windowed(preparedCache_.slideLikeLayer(), slideMotionCursor_), playfieldRect);
+        appendSprites(layerState.sprites);
+        appendOwnedImages(layerState.ownedImages);
+    }
+
+    // Judge effect (z=8)
+    {
+        auto layerState = scene::buildPreviewJudgeEffectLayerState(
+            state, windowed(preparedCache_.judgeEffectLayer(), judgeEffectCursor_), playfieldRect);
+        appendSprites(layerState.sprites);
+        appendOwnedImages(layerState.ownedImages);
+    }
+
+    // Touch judge (z=9)
+    {
+        auto layerState = scene::buildPreviewTouchJudgeLayerState(
+            state, windowed(preparedCache_.touchJudgeLayer(), touchJudgeCursor_), playfieldRect);
+        appendSprites(layerState.sprites);
+    }
+
+    // Head (z=10) — passes the asset cache so tinted base+overlay
+    // composites are deduped across frames.
+    {
+        auto layerState = scene::buildPreviewHeadLayerState(
+            state, windowed(preparedCache_.headLayer(), headCursor_), playfieldRect,
+            &headRenderAssetCache_);
+        appendSprites(layerState.sprites);
+        appendOwnedImages(layerState.ownedImages);
+    }
+
+    // Touch (z=11)
+    {
+        auto layerState = scene::buildPreviewTouchLayerState(
+            state, windowed(preparedCache_.touchLayer(), touchCursor_), playfieldRect);
+        appendSprites(layerState.sprites);
+        appendOwnedImages(layerState.ownedImages);
+    }
+
+    // Touch hold (z=12) — sprites only; arc rendering is Phase 3.5.
+    {
+        auto layerState = scene::buildPreviewTouchHoldLayerState(
+            state, windowed(preparedCache_.touchHoldLayer(), touchHoldCursor_), playfieldRect);
+        appendSprites(layerState.sprites);
+        appendOwnedImages(layerState.ownedImages);
+    }
+
+    // Chart review (z=13) — special: not marker-windowed; uses
+    // preparedEvents collected from the chart_review layer cursor.
+    {
+        scene::PreviewChartReviewPreparedEvents preparedEvents;
+        preparedCache_.collectChartReviewEvents(
+            chartReviewCursor_.activePreparedIndices, &preparedEvents);
+        appendSprites(scene::buildPreviewChartReviewLayerSprites(
+            state, playfieldRect, &preparedEvents));
+    }
+
+    // Maimuri DX judge (z=14) — uses the SIMPLE full-marker view
+    // (PreviewQuickMaimuriDxJudgeLayer.cpp does the same) because the
+    // maimuriDxJudgeLayer cursor windows the *event* list, not markers.
+    // The cursor still feeds collectMaimuriDxJudgeData for the events
+    // themselves.
+    {
+        QVector<MuriJudgeSpriteEvent> activeEvents;
+        QVector<int> activeMarkerIndices;
+        preparedCache_.collectMaimuriDxJudgeData(
+            maimuriDxJudgeCursor_.activePreparedIndices,
+            &activeEvents, &activeMarkerIndices);
+        scene::PreviewActiveMarkerView allMarkers(state.noteMarkers);
+        appendSprites(scene::buildPreviewMaimuriDxJudgeLayerSprites(
+            state, allMarkers, activeEvents, playfieldRect));
+    }
+
     if ((snapshot.revision % 30) == 0 || snapshot.revision <= 5) {
         logSurface("snapshot_published",
-                   QStringLiteral("revision=%1 sprites=%2 retained=%3 playhead=%4 logical=%5x%6")
+                   QStringLiteral("revision=%1 sprites=%2 retained=%3 playhead=%4 logical=%5x%6 cache_rebuilt=%7")
                        .arg(snapshot.revision)
                        .arg(snapshot.sprites.size())
                        .arg(snapshot.retainedImages.size())
                        .arg(snapshot.playheadSeconds, 0, 'f', 3)
-                       .arg(logicalSize.width()).arg(logicalSize.height()));
+                       .arg(logicalSize.width()).arg(logicalSize.height())
+                       .arg(cacheRebuilt ? 1 : 0));
     }
 
     renderer_.publishSnapshot(snapshot);

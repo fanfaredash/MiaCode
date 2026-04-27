@@ -2,6 +2,8 @@
 
 #include "preview/dcomp/PreviewDCompCore.h"
 #include "preview/dcomp/PreviewDCompRenderer.h"
+#include "preview/scene/PreviewHeadLayerState.h"
+#include "preview/scene/PreviewPreparedSceneCache.h"
 
 #include <QObject>
 #include <QPointer>
@@ -73,6 +75,30 @@ private:
     PreviewDCompRenderer renderer_;
     qint64 snapshotRevision_ = 0;
     bool initialised_ = false;
+
+    // Phase 3.4 — sprite-layer windowing. Mirrors PreviewQuickSceneRoot's
+    // per-frame cache + per-layer cursor pattern: preparedCache_.sync()
+    // rebuilds when the chart content changes, after which all cursors
+    // are reset; otherwise each cursor advances incrementally with the
+    // playhead so per-frame layer assembly only walks active markers,
+    // not the full chart.
+    miacode::preview::scene::PreviewPreparedSceneCache preparedCache_;
+    miacode::preview::scene::PreviewLayerWindowCursor guideCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor headCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor trackCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor slideMotionCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor judgeEffectCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor touchCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor touchJudgeCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor touchHoldCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor chartReviewCursor_;
+    miacode::preview::scene::PreviewLayerWindowCursor maimuriDxJudgeCursor_;
+
+    // Head layer composites tinted base + overlay images per marker; the
+    // cache short-circuits redundant compositions when the same triplet
+    // (base, overlay, tint) recurs across frames. Lives on the GUI
+    // thread (built here, never touched by the render thread).
+    miacode::preview::scene::PreviewHeadRenderAssetCache headRenderAssetCache_;
 };
 
 }  // namespace miacode::preview::dcomp
