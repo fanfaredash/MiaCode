@@ -165,6 +165,28 @@ inline bool previewDCompExclusiveEnabled()
         && envFlagEnabled("MIACODE_PREVIEW_DCOMP_EXCLUSIVE");
 }
 
+inline bool previewDCompVsyncPresentEnabled()
+{
+    // Phase 4-perf-fix — when on, the DComp render thread uses
+    // Present(1, 0) (block on vsync) instead of Present(0, 0)
+    // (non-blocking). Pace the render loop to the display refresh
+    // rate so each snapshot is rendered exactly once instead of
+    // 2-3× (the over-render comes from Present(0, 0) draining DXGI's
+    // back-buffer queue faster than the snapshot rate can refill it
+    // — that produces visible motion jitter when the publish timing
+    // has any variance).
+    //
+    // Trade-off: with Qt's QSG GPU backend also presenting at 60 Hz,
+    // both swap chains may serialise on vsync via DWM, reintroducing
+    // the dual-swap-chain stutter the user originally diagnosed.
+    // Safer to gate this behind a flag the user can toggle:
+    //   - With QT_QUICK_BACKEND=software: turn this on, motion
+    //     becomes locked to vsync without contention.
+    //   - With Qt GPU backend: leaving this off keeps the
+    //     non-blocking present pattern.
+    return envFlagEnabled("MIACODE_PREVIEW_DCOMP_VSYNC_PRESENT");
+}
+
 inline bool disableTimelineEnabled()
 {
     // Phase 4-perf experiment — when on, hides the Timeline QSG item

@@ -1,6 +1,7 @@
 #include "preview/dcomp/PreviewDCompCore.h"
 
 #include "common/DebugLog.h"
+#include "common/DebugOptions.h"
 
 #include <QString>
 
@@ -464,7 +465,19 @@ bool PreviewDCompCore::present()
     // FRAME_LATENCY_WAITABLE_OBJECT), the documented pattern is
     // Present(0, 0) and let DWM handle vsync via the desktop
     // composition path. No tearing — DWM never tears.
-    HRESULT hr = swapChain_->Present(0, 0);
+    //
+    // Phase 4-perf-fix flag: MIACODE_PREVIEW_DCOMP_VSYNC_PRESENT swaps
+    // to Present(1, 0) which paces the render loop to exactly the
+    // display refresh rate. With the non-blocking pattern the loop
+    // runs at ~167 Hz (DXGI back-buffer drain rate) and renders the
+    // same snapshot 2-3× before a new one arrives — when snapshot
+    // publish timing varies, the eye perceives that as motion jitter
+    // even though each frame is internally correct. Vsync-paced
+    // present locks render rate to snapshot rate so each snapshot is
+    // shown exactly once.
+    const UINT syncInterval =
+        miacode::debug_options::previewDCompVsyncPresentEnabled() ? 1u : 0u;
+    HRESULT hr = swapChain_->Present(syncInterval, 0);
     if (FAILED(hr)) {
         logDCompError("present", hr);
         return false;
