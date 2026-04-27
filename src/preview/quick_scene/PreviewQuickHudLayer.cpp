@@ -1,5 +1,6 @@
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
 
+#include "common/DebugOptions.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/scene/PreviewFrameState.h"
 #include "preview/scene/PreviewHudState.h"
@@ -138,24 +139,46 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
     if (painter == nullptr) {
         return;
     }
-
+    // Phase 4b — when DComp-exclusive mode is on, the HUD is rendered
+    // by PreviewDCompSurface via the same paintPreviewHudOverlay
+    // helper into an offscreen QImage and uploaded as a DComp sprite.
+    // Skipping QSG paint here avoids the redundant QQuickPaintedItem
+    // texture upload that was the last QSG cost the user flagged as
+    // perf-relevant.
+    if (miacode::debug_options::previewDCompExclusiveEnabled()) {
+        return;
+    }
     const miacode::preview::scene::PreviewFrameState* state = nullptr;
     if (runtime_ != nullptr) {
         state = &runtime_->frameState();
     } else {
         state = frameState_;
     }
-    if (state == nullptr
-        || !miacode::preview::scene::previewRenderLayerEnabled(
-            layerFlags_,
-            miacode::preview::scene::HudLayer)) {
+    if (state == nullptr) {
+        return;
+    }
+    miacode::preview::hud::paintPreviewHudOverlay(
+        *painter, *state, boundingRect().size().toSize(), layerFlags_);
+}
+
+namespace miacode::preview::hud {
+
+void paintPreviewHudOverlay(
+    QPainter& painter,
+    const miacode::preview::scene::PreviewFrameState& stateRef,
+    const QSize& canvasSize,
+    miacode::preview::scene::PreviewRenderLayerFlags layerFlags)
+{
+    const auto* state = &stateRef;
+    if (!miacode::preview::scene::previewRenderLayerEnabled(
+            layerFlags, miacode::preview::scene::HudLayer)) {
         return;
     }
     if (!state->render.showTimestamp && !state->render.showDebugInfo && !state->render.showObjectStatsHud) {
         return;
     }
 
-    const QRectF stageRect = miacode::preview::scene::stageRectForSize(boundingRect().size().toSize());
+    const QRectF stageRect = miacode::preview::scene::stageRectForSize(canvasSize);
     constexpr qreal kHudReferenceShortSide = 1024.0;
     constexpr qreal kHudReferencePadding = 18.0;
     constexpr int kHudReferenceDebugFontPointSize = 13;
@@ -184,7 +207,7 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
         int lineIndex = 0;
         const auto drawDebugLine = [&](const QString& text) {
             drawHudText(
-                *painter,
+                painter,
                 QPointF(leftX, baseline0 + metrics.height() * lineIndex),
                 text,
                 fpsFont,
@@ -248,14 +271,14 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
                 break;
             }
             drawHudText(
-                *painter,
+                painter,
                 QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
                 QStringLiteral("Media: external/%1").arg(mediaType),
                 fpsFont,
                 shadowOffset
             );
             drawHudText(
-                *painter,
+                painter,
                 QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
                 QStringLiteral("Video: %1  Delta: %2 s")
                     .arg(
@@ -271,7 +294,7 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
                 ? QString::number(state->media.externalVideoFrameAgeMs)
                 : QStringLiteral("na");
             drawHudText(
-                *painter,
+                painter,
                 QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
                 QStringLiteral("Age: %1 ms  AvgInt: %2  MaxInt: %3")
                     .arg(frameAgeText)
@@ -281,7 +304,7 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
                 shadowOffset
             );
             drawHudText(
-                *painter,
+                painter,
                 QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
                 QStringLiteral("Stall: %1  Count: %2  MediaT: %3 s")
                     .arg(state->media.externalVideoFrameStalled ? QStringLiteral("yes") : QStringLiteral("no"))
@@ -307,7 +330,7 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
         const qreal timestampBottomExtraInset =
             insetTimestampForAspect ? (static_cast<qreal>(timeMetrics.lineSpacing()) * 0.5) : 0.0;
         drawHudText(
-            *painter,
+            painter,
             QPointF(
                 stageRect.left() + hudPadding + positiveTimeExtraInset,
                 stageRect.bottom() - hudPadding - timestampBottomExtraInset
@@ -424,19 +447,21 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
 
     const qreal shadowOffset = qMax<qreal>(1.0, 2.0 * hudScale);
     qreal baseline = blockTop + titleMetrics.ascent();
-    drawHudText(*painter, QPointF(blockLeft, baseline), QStringLiteral("FiNALE Rate:"), titleFont, shadowOffset);
+    drawHudText(painter, QPointF(blockLeft, baseline), QStringLiteral("FiNALE Rate:"), titleFont, shadowOffset);
     baseline += titleMetrics.descent() + headerGap + rateMetrics.ascent();
-    drawHudText(*painter, QPointF(blockLeft, baseline), statLines.at(0), rateFont, shadowOffset);
+    drawHudText(painter, QPointF(blockLeft, baseline), statLines.at(0), rateFont, shadowOffset);
     baseline += rateMetrics.descent() + sectionGap + titleMetrics.ascent();
-    drawHudText(*painter, QPointF(blockLeft, baseline), QStringLiteral("DELUXE Rate:"), titleFont, shadowOffset);
+    drawHudText(painter, QPointF(blockLeft, baseline), QStringLiteral("DELUXE Rate:"), titleFont, shadowOffset);
     baseline += titleMetrics.descent() + headerGap + rateMetrics.ascent();
-    drawHudText(*painter, QPointF(blockLeft, baseline), rateLine, rateFont, shadowOffset);
+    drawHudText(painter, QPointF(blockLeft, baseline), rateLine, rateFont, shadowOffset);
     baseline += rateMetrics.descent() + sectionGap + statMetrics.ascent();
     for (int i = 1; i < statLines.size(); ++i) {
         if (i > 1) {
             baseline += statGap + statMetrics.leading();
         }
-        drawHudText(*painter, QPointF(blockLeft, baseline), statLines.at(i), statFont, shadowOffset);
+        drawHudText(painter, QPointF(blockLeft, baseline), statLines.at(i), statFont, shadowOffset);
         baseline += statMetrics.height();
     }
 }
+
+}  // namespace miacode::preview::hud

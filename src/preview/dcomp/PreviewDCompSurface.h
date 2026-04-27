@@ -97,6 +97,15 @@ private:
     // throttle rebuild work when the runtime emits frameStateChanged
     // faster than the render thread can consume it.
     qint64 lastPublishNs_ = 0;
+
+    // Phase 4f — HUD overlay rasterised here (was QQuickPaintedItem on
+    // QSG). The legacy PreviewQuickHudLayer's draw logic now lives in
+    // the standalone paintPreviewHudOverlay free function; we run it
+    // every ~200 ms into hudImage_ and push that as a sprite at the
+    // top of the snapshot's draw batches. Between rebuilds the same
+    // QImage's cacheKey stays stable so the texture cache hits.
+    QSharedPointer<QImage> hudImage_;
+    qint64 lastHudRebuildNs_ = 0;
     PreviewDCompCore core_;
     PreviewDCompRenderer renderer_;
     qint64 snapshotRevision_ = 0;

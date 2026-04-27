@@ -13,6 +13,9 @@
 #include "preview/scene/PreviewMuriActionLayerState.h"
 #include "preview/scene/PreviewMuriPadLayerState.h"
 #include "preview/scene/PreviewSceneGeometry.h"
+#include "preview/quick_scene/PreviewQuickHudLayer.h"
+
+#include <QPainter>
 #include "preview/scene/PreviewSlideMotionLayerState.h"
 #include "preview/scene/PreviewTouchHoldLayerState.h"
 #include "preview/scene/PreviewTouchJudgeLayerState.h"
@@ -508,6 +511,48 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
         scene::PreviewActiveMarkerView allMarkers(state.noteMarkers);
         pushSpriteBatch(scene::buildPreviewMaimuriDxJudgeLayerSprites(
             state, allMarkers, activeEvents, playfieldRect));
+    }
+
+    // Phase 4f — HUD overlay rendered via QPainter into a sprite.
+    // Throttled at ~5 Hz (200 ms) so we don't pay the rasterisation
+    // cost every frame; the rendered text is stable between rebuilds
+    // and the texture cache hits on the unchanged QImage cacheKey.
+    // Pushed last so it draws on top of everything (mirrors the
+    // legacy z=2 placement of PreviewQuickHudLayer above the chart).
+    if (enabled(scene::HudLayer)) {
+        constexpr qint64 kHudRebuildIntervalNs = 200LL * 1000LL * 1000LL;
+        const bool needsRebuild =
+            !hudImage_
+            || hudImage_->size() != logicalSize
+            || lastHudRebuildNs_ == 0
+            || (nowNs - lastHudRebuildNs_) >= kHudRebuildIntervalNs;
+        if (needsRebuild) {
+            auto fresh = QSharedPointer<QImage>::create(
+                logicalSize, QImage::Format_RGBA8888_Premultiplied);
+            fresh->fill(Qt::transparent);
+            QPainter p(fresh.data());
+            miacode::preview::hud::paintPreviewHudOverlay(
+                p, state, logicalSize, layerFlags_);
+            p.end();
+            hudImage_ = fresh;
+            lastHudRebuildNs_ = nowNs;
+        }
+        if (hudImage_ && !hudImage_->isNull()) {
+            snapshot.retainedImages.append(hudImage_);
+            scene::PreviewSpriteDescriptor hud;
+            hud.image = hudImage_.data();
+            hud.center = QPointF(logicalSize.width() / 2.0,
+                                  logicalSize.height() / 2.0);
+            hud.width = logicalSize.width();
+            hud.height = logicalSize.height();
+            hud.rotationDegrees = 0.0;
+            hud.opacity = 1.0;
+            hud.effect = scene::PreviewAnimatedSpriteEffect::None;
+            hud.cacheable = true;
+            scene::PreviewSpriteDescriptors batch;
+            batch.append(hud);
+            pushSpriteBatch(batch);
+        }
     }
 
     if ((snapshot.revision % 30) == 0 || snapshot.revision <= 5) {

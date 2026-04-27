@@ -157,6 +157,16 @@ ID3D11ShaderResourceView* PreviewDCompTextureCache::lookupOrCreate(
     return raw;
 }
 
+void PreviewDCompTextureCache::evictCacheableKey(qint64 key)
+{
+    auto it = cacheable_.find(key);
+    if (it == cacheable_.end()) return;
+    if (*it != nullptr) {
+        (*it)->Release();
+    }
+    cacheable_.erase(it);
+}
+
 void PreviewDCompTextureCache::endFrame()
 {
     // Wipe the per-frame transient compartment. Each Release pairs with

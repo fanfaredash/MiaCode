@@ -66,6 +66,14 @@ public:
     // after all draw calls referencing those SRVs have been issued.
     void endFrame();
 
+    // Phase 4f — drop a single cacheable entry by its QImage cacheKey.
+    // Used for content that re-rasterises periodically (e.g. the HUD
+    // overlay rebuilt every ~200 ms with new text), where the old
+    // entry is known to be obsolete and would otherwise sit in the
+    // cache until it triggers the entry-cap flush — which would also
+    // drop chart sprites and cause a re-upload stutter.
+    void evictCacheableKey(qint64 key);
+
     // Drop all cached textures (cacheable + transient). Call from the
     // render thread before the associated D3D11 device is released.
     void clear();
@@ -82,11 +90,15 @@ public:
 
 private:
 #ifdef Q_OS_WIN
-    // Phase 3.6 — entry cap mirroring PreviewTextureRepository's 96
-    // limit. When exceeded, the cacheable compartment is fully
-    // flushed (the just-inserted entry survives so the current
-    // lookup stays valid).
-    static constexpr int kCacheableEntryCap = 96;
+    // Cacheable compartment cap. The legacy PreviewTextureRepository
+    // uses 96, sized for chart sprite content alone. Phase 4f added
+    // the periodic-rasterised HUD overlay (re-uploaded ~5 Hz with a
+    // new cacheKey each rebuild), which would push the cap on a 9s
+    // cycle and drop chart sprites with it; widen to 1024 so HUD
+    // accumulation only triggers flushes after ~200s. Bytes still
+    // bounded by the natural cost of unique sprite assets in a
+    // chart (~50 typical), and HUD QImages are small.
+    static constexpr int kCacheableEntryCap = 1024;
 
     // Storage holds raw SRV pointers with manual AddRef/Release. We
     // *cannot* store Microsoft::WRL::ComPtr directly here: QHash's

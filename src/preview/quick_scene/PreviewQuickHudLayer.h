@@ -4,13 +4,32 @@
 #include <QMetaObject>
 #include <QPointer>
 #include <QQuickPaintedItem>
+#include <QSize>
 
 #include "preview/scene/PreviewLayerOrder.h"
 
+class QPainter;
 class PreviewRuntime;
 namespace miacode::preview::scene {
 struct PreviewFrameState;
 }
+
+namespace miacode::preview::hud {
+
+// Phase 4f — standalone HUD painter, used by both the legacy
+// PreviewQuickHudLayer (via QQuickPaintedItem::paint) and the DComp
+// path (which rasterises into an offscreen QImage and uploads it as
+// a textured sprite). All inputs are read-only; painter must be set
+// up to draw within the canvas's local coordinate space (top-left
+// origin, size canvasSize).
+void paintPreviewHudOverlay(
+    QPainter& painter,
+    const miacode::preview::scene::PreviewFrameState& state,
+    const QSize& canvasSize,
+    miacode::preview::scene::PreviewRenderLayerFlags layerFlags
+        = miacode::preview::scene::kPreviewAllRenderLayers);
+
+}  // namespace miacode::preview::hud
 
 class PreviewQuickHudLayer : public QQuickPaintedItem
 {
