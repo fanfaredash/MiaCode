@@ -127,14 +127,16 @@ void PreviewDCompSurface::onWindowGeometryChanged()
     if (clientPx.width() <= 0 || clientPx.height() <= 0) {
         return;
     }
-    // For Phase 1: keep the swap chain at the test-rect size, but update
-    // the visual transform so the rectangle stays at the new placement.
+    // From Phase 2: route resize through the renderer so the swap chain
+    // ResizeBuffers happens on the render thread between presents (the
+    // only safe spot per DXGI). The visual transform is independent — we
+    // can apply it from the GUI thread immediately because it only writes
+    // to DComp's IDCompositionVisual, not the swap chain.
     const QSize rectSize = testRectSize(clientPx);
     if (rectSize != core_.swapChainPixelSize()) {
-        core_.resize(rectSize);
+        renderer_.requestResize(rectSize);
     }
     core_.setVisualTransform(kTestRectInsetPx, kTestRectInsetPx, rectSize);
-    scheduleTestRender();
 }
 
 void PreviewDCompSurface::onWindowVisibilityChanged()
@@ -189,13 +191,24 @@ bool PreviewDCompSurface::initialiseIfReady()
                QStringLiteral("client_w=%1 client_h=%2 rect_w=%3 rect_h=%4")
                    .arg(clientPx.width()).arg(clientPx.height())
                    .arg(rectSize.width()).arg(rectSize.height()));
-    scheduleTestRender();
+    // Phase 2: start the dedicated render thread that paces on the
+    // FRAME_LATENCY_WAITABLE_OBJECT and drives the swap chain. From now on
+    // all rendering happens off the GUI thread.
+    if (!renderer_.start(&core_)) {
+        logSurface("renderer_start_failed");
+    }
     return true;
 }
 
 void PreviewDCompSurface::teardownCore()
 {
     if (initialised_) {
+        // Stop the render thread BEFORE tearing down Core — Core owns the
+        // D3D11 device and swap chain that the renderer uses, and the
+        // waitable handle is closed during shutdown. stop() joins the
+        // thread so we know it's not touching the resources during
+        // shutdown.
+        renderer_.stop();
         core_.shutdown();
         initialised_ = false;
         logSurface("teardown");
@@ -224,17 +237,6 @@ void* PreviewDCompSurface::currentParentHwnd() const
 #else
     return nullptr;
 #endif
-}
-
-void PreviewDCompSurface::scheduleTestRender()
-{
-    if (!initialised_) {
-        return;
-    }
-    // Phase 1 renders synchronously on the GUI thread when called.
-    // Phase 2 will replace this with the dedicated render thread + frame
-    // latency waitable.
-    core_.renderTestFrame();
 }
 
 }  // namespace miacode::preview::dcomp

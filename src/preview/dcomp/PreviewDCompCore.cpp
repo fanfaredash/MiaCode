@@ -412,28 +412,34 @@ bool PreviewDCompCore::setVisualTransform(int xPx, int yPx, QSize displaySize)
 
 bool PreviewDCompCore::renderTestFrame()
 {
+    return renderClear(1.0f, 0.0f, 0.0f, 1.0f);
+}
+
+bool PreviewDCompCore::renderClear(float r, float g, float b, float a)
+{
     if (!ready_) {
         return false;
     }
     if (!backBufferRtv_) {
         return false;
     }
-    // Phase 1 deliverable: solid-red clear so we can confirm the visual is
-    // attached, sized, and visible. Phase 3 replaces this with the real
-    // sprite pipeline. Alpha 1.0 is required for DXGI_ALPHA_MODE_PREMULTIPLIED
-    // — DComp blends the visual's pixels with the parent HWND's framebuffer,
-    // and a fully-opaque red proves we're on top.
-    const float clearColor[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
+    const float clearColor[4] = { r, g, b, a };
     d3dContext_->ClearRenderTargetView(backBufferRtv_.Get(), clearColor);
 
-    // Present(1, 0) = sync to vsync, no flags. Same call we'll use in
-    // Phase 2's render-thread loop.
+    // Present(1, 0) = sync to vsync, no flags. The render thread blocking
+    // on the swap chain's frame-latency waitable means this Present
+    // returns quickly — the wait already happened up the stack.
     HRESULT hr = swapChain_->Present(1, 0);
     if (FAILED(hr)) {
         logDCompError("present", hr);
         return false;
     }
     return true;
+}
+
+HANDLE PreviewDCompCore::frameLatencyWaitable() const
+{
+    return frameLatencyWaitable_;
 }
 
 void PreviewDCompCore::shutdown()

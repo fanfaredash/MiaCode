@@ -1,6 +1,7 @@
 #pragma once
 
 #include "preview/dcomp/PreviewDCompCore.h"
+#include "preview/dcomp/PreviewDCompRenderer.h"
 
 #include <QObject>
 #include <QPointer>
@@ -56,10 +57,10 @@ private:
     void teardownCore();
     QSize currentClientPixelSize() const;
     void* currentParentHwnd() const;
-    void scheduleTestRender();
 
     QPointer<QQuickWindow> window_;
     PreviewDCompCore core_;
+    PreviewDCompRenderer renderer_;
     bool initialised_ = false;
 };
 

@@ -68,6 +68,21 @@ public:
     // animation. Phase 2 replaces this with the real render loop.
     bool renderTestFrame();
 
+    // Phase 2: parameterised clear+present, called from the render
+    // thread on every wake-up. The alpha component must be 1.0 with the
+    // DXGI_ALPHA_MODE_PREMULTIPLIED swap chain we configured in
+    // createSwapChain — anything less and DComp would alpha-blend our
+    // visual with the QML scene below, which Phase 1 doesn't want.
+    // Thread safety: caller must ensure only the render thread calls
+    // this. The immediate D3D11 context is not safe to share.
+    bool renderClear(float r, float g, float b, float a);
+
+    // Returns the FRAME_LATENCY_WAITABLE_OBJECT handle the render thread
+    // blocks on (WaitForSingleObject). Lifetime is tied to this Core —
+    // caller must not CloseHandle it. Returns nullptr if the swap chain
+    // hasn't been created yet (i.e. before initialise() succeeds).
+    HANDLE frameLatencyWaitable() const;
+
     // True iff initialise() has succeeded and shutdown() has not been
     // called.
     bool isReady() const;
@@ -80,6 +95,8 @@ public:
     bool resize(QSize) { return false; }
     bool setVisualTransform(int, int, QSize) { return false; }
     bool renderTestFrame() { return false; }
+    bool renderClear(float, float, float, float) { return false; }
+    void* frameLatencyWaitable() const { return nullptr; }
     bool isReady() const { return false; }
     QSize swapChainPixelSize() const { return {}; }
 #endif
