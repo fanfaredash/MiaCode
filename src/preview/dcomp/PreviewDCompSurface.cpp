@@ -151,14 +151,26 @@ void PreviewDCompSurface::setRuntime(PreviewRuntime* runtime)
     }
     runtime_ = runtime;
     if (runtime_ != nullptr) {
-        // DirectConnection so the GUI thread builds the snapshot and
-        // publishes it inline with the signal — no event-loop hop. Both
-        // slot and signal live on the GUI thread, so DirectConnection
-        // is safe.
+        // Phase 4-perf-fix: QueuedConnection, NOT Direct. The runtime's
+        // tick path looks like
+        //   1. setPlayheadSeconds(audioSecond, /*requestUpdate=*/true)
+        //         → frameState.playhead = audioSecond, emit signal
+        //   2. visualSecond = applyVisualClockSmoothing(audioSecond, …)
+        //   3. setPlayheadSeconds(visualSecond, /*requestUpdate=*/false)
+        //         → frameState.playhead = visualSecond, NO emit
+        // A DirectConnection slot fires inside step 1, so it captures
+        // the audio-time playhead — without the +16.67ms visual
+        // lookahead the legacy QSG path got because it reads
+        // frameState() at QSG render time (after step 3 settled).
+        // Result: DComp lags audio by one vsync vs legacy. Queueing
+        // defers the slot until after the tick completes; by then
+        // step 3 has overwritten the playhead with the
+        // smoothing-adjusted, lookahead-biased value, so the snapshot
+        // captures what legacy would have rendered.
         runtimeFrameStateConnection_ = QObject::connect(
             runtime_, &PreviewRuntime::frameStateChanged, this,
             &PreviewDCompSurface::onRuntimeFrameStateChanged,
-            Qt::DirectConnection);
+            Qt::QueuedConnection);
         // Publish an initial snapshot so the renderer has valid data
         // before the first frameStateChanged fires (e.g. during the
         // window's pre-playback idle phase).
