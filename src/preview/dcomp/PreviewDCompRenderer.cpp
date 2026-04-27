@@ -234,6 +234,22 @@ void PreviewDCompRenderer::renderAnimatedFrame()
         snapshot = snapshot_;
     }
 
+    // Phase 3.3a diagnostic: log sprite/image counts every ~60 frames
+    // so we can verify the snapshot is carrying the layer-state output.
+    // The threshold check on first non-zero sprite count fires once
+    // when chart content first reaches the render thread.
+    static thread_local qint64 s_lastLoggedSpriteCount = -1;
+    if (snapshot.sprites.size() != s_lastLoggedSpriteCount
+        && (framesRendered_.load() % 60) == 0) {
+        s_lastLoggedSpriteCount = snapshot.sprites.size();
+        logRenderer("snapshot_sprite_count",
+                    QStringLiteral("revision=%1 sprites=%2 retained_images=%3 playhead=%4")
+                        .arg(snapshot.revision)
+                        .arg(snapshot.sprites.size())
+                        .arg(snapshot.retainedImages.size())
+                        .arg(snapshot.playheadSeconds, 0, 'f', 3));
+    }
+
     // Phase 3.1+3.2: render a textured quad through the full sprite
     // pipeline. The quad's horizontal position is now driven by the
     // playhead from the snapshot — visual proof that GUI-thread state

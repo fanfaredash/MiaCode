@@ -2,7 +2,10 @@
 
 #include "common/DebugLog.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "preview/scene/PreviewActiveMarkerView.h"
 #include "preview/scene/PreviewFrameState.h"
+#include "preview/scene/PreviewSceneGeometry.h"
+#include "preview/scene/PreviewTrackLayerState.h"
 
 #include <QQuickWindow>
 
@@ -147,14 +150,62 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     if (runtime_ == nullptr) {
         return;
     }
+    const auto& state = runtime_->frameState();
+
     PreviewDCompFrameStateSnapshot snapshot;
     snapshot.revision = ++snapshotRevision_;
-    snapshot.playheadSeconds = runtime_->frameState().playheadSeconds;
+    snapshot.playheadSeconds = state.playheadSeconds;
     snapshot.sceneLogicalSize = currentClientPixelSize();
-    // playing flag: the runtime doesn't expose this directly here, so
-    // for Phase 3.2 we leave it false; Phase 3.3+ can wire it from
-    // PreviewSection state if needed.
     snapshot.playing = false;
+
+    // Phase 3.3a: build the backdrop + track layer descriptors on the
+    // GUI thread and stash them in the snapshot. The render thread
+    // walks them after publish. We use the QQuickWindow's logical size
+    // for the playfield rect rather than a placeholder geometry — Phase
+    // 4 replaces this with a per-placeholder rect, but for the Phase 1
+    // top-left demo region the swap chain itself drives the projection,
+    // and we just need *some* representative rect to feed the layer
+    // builders.
+    const QSize logicalSize = window_ != nullptr
+        ? QSize(window_->width(), window_->height())
+        : QSize(800, 800);
+    const double layoutSquareScale = state.render.layoutSquareScale > 0.0
+        ? state.render.layoutSquareScale
+        : 1.0;
+    const QRectF stageRect = miacode::preview::scene::stageRectForSize(logicalSize);
+    const QRectF playfieldRect = miacode::preview::scene::playfieldRectForStage(
+        stageRect, layoutSquareScale);
+
+    // Backdrop: synthesised single descriptor pointing at the runtime's
+    // outline asset. Lifetime is tied to PreviewRuntime so no
+    // retainedImages entry needed for this one.
+    if (!state.assets.outlineImage.isNull()) {
+        miacode::preview::scene::PreviewSpriteDescriptor backdrop;
+        backdrop.image = &state.assets.outlineImage;
+        backdrop.center = playfieldRect.center();
+        backdrop.width = playfieldRect.width();
+        backdrop.height = playfieldRect.height();
+        backdrop.rotationDegrees = 0.0;
+        backdrop.opacity = 1.0;
+        backdrop.effect = miacode::preview::scene::PreviewAnimatedSpriteEffect::None;
+        backdrop.cacheable = true;
+        snapshot.sprites.append(backdrop);
+    }
+
+    // Track layer: produces per-marker note sprites. The legacy code
+    // uses a windowed PreviewActiveMarkerView via PreparedSceneCache,
+    // but for Phase 3.3a we use the simpler full-marker constructor —
+    // the perf optimisation can come back in Phase 3.4+ if needed.
+    miacode::preview::scene::PreviewActiveMarkerView trackMarkers(state.noteMarkers);
+    auto trackState = miacode::preview::scene::buildPreviewTrackLayerState(
+        state, trackMarkers, playfieldRect);
+    for (auto& sprite : trackState.sprites) {
+        snapshot.sprites.append(sprite);
+    }
+    for (auto& image : trackState.ownedImages) {
+        snapshot.retainedImages.append(image);
+    }
+
     renderer_.publishSnapshot(snapshot);
 }
 

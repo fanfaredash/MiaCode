@@ -20,7 +20,13 @@
 // here are deliberately small and trivially copyable so adding more
 // stays cheap.
 
+#include "preview/scene/PreviewSpriteDescriptor.h"
+
+#include <QSharedPointer>
 #include <QSize>
+#include <QVector>
+
+class QImage;
 
 namespace miacode::preview::dcomp {
 
@@ -47,6 +53,23 @@ struct PreviewDCompFrameStateSnapshot
     // hint for the renderer — Phase 3.2 ignores this; later phases may
     // use it to suppress animation when paused.
     bool playing = false;
+
+    // Phase 3.3 — Real layer-state output for the render thread to draw.
+    // Descriptor pointers reference QImage objects whose lifetime is
+    // either pinned by PreviewRuntime (state.assets.*) or carried in
+    // retainedImages below. The render thread treats these as read-only
+    // and copies them into ID3D11Texture2D backing through a content-
+    // fingerprint cache (Phase 3.3b).
+    miacode::preview::scene::PreviewSpriteDescriptors sprites;
+
+    // Per-frame composited QImages produced by some layer-state builders
+    // (head, judge_effect, slide_motion, touch, touch_hold, track). The
+    // raw const QImage* pointers in `sprites` reference into these, so
+    // the snapshot must keep the shared pointers alive until the render
+    // thread is done with the frame. Without this the QImages would be
+    // freed at end-of-statement on the GUI thread and the render thread
+    // would dereference dangling pointers.
+    QVector<QSharedPointer<QImage>> retainedImages;
 };
 
 }  // namespace miacode::preview::dcomp
