@@ -452,10 +452,19 @@ bool PreviewDCompCore::present()
     if (!ready_) {
         return false;
     }
-    // Present(1, 0) = sync to vsync, no flags. The render thread blocks
-    // on the swap chain's frame-latency waitable elsewhere, so this
-    // returns quickly — the wait already happened up the stack.
-    HRESULT hr = swapChain_->Present(1, 0);
+    // Present(0, 0) — non-blocking. The render thread already paces on
+    // FRAME_LATENCY_WAITABLE_OBJECT, so the swap chain knows when DXGI
+    // is ready to enqueue the next frame. Using Present(1, 0) on top
+    // of that double-paces: both the waitable AND the Present block on
+    // vsync, and with Qt's QSG swap chain also presenting in the same
+    // vsync slot, total contention adds up to the high
+    // present_gate_wait Qt's profiling reports.
+    //
+    // For a composition swap chain (CreateSwapChainForComposition +
+    // FRAME_LATENCY_WAITABLE_OBJECT), the documented pattern is
+    // Present(0, 0) and let DWM handle vsync via the desktop
+    // composition path. No tearing — DWM never tears.
+    HRESULT hr = swapChain_->Present(0, 0);
     if (FAILED(hr)) {
         logDCompError("present", hr);
         return false;
