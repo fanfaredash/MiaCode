@@ -658,6 +658,59 @@ void emitSpriteVertices(const miacode::preview::scene::PreviewSpriteDescriptor& 
     out.push_back({ blx, bly, u0, v1, opacity, effect });
 }
 
+// Phase 3.5b — arc tessellation. Legacy QSG renders an arc as a
+// clipped textured quad: a triangle-fan clip polygon over the sector
+// + a full-rect QSGSimpleTextureNode behind it. We collapse that to a
+// single textured triangle fan — vertices placed at the arc's segment
+// edges, UVs computed from the world position relative to the arc's
+// bounding rect. The output is identical (clip ∩ textured quad ==
+// textured triangle fan within the arc) and uses the same sprite
+// shader path with no extra state.
+void emitArcVertices(const miacode::preview::scene::PreviewArcDescriptor& arc,
+                      std::vector<PreviewDCompSpriteVertex>& out)
+{
+    constexpr int kSegments = 48;
+    if (arc.image == nullptr || arc.image->isNull()) return;
+    if (arc.width <= 0.0 || arc.height <= 0.0) return;
+    if (arc.opacity <= 0.0) return;
+    if (qFuzzyIsNull(arc.sweepDegrees)) return;
+
+    const float cx = static_cast<float>(arc.center.x());
+    const float cy = static_cast<float>(arc.center.y());
+    const float rx = static_cast<float>(arc.width) * 0.5f;
+    const float ry = static_cast<float>(arc.height) * 0.5f;
+    const float opacity = static_cast<float>(qBound(0.0, arc.opacity, 1.0));
+    const float rectLeft = cx - rx;
+    const float rectTop = cy - ry;
+    const float rectW = static_cast<float>(arc.width);
+    const float rectH = static_cast<float>(arc.height);
+    const float invW = rectW > 0.0f ? 1.0f / rectW : 1.0f;
+    const float invH = rectH > 0.0f ? 1.0f / rectH : 1.0f;
+
+    const auto pointForAngle = [&](double degrees, float& outX, float& outY) {
+        const double rad = qDegreesToRadians(-degrees);
+        outX = cx + rx * static_cast<float>(std::cos(rad));
+        outY = cy + ry * static_cast<float>(std::sin(rad));
+    };
+    const float uCenter = (cx - rectLeft) * invW;  // = 0.5
+    const float vCenter = (cy - rectTop) * invH;   // = 0.5
+
+    for (int i = 0; i < kSegments; ++i) {
+        const double t0 = static_cast<double>(i) / kSegments;
+        const double t1 = static_cast<double>(i + 1) / kSegments;
+        float x0, y0, x1, y1;
+        pointForAngle(arc.startDegrees + arc.sweepDegrees * t0, x0, y0);
+        pointForAngle(arc.startDegrees + arc.sweepDegrees * t1, x1, y1);
+        const float u0 = (x0 - rectLeft) * invW;
+        const float v0 = (y0 - rectTop) * invH;
+        const float u1 = (x1 - rectLeft) * invW;
+        const float v1 = (y1 - rectTop) * invH;
+        out.push_back({ cx, cy, uCenter, vCenter, opacity, 0.0f });
+        out.push_back({ x0, y0, u0, v0, opacity, 0.0f });
+        out.push_back({ x1, y1, u1, v1, opacity, 0.0f });
+    }
+}
+
 // Phase 3.5a — circle/ellipse tessellation for the solid-colour PS.
 //
 // Filled fan: 32 segments × 3 vertices/triangle = 96 verts.
@@ -872,9 +925,44 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
             processed += batch.count;
             break;
         }
-        case BatchType::Arcs:
-            // Phase 3.5b — implemented in a follow-up.
+        case BatchType::Arcs: {
+            // Arcs use the same textured-sprite shader; each arc is a
+            // textured triangle fan over its sector. Group adjacent arcs
+            // sharing one SRV into a single run, like sprite batching.
+            const int end = batch.firstIndex + batch.count;
+            for (int i = batch.firstIndex; i < end && i < snapshot.arcs.size(); ++i) {
+                const auto& arc = snapshot.arcs.at(i);
+                if (arc.image == nullptr || arc.image->isNull()) {
+                    ++skipNullImage;
+                    continue;
+                }
+                ID3D11ShaderResourceView* srv =
+                    textureCache.lookupOrCreate(arc.image, device, arc.cacheable);
+                if (srv == nullptr) {
+                    ++skipNullSrv;
+                    continue;
+                }
+                if (runs.empty()
+                    || runs.back().kind != RunKind::Sprite
+                    || runs.back().srv != srv) {
+                    DrawRun r;
+                    r.kind = RunKind::Sprite;
+                    r.srv = srv;
+                    r.firstVertex = static_cast<int>(staging.size());
+                    r.vertexCount = 0;
+                    runs.push_back(r);
+                }
+                const int before = static_cast<int>(staging.size());
+                emitArcVertices(arc, staging);
+                const int added = static_cast<int>(staging.size()) - before;
+                runs.back().vertexCount += added;
+                if (added == 0) {
+                    ++skipEmitFiltered;
+                }
+                ++processed;
+            }
             break;
+        }
         }
     }
 

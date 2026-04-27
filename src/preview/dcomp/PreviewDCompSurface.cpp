@@ -252,6 +252,15 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
         snapshot.circles.append(circles);
         snapshot.batches.append(batch);
     };
+    const auto pushArcBatch = [&](const scene::PreviewArcDescriptors& arcs) {
+        if (arcs.isEmpty()) return;
+        PreviewDCompFrameStateSnapshot::DrawBatch batch;
+        batch.type = BatchType::Arcs;
+        batch.firstIndex = static_cast<qint32>(snapshot.arcs.size());
+        batch.count = static_cast<qint32>(arcs.size());
+        snapshot.arcs.append(arcs);
+        snapshot.batches.append(batch);
+    };
 
     // Backdrop (z=1 in the legacy stack). Snapshot owns its own QImage
     // copy so the render thread never reads runtime-mutated QImage state
@@ -339,11 +348,14 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
         appendOwnedImages(layerState.ownedImages);
     }
 
-    // Touch hold (z=12) — sprites; arcs added in Phase 3.5b.
+    // Touch hold (z=12) — sprites first, then arcs; legacy QSG renders
+    // them as separate child nodes inside the same layer slot, with
+    // arcs above sprites visually.
     {
         auto layerState = scene::buildPreviewTouchHoldLayerState(
             state, windowed(preparedCache_.touchHoldLayer(), touchHoldCursor_), playfieldRect);
         pushSpriteBatch(layerState.sprites);
+        pushArcBatch(layerState.arcs);
         appendOwnedImages(layerState.ownedImages);
     }
 
