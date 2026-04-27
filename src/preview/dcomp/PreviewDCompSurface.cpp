@@ -644,6 +644,19 @@ void PreviewDCompSurface::onWindowVisibilityChanged()
         initialiseIfReady();
     }
     tryDiscoverTrackedItem();
+
+    // Phase 4e — pause the render thread when the host window is
+    // hidden or minimised. The DComp visual can't be visible to the
+    // user in those states, so spinning on the frame-latency
+    // waitable is wasted CPU/GPU. visibility() reads as Hidden /
+    // Minimized / Maximized / FullScreen / AutomaticVisibility /
+    // Windowed; pause for Hidden + Minimized only.
+    const QWindow::Visibility vis = window_->visibility();
+    const bool shouldPause = (vis == QWindow::Hidden)
+                          || (vis == QWindow::Minimized);
+    if (initialised_) {
+        renderer_.setPaused(shouldPause);
+    }
 }
 
 void PreviewDCompSurface::onTrackedItemGeometryChanged()

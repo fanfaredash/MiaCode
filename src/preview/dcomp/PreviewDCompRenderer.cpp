@@ -122,6 +122,15 @@ void PreviewDCompRenderer::stop()
     }
 #endif
 
+    // Phase 4e — also wake the cv in case the thread is parked on
+    // setPaused(true) instead of the waitable. The cv predicate
+    // re-checks stopRequested_, so the wait returns and the loop
+    // breaks cleanly.
+    {
+        std::lock_guard<std::mutex> lock(pauseMutex_);
+        pauseCv_.notify_all();
+    }
+
     if (thread_.joinable()) {
         thread_.join();
     }
@@ -161,6 +170,21 @@ void PreviewDCompRenderer::publishSnapshot(const PreviewDCompFrameStateSnapshot&
     snapshot_ = snapshot;
 }
 
+void PreviewDCompRenderer::setPaused(bool paused)
+{
+    const bool wasPaused = paused_.exchange(paused, std::memory_order_acq_rel);
+    if (wasPaused == paused) {
+        return;
+    }
+    if (!paused) {
+        // Resume: wake the render thread so it re-evaluates its loop
+        // condition and rejoins the frame-latency wait.
+        std::lock_guard<std::mutex> lock(pauseMutex_);
+        pauseCv_.notify_all();
+    }
+    logRenderer(paused ? "paused" : "resumed");
+}
+
 void PreviewDCompRenderer::renderLoop()
 {
 #ifdef Q_OS_WIN
@@ -197,6 +221,24 @@ void PreviewDCompRenderer::renderLoop()
                     .arg(mmcssResult.lastErrorCode));
 
     while (!stopRequested_.load(std::memory_order_acquire)) {
+        // Phase 4e — pause gate. When the host window is minimised
+        // or hidden, paused_ flips to true and we park here on the
+        // condition variable instead of spinning on the frame
+        // latency waitable. setPaused(false) signals the cv to
+        // wake us; stop() also wakes us by setting stopRequested_
+        // and notifying the cv (see end of stop()).
+        if (paused_.load(std::memory_order_acquire)) {
+            std::unique_lock<std::mutex> lock(pauseMutex_);
+            pauseCv_.wait(lock, [this]() {
+                return !paused_.load(std::memory_order_acquire)
+                    || stopRequested_.load(std::memory_order_acquire);
+            });
+            if (stopRequested_.load(std::memory_order_acquire)) {
+                break;
+            }
+            // Fall through: resume on the next iteration.
+        }
+
         // Plan §2: block on the GPU fence so we wake exactly once per
         // vsync slot when DXGI is ready to enqueue the next present.
         // INFINITE because stop() wakes us via SetEvent.

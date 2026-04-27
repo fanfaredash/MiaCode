@@ -23,6 +23,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <mutex>
 #include <thread>
 
@@ -66,6 +67,15 @@ public:
     // pulls the latest snapshot at the top of each frame.
     void publishSnapshot(const PreviewDCompFrameStateSnapshot& snapshot);
 
+    // Phase 4e — pause / resume the render loop. While paused the
+    // render thread blocks on a condition variable instead of waking
+    // on the frame-latency waitable: zero CPU/GPU usage, no presents
+    // queued. Used to throttle while the host window is minimised
+    // or hidden, where the DComp visual is invisible to the user
+    // anyway. Idempotent and thread-safe; OK to flip rapidly during
+    // window state transitions.
+    void setPaused(bool paused);
+
 private:
     void renderLoop();
     void processPendingResizeLocked();
@@ -100,6 +110,14 @@ private:
     // For colour-cycle animation. Captured at start() so the cycle starts
     // at zero time on each new render thread.
     std::chrono::steady_clock::time_point startTime_;
+
+    // Phase 4e — render-loop pause gate. paused_ is the truth source
+    // (atomic so stop() can read it without the cv mutex); pauseMutex_
+    // / pauseCv_ park the render thread when paused_ flips to true and
+    // wake it when it flips to false.
+    std::atomic<bool> paused_{ false };
+    std::mutex pauseMutex_;
+    std::condition_variable pauseCv_;
 };
 
 }  // namespace miacode::preview::dcomp
