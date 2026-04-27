@@ -35,7 +35,16 @@ Item {
         id: timelineItem
 
         anchors.fill: parent
-        stateBridge: controller ? controller.timelineStateBridge : null
+        // Phase 4-perf experiment — when MIACODE_DISABLE_TIMELINE is
+        // set, hide the timeline entirely so its QSG rendering load
+        // (note rasters, waveform, grid lines) doesn't compete with
+        // DComp for GPU/CPU. Used in conjunction with
+        // QT_QUICK_BACKEND=software to test the dual-swap-chain
+        // contention hypothesis.
+        visible: !(controller && controller.disableTimeline)
+        stateBridge: !(controller && controller.disableTimeline)
+            ? (controller ? controller.timelineStateBridge : null)
+            : null
         headerLeftLimit: zoomButton.x + zoomButton.width + 2
         headerRightLimit: followCheck.x - 2
 

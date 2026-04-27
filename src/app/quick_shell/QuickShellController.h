@@ -33,6 +33,10 @@ class QuickShellController : public QObject
     // themselves to avoid double-rendering when DComp is the
     // authoritative chart renderer.
     Q_PROPERTY(bool previewDCompExclusive READ previewDCompExclusive CONSTANT)
+    // Phase 4-perf experiment — env-driven flag. Disables Timeline
+    // rendering so we can attribute stutter to the timeline vs the
+    // chart preview pipeline.
+    Q_PROPERTY(bool disableTimeline READ disableTimeline CONSTANT)
     Q_PROPERTY(QObject* timelineStateBridge READ timelineStateBridge CONSTANT)
     Q_PROPERTY(bool timelineSurfaceReady READ timelineSurfaceReady NOTIFY shellStateChanged)
     Q_PROPERTY(QString bottomTabsCurrentTabId READ bottomTabsCurrentTabId NOTIFY shellStateChanged)
@@ -70,6 +74,7 @@ public:
     QWindow* previewCompositeWindow() const;
     bool previewUsesSeparateSurface() const;
     bool previewDCompExclusive() const;
+    bool disableTimeline() const;
     QObject* timelineStateBridge() const;
     bool timelineSurfaceReady() const;
     QString bottomTabsCurrentTabId() const;

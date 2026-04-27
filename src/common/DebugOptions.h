@@ -165,6 +165,19 @@ inline bool previewDCompExclusiveEnabled()
         && envFlagEnabled("MIACODE_PREVIEW_DCOMP_EXCLUSIVE");
 }
 
+inline bool disableTimelineEnabled()
+{
+    // Phase 4-perf experiment — when on, hides the Timeline QSG item
+    // entirely so its render cost (custom QQuickItem with note
+    // textures, scrolling waveform, etc.) is removed. Used to test
+    // the dual-swap-chain compositing hypothesis: if QT_QUICK_BACKEND
+    // =software combined with this flag substantially reduces stutter,
+    // the QSG GPU work in the editor was contending with DComp's
+    // present cycle. Not a permanent feature — the user re-enables
+    // by unsetting the flag.
+    return envFlagEnabled("MIACODE_DISABLE_TIMELINE");
+}
+
 inline bool previewQsgRenderTimingEnabled()
 {
     // Captures Qt's built-in scene-graph timing (`qt.scenegraph.time.*` log
