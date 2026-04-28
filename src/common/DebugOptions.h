@@ -165,6 +165,34 @@ inline bool previewDCompExclusiveEnabled()
         && envFlagEnabled("MIACODE_PREVIEW_DCOMP_EXCLUSIVE");
 }
 
+inline bool previewDCompTopLevelHwndEnabled()
+{
+    // Phase 4-perf-final — when on, the DComp visual tree is hosted by
+    // a separate top-level borderless transparent HWND that's owned
+    // (not parented) by the editor's QQuickWindow HWND. DWM treats
+    // top-level HWNDs as independent composition planes, so the
+    // editor's QSG swap chain and DComp's swap chain no longer
+    // serialise on the same HWND.
+    //
+    // This is the architectural answer to the residual judder we
+    // could not fix by optimising the GUI hot path: even with the
+    // overlay-cache fix, worker-thread HUD raster, render-thread
+    // playhead clock, and vsync-aligned publishing, DWM compositing
+    // two flip-mode swap chains under one HWND introduces small
+    // inter-Present serialisation that surfaces as the residual
+    // motion judder. A separate top-level HWND ducks the problem
+    // entirely — at the cost of more positioning logic
+    // (mapToGlobal + MoveWindow on every editor move/resize/screen
+    // change). Implies and requires previewUseDCompEnabled.
+    //
+    // The earlier MIACODE_PREVIEW_DCOMP_CHILD_HWND was a half-step
+    // (child HWNDs share their parent's compositor target in DWM,
+    // so it didn't break the dual-swap-chain serialisation). This
+    // flag takes precedence over CHILD_HWND when both are set.
+    return previewUseDCompEnabled()
+        && envFlagEnabled("MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND");
+}
+
 inline bool previewDCompChildHwndEnabled()
 {
     // Phase 4-perf-test (Option 3) — when on, the DComp visual tree
@@ -226,6 +254,32 @@ inline bool disableTimelineEnabled()
     // present cycle. Not a permanent feature — the user re-enables
     // by unsetting the flag.
     return envFlagEnabled("MIACODE_DISABLE_TIMELINE");
+}
+
+inline bool previewQsgFullDisableEnabled()
+{
+    // Diagnostic / fallback mode: disable Qt Quick's native (GPU) rendering
+    // path entirely. When set, startup forces:
+    //   - QSG_RENDER_LOOP=basic           (no separate QSG render thread)
+    //   - setGraphicsApi(Software)        (no D3D11/D3D12/Vulkan backend;
+    //                                      QPainter blits via raster paint
+    //                                      engine)
+    // Combined: Qt creates no GPU swap chain and no render thread, so
+    // anything DComp / external presents alongside it has no Qt-side
+    // GPU contention to compete with.
+    //
+    // Used to answer: "is the residual lag fundamental to mixing Qt's
+    // native render path with our DComp present, or fixable on the
+    // Qt side?". If playback is still laggy with this on, the cause
+    // is *not* Qt-side GPU/render-thread interference and further
+    // optimisation has to look elsewhere (or the residual is below
+    // the perceptual threshold and tooling is needed to characterise
+    // it). If playback becomes smooth with this on, that pinpoints
+    // Qt's native render path as the contention source.
+    //
+    // Production-untenable on its own (the editor UI rasterising on
+    // CPU is heavy), but a clean isolation test.
+    return envFlagEnabled("MIACODE_PREVIEW_QSG_FULL_DISABLE");
 }
 
 inline bool previewDCompQuiesceQsgEnabled()

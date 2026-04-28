@@ -6,8 +6,11 @@
 #include "preview/scene/PreviewLayerOrder.h"
 #include "preview/scene/PreviewPreparedSceneCache.h"
 
+#include <QFuture>
+#include <QFutureWatcher>
 #include <QObject>
 #include <QPointer>
+#include <QSharedPointer>
 #include <QSize>
 #include <QTimer>
 
@@ -76,6 +79,7 @@ private slots:
     void onRuntimeFrameStateChanged();
     void onRendererPresented(qint64 emittedAtNs);
     void onTrackedItemGeometryChanged();
+    void onHudRebuildFinished();
 
 private:
     bool initialiseIfReady();
@@ -214,6 +218,29 @@ private:
     qint64 presentedLatencyMaxNs_ = 0;
     qint64 presentedLatencyMinNs_ = 0;
     qint64 presentedLatencyLongCount_ = 0;  // > 5 ms latency
+
+    // HUD rebuild timing — wraps the QImage allocation + fill +
+    // paintPreviewHudOverlay block inside onRuntimeFrameStateChanged.
+    // Fires every 200 ms (≈ 5/s), so if max_ms is in the 5-25 ms range
+    // it's likely the residual presented_latency long_count source we
+    // see after the overlay-cache fix landed. If max_ms is < 1 ms,
+    // HUD isn't the suspect and we look elsewhere.
+    qint64 hudRebuildCount_ = 0;
+    qint64 hudRebuildSumNs_ = 0;
+    qint64 hudRebuildMaxNs_ = 0;
+
+    // Async HUD rebuild. paintPreviewHudOverlay's full QPainter raster
+    // costs ~5 ms (text rendering dominates) and historically ran
+    // synchronously inside onRuntimeFrameStateChanged at the 200 ms
+    // boundary, contributing ~5 of the residual presented_latency
+    // long_count events per second. Now we kick off a QtConcurrent::run
+    // task that builds the QImage on a worker thread, the watcher's
+    // `finished` signal swaps it into hudImage_ on the GUI thread.
+    // While the worker is in flight, we don't queue another rebuild —
+    // worst case the HUD updates slightly later, which is invisible
+    // for an FPS overlay.
+    QFutureWatcher<QSharedPointer<QImage>> hudRebuildWatcher_;
+    bool hudRebuildInFlight_ = false;
 };
 
 }  // namespace miacode::preview::dcomp

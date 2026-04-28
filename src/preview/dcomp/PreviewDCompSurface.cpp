@@ -27,6 +27,7 @@
 #include <QElapsedTimer>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QtConcurrent/QtConcurrentRun>
 
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
@@ -89,6 +90,14 @@ PreviewDCompSurface::PreviewDCompSurface(QObject* parent)
     connect(&renderer_, &PreviewDCompRenderer::presented, this,
             &PreviewDCompSurface::onRendererPresented,
             Qt::QueuedConnection);
+
+    // Worker-thread HUD rebuild. The watcher lives on the GUI thread;
+    // its `finished` signal is delivered here by Qt's auto-connection,
+    // and onHudRebuildFinished swaps the produced QImage into hudImage_.
+    connect(&hudRebuildWatcher_,
+            &QFutureWatcher<QSharedPointer<QImage>>::finished,
+            this,
+            &PreviewDCompSurface::onHudRebuildFinished);
 }
 
 PreviewDCompSurface::~PreviewDCompSurface()
@@ -122,6 +131,15 @@ void PreviewDCompSurface::attachToWindow(QQuickWindow* window)
             &PreviewDCompSurface::onWindowGeometryChanged);
     connect(window_, &QQuickWindow::visibilityChanged, this,
             &PreviewDCompSurface::onWindowVisibilityChanged);
+    // Top-level HWND mode also needs to follow editor position changes
+    // — moving the editor must move the popup that hosts the chart.
+    // QWindow::xChanged / yChanged fire on the GUI thread when the
+    // user drags the editor. The slot reapplies the tracked item's
+    // screen coords through MoveWindow.
+    connect(window_, &QWindow::xChanged, this,
+            &PreviewDCompSurface::onWindowGeometryChanged);
+    connect(window_, &QWindow::yChanged, this,
+            &PreviewDCompSurface::onWindowGeometryChanged);
     // Phase 4e — DPI / multi-monitor handling. screenChanged fires
     // when the user drags the window between monitors with different
     // DPI scaling. effectiveDevicePixelRatio updates on the new
@@ -221,6 +239,15 @@ void PreviewDCompSurface::setRuntime(PreviewRuntime* runtime)
 
 void PreviewDCompSurface::detach()
 {
+    // Wait for any in-flight HUD rebuild to finish before tearing
+    // down — the worker captures stateCopy by value so it doesn't
+    // dereference into our memory, but the watcher's `finished` slot
+    // fires on this object and would crash if it ran post-destruction.
+    if (hudRebuildWatcher_.isRunning()) {
+        hudRebuildWatcher_.waitForFinished();
+    }
+    hudRebuildInFlight_ = false;
+
     if (presentRateDiagTimer_.isActive()) {
         presentRateDiagTimer_.stop();
     }
@@ -693,19 +720,34 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
             || hudImage_->size() != hudPixelSize
             || lastHudRebuildNs_ == 0
             || (nowNs - lastHudRebuildNs_) >= kHudRebuildIntervalNs;
-        if (needsRebuild) {
-            auto fresh = QSharedPointer<QImage>::create(
-                hudPixelSize, QImage::Format_RGBA8888_Premultiplied);
-            fresh->fill(Qt::transparent);
-            QPainter p(fresh.data());
-            // Pass the same physical size so paintPreviewHudOverlay's
-            // shortSide / kHudReferenceShortSide ratio scales fonts
-            // for the high-res target.
-            miacode::preview::hud::paintPreviewHudOverlay(
-                p, state, hudPixelSize, layerFlags_);
-            p.end();
-            hudImage_ = fresh;
+        if (needsRebuild && !hudRebuildInFlight_) {
+            // Post the rebuild to a worker thread. Cost on the GUI hot
+            // path is one PreviewFrameState copy (cheap due to Qt COW
+            // containers + std::shared_ptr refcounts) plus a
+            // QtConcurrent::run task post (~µs). The synchronous
+            // QPainter rasterisation that used to live here moves off
+            // the GUI thread entirely; the result lands in
+            // onHudRebuildFinished.
+            const scene::PreviewFrameState stateCopy = state;
+            const auto layerFlagsCopy = layerFlags_;
+            const QSize hudPixelSizeCopy = hudPixelSize;
+            hudRebuildInFlight_ = true;
             lastHudRebuildNs_ = nowNs;
+            auto future = QtConcurrent::run(
+                [stateCopy, layerFlagsCopy, hudPixelSizeCopy]() {
+                    QElapsedTimer workerTimer;
+                    workerTimer.start();
+                    auto fresh = QSharedPointer<QImage>::create(
+                        hudPixelSizeCopy,
+                        QImage::Format_RGBA8888_Premultiplied);
+                    fresh->fill(Qt::transparent);
+                    QPainter p(fresh.data());
+                    miacode::preview::hud::paintPreviewHudOverlay(
+                        p, stateCopy, hudPixelSizeCopy, layerFlagsCopy);
+                    p.end();
+                    return fresh;
+                });
+            hudRebuildWatcher_.setFuture(future);
         }
         if (hudImage_ && !hudImage_->isNull()) {
             snapshot.retainedImages.append(hudImage_);
@@ -793,6 +835,36 @@ void PreviewDCompSurface::onRendererPresented(qint64 emittedAtNs)
     // which is correct: it's neither the runtime nor the renderer
     // signal frame, just a method call on the same object.
     onRuntimeFrameStateChanged();
+}
+
+void PreviewDCompSurface::onHudRebuildFinished()
+{
+    hudRebuildInFlight_ = false;
+    if (!hudRebuildWatcher_.future().isValid()
+        || hudRebuildWatcher_.future().resultCount() == 0) {
+        return;
+    }
+    QSharedPointer<QImage> fresh = hudRebuildWatcher_.future().result();
+    if (!fresh || fresh->isNull()) {
+        return;
+    }
+    // Approximate per-rebuild stats: elapsed = now - last task start.
+    // We can't time the worker thread directly without piping a
+    // duration through the future, but lastHudRebuildNs_ was set when
+    // the task was posted and the watcher fires when the task
+    // returns, so this is a reasonable upper-bound proxy. Real wall-
+    // clock time spent on the worker is what matters for confirming
+    // the GUI hot path is unblocked, which the existing
+    // tick_build_stats max_ms (now ≪ 5 ms) already shows.
+    const qint64 nowNs = QDateTime::currentMSecsSinceEpoch() * 1000000LL;
+    const qint64 elapsedNs = lastHudRebuildNs_ != 0
+        ? (nowNs - lastHudRebuildNs_) : 0;
+    ++hudRebuildCount_;
+    hudRebuildSumNs_ += elapsedNs;
+    if (elapsedNs > hudRebuildMaxNs_) {
+        hudRebuildMaxNs_ = elapsedNs;
+    }
+    hudImage_ = fresh;
 }
 
 void PreviewDCompSurface::onWindowSceneGraphInitialized()
@@ -943,19 +1015,32 @@ void PreviewDCompSurface::applyTrackedItemGeometry()
     if (pixelSize != core_.swapChainPixelSize()) {
         renderer_.requestResize(pixelSize);
     }
-    // Phase 4-perf-test (Option 3): when the visual is hosted in our
-    // own child HWND, position the HWND itself instead of relying on
-    // the DComp visual transform. The visual stays at (0,0) inside
-    // the child HWND's client area; MoveWindow handles the screen-
-    // space placement. DWM then sees our chart preview as a real
-    // sibling-style window of the QQuickWindow's HWND rather than a
-    // visual sub-tree, which is what we're trying to test.
+    // When the visual is hosted in our own external HWND, position
+    // the HWND instead of relying on the DComp visual transform.
+    // The visual stays at (0, 0) inside that HWND's client area;
+    // MoveWindow handles placement. Two modes:
+    //   - TOPLEVEL_HWND: HWND is a top-level popup; MoveWindow takes
+    //     SCREEN-relative coords. We map the tracked item's logical
+    //     position through QWindow::mapToGlobal then scale by DPR.
+    //   - CHILD_HWND: HWND is a WS_CHILD of the QQuickWindow's
+    //     HWND; MoveWindow takes parent-client-area-relative coords,
+    //     which is what xPx/yPx already are.
 #ifdef Q_OS_WIN
     if (childHwnd_ != nullptr) {
-        ::MoveWindow(reinterpret_cast<HWND>(childHwnd_),
-                     xPx, yPx,
-                     pixelSize.width(), pixelSize.height(),
-                     TRUE);
+        if (miacode::debug_options::previewDCompTopLevelHwndEnabled()) {
+            const QPointF globalLogical = window_->mapToGlobal(topLeftScene);
+            const int globalXPx = qRound(globalLogical.x() * dpr);
+            const int globalYPx = qRound(globalLogical.y() * dpr);
+            ::MoveWindow(reinterpret_cast<HWND>(childHwnd_),
+                         globalXPx, globalYPx,
+                         pixelSize.width(), pixelSize.height(),
+                         TRUE);
+        } else {
+            ::MoveWindow(reinterpret_cast<HWND>(childHwnd_),
+                         xPx, yPx,
+                         pixelSize.width(), pixelSize.height(),
+                         TRUE);
+        }
         core_.setVisualTransform(0, 0, pixelSize);
     } else {
         core_.setVisualTransform(xPx, yPx, pixelSize);
@@ -1079,6 +1164,50 @@ void* PreviewDCompSurface::currentParentHwnd() const
     // surface go through the same handle.
     if (childHwnd_ != nullptr) {
         return childHwnd_;
+    }
+    if (miacode::debug_options::previewDCompTopLevelHwndEnabled()) {
+        // Top-level borderless transparent owned popup. WS_POPUP gives
+        // us a window with no caption, no border, no system menu. The
+        // extended styles together make it click-through
+        // (WS_EX_TRANSPARENT), focus-stealing-proof (WS_EX_NOACTIVATE),
+        // alpha-capable (WS_EX_LAYERED — required for transparent
+        // composition), and absent from the taskbar / Alt-Tab list
+        // (WS_EX_TOOLWINDOW). The QQuickWindow's HWND is the OWNER,
+        // not the parent, which means the popup stays above the
+        // editor and follows its minimise/restore lifecycle without
+        // being clipped to the editor's client area (which is what
+        // would happen with WS_CHILD).
+        const HWND owner = reinterpret_cast<HWND>(window_->winId());
+        if (owner == nullptr) {
+            return nullptr;
+        }
+        const HWND popup = ::CreateWindowExW(
+            WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_LAYERED
+                | WS_EX_TOOLWINDOW,
+            L"STATIC",
+            L"",
+            WS_POPUP,
+            0, 0, 1, 1,
+            owner, nullptr,
+            ::GetModuleHandleW(nullptr), nullptr);
+        if (popup == nullptr) {
+            const DWORD err = ::GetLastError();
+            logSurface("toplevel_hwnd_create_failed",
+                       QStringLiteral("err=%1").arg(err));
+            return reinterpret_cast<void*>(owner);
+        }
+        // Fully opaque alpha — the chart content itself comes from
+        // DComp's premultiplied compositing. The layered window flag
+        // is required to coexist with the editor's swap chain
+        // without producing a black box.
+        ::SetLayeredWindowAttributes(popup, 0, 255, LWA_ALPHA);
+        ::ShowWindow(popup, SW_SHOWNOACTIVATE);
+        const_cast<PreviewDCompSurface*>(this)->childHwnd_ = popup;
+        logSurface("toplevel_hwnd_created",
+                   QStringLiteral("owner=0x%1 popup=0x%2")
+                       .arg(reinterpret_cast<quintptr>(owner), 0, 16)
+                       .arg(reinterpret_cast<quintptr>(popup), 0, 16));
+        return reinterpret_cast<void*>(popup);
     }
     if (miacode::debug_options::previewDCompChildHwndEnabled()) {
         // First-time init in child-HWND mode — create the HWND now.
@@ -1230,6 +1359,29 @@ void PreviewDCompSurface::logPresentRateDiagnostic()
     presentedLatencyMaxNs_ = 0;
     presentedLatencyMinNs_ = 0;
     presentedLatencyLongCount_ = 0;
+
+    // HUD rebuild timing. The block runs synchronously inside
+    // onRuntimeFrameStateChanged every 200 ms (≈ 5/s), so each entry
+    // here is one full QPainter rasterise. If max_ms is high (5+ ms)
+    // and rate is ~5/s, this is the dominant residual latency source
+    // and the fix is to move it to a worker thread.
+    const double avgHudMs = hudRebuildCount_ > 0
+        ? static_cast<double>(hudRebuildSumNs_)
+            / static_cast<double>(hudRebuildCount_) / 1.0e6
+        : 0.0;
+    const double maxHudMs =
+        static_cast<double>(hudRebuildMaxNs_) / 1.0e6;
+    logSurface(
+        "hud_rebuild_stats",
+        QStringLiteral(
+            "rebuilds=%1 avg_ms=%2 max_ms=%3 interval_ms=%4")
+            .arg(hudRebuildCount_)
+            .arg(avgHudMs, 0, 'f', 3)
+            .arg(maxHudMs, 0, 'f', 3)
+            .arg(static_cast<double>(deltaNs) / 1.0e6, 0, 'f', 1));
+    hudRebuildCount_ = 0;
+    hudRebuildSumNs_ = 0;
+    hudRebuildMaxNs_ = 0;
 
     lastDiagDCompFrames_ = dcompFrames;
     lastDiagQtFrames_ = qtFrames;

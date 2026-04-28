@@ -809,9 +809,11 @@ int main(int argc, char* argv[])
         miacode::debug_log::initializeStartupTimingLogSession();
     }
 
-    const bool forceBasicRenderLoop = miacode::debug_options::envFlagEnabled(
-        "MIACODE_PREVIEW_FORCE_BASIC_RENDER_LOOP"
-    );
+    const bool qsgFullDisable = miacode::debug_options::previewQsgFullDisableEnabled();
+    const bool forceBasicRenderLoop = qsgFullDisable
+        || miacode::debug_options::envFlagEnabled(
+            "MIACODE_PREVIEW_FORCE_BASIC_RENDER_LOOP"
+        );
     const bool disableDontCreateNativeWidgetSiblings = miacode::debug_options::envFlagEnabled(
         "MIACODE_PREVIEW_DISABLE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS"
     );
@@ -868,11 +870,12 @@ int main(int argc, char* argv[])
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("startup/qt_config"),
             QString(
-                "force_basic_render_loop=%1 qsg_render_loop=%2 "
+                "qsg_full_disable=%1 force_basic_render_loop=%2 qsg_render_loop=%3 "
                 "dont_create_native_widget_siblings_default=1 "
-                "disable_dont_create_native_widget_siblings=%3 "
-                "effective_dont_create_native_widget_siblings=%4"
+                "disable_dont_create_native_widget_siblings=%4 "
+                "effective_dont_create_native_widget_siblings=%5"
             )
+                .arg(qsgFullDisable ? 1 : 0)
                 .arg(forceBasicRenderLoop ? 1 : 0)
                 .arg(qEnvironmentVariable("QSG_RENDER_LOOP").trimmed().isEmpty()
                          ? QStringLiteral("(default)")
@@ -917,6 +920,13 @@ int main(int argc, char* argv[])
         QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
         appliedGraphicsBackend = QStringLiteral("opengl");
         graphicsBackendSource = QStringLiteral("cli_video_export_force");
+    } else if (qsgFullDisable) {
+        // Diagnostic mode: completely exclude Qt Quick's native render
+        // path. Force software backend regardless of CLI / persisted
+        // setting; do NOT persist, so a normal next launch reverts.
+        appliedGraphicsBackend =
+            applyGraphicsBackendChoice(QStringLiteral("software"));
+        graphicsBackendSource = QStringLiteral("qsg_full_disable_forced");
     } else {
         const GraphicsBackendChoice choice = resolveGraphicsBackendChoice(rawArgs);
         if (choice.fromCommandLine) {
