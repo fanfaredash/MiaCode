@@ -76,6 +76,28 @@ public:
     // window state transitions.
     void setPaused(bool paused);
 
+    // True if the render thread is alive AND not in the paused state. The
+    // surface uses this to decide whether to publish on its own
+    // (paused / scrub case) or wait for the render thread's `presented`
+    // signal to drive vsync-aligned publishes (playback case).
+    bool isActivelyRendering() const;
+
+signals:
+    // Fired from the render thread after each successful Present. The
+    // surface listens to this on the GUI thread (Qt::QueuedConnection)
+    // and uses it as the publish trigger during playback so consecutive
+    // snapshots are sampled at uniform vsync intervals — fixes the
+    // playhead-delta variance caused by GUI-tick scheduler jitter when
+    // the runtime's frameStateChanged was the publish trigger.
+    //
+    // emittedAtNs is the wall-clock time the render thread emitted the
+    // signal (UTC ms × 1e6). The receiving slot subtracts its own
+    // wall-clock time to compute Qt::QueuedConnection dispatch latency
+    // — i.e. how long the GUI thread sat on the queued event before
+    // running the slot. High dispatch latency means the GUI thread was
+    // blocked by *something else* during that window.
+    void presented(qint64 emittedAtNs);
+
 private:
     void renderLoop();
     void processPendingResizeLocked();

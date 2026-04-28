@@ -16,7 +16,21 @@ struct AnimatedSpriteAdjustParams {
 constexpr qreal kMaterialAnimationTimeScale = 1.0 / 20.0;
 constexpr qreal kMaterialAnimationPhaseScale = (kMaterialAnimationTimeScale / 0.0008) * 0.2;
 constexpr qreal kOverlayCacheScalarQuantization = 4096.0;
-constexpr qsizetype kOverlayCacheMaxEntries = 128;
+// Was 128 with clear-all-on-full eviction. The cap was reachable in
+// realistic playback (a chart can produce many distinct
+// (base, overlay, mix, lighten, tint) tuples as it scrolls through
+// dense regions), and once it filled, every subsequent novel tuple
+// triggered overlayImageCache().clear() — wiping all 128 cached
+// composites in one go. The next dozen frames then all cache-miss
+// composeOverlayImage, each running a full per-pixel tint walk
+// (~256x256 ARGB ~= 65k iterations) plus a QPainter compose, on the
+// GUI thread. That landed as 100-500 ms `onRuntimeFrameStateChanged`
+// stalls visible in tick_build_stats max_build_ms — the actual
+// source of the perceived motion judder once the publish/render
+// pipeline was clean. Bumping to 2048 + FIFO single-entry eviction
+// (below) keeps memory bounded while never causing catastrophic
+// re-fill events on a steady-state chart.
+constexpr qsizetype kOverlayCacheMaxEntries = 2048;
 
 struct OverlayCacheKey {
     quint64 baseImageKey = 0;
@@ -60,6 +74,21 @@ QHash<OverlayCacheKey, QImage>& overlayImageCache()
 {
     static QHash<OverlayCacheKey, QImage> cache;
     return cache;
+}
+
+// Insertion-order tracker for the cache above. Front = oldest. Used
+// for FIFO eviction in place of the original clear-all-on-full
+// strategy. Not full LRU (we don't move-to-back on hit) — that would
+// cost an extra mutex-protected list operation per cache hit, which
+// the per-frame hot path runs many times. Pure FIFO is good enough
+// because the cache is sized to fit a typical chart's full set of
+// overlay tuples; eviction only kicks in for unusually busy charts
+// or accumulated session state, and FIFO drops the truly oldest
+// rather than scanning randomly.
+QList<OverlayCacheKey>& overlayImageCacheInsertionOrder()
+{
+    static QList<OverlayCacheKey> order;
+    return order;
 }
 
 qint64 quantizeOverlayCacheScalar(qreal value)
@@ -202,10 +231,21 @@ QImage composeOverlayImage(
             const QImage& cached = it.value();
             return cached;
         }
-        if (overlayImageCache().size() >= kOverlayCacheMaxEntries) {
-            overlayImageCache().clear();
+        // FIFO eviction — drop the oldest single entry instead of
+        // wiping the whole cache. The previous clear-all-on-full
+        // strategy was the dominant source of GUI-thread stalls
+        // during playback (single onRuntimeFrameStateChanged calls
+        // running 100-500 ms doing back-to-back composeOverlayImage
+        // re-rasterisations). Single-entry eviction caps the worst
+        // case at one extra rasterisation per cache miss, and only
+        // when actually at the limit.
+        auto& cache = overlayImageCache();
+        auto& order = overlayImageCacheInsertionOrder();
+        while (cache.size() >= kOverlayCacheMaxEntries && !order.isEmpty()) {
+            cache.remove(order.takeFirst());
         }
-        overlayImageCache().insert(cacheKey, composed);
+        cache.insert(cacheKey, composed);
+        order.append(cacheKey);
     }
     return composed;
 }

@@ -24,6 +24,7 @@
 #include "preview/scene/PreviewTrackLayerState.h"
 
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QQuickItem>
 #include <QQuickWindow>
 
@@ -77,6 +78,17 @@ QSize testRectSize(QSize clientSize)
 PreviewDCompSurface::PreviewDCompSurface(QObject* parent)
     : QObject(parent)
 {
+    // Render-thread-driven publishing. Each Present on the render thread
+    // fires `presented` carrying its emit timestamp; we re-enter
+    // onRendererPresented on the GUI thread (which records dispatch
+    // latency, then calls onRuntimeFrameStateChanged to build + publish
+    // a snapshot that's vsync-aligned). Paired with the gating in
+    // onRuntimeFrameStateChanged, this makes playback publishes uniformly
+    // spaced at the display refresh interval — which is what fixed the
+    // playhead-delta variance the diagnostic exposed.
+    connect(&renderer_, &PreviewDCompRenderer::presented, this,
+            &PreviewDCompSurface::onRendererPresented,
+            Qt::QueuedConnection);
 }
 
 PreviewDCompSurface::~PreviewDCompSurface()
@@ -127,6 +139,28 @@ void PreviewDCompSurface::attachToWindow(QQuickWindow* window)
             });
     connect(window_, &QObject::destroyed, this, &PreviewDCompSurface::detach);
 
+    // Diagnostic: tally Qt's per-vsync Presents so logPresentRateDiagnostic()
+    // can compare them to DComp's. DirectConnection so the increment runs
+    // on the QSG render thread without a queued event allocation. The
+    // atomic is read from the GUI thread by the periodic logger.
+    qtFrameSwapDiagConnection_ = connect(
+        window_, &QQuickWindow::frameSwapped, this,
+        [this]() {
+            qtFrameSwapCount_.fetch_add(1, std::memory_order_relaxed);
+        },
+        Qt::DirectConnection);
+    if (!presentRateDiagTimer_.isActive()) {
+        presentRateDiagTimer_.setInterval(1000);
+        presentRateDiagTimer_.setTimerType(Qt::CoarseTimer);
+        QObject::disconnect(&presentRateDiagTimer_, nullptr, this, nullptr);
+        connect(&presentRateDiagTimer_, &QTimer::timeout, this,
+                &PreviewDCompSurface::logPresentRateDiagnostic);
+        lastDiagDCompFrames_ = 0;
+        lastDiagQtFrames_ = 0;
+        lastDiagNs_ = QDateTime::currentMSecsSinceEpoch() * 1000000LL;
+        presentRateDiagTimer_.start();
+    }
+
     // If the window is already initialised + visible, init right away.
     if (window_->isSceneGraphInitialized()) {
         initialiseIfReady();
@@ -151,6 +185,7 @@ void PreviewDCompSurface::setRuntime(PreviewRuntime* runtime)
         runtimeFrameStateConnection_ = QMetaObject::Connection();
     }
     runtime_ = runtime;
+    renderPlayheadInitialized_ = false;
     if (runtime_ != nullptr) {
         // Phase 4-perf-fix: QueuedConnection, NOT Direct. The runtime's
         // tick path looks like
@@ -186,6 +221,13 @@ void PreviewDCompSurface::setRuntime(PreviewRuntime* runtime)
 
 void PreviewDCompSurface::detach()
 {
+    if (presentRateDiagTimer_.isActive()) {
+        presentRateDiagTimer_.stop();
+    }
+    if (qtFrameSwapDiagConnection_) {
+        QObject::disconnect(qtFrameSwapDiagConnection_);
+        qtFrameSwapDiagConnection_ = QMetaObject::Connection();
+    }
     if (window_) {
         disconnect(window_, nullptr, this, nullptr);
     }
@@ -217,25 +259,91 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
         return;
     }
 
-    // Phase 4b-perf: throttle snapshot rebuild to ~60 Hz (the DComp
-    // render thread's max consume rate). The runtime can fire
-    // frameStateChanged faster than that — audio events, multiple
-    // updates per visual frame, etc. — and any intermediate publishes
-    // get overwritten before the render thread reads them. Skipping
-    // the work entirely when the previous publish is < 16 ms old
-    // halves the GUI-thread layer-build cost in pathological cases
-    // without affecting the rendered frame rate.
-    const qint64 nowNs = QDateTime::currentMSecsSinceEpoch() * 1000000LL;
-    if (lastPublishNs_ != 0 && (nowNs - lastPublishNs_) < 14'000'000LL) {
+    // Vsync-aligned publishing. When the render thread is actively
+    // rendering (playback is on, not paused), it fires `presented` once
+    // per Present — that signal drives the publish at uniform display-
+    // refresh-rate intervals. While that's the case, suppress publishes
+    // triggered by PreviewRuntime::frameStateChanged: those fire at
+    // GUI-tick scheduler jitter (15-19 ms gaps with occasional cluster
+    // pairs sub-ms apart), which is exactly the source of the playhead-
+    // delta variance the user perceives as judder. The render thread's
+    // signal is uniform; let it be the sole publish trigger during play.
+    //
+    // The `sender()` check distinguishes the two paths: when this slot
+    // is invoked from the renderer's `presented` signal, sender() is
+    // &renderer_, the gate is bypassed, and we publish. When invoked
+    // from PreviewRuntime::frameStateChanged, sender() is runtime_, the
+    // gate fires during playback and skips. Direct calls (e.g. from
+    // setRuntime() to seed an initial snapshot) have sender() == nullptr
+    // and bypass the gate as intended.
+    const QObject* eventSource = sender();
+    const bool fromRuntime = (eventSource == runtime_.data());
+    if (fromRuntime && renderer_.isActivelyRendering()) {
         return;
     }
+    // Note: gap and dispatch-latency diagnostics are recorded in
+    // onRendererPresented (the dedicated slot for the renderer signal)
+    // so they observe the full Qt::QueuedConnection dispatch path. By
+    // the time we reach here from a direct call, sender() is nullptr
+    // and the source-discriminator logic that used to live here would
+    // mis-attribute every call.
+
+    // No coalescing throttle. The original code clamped this slot to
+    // ~71 Hz (14 ms floor) to "halve the build cost in pathological
+    // cases", and a follow-up dropped it to 4 ms hoping queue
+    // clustering would stop. Both versions kept dropping ~25 % of
+    // legitimate 60 Hz ticks — Qt::QueuedConnection clusters two
+    // consecutive events with sub-millisecond inter-call gaps when
+    // the GUI thread becomes idle after being briefly busy, and even
+    // a 1 ms floor would have rejected those.
+    //
+    // The tick_build_stats diagnostic settled the trade-off: avg
+    // build cost is 0.3-0.7 ms, max ~10 ms during cache rebuilds.
+    // Doing every emit's work — even at 100/s — is < 5 % of one CPU
+    // core. Versus the alternative of dropping 25 % of publishes,
+    // which manifests as 44 Hz motion on a 60 Hz display (the
+    // user-visible judder this work is targeting). Trivial CPU cost
+    // beats wrong-rate publishes.
+    const qint64 nowNs = QDateTime::currentMSecsSinceEpoch() * 1000000LL;
     lastPublishNs_ = nowNs;
+    QElapsedTimer tickBuildTimer;
+    tickBuildTimer.start();
 
     const auto& state = runtime_->frameState();
 
+    // Render-thread playhead clock: advance by wall-clock time elapsed
+    // since the last publish, then drift-correct against the runtime's
+    // audio-time playhead. When `presented` drives this slot at uniform
+    // vsync intervals, renderPlayheadSeconds_ advances by uniform amounts
+    // per sample regardless of GUI-tick scheduler jitter — fixing the
+    // 6-8 ms stddev playhead_delta_stats was reporting. The runtime's
+    // playheadSeconds (state.playheadSeconds) is the audio-time anchor:
+    // small drifts are corrected gradually by reading wall-clock elapsed,
+    // large drifts (seek, pause/resume, > 50 ms) snap so we don't render
+    // motion across a discontinuity.
+    constexpr double kRenderPlayheadSnapSeconds = 0.050;
+    if (!renderPlayheadInitialized_) {
+        renderPlayheadSeconds_ = state.playheadSeconds;
+        renderPlayheadLastSampleNs_ = nowNs;
+        renderPlayheadInitialized_ = true;
+    } else {
+        const qint64 elapsedNs = nowNs - renderPlayheadLastSampleNs_;
+        const double elapsedSeconds = static_cast<double>(elapsedNs) / 1.0e9;
+        // Bound the step to [0, 100 ms] so a long stall (e.g., system
+        // sleep / GC pause) doesn't make us race forward by seconds when
+        // we wake; the drift snap below catches up cleanly instead.
+        const double cappedElapsed = qBound(0.0, elapsedSeconds, 0.100);
+        renderPlayheadSeconds_ += cappedElapsed;
+        renderPlayheadLastSampleNs_ = nowNs;
+        const double drift = state.playheadSeconds - renderPlayheadSeconds_;
+        if (qAbs(drift) > kRenderPlayheadSnapSeconds) {
+            renderPlayheadSeconds_ = state.playheadSeconds;
+        }
+    }
+
     PreviewDCompFrameStateSnapshot snapshot;
     snapshot.revision = ++snapshotRevision_;
-    snapshot.playheadSeconds = state.playheadSeconds;
+    snapshot.playheadSeconds = renderPlayheadSeconds_;
     snapshot.playing = false;
 
     // Phase 4a: when a QML target item is tracked, the scene's logical
@@ -288,7 +396,11 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
         chartReviewCursor_.reset();
         maimuriDxJudgeCursor_.reset();
     }
-    const double playheadSeconds = state.playheadSeconds;
+    // Use the render-thread playhead clock (uniform 16.67 ms per sample
+    // when driven by `presented` at vsync) so cursor advancement and
+    // sprite positions match the playhead value the snapshot carries —
+    // not the jittery state.playheadSeconds that the GUI tick wrote.
+    const double playheadSeconds = renderPlayheadSeconds_;
     scene::syncPreviewLayerWindowCursor(preparedCache_.guideLayer(), playheadSeconds, &guideCursor_);
     scene::syncPreviewLayerWindowCursor(preparedCache_.headLayer(), playheadSeconds, &headCursor_);
     scene::syncPreviewLayerWindowCursor(preparedCache_.slideLikeLayer(), playheadSeconds, &trackCursor_);
@@ -629,11 +741,58 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     }
 
     renderer_.publishSnapshot(snapshot);
+
+    const qint64 buildNs = tickBuildTimer.nsecsElapsed();
+    ++tickBuildCount_;
+    tickBuildSumNs_ += buildNs;
+    if (buildNs > tickBuildMaxNs_) {
+        tickBuildMaxNs_ = buildNs;
+    }
 }
 
 bool PreviewDCompSurface::isActive() const
 {
     return initialised_;
+}
+
+void PreviewDCompSurface::onRendererPresented(qint64 emittedAtNs)
+{
+    const qint64 nowNs = QDateTime::currentMSecsSinceEpoch() * 1000000LL;
+
+    // Inter-call gap on the renderer-driven slot path. Render thread
+    // fires `presented` ~16.67 ms apart (Present(1, 0) is vsync-paced);
+    // any deviation here comes from the GUI thread sitting on the
+    // queued event because it was busy with something else.
+    if (lastPresentedSlotNs_ != 0) {
+        const qint64 gapNs = nowNs - lastPresentedSlotNs_;
+        ++presentedGapCount_;
+        presentedGapSumNs_ += gapNs;
+        if (gapNs > presentedGapMaxNs_) presentedGapMaxNs_ = gapNs;
+        if (presentedGapMinNs_ == 0 || gapNs < presentedGapMinNs_) {
+            presentedGapMinNs_ = gapNs;
+        }
+        if (gapNs > 20'000'000LL) ++presentedGapLongCount_;
+        if (gapNs < 8'000'000LL) ++presentedGapShortCount_;
+    }
+    lastPresentedSlotNs_ = nowNs;
+
+    // Dispatch latency: how long the queued event sat before the slot
+    // ran. A healthy GUI thread dispatches < 1 ms after emit. Anything
+    // larger means the GUI thread was blocked — that's the actual
+    // duration we're trying to attribute to a specific blocker.
+    const qint64 latencyNs = nowNs - emittedAtNs;
+    ++presentedLatencyCount_;
+    presentedLatencySumNs_ += latencyNs;
+    if (latencyNs > presentedLatencyMaxNs_) presentedLatencyMaxNs_ = latencyNs;
+    if (presentedLatencyMinNs_ == 0 || latencyNs < presentedLatencyMinNs_) {
+        presentedLatencyMinNs_ = latencyNs;
+    }
+    if (latencyNs > 5'000'000LL) ++presentedLatencyLongCount_;
+
+    // Direct call into the publish path. sender() is nullptr inside,
+    // which is correct: it's neither the runtime nor the renderer
+    // signal frame, just a method call on the same object.
+    onRuntimeFrameStateChanged();
 }
 
 void PreviewDCompSurface::onWindowSceneGraphInitialized()
@@ -958,6 +1117,123 @@ void* PreviewDCompSurface::currentParentHwnd() const
 #else
     return nullptr;
 #endif
+}
+
+void PreviewDCompSurface::logPresentRateDiagnostic()
+{
+    const qint64 nowNs = QDateTime::currentMSecsSinceEpoch() * 1000000LL;
+    const qint64 dcompFrames = renderer_.framesRendered();
+    const qint64 qtFrames =
+        qtFrameSwapCount_.load(std::memory_order_relaxed);
+    const qint64 deltaNs = nowNs - lastDiagNs_;
+    const double deltaSec = deltaNs > 0 ? static_cast<double>(deltaNs) / 1.0e9
+                                        : 1.0;
+    const double dcompFps =
+        static_cast<double>(dcompFrames - lastDiagDCompFrames_) / deltaSec;
+    const double qtFps =
+        static_cast<double>(qtFrames - lastDiagQtFrames_) / deltaSec;
+    logSurface("present_rates",
+               QStringLiteral(
+                   "dcomp_fps=%1 qt_fps=%2 dcomp_total=%3 qt_total=%4 "
+                   "interval_ms=%5 quiesce_qsg=%6 child_hwnd=%7 vsync_present=%8")
+                   .arg(dcompFps, 0, 'f', 1)
+                   .arg(qtFps, 0, 'f', 1)
+                   .arg(dcompFrames)
+                   .arg(qtFrames)
+                   .arg(static_cast<double>(deltaNs) / 1.0e6, 0, 'f', 1)
+                   .arg(miacode::debug_options::previewDCompQuiesceQsgEnabled() ? 1 : 0)
+                   .arg(miacode::debug_options::previewDCompChildHwndEnabled() ? 1 : 0)
+                   .arg(miacode::debug_options::previewDCompVsyncPresentEnabled() ? 1 : 0));
+
+    // Per-tick snapshot-build timing (GUI thread). If avg_ms is high
+    // (≳5 ms), the snapshot build is the GUI thread bottleneck. If
+    // avg_ms is low but publishes/sec is well below 60, the slot is
+    // being dispatched late (queued-event latency, GUI thread doing
+    // other work) and the fix is on the dispatch side.
+    const double avgBuildMs =
+        tickBuildCount_ > 0
+            ? static_cast<double>(tickBuildSumNs_)
+                  / static_cast<double>(tickBuildCount_) / 1.0e6
+            : 0.0;
+    const double maxBuildMs = static_cast<double>(tickBuildMaxNs_) / 1.0e6;
+    logSurface(
+        "tick_build_stats",
+        QStringLiteral(
+            "publishes=%1 throttled=%2 avg_build_ms=%3 max_build_ms=%4 "
+            "interval_ms=%5")
+            .arg(tickBuildCount_)
+            .arg(tickThrottledCount_)
+            .arg(avgBuildMs, 0, 'f', 3)
+            .arg(maxBuildMs, 0, 'f', 3)
+            .arg(static_cast<double>(deltaNs) / 1.0e6, 0, 'f', 1));
+    tickBuildCount_ = 0;
+    tickBuildSumNs_ = 0;
+    tickBuildMaxNs_ = 0;
+    tickThrottledCount_ = 0;
+
+    // Inter-call gap distribution. avg ≈ 16.67 ms = GUI thread is
+    // dispatching presented signals on time. avg > 17 ms or
+    // long_gap_count > 0 means the GUI thread was blocked by some
+    // other event (sync handoff, paint, timeline tick) for at least
+    // one vsync. short_gap_count counts cluster events (queue drain
+    // catching up after a stall) — that's the symptom we're tracing.
+    const double avgGapMs = presentedGapCount_ > 0
+        ? static_cast<double>(presentedGapSumNs_)
+            / static_cast<double>(presentedGapCount_) / 1.0e6
+        : 0.0;
+    const double maxGapMs =
+        static_cast<double>(presentedGapMaxNs_) / 1.0e6;
+    const double minGapMs =
+        static_cast<double>(presentedGapMinNs_) / 1.0e6;
+    logSurface(
+        "presented_gap_stats",
+        QStringLiteral(
+            "samples=%1 avg_ms=%2 min_ms=%3 max_ms=%4 long_gaps=%5 "
+            "short_gaps=%6")
+            .arg(presentedGapCount_)
+            .arg(avgGapMs, 0, 'f', 3)
+            .arg(minGapMs, 0, 'f', 3)
+            .arg(maxGapMs, 0, 'f', 3)
+            .arg(presentedGapLongCount_)
+            .arg(presentedGapShortCount_));
+    presentedGapCount_ = 0;
+    presentedGapSumNs_ = 0;
+    presentedGapMaxNs_ = 0;
+    presentedGapMinNs_ = 0;
+    presentedGapLongCount_ = 0;
+    presentedGapShortCount_ = 0;
+
+    // Dispatch latency: time the queued `presented` event spent waiting
+    // before its slot ran. avg < 1 ms means GUI thread is responsive;
+    // long_count > 0 means it was blocked by another event for at
+    // least 5 ms when the signal was queued — the duration of that
+    // block IS the size of long-tailed latency outliers.
+    const double avgLatencyMs = presentedLatencyCount_ > 0
+        ? static_cast<double>(presentedLatencySumNs_)
+            / static_cast<double>(presentedLatencyCount_) / 1.0e6
+        : 0.0;
+    const double maxLatencyMs =
+        static_cast<double>(presentedLatencyMaxNs_) / 1.0e6;
+    const double minLatencyMs =
+        static_cast<double>(presentedLatencyMinNs_) / 1.0e6;
+    logSurface(
+        "presented_latency_stats",
+        QStringLiteral(
+            "samples=%1 avg_ms=%2 min_ms=%3 max_ms=%4 long_count=%5")
+            .arg(presentedLatencyCount_)
+            .arg(avgLatencyMs, 0, 'f', 3)
+            .arg(minLatencyMs, 0, 'f', 3)
+            .arg(maxLatencyMs, 0, 'f', 3)
+            .arg(presentedLatencyLongCount_));
+    presentedLatencyCount_ = 0;
+    presentedLatencySumNs_ = 0;
+    presentedLatencyMaxNs_ = 0;
+    presentedLatencyMinNs_ = 0;
+    presentedLatencyLongCount_ = 0;
+
+    lastDiagDCompFrames_ = dcompFrames;
+    lastDiagQtFrames_ = qtFrames;
+    lastDiagNs_ = nowNs;
 }
 
 }  // namespace miacode::preview::dcomp

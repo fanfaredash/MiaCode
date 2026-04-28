@@ -228,6 +228,60 @@ inline bool disableTimelineEnabled()
     return envFlagEnabled("MIACODE_DISABLE_TIMELINE");
 }
 
+inline bool previewDCompQuiesceQsgEnabled()
+{
+    // Phase 4-perf (post-Option-1) — when on AND the DComp path is
+    // active, PreviewQuickSceneRoot and PreviewQuickHudLayer skip
+    // their `runtime->frameStateChanged → update()` subscriptions.
+    //
+    // Why: those subscriptions originally existed because the
+    // playback tick was present-driven (gated on QQuickWindow's
+    // frameSwapped) and the QSG items had to keep firing
+    // updatePaintNode at 60Hz to keep the present cadence alive.
+    // Commit 18a9813 disabled present-driven pacing for all
+    // frame-rate modes, so the tick is now timer-driven; the
+    // QSG items no longer need to drive QQuickWindow Presents.
+    // With DComp painting all chart content, the QSG side has
+    // nothing useful to refresh — its 60Hz Presents purely
+    // contend with DComp's swap chain in DWM.
+    //
+    // Risk: if a QML item somewhere still depends on the QSG
+    // items repainting (unlikely — they short-circuit
+    // updatePaintNode in DComp-exclusive mode), it would go
+    // stale. Keep gated behind a flag so the user can A/B
+    // confirm before making it the default.
+    return previewUseDCompEnabled()
+        && envFlagEnabled("MIACODE_PREVIEW_DCOMP_QUIESCE_QSG");
+}
+
+inline int previewTimelineThrottleHz()
+{
+    // Phase 4-perf (Option 1) — caps the timeline UI tick timer to
+    // at most this rate. Default 0 means uncapped (the timeline ticks
+    // at the same rate as the preview canvas, which is what the
+    // editor has historically done). Set e.g. to 30 to halve the
+    // editor's QSG present rate during playback.
+    //
+    // The hypothesis: when the DComp preview path runs, every
+    // timeline tick during playback causes Qt to push a frame on
+    // the editor swap chain (one Present per playhead bump), and
+    // DWM has to composite *both* swap chains every refresh. Cutting
+    // the editor present rate to 30 Hz halves DWM's compositing
+    // load on the editor side without making playhead motion look
+    // worse to a human (a 1px/frame line at 60 vs 30 Hz is visually
+    // indistinguishable). Trade-off: the playhead lags audio by up
+    // to ~33 ms in the worst case, which is still well under
+    // perceptual threshold.
+    //
+    // Values 1..240 are accepted; anything else (including the
+    // default 0 / empty) leaves the timeline rate unchanged.
+    const int v = envIntValue("MIACODE_PREVIEW_TIMELINE_THROTTLE_HZ", 0);
+    if (v <= 0 || v > 240) {
+        return 0;
+    }
+    return v;
+}
+
 inline bool previewQsgRenderTimingEnabled()
 {
     // Captures Qt's built-in scene-graph timing (`qt.scenegraph.time.*` log

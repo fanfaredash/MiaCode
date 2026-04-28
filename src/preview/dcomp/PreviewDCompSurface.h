@@ -9,6 +9,9 @@
 #include <QObject>
 #include <QPointer>
 #include <QSize>
+#include <QTimer>
+
+#include <atomic>
 
 class QQuickItem;
 class QQuickWindow;
@@ -71,6 +74,7 @@ private slots:
     void onWindowGeometryChanged();
     void onWindowVisibilityChanged();
     void onRuntimeFrameStateChanged();
+    void onRendererPresented(qint64 emittedAtNs);
     void onTrackedItemGeometryChanged();
 
 private:
@@ -105,6 +109,19 @@ private:
     // throttle rebuild work when the runtime emits frameStateChanged
     // faster than the render thread can consume it.
     qint64 lastPublishNs_ = 0;
+
+    // Render-thread playhead clock. Advances at wall-clock rate
+    // between publish calls; drifts toward the runtime's audio-time
+    // playhead via per-publish drift correction; snaps when drift
+    // exceeds threshold (seek / pause / resume). This decouples the
+    // rendered playhead from GUI-tick scheduler jitter — sampled at
+    // uniform vsync intervals (because publishes are vsync-driven),
+    // it advances by uniform amounts per sample, eliminating the
+    // 6-8 ms stddev seen in playhead_delta_stats with the old
+    // path that read frameState_.playheadSeconds directly.
+    double renderPlayheadSeconds_ = 0.0;
+    qint64 renderPlayheadLastSampleNs_ = 0;
+    bool renderPlayheadInitialized_ = false;
 
     // Phase 4f — HUD overlay rasterised here (was QQuickPaintedItem on
     // QSG). The legacy PreviewQuickHudLayer's draw logic now lives in
@@ -147,6 +164,56 @@ private:
     // Phase 3.6 — per-layer enable bitmap. All layers on by default.
     miacode::preview::scene::PreviewRenderLayerFlags layerFlags_ =
         miacode::preview::scene::kPreviewAllRenderLayers;
+
+    // Diagnostic: count Qt's QQuickWindow::frameSwapped emissions so we
+    // can compare Qt's Present rate to DComp's Present rate at runtime.
+    // Incremented on the QSG render thread (DirectConnection), read on
+    // the GUI thread by the periodic logger. Used to disambiguate
+    // "DWM compositing two swap chains" from "Qt's render loop is
+    // hot driving Presents". See logPresentRateDiagnostic().
+    std::atomic<qint64> qtFrameSwapCount_{ 0 };
+    QMetaObject::Connection qtFrameSwapDiagConnection_;
+    QTimer presentRateDiagTimer_;
+    qint64 lastDiagDCompFrames_ = 0;
+    qint64 lastDiagQtFrames_ = 0;
+    qint64 lastDiagNs_ = 0;
+    void logPresentRateDiagnostic();
+
+    // Per-tick timing of onRuntimeFrameStateChanged. Reset by
+    // logPresentRateDiagnostic each second. Tells us whether the slow
+    // GUI tick rate (~46 Hz vs the 60 Hz target) is from the snapshot
+    // build itself (high tickBuildNs_) or from somewhere else (build
+    // is fast but rate is still low, meaning slot dispatch is delayed).
+    qint64 tickBuildCount_ = 0;
+    qint64 tickBuildSumNs_ = 0;
+    qint64 tickBuildMaxNs_ = 0;
+    qint64 tickThrottledCount_ = 0;
+
+    // Inter-call gap distribution on the renderer-driven slot path.
+    // Tells us how often the GUI thread fails to dispatch a queued
+    // `presented` signal within a vsync window — the actual root
+    // cause of the playhead-delta clustering. avg ≈ 16.67 ms = healthy,
+    // long_gap_count > 0 = GUI thread is being blocked by something
+    // else (Qt sync handoff, timeline tick, paint events, …).
+    qint64 lastPresentedSlotNs_ = 0;
+    qint64 presentedGapCount_ = 0;
+    qint64 presentedGapSumNs_ = 0;
+    qint64 presentedGapMaxNs_ = 0;
+    qint64 presentedGapMinNs_ = 0;
+    qint64 presentedGapLongCount_ = 0;  // gaps > 20 ms (one missed vsync)
+    qint64 presentedGapShortCount_ = 0;  // gaps < 8 ms (queue clusters)
+
+    // Dispatch latency: time from render thread emitting `presented`
+    // to the GUI-thread slot starting to run. High latency means the
+    // GUI thread was blocked when the signal was queued — the actual
+    // root cause of the long_gap pattern. The slot-time inside
+    // tick_build_stats only measures what we did, not what kept the
+    // GUI thread busy beforehand.
+    qint64 presentedLatencyCount_ = 0;
+    qint64 presentedLatencySumNs_ = 0;
+    qint64 presentedLatencyMaxNs_ = 0;
+    qint64 presentedLatencyMinNs_ = 0;
+    qint64 presentedLatencyLongCount_ = 0;  // > 5 ms latency
 };
 
 }  // namespace miacode::preview::dcomp

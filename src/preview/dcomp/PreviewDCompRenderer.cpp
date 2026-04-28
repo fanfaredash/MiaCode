@@ -3,6 +3,7 @@
 #include "common/DebugLog.h"
 #include "common/Mmcss.h"
 
+#include <QDateTime>
 #include <QString>
 
 #ifdef Q_OS_WIN
@@ -164,6 +165,12 @@ qint64 PreviewDCompRenderer::framesRendered() const
     return framesRendered_.load(std::memory_order_acquire);
 }
 
+bool PreviewDCompRenderer::isActivelyRendering() const
+{
+    return running_.load(std::memory_order_acquire)
+        && !paused_.load(std::memory_order_acquire);
+}
+
 void PreviewDCompRenderer::publishSnapshot(const PreviewDCompFrameStateSnapshot& snapshot)
 {
     std::lock_guard<std::mutex> lock(snapshotMutex_);
@@ -277,6 +284,12 @@ void PreviewDCompRenderer::renderLoop()
 
         renderAnimatedFrame();
         framesRendered_.fetch_add(1, std::memory_order_release);
+        // Drive vsync-aligned publishing on the GUI thread. The signal
+        // crosses threads via Qt::QueuedConnection; the cost is one
+        // QEvent post per frame, dwarfed by the work the GUI thread
+        // does in response. Carries the emit timestamp so the slot
+        // can measure GUI-thread dispatch latency.
+        emit presented(QDateTime::currentMSecsSinceEpoch() * 1000000LL);
     }
 
     // Pair with the MMCSS registration above. The handle is per-thread;
@@ -344,11 +357,11 @@ void PreviewDCompRenderer::renderAnimatedFrame()
     }
     lastSnapshotRevision_ = snapshot.revision;
 
-    // Log every ~600 unique snapshots (10 seconds at 60 Hz). Accumulate
-    // a fresh window after each log so the metric reflects recent
-    // behaviour rather than a session average that hides recent
-    // regressions.
-    if (playheadDeltaSampleCount_ >= 600) {
+    // Log every ~60 unique snapshots (1 second at 60 Hz) so short
+    // playback sessions still get data. Accumulate a fresh window
+    // after each log so the metric reflects recent behaviour rather
+    // than a session average that hides recent regressions.
+    if (playheadDeltaSampleCount_ >= 60) {
         const double avg = playheadDeltaSumMs_
             / static_cast<double>(playheadDeltaSampleCount_);
         const double meanSq = playheadDeltaSqSumMs_

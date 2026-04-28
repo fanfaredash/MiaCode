@@ -121,6 +121,17 @@ private:
     mutable quint64 cachedSceneBuildNotesRevision_ = 0;
     mutable quint64 cachedSceneBuildOverlayRevision_ = 0;
     mutable quint64 sceneStateRebuildCount_ = 0;
+    // Per-second timing of updatePaintNode itself, so we can locate the
+    // actual cost (currentSceneState walk, layer updateNode work, QSG
+    // sync handoff). Logged once per second to avoid spamming the
+    // hot path. Tells us whether the GUI-thread block we see in
+    // PreviewDCompSurface::presented_gap_stats is coming from this
+    // updatePaintNode running long, or from the QSG infrastructure
+    // surrounding it.
+    mutable qint64 updatePaintNodeCount_ = 0;
+    mutable qint64 updatePaintNodeSumNs_ = 0;
+    mutable qint64 updatePaintNodeMaxNs_ = 0;
+    mutable qint64 updatePaintNodeLastLogMs_ = 0;
     bool dragActive_ = false;
     int dragStartX_ = 0;
     int dragStartScrollValue_ = 0;

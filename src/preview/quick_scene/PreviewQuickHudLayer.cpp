@@ -97,9 +97,11 @@ void PreviewQuickHudLayer::setRuntime(PreviewRuntime* runtime)
     runtime_ = runtime;
     if (runtime_ != nullptr) {
         frameState_ = nullptr;
-        runtimeUpdateConnection_ = QObject::connect(runtime_, &PreviewRuntime::frameStateChanged, this, [this]() {
-            requestThrottledUpdate();
-        });
+        if (!miacode::debug_options::previewDCompQuiesceQsgEnabled()) {
+            runtimeUpdateConnection_ = QObject::connect(runtime_, &PreviewRuntime::frameStateChanged, this, [this]() {
+                requestThrottledUpdate();
+            });
+        }
         runtime_->setFrameSize(boundingRect().size().toSize());
     }
     emit runtimeChanged();
