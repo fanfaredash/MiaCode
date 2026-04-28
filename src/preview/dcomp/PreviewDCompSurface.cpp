@@ -1,6 +1,7 @@
 #include "preview/dcomp/PreviewDCompSurface.h"
 
 #include "common/DebugLog.h"
+#include "common/DebugOptions.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/scene/PreviewActiveMarkerView.h"
 #include "preview/scene/PreviewChartReviewLayerState.h"
@@ -195,6 +196,18 @@ void PreviewDCompSurface::detach()
     setTrackedItem(nullptr);
     runtime_ = nullptr;
     teardownCore();
+#ifdef Q_OS_WIN
+    // Phase 4-perf-test (Option 3): pair with the lazy-create in
+    // currentParentHwnd. teardownCore released DComp's references
+    // to this HWND already; we own the Win32 handle so destroy it
+    // here. Has to be after teardownCore (DComp expects the parent
+    // HWND alive while the visual tree is being shut down).
+    if (childHwnd_ != nullptr) {
+        ::DestroyWindow(reinterpret_cast<HWND>(childHwnd_));
+        childHwnd_ = nullptr;
+        logSurface("child_hwnd_destroyed");
+    }
+#endif
     window_ = nullptr;
 }
 
@@ -771,7 +784,26 @@ void PreviewDCompSurface::applyTrackedItemGeometry()
     if (pixelSize != core_.swapChainPixelSize()) {
         renderer_.requestResize(pixelSize);
     }
+    // Phase 4-perf-test (Option 3): when the visual is hosted in our
+    // own child HWND, position the HWND itself instead of relying on
+    // the DComp visual transform. The visual stays at (0,0) inside
+    // the child HWND's client area; MoveWindow handles the screen-
+    // space placement. DWM then sees our chart preview as a real
+    // sibling-style window of the QQuickWindow's HWND rather than a
+    // visual sub-tree, which is what we're trying to test.
+#ifdef Q_OS_WIN
+    if (childHwnd_ != nullptr) {
+        ::MoveWindow(reinterpret_cast<HWND>(childHwnd_),
+                     xPx, yPx,
+                     pixelSize.width(), pixelSize.height(),
+                     TRUE);
+        core_.setVisualTransform(0, 0, pixelSize);
+    } else {
+        core_.setVisualTransform(xPx, yPx, pixelSize);
+    }
+#else
     core_.setVisualTransform(xPx, yPx, pixelSize);
+#endif
 
     // Phase 4a diagnostic: log the geometry decision sparingly so we
     // can confirm the tracked item's reported bounds match the visible
@@ -880,6 +912,47 @@ void* PreviewDCompSurface::currentParentHwnd() const
 #ifdef Q_OS_WIN
     if (window_ == nullptr) {
         return nullptr;
+    }
+    // Phase 4-perf-test (Option 3): when the child-HWND flag is on
+    // and we already created our child window, the DComp visual
+    // tree is parented to *it*, not to the QQuickWindow's HWND.
+    // Re-attach attempts during the lifetime of an initialised
+    // surface go through the same handle.
+    if (childHwnd_ != nullptr) {
+        return childHwnd_;
+    }
+    if (miacode::debug_options::previewDCompChildHwndEnabled()) {
+        // First-time init in child-HWND mode — create the HWND now.
+        // Style: WS_CHILD parented to the QQuickWindow, click-through
+        // (WS_EX_TRANSPARENT) so QML below still receives input,
+        // WS_EX_NOACTIVATE to avoid focus stealing. Use the built-in
+        // STATIC class so we don't need to register one of our own;
+        // the window does no painting (DComp paints the visual on
+        // top of it), so the class's default WndProc is fine.
+        const HWND parent = reinterpret_cast<HWND>(window_->winId());
+        if (parent == nullptr) {
+            return nullptr;
+        }
+        const HWND hwnd = ::CreateWindowExW(
+            WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
+            L"STATIC",
+            L"",
+            WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
+            0, 0, 1, 1,
+            parent, nullptr,
+            ::GetModuleHandleW(nullptr), nullptr);
+        if (hwnd == nullptr) {
+            const DWORD err = ::GetLastError();
+            logSurface("child_hwnd_create_failed",
+                       QStringLiteral("err=%1").arg(err));
+            return reinterpret_cast<void*>(parent);
+        }
+        const_cast<PreviewDCompSurface*>(this)->childHwnd_ = hwnd;
+        logSurface("child_hwnd_created",
+                   QStringLiteral("parent=0x%1 child=0x%2")
+                       .arg(reinterpret_cast<quintptr>(parent), 0, 16)
+                       .arg(reinterpret_cast<quintptr>(hwnd), 0, 16));
+        return reinterpret_cast<void*>(hwnd);
     }
     return reinterpret_cast<void*>(window_->winId());
 #else

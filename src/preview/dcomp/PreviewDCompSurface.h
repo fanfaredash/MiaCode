@@ -91,6 +91,14 @@ private:
     QPointer<QQuickWindow> window_;
     QPointer<QQuickItem> trackedItem_;
     QPointer<PreviewRuntime> runtime_;
+
+    // Phase 4-perf-test (Option 3) — when previewDCompChildHwndEnabled,
+    // we create a click-through child HWND under the parent
+    // QQuickWindow's HWND, give the DComp visual tree to *that*
+    // HWND, and reposition it via MoveWindow on QML geometry change.
+    // 0 when the feature is off (visual is parented to the
+    // QQuickWindow's HWND directly).
+    void* childHwnd_ = nullptr;
     QMetaObject::Connection runtimeFrameStateConnection_;
     QVector<QMetaObject::Connection> trackedItemConnections_;
     // Phase 4b-perf: timestamp of the last snapshot publish, used to

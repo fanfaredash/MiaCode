@@ -165,6 +165,34 @@ inline bool previewDCompExclusiveEnabled()
         && envFlagEnabled("MIACODE_PREVIEW_DCOMP_EXCLUSIVE");
 }
 
+inline bool previewDCompChildHwndEnabled()
+{
+    // Phase 4-perf-test (Option 3) — when on, the DComp visual tree
+    // is hosted by a dedicated child HWND parented to the
+    // QQuickWindow, instead of attaching directly to the
+    // QQuickWindow's HWND. The child HWND is positioned (MoveWindow)
+    // to track the QML preview pane's bounds, so DWM sees a
+    // separate top-level-style window for the chart preview rather
+    // than a visual sub-tree under the editor's main HWND.
+    //
+    // Goal: test whether DWM's compositor treats sibling HWNDs
+    // differently from DComp visuals on a single HWND, which would
+    // affect how the chart preview's swap chain serialises against
+    // the editor's QSG swap chain at vsync. If perf improves with
+    // this on (and the flag combination QT_QUICK_BACKEND not set),
+    // it confirms separate-HWND is a viable production path.
+    //
+    // Caveats:
+    //   - The child HWND is WS_EX_TRANSPARENT (click-through) and
+    //     WS_EX_NOACTIVATE so input still routes to QML below.
+    //   - Z-ordering: the HWND is a real Win32 child, so it sits
+    //     above QSG content within the parent. Modal dialogs that
+    //     overlap the preview pane may need extra care.
+    //   - Resize/move tracking has to keep the HWND in sync with
+    //     QML layout changes.
+    return envFlagEnabled("MIACODE_PREVIEW_DCOMP_CHILD_HWND");
+}
+
 inline bool previewDCompVsyncPresentEnabled()
 {
     // Phase 4-perf-fix — when on, the DComp render thread uses
