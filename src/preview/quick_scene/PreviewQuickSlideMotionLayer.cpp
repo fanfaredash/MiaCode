@@ -2,9 +2,9 @@
 
 #include "preview/quick_scene/PreviewQuickSpriteNodes.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
-#include "preview/scene/PreviewPreparedSceneCache.h"
-#include "preview/scene/PreviewSceneGeometry.h"
-#include "preview/scene/PreviewSlideMotionLayerState.h"
+#include "core/scene/PreviewPreparedSceneCache.h"
+#include "core/scene/PreviewSceneGeometry.h"
+#include "core/scene/PreviewSlideMotionLayerState.h"
 
 QSGNode* PreviewQuickSlideMotionLayer::updateNode(
     QSGNode* oldNode,

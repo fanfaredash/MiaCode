@@ -155,61 +155,61 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/runtime/PreviewStageMediaHost.cpp
     src/preview/runtime/PreviewRuntime.h
     src/preview/runtime/PreviewRuntime.cpp
-    src/preview/scene/PreviewFrameState.h
-    src/preview/scene/PreviewHudState.h
-    src/preview/scene/PreviewHudState.cpp
-    src/preview/scene/PreviewProgressStatsCache.h
-    src/preview/scene/PreviewProgressStatsCache.cpp
-    src/preview/scene/PreviewPreparedSceneCache.h
-    src/preview/scene/PreviewPreparedSceneCache.cpp
-    src/preview/scene/PreviewLayerOrder.h
-    src/preview/scene/PreviewOpacityCurves.h
-    src/preview/scene/PreviewOpacityCurves.cpp
-    src/preview/scene/PreviewSceneConstants.h
-    src/preview/scene/PreviewSceneMath.h
-    src/preview/scene/PreviewSceneMath.cpp
-    src/preview/scene/PreviewSceneGeometry.h
-    src/preview/scene/PreviewSceneGeometry.cpp
-    src/preview/scene/PreviewMarkerDrawOrder.h
-    src/preview/scene/PreviewMarkerDrawOrder.cpp
-    src/preview/scene/PreviewSkinSelectors.h
-    src/preview/scene/PreviewSkinSelectors.cpp
-    src/preview/scene/PreviewSpriteDescriptor.h
-    src/preview/scene/PreviewCircleDescriptor.h
-    src/preview/scene/PreviewSectorDescriptor.h
-    src/preview/scene/PreviewTrackShared.h
-    src/preview/scene/PreviewTrackShared.cpp
-    src/preview/scene/PreviewJudgeOverlayShared.h
-    src/preview/scene/PreviewJudgeOverlayShared.cpp
-    src/preview/scene/PreviewGuideLayerState.h
-    src/preview/scene/PreviewGuideLayerState.cpp
-    src/preview/scene/PreviewTrackLayerState.h
-    src/preview/scene/PreviewTrackLayerState.cpp
-    src/preview/scene/PreviewSlideMotionLayerState.h
-    src/preview/scene/PreviewSlideMotionLayerState.cpp
-    src/preview/scene/PreviewJudgeEffectLayerState.h
-    src/preview/scene/PreviewJudgeEffectLayerState.cpp
-    src/preview/scene/PreviewChartReviewLayerState.h
-    src/preview/scene/PreviewChartReviewLayerState.cpp
-    src/preview/scene/PreviewJudgeFireworkLayerState.h
-    src/preview/scene/PreviewJudgeFireworkLayerState.cpp
-    src/preview/scene/PreviewMuriPadLayerState.h
-    src/preview/scene/PreviewMuriPadLayerState.cpp
-    src/preview/scene/PreviewMuriActionLayerState.h
-    src/preview/scene/PreviewMuriActionLayerState.cpp
-    src/preview/scene/PreviewTouchJudgeLayerState.h
-    src/preview/scene/PreviewTouchJudgeLayerState.cpp
-    src/preview/scene/PreviewTouchLayerState.h
-    src/preview/scene/PreviewTouchLayerState.cpp
-    src/preview/scene/PreviewAnimatedSpriteHelpers.h
-    src/preview/scene/PreviewAnimatedSpriteHelpers.cpp
-    src/preview/scene/PreviewArcDescriptor.h
-    src/preview/scene/PreviewHeadLayerState.h
-    src/preview/scene/PreviewHeadLayerState.cpp
-    src/preview/scene/PreviewTouchHoldLayerState.h
-    src/preview/scene/PreviewTouchHoldLayerState.cpp
-    src/preview/scene/PreviewMaimuriDxJudgeLayerState.h
-    src/preview/scene/PreviewMaimuriDxJudgeLayerState.cpp
+    src/core/scene/PreviewFrameState.h
+    src/core/scene/PreviewHudState.h
+    src/core/scene/PreviewHudState.cpp
+    src/core/scene/PreviewProgressStatsCache.h
+    src/core/scene/PreviewProgressStatsCache.cpp
+    src/core/scene/PreviewPreparedSceneCache.h
+    src/core/scene/PreviewPreparedSceneCache.cpp
+    src/core/scene/PreviewLayerOrder.h
+    src/core/scene/PreviewOpacityCurves.h
+    src/core/scene/PreviewOpacityCurves.cpp
+    src/core/scene/PreviewSceneConstants.h
+    src/core/scene/PreviewSceneMath.h
+    src/core/scene/PreviewSceneMath.cpp
+    src/core/scene/PreviewSceneGeometry.h
+    src/core/scene/PreviewSceneGeometry.cpp
+    src/core/scene/PreviewMarkerDrawOrder.h
+    src/core/scene/PreviewMarkerDrawOrder.cpp
+    src/core/scene/PreviewSkinSelectors.h
+    src/core/scene/PreviewSkinSelectors.cpp
+    src/core/scene/PreviewSpriteDescriptor.h
+    src/core/scene/PreviewCircleDescriptor.h
+    src/core/scene/PreviewSectorDescriptor.h
+    src/core/scene/PreviewTrackShared.h
+    src/core/scene/PreviewTrackShared.cpp
+    src/core/scene/PreviewJudgeOverlayShared.h
+    src/core/scene/PreviewJudgeOverlayShared.cpp
+    src/core/scene/PreviewGuideLayerState.h
+    src/core/scene/PreviewGuideLayerState.cpp
+    src/core/scene/PreviewTrackLayerState.h
+    src/core/scene/PreviewTrackLayerState.cpp
+    src/core/scene/PreviewSlideMotionLayerState.h
+    src/core/scene/PreviewSlideMotionLayerState.cpp
+    src/core/scene/PreviewJudgeEffectLayerState.h
+    src/core/scene/PreviewJudgeEffectLayerState.cpp
+    src/core/scene/PreviewChartReviewLayerState.h
+    src/core/scene/PreviewChartReviewLayerState.cpp
+    src/core/scene/PreviewJudgeFireworkLayerState.h
+    src/core/scene/PreviewJudgeFireworkLayerState.cpp
+    src/core/scene/PreviewMuriPadLayerState.h
+    src/core/scene/PreviewMuriPadLayerState.cpp
+    src/core/scene/PreviewMuriActionLayerState.h
+    src/core/scene/PreviewMuriActionLayerState.cpp
+    src/core/scene/PreviewTouchJudgeLayerState.h
+    src/core/scene/PreviewTouchJudgeLayerState.cpp
+    src/core/scene/PreviewTouchLayerState.h
+    src/core/scene/PreviewTouchLayerState.cpp
+    src/core/scene/PreviewAnimatedSpriteHelpers.h
+    src/core/scene/PreviewAnimatedSpriteHelpers.cpp
+    src/core/scene/PreviewArcDescriptor.h
+    src/core/scene/PreviewHeadLayerState.h
+    src/core/scene/PreviewHeadLayerState.cpp
+    src/core/scene/PreviewTouchHoldLayerState.h
+    src/core/scene/PreviewTouchHoldLayerState.cpp
+    src/core/scene/PreviewMaimuriDxJudgeLayerState.h
+    src/core/scene/PreviewMaimuriDxJudgeLayerState.cpp
     src/preview/quick_scene/PreviewTextureRepository.h
     src/preview/quick_scene/PreviewTextureRepository.cpp
     src/preview/quick_scene/PreviewQuickStageBackgroundLayer.h
@@ -255,36 +255,36 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/quick_scene/PreviewQuickSceneRoot.h
     src/preview/quick_scene/PreviewQuickSceneRoot.cpp
     src/preview/quick_scene/PreviewQuickSceneInvalidationPolicy.h
-    src/preview/dcomp/PreviewDCompCore.h
-    src/preview/dcomp/PreviewDCompCore.cpp
-    src/preview/dcomp/PreviewDCompFrameStateSnapshot.h
-    src/preview/dcomp/PreviewDCompRenderer.h
-    src/preview/dcomp/PreviewDCompRenderer.cpp
-    src/preview/dcomp/PreviewDCompSpritePipeline.h
-    src/preview/dcomp/PreviewDCompSpritePipeline.cpp
-    src/preview/dcomp/PreviewDCompTextureCache.h
-    src/preview/dcomp/PreviewDCompTextureCache.cpp
-    src/preview/dcomp/PreviewDCompSurface.h
-    src/preview/dcomp/PreviewDCompSurface.cpp
-    src/preview/audio/PreviewAudioBackend.h
-    src/preview/audio/PreviewAudioSettings.h
-    src/preview/audio/PreviewAudioSettings.cpp
-    src/preview/audio/BassPreviewAudioBackend.h
-    src/preview/audio/BassPreviewAudioBackend.cpp
-    src/preview/audio/MiniaudioPreviewAudioBackend.h
-    src/preview/audio/MiniaudioPreviewAudioBackend.cpp
-    src/preview/audio/QtPreviewSfxRuntime.h
-    src/preview/audio/QtPreviewSfxRuntime.cpp
-    src/simai/transform/ChartBatchTransform.h
-    src/simai/transform/ChartBatchTransform.cpp
-    src/simai/transform/ChartNormalization.h
-    src/simai/transform/ChartNormalization.cpp
-    src/simai/document/SimaiDocument.h
-    src/simai/document/SimaiDocument.cpp
-    src/simai/document/SimaiTimingMetadata.h
-    src/simai/document/SimaiTimingMetadata.cpp
-    src/simai/parser/SimaiNativeParser.h
-    src/simai/parser/SimaiNativeParser.cpp
+    src/render/backend_d3d11/PreviewDCompCore.h
+    src/render/backend_d3d11/PreviewDCompCore.cpp
+    src/render/backend_d3d11/PreviewDCompFrameStateSnapshot.h
+    src/render/PreviewDCompRenderer.h
+    src/render/PreviewDCompRenderer.cpp
+    src/render/backend_d3d11/PreviewDCompSpritePipeline.h
+    src/render/backend_d3d11/PreviewDCompSpritePipeline.cpp
+    src/render/backend_d3d11/PreviewDCompTextureCache.h
+    src/render/backend_d3d11/PreviewDCompTextureCache.cpp
+    src/render/backend_d3d11/PreviewDCompSurface.h
+    src/render/backend_d3d11/PreviewDCompSurface.cpp
+    src/audio/PreviewAudioBackend.h
+    src/audio/PreviewAudioSettings.h
+    src/audio/PreviewAudioSettings.cpp
+    src/audio/BassPreviewAudioBackend.h
+    src/audio/BassPreviewAudioBackend.cpp
+    src/audio/MiniaudioPreviewAudioBackend.h
+    src/audio/MiniaudioPreviewAudioBackend.cpp
+    src/audio/QtPreviewSfxRuntime.h
+    src/audio/QtPreviewSfxRuntime.cpp
+    src/core/chart/transform/ChartBatchTransform.h
+    src/core/chart/transform/ChartBatchTransform.cpp
+    src/core/chart/transform/ChartNormalization.h
+    src/core/chart/transform/ChartNormalization.cpp
+    src/core/chart/document/SimaiDocument.h
+    src/core/chart/document/SimaiDocument.cpp
+    src/core/chart/document/SimaiTimingMetadata.h
+    src/core/chart/document/SimaiTimingMetadata.cpp
+    src/core/chart/parser/SimaiNativeParser.h
+    src/core/chart/parser/SimaiNativeParser.cpp
     src/timeline/TimelineData.h
     src/timeline/TimelineRenderData.h
     src/timeline/TimelineQuickModel.h
@@ -396,13 +396,13 @@ target_include_directories(MiaCode PRIVATE
     src/core/video
     src/editor
     src/preview
-    src/preview/audio
+    src/audio
     src/preview/quick_scene
     src/preview/runtime
-    src/preview/scene
-    src/simai
-    src/simai/document
-    src/simai/parser
+    src/core/scene
+    src/core/chart
+    src/core/chart/document
+    src/core/chart/parser
     src/timeline
     src/tools/latency
     src/tools/video_export
@@ -428,7 +428,7 @@ if (WIN32)
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/mpv/lib/win64/libmpv-2.lib"
         winmm
         avrt  # Multimedia Class Scheduler Service (AvSetMmThreadCharacteristicsW)
-        d3d11        # DComp preview path (src/preview/dcomp) — see docs plan §3 Phase 1
+        d3d11        # DComp preview path (src/render/backend_d3d11) — see docs plan §3 Phase 1
         dxgi         # IDXGIFactory2::CreateSwapChainForComposition + frame latency waitable
         dcomp        # DCompositionCreateDevice + visual tree
         d3dcompiler  # Phase 3 sprite pipeline runtime HLSL compile (D3DCompile)
@@ -457,12 +457,12 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/tools/muri/MuriDump.cpp
         src/common/MuriTypes.h
         src/common/MuriTypes.cpp
-        src/simai/document/SimaiDocument.h
-        src/simai/document/SimaiDocument.cpp
-        src/simai/document/SimaiTimingMetadata.h
-        src/simai/document/SimaiTimingMetadata.cpp
-        src/simai/parser/SimaiNativeParser.h
-        src/simai/parser/SimaiNativeParser.cpp
+        src/core/chart/document/SimaiDocument.h
+        src/core/chart/document/SimaiDocument.cpp
+        src/core/chart/document/SimaiTimingMetadata.h
+        src/core/chart/document/SimaiTimingMetadata.cpp
+        src/core/chart/parser/SimaiNativeParser.h
+        src/core/chart/parser/SimaiNativeParser.cpp
         src/tools/muri/MuriAnalyzer.h
         src/tools/muri/MuriAnalyzer.cpp
         src/tools/muri/MuriStaticChecker.h
@@ -471,54 +471,54 @@ if (MIACODE_BUILD_DEV_TOOLS)
     )
 
     add_executable(simai_native_dump
-        src/simai/parser/SimaiNativeDump.cpp
-        src/simai/document/SimaiDocument.h
-        src/simai/document/SimaiDocument.cpp
-        src/simai/parser/SimaiNativeParser.h
-        src/simai/parser/SimaiNativeParser.cpp
-        src/simai/document/SimaiTimingMetadata.h
-        src/simai/document/SimaiTimingMetadata.cpp
+        src/core/chart/parser/SimaiNativeDump.cpp
+        src/core/chart/document/SimaiDocument.h
+        src/core/chart/document/SimaiDocument.cpp
+        src/core/chart/parser/SimaiNativeParser.h
+        src/core/chart/parser/SimaiNativeParser.cpp
+        src/core/chart/document/SimaiTimingMetadata.h
+        src/core/chart/document/SimaiTimingMetadata.cpp
         resources/fonts.qrc
     )
 
     add_executable(soundtouch_probe
-        src/preview/audio/PreviewAudioBackend.h
+        src/audio/PreviewAudioBackend.h
         src/tools/probe/SoundtouchProbe.cpp
-        src/preview/audio/PreviewAudioSettings.h
-        src/preview/audio/PreviewAudioSettings.cpp
-        src/preview/audio/BassPreviewAudioBackend.h
-        src/preview/audio/BassPreviewAudioBackend.cpp
-        src/preview/audio/MiniaudioPreviewAudioBackend.h
-        src/preview/audio/MiniaudioPreviewAudioBackend.cpp
-        src/preview/audio/QtPreviewSfxRuntime.h
-        src/preview/audio/QtPreviewSfxRuntime.cpp
+        src/audio/PreviewAudioSettings.h
+        src/audio/PreviewAudioSettings.cpp
+        src/audio/BassPreviewAudioBackend.h
+        src/audio/BassPreviewAudioBackend.cpp
+        src/audio/MiniaudioPreviewAudioBackend.h
+        src/audio/MiniaudioPreviewAudioBackend.cpp
+        src/audio/QtPreviewSfxRuntime.h
+        src/audio/QtPreviewSfxRuntime.cpp
         src/common/DebugLog.h
         src/common/DebugLog.cpp
     )
 
     add_executable(simai_parser_spec
         src/tools/simai_parser/SimaiParserSpec.cpp
-        src/simai/document/SimaiDocument.h
-        src/simai/document/SimaiDocument.cpp
-        src/simai/parser/SimaiNativeParser.h
-        src/simai/parser/SimaiNativeParser.cpp
-        src/simai/document/SimaiTimingMetadata.h
-        src/simai/document/SimaiTimingMetadata.cpp
+        src/core/chart/document/SimaiDocument.h
+        src/core/chart/document/SimaiDocument.cpp
+        src/core/chart/parser/SimaiNativeParser.h
+        src/core/chart/parser/SimaiNativeParser.cpp
+        src/core/chart/document/SimaiTimingMetadata.h
+        src/core/chart/document/SimaiTimingMetadata.cpp
         resources/fonts.qrc
     )
 
     add_executable(chart_batch_transform_spec
         src/tools/chart_transform/ChartBatchTransformSpec.cpp
-        src/simai/transform/ChartBatchTransform.h
-        src/simai/transform/ChartBatchTransform.cpp
-        src/simai/transform/ChartNormalization.h
-        src/simai/transform/ChartNormalization.cpp
-        src/simai/document/SimaiDocument.h
-        src/simai/document/SimaiDocument.cpp
-        src/simai/document/SimaiTimingMetadata.h
-        src/simai/document/SimaiTimingMetadata.cpp
-        src/simai/parser/SimaiNativeParser.h
-        src/simai/parser/SimaiNativeParser.cpp
+        src/core/chart/transform/ChartBatchTransform.h
+        src/core/chart/transform/ChartBatchTransform.cpp
+        src/core/chart/transform/ChartNormalization.h
+        src/core/chart/transform/ChartNormalization.cpp
+        src/core/chart/document/SimaiDocument.h
+        src/core/chart/document/SimaiDocument.cpp
+        src/core/chart/document/SimaiTimingMetadata.h
+        src/core/chart/document/SimaiTimingMetadata.cpp
+        src/core/chart/parser/SimaiNativeParser.h
+        src/core/chart/parser/SimaiNativeParser.cpp
         resources/fonts.qrc
     )
 
@@ -526,12 +526,12 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/tools/muri/MuriSpec.cpp
         src/common/MuriTypes.h
         src/common/MuriTypes.cpp
-        src/simai/document/SimaiDocument.h
-        src/simai/document/SimaiDocument.cpp
-        src/simai/parser/SimaiNativeParser.h
-        src/simai/parser/SimaiNativeParser.cpp
-        src/simai/document/SimaiTimingMetadata.h
-        src/simai/document/SimaiTimingMetadata.cpp
+        src/core/chart/document/SimaiDocument.h
+        src/core/chart/document/SimaiDocument.cpp
+        src/core/chart/parser/SimaiNativeParser.h
+        src/core/chart/parser/SimaiNativeParser.cpp
+        src/core/chart/document/SimaiTimingMetadata.h
+        src/core/chart/document/SimaiTimingMetadata.cpp
         src/tools/muri/MuriAnalyzer.h
         src/tools/muri/MuriAnalyzer.cpp
         src/tools/muri/MuriPanelEntries.h
@@ -543,12 +543,12 @@ if (MIACODE_BUILD_DEV_TOOLS)
 
     add_executable(timeline_model_spec
         src/tools/timeline/TimelineModelSpec.cpp
-        src/simai/document/SimaiDocument.h
-        src/simai/document/SimaiDocument.cpp
-        src/simai/parser/SimaiNativeParser.h
-        src/simai/parser/SimaiNativeParser.cpp
-        src/simai/document/SimaiTimingMetadata.h
-        src/simai/document/SimaiTimingMetadata.cpp
+        src/core/chart/document/SimaiDocument.h
+        src/core/chart/document/SimaiDocument.cpp
+        src/core/chart/parser/SimaiNativeParser.h
+        src/core/chart/parser/SimaiNativeParser.cpp
+        src/core/chart/document/SimaiTimingMetadata.h
+        src/core/chart/document/SimaiTimingMetadata.cpp
         src/timeline/TimelineQuickModel.h
         src/timeline/TimelineQuickModel.cpp
         resources/fonts.qrc
@@ -558,46 +558,46 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/tools/preview/PreviewSceneAssetLoaderSpec.cpp
         src/preview/runtime/PreviewSceneAssetLoader.h
         src/preview/runtime/PreviewSceneAssetLoader.cpp
-        src/preview/scene/PreviewFrameState.h
+        src/core/scene/PreviewFrameState.h
     )
 
     add_executable(preview_firework_lifecycle_spec
         src/tools/preview/PreviewFireworkLifecycleSpec.cpp
-        src/preview/scene/PreviewFrameState.h
-        src/preview/scene/PreviewJudgeFireworkLayerState.h
-        src/preview/scene/PreviewJudgeFireworkLayerState.cpp
-        src/preview/scene/PreviewSceneMath.h
-        src/preview/scene/PreviewSceneMath.cpp
+        src/core/scene/PreviewFrameState.h
+        src/core/scene/PreviewJudgeFireworkLayerState.h
+        src/core/scene/PreviewJudgeFireworkLayerState.cpp
+        src/core/scene/PreviewSceneMath.h
+        src/core/scene/PreviewSceneMath.cpp
     )
 
     add_executable(preview_head_layer_spec
         src/tools/preview/PreviewHeadLayerSpec.cpp
-        src/simai/document/SimaiDocument.h
-        src/simai/document/SimaiDocument.cpp
-        src/simai/parser/SimaiNativeParser.h
-        src/simai/parser/SimaiNativeParser.cpp
-        src/simai/document/SimaiTimingMetadata.h
-        src/simai/document/SimaiTimingMetadata.cpp
-        src/preview/scene/PreviewFrameState.h
-        src/preview/scene/PreviewPreparedSceneCache.h
-        src/preview/scene/PreviewPreparedSceneCache.cpp
-        src/preview/scene/PreviewChartReviewLayerState.h
-        src/preview/scene/PreviewChartReviewLayerState.cpp
-        src/preview/scene/PreviewHeadLayerState.h
-        src/preview/scene/PreviewHeadLayerState.cpp
-        src/preview/scene/PreviewMarkerDrawOrder.h
-        src/preview/scene/PreviewMarkerDrawOrder.cpp
-        src/preview/scene/PreviewAnimatedSpriteHelpers.h
-        src/preview/scene/PreviewAnimatedSpriteHelpers.cpp
-        src/preview/scene/PreviewJudgeOverlayShared.h
-        src/preview/scene/PreviewJudgeOverlayShared.cpp
-        src/preview/scene/PreviewOpacityCurves.h
-        src/preview/scene/PreviewOpacityCurves.cpp
-        src/preview/scene/PreviewSceneConstants.h
-        src/preview/scene/PreviewSceneMath.h
-        src/preview/scene/PreviewSceneMath.cpp
-        src/preview/scene/PreviewSkinSelectors.h
-        src/preview/scene/PreviewSkinSelectors.cpp
+        src/core/chart/document/SimaiDocument.h
+        src/core/chart/document/SimaiDocument.cpp
+        src/core/chart/parser/SimaiNativeParser.h
+        src/core/chart/parser/SimaiNativeParser.cpp
+        src/core/chart/document/SimaiTimingMetadata.h
+        src/core/chart/document/SimaiTimingMetadata.cpp
+        src/core/scene/PreviewFrameState.h
+        src/core/scene/PreviewPreparedSceneCache.h
+        src/core/scene/PreviewPreparedSceneCache.cpp
+        src/core/scene/PreviewChartReviewLayerState.h
+        src/core/scene/PreviewChartReviewLayerState.cpp
+        src/core/scene/PreviewHeadLayerState.h
+        src/core/scene/PreviewHeadLayerState.cpp
+        src/core/scene/PreviewMarkerDrawOrder.h
+        src/core/scene/PreviewMarkerDrawOrder.cpp
+        src/core/scene/PreviewAnimatedSpriteHelpers.h
+        src/core/scene/PreviewAnimatedSpriteHelpers.cpp
+        src/core/scene/PreviewJudgeOverlayShared.h
+        src/core/scene/PreviewJudgeOverlayShared.cpp
+        src/core/scene/PreviewOpacityCurves.h
+        src/core/scene/PreviewOpacityCurves.cpp
+        src/core/scene/PreviewSceneConstants.h
+        src/core/scene/PreviewSceneMath.h
+        src/core/scene/PreviewSceneMath.cpp
+        src/core/scene/PreviewSkinSelectors.h
+        src/core/scene/PreviewSkinSelectors.cpp
         src/common/MuriTypes.h
         src/common/MuriTypes.cpp
         src/timeline/TimelineData.h
@@ -606,33 +606,33 @@ if (MIACODE_BUILD_DEV_TOOLS)
 
     add_executable(preview_realtime_object_hot_path_spec
         src/tools/preview/PreviewRealtimeObjectHotPathSpec.cpp
-        src/preview/scene/PreviewActiveMarkerView.h
-        src/preview/scene/PreviewPreparedSceneCache.h
-        src/preview/scene/PreviewPreparedSceneCache.cpp
-        src/preview/scene/PreviewFrameState.h
-        src/preview/scene/PreviewChartReviewLayerState.h
-        src/preview/scene/PreviewChartReviewLayerState.cpp
-        src/preview/scene/PreviewMarkerDrawOrder.h
-        src/preview/scene/PreviewMarkerDrawOrder.cpp
-        src/preview/scene/PreviewSlideMotionLayerState.h
-        src/preview/scene/PreviewSlideMotionLayerState.cpp
-        src/preview/scene/PreviewTrackLayerState.h
-        src/preview/scene/PreviewTrackLayerState.cpp
-        src/preview/scene/PreviewTrackShared.h
-        src/preview/scene/PreviewTrackShared.cpp
-        src/preview/scene/PreviewMuriActionLayerState.h
-        src/preview/scene/PreviewMuriActionLayerState.cpp
-        src/preview/scene/PreviewAnimatedSpriteHelpers.h
-        src/preview/scene/PreviewAnimatedSpriteHelpers.cpp
-        src/preview/scene/PreviewJudgeOverlayShared.h
-        src/preview/scene/PreviewJudgeOverlayShared.cpp
-        src/preview/scene/PreviewOpacityCurves.h
-        src/preview/scene/PreviewOpacityCurves.cpp
-        src/preview/scene/PreviewSceneConstants.h
-        src/preview/scene/PreviewSceneMath.h
-        src/preview/scene/PreviewSceneMath.cpp
-        src/preview/scene/PreviewSkinSelectors.h
-        src/preview/scene/PreviewSkinSelectors.cpp
+        src/core/scene/PreviewActiveMarkerView.h
+        src/core/scene/PreviewPreparedSceneCache.h
+        src/core/scene/PreviewPreparedSceneCache.cpp
+        src/core/scene/PreviewFrameState.h
+        src/core/scene/PreviewChartReviewLayerState.h
+        src/core/scene/PreviewChartReviewLayerState.cpp
+        src/core/scene/PreviewMarkerDrawOrder.h
+        src/core/scene/PreviewMarkerDrawOrder.cpp
+        src/core/scene/PreviewSlideMotionLayerState.h
+        src/core/scene/PreviewSlideMotionLayerState.cpp
+        src/core/scene/PreviewTrackLayerState.h
+        src/core/scene/PreviewTrackLayerState.cpp
+        src/core/scene/PreviewTrackShared.h
+        src/core/scene/PreviewTrackShared.cpp
+        src/core/scene/PreviewMuriActionLayerState.h
+        src/core/scene/PreviewMuriActionLayerState.cpp
+        src/core/scene/PreviewAnimatedSpriteHelpers.h
+        src/core/scene/PreviewAnimatedSpriteHelpers.cpp
+        src/core/scene/PreviewJudgeOverlayShared.h
+        src/core/scene/PreviewJudgeOverlayShared.cpp
+        src/core/scene/PreviewOpacityCurves.h
+        src/core/scene/PreviewOpacityCurves.cpp
+        src/core/scene/PreviewSceneConstants.h
+        src/core/scene/PreviewSceneMath.h
+        src/core/scene/PreviewSceneMath.cpp
+        src/core/scene/PreviewSkinSelectors.h
+        src/core/scene/PreviewSkinSelectors.cpp
         src/common/MuriTypes.h
         src/common/MuriTypes.cpp
         src/timeline/TimelineData.h
@@ -654,21 +654,21 @@ if (MIACODE_BUILD_DEV_TOOLS)
 
     add_executable(preview_audio_settings_spec
         src/tools/preview/PreviewAudioSettingsSpec.cpp
-        src/preview/audio/PreviewAudioSettings.h
-        src/preview/audio/PreviewAudioSettings.cpp
+        src/audio/PreviewAudioSettings.h
+        src/audio/PreviewAudioSettings.cpp
         src/common/PreviewSfxAssets.h
         src/common/PreviewSfxSemantics.h
     )
 
     add_executable(bass_preview_retained_state_spec
         src/tools/preview/BassPreviewRetainedStateSpec.cpp
-        src/preview/audio/BassPreviewRetainedState.h
-        src/preview/audio/PreviewAudioBackend.h
+        src/audio/BassPreviewRetainedState.h
+        src/audio/PreviewAudioBackend.h
     )
 
     add_executable(bass_preview_debug_log_routing_spec
         src/tools/preview/BassPreviewDebugLogRoutingSpec.cpp
-        src/preview/audio/BassPreviewDebugLogRouting.h
+        src/audio/BassPreviewDebugLogRouting.h
     )
 
     add_executable(quickshell_preview_surface_policy_spec
@@ -694,8 +694,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/common/PreviewSfxAssets.h
         src/common/PreviewSfxSemantics.h
         src/common/VideoExportConfig.h
-        src/preview/audio/PreviewAudioSettings.h
-        src/preview/audio/PreviewAudioSettings.cpp
+        src/audio/PreviewAudioSettings.h
+        src/audio/PreviewAudioSettings.cpp
         src/timeline/TimelineData.h
     )
 
@@ -708,9 +708,9 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src
         src/app/ui
         src/common
-        src/simai
-        src/simai/document
-        src/simai/parser
+        src/core/chart
+        src/core/chart/document
+        src/core/chart/parser
         src/timeline
         src/tools
     )
@@ -722,8 +722,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
     )
     target_include_directories(simai_native_dump PRIVATE
         src
-        src/simai
-        src/simai/parser
+        src/core/chart
+        src/core/chart/parser
         src/timeline
     )
 
@@ -735,8 +735,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_include_directories(simai_parser_spec PRIVATE
         src
         src/app/ui
-        src/simai
-        src/simai/parser
+        src/core/chart
+        src/core/chart/parser
         src/timeline
     )
 
@@ -751,7 +751,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
         third_party/bass/include
         src
         src/preview
-        src/preview/audio
+        src/audio
         src/core/video
         src/timeline
         src/tools
@@ -782,10 +782,10 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src
         src/app/ui
         src/common
-        src/simai
-        src/simai/document
-        src/simai/parser
-        src/simai/transform
+        src/core/chart
+        src/core/chart/document
+        src/core/chart/parser
+        src/core/chart/transform
         src/timeline
     )
 
@@ -798,8 +798,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src
         src/app/ui
         src/common
-        src/simai
-        src/simai/parser
+        src/core/chart
+        src/core/chart/parser
         src/timeline
         src/tools
     )
@@ -812,8 +812,8 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_include_directories(timeline_model_spec PRIVATE
         src
         src/app/ui
-        src/simai
-        src/simai/parser
+        src/core/chart
+        src/core/chart/parser
         src/timeline
         src/tools
     )
@@ -827,7 +827,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/common
         src/preview
         src/preview/runtime
-        src/preview/scene
+        src/core/scene
         src/core/video
         src/timeline
     )
@@ -840,7 +840,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src
         src/common
         src/preview
-        src/preview/scene
+        src/core/scene
         src/core/video
         src/timeline
     )
@@ -854,10 +854,10 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src
         src/common
         src/preview
-        src/preview/scene
-        src/simai
-        src/simai/document
-        src/simai/parser
+        src/core/scene
+        src/core/chart
+        src/core/chart/document
+        src/core/chart/parser
         src/timeline
     )
 
@@ -869,7 +869,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src
         src/common
         src/preview
-        src/preview/scene
+        src/core/scene
         src/timeline
     )
 
@@ -899,7 +899,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src
         src/common
         src/preview
-        src/preview/audio
+        src/audio
     )
 
     target_link_libraries(bass_preview_retained_state_spec PRIVATE
@@ -909,7 +909,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src
         src/common
         src/preview
-        src/preview/audio
+        src/audio
     )
 
     target_link_libraries(bass_preview_debug_log_routing_spec PRIVATE
@@ -919,7 +919,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src
         src/common
         src/preview
-        src/preview/audio
+        src/audio
     )
 
     target_link_libraries(quickshell_preview_surface_policy_spec PRIVATE
@@ -945,7 +945,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
     target_include_directories(video_export_audio_render_plan_spec PRIVATE
         src
         src/common
-        src/preview/audio
+        src/audio
         src/core/video
         src/timeline
         src/tools

@@ -5,8 +5,8 @@
 #include "PlainCodeEditor.h"
 #include "UiText.h"
 #include "UiTheme.h"
-#include "simai/transform/ChartBatchTransform.h"
-#include "simai/transform/ChartNormalization.h"
+#include "core/chart/transform/ChartBatchTransform.h"
+#include "core/chart/transform/ChartNormalization.h"
 
 #include <functional>
 

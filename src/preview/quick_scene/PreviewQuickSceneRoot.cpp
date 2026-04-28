@@ -4,8 +4,8 @@
 #include "common/DebugLog.h"
 #include "common/Mmcss.h"
 #include "preview/runtime/PreviewRuntime.h"
-#include "preview/scene/PreviewFrameState.h"
-#include "preview/scene/PreviewPreparedSceneCache.h"
+#include "core/scene/PreviewFrameState.h"
+#include "core/scene/PreviewPreparedSceneCache.h"
 
 #include <QCoreApplication>
 #include <QElapsedTimer>

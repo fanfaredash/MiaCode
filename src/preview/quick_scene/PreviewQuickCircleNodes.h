@@ -1,6 +1,6 @@
 #pragma once
 
-#include "preview/scene/PreviewCircleDescriptor.h"
+#include "core/scene/PreviewCircleDescriptor.h"
 
 class QSGNode;
 

@@ -2,7 +2,7 @@
 
 #include "common/PreviewVideoGeometryConfig.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
-#include "preview/scene/PreviewSceneGeometry.h"
+#include "core/scene/PreviewSceneGeometry.h"
 
 #include <QColor>
 #include <QElapsedTimer>

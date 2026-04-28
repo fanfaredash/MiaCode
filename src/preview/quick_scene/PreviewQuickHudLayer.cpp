@@ -2,10 +2,10 @@
 
 #include "common/DebugOptions.h"
 #include "preview/runtime/PreviewRuntime.h"
-#include "preview/scene/PreviewFrameState.h"
-#include "preview/scene/PreviewHudState.h"
-#include "preview/scene/PreviewProgressStatsCache.h"
-#include "preview/scene/PreviewSceneGeometry.h"
+#include "core/scene/PreviewFrameState.h"
+#include "core/scene/PreviewHudState.h"
+#include "core/scene/PreviewProgressStatsCache.h"
+#include "core/scene/PreviewSceneGeometry.h"
 
 #include <QFontMetrics>
 #include <QPainter>

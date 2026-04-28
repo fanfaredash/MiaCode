@@ -9,7 +9,7 @@
 #include "common/DebugOptions.h"
 #include "common/DebugLog.h"
 #include "mainwindow/MainWindow.h"
-#include "preview/dcomp/PreviewDCompSurface.h"
+#include "render/backend_d3d11/PreviewDCompSurface.h"
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
 #include "preview/runtime/PreviewRuntime.h"

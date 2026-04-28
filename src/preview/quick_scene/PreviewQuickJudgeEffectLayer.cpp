@@ -2,9 +2,9 @@
 
 #include "preview/quick_scene/PreviewQuickSpriteNodes.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
-#include "preview/scene/PreviewJudgeEffectLayerState.h"
-#include "preview/scene/PreviewPreparedSceneCache.h"
-#include "preview/scene/PreviewSceneGeometry.h"
+#include "core/scene/PreviewJudgeEffectLayerState.h"
+#include "core/scene/PreviewPreparedSceneCache.h"
+#include "core/scene/PreviewSceneGeometry.h"
 
 QSGNode* PreviewQuickJudgeEffectLayer::updateNode(
     QSGNode* oldNode,

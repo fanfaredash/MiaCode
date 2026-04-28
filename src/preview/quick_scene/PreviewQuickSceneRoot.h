@@ -26,8 +26,8 @@
 #include "preview/quick_scene/PreviewQuickTouchHoldLayer.h"
 #include "preview/quick_scene/PreviewQuickTouchLayer.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
-#include "preview/scene/PreviewPreparedSceneCache.h"
-#include "preview/scene/PreviewLayerOrder.h"
+#include "core/scene/PreviewPreparedSceneCache.h"
+#include "core/scene/PreviewLayerOrder.h"
 
 class PreviewRuntime;
 namespace miacode::preview::scene {

@@ -2,7 +2,7 @@
 
 #include "preview/quick_scene/PreviewQuickSpriteBatchPolicy.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
-#include "preview/scene/PreviewAnimatedSpriteHelpers.h"
+#include "core/scene/PreviewAnimatedSpriteHelpers.h"
 
 #include <QHash>
 #include <QQuickWindow>

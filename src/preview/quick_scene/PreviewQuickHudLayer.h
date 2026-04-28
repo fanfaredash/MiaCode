@@ -6,7 +6,7 @@
 #include <QQuickPaintedItem>
 #include <QSize>
 
-#include "preview/scene/PreviewLayerOrder.h"
+#include "core/scene/PreviewLayerOrder.h"
 
 class QPainter;
 class PreviewRuntime;

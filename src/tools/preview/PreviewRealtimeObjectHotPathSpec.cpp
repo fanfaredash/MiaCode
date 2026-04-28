@@ -3,14 +3,14 @@
 #include <QRectF>
 #include <QTextStream>
 
-#include "preview/scene/PreviewActiveMarkerView.h"
-#include "preview/scene/PreviewMarkerDrawOrder.h"
-#include "preview/scene/PreviewMuriActionLayerState.h"
-#include "preview/scene/PreviewPreparedSceneCache.h"
-#include "preview/scene/PreviewSceneConstants.h"
-#include "preview/scene/PreviewSceneMath.h"
-#include "preview/scene/PreviewSlideMotionLayerState.h"
-#include "preview/scene/PreviewTrackLayerState.h"
+#include "core/scene/PreviewActiveMarkerView.h"
+#include "core/scene/PreviewMarkerDrawOrder.h"
+#include "core/scene/PreviewMuriActionLayerState.h"
+#include "core/scene/PreviewPreparedSceneCache.h"
+#include "core/scene/PreviewSceneConstants.h"
+#include "core/scene/PreviewSceneMath.h"
+#include "core/scene/PreviewSlideMotionLayerState.h"
+#include "core/scene/PreviewTrackLayerState.h"
 
 namespace {
 

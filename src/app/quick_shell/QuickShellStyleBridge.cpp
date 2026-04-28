@@ -3,7 +3,7 @@
 #include "QuickShellNativeSurfaceHost.h"
 #include "UiTheme.h"
 #include "ui/WindowParityMetrics.h"
-#include "preview/scene/PreviewHudState.h"
+#include "core/scene/PreviewHudState.h"
 
 #include <QApplication>
 #include <QDockWidget>

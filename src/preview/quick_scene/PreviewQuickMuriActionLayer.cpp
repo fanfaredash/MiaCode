@@ -1,8 +1,8 @@
 #include "preview/quick_scene/PreviewQuickMuriActionLayer.h"
 
 #include "preview/quick_scene/PreviewQuickCircleNodes.h"
-#include "preview/scene/PreviewMuriActionLayerState.h"
-#include "preview/scene/PreviewSceneGeometry.h"
+#include "core/scene/PreviewMuriActionLayerState.h"
+#include "core/scene/PreviewSceneGeometry.h"
 
 QSGNode* PreviewQuickMuriActionLayer::updateNode(
     QSGNode* oldNode,

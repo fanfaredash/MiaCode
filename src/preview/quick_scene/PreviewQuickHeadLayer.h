@@ -1,7 +1,7 @@
 #pragma once
 
-#include "preview/scene/PreviewFrameState.h"
-#include "preview/scene/PreviewHeadLayerState.h"
+#include "core/scene/PreviewFrameState.h"
+#include "core/scene/PreviewHeadLayerState.h"
 
 class QQuickWindow;
 class QSGNode;
