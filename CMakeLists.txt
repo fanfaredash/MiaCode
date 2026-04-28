@@ -36,6 +36,7 @@ if (MSVC)
     set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
         "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>"
     )
+    add_compile_options(/MP)
 endif()
 
 set(CMAKE_AUTOMOC ON)
