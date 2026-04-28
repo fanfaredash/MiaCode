@@ -167,93 +167,19 @@ inline bool previewDCompExclusiveEnabled()
 
 inline bool previewDCompTopLevelHwndEnabled()
 {
-    // Phase 4-perf-final — when on, the DComp visual tree is hosted by
-    // a separate top-level borderless transparent HWND that's owned
-    // (not parented) by the editor's QQuickWindow HWND. DWM treats
-    // top-level HWNDs as independent composition planes, so the
-    // editor's QSG swap chain and DComp's swap chain no longer
-    // serialise on the same HWND.
-    //
-    // This is the architectural answer to the residual judder we
-    // could not fix by optimising the GUI hot path: even with the
-    // overlay-cache fix, worker-thread HUD raster, render-thread
-    // playhead clock, and vsync-aligned publishing, DWM compositing
-    // two flip-mode swap chains under one HWND introduces small
-    // inter-Present serialisation that surfaces as the residual
-    // motion judder. A separate top-level HWND ducks the problem
-    // entirely — at the cost of more positioning logic
-    // (mapToGlobal + MoveWindow on every editor move/resize/screen
-    // change). Implies and requires previewUseDCompEnabled.
-    //
-    // The earlier MIACODE_PREVIEW_DCOMP_CHILD_HWND was a half-step
-    // (child HWNDs share their parent's compositor target in DWM,
-    // so it didn't break the dual-swap-chain serialisation). This
-    // flag takes precedence over CHILD_HWND when both are set.
+    // When on, the DComp visual tree is hosted by a separate top-level
+    // borderless transparent HWND that's owned (not parented) by the
+    // editor's QQuickWindow HWND. DWM treats top-level HWNDs as
+    // independent composition planes, so the editor's QSG swap chain
+    // and DComp's swap chain no longer serialise on the same HWND.
+    // This is the architectural fix that lets the chart-preview swap
+    // chain present without inter-swap-chain serialisation in DWM.
+    // Phase 3 of the v2-refactor turns this on unconditionally; for
+    // now it remains opt-in via env flag so we can A/B against the
+    // legacy in-place mode while the rest of the refactor lands.
+    // Implies and requires previewUseDCompEnabled.
     return previewUseDCompEnabled()
         && envFlagEnabled("MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND");
-}
-
-inline bool previewDCompChildHwndEnabled()
-{
-    // Phase 4-perf-test (Option 3) — when on, the DComp visual tree
-    // is hosted by a dedicated child HWND parented to the
-    // QQuickWindow, instead of attaching directly to the
-    // QQuickWindow's HWND. The child HWND is positioned (MoveWindow)
-    // to track the QML preview pane's bounds, so DWM sees a
-    // separate top-level-style window for the chart preview rather
-    // than a visual sub-tree under the editor's main HWND.
-    //
-    // Goal: test whether DWM's compositor treats sibling HWNDs
-    // differently from DComp visuals on a single HWND, which would
-    // affect how the chart preview's swap chain serialises against
-    // the editor's QSG swap chain at vsync. If perf improves with
-    // this on (and the flag combination QT_QUICK_BACKEND not set),
-    // it confirms separate-HWND is a viable production path.
-    //
-    // Caveats:
-    //   - The child HWND is WS_EX_TRANSPARENT (click-through) and
-    //     WS_EX_NOACTIVATE so input still routes to QML below.
-    //   - Z-ordering: the HWND is a real Win32 child, so it sits
-    //     above QSG content within the parent. Modal dialogs that
-    //     overlap the preview pane may need extra care.
-    //   - Resize/move tracking has to keep the HWND in sync with
-    //     QML layout changes.
-    return envFlagEnabled("MIACODE_PREVIEW_DCOMP_CHILD_HWND");
-}
-
-inline bool previewDCompVsyncPresentEnabled()
-{
-    // Phase 4-perf-fix — when on, the DComp render thread uses
-    // Present(1, 0) (block on vsync) instead of Present(0, 0)
-    // (non-blocking). Pace the render loop to the display refresh
-    // rate so each snapshot is rendered exactly once instead of
-    // 2-3× (the over-render comes from Present(0, 0) draining DXGI's
-    // back-buffer queue faster than the snapshot rate can refill it
-    // — that produces visible motion jitter when the publish timing
-    // has any variance).
-    //
-    // Trade-off: with Qt's QSG GPU backend also presenting at 60 Hz,
-    // both swap chains may serialise on vsync via DWM, reintroducing
-    // the dual-swap-chain stutter the user originally diagnosed.
-    // Safer to gate this behind a flag the user can toggle:
-    //   - With QT_QUICK_BACKEND=software: turn this on, motion
-    //     becomes locked to vsync without contention.
-    //   - With Qt GPU backend: leaving this off keeps the
-    //     non-blocking present pattern.
-    return envFlagEnabled("MIACODE_PREVIEW_DCOMP_VSYNC_PRESENT");
-}
-
-inline bool disableTimelineEnabled()
-{
-    // Phase 4-perf experiment — when on, hides the Timeline QSG item
-    // entirely so its render cost (custom QQuickItem with note
-    // textures, scrolling waveform, etc.) is removed. Used to test
-    // the dual-swap-chain compositing hypothesis: if QT_QUICK_BACKEND
-    // =software combined with this flag substantially reduces stutter,
-    // the QSG GPU work in the editor was contending with DComp's
-    // present cycle. Not a permanent feature — the user re-enables
-    // by unsetting the flag.
-    return envFlagEnabled("MIACODE_DISABLE_TIMELINE");
 }
 
 inline bool previewQsgFullDisableEnabled()
@@ -306,34 +232,6 @@ inline bool previewDCompQuiesceQsgEnabled()
     // confirm before making it the default.
     return previewUseDCompEnabled()
         && envFlagEnabled("MIACODE_PREVIEW_DCOMP_QUIESCE_QSG");
-}
-
-inline int previewTimelineThrottleHz()
-{
-    // Phase 4-perf (Option 1) — caps the timeline UI tick timer to
-    // at most this rate. Default 0 means uncapped (the timeline ticks
-    // at the same rate as the preview canvas, which is what the
-    // editor has historically done). Set e.g. to 30 to halve the
-    // editor's QSG present rate during playback.
-    //
-    // The hypothesis: when the DComp preview path runs, every
-    // timeline tick during playback causes Qt to push a frame on
-    // the editor swap chain (one Present per playhead bump), and
-    // DWM has to composite *both* swap chains every refresh. Cutting
-    // the editor present rate to 30 Hz halves DWM's compositing
-    // load on the editor side without making playhead motion look
-    // worse to a human (a 1px/frame line at 60 vs 30 Hz is visually
-    // indistinguishable). Trade-off: the playhead lags audio by up
-    // to ~33 ms in the worst case, which is still well under
-    // perceptual threshold.
-    //
-    // Values 1..240 are accepted; anything else (including the
-    // default 0 / empty) leaves the timeline rate unchanged.
-    const int v = envIntValue("MIACODE_PREVIEW_TIMELINE_THROTTLE_HZ", 0);
-    if (v <= 0 || v > 240) {
-        return 0;
-    }
-    return v;
 }
 
 inline bool previewQsgRenderTimingEnabled()

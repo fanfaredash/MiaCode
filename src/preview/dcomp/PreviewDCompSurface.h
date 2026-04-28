@@ -100,18 +100,17 @@ private:
     QPointer<QQuickItem> trackedItem_;
     QPointer<PreviewRuntime> runtime_;
 
-    // Phase 4-perf-test (Option 3) — when previewDCompChildHwndEnabled,
-    // we create a click-through child HWND under the parent
-    // QQuickWindow's HWND, give the DComp visual tree to *that*
-    // HWND, and reposition it via MoveWindow on QML geometry change.
-    // 0 when the feature is off (visual is parented to the
-    // QQuickWindow's HWND directly).
+    // When previewDCompTopLevelHwndEnabled, we create a top-level
+    // borderless transparent owned popup HWND, give the DComp visual
+    // tree to *that* HWND, and reposition it via MoveWindow on QML
+    // geometry change. nullptr when the feature is off (visual is
+    // parented to the QQuickWindow's HWND directly).
+    // (Name is historical — kept until Phase 3 renames to popupHwnd_.)
     void* childHwnd_ = nullptr;
     QMetaObject::Connection runtimeFrameStateConnection_;
     QVector<QMetaObject::Connection> trackedItemConnections_;
-    // Phase 4b-perf: timestamp of the last snapshot publish, used to
-    // throttle rebuild work when the runtime emits frameStateChanged
-    // faster than the render thread can consume it.
+    // Wall-clock timestamp of the last snapshot publish. Used by
+    // diagnostics; the publish path itself does NOT throttle.
     qint64 lastPublishNs_ = 0;
 
     // Render-thread playhead clock. Advances at wall-clock rate
@@ -191,7 +190,6 @@ private:
     qint64 tickBuildCount_ = 0;
     qint64 tickBuildSumNs_ = 0;
     qint64 tickBuildMaxNs_ = 0;
-    qint64 tickThrottledCount_ = 0;
 
     // Inter-call gap distribution on the renderer-driven slot path.
     // Tells us how often the GUI thread fails to dispatch a queued

@@ -453,31 +453,15 @@ bool PreviewDCompCore::present()
     if (!ready_) {
         return false;
     }
-    // Present(0, 0) — non-blocking. The render thread already paces on
-    // FRAME_LATENCY_WAITABLE_OBJECT, so the swap chain knows when DXGI
-    // is ready to enqueue the next frame. Using Present(1, 0) on top
-    // of that double-paces: both the waitable AND the Present block on
-    // vsync, and with Qt's QSG swap chain also presenting in the same
-    // vsync slot, total contention adds up to the high
-    // present_gate_wait Qt's profiling reports.
-    //
-    // For a composition swap chain (CreateSwapChainForComposition +
-    // FRAME_LATENCY_WAITABLE_OBJECT), the documented pattern is
-    // Present(0, 0) and let DWM handle vsync via the desktop
-    // composition path. No tearing — DWM never tears.
-    //
-    // Phase 4-perf-fix flag: MIACODE_PREVIEW_DCOMP_VSYNC_PRESENT swaps
-    // to Present(1, 0) which paces the render loop to exactly the
-    // display refresh rate. With the non-blocking pattern the loop
-    // runs at ~167 Hz (DXGI back-buffer drain rate) and renders the
-    // same snapshot 2-3× before a new one arrives — when snapshot
-    // publish timing varies, the eye perceives that as motion jitter
-    // even though each frame is internally correct. Vsync-paced
-    // present locks render rate to snapshot rate so each snapshot is
-    // shown exactly once.
-    const UINT syncInterval =
-        miacode::debug_options::previewDCompVsyncPresentEnabled() ? 1u : 0u;
-    HRESULT hr = swapChain_->Present(syncInterval, 0);
+    // Present(1, 0) — block on vsync. Locks the render loop to the
+    // display refresh rate so each snapshot is rendered exactly once.
+    // The non-blocking Present(0, 0) pattern (with the render thread
+    // pacing on FRAME_LATENCY_WAITABLE_OBJECT) drains DXGI's back-buffer
+    // queue at ~167 Hz, so the same snapshot gets re-presented 2-3×
+    // before a new one arrives; any variance in snapshot publish
+    // timing then surfaces as visible motion jitter. Vsync-blocking
+    // present makes render rate = snapshot rate = display rate.
+    HRESULT hr = swapChain_->Present(1u, 0);
     if (FAILED(hr)) {
         logDCompError("present", hr);
         return false;

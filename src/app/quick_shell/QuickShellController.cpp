@@ -161,11 +161,6 @@ bool QuickShellController::previewDCompExclusive() const
     return miacode::debug_options::previewDCompExclusiveEnabled();
 }
 
-bool QuickShellController::disableTimeline() const
-{
-    return miacode::debug_options::disableTimelineEnabled();
-}
-
 QObject* QuickShellController::timelineStateBridge() const
 {
     return stateSource_ != nullptr ? stateSource_->shellTimelineStateBridgeObject() : nullptr;

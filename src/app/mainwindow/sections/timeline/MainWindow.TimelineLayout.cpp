@@ -512,12 +512,8 @@ qint64 MainWindow::TimelineSection::timelineTargetFrameIntervalNs() const
 {
     const qint64 previewIntervalNs = qMax<qint64>(1LL, previewCanvasTargetFrameIntervalNs());
     const double previewTargetFps = 1000000000.0 / static_cast<double>(previewIntervalNs);
-    double timelineTargetFps =
+    const double timelineTargetFps =
         qMin(previewTargetFps, miacode::mainwindow::shared::kTimelineMaxUiUpdateFps);
-    const int throttleHz = miacode::debug_options::previewTimelineThrottleHz();
-    if (throttleHz > 0) {
-        timelineTargetFps = qMin(timelineTargetFps, static_cast<double>(throttleHz));
-    }
     return qMax<qint64>(1LL, qRound64(1000000000.0 / timelineTargetFps));
 }
 

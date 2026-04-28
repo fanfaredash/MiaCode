@@ -54,26 +54,6 @@ void logSurface(const char* action, const QString& extra = QString())
         payload);
 }
 
-// Phase 1 placement: 200×200 red square pinned 16px in from the top-left
-// of the client area. A fixed offset is enough to verify the visual tree
-// works; Phase 4 replaces this with a placeholder-driven transform.
-constexpr int kTestRectInsetPx = 16;
-constexpr int kTestRectBaseSidePx = 200;
-
-QSize testRectSize(QSize clientSize)
-{
-    // Scale the rectangle proportionally to the window so the resize
-    // demo per plan §3 Phase 1 is visible. Cap so it doesn't dominate
-    // the entire window on small client areas.
-    if (clientSize.width() <= 0 || clientSize.height() <= 0) {
-        return { kTestRectBaseSidePx, kTestRectBaseSidePx };
-    }
-    const int side = std::min(
-        std::max(64, std::min(clientSize.width(), clientSize.height()) / 4),
-        kTestRectBaseSidePx);
-    return { side, side };
-}
-
 }  // namespace
 
 PreviewDCompSurface::PreviewDCompSurface(QObject* parent)
@@ -888,22 +868,19 @@ void PreviewDCompSurface::onWindowGeometryChanged()
         return;
     }
     tryDiscoverTrackedItem();
-    // Phase 4a: when a QML target item is tracked the visual follows
-    // the item; otherwise we fall back to the Phase-1 demo region.
+    // The visual follows the tracked QML preview pane. If the pane
+    // hasn't been discovered yet (early in QML construction), fall
+    // back to covering the full client area so something visible
+    // exists; applyTrackedItemGeometry will narrow it on the next
+    // tick once the pane is found.
     if (trackedItem_ != nullptr) {
         applyTrackedItemGeometry();
         return;
     }
-    // From Phase 2: route resize through the renderer so the swap chain
-    // ResizeBuffers happens on the render thread between presents (the
-    // only safe spot per DXGI). The visual transform is independent — we
-    // can apply it from the GUI thread immediately because it only writes
-    // to DComp's IDCompositionVisual, not the swap chain.
-    const QSize rectSize = testRectSize(clientPx);
-    if (rectSize != core_.swapChainPixelSize()) {
-        renderer_.requestResize(rectSize);
+    if (clientPx != core_.swapChainPixelSize()) {
+        renderer_.requestResize(clientPx);
     }
-    core_.setVisualTransform(kTestRectInsetPx, kTestRectInsetPx, rectSize);
+    core_.setVisualTransform(0, 0, clientPx);
 }
 
 void PreviewDCompSurface::onWindowVisibilityChanged()
@@ -1015,32 +992,21 @@ void PreviewDCompSurface::applyTrackedItemGeometry()
     if (pixelSize != core_.swapChainPixelSize()) {
         renderer_.requestResize(pixelSize);
     }
-    // When the visual is hosted in our own external HWND, position
-    // the HWND instead of relying on the DComp visual transform.
-    // The visual stays at (0, 0) inside that HWND's client area;
-    // MoveWindow handles placement. Two modes:
-    //   - TOPLEVEL_HWND: HWND is a top-level popup; MoveWindow takes
-    //     SCREEN-relative coords. We map the tracked item's logical
-    //     position through QWindow::mapToGlobal then scale by DPR.
-    //   - CHILD_HWND: HWND is a WS_CHILD of the QQuickWindow's
-    //     HWND; MoveWindow takes parent-client-area-relative coords,
-    //     which is what xPx/yPx already are.
+    // Top-level HWND mode: the popup HWND owns the DComp visual tree
+    // and is positioned via MoveWindow in SCREEN-relative coordinates
+    // (mapToGlobal + DPR). The DComp visual stays at (0, 0) inside
+    // the popup's client area. In legacy in-place mode, the visual
+    // is parented to the QQuickWindow's HWND directly and we use the
+    // visual transform to position it in client coordinates.
 #ifdef Q_OS_WIN
     if (childHwnd_ != nullptr) {
-        if (miacode::debug_options::previewDCompTopLevelHwndEnabled()) {
-            const QPointF globalLogical = window_->mapToGlobal(topLeftScene);
-            const int globalXPx = qRound(globalLogical.x() * dpr);
-            const int globalYPx = qRound(globalLogical.y() * dpr);
-            ::MoveWindow(reinterpret_cast<HWND>(childHwnd_),
-                         globalXPx, globalYPx,
-                         pixelSize.width(), pixelSize.height(),
-                         TRUE);
-        } else {
-            ::MoveWindow(reinterpret_cast<HWND>(childHwnd_),
-                         xPx, yPx,
-                         pixelSize.width(), pixelSize.height(),
-                         TRUE);
-        }
+        const QPointF globalLogical = window_->mapToGlobal(topLeftScene);
+        const int globalXPx = qRound(globalLogical.x() * dpr);
+        const int globalYPx = qRound(globalLogical.y() * dpr);
+        ::MoveWindow(reinterpret_cast<HWND>(childHwnd_),
+                     globalXPx, globalYPx,
+                     pixelSize.width(), pixelSize.height(),
+                     TRUE);
         core_.setVisualTransform(0, 0, pixelSize);
     } else {
         core_.setVisualTransform(xPx, yPx, pixelSize);
@@ -1096,25 +1062,21 @@ bool PreviewDCompSurface::initialiseIfReady()
         return false;
     }
 
-    const QSize rectSize = testRectSize(clientPx);
-
 #ifdef Q_OS_WIN
-    if (!core_.initialise(reinterpret_cast<HWND>(parentHwnd), rectSize)) {
+    if (!core_.initialise(reinterpret_cast<HWND>(parentHwnd), clientPx)) {
         logSurface("init_failed");
         return false;
     }
 #else
     Q_UNUSED(parentHwnd);
-    Q_UNUSED(rectSize);
     return false;
 #endif
 
-    core_.setVisualTransform(kTestRectInsetPx, kTestRectInsetPx, rectSize);
+    core_.setVisualTransform(0, 0, clientPx);
     initialised_ = true;
     logSurface("initialised",
-               QStringLiteral("client_w=%1 client_h=%2 rect_w=%3 rect_h=%4")
-                   .arg(clientPx.width()).arg(clientPx.height())
-                   .arg(rectSize.width()).arg(rectSize.height()));
+               QStringLiteral("client_w=%1 client_h=%2")
+                   .arg(clientPx.width()).arg(clientPx.height()));
     // Phase 2: start the dedicated render thread that paces on the
     // FRAME_LATENCY_WAITABLE_OBJECT and drives the swap chain. From now on
     // all rendering happens off the GUI thread.
@@ -1157,11 +1119,7 @@ void* PreviewDCompSurface::currentParentHwnd() const
     if (window_ == nullptr) {
         return nullptr;
     }
-    // Phase 4-perf-test (Option 3): when the child-HWND flag is on
-    // and we already created our child window, the DComp visual
-    // tree is parented to *it*, not to the QQuickWindow's HWND.
-    // Re-attach attempts during the lifetime of an initialised
-    // surface go through the same handle.
+    // If we already created our top-level popup HWND, reuse it.
     if (childHwnd_ != nullptr) {
         return childHwnd_;
     }
@@ -1209,39 +1167,6 @@ void* PreviewDCompSurface::currentParentHwnd() const
                        .arg(reinterpret_cast<quintptr>(popup), 0, 16));
         return reinterpret_cast<void*>(popup);
     }
-    if (miacode::debug_options::previewDCompChildHwndEnabled()) {
-        // First-time init in child-HWND mode — create the HWND now.
-        // Style: WS_CHILD parented to the QQuickWindow, click-through
-        // (WS_EX_TRANSPARENT) so QML below still receives input,
-        // WS_EX_NOACTIVATE to avoid focus stealing. Use the built-in
-        // STATIC class so we don't need to register one of our own;
-        // the window does no painting (DComp paints the visual on
-        // top of it), so the class's default WndProc is fine.
-        const HWND parent = reinterpret_cast<HWND>(window_->winId());
-        if (parent == nullptr) {
-            return nullptr;
-        }
-        const HWND hwnd = ::CreateWindowExW(
-            WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
-            L"STATIC",
-            L"",
-            WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
-            0, 0, 1, 1,
-            parent, nullptr,
-            ::GetModuleHandleW(nullptr), nullptr);
-        if (hwnd == nullptr) {
-            const DWORD err = ::GetLastError();
-            logSurface("child_hwnd_create_failed",
-                       QStringLiteral("err=%1").arg(err));
-            return reinterpret_cast<void*>(parent);
-        }
-        const_cast<PreviewDCompSurface*>(this)->childHwnd_ = hwnd;
-        logSurface("child_hwnd_created",
-                   QStringLiteral("parent=0x%1 child=0x%2")
-                       .arg(reinterpret_cast<quintptr>(parent), 0, 16)
-                       .arg(reinterpret_cast<quintptr>(hwnd), 0, 16));
-        return reinterpret_cast<void*>(hwnd);
-    }
     return reinterpret_cast<void*>(window_->winId());
 #else
     return nullptr;
@@ -1264,15 +1189,14 @@ void PreviewDCompSurface::logPresentRateDiagnostic()
     logSurface("present_rates",
                QStringLiteral(
                    "dcomp_fps=%1 qt_fps=%2 dcomp_total=%3 qt_total=%4 "
-                   "interval_ms=%5 quiesce_qsg=%6 child_hwnd=%7 vsync_present=%8")
+                   "interval_ms=%5 quiesce_qsg=%6 toplevel_hwnd=%7")
                    .arg(dcompFps, 0, 'f', 1)
                    .arg(qtFps, 0, 'f', 1)
                    .arg(dcompFrames)
                    .arg(qtFrames)
                    .arg(static_cast<double>(deltaNs) / 1.0e6, 0, 'f', 1)
                    .arg(miacode::debug_options::previewDCompQuiesceQsgEnabled() ? 1 : 0)
-                   .arg(miacode::debug_options::previewDCompChildHwndEnabled() ? 1 : 0)
-                   .arg(miacode::debug_options::previewDCompVsyncPresentEnabled() ? 1 : 0));
+                   .arg(miacode::debug_options::previewDCompTopLevelHwndEnabled() ? 1 : 0));
 
     // Per-tick snapshot-build timing (GUI thread). If avg_ms is high
     // (≳5 ms), the snapshot build is the GUI thread bottleneck. If
@@ -1288,17 +1212,14 @@ void PreviewDCompSurface::logPresentRateDiagnostic()
     logSurface(
         "tick_build_stats",
         QStringLiteral(
-            "publishes=%1 throttled=%2 avg_build_ms=%3 max_build_ms=%4 "
-            "interval_ms=%5")
+            "publishes=%1 avg_build_ms=%2 max_build_ms=%3 interval_ms=%4")
             .arg(tickBuildCount_)
-            .arg(tickThrottledCount_)
             .arg(avgBuildMs, 0, 'f', 3)
             .arg(maxBuildMs, 0, 'f', 3)
             .arg(static_cast<double>(deltaNs) / 1.0e6, 0, 'f', 1));
     tickBuildCount_ = 0;
     tickBuildSumNs_ = 0;
     tickBuildMaxNs_ = 0;
-    tickThrottledCount_ = 0;
 
     // Inter-call gap distribution. avg ≈ 16.67 ms = GUI thread is
     // dispatching presented signals on time. avg > 17 ms or
