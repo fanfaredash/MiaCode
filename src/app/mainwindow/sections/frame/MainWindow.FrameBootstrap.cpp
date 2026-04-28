@@ -1114,6 +1114,7 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     timelineQuickStateBridge_->setShowSlideTracks(true);
     connect(timelineQuickStateBridge_, &TimelineQuickStateBridge::zoomScaleChanged, this, [this](double) {
         savePortableState();
+        saveProjectRenderState();
     });
     if (!timelineWidgetlessQuickRoute_) {
         timelineView_ = new TimelineView(bottomTabs_);

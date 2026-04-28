@@ -333,6 +333,7 @@ void MainWindow::DocumentSection::onNormalizeWholeChart()
                 state_.chartNormalizeStartAtNewMeasure_ = changedOptions.startAtNewMeasure;
                 state_.chartNormalizeReduceTo384Grid_ = changedOptions.reduceTo384Grid;
                 owner_.savePortableState();
+                owner_.saveProjectRenderState();
             });
     if (!dialogResult.accepted) {
         return;

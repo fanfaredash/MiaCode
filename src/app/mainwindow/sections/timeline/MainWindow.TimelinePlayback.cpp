@@ -723,6 +723,8 @@ void MainWindow::TimelineSection::applyPreviewPlaybackRate(double rate)
                 state_.previewTimingSettings_);
         }
     }
+    owner_.saveProjectRenderState();
+    owner_.savePortableState();
     if (state_.qtPreviewPlaying_ || state_.previewStartupSyncPending_ || state_.previewLateVideoStartPending_) {
         stopQtPreviewPlayback(true);
         startQtPreviewPlayback(state_.qtPreviewPauseSecond_, true);

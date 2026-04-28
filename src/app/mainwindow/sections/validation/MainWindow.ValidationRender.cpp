@@ -138,6 +138,7 @@ void MainWindow::ValidationSection::onEditStaticTapOnSlideThreshold()
 
     state_.staticTapOnSlideThresholdMs_ = newThresholdMs;
     owner_.savePortableState();
+    owner_.saveProjectRenderState();
     if (owner_.hasActiveDifficulty()) {
         if (!owner_.scheduleTimelineAnalysisRefreshFromLatestPreviewState()) {
             owner_.refreshTimelineMetadata();
@@ -154,8 +155,6 @@ void MainWindow::ValidationSection::onEditStaticTapOnSlideThreshold()
 
 void MainWindow::ValidationSection::applyMuriRenderOptions()
 {
-    state_.showJudgeMarkers_ = false;
-    state_.showTouchTrail_ = false;
     state_.muriRenderOptions_.showSlideTracks = state_.showSlideTracks_;
     state_.muriRenderOptions_.showJudgeMarkers = state_.showJudgeMarkers_;
     state_.muriRenderOptions_.showTouchTrail = state_.showTouchTrail_;

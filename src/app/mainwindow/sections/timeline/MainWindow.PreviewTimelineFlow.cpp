@@ -751,6 +751,7 @@ void MainWindow::TimelineSection::onTimelineFollowPreviewToggled(bool enabled)
     state_.previewFollowEnabled_ = enabled;
     invalidatePreviewFollowBindingCache();
     owner_.savePortableState();
+    owner_.saveProjectRenderState();
     if (!enabled) {
         owner_.clearPreviewFollowDecoration();
         return;

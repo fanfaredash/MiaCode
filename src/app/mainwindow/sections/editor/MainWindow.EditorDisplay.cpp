@@ -88,6 +88,9 @@ void MainWindow::EditorSection::loadPortableState()
     if (!trackPath.isEmpty() && QFileInfo::exists(trackPath)) {
         state_.lastTrackPath_ = QDir::cleanPath(trackPath);
     }
+    if (app.value("show_slide_tracks").isBool()) {
+        state_.showSlideTracks_ = app.value("show_slide_tracks").toBool(state_.showSlideTracks_);
+    }
     applyPortablePreviewSettings(preview);
     if (state_.timelineQuickStateBridge_ != nullptr) {
         if (preview.value("timeline_zoom_scale").isDouble()) {
@@ -98,6 +101,10 @@ void MainWindow::EditorSection::loadPortableState()
         state_.timelineQuickStateBridge_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
     }
     owner_.refreshPreviewFrameRateTimers();
+    owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
+    if (state_.previewSfxRuntime_ != nullptr) {
+        state_.previewSfxRuntime_->setBackgroundTrackPlaybackRate(state_.previewPlaybackRate_);
+    }
 }
 
 void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
@@ -106,6 +113,7 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.previewAudioSettings_ = state_.softwarePreviewAudioSettings_;
     state_.softwarePreviewTimingSettings_ = PreviewTimingSettings();
     state_.previewTimingSettings_ = state_.softwarePreviewTimingSettings_;
+    state_.previewPlaybackRate_ = 1.0;
     state_.showSlideTracks_ = true;
     state_.showJudgeMarkers_ = false;
     state_.showTouchTrail_ = false;
@@ -139,6 +147,21 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
 
 void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& preview)
 {
+    if (preview.value("preview_playback_rate").isDouble()) {
+        state_.previewPlaybackRate_ = qMax(
+            0.25,
+            preview.value("preview_playback_rate").toDouble(state_.previewPlaybackRate_)
+        );
+    }
+    if (preview.value("show_slide_tracks").isBool()) {
+        state_.showSlideTracks_ = preview.value("show_slide_tracks").toBool(state_.showSlideTracks_);
+    }
+    if (preview.value("show_judge_markers").isBool()) {
+        state_.showJudgeMarkers_ = preview.value("show_judge_markers").toBool(state_.showJudgeMarkers_);
+    }
+    if (preview.value("show_touch_trail").isBool()) {
+        state_.showTouchTrail_ = preview.value("show_touch_trail").toBool(state_.showTouchTrail_);
+    }
     if (preview.value("static_tap_on_slide_threshold_ms").isDouble()) {
         state_.staticTapOnSlideThresholdMs_ = qBound(
             miacode::muri::kStaticTapOnSlideThresholdMinMs,
@@ -292,8 +315,6 @@ void MainWindow::EditorSection::savePortableState() const
     QJsonObject ui = root.value("ui").toObject();
     QJsonObject app = root.value("app").toObject();
     QJsonObject preview = app.value("preview").toObject();
-    preview.remove("show_judge_markers");
-    preview.remove("show_touch_trail");
 
     ui.insert("editor_text_font_size", state_.editorTextFontPointSize_);
     ui.insert("editor_line_spacing_factor", state_.editorLineSpacingFactor_);
@@ -303,8 +324,12 @@ void MainWindow::EditorSection::savePortableState() const
     app.insert("last_open_file", state_.lastSessionFilePath_);
     app.insert("auto_restore_last_open_file", state_.autoRestoreLastSessionFile_);
     app.insert("last_track_path", state_.lastTrackPath_);
-    app.insert("show_slide_tracks", true);
+    app.insert("show_slide_tracks", state_.showSlideTracks_);
 
+    preview.insert("preview_playback_rate", state_.previewPlaybackRate_);
+    preview.insert("show_slide_tracks", state_.showSlideTracks_);
+    preview.insert("show_judge_markers", state_.showJudgeMarkers_);
+    preview.insert("show_touch_trail", state_.showTouchTrail_);
     preview.insert("static_tap_on_slide_threshold_ms", state_.staticTapOnSlideThresholdMs_);
     preview.insert(
         "muri_render_mode",

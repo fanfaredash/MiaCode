@@ -1210,6 +1210,7 @@ void MainWindow::TimelineSection::setWorkspacePanelsSwapped(bool swapped, bool p
     applyWorkspacePanelArrangement();
     if (persistState) {
         owner_.savePortableState();
+        owner_.saveProjectRenderState();
     }
 }
 

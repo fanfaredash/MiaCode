@@ -1,8 +1,10 @@
 #include "MainWindow.EditorSection.h"
 #include "../../MainWindowShared.h"
 
+#include "QtPreviewSfxRuntime.h"
 #include "UiText.h"
 #include "preview/runtime/PreviewRuntime.h"
+#include "simai/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 
 #include <QtCore>
@@ -54,6 +56,8 @@ void MainWindow::EditorSection::loadProjectRenderState()
     resetPortablePreviewSettingsToDefaults();
     applyPortablePreviewSettings(portablePreview);
     state_.projectLastOpenedDifficultyId_ = 0;
+    bool projectTimelineZoomScaleLoaded = false;
+    double projectTimelineZoomScale = 0.5;
 
     const QString path = resolveProjectRenderStateFilePath();
     const QString legacyPath = legacyProjectRenderStateFilePath(state_.currentFilePath_);
@@ -77,6 +81,12 @@ void MainWindow::EditorSection::loadProjectRenderState()
                 }
                 const QJsonObject render = root.value("render").toObject();
                 if (!render.isEmpty()) {
+                    if (render.value("preview_playback_rate").isDouble()) {
+                        state_.previewPlaybackRate_ = qMax(
+                            0.25,
+                            render.value("preview_playback_rate").toDouble(state_.previewPlaybackRate_)
+                        );
+                    }
                     const double legacyBrightness = qBound(
                         0.0,
                         render.value("background_brightness").toDouble(state_.previewBackgroundBrightnessOuter_),
@@ -165,8 +175,16 @@ void MainWindow::EditorSection::loadProjectRenderState()
                             render.value("wifi_need_c").toBool(state_.muriRenderOptions_.wifiNeedC);
                     }
                     state_.muriRenderOptions_.excludeTouchFromMultiTouch = true;
-                    state_.showJudgeMarkers_ = false;
-                    state_.showTouchTrail_ = false;
+                    if (render.value("show_slide_tracks").isBool()) {
+                        state_.showSlideTracks_ = render.value("show_slide_tracks").toBool(state_.showSlideTracks_);
+                    }
+                    if (render.value("show_judge_markers").isBool()) {
+                        state_.showJudgeMarkers_ =
+                            render.value("show_judge_markers").toBool(state_.showJudgeMarkers_);
+                    }
+                    if (render.value("show_touch_trail").isBool()) {
+                        state_.showTouchTrail_ = render.value("show_touch_trail").toBool(state_.showTouchTrail_);
+                    }
                     if (render.value("canvas_frame_rate_mode").isString()) {
                         state_.previewCanvasFrameRateMode_ =
                             owner_.previewCanvasFrameRateModeFromStorageValue(render.value("canvas_frame_rate_mode").toString());
@@ -198,6 +216,25 @@ void MainWindow::EditorSection::loadProjectRenderState()
                         state_.previewShowValidationSummary_ =
                             render.value("show_validation_summary").toBool(state_.previewShowValidationSummary_);
                     }
+                    if (render.value("follow_preview").isBool()) {
+                        state_.previewFollowEnabled_ =
+                            render.value("follow_preview").toBool(state_.previewFollowEnabled_);
+                    }
+                    if (render.value("timeline_zoom_scale").isDouble()) {
+                        projectTimelineZoomScaleLoaded = true;
+                        projectTimelineZoomScale = render.value("timeline_zoom_scale").toDouble(projectTimelineZoomScale);
+                    }
+                    const miacode::chart_transform::ChartNormalizationOptions normalizationOptions =
+                        miacode::chart_transform::chartNormalizationOptionsFromPreferences(
+                            render,
+                            miacode::chart_transform::ChartNormalizationOptions{
+                                state_.chartNormalizeStartAtNewMeasure_,
+                                state_.chartNormalizeReduceTo384Grid_});
+                    state_.chartNormalizeStartAtNewMeasure_ = normalizationOptions.startAtNewMeasure;
+                    state_.chartNormalizeReduceTo384Grid_ = normalizationOptions.reduceTo384Grid;
+                    if (render.value("swap_side_panels").isBool()) {
+                        state_.workspacePanelsSwapped_ = render.value("swap_side_panels").toBool(state_.workspacePanelsSwapped_);
+                    }
                     const bool unifiedObjectStatsHud = state_.previewShowObjectStatsHud_ || state_.exportShowObjectStatsHud_;
                     state_.previewShowObjectStatsHud_ = unifiedObjectStatsHud;
                     state_.exportShowObjectStatsHud_ = unifiedObjectStatsHud;
@@ -224,9 +261,16 @@ void MainWindow::EditorSection::loadProjectRenderState()
     state_.previewAudioSettings_.normalize();
     state_.previewTimingSettings_.normalize();
     if (state_.timelineQuickStateBridge_ != nullptr) {
+        if (projectTimelineZoomScaleLoaded) {
+            state_.timelineQuickStateBridge_->setZoomScale(projectTimelineZoomScale);
+        }
         state_.timelineQuickStateBridge_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
     }
     owner_.refreshPreviewFrameRateTimers();
+    owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
+    if (state_.previewSfxRuntime_ != nullptr) {
+        state_.previewSfxRuntime_->setBackgroundTrackPlaybackRate(state_.previewPlaybackRate_);
+    }
     owner_.applyPreviewStageMediaRouteVisualSettings();
     if (state_.previewCanvas_ != nullptr) {
         owner_.applyEffectivePreviewOutlineVariantToCanvas();
@@ -267,8 +311,10 @@ void MainWindow::EditorSection::saveProjectRenderState() const
     root.insert("audio", state_.previewAudioSettings_.toJson());
     root.insert("timing", state_.previewTimingSettings_.toJson());
     QJsonObject render;
-    render.remove("show_judge_markers");
-    render.remove("show_touch_trail");
+    render.insert("preview_playback_rate", state_.previewPlaybackRate_);
+    render.insert("show_slide_tracks", state_.showSlideTracks_);
+    render.insert("show_judge_markers", state_.showJudgeMarkers_);
+    render.insert("show_touch_trail", state_.showTouchTrail_);
     render.insert("background_brightness", state_.previewBackgroundBrightnessOuter_);
     render.insert("background_brightness_outer", state_.previewBackgroundBrightnessOuter_);
     render.insert("background_brightness_inner", state_.previewBackgroundBrightnessInner_);
@@ -303,6 +349,17 @@ void MainWindow::EditorSection::saveProjectRenderState() const
     render.insert("show_object_stats_preview", state_.previewShowObjectStatsHud_);
     render.insert("show_object_stats_export", state_.exportShowObjectStatsHud_);
     render.insert("show_validation_summary", state_.previewShowValidationSummary_);
+    render.insert("follow_preview", state_.previewFollowEnabled_);
+    render.insert(
+        "timeline_zoom_scale",
+        state_.timelineQuickStateBridge_ != nullptr ? state_.timelineQuickStateBridge_->zoomScale() : 0.5
+    );
+    miacode::chart_transform::saveChartNormalizationOptionsToPreferences(
+        &render,
+        miacode::chart_transform::ChartNormalizationOptions{
+            state_.chartNormalizeStartAtNewMeasure_,
+            state_.chartNormalizeReduceTo384Grid_});
+    render.insert("swap_side_panels", state_.workspacePanelsSwapped_);
     render.insert("canvas_aspect_ratio", 1.0);
     render.insert("auto_restore_square_after_export", false);
     root.insert("render", render);
