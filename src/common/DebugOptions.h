@@ -273,39 +273,6 @@ inline bool timelineHotpathDiagnosticsEnabled()
     return runtimeDebugOutputEnabled() && envFlagEnabled("MIACODE_TIMELINE_HOTPATH_DIAG");
 }
 
-inline bool glDebugMessagesEnabled()
-{
-    return debugCategoryEnabled("MIACODE_DISABLE_GL_DEBUG_MESSAGES");
-}
-
-inline bool forceDontCreateNativeWidgetSiblings()
-{
-    return envFlagEnabled("MIACODE_FORCE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS");
-}
-
-inline bool forceBasicQsgRenderLoop()
-{
-    return envFlagEnabled("MIACODE_FORCE_BASIC_QSG_RENDER_LOOP");
-}
-
-inline int previewVideoFallbackCompareEveryFrames()
-{
-    if (!runtimeDebugOutputEnabled()) {
-        return 0;
-    }
-    const int value = envIntValue("MIACODE_PREVIEW_DIAG_COMPARE_VIDEO_FALLBACK_EVERY", 0);
-    return value > 0 ? value : 0;
-}
-
-inline int previewPresentCompareEveryFrames()
-{
-    if (!runtimeDebugOutputEnabled()) {
-        return 0;
-    }
-    const int value = envIntValue("MIACODE_PREVIEW_DIAG_COMPARE_PRESENT_EVERY", 0);
-    return value > 0 ? value : 0;
-}
-
 inline bool previewCompareDumpFramesEnabled()
 {
     return runtimeDebugOutputEnabled() && envFlagEnabled("MIACODE_PREVIEW_DIAG_COMPARE_DUMP_FRAMES");

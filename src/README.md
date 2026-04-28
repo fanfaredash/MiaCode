@@ -1,75 +1,108 @@
-# `src` Directory Layout (Current)
+# `src` Directory Layout (v2-refactor target)
 
-This repository is organized by module responsibility.
-Except for entry files, keep sources in second-level folders.
+This repository is organised by module responsibility, modelled after
+the OBS source/compositor split. Except for entry files, keep sources
+in their second-level folders.
 
 ```text
 src/
-  app/
+  app/                       # App entry, MainWindow, QuickShell glue
     main.cpp
     AppVersion.h.in
     mainwindow/
     ui/
+    quick_shell/
 
-  common/
+  audio/                     # BASS / miniaudio backends, SFX runtime
+    PreviewAudioBackend.h
+    BassPreviewAudioBackend.*
+    MiniaudioPreviewAudioBackend.*
+    PreviewAudioSettings.*
+    QtPreviewSfxRuntime.*
+    QtPreviewSfxRuntime.*.cpp
 
-  editor/
-    PlainCodeEditor.*
-    BracketScopeHighlighter.*
+  common/                    # Cross-module utilities, debug logging,
+                             # shared config structs
 
-  preview/
-    audio/
-      PreviewAudioSettings.*
-      QtPreviewSfxRuntime.*
-      QtPreviewSfxRuntime.*.cpp
-    video/
-      PreviewRenderSettings.h
-    scene/
+  core/
+    chart/                   # simai parsing + transforms (was src/simai/)
+      document/
+        SimaiDocument.*
+        SimaiTimingMetadata.*
+      parser/
+        SimaiNativeParser.*
+        SimaiNativeParser.*.cpp
+        SimaiNativeDump.cpp
+      transform/
+        ChartBatchTransform.*
+        ChartNormalization.*
+    scene/                   # Pure frame-state math + per-layer
+                             # descriptor building (was preview/scene/)
       PreviewFrameState.h
       Preview*LayerState.*
       PreviewOpacityCurves.*
       PreviewScene*.*
       PreviewSkinSelectors.*
       PreviewTrackShared.*
-    quick_scene/
-      PreviewQuick*Layer.*
-      PreviewQuick*Nodes.*
-      PreviewQuickSceneRoot.*
-      PreviewTextureRepository.*
-    runtime/
-      PreviewRuntime.*
-      PreviewQuickExportSession.*
-      PreviewSceneAssetLoader.*
-      PreviewSceneAssetRepository.*
+    video/                   # libmpv probe (Phase 0); MpvVideoSource
+                             # (Phase 4); shared render settings.
+      MpvProbe.*
+      PreviewRenderSettings.h
 
-  simai/
-    document/
-      SimaiDocument.*
-    parser/
-      SimaiNativeParser.*
-      SimaiNativeParser.*.cpp
-      SimaiNativeDump.cpp
+  editor/                    # In-app text editor for chart files
+    PlainCodeEditor.*
+    BracketScopeHighlighter.*
 
-  timeline/
+  preview/                   # Legacy preview surfaces — Phase 2/3 will
+                             # replace these with the source/compositor
+                             # path. Retained for now so the existing
+                             # QSG render path keeps working.
+    quick_scene/             # QSG-based chart layer renderers
+    runtime/                 # PreviewRuntime, snapshot host (timing
+                             # extraction → core/timing/ in Phase 2/3)
+
+  render/                    # OBS-style rendering (was preview/dcomp/)
+    PreviewDCompRenderer.*   # Render thread; renamed → RenderThread in Phase 3
+    backend_d3d11/
+      PreviewDCompCore.*
+      PreviewDCompSpritePipeline.*
+      PreviewDCompTextureCache.*
+      PreviewDCompFrameStateSnapshot.h
+      PreviewDCompSurface.*  # Becomes RenderView in Phase 3
+      PreviewDCompPhase0Smoke.cpp
+
+  timeline/                  # Editor timeline strip — option-A scope
+                             # expansion: Phase 2/3 will add timeline
+                             # IPreviewSources + a second RenderView.
     TimelineView.*
     TimelineView.*.cpp
+    TimelineSceneState*
+    TimelineNoteAssets.*
+    quick/                   # legacy QSG layer items
+      TimelineQuickItem.*
+      TimelineQuick*Layer.*
 
-  tools/
+  tools/                     # Standalone helpers + spec/probe targets
     latency/
-      LatencyDetectorDialog.*
-      LatencyDetectorDialog.*.cpp
-    video_export/
-      VideoExportDialog.*
-      VideoExportController.*
+    muri/
     probe/
-      SoundtouchProbe.cpp
+    timeline/
+    video_export/
 ```
 
 ## Conventions
 - `app/` is for app entry and window orchestration only.
-- `preview/scene` owns pure frame-state math and per-layer descriptor building.
-- `preview/quick_scene` owns QSG/QQuick rendering only.
-- `preview/runtime` owns live/runtime sessions, asset ownership, and headless Quick export session wiring.
-- `preview/video` is now limited to media transport and shared preview render settings.
-- `simai/parser` stores parser entry, parser internal fragments, and native dump tooling.
-- Prefer existing second-level folders instead of creating parallel aliases.
+- `core/scene/` owns pure frame-state math and per-layer descriptor
+  building. No QSG / D3D11 dependencies.
+- `core/chart/` owns simai parsing, transforms, normalisation. No
+  scene / runtime dependencies.
+- `core/video/` owns libmpv-related code and shared render settings.
+- `audio/` owns audio backends; nothing else may link BASS or
+  miniaudio directly.
+- `render/` owns the D3D11 / DirectComposition rendering pipeline.
+  Phase 2 introduces `IPreviewSource` + `Compositor` here; Phase 3
+  introduces `RenderView`.
+- `preview/` is **legacy** — Phase 2/3 deletes most of it as sources/
+  takes over. Don't add new code here.
+- Prefer existing second-level folders instead of creating parallel
+  aliases.
