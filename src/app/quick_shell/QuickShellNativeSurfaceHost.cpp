@@ -1,5 +1,7 @@
 #include "QuickShellNativeSurfaceHost.h"
 
+#include "common/DebugLog.h"
+
 #include <QBoxLayout>
 #include <QDockWidget>
 #include <QEasingCurve>
@@ -173,33 +175,127 @@ QuickShellNativeSurfaceHost::QuickShellNativeSurfaceHost(
 
 QuickShellNativeSurfaceHost::~QuickShellNativeSurfaceHost()
 {
-    delete surfaceBundle_.topChrome;
-    surfaceBundle_.topChrome = nullptr;
-    delete surfaceBundle_.sidebar;
-    surfaceBundle_.sidebar = nullptr;
-    delete surfaceBundle_.workspace;
-    surfaceBundle_.workspace = nullptr;
-    delete surfaceBundle_.bottomTabs;
-    surfaceBundle_.bottomTabs = nullptr;
-    delete surfaceBundle_.status;
-    surfaceBundle_.status = nullptr;
+    // Per-delete bracket logging so a crash inside any single delete is pinpointed by the last
+    // "*_enter" line in the log without a subsequent "*_exit". Matches the pattern added in
+    // QuickShellBootstrap::acceptedCloseDestroyAndQuit() one level up.
+    const auto logStep = [](const QString& action) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/surface_host"),
+            QStringLiteral("action=%1").arg(action),
+            true
+        );
+    };
+
+    logStep(QStringLiteral("destructor_enter"));
+
+    // Release rehosted MainWindow widgets before deleting surface widgets so they are not
+    // transitively destroyed via child-widget cascade. attachNativeWidgets() reparented the
+    // menu bar, tool bar, status bar, outline dock, workspace widget, and bottom-tabs widget
+    // INTO these surface widgets; deleting the surface widget would then destroy those
+    // rehosted children. The crash seen as "widget_sidebar_enter" with no "widget_sidebar_exit"
+    // tracks to outline-dock (a QDockWidget) destruction inside sidebar deletion — Qt's QDockWidget
+    // teardown does not tolerate being deleted as a grandchild of a widget it was never docked into.
+    if (contentProvider_ != nullptr) {
+        logStep(QStringLiteral("detach_rehosted_enter"));
+        QMainWindow* mainWindow = qobject_cast<QMainWindow*>(contentProvider_->shellWindowWidget());
+        const auto releaseBack = [mainWindow](QWidget* widget) {
+            if (widget == nullptr || mainWindow == nullptr) {
+                return;
+            }
+            if (widget->parentWidget() == mainWindow) {
+                return;
+            }
+            widget->hide();
+            widget->setParent(mainWindow);
+        };
+        if (mainWindow != nullptr) {
+            releaseBack(mainWindow->menuBar());
+            if (QToolBar* toolBar = mainWindow->findChild<QToolBar*>()) {
+                releaseBack(toolBar);
+            }
+            releaseBack(mainWindow->statusBar());
+        }
+        releaseBack(contentProvider_->shellOutlineDockWidget());
+        releaseBack(contentProvider_->shellWorkspaceWidget());
+        releaseBack(contentProvider_->shellBottomTabsWidget());
+        logStep(QStringLiteral("detach_rehosted_exit"));
+    }
+
+    if (surfaceBundle_.topChrome != nullptr) {
+        logStep(QStringLiteral("bundle_topChrome_enter"));
+        delete surfaceBundle_.topChrome;
+        surfaceBundle_.topChrome = nullptr;
+        logStep(QStringLiteral("bundle_topChrome_exit"));
+    }
+    if (surfaceBundle_.sidebar != nullptr) {
+        logStep(QStringLiteral("bundle_sidebar_enter"));
+        delete surfaceBundle_.sidebar;
+        surfaceBundle_.sidebar = nullptr;
+        logStep(QStringLiteral("bundle_sidebar_exit"));
+    }
+    if (surfaceBundle_.workspace != nullptr) {
+        logStep(QStringLiteral("bundle_workspace_enter"));
+        delete surfaceBundle_.workspace;
+        surfaceBundle_.workspace = nullptr;
+        logStep(QStringLiteral("bundle_workspace_exit"));
+    }
+    if (surfaceBundle_.bottomTabs != nullptr) {
+        logStep(QStringLiteral("bundle_bottomTabs_enter"));
+        delete surfaceBundle_.bottomTabs;
+        surfaceBundle_.bottomTabs = nullptr;
+        logStep(QStringLiteral("bundle_bottomTabs_exit"));
+    }
+    if (surfaceBundle_.status != nullptr) {
+        logStep(QStringLiteral("bundle_status_enter"));
+        delete surfaceBundle_.status;
+        surfaceBundle_.status = nullptr;
+        logStep(QStringLiteral("bundle_status_exit"));
+    }
     surfaceBundle_.previewCompositeWindow = nullptr;
-    delete topChromeSurfaceWidget_;
-    topChromeSurfaceWidget_ = nullptr;
-    delete sidebarSurfaceWidget_;
-    sidebarSurfaceWidget_ = nullptr;
-    delete workspaceSurfaceWidget_;
-    workspaceSurfaceWidget_ = nullptr;
-    delete bottomTabsSurfaceWidget_;
-    bottomTabsSurfaceWidget_ = nullptr;
-    delete statusSurfaceWidget_;
-    statusSurfaceWidget_ = nullptr;
-    delete bottomTabsSpeedToastWindow_;
-    bottomTabsSpeedToastWindow_ = nullptr;
+
+    if (topChromeSurfaceWidget_ != nullptr) {
+        logStep(QStringLiteral("widget_topChrome_enter"));
+        delete topChromeSurfaceWidget_;
+        topChromeSurfaceWidget_ = nullptr;
+        logStep(QStringLiteral("widget_topChrome_exit"));
+    }
+    if (sidebarSurfaceWidget_ != nullptr) {
+        logStep(QStringLiteral("widget_sidebar_enter"));
+        delete sidebarSurfaceWidget_;
+        sidebarSurfaceWidget_ = nullptr;
+        logStep(QStringLiteral("widget_sidebar_exit"));
+    }
+    if (workspaceSurfaceWidget_ != nullptr) {
+        logStep(QStringLiteral("widget_workspace_enter"));
+        delete workspaceSurfaceWidget_;
+        workspaceSurfaceWidget_ = nullptr;
+        logStep(QStringLiteral("widget_workspace_exit"));
+    }
+    if (bottomTabsSurfaceWidget_ != nullptr) {
+        logStep(QStringLiteral("widget_bottomTabs_enter"));
+        delete bottomTabsSurfaceWidget_;
+        bottomTabsSurfaceWidget_ = nullptr;
+        logStep(QStringLiteral("widget_bottomTabs_exit"));
+    }
+    if (statusSurfaceWidget_ != nullptr) {
+        logStep(QStringLiteral("widget_status_enter"));
+        delete statusSurfaceWidget_;
+        statusSurfaceWidget_ = nullptr;
+        logStep(QStringLiteral("widget_status_exit"));
+    }
+    if (bottomTabsSpeedToastWindow_ != nullptr) {
+        logStep(QStringLiteral("widget_speedToastWindow_enter"));
+        delete bottomTabsSpeedToastWindow_;
+        bottomTabsSpeedToastWindow_ = nullptr;
+        logStep(QStringLiteral("widget_speedToastWindow_exit"));
+    }
     bottomTabsSpeedToastPanel_ = nullptr;
     bottomTabsSpeedToastLabel_ = nullptr;
     bottomTabsSpeedToastTimer_ = nullptr;
     bottomTabsSpeedToastOpacityAnimation_ = nullptr;
+
+    logStep(QStringLiteral("destructor_exit"));
 }
 
 QuickShellNativeSurfaceBundle QuickShellNativeSurfaceHost::surfaceBundle() const

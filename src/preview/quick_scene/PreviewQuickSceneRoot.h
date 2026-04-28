@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QElapsedTimer>
 #include <QMetaObject>
 #include <QMutex>
 #include <QPointer>
@@ -7,6 +8,7 @@
 #include <QQuickItem>
 #include <QSize>
 #include <QString>
+#include <atomic>
 
 #include "preview/quick_scene/PreviewQuickBackdropLayer.h"
 #include "preview/quick_scene/PreviewQuickChartReviewLayer.h"
@@ -62,11 +64,20 @@ private:
     void enqueueTextureStatsForPresentation(const PreviewTextureStats& stats);
     PreviewTextureStats takePendingTextureStatsForPresentation() const;
     void syncVisibleHostWindowBinding(const char* reason = "unspecified");
+    void recordRenderPhaseProfile();
 
     QPointer<PreviewRuntime> runtime_;
     QMetaObject::Connection runtimeUpdateConnection_;
     QMetaObject::Connection frameSwapConnection_;
     QMetaObject::Connection windowVisibilityConnection_;
+    QMetaObject::Connection renderBeforeSyncConnection_;
+    QMetaObject::Connection renderAfterSyncConnection_;
+    QMetaObject::Connection renderBeforeRenderConnection_;
+    QMetaObject::Connection renderAfterRenderConnection_;
+    QMetaObject::Connection renderFrameSwapProfileConnection_;
+    QMetaObject::Connection sceneGraphInvalidatedConnection_;
+    QMetaObject::Connection mmcssBootstrapConnection_;
+    std::atomic<bool> mmcssRegistrationAttempted_{false};
     QPointer<QQuickWindow> boundWindow_;
     const miacode::preview::scene::PreviewFrameState* frameState_ = nullptr;
     miacode::preview::scene::PreviewRenderLayerFlags layerFlags_ =
@@ -109,4 +120,15 @@ private:
     bool lastLoggedHasState_ = false;
     QSize lastLoggedRenderSize_;
     quintptr lastLoggedWindowHandle_ = 0;
+    // Render-thread phase timing (diagnostic-gated). Lives entirely on the render thread:
+    // QQuickWindow fires all sync/render signals in sequence on the same render thread, and
+    // QElapsedTimer::nsecsElapsed() is safe to read from one thread after start() is called.
+    QElapsedTimer renderPhaseTimer_;
+    qint64 renderPhaseUpdatePaintStartNs_ = -1;
+    qint64 renderPhaseUpdatePaintEndNs_ = -1;
+    qint64 renderPhaseSyncStartNs_ = -1;
+    qint64 renderPhaseSyncEndNs_ = -1;
+    qint64 renderPhaseRenderStartNs_ = -1;
+    qint64 renderPhaseRenderEndNs_ = -1;
+    qint64 renderPhaseLastLogMs_ = -1;
 };

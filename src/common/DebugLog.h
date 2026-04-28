@@ -2,6 +2,7 @@
 
 #include <QString>
 #include <QStringList>
+#include <QtGlobal>
 
 namespace miacode::debug_log {
 
@@ -13,6 +14,29 @@ enum class Channel {
     Fatal,
     PreviewProfile,
 };
+
+struct LogWriterStats {
+    quint64 enqueuedCount = 0;     // total appendText calls that reached the queue
+    quint64 droppedCount = 0;      // drops from queue overflow (>kMaxQueueSize)
+    quint64 writtenCount = 0;      // entries actually written to disk
+    quint64 totalIoTimeNs = 0;     // cumulative time spent in writeEntry on worker thread
+    quint64 maxBatchTimeNs = 0;    // worst-case single-batch write time (ns)
+    quint64 maxEnqueueTimeNs = 0;  // worst-case mutex-hold time on a caller thread (ns)
+    int currentQueueSize = 0;      // outstanding entries waiting for the worker
+    int peakQueueSize = 0;         // high-water mark
+    bool workerRunning = false;
+    bool asyncEnabled = true;
+};
+
+// Return a snapshot of the async log writer's counters. Cheap (atomic loads + brief mutex).
+LogWriterStats logWriterStatsSnapshot();
+
+// Block until all enqueued log entries have been written. Returns true on success, false on
+// timeout. Pass -1 to wait indefinitely. Used at shutdown and before truncating operations.
+bool flushAsyncLogWriter(int timeoutMs = -1);
+
+// Stop the worker thread and synchronously flush any remaining entries. Idempotent.
+void shutdownAsyncLogWriter();
 
 QString timestampString();
 QString logDirectory();

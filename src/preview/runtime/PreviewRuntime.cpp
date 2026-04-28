@@ -2,6 +2,7 @@
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/Mmcss.h"
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
@@ -48,6 +49,40 @@ double rollingMaxMs(const QVector<double>& samples, int count)
     return maxMs;
 }
 
+// Multiplier applied to the target frame interval to flag a "stutter".
+// 1.5× target (≈25ms at 60Hz) is the threshold beyond which an isolated
+// frame is reliably noticeable. Counted against the rolling sample window
+// so the HUD shows a per-second-scale figure.
+constexpr double kStutterMultiplier = 1.5;
+
+int rollingStutterCount(const QVector<double>& samples, int count, double thresholdMs)
+{
+    if (thresholdMs <= 0.0 || count <= 0) {
+        return 0;
+    }
+    int stutters = 0;
+    for (int index = 0; index < count; ++index) {
+        if (samples.at(index) > thresholdMs) {
+            ++stutters;
+        }
+    }
+    return stutters;
+}
+
+double targetIntervalMsForStutterDetection(double targetFps)
+{
+    // Fall back to 60fps if target hasn't been published yet (early frames).
+    const double effectiveTarget = targetFps > 1.0 ? targetFps : 60.0;
+    return 1000.0 / effectiveTarget;
+}
+
+struct PlaybackScopeAccumulator {
+    bool active = false;
+    double* sumMs = nullptr;
+    double* maxMs = nullptr;
+    qint64* sampleCount = nullptr;
+};
+
 void recordIntervalSample(
     QElapsedTimer& timer,
     qint64& lastSampleNs,
@@ -57,7 +92,8 @@ void recordIntervalSample(
     double& sessionSumMs,
     double& sessionMaxMs,
     qint64& sessionSampleCount,
-    double& fpsDisplay)
+    double& fpsDisplay,
+    const PlaybackScopeAccumulator& playbackScope = PlaybackScopeAccumulator{})
 {
     if (!timer.isValid()) {
         timer.start();
@@ -80,6 +116,14 @@ void recordIntervalSample(
             sessionSumMs += intervalMs;
             sessionMaxMs = qMax(sessionMaxMs, intervalMs);
             sessionSampleCount += 1;
+            if (playbackScope.active
+                && playbackScope.sumMs != nullptr
+                && playbackScope.maxMs != nullptr
+                && playbackScope.sampleCount != nullptr) {
+                *playbackScope.sumMs += intervalMs;
+                *playbackScope.maxMs = qMax(*playbackScope.maxMs, intervalMs);
+                *playbackScope.sampleCount += 1;
+            }
         }
     }
     lastSampleNs = nowNs;
@@ -180,6 +224,11 @@ void PreviewRuntime::update()
 {
     updateRequestCountTotal_ += 1;
     frameState_.updateRequestCount = updateRequestCountTotal_;
+    PlaybackScopeAccumulator playbackScope;
+    playbackScope.active = activePlaybackProfiling_;
+    playbackScope.sumMs = &playbackUpdateRequestIntervalSumMs_;
+    playbackScope.maxMs = &playbackUpdateRequestIntervalMaxMs_;
+    playbackScope.sampleCount = &playbackUpdateRequestIntervalSampleCount_;
     recordIntervalSample(
         updateRequestTimer_,
         lastUpdateRequestNs_,
@@ -189,8 +238,17 @@ void PreviewRuntime::update()
         updateRequestIntervalSumMs_,
         updateRequestIntervalMaxMs_,
         updateRequestIntervalSampleCount_,
-        frameState_.updateRequestFpsDisplay
+        frameState_.updateRequestFpsDisplay,
+        playbackScope
     );
+    {
+        const double thresholdMs = kStutterMultiplier
+            * targetIntervalMsForStutterDetection(frameState_.framePacingTargetFps);
+        frameState_.updateRequestMaxMsDisplay =
+            rollingMaxMs(updateRequestIntervalsMs_, updateRequestIntervalCount_);
+        frameState_.updateRequestStutterCountDisplay = rollingStutterCount(
+            updateRequestIntervalsMs_, updateRequestIntervalCount_, thresholdMs);
+    }
     pendingPresentedStatsRefresh_ = true;
     emit frameStateChanged();
     if (visibleHostWindow_ != nullptr) {
@@ -504,6 +562,12 @@ void PreviewRuntime::reset()
     frameState_.fpsDisplay = 0.0;
     frameState_.tickFpsDisplay = 0.0;
     frameState_.updateRequestFpsDisplay = 0.0;
+    frameState_.presentMaxMsDisplay = 0.0;
+    frameState_.tickMaxMsDisplay = 0.0;
+    frameState_.updateRequestMaxMsDisplay = 0.0;
+    frameState_.presentStutterCountDisplay = 0;
+    frameState_.tickStutterCountDisplay = 0;
+    frameState_.updateRequestStutterCountDisplay = 0;
     frameState_.tickCount = 0;
     frameState_.updateRequestCount = 0;
     frameState_.presentedFrameCount = 0;
@@ -522,6 +586,11 @@ void PreviewRuntime::noteTickForProfiling()
 {
     tickCountTotal_ += 1;
     frameState_.tickCount = tickCountTotal_;
+    PlaybackScopeAccumulator playbackScope;
+    playbackScope.active = activePlaybackProfiling_;
+    playbackScope.sumMs = &playbackTickIntervalSumMs_;
+    playbackScope.maxMs = &playbackTickIntervalMaxMs_;
+    playbackScope.sampleCount = &playbackTickIntervalSampleCount_;
     recordIntervalSample(
         tickTimer_,
         lastTickNs_,
@@ -531,8 +600,17 @@ void PreviewRuntime::noteTickForProfiling()
         tickIntervalSumMs_,
         tickIntervalMaxMs_,
         tickIntervalSampleCount_,
-        frameState_.tickFpsDisplay
+        frameState_.tickFpsDisplay,
+        playbackScope
     );
+    {
+        const double thresholdMs = kStutterMultiplier
+            * targetIntervalMsForStutterDetection(frameState_.framePacingTargetFps);
+        frameState_.tickMaxMsDisplay =
+            rollingMaxMs(tickIntervalsMs_, tickIntervalCount_);
+        frameState_.tickStutterCountDisplay = rollingStutterCount(
+            tickIntervalsMs_, tickIntervalCount_, thresholdMs);
+    }
 }
 
 void PreviewRuntime::notePresentedTextureStats(const PreviewTextureStats& stats)
@@ -629,12 +707,15 @@ void PreviewRuntime::notePresentedTextureStats(const PreviewTextureStats& stats)
     }
 }
 
-void PreviewRuntime::noteFixedTimerDeadlineMetrics(qint64 latenessNs, int catchupTicks, qint64 skippedIntervals)
+void PreviewRuntime::noteFixedTimerPacingMetrics(
+    qint64 latenessNs,
+    bool softLate,
+    bool hardResync,
+    qint64 presentMissedSlots)
 {
-    if (!miacode::debug_options::previewProfileOutputEnabled()) {
-        return;
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        profilingSummaryDirty_ = true;
     }
-    profilingSummaryDirty_ = true;
     if (latenessNs > 0) {
         const double latenessMs = static_cast<double>(latenessNs) / 1000000.0;
         fixedTimerLateWakeupCount_ += 1;
@@ -642,11 +723,206 @@ void PreviewRuntime::noteFixedTimerDeadlineMetrics(qint64 latenessNs, int catchu
         fixedTimerLatenessMaxMs_ = qMax(fixedTimerLatenessMaxMs_, latenessMs);
         fixedTimerLatenessSampleCount_ += 1;
     }
-    if (catchupTicks > 0) {
-        fixedTimerCatchupTickCount_ += catchupTicks;
+    if (softLate) {
+        fixedTimerSoftLateCount_ += 1;
     }
-    if (skippedIntervals > 0) {
-        fixedTimerSkippedIntervalCount_ += skippedIntervals;
+    if (hardResync) {
+        fixedTimerHardResyncCount_ += 1;
+    }
+    if (presentMissedSlots > 0) {
+        fixedTimerPresentMissedSlotCount_ += presentMissedSlots;
+    }
+}
+
+void PreviewRuntime::notePreviewClockMetrics(
+    double audioDeltaSeconds,
+    double visualDeltaSeconds,
+    double audioMinusFallbackSeconds,
+    bool hasAudioClock,
+    bool audioLargeStep,
+    bool visualLargeStep)
+{
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        profilingSummaryDirty_ = true;
+    }
+    if (hasAudioClock) {
+        if (qIsFinite(audioDeltaSeconds) && audioDeltaSeconds > 0.0) {
+            audioClockDeltaMaxMs_ = qMax(audioClockDeltaMaxMs_, audioDeltaSeconds * 1000.0);
+        }
+        if (qIsFinite(audioMinusFallbackSeconds)) {
+            const double deltaMs = audioMinusFallbackSeconds * 1000.0;
+            audioVsFallbackSumMs_ += deltaMs;
+            audioVsFallbackMaxAbsMs_ = qMax(audioVsFallbackMaxAbsMs_, qAbs(deltaMs));
+            audioVsFallbackSampleCount_ += 1;
+        }
+        if (audioLargeStep) {
+            audioClockLargeStepCount_ += 1;
+        }
+    }
+    if (visualLargeStep) {
+        visualTimeLargeStepCount_ += 1;
+    }
+    Q_UNUSED(visualDeltaSeconds);
+}
+
+void PreviewRuntime::noteFixedTimerHighResolutionRequest(bool requested)
+{
+    if (!requested || fixedTimerHighResRequested_) {
+        return;
+    }
+    fixedTimerHighResRequested_ = true;
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        profilingSummaryDirty_ = true;
+    }
+}
+
+void PreviewRuntime::noteFixedTimerHighResolutionBeginResult(bool ok)
+{
+    if (!ok || fixedTimerHighResBeginOk_) {
+        return;
+    }
+    fixedTimerHighResBeginOk_ = true;
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        profilingSummaryDirty_ = true;
+    }
+}
+
+void PreviewRuntime::noteFixedTimerHighResolutionStopState(bool activeAtStop)
+{
+    if (!activeAtStop || fixedTimerHighResActiveAtStop_) {
+        return;
+    }
+    fixedTimerHighResActiveAtStop_ = true;
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        profilingSummaryDirty_ = true;
+    }
+}
+
+void PreviewRuntime::notePreviewPacingTick(qint64 wallDeltaNs, double playheadDeltaSeconds, double speedRatio)
+{
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        profilingSummaryDirty_ = true;
+    }
+    if (qIsFinite(speedRatio) && speedRatio > 0.0) {
+        tickSpeedRatioMax_ = qMax(tickSpeedRatioMax_, speedRatio);
+        if (speedRatio > 1.5 && wallDeltaNs > 0 && playheadDeltaSeconds > 0.0) {
+            tickLargeStepCount_ += 1;
+        }
+    }
+}
+
+void PreviewRuntime::noteDisplayRefreshFrameRequest()
+{
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        profilingSummaryDirty_ = true;
+    }
+    displayRefreshRequestCount_ += 1;
+}
+
+void PreviewRuntime::noteDisplayRefreshFramePresentation(qint64 waitNs, bool matchedRequest)
+{
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        profilingSummaryDirty_ = true;
+    }
+    if (!matchedRequest) {
+        return;
+    }
+    displayRefreshPresentedAfterRequestCount_ += 1;
+    if (waitNs <= 0) {
+        return;
+    }
+    const double waitMs = static_cast<double>(waitNs) / 1000000.0;
+    displayRefreshPresentWaitSumMs_ += waitMs;
+    displayRefreshPresentWaitMaxMs_ = qMax(displayRefreshPresentWaitMaxMs_, waitMs);
+    displayRefreshPresentWaitSampleCount_ += 1;
+}
+
+void PreviewRuntime::noteDisplayRefreshWatchdogTimeout()
+{
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        profilingSummaryDirty_ = true;
+    }
+    displayRefreshWatchdogTimeoutCount_ += 1;
+}
+
+void PreviewRuntime::noteDisplayRefreshQueuedTick()
+{
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        profilingSummaryDirty_ = true;
+    }
+    displayRefreshQueuedTickCount_ += 1;
+}
+
+void PreviewRuntime::noteDisplayRefreshTimerFallbackTick()
+{
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        profilingSummaryDirty_ = true;
+    }
+    displayRefreshTimerFallbackTickCount_ += 1;
+}
+
+void PreviewRuntime::noteFixedGateVisualTick(qint64 gateWaitNs)
+{
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        profilingSummaryDirty_ = true;
+    }
+    fixedGateVisualTickCount_ += 1;
+    if (gateWaitNs > 0) {
+        const double waitMs = static_cast<double>(gateWaitNs) / 1000000.0;
+        fixedGatePresentGateWaitSumMs_ += waitMs;
+        fixedGatePresentGateWaitMaxMs_ = qMax(fixedGatePresentGateWaitMaxMs_, waitMs);
+        fixedGatePresentGateWaitSampleCount_ += 1;
+    }
+}
+
+void PreviewRuntime::noteFixedGatePresentWithoutTick(qint64 gateWaitNs)
+{
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        profilingSummaryDirty_ = true;
+    }
+    fixedGatePresentWithoutTickCount_ += 1;
+    Q_UNUSED(gateWaitNs);
+}
+
+void PreviewRuntime::noteFixedGateWatchdogKick()
+{
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        profilingSummaryDirty_ = true;
+    }
+    fixedGateWatchdogKickCount_ += 1;
+}
+
+void PreviewRuntime::noteFixedGateMissedTargetSlots(qint64 count)
+{
+    if (count <= 0) {
+        return;
+    }
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        profilingSummaryDirty_ = true;
+    }
+    fixedGateMissedTargetSlotsCount_ += count;
+}
+
+void PreviewRuntime::setActivePlaybackProfilingEnabled(bool enabled)
+{
+    if (activePlaybackProfiling_ == enabled) {
+        return;
+    }
+    activePlaybackProfiling_ = enabled;
+    if (enabled) {
+        // Reset playback-scope accumulators so pause gaps don't leak into the next run.
+        playbackPresentedFrameIntervalSumMs_ = 0.0;
+        playbackPresentedFrameIntervalMaxMs_ = 0.0;
+        playbackPresentedFrameIntervalSampleCount_ = 0;
+        playbackUpdateRequestIntervalSumMs_ = 0.0;
+        playbackUpdateRequestIntervalMaxMs_ = 0.0;
+        playbackUpdateRequestIntervalSampleCount_ = 0;
+        playbackTickIntervalSumMs_ = 0.0;
+        playbackTickIntervalMaxMs_ = 0.0;
+        playbackTickIntervalSampleCount_ = 0;
+    }
+    if (miacode::debug_options::previewProfileOutputEnabled()) {
+        profilingSummaryDirty_ = true;
     }
 }
 
@@ -679,6 +955,12 @@ void PreviewRuntime::resetProfilingSession()
     frameState_.fpsDisplay = 0.0;
     frameState_.tickFpsDisplay = 0.0;
     frameState_.updateRequestFpsDisplay = 0.0;
+    frameState_.presentMaxMsDisplay = 0.0;
+    frameState_.tickMaxMsDisplay = 0.0;
+    frameState_.updateRequestMaxMsDisplay = 0.0;
+    frameState_.presentStutterCountDisplay = 0;
+    frameState_.tickStutterCountDisplay = 0;
+    frameState_.updateRequestStutterCountDisplay = 0;
     frameState_.tickCount = 0;
     frameState_.updateRequestCount = 0;
     frameState_.presentedFrameCount = 0;
@@ -706,9 +988,47 @@ void PreviewRuntime::resetProfilingSession()
     fixedTimerLateWakeupCount_ = 0;
     fixedTimerCatchupTickCount_ = 0;
     fixedTimerSkippedIntervalCount_ = 0;
+    fixedTimerSoftLateCount_ = 0;
+    fixedTimerHardResyncCount_ = 0;
+    fixedTimerPresentMissedSlotCount_ = 0;
+    fixedTimerHighResRequested_ = false;
+    fixedTimerHighResBeginOk_ = false;
+    fixedTimerHighResActiveAtStop_ = false;
     fixedTimerLatenessSumMs_ = 0.0;
     fixedTimerLatenessMaxMs_ = 0.0;
     fixedTimerLatenessSampleCount_ = 0;
+    displayRefreshRequestCount_ = 0;
+    displayRefreshPresentedAfterRequestCount_ = 0;
+    displayRefreshWatchdogTimeoutCount_ = 0;
+    displayRefreshQueuedTickCount_ = 0;
+    displayRefreshTimerFallbackTickCount_ = 0;
+    displayRefreshPresentWaitSumMs_ = 0.0;
+    displayRefreshPresentWaitMaxMs_ = 0.0;
+    displayRefreshPresentWaitSampleCount_ = 0;
+    tickSpeedRatioMax_ = 0.0;
+    tickLargeStepCount_ = 0;
+    audioClockDeltaMaxMs_ = 0.0;
+    audioClockLargeStepCount_ = 0;
+    audioVsFallbackSumMs_ = 0.0;
+    audioVsFallbackMaxAbsMs_ = 0.0;
+    audioVsFallbackSampleCount_ = 0;
+    visualTimeLargeStepCount_ = 0;
+    playbackPresentedFrameIntervalSumMs_ = 0.0;
+    playbackPresentedFrameIntervalMaxMs_ = 0.0;
+    playbackPresentedFrameIntervalSampleCount_ = 0;
+    playbackUpdateRequestIntervalSumMs_ = 0.0;
+    playbackUpdateRequestIntervalMaxMs_ = 0.0;
+    playbackUpdateRequestIntervalSampleCount_ = 0;
+    playbackTickIntervalSumMs_ = 0.0;
+    playbackTickIntervalMaxMs_ = 0.0;
+    playbackTickIntervalSampleCount_ = 0;
+    fixedGateVisualTickCount_ = 0;
+    fixedGatePresentWithoutTickCount_ = 0;
+    fixedGatePresentGateWaitSumMs_ = 0.0;
+    fixedGatePresentGateWaitMaxMs_ = 0.0;
+    fixedGatePresentGateWaitSampleCount_ = 0;
+    fixedGateMissedTargetSlotsCount_ = 0;
+    fixedGateWatchdogKickCount_ = 0;
 }
 
 QString PreviewRuntime::writeProfilingSummaryToFile()
@@ -771,11 +1091,124 @@ QString PreviewRuntime::writeProfilingSummaryToFile()
     stream << "fixed_timer.lateness_max_ms=" << QString::number(fixedTimerLatenessMaxMs_, 'f', 4) << '\n';
     stream << "fixed_timer.catchup_ticks_total=" << fixedTimerCatchupTickCount_ << '\n';
     stream << "fixed_timer.skipped_intervals_total=" << fixedTimerSkippedIntervalCount_ << '\n';
+    stream << "fixed_timer.soft_late_total=" << fixedTimerSoftLateCount_ << '\n';
+    stream << "fixed_timer.hard_resync_total=" << fixedTimerHardResyncCount_ << '\n';
+    stream << "fixed_timer.present_missed_slots_total=" << fixedTimerPresentMissedSlotCount_ << '\n';
+    stream << "fixed_timer.high_res_resolution_enabled="
+           << (fixedTimerHighResBeginOk_ ? 1 : 0) << '\n';
+    stream << "fixed_timer.high_res_requested=" << (fixedTimerHighResRequested_ ? 1 : 0) << '\n';
+    stream << "fixed_timer.high_res_begin_ok=" << (fixedTimerHighResBeginOk_ ? 1 : 0) << '\n';
+    stream << "fixed_timer.high_res_active_at_stop=" << (fixedTimerHighResActiveAtStop_ ? 1 : 0) << '\n';
+    stream << "logic.skipped_ticks_total=0" << '\n';
     stream << "frame_pacing.mode="
            << (frameState_.framePacingUsesDisplayRefresh ? "display_refresh" : "fixed_interval") << '\n';
     stream << "frame_pacing.target_fps=" << QString::number(frameState_.framePacingTargetFps, 'f', 4) << '\n';
     stream << "frame_pacing.display_refresh_rate=" << QString::number(frameState_.displayRefreshRate, 'f', 4)
            << '\n';
+    stream << "display_refresh.requests_total=" << displayRefreshRequestCount_ << '\n';
+    stream << "display_refresh.presented_after_request_total="
+           << displayRefreshPresentedAfterRequestCount_ << '\n';
+    stream << "display_refresh.watchdog_timeouts_total=" << displayRefreshWatchdogTimeoutCount_ << '\n';
+    stream << "display_refresh.queued_ticks_total=" << displayRefreshQueuedTickCount_ << '\n';
+    stream << "display_refresh.timer_fallback_ticks_total="
+           << displayRefreshTimerFallbackTickCount_ << '\n';
+    stream << "display_refresh.present_wait_avg_ms="
+           << QString::number(
+                  averageOrZero(displayRefreshPresentWaitSumMs_, displayRefreshPresentWaitSampleCount_),
+                  'f',
+                  4
+              )
+           << '\n';
+    stream << "display_refresh.present_wait_max_ms="
+           << QString::number(displayRefreshPresentWaitMaxMs_, 'f', 4) << '\n';
+    stream << "tick.speed_ratio_max=" << QString::number(tickSpeedRatioMax_, 'f', 4) << '\n';
+    stream << "tick.large_step_count=" << tickLargeStepCount_ << '\n';
+    stream << "audio_clock.delta_max_ms=" << QString::number(audioClockDeltaMaxMs_, 'f', 4) << '\n';
+    stream << "audio_clock.large_step_total=" << audioClockLargeStepCount_ << '\n';
+    stream << "audio_clock.audio_vs_fallback_avg_ms="
+           << QString::number(averageOrZero(audioVsFallbackSumMs_, audioVsFallbackSampleCount_), 'f', 4)
+           << '\n';
+    stream << "audio_clock.audio_vs_fallback_max_abs_ms="
+           << QString::number(audioVsFallbackMaxAbsMs_, 'f', 4) << '\n';
+    stream << "visual_time.large_step_total=" << visualTimeLargeStepCount_ << '\n';
+    const double playbackPresentAvgMs =
+        averageOrZero(playbackPresentedFrameIntervalSumMs_, playbackPresentedFrameIntervalSampleCount_);
+    const double playbackUpdateRequestAvgMs =
+        averageOrZero(playbackUpdateRequestIntervalSumMs_, playbackUpdateRequestIntervalSampleCount_);
+    const double playbackTickAvgMs =
+        averageOrZero(playbackTickIntervalSumMs_, playbackTickIntervalSampleCount_);
+    stream << "playback_present_samples=" << playbackPresentedFrameIntervalSampleCount_ << '\n';
+    stream << "playback_present_avg_ms=" << QString::number(playbackPresentAvgMs, 'f', 4) << '\n';
+    stream << "playback_present_max_ms=" << QString::number(playbackPresentedFrameIntervalMaxMs_, 'f', 4)
+           << '\n';
+    stream << "playback_present_fps=" << QString::number(fpsFromAverageMs(playbackPresentAvgMs), 'f', 4)
+           << '\n';
+    stream << "playback_update_request_samples=" << playbackUpdateRequestIntervalSampleCount_ << '\n';
+    stream << "playback_update_request_avg_ms=" << QString::number(playbackUpdateRequestAvgMs, 'f', 4)
+           << '\n';
+    stream << "playback_update_request_max_ms="
+           << QString::number(playbackUpdateRequestIntervalMaxMs_, 'f', 4) << '\n';
+    stream << "playback_update_request_fps="
+           << QString::number(fpsFromAverageMs(playbackUpdateRequestAvgMs), 'f', 4) << '\n';
+    stream << "playback_tick_samples=" << playbackTickIntervalSampleCount_ << '\n';
+    stream << "playback_tick_avg_ms=" << QString::number(playbackTickAvgMs, 'f', 4) << '\n';
+    stream << "playback_tick_max_ms=" << QString::number(playbackTickIntervalMaxMs_, 'f', 4) << '\n';
+    stream << "playback_tick_fps=" << QString::number(fpsFromAverageMs(playbackTickAvgMs), 'f', 4)
+           << '\n';
+    stream << "fixed_gate.visual_ticks_total=" << fixedGateVisualTickCount_ << '\n';
+    stream << "fixed_gate.present_without_tick_total=" << fixedGatePresentWithoutTickCount_ << '\n';
+    stream << "fixed_gate.present_gate_wait_avg_ms="
+           << QString::number(
+                  averageOrZero(fixedGatePresentGateWaitSumMs_, fixedGatePresentGateWaitSampleCount_),
+                  'f',
+                  4
+              )
+           << '\n';
+    stream << "fixed_gate.present_gate_wait_max_ms="
+           << QString::number(fixedGatePresentGateWaitMaxMs_, 'f', 4) << '\n';
+    stream << "fixed_gate.missed_target_slots_total=" << fixedGateMissedTargetSlotsCount_ << '\n';
+    stream << "fixed_gate.watchdog_kick_total=" << fixedGateWatchdogKickCount_ << '\n';
+    {
+        // Async log writer overhead. Caller-thread cost is `log_writer.max_enqueue_ms` —
+        // anything well under 1ms means logging is not on the hot path. The `total_io_ms`
+        // and `worker_max_batch_ms` figures live on the worker thread and reflect the
+        // actual file I/O cost, which doesn't block GUI/render frames.
+        const miacode::debug_log::LogWriterStats logStats =
+            miacode::debug_log::logWriterStatsSnapshot();
+        const auto nsToMs = [](quint64 ns) {
+            return static_cast<double>(ns) / 1000000.0;
+        };
+        stream << "log_writer.async_enabled=" << (logStats.asyncEnabled ? 1 : 0) << '\n';
+        stream << "log_writer.worker_running=" << (logStats.workerRunning ? 1 : 0) << '\n';
+        stream << "log_writer.enqueued_total=" << logStats.enqueuedCount << '\n';
+        stream << "log_writer.written_total=" << logStats.writtenCount << '\n';
+        stream << "log_writer.dropped_total=" << logStats.droppedCount << '\n';
+        stream << "log_writer.queue_size_current=" << logStats.currentQueueSize << '\n';
+        stream << "log_writer.queue_size_peak=" << logStats.peakQueueSize << '\n';
+        stream << "log_writer.max_enqueue_ms="
+               << QString::number(nsToMs(logStats.maxEnqueueTimeNs), 'f', 4) << '\n';
+        stream << "log_writer.worker_max_batch_ms="
+               << QString::number(nsToMs(logStats.maxBatchTimeNs), 'f', 4) << '\n';
+        stream << "log_writer.worker_total_io_ms="
+               << QString::number(nsToMs(logStats.totalIoTimeNs), 'f', 4) << '\n';
+    }
+    {
+        // MMCSS (Windows multimedia scheduler) registration status. Surfaced here because
+        // the original mmcss_register log line lives in the runtime debug log, which gets
+        // trimmed mid-session — but the summary file is rewritten in full and never
+        // truncated, so this is the reliable place to confirm MMCSS actually took.
+        const miacode::mmcss::LastRegistrationStatus mmStatus =
+            miacode::mmcss::lastRegistrationStatus();
+        stream << "mmcss.ever_attempted=" << (mmStatus.everAttempted ? 1 : 0) << '\n';
+        stream << "mmcss.ever_registered=" << (mmStatus.everRegistered ? 1 : 0) << '\n';
+        stream << "mmcss.last_task_class="
+               << (mmStatus.lastTaskClass.isEmpty() ? QStringLiteral("(none)") : mmStatus.lastTaskClass)
+               << '\n';
+        stream << "mmcss.last_skip_reason="
+               << (mmStatus.lastSkipReason.isEmpty() ? QStringLiteral("(ok)") : mmStatus.lastSkipReason)
+               << '\n';
+        stream << "mmcss.last_errno=" << mmStatus.lastErrorCode << '\n';
+    }
     stream << "ratio.present_per_tick="
            << QString::number(
                   tickCountTotal_ > 0
@@ -983,6 +1416,11 @@ void PreviewRuntime::refreshAssetStateFromRepository()
 
 void PreviewRuntime::updatePresentedFrameStats()
 {
+    PlaybackScopeAccumulator playbackScope;
+    playbackScope.active = activePlaybackProfiling_;
+    playbackScope.sumMs = &playbackPresentedFrameIntervalSumMs_;
+    playbackScope.maxMs = &playbackPresentedFrameIntervalMaxMs_;
+    playbackScope.sampleCount = &playbackPresentedFrameIntervalSampleCount_;
     recordIntervalSample(
         presentTimer_,
         lastPresentedNs_,
@@ -992,8 +1430,17 @@ void PreviewRuntime::updatePresentedFrameStats()
         presentedFrameIntervalSumMs_,
         presentedFrameIntervalMaxMs_,
         presentedFrameIntervalSampleCount_,
-        frameState_.fpsDisplay
+        frameState_.fpsDisplay,
+        playbackScope
     );
+    {
+        const double thresholdMs = kStutterMultiplier
+            * targetIntervalMsForStutterDetection(frameState_.framePacingTargetFps);
+        frameState_.presentMaxMsDisplay =
+            rollingMaxMs(presentedFrameIntervalsMs_, presentedFrameIntervalCount_);
+        frameState_.presentStutterCountDisplay = rollingStutterCount(
+            presentedFrameIntervalsMs_, presentedFrameIntervalCount_, thresholdMs);
+    }
     frameState_.usedGpuRendererThisFrame = true;
     frameState_.cpuFallbackCount = 0;
 }

@@ -81,6 +81,11 @@ private:
     void clearCachedTextures();
 
     QQuickWindow* window_ = nullptr;
+    // L1 cache: keyed by image.cacheKey() (fast path for re-using the same QImage instance).
+    // Maps the fast cache key to the de-duplicated content-fingerprint key in cachedTextures_.
+    QHash<quint64, quint64> cachedKeyToFingerprint_;
+    // L2 cache: keyed by content fingerprint (collapses visually-identical QImage instances
+    // that originate from different sources but represent the same texture).
     QHash<quint64, QSGTexture*> cachedTextures_;
     QHash<quint64, qint64> cachedTextureBytesByKey_;
     QHash<quint64, QSGTexture*> transientTextures_;

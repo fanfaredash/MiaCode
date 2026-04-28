@@ -9,8 +9,10 @@
 #include "common/DebugOptions.h"
 #include "common/DebugLog.h"
 #include "mainwindow/MainWindow.h"
+#include "preview/dcomp/PreviewDCompSurface.h"
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
 #include "preview/quick_scene/PreviewQuickSceneRoot.h"
+#include "preview/runtime/PreviewRuntime.h"
 #include "timeline/quick/TimelineQuickItem.h"
 
 #include <QApplication>
@@ -386,6 +388,31 @@ bool QuickShellBootstrap::start()
         rootWindowNativeHwnd_ = static_cast<quintptr>(window->winId());
 #endif
         window->installEventFilter(this);
+
+        // Phase 1 of the DComp preview path. Opt-in via
+        // MIACODE_PREVIEW_USE_DCOMP=1. Renders a red test rectangle in the
+        // top-left of the window to verify the DComp visual tree attaches
+        // and resizes correctly. Attached lazily on first sceneGraphInitialized
+        // (handled inside attachToWindow). Phase 4+ replaces the fixed
+        // top-left placement with placeholder-driven geometry.
+        if (miacode::debug_options::previewUseDCompEnabled()) {
+            previewDCompSurface_ =
+                std::make_unique<miacode::preview::dcomp::PreviewDCompSurface>(this);
+            previewDCompSurface_->attachToWindow(window);
+            // Phase 3.2: connect the surface to the PreviewRuntime so the
+            // render thread can read playhead state. controller_ exposes
+            // it as a generic QObject* (the QML-property accessor); cast
+            // back to PreviewRuntime for the typed setRuntime call.
+            if (controller_ != nullptr) {
+                if (auto* runtime = qobject_cast<PreviewRuntime*>(
+                        controller_->previewRuntime()); runtime != nullptr) {
+                    previewDCompSurface_->setRuntime(runtime);
+                }
+            }
+            appendQuickShellRuntimeLog(
+                QStringLiteral("dcomp_surface_attached"),
+                QStringLiteral("phase=3.2 reason=env_flag"));
+        }
         if (surfaceHost_ != nullptr) {
             surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
         }
@@ -906,6 +933,14 @@ void QuickShellBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QStrin
         if (!pointer) {
             return;
         }
+        // Bracket-log around the destructor so that if .reset() crashes, we can tell which
+        // pointer was being torn down from the last logged "enter" line.
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("close_timing/quick_shell"),
+            QStringLiteral("action=%1_enter").arg(step),
+            true
+        );
         QElapsedTimer timer;
         timer.start();
         pointer.reset();

@@ -1,5 +1,6 @@
 #include "preview/quick_scene/PreviewQuickHudLayer.h"
 
+#include "common/DebugOptions.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/scene/PreviewFrameState.h"
 #include "preview/scene/PreviewHudState.h"
@@ -9,6 +10,7 @@
 #include <QFontMetrics>
 #include <QPainter>
 #include <QQuickWindow>
+#include <QTimer>
 
 namespace {
 
@@ -30,17 +32,58 @@ void drawHudText(QPainter& painter, const QPointF& baseline, const QString& text
 
 }  // namespace
 
+// Min interval between HUD repaints. The HUD shows FPS/max-ms/stutter
+// counts which are statistical aggregates over a ~1s rolling window —
+// updating their visual presentation at ~10Hz is indistinguishable to the
+// eye from updating at 60Hz, but cuts the QSG sync cost by 6× because the
+// QQuickPaintedItem only re-rasterises its full-area backing texture on
+// actual update() calls. Empirically observed to drop the QSG sync phase
+// from ~7.8ms/frame to ~2-3ms on the test chart.
+constexpr qint64 kHudUpdateIntervalMs = 100;
+
 PreviewQuickHudLayer::PreviewQuickHudLayer(QQuickItem* parent)
     : QQuickPaintedItem(parent)
 {
     setOpaquePainting(false);
     setAntialiasing(true);
+    hudUpdateThrottleTimer_.start();
     connect(this, &QQuickItem::windowChanged, this, [this](QQuickWindow*) {
         if (runtime_ != nullptr) {
             runtime_->setFrameSize(boundingRect().size().toSize());
         }
         update();
     });
+}
+
+void PreviewQuickHudLayer::requestThrottledUpdate()
+{
+    if (!hudUpdateThrottleTimer_.isValid()) {
+        hudUpdateThrottleTimer_.start();
+    }
+    const qint64 nowMs = hudUpdateThrottleTimer_.elapsed();
+    if (lastHudUpdateMs_ < 0 || (nowMs - lastHudUpdateMs_) >= kHudUpdateIntervalMs) {
+        lastHudUpdateMs_ = nowMs;
+        hudUpdatePending_ = false;
+        update();
+        return;
+    }
+    // Inside the throttle window — schedule a single deferred update so the
+    // last frameStateChanged in the window still produces a visible refresh
+    // (otherwise a burst of changes ending at the start of the window would
+    // never repaint until the next frameStateChanged after the window
+    // closes, leaving stale text on screen).
+    if (!hudUpdatePending_) {
+        hudUpdatePending_ = true;
+        const qint64 delayMs = kHudUpdateIntervalMs - (nowMs - lastHudUpdateMs_);
+        QTimer::singleShot(qMax<qint64>(1, delayMs), this, [this]() {
+            if (!hudUpdatePending_) {
+                return;
+            }
+            lastHudUpdateMs_ = hudUpdateThrottleTimer_.elapsed();
+            hudUpdatePending_ = false;
+            update();
+        });
+    }
 }
 
 void PreviewQuickHudLayer::setRuntime(PreviewRuntime* runtime)
@@ -54,9 +97,11 @@ void PreviewQuickHudLayer::setRuntime(PreviewRuntime* runtime)
     runtime_ = runtime;
     if (runtime_ != nullptr) {
         frameState_ = nullptr;
-        runtimeUpdateConnection_ = QObject::connect(runtime_, &PreviewRuntime::frameStateChanged, this, [this]() {
-            update();
-        });
+        if (!miacode::debug_options::previewDCompQuiesceQsgEnabled()) {
+            runtimeUpdateConnection_ = QObject::connect(runtime_, &PreviewRuntime::frameStateChanged, this, [this]() {
+                requestThrottledUpdate();
+            });
+        }
         runtime_->setFrameSize(boundingRect().size().toSize());
     }
     emit runtimeChanged();
@@ -96,24 +141,46 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
     if (painter == nullptr) {
         return;
     }
-
+    // Phase 4b — when DComp-exclusive mode is on, the HUD is rendered
+    // by PreviewDCompSurface via the same paintPreviewHudOverlay
+    // helper into an offscreen QImage and uploaded as a DComp sprite.
+    // Skipping QSG paint here avoids the redundant QQuickPaintedItem
+    // texture upload that was the last QSG cost the user flagged as
+    // perf-relevant.
+    if (miacode::debug_options::previewDCompExclusiveEnabled()) {
+        return;
+    }
     const miacode::preview::scene::PreviewFrameState* state = nullptr;
     if (runtime_ != nullptr) {
         state = &runtime_->frameState();
     } else {
         state = frameState_;
     }
-    if (state == nullptr
-        || !miacode::preview::scene::previewRenderLayerEnabled(
-            layerFlags_,
-            miacode::preview::scene::HudLayer)) {
+    if (state == nullptr) {
+        return;
+    }
+    miacode::preview::hud::paintPreviewHudOverlay(
+        *painter, *state, boundingRect().size().toSize(), layerFlags_);
+}
+
+namespace miacode::preview::hud {
+
+void paintPreviewHudOverlay(
+    QPainter& painter,
+    const miacode::preview::scene::PreviewFrameState& stateRef,
+    const QSize& canvasSize,
+    miacode::preview::scene::PreviewRenderLayerFlags layerFlags)
+{
+    const auto* state = &stateRef;
+    if (!miacode::preview::scene::previewRenderLayerEnabled(
+            layerFlags, miacode::preview::scene::HudLayer)) {
         return;
     }
     if (!state->render.showTimestamp && !state->render.showDebugInfo && !state->render.showObjectStatsHud) {
         return;
     }
 
-    const QRectF stageRect = miacode::preview::scene::stageRectForSize(boundingRect().size().toSize());
+    const QRectF stageRect = miacode::preview::scene::stageRectForSize(canvasSize);
     constexpr qreal kHudReferenceShortSide = 1024.0;
     constexpr qreal kHudReferencePadding = 18.0;
     constexpr int kHudReferenceDebugFontPointSize = 13;
@@ -142,7 +209,7 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
         int lineIndex = 0;
         const auto drawDebugLine = [&](const QString& text) {
             drawHudText(
-                *painter,
+                painter,
                 QPointF(leftX, baseline0 + metrics.height() * lineIndex),
                 text,
                 fpsFont,
@@ -156,13 +223,29 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
                 .arg(state->usedGpuRendererThisFrame ? QStringLiteral("GPU") : QStringLiteral("CPU"))
                 .arg(state->cpuFallbackCount)
         );
+        // The trailing max=Nms and stut=N metrics surface what an FPS average
+        // hides: max is the worst single inter-event interval in the rolling
+        // window, stut is the count of intervals exceeding 1.5× the target
+        // (i.e. user-noticeable hitches). A clean 60fps line should show
+        // max≈17ms stut=0; numbers above that are the actual lag the user
+        // perceives even when the FPS figure looks healthy.
         drawDebugLine(
-            QStringLiteral("Present: %1 FPS").arg(QString::number(state->fpsDisplay, 'f', 1))
+            QStringLiteral("Present: %1 FPS  max=%2ms  stut=%3")
+                .arg(QString::number(state->fpsDisplay, 'f', 1))
+                .arg(QString::number(state->presentMaxMsDisplay, 'f', 0))
+                .arg(state->presentStutterCountDisplay)
         );
         drawDebugLine(
-            QStringLiteral("Tick: %1 FPS  Req: %2 FPS")
+            QStringLiteral("Tick: %1 FPS  max=%2ms  stut=%3")
                 .arg(QString::number(state->tickFpsDisplay, 'f', 1))
+                .arg(QString::number(state->tickMaxMsDisplay, 'f', 0))
+                .arg(state->tickStutterCountDisplay)
+        );
+        drawDebugLine(
+            QStringLiteral("Req: %1 FPS  max=%2ms  stut=%3")
                 .arg(QString::number(state->updateRequestFpsDisplay, 'f', 1))
+                .arg(QString::number(state->updateRequestMaxMsDisplay, 'f', 0))
+                .arg(state->updateRequestStutterCountDisplay)
         );
         drawDebugLine(
             QStringLiteral("Count T/U/P: %1 / %2 / %3")
@@ -190,14 +273,14 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
                 break;
             }
             drawHudText(
-                *painter,
+                painter,
                 QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
                 QStringLiteral("Media: external/%1").arg(mediaType),
                 fpsFont,
                 shadowOffset
             );
             drawHudText(
-                *painter,
+                painter,
                 QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
                 QStringLiteral("Video: %1  Delta: %2 s")
                     .arg(
@@ -213,7 +296,7 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
                 ? QString::number(state->media.externalVideoFrameAgeMs)
                 : QStringLiteral("na");
             drawHudText(
-                *painter,
+                painter,
                 QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
                 QStringLiteral("Age: %1 ms  AvgInt: %2  MaxInt: %3")
                     .arg(frameAgeText)
@@ -223,7 +306,7 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
                 shadowOffset
             );
             drawHudText(
-                *painter,
+                painter,
                 QPointF(leftX, baseline0 + metrics.height() * lineIndex++),
                 QStringLiteral("Stall: %1  Count: %2  MediaT: %3 s")
                     .arg(state->media.externalVideoFrameStalled ? QStringLiteral("yes") : QStringLiteral("no"))
@@ -249,7 +332,7 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
         const qreal timestampBottomExtraInset =
             insetTimestampForAspect ? (static_cast<qreal>(timeMetrics.lineSpacing()) * 0.5) : 0.0;
         drawHudText(
-            *painter,
+            painter,
             QPointF(
                 stageRect.left() + hudPadding + positiveTimeExtraInset,
                 stageRect.bottom() - hudPadding - timestampBottomExtraInset
@@ -366,19 +449,21 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
 
     const qreal shadowOffset = qMax<qreal>(1.0, 2.0 * hudScale);
     qreal baseline = blockTop + titleMetrics.ascent();
-    drawHudText(*painter, QPointF(blockLeft, baseline), QStringLiteral("FiNALE Rate:"), titleFont, shadowOffset);
+    drawHudText(painter, QPointF(blockLeft, baseline), QStringLiteral("FiNALE Rate:"), titleFont, shadowOffset);
     baseline += titleMetrics.descent() + headerGap + rateMetrics.ascent();
-    drawHudText(*painter, QPointF(blockLeft, baseline), statLines.at(0), rateFont, shadowOffset);
+    drawHudText(painter, QPointF(blockLeft, baseline), statLines.at(0), rateFont, shadowOffset);
     baseline += rateMetrics.descent() + sectionGap + titleMetrics.ascent();
-    drawHudText(*painter, QPointF(blockLeft, baseline), QStringLiteral("DELUXE Rate:"), titleFont, shadowOffset);
+    drawHudText(painter, QPointF(blockLeft, baseline), QStringLiteral("DELUXE Rate:"), titleFont, shadowOffset);
     baseline += titleMetrics.descent() + headerGap + rateMetrics.ascent();
-    drawHudText(*painter, QPointF(blockLeft, baseline), rateLine, rateFont, shadowOffset);
+    drawHudText(painter, QPointF(blockLeft, baseline), rateLine, rateFont, shadowOffset);
     baseline += rateMetrics.descent() + sectionGap + statMetrics.ascent();
     for (int i = 1; i < statLines.size(); ++i) {
         if (i > 1) {
             baseline += statGap + statMetrics.leading();
         }
-        drawHudText(*painter, QPointF(blockLeft, baseline), statLines.at(i), statFont, shadowOffset);
+        drawHudText(painter, QPointF(blockLeft, baseline), statLines.at(i), statFont, shadowOffset);
         baseline += statMetrics.height();
     }
 }
+
+}  // namespace miacode::preview::hud

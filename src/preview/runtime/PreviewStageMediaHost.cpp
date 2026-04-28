@@ -778,12 +778,22 @@ void PreviewStageMediaHost::syncPlayback(double seconds)
 
     lastTimelineSecond_ = qMax(0.0, seconds);
     if (!videoPlaybackPendingStart_) {
-        if (videoPlaybackActive_ && playerPlaybackState(player_) != QMediaPlayer::PlayingState) {
+        const bool wasPlaying = playerPlaybackState(player_) == QMediaPlayer::PlayingState;
+        bool transitioned = false;
+        if (videoPlaybackActive_ && !wasPlaying) {
             player_->play();
+            transitioned = true;
         }
         updateClockDelta();
-        updateVideoFrameStallState(true);
-        emit diagnosticsChanged();
+        const bool stallStateChanged = updateVideoFrameStallState(true);
+        // Steady-state syncPlayback is called every preview tick (~60/s). Emitting
+        // diagnosticsChanged unconditionally here fans out to refreshPreviewStageMediaRouteDebugState
+        // which re-pushes media stats into frameState on every tick even though values seldom change.
+        // Limit the emission to actual state transitions; other paths (noteVideoFrameArrived,
+        // pause, recover, stall transitions) continue to emit when something genuinely changed.
+        if (transitioned || stallStateChanged) {
+            emit diagnosticsChanged();
+        }
         return;
     }
 
@@ -1554,7 +1564,7 @@ void PreviewStageMediaHost::resetVideoFrameDiagnostics()
     videoFrameStalled_ = false;
 }
 
-void PreviewStageMediaHost::updateVideoFrameStallState(bool logTransition)
+bool PreviewStageMediaHost::updateVideoFrameStallState(bool logTransition)
 {
     const qint64 ageMs = currentVideoFrameAgeForDiagnosticsMs();
     const bool stalled =
@@ -1563,14 +1573,14 @@ void PreviewStageMediaHost::updateVideoFrameStallState(bool logTransition)
         && ageMs >= 0
         && ageMs >= videoFrameStallThresholdMs();
     if (videoFrameStalled_ == stalled) {
-        return;
+        return false;
     }
     videoFrameStalled_ = stalled;
     if (videoFrameStalled_) {
         videoFrameStallCount_ += 1;
     }
     if (!logTransition) {
-        return;
+        return true;
     }
     appendPreviewStageMediaLog(
         videoFrameStalled_ ? QStringLiteral("video_frame_stall_begin") : QStringLiteral("video_frame_stall_end"),
@@ -1587,6 +1597,7 @@ void PreviewStageMediaHost::updateVideoFrameStallState(bool logTransition)
     if (videoFrameStalled_) {
         scheduleVideoPlaybackWatchdog(QStringLiteral("frame_stall"));
     }
+    return true;
 }
 
 qint64 PreviewStageMediaHost::currentVideoFrameAgeForDiagnosticsMs() const

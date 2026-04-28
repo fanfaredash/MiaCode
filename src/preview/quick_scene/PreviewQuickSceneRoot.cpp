@@ -2,12 +2,15 @@
 
 #include "common/DebugOptions.h"
 #include "common/DebugLog.h"
+#include "common/Mmcss.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/scene/PreviewFrameState.h"
 #include "preview/scene/PreviewPreparedSceneCache.h"
 
+#include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QAtomicInteger>
+#include <QMetaObject>
 #include <QMutexLocker>
 #include <QQuickWindow>
 #include <QSGNode>
@@ -140,6 +143,11 @@ PreviewQuickSceneRoot::PreviewQuickSceneRoot(QQuickItem* parent)
     , instanceId_(nextPreviewQuickSceneRootInstanceId())
 {
     setFlag(ItemHasContents, true);
+    // Phase 4a — let PreviewDCompSurface auto-discover this item via
+    // QObject::findChild on the QQuickWindow. Decoupled from the
+    // dcomp/ side: surface looks up by objectName instead of taking a
+    // direct dependency on PreviewQuickSceneRoot's type.
+    setObjectName(QStringLiteral("preview_dcomp_track_target"));
     appendQuickSceneLog(
         QStringLiteral("scene_root_construct"),
         QString("%1 item_visible=%2")
@@ -219,9 +227,11 @@ void PreviewQuickSceneRoot::setRuntime(PreviewRuntime* runtime)
     runtime_ = runtime;
     if (runtime_ != nullptr) {
         frameState_ = nullptr;
-        runtimeUpdateConnection_ = QObject::connect(runtime_, &PreviewRuntime::frameStateChanged, this, [this]() {
-            update();
-        });
+        if (!miacode::debug_options::previewDCompQuiesceQsgEnabled()) {
+            runtimeUpdateConnection_ = QObject::connect(runtime_, &PreviewRuntime::frameStateChanged, this, [this]() {
+                update();
+            });
+        }
         runtime_->setFrameSize(boundingRect().size().toSize());
     }
     syncVisibleHostWindowBinding("set_runtime");
@@ -387,6 +397,30 @@ void PreviewQuickSceneRoot::syncVisibleHostWindowBinding(const char* reason)
             .arg(boundWindow_->isVisible() ? 1 : 0)
             .arg(pointerHex(runtime_))
     );
+    {
+        // One-time log of which graphics API Qt actually settled on. The static enum is
+        // available here even before sceneGraphInitialized fires; the matching driver
+        // string requires QRhi which may not exist yet — query lazily on first present.
+        const QSGRendererInterface* iface = boundWindow_->rendererInterface();
+        const auto apiToString = [](QSGRendererInterface::GraphicsApi api) -> QString {
+            switch (api) {
+                case QSGRendererInterface::Direct3D11: return QStringLiteral("Direct3D11");
+                case QSGRendererInterface::Direct3D12: return QStringLiteral("Direct3D12");
+                case QSGRendererInterface::OpenGL:     return QStringLiteral("OpenGL");
+                case QSGRendererInterface::Vulkan:     return QStringLiteral("Vulkan");
+                case QSGRendererInterface::Metal:      return QStringLiteral("Metal");
+                case QSGRendererInterface::Software:   return QStringLiteral("Software");
+                case QSGRendererInterface::Unknown:    return QStringLiteral("Unknown");
+                default:                               return QStringLiteral("OtherEnum");
+            }
+        };
+        appendQuickSceneLog(
+            QStringLiteral("rhi_backend"),
+            QString("graphics_api=%1 enum=%2")
+                .arg(iface != nullptr ? apiToString(iface->graphicsApi()) : QStringLiteral("(null)"))
+                .arg(iface != nullptr ? static_cast<int>(iface->graphicsApi()) : -1)
+        );
+    }
     runtime_->setVisibleHostWindow(boundWindow_);
     windowVisibilityConnection_ = QObject::connect(boundWindow_, &QWindow::visibilityChanged, this, [this](QWindow::Visibility) {
         syncVisibleHostWindowBinding("window_visibility_changed");
@@ -401,11 +435,108 @@ void PreviewQuickSceneRoot::syncVisibleHostWindowBinding(const char* reason)
         }
         runtime_->notifyVisibleFramePresented();
     });
+    // Register Qt's QSG render thread with Windows MMCSS (Multimedia Class Scheduler
+    // Service) under the "Games" task class. This asks the OS scheduler to protect the
+    // thread from being preempted by background work — the standard fix used by every
+    // native rhythm game and DAW on Windows for the same bimodal-stall pattern we're
+    // hitting (render thread occasionally gets scheduled out for a full quantum, surfacing
+    // as render_submit_ms = 22ms with pre_render_wait_ms ≈ 0).
+    //
+    // We hook beforeSynchronizing rather than sceneGraphInitialized because the latter
+    // fires once and we may have already missed it by the time syncVisibleHostWindowBinding
+    // runs (depending on QML construction order and when the scene graph spins up).
+    // beforeSynchronizing fires every frame on the render thread, so the first invocation
+    // after our connection is a guaranteed-on-render-thread checkpoint. The atomic guard
+    // ensures we only call into Win32 once per scene-graph lifetime; the lambda becomes a
+    // single atomic load + early return on every subsequent frame.
+    mmcssRegistrationAttempted_.store(false, std::memory_order_relaxed);
+    mmcssBootstrapConnection_ = QObject::connect(
+        boundWindow_, &QQuickWindow::beforeSynchronizing, this,
+        [this]() {
+            bool expected = false;
+            if (!mmcssRegistrationAttempted_.compare_exchange_strong(
+                    expected, true, std::memory_order_acq_rel)) {
+                return;
+            }
+            const miacode::mmcss::RegistrationResult result =
+                miacode::mmcss::registerCurrentThread(QStringLiteral("Games"));
+            appendQuickSceneLog(
+                QStringLiteral("mmcss_register"),
+                QString("registered=%1 task_class=%2 reason=%3 errno=%4")
+                    .arg(result.registered ? 1 : 0)
+                    .arg(result.taskClassUsed.isEmpty() ? QStringLiteral("(none)") : result.taskClassUsed)
+                    .arg(result.skipReason.isEmpty() ? QStringLiteral("(ok)") : result.skipReason)
+                    .arg(result.lastErrorCode));
+        },
+        Qt::DirectConnection);
+    // sceneGraphInvalidated runs on the render thread before it shuts down (e.g. window
+    // hide). Unregister so the OS releases its MMCSS reservation; reset the guard so a
+    // subsequent rebind picks up MMCSS again on the new render thread.
+    sceneGraphInvalidatedConnection_ = QObject::connect(
+        boundWindow_, &QQuickWindow::sceneGraphInvalidated, this,
+        [this]() {
+            miacode::mmcss::unregisterCurrentThread();
+            mmcssRegistrationAttempted_.store(false, std::memory_order_release);
+        },
+        Qt::DirectConnection);
+    if (miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
+        // Direct-connected render-thread hooks. Qt Quick's threaded render loop runs
+        // beforeSynchronizing → afterSynchronizing → beforeRendering → afterRendering → frameSwapped
+        // in order on the render thread (updatePaintNode also runs on that thread, before this chain).
+        // Timing each phase lets us break the cycle wall_ms into: paint-node build, sync handoff,
+        // render command submission, GPU execute + vsync wait.
+        if (!renderPhaseTimer_.isValid()) {
+            renderPhaseTimer_.start();
+        }
+        renderBeforeSyncConnection_ = QObject::connect(
+            boundWindow_, &QQuickWindow::beforeSynchronizing, this,
+            [this]() { renderPhaseSyncStartNs_ = renderPhaseTimer_.nsecsElapsed(); },
+            Qt::DirectConnection);
+        renderAfterSyncConnection_ = QObject::connect(
+            boundWindow_, &QQuickWindow::afterSynchronizing, this,
+            [this]() { renderPhaseSyncEndNs_ = renderPhaseTimer_.nsecsElapsed(); },
+            Qt::DirectConnection);
+        renderBeforeRenderConnection_ = QObject::connect(
+            boundWindow_, &QQuickWindow::beforeRendering, this,
+            [this]() { renderPhaseRenderStartNs_ = renderPhaseTimer_.nsecsElapsed(); },
+            Qt::DirectConnection);
+        renderAfterRenderConnection_ = QObject::connect(
+            boundWindow_, &QQuickWindow::afterRendering, this,
+            [this]() { renderPhaseRenderEndNs_ = renderPhaseTimer_.nsecsElapsed(); },
+            Qt::DirectConnection);
+        renderFrameSwapProfileConnection_ = QObject::connect(
+            boundWindow_, &QQuickWindow::frameSwapped, this,
+            [this]() { recordRenderPhaseProfile(); },
+            Qt::DirectConnection);
+    }
 }
 
 QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* updatePaintNodeData)
 {
     Q_UNUSED(updatePaintNodeData);
+
+    // Phase 4b — when DComp-exclusive mode is on, the DComp surface is
+    // the authoritative chart renderer; this QSG path produces nothing.
+    // Discard any existing scene-graph subtree and return null so Qt
+    // skips this layer entirely. The QQuickItem itself stays visible
+    // (so the DComp surface's findChild + mapToScene tracking still
+    // works), but its bounding rect contributes no pixels to the QSG
+    // scene. PreviewQuickHudLayer + PreviewStageMediaItem are sibling
+    // items and continue to render normally.
+    if (miacode::debug_options::previewDCompExclusiveEnabled()) {
+        if (oldNode != nullptr) {
+            delete oldNode;
+        }
+        return nullptr;
+    }
+
+    const bool renderDiagEnabled = miacode::debug_options::previewFramePacingDiagnosticsEnabled();
+    if (renderDiagEnabled) {
+        if (!renderPhaseTimer_.isValid()) {
+            renderPhaseTimer_.start();
+        }
+        renderPhaseUpdatePaintStartNs_ = renderPhaseTimer_.nsecsElapsed();
+    }
 
     auto* root = ensureLayerSlotRoot(oldNode);
     textures_.setWindow(window());
@@ -733,7 +864,92 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
     if (miacode::debug_options::previewProfileOutputEnabled()) {
         enqueueTextureStatsForPresentation(textureStats());
     }
+    if (renderDiagEnabled) {
+        renderPhaseUpdatePaintEndNs_ = renderPhaseTimer_.nsecsElapsed();
+    }
     return root;
+}
+
+void PreviewQuickSceneRoot::recordRenderPhaseProfile()
+{
+    // Runs on the render thread (DirectConnection from frameSwapped). Read the phase
+    // timestamps captured by the sibling signal handlers and log a single compact summary.
+    // Rate-limited: log once per sample interval, plus log slow frames unconditionally to
+    // catch spikes. All timestamps are monotonic nsecs from the same QElapsedTimer.
+    if (runtime_ == nullptr || !renderPhaseTimer_.isValid()) {
+        return;
+    }
+    const qint64 swapNs = renderPhaseTimer_.nsecsElapsed();
+    const qint64 paintStart = renderPhaseUpdatePaintStartNs_;
+    const qint64 paintEnd = renderPhaseUpdatePaintEndNs_;
+    const qint64 syncStart = renderPhaseSyncStartNs_;
+    const qint64 syncEnd = renderPhaseSyncEndNs_;
+    const qint64 renderStart = renderPhaseRenderStartNs_;
+    const qint64 renderEnd = renderPhaseRenderEndNs_;
+
+    auto toMs = [](qint64 ns) -> double {
+        return ns >= 0 ? static_cast<double>(ns) / 1000000.0 : -1.0;
+    };
+    auto deltaMs = [](qint64 endNs, qint64 startNs) -> double {
+        if (endNs < 0 || startNs < 0 || endNs < startNs) {
+            return -1.0;
+        }
+        return static_cast<double>(endNs - startNs) / 1000000.0;
+    };
+
+    const double paintMs = deltaMs(paintEnd, paintStart);
+    const double syncMs = deltaMs(syncEnd, syncStart);
+    const double renderSubmitMs = deltaMs(renderEnd, renderStart);
+    const double swapGpuMs = deltaMs(swapNs, renderEnd);
+    const double totalMs = deltaMs(swapNs, paintStart);
+    // pre_render_wait_ms = gap between afterSynchronizing and beforeRendering. In Qt's
+    // threaded RHI render loop the swap-chain image acquire happens here, so a fat value
+    // is the smoking gun for vsync / DXGI flip-queue back-pressure (we'll see this spike
+    // even when the per-node command-buffer build is fast). A near-zero value means the
+    // ~22ms in render_submit_ms is genuinely command-buffer construction.
+    const double preRenderWaitMs = deltaMs(renderStart, syncEnd);
+
+    // Find the layer with highest buildMs this frame. Acceptable to iterate — at most ~15 entries.
+    double topLayerBuildMs = 0.0;
+    QString topLayerName;
+    double totalLayerBuildMs = 0.0;
+    for (const PreviewTextureLayerStats& stat : layerProfileStats_) {
+        totalLayerBuildMs += stat.buildMs;
+        if (stat.buildMs > topLayerBuildMs) {
+            topLayerBuildMs = stat.buildMs;
+            topLayerName = stat.name;
+        }
+    }
+
+    const qint64 nowMs = static_cast<qint64>(swapNs / 1000000LL);
+    const qint64 sampleMs = miacode::debug_options::previewFramePacingDiagnosticSampleMs();
+    // "Slow" = total frame pipeline > ~2 target intervals. Use 30ms as a fixed floor since the
+    // render-thread code has no direct access to target interval and vsync is typically 16.67ms.
+    constexpr double kSlowFrameMs = 30.0;
+    const bool slowFrame = totalMs >= kSlowFrameMs;
+    const bool sampleReady =
+        renderPhaseLastLogMs_ < 0 || (nowMs - renderPhaseLastLogMs_) >= sampleMs;
+    if (!slowFrame && !sampleReady) {
+        return;
+    }
+    renderPhaseLastLogMs_ = nowMs;
+
+    appendQuickSceneLog(
+        QStringLiteral("render_frame_profile"),
+        QString("total_ms=%1 paint_ms=%2 sync_ms=%3 pre_render_wait_ms=%4 render_submit_ms=%5 "
+                "swap_gpu_ms=%6 layer_sum_ms=%7 top_layer=%8 top_layer_ms=%9 layer_count=%10 slow=%11")
+            .arg(totalMs < 0 ? QStringLiteral("na") : QString::number(totalMs, 'f', 3))
+            .arg(paintMs < 0 ? QStringLiteral("na") : QString::number(paintMs, 'f', 3))
+            .arg(syncMs < 0 ? QStringLiteral("na") : QString::number(syncMs, 'f', 3))
+            .arg(preRenderWaitMs < 0 ? QStringLiteral("na") : QString::number(preRenderWaitMs, 'f', 3))
+            .arg(renderSubmitMs < 0 ? QStringLiteral("na") : QString::number(renderSubmitMs, 'f', 3))
+            .arg(swapGpuMs < 0 ? QStringLiteral("na") : QString::number(swapGpuMs, 'f', 3))
+            .arg(QString::number(totalLayerBuildMs, 'f', 3))
+            .arg(topLayerName.isEmpty() ? QStringLiteral("none") : topLayerName)
+            .arg(QString::number(topLayerBuildMs, 'f', 3))
+            .arg(layerProfileStats_.size())
+            .arg(slowFrame ? 1 : 0)
+    );
 }
 
 void PreviewQuickSceneRoot::geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry)

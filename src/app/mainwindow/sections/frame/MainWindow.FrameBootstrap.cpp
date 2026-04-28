@@ -41,6 +41,27 @@
 
 using namespace miacode::mainwindow::shared;
 
+namespace {
+
+void appendPreviewFramePacingDiagLog(const QString& action, const QString& payload = QString())
+{
+    if (!miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
+        return;
+    }
+    QString text = QStringLiteral("action=%1").arg(action);
+    if (!payload.trimmed().isEmpty()) {
+        text += QStringLiteral(" ") + payload.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview/frame_pacing"),
+        text,
+        true
+    );
+}
+
+}  // namespace
+
 MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     : QMainWindow(parent)
 {
@@ -960,13 +981,111 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     logStartupStage("preview_sfx_runtime_created");
     connect(previewCanvas_, &PreviewRuntime::framePresented, this, [this]() {
         timelineSection_->handlePreviewStartupCanvasPresented();
-        if (!qtPreviewPlaying_
-            || !previewCanvasUsesFrameSwappedPacing()
-            || !qtPreviewAwaitingFrameSwap_) {
+        if (!qtPreviewPlaying_) {
             return;
         }
-        qtPreviewAwaitingFrameSwap_ = false;
-        qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+        if (previewCanvasUsesFrameSwappedPacing()) {
+            const bool matchedRequest = qtPreviewAwaitingFrameSwap_;
+            const qint64 nowNs = qtPreviewWatchdogElapsed_.nsecsElapsed();
+            const qint64 nowMs = qtPreviewWatchdogElapsed_.elapsed();
+            const qint64 waitNs =
+                matchedRequest && qtPreviewAwaitingFrameSwapSinceNs_ >= 0
+                    ? qMax<qint64>(0, nowNs - qtPreviewAwaitingFrameSwapSinceNs_)
+                    : 0;
+            qtPreviewDisplayRefreshFramePresentSeq_ += 1;
+            if (previewCanvas_ != nullptr) {
+                previewCanvas_->noteDisplayRefreshFramePresentation(waitNs, matchedRequest);
+            }
+            if (miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
+                const qint64 sampleMs = miacode::debug_options::previewFramePacingDiagnosticSampleMs();
+                if (!matchedRequest
+                    || qtPreviewFramePacingDiagLastPresentLogMs_ < 0
+                    || nowMs - qtPreviewFramePacingDiagLastPresentLogMs_ >= sampleMs) {
+                    qtPreviewFramePacingDiagLastPresentLogMs_ = nowMs;
+                    appendPreviewFramePacingDiagLog(
+                        matchedRequest ? QStringLiteral("display_present") : QStringLiteral("display_orphan_present"),
+                        QStringLiteral("request_seq=%1 present_seq=%2 wait_ms=%3 queued=%4")
+                            .arg(qtPreviewDisplayRefreshFrameRequestSeq_)
+                            .arg(qtPreviewDisplayRefreshFramePresentSeq_)
+                            .arg(static_cast<double>(waitNs) / 1000000.0, 0, 'f', 3)
+                            .arg(qtPreviewDisplayRefreshTickQueued_ ? 1 : 0)
+                    );
+                }
+            }
+            if (!matchedRequest) {
+                return;
+            }
+            qtPreviewAwaitingFrameSwap_ = false;
+            qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+            qtPreviewAwaitingFrameSwapSinceNs_ = -1;
+            qtPreviewDisplayRefreshConsecutiveWatchdogs_ = 0;
+            if (qtPreviewDisplayRefreshTickQueued_) {
+                return;
+            }
+            qtPreviewDisplayRefreshTickQueued_ = true;
+            if (previewCanvas_ != nullptr) {
+                previewCanvas_->noteDisplayRefreshQueuedTick();
+            }
+            // Call onQtPreviewTick synchronously inside the framePresented callback. Every extra
+            // event-loop hop between a present and the next update() is ~1-3ms of latency, and
+            // on systems where the render pipeline takes ~14-15ms per frame that latency pushes
+            // completion past the next vsync boundary, doubling the effective cycle time.
+            // The doc's advice against synchronous tick here was cautionary, not load-bearing —
+            // the tick body completes in ~0.5ms and cannot re-enter this callback (update() only
+            // schedules a render; the next framePresented fires on the next vsync).
+            qtPreviewDisplayRefreshTickQueued_ = false;
+            if (qtPreviewPlaying_
+                && previewCanvasUsesFrameSwappedPacing()
+                && !qtPreviewAwaitingFrameSwap_) {
+                onQtPreviewTick();
+            }
+            return;
+        }
+        // Fixed interval mode: present-driven gate (doc section 4.1). Each present clears the
+        // awaiting flag and runs the FPS gate synchronously — same reasoning as DisplayRefresh
+        // branch above (avoid event-loop latency that costs vsync alignment).
+        const bool matchedRequest = qtPreviewFixedAwaitingFrame_;
+        const qint64 nowNs = qtPreviewWatchdogElapsed_.nsecsElapsed();
+        const qint64 nowMs = qtPreviewWatchdogElapsed_.elapsed();
+        const qint64 waitNs =
+            matchedRequest && qtPreviewFixedAwaitingFrameSinceNs_ >= 0
+                ? qMax<qint64>(0, nowNs - qtPreviewFixedAwaitingFrameSinceNs_)
+                : 0;
+        qtPreviewFixedGateFramePresentSeq_ += 1;
+        if (miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
+            const qint64 sampleMs = miacode::debug_options::previewFramePacingDiagnosticSampleMs();
+            if (!matchedRequest
+                || qtPreviewFramePacingDiagLastPresentLogMs_ < 0
+                || nowMs - qtPreviewFramePacingDiagLastPresentLogMs_ >= sampleMs) {
+                qtPreviewFramePacingDiagLastPresentLogMs_ = nowMs;
+                appendPreviewFramePacingDiagLog(
+                    matchedRequest
+                        ? QStringLiteral("fixed_gate_present")
+                        : QStringLiteral("fixed_gate_orphan_present"),
+                    QStringLiteral("request_seq=%1 present_seq=%2 wait_ms=%3 queued=%4")
+                        .arg(qtPreviewFixedGateFrameRequestSeq_)
+                        .arg(qtPreviewFixedGateFramePresentSeq_)
+                        .arg(static_cast<double>(waitNs) / 1000000.0, 0, 'f', 3)
+                        .arg(qtPreviewFixedFrameTickQueued_ ? 1 : 0)
+                );
+            }
+        }
+        if (!matchedRequest) {
+            return;
+        }
+        qtPreviewFixedAwaitingFrame_ = false;
+        qtPreviewFixedAwaitingFrameSinceMs_ = -1;
+        qtPreviewFixedAwaitingFrameSinceNs_ = -1;
+        if (qtPreviewFixedFrameTickQueued_) {
+            return;
+        }
+        qtPreviewFixedFrameTickQueued_ = true;
+        // Synchronous call — skip the event-loop hop. See the DisplayRefresh branch above for the
+        // rationale. advanceFixedIntervalGateAfterPresent internally re-checks playing / mode /
+        // awaiting-frame state, so running it straight from this lambda is safe even if another
+        // queued event (e.g. pause) is sitting behind the current signal.
+        qtPreviewFixedFrameTickQueued_ = false;
+        advanceFixedIntervalGateAfterPresent();
     });
     logStartupStage("preview_runtime_connections_ready");
     logStartupStage("preview_runtime_ready");

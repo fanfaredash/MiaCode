@@ -72,6 +72,165 @@ bool wantsQuickShellBeta(const QStringList& arguments)
     return arguments.contains(QStringLiteral("--quick-shell-beta"));
 }
 
+// ===== Graphics backend selector =====
+//
+// User-driven backend selection without driver probing (which would touch GPU vendor DLLs
+// and trip Windows Defender heuristics). Strategy:
+//   1. CLI flag `--rhi=<name>` overrides everything for this run AND persists the choice
+//      so the same backend is used on the next launch.
+//   2. With no flag, the persisted choice from a small JSON file beside the executable is
+//      applied. If neither exists, we leave Qt on its platform default (D3D11 on Windows).
+//   3. The persistence file is plain JSON, written only on explicit user choice — the
+//      app never tries backends behind the user's back. If a chosen backend fails to
+//      initialise the user can recover by relaunching with `--rhi=auto` (clears the file)
+//      or `--rhi=d3d11` (forces the safe Windows default).
+//
+// Recognised values: "auto" / "default" (no override), "d3d11", "d3d12", "opengl",
+// "vulkan", "metal", "software". Anything else is rejected and we fall through to auto.
+
+struct GraphicsBackendChoice {
+    QString name;            // canonical lowercase name, or empty for "auto"
+    bool fromCommandLine;    // true if this came from --rhi= rather than the saved file
+    bool clearedByCommand;   // true if the user explicitly asked to clear via --rhi=auto
+};
+
+QString persistedGraphicsBackendFilePath()
+{
+    // Beside the executable so the file is portable with the install. Hidden (leading dot)
+    // to keep the directory uncluttered.
+    const QDir appDir(QCoreApplication::applicationDirPath());
+    return appDir.filePath(QStringLiteral(".miacode_graphics.json"));
+}
+
+QString readPersistedGraphicsBackend()
+{
+    const QString path = persistedGraphicsBackendFilePath();
+    QFile file(path);
+    if (!file.exists() || !file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return QString();
+    }
+    const QByteArray bytes = file.readAll();
+    file.close();
+    QJsonParseError err;
+    const QJsonDocument doc = QJsonDocument::fromJson(bytes, &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+        return QString();
+    }
+    return doc.object().value(QStringLiteral("backend")).toString().trimmed().toLower();
+}
+
+bool writePersistedGraphicsBackend(const QString& backend)
+{
+    const QString path = persistedGraphicsBackendFilePath();
+    if (backend.isEmpty()) {
+        // "auto" / clear: just remove the file.
+        QFile::remove(path);
+        return true;
+    }
+    QJsonObject obj;
+    obj.insert(QStringLiteral("backend"), backend);
+    obj.insert(QStringLiteral("schema"), QStringLiteral("miacode_graphics_v1"));
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        return false;
+    }
+    const QByteArray bytes = QJsonDocument(obj).toJson(QJsonDocument::Indented);
+    const qint64 written = file.write(bytes);
+    file.close();
+    return written == bytes.size();
+}
+
+QString canonicalRhiName(const QString& raw)
+{
+    const QString name = raw.trimmed().toLower();
+    if (name == QStringLiteral("auto") || name == QStringLiteral("default")
+        || name == QStringLiteral("platform") || name == QStringLiteral("none")) {
+        return QString();
+    }
+    if (name == QStringLiteral("d3d11") || name == QStringLiteral("direct3d11")
+        || name == QStringLiteral("dx11")) {
+        return QStringLiteral("d3d11");
+    }
+    if (name == QStringLiteral("d3d12") || name == QStringLiteral("direct3d12")
+        || name == QStringLiteral("dx12")) {
+        return QStringLiteral("d3d12");
+    }
+    if (name == QStringLiteral("opengl") || name == QStringLiteral("gl")) {
+        return QStringLiteral("opengl");
+    }
+    if (name == QStringLiteral("vulkan") || name == QStringLiteral("vk")) {
+        return QStringLiteral("vulkan");
+    }
+    if (name == QStringLiteral("metal")) {
+        return QStringLiteral("metal");
+    }
+    if (name == QStringLiteral("software") || name == QStringLiteral("sw")
+        || name == QStringLiteral("null")) {
+        return QStringLiteral("software");
+    }
+    return QString();  // unknown — caller treats as "no override".
+}
+
+// Pulls "--rhi=<value>" or "--rhi <value>" out of the raw argv. We do NOT use
+// QCommandLineParser here because it requires a constructed QApplication, and we want to
+// pick the backend before that.
+QString parseRhiCommandLineArg(const QStringList& args)
+{
+    static const QString kFlag = QStringLiteral("--rhi");
+    static const QString kFlagEq = QStringLiteral("--rhi=");
+    for (int i = 1; i < args.size(); ++i) {
+        const QString& a = args.at(i);
+        if (a.startsWith(kFlagEq)) {
+            return a.mid(kFlagEq.size());
+        }
+        if (a == kFlag && (i + 1) < args.size()) {
+            return args.at(i + 1);
+        }
+    }
+    return QString();
+}
+
+GraphicsBackendChoice resolveGraphicsBackendChoice(const QStringList& args)
+{
+    GraphicsBackendChoice choice{};
+    const QString cliRaw = parseRhiCommandLineArg(args);
+    if (!cliRaw.isEmpty()) {
+        choice.fromCommandLine = true;
+        const QString canonical = canonicalRhiName(cliRaw);
+        choice.name = canonical;
+        choice.clearedByCommand = canonical.isEmpty()
+            && (cliRaw.compare(QStringLiteral("auto"), Qt::CaseInsensitive) == 0
+                || cliRaw.compare(QStringLiteral("default"), Qt::CaseInsensitive) == 0
+                || cliRaw.compare(QStringLiteral("none"), Qt::CaseInsensitive) == 0);
+        return choice;
+    }
+    choice.name = readPersistedGraphicsBackend();
+    return choice;
+}
+
+// Apply the chosen backend to QQuickWindow. Must be called AFTER QApplication construction
+// (because setGraphicsApi consults Qt's per-process state) but BEFORE any QQuickWindow
+// is realised. Returns the canonical name actually applied (empty for "auto/default").
+QString applyGraphicsBackendChoice(const QString& backend)
+{
+    if (backend == QStringLiteral("d3d11")) {
+        QQuickWindow::setGraphicsApi(QSGRendererInterface::Direct3D11);
+    } else if (backend == QStringLiteral("d3d12")) {
+        QQuickWindow::setGraphicsApi(QSGRendererInterface::Direct3D12);
+    } else if (backend == QStringLiteral("opengl")) {
+        QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+    } else if (backend == QStringLiteral("vulkan")) {
+        QQuickWindow::setGraphicsApi(QSGRendererInterface::Vulkan);
+    } else if (backend == QStringLiteral("metal")) {
+        QQuickWindow::setGraphicsApi(QSGRendererInterface::Metal);
+    } else if (backend == QStringLiteral("software")) {
+        QQuickWindow::setGraphicsApi(QSGRendererInterface::Software);
+    } else {
+        return QString();
+    }
+    return backend;
+}
+
 void addSharedCliDebugOption(QCommandLineParser& parser)
 {
     // main() already enables debug mode before CLI dispatch. We still declare
@@ -664,6 +823,46 @@ int main(int argc, char* argv[])
     if (dontCreateNativeWidgetSiblingsEnabled) {
         QApplication::setAttribute(Qt::AA_DontCreateNativeWidgetSiblings);
     }
+
+    // Diagnostic: capture Qt's scene-graph render timings into our runtime log
+    // when the user opts in. Has to happen before QApplication construction
+    // because Qt reads QSG_RENDER_TIMING / QT_LOGGING_RULES once at startup
+    // and the categories are gated on those env vars. We append our category
+    // override to whatever the user already has rather than overwriting, so
+    // existing rule overrides keep working.
+    if (miacode::debug_options::previewQsgRenderTimingEnabled()) {
+        qputenv("QSG_RENDER_TIMING", QByteArrayLiteral("1"));
+        const QByteArray existingRules = qgetenv("QT_LOGGING_RULES");
+        QByteArray nextRules = existingRules;
+        if (!nextRules.isEmpty() && !nextRules.endsWith(';')) {
+            nextRules.append(';');
+        }
+        nextRules.append("qt.scenegraph.time.*=true");
+        qputenv("QT_LOGGING_RULES", nextRules);
+
+        // Route the resulting qt.scenegraph.time.* messages to our log so they
+        // sit alongside renderer_perf / frame_pacing in the same file with
+        // matching timestamps. Pass everything else through to the prior
+        // handler (whatever Qt had installed before us) so we don't silence
+        // ordinary Qt warnings/criticals.
+        static QtMessageHandler s_priorMessageHandler = nullptr;
+        s_priorMessageHandler = qInstallMessageHandler(
+            [](QtMsgType type, const QMessageLogContext& ctx, const QString& msg) {
+                const char* category = ctx.category != nullptr ? ctx.category : "";
+                if (qstrncmp(category, "qt.scenegraph.time.", 19) == 0) {
+                    miacode::debug_log::appendLine(
+                        miacode::debug_log::Channel::Runtime,
+                        QStringLiteral("preview/qsg_timing"),
+                        QString("category=%1 msg=%2")
+                            .arg(QString::fromLatin1(category))
+                            .arg(msg));
+                    return;
+                }
+                if (s_priorMessageHandler != nullptr) {
+                    s_priorMessageHandler(type, ctx, msg);
+                }
+            });
+    }
     if (miacode::debug_options::runtimeDebugOutputEnabled()) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
@@ -695,17 +894,56 @@ int main(int argc, char* argv[])
     logStartupStage("process_entry");
 
     QSurfaceFormat format = QSurfaceFormat::defaultFormat();
-    format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
+    // Triple-buffer + vsync. With DoubleBuffer the swap chain caps the GPU at 1 frame in
+    // flight, so a fast Render submit (~5 ms) immediately stalls on the next Present until
+    // the previous frame swaps — surfacing as a bimodal render_submit_ms (median ~5 ms,
+    // p90 ~24 ms ≈ one vsync of forced wait). TripleBuffer keeps two frames in flight,
+    // letting the CPU stay one frame ahead of the GPU and removing the back-pressure stall.
+    // Cost: one extra frame (~16.7 ms) of latency from input to display, which is
+    // imperceptible for a chart preview where the playhead is audio-authoritative anyway.
+    format.setSwapBehavior(QSurfaceFormat::TripleBuffer);
     format.setSwapInterval(1);
     QSurfaceFormat::setDefaultFormat(format);
     logStartupStage("surface_format_ready");
 
     QApplication app(argc, argv);
 
+    // Backend selection. CLI export always forces OpenGL (legacy export pipeline relies on
+    // it). Otherwise: honour user's --rhi=<name> if present (and persist for next launch),
+    // else fall back to the persisted choice from the prior run, else Qt's platform default.
+    QString appliedGraphicsBackend;
+    QString graphicsBackendSource;
     if (forceOpenGlGraphicsApi) {
         QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+        appliedGraphicsBackend = QStringLiteral("opengl");
+        graphicsBackendSource = QStringLiteral("cli_video_export_force");
+    } else {
+        const GraphicsBackendChoice choice = resolveGraphicsBackendChoice(rawArgs);
+        if (choice.fromCommandLine) {
+            // Persist (or clear) so the next launch defaults to the same backend without
+            // requiring the flag again.
+            writePersistedGraphicsBackend(choice.name);
+        }
+        appliedGraphicsBackend = applyGraphicsBackendChoice(choice.name);
+        graphicsBackendSource = choice.fromCommandLine
+            ? (choice.clearedByCommand
+                   ? QStringLiteral("cli_cleared")
+                   : QStringLiteral("cli_override"))
+            : (choice.name.isEmpty() ? QStringLiteral("platform_default")
+                                     : QStringLiteral("persisted"));
     }
     logStartupStage("qapplication_constructed");
+    if (miacode::debug_options::runtimeDebugOutputEnabled()) {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("startup/graphics_backend"),
+            QString("applied=%1 source=%2 persisted_path=%3")
+                .arg(appliedGraphicsBackend.isEmpty() ? QStringLiteral("(qt_default)")
+                                                      : appliedGraphicsBackend)
+                .arg(graphicsBackendSource)
+                .arg(persistedGraphicsBackendFilePath())
+        );
+    }
     if (miacode::debug_options::runtimeDebugOutputEnabled()) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
@@ -852,5 +1090,8 @@ int main(int argc, char* argv[])
             .arg(QApplication::topLevelWidgets().size())
             .arg(QGuiApplication::topLevelWindows().size())
     );
+    // Permanently shut down the async log writer last so any teardown logs above are
+    // drained to disk and the worker thread is joined before the process exits.
+    miacode::debug_log::shutdownAsyncLogWriter();
     return exitCode;
 }

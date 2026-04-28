@@ -31,6 +31,11 @@
 #include <QtGui>
 #include <QtWidgets>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <mmsystem.h>
+#endif
+
 using namespace miacode::mainwindow::shared;
 
 namespace {
@@ -83,7 +88,110 @@ void updatePreviewControlsLayout(
     }
 }
 
+void appendPreviewFramePacingDiagLog(const QString& action, const QString& payload = QString())
+{
+    if (!miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
+        return;
+    }
+    QString text = QStringLiteral("action=%1").arg(action);
+    if (!payload.trimmed().isEmpty()) {
+        text += QStringLiteral(" ") + payload.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview/frame_pacing"),
+        text,
+        true
+    );
+}
+
+void appendPreviewFramePacingStatusLog(const QString& action, const QString& payload = QString())
+{
+    QString text = QStringLiteral("action=%1").arg(action);
+    if (!payload.trimmed().isEmpty()) {
+        text += QStringLiteral(" ") + payload.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview/frame_pacing"),
+        text,
+        true
+    );
+}
+
+int previewFrameSwapWatchdogTimeoutMs(qint64 frameIntervalNs)
+{
+    return qMax(
+        24,
+        qMax(1, qRound(static_cast<double>(frameIntervalNs) / 1000000.0)) * 2
+    );
+}
+
 }  // namespace
+
+void MainWindow::setPreviewFixedTimerHighResolutionActive(bool active)
+{
+#ifdef Q_OS_WIN
+    const bool envRequested = miacode::debug_options::previewFixedTimerHighResolutionEnabled();
+    const bool desired =
+        active && envRequested;
+    if (active && previewCanvas_ != nullptr) {
+        previewCanvas_->noteFixedTimerHighResolutionRequest(envRequested);
+    }
+    if (qtPreviewFixedTimerHighResResolutionActive_ == desired) {
+        if (active) {
+            appendPreviewFramePacingStatusLog(
+                QStringLiteral("fixed_timer_high_res_requested"),
+                QStringLiteral("env=%1 active=%2 already_active=%3")
+                    .arg(envRequested ? 1 : 0)
+                    .arg(active ? 1 : 0)
+                    .arg(qtPreviewFixedTimerHighResResolutionActive_ ? 1 : 0)
+            );
+        }
+        return;
+    }
+    if (desired) {
+        appendPreviewFramePacingStatusLog(
+            QStringLiteral("fixed_timer_high_res_requested"),
+            QStringLiteral("env=1 active=1 already_active=0")
+        );
+        const MMRESULT result = timeBeginPeriod(1);
+        if (result == TIMERR_NOERROR) {
+            qtPreviewFixedTimerHighResResolutionActive_ = true;
+            if (previewCanvas_ != nullptr) {
+                previewCanvas_->noteFixedTimerHighResolutionBeginResult(true);
+            }
+            appendPreviewFramePacingStatusLog(
+                QStringLiteral("fixed_timer_high_res_enabled"),
+                QStringLiteral("result=0")
+            );
+            return;
+        }
+        if (previewCanvas_ != nullptr) {
+            previewCanvas_->noteFixedTimerHighResolutionBeginResult(false);
+        }
+        appendPreviewFramePacingStatusLog(
+            QStringLiteral("fixed_timer_high_res_failed"),
+            QStringLiteral("result=%1").arg(static_cast<unsigned int>(result))
+        );
+        return;
+    }
+    const bool activeAtStop = qtPreviewFixedTimerHighResResolutionActive_;
+    if (!activeAtStop) {
+        return;
+    }
+    if (previewCanvas_ != nullptr) {
+        previewCanvas_->noteFixedTimerHighResolutionStopState(true);
+    }
+    timeEndPeriod(1);
+    qtPreviewFixedTimerHighResResolutionActive_ = false;
+    appendPreviewFramePacingStatusLog(
+        QStringLiteral("fixed_timer_high_res_disabled")
+    );
+#else
+    Q_UNUSED(active);
+#endif
+}
 
 double MainWindow::TimelineSection::previewDurationSeconds() const
 {
@@ -374,7 +482,17 @@ double MainWindow::TimelineSection::currentPreviewCanvasRefreshRate() const
 
 bool MainWindow::TimelineSection::previewCanvasUsesFrameSwappedPacing() const
 {
-    return state_.previewCanvasFrameRateMode_ == PreviewCanvasFrameRateMode::DisplayRefresh;
+    // Disabled (2026-04-27): the present-driven gate from 927322b was reverted
+    // because coupling the playback tick to frameSwapped meant any render
+    // hiccup directly stalled the playback clock — visible as choppiness on
+    // hardware that can't sustain 60fps. Reverting to the beta19 timer-driven
+    // path (qtPreviewTimer_ firing on a fixed interval regardless of render
+    // throughput) preserves audio-video sync at the cost of being able to
+    // over-tick under heavy load. The rest of 927322b — TripleBuffer, async
+    // log writer, MMCSS, sprite batching, visual-clock smoothing — is kept;
+    // only the gate is dropped. The gate code paths are left in place but
+    // unreachable so the surgery is one line.
+    return false;
 }
 
 qint64 MainWindow::TimelineSection::previewCanvasTargetFrameIntervalNs() const
@@ -394,8 +512,12 @@ qint64 MainWindow::TimelineSection::timelineTargetFrameIntervalNs() const
 {
     const qint64 previewIntervalNs = qMax<qint64>(1LL, previewCanvasTargetFrameIntervalNs());
     const double previewTargetFps = 1000000000.0 / static_cast<double>(previewIntervalNs);
-    const double timelineTargetFps =
+    double timelineTargetFps =
         qMin(previewTargetFps, miacode::mainwindow::shared::kTimelineMaxUiUpdateFps);
+    const int throttleHz = miacode::debug_options::previewTimelineThrottleHz();
+    if (throttleHz > 0) {
+        timelineTargetFps = qMin(timelineTargetFps, static_cast<double>(throttleHz));
+    }
     return qMax<qint64>(1LL, qRound64(1000000000.0 / timelineTargetFps));
 }
 
@@ -413,19 +535,31 @@ void MainWindow::TimelineSection::resetQtPreviewFixedFramePacing()
 
 void MainWindow::TimelineSection::scheduleNextQtPreviewTick()
 {
+    // Doc section 4.3: qtPreviewTimer_ is a watchdog in both modes. Normal visual cadence is
+    // driven by framePresented -> queued tick; this timer only kicks if present never arrives.
     if (ui_.qtPreviewTimer_ == nullptr || !state_.qtPreviewPlaying_) {
         return;
     }
+    qint64 awaitingSinceMs = -1;
+    bool awaiting = false;
     if (previewCanvasUsesFrameSwappedPacing()) {
-        ui_.qtPreviewTimer_->start();
+        awaiting = state_.qtPreviewAwaitingFrameSwap_;
+        awaitingSinceMs = state_.qtPreviewAwaitingFrameSwapSinceMs_;
+    } else {
+        awaiting = state_.qtPreviewFixedAwaitingFrame_;
+        awaitingSinceMs = state_.qtPreviewFixedAwaitingFrameSinceMs_;
+    }
+    if (!awaiting) {
+        ui_.qtPreviewTimer_->stop();
         return;
     }
-    if (state_.qtPreviewNextFixedTickDueNs_ < 0 || state_.qtPreviewFixedTickOriginNs_ < 0) {
-        resetQtPreviewFixedFramePacing();
-    }
-    const qint64 nowNs = state_.qtPreviewWatchdogElapsed_.nsecsElapsed();
-    const qint64 delayNs = qMax<qint64>(0, state_.qtPreviewNextFixedTickDueNs_ - nowNs);
-    ui_.qtPreviewTimer_->setInterval(std::chrono::nanoseconds(delayNs));
+    const qint64 nowMs = state_.qtPreviewWatchdogElapsed_.elapsed();
+    const qint64 elapsedMs =
+        awaitingSinceMs >= 0 ? qMax<qint64>(0, nowMs - awaitingSinceMs) : 0;
+    const int timeoutMs = previewFrameSwapWatchdogTimeoutMs(previewCanvasTargetFrameIntervalNs());
+    const int delayMs =
+        qMax(1, timeoutMs - static_cast<int>(qMin<qint64>(elapsedMs, timeoutMs)));
+    ui_.qtPreviewTimer_->setInterval(std::chrono::milliseconds(delayMs));
     ui_.qtPreviewTimer_->start();
 }
 
@@ -439,8 +573,141 @@ void MainWindow::TimelineSection::requestNextDisplayRefreshPreviewFrame()
     }
     state_.qtPreviewAwaitingFrameSwap_ = true;
     state_.qtPreviewAwaitingFrameSwapSinceMs_ = state_.qtPreviewWatchdogElapsed_.elapsed();
+    state_.qtPreviewAwaitingFrameSwapSinceNs_ = state_.qtPreviewWatchdogElapsed_.nsecsElapsed();
+    state_.qtPreviewDisplayRefreshFrameRequestSeq_ += 1;
+    state_.previewCanvas_->noteDisplayRefreshFrameRequest();
+    if (miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
+        const qint64 sampleMs = miacode::debug_options::previewFramePacingDiagnosticSampleMs();
+        if (state_.qtPreviewFramePacingDiagLastRequestLogMs_ < 0
+            || state_.qtPreviewAwaitingFrameSwapSinceMs_ - state_.qtPreviewFramePacingDiagLastRequestLogMs_ >= sampleMs) {
+            state_.qtPreviewFramePacingDiagLastRequestLogMs_ = state_.qtPreviewAwaitingFrameSwapSinceMs_;
+            appendPreviewFramePacingDiagLog(
+                QStringLiteral("display_request"),
+                QStringLiteral("seq=%1 playhead=%2 target_ms=%3")
+                    .arg(state_.qtPreviewDisplayRefreshFrameRequestSeq_)
+                    .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6)
+                    .arg(previewFrameSwapWatchdogTimeoutMs(previewCanvasTargetFrameIntervalNs()))
+            );
+        }
+    }
     state_.previewCanvas_->update();
     scheduleNextQtPreviewTick();
+}
+
+void MainWindow::TimelineSection::requestNextFixedIntervalPreviewFrame()
+{
+    // Doc section 4.1: fixed 60/120 is now present-driven. This mirrors the DisplayRefresh
+    // request path — set awaiting flag, ask the canvas to update, arm the watchdog.
+    if (!state_.qtPreviewPlaying_
+        || state_.previewCanvas_ == nullptr
+        || previewCanvasUsesFrameSwappedPacing()
+        || state_.qtPreviewFixedAwaitingFrame_) {
+        return;
+    }
+    state_.qtPreviewFixedAwaitingFrame_ = true;
+    state_.qtPreviewFixedAwaitingFrameSinceMs_ = state_.qtPreviewWatchdogElapsed_.elapsed();
+    state_.qtPreviewFixedAwaitingFrameSinceNs_ = state_.qtPreviewWatchdogElapsed_.nsecsElapsed();
+    state_.qtPreviewFixedGateFrameRequestSeq_ += 1;
+    state_.previewCanvas_->update();
+    scheduleNextQtPreviewTick();
+}
+
+void MainWindow::TimelineSection::requestNextPreviewCanvasFrame()
+{
+    if (previewCanvasUsesFrameSwappedPacing()) {
+        requestNextDisplayRefreshPreviewFrame();
+    } else {
+        requestNextFixedIntervalPreviewFrame();
+    }
+}
+
+void MainWindow::TimelineSection::advanceFixedIntervalGateAfterPresent()
+{
+    // Doc section 4.1: FPS gate between presents. Only run a visual tick when the target
+    // interval has elapsed since the *scheduled* time of the previous tick (phase-locked),
+    // not since the tick's end-of-work wall time. Otherwise tick execution time (2-5ms) would
+    // cause every other present at 60Hz to miss the gate, halving effective tick rate.
+    if (!state_.qtPreviewPlaying_
+        || previewCanvasUsesFrameSwappedPacing()
+        || state_.qtPreviewFixedAwaitingFrame_) {
+        return;
+    }
+    const qint64 nowNs = state_.qtPreviewWatchdogElapsed_.nsecsElapsed();
+    const qint64 targetIntervalNs = qMax<qint64>(1, previewCanvasTargetFrameIntervalNs());
+    // Allow ~12.5% of the target as slop so vsync jitter (e.g. 16.4ms on a 60Hz panel) does
+    // not cause the gate to reject a present that arrived a fraction earlier than target.
+    const qint64 slopNs = targetIntervalNs / 8;
+    const bool firstTick = state_.qtPreviewLastVisualTickNs_ < 0;
+    const qint64 sinceLastNs =
+        firstTick ? targetIntervalNs : qMax<qint64>(0, nowNs - state_.qtPreviewLastVisualTickNs_);
+    const bool gatePassed = firstTick || (sinceLastNs + slopNs) >= targetIntervalNs;
+    if (gatePassed) {
+        // Record the canonical "tick time" now, BEFORE the tick runs. Using phase-locked
+        // advancement (previous + targetInterval) keeps the tick cadence aligned with the
+        // target rate instead of drifting by the tick's work latency. Two clamps:
+        //   1. Way late (display hidden, scheduler stall): resync to now — doc section 3.2
+        //      forbids chasing multiple missed slots.
+        //   2. Slightly ahead of nowNs (presents arriving faster than target, e.g. on a
+        //      144Hz panel with 60Hz target): cap to nowNs so lastVisualTickNs_ cannot
+        //      accumulate ahead of wall time and eventually starve the gate.
+        if (firstTick) {
+            state_.qtPreviewLastVisualTickNs_ = nowNs;
+        } else {
+            const qint64 idealNextNs = state_.qtPreviewLastVisualTickNs_ + targetIntervalNs;
+            if (nowNs - idealNextNs > targetIntervalNs * 2) {
+                state_.qtPreviewLastVisualTickNs_ = nowNs;
+            } else {
+                state_.qtPreviewLastVisualTickNs_ = qMin(idealNextNs, nowNs);
+            }
+        }
+        if (state_.previewCanvas_ != nullptr) {
+            state_.previewCanvas_->noteFixedGateVisualTick(sinceLastNs);
+            if (!firstTick && sinceLastNs > targetIntervalNs * 2) {
+                const qint64 missed = (sinceLastNs / targetIntervalNs) - 1;
+                if (missed > 0) {
+                    state_.previewCanvas_->noteFixedGateMissedTargetSlots(missed);
+                }
+            }
+        }
+        if (miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
+            const qint64 nowMs = state_.qtPreviewWatchdogElapsed_.elapsed();
+            const qint64 sampleMs = miacode::debug_options::previewFramePacingDiagnosticSampleMs();
+            if (state_.qtPreviewFramePacingDiagLastFixedGateLogMs_ < 0
+                || nowMs - state_.qtPreviewFramePacingDiagLastFixedGateLogMs_ >= sampleMs) {
+                state_.qtPreviewFramePacingDiagLastFixedGateLogMs_ = nowMs;
+                appendPreviewFramePacingDiagLog(
+                    QStringLiteral("fixed_gate_tick"),
+                    QStringLiteral("source=present gate_wait_ms=%1 target_ms=%2 awaiting_frame=0 time_authority=%3")
+                        .arg(static_cast<double>(sinceLastNs) / 1000000.0, 0, 'f', 3)
+                        .arg(static_cast<double>(targetIntervalNs) / 1000000.0, 0, 'f', 3)
+                        .arg(state_.previewSfxRuntime_ != nullptr
+                            ? QStringLiteral("audio")
+                            : QStringLiteral("elapsed_fallback"))
+                );
+            }
+        }
+        onQtPreviewTick();
+    } else {
+        if (state_.previewCanvas_ != nullptr) {
+            state_.previewCanvas_->noteFixedGatePresentWithoutTick(sinceLastNs);
+        }
+        if (miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
+            const qint64 nowMs = state_.qtPreviewWatchdogElapsed_.elapsed();
+            const qint64 sampleMs = miacode::debug_options::previewFramePacingDiagnosticSampleMs();
+            if (state_.qtPreviewFramePacingDiagLastFixedGateLogMs_ < 0
+                || nowMs - state_.qtPreviewFramePacingDiagLastFixedGateLogMs_ >= sampleMs) {
+                state_.qtPreviewFramePacingDiagLastFixedGateLogMs_ = nowMs;
+                appendPreviewFramePacingDiagLog(
+                    QStringLiteral("fixed_gate_present_without_tick"),
+                    QStringLiteral("gate_wait_ms=%1 target_ms=%2")
+                        .arg(static_cast<double>(sinceLastNs) / 1000000.0, 0, 'f', 3)
+                        .arg(static_cast<double>(targetIntervalNs) / 1000000.0, 0, 'f', 3)
+                );
+            }
+        }
+        // Keep the present pump alive so the next present can re-check the gate.
+        requestNextFixedIntervalPreviewFrame();
+    }
 }
 
 void MainWindow::TimelineSection::refreshPreviewFrameRateTimers()
@@ -462,19 +729,6 @@ void MainWindow::TimelineSection::refreshPreviewFrameRateTimers()
     }
 }
 
-double MainWindow::TimelineSection::fixedIntervalPreviewSecondForDeadlineNs(qint64 deadlineNs) const
-{
-    if (state_.qtPreviewFixedTickOriginNs_ < 0) {
-        return qMax(0.0, state_.qtPreviewPauseSecond_);
-    }
-    const qint64 elapsedNs = qMax<qint64>(0, deadlineNs - state_.qtPreviewFixedTickOriginNs_);
-    return qMax(
-        0.0,
-        state_.qtPreviewStartSecond_
-            + (static_cast<double>(elapsedNs) / 1000000000.0) * state_.previewPlaybackRate_
-    );
-}
-
 void MainWindow::TimelineSection::setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
 {
     if (state_.previewCanvasFrameRateMode_ == mode) {
@@ -488,13 +742,27 @@ void MainWindow::TimelineSection::setPreviewCanvasFrameRateMode(PreviewCanvasFra
     }
     state_.qtPreviewAwaitingFrameSwap_ = false;
     state_.qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+    state_.qtPreviewAwaitingFrameSwapSinceNs_ = -1;
+    state_.qtPreviewDisplayRefreshTickQueued_ = false;
+    state_.qtPreviewDisplayRefreshConsecutiveWatchdogs_ = 0;
+    state_.qtPreviewFixedAwaitingFrame_ = false;
+    state_.qtPreviewFixedAwaitingFrameSinceMs_ = -1;
+    state_.qtPreviewFixedAwaitingFrameSinceNs_ = -1;
+    state_.qtPreviewFixedFrameTickQueued_ = false;
+    state_.qtPreviewLastVisualTickNs_ = -1;
+    state_.qtPreviewFramePacingDiagLastFixedGateLogMs_ = -1;
     resetQtPreviewFixedFramePacing();
     if (state_.qtPreviewPlaying_) {
+        // Doc 4.3: high-res timer is no longer the cadence source; keep the call to preserve
+        // existing Windows timer resolution hygiene for the watchdog path.
+        owner_.setPreviewFixedTimerHighResolutionActive(!previewCanvasUsesFrameSwappedPacing());
         if (state_.previewCanvas_ != nullptr && previewCanvasUsesFrameSwappedPacing()) {
             requestNextDisplayRefreshPreviewFrame();
         } else {
-            scheduleNextQtPreviewTick();
+            requestNextFixedIntervalPreviewFrame();
         }
+    } else {
+        owner_.setPreviewFixedTimerHighResolutionActive(false);
     }
     if (persistState) {
         owner_.saveProjectRenderState();
@@ -1168,6 +1436,21 @@ void MainWindow::scheduleNextQtPreviewTick()
 void MainWindow::requestNextDisplayRefreshPreviewFrame()
 {
     timelineSection_->requestNextDisplayRefreshPreviewFrame();
+}
+
+void MainWindow::requestNextFixedIntervalPreviewFrame()
+{
+    timelineSection_->requestNextFixedIntervalPreviewFrame();
+}
+
+void MainWindow::advanceFixedIntervalGateAfterPresent()
+{
+    timelineSection_->advanceFixedIntervalGateAfterPresent();
+}
+
+void MainWindow::requestNextPreviewCanvasFrame()
+{
+    timelineSection_->requestNextPreviewCanvasFrame();
 }
 
 void MainWindow::refreshPreviewFrameRateTimers()

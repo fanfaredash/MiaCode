@@ -61,6 +61,9 @@ Debug subcategories now default to on inside debug mode and are disabled with:
   - default file: `miacode_preview_profile_summary.txt`
   - `present_avg_ms` / `present_max_ms` are session-accumulated present intervals, while `present_window_*` keeps the last rolling present window used by the on-screen present FPS readout
   - quickshell preview sessions now also write `tick_*`, `update_request_*`, `frame_pacing.*`, and `ratio.*` rows so logical tick cadence, update-request cadence, and actual present cadence can be compared directly
+  - fixed-FPS pacing sessions now also write `fixed_timer.soft_late_total`, `fixed_timer.hard_resync_total`, `fixed_timer.present_missed_slots_total`, session-level `fixed_timer.high_res_resolution_enabled`, `fixed_timer.high_res_requested`, `fixed_timer.high_res_begin_ok`, `fixed_timer.high_res_active_at_stop`, and `logic.skipped_ticks_total`; the retired `fixed_timer.skipped_intervals_total` row is kept for compatibility and should remain `0`
+  - display-refresh pacing sessions now also write `display_refresh.requests_total`, `display_refresh.presented_after_request_total`, `display_refresh.watchdog_timeouts_total`, `display_refresh.queued_ticks_total`, `display_refresh.timer_fallback_ticks_total`, `display_refresh.present_wait_*`, `tick.speed_ratio_max`, and `tick.large_step_count`
+  - audio-clock comparison rows `audio_clock.delta_max_ms`, `audio_clock.large_step_total`, `audio_clock.audio_vs_fallback_avg_ms`, `audio_clock.audio_vs_fallback_max_abs_ms`, plus `visual_time.large_step_total`, separate BASS/elapsed drift from selected visual playhead jumps
   - quickshell external-media sessions now also write `external_stage_media.*` summary rows for separate-surface state, media kind, aggregate video-frame counts, estimated video FPS, video-frame intervals, and stall counts without emitting per-frame runtime logs
   - current summary also includes `stage_bg.*` sub-metrics for stage-background media conversion, media texture work, dim-uniform updates, node-update time, and media/dim frame counters
   - layer summary rows now also include `candidate_count_*` and `active_count_*` so prepared-window efficiency can be compared against sprite/batch counts
@@ -83,6 +86,35 @@ The Windows release package also ships:
 - `MIACODE_TRACK_PATH`
   - preview track-path override
   - owner: `src/app/mainwindow/MainWindow.cpp`
+- `MIACODE_PREVIEW_FRAME_PACING_DIAG`
+  - enables low-noise runtime `preview/frame_pacing` request/tick/present/watchdog diagnostics without requiring `--debug`
+  - normal request/tick/present samples are rate-limited; watchdog timeout, fixed-timer present-miss/hard-resync, orphan-present, and large-step events log immediately
+  - owners: `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrap.cpp`, `src/app/mainwindow/sections/frame/MainWindow.FrameBootstrapFinalize.cpp`, `src/app/mainwindow/sections/timeline/MainWindow.TimelineLayout.cpp`, `src/app/mainwindow/sections/timeline/MainWindow.TimelinePlayback.cpp`
+- `MIACODE_PREVIEW_FRAME_PACING_DIAG_SAMPLE_MS`
+  - pacing diagnostic normal-sample interval in milliseconds, default `1000`
+  - owner: `src/common/DebugOptions.h`
+- `MIACODE_PREVIEW_FIXED_TIMER_HIGH_RES`
+  - Windows-only A/B switch for fixed 60/120 preview pacing; while fixed-FPS realtime preview is playing it requests `timeBeginPeriod(1)` and releases it on stop, mode switch, or shutdown
+  - default is off; DisplayRefresh pacing does not use it
+  - owners: `src/common/DebugOptions.h`, `src/app/mainwindow/sections/timeline/MainWindow.TimelineLayout.cpp`
+- `MIACODE_PREVIEW_VISUAL_SMOOTHING`
+  - bounds the per-frame visual playhead delta so render-time variance doesn't propagate audio-time jumps straight into the rendered scene; large drift > 50ms triggers a snap (treated as seek)
+  - default is on; set to `0` to pass audio time through unchanged
+  - owners: `src/common/DebugOptions.h`, `src/app/mainwindow/sections/timeline/MainWindow.TimelinePlayback.cpp` (`applyVisualClockSmoothing`)
+- `MIACODE_PREVIEW_QSG_RENDER_TIMING`
+  - sets `QSG_RENDER_TIMING=1` and `QT_LOGGING_RULES+=qt.scenegraph.time.*=true` before `QApplication` construction, then installs a `QtMessageHandler` that routes those messages to the runtime log under `runtime/preview/qsg_timing`
+  - use to diagnose stutter that the offscreen-renderer perf instrumentation can't see — i.e. when `renderer_perf max_frame_total_ms` is well under the vsync budget but `fixed_gate_present wait_ms` and `fixed_gate_tick gate_wait_ms` still spike
+  - default off; flag is read once at startup so it must be in the environment before the exe launches
+  - owners: `src/common/DebugOptions.h`, `src/app/main.cpp`
+- `MIACODE_PREVIEW_VISUAL_LOOKAHEAD_VSYNCS`
+  - Tier 2A predictive playhead. Biases the rendered visual time forward by N display intervals (scaled by current playback rate) so the frame represents audio time at the moment it's actually visible — eliminates the perceived "audio leads video by one frame" lag from the GUI→render→composite→present pipeline
+  - default `1.0` (≈16.7ms at 60Hz); set to `0` to disable, allowed range `[0, 4]`
+  - applies to all return paths of `applyVisualClockSmoothing` (smoothed, snap, reverse-motion, disabled, not-initialized) so motion stays continuous across snap boundaries
+  - the stored visual-clock state tracks un-biased smoothed audio time; lookahead is applied only to the per-frame return value, so smoothing math (drift, catchup, snap) stays coherent
+  - owners: `src/common/DebugOptions.h`, `src/app/mainwindow/sections/timeline/MainWindow.TimelinePlayback.cpp` (`applyVisualClockSmoothing`)
+- `MIACODE_TIMELINE_HOTPATH_DIAG`
+  - re-enables high-frequency quick timeline hot-path logs such as `timeline/bridge action=set_horizontal_scroll_value` and `timeline/quick_scene action=content_transform_update` inside runtime debug mode
+  - owners: `src/timeline/quick/TimelineQuickStateBridge.cpp`, `src/timeline/quick/TimelineQuickItem.cpp`
 - `MIACODE_PREVIEW_DIAG_COMPARE_VIDEO_FALLBACK_EVERY`
   - samples every Nth direct-upload preview video frame
   - compares GPU framebuffer readback against a CPU `QVideoFrame::toImage()` fallback render
@@ -133,19 +165,21 @@ Runtime black-screen / dialog tracing in the main app currently uses these tags:
 - `preview/quick_runtime`
 - `preview/quick_scene`
 - `preview/interaction`
+- `preview/frame_pacing`
 - `timeline/interaction`
 - `timeline/bridge`
 - `timeline/quick_scene`
 - `timeline/cursor_map`
 
 The `preview/quick_runtime` stream now also emits `action=frame_stall` when the embedded Quick window stays visible/exposed but stops presenting for an extended interval.
+The `preview/frame_pacing` stream is off by default and turns on with `MIACODE_PREVIEW_FRAME_PACING_DIAG=1`; it emits low-frequency `display_request`, `display_present`, and `tick_sample` lines plus immediate `display_watchdog_timeout`, `fixed_timer_present_miss`, `fixed_timer_hard_resync`, `display_orphan_present`, and `tick_large_step` events. Sparse fixed-timer high-resolution status lines (`fixed_timer_high_res_requested`, `fixed_timer_high_res_enabled`, `fixed_timer_high_res_failed`, `fixed_timer_high_res_disabled`) are written even without per-frame pacing diagnostics so env propagation can be verified.
 The `preview/embedded_refresh` stream now also marks resize-throttling transitions with `action=resize_degrade_begin` / `action=resize_degrade_end`.
 The `startup/qt_config` runtime tag logs the active Qt graphics/render-loop experiment flags at process start, including whether the default native-sibling workaround was opted out.
 The `window/focus` runtime tag now traces app-level `focusChanged`, activation edges, watched editor/preview `FocusIn`/`FocusOut` events, pending text-focus snapshots, and restore attempts for Alt-Tab regression debugging.
 The `preview/interaction` runtime tag now traces end-to-end preview action boundaries for `play`, `pause`, `stop`, and `ctrl+click` seek, keyed by one `op` id per interaction.
 The `timeline/interaction` runtime tag now traces quick timeline drag, wheel-scroll, and held-key horizontal scroll inputs so user input can be matched to quick-scene work.
-The `timeline/bridge` runtime tag now records quick timeline bridge pushes such as `action=set_horizontal_scroll_value`.
-The `timeline/quick_scene` runtime tag now distinguishes full `scene_state_rebuild_*` passes from `action=content_transform_update` scroll-only paints, so cached-scene transform behavior can be verified directly from logs.
+The `timeline/bridge` runtime tag now records high-frequency quick timeline bridge pushes such as `action=set_horizontal_scroll_value` only when `MIACODE_TIMELINE_HOTPATH_DIAG=1`.
+The `timeline/quick_scene` runtime tag now distinguishes full `scene_state_rebuild_*` passes from `action=content_transform_update` scroll-only paints; the scroll-only hot-path paint log requires `MIACODE_TIMELINE_HOTPATH_DIAG=1`.
 The `timeline/cursor_map` runtime tag now profiles cursor-to-second mapping in `timelineSecondForCursor()`.
 The `app_shutdown` runtime tag now traces `lastWindowClosed`, periodic post-close heartbeats, `aboutToQuit`, `app.exec()` exit, and post-event-loop object teardown so "window disappeared but process still lives" tails can be separated from close-event time.
 QuickShell accepted root-window closes now notify C++ from QML before the window hide tail, logging `root_close_accepted_notify` and `accepted_close_shutdown_*`; the immediate pass shuts down preview and closes the hidden backend `MainWindow`, then a queued pre-quit pass logs `accepted_close_destroy_*` while destroying the QML engine, native surfaces, controller, style bridge, and backend before explicitly requesting `quit()`.

@@ -107,7 +107,7 @@ private:
     void updateClockDelta();
     void noteVideoFrameArrived(const QVideoFrame& frame, quint64 sourceGeneration);
     void resetVideoFrameDiagnostics();
-    void updateVideoFrameStallState(bool logTransition);
+    bool updateVideoFrameStallState(bool logTransition);
     qint64 currentVideoFrameAgeForDiagnosticsMs() const;
     qint64 videoFrameStallThresholdMs() const;
 

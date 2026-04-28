@@ -1,5 +1,7 @@
 #include "timeline/quick/TimelineQuickItem.h"
 
+#include <QDateTime>
+#include <QElapsedTimer>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QQuickWindow>
@@ -526,6 +528,8 @@ void TimelineQuickItem::stopHeldHorizontalKeyScroll(int key)
 QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data)
 {
     Q_UNUSED(data);
+    QElapsedTimer paintNodeTimer;
+    paintNodeTimer.start();
     auto* root = ensureSlotRoot(oldNode);
     if (!canBecomeReady()) {
         updateReadyState(false);
@@ -557,7 +561,7 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
     }
     cachedThemeSignature_ = timelineThemeSignature(state);
     if (state.horizontalScrollValue != lastPaintedHorizontalScrollValue_
-        && miacode::debug_options::runtimeDebugOutputEnabled()) {
+        && miacode::debug_options::timelineHotpathDiagnosticsEnabled()) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("timeline/quick_scene"),
@@ -583,6 +587,36 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         return overlayLayer_->updateNode(oldChild, state, window(), textures_.get());
     });
     updateReadyState(true);
+
+    const qint64 elapsedNs = paintNodeTimer.nsecsElapsed();
+    ++updatePaintNodeCount_;
+    updatePaintNodeSumNs_ += elapsedNs;
+    if (elapsedNs > updatePaintNodeMaxNs_) updatePaintNodeMaxNs_ = elapsedNs;
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    if (updatePaintNodeLastLogMs_ == 0) {
+        updatePaintNodeLastLogMs_ = nowMs;
+    } else if (nowMs - updatePaintNodeLastLogMs_ >= 1000) {
+        const double avgMs = updatePaintNodeCount_ > 0
+            ? static_cast<double>(updatePaintNodeSumNs_)
+                / static_cast<double>(updatePaintNodeCount_) / 1.0e6
+            : 0.0;
+        const double maxMs =
+            static_cast<double>(updatePaintNodeMaxNs_) / 1.0e6;
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("timeline/quick_scene"),
+            QStringLiteral(
+                "action=update_paint_node_stats samples=%1 avg_ms=%2 max_ms=%3 "
+                "interval_ms=%4")
+                .arg(updatePaintNodeCount_)
+                .arg(avgMs, 0, 'f', 3)
+                .arg(maxMs, 0, 'f', 3)
+                .arg(nowMs - updatePaintNodeLastLogMs_));
+        updatePaintNodeCount_ = 0;
+        updatePaintNodeSumNs_ = 0;
+        updatePaintNodeMaxNs_ = 0;
+        updatePaintNodeLastLogMs_ = nowMs;
+    }
     return root;
 }
 

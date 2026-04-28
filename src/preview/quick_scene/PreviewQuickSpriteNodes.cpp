@@ -340,8 +340,19 @@ public:
         }
         geometry_->markVertexDataDirty();
 
+        const bool textureChanged = lastTexture_ != run.texture;
         material_->setBatchState(run.texture, wave, absWave);
-        markDirty(QSGNode::DirtyGeometry | QSGNode::DirtyMaterial);
+        // Only flag DirtyMaterial when the texture binding actually changed. Per-frame
+        // wave/absWave uniform updates are picked up by updateUniformData() regardless of
+        // this flag, and adjacent batches always have distinct textures so Qt's batcher
+        // would never merge them either way. Setting DirtyMaterial unconditionally forces
+        // Qt to re-evaluate compare() and refresh the RHI resource binding every frame —
+        // wasted work in steady state.
+        const QSGNode::DirtyState dirty = textureChanged
+            ? (QSGNode::DirtyGeometry | QSGNode::DirtyMaterial)
+            : QSGNode::DirtyGeometry;
+        markDirty(dirty);
+        lastTexture_ = run.texture;
         profile.allocatedVertexCapacity = allocatedVertexCapacity_;
         return profile;
     }
@@ -351,6 +362,7 @@ private:
     PreviewQuickSpriteMaterial* material_ = nullptr;
     int allocatedVertexCapacity_ = 0;
     int underuseFrameCount_ = 0;
+    QSGTexture* lastTexture_ = nullptr;
 };
 
 }  // namespace
@@ -365,6 +377,18 @@ QSGNode* buildPreviewSpriteNodeTree(
 )
 {
     if (window == nullptr || textures == nullptr) {
+        delete oldNode;
+        return nullptr;
+    }
+
+    // Empty-layer fast path: skip root allocation + batch-run scan for layers that have no
+    // sprites this frame. 9 of the 15 layers are typically empty for non-touch charts, so
+    // this saves ~9 new/delete churns per frame plus the (zero-iteration) scan loop.
+    if (sprites.isEmpty()) {
+        if (textures != nullptr) {
+            PreviewSpriteBatchFrameProfile emptyProfile;
+            textures->noteSpriteBatchStats(profileLayerName, emptyProfile);
+        }
         delete oldNode;
         return nullptr;
     }
@@ -390,7 +414,12 @@ QSGNode* buildPreviewSpriteNodeTree(
         }
         texture->setFiltering(QSGTexture::Linear);
 
-        const SpriteFamilyKey familyKey = static_cast<SpriteFamilyKey>(sprite.image->cacheKey());
+        // Batch by the *resolved* texture pointer rather than the QImage cacheKey: the texture
+        // repository now de-duplicates visually-identical QImage instances down to a single
+        // QSGTexture, so any two sprites that the GPU can draw with the same atlas slot share
+        // one familyKey here. Using image.cacheKey() instead would split such sprites into
+        // separate runs even though they bind the same texture, defeating the dedup work.
+        const SpriteFamilyKey familyKey = static_cast<SpriteFamilyKey>(reinterpret_cast<quintptr>(texture));
         if (runCount == 0 || runs.at(runCount - 1).familyKey != familyKey) {
             if (runCount >= runs.size()) {
                 runs.append(OrderedRunScratch());

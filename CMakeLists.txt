@@ -109,6 +109,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/MuriConfig.h
     src/common/DebugLog.h
     src/common/DebugLog.cpp
+    src/common/Mmcss.h
+    src/common/Mmcss.cpp
     src/common/DebugImageCompare.h
     src/common/ChartAssetPaths.h
     src/common/TimelineThemeConfig.h
@@ -253,6 +255,17 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/quick_scene/PreviewQuickSceneRoot.h
     src/preview/quick_scene/PreviewQuickSceneRoot.cpp
     src/preview/quick_scene/PreviewQuickSceneInvalidationPolicy.h
+    src/preview/dcomp/PreviewDCompCore.h
+    src/preview/dcomp/PreviewDCompCore.cpp
+    src/preview/dcomp/PreviewDCompFrameStateSnapshot.h
+    src/preview/dcomp/PreviewDCompRenderer.h
+    src/preview/dcomp/PreviewDCompRenderer.cpp
+    src/preview/dcomp/PreviewDCompSpritePipeline.h
+    src/preview/dcomp/PreviewDCompSpritePipeline.cpp
+    src/preview/dcomp/PreviewDCompTextureCache.h
+    src/preview/dcomp/PreviewDCompTextureCache.cpp
+    src/preview/dcomp/PreviewDCompSurface.h
+    src/preview/dcomp/PreviewDCompSurface.cpp
     src/preview/audio/PreviewAudioBackend.h
     src/preview/audio/PreviewAudioSettings.h
     src/preview/audio/PreviewAudioSettings.cpp
@@ -409,6 +422,12 @@ if (WIN32)
     target_link_libraries(MiaCode PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
+        winmm
+        avrt  # Multimedia Class Scheduler Service (AvSetMmThreadCharacteristicsW)
+        d3d11        # DComp preview path (src/preview/dcomp) — see docs plan §3 Phase 1
+        dxgi         # IDXGIFactory2::CreateSwapChainForComposition + frame latency waitable
+        dcomp        # DCompositionCreateDevice + visual tree
+        d3dcompiler  # Phase 3 sprite pipeline runtime HLSL compile (D3DCompile)
     )
     add_custom_command(TARGET MiaCode POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different

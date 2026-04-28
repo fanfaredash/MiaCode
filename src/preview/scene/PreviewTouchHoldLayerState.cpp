@@ -20,16 +20,33 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
         previewTouchTimingForFlowSpeed(static_cast<qreal>(state.render.touchFlowSpeed));
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
-    const auto appendSprite = [&layerState](
-                                  const QImage* image,
-                                  const QPointF& center,
-                                  qreal width,
-                                  qreal height,
-                                  qreal rotation,
-                                  qreal opacity,
-                                  PreviewAnimatedSpriteEffect effect = PreviewAnimatedSpriteEffect::None,
-                                  bool cacheable = true
-                              ) {
+
+    // Emit-order optimisation: group sprites by family across all hold markers so the
+    // run-builder can collapse N holds × 5 pieces into a constant number of batches. Within
+    // a single hold the painter's-algorithm order is preserved (fan3 → fan2 → fan1 → fan0 →
+    // point); only the cross-marker ordering changes. This is safe because touch-zones
+    // (C/A/B/D/E) sit at distinct screen positions, so different touch_hold markers do not
+    // overlap geometrically — there is no observer who can tell which one drew first.
+    constexpr int kFanBucketCount = 4;  // index 0 = fan3 (back) … 3 = fan0 (front)
+    QVector<PreviewSpriteDescriptor> fanBuckets[kFanBucketCount];
+    QVector<PreviewSpriteDescriptor> pointBucket;
+    fanBuckets[0].reserve(markers.size());
+    fanBuckets[1].reserve(markers.size());
+    fanBuckets[2].reserve(markers.size());
+    fanBuckets[3].reserve(markers.size());
+    pointBucket.reserve(markers.size());
+
+    const auto appendToBucket = [](
+                                    QVector<PreviewSpriteDescriptor>& bucket,
+                                    const QImage* image,
+                                    const QPointF& center,
+                                    qreal width,
+                                    qreal height,
+                                    qreal rotation,
+                                    qreal opacity,
+                                    PreviewAnimatedSpriteEffect effect = PreviewAnimatedSpriteEffect::None,
+                                    bool cacheable = true
+                                ) {
         if (image == nullptr || image->isNull() || opacity <= 0.0 || width <= 0.0 || height <= 0.0) {
             return;
         }
@@ -42,7 +59,7 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
         sprite.opacity = opacity;
         sprite.effect = effect;
         sprite.cacheable = cacheable;
-        layerState.sprites.append(sprite);
+        bucket.append(sprite);
     };
 
     for (int markerIndex = 0; markerIndex < markers.size(); ++markerIndex) {
@@ -131,7 +148,10 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
             if (pieceLayout.image == nullptr || pieceLayout.image->isNull()) {
                 continue;
             }
-            appendSprite(
+            // index=3 → fan3 (back, bucket 0); index=0 → fan0 (front, bucket 3).
+            const int bucketIndex = 3 - index;
+            appendToBucket(
+                fanBuckets[bucketIndex],
                 pieceLayout.image,
                 QPointF(point.x() + pieceLayout.dx, point.y() + pieceLayout.dy),
                 qMax<qreal>(1.0, qRound(pieceLayout.image->width() * kTouchAssetScale * canvasScale)),
@@ -142,7 +162,7 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
                 fansCacheable
             );
         }
-        appendSprite(&pointBase, point, pointWidth, pointHeight, 0.0, alpha);
+        appendToBucket(pointBucket, &pointBase, point, pointWidth, pointHeight, 0.0, alpha);
 
         if (deltaSeconds >= 0.0 && !borderBase.isNull()) {
             const qreal progress = qBound<qreal>(0.0, deltaSeconds / holdDuration, 1.0);
@@ -160,6 +180,20 @@ PreviewTouchHoldLayerState buildPreviewTouchHoldLayerState(
             }
         }
     }
+
+    // Painter's-algorithm flush: back-most fans first, then layer toward the front, then the
+    // touch-point on top. Concatenating the buckets in this order preserves the per-hold
+    // z-stack while letting the run-builder fuse same-family sprites from all holds into one
+    // batch each.
+    qsizetype emittedSpriteTotal = pointBucket.size();
+    for (int bucketIndex = 0; bucketIndex < kFanBucketCount; ++bucketIndex) {
+        emittedSpriteTotal += fanBuckets[bucketIndex].size();
+    }
+    layerState.sprites.reserve(layerState.sprites.size() + emittedSpriteTotal);
+    for (int bucketIndex = 0; bucketIndex < kFanBucketCount; ++bucketIndex) {
+        layerState.sprites.append(fanBuckets[bucketIndex]);
+    }
+    layerState.sprites.append(pointBucket);
 
     return layerState;
 }

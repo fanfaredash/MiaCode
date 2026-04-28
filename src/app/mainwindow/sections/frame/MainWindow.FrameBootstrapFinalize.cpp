@@ -40,6 +40,35 @@
 
 using namespace miacode::mainwindow::shared;
 
+namespace {
+
+void appendPreviewFramePacingDiagLog(const QString& action, const QString& payload = QString())
+{
+    if (!miacode::debug_options::previewFramePacingDiagnosticsEnabled()) {
+        return;
+    }
+    QString text = QStringLiteral("action=%1").arg(action);
+    if (!payload.trimmed().isEmpty()) {
+        text += QStringLiteral(" ") + payload.trimmed();
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("preview/frame_pacing"),
+        text,
+        true
+    );
+}
+
+int previewFrameSwapWatchdogTimeoutMs(qint64 frameIntervalNs)
+{
+    return qMax(
+        24,
+        qMax(1, qRound(static_cast<double>(frameIntervalNs) / 1000000.0)) * 2
+    );
+}
+
+}  // namespace
+
 void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<void(const QString&)>& logStartupStage)
 {
     constexpr int kToolbarLeadingSpacerWidth = 6;
@@ -155,74 +184,81 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     qtPreviewTimer_->setSingleShot(true);
     qtPreviewTimer_->setTimerType(Qt::PreciseTimer);
     connect(qtPreviewTimer_, &QChronoTimer::timeout, this, [this]() {
+        // Doc section 4.1/4.3: qtPreviewTimer_ is a watchdog for both modes — it no longer
+        // carries the normal visual cadence. It only fires if the framePresented pipeline
+        // has stalled long enough to warrant a kick.
         if (!qtPreviewPlaying_) {
             return;
         }
-        const bool usingFrameSwapPacing =
-            previewCanvas_ != nullptr && previewCanvasUsesFrameSwappedPacing();
-        if (!usingFrameSwapPacing) {
-            const qint64 frameIntervalNs = previewCanvasTargetFrameIntervalNs();
-            if (qtPreviewNextFixedTickDueNs_ < 0 || qtPreviewFixedTickOriginNs_ < 0) {
-                resetQtPreviewFixedFramePacing();
+        const qint64 nowMs = qtPreviewWatchdogElapsed_.elapsed();
+        const int stallTimeoutMs =
+            previewFrameSwapWatchdogTimeoutMs(previewCanvasTargetFrameIntervalNs());
+        if (previewCanvasUsesFrameSwappedPacing()) {
+            if (!qtPreviewAwaitingFrameSwap_) {
+                return;
             }
-            const qint64 nowNs = qtPreviewWatchdogElapsed_.nsecsElapsed();
-            const qint64 latenessNs = qMax<qint64>(0, nowNs - qtPreviewNextFixedTickDueNs_);
-            const bool canLogicalCatchup =
-                !(previewSfxRuntime_ != nullptr
-                    && previewSfxRuntime_->hasBackgroundTrack()
-                    && previewSfxRuntime_->isBackgroundTrackRunning());
-            int ticksToRun = 1;
-            if (canLogicalCatchup && frameIntervalNs > 0 && latenessNs >= frameIntervalNs) {
-                ticksToRun = qMin(2, 1 + static_cast<int>(latenessNs / frameIntervalNs));
-            }
-            int executedTicks = 0;
-            for (; executedTicks < ticksToRun && qtPreviewPlaying_; ++executedTicks) {
-                const qint64 scheduledDueNs = qtPreviewNextFixedTickDueNs_;
-                if (canLogicalCatchup) {
-                    timelineSection_->onQtPreviewTickAtSecond(
-                        timelineSection_->fixedIntervalPreviewSecondForDeadlineNs(scheduledDueNs)
-                    );
-                } else {
-                    onQtPreviewTick();
+            if (qtPreviewAwaitingFrameSwapSinceMs_ >= 0
+                && nowMs - qtPreviewAwaitingFrameSwapSinceMs_ >= stallTimeoutMs) {
+                const qint64 waitMs = nowMs - qtPreviewAwaitingFrameSwapSinceMs_;
+                qtPreviewDisplayRefreshConsecutiveWatchdogs_ += 1;
+                if (previewCanvas_ != nullptr) {
+                    previewCanvas_->noteDisplayRefreshWatchdogTimeout();
+                    previewCanvas_->noteDisplayRefreshTimerFallbackTick();
                 }
-                if (!qtPreviewPlaying_) {
-                    return;
-                }
-                if (previewCanvas_ != nullptr && !previewCanvasUsesFrameSwappedPacing()) {
-                    previewCanvas_->update();
-                }
-                qtPreviewNextFixedTickDueNs_ += frameIntervalNs;
-            }
-            const qint64 postTickNowNs = qtPreviewWatchdogElapsed_.nsecsElapsed();
-            qint64 skippedIntervals = 0;
-            if (frameIntervalNs > 0 && qtPreviewNextFixedTickDueNs_ <= postTickNowNs) {
-                skippedIntervals =
-                    qMax<qint64>(1, ((postTickNowNs - qtPreviewNextFixedTickDueNs_) / frameIntervalNs) + 1);
-                qtPreviewNextFixedTickDueNs_ += skippedIntervals * frameIntervalNs;
-            }
-            if (previewCanvas_ != nullptr) {
-                previewCanvas_->noteFixedTimerDeadlineMetrics(
-                    latenessNs,
-                    qMax(0, executedTicks - 1),
-                    skippedIntervals
+                appendPreviewFramePacingDiagLog(
+                    QStringLiteral("display_watchdog_timeout"),
+                    QStringLiteral(
+                        "wait_ms=%1 target_ms=%2 txn=%3 playhead=%4 audio_second=%5 consecutive_count=%6"
+                    )
+                        .arg(waitMs)
+                        .arg(stallTimeoutMs)
+                        .arg(state_.activePreviewPlaybackTransactionId_)
+                        .arg(qMax(0.0, qtPreviewPauseSecond_), 0, 'f', 6)
+                        .arg(qMax(0.0, currentPreviewAuthoritativeAudioClockSecond()), 0, 'f', 6)
+                        .arg(qtPreviewDisplayRefreshConsecutiveWatchdogs_)
                 );
+                qtPreviewAwaitingFrameSwap_ = false;
+                qtPreviewAwaitingFrameSwapSinceMs_ = -1;
+                qtPreviewAwaitingFrameSwapSinceNs_ = -1;
+                qtPreviewDisplayRefreshTickQueued_ = false;
+                onQtPreviewTick();
+                return;
             }
             scheduleNextQtPreviewTick();
             return;
         }
-        if (!qtPreviewAwaitingFrameSwap_) {
-            onQtPreviewTick();
+        // Fixed interval watchdog (doc 4.1): if no present in a reasonable window while we had
+        // an update() request in flight, clear state and kick a new frame request.
+        if (!qtPreviewFixedAwaitingFrame_) {
             return;
         }
-        const qint64 nowMs = qtPreviewWatchdogElapsed_.elapsed();
-        const int stallTimeoutMs = qMax(
-            24,
-            qMax(1, qRound(static_cast<double>(previewCanvasTargetFrameIntervalNs()) / 1000000.0)) * 2
-        );
-        if (qtPreviewAwaitingFrameSwapSinceMs_ >= 0 && nowMs - qtPreviewAwaitingFrameSwapSinceMs_ >= stallTimeoutMs) {
-            qtPreviewAwaitingFrameSwap_ = false;
-            qtPreviewAwaitingFrameSwapSinceMs_ = -1;
-            onQtPreviewTick();
+        if (qtPreviewFixedAwaitingFrameSinceMs_ >= 0
+            && nowMs - qtPreviewFixedAwaitingFrameSinceMs_ >= stallTimeoutMs) {
+            const qint64 waitMs = nowMs - qtPreviewFixedAwaitingFrameSinceMs_;
+            if (previewCanvas_ != nullptr) {
+                previewCanvas_->noteFixedGateWatchdogKick();
+            }
+            appendPreviewFramePacingDiagLog(
+                QStringLiteral("fixed_gate_watchdog_kick"),
+                QStringLiteral(
+                    "wait_ms=%1 target_ms=%2 txn=%3 playhead=%4 audio_second=%5 time_authority=%6"
+                )
+                    .arg(waitMs)
+                    .arg(stallTimeoutMs)
+                    .arg(state_.activePreviewPlaybackTransactionId_)
+                    .arg(qMax(0.0, qtPreviewPauseSecond_), 0, 'f', 6)
+                    .arg(qMax(0.0, currentPreviewAuthoritativeAudioClockSecond()), 0, 'f', 6)
+                    .arg(previewSfxRuntime_ != nullptr
+                        ? QStringLiteral("audio")
+                        : QStringLiteral("elapsed_fallback"))
+            );
+            qtPreviewFixedAwaitingFrame_ = false;
+            qtPreviewFixedAwaitingFrameSinceMs_ = -1;
+            qtPreviewFixedAwaitingFrameSinceNs_ = -1;
+            qtPreviewFixedFrameTickQueued_ = false;
+            // Re-prime the present pump; do not advance visual time here — onQtPreviewTick will
+            // run from the next real framePresented once it arrives.
+            requestNextFixedIntervalPreviewFrame();
             return;
         }
         scheduleNextQtPreviewTick();

@@ -1,5 +1,6 @@
 #include "preview/quick_scene/PreviewTextureRepository.h"
 
+#include <QHashFunctions>
 #include <QQuickWindow>
 #include <QSGTexture>
 
@@ -7,6 +8,38 @@ namespace {
 
 constexpr qsizetype kPreviewCachedTextureEntryLimit = 96;
 constexpr qint64 kPreviewCachedTextureByteLimit = 96LL * 1024 * 1024;
+// Safety cap on the L1 cacheKey -> fingerprint mapping. Each entry is only ~24 bytes, but
+// in long-running sessions where many short-lived QImage instances dedup to a small set of
+// fingerprints we still want a bound to keep lookup costs predictable.
+constexpr qsizetype kPreviewCachedFastKeyEntryLimit = 8192;
+
+// Content-fingerprint key for the L2 texture cache. Two QImage instances with different
+// cacheKey()s but identical pixel content (e.g. when sprite atlases re-decode the same PNG
+// into a fresh QImage every frame) collapse to the same fingerprint and therefore share a
+// single GPU texture. The fingerprint mixes the raw pixel bytes with width/height/format
+// so resized or reformatted variants stay distinct.
+quint64 computeImageContentFingerprint(const QImage& image)
+{
+    if (image.isNull()) {
+        return 0;
+    }
+    const qsizetype byteCount = image.sizeInBytes();
+    const uchar* bytes = image.constBits();
+    quint64 hash = 0;
+    if (bytes != nullptr && byteCount > 0) {
+        hash = static_cast<quint64>(qHashBits(bytes, static_cast<size_t>(byteCount), /*seed=*/0));
+    }
+    // Mix in metadata so two images with coincidentally identical byte counts but different
+    // dimensions / pixel format don't alias each other.
+    hash ^= static_cast<quint64>(image.width()) * 0x9E3779B185EBCA87ULL;
+    hash ^= static_cast<quint64>(image.height()) * 0xC2B2AE3D27D4EB4FULL;
+    hash ^= static_cast<quint64>(image.format()) * 0x165667B19E3779F9ULL;
+    if (hash == 0) {
+        // Reserve 0 as a "no fingerprint" sentinel.
+        hash = 1;
+    }
+    return hash;
+}
 
 PreviewTextureLayerStats& ensureLayerStats(
     QVector<PreviewTextureLayerStats>* layerStats,
@@ -46,7 +79,8 @@ void PreviewTextureRepository::beginFrame()
 {
     if (cachedTextureFlushPending_
         || cachedTextures_.size() > kPreviewCachedTextureEntryLimit
-        || cachedTextureBytes_ > kPreviewCachedTextureByteLimit) {
+        || cachedTextureBytes_ > kPreviewCachedTextureByteLimit
+        || cachedKeyToFingerprint_.size() > kPreviewCachedFastKeyEntryLimit) {
         clearCachedTextures();
     }
     qDeleteAll(transientTextures_);
@@ -60,16 +94,35 @@ QSGTexture* PreviewTextureRepository::textureForImage(const QImage& image, bool 
         return nullptr;
     }
 
-    const quint64 key = static_cast<quint64>(image.cacheKey());
+    const quint64 fastKey = static_cast<quint64>(image.cacheKey());
     if (cacheable) {
-        if (QSGTexture* existing = cachedTextures_.value(key, nullptr); existing != nullptr) {
+        // L1: same QImage instance we've already seen this run -- skip the fingerprint hash.
+        if (auto fpIt = cachedKeyToFingerprint_.constFind(fastKey);
+            fpIt != cachedKeyToFingerprint_.constEnd()) {
+            if (QSGTexture* existing = cachedTextures_.value(*fpIt, nullptr); existing != nullptr) {
+                stats_.cachedHitCount += 1;
+                return existing;
+            }
+            // Stale L1 entry pointing at a fingerprint that has already been evicted; drop it
+            // and fall through to recompute the fingerprint and possibly re-create the texture.
+            cachedKeyToFingerprint_.erase(fpIt);
+        }
+
+        // L2: content fingerprint -- collapses different QImage instances that hold identical
+        // pixel content (the typical sprite-atlas case where a fresh QImage is decoded each
+        // frame from the same source).
+        const quint64 fingerprint = computeImageContentFingerprint(image);
+        if (QSGTexture* existing = cachedTextures_.value(fingerprint, nullptr); existing != nullptr) {
+            cachedKeyToFingerprint_.insert(fastKey, fingerprint);
             stats_.cachedHitCount += 1;
             return existing;
         }
+
         QSGTexture* texture = window_->createTextureFromImage(image);
-        cachedTextures_.insert(key, texture);
+        cachedTextures_.insert(fingerprint, texture);
+        cachedKeyToFingerprint_.insert(fastKey, fingerprint);
         const qint64 imageBytes = qMax<qint64>(1, image.sizeInBytes());
-        cachedTextureBytesByKey_.insert(key, imageBytes);
+        cachedTextureBytesByKey_.insert(fingerprint, imageBytes);
         cachedTextureBytes_ += imageBytes;
         if (cachedTextures_.size() > kPreviewCachedTextureEntryLimit
             || cachedTextureBytes_ > kPreviewCachedTextureByteLimit) {
@@ -78,12 +131,12 @@ QSGTexture* PreviewTextureRepository::textureForImage(const QImage& image, bool 
         stats_.cachedCreateCount += 1;
         return texture;
     }
-    if (QSGTexture* existing = transientTextures_.value(key, nullptr); existing != nullptr) {
+    if (QSGTexture* existing = transientTextures_.value(fastKey, nullptr); existing != nullptr) {
         stats_.transientHitCount += 1;
         return existing;
     }
     QSGTexture* texture = createOwnedTexture(image);
-    transientTextures_.insert(key, texture);
+    transientTextures_.insert(fastKey, texture);
     stats_.transientCreateCount += 1;
     return texture;
 }
@@ -167,6 +220,7 @@ void PreviewTextureRepository::clearCachedTextures()
 {
     qDeleteAll(cachedTextures_);
     cachedTextures_.clear();
+    cachedKeyToFingerprint_.clear();
     cachedTextureBytesByKey_.clear();
     cachedTextureBytes_ = 0;
     cachedTextureFlushPending_ = false;
