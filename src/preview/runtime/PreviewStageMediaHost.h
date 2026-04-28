@@ -1,6 +1,6 @@
 #pragma once
 
-#include "preview/video/PreviewRenderSettings.h"
+#include "core/video/PreviewRenderSettings.h"
 
 #include <QElapsedTimer>
 #include <QMetaObject>

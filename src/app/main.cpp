@@ -7,7 +7,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/WaveformCache.h"
-#include "preview/video/MpvProbe.h"
+#include "core/video/MpvProbe.h"
 
 #include <QApplication>
 #include <QCommandLineOption>

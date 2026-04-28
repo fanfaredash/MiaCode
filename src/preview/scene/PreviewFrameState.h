@@ -11,7 +11,7 @@
 #include "common/PreviewVideoGeometryConfig.h"
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
-#include "preview/video/PreviewRenderSettings.h"
+#include "core/video/PreviewRenderSettings.h"
 #include "timeline/TimelineData.h"
 
 #ifdef HAVE_QT_MULTIMEDIA

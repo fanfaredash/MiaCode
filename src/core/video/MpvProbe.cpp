@@ -1,4 +1,4 @@
-#include "preview/video/MpvProbe.h"
+#include "core/video/MpvProbe.h"
 
 #include "common/DebugLog.h"
 

@@ -6,7 +6,7 @@
 #include <QString>
 #include <QStringList>
 
-#include "preview/video/PreviewRenderSettings.h"
+#include "core/video/PreviewRenderSettings.h"
 
 namespace miacode::assets {
 

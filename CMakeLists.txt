@@ -393,13 +393,13 @@ target_include_directories(MiaCode PRIVATE
     src/app
     src/app/quick_shell
     src/app/ui
+    src/core/video
     src/editor
     src/preview
     src/preview/audio
     src/preview/quick_scene
     src/preview/runtime
     src/preview/scene
-    src/preview/video
     src/simai
     src/simai/document
     src/simai/parser
@@ -410,8 +410,8 @@ target_include_directories(MiaCode PRIVATE
 
 target_sources(MiaCode PRIVATE
     src/common/PreviewAudioMixConfig.h
-    src/preview/video/MpvProbe.cpp
-    src/preview/video/MpvProbe.h
+    src/core/video/MpvProbe.cpp
+    src/core/video/MpvProbe.h
     src/tools/video_export/VideoExportAudioRenderPlan.h
     src/tools/video_export/VideoExportAudioRenderPlan.cpp
     src/tools/video_export/VideoExportAudioBackend.h
@@ -752,7 +752,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src
         src/preview
         src/preview/audio
-        src/preview/video
+        src/core/video
         src/timeline
         src/tools
     )
@@ -828,7 +828,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/preview
         src/preview/runtime
         src/preview/scene
-        src/preview/video
+        src/core/video
         src/timeline
     )
 
@@ -841,7 +841,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src/common
         src/preview
         src/preview/scene
-        src/preview/video
+        src/core/video
         src/timeline
     )
 
@@ -946,7 +946,7 @@ if (MIACODE_BUILD_DEV_TOOLS)
         src
         src/common
         src/preview/audio
-        src/preview/video
+        src/core/video
         src/timeline
         src/tools
         src/tools/video_export
