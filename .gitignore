@@ -48,6 +48,11 @@ third_party/ffmpeg/**/ffmpeg.exe
 third_party/ffmpeg/**/ffprobe
 third_party/ffmpeg/**/ffprobe.exe
 
+# libmpv vendoring — keep headers + import lib + .def under VC, ignore
+# the downloaded archive and any regenerated .exp file.
+third_party/mpv/**/*.7z
+third_party/mpv/**/*.exp
+
 # scripts whitelist: ignore all by default, allow only release/infra scripts.
 scripts/*
 !scripts/Start_MiaCode_Debug.bat

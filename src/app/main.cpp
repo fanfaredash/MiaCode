@@ -7,6 +7,7 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/WaveformCache.h"
+#include "preview/video/MpvProbe.h"
 
 #include <QApplication>
 #include <QCommandLineOption>
@@ -808,6 +809,11 @@ int main(int argc, char* argv[])
     if (miacode::debug_options::startupTimingEnabled()) {
         miacode::debug_log::initializeStartupTimingLogSession();
     }
+
+    // v2-refactor Phase 0 — confirm libmpv is loaded and log its API
+    // version. No functional change; Phase 4 builds the actual video
+    // source on top of this.
+    miacode::preview::video::probeLibmpvAtStartup();
 
     const bool qsgFullDisable = miacode::debug_options::previewQsgFullDisableEnabled();
     const bool forceBasicRenderLoop = qsgFullDisable
