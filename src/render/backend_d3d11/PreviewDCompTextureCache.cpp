@@ -5,6 +5,8 @@
 #include <QImage>
 #include <QString>
 
+#include <algorithm>
+
 namespace miacode::preview::dcomp {
 
 namespace {
@@ -125,31 +127,50 @@ ID3D11ShaderResourceView* PreviewDCompTextureCache::lookupOrCreate(
     raw->AddRef();
     if (cacheable) {
         cacheable_.insert(key, raw);
+        cacheableInsertionOrder_.push_back(key);
         if ((cacheable_.size() % 32) == 0) {
             logCache("cacheable_growth",
                      QStringLiteral("count=%1").arg(cacheable_.size()));
         }
-        // Phase 3.6 — cache cap mirroring PreviewTextureRepository's 96
-        // entry / 96MB triggers (PreviewTextureRepository.cpp:9-10).
-        // When the cap is exceeded we flush the entire cacheable cache
-        // and rebuild lazily on the next lookup. The current entry
-        // (`raw`) was just added and stays via the lookupOrCreate
-        // return; only the older entries are dropped. Without a cap a
-        // long edit session that loads many distinct sprite skins
-        // could grow unbounded.
-        if (cacheable_.size() > kCacheableEntryCap) {
-            // Save the entry we just inserted, drop everything else,
-            // then re-insert. That way the caller keeps a valid SRV.
-            cacheable_.remove(key);
-            for (auto it = cacheable_.cbegin(); it != cacheable_.cend(); ++it) {
-                if (*it != nullptr) (*it)->Release();
+        // FIFO single-eviction at the cap. Replaces the previous
+        // clear-all-on-full pattern (HANDOVER §7.4 documents this same
+        // class of bug for the overlay cache). Releasing every cached
+        // SRV at once UAF'd D3D11's immediate context, which still had
+        // a previously-bound SRV from earlier in the frame whose only
+        // ref was held by `cacheable_`. The crash signature was a
+        // shutdown after `cacheable_flush reason=entry_cap` — render
+        // thread freezing one second later when its next draw call
+        // dereferenced the freed SRV.
+        //
+        // Now: drop the SINGLE oldest entry until back under cap. The
+        // entry we just inserted is at the back of the FIFO so it
+        // survives. D3D11's bound-SRV ref-counting protects any SRV
+        // currently bound (immediate context's binding holds an
+        // implicit ref via PSSetShaderResources) so single-eviction
+        // is safe in any render-thread state.
+        while (cacheable_.size() > kCacheableEntryCap
+               && !cacheableInsertionOrder_.empty()) {
+            const qint64 oldest = cacheableInsertionOrder_.front();
+            cacheableInsertionOrder_.pop_front();
+            if (oldest == key) {
+                // The entry we just inserted — skip; it'll re-enter the
+                // FIFO from a future insert. Should not happen in normal
+                // flow since we push_back before this loop, but defensive.
+                continue;
             }
-            cacheable_.clear();
-            cacheable_.insert(key, raw);
-            logCache("cacheable_flush",
-                     QStringLiteral("reason=entry_cap cap=%1 retained_key=0x%2")
+            auto it = cacheable_.find(oldest);
+            if (it == cacheable_.end()) {
+                continue;  // already evicted by some other path
+            }
+            if (*it != nullptr) {
+                (*it)->Release();
+            }
+            cacheable_.erase(it);
+            logCache("cacheable_evict_oldest",
+                     QStringLiteral("cap=%1 evicted_key=0x%2 size_after=%3")
                          .arg(kCacheableEntryCap)
-                         .arg(static_cast<quint64>(key), 0, 16));
+                         .arg(static_cast<quint64>(oldest), 0, 16)
+                         .arg(cacheable_.size()));
         }
     } else {
         transient_.insert(key, raw);
@@ -165,6 +186,16 @@ void PreviewDCompTextureCache::evictCacheableKey(qint64 key)
         (*it)->Release();
     }
     cacheable_.erase(it);
+    // Keep the insertion-order FIFO consistent. Linear scan is fine —
+    // explicit eviction is a rare path (compared to the hot lookup-or-
+    // create path).
+    auto orderIt = std::find(
+        cacheableInsertionOrder_.begin(),
+        cacheableInsertionOrder_.end(),
+        key);
+    if (orderIt != cacheableInsertionOrder_.end()) {
+        cacheableInsertionOrder_.erase(orderIt);
+    }
 }
 
 void PreviewDCompTextureCache::endFrame()
@@ -200,6 +231,7 @@ void PreviewDCompTextureCache::clear()
     }
     cacheable_.clear();
     transient_.clear();
+    cacheableInsertionOrder_.clear();
 }
 
 #endif  // Q_OS_WIN

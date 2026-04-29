@@ -21,6 +21,8 @@
 
 #include <QHash>
 
+#include <deque>
+
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -111,6 +113,14 @@ private:
     // PODs, which it handles correctly.
     QHash<qint64, ID3D11ShaderResourceView*> cacheable_;
     QHash<qint64, ID3D11ShaderResourceView*> transient_;
+    // Insertion-order log mirroring `cacheable_` so the cap-eviction
+    // path can drop the oldest single entry instead of clearing all
+    // entries. The clear-all behaviour caused a UAF when D3D11's
+    // immediate context still had a previously-bound SRV from earlier
+    // in the frame whose only ref was held by `cacheable_` (mirrors
+    // HANDOVER §7.4's overlay-cache catastrophic-flush pattern —
+    // documented as a class-of-bug to avoid in v2).
+    std::deque<qint64> cacheableInsertionOrder_;
 #endif
 };
 
