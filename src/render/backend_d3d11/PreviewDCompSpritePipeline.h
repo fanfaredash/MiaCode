@@ -192,9 +192,20 @@ private:
     // Phase 3.5a expanded the budget to accommodate circle tessellation
     // alongside sprite quads. A 32-segment filled circle is 96 vertices;
     // a 32-segment stroke ring is 192 vertices (six per segment quad).
-    // Worst-case ~10 circles ≈ 2880 verts + ~100 sprite quads ≈ 600
-    // verts = ~3.5k, comfortably under 8192.
-    static constexpr int kMaxVertices = 8192;
+    // Worst-case chart-only path: ~10 circles ≈ 2880 verts + ~100 sprite
+    // quads ≈ 600 verts = ~3.5k.
+    //
+    // Phase 3d added the timeline source set, which can emit tens of
+    // thousands of primitives (every visible note + every slide track
+    // segment + waveform bars + grid lines + frame rects). Observed
+    // worst-case: 234,444 verts in love-machine-3 at full zoom-out
+    // (snapshot has ~32K timeline rects + ~1.6K timeline lines).
+    // 8K cap truncated 97% of the timeline content. Raise to 1M
+    // verts (1M × sizeof(vertex) ≈ 32 MB GPU memory — well within
+    // budget even on integrated GPUs); future Phase 5 polish can
+    // tighten this with per-frame culling against the visible
+    // viewport once the timeline scroll/zoom is the dominant cost.
+    static constexpr int kMaxVertices = 1024 * 1024;
     bool ready_ = false;
 #endif
 };
