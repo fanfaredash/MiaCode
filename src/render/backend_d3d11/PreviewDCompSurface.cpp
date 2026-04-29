@@ -38,6 +38,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 
 namespace {
 // Monotonic, high-resolution timestamp in nanoseconds. Same clock as
@@ -76,14 +77,21 @@ PreviewDCompSurface::PreviewDCompSurface(QObject* parent)
     // Render-thread-driven publishing. Each Present on the render thread
     // fires `presented` carrying its emit timestamp; we re-enter
     // onRendererPresented on the GUI thread (which records dispatch
-    // latency, then calls onRuntimeFrameStateChanged to build + publish
-    // a snapshot that's vsync-aligned). Paired with the gating in
+    // latency, then calls buildAndPublishSnapshot to produce a snapshot
+    // that's vsync-aligned). Paired with the gating in
     // onRuntimeFrameStateChanged, this makes playback publishes uniformly
     // spaced at the display refresh interval — which is what fixed the
     // playhead-delta variance the diagnostic exposed.
-    connect(&renderer_, &PreviewDCompRenderer::presented, this,
-            &PreviewDCompSurface::onRendererPresented,
-            Qt::QueuedConnection);
+    //
+    // Connection captured into rendererPresentedConnection_ so detach()
+    // can disconnect it BEFORE renderer_.stop() joins; without that,
+    // a queued `presented` emit posted right before stop() returns can
+    // dispatch on a half-destroyed surface during shutdown (cross-thread
+    // UAF — produced the 2 GB process dumps).
+    rendererPresentedConnection_ = connect(
+        &renderer_, &PreviewDCompRenderer::presented, this,
+        &PreviewDCompSurface::onRendererPresented,
+        Qt::QueuedConnection);
 
     // Worker-thread HUD rebuild. The watcher lives on the GUI thread;
     // its `finished` signal is delivered here by Qt's auto-connection,
@@ -256,6 +264,18 @@ void PreviewDCompSurface::detach()
         QObject::disconnect(runtimeFrameStateConnection_);
         runtimeFrameStateConnection_ = QMetaObject::Connection();
     }
+    // CRITICAL: disconnect the render thread's `presented` signal BEFORE
+    // teardownCore (which calls renderer_.stop() / joins the thread).
+    // Any queued `presented` emit already on the GUI event queue gets
+    // dropped at disconnect time; any new emit between this line and
+    // the join lands on a disconnected slot and is a no-op. Without
+    // this, a present-then-stop race produced a cross-thread UAF when
+    // the queued event was processed after the surface had begun
+    // tearing down — surfaced as the 2 GB shutdown dumps.
+    if (rendererPresentedConnection_) {
+        QObject::disconnect(rendererPresentedConnection_);
+        rendererPresentedConnection_ = QMetaObject::Connection();
+    }
     setTrackedItem(nullptr);
     runtime_ = nullptr;
     teardownCore();
@@ -371,31 +391,45 @@ void PreviewDCompSurface::buildAndPublishSnapshot(qint64 emittedAtNs)
     const qint64 playheadSampleNs = (emittedAtNs > 0) ? emittedAtNs : nowNs;
     constexpr double kRenderPlayheadSnapSeconds = 0.050;
     constexpr double kFixedNominal60HzSeconds = 1.0 / 60.0;
+    // Pause detection: if state.playheadSeconds (the audio-time anchor
+    // from PreviewRuntime, after smoothing + lookahead) hasn't changed
+    // since last call, audio is paused — visual playhead must NOT
+    // advance, otherwise the fixed-nominal +16.67 ms / frame plus the
+    // 50 ms drift snap produces a 4-frame oscillation visible as
+    // flicker on per-playhead animations (judge effects, slide motion,
+    // etc.). The first call (NaN) falls through to the playback path.
+    const double currentAudioSeconds = state.playheadSeconds;
+    const bool audioStalled =
+        !std::isnan(lastObservedAudioSeconds_)
+        && currentAudioSeconds == lastObservedAudioSeconds_;
+    lastObservedAudioSeconds_ = currentAudioSeconds;
     if (!renderPlayheadInitialized_) {
-        renderPlayheadSeconds_ = state.playheadSeconds;
+        renderPlayheadSeconds_ = currentAudioSeconds;
         renderPlayheadLastSampleNs_ = playheadSampleNs;
         renderPlayheadInitialized_ = true;
+    } else if (audioStalled) {
+        // Pause: lock visual to audio anchor; no advance, no drift
+        // accumulation, no snap-induced backward jumps. Each snapshot
+        // carries the exact audio time, so paused-state animations
+        // are visually frozen on a stable frame.
+        renderPlayheadSeconds_ = currentAudioSeconds;
+        renderPlayheadLastSampleNs_ = playheadSampleNs;
     } else {
-        // Render-thread-driven path (emittedAtNs > 0): advance by a
-        // hardcoded 60 Hz vsync interval. Verified empirically to drive
-        // playhead_delta_stats stddev_ms to 0.000 in steady state on
-        // the test hardware (60 Hz monitor, 60 FPS playback).
+        // Playback path.
         //
-        // Hardcoded for now — two prior attempts to plumb the user's
-        // Video-Settings selection (60 / 120 / Display Refresh) through
-        // PreviewRuntime stalled the render thread mid-session for
-        // reasons not yet pinned. The hardcoded form was already tested
-        // working under the f60762a env-flag-gated rollout. Phase 5
-        // polish reattempts the user-setting plumbing with more care
-        // (likely a non-PreviewRuntime path).
+        // Render-thread-driven (emittedAtNs > 0): advance by a hardcoded
+        // 60 Hz vsync interval. Empirically drives playhead_delta_stats
+        // stddev_ms to 0.000 on the 60 Hz test hardware. Hardcoded for
+        // now — two prior attempts to plumb the user's Video-Settings
+        // selection (60 / 120 / Display Refresh) through PreviewRuntime
+        // stalled the render thread mid-session for reasons not yet
+        // pinned. Phase 5 polish reattempts plumbing with more care.
         //
-        // Direct/runtime-driven path (emittedAtNs == 0, paused state):
+        // Direct/runtime-driven (emittedAtNs == 0, e.g. setRuntime seed):
         // measured wall-clock advance bounded to [0, 100 ms] so a long
         // stall doesn't race forward.
         //
-        // Drift snap (>50 ms) catches seek / pause-resume / sustained
-        // missed-vsync. With a 60 Hz monitor and 60 Hz nominal, drift
-        // stays well under 50 ms in steady state.
+        // Drift snap (>50 ms) catches seek and sustained missed-vsync.
         double advanceSeconds;
         if (emittedAtNs > 0) {
             advanceSeconds = kFixedNominal60HzSeconds;
@@ -408,9 +442,9 @@ void PreviewDCompSurface::buildAndPublishSnapshot(qint64 emittedAtNs)
         }
         renderPlayheadSeconds_ += advanceSeconds;
         renderPlayheadLastSampleNs_ = playheadSampleNs;
-        const double drift = state.playheadSeconds - renderPlayheadSeconds_;
+        const double drift = currentAudioSeconds - renderPlayheadSeconds_;
         if (qAbs(drift) > kRenderPlayheadSnapSeconds) {
-            renderPlayheadSeconds_ = state.playheadSeconds;
+            renderPlayheadSeconds_ = currentAudioSeconds;
         }
     }
 

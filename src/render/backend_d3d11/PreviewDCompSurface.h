@@ -11,6 +11,8 @@
 #include <QObject>
 #include <QPointer>
 #include <QSharedPointer>
+
+#include <limits>
 #include <QSize>
 #include <QTimer>
 
@@ -117,10 +119,26 @@ private:
     // (Name is historical — kept until Phase 3 renames to popupHwnd_.)
     void* childHwnd_ = nullptr;
     QMetaObject::Connection runtimeFrameStateConnection_;
+    // Stored so detach() can explicitly disconnect the render thread's
+    // `presented` signal BEFORE renderer_.stop() joins. Without this,
+    // any in-flight emit posted to the GUI thread's queue right before
+    // the join completes would dispatch to a half-destroyed surface
+    // (Qt::QueuedConnection events live in the queue until processed),
+    // crashing during shutdown with the cross-thread UAF that produces
+    // the 2 GB process dumps.
+    QMetaObject::Connection rendererPresentedConnection_;
     QVector<QMetaObject::Connection> trackedItemConnections_;
     // Wall-clock timestamp of the last snapshot publish. Used by
     // diagnostics; the publish path itself does NOT throttle.
     qint64 lastPublishNs_ = 0;
+    // Tracks the audio anchor across consecutive buildAndPublishSnapshot
+    // calls. When state.playheadSeconds doesn't move between two calls
+    // we know audio is paused — the visual playhead must not advance,
+    // otherwise the fixed-nominal advance + 50 ms drift snap produces
+    // a 4-frame oscillation visible as flicker on any per-playhead
+    // animation. Initialised to NaN so the first comparison falls
+    // through to the playback path.
+    double lastObservedAudioSeconds_ = std::numeric_limits<double>::quiet_NaN();
 
     // Render-thread playhead clock. Advances at wall-clock rate
     // between publish calls; drifts toward the runtime's audio-time
