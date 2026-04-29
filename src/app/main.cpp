@@ -1014,8 +1014,26 @@ int main(int argc, char* argv[])
         return exitCode;
     }
 
+    // Phase 3a of the v2-refactor — `--quick-shell-beta` becomes the
+    // canonical opt-in for the new DComp pipeline. Setting the env vars
+    // here (before any code that reads them via envFlagEnabled) makes
+    // the flag self-contained: users running with --quick-shell-beta no
+    // longer need to also set MIACODE_PREVIEW_USE_DCOMP=1 in their
+    // shell, and the same release build covers both legacy QSG and
+    // DComp paths via this single argv check.
+    //
+    // We use qputenv(..., "1") only when the env var is currently
+    // *unset*, so an explicit MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND=0 in
+    // the launching shell still wins (lets the user A/B without
+    // rebuilding). previewUseDCompEnabled defers to envFlagEnabled
+    // which checks the live env on every call, so setting it here is
+    // sufficient.
     const bool quickShellBetaRequested = wantsQuickShellBeta(app.arguments());
-    Q_UNUSED(quickShellBetaRequested);
+    if (quickShellBetaRequested) {
+        if (qEnvironmentVariableIsEmpty("MIACODE_PREVIEW_USE_DCOMP")) {
+            qputenv("MIACODE_PREVIEW_USE_DCOMP", QByteArrayLiteral("1"));
+        }
+    }
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     QElapsedTimer appExecElapsed;

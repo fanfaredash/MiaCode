@@ -174,12 +174,20 @@ inline bool previewDCompTopLevelHwndEnabled()
     // and DComp's swap chain no longer serialise on the same HWND.
     // This is the architectural fix that lets the chart-preview swap
     // chain present without inter-swap-chain serialisation in DWM.
-    // Phase 3 of the v2-refactor turns this on unconditionally; for
-    // now it remains opt-in via env flag so we can A/B against the
-    // legacy in-place mode while the rest of the refactor lands.
-    // Implies and requires previewUseDCompEnabled.
-    return previewUseDCompEnabled()
-        && envFlagEnabled("MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND");
+    //
+    // Phase 3a — default-on when DComp is enabled. The env flag is now
+    // an *override* rather than an opt-in: leave it unset (the common
+    // case) and you get the new behaviour; set it explicitly to "0" /
+    // "false" to fall back to the legacy in-place mode. This lets us
+    // ship the new pipeline as the default while keeping the A/B
+    // escape hatch around for diagnostics. Implies and requires
+    // previewUseDCompEnabled.
+    if (!previewUseDCompEnabled()) {
+        return false;
+    }
+    const std::optional<bool> override = envOptionalFlagValue(
+        "MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND");
+    return override.value_or(true);
 }
 
 inline bool previewQsgFullDisableEnabled()
