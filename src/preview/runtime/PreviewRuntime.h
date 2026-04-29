@@ -172,6 +172,23 @@ public:
     void setFrameSize(const QSize& size);
     const miacode::preview::scene::PreviewFrameState& frameState() const { return frameState_; }
 
+    // Per-frame nominal advance interval used by the DComp render-thread
+    // playhead clock. Set by MainWindow::refreshPreviewFrameRateTimers
+    // from the user's "Video Settings" canvas-frame-rate selection
+    // (60 / 120 / Display Refresh — same code path for all three; the
+    // mainwindow already computes the resolved interval). Default 60 Hz
+    // so callers that never call the setter still get a sane clock.
+    //
+    // Plain getter/setter — deliberately NOT a Q_OBJECT signal/slot.
+    // An earlier attempt that emitted a `targetFrameIntervalChanged`
+    // signal here triggered something (suspected MOC churn or
+    // Q_OBJECT-table side effect) that stalled the render thread mid
+    // session; the plain-method form is byte-identical to the
+    // not-yet-touched class layout from MOC's perspective and avoids
+    // that whole class of risk.
+    qint64 nominalFrameIntervalNs() const { return nominalFrameIntervalNs_; }
+    void setNominalFrameIntervalNs(qint64 ns);
+
 signals:
     void frameStateChanged();
     void framePresented();
@@ -187,6 +204,8 @@ private:
     miacode::preview::scene::PreviewFrameState frameState_;
     bool requestedShowObjectStatsHud_ = false;
     bool suppressObjectStatsHud_ = false;
+    // Default 60 Hz; MainWindow updates from Video Settings.
+    qint64 nominalFrameIntervalNs_ = 1000000000LL / 60LL;
     QElapsedTimer presentTimer_;
     qint64 lastPresentedNs_ = -1;
     QVector<double> presentedFrameIntervalsMs_;

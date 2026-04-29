@@ -722,6 +722,12 @@ void MainWindow::TimelineSection::refreshPreviewFrameRateTimers()
             targetIntervalNs > 0 ? (1000000000.0 / static_cast<double>(targetIntervalNs)) : 0.0,
             currentPreviewCanvasRefreshRate()
         );
+        // Push the resolved interval into the runtime so the DComp
+        // surface advances its render-thread playhead clock by this
+        // exact value per frame. All three Video Settings options
+        // (60 / 120 / Display Refresh) flow through the same code
+        // path here — only the resolved interval differs.
+        state_.previewCanvas_->setNominalFrameIntervalNs(targetIntervalNs);
     }
 }
 

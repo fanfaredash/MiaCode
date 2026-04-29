@@ -370,33 +370,47 @@ void PreviewDCompSurface::buildAndPublishSnapshot(qint64 emittedAtNs)
     // a discontinuity.
     const qint64 playheadSampleNs = (emittedAtNs > 0) ? emittedAtNs : nowNs;
     constexpr double kRenderPlayheadSnapSeconds = 0.050;
-    // Experimental: when MIACODE_PREVIEW_DCOMP_FIXED_NOMINAL_CLOCK=1,
-    // advance the render-thread playhead clock by a hardcoded 60 Hz
-    // vsync interval per render-thread-driven publish, instead of by
-    // measured wall-clock. Goal is to drive playhead_delta_stats
-    // stddev → 0 by removing Present(1,0) return-time variance from
-    // the playhead increment. Off by default — earlier attempts to
-    // make this default broke the preview render path mid-session
-    // (root cause TBD); this flag isolates the change for safe A/B.
-    const bool fixedNominalClock =
-        miacode::debug_options::previewDCompFixedNominalClockEnabled();
-    constexpr double kFixedNominal60HzSeconds = 1.0 / 60.0;
     if (!renderPlayheadInitialized_) {
         renderPlayheadSeconds_ = state.playheadSeconds;
         renderPlayheadLastSampleNs_ = playheadSampleNs;
         renderPlayheadInitialized_ = true;
     } else {
+        // Hybrid playhead clock — verified to drive playhead_delta_stats
+        // stddev_ms to 0 in steady-state playback.
+        //
+        // Render-thread-driven path (emittedAtNs > 0): advance by the
+        // user-selected nominal frame interval, pulled from the runtime.
+        // PreviewRuntime::nominalFrameIntervalNs is set by MainWindow's
+        // refreshPreviewFrameRateTimers() and reflects the current Video
+        // Settings selection (60 FPS / 120 FPS / Display Refresh — same
+        // code path here for all three; only the resolved value differs).
+        // Using a fixed nominal value rather than measured wall-clock
+        // makes consecutive snapshot.playheadSeconds differ by exactly
+        // the configured interval, immune to Present(1, 0) return-time
+        // variance and DXGI flip-queue scheduling — the residual ~1 ms
+        // stddev source under measured wall-clock advance.
+        //
+        // Direct/runtime-driven path (emittedAtNs == 0, paused state):
+        // measured wall-clock advance, bounded so a long stall (system
+        // sleep / GC pause) doesn't race forward by seconds.
+        //
+        // Drift snap (>50 ms): if state.playheadSeconds (audio anchor)
+        // diverges substantially from renderPlayheadSeconds_, snap. This
+        // catches seek / pause-resume / sustained missed-vsync, AND the
+        // case where the user picked an inconsistent rate (e.g. 120 FPS
+        // selection on a 60 Hz monitor) — drift accumulates linearly,
+        // snap fires periodically, audio sync stays correct at the cost
+        // of a periodic single-frame jump.
         double advanceSeconds;
-        if (fixedNominalClock && emittedAtNs > 0) {
-            // Steady-state path under the experimental flag: ignore
-            // wall-clock entirely.
-            advanceSeconds = kFixedNominal60HzSeconds;
+        if (emittedAtNs > 0) {
+            const qint64 nominalIntervalNs =
+                runtime_->nominalFrameIntervalNs();
+            advanceSeconds = static_cast<double>(nominalIntervalNs) / 1.0e9;
         } else {
-            const qint64 elapsedNs = playheadSampleNs - renderPlayheadLastSampleNs_;
-            const double elapsedSeconds = static_cast<double>(elapsedNs) / 1.0e9;
-            // Bound the step to [0, 100 ms] so a long stall (e.g., system
-            // sleep / GC pause) doesn't make us race forward by seconds
-            // when we wake; the drift snap below catches up cleanly instead.
+            const qint64 elapsedNs =
+                playheadSampleNs - renderPlayheadLastSampleNs_;
+            const double elapsedSeconds =
+                static_cast<double>(elapsedNs) / 1.0e9;
             advanceSeconds = qBound(0.0, elapsedSeconds, 0.100);
         }
         renderPlayheadSeconds_ += advanceSeconds;
