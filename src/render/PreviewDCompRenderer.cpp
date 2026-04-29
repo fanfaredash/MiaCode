@@ -191,7 +191,14 @@ bool PreviewDCompRenderer::isActivelyRendering() const
 void PreviewDCompRenderer::publishSnapshot(const PreviewDCompFrameStateSnapshot& snapshot)
 {
     std::lock_guard<std::mutex> lock(snapshotMutex_);
-    snapshot_ = snapshot;
+    snapshotQueue_.push_back(snapshot);
+    // Drop oldest entries past the cap. Steady-state depth is 0-1; a
+    // pair-cluster lands depth 2; depth 3 has margin before we start
+    // shedding. Hitting 3 means the GUI is consistently outpacing the
+    // render thread — rare since both are vsync-paced.
+    while (snapshotQueue_.size() > static_cast<size_t>(kSnapshotQueueCapacity)) {
+        snapshotQueue_.pop_front();
+    }
 }
 
 void PreviewDCompRenderer::setPaused(bool paused)
@@ -331,13 +338,26 @@ void PreviewDCompRenderer::renderAnimatedFrame()
     }
 
 #ifdef Q_OS_WIN
-    // Phase 3.2: copy the latest published snapshot under the lock.
-    // The lock is held for one struct copy (< 100 ns) — render path
-    // contention is not a concern at this scale.
+    // Pop the front of the snapshot queue (FIFO). When the queue is
+    // empty (GUI hasn't published since last consume — happens at start
+    // and during paused state), reuse the last consumed snapshot so the
+    // renderer keeps presenting valid content instead of flashing to a
+    // default-constructed frame.
+    //
+    // The lock is held for one std::move + a possible deque pop — tens
+    // of nanoseconds. Render path contention is not a concern at this
+    // scale; snapshotMutex_ is uncontended in steady state because the
+    // GUI publish runs to completion between vsync waits.
     PreviewDCompFrameStateSnapshot snapshot;
     {
         std::lock_guard<std::mutex> lock(snapshotMutex_);
-        snapshot = snapshot_;
+        if (!snapshotQueue_.empty()) {
+            snapshot = std::move(snapshotQueue_.front());
+            snapshotQueue_.pop_front();
+            lastConsumedSnapshot_ = snapshot;
+        } else {
+            snapshot = lastConsumedSnapshot_;
+        }
     }
 
     // Phase 3.3a diagnostic: log sprite/image counts every ~60 frames

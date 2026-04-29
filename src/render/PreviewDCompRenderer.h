@@ -24,6 +24,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <deque>
 #include <mutex>
 #include <thread>
 
@@ -114,12 +115,30 @@ private:
     std::atomic<bool> stopRequested_{ false };
     std::atomic<qint64> framesRendered_{ 0 };
 
-    // Latest published frame state. The GUI thread writes via
-    // publishSnapshot under snapshotMutex_; the render thread copies it
-    // out at the top of each frame. POD by value, ~80 bytes — the lock
-    // is held for tens of nanoseconds (one struct copy).
+    // Snapshot mailbox. The GUI thread enqueues via publishSnapshot under
+    // snapshotMutex_; the render thread pops the front entry per frame.
+    //
+    // Capacity > 1 is the fix for queued-event clusters on the GUI side:
+    // when two presented-driven publishes land in rapid succession (Qt's
+    // QueuedConnection sometimes coalesces sub-ms between events when the
+    // GUI thread alternates busy/idle), the render thread used to see
+    // only the latest one in a single-slot mailbox — the intermediate
+    // snapshot was overwritten before being consumed, and the renderer's
+    // playhead_delta_stats logged a 2-vsync delta as a single sample.
+    // With FIFO depth N, those clusters become N consecutive 1-vsync
+    // deltas instead, and the render thread renders both frames in
+    // sequence (one per vsync).
+    //
+    // When the queue overflows (GUI consistently faster than vsync, very
+    // rare since both are paced to the display rate), drop oldest to keep
+    // the latest state visible. When the queue is empty (render thread is
+    // ahead, e.g. the GUI thread missed a publish), the render thread
+    // falls back to the most recently consumed snapshot — same as the
+    // single-slot behaviour at idle.
+    static constexpr int kSnapshotQueueCapacity = 3;
     mutable std::mutex snapshotMutex_;
-    PreviewDCompFrameStateSnapshot snapshot_;
+    std::deque<PreviewDCompFrameStateSnapshot> snapshotQueue_;
+    PreviewDCompFrameStateSnapshot lastConsumedSnapshot_;
 
     // Pending-resize queue. The mutex is held only while reading or writing
     // `pendingResizeSize_` and `pendingResizeRequested_`; the renderer
