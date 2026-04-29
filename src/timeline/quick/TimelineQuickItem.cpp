@@ -222,19 +222,26 @@ TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
     setObjectName(QStringLiteral("timeline_dcomp_track_target"));
     if (miacode::debug_options::previewTimelineUseDCompEnabled()) {
         dcompView_ = std::make_unique<miacode::preview::dcomp::TimelineRenderView>(this);
-        // Attach to the host window once we're parented into a scene.
-        // QQuickItem fires windowChanged() with the new window when
-        // setParentItem moves us into a scene; if we're already in
-        // one (e.g. instantiated directly with a window), attach now.
+        // Attach to the host window once we're parented into a scene,
+        // and tell the view we ARE its tracked item — bypassing the
+        // findChild-by-objectName dance, which fails in the
+        // sceneGraphInitialized → onWindowGeometryChanged path because
+        // the QQuickItem is constructed lazily by QML and isn't in
+        // the window's child tree at the right moment. The popup
+        // would otherwise stay sized to the full QQuickWindow client
+        // area, drawing timeline rects/lines at the window's top-left
+        // instead of inside the timeline pane.
         dcompWindowConnection_ = connect(
             this, &QQuickItem::windowChanged, this,
             [this](QQuickWindow* w) {
                 if (dcompView_ != nullptr) {
                     dcompView_->attachToWindow(w);
+                    dcompView_->setTrackedQuickItem(this);
                 }
             });
         if (window() != nullptr) {
             dcompView_->attachToWindow(window());
+            dcompView_->setTrackedQuickItem(this);
         }
     }
 }
