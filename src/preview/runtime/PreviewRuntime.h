@@ -172,22 +172,9 @@ public:
     void setFrameSize(const QSize& size);
     const miacode::preview::scene::PreviewFrameState& frameState() const { return frameState_; }
 
-    // Target rendering interval in nanoseconds. Set by MainWindow's
-    // refreshPreviewFrameRateTimers() from the user's "Video Settings"
-    // canvas-frame-rate selection (60 FPS / 120 FPS / Display Refresh).
-    // Used by the DComp render-thread playhead clock to advance by the
-    // exact target interval per frame instead of by measured wall-clock
-    // (which inherits Present + GPU-queue scheduling jitter and surfaces
-    // as ~1 ms playhead-delta variance even with the monotonic clock).
-    // Default 16.67 ms (60 Hz) so callers that never call the setter
-    // get sane behaviour.
-    qint64 targetFrameIntervalNs() const { return targetFrameIntervalNs_; }
-    void setTargetFrameIntervalNs(qint64 ns);
-
 signals:
     void frameStateChanged();
     void framePresented();
-    void targetFrameIntervalChanged(qint64 newIntervalNs);
 
 private:
     void handlePresentedFrame();
@@ -200,11 +187,6 @@ private:
     miacode::preview::scene::PreviewFrameState frameState_;
     bool requestedShowObjectStatsHud_ = false;
     bool suppressObjectStatsHud_ = false;
-    // Default 60 Hz vsync interval; updated by setTargetFrameIntervalNs
-    // from MainWindow when the user selects 60 / 120 / Display-Refresh
-    // in Video Settings. Read by the DComp surface to advance its
-    // render-thread playhead clock by the exact configured interval.
-    qint64 targetFrameIntervalNs_ = 1000000000LL / 60LL;
     QElapsedTimer presentTimer_;
     qint64 lastPresentedNs_ = -1;
     QVector<double> presentedFrameIntervalsMs_;

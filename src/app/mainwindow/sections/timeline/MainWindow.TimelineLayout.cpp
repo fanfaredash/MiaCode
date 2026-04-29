@@ -722,12 +722,6 @@ void MainWindow::TimelineSection::refreshPreviewFrameRateTimers()
             targetIntervalNs > 0 ? (1000000000.0 / static_cast<double>(targetIntervalNs)) : 0.0,
             currentPreviewCanvasRefreshRate()
         );
-        // Push the user-selected target interval into the runtime so the
-        // DComp render-thread playhead clock advances by the configured
-        // value (60 FPS / 120 FPS / Display Refresh) rather than by
-        // measured wall-clock — which inherits Present + GPU-queue
-        // scheduling jitter and surfaces as ~1 ms playhead-delta variance.
-        state_.previewCanvas_->setTargetFrameIntervalNs(targetIntervalNs);
     }
 }
 
