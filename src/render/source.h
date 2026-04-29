@@ -55,6 +55,12 @@ struct PreviewBuildContext {
     QRectF playfieldRect;
     miacode::preview::scene::PreviewRenderLayerFlags layerFlags;
     double playheadSeconds = 0.0;
+    // Effective device pixel ratio of the host QQuickWindow. Sources
+    // that rasterise text (HudSource) need this so font hinting and
+    // anti-aliasing land at physical pixel boundaries — without it,
+    // a logical-size QImage gets bilinear-upscaled by DPR through the
+    // D3D11 sampler and the text looks blurry on a HiDPI display.
+    qreal  devicePixelRatio = 1.0;
 };
 
 // Single-method (effectively) interface every renderable thing

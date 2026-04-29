@@ -3,31 +3,30 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "preview/runtime/PreviewRuntime.h"
-#include "core/scene/PreviewActiveMarkerView.h"
-#include "core/scene/PreviewChartReviewLayerState.h"
 #include "core/scene/PreviewFrameState.h"
-#include "core/scene/PreviewGuideLayerState.h"
-#include "core/scene/PreviewHeadLayerState.h"
-#include "core/scene/PreviewJudgeEffectLayerState.h"
-#include "core/scene/PreviewJudgeFireworkLayerState.h"
-#include "core/scene/PreviewMaimuriDxJudgeLayerState.h"
-#include "core/scene/PreviewMuriActionLayerState.h"
-#include "core/scene/PreviewMuriPadLayerState.h"
 #include "core/scene/PreviewSceneGeometry.h"
-#include "preview/quick_scene/PreviewQuickHudLayer.h"
 
-#include <QPainter>
-#include "core/scene/PreviewSlideMotionLayerState.h"
-#include "core/scene/PreviewTouchHoldLayerState.h"
-#include "core/scene/PreviewTouchJudgeLayerState.h"
-#include "core/scene/PreviewTouchLayerState.h"
-#include "core/scene/PreviewTrackLayerState.h"
+#include "sources/chart/BackdropSource.h"
+#include "sources/chart/ChartReviewSource.h"
+#include "sources/chart/GuideSource.h"
+#include "sources/chart/HeadSource.h"
+#include "sources/chart/HudSource.h"
+#include "sources/chart/JudgeEffectSource.h"
+#include "sources/chart/JudgeFireworkSource.h"
+#include "sources/chart/MaimuriDxJudgeSource.h"
+#include "sources/chart/MuriActionSource.h"
+#include "sources/chart/MuriPadSource.h"
+#include "sources/chart/SlideMotionSource.h"
+#include "sources/chart/StageBackgroundSource.h"
+#include "sources/chart/TouchHoldSource.h"
+#include "sources/chart/TouchJudgeSource.h"
+#include "sources/chart/TouchSource.h"
+#include "sources/chart/TrackSource.h"
 
 #include <QDateTime>
 #include <QElapsedTimer>
 #include <QQuickItem>
 #include <QQuickWindow>
-#include <QtConcurrent/QtConcurrentRun>
 
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
@@ -529,332 +528,36 @@ void PreviewDCompSurface::buildAndPublishSnapshot(qint64 emittedAtNs)
     scene::syncPreviewLayerWindowCursor(preparedCache_.chartReviewLayer(), playheadSeconds, &chartReviewCursor_);
     scene::syncPreviewLayerWindowCursor(preparedCache_.maimuriDxJudgeLayer(), playheadSeconds, &maimuriDxJudgeCursor_);
 
-    const auto windowed = [&](const auto& layer, const scene::PreviewLayerWindowCursor& cursor) {
-        return scene::PreviewActiveMarkerView(state.noteMarkers, layer, cursor);
-    };
-    const auto appendOwnedImages =
-        [&](const QVector<QSharedPointer<QImage>>& images) {
-            for (const auto& image : images) {
-                snapshot.retainedImages.append(image);
-            }
-        };
-    // Phase 3.5a: tagged-batch pushers. Each layer pushes one or more
-    // batches recording its primitive type + range; the pipeline then
-    // walks `snapshot.batches` in order, switching shaders per type. An
-    // empty layer pushes nothing.
-    using BatchType = PreviewDCompFrameStateSnapshot::BatchType;
-    const auto pushSpriteBatch = [&](const scene::PreviewSpriteDescriptors& sprites) {
-        if (sprites.isEmpty()) return;
-        PreviewDCompFrameStateSnapshot::DrawBatch batch;
-        batch.type = BatchType::Sprites;
-        batch.firstIndex = static_cast<qint32>(snapshot.sprites.size());
-        batch.count = static_cast<qint32>(sprites.size());
-        snapshot.sprites.append(sprites);
-        snapshot.batches.append(batch);
-    };
-    const auto pushCircleBatch = [&](const scene::PreviewCircleDescriptors& circles) {
-        if (circles.isEmpty()) return;
-        PreviewDCompFrameStateSnapshot::DrawBatch batch;
-        batch.type = BatchType::Circles;
-        batch.firstIndex = static_cast<qint32>(snapshot.circles.size());
-        batch.count = static_cast<qint32>(circles.size());
-        snapshot.circles.append(circles);
-        snapshot.batches.append(batch);
-    };
-    const auto pushArcBatch = [&](const scene::PreviewArcDescriptors& arcs) {
-        if (arcs.isEmpty()) return;
-        PreviewDCompFrameStateSnapshot::DrawBatch batch;
-        batch.type = BatchType::Arcs;
-        batch.firstIndex = static_cast<qint32>(snapshot.arcs.size());
-        batch.count = static_cast<qint32>(arcs.size());
-        snapshot.arcs.append(arcs);
-        snapshot.batches.append(batch);
-    };
-    const auto pushFireworkBatch = [&](const scene::PreviewJudgeFireworkLayerState& fw) {
-        if (!fw.active) return;
-        PreviewDCompFrameStateSnapshot::DrawBatch batch;
-        batch.type = BatchType::Fireworks;
-        batch.firstIndex = static_cast<qint32>(snapshot.fireworks.size());
-        batch.count = 1;
-        snapshot.fireworks.append(fw);
-        snapshot.batches.append(batch);
-    };
-
-    // Phase 3.6 — gate each layer on layerFlags_. Mirrors PreviewQuickSceneRoot's
-    // updateLayerSlotProfiled(... previewRenderLayerEnabled(...)) checks.
-    const auto enabled = [this](scene::PreviewRenderLayer layer) {
-        return scene::previewRenderLayerEnabled(layerFlags_, layer);
-    };
-
-    // Stage background (z=0) — Phase 4c. Picks the first non-null
-    // image from media.resolvedStageImage / mediaFrame /
-    // retainedVideoFallbackFrame, fits it into stageRect by either
-    // contain or cover (per state.render.backgroundScaleMode), and
-    // pushes it as a sprite. cacheable mirrors the legacy
-    // resolvedStageImageCacheable flag — true for static images that
-    // recur frame-to-frame, false for video/dynamic frames so they
-    // run through the per-frame transient compartment.
+    // Phase 2c — OBS-style source/compositor walk. The compositor owns
+    // an ordered list of IPreviewSource instances (chart sprite layers,
+    // HUD overlay) and contributes each enabled source's descriptors in
+    // z-order. Each source owns at most one batch type; the few that
+    // emit multiple (track, slide motion, head, touch, touch_hold) push
+    // them in their own contributeToSnapshot. Walks the *entire* legacy
+    // layer set (StageBackground … HudLayer) — same draw output as the
+    // pre-refactor inline code, just dispatched via virtual calls.
     //
-    // Skipped when separate-surface external media is active (the
-    // legacy QSG path also short-circuits in that case — the media
-    // is rendered by an external HWND/QQuickWindow instead). Skipped
-    // when no media is available so the dark canvasBg from the
-    // embeddedPreviewFrame Rectangle shows through DComp's
-    // transparent clear.
-    if (enabled(scene::StageBackgroundLayer)) {
-        const auto& media = state.media;
-        const bool usesExternalMedia =
-            media.presentationMode
-                == scene::PreviewStageMediaPresentationMode::ExternalQuickMediaItem;
-        QImage bgImage;
-        bool bgCacheable = true;
-        if (!usesExternalMedia) {
-            if (!media.resolvedStageImage.isNull()) {
-                bgImage = media.resolvedStageImage;
-                bgCacheable = media.resolvedStageImageCacheable;
-            } else if (!media.mediaFrame.isNull()) {
-                bgImage = media.mediaFrame;
-                bgCacheable = true;
-            } else if (!media.retainedVideoFallbackFrame.isNull()) {
-                bgImage = media.retainedVideoFallbackFrame;
-                bgCacheable = false;  // last-known fallback, treat as transient
-            }
-        }
-        if (!bgImage.isNull() && bgImage.width() > 0 && bgImage.height() > 0) {
-            const bool fitContain =
-                state.render.backgroundScaleMode == PreviewBackgroundScaleMode::FitContain;
-            const QRectF targetRect = scene::mediaTargetRect(
-                bgImage.size(), stageRect, fitContain);
-            if (targetRect.width() > 0.0 && targetRect.height() > 0.0) {
-                auto bgPtr = QSharedPointer<QImage>::create(bgImage);
-                snapshot.retainedImages.append(bgPtr);
-                scene::PreviewSpriteDescriptor bg;
-                bg.image = bgPtr.data();
-                bg.center = targetRect.center();
-                bg.width = targetRect.width();
-                bg.height = targetRect.height();
-                bg.rotationDegrees = 0.0;
-                bg.opacity = 1.0;
-                bg.effect = scene::PreviewAnimatedSpriteEffect::None;
-                bg.cacheable = bgCacheable;
-                scene::PreviewSpriteDescriptors batch;
-                batch.append(bg);
-                pushSpriteBatch(batch);
-            }
-        }
-    }
-
-    // Backdrop (z=1 in the legacy stack). Snapshot owns its own QImage
-    // copy so the render thread never reads runtime-mutated QImage state
-    // — see Phase 3.3c-fix commit notes for why this matters.
-    if (enabled(scene::BackdropLayer) && !state.assets.outlineImage.isNull()) {
-        auto backdropImage =
-            QSharedPointer<QImage>::create(state.assets.outlineImage);
-        snapshot.retainedImages.append(backdropImage);
-        scene::PreviewSpriteDescriptor backdrop;
-        backdrop.image = backdropImage.data();
-        backdrop.center = playfieldRect.center();
-        backdrop.width = playfieldRect.width();
-        backdrop.height = playfieldRect.height();
-        backdrop.rotationDegrees = 0.0;
-        backdrop.opacity = 1.0;
-        backdrop.effect = scene::PreviewAnimatedSpriteEffect::None;
-        backdrop.cacheable = true;
-        scene::PreviewSpriteDescriptors backdropBatch;
-        backdropBatch.append(backdrop);
-        pushSpriteBatch(backdropBatch);
-    }
-
-    // The remaining layers push batches in the same back-to-front order
-    // as PreviewQuickSceneRoot::updatePaintNode — z-order matters
-    // because the pipeline issues draws in batch order with
-    // premultiplied-alpha blending, so later batches paint over earlier
-    // ones. Layer flags (which the user can toggle) aren't honoured
-    // yet; Phase 3.6 wires them up alongside pixel-parity checks.
-
-    // Muri pad (z=2) — solid-colour ellipses (Phase 3.5a).
-    if (enabled(scene::MuriPadStateLayer)) {
-        pushCircleBatch(scene::buildPreviewMuriPadLayerState(state, playfieldRect).circles);
-    }
-
-    // Muri action (z=3) — solid-colour ellipses (Phase 3.5a).
-    if (enabled(scene::MuriActionLayer)) {
-        pushCircleBatch(scene::buildPreviewMuriActionLayerState(state, playfieldRect).circles);
-    }
-
-    // Judge firework (z=4) — Phase 3.5c. Uses the windowed firework
-    // layer cursor for activation timing.
-    if (enabled(scene::JudgeFireworkLayer)) {
-        pushFireworkBatch(scene::buildPreviewJudgeFireworkLayerState(
-            state, windowed(preparedCache_.judgeFireworkLayer(), judgeFireworkCursor_),
-            playfieldRect));
-    }
-
-    // Guide (z=5)
-    if (enabled(scene::GuideLayer)) {
-        pushSpriteBatch(scene::buildPreviewGuideLayerSprites(
-            state, windowed(preparedCache_.guideLayer(), guideCursor_), playfieldRect));
-    }
-
-    // Track (z=6)
-    if (enabled(scene::TrackLayer)) {
-        auto layerState = scene::buildPreviewTrackLayerState(
-            state, windowed(preparedCache_.slideLikeLayer(), trackCursor_), playfieldRect);
-        pushSpriteBatch(layerState.sprites);
-        appendOwnedImages(layerState.ownedImages);
-    }
-
-    // Slide motion (z=7)
-    if (enabled(scene::SlideMotionLayer)) {
-        auto layerState = scene::buildPreviewSlideMotionLayerState(
-            state, windowed(preparedCache_.slideLikeLayer(), slideMotionCursor_), playfieldRect);
-        pushSpriteBatch(layerState.sprites);
-        appendOwnedImages(layerState.ownedImages);
-    }
-
-    // Judge effect (z=8)
-    if (enabled(scene::JudgeLayer)) {
-        auto layerState = scene::buildPreviewJudgeEffectLayerState(
-            state, windowed(preparedCache_.judgeEffectLayer(), judgeEffectCursor_), playfieldRect);
-        pushSpriteBatch(layerState.sprites);
-        appendOwnedImages(layerState.ownedImages);
-    }
-
-    // Touch judge (z=9)
-    if (enabled(scene::JudgeTouchLayer)) {
-        pushSpriteBatch(scene::buildPreviewTouchJudgeLayerState(
-            state, windowed(preparedCache_.touchJudgeLayer(), touchJudgeCursor_), playfieldRect).sprites);
-    }
-
-    // Head (z=10) — passes the asset cache so tinted base+overlay
-    // composites are deduped across frames.
-    if (enabled(scene::HeadLayer)) {
-        auto layerState = scene::buildPreviewHeadLayerState(
-            state, windowed(preparedCache_.headLayer(), headCursor_), playfieldRect,
-            &headRenderAssetCache_);
-        pushSpriteBatch(layerState.sprites);
-        appendOwnedImages(layerState.ownedImages);
-    }
-
-    // Touch (z=11)
-    if (enabled(scene::TouchLayer)) {
-        auto layerState = scene::buildPreviewTouchLayerState(
-            state, windowed(preparedCache_.touchLayer(), touchCursor_), playfieldRect);
-        pushSpriteBatch(layerState.sprites);
-        appendOwnedImages(layerState.ownedImages);
-    }
-
-    // Touch hold (z=12) — sprites first, then arcs; legacy QSG renders
-    // them as separate child nodes inside the same layer slot, with
-    // arcs above sprites visually.
-    if (enabled(scene::TouchHoldLayer)) {
-        auto layerState = scene::buildPreviewTouchHoldLayerState(
-            state, windowed(preparedCache_.touchHoldLayer(), touchHoldCursor_), playfieldRect);
-        pushSpriteBatch(layerState.sprites);
-        pushArcBatch(layerState.arcs);
-        appendOwnedImages(layerState.ownedImages);
-    }
-
-    // Chart review (z=13) — special: not marker-windowed; uses
-    // preparedEvents collected from the chart_review layer cursor.
-    if (enabled(scene::ChartReviewLayer)) {
-        scene::PreviewChartReviewPreparedEvents preparedEvents;
-        preparedCache_.collectChartReviewEvents(
-            chartReviewCursor_.activePreparedIndices, &preparedEvents);
-        pushSpriteBatch(scene::buildPreviewChartReviewLayerSprites(
-            state, playfieldRect, &preparedEvents));
-    }
-
-    // Maimuri DX judge (z=14) — uses the SIMPLE full-marker view
-    // (PreviewQuickMaimuriDxJudgeLayer.cpp does the same) because the
-    // maimuriDxJudgeLayer cursor windows the *event* list, not markers.
-    // The cursor still feeds collectMaimuriDxJudgeData for the events
-    // themselves.
-    if (enabled(scene::MaimuriDxJudgeLayer)) {
-        QVector<MuriJudgeSpriteEvent> activeEvents;
-        QVector<int> activeMarkerIndices;
-        preparedCache_.collectMaimuriDxJudgeData(
-            maimuriDxJudgeCursor_.activePreparedIndices,
-            &activeEvents, &activeMarkerIndices);
-        scene::PreviewActiveMarkerView allMarkers(state.noteMarkers);
-        pushSpriteBatch(scene::buildPreviewMaimuriDxJudgeLayerSprites(
-            state, allMarkers, activeEvents, playfieldRect));
-    }
-
-    // Phase 4f — HUD overlay rendered via QPainter into a sprite.
-    // Throttled at ~5 Hz (200 ms) so we don't pay the rasterisation
-    // cost every frame; the rendered text is stable between rebuilds
-    // and the texture cache hits on the unchanged QImage cacheKey.
-    // Pushed last so it draws on top of everything (mirrors the
-    // legacy z=2 placement of PreviewQuickHudLayer above the chart).
-    //
-    // Rasterise at PHYSICAL pixel size (logical × DPR), not logical:
-    // DComp's viewport is physical pixels, so a logical-size texture
-    // gets upscaled by DPR through bilinear filtering and the text
-    // looks blurry. Sprite still covers the canvas at logical bounds;
-    // the bigger texture maps 1:1 to physical viewport pixels =
-    // crisp text. paintPreviewHudOverlay's font scaling already
-    // hinges on shortSide / kHudReferenceShortSide (1024), so feeding
-    // it the larger size auto-scales fonts to the right pixel size.
-    if (enabled(scene::HudLayer)) {
-        const qreal hudDpr = window_ != nullptr
-            && window_->effectiveDevicePixelRatio() > 0.0
-                ? window_->effectiveDevicePixelRatio() : 1.0;
-        const QSize hudPixelSize(
-            qMax(1, qRound(logicalSize.width() * hudDpr)),
-            qMax(1, qRound(logicalSize.height() * hudDpr)));
-        constexpr qint64 kHudRebuildIntervalNs = 200LL * 1000LL * 1000LL;
-        const bool needsRebuild =
-            !hudImage_
-            || hudImage_->size() != hudPixelSize
-            || lastHudRebuildNs_ == 0
-            || (nowNs - lastHudRebuildNs_) >= kHudRebuildIntervalNs;
-        if (needsRebuild && !hudRebuildInFlight_) {
-            // Post the rebuild to a worker thread. Cost on the GUI hot
-            // path is one PreviewFrameState copy (cheap due to Qt COW
-            // containers + std::shared_ptr refcounts) plus a
-            // QtConcurrent::run task post (~µs). The synchronous
-            // QPainter rasterisation that used to live here moves off
-            // the GUI thread entirely; the result lands in
-            // onHudRebuildFinished.
-            const scene::PreviewFrameState stateCopy = state;
-            const auto layerFlagsCopy = layerFlags_;
-            const QSize hudPixelSizeCopy = hudPixelSize;
-            hudRebuildInFlight_ = true;
-            lastHudRebuildNs_ = nowNs;
-            auto future = QtConcurrent::run(
-                [stateCopy, layerFlagsCopy, hudPixelSizeCopy]() {
-                    QElapsedTimer workerTimer;
-                    workerTimer.start();
-                    auto fresh = QSharedPointer<QImage>::create(
-                        hudPixelSizeCopy,
-                        QImage::Format_RGBA8888_Premultiplied);
-                    fresh->fill(Qt::transparent);
-                    QPainter p(fresh.data());
-                    miacode::preview::hud::paintPreviewHudOverlay(
-                        p, stateCopy, hudPixelSizeCopy, layerFlagsCopy);
-                    p.end();
-                    return fresh;
-                });
-            hudRebuildWatcher_.setFuture(future);
-        }
-        if (hudImage_ && !hudImage_->isNull()) {
-            snapshot.retainedImages.append(hudImage_);
-            scene::PreviewSpriteDescriptor hud;
-            hud.image = hudImage_.data();
-            hud.center = QPointF(logicalSize.width() / 2.0,
-                                  logicalSize.height() / 2.0);
-            hud.width = logicalSize.width();
-            hud.height = logicalSize.height();
-            hud.rotationDegrees = 0.0;
-            hud.opacity = 1.0;
-            hud.effect = scene::PreviewAnimatedSpriteEffect::None;
-            hud.cacheable = true;
-            scene::PreviewSpriteDescriptors batch;
-            batch.append(hud);
-            pushSpriteBatch(batch);
-        }
-    }
+    // The surface still owns the per-frame state the cursored sources
+    // depend on — preparedCache_, the eleven cursor members,
+    // headRenderAssetCache_, and the four HUD watcher fields — because
+    // those are tied to the surface's lifetime, not the compositor's.
+    // Sources hold non-owning pointers; lazy-initialised on the first
+    // build so all surface members are constructed first.
+    ensureCompositorInitialized();
+    const qreal dpr = (window_ != nullptr
+                       && window_->effectiveDevicePixelRatio() > 0.0)
+                          ? window_->effectiveDevicePixelRatio()
+                          : 1.0;
+    miacode::render::PreviewBuildContext ctx{
+        state,
+        logicalSize,
+        stageRect,
+        playfieldRect,
+        layerFlags_,
+        renderPlayheadSeconds_,
+        dpr,
+    };
+    compositor_.buildSnapshot(ctx, snapshot);
 
     if ((snapshot.revision % 30) == 0 || snapshot.revision <= 5) {
         logSurface("snapshot_published",
@@ -884,6 +587,58 @@ void PreviewDCompSurface::buildAndPublishSnapshot(qint64 emittedAtNs)
 bool PreviewDCompSurface::isActive() const
 {
     return initialised_;
+}
+
+void PreviewDCompSurface::ensureCompositorInitialized()
+{
+    if (compositorInitialized_) {
+        return;
+    }
+    compositorInitialized_ = true;
+
+    // Register every chart layer in legacy z-order. Compositor sorts on
+    // registerSource(), so the registration order doesn't matter for
+    // drawing — only zOrder() does. We still register in z-ascending
+    // order for readability and to make a future stable-z layer (two
+    // sources at the same z, like touch_hold sprites + arcs if we ever
+    // split that source) keep its pre-refactor order.
+    using namespace miacode::sources::chart;
+    compositor_.registerSource(std::make_unique<StageBackgroundSource>());
+    compositor_.registerSource(std::make_unique<BackdropSource>());
+    compositor_.registerSource(std::make_unique<MuriPadSource>());
+    compositor_.registerSource(std::make_unique<MuriActionSource>());
+    compositor_.registerSource(std::make_unique<JudgeFireworkSource>(
+        &preparedCache_, &judgeFireworkCursor_));
+    compositor_.registerSource(std::make_unique<GuideSource>(
+        &preparedCache_, &guideCursor_));
+    compositor_.registerSource(std::make_unique<TrackSource>(
+        &preparedCache_, &trackCursor_));
+    compositor_.registerSource(std::make_unique<SlideMotionSource>(
+        &preparedCache_, &slideMotionCursor_));
+    compositor_.registerSource(std::make_unique<JudgeEffectSource>(
+        &preparedCache_, &judgeEffectCursor_));
+    compositor_.registerSource(std::make_unique<TouchJudgeSource>(
+        &preparedCache_, &touchJudgeCursor_));
+    compositor_.registerSource(std::make_unique<HeadSource>(
+        &preparedCache_, &headCursor_, &headRenderAssetCache_));
+    compositor_.registerSource(std::make_unique<TouchSource>(
+        &preparedCache_, &touchCursor_));
+    compositor_.registerSource(std::make_unique<TouchHoldSource>(
+        &preparedCache_, &touchHoldCursor_));
+    compositor_.registerSource(std::make_unique<ChartReviewSource>(
+        &preparedCache_, &chartReviewCursor_));
+    compositor_.registerSource(std::make_unique<MaimuriDxJudgeSource>(
+        &preparedCache_, &maimuriDxJudgeCursor_));
+    // HUD source last — z=15 > all chart layers. Holds non-owning
+    // pointers to four surface-owned fields the rebuild path mutates;
+    // the watcher's `finished` signal stays connected to the surface
+    // (which writes hudImage_ back). Single-threaded GUI access.
+    compositor_.registerSource(std::make_unique<HudSource>(
+        &hudImage_, &lastHudRebuildNs_, &hudRebuildWatcher_,
+        &hudRebuildInFlight_));
+
+    logSurface("compositor_initialized",
+               QStringLiteral("source_count=%1").arg(compositor_.sourceCount()));
 }
 
 void PreviewDCompSurface::onRendererPresented(qint64 emittedAtNs)

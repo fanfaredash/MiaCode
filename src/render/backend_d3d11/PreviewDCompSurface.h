@@ -2,6 +2,7 @@
 
 #include "render/backend_d3d11/PreviewDCompCore.h"
 #include "render/PreviewDCompRenderer.h"
+#include "render/compositor.h"
 #include "core/scene/PreviewHeadLayerState.h"
 #include "core/scene/PreviewLayerOrder.h"
 #include "core/scene/PreviewPreparedSceneCache.h"
@@ -266,6 +267,17 @@ private:
     // for an FPS overlay.
     QFutureWatcher<QSharedPointer<QImage>> hudRebuildWatcher_;
     bool hudRebuildInFlight_ = false;
+
+    // Phase 2c — OBS-style source/compositor pipeline. The Compositor
+    // owns an ordered list of IPreviewSource instances (chart sprite
+    // layers, HUD overlay, …); buildAndPublishSnapshot's per-layer code
+    // is now a single compositor_.buildSnapshot(ctx, snapshot) call.
+    // Lazily populated on the first runtime/window pairing so the
+    // sources can take non-owning pointers to surface-owned state
+    // (preparedCache_, cursors, headRenderAssetCache_, hudImage_, …).
+    miacode::render::Compositor compositor_;
+    bool compositorInitialized_ = false;
+    void ensureCompositorInitialized();
 };
 
 }  // namespace miacode::preview::dcomp

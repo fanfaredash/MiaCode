@@ -289,6 +289,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/sources/chart/ChartReviewSource.cpp
     src/sources/chart/MaimuriDxJudgeSource.h
     src/sources/chart/MaimuriDxJudgeSource.cpp
+    src/sources/chart/HudSource.h
+    src/sources/chart/HudSource.cpp
     src/render/backend_d3d11/PreviewDCompCore.h
     src/render/backend_d3d11/PreviewDCompCore.cpp
     src/render/backend_d3d11/PreviewDCompFrameStateSnapshot.h
