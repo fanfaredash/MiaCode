@@ -1394,6 +1394,22 @@ void PreviewRuntime::setFrameSize(const QSize& size)
     update();
 }
 
+void PreviewRuntime::setTargetFrameIntervalNs(qint64 ns)
+{
+    // Clamp to a sane range — 1 ms (1000 Hz) lower bound to avoid
+    // pathological small values; 100 ms (10 Hz) upper bound for the
+    // same reason. The DComp surface uses this as the per-frame
+    // playhead increment; absurd values would make motion look broken
+    // immediately, this just keeps the value in a self-consistent
+    // regime.
+    const qint64 clamped = qBound<qint64>(1'000'000LL, ns, 100'000'000LL);
+    if (clamped == targetFrameIntervalNs_) {
+        return;
+    }
+    targetFrameIntervalNs_ = clamped;
+    emit targetFrameIntervalChanged(targetFrameIntervalNs_);
+}
+
 void PreviewRuntime::handlePresentedFrame()
 {
     presentedFrameCountTotal_ += 1;

@@ -344,44 +344,62 @@ void PreviewDCompSurface::buildAndPublishSnapshot(qint64 emittedAtNs)
 
     const auto& state = runtime_->frameState();
 
-    // Render-thread playhead clock. When the call originates from
-    // onRendererPresented, emittedAtNs is the render thread's monotonic
-    // (steady_clock) timestamp captured immediately after Present(1, 0)
-    // returned — i.e., the actual vsync moment. Using it for the
-    // playhead delta means renderPlayheadSeconds_ advances by exactly
-    // the vsync interval, immune to:
-    //   - Qt::QueuedConnection dispatch latency (typically 0.5-3 ms,
-    //     can spike to 10 ms under contention),
-    //   - the ms-quantisation that QDateTime::currentMSecsSinceEpoch
-    //     used to introduce (0.67 ms variance at 60 Hz),
-    //   - GUI-thread scheduler jitter.
+    // Render-thread playhead clock — hybrid between a fixed-interval
+    // counter and an audio-anchored clock.
     //
-    // For non-render-thread callers (setRuntime, the runtime-driven
-    // path that survives the early return above when not actively
-    // rendering), emittedAtNs is 0 and we fall back to nowNs. The fall-
-    // back path is rare (paused state) and stability there matters
-    // less, since the renderer is re-presenting the same snapshot
-    // anyway.
+    // The fixed-interval part: we advance renderPlayheadSeconds_ by
+    // the user-selected target interval (60 FPS / 120 FPS / Display
+    // Refresh), pulled from PreviewRuntime which is in turn driven by
+    // MainWindow's Video Settings dialog. By construction every
+    // snapshot's playheadSeconds differs from the previous by exactly
+    // that interval — immune to:
+    //   - Qt::QueuedConnection dispatch latency (0.5-10 ms),
+    //   - GUI-thread scheduler jitter,
+    //   - Present(1, 0) return timing variance (0.5-2 ms — Present
+    //     does NOT block strictly to vsync; cadence comes from the
+    //     FRAME_LATENCY_WAITABLE wait at the loop top, but Present
+    //     return time still inherits DXGI flip-queue scheduling),
+    //   - GPU back-pressure.
     //
-    // The runtime's playheadSeconds (state.playheadSeconds) is the
-    // audio-time anchor: small drifts are corrected gradually by
-    // advancing the render clock independently, large drifts (seek,
-    // pause/resume, > 50 ms) snap so we don't render motion across
-    // a discontinuity.
-    const qint64 playheadSampleNs = (emittedAtNs > 0) ? emittedAtNs : nowNs;
+    // The audio-anchored part: state.playheadSeconds is the visualSecond
+    // from PreviewRuntime (audio-time + smoothing + lookahead). On large
+    // drift (> 50 ms) we snap to it so seek / pause-resume / sustained
+    // missed-vsync don't accumulate. In steady state drift stays well
+    // under 50 ms because the user-selected target interval matches the
+    // actual display rate (or is smaller for explicit 60 FPS / 120 FPS
+    // requests on a higher-rate display, which is the user's choice).
+    //
+    // Three cases for which interval to advance by:
+    //   - emittedAtNs > 0: the publish was driven by the render thread's
+    //     `presented` signal. Advance by the configured target interval.
+    //     This is the steady-state path during playback.
+    //   - emittedAtNs == 0 and we have a previous sample: a runtime-
+    //     driven publish landed (paused state). Advance by wall-clock
+    //     between calls; fine because no one is watching.
+    //   - First call ever (renderPlayheadInitialized_ == false): seed
+    //     from state.playheadSeconds.
     constexpr double kRenderPlayheadSnapSeconds = 0.050;
+    const qint64 nominalIntervalNs = runtime_->targetFrameIntervalNs();
+    const qint64 playheadSampleNs = (emittedAtNs > 0) ? emittedAtNs : nowNs;
     if (!renderPlayheadInitialized_) {
         renderPlayheadSeconds_ = state.playheadSeconds;
         renderPlayheadLastSampleNs_ = playheadSampleNs;
         renderPlayheadInitialized_ = true;
     } else {
-        const qint64 elapsedNs = playheadSampleNs - renderPlayheadLastSampleNs_;
-        const double elapsedSeconds = static_cast<double>(elapsedNs) / 1.0e9;
-        // Bound the step to [0, 100 ms] so a long stall (e.g., system
-        // sleep / GC pause) doesn't make us race forward by seconds when
-        // we wake; the drift snap below catches up cleanly instead.
-        const double cappedElapsed = qBound(0.0, elapsedSeconds, 0.100);
-        renderPlayheadSeconds_ += cappedElapsed;
+        double advanceSeconds;
+        if (emittedAtNs > 0) {
+            // Steady-state path: ignore the measured wall-clock delta
+            // entirely and advance by the exact configured interval.
+            // This is what makes playhead_delta_stats stddev → 0.
+            advanceSeconds = static_cast<double>(nominalIntervalNs) / 1.0e9;
+        } else {
+            // Paused / runtime-driven path: use measured wall-clock,
+            // bounded so a long stall doesn't race forward by seconds.
+            const qint64 elapsedNs = playheadSampleNs - renderPlayheadLastSampleNs_;
+            const double elapsedSeconds = static_cast<double>(elapsedNs) / 1.0e9;
+            advanceSeconds = qBound(0.0, elapsedSeconds, 0.100);
+        }
+        renderPlayheadSeconds_ += advanceSeconds;
         renderPlayheadLastSampleNs_ = playheadSampleNs;
         const double drift = state.playheadSeconds - renderPlayheadSeconds_;
         if (qAbs(drift) > kRenderPlayheadSnapSeconds) {
