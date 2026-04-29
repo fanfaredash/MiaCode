@@ -158,8 +158,22 @@ bool TimelineRenderView::isActive() const
 
 void TimelineRenderView::onWindowSceneGraphInitialized()
 {
+    const bool wasInitialized = initialised_;
     initialiseIfReady();
     tryDiscoverTrackedItem();
+    // Phase 3c-fix5 — when initialiseIfReady transitions from
+    // false → true here, the previous setTrackedQuickItem call
+    // (which arrived earlier via TimelineQuickItem's windowChanged
+    // slot) ran applyTrackedItemGeometry while !initialised_ was
+    // true, so it short-circuited at the !initialised_ guard. Now
+    // that init succeeded, re-apply the geometry so the popup
+    // sizes/positions to the tracked item bounds. Without this the
+    // popup stays at the default (0, 0) + currentClientPixelSize
+    // (full window) — which is exactly what produced the user's
+    // "popup at the wrong place" verification screenshot.
+    if (!wasInitialized && initialised_ && trackedItem_ != nullptr) {
+        applyTrackedItemGeometry();
+    }
 }
 
 void TimelineRenderView::onWindowGeometryChanged()
@@ -167,6 +181,14 @@ void TimelineRenderView::onWindowGeometryChanged()
     if (!initialised_) {
         initialiseIfReady();
         tryDiscoverTrackedItem();
+        // Phase 3c-fix5 — same recovery as onWindowSceneGraphInitialized:
+        // if init transitioned to true on this signal, the popup needs
+        // its geometry applied now that the trackedItem (set earlier
+        // from TimelineQuickItem's windowChanged) has a valid render
+        // target.
+        if (initialised_ && trackedItem_ != nullptr) {
+            applyTrackedItemGeometry();
+        }
         return;
     }
     const QSize clientPx = currentClientPixelSize();
@@ -189,10 +211,18 @@ void TimelineRenderView::onWindowVisibilityChanged()
     if (window_ == nullptr) {
         return;
     }
+    const bool wasInitialized = initialised_;
     if (window_->isVisible() && !initialised_) {
         initialiseIfReady();
     }
     tryDiscoverTrackedItem();
+    // Phase 3c-fix5 — covers the third entry point where init can
+    // transition from false → true. Same recovery as the other two
+    // (sceneGraphInitialized, geometryChanged): apply tracked-item
+    // geometry now that the popup is ready to receive it.
+    if (!wasInitialized && initialised_ && trackedItem_ != nullptr) {
+        applyTrackedItemGeometry();
+    }
     const QWindow::Visibility vis = window_->visibility();
     const bool shouldPause = (vis == QWindow::Hidden)
                           || (vis == QWindow::Minimized);
