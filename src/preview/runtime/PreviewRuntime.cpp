@@ -1394,14 +1394,6 @@ void PreviewRuntime::setFrameSize(const QSize& size)
     update();
 }
 
-void PreviewRuntime::setNominalFrameIntervalNs(qint64 ns)
-{
-    // Clamp to [1 ms, 100 ms] — the DComp surface uses this as the
-    // per-frame playhead increment; absurd values would surface
-    // immediately as motion at the wrong rate.
-    nominalFrameIntervalNs_ = qBound<qint64>(1'000'000LL, ns, 100'000'000LL);
-}
-
 void PreviewRuntime::handlePresentedFrame()
 {
     presentedFrameCountTotal_ += 1;
