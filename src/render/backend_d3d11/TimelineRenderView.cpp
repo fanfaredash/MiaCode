@@ -299,6 +299,32 @@ void TimelineRenderView::applyTrackedItemGeometry()
                      pixelSize.width(), pixelSize.height(),
                      TRUE);
         core_.setVisualTransform(0, 0, pixelSize);
+
+        // Phase 3c-fix: log the geometry decision sparingly so we can
+        // confirm the tracked item's reported bounds match the visible
+        // timeline pane. Only on changes to avoid log flooding.
+        static thread_local int s_lastX = INT_MIN;
+        static thread_local int s_lastY = INT_MIN;
+        static thread_local QSize s_lastSize;
+        if (s_lastX != globalXPx || s_lastY != globalYPx
+            || s_lastSize != pixelSize) {
+            s_lastX = globalXPx;
+            s_lastY = globalYPx;
+            s_lastSize = pixelSize;
+            logTimelineView(
+                "track_target_geometry",
+                QStringLiteral(
+                    "scene_x=%1 scene_y=%2 item_w=%3 item_h=%4 dpr=%5 "
+                    "global_x=%6 global_y=%7 px_w=%8 px_h=%9 obj=%10")
+                    .arg(topLeftScene.x(), 0, 'f', 2)
+                    .arg(topLeftScene.y(), 0, 'f', 2)
+                    .arg(itemW, 0, 'f', 2)
+                    .arg(itemH, 0, 'f', 2)
+                    .arg(dpr, 0, 'f', 2)
+                    .arg(globalXPx).arg(globalYPx)
+                    .arg(pixelSize.width()).arg(pixelSize.height())
+                    .arg(trackedItem_->objectName()));
+        }
     } else {
         core_.setVisualTransform(xPx, yPx, pixelSize);
     }
