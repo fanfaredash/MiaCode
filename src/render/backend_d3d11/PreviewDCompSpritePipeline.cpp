@@ -1031,6 +1031,74 @@ void emitCircleVertices(const miacode::preview::scene::PreviewCircleDescriptor& 
     }
 }
 
+// Phase 3b — timeline filled-rect tessellation. Two triangles per
+// rect with the (uv.x, uv.y, opacity, effect) vertex slots repurposed
+// as straight (R, G, B, A) for the kSolidPS shader. Same pattern as
+// emitCircleVertices.
+void emitTimelineRectVertices(const miacode::timeline::TimelineSceneRect& rect,
+                               std::vector<PreviewDCompSpriteVertex>& out)
+{
+    const float x0 = static_cast<float>(rect.rect.left());
+    const float y0 = static_cast<float>(rect.rect.top());
+    const float x1 = static_cast<float>(rect.rect.right());
+    const float y1 = static_cast<float>(rect.rect.bottom());
+    if (x1 <= x0 || y1 <= y0) return;
+    if (rect.color.alpha() == 0) return;
+    const float r = static_cast<float>(qBound(0.0, rect.color.redF(), 1.0));
+    const float g = static_cast<float>(qBound(0.0, rect.color.greenF(), 1.0));
+    const float b = static_cast<float>(qBound(0.0, rect.color.blueF(), 1.0));
+    const float a = static_cast<float>(qBound(0.0, rect.color.alphaF(), 1.0));
+    // Two triangles forming the quad (CCW). The vertex's color slots
+    // ride into the shader as the colour to output.
+    out.push_back({ x0, y0, r, g, b, a });
+    out.push_back({ x1, y0, r, g, b, a });
+    out.push_back({ x0, y1, r, g, b, a });
+    out.push_back({ x1, y0, r, g, b, a });
+    out.push_back({ x1, y1, r, g, b, a });
+    out.push_back({ x0, y1, r, g, b, a });
+}
+
+// Phase 3b — timeline line tessellation. Each line becomes a thin
+// quad (4 vertices, 2 triangles, 6 emitted verts) extruded
+// perpendicular to the line direction by half the requested width.
+// Width clamps up to 1 px so a zero-width request still draws a
+// visible hairline (matches the QSG path's defaultBaseWidth).
+void emitTimelineLineVertices(const miacode::timeline::TimelineSceneLine& line,
+                               std::vector<PreviewDCompSpriteVertex>& out)
+{
+    if (line.color.alpha() == 0) return;
+    const float x0 = static_cast<float>(line.start.x());
+    const float y0 = static_cast<float>(line.start.y());
+    const float x1 = static_cast<float>(line.end.x());
+    const float y1 = static_cast<float>(line.end.y());
+    const float dx = x1 - x0;
+    const float dy = y1 - y0;
+    const float lenSq = dx * dx + dy * dy;
+    if (lenSq <= 1.0e-3f) return;
+    const float len = std::sqrt(lenSq);
+    const float halfWidth =
+        std::max(static_cast<float>(line.width), 1.0f) * 0.5f;
+    // Unit perpendicular to the line direction, scaled by halfWidth.
+    const float nx = -dy / len * halfWidth;
+    const float ny =  dx / len * halfWidth;
+    const float r = static_cast<float>(qBound(0.0, line.color.redF(), 1.0));
+    const float g = static_cast<float>(qBound(0.0, line.color.greenF(), 1.0));
+    const float b = static_cast<float>(qBound(0.0, line.color.blueF(), 1.0));
+    const float a = static_cast<float>(qBound(0.0, line.color.alphaF(), 1.0));
+    // Quad corners: (a, b) at start, (c, d) at end.
+    const float ax = x0 + nx, ay = y0 + ny;
+    const float bx = x0 - nx, by = y0 - ny;
+    const float cx = x1 - nx, cy = y1 - ny;
+    const float dx2 = x1 + nx, dy2 = y1 + ny;
+    // Two triangles: a-b-c then a-c-d.
+    out.push_back({ ax, ay, r, g, b, a });
+    out.push_back({ bx, by, r, g, b, a });
+    out.push_back({ cx, cy, r, g, b, a });
+    out.push_back({ ax, ay, r, g, b, a });
+    out.push_back({ cx, cy, r, g, b, a });
+    out.push_back({ dx2, dy2, r, g, b, a });
+}
+
 }  // namespace
 
 bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
@@ -1250,15 +1318,56 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
             }
             break;
         }
-        // Phase 2d — timeline batch types are reserved for the Phase 3
-        // RenderView migration that adds the GPU pipelines for rect/
-        // line/triangle/text/glyph rendering. Until Phase 3 ships,
-        // timeline sources can build batches on the GUI thread (e.g.
-        // for a chart-only preview that has the chart compositor
-        // configured but no timeline state) and the render thread
-        // simply skips the unknown types — chart rendering is unaffected.
-        case BatchType::TimelineRects:
-        case BatchType::TimelineLines:
+        // Phase 3b — filled timeline rects. Same shader path as
+        // Circles (RunKind::Solid); just emits two triangles per rect
+        // with the colour packed into the vertex slots the kSolidPS
+        // shader reads as RGBA.
+        case BatchType::TimelineRects: {
+            const int end = batch.firstIndex + batch.count;
+            DrawRun r;
+            r.kind = RunKind::Solid;
+            r.srv = nullptr;
+            r.firstVertex = static_cast<int>(staging.size());
+            r.vertexCount = 0;
+            for (int i = batch.firstIndex;
+                 i < end && i < snapshot.timelineRects.size(); ++i) {
+                const int before = static_cast<int>(staging.size());
+                emitTimelineRectVertices(snapshot.timelineRects.at(i), staging);
+                r.vertexCount += static_cast<int>(staging.size()) - before;
+            }
+            if (r.vertexCount > 0) {
+                runs.push_back(r);
+            }
+            processed += batch.count;
+            break;
+        }
+        // Phase 3b — timeline line segments. Each line becomes a thin
+        // perpendicular-extruded quad. Same RunKind::Solid pipeline.
+        case BatchType::TimelineLines: {
+            const int end = batch.firstIndex + batch.count;
+            DrawRun r;
+            r.kind = RunKind::Solid;
+            r.srv = nullptr;
+            r.firstVertex = static_cast<int>(staging.size());
+            r.vertexCount = 0;
+            for (int i = batch.firstIndex;
+                 i < end && i < snapshot.timelineLines.size(); ++i) {
+                const int before = static_cast<int>(staging.size());
+                emitTimelineLineVertices(snapshot.timelineLines.at(i), staging);
+                r.vertexCount += static_cast<int>(staging.size()) - before;
+            }
+            if (r.vertexCount > 0) {
+                runs.push_back(r);
+            }
+            processed += batch.count;
+            break;
+        }
+        // Phase 3d will add the remaining timeline batch types
+        // (triangles, text labels, glyphs, sprites, hold spans). The
+        // batches are still pushed by the timeline sources in Phase
+        // 2d / 3b — the render thread silently skips the not-yet-
+        // wired types so the chart preview is unaffected when a
+        // timeline RenderView feeds them in.
         case BatchType::TimelineTriangles:
         case BatchType::TimelineTextLabels:
         case BatchType::TimelineGlyphs:
