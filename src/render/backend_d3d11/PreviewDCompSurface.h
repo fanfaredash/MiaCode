@@ -82,6 +82,15 @@ private slots:
     void onHudRebuildFinished();
 
 private:
+    // Internal publish helper. emittedAtNs is the render thread's
+    // monotonic Present timestamp when this call was triggered by
+    // onRendererPresented; 0 for direct calls (e.g., setRuntime, the
+    // runtime → surface queued connection). When non-zero it's used
+    // for the renderPlayheadSeconds_ delta so the clock advances by
+    // the actual vsync interval rather than the GUI-thread queued-
+    // dispatch interval (which inherits scheduler jitter).
+    void buildAndPublishSnapshot(qint64 emittedAtNs);
+
     bool initialiseIfReady();
     void teardownCore();
     QSize currentClientPixelSize() const;

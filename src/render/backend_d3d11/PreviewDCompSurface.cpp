@@ -37,6 +37,20 @@
 #endif
 
 #include <algorithm>
+#include <chrono>
+
+namespace {
+// Monotonic, high-resolution timestamp in nanoseconds. Same clock as
+// the render thread's `presented(emittedAtNs)` payload (steady_clock).
+// Used for diagnostics and for the renderPlayheadSeconds_ delta when
+// the publish was driven directly (no render-thread emit timestamp).
+inline qint64 monotonicNanoseconds()
+{
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+}  // namespace
 
 namespace miacode::preview::dcomp {
 
@@ -155,7 +169,7 @@ void PreviewDCompSurface::attachToWindow(QQuickWindow* window)
                 &PreviewDCompSurface::logPresentRateDiagnostic);
         lastDiagDCompFrames_ = 0;
         lastDiagQtFrames_ = 0;
-        lastDiagNs_ = QDateTime::currentMSecsSinceEpoch() * 1000000LL;
+        lastDiagNs_ = monotonicNanoseconds();
         presentRateDiagTimer_.start();
     }
 
@@ -288,12 +302,24 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     if (fromRuntime && renderer_.isActivelyRendering()) {
         return;
     }
+
+    // emittedAtNs = 0 → no render-thread Present timestamp is available
+    // (this is a runtime-driven or direct call). buildAndPublishSnapshot
+    // falls back to the current monotonic now in that case.
+    buildAndPublishSnapshot(0);
+}
+
+void PreviewDCompSurface::buildAndPublishSnapshot(qint64 emittedAtNs)
+{
+    if (runtime_ == nullptr) {
+        return;
+    }
+
     // Note: gap and dispatch-latency diagnostics are recorded in
     // onRendererPresented (the dedicated slot for the renderer signal)
     // so they observe the full Qt::QueuedConnection dispatch path. By
-    // the time we reach here from a direct call, sender() is nullptr
-    // and the source-discriminator logic that used to live here would
-    // mis-attribute every call.
+    // the time we reach here from a direct call we no longer have the
+    // signal context.
 
     // No coalescing throttle. The original code clamped this slot to
     // ~71 Hz (14 ms floor) to "halve the build cost in pathological
@@ -311,37 +337,52 @@ void PreviewDCompSurface::onRuntimeFrameStateChanged()
     // which manifests as 44 Hz motion on a 60 Hz display (the
     // user-visible judder this work is targeting). Trivial CPU cost
     // beats wrong-rate publishes.
-    const qint64 nowNs = QDateTime::currentMSecsSinceEpoch() * 1000000LL;
+    const qint64 nowNs = monotonicNanoseconds();
     lastPublishNs_ = nowNs;
     QElapsedTimer tickBuildTimer;
     tickBuildTimer.start();
 
     const auto& state = runtime_->frameState();
 
-    // Render-thread playhead clock: advance by wall-clock time elapsed
-    // since the last publish, then drift-correct against the runtime's
-    // audio-time playhead. When `presented` drives this slot at uniform
-    // vsync intervals, renderPlayheadSeconds_ advances by uniform amounts
-    // per sample regardless of GUI-tick scheduler jitter — fixing the
-    // 6-8 ms stddev playhead_delta_stats was reporting. The runtime's
-    // playheadSeconds (state.playheadSeconds) is the audio-time anchor:
-    // small drifts are corrected gradually by reading wall-clock elapsed,
-    // large drifts (seek, pause/resume, > 50 ms) snap so we don't render
-    // motion across a discontinuity.
+    // Render-thread playhead clock. When the call originates from
+    // onRendererPresented, emittedAtNs is the render thread's monotonic
+    // (steady_clock) timestamp captured immediately after Present(1, 0)
+    // returned — i.e., the actual vsync moment. Using it for the
+    // playhead delta means renderPlayheadSeconds_ advances by exactly
+    // the vsync interval, immune to:
+    //   - Qt::QueuedConnection dispatch latency (typically 0.5-3 ms,
+    //     can spike to 10 ms under contention),
+    //   - the ms-quantisation that QDateTime::currentMSecsSinceEpoch
+    //     used to introduce (0.67 ms variance at 60 Hz),
+    //   - GUI-thread scheduler jitter.
+    //
+    // For non-render-thread callers (setRuntime, the runtime-driven
+    // path that survives the early return above when not actively
+    // rendering), emittedAtNs is 0 and we fall back to nowNs. The fall-
+    // back path is rare (paused state) and stability there matters
+    // less, since the renderer is re-presenting the same snapshot
+    // anyway.
+    //
+    // The runtime's playheadSeconds (state.playheadSeconds) is the
+    // audio-time anchor: small drifts are corrected gradually by
+    // advancing the render clock independently, large drifts (seek,
+    // pause/resume, > 50 ms) snap so we don't render motion across
+    // a discontinuity.
+    const qint64 playheadSampleNs = (emittedAtNs > 0) ? emittedAtNs : nowNs;
     constexpr double kRenderPlayheadSnapSeconds = 0.050;
     if (!renderPlayheadInitialized_) {
         renderPlayheadSeconds_ = state.playheadSeconds;
-        renderPlayheadLastSampleNs_ = nowNs;
+        renderPlayheadLastSampleNs_ = playheadSampleNs;
         renderPlayheadInitialized_ = true;
     } else {
-        const qint64 elapsedNs = nowNs - renderPlayheadLastSampleNs_;
+        const qint64 elapsedNs = playheadSampleNs - renderPlayheadLastSampleNs_;
         const double elapsedSeconds = static_cast<double>(elapsedNs) / 1.0e9;
         // Bound the step to [0, 100 ms] so a long stall (e.g., system
         // sleep / GC pause) doesn't make us race forward by seconds when
         // we wake; the drift snap below catches up cleanly instead.
         const double cappedElapsed = qBound(0.0, elapsedSeconds, 0.100);
         renderPlayheadSeconds_ += cappedElapsed;
-        renderPlayheadLastSampleNs_ = nowNs;
+        renderPlayheadLastSampleNs_ = playheadSampleNs;
         const double drift = state.playheadSeconds - renderPlayheadSeconds_;
         if (qAbs(drift) > kRenderPlayheadSnapSeconds) {
             renderPlayheadSeconds_ = state.playheadSeconds;
@@ -779,7 +820,10 @@ bool PreviewDCompSurface::isActive() const
 
 void PreviewDCompSurface::onRendererPresented(qint64 emittedAtNs)
 {
-    const qint64 nowNs = QDateTime::currentMSecsSinceEpoch() * 1000000LL;
+    // monotonicNanoseconds() uses the same clock as the render thread's
+    // emittedAtNs, so subtracting them gives the true GUI-thread
+    // dispatch latency in nanoseconds.
+    const qint64 nowNs = monotonicNanoseconds();
 
     // Inter-call gap on the renderer-driven slot path. Render thread
     // fires `presented` ~16.67 ms apart (Present(1, 0) is vsync-paced);
@@ -811,10 +855,11 @@ void PreviewDCompSurface::onRendererPresented(qint64 emittedAtNs)
     }
     if (latencyNs > 5'000'000LL) ++presentedLatencyLongCount_;
 
-    // Direct call into the publish path. sender() is nullptr inside,
-    // which is correct: it's neither the runtime nor the renderer
-    // signal frame, just a method call on the same object.
-    onRuntimeFrameStateChanged();
+    // Forward the render-thread Present timestamp into the publish
+    // helper. The helper uses it to advance renderPlayheadSeconds_ by
+    // the actual vsync interval (immune to dispatch jitter), instead
+    // of the GUI-thread-side wall-clock delta which would inherit it.
+    buildAndPublishSnapshot(emittedAtNs);
 }
 
 void PreviewDCompSurface::onHudRebuildFinished()
@@ -836,7 +881,7 @@ void PreviewDCompSurface::onHudRebuildFinished()
     // clock time spent on the worker is what matters for confirming
     // the GUI hot path is unblocked, which the existing
     // tick_build_stats max_ms (now ≪ 5 ms) already shows.
-    const qint64 nowNs = QDateTime::currentMSecsSinceEpoch() * 1000000LL;
+    const qint64 nowNs = monotonicNanoseconds();
     const qint64 elapsedNs = lastHudRebuildNs_ != 0
         ? (nowNs - lastHudRebuildNs_) : 0;
     ++hudRebuildCount_;
@@ -1175,7 +1220,7 @@ void* PreviewDCompSurface::currentParentHwnd() const
 
 void PreviewDCompSurface::logPresentRateDiagnostic()
 {
-    const qint64 nowNs = QDateTime::currentMSecsSinceEpoch() * 1000000LL;
+    const qint64 nowNs = monotonicNanoseconds();
     const qint64 dcompFrames = renderer_.framesRendered();
     const qint64 qtFrames =
         qtFrameSwapCount_.load(std::memory_order_relaxed);

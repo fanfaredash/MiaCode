@@ -13,7 +13,24 @@
 #include <windows.h>
 #endif
 
+#include <chrono>
 #include <cmath>
+
+namespace {
+
+// Monotonic, high-resolution timestamp in nanoseconds. Used for the
+// `presented` signal payload and any cross-thread interval measurement
+// where wall-clock drift / NTP correction would corrupt the data.
+// Resolution on Windows is QueryPerformanceCounter (~100 ns); orders
+// of magnitude tighter than QDateTime::currentMSecsSinceEpoch's 1 ms.
+inline qint64 monotonicNanoseconds()
+{
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+
+}  // namespace
 
 namespace miacode::preview::dcomp {
 
@@ -287,9 +304,17 @@ void PreviewDCompRenderer::renderLoop()
         // Drive vsync-aligned publishing on the GUI thread. The signal
         // crosses threads via Qt::QueuedConnection; the cost is one
         // QEvent post per frame, dwarfed by the work the GUI thread
-        // does in response. Carries the emit timestamp so the slot
-        // can measure GUI-thread dispatch latency.
-        emit presented(QDateTime::currentMSecsSinceEpoch() * 1000000LL);
+        // does in response.
+        //
+        // Carries a *monotonic high-resolution* (~100 ns on Windows)
+        // timestamp captured immediately after Present(1, 0) returns.
+        // The GUI slot uses this to advance renderPlayheadSeconds_ by
+        // the actual vsync interval rather than by the delta between
+        // GUI-thread queued-event landing times — which inherits Qt's
+        // queued-dispatch jitter (typically 0.5-3 ms, can spike to
+        // 10 ms under contention) and would otherwise propagate into
+        // the playhead and be visible as motion irregularity.
+        emit presented(monotonicNanoseconds());
     }
 
     // Pair with the MMCSS registration above. The handle is per-thread;
