@@ -109,11 +109,22 @@ void TimelineRenderView::attachToWindow(QQuickWindow* window)
 void TimelineRenderView::setSceneState(
     const miacode::timeline::TimelineSceneState& state)
 {
+    // Cache only — DO NOT publish immediately. The renderer's
+    // `presented` signal (vsync-paced, max 60-120 Hz depending on
+    // display) drives buildAndPublishSnapshot; the cached state is
+    // picked up on the next vsync.
+    //
+    // Publishing immediately + on presented effectively doubled the
+    // publish rate during playback (TimelineQuickStateBridge fires
+    // renderStateChanged ~60 Hz when the playhead line moves; the
+    // renderer also fires presented ~60 Hz). With each publish
+    // rebuilding a snapshot of all timeline primitives — including
+    // the QPainter text-label rasterise on cache misses — that
+    // doubled GUI-thread work. The chart preview's renderer was
+    // observed Present-stalling for up to 2.8s under this load
+    // (verification screenshot: Present=11.9 FPS during play).
     sceneState_ = state;
     sceneStateValid_ = true;
-    if (initialised_) {
-        buildAndPublishSnapshot();
-    }
 }
 
 void TimelineRenderView::setTrackedQuickItem(QQuickItem* item)
