@@ -1250,6 +1250,21 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
             }
             break;
         }
+        // Phase 2d — timeline batch types are reserved for the Phase 3
+        // RenderView migration that adds the GPU pipelines for rect/
+        // line/triangle/text/glyph rendering. Until Phase 3 ships,
+        // timeline sources can build batches on the GUI thread (e.g.
+        // for a chart-only preview that has the chart compositor
+        // configured but no timeline state) and the render thread
+        // simply skips the unknown types — chart rendering is unaffected.
+        case BatchType::TimelineRects:
+        case BatchType::TimelineLines:
+        case BatchType::TimelineTriangles:
+        case BatchType::TimelineTextLabels:
+        case BatchType::TimelineGlyphs:
+        case BatchType::TimelineSprites:
+        case BatchType::TimelineHoldSpans:
+            break;
         }
     }
 

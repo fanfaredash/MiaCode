@@ -34,6 +34,7 @@
 #include "core/scene/PreviewFrameState.h"
 #include "core/scene/PreviewLayerOrder.h"
 #include "render/backend_d3d11/PreviewDCompFrameStateSnapshot.h"
+#include "timeline/TimelineSceneState.h"
 
 #include <QRectF>
 #include <QSize>
@@ -61,6 +62,13 @@ struct PreviewBuildContext {
     // a logical-size QImage gets bilinear-upscaled by DPR through the
     // D3D11 sampler and the text looks blurry on a HiDPI display.
     qreal  devicePixelRatio = 1.0;
+
+    // Phase 2d — timeline state. Non-null only when the compositor is
+    // running for a RenderView that includes timeline layers. The
+    // chart-only preview path (current default) sets this to nullptr,
+    // and timeline sources skip with a single null-check. Pointer is
+    // non-owning — its lifetime is the host window/scene's lifetime.
+    const miacode::timeline::TimelineSceneState* timelineState = nullptr;
 };
 
 // Single-method (effectively) interface every renderable thing

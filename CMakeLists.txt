@@ -291,6 +291,16 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/sources/chart/MaimuriDxJudgeSource.cpp
     src/sources/chart/HudSource.h
     src/sources/chart/HudSource.cpp
+    src/sources/timeline/TimelineGridSource.h
+    src/sources/timeline/TimelineGridSource.cpp
+    src/sources/timeline/TimelineWaveformSource.h
+    src/sources/timeline/TimelineWaveformSource.cpp
+    src/sources/timeline/TimelineNotesSource.h
+    src/sources/timeline/TimelineNotesSource.cpp
+    src/sources/timeline/TimelineHeaderSource.h
+    src/sources/timeline/TimelineHeaderSource.cpp
+    src/sources/timeline/TimelineOverlaySource.h
+    src/sources/timeline/TimelineOverlaySource.cpp
     src/render/backend_d3d11/PreviewDCompCore.h
     src/render/backend_d3d11/PreviewDCompCore.cpp
     src/render/backend_d3d11/PreviewDCompFrameStateSnapshot.h

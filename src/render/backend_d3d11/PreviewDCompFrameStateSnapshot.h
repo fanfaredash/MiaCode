@@ -24,6 +24,7 @@
 #include "core/scene/PreviewCircleDescriptor.h"
 #include "core/scene/PreviewJudgeFireworkLayerState.h"
 #include "core/scene/PreviewSpriteDescriptor.h"
+#include "timeline/TimelineSceneState.h"
 
 #include <QSharedPointer>
 #include <QSize>
@@ -76,12 +77,39 @@ struct PreviewDCompFrameStateSnapshot
     // per frame (the chart's currently-firing judge effect, if any).
     QVector<miacode::preview::scene::PreviewJudgeFireworkLayerState> fireworks;
 
+    // Phase 2d — timeline primitives. The timeline emits a richer set
+    // of primitives than the chart preview (rects with arbitrary fill,
+    // line segments with width, triangles for header markers, text
+    // labels for lane/header callouts, glyph dots for muri markers).
+    // GUI-thread compositor walk pushes these in Phase 2d; the GPU
+    // pipelines that consume them are added in Phase 3 alongside the
+    // RenderView migration. Until Phase 3 wires those pipelines, the
+    // renderer's batch switch defaults to skipping any non-chart batch
+    // type — chart preview rendering is unaffected.
+    QVector<miacode::timeline::TimelineSceneRect>      timelineRects;
+    QVector<miacode::timeline::TimelineSceneLine>      timelineLines;
+    QVector<miacode::timeline::TimelineSceneTriangle>  timelineTriangles;
+    QVector<miacode::timeline::TimelineSceneTextLabel> timelineTextLabels;
+    QVector<miacode::timeline::TimelineSceneGlyph>     timelineGlyphs;
+    QVector<miacode::timeline::TimelineSceneSprite>    timelineSprites;
+    QVector<miacode::timeline::TimelineSceneHoldSpan>  timelineHoldSpans;
+
     // Z-ordered draw command list. Each batch references a contiguous
     // run inside one of the primitive vectors (sprites/circles/arcs/
-    // fireworks). The pipeline iterates batches in order, switching
-    // shaders/state as needed. The legacy QSG path enforces z-order
-    // via its node tree; this is the equivalent.
-    enum class BatchType : qint8 { Sprites, Circles, Arcs, Fireworks };
+    // fireworks/timelineRects/timelineLines/...). The pipeline iterates
+    // batches in order, switching shaders/state as needed. The legacy
+    // QSG path enforces z-order via its node tree; this is the
+    // equivalent.
+    //
+    // Timeline-* batch types are reserved for Phase 3+. Adding them now
+    // lets the timeline sources compose their batches on the GUI side;
+    // the renderer skips them via the default branch until Phase 3.
+    enum class BatchType : qint8 {
+        Sprites, Circles, Arcs, Fireworks,
+        TimelineRects, TimelineLines, TimelineTriangles,
+        TimelineTextLabels, TimelineGlyphs,
+        TimelineSprites, TimelineHoldSpans,
+    };
     struct DrawBatch {
         BatchType type = BatchType::Sprites;
         qint32 firstIndex = 0;
