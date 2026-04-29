@@ -190,6 +190,25 @@ inline bool previewDCompTopLevelHwndEnabled()
     return override.value_or(true);
 }
 
+inline bool previewTimelineUseDCompEnabled()
+{
+    // Phase 3c of the v2-refactor — opt-in for the timeline pane's
+    // DComp pipeline. When set, TimelineQuickItem instantiates a
+    // TimelineRenderView alongside its existing QSG paint node and
+    // pushes scene-state updates to both. The QSG path stays alive
+    // (so timeline drawing keeps working if the DComp visual fails),
+    // and the DComp popup overlays it on top via the top-level HWND.
+    // Phase 3e turns this on unconditionally and removes the QSG
+    // paint code; until then it stays opt-in via env flag so we can
+    // A/B test the new pipeline without breaking the editor.
+    //
+    // Implies and requires previewUseDCompEnabled (the timeline view
+    // shares D3D11 device + waitable + texture cache infrastructure
+    // with the chart-preview path).
+    return previewUseDCompEnabled()
+        && envFlagEnabled("MIACODE_TIMELINE_USE_DCOMP");
+}
+
 inline bool previewQsgFullDisableEnabled()
 {
     // Diagnostic / fallback mode: disable Qt Quick's native (GPU) rendering

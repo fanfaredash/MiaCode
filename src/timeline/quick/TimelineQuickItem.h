@@ -20,6 +20,10 @@ class TimelineQuickHeaderLayer;
 class TimelineQuickNotesLayer;
 class TimelineQuickOverlayLayer;
 
+namespace miacode::preview::dcomp {
+class TimelineRenderView;
+}
+
 class TimelineQuickItem : public QQuickItem
 {
     Q_OBJECT
@@ -148,4 +152,15 @@ private:
     std::unique_ptr<TimelineQuickHeaderLayer> headerLayer_;
     std::unique_ptr<TimelineQuickNotesLayer> notesLayer_;
     std::unique_ptr<TimelineQuickOverlayLayer> overlayLayer_;
+
+    // Phase 3c — DComp render view for the timeline pane. Nullptr when
+    // previewTimelineUseDCompEnabled() returned false at construction.
+    // Lives next to the QSG paint code: the QSG path keeps drawing
+    // (so the editor stays functional if DComp fails), and the DComp
+    // top-level popup HWND overlays the QSG output. Phase 3e drops
+    // the QSG path entirely once timeline-DComp ships its remaining
+    // primitive types.
+    std::unique_ptr<miacode::preview::dcomp::TimelineRenderView> dcompView_;
+    QMetaObject::Connection dcompWindowConnection_;
+    void pushSceneStateToDComp();
 };

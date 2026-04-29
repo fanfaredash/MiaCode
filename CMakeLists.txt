@@ -303,6 +303,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/sources/timeline/TimelineOverlaySource.cpp
     src/render/backend_d3d11/PreviewDCompCore.h
     src/render/backend_d3d11/PreviewDCompCore.cpp
+    src/render/backend_d3d11/TimelineRenderView.h
+    src/render/backend_d3d11/TimelineRenderView.cpp
     src/render/backend_d3d11/PreviewDCompFrameStateSnapshot.h
     src/render/PreviewDCompRenderer.h
     src/render/PreviewDCompRenderer.cpp

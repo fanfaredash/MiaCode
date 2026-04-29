@@ -22,6 +22,7 @@
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "timeline/quick/TimelineQuickTextureCache.h"
 #include "timeline/quick/TimelineQuickWaveformLayer.h"
+#include "render/backend_d3d11/TimelineRenderView.h"
 
 namespace {
 
@@ -211,10 +212,42 @@ TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
     heldHorizontalKeyScrollTimer_.setSingleShot(false);
     heldHorizontalKeyScrollTimer_.setInterval(kTimelineKeyHoldTickIntervalMs);
     connect(&heldHorizontalKeyScrollTimer_, &QTimer::timeout, this, &TimelineQuickItem::applyHeldHorizontalKeyScrollTick);
+
+    // Phase 3c — DComp tracker placeholder. The TimelineRenderView's
+    // tryDiscoverTrackedItem looks up by this objectName via
+    // QObject::findChild on the QQuickWindow.  Even when the env flag
+    // is off (no view created) we still set the name so a later
+    // toggle-on Just Works. Same pattern as PreviewQuickSceneRoot's
+    // preview_dcomp_track_target.
+    setObjectName(QStringLiteral("timeline_dcomp_track_target"));
+    if (miacode::debug_options::previewTimelineUseDCompEnabled()) {
+        dcompView_ = std::make_unique<miacode::preview::dcomp::TimelineRenderView>(this);
+        // Attach to the host window once we're parented into a scene.
+        // QQuickItem fires windowChanged() with the new window when
+        // setParentItem moves us into a scene; if we're already in
+        // one (e.g. instantiated directly with a window), attach now.
+        dcompWindowConnection_ = connect(
+            this, &QQuickItem::windowChanged, this,
+            [this](QQuickWindow* w) {
+                if (dcompView_ != nullptr) {
+                    dcompView_->attachToWindow(w);
+                }
+            });
+        if (window() != nullptr) {
+            dcompView_->attachToWindow(window());
+        }
+    }
 }
 
 TimelineQuickItem::~TimelineQuickItem()
- = default;
+{
+    if (dcompWindowConnection_) {
+        QObject::disconnect(dcompWindowConnection_);
+        dcompWindowConnection_ = QMetaObject::Connection();
+    }
+    // dcompView_'s unique_ptr destructor handles renderer.stop() +
+    // core.shutdown() ordering through TimelineRenderView::~TimelineRenderView.
+}
 
 TimelineQuickStateBridge* TimelineQuickItem::stateBridge() const
 {
@@ -365,6 +398,19 @@ void TimelineQuickItem::syncSourceState()
         updateReadyState(false);
     }
     update();
+    // Phase 3c — also push the latest state to the DComp render view.
+    // syncSourceState fires on every renderStateChanged from the bridge,
+    // so this is the natural hook for keeping the render view in sync.
+    // No-op when the env flag is off (dcompView_ stays nullptr).
+    pushSceneStateToDComp();
+}
+
+void TimelineQuickItem::pushSceneStateToDComp()
+{
+    if (dcompView_ == nullptr) {
+        return;
+    }
+    dcompView_->setSceneState(currentSceneState());
 }
 
 void TimelineQuickItem::updateReadyState(bool ready)
