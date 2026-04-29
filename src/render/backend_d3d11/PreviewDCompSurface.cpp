@@ -104,6 +104,21 @@ PreviewDCompSurface::PreviewDCompSurface(QObject* parent)
 
 PreviewDCompSurface::~PreviewDCompSurface()
 {
+    // Disconnect the render thread's `presented` signal BEFORE detach()
+    // (which calls teardownCore() / renderer_.stop() / joins the thread).
+    // Without this, any queued emit posted right before stop() returns
+    // can dispatch on a half-destroyed surface during shutdown — that's
+    // the cross-thread UAF that produced the 2 GB process dumps.
+    //
+    // Done in the destructor (not in detach()) because detach() is also
+    // called from attachToWindow() during a window-switch — and the
+    // connection is set up ONCE in the constructor, so disconnecting it
+    // on every detach would leave the surface deaf to the render thread
+    // after the first re-attach.
+    if (rendererPresentedConnection_) {
+        QObject::disconnect(rendererPresentedConnection_);
+        rendererPresentedConnection_ = QMetaObject::Connection();
+    }
     detach();
 }
 
@@ -264,18 +279,12 @@ void PreviewDCompSurface::detach()
         QObject::disconnect(runtimeFrameStateConnection_);
         runtimeFrameStateConnection_ = QMetaObject::Connection();
     }
-    // CRITICAL: disconnect the render thread's `presented` signal BEFORE
-    // teardownCore (which calls renderer_.stop() / joins the thread).
-    // Any queued `presented` emit already on the GUI event queue gets
-    // dropped at disconnect time; any new emit between this line and
-    // the join lands on a disconnected slot and is a no-op. Without
-    // this, a present-then-stop race produced a cross-thread UAF when
-    // the queued event was processed after the surface had begun
-    // tearing down — surfaced as the 2 GB shutdown dumps.
-    if (rendererPresentedConnection_) {
-        QObject::disconnect(rendererPresentedConnection_);
-        rendererPresentedConnection_ = QMetaObject::Connection();
-    }
+    // NOTE: rendererPresentedConnection_ is intentionally NOT
+    // disconnected here. It's set up once in the constructor and the
+    // destructor handles the disconnect (see ~PreviewDCompSurface).
+    // detach() is called from both the destructor *and* attachToWindow
+    // (during window switch) — disconnecting here would leave the
+    // surface deaf to the render thread after the first re-attach.
     setTrackedItem(nullptr);
     runtime_ = nullptr;
     teardownCore();
