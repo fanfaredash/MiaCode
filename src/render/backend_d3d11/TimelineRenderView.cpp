@@ -468,7 +468,7 @@ void TimelineRenderView::ensureCompositorInitialized()
     compositor_.registerSource(std::make_unique<TimelineGridSource>());
     compositor_.registerSource(std::make_unique<TimelineWaveformSource>());
     compositor_.registerSource(std::make_unique<TimelineNotesSource>());
-    compositor_.registerSource(std::make_unique<TimelineHeaderSource>());
+    compositor_.registerSource(std::make_unique<TimelineHeaderSource>(&labelCache_));
     compositor_.registerSource(std::make_unique<TimelineOverlaySource>());
     logTimelineView("compositor_initialized",
                     QStringLiteral("source_count=%1")

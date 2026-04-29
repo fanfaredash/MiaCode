@@ -29,6 +29,7 @@
 #include "render/backend_d3d11/PreviewDCompCore.h"
 #include "render/PreviewDCompRenderer.h"
 #include "render/compositor.h"
+#include "sources/timeline/TimelineLabelCache.h"
 #include "timeline/TimelineSceneState.h"
 
 #include <QObject>
@@ -107,6 +108,13 @@ private:
 
     miacode::render::Compositor compositor_;
     bool compositorInitialized_ = false;
+
+    // Phase 3d-2 — CPU label rasterisation cache. Owned by the view
+    // so all timeline sources that produce text (currently only
+    // TimelineHeaderSource for laneLabels + headerLabels) share one
+    // cache and one set of QImages. Lifetime tied to the view; sources
+    // hold a non-owning pointer.
+    miacode::sources::timeline::TimelineLabelCache labelCache_;
 };
 
 }  // namespace miacode::preview::dcomp
