@@ -62,6 +62,12 @@ public:
     // steady state.
     void setSceneState(const miacode::timeline::TimelineSceneState& state);
 
+    // Direct tracked-item set. Avoids the findChild-by-objectName
+    // dance for callers that already hold a pointer (e.g. the
+    // QQuickItem itself owning this view). Wires the same geometry
+    // signals as the discover path.
+    void setTrackedQuickItem(QQuickItem* item);
+
     // Releases all resources and disconnects from the window. Idempotent.
     void detach();
 

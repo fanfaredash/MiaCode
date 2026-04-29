@@ -116,6 +116,11 @@ void TimelineRenderView::setSceneState(
     }
 }
 
+void TimelineRenderView::setTrackedQuickItem(QQuickItem* item)
+{
+    setTrackedItem(item);
+}
+
 void TimelineRenderView::detach()
 {
     if (window_) {

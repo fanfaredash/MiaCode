@@ -1058,6 +1058,101 @@ void emitTimelineRectVertices(const miacode::timeline::TimelineSceneRect& rect,
     out.push_back({ x0, y1, r, g, b, a });
 }
 
+// Phase 3d — timeline triangle. Three vertices, one filled triangle.
+// Used by header markers and the entry marker.
+void emitTimelineTriangleVertices(
+    const miacode::timeline::TimelineSceneTriangle& tri,
+    std::vector<PreviewDCompSpriteVertex>& out)
+{
+    if (tri.color.alpha() == 0) return;
+    const float r = static_cast<float>(qBound(0.0, tri.color.redF(), 1.0));
+    const float g = static_cast<float>(qBound(0.0, tri.color.greenF(), 1.0));
+    const float b = static_cast<float>(qBound(0.0, tri.color.blueF(), 1.0));
+    const float a = static_cast<float>(qBound(0.0, tri.color.alphaF(), 1.0));
+    out.push_back({ static_cast<float>(tri.a.x()), static_cast<float>(tri.a.y()), r, g, b, a });
+    out.push_back({ static_cast<float>(tri.b.x()), static_cast<float>(tri.b.y()), r, g, b, a });
+    out.push_back({ static_cast<float>(tri.c.x()), static_cast<float>(tri.c.y()), r, g, b, a });
+}
+
+// Phase 3d — timeline glyph (muri dot). The glyph descriptor carries
+// a shape hint (Circle / Diamond / RoundedRect) and a stroke + fill
+// pair. We reuse the existing emitCircleVertices for circles (just
+// repackage the rect as center+radius), emit a diamond/rounded-rect
+// as a 4-vertex polygon, and route everything through the kSolidPS
+// shader path. RoundedRect is approximated by a plain rect for now —
+// muri dots are small enough that the corner rounding is barely
+// perceptible at typical timeline zoom; Phase 5 polish can swap in
+// an SDF-based PS if pixel parity becomes important.
+void emitTimelineGlyphVertices(
+    const miacode::timeline::TimelineSceneGlyph& glyph,
+    std::vector<PreviewDCompSpriteVertex>& out)
+{
+    if (glyph.fillColor.alpha() == 0 && glyph.strokeColor.alpha() == 0) {
+        return;
+    }
+    const float x0 = static_cast<float>(glyph.rect.left());
+    const float y0 = static_cast<float>(glyph.rect.top());
+    const float x1 = static_cast<float>(glyph.rect.right());
+    const float y1 = static_cast<float>(glyph.rect.bottom());
+    if (x1 <= x0 || y1 <= y0) return;
+    const float cx = (x0 + x1) * 0.5f;
+    const float cy = (y0 + y1) * 0.5f;
+
+    auto pack = [](const QColor& c) {
+        return std::array<float, 4>{
+            static_cast<float>(qBound(0.0, c.redF(), 1.0)),
+            static_cast<float>(qBound(0.0, c.greenF(), 1.0)),
+            static_cast<float>(qBound(0.0, c.blueF(), 1.0)),
+            static_cast<float>(qBound(0.0, c.alphaF(), 1.0)),
+        };
+    };
+    auto pushQuad = [&](float lx, float ly, float rx, float ry,
+                         const std::array<float, 4>& rgba) {
+        out.push_back({ lx, ly, rgba[0], rgba[1], rgba[2], rgba[3] });
+        out.push_back({ rx, ly, rgba[0], rgba[1], rgba[2], rgba[3] });
+        out.push_back({ lx, ry, rgba[0], rgba[1], rgba[2], rgba[3] });
+        out.push_back({ rx, ly, rgba[0], rgba[1], rgba[2], rgba[3] });
+        out.push_back({ rx, ry, rgba[0], rgba[1], rgba[2], rgba[3] });
+        out.push_back({ lx, ry, rgba[0], rgba[1], rgba[2], rgba[3] });
+    };
+
+    using Shape = miacode::timeline::TimelineSceneGlyphShape;
+    if (glyph.shape == Shape::Circle && glyph.fillColor.alpha() > 0) {
+        // Reuse the circle tessellator — build a temporary
+        // PreviewCircleDescriptor, ignore stroke for muri dots (they
+        // typically only have fill).
+        miacode::preview::scene::PreviewCircleDescriptor c;
+        c.center = QPointF(cx, cy);
+        c.radiusX = (x1 - x0) * 0.5f;
+        c.radiusY = (y1 - y0) * 0.5f;
+        c.fillColor = glyph.fillColor;
+        c.strokeColor = glyph.strokeColor;
+        c.strokeWidth = glyph.strokeWidth;
+        emitCircleVertices(c, out);
+        return;
+    }
+    if (glyph.shape == Shape::Diamond && glyph.fillColor.alpha() > 0) {
+        // Diamond = 4 triangles fanning from the centre to the four
+        // axis-aligned corners. 6 verts as 2 triangles forming the
+        // diamond quad in (top, right, bottom, left) order.
+        const auto fill = pack(glyph.fillColor);
+        out.push_back({ cx, y0, fill[0], fill[1], fill[2], fill[3] });
+        out.push_back({ x1, cy, fill[0], fill[1], fill[2], fill[3] });
+        out.push_back({ x0, cy, fill[0], fill[1], fill[2], fill[3] });
+        out.push_back({ x1, cy, fill[0], fill[1], fill[2], fill[3] });
+        out.push_back({ cx, y1, fill[0], fill[1], fill[2], fill[3] });
+        out.push_back({ x0, cy, fill[0], fill[1], fill[2], fill[3] });
+        return;
+    }
+    // RoundedRect (approximation) and any unhandled shape — emit a
+    // plain rect with the fill colour. Acceptable for muri dots
+    // which are small (~6 px) — the rounded corners are sub-pixel
+    // anyway at timeline zoom.
+    if (glyph.fillColor.alpha() > 0) {
+        pushQuad(x0, y0, x1, y1, pack(glyph.fillColor));
+    }
+}
+
 // Phase 3b — timeline line tessellation. Each line becomes a thin
 // quad (4 vertices, 2 triangles, 6 emitted verts) extruded
 // perpendicular to the line direction by half the requested width.
@@ -1362,15 +1457,57 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
             processed += batch.count;
             break;
         }
-        // Phase 3d will add the remaining timeline batch types
-        // (triangles, text labels, glyphs, sprites, hold spans). The
-        // batches are still pushed by the timeline sources in Phase
-        // 2d / 3b — the render thread silently skips the not-yet-
-        // wired types so the chart preview is unaffected when a
-        // timeline RenderView feeds them in.
-        case BatchType::TimelineTriangles:
+        // Phase 3d (subset 1) — TimelineTriangles. Three verts per
+        // triangle, packed colour, kSolidPS pipeline.
+        case BatchType::TimelineTriangles: {
+            const int end = batch.firstIndex + batch.count;
+            DrawRun r;
+            r.kind = RunKind::Solid;
+            r.srv = nullptr;
+            r.firstVertex = static_cast<int>(staging.size());
+            r.vertexCount = 0;
+            for (int i = batch.firstIndex;
+                 i < end && i < snapshot.timelineTriangles.size(); ++i) {
+                const int before = static_cast<int>(staging.size());
+                emitTimelineTriangleVertices(snapshot.timelineTriangles.at(i), staging);
+                r.vertexCount += static_cast<int>(staging.size()) - before;
+            }
+            if (r.vertexCount > 0) {
+                runs.push_back(r);
+            }
+            processed += batch.count;
+            break;
+        }
+        // Phase 3d (subset 1) — TimelineGlyphs. Each glyph picks its
+        // tessellation per shape (Circle / Diamond / RoundedRect),
+        // all routed through kSolidPS. RoundedRect approximates as
+        // a plain rect for now (muri dots are small enough that
+        // sub-pixel corner rounding doesn't matter at typical zoom).
+        case BatchType::TimelineGlyphs: {
+            const int end = batch.firstIndex + batch.count;
+            DrawRun r;
+            r.kind = RunKind::Solid;
+            r.srv = nullptr;
+            r.firstVertex = static_cast<int>(staging.size());
+            r.vertexCount = 0;
+            for (int i = batch.firstIndex;
+                 i < end && i < snapshot.timelineGlyphs.size(); ++i) {
+                const int before = static_cast<int>(staging.size());
+                emitTimelineGlyphVertices(snapshot.timelineGlyphs.at(i), staging);
+                r.vertexCount += static_cast<int>(staging.size()) - before;
+            }
+            if (r.vertexCount > 0) {
+                runs.push_back(r);
+            }
+            processed += batch.count;
+            break;
+        }
+        // Phase 3d-2/3 will add TextLabels (CPU-rasterise to QImage,
+        // emit as Sprites internally — same approach HudSource uses
+        // for HUD text), Sprites (chart-style textured quads, asset
+        // lookup via a TimelineNoteAssets registry), and HoldSpans
+        // (tiled textured rects under hold notes).
         case BatchType::TimelineTextLabels:
-        case BatchType::TimelineGlyphs:
         case BatchType::TimelineSprites:
         case BatchType::TimelineHoldSpans:
             break;
