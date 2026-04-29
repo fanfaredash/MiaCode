@@ -370,18 +370,36 @@ void PreviewDCompSurface::buildAndPublishSnapshot(qint64 emittedAtNs)
     // a discontinuity.
     const qint64 playheadSampleNs = (emittedAtNs > 0) ? emittedAtNs : nowNs;
     constexpr double kRenderPlayheadSnapSeconds = 0.050;
+    // Experimental: when MIACODE_PREVIEW_DCOMP_FIXED_NOMINAL_CLOCK=1,
+    // advance the render-thread playhead clock by a hardcoded 60 Hz
+    // vsync interval per render-thread-driven publish, instead of by
+    // measured wall-clock. Goal is to drive playhead_delta_stats
+    // stddev → 0 by removing Present(1,0) return-time variance from
+    // the playhead increment. Off by default — earlier attempts to
+    // make this default broke the preview render path mid-session
+    // (root cause TBD); this flag isolates the change for safe A/B.
+    const bool fixedNominalClock =
+        miacode::debug_options::previewDCompFixedNominalClockEnabled();
+    constexpr double kFixedNominal60HzSeconds = 1.0 / 60.0;
     if (!renderPlayheadInitialized_) {
         renderPlayheadSeconds_ = state.playheadSeconds;
         renderPlayheadLastSampleNs_ = playheadSampleNs;
         renderPlayheadInitialized_ = true;
     } else {
-        const qint64 elapsedNs = playheadSampleNs - renderPlayheadLastSampleNs_;
-        const double elapsedSeconds = static_cast<double>(elapsedNs) / 1.0e9;
-        // Bound the step to [0, 100 ms] so a long stall (e.g., system
-        // sleep / GC pause) doesn't make us race forward by seconds when
-        // we wake; the drift snap below catches up cleanly instead.
-        const double cappedElapsed = qBound(0.0, elapsedSeconds, 0.100);
-        renderPlayheadSeconds_ += cappedElapsed;
+        double advanceSeconds;
+        if (fixedNominalClock && emittedAtNs > 0) {
+            // Steady-state path under the experimental flag: ignore
+            // wall-clock entirely.
+            advanceSeconds = kFixedNominal60HzSeconds;
+        } else {
+            const qint64 elapsedNs = playheadSampleNs - renderPlayheadLastSampleNs_;
+            const double elapsedSeconds = static_cast<double>(elapsedNs) / 1.0e9;
+            // Bound the step to [0, 100 ms] so a long stall (e.g., system
+            // sleep / GC pause) doesn't make us race forward by seconds
+            // when we wake; the drift snap below catches up cleanly instead.
+            advanceSeconds = qBound(0.0, elapsedSeconds, 0.100);
+        }
+        renderPlayheadSeconds_ += advanceSeconds;
         renderPlayheadLastSampleNs_ = playheadSampleNs;
         const double drift = state.playheadSeconds - renderPlayheadSeconds_;
         if (qAbs(drift) > kRenderPlayheadSnapSeconds) {

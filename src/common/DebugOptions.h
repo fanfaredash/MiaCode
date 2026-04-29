@@ -182,6 +182,33 @@ inline bool previewDCompTopLevelHwndEnabled()
         && envFlagEnabled("MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND");
 }
 
+inline bool previewDCompFixedNominalClockEnabled()
+{
+    // Experimental playhead-clock mode for the DComp surface. When on,
+    // renderPlayheadSeconds_ advances by a hardcoded nominal 60 Hz vsync
+    // interval (16.67 ms) per render-thread-driven publish, instead of
+    // by measured wall-clock between publishes.
+    //
+    // Goal: drive playhead_delta_stats stddev_ms toward 0 — the residual
+    // variance under wall-clock advance comes from Present(1,0) return
+    // timing variance + DXGI flip-queue scheduling, not from the
+    // monotonic clock or queued-dispatch jitter (those were already
+    // fixed by the monotonic-clock + FIFO-mailbox commits).
+    //
+    // Why opt-in for now: a previous attempt to plumb the user's
+    // Video-Settings rate selection through PreviewRuntime broke the
+    // preview render path (rendering stalled mid-session, root cause
+    // not yet pinned). Until we understand why, this experimental flag
+    // exercises the playhead-clock change in isolation — no
+    // PreviewRuntime API changes, no MOC churn, no MainWindow plumbing —
+    // so we can isolate whether the fix concept itself is sound.
+    //
+    // Hardcoded 60 Hz only. Phase 5 polish will plumb the user-selected
+    // rate (60 / 120 / Display Refresh) through once this is proven safe.
+    return previewUseDCompEnabled()
+        && envFlagEnabled("MIACODE_PREVIEW_DCOMP_FIXED_NOMINAL_CLOCK");
+}
+
 inline bool previewQsgFullDisableEnabled()
 {
     // Diagnostic / fallback mode: disable Qt Quick's native (GPU) rendering
