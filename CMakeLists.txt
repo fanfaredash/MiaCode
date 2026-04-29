@@ -258,6 +258,37 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/render/source.h
     src/render/compositor.h
     src/render/compositor.cpp
+    src/render/snapshot_builder.h
+    src/sources/chart/StageBackgroundSource.h
+    src/sources/chart/StageBackgroundSource.cpp
+    src/sources/chart/BackdropSource.h
+    src/sources/chart/BackdropSource.cpp
+    src/sources/chart/MuriPadSource.h
+    src/sources/chart/MuriPadSource.cpp
+    src/sources/chart/MuriActionSource.h
+    src/sources/chart/MuriActionSource.cpp
+    src/sources/chart/JudgeFireworkSource.h
+    src/sources/chart/JudgeFireworkSource.cpp
+    src/sources/chart/GuideSource.h
+    src/sources/chart/GuideSource.cpp
+    src/sources/chart/TrackSource.h
+    src/sources/chart/TrackSource.cpp
+    src/sources/chart/SlideMotionSource.h
+    src/sources/chart/SlideMotionSource.cpp
+    src/sources/chart/JudgeEffectSource.h
+    src/sources/chart/JudgeEffectSource.cpp
+    src/sources/chart/TouchJudgeSource.h
+    src/sources/chart/TouchJudgeSource.cpp
+    src/sources/chart/HeadSource.h
+    src/sources/chart/HeadSource.cpp
+    src/sources/chart/TouchSource.h
+    src/sources/chart/TouchSource.cpp
+    src/sources/chart/TouchHoldSource.h
+    src/sources/chart/TouchHoldSource.cpp
+    src/sources/chart/ChartReviewSource.h
+    src/sources/chart/ChartReviewSource.cpp
+    src/sources/chart/MaimuriDxJudgeSource.h
+    src/sources/chart/MaimuriDxJudgeSource.cpp
     src/render/backend_d3d11/PreviewDCompCore.h
     src/render/backend_d3d11/PreviewDCompCore.cpp
     src/render/backend_d3d11/PreviewDCompFrameStateSnapshot.h
