@@ -255,6 +255,9 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/quick_scene/PreviewQuickSceneRoot.h
     src/preview/quick_scene/PreviewQuickSceneRoot.cpp
     src/preview/quick_scene/PreviewQuickSceneInvalidationPolicy.h
+    src/render/source.h
+    src/render/compositor.h
+    src/render/compositor.cpp
     src/render/backend_d3d11/PreviewDCompCore.h
     src/render/backend_d3d11/PreviewDCompCore.cpp
     src/render/backend_d3d11/PreviewDCompFrameStateSnapshot.h
