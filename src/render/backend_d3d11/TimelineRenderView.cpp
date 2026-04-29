@@ -272,13 +272,20 @@ void TimelineRenderView::applyTrackedItemGeometry()
     }
 #ifdef Q_OS_WIN
     if (childHwnd_ != nullptr) {
-        const QPoint clientOrigin =
-            window_->mapToGlobal(QPoint(0, 0));
+        // Match PreviewDCompSurface's geometry maths exactly: mapToGlobal
+        // converts the scene-space top-left to LOGICAL screen coords;
+        // multiply by DPR to get screen PIXELS for MoveWindow. Using
+        // logical numbers here (the previous version of this branch)
+        // resulted in a popup that was 1/DPR the correct size on HiDPI
+        // displays (DPR=1.5 → popup at 67% size, content corner shifted
+        // up-left into the editor area — produced the gray-block overlap
+        // in the user verification screenshot).
+        const QPointF globalLogical = window_->mapToGlobal(topLeftScene);
+        const int globalXPx = qRound(globalLogical.x() * dpr);
+        const int globalYPx = qRound(globalLogical.y() * dpr);
         ::MoveWindow(reinterpret_cast<HWND>(childHwnd_),
-                     clientOrigin.x() + qRound(topLeftScene.x()),
-                     clientOrigin.y() + qRound(topLeftScene.y()),
-                     qMax(1, qRound(itemW)),
-                     qMax(1, qRound(itemH)),
+                     globalXPx, globalYPx,
+                     pixelSize.width(), pixelSize.height(),
                      TRUE);
         core_.setVisualTransform(0, 0, pixelSize);
     } else {
