@@ -30,6 +30,7 @@
 #include "render/PreviewDCompRenderer.h"
 #include "render/compositor.h"
 #include "sources/timeline/TimelineLabelCache.h"
+#include "sources/timeline/TimelineSpriteAssetCache.h"
 #include "timeline/TimelineSceneState.h"
 
 #include <QObject>
@@ -115,6 +116,12 @@ private:
     // cache and one set of QImages. Lifetime tied to the view; sources
     // hold a non-owning pointer.
     miacode::sources::timeline::TimelineLabelCache labelCache_;
+
+    // Phase 3d-3 — sprite asset cache. Wraps TimelineNoteAssets
+    // (loaded lazily on first lookup) and caches transformed
+    // QImages keyed on (type, scale, rotation, mirror). Shared by
+    // TimelineNotesSource for both noteSprites and trackSprites.
+    miacode::sources::timeline::TimelineSpriteAssetCache spriteAssetCache_;
 };
 
 }  // namespace miacode::preview::dcomp

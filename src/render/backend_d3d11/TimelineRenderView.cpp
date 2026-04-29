@@ -467,7 +467,7 @@ void TimelineRenderView::ensureCompositorInitialized()
     using namespace miacode::sources::timeline;
     compositor_.registerSource(std::make_unique<TimelineGridSource>());
     compositor_.registerSource(std::make_unique<TimelineWaveformSource>());
-    compositor_.registerSource(std::make_unique<TimelineNotesSource>());
+    compositor_.registerSource(std::make_unique<TimelineNotesSource>(&spriteAssetCache_));
     compositor_.registerSource(std::make_unique<TimelineHeaderSource>(&labelCache_));
     compositor_.registerSource(std::make_unique<TimelineOverlaySource>());
     logTimelineView("compositor_initialized",
