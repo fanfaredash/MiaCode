@@ -313,15 +313,18 @@ void TimelineRenderView::applyTrackedItemGeometry()
     }
 #ifdef Q_OS_WIN
     if (childHwnd_ != nullptr) {
-        // Match PreviewDCompSurface's geometry maths exactly: mapToGlobal
-        // converts the scene-space top-left to LOGICAL screen coords;
-        // multiply by DPR to get screen PIXELS for MoveWindow. Using
-        // logical numbers here (the previous version of this branch)
-        // resulted in a popup that was 1/DPR the correct size on HiDPI
-        // displays (DPR=1.5 → popup at 67% size, content corner shifted
-        // up-left into the editor area — produced the gray-block overlap
-        // in the user verification screenshot).
-        const QPointF globalLogical = window_->mapToGlobal(topLeftScene);
+        // Phase 3c-fix6 — use QQuickItem::mapToGlobal directly instead
+        // of QQuickWindow::mapToGlobal(item->mapToScene(...)). The
+        // user pointed out the timeline pane is rendered through QML
+        // (Quickshell-qml) while the text-box editor is QWidget; the
+        // QML root QQuickWindow is hosted alongside QWidget bridge
+        // surfaces in QuickShellNativeSurfaceHost, and the QQuickWindow's
+        // own mapToGlobal returns coordinates that don't account for
+        // the bridge surface's screen position. QQuickItem::mapToGlobal
+        // is item-aware and walks the QQuickWindow → screen path
+        // correctly through Qt's window-system integration regardless
+        // of the embedding pattern.
+        const QPointF globalLogical = trackedItem_->mapToGlobal(QPointF(0.0, 0.0));
         const int globalXPx = qRound(globalLogical.x() * dpr);
         const int globalYPx = qRound(globalLogical.y() * dpr);
         ::MoveWindow(reinterpret_cast<HWND>(childHwnd_),
@@ -330,9 +333,12 @@ void TimelineRenderView::applyTrackedItemGeometry()
                      TRUE);
         core_.setVisualTransform(0, 0, pixelSize);
 
-        // Phase 3c-fix: log the geometry decision sparingly so we can
+        // Phase 3c-fix4: log the geometry decision sparingly so we can
         // confirm the tracked item's reported bounds match the visible
-        // timeline pane. Only on changes to avoid log flooding.
+        // timeline pane. Only on changes to avoid log flooding. The
+        // log shows BOTH the QQuickWindow-relative mapToGlobal and the
+        // QQuickItem direct mapToGlobal so we can compare them.
+        const QPointF windowGlobal = window_->mapToGlobal(topLeftScene);
         static thread_local int s_lastX = INT_MIN;
         static thread_local int s_lastY = INT_MIN;
         static thread_local QSize s_lastSize;
@@ -345,13 +351,17 @@ void TimelineRenderView::applyTrackedItemGeometry()
                 "track_target_geometry",
                 QStringLiteral(
                     "scene_x=%1 scene_y=%2 item_w=%3 item_h=%4 dpr=%5 "
-                    "global_x=%6 global_y=%7 px_w=%8 px_h=%9 obj=%10")
+                    "item_global_x=%6 item_global_y=%7 "
+                    "win_global_x=%8 win_global_y=%9 "
+                    "px_w=%10 px_h=%11 obj=%12")
                     .arg(topLeftScene.x(), 0, 'f', 2)
                     .arg(topLeftScene.y(), 0, 'f', 2)
                     .arg(itemW, 0, 'f', 2)
                     .arg(itemH, 0, 'f', 2)
                     .arg(dpr, 0, 'f', 2)
                     .arg(globalXPx).arg(globalYPx)
+                    .arg(qRound(windowGlobal.x() * dpr))
+                    .arg(qRound(windowGlobal.y() * dpr))
                     .arg(pixelSize.width()).arg(pixelSize.height())
                     .arg(trackedItem_->objectName()));
         }
