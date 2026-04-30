@@ -220,6 +220,20 @@ TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
     // toggle-on Just Works. Same pattern as PreviewQuickSceneRoot's
     // preview_dcomp_track_target.
     setObjectName(QStringLiteral("timeline_dcomp_track_target"));
+    // Phase 3e-diag — force-log every TimelineQuickItem construction so
+    // we can identify if QML is creating multiple instances (which
+    // would explain the two-popup symptom in the user's log).
+    {
+        static std::atomic<int> sInstanceCounter{0};
+        const int instanceId = ++sInstanceCounter;
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("timeline/quick_item"),
+            QStringLiteral("action=construct instance=%1 ptr=0x%2")
+                .arg(instanceId)
+                .arg(reinterpret_cast<quintptr>(this), 0, 16),
+            /*force=*/true);
+    }
     if (miacode::debug_options::previewTimelineUseDCompEnabled()) {
         dcompView_ = std::make_unique<miacode::preview::dcomp::TimelineRenderView>(this);
         // Attach to the host window once we're parented into a scene,
@@ -248,6 +262,12 @@ TimelineQuickItem::TimelineQuickItem(QQuickItem* parent)
 
 TimelineQuickItem::~TimelineQuickItem()
 {
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("timeline/quick_item"),
+        QStringLiteral("action=destruct ptr=0x%1")
+            .arg(reinterpret_cast<quintptr>(this), 0, 16),
+        /*force=*/true);
     if (dcompWindowConnection_) {
         QObject::disconnect(dcompWindowConnection_);
         dcompWindowConnection_ = QMetaObject::Connection();
