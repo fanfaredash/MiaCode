@@ -67,6 +67,36 @@ TimelineRenderView::TimelineRenderView(QObject* parent)
         &renderer_, &PreviewDCompRenderer::presented, this,
         &TimelineRenderView::onRendererPresented,
         Qt::QueuedConnection);
+
+    // Phase 3f-1 — startup visibility gate. Popup stays SW_HIDE from
+    // creation until geometry has been quiescent for the debounce
+    // window. The debounce timer is single-shot, restarted on every
+    // applyTrackedItemGeometry call where the (xPx, yPx, pixelSize)
+    // tuple actually changed. When the timer fires (= no geometry
+    // change for the debounce duration), we ShowWindow.
+    //
+    // 80 ms covers the typical layout-settle cascade (the user's logs
+    // showed all geometry transitions within ~230 ms; the LAST
+    // transition was followed by a quiet period until snapshot
+    // publishing began ~400 ms later). A shorter debounce risks
+    // flashing the popup mid-cascade; a longer one delays first paint.
+    popupVisibilityDebounce_.setSingleShot(true);
+    popupVisibilityDebounce_.setInterval(80);
+    connect(&popupVisibilityDebounce_, &QTimer::timeout, this, [this]() {
+#ifdef Q_OS_WIN
+        if (childHwnd_ == nullptr || popupShown_) {
+            return;
+        }
+        ::ShowWindow(reinterpret_cast<HWND>(childHwnd_), SW_SHOWNOACTIVATE);
+        popupShown_ = true;
+        logTimelineViewForced(
+            "popup_shown",
+            QStringLiteral("popup=0x%1 px_w=%2 px_h=%3")
+                .arg(reinterpret_cast<quintptr>(childHwnd_), 0, 16)
+                .arg(lastAppliedPixelSize_.width())
+                .arg(lastAppliedPixelSize_.height()));
+#endif
+    });
 }
 
 TimelineRenderView::~TimelineRenderView()
@@ -178,6 +208,14 @@ void TimelineRenderView::detach()
         childHwnd_ = nullptr;
         logTimelineViewForced("child_hwnd_destroyed");
     }
+    // Phase 3f-1 — reset visibility-gate state so a re-attach starts
+    // fresh (popup re-created hidden, debounce timer re-armed on next
+    // applyTrackedItemGeometry).
+    popupVisibilityDebounce_.stop();
+    popupShown_ = false;
+    lastAppliedXPx_ = INT_MIN;
+    lastAppliedYPx_ = INT_MIN;
+    lastAppliedPixelSize_ = QSize();
 #endif
     window_ = nullptr;
 }
@@ -384,10 +422,33 @@ void TimelineRenderView::applyTrackedItemGeometry()
         const QPointF globalLogical = trackedItem_->mapToGlobal(QPointF(0.0, 0.0));
         const int globalXPx = qRound(globalLogical.x() * dpr);
         const int globalYPx = qRound(globalLogical.y() * dpr);
-        ::MoveWindow(reinterpret_cast<HWND>(childHwnd_),
-                     globalXPx, globalYPx,
-                     pixelSize.width(), pixelSize.height(),
-                     TRUE);
+        // Phase 3f-1 — only call MoveWindow + restart the visibility
+        // debounce when the geometry actually changed. Without this
+        // gate, the per-publish geometry resync (fix9, 60 Hz) would
+        // restart the debounce every frame and the popup would never
+        // become visible.
+        const bool geometryChanged =
+            (lastAppliedXPx_ != globalXPx)
+            || (lastAppliedYPx_ != globalYPx)
+            || (lastAppliedPixelSize_ != pixelSize);
+        if (geometryChanged) {
+            ::MoveWindow(reinterpret_cast<HWND>(childHwnd_),
+                         globalXPx, globalYPx,
+                         pixelSize.width(), pixelSize.height(),
+                         TRUE);
+            lastAppliedXPx_ = globalXPx;
+            lastAppliedYPx_ = globalYPx;
+            lastAppliedPixelSize_ = pixelSize;
+            // Restart the visibility debounce. If the popup hasn't
+            // shown yet, the timer's timeout will ShowWindow once
+            // 80 ms have passed without another geometry change.
+            // If the popup is already visible (post-startup resize),
+            // restarting is harmless — the timer's slot short-circuits
+            // on `popupShown_=true`.
+            if (!popupShown_) {
+                popupVisibilityDebounce_.start();
+            }
+        }
         core_.setVisualTransform(0, 0, pixelSize);
     } else {
         core_.setVisualTransform(xPx, yPx, pixelSize);
@@ -604,10 +665,20 @@ void* TimelineRenderView::currentParentHwnd() const
             return reinterpret_cast<void*>(owner);
         }
         ::SetLayeredWindowAttributes(popup, 0, 255, LWA_ALPHA);
-        ::ShowWindow(popup, SW_SHOWNOACTIVATE);
+        // Phase 3f-1 — DON'T ShowWindow here. The popup stays SW_HIDE
+        // until applyTrackedItemGeometry's debounce timer fires, which
+        // happens 80 ms after the last MoveWindow. This eliminates the
+        // visible "popup dancing around screen during startup" flicker
+        // — the popup is positioned silently while QML's layout
+        // cascade resolves, and only flips to visible once geometry
+        // has settled.
+        //
+        // Note: SW_HIDE is the default state of a freshly CreateWindowExW'd
+        // window in modern Windows when no SW_SHOW* flag is in WS_*. We
+        // don't need an explicit SW_HIDE call.
         const_cast<TimelineRenderView*>(this)->childHwnd_ = popup;
         logTimelineViewForced("toplevel_hwnd_created",
-                               QStringLiteral("owner=0x%1 popup=0x%2")
+                               QStringLiteral("owner=0x%1 popup=0x%2 (hidden until geometry settles)")
                                    .arg(reinterpret_cast<quintptr>(owner), 0, 16)
                                    .arg(reinterpret_cast<quintptr>(popup), 0, 16));
         return reinterpret_cast<void*>(popup);

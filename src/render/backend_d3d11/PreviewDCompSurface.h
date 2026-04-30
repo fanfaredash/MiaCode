@@ -18,6 +18,7 @@
 #include <QTimer>
 
 #include <atomic>
+#include <climits>
 
 class QQuickItem;
 class QQuickWindow;
@@ -119,6 +120,19 @@ private:
     // parented to the QQuickWindow's HWND directly).
     // (Name is historical — kept until Phase 3 renames to popupHwnd_.)
     void* childHwnd_ = nullptr;
+    // Phase 3f-1 — startup visibility gate (mirrors TimelineRenderView).
+    // The popup HWND is created hidden; applyTrackedItemGeometry calls
+    // MoveWindow as the QQuickItem's anchors-fill resolves through the
+    // QML layout cascade, but the popup stays SW_HIDE the whole time.
+    // A debounce timer (single-shot, restarted on every geometry
+    // change) only ShowWindows the popup once geometry has been
+    // quiescent for one settle window — eliminating the "popup
+    // dancing during startup" jank the user reported.
+    QTimer popupVisibilityDebounce_;
+    bool popupShown_ = false;
+    int lastAppliedGlobalXPx_ = INT_MIN;
+    int lastAppliedGlobalYPx_ = INT_MIN;
+    QSize lastAppliedPixelSize_;
     QMetaObject::Connection runtimeFrameStateConnection_;
     // Stored so detach() can explicitly disconnect the render thread's
     // `presented` signal BEFORE renderer_.stop() joins. Without this,

@@ -99,6 +99,28 @@ PreviewDCompSurface::PreviewDCompSurface(QObject* parent)
             &QFutureWatcher<QSharedPointer<QImage>>::finished,
             this,
             &PreviewDCompSurface::onHudRebuildFinished);
+
+    // Phase 3f-1 — startup visibility gate. Mirrors TimelineRenderView.
+    // The popup HWND is created hidden; the debounce timer fires once
+    // geometry has been quiescent for 80 ms (one render-cycle's worth
+    // of layout-settle margin), which is when we ShowWindow.
+    popupVisibilityDebounce_.setSingleShot(true);
+    popupVisibilityDebounce_.setInterval(80);
+    connect(&popupVisibilityDebounce_, &QTimer::timeout, this, [this]() {
+#ifdef Q_OS_WIN
+        if (childHwnd_ == nullptr || popupShown_) {
+            return;
+        }
+        ::ShowWindow(reinterpret_cast<HWND>(childHwnd_), SW_SHOWNOACTIVATE);
+        popupShown_ = true;
+        logSurface(
+            "popup_shown",
+            QStringLiteral("popup=0x%1 px_w=%2 px_h=%3")
+                .arg(reinterpret_cast<quintptr>(childHwnd_), 0, 16)
+                .arg(lastAppliedPixelSize_.width())
+                .arg(lastAppliedPixelSize_.height()));
+#endif
+    });
 }
 
 PreviewDCompSurface::~PreviewDCompSurface()
@@ -298,6 +320,14 @@ void PreviewDCompSurface::detach()
         childHwnd_ = nullptr;
         logSurface("child_hwnd_destroyed");
     }
+    // Phase 3f-1 — reset visibility-gate state. A re-attach starts
+    // fresh: popup created hidden, debounce re-armed on next
+    // applyTrackedItemGeometry, ShowWindow only when geometry settles.
+    popupVisibilityDebounce_.stop();
+    popupShown_ = false;
+    lastAppliedGlobalXPx_ = INT_MIN;
+    lastAppliedGlobalYPx_ = INT_MIN;
+    lastAppliedPixelSize_ = QSize();
 #endif
     window_ = nullptr;
 }
@@ -871,10 +901,29 @@ void PreviewDCompSurface::applyTrackedItemGeometry()
         const QPointF globalLogical = window_->mapToGlobal(topLeftScene);
         const int globalXPx = qRound(globalLogical.x() * dpr);
         const int globalYPx = qRound(globalLogical.y() * dpr);
-        ::MoveWindow(reinterpret_cast<HWND>(childHwnd_),
-                     globalXPx, globalYPx,
-                     pixelSize.width(), pixelSize.height(),
-                     TRUE);
+        // Phase 3f-1 — only call MoveWindow + restart the visibility
+        // debounce when the geometry actually changed. Without this
+        // gate, the per-publish geometry resync would restart the
+        // debounce every frame and the popup would never show.
+        const bool geometryChanged =
+            (lastAppliedGlobalXPx_ != globalXPx)
+            || (lastAppliedGlobalYPx_ != globalYPx)
+            || (lastAppliedPixelSize_ != pixelSize);
+        if (geometryChanged) {
+            ::MoveWindow(reinterpret_cast<HWND>(childHwnd_),
+                         globalXPx, globalYPx,
+                         pixelSize.width(), pixelSize.height(),
+                         TRUE);
+            lastAppliedGlobalXPx_ = globalXPx;
+            lastAppliedGlobalYPx_ = globalYPx;
+            lastAppliedPixelSize_ = pixelSize;
+            // Restart the visibility debounce. Once popup is shown
+            // (post-startup), restarting is harmless — the timer's
+            // slot short-circuits on `popupShown_=true`.
+            if (!popupShown_) {
+                popupVisibilityDebounce_.start();
+            }
+        }
         core_.setVisualTransform(0, 0, pixelSize);
     } else {
         core_.setVisualTransform(xPx, yPx, pixelSize);
@@ -1027,10 +1076,14 @@ void* PreviewDCompSurface::currentParentHwnd() const
         // is required to coexist with the editor's swap chain
         // without producing a black box.
         ::SetLayeredWindowAttributes(popup, 0, 255, LWA_ALPHA);
-        ::ShowWindow(popup, SW_SHOWNOACTIVATE);
+        // Phase 3f-1 — DON'T ShowWindow here. The popup stays hidden
+        // until applyTrackedItemGeometry's debounce timer fires, which
+        // happens 80 ms after the last MoveWindow (= geometry has
+        // stopped changing). Eliminates the visible "popup dancing
+        // around screen during startup" flicker the user reported.
         const_cast<PreviewDCompSurface*>(this)->childHwnd_ = popup;
         logSurface("toplevel_hwnd_created",
-                   QStringLiteral("owner=0x%1 popup=0x%2")
+                   QStringLiteral("owner=0x%1 popup=0x%2 (hidden until geometry settles)")
                        .arg(reinterpret_cast<quintptr>(owner), 0, 16)
                        .arg(reinterpret_cast<quintptr>(popup), 0, 16));
         return reinterpret_cast<void*>(popup);
