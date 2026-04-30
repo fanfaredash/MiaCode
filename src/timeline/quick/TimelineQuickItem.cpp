@@ -581,6 +581,33 @@ void TimelineQuickItem::stopHeldHorizontalKeyScroll(int key)
 QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data)
 {
     Q_UNUSED(data);
+
+    // Phase 3e — when DComp-exclusive mode is on for the timeline, the
+    // TimelineRenderView is the authoritative timeline renderer. This
+    // QSG path produces nothing: discard any existing scene-graph
+    // subtree and return null so Qt skips this layer entirely. The
+    // QQuickItem itself stays alive (so DComp's tracked-item geometry
+    // tracking still works), but its bounding rect contributes no
+    // pixels to the QSG scene.
+    //
+    // Mirrors PreviewQuickSceneRoot::updatePaintNode's gate at line
+    // 526 (`previewDCompExclusiveEnabled`) — same pattern, same
+    // behaviour. Without this gate, both the QSG layers and the DComp
+    // pipeline would render the same timeline content into different
+    // surfaces, producing the "two timelines" symptom the user
+    // observed (one rendered by QML+QSG, one by DComp; whichever DWM
+    // composites on top wins visually, with the other showing through
+    // transparent regions).
+    if (miacode::debug_options::previewTimelineUseDCompEnabled()) {
+        if (oldNode != nullptr) {
+            delete oldNode;
+        }
+        updateReadyState(true);
+        // Still push state to DComp side as before.
+        pushSceneStateToDComp();
+        return nullptr;
+    }
+
     QElapsedTimer paintNodeTimer;
     paintNodeTimer.start();
     auto* root = ensureSlotRoot(oldNode);

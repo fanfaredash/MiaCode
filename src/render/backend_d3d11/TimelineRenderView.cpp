@@ -531,32 +531,48 @@ void* TimelineRenderView::currentParentHwnd() const
     if (window_ == nullptr) {
         return nullptr;
     }
-    // Phase 3c-fix8 — TIMELINE always uses in-place mode (DComp visual
-    // parented to the QQuickWindow's HWND directly). The chart preview
-    // sticks with top-level popup mode because its tracked item maps
-    // 1:1 to a screen rectangle Qt's QQuickWindow::mapToGlobal can
-    // resolve. The timeline lives inside QuickShellNativeSurfaceHost's
-    // multi-surface architecture (the QML scene is composed alongside
-    // QWidget bridge surfaces), and the QQuickWindow→screen mapping
-    // for an embedded item produced popup positions that didn't match
-    // where TimelineQuickItem's QSG output actually rendered (user's
-    // verification screenshot: popup at the wrong place ~250 px above
-    // the visible timeline pane).
-    //
-    // In-place mode bypasses screen-coord mapping entirely: DComp's
-    // visual is positioned via setVisualTransform within the
-    // QQuickWindow's own client area, sharing the EXACT same coord
-    // system QSG uses for TimelineQuickItem. If QSG renders at scene
-    // (X, Y), DComp also renders at (X, Y); they're guaranteed to
-    // overlap pixel-perfect.
-    //
-    // Trade-off: top-level popup mode gives DComp its own DWM
-    // composition plane (no inter-swap-chain serialisation with QSG).
-    // In-place mode shares the QQuickWindow's swap chain target, so
-    // there's some DWM serialisation cost. For the timeline this is
-    // fine — it doesn't have the chart preview's per-frame redraw
-    // pressure (timeline state changes only on edit / scroll / playhead
-    // tick, not every vsync).
+    if (childHwnd_ != nullptr) {
+        return childHwnd_;
+    }
+    // Phase 3e — same top-level popup HWND pattern as PreviewDCompSurface.
+    // The earlier fix8 attempt (in-place mode) was a workaround for
+    // what looked like wrong popup positioning, but the actual cause
+    // was the simultaneous QSG rendering of TimelineQuickItem
+    // producing the "two timelines" symptom. With Phase 3e's QSG-paint
+    // suppression in place (TimelineQuickItem::updatePaintNode gates on
+    // previewTimelineUseDCompEnabled and returns nullptr), the popup's
+    // top-level positioning matches what the chart preview already
+    // does successfully — geometry log confirms mapToGlobal returns
+    // accurate global coords (item_global == win_global).
+    if (miacode::debug_options::previewDCompTopLevelHwndEnabled()) {
+        const HWND owner = reinterpret_cast<HWND>(window_->winId());
+        if (owner == nullptr) {
+            return nullptr;
+        }
+        const HWND popup = ::CreateWindowExW(
+            WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_LAYERED
+                | WS_EX_TOOLWINDOW,
+            L"STATIC",
+            L"",
+            WS_POPUP,
+            0, 0, 1, 1,
+            owner, nullptr,
+            ::GetModuleHandleW(nullptr), nullptr);
+        if (popup == nullptr) {
+            const DWORD err = ::GetLastError();
+            logTimelineView("toplevel_hwnd_create_failed",
+                            QStringLiteral("err=%1").arg(err));
+            return reinterpret_cast<void*>(owner);
+        }
+        ::SetLayeredWindowAttributes(popup, 0, 255, LWA_ALPHA);
+        ::ShowWindow(popup, SW_SHOWNOACTIVATE);
+        const_cast<TimelineRenderView*>(this)->childHwnd_ = popup;
+        logTimelineView("toplevel_hwnd_created",
+                        QStringLiteral("owner=0x%1 popup=0x%2")
+                            .arg(reinterpret_cast<quintptr>(owner), 0, 16)
+                            .arg(reinterpret_cast<quintptr>(popup), 0, 16));
+        return reinterpret_cast<void*>(popup);
+    }
     return reinterpret_cast<void*>(window_->winId());
 #else
     return nullptr;
