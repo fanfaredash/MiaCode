@@ -475,17 +475,17 @@ bool TimelineRenderView::initialiseIfReady()
     }
     void* parentHwnd = currentParentHwnd();
     if (parentHwnd == nullptr) {
-        logTimelineView("init_deferred", QStringLiteral("reason=null_hwnd"));
+        logTimelineViewForced("init_deferred", QStringLiteral("reason=null_hwnd"));
         return false;
     }
     const QSize clientPx = currentClientPixelSize();
     if (clientPx.width() <= 0 || clientPx.height() <= 0) {
-        logTimelineView("init_deferred", QStringLiteral("reason=zero_size"));
+        logTimelineViewForced("init_deferred", QStringLiteral("reason=zero_size"));
         return false;
     }
 #ifdef Q_OS_WIN
     if (!core_.initialise(reinterpret_cast<HWND>(parentHwnd), clientPx)) {
-        logTimelineView("init_failed");
+        logTimelineViewForced("init_failed");
         return false;
     }
 #else
@@ -494,11 +494,11 @@ bool TimelineRenderView::initialiseIfReady()
 #endif
     core_.setVisualTransform(0, 0, clientPx);
     initialised_ = true;
-    logTimelineView("initialised",
-                    QStringLiteral("client_w=%1 client_h=%2")
-                        .arg(clientPx.width()).arg(clientPx.height()));
+    logTimelineViewForced("initialised",
+                          QStringLiteral("client_w=%1 client_h=%2")
+                              .arg(clientPx.width()).arg(clientPx.height()));
     if (!renderer_.start(&core_)) {
-        logTimelineView("renderer_start_failed");
+        logTimelineViewForced("renderer_start_failed");
     }
     return true;
 }
@@ -509,7 +509,7 @@ void TimelineRenderView::teardownCore()
         renderer_.stop();
         core_.shutdown();
         initialised_ = false;
-        logTimelineView("teardown");
+        logTimelineViewForced("teardown");
     }
 }
 
@@ -560,17 +560,17 @@ void* TimelineRenderView::currentParentHwnd() const
             ::GetModuleHandleW(nullptr), nullptr);
         if (popup == nullptr) {
             const DWORD err = ::GetLastError();
-            logTimelineView("toplevel_hwnd_create_failed",
-                            QStringLiteral("err=%1").arg(err));
+            logTimelineViewForced("toplevel_hwnd_create_failed",
+                                   QStringLiteral("err=%1").arg(err));
             return reinterpret_cast<void*>(owner);
         }
         ::SetLayeredWindowAttributes(popup, 0, 255, LWA_ALPHA);
         ::ShowWindow(popup, SW_SHOWNOACTIVATE);
         const_cast<TimelineRenderView*>(this)->childHwnd_ = popup;
-        logTimelineView("toplevel_hwnd_created",
-                        QStringLiteral("owner=0x%1 popup=0x%2")
-                            .arg(reinterpret_cast<quintptr>(owner), 0, 16)
-                            .arg(reinterpret_cast<quintptr>(popup), 0, 16));
+        logTimelineViewForced("toplevel_hwnd_created",
+                               QStringLiteral("owner=0x%1 popup=0x%2")
+                                   .arg(reinterpret_cast<quintptr>(owner), 0, 16)
+                                   .arg(reinterpret_cast<quintptr>(popup), 0, 16));
         return reinterpret_cast<void*>(popup);
     }
     return reinterpret_cast<void*>(window_->winId());
