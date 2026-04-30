@@ -482,37 +482,57 @@ bool TimelineRenderView::initialiseIfReady()
 {
     logTimelineViewForced(
         "initialiseIfReady_enter",
-        QStringLiteral("initialised=%1 childHwnd=0x%2 window=0x%3")
+        QStringLiteral("initialised=%1 initialising=%2 childHwnd=0x%3 window=0x%4")
             .arg(initialised_ ? 1 : 0)
+            .arg(initialising_ ? 1 : 0)
             .arg(reinterpret_cast<quintptr>(childHwnd_), 0, 16)
             .arg(reinterpret_cast<quintptr>(window_.data()), 0, 16));
     if (initialised_) {
         return true;
     }
+    // Phase 3e-fix — Win32 reentry guard. CreateWindowExW + ShowWindow
+    // + SetLayeredWindowAttributes inside currentParentHwnd can pump
+    // messages on Windows, and Qt dispatches queued events during that
+    // pump. If a queued event re-enters initialiseIfReady (observed in
+    // user logs at 15:01:05.825 → 05.859, 34ms apart, both seeing
+    // initialised_=false), the second call would create a duplicate
+    // popup HWND, leading to two stacked top-level popups in DWM —
+    // exactly the "empty timeline" symptom from the verification
+    // screenshot.
+    if (initialising_) {
+        return false;
+    }
+    initialising_ = true;
     if (window_ == nullptr) {
+        initialising_ = false;
         return false;
     }
     void* parentHwnd = currentParentHwnd();
     if (parentHwnd == nullptr) {
         logTimelineViewForced("init_deferred", QStringLiteral("reason=null_hwnd"));
+        initialising_ = false;
         return false;
     }
     const QSize clientPx = currentClientPixelSize();
     if (clientPx.width() <= 0 || clientPx.height() <= 0) {
         logTimelineViewForced("init_deferred", QStringLiteral("reason=zero_size"));
+        initialising_ = false;
         return false;
     }
 #ifdef Q_OS_WIN
     if (!core_.initialise(reinterpret_cast<HWND>(parentHwnd), clientPx)) {
         logTimelineViewForced("init_failed");
+        initialising_ = false;
         return false;
     }
 #else
     Q_UNUSED(parentHwnd);
+    initialising_ = false;
     return false;
 #endif
     core_.setVisualTransform(0, 0, clientPx);
     initialised_ = true;
+    initialising_ = false;
     logTimelineViewForced("initialised",
                           QStringLiteral("client_w=%1 client_h=%2")
                               .arg(clientPx.width()).arg(clientPx.height()));

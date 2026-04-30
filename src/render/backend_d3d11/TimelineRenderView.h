@@ -106,6 +106,17 @@ private:
     PreviewDCompRenderer renderer_;
     qint64 snapshotRevision_ = 0;
     bool initialised_ = false;
+    // Phase 3e-fix — Win32 reentry guard for initialiseIfReady. Inside
+    // currentParentHwnd, Win32 calls (CreateWindowExW + ShowWindow +
+    // SetLayeredWindowAttributes) can pump messages, which Qt
+    // dispatches as queued events. If one of those queued events calls
+    // initialiseIfReady recursively (e.g., a windowChanged slot fires
+    // because a parent reparented us during the popup-creation pump),
+    // both calls would see initialised_=false (the first hasn't yet
+    // reached its `initialised_=true` line), both would create
+    // separate popup HWNDs, and we'd end up with two visible-but-
+    // empty popups stacked on top of each other in DWM.
+    bool initialising_ = false;
 
     miacode::render::Compositor compositor_;
     bool compositorInitialized_ = false;
