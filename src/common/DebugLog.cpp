@@ -204,7 +204,13 @@ QString defaultDebugLogDirectory()
 
 qint64 startupTrimMaxBytes()
 {
-    return 100 * 1024;
+    // Phase 3e diag — temporarily bumped from 100 KB to 2 MB so we
+    // can capture the full Phase 3e startup sequence including
+    // TimelineQuickItem construct events. The default 100 KB was
+    // truncating ~30 seconds of session into ~1 second of visible
+    // log when --debug is active. Restore to 100 KB once Phase 3e
+    // converges.
+    return 2 * 1024 * 1024;
 }
 
 bool trimFileToMaxBytesLocked(const QString& path, qint64 maxBytes)
