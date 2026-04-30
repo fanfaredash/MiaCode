@@ -312,18 +312,44 @@ void TimelineRenderView::applyTrackedItemGeometry()
         renderer_.requestResize(pixelSize);
     }
 #ifdef Q_OS_WIN
+    // Phase 3c-fix10 — log geometry values regardless of mode (top-level
+    // popup vs in-place). With Phase 3c-fix8's in-place mode, childHwnd_
+    // is always null for the timeline view, so the previous log inside
+    // the `if (childHwnd_ != nullptr)` branch never fired.
+    {
+        const QPointF windowGlobal = window_->mapToGlobal(topLeftScene);
+        const QPointF itemGlobal = trackedItem_->mapToGlobal(QPointF(0.0, 0.0));
+        static thread_local int s_lastX = INT_MIN;
+        static thread_local int s_lastY = INT_MIN;
+        static thread_local QSize s_lastSize;
+        if (s_lastX != xPx || s_lastY != yPx
+            || s_lastSize != pixelSize) {
+            s_lastX = xPx;
+            s_lastY = yPx;
+            s_lastSize = pixelSize;
+            logTimelineView(
+                "track_target_geometry",
+                QStringLiteral(
+                    "scene_x=%1 scene_y=%2 item_w=%3 item_h=%4 dpr=%5 "
+                    "scene_xPx=%6 scene_yPx=%7 "
+                    "item_global=%8,%9 win_global=%10,%11 "
+                    "px_w=%12 px_h=%13 mode=%14 obj=%15")
+                    .arg(topLeftScene.x(), 0, 'f', 2)
+                    .arg(topLeftScene.y(), 0, 'f', 2)
+                    .arg(itemW, 0, 'f', 2)
+                    .arg(itemH, 0, 'f', 2)
+                    .arg(dpr, 0, 'f', 2)
+                    .arg(xPx).arg(yPx)
+                    .arg(qRound(itemGlobal.x() * dpr))
+                    .arg(qRound(itemGlobal.y() * dpr))
+                    .arg(qRound(windowGlobal.x() * dpr))
+                    .arg(qRound(windowGlobal.y() * dpr))
+                    .arg(pixelSize.width()).arg(pixelSize.height())
+                    .arg(childHwnd_ != nullptr ? "popup" : "inplace")
+                    .arg(trackedItem_->objectName()));
+        }
+    }
     if (childHwnd_ != nullptr) {
-        // Phase 3c-fix6 — use QQuickItem::mapToGlobal directly instead
-        // of QQuickWindow::mapToGlobal(item->mapToScene(...)). The
-        // user pointed out the timeline pane is rendered through QML
-        // (Quickshell-qml) while the text-box editor is QWidget; the
-        // QML root QQuickWindow is hosted alongside QWidget bridge
-        // surfaces in QuickShellNativeSurfaceHost, and the QQuickWindow's
-        // own mapToGlobal returns coordinates that don't account for
-        // the bridge surface's screen position. QQuickItem::mapToGlobal
-        // is item-aware and walks the QQuickWindow → screen path
-        // correctly through Qt's window-system integration regardless
-        // of the embedding pattern.
         const QPointF globalLogical = trackedItem_->mapToGlobal(QPointF(0.0, 0.0));
         const int globalXPx = qRound(globalLogical.x() * dpr);
         const int globalYPx = qRound(globalLogical.y() * dpr);
@@ -332,39 +358,6 @@ void TimelineRenderView::applyTrackedItemGeometry()
                      pixelSize.width(), pixelSize.height(),
                      TRUE);
         core_.setVisualTransform(0, 0, pixelSize);
-
-        // Phase 3c-fix4: log the geometry decision sparingly so we can
-        // confirm the tracked item's reported bounds match the visible
-        // timeline pane. Only on changes to avoid log flooding. The
-        // log shows BOTH the QQuickWindow-relative mapToGlobal and the
-        // QQuickItem direct mapToGlobal so we can compare them.
-        const QPointF windowGlobal = window_->mapToGlobal(topLeftScene);
-        static thread_local int s_lastX = INT_MIN;
-        static thread_local int s_lastY = INT_MIN;
-        static thread_local QSize s_lastSize;
-        if (s_lastX != globalXPx || s_lastY != globalYPx
-            || s_lastSize != pixelSize) {
-            s_lastX = globalXPx;
-            s_lastY = globalYPx;
-            s_lastSize = pixelSize;
-            logTimelineView(
-                "track_target_geometry",
-                QStringLiteral(
-                    "scene_x=%1 scene_y=%2 item_w=%3 item_h=%4 dpr=%5 "
-                    "item_global_x=%6 item_global_y=%7 "
-                    "win_global_x=%8 win_global_y=%9 "
-                    "px_w=%10 px_h=%11 obj=%12")
-                    .arg(topLeftScene.x(), 0, 'f', 2)
-                    .arg(topLeftScene.y(), 0, 'f', 2)
-                    .arg(itemW, 0, 'f', 2)
-                    .arg(itemH, 0, 'f', 2)
-                    .arg(dpr, 0, 'f', 2)
-                    .arg(globalXPx).arg(globalYPx)
-                    .arg(qRound(windowGlobal.x() * dpr))
-                    .arg(qRound(windowGlobal.y() * dpr))
-                    .arg(pixelSize.width()).arg(pixelSize.height())
-                    .arg(trackedItem_->objectName()));
-        }
     } else {
         core_.setVisualTransform(xPx, yPx, pixelSize);
     }
