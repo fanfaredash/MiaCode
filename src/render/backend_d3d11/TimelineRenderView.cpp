@@ -380,6 +380,22 @@ void TimelineRenderView::buildAndPublishSnapshot()
     }
     ensureCompositorInitialized();
 
+    // Phase 3c-fix9 — defensive geometry resync on every publish. The
+    // QML layout settles AFTER our windowChanged slot runs in the
+    // common startup path; the width/heightChanged signals we hook up
+    // in setTrackedItem cover later changes, but the very first
+    // setTrackedQuickItem call sees layout-uninitialized
+    // width()/height() values (often the parent's tentative bounds),
+    // which produce an oversized initial popup that only corrects
+    // itself when a window resize / zoom-restore re-fires the
+    // geometry signals (Figure 1 vs Figure 2 of the user's
+    // verification screenshots). Re-applying geometry here is cheap
+    // — setVisualTransform is a DComp transform write — and ensures
+    // the popup stays in sync regardless of which signal we missed.
+    if (initialised_ && trackedItem_ != nullptr) {
+        applyTrackedItemGeometry();
+    }
+
     PreviewDCompFrameStateSnapshot snapshot;
     snapshot.revision = ++snapshotRevision_;
     snapshot.playheadSeconds = sceneState_.visibleStartSecond;  // not animated
