@@ -84,6 +84,12 @@ TimelineRenderView::~TimelineRenderView()
 
 void TimelineRenderView::attachToWindow(QQuickWindow* window)
 {
+    logTimelineViewForced(
+        "attachToWindow_enter",
+        QStringLiteral("incoming=0x%1 current=0x%2 same=%3")
+            .arg(reinterpret_cast<quintptr>(window), 0, 16)
+            .arg(reinterpret_cast<quintptr>(window_.data()), 0, 16)
+            .arg(window_ == window ? 1 : 0));
     if (window_ == window) {
         return;
     }
@@ -152,6 +158,13 @@ void TimelineRenderView::setTrackedQuickItem(QQuickItem* item)
 
 void TimelineRenderView::detach()
 {
+    logTimelineViewForced(
+        "detach_enter",
+        QStringLiteral("initialised=%1 childHwnd=0x%2 window=0x%3 trackedItem=0x%4")
+            .arg(initialised_ ? 1 : 0)
+            .arg(reinterpret_cast<quintptr>(childHwnd_), 0, 16)
+            .arg(reinterpret_cast<quintptr>(window_.data()), 0, 16)
+            .arg(reinterpret_cast<quintptr>(trackedItem_.data()), 0, 16));
     if (window_) {
         disconnect(window_, nullptr, this, nullptr);
     }
@@ -163,7 +176,7 @@ void TimelineRenderView::detach()
     if (childHwnd_ != nullptr) {
         ::DestroyWindow(reinterpret_cast<HWND>(childHwnd_));
         childHwnd_ = nullptr;
-        logTimelineView("child_hwnd_destroyed");
+        logTimelineViewForced("child_hwnd_destroyed");
     }
 #endif
     window_ = nullptr;
@@ -467,6 +480,12 @@ void TimelineRenderView::buildAndPublishSnapshot()
 
 bool TimelineRenderView::initialiseIfReady()
 {
+    logTimelineViewForced(
+        "initialiseIfReady_enter",
+        QStringLiteral("initialised=%1 childHwnd=0x%2 window=0x%3")
+            .arg(initialised_ ? 1 : 0)
+            .arg(reinterpret_cast<quintptr>(childHwnd_), 0, 16)
+            .arg(reinterpret_cast<quintptr>(window_.data()), 0, 16));
     if (initialised_) {
         return true;
     }
