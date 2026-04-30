@@ -447,8 +447,20 @@ QWidget* QuickShellNativeSurfaceHost::createBridgeSurface(const QString& objectN
     bridgeRoot->setContentsMargins(0, 0, 0, 0);
     bridgeRoot->setMinimumSize(QSize(64, 64));
     bridgeRoot->resize(960, 720);
-    bridgeRoot->winId();
+    // Phase 3f-3 — hide() BEFORE winId(). Order matters: winId() forces
+    // native HWND creation, and Qt creates the HWND in the visible
+    // state if hide() hasn't been called first. Calling hide() AFTER
+    // winId() means the HWND briefly flashes on screen at the default
+    // (0,0) position with size (960,720) before Qt issues
+    // ShowWindow(SW_HIDE). That's the "black square dancing during
+    // startup" the user reported.
+    //
+    // Setting WA_DontShowOnScreen would suppress the native window
+    // entirely, but we NEED the HWND for QWindow::fromWinId so the
+    // QML WindowContainer can adopt it. So we just hide it cleanly
+    // before forcing creation.
     bridgeRoot->hide();
+    bridgeRoot->winId();
     return bridgeRoot;
 }
 
