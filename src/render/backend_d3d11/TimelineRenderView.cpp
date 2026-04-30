@@ -35,6 +35,24 @@ void logTimelineView(const char* action, const QString& extra = QString())
         payload);
 }
 
+// Phase 3c-fix11 — force-log key geometry diagnostics regardless of
+// runtimeDebugOutputEnabled. Lets the user capture these without
+// having to remember `--debug` on every test session. The log overhead
+// is bounded by the dedup check inside applyTrackedItemGeometry — it
+// only emits on geometry change, not every publish.
+void logTimelineViewForced(const char* action, const QString& extra = QString())
+{
+    QString payload = QStringLiteral("action=%1").arg(QString::fromLatin1(action));
+    if (!extra.isEmpty()) {
+        payload += QStringLiteral(" ") + extra;
+    }
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("render/backend_d3d11/timeline_view"),
+        payload,
+        /*force=*/true);
+}
+
 }  // namespace
 
 TimelineRenderView::TimelineRenderView(QObject* parent)
@@ -327,7 +345,7 @@ void TimelineRenderView::applyTrackedItemGeometry()
             s_lastX = xPx;
             s_lastY = yPx;
             s_lastSize = pixelSize;
-            logTimelineView(
+            logTimelineViewForced(
                 "track_target_geometry",
                 QStringLiteral(
                     "scene_x=%1 scene_y=%2 item_w=%3 item_h=%4 dpr=%5 "
