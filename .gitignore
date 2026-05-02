@@ -53,6 +53,19 @@ third_party/ffmpeg/**/ffprobe.exe
 third_party/mpv/**/*.7z
 third_party/mpv/**/*.exp
 
+# Third-party binary blobs — never track DLLs/EXEs/SOs/dylibs anywhere
+# under third_party/. The libmpv-2.dll incident (112 MB blob shipped to
+# 96 commits, blocked by GitHub's 100 MB push limit) showed that
+# accidentally vendoring a runtime binary can require painful history
+# rewrites to fix. Build/runtime binaries should be sourced via a
+# package manager / download script, never committed.
+third_party/**/*.dll
+third_party/**/*.exe
+third_party/**/*.so
+third_party/**/*.so.*
+third_party/**/*.dylib
+third_party/**/*.a
+
 # scripts whitelist: ignore all by default, allow only release/infra scripts.
 scripts/*
 !scripts/Start_MiaCode_Debug.bat
