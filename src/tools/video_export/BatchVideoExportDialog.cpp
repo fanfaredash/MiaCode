@@ -63,6 +63,21 @@ constexpr ResolutionPreset kResolutionPresets[] = {
 };
 
 constexpr int kFpsOptions[] = {60, 120};
+constexpr int kAudioBitrateOptionsKbps[] = {128, 160, 192, 256, 320};
+
+int normaliseAudioBitrateKbps(int requested)
+{
+    int closest = kAudioBitrateOptionsKbps[0];
+    int closestDelta = qAbs(requested - closest);
+    for (int candidate : kAudioBitrateOptionsKbps) {
+        const int delta = qAbs(requested - candidate);
+        if (delta < closestDelta) {
+            closest = candidate;
+            closestDelta = delta;
+        }
+    }
+    return closest;
+}
 
 QString uiText(const char* key, const QString& fallback)
 {
@@ -375,6 +390,7 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     , requestedTask_(baseTask)
     , selectedResolution_(QSize(qMax(1, baseTask.outputWidth), qMax(1, baseTask.outputHeight)))
     , selectedFps_(baseTask.fps >= 90 ? 120 : 60)
+    , selectedAudioBitrateKbps_(baseTask.audioBitrateKbps)
     , selectedPreset_(baseTask.preset)
     , selectedBackgroundScaleMode_(baseTask.backgroundScaleMode)
     , selectedTapFlowSpeed_(baseTask.tapFlowSpeed)
@@ -465,6 +481,29 @@ BatchVideoExportDialog::BatchVideoExportDialog(
     }
     topForm->addWidget(fpsLabel, row, 0);
     topForm->addWidget(fpsButton_, row, 1, 1, 2);
+    ++row;
+
+    // Audio quality dropdown — drives ffmpeg `-b:a <kbps>k`. Mirrors
+    // the single-export VideoExportDialog implementation; both dialogs
+    // load/save through the same dialog-preferences JSON object.
+    selectedAudioBitrateKbps_ = normaliseAudioBitrateKbps(selectedAudioBitrateKbps_);
+    auto* audioBitrateLabel = new QLabel(uiText("dialog.video_export.audio_bitrate", QStringLiteral("Audio quality")), this);
+    audioBitrateLabel->setFixedWidth(kFormLabelWidth);
+    audioBitrateButton_ = createDialogMenuButton(this, QStringLiteral("%1 kbps").arg(selectedAudioBitrateKbps_));
+    audioBitrateMenu_ = new QMenu(audioBitrateButton_);
+    UiTheme::styleRoundedMenu(*audioBitrateMenu_);
+    audioBitrateButton_->setMenu(audioBitrateMenu_);
+    for (int kbps : kAudioBitrateOptionsKbps) {
+        addDialogMenuChoice(audioBitrateMenu_, QStringLiteral("%1 kbps").arg(kbps), [this, kbps]() {
+            selectedAudioBitrateKbps_ = kbps;
+            if (audioBitrateButton_ != nullptr) {
+                audioBitrateButton_->setText(QStringLiteral("%1 kbps").arg(selectedAudioBitrateKbps_));
+            }
+            persistExportOnlySettings();
+        });
+    }
+    topForm->addWidget(audioBitrateLabel, row, 0);
+    topForm->addWidget(audioBitrateButton_, row, 1, 1, 2);
     ++row;
 
     auto* presetLabel = new QLabel(uiText("dialog.video_export.preset", QStringLiteral("Export Settings")), this);
@@ -849,6 +888,7 @@ bool BatchVideoExportDialog::applyUiToTask(VideoExportTask* task, QString* error
     task->outputWidth = selectedResolution_.width();
     task->outputHeight = selectedResolution_.height();
     task->fps = selectedFps_;
+    task->audioBitrateKbps = normaliseAudioBitrateKbps(selectedAudioBitrateKbps_);
     task->preset = selectedPreset_;
     task->showTimestamp = showTimestampCheck_ != nullptr && showTimestampCheck_->isChecked();
     task->showObjectStatsHud = showObjectStatsCheck_ != nullptr && showObjectStatsCheck_->isChecked();
@@ -974,6 +1014,13 @@ void BatchVideoExportDialog::loadPersistedSettings()
         fpsButton_->setText(QStringLiteral("%1 FPS").arg(selectedFps_));
     }
 
+    const int savedAudioBitrate = settings.value(QStringLiteral("audio_bitrate_kbps"))
+                                         .toInt(selectedAudioBitrateKbps_);
+    selectedAudioBitrateKbps_ = normaliseAudioBitrateKbps(savedAudioBitrate);
+    if (audioBitrateButton_ != nullptr) {
+        audioBitrateButton_->setText(QStringLiteral("%1 kbps").arg(selectedAudioBitrateKbps_));
+    }
+
     selectedPreset_ = videoExportPresetFromStoredValue(
         settings.value(QStringLiteral("preset")),
         selectedPreset_
@@ -989,6 +1036,7 @@ void BatchVideoExportDialog::savePersistedSettings(const VideoExportTask& task) 
     settings.insert(QStringLiteral("resolution_width"), task.outputWidth);
     settings.insert(QStringLiteral("resolution_height"), task.outputHeight);
     settings.insert(QStringLiteral("fps"), task.fps);
+    settings.insert(QStringLiteral("audio_bitrate_kbps"), task.audioBitrateKbps);
     settings.insert(QStringLiteral("preset"), videoExportPresetToken(task.preset));
     miacode::video_export::saveDialogPreferences(settings);
 }
@@ -999,6 +1047,7 @@ void BatchVideoExportDialog::persistExportOnlySettings() const
     settings.insert(QStringLiteral("resolution_width"), selectedResolution_.width());
     settings.insert(QStringLiteral("resolution_height"), selectedResolution_.height());
     settings.insert(QStringLiteral("fps"), selectedFps_);
+    settings.insert(QStringLiteral("audio_bitrate_kbps"), selectedAudioBitrateKbps_);
     settings.insert(QStringLiteral("preset"), videoExportPresetToken(selectedPreset_));
     miacode::video_export::saveDialogPreferences(settings);
 }

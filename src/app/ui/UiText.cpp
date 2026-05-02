@@ -525,6 +525,7 @@ const QHash<QString, QString>& zhMap()
         {"dialog.video_export.browse", "浏览..."},
         {"dialog.video_export.resolution", "分辨率"},
         {"dialog.video_export.fps", "帧率"},
+        {"dialog.video_export.audio_bitrate", "音频码率"},
         {"dialog.video_export.preset", "导出设置"},
         {"dialog.video_export.preset.fast", "快速"},
         {"dialog.video_export.preset.high_quality", "高质量"},

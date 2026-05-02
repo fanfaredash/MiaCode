@@ -152,6 +152,9 @@ private:
     QToolButton* fpsButton_ = nullptr;
     QMenu* fpsMenu_ = nullptr;
     int selectedFps_ = 60;
+    QToolButton* audioBitrateButton_ = nullptr;
+    QMenu* audioBitrateMenu_ = nullptr;
+    int selectedAudioBitrateKbps_ = 192;
     QToolButton* presetButton_ = nullptr;
     QMenu* presetMenu_ = nullptr;
     VideoExportPreset selectedPreset_ = VideoExportPreset::Fast;

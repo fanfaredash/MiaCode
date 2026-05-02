@@ -47,6 +47,12 @@ struct VideoExportTask {
     int outputWidth = 1024;
     int outputHeight = 1024;
     int fps = 60;
+    // AAC audio bitrate in kbps. Allowed values are surfaced in the
+    // export dialog dropdown (128/160/192/256/320). The default of 192
+    // is one step above the previous hard-coded 160k baseline — slight
+    // quality bump for charts with stereo BGM, transparent for casual
+    // phone playback. Routed into ffmpeg as `-b:a <kbps>k`.
+    int audioBitrateKbps = 192;
     VideoExportPreset preset = VideoExportPreset::Fast;
     bool fullRangeExport = true;
     bool showTimestamp = true;

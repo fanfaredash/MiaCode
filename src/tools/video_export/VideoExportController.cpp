@@ -3526,7 +3526,13 @@ VideoExportResult VideoExportController::exportPreparedTask(
          << QStringLiteral("-c:a")
          << QStringLiteral("aac")
          << QStringLiteral("-b:a")
-         << QStringLiteral("160k");
+         // Clamp into the dropdown's accepted range so any out-of-band
+         // value (e.g. an old preferences file with a stale int) still
+         // produces a valid AAC encoder argument. 320k is the AAC LC
+         // ceiling for stereo at 44.1/48 kHz; below 96k AAC quality
+         // collapses, so 96k is our floor.
+         << QStringLiteral("%1k")
+                .arg(qBound(96, task.audioBitrateKbps, 320));
     if (encoderConfig.explicitBframes >= 0) {
         args << QStringLiteral("-bf") << QString::number(encoderConfig.explicitBframes);
     }
