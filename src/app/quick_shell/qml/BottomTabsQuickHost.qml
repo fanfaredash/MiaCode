@@ -67,55 +67,113 @@ Rectangle {
         anchors.fill: parent
         spacing: 0
 
+        // Issue #2b Option B — restyle to match Qt's native QTabBar look:
+        //  - Rectangular tabs (no pill rounding); subtle 2px top corner rounding.
+        //  - Selected tab background MERGES with the content area below by
+        //    sharing its colour and skipping the bottom border.
+        //  - Unselected tabs have a visible bottom border (shown via the
+        //    parent strip's bottom edge) and slightly recessed background.
+        //  - Hover: subtle background shift.
+        //  - Side / top borders only on selected to detach it from neighbours.
+        // The visual is intentionally close to QTabWidget's North-tab-bar
+        // styling so the legacy QSG path benefits from the same look once
+        // the user enables it via the existing tab-bar code path.
         Rectangle {
+            id: tabStrip
             Layout.fillWidth: true
             Layout.preferredHeight: root.tabBarHeight
             Layout.minimumHeight: root.tabBarHeight
             Layout.maximumHeight: root.tabBarHeight
-            color: tone("cardAltBg", "#f7f9fc")
-            border.color: tone("border", "#d5e0ec")
+            color: tone("cardAltBg", "#f3f5f8")
+
+            // Bottom separator line under the strip. Drawn behind the tabs;
+            // the selected tab paints over its segment to "punch through".
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: 1
+                color: tone("border", "#d5e0ec")
+            }
 
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 8
                 anchors.rightMargin: 8
-                spacing: 6
+                spacing: 0
 
                 Repeater {
                     model: root.visibleTabs
 
-                    delegate: Rectangle {
+                    delegate: Item {
+                        id: tabItem
                         required property var modelData
+                        // Bind directly to the controller property; using
+                        // `parent.<x>` from inside child Rectangles can fail
+                        // to re-evaluate reactively in some QML versions.
+                        readonly property bool isCurrentTab: controller
+                            && controller.bottomTabsCurrentTabId === modelData.id
 
-                        Layout.preferredWidth: tabLabel.implicitWidth + 26
-                        Layout.minimumWidth: tabLabel.implicitWidth + 26
+                        Layout.preferredWidth: tabLabel.implicitWidth + 28
+                        Layout.minimumWidth: tabLabel.implicitWidth + 28
                         Layout.fillHeight: true
-                        radius: 8
-                        color: controller && controller.bottomTabsCurrentTabId === modelData.id
-                            ? tone("accent", "#2e77d0")
-                            : (tabMouseArea.containsMouse
-                                ? tone("menuHoverBg", "#eef5ff")
-                                : "transparent")
-                        border.color: controller && controller.bottomTabsCurrentTabId === modelData.id
-                            ? tone("accent", "#2e77d0")
-                            : "transparent"
+
+                        // Tab body. Top-rounded rectangle: 2px radius at top
+                        // corners only (achieved by pulling the rectangle 2px
+                        // below the bottom edge so the bottom-radius vanishes
+                        // beneath the strip's bottom edge / next-row content).
+                        Rectangle {
+                            anchors.left: tabItem.left
+                            anchors.right: tabItem.right
+                            anchors.top: tabItem.top
+                            // Selected: extend 1px beyond the bottom so the
+                            // strip's bottom-line border is overlapped and
+                            // the tab visually merges with the content area.
+                            anchors.bottom: tabItem.bottom
+                            anchors.bottomMargin: tabItem.isCurrentTab ? -1 : 0
+                            radius: 2
+                            color: tabItem.isCurrentTab
+                                ? tone("cardBg", "#ffffff")
+                                : (tabMouseArea.containsMouse
+                                    ? tone("menuHoverBg", "#eef5ff")
+                                    : "transparent")
+                            border.width: tabItem.isCurrentTab ? 1 : 0
+                            border.color: tone("border", "#d5e0ec")
+                        }
+
+                        // Selected-tab "punch-through": redraw the bottom
+                        // 1px in the content background colour so the
+                        // strip's bottom separator looks broken under us.
+                        Rectangle {
+                            anchors.left: tabItem.left
+                            anchors.leftMargin: 1
+                            anchors.right: tabItem.right
+                            anchors.rightMargin: 1
+                            anchors.bottom: tabItem.bottom
+                            height: 1
+                            color: tone("cardBg", "#ffffff")
+                            visible: tabItem.isCurrentTab
+                        }
 
                         Text {
                             id: tabLabel
 
-                            anchors.centerIn: parent
+                            anchors.centerIn: tabItem
                             text: modelData.label
-                            color: controller && controller.bottomTabsCurrentTabId === modelData.id
-                                ? tone("accentText", "#ffffff")
-                                : tone("textPrimary", "#203040")
+                            color: tabItem.isCurrentTab
+                                ? tone("textPrimary", "#203040")
+                                : tone("textSecondary", "#5a6878")
                             font.pixelSize: 13
-                            font.weight: Font.DemiBold
+                            // Native QTabBar uses regular weight; reserved
+                            // semibold for emphasis is not how Qt's native
+                            // tab labels look.
+                            font.weight: Font.Normal
                         }
 
                         MouseArea {
                             id: tabMouseArea
 
-                            anchors.fill: parent
+                            anchors.fill: tabItem
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {

@@ -278,7 +278,17 @@ void MainWindow::setCurrentBottomTabsTabId(BottomTabsTabId tabId)
     if (tabId == BottomTabsTabId::Unknown) {
         return;
     }
-    if (!bottomTabsTabVisible(tabId)) {
+    // Issue #2 fix — in QuickShell mode the legacy QTabWidget is hidden
+    // (the QML BottomTabsQuickHost renders the tab bar instead) and the
+    // legacy widget's `isTabVisible(index)` may report false even when
+    // the QML controller reports the tab as user-visible. The early
+    // return on `!bottomTabsTabVisible(tabId)` then drops every click
+    // from the QML tab bar — which is exactly the symptom the user
+    // reported ("clicking validation/muri detect has no effect").
+    // Skip the legacy visibility gate when the QuickShell backend is
+    // active; visibility there is already gated at the QML level by
+    // the validationTabVisible / muriTabVisible properties.
+    if (!quickShellBackendActive_ && !bottomTabsTabVisible(tabId)) {
         return;
     }
     currentBottomTabsTabId_ = tabId;
