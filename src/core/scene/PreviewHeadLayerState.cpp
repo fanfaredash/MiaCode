@@ -307,10 +307,23 @@ PreviewHeadLayerState buildPreviewHeadLayerState(
                 fallbackLayerOrder.append(index);
             }
         }
+        // Bug fix: the "Slide Stacking Order" video setting
+        // (slideEarlierSecondAndTextOnTop) used to feed the head-layer
+        // sort here too. The user reports that toggling the option
+        // changed which slide-head star rendered on top — but the
+        // option's only documented purpose is path/track stacking.
+        // Heads should be deterministic and option-independent so that
+        // (a) the user-visible head ordering stays stable across
+        // settings changes, and (b) paired same-head double-stars
+        // pick a consistent representative regardless of preference.
+        // Force `earlierOnTop = true` (always-deterministic order) so
+        // PreviewTrackLayerState / PreviewSlideMotionLayerState remain
+        // the only consumers of the user setting.
+        constexpr bool kHeadStarAlwaysEarlierOnTop = true;
         sortPreviewMarkerViewIndicesForDraw(
             markers,
             &fallbackLayerOrder,
-            state.render.slideEarlierSecondAndTextOnTop
+            kHeadStarAlwaysEarlierOnTop
         );
         fallbackSlideHeadRepresentatives = buildSlideHeadRepresentatives(state.noteMarkers);
     } else {
