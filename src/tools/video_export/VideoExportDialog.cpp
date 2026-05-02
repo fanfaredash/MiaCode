@@ -477,14 +477,21 @@ VideoExportDialog::VideoExportDialog(
     primaryPanelLayout->setSpacing(8);
     rootLayout->addWidget(primaryPanel, 0);
 
+    // Output section — same label-above-control style as the dropdown
+    // grid below. Top line is the "Output" label, bottom line carries
+    // the path field (stretches) and the Browse button (fixed width).
     auto* outputRow = new QWidget(primaryPanel);
-    auto* outputLayout = new QHBoxLayout(outputRow);
-    outputLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
-    outputLayout->setSpacing(kFormRowSpacing);
+    auto* outputColumn = new QVBoxLayout(outputRow);
+    outputColumn->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
+    outputColumn->setSpacing(6);
     auto* outputLabel = new QLabel(l10n(QStringLiteral("Output"), QStringLiteral("杈撳嚭")), outputRow);
-    outputLabel->setFixedWidth(kFormLabelWidth);
     outputLabel->setText(uiText("dialog.video_export.output", QStringLiteral("Output")));
-    outputPathEdit_ = new QLineEdit(outputRow);
+    outputColumn->addWidget(outputLabel, 0);
+    auto* outputControlRow = new QWidget(outputRow);
+    auto* outputControlLayout = new QHBoxLayout(outputControlRow);
+    outputControlLayout->setContentsMargins(0, 0, 0, 0);
+    outputControlLayout->setSpacing(kFormRowSpacing);
+    outputPathEdit_ = new QLineEdit(outputControlRow);
     outputPathEdit_->setText(displayOutputPathForDialog(baseTask_.outputPath, exportBaseDirectory(baseTask_)));
     auto* browseButton = new QPushButton(l10n(QStringLiteral("Browse..."), QStringLiteral("娴忚...")), outputRow);
     browseButton->setText(uiText("dialog.video_export.browse", QStringLiteral("Browse...")));
@@ -492,9 +499,9 @@ VideoExportDialog::VideoExportDialog(
     const int rightAlignedButtonWidth = qMax(browseButton->sizeHint().width(), kDialogActionButtonMinWidth);
     browseButton->setFixedWidth(rightAlignedButtonWidth);
     connect(browseButton, &QPushButton::clicked, this, &VideoExportDialog::browseOutputPath);
-    outputLayout->addWidget(outputLabel, 0);
-    outputLayout->addWidget(outputPathEdit_, 1);
-    outputLayout->addWidget(browseButton, 0);
+    outputControlLayout->addWidget(outputPathEdit_, 1);
+    outputControlLayout->addWidget(browseButton, 0);
+    outputColumn->addWidget(outputControlRow, 0);
     primaryPanelLayout->addWidget(outputRow, 0);
     // Beta20-fix — 2x2 grid layout for the 4 dropdown options.
     //
