@@ -4,7 +4,7 @@
 #include "QtPreviewSfxRuntime.h"
 #include "UiText.h"
 #include "preview/runtime/PreviewRuntime.h"
-#include "simai/transform/ChartNormalization.h"
+#include "core/chart/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 
 #include <QtCore>
