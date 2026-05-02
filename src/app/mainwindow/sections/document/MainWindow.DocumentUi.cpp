@@ -648,7 +648,10 @@ void MainWindow::DocumentSection::rebuildFieldSidebar()
         }
     }
     if (hasMissingDifficulty) {
-        const QString addDifficultyLabel = uiText("sidebar.add_difficulty", "+ Add Difficulty");
+        // Abbreviated to "+ Add Diff." in English so the label fits the
+        // narrow sidebar list-item column without truncation. Chinese
+        // version "添加难度" already fits.
+        const QString addDifficultyLabel = uiText("sidebar.add_difficulty", "+ Add Diff.");
         auto* addItem = new QListWidgetItem(
             owner_.style()->standardIcon(QStyle::SP_FileDialogNewFolder),
             addDifficultyLabel,

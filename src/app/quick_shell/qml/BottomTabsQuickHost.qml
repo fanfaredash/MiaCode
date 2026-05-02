@@ -44,13 +44,17 @@ Rectangle {
 
     readonly property int tabBarHeight: metric("bottomTabsTabBarHeight", 40)
     readonly property var visibleTabs: {
+        // Labels come from the controller (which honours UiText::isChineseUi)
+        // rather than QML's qsTr — qsTr requires a .ts translation file
+        // that the project doesn't ship, so it'd just leak the English
+        // literal. The controller mirrors MainWindow::bottomTabsFallbackLabel.
         const tabs = []
         if (controller && controller.timelineTabVisible)
-            tabs.push({ "id": "timeline", "label": qsTr("Timeline") })
+            tabs.push({ "id": "timeline", "label": controller.timelineTabLabel })
         if (controller && controller.validationTabVisible)
-            tabs.push({ "id": "validation", "label": qsTr("Syntax Check") })
+            tabs.push({ "id": "validation", "label": controller.validationTabLabel })
         if (controller && controller.muriTabVisible)
-            tabs.push({ "id": "muri", "label": qsTr("Muri Check") })
+            tabs.push({ "id": "muri", "label": controller.muriTabLabel })
         return tabs
     }
 

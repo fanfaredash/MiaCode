@@ -461,7 +461,7 @@ void MainWindow::FrameSection::setupMenusAndActions(QMenu* fileMenu, QMenu* edit
     connect(owner_.previewAudioSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewAudioSettings);
     previewMenu->addAction(owner_.previewAudioSettingsAction_);
 
-    owner_.previewVideoSettingsAction_ = new QAction(uiText("action.video_settings", "Preview Settings..."), &owner_);
+    owner_.previewVideoSettingsAction_ = new QAction(uiText("action.video_settings", "Video Settings..."), &owner_);
     connect(owner_.previewVideoSettingsAction_, &QAction::triggered, &owner_, &MainWindow::onPreviewVideoSettings);
     previewMenu->addAction(owner_.previewVideoSettingsAction_);
 

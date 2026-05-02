@@ -1,5 +1,7 @@
 #include "timeline/quick/TimelineQuickItem.h"
 
+#include "UiText.h"
+
 #include <QDateTime>
 #include <QElapsedTimer>
 #include <QKeyEvent>
@@ -576,8 +578,11 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     // Phase 9d-native — header-control state for native rendering of
     // the zoom button + follow checkbox in the DComp pipeline.
     request.followPreviewEnabled = stateBridge_->followPreviewEnabled();
-    request.isChineseUi = QLocale::system().language() == QLocale::Chinese
-        || QLocale().language() == QLocale::Chinese;
+    // Use the app's UI language selector (UiText::isChineseUi()) — not
+    // the OS locale. A user with a Chinese OS who selected English in
+    // the preferences would otherwise still see "跟随预览" instead of
+    // "Follow Preview" on the timeline header.
+    request.isChineseUi = UiText::isChineseUi();
     request.appearanceRevision = appearanceRevision_;
     request.gridRevision = stateBridge_->gridRevision();
     request.waveformRevision = stateBridge_->waveformRevision();

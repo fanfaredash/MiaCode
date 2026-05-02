@@ -40,6 +40,12 @@ class QuickShellController : public QObject
     Q_PROPERTY(bool timelineTabVisible READ timelineTabVisible NOTIFY shellStateChanged)
     Q_PROPERTY(bool validationTabVisible READ validationTabVisible NOTIFY shellStateChanged)
     Q_PROPERTY(bool muriTabVisible READ muriTabVisible NOTIFY shellStateChanged)
+    // Localized labels — read here so the QML side doesn't have to know
+    // about the UiText::isChineseUi() switch. Constant per session
+    // (locale isn't switched at runtime), so a CONSTANT property is fine.
+    Q_PROPERTY(QString timelineTabLabel READ timelineTabLabel CONSTANT)
+    Q_PROPERTY(QString validationTabLabel READ validationTabLabel CONSTANT)
+    Q_PROPERTY(QString muriTabLabel READ muriTabLabel CONSTANT)
     Q_PROPERTY(QWindow* topChromeWindow READ topChromeWindow CONSTANT)
     Q_PROPERTY(QWindow* sidebarWindow READ sidebarWindow CONSTANT)
     Q_PROPERTY(QWindow* workspaceWindow READ workspaceWindow CONSTANT)
@@ -77,6 +83,9 @@ public:
     bool timelineTabVisible() const;
     bool validationTabVisible() const;
     bool muriTabVisible() const;
+    QString timelineTabLabel() const;
+    QString validationTabLabel() const;
+    QString muriTabLabel() const;
     QWindow* topChromeWindow() const;
     QWindow* sidebarWindow() const;
     QWindow* workspaceWindow() const;

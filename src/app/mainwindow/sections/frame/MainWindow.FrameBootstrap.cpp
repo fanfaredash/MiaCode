@@ -136,7 +136,11 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
     auto* fileMenu = menuBar()->addMenu(uiText("menu.file", "&File"));
     auto* editMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("编辑(&E)") : QStringLiteral("&Edit"));
     auto* toolsMenu = menuBar()->addMenu(uiText("menu.tools", "&Tools"));
-    auto* transformMenu = menuBar()->addMenu(uiText("menu.transform", "变换(&T)"));
+    // English fallback was "变换(&T)" — leaked the Chinese label to
+    // English UI users (UiText::text returns empty for non-Chinese, so
+    // the second arg is what English UI displays). Use the actual
+    // English mnemonic "Transform(&T)".
+    auto* transformMenu = menuBar()->addMenu(uiText("menu.transform", "Transform(&T)"));
     auto* previewMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("预览(&P)") : QStringLiteral("&Preview"));
     auto* helpMenu = menuBar()->addMenu(uiText("menu.help", "&Help"));
     styleRoundedMenu(*fileMenu);

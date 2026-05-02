@@ -1,6 +1,7 @@
 #include "QuickShellController.h"
 
 #include "QuickShellNativeSurfaceHost.h"
+#include "UiText.h"
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
@@ -194,6 +195,25 @@ bool QuickShellController::validationTabVisible() const
 bool QuickShellController::muriTabVisible() const
 {
     return muriTabVisible_;
+}
+
+QString QuickShellController::timelineTabLabel() const
+{
+    // Mirrors MainWindow::bottomTabsFallbackLabel for the legacy QSG
+    // path — keeps the QuickShell bottom-tab labels identical to the
+    // ones the legacy QTabBar code uses, with the same Chinese /
+    // English split.
+    return UiText::isChineseUi() ? QStringLiteral("时间轴") : QStringLiteral("Timeline");
+}
+
+QString QuickShellController::validationTabLabel() const
+{
+    return UiText::isChineseUi() ? QStringLiteral("语法检查") : QStringLiteral("Syntax Check");
+}
+
+QString QuickShellController::muriTabLabel() const
+{
+    return UiText::isChineseUi() ? QStringLiteral("无理检查") : QStringLiteral("Muri Check");
 }
 
 QWindow* QuickShellController::topChromeWindow() const
