@@ -216,12 +216,31 @@ MainWindow::~MainWindow()
 {
     QElapsedTimer totalTimer;
     totalTimer.start();
-    miacode::debug_log::appendTimingLine(
+    // beta20-fix2 — first action in the destructor must be a force-logged
+    // marker WITH NO MEMBER ACCESS, so we can tell from the runtime log
+    // whether the destructor body even started executing. The previous
+    // implementation jumped straight into a 10-arg .arg() chain that
+    // touched many members (`isVisible()`, `previewWarmupPool_->...`,
+    // `videoExportWorkerProcess_->...`); a crash in any of those would
+    // leave no trace. The user-reported beta20 crash dump has the
+    // runtime log ending at `accepted_close_destroy_backend_enter` with
+    // no `destructor_enter` line — meaning either the destructor body
+    // never ran OR its first .arg() chain crashed. This bare line
+    // disambiguates the next crash.
+    miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("app_shutdown/mainwindow"),
-        QStringLiteral("destructor_enter"),
-        0,
-        QStringLiteral(
+        QStringLiteral("step=destructor_body_entered"),
+        /*force=*/true);
+
+    // Original diagnostic with member-touching .arg() chain — kept for
+    // completeness but now safe because the bare marker above already
+    // proved the destructor entered. force=true so it lands even when
+    // debug mode is off and the next abnormal-exit dump can locate it.
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("app_shutdown/mainwindow"),
+        QStringLiteral("step=destructor_enter "
             "visible=%1 top_level_widgets=%2 current_file=%3 preview_canvas=%4 preview_sfx=%5 waveform_cache=%6 "
             "warmup_active=%7 slow_refresh_active=%8 analysis_active=%9 export_worker_state=%10")
             .arg(isVisible() ? 1 : 0)
@@ -233,25 +252,38 @@ MainWindow::~MainWindow()
             .arg(previewWarmupPool_ != nullptr ? previewWarmupPool_->activeThreadCount() : -1)
             .arg(timelineSlowRefreshPool_ != nullptr ? timelineSlowRefreshPool_->activeThreadCount() : -1)
             .arg(timelineAnalysisPool_ != nullptr ? timelineAnalysisPool_->activeThreadCount() : -1)
-            .arg(videoExportWorkerProcess_ != nullptr ? static_cast<int>(videoExportWorkerProcess_->state()) : -1)
-    );
+            .arg(videoExportWorkerProcess_ != nullptr ? static_cast<int>(videoExportWorkerProcess_->state()) : -1),
+        /*force=*/true);
+
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("app_shutdown/mainwindow"),
+        QStringLiteral("step=before_disable_high_res_timer"),
+        /*force=*/true);
     setPreviewFixedTimerHighResolutionActive(false);
+
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("app_shutdown/mainwindow"),
+        QStringLiteral("step=before_shutdown_preview_stage_media_host"),
+        /*force=*/true);
     QElapsedTimer stageMediaTimer;
     stageMediaTimer.start();
     shutdownPreviewStageMediaHost();
-    miacode::debug_log::appendTimingLine(
+    miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("app_shutdown/mainwindow"),
-        QStringLiteral("shutdown_preview_stage_media_host"),
-        stageMediaTimer.elapsed()
-    );
-    miacode::debug_log::appendTimingLine(
+        QStringLiteral("step=after_shutdown_preview_stage_media_host elapsed_ms=%1")
+            .arg(stageMediaTimer.elapsed()),
+        /*force=*/true);
+
+    miacode::debug_log::appendLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("app_shutdown/mainwindow"),
-        QStringLiteral("destructor_body"),
-        totalTimer.elapsed(),
-        QStringLiteral("top_level_widgets=%1").arg(QApplication::topLevelWidgets().size())
-    );
+        QStringLiteral("step=destructor_body_exit elapsed_ms=%1 top_level_widgets=%2")
+            .arg(totalTimer.elapsed())
+            .arg(QApplication::topLevelWidgets().size()),
+        /*force=*/true);
 }
 
 void MainWindow::preparePreviewForShutdown()

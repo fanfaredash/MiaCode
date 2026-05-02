@@ -1059,11 +1059,20 @@ void QuickShellBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QStrin
         QElapsedTimer timer;
         timer.start();
         pointer.reset();
+        // beta20-fix2 — force-log the elapsed-time line too. Without
+        // --debug the prior `appendTimingLine` (force=false default)
+        // would silently drop, leaving the runtime log with `_enter`
+        // lines but no `_exit`/elapsed lines, making it impossible to
+        // tell from a non-debug crash dump whether a particular
+        // destructor finished or hung. Force-true matches the `_enter`
+        // line's logging level so brackets are symmetric in any mode.
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("close_timing/quick_shell"),
             step,
-            timer.elapsed()
+            timer.elapsed(),
+            QString(),
+            /*force=*/true
         );
     };
 
@@ -1097,16 +1106,24 @@ void QuickShellBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QStrin
     logResetTiming(QStringLiteral("accepted_close_destroy_surface_host"), surfaceHost_);
     logResetTiming(QStringLiteral("accepted_close_destroy_backend"), backend_);
 
+    // beta20-fix2 — force-log so non-debug crash dumps can tell whether
+    // we got to the very end of the close sequence or hung partway. If
+    // this line is absent in a future log but `accepted_close_destroy_backend_enter`
+    // is present, the crash is in `~MainWindow()` (i.e. backend.reset()).
     miacode::debug_log::appendTimingLine(
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("close_timing/quick_shell"),
         QStringLiteral("accepted_close_destroy_and_quit"),
         totalTimer.elapsed(),
-        QStringLiteral("source=%1").arg(source)
+        QStringLiteral("source=%1").arg(source),
+        /*force=*/true
     );
-    appendQuickShellRuntimeLog(
-        QStringLiteral("accepted_close_destroy_quit_request"),
-        QStringLiteral("source=%1 elapsed_ms=%2").arg(source).arg(totalTimer.elapsed())
+    miacode::debug_log::appendLine(
+        miacode::debug_log::Channel::Runtime,
+        QStringLiteral("quick_shell"),
+        QStringLiteral("action=accepted_close_destroy_quit_request source=%1 elapsed_ms=%2")
+            .arg(source).arg(totalTimer.elapsed()),
+        /*force=*/true
     );
     QCoreApplication::quit();
 }
