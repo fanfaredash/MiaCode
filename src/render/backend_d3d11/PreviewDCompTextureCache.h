@@ -59,8 +59,16 @@ public:
     // or D3D11 texture creation fails. Caller must use `device` only
     // from the render thread (D3D11Device::Create* are thread-safe but
     // the cache maps themselves are single-threaded).
+    // beta20: `context` is now required so freshly-uploaded textures can
+    // get a mip chain via `ID3D11DeviceContext::GenerateMips`. Without
+    // mips the sampler's `MIN_MAG_MIP_LINEAR` degenerates to bilinear,
+    // which makes downscaled sprites jagged (no high-frequency aliasing
+    // protection) and upscaled sprites blurry (no low-frequency to
+    // recover). Caller passes the same immediate context it uses for
+    // the subsequent draw — single-thread requirement of D3D11.
     ID3D11ShaderResourceView* lookupOrCreate(const QImage* image,
                                               ID3D11Device* device,
+                                              ID3D11DeviceContext* context,
                                               bool cacheable);
 
     // Free the transient SRVs created with cacheable=false during the
@@ -83,7 +91,7 @@ public:
     int cacheableSize() const { return cacheable_.size(); }
     int transientSize() const { return transient_.size(); }
 #else
-    void* lookupOrCreate(const QImage*, void*, bool) { return nullptr; }
+    void* lookupOrCreate(const QImage*, void*, void*, bool) { return nullptr; }
     void endFrame() {}
     void clear() {}
     int cacheableSize() const { return 0; }

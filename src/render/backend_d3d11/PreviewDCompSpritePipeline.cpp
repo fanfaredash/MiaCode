@@ -658,11 +658,18 @@ bool PreviewDCompSpritePipeline::createBuffers(ID3D11Device* device)
 bool PreviewDCompSpritePipeline::createSamplerAndTexture(ID3D11Device* device)
 {
     D3D11_SAMPLER_DESC sd{};
-    sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    // beta20 — anisotropic filtering with the texture cache's new mip
+    // chains. Anisotropic costs ~free on any GPU from the last decade
+    // and substantially improves oblique-angle sampling (e.g. spinning
+    // slide-arrow sprites where the screen-space footprint is non-
+    // square). MaxAnisotropy = 8 is the modern default sweet spot:
+    // 16 is the cap, but 8 captures the visible quality jump and
+    // costs ~half the texture-bandwidth of 16.
+    sd.Filter = D3D11_FILTER_ANISOTROPIC;
     sd.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
     sd.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
     sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-    sd.MaxAnisotropy = 1;
+    sd.MaxAnisotropy = 8;
     sd.ComparisonFunc = D3D11_COMPARISON_NEVER;
     sd.MinLOD = 0;
     sd.MaxLOD = D3D11_FLOAT32_MAX;
@@ -1295,7 +1302,7 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
                     continue;
                 }
                 ID3D11ShaderResourceView* srv =
-                    textureCache.lookupOrCreate(sprite.image, device, sprite.cacheable);
+                    textureCache.lookupOrCreate(sprite.image, device, context, sprite.cacheable);
                 if (srv == nullptr) {
                     ++skipNullSrv;
                     continue;
@@ -1395,7 +1402,7 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
                     continue;
                 }
                 ID3D11ShaderResourceView* srv =
-                    textureCache.lookupOrCreate(arc.image, device, arc.cacheable);
+                    textureCache.lookupOrCreate(arc.image, device, context, arc.cacheable);
                 if (srv == nullptr) {
                     ++skipNullSrv;
                     continue;
@@ -1746,7 +1753,7 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
 
             ID3D11ShaderResourceView* srv = nullptr;
             if (hasTextureBall) {
-                srv = textureCache.lookupOrCreate(fw.colorBallImage, device, true);
+                srv = textureCache.lookupOrCreate(fw.colorBallImage, device, context, true);
             }
             ID3D11ShaderResourceView* srvs[1] = { srv };
             context->PSSetShaderResources(0, 1, srvs);
