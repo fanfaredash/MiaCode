@@ -141,15 +141,19 @@ inline bool previewVisualSmoothingEnabled()
 
 inline bool previewUseDCompEnabled()
 {
-    // Phase 1 of the DirectComposition preview path (see local plan doc
+    // DirectComposition preview path (see local plan doc
     // docs/PREVIEW_FRAME_PACING_FEASIBILITY_AND_IMPLEMENTATION_PLAN_ZH.md).
     // When set, QuickShellBootstrap creates a PreviewDCompSurface attached
-    // to the main QQuickWindow on first show. Phase 1 deliverable is just a
-    // red test rectangle in the top-left of the window — Phase 4 wires it
-    // to the actual preview slot via a QML placeholder. Default off so
-    // every release build behaves exactly like the legacy path until each
-    // phase is fully validated.
-    return envFlagEnabled("MIACODE_PREVIEW_USE_DCOMP");
+    // to the main QQuickWindow on first show.
+    //
+    // Default ON as of Phase 4e — the DComp path is the supported preview
+    // pipeline (per-pixel alpha popups, frame-latency-waitable pacing,
+    // device-removed recovery, owner-followed positioning). Set
+    // `MIACODE_PREVIEW_USE_DCOMP=0` to fall back to the legacy QSG-only
+    // pipeline (kept around as a safety hatch for unusual graphics
+    // drivers; will be retired once Phase 5 multi-monitor / DPI edge
+    // cases are signed off).
+    return envOptionalFlagValue("MIACODE_PREVIEW_USE_DCOMP").value_or(true);
 }
 
 inline bool previewDCompPerPixelAlphaEnabled();  // forward decl for use below
