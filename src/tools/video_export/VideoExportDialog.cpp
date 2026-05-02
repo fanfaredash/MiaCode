@@ -496,12 +496,33 @@ VideoExportDialog::VideoExportDialog(
     outputLayout->addWidget(outputPathEdit_, 1);
     outputLayout->addWidget(browseButton, 0);
     primaryPanelLayout->addWidget(outputRow, 0);
+    // Beta20-fix — paired-row layout for the 4 dropdown options.
+    //
+    // Old layout: 4 rows (Resolution / FPS / Audio quality / Export
+    // Settings), each label clamped to `kFormLabelWidth = 52 px`, each
+    // row reserving a right-aligned `rightAlignedButtonWidth` spacer
+    // that mirrored the Browse button width on the Output row above.
+    //
+    // Two problems the user flagged:
+    //   1. 52 px isn't wide enough for the longer English labels —
+    //      the dialog rendered as "Resolutio", "Audio qu", "Export
+    //      Se" with each label visually clipped by the dropdown that
+    //      followed it.
+    //   2. The right-aligned spacer (designed to align the Browse
+    //      button column on the Output row) wasted horizontal space
+    //      on every dropdown row that didn't actually need an action
+    //      button at the right.
+    //
+    // New layout: pair the 4 options 2-per-line. Drop the fixed label
+    // widths and the right-aligned spacers entirely — labels size to
+    // their natural text width, dropdowns stretch fill the remaining
+    // space within each half of the row. Dialog stays the same width;
+    // labels never truncate; vertical real estate halved.
     auto* resolutionRow = new QWidget(primaryPanel);
     auto* resolutionLayout = new QHBoxLayout(resolutionRow);
     resolutionLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     resolutionLayout->setSpacing(kFormRowSpacing);
     auto* resolutionLabel = new QLabel(l10n(QStringLiteral("Resolution"), QStringLiteral("分辨率")), resolutionRow);
-    resolutionLabel->setFixedWidth(kFormLabelWidth);
     resolutionLabel->setText(uiText("dialog.video_export.resolution", QStringLiteral("Resolution")));
     int currentPresetIndex = -1;
     for (int i = 0; i < static_cast<int>(std::size(kResolutionPresets)); ++i) {
@@ -553,11 +574,8 @@ VideoExportDialog::VideoExportDialog(
     resolutionButton_->setMenu(resolutionMenu_);
     resolutionLayout->addWidget(resolutionLabel, 0);
     resolutionLayout->addWidget(resolutionButton_, 1);
-    auto* resolutionRightPlaceholder = new QWidget(resolutionRow);
-    resolutionRightPlaceholder->setFixedWidth(rightAlignedButtonWidth);
-    resolutionLayout->addWidget(resolutionRightPlaceholder, 0);
-    primaryPanelLayout->addWidget(resolutionRow, 0);
 
+    // Right half of the resolution row — FPS dropdown.
     selectedFps_ = baseTask_.fps >= 90 ? 120 : 60;
     fpsButton_ = createDialogMenuButton(optionsContent_, QStringLiteral("%1 FPS").arg(selectedFps_));
     fpsMenu_ = new QMenu(fpsButton_);
@@ -573,18 +591,14 @@ VideoExportDialog::VideoExportDialog(
         });
     }
     fpsButton_->setMenu(fpsMenu_);
-    auto* fpsRow = new QWidget(primaryPanel);
-    auto* fpsLayout = new QHBoxLayout(fpsRow);
-    fpsLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
-    fpsLayout->setSpacing(kFormRowSpacing);
-    auto* fpsLabel = new QLabel(uiText("dialog.video_export.fps", QStringLiteral("FPS")), fpsRow);
-    fpsLabel->setFixedWidth(kFormLabelWidth);
-    fpsLayout->addWidget(fpsLabel, 0);
-    fpsLayout->addWidget(fpsButton_, 1);
-    auto* fpsRightPlaceholder = new QWidget(fpsRow);
-    fpsRightPlaceholder->setFixedWidth(rightAlignedButtonWidth);
-    fpsLayout->addWidget(fpsRightPlaceholder, 0);
-    primaryPanelLayout->addWidget(fpsRow, 0);
+    auto* fpsLabel = new QLabel(uiText("dialog.video_export.fps", QStringLiteral("FPS")), resolutionRow);
+    // Visual gap between the left-half pair (label + dropdown) and the
+    // right-half pair. ~16 px reads as a clear column boundary without
+    // wasting space.
+    resolutionLayout->addSpacing(16);
+    resolutionLayout->addWidget(fpsLabel, 0);
+    resolutionLayout->addWidget(fpsButton_, 1);
+    primaryPanelLayout->addWidget(resolutionRow, 0);
 
     // Audio quality dropdown — picks AAC bitrate forwarded to ffmpeg
     // as `-b:a <kbps>k`. Default 192 is a step above the previous
@@ -608,21 +622,18 @@ VideoExportDialog::VideoExportDialog(
         });
     }
     audioBitrateButton_->setMenu(audioBitrateMenu_);
+    // Bottom row — Audio quality (left half) + Export Settings (right
+    // half). Same paired-column structure as the Resolution+FPS row.
     auto* audioBitrateRow = new QWidget(primaryPanel);
     auto* audioBitrateLayout = new QHBoxLayout(audioBitrateRow);
     audioBitrateLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
     audioBitrateLayout->setSpacing(kFormRowSpacing);
     auto* audioBitrateLabel = new QLabel(uiText("dialog.video_export.audio_bitrate", QStringLiteral("Audio quality")), audioBitrateRow);
-    audioBitrateLabel->setFixedWidth(kFormLabelWidth);
     audioBitrateLayout->addWidget(audioBitrateLabel, 0);
     audioBitrateLayout->addWidget(audioBitrateButton_, 1);
-    auto* audioBitrateRightPlaceholder = new QWidget(audioBitrateRow);
-    audioBitrateRightPlaceholder->setFixedWidth(rightAlignedButtonWidth);
-    audioBitrateLayout->addWidget(audioBitrateRightPlaceholder, 0);
-    primaryPanelLayout->addWidget(audioBitrateRow, 0);
 
     selectedPreset_ = baseTask_.preset;
-    presetButton_ = createDialogMenuButton(primaryPanel, exportDialogPresetLabel(selectedPreset_));
+    presetButton_ = createDialogMenuButton(audioBitrateRow, exportDialogPresetLabel(selectedPreset_));
     presetMenu_ = new QMenu(presetButton_);
     UiTheme::styleRoundedMenu(*presetMenu_);
     addDialogMenuChoice(
@@ -648,21 +659,14 @@ VideoExportDialog::VideoExportDialog(
         }
     );
     presetButton_->setMenu(presetMenu_);
-    auto* presetRow = new QWidget(primaryPanel);
-    auto* presetLayout = new QHBoxLayout(presetRow);
-    presetLayout->setContentsMargins(kSectionContentLeftInset, 0, kSectionContentLeftInset, 0);
-    presetLayout->setSpacing(kFormRowSpacing);
     auto* presetLabel = new QLabel(
         uiText("dialog.video_export.preset", QStringLiteral("Export Settings")),
-        presetRow
+        audioBitrateRow
     );
-    presetLabel->setFixedWidth(kFormLabelWidth);
-    presetLayout->addWidget(presetLabel, 0);
-    presetLayout->addWidget(presetButton_, 1);
-    auto* presetRightPlaceholder = new QWidget(presetRow);
-    presetRightPlaceholder->setFixedWidth(rightAlignedButtonWidth);
-    presetLayout->addWidget(presetRightPlaceholder, 0);
-    primaryPanelLayout->addWidget(presetRow, 0);
+    audioBitrateLayout->addSpacing(16);
+    audioBitrateLayout->addWidget(presetLabel, 0);
+    audioBitrateLayout->addWidget(presetButton_, 1);
+    primaryPanelLayout->addWidget(audioBitrateRow, 0);
 
     rangeContent_ = new QWidget(this);
     auto* rangeLayout = new QVBoxLayout(rangeContent_);
