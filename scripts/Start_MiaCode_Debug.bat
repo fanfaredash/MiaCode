@@ -8,7 +8,10 @@ set "MIACODE_LOG_DIR=%APP_DIR%\logs"
 
 if not exist "%MIACODE_LOG_DIR%" mkdir "%MIACODE_LOG_DIR%"
 
-echo MiaCode debug mode - default quick shell
+REM Beta20+ default: QuickShell + DComp preview pipeline. Adding --debug
+REM activates the full runtime/audio/startup-timing log channels under
+REM .\logs\ . Pass extra CLI flags as %1..%9 (e.g. a chart path).
+echo MiaCode debug mode (QuickShell + DComp default)
 echo   App : %APP_DIR%\MiaCode.exe
 echo   Logs: %MIACODE_LOG_DIR%
 echo.

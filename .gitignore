@@ -56,6 +56,7 @@ third_party/mpv/**/*.exp
 # scripts whitelist: ignore all by default, allow only release/infra scripts.
 scripts/*
 !scripts/Start_MiaCode_Debug.bat
+!scripts/Start_MiaCode_Legacy_QML.bat
 !scripts/build-macos.sh
 !scripts/build-win.ps1
 !scripts/compare-export-encode-profiles.ps1

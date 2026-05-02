@@ -290,15 +290,19 @@ New-Item -ItemType Directory -Path $DistDir | Out-Null
 Copy-Item $exePath (Join-Path $DistDir "MiaCode.exe") -Force
 
 $debugLauncherSrc = Join-Path $repoRoot "scripts\\Start_MiaCode_Debug.bat"
-if (Test-Path $debugLauncherSrc) {
-    Copy-Item $debugLauncherSrc (Join-Path $DistDir "Start_MiaCode_Debug.bat") -Force
+if (!(Test-Path $debugLauncherSrc)) {
+    throw "Missing required launcher script: $debugLauncherSrc"
 }
-$quickShellDebugLauncherSrc = Join-Path $repoRoot "scripts\\Start_MiaCode_QuickShell_Debug.bat"
-if (Test-Path $quickShellDebugLauncherSrc) {
-    Copy-Item $quickShellDebugLauncherSrc (Join-Path $DistDir "Start_MiaCode_QuickShell_Debug.bat") -Force
+Copy-Item $debugLauncherSrc (Join-Path $DistDir "Start_MiaCode_Debug.bat") -Force
+
+$legacyQmlLauncherSrc = Join-Path $repoRoot "scripts\\Start_MiaCode_Legacy_QML.bat"
+if (!(Test-Path $legacyQmlLauncherSrc)) {
+    throw "Missing required launcher script: $legacyQmlLauncherSrc"
 }
+Copy-Item $legacyQmlLauncherSrc (Join-Path $DistDir "Start_MiaCode_Legacy_QML.bat") -Force
+
 New-Item -ItemType Directory -Path (Join-Path $DistDir "logs") -Force | Out-Null
-New-Item -ItemType Directory -Path (Join-Path $DistDir "logs\\quick-shell-beta") -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $DistDir "logs\\legacy-qml") -Force | Out-Null
 
 if ($Config -eq "Debug") {
     $deployMode = "--debug"
@@ -306,13 +310,28 @@ if ($Config -eq "Debug") {
     $deployMode = "--release"
 }
 
-& $deployTool `
-    --dir $DistDir `
-    $deployMode `
-    --compiler-runtime `
-    --no-translations `
-    --qmldir (Join-Path $repoRoot "src") `
-    (Join-Path $DistDir "MiaCode.exe")
+# windeployqt routinely warns to stderr (e.g. "Cannot find any version of
+# the dxcompiler.dll and dxil.dll" — we handle those ourselves below from
+# the build output dir). PS 5.1 treats native-command stderr as a
+# terminating error under `$ErrorActionPreference = Stop`, which would
+# abort the package right after windeployqt with no real failure. Drop
+# to Continue around the call and verify success via $LASTEXITCODE.
+$prevErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+try {
+    & $deployTool `
+        --dir $DistDir `
+        $deployMode `
+        --compiler-runtime `
+        --no-translations `
+        --qmldir (Join-Path $repoRoot "src") `
+        (Join-Path $DistDir "MiaCode.exe")
+    if ($LASTEXITCODE -ne 0) {
+        throw "windeployqt failed with exit code $LASTEXITCODE"
+    }
+} finally {
+    $ErrorActionPreference = $prevErrorActionPreference
+}
 
 $requiredQtRuntimeDllBaseNames = @(
     "Qt6Core",
@@ -326,6 +345,10 @@ $requiredQtRuntimeDllBaseNames = @(
     "Qt6QmlMeta",
     "Qt6QmlModels",
     "Qt6QmlWorkerScript",
+    # QuickShell needs QtQuick.Controls (toolbar / sidebar / dialog
+    # components throughout src/app/quick_shell/qml/). MiaCode.exe
+    # imports Qt6QuickControls2 directly (verified via dumpbin).
+    "Qt6QuickControls2",
     "Qt6Svg"
 )
 Copy-QtRuntimeDllSet -QtBinDir $qtBinDir -DistDir $DistDir -BaseNames $requiredQtRuntimeDllBaseNames -Config $Config
@@ -440,11 +463,12 @@ $releaseReadme = Join-Path $docsDir "RELEASE_README.txt"
 $releaseLines = @(
     "MiaCode release package"
     ""
-    "Run:"
+    "Run (default — DComp preview pipeline + QuickShell UI):"
     "  MiaCode.exe"
-    "  MiaCode.exe --qt-native"
-    "  Start_MiaCode_Debug.bat"
-    "  Start_MiaCode_QuickShell_Debug.bat"
+    "  Start_MiaCode_Debug.bat            (adds --debug, logs into .\\logs\\)"
+    ""
+    "Run with the legacy QSG-only preview pipeline (DComp disabled):"
+    "  Start_MiaCode_Legacy_QML.bat       (sets MIACODE_PREVIEW_USE_DCOMP=0)"
     ""
     "Debug logs:"
     "  .\\logs\\miacode_runtime_debug.log"
@@ -452,19 +476,20 @@ $releaseLines = @(
     "  .\\logs\\miacode_video_export.log"
     "  .\\logs\\miacode_startup_timing.log"
     "  .\\logs\\miacode_fatal.log"
-    "  .\\logs\\quick-shell-beta\\miacode_runtime_debug.log"
-    "  .\\logs\\quick-shell-beta\\miacode_audio_debug.log"
-    "  .\\logs\\quick-shell-beta\\miacode_video_export.log"
-    "  .\\logs\\quick-shell-beta\\miacode_startup_timing.log"
-    "  .\\logs\\quick-shell-beta\\miacode_fatal.log"
+    "  .\\logs\\legacy-qml\\miacode_runtime_debug.log"
+    "  .\\logs\\legacy-qml\\miacode_audio_debug.log"
+    "  .\\logs\\legacy-qml\\miacode_video_export.log"
+    "  .\\logs\\legacy-qml\\miacode_startup_timing.log"
+    "  .\\logs\\legacy-qml\\miacode_fatal.log"
     ""
     "Included:"
     "  - MiaCode.exe (main app)"
     "  - Start_MiaCode_Debug.bat"
-    "  - Start_MiaCode_QuickShell_Debug.bat"
+    "  - Start_MiaCode_Legacy_QML.bat"
     "  - Qt runtime DLLs, plugin folders, and QML modules"
     "  - BASS runtime DLLs (bass, bassmix, bass_fx, bass_aac, bassopus)"
-    "  - libmpv-2.dll (Phase 0 probe; Phase 4 video background)"
+    "  - libmpv-2.dll (chart preview video background + startup probe)"
+    "  - dxcompiler.dll, dxil.dll (D3D shader compilation runtime)"
     "  - ffmpeg/ffmpeg.exe"
     "  - assets/"
     "  - docs/"
@@ -490,9 +515,9 @@ $releaseLines | Set-Content -Path $releaseReadme -Encoding UTF8
 $requiredPackagePaths = @(
     "MiaCode.exe",
     "Start_MiaCode_Debug.bat",
-    "Start_MiaCode_QuickShell_Debug.bat",
+    "Start_MiaCode_Legacy_QML.bat",
     "logs",
-    "logs\\quick-shell-beta",
+    "logs\\legacy-qml",
     (Get-QtRuntimeDllName -BaseName "Qt6Core" -Config $Config),
     (Get-QtRuntimeDllName -BaseName "Qt6Gui" -Config $Config),
     (Get-QtRuntimeDllName -BaseName "Qt6Widgets" -Config $Config),
@@ -504,6 +529,7 @@ $requiredPackagePaths = @(
     (Get-QtRuntimeDllName -BaseName "Qt6QmlMeta" -Config $Config),
     (Get-QtRuntimeDllName -BaseName "Qt6QmlModels" -Config $Config),
     (Get-QtRuntimeDllName -BaseName "Qt6QmlWorkerScript" -Config $Config),
+    (Get-QtRuntimeDllName -BaseName "Qt6QuickControls2" -Config $Config),
     (Get-QtRuntimeDllName -BaseName "Qt6Svg" -Config $Config),
     "D3Dcompiler_47.dll",
     "dxcompiler.dll",
@@ -516,6 +542,8 @@ $requiredPackagePaths = @(
     "libmpv-2.dll",
     "platforms\\qwindows.dll",
     "qml\\QtQuick\\qtquick2plugin.dll",
+    "qml\\QtQuick\\Controls\\qtquickcontrols2plugin.dll",
+    "qml\\QtQuick\\Layouts\\qquicklayoutsplugin.dll",
     "qml\\QtQml\\Models\\modelsplugin.dll",
     "qml\\QtQml\\WorkerScript\\workerscriptplugin.dll",
     "docs\\PREVIEW_RUNTIME_EXPORT_ARCHITECTURE_SPEC.md"
@@ -524,6 +552,8 @@ $unexpectedPackagePaths = @(
     "Start_MiaCode_Debug_CompareDump.bat",
     "Start_MiaCode_Debug_View.bat",
     "Start_MiaCode_Debug_Widget.bat",
+    "Start_MiaCode_QuickShell_Debug.bat",
+    "logs\\quick-shell-beta",
     "soundtouch_probe.exe",
     (Get-QtRuntimeDllName -BaseName "Qt6OpenGLWidgets" -Config $Config),
     (Get-QtRuntimeDllName -BaseName "Qt6Concurrent" -Config $Config),
