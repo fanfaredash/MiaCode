@@ -354,7 +354,12 @@ const QHash<QString, QString>& zhMap()
     static const QHash<QString, QString> map{
         {"menu.file", "文件(&F)"},
         {"menu.tools", "工具(&T)"},
-        {"menu.transform", "变换(&T)"},
+        // Beta20-fix — was 变换(&T) which collided with 工具(&T) on the
+        // Alt+T accelerator. Renamed to 调整 (synonym for Transform in
+        // chart-editing context: rotate / mirror / normalise / break-
+        // toggle etc. are all "adjustments" to the chart) with mnemonic
+        // M. Mirrors English "Modify(&M)".
+        {"menu.transform", "调整(&M)"},
         {"menu.help", "帮助(&H)"},
 
         {"action.new", "新建"},

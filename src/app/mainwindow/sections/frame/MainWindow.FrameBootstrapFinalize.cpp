@@ -78,19 +78,30 @@ void MainWindow::finishFrameBootstrap(QToolBar* toolBar, const std::function<voi
     toolBar->addAction(openAction_);
     toolBar->addAction(saveAction_);
     constexpr int kToolbarActionButtonWidth = 64;
-    constexpr int kToolbarActionButtonHorizontalPadding = 20;
+    // Beta20-fix — reduced from 20 → 12 (6 px on each side) so the
+    // explicit-fixed-width buttons (Audio Settings / Video Settings)
+    // hug their text the same way Qt's native `addAction()`-managed
+    // toolbar buttons (Open / Save / Export) do. The previous 20 px
+    // produced ~10 px of empty space on each side of the label text,
+    // which read as gratuitous extra margin compared to the native
+    // buttons next to them.
+    constexpr int kToolbarActionButtonHorizontalPadding = 12;
     const auto compactToolbarButtonWidth = [](const QFont& font, QAction* action) -> int {
         if (action == nullptr) {
             return kToolbarActionButtonWidth;
         }
-        if (UiText::isChineseUi()) {
-            return kToolbarActionButtonWidth;
-        }
         const QFontMetrics metrics(font);
-        return qMax(
-            kToolbarActionButtonWidth,
-            metrics.horizontalAdvance(action->text()) + kToolbarActionButtonHorizontalPadding
-        );
+        const int textBoundedWidth =
+            metrics.horizontalAdvance(action->text())
+            + kToolbarActionButtonHorizontalPadding;
+        // Chinese UI — short labels (设置, 导出) are far narrower than
+        // the 64 px floor, so always clamp to the floor in Chinese to
+        // keep the toolbar visually balanced. English UI — let labels
+        // grow naturally beyond the floor when needed.
+        if (UiText::isChineseUi()) {
+            return qMax(kToolbarActionButtonWidth, textBoundedWidth);
+        }
+        return qMax(kToolbarActionButtonWidth, textBoundedWidth);
     };
     const auto makeCompactToolbarButton = [toolBar, compactToolbarButtonWidth](QAction* action) -> QToolButton* {
         auto* button = new QToolButton(toolBar);

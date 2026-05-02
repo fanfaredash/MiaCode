@@ -133,16 +133,23 @@ MainWindow::MainWindow(bool quickShellBootstrapMode, QWidget* parent)
         topMenuBar->setNativeMenuBar(false);
     }
 
-    auto* fileMenu = menuBar()->addMenu(uiText("menu.file", "&File"));
-    auto* editMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("编辑(&E)") : QStringLiteral("&Edit"));
-    auto* toolsMenu = menuBar()->addMenu(uiText("menu.tools", "&Tools"));
-    // English fallback was "变换(&T)" — leaked the Chinese label to
-    // English UI users (UiText::text returns empty for non-Chinese, so
-    // the second arg is what English UI displays). Use the actual
-    // English mnemonic "Transform(&T)".
-    auto* transformMenu = menuBar()->addMenu(uiText("menu.transform", "Transform(&T)"));
-    auto* previewMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("预览(&P)") : QStringLiteral("&Preview"));
-    auto* helpMenu = menuBar()->addMenu(uiText("menu.help", "&Help"));
+    // Beta20-fix — unified all top menus to the `Name(&L)` mnemonic
+    // suffix style for both English and Chinese (was: English used the
+    // bare `&L` underline form `&File`/`&Edit` while Transform used the
+    // `Name(&L)` suffix form, producing visually inconsistent menu
+    // labels). The trailing `(L)` parens render in both locales which
+    // matches the existing Chinese convention.
+    auto* fileMenu = menuBar()->addMenu(uiText("menu.file", "File(&F)"));
+    auto* editMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("编辑(&E)") : QStringLiteral("Edit(&E)"));
+    auto* toolsMenu = menuBar()->addMenu(uiText("menu.tools", "Tools(&T)"));
+    // Beta20-fix — Transform menu renamed to "Modify" / "调整" in both
+    // languages so the Alt-T mnemonic is unambiguous for the Tools
+    // menu. Picked "Modify" (Alt+M) over "Transform(&R)" because the
+    // user requested a synonym, not just a different mnemonic letter.
+    // The Chinese key in UiText.cpp likewise uses 调整(&M).
+    auto* transformMenu = menuBar()->addMenu(uiText("menu.transform", "Modify(&M)"));
+    auto* previewMenu = menuBar()->addMenu(UiText::isChineseUi() ? QStringLiteral("预览(&P)") : QStringLiteral("Preview(&P)"));
+    auto* helpMenu = menuBar()->addMenu(uiText("menu.help", "Help(&H)"));
     styleRoundedMenu(*fileMenu);
     styleRoundedMenu(*editMenu);
     styleRoundedMenu(*toolsMenu);
