@@ -45,15 +45,13 @@ function Read-VersionInfoFromCMake {
     if (![string]::IsNullOrWhiteSpace($prerelease)) {
         $version = "$version-$prerelease"
     }
-    $displayVersion = $baseVersion
-    $displayPrerelease = [regex]::Match($content, 'set\(MIACODE_DISPLAY_PRERELEASE\s+"([^"]*)"').Groups[1].Value
-    if (![string]::IsNullOrWhiteSpace($displayPrerelease)) {
-        $displayVersion = "$displayVersion-$displayPrerelease"
-    }
-
+    # Beta20+ unifies version display: package filename and About-dialog
+    # version are always identical (CMakeLists used to keep them split via
+    # MIACODE_DISPLAY_PRERELEASE; they drifted in practice and beta20
+    # collapsed them).
     return [PSCustomObject]@{
         PackageVersion = $version
-        DisplayVersion = $displayVersion
+        DisplayVersion = $version
     }
 }
 
