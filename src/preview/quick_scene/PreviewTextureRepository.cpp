@@ -118,19 +118,14 @@ QSGTexture* PreviewTextureRepository::textureForImage(const QImage& image, bool 
             return existing;
         }
 
-        // beta20 — request a mip chain on the QSG texture so the
-        // sprite sampler has prefiltered low-res levels for downscale
-        // and matches the DComp pipeline's behaviour. Without this
-        // QSGTexture::Linear filtering on a no-mip texture causes
-        // jagged edges when chart sprites are downscaled (small
-        // playfield exports, low-res preview windows). Pairs with
-        // setMipmapFiltering at the call site (PreviewQuickSpriteNodes,
-        // PreviewQuickArcNodes, etc.).
-        QSGTexture* texture = window_->createTextureFromImage(
-            image, QQuickWindow::TextureCanUseAtlas);
-        if (texture != nullptr) {
-            texture->setMipmapFiltering(QSGTexture::Linear);
-        }
+        // beta20-fix2 — REVERTED to no-mip for parity with the
+        // DComp-side revert (Intel iGPU driver crash on runtime mip
+        // generation). Qt's createTextureFromImage uses the platform
+        // RHI backend (D3D11 on Windows by default), so requesting
+        // mips here would route through the same driver path that
+        // crashed igd10um64xe.DLL on the DComp side. Pre-generated
+        // asset mips are the planned follow-up.
+        QSGTexture* texture = window_->createTextureFromImage(image);
         cachedTextures_.insert(fingerprint, texture);
         cachedKeyToFingerprint_.insert(fastKey, fingerprint);
         const qint64 imageBytes = qMax<qint64>(1, image.sizeInBytes());
@@ -196,13 +191,8 @@ QSGTexture* PreviewTextureRepository::createOwnedTexture(const QImage& image) co
     if (window_ == nullptr || image.isNull()) {
         return nullptr;
     }
-    // Same beta20 mip-chain request as the cached path above.
-    QSGTexture* texture = window_->createTextureFromImage(
-        image, QQuickWindow::TextureCanUseAtlas);
-    if (texture != nullptr) {
-        texture->setMipmapFiltering(QSGTexture::Linear);
-    }
-    return texture;
+    // beta20-fix2 — no mip request, see cached path comment above.
+    return window_->createTextureFromImage(image);
 }
 
 void PreviewTextureRepository::noteSpriteBatchStats(

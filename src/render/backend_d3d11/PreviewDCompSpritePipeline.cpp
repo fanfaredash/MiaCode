@@ -658,13 +658,15 @@ bool PreviewDCompSpritePipeline::createBuffers(ID3D11Device* device)
 bool PreviewDCompSpritePipeline::createSamplerAndTexture(ID3D11Device* device)
 {
     D3D11_SAMPLER_DESC sd{};
-    // beta20 — anisotropic filtering with the texture cache's new mip
-    // chains. Anisotropic costs ~free on any GPU from the last decade
-    // and substantially improves oblique-angle sampling (e.g. spinning
-    // slide-arrow sprites where the screen-space footprint is non-
-    // square). MaxAnisotropy = 8 is the modern default sweet spot:
-    // 16 is the cap, but 8 captures the visible quality jump and
-    // costs ~half the texture-bandwidth of 16.
+    // beta20-fix2 — anisotropic filtering KEPT. The mip-chain change in
+    // PreviewDCompTextureCache was reverted (Intel iGPU driver crash);
+    // textures now have only level-0, so the trilinear/anisotropic
+    // sampler effectively does anisotropic-bilinear. Anisotropic alone
+    // still helps oblique-angle sampling (e.g. spinning slide arrows)
+    // and is essentially free on any GPU from the last decade. The
+    // downscale-jagginess that the mip chain would have fixed is back;
+    // a follow-up will add pre-generated mip chains to the source
+    // assets (so we don't ask the driver to generate them at runtime).
     sd.Filter = D3D11_FILTER_ANISOTROPIC;
     sd.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
     sd.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;

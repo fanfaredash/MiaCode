@@ -87,37 +87,42 @@ ID3D11ShaderResourceView* PreviewDCompTextureCache::lookupOrCreate(
         return nullptr;
     }
 
-    // beta20 — full mip chain enabled. Without it the sprite sampler's
-    // `MIN_MAG_MIP_LINEAR` mode degenerates to bilinear (no other LOD
-    // exists) and produces:
-    //   - aliased / jagged edges when sprites are downscaled (no
-    //     prefiltered low-res levels for the GPU to sample)
-    //   - amplified bilinear blur when sprites are upscaled (no high
-    //     frequency to recover from a single source level)
-    // The mip chain (~33% extra memory per texture) lets trilinear
-    // pick the level closest to the screen-space footprint and
-    // interpolate between two levels at any non-unity scale.
+    // beta20-fix2 — REVERTED to single-mip IMMUTABLE textures.
     //
-    // To use `GenerateMips` we must (a) declare a full mip chain
-    // (`MipLevels = 0` = auto-compute log2(max(w,h)) + 1 levels),
-    // (b) bind the texture as both SHADER_RESOURCE and RENDER_TARGET,
-    // and (c) flag GENERATE_MIPS in `MiscFlags`. That precludes
-    // `D3D11_USAGE_IMMUTABLE` because the runtime needs to write the
-    // generated levels — switch to DEFAULT and seed level 0 via
-    // UpdateSubresource after creation.
+    // The earlier "MipLevels=0 + GENERATE_MIPS + RT_BIND + UpdateSubresource
+    // + GenerateMips" flow was crashing the Intel iGPU UMD driver
+    // (`igd10um64xe.DLL +0x412e3` — a deterministic NULL deref reproduced
+    // on three separate user dumps at exactly that instruction). The
+    // crash signature is consistent with the driver hitting an unhardened
+    // code path during runtime mip generation, especially after a
+    // device-recovery cycle (which our beta20 device-removed handler
+    // exercises explicitly). Reverting the texture-creation flow to the
+    // pre-mip baseline removes the trigger.
+    //
+    // Quality cost: trilinear sampler (still
+    // `D3D11_FILTER_ANISOTROPIC` from PreviewDCompSpritePipeline) now
+    // degenerates to anisotropic-bilinear with no inter-mip blending.
+    // Downscaled sprites get the original beta19 jagginess back. The
+    // proper fix is to ship pre-generated mip chains in the source
+    // assets (PNG with embedded mips via DDS or KTX2) so we don't ask
+    // the driver to do it at runtime — a future-asset-pipeline task
+    // tracked separately.
     D3D11_TEXTURE2D_DESC td{};
     td.Width = static_cast<UINT>(normalized.width());
     td.Height = static_cast<UINT>(normalized.height());
-    td.MipLevels = 0;  // auto: log2(max(w,h)) + 1
+    td.MipLevels = 1;
     td.ArraySize = 1;
     td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     td.SampleDesc.Count = 1;
-    td.Usage = D3D11_USAGE_DEFAULT;
-    td.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-    td.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+    td.Usage = D3D11_USAGE_IMMUTABLE;
+    td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    D3D11_SUBRESOURCE_DATA srd{};
+    srd.pSysMem = normalized.constBits();
+    srd.SysMemPitch = static_cast<UINT>(normalized.bytesPerLine());
 
     Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
-    HRESULT hr = device->CreateTexture2D(&td, nullptr, texture.GetAddressOf());
+    HRESULT hr = device->CreateTexture2D(&td, &srd, texture.GetAddressOf());
     if (FAILED(hr)) {
         logCache("create_texture_failed",
                  QStringLiteral("hr=0x%1 key=0x%2 w=%3 h=%4")
@@ -126,16 +131,6 @@ ID3D11ShaderResourceView* PreviewDCompTextureCache::lookupOrCreate(
                      .arg(normalized.width()).arg(normalized.height()));
         return nullptr;
     }
-
-    // Seed the level-0 image. UpdateSubresource is correct for DEFAULT
-    // usage; level 0 = subresource index 0 in a 1-array-slice texture.
-    context->UpdateSubresource(
-        texture.Get(),
-        /*DstSubresource=*/0,
-        /*pDstBox=*/nullptr,
-        normalized.constBits(),
-        static_cast<UINT>(normalized.bytesPerLine()),
-        /*SrcDepthPitch=*/0);
 
     Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> srv;
     hr = device->CreateShaderResourceView(texture.Get(), nullptr,
@@ -147,11 +142,8 @@ ID3D11ShaderResourceView* PreviewDCompTextureCache::lookupOrCreate(
                      .arg(static_cast<quint64>(key), 0, 16));
         return nullptr;
     }
-
-    // Generate the lower mip levels from level 0. Cheap on the GPU
-    // (one full-screen pass per level via the driver's box-filter
-    // implementation) and runs once per cached texture.
-    context->GenerateMips(srv.Get());
+    Q_UNUSED(context);  // beta20-fix2: kept the ctx parameter for ABI/symmetry,
+                        // but no GenerateMips call any more.
 
     // Manual AddRef so the cache holds an owning ref to the SRV. Local
     // ComPtr `srv` releases its ref when this function returns; the
