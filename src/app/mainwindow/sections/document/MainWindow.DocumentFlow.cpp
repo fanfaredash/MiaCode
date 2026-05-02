@@ -13,6 +13,7 @@
 #include "app/quick_shell/QuickShellPreviewCompositeSurface.h"
 #include "app/quick_shell/QuickShellPreviewSurfacePolicy.h"
 #include "common/ChartAssetPaths.h"
+#include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/WaveformCache.h"
@@ -681,9 +682,63 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
         miacode::waveform::makeWaveformPlaceholder(
             knownTrackDurationSeconds > 0.0 ? knownTrackDurationSeconds : 0.0));
     owner_.setCurrentFilePath(normalizedPath, true);
-    loadDocument(document);
+
+    // Eagerly create the crash-recovery directory BEFORE the user can
+    // edit. Without this, a crash in the first ~1 ms after a keystroke
+    // (before the lazy mkpath inside updateSnapshot has run) would find
+    // the parent directory missing and fail CreateFileW. mkpath is
+    // re-entrant and cheap on warm runs (one stat()).
+    miacode::crash_recovery::prepareForChart(normalizedPath);
+
+    // Crash-recovery prompt — if a recovery file exists for this chart
+    // and its content differs from what's on disk, offer the user the
+    // chance to restore the unsaved changes from before the crash.
+    // Only fires on the path where the user actually opens a chart;
+    // restoreLastSessionFile and other internal callers also funnel
+    // through here so they get the prompt too.
+    SimaiDocument documentToLoad = document;
+    bool restoredFromCrash = false;
+    {
+        const QByteArray recoveryUtf8 =
+            miacode::crash_recovery::readRecoveryFile(normalizedPath);
+        if (!recoveryUtf8.isEmpty()) {
+            const QString recoveryText = QString::fromUtf8(recoveryUtf8);
+            const QString diskText = document.toText();
+            if (!recoveryText.isEmpty() && recoveryText != diskText) {
+                const auto choice = QMessageBox::question(
+                    &owner_,
+                    QObject::tr("Recover Unsaved Changes"),
+                    QObject::tr(
+                        "MiaCode appears to have closed unexpectedly while "
+                        "editing this chart.\n\n"
+                        "Recover the unsaved changes from the previous "
+                        "session?\n\n"
+                        "(Choosing No will discard the recovery file.)"),
+                    QMessageBox::Yes | QMessageBox::No,
+                    QMessageBox::Yes);
+                if (choice == QMessageBox::Yes) {
+                    documentToLoad = SimaiDocument::fromText(recoveryText);
+                    restoredFromCrash = true;
+                }
+            }
+            // Always delete the recovery file once it's been considered
+            // — keeping it around would prompt repeatedly even after
+            // the user declined or has resaved.
+            miacode::crash_recovery::deleteRecoveryFile(normalizedPath);
+        }
+    }
+
+    loadDocument(documentToLoad);
     owner_.refreshWaveformCache(knownTrackDurationSeconds);
-    if (showStatusMessage) {
+    if (restoredFromCrash) {
+        owner_.statusBar()->showMessage(
+            QObject::tr("Recovered unsaved changes from previous session — "
+                        "save to keep them."),
+            10000);
+        // Mark the current text as a fresh edit baseline so the regular
+        // autosave timers see it as dirty vs the on-disk content.
+        markCurrentFieldDirty();
+    } else if (showStatusMessage) {
         owner_.statusBar()->showMessage(
             QString("Opened: %1 (%2)")
                 .arg(QFileInfo(normalizedPath).fileName())
@@ -699,6 +754,22 @@ void MainWindow::DocumentSection::resetAutosaveState(const QString& referenceTex
     state_.autosaveLastHistoryContentSignature_.clear();
     state_.autosaveLastHistorySnapshotMs_ = kAutosaveUnsetTimestampMs;
     state_.autosaveDirtySinceMs_ = kAutosaveUnsetTimestampMs;
+
+    // Crash-recovery: a fresh document state means the on-disk content
+    // is now the truth — clear any stale crash-recovery file and the
+    // in-memory snapshot. If the user was working on a different chart
+    // or just saved, we don't want a future crash to write a recovery
+    // file with the now-stale content. The next markCurrentFieldDirty
+    // refills the snapshot.
+    cleanupCrashRecoveryForCleanExit();
+}
+
+void MainWindow::DocumentSection::cleanupCrashRecoveryForCleanExit()
+{
+    if (!state_.currentFilePath_.isEmpty()) {
+        miacode::crash_recovery::deleteRecoveryFile(state_.currentFilePath_);
+    }
+    miacode::crash_recovery::clearSnapshot();
 }
 
 QString MainWindow::DocumentSection::resolveAutosaveDirectoryPath() const

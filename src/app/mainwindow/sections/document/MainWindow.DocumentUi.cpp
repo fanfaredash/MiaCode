@@ -858,7 +858,8 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
         owner_.syncPreviewStageMediaRouteChartPath(
             state_.currentFilePath_,
             state_.lastTrackPath_,
-            state_.qtPreviewPauseSecond_);
+            state_.qtPreviewPauseSecond_,
+            state_.document_.videoPath);  // Phase 4c — &video= override
     }
     if (ui_.editorStack_ != nullptr && ui_.chartPage_ != nullptr) {
         ui_.editorStack_->setCurrentWidget(ui_.chartPage_);

@@ -4,6 +4,7 @@
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/WaveformCache.h"
@@ -794,6 +795,13 @@ int runCliVideoExportWorker(QApplication& app, QString* errorMessage)
 
 int main(int argc, char* argv[])
 {
+    // Install crash-time autosave handlers BEFORE anything else can fail.
+    // This way an early-startup segfault (e.g. graphics driver bug during
+    // QApplication construction) still gets a chance to flush the
+    // last-known document text — though in practice early crashes happen
+    // before any document is loaded so the snapshot is empty / safe.
+    miacode::crash_recovery::install();
+
     QStringList rawArgs;
     rawArgs.reserve(argc);
     for (int index = 0; index < argc; ++index) {

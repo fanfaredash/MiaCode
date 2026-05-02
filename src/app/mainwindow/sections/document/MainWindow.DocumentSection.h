@@ -26,6 +26,11 @@ public:
         double knownTrackDurationSeconds = -1.0
     );
     void resetAutosaveState(const QString& referenceText);
+    // Drop the in-memory crash-recovery snapshot AND delete the
+    // on-disk recovery file for the current chart. Called from the
+    // close-event path so a clean exit doesn't leave a stale recovery
+    // file that would prompt "recover unsaved changes?" on next open.
+    void cleanupCrashRecoveryForCleanExit();
     QString resolveAutosaveDirectoryPath() const;
     QString currentDocumentTextForAutosave() const;
     void pruneAutosaveFiles(const QString& autosaveDirectoryPath) const;

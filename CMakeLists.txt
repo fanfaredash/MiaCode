@@ -109,6 +109,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/common/MuriConfig.h
     src/common/DebugLog.h
     src/common/DebugLog.cpp
+    src/common/CrashRecovery.h
+    src/common/CrashRecovery.cpp
     src/common/Mmcss.h
     src/common/Mmcss.cpp
     src/common/DebugImageCompare.h
@@ -318,6 +320,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/render/backend_d3d11/PreviewDCompTextureCache.cpp
     src/render/backend_d3d11/PreviewDCompSurface.h
     src/render/backend_d3d11/PreviewDCompSurface.cpp
+    src/render/backend_d3d11/PreviewPopupHwndTracker.h
+    src/render/backend_d3d11/PreviewPopupHwndTracker.cpp
     src/audio/PreviewAudioBackend.h
     src/audio/PreviewAudioSettings.h
     src/audio/PreviewAudioSettings.cpp

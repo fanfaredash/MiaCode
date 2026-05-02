@@ -5,6 +5,7 @@
 #include "PlainCodeEditor.h"
 #include "TimelineView.h"
 #include "UiText.h"
+#include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 
@@ -522,6 +523,17 @@ void MainWindow::DocumentSection::markCurrentFieldDirty()
 {
     if (ui_.autosaveIdleTimer_ != nullptr) {
         ui_.autosaveIdleTimer_->start();
+    }
+    // Crash-time autosave — push the current document text into the
+    // crash-handler's snapshot mailbox so an abnormal exit (segfault,
+    // abort, std::terminate) within the next ~milliseconds still
+    // produces a recovery file. Cheap: bounded memcpy + atomic store,
+    // no disk I/O. The 2-second debounced .bak write below is for
+    // routine autosave; this is the per-edit safety net.
+    if (!state_.currentFilePath_.isEmpty()) {
+        miacode::crash_recovery::updateSnapshot(
+            state_.currentFilePath_,
+            currentDocumentTextForAutosave());
     }
     refreshCurrentFieldDirtyState();
 }
