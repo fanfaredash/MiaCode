@@ -110,12 +110,33 @@ private:
     bool ready_ = false;
     quint64 appearanceRevision_ = 0;
     qreal cachedDevicePixelRatio_ = 0.0;
-    QString cachedThemeSignature_;
+    // Phase-4e-old-opt — was QString built via per-paint label-name
+    // concat; replaced by a 64-bit hash. `0` is sentinel for
+    // "uninitialised" (no chart loaded yet); a real chart will hash to
+    // some non-zero value with overwhelming probability.
+    quint64 cachedThemeSignature_ = 0;
+    bool cachedThemeSignatureValid_ = false;
     bool pendingThemeInvalidation_ = false;
     bool pendingDprInvalidation_ = false;
     mutable bool cachedSceneStateValid_ = false;
     mutable miacode::timeline::TimelineSceneState cachedSceneState_;
     mutable QSize cachedSceneBuildViewportSize_;
+    // Phase 7 — scroll-bucket viewport culling. The cache is rebuilt
+    // when the user scrolls into a new bucket (= one viewport-width
+    // wide). Combined with the bucket-bumped revisions in
+    // applyDynamicSceneState, the QSG layers see new revisions on
+    // bucket transitions and rebuild their children with the freshly
+    // emitted (culled) primitives. Within a bucket, the per-frame
+    // transform handles the small offset and no rebuild fires.
+    // INT_MIN is the "never built" sentinel so the first call always
+    // rebuilds.
+    mutable int cachedScrollBucket_ = INT_MIN;
+    // Phase 9d-native polish — header-control state participates in
+    // the cache key so the native zoom-button text + follow-check tick
+    // update on click rather than waiting for a playback tick to bump
+    // an unrelated revision.
+    mutable bool cachedSceneBuildFollowPreviewEnabled_ = false;
+    mutable double cachedSceneBuildZoomScale_ = -1.0;  // sentinel: forces first build
     mutable int cachedSceneBuildHeaderLeftLimit_ = 0;
     mutable int cachedSceneBuildHeaderRightLimit_ = 0;
     mutable quint64 cachedSceneBuildAppearanceRevision_ = 0;

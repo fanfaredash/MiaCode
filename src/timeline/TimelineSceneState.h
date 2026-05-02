@@ -137,6 +137,12 @@ struct TimelineSceneState {
     QVector<TimelineSceneLine> gridLines;
     QVector<TimelineSceneRect> frameRects;
     QVector<TimelineSceneLine> frameLines;
+    // Phase 4d-fix — opaque sidebar mask drawn AFTER notes/sprites so
+    // chart-content (slide arrows, etc.) that scrolls into the lane-
+    // label column doesn't bleed through. Same coverage as the
+    // sidebar entry in `frameRects` but emitted at z=3 (header) rather
+    // than z=0 (grid). Fills only when laneLabels are populated.
+    TimelineSceneRect sidebarMaskRect;
     QVector<TimelineSceneTextLabel> laneLabels;
     QVector<TimelineSceneTextLabel> headerLabels;
     QVector<TimelineSceneTriangle> headerMarkers;
@@ -155,6 +161,30 @@ struct TimelineSceneState {
     TimelineSceneLine playheadLine;
     bool hasDragCenterLine = false;
     TimelineSceneLine dragCenterLine;
+
+    // Phase 9d-native — header control visuals (zoom button + follow
+    // checkbox). Emitted by the builder when the request carries the
+    // matching state; rendered natively in the DComp pipeline so the
+    // controls paint on the popup's composition plane (QML siblings
+    // of TimelineQuickItem can't, since DWM stacks the popup HWND
+    // above the QQuickWindow surface). The QML ToolButton/CheckBox
+    // in TimelineTabSurface.qml stay alive (with opacity 0) for
+    // input handling — DComp popup is WS_EX_TRANSPARENT so clicks
+    // pass through to the QQuickItem layer.
+    bool hasHeaderControls = false;
+    TimelineSceneRect zoomButtonBg;
+    TimelineSceneRect zoomButtonBorder;        // 1-px stroke as a thin rect set
+    TimelineSceneTextLabel zoomButtonLabel;
+    TimelineSceneRect followCheckBg;           // Phase 9d-native — opaque
+                                               // backdrop spanning indicator
+                                               // + gap + text so line markers
+                                               // don't leak through the text
+                                               // glyph gaps. No border.
+    TimelineSceneRect followCheckIndicator;    // checkbox box
+    TimelineSceneRect followCheckIndicatorBorder;
+    bool followCheckChecked = false;
+    TimelineSceneRect followCheckMark;         // tick mark when checked
+    TimelineSceneTextLabel followCheckLabel;
 };
 
 }  // namespace miacode::timeline

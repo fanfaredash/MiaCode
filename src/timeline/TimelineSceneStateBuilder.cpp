@@ -422,22 +422,49 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         QRectF(0.0, 0.0, request.viewportSize.width(), request.viewportSize.height()),
         theme.window,
     });
-    state.baseBackgroundRects.append(TimelineSceneRect{
-        QRectF(0.0, 0.0, request.viewportSize.width(), state.timelineTop),
-        theme.header,
-    });
-    state.baseBackgroundRects.append(TimelineSceneRect{
-        QRectF(0.0, state.timelineTop, state.timelineLeft, state.timelineHeight),
-        theme.sidebar,
-    });
+    {
+        // Phase 9d-native polish — force the header-band fill opaque
+        // so the native-rendered controls (zoom button + follow check
+        // text) sit on a solid background. theme.header inherits a
+        // semi-transparent alpha from the palette which lets
+        // scrolling content leak through the text label area.
+        QColor opaqueHeader = theme.header;
+        opaqueHeader.setAlpha(255);
+        state.baseBackgroundRects.append(TimelineSceneRect{
+            QRectF(0.0, 0.0, request.viewportSize.width(), state.timelineTop),
+            opaqueHeader,
+        });
+    }
+    {
+        // Phase 9a-fix4 — opaque sidebar (matches the frameRect below).
+        QColor opaqueSidebar = theme.sidebar;
+        opaqueSidebar.setAlpha(255);
+        state.baseBackgroundRects.append(TimelineSceneRect{
+            QRectF(0.0, state.timelineTop, state.timelineLeft, state.timelineHeight),
+            opaqueSidebar,
+        });
+    }
     state.baseBackgroundRects.append(TimelineSceneRect{
         QRectF(state.timelineLeft, state.timelineTop, request.viewportSize.width() - state.timelineLeft, state.timelineHeight),
         theme.base,
     });
-    state.frameRects.append(TimelineSceneRect{
-        QRectF(0.0, state.timelineTop - 1.0, state.timelineLeft + 1.0, state.timelineHeight + 2.0),
-        theme.sidebar,
-    });
+    {
+        // Phase 9a-fix4 — force the sidebar fill to fully opaque alpha
+        // so notes that scroll-translate into viewport-X < timelineLeft
+        // can't bleed through during scroll.
+        QColor opaqueSidebar = theme.sidebar;
+        opaqueSidebar.setAlpha(255);
+        const QRectF sidebarRect(
+            0.0, state.timelineTop - 1.0,
+            state.timelineLeft + 1.0, state.timelineHeight + 2.0);
+        state.frameRects.append(TimelineSceneRect{sidebarRect, opaqueSidebar});
+        // Phase 4d-fix — same rect, published as a separate field so
+        // TimelineHeaderSource can re-emit it AFTER notes/sprites at
+        // z=3. This masks any chart-content that scrolls into the
+        // lane-label column (e.g. slide-trace arrows extending toward
+        // the off-screen-left edge).
+        state.sidebarMaskRect = TimelineSceneRect{sidebarRect, opaqueSidebar};
+    }
     state.frameLines.append(TimelineSceneLine{
         QPointF(0.0, state.timelineTop - 1.0),
         QPointF(request.viewportSize.width(), state.timelineTop - 1.0),
@@ -508,11 +535,29 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 qMax(0.001, state.visibleEndSecond - state.visibleStartSecond),
                 qMax(1, request.viewportSize.width() - state.timelineLeft));
         if (waveformLevel != nullptr && !waveformLevel->columns.isEmpty()) {
+            // Phase 7 — scroll-bucket culling. When the caller has
+            // opted in via request.horizontalCullPaddingPx > 0 and
+            // bumps revisions per scroll bucket (TimelineQuickItem
+            // does), narrow the column range to viewport ± padding
+            // seconds. When the caller hasn't opted in, fall back to
+            // the full display range to preserve legacy behaviour
+            // (the QSG waveform layer caches children by revision; if
+            // we cull without forcing a rebuild on scroll, scrolled-
+            // into areas would reveal empty space — see Phase 5
+            // post-mortem).
+            double cullStartSecond = state.displayStartSeconds;
+            double cullEndSecond = state.displayEndSeconds;
+            if (request.horizontalCullPaddingPx > 0 && state.pixelsPerSecond > 1e-6) {
+                const double paddingSec =
+                    static_cast<double>(request.horizontalCullPaddingPx) / state.pixelsPerSecond;
+                cullStartSecond = qMax(0.0, state.visibleStartSecond - paddingSec);
+                cullEndSecond = state.visibleEndSecond + paddingSec;
+            }
             const QPair<int, int> visibleColumns =
                 miacode::waveform::visibleWaveformColumnRange(
                     *waveformLevel,
-                    qMax(0.0, state.displayStartSeconds),
-                    qMax(0.0, state.displayEndSeconds));
+                    qMax(0.0, cullStartSecond),
+                    qMax(0.0, cullEndSecond));
             const qreal centerY = state.timelineTop + state.timelineHeight / 2.0;
             const qreal maxAmplitude = (qMax<qreal>(8.0, state.timelineHeight / 2.0 - 8.0) * 7.0) / 9.0;
             for (int index = visibleColumns.first; index < visibleColumns.second; ++index) {
@@ -537,9 +582,26 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         }
     }
 
+    // Phase 7 — scroll-bucket grid culling. Same gate as the waveform
+    // path: only cull when the caller has opted in via
+    // horizontalCullPaddingPx > 0 (and is bucket-bumping revisions
+    // upstream). The cull is in CONTENT-X space, expanded by
+    // padding, so a grid line whose content X falls outside the
+    // bucket window is dropped. When padding=0, no cull (legacy).
+    qreal gridCullMinX = -std::numeric_limits<qreal>::infinity();
+    qreal gridCullMaxX = std::numeric_limits<qreal>::infinity();
+    if (request.horizontalCullPaddingPx > 0) {
+        const qreal scrollX = static_cast<qreal>(state.horizontalScrollValue);
+        const qreal padding = static_cast<qreal>(request.horizontalCullPaddingPx);
+        gridCullMinX = scrollX + state.timelineLeft - padding - 2.0;
+        gridCullMaxX = scrollX + state.viewportSize.width() + padding + 2.0;
+    }
     const auto addGridLine = [&](double absoluteSecond, const QColor& color, qreal width, bool exactPosition) {
         const qreal x = (exactPosition ? secondToXExact(state, absoluteSecond)
                                        : static_cast<qreal>(secondToSceneX(state, absoluteSecond)));
+        if (x < gridCullMinX || x > gridCullMaxX) {
+            return;
+        }
         state.gridLines.append(TimelineSceneLine{
             QPointF(x, state.timelineTop),
             QPointF(x, state.timelineTop + state.timelineHeight),
@@ -649,7 +711,33 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         }
     }
 
-    const TimelineVisibleLineRange visibleNoteRange{0, static_cast<int>(request.snapshot.lines.size())};
+    // Phase 7 — scroll-bucket note culling. When the caller has opted
+    // in via horizontalCullPaddingPx (and bumps notesRevision per
+    // bucket), bisect the line range against the visible viewport
+    // expanded by padding. This mirrors what legacy TimelineView
+    // already does (TimelineView.Paint.cpp:44). When the caller
+    // hasn't opted in, fall back to the full chart range to preserve
+    // legacy behaviour.
+    TimelineVisibleLineRange visibleNoteRange{0, static_cast<int>(request.snapshot.lines.size())};
+    if (request.horizontalCullPaddingPx > 0 && state.pixelsPerSecond > 1e-6) {
+        const QVector<double>& noteVisualPrefixMax =
+            (request.showSlideTracks || !request.muriMarkersByLocation.isEmpty())
+                ? request.snapshot.noteVisualEndPrefixMaxWithSlideTracks
+                : request.snapshot.noteVisualEndPrefixMaxWithoutSlideTracks;
+        if (noteVisualPrefixMax.size() == request.snapshot.lines.size()) {
+            const double paddingSec =
+                static_cast<double>(request.horizontalCullPaddingPx) / state.pixelsPerSecond;
+            // 2 s extra slop on top of bucket padding — covers tail-
+            // extending notes (long slides, fireworks) whose visual
+            // range exceeds the head's second.
+            const double slopSec = 2.0;
+            visibleNoteRange = timelineRenderVisibleNoteLineRange(
+                request.snapshot.lines,
+                noteVisualPrefixMax,
+                state.visibleStartSecond - paddingSec - slopSec,
+                state.visibleEndSecond + paddingSec + slopSec);
+        }
+    }
     const QVector<TimelineVisibleNoteRef> visibleNoteRefs =
         timelineRenderVisibleNotePaintOrder(request.snapshot.lines, visibleNoteRange);
 
@@ -1027,6 +1115,117 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 2.0,
             };
         }
+    }
+
+    // Phase 9d-native — emit header control visuals (zoom button +
+    // follow checkbox). Mirrors the QML ToolButton + CheckBox in
+    // TimelineTabSurface.qml: zoom on the left at parent.left + 4,
+    // follow on the right at parent.right - 8. Vertically centred in
+    // the header band (y in [0, timelineTop)). Sized to roughly
+    // match the QML controls.
+    if (state.timelineTop > 4 && request.viewportSize.width() > 0) {
+        state.hasHeaderControls = true;
+        // Phase 9d-native polish — use the application's default UI
+        // font (matches the menu-bar font, including Chinese fallback
+        // chain) at the same pixel size the QML controls use, but at
+        // normal weight (the Follow Preview label looked too bold at
+        // DemiBold; the QML CheckBox actually shows up regular due to
+        // the system theme override).
+        QFont controlFont;
+        controlFont.setPixelSize(12);
+        const QFontMetricsF controlMetrics(controlFont);
+        const int btnHeight = 22;
+        const int btnY = qMax(0, (state.timelineTop - btnHeight) / 2);
+        const QColor cardBg = theme.window.lightnessF() < 0.5
+            ? QColor(31, 41, 55) : QColor(243, 244, 246);
+        const QColor borderColor = theme.border;
+
+        // ---- Zoom button (left) ----
+        const QString zoomText = QStringLiteral("%1%").arg(
+            qRound(request.zoomScale * 100.0));
+        const qreal zoomTextW = controlMetrics.horizontalAdvance(zoomText);
+        // Padding: 12 left for glyph slot, 8 right
+        const int zoomBtnW = qRound(zoomTextW + 12 + 8);
+        const int zoomBtnX = 4;
+        state.zoomButtonBg = TimelineSceneRect{
+            QRectF(zoomBtnX, btnY, zoomBtnW, btnHeight),
+            cardBg,
+        };
+        state.zoomButtonBorder = TimelineSceneRect{
+            // Drawn as a thin frame via 4 hairlines below; we keep one
+            // descriptor for "the border colour" so the source can pick
+            // it up. Width/height encode line thickness via
+            // a sentinel: we use the rect itself plus 1-px hairlines
+            // emitted by the source.
+            QRectF(zoomBtnX, btnY, zoomBtnW, btnHeight),
+            borderColor,
+        };
+        TimelineSceneTextLabel zoomLabel;
+        zoomLabel.text = zoomText;
+        zoomLabel.font = controlFont;
+        zoomLabel.color = theme.label;
+        zoomLabel.logicalSize = timelineTextLogicalSize(controlFont, zoomText);
+        zoomLabel.topLeft = QPointF(
+            zoomBtnX + 12 - kTimelineTextHorizontalPadding,
+            btnY + (btnHeight - controlMetrics.height()) * 0.5
+                - kTimelineTextVerticalPadding);
+        state.zoomButtonLabel = zoomLabel;
+
+        // ---- Follow check (right) ----
+        const QString followText = request.isChineseUi
+            ? QString::fromUtf8("跟随预览")
+            : QStringLiteral("Follow Preview");
+        const qreal followTextW = controlMetrics.horizontalAdvance(followText);
+        const int followBoxSize = 14;
+        const int followBoxToTextGap = 6;
+        const int followTextRightPad = 4;  // air to the right of text
+        const int followTotalW = qRound(followBoxSize + followBoxToTextGap
+                                        + followTextW + followTextRightPad);
+        const int followX = request.viewportSize.width() - 8 - followTotalW;
+        const int followBoxY = btnY + (btnHeight - followBoxSize) / 2;
+        const QColor accent = theme.cursor;
+        // Phase 9d-native polish — opaque backdrop covering indicator
+        // + gap + text. Same colour as the header band so it visually
+        // blends, but blocks line markers / waveform content from
+        // showing through the text glyph gaps. No border (per user's
+        // request). Pushed before the indicator in the source so the
+        // checkbox box paints on top.
+        QColor followBgColor = theme.header;
+        followBgColor.setAlpha(255);
+        state.followCheckBg = TimelineSceneRect{
+            QRectF(followX, btnY, followTotalW, btnHeight),
+            followBgColor,
+        };
+        state.followCheckIndicator = TimelineSceneRect{
+            QRectF(followX, followBoxY, followBoxSize, followBoxSize),
+            request.followPreviewEnabled ? accent : cardBg,
+        };
+        state.followCheckIndicatorBorder = TimelineSceneRect{
+            QRectF(followX, followBoxY, followBoxSize, followBoxSize),
+            request.followPreviewEnabled ? accent : borderColor,
+        };
+        state.followCheckChecked = request.followPreviewEnabled;
+        if (request.followPreviewEnabled) {
+            // Tick mark — diagonal hairline approximation. Drawn as a
+            // small filled rect (cheap; readable at 14×14).
+            const qreal tickX = followX + 3.0;
+            const qreal tickY = followBoxY + followBoxSize * 0.55;
+            state.followCheckMark = TimelineSceneRect{
+                QRectF(tickX, tickY, 8.0, 2.0),
+                QColor(255, 255, 255),
+            };
+        }
+        TimelineSceneTextLabel followLabel;
+        followLabel.text = followText;
+        followLabel.font = controlFont;
+        followLabel.color = theme.label;
+        followLabel.logicalSize = timelineTextLogicalSize(controlFont, followText);
+        followLabel.topLeft = QPointF(
+            followX + followBoxSize + followBoxToTextGap
+                - kTimelineTextHorizontalPadding,
+            btnY + (btnHeight - controlMetrics.height()) * 0.5
+                - kTimelineTextVerticalPadding);
+        state.followCheckLabel = followLabel;
     }
 
     return state;

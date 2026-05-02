@@ -7,8 +7,11 @@
 #include <QSGGeometryNode>
 #include <QSGNode>
 #include <QSGSimpleRectNode>
+#include <QSGTextureMaterial>
 #include <QSGTransformNode>
 #include <QtMath>
+
+#include <cstring>
 
 QImage makeTimelineGlyphImage(const miacode::timeline::TimelineSceneGlyph& glyph)
 {
@@ -127,4 +130,208 @@ QSGNode* buildTimelineTriangleNode(const miacode::timeline::TimelineSceneTriangl
     node->setFlag(QSGNode::OwnsGeometry);
     node->setFlag(QSGNode::OwnsMaterial);
     return node;
+}
+
+// ---------------------------------------------------------------------
+// TimelineQuickFlatColorBatchBuilder
+//
+// Coalesces consecutive axis-aligned rects sharing a color into a
+// single QSGGeometryNode with N*6 vertices. Sibling of the sprite
+// builder; same triangle-list layout, but Point2D (no UV) and a
+// QSGFlatColorMaterial. Used by grid-line and waveform-bar emit paths
+// where data has long same-color runs but per-line/per-bar QSG node
+// allocation was the prior bottleneck.
+
+TimelineQuickFlatColorBatchBuilder::TimelineQuickFlatColorBatchBuilder(QSGNode* parent)
+    : parent_(parent)
+{
+    pendingVertices_.reserve(4096);
+}
+
+void TimelineQuickFlatColorBatchBuilder::appendRect(const QColor& color, const QRectF& rect)
+{
+    if (parent_ == nullptr || !rect.isValid() || rect.width() <= 0.0 || rect.height() <= 0.0) {
+        return;
+    }
+    // Color rgba() comparison — themes with slightly-different colours
+    // don't merge, which is correct: each color needs its own material
+    // anyway. Equal-rgba colors definitely merge.
+    if (currentColorValid_ && currentColor_.rgba() != color.rgba()) {
+        flush();
+    }
+    currentColor_ = color;
+    currentColorValid_ = true;
+
+    const float xL = static_cast<float>(rect.left());
+    const float xR = static_cast<float>(rect.right());
+    const float yT = static_cast<float>(rect.top());
+    const float yB = static_cast<float>(rect.bottom());
+    QSGGeometry::Point2D v;
+    v.set(xL, yT); pendingVertices_.append(v);
+    v.set(xR, yT); pendingVertices_.append(v);
+    v.set(xL, yB); pendingVertices_.append(v);
+    v.set(xL, yB); pendingVertices_.append(v);
+    v.set(xR, yT); pendingVertices_.append(v);
+    v.set(xR, yB); pendingVertices_.append(v);
+    ++totalQuads_;
+}
+
+bool TimelineQuickFlatColorBatchBuilder::tryAppendOrthogonalLine(
+    const miacode::timeline::TimelineSceneLine& line)
+{
+    const qreal dx = line.end.x() - line.start.x();
+    const qreal dy = line.end.y() - line.start.y();
+    const bool vertical = qAbs(dx) <= 0.001;
+    const bool horizontal = qAbs(dy) <= 0.001;
+    if (!vertical && !horizontal) {
+        return false;  // diagonal — caller falls back to legacy path.
+    }
+    const qreal lineWidth = qMax<qreal>(1.0, line.width);
+    if (vertical) {
+        const qreal x = line.start.x() - (lineWidth * 0.5);
+        const qreal top = qMin(line.start.y(), line.end.y());
+        appendRect(line.color, QRectF(x, top, lineWidth, qAbs(dy)));
+    } else {
+        const qreal y = line.start.y() - (lineWidth * 0.5);
+        const qreal left = qMin(line.start.x(), line.end.x());
+        appendRect(line.color, QRectF(left, y, qAbs(dx), lineWidth));
+    }
+    return true;
+}
+
+void TimelineQuickFlatColorBatchBuilder::flush()
+{
+    if (parent_ == nullptr || pendingVertices_.isEmpty() || !currentColorValid_) {
+        pendingVertices_.clear();
+        currentColorValid_ = false;
+        return;
+    }
+
+    auto* geometry = new QSGGeometry(
+        QSGGeometry::defaultAttributes_Point2D(),
+        pendingVertices_.size());
+    geometry->setDrawingMode(QSGGeometry::DrawTriangles);
+    QSGGeometry::Point2D* dst = geometry->vertexDataAsPoint2D();
+    std::memcpy(dst,
+                pendingVertices_.constData(),
+                static_cast<size_t>(pendingVertices_.size())
+                    * sizeof(QSGGeometry::Point2D));
+
+    auto* material = new QSGFlatColorMaterial();
+    material->setColor(currentColor_);
+
+    auto* node = new QSGGeometryNode();
+    node->setGeometry(geometry);
+    node->setMaterial(material);
+    node->setFlag(QSGNode::OwnsGeometry);
+    node->setFlag(QSGNode::OwnsMaterial);
+    parent_->appendChildNode(node);
+
+    ++totalBatches_;
+    pendingVertices_.clear();
+    currentColorValid_ = false;
+}
+
+// ---------------------------------------------------------------------
+// TimelineQuickSpriteBatchBuilder
+//
+// Coalesces consecutive textured quads sharing a texture into a single
+// QSGGeometryNode with N*6 vertices (triangle list — 2 triangles per
+// quad). On a texture transition, finishes the current batch as a node
+// and starts a new accumulator. Mirrors PreviewDCompSpritePipeline's
+// DrawRun coalescing on the new pipeline side.
+
+TimelineQuickSpriteBatchBuilder::TimelineQuickSpriteBatchBuilder(QSGNode* parent)
+    : parent_(parent)
+{
+    // Reserve a generous starting capacity so the typical chart's hot
+    // batch (e.g. all track-segment sprites of one type) never re-
+    // allocates mid-fill. 4096 verts = 682 quads; charts tend to have
+    // dense same-texture runs of a few thousand notes, so this avoids
+    // the small-buffer doubling cascade.
+    pendingVertices_.reserve(4096);
+}
+
+void TimelineQuickSpriteBatchBuilder::appendQuad(QSGTexture* texture, const QRectF& rect)
+{
+    appendQuad(texture, rect, QRectF(0.0, 0.0, 1.0, 1.0));
+}
+
+void TimelineQuickSpriteBatchBuilder::appendQuad(QSGTexture* texture,
+                                                  const QRectF& rect,
+                                                  const QRectF& uvRect)
+{
+    if (parent_ == nullptr || texture == nullptr || !rect.isValid()) {
+        return;
+    }
+    // Texture changed → flush previous batch before adding this quad.
+    if (currentTexture_ != nullptr && currentTexture_ != texture) {
+        flush();
+    }
+    currentTexture_ = texture;
+
+    // Triangle-list layout: 2 triangles per quad, 6 verts total.
+    // Vertex order: TL, TR, BL, BL, TR, BR.
+    // No index buffer — the redundancy is small (6 vs 4) and skipping
+    // index management keeps the streaming append fast.
+    const float xL = static_cast<float>(rect.left());
+    const float xR = static_cast<float>(rect.right());
+    const float yT = static_cast<float>(rect.top());
+    const float yB = static_cast<float>(rect.bottom());
+    const float uL = static_cast<float>(uvRect.left());
+    const float uR = static_cast<float>(uvRect.right());
+    const float vT = static_cast<float>(uvRect.top());
+    const float vB = static_cast<float>(uvRect.bottom());
+
+    QSGGeometry::TexturedPoint2D v;
+    v.set(xL, yT, uL, vT); pendingVertices_.append(v);
+    v.set(xR, yT, uR, vT); pendingVertices_.append(v);
+    v.set(xL, yB, uL, vB); pendingVertices_.append(v);
+    v.set(xL, yB, uL, vB); pendingVertices_.append(v);
+    v.set(xR, yT, uR, vT); pendingVertices_.append(v);
+    v.set(xR, yB, uR, vB); pendingVertices_.append(v);
+
+    ++totalQuads_;
+}
+
+void TimelineQuickSpriteBatchBuilder::flush()
+{
+    if (parent_ == nullptr || currentTexture_ == nullptr || pendingVertices_.isEmpty()) {
+        currentTexture_ = nullptr;
+        pendingVertices_.clear();
+        return;
+    }
+
+    auto* geometry = new QSGGeometry(
+        QSGGeometry::defaultAttributes_TexturedPoint2D(),
+        pendingVertices_.size());
+    geometry->setDrawingMode(QSGGeometry::DrawTriangles);
+    QSGGeometry::TexturedPoint2D* dst = geometry->vertexDataAsTexturedPoint2D();
+    std::memcpy(dst,
+                pendingVertices_.constData(),
+                static_cast<size_t>(pendingVertices_.size())
+                    * sizeof(QSGGeometry::TexturedPoint2D));
+
+    // QSGTextureMaterial honours per-pixel alpha (chart sprites have
+    // transparent borders, hold caps overlap their bodies on the alpha
+    // channel). QSGOpaqueTextureMaterial would be wrong even for sprite
+    // types whose interior is opaque, because the TRANSITION pixels
+    // along the border are partial alpha.
+    auto* material = new QSGTextureMaterial();
+    material->setTexture(currentTexture_);
+    material->setFiltering(QSGTexture::Linear);
+    material->setMipmapFiltering(QSGTexture::None);
+    material->setHorizontalWrapMode(QSGTexture::ClampToEdge);
+    material->setVerticalWrapMode(QSGTexture::ClampToEdge);
+
+    auto* node = new QSGGeometryNode();
+    node->setGeometry(geometry);
+    node->setMaterial(material);
+    node->setFlag(QSGNode::OwnsGeometry);
+    node->setFlag(QSGNode::OwnsMaterial);
+    parent_->appendChildNode(node);
+
+    ++totalBatches_;
+    pendingVertices_.clear();
+    currentTexture_ = nullptr;
 }

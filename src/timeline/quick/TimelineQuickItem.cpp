@@ -3,6 +3,7 @@
 #include <QDateTime>
 #include <QElapsedTimer>
 #include <QKeyEvent>
+#include <QLocale>
 #include <QMouseEvent>
 #include <QQuickWindow>
 #include <QSGNode>
@@ -93,24 +94,36 @@ void updateLayerSlot(QSGNode* slot, UpdateFn&& updateFn)
     }
 }
 
-QString timelineThemeSignature(const miacode::timeline::TimelineSceneState& state)
+// Phase-4e-old-opt — replaces a string-concat-per-paint hot path with a
+// numeric hash accumulator. The previous version built a QString of the
+// form `font.toString() + color.name() + ...` per label/marker, which
+// at ~100 labels typical for a long chart cost ~10 KB of heap allocs +
+// memcpy per paint. The hash here is mixed with the FNV-style 0x9E3779B9
+// constant + bit-rotation so that small changes (one label colour
+// flipping) flip many bits, keeping comparison robustness.
+quint64 timelineThemeSignatureHash(const miacode::timeline::TimelineSceneState& state)
 {
-    QString themeSignature;
+    quint64 h = 0;
+    const auto mix = [&](quint64 v) {
+        // Boost-style hash combine. The magic constant is ~ golden
+        // ratio in 64 bits; XOR + shift produces good diffusion.
+        h ^= v + 0x9E3779B97F4A7C15ULL + (h << 6) + (h >> 2);
+    };
     for (const auto& label : state.laneLabels) {
-        themeSignature += label.font.toString();
-        themeSignature += label.color.name(QColor::HexArgb);
+        mix(qHash(label.font));
+        mix(static_cast<quint64>(label.color.rgba()));
     }
     for (const auto& label : state.headerLabels) {
-        themeSignature += label.font.toString();
-        themeSignature += label.color.name(QColor::HexArgb);
+        mix(qHash(label.font));
+        mix(static_cast<quint64>(label.color.rgba()));
     }
     for (const auto& marker : state.headerMarkers) {
-        themeSignature += marker.color.name(QColor::HexArgb);
+        mix(static_cast<quint64>(marker.color.rgba()));
     }
     if (state.hasEntryMarker) {
-        themeSignature += state.entryMarker.color.name(QColor::HexArgb);
+        mix(static_cast<quint64>(state.entryMarker.color.rgba()));
     }
-    return themeSignature;
+    return h;
 }
 
 void appendTimelineQuickInteractionLog(const QString& action, const QString& payload = QString())
@@ -150,6 +163,29 @@ void applyDynamicSceneState(
         miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(*state, state->timelineLeft);
     state->visibleEndSecond =
         miacode::timeline::TimelineSceneStateBuilder::sceneXToSecond(*state, state->viewportSize.width());
+
+    // Phase 7 — bucket-bump revisions. The QSG layers
+    // (TimelineQuickWaveformLayer / Header (grid) / Notes) only
+    // rebuild their child node tree when the corresponding revision
+    // counter changes. With Phase 7 build-time culling, the cached
+    // primitive set is bucket-specific, but the bridge's revisions
+    // only bump on data changes (chart edits, waveform load) — not
+    // on scroll. Adding the current scroll bucket to each revision
+    // here gives the layer a bucket-specific view of the revision
+    // that flips when the user scrolls into a new bucket. Combined
+    // with the matching cache invalidation in
+    // TimelineQuickItem::currentSceneState, the layer rebuilds its
+    // children to match the freshly emitted primitives. Within a
+    // bucket the bumped revision is constant, so layers happily
+    // skip rebuilds and the per-frame cost stays at "set transform".
+    if (state->viewportSize.width() > 0) {
+        const int bucketSize = state->viewportSize.width();
+        const quint64 bucket =
+            static_cast<quint64>(state->horizontalScrollValue / bucketSize);
+        state->waveformRevision += bucket;
+        state->gridRevision += bucket;
+        state->notesRevision += bucket;
+    }
 
     state->hasCursorLine = false;
     state->hasPlayheadLine = false;
@@ -397,7 +433,8 @@ void TimelineQuickItem::cycleZoomPreset()
 
 void TimelineQuickItem::refreshTheme()
 {
-    cachedThemeSignature_.clear();
+    cachedThemeSignature_ = 0;
+    cachedThemeSignatureValid_ = false;
     cachedSceneStateValid_ = false;
     ++appearanceRevision_;
     pendingThemeInvalidation_ = true;
@@ -473,9 +510,19 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         return miacode::timeline::TimelineSceneState();
     }
     const QSize viewportSize(qMax(1, qRound(width())), qMax(1, qRound(height())));
+    // Phase 7 — bucket size = one viewport. Build emits primitives
+    // for [bucket-1, bucket+2] (3 viewports total: bucket itself + 1
+    // buffer each side). Scrolling within a bucket reuses the
+    // cached state; crossing into a new bucket triggers a rebuild
+    // which emits primitives for the new window.
+    const int bucketSize = viewportSize.width();
+    const int currentScroll = stateBridge_->horizontalScrollValue();
+    const int currentScrollBucket =
+        bucketSize > 0 ? (currentScroll / bucketSize) : 0;
     const bool rebuildNeeded =
         !cachedSceneStateValid_
         || cachedSceneBuildViewportSize_ != viewportSize
+        || cachedScrollBucket_ != currentScrollBucket
         || cachedSceneBuildHeaderLeftLimit_ != headerLeftLimit_
         || cachedSceneBuildHeaderRightLimit_ != headerRightLimit_
         || cachedSceneBuildAppearanceRevision_ != appearanceRevision_
@@ -483,7 +530,14 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         || cachedSceneBuildWaveformRevision_ != stateBridge_->waveformRevision()
         || cachedSceneBuildHeaderRevision_ != stateBridge_->headerRevision()
         || cachedSceneBuildNotesRevision_ != stateBridge_->notesRevision()
-        || cachedSceneBuildOverlayRevision_ != stateBridge_->overlayRevision();
+        || cachedSceneBuildOverlayRevision_ != stateBridge_->overlayRevision()
+        // Phase 9d-native polish — header-control state. Without these
+        // the native zoom-button text + follow-check tick only update
+        // when some other revision happens to bump (e.g., a playback
+        // tick), making the click feel unresponsive.
+        || cachedSceneBuildFollowPreviewEnabled_ != stateBridge_->followPreviewEnabled()
+        || !qFuzzyCompare(cachedSceneBuildZoomScale_ + 1.0,
+                          stateBridge_->zoomScale() + 1.0);
     if (rebuildNeeded && miacode::debug_options::runtimeDebugOutputEnabled()) {
         miacode::debug_log::appendLine(
             miacode::debug_log::Channel::Runtime,
@@ -503,6 +557,12 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.viewportSize = viewportSize;
     request.headerLineNumberFont = stateBridge_->headerLineNumberFont();
     request.horizontalScrollValue = stateBridge_->horizontalScrollValue();
+    // Phase 7 — opt into scroll-bucket culling. Builder emits
+    // primitives for visible viewport ± bucketSize px (so 3 total
+    // viewports of horizontal coverage). Layers will rebuild their
+    // QSG children when the bucket-bumped revision in
+    // applyDynamicSceneState changes.
+    request.horizontalCullPaddingPx = bucketSize;
     request.headerLeftLimit = headerLeftLimit_;
     request.headerRightLimit = headerRightLimit_ > 0 ? headerRightLimit_ : request.viewportSize.width();
     request.zoomScale = stateBridge_->zoomScale();
@@ -513,6 +573,11 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     request.showSlideTracks = stateBridge_->showSlideTracks();
     request.playheadIndicatorSuppressed = stateBridge_->playheadIndicatorSuppressed();
     request.dragActive = dragActive_;
+    // Phase 9d-native — header-control state for native rendering of
+    // the zoom button + follow checkbox in the DComp pipeline.
+    request.followPreviewEnabled = stateBridge_->followPreviewEnabled();
+    request.isChineseUi = QLocale::system().language() == QLocale::Chinese
+        || QLocale().language() == QLocale::Chinese;
     request.appearanceRevision = appearanceRevision_;
     request.gridRevision = stateBridge_->gridRevision();
     request.waveformRevision = stateBridge_->waveformRevision();
@@ -524,6 +589,7 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         cachedSceneState_ = miacode::timeline::TimelineSceneStateBuilder::build(request);
         cachedSceneStateValid_ = true;
         cachedSceneBuildViewportSize_ = viewportSize;
+        cachedScrollBucket_ = currentScrollBucket;
         cachedSceneBuildHeaderLeftLimit_ = headerLeftLimit_;
         cachedSceneBuildHeaderRightLimit_ = headerRightLimit_;
         cachedSceneBuildAppearanceRevision_ = appearanceRevision_;
@@ -532,6 +598,10 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         cachedSceneBuildHeaderRevision_ = stateBridge_->headerRevision();
         cachedSceneBuildNotesRevision_ = stateBridge_->notesRevision();
         cachedSceneBuildOverlayRevision_ = stateBridge_->overlayRevision();
+        // Phase 9d-native polish — record header-control state so the
+        // next call's rebuildNeeded check can detect a change.
+        cachedSceneBuildFollowPreviewEnabled_ = stateBridge_->followPreviewEnabled();
+        cachedSceneBuildZoomScale_ = stateBridge_->zoomScale();
     }
     if (rebuildNeeded && miacode::debug_options::runtimeDebugOutputEnabled()) {
         miacode::debug_log::appendLine(
@@ -653,13 +723,14 @@ QSGNode* TimelineQuickItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeDat
         pendingThemeInvalidation_ = false;
     }
     miacode::timeline::TimelineSceneState state = currentSceneState();
-    const QString themeSignature = timelineThemeSignature(state);
-    if (!cachedThemeSignature_.isEmpty() && cachedThemeSignature_ != themeSignature) {
+    const quint64 themeSignature = timelineThemeSignatureHash(state);
+    if (cachedThemeSignatureValid_ && cachedThemeSignature_ != themeSignature) {
         ++appearanceRevision_;
         textures_->invalidateThemeDependent();
         state = currentSceneState();
     }
-    cachedThemeSignature_ = timelineThemeSignature(state);
+    cachedThemeSignature_ = timelineThemeSignatureHash(state);
+    cachedThemeSignatureValid_ = true;
     if (state.horizontalScrollValue != lastPaintedHorizontalScrollValue_
         && miacode::debug_options::timelineHotpathDiagnosticsEnabled()) {
         miacode::debug_log::appendLine(

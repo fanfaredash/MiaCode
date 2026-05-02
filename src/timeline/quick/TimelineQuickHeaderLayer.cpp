@@ -142,9 +142,21 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
     }
     if (appearanceChanged || root->gridRevision != state.gridRevision) {
         clearChildren(gridContentRoot);
+        // Phase-4e-old-opt — grid lines are predominantly orthogonal
+        // beat/sub-division markers in 1-3 distinct colours (theme-
+        // driven beat / sub-beat / measure colours). Coalescing them
+        // into per-color flat-color geometry collapses what used to be
+        // 5k-50k QSGSimpleRectNode allocations on long charts down to
+        // 1-3 QSGGeometryNode batches. Diagonal/non-orthogonal lines
+        // (rare in grid emit) fall through to the legacy node path.
+        TimelineQuickFlatColorBatchBuilder gridBatch(gridContentRoot);
         for (const auto& line : state.gridLines) {
-            gridContentRoot->appendChildNode(buildTimelineLineNode(line));
+            if (!gridBatch.tryAppendOrthogonalLine(line)) {
+                gridBatch.flush();
+                gridContentRoot->appendChildNode(buildTimelineLineNode(line));
+            }
         }
+        gridBatch.flush();
         root->gridRevision = state.gridRevision;
     }
     if (appearanceChanged || root->headerRevision != state.headerRevision) {

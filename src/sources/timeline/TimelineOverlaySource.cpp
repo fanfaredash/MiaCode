@@ -30,8 +30,13 @@ void TimelineOverlaySource::contributeToSnapshot(
     // The single-element optionals (cursor, playhead, drag-center,
     // entry marker) only push a batch when the corresponding `has*`
     // flag is true, mirroring the QSG path's gated-add pattern.
-    sb::pushTimelineRectBatch(snapshot, state->frameRects);
-    sb::pushTimelineLineBatch(snapshot, state->frameLines);
+
+    // Phase 9a-fix3 — frameRects + frameLines moved to
+    // TimelineGridSource so they render BEFORE laneLabels (which are
+    // emitted by TimelineHeaderSource at z=3). In the QSG path these
+    // share `staticRoot` with laneLabels, with the labels added LATER
+    // and therefore drawn on top of the opaque sidebar frameRect.
+    // Keeping them in Overlay (z=4) made them paint over the labels.
 
     if (state->hasCursorLine) {
         QVector<miacode::timeline::TimelineSceneLine> tmp;
