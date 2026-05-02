@@ -386,8 +386,9 @@ void MainWindow::PreviewSection::ensurePreviewStageMediaHostInitialized()
         refreshPreviewStageMediaRouteDebugState(!state_.qtPreviewPlaying_);
     });
     // Phase 4c — let the bootstrap wire this host into the
-    // PreviewDCompSurface so MpvVideoSource can find the libmpv
-    // provider via ctx.mpvFrameProvider on every snapshot build.
+    // PreviewDCompSurface so StageBackgroundSource can pull the
+    // current QVideoFrame each snapshot build (the host owns the
+    // QMediaPlayer + QVideoSink that produced it).
     emit owner_.previewStageMediaHostInitialized(state_.previewStageMediaHost_);
     ensureQuickShellPreviewCompositeSurfaceInitialized();
     state_.previewStageMediaHost_->setWarmupResolvedMediaPath(state_.previewMediaWarmupChartPath_, state_.previewMediaWarmupResolvedPath_);

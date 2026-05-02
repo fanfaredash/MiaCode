@@ -99,10 +99,11 @@ class MainWindow : public QMainWindow,
 
 public:
     // Phase 4c — non-owning accessor + signal so the QuickShellBootstrap can
-    // wire the host into PreviewDCompSurface for MpvVideoSource lookup.
-    // The host is created lazily inside MainWindow.PreviewStageMediaRoute
-    // on first chart-load; the signal lets the bootstrap connect once
-    // and react to its appearance without polling.
+    // wire the host (QMediaPlayer + QVideoSink) into PreviewDCompSurface
+    // for StageBackgroundSource video-frame lookup. The host is created
+    // lazily inside MainWindow.PreviewStageMediaRoute on first chart-load;
+    // the signal lets the bootstrap connect once and react to its
+    // appearance without polling.
     PreviewStageMediaHost* previewStageMediaHost() const;
 
 signals:

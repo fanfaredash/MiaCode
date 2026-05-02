@@ -3,8 +3,9 @@
 // Phase 2 of the v2-refactor: IPreviewSource is the source side of the
 // OBS-style source/compositor architecture. Each renderable thing
 // (chart layers, timeline layers, the FPS HUD, the static stage
-// background, the libmpv video background in Phase 4) implements this
-// single-method interface and registers with a `Compositor`. The
+// background, the QMediaPlayer/QVideoSink-backed video background)
+// implements this single-method interface and registers with a
+// `Compositor`. The
 // compositor walks registered sources in z-order and lets each one
 // emit its sprite/circle/arc/firework descriptors into a shared
 // `PreviewDCompFrameStateSnapshot`.

@@ -415,11 +415,12 @@ bool QuickShellBootstrap::start()
                 }
             }
             // Phase 4c — wire the PreviewStageMediaHost into the surface
-            // so MpvVideoSource can find the libmpv provider via
-            // ctx.mpvFrameProvider on every snapshot build. The host
-            // is created lazily inside MainWindow on first chart-load,
-            // so we connect the signal AND attach the host immediately
-            // if it already exists (race-free in either direction).
+            // so StageBackgroundSource can pull the current QVideoFrame
+            // (delivered by the host's QMediaPlayer + QVideoSink) on
+            // every snapshot build. The host is created lazily inside
+            // MainWindow on first chart-load, so we connect the signal
+            // AND attach the host immediately if it already exists
+            // (race-free in either direction).
             if (backend_ != nullptr) {
                 QObject::connect(
                     backend_.get(),

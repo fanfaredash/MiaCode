@@ -65,13 +65,12 @@ public:
     // thread reads at the top of each frame). Pass nullptr to detach.
     void setRuntime(PreviewRuntime* runtime);
 
-    // Phase 4c — wires the libmpv-backed video provider into the
-    // compositor's per-tick PreviewBuildContext. The host owns the
-    // actual MpvVideoBackend; this surface stores only a non-owning
-    // pointer used to look up the current `IMpvFrameProvider*` via
-    // `host->mpvFrameProvider()` on every snapshot build (so the
-    // wiring stays correct across chart switches without an explicit
-    // re-wire). Pass nullptr to detach.
+    // Phase 4c — wires the QMediaPlayer/QVideoSink-backed stage media
+    // host into the compositor. The host owns the actual playback
+    // pipeline (QMediaPlayer feeds QVideoSink which delivers
+    // QVideoFrames into PreviewRuntime::setVideoFrame); this surface
+    // stores a non-owning pointer used by StageBackgroundSource to
+    // resolve the current frame each snapshot. Pass nullptr to detach.
     void setStageMediaHost(PreviewStageMediaHost* host);
 
     // Phase 3.6: per-layer enable bitmap. Mirrors PreviewQuickSceneRoot's
@@ -189,9 +188,10 @@ private:
     QPointer<QQuickWindow> window_;
     QPointer<QQuickItem> trackedItem_;
     QPointer<PreviewRuntime> runtime_;
-    // Phase 4c — non-owning. Looked up each snapshot build via
-    // host_->mpvFrameProvider() to populate ctx.mpvFrameProvider for
-    // MpvVideoSource. QPointer auto-clears if the host is destroyed
+    // Phase 4c — non-owning. The host owns QMediaPlayer + QVideoSink
+    // and delivers QVideoFrames into PreviewRuntime::setVideoFrame.
+    // StageBackgroundSource pulls the current frame from there each
+    // snapshot. QPointer auto-clears if the host is destroyed
     // (e.g. on app exit before our dtor runs).
     QPointer<PreviewStageMediaHost> stageMediaHost_;
 

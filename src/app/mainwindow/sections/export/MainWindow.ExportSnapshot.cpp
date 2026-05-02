@@ -378,9 +378,9 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
     built.trackPath = owner_.resolveDefaultTrackPath();
     // Phase 4c — honour `&video=` override so live preview and export
     // render the same background. Without this, a chart with an
-    // explicit `&video=` would diverge: live preview uses libmpv on
-    // the override path, export's ffmpeg input uses the sibling
-    // file (or nothing if no sibling exists).
+    // explicit `&video=` would diverge: live preview uses Qt's
+    // QMediaPlayer on the override path, export's ffmpeg input uses
+    // the sibling file (or nothing if no sibling exists).
     built.backgroundMediaPath = miacode::chart_assets::resolveChartVideoPath(
         owner_.currentFilePath_, owner_.document_.videoPath);
     if (built.backgroundMediaPath.isEmpty()) {

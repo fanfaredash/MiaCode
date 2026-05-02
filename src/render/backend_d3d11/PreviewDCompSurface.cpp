@@ -16,9 +16,10 @@
 #include "sources/chart/MaimuriDxJudgeSource.h"
 #include "sources/chart/MuriActionSource.h"
 
-// Phase 4c — non-owning host pointer; included for the lookup of
-// IMpvFrameProvider* during snapshot build. Forward decl in the
-// header keeps the public surface clean.
+// Phase 4c — non-owning host pointer; included so the surface can
+// pass the host into StageBackgroundSource at snapshot-build time
+// (StageBackgroundSource asks the host for the current QVideoFrame).
+// Forward decl in the header keeps the public surface clean.
 #include "preview/runtime/PreviewStageMediaHost.h"
 #include "sources/chart/MuriPadSource.h"
 #include "sources/chart/SlideMotionSource.h"
@@ -310,10 +311,10 @@ void PreviewDCompSurface::setStageMediaHost(PreviewStageMediaHost* host)
     logSurface("stage_media_host",
                QStringLiteral("host=0x%1")
                    .arg(reinterpret_cast<quintptr>(host), 0, 16));
-    // No connection to listen to — the snapshot build path looks up
-    // the provider every tick via host_->mpvFrameProvider(), so the
-    // wiring stays correct across chart switches without manual
-    // re-publishing.
+    // No connection to listen to — the snapshot build path reads the
+    // current QVideoFrame from PreviewRuntime each tick (delivered
+    // there by the host's QVideoSink), so wiring stays correct across
+    // chart switches without manual re-publishing.
 }
 
 void PreviewDCompSurface::detach()

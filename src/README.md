@@ -44,9 +44,10 @@ src/
       PreviewScene*.*
       PreviewSkinSelectors.*
       PreviewTrackShared.*
-    video/                   # libmpv probe (Phase 0); MpvVideoSource
-                             # (Phase 4); shared render settings.
-      MpvProbe.*
+    video/                   # Shared render settings for the preview
+                             # video pipeline. Actual playback uses
+                             # Qt6Multimedia (QMediaPlayer + QVideoSink)
+                             # via PreviewStageMediaHost.
       PreviewRenderSettings.h
 
   editor/                    # In-app text editor for chart files
@@ -96,7 +97,9 @@ src/
   building. No QSG / D3D11 dependencies.
 - `core/chart/` owns simai parsing, transforms, normalisation. No
   scene / runtime dependencies.
-- `core/video/` owns libmpv-related code and shared render settings.
+- `core/video/` owns shared render settings for the video pipeline.
+  Actual playback lives in `preview/runtime/PreviewStageMediaHost`
+  (Qt6Multimedia QMediaPlayer + QVideoSink).
 - `audio/` owns audio backends; nothing else may link BASS or
   miniaudio directly.
 - `render/` owns the D3D11 / DirectComposition rendering pipeline.

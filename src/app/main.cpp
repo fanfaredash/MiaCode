@@ -8,7 +8,6 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/WaveformCache.h"
-#include "core/video/MpvProbe.h"
 
 #include <QApplication>
 #include <QCommandLineOption>
@@ -818,10 +817,10 @@ int main(int argc, char* argv[])
         miacode::debug_log::initializeStartupTimingLogSession();
     }
 
-    // v2-refactor Phase 0 — confirm libmpv is loaded and log its API
-    // version. No functional change; Phase 4 builds the actual video
-    // source on top of this.
-    miacode::preview::video::probeLibmpvAtStartup();
+    // (libmpv probe removed in beta20 — the "Phase 4 video source built on
+    // top of this" never landed; chart-preview video backgrounds use Qt's
+    // QMediaPlayer + QVideoSink stack via PreviewStageMediaHost. Shipping
+    // libmpv-2.dll cost ~113 MB to log a single startup version line.)
 
     const bool qsgFullDisable = miacode::debug_options::previewQsgFullDisableEnabled();
     const bool forceBasicRenderLoop = qsgFullDisable

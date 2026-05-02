@@ -382,21 +382,10 @@ foreach ($runtimeDll in $requiredBassRuntimeDlls) {
     Copy-Item $srcDll (Join-Path $DistDir $runtimeDll) -Force
 }
 
-# v2-refactor Phase 0: libmpv runtime. Phase 4 will exercise the
-# render API; until then it's only used by the startup probe in
-# main.cpp, but the DLL must always ship because the .lib import
-# library statically references it.
-$mpvRuntimeDir = Join-Path $repoRoot "third_party\\mpv\\bin\\win64"
-$requiredMpvRuntimeDlls = @(
-    "libmpv-2.dll"
-)
-foreach ($runtimeDll in $requiredMpvRuntimeDlls) {
-    $srcDll = Join-Path $mpvRuntimeDir $runtimeDll
-    if (!(Test-Path $srcDll)) {
-        throw "Missing required libmpv runtime DLL: $srcDll"
-    }
-    Copy-Item $srcDll (Join-Path $DistDir $runtimeDll) -Force
-}
+# (libmpv removed in beta20 — chart-preview video backgrounds use
+# Qt6Multimedia's QMediaPlayer + QVideoSink stack via PreviewStageMediaHost,
+# not the planned MpvVideoSource that never landed. libmpv-2.dll was 113 MB
+# of dead weight just to log a startup probe version line.)
 
 if ($IncludeDevTools) {
     foreach ($toolName in @("simai_native_dump.exe")) {
@@ -488,7 +477,6 @@ $releaseLines = @(
     "  - Start_MiaCode_Legacy_QML.bat"
     "  - Qt runtime DLLs, plugin folders, and QML modules"
     "  - BASS runtime DLLs (bass, bassmix, bass_fx, bass_aac, bassopus)"
-    "  - libmpv-2.dll (chart preview video background + startup probe)"
     "  - dxcompiler.dll, dxil.dll (D3D shader compilation runtime)"
     "  - ffmpeg/ffmpeg.exe"
     "  - assets/"
@@ -539,7 +527,6 @@ $requiredPackagePaths = @(
     "bass_fx.dll",
     "bass_aac.dll",
     "bassopus.dll",
-    "libmpv-2.dll",
     "platforms\\qwindows.dll",
     "qml\\QtQuick\\qtquick2plugin.dll",
     "qml\\QtQuick\\Controls\\qtquickcontrols2plugin.dll",
@@ -554,6 +541,7 @@ $unexpectedPackagePaths = @(
     "Start_MiaCode_Debug_Widget.bat",
     "Start_MiaCode_QuickShell_Debug.bat",
     "logs\\quick-shell-beta",
+    "libmpv-2.dll",
     "soundtouch_probe.exe",
     (Get-QtRuntimeDllName -BaseName "Qt6OpenGLWidgets" -Config $Config),
     (Get-QtRuntimeDllName -BaseName "Qt6Concurrent" -Config $Config),

@@ -444,7 +444,6 @@ target_link_libraries(MiaCode PRIVATE
 target_include_directories(MiaCode PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/generated
     third_party/bass/include
-    third_party/mpv/include
     src
     src/app
     src/app/quick_shell
@@ -466,8 +465,6 @@ target_include_directories(MiaCode PRIVATE
 
 target_sources(MiaCode PRIVATE
     src/common/PreviewAudioMixConfig.h
-    src/core/video/MpvProbe.cpp
-    src/core/video/MpvProbe.h
     src/tools/video_export/VideoExportAudioRenderPlan.h
     src/tools/video_export/VideoExportAudioRenderPlan.cpp
     src/tools/video_export/VideoExportAudioBackend.h
@@ -481,7 +478,6 @@ if (WIN32)
     target_link_libraries(MiaCode PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bass.lib"
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/lib/win64/bassmix.lib"
-        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/mpv/lib/win64/libmpv-2.lib"
         winmm
         avrt  # Multimedia Class Scheduler Service (AvSetMmThreadCharacteristicsW)
         d3d11        # DComp preview path (src/render/backend_d3d11) — see docs plan §3 Phase 1
@@ -496,7 +492,6 @@ if (WIN32)
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_fx.dll"
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bass_aac.dll"
             "${CMAKE_CURRENT_SOURCE_DIR}/third_party/bass/bin/win64/bassopus.dll"
-            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/mpv/bin/win64/libmpv-2.dll"
             $<TARGET_FILE_DIR:MiaCode>
     )
 endif()
