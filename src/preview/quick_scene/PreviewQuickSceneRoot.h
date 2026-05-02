@@ -26,8 +26,8 @@
 #include "preview/quick_scene/PreviewQuickTouchHoldLayer.h"
 #include "preview/quick_scene/PreviewQuickTouchLayer.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
-#include "preview/scene/PreviewPreparedSceneCache.h"
-#include "preview/scene/PreviewLayerOrder.h"
+#include "core/scene/PreviewPreparedSceneCache.h"
+#include "core/scene/PreviewLayerOrder.h"
 
 class PreviewRuntime;
 namespace miacode::preview::scene {
@@ -38,6 +38,14 @@ class PreviewQuickSceneRoot : public QQuickItem
 {
     Q_OBJECT
     Q_PROPERTY(QObject* runtime READ runtimeObject WRITE setRuntimeObject NOTIFY runtimeChanged)
+    // Issue #4 fix — when true, skip the DComp-exclusive short-circuit
+    // and render via the legacy QSG path even if DComp is enabled
+    // globally. Set by QML for the fullscreen QuickShellPreviewSurface
+    // instance, where DComp can't reach (popup HWND is owned by the
+    // editor, not the fullscreen window — z-ordering hides the popup
+    // behind the fullscreen window). Defaults to false (DComp wins).
+    Q_PROPERTY(bool dcompFallbackActive READ dcompFallbackActive
+               WRITE setDCompFallbackActive NOTIFY dcompFallbackActiveChanged)
 
 public:
     explicit PreviewQuickSceneRoot(QQuickItem* parent = nullptr);
@@ -48,11 +56,15 @@ public:
     void setRuntimeObject(QObject* runtimeObject);
     void setFrameState(const miacode::preview::scene::PreviewFrameState* frameState);
     void setLayerFlags(miacode::preview::scene::PreviewRenderLayerFlags layerFlags);
+
+    bool dcompFallbackActive() const { return dcompFallbackActive_; }
+    void setDCompFallbackActive(bool active);
     void invalidateTextureCache();
     PreviewTextureStats textureStats() const;
 
 signals:
     void runtimeChanged();
+    void dcompFallbackActiveChanged();
 
 protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* updatePaintNodeData) override;
@@ -82,6 +94,8 @@ private:
     const miacode::preview::scene::PreviewFrameState* frameState_ = nullptr;
     miacode::preview::scene::PreviewRenderLayerFlags layerFlags_ =
         miacode::preview::scene::kPreviewAllRenderLayers;
+    // Issue #4 fix — when set, render via legacy QSG even with DComp on.
+    bool dcompFallbackActive_ = false;
     QVector<PreviewTextureLayerStats> layerProfileStats_;
     PreviewTextureRepository textures_;
     PreviewQuickStageBackgroundLayer stageBackgroundLayer_;

@@ -106,8 +106,16 @@ QSGNode* TimelineQuickWaveformLayer::updateNode(
         return root;
     }
     clearChildren(contentRoot);
-    for (const auto& rect : state.waveformBars) {
-        contentRoot->appendChildNode(buildTimelineRectNode(rect));
+    // Phase-4e-old-opt — waveform bars are typically all the same
+    // colour (theme's audio-track tint), so this collapses to ONE
+    // QSGGeometryNode regardless of how many bars are emitted. With
+    // long songs at high zoom this can be 10k+ rectangles otherwise.
+    {
+        TimelineQuickFlatColorBatchBuilder waveformBatch(contentRoot);
+        for (const auto& rect : state.waveformBars) {
+            waveformBatch.appendRect(rect.color, rect.rect);
+        }
+        waveformBatch.flush();
     }
     root->revision = state.waveformRevision;
     root->appearanceRevision = state.appearanceRevision;

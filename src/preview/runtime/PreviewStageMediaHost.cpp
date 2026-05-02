@@ -2,6 +2,7 @@
 
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
+#include "common/DebugOptions.h"
 
 #ifdef HAVE_QT_MULTIMEDIA
 #include <QAudioOutput>
@@ -329,7 +330,38 @@ void PreviewStageMediaHost::setMediaVisible(bool visible)
         return;
     }
     mediaVisible_ = visible;
+    // Phase 4c-9 — invalidate the toImage() throttle so the first
+    // QVideoSink frame after a visibility-on transition is captured
+    // immediately (bg shouldn't ghost between hide→show with stale
+    // content, especially at scrub time). Only used by the legacy
+    // CPU detour; ignored under per-pixel alpha mode.
+    if (visible) {
+        videoFrameToImageThrottle_.invalidate();
+    }
     emit mediaVisibilityChanged();
+}
+
+QImage PreviewStageMediaHost::currentBackgroundImage() const
+{
+    // Phase 4d — when per-pixel alpha is enabled the DComp HWND is
+    // transparent at the OS level, so QML's PreviewStageMediaItem
+    // (Image/VideoOutput) below shows through natively. The CPU
+    // detour (StageBackgroundSource painting the bg) is no longer
+    // needed and should be skipped to avoid duplicate paint cost.
+    if (miacode::debug_options::previewDCompPerPixelAlphaEnabled()) {
+        return QImage();
+    }
+    // Phase 4c-8 (image) + 4c-9 (video) — return the cached bg image
+    // for both kinds. For Image: loadImageMedia() seeds it once at
+    // chart-load. For Video: noteVideoFrameArrived() converts each
+    // QVideoFrame to a QImage and updates it as new frames flow in.
+    // The DComp surface reads this every snapshot tick; image-mode
+    // returns the same content frame-to-frame (cheap), video-mode
+    // returns the latest decoded frame.
+    if (mediaKind_ != MediaKind::Image && mediaKind_ != MediaKind::Video) {
+        return QImage();
+    }
+    return loadedBackgroundImage_;
 }
 
 QUrl PreviewStageMediaHost::imageSource() const
@@ -360,21 +392,39 @@ void PreviewStageMediaHost::setBackgroundScaleMode(PreviewBackgroundScaleMode mo
     emit backgroundScaleModeChanged();
 }
 
-void PreviewStageMediaHost::setChartPath(const QString& chartPath)
+void PreviewStageMediaHost::setChartPath(const QString& chartPath,
+                                         const QString& chartVideoOverridePath)
 {
     const QString normalizedChartPath = normalizedLocalPath(chartPath);
-    if (normalizedChartPath == chartPath_) {
+    // Phase 4c — keys cache on (chart-path, video-override) jointly.
+    // The user might re-select the same chart after editing &video=,
+    // so chart-path equality alone isn't sufficient to skip the
+    // refresh.
+    if (normalizedChartPath == chartPath_
+        && chartVideoOverridePath == chartVideoOverridePath_) {
         return;
     }
 
     chartPath_ = normalizedChartPath;
+    chartVideoOverridePath_ = chartVideoOverridePath;
     clearMedia();
     if (chartPath_.isEmpty()) {
         appendPreviewStageMediaLog(QStringLiteral("set_chart_path"), QStringLiteral("chart=(empty) kind=none"));
         return;
     }
 
-    const QString resolvedPath = resolveMediaPath(chartPath_);
+    // Phase 4c — unified resolution: explicit `&video=` override
+    // beats the sibling-filename heuristic. Falls back to the legacy
+    // `resolveMediaPath` path when no override is given AND no
+    // sibling video exists, so still-image charts keep working.
+    QString resolvedPath = miacode::chart_assets::resolveChartVideoPath(
+        chartPath_, chartVideoOverridePath_);
+    if (resolvedPath.isEmpty()) {
+        // No video override AND no sibling video → fall through to
+        // the legacy media-resolver, which also picks up image-only
+        // backgrounds (bg.jpg / bg.png).
+        resolvedPath = resolveMediaPath(chartPath_);
+    }
     if (resolvedPath.isEmpty()) {
         appendPreviewStageMediaLog(
             QStringLiteral("set_chart_path"),
@@ -384,8 +434,8 @@ void PreviewStageMediaHost::setChartPath(const QString& chartPath)
     }
 
     mediaPath_ = resolvedPath;
-    const QString suffix = QFileInfo(mediaPath_).suffix().trimmed().toLower();
-    if (suffix == QStringLiteral("mp4")) {
+    const bool isVideo = miacode::chart_assets::isVideoBackgroundPath(mediaPath_);
+    if (isVideo) {
         loadVideoMedia(mediaPath_);
     } else {
         loadImageMedia(mediaPath_);
@@ -393,10 +443,13 @@ void PreviewStageMediaHost::setChartPath(const QString& chartPath)
 
     appendPreviewStageMediaLog(
         QStringLiteral("set_chart_path"),
-        QStringLiteral("chart=%1 media=%2 kind=%3")
+        QStringLiteral("chart=%1 media=%2 kind=%3 override=%4")
             .arg(chartPath_)
             .arg(mediaPath_)
             .arg(debugMediaTypeName())
+            .arg(chartVideoOverridePath_.isEmpty()
+                    ? QStringLiteral("(none)")
+                    : chartVideoOverridePath_)
     );
 }
 
@@ -601,12 +654,13 @@ void PreviewStageMediaHost::setTimelineOffsetSeconds(double seconds)
 
 void PreviewStageMediaHost::setPlayheadSeconds(double seconds)
 {
-#ifndef HAVE_QT_MULTIMEDIA
-    Q_UNUSED(seconds);
-#else
     const double clampedSecond = qMax(0.0, seconds);
     observedPlayheadSecond_ = clampedSecond;
     updateClockDelta();
+
+#ifndef HAVE_QT_MULTIMEDIA
+    Q_UNUSED(seconds);
+#else
     if (mediaKind_ != MediaKind::Video || player_ == nullptr) {
         emit diagnosticsChanged();
         return;
@@ -832,10 +886,10 @@ void PreviewStageMediaHost::syncPlayback(double seconds)
 
 void PreviewStageMediaHost::pausePlayback()
 {
+    observedPlayheadSecond_ = currentPlaybackSecond();
 #ifndef HAVE_QT_MULTIMEDIA
     return;
 #else
-    observedPlayheadSecond_ = currentPlaybackSecond();
     if (mediaKind_ == MediaKind::Video && player_ != nullptr) {
         player_->pause();
     }
@@ -963,6 +1017,10 @@ void PreviewStageMediaHost::clearMedia()
         player_->setSource(QUrl());
     }
 #endif
+    // Phase 4c-8 — clear the cached image so a chart switch from
+    // image→video doesn't leave the old image visible behind the
+    // new video.
+    loadedBackgroundImage_ = QImage();
     ++videoSourceGeneration_;
     mediaKind_ = MediaKind::None;
     pausedSeekCompletionPending_ = false;
@@ -1007,6 +1065,17 @@ QString PreviewStageMediaHost::resolveMediaPath(const QString& chartPath) const
 void PreviewStageMediaHost::loadImageMedia(const QString& path)
 {
     imageSource_ = QUrl::fromLocalFile(path);
+    // Phase 4c-8 — also load the QImage so DComp's StageBackgroundSource
+    // can render it. The QML PreviewStageMediaItem still binds to
+    // imageSource_ but is occluded by the DComp HWND on top; the DComp
+    // surface needs its own copy to actually paint the bg in the
+    // chart-preview area.
+    loadedBackgroundImage_ = QImage(path);
+    if (loadedBackgroundImage_.isNull()) {
+        appendPreviewStageMediaLog(
+            QStringLiteral("load_image_failed"),
+            QStringLiteral("path=%1").arg(path));
+    }
     mediaKind_ = MediaKind::Image;
     ++videoSourceGeneration_;
     pausedSeekCompletionPending_ = false;
@@ -1044,6 +1113,15 @@ void PreviewStageMediaHost::loadVideoMedia(const QString& path)
     }
 
     imageSource_ = QUrl();
+    // Phase 4c-9 — clear stale image bg from a prior chart so the
+    // DComp surface paints nothing until the first decoded video
+    // frame arrives via noteVideoFrameArrived(). Also invalidate
+    // the toImage() throttle so the very first frame after this
+    // chart switch is captured immediately (otherwise a recently-
+    // armed throttle from the previous chart could delay it up to
+    // 33ms on top of the QMediaPlayer prepare latency).
+    loadedBackgroundImage_ = QImage();
+    videoFrameToImageThrottle_.invalidate();
     mediaKind_ = MediaKind::Video;
     pausedSeekCompletionPending_ = false;
     pausedSeekTargetMs_ = -1;
@@ -1433,6 +1511,42 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame, quin
     }
     if (!frame.isValid()) {
         return;
+    }
+    // Phase 4c-9 — convert the QVideoFrame to a QImage and stash it
+    // for DComp's StageBackgroundSource. The QML VideoOutput
+    // underneath the DComp HWND is occluded (WS_EX_LAYERED + LWA_ALPHA
+    // is opaque per-window), so DComp has to paint the frame itself.
+    // QVideoFrame::toImage() is GUI-thread safe (this slot runs on
+    // GUI via the queued `videoFrameChanged` connection).
+    //
+    // Cost-mitigation gates (added because user reported the HUD's
+    // stutter counter climbing to ~20 with video bg vs <5 with image):
+    //   1. Skip when not visible — `mediaVisible_` gates the user's
+    //      "Hide PV/BG while paused" setting; no point converting if
+    //      the user has chosen to hide the bg.
+    //   2. Throttle to ~30Hz max (33ms gap). For 30fps source video
+    //      this means we capture roughly every other emission on
+    //      avg; the rendered bg updates at ~15Hz, which is still
+    //      visually fluid for a background and halves GUI thread
+    //      cost. We always capture the FIRST frame after a
+    //      visibility transition / chart switch (throttle not yet
+    //      armed), so user actions don't get a stale frame.
+    constexpr qint64 kVideoFrameToImageThrottleMs = 33;
+    const bool throttledOut =
+        videoFrameToImageThrottle_.isValid()
+        && videoFrameToImageThrottle_.elapsed() < kVideoFrameToImageThrottleMs;
+    // Phase 4d — when per-pixel alpha is on, QML's VideoOutput renders
+    // the video natively (GPU-direct via QRhi), no CPU detour needed.
+    // Skip the toImage() conversion entirely — that's the whole point
+    // of per-pixel alpha: zero CPU cost for video bg.
+    const bool skipForPerPixelAlpha =
+        miacode::debug_options::previewDCompPerPixelAlphaEnabled();
+    if (mediaVisible_ && !throttledOut && !skipForPerPixelAlpha) {
+        QImage decodedImage = frame.toImage();
+        if (!decodedImage.isNull()) {
+            loadedBackgroundImage_ = std::move(decodedImage);
+            videoFrameToImageThrottle_.restart();
+        }
     }
     const bool firstFrameForSource = videoFrameCountTotal_ == 0;
     if (videoFrameElapsed_.isValid()) {

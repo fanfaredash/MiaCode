@@ -1,8 +1,8 @@
 #include "preview/quick_scene/PreviewQuickMuriPadLayer.h"
 
 #include "preview/quick_scene/PreviewQuickCircleNodes.h"
-#include "preview/scene/PreviewMuriPadLayerState.h"
-#include "preview/scene/PreviewSceneGeometry.h"
+#include "core/scene/PreviewMuriPadLayerState.h"
+#include "core/scene/PreviewSceneGeometry.h"
 
 QSGNode* PreviewQuickMuriPadLayer::updateNode(
     QSGNode* oldNode,

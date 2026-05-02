@@ -5,7 +5,7 @@
 #include <QString>
 #include <QVector>
 
-#include "simai/document/SimaiTimingMetadata.h"
+#include "core/chart/document/SimaiTimingMetadata.h"
 #include "timeline/TimelineRenderData.h"
 
 class QTextDocument;

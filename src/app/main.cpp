@@ -4,9 +4,11 @@
 #include "tools/video_export/VideoExportSnapshot.h"
 #include "UiText.h"
 #include "UiTheme.h"
+#include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 #include "common/WaveformCache.h"
+#include "core/video/MpvProbe.h"
 
 #include <QApplication>
 #include <QCommandLineOption>
@@ -793,6 +795,13 @@ int runCliVideoExportWorker(QApplication& app, QString* errorMessage)
 
 int main(int argc, char* argv[])
 {
+    // Install crash-time autosave handlers BEFORE anything else can fail.
+    // This way an early-startup segfault (e.g. graphics driver bug during
+    // QApplication construction) still gets a chance to flush the
+    // last-known document text — though in practice early crashes happen
+    // before any document is loaded so the snapshot is empty / safe.
+    miacode::crash_recovery::install();
+
     QStringList rawArgs;
     rawArgs.reserve(argc);
     for (int index = 0; index < argc; ++index) {
@@ -809,9 +818,16 @@ int main(int argc, char* argv[])
         miacode::debug_log::initializeStartupTimingLogSession();
     }
 
-    const bool forceBasicRenderLoop = miacode::debug_options::envFlagEnabled(
-        "MIACODE_PREVIEW_FORCE_BASIC_RENDER_LOOP"
-    );
+    // v2-refactor Phase 0 — confirm libmpv is loaded and log its API
+    // version. No functional change; Phase 4 builds the actual video
+    // source on top of this.
+    miacode::preview::video::probeLibmpvAtStartup();
+
+    const bool qsgFullDisable = miacode::debug_options::previewQsgFullDisableEnabled();
+    const bool forceBasicRenderLoop = qsgFullDisable
+        || miacode::debug_options::envFlagEnabled(
+            "MIACODE_PREVIEW_FORCE_BASIC_RENDER_LOOP"
+        );
     const bool disableDontCreateNativeWidgetSiblings = miacode::debug_options::envFlagEnabled(
         "MIACODE_PREVIEW_DISABLE_DONT_CREATE_NATIVE_WIDGET_SIBLINGS"
     );
@@ -868,11 +884,12 @@ int main(int argc, char* argv[])
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("startup/qt_config"),
             QString(
-                "force_basic_render_loop=%1 qsg_render_loop=%2 "
+                "qsg_full_disable=%1 force_basic_render_loop=%2 qsg_render_loop=%3 "
                 "dont_create_native_widget_siblings_default=1 "
-                "disable_dont_create_native_widget_siblings=%3 "
-                "effective_dont_create_native_widget_siblings=%4"
+                "disable_dont_create_native_widget_siblings=%4 "
+                "effective_dont_create_native_widget_siblings=%5"
             )
+                .arg(qsgFullDisable ? 1 : 0)
                 .arg(forceBasicRenderLoop ? 1 : 0)
                 .arg(qEnvironmentVariable("QSG_RENDER_LOOP").trimmed().isEmpty()
                          ? QStringLiteral("(default)")
@@ -917,6 +934,13 @@ int main(int argc, char* argv[])
         QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
         appliedGraphicsBackend = QStringLiteral("opengl");
         graphicsBackendSource = QStringLiteral("cli_video_export_force");
+    } else if (qsgFullDisable) {
+        // Diagnostic mode: completely exclude Qt Quick's native render
+        // path. Force software backend regardless of CLI / persisted
+        // setting; do NOT persist, so a normal next launch reverts.
+        appliedGraphicsBackend =
+            applyGraphicsBackendChoice(QStringLiteral("software"));
+        graphicsBackendSource = QStringLiteral("qsg_full_disable_forced");
     } else {
         const GraphicsBackendChoice choice = resolveGraphicsBackendChoice(rawArgs);
         if (choice.fromCommandLine) {
@@ -998,8 +1022,26 @@ int main(int argc, char* argv[])
         return exitCode;
     }
 
+    // Phase 3a of the v2-refactor — `--quick-shell-beta` becomes the
+    // canonical opt-in for the new DComp pipeline. Setting the env vars
+    // here (before any code that reads them via envFlagEnabled) makes
+    // the flag self-contained: users running with --quick-shell-beta no
+    // longer need to also set MIACODE_PREVIEW_USE_DCOMP=1 in their
+    // shell, and the same release build covers both legacy QSG and
+    // DComp paths via this single argv check.
+    //
+    // We use qputenv(..., "1") only when the env var is currently
+    // *unset*, so an explicit MIACODE_PREVIEW_DCOMP_TOPLEVEL_HWND=0 in
+    // the launching shell still wins (lets the user A/B without
+    // rebuilding). previewUseDCompEnabled defers to envFlagEnabled
+    // which checks the live env on every call, so setting it here is
+    // sufficient.
     const bool quickShellBetaRequested = wantsQuickShellBeta(app.arguments());
-    Q_UNUSED(quickShellBetaRequested);
+    if (quickShellBetaRequested) {
+        if (qEnvironmentVariableIsEmpty("MIACODE_PREVIEW_USE_DCOMP")) {
+            qputenv("MIACODE_PREVIEW_USE_DCOMP", QByteArrayLiteral("1"));
+        }
+    }
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     QElapsedTimer appExecElapsed;

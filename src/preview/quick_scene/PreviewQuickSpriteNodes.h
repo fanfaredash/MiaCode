@@ -1,6 +1,6 @@
 #pragma once
 
-#include "preview/scene/PreviewSpriteDescriptor.h"
+#include "core/scene/PreviewSpriteDescriptor.h"
 
 class QQuickWindow;
 class QSGNode;

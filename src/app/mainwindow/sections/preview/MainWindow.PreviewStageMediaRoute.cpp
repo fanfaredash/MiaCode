@@ -17,9 +17,9 @@
 #include "common/DebugLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
-#include "preview/scene/PreviewProgressStatsCache.h"
-#include "simai/transform/ChartBatchTransform.h"
-#include "simai/transform/ChartNormalization.h"
+#include "core/scene/PreviewProgressStatsCache.h"
+#include "core/chart/transform/ChartBatchTransform.h"
+#include "core/chart/transform/ChartNormalization.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
 #include "tools/muri/MuriStaticChecker.h"
@@ -115,7 +115,11 @@ void MainWindow::PreviewSection::scheduleDeferredQuickShellStartupStageMediaLoad
         }
 
         state_.deferredQuickShellStartupStageMediaPending_ = false;
-        state_.previewStageMediaHost_->setChartPath(state_.deferredQuickShellStartupStageMediaChartPath_);
+        // Phase 4c — use the cached override threaded through the
+        // deferred-load path (set in syncPreviewStageMediaRouteChartPath).
+        state_.previewStageMediaHost_->setChartPath(
+            state_.deferredQuickShellStartupStageMediaChartPath_,
+            state_.deferredQuickShellStartupStageMediaVideoOverride_);
         state_.previewStageMediaHost_->setPlayheadSeconds(state_.deferredQuickShellStartupStageMediaPausedSecond_);
         refreshPreviewStageMediaRouteDebugState(false);
     });
@@ -140,8 +144,10 @@ void MainWindow::PreviewSection::ensurePreviewStageMediaRouteInitialized()
 void MainWindow::PreviewSection::syncPreviewStageMediaRouteChartPath(
     const QString& chartPath,
     const QString& trackPath,
-    double pausedSecond)
+    double pausedSecond,
+    const QString& chartVideoOverridePath)
 {
+    Q_UNUSED(trackPath);
     const double clampedPausedSecond = qMax(0.0, pausedSecond);
     updatePreviewStageMediaPresentationMode(false);
 
@@ -149,9 +155,13 @@ void MainWindow::PreviewSection::syncPreviewStageMediaRouteChartPath(
     state_.deferredQuickShellStartupStageMediaChartPath_ = chartPath;
     state_.deferredQuickShellStartupStageMediaPausedSecond_ = clampedPausedSecond;
     state_.deferredQuickShellStartupStageMediaPending_ = true;
+    // Phase 4c — cache the override on the section so the
+    // deferred-load completion in onPreviewStageMediaDeferredLoadReady
+    // (around line 113) can apply it when the actual setChartPath fires.
+    state_.deferredQuickShellStartupStageMediaVideoOverride_ = chartVideoOverridePath;
     if (!shouldDeferQuickShellStartupStageMediaLoad()) {
         state_.deferredQuickShellStartupStageMediaPending_ = false;
-        state_.previewStageMediaHost_->setChartPath(chartPath);
+        state_.previewStageMediaHost_->setChartPath(chartPath, chartVideoOverridePath);
         state_.previewStageMediaHost_->setPlayheadSeconds(clampedPausedSecond);
     }
 
@@ -375,14 +385,23 @@ void MainWindow::PreviewSection::ensurePreviewStageMediaHostInitialized()
     connect(state_.previewStageMediaHost_, &PreviewStageMediaHost::diagnosticsChanged, &owner_, [this]() {
         refreshPreviewStageMediaRouteDebugState(!state_.qtPreviewPlaying_);
     });
+    // Phase 4c — let the bootstrap wire this host into the
+    // PreviewDCompSurface so MpvVideoSource can find the libmpv
+    // provider via ctx.mpvFrameProvider on every snapshot build.
+    emit owner_.previewStageMediaHostInitialized(state_.previewStageMediaHost_);
     ensureQuickShellPreviewCompositeSurfaceInitialized();
     state_.previewStageMediaHost_->setWarmupResolvedMediaPath(state_.previewMediaWarmupChartPath_, state_.previewMediaWarmupResolvedPath_);
     state_.deferredQuickShellStartupStageMediaChartPath_ = state_.currentFilePath_;
+    // Phase 4c — pick up the &video= override from the parsed document
+    // so the lazy host-init path (this code) honours it on first load.
+    state_.deferredQuickShellStartupStageMediaVideoOverride_ = state_.document_.videoPath;
     state_.deferredQuickShellStartupStageMediaPausedSecond_ = qMax(0.0, state_.qtPreviewPauseSecond_);
     state_.deferredQuickShellStartupStageMediaPending_ = !state_.currentFilePath_.isEmpty();
     if (!shouldDeferQuickShellStartupStageMediaLoad()) {
         state_.deferredQuickShellStartupStageMediaPending_ = false;
-        state_.previewStageMediaHost_->setChartPath(state_.currentFilePath_);
+        state_.previewStageMediaHost_->setChartPath(
+            state_.currentFilePath_,
+            state_.deferredQuickShellStartupStageMediaVideoOverride_);
         state_.previewStageMediaHost_->setPlayheadSeconds(state_.qtPreviewPauseSecond_);
     }
     refreshQuickShellPreviewCompositeSurfaceState();
@@ -516,9 +535,17 @@ void MainWindow::ensurePreviewStageMediaRouteInitialized()
     previewSection_->ensurePreviewStageMediaRouteInitialized();
 }
 
-void MainWindow::syncPreviewStageMediaRouteChartPath(const QString& chartPath, const QString& trackPath, double pausedSecond)
+PreviewStageMediaHost* MainWindow::previewStageMediaHost() const
 {
-    previewSection_->syncPreviewStageMediaRouteChartPath(chartPath, trackPath, pausedSecond);
+    // Phase 4c — non-owning. Returns nullptr until the host has been
+    // lazily created (first chart-load triggers it inside
+    // PreviewSection::ensurePreviewStageMediaHostInitialized).
+    return state_.previewStageMediaHost_;
+}
+
+void MainWindow::syncPreviewStageMediaRouteChartPath(const QString& chartPath, const QString& trackPath, double pausedSecond, const QString& chartVideoOverridePath)
+{
+    previewSection_->syncPreviewStageMediaRouteChartPath(chartPath, trackPath, pausedSecond, chartVideoOverridePath);
 }
 
 void MainWindow::clearPreviewStageMediaRoute()

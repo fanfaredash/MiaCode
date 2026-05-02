@@ -682,14 +682,55 @@ QVector<MuriStaticReference> buildStaticMuriReferences(
         candidate.holdLike = isHoldLikeMarker(note);
         overlapCandidates.append(candidate);
     }
-    for (const StaticHeadStarTarget& target : headStarTargets) {
-        if (target.pad.isEmpty()) {
+    // Slide head-star overlap candidates.
+    //
+    // Bug fix: previously this loop iterated `headStarTargets`, which
+    // deduplicates same-head-slide pairs (`5-1[8:1]/5-2[8:1]`) into a
+    // single judge target via the `same_head_star_note|...` emit key
+    // in headStarJudgeEmitKey. That dedup is correct for visual judge
+    // representation (one rendered double-star → one judge target),
+    // but it silently hid the head-star *collision* between the two
+    // slides — so the symmetry the user expects between
+    //   `5/5`            (tap+tap)        → Overlap fires ✓
+    //   `5/5-1[8:1]`     (tap+slideHead)  → Overlap fires ✓
+    //   `5-1/5-2[8:1]`   (slideHead+slideHead) → Overlap should fire
+    // was broken on the third case. Iterate noteMarkers directly here
+    // so each slide head contributes its own candidate. The pairwise
+    // overlap loop below then sees both heads and fires Overlap.
+    QSet<QString> emittedOverlapHeadKeys;
+    for (const TimelineNoteMarker& marker : noteMarkers) {
+        if (!shouldCreateHeadStarTarget(marker)) {
             continue;
         }
-
+        const QString pad = lanePadToken(marker.lane);
+        if (pad.isEmpty()) {
+            continue;
+        }
+        // Dedup key: sourceLine + sourceCol + lane + second uniquely
+        // identifies one user-typed chart cell. Critically, parseOrder
+        // is OMITTED — when the user writes the explicit same-head
+        // chain operator `*` (e.g. `5-1[8:1]*-2[8:1]`), the parser
+        // emits multiple slide markers that share sourceLine+sourceCol
+        // (both paths emanate from the same `5` token) but have
+        // distinct parseOrders. Including parseOrder would treat them
+        // as separate overlap candidates and fire a false-positive
+        // Overlap on intentionally-stacked paths. The `/` synchronous-
+        // group separator (`5-1[8:1]/5-2[8:1]`), by contrast, gives
+        // each slide its own `5` token at a different sourceCol, so
+        // they survive dedup as two distinct candidates and Overlap
+        // correctly fires.
+        const QString key = QStringLiteral("overlap_head|%1|%2|%3|%4")
+                                .arg(marker.sourceLine)
+                                .arg(marker.sourceCol)
+                                .arg(marker.lane)
+                                .arg(marker.second, 0, 'f', 6);
+        if (emittedOverlapHeadKeys.contains(key)) {
+            continue;
+        }
+        emittedOverlapHeadKeys.insert(key);
         StaticOverlapCandidate candidate;
-        candidate.note = target.note;
-        candidate.pad = target.pad;
+        candidate.note = staticReferenceNoteFromHeadStar(marker);
+        candidate.pad = pad;
         candidate.tapLike = true;
         overlapCandidates.append(candidate);
     }

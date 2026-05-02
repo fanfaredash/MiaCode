@@ -359,6 +359,22 @@ foreach ($runtimeDll in $requiredBassRuntimeDlls) {
     Copy-Item $srcDll (Join-Path $DistDir $runtimeDll) -Force
 }
 
+# v2-refactor Phase 0: libmpv runtime. Phase 4 will exercise the
+# render API; until then it's only used by the startup probe in
+# main.cpp, but the DLL must always ship because the .lib import
+# library statically references it.
+$mpvRuntimeDir = Join-Path $repoRoot "third_party\\mpv\\bin\\win64"
+$requiredMpvRuntimeDlls = @(
+    "libmpv-2.dll"
+)
+foreach ($runtimeDll in $requiredMpvRuntimeDlls) {
+    $srcDll = Join-Path $mpvRuntimeDir $runtimeDll
+    if (!(Test-Path $srcDll)) {
+        throw "Missing required libmpv runtime DLL: $srcDll"
+    }
+    Copy-Item $srcDll (Join-Path $DistDir $runtimeDll) -Force
+}
+
 if ($IncludeDevTools) {
     foreach ($toolName in @("simai_native_dump.exe")) {
         $toolPath = Join-Path $buildOutputDir $toolName
@@ -448,6 +464,7 @@ $releaseLines = @(
     "  - Start_MiaCode_QuickShell_Debug.bat"
     "  - Qt runtime DLLs, plugin folders, and QML modules"
     "  - BASS runtime DLLs (bass, bassmix, bass_fx, bass_aac, bassopus)"
+    "  - libmpv-2.dll (Phase 0 probe; Phase 4 video background)"
     "  - ffmpeg/ffmpeg.exe"
     "  - assets/"
     "  - docs/"
@@ -496,6 +513,7 @@ $requiredPackagePaths = @(
     "bass_fx.dll",
     "bass_aac.dll",
     "bassopus.dll",
+    "libmpv-2.dll",
     "platforms\\qwindows.dll",
     "qml\\QtQuick\\qtquick2plugin.dll",
     "qml\\QtQml\\Models\\modelsplugin.dll",

@@ -10,6 +10,12 @@ Item {
     property var mediaHost: null
     property var logger: null
     property string surfaceRole: "unknown"
+    // Issue #4 fix — true for the fullscreen instance so the legacy QSG
+    // path inside PreviewQuickSceneRoot / PreviewQuickHudLayer renders
+    // chart content + HUD into the fullscreen window. The DComp popup
+    // HWND can't follow the secondary fullscreen Window — it's owned
+    // by the editor and z-orders behind the fullscreen window.
+    property bool dcompFallbackActive: false
     property var attachedMediaHost: null
     property var attachedVideoOutputObject: null
     readonly property string instanceTag: surfaceRole + ":" + Math.round(Math.random() * 1000000000)
@@ -118,11 +124,13 @@ Item {
         anchors.fill: parent
         z: 1
         runtime: root.runtime
+        dcompFallbackActive: root.dcompFallbackActive
     }
 
     PreviewQuickHudLayer {
         anchors.fill: parent
         z: 2
         runtime: root.runtime
+        dcompFallbackActive: root.dcompFallbackActive
     }
 }

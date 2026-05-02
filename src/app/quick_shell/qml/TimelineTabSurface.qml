@@ -31,6 +31,14 @@ Item {
         return paletteMap && paletteMap[key] !== undefined ? paletteMap[key] : fallback
     }
 
+    // Phase 9d reverted — separating the band visually didn't match
+    // user expectation (buttons + line markers should occupy the
+    // SAME header band, not stack vertically). The proper fix is
+    // either (a) render zoom/follow buttons natively in the DComp
+    // pipeline so they paint on the popup's composition plane, or
+    // (b) host the QML buttons in a separate Window with its own
+    // HWND so DWM can put them above the popup. Both are larger
+    // changes; deferring to a follow-up Phase 9d-native.
     TimelineQuickItem {
         id: timelineItem
 
@@ -99,6 +107,11 @@ Item {
         spacing: 6
         hoverEnabled: true
         text: Math.round(timelineItem.zoomScale * 100) + "%"
+        // Phase 9d-native — invisible to the eye (DComp pipeline
+        // renders the button visually in the popup composition plane)
+        // but still active for input. The DComp popup HWND is
+        // WS_EX_TRANSPARENT so clicks pass through to this QQuickItem.
+        opacity: 0
 
         background: Rectangle {
             radius: 6
@@ -190,6 +203,10 @@ Item {
         spacing: 4
         text: root.isChineseUi() ? "跟随预览" : "Follow Preview"
         checked: timelineItem.followPreviewEnabled
+        // Phase 9d-native — invisible (DComp renders natively in the
+        // popup composition plane) but still receives input. DComp
+        // popup is WS_EX_TRANSPARENT so clicks pass through.
+        opacity: 0
 
         indicator: Rectangle {
             implicitWidth: 14

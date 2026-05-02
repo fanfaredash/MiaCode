@@ -18,9 +18,9 @@
 #include "common/PreviewInteractionConfig.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
-#include "preview/scene/PreviewProgressStatsCache.h"
-#include "simai/transform/ChartBatchTransform.h"
-#include "simai/transform/ChartNormalization.h"
+#include "core/scene/PreviewProgressStatsCache.h"
+#include "core/chart/transform/ChartBatchTransform.h"
+#include "core/chart/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
@@ -464,6 +464,11 @@ QString MainWindow::TimelineSection::previewCanvasFrameRateModeStorageValue() co
     }
 }
 
+MainWindow::PreviewCanvasFrameRateMode MainWindow::currentPreviewCanvasFrameRateMode() const
+{
+    return state_.previewCanvasFrameRateMode_;
+}
+
 double MainWindow::TimelineSection::currentPreviewCanvasRefreshRate() const
 {
     QScreen* targetScreen = owner_.screen();
@@ -731,12 +736,38 @@ void MainWindow::TimelineSection::refreshPreviewFrameRateTimers()
 
 void MainWindow::TimelineSection::setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState)
 {
+    // Issue #3 fix — DComp renderer Present(N, 0) cap. Computes N from
+    // the user's target FPS option vs the display refresh rate. N=1
+    // gives the display rate (the DisplayRefresh option AND any target
+    // ≥ display rate); N=2 halves it (60 FPS on 120 Hz display); etc.
+    // Clamped to [1, 4] — at N=4 we're already at 30 FPS on 120 Hz,
+    // which is plenty.
+    const auto computeSyncInterval = [this](PreviewCanvasFrameRateMode m) -> unsigned int {
+        const double displayHz = currentPreviewCanvasRefreshRate();
+        if (!qIsFinite(displayHz) || displayHz < 1.0) {
+            return 1U;
+        }
+        double targetHz = displayHz;  // DisplayRefresh fall-through
+        if (m == PreviewCanvasFrameRateMode::Fps60) {
+            targetHz = 60.0;
+        } else if (m == PreviewCanvasFrameRateMode::Fps120) {
+            targetHz = 120.0;
+        }
+        const double interval = displayHz / qMax(1.0, targetHz);
+        const int rounded = static_cast<int>(qBound<double>(1.0, qRound(interval), 4.0));
+        return static_cast<unsigned int>(rounded);
+    };
     if (state_.previewCanvasFrameRateMode_ == mode) {
         refreshPreviewFrameRateTimers();
+        // Forward to listeners even on no-op changes; the quick-shell
+        // bootstrap connects this signal lazily and may need the
+        // current value pushed once after attaching its surface.
+        emit owner_.previewCanvasPresentSyncIntervalChanged(computeSyncInterval(mode));
         return;
     }
     state_.previewCanvasFrameRateMode_ = mode;
     refreshPreviewFrameRateTimers();
+    emit owner_.previewCanvasPresentSyncIntervalChanged(computeSyncInterval(mode));
     if (ui_.qtPreviewTimer_ != nullptr) {
         ui_.qtPreviewTimer_->stop();
     }

@@ -6,8 +6,8 @@
 
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
-#include "simai/document/SimaiTimingMetadata.h"
-#include "simai/parser/SimaiNativeParser.h"
+#include "core/chart/document/SimaiTimingMetadata.h"
+#include "core/chart/parser/SimaiNativeParser.h"
 #include "timeline/TimelineData.h"
 
 struct TimelineSlowRefreshRequest {

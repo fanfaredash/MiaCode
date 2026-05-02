@@ -6,7 +6,7 @@
 #include <QQuickPaintedItem>
 #include <QSize>
 
-#include "preview/scene/PreviewLayerOrder.h"
+#include "core/scene/PreviewLayerOrder.h"
 
 class QPainter;
 class PreviewRuntime;
@@ -35,6 +35,11 @@ class PreviewQuickHudLayer : public QQuickPaintedItem
 {
     Q_OBJECT
     Q_PROPERTY(QObject* runtime READ runtimeObject WRITE setRuntimeObject NOTIFY runtimeChanged)
+    // Issue #4 fix — pair to PreviewQuickSceneRoot::dcompFallbackActive.
+    // QML sets this on the fullscreen instance so the HUD renders via
+    // the legacy QQuickPaintedItem path inside the fullscreen window.
+    Q_PROPERTY(bool dcompFallbackActive READ dcompFallbackActive
+               WRITE setDCompFallbackActive NOTIFY dcompFallbackActiveChanged)
 
 public:
     explicit PreviewQuickHudLayer(QQuickItem* parent = nullptr);
@@ -46,8 +51,12 @@ public:
     void setLayerFlags(miacode::preview::scene::PreviewRenderLayerFlags layerFlags);
     void paint(QPainter* painter) override;
 
+    bool dcompFallbackActive() const { return dcompFallbackActive_; }
+    void setDCompFallbackActive(bool active);
+
 signals:
     void runtimeChanged();
+    void dcompFallbackActiveChanged();
 
 private:
     void requestThrottledUpdate();
@@ -67,4 +76,5 @@ private:
     QElapsedTimer hudUpdateThrottleTimer_;
     qint64 lastHudUpdateMs_ = -1;
     bool hudUpdatePending_ = false;
+    bool dcompFallbackActive_ = false;
 };

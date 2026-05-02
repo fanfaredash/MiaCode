@@ -17,7 +17,7 @@
 
 #include "SimaiDocument.h"
 #include "SimaiNativeParser.h"
-#include "simai/transform/ChartNormalization.h"
+#include "core/chart/transform/ChartNormalization.h"
 
 namespace {
 

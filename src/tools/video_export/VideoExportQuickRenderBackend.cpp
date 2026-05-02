@@ -2,7 +2,7 @@
 
 #include "common/PreviewGameplayConfig.h"
 #include "common/PreviewVideoGeometryConfig.h"
-#include "preview/scene/PreviewProgressStatsCache.h"
+#include "core/scene/PreviewProgressStatsCache.h"
 
 #include <memory>
 

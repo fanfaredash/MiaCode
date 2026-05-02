@@ -16,9 +16,9 @@
 #include "common/DebugOptions.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
-#include "preview/scene/PreviewProgressStatsCache.h"
-#include "simai/transform/ChartBatchTransform.h"
-#include "simai/transform/ChartNormalization.h"
+#include "core/scene/PreviewProgressStatsCache.h"
+#include "core/chart/transform/ChartBatchTransform.h"
+#include "core/chart/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
@@ -858,7 +858,8 @@ bool MainWindow::DocumentSection::switchToDifficultyField(int difficultyId)
         owner_.syncPreviewStageMediaRouteChartPath(
             state_.currentFilePath_,
             state_.lastTrackPath_,
-            state_.qtPreviewPauseSecond_);
+            state_.qtPreviewPauseSecond_,
+            state_.document_.videoPath);  // Phase 4c — &video= override
     }
     if (ui_.editorStack_ != nullptr && ui_.chartPage_ != nullptr) {
         ui_.editorStack_->setCurrentWidget(ui_.chartPage_);

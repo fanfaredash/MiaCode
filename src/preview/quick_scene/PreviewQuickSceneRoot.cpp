@@ -4,8 +4,8 @@
 #include "common/DebugLog.h"
 #include "common/Mmcss.h"
 #include "preview/runtime/PreviewRuntime.h"
-#include "preview/scene/PreviewFrameState.h"
-#include "preview/scene/PreviewPreparedSceneCache.h"
+#include "core/scene/PreviewFrameState.h"
+#include "core/scene/PreviewPreparedSceneCache.h"
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -254,6 +254,21 @@ QObject* PreviewQuickSceneRoot::runtimeObject() const
 void PreviewQuickSceneRoot::setRuntimeObject(QObject* runtimeObject)
 {
     setRuntime(qobject_cast<PreviewRuntime*>(runtimeObject));
+}
+
+void PreviewQuickSceneRoot::setDCompFallbackActive(bool active)
+{
+    if (dcompFallbackActive_ == active) {
+        return;
+    }
+    dcompFallbackActive_ = active;
+    // Force a re-paint so the next updatePaintNode honours the new
+    // setting immediately. With fallback on, the legacy QSG path
+    // resumes producing pixels; with it off, the DComp short-circuit
+    // returns nullptr again. Either way the user-visible state needs
+    // to switch within one frame of the QML toggle.
+    update();
+    emit dcompFallbackActiveChanged();
 }
 
 void PreviewQuickSceneRoot::setFrameState(const miacode::preview::scene::PreviewFrameState* frameState)
@@ -523,7 +538,27 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
     // works), but its bounding rect contributes no pixels to the QSG
     // scene. PreviewQuickHudLayer + PreviewStageMediaItem are sibling
     // items and continue to render normally.
-    if (miacode::debug_options::previewDCompExclusiveEnabled()) {
+    //
+    // Phase 4d-fix — exception: when per-pixel alpha is on (the default
+    // case where exclusive auto-enables), we still want the QSG
+    // stage_background dim shader to run so the user's "Background
+    // brightness" sliders affect QML's PreviewStageMediaItem (which
+    // shows through DComp's transparent areas). The chart-sprite QSG
+    // layers stay skipped — only the dim slot is processed. See the
+    // `keepDimOnly` short-circuit below the dim slot for the second
+    // half of this conditional.
+    // Issue #4 fix — `dcompFallbackActive_` overrides the DComp-exclusive
+    // short-circuit. QML sets this on the fullscreen QuickShellPreviewSurface
+    // instance because the DComp popup HWND can't follow the secondary
+    // fullscreen window (it's owned by the editor and would be z-ordered
+    // behind the fullscreen window). With fallback active, the legacy
+    // QSG path renders chart content into the fullscreen window directly,
+    // matching the embedded preview's appearance.
+    const bool exclusive = !dcompFallbackActive_
+        && miacode::debug_options::previewDCompExclusiveEnabled();
+    const bool keepDimOnly = exclusive
+        && miacode::debug_options::previewDCompPerPixelAlphaEnabled();
+    if (exclusive && !keepDimOnly) {
         if (oldNode != nullptr) {
             delete oldNode;
         }
@@ -629,6 +664,23 @@ QSGNode* PreviewQuickSceneRoot::updatePaintNode(QSGNode* oldNode, UpdatePaintNod
         [&](QSGNode* oldChild) {
             return stageBackgroundLayer_.updateNode(oldChild, *state, renderSize, window(), &textures_);
         });
+    // Phase 4d-fix — when per-pixel alpha is on (exclusive auto-on),
+    // stop here. The dim-layer slot above is the only QSG output the
+    // chart preview needs; chart-sprite layers below are owned by
+    // DComp. This preserves the user's Background brightness controls
+    // while keeping DComp the exclusive chart renderer.
+    if (keepDimOnly) {
+        // Trim any stale chart-sprite slots from a prior frame that
+        // ran without exclusive mode — otherwise they'd still be
+        // attached to root from before the toggle.
+        const int currentChildCount = root->childCount();
+        for (int i = currentChildCount - 1; i >= slotIndex; --i) {
+            QSGNode* extra = root->childAtIndex(i);
+            root->removeChildNode(extra);
+            delete extra;
+        }
+        return root;
+    }
     updateLayerSlotProfiled(
         layerSlotAt(root, slotIndex++),
         miacode::preview::scene::previewRenderLayerEnabled(layerFlags_, miacode::preview::scene::BackdropLayer),

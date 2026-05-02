@@ -1,7 +1,7 @@
 #include "preview/quick_scene/PreviewQuickBackdropLayer.h"
 
 #include "preview/quick_scene/PreviewTextureRepository.h"
-#include "preview/scene/PreviewSceneGeometry.h"
+#include "core/scene/PreviewSceneGeometry.h"
 
 #include <QQuickWindow>
 #include <QSGNode>

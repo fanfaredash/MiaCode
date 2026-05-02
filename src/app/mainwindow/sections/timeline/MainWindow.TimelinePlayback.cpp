@@ -18,10 +18,10 @@
 #include "common/PreviewInteractionConfig.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
-#include "preview/scene/PreviewOpacityCurves.h"
-#include "preview/scene/PreviewProgressStatsCache.h"
-#include "simai/transform/ChartBatchTransform.h"
-#include "simai/transform/ChartNormalization.h"
+#include "core/scene/PreviewOpacityCurves.h"
+#include "core/scene/PreviewProgressStatsCache.h"
+#include "core/chart/transform/ChartBatchTransform.h"
+#include "core/chart/transform/ChartNormalization.h"
 #include "timeline/quick/TimelineQuickStateBridge.h"
 #include "tools/muri/MuriAnalyzer.h"
 #include "tools/muri/MuriPanelEntries.h"
@@ -982,7 +982,15 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackExact()
             .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6)
             .arg(static_cast<int>(pauseResult.retainedMode)));
     state_.qtPreviewPendingTimelineSecond_ = state_.qtPreviewPauseSecond_;
-    state_.qtPreviewPendingTimelineCenterView_ = false;
+    // Per docs/TIMELINE_COORDINATE_FOCUS_SPEC.md §5: 播放中 → 点击暂停 → 暂停-R,
+    // Timeline 聚焦 R. The next paused-flush must call
+    // setPlayheadSeconds(s, /*centerView=*/true) so centerOnSecond
+    // recomputes horizontalScrollValue around the freeze point. Was
+    // false here, which left scroll wherever it was at the moment of
+    // pause (often 0 if a startup race kept the playback timer's
+    // ticks blocked) — visible symptom: timeline body locked at
+    // chart start with playhead off-screen to the right.
+    state_.qtPreviewPendingTimelineCenterView_ = true;
     state_.qtPreviewTimelineDirty_ = true;
     state_.qtPreviewPlaying_ = false;
     if (state_.previewCanvas_ != nullptr) {
@@ -1040,7 +1048,8 @@ void MainWindow::TimelineSection::pauseQtPreviewPlaybackForReanchor()
     stopQtPreviewTimers();
     state_.pausedPreviewMediaSeekPending_ = false;
     state_.qtPreviewPendingTimelineSecond_ = state_.qtPreviewPauseSecond_;
-    state_.qtPreviewPendingTimelineCenterView_ = false;
+    // Spec: pause-for-reanchor lands in 暂停-R, so request R-centring.
+    state_.qtPreviewPendingTimelineCenterView_ = true;
     state_.qtPreviewTimelineDirty_ = true;
     state_.qtPreviewPlaying_ = false;
     if (state_.previewCanvas_ != nullptr) {
@@ -1337,7 +1346,10 @@ void MainWindow::TimelineSection::stopQtPreviewPlayback(bool keepPosition)
                 .arg(keepPosition ? 1 : 0)
                 .arg(state_.qtPreviewPauseSecond_, 0, 'f', 6));
         state_.qtPreviewPendingTimelineSecond_ = state_.qtPreviewPauseSecond_;
-        state_.qtPreviewPendingTimelineCenterView_ = false;
+        // Spec: 任意 → 点击停止 → 停止位 (= 暂停-R 且 R = L), Timeline 聚焦 R.
+        // Stop must request R-centring so the timeline jumps back to
+        // L=R = the playback entry point.
+        state_.qtPreviewPendingTimelineCenterView_ = true;
         state_.qtPreviewTimelineDirty_ = true;
     }
     state_.qtPreviewPlaying_ = false;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "preview/scene/PreviewFrameState.h"
+#include "core/scene/PreviewFrameState.h"
 
 #include <QtGlobal>
 

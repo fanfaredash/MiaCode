@@ -3,13 +3,13 @@
 #include <QRectF>
 #include <QTextStream>
 
-#include "preview/scene/PreviewActiveMarkerView.h"
-#include "preview/scene/PreviewHeadLayerState.h"
-#include "preview/scene/PreviewOpacityCurves.h"
-#include "preview/scene/PreviewPreparedSceneCache.h"
-#include "preview/scene/PreviewSceneConstants.h"
-#include "preview/scene/PreviewSceneMath.h"
-#include "simai/parser/SimaiNativeParser.h"
+#include "core/scene/PreviewActiveMarkerView.h"
+#include "core/scene/PreviewHeadLayerState.h"
+#include "core/scene/PreviewOpacityCurves.h"
+#include "core/scene/PreviewPreparedSceneCache.h"
+#include "core/scene/PreviewSceneConstants.h"
+#include "core/scene/PreviewSceneMath.h"
+#include "core/chart/parser/SimaiNativeParser.h"
 
 namespace {
 

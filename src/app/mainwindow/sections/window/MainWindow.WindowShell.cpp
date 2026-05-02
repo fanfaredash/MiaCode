@@ -12,7 +12,7 @@
 #include "common/DebugLog.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
-#include "preview/scene/PreviewProgressStatsCache.h"
+#include "core/scene/PreviewProgressStatsCache.h"
 
 #include <QtCore>
 #include <QtGui>

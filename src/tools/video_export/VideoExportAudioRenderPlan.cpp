@@ -6,7 +6,7 @@
 #include "common/PreviewSfxSemantics.h"
 #include "common/PreviewSfxTimeline.h"
 #include "common/VideoExportConfig.h"
-#include "preview/audio/PreviewAudioSettings.h"
+#include "audio/PreviewAudioSettings.h"
 
 #include <QDir>
 #include <QFileInfo>

@@ -6,8 +6,8 @@
 #include <QTextStream>
 
 #include "preview/runtime/PreviewQuickExportSession.h"
-#include "preview/scene/PreviewFrameState.h"
-#include "preview/scene/PreviewLayerOrder.h"
+#include "core/scene/PreviewFrameState.h"
+#include "core/scene/PreviewLayerOrder.h"
 
 namespace {
 

@@ -524,6 +524,10 @@ void MainWindow::WindowSection::closeEvent(QCloseEvent* event)
             autosaveTimer.elapsed(),
             QStringLiteral("allow_history=0")
         );
+        // Clean exit: drop the crash-recovery snapshot + delete any
+        // recovery file so we don't prompt the user on next open about
+        // a "crash" that was actually a clean shutdown.
+        owner_.documentSection_->cleanupCrashRecoveryForCleanExit();
 
         QElapsedTimer savePortableTimer;
         savePortableTimer.start();

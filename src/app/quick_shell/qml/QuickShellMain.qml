@@ -1354,6 +1354,15 @@ ApplicationWindow {
                             mediaHost: controller.previewStageMediaHost
                             logger: controller
                             surfaceRole: "fullscreen_inline"
+                            // Issue #4 fix — fullscreen window can't host the
+                            // DComp popup (z-order issue with owned popups
+                            // behind the foreground secondary window). Tell
+                            // PreviewQuickSceneRoot + PreviewQuickHudLayer to
+                            // resume their legacy QSG render path inside the
+                            // fullscreen window so chart sprites + HUD show
+                            // here. The embedded inline instance leaves this
+                            // false (DComp popup wins as before).
+                            dcompFallbackActive: true
                         }
                     }
 

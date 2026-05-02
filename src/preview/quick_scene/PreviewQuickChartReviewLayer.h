@@ -1,6 +1,6 @@
 #pragma once
 
-#include "preview/scene/PreviewChartReviewLayerState.h"
+#include "core/scene/PreviewChartReviewLayerState.h"
 
 class QQuickWindow;
 class QSGNode;

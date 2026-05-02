@@ -3,9 +3,9 @@
 #include <QRectF>
 #include <QTextStream>
 
-#include "preview/scene/PreviewActiveMarkerView.h"
-#include "preview/scene/PreviewFrameState.h"
-#include "preview/scene/PreviewJudgeFireworkLayerState.h"
+#include "core/scene/PreviewActiveMarkerView.h"
+#include "core/scene/PreviewFrameState.h"
+#include "core/scene/PreviewJudgeFireworkLayerState.h"
 
 namespace {
 

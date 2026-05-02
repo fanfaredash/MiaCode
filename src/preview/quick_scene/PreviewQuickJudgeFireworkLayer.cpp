@@ -1,9 +1,9 @@
 #include "preview/quick_scene/PreviewQuickJudgeFireworkLayer.h"
 
 #include "preview/quick_scene/PreviewTextureRepository.h"
-#include "preview/scene/PreviewJudgeFireworkLayerState.h"
-#include "preview/scene/PreviewPreparedSceneCache.h"
-#include "preview/scene/PreviewSceneGeometry.h"
+#include "core/scene/PreviewJudgeFireworkLayerState.h"
+#include "core/scene/PreviewPreparedSceneCache.h"
+#include "core/scene/PreviewSceneGeometry.h"
 
 #include <QMatrix4x4>
 #include <QQuickWindow>

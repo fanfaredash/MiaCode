@@ -11,7 +11,7 @@
 #include "common/MuriRenderOptions.h"
 #include "common/MuriTypes.h"
 #include "preview/quick_scene/PreviewTextureRepository.h"
-#include "preview/scene/PreviewFrameState.h"
+#include "core/scene/PreviewFrameState.h"
 #include "preview/runtime/PreviewSceneAssetRepository.h"
 
 class QQuickWindow;

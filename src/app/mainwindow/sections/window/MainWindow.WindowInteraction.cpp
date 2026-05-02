@@ -211,7 +211,8 @@ void MainWindow::WindowSection::recoverPreviewBackendsAfterApplicationResume()
         owner_.syncPreviewStageMediaRouteChartPath(
             state_.currentFilePath_,
             state_.lastTrackPath_,
-            qMax(0.0, state_.qtPreviewPauseSecond_)
+            qMax(0.0, state_.qtPreviewPauseSecond_),
+            state_.document_.videoPath  // Phase 4c — &video= override
         );
         owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
     }

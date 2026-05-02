@@ -2,7 +2,7 @@
 #include <QTextStream>
 
 #include "common/PreviewSfxAssets.h"
-#include "preview/audio/PreviewAudioSettings.h"
+#include "audio/PreviewAudioSettings.h"
 
 namespace {
 

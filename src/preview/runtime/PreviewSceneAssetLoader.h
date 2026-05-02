@@ -2,7 +2,7 @@
 
 #include <QString>
 
-#include "preview/scene/PreviewFrameState.h"
+#include "core/scene/PreviewFrameState.h"
 
 namespace miacode::preview::runtime {
 
