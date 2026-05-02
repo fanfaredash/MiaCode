@@ -517,12 +517,14 @@ qint64 MainWindow::TimelineSection::timelineTargetFrameIntervalNs() const
 {
     const qint64 previewIntervalNs = qMax<qint64>(1LL, previewCanvasTargetFrameIntervalNs());
     const double previewTargetFps = 1000000000.0 / static_cast<double>(previewIntervalNs);
-    double timelineTargetFps =
+    const double timelineTargetFps =
         qMin(previewTargetFps, miacode::mainwindow::shared::kTimelineMaxUiUpdateFps);
-    const int throttleHz = miacode::debug_options::previewTimelineThrottleHz();
-    if (throttleHz > 0) {
-        timelineTargetFps = qMin(timelineTargetFps, static_cast<double>(throttleHz));
-    }
+    // beta20 merge note: the test-branch `previewTimelineThrottleHz`
+    // env override is superseded by Phase 4e's FPS sync interval (the
+    // preview's `Present(N, 0)` call already paces both the preview
+    // and the timeline UI tick that follows it). The throttle helper
+    // no longer exists in DebugOptions.h, so the call was dropped
+    // during the merge cleanup.
     return qMax<qint64>(1LL, qRound64(1000000000.0 / timelineTargetFps));
 }
 
