@@ -320,12 +320,18 @@ void TimelineRenderView::onWindowActiveChanged()
     }
     const bool active = window_->isActive();
     if (!active) {
+        // Beta20-fix3 — pause render thread on focus loss to prevent
+        // DEVICE_REMOVED triggered by GPU power transitions during
+        // prolonged out-of-focus playback. See
+        // PreviewDCompSurface::onWindowActiveChanged for the full
+        // rationale (Intel iGPU swap-chain invalidation, ~2s recovery
+        // visible to user as a "preview restart" hiccup).
+        renderer_.setPaused(true);
         return;
     }
-    // Regained focus — re-anchor the popup and force a republish so the
-    // render thread has fresh state. Mirrors PreviewDCompSurface; same
-    // root cause (DWM throttling unfocused windows starves the swap
-    // chain's frame-latency waitable, leaving the popup detached).
+    // Regained focus — resume the render thread, re-anchor the popup,
+    // and force a republish so the render thread has fresh state.
+    renderer_.setPaused(false);
     if (trackedItem_ != nullptr) {
         applyTrackedItemGeometry();
         QTimer::singleShot(50, this, [this]() {

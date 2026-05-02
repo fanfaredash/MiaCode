@@ -1002,18 +1002,40 @@ void PreviewDCompSurface::onWindowActiveChanged()
                    .arg(trackedItem_ != nullptr ? 1 : 0)
                    .arg(runtime_ != nullptr ? 1 : 0));
     if (!active) {
-        // Lost focus — nothing to do. The renderer keeps presenting at
-        // whatever rate DWM allows. If DWM throttles the waitable to
-        // zero, the renderer's WAIT_TIMEOUT path force-presents anyway
-        // (see PreviewDCompRenderer::renderLoop), so the loop won't
-        // soft-deadlock.
+        // Lost focus — pause the render thread.
+        //
+        // Beta20-fix3 — without this, on Intel iGPUs (and likely other
+        // power-managed GPUs) the swap chain can be invalidated after
+        // the window has been out of focus for a while: DWM throttles
+        // compositing of unfocused windows, the GPU enters a low-power
+        // state, and the next Present returns DXGI_ERROR_DEVICE_REMOVED.
+        // The device-lost recovery handler then takes ~2 s to rebuild
+        // everything, which the user sees as a noticeable "restart"
+        // (preview disappears for 2-3 s before re-appearing). User
+        // logs at 23:35:46 and 23:39:17 both showed exactly this:
+        //   [preview/dcomp] op=present hr=0x887a0005
+        //   action=device_removed_exit
+        //   action=device_lost_recovery_begin/complete (2.3 / 2.1 s gap)
+        //
+        // Pausing the render thread on focus loss eliminates the
+        // trigger entirely: no Present calls → no chance for the
+        // device to be marked removed during the GPU's idle window.
+        // Audio playback is unaffected (it lives on a different
+        // thread); the preview holds the last presented frame and
+        // resumes from the current playhead when focus returns.
+        renderer_.setPaused(true);
         return;
     }
 
-    // Regained focus / activation. Re-anchor the popup HWND to the
-    // tracked QQuickItem in case the layout settled differently while
-    // the window was idle, and publish a fresh snapshot to flush any
-    // queued state through the render thread immediately.
+    // Regained focus / activation.
+    //  1. Resume the render thread (paired with the setPaused(true) on
+    //     the focus-loss branch above).
+    //  2. Re-anchor the popup HWND to the tracked QQuickItem — layout
+    //     may have settled differently while the window was idle.
+    //  3. Force a fresh snapshot publish so the renderer has current
+    //     state to consume on its first wake-up after resume.
+    renderer_.setPaused(false);
+
     if (trackedItem_ != nullptr) {
         applyTrackedItemGeometry();
         // Fire a delayed re-apply too — Qt may still be processing
