@@ -66,16 +66,8 @@ const UiTheme::Colors& lightColors()
         QColor("#E8E8E8"),
         QColor("#F7F8FA"),
         QColor("#C7D2DF"),
-        // Beta21-fix2 — punch up timeline grid contrast.
-        // Major (measure) was `#AEBCCC` (RGB 174,188,204) opaque — only
-        // ~50 brightness delta vs the near-white lane fill, so measure
-        // boundaries read as a faint wash. New `#6986B4` (RGB 105,134,180)
-        // is a saturated dark blue at the same opacity → ~140 delta.
-        // Minor (per-comma) keeps its RGB but bumps alpha 124 → 175 so
-        // it stays clearly subordinate to the major while still
-        // registering as a visible tick.
-        QColor("#6986B4"),
-        QColor(88, 112, 148, 175),
+        QColor("#AEBCCC"),
+        QColor(88, 112, 148, 124),
         QColor(251, 251, 251, 190),
         QColor(242, 242, 242, 190),
         QColor("#4D5C6D"),
@@ -130,14 +122,8 @@ const UiTheme::Colors& darkColors()
         QColor("#171D24"),
         QColor("#202833"),
         QColor("#4A5C70"),
-        // Beta21-fix2 — same contrast bump as light theme, applied to
-        // dark. Major was `#6B8096` (RGB 107,128,150) on lane bg
-        // RGB(34,42,52,210) — ~80 brightness delta. New `#9CB7DC`
-        // (RGB 156,183,220) brings that to ~140 delta. Minor stays the
-        // same RGB but alpha 110 → 165 for visibility against the very
-        // dark lane fill.
-        QColor("#9CB7DC"),
-        QColor(103, 137, 186, 165),
+        QColor("#6B8096"),
+        QColor(103, 137, 186, 110),
         QColor(34, 42, 52, 210),
         QColor(29, 36, 45, 210),
         QColor("#C8D5E5"),
