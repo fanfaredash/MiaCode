@@ -3075,10 +3075,21 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const int frameHeight = qMax(1, task.outputHeight);
     const QSize frameSize(frameWidth, frameHeight);
     const QString explicitMediaPath = normalizePath(task.backgroundMediaPath);
-    const QString mediaPath = miacode::chart_assets::resolvePreferredBackgroundMediaPath(
-        task.chartPath,
-        explicitMediaPath
-    );
+    // Phase 4c — `task.backgroundMediaPath` is filled by the snapshot
+    // builder using `resolveChartVideoPath` (`&video=` override first,
+    // then sibling fallback). Trust that as the final choice when it
+    // points at a supported file; the legacy `resolvePreferredBackground…`
+    // path inverts the priority (sibling first), which would silently
+    // override the chart-author's explicit `&video=` choice.
+    QString mediaPath;
+    if (miacode::chart_assets::isSupportedBackgroundMediaPath(
+            explicitMediaPath, /*includeVideoCandidates=*/true)) {
+        mediaPath = explicitMediaPath;
+    } else {
+        mediaPath = miacode::chart_assets::resolvePreferredBackgroundMediaPath(
+            task.chartPath,
+            explicitMediaPath);
+    }
     const bool hasMedia = !mediaPath.isEmpty();
     const bool mediaIsImage = hasMedia && isImageMediaPath(mediaPath);
     const QString trackPath = audioRenderPlan.backgroundTrack.enabled

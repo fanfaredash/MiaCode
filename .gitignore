@@ -66,3 +66,4 @@ scripts/*
 !scripts/package-win.ps1
 !scripts/README.md
 !scripts/README_EN.md
+.claude/

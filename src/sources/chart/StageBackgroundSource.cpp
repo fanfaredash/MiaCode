@@ -21,29 +21,42 @@ void StageBackgroundSource::contributeToSnapshot(
     const render::PreviewBuildContext& ctx,
     dcomp::PreviewDCompFrameStateSnapshot& snapshot)
 {
-    // Skipped when separate-surface external media is active (legacy
-    // QSG also short-circuits in that case — the media is rendered
-    // by an external HWND/QQuickWindow). Skipped when no media is
-    // available so the dark canvasBg from embeddedPreviewFrame
-    // shows through DComp's transparent clear.
+    // Phase 4c-8 — image-mode override path takes precedence. The
+    // PreviewStageMediaHost loads the bg.{jpg,png,...} into a QImage
+    // and publishes it through ctx.stageBackgroundImageOverride; the
+    // DComp HWND on top of the QML window occludes QML's
+    // PreviewStageMediaItem, so DComp has to paint the bg here for
+    // the user to see it. When this override is set, we ignore the
+    // legacy `presentationMode == ExternalQuickMediaItem` skip
+    // because the external QML render is already invisible to the
+    // user.
     const auto& state = ctx.frameState;
     const auto& media = state.media;
-    const bool usesExternalMedia =
-        media.presentationMode
-            == scene::PreviewStageMediaPresentationMode::ExternalQuickMediaItem;
 
     QImage bgImage;
     bool bgCacheable = true;
-    if (!usesExternalMedia) {
-        if (!media.resolvedStageImage.isNull()) {
-            bgImage = media.resolvedStageImage;
-            bgCacheable = media.resolvedStageImageCacheable;
-        } else if (!media.mediaFrame.isNull()) {
-            bgImage = media.mediaFrame;
-            bgCacheable = true;
-        } else if (!media.retainedVideoFallbackFrame.isNull()) {
-            bgImage = media.retainedVideoFallbackFrame;
-            bgCacheable = false;  // last-known fallback, treat as transient
+    if (!ctx.stageBackgroundImageOverride.isNull()) {
+        bgImage = ctx.stageBackgroundImageOverride;
+        bgCacheable = true;  // image file content is stable per chart load
+    } else {
+        // Legacy path: the historic external-media skip + the
+        // resolvedStageImage / mediaFrame / retainedVideoFallbackFrame
+        // chain. Kept intact for the (currently unwired) video-frame
+        // pipeline that Phase 4c-9 will populate.
+        const bool usesExternalMedia =
+            media.presentationMode
+                == scene::PreviewStageMediaPresentationMode::ExternalQuickMediaItem;
+        if (!usesExternalMedia) {
+            if (!media.resolvedStageImage.isNull()) {
+                bgImage = media.resolvedStageImage;
+                bgCacheable = media.resolvedStageImageCacheable;
+            } else if (!media.mediaFrame.isNull()) {
+                bgImage = media.mediaFrame;
+                bgCacheable = true;
+            } else if (!media.retainedVideoFallbackFrame.isNull()) {
+                bgImage = media.retainedVideoFallbackFrame;
+                bgCacheable = false;
+            }
         }
     }
     if (bgImage.isNull() || bgImage.width() <= 0 || bgImage.height() <= 0) {

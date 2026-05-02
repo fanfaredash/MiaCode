@@ -118,6 +118,16 @@ void PreviewQuickHudLayer::setRuntimeObject(QObject* runtimeObject)
     setRuntime(qobject_cast<PreviewRuntime*>(runtimeObject));
 }
 
+void PreviewQuickHudLayer::setDCompFallbackActive(bool active)
+{
+    if (dcompFallbackActive_ == active) {
+        return;
+    }
+    dcompFallbackActive_ = active;
+    update();
+    emit dcompFallbackActiveChanged();
+}
+
 void PreviewQuickHudLayer::setFrameState(const miacode::preview::scene::PreviewFrameState* frameState)
 {
     frameState_ = frameState;
@@ -147,7 +157,14 @@ void PreviewQuickHudLayer::paint(QPainter* painter)
     // Skipping QSG paint here avoids the redundant QQuickPaintedItem
     // texture upload that was the last QSG cost the user flagged as
     // perf-relevant.
-    if (miacode::debug_options::previewDCompExclusiveEnabled()) {
+    //
+    // Issue #4 fix — `dcompFallbackActive_` overrides the gate: in the
+    // fullscreen QuickShellPreviewSurface instance the DComp popup
+    // can't render (see PreviewQuickSceneRoot's parallel comment), so
+    // QML sets fallback=true to let this QQuickPaintedItem paint as
+    // usual.
+    if (!dcompFallbackActive_
+        && miacode::debug_options::previewDCompExclusiveEnabled()) {
         return;
     }
     const miacode::preview::scene::PreviewFrameState* state = nullptr;

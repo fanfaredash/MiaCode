@@ -126,29 +126,40 @@ void MainWindow::PreviewSection::schedulePreviewSubsystemWarmup()
     audioSettingsSnapshot.normalize();
     const QString chartPathSnapshot = state_.currentFilePath_;
     const QString trackPathSnapshot = state_.lastTrackPath_;
+    // Phase 4c — capture &video= override snapshot so the worker
+    // pre-resolves the right path (explicit override beats sibling).
+    const QString chartVideoOverrideSnapshot = state_.document_.videoPath;
     const double playbackRateSnapshot = state_.previewPlaybackRate_;
-    schedulePreviewMediaWarmup(generation, chartPathSnapshot, trackPathSnapshot);
+    schedulePreviewMediaWarmup(generation, chartPathSnapshot, trackPathSnapshot, chartVideoOverrideSnapshot);
     schedulePreviewSfxWarmup(generation, chartPathSnapshot, trackPathSnapshot, audioSettingsSnapshot, playbackRateSnapshot);
 }
 
 void MainWindow::PreviewSection::schedulePreviewMediaWarmup(
     quint64 generation,
     const QString& chartPathSnapshot,
-    const QString& trackPathSnapshot)
+    const QString& trackPathSnapshot,
+    const QString& chartVideoOverrideSnapshot)
 {
     if (state_.previewWarmupPool_ == nullptr) {
         return;
     }
     QPointer<MainWindow> guard(&owner_);
-    state_.previewWarmupPool_->start([guard, generation, chartPathSnapshot, trackPathSnapshot]() {
+    state_.previewWarmupPool_->start([guard, generation, chartPathSnapshot, trackPathSnapshot, chartVideoOverrideSnapshot]() {
         QElapsedTimer timer;
         timer.start();
         PreviewMediaWarmupResult result;
         result.generation = generation;
         result.chartPath = chartPathSnapshot;
         result.trackPath = trackPathSnapshot;
+        // Phase 4c — unified resolver honours `&video=` first, then
+        // falls back to sibling `bg.mp4`/`pv.mp4`/`bg.png` etc. Same
+        // file the live preview will load — pre-warming the OS cache
+        // here so the host's first decode/load runs cheap.
 #ifdef HAVE_QT_MULTIMEDIA
-        result.resolvedMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(chartPathSnapshot, true);
+        result.resolvedMediaPath = miacode::chart_assets::resolveChartVideoPath(chartPathSnapshot, chartVideoOverrideSnapshot);
+        if (result.resolvedMediaPath.isEmpty()) {
+            result.resolvedMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(chartPathSnapshot, true);
+        }
 #else
         result.resolvedMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(chartPathSnapshot, false);
 #endif
@@ -330,7 +341,14 @@ QString MainWindow::PreviewSection::previewOutlineVariantStorageValue() const
 
 PreviewOutlineVariant MainWindow::PreviewSection::autoPreviewOutlineVariantForChart(const QString& chartPath) const
 {
-    return miacode::chart_assets::hasBackgroundMedia(chartPath)
+    // Phase 4c — also count `&video=` overrides as "has background"
+    // so charts that exclusively rely on the explicit-video path
+    // (no sibling bg.* file) get the right outline variant. Without
+    // this, a chart with `&video=bg.mp4` but no sibling files would
+    // fall through to JudgeAreaLabeled even though the video does
+    // render behind the playfield.
+    return miacode::chart_assets::hasChartBackgroundMedia(
+                chartPath, state_.document_.videoPath)
         ? PreviewOutlineVariant::Line
         : PreviewOutlineVariant::JudgeAreaLabeled;
 }
@@ -417,9 +435,10 @@ void MainWindow::schedulePreviewSubsystemWarmup()
 void MainWindow::schedulePreviewMediaWarmup(
     quint64 generation,
     const QString& chartPathSnapshot,
-    const QString& trackPathSnapshot)
+    const QString& trackPathSnapshot,
+    const QString& chartVideoOverrideSnapshot)
 {
-    previewSection_->schedulePreviewMediaWarmup(generation, chartPathSnapshot, trackPathSnapshot);
+    previewSection_->schedulePreviewMediaWarmup(generation, chartPathSnapshot, trackPathSnapshot, chartVideoOverrideSnapshot);
 }
 
 void MainWindow::schedulePreviewSfxWarmup(

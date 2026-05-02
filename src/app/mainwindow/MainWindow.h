@@ -38,6 +38,7 @@ class QCloseEvent;
 class QChronoTimer;
 class QDockWidget;
 class QEvent;
+class PreviewStageMediaHost;
 class QFrame;
 class QGraphicsOpacityEffect;
 class QGridLayout;
@@ -95,6 +96,28 @@ class MainWindow : public QMainWindow,
                    public QuickShellNativeContentProvider
 {
     Q_OBJECT
+
+public:
+    // Phase 4c — non-owning accessor + signal so the QuickShellBootstrap can
+    // wire the host into PreviewDCompSurface for MpvVideoSource lookup.
+    // The host is created lazily inside MainWindow.PreviewStageMediaRoute
+    // on first chart-load; the signal lets the bootstrap connect once
+    // and react to its appearance without polling.
+    PreviewStageMediaHost* previewStageMediaHost() const;
+
+signals:
+    void previewStageMediaHostInitialized(PreviewStageMediaHost* host);
+    // Issue #3 fix — emitted whenever the user changes the preview canvas
+    // frame-rate option in Render Settings. Carries the SyncInterval
+    // value (1, 2, 3) for the DComp renderer's Present(N, 0) call.
+    // The GUI computes N = round(target_interval_ns / display_vsync_ns)
+    // because only the GUI has QScreen::refreshRate() — the render
+    // thread can't safely query Qt screen state.
+    //   - 1 = present every vsync (display rate; this is the
+    //         DisplayRefresh option AND also Fps60 on a 60 Hz display).
+    //   - 2 = present every other vsync (60 FPS on 120 Hz, 50 on 100 Hz).
+    //   - 3 = present every third vsync.
+    void previewCanvasPresentSyncIntervalChanged(unsigned int syncInterval);
 
 public:
     struct CliVideoExportRequest {
@@ -234,6 +257,17 @@ private slots:
     void onReplaceAll();
     void onErrorItemActivated(QListWidgetItem* item);
     void onMuriItemActivated(QListWidgetItem* item);
+public:
+    // Issue #3 fix — moved from private so QuickShellBootstrap can read
+    // the cached mode at attach-time and seed the DComp renderer's
+    // target-frame-interval cap. Exposing the enum doesn't widen any
+    // mutation surface (the setter setPreviewCanvasFrameRateMode
+    // remains internal); only the value type is now visible.
+    enum class PreviewCanvasFrameRateMode {
+        Fps60,
+        Fps120,
+        DisplayRefresh,
+    };
 private:
     using BatchTransform = std::function<QString(const QString&, int*)>;
     enum class ChartTransformOp {
@@ -242,11 +276,6 @@ private:
         Rotate180,
         Rotate45CounterClockwise,
         Rotate45Clockwise,
-    };
-    enum class PreviewCanvasFrameRateMode {
-        Fps60,
-        Fps120,
-        DisplayRefresh,
     };
     enum class PreviewSkinVariant {
         Standard,
@@ -304,6 +333,15 @@ private:
     void setPreviewCanvasFrameRateMode(PreviewCanvasFrameRateMode mode, bool persistState);
     PreviewCanvasFrameRateMode previewCanvasFrameRateModeFromStorageValue(const QString& value) const;
     QString previewCanvasFrameRateModeStorageValue() const;
+public:
+    // Issue #3 fix — public getter for the current preview canvas
+    // frame-rate mode. QuickShellBootstrap needs it to seed the DComp
+    // renderer's target-interval at attach time (before the user has
+    // touched Render Settings, the cached value is already set from
+    // the persisted project / portable state). Read-only — the setter
+    // setPreviewCanvasFrameRateMode stays internal.
+    PreviewCanvasFrameRateMode currentPreviewCanvasFrameRateMode() const;
+private:
     PreviewOutlineVariant previewOutlineVariantFromStorageValue(const QString& value) const;
     QString previewOutlineVariantStorageValue() const;
     PreviewOutlineVariant autoPreviewOutlineVariantForChart(const QString& chartPath) const;

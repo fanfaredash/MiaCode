@@ -82,6 +82,14 @@ SimaiDocument SimaiDocument::fromText(const QString& text)
             doc.designer = field.value;
             continue;
         }
+        if (field.key == "video") {
+            // Phase 4 — optional video-background path. Stored verbatim
+            // (typically a relative filename next to the chart file);
+            // path resolution to absolute filesystem location happens at
+            // chart-load time in the calling code.
+            doc.videoPath = field.value;
+            continue;
+        }
 
         QString prefix;
         int id = 0;
@@ -216,6 +224,12 @@ QString SimaiDocument::toText() const
     blocks.append(serializeField("first", first));
     if (!designer.isEmpty()) {
         blocks.append(serializeField("des", designer));
+    }
+    if (!videoPath.isEmpty()) {
+        // Phase 4 — round-trip the video-background path so saving a
+        // chart preserves the &video= field. Mirrors the placement of
+        // the parser's `video` handler before the difficulty fields.
+        blocks.append(serializeField("video", videoPath));
     }
 
     for (const SimaiRawField& field : extraFields) {

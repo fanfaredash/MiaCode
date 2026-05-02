@@ -152,17 +152,29 @@ inline bool previewUseDCompEnabled()
     return envFlagEnabled("MIACODE_PREVIEW_USE_DCOMP");
 }
 
+inline bool previewDCompPerPixelAlphaEnabled();  // forward decl for use below
+
 inline bool previewDCompExclusiveEnabled()
 {
     // Phase 4b — when on, the legacy QSG chart-layer pipeline
     // (PreviewQuickSceneRoot's updatePaintNode) is short-circuited so
     // the DComp surface is the only thing rendering chart content.
-    // The other QSG items inside QuickShellPreviewSurface
-    // (PreviewStageMediaItem for video background, PreviewQuickHudLayer
-    // for the FPS overlay) keep running. Implies and requires
+    // The HUD layer (PreviewQuickHudLayer) ALSO short-circuits (see
+    // PreviewQuickHudLayer.cpp:150). Only PreviewStageMediaItem
+    // (image / video bg) keeps rendering in QSG. Implies and requires
     // previewUseDCompEnabled — otherwise nothing renders the chart.
-    return previewUseDCompEnabled()
-        && envFlagEnabled("MIACODE_PREVIEW_DCOMP_EXCLUSIVE");
+    //
+    // Phase 4d — automatically enabled when per-pixel alpha is on.
+    // Without exclusive, both QSG and DComp render chart sprites +
+    // HUD; LWA used to occlude the QSG copy, but per-pixel alpha
+    // lets QSG show through, producing visible duplicate rendering.
+    if (!previewUseDCompEnabled()) {
+        return false;
+    }
+    if (envFlagEnabled("MIACODE_PREVIEW_DCOMP_EXCLUSIVE")) {
+        return true;
+    }
+    return previewDCompPerPixelAlphaEnabled();
 }
 
 inline bool previewDCompTopLevelHwndEnabled()
@@ -190,23 +202,64 @@ inline bool previewDCompTopLevelHwndEnabled()
     return override.value_or(true);
 }
 
+inline bool previewDCompPerPixelAlphaEnabled()
+{
+    // Phase 4d — per-pixel alpha composition for the DComp top-level
+    // popup HWND. The popup is created with WS_EX_NOREDIRECTIONBITMAP
+    // (Win10+) instead of WS_EX_LAYERED + LWA_ALPHA(255). NRB tells
+    // the OS not to allocate a redirection bitmap; the DComp visual
+    // tree composes directly into DWM, allowing per-pixel alpha to
+    // "see through" to whatever's behind the HWND (the editor's QML
+    // scene). This is the proper architecture: QML renders bg
+    // image/video natively via QRhi (GPU-direct), DComp paints
+    // chart sprites + HUD on top with per-pixel alpha.
+    //
+    // Phase 4d-final: now default-on whenever DComp is enabled, with
+    // the env flag acting as an override (set explicitly to "0" to
+    // fall back to legacy LWA mode + CPU bg detour). Verified working
+    // on the user's Win11 setup (image bg from Lone Wolf / love
+    // machine 3 visible, video bg from ECHO smooth, HUD stutters
+    // back to image-level after auto-exclusive suppresses duplicate
+    // QSG chart-rendering).
+    //
+    // Pairs with previewDCompExclusiveEnabled() which auto-enables
+    // when this is on, so the QSG chart + HUD layers don't duplicate
+    // DComp's painting through the now-transparent popup.
+    if (!previewUseDCompEnabled()) {
+        return false;
+    }
+    const std::optional<bool> override = envOptionalFlagValue(
+        "MIACODE_PREVIEW_DCOMP_PER_PIXEL_ALPHA");
+    return override.value_or(true);
+}
+
 inline bool previewTimelineUseDCompEnabled()
 {
-    // Phase 3c of the v2-refactor — opt-in for the timeline pane's
-    // DComp pipeline. When set, TimelineQuickItem instantiates a
-    // TimelineRenderView alongside its existing QSG paint node and
-    // pushes scene-state updates to both. The QSG path stays alive
-    // (so timeline drawing keeps working if the DComp visual fails),
-    // and the DComp popup overlays it on top via the top-level HWND.
-    // Phase 3e turns this on unconditionally and removes the QSG
-    // paint code; until then it stays opt-in via env flag so we can
-    // A/B test the new pipeline without breaking the editor.
+    // Phase 3c of the v2-refactor — DComp pipeline for the timeline
+    // pane. When on, TimelineQuickItem instantiates a TimelineRenderView
+    // alongside its existing QSG paint node and pushes scene-state
+    // updates to both. The QSG path stays alive (so timeline drawing
+    // keeps working if the DComp visual fails), and the DComp popup
+    // overlays it on top via the top-level HWND. Phase 3e turns this on
+    // unconditionally and removes the QSG paint code.
+    //
+    // Phase 9d-final: now default-on whenever DComp is enabled — the
+    // env flag is an *override* rather than an opt-in. Leave it unset
+    // (the common case) to get the new behaviour; set it explicitly to
+    // "0" / "false" to fall back to the legacy QSG-only path. This
+    // mirrors the previewDCompTopLevelHwndEnabled() pattern: ship the
+    // new pipeline as the default while keeping the A/B escape hatch
+    // around for diagnostics.
     //
     // Implies and requires previewUseDCompEnabled (the timeline view
     // shares D3D11 device + waitable + texture cache infrastructure
     // with the chart-preview path).
-    return previewUseDCompEnabled()
-        && envFlagEnabled("MIACODE_TIMELINE_USE_DCOMP");
+    if (!previewUseDCompEnabled()) {
+        return false;
+    }
+    const std::optional<bool> override = envOptionalFlagValue(
+        "MIACODE_TIMELINE_USE_DCOMP");
+    return override.value_or(true);
 }
 
 inline bool previewQsgFullDisableEnabled()

@@ -51,6 +51,13 @@ public:
     QString artist;
     QString first;
     QString designer;
+    // Phase 4 of the v2-refactor — optional video-background path for
+    // chart preview. Stored as the raw `&video=` value (typically a
+    // relative path next to the chart file, e.g. `bg.mp4`). Empty
+    // means "no video; fall back to image background". Resolution to
+    // an absolute filesystem path happens at chart-load time, not
+    // here, because SimaiDocument is location-agnostic.
+    QString videoPath;
     QVector<SimaiRawField> extraFields;
 
 private:

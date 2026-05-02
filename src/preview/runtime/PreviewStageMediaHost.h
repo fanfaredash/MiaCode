@@ -3,6 +3,7 @@
 #include "core/video/PreviewRenderSettings.h"
 
 #include <QElapsedTimer>
+#include <QImage>
 #include <QMetaObject>
 #include <QObject>
 #include <QPointer>
@@ -33,7 +34,7 @@ public:
     enum class MediaKind {
         None,
         Image,
-        Video,
+        Video,    // QMediaPlayer-backed (the only video path post-Phase 4d)
     };
     Q_ENUM(MediaKind)
 
@@ -54,7 +55,21 @@ public:
     void setBackgroundScaleModeValue(int mode);
     void setBackgroundScaleMode(PreviewBackgroundScaleMode mode);
 
-    void setChartPath(const QString& chartPath);
+    // Phase 4c — `chartVideoOverridePath` is the raw `&video=` value
+    // from `SimaiDocument::videoPath`. When non-empty, it overrides
+    // the sibling-filename heuristic (bg.mp4 / pv.mp4) for video
+    // resolution. Empty string preserves legacy behaviour.
+    void setChartPath(const QString& chartPath,
+                      const QString& chartVideoOverridePath = QString());
+
+    // Phase 4c-8 / 4d — fallback path for legacy LWA composition mode
+    // (when MIACODE_PREVIEW_DCOMP_PER_PIXEL_ALPHA=0): returns a copy
+    // of the currently-loaded image-mode background. With per-pixel
+    // alpha (the default), QML's PreviewStageMediaItem renders the
+    // bg natively and this getter returns null. The CPU detour
+    // exists only for the env-disabled-NRB fallback case.
+    QImage currentBackgroundImage() const;
+
     void setPlaybackRate(double rate);
     void setTimelineOffsetSeconds(double seconds);
     void setPlaybackTransactionId(quint64 transactionId);
@@ -114,9 +129,25 @@ private:
     MediaKind mediaKind_ = MediaKind::None;
     QString chartPath_;
     QString mediaPath_;
+    // Phase 4c — last-set raw `&video=` value. Cached so a no-op
+    // setChartPath(same chart, same override) is a fast skip.
+    QString chartVideoOverridePath_;
     QString warmupChartPath_;
     QString warmupMediaPath_;
     QUrl imageSource_;
+    // Phase 4c-8 — cached QImage of the loaded image-mode background.
+    // Populated in loadImageMedia(); cleared in clearMedia/loadVideoMedia/
+    // loadDcompVideoMedia. Surface reads this via currentBackgroundImage()
+    // and pushes into PreviewBuildContext for StageBackgroundSource.
+    QImage loadedBackgroundImage_;
+    // Phase 4c-9 throttle — caps QVideoFrame::toImage() conversions
+    // to ~30Hz to keep the GUI thread under per-tick budget. Each
+    // conversion is ~5–10ms (YUV→RGB + 2.5+ MB allocation) for a
+    // 1080p source; without throttling, a 30fps video produces
+    // 30 conversions/sec on the GUI thread, which pushes the
+    // 60Hz chart-preview tick into stutter territory (HUD stutter
+    // count climbed to ~20 during ECHO playback before throttling).
+    QElapsedTimer videoFrameToImageThrottle_;
     bool mediaVisible_ = true;
     PreviewBackgroundScaleMode backgroundScaleMode_ = PreviewBackgroundScaleMode::FillCrop;
     QMediaPlayer* player_ = nullptr;

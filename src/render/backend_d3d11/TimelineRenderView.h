@@ -28,6 +28,7 @@
 
 #include "render/backend_d3d11/PreviewDCompCore.h"
 #include "render/PreviewDCompRenderer.h"
+#include "render/backend_d3d11/PreviewPopupHwndTracker.h"
 #include "render/compositor.h"
 #include "sources/timeline/TimelineLabelCache.h"
 #include "sources/timeline/TimelineSpriteAssetCache.h"
@@ -82,8 +83,17 @@ private slots:
     void onWindowSceneGraphInitialized();
     void onWindowGeometryChanged();
     void onWindowVisibilityChanged();
+    // Idle-detach fix — see PreviewDCompSurface::onWindowActiveChanged
+    // for full rationale. Re-anchors the timeline popup to the tracked
+    // QQuickItem and republishes scene state when the editor regains
+    // focus.
+    void onWindowActiveChanged();
     void onRendererPresented(qint64 emittedAtNs);
     void onTrackedItemGeometryChanged();
+    // Device-removed recovery — see PreviewDCompSurface::onRendererDeviceLost
+    // for full rationale. Tears down + re-initialises Core on the same
+    // popup HWND when the renderer signals device removal.
+    void onRendererDeviceLost();
 
 private:
     void buildAndPublishSnapshot();
@@ -95,6 +105,26 @@ private:
     void setTrackedItem(QQuickItem* item);
     void applyTrackedItemGeometry();
     void ensureCompositorInitialized();
+
+#ifdef Q_OS_WIN
+    // Phase 4e — see PreviewDCompSurface::applyPopupHwndDeferred for the
+    // architecture rationale. Same pattern: WM_WINDOWPOSCHANGED on the
+    // editor HWND triggers a batched DeferWindowPos that repositions
+    // both this timeline popup and the chart-preview popup in the same
+    // DWM tick, killing the inter-popup tear during animations.
+    bool applyPopupHwndDeferred(HDWP& hdwp);
+    void registerWithPopupTracker();
+    void unregisterFromPopupTracker();
+    bool registeredWithPopupTracker_ = false;
+    // Phase 4e-fix2 — separate dedup state. See PreviewDCompSurface.h
+    // for the full rationale; same pattern here.
+    int lastDeferredAppliedXPx_ = INT_MIN;
+    int lastDeferredAppliedYPx_ = INT_MIN;
+    QSize lastDeferredAppliedPixelSize_;
+    // Issue #1 fix — owner client-size tracking. See PreviewDCompSurface.h.
+    int lastClientWPx_ = INT_MIN;
+    int lastClientHPx_ = INT_MIN;
+#endif
 
     QPointer<QQuickWindow> window_;
     QPointer<QQuickItem> trackedItem_;
@@ -155,6 +185,23 @@ private:
     int lastAppliedXPx_ = INT_MIN;
     int lastAppliedYPx_ = INT_MIN;
     QSize lastAppliedPixelSize_;
+
+    // Phase 3f-4 — second visibility gate. The 3f-1 debounce alone
+    // showed the popup as soon as geometry settled, but at that
+    // moment the renderer might not yet have produced a frame with
+    // *content* — sceneStateValid_ may still be false, or the publish
+    // → render → present pipeline may be one vsync away from showing
+    // the just-published state. The user reported a brief black-frame
+    // flash on startup. We now also require at least two
+    // buildAndPublishSnapshot calls to have completed with
+    // sceneStateValid_=true before the popup can show: one publish
+    // pushes content into the renderer's queue, the next present is
+    // the one that actually drew with that content. ShowWindow on
+    // that boundary means the popup becomes visible with a real
+    // frame in its swap chain, not the clear-color initial state.
+    bool geometrySettled_ = false;
+    int contentPublishedFrames_ = 0;
+    void maybeShowPopupHwnd();
 };
 
 }  // namespace miacode::preview::dcomp

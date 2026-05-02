@@ -67,6 +67,12 @@ TimelineRenderView::TimelineRenderView(QObject* parent)
         &renderer_, &PreviewDCompRenderer::presented, this,
         &TimelineRenderView::onRendererPresented,
         Qt::QueuedConnection);
+    // Device-removed recovery — see PreviewDCompSurface for the full
+    // rationale. Render thread emits deviceLost on D3D11 device removal;
+    // we tear down + re-initialise Core to recover.
+    connect(&renderer_, &PreviewDCompRenderer::deviceLost, this,
+            &TimelineRenderView::onRendererDeviceLost,
+            Qt::QueuedConnection);
 
     // Phase 3f-1 — startup visibility gate. Popup stays SW_HIDE from
     // creation until geometry has been quiescent for the debounce
@@ -83,19 +89,12 @@ TimelineRenderView::TimelineRenderView(QObject* parent)
     popupVisibilityDebounce_.setSingleShot(true);
     popupVisibilityDebounce_.setInterval(80);
     connect(&popupVisibilityDebounce_, &QTimer::timeout, this, [this]() {
-#ifdef Q_OS_WIN
-        if (childHwnd_ == nullptr || popupShown_) {
-            return;
-        }
-        ::ShowWindow(reinterpret_cast<HWND>(childHwnd_), SW_SHOWNOACTIVATE);
-        popupShown_ = true;
-        logTimelineViewForced(
-            "popup_shown",
-            QStringLiteral("popup=0x%1 px_w=%2 px_h=%3")
-                .arg(reinterpret_cast<quintptr>(childHwnd_), 0, 16)
-                .arg(lastAppliedPixelSize_.width())
-                .arg(lastAppliedPixelSize_.height()));
-#endif
+        // Geometry has been quiet for 80 ms — half of the show
+        // criterion. The other half is `contentPublishedFrames_ >= 2`,
+        // checked inside maybeShowPopupHwnd. Whichever arrives last
+        // triggers the actual ShowWindow.
+        geometrySettled_ = true;
+        maybeShowPopupHwnd();
     });
 }
 
@@ -144,6 +143,10 @@ void TimelineRenderView::attachToWindow(QQuickWindow* window)
             &TimelineRenderView::onWindowGeometryChanged);
     connect(window_, &QQuickWindow::visibilityChanged, this,
             &TimelineRenderView::onWindowVisibilityChanged);
+    // Idle-detach fix — re-anchor + republish on focus return. See
+    // PreviewDCompSurface::onWindowActiveChanged for the full rationale.
+    connect(window_, &QQuickWindow::activeChanged, this,
+            &TimelineRenderView::onWindowActiveChanged);
     // Top-level HWND mode also needs to follow editor position changes.
     connect(window_, &QWindow::xChanged, this,
             &TimelineRenderView::onWindowGeometryChanged);
@@ -204,6 +207,10 @@ void TimelineRenderView::detach()
     teardownCore();
 #ifdef Q_OS_WIN
     if (childHwnd_ != nullptr) {
+        // Phase 4e — unregister BEFORE the HWND vanishes so an
+        // in-flight WM_WINDOWPOSCHANGED can't fire DeferWindowPos on
+        // a freed handle. Same rationale as PreviewDCompSurface.
+        unregisterFromPopupTracker();
         ::DestroyWindow(reinterpret_cast<HWND>(childHwnd_));
         childHwnd_ = nullptr;
         logTimelineViewForced("child_hwnd_destroyed");
@@ -216,6 +223,10 @@ void TimelineRenderView::detach()
     lastAppliedXPx_ = INT_MIN;
     lastAppliedYPx_ = INT_MIN;
     lastAppliedPixelSize_ = QSize();
+    // Phase 3f-4 — reset the content-frame gate so a re-attach
+    // re-arms it (mirror of PreviewDCompSurface::detach handling).
+    geometrySettled_ = false;
+    contentPublishedFrames_ = 0;
 #endif
     window_ = nullptr;
 }
@@ -269,10 +280,12 @@ void TimelineRenderView::onWindowGeometryChanged()
         applyTrackedItemGeometry();
         return;
     }
-    if (clientPx != core_.swapChainPixelSize()) {
-        renderer_.requestResize(clientPx);
-    }
+    // Phase 4d-fix7-final2 — setVT before requestResize + displaySize
+    // bundled with the resize request to avoid render-thread race.
     core_.setVisualTransform(0, 0, clientPx);
+    if (clientPx != core_.swapChainPixelSize()) {
+        renderer_.requestResize(clientPx, clientPx);
+    }
 }
 
 void TimelineRenderView::onWindowVisibilityChanged()
@@ -300,6 +313,32 @@ void TimelineRenderView::onWindowVisibilityChanged()
     }
 }
 
+void TimelineRenderView::onWindowActiveChanged()
+{
+    if (window_ == nullptr || !initialised_) {
+        return;
+    }
+    const bool active = window_->isActive();
+    if (!active) {
+        return;
+    }
+    // Regained focus — re-anchor the popup and force a republish so the
+    // render thread has fresh state. Mirrors PreviewDCompSurface; same
+    // root cause (DWM throttling unfocused windows starves the swap
+    // chain's frame-latency waitable, leaving the popup detached).
+    if (trackedItem_ != nullptr) {
+        applyTrackedItemGeometry();
+        QTimer::singleShot(50, this, [this]() {
+            if (trackedItem_ != nullptr) {
+                applyTrackedItemGeometry();
+            }
+        });
+    }
+    if (sceneStateValid_) {
+        buildAndPublishSnapshot();
+    }
+}
+
 void TimelineRenderView::onRendererPresented(qint64 emittedAtNs)
 {
     Q_UNUSED(emittedAtNs);
@@ -311,6 +350,25 @@ void TimelineRenderView::onRendererPresented(qint64 emittedAtNs)
     // PreviewDCompFrameStateSnapshot is rebuilt but its descriptor
     // vectors don't allocate fresh storage when nothing changed.
     buildAndPublishSnapshot();
+}
+
+void TimelineRenderView::onRendererDeviceLost()
+{
+    if (!initialised_) {
+        return;
+    }
+    // Tear down + re-init on the same popup HWND. See
+    // PreviewDCompSurface::onRendererDeviceLost for the full rationale.
+    teardownCore();
+    if (!initialiseIfReady()) {
+        return;
+    }
+    if (trackedItem_ != nullptr) {
+        applyTrackedItemGeometry();
+    }
+    if (sceneStateValid_) {
+        buildAndPublishSnapshot();
+    }
 }
 
 void TimelineRenderView::onTrackedItemGeometryChanged()
@@ -364,6 +422,53 @@ void TimelineRenderView::applyTrackedItemGeometry()
     if (window_ == nullptr || trackedItem_ == nullptr || !initialised_) {
         return;
     }
+    // Issue #2 follow-up — hide the popup HWND when the tracked QQuickItem
+    // is no longer effectively visible (e.g. user switched the bottom-tab
+    // from Timeline to Validation/Muri, which sets the QML
+    // TimelineTabSurface `visible: false`; or navigated to Chart Info
+    // Settings, which destroys the tab area entirely). QQuickItem::isVisible
+    // in Qt 6 returns the *effective* visibility (parent chain considered),
+    // so checking it here detects both cases. Without this hide path the
+    // popup HWND keeps painting at its last screen position — the user
+    // sees a "ghost timeline" overlaid on whatever else is on screen.
+    //
+    // We preserve `geometrySettled_` and `contentPublishedFrames_` across
+    // the hide/show cycle: those gates were designed for the FIRST show
+    // (so the popup never appears mid-startup with stale clear-colour
+    // content). After the first successful show, they've already done
+    // their job; resetting them on every hide would force the user to
+    // wait through the gate every time they re-open the Timeline tab.
+#ifdef Q_OS_WIN
+    if (childHwnd_ != nullptr) {
+        const bool itemEffectivelyVisible = trackedItem_->isVisible();
+        if (!itemEffectivelyVisible) {
+            if (popupShown_) {
+                ::ShowWindow(reinterpret_cast<HWND>(childHwnd_), SW_HIDE);
+                popupShown_ = false;
+                logTimelineView(
+                    "popup_hidden_track_invisible",
+                    QStringLiteral("popup=0x%1 obj=%2")
+                        .arg(reinterpret_cast<quintptr>(childHwnd_), 0, 16)
+                        .arg(trackedItem_->objectName()));
+            }
+            return;
+        }
+        // Becoming visible again. If we were shown previously (the
+        // popup has real swap-chain content already), re-show
+        // immediately rather than waiting for the debounce + content-
+        // frame gate — those guard against showing an empty swap
+        // chain at startup, which doesn't apply to a hide/show cycle.
+        if (!popupShown_ && geometrySettled_ && contentPublishedFrames_ >= 2) {
+            ::ShowWindow(reinterpret_cast<HWND>(childHwnd_), SW_SHOWNOACTIVATE);
+            popupShown_ = true;
+            logTimelineView(
+                "popup_reshown_track_visible",
+                QStringLiteral("popup=0x%1 obj=%2")
+                    .arg(reinterpret_cast<quintptr>(childHwnd_), 0, 16)
+                    .arg(trackedItem_->objectName()));
+        }
+    }
+#endif
     const QPointF topLeftScene = trackedItem_->mapToScene(QPointF(0.0, 0.0));
     const qreal itemW = trackedItem_->width();
     const qreal itemH = trackedItem_->height();
@@ -377,8 +482,24 @@ void TimelineRenderView::applyTrackedItemGeometry()
     const int yPx = qRound(topLeftScene.y() * dpr);
     const QSize pixelSize(qMax(1, qRound(itemW * dpr)),
                            qMax(1, qRound(itemH * dpr)));
-    if (pixelSize != core_.swapChainPixelSize()) {
-        renderer_.requestResize(pixelSize);
+    // Phase 4d-fix7-final2 — call setVisualTransform BEFORE
+    // requestResize, and bundle displaySize with the resize request,
+    // so the render thread's post-resize VT re-apply uses a value
+    // paired atomically with this specific resize. Without that
+    // bundling, rapid GUI-thread updates can leave swap≠vt_display
+    // post-settle, scaling content non-uniformly.
+    const QSize prevSwapSize = core_.swapChainPixelSize();
+#ifdef Q_OS_WIN
+    if (childHwnd_ != nullptr) {
+        core_.setVisualTransform(0, 0, pixelSize);
+    } else {
+        core_.setVisualTransform(xPx, yPx, pixelSize);
+    }
+#else
+    core_.setVisualTransform(xPx, yPx, pixelSize);
+#endif
+    if (pixelSize != prevSwapSize) {
+        renderer_.requestResize(pixelSize, pixelSize);
     }
 #ifdef Q_OS_WIN
     // Phase 3c-fix10 — log geometry values regardless of mode (top-level
@@ -449,19 +570,30 @@ void TimelineRenderView::applyTrackedItemGeometry()
                 popupVisibilityDebounce_.start();
             }
         }
-        core_.setVisualTransform(0, 0, pixelSize);
-    } else {
-        core_.setVisualTransform(xPx, yPx, pixelSize);
     }
-#else
-    core_.setVisualTransform(xPx, yPx, pixelSize);
 #endif
+    // Phase 4d-fix7-final2 — setVisualTransform was called earlier in
+    // this function (above the resize request) so the render thread's
+    // post-resize VT re-apply uses a displaySize that's paired with
+    // the resize target.
 }
 
 void TimelineRenderView::buildAndPublishSnapshot()
 {
     if (!sceneStateValid_) {
         return;
+    }
+    // Issue #4 fix — fullscreen exit recovery. Same rationale as
+    // PreviewDCompSurface::buildAndPublishSnapshot. The timeline
+    // QQuickItem in the editor window may be destroyed and recreated
+    // around state transitions (fullscreen / panel reorganisations),
+    // and no window-level signal triggers tryDiscoverTrackedItem on
+    // the re-create path. Re-discover lazily here when needed.
+    if (trackedItem_.isNull() && window_ != nullptr) {
+        tryDiscoverTrackedItem();
+        if (!trackedItem_.isNull()) {
+            applyTrackedItemGeometry();
+        }
     }
     ensureCompositorInitialized();
 
@@ -521,6 +653,14 @@ void TimelineRenderView::buildAndPublishSnapshot()
         dpr,
         &sceneState_,
     };
+    // Phase 8 — propagate the horizontal scroll value into the snapshot
+    // so the GPU pipeline can apply it as an X offset at vertex emission
+    // time. The QSG path used a per-layer translate(-scroll, 0) on the
+    // QSGTransformNode; in DComp mode the equivalent is to subtract
+    // this value from every timeline-batch vertex's X. Without it, the
+    // renderer drew at content-X = screen-X regardless of scroll, so
+    // playback / drag / wheel had no visible effect on the body.
+    snapshot.timelineHorizontalScrollPx = sceneState_.horizontalScrollValue;
     compositor_.buildSnapshot(ctx, snapshot);
 
     if ((snapshot.revision % 60) == 0 || snapshot.revision <= 5) {
@@ -537,6 +677,42 @@ void TimelineRenderView::buildAndPublishSnapshot()
                 .arg(logicalSize.height()));
     }
     renderer_.publishSnapshot(snapshot);
+
+    // Phase 3f-4 — count publishes that actually pushed content. Two
+    // is the magic number: the first publish puts content in the
+    // renderer's queue; the next presented signal is the one that
+    // confirms the renderer drew with that content. ShowWindow on the
+    // boundary means the popup becomes visible already showing real
+    // pixels, not the swap chain's clear-color initial state. Cap at
+    // 2 so the counter doesn't grow forever — once we've shown, the
+    // gate is irrelevant.
+    if (contentPublishedFrames_ < 2) {
+        ++contentPublishedFrames_;
+        if (contentPublishedFrames_ == 2) {
+            maybeShowPopupHwnd();
+        }
+    }
+}
+
+void TimelineRenderView::maybeShowPopupHwnd()
+{
+#ifdef Q_OS_WIN
+    if (childHwnd_ == nullptr || popupShown_) {
+        return;
+    }
+    if (!geometrySettled_ || contentPublishedFrames_ < 2) {
+        return;
+    }
+    ::ShowWindow(reinterpret_cast<HWND>(childHwnd_), SW_SHOWNOACTIVATE);
+    popupShown_ = true;
+    logTimelineViewForced(
+        "popup_shown",
+        QStringLiteral("popup=0x%1 px_w=%2 px_h=%3 publishes=%4")
+            .arg(reinterpret_cast<quintptr>(childHwnd_), 0, 16)
+            .arg(lastAppliedPixelSize_.width())
+            .arg(lastAppliedPixelSize_.height())
+            .arg(contentPublishedFrames_));
+#endif
 }
 
 bool TimelineRenderView::initialiseIfReady()
@@ -677,6 +853,12 @@ void* TimelineRenderView::currentParentHwnd() const
         // window in modern Windows when no SW_SHOW* flag is in WS_*. We
         // don't need an explicit SW_HIDE call.
         const_cast<TimelineRenderView*>(this)->childHwnd_ = popup;
+        // Phase 4e — register with the owner-followed popup tracker.
+        // See PreviewDCompSurface::registerWithPopupTracker for the
+        // architecture; the timeline popup uses the same hook so both
+        // popups commit in the same DWM tick on every editor
+        // WM_WINDOWPOSCHANGED.
+        const_cast<TimelineRenderView*>(this)->registerWithPopupTracker();
         logTimelineViewForced("toplevel_hwnd_created",
                                QStringLiteral("owner=0x%1 popup=0x%2 (hidden until geometry settles)")
                                    .arg(reinterpret_cast<quintptr>(owner), 0, 16)
@@ -705,5 +887,114 @@ void TimelineRenderView::ensureCompositorInitialized()
                     QStringLiteral("source_count=%1")
                         .arg(compositor_.sourceCount()));
 }
+
+#ifdef Q_OS_WIN
+bool TimelineRenderView::applyPopupHwndDeferred(HDWP& hdwp)
+{
+    if (hdwp == nullptr) {
+        return false;
+    }
+    if (childHwnd_ == nullptr || !initialised_) {
+        return false;
+    }
+    if (trackedItem_ == nullptr || window_.isNull()) {
+        return false;
+    }
+    if (trackedItem_->window() != window_.data()) {
+        return false;
+    }
+    const qreal itemW = trackedItem_->width();
+    const qreal itemH = trackedItem_->height();
+    if (itemW <= 0.0 || itemH <= 0.0) {
+        return false;
+    }
+    const qreal dpr = window_->effectiveDevicePixelRatio() > 0.0
+        ? window_->effectiveDevicePixelRatio() : 1.0;
+    // Phase 4e-fix1 — bypass Qt's mapToGlobal (cached, stale during
+    // WM_WINDOWPOSCHANGED). Use Win32 ClientToScreen on the owner HWND
+    // for the fresh client-area origin, then add the tracked item's
+    // SCENE position. trackedItem_->mapToScene gives us the offset
+    // within the QQuickWindow's client area.
+    const HWND ownerHwnd = reinterpret_cast<HWND>(window_->winId());
+    POINT clientOriginScreen{ 0, 0 };
+    ::ClientToScreen(ownerHwnd, &clientOriginScreen);
+    // Issue #1 fix — see PreviewDCompSurface for rationale. Bail when
+    // the owner's client size has changed since the last deferred apply
+    // so the (still-stale) Qt-computed scene coords don't paint the
+    // popup at a wrong Y.
+    {
+        RECT clientRect{ 0, 0, 0, 0 };
+        ::GetClientRect(ownerHwnd, &clientRect);
+        const int clientW = clientRect.right - clientRect.left;
+        const int clientH = clientRect.bottom - clientRect.top;
+        if (lastClientWPx_ != INT_MIN && lastClientHPx_ != INT_MIN
+            && (lastClientWPx_ != clientW || lastClientHPx_ != clientH)) {
+            lastClientWPx_ = clientW;
+            lastClientHPx_ = clientH;
+            return false;
+        }
+        lastClientWPx_ = clientW;
+        lastClientHPx_ = clientH;
+    }
+    const QPointF topLeftScene = trackedItem_->mapToScene(QPointF(0.0, 0.0));
+    const int globalXPx = clientOriginScreen.x + qRound(topLeftScene.x() * dpr);
+    const int globalYPx = clientOriginScreen.y + qRound(topLeftScene.y() * dpr);
+    const QSize pixelSize(qMax(1, qRound(itemW * dpr)),
+                           qMax(1, qRound(itemH * dpr)));
+    // Phase 4e-fix2 — see PreviewDCompSurface for rationale. Dedup
+    // against lastDeferred* (independent from applyTrackedItemGeometry's
+    // lastApplied*) so this path always wins on each WM_WINDOWPOSCHANGED.
+    const bool geometryChanged =
+        (lastDeferredAppliedXPx_ != globalXPx)
+        || (lastDeferredAppliedYPx_ != globalYPx)
+        || (lastDeferredAppliedPixelSize_ != pixelSize);
+    if (!geometryChanged) {
+        return false;
+    }
+    HDWP next = ::DeferWindowPos(hdwp,
+                                  reinterpret_cast<HWND>(childHwnd_),
+                                  nullptr,
+                                  globalXPx, globalYPx,
+                                  pixelSize.width(), pixelSize.height(),
+                                  SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOREDRAW);
+    if (next == nullptr) {
+        hdwp = nullptr;
+        return false;
+    }
+    hdwp = next;
+    lastDeferredAppliedXPx_ = globalXPx;
+    lastDeferredAppliedYPx_ = globalYPx;
+    lastDeferredAppliedPixelSize_ = pixelSize;
+    lastAppliedXPx_ = globalXPx;
+    lastAppliedYPx_ = globalYPx;
+    lastAppliedPixelSize_ = pixelSize;
+    if (!popupShown_) {
+        popupVisibilityDebounce_.start();
+    }
+    return true;
+}
+
+void TimelineRenderView::registerWithPopupTracker()
+{
+    if (registeredWithPopupTracker_) {
+        return;
+    }
+    PreviewPopupHwndTracker::registerSurface(
+        this,
+        [this](HDWP& hdwp) -> bool {
+            return applyPopupHwndDeferred(hdwp);
+        });
+    registeredWithPopupTracker_ = true;
+}
+
+void TimelineRenderView::unregisterFromPopupTracker()
+{
+    if (!registeredWithPopupTracker_) {
+        return;
+    }
+    PreviewPopupHwndTracker::unregisterSurface(this);
+    registeredWithPopupTracker_ = false;
+}
+#endif
 
 }  // namespace miacode::preview::dcomp

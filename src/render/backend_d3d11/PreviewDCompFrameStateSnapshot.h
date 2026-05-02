@@ -94,6 +94,17 @@ struct PreviewDCompFrameStateSnapshot
     QVector<miacode::timeline::TimelineSceneSprite>    timelineSprites;
     QVector<miacode::timeline::TimelineSceneHoldSpan>  timelineHoldSpans;
 
+    // Phase 8 — horizontal scroll offset for the timeline batches, in
+    // physical pixels (same units as the rect/line vertex coordinates).
+    // The QSG path applied this via `transform.translate(-scroll, 0)` on
+    // each layer's transform root; in DComp mode the equivalent is to
+    // subtract this value from every X coordinate at vertex emission
+    // time. Set by the timeline IPreviewSources in contributeToSnapshot
+    // from `ctx.timelineState->horizontalScrollValue`. Chart-preview
+    // batches (Sprites/Circles/Arcs/Fireworks) ignore this value — they
+    // already render at viewport-X.
+    int timelineHorizontalScrollPx = 0;
+
     // Z-ordered draw command list. Each batch references a contiguous
     // run inside one of the primitive vectors (sprites/circles/arcs/
     // fireworks/timelineRects/timelineLines/...). The pipeline iterates

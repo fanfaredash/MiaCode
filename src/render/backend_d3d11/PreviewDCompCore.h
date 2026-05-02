@@ -55,7 +55,15 @@ public:
     // Asks the swap chain to resize to `newPixelSize`. Cheap (uses
     // ResizeBuffers, which keeps the existing back-buffer pool). Plan §4.5
     // discusses why this is decoupled from the visual transform.
-    bool resize(QSize newPixelSize);
+    // Phase 4d-fix7-final2 — `vtDisplaySizeOverride` (optional) lets
+    // the caller specify the displaySize to use when re-applying the
+    // visual transform after the swap chain resize completes. If
+    // invalid (default-constructed QSize), the post-resize re-apply
+    // falls back to the global lastVisualTransformDisplaySize_.
+    // Used by the render thread to pass the displaySize that was
+    // captured atomically with the resize request, avoiding races
+    // with concurrent GUI-thread setVisualTransform updates.
+    bool resize(QSize newPixelSize, QSize vtDisplaySizeOverride = QSize());
 
     // Updates the visual's affine transform: position relative to the
     // parent HWND's client-area origin, scaled to `displaySize` pixels. The
@@ -81,7 +89,12 @@ public:
     // do its own clear (or skip clearing entirely) and Core just flips
     // the swap chain. Returns false if !ready_ or Present fails.
     // Thread safety: render thread only, same as renderClear.
-    bool present();
+    //
+    // syncInterval is forwarded to ::Present(syncInterval, 0). 1 = wait
+    // for next vsync (legacy default); 2 = wait for two vsyncs (half
+    // rate, e.g. 60 FPS on a 120 Hz display). The renderer computes
+    // this from the user's FPS-cap option vs the display refresh rate.
+    bool present(unsigned int syncInterval = 1);
 
     // Returns the FRAME_LATENCY_WAITABLE_OBJECT handle the render thread
     // blocks on (WaitForSingleObject). Lifetime is tied to this Core —
@@ -102,6 +115,22 @@ public:
     // called.
     bool isReady() const;
 
+    // True if the D3D11 device has been removed (driver crash, GPU
+    // reset, TDR timeout, OOM removal, etc.). Wraps
+    // ID3D11Device::GetDeviceRemovedReason — if this returns FAILED the
+    // device is unrecoverable and the swap chain will fail every
+    // subsequent Present forever. The render thread polls this each
+    // iteration so it can exit cleanly instead of looping on a stuck
+    // FRAME_LATENCY_WAITABLE_OBJECT (which stops signalling once the
+    // device is removed).
+    //
+    // Observed in user logs at 06:08:30.623 (rapid progress-bar drag):
+    // [preview/dcomp] op=present hr=0x887a0005 (DXGI_ERROR_DEVICE_REMOVED).
+    // Without this check the render thread blocked on
+    // WaitForSingleObject(waitable, INFINITE) forever, freezing the
+    // entire DComp pipeline until the user killed the app.
+    bool isDeviceRemoved() const;
+
     QSize swapChainPixelSize() const;
 #else
     // Non-Windows stubs so callers can compile.
@@ -117,6 +146,7 @@ public:
     void* context() const { return nullptr; }
     void* backBufferRtv() const { return nullptr; }
     bool isReady() const { return false; }
+    bool isDeviceRemoved() const { return false; }
     QSize swapChainPixelSize() const { return {}; }
 #endif
 

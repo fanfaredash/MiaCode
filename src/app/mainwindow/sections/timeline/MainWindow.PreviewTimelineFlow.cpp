@@ -537,7 +537,7 @@ void MainWindow::TimelineSection::setCurrentFilePath(const QString& path, bool s
     if (pathChanged) {
         owner_.loadProjectRenderState();
     }
-    owner_.syncPreviewStageMediaRouteChartPath(state_.currentFilePath_, state_.lastTrackPath_, state_.qtPreviewPauseSecond_);
+    owner_.syncPreviewStageMediaRouteChartPath(state_.currentFilePath_, state_.lastTrackPath_, state_.qtPreviewPauseSecond_, state_.document_.videoPath);  // Phase 4c &video= override
     if (state_.previewCanvas_ != nullptr) {
         state_.previewCanvas_->setPlayheadSeconds(state_.qtPreviewPauseSecond_, false);
     }

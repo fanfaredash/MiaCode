@@ -326,13 +326,40 @@ bool PreviewDCompCore::createDCompVisualTree(HWND parentHwnd)
     return true;
 }
 
-bool PreviewDCompCore::resize(QSize newPixelSize)
+bool PreviewDCompCore::resize(QSize newPixelSize, QSize vtDisplaySizeOverride)
 {
     if (!ready_) {
         return false;
     }
+    // Phase 4d-fix7-final2 — pick the displaySize for post-resize VT
+    // re-apply: prefer the explicit override (atomic with the resize
+    // request), fall back to the recorded last value if no override.
+    const QSize displaySizeForReapply =
+        vtDisplaySizeOverride.isValid()
+            ? vtDisplaySizeOverride
+            : lastVisualTransformDisplaySize_;
     if (newPixelSize == swapChainSize_) {
-        return true;  // no-op
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("render/backend_d3d11/core"),
+            QStringLiteral("action=resize_noop swap=%1x%2 vt_display=%3x%4 vt_valid=%5")
+                .arg(swapChainSize_.width()).arg(swapChainSize_.height())
+                .arg(displaySizeForReapply.width())
+                .arg(displaySizeForReapply.height())
+                .arg(lastVisualTransformValid_ ? 1 : 0),
+            /*force=*/false);
+        // Phase 4d-fix7-debug — even when the swap chain is already at
+        // the target size, we may still need to refresh the visual
+        // transform: the GUI thread may have set it against an *older*
+        // swap-chain size (during a multi-step resize) and never
+        // re-applied. Re-apply with the override displaySize (or the
+        // recorded last value) against the current matching swap
+        // chain size to ensure scale=1.0 post-resize-settle.
+        if (lastVisualTransformValid_) {
+            setVisualTransform(lastVisualTransformX_, lastVisualTransformY_,
+                                displaySizeForReapply);
+        }
+        return true;
     }
     if (newPixelSize.width() <= 0 || newPixelSize.height() <= 0) {
         return false;
@@ -373,8 +400,25 @@ bool PreviewDCompCore::resize(QSize newPixelSize)
     // is wrong now. Re-applying with the same displaySize against the
     // new swap chain size gives the correct 1:1 scale.
     if (lastVisualTransformValid_) {
+        // Phase 4d-fix7-final2 — use the override displaySize (paired
+        // with this resize request) instead of the global recorded one.
         setVisualTransform(lastVisualTransformX_, lastVisualTransformY_,
-                            lastVisualTransformDisplaySize_);
+                            displaySizeForReapply);
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("render/backend_d3d11/core"),
+            QStringLiteral("action=resize_post_vt_reapply swap=%1x%2 vt_display=%3x%4")
+                .arg(swapChainSize_.width()).arg(swapChainSize_.height())
+                .arg(displaySizeForReapply.width())
+                .arg(displaySizeForReapply.height()),
+            /*force=*/false);
+    } else {
+        miacode::debug_log::appendLine(
+            miacode::debug_log::Channel::Runtime,
+            QStringLiteral("render/backend_d3d11/core"),
+            QStringLiteral("action=resize_post_vt_skip reason=no_recorded_transform swap=%1x%2")
+                .arg(swapChainSize_.width()).arg(swapChainSize_.height()),
+            /*force=*/false);
     }
     return true;
 }
@@ -448,20 +492,19 @@ bool PreviewDCompCore::renderClear(float r, float g, float b, float a)
     return present();
 }
 
-bool PreviewDCompCore::present()
+bool PreviewDCompCore::present(unsigned int syncInterval)
 {
     if (!ready_) {
         return false;
     }
-    // Present(1, 0) — block on vsync. Locks the render loop to the
-    // display refresh rate so each snapshot is rendered exactly once.
-    // The non-blocking Present(0, 0) pattern (with the render thread
-    // pacing on FRAME_LATENCY_WAITABLE_OBJECT) drains DXGI's back-buffer
-    // queue at ~167 Hz, so the same snapshot gets re-presented 2-3×
-    // before a new one arrives; any variance in snapshot publish
-    // timing then surfaces as visible motion jitter. Vsync-blocking
-    // present makes render rate = snapshot rate = display rate.
-    HRESULT hr = swapChain_->Present(1u, 0);
+    // Present(N, 0) — block until the Nth-next vsync. N=1 (default) is
+    // the historical "lock to display rate" behaviour; N>=2 caps the
+    // present rate to display_rate/N (e.g., N=2 on a 120 Hz display
+    // gives a precise 60 FPS, N=3 gives 40 FPS). Skipping presents in
+    // software is incompatible with the FRAME_LATENCY_WAITABLE_OBJECT
+    // pacing — the waitable signals once per Present, so a stuck Present
+    // would freeze the render loop.
+    HRESULT hr = swapChain_->Present(syncInterval, 0);
     if (FAILED(hr)) {
         logDCompError("present", hr);
         return false;
@@ -527,6 +570,21 @@ void PreviewDCompCore::shutdown()
 bool PreviewDCompCore::isReady() const
 {
     return ready_;
+}
+
+bool PreviewDCompCore::isDeviceRemoved() const
+{
+    if (!d3dDevice_) {
+        return false;  // No device to be "removed".
+    }
+    // GetDeviceRemovedReason returns S_OK while the device is alive and
+    // an HRESULT (DXGI_ERROR_DEVICE_REMOVED / _RESET / _HUNG / driver
+    // internal error) once it is removed. Cheap call — it just reads a
+    // flag the runtime sets when removal is detected. Safe to call
+    // from any thread because it queries device state, not anything
+    // requiring the immediate context.
+    const HRESULT hr = d3dDevice_->GetDeviceRemovedReason();
+    return FAILED(hr);
 }
 
 QSize PreviewDCompCore::swapChainPixelSize() const

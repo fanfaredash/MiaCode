@@ -1036,11 +1036,13 @@ void emitCircleVertices(const miacode::preview::scene::PreviewCircleDescriptor& 
 // as straight (R, G, B, A) for the kSolidPS shader. Same pattern as
 // emitCircleVertices.
 void emitTimelineRectVertices(const miacode::timeline::TimelineSceneRect& rect,
-                               std::vector<PreviewDCompSpriteVertex>& out)
+                               std::vector<PreviewDCompSpriteVertex>& out,
+                               int xOffset)
 {
-    const float x0 = static_cast<float>(rect.rect.left());
+    const float dx = static_cast<float>(xOffset);
+    const float x0 = static_cast<float>(rect.rect.left())   - dx;
     const float y0 = static_cast<float>(rect.rect.top());
-    const float x1 = static_cast<float>(rect.rect.right());
+    const float x1 = static_cast<float>(rect.rect.right())  - dx;
     const float y1 = static_cast<float>(rect.rect.bottom());
     if (x1 <= x0 || y1 <= y0) return;
     if (rect.color.alpha() == 0) return;
@@ -1062,16 +1064,18 @@ void emitTimelineRectVertices(const miacode::timeline::TimelineSceneRect& rect,
 // Used by header markers and the entry marker.
 void emitTimelineTriangleVertices(
     const miacode::timeline::TimelineSceneTriangle& tri,
-    std::vector<PreviewDCompSpriteVertex>& out)
+    std::vector<PreviewDCompSpriteVertex>& out,
+    int xOffset)
 {
     if (tri.color.alpha() == 0) return;
     const float r = static_cast<float>(qBound(0.0, tri.color.redF(), 1.0));
     const float g = static_cast<float>(qBound(0.0, tri.color.greenF(), 1.0));
     const float b = static_cast<float>(qBound(0.0, tri.color.blueF(), 1.0));
     const float a = static_cast<float>(qBound(0.0, tri.color.alphaF(), 1.0));
-    out.push_back({ static_cast<float>(tri.a.x()), static_cast<float>(tri.a.y()), r, g, b, a });
-    out.push_back({ static_cast<float>(tri.b.x()), static_cast<float>(tri.b.y()), r, g, b, a });
-    out.push_back({ static_cast<float>(tri.c.x()), static_cast<float>(tri.c.y()), r, g, b, a });
+    const float dx = static_cast<float>(xOffset);
+    out.push_back({ static_cast<float>(tri.a.x()) - dx, static_cast<float>(tri.a.y()), r, g, b, a });
+    out.push_back({ static_cast<float>(tri.b.x()) - dx, static_cast<float>(tri.b.y()), r, g, b, a });
+    out.push_back({ static_cast<float>(tri.c.x()) - dx, static_cast<float>(tri.c.y()), r, g, b, a });
 }
 
 // Phase 3d — timeline glyph (muri dot). The glyph descriptor carries
@@ -1085,14 +1089,16 @@ void emitTimelineTriangleVertices(
 // an SDF-based PS if pixel parity becomes important.
 void emitTimelineGlyphVertices(
     const miacode::timeline::TimelineSceneGlyph& glyph,
-    std::vector<PreviewDCompSpriteVertex>& out)
+    std::vector<PreviewDCompSpriteVertex>& out,
+    int xOffset)
 {
     if (glyph.fillColor.alpha() == 0 && glyph.strokeColor.alpha() == 0) {
         return;
     }
-    const float x0 = static_cast<float>(glyph.rect.left());
+    const float dx = static_cast<float>(xOffset);
+    const float x0 = static_cast<float>(glyph.rect.left())   - dx;
     const float y0 = static_cast<float>(glyph.rect.top());
-    const float x1 = static_cast<float>(glyph.rect.right());
+    const float x1 = static_cast<float>(glyph.rect.right())  - dx;
     const float y1 = static_cast<float>(glyph.rect.bottom());
     if (x1 <= x0 || y1 <= y0) return;
     const float cx = (x0 + x1) * 0.5f;
@@ -1159,12 +1165,14 @@ void emitTimelineGlyphVertices(
 // Width clamps up to 1 px so a zero-width request still draws a
 // visible hairline (matches the QSG path's defaultBaseWidth).
 void emitTimelineLineVertices(const miacode::timeline::TimelineSceneLine& line,
-                               std::vector<PreviewDCompSpriteVertex>& out)
+                               std::vector<PreviewDCompSpriteVertex>& out,
+                               int xOffset)
 {
     if (line.color.alpha() == 0) return;
-    const float x0 = static_cast<float>(line.start.x());
+    const float xoff = static_cast<float>(xOffset);
+    const float x0 = static_cast<float>(line.start.x()) - xoff;
     const float y0 = static_cast<float>(line.start.y());
-    const float x1 = static_cast<float>(line.end.x());
+    const float x1 = static_cast<float>(line.end.x())   - xoff;
     const float y1 = static_cast<float>(line.end.y());
     const float dx = x1 - x0;
     const float dy = y1 - y0;
@@ -1417,8 +1425,14 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
         // Circles (RunKind::Solid); just emits two triangles per rect
         // with the colour packed into the vertex slots the kSolidPS
         // shader reads as RGBA.
+        // Phase 8 — horizontal scroll translate for every timeline
+        // batch. The QSG path applied the equivalent via per-layer
+        // QSGTransformNode::translate(-scroll, 0); without it, content
+        // X = screen X and drag/wheel/playback scroll has no visible
+        // effect.
         case BatchType::TimelineRects: {
             const int end = batch.firstIndex + batch.count;
+            const int xOffset = snapshot.timelineHorizontalScrollPx;
             DrawRun r;
             r.kind = RunKind::Solid;
             r.srv = nullptr;
@@ -1427,7 +1441,7 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
             for (int i = batch.firstIndex;
                  i < end && i < snapshot.timelineRects.size(); ++i) {
                 const int before = static_cast<int>(staging.size());
-                emitTimelineRectVertices(snapshot.timelineRects.at(i), staging);
+                emitTimelineRectVertices(snapshot.timelineRects.at(i), staging, xOffset);
                 r.vertexCount += static_cast<int>(staging.size()) - before;
             }
             if (r.vertexCount > 0) {
@@ -1440,6 +1454,7 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
         // perpendicular-extruded quad. Same RunKind::Solid pipeline.
         case BatchType::TimelineLines: {
             const int end = batch.firstIndex + batch.count;
+            const int xOffset = snapshot.timelineHorizontalScrollPx;
             DrawRun r;
             r.kind = RunKind::Solid;
             r.srv = nullptr;
@@ -1448,7 +1463,7 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
             for (int i = batch.firstIndex;
                  i < end && i < snapshot.timelineLines.size(); ++i) {
                 const int before = static_cast<int>(staging.size());
-                emitTimelineLineVertices(snapshot.timelineLines.at(i), staging);
+                emitTimelineLineVertices(snapshot.timelineLines.at(i), staging, xOffset);
                 r.vertexCount += static_cast<int>(staging.size()) - before;
             }
             if (r.vertexCount > 0) {
@@ -1461,6 +1476,7 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
         // triangle, packed colour, kSolidPS pipeline.
         case BatchType::TimelineTriangles: {
             const int end = batch.firstIndex + batch.count;
+            const int xOffset = snapshot.timelineHorizontalScrollPx;
             DrawRun r;
             r.kind = RunKind::Solid;
             r.srv = nullptr;
@@ -1469,7 +1485,7 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
             for (int i = batch.firstIndex;
                  i < end && i < snapshot.timelineTriangles.size(); ++i) {
                 const int before = static_cast<int>(staging.size());
-                emitTimelineTriangleVertices(snapshot.timelineTriangles.at(i), staging);
+                emitTimelineTriangleVertices(snapshot.timelineTriangles.at(i), staging, xOffset);
                 r.vertexCount += static_cast<int>(staging.size()) - before;
             }
             if (r.vertexCount > 0) {
@@ -1485,6 +1501,7 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
         // sub-pixel corner rounding doesn't matter at typical zoom).
         case BatchType::TimelineGlyphs: {
             const int end = batch.firstIndex + batch.count;
+            const int xOffset = snapshot.timelineHorizontalScrollPx;
             DrawRun r;
             r.kind = RunKind::Solid;
             r.srv = nullptr;
@@ -1493,7 +1510,7 @@ bool PreviewDCompSpritePipeline::renderSnapshot(ID3D11DeviceContext* context,
             for (int i = batch.firstIndex;
                  i < end && i < snapshot.timelineGlyphs.size(); ++i) {
                 const int before = static_cast<int>(staging.size());
-                emitTimelineGlyphVertices(snapshot.timelineGlyphs.at(i), staging);
+                emitTimelineGlyphVertices(snapshot.timelineGlyphs.at(i), staging, xOffset);
                 r.vertexCount += static_cast<int>(staging.size()) - before;
             }
             if (r.vertexCount > 0) {

@@ -36,6 +36,7 @@
 #include "render/backend_d3d11/PreviewDCompFrameStateSnapshot.h"
 #include "timeline/TimelineSceneState.h"
 
+#include <QImage>
 #include <QRectF>
 #include <QSize>
 
@@ -69,6 +70,15 @@ struct PreviewBuildContext {
     // and timeline sources skip with a single null-check. Pointer is
     // non-owning — its lifetime is the host window/scene's lifetime.
     const miacode::timeline::TimelineSceneState* timelineState = nullptr;
+
+    // Phase 4c-8 — image-mode background override. Non-null when the
+    // chart has a resolved bg.{jpg,png,jpeg} that needs to be painted
+    // by DComp's StageBackgroundSource (because the QML
+    // PreviewStageMediaItem beneath the DComp HWND is occluded by the
+    // layered window's per-window opacity). Pre-existing v2-refactor
+    // composition gap; this field is the route to fixing it without
+    // restructuring the QML/DComp HWND layering.
+    QImage stageBackgroundImageOverride;
 };
 
 // Single-method (effectively) interface every renderable thing

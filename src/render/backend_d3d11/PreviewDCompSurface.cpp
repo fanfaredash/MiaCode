@@ -15,6 +15,11 @@
 #include "sources/chart/JudgeFireworkSource.h"
 #include "sources/chart/MaimuriDxJudgeSource.h"
 #include "sources/chart/MuriActionSource.h"
+
+// Phase 4c — non-owning host pointer; included for the lookup of
+// IMpvFrameProvider* during snapshot build. Forward decl in the
+// header keeps the public surface clean.
+#include "preview/runtime/PreviewStageMediaHost.h"
 #include "sources/chart/MuriPadSource.h"
 #include "sources/chart/SlideMotionSource.h"
 #include "sources/chart/StageBackgroundSource.h"
@@ -38,6 +43,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 
 namespace {
 // Monotonic, high-resolution timestamp in nanoseconds. Same clock as
@@ -92,6 +98,17 @@ PreviewDCompSurface::PreviewDCompSurface(QObject* parent)
         &PreviewDCompSurface::onRendererPresented,
         Qt::QueuedConnection);
 
+    // Device-removed recovery. Render thread emits `deviceLost` (queued
+    // delivery — it's on a separate thread) right before exiting due to
+    // detected D3D11 device removal. The slot tears down + re-initialises
+    // the Core to recreate the device. Without this connection the user
+    // sees a permanently frozen preview after any device-removed event
+    // (TDR / driver crash / OOM), requiring an app restart.
+    rendererDeviceLostConnection_ = connect(
+        &renderer_, &PreviewDCompRenderer::deviceLost, this,
+        &PreviewDCompSurface::onRendererDeviceLost,
+        Qt::QueuedConnection);
+
     // Worker-thread HUD rebuild. The watcher lives on the GUI thread;
     // its `finished` signal is delivered here by Qt's auto-connection,
     // and onHudRebuildFinished swaps the produced QImage into hudImage_.
@@ -107,19 +124,12 @@ PreviewDCompSurface::PreviewDCompSurface(QObject* parent)
     popupVisibilityDebounce_.setSingleShot(true);
     popupVisibilityDebounce_.setInterval(80);
     connect(&popupVisibilityDebounce_, &QTimer::timeout, this, [this]() {
-#ifdef Q_OS_WIN
-        if (childHwnd_ == nullptr || popupShown_) {
-            return;
-        }
-        ::ShowWindow(reinterpret_cast<HWND>(childHwnd_), SW_SHOWNOACTIVATE);
-        popupShown_ = true;
-        logSurface(
-            "popup_shown",
-            QStringLiteral("popup=0x%1 px_w=%2 px_h=%3")
-                .arg(reinterpret_cast<quintptr>(childHwnd_), 0, 16)
-                .arg(lastAppliedPixelSize_.width())
-                .arg(lastAppliedPixelSize_.height()));
-#endif
+        // Phase 3f-4 — geometry settled is half of the show criterion;
+        // the other half (≥ 2 publishes with content) is checked
+        // inside maybeShowPopupHwnd. Whichever arrives last triggers
+        // the actual ShowWindow.
+        geometrySettled_ = true;
+        maybeShowPopupHwnd();
     });
 }
 
@@ -139,6 +149,10 @@ PreviewDCompSurface::~PreviewDCompSurface()
     if (rendererPresentedConnection_) {
         QObject::disconnect(rendererPresentedConnection_);
         rendererPresentedConnection_ = QMetaObject::Connection();
+    }
+    if (rendererDeviceLostConnection_) {
+        QObject::disconnect(rendererDeviceLostConnection_);
+        rendererDeviceLostConnection_ = QMetaObject::Connection();
     }
     detach();
 }
@@ -169,6 +183,13 @@ void PreviewDCompSurface::attachToWindow(QQuickWindow* window)
             &PreviewDCompSurface::onWindowGeometryChanged);
     connect(window_, &QQuickWindow::visibilityChanged, this,
             &PreviewDCompSurface::onWindowVisibilityChanged);
+    // Idle-detach fix — DWM throttles compositing of unfocused windows
+    // and the swap chain's FRAME_LATENCY_WAITABLE_OBJECT can stop
+    // signalling after extended idle. When focus comes back, re-apply
+    // the tracked geometry + publish a fresh snapshot to kick the
+    // render thread back into normal pacing.
+    connect(window_, &QQuickWindow::activeChanged, this,
+            &PreviewDCompSurface::onWindowActiveChanged);
     // Top-level HWND mode also needs to follow editor position changes
     // — moving the editor must move the popup that hosts the chart.
     // QWindow::xChanged / yChanged fire on the GUI thread when the
@@ -231,6 +252,11 @@ void PreviewDCompSurface::setLayerFlags(
     onRuntimeFrameStateChanged();  // republish so the change shows immediately
 }
 
+void PreviewDCompSurface::setRenderPresentSyncInterval(unsigned int syncInterval)
+{
+    renderer_.setPresentSyncInterval(syncInterval);
+}
+
 void PreviewDCompSurface::setRuntime(PreviewRuntime* runtime)
 {
     if (runtime_ == runtime) {
@@ -275,6 +301,21 @@ void PreviewDCompSurface::setRuntime(PreviewRuntime* runtime)
     }
 }
 
+void PreviewDCompSurface::setStageMediaHost(PreviewStageMediaHost* host)
+{
+    if (stageMediaHost_ == host) {
+        return;
+    }
+    stageMediaHost_ = host;
+    logSurface("stage_media_host",
+               QStringLiteral("host=0x%1")
+                   .arg(reinterpret_cast<quintptr>(host), 0, 16));
+    // No connection to listen to — the snapshot build path looks up
+    // the provider every tick via host_->mpvFrameProvider(), so the
+    // wiring stays correct across chart switches without manual
+    // re-publishing.
+}
+
 void PreviewDCompSurface::detach()
 {
     // Wait for any in-flight HUD rebuild to finish before tearing
@@ -316,6 +357,12 @@ void PreviewDCompSurface::detach()
     // here. Has to be after teardownCore (DComp expects the parent
     // HWND alive while the visual tree is being shut down).
     if (childHwnd_ != nullptr) {
+        // Phase 4e — unregister BEFORE the HWND vanishes; otherwise an
+        // in-flight WM_WINDOWPOSCHANGED could fire DeferWindowPos on a
+        // freed HWND. The tracker holds only this surface's `this`
+        // pointer plus a callback closure capturing `this`, so it's
+        // safe to keep the closure alive until our destructor runs.
+        unregisterFromPopupTracker();
         ::DestroyWindow(reinterpret_cast<HWND>(childHwnd_));
         childHwnd_ = nullptr;
         logSurface("child_hwnd_destroyed");
@@ -328,6 +375,13 @@ void PreviewDCompSurface::detach()
     lastAppliedGlobalXPx_ = INT_MIN;
     lastAppliedGlobalYPx_ = INT_MIN;
     lastAppliedPixelSize_ = QSize();
+    // Phase 3f-4 — reset the content-frame gate alongside the
+    // geometry one. A re-attach should re-arm both: the popup is
+    // created hidden again, geometrySettled_ flips on the next
+    // debounce timeout, and contentPublishedFrames_ counts up as the
+    // new renderer publishes.
+    geometrySettled_ = false;
+    contentPublishedFrames_ = 0;
 #endif
     window_ = nullptr;
 }
@@ -371,6 +425,26 @@ void PreviewDCompSurface::buildAndPublishSnapshot(qint64 emittedAtNs)
 {
     if (runtime_ == nullptr) {
         return;
+    }
+
+    // Issue #4 fix — fullscreen exit recovery. When the embedded
+    // PreviewQuickSceneRoot is destroyed (fullscreen activation) and
+    // later re-created (fullscreen exit), QPointer auto-clears
+    // trackedItem_ but no event triggers tryDiscoverTrackedItem on
+    // the re-create path (window's geometry/visibility/sceneGraph
+    // signals don't fire — the editor window is unchanged across
+    // the fullscreen toggle). Result: popup HWND stuck at pre-
+    // fullscreen geometry, no chart updates after exit. Re-discover
+    // each publish — cheap (single findChild by objectName) and a
+    // no-op once trackedItem_ is set.
+    if (trackedItem_.isNull() && window_ != nullptr) {
+        tryDiscoverTrackedItem();
+        if (!trackedItem_.isNull()) {
+            // Newly discovered — push geometry immediately so the
+            // popup HWND moves to the correct position before the
+            // next render cycle.
+            applyTrackedItemGeometry();
+        }
     }
 
     // Note: gap and dispatch-latency diagnostics are recorded in
@@ -586,6 +660,11 @@ void PreviewDCompSurface::buildAndPublishSnapshot(qint64 emittedAtNs)
         layerFlags_,
         renderPlayheadSeconds_,
         dpr,
+        /*timelineState=*/nullptr,
+        /*stageBackgroundImageOverride=*/(
+            stageMediaHost_ != nullptr
+                ? stageMediaHost_->currentBackgroundImage()
+                : QImage()),
     };
     compositor_.buildSnapshot(ctx, snapshot);
 
@@ -612,6 +691,41 @@ void PreviewDCompSurface::buildAndPublishSnapshot(qint64 emittedAtNs)
     if (buildNs > tickBuildMaxNs_) {
         tickBuildMaxNs_ = buildNs;
     }
+
+    // Phase 3f-4 — count publishes with real content. First publish
+    // queues content for the renderer; second publish proves the
+    // renderer drew with that content (because publish is driven by
+    // onRendererPresented at vsync rate, the second invocation
+    // implies a present cycle has elapsed since content first
+    // arrived). ShowWindow on that boundary so the popup never
+    // appears showing the swap chain's clear-color initial state.
+    if (contentPublishedFrames_ < 2) {
+        ++contentPublishedFrames_;
+        if (contentPublishedFrames_ == 2) {
+            maybeShowPopupHwnd();
+        }
+    }
+}
+
+void PreviewDCompSurface::maybeShowPopupHwnd()
+{
+#ifdef Q_OS_WIN
+    if (childHwnd_ == nullptr || popupShown_) {
+        return;
+    }
+    if (!geometrySettled_ || contentPublishedFrames_ < 2) {
+        return;
+    }
+    ::ShowWindow(reinterpret_cast<HWND>(childHwnd_), SW_SHOWNOACTIVATE);
+    popupShown_ = true;
+    logSurface(
+        "popup_shown",
+        QStringLiteral("popup=0x%1 px_w=%2 px_h=%3 publishes=%4")
+            .arg(reinterpret_cast<quintptr>(childHwnd_), 0, 16)
+            .arg(lastAppliedPixelSize_.width())
+            .arg(lastAppliedPixelSize_.height())
+            .arg(contentPublishedFrames_));
+#endif
 }
 
 bool PreviewDCompSurface::isActive() const
@@ -775,10 +889,12 @@ void PreviewDCompSurface::onWindowGeometryChanged()
         applyTrackedItemGeometry();
         return;
     }
-    if (clientPx != core_.swapChainPixelSize()) {
-        renderer_.requestResize(clientPx);
-    }
+    // Phase 4d-fix7-final2 — same setVisualTransform-then-requestResize
+    // ordering, with displaySize bundled into the resize request.
     core_.setVisualTransform(0, 0, clientPx);
+    if (clientPx != core_.swapChainPixelSize()) {
+        renderer_.requestResize(clientPx, clientPx);
+    }
 }
 
 void PreviewDCompSurface::onWindowVisibilityChanged()
@@ -802,6 +918,117 @@ void PreviewDCompSurface::onWindowVisibilityChanged()
                           || (vis == QWindow::Minimized);
     if (initialised_) {
         renderer_.setPaused(shouldPause);
+    }
+
+    // Phase 4d-fix7-maximize — when the user toggles maximize/restore,
+    // the QML layout cascade settles the chart-preview QQuickItem to
+    // its new on-screen position, but `xChanged`/`yChanged` only fire
+    // on actual property changes. If the item ends up at a position
+    // that wasn't reached during the cascade's intermediate values,
+    // the popup HWND can be left at a stale position. We re-fire
+    // `applyTrackedItemGeometry` on every visibility change to catch
+    // the post-restore settled position. Single-shot QTimer with a
+    // small delay gives Qt's layout system time to finalise before
+    // we read mapToGlobal.
+    if (initialised_ && trackedItem_ != nullptr) {
+        QTimer::singleShot(50, this, [this]() {
+            if (trackedItem_ != nullptr) {
+                applyTrackedItemGeometry();
+            }
+        });
+        QTimer::singleShot(200, this, [this]() {
+            if (trackedItem_ != nullptr) {
+                applyTrackedItemGeometry();
+            }
+        });
+    }
+}
+
+void PreviewDCompSurface::onRendererDeviceLost()
+{
+    // Runs on the GUI thread (queued connection from the render thread).
+    // The render thread has already broken out of its loop and is on
+    // its way to returning from renderLoop — renderer_.stop() will
+    // join it cleanly (immediate, since it's already exiting).
+    if (!initialised_) {
+        // Already torn down by some other path (e.g. detach()).
+        // Nothing to do.
+        logSurface("device_lost_recovery_skip", QStringLiteral("reason=not_initialised"));
+        return;
+    }
+    logSurface("device_lost_recovery_begin",
+               QStringLiteral("frames_pre=%1").arg(renderer_.framesRendered()));
+
+    // Tear down: stops the (already-exiting) render thread, joins it,
+    // shuts down Core (releases device, swap chain, DComp visual tree).
+    // The popup HWND is preserved — it's owned by the surface, not Core.
+    teardownCore();
+
+    // Reinitialize: creates a fresh D3D11 device + swap chain + DComp
+    // visual tree on the SAME popup HWND, then starts a new render
+    // thread. If the GPU is still in a bad state, initialise will
+    // fail (D3D11CreateDevice returns failure or DComp can't attach);
+    // we log and stay detached. The user can recover by closing/
+    // reopening the chart or restarting the app.
+    if (!initialiseIfReady()) {
+        logSurface("device_lost_recovery_failed",
+                   QStringLiteral("reason=initialiseIfReady_returned_false"));
+        return;
+    }
+    logSurface("device_lost_recovery_complete");
+
+    // Re-anchor the popup to the tracked QQuickItem and push a fresh
+    // snapshot through the new render thread so the preview shows
+    // current state on the next vsync instead of whatever last
+    // presented before the device went away.
+    if (trackedItem_ != nullptr) {
+        applyTrackedItemGeometry();
+    }
+    if (runtime_ != nullptr) {
+        buildAndPublishSnapshot(0);
+    }
+}
+
+void PreviewDCompSurface::onWindowActiveChanged()
+{
+    if (window_ == nullptr || !initialised_) {
+        return;
+    }
+    const bool active = window_->isActive();
+    logSurface("active_changed",
+               QStringLiteral("active=%1 has_tracked=%2 has_runtime=%3")
+                   .arg(active ? 1 : 0)
+                   .arg(trackedItem_ != nullptr ? 1 : 0)
+                   .arg(runtime_ != nullptr ? 1 : 0));
+    if (!active) {
+        // Lost focus — nothing to do. The renderer keeps presenting at
+        // whatever rate DWM allows. If DWM throttles the waitable to
+        // zero, the renderer's WAIT_TIMEOUT path force-presents anyway
+        // (see PreviewDCompRenderer::renderLoop), so the loop won't
+        // soft-deadlock.
+        return;
+    }
+
+    // Regained focus / activation. Re-anchor the popup HWND to the
+    // tracked QQuickItem in case the layout settled differently while
+    // the window was idle, and publish a fresh snapshot to flush any
+    // queued state through the render thread immediately.
+    if (trackedItem_ != nullptr) {
+        applyTrackedItemGeometry();
+        // Fire a delayed re-apply too — Qt may still be processing
+        // activation-related layout adjustments when this slot runs.
+        QTimer::singleShot(50, this, [this]() {
+            if (trackedItem_ != nullptr) {
+                applyTrackedItemGeometry();
+            }
+        });
+    }
+    if (runtime_ != nullptr) {
+        // Force a fresh publish on the snapshot mailbox so the render
+        // thread has guaranteed-current state to consume on its next
+        // wake-up. The 0 emittedAtNs marks this as a non-vsync-driven
+        // publish (so the playhead-delta diagnostic ignores it).
+        buildAndPublishSnapshot(0);
     }
 }
 
@@ -887,8 +1114,43 @@ void PreviewDCompSurface::applyTrackedItemGeometry()
     const QSize pixelSize(qRound(itemW * dpr), qRound(itemH * dpr));
     if (pixelSize.width() <= 0 || pixelSize.height() <= 0) return;
 
-    if (pixelSize != core_.swapChainPixelSize()) {
-        renderer_.requestResize(pixelSize);
+    // Phase 4d-fix7-final — race-condition fix. Update the visual
+    // transform's displaySize BEFORE queuing the swap chain resize.
+    // The render thread reads `lastVisualTransformDisplaySize_` when
+    // it re-applies the visual transform after the swap chain resize
+    // completes. If we queue the resize first and update displaySize
+    // after, the render thread can pre-empt and re-apply VT with the
+    // STALE prior-frame displaySize, leaving the visual at a
+    // non-1.0 scale (e.g. swap=1108x1002 with vt_display=1108x1108
+    // produces a 10.6% vertical stretch). Updating displaySize
+    // first ensures the render thread always sees a value matching
+    // the resize target.
+    //
+    // Note: setVisualTransform itself uses the swap chain's CURRENT
+    // size (not the new one) for its scale calc. Until the render
+    // thread completes the resize, the GUI-applied visual transform
+    // produces a transient mis-scale (~16ms typically) — that's the
+    // unavoidable transition phase. The post-resize re-apply
+    // corrects it.
+    const QSize prevSwapSize = core_.swapChainPixelSize();
+#ifdef Q_OS_WIN
+    if (childHwnd_ != nullptr) {
+        core_.setVisualTransform(0, 0, pixelSize);
+    } else {
+        core_.setVisualTransform(xPx, yPx, pixelSize);
+    }
+#else
+    core_.setVisualTransform(xPx, yPx, pixelSize);
+#endif
+
+    if (pixelSize != prevSwapSize) {
+        // Phase 4d-fix7-final2 — pair the displaySize atomically with
+        // the resize request. The render thread's post-resize VT
+        // re-apply will use exactly this displaySize, eliminating the
+        // race where rapid GUI-thread setVisualTransform updates
+        // could move the global lastVisualTransformDisplaySize_ to a
+        // value that doesn't match the resize target.
+        renderer_.requestResize(pixelSize, pixelSize);
     }
     // Top-level HWND mode: the popup HWND owns the DComp visual tree
     // and is positioned via MoveWindow in SCREEN-relative coordinates
@@ -914,6 +1176,21 @@ void PreviewDCompSurface::applyTrackedItemGeometry()
                          globalXPx, globalYPx,
                          pixelSize.width(), pixelSize.height(),
                          TRUE);
+            // Phase 4d-fix7-debug — log every MoveWindow + swap chain
+            // resize to track resize misalignment regressions.
+            logSurface(
+                "popup_movewindow",
+                QStringLiteral("from_xy=%1,%2 to_xy=%3,%4 from_px=%5x%6 to_px=%7x%8 swap=%9x%10")
+                    .arg(lastAppliedGlobalXPx_)
+                    .arg(lastAppliedGlobalYPx_)
+                    .arg(globalXPx)
+                    .arg(globalYPx)
+                    .arg(lastAppliedPixelSize_.width())
+                    .arg(lastAppliedPixelSize_.height())
+                    .arg(pixelSize.width())
+                    .arg(pixelSize.height())
+                    .arg(core_.swapChainPixelSize().width())
+                    .arg(core_.swapChainPixelSize().height()));
             lastAppliedGlobalXPx_ = globalXPx;
             lastAppliedGlobalYPx_ = globalYPx;
             lastAppliedPixelSize_ = pixelSize;
@@ -924,13 +1201,12 @@ void PreviewDCompSurface::applyTrackedItemGeometry()
                 popupVisibilityDebounce_.start();
             }
         }
-        core_.setVisualTransform(0, 0, pixelSize);
-    } else {
-        core_.setVisualTransform(xPx, yPx, pixelSize);
     }
-#else
-    core_.setVisualTransform(xPx, yPx, pixelSize);
 #endif
+    // Phase 4d-fix7-final — setVisualTransform is now called BEFORE
+    // requestResize at the top of this function, eliminating the
+    // race where the render thread's post-resize VT re-apply would
+    // see a stale lastVisualTransformDisplaySize_.
 
     // Phase 4a diagnostic: log the geometry decision sparingly so we
     // can confirm the tracked item's reported bounds match the visible
@@ -1045,20 +1321,38 @@ void* PreviewDCompSurface::currentParentHwnd() const
         // us a window with no caption, no border, no system menu. The
         // extended styles together make it click-through
         // (WS_EX_TRANSPARENT), focus-stealing-proof (WS_EX_NOACTIVATE),
-        // alpha-capable (WS_EX_LAYERED — required for transparent
-        // composition), and absent from the taskbar / Alt-Tab list
-        // (WS_EX_TOOLWINDOW). The QQuickWindow's HWND is the OWNER,
-        // not the parent, which means the popup stays above the
-        // editor and follows its minimise/restore lifecycle without
-        // being clipped to the editor's client area (which is what
-        // would happen with WS_CHILD).
+        // and absent from the taskbar / Alt-Tab list (WS_EX_TOOLWINDOW).
+        //
+        // Phase 4d — composition mode selection:
+        //   - Default (legacy): WS_EX_LAYERED + LWA_ALPHA(255). Whole-
+        //     window opaque alpha; DComp content shows but the popup
+        //     occludes whatever's behind it (the QML scene). Required
+        //     for the original "no black box" workaround.
+        //   - Per-pixel alpha (opt-in): WS_EX_NOREDIRECTIONBITMAP.
+        //     Win10+ flag that skips the redirection-surface allocation
+        //     and lets DComp's premultiplied alpha composite directly
+        //     into DWM, so QML below shows through transparent areas.
+        //     Enables GPU-direct QML VideoOutput rendering for video
+        //     bg without the CPU readback we currently do.
+        //
+        // The QQuickWindow's HWND is the OWNER, not the parent, which
+        // means the popup stays above the editor and follows its
+        // minimise/restore lifecycle without being clipped to the
+        // editor's client area (which is what would happen with
+        // WS_CHILD).
         const HWND owner = reinterpret_cast<HWND>(window_->winId());
         if (owner == nullptr) {
             return nullptr;
         }
+        const bool perPixelAlpha = miacode::debug_options::previewDCompPerPixelAlphaEnabled();
+        DWORD exStyle = WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+        if (perPixelAlpha) {
+            exStyle |= WS_EX_NOREDIRECTIONBITMAP;
+        } else {
+            exStyle |= WS_EX_LAYERED;
+        }
         const HWND popup = ::CreateWindowExW(
-            WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_LAYERED
-                | WS_EX_TOOLWINDOW,
+            exStyle,
             L"STATIC",
             L"",
             WS_POPUP,
@@ -1068,24 +1362,51 @@ void* PreviewDCompSurface::currentParentHwnd() const
         if (popup == nullptr) {
             const DWORD err = ::GetLastError();
             logSurface("toplevel_hwnd_create_failed",
-                       QStringLiteral("err=%1").arg(err));
+                       QStringLiteral("err=%1 ex_style=0x%2 mode=%3")
+                           .arg(err)
+                           .arg(exStyle, 0, 16)
+                           .arg(perPixelAlpha ? "per_pixel_alpha" : "layered_lwa"));
             return reinterpret_cast<void*>(owner);
         }
-        // Fully opaque alpha — the chart content itself comes from
-        // DComp's premultiplied compositing. The layered window flag
-        // is required to coexist with the editor's swap chain
-        // without producing a black box.
-        ::SetLayeredWindowAttributes(popup, 0, 255, LWA_ALPHA);
+        if (!perPixelAlpha) {
+            // Legacy mode — fully opaque alpha; the chart content itself
+            // comes from DComp's premultiplied compositing. The layered
+            // window flag is required to coexist with the editor's swap
+            // chain without producing a black box.
+            ::SetLayeredWindowAttributes(popup, 0, 255, LWA_ALPHA);
+        }
+        // Per-pixel alpha mode skips SetLayeredWindowAttributes entirely
+        // — NRB-popup composes via DComp + DWM directly.
         // Phase 3f-1 — DON'T ShowWindow here. The popup stays hidden
         // until applyTrackedItemGeometry's debounce timer fires, which
         // happens 80 ms after the last MoveWindow (= geometry has
         // stopped changing). Eliminates the visible "popup dancing
         // around screen during startup" flicker the user reported.
         const_cast<PreviewDCompSurface*>(this)->childHwnd_ = popup;
+        // Phase 4e — diagnostic-A: prove this code path executes via the
+        // same logSurface path that successfully emits toplevel_hwnd_created.
+        // If "before_register_marker" appears in runtime log, code is reached.
+        logSurface("before_register_marker",
+                   QStringLiteral("popup=0x%1 childHwnd=0x%2")
+                       .arg(reinterpret_cast<quintptr>(popup), 0, 16)
+                       .arg(reinterpret_cast<quintptr>(childHwnd_), 0, 16));
+        // Phase 4e — register with the owner-followed popup tracker now
+        // that the HWND exists. Hooks into WM_WINDOWPOSCHANGED on the
+        // editor HWND so drag/maximize animations track instantly via
+        // a batched DeferWindowPos instead of waiting for Qt signals.
+        const_cast<PreviewDCompSurface*>(this)->registerWithPopupTracker();
+        // Phase 4e — diagnostic-B: prove registerWithPopupTracker returned.
+        // If "after_register_marker" appears, the call returned (didn't
+        // throw or hang). Writing through the proven-working logSurface
+        // path eliminates any "fopen denied" hypothesis.
+        logSurface("after_register_marker",
+                   QStringLiteral("registered=%1")
+                       .arg(registeredWithPopupTracker_ ? 1 : 0));
         logSurface("toplevel_hwnd_created",
-                   QStringLiteral("owner=0x%1 popup=0x%2 (hidden until geometry settles)")
+                   QStringLiteral("owner=0x%1 popup=0x%2 mode=%3 (hidden until geometry settles)")
                        .arg(reinterpret_cast<quintptr>(owner), 0, 16)
-                       .arg(reinterpret_cast<quintptr>(popup), 0, 16));
+                       .arg(reinterpret_cast<quintptr>(popup), 0, 16)
+                       .arg(perPixelAlpha ? "per_pixel_alpha" : "layered_lwa"));
         return reinterpret_cast<void*>(popup);
     }
     return reinterpret_cast<void*>(window_->winId());
@@ -1229,5 +1550,170 @@ void PreviewDCompSurface::logPresentRateDiagnostic()
     lastDiagQtFrames_ = qtFrames;
     lastDiagNs_ = nowNs;
 }
+
+#ifdef Q_OS_WIN
+bool PreviewDCompSurface::applyPopupHwndDeferred(HDWP& hdwp)
+{
+    // Phase 4e — fast HWND tracking driven by the editor's
+    // WM_WINDOWPOSCHANGED. Keep this minimal: just MoveWindow
+    // equivalent via DeferWindowPos. Visual-transform / swap-chain
+    // resize stay on the Qt-signal path (applyTrackedItemGeometry).
+    if (hdwp == nullptr) {
+        return false;
+    }
+    if (childHwnd_ == nullptr || !initialised_) {
+        return false;
+    }
+    if (trackedItem_ == nullptr || window_.isNull()) {
+        return false;
+    }
+    if (trackedItem_->window() != window_.data()) {
+        return false;
+    }
+    const qreal itemW = trackedItem_->width();
+    const qreal itemH = trackedItem_->height();
+    if (itemW <= 0.0 || itemH <= 0.0) {
+        return false;
+    }
+    const qreal dpr = window_->effectiveDevicePixelRatio() > 0.0
+        ? window_->effectiveDevicePixelRatio() : 1.0;
+    const QPointF topLeftScene = trackedItem_->mapToScene(QPointF(0.0, 0.0));
+    // Phase 4e-fix1 — bypass Qt's QQuickWindow::mapToGlobal because it
+    // reads a CACHED frame geometry that Qt updates AFTER processing
+    // WM_WINDOWPOSCHANGED. At the moment our deferred callback runs,
+    // Qt's cache still has the previous position, so mapToGlobal would
+    // return STALE coordinates and the dedup check (geometryChanged)
+    // would always be false — DeferWindowPos never fires. Use Win32
+    // ClientToScreen directly: it reads the kernel's current window
+    // state and returns the FRESH client-area origin every call.
+    const HWND ownerHwnd = reinterpret_cast<HWND>(window_->winId());
+    POINT clientOriginScreen{ 0, 0 };
+    ::ClientToScreen(ownerHwnd, &clientOriginScreen);
+    // Issue #1 fix — detect window RESIZE (vs. pure translation) by
+    // checking GetClientRect against the last observed client size.
+    // During a resize (e.g. user drags the right edge of the window),
+    // both Win32 and Qt see the new geometry, but they arrive at
+    // different times: ClientToScreen above is FRESH (kernel-side),
+    // while trackedItem_->mapToScene below is STALE (Qt's layout
+    // cascade is async). Combining them yields a wrong popup
+    // position for ~1 frame, visibly inconsistent with the QML
+    // background rectangle. We can't synchronise Qt's layout from
+    // inside a Win32 message handler safely, so on a detected resize
+    // we bail and let the Qt-signal path (applyTrackedItemGeometry,
+    // wired to xChanged/widthChanged) catch up. Pure-translation
+    // drags continue to use the synchronous deferred path because
+    // mapToScene returns correct values when only the window's origin
+    // changed.
+    {
+        RECT clientRect{ 0, 0, 0, 0 };
+        ::GetClientRect(ownerHwnd, &clientRect);
+        const int clientW = clientRect.right - clientRect.left;
+        const int clientH = clientRect.bottom - clientRect.top;
+        if (lastClientWPx_ != INT_MIN && lastClientHPx_ != INT_MIN
+            && (lastClientWPx_ != clientW || lastClientHPx_ != clientH)) {
+            // Size changed since last deferred apply. Refuse to commit
+            // a stale-Qt-coords position; let xChanged catch up via
+            // applyTrackedItemGeometry. Update the tracking values so
+            // the next call (which sees the same size) can proceed.
+            lastClientWPx_ = clientW;
+            lastClientHPx_ = clientH;
+            return false;
+        }
+        lastClientWPx_ = clientW;
+        lastClientHPx_ = clientH;
+    }
+    const int globalXPx = clientOriginScreen.x + qRound(topLeftScene.x() * dpr);
+    const int globalYPx = clientOriginScreen.y + qRound(topLeftScene.y() * dpr);
+    const QSize pixelSize(qMax(1, qRound(itemW * dpr)),
+                           qMax(1, qRound(itemH * dpr)));
+    // Phase 4e-fix2 — dedup against lastDeferred*, not lastApplied*.
+    // The Qt-signal driven applyTrackedItemGeometry() also moves the
+    // popup and updates lastApplied* on every xChanged/widthChanged;
+    // if we shared dedup state, the deferred callback would always
+    // early-out (since applyTrackedItemGeometry runs first and pre-
+    // computes the same target), which is exactly what diagnostic
+    // run on 2026-05-02 showed: computed always equalled last while
+    // the user was actively dragging. Separate state guarantees the
+    // deferred path commits at least once per WM_WINDOWPOSCHANGED
+    // tick, which is the whole point — that's the synchronous-with-
+    // editor's-compositor-tick property the Qt-signal path lacks.
+    const bool geometryChanged =
+        (lastDeferredAppliedXPx_ != globalXPx)
+        || (lastDeferredAppliedYPx_ != globalYPx)
+        || (lastDeferredAppliedPixelSize_ != pixelSize);
+    {
+        static thread_local qint64 s_lastLogMs = 0;
+        const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+        if (nowMs - s_lastLogMs >= 1000) {
+            s_lastLogMs = nowMs;
+            logSurface("popup_deferred_check",
+                       QStringLiteral("computed=%1,%2 lastDef=%3,%4 size=%5x%6 lastDefSize=%7x%8 changed=%9")
+                           .arg(globalXPx).arg(globalYPx)
+                           .arg(lastDeferredAppliedXPx_).arg(lastDeferredAppliedYPx_)
+                           .arg(pixelSize.width()).arg(pixelSize.height())
+                           .arg(lastDeferredAppliedPixelSize_.width()).arg(lastDeferredAppliedPixelSize_.height())
+                           .arg(geometryChanged ? 1 : 0));
+        }
+    }
+    if (!geometryChanged) {
+        return false;
+    }
+    // SWP_NOREDRAW: we don't want a partial-paint flash during the
+    // batch — DComp will re-present its own swap chain on the next
+    // vsync regardless. SWP_NOACTIVATE | SWP_NOZORDER: the popup is
+    // owned, so its z-order is automatic; activating it would steal
+    // focus from the editor mid-drag.
+    HDWP next = ::DeferWindowPos(hdwp,
+                                  reinterpret_cast<HWND>(childHwnd_),
+                                  nullptr,
+                                  globalXPx, globalYPx,
+                                  pixelSize.width(), pixelSize.height(),
+                                  SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOREDRAW);
+    if (next == nullptr) {
+        // Signal error to the tracker by zeroing hdwp; tracker bails
+        // out of the rest of the batch this tick.
+        hdwp = nullptr;
+        return false;
+    }
+    hdwp = next;
+    // Update BOTH dedup states. Updating lastApplied* lets the
+    // Qt-signal-driven applyTrackedItemGeometry skip its redundant
+    // MoveWindow when its xChanged finally fires (the popup is
+    // already where Qt thinks it should be). Updating lastDeferred*
+    // is the actual dedup for our path.
+    lastDeferredAppliedXPx_ = globalXPx;
+    lastDeferredAppliedYPx_ = globalYPx;
+    lastDeferredAppliedPixelSize_ = pixelSize;
+    lastAppliedGlobalXPx_ = globalXPx;
+    lastAppliedGlobalYPx_ = globalYPx;
+    lastAppliedPixelSize_ = pixelSize;
+    if (!popupShown_) {
+        popupVisibilityDebounce_.start();
+    }
+    return true;
+}
+
+void PreviewDCompSurface::registerWithPopupTracker()
+{
+    if (registeredWithPopupTracker_) {
+        return;
+    }
+    PreviewPopupHwndTracker::registerSurface(
+        this,
+        [this](HDWP& hdwp) -> bool {
+            return applyPopupHwndDeferred(hdwp);
+        });
+    registeredWithPopupTracker_ = true;
+}
+
+void PreviewDCompSurface::unregisterFromPopupTracker()
+{
+    if (!registeredWithPopupTracker_) {
+        return;
+    }
+    PreviewPopupHwndTracker::unregisterSurface(this);
+    registeredWithPopupTracker_ = false;
+}
+#endif
 
 }  // namespace miacode::preview::dcomp

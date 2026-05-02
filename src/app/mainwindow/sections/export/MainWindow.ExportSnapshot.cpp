@@ -376,7 +376,16 @@ bool MainWindow::ExportSection::buildVideoExportSnapshot(
         ? QString()
         : QFileInfo(owner_.currentFilePath_).absolutePath();
     built.trackPath = owner_.resolveDefaultTrackPath();
-    built.backgroundMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(owner_.currentFilePath_);
+    // Phase 4c — honour `&video=` override so live preview and export
+    // render the same background. Without this, a chart with an
+    // explicit `&video=` would diverge: live preview uses libmpv on
+    // the override path, export's ffmpeg input uses the sibling
+    // file (or nothing if no sibling exists).
+    built.backgroundMediaPath = miacode::chart_assets::resolveChartVideoPath(
+        owner_.currentFilePath_, owner_.document_.videoPath);
+    if (built.backgroundMediaPath.isEmpty()) {
+        built.backgroundMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(owner_.currentFilePath_);
+    }
     built.skinDirectory = owner_.resolvePreviewSkinDir();
     built.audioSettings = owner_.previewAudioSettings_;
     built.audioSettings.normalize();
@@ -586,7 +595,13 @@ bool MainWindow::ExportSection::buildVideoExportSnapshotForChartDirectory(
     built.originalChartPath = chartPath;
     built.projectDir = QFileInfo(chartPath).absolutePath();
     built.trackPath = trackPath;
-    built.backgroundMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(chartPath);
+    // Phase 4c — batch export honours `&video=` like the single-chart
+    // export path so per-chart explicit overrides flow through.
+    built.backgroundMediaPath = miacode::chart_assets::resolveChartVideoPath(
+        chartPath, document.videoPath);
+    if (built.backgroundMediaPath.isEmpty()) {
+        built.backgroundMediaPath = miacode::chart_assets::resolveBackgroundMediaPath(chartPath);
+    }
     built.skinDirectory = owner_.resolvePreviewSkinDir();
     built.audioSettings = requestedTask.audioSettings;
     built.audioSettings.normalize();

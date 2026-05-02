@@ -2,6 +2,7 @@
 
 #include "render/backend_d3d11/PreviewDCompCore.h"
 #include "render/PreviewDCompRenderer.h"
+#include "render/backend_d3d11/PreviewPopupHwndTracker.h"
 #include "render/compositor.h"
 #include "core/scene/PreviewHeadLayerState.h"
 #include "core/scene/PreviewLayerOrder.h"
@@ -23,6 +24,7 @@
 class QQuickItem;
 class QQuickWindow;
 class PreviewRuntime;
+class PreviewStageMediaHost;
 
 namespace miacode::preview::dcomp {
 
@@ -63,6 +65,15 @@ public:
     // thread reads at the top of each frame). Pass nullptr to detach.
     void setRuntime(PreviewRuntime* runtime);
 
+    // Phase 4c — wires the libmpv-backed video provider into the
+    // compositor's per-tick PreviewBuildContext. The host owns the
+    // actual MpvVideoBackend; this surface stores only a non-owning
+    // pointer used to look up the current `IMpvFrameProvider*` via
+    // `host->mpvFrameProvider()` on every snapshot build (so the
+    // wiring stays correct across chart switches without an explicit
+    // re-wire). Pass nullptr to detach.
+    void setStageMediaHost(PreviewStageMediaHost* host);
+
     // Phase 3.6: per-layer enable bitmap. Mirrors PreviewQuickSceneRoot's
     // layerFlags_; defaults to kPreviewAllRenderLayers for live preview.
     // Each onRuntimeFrameStateChanged() honours the current flags before
@@ -70,6 +81,14 @@ public:
     // and the draw-list contribution. Used by the future export path
     // when DComp replaces QSG there too.
     void setLayerFlags(miacode::preview::scene::PreviewRenderLayerFlags flags);
+
+    // Issue #3 fix — forwards to PreviewDCompRenderer::setPresentSyncInterval.
+    // 1 = vsync rate (display refresh); 2 = half rate (e.g. 60 FPS on
+    // a 120 Hz display); etc. Wired from MainWindow's Render Settings
+    // → Preview Canvas Frame Rate option via QuickShellBootstrap, with
+    // the GUI computing the interval from the user's target FPS and
+    // QScreen::refreshRate().
+    void setRenderPresentSyncInterval(unsigned int syncInterval);
 
     // Releases all resources and disconnects from the window. Idempotent.
     void detach();
@@ -80,10 +99,30 @@ private slots:
     void onWindowSceneGraphInitialized();
     void onWindowGeometryChanged();
     void onWindowVisibilityChanged();
+    // Idle-detach fix — fires on QQuickWindow::activeChanged. When the
+    // editor window regains keyboard focus / activation after sitting
+    // idle (DWM throttles compositing of unfocused windows; the popup
+    // can drift / desync), force a fresh applyTrackedItemGeometry +
+    // publish so the popup re-anchors to the tracked QQuickItem and
+    // the renderer wakes from its starved-waitable spinner. See user
+    // bug report: "preview detaches and clicking play doesn't refresh
+    // it after window idle + loses focus".
+    void onWindowActiveChanged();
     void onRuntimeFrameStateChanged();
     void onRendererPresented(qint64 emittedAtNs);
     void onTrackedItemGeometryChanged();
     void onHudRebuildFinished();
+    // Device-removed recovery handler. Fired (queued) by the render
+    // thread when it detects DXGI_ERROR_DEVICE_REMOVED via
+    // GetDeviceRemovedReason and exits. The slot tears down the Core
+    // and re-initialises it on the same popup HWND — yielding a fresh
+    // D3D11 device + swap chain + DComp visual tree — then restarts
+    // the renderer. Single retry; if reinit fails we log and stay
+    // detached. See user repro at 06:40:37 in the runtime log:
+    //   [preview/dcomp] op=present hr=0x887a0005
+    //   [render/.../renderer] action=device_removed_exit ...
+    //   (preview frozen until app restart)
+    void onRendererDeviceLost();
 
 private:
     // Internal publish helper. emittedAtNs is the render thread's
@@ -109,9 +148,52 @@ private:
     void setTrackedItem(QQuickItem* item);
     void applyTrackedItemGeometry();
 
+#ifdef Q_OS_WIN
+    // Phase 4e — deferred-batch popup repositioning, called from
+    // PreviewPopupHwndTracker on every WM_WINDOWPOSCHANGED for the
+    // owner editor HWND. Computes the popup's target screen rect from
+    // the tracked QQuickItem (same source of truth as
+    // applyTrackedItemGeometry), and extends the in-flight HDWP via
+    // ::DeferWindowPos so all popups commit in one DWM tick. Skipping
+    // the DComp visual transform / swap chain resize here is
+    // deliberate — those are still driven by Qt's xChanged/widthChanged
+    // signals, so during an animation the HWND tracks instantly while
+    // VT/swap-chain catch up over 1-2 frames (invisible on a popup
+    // this size).
+    bool applyPopupHwndDeferred(HDWP& hdwp);
+    void registerWithPopupTracker();
+    void unregisterFromPopupTracker();
+    bool registeredWithPopupTracker_ = false;
+    // Phase 4e-fix2 — separate dedup state for the deferred path.
+    // applyTrackedItemGeometry (Qt-signal driven) and the deferred
+    // callback share the same target geometry but run on different
+    // schedules; sharing lastApplied* causes the Qt-signal path to
+    // pre-update the dedup before WM_WINDOWPOSCHANGED arrives, so the
+    // deferred callback always early-outs and the synchronous batch
+    // never commits in the editor's compositor tick. With separate
+    // tracking, the deferred callback fires every tick where it sees
+    // a position different from what IT last committed — which is
+    // every drag tick, since the Qt-signal path is one cycle behind.
+    int lastDeferredAppliedXPx_ = INT_MIN;
+    int lastDeferredAppliedYPx_ = INT_MIN;
+    QSize lastDeferredAppliedPixelSize_;
+    // Issue #1 fix — track owner window's client size to detect resize
+    // events (vs. pure translation) inside the deferred callback. On
+    // a detected resize we bail out so the Qt-signal path can catch up
+    // with consistent geometry; see applyPopupHwndDeferred for the full
+    // rationale.
+    int lastClientWPx_ = INT_MIN;
+    int lastClientHPx_ = INT_MIN;
+#endif
+
     QPointer<QQuickWindow> window_;
     QPointer<QQuickItem> trackedItem_;
     QPointer<PreviewRuntime> runtime_;
+    // Phase 4c — non-owning. Looked up each snapshot build via
+    // host_->mpvFrameProvider() to populate ctx.mpvFrameProvider for
+    // MpvVideoSource. QPointer auto-clears if the host is destroyed
+    // (e.g. on app exit before our dtor runs).
+    QPointer<PreviewStageMediaHost> stageMediaHost_;
 
     // When previewDCompTopLevelHwndEnabled, we create a top-level
     // borderless transparent owned popup HWND, give the DComp visual
@@ -133,6 +215,18 @@ private:
     int lastAppliedGlobalXPx_ = INT_MIN;
     int lastAppliedGlobalYPx_ = INT_MIN;
     QSize lastAppliedPixelSize_;
+    // Phase 3f-4 — second visibility gate. The 3f-1 debounce alone
+    // showed the popup as soon as geometry settled, but that moment
+    // could land BEFORE the renderer actually drew a frame with
+    // content (the swap chain still held its clear-color initial
+    // state). The user reported a brief black-frame flash. We now
+    // also require ≥ 2 buildAndPublishSnapshot calls to have
+    // completed before ShowWindow fires — one to push content into
+    // the queue, the next present cycle to draw it. ShowWindow
+    // happens on whichever signal arrives last.
+    bool geometrySettled_ = false;
+    int contentPublishedFrames_ = 0;
+    void maybeShowPopupHwnd();
     QMetaObject::Connection runtimeFrameStateConnection_;
     // Stored so detach() can explicitly disconnect the render thread's
     // `presented` signal BEFORE renderer_.stop() joins. Without this,
@@ -142,6 +236,10 @@ private:
     // crashing during shutdown with the cross-thread UAF that produces
     // the 2 GB process dumps.
     QMetaObject::Connection rendererPresentedConnection_;
+    // Same shutdown-safety pattern for the deviceLost queued signal —
+    // explicit disconnect before renderer_.stop() joins so any in-flight
+    // emit doesn't dispatch on a half-destroyed surface.
+    QMetaObject::Connection rendererDeviceLostConnection_;
     QVector<QMetaObject::Connection> trackedItemConnections_;
     // Wall-clock timestamp of the last snapshot publish. Used by
     // diagnostics; the publish path itself does NOT throttle.

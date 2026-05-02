@@ -56,7 +56,15 @@ public:
     // `WaitForSingleObject` returning and the next present, which is the
     // safe spot — D3D11 doesn't allow ResizeBuffers while a present is in
     // flight, and there are no outstanding frames at that point.
-    void requestResize(QSize newPixelSize);
+    // Phase 4d-fix7-final2 — `displaySize` is the value to use as the
+    // visual transform's displaySize when re-applying after the swap
+    // chain resize completes. Must travel with the resize request so
+    // it stays consistent across rapid GUI-thread updates: without
+    // this, a fast enlarge→shrink sequence would queue a resize for
+    // size A but by the time the render thread re-applies VT, the
+    // global lastVisualTransformDisplaySize_ may have been updated
+    // to size B, producing scale != 1.
+    void requestResize(QSize newPixelSize, QSize displaySize);
 
     // Diagnostics counter. Read from any thread; written from the render
     // thread.
@@ -83,6 +91,23 @@ public:
     // signal to drive vsync-aligned publishes (playback case).
     bool isActivelyRendering() const;
 
+    // FPS cap. Sets the SyncInterval passed to ::Present(SyncInterval, 0).
+    //   - 1 (default) = vsync rate (display refresh).
+    //   - 2           = half rate (e.g., 60 FPS on 120 Hz display).
+    //   - 3           = third rate.
+    //   - clamped to [1, 4] internally.
+    // Computed by the GUI from the user's target FPS option and the
+    // display refresh rate (which only Qt's QScreen API exposes). The
+    // render thread reads this atomically every present and passes it
+    // to Present, so the change takes effect within one frame.
+    //
+    // Why not "skip presents in software": the DXGI frame-latency
+    // waitable signals after a Present consumes a back-buffer slot.
+    // Skipping presents starves the waitable, freezing the loop. Using
+    // SyncInterval keeps Present in the cycle and lets the waitable
+    // pace it correctly.
+    void setPresentSyncInterval(unsigned int syncInterval);
+
 signals:
     // Fired from the render thread after each successful Present. The
     // surface listens to this on the GUI thread (Qt::QueuedConnection)
@@ -98,6 +123,23 @@ signals:
     // running the slot. High dispatch latency means the GUI thread was
     // blocked by *something else* during that window.
     void presented(qint64 emittedAtNs);
+
+    // Fired from the render thread immediately before exiting due to
+    // detected D3D11 device removal (TDR / driver crash / OOM /
+    // GPU power-state transition). The render thread cannot recover
+    // by itself — only the GUI thread can call shutdown() + initialise()
+    // on Core to get a fresh D3D11 device, and only the GUI thread can
+    // restart the renderer.
+    //
+    // The surface listens to this on the GUI thread via Qt::QueuedConnection
+    // and runs the recovery dance: stop renderer → shutdown core →
+    // re-initialise core (new device + swap chain on the same popup
+    // HWND) → restart renderer → republish a snapshot. If recovery
+    // succeeds the user sees a brief (<200 ms) flicker; if recovery
+    // fails the surface logs and stays detached, requiring an app
+    // restart — same end state as before this signal existed, but
+    // with diagnostic visibility.
+    void deviceLost();
 
 private:
     void renderLoop();
@@ -146,6 +188,7 @@ private:
     // before calling into Core::resize().
     std::mutex pendingResizeMutex_;
     QSize pendingResizeSize_;
+    QSize pendingResizeDisplaySize_;  // Phase 4d-fix7-final2 — see header
     bool pendingResizeRequested_ = false;
 
     // For colour-cycle animation. Captured at start() so the cycle starts
@@ -174,6 +217,22 @@ private:
     double playheadDeltaMaxMs_ = 0.0;
     double playheadDeltaMinMs_ = 1.0e9;
     qint64 playheadDeltaSampleCount_ = 0;
+
+    // FPS cap (see setPresentSyncInterval). Read from the render thread,
+    // written from any thread. 1 = vsync rate; 2 = half; etc.
+    std::atomic<unsigned int> presentSyncInterval_{ 1 };
+    qint64 lastPresentNs_ = 0;
+
+    // Diagnostic counter — incremented every time WaitForSingleObject hits
+    // its 1-second timeout (waitable starved). Reset on a successful
+    // wake-up. Logged periodically while >0. Used to chase down the
+    // "preview detached after idle / lost focus" pattern: DWM can throttle
+    // compositing of unfocused windows, which starves the swap chain's
+    // FRAME_LATENCY_WAITABLE_OBJECT, which previously turned the render
+    // thread into a 1 Hz spinner that never re-armed the fence. Now we
+    // fall through to a forced Present on timeout to break the soft
+    // deadlock — this counter records how often that path fires.
+    qint64 waitTimeoutCount_ = 0;
 };
 
 }  // namespace miacode::preview::dcomp

@@ -244,6 +244,9 @@
         bool deferredQuickShellStartupStageMediaPending_ = false;
         bool deferredQuickShellStartupStageMediaFlushScheduled_ = false;
         QString deferredQuickShellStartupStageMediaChartPath_;
+        // Phase 4c — caches the &video= override for the deferred-load
+        // path so the eventual setChartPath call has the right metadata.
+        QString deferredQuickShellStartupStageMediaVideoOverride_;
         double deferredQuickShellStartupStageMediaPausedSecond_ = 0.0;
         quint64 waveformRefreshGeneration_ = 0;
         bool pendingDeferredValidationUiRefresh_ = false;
