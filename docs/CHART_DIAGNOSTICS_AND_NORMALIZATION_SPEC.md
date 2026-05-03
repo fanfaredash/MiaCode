@@ -111,6 +111,8 @@ below is exactly the severity displayed in the UI.
 | 12 | Unmatched closing bracket | Error | `StrictChecks.cpp:131-137` (within `runStrictFormatChecks`) | `]` without matching `[`; `}` without `{`; `)` without `(` |
 | 13 | Unclosed bracket | Error | `StrictChecks.cpp:142-145` (within `runStrictFormatChecks`) | `[` / `{` / `(` left on the stack at end of file |
 | 14 | Non-canonical center touch token (`C1`/`C2`) | Warning | `TouchTap.cpp:12-31` `kNonCanonicalCenterTouchPrefix` | `C1` — both lenient and strict normalize to `C`; strict additionally flags the non-canonical form. |
+| 15 | Misplaced slide-head modifier (`?` / `!` / `@`) | Error | `Driver.cpp` `detectMisplacedSlideHeadModifierMessage` / `kMisplacedSlideHeadModifierPrefix` | These characters are slide-only head modifiers. Strict requires every `?`/`!`/`@` to sit at index `[1, firstShapeIdx)` of a token that contains a slide-shape character (`-^v<>VpqszwW`). Order with `b`/`x` is unrestricted. Examples: `1!`, `1h@`, `1-5![8:1]`, `1-?5[8:1]` all reject; `1!-5[8:1]`, `1x?-5[8:1]`, `1@bx-5[8:1]` all pass. |
+| 16 | Misplaced tap-star modifier (`$` / `$$`) | Error | `Driver.cpp` `detectMisplacedTapStarModifierMessage` / `kMisplacedTapStarModifierPrefix` | `$` is a tap-only modifier (sets `tapUsesStarMaterial`; `$$` adds `tapStarDouble`). Strict rejects `$` in any token that is not a pure tap — i.e., any token that is non-digit-led, contains a slide-shape char, contains `[…]`, or contains `h` (case-insensitive). Combination with `b` / `x` in either order is fine: `1$`, `1$$`, `1b$`, `1$x`, `1$bx`, `1bx$$` all pass; `A1$`, `1-5$[8:1]`, `1h$`, `1$h[1:1]` all reject. |
 
 The `runStrictFormatChecks(state, lines)` pass at `Driver.cpp:652` runs
 **after** the main parse loop. It strips control blocks `( … )`, `{ … }`,
@@ -239,6 +241,11 @@ participates. The strict severity is the UI severity.
 | `1abc,2,3,` (note-line missing comma somewhere) | **Error** | `Missing beat separator ','` from `runStrictFormatChecks` |
 | `1xh` / `1hx` / `1bxhf` / `1fxhb` | **Not flagged** | `parseTapModifierSequence` is order-agnostic |
 | Touch `C1` | **Warning** *(flipped from Error)* | `kNonCanonicalCenterTouchPrefix` (`TouchTap.cpp:12-31`). Both lenient and strict normalize `C1`/`C2` → `C`; strict additionally flags the non-canonical form. The two pipelines now agree on the parsed marker. |
+| `1!` / `1h@` (slide-only modifier on non-slide token) | **Error** | `kMisplacedSlideHeadModifierPrefix` (`Driver.cpp` `detectMisplacedSlideHeadModifierMessage`) — token has no slide-shape character. |
+| `1-5![8:1]` / `1-?5[8:1]` (slide-only modifier in slide body) | **Error** | `kMisplacedSlideHeadModifierPrefix` — `?`/`!`/`@` sits at or past the first slide-shape character. |
+| `1!-5[8:1]` / `1x?-5[8:1]` / `1@bx-5[8:1]` | **Not flagged** | All three characters sit in the head region between the lane digit and the first shape character; order with `b`/`x` is unrestricted. |
+| `A1$` / `1-5$[8:1]` / `1h$` / `1$h[1:1]` (tap-star modifier on non-tap) | **Error** | `kMisplacedTapStarModifierPrefix` (`Driver.cpp` `detectMisplacedTapStarModifierMessage`) — token is a touch / slide / hold / bracketed-non-tap respectively. |
+| `1$` / `1$$` / `1b$` / `1$x` / `1$bx` / `1bx$$` | **Not flagged** | Token is a pure tap; `$` / `$$` may appear in any order with `b` / `x`. |
 
 ### 1.3 Locale-aware display messages
 

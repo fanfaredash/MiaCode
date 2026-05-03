@@ -103,6 +103,8 @@ time-signature 摆放风格。这些都是 strict-only。Lenient pass 在
 | 12 | 不匹配的右括号 | Error | `StrictChecks.cpp:131-137`（在 `runStrictFormatChecks` 中） | `]` 没有对应的 `[`；`}` 没有 `{`；`)` 没有 `(` |
 | 13 | 未闭合的左括号 | Error | `StrictChecks.cpp:142-145`（在 `runStrictFormatChecks` 中） | `[` / `{` / `(` 在文件结尾仍残留在 stack 中 |
 | 14 | 非典范的中心 Touch 音符（`C1`/`C2`） | Warning | `TouchTap.cpp:12-31` `kNonCanonicalCenterTouchPrefix` | `C1` —— lenient 与 strict 都把它归一化为 `C`，strict 额外标注非典范写法。 |
+| 15 | Slide head 修饰符位置错误（`?` / `!` / `@`） | Error | `Driver.cpp` `detectMisplacedSlideHeadModifierMessage` / `kMisplacedSlideHeadModifierPrefix` | 这三个字符是仅 slide 才有的 head 修饰符。strict 要求每个 `?`/`!`/`@` 必须落在 token 中的 `[1, firstShapeIdx)` 范围内（`firstShapeIdx` 是 token 中第一个 slide shape 字符的下标，shape 字符集为 `-^v<>VpqszwW`）。它们与 `b`/`x` 的相对顺序没有限制。例如 `1!`、`1h@`、`1-5![8:1]`、`1-?5[8:1]` 都会被拒绝；`1!-5[8:1]`、`1x?-5[8:1]`、`1@bx-5[8:1]` 都通过。 |
+| 16 | Tap-star 修饰符位置错误（`$` / `$$`） | Error | `Driver.cpp` `detectMisplacedTapStarModifierMessage` / `kMisplacedTapStarModifierPrefix` | `$` 是仅 tap 才有的修饰符（设置 `tapUsesStarMaterial`，`$$` 额外置 `tapStarDouble`）。strict 拒绝 `$` 出现在任何非纯 tap 的 token 中 —— 即非数字开头、含 slide shape 字符、含 `[…]`、或含 `h`（不区分大小写）的任意 token。与 `b`/`x` 的任意顺序组合都允许：`1$`、`1$$`、`1b$`、`1$x`、`1$bx`、`1bx$$` 都通过；`A1$`、`1-5$[8:1]`、`1h$`、`1$h[1:1]` 都拒绝。 |
 
 `runStrictFormatChecks(state, lines)` 在 `Driver.cpp:652` 即主 parse loop
 之**后**才跑。它会先剥掉控制块 `( … )`、`{ … }`、`<HS* … >`、以及整行
@@ -216,6 +218,11 @@ Lenient 的存在意义现在只剩一件事：抽取一组可用的 timeline ma
 | `1abc,2,3,`（note 行某处缺逗号） | **Error** | `runStrictFormatChecks` 的 `Missing beat separator ','` |
 | `1xh` / `1hx` / `1bxhf` / `1fxhb` | **不报** | `parseTapModifierSequence` 不关心顺序 |
 | Touch `C1` | **Warning** *（原 Error，已翻牌）* | `kNonCanonicalCenterTouchPrefix`（`TouchTap.cpp:12-31`）。lenient 与 strict 都把 `C1`/`C2` 归一化为 `C`，strict 额外标注非典范写法。两条流水线现在对解析出的 marker 一致。 |
+| `1!` / `1h@`（仅 slide 才用的修饰符出现在非 slide token） | **Error** | `kMisplacedSlideHeadModifierPrefix`（`Driver.cpp` `detectMisplacedSlideHeadModifierMessage`） —— token 中没有 slide shape 字符。 |
+| `1-5![8:1]` / `1-?5[8:1]`（仅 slide 才用的修饰符出现在 slide body） | **Error** | `kMisplacedSlideHeadModifierPrefix` —— `?`/`!`/`@` 落在第一个 slide shape 字符之后。 |
+| `1!-5[8:1]` / `1x?-5[8:1]` / `1@bx-5[8:1]` | **不报** | 三种字符都落在 lane digit 与第一个 shape 字符之间，与 `b`/`x` 的顺序不受限。 |
+| `A1$` / `1-5$[8:1]` / `1h$` / `1$h[1:1]`（仅 tap 才用的修饰符出现在非 tap） | **Error** | `kMisplacedTapStarModifierPrefix`（`Driver.cpp` `detectMisplacedTapStarModifierMessage`） —— token 分别是 touch / slide / hold / 带 `[…]` 的非 tap。 |
+| `1$` / `1$$` / `1b$` / `1$x` / `1$bx` / `1bx$$` | **不报** | Token 是纯 tap；`$` / `$$` 与 `b` / `x` 任意顺序组合都可以。 |
 
 ### 1.3 本地化展示
 
