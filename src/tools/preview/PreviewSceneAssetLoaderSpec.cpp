@@ -7,6 +7,7 @@
 #include <QTextStream>
 
 #include "common/AssetPaths.h"
+#include "core/video/PreviewRenderSettings.h"
 #include "preview/runtime/PreviewSceneAssetLoader.h"
 
 namespace {
@@ -54,7 +55,7 @@ bool verifyDxRootLayout(QTextStream& err)
         return false;
     }
 
-    const auto result = miacode::preview::runtime::PreviewSceneAssetLoader::load(dxDir, false);
+    const auto result = miacode::preview::runtime::PreviewSceneAssetLoader::load(dxDir, PreviewOutlineVariant::Line);
     if (!require(
             result.judgeOverlayAssets.neutral.straightLeftImage.size() == QSize(428, 140),
             QStringLiteral("DX just_str_l.png did not load as 428x140"),
@@ -151,7 +152,7 @@ bool verifyLegacyFallback(QTextStream& err)
         return false;
     }
 
-    const auto fallbackResult = miacode::preview::runtime::PreviewSceneAssetLoader::load(tempDir.path(), false);
+    const auto fallbackResult = miacode::preview::runtime::PreviewSceneAssetLoader::load(tempDir.path(), PreviewOutlineVariant::Line);
     if (!require(
             !fallbackResult.judgeOverlayAssets.fastGood.straightLeftImage.isNull(),
             QStringLiteral("legacy SlideOKSkins fallback did not load just_str_l_fast_gd.png"),
@@ -163,7 +164,7 @@ bool verifyLegacyFallback(QTextStream& err)
         return false;
     }
 
-    const auto rootPreferredResult = miacode::preview::runtime::PreviewSceneAssetLoader::load(tempDir.path(), false);
+    const auto rootPreferredResult = miacode::preview::runtime::PreviewSceneAssetLoader::load(tempDir.path(), PreviewOutlineVariant::Line);
     return require(
         rootPreferredResult.judgeOverlayAssets.fastGood.straightLeftImage.size() == QSize(11, 13),
         QStringLiteral("root-level just_str_l_fast_gd.png was not preferred over SlideOKSkins fallback"),
