@@ -114,6 +114,20 @@ const QString& kNonCanonicalCenterTouchPrefix()
     return value;
 }
 
+const QString& kMisplacedSlideHeadModifierPrefix()
+{
+    static const QString value = QStringLiteral(
+        "Slide head modifier (?, !, @) may only appear between slide head and shape: ");
+    return value;
+}
+
+const QString& kMisplacedTapStarModifierPrefix()
+{
+    static const QString value = QStringLiteral(
+        "Tap-star modifier ($) may only appear within a tap: ");
+    return value;
+}
+
 const QString& kInvalidTouchModifierPrefix()
 {
     static const QString value = QStringLiteral("Invalid touch modifier: ");
@@ -252,6 +266,8 @@ const QHash<QString, QString>& zhPrefixMap()
         {kInvalidTouchTokenPrefix(), QStringLiteral("Touch 音符无效：")},
         {kNonCanonicalCenterTouchPrefix(), QStringLiteral("非典范的中心 Touch 音符（应使用 C）：")},
         {kInvalidTouchModifierPrefix(), QStringLiteral("Touch 修饰符无效：")},
+        {kMisplacedSlideHeadModifierPrefix(), QStringLiteral("Slide head 修饰符（?、!、@）只能出现在 slide head 与 shape 之间：")},
+        {kMisplacedTapStarModifierPrefix(), QStringLiteral("Tap-star 修饰符（$）只能出现在 tap 中：")},
         {kFullwidthDigitPrefix(), QStringLiteral("检测到全角数字，请改用半角数字：")},
         {kFullwidthTouchRegionPrefix(), QStringLiteral("检测到全角触摸区域字母，请改用半角区域字母：")},
         {kFullwidthModifierPrefix(), QStringLiteral("检测到全角修饰符，请改用半角修饰符：")},
@@ -285,6 +301,8 @@ const QVector<QString>& zhPrefixOrder()
         kInvalidTouchTokenPrefix(),
         kNonCanonicalCenterTouchPrefix(),
         kInvalidTouchModifierPrefix(),
+        kMisplacedSlideHeadModifierPrefix(),
+        kMisplacedTapStarModifierPrefix(),
         kFullwidthDigitPrefix(),
         kFullwidthTouchRegionPrefix(),
         kFullwidthModifierPrefix(),
@@ -301,6 +319,101 @@ const QVector<QString>& zhPrefixOrder()
 }
 
 }  // namespace ValidationMessage
+
+bool isSlideShapeChar(QChar ch)
+{
+    static const QString kSlideShapeChars = QStringLiteral("-^v<>VpqszwW");
+    return kSlideShapeChars.contains(ch);
+}
+
+bool tokenContainsSlideShape(const QString& token)
+{
+    // Match the dispatch heuristic in TouchTap.cpp::parseTapOrHoldToken — any
+    // shape character anywhere in the token (after the lane digit) marks the
+    // token as slide-bound. Position 0 is always the lane digit so we start
+    // at 1.
+    for (int i = 1; i < token.size(); ++i) {
+        if (isSlideShapeChar(token.at(i))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Strict-only check. Returns the validation message to emit, or empty
+// string if the token has no `?`, `!`, `@` (or all of them are validly
+// placed in the slide-head region between the lane digit and the first
+// slide-shape character).
+QString detectMisplacedSlideHeadModifierMessage(const QString& token)
+{
+    bool hasSlideHeadCh = false;
+    for (QChar ch : token) {
+        if (ch == QChar('?') || ch == QChar('!') || ch == QChar('@')) {
+            hasSlideHeadCh = true;
+            break;
+        }
+    }
+    if (!hasSlideHeadCh) {
+        return QString();
+    }
+
+    // The token must contain a slide-shape character to be a slide. If
+    // there is no shape character, `?`/`!`/`@` cannot be valid head
+    // modifiers — they are slide-only. Examples that hit this branch:
+    // `1!`, `1h@`, `A1?`.
+    int firstShapeIdx = -1;
+    for (int i = 1; i < token.size(); ++i) {
+        if (isSlideShapeChar(token.at(i))) {
+            firstShapeIdx = i;
+            break;
+        }
+    }
+    if (firstShapeIdx < 0) {
+        return ValidationMessage::kMisplacedSlideHeadModifierPrefix() + token;
+    }
+
+    // Each `?`/`!`/`@` must sit at index in [1, firstShapeIdx). Order
+    // relative to other head modifiers (`b`, `x`) is unrestricted —
+    // parseSlideHeadModifierPrefix already accepts arbitrary
+    // interleavings within the head region.
+    for (int i = 0; i < token.size(); ++i) {
+        const QChar ch = token.at(i);
+        if (ch != QChar('?') && ch != QChar('!') && ch != QChar('@')) {
+            continue;
+        }
+        if (i < 1 || i >= firstShapeIdx) {
+            return ValidationMessage::kMisplacedSlideHeadModifierPrefix() + token;
+        }
+    }
+    return QString();
+}
+
+// Strict-only check. Returns the validation message to emit, or empty
+// string if the token has no `$` (or the `$` sits in a pure-tap context).
+// "Pure tap" = lane-digit-led, no slide-shape character, no `[…]`
+// duration block, no `h` modifier (case-insensitive). `$` may be freely
+// combined with `b` / `x` in either order — the parser already accepts
+// that combination.
+QString detectMisplacedTapStarModifierMessage(const QString& token)
+{
+    if (!token.contains(QChar('$'))) {
+        return QString();
+    }
+    if (token.isEmpty() || !isDigitLane(token.at(0))) {
+        return ValidationMessage::kMisplacedTapStarModifierPrefix() + token;
+    }
+    if (tokenContainsSlideShape(token)) {
+        return ValidationMessage::kMisplacedTapStarModifierPrefix() + token;
+    }
+    if (token.contains(QChar('['))) {
+        return ValidationMessage::kMisplacedTapStarModifierPrefix() + token;
+    }
+    if (token.contains(QChar('h'), Qt::CaseInsensitive)) {
+        return ValidationMessage::kMisplacedTapStarModifierPrefix() + token;
+    }
+    return QString();
+}
+
 void parseToken(ParseState* state, const QString& token, int lineNumber, int column, QVector<int>* groupIndices)
 {
     if (state == nullptr) {
@@ -313,6 +426,19 @@ void parseToken(ParseState* state, const QString& token, int lineNumber, int col
     if (const QString fullwidthIssue = detectFullwidthSyntaxIssueMessage(token); !fullwidthIssue.isEmpty()) {
         appendTokenError(state, lineNumber, column, fullwidthIssue, column + token.size() - 1);
         return;
+    }
+
+    // Strict-only character-placement checks. Emit before dispatching so
+    // the user gets the specific diagnostic even when the downstream
+    // parser would also reject the token with a more generic message.
+    // Lenient mode is unchanged — these checks are gated on strictMode.
+    if (state->strictMode) {
+        if (const QString msg = detectMisplacedSlideHeadModifierMessage(token); !msg.isEmpty()) {
+            appendTokenError(state, lineNumber, column, msg, column + token.size() - 1);
+        }
+        if (const QString msg = detectMisplacedTapStarModifierMessage(token); !msg.isEmpty()) {
+            appendTokenError(state, lineNumber, column, msg, column + token.size() - 1);
+        }
     }
 
     bool simpleDigitCluster = true;
