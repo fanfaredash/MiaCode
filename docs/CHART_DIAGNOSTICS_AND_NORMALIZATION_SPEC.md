@@ -317,6 +317,16 @@ Surface in the UI:
 
 ## 2. Irrational pattern detection — "无理检查 / Muri Diagnostics"
 
+> **Verification status.** This section describes the subsystem at the
+> index / design-intent level. Unlike §1 (grammar detection), it has
+> _not_ been audited line-by-line against the implementation in this
+> revision; the rules and examples described here may not exactly match
+> current `MuriAnalyzer` / `MuriStaticChecker` behavior. **Manual
+> code-level verification is still required** before relying on this
+> section as authoritative. The authoritative reference is
+> `docs/MURI_DETECTION_SPEC.md` and the source files cited in the entry
+> points table below.
+
 Detects **hand-impossible** patterns. Operates on the parsed timeline
 markers, not raw text. Two analysis modes — runtime (180-TPS hand-action
 simulation) and static (geometry + timing thresholds) — merged into a
@@ -383,6 +393,17 @@ merge/dedup, jump-to-location semantics). Test coverage:
 ---
 
 ## 3. Chart normalization — "调整 / Modify" menu
+
+> **Verification status.** This section describes the subsystem at the
+> index / design-intent level. Unlike §1 (grammar detection), it has
+> _not_ been audited line-by-line against the implementation in this
+> revision; the rewrite rules and option semantics described here may
+> not exactly match current `normalizeChartText()` /
+> `ChartBatchTransformSpec` behavior. **Manual code-level verification
+> is still required** before relying on this section as authoritative.
+> The authoritative reference is
+> `docs/SIMAI_NORMALIZATION_TIME_SIGNATURE_RESEARCH.md` and the source
+> files cited in the entry points table below.
 
 Rewrites the chart text into a canonical form. **Never invoked
 implicitly** — always user-triggered via menu, with an undoable single
