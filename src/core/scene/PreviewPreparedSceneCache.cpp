@@ -360,10 +360,21 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
     finalizePreparedLayerWindow(&touchHoldLayer_);
     finalizePreparedLayerWindow(&chartReviewLayer_);
     finalizePreparedLayerWindow(&maimuriDxJudgeLayer_);
+    // Beta21-fix13 — the slide-stacking-order setting
+    // (`slideEarlierSecondAndTextOnTop`) MUST NOT influence the head
+    // layer's draw rank. The setting's documented purpose is the slide
+    // TRACK layer's internal stacking only — slide head stars (this
+    // layer) and any other non-track layers must remain deterministic
+    // and option-independent. PreviewHeadLayerState's fallback path at
+    // lines ~310-322 already forces `earlierOnTop = true` for the same
+    // reason; this mirrors that behaviour for the prepared (cached)
+    // draw-order path so toggling the option in Video Settings doesn't
+    // shuffle which slide head star renders on top.
+    constexpr bool kHeadLayerAlwaysEarlierOnTop = true;
     rebuildPreviewPreparedMarkerDrawOrder(
         state.noteMarkers,
         &headLayer_,
-        state.render.slideEarlierSecondAndTextOnTop
+        kHeadLayerAlwaysEarlierOnTop
     );
     rebuildPreviewPreparedMarkerDrawOrder(
         state.noteMarkers,
