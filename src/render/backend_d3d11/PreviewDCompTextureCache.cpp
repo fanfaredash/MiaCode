@@ -6,6 +6,7 @@
 #include <QString>
 
 #include <algorithm>
+#include <vector>
 
 namespace miacode::preview::dcomp {
 
@@ -22,6 +23,58 @@ void logCache(const char* action, const QString& extra = QString())
         miacode::debug_log::Channel::Runtime,
         QStringLiteral("render/backend_d3d11/texture_cache"),
         payload);
+}
+
+constexpr UINT mipNextDim(UINT d)
+{
+    return std::max<UINT>(1u, d / 2u);
+}
+
+UINT mipLevelCountFor(UINT width, UINT height)
+{
+    UINT levels = 1;
+    UINT w = width;
+    UINT h = height;
+    while (w > 1 || h > 1) {
+        w = mipNextDim(w);
+        h = mipNextDim(h);
+        ++levels;
+    }
+    return levels;
+}
+
+// Build a CPU-side mip pyramid from a Format_RGBA8888_Premultiplied
+// source. Each successive level is a 2:1 SmoothTransformation downscale
+// of the prior level (Qt's bilinear downscale is equivalent to a box
+// filter at a 2:1 ratio — adequate for skin assets, with the right edge
+// behaviour when one dimension collapses to 1 first). Dimensions match
+// D3D11's expected `max(1, prev/2)` rule so the SUBRESOURCE_DATA array
+// can be uploaded against `MipLevels = pyramid.size()`.
+std::vector<QImage> buildMipPyramid(const QImage& base)
+{
+    std::vector<QImage> pyramid;
+    pyramid.reserve(mipLevelCountFor(
+        static_cast<UINT>(base.width()),
+        static_cast<UINT>(base.height())));
+    pyramid.push_back(base);
+    UINT w = static_cast<UINT>(base.width());
+    UINT h = static_cast<UINT>(base.height());
+    while (w > 1 || h > 1) {
+        const UINT nw = mipNextDim(w);
+        const UINT nh = mipNextDim(h);
+        QImage next = pyramid.back().scaled(
+            static_cast<int>(nw),
+            static_cast<int>(nh),
+            Qt::IgnoreAspectRatio,
+            Qt::SmoothTransformation);
+        if (next.format() != QImage::Format_RGBA8888_Premultiplied) {
+            next = next.convertToFormat(QImage::Format_RGBA8888_Premultiplied);
+        }
+        pyramid.push_back(std::move(next));
+        w = nw;
+        h = nh;
+    }
+    return pyramid;
 }
 #endif
 
@@ -87,48 +140,65 @@ ID3D11ShaderResourceView* PreviewDCompTextureCache::lookupOrCreate(
         return nullptr;
     }
 
-    // beta20-fix2 — REVERTED to single-mip IMMUTABLE textures.
+    // beta24 — IMMUTABLE texture with a CPU-built mip chain.
     //
-    // The earlier "MipLevels=0 + GENERATE_MIPS + RT_BIND + UpdateSubresource
-    // + GenerateMips" flow was crashing the Intel iGPU UMD driver
-    // (`igd10um64xe.DLL +0x412e3` — a deterministic NULL deref reproduced
-    // on three separate user dumps at exactly that instruction). The
-    // crash signature is consistent with the driver hitting an unhardened
-    // code path during runtime mip generation, especially after a
-    // device-recovery cycle (which our beta20 device-removed handler
-    // exercises explicitly). Reverting the texture-creation flow to the
-    // pre-mip baseline removes the trigger.
+    // The earlier beta20 attempt at runtime mip generation
+    // ("MipLevels=0 + GENERATE_MIPS + RT_BIND + UpdateSubresource +
+    // GenerateMips") crashed the Intel iGPU UMD with a deterministic
+    // NULL deref at `igd10um64xe.DLL +0x412e3`, reproduced on three
+    // user dumps; beta20-fix2 reverted to a single-level IMMUTABLE
+    // texture, which fixed the crash but brought back the downscale
+    // jagginess (taps spawn at ~6 px from a 122 px source — ~20×
+    // minification, which bilinear-only sampling cannot anti-alias).
     //
-    // Quality cost: trilinear sampler (still
-    // `D3D11_FILTER_ANISOTROPIC` from PreviewDCompSpritePipeline) now
-    // degenerates to anisotropic-bilinear with no inter-mip blending.
-    // Downscaled sprites get the original beta19 jagginess back. The
-    // proper fix is to ship pre-generated mip chains in the source
-    // assets (PNG with embedded mips via DDS or KTX2) so we don't ask
-    // the driver to do it at runtime — a future-asset-pipeline task
-    // tracked separately.
+    // This path keeps every property of beta20-fix2 that mattered for
+    // the crash (no `GenerateMips` call, no `MISC_GENERATE_MIPS`, no
+    // `D3D11_USAGE_DEFAULT`, no `RENDER_TARGET` bind) so the Intel UMD
+    // never executes its mip-generation code path. The mip pyramid is
+    // built on the CPU via `buildMipPyramid` (Qt SmoothTransformation
+    // 2:1 successive downscales) and shipped to D3D11 in the
+    // SUBRESOURCE_DATA array, one entry per level. CreateTexture2D
+    // sees the texture as fully-initialised IMMUTABLE content — same
+    // shape as a pre-baked DDS / KTX2 with mips, just decoded from a
+    // PNG and pyramided in-process. The anisotropic-8 sampler in
+    // PreviewDCompSpritePipeline now has real mip levels to filter
+    // through, so downscaled sprites are properly trilinear-blended.
+    //
+    // Memory cost: ~33% per texture (geometric series 1 + 1/4 + 1/16
+    // + ... → 4/3). For ~50 unique chart sprites at 122² × 4B that
+    // is ~1 MB extra GPU. CPU cost: a handful of QImage::scaled calls
+    // per unique cacheable upload, amortised over the cached lifetime.
+    const std::vector<QImage> pyramid = buildMipPyramid(normalized);
+    const UINT mipLevelCount = static_cast<UINT>(pyramid.size());
+
     D3D11_TEXTURE2D_DESC td{};
     td.Width = static_cast<UINT>(normalized.width());
     td.Height = static_cast<UINT>(normalized.height());
-    td.MipLevels = 1;
+    td.MipLevels = mipLevelCount;
     td.ArraySize = 1;
     td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     td.SampleDesc.Count = 1;
     td.Usage = D3D11_USAGE_IMMUTABLE;
     td.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    // td.MiscFlags intentionally left zero — `MISC_GENERATE_MIPS` is what
+    // armed the beta20 GenerateMips call that the Intel UMD crashed on.
 
-    D3D11_SUBRESOURCE_DATA srd{};
-    srd.pSysMem = normalized.constBits();
-    srd.SysMemPitch = static_cast<UINT>(normalized.bytesPerLine());
+    std::vector<D3D11_SUBRESOURCE_DATA> srds(mipLevelCount);
+    for (UINT level = 0; level < mipLevelCount; ++level) {
+        srds[level].pSysMem = pyramid[level].constBits();
+        srds[level].SysMemPitch = static_cast<UINT>(pyramid[level].bytesPerLine());
+        srds[level].SysMemSlicePitch = 0;
+    }
 
     Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
-    HRESULT hr = device->CreateTexture2D(&td, &srd, texture.GetAddressOf());
+    HRESULT hr = device->CreateTexture2D(&td, srds.data(), texture.GetAddressOf());
     if (FAILED(hr)) {
         logCache("create_texture_failed",
-                 QStringLiteral("hr=0x%1 key=0x%2 w=%3 h=%4")
+                 QStringLiteral("hr=0x%1 key=0x%2 w=%3 h=%4 mips=%5")
                      .arg(static_cast<unsigned long>(hr), 8, 16, QChar('0'))
                      .arg(static_cast<quint64>(key), 0, 16)
-                     .arg(normalized.width()).arg(normalized.height()));
+                     .arg(normalized.width()).arg(normalized.height())
+                     .arg(mipLevelCount));
         return nullptr;
     }
 
@@ -142,8 +212,9 @@ ID3D11ShaderResourceView* PreviewDCompTextureCache::lookupOrCreate(
                      .arg(static_cast<quint64>(key), 0, 16));
         return nullptr;
     }
-    Q_UNUSED(context);  // beta20-fix2: kept the ctx parameter for ABI/symmetry,
-                        // but no GenerateMips call any more.
+    Q_UNUSED(context);  // ctx parameter retained for ABI/symmetry; we
+                        // upload all mip levels via SUBRESOURCE_DATA at
+                        // create time and never call GenerateMips.
 
     // Manual AddRef so the cache holds an owning ref to the SRV. Local
     // ComPtr `srv` releases its ref when this function returns; the
