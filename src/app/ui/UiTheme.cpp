@@ -66,8 +66,19 @@ const UiTheme::Colors& lightColors()
         QColor("#E8E8E8"),
         QColor("#F7F8FA"),
         QColor("#C7D2DF"),
-        QColor("#AEBCCC"),
-        QColor(88, 112, 148, 124),
+        // Beta21-fix4 — bump timeline grid contrast to match beta19's
+        // on-screen brightness. Three independent diagnostic experiments
+        // (per-line vs batched material A/B, MSAA 4x, CPU QPainter into
+        // texture) proved the rendering pipeline produces identical
+        // pixels — so adjusting the palette is now the principled lever.
+        // Reference: user-provided beta19 screenshot shows major/minor
+        // lines rendering at ~RGB 160-205 on a lane background of
+        // ~RGB 35-45. The previous values blended to ~128 (major) /
+        // ~85 (minor), well below the reference. Light-theme values
+        // mirror the same brightness boost inverted for the near-white
+        // lane background — saturated dark blue at higher alpha.
+        QColor("#5B7AA8"),
+        QColor(60, 85, 135, 180),
         QColor(251, 251, 251, 190),
         QColor(242, 242, 242, 190),
         QColor("#4D5C6D"),
@@ -122,8 +133,15 @@ const UiTheme::Colors& darkColors()
         QColor("#171D24"),
         QColor("#202833"),
         QColor("#4A5C70"),
-        QColor("#6B8096"),
-        QColor(103, 137, 186, 110),
+        // Beta21-fix4 — see light-theme companion above. Reference
+        // beta19 dark-theme screenshot shows lines at ~RGB 180-205 on
+        // lane RGB ~35-45. New values blend to that range:
+        //   gridMajor #B8CDE5 opaque → on-screen ~RGB(184,205,229).
+        //   gridMinor (180,200,225,150) over lane (34,42,52) ≈
+        //   blended ~RGB(155,170,195). Matches the bright per-comma
+        //   ticks in the reference.
+        QColor("#B8CDE5"),
+        QColor(180, 200, 225, 150),
         QColor(34, 42, 52, 210),
         QColor(29, 36, 45, 210),
         QColor("#C8D5E5"),
