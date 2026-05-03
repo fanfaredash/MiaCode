@@ -91,6 +91,18 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
         sanitizedCore.append(ch);
     }
 
+    // Strict-only chain syntax check. Catches things the lenient chain
+    // parser silently elides — orphan digits between shapes (`1v35-7`),
+    // wrong digit counts after a shape, dangling brackets. Lenient mode
+    // is unchanged (the existing parsers continue to do their best).
+    // We emit and continue so downstream parsing still runs and may
+    // produce additional, more specific errors (e.g. unknown-shape from
+    // the slide-data lookup at parse time).
+    if (state->strictMode && !isValidSlideChainStrict(sanitizedCore)) {
+        appendTokenError(state, lineNumber, column,
+            QString("Invalid slide chain syntax: %1").arg(token));
+    }
+
     const int lane = token.at(0).digitValue();
     double waitSecond = 0.0;
     double durationSecond = 0.0;

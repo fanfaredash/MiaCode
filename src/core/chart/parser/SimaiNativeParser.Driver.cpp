@@ -128,6 +128,12 @@ const QString& kMisplacedTapStarModifierPrefix()
     return value;
 }
 
+const QString& kInvalidSlideChainPrefix()
+{
+    static const QString value = QStringLiteral("Invalid slide chain syntax: ");
+    return value;
+}
+
 const QString& kInvalidTouchModifierPrefix()
 {
     static const QString value = QStringLiteral("Invalid touch modifier: ");
@@ -268,6 +274,7 @@ const QHash<QString, QString>& zhPrefixMap()
         {kInvalidTouchModifierPrefix(), QStringLiteral("Touch 修饰符无效：")},
         {kMisplacedSlideHeadModifierPrefix(), QStringLiteral("Slide head 修饰符（?、!、@）只能出现在 slide head 与 shape 之间：")},
         {kMisplacedTapStarModifierPrefix(), QStringLiteral("Tap-star 修饰符（$）只能出现在 tap 中：")},
+        {kInvalidSlideChainPrefix(), QStringLiteral("Slide 段链语法无效：")},
         {kFullwidthDigitPrefix(), QStringLiteral("检测到全角数字，请改用半角数字：")},
         {kFullwidthTouchRegionPrefix(), QStringLiteral("检测到全角触摸区域字母，请改用半角区域字母：")},
         {kFullwidthModifierPrefix(), QStringLiteral("检测到全角修饰符，请改用半角修饰符：")},
@@ -303,6 +310,7 @@ const QVector<QString>& zhPrefixOrder()
         kInvalidTouchModifierPrefix(),
         kMisplacedSlideHeadModifierPrefix(),
         kMisplacedTapStarModifierPrefix(),
+        kInvalidSlideChainPrefix(),
         kFullwidthDigitPrefix(),
         kFullwidthTouchRegionPrefix(),
         kFullwidthModifierPrefix(),

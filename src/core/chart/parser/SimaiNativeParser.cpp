@@ -1227,6 +1227,92 @@ bool parseStandardSlideChain(
     return false;
 }
 
+// Strict-only syntactic validator for slide chains. Walks the slide core
+// (head digit + shape segments + optional [duration] block) and verifies
+// every character is consumed by a valid construct. The lenient parser
+// (parseStandardSlideChain) silently `continue`s past orphan digits like
+// the stray `5` in `1v35-7[8:1]` (which it then parses as `[1v3, 3-7]`);
+// this validator catches that.
+//
+// Strict syntax rules:
+//   - First char is a 1..8 lane digit (`isDigitLane`).
+//   - Then a sequence of shape segments, each one of:
+//     - `V` followed by exactly two 1..8 digits (via, end). Geometric
+//       validity of the (start, V, via, end) combination is enforced
+//       by the existing slide-data lookup downstream — this validator
+//       only checks digit positions and counts.
+//     - `p` or `q` followed by either a single 1..8 digit (single-loop)
+//       or another `p`/`q` then a 1..8 digit (double-loop pp/qq).
+//     - One of `-^v<>szw` followed by exactly one 1..8 digit.
+//   - Optionally, a `[…]` duration / wait+duration block. May appear
+//     between shape segments (per-segment timing) or at the end (total).
+//   - Nothing else. Any other character — orphan digit, unknown shape
+//     letter, dangling `[` — is rejected.
+//   - Must contain at least one shape segment (so a bare `1[8:1]` does
+//     not slip through, though that token doesn't reach this validator
+//     anyway because the upstream dispatch routes it to the hold path).
+//
+// Returns true if the chain is strictly valid; false otherwise.
+bool isValidSlideChainStrict(const QString& slideCore)
+{
+    if (slideCore.isEmpty() || !isDigitLane(slideCore.at(0))) {
+        return false;
+    }
+    int i = 1;
+    bool sawShape = false;
+    const int n = slideCore.size();
+    while (i < n) {
+        const QChar ch = slideCore.at(i);
+        if (ch == QChar('[')) {
+            const int close = slideCore.indexOf(QChar(']'), i + 1);
+            if (close < 0) {
+                return false;
+            }
+            i = close + 1;
+            continue;
+        }
+        if (ch == QChar('V')) {
+            if (i + 2 >= n
+                || !isDigitLane(slideCore.at(i + 1))
+                || !isDigitLane(slideCore.at(i + 2))) {
+                return false;
+            }
+            i += 3;
+            sawShape = true;
+            continue;
+        }
+        if (ch == QChar('p') || ch == QChar('q')) {
+            if (i + 1 >= n) {
+                return false;
+            }
+            const QChar next = slideCore.at(i + 1);
+            if (next == ch) {
+                if (i + 2 >= n || !isDigitLane(slideCore.at(i + 2))) {
+                    return false;
+                }
+                i += 3;
+            } else {
+                if (!isDigitLane(next)) {
+                    return false;
+                }
+                i += 2;
+            }
+            sawShape = true;
+            continue;
+        }
+        if (QStringLiteral("-^v<>szw").contains(ch)) {
+            if (i + 1 >= n || !isDigitLane(slideCore.at(i + 1))) {
+                return false;
+            }
+            i += 2;
+            sawShape = true;
+            continue;
+        }
+        return false;
+    }
+    return sawShape;
+}
+
 QString normalizedSlideLookupKey(const QString& token)
 {
     if (token.isEmpty() || !isDigitLane(token.at(0))) {
