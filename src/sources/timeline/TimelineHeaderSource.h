@@ -19,7 +19,7 @@ class TimelineHeaderSource final : public render::IPreviewSource
 public:
     explicit TimelineHeaderSource(TimelineLabelCache* labelCache);
 
-    int zOrder() const override { return 3; }
+    int zOrder() const override { return 5; }  // Beta21-fix12: cascade-bumped 4→5 (lane overlay split out at z=2)
     bool isEnabled(const render::PreviewBuildContext& ctx) const override;
     void contributeToSnapshot(
         const render::PreviewBuildContext& ctx,

@@ -302,6 +302,10 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/sources/chart/HudSource.cpp
     src/sources/timeline/TimelineGridSource.h
     src/sources/timeline/TimelineGridSource.cpp
+    src/sources/timeline/TimelineGridLinesSource.h
+    src/sources/timeline/TimelineGridLinesSource.cpp
+    src/sources/timeline/TimelineLaneOverlaySource.h
+    src/sources/timeline/TimelineLaneOverlaySource.cpp
     src/sources/timeline/TimelineWaveformSource.h
     src/sources/timeline/TimelineWaveformSource.cpp
     src/sources/timeline/TimelineNotesSource.h
@@ -376,6 +380,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/timeline/quick/TimelineQuickWaveformLayer.cpp
     src/timeline/quick/TimelineQuickHeaderLayer.h
     src/timeline/quick/TimelineQuickHeaderLayer.cpp
+    src/timeline/quick/TimelineQuickGridLinesLayer.h
+    src/timeline/quick/TimelineQuickGridLinesLayer.cpp
     src/timeline/quick/TimelineQuickNotesLayer.h
     src/timeline/quick/TimelineQuickNotesLayer.cpp
     src/timeline/quick/TimelineQuickOverlayLayer.h

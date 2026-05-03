@@ -19,7 +19,7 @@ class TimelineOverlaySource final : public render::IPreviewSource
 public:
     TimelineOverlaySource() = default;
 
-    int zOrder() const override { return 4; }
+    int zOrder() const override { return 6; }  // Beta21-fix12: cascade-bumped 5→6 (lane overlay split out at z=2)
     bool isEnabled(const render::PreviewBuildContext& ctx) const override;
     void contributeToSnapshot(
         const render::PreviewBuildContext& ctx,

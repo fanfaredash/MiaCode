@@ -80,7 +80,11 @@ void TimelineGridSource::contributeToSnapshot(
         sb::pushTimelineLineBatch(snapshot, state->frameLines);
     }
 
-    sb::pushTimelineLineBatch(snapshot, state->gridLines);
+    // Beta21-fix7 — gridLines moved to dedicated TimelineGridLinesSource
+    // (zOrder=2), placing the bar/note vertical lines above the waveform
+    // (z=1) instead of underneath it. Keeping the emission here would
+    // re-stack them at z=0 and re-introduce the "lines below waveform"
+    // bug that motivated the split.
 }
 
 }  // namespace miacode::sources::timeline

@@ -17,6 +17,7 @@ class TimelineQuickTextureCache;
 class TimelineQuickGridLayer;
 class TimelineQuickWaveformLayer;
 class TimelineQuickHeaderLayer;
+class TimelineQuickGridLinesLayer;
 class TimelineQuickNotesLayer;
 class TimelineQuickOverlayLayer;
 
@@ -171,6 +172,7 @@ private:
     std::unique_ptr<TimelineQuickGridLayer> gridLayer_;
     std::unique_ptr<TimelineQuickWaveformLayer> waveformLayer_;
     std::unique_ptr<TimelineQuickHeaderLayer> headerLayer_;
+    std::unique_ptr<TimelineQuickGridLinesLayer> gridLinesLayer_;
     std::unique_ptr<TimelineQuickNotesLayer> notesLayer_;
     std::unique_ptr<TimelineQuickOverlayLayer> overlayLayer_;
 

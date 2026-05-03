@@ -181,28 +181,15 @@ void TimelineNotesSource::contributeToSnapshot(
         }
     };
 
-    // Phase 9a-fix1 — laneOverlayRects are emitted at viewport-relative
-    // X coordinates (state.timelineLeft + viewport-width span), and in
-    // the QSG path live OUTSIDE the gridTransformRoot, so they never
-    // translate with scroll. The DComp TimelineRects batch applies a
-    // unified Phase-8 scroll translate to all rects, which would push
-    // these off-screen as the user scrolls. Bake +scroll into their X
-    // coords here so the pipeline's -scroll cancels out and they stay
-    // pinned to the viewport — matching the QSG `staticRoot` placement.
-    if (scrollOffsetX != 0.0 && !state->laneOverlayRects.isEmpty()) {
-        QVector<miacode::timeline::TimelineSceneRect> shifted;
-        shifted.reserve(state->laneOverlayRects.size());
-        for (const auto& r : state->laneOverlayRects) {
-            miacode::timeline::TimelineSceneRect copy = r;
-            copy.rect.translate(scrollOffsetX, 0.0);
-            shifted.append(copy);
-        }
-        sb::pushTimelineRectBatch(snapshot, shifted);
-    } else {
-        sb::pushTimelineRectBatch(snapshot, state->laneOverlayRects);
-    }
-    // fireworkBands ARE chart-content (each band is positioned at a
-    // firework trigger second) and MUST scroll with the chart.
+    // Beta21-fix12 — laneOverlayRects moved to dedicated
+    // TimelineLaneOverlaySource at z=2 (between waveform and grid lines)
+    // so they no longer mute the bar/note lines drawn at z=3. Keeping
+    // them here would put the translucent overlay back on top of grid
+    // lines — the original "lines too faint" bug.
+    //
+    // fireworkBands ARE chart-content (each band positioned at a
+    // firework trigger second) and MUST scroll with the chart, so they
+    // stay in this source.
     sb::pushTimelineRectBatch(snapshot, state->fireworkBands);
 
     // Phase 4d-fix5 — stacking order matches the QSG NotesLayer in

@@ -3,8 +3,10 @@
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
 
+#include "sources/timeline/TimelineGridLinesSource.h"
 #include "sources/timeline/TimelineGridSource.h"
 #include "sources/timeline/TimelineHeaderSource.h"
+#include "sources/timeline/TimelineLaneOverlaySource.h"
 #include "sources/timeline/TimelineNotesSource.h"
 #include "sources/timeline/TimelineOverlaySource.h"
 #include "sources/timeline/TimelineWaveformSource.h"
@@ -884,11 +886,20 @@ void TimelineRenderView::ensureCompositorInitialized()
     }
     compositorInitialized_ = true;
     using namespace miacode::sources::timeline;
-    compositor_.registerSource(std::make_unique<TimelineGridSource>());
-    compositor_.registerSource(std::make_unique<TimelineWaveformSource>());
-    compositor_.registerSource(std::make_unique<TimelineNotesSource>(&spriteAssetCache_));
-    compositor_.registerSource(std::make_unique<TimelineHeaderSource>(&labelCache_));
-    compositor_.registerSource(std::make_unique<TimelineOverlaySource>());
+    compositor_.registerSource(std::make_unique<TimelineGridSource>());           // z=0
+    compositor_.registerSource(std::make_unique<TimelineWaveformSource>());       // z=1
+    // Beta21-fix12 — TimelineLaneOverlaySource at z=2 sits between the
+    // waveform (z=1) and the grid lines (z=3). The translucent lane row
+    // fills mute the waveform underneath but no longer mute the bar/note
+    // lines drawn afterwards. Previously laneOverlayRects lived inside
+    // TimelineNotesSource, which put them above the grid-lines source
+    // — knocking the bar-line color down to ~25%/~18% of its source
+    // RGB through the lane-overlay alpha blend.
+    compositor_.registerSource(std::make_unique<TimelineLaneOverlaySource>());    // z=2
+    compositor_.registerSource(std::make_unique<TimelineGridLinesSource>());      // z=3 (was 2)
+    compositor_.registerSource(std::make_unique<TimelineNotesSource>(&spriteAssetCache_));  // z=4 (was 3)
+    compositor_.registerSource(std::make_unique<TimelineHeaderSource>(&labelCache_));       // z=5 (was 4)
+    compositor_.registerSource(std::make_unique<TimelineOverlaySource>());        // z=6 (was 5)
     logTimelineView("compositor_initialized",
                     QStringLiteral("source_count=%1")
                         .arg(compositor_.sourceCount()));

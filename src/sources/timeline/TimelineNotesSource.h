@@ -20,7 +20,7 @@ class TimelineNotesSource final : public render::IPreviewSource
 public:
     explicit TimelineNotesSource(TimelineSpriteAssetCache* assetCache);
 
-    int zOrder() const override { return 2; }
+    int zOrder() const override { return 4; }  // Beta21-fix12: cascade-bumped 3→4 (lane overlays moved out, grid lines now z=3)
     bool isEnabled(const render::PreviewBuildContext& ctx) const override;
     void contributeToSnapshot(
         const render::PreviewBuildContext& ctx,

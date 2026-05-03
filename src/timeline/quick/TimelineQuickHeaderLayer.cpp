@@ -141,22 +141,13 @@ QSGNode* TimelineQuickHeaderLayer::updateNode(
         root->staticRevision = state.gridRevision;
     }
     if (appearanceChanged || root->gridRevision != state.gridRevision) {
+        // Beta21-fix7 — grid lines (bar lines + per-comma note ticks)
+        // are rendered by the dedicated TimelineQuickGridLinesLayer,
+        // which sits in its own slot AFTER waveformLayer and after
+        // this headerLayer. The previous in-place batch builder is
+        // gone; this branch just keeps gridContentRoot empty so QSG
+        // doesn't carry stale geometry from the earlier layout.
         clearChildren(gridContentRoot);
-        // Phase-4e-old-opt — grid lines are predominantly orthogonal
-        // beat/sub-division markers in 1-3 distinct colours (theme-
-        // driven beat / sub-beat / measure colours). Coalescing them
-        // into per-color flat-color geometry collapses what used to be
-        // 5k-50k QSGSimpleRectNode allocations on long charts down to
-        // 1-3 QSGGeometryNode batches. Diagonal/non-orthogonal lines
-        // (rare in grid emit) fall through to the legacy node path.
-        TimelineQuickFlatColorBatchBuilder gridBatch(gridContentRoot);
-        for (const auto& line : state.gridLines) {
-            if (!gridBatch.tryAppendOrthogonalLine(line)) {
-                gridBatch.flush();
-                gridContentRoot->appendChildNode(buildTimelineLineNode(line));
-            }
-        }
-        gridBatch.flush();
         root->gridRevision = state.gridRevision;
     }
     if (appearanceChanged || root->headerRevision != state.headerRevision) {
