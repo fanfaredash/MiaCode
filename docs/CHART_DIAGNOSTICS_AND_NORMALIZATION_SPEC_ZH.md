@@ -40,29 +40,143 @@ slide、hold 和 strict-format check 等多个实现文件。诊断信息发射�
 纯文本形态校验。每次编辑时都会跑；结果以一列错误 / 警告行渲染在 timeline
 下方面板。
 
-### 入口
+### 1.1 两种 parse 模式
 
-| 表面 | 文件 / 符号 |
-|---|---|
-| 公共 API | `SimaiNativeParser::validateSyntax()` —— `src/core/chart/parser/SimaiNativeParser.h:62` |
-| 结构化报告 | `SimaiNativeParser::buildValidationReport()` —— `:67` |
-| UI 宿主 | `MainWindow::ValidationSection` —— `src/app/mainwindow/sections/validation/MainWindow.Validation*.cpp` |
-| 底部 tab 门控 | `BottomTabsQuickHost.qml` 中的 `controller.validationTabVisible` |
+Simai parser 暴露的是单一 `parseInternal()` 内核，通过 `strictMode`
+布尔开关产生两种语义不同的 pass：
 
-### 检测分类
+| 模式 | 公共 API | `strictMode` | 用途 |
+|---|---|---|---|
+| **Lenient** | `SimaiNativeParser::parseForTimeline()`（`SimaiNativeParser.h:59`） | `false` | 实时 timeline marker 抽取；每次编辑器编辑都会跑 |
+| **Strict** | `SimaiNativeParser::validateSyntax()`（`:62`） | `true` | "语法检查" tab 列表；通过 `buildValidationReport()` 触发 |
 
-strict pass 调用了若干个验证组（都在 `SimaiNativeParser.*.cpp` 下）：
+两种 pass 共用同一份 parser 代码，都产生
+`SimaiNativeParseResult { ok, errors, warnings, measureLineSeconds,
+beatMarkers, noteMarkers, durationSeconds }`。差别在于
+*哪些* 检查会被激活：
 
-| 组别 | 文件 | 例子 |
+#### Lenient pass（`strictMode = false`）
+
+目标：**无论文本是否完美，总是抽取一组可用的 marker。** 仅当一个 token
+无法产出 marker 时才报错。
+
+Lenient 的错误 / 失败点：
+
+- 阻碍后续 parse 的括号 / 结构错误
+  （`[ ]`, `( )`, `{ }` 不匹配；未终止的 `(BPM)` / `{N}` / `[HS*]` 块
+  —— `SimaiNativeParser.Driver.cpp` 第 521、543、584 行）。
+- 非法的 lane / ring / pad token（被
+  `MuriConfig.h::padTokenIsValid()` 拒绝 —— 环 `A..E`、lane `1..8`、
+  中心 `C`）。
+- 异常的 slide / wifi 路径或 `[N:M]` 时间分数
+  （`SimaiNativeParser.Slide.cpp`）。
+- 异常的 tap / touch / hold token
+  （`SimaiNativeParser.TouchTap.cpp`）。
+- 非法的 `(BPM)` / `{N}` 数值（如 0、负数、NaN）。
+
+Lenient *不* 关心：modifier 排序、`{N}` 与 384 的整除性、重复分隔符、
+time-signature 摆放风格。这些都是 strict-only。Lenient pass 在
+`errors == 0` 时意味着「谱面文本结构上足够规整，可以构建 timeline」。
+
+#### Strict pass（`strictMode = true`）
+
+目标：**捕获*所有*偏离 simai 典范形式的写法**，包括 lenient 会默默接受的
+那些。在 lenient 的全部检查之上再叠加：
+
+| 仅 strict 的检查 | 来源 | 例子 |
 |---|---|---|
-| 括号 / 结构 | `SimaiNativeParser.Driver.cpp` | `[ ]`, `( )`, `{ }` 不匹配；未终止字符串 |
-| Lane 合法性 | `MuriConfig.h::padTokenIsValid()` | lane 不在 `1..8`；ring 不在 `A..E`；未知中心键（`C` 之外） |
-| Slide / wifi | `SimaiNativeParser.Slide.cpp` | slide 路径异常、缺端点、`[N:M]` 时间分数非法 |
-| Tap / touch / hold | `SimaiNativeParser.TouchTap.cpp` | tap+slide-head 冲突、hold 缺时间 |
-| Modifier 顺序 | `SimaiNativeParser.StrictChecks.cpp` | `b/x/h/f` 非典范顺序；同一 modifier 重复 |
-| Time-signature | `SimaiNativeParser.StrictChecks.cpp:105` | `||x/y` 放置；纯注释行被跳过 |
+| `{N}` 必须整除 384 | `SimaiNativeParser.Driver.cpp:565` `(384 % beats) != 0` | `{7}` 拒绝（7 ∤ 384）；`{16}` 接受 |
+| Beat 数值 clamp 警告 | `:561` `formatBeatValueClamped(beats)` | `{1024}` 被 clamp 到可表示的最大值 |
+| 重复 `/` 分隔符 | `:593-595` `kRepeatedSlashSeparator()` | `1//5` 被标记 |
+| 重复 `` ` `` 分隔符 | `:604-606` `kRepeatedBacktickSeparator()` | `` 1``5 `` 被标记 |
+| Modifier 典范顺序 `b x h f` | `SimaiNativeParser.StrictChecks.cpp`（`kInvalidHoldModifierSequencePrefix`、`kNonCanonicalHoldModifierPlacementPrefix`） | `1xb` 而不是 `1bx` |
+| Break-slide `b` modifier 位置 | `kInvalidBreakSlideModifierPositionPrefix` | slide 头/体上 `b` 错位 |
+| Slide / hold 时值块位置 | `kInvalidSlideDurationPlacementPrefix`、`kInvalidSlideDurationPrefix`、`kInvalidHoldDurationPrefix` | 时值块位置错误 |
+| Touch 时值需要 `h` 修饰符 | `kTouchDurationRequiresHPrefix` | touch token 上有时值但没 `h` |
+| Time-signature `||x/y` 摆放 | `SimaiNativeParser.StrictChecks.cpp:105` | inline TS 出现在意外位置；纯注释 `||` 行被跳过 |
+| 文件结尾 strict flush | `SimaiNativeParser.Driver.cpp:652` | 末尾 token 状态校验 |
 
-### 问题呈现
+Strict 还额外调用 `StrictChecks.cpp` 中的全套校验器，通过
+`SimaiNativeParser.cpp:1487` 末尾的
+`#include "SimaiNativeParser.StrictChecks.cpp"` 引入。
+
+### 1.2 合并步骤 —— `buildValidationReport()`
+
+「语法检查」tab 并不直接展示 strict 错误。它会调用
+`buildValidationReport()`（`SimaiNativeParser.Driver.cpp:986-1068`），
+该函数同时跑**两种 pass** 并产出合并报告。输出类型：
+
+```cpp
+struct SimaiNativeValidationReport {
+    bool ok;
+    int errorCount;
+    int warningCount;
+    int lenientNoteCount;
+    int lenientErrorCount;
+    int strictNoteCount;
+    int strictErrorCount;
+    QVector<SimaiNativeValidationIssue> issues;
+};
+```
+
+合并逻辑（Driver.cpp:1023-1050）：
+
+1. 取 *strict* 错误列表作为 issue 源。
+2. 对每个 strict 错误计算稳定 key，看 lenient pass 是否在同一位置也报了
+   同样的 key。
+3. **如果 lenient 也在同一位置失败** → severity 保持 `Error`
+   （这是真正的结构性问题）。
+4. **如果只有 strict 报错** → severity 降级为 `Warning`
+   （谱面能正常 parse，只是写法不典范）。
+5. **例外列表 —— `shouldRemainValidationError()`**
+   （Driver.cpp:235-241）即使只有 strict 报，也保持 `Error`，因为这些
+   几乎一定会引起下游错误：
+   - 重复 `/` 分隔符
+   - 重复 `` ` `` 分隔符
+   - 不匹配的右括号（任何种类）
+   - 未闭合的左括号（任何种类）
+6. Strict *警告*（在 strict pass 中本就是 `Warning`）原样保留。
+7. 空谱面捷径：`text.trimmed().isEmpty()` 时跳过两次 pass，直接产出一条
+   `kChartEmpty()` 原始 message 的 `Error` issue。
+
+这就解释了报告里那四个计数的存在：`lenientNoteCount` 与 `strictNoteCount`
+显示每种 pass 抽出多少 marker（通常一致，但 strict 拒绝某些 lenient
+能接受的 token 时会发散）；`lenientErrorCount` / `strictErrorCount`
+让你一眼看出 issue 列表里多少是「结构性」、多少是「风格性」。
+
+#### 严重度降级示例
+
+| 输入 | Lenient | Strict | UI 严重度 |
+|---|---|---|---|
+| `1[4:1`（未闭合括号） | Error | Error | **Error**（lenient 同意） |
+| `1//5`（重复 `/`） | OK | Error | **Error**（在 `shouldRemainValidationError` 例外列表中） |
+| `1xh`（modifier 非典范） | OK | Error | **Warning**（仅 strict，降级） |
+| `{7}1,2,3,`（{7} 非 384 整除） | OK | Error | **Warning**（仅 strict） |
+
+### 1.3 本地化展示
+
+`buildValidationReport(text, locale, ...)` 接受
+`SimaiNativeValidationLocale::English` 或 `Chinese`。parser 输出的原始
+`message` 通过以下表映射：
+
+- `ValidationMessage::zhExactMap()`（Driver.cpp:230） —— 完全匹配的中文
+  翻译。
+- `ValidationMessage::zhPrefixMap()`（Driver.cpp:243） —— 带可变后缀
+  message 的前缀型中文翻译。
+
+格式：`[ERROR] <已本地化的详情>` 或 `[WARNING] <已本地化的详情>`。
+
+### 1.4 隐藏的运行时开关 —— invalid-star 预览
+
+`SimaiNativeParser::setInvalidStarPreviewEnabled(bool)` /
+`invalidStarPreviewEnabled()`（`SimaiNativeParser.h:65-66`，
+Driver.cpp:976-984）控制一个仅 debug 用的预览路径，让用户在写谱时
+看到「非法」星 slide 长什么样。仅 `parseForTimeline` 尊重该 flag
+（通过 `parseInternal` 的第三个参数）；`validateSyntax` 始终传
+`false`。这个 flag 是设置项驱动的、不属于公共规格的一部分，但在分析
+两种模式下 marker 数量发散时会用到。
+
+### 1.5 问题呈现
 
 每个 issue 是 `SimaiNativeValidationIssue`（头文件 `:36-43`）：
 
@@ -73,7 +187,7 @@ struct SimaiNativeValidationIssue {
     int endCol;
     SimaiNativeValidationSeverity severity;  // Error | Warning
     QString rawMessage;
-    QString displayMessage;     // 已本地化
+    QString displayMessage;     // 已本地化，含 "[ERROR]"/"[WARNING]" 前缀
 };
 ```
 
@@ -85,12 +199,12 @@ UI 上的呈现：
 - **header 级 ignore**：每条 issue 带一个 issue-type 字符串 key，谱面作者
   可以在文件顶部加 `||#ignore <key>` 行来项目级别禁用某个分类。
 
-### 语法检测**不**做什么
+### 1.6 语法检测**不**做什么
 
 - 不报无理 / 可奏性问题（那是子系统 2 的事）。
 - 不自动修复；重写是子系统 3 的工作。
-- 不阻塞 parse —— `parseForTimeline()` 是 lenient 的，无论 strict 错误是否
-  存在都会跑，让用户能继续编辑。
+- 不阻塞 parse —— `parseForTimeline()` 无论 strict 错误是否存在都会跑，
+  让用户能边编辑边看到面板里的 strict 警告。
 
 ---
 

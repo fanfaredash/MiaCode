@@ -44,30 +44,152 @@ is gated on `controller.<tabName>TabVisible` properties exposed by
 Pure text-shape validation. Runs on every editor edit; results render
 into a list of error/warning rows below the timeline.
 
-### Entry points
+### 1.1 Two parsing modes
 
-| Surface | File / symbol |
-|---|---|
-| Public API | `SimaiNativeParser::validateSyntax()` — `src/core/chart/parser/SimaiNativeParser.h:62` |
-| Structured report | `SimaiNativeParser::buildValidationReport()` — `:67` |
-| UI host | `MainWindow::ValidationSection` — `src/app/mainwindow/sections/validation/MainWindow.Validation*.cpp` |
-| Bottom-tabs gate | `controller.validationTabVisible` in `BottomTabsQuickHost.qml` |
+The simai parser exposes a single `parseInternal()` core, toggled by a
+`strictMode` boolean to produce two semantically distinct passes:
 
-### Detection categories
+| Mode | Public API | `strictMode` | Used for |
+|---|---|---|---|
+| **Lenient** | `SimaiNativeParser::parseForTimeline()` (`SimaiNativeParser.h:59`) | `false` | Live timeline marker extraction; runs on every editor edit |
+| **Strict** | `SimaiNativeParser::validateSyntax()` (`:62`) | `true` | The "Syntax Check" tab list; runs through `buildValidationReport()` |
 
-The strict pass invokes several verifier groups (all under
-`SimaiNativeParser.*.cpp`):
+Both passes share the same parser code and produce a
+`SimaiNativeParseResult { ok, errors, warnings, measureLineSeconds,
+beatMarkers, noteMarkers, durationSeconds }`. The difference lives in
+*which* checks the parser activates:
 
-| Group | File | Examples |
+#### Lenient pass (`strictMode = false`)
+
+Goal: **always extract a usable marker set, even if the text is
+imperfect.** Reports an error only when a token cannot produce a
+marker.
+
+Lenient errors / failure points:
+
+- Bracket / structural failures that prevent further parsing
+  (unmatched `[ ]`, `( )`, `{ }`; unterminated `(BPM)` / `{N}` / `[HS*]`
+  block — `SimaiNativeParser.Driver.cpp` lines 521, 543, 584).
+- Invalid lane / ring / pad token (rejected by
+  `MuriConfig.h::padTokenIsValid()` — rings `A..E`, lanes `1..8`,
+  center `C`).
+- Malformed slide / wifi path or `[N:M]` timing fraction
+  (`SimaiNativeParser.Slide.cpp`).
+- Malformed tap / touch / hold tokens
+  (`SimaiNativeParser.TouchTap.cpp`).
+- Invalid `(BPM)` / `{N}` numeric value (e.g. zero, negative, NaN).
+
+Lenient *does not* care about: modifier ordering, `{N}` divisor
+compatibility with 384, repeated separator runs, time-signature
+placement style. Those are strict-only. A lenient parse with `errors
+== 0` means "the chart text was structurally well-formed enough to
+build the timeline."
+
+#### Strict pass (`strictMode = true`)
+
+Goal: **catch *every* deviation from canonical simai form,** including
+things the lenient pass would silently accept. Adds the following
+checks on top of all lenient checks:
+
+| Strict-only check | Source | Example |
 |---|---|---|
-| Bracket / structural | `SimaiNativeParser.Driver.cpp` | unbalanced `[ ]`, `( )`, `{ }`; unterminated string |
-| Lane validity | `MuriConfig.h::padTokenIsValid()` | lane out of `1..8`, ring outside `A..E`, unknown center other than `C` |
-| Slide / wifi | `SimaiNativeParser.Slide.cpp` | malformed slide path, missing endpoint, invalid `[N:M]` timing fraction |
-| Tap / touch / hold | `SimaiNativeParser.TouchTap.cpp` | tap+slide-head conflicts, hold without timing |
-| Modifier order | `SimaiNativeParser.StrictChecks.cpp` | non-canonical `b/x/h/f` ordering; double-applied modifier |
-| Time-signature | `SimaiNativeParser.StrictChecks.cpp:105` | `||x/y` placement; comment-only lines skipped |
+| `{N}` divisor of 384 | `SimaiNativeParser.Driver.cpp:565` `(384 % beats) != 0` | `{7}` rejected (7 ∤ 384); `{16}` accepted |
+| Beat value clamping warning | `:561` `formatBeatValueClamped(beats)` | `{1024}` clamped to a representable maximum |
+| Repeated `/` separator | `:593-595` `kRepeatedSlashSeparator()` | `1//5` flagged |
+| Repeated `` ` `` separator | `:604-606` `kRepeatedBacktickSeparator()` | `` 1``5 `` flagged |
+| Modifier canonical order `b x h f` | `SimaiNativeParser.StrictChecks.cpp` (`kInvalidHoldModifierSequencePrefix`, `kNonCanonicalHoldModifierPlacementPrefix`) | `1xb` instead of `1bx` |
+| Break-slide `b` modifier position | `kInvalidBreakSlideModifierPositionPrefix` | mis-placed `b` on slide head/body |
+| Slide / hold duration block placement | `kInvalidSlideDurationPlacementPrefix`, `kInvalidSlideDurationPrefix`, `kInvalidHoldDurationPrefix` | duration block in wrong position |
+| Touch duration requires `h` | `kTouchDurationRequiresHPrefix` | duration on touch token without `h` |
+| Time-signature `||x/y` placement | `SimaiNativeParser.StrictChecks.cpp:105` | inline TS at unexpected slot; comment-only `||` lines skipped |
+| End-of-file strict flush | `SimaiNativeParser.Driver.cpp:652` | trailing token state validation |
 
-### Issue presentation
+Strict additionally invokes the `StrictChecks.cpp` verifier suite,
+included via `#include "SimaiNativeParser.StrictChecks.cpp"` at the
+end of `SimaiNativeParser.cpp:1487`.
+
+### 1.2 The merge step — `buildValidationReport()`
+
+The "Syntax Check" tab does NOT just show strict errors verbatim. It
+calls `buildValidationReport()` (`SimaiNativeParser.Driver.cpp:986-1068`)
+which runs **both** passes and produces a merged report. Output type:
+
+```cpp
+struct SimaiNativeValidationReport {
+    bool ok;
+    int errorCount;
+    int warningCount;
+    int lenientNoteCount;
+    int lenientErrorCount;
+    int strictNoteCount;
+    int strictErrorCount;
+    QVector<SimaiNativeValidationIssue> issues;
+};
+```
+
+The merge logic (Driver.cpp:1023-1050):
+
+1. Take the *strict* error list as the issue source.
+2. For each strict error, compute a stable key and check whether the
+   lenient pass produced the same key.
+3. **If lenient also failed at the same place** → severity stays
+   `Error` (it's a real structural break).
+4. **If only strict failed** → severity is downgraded to `Warning`
+   (the chart parses fine, it just deviates from canonical form).
+5. **Exception list — `shouldRemainValidationError()`**
+   (Driver.cpp:235-241) keeps these as `Error` even when only strict
+   reports them, because they almost always cause downstream
+   correctness issues:
+   - Repeated `/` separator
+   - Repeated `` ` `` separator
+   - Unmatched closing bracket (any kind)
+   - Unclosed bracket (any kind)
+6. Strict *warnings* (already `Warning` in the strict pass) pass
+   through as-is.
+7. Empty-chart shortcut: if `text.trimmed().isEmpty()`, skip both
+   passes and emit a single `Error` issue with `kChartEmpty()` raw
+   message.
+
+This is how you get the four reporting counters: `lenientNoteCount`
+and `strictNoteCount` show how many markers each pass produced (often
+identical, but can diverge when strict rejects a token lenient
+accepted); `lenientErrorCount` / `strictErrorCount` reveal how much of
+the issue list is "structural" vs "stylistic."
+
+#### Severity downgrade examples
+
+| Input | Lenient | Strict | UI severity |
+|---|---|---|---|
+| `1[4:1` (unclosed bracket) | Error | Error | **Error** (lenient agrees) |
+| `1//5` (repeated `/`) | OK | Error | **Error** (in `shouldRemainValidationError` exception list) |
+| `1xh` (modifier non-canonical) | OK | Error | **Warning** (strict-only, downgraded) |
+| `{7}1,2,3,` ({7} not 384 divisor) | OK | Error | **Warning** (strict-only) |
+
+### 1.3 Locale-aware display messages
+
+`buildValidationReport(text, locale, ...)` accepts
+`SimaiNativeValidationLocale::English` or `Chinese`. The raw
+`message` from the parser is mapped through:
+
+- `ValidationMessage::zhExactMap()` (Driver.cpp:230) — exact-match
+  Chinese translations.
+- `ValidationMessage::zhPrefixMap()` (Driver.cpp:243) — prefix-based
+  Chinese translations for messages with variable suffix.
+
+Format: `[ERROR] <localized detail>` or `[WARNING] <localized detail>`.
+
+### 1.4 Hidden runtime toggle — invalid-star preview
+
+`SimaiNativeParser::setInvalidStarPreviewEnabled(bool)` /
+`invalidStarPreviewEnabled()` (`SimaiNativeParser.h:65-66`,
+Driver.cpp:976-984) gates a debug-only preview path that lets the
+user see what an "invalid" star slide would look like during chart
+authoring. Only `parseForTimeline` honors it (via the third arg to
+`parseInternal`); `validateSyntax` always passes `false`. This flag
+is settings-driven, not part of the public spec, but worth knowing
+when reasoning about marker count drift between modes.
+
+### 1.5 Issue presentation
 
 Each issue is `SimaiNativeValidationIssue` (header `:36-43`):
 
@@ -78,25 +200,27 @@ struct SimaiNativeValidationIssue {
     int endCol;
     SimaiNativeValidationSeverity severity;  // Error | Warning
     QString rawMessage;
-    QString displayMessage;     // localized
+    QString displayMessage;     // localized, includes "[ERROR]"/"[WARNING]" prefix
 };
 ```
 
 Surface in the UI:
 
-- **Panel list**: one row per issue, `[Lline Ccol]` prefix + display text.
-- **Editor extra-selection**: red squiggle / amber underline overlay at
-  `(line, col..endCol)` (driven by `refreshEditorExtraSelections`).
-- **Header-level ignore**: an issue-type key on the entry lets the chart
-  author add `||#ignore <key>` at the top of the file to suppress one
-  category project-wide.
+- **Panel list**: one row per issue, `[Lline Ccol]` prefix + display
+  text.
+- **Editor extra-selection**: red squiggle / amber underline overlay
+  at `(line, col..endCol)` (driven by `refreshEditorExtraSelections`).
+- **Header-level ignore**: an issue-type key on the entry lets the
+  chart author add `||#ignore <key>` at the top of the file to
+  suppress one category project-wide.
 
-### What syntax detection does NOT do
+### 1.6 What syntax detection does NOT do
 
 - Does not flag muri / playability concerns (those go to subsystem 2).
 - Does not auto-fix; rewrites are subsystem 3's job.
-- Does not block parsing — `parseForTimeline()` is lenient and runs
-  regardless of strict errors so the user can continue editing.
+- Does not block parsing — `parseForTimeline()` runs regardless of
+  strict errors so the user can continue editing while seeing strict
+  warnings in the panel.
 
 ---
 
