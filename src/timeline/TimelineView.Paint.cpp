@@ -103,11 +103,22 @@ void TimelineView::paintEvent(QPaintEvent* event)
     painter.fillRect(timelineRect, c.timelineBase);
     const QPen borderPen(c.timelineBorder, 1.0);
     const QPen axisPen(c.timelineAxis, 1.0);
-    const QPen majorBeatPen(c.timelineGridMajor, kTimelineBeatLineWidth);
+    // Beta21-fix7 — bar lines use `c.timelineLabel` (lane-number text
+    // color). `c.timelineAxis` had identical luminance to waveform
+    // stroke (both ~RGB 167 light / both ~140 dark) so axis-colored
+    // bar lines disappeared into waveform. Label color is consistently
+    // darker (light) / brighter (dark) than waveform, providing the
+    // visible separator the user expects. Sister change applied in
+    // TimelineThemeConfig.h for the QSG path.
+    const QPen majorBeatPen(c.timelineLabel, kTimelineBeatLineWidth);
     QColor laneDividerColor = c.timelineBorder;
     laneDividerColor.setAlpha(qMin(laneDividerColor.alpha(), 96));
     const QPen laneDividerPen(laneDividerColor, 1.0);
-    const QPen minorBeatPen(laneDividerColor, 1.0);
+    // Beta21-fix6 — note-line alpha clamp 180 → 220 (slight bump for
+    // visibility); lane-divider clamp stays at 96 (subtle row hint).
+    QColor noteLineColor = c.timelineBorder;
+    noteLineColor.setAlpha(qMin(noteLineColor.alpha(), 220));
+    const QPen minorBeatPen(noteLineColor, 1.0);
     painter.setPen(borderPen);
     painter.drawLine(0, top - 1, viewport()->width(), top - 1);
 

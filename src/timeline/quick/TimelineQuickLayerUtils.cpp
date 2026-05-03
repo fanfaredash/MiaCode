@@ -219,6 +219,20 @@ void TimelineQuickFlatColorBatchBuilder::flush()
 
     auto* material = new QSGFlatColorMaterial();
     material->setColor(currentColor_);
+    // Beta21-fix6 — force the translucent rendering path even for
+    // alpha-255 colors. QSGFlatColorMaterial's setColor() clears the
+    // Blending flag whenever alpha == 255, which puts the geometry
+    // into Qt 6's opaque batch path. The opaque path is permitted to
+    // reorder draws for early-Z rejection, and on D3D11 the result is
+    // that opaque grid bars (alpha 255) can be drawn BEFORE the
+    // opaque waveform bars even though the scene graph has them at a
+    // higher z-position than the waveform layer. Setting Blending=true
+    // forces strict scene-graph order (back-to-front translucent
+    // batch), so a bar line emitted after the waveform genuinely lands
+    // on top of waveform pixels. The cost is negligible — at most a
+    // few grid-line batches go through the alpha-blend pipeline once
+    // per gridRevision change.
+    material->setFlag(QSGMaterial::Blending, true);
 
     auto* node = new QSGGeometryNode();
     node->setGeometry(geometry);
