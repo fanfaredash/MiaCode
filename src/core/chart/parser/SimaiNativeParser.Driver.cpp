@@ -232,14 +232,6 @@ const QHash<QString, QString>& zhExactMap()
     return map;
 }
 
-bool shouldRemainValidationError(const QString& detail)
-{
-    return detail == kRepeatedSlashSeparator()
-        || detail == kRepeatedBacktickSeparator()
-        || detail.startsWith(kUnmatchedClosingBracketPrefix())
-        || detail.startsWith(kUnclosedBracketPrefix());
-}
-
 const QHash<QString, QString>& zhPrefixMap()
 {
     static const QHash<QString, QString> map{
@@ -563,7 +555,8 @@ SimaiNativeParseResult parseInternal(
                         );
                     }
                 } else if (strictMode && (384 % beats) != 0) {
-                    appendTokenError(
+                    state.beats = beats;
+                    appendTokenWarning(
                         &state,
                         lineNumber,
                         i + 1,
@@ -906,15 +899,6 @@ SimaiNativeParseResult parseInternal(
     return state.result;
 }
 
-QString makeValidationMessageKey(const SimaiNativeMessage& message)
-{
-    return QStringLiteral("%1:%2:%3:%4")
-        .arg(message.line)
-        .arg(message.col)
-        .arg(message.endCol)
-        .arg(message.message);
-}
-
 QString localizeValidationDetail(QString detail, SimaiNativeValidationLocale locale)
 {
     if (locale == SimaiNativeValidationLocale::English) {
@@ -989,6 +973,13 @@ SimaiNativeValidationReport SimaiNativeParser::buildValidationReport(
     const SimaiNativeParseResult* lenientResult,
     const miacode::simai::SimaiTimingMetadata& timingMetadata)
 {
+    // The lenient pass is now exclusively a chart-preview vehicle (see
+    // parseForTimeline) and must not influence diagnostics. Validation severity
+    // is whatever the strict parser emits — full stop. The legacy parameter is
+    // retained for ABI/source compatibility with cached-result call sites; it
+    // is intentionally unused here.
+    Q_UNUSED(lenientResult);
+
     SimaiNativeValidationReport report;
 
     if (text.trimmed().isEmpty()) {
@@ -1007,45 +998,28 @@ SimaiNativeValidationReport SimaiNativeParser::buildValidationReport(
         return report;
     }
 
-    SimaiNativeParseResult lenientOwned;
-    const SimaiNativeParseResult* effectiveLenientResult = lenientResult;
-    if (effectiveLenientResult == nullptr) {
-        lenientOwned = parseForTimeline(text, timingMetadata);
-        effectiveLenientResult = &lenientOwned;
-    }
     const SimaiNativeParseResult strictResult = validateSyntax(text, timingMetadata);
 
-    report.lenientNoteCount = effectiveLenientResult->noteMarkers.size();
-    report.lenientErrorCount = effectiveLenientResult->errors.size();
+    // Lenient-side counters are kept in the report struct for ABI compatibility
+    // with downstream consumers (MainWindow validation entries, etc.) but are
+    // no longer populated — preview parsing is an entirely separate flow.
+    report.lenientNoteCount = 0;
+    report.lenientErrorCount = 0;
     report.strictNoteCount = strictResult.noteMarkers.size();
     report.strictErrorCount = strictResult.errors.size();
 
-    QSet<QString> lenientErrorKeys;
-    for (const SimaiNativeMessage& error : effectiveLenientResult->errors) {
-        lenientErrorKeys.insert(makeValidationMessageKey(error));
-    }
-
     report.issues.reserve(strictResult.errors.size() + strictResult.warnings.size());
     for (const SimaiNativeMessage& error : strictResult.errors) {
-        const bool lenientAlsoFailed = lenientErrorKeys.contains(makeValidationMessageKey(error));
-        const SimaiNativeValidationSeverity severity = lenientAlsoFailed
-            || ValidationMessage::shouldRemainValidationError(error.message)
-            ? SimaiNativeValidationSeverity::Error
-            : SimaiNativeValidationSeverity::Warning;
-        if (severity == SimaiNativeValidationSeverity::Error) {
-            ++report.errorCount;
-        } else {
-            ++report.warningCount;
-        }
+        ++report.errorCount;
 
         SimaiNativeValidationIssue issue;
         issue.line = error.line;
         issue.col = error.col;
         issue.endCol = error.endCol;
-        issue.severity = severity;
+        issue.severity = SimaiNativeValidationSeverity::Error;
         issue.rawMessage = error.message;
         issue.displayMessage = QStringLiteral("%1 %2")
-            .arg(validationSeverityPrefix(severity, locale), localizeValidationDetail(error.message, locale));
+            .arg(validationSeverityPrefix(issue.severity, locale), localizeValidationDetail(error.message, locale));
         report.issues.append(issue);
     }
 

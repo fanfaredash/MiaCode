@@ -57,7 +57,7 @@ void parseTouchToken(ParseState* state, const QString& token, int lineNumber, in
         marker.type = "touch_hold";
         marker.endSecond = marker.second + qMax(0.0, durationSecond);
         if (state->strictMode && hasNonCanonicalHoldModifierPlacement) {
-            appendTokenWarning(
+            appendTokenError(
                 state,
                 lineNumber,
                 column,
@@ -155,7 +155,7 @@ void parseTapOrHoldToken(ParseState* state, const QString& token, int lineNumber
         marker.type = "hold";
         marker.endSecond = marker.second + qMax(0.0, durationSecond);
         if (state->strictMode && hasOpenBracket && hasNonCanonicalHoldModifierPlacement) {
-            appendTokenWarning(
+            appendTokenError(
                 state,
                 lineNumber,
                 column,
