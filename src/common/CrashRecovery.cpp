@@ -350,9 +350,9 @@ QString crashRecoveryFilePath(const QString& chartFilePath)
         fileName = QStringLiteral("maidata.txt");
     }
     // Mirrors autosaveEntryDirectoryPathForFile +
-    // <chartDir>/.miacode/autosave/<fileName>/<fileName>.crash_recovery
+    // <chartDir>/.miacode/.autosave/<fileName>/<fileName>.crash_recovery
     return QDir(chartDir)
-        .filePath(QStringLiteral(".miacode/autosave/%1/%1.crash_recovery")
+        .filePath(QStringLiteral(".miacode/.autosave/%1/%1.crash_recovery")
                       .arg(fileName));
 }
 

@@ -85,7 +85,7 @@ void updateSnapshot(const QString& chartFilePath,
 void clearSnapshot();
 
 // Resolve the recovery file path for a chart:
-//   <chartDir>/.miacode/autosave/<chartFile>/<chartFile>.crash_recovery
+//   <chartDir>/.miacode/.autosave/<chartFile>/<chartFile>.crash_recovery
 // Returns empty if chartFilePath is empty / can't be resolved.
 QString crashRecoveryFilePath(const QString& chartFilePath);
 

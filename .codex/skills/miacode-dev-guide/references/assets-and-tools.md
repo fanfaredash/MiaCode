@@ -41,7 +41,7 @@ Current chart-directory conventions:
   - stores hashed per-track waveform cache blobs reused by timeline and latency detection
   - cache validity is tied to normalized track path plus file size and last-modified timestamp
 - autosave container root:
-  - `.miacode/autosave/<chart file>/`
+  - `.miacode/.autosave/<chart file>/`
   - contains `<chart file>.bak`, `history/*.bak`, and `autosave.json`
   - current history filenames use `YYYY-MM-DD-HH-MM-SS.bak`
   - if multiple history writes happen inside the same second, the later write replaces the earlier file of that same name

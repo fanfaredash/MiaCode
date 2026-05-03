@@ -47,7 +47,7 @@ Use this file to map a user-facing feature to the concrete file, class, and func
 - File open/save/new and field switching:
   - File: `src/app/mainwindow/sections/document/MainWindow.DocumentFlow.cpp`
   - Key functions: `applyCurrentFieldToDocument`, `onNewFile`, `onOpenFile`, `onSaveFile`, `onSaveFileAs`, `runAutosaveCheck`, `rebuildFieldSidebar`, `populateMetadataPage`, `populateDifficultyPage`, `switchToMetadataField`, `switchToDifficultyField`, `loadDocument`
-  - Owns: user-initiated file I/O plus background autosave snapshots under the project-local `.miacode/autosave/<chart file>/` container, including overwriteable latest backups named `<chart file>.bak`, timer-driven `history/YYYY-MM-DD-HH-MM-SS.bak` snapshots, and per-file `autosave.json` metadata rebuilds
+  - Owns: user-initiated file I/O plus background autosave snapshots under the project-local `.miacode/.autosave/<chart file>/` container, including overwriteable latest backups named `<chart file>.bak`, timer-driven `history/YYYY-MM-DD-HH-MM-SS.bak` snapshots, and per-file `autosave.json` metadata rebuilds
 - Document editor header / page-mode UI:
   - File: `src/app/mainwindow/sections/document/MainWindow.DocumentUi.cpp`
   - Key functions: `updateEditorHeader`, `updateEditorHeaderLayoutMode`, `switchToWelcomePage`, `switchToMetadataField`, `switchToDifficultyField`, `activateInitialField`

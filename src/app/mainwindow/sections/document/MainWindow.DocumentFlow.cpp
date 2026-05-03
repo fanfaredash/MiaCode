@@ -174,7 +174,7 @@ QString autosaveEntryDirectoryPathForFile(const QString& filePath)
     if (fileContainerName.isEmpty()) {
         fileContainerName = QStringLiteral("maidata.txt");
     }
-    return QDir(projectDataDirectoryPath).filePath(QStringLiteral("autosave/%1").arg(fileContainerName));
+    return QDir(projectDataDirectoryPath).filePath(QStringLiteral(".autosave/%1").arg(fileContainerName));
 }
 
 QString autosaveLatestFilePath(const QString& autosaveDirectoryPath)
