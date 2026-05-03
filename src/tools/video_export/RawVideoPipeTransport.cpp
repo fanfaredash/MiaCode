@@ -426,10 +426,11 @@ bool startRawVideoPipePumpThread(RawVideoPipePump* pump, QString* failureDetail)
     return true;
 }
 
-bool enqueueRawVideoFrame(
+namespace {
+
+bool enqueuePreparedPacket(
     RawVideoPipePump* pump,
-    QByteArray frameBytes,
-    int frameIndex,
+    RawVideoPipePacket&& packet,
     qint64* producerWaitNs,
     int* queuedFramesAfterEnqueue,
     QString* failureDetail)
@@ -447,6 +448,7 @@ bool enqueueRawVideoFrame(
         return false;
     }
 
+    const int frameIndex = packet.frameIndex;
     QElapsedTimer waitTimer;
     bool waited = false;
     int queuedFrames = 0;
@@ -475,9 +477,6 @@ bool enqueueRawVideoFrame(
             pump->notFull.wait_for(lock, std::chrono::milliseconds(20));
         }
 
-        RawVideoPipePacket packet;
-        packet.bytes = std::move(frameBytes);
-        packet.frameIndex = frameIndex;
         pump->queue.emplace_back(std::move(packet));
         queuedFrames = static_cast<int>(pump->queue.size());
         pump->stats.maxQueuedFrames = qMax(pump->stats.maxQueuedFrames, queuedFrames);
@@ -499,6 +498,65 @@ bool enqueueRawVideoFrame(
     }
     pump->notEmpty.notify_one();
     return true;
+}
+
+}  // namespace
+
+bool enqueueRawVideoFrame(
+    RawVideoPipePump* pump,
+    QByteArray frameBytes,
+    int frameIndex,
+    qint64* producerWaitNs,
+    int* queuedFramesAfterEnqueue,
+    QString* failureDetail)
+{
+    RawVideoPipePacket packet;
+    packet.bytes = std::move(frameBytes);
+    packet.frameIndex = frameIndex;
+    return enqueuePreparedPacket(
+        pump, std::move(packet), producerWaitNs, queuedFramesAfterEnqueue, failureDetail);
+}
+
+bool enqueueRawVideoFrame(
+    RawVideoPipePump* pump,
+    QImage frame,
+    int frameIndex,
+    qint64* producerWaitNs,
+    int* queuedFramesAfterEnqueue,
+    QString* failureDetail)
+{
+    if (frame.isNull()) {
+        if (failureDetail != nullptr) {
+            *failureDetail = QStringLiteral("zero-copy enqueue received a null frame");
+        }
+        return false;
+    }
+    const qsizetype expectedRowBytes = static_cast<qsizetype>(frame.width()) * 4;
+    if (frame.bytesPerLine() != expectedRowBytes) {
+        // The caller is responsible for verifying packed-stride before invoking
+        // this overload — fail loud rather than silently fall back to a copy.
+        if (failureDetail != nullptr) {
+            *failureDetail = QStringLiteral(
+                "zero-copy enqueue received non-packed stride (bytesPerLine=%1 expected=%2)")
+                .arg(frame.bytesPerLine())
+                .arg(expectedRowBytes);
+        }
+        return false;
+    }
+
+    const qsizetype frameByteCount = expectedRowBytes * static_cast<qsizetype>(frame.height());
+    RawVideoPipePacket packet;
+    // QImage's constBits() points at scanline 0; with packed stride the full
+    // frame is `expectedRowBytes * height` contiguous bytes starting there.
+    // fromRawData wraps the pointer without copying; the QImage in `frameOwner`
+    // keeps the data alive for the writer thread.
+    packet.bytes = QByteArray::fromRawData(
+        reinterpret_cast<const char*>(frame.constBits()),
+        frameByteCount);
+    packet.frameOwner = std::move(frame);
+    packet.frameIndex = frameIndex;
+    return enqueuePreparedPacket(
+        pump, std::move(packet), producerWaitNs, queuedFramesAfterEnqueue, failureDetail);
 }
 
 void shutdownRawVideoPipe(RawVideoPipe* pipe)

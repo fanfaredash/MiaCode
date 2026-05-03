@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QImage>
 #include <QSize>
 #include <QString>
 #include <QtGlobal>
@@ -46,7 +47,15 @@ struct RawVideoPipe {
 };
 
 struct RawVideoPipePacket {
+    // The writer thread reads `bytes.constData()` / `bytes.size()`. When `bytes`
+    // is constructed via `QByteArray::fromRawData` (the zero-copy producer path),
+    // `frameOwner` keeps the underlying pixel buffer alive: the packet holds a
+    // QImage refcount on the QSG-readback frame, so the bytes remain valid until
+    // the packet is popped and destroyed on the writer thread. When `bytes` owns
+    // its storage (the rare repack path used for non-packed strides), `frameOwner`
+    // stays null.
     QByteArray bytes;
+    QImage frameOwner;
     int frameIndex = -1;
 };
 
@@ -89,6 +98,31 @@ bool startRawVideoPipePumpThread(RawVideoPipePump* pump, QString* failureDetail 
 bool enqueueRawVideoFrame(
     RawVideoPipePump* pump,
     QByteArray frameBytes,
+    int frameIndex,
+    qint64* producerWaitNs = nullptr,
+    int* queuedFramesAfterEnqueue = nullptr,
+    QString* failureDetail = nullptr
+);
+
+// Zero-copy enqueue. The pixel data is referenced via `QByteArray::fromRawData`
+// pointing into `frame`, and the QImage itself is stored in the packet to keep
+// the buffer alive until the writer thread pops the packet. Only valid when
+// `frame` has packed RGBA8888 data (`bytesPerLine == width * 4`). Caller pre-
+// validates that condition; fall back to the QByteArray overload when the
+// stride is non-packed and a repack is required. Eliminates a per-frame
+// heap allocation + memcpy of the entire frame (~8 MB for 1080p) — at 60 fps
+// that is ~480 MB/s of churn the producer thread no longer pays.
+//
+// Caveat: VideoExportController routes frame 0 through the QByteArray
+// overload as a workaround for a not-yet-identified corruption that affects
+// only the very first exported frame when this overload is used (a 250×26 px
+// black region matching the playfield outline's top arc). Frames 1+ are
+// safe. See the comment block in VideoExportController's processReadyFrame
+// for the full investigation. Once the root cause is found, the carve-out
+// can be removed and this overload used unconditionally.
+bool enqueueRawVideoFrame(
+    RawVideoPipePump* pump,
+    QImage frame,
     int frameIndex,
     qint64* producerWaitNs = nullptr,
     int* queuedFramesAfterEnqueue = nullptr,

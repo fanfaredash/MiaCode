@@ -3913,14 +3913,74 @@ VideoExportResult VideoExportController::exportPreparedTask(
         QString ffmpegWriteFailure;
         qint64 producerWaitNs = 0;
         int queuedFramesAfterEnqueue = 0;
-        if (packedFrameSize > 0
-            && !enqueueRawVideoFrame(
-                &rawVideoPipePump,
-                QByteArray(packedFrameData, static_cast<qsizetype>(packedFrameSize)),
-                frameIndex,
-                &producerWaitNs,
-                &queuedFramesAfterEnqueue,
-                &ffmpegWriteFailure)) {
+        // Zero-copy enqueue path with a frame-0 carve-out.
+        //
+        // Steady state: when `preparePackedRgbaFrame` returned a pointer
+        // into one of the readback QImage buffers (the dominant case —
+        // the readback frame is already RGBA8888 with packed stride), we
+        // move a refcount-bumped copy of that QImage into the pump
+        // packet via QByteArray::fromRawData. That eliminates a per-frame
+        // deep copy of ~width*height*4 bytes (~3.5 MB at 720p, ~8 MB at
+        // 1080p) into a fresh heap-owned QByteArray. Beta24 measurements
+        // (ECHO,_MAS @ 1280×720 60 fps): avgWriteMs collapsed from
+        // 1.55 ms → 0.018 ms and total export time fell ~22.7%.
+        //
+        // Frame-0 carve-out: a not-yet-identified mechanism corrupts a
+        // 250×26 px region at the top of frame 0 only when zero-copy is
+        // used. Diff with the deep-copy path showed the corrupted bytes
+        // follow the SHAPE of the playfield outline's top arc + the two
+        // top-most lane-marker dots — i.e. the outline texture's
+        // contribution to those pixels is missing in the readback bytes
+        // by the time the worker thread reads them. Frames 1+ are
+        // pixel-identical to the deep-copy path, so the regression is
+        // genuinely confined to frame 0. Working hypotheses (none
+        // confirmed): (a) Qt's first-frame texture-atlas upload races
+        // with the readback buffer reuse, (b) the warmup-allocated
+        // `reusableReadbackFrame_` buffer doesn't trigger COW detach the
+        // same way on the very first PBO-pipeline convert, (c) heap
+        // memory aliasing between the outline QImage and the readback
+        // QImage on the first frame only.
+        //
+        // Workaround: deep-copy frame 0, zero-copy frames 1+. The cost
+        // is one ~width*height*4-byte memcpy on a single frame per
+        // export, which is dominated by the readback synchronisation on
+        // that frame anyway. Remove the carve-out and the fallback
+        // branch once the root cause is found.
+        bool enqueueOk = true;
+        if (packedFrameSize > 0) {
+            const bool forceDeepCopyForFrame0 = (frameIndex == 0);
+            if (!forceDeepCopyForFrame0 && packedFrameScratch.isEmpty()) {
+                QImage zeroCopyOwner = convertedRgbaFrame.isNull() ? frame : convertedRgbaFrame;
+                enqueueOk = enqueueRawVideoFrame(
+                    &rawVideoPipePump,
+                    std::move(zeroCopyOwner),
+                    frameIndex,
+                    &producerWaitNs,
+                    &queuedFramesAfterEnqueue,
+                    &ffmpegWriteFailure);
+            } else if (!packedFrameScratch.isEmpty()) {
+                enqueueOk = enqueueRawVideoFrame(
+                    &rawVideoPipePump,
+                    std::move(packedFrameScratch),
+                    frameIndex,
+                    &producerWaitNs,
+                    &queuedFramesAfterEnqueue,
+                    &ffmpegWriteFailure);
+            } else {
+                // Frame-0 carve-out: deep-copy the bytes at enqueue time
+                // so that any later mutation of the readback QImage's
+                // buffer cannot influence what the worker thread writes
+                // to the ffmpeg pipe. See the comment block above.
+                enqueueOk = enqueueRawVideoFrame(
+                    &rawVideoPipePump,
+                    QByteArray(packedFrameData, static_cast<qsizetype>(packedFrameSize)),
+                    frameIndex,
+                    &producerWaitNs,
+                    &queuedFramesAfterEnqueue,
+                    &ffmpegWriteFailure);
+            }
+        }
+        if (!enqueueOk) {
             const QString processSnapshot = describeProcessForLog(ffmpeg);
             ffmpeg.kill();
             ffmpeg.waitForFinished(2000);
