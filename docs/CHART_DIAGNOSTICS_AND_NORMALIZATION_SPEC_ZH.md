@@ -94,14 +94,15 @@ time-signature 摆放风格。这些都是 strict-only。Lenient pass 在
 | 3 | 未闭合 `[HS*…>` 块 | Error | `Driver.cpp:582-587` `kUnterminatedHsBlock()` | `[HS*x` 没有闭合 `>`。**lenient 模式直接 silent break**，不报错。 |
 | 4 | 重复 `/` 分隔符 | Error | `Driver.cpp:593-597` `kRepeatedSlashSeparator()` | `1//5` |
 | 5 | 重复 `` ` `` 分隔符 | Error | `Driver.cpp:604-611` `kRepeatedBacktickSeparator()` | `` 1``5 `` |
-| 6 | Touch_hold 修饰符位置非典范 | Error | `TouchTap.cpp:59-66` `kNonCanonicalHoldModifierPlacementPrefix` | `Ah[4:1]b` —— touch 同时有 `[duration]` 和 `]` 之后的非空后缀修饰符 |
-| 7 | Tap/hold 修饰符位置非典范 | Error | `TouchTap.cpp:157-164` `kNonCanonicalHoldModifierPlacementPrefix` | `1h[4:1]x` —— hold 同时有 `[duration]` 和 `]` 之后的非空后缀修饰符 |
-| 8 | Break-slide `b` 修饰符位置无效 | Error | `Slide.cpp:69-77` `kInvalidBreakSlideModifierPositionPrefix` | `b` 不是紧挨在 slide token 第一个 `[` 之前 |
+| 6 | Touch_hold 修饰符位置非典范 | Warning | `TouchTap.cpp:71-80` `kNonCanonicalHoldModifierPlacementPrefix` | `Ah[4:1]b` —— touch 同时有 `[duration]` 和 `]` 之后的非空后缀修饰符 |
+| 7 | Tap/hold 修饰符位置非典范 | Warning | `TouchTap.cpp:169-178` `kNonCanonicalHoldModifierPlacementPrefix` | `1h[4:1]x` —— hold 同时有 `[duration]` 和 `]` 之后的非空后缀修饰符 |
+| 8 | Break-slide `b` 修饰符位置非典范 | Warning | `Slide.cpp:60-82` `kInvalidBreakSlideModifierPositionPrefix` | `b` 不是紧挨在 slide token 第一个 `[` 之前。Slide 仍然能 parse，`trackBreak` 被置位；`b` 字符在构建 `sanitizedCore` 时被剥离。 |
 | 9 | Slide 时值块位置无效 | Error | `Slide.cpp:113-115` `kInvalidSlideDurationPlacementPrefix` | Slide token 包含多于一个 `[…]` 块 |
 | 10 | 多段 slide 带每段 wait+duration | Error（通过 parse 失败 → `classifyInvalidNoteMessage`） | `SimaiNativeParser.cpp:1206` strict 时 `parseStandardSlideChain` 返回 `false` | 多形 chain 每形都带 `[wait#duration]`，strict 拒绝；lenient 按形状长度比例分配总时值 |
 | 11 | 缺失 beat 分隔符 `,` | Error | `StrictChecks.cpp:119-123` `runStrictFormatChecks` | 含有 note 字符且非终止 `E` 的行，整行没有 `,` |
 | 12 | 不匹配的右括号 | Error | `StrictChecks.cpp:131-137`（在 `runStrictFormatChecks` 中） | `]` 没有对应的 `[`；`}` 没有 `{`；`)` 没有 `(` |
 | 13 | 未闭合的左括号 | Error | `StrictChecks.cpp:142-145`（在 `runStrictFormatChecks` 中） | `[` / `{` / `(` 在文件结尾仍残留在 stack 中 |
+| 14 | 非典范的中心 Touch 音符（`C1`/`C2`） | Warning | `TouchTap.cpp:12-31` `kNonCanonicalCenterTouchPrefix` | `C1` —— lenient 与 strict 都把它归一化为 `C`，strict 额外标注非典范写法。 |
 
 `runStrictFormatChecks(state, lines)` 在 `Driver.cpp:652` 即主 parse loop
 之**后**才跑。它会先剥掉控制块 `( … )`、`{ … }`、`<HS* … >`、以及整行
@@ -112,9 +113,13 @@ time-signature 摆放风格。这些都是 strict-only。Lenient pass 在
 
 | Lenient 宽松处理 | 来源 | 行为 |
 |---|---|---|
-| Touch `C1` / `C2` → `C` 归一化 | `TouchTap.cpp:13-18` | Lenient 在校验前静默把 `C1`/`C2` 改写为 `C`。Strict 跳过这一步，token 原样进入 `parseTouchSuffix`，几乎一定产生 `Invalid touch token` 错误。 |
 | 多段 slide chain 带每段 wait+duration | `SimaiNativeParser.cpp:1209-1213` | Lenient 按形状长度比例把总时值分配到各段；strict 拒绝（即上表 #10）。 |
 | 未闭合 `[HS*` 块 | `Driver.cpp:582-587` | Lenient 直接 silent break；strict 报上表 #3。 |
+
+> **关于 `C1`/`C2` 的说明。** 这一项以前是仅 lenient 的宽松处理（lenient
+> 改写、strict 不改写）。现在两种 pass 都做归一化，所以解析出来的 marker
+> 一致，仅 strict 额外发一条 Warning（即上表 #14）。两条流水线不再对
+> 「这个 token 是否合法」有分歧。
 
 ### 修饰符字母顺序 —— 明确**不是** strict 检查
 
@@ -202,14 +207,15 @@ Lenient 的存在意义现在只剩一件事：抽取一组可用的 timeline ma
 | `` 1``5 ``（重复 `` ` ``） | **Error** | `kRepeatedBacktickSeparator` |
 | `1bb`（重复 `b` 修饰符） | **Error** | `parseTapModifierSequence` 返回 `false`（与模式无关） |
 | `1[4:1]h`（`h` 在 `]` 之后） | **Error** | `TouchTap.cpp:119-122`（与模式无关） |
-| `1h[4:1]x`（tap/hold 修饰符位置非典范） | **Error** *（原 Warning，已翻牌）* | `kNonCanonicalHoldModifierPlacementPrefix`（`TouchTap.cpp:157-164`） |
-| `Ah[4:1]b`（touch_hold 修饰符位置非典范） | **Error** *（原 Warning，已翻牌）* | `kNonCanonicalHoldModifierPlacementPrefix`（`TouchTap.cpp:59-66`） |
+| `1h[4:1]x`（tap/hold 修饰符位置非典范） | **Warning** | `kNonCanonicalHoldModifierPlacementPrefix`（`TouchTap.cpp:169-178`） |
+| `Ah[4:1]b`（touch_hold 修饰符位置非典范） | **Warning** | `kNonCanonicalHoldModifierPlacementPrefix`（`TouchTap.cpp:71-80`） |
+| `2bv-3[4:1]`（break-slide `b` 不紧挨 `[`） | **Warning** *（原 Error，已翻牌）* | `kInvalidBreakSlideModifierPositionPrefix`（`Slide.cpp:60-82`）。Slide 仍能 parse，`trackBreak` 被置位。 |
 | `{7}1,2,3,`（7 ∤ 384） | **Warning** *（原 Error，已翻牌）* | `formatStrictBeatValue`（`Driver.cpp:557-565`） |
 | `{1024}1,2,…`（beats 被 clamp） | **Warning** | `formatBeatValueClamped` |
 | `[HS*xyz`（无闭合 `>`） | **Error** | `kUnterminatedHsBlock` |
 | `1abc,2,3,`（note 行某处缺逗号） | **Error** | `runStrictFormatChecks` 的 `Missing beat separator ','` |
 | `1xh` / `1hx` / `1bxhf` / `1fxhb` | **不报** | `parseTapModifierSequence` 不关心顺序 |
-| Touch `C1` | **Error** | strict 跳过 lenient 的 `C1`/`C2` → `C` 改写，token 原样进入 `parseTouchSuffix`，被拒（`Invalid touch token: C1`）。lenient 流水线仍把它渲染为预览 timeline 上的 `C` touch —— 两条流水线在这里默默不同，是设计如此。 |
+| Touch `C1` | **Warning** *（原 Error，已翻牌）* | `kNonCanonicalCenterTouchPrefix`（`TouchTap.cpp:12-31`）。lenient 与 strict 都把 `C1`/`C2` 归一化为 `C`，strict 额外标注非典范写法。两条流水线现在对解析出的 marker 一致。 |
 
 ### 1.3 本地化展示
 

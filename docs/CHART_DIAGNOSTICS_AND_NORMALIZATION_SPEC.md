@@ -102,14 +102,15 @@ below is exactly the severity displayed in the UI.
 | 3 | Unterminated `[HS*…>` block | Error | `Driver.cpp:582-587` `kUnterminatedHsBlock()` | `[HS*x` without closing `>`. **Lenient mode silently `break`s** instead of erroring. |
 | 4 | Repeated `/` separator | Error | `Driver.cpp:593-597` `kRepeatedSlashSeparator()` | `1//5` |
 | 5 | Repeated `` ` `` separator | Error | `Driver.cpp:604-611` `kRepeatedBacktickSeparator()` | `` 1``5 `` |
-| 6 | Non-canonical hold modifier placement (touch_hold) | Error | `TouchTap.cpp:59-66` `kNonCanonicalHoldModifierPlacementPrefix` | `Ah[4:1]b` — touch with `[duration]` AND non-empty suffix modifier after `]` |
-| 7 | Non-canonical hold modifier placement (tap/hold) | Error | `TouchTap.cpp:157-164` `kNonCanonicalHoldModifierPlacementPrefix` | `1h[4:1]x` — hold with `[duration]` AND non-empty suffix modifier after `]` |
-| 8 | Invalid break-slide `b` modifier position | Error | `Slide.cpp:69-77` `kInvalidBreakSlideModifierPositionPrefix` | `b` not immediately before the first `[` in a slide token |
+| 6 | Non-canonical hold modifier placement (touch_hold) | Warning | `TouchTap.cpp:71-80` `kNonCanonicalHoldModifierPlacementPrefix` | `Ah[4:1]b` — touch with `[duration]` AND non-empty suffix modifier after `]` |
+| 7 | Non-canonical hold modifier placement (tap/hold) | Warning | `TouchTap.cpp:169-178` `kNonCanonicalHoldModifierPlacementPrefix` | `1h[4:1]x` — hold with `[duration]` AND non-empty suffix modifier after `]` |
+| 8 | Non-canonical break-slide `b` modifier position | Warning | `Slide.cpp:60-82` `kInvalidBreakSlideModifierPositionPrefix` | `b` not immediately before the first `[` in a slide token. Slide still parses with `trackBreak` set; the `b` characters are stripped from `sanitizedCore`. |
 | 9 | Invalid slide duration placement | Error | `Slide.cpp:113-115` `kInvalidSlideDurationPlacementPrefix` | Slide token with more than one `[…]` block |
 | 10 | Multi-segment slide with per-segment wait+duration | Error (via parse failure → `classifyInvalidNoteMessage`) | `SimaiNativeParser.cpp:1206` strict returns `false` from `parseStandardSlideChain` | Multi-shape chain with per-shape `[wait#duration]` markers — strict rejects, lenient distributes |
 | 11 | Missing beat separator `,` | Error | `StrictChecks.cpp:119-123` `runStrictFormatChecks` | A note-bearing line that contains no `,` and isn't the terminal `E` line |
 | 12 | Unmatched closing bracket | Error | `StrictChecks.cpp:131-137` (within `runStrictFormatChecks`) | `]` without matching `[`; `}` without `{`; `)` without `(` |
 | 13 | Unclosed bracket | Error | `StrictChecks.cpp:142-145` (within `runStrictFormatChecks`) | `[` / `{` / `(` left on the stack at end of file |
+| 14 | Non-canonical center touch token (`C1`/`C2`) | Warning | `TouchTap.cpp:12-31` `kNonCanonicalCenterTouchPrefix` | `C1` — both lenient and strict normalize to `C`; strict additionally flags the non-canonical form. |
 
 The `runStrictFormatChecks(state, lines)` pass at `Driver.cpp:652` runs
 **after** the main parse loop. It strips control blocks `( … )`, `{ … }`,
@@ -121,9 +122,14 @@ strict-only checks #11–#13.
 
 | Lenient relaxation | Source | Behavior |
 |---|---|---|
-| Touch token `C1` / `C2` → `C` normalization | `TouchTap.cpp:13-18` | Lenient silently rewrites `C1`/`C2` to `C` before validation. Strict skips this rewrite, so the token reaches `parseTouchSuffix` unchanged and almost certainly produces an `Invalid touch token` error. |
 | Multi-segment slide chain with per-segment timing | `SimaiNativeParser.cpp:1209-1213` | Lenient distributes total duration across shapes by relative shape length; strict refuses (check #10 above). |
 | Unterminated `[HS*` block | `Driver.cpp:582-587` | Lenient `break`s the line silently; strict reports check #3. |
+
+> **Note on `C1`/`C2`.** This used to be a lenient-only relaxation
+> (lenient rewrote, strict did not). Both passes now perform the
+> rewrite, so they agree on the parsed marker; only the strict pass
+> additionally emits a Warning (check #14). The two pipelines no
+> longer disagree on whether the token is acceptable.
 
 ### Modifier-letter ordering — explicitly NOT a strict check
 
@@ -224,14 +230,15 @@ participates. The strict severity is the UI severity.
 | `` 1``5 `` (repeated `` ` ``) | **Error** | `kRepeatedBacktickSeparator` |
 | `1bb` (duplicate `b` modifier) | **Error** | `parseTapModifierSequence` returns `false` (mode-independent) |
 | `1[4:1]h` (`h` after duration block) | **Error** | `TouchTap.cpp:119-122` (mode-independent) |
-| `1h[4:1]x` (tap/hold non-canonical modifier placement) | **Error** *(flipped from Warning)* | `kNonCanonicalHoldModifierPlacementPrefix` (`TouchTap.cpp:157-164`) |
-| `Ah[4:1]b` (touch_hold non-canonical modifier placement) | **Error** *(flipped from Warning)* | `kNonCanonicalHoldModifierPlacementPrefix` (`TouchTap.cpp:59-66`) |
+| `1h[4:1]x` (tap/hold non-canonical modifier placement) | **Warning** | `kNonCanonicalHoldModifierPlacementPrefix` (`TouchTap.cpp:169-178`) |
+| `Ah[4:1]b` (touch_hold non-canonical modifier placement) | **Warning** | `kNonCanonicalHoldModifierPlacementPrefix` (`TouchTap.cpp:71-80`) |
+| `2bv-3[4:1]` (break-slide `b` not immediately before `[`) | **Warning** *(flipped from Error)* | `kInvalidBreakSlideModifierPositionPrefix` (`Slide.cpp:60-82`). Slide still parses with `trackBreak = true`. |
 | `{7}1,2,3,` (7 ∤ 384) | **Warning** *(flipped from Error)* | `formatStrictBeatValue` (`Driver.cpp:557-565`) |
 | `{1024}1,2,…` (beats clamped) | **Warning** | `formatBeatValueClamped` |
 | `[HS*xyz` (no closing `>`) | **Error** | `kUnterminatedHsBlock` |
 | `1abc,2,3,` (note-line missing comma somewhere) | **Error** | `Missing beat separator ','` from `runStrictFormatChecks` |
 | `1xh` / `1hx` / `1bxhf` / `1fxhb` | **Not flagged** | `parseTapModifierSequence` is order-agnostic |
-| Touch `C1` | **Error** | Strict skips the lenient `C1`/`C2` → `C` rewrite, so `parseTouchSuffix` rejects (`Invalid touch token: C1`). The lenient pipeline still renders this as a `C` touch on the preview timeline — the two pipelines differ silently here, by design. |
+| Touch `C1` | **Warning** *(flipped from Error)* | `kNonCanonicalCenterTouchPrefix` (`TouchTap.cpp:12-31`). Both lenient and strict normalize `C1`/`C2` → `C`; strict additionally flags the non-canonical form. The two pipelines now agree on the parsed marker. |
 
 ### 1.3 Locale-aware display messages
 
