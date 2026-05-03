@@ -59,6 +59,7 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
     }
 
     bool trackBreak = false;
+    bool warnedInvalidBreakPos = false;
     const int firstBracketIndex = noteCore.indexOf(QChar('['));
     for (int i = 1; i < noteCore.size(); ++i) {
         if (noteCore.at(i) != QChar('b')) {
@@ -66,14 +67,17 @@ void parseSlideToken(ParseState* state, const QString& token, int lineNumber, in
         }
         trackBreak = true;
         const bool validStrictBreakPos = firstBracketIndex > 0 && i == firstBracketIndex - 1;
-        if (state->strictMode && !validStrictBreakPos) {
-            appendTokenError(
+        if (state->strictMode && !validStrictBreakPos && !warnedInvalidBreakPos) {
+            // Non-canonical placement; flag once and let the slide parse
+            // through. The `b` characters are stripped from sanitizedCore
+            // below, so the slide shape resolves normally with trackBreak set.
+            appendTokenWarning(
                 state,
                 lineNumber,
                 column,
                 QString("Invalid break slide modifier position: %1").arg(token)
             );
-            return;
+            warnedInvalidBreakPos = true;
         }
     }
 

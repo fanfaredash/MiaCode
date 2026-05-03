@@ -10,11 +10,24 @@ void parseTouchToken(ParseState* state, const QString& token, int lineNumber, in
     }
 
     QString normalizedToken = token;
-    if (!state->strictMode
-        && normalizedToken.size() >= 2
+    if (normalizedToken.size() >= 2
         && normalizedToken.at(0).toUpper() == QChar('C')
         && (normalizedToken.at(1) == QChar('1') || normalizedToken.at(1) == QChar('2'))) {
+        // Both lenient and strict accept C1/C2 as aliases for C, so the
+        // preview pipeline and the validation pipeline agree on what gets
+        // rendered. Strict additionally flags it as non-canonical, since
+        // the canonical form is plain C. The English literal here must
+        // match kNonCanonicalCenterTouchPrefix() in Driver.cpp so the
+        // ZH localization map picks it up.
         normalizedToken.remove(1, 1);
+        if (state->strictMode) {
+            appendTokenWarning(
+                state,
+                lineNumber,
+                column,
+                QString("Non-canonical center touch token (use C): %1").arg(token)
+            );
+        }
     }
 
     QString durationSignature;
@@ -57,7 +70,7 @@ void parseTouchToken(ParseState* state, const QString& token, int lineNumber, in
         marker.type = "touch_hold";
         marker.endSecond = marker.second + qMax(0.0, durationSecond);
         if (state->strictMode && hasNonCanonicalHoldModifierPlacement) {
-            appendTokenError(
+            appendTokenWarning(
                 state,
                 lineNumber,
                 column,
@@ -155,7 +168,7 @@ void parseTapOrHoldToken(ParseState* state, const QString& token, int lineNumber
         marker.type = "hold";
         marker.endSecond = marker.second + qMax(0.0, durationSecond);
         if (state->strictMode && hasOpenBracket && hasNonCanonicalHoldModifierPlacement) {
-            appendTokenError(
+            appendTokenWarning(
                 state,
                 lineNumber,
                 column,

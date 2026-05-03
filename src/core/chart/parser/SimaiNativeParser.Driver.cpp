@@ -108,6 +108,12 @@ const QString& kInvalidTouchTokenPrefix()
     return value;
 }
 
+const QString& kNonCanonicalCenterTouchPrefix()
+{
+    static const QString value = QStringLiteral("Non-canonical center touch token (use C): ");
+    return value;
+}
+
 const QString& kInvalidTouchModifierPrefix()
 {
     static const QString value = QStringLiteral("Invalid touch modifier: ");
@@ -244,6 +250,7 @@ const QHash<QString, QString>& zhPrefixMap()
         {kInvalidTouchHoldDurationPrefix(), QStringLiteral("TouchHold 时值无效：")},
         {kTouchDurationRequiresHPrefix(), QStringLiteral("Touch 时值需要 'h' 修饰符：")},
         {kInvalidTouchTokenPrefix(), QStringLiteral("Touch 音符无效：")},
+        {kNonCanonicalCenterTouchPrefix(), QStringLiteral("非典范的中心 Touch 音符（应使用 C）：")},
         {kInvalidTouchModifierPrefix(), QStringLiteral("Touch 修饰符无效：")},
         {kFullwidthDigitPrefix(), QStringLiteral("检测到全角数字，请改用半角数字：")},
         {kFullwidthTouchRegionPrefix(), QStringLiteral("检测到全角触摸区域字母，请改用半角区域字母：")},
@@ -276,6 +283,7 @@ const QVector<QString>& zhPrefixOrder()
         kInvalidTouchHoldDurationPrefix(),
         kTouchDurationRequiresHPrefix(),
         kInvalidTouchTokenPrefix(),
+        kNonCanonicalCenterTouchPrefix(),
         kInvalidTouchModifierPrefix(),
         kFullwidthDigitPrefix(),
         kFullwidthTouchRegionPrefix(),
