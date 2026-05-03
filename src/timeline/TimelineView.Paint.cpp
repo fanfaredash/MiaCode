@@ -107,15 +107,7 @@ void TimelineView::paintEvent(QPaintEvent* event)
     QColor laneDividerColor = c.timelineBorder;
     laneDividerColor.setAlpha(qMin(laneDividerColor.alpha(), 96));
     const QPen laneDividerPen(laneDividerColor, 1.0);
-    // Beta21-fix — minor beat ticks now use the dedicated
-    // `timelineGridMinor` palette entry instead of the lane-divider
-    // colour (`timelineBorder` clamped to alpha 96). The lane-divider
-    // colour is too faint against a near-white lane background to
-    // register as per-comma vertical ticks; users perceived the
-    // entire comma grid as missing. The minimap painter below already
-    // reads `c.timelineGridMinor` directly — this aligns the main
-    // path with that.
-    const QPen minorBeatPen(c.timelineGridMinor, 1.0);
+    const QPen minorBeatPen(laneDividerColor, 1.0);
     painter.setPen(borderPen);
     painter.drawLine(0, top - 1, viewport()->width(), top - 1);
 

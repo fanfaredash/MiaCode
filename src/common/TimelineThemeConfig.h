@@ -40,14 +40,8 @@ struct TimelineThemeColors {
 inline TimelineThemeColors timelineThemeColors()
 {
     const UiTheme::Colors& c = UiTheme::colors();
-    // Beta21-fix — use the dedicated `timelineGridMinor` palette entry
-    // for per-comma minor beat ticks. Previously this was derived from
-    // `timelineBorder` clamped to alpha 96, producing barely-visible
-    // lines (the entire comma grid disappeared on a near-white lane
-    // background). The minimap painter at TimelineView.Paint.cpp:870
-    // already used `c.timelineGridMinor` directly; this aligns the
-    // main timeline with that. The legacy main paint path also reads
-    // c.timelineGridMinor directly now (see TimelineView.Paint.cpp).
+    QColor minorGrid = c.timelineBorder;
+    minorGrid.setAlpha(qMin(minorGrid.alpha(), 96));
     return TimelineThemeColors{
         c.timelineWindow,
         c.timelineHeader,
@@ -56,7 +50,7 @@ inline TimelineThemeColors timelineThemeColors()
         c.timelineBorder,
         c.timelineAxis,
         c.timelineGridMajor,
-        c.timelineGridMinor,
+        minorGrid,
         c.timelineLaneEven,
         c.timelineLaneOdd,
         c.timelineLabel,
