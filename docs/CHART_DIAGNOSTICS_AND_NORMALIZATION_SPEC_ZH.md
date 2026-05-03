@@ -105,6 +105,7 @@ time-signature 摆放风格。这些都是 strict-only。Lenient pass 在
 | 14 | 非典范的中心 Touch 音符（`C1`/`C2`） | Warning | `TouchTap.cpp:12-31` `kNonCanonicalCenterTouchPrefix` | `C1` —— lenient 与 strict 都把它归一化为 `C`，strict 额外标注非典范写法。 |
 | 15 | Slide head 修饰符位置错误（`?` / `!` / `@`） | Error | `Driver.cpp` `detectMisplacedSlideHeadModifierMessage` / `kMisplacedSlideHeadModifierPrefix` | 这三个字符是仅 slide 才有的 head 修饰符。strict 要求每个 `?`/`!`/`@` 必须落在 token 中的 `[1, firstShapeIdx)` 范围内（`firstShapeIdx` 是 token 中第一个 slide shape 字符的下标，shape 字符集为 `-^v<>VpqszwW`）。它们与 `b`/`x` 的相对顺序没有限制。例如 `1!`、`1h@`、`1-5![8:1]`、`1-?5[8:1]` 都会被拒绝；`1!-5[8:1]`、`1x?-5[8:1]`、`1@bx-5[8:1]` 都通过。 |
 | 16 | Tap-star 修饰符位置错误（`$` / `$$`） | Error | `Driver.cpp` `detectMisplacedTapStarModifierMessage` / `kMisplacedTapStarModifierPrefix` | `$` 是仅 tap 才有的修饰符（设置 `tapUsesStarMaterial`，`$$` 额外置 `tapStarDouble`）。strict 拒绝 `$` 出现在任何非纯 tap 的 token 中 —— 即非数字开头、含 slide shape 字符、含 `[…]`、或含 `h`（不区分大小写）的任意 token。与 `b`/`x` 的任意顺序组合都允许：`1$`、`1$$`、`1b$`、`1$x`、`1$bx`、`1bx$$` 都通过；`A1$`、`1-5$[8:1]`、`1h$`、`1$h[1:1]` 都拒绝。 |
+| 17 | Slide 段链语法无效 | Error | `SimaiNativeParser.cpp` `isValidSlideChainStrict` / `kInvalidSlideChainPrefix`，由 `Slide.cpp::parseSlideToken` 调用 | 在 `*` 拆分 + head 还原 + 剥掉 `b` 之后，逐字符走过 slide core，确保每个字符都被一个合法构造消费。**Lane 数字。** head 必须是 1-8；每个 shape 的尾随数字也必须是 1-8。**Shape 格式。** `V` 必须紧跟两个 1-8 数字；`p` / `q` 后可跟一个数字（单环），或再跟一个相同字符再跟一个数字（双环 `pp` / `qq`）；`-^v<>szw` 中每个字符后必须恰好跟一个 1-8 数字。**无 orphan 字符。** 任何不是 shape / 不是 `[`、且未被任何 shape 的尾随数字槽消费的字符，都会被拒绝 —— 这正是用来抓 lenient chain parser 的 silent-skip：例如 `1v35-7[8:1]` 中的 `5` 会被 lenient 默默丢掉，parse 成 `[1v3, 3-7]`。**至少一个 shape。** 整段只有 bracket 的 token（如 `1[8:1]`）会被拒绝（不过这种 token 在上游 dispatch 时就走 hold 分支了，不会进到本检查）。**Chain 自动连接** —— 每个 shape 的 source 就是上一段的 destination，只要数字位数正确，chain 自然连得起来。**几何合法性**（start, V, via, end 是否真是合法的 V 组合）_不_ 在这里检查 —— 那是 `Slide.cpp:147` 已有的 slide-data 查表负责的，两种模式下都会对未知 shape key 报错（如 `1V32` 今天就已经会被拒绝）。 |
 
 `runStrictFormatChecks(state, lines)` 在 `Driver.cpp:652` 即主 parse loop
 之**后**才跑。它会先剥掉控制块 `( … )`、`{ … }`、`<HS* … >`、以及整行
@@ -223,6 +224,14 @@ Lenient 的存在意义现在只剩一件事：抽取一组可用的 timeline ma
 | `1!-5[8:1]` / `1x?-5[8:1]` / `1@bx-5[8:1]` | **不报** | 三种字符都落在 lane digit 与第一个 shape 字符之间，与 `b`/`x` 的顺序不受限。 |
 | `A1$` / `1-5$[8:1]` / `1h$` / `1$h[1:1]`（仅 tap 才用的修饰符出现在非 tap） | **Error** | `kMisplacedTapStarModifierPrefix`（`Driver.cpp` `detectMisplacedTapStarModifierMessage`） —— token 分别是 touch / slide / hold / 带 `[…]` 的非 tap。 |
 | `1$` / `1$$` / `1b$` / `1$x` / `1$bx` / `1bx$$` | **不报** | Token 是纯 tap；`$` / `$$` 与 `b` / `x` 任意顺序组合都可以。 |
+| `1V35-7[8:1]`（V chain 接 `-`） | **不报** | `V35` 是两个数字（3、5），`-7` 是一个数字，chain 5→5 衔接。两个 shape 都能在 slide data 中查到。 |
+| `1v35-7[8:1]`（小写 `v` 跟两个数字） | **Error** | `kInvalidSlideChainPrefix` —— 小写 `v` 后面只跟一个数字，所以 `1v3` 之后的 `5` 是 orphan。lenient 默默丢掉它，parse 成 `[1v3, 3-7]`。 |
+| `1V32-7[8:1]`（V 组合无效） | **Error** | `Slide.cpp:147` `Invalid note: … unknown shape 1V32` —— 由已有的 slide-data 查表抓住，不是新的 strict 语法检查（后者只校验数字位数）。两种模式下都会报错；lenient 行为未变。 |
+| `1-5p6[8:1]`（多 shape chain `-` + `p`） | **不报** | 两个 shape 各跟一个数字，chain 5→5 衔接。 |
+| `1-5-p6[8:1]`（chain 中 orphan） | **Error** | `kInvalidSlideChainPrefix` —— 第二个 `-` 的尾随槽是 `p`，不是 1-8 数字；尾部的 `6` 同样是 orphan。 |
+| `1-5[8:1]*-6[8:1]`（同 head `*` 拆分） | **不报** | `*` 拆分后两个分支是 `1-5[8:1]` 与 `1-6[8:1]`（head `1` 继承），都合法。 |
+| `1-5[8:1]*-p6[8:1]`（第二个分支无效） | **Error** 出现在第二个分支 | 第一个分支合法；第二个分支重建为 `1-p6[8:1]`，被 strict chain 检查拒绝（`-` 后跟 `p`，不是数字）。 |
+| `1-5[8:1]*-5p6[8:1]`（第二个分支是多 shape） | **不报** | 第二个分支重建为 `1-5p6[8:1]`，是合法的两段 chain。 |
 
 ### 1.3 本地化展示
 
