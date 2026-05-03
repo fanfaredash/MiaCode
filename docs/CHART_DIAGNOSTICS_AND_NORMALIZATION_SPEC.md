@@ -91,19 +91,19 @@ Goal: **catch *every* deviation from canonical simai form,** including
 things the lenient pass would silently accept. Adds the following
 checks on top of all lenient checks:
 
-Strict-only checks, audited from source. Severity column is the
-**raw** severity emitted; the merge step in §1.2 may downgrade Errors
-to Warnings before display.
+Strict-only checks, audited from source. The strict pass output is
+authoritative — there is no longer a merge step, so the severity column
+below is exactly the severity displayed in the UI.
 
 | # | Strict-only check | Severity | Source | Example |
 |---|---|---|---|---|
-| 1 | `{N}` divisor of 384 | Error | `Driver.cpp:565` `(384 % beats) != 0` (only when `beats <= 384`) | `{7}` rejected — 7 ∤ 384 |
+| 1 | `{N}` divisor of 384 | Warning | `Driver.cpp:557-565` `(384 % beats) != 0` (only when `beats <= 384`) | `{7}` — 7 ∤ 384, parses but flagged |
 | 2 | `{N}` clamped value warning | Warning | `Driver.cpp:550-564` `formatBeatValueClamped(beats)` (only when `beats > 384`) | `{1024}` clamped, warning emitted |
 | 3 | Unterminated `[HS*…>` block | Error | `Driver.cpp:582-587` `kUnterminatedHsBlock()` | `[HS*x` without closing `>`. **Lenient mode silently `break`s** instead of erroring. |
 | 4 | Repeated `/` separator | Error | `Driver.cpp:593-597` `kRepeatedSlashSeparator()` | `1//5` |
 | 5 | Repeated `` ` `` separator | Error | `Driver.cpp:604-611` `kRepeatedBacktickSeparator()` | `` 1``5 `` |
-| 6 | Non-canonical hold modifier placement (touch_hold) | Warning | `TouchTap.cpp:59-66` `kNonCanonicalHoldModifierPlacementPrefix` | `Ah[4:1]b` — touch with `[duration]` AND non-empty suffix modifier after `]` |
-| 7 | Non-canonical hold modifier placement (tap/hold) | Warning | `TouchTap.cpp:157-164` `kNonCanonicalHoldModifierPlacementPrefix` | `1h[4:1]x` — hold with `[duration]` AND non-empty suffix modifier after `]` |
+| 6 | Non-canonical hold modifier placement (touch_hold) | Error | `TouchTap.cpp:59-66` `kNonCanonicalHoldModifierPlacementPrefix` | `Ah[4:1]b` — touch with `[duration]` AND non-empty suffix modifier after `]` |
+| 7 | Non-canonical hold modifier placement (tap/hold) | Error | `TouchTap.cpp:157-164` `kNonCanonicalHoldModifierPlacementPrefix` | `1h[4:1]x` — hold with `[duration]` AND non-empty suffix modifier after `]` |
 | 8 | Invalid break-slide `b` modifier position | Error | `Slide.cpp:69-77` `kInvalidBreakSlideModifierPositionPrefix` | `b` not immediately before the first `[` in a slide token |
 | 9 | Invalid slide duration placement | Error | `Slide.cpp:113-115` `kInvalidSlideDurationPlacementPrefix` | Slide token with more than one `[…]` block |
 | 10 | Multi-segment slide with per-segment wait+duration | Error (via parse failure → `classifyInvalidNoteMessage`) | `SimaiNativeParser.cpp:1206` strict returns `false` from `parseStandardSlideChain` | Multi-shape chain with per-shape `[wait#duration]` markers — strict rejects, lenient distributes |
@@ -153,71 +153,85 @@ Strict additionally invokes the `StrictChecks.cpp` verifier suite,
 included via `#include "SimaiNativeParser.StrictChecks.cpp"` at the
 end of `SimaiNativeParser.cpp:1487`.
 
-### 1.2 The merge step — `buildValidationReport()`
+### 1.2 The validation report — `buildValidationReport()`
 
-The "Syntax Check" tab does NOT just show strict errors verbatim. It
-calls `buildValidationReport()` (`SimaiNativeParser.Driver.cpp:986-1068`)
-which runs **both** passes and produces a merged report. Output type:
+`buildValidationReport()` (`SimaiNativeParser.Driver.cpp:971-1042`)
+produces the report consumed by the "Syntax Check" tab. Output type:
 
 ```cpp
 struct SimaiNativeValidationReport {
     bool ok;
     int errorCount;
     int warningCount;
-    int lenientNoteCount;
-    int lenientErrorCount;
+    int lenientNoteCount;       // legacy field; always 0 in the new pipeline
+    int lenientErrorCount;      // legacy field; always 0 in the new pipeline
     int strictNoteCount;
     int strictErrorCount;
     QVector<SimaiNativeValidationIssue> issues;
 };
 ```
 
-The merge logic (Driver.cpp:1023-1050):
+The build logic is now strict-only:
 
-1. Take the *strict* error list as the issue source.
-2. For each strict error, compute a stable key and check whether the
-   lenient pass produced the same key.
-3. **If lenient also failed at the same place** → severity stays
-   `Error` (it's a real structural break).
-4. **If only strict failed** → severity is downgraded to `Warning`
-   (the chart parses fine, it just deviates from canonical form).
-5. **Exception list — `shouldRemainValidationError()`**
-   (Driver.cpp:235-241) keeps these as `Error` even when only strict
-   reports them, because they almost always cause downstream
-   correctness issues:
-   - Repeated `/` separator
-   - Repeated `` ` `` separator
-   - Unmatched closing bracket (any kind)
-   - Unclosed bracket (any kind)
-6. Strict *warnings* (already `Warning` in the strict pass) pass
-   through as-is.
-7. Empty-chart shortcut: if `text.trimmed().isEmpty()`, skip both
-   passes and emit a single `Error` issue with `kChartEmpty()` raw
-   message.
+1. **Empty-chart shortcut.** If `text.trimmed().isEmpty()`, emit a single
+   `Error` issue with `kChartEmpty()` raw message and return.
+2. **Strict pass.** Call `validateSyntax()` (which is `parseInternal()`
+   with `strictMode = true`).
+3. **Issue copy-through.** Each strict *error* becomes a UI `Error`
+   issue. Each strict *warning* becomes a UI `Warning` issue. **No
+   merge, no downgrade, no exception list** — the strict pass severity
+   is the final severity.
+4. `report.ok = (report.errorCount == 0)`.
 
-This is how you get the four reporting counters: `lenientNoteCount`
-and `strictNoteCount` show how many markers each pass produced (often
-identical, but can diverge when strict rejects a token lenient
-accepted); `lenientErrorCount` / `strictErrorCount` reveal how much of
-the issue list is "structural" vs "stylistic."
+#### Decoupling from the lenient pass
 
-#### Severity downgrade examples
+The lenient pass (`parseForTimeline`) is **no longer consulted** when
+building the validation report. It exists exclusively to extract a
+usable timeline marker set for chart preview rendering — that is its
+only job. Grammar diagnostics never look at it.
 
-| Input | Lenient raw | Strict raw | UI severity in merged report |
-|---|---|---|---|
-| `1[4:1` (unclosed bracket) | (no error during parse loop; reaches `runStrictFormatChecks`) | Error from `runStrictFormatChecks` | **Error** — kept by `kUnclosedBracketPrefix` exception |
-| `]` (unmatched closing bracket) | (no error during parse loop) | Error from `runStrictFormatChecks` | **Error** — kept by `kUnmatchedClosingBracketPrefix` exception |
-| `1//5` (repeated `/`) | OK | Error | **Error** — kept by `kRepeatedSlashSeparator` exception |
-| `` 1``5 `` (repeated `` ` ``) | OK | Error | **Error** — kept by `kRepeatedBacktickSeparator` exception |
-| `1bb` (duplicate `b` modifier) | Error | Error | **Error** — lenient agrees |
-| `1[4:1]h` (`h` after duration block) | Error | Error | **Error** — lenient agrees (`TouchTap.cpp:119-122`) |
-| `1h[4:1]x` (modifier after duration block) | OK | Warning (`kNonCanonicalHoldModifierPlacementPrefix`) | **Warning** — strict-only, passes through as Warning |
-| `{7}1,2,3,` (7 ∤ 384) | OK | Error (`formatStrictBeatValue`) | **Warning** — strict-only, downgraded to Warning |
-| `{1024}1,2,…` (beats clamped) | OK | Warning (`formatBeatValueClamped`) | **Warning** — already Warning, passes through |
-| `[HS*xyz` (no closing `>`) | OK (silent line break) | Error (`kUnterminatedHsBlock`) | **Warning** — strict-only, downgraded |
-| `1abc,2,3,` (note-line missing comma somewhere) | OK | Error (`Missing beat separator ','`) | **Warning** — strict-only, downgraded |
-| `1xh` / `1hx` / `1bxhf` / `1fxhb` (any modifier letter ordering) | OK | OK | **Not flagged** — `parseTapModifierSequence` is order-agnostic |
-| Touch `C1` | OK (normalized to `C`) | Error (`Invalid touch token: C1`) | **Warning** — strict-only, downgraded (lenient relaxation #1) |
+This decoupling is reflected in the report struct:
+
+- `lenientNoteCount` and `lenientErrorCount` are kept for ABI
+  compatibility (existing `MainWindow::ValidationEntry` consumers
+  reference them) but are populated as `0`. They no longer carry
+  meaning.
+- The legacy `lenientResult` parameter on `buildValidationReport()`
+  remains in the signature for source-compatibility with cached-result
+  call sites (`ValidationRuntime.cpp` passes a cached lenient result
+  to avoid re-parsing). The implementation marks it `Q_UNUSED`.
+- The previously documented `shouldRemainValidationError()` exception
+  list and the `makeValidationMessageKey()` helper have been removed
+  outright — they were only meaningful in service of the merge step.
+
+What this means in practice:
+
+- "What does the editor render on the timeline?" → answered by the
+  lenient pass alone.
+- "Is this canonical simai?" → answered by the strict pass alone.
+- The two questions never influence each other.
+
+#### Severity outcomes (post-decoupling)
+
+The "Lenient raw" column has been removed because it no longer
+participates. The strict severity is the UI severity.
+
+| Input | UI severity | Strict-pass source |
+|---|---|---|
+| `1[4:1` (unclosed bracket) | **Error** | `kUnclosedBracketPrefix` from `runStrictFormatChecks` |
+| `]` (unmatched closing bracket) | **Error** | `kUnmatchedClosingBracketPrefix` from `runStrictFormatChecks` |
+| `1//5` (repeated `/`) | **Error** | `kRepeatedSlashSeparator` |
+| `` 1``5 `` (repeated `` ` ``) | **Error** | `kRepeatedBacktickSeparator` |
+| `1bb` (duplicate `b` modifier) | **Error** | `parseTapModifierSequence` returns `false` (mode-independent) |
+| `1[4:1]h` (`h` after duration block) | **Error** | `TouchTap.cpp:119-122` (mode-independent) |
+| `1h[4:1]x` (tap/hold non-canonical modifier placement) | **Error** *(flipped from Warning)* | `kNonCanonicalHoldModifierPlacementPrefix` (`TouchTap.cpp:157-164`) |
+| `Ah[4:1]b` (touch_hold non-canonical modifier placement) | **Error** *(flipped from Warning)* | `kNonCanonicalHoldModifierPlacementPrefix` (`TouchTap.cpp:59-66`) |
+| `{7}1,2,3,` (7 ∤ 384) | **Warning** *(flipped from Error)* | `formatStrictBeatValue` (`Driver.cpp:557-565`) |
+| `{1024}1,2,…` (beats clamped) | **Warning** | `formatBeatValueClamped` |
+| `[HS*xyz` (no closing `>`) | **Error** | `kUnterminatedHsBlock` |
+| `1abc,2,3,` (note-line missing comma somewhere) | **Error** | `Missing beat separator ','` from `runStrictFormatChecks` |
+| `1xh` / `1hx` / `1bxhf` / `1fxhb` | **Not flagged** | `parseTapModifierSequence` is order-agnostic |
+| Touch `C1` | **Error** | Strict skips the lenient `C1`/`C2` → `C` rewrite, so `parseTouchSuffix` rejects (`Invalid touch token: C1`). The lenient pipeline still renders this as a `C` touch on the preview timeline — the two pipelines differ silently here, by design. |
 
 ### 1.3 Locale-aware display messages
 
