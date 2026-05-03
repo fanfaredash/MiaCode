@@ -28,55 +28,55 @@ QString cssRgba(const QColor& color, int alpha)
 const UiTheme::Colors& lightColors()
 {
     static const UiTheme::Colors theme{
-        false,
-        QColor("#F8FAFD"),
-        QColor("#F5F7FA"),
-        QColor("#F7F9FC"),
-        QColor("#F7F9FC"),
-        QColor("#F5F7FA"),
-        QColor("#FFFFFF"),
-        QColor("#EDF2F8"),
-        QColor("#FFFFFF"),
-        QColor("#F2F5F9"),
-        QColor("#000000"),
-        QColor("#203040"),
-        QColor("#5F6B7A"),
-        QColor("#7A8796"),
-        QColor("#FFFFFF"),
-        QColor("#D5E0EC"),
-        QColor("#CCD6E2"),
-        QColor("#B8C7DA"),
-        QColor("#2E77D0"),
-        QColor("#3A86E8"),
-        QColor("#2668B9"),
-        QColor("#FFFFFF"),
-        QColor("#B8CCE5"),
-        QColor("#1F1F1F"),
-        QColor("#FFFFFF"),
-        QColor("#D7E0EB"),
-        QColor("#EEF5FF"),
-        QColor("#9AA5B4"),
-        QColor("#F4F7FB"),
-        QColor("#9CB5CE"),
-        QColor("#81A2C3"),
-        QColor("#2B3C4E"),
-        QColor("#5D6E83"),
-        QColor("#F5F5F5"),
-        QColor("#F3F5F8"),
-        QColor("#E8E8E8"),
-        QColor("#F7F8FA"),
-        QColor("#C7D2DF"),
-        QColor("#AEBCCC"),
-        QColor(88, 112, 148, 124),
-        QColor(251, 251, 251, 190),
-        QColor(242, 242, 242, 190),
-        QColor("#4D5C6D"),
-        QColor("#9AA7B6"),
-        QColor(210, 224, 214, 108),
-        QColor("#9CB3A6"),
-        QColor("#3A7AFE"),
-        QColor("#B85C4D"),
-        QColor("#F28C28"),
+        false,                              // dark
+        QColor("#F8FAFD"),                  // windowBg
+        QColor("#F5F7FA"),                  // windowAltBg
+        QColor("#F7F9FC"),                  // toolbarBg
+        QColor("#F7F9FC"),                  // statusBg
+        QColor("#F5F7FA"),                  // panelBg
+        QColor("#FFFFFF"),                  // cardBg
+        QColor("#EDF2F8"),                  // cardAltBg
+        QColor("#FFFFFF"),                  // inputBg
+        QColor("#F2F5F9"),                  // inputDisabledBg
+        QColor("#000000"),                  // canvasBg
+        QColor("#203040"),                  // textPrimary
+        QColor("#5F6B7A"),                  // textSecondary
+        QColor("#7A8796"),                  // textMuted
+        QColor("#FFFFFF"),                  // textInverse
+        QColor("#D5E0EC"),                  // border
+        QColor("#CCD6E2"),                  // borderSoft
+        QColor("#B8C7DA"),                  // borderStrong
+        QColor("#2E77D0"),                  // accent
+        QColor("#3A86E8"),                  // accentHover
+        QColor("#2668B9"),                  // accentPressed
+        QColor("#FFFFFF"),                  // accentText
+        QColor("#B8CCE5"),                  // selection
+        QColor("#1F1F1F"),                  // selectionText
+        QColor("#FFFFFF"),                  // menuBg
+        QColor("#D7E0EB"),                  // menuBorder
+        QColor("#EEF5FF"),                  // menuHoverBg
+        QColor("#9AA5B4"),                  // menuDisabledText
+        QColor("#F4F7FB"),                  // scrollTrack
+        QColor("#9CB5CE"),                  // scrollHandle
+        QColor("#81A2C3"),                  // scrollHandleHover
+        QColor("#2B3C4E"),                  // iconPrimary
+        QColor("#5D6E83"),                  // iconSecondary
+        QColor("#F5F5F5"),                  // timelineWindow
+        QColor("#F3F5F8"),                  // timelineHeader
+        QColor("#E8E8E8"),                  // timelineSidebar
+        QColor("#F7F8FA"),                  // timelineBase
+        QColor("#C7D2DF"),                  // timelineBorder
+        QColor("#5A86D8"),                  // timelineGridMajor
+        QColor(174, 188, 204, 110),         // timelineGridMinor
+        QColor(251, 251, 251, 190),         // timelineLaneEven
+        QColor(242, 242, 242, 190),         // timelineLaneOdd
+        QColor("#4D5C6D"),                  // timelineLabel
+        QColor("#9AA7B6"),                  // timelineAxis
+        QColor(210, 224, 214, 108),         // timelineWaveFill
+        QColor("#9CB3A6"),                  // timelineWaveStroke
+        QColor("#FFC90E"),                  // timelinePlayhead
+        QColor("#B85C4D"),                  // timelineCursor
+        QColor("#F28C28"),                  // timelineLimit
     };
     return theme;
 }
@@ -84,55 +84,55 @@ const UiTheme::Colors& lightColors()
 const UiTheme::Colors& darkColors()
 {
     static const UiTheme::Colors theme{
-        true,
-        QColor("#151A20"),
-        QColor("#1B2129"),
-        QColor("#171C23"),
-        QColor("#171C23"),
-        QColor("#1B2129"),
-        QColor("#232B35"),
-        QColor("#1F2630"),
-        QColor("#171D24"),
-        QColor("#202833"),
-        QColor("#050607"),
-        QColor("#E6EEF8"),
-        QColor("#A9B6C6"),
-        QColor("#7B8798"),
-        QColor("#0F141A"),
-        QColor("#384656"),
-        QColor("#455466"),
-        QColor("#546679"),
-        QColor("#4F8FEC"),
-        QColor("#67A1F1"),
-        QColor("#3E79D0"),
-        QColor("#F7FBFF"),
-        QColor("#315D9E"),
-        QColor("#F7FBFF"),
-        QColor("#1F2630"),
-        QColor("#455466"),
-        QColor("#2C3846"),
-        QColor("#748091"),
-        QColor("#1C232C"),
-        QColor("#5A6A7B"),
-        QColor("#70849A"),
-        QColor("#D8E2EE"),
-        QColor("#95A4B7"),
-        QColor("#1A2027"),
-        QColor("#1D232B"),
-        QColor("#171D24"),
-        QColor("#202833"),
-        QColor("#4A5C70"),
-        QColor("#6B8096"),
-        QColor(103, 137, 186, 110),
-        QColor(34, 42, 52, 210),
-        QColor(29, 36, 45, 210),
-        QColor("#C8D5E5"),
-        QColor("#8091A5"),
-        QColor(118, 179, 140, 158),
-        QColor("#5E8B6E"),
-        QColor("#6FA8FF"),
-        QColor("#C96B5B"),
-        QColor("#FF9B4A"),
+        true,                               // dark
+        QColor("#151A20"),                  // windowBg
+        QColor("#1B2129"),                  // windowAltBg
+        QColor("#171C23"),                  // toolbarBg
+        QColor("#171C23"),                  // statusBg
+        QColor("#1B2129"),                  // panelBg
+        QColor("#232B35"),                  // cardBg
+        QColor("#1F2630"),                  // cardAltBg
+        QColor("#171D24"),                  // inputBg
+        QColor("#202833"),                  // inputDisabledBg
+        QColor("#050607"),                  // canvasBg
+        QColor("#E6EEF8"),                  // textPrimary
+        QColor("#A9B6C6"),                  // textSecondary
+        QColor("#7B8798"),                  // textMuted
+        QColor("#0F141A"),                  // textInverse
+        QColor("#384656"),                  // border
+        QColor("#455466"),                  // borderSoft
+        QColor("#546679"),                  // borderStrong
+        QColor("#4F8FEC"),                  // accent
+        QColor("#67A1F1"),                  // accentHover
+        QColor("#3E79D0"),                  // accentPressed
+        QColor("#F7FBFF"),                  // accentText
+        QColor("#315D9E"),                  // selection
+        QColor("#F7FBFF"),                  // selectionText
+        QColor("#1F2630"),                  // menuBg
+        QColor("#455466"),                  // menuBorder
+        QColor("#2C3846"),                  // menuHoverBg
+        QColor("#748091"),                  // menuDisabledText
+        QColor("#1C232C"),                  // scrollTrack
+        QColor("#5A6A7B"),                  // scrollHandle
+        QColor("#70849A"),                  // scrollHandleHover
+        QColor("#D8E2EE"),                  // iconPrimary
+        QColor("#95A4B7"),                  // iconSecondary
+        QColor("#1A2027"),                  // timelineWindow
+        QColor("#1D232B"),                  // timelineHeader
+        QColor("#171D24"),                  // timelineSidebar
+        QColor("#202833"),                  // timelineBase
+        QColor("#4A5C70"),                  // timelineBorder
+        QColor("#7FA5D8"),                  // timelineGridMajor
+        QColor(95, 120, 155, 80),           // timelineGridMinor
+        QColor(34, 42, 52, 210),            // timelineLaneEven
+        QColor(29, 36, 45, 210),            // timelineLaneOdd
+        QColor("#C8D5E5"),                  // timelineLabel
+        QColor("#8091A5"),                  // timelineAxis
+        QColor(118, 179, 140, 158),         // timelineWaveFill
+        QColor("#5E8B6E"),                  // timelineWaveStroke
+        QColor("#FFC90E"),                  // timelinePlayhead
+        QColor("#C96B5B"),                  // timelineCursor
+        QColor("#FF9B4A"),                  // timelineLimit
     };
     return theme;
 }

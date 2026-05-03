@@ -40,13 +40,6 @@ struct TimelineThemeColors {
 inline TimelineThemeColors timelineThemeColors()
 {
     const UiTheme::Colors& c = UiTheme::colors();
-    // Beta21-fix6 — note-line clamp bumped 180 → 220 per user request
-    // for "slightly more prominent" per-comma ticks. Higher cap pushes
-    // the blended on-screen brightness another ~6-8 levels above lane
-    // bg without going fully opaque (which would make note-line and
-    // bar-line visually indistinguishable).
-    QColor minorGrid = c.timelineBorder;
-    minorGrid.setAlpha(qMin(minorGrid.alpha(), 220));
     return TimelineThemeColors{
         c.timelineWindow,
         c.timelineHeader,
@@ -54,28 +47,14 @@ inline TimelineThemeColors timelineThemeColors()
         c.timelineBase,
         c.timelineBorder,
         c.timelineAxis,
-        // Beta21-fix7 — bar lines tested against waveform contrast.
-        // `c.timelineAxis` matched the boundary line color visually
-        // against the empty sidebar (where the boundary lives), but
-        // its luminance (~RGB 167 light / ~146 dark) is essentially
-        // identical to `c.timelineWaveStroke` (~RGB 167 light / ~114
-        // dark). With waveform underneath, the axis-colored bar line
-        // disappears into the waveform brightness band even with the
-        // force-Blending=true fix in TimelineQuickLayerUtils.cpp
-        // ensuring the line draws after the waveform.
-        //
-        // Switching to `c.timelineLabel` (the lane-number text color):
-        //   Light: `#4D5C6D` (RGB 77,92,109, brightness ~93) — clearly
-        //          darker than waveform 167, visible separator.
-        //   Dark:  `#C8D5E5` (RGB 200,213,229, brightness ~217) —
-        //          clearly brighter than waveform 114, visible.
-        // This still matches the user's "same color as boundary
-        // vertical line" intent in spirit — the lane-number text and
-        // the boundary line are part of the same left-hand sidebar
-        // visual group, and timelineLabel is what the lane numbers
-        // themselves are drawn in.
-        c.timelineLabel,
-        minorGrid,
+        // Beta21-fix11 — wired through dedicated palette entries:
+        //   bar lines  -> c.timelineGridMajor
+        //   note lines -> c.timelineGridMinor
+        // Tune those two values directly in UiTheme.cpp without
+        // affecting any other timeline element (axis boundary, lane
+        // labels, etc.).
+        c.timelineGridMajor,
+        c.timelineGridMinor,
         c.timelineLaneEven,
         c.timelineLaneOdd,
         c.timelineLabel,
