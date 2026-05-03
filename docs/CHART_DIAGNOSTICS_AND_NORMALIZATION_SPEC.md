@@ -91,18 +91,63 @@ Goal: **catch *every* deviation from canonical simai form,** including
 things the lenient pass would silently accept. Adds the following
 checks on top of all lenient checks:
 
-| Strict-only check | Source | Example |
+Strict-only checks, audited from source. Severity column is the
+**raw** severity emitted; the merge step in §1.2 may downgrade Errors
+to Warnings before display.
+
+| # | Strict-only check | Severity | Source | Example |
+|---|---|---|---|---|
+| 1 | `{N}` divisor of 384 | Error | `Driver.cpp:565` `(384 % beats) != 0` (only when `beats <= 384`) | `{7}` rejected — 7 ∤ 384 |
+| 2 | `{N}` clamped value warning | Warning | `Driver.cpp:550-564` `formatBeatValueClamped(beats)` (only when `beats > 384`) | `{1024}` clamped, warning emitted |
+| 3 | Unterminated `[HS*…>` block | Error | `Driver.cpp:582-587` `kUnterminatedHsBlock()` | `[HS*x` without closing `>`. **Lenient mode silently `break`s** instead of erroring. |
+| 4 | Repeated `/` separator | Error | `Driver.cpp:593-597` `kRepeatedSlashSeparator()` | `1//5` |
+| 5 | Repeated `` ` `` separator | Error | `Driver.cpp:604-611` `kRepeatedBacktickSeparator()` | `` 1``5 `` |
+| 6 | Non-canonical hold modifier placement (touch_hold) | Warning | `TouchTap.cpp:59-66` `kNonCanonicalHoldModifierPlacementPrefix` | `Ah[4:1]b` — touch with `[duration]` AND non-empty suffix modifier after `]` |
+| 7 | Non-canonical hold modifier placement (tap/hold) | Warning | `TouchTap.cpp:157-164` `kNonCanonicalHoldModifierPlacementPrefix` | `1h[4:1]x` — hold with `[duration]` AND non-empty suffix modifier after `]` |
+| 8 | Invalid break-slide `b` modifier position | Error | `Slide.cpp:69-77` `kInvalidBreakSlideModifierPositionPrefix` | `b` not immediately before the first `[` in a slide token |
+| 9 | Invalid slide duration placement | Error | `Slide.cpp:113-115` `kInvalidSlideDurationPlacementPrefix` | Slide token with more than one `[…]` block |
+| 10 | Multi-segment slide with per-segment wait+duration | Error (via parse failure → `classifyInvalidNoteMessage`) | `SimaiNativeParser.cpp:1206` strict returns `false` from `parseStandardSlideChain` | Multi-shape chain with per-shape `[wait#duration]` markers — strict rejects, lenient distributes |
+| 11 | Missing beat separator `,` | Error | `StrictChecks.cpp:119-123` `runStrictFormatChecks` | A note-bearing line that contains no `,` and isn't the terminal `E` line |
+| 12 | Unmatched closing bracket | Error | `StrictChecks.cpp:131-137` (within `runStrictFormatChecks`) | `]` without matching `[`; `}` without `{`; `)` without `(` |
+| 13 | Unclosed bracket | Error | `StrictChecks.cpp:142-145` (within `runStrictFormatChecks`) | `[` / `{` / `(` left on the stack at end of file |
+
+The `runStrictFormatChecks(state, lines)` pass at `Driver.cpp:652` runs
+**after** the main parse loop. It strips control blocks `( … )`, `{ … }`,
+`<HS* … >` and full-line `||`-prefixed comments (`StrictChecks.cpp:101-115`)
+before checking, so commented-out content does not trigger the
+strict-only checks #11–#13.
+
+**Lenient-only behavior** (relaxations the strict pass doesn't apply):
+
+| Lenient relaxation | Source | Behavior |
 |---|---|---|
-| `{N}` divisor of 384 | `SimaiNativeParser.Driver.cpp:565` `(384 % beats) != 0` | `{7}` rejected (7 ∤ 384); `{16}` accepted |
-| Beat value clamping warning | `:561` `formatBeatValueClamped(beats)` | `{1024}` clamped to a representable maximum |
-| Repeated `/` separator | `:593-595` `kRepeatedSlashSeparator()` | `1//5` flagged |
-| Repeated `` ` `` separator | `:604-606` `kRepeatedBacktickSeparator()` | `` 1``5 `` flagged |
-| Modifier canonical order `b x h f` | `SimaiNativeParser.StrictChecks.cpp` (`kInvalidHoldModifierSequencePrefix`, `kNonCanonicalHoldModifierPlacementPrefix`) | `1xb` instead of `1bx` |
-| Break-slide `b` modifier position | `kInvalidBreakSlideModifierPositionPrefix` | mis-placed `b` on slide head/body |
-| Slide / hold duration block placement | `kInvalidSlideDurationPlacementPrefix`, `kInvalidSlideDurationPrefix`, `kInvalidHoldDurationPrefix` | duration block in wrong position |
-| Touch duration requires `h` | `kTouchDurationRequiresHPrefix` | duration on touch token without `h` |
-| Time-signature `||x/y` placement | `SimaiNativeParser.StrictChecks.cpp:105` | inline TS at unexpected slot; comment-only `||` lines skipped |
-| End-of-file strict flush | `SimaiNativeParser.Driver.cpp:652` | trailing token state validation |
+| Touch token `C1` / `C2` → `C` normalization | `TouchTap.cpp:13-18` | Lenient silently rewrites `C1`/`C2` to `C` before validation. Strict skips this rewrite, so the token reaches `parseTouchSuffix` unchanged and almost certainly produces an `Invalid touch token` error. |
+| Multi-segment slide chain with per-segment timing | `SimaiNativeParser.cpp:1209-1213` | Lenient distributes total duration across shapes by relative shape length; strict refuses (check #10 above). |
+| Unterminated `[HS*` block | `Driver.cpp:582-587` | Lenient `break`s the line silently; strict reports check #3. |
+
+### Modifier-letter ordering — explicitly NOT a strict check
+
+The parser **does not enforce a canonical order on `b / x / h / f`**.
+`parseTapModifierSequence` (`SimaiNativeParser.cpp:90+`) iterates the
+modifier characters and only rejects **duplicates**. So all of
+`1bx`, `1xb`, `1xh`, `1hx`, `1bhxf`, `1fxhb` parse identically.
+
+The Chinese display string "Hold 修饰符顺序无效" historically reads as
+"modifier order invalid," but the underlying English message
+`Invalid hold modifier sequence: <token>` actually fires for two
+distinct conditions, **both of which are mode-independent (lenient AND
+strict)**:
+
+| Condition | Source | Example |
+|---|---|---|
+| Duplicate modifier in prefix or suffix | `parseTapModifierSequence` returns `false` → `TouchTap.cpp:126` | `1bb`, `1xx`, `1hh` |
+| `h` modifier appears in the suffix after `]` | `TouchTap.cpp:119-122` | `1[4:1]h`, `1x[4:1]h` |
+
+The strict-only Warning `kNonCanonicalHoldModifierPlacementPrefix`
+(checks #6 / #7) is a **separate condition** about modifier *placement*
+relative to a `[duration]` block, not about modifier *ordering*. It
+fires only when the `[duration]` block exists AND there is a non-empty
+suffix modifier string after `]`.
 
 Strict additionally invokes the `StrictChecks.cpp` verifier suite,
 included via `#include "SimaiNativeParser.StrictChecks.cpp"` at the
@@ -158,12 +203,21 @@ the issue list is "structural" vs "stylistic."
 
 #### Severity downgrade examples
 
-| Input | Lenient | Strict | UI severity |
+| Input | Lenient raw | Strict raw | UI severity in merged report |
 |---|---|---|---|
-| `1[4:1` (unclosed bracket) | Error | Error | **Error** (lenient agrees) |
-| `1//5` (repeated `/`) | OK | Error | **Error** (in `shouldRemainValidationError` exception list) |
-| `1xh` (modifier non-canonical) | OK | Error | **Warning** (strict-only, downgraded) |
-| `{7}1,2,3,` ({7} not 384 divisor) | OK | Error | **Warning** (strict-only) |
+| `1[4:1` (unclosed bracket) | (no error during parse loop; reaches `runStrictFormatChecks`) | Error from `runStrictFormatChecks` | **Error** — kept by `kUnclosedBracketPrefix` exception |
+| `]` (unmatched closing bracket) | (no error during parse loop) | Error from `runStrictFormatChecks` | **Error** — kept by `kUnmatchedClosingBracketPrefix` exception |
+| `1//5` (repeated `/`) | OK | Error | **Error** — kept by `kRepeatedSlashSeparator` exception |
+| `` 1``5 `` (repeated `` ` ``) | OK | Error | **Error** — kept by `kRepeatedBacktickSeparator` exception |
+| `1bb` (duplicate `b` modifier) | Error | Error | **Error** — lenient agrees |
+| `1[4:1]h` (`h` after duration block) | Error | Error | **Error** — lenient agrees (`TouchTap.cpp:119-122`) |
+| `1h[4:1]x` (modifier after duration block) | OK | Warning (`kNonCanonicalHoldModifierPlacementPrefix`) | **Warning** — strict-only, passes through as Warning |
+| `{7}1,2,3,` (7 ∤ 384) | OK | Error (`formatStrictBeatValue`) | **Warning** — strict-only, downgraded to Warning |
+| `{1024}1,2,…` (beats clamped) | OK | Warning (`formatBeatValueClamped`) | **Warning** — already Warning, passes through |
+| `[HS*xyz` (no closing `>`) | OK (silent line break) | Error (`kUnterminatedHsBlock`) | **Warning** — strict-only, downgraded |
+| `1abc,2,3,` (note-line missing comma somewhere) | OK | Error (`Missing beat separator ','`) | **Warning** — strict-only, downgraded |
+| `1xh` / `1hx` / `1bxhf` / `1fxhb` (any modifier letter ordering) | OK | OK | **Not flagged** — `parseTapModifierSequence` is order-agnostic |
+| Touch `C1` | OK (normalized to `C`) | Error (`Invalid touch token: C1`) | **Warning** — strict-only, downgraded (lenient relaxation #1) |
 
 ### 1.3 Locale-aware display messages
 

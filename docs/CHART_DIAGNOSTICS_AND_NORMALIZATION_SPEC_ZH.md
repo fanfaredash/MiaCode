@@ -83,22 +83,58 @@ time-signature 摆放风格。这些都是 strict-only。Lenient pass 在
 目标：**捕获*所有*偏离 simai 典范形式的写法**，包括 lenient 会默默接受的
 那些。在 lenient 的全部检查之上再叠加：
 
-| 仅 strict 的检查 | 来源 | 例子 |
-|---|---|---|
-| `{N}` 必须整除 384 | `SimaiNativeParser.Driver.cpp:565` `(384 % beats) != 0` | `{7}` 拒绝（7 ∤ 384）；`{16}` 接受 |
-| Beat 数值 clamp 警告 | `:561` `formatBeatValueClamped(beats)` | `{1024}` 被 clamp 到可表示的最大值 |
-| 重复 `/` 分隔符 | `:593-595` `kRepeatedSlashSeparator()` | `1//5` 被标记 |
-| 重复 `` ` `` 分隔符 | `:604-606` `kRepeatedBacktickSeparator()` | `` 1``5 `` 被标记 |
-| Modifier 典范顺序 `b x h f` | `SimaiNativeParser.StrictChecks.cpp`（`kInvalidHoldModifierSequencePrefix`、`kNonCanonicalHoldModifierPlacementPrefix`） | `1xb` 而不是 `1bx` |
-| Break-slide `b` modifier 位置 | `kInvalidBreakSlideModifierPositionPrefix` | slide 头/体上 `b` 错位 |
-| Slide / hold 时值块位置 | `kInvalidSlideDurationPlacementPrefix`、`kInvalidSlideDurationPrefix`、`kInvalidHoldDurationPrefix` | 时值块位置错误 |
-| Touch 时值需要 `h` 修饰符 | `kTouchDurationRequiresHPrefix` | touch token 上有时值但没 `h` |
-| Time-signature `||x/y` 摆放 | `SimaiNativeParser.StrictChecks.cpp:105` | inline TS 出现在意外位置；纯注释 `||` 行被跳过 |
-| 文件结尾 strict flush | `SimaiNativeParser.Driver.cpp:652` | 末尾 token 状态校验 |
+仅 strict 模式触发的检查（已逐项对照源码核对）。Severity 列是**原始**
+emit 的级别；§1.2 的合并步骤可能把 Error 降级为 Warning 后再展示。
 
-Strict 还额外调用 `StrictChecks.cpp` 中的全套校验器，通过
-`SimaiNativeParser.cpp:1487` 末尾的
-`#include "SimaiNativeParser.StrictChecks.cpp"` 引入。
+| # | 仅 strict 的检查 | 严重度 | 来源 | 例子 |
+|---|---|---|---|---|
+| 1 | `{N}` 必须整除 384 | Error | `Driver.cpp:565` `(384 % beats) != 0`（仅当 `beats <= 384`） | `{7}` 拒绝 —— 7 ∤ 384 |
+| 2 | `{N}` 数值 clamp 警告 | Warning | `Driver.cpp:550-564` `formatBeatValueClamped(beats)`（仅当 `beats > 384`） | `{1024}` 被 clamp，emit 警告 |
+| 3 | 未闭合 `[HS*…>` 块 | Error | `Driver.cpp:582-587` `kUnterminatedHsBlock()` | `[HS*x` 没有闭合 `>`。**lenient 模式直接 silent break**，不报错。 |
+| 4 | 重复 `/` 分隔符 | Error | `Driver.cpp:593-597` `kRepeatedSlashSeparator()` | `1//5` |
+| 5 | 重复 `` ` `` 分隔符 | Error | `Driver.cpp:604-611` `kRepeatedBacktickSeparator()` | `` 1``5 `` |
+| 6 | Touch_hold 修饰符位置非典范 | Warning | `TouchTap.cpp:59-66` `kNonCanonicalHoldModifierPlacementPrefix` | `Ah[4:1]b` —— touch 同时有 `[duration]` 和 `]` 之后的非空后缀修饰符 |
+| 7 | Tap/hold 修饰符位置非典范 | Warning | `TouchTap.cpp:157-164` `kNonCanonicalHoldModifierPlacementPrefix` | `1h[4:1]x` —— hold 同时有 `[duration]` 和 `]` 之后的非空后缀修饰符 |
+| 8 | Break-slide `b` 修饰符位置无效 | Error | `Slide.cpp:69-77` `kInvalidBreakSlideModifierPositionPrefix` | `b` 不是紧挨在 slide token 第一个 `[` 之前 |
+| 9 | Slide 时值块位置无效 | Error | `Slide.cpp:113-115` `kInvalidSlideDurationPlacementPrefix` | Slide token 包含多于一个 `[…]` 块 |
+| 10 | 多段 slide 带每段 wait+duration | Error（通过 parse 失败 → `classifyInvalidNoteMessage`） | `SimaiNativeParser.cpp:1206` strict 时 `parseStandardSlideChain` 返回 `false` | 多形 chain 每形都带 `[wait#duration]`，strict 拒绝；lenient 按形状长度比例分配总时值 |
+| 11 | 缺失 beat 分隔符 `,` | Error | `StrictChecks.cpp:119-123` `runStrictFormatChecks` | 含有 note 字符且非终止 `E` 的行，整行没有 `,` |
+| 12 | 不匹配的右括号 | Error | `StrictChecks.cpp:131-137`（在 `runStrictFormatChecks` 中） | `]` 没有对应的 `[`；`}` 没有 `{`；`)` 没有 `(` |
+| 13 | 未闭合的左括号 | Error | `StrictChecks.cpp:142-145`（在 `runStrictFormatChecks` 中） | `[` / `{` / `(` 在文件结尾仍残留在 stack 中 |
+
+`runStrictFormatChecks(state, lines)` 在 `Driver.cpp:652` 即主 parse loop
+之**后**才跑。它会先剥掉控制块 `( … )`、`{ … }`、`<HS* … >`、以及整行
+`||`-前缀注释（`StrictChecks.cpp:101-115`），然后再做检查 #11-#13；
+所以注释掉的内容**不会**触发这三项 strict-only 检查。
+
+**仅 lenient 的行为**（strict 不会做的宽松处理）：
+
+| Lenient 宽松处理 | 来源 | 行为 |
+|---|---|---|
+| Touch `C1` / `C2` → `C` 归一化 | `TouchTap.cpp:13-18` | Lenient 在校验前静默把 `C1`/`C2` 改写为 `C`。Strict 跳过这一步，token 原样进入 `parseTouchSuffix`，几乎一定产生 `Invalid touch token` 错误。 |
+| 多段 slide chain 带每段 wait+duration | `SimaiNativeParser.cpp:1209-1213` | Lenient 按形状长度比例把总时值分配到各段；strict 拒绝（即上表 #10）。 |
+| 未闭合 `[HS*` 块 | `Driver.cpp:582-587` | Lenient 直接 silent break；strict 报上表 #3。 |
+
+### 修饰符字母顺序 —— 明确**不是** strict 检查
+
+Parser **不强制 `b / x / h / f` 的典范字母顺序**。
+`parseTapModifierSequence`（`SimaiNativeParser.cpp:90+`）按字符迭代，
+**仅在出现重复时拒绝**。也就是说 `1bx`、`1xb`、`1xh`、`1hx`、`1bhxf`、
+`1fxhb` parse 出来都一样。
+
+中文显示串「Hold 修饰符顺序无效」历史上读起来像「顺序错」，但底层
+英文 `Invalid hold modifier sequence: <token>` 实际上对应两种条件，
+**两种都与模式无关（lenient 和 strict 都报）**：
+
+| 条件 | 来源 | 例子 |
+|---|---|---|
+| 前缀或后缀里出现重复修饰符 | `parseTapModifierSequence` 返回 `false` → `TouchTap.cpp:126` | `1bb`、`1xx`、`1hh` |
+| `]` 之后的后缀里出现 `h` 修饰符 | `TouchTap.cpp:119-122` | `1[4:1]h`、`1x[4:1]h` |
+
+仅 strict 的 Warning `kNonCanonicalHoldModifierPlacementPrefix`（即上表
+#6 / #7）是**另一回事**：它谈的是修饰符相对 `[duration]` 块的*位置*，
+不是修饰符*顺序*。仅当 `[duration]` 块存在 AND `]` 之后还有非空后缀
+修饰符时才触发。
 
 ### 1.2 合并步骤 —— `buildValidationReport()`
 
@@ -146,12 +182,21 @@ struct SimaiNativeValidationReport {
 
 #### 严重度降级示例
 
-| 输入 | Lenient | Strict | UI 严重度 |
+| 输入 | Lenient 原始 | Strict 原始 | 合并报告中的 UI 严重度 |
 |---|---|---|---|
-| `1[4:1`（未闭合括号） | Error | Error | **Error**（lenient 同意） |
-| `1//5`（重复 `/`） | OK | Error | **Error**（在 `shouldRemainValidationError` 例外列表中） |
-| `1xh`（modifier 非典范） | OK | Error | **Warning**（仅 strict，降级） |
-| `{7}1,2,3,`（{7} 非 384 整除） | OK | Error | **Warning**（仅 strict） |
+| `1[4:1`（未闭合 `[`） | （parse loop 中无错；流到 `runStrictFormatChecks`） | Error from `runStrictFormatChecks` | **Error** —— `kUnclosedBracketPrefix` 例外保留 |
+| `]`（不匹配右括号） | （parse loop 中无错） | Error from `runStrictFormatChecks` | **Error** —— `kUnmatchedClosingBracketPrefix` 例外保留 |
+| `1//5`（重复 `/`） | OK | Error | **Error** —— `kRepeatedSlashSeparator` 例外保留 |
+| `` 1``5 ``（重复 `` ` ``） | OK | Error | **Error** —— `kRepeatedBacktickSeparator` 例外保留 |
+| `1bb`（重复 `b` 修饰符） | Error | Error | **Error** —— lenient 同意 |
+| `1[4:1]h`（`h` 在 `]` 之后） | Error | Error | **Error** —— lenient 同意（`TouchTap.cpp:119-122`） |
+| `1h[4:1]x`（修饰符在 `]` 之后） | OK | Warning（`kNonCanonicalHoldModifierPlacementPrefix`） | **Warning** —— 仅 strict，原样保留 |
+| `{7}1,2,3,`（7 ∤ 384） | OK | Error（`formatStrictBeatValue`） | **Warning** —— 仅 strict，降级为 Warning |
+| `{1024}1,2,…`（beats clamp） | OK | Warning（`formatBeatValueClamped`） | **Warning** —— 已经是 Warning，原样保留 |
+| `[HS*xyz`（无闭合 `>`） | OK（silent break） | Error（`kUnterminatedHsBlock`） | **Warning** —— 仅 strict，降级 |
+| `1abc,2,3,`（note 行某处缺逗号） | OK | Error（`Missing beat separator ','`） | **Warning** —— 仅 strict，降级 |
+| `1xh` / `1hx` / `1bxhf` / `1fxhb`（任意修饰符字母顺序） | OK | OK | **不报** —— `parseTapModifierSequence` 不关心顺序 |
+| Touch `C1` | OK（被归一化为 `C`） | Error（`Invalid touch token: C1`） | **Warning** —— 仅 strict，降级（lenient 宽松处理 #1） |
 
 ### 1.3 本地化展示
 
