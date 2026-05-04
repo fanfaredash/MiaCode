@@ -1013,10 +1013,47 @@ void BassPreviewAudioBackend::startTransportFromCurrentAnchor()
         return;
     }
     const RetainedPlaybackMode retainedMode = retainedPlaybackMode_;
+    // Capture the intended resume target BEFORE BASS_ChannelPlay
+    // perturbs anything. lastAuthoritativeSecond was just set to the
+    // paused position by either the applyPausedPreviewState reuse
+    // path (PausedExact / PausedAnchored) or by a preceding
+    // anchorTransport / repositionPausedTransport on the seek paths.
+    const double resumeTargetSecond = playbackSession_.lastAuthoritativeSecond;
     logTrackFileMissingAfterLoadIfNeeded();
     BASS_ChannelPlay(masterMixer_, FALSE);
     playbackSession_.masterRunning = true;
-    playbackSession_.lastAuthoritativeSecond = authoritativeSecond();
+    // Re-anchor sessionStartSecond so future authoritativeSecond()
+    // queries return values consistent with the resume target.
+    //
+    // BASS_ChannelPlay primes the device output buffer with audio
+    // starting at the current byte-position; BASS_ChannelGetPosition
+    // then reports the *post-prime* offset (~+40 ms on typical
+    // Windows configs — the audio that's been decoded into the
+    // device buffer but not yet heard). Without this re-anchor,
+    // authoritativeSecond returns sessionStartSecond + post_prime,
+    // which is buffer-latency past the resume target — visible to
+    // the user as a "playhead jumps forward by ~40 ms after pause+
+    // replay" regression.
+    //
+    // The re-anchor formula: pick sessionStartSecond such that the
+    // moment-of-resume reading evaluates back to resumeTargetSecond.
+    //   want: sessionStartSecond + mixerElapsed × rate = resumeTarget
+    //   so:   sessionStartSecond = resumeTarget − mixerElapsed × rate
+    //
+    // Going forward, BASS's mixerElapsed advances at real time and
+    // authoritativeSecond stays in sync with the resume timeline. The
+    // negative offset (sessionStartSecond ≈ resumeTarget − 0.040) is
+    // numerically fine — sessionStartSecond is only ever used as the
+    // base in this same formula, and downstream callers that read it
+    // directly (group-sync delta, log lines) compute deltas that are
+    // unaffected by the absolute value.
+    const QWORD position = BASS_ChannelGetPosition(masterMixer_, BASS_POS_BYTE);
+    if (position != static_cast<QWORD>(-1)) {
+        const double mixerElapsedSecond = BASS_ChannelBytes2Seconds(masterMixer_, position);
+        playbackSession_.sessionStartSecond =
+            resumeTargetSecond - (mixerElapsedSecond * playbackSession_.sessionPlaybackRate);
+    }
+    playbackSession_.lastAuthoritativeSecond = resumeTargetSecond;
     if (backgroundTrackSample_ != nullptr) {
         if (!playbackSession_.backgroundTrackPendingStart) {
             backgroundTrackSample_->play();
@@ -1584,6 +1621,21 @@ void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
     }
     BASS_ChannelPlay(masterMixer_, FALSE);
     playbackSession_.masterRunning = true;
+    // Re-anchor sessionStartSecond so post-buffer-prime BASS position
+    // maps to the requested start (same buffer-prime offset that
+    // bites startTransportFromCurrentAnchor; see that function for
+    // the full rationale). Without this, authoritativeSecond runs
+    // ~40 ms ahead of preparedPlayback_.startSecond the moment BASS
+    // finishes priming — equivalent to the resume-from-pause "jump
+    // forward by 40 ms" symptom on every initial play / seek-and-play.
+    {
+        const QWORD position = BASS_ChannelGetPosition(masterMixer_, BASS_POS_BYTE);
+        if (position != static_cast<QWORD>(-1)) {
+            const double mixerElapsedSecond = BASS_ChannelBytes2Seconds(masterMixer_, position);
+            playbackSession_.sessionStartSecond =
+                preparedPlayback_.startSecond - (mixerElapsedSecond * playbackSession_.sessionPlaybackRate);
+        }
+    }
     playbackSession_.lastAuthoritativeSecond = preparedPlayback_.startSecond;
     if (backgroundTrackSample_ != nullptr && !playbackSession_.backgroundTrackPendingStart) {
         backgroundTrackSample_->play();
