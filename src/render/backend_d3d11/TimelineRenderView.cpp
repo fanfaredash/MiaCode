@@ -322,18 +322,25 @@ void TimelineRenderView::onWindowActiveChanged()
     }
     const bool active = window_->isActive();
     if (!active) {
-        // Beta20-fix3 — pause render thread on focus loss to prevent
-        // DEVICE_REMOVED triggered by GPU power transitions during
-        // prolonged out-of-focus playback. See
-        // PreviewDCompSurface::onWindowActiveChanged for the full
-        // rationale (Intel iGPU swap-chain invalidation, ~2s recovery
-        // visible to user as a "preview restart" hiccup).
-        renderer_.setPaused(true);
+        // Phase 5 — no-op on focus loss. The previous Beta20-fix3
+        // setPaused(true) was removed because users frequently want to
+        // run MiaCode side-by-side with another foreground app for
+        // comparison, and the pause caused the timeline preview to go
+        // stale + flicker during the resume. Device-loss prevention
+        // for the iGPU power-transition case has moved into the
+        // renderer's occlusion-poll branch — when the popup HWND is
+        // fully covered (DXGI_STATUS_OCCLUDED), the render thread
+        // switches from the waitable-driven render path to a 10 Hz
+        // visibility probe (PreviewDCompCore::testOcclusion) until DWM
+        // resumes compositing. Partial occlusion is handled
+        // transparently by DWM (it clips the covered region during
+        // composition) and continues full-rate rendering. See
+        // PreviewDCompCore.h Phase 5 comment for details.
         return;
     }
-    // Regained focus — resume the render thread, re-anchor the popup,
-    // and force a republish so the render thread has fresh state.
-    renderer_.setPaused(false);
+    // Defensive geometry re-apply on focus return — covers the rare
+    // case where layout settled differently while the window was
+    // backgrounded. Cheap; safe to over-call.
     if (trackedItem_ != nullptr) {
         applyTrackedItemGeometry();
         QTimer::singleShot(50, this, [this]() {
@@ -341,9 +348,6 @@ void TimelineRenderView::onWindowActiveChanged()
                 applyTrackedItemGeometry();
             }
         });
-    }
-    if (sceneStateValid_) {
-        buildAndPublishSnapshot();
     }
 }
 

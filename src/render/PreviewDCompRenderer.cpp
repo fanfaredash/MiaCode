@@ -262,6 +262,16 @@ void PreviewDCompRenderer::renderLoop()
                          ? QStringLiteral("(ok)") : mmcssResult.skipReason)
                     .arg(mmcssResult.lastErrorCode));
 
+    // Phase 5 — local occlusion-poll state. When Present returns
+    // DXGI_STATUS_OCCLUDED (popup HWND fully covered by another window),
+    // we drop out of the waitable-driven render path and into a low-rate
+    // visibility probe. We do NOT do real render work while occluded —
+    // the back-buffer would just be discarded. Resumes the moment
+    // testOcclusion() reports S_OK (i.e., DWM has resumed compositing
+    // our popup). Render-thread-local; no atomic needed.
+    bool occluded = false;
+    int occludedPolls = 0;
+
     while (!stopRequested_.load(std::memory_order_acquire)) {
         // Phase 4e — pause gate. When the host window is minimised
         // or hidden, paused_ flips to true and we park here on the
@@ -279,6 +289,48 @@ void PreviewDCompRenderer::renderLoop()
                 break;
             }
             // Fall through: resume on the next iteration.
+        }
+
+        // Phase 5 — occluded-poll branch. While Present is reporting
+        // the window covered, skip the waitable wait + render path
+        // entirely and just probe visibility every ~100 ms. The probe
+        // (testOcclusion / DXGI_PRESENT_TEST) does not consume a
+        // back-buffer slot, so the FRAME_LATENCY_WAITABLE_OBJECT stays
+        // un-armed and we don't get into the "stuck waitable" failure
+        // mode. We use pauseCv_ for the sleep so stop() wakes us
+        // immediately.
+        if (occluded) {
+            {
+                std::unique_lock<std::mutex> lock(pauseMutex_);
+                pauseCv_.wait_for(lock, std::chrono::milliseconds(100), [this]() {
+                    return stopRequested_.load(std::memory_order_acquire);
+                });
+            }
+            if (stopRequested_.load(std::memory_order_acquire)) {
+                break;
+            }
+            ++occludedPolls;
+            if (core_->testOcclusion()) {
+                logRenderer("occlusion_cleared",
+                            QStringLiteral("polls=%1 frames_total=%2")
+                                .arg(occludedPolls)
+                                .arg(framesRendered_.load()));
+                occluded = false;
+                occludedPolls = 0;
+                // Fall through to the normal render path. Skip the
+                // waitable wait this iteration since the swap chain has
+                // just transitioned out of an occluded state and the
+                // waitable may not have armed yet.
+                continue;
+            }
+            if ((occludedPolls % 50) == 1) {
+                // Periodic sustained-occlusion log (~once every 5 s).
+                logRenderer("occluded_polling",
+                            QStringLiteral("polls=%1 frames_total=%2")
+                                .arg(occludedPolls)
+                                .arg(framesRendered_.load()));
+            }
+            continue;
         }
 
         // Plan §2: block on the GPU fence so we wake exactly once per
@@ -415,6 +467,25 @@ void PreviewDCompRenderer::renderLoop()
         }
 
         renderAnimatedFrame();
+
+        // Phase 5 — Present-result inspection. If the swap chain
+        // transitioned to fully occluded during this Present (DWM
+        // stopped compositing our popup), set the local flag so the
+        // next loop iteration enters the occluded-poll branch above
+        // instead of the waitable-driven render path. Do NOT count
+        // this iteration as a presented frame and do NOT emit
+        // presented() — the back-buffer was discarded by DWM and the
+        // GUI-side playhead advance would otherwise drift on the
+        // discarded delta.
+        if (core_->wasLastPresentOccluded()) {
+            occluded = true;
+            occludedPolls = 0;
+            logRenderer("occluded_enter",
+                        QStringLiteral("frames_total=%1")
+                            .arg(framesRendered_.load()));
+            continue;
+        }
+
         framesRendered_.fetch_add(1, std::memory_order_release);
         // Record present time for the FPS-cap gate above.
         lastPresentNs_ = monotonicNanoseconds();

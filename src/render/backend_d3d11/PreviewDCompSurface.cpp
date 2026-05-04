@@ -1002,40 +1002,50 @@ void PreviewDCompSurface::onWindowActiveChanged()
                    .arg(trackedItem_ != nullptr ? 1 : 0)
                    .arg(runtime_ != nullptr ? 1 : 0));
     if (!active) {
-        // Lost focus — pause the render thread.
+        // Phase 5 — no-op on focus loss. Was Beta20-fix3
+        // setPaused(true). Removed so users can keep the chart preview
+        // rendering at full vsync rate while comparing against another
+        // foreground app side-by-side; the previous pause caused a
+        // visible stale period + flicker during focus return.
         //
-        // Beta20-fix3 — without this, on Intel iGPUs (and likely other
-        // power-managed GPUs) the swap chain can be invalidated after
-        // the window has been out of focus for a while: DWM throttles
-        // compositing of unfocused windows, the GPU enters a low-power
-        // state, and the next Present returns DXGI_ERROR_DEVICE_REMOVED.
-        // The device-lost recovery handler then takes ~2 s to rebuild
-        // everything, which the user sees as a noticeable "restart"
-        // (preview disappears for 2-3 s before re-appearing). User
-        // logs at 23:35:46 and 23:39:17 both showed exactly this:
-        //   [preview/dcomp] op=present hr=0x887a0005
-        //   action=device_removed_exit
-        //   action=device_lost_recovery_begin/complete (2.3 / 2.1 s gap)
+        // Device-loss prevention for the case the pause originally
+        // covered (Intel iGPU swap-chain invalidation when DWM stops
+        // compositing a fully-covered popup) has moved into the
+        // renderer's occlusion-poll branch: when Present returns
+        // DXGI_STATUS_OCCLUDED, the render thread switches from the
+        // waitable-driven render path to a 10 Hz visibility probe
+        // (PreviewDCompCore::testOcclusion) until DWM resumes
+        // compositing. Partial occlusion is handled transparently by
+        // DWM (clips the covered region during composition), so
+        // full-rate rendering continues in the comparison workflow.
+        // See PreviewDCompCore.h Phase 5 comment for details.
         //
-        // Pausing the render thread on focus loss eliminates the
-        // trigger entirely: no Present calls → no chance for the
-        // device to be marked removed during the GPU's idle window.
-        // Audio playback is unaffected (it lives on a different
-        // thread); the preview holds the last presented frame and
-        // resumes from the current playhead when focus returns.
-        renderer_.setPaused(true);
+        // The historical Beta20-fix3 commentary (preserved for
+        // archaeology) described the original failure mode the pause
+        // protected against:
+        //   on Intel iGPUs (and likely other power-managed GPUs) the
+        //   swap chain can be invalidated after the window has been
+        //   out of focus for a while: DWM throttles compositing of
+        //   unfocused windows, the GPU enters a low-power state, and
+        //   the next Present returns DXGI_ERROR_DEVICE_REMOVED. The
+        //   device-lost recovery handler then takes ~2 s to rebuild
+        //   everything, which the user sees as a noticeable "restart".
+        //   User logs at 23:35:46 and 23:39:17 both showed exactly:
+        //     [preview/dcomp] op=present hr=0x887a0005
+        //     action=device_removed_exit
+        //     action=device_lost_recovery_begin/complete (2.3 / 2.1 s)
+        // The new occlusion-poll path achieves the same
+        // device-loss-avoidance without the focus-bound
+        // pause/resume churn — and crucially, only when the popup
+        // actually goes off-screen (full occlusion), not on every
+        // focus toggle.
         return;
     }
 
-    // Regained focus / activation.
-    //  1. Resume the render thread (paired with the setPaused(true) on
-    //     the focus-loss branch above).
-    //  2. Re-anchor the popup HWND to the tracked QQuickItem — layout
-    //     may have settled differently while the window was idle.
-    //  3. Force a fresh snapshot publish so the renderer has current
-    //     state to consume on its first wake-up after resume.
-    renderer_.setPaused(false);
-
+    // Defensive geometry re-apply on focus return — covers the rare
+    // case where layout settled differently while the window was
+    // backgrounded. Cheap; safe to over-call. No render-thread resume
+    // needed (it never paused).
     if (trackedItem_ != nullptr) {
         applyTrackedItemGeometry();
         // Fire a delayed re-apply too — Qt may still be processing
@@ -1045,13 +1055,6 @@ void PreviewDCompSurface::onWindowActiveChanged()
                 applyTrackedItemGeometry();
             }
         });
-    }
-    if (runtime_ != nullptr) {
-        // Force a fresh publish on the snapshot mailbox so the render
-        // thread has guaranteed-current state to consume on its next
-        // wake-up. The 0 emittedAtNs marks this as a non-vsync-driven
-        // publish (so the playhead-delta diagnostic ignores it).
-        buildAndPublishSnapshot(0);
     }
 }
 
