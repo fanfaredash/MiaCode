@@ -198,6 +198,17 @@ private:
     void* bassFxTempoCreate_ = nullptr;
     RetainedPlaybackMode retainedPlaybackMode_ = RetainedPlaybackMode::None;
     RetainedBgmState retainedBgmState_ = RetainedBgmState::NoneLoaded;
+    // Cached BASS_ChannelPlay buffer-prime amount, measured by
+    // sampling the mixer's byte counter pre/post the first
+    // BASS_ChannelPlay call after a session reset. Used by
+    // startTransportFromCurrentAnchor on resume-from-pause to seek
+    // the mixer back by exactly this amount before BASS_ChannelPlay,
+    // so the post-prime counter ends back at the paused position
+    // (no visible playhead jump) AND audio resumes from the position
+    // the user actually heard last (no audio gap). 0 until first
+    // measurement; conservative non-zero ceiling rejects garbage
+    // readings (huge or negative deltas from clock anomalies).
+    double bassPrimeLatencySec_ = 0.0;
     bool initWindowActive_ = true;
     quint64 transportReadyGeneration_ = 0;
     bool trackMissingAfterLoadLogged_ = false;

@@ -1013,10 +1013,74 @@ void BassPreviewAudioBackend::startTransportFromCurrentAnchor()
         return;
     }
     const RetainedPlaybackMode retainedMode = retainedPlaybackMode_;
+    // Capture the resume target (= where the visible playhead was at
+    // pause). suspendPlaybackTransport set this from authoritativeSecond
+    // at pause time; later seek/anchor paths overwrite it to their
+    // target before reaching this function.
+    const double resumeTargetSec = playbackSession_.lastAuthoritativeSecond;
+
+    // Resume-from-pause buffer alignment.
+    //
+    // The BASS mixer's BASS_POS_BYTE counter tracks bytes *consumed*
+    // from the source (the write head into the device output buffer),
+    // not the bytes currently audible from the speaker. The two differ
+    // by the device output latency — typically ~40 ms on Windows. So:
+    //
+    //   audio in user's ears = byte_pos(counter − device_latency)
+    //
+    // When BASS_ChannelPause is called mid-play at counter=X, the
+    // mixer freezes at X; the user has just heard byte_pos(X−latency).
+    // When BASS_ChannelPlay later resumes, the mixer pre-fills the
+    // device buffer from byte_pos(X), advancing the counter to
+    // X + prime where prime ≈ device_latency. Audio plays from
+    // byte_pos(X) — skipping the latency-worth of source content
+    // between byte_pos(X−latency) and byte_pos(X). Visible playhead
+    // (which mirrors the counter via authoritativeSecond) jumps from
+    // X to X+prime. Both effects in lockstep — beta19's behavior.
+    //
+    // We want neither: no visible jump, no audio skip. Achieve both by
+    // seeking BASS back by `prime` *before* BASS_ChannelPlay. Then
+    // pre-fill reads from byte_pos(X−prime) ≈ byte_pos(X−latency),
+    // counter ends at X again post-prime, audio resumes from where the
+    // user actually heard last — fully continuous, no jump.
+    //
+    // `bassPrimeLatencySec_` is the cached prime estimate, measured by
+    // commitPreparedPreviewPlayback on the first play of each session.
+    // 0 until measured, in which case we skip the seek-back (preserves
+    // beta19 fallback behavior). Clamped to the current pause position
+    // so we never seek before the start of the source.
+    const QWORD pausedPos = BASS_ChannelGetPosition(masterMixer_, BASS_POS_BYTE);
+    if (pausedPos != static_cast<QWORD>(-1) && bassPrimeLatencySec_ > 0.0) {
+        const double pausedCounterSec = BASS_ChannelBytes2Seconds(masterMixer_, pausedPos);
+        const double seekBackSec = qMin(pausedCounterSec, bassPrimeLatencySec_);
+        if (seekBackSec > 0.0) {
+            const QWORD seekTargetPos = BASS_ChannelSeconds2Bytes(
+                masterMixer_, pausedCounterSec - seekBackSec);
+            BASS_ChannelSetPosition(masterMixer_, seekTargetPos, BASS_POS_BYTE);
+        }
+    }
+
     logTrackFileMissingAfterLoadIfNeeded();
     BASS_ChannelPlay(masterMixer_, FALSE);
     playbackSession_.masterRunning = true;
-    playbackSession_.lastAuthoritativeSecond = authoritativeSecond();
+
+    // Re-anchor sessionStartSecond so authoritativeSecond reads back as
+    // resumeTargetSec at the moment of resume — and stays consistent
+    // with the resume timeline as BASS advances. Because the seek-back
+    // above was sized to cancel the prime, the post-play counter
+    // re-lands at the paused counter position, so this re-anchor is
+    // stable across cycles (no accumulating drift). If the seek-back
+    // was skipped (cache cold) or clamped (pause near start of track),
+    // the formula still produces the correct visible at this exact
+    // moment; only the audio-resume-position fidelity degrades, which
+    // is the beta19 fallback.
+    const QWORD postPlayPos = BASS_ChannelGetPosition(masterMixer_, BASS_POS_BYTE);
+    if (postPlayPos != static_cast<QWORD>(-1)) {
+        const double postPlayCounterSec = BASS_ChannelBytes2Seconds(masterMixer_, postPlayPos);
+        playbackSession_.sessionStartSecond =
+            resumeTargetSec - (postPlayCounterSec * playbackSession_.sessionPlaybackRate);
+    }
+    playbackSession_.lastAuthoritativeSecond = resumeTargetSec;
     if (backgroundTrackSample_ != nullptr) {
         if (!playbackSession_.backgroundTrackPendingStart) {
             backgroundTrackSample_->play();
@@ -1582,8 +1646,47 @@ void BassPreviewAudioBackend::commitPreparedPreviewPlayback()
     if (!preparedPlayback_.pending || masterMixer_ == 0) {
         return;
     }
+    // Sample mixer counter pre/post BASS_ChannelPlay so we can:
+    //   1. Adjust sessionStartSecond to absorb the prime offset (so
+    //      the visible playhead reads as preparedPlayback_.startSecond
+    //      at this moment, not startSecond+prime — eliminates the
+    //      "playhead lurches forward by ~40 ms on initial play /
+    //      seek-and-play" cosmetic bug);
+    //   2. Update bassPrimeLatencySec_ so the resume path
+    //      (startTransportFromCurrentAnchor) can seek BASS back by
+    //      this measured amount and avoid both the visible-jump and
+    //      audio-skip on resume-from-pause.
+    //
+    // resetMasterMixerClock(startSecond) was just called by
+    // preparePreviewPlaybackTransaction, which set the counter to 0.
+    // So pre-play counter ≈ 0; post-play counter ≈ prime.
+    const QWORD prePlayPos = BASS_ChannelGetPosition(masterMixer_, BASS_POS_BYTE);
+    const double prePlayCounterSec = (prePlayPos != static_cast<QWORD>(-1))
+        ? BASS_ChannelBytes2Seconds(masterMixer_, prePlayPos)
+        : 0.0;
     BASS_ChannelPlay(masterMixer_, FALSE);
     playbackSession_.masterRunning = true;
+    const QWORD postPlayPos = BASS_ChannelGetPosition(masterMixer_, BASS_POS_BYTE);
+    if (postPlayPos != static_cast<QWORD>(-1)) {
+        const double postPlayCounterSec = BASS_ChannelBytes2Seconds(masterMixer_, postPlayPos);
+        const double measuredPrime = postPlayCounterSec - prePlayCounterSec;
+        // Reject obviously bad readings (negative, huge). Plausible
+        // device latencies are 1–200 ms; clamp the cache window to
+        // (0, 0.5 s) to keep the seek-back amount sane even on weird
+        // hardware/driver combinations.
+        if (measuredPrime > 0.0 && measuredPrime < 0.5) {
+            bassPrimeLatencySec_ = measuredPrime;
+        }
+        // Re-anchor sessionStartSecond so visible at this moment
+        // equals preparedPlayback_.startSecond. resetMasterMixerClock
+        // set sessionStartSecond=startSecond, but BASS has now primed
+        // the buffer and the counter sits at ~prime — without this
+        // adjustment, authoritativeSecond would return
+        // startSecond + prime on the very next query.
+        playbackSession_.sessionStartSecond =
+            preparedPlayback_.startSecond
+            - (postPlayCounterSec * playbackSession_.sessionPlaybackRate);
+    }
     playbackSession_.lastAuthoritativeSecond = preparedPlayback_.startSecond;
     if (backgroundTrackSample_ != nullptr && !playbackSession_.backgroundTrackPendingStart) {
         backgroundTrackSample_->play();
