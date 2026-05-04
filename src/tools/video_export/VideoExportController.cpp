@@ -99,17 +99,33 @@ struct VideoBitratePlan {
 };
 
 struct X264TuningPlan {
+    // beta25 — defaults retuned for compactness. The previous
+    // {preset=fast, crf=21, bf=0} chased fast wallclock encode at the
+    // cost of ~25-35% larger files than the x264 stock defaults at the
+    // same visual quality. {preset=fast, crf=23, bf=3, tune=animation}
+    // pushes towards stock behaviour: bf=3 is the x264 default and
+    // ships ~10-15% smaller; crf=23 is one notch below crf=21 and is
+    // visually transparent for chart-preview content; the animation
+    // tune adjusts deblocking + aq-strength to favour the sharp-edge
+    // graphic content that dominates the chart layer. The autotuner
+    // below adds another one-step preset bump (faster→fast, fast→medium)
+    // so the assembly defaults emit roughly stock x264 behaviour.
     QString preset = QStringLiteral("fast");
-    int crf = 21;
-    int bframes = 0;
+    int crf = 23;
+    int bframes = 3;
+    QString tune;
 
     QStringList toArgs() const
     {
-        return QStringList{
+        QStringList args{
             QStringLiteral("-preset"), preset,
             QStringLiteral("-crf"), QString::number(crf),
             QStringLiteral("-bf"), QString::number(bframes)
         };
+        if (!tune.isEmpty()) {
+            args << QStringLiteral("-tune") << tune;
+        }
+        return args;
     }
 };
 
@@ -701,6 +717,21 @@ X264TuningPlan chooseX264TuningPlan(
         plan.preset = fasterX264Preset(plan.preset);
     }
 
+    // Compactness bump. After the memory/thread/pixel-rate logic above
+    // settles on a preset, advance the two cheap ones by a notch:
+    //   faster → fast  (~10-15% smaller, ~30% slower encode)
+    //   fast   → medium (~10-12% smaller, ~50-100% slower encode)
+    // Higher presets (medium, slow, slower, veryslow) and the
+    // ultrafast/superfast/veryfast tail are left alone — those slots
+    // are picked by other branches deliberately and bumping them costs
+    // disproportionate encode time per byte saved.
+    if (plan.preset == QLatin1String("faster")) {
+        plan.preset = QStringLiteral("fast");
+    } else if (plan.preset == QLatin1String("fast")) {
+        plan.preset = QStringLiteral("medium");
+    }
+    plan.tune = QStringLiteral("animation");
+
     if (preset == VideoExportPreset::HighQuality) {
         plan.crf = qMax(18, plan.crf - 1);
         plan.bframes = 0;
@@ -714,10 +745,15 @@ X264TuningPlan chooseX264TuningPlan(
         exportConfig.x264CrfOverride >= 0 ? exportConfig.x264CrfOverride : plan.crf,
         28
     );
+    // beta25 — bframes upper bound raised from 2 to 8 to honour the new
+    // x264 stock default of 3 (and let advanced users push higher via
+    // MIACODE_EXPORT_X264_BFRAMES). 8 is x264's recommended ceiling for
+    // typical content; values above that hit diminishing returns and
+    // can slow decode on weaker playback hardware.
     plan.bframes = qBound(
         0,
         exportConfig.x264BframesOverride >= 0 ? exportConfig.x264BframesOverride : plan.bframes,
-        2
+        8
     );
     return plan;
 }
