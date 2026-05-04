@@ -174,6 +174,22 @@ void PreviewStageMediaHost::initializeBackendObjects()
     audioOutput_->setVolume(0.0f);
     player_->setAudioOutput(audioOutput_);
     player_->setPlaybackRate(static_cast<qreal>(playbackRate_));
+    // One-shot diagnostic so the user-machine vs dev-machine PV-scaling
+    // bug can be pinned down without a custom build. The QtMultimedia
+    // backend (FFmpeg vs native WMF on Windows) is selected at runtime
+    // based on QT_MEDIA_BACKEND + plugin availability + silent fallback;
+    // it's never logged elsewhere, but the chosen backend can change how
+    // a video frame's pixel size + rotation get reported (rotation
+    // metadata in particular is applied by some backends and ignored by
+    // others, which inverts the aspect of phone-captured PVs).
+    appendPreviewStageMediaLog(
+        QStringLiteral("media_backend"),
+        QString("qt_runtime_version=%1 qt_media_backend_env=%2")
+            .arg(QString::fromLatin1(qVersion()))
+            .arg(qEnvironmentVariable(
+                "QT_MEDIA_BACKEND",
+                QStringLiteral("(unset:default)")))
+    );
     connect(player_, &QMediaPlayer::positionChanged, this, [this](qint64 positionMs) {
         if (mediaKind_ != MediaKind::Video) {
             return;
@@ -1564,14 +1580,49 @@ void PreviewStageMediaHost::noteVideoFrameArrived(const QVideoFrame& frame, quin
     ++videoFrameCountTotal_;
     consecutiveVideoBackendRecoveryCount_ = 0;
     if (firstFrameForSource) {
+        // Frame size + surface format diagnostics are the missing piece for
+        // the user-machine PV-scaling bug: mediaTargetRect / VideoOutput
+        // fillMode use the source's reported pixel aspect, and that aspect
+        // can flip portrait↔landscape between QtMultimedia backends when a
+        // phone-captured PV carries rotation metadata (FFmpeg applies the
+        // rotation, native backends often don't). frame.size() shows the
+        // post-rotation (or raw) pixel size; surfaceFormat.frameSize() and
+        // viewport() expose the underlying buffer + cropped region; the
+        // rotation/mirrored flags expose what the backend reports the
+        // frame still needs.
+        const QVideoFrameFormat fmt = frame.surfaceFormat();
+        const QSize frameSize = frame.size();
+        const QSize fmtFrameSize = fmt.frameSize();
+        const QRect viewport = fmt.viewport();
+        const auto rotationDegrees = [](QtVideo::Rotation rotation) -> int {
+            switch (rotation) {
+            case QtVideo::Rotation::None: return 0;
+            case QtVideo::Rotation::Clockwise90: return 90;
+            case QtVideo::Rotation::Clockwise180: return 180;
+            case QtVideo::Rotation::Clockwise270: return 270;
+            }
+            return -1;
+        };
         appendPreviewStageMediaLog(
             QStringLiteral("video_frame_first"),
-            QString("frame_ms=%1 frame_end_ms=%2 player_position_ms=%3 target_seek_ms=%4 playback_active=%5")
+            QString(
+                "frame_ms=%1 frame_end_ms=%2 player_position_ms=%3 target_seek_ms=%4 "
+                "playback_active=%5 frame_size=%6x%7 fmt_size=%8x%9 "
+                "viewport=%10,%11+%12x%13 pixel_format=%14 rotation_deg=%15 "
+                "mirrored=%16"
+            )
                 .arg(frame.startTime() >= 0 ? frame.startTime() / 1000 : -1)
                 .arg(frame.endTime() >= 0 ? frame.endTime() / 1000 : -1)
                 .arg(player_ != nullptr ? player_->position() : -1)
                 .arg(lastSeekMs_)
                 .arg(videoPlaybackActive_ ? 1 : 0)
+                .arg(frameSize.width()).arg(frameSize.height())
+                .arg(fmtFrameSize.width()).arg(fmtFrameSize.height())
+                .arg(viewport.x()).arg(viewport.y())
+                .arg(viewport.width()).arg(viewport.height())
+                .arg(QVideoFrameFormat::pixelFormatToString(fmt.pixelFormat()))
+                .arg(rotationDegrees(frame.rotation()))
+                .arg(frame.mirrored() ? 1 : 0)
         );
     }
     if (videoPlaybackActive_ && !videoPlaybackActiveElapsed_.isValid()) {
