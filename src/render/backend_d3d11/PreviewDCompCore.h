@@ -115,6 +115,26 @@ public:
     // called.
     bool isReady() const;
 
+    // Phase 5 — occlusion tracking. The renderer uses these to handle the
+    // case where the popup HWND has been fully covered by another window
+    // (DWM stops compositing, Present returns DXGI_STATUS_OCCLUDED). With
+    // the focus-loss render-thread pause removed (so users can do
+    // side-by-side comparison with other foreground apps without flicker),
+    // these provide the cheap occlusion-detection path that keeps the
+    // iGPU from being woken to do work that DWM would only discard.
+    //
+    // wasLastPresentOccluded() — true if the last present() call returned
+    // DXGI_STATUS_OCCLUDED. Reset on the next non-occluded Present.
+    // Render thread only.
+    //
+    // testOcclusion() — calls Present(0, DXGI_PRESENT_TEST), which probes
+    // visibility without consuming a back-buffer or actually flipping.
+    // Returns true if the window is now visible (S_OK), false if still
+    // occluded. Render thread only. Cheap — meant for ~10 Hz polling
+    // while the renderer is in the occluded-poll branch.
+    bool wasLastPresentOccluded() const;
+    bool testOcclusion();
+
     // True if the D3D11 device has been removed (driver crash, GPU
     // reset, TDR timeout, OOM removal, etc.). Wraps
     // ID3D11Device::GetDeviceRemovedReason — if this returns FAILED the
@@ -185,6 +205,9 @@ private:
     HWND parentHwnd_ = nullptr;
     QSize swapChainSize_;
     bool ready_ = false;
+    // Phase 5 — last present() saw DXGI_STATUS_OCCLUDED. Render-thread
+    // only; no atomic needed (single writer, single reader, same thread).
+    bool lastPresentOccluded_ = false;
 #endif
 };
 

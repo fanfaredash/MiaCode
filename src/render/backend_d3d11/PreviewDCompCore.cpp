@@ -505,11 +505,55 @@ bool PreviewDCompCore::present(unsigned int syncInterval)
     // pacing — the waitable signals once per Present, so a stuck Present
     // would freeze the render loop.
     HRESULT hr = swapChain_->Present(syncInterval, 0);
+    if (hr == DXGI_STATUS_OCCLUDED) {
+        // Window is fully occluded — DWM has stopped compositing. The
+        // Present call itself didn't fail; it just discarded the frame.
+        // Flag this for the renderer's occlusion-poll branch so it can
+        // switch from the waitable-driven render loop to a low-rate
+        // visibility probe (testOcclusion()) until DWM resumes
+        // compositing. Phase 5 — paired with the focus-loss pause
+        // removal (TimelineRenderView / PreviewDCompSurface
+        // onWindowActiveChanged).
+        lastPresentOccluded_ = true;
+        return true;
+    }
+    lastPresentOccluded_ = false;
     if (FAILED(hr)) {
         logDCompError("present", hr);
         return false;
     }
     return true;
+}
+
+bool PreviewDCompCore::wasLastPresentOccluded() const
+{
+    return lastPresentOccluded_;
+}
+
+bool PreviewDCompCore::testOcclusion()
+{
+    if (!ready_) {
+        // Treat as still occluded so the caller keeps polling rather
+        // than rushing back to the render path on a half-initialised
+        // swap chain.
+        return false;
+    }
+    // DXGI_PRESENT_TEST: probe visibility without consuming a back-buffer
+    // and without actually flipping. Returns S_OK if the window has been
+    // composed since the last test (i.e., is now visible), or
+    // DXGI_STATUS_OCCLUDED if still hidden.
+    //
+    // Cheap enough for ~10 Hz polling during the occluded-poll branch.
+    // No effect on the FRAME_LATENCY_WAITABLE_OBJECT — it doesn't consume
+    // a buffer slot.
+    HRESULT hr = swapChain_->Present(0, DXGI_PRESENT_TEST);
+    if (hr == S_OK) {
+        // Visibility has resumed. Caller will exit the poll branch and
+        // resume normal vsync-paced rendering.
+        lastPresentOccluded_ = false;
+        return true;
+    }
+    return false;
 }
 
 HANDLE PreviewDCompCore::frameLatencyWaitable() const
