@@ -534,8 +534,6 @@ void PreviewDCompSurface::buildAndPublishSnapshot(qint64 emittedAtNs)
     // pause/resume, > 50 ms) snap so we don't render motion across
     // a discontinuity.
     const qint64 playheadSampleNs = (emittedAtNs > 0) ? emittedAtNs : nowNs;
-    constexpr double kRenderPlayheadSnapSeconds = 0.050;
-    constexpr double kFixedNominal60HzSeconds = 1.0 / 60.0;
     // Pause detection: if state.playheadSeconds (the audio-time anchor
     // from PreviewRuntime, after smoothing + lookahead) hasn't changed
     // since last call, audio is paused — visual playhead must NOT
@@ -560,37 +558,40 @@ void PreviewDCompSurface::buildAndPublishSnapshot(qint64 emittedAtNs)
         renderPlayheadSeconds_ = currentAudioSeconds;
         renderPlayheadLastSampleNs_ = playheadSampleNs;
     } else {
-        // Playback path.
+        // Playback path. Lock the render clock to the audio anchor.
         //
-        // Render-thread-driven (emittedAtNs > 0): advance by a hardcoded
-        // 60 Hz vsync interval. Empirically drives playhead_delta_stats
-        // stddev_ms to 0.000 on the 60 Hz test hardware. Hardcoded for
-        // now — two prior attempts to plumb the user's Video-Settings
-        // selection (60 / 120 / Display Refresh) through PreviewRuntime
-        // stalled the render thread mid-session for reasons not yet
-        // pinned. Phase 5 polish reattempts plumbing with more care.
+        // History: this used to advance renderPlayheadSeconds_ by a
+        // fixed 16.67 ms per vsync (when render-thread-driven) and
+        // snap to the audio anchor only on >50 ms drift. The fixed-
+        // rate advance + snap design was added during Phase 4-perf to
+        // drive playhead_delta_stats stddev_ms to 0.000 on idealised
+        // 60 Hz test hardware. It worked when the audio anchor itself
+        // advanced at exactly 16.67 ms / vsync — i.e., uninterrupted
+        // playback at native rate.
         //
-        // Direct/runtime-driven (emittedAtNs == 0, e.g. setRuntime seed):
-        // measured wall-clock advance bounded to [0, 100 ms] so a long
-        // stall doesn't race forward.
+        // It broke during rapid pause-resume cycles. Each
+        // BASS_ChannelPlay has a ~22 ms buffer-prime startup gap during
+        // which the audio anchor doesn't advance; the user's offset-
+        // testing workflow (frame-step pause-play-pause-play) drops
+        // the effective audio rate to ~30 % real-time. The render
+        // clock kept pushing forward at 16.67 ms / vsync, ran ahead
+        // of the audio anchor by 50 ms after ~3 vsyncs, snapped
+        // backward — repeat. Visible to the user as "audio-rendering
+        // misalignment after repeated pause-resume" — the rendered
+        // playfield notes / playhead marker stutter relative to the
+        // audio they hear.
         //
-        // Drift snap (>50 ms) catches seek and sustained missed-vsync.
-        double advanceSeconds;
-        if (emittedAtNs > 0) {
-            advanceSeconds = kFixedNominal60HzSeconds;
-        } else {
-            const qint64 elapsedNs =
-                playheadSampleNs - renderPlayheadLastSampleNs_;
-            const double elapsedSeconds =
-                static_cast<double>(elapsedNs) / 1.0e9;
-            advanceSeconds = qBound(0.0, elapsedSeconds, 0.100);
-        }
-        renderPlayheadSeconds_ += advanceSeconds;
+        // Locking render to audio eliminates this. When audio is at
+        // native rate, audio publishes arrive at vsync-aligned
+        // intervals (the GUI's applyVisualClockSmoothing returns
+        // smoothed-audio + lookahead, vsync-spaced) so the render
+        // clock advances at vsync rate too — no functional regression
+        // for the steady-playback case the original Phase 4-perf
+        // design optimised for. When audio is slow (rapid cycles or
+        // any other source of audio-rate dip), render follows
+        // honestly. No drift accumulation, no snap-back oscillation.
+        renderPlayheadSeconds_ = currentAudioSeconds;
         renderPlayheadLastSampleNs_ = playheadSampleNs;
-        const double drift = currentAudioSeconds - renderPlayheadSeconds_;
-        if (qAbs(drift) > kRenderPlayheadSnapSeconds) {
-            renderPlayheadSeconds_ = currentAudioSeconds;
-        }
     }
 
     PreviewDCompFrameStateSnapshot snapshot;
