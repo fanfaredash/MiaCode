@@ -448,6 +448,38 @@ void PreviewDCompSurface::buildAndPublishSnapshot(qint64 emittedAtNs)
         }
     }
 
+    // Per-vsync defensive geometry resync — mirrors the timeline view's
+    // Phase 3c-fix9 fix and closes the same hole for the chart preview.
+    //
+    // The popup HWND tracks the QML preview pane via QQuickWindow signals
+    // (xChanged / yChanged / widthChanged / heightChanged). Those fire
+    // reliably for QML-internal layout changes, but NOT when the parent
+    // QMainWindow is dragged on screen: the QQuickWindow is hosted via
+    // QWindow::fromWinId on a bridgeRoot QWidget, and Qt tracks its
+    // position relative to that bridge — which doesn't move in widget-
+    // tree terms even though the underlying OS HWND does. Net effect
+    // before this fix: drag MiaCode's title bar → QML Rectangle (the
+    // #1F2833 background of PreviewRuntimeView.qml) repaints at the new
+    // screen position, but the popup HWND with the playfield stays at
+    // the old position until something else triggers
+    // applyTrackedItemGeometry — typically focus regain — at which
+    // point the popup snaps into place. Users experienced this as
+    // "HWND popup misaligned with QML background", with the QML
+    // background showing through on one edge and the popup clipping
+    // on the opposite edge. Confirmed in user logs by popup_movewindow
+    // events firing only on active_changed=1 boundaries even after
+    // sustained window-position drift.
+    //
+    // Per-publish applyTrackedItemGeometry is cheap: the inner
+    // geometryChanged gate skips MoveWindow when the screen position
+    // hasn't drifted, and setVisualTransform is just a DComp transform
+    // write + Commit at vsync rate (which the timeline view has been
+    // doing on this same code path since Phase 3c-fix9 with no
+    // measurable cost).
+    if (initialised_ && trackedItem_ != nullptr) {
+        applyTrackedItemGeometry();
+    }
+
     // Note: gap and dispatch-latency diagnostics are recorded in
     // onRendererPresented (the dedicated slot for the renderer signal)
     // so they observe the full Qt::QueuedConnection dispatch path. By
