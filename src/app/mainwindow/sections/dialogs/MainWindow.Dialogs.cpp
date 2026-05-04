@@ -548,16 +548,49 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
             "Display Refresh Rate"
         ))
         .arg(QString::number(detectedRefreshRate, 'f', detectedRefreshRate >= 100.0 ? 0 : 1));
-    const QList<CanvasFrameRateOption> canvasFrameRateOptions{
-        {PreviewCanvasFrameRateMode::Fps60, uiText("dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS")},
-        {PreviewCanvasFrameRateMode::Fps120, uiText("dialog.render_settings.preview.canvas_frame_rate.120", "120 FPS")},
-        {PreviewCanvasFrameRateMode::DisplayRefresh, displayRefreshLabel},
-    };
+    QList<CanvasFrameRateOption> canvasFrameRateOptions;
+    canvasFrameRateOptions.append({
+        PreviewCanvasFrameRateMode::Fps60,
+        uiText("dialog.render_settings.preview.canvas_frame_rate.60", "60 FPS"),
+    });
+    // Only expose the 120 FPS option on a display that can sustain it.
+    // The backend clamps Fps120 to display refresh at runtime (see
+    // previewCanvasTargetFrameIntervalNs), so leaving it in the menu
+    // would advertise a setting that silently degrades to display
+    // refresh — confusing the user. Threshold uses an epsilon (119.5)
+    // so panels that report 119.88 Hz (common OEM round-down of true
+    // 120 Hz) still see the option.
+    if (detectedRefreshRate >= 119.5) {
+        canvasFrameRateOptions.append({
+            PreviewCanvasFrameRateMode::Fps120,
+            uiText("dialog.render_settings.preview.canvas_frame_rate.120", "120 FPS"),
+        });
+    }
+    canvasFrameRateOptions.append({
+        PreviewCanvasFrameRateMode::DisplayRefresh,
+        displayRefreshLabel,
+    });
+
     QString selectedCanvasFrameRateLabel = canvasFrameRateOptions.front().label;
+    bool foundExactSelectedFrameRate = false;
     for (const CanvasFrameRateOption& option : canvasFrameRateOptions) {
         if (option.mode == owner_.previewCanvasFrameRateMode_) {
             selectedCanvasFrameRateLabel = option.label;
+            foundExactSelectedFrameRate = true;
             break;
+        }
+    }
+    // Saved mode is no longer offered (user previously had Fps120 on a
+    // higher-refresh display, then connected to a lower one). Show the
+    // DisplayRefresh label since that's what the backend actually
+    // applies at runtime — the saved value itself is preserved so
+    // reconnecting to a 120 Hz panel restores the original selection.
+    if (!foundExactSelectedFrameRate) {
+        for (const CanvasFrameRateOption& option : canvasFrameRateOptions) {
+            if (option.mode == PreviewCanvasFrameRateMode::DisplayRefresh) {
+                selectedCanvasFrameRateLabel = option.label;
+                break;
+            }
         }
     }
     auto* canvasFrameRateButton = createDialogMenuButton(videoGroup, selectedCanvasFrameRateLabel);

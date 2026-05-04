@@ -502,15 +502,31 @@ bool MainWindow::TimelineSection::previewCanvasUsesFrameSwappedPacing() const
 
 qint64 MainWindow::TimelineSection::previewCanvasTargetFrameIntervalNs() const
 {
+    // The render thread Presents at vsync (syncInterval >= 1), so it
+    // physically cannot sustain a target rate above displayHz. The GUI
+    // publish timer must match the *effective* render cadence — if it
+    // ticks faster, snapshots queue up + get dropped, producing visible
+    // stutter. Reported by users selecting 120 FPS on a 65 Hz display:
+    // GUI ticked at 120 Hz, render Presented at 65 Hz, mismatch
+    // manifested as periodic frame-skip artefacts.
+    //
+    // Fix: clamp targetHz to displayHz before deriving the interval.
+    // Same clamp guards Fps60 against (rare) sub-60 Hz displays.
+    const double displayHz = currentPreviewCanvasRefreshRate();
+    double targetHz;
     switch (state_.previewCanvasFrameRateMode_) {
     case PreviewCanvasFrameRateMode::Fps120:
-        return 1000000000LL / 120LL;
-    case PreviewCanvasFrameRateMode::DisplayRefresh:
-        return qMax<qint64>(1LL, qRound64(1000000000.0 / currentPreviewCanvasRefreshRate()));
+        targetHz = qMin(120.0, displayHz);
+        break;
     case PreviewCanvasFrameRateMode::Fps60:
+        targetHz = qMin(60.0, displayHz);
+        break;
+    case PreviewCanvasFrameRateMode::DisplayRefresh:
     default:
-        return 1000000000LL / 60LL;
+        targetHz = displayHz;
+        break;
     }
+    return qMax<qint64>(1LL, qRound64(1000000000.0 / qMax(1.0, targetHz)));
 }
 
 qint64 MainWindow::TimelineSection::timelineTargetFrameIntervalNs() const
