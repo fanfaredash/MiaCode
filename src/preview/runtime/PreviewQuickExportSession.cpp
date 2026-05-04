@@ -63,6 +63,7 @@ PreviewQuickExportSession::PreviewQuickExportSession(QObject* parent)
 
 PreviewQuickExportSession::~PreviewQuickExportSession()
 {
+    stopConvertWorker();
     invalidate();
 }
 
@@ -555,19 +556,46 @@ bool PreviewQuickExportSession::renderFramePboStep(
         return false;
     }
 
+    // Pipeline:
+    //   prior_worker_output  ──┐
+    //                          │  (returned to caller this tick)
+    //   prev PBO ── memcpy ────┼─→ worker (running in parallel with the
+    //                          │   next render's GL command issue)
+    //   render N + glReadPixels┘
+    //
+    // Two pending slots in steady state: one frame queued in a PBO
+    // waiting for GPU readback, and one frame in the convert worker
+    // waiting on the CPU. drainOnly retires both, one per call.
+    QElapsedTimer readbackTimer;
+    readbackTimer.start();
+    QImage workerOutput;
+    bool hadWorkerOutput = false;
+    if (convertJobInFlight_) {
+        QString workerErr;
+        if (!waitForPendingConvertJob(&workerOutput, &workerErr)) {
+            if (errorMessage != nullptr) {
+                *errorMessage = workerErr;
+            }
+            context_->doneCurrent();
+            return false;
+        }
+        hadWorkerOutput = !workerOutput.isNull();
+    }
+
     if (drainOnly) {
         if (offscreenReadbackPendingIndex_ >= 0) {
-            QElapsedTimer readbackTimer;
-            readbackTimer.start();
-            QImage drainedFrame;
-            if (!mapOffscreenReadbackPbo(offscreenReadbackPendingIndex_, pixelSize, &drainedFrame, errorMessage)) {
+            // Promote the queued PBO into a worker job. The next
+            // drainOnly call will return this frame's converted output.
+            if (!mapPboAndSubmitConvertJob(offscreenReadbackPendingIndex_, pixelSize, errorMessage)) {
                 context_->doneCurrent();
                 return false;
             }
-            lastRenderStats_.readbackNs = readbackTimer.nsecsElapsed();
             offscreenReadbackPendingIndex_ = -1;
+        }
+        lastRenderStats_.readbackNs = readbackTimer.nsecsElapsed();
+        if (hadWorkerOutput) {
             if (completedFrame != nullptr) {
-                *completedFrame = std::move(drainedFrame);
+                *completedFrame = std::move(workerOutput);
             }
             if (completedFrameReady != nullptr) {
                 *completedFrameReady = completedFrame != nullptr && !completedFrame->isNull();
@@ -602,25 +630,25 @@ bool PreviewQuickExportSession::renderFramePboStep(
     gl->glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
 
     if (offscreenReadbackPendingIndex_ >= 0) {
-        QElapsedTimer readbackTimer;
-        readbackTimer.start();
-        QImage readyFrame;
-        if (!mapOffscreenReadbackPbo(offscreenReadbackPendingIndex_, pixelSize, &readyFrame, errorMessage)) {
+        if (!mapPboAndSubmitConvertJob(offscreenReadbackPendingIndex_, pixelSize, errorMessage)) {
             context_->doneCurrent();
             return false;
         }
-        lastRenderStats_.readbackNs = readbackTimer.nsecsElapsed();
+    }
+    lastRenderStats_.readbackNs = readbackTimer.nsecsElapsed();
+
+    offscreenReadbackPendingIndex_ = writeIndex;
+    offscreenReadbackPboWriteIndex_ = (writeIndex + 1) % 2;
+    context_->doneCurrent();
+
+    if (hadWorkerOutput) {
         if (completedFrame != nullptr) {
-            *completedFrame = std::move(readyFrame);
+            *completedFrame = std::move(workerOutput);
         }
         if (completedFrameReady != nullptr) {
             *completedFrameReady = completedFrame != nullptr && !completedFrame->isNull();
         }
     }
-
-    offscreenReadbackPendingIndex_ = writeIndex;
-    offscreenReadbackPboWriteIndex_ = (writeIndex + 1) % 2;
-    context_->doneCurrent();
     return true;
 }
 
@@ -748,6 +776,179 @@ bool PreviewQuickExportSession::convertBottomUpPremultipliedReadbackToStraightRg
             dst[2] = unpremultiplyChannel(src[2], alpha);
         }
     }
+    return true;
+}
+
+// Convert worker. Pulls a (sourceBytes, size) handoff out of the
+// producer-set fields under convertMutex_, runs the existing
+// convertBottomUpPremultipliedReadbackToStraightRgba into the worker's
+// own QImage, and signals back. The producer guarantees exclusive
+// access to the staging buffer between submit and wait, so the worker
+// can read sourceBytes lock-free during the conversion itself.
+void PreviewQuickExportSession::convertWorkerLoop()
+{
+    while (true) {
+        const uchar* sourceBytes = nullptr;
+        qsizetype sourceBytesPerRow = 0;
+        QSize size;
+        {
+            std::unique_lock<std::mutex> lock(convertMutex_);
+            convertSubmitCv_.wait(lock, [this]() {
+                return convertJobPending_ || convertStop_.load(std::memory_order_acquire);
+            });
+            if (convertStop_.load(std::memory_order_acquire)) {
+                return;
+            }
+            sourceBytes = convertJobInputBytes_;
+            sourceBytesPerRow = convertJobInputBytesPerRow_;
+            size = convertJobImageSize_;
+            convertJobPending_ = false;
+        }
+        QImage output;
+        QString err;
+        const bool ok = convertBottomUpPremultipliedReadbackToStraightRgba(
+            sourceBytes, sourceBytesPerRow, size, &output, &err);
+        {
+            std::lock_guard<std::mutex> lock(convertMutex_);
+            convertJobOutputFrame_ = std::move(output);
+            convertJobSucceeded_ = ok;
+            convertJobErrorMessage_ = err;
+            convertJobDone_ = true;
+        }
+        convertDoneCv_.notify_one();
+    }
+}
+
+void PreviewQuickExportSession::startConvertWorkerIfNeeded()
+{
+    if (convertThread_.joinable()) {
+        return;
+    }
+    convertStop_.store(false, std::memory_order_release);
+    convertJobPending_ = false;
+    convertJobDone_ = false;
+    convertJobInFlight_ = false;
+    convertJobSucceeded_ = false;
+    convertJobErrorMessage_.clear();
+    convertJobOutputFrame_ = QImage();
+    convertThread_ = std::thread([this]() { convertWorkerLoop(); });
+}
+
+void PreviewQuickExportSession::stopConvertWorker()
+{
+    if (!convertThread_.joinable()) {
+        return;
+    }
+    convertStop_.store(true, std::memory_order_release);
+    convertSubmitCv_.notify_all();
+    convertThread_.join();
+    convertJobPending_ = false;
+    convertJobDone_ = false;
+    convertJobInFlight_ = false;
+    convertJobOutputFrame_ = QImage();
+}
+
+// Producer-side: map the queued PBO into CPU memory, copy its bytes
+// into the worker's staging buffer (the GL mapping must be released
+// before the next renderFramePboStep so the GPU can reuse the PBO),
+// and submit the convert job. The worker runs in parallel with the
+// next frame's render-command issue + glReadPixels enqueue, and the
+// producer waits on its result one iteration later. Net effect: the
+// per-frame readback path becomes max(render, convert) instead of
+// render+convert, with one extra frame of pipeline depth.
+bool PreviewQuickExportSession::mapPboAndSubmitConvertJob(
+    int pboIndex,
+    const QSize& imageSize,
+    QString* errorMessage)
+{
+    if (pboIndex < 0 || pboIndex >= 2 || offscreenReadbackPbos_[pboIndex] == 0) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("invalid Quick export readback PBO index");
+        }
+        return false;
+    }
+    QOpenGLExtraFunctions* extra = context_ != nullptr ? context_->extraFunctions() : nullptr;
+    if (extra == nullptr) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("OpenGL extra functions are unavailable while mapping PBO");
+        }
+        return false;
+    }
+
+    const QSize safeSize(qMax(1, imageSize.width()), qMax(1, imageSize.height()));
+    const qsizetype bytesPerRow = static_cast<qsizetype>(safeSize.width()) * 4;
+    const qsizetype byteCount = bytesPerRow * static_cast<qsizetype>(safeSize.height());
+    if (pboStagingBuffer_.size() < byteCount) {
+        pboStagingBuffer_.resize(byteCount);
+        if (pboStagingBuffer_.size() < byteCount) {
+            if (errorMessage != nullptr) {
+                *errorMessage = QStringLiteral("failed to allocate Quick export PBO staging buffer");
+            }
+            return false;
+        }
+    }
+
+    extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, offscreenReadbackPbos_[pboIndex]);
+    void* mapped = extra->glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, offscreenReadbackPboBytes_, GL_MAP_READ_BIT);
+    if (mapped == nullptr) {
+        extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to map Quick export readback PBO");
+        }
+        return false;
+    }
+    std::memcpy(pboStagingBuffer_.data(), mapped, static_cast<size_t>(byteCount));
+    const bool unmapOk = extra->glUnmapBuffer(GL_PIXEL_PACK_BUFFER) == GL_TRUE;
+    extra->glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    if (!unmapOk) {
+        if (errorMessage != nullptr) {
+            *errorMessage = QStringLiteral("failed to unmap Quick export readback PBO");
+        }
+        return false;
+    }
+
+    startConvertWorkerIfNeeded();
+    {
+        std::lock_guard<std::mutex> lock(convertMutex_);
+        convertJobInputBytes_ = reinterpret_cast<const uchar*>(pboStagingBuffer_.constData());
+        convertJobInputBytesPerRow_ = bytesPerRow;
+        convertJobImageSize_ = safeSize;
+        convertJobOutputFrame_ = QImage();
+        convertJobSucceeded_ = false;
+        convertJobErrorMessage_.clear();
+        convertJobPending_ = true;
+        convertJobDone_ = false;
+        convertJobInFlight_ = true;
+    }
+    convertSubmitCv_.notify_one();
+    return true;
+}
+
+bool PreviewQuickExportSession::waitForPendingConvertJob(QImage* output, QString* errorMessage)
+{
+    std::unique_lock<std::mutex> lock(convertMutex_);
+    if (!convertJobInFlight_) {
+        if (output != nullptr) {
+            *output = QImage();
+        }
+        return true;
+    }
+    convertDoneCv_.wait(lock, [this]() { return convertJobDone_; });
+    convertJobDone_ = false;
+    convertJobInFlight_ = false;
+    if (!convertJobSucceeded_) {
+        if (errorMessage != nullptr) {
+            *errorMessage = convertJobErrorMessage_;
+        }
+        if (output != nullptr) {
+            *output = QImage();
+        }
+        return false;
+    }
+    if (output != nullptr) {
+        *output = std::move(convertJobOutputFrame_);
+    }
+    convertJobOutputFrame_ = QImage();
     return true;
 }
 

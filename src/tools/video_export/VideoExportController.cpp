@@ -48,6 +48,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <deque>
 #include <functional>
 #include <optional>
 
@@ -850,7 +851,7 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
     VideoExportQuickRenderBackend* exportBackend,
     bool* useOffscreenGpu,
     bool* useOffscreenPboReadback,
-    PendingPboFrame* pendingPboFrame,
+    std::deque<PendingPboFrame>* pendingPboFrames,
     const QSize& frameSize,
     int frameIndex,
     double exportSecond,
@@ -864,7 +865,7 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
     if (exportBackend == nullptr
         || useOffscreenGpu == nullptr
         || useOffscreenPboReadback == nullptr
-        || pendingPboFrame == nullptr
+        || pendingPboFrames == nullptr
         || readyFrame == nullptr) {
         return ExportFrameRenderStatus::Failed;
     }
@@ -892,22 +893,32 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
         const qint64 renderNs = frameTimer.nsecsElapsed();
         if (pboStepOk) {
             usedOffscreenPath = true;
-            const bool producedReadyFrame = completedFrameReady && pendingPboFrame->valid;
+            // Two pending slots in steady state since the convert worker
+            // adds an extra frame of pipeline depth on top of the PBO
+            // ping-pong: oldest entry = frame whose worker job just
+            // finished and is being returned to us in completedFrame;
+            // newer entry = frame currently in a PBO awaiting either
+            // worker submission or readback finalisation.
+            const bool producedReadyFrame = completedFrameReady && !pendingPboFrames->empty();
             if (producedReadyFrame) {
+                PendingPboFrame oldest = std::move(pendingPboFrames->front());
+                pendingPboFrames->pop_front();
                 *readyFrame = buildReadyFramePayload(
                     exportBackend,
-                    pendingPboFrame->frameIndex,
-                    pendingPboFrame->exportSecond,
-                    std::move(pendingPboFrame->traceItems),
+                    oldest.frameIndex,
+                    oldest.exportSecond,
+                    std::move(oldest.traceItems),
                     std::move(completedFrame),
                     renderNs,
                     true
                 );
             }
-            pendingPboFrame->valid = true;
-            pendingPboFrame->frameIndex = frameIndex;
-            pendingPboFrame->exportSecond = exportSecond;
-            pendingPboFrame->traceItems = std::move(traceItems);
+            PendingPboFrame newPending;
+            newPending.valid = true;
+            newPending.frameIndex = frameIndex;
+            newPending.exportSecond = exportSecond;
+            newPending.traceItems = std::move(traceItems);
+            pendingPboFrames->push_back(std::move(newPending));
             return producedReadyFrame ? ExportFrameRenderStatus::Ready : ExportFrameRenderStatus::Deferred;
         }
 
@@ -945,7 +956,7 @@ ExportFrameRenderStatus renderExportFrameWithConfiguredBackend(
 
 bool drainPendingExportFrame(
     VideoExportQuickRenderBackend* exportBackend,
-    PendingPboFrame* pendingPboFrame,
+    std::deque<PendingPboFrame>* pendingPboFrames,
     const QSize& frameSize,
     bool showTimestamp,
     bool showObjectStatsHud,
@@ -953,7 +964,8 @@ bool drainPendingExportFrame(
     QString* errorMessage
 )
 {
-    if (exportBackend == nullptr || pendingPboFrame == nullptr || readyFrame == nullptr || !pendingPboFrame->valid) {
+    if (exportBackend == nullptr || pendingPboFrames == nullptr || readyFrame == nullptr
+        || pendingPboFrames->empty()) {
         if (errorMessage != nullptr) {
             *errorMessage = QStringLiteral("no pending PBO frame to drain");
         }
@@ -968,7 +980,7 @@ bool drainPendingExportFrame(
     QString drainError;
     const bool drainOk = exportBackend->renderOverlayFrameOffscreenPboStep(
         frameSize,
-        pendingPboFrame->exportSecond,
+        pendingPboFrames->front().exportSecond,
         showTimestamp,
         showObjectStatsHud,
         &drainedFrame,
@@ -983,18 +995,17 @@ bool drainPendingExportFrame(
         return false;
     }
 
+    PendingPboFrame oldest = std::move(pendingPboFrames->front());
+    pendingPboFrames->pop_front();
     *readyFrame = buildReadyFramePayload(
         exportBackend,
-        pendingPboFrame->frameIndex,
-        pendingPboFrame->exportSecond,
-        std::move(pendingPboFrame->traceItems),
+        oldest.frameIndex,
+        oldest.exportSecond,
+        std::move(oldest.traceItems),
         std::move(drainedFrame),
         frameTimer.nsecsElapsed(),
         true
     );
-    pendingPboFrame->valid = false;
-    pendingPboFrame->frameIndex = -1;
-    pendingPboFrame->exportSecond = 0.0;
     return true;
 }
 
@@ -3764,7 +3775,12 @@ VideoExportResult VideoExportController::exportPreparedTask(
         );
     }
 
-    PendingPboFrame pendingPboFrame;
+    // Two pending slots are needed in steady state: one frame queued in
+    // a PBO awaiting GPU readback, and one frame submitted to the
+    // convert worker. The for-loop below pushes a new pending entry per
+    // iteration and pops the oldest one as renderFramePboStep returns
+    // it; the post-loop drain steps walk the deque to zero.
+    std::deque<PendingPboFrame> pendingPboFrames;
     QImage convertedRgbaFrame;
     QByteArray packedFrameScratch;
 
@@ -4278,7 +4294,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
             &exportCanvas,
             &useOffscreenGpu,
             &useOffscreenPboReadback,
-            &pendingPboFrame,
+            &pendingPboFrames,
             frameSize,
             frameIndex,
             exportSecond,
@@ -4310,12 +4326,13 @@ VideoExportResult VideoExportController::exportPreparedTask(
         }
     }
 
-    if (useOffscreenPboReadback && pendingPboFrame.valid) {
+    while (useOffscreenPboReadback && !pendingPboFrames.empty()) {
+        const int drainFrameIndex = pendingPboFrames.front().frameIndex;
         ReadyFramePayload readyFrame;
         QString drainError;
         if (!drainPendingExportFrame(
                 &exportCanvas,
-                &pendingPboFrame,
+                &pendingPboFrames,
                 frameSize,
                 task.showTimestamp,
                 task.showObjectStatsHud,
@@ -4329,7 +4346,7 @@ VideoExportResult VideoExportController::exportPreparedTask(
             appendVideoExportLog(
                 QStringLiteral("fail_render_frame"),
                 QStringLiteral("frame=%1 offscreen=1 drain=1 error=%2")
-                    .arg(pendingPboFrame.frameIndex)
+                    .arg(drainFrameIndex)
                     .arg(drainError.isEmpty() ? QStringLiteral("unknown") : drainError)
             );
             return result;

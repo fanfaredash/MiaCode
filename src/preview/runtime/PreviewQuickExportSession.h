@@ -8,6 +8,11 @@
 #include <QSurfaceFormat>
 #include <QtGui/qopengl.h>
 
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
 #include "core/scene/PreviewFrameState.h"
 #include "core/scene/PreviewLayerOrder.h"
 
@@ -81,6 +86,11 @@ private:
     );
     bool ensureOffscreenReadbackPbos(const QSize& imageSize, QString* errorMessage);
     bool mapOffscreenReadbackPbo(int pboIndex, const QSize& imageSize, QImage* frame, QString* errorMessage);
+    bool mapPboAndSubmitConvertJob(int pboIndex, const QSize& imageSize, QString* errorMessage);
+    bool waitForPendingConvertJob(QImage* output, QString* errorMessage);
+    void startConvertWorkerIfNeeded();
+    void stopConvertWorker();
+    void convertWorkerLoop();
     bool renderSceneIntoFramebuffer(QString* errorMessage);
     bool ensureContextCurrent(QString* errorMessage);
     void destroyFramebuffer();
@@ -123,4 +133,27 @@ private:
     miacode::preview::scene::PreviewRenderLayerFlags appliedLayerFlags_ =
         miacode::preview::scene::kPreviewAllRenderLayers;
     PreviewQuickExportRenderStats lastRenderStats_;
+
+    // Convert worker — see the implementation comment in
+    // renderFramePboStep for the 2-frame defer it introduces. The
+    // staging buffer is the producer-side scratch into which the PBO
+    // bytes get memcpy'd before the worker is woken up; while the
+    // worker is reading from it, the producer must not overwrite it,
+    // and the renderFramePboStep flow guarantees that by waiting for
+    // the prior job before triggering the next memcpy.
+    QByteArray pboStagingBuffer_;
+    std::thread convertThread_;
+    std::mutex convertMutex_;
+    std::condition_variable convertSubmitCv_;
+    std::condition_variable convertDoneCv_;
+    std::atomic<bool> convertStop_{false};
+    bool convertJobPending_ = false;
+    bool convertJobDone_ = false;
+    bool convertJobInFlight_ = false;
+    bool convertJobSucceeded_ = false;
+    const uchar* convertJobInputBytes_ = nullptr;
+    qsizetype convertJobInputBytesPerRow_ = 0;
+    QSize convertJobImageSize_;
+    QImage convertJobOutputFrame_;
+    QString convertJobErrorMessage_;
 };
