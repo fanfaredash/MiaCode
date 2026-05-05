@@ -44,6 +44,7 @@ qreal touchLogicalOffsetForDelta(
 qreal muriFlashOpacity(double flashSecond, double playheadSeconds);
 qreal maimuriDxJudgeFadeOutAlpha(qreal elapsedSeconds, qreal lifetimeSeconds, qreal fadeOutStartSeconds);
 qreal maimuriDxSimpleJudgeAlpha(qreal elapsedSeconds, qreal lifetimeSeconds, qreal fadeOutStartSeconds, qreal fadeInSeconds);
+qreal maimuriDxSlideJudgeAlpha(qreal elapsedSeconds, qreal lifetimeSeconds, qreal fadeInEndSeconds, qreal fadeOutStartSeconds, qreal fadeOutEndSeconds);
 TapApproachSample sampleTapApproach(
     qreal deltaSeconds,
     qreal tapLifecycleDurationSeconds,

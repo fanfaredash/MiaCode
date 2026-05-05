@@ -16,6 +16,16 @@ namespace miacode::preview::scene {
 inline constexpr qreal kMaimuriDxJudgeLifetimeSeconds = static_cast<qreal>(90.0 / miacode::muri::kJudgeTps);
 inline constexpr qreal kMaimuriDxJudgeFadeOutStartSeconds = static_cast<qreal>(45.0 / miacode::muri::kJudgeTps);
 inline constexpr qreal kMaimuriDxSimpleJudgeFadeInSeconds = static_cast<qreal>(22.5 / miacode::muri::kJudgeTps);
+// Slide-OK timing matches MajdataPlay StarOver.anim modern variant (60 fps keyframes: fade-in 0..2, hold 2..17, fade-out 17..25, lifetime gate 30).
+inline constexpr qreal kMaimuriDxSlideJudgeLifetimeSeconds = static_cast<qreal>(90.0 / miacode::muri::kJudgeTps);
+inline constexpr qreal kMaimuriDxSlideJudgeFadeInEndSeconds = static_cast<qreal>(6.0 / miacode::muri::kJudgeTps);
+inline constexpr qreal kMaimuriDxSlideJudgeFadeOutStartSeconds = static_cast<qreal>(51.0 / miacode::muri::kJudgeTps);
+inline constexpr qreal kMaimuriDxSlideJudgeFadeOutEndSeconds = static_cast<qreal>(75.0 / miacode::muri::kJudgeTps);
+// Bound for culling/cache windows: must cover the longest-lived judge kind so per-kind alpha curves can finish naturally.
+inline constexpr qreal kMaimuriDxJudgeMaxLifetimeSeconds =
+    kMaimuriDxJudgeLifetimeSeconds > kMaimuriDxSlideJudgeLifetimeSeconds
+        ? kMaimuriDxJudgeLifetimeSeconds
+        : kMaimuriDxSlideJudgeLifetimeSeconds;
 inline constexpr qreal kMaimuriDxJudgeSimpleWidthLogical = 112.0;
 inline constexpr qreal kMaimuriDxJudgeStraightWidthLogical = 214.0;
 inline constexpr qreal kMaimuriDxJudgeCircleWidthLogical = 205.0;

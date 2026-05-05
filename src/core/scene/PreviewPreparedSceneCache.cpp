@@ -331,7 +331,7 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
         chartReviewLayer_.entries.append(PreviewPreparedChartReviewEntry{
             event,
             event.second,
-            event.second + kMaimuriDxJudgeLifetimeSeconds
+            event.second + kMaimuriDxJudgeMaxLifetimeSeconds
         });
     }
 
@@ -340,7 +340,7 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
         PreviewPreparedMaimuriDxJudgeEntry entry;
         entry.event = event;
         entry.activeStart = qMax(event.second, event.spawnSecond);
-        entry.activeEnd = event.second + kMaimuriDxJudgeLifetimeSeconds;
+        entry.activeEnd = event.second + kMaimuriDxJudgeMaxLifetimeSeconds;
         if (!event.markerKey.isEmpty()) {
             const auto it = markerIndexByKey.constFind(event.markerKey);
             if (it != markerIndexByKey.constEnd()) {

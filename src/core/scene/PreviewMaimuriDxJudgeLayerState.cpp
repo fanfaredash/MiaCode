@@ -61,7 +61,7 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
         }
 
         const qreal elapsedSeconds = static_cast<qreal>(state.playheadSeconds - event.second);
-        if (elapsedSeconds < 0.0 || elapsedSeconds > kMaimuriDxJudgeLifetimeSeconds) {
+        if (elapsedSeconds < 0.0 || elapsedSeconds > kMaimuriDxJudgeMaxLifetimeSeconds) {
             continue;
         }
 
@@ -107,47 +107,57 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
             image = useRightImage
                 ? &state.judgeOverlay.fastGood.straightRightImage
                 : &state.judgeOverlay.fastGood.straightLeftImage;
-            alpha = maimuriDxJudgeFadeOutAlpha(
+            alpha = maimuriDxSlideJudgeAlpha(
                 elapsedSeconds,
-                kMaimuriDxJudgeLifetimeSeconds,
-                kMaimuriDxJudgeFadeOutStartSeconds
+                kMaimuriDxSlideJudgeLifetimeSeconds,
+                kMaimuriDxSlideJudgeFadeInEndSeconds,
+                kMaimuriDxSlideJudgeFadeOutStartSeconds,
+                kMaimuriDxSlideJudgeFadeOutEndSeconds
             );
             break;
         }
         case MuriJudgeSpriteKind::SlideCircleCcw:
             placement = buildJudgeOverlayCircleCcwPlacement(event.lane);
             image = &state.judgeOverlay.fastGood.circleLeftImage;
-            alpha = maimuriDxJudgeFadeOutAlpha(
+            alpha = maimuriDxSlideJudgeAlpha(
                 elapsedSeconds,
-                kMaimuriDxJudgeLifetimeSeconds,
-                kMaimuriDxJudgeFadeOutStartSeconds
+                kMaimuriDxSlideJudgeLifetimeSeconds,
+                kMaimuriDxSlideJudgeFadeInEndSeconds,
+                kMaimuriDxSlideJudgeFadeOutStartSeconds,
+                kMaimuriDxSlideJudgeFadeOutEndSeconds
             );
             break;
         case MuriJudgeSpriteKind::SlideCircleCw:
             placement = buildJudgeOverlayCircleCwPlacement(event.lane);
             image = &state.judgeOverlay.fastGood.circleRightImage;
-            alpha = maimuriDxJudgeFadeOutAlpha(
+            alpha = maimuriDxSlideJudgeAlpha(
                 elapsedSeconds,
-                kMaimuriDxJudgeLifetimeSeconds,
-                kMaimuriDxJudgeFadeOutStartSeconds
+                kMaimuriDxSlideJudgeLifetimeSeconds,
+                kMaimuriDxSlideJudgeFadeInEndSeconds,
+                kMaimuriDxSlideJudgeFadeOutStartSeconds,
+                kMaimuriDxSlideJudgeFadeOutEndSeconds
             );
             break;
         case MuriJudgeSpriteKind::WifiUp:
             placement = buildJudgeOverlayWifiPlacement(event.lane, true);
             image = &state.judgeOverlay.fastGood.wifiUpImage;
-            alpha = maimuriDxJudgeFadeOutAlpha(
+            alpha = maimuriDxSlideJudgeAlpha(
                 elapsedSeconds,
-                kMaimuriDxJudgeLifetimeSeconds,
-                kMaimuriDxJudgeFadeOutStartSeconds
+                kMaimuriDxSlideJudgeLifetimeSeconds,
+                kMaimuriDxSlideJudgeFadeInEndSeconds,
+                kMaimuriDxSlideJudgeFadeOutStartSeconds,
+                kMaimuriDxSlideJudgeFadeOutEndSeconds
             );
             break;
         case MuriJudgeSpriteKind::WifiDown:
             placement = buildJudgeOverlayWifiPlacement(event.lane, false);
             image = &state.judgeOverlay.fastGood.wifiDownImage;
-            alpha = maimuriDxJudgeFadeOutAlpha(
+            alpha = maimuriDxSlideJudgeAlpha(
                 elapsedSeconds,
-                kMaimuriDxJudgeLifetimeSeconds,
-                kMaimuriDxJudgeFadeOutStartSeconds
+                kMaimuriDxSlideJudgeLifetimeSeconds,
+                kMaimuriDxSlideJudgeFadeInEndSeconds,
+                kMaimuriDxSlideJudgeFadeOutStartSeconds,
+                kMaimuriDxSlideJudgeFadeOutEndSeconds
             );
             break;
         }

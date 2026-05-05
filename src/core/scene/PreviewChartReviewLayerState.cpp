@@ -155,7 +155,7 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
     sprites.reserve(events.size());
     for (const PreviewChartReviewPreparedEvent& event : events) {
         const qreal elapsedSeconds = static_cast<qreal>(state.playheadSeconds - event.second);
-        if (elapsedSeconds < 0.0 || elapsedSeconds > kMaimuriDxJudgeLifetimeSeconds) {
+        if (elapsedSeconds < 0.0 || elapsedSeconds > kMaimuriDxJudgeMaxLifetimeSeconds) {
             continue;
         }
 
@@ -191,50 +191,62 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
         }
         case PreviewChartReviewPreparedKind::StraightLeft:
             image = &state.judgeOverlay.neutral.straightLeftImage;
-            alpha = maimuriDxJudgeFadeOutAlpha(
+            alpha = maimuriDxSlideJudgeAlpha(
                 elapsedSeconds,
-                kMaimuriDxJudgeLifetimeSeconds,
-                kMaimuriDxJudgeFadeOutStartSeconds
+                kMaimuriDxSlideJudgeLifetimeSeconds,
+                kMaimuriDxSlideJudgeFadeInEndSeconds,
+                kMaimuriDxSlideJudgeFadeOutStartSeconds,
+                kMaimuriDxSlideJudgeFadeOutEndSeconds
             );
             break;
         case PreviewChartReviewPreparedKind::StraightRight:
             image = &state.judgeOverlay.neutral.straightRightImage;
-            alpha = maimuriDxJudgeFadeOutAlpha(
+            alpha = maimuriDxSlideJudgeAlpha(
                 elapsedSeconds,
-                kMaimuriDxJudgeLifetimeSeconds,
-                kMaimuriDxJudgeFadeOutStartSeconds
+                kMaimuriDxSlideJudgeLifetimeSeconds,
+                kMaimuriDxSlideJudgeFadeInEndSeconds,
+                kMaimuriDxSlideJudgeFadeOutStartSeconds,
+                kMaimuriDxSlideJudgeFadeOutEndSeconds
             );
             break;
         case PreviewChartReviewPreparedKind::CircleLeft:
             image = &state.judgeOverlay.neutral.circleLeftImage;
-            alpha = maimuriDxJudgeFadeOutAlpha(
+            alpha = maimuriDxSlideJudgeAlpha(
                 elapsedSeconds,
-                kMaimuriDxJudgeLifetimeSeconds,
-                kMaimuriDxJudgeFadeOutStartSeconds
+                kMaimuriDxSlideJudgeLifetimeSeconds,
+                kMaimuriDxSlideJudgeFadeInEndSeconds,
+                kMaimuriDxSlideJudgeFadeOutStartSeconds,
+                kMaimuriDxSlideJudgeFadeOutEndSeconds
             );
             break;
         case PreviewChartReviewPreparedKind::CircleRight:
             image = &state.judgeOverlay.neutral.circleRightImage;
-            alpha = maimuriDxJudgeFadeOutAlpha(
+            alpha = maimuriDxSlideJudgeAlpha(
                 elapsedSeconds,
-                kMaimuriDxJudgeLifetimeSeconds,
-                kMaimuriDxJudgeFadeOutStartSeconds
+                kMaimuriDxSlideJudgeLifetimeSeconds,
+                kMaimuriDxSlideJudgeFadeInEndSeconds,
+                kMaimuriDxSlideJudgeFadeOutStartSeconds,
+                kMaimuriDxSlideJudgeFadeOutEndSeconds
             );
             break;
         case PreviewChartReviewPreparedKind::WifiUp:
             image = &state.judgeOverlay.neutral.wifiUpImage;
-            alpha = maimuriDxJudgeFadeOutAlpha(
+            alpha = maimuriDxSlideJudgeAlpha(
                 elapsedSeconds,
-                kMaimuriDxJudgeLifetimeSeconds,
-                kMaimuriDxJudgeFadeOutStartSeconds
+                kMaimuriDxSlideJudgeLifetimeSeconds,
+                kMaimuriDxSlideJudgeFadeInEndSeconds,
+                kMaimuriDxSlideJudgeFadeOutStartSeconds,
+                kMaimuriDxSlideJudgeFadeOutEndSeconds
             );
             break;
         case PreviewChartReviewPreparedKind::WifiDown:
             image = &state.judgeOverlay.neutral.wifiDownImage;
-            alpha = maimuriDxJudgeFadeOutAlpha(
+            alpha = maimuriDxSlideJudgeAlpha(
                 elapsedSeconds,
-                kMaimuriDxJudgeLifetimeSeconds,
-                kMaimuriDxJudgeFadeOutStartSeconds
+                kMaimuriDxSlideJudgeLifetimeSeconds,
+                kMaimuriDxSlideJudgeFadeInEndSeconds,
+                kMaimuriDxSlideJudgeFadeOutStartSeconds,
+                kMaimuriDxSlideJudgeFadeOutEndSeconds
             );
             break;
         }
