@@ -93,8 +93,9 @@ PreviewSpriteDescriptors buildPreviewMaimuriDxJudgeLayerSprites(
             alpha = maimuriDxSimpleJudgeAlpha(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,
+                kMaimuriDxSimpleJudgeFadeInSeconds,
                 kMaimuriDxJudgeFadeOutStartSeconds,
-                kMaimuriDxSimpleJudgeFadeInSeconds
+                kMaimuriDxSimpleJudgeFadeOutEndSeconds
             );
             break;
         }

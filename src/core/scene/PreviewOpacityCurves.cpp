@@ -146,35 +146,30 @@ qreal muriFlashOpacity(double flashSecond, double playheadSeconds)
     return qBound<qreal>(0.0, 0.45 * (1.0 - elapsed / kFlashDurationSeconds), 0.45);
 }
 
-qreal maimuriDxJudgeFadeOutAlpha(qreal elapsedSeconds, qreal lifetimeSeconds, qreal fadeOutStartSeconds)
+qreal maimuriDxSimpleJudgeAlpha(qreal elapsedSeconds, qreal lifetimeSeconds, qreal fadeInEndSeconds, qreal fadeOutStartSeconds, qreal fadeOutEndSeconds)
 {
     if (elapsedSeconds < 0.0 || elapsedSeconds > lifetimeSeconds) {
         return 0.0;
+    }
+    if (elapsedSeconds < fadeInEndSeconds) {
+        return qBound<qreal>(
+            0.0,
+            elapsedSeconds / qMax<qreal>(miacode::preview::scene::kRenderDurationEpsilon, fadeInEndSeconds),
+            1.0
+        );
     }
     if (elapsedSeconds <= fadeOutStartSeconds) {
         return 1.0;
     }
+    if (elapsedSeconds >= fadeOutEndSeconds) {
+        return 0.0;
+    }
     return qBound<qreal>(
         0.0,
         1.0 - (elapsedSeconds - fadeOutStartSeconds)
-            / qMax<qreal>(miacode::preview::scene::kRenderDurationEpsilon, lifetimeSeconds - fadeOutStartSeconds),
+            / qMax<qreal>(miacode::preview::scene::kRenderDurationEpsilon, fadeOutEndSeconds - fadeOutStartSeconds),
         1.0
     );
-}
-
-qreal maimuriDxSimpleJudgeAlpha(qreal elapsedSeconds, qreal lifetimeSeconds, qreal fadeOutStartSeconds, qreal fadeInSeconds)
-{
-    if (elapsedSeconds < 0.0 || elapsedSeconds > lifetimeSeconds) {
-        return 0.0;
-    }
-    if (elapsedSeconds < fadeInSeconds) {
-        return qBound<qreal>(
-            0.0,
-            elapsedSeconds / qMax<qreal>(miacode::preview::scene::kRenderDurationEpsilon, fadeInSeconds),
-            1.0
-        );
-    }
-    return maimuriDxJudgeFadeOutAlpha(elapsedSeconds, lifetimeSeconds, fadeOutStartSeconds);
 }
 
 qreal maimuriDxSlideJudgeAlpha(qreal elapsedSeconds, qreal lifetimeSeconds, qreal fadeInEndSeconds, qreal fadeOutStartSeconds, qreal fadeOutEndSeconds)

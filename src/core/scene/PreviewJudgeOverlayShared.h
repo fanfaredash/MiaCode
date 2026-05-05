@@ -13,9 +13,11 @@ struct TimelineNoteMarker;
 
 namespace miacode::preview::scene {
 
-inline constexpr qreal kMaimuriDxJudgeLifetimeSeconds = static_cast<qreal>(90.0 / miacode::muri::kJudgeTps);
-inline constexpr qreal kMaimuriDxJudgeFadeOutStartSeconds = static_cast<qreal>(45.0 / miacode::muri::kJudgeTps);
-inline constexpr qreal kMaimuriDxSimpleJudgeFadeInSeconds = static_cast<qreal>(22.5 / miacode::muri::kJudgeTps);
+// Judge text alpha curve matches MajdataPlay JudgePerfect.anim m_Color.a on JudgeCPNormal (60 fps keys: hold 0..10, fade-out 10..16, lifetime gate 21). Scale-pop entrance is not modelled.
+inline constexpr qreal kMaimuriDxJudgeLifetimeSeconds = static_cast<qreal>(63.0 / miacode::muri::kJudgeTps);
+inline constexpr qreal kMaimuriDxJudgeFadeOutStartSeconds = static_cast<qreal>(30.0 / miacode::muri::kJudgeTps);
+inline constexpr qreal kMaimuriDxSimpleJudgeFadeInSeconds = 0.0;
+inline constexpr qreal kMaimuriDxSimpleJudgeFadeOutEndSeconds = static_cast<qreal>(48.0 / miacode::muri::kJudgeTps);
 // Slide-OK timing matches MajdataPlay StarOver.anim modern variant (60 fps keyframes: fade-in 0..2, hold 2..17, fade-out 17..25, lifetime gate 30).
 inline constexpr qreal kMaimuriDxSlideJudgeLifetimeSeconds = static_cast<qreal>(90.0 / miacode::muri::kJudgeTps);
 inline constexpr qreal kMaimuriDxSlideJudgeFadeInEndSeconds = static_cast<qreal>(6.0 / miacode::muri::kJudgeTps);

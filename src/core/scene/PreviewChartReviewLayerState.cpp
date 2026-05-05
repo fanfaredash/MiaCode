@@ -184,8 +184,9 @@ PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(
             alpha = maimuriDxSimpleJudgeAlpha(
                 elapsedSeconds,
                 kMaimuriDxJudgeLifetimeSeconds,
+                kMaimuriDxSimpleJudgeFadeInSeconds,
                 kMaimuriDxJudgeFadeOutStartSeconds,
-                kMaimuriDxSimpleJudgeFadeInSeconds
+                kMaimuriDxSimpleJudgeFadeOutEndSeconds
             );
             break;
         }
