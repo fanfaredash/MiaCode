@@ -180,10 +180,15 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
             preview.value("show_chart_review_slide_judge_overlay")
                 .toBool(state_.muriRenderOptions_.showChartReviewSlideJudgeOverlay);
     }
-    if (preview.value("show_chart_review_simple_judge_overlay").isBool()) {
-        state_.muriRenderOptions_.showChartReviewSimpleJudgeOverlay =
-            preview.value("show_chart_review_simple_judge_overlay")
-                .toBool(state_.muriRenderOptions_.showChartReviewSimpleJudgeOverlay);
+    if (preview.value("show_chart_review_tap_judge_overlay").isBool()) {
+        state_.muriRenderOptions_.showChartReviewTapJudgeOverlay =
+            preview.value("show_chart_review_tap_judge_overlay")
+                .toBool(state_.muriRenderOptions_.showChartReviewTapJudgeOverlay);
+    }
+    if (preview.value("show_chart_review_touch_judge_overlay").isBool()) {
+        state_.muriRenderOptions_.showChartReviewTouchJudgeOverlay =
+            preview.value("show_chart_review_touch_judge_overlay")
+                .toBool(state_.muriRenderOptions_.showChartReviewTouchJudgeOverlay);
     }
     if (preview.value("wifi_need_c").isBool()) {
         state_.muriRenderOptions_.wifiNeedC = preview.value("wifi_need_c").toBool(state_.muriRenderOptions_.wifiNeedC);
@@ -338,7 +343,8 @@ void MainWindow::EditorSection::savePortableState() const
             : QStringLiteral("native")
     );
     preview.insert("show_chart_review_slide_judge_overlay", state_.muriRenderOptions_.showChartReviewSlideJudgeOverlay);
-    preview.insert("show_chart_review_simple_judge_overlay", state_.muriRenderOptions_.showChartReviewSimpleJudgeOverlay);
+    preview.insert("show_chart_review_tap_judge_overlay", state_.muriRenderOptions_.showChartReviewTapJudgeOverlay);
+    preview.insert("show_chart_review_touch_judge_overlay", state_.muriRenderOptions_.showChartReviewTouchJudgeOverlay);
     preview.insert("wifi_need_c", state_.muriRenderOptions_.wifiNeedC);
     preview.insert("background_brightness", state_.previewBackgroundBrightnessOuter_);
     preview.insert("background_brightness_outer", state_.previewBackgroundBrightnessOuter_);

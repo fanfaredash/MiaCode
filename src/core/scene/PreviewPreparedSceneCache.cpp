@@ -128,7 +128,8 @@ bool PreviewPreparedSceneCache::sync(const PreviewFrameState& state)
     nextKey.showSlideTracks = state.muriRenderOptions.showSlideTracks;
     nextKey.slideEarlierSecondAndTextOnTop = state.render.slideEarlierSecondAndTextOnTop;
     nextKey.showChartReviewSlideJudgeOverlay = state.muriRenderOptions.showChartReviewSlideJudgeOverlay;
-    nextKey.showChartReviewSimpleJudgeOverlay = state.muriRenderOptions.showChartReviewSimpleJudgeOverlay;
+    nextKey.showChartReviewTapJudgeOverlay = state.muriRenderOptions.showChartReviewTapJudgeOverlay;
+    nextKey.showChartReviewTouchJudgeOverlay = state.muriRenderOptions.showChartReviewTouchJudgeOverlay;
 
     if (key_ == nextKey) {
         return false;
@@ -324,7 +325,8 @@ void PreviewPreparedSceneCache::rebuild(const PreviewFrameState& state)
     const PreviewChartReviewPreparedEvents chartReviewEvents = buildPreviewChartReviewPreparedEvents(
         state.noteMarkers,
         state.muriRenderOptions.showChartReviewSlideJudgeOverlay,
-        state.muriRenderOptions.showChartReviewSimpleJudgeOverlay
+        state.muriRenderOptions.showChartReviewTapJudgeOverlay,
+        state.muriRenderOptions.showChartReviewTouchJudgeOverlay
     );
     chartReviewLayer_.entries.reserve(chartReviewEvents.size());
     for (const PreviewChartReviewPreparedEvent& event : chartReviewEvents) {

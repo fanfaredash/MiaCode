@@ -652,32 +652,83 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
         owner_.savePortableState();
     });
     skinButton->setMenu(skinMenu);
-    const QString enabledLabel = uiText("dialog.render_settings.option.enabled", "Enabled");
     const QString disabledLabel = uiText("dialog.render_settings.option.disabled", "Disabled");
-    auto* slideJudgeEffectButton = createDialogMenuButton(
-        gameplayGroup,
-        owner_.muriRenderOptions_.showChartReviewSlideJudgeOverlay ? enabledLabel : disabledLabel
-    );
-    slideJudgeEffectButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    auto* slideJudgeEffectMenu = new QMenu(slideJudgeEffectButton);
-    styleRoundedMenu(*slideJudgeEffectMenu);
-    const auto setSlideJudgeEffectEnabled = [this, slideJudgeEffectButton, enabledLabel, disabledLabel](bool enabled) {
-        slideJudgeEffectButton->setText(enabled ? enabledLabel : disabledLabel);
-        if (owner_.muriRenderOptions_.showChartReviewSlideJudgeOverlay == enabled) {
-            return;
+    const QString slideJudgeChoiceLabel = uiText("dialog.render_settings.gameplay.judge_effect.slide", "slide");
+    const QString tapJudgeChoiceLabel = uiText("dialog.render_settings.gameplay.judge_effect.tap", "tap");
+    const QString touchJudgeChoiceLabel = uiText("dialog.render_settings.gameplay.judge_effect.touch", "touch");
+    const auto judgeEffectButtonLabel = [
+        this,
+        slideJudgeChoiceLabel,
+        tapJudgeChoiceLabel,
+        touchJudgeChoiceLabel,
+        disabledLabel
+    ]() {
+        QStringList parts;
+        if (owner_.muriRenderOptions_.showChartReviewSlideJudgeOverlay) {
+            parts.append(slideJudgeChoiceLabel);
         }
-        owner_.muriRenderOptions_.showChartReviewSlideJudgeOverlay = enabled;
-        owner_.applyMuriRenderOptions();
-        owner_.saveProjectRenderState();
-        owner_.savePortableState();
+        if (owner_.muriRenderOptions_.showChartReviewTapJudgeOverlay) {
+            parts.append(tapJudgeChoiceLabel);
+        }
+        if (owner_.muriRenderOptions_.showChartReviewTouchJudgeOverlay) {
+            parts.append(touchJudgeChoiceLabel);
+        }
+        return parts.isEmpty() ? disabledLabel : parts.join(QStringLiteral(", "));
     };
-    addDialogMenuChoice(slideJudgeEffectMenu, enabledLabel, [setSlideJudgeEffectEnabled]() {
-        setSlideJudgeEffectEnabled(true);
-    });
-    addDialogMenuChoice(slideJudgeEffectMenu, disabledLabel, [setSlideJudgeEffectEnabled]() {
-        setSlideJudgeEffectEnabled(false);
-    });
-    slideJudgeEffectButton->setMenu(slideJudgeEffectMenu);
+    auto* judgeEffectButton = createDialogMenuButton(gameplayGroup, judgeEffectButtonLabel());
+    judgeEffectButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto* judgeEffectMenu = new QMenu(judgeEffectButton);
+    styleRoundedMenu(*judgeEffectMenu);
+    // QCheckBox-in-QWidgetAction so the menu stays open during multi-selection (regular QActions auto-close).
+    const auto addJudgeEffectChoice = [
+        this,
+        &dialog,
+        judgeEffectButton,
+        judgeEffectButtonLabel,
+        judgeEffectMenu
+    ](const QString& label, bool MuriRenderOptions::*memberPtr) {
+        auto* action = new QWidgetAction(judgeEffectMenu);
+        auto* checkbox = new QCheckBox(label, judgeEffectMenu);
+        checkbox->setChecked(owner_.muriRenderOptions_.*memberPtr);
+        checkbox->setCursor(Qt::PointingHandCursor);
+        const auto& c = UiTheme::colors();
+        checkbox->setStyleSheet(
+            QStringLiteral(
+                "QCheckBox {"
+                " color: %1;"
+                " background: transparent;"
+                " padding: 6px 20px 6px 12px;"
+                "}"
+                "QCheckBox:hover {"
+                " background: %2;"
+                " border-radius: 6px;"
+                "}"
+            )
+                .arg(c.textPrimary.name(QColor::HexRgb))
+                .arg(c.menuHoverBg.name(QColor::HexRgb))
+        );
+        QObject::connect(
+            checkbox,
+            &QCheckBox::toggled,
+            &dialog,
+            [this, judgeEffectButton, judgeEffectButtonLabel, memberPtr](bool checked) {
+                if (owner_.muriRenderOptions_.*memberPtr == checked) {
+                    return;
+                }
+                owner_.muriRenderOptions_.*memberPtr = checked;
+                judgeEffectButton->setText(judgeEffectButtonLabel());
+                owner_.applyMuriRenderOptions();
+                owner_.saveProjectRenderState();
+                owner_.savePortableState();
+            }
+        );
+        action->setDefaultWidget(checkbox);
+        judgeEffectMenu->addAction(action);
+    };
+    addJudgeEffectChoice(slideJudgeChoiceLabel, &MuriRenderOptions::showChartReviewSlideJudgeOverlay);
+    addJudgeEffectChoice(tapJudgeChoiceLabel, &MuriRenderOptions::showChartReviewTapJudgeOverlay);
+    addJudgeEffectChoice(touchJudgeChoiceLabel, &MuriRenderOptions::showChartReviewTouchJudgeOverlay);
+    judgeEffectButton->setMenu(judgeEffectMenu);
     const QString judgeLinePointLabel = uiText("dialog.render_settings.gameplay.judge_line.point", "Point");
     const QString judgeLineLineLabel = uiText("dialog.render_settings.gameplay.judge_line.line", "Line");
     const QString judgeLineAreaLabel = uiText("dialog.render_settings.gameplay.judge_line.area", "Judge Area");
@@ -865,14 +916,14 @@ void MainWindow::DialogsSection::openPreviewSettingsDialog(bool includeAudioSett
     addGameplayField(
         1,
         1,
-        uiText("dialog.render_settings.gameplay.slide_judge_effect", "Slide Judge Effect"),
-        slideJudgeEffectButton
+        uiText("dialog.render_settings.gameplay.judge_line", "Judge Line"),
+        judgeLineButton
     );
     addGameplayField(
         2,
         0,
-        uiText("dialog.render_settings.gameplay.judge_line", "Judge Line"),
-        judgeLineButton
+        uiText("dialog.render_settings.gameplay.judge_effect", "Judge Effect"),
+        judgeEffectButton
     );
     addGameplayField(
         2,

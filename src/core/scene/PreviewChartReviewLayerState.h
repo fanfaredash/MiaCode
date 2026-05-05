@@ -28,7 +28,8 @@ using PreviewChartReviewPreparedEvents = QVector<PreviewChartReviewPreparedEvent
 PreviewChartReviewPreparedEvents buildPreviewChartReviewPreparedEvents(
     const QVector<TimelineNoteMarker>& noteMarkers,
     bool showSlideJudgeOverlay,
-    bool showSimpleJudgeOverlay
+    bool showTapJudgeOverlay,
+    bool showTouchJudgeOverlay
 );
 
 PreviewSpriteDescriptors buildPreviewChartReviewLayerSprites(

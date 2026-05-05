@@ -181,8 +181,12 @@ QJsonObject VideoExportSnapshot::toJson() const
         muriRenderOptions.showChartReviewSlideJudgeOverlay
     );
     render.insert(
-        QStringLiteral("show_chart_review_simple_judge_overlay"),
-        muriRenderOptions.showChartReviewSimpleJudgeOverlay
+        QStringLiteral("show_chart_review_tap_judge_overlay"),
+        muriRenderOptions.showChartReviewTapJudgeOverlay
+    );
+    render.insert(
+        QStringLiteral("show_chart_review_touch_judge_overlay"),
+        muriRenderOptions.showChartReviewTouchJudgeOverlay
     );
     render.insert(QStringLiteral("wifi_need_c"), muriRenderOptions.wifiNeedC);
     render.insert(QStringLiteral("static_tap_on_slide_threshold_seconds"), staticTapOnSlideThresholdSeconds);
@@ -280,9 +284,12 @@ bool VideoExportSnapshot::fromJson(
     parsed.muriRenderOptions.showChartReviewSlideJudgeOverlay =
         render.value(QStringLiteral("show_chart_review_slide_judge_overlay"))
             .toBool(parsed.muriRenderOptions.showChartReviewSlideJudgeOverlay);
-    parsed.muriRenderOptions.showChartReviewSimpleJudgeOverlay =
-        render.value(QStringLiteral("show_chart_review_simple_judge_overlay"))
-            .toBool(parsed.muriRenderOptions.showChartReviewSimpleJudgeOverlay);
+    parsed.muriRenderOptions.showChartReviewTapJudgeOverlay =
+        render.value(QStringLiteral("show_chart_review_tap_judge_overlay"))
+            .toBool(parsed.muriRenderOptions.showChartReviewTapJudgeOverlay);
+    parsed.muriRenderOptions.showChartReviewTouchJudgeOverlay =
+        render.value(QStringLiteral("show_chart_review_touch_judge_overlay"))
+            .toBool(parsed.muriRenderOptions.showChartReviewTouchJudgeOverlay);
     parsed.muriRenderOptions.wifiNeedC =
         render.value(QStringLiteral("wifi_need_c")).toBool(parsed.muriRenderOptions.wifiNeedC);
     parsed.muriRenderOptions.excludeTouchFromMultiTouch = true;

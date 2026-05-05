@@ -165,10 +165,15 @@ void MainWindow::EditorSection::loadProjectRenderState()
                             render.value("show_chart_review_slide_judge_overlay")
                                 .toBool(state_.muriRenderOptions_.showChartReviewSlideJudgeOverlay);
                     }
-                    if (render.value("show_chart_review_simple_judge_overlay").isBool()) {
-                        state_.muriRenderOptions_.showChartReviewSimpleJudgeOverlay =
-                            render.value("show_chart_review_simple_judge_overlay")
-                                .toBool(state_.muriRenderOptions_.showChartReviewSimpleJudgeOverlay);
+                    if (render.value("show_chart_review_tap_judge_overlay").isBool()) {
+                        state_.muriRenderOptions_.showChartReviewTapJudgeOverlay =
+                            render.value("show_chart_review_tap_judge_overlay")
+                                .toBool(state_.muriRenderOptions_.showChartReviewTapJudgeOverlay);
+                    }
+                    if (render.value("show_chart_review_touch_judge_overlay").isBool()) {
+                        state_.muriRenderOptions_.showChartReviewTouchJudgeOverlay =
+                            render.value("show_chart_review_touch_judge_overlay")
+                                .toBool(state_.muriRenderOptions_.showChartReviewTouchJudgeOverlay);
                     }
                     if (render.value("wifi_need_c").isBool()) {
                         state_.muriRenderOptions_.wifiNeedC =
@@ -337,7 +342,8 @@ void MainWindow::EditorSection::saveProjectRenderState() const
     }
     render.insert("render_mode", renderModeToken(state_.muriRenderOptions_.renderMode));
     render.insert("show_chart_review_slide_judge_overlay", state_.muriRenderOptions_.showChartReviewSlideJudgeOverlay);
-    render.insert("show_chart_review_simple_judge_overlay", state_.muriRenderOptions_.showChartReviewSimpleJudgeOverlay);
+    render.insert("show_chart_review_tap_judge_overlay", state_.muriRenderOptions_.showChartReviewTapJudgeOverlay);
+    render.insert("show_chart_review_touch_judge_overlay", state_.muriRenderOptions_.showChartReviewTouchJudgeOverlay);
     render.insert("wifi_need_c", state_.muriRenderOptions_.wifiNeedC);
     render.insert("canvas_frame_rate_mode", owner_.previewCanvasFrameRateModeStorageValue());
     render.insert(
