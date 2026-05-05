@@ -16,8 +16,8 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
 )
 {
     PreviewTouchLayerState layerState;
-    QHash<quint64, int> overlapCounts;
-    overlapCounts.reserve(16);
+    QHash<quint64, QVector<int>> sensorMarkers;
+    sensorMarkers.reserve(16);
     const PreviewTouchTiming touchTiming =
         previewTouchTimingForFlowSpeed(static_cast<qreal>(state.render.touchFlowSpeed));
 
@@ -30,7 +30,14 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
         if (deltaSeconds <= -touchTiming.durationSeconds || deltaSeconds >= 0.0) {
             continue;
         }
-        overlapCounts[touchRegionKey(marker)] += 1;
+        sensorMarkers[touchRegionKey(marker)].append(markerIndex);
+    }
+    // Order each sensor's marker list by hit time ascending so [0] = front (earliest hit),
+    // [1] = next-up (drives border_2 sprite variant), [2] = third (drives border_3 variant).
+    for (auto it = sensorMarkers.begin(); it != sensorMarkers.end(); ++it) {
+        std::sort(it->begin(), it->end(), [&markers](int a, int b) {
+            return markers.markerAt(a).second < markers.markerAt(b).second;
+        });
     }
 
     const qreal canvasScale = playfieldRect.width() / kLogicalCanvasSize;
@@ -80,10 +87,6 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
             (marker.isBreak && !state.skin.touchCornerBreakImage.isNull())
                 ? state.skin.touchCornerBreakImage
                 : ((marker.isEach && !state.skin.touchCornerEachImage.isNull()) ? state.skin.touchCornerEachImage : state.skin.touchCornerImage);
-        const QImage* border2Image =
-            marker.isBreak ? &state.skin.touchBorder2BreakImage : (marker.isEach ? &state.skin.touchBorder2EachImage : &state.skin.touchBorder2Image);
-        const QImage* border3Image =
-            marker.isBreak ? &state.skin.touchBorder3BreakImage : (marker.isEach ? &state.skin.touchBorder3EachImage : &state.skin.touchBorder3Image);
         if (basePointImage.isNull() || baseCornerImage.isNull()) {
             continue;
         }
@@ -105,7 +108,8 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
             touchTiming.closeDurationSeconds
         );
         const qreal offset = mapLogicalLengthToRect(logicalOffset, playfieldRect);
-        const int overlapCount = overlapCounts.value(touchRegionKey(marker), 0);
+        const QVector<int>& sensorList = sensorMarkers.value(touchRegionKey(marker));
+        const bool isFrontOnSensor = !sensorList.isEmpty() && sensorList.first() == markerIndex;
 
         const qreal pointWidth = qMax<qreal>(1.0, qRound(basePointImage.width() * kTouchAssetScale * canvasScale));
         const qreal pointHeight = qMax<qreal>(1.0, qRound(basePointImage.height() * kTouchAssetScale * canvasScale));
@@ -134,25 +138,45 @@ PreviewTouchLayerState buildPreviewTouchLayerState(
                 cornerImageCacheable
             );
         }
-        if (overlapCount >= kTouchOverlapBorder2Threshold && border2Image != nullptr && !border2Image->isNull()) {
-            appendSprite(
-                border2Image,
-                point,
-                qMax<qreal>(1.0, qRound(border2Image->width() * kTouchAssetScale * canvasScale)),
-                qMax<qreal>(1.0, qRound(border2Image->height() * kTouchAssetScale * canvasScale)),
-                0.0,
-                alpha
-            );
-        }
-        if (overlapCount >= kTouchOverlapBorder3Threshold && border3Image != nullptr && !border3Image->isNull()) {
-            appendSprite(
-                border3Image,
-                point,
-                qMax<qreal>(1.0, qRound(border3Image->width() * kTouchAssetScale * canvasScale)),
-                qMax<qreal>(1.0, qRound(border3Image->height() * kTouchAssetScale * canvasScale)),
-                0.0,
-                alpha
-            );
+        // Per-sensor borders: emitted only on the front (earliest-hit) marker's iteration so each
+        // sensor gets at most one border_2 / border_3 (matches MajdataPlay's per-sensor TouchBorder).
+        // Variant follows queue[1] / queue[2]'s flags — the next/third upcoming touch — and alpha
+        // pops to 1.0 instantly rather than tracking the front touch's pre-hit fade.
+        if (isFrontOnSensor && sensorList.size() >= kTouchOverlapBorder2Threshold) {
+            const TimelineNoteMarker& secondMarker = markers.markerAt(sensorList.at(1));
+            const QImage* secondBorder2 = secondMarker.isBreak
+                ? &state.skin.touchBorder2BreakImage
+                : (secondMarker.isEach
+                    ? &state.skin.touchBorder2EachImage
+                    : &state.skin.touchBorder2Image);
+            if (secondBorder2 != nullptr && !secondBorder2->isNull()) {
+                appendSprite(
+                    secondBorder2,
+                    point,
+                    qMax<qreal>(1.0, qRound(secondBorder2->width() * kTouchAssetScale * canvasScale)),
+                    qMax<qreal>(1.0, qRound(secondBorder2->height() * kTouchAssetScale * canvasScale)),
+                    0.0,
+                    1.0
+                );
+            }
+            if (sensorList.size() >= kTouchOverlapBorder3Threshold) {
+                const TimelineNoteMarker& thirdMarker = markers.markerAt(sensorList.at(2));
+                const QImage* thirdBorder3 = thirdMarker.isBreak
+                    ? &state.skin.touchBorder3BreakImage
+                    : (thirdMarker.isEach
+                        ? &state.skin.touchBorder3EachImage
+                        : &state.skin.touchBorder3Image);
+                if (thirdBorder3 != nullptr && !thirdBorder3->isNull()) {
+                    appendSprite(
+                        thirdBorder3,
+                        point,
+                        qMax<qreal>(1.0, qRound(thirdBorder3->width() * kTouchAssetScale * canvasScale)),
+                        qMax<qreal>(1.0, qRound(thirdBorder3->height() * kTouchAssetScale * canvasScale)),
+                        0.0,
+                        1.0
+                    );
+                }
+            }
         }
         appendSprite(&basePointImage, point, pointWidth, pointHeight, 0.0, alpha);
     }
