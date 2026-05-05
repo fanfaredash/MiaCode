@@ -20,10 +20,11 @@ constexpr double kTouchCanvasCenter = 270.0;
 constexpr double kLaneAngleBaseDegrees = -67.5;
 constexpr double kLaneAngleStepDegrees = 45.0;
 constexpr double kOuterLaneRadius = 430.0;
+// Ratios match MajdataPlay's NoteHelper.GetTouchAreaDistance (A 4.0, B 2.2, D 4.1, E 3.1).
 constexpr double kTouchDistanceA = 540.0 * 410.0 / 1080.0;
-constexpr double kTouchDistanceB = 540.0 * 220.0 / 1080.0;
-constexpr double kTouchDistanceD = 540.0 * 440.0 / 1080.0;
-constexpr double kTouchDistanceE = 540.0 * 310.0 / 1080.0;
+constexpr double kTouchDistanceB = kTouchDistanceA * 2.2 / 4.0;
+constexpr double kTouchDistanceD = kTouchDistanceA * 4.1 / 4.0;
+constexpr double kTouchDistanceE = kTouchDistanceA * 3.1 / 4.0;
 constexpr int kPathSampleCount = 33;
 constexpr double kJudgeTps = 180.0;
 constexpr double kTapOnSlideThresholdSeconds = 1.0 / kJudgeTps;
