@@ -81,6 +81,8 @@ public:
     void restorePlayheadIndicatorForQuickSurface(bool immediate = false);
     void setFollowPreviewEnabled(bool enabled);
     bool followPreviewEnabled() const;
+    void setFollowProgressEnabled(bool enabled);
+    bool followProgressEnabled() const;
     void setPresentationMode(PresentationMode mode);
     PresentationMode presentationMode() const;
     int zoomPresetIndex() const;
@@ -96,6 +98,7 @@ signals:
     void timelineDragFinished(double second);
     void timelineUserInteractionStarted();
     void followPreviewToggled(bool enabled);
+    void followProgressToggled(bool enabled);
     void previewPlayPauseRequested();
     void renderStateChanged();
 
@@ -213,6 +216,7 @@ private:
     std::shared_ptr<const miacode::waveform::WaveformData> waveformData_;
     QToolButton* zoomButton_ = nullptr;
     QCheckBox* followPreviewCheckBox_ = nullptr;
+    QCheckBox* followProgressCheckBox_ = nullptr;
     QFont headerLineNumberFont_;
     QVector<double> zoomPresets_;
     QVector<double> buttonZoomPresets_;

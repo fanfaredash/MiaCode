@@ -443,6 +443,11 @@ void MainWindow::WindowSection::shellTimelineFollowPreviewToggled(bool enabled)
     owner_.timelineSection_->onTimelineFollowPreviewToggled(enabled);
 }
 
+void MainWindow::WindowSection::shellTimelineFollowProgressToggled(bool enabled)
+{
+    owner_.timelineSection_->onTimelineFollowProgressToggled(enabled);
+}
+
 bool MainWindow::WindowSection::shellHasShortcut(const QKeySequence& sequence) const
 {
     if (sequence.isEmpty()) {
@@ -936,4 +941,3 @@ void MainWindow::WindowSection::updateBottomTabsDeviceHeight()
         owner_.previewLeftColumn_->updateGeometry();
     }
 }
-

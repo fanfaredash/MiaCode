@@ -1397,12 +1397,13 @@ void MainWindow::TimelineSection::applyQtPreviewPosition(double second, bool cen
     const double timelineCadenceSeconds =
         static_cast<double>(qMax<qint64>(1, timelineTargetFrameIntervalNs())) / 1000000000.0;
     state_.qtPreviewPauseSecond_ = second;
+    const bool timelineShouldCenter = centerView && (!state_.qtPreviewPlaying_ || state_.previewProgressFollowEnabled_);
     if (!state_.qtPreviewPlaying_
         && state_.timelineQuickStateBridge_ != nullptr
         && (state_.qtPreviewLastTimelineSecond_ < 0.0
             || qAbs(second - state_.qtPreviewLastTimelineSecond_) >= timelineCadenceSeconds)) {
         state_.qtPreviewPendingTimelineSecond_ = second;
-        state_.qtPreviewPendingTimelineCenterView_ = state_.qtPreviewPendingTimelineCenterView_ || centerView;
+        state_.qtPreviewPendingTimelineCenterView_ = state_.qtPreviewPendingTimelineCenterView_ || timelineShouldCenter;
         state_.qtPreviewTimelineDirty_ = true;
         if (quickTimelineBridgeReady) {
             flushQtPreviewTimelinePosition();
@@ -1451,7 +1452,7 @@ void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()
             return;
         }
         const double second = qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond());
-        state_.timelineQuickStateBridge_->setPlayheadSeconds(second, true);
+        state_.timelineQuickStateBridge_->setPlayheadSeconds(second, state_.previewProgressFollowEnabled_);
         state_.timelineQuickStateBridge_->focusPlayhead(false);
         state_.qtPreviewLastTimelineSecond_ = second;
         // Follow-preview cursor sync runs on the timeline tick (throttled to timeline target

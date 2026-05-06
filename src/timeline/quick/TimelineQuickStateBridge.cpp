@@ -765,6 +765,20 @@ void TimelineQuickStateBridge::setFollowPreviewEnabled(bool enabled)
     emit renderStateChanged();
 }
 
+bool TimelineQuickStateBridge::followProgressEnabled() const
+{
+    return followProgressEnabled_;
+}
+
+void TimelineQuickStateBridge::setFollowProgressEnabled(bool enabled)
+{
+    if (followProgressEnabled_ == enabled) {
+        return;
+    }
+    followProgressEnabled_ = enabled;
+    emit renderStateChanged();
+}
+
 bool TimelineQuickStateBridge::playheadIndicatorSuppressed() const
 {
     return playheadIndicatorSuppressed_;

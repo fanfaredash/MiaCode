@@ -59,6 +59,8 @@ public:
     void setShowSlideTracks(bool show);
     bool followPreviewEnabled() const;
     void setFollowPreviewEnabled(bool enabled);
+    bool followProgressEnabled() const;
+    void setFollowProgressEnabled(bool enabled);
     bool playheadIndicatorSuppressed() const;
     void suppressPlayheadIndicator();
     void restorePlayheadIndicator(bool immediate = false);
@@ -102,6 +104,7 @@ private:
     double cursorSeconds_ = 0.0;
     bool showSlideTracks_ = true;
     bool followPreviewEnabled_ = false;
+    bool followProgressEnabled_ = true;
     bool playheadIndicatorSuppressed_ = false;
     miacode::timeline::TimelineSceneLayoutMetrics layoutMetrics_;
     bool layoutMetricsValid_ = false;

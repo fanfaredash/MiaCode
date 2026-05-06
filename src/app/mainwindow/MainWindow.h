@@ -178,6 +178,7 @@ public:
     void shellTimelineUserInteractionStarted() override;
     void shellTimelineSurfaceReady() override;
     void shellTimelineFollowPreviewToggled(bool enabled) override;
+    void shellTimelineFollowProgressToggled(bool enabled) override;
     bool shellHasShortcut(const QKeySequence& sequence) const override;
     bool shellTriggerShortcut(const QKeySequence& sequence) override;
     QString shellWindowTitle() const override;

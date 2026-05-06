@@ -676,10 +676,6 @@ void MainWindow::TimelineSection::onTimelineHeaderNavigateRequested(double secon
 
 void MainWindow::TimelineSection::onTimelineUserInteractionStarted()
 {
-    if (state_.qtPreviewPlaying_) {
-        pauseQtPreviewPlaybackExact();
-        owner_.updatePauseButtonAppearance();
-    }
 }
 
 void MainWindow::TimelineSection::onTimelineDragStarted()
@@ -702,29 +698,15 @@ void MainWindow::TimelineSection::onTimelineDragStarted()
 
 void MainWindow::TimelineSection::onTimelineCenterNavigateRequested(double second)
 {
-    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
-    const int elapsedMs = state_.previewScrubRenderElapsed_.isValid()
-        ? static_cast<int>(state_.previewScrubRenderElapsed_.elapsed())
-        : -1;
-    const bool shouldRenderNow = !state_.previewScrubRenderElapsed_.isValid()
-        || elapsedMs >= kPreviewScrubRenderIntervalMs;
-    if (shouldRenderNow) {
-        owner_.ensurePreviewStageMediaRouteInitialized();
-        owner_.ensurePreviewSfxRuntimePrepared();
-        requestPausedPreviewSeek(clampedSecond, false, false, false);
-        state_.previewScrubRenderElapsed_.restart();
-    } else {
-        schedulePreviewSeek(clampedSecond, false);
-    }
+    Q_UNUSED(second);
 }
 
 void MainWindow::TimelineSection::onTimelineWheelNavigateRequested(double second)
 {
-    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    Q_UNUSED(second);
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
         ui_.previewSeekDebounceTimer_->stop();
     }
-    seekPreviewToSecond(clampedSecond, false);
 }
 
 void MainWindow::TimelineSection::onTimelineDragFinished(double second)
@@ -736,14 +718,13 @@ void MainWindow::TimelineSection::onTimelineDragFinished(double second)
     stopPreviewHeldSeek();
     QToolTip::hideText();
     state_.previewScrubRenderElapsed_.invalidate();
-    const double clampedSecond = qBound(0.0, second, previewDurationSeconds());
+    Q_UNUSED(second);
     if (state_.previewFullscreenActive_) {
         owner_.showPreviewFullscreenControls(false);
     }
     if (ui_.previewSeekDebounceTimer_ != nullptr) {
         ui_.previewSeekDebounceTimer_->stop();
     }
-    seekPreviewToSecond(clampedSecond, false);
 }
 
 void MainWindow::TimelineSection::onTimelineFollowPreviewToggled(bool enabled)
@@ -761,6 +742,19 @@ void MainWindow::TimelineSection::onTimelineFollowPreviewToggled(bool enabled)
     }
     const double second = qMax(0.0, owner_.currentPreviewAuthoritativeAudioClockSecond());
     syncEditorCursorToPreviewSecond(second, false, !state_.qtPreviewPlaying_);
+}
+
+void MainWindow::TimelineSection::onTimelineFollowProgressToggled(bool enabled)
+{
+    state_.previewProgressFollowEnabled_ = enabled;
+    if (state_.timelineQuickStateBridge_ != nullptr) {
+        state_.timelineQuickStateBridge_->setFollowProgressEnabled(enabled);
+    }
+    if (ui_.timelineView_ != nullptr) {
+        ui_.timelineView_->setFollowProgressEnabled(enabled);
+    }
+    owner_.savePortableState();
+    owner_.saveProjectRenderState();
 }
 
 void MainWindow::TimelineSection::applyLatestTimelinePreviewStateToPausedPreview()

@@ -244,8 +244,8 @@ TimelineView::TimelineView(QWidget* parent)
     followPreviewCheckBox_->setCursor(Qt::PointingHandCursor);
     followPreviewCheckBox_->setText(
         UiText::isChineseUi()
-            ? QStringLiteral("\u8ddf\u968f\u9884\u89c8")
-            : QStringLiteral("Follow Preview")
+            ? QStringLiteral("\u5149\u6807\u8ddf\u968f")
+            : QStringLiteral("Cursor Follow")
     );
     followPreviewCheckBox_->setToolTip(
         UiText::isChineseUi()
@@ -257,6 +257,25 @@ TimelineView::TimelineView(QWidget* parent)
             stateBridge_->setFollowPreviewEnabled(enabled);
         }
         emit followPreviewToggled(enabled);
+    });
+    followProgressCheckBox_ = new QCheckBox(this);
+    followProgressCheckBox_->setCursor(Qt::PointingHandCursor);
+    followProgressCheckBox_->setText(
+        UiText::isChineseUi()
+            ? QStringLiteral("\u8fdb\u5ea6\u8ddf\u968f")
+            : QStringLiteral("Progress Follow")
+    );
+    followProgressCheckBox_->setToolTip(
+        UiText::isChineseUi()
+            ? QStringLiteral("\u64ad\u653e\u4e2d\u8ba9\u65f6\u95f4\u8f74\u89c6\u56fe\u8ddf\u968f\u9884\u89c8\u8fdb\u5ea6\u7ebf")
+            : QStringLiteral("During playback, keep the timeline view centered on the preview progress line")
+    );
+    followProgressCheckBox_->setChecked(true);
+    connect(followProgressCheckBox_, &QCheckBox::toggled, this, [this](bool enabled) {
+        if (stateBridge_ != nullptr && !applyingBridgeState_) {
+            stateBridge_->setFollowProgressEnabled(enabled);
+        }
+        emit followProgressToggled(enabled);
     });
 
     headerLineNumberFont_ = QFontDatabase::systemFont(QFontDatabase::FixedFont);
@@ -347,6 +366,10 @@ void TimelineView::applyStateFromBridge()
         const QSignalBlocker blocker(followPreviewCheckBox_);
         followPreviewCheckBox_->setChecked(stateBridge_->followPreviewEnabled());
     }
+    if (followProgressCheckBox_ != nullptr) {
+        const QSignalBlocker blocker(followProgressCheckBox_);
+        followProgressCheckBox_->setChecked(stateBridge_->followProgressEnabled());
+    }
     updateDisplayBounds();
     updateHorizontalRange();
     if (horizontalScrollBar() != nullptr) {
@@ -397,6 +420,15 @@ void TimelineView::refreshTheme()
     }
     if (followPreviewCheckBox_ != nullptr) {
         followPreviewCheckBox_->setStyleSheet(
+            UiTheme::timelineCheckBoxStyleSheet()
+            + QStringLiteral(
+                "QCheckBox { spacing: 4px; }"
+                "QCheckBox::indicator { width: 14px; height: 14px; }"
+            )
+        );
+    }
+    if (followProgressCheckBox_ != nullptr) {
+        followProgressCheckBox_->setStyleSheet(
             UiTheme::timelineCheckBoxStyleSheet()
             + QStringLiteral(
                 "QCheckBox { spacing: 4px; }"
@@ -734,6 +766,12 @@ int TimelineView::minimumContentHeightForCurrentDevice() const
             qMax(followPreviewCheckBox_->minimumSizeHint().height(), followPreviewCheckBox_->sizeHint().height())
         );
     }
+    if (followProgressCheckBox_ != nullptr) {
+        controlBandHeight = qMax(
+            controlBandHeight,
+            qMax(followProgressCheckBox_->minimumSizeHint().height(), followProgressCheckBox_->sizeHint().height())
+        );
+    }
     if (!headerLineNumberFont_.family().isEmpty()) {
         controlBandHeight = qMax(controlBandHeight, QFontMetrics(headerLineNumberFont_).height());
     }
@@ -852,6 +890,25 @@ void TimelineView::setFollowPreviewEnabled(bool enabled)
 bool TimelineView::followPreviewEnabled() const
 {
     return followPreviewCheckBox_ != nullptr && followPreviewCheckBox_->isChecked();
+}
+
+void TimelineView::setFollowProgressEnabled(bool enabled)
+{
+    if (stateBridge_ != nullptr && !applyingBridgeState_) {
+        stateBridge_->setFollowProgressEnabled(enabled);
+        return;
+    }
+    if (followProgressCheckBox_ == nullptr) {
+        return;
+    }
+    const QSignalBlocker blocker(followProgressCheckBox_);
+    followProgressCheckBox_->setChecked(enabled);
+    emit renderStateChanged();
+}
+
+bool TimelineView::followProgressEnabled() const
+{
+    return followProgressCheckBox_ == nullptr || followProgressCheckBox_->isChecked();
 }
 
 void TimelineView::setPresentationMode(PresentationMode mode)

@@ -1127,12 +1127,10 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
         state.hasHeaderControls = true;
         // Phase 9d-native polish — use the application's default UI
         // font (matches the menu-bar font, including Chinese fallback
-        // chain) at the same pixel size the QML controls use, but at
-        // normal weight (the Follow Preview label looked too bold at
-        // DemiBold; the QML CheckBox actually shows up regular due to
-        // the system theme override).
+        // chain) at the same pixel size and weight the QML controls use.
         QFont controlFont;
         controlFont.setPixelSize(12);
+        controlFont.setWeight(QFont::DemiBold);
         const QFontMetricsF controlMetrics(controlFont);
         const int btnHeight = 22;
         const int btnY = qMax(0, (state.timelineTop - btnHeight) / 2);
@@ -1171,17 +1169,25 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
                 - kTimelineTextVerticalPadding);
         state.zoomButtonLabel = zoomLabel;
 
-        // ---- Follow check (right) ----
+        // ---- Follow checks (right) ----
         const QString followText = request.isChineseUi
-            ? QString::fromUtf8("跟随预览")
-            : QStringLiteral("Follow Preview");
+            ? QStringLiteral("\u5149\u6807\u8ddf\u968f")
+            : QStringLiteral("Cursor Follow");
+        const QString progressFollowText = request.isChineseUi
+            ? QStringLiteral("\u8fdb\u5ea6\u8ddf\u968f")
+            : QStringLiteral("Progress Follow");
         const qreal followTextW = controlMetrics.horizontalAdvance(followText);
+        const qreal progressFollowTextW = controlMetrics.horizontalAdvance(progressFollowText);
         const int followBoxSize = 14;
         const int followBoxToTextGap = 6;
         const int followTextRightPad = 4;  // air to the right of text
+        const int followCheckGap = 10;
         const int followTotalW = qRound(followBoxSize + followBoxToTextGap
                                         + followTextW + followTextRightPad);
-        const int followX = request.viewportSize.width() - 8 - followTotalW;
+        const int progressFollowTotalW = qRound(followBoxSize + followBoxToTextGap
+                                                + progressFollowTextW + followTextRightPad);
+        const int progressFollowX = request.viewportSize.width() - 8 - progressFollowTotalW;
+        const int followX = progressFollowX - followCheckGap - followTotalW;
         const int followBoxY = btnY + (btnHeight - followBoxSize) / 2;
         const QColor accent = theme.cursor;
         // Phase 9d-native polish — opaque backdrop covering indicator
@@ -1226,6 +1232,30 @@ TimelineSceneState TimelineSceneStateBuilder::build(const TimelineSceneBuildRequ
             btnY + (btnHeight - controlMetrics.height()) * 0.5
                 - kTimelineTextVerticalPadding);
         state.followCheckLabel = followLabel;
+        state.progressFollowCheckBg = TimelineSceneRect{
+            QRectF(progressFollowX, btnY, progressFollowTotalW, btnHeight),
+            followBgColor,
+        };
+        state.progressFollowCheckIndicator = TimelineSceneRect{
+            QRectF(progressFollowX, followBoxY, followBoxSize, followBoxSize),
+            request.followProgressEnabled ? accent : cardBg,
+        };
+        state.progressFollowCheckIndicatorBorder = TimelineSceneRect{
+            QRectF(progressFollowX, followBoxY, followBoxSize, followBoxSize),
+            request.followProgressEnabled ? accent : borderColor,
+        };
+        state.progressFollowCheckChecked = request.followProgressEnabled;
+        TimelineSceneTextLabel progressFollowLabel;
+        progressFollowLabel.text = progressFollowText;
+        progressFollowLabel.font = controlFont;
+        progressFollowLabel.color = theme.label;
+        progressFollowLabel.logicalSize = timelineTextLogicalSize(controlFont, progressFollowText);
+        progressFollowLabel.topLeft = QPointF(
+            progressFollowX + followBoxSize + followBoxToTextGap
+                - kTimelineTextHorizontalPadding,
+            btnY + (btnHeight - controlMetrics.height()) * 0.5
+                - kTimelineTextVerticalPadding);
+        state.progressFollowCheckLabel = progressFollowLabel;
     }
 
     return state;

@@ -285,16 +285,38 @@ void TimelineView::layoutHeaderButtons()
         if (followPreviewCheckBox_ != nullptr) {
             followPreviewCheckBox_->hide();
         }
+        if (followProgressCheckBox_ != nullptr) {
+            followProgressCheckBox_->hide();
+        }
         return;
     }
 
     const int leftBaseX = 4;
     const int rightMargin = 8;
+    const int controlGap = 10;
     int x = leftBaseX;
     if (zoomButton_ != nullptr) {
         zoomButton_->show();
         const int y = qMax(0, (timelineTop() - zoomButton_->height()) / 2);
         zoomButton_->move(x, y);
+    }
+    int rightX = viewport()->width() - rightMargin;
+    if (followProgressCheckBox_ != nullptr) {
+        followProgressCheckBox_->show();
+        followProgressCheckBox_->adjustSize();
+        const int checkBoxHeight = qMax(
+            followProgressCheckBox_->minimumSizeHint().height(),
+            followProgressCheckBox_->sizeHint().height()
+        );
+        const int checkBoxWidth = qMax(
+            followProgressCheckBox_->minimumSizeHint().width(),
+            followProgressCheckBox_->sizeHint().width()
+        );
+        followProgressCheckBox_->setFixedWidth(checkBoxWidth);
+        followProgressCheckBox_->setFixedHeight(checkBoxHeight);
+        const int y = qMax(0, (timelineTop() - followProgressCheckBox_->height()) / 2);
+        followProgressCheckBox_->move(qMax(leftBaseX, rightX - followProgressCheckBox_->width()), y);
+        rightX = followProgressCheckBox_->x() - controlGap;
     }
     if (followPreviewCheckBox_ != nullptr) {
         followPreviewCheckBox_->show();
@@ -310,8 +332,7 @@ void TimelineView::layoutHeaderButtons()
         followPreviewCheckBox_->setFixedWidth(checkBoxWidth);
         followPreviewCheckBox_->setFixedHeight(checkBoxHeight);
         const int y = qMax(0, (timelineTop() - followPreviewCheckBox_->height()) / 2);
-        const int rightX = qMax(leftBaseX, viewport()->width() - followPreviewCheckBox_->width() - rightMargin);
-        followPreviewCheckBox_->move(rightX, y);
+        followPreviewCheckBox_->move(qMax(leftBaseX, rightX - followPreviewCheckBox_->width()), y);
     }
 }
 

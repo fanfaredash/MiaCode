@@ -99,6 +99,7 @@ void MainWindow::EditorSection::loadPortableState()
             );
         }
         state_.timelineQuickStateBridge_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
+        state_.timelineQuickStateBridge_->setFollowProgressEnabled(state_.previewProgressFollowEnabled_);
     }
     owner_.refreshPreviewFrameRateTimers();
     owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
@@ -118,6 +119,7 @@ void MainWindow::EditorSection::resetPortablePreviewSettingsToDefaults()
     state_.showJudgeMarkers_ = false;
     state_.showTouchTrail_ = false;
     state_.previewFollowEnabled_ = false;
+    state_.previewProgressFollowEnabled_ = true;
     state_.muriRenderOptions_ = MuriRenderOptions();
     state_.staticTapOnSlideThresholdMs_ = miacode::muri::kStaticTapOnSlideThresholdDefaultMs;
     state_.previewBackgroundBrightnessOuter_ = miacode::preview_video::kBackgroundBrightnessDefault;
@@ -291,6 +293,9 @@ void MainWindow::EditorSection::applyPortablePreviewSettings(const QJsonObject& 
     if (preview.value("follow_preview").isBool()) {
         state_.previewFollowEnabled_ = preview.value("follow_preview").toBool(false);
     }
+    if (preview.value("follow_progress").isBool()) {
+        state_.previewProgressFollowEnabled_ = preview.value("follow_progress").toBool(true);
+    }
     const miacode::chart_transform::ChartNormalizationOptions normalizationOptions =
         miacode::chart_transform::chartNormalizationOptionsFromPreferences(
             preview,
@@ -377,6 +382,7 @@ void MainWindow::EditorSection::savePortableState() const
     preview.insert("show_object_stats_export", state_.exportShowObjectStatsHud_);
     preview.insert("show_validation_summary", state_.previewShowValidationSummary_);
     preview.insert("follow_preview", state_.previewFollowEnabled_);
+    preview.insert("follow_progress", state_.previewProgressFollowEnabled_);
     preview.insert(
         "timeline_zoom_scale",
         state_.timelineQuickStateBridge_ != nullptr ? state_.timelineQuickStateBridge_->zoomScale() : 0.5

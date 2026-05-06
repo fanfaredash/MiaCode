@@ -49,6 +49,7 @@ struct TimelineSceneBuildRequest {
     // because DWM stacks the popup HWND above the QQuickWindow's
     // surface and QML siblings can't paint above it.
     bool followPreviewEnabled = false;
+    bool followProgressEnabled = true;
     bool isChineseUi = false;
     quint64 appearanceRevision = 0;
     quint64 gridRevision = 0;

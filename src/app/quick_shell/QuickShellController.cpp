@@ -493,6 +493,15 @@ void QuickShellController::timelineFollowPreviewToggled(bool enabled)
     refreshFromStateSource();
 }
 
+void QuickShellController::timelineFollowProgressToggled(bool enabled)
+{
+    if (commandSink_ == nullptr) {
+        return;
+    }
+    commandSink_->shellTimelineFollowProgressToggled(enabled);
+    refreshFromStateSource();
+}
+
 bool QuickShellController::stepPreviewBySeconds(double deltaSeconds, bool centerView)
 {
     if (commandSink_ == nullptr) {

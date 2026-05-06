@@ -380,6 +380,7 @@
         bool showJudgeMarkers_ = false;
         bool showTouchTrail_ = false;
         bool previewFollowEnabled_ = false;
+        bool previewProgressFollowEnabled_ = true;
         MuriAnalysisReport muriAnalysisReport_;
         QVector<MuriStaticReference> muriStaticReferences_;
         MuriRenderOptions muriRenderOptions_;
@@ -702,6 +703,7 @@
     bool& showJudgeMarkers_ = state_.showJudgeMarkers_;
     bool& showTouchTrail_ = state_.showTouchTrail_;
     bool& previewFollowEnabled_ = state_.previewFollowEnabled_;
+    bool& previewProgressFollowEnabled_ = state_.previewProgressFollowEnabled_;
     MuriAnalysisReport& muriAnalysisReport_ = state_.muriAnalysisReport_;
     QVector<MuriStaticReference>& muriStaticReferences_ = state_.muriStaticReferences_;
     MuriRenderOptions& muriRenderOptions_ = state_.muriRenderOptions_;

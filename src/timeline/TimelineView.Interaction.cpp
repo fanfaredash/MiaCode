@@ -110,12 +110,7 @@ void TimelineView::mousePressEvent(QMouseEvent* event)
     timelineDragStartX_ = qRound(event->position().x());
     timelineDragStartScrollValue_ = horizontalScrollBar()->value();
     viewport()->setCursor(Qt::ClosedHandCursor);
-    suppressPlayheadIndicatorForInteraction();
     emit timelineDragStarted();
-    if (!playheadNearViewportCenter()) {
-        const double centerSecond = viewportCenterSecond();
-        emit centerNavigateRequested(centerSecond);
-    }
     appendTimelineUiPerfLog(
         QStringLiteral("kind=drag_begin scroll=%1 center_second=%2")
             .arg(horizontalScrollBar() != nullptr ? horizontalScrollBar()->value() : 0)
@@ -129,7 +124,6 @@ void TimelineView::mouseMoveEvent(QMouseEvent* event)
     if (event != nullptr && timelineDragActive_) {
         const int deltaX = qRound(event->position().x()) - timelineDragStartX_;
         setHorizontalScrollValue(timelineDragStartScrollValue_ - deltaX);
-        emit centerNavigateRequested(viewportCenterSecond());
         event->accept();
         return;
     }
@@ -141,7 +135,6 @@ void TimelineView::mouseReleaseEvent(QMouseEvent* event)
     if (event != nullptr && event->button() == Qt::LeftButton && timelineDragActive_) {
         timelineDragActive_ = false;
         viewport()->unsetCursor();
-        restorePlayheadIndicatorAfterInteraction(true);
         appendTimelineUiPerfLog(
             QStringLiteral("kind=drag_end scroll=%1 center_second=%2")
                 .arg(horizontalScrollBar() != nullptr ? horizontalScrollBar()->value() : 0)
@@ -168,10 +161,7 @@ void TimelineView::wheelEvent(QWheelEvent* event)
         setFocus(Qt::MouseFocusReason);
         emit timelineUserInteractionStarted();
         focusPlayhead(false);
-        suppressPlayheadIndicatorForInteraction();
         setHorizontalScrollValue(horizontalScrollBar()->value() - (delta / 2));
-        emit timelineWheelNavigateRequested(viewportCenterSecond());
-        restorePlayheadIndicatorAfterInteraction();
         event->accept();
         return;
     }

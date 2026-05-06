@@ -185,6 +185,11 @@ struct TimelineSceneState {
     bool followCheckChecked = false;
     TimelineSceneRect followCheckMark;         // tick mark when checked
     TimelineSceneTextLabel followCheckLabel;
+    TimelineSceneRect progressFollowCheckBg;
+    TimelineSceneRect progressFollowCheckIndicator;
+    TimelineSceneRect progressFollowCheckIndicatorBorder;
+    bool progressFollowCheckChecked = true;
+    TimelineSceneTextLabel progressFollowCheckLabel;
 };
 
 }  // namespace miacode::timeline

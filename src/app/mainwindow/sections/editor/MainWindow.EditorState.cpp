@@ -225,6 +225,10 @@ void MainWindow::EditorSection::loadProjectRenderState()
                         state_.previewFollowEnabled_ =
                             render.value("follow_preview").toBool(state_.previewFollowEnabled_);
                     }
+                    if (render.value("follow_progress").isBool()) {
+                        state_.previewProgressFollowEnabled_ =
+                            render.value("follow_progress").toBool(state_.previewProgressFollowEnabled_);
+                    }
                     if (render.value("timeline_zoom_scale").isDouble()) {
                         projectTimelineZoomScaleLoaded = true;
                         projectTimelineZoomScale = render.value("timeline_zoom_scale").toDouble(projectTimelineZoomScale);
@@ -270,6 +274,7 @@ void MainWindow::EditorSection::loadProjectRenderState()
             state_.timelineQuickStateBridge_->setZoomScale(projectTimelineZoomScale);
         }
         state_.timelineQuickStateBridge_->setFollowPreviewEnabled(state_.previewFollowEnabled_);
+        state_.timelineQuickStateBridge_->setFollowProgressEnabled(state_.previewProgressFollowEnabled_);
     }
     owner_.refreshPreviewFrameRateTimers();
     owner_.applyPreviewStageMediaRoutePlaybackRate(state_.previewPlaybackRate_);
@@ -356,6 +361,7 @@ void MainWindow::EditorSection::saveProjectRenderState() const
     render.insert("show_object_stats_export", state_.exportShowObjectStatsHud_);
     render.insert("show_validation_summary", state_.previewShowValidationSummary_);
     render.insert("follow_preview", state_.previewFollowEnabled_);
+    render.insert("follow_progress", state_.previewProgressFollowEnabled_);
     render.insert(
         "timeline_zoom_scale",
         state_.timelineQuickStateBridge_ != nullptr ? state_.timelineQuickStateBridge_->zoomScale() : 0.5

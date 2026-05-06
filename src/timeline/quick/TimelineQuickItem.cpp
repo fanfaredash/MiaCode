@@ -415,6 +415,28 @@ void TimelineQuickItem::setFollowPreviewEnabled(bool enabled)
     update();
 }
 
+bool TimelineQuickItem::followProgressEnabled() const
+{
+    return cachedFollowProgressEnabled_;
+}
+
+void TimelineQuickItem::setFollowProgressEnabled(bool enabled)
+{
+    const bool changed = cachedFollowProgressEnabled_ != enabled;
+    if (stateBridge_ != nullptr) {
+        stateBridge_->setFollowProgressEnabled(enabled);
+    }
+    if (!changed) {
+        return;
+    }
+    if (cachedFollowProgressEnabled_ != enabled) {
+        cachedFollowProgressEnabled_ = enabled;
+        emit followProgressEnabledChanged();
+    }
+    emit followProgressToggled(enabled);
+    update();
+}
+
 int TimelineQuickItem::timelineTop() const
 {
     return cachedTimelineTop_;
@@ -449,6 +471,7 @@ void TimelineQuickItem::syncSourceState()
 {
     const qreal nextZoom = stateBridge_ != nullptr ? stateBridge_->zoomScale() : 0.5;
     const bool nextFollow = stateBridge_ != nullptr && stateBridge_->followPreviewEnabled();
+    const bool nextProgressFollow = stateBridge_ == nullptr || stateBridge_->followProgressEnabled();
     const int nextTimelineTop = static_cast<int>(currentSceneState().timelineTop);
     if (!qFuzzyCompare(cachedZoomScale_ + 1.0, nextZoom + 1.0)) {
         cachedZoomScale_ = nextZoom;
@@ -457,6 +480,10 @@ void TimelineQuickItem::syncSourceState()
     if (cachedFollowPreviewEnabled_ != nextFollow) {
         cachedFollowPreviewEnabled_ = nextFollow;
         emit followPreviewEnabledChanged();
+    }
+    if (cachedFollowProgressEnabled_ != nextProgressFollow) {
+        cachedFollowProgressEnabled_ = nextProgressFollow;
+        emit followProgressEnabledChanged();
     }
     if (cachedTimelineTop_ != nextTimelineTop) {
         cachedTimelineTop_ = nextTimelineTop;
@@ -540,6 +567,7 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         // when some other revision happens to bump (e.g., a playback
         // tick), making the click feel unresponsive.
         || cachedSceneBuildFollowPreviewEnabled_ != stateBridge_->followPreviewEnabled()
+        || cachedSceneBuildFollowProgressEnabled_ != stateBridge_->followProgressEnabled()
         || !qFuzzyCompare(cachedSceneBuildZoomScale_ + 1.0,
                           stateBridge_->zoomScale() + 1.0);
     if (rebuildNeeded && miacode::debug_options::runtimeDebugOutputEnabled()) {
@@ -580,10 +608,11 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
     // Phase 9d-native — header-control state for native rendering of
     // the zoom button + follow checkbox in the DComp pipeline.
     request.followPreviewEnabled = stateBridge_->followPreviewEnabled();
+    request.followProgressEnabled = stateBridge_->followProgressEnabled();
     // Use the app's UI language selector (UiText::isChineseUi()) — not
     // the OS locale. A user with a Chinese OS who selected English in
-    // the preferences would otherwise still see "跟随预览" instead of
-    // "Follow Preview" on the timeline header.
+    // the preferences would otherwise still see Chinese labels instead of
+    // English labels on the timeline header.
     request.isChineseUi = UiText::isChineseUi();
     request.appearanceRevision = appearanceRevision_;
     request.gridRevision = stateBridge_->gridRevision();
@@ -608,6 +637,7 @@ miacode::timeline::TimelineSceneState TimelineQuickItem::currentSceneState() con
         // Phase 9d-native polish — record header-control state so the
         // next call's rebuildNeeded check can detect a change.
         cachedSceneBuildFollowPreviewEnabled_ = stateBridge_->followPreviewEnabled();
+        cachedSceneBuildFollowProgressEnabled_ = stateBridge_->followProgressEnabled();
         cachedSceneBuildZoomScale_ = stateBridge_->zoomScale();
     }
     if (rebuildNeeded && miacode::debug_options::runtimeDebugOutputEnabled()) {
@@ -847,10 +877,6 @@ void TimelineQuickItem::mousePressEvent(QMouseEvent* event)
     }
 
     emit timelineUserInteractionStarted();
-    if (!playheadNearViewportCenter()) {
-        const double centerSecond = viewportCenterSecondForScroll(stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0);
-        emit centerNavigateRequested(centerSecond);
-    }
     dragActive_ = true;
     dragStartX_ = qRound(event->position().x());
     dragStartScrollValue_ = stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0;
@@ -861,7 +887,6 @@ void TimelineQuickItem::mousePressEvent(QMouseEvent* event)
             .arg(dragStartScrollValue_));
     if (stateBridge_ != nullptr) {
         stateBridge_->focusPlayhead(false);
-        stateBridge_->suppressPlayheadIndicator();
     }
     emit timelineDragStarted();
     update();
@@ -877,7 +902,7 @@ void TimelineQuickItem::mouseMoveEvent(QMouseEvent* event)
     const int newScroll = dragStartScrollValue_ - (qRound(event->position().x()) - dragStartX_);
     stateBridge_->setHorizontalScrollValue(newScroll);
     const double centerSecond = viewportCenterSecondForScroll(stateBridge_->horizontalScrollValue());
-    emit centerNavigateRequested(centerSecond);
+    Q_UNUSED(centerSecond);
     event->accept();
 }
 
@@ -915,9 +940,6 @@ void TimelineQuickItem::mouseReleaseEvent(QMouseEvent* event)
 {
     if (event != nullptr && event->button() == Qt::LeftButton && dragActive_) {
         dragActive_ = false;
-        if (stateBridge_ != nullptr) {
-            stateBridge_->restorePlayheadIndicator(true);
-        }
         const double centerSecond = viewportCenterSecondForScroll(stateBridge_ != nullptr ? stateBridge_->horizontalScrollValue() : 0);
         appendTimelineQuickInteractionLog(
             QStringLiteral("drag_end"),
@@ -974,7 +996,6 @@ void TimelineQuickItem::wheelEvent(QWheelEvent* event)
 
     emit timelineUserInteractionStarted();
     stateBridge_->focusPlayhead(false);
-    stateBridge_->suppressPlayheadIndicator();
     stateBridge_->setHorizontalScrollValue(stateBridge_->horizontalScrollValue() - (delta / 2));
     const double centerSecond = viewportCenterSecondForScroll(stateBridge_->horizontalScrollValue());
     appendTimelineQuickInteractionLog(
@@ -982,8 +1003,7 @@ void TimelineQuickItem::wheelEvent(QWheelEvent* event)
         QString("scroll_after=%1 center_second=%2")
             .arg(stateBridge_->horizontalScrollValue())
             .arg(centerSecond, 0, 'f', 6));
-    emit timelineWheelNavigateRequested(centerSecond);
-    stateBridge_->restorePlayheadIndicator(false);
+    Q_UNUSED(centerSecond);
     event->accept();
 }
 

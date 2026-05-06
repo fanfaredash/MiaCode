@@ -45,7 +45,7 @@ Item {
         anchors.fill: parent
         stateBridge: controller ? controller.timelineStateBridge : null
         headerLeftLimit: zoomButton.x + zoomButton.width + 2
-        headerRightLimit: followCheck.x - 2
+        headerRightLimit: followPreviewCheck.x - 2
 
         onHeaderNavigateRequested: function(second) {
             if (controller)
@@ -78,6 +78,10 @@ Item {
         onFollowPreviewToggled: function(enabled) {
             if (controller)
                 controller.timelineFollowPreviewToggled(enabled)
+        }
+        onFollowProgressToggled: function(enabled) {
+            if (controller)
+                controller.timelineFollowProgressToggled(enabled)
         }
         onPreviewPlayPauseRequested: {
             if (controller)
@@ -185,14 +189,14 @@ Item {
     }
 
     CheckBox {
-        id: followCheck
+        id: followPreviewCheck
 
-        anchors.right: parent.right
-        anchors.rightMargin: 8
+        anchors.right: followProgressCheck.left
+        anchors.rightMargin: 10
         y: Math.max(0, (timelineItem.timelineTop - height) / 2)
         hoverEnabled: true
         spacing: 4
-        text: root.isChineseUi() ? "跟随预览" : "Follow Preview"
+        text: root.isChineseUi() ? "\u5149\u6807\u8ddf\u968f" : "Cursor Follow"
         checked: timelineItem.followPreviewEnabled
         // Phase 9d-native — invisible (DComp renders natively in the
         // popup composition plane) but still receives input. DComp
@@ -203,21 +207,21 @@ Item {
             implicitWidth: 14
             implicitHeight: 14
             x: 0
-            y: (followCheck.height - height) / 2
+            y: (followPreviewCheck.height - height) / 2
             radius: 3
-            color: followCheck.checked
+            color: followPreviewCheck.checked
                 ? root.tone("accent", "#60a5fa")
                 : root.tone("cardBg", "#1f2937")
             border.width: 1
-            border.color: followCheck.checked
+            border.color: followPreviewCheck.checked
                 ? root.tone("accent", "#60a5fa")
-                : (followCheck.hovered
+                : (followPreviewCheck.hovered
                     ? root.tone("accent", "#60a5fa")
                     : root.tone("border", "#475569"))
 
             Canvas {
                 anchors.fill: parent
-                visible: followCheck.checked
+                visible: followPreviewCheck.checked
 
                 onPaint: {
                     const ctx = getContext("2d")
@@ -236,14 +240,74 @@ Item {
         }
 
         contentItem: Text {
-            text: followCheck.text
+            text: followPreviewCheck.text
             color: root.tone("textPrimary", "#e5e7eb")
             font.weight: Font.DemiBold
             font.pixelSize: 12
             verticalAlignment: Text.AlignVCenter
-            leftPadding: followCheck.indicator.width + followCheck.spacing
+            leftPadding: followPreviewCheck.indicator.width + followPreviewCheck.spacing
         }
 
         onClicked: timelineItem.followPreviewEnabled = checked
+    }
+
+    CheckBox {
+        id: followProgressCheck
+
+        anchors.right: parent.right
+        anchors.rightMargin: 8
+        y: Math.max(0, (timelineItem.timelineTop - height) / 2)
+        hoverEnabled: true
+        spacing: 4
+        text: root.isChineseUi() ? "\u8fdb\u5ea6\u8ddf\u968f" : "Progress Follow"
+        checked: timelineItem.followProgressEnabled
+        opacity: 0
+
+        indicator: Rectangle {
+            implicitWidth: 14
+            implicitHeight: 14
+            x: 0
+            y: (followProgressCheck.height - height) / 2
+            radius: 3
+            color: followProgressCheck.checked
+                ? root.tone("accent", "#60a5fa")
+                : root.tone("cardBg", "#1f2937")
+            border.width: 1
+            border.color: followProgressCheck.checked
+                ? root.tone("accent", "#60a5fa")
+                : (followProgressCheck.hovered
+                    ? root.tone("accent", "#60a5fa")
+                    : root.tone("border", "#475569"))
+
+            Canvas {
+                anchors.fill: parent
+                visible: followProgressCheck.checked
+
+                onPaint: {
+                    const ctx = getContext("2d")
+                    ctx.reset()
+                    ctx.strokeStyle = root.tone("accentText", "#ffffff")
+                    ctx.lineWidth = 1.8
+                    ctx.lineCap = "round"
+                    ctx.lineJoin = "round"
+                    ctx.beginPath()
+                    ctx.moveTo(width * 0.24, height * 0.55)
+                    ctx.lineTo(width * 0.44, height * 0.74)
+                    ctx.lineTo(width * 0.78, height * 0.28)
+                    ctx.stroke()
+                }
+            }
+        }
+
+        contentItem: Text {
+            text: followProgressCheck.text
+            color: root.tone("textPrimary", "#e5e7eb")
+            font.weight: Font.DemiBold
+            font.pixelSize: 12
+            verticalAlignment: Text.AlignVCenter
+            leftPadding: followProgressCheck.indicator.width + followProgressCheck.spacing
+        }
+
+        onClicked: timelineItem.followProgressEnabled = checked
     }
 }
