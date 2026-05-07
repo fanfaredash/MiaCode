@@ -2,6 +2,7 @@
 
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/OperationLog.h"
 #include "preview/ipc/PreviewSnapshotRingBuffer.h"
 #include "preview/ipc/PreviewWorkerProtocol.h"
 
@@ -69,10 +70,13 @@ QString PreviewWorkerSupervisor::resolveWorkerExecutablePath() const
 
 bool PreviewWorkerSupervisor::startProcess(bool staticTestMode, QString* errorMessage)
 {
+    MC_OP("PreviewWorkerSupervisor::startProcess");
+    _mc_op_.note(QStringLiteral("staticTestMode=%1").arg(staticTestMode ? 1 : 0));
     if (process_ != nullptr && process_->state() != QProcess::NotRunning) {
         if (errorMessage != nullptr) {
             *errorMessage = QStringLiteral("preview worker already running");
         }
+        _mc_op_.fail(QStringLiteral("already_running"));
         return false;
     }
 
@@ -81,6 +85,7 @@ bool PreviewWorkerSupervisor::startProcess(bool staticTestMode, QString* errorMe
         if (errorMessage != nullptr) {
             *errorMessage = QStringLiteral("worker executable not found at %1").arg(program);
         }
+        _mc_op_.fail(QStringLiteral("executable_not_found at=%1").arg(program));
         return false;
     }
 
@@ -153,6 +158,8 @@ bool PreviewWorkerSupervisor::startProcess(bool staticTestMode, QString* errorMe
 
 bool PreviewWorkerSupervisor::spawnStaticTest(quint64 editorHwnd, QString* errorMessage)
 {
+    MC_OP("PreviewWorkerSupervisor::spawnStaticTest");
+    _mc_op_.note(QStringLiteral("editor_hwnd=0x%1").arg(editorHwnd, 0, 16));
     lastEditorHwnd_ = editorHwnd;
     lastSnapshotShmKey_.clear();
     lastSnapshotSlotByteSize_ = 0;
@@ -183,6 +190,12 @@ bool PreviewWorkerSupervisor::spawn(quint64 editorHwnd,
                                     int snapshotSlotCount,
                                     QString* errorMessage)
 {
+    MC_OP("PreviewWorkerSupervisor::spawn");
+    _mc_op_.note(QStringLiteral("editor_hwnd=0x%1 shm=%2 slots=%3x%4B")
+                     .arg(editorHwnd, 0, 16)
+                     .arg(snapshotShmKey)
+                     .arg(snapshotSlotCount)
+                     .arg(snapshotSlotByteSize));
     lastEditorHwnd_ = editorHwnd;
     lastSnapshotShmKey_ = snapshotShmKey;
     lastSnapshotSlotByteSize_ = snapshotSlotByteSize;
@@ -209,6 +222,8 @@ bool PreviewWorkerSupervisor::spawn(quint64 editorHwnd,
 
 bool PreviewWorkerSupervisor::spawnWithSyntheticPublisher(quint64 editorHwnd, QString* errorMessage)
 {
+    MC_OP("PreviewWorkerSupervisor::spawnWithSyntheticPublisher");
+    _mc_op_.note(QStringLiteral("editor_hwnd=0x%1").arg(editorHwnd, 0, 16));
     if (syntheticRingBuffer_ == nullptr) {
         syntheticRingBuffer_ = std::make_unique<PreviewSnapshotRingBuffer>();
         QString ringError;
@@ -243,6 +258,8 @@ bool PreviewWorkerSupervisor::spawnWithSyntheticPublisher(quint64 editorHwnd, QS
 
 bool PreviewWorkerSupervisor::spawnWithExternalPublisher(quint64 editorHwnd, QString* errorMessage)
 {
+    MC_OP("PreviewWorkerSupervisor::spawnWithExternalPublisher");
+    _mc_op_.note(QStringLiteral("editor_hwnd=0x%1").arg(editorHwnd, 0, 16));
     if (syntheticPublisherTimer_.isActive()) {
         if (errorMessage != nullptr) {
             *errorMessage = QStringLiteral("synthetic publisher already active");
@@ -507,6 +524,10 @@ void PreviewWorkerSupervisor::parseStdoutLine(const QByteArray& line)
 
 void PreviewWorkerSupervisor::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
+    MC_OP("PreviewWorkerSupervisor::onProcessFinished");
+    _mc_op_.note(QStringLiteral("exit_code=%1 status=%2")
+                     .arg(exitCode)
+                     .arg(exitStatus == QProcess::CrashExit ? "crash" : "normal"));
     // Capture timestamp first thing — every later step (logging, signal
     // dispatch) adds noise to the respawn-to-attach measurement.
     lastWorkerExitMonotonicNs_ = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -538,7 +559,11 @@ void PreviewWorkerSupervisor::onProcessFinished(int exitCode, QProcess::ExitStat
 
 void PreviewWorkerSupervisor::scheduleRespawn()
 {
+    MC_OP("PreviewWorkerSupervisor::scheduleRespawn");
     ++respawnAttemptsInWindow_;
+    _mc_op_.note(QStringLiteral("attempt=%1 delay_ms=%2")
+                     .arg(respawnAttemptsInWindow_)
+                     .arg(respawnDelayMs_));
     // Phase 5 stress test override — production code respects the
     // crash-loop limit so a deterministic-fail bug doesn't infinite-loop
     // through respawns. The stress test deliberately injects N>5 crashes
@@ -547,6 +572,10 @@ void PreviewWorkerSupervisor::scheduleRespawn()
     const bool bypassLimit =
         miacode::debug_options::envFlagEnabled("MIACODE_PREVIEW_WORKER_DISABLE_CRASH_LIMIT");
     if (!bypassLimit && respawnAttemptsInWindow_ > kMaxRespawnAttemptsInWindow) {
+        _mc_op_.fail(QStringLiteral("crash_loop_giving_up attempts=%1 max=%2 window_ms=%3")
+                         .arg(respawnAttemptsInWindow_)
+                         .arg(kMaxRespawnAttemptsInWindow)
+                         .arg(kHealthyResetWindowMs));
         appendSupervisorLog(QStringLiteral("respawn_giving_up"),
                             QStringLiteral("attempts=%1 > %2 within %3 ms")
                                 .arg(respawnAttemptsInWindow_)

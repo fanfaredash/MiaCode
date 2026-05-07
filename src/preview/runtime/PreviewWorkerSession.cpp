@@ -1,6 +1,7 @@
 #include "preview/runtime/PreviewWorkerSession.h"
 
 #include "common/DebugLog.h"
+#include "common/OperationLog.h"
 #include "common/DebugOptions.h"
 #include "common/Mmcss.h"
 
@@ -232,7 +233,15 @@ void PreviewWorkerSession::destroyPopupHwnd()
 
 bool PreviewWorkerSession::handleAttach(const AttachCommand& attach)
 {
+    MC_OP("PreviewWorkerSession::handleAttach");
+    _mc_op_.note(QStringLiteral("editor_hwnd=0x%1 session=%2 proto=%3")
+                     .arg(attach.editorHwnd, 0, 16)
+                     .arg(attach.sessionId)
+                     .arg(attach.protocolVersion));
     if (attach.protocolVersion != ipc::kPreviewWorkerProtocolVersion) {
+        _mc_op_.fail(QStringLiteral("protocol_mismatch editor_proto=%1 worker_proto=%2")
+                         .arg(attach.protocolVersion)
+                         .arg(ipc::kPreviewWorkerProtocolVersion));
         ipc::emitFatalEvent(
             QStringLiteral("protocol_mismatch"),
             QStringLiteral("editor_proto=%1 worker_proto=%2")
@@ -269,6 +278,8 @@ bool PreviewWorkerSession::handleAttach(const AttachCommand& attach)
 #ifdef Q_OS_WIN
         const HWND owner = reinterpret_cast<HWND>(attach.editorHwnd);
         if (owner == nullptr || !::IsWindow(owner)) {
+            _mc_op_.fail(QStringLiteral("qsg_attach_invalid_editor_hwnd hwnd=0x%1")
+                             .arg(attach.editorHwnd, 0, 16));
             ipc::emitFatalEvent(QStringLiteral("qsg_attach_invalid_editor_hwnd"),
                                 QStringLiteral("hwnd=0x%1").arg(attach.editorHwnd, 0, 16));
             return false;
@@ -486,6 +497,8 @@ bool PreviewWorkerSession::handleAttach(const AttachCommand& attach)
 
 void PreviewWorkerSession::handleSetVisualTransform(int xPx, int yPx, int displayWPx, int displayHPx)
 {
+    MC_OP("PreviewWorkerSession::handleSetVisualTransform");
+    _mc_op_.note(QStringLiteral("x=%1 y=%2 w=%3 h=%4").arg(xPx).arg(yPx).arg(displayWPx).arg(displayHPx));
 #ifdef Q_OS_WIN
     if (popupHwnd_ == nullptr || (!qsgMode_ && core_ == nullptr)) {
         appendWorkerLog(QStringLiteral("set_visual_transform_drop"),
@@ -598,6 +611,8 @@ void PreviewWorkerSession::onOwnerLocationChanged(int left, int top, int right, 
 
 void PreviewWorkerSession::handleResize(int wPx, int hPx)
 {
+    MC_OP("PreviewWorkerSession::handleResize");
+    _mc_op_.note(QStringLiteral("w=%1 h=%2").arg(wPx).arg(hPx));
 #ifdef Q_OS_WIN
     if (core_ == nullptr || wPx <= 0 || hPx <= 0) {
         return;
@@ -1978,12 +1993,16 @@ void PreviewWorkerSession::teardown()
 
 void PreviewWorkerSession::onStdinCommandLine(const QByteArray& line)
 {
+    MC_OP("PreviewWorkerSession::onStdinCommandLine");
     if (line.isEmpty()) {
         return;
     }
     QJsonParseError parseError;
     const QJsonDocument doc = QJsonDocument::fromJson(line, &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        _mc_op_.fail(QStringLiteral("json_parse_failed offset=%1 err=%2")
+                         .arg(parseError.offset)
+                         .arg(parseError.errorString()));
         ipc::emitFatalEvent(QStringLiteral("json_parse_failed"),
                             QStringLiteral("offset=%1 err=%2")
                                 .arg(parseError.offset)
@@ -1994,9 +2013,11 @@ void PreviewWorkerSession::onStdinCommandLine(const QByteArray& line)
 
     const QJsonObject obj = doc.object();
     const QString cmd = obj.value(QStringLiteral("cmd")).toString();
+    _mc_op_.note(QStringLiteral("cmd=%1").arg(cmd));
 
     if (cmd == QLatin1String(ipc::kCmdAttach)) {
         if (attached_) {
+            _mc_op_.fail(QStringLiteral("double_attach"));
             ipc::emitFatalEvent(QStringLiteral("double_attach"), QString());
             QCoreApplication::exit(1);
             return;
@@ -2041,6 +2062,7 @@ void PreviewWorkerSession::onStdinCommandLine(const QByteArray& line)
         return;
     }
 
+    _mc_op_.fail(QStringLiteral("unknown_cmd %1").arg(cmd));
     ipc::emitFatalEvent(QStringLiteral("unknown_cmd"), cmd);
     QCoreApplication::exit(1);
 }
@@ -2055,6 +2077,7 @@ void PreviewWorkerSession::onStdinClosed()
 
 int PreviewWorkerSession::runStaticTest()
 {
+    MC_OP("PreviewWorkerSession::runStaticTest");
     // Diagnostic startup line on stderr — captured by the supervisor's
     // readyReadStandardError handler. Tells us whether the worker
     // process actually entered runStaticTest and what env vars it
@@ -2170,6 +2193,7 @@ int PreviewWorkerSession::runStaticTest()
 
 int PreviewWorkerSession::run()
 {
+    MC_OP("PreviewWorkerSession::run");
     // Phase 1+ entry — same control protocol but consumes the snapshot
     // ring buffer for real frame rendering. Until that path lands, the
     // production entry point is the static test loop. Calling site can
