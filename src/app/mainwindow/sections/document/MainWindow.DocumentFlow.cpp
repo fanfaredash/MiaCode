@@ -16,6 +16,7 @@
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
 #include "common/DebugOptions.h"
+#include "common/OperationLog.h"
 #include "common/WaveformCache.h"
 #include "preview/runtime/PreviewRuntime.h"
 #include "preview/runtime/PreviewStageMediaHost.h"
@@ -442,6 +443,7 @@ bool MainWindow::DocumentSection::applyCurrentFieldToDocument()
 
 void MainWindow::DocumentSection::onNewFile()
 {
+    MC_OP("MainWindow::DocumentSection::onNewFile");
     if (!maybeSaveBeforeContinue()) {
         return;
     }
@@ -497,6 +499,7 @@ void MainWindow::DocumentSection::onNewFile()
 
 void MainWindow::DocumentSection::onOpenFile()
 {
+    MC_OP("MainWindow::DocumentSection::onOpenFile");
     owner_.windowSection_->logTopLevelWindowSnapshot("open_file_flow/begin");
     const bool canContinue = maybeSaveBeforeContinue();
     if (!canContinue) {
@@ -522,8 +525,11 @@ void MainWindow::DocumentSection::onOpenFile()
 
 bool MainWindow::DocumentSection::openFileAtPath(const QString& path, bool showStatusMessage, bool showErrors)
 {
+    MC_OP("MainWindow::DocumentSection::openFileAtPath");
+    _mc_op_.note(QStringLiteral("path=%1").arg(path));
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
     if (normalizedPath.isEmpty()) {
+        _mc_op_.fail(QStringLiteral("empty path"));
         return false;
     }
 
@@ -533,6 +539,7 @@ bool MainWindow::DocumentSection::openFileAtPath(const QString& path, bool showS
         if (showErrors) {
             UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Open Failed", "Cannot open file:\n" + normalizedPath);
         }
+        _mc_op_.fail(QStringLiteral("prepareDocumentOpenPayload failed"));
         return false;
     }
 
@@ -548,16 +555,20 @@ bool MainWindow::DocumentSection::openFileAtPath(const QString& path, bool showS
 
 bool MainWindow::DocumentSection::restoreLastSessionFile()
 {
+    MC_OP("MainWindow::DocumentSection::restoreLastSessionFile");
+    _mc_op_.note(QStringLiteral("path=%1").arg(state_.lastSessionFilePath_));
     if (state_.lastSessionFilePath_.isEmpty()) {
-        return false;
+        return false;  // not a failure — first run or cleared session
     }
     const QFileInfo fileInfo(state_.lastSessionFilePath_);
     if (!fileInfo.exists() || !fileInfo.isFile()) {
+        _mc_op_.fail(QStringLiteral("session_file_missing"));
         state_.lastSessionFilePath_.clear();
         return false;
     }
     const PreparedDocumentOpenPayload payload = prepareDocumentOpenPayload(fileInfo.absoluteFilePath(), true);
     if (!payload.success) {
+        _mc_op_.fail(QStringLiteral("prepareDocumentOpenPayload failed"));
         return false;
     }
     applyOpenedDocumentState(
@@ -677,6 +688,10 @@ void MainWindow::DocumentSection::applyOpenedDocumentState(
     bool showStatusMessage,
     double knownTrackDurationSeconds)
 {
+    MC_OP("MainWindow::DocumentSection::applyOpenedDocumentState");
+    _mc_op_.note(QStringLiteral("path=%1 dur=%2")
+                     .arg(normalizedPath)
+                     .arg(knownTrackDurationSeconds, 0, 'f', 3));
     state_.currentEncoding_ = encodingUsed;
     owner_.applyWaveformData(
         miacode::waveform::makeWaveformPlaceholder(
@@ -957,6 +972,7 @@ void MainWindow::DocumentSection::runAutosaveCheck(bool allowHistory)
 
 bool MainWindow::DocumentSection::onSaveFile()
 {
+    MC_OP("MainWindow::DocumentSection::onSaveFile");
     if (state_.currentFilePath_.isEmpty()) {
         return onSaveFileAs();
     }
@@ -965,6 +981,7 @@ bool MainWindow::DocumentSection::onSaveFile()
 
 bool MainWindow::DocumentSection::onSaveFileAs()
 {
+    MC_OP("MainWindow::DocumentSection::onSaveFileAs");
     owner_.windowSection_->logTopLevelWindowSnapshot("save_file_as_dialog/begin");
     owner_.windowSection_->logWindowGeometryDebug("save_file_as_before_dialog");
     const QString path = QFileDialog::getSaveFileName(
@@ -984,6 +1001,8 @@ bool MainWindow::DocumentSection::onSaveFileAs()
 
 bool MainWindow::DocumentSection::saveToPath(const QString& path)
 {
+    MC_OP("MainWindow::DocumentSection::saveToPath");
+    _mc_op_.note(QStringLiteral("path=%1").arg(path));
     QElapsedTimer totalTimer;
     totalTimer.start();
     const QString normalizedPath = path.isEmpty() ? QString() : QDir::cleanPath(path);
@@ -1001,6 +1020,7 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
             .arg(applied ? QStringLiteral("applied") : QStringLiteral("failed"), targetName)
     );
     if (!applied) {
+        _mc_op_.fail(QStringLiteral("apply_current_field_to_document failed"));
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,
             QStringLiteral("close_timing/document"),
@@ -1013,6 +1033,7 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
     bool firstOk = false;
     (void)owner_.parsedFirstSeconds(&firstOk);
     if (!firstOk) {
+        _mc_op_.fail(QStringLiteral("invalid_first"));
         UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Save Failed", "&first must be a valid number of seconds.");
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,
@@ -1025,6 +1046,7 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
     }
     QSaveFile file(path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        _mc_op_.fail(QStringLiteral("QSaveFile::open: %1").arg(file.errorString()));
         UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Save Failed", "Cannot write file:\n" + path);
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,
@@ -1045,6 +1067,7 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
         data = encoder.encode(serialized);
     }
     if (file.write(data) != data.size() || !file.commit()) {
+        _mc_op_.fail(QStringLiteral("write_or_commit_failed err=%1").arg(file.errorString()));
         UiDialogs::showMessageBox(QMessageBox::Critical, &owner_, "Save Failed", "Write failed:\n" + path);
         miacode::debug_log::appendTimingLine(
             miacode::debug_log::Channel::Runtime,
@@ -1080,6 +1103,8 @@ bool MainWindow::DocumentSection::saveToPath(const QString& path)
 
 bool MainWindow::DocumentSection::applyBatchTransform(const QString& opName, const BatchTransform& transform)
 {
+    MC_OP("MainWindow::DocumentSection::applyBatchTransform");
+    _mc_op_.note(QStringLiteral("op=%1").arg(opName));
     const QString original = owner_.editorText();
     auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
     const QTextCursor oldCursor = editor->textCursor();
@@ -1129,6 +1154,8 @@ bool MainWindow::DocumentSection::applyBatchTransform(const QString& opName, con
 
 bool MainWindow::DocumentSection::applySelectionBatchTransform(const QString& opName, const BatchTransform& transform)
 {
+    MC_OP("MainWindow::DocumentSection::applySelectionBatchTransform");
+    _mc_op_.note(QStringLiteral("op=%1").arg(opName));
     auto* editor = qobject_cast<PlainCodeEditor*>(ui_.editorWidget_);
     const QTextCursor oldCursor = editor->textCursor();
     const int oldVScroll = editor->verticalScrollBar() != nullptr ? editor->verticalScrollBar()->value() : 0;
