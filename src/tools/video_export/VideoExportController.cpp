@@ -9,6 +9,7 @@
 #include "common/AssetPaths.h"
 #include "common/ChartAssetPaths.h"
 #include "common/DebugLog.h"
+#include "common/OperationLog.h"
 #include "common/DebugOptions.h"
 #include "common/LayoutRingConfig.h"
 #include "common/PreviewAudioMixConfig.h"
@@ -3018,6 +3019,8 @@ VideoExportResult VideoExportController::exportFullPreview(
     QProgressDialog* progress
 )
 {
+    MC_OP("VideoExportController::exportFullPreview");
+    _mc_op_.note(QStringLiteral("output=%1").arg(task.outputPath));
     const auto progressCallback = [progress](int percent, const QString& text) {
         if (progress == nullptr) {
             return false;
@@ -3040,6 +3043,12 @@ VideoExportResult VideoExportController::exportPreparedTask(
     const VideoExportProgressCallback& progressCallback
 )
 {
+    MC_OP("VideoExportController::exportPreparedTask");
+    _mc_op_.note(QStringLiteral("output=%1 chart=%2 size=%3x%4 fps=%5")
+                     .arg(task.outputPath, task.chartPath)
+                     .arg(task.outputWidth)
+                     .arg(task.outputHeight)
+                     .arg(task.fps));
     VideoExportResult result;
     const ExportRuntimeConfig exportConfig = loadExportRuntimeConfig();
     QElapsedTimer exportTimer;
