@@ -1,6 +1,7 @@
 #include "common/CrashRecovery.h"
 
 #include "common/DebugLog.h"
+#include "common/OperationLog.h"
 
 #include <QDir>
 #include <QFile>
@@ -225,7 +226,10 @@ void install()
 
 bool prepareForChart(const QString& chartFilePath)
 {
+    MC_OP("crash_recovery::prepareForChart");
+    _mc_op_.note(QStringLiteral("chart=%1").arg(chartFilePath));
     if (chartFilePath.isEmpty()) {
+        _mc_op_.fail(QStringLiteral("empty chartFilePath"));
         return false;
     }
     const QString recoveryPath = crashRecoveryFilePath(chartFilePath);
@@ -233,10 +237,12 @@ bool prepareForChart(const QString& chartFilePath)
         logCrashRecovery("prepare_skipped",
                          QStringLiteral("reason=path_unresolved chart=%1")
                              .arg(chartFilePath));
+        _mc_op_.fail(QStringLiteral("path_unresolved"));
         return false;
     }
     const QString recoveryDir = QFileInfo(recoveryPath).absolutePath();
     if (recoveryDir.isEmpty()) {
+        _mc_op_.fail(QStringLiteral("recoveryDir empty"));
         return false;
     }
     QDir dir;
@@ -249,6 +255,7 @@ bool prepareForChart(const QString& chartFilePath)
         logCrashRecovery("prepare_failed",
                          QStringLiteral("reason=mkpath_failed dir=%1")
                              .arg(recoveryDir));
+        _mc_op_.fail(QStringLiteral("mkpath_failed dir=%1").arg(recoveryDir));
         return false;
     }
     logCrashRecovery("prepare_ok",
@@ -358,16 +365,25 @@ QString crashRecoveryFilePath(const QString& chartFilePath)
 
 QByteArray readRecoveryFile(const QString& chartFilePath)
 {
+    MC_OP("crash_recovery::readRecoveryFile");
+    _mc_op_.note(QStringLiteral("chart=%1").arg(chartFilePath));
     // Returns the raw UTF-8 bytes the crash handler wrote (no BOM, no
     // transformation). The caller decodes with QString::fromUtf8 to
     // match the encoding contract documented in the header. If the
     // file isn't present or can't be read, returns an empty QByteArray.
     const QString path = crashRecoveryFilePath(chartFilePath);
     if (path.isEmpty()) {
+        // Not a real failure — chart path was empty, common at startup
+        // before any chart is open. Stay silent.
         return QByteArray();
     }
     QFile file(path);
-    if (!file.exists() || !file.open(QIODevice::ReadOnly)) {
+    if (!file.exists()) {
+        // Not a failure — no recovery state to read. Stay silent.
+        return QByteArray();
+    }
+    if (!file.open(QIODevice::ReadOnly)) {
+        _mc_op_.fail(QStringLiteral("open_failed err=%1").arg(file.errorString()));
         return QByteArray();
     }
     return file.readAll();
@@ -375,6 +391,8 @@ QByteArray readRecoveryFile(const QString& chartFilePath)
 
 bool deleteRecoveryFile(const QString& chartFilePath)
 {
+    MC_OP("crash_recovery::deleteRecoveryFile");
+    _mc_op_.note(QStringLiteral("chart=%1").arg(chartFilePath));
     const QString path = crashRecoveryFilePath(chartFilePath);
     if (path.isEmpty()) {
         return true;  // nothing to delete
@@ -392,6 +410,7 @@ bool deleteRecoveryFile(const QString& chartFilePath)
                          QStringLiteral("path=%1 err=%2")
                              .arg(path)
                              .arg(file.errorString()));
+        _mc_op_.fail(QStringLiteral("remove_failed err=%1").arg(file.errorString()));
     }
     return removed;
 }

@@ -12,6 +12,7 @@
 #include "UiTheme.h"
 #include "common/CrashRecovery.h"
 #include "common/DebugLog.h"
+#include "common/OperationLog.h"
 #include "common/DebugOptions.h"
 #include "common/WaveformCache.h"
 
@@ -414,6 +415,7 @@ QString summarizeTopLevelWindows()
 
 int runCliVideoExport(QApplication& app, QString* errorMessage)
 {
+    MC_OP("runCliVideoExport");
     try {
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("MiaCode CLI video export"));
@@ -681,6 +683,7 @@ int runCliVideoExport(QApplication& app, QString* errorMessage)
 
 int runCliVideoExportWorker(QApplication& app, QString* errorMessage)
 {
+    MC_OP("runCliVideoExportWorker");
     QString workerJobId;
     try {
     QCommandLineParser parser;
@@ -844,6 +847,7 @@ int runCliVideoExportWorker(QApplication& app, QString* errorMessage)
 // See docs/PREVIEW_DEVICE_LOSS_MITIGATION_AND_PROCESS_ISOLATION_PLAN.md.
 int runCliPreviewWorkerRingSelfTest(QString* errorMessage)
 {
+    MC_OP("runCliPreviewWorkerRingSelfTest");
     // Single-process Phase 1 round-trip: create a publisher, attach a
     // consumer to the same key, push N synthetic snapshots, read them
     // back, report avg/min/max latency in microseconds. Exercises the
@@ -858,6 +862,7 @@ int runCliPreviewWorkerRingSelfTest(QString* errorMessage)
         if (errorMessage != nullptr) {
             *errorMessage = QStringLiteral("publisher create failed: %1").arg(errOut);
         }
+        _mc_op_.fail(QStringLiteral("publisher create failed: %1").arg(errOut));
         return 1;
     }
 
@@ -1138,6 +1143,7 @@ int runCliPreviewWorkerRingSelfTest(QString* errorMessage)
 //   MIACODE_PREVIEW_WORKER_INJECT_CRASH=N      (forwarded to the worker)
 int runCliPreviewWorkerCrashRecoveryTest(QApplication& app, QString* errorMessage)
 {
+    MC_OP("runCliPreviewWorkerCrashRecoveryTest");
 #ifdef Q_OS_WIN
     namespace ipc = miacode::preview::ipc;
 
@@ -1293,6 +1299,8 @@ int runCliPreviewWorkerCrashRecoveryTest(QApplication& app, QString* errorMessag
 
 int runCliPreviewWorker(QApplication& app, bool staticTestMode, QString* errorMessage)
 {
+    MC_OP("runCliPreviewWorker");
+    _mc_op_.note(QStringLiteral("staticTestMode=%1").arg(staticTestMode ? 1 : 0));
     try {
         QCommandLineParser parser;
         parser.setApplicationDescription(QStringLiteral("MiaCode preview worker"));
@@ -1368,6 +1376,7 @@ int runCliPreviewWorker(QApplication& app, bool staticTestMode, QString* errorMe
 
 int main(int argc, char* argv[])
 {
+    MC_OP("main");
     // Install crash-time autosave handlers BEFORE anything else can fail.
     // This way an early-startup segfault (e.g. graphics driver bug during
     // QApplication construction) still gets a chance to flush the
