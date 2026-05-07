@@ -1459,7 +1459,7 @@ void MainWindow::TimelineSection::flushQtPreviewTimelinePosition()
         // FPS, typically 30-60Hz) rather than on the per-frame preview tick. This keeps the
         // editor cursor tracking the playhead without eating into the preview render budget.
         if (state_.previewFollowEnabled_) {
-            syncEditorCursorToPreviewSecond(second, true, false);
+            syncEditorCursorToPreviewSecond(second, false, false);
         }
         return;
     }

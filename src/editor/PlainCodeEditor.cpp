@@ -426,6 +426,9 @@ bool PlainCodeEditor::applyPreviewFollowCursor(const QTextCursor& cursor, bool c
         return false;
     }
 
+    const int oldVScroll = !centerView && verticalScrollBar() != nullptr ? verticalScrollBar()->value() : 0;
+    const int oldHScroll = !centerView && horizontalScrollBar() != nullptr ? horizontalScrollBar()->value() : 0;
+
     if (suppressSignals) {
         QSignalBlocker blocker(this);
         setTextCursor(cursor);
@@ -440,6 +443,13 @@ bool PlainCodeEditor::applyPreviewFollowCursor(const QTextCursor& cursor, bool c
             const QRect caretRect = cursorRect();
             const int centeredValue = vbar->value() + caretRect.center().y() - (viewport()->height() / 2);
             vbar->setValue(qBound(vbar->minimum(), centeredValue, vbar->maximum()));
+        }
+    } else {
+        if (QScrollBar* vbar = verticalScrollBar()) {
+            vbar->setValue(qBound(vbar->minimum(), oldVScroll, vbar->maximum()));
+        }
+        if (QScrollBar* hbar = horizontalScrollBar()) {
+            hbar->setValue(qBound(hbar->minimum(), oldHScroll, hbar->maximum()));
         }
     }
     return true;

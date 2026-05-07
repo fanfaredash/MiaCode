@@ -1553,6 +1553,20 @@ void MainWindow::TimelineSection::syncEditorCursorToPreviewSecond(
         return overlayTimer.nsecsElapsed();
     };
 
+    if (state_.qtPreviewPlaying_ && !centerView) {
+        followOverlayElapsedNs = applyFollowOverlay(resolved);
+        logPerf(
+            QStringLiteral("visual_follow_updated"),
+            resolved,
+            false,
+            resolved ? &span : nullptr,
+            resolveElapsedNs,
+            0,
+            followOverlayElapsedNs,
+            0);
+        return;
+    }
+
     if (alreadyAtSelectionEnd) {
         followOverlayElapsedNs = applyFollowOverlay(resolved);
         logPerf(
