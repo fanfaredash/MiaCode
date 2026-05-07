@@ -11,6 +11,9 @@
 #include "mainwindow/MainWindow.h"
 #include "render/backend_d3d11/PreviewDCompSurface.h"
 #include "render/backend_d3d11/PreviewPopupHwndTracker.h"
+#include "preview/ipc/PreviewFrameStateProjector.h"
+#include "preview/ipc/PreviewFrameStateSerial.h"
+#include "preview/ipc/PreviewWorkerSupervisor.h"
 // Phase 4c — needed for the host pointer type in the bootstrap
 // wiring lambda; the lambda passes it straight to setStageMediaHost.
 #include "preview/runtime/PreviewStageMediaHost.h"
@@ -400,7 +403,25 @@ bool QuickShellBootstrap::start()
         // and resizes correctly. Attached lazily on first sceneGraphInitialized
         // (handled inside attachToWindow). Phase 4+ replaces the fixed
         // top-left placement with placeholder-driven geometry.
-        if (miacode::debug_options::previewUseDCompEnabled()) {
+        //
+        // Phase 4 — when the out-of-process worker is enabled AND its
+        // QSG render path is on, the worker is the sole chart renderer:
+        // suppress the in-process DComp surface so the two popups don't
+        // double-render and compete for the same screen rect. This is
+        // also THE point of Tier 2 process isolation —
+        // DXGI_ERROR_DEVICE_REMOVED on the in-process surface used to
+        // cascade into the editor process; with the in-process surface
+        // suppressed, the chart popup's D3D11 lifetime lives entirely
+        // inside the respawnable worker and crashes are contained.
+        const bool workerOwnsChartRender =
+            miacode::debug_options::previewOutOfProcessEnabled()
+            && miacode::debug_options::previewWorkerQsgRenderEnabled();
+        if (workerOwnsChartRender) {
+            appendQuickShellRuntimeLog(
+                QStringLiteral("dcomp_surface_suppressed"),
+                QStringLiteral("reason=worker_qsg_owns_chart"));
+        }
+        if (miacode::debug_options::previewUseDCompEnabled() && !workerOwnsChartRender) {
             previewDCompSurface_ =
                 std::make_unique<miacode::preview::dcomp::PreviewDCompSurface>(this);
             previewDCompSurface_->attachToWindow(window);
@@ -488,6 +509,242 @@ bool QuickShellBootstrap::start()
                 QStringLiteral("dcomp_surface_attached"),
                 QStringLiteral("phase=3.2 reason=env_flag"));
         }
+
+#ifdef Q_OS_WIN
+        // Out-of-process preview worker. Opt-in via
+        // MIACODE_PREVIEW_OUT_OF_PROCESS=1. Phase 0 of the plan keeps the
+        // in-process surface running alongside the worker so the user can
+        // visually verify the cross-process popup appears, follows the
+        // editor, and survives crash/respawn. Once Phase 4+ proves parity,
+        // a follow-up commit gates the in-process surface off when this
+        // flag is set.
+        if (miacode::debug_options::previewOutOfProcessEnabled()) {
+            previewWorkerSupervisor_ = std::make_unique<miacode::preview::ipc::PreviewWorkerSupervisor>(this);
+            // The QQuickWindow's HWND is available now because attachToWindow
+            // above already nudged sceneGraphInitialized handlers if needed.
+            // window->winId() forces native realisation and returns the HWND.
+            const quint64 editorHwnd = static_cast<quint64>(window->winId());
+            const bool useRealPublisher =
+                miacode::debug_options::previewWorkerRealPublisherEnabled();
+            QString errorMessage;
+            // Two modes share this entry:
+            //   default       — Phase 1 synthetic publisher (60 Hz fake data)
+            //   real publisher — Phase 4 prototype: connects PreviewRuntime::frameStateChanged
+            //                    and projects the live state into the ring buffer
+            const bool spawnedOk = useRealPublisher
+                ? previewWorkerSupervisor_->spawnWithExternalPublisher(editorHwnd, &errorMessage)
+                : previewWorkerSupervisor_->spawnWithSyntheticPublisher(editorHwnd, &errorMessage);
+            appendQuickShellRuntimeLog(
+                QStringLiteral("preview_worker_spawn"),
+                QStringLiteral("ok=%1 editor_hwnd=0x%2 error=%3 phase=%4")
+                    .arg(spawnedOk ? 1 : 0)
+                    .arg(editorHwnd, 0, 16)
+                    .arg(errorMessage)
+                    .arg(useRealPublisher
+                             ? QStringLiteral("phase0+phase4_prototype_real_publisher")
+                             : QStringLiteral("phase0+phase1_synthetic")));
+
+            // Compute the worker popup's screen-space rect from the
+            // tracked preview QQuickItem (same source of truth the
+            // in-process PreviewDCompSurface uses). The signal-based
+            // listeners below cover the common cases (window move,
+            // resize, anchored item geometry change), but DPI changes
+            // and zoom adjustments don't always fire those signals — so
+            // the real-publisher path also re-pushes on every
+            // PreviewRuntime::frameStateChanged tick. The supervisor
+            // dedupes against `lastVt*` cache so per-frame calls cost
+            // one inequality check + a stdin write only when geometry
+            // actually changed.
+            auto pushPopupGeometry = [this, window]() {
+                if (previewWorkerSupervisor_ == nullptr || !previewWorkerSupervisor_->isAttached()) {
+                    return;
+                }
+                QQuickItem* item = window->findChild<QQuickItem*>(
+                    QStringLiteral("preview_dcomp_track_target"));
+                if (item == nullptr || item->width() <= 0.0 || item->height() <= 0.0) {
+                    return;
+                }
+                const qreal dpr = window->effectiveDevicePixelRatio() > 0.0
+                    ? window->effectiveDevicePixelRatio() : 1.0;
+                const QPointF topLeftScene = item->mapToScene(QPointF(0, 0));
+                const QPointF topLeftGlobal = window->mapToGlobal(topLeftScene);
+                const int xPx = qRound(topLeftGlobal.x() * dpr);
+                const int yPx = qRound(topLeftGlobal.y() * dpr);
+                const int wPx = qRound(item->width() * dpr);
+                const int hPx = qRound(item->height() * dpr);
+                previewWorkerSupervisor_->setVisualTransform(xPx, yPx, wPx, hPx);
+            };
+
+            // Real publisher: hook PreviewRuntime::frameStateChanged →
+            // project + publish. The connection is single-shot per spawn;
+            // it survives the supervisor object's lifetime and is cleaned
+            // up via the QObject parent-child relationship at shutdown.
+            if (spawnedOk && useRealPublisher && controller_ != nullptr) {
+                if (auto* runtime = qobject_cast<PreviewRuntime*>(
+                        controller_->previewRuntime()); runtime != nullptr) {
+                    QObject::connect(
+                        runtime,
+                        &PreviewRuntime::frameStateChanged,
+                        this,
+                        [this, runtime, pushPopupGeometry]() {
+                            if (previewWorkerSupervisor_ == nullptr) {
+                                return;
+                            }
+                            // Heap-allocate — POD is ~150 KB and the
+                            // signal fires on every audio tick; stack
+                            // pressure would compound through Qt's
+                            // queued dispatch frames.
+                            auto snapshotHeap = std::make_unique<miacode::preview::ipc::PreviewFrameStateSerial>();
+                            miacode::preview::ipc::PreviewFrameStateSerial& snapshot = *snapshotHeap;
+                            snapshot.layoutVersion = miacode::preview::ipc::kSerialLayoutVersion;
+                            const auto& fs = runtime->frameState();
+                            miacode::preview::ipc::projectScalarsToSerial(fs, snapshot);
+                            miacode::preview::ipc::projectActiveSpritesToSerial(fs, snapshot);
+                            miacode::preview::ipc::projectAssetPathsToSerial(
+                                runtime->skinDirectory(), snapshot);
+                            miacode::preview::ipc::projectMuriAnalysisReportToSerial(fs, snapshot);
+                            // Chart media (PV / BG) paths — worker loads its
+                            // own copies so the bg renders inside the worker
+                            // popup. mediaKind / mediaVisible drive the
+                            // worker's image vs video pipeline switch.
+                            QString mediaImagePath;
+                            QString mediaVideoPath;
+                            int mediaKindValue = 0;
+                            bool mediaVisible = false;
+                            quint64 mediaSerial = 0;
+                            if (backend_ != nullptr) {
+                                if (auto* host = backend_->previewStageMediaHost();
+                                    host != nullptr) {
+                                    if (host->hasResolvedMedia()) {
+                                        mediaVisible = host->mediaVisible();
+                                        if (host->hasVideoMedia()) {
+                                            mediaKindValue = 2;
+                                            mediaVideoPath = host->resolvedVideoPath();
+                                        } else {
+                                            mediaKindValue = 1;
+                                            mediaImagePath =
+                                                host->imageSource().toLocalFile();
+                                        }
+                                    }
+                                    // Lightweight serial: bump on any path change.
+                                    mediaSerial = static_cast<quint64>(
+                                        qHash(mediaImagePath)
+                                        ^ (static_cast<quint64>(qHash(mediaVideoPath)) << 1)
+                                        ^ (static_cast<quint64>(mediaKindValue) << 32)
+                                        ^ (mediaVisible ? (1ULL << 48) : 0ULL));
+                                }
+                            }
+                            miacode::preview::ipc::projectMediaPathsToSerial(
+                                mediaImagePath, mediaVideoPath,
+                                mediaKindValue, mediaVisible, mediaSerial,
+                                snapshot);
+                            previewWorkerSupervisor_->publishSnapshot(snapshot);
+                            // Re-push popup geometry every tick so DPI /
+                            // zoom changes propagate even when their
+                            // dedicated Qt signals don't fire. Cheap —
+                            // supervisor dedupes via its cache.
+                            pushPopupGeometry();
+                        });
+                    appendQuickShellRuntimeLog(
+                        QStringLiteral("preview_worker_real_publisher_connected"),
+                        QStringLiteral("frame_state_changed=connected"));
+                }
+            }
+            if (spawnedOk) {
+                // Bind to the preview item's geometry signals when the item
+                // becomes available. The QML scene tree may not be built
+                // yet at this point, so we also push from a couple of
+                // window-level signals + the worker_attached event.
+                auto bindToTrackedItem = [this, window, pushPopupGeometry]() {
+                    QQuickItem* item = window->findChild<QQuickItem*>(
+                        QStringLiteral("preview_dcomp_track_target"));
+                    if (item == nullptr) {
+                        return;
+                    }
+                    auto once = [this, item, pushPopupGeometry](
+                                    auto signal) {
+                        QObject::connect(item, signal, this, pushPopupGeometry);
+                    };
+                    once(&QQuickItem::xChanged);
+                    once(&QQuickItem::yChanged);
+                    once(&QQuickItem::widthChanged);
+                    once(&QQuickItem::heightChanged);
+                    once(&QQuickItem::visibleChanged);
+                    pushPopupGeometry();
+                };
+
+                QObject::connect(window, &QQuickWindow::sceneGraphInitialized, this, bindToTrackedItem);
+
+                // Authoritative source of truth for the worker's popup
+                // position is the in-process PreviewDCompSurface itself.
+                // Whenever it MoveWindows its own popup, it emits
+                // popupGeometryApplied with the same coords. Mirroring
+                // those exactly to the worker eliminates EVERY drift
+                // class:
+                //   * fast drag / minimize / maximize transients
+                //   * cross-monitor DPI transitions
+                //   * post-swap-chain-resize y-adjusts (the in-process
+                //     surface re-applies internally without any public
+                //     Qt signal exposing the new position — this was
+                //     the cause of the 716ms drift in the latest log)
+                // Coordinates are virtual-desktop physical pixels; pass
+                // straight through. The supervisor's setVisualTransform
+                // dedup absorbs idempotent re-emits.
+                if (previewDCompSurface_ != nullptr) {
+                    QObject::connect(
+                        previewDCompSurface_.get(),
+                        &miacode::preview::dcomp::PreviewDCompSurface::popupGeometryApplied,
+                        this,
+                        [this](int xPx, int yPx, int wPx, int hPx) {
+                            if (previewWorkerSupervisor_ == nullptr) {
+                                return;
+                            }
+                            previewWorkerSupervisor_->setVisualTransform(xPx, yPx, wPx, hPx);
+                        });
+                }
+
+                // We deliberately do NOT connect to QQuickWindow's xChanged,
+                // yChanged, widthChanged, heightChanged, or screenChanged
+                // signals here — and we do NOT register with
+                // PreviewPopupHwndTracker. Those fire BEFORE Qt has
+                // propagated DPR / layout changes through the
+                // PreviewQuickSceneRoot QQuickItem's geometry. Calling
+                // pushPopupGeometry at that moment produces stale physical-
+                // pixel coords (old item width × new DPR, or new window
+                // position × old item layout), and the worker popup lands
+                // ~50 px away from where the in-process popup ends up
+                // ~14-40 ms later. The in-process PreviewDCompSurface
+                // avoids this by only listening to the QQuickItem's own
+                // signals, which fire AFTER layout has settled.
+                //
+                // The wiring we do keep:
+                //   - PreviewDCompSurface::popupGeometryApplied (above) —
+                //     the cleanest mirror; fires for every in-process
+                //     MoveWindow including internal re-applies
+                //   - item geometry signals (set up in bindToTrackedItem
+                //     during sceneGraphInitialized) — defence-in-depth
+                //     for the case where the in-process surface hasn't
+                //     attached yet
+                //   - PreviewRuntime::frameStateChanged (audio-tick rate)
+                //     — catch-up for occasional missed events
+                //   - workerAttached signal — initial position on respawn
+
+                // Push initial geometry on worker attach, AND retry once
+                // the QML tree is up. The supervisor caches the last VT
+                // and replays it on respawn, so a single successful push
+                // is durable.
+                QObject::connect(
+                    previewWorkerSupervisor_.get(),
+                    &miacode::preview::ipc::PreviewWorkerSupervisor::workerAttached,
+                    this,
+                    [pushPopupGeometry, bindToTrackedItem](quint64 /*popupHwnd*/) {
+                        bindToTrackedItem();
+                        pushPopupGeometry();
+                    });
+            }
+        }
+#endif
+
         if (surfaceHost_ != nullptr) {
             surfaceHost_->updateRootWindowFrameGeometry(window->frameGeometry());
         }
@@ -1096,6 +1353,15 @@ void QuickShellBootstrap::destroyAcceptedRootWindowResourcesAndQuit(const QStrin
     // commits 8ec8c18 / 55107cf / 7ebab94.
     logResetTiming(QStringLiteral("accepted_close_destroy_preview_dcomp_surface"),
                    previewDCompSurface_);
+    // Out-of-process worker — graceful shutdown sends "shutdown" via stdin
+    // and waits ~500 ms for the worker to exit. Same ordering rationale
+    // as the in-process surface: tear it down before MainWindow so any
+    // in-flight queued signals don't reach a destroyed receiver.
+    if (previewWorkerSupervisor_ != nullptr) {
+        previewWorkerSupervisor_->shutdown();
+    }
+    logResetTiming(QStringLiteral("accepted_close_destroy_preview_worker_supervisor"),
+                   previewWorkerSupervisor_);
     logResetTiming(QStringLiteral("accepted_close_destroy_engine"), engine_);
     rootWindow_ = nullptr;
 #ifdef Q_OS_WIN

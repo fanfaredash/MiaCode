@@ -1253,6 +1253,12 @@ void PreviewDCompSurface::applyTrackedItemGeometry()
             lastAppliedGlobalXPx_ = globalXPx;
             lastAppliedGlobalYPx_ = globalYPx;
             lastAppliedPixelSize_ = pixelSize;
+            // Out-of-process worker mirror — emit so the worker popup
+            // can MoveWindow with identical coords. Covers internal
+            // re-applies (post-resize y-adjust) that don't fire any
+            // public Qt signal external observers could subscribe to.
+            emit popupGeometryApplied(globalXPx, globalYPx,
+                                      pixelSize.width(), pixelSize.height());
             // Restart the visibility debounce. Once popup is shown
             // (post-startup), restarting is harmless — the timer's
             // slot short-circuits on `popupShown_=true`.
@@ -1746,6 +1752,11 @@ bool PreviewDCompSurface::applyPopupHwndDeferred(HDWP& hdwp)
     lastAppliedGlobalXPx_ = globalXPx;
     lastAppliedGlobalYPx_ = globalYPx;
     lastAppliedPixelSize_ = pixelSize;
+    // Out-of-process worker mirror — see twin emit at the regular
+    // MoveWindow site. Each WM_WINDOWPOSCHANGED tick fires this so
+    // the worker popup tracks the editor's compositor-tick reposition.
+    emit popupGeometryApplied(globalXPx, globalYPx,
+                              pixelSize.width(), pixelSize.height());
     if (!popupShown_) {
         popupVisibilityDebounce_.start();
     }

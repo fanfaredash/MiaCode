@@ -51,6 +51,11 @@ public:
     bool mediaVisible() const;
     void setMediaVisible(bool visible);
     QUrl imageSource() const;
+    // Resolved video file path. Empty when not in Video mode. Returned
+    // as a local file path (not a QUrl) since the only consumer is the
+    // out-of-process worker projector which converts to a SerialString
+    // for IPC.
+    QString resolvedVideoPath() const;
     int backgroundScaleMode() const;
     void setBackgroundScaleModeValue(int mode);
     void setBackgroundScaleMode(PreviewBackgroundScaleMode mode);

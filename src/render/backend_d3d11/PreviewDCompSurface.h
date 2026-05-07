@@ -94,6 +94,17 @@ public:
 
     bool isActive() const;
 
+signals:
+    // Fired whenever the in-process popup HWND is repositioned via
+    // MoveWindow — every Qt-signal-driven update AND every internal re-
+    // application (e.g. post-swap-chain-resize y-adjust). The worker-side
+    // popup supervisor subscribes to this so the worker popup mirrors
+    // the in-process popup atomically, including internal re-applies
+    // that no public Qt signal exposes. Coordinates are virtual-desktop
+    // physical pixels — pass directly to setVisualTransform on the
+    // worker side.
+    void popupGeometryApplied(int xPx, int yPx, int widthPx, int heightPx);
+
 private slots:
     void onWindowSceneGraphInitialized();
     void onWindowGeometryChanged();

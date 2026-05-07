@@ -118,6 +118,12 @@ public:
     void setMuriAnalysisReport(const MuriAnalysisReport& report);
     void setMuriRenderOptions(const MuriRenderOptions& options);
     void setSkinDirectory(const QString& skinDir);
+    // Read-only accessor exposed for the out-of-process preview worker
+    // path — the supervisor projects this into PreviewFrameStateSerial
+    // so the worker can load its own skin asset copies from disk via
+    // PreviewSceneAssetLoader. Returns the empty string when no skin
+    // has been bound yet.
+    QString skinDirectory() const;
     void setOutlineVariant(PreviewOutlineVariant variant);
     void setBackgroundBrightness(double brightness);
     void setBackgroundBrightnessOuter(double brightness);

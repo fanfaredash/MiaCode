@@ -440,6 +440,14 @@ void PreviewRuntime::setSkinDirectory(const QString& skinDir)
     }
 }
 
+QString PreviewRuntime::skinDirectory() const
+{
+    if (assets_ == nullptr) {
+        return QString();
+    }
+    return assets_->skinDirectory();
+}
+
 void PreviewRuntime::setOutlineVariant(PreviewOutlineVariant variant)
 {
     if (assets_ != nullptr) {

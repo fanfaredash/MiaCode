@@ -385,6 +385,14 @@ QUrl PreviewStageMediaHost::imageSource() const
     return imageSource_;
 }
 
+QString PreviewStageMediaHost::resolvedVideoPath() const
+{
+    if (mediaKind_ != MediaKind::Video) {
+        return QString();
+    }
+    return mediaPath_;
+}
+
 int PreviewStageMediaHost::backgroundScaleMode() const
 {
     return static_cast<int>(backgroundScaleMode_);

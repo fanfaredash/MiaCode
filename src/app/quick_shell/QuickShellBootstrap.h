@@ -22,6 +22,10 @@ namespace miacode::preview::dcomp {
 class PreviewDCompSurface;
 }
 
+namespace miacode::preview::ipc {
+class PreviewWorkerSupervisor;
+}
+
 class QuickShellBootstrap : public QObject
 {
     Q_OBJECT
@@ -57,6 +61,12 @@ private:
     std::unique_ptr<QuickShellStyleBridge> styleBridge_;
     std::unique_ptr<QQmlApplicationEngine> engine_;
     std::unique_ptr<miacode::preview::dcomp::PreviewDCompSurface> previewDCompSurface_;
+    // Out-of-process preview worker supervisor — created when
+    // MIACODE_PREVIEW_OUT_OF_PROCESS=1. Lives alongside the in-process
+    // previewDCompSurface_ for now (Phase 0 verification mode shows both
+    // popups simultaneously); future phase removes the in-process surface
+    // when the worker takes over rendering.
+    std::unique_ptr<miacode::preview::ipc::PreviewWorkerSupervisor> previewWorkerSupervisor_;
 #ifdef Q_OS_WIN
     std::unique_ptr<QAbstractNativeEventFilter> nativeCloseEventFilter_;
     quintptr rootWindowNativeHwnd_ = 0;

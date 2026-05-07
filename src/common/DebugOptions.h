@@ -6,7 +6,59 @@
 #include <atomic>
 #include <optional>
 
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace miacode::debug_options {
+
+// Detect "Windows on ARM64 running x86/x64 emulated process". This is
+// the configuration Apple Silicon Macs run Windows in (UTM / Parallels
+// install Windows-ARM, which then emulates x86/x64 binaries). Some
+// graphics paths — DXGI swap chain creation, owned-popup HWND topology
+// with WS_EX_NOREDIRECTIONBITMAP — have been observed to crash under
+// this emulation. Detected once per process via IsWow64Process2 (Win10
+// 1709+); cached in a function-local static so subsequent calls are a
+// single atomic load.
+//
+// Used by previewUseDCompEnabled() / previewOutOfProcessEnabled() to
+// fall back to the legacy QSG-only render path (the beta19-equivalent
+// pre-DComp pipeline) where neither path creates a popup HWND.
+inline bool runningOnArm64WindowsEmulation()
+{
+#ifdef Q_OS_WIN
+    static const bool result = []() -> bool {
+        // IsWow64Process2 lives in kernel32.dll on Win10 1709+. Resolve
+        // dynamically so a binary built against the Win10 SDK still
+        // links and runs on Win8.1 / Win10 RS2 (which lack it).
+        using IsWow64Process2Fn = BOOL(WINAPI*)(HANDLE, USHORT*, USHORT*);
+        const HMODULE kernel32 = ::GetModuleHandleW(L"kernel32.dll");
+        if (kernel32 == nullptr) {
+            return false;
+        }
+        const auto fn = reinterpret_cast<IsWow64Process2Fn>(
+            ::GetProcAddress(kernel32, "IsWow64Process2"));
+        if (fn == nullptr) {
+            return false;  // older OS — not in the affected matrix
+        }
+        USHORT processMachine = 0;
+        USHORT nativeMachine = 0;
+        if (!fn(::GetCurrentProcess(), &processMachine, &nativeMachine)) {
+            return false;
+        }
+        // Native = ARM64, process = x86/x64 → emulated.
+        return nativeMachine == IMAGE_FILE_MACHINE_ARM64
+               && processMachine != IMAGE_FILE_MACHINE_ARM64
+               && processMachine != IMAGE_FILE_MACHINE_UNKNOWN;
+    }();
+    return result;
+#else
+    return false;
+#endif
+}
 
 inline bool isTruthyValue(const QString& value)
 {
@@ -153,7 +205,85 @@ inline bool previewUseDCompEnabled()
     // pipeline (kept around as a safety hatch for unusual graphics
     // drivers; will be retired once Phase 5 multi-monitor / DPI edge
     // cases are signed off).
-    return envOptionalFlagValue("MIACODE_PREVIEW_USE_DCOMP").value_or(true);
+    //
+    // Auto-disabled on Apple Silicon Windows VMs (Windows-on-ARM running
+    // x86/x64 emulation): the DComp popup HWND + WS_EX_NOREDIRECTIONBITMAP
+    // + DXGI swap-chain combination has been observed to crash under
+    // that emulation. The legacy QSG-only path (beta19-equivalent) is
+    // the safe fallback there. Explicit `MIACODE_PREVIEW_USE_DCOMP=1`
+    // overrides the auto-fallback for users who want to test on that
+    // hardware.
+    const auto override = envOptionalFlagValue("MIACODE_PREVIEW_USE_DCOMP");
+    if (override.has_value()) {
+        return *override;
+    }
+    if (runningOnArm64WindowsEmulation()) {
+        return false;
+    }
+    return true;
+}
+
+inline bool previewOutOfProcessEnabled()
+{
+    // Out-of-process preview worker (see
+    // docs/PREVIEW_DEVICE_LOSS_MITIGATION_AND_PROCESS_ISOLATION_PLAN.md
+    // section 7.5). The supervisor spawns a child MiaCode.exe
+    // --preview-worker process that owns the chart popup HWND + render
+    // path, so DXGI_ERROR_DEVICE_REMOVED on the chart popup is
+    // contained by a respawning supervisor rather than cascading into
+    // the editor.
+    //
+    // Default ON. Combined with the QSG render flag (also default ON),
+    // the worker is the chart preview's authoritative renderer; the
+    // editor's in-process PreviewDCompSurface is suppressed and the
+    // editor's main render thread drops the dual-D3D11-device load
+    // from the original Phase 4e architecture.
+    //
+    // Auto-disabled on Apple Silicon Windows VMs — the worker also
+    // creates an owned-popup HWND, which has the same crash risk under
+    // ARM64 → x86 emulation as the in-process DComp popup. Set
+    // `MIACODE_PREVIEW_OUT_OF_PROCESS=0` to opt out (e.g. while
+    // diagnosing worker-specific issues).
+    const auto override = envOptionalFlagValue("MIACODE_PREVIEW_OUT_OF_PROCESS");
+    if (override.has_value()) {
+        return *override;
+    }
+    if (runningOnArm64WindowsEmulation()) {
+        return false;
+    }
+    return true;
+}
+
+inline bool previewWorkerQsgRenderEnabled()
+{
+    // When set, the out-of-process preview worker swaps its DComp /
+    // PreviewDCompSpritePipeline render path for a QSG path: a
+    // QQuickWindow hosting a PreviewQuickSceneRoot that reuses the
+    // editor's existing layer code (head, track, slide motion, judge
+    // effect, judge firework, touch, touch-hold, ...). Pixel-perfect
+    // chart fidelity by reusing the editor's QSG layer code.
+    //
+    // Default ON. Pairs with previewOutOfProcessEnabled to make the
+    // worker the chart preview's authoritative renderer with full
+    // chart fidelity. Set `MIACODE_PREVIEW_WORKER_QSG_RENDER=0` to
+    // fall back to the worker's legacy circles-MVP DComp render path.
+    return envOptionalFlagValue("MIACODE_PREVIEW_WORKER_QSG_RENDER").value_or(true);
+}
+
+inline bool previewWorkerRealPublisherEnabled()
+{
+    // When the out-of-process worker is enabled, this flag controls
+    // whether the supervisor publishes the editor's live PreviewRuntime
+    // state (real publisher) or a 60 Hz synthetic frame stream (Phase
+    // 1 latency-harness mode).
+    //
+    // Default ON. Real publisher is the production path; the synthetic
+    // mode is only useful for IPC-latency benchmarking. Set
+    // `MIACODE_PREVIEW_WORKER_REAL_PUBLISHER=0` to switch the supervisor
+    // back into the synthetic timer (the worker will then render its
+    // legacy circles-MVP demo against fake playhead data, useful for
+    // measuring ring-buffer round-trip latency on a given hardware).
+    return envOptionalFlagValue("MIACODE_PREVIEW_WORKER_REAL_PUBLISHER").value_or(true);
 }
 
 inline bool previewDCompPerPixelAlphaEnabled();  // forward decl for use below
@@ -242,28 +372,27 @@ inline bool previewTimelineUseDCompEnabled()
     // Phase 3c of the v2-refactor — DComp pipeline for the timeline
     // pane. When on, TimelineQuickItem instantiates a TimelineRenderView
     // alongside its existing QSG paint node and pushes scene-state
-    // updates to both. The QSG path stays alive (so timeline drawing
-    // keeps working if the DComp visual fails), and the DComp popup
-    // overlays it on top via the top-level HWND. Phase 3e turns this on
-    // unconditionally and removes the QSG paint code.
+    // updates to both. The DComp popup overlays the QSG paint via a
+    // top-level HWND.
     //
-    // Phase 9d-final: now default-on whenever DComp is enabled — the
-    // env flag is an *override* rather than an opt-in. Leave it unset
-    // (the common case) to get the new behaviour; set it explicitly to
-    // "0" / "false" to fall back to the legacy QSG-only path. This
-    // mirrors the previewDCompTopLevelHwndEnabled() pattern: ship the
-    // new pipeline as the default while keeping the A/B escape hatch
-    // around for diagnostics.
+    // Default OFF as of the worker-preview rollout. Now that the chart
+    // preview is hosted by the out-of-process worker, the editor's
+    // main process renders only the timeline + UI chrome. Pulling
+    // timeline rendering back into the QSG path (no popup HWND, no
+    // second D3D11 device, no per-window swap-chain serialisation
+    // contending with the worker) is the simpler topology — fewer
+    // moving Win32 pieces in the editor process. Set
+    // `MIACODE_TIMELINE_USE_DCOMP=1` to re-enable the DComp timeline
+    // pipeline (e.g. for performance comparison or diagnostics).
     //
-    // Implies and requires previewUseDCompEnabled (the timeline view
-    // shares D3D11 device + waitable + texture cache infrastructure
-    // with the chart-preview path).
+    // Auto-disabled on Apple Silicon Windows VMs alongside the chart
+    // preview's DComp path, via the previewUseDCompEnabled cascade.
     if (!previewUseDCompEnabled()) {
         return false;
     }
     const std::optional<bool> override = envOptionalFlagValue(
         "MIACODE_TIMELINE_USE_DCOMP");
-    return override.value_or(true);
+    return override.value_or(false);
 }
 
 inline bool previewQsgFullDisableEnabled()

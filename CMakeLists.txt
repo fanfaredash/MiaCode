@@ -154,6 +154,15 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/tools/video_export/RawVideoPipeTransport.cpp
     src/tools/video_export/VideoExportSnapshot.h
     src/tools/video_export/VideoExportSnapshot.cpp
+    src/preview/ipc/PreviewFrameStateProjector.h
+    src/preview/ipc/PreviewFrameStateProjector.cpp
+    src/preview/ipc/PreviewFrameStateSerial.h
+    src/preview/ipc/PreviewSnapshotRingBuffer.h
+    src/preview/ipc/PreviewSnapshotRingBuffer.cpp
+    src/preview/ipc/PreviewWorkerProtocol.h
+    src/preview/ipc/PreviewWorkerProtocol.cpp
+    src/preview/ipc/PreviewWorkerSupervisor.h
+    src/preview/ipc/PreviewWorkerSupervisor.cpp
     src/preview/runtime/PreviewQuickExportSession.h
     src/preview/runtime/PreviewQuickExportSession.cpp
     src/preview/runtime/PreviewSceneAssetLoader.h
@@ -164,6 +173,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/preview/runtime/PreviewStageMediaHost.cpp
     src/preview/runtime/PreviewRuntime.h
     src/preview/runtime/PreviewRuntime.cpp
+    src/preview/runtime/PreviewWorkerSession.h
+    src/preview/runtime/PreviewWorkerSession.cpp
     src/core/scene/PreviewFrameState.h
     src/core/scene/PreviewHudState.h
     src/core/scene/PreviewHudState.cpp
@@ -333,6 +344,8 @@ add_executable(MiaCode WIN32 MACOSX_BUNDLE
     src/render/backend_d3d11/PreviewDCompSurface.cpp
     src/render/backend_d3d11/PreviewPopupHwndTracker.h
     src/render/backend_d3d11/PreviewPopupHwndTracker.cpp
+    src/render/backend_d3d11/OwnerHwndTracker.h
+    src/render/backend_d3d11/OwnerHwndTracker.cpp
     src/audio/PreviewAudioBackend.h
     src/audio/PreviewAudioSettings.h
     src/audio/PreviewAudioSettings.cpp
